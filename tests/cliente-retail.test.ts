@@ -1,9 +1,9 @@
 /**
  * Contrato retail del cliente (F1 · Stitch S01–S04).
  *
- * 4 destinos fijos (Inicio · Cuenta · Mi QR · Menú), carcasa propia del
- * cliente, Inter y azules comerciales en ámbito .retail. AppShell quedó para
- * el personal, sin dock inferior.
+ * Destinos fijos (Inicio · Cuenta · Mi QR · Beneficios · Menú), carcasa propia
+ * del cliente, Inter y azules comerciales en ámbito .retail. AppShell quedó
+ * para el personal, sin dock inferior.
  *
  * Ejecutar: npm test
  */
@@ -20,15 +20,36 @@ import {
 const RAIZ = join(__dirname, '..')
 const leer = (r: string) => readFileSync(join(RAIZ, r), 'utf8')
 
-test('la navegación del cliente son exactamente 4 destinos, en su orden', () => {
+test('la navegación del cliente es una lista fija, en su orden', () => {
+  // Eran cuatro; «Beneficios» se sumó con el rediseño del Inicio. Lo que esta
+  // prueba protege no es el número: es que la lista sea la MISMA para todas las
+  // empresas y en todos los tamaños, y que nadie la reordene sin querer.
   assert.deepEqual(
     DESTINOS_CLIENTE.map((d) => d.href),
-    ['/cliente/inicio', '/cliente/perfil', '/cliente/qr', '/cliente/menu']
+    [
+      '/cliente/inicio',
+      '/cliente/perfil',
+      '/cliente/qr',
+      '/cliente/promociones',
+      '/cliente/menu',
+    ]
   )
   assert.deepEqual(
     DESTINOS_CLIENTE.map((d) => d.label),
-    ['Inicio', 'Cuenta', 'Mi QR', 'Menú']
+    ['Inicio', 'Cuenta', 'Mi QR', 'Beneficios', 'Menú']
   )
+})
+
+test('cada destino apunta a una pantalla que existe', () => {
+  // Un destino sin página es un enlace a un 404 en la barra principal de la
+  // app. Se comprueba contra el árbol de rutas, no contra una lista a mano.
+  for (const d of DESTINOS_CLIENTE) {
+    const ruta = d.href.replace(/^\//, '')
+    assert.ok(
+      existsSync(join(RAIZ, 'src', 'app', '(cliente)', ruta, 'page.tsx')),
+      `«${d.label}» apunta a ${d.href} y ahí no hay pantalla`
+    )
+  }
 })
 
 test('una ruta que cuelga de un destino lo marca activo; una parecida no', () => {
@@ -78,9 +99,17 @@ test('el layout del cliente usa CustomerShell + Inter + retail, no AppShell', ()
 test('CustomerShell: header, ubicación, pestañas y dock', () => {
   const src = leer('src/components/layout/CustomerShell.tsx')
   assert.match(src, /action="\/cliente\/buscar"/)
-  assert.match(src, /href="\/cliente\/qr"/)
   assert.match(src, /href="\/cliente\/cerca"/)
   assert.match(src, /href="\/cliente\/perfil"/)
+  // El atajo al escáner SALIÓ de la cabecera con el rediseño del Inicio, y no
+  // se perdió: «Mi QR» es uno de los destinos del dock, que se alcanza desde
+  // cualquier pantalla. Lo que hay que vigilar es eso —que siga alcanzable—, no
+  // que el enlace esté en un sitio concreto.
+  assert.doesNotMatch(src, /href="\/cliente\/qr"/, 'el atajo volvió a la cabecera: sobra, ya está en el dock')
+  assert.ok(
+    DESTINOS_CLIENTE.some((d) => d.href === '/cliente/qr'),
+    'Mi QR desapareció del dock y tampoco está en la cabecera: no hay forma de llegar'
+  )
   assert.match(src, /<BottomNav \/>/)
   assert.match(src, /<TabsEscritorio \/>/)
   assert.match(src, /con-dock-inferior/)

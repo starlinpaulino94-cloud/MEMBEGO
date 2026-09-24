@@ -12,6 +12,13 @@ import {
   Info,
   ChevronRight,
   ChevronDown,
+  Crown,
+  Gift,
+  Dices,
+  CarFront,
+  Newspaper,
+  Users,
+  SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
@@ -27,18 +34,26 @@ interface Fila {
   href: string
   label: string
   icon: LucideIcon
+  seccion: string
 }
 
 /** Directorio completo de la app (contrato Stitch S03). */
 const FILAS: Fila[] = [
-  { href: '/cliente/empresas', label: 'Empresas y negocios cercanos', icon: Store },
-  { href: '/mis-membresias', label: 'Membresías activas y disponibles', icon: WalletCards },
-  { href: '/cliente/promociones', label: 'Catálogo de beneficios y descuentos', icon: Percent },
-  { href: '/cliente/citas', label: 'Mis citas y reservaciones', icon: CalendarDays },
-  { href: '/cliente/mis-excursiones', label: 'Mis excursiones y boletos', icon: Ticket },
-  { href: '/cliente/historial', label: 'Historial de visitas y canjes', icon: ReceiptText },
-  { href: '/cliente/pagos', label: 'Mis pagos y facturación', icon: WalletCards },
-  { href: '/cliente/ayuda', label: 'Servicio de atención al cliente y soporte', icon: LifeBuoy },
+  { href: '/cliente/planes', label: 'Planes y precios', icon: Crown, seccion: 'Ahorrar' },
+  { href: '/mis-membresias', label: 'Membresías activas y disponibles', icon: WalletCards, seccion: 'Ahorrar' },
+  { href: '/cliente/promociones', label: 'Catálogo de beneficios y descuentos', icon: Percent, seccion: 'Ahorrar' },
+  { href: '/cliente/regalos', label: 'Regalos y gift cards', icon: Gift, seccion: 'Ahorrar' },
+  { href: '/cliente/ruleta', label: 'Ruleta de premios', icon: Dices, seccion: 'Ahorrar' },
+  { href: '/cliente/invita-y-gana', label: 'Invita y gana recompensas', icon: Users, seccion: 'Ahorrar' },
+  { href: '/cliente/vehiculos', label: 'Mis vehículos', icon: CarFront, seccion: 'Mis cosas' },
+  { href: '/cliente/citas', label: 'Mis citas y reservaciones', icon: CalendarDays, seccion: 'Mis cosas' },
+  { href: '/cliente/mis-excursiones', label: 'Mis excursiones y boletos', icon: Ticket, seccion: 'Mis cosas' },
+  { href: '/cliente/historial', label: 'Historial de visitas y canjes', icon: ReceiptText, seccion: 'Mis cosas' },
+  { href: '/cliente/pagos', label: 'Mis pagos y facturación', icon: WalletCards, seccion: 'Mis cosas' },
+  { href: '/cliente/empresas', label: 'Empresas y negocios cercanos', icon: Store, seccion: 'Descubrir' },
+  { href: '/cliente/novedades', label: 'Novedades y avisos', icon: Newspaper, seccion: 'Descubrir' },
+  { href: '/cliente/intereses', label: 'Elegir intereses', icon: SlidersHorizontal, seccion: 'Descubrir' },
+  { href: '/cliente/ayuda', label: 'Servicio de atención al cliente y soporte', icon: LifeBuoy, seccion: 'Ayuda' },
 ]
 
 export default async function MenuPage() {
@@ -47,8 +62,8 @@ export default async function MenuPage() {
     getCategoriesPublic().catch(() => []),
     user.metadata.clienteId
       ? getNavOcultoClienteCached(user.metadata.clienteId, user.metadata.companyId).catch(
-          () => [] as string[]
-        )
+        () => [] as string[]
+      )
       : Promise.resolve([] as string[]),
     user.metadata.clienteId
       ? getClientePerfil(user.metadata.clienteId).catch(() => null)
@@ -56,6 +71,13 @@ export default async function MenuPage() {
   ])
   const oculto = new Set(ocultas)
   const filas = FILAS.filter((f) => !oculto.has(f.href))
+  // Las ocultas ya salieron en el filtro: una sección vacía no se renderiza.
+  const secciones: { titulo: string; filas: typeof filas }[] = []
+  for (const f of filas) {
+    const ultima = secciones[secciones.length - 1]
+    if (ultima && ultima.titulo === f.seccion) ultima.filas.push(f)
+    else secciones.push({ titulo: f.seccion, filas: [f] })
+  }
   const nombre = perfil?.nombre?.split(' ')[0] || user.email
 
   return (
@@ -97,40 +119,49 @@ export default async function MenuPage() {
         </ul>
       </details>
 
-      <ul className="space-y-2">
-        {filas.map((f) => (
-          <li key={f.href}>
-            <Link
-              href={f.href}
-              className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 outline-none transition hover:border-primary/30 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <f.icon className="h-5 w-5" aria-hidden />
-              </span>
-              <span className="min-w-0 flex-1 text-[15px] font-semibold text-foreground">
-                {f.label}
-              </span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden />
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {secciones.map((s) => (
+        <section key={s.titulo} aria-label={s.titulo}>
+          <h2 className="px-1 pb-1 text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {s.titulo}
+          </h2>
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {s.filas.map((f) => (
+              <li key={f.href}>
+                <Link
+                  href={f.href}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 outline-none transition hover:border-primary/30 active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <f.icon className="h-5 w-5" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1 text-[15px] font-semibold text-foreground">
+                    {f.label}
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
 
       <form
         action={logout}
-        className="flex items-center gap-3 rounded-xl border border-border bg-card p-4"
+        className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-destructive/30 active:scale-[0.99] focus-within:ring-2 focus-within:ring-destructive"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-          <LogOut className="h-5 w-5" aria-hidden />
-        </span>
-        <p className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">
-          ¿No eres {nombre}? Cerrar sesión
-        </p>
         <button
           type="submit"
           aria-label="Cerrar sesión"
-                className="rounded-lg p-1 text-muted-foreground outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+          className="rounded-lg p-1 text-muted-foreground outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary flex items-center justify-between w-full hover:cursor-pointer"
         >
+          <div className="flex gap-3 items-center">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <LogOut className="h-5 w-5" aria-hidden />
+            </span>
+            <p className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">
+              ¿No eres {nombre}? Cerrar sesión
+            </p>
+          </div>
           <ChevronRight className="h-4 w-4" aria-hidden />
         </button>
       </form>

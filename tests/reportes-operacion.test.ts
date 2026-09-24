@@ -208,7 +208,7 @@ test('los nombres de empleado se buscan acotados a la empresa, por los dos camin
   // un empleado que atiende dos negocios saldría como «(eliminado)» en el
   // reporte del segundo: un nombre falso, no un dato que falte.
   const src = fuente(...MOTOR)
-  const fn = src.slice(src.indexOf("agrupar(tx, companyId, rango, 'empleadoId'"))
+  const fn = src.slice(src.indexOf("agrupar(tx, companyId, rango, filtro, 'empleadoId'"))
   const bloque = fn.slice(0, 800)
   assert.match(bloque, /tx\.user\.findMany\(/)
   assert.match(bloque, /OR: \[\{ companyId \}, \{ empresasAcceso: \{ some: \{ companyId \} \} \}\]/)

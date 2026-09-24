@@ -34,6 +34,19 @@ export const MINIMO_BUSQUEDA = 2
 /** Tope de resultados. Buscar sí; descargarse la base a base de probar, no. */
 export const MAX_BUSQUEDA = 20
 
+/**
+ * NINGUNA de estas resoluciones traga el error de la base con `.catch(() => …)`.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * UN ERROR DE INFRA NO PUEDE DISFRAZARSE DE «NO EXISTE» (barrido de bugs ocultos)
+ *
+ * Devolver `null` ante un fallo de la base convierte «la consulta falló» en «este
+ * cliente no está» —y ése es, en palabras del propio módulo, «el peor fallo
+ * posible aquí»: el empleado concluye que el socio no tiene membresía y le cobra
+ * el precio completo—. El fallo se propaga: el borde HTTP lo convierte en un 500
+ * REINTENABLE, y el resolutor en proceso lo distingue de un `noEncontrado`. Un
+ * `null` solo significa lo que debe significar: no hay tal cliente.
+ */
 export async function clientePorId(
   companyId: string,
   customerId: string
@@ -43,7 +56,7 @@ export async function clientePorId(
       where: { id: customerId, companyId },
       select: { id: true, nombre: true, email: true, telefono: true },
     })
-  ).catch(() => null)
+  )
   return c ? customerDTO(c) : null
 }
 
@@ -56,7 +69,7 @@ export async function clientePorEmail(
       where: { companyId, email: email.trim().toLowerCase() },
       select: { id: true, nombre: true, email: true, telefono: true },
     })
-  ).catch(() => null)
+  )
   return c ? customerDTO(c) : null
 }
 
@@ -76,7 +89,7 @@ export async function clientePorTelefono(
       where: { companyId, telefono: { not: null } },
       select: { id: true, nombre: true, email: true, telefono: true },
     })
-  ).catch(() => [])
+  )
 
   const c = candidatos.find((x) => mismoTelefono(x.telefono ?? '', telefono))
   return c ? customerDTO(c) : null
@@ -108,7 +121,7 @@ export async function clientePorPlaca(
         cliente: { select: { id: true, nombre: true, email: true, telefono: true } },
       },
     })
-  ).catch(() => null)
+  )
 
   return v?.cliente ? customerDTO(v.cliente) : null
 }
@@ -168,6 +181,12 @@ export async function listarClientes(
   companyId: string,
   pagina: { take: number; cursor?: { id: string }; skip?: number }
 ): Promise<FilaCliente[]> {
+  // NO se traga el error con `.catch(() => [])`. Una página vacía por un fallo de
+  // la base se leería como «llegaste al final» (nextCursor null), y una
+  // sincronización de un CRM daría por completa la clientela y dejaría fuera a
+  // todos los clientes tras la página donde falló —justo la pérdida silenciosa
+  // que la paginación por cursor (B-6) vino a eliminar—. El fallo se propaga y el
+  // borde HTTP responde un 500 REINTENABLE.
   return conEmpresa(companyId, (tx) =>
     tx.cliente.findMany({
       where: { companyId },
@@ -176,7 +195,7 @@ export async function listarClientes(
       take: pagina.take,
       ...(pagina.cursor ? { cursor: pagina.cursor, skip: pagina.skip ?? 1 } : {}),
     })
-  ).catch(() => [])
+  )
 }
 
 // ── Vehículos ───────────────────────────────────────────────────────────────

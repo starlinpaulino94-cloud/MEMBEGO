@@ -29,14 +29,22 @@ export async function GET(req: NextRequest) {
   const pag = leerPaginacion(params, auth.ctx.requestId)
   if (!pag.ok) return pag.fallo
 
-  // `...pag.cursor` añade `cursor`/`skip` cuando hay página previa, o nada en la
-  // primera. Mismo patrón que los demás listados paginados.
-  const filas = await listarClientes(auth.companyId, { take: pag.limite + 1, ...pag.cursor })
-  const { items, nextCursor } = construirPagina(filas, pag.limite)
-  return respuestaApi(
-    { customers: items.map(customerDTO), page: { limit: pag.limite, nextCursor } },
-    auth.ctx.requestId,
-  )
+  try {
+    // `...pag.cursor` añade `cursor`/`skip` cuando hay página previa, o nada en la
+    // primera. Mismo patrón que los demás listados paginados.
+    const filas = await listarClientes(auth.companyId, { take: pag.limite + 1, ...pag.cursor })
+    const { items, nextCursor } = construirPagina(filas, pag.limite)
+    return respuestaApi(
+      { customers: items.map(customerDTO), page: { limit: pag.limite, nextCursor } },
+      auth.ctx.requestId,
+    )
+  } catch (e) {
+    // Un fallo de la base NO puede salir como una página vacía «final»: eso haría
+    // que una sincronización diera por completa la clientela y perdiera lo que
+    // falta. Se responde un 500 reintenable, que el cliente sí puede repetir.
+    console.error('[platform] listar clientes:', e)
+    return errorApi('INTERNAL_ERROR', auth.ctx.requestId)
+  }
 }
 
 /**

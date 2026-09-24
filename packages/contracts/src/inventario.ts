@@ -169,6 +169,13 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     resumen: 'Edita el nombre, el teléfono o el correo de un cliente existente.',
   },
   {
+    metodo: 'DELETE',
+    ruta: '/customers/{id}',
+    scope: 'customers:delete',
+    principal: 'empresa',
+    resumen: 'Borra un cliente y purga en cascada todos sus datos en la empresa.',
+  },
+  {
     metodo: 'POST',
     ruta: '/customers',
     scope: 'customers:write',
@@ -221,6 +228,13 @@ export const INVENTARIO_API: readonly RecursoApi[] = [
     principal: 'sistema-o-empresa',
     resumen: 'Citas de la empresa en un rango de fechas.',
     paginado: true,
+  },
+  {
+    metodo: 'POST',
+    ruta: '/appointments/{id}/cancel',
+    scope: 'appointments:manage',
+    principal: 'empresa',
+    resumen: 'Cancela una cita. Idempotente: repetirla la deja cancelada sin volver a avisar.',
   },
 
   // ── Escrituras (solo satélites) ─────────────────────────────────────────

@@ -71,11 +71,31 @@ export interface SucursalCercana {
   urlDetalle: string
 }
 
+/**
+ * Motivo por el que una búsqueda no pudo resolverse. Viaja en un 200 y no en un
+ * 422: no es un error de la petición de la persona, es un estado esperado del
+ * mapa ("aún no guardaste tu vivienda", "falta autorizar la ubicación") que la
+ * pantalla puede explicar y, a veces, resolver con un botón.
+ */
+export type MotivoCercanosCodigo =
+  | 'consentimiento_requerido'
+  | 'sin_ubicacion_vivienda'
+  | 'sin_coordenadas'
+  | 'ubicacion_invalida'
+
+export interface MotivoCercanos {
+  codigo: MotivoCercanosCodigo
+  mensaje: string
+}
+
 export interface ResultadoCercanos {
   resultados: SucursalCercana[]
   hayMas: boolean
   total: number
-  ubicacion: UbicacionBusqueda
+  /** Ancla de la búsqueda. `null` cuando la búsqueda degradó sin ubicación. */
+  ubicacion: UbicacionBusqueda | null
+  /** Presente SOLO cuando la búsqueda no pudo resolverse (200 degradado). */
+  motivo?: MotivoCercanos
 }
 
 export interface ViewportMapa {

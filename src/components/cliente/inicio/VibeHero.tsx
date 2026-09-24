@@ -16,8 +16,15 @@ import { RetailEmptyState } from './RetailEmptyState'
  * por defecto, las promociones destacadas del marketplace. La tarjeta entera
  * es el enlace; el botón es visual.
  */
-export function VibeHero({ heroes }: { heroes: InicioVista['heroes'] }) {
+export function VibeHero({
+  heroes,
+  categoriaActiva,
+}: {
+  heroes: InicioVista['heroes']
+  categoriaActiva?: string | null
+}) {
   if (heroes.length === 0) {
+    if (categoriaActiva) return null
     return (
       <RetailEmptyState
         title="Novedades"
@@ -51,26 +58,37 @@ export function VibeHero({ heroes }: { heroes: InicioVista['heroes'] }) {
 
             <div className="relative z-10 flex h-full flex-col justify-between p-5">
               <div className="space-y-1">
-                <span className="grad-vibe inline-block rounded-full px-3 py-1 text-label-sm font-bold uppercase tracking-wider text-white">
-                  Novedad destacada
-                </span>
-                <h2 className="mt-2 font-display text-4xl font-extrabold leading-tight text-white">
+                <div className="flex items-center gap-2">
+                  <span className="grad-vibe inline-block rounded-full px-3 py-1 text-label-sm font-bold uppercase tracking-wider text-white shadow">
+                    {hero.etiqueta ?? 'Novedad destacada'}
+                  </span>
+                  {hero.descuento ? (
+                    <span className="rounded-full bg-amber-400 px-2.5 py-0.5 text-label-sm font-extrabold text-black shadow">
+                      {hero.descuento}
+                    </span>
+                  ) : null}
+                </div>
+                <h2 className="mt-2 font-display text-3xl md:text-4xl font-extrabold leading-tight text-white drop-shadow">
                   {hero.titulo}
                 </h2>
                 {hero.subtitulo ? (
-                  <span className="block text-small font-medium text-vibe-celeste">
+                  <span className="line-clamp-2 block text-small font-medium text-vibe-celeste drop-shadow-sm">
                     {hero.subtitulo}
                   </span>
                 ) : null}
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-vibe-borde bg-card/95 p-3 backdrop-blur">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-vibe-borde bg-card/95 p-3 backdrop-blur shadow-sm">
                   <div className="min-w-0">
                     <span className="block truncate text-label-sm font-bold text-foreground">
                       {hero.empresa}
                     </span>
-                    {hero.planDesde ? (
+                    {hero.precio ? (
+                      <span className="block truncate text-label-md font-extrabold text-vibe-violet">
+                        {hero.precio}
+                      </span>
+                    ) : hero.planDesde ? (
                       <span className="block truncate text-label-sm font-bold text-vibe-ink">
                         {hero.planDesde}
                       </span>
@@ -85,7 +103,7 @@ export function VibeHero({ heroes }: { heroes: InicioVista['heroes'] }) {
                     </span>
                   ) : null}
                 </div>
-                <span className="grad-vibe-cta flex w-full items-center justify-center gap-2 rounded-full py-3 text-label-md font-bold text-white">
+                <span className="grad-vibe-cta flex w-full items-center justify-center gap-2 rounded-full py-3 text-label-md font-bold text-white shadow">
                   {hero.cta}
                   <ArrowRight className="size-4" aria-hidden />
                 </span>

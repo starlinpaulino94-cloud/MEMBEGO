@@ -3,10 +3,11 @@ import { getUser } from '@/lib/auth'
 import { requireSection, puedeFuncion } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { conEmpresa } from '@/lib/tenant'
-import { TZ_PLATAFORMA } from '@/lib/format'
-import { respuestaCsv } from '@/lib/csv'
+import { zonaSegura } from '@/lib/zona-horaria'
+import { armarCsvBloques, respuestaCsv } from '@/lib/csv'
+import { armarXlsxBloques, pideXlsx, respuestaXlsx } from '@/lib/xlsx'
 import { leerRango } from '@/modules/reportes/rango'
-import { getReporte, reporteToCsv } from '@/modules/reportes/queries'
+import { getReporte, reporteToBloques } from '@/modules/reportes/queries'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
   const empresa = await conEmpresa(companyId, (tx) =>
     tx.company.findUnique({ where: { id: companyId }, select: { name: true, zonaHoraria: true } })
   ).catch(() => null)
-  const timeZone = empresa?.zonaHoraria || TZ_PLATAFORMA
+  const timeZone = zonaSegura(empresa?.zonaHoraria)
 
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries())
   const rango = leerRango(sp, timeZone)
@@ -47,14 +48,19 @@ export async function GET(req: NextRequest) {
   const verFinancieros = await puedeFuncion('reportes', 'ver_financieros')
   const reporte = await getReporte(companyId, rango, timeZone, { verFinancieros })
 
-  return respuestaCsv(
-    reporteToCsv(reporte, {
-      empresa: empresa?.name ?? 'Mi negocio',
-      desdeDia: rango.desdeDia,
-      hastaDia: rango.hastaDia,
-      dias: rango.dias,
-    }),
-    `reporte-${rango.desdeDia}_${rango.hastaDia}`,
-    { fechar: false }
-  )
+  const bloques = reporteToBloques(reporte, {
+    empresa: empresa?.name ?? 'Mi negocio',
+    desdeDia: rango.desdeDia,
+    hastaDia: rango.hastaDia,
+    dias: rango.dias,
+  })
+  const nombre = `reporte-${rango.desdeDia}_${rango.hastaDia}`
+
+  // El MISMO reporte, en un libro de Excel con una hoja por bloque.
+  // El CSV no se toca: quien ya automatizó una descarga sigue igual.
+  if (pideXlsx(req.nextUrl.searchParams)) {
+    return respuestaXlsx(await armarXlsxBloques(bloques), nombre, { fechar: false })
+  }
+
+  return respuestaCsv(armarCsvBloques(bloques), nombre, { fechar: false })
 }

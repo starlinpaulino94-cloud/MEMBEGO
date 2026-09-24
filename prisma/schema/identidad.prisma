@@ -240,6 +240,12 @@ model User {
   /// serie ({v:1, secciones:{sec:bool}, funciones:{sec:{fn:false}}}). Solo
   /// diferencias; null = hereda el rol tal cual. Ver lib/auth/permissions.ts.
   permisos           Json?
+  /// Reportes: qué cifras del resumen ejecutivo ve ESTA persona y en qué orden
+  /// ({v:1, ocultas:[clave], orden:[clave]}). Se guarda lo OCULTO, no lo
+  /// visible: así una cifra nueva aparece sola para todos en vez de quedar
+  /// escondida para quien hubiera personalizado alguna vez. null = de fábrica.
+  /// Ver modules/reportes/preferencias.ts.
+  preferenciasReportes Json?
   // Consentimiento (cumplimiento): rastro auditable de aceptación de términos
   // y opt-in de comunicaciones de marketing, con la versión y el momento.
   termsAcceptedAt    DateTime?

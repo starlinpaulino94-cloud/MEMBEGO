@@ -38,7 +38,7 @@ export function AfiliarEmpresaCard({
   }, [state.error])
 
   return (
-    <Card className="border-white/10 bg-white/5 text-white">
+    <Card>
       <CardHeader>
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
           <BadgeCheck className="h-6 w-6" />

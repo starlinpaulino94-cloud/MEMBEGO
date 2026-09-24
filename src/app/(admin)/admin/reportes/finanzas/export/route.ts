@@ -3,8 +3,9 @@ import { getUser } from '@/lib/auth'
 import { requireSection } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { conEmpresa } from '@/lib/tenant'
-import { TZ_PLATAFORMA } from '@/lib/format'
+import { zonaSegura } from '@/lib/zona-horaria'
 import { armarCsvBloques, respuestaCsv } from '@/lib/csv'
+import { armarXlsxBloques, pideXlsx, respuestaXlsx } from '@/lib/xlsx'
 import { leerRango } from '@/modules/reportes/rango'
 import { getReporteFinanzas } from '@/modules/reportes/finanzas'
 
@@ -35,13 +36,17 @@ export async function GET(req: NextRequest) {
   const empresa = await conEmpresa(companyId, (tx) =>
     tx.company.findUnique({ where: { id: companyId }, select: { name: true, zonaHoraria: true } })
   ).catch(() => null)
-  const timeZone = empresa?.zonaHoraria || TZ_PLATAFORMA
+  const timeZone = zonaSegura(empresa?.zonaHoraria)
 
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries())
   const rango = leerRango(sp, timeZone)
-  const r = await getReporteFinanzas(companyId, rango)
+  // El filtro viaja en la misma query string que el rango: el archivo sale con
+  // EL MISMO corte que la pantalla. La validación del id vive en la consulta.
+  const r = await getReporteFinanzas(companyId, rango, timeZone, new Date(), {
+    filtro: { sucursalId: sp.sucursal?.trim() || undefined },
+  })
 
-  const csv = armarCsvBloques([
+  const bloques = [
     {
       titulo: 'Alcance del reporte',
       encabezados: ['Concepto', 'Valor'],
@@ -50,10 +55,15 @@ export async function GET(req: NextRequest) {
         ['Periodo', `${rango.desdeDia} a ${rango.hastaDia}`],
         ['Dias', rango.dias],
         ['Comparado contra', rango.etiquetaComparacion],
+        // El filtro APLICADO, con nombre: un CSV filtrado sin esta línea es
+        // indistinguible del reporte completo una vez descargado.
+        ['Filtro por sucursal', r.filtro ? r.filtro.sucursal.nombre : '(todas)'],
         ['Datos completos', r.incompleto ? 'NO - alguna consulta fallo' : 'Si'],
         [
           'Cobrado sin entregar',
-          'No depende del periodo: cubre todo lo que siga abierto',
+          r.filtro
+            ? 'No depende del periodo NI del filtro: cubre toda la empresa'
+            : 'No depende del periodo: cubre todo lo que siga abierto',
         ],
         [
           'Recurrente estimado',
@@ -77,19 +87,28 @@ export async function GET(req: NextRequest) {
       encabezados: ['Metodo', 'Operaciones', 'Monto'],
       filas: r.porMetodo.map((m) => [m.metodo, m.operaciones, m.monto.toFixed(2)]),
     },
+    // Con filtro la pasarela NO va vacía: no va, con su porqué en una fila.
+    // Un bloque con encabezados y sin filas se leería como «no hubo intentos»,
+    // que es una afirmación sobre la pasarela y no sobre el filtro.
     {
       titulo: 'Intentos de pago en linea',
       encabezados: ['Estado', 'Intentos', 'Monto'],
-      filas: [
-        ...r.intentos.map((i) => [i.estado, i.total, i.monto.toFixed(2)]),
-        ['TASA DE APROBACION %', r.tasaAprobacion ?? 'sin dato', ''],
-      ],
+      filas: r.filtro
+        ? [['OMITIDO - un pago en linea no pertenece a ninguna sucursal', '', '']]
+        : [
+            ...r.intentos.map((i) => [i.estado, i.total, i.monto.toFixed(2)]),
+            ['TASA DE APROBACION %', r.tasaAprobacion ?? 'sin dato', ''],
+          ],
     },
-    {
-      titulo: 'Motivos de rechazo',
-      encabezados: ['Motivo', 'Veces'],
-      filas: r.motivosRechazo.map((m) => [m.motivo, m.total]),
-    },
+    ...(r.filtro
+      ? []
+      : [
+          {
+            titulo: 'Motivos de rechazo',
+            encabezados: ['Motivo', 'Veces'],
+            filas: r.motivosRechazo.map((m) => [m.motivo, m.total] as (string | number)[]),
+          },
+        ]),
     {
       titulo: 'Pendientes y deshechas',
       encabezados: ['Concepto', 'Operaciones', 'Monto'],
@@ -99,14 +118,32 @@ export async function GET(req: NextRequest) {
       ],
     },
     {
+      // SOLO la caja: los cobros de membresia tienen otro reloj y mezclarlos
+      // en una serie daria una columna que no corresponde a ningun hecho. El
+      // titulo lo dice para que el archivo se defienda solo una vez bajado.
+      titulo: 'Ingreso de caja dia a dia (NO incluye cobros de membresia)',
+      encabezados: ['Dia', 'Operaciones', 'Ingreso de caja'],
+      filas: r.serie.map((p) => [p.dia, p.operaciones, p.monto.toFixed(2)]),
+    },
+    {
       titulo: 'Recurrente estimado (NO es dinero cobrado)',
       encabezados: ['Concepto', 'Valor'],
-      filas: [
-        ['Estimacion a 30 dias', r.recurrenteEstimado.monto.toFixed(2)],
-        ['Membresias vigentes', r.recurrenteEstimado.membresias],
-      ],
+      filas: r.filtro
+        ? [['OMITIDO - la estimacion es de la empresa entera, no de una sucursal', '']]
+        : [
+            ['Estimacion a 30 dias', r.recurrenteEstimado.monto.toFixed(2)],
+            ['Membresias vigentes', r.recurrenteEstimado.membresias],
+          ],
     },
-  ])
+  ]
+
+  // El MISMO reporte, en un libro de Excel con una hoja por bloque.
+  // El CSV no se toca: quien ya automatizó una descarga sigue igual.
+  if (pideXlsx(req.nextUrl.searchParams)) {
+    return respuestaXlsx(await armarXlsxBloques(bloques), `finanzas-${rango.desdeDia}-a-${rango.hastaDia}`, { fechar: false })
+  }
+
+  const csv = armarCsvBloques(bloques)
 
   return respuestaCsv(csv, `finanzas-${rango.desdeDia}-a-${rango.hastaDia}`, { fechar: false })
 }

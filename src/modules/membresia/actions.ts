@@ -224,25 +224,123 @@ export async function seleccionarPlan(
 }
 
 /**
- * El cliente con membresía ACTIVA solicita cambiar de plan (subir o bajar).
- * No toca el plan vigente: solo registra `planIdSolicitado`. El cambio se aplica
- * cuando el admin aprueba el comprobante del nuevo plan. Así el cliente no pierde
- * acceso mientras se procesa el cambio.
- */
-/**
- * POLÍTICA (deshabilitada por decisión de negocio): una vez adquirido el plan,
- * el cliente NO puede cambiarlo desde la app. El cambio de plan lo realiza
- * únicamente el negocio desde su panel (cambiarPlanDeMembresia en
- * modules/admin/actions.ts). Se conserva la acción devolviendo un error claro
- * como defensa en profundidad ante clientes/formularios antiguos.
+ * El cliente con membresía ACTIVA solicita subir de plan. Revertida la política
+ * que lo deshabilitaba (decisión del usuario, 18-09-2026).
+ *
+ * No toca el plan vigente —solo registra `planIdSolicitado`—, así que conserva
+ * el acceso mientras el cambio se procesa. SOLO SUBIR: si el plan destino no
+ * cuesta más que el vigente, se rechaza sin registrar nada. El importe a pagar
+ * NO viaja desde el navegador: lo resuelve `calcularPagoCambioPlan` en servidor.
  */
 export async function solicitarCambioPlan(
   _prev: SeleccionState,
-  _formData: FormData
+  formData: FormData
 ): Promise<SeleccionState> {
-  return {
-    error:
-      'El cambio de plan lo gestiona el negocio. Solicítalo en el local y el equipo lo aplicará por ti.',
+  try {
+    const user = await getUser()
+    if (!user || user.metadata.role !== 'CLIENTE') {
+      return { error: 'No autorizado.' }
+    }
+
+    // Resolver el clienteId: puede venir en el metadata o haber que buscarlo
+    // por supabaseId (caso de usuarios migrados o con metadata incompleta).
+    let clienteId = user.metadata.clienteId
+    if (!clienteId && user.supabaseId) {
+      const cliente = await sinEmpresa('cambio plan: resolver cliente por supabaseId', (tx) =>
+        tx.cliente.findFirst({
+          where: { supabaseId: user.supabaseId },
+          select: { id: true },
+        })
+      )
+      if (cliente) clienteId = cliente.id
+    }
+    if (!clienteId) {
+      return { error: 'No autorizado.' }
+    }
+
+    if (!(await formSubmitLimiter(clienteId))) {
+      return { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' }
+    }
+
+    const membershipId = String(formData.get('membershipId') ?? '').trim()
+    const planId = String(formData.get('planId') ?? '').trim()
+    if (!membershipId) return { error: 'Membresía no especificada.' }
+    if (!planId) return { error: 'Selecciona el plan al que quieres cambiar.' }
+
+    const membership = await sinEmpresa(
+      'cambio de plan: la persona busca su membresía entre todas sus fichas',
+      (tx) =>
+        tx.membership.findUnique({
+          where: { id: membershipId },
+          select: {
+            id: true,
+            clienteId: true,
+            estado: true,
+            planId: true,
+            planIdSolicitado: true,
+            plan: { select: { nombre: true, precio: true } },
+            cliente: { select: { companyId: true } },
+          },
+        })
+    )
+    if (!membership) return { error: 'Membresía no encontrada.' }
+    if (membership.clienteId !== clienteId) {
+      return { error: 'No autorizado.' }
+    }
+    if (membership.estado !== 'ACTIVA') {
+      return { error: 'Solo puedes cambiar de plan con una membresía activa.' }
+    }
+
+    const planDestino = await conEmpresa(membership.cliente.companyId, (tx) =>
+      tx.plan.findFirst({
+        where: {
+          id: planId,
+          companyId: membership.cliente.companyId,
+          activo: true,
+        },
+        select: { id: true, precio: true },
+      })
+    )
+    if (!planDestino) {
+      return { error: 'Ese plan no está disponible para tu empresa.' }
+    }
+    if (planDestino.id === membership.planId) {
+      return { error: 'Ese ya es tu plan actual.' }
+    }
+
+    if (Number(planDestino.precio) <= Number(membership.plan.precio)) {
+      return {
+        error:
+          'Solo puedes cambiar a un plan de mayor valor. Para bajar de plan, habla con el negocio.',
+      }
+    }
+
+    const yaPedido = membership.planIdSolicitado === planDestino.id
+    await conEmpresa(membership.cliente.companyId, (tx) =>
+      tx.membership.update({
+        where: { id: membership.id },
+        data: {
+          planIdSolicitado: planDestino.id,
+          ...(yaPedido
+            ? {}
+            : {
+                comprobanteUrl: null,
+                comprobanteNota: null,
+                metodoPagoId: null,
+                rechazadoReason: null,
+              }),
+        },
+      })
+    )
+
+    revalidatePath('/mis-membresias')
+    revalidatePath(`/membresia/${membership.id}`)
+    revalidatePath('/cliente/planes')
+    revalidateTag(NAV_CLIENTE_TAG, 'max')
+    return { success: true }
+  } catch (e) {
+    console.error('[membresia] solicitarCambioPlan error:', e)
+    return { error: 'Ocurrió un error inesperado. Intenta de nuevo.' }
   }
 }
 

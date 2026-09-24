@@ -471,6 +471,9 @@ enum MembresiaEventoTipo {
   CANCELADA
   VENCIDA
   RECHAZADA
+  /// Ajuste manual: vigencia extendida/movida o lavados corregidos. Antes vivía
+  /// solo como nota de auditoría y el ciclo de vida no lo veía (reportes F2).
+  AJUSTADA
 }
 
 /// Quién provocó el evento. No es el rol de quien lo hizo: es el CAMINO por el

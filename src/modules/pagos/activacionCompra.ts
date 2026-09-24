@@ -10,6 +10,7 @@
  */
 
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { consumirCupoPromocion } from '@/modules/promociones/cupo'
 import { crearNotificacion } from '@/modules/notificaciones/service'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { procesarReferidoCompletado } from '@/modules/referidos/actions'
@@ -81,15 +82,11 @@ export async function activarCompraPromocion(
 
   try {
     await conEmpresa(cid, async (tx) => {
-      // Cupo atómico: `canjes` cuenta ventas activadas contra `maxCanjes`.
-      // Guard en SQL para que dos aprobaciones concurrentes no sobrevendan.
-      const cupo = await tx.$queryRaw<{ id: string }[]>`
-        UPDATE "promociones" SET "canjes" = "canjes" + 1
-         WHERE "id" = ${promo.id}
-           AND ("maxCanjes" IS NULL OR "canjes" < "maxCanjes")
-        RETURNING "id"
-      `
-      if (cupo.length === 0) throw new Error('CUPO_AGOTADO')
+      // Cupo atómico: `canjes` cuenta entregas contra `maxCanjes`. La consulta
+      // vivía aquí; se mudó a `promociones/cupo.ts` cuando las recompensas del
+      // Growth Engine pasaron a descontar también. Dos copias de un guard de
+      // concurrencia son dos sitios donde arreglarlo, y solo se arregla uno.
+      if (!(await consumirCupoPromocion(tx, promo.id))) throw new Error('CUPO_AGOTADO')
 
       // Guard anti-doble-activación (mismo patrón que el QR de un solo uso).
       const upd = await tx.productoCompra.updateMany({

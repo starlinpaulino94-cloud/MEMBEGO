@@ -1,0 +1,34 @@
+-- ============================================================================
+-- REPORTES · QUÉ CIFRAS VE CADA QUIEN  (rediseño de reportes · Fase 11)
+-- ============================================================================
+--
+-- El resumen ejecutivo del índice enseña las mismas cinco cifras a todo el
+-- mundo. A quien lleva el mostrador, «cobros de membresías» no le dice nada el
+-- lunes por la mañana; a quien lleva las cuentas, «entregas sin cobro» es
+-- ruido. Cinco tarjetas donde dos sobran hacen que las tres que importan se
+-- lean peor.
+--
+-- La preferencia es de la PERSONA, no de la empresa: dos empleados del mismo
+-- negocio miran cosas distintas, y una configuración única obligaría a que uno
+-- de los dos aguantara la del otro.
+--
+-- FORMA DEL SOBRE, y por qué guarda lo oculto y no lo visible:
+--
+--   {"v":1,"ocultas":["entregas"],"orden":["ventas","ingresosCaja",…]}
+--
+-- Si guardara las que SÍ se ven, la cifra que se añada mañana no estaría en
+-- ningún sobre ya guardado y quedaría escondida para todo el que hubiera
+-- personalizado alguna vez, sin que nada fallara. Guardando lo oculto, lo que
+-- no se nombra se enseña.
+--
+-- Va en `users` y no en una tabla aparte porque es exactamente el mismo caso
+-- que `users.permisos`: un ajuste por persona, pequeño, que siempre se lee
+-- junto al usuario. Una tabla nueva añadiría un JOIN a cada carga del panel
+-- para guardar un objeto de dos listas.
+--
+-- Idempotente y no destructivo: solo AÑADE una columna que admite nulos.
+-- `null` significa «de fábrica», que es lo que ve todo el mundo hoy, así que
+-- aplicar esto no cambia ninguna pantalla hasta que alguien personalice.
+-- ============================================================================
+
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "preferenciasReportes" JSONB;

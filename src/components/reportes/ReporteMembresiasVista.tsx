@@ -1,9 +1,16 @@
 import Link from 'next/link'
+import { formatoEntero } from '@/modules/reportes/formato'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { ReporteMembresias } from '@/modules/reportes/membresias'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
+import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
+import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
+import { GraficoRanking } from '@/components/reportes/graficos/GraficoRanking'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -11,11 +18,16 @@ import { EmptyState } from '@/components/ui/empty-state'
 /**
  * CICLO DE VIDA DE LAS MEMBRESÍAS.
  *
- * Sin gráficas, y es una decisión, no una carencia: `ResponsiveContainer` de
- * Recharts sale en blanco en `@media print` —está documentado en
- * `docs/REPORTES.md`— y este reporte se imprime más de lo que se mira. Las
- * tablas dicen lo mismo, se imprimen bien y además son la alternativa textual
- * para un lector de pantalla.
+ * Durante mucho tiempo esta pantalla NO tuvo gráficas, y estaba escrito aquí
+ * que era una decisión: `ResponsiveContainer` de Recharts sale en blanco en
+ * `@media print`, y este reporte se imprime más de lo que se mira.
+ *
+ * El problema era real; la conclusión, ya no. `PanelGrafico` **exige** la tabla
+ * equivalente además del gráfico, así que el papel sale con los mismos números
+ * de siempre. Y aquí la forma importa de verdad: altas y bajas dibujadas juntas
+ * enseñan en un vistazo si el mes creció o solo se movió, que es lo que dos
+ * cifras sueltas no dicen. Las tablas no se han quitado de ningún sitio: están
+ * dentro del panel.
  *
  * Cada cifra lleva su enlace al detalle. Un número que no se puede abrir hasta
  * las filas que lo producen no es un reporte: es una afirmación.
@@ -39,11 +51,25 @@ export function ReporteMembresiasVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+  const fEntero = formatoEntero(null)
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
+  const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
   const detalle = (tipo: string) =>
     `/admin/reportes/membresias/detalle?tipo=${tipo}${qs ? `&${qs.slice(1)}` : ''}`
 
   const hayMovimiento =
-    r.activadas.valor + r.renovadas.valor + r.canceladas.valor + r.vencidas.valor > 0
+    r.activadas.valor +
+      r.renovadas.valor +
+      r.canceladas.valor +
+      r.vencidas.valor +
+      r.creadas.valor +
+      r.rechazadas.valor +
+      r.ajustadas.valor >
+    0
   const cambios = r.cambiosDePlan
   const totalCambios = cambios.subida + cambios.bajada + cambios.lateral + cambios.desconocido
 
@@ -83,6 +109,26 @@ export function ReporteMembresiasVista({
         <KpiReporte label="Renovaciones" kpi={r.renovadas} formato={entero} />
         <KpiReporte label="Cancelaciones" kpi={r.canceladas} formato={entero} invertido />
         <KpiReporte label="Vencimientos" kpi={r.vencidas} formato={entero} invertido />
+      </div>
+
+      {/* El RESTO del ciclo, que la tabla ya guardaba y el reporte callaba:
+          nacimientos pendientes, pagos rechazados y ajustes manuales (vigencia
+          extendida, lavados corregidos). */}
+      <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
+        <KpiReporte label="Creadas (pendientes de pago)" kpi={r.creadas} formato={entero} />
+        <KpiReporte label="Pagos rechazados" kpi={r.rechazadas} formato={entero} invertido />
+        <KpiReporte label="Ajustes manuales" kpi={r.ajustadas} formato={entero} />
+      </div>
+
+      {/* El detalle no puede vivir escondido en una nota al pie: es LA pantalla
+          que responde «¿cuándo, a quién y quién lo hizo?». */}
+      <div className="print:hidden">
+        <Link
+          href={detalle('RENOVADA')}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-small font-semibold text-primary hover:bg-muted/40"
+        >
+          Ver el detalle evento por evento: quién, cuándo y por qué →
+        </Link>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2 print:gap-2">
@@ -138,19 +184,33 @@ export function ReporteMembresiasVista({
             )}
           </section>
 
-          <section>
-            <SectionHeader title="Por plan" />
-            <Tabla
-              encabezados={['Plan', 'Activaciones', 'Renovaciones', 'Bajas']}
-              filas={r.porPlan.map((p) => [
-                p.plan,
-                entero(p.activadas),
-                entero(p.renovadas),
-                entero(p.bajas),
-              ])}
-              vacio="Ningún plan tuvo movimiento en el periodo."
-            />
-          </section>
+          <PanelGrafico
+            titulo="Qué planes se mueven"
+            pregunta="¿Dónde está pasando el ciclo de vida?"
+            periodo={periodo}
+            nota="La barra mide activaciones MÁS renovaciones —el movimiento de entrada—, que es el mismo orden en el que el motor devuelve la tabla. Las bajas no se restan de la barra: van en su columna, porque un plan con mucho movimiento en los dos sentidos no es lo mismo que uno tranquilo."
+            grafico={
+              <GraficoRanking
+                filas={r.porPlan.map((p) => ({
+                  nombre: p.plan,
+                  valor: p.activadas + p.renovadas,
+                }))}
+                formato={fEntero}
+              />
+            }
+            tabla={
+              <Tabla
+                encabezados={['Plan', 'Activaciones', 'Renovaciones', 'Bajas']}
+                filas={r.porPlan.map((p) => [
+                  p.plan,
+                  num(p.activadas, entero(p.activadas)),
+                  num(p.renovadas, entero(p.renovadas)),
+                  num(p.bajas, entero(p.bajas)),
+                ])}
+                vacio="Ningún plan tuvo movimiento en el periodo."
+              />
+            }
+          />
 
           {r.motivos.length > 0 && (
             <section>
@@ -160,22 +220,40 @@ export function ReporteMembresiasVista({
               />
               <Tabla
                 encabezados={['Motivo', 'Veces']}
-                filas={r.motivos.map((m) => [m.motivo, entero(m.total)])}
+                filas={r.motivos.map((m) => [m.motivo, num(m.total, entero(m.total))])}
                 vacio=""
               />
             </section>
           )}
 
-          <section>
-            <SectionHeader title="Día a día" />
-            <Tabla
-              encabezados={['Día', 'Activaciones', 'Renovaciones', 'Bajas']}
-              filas={r.serie
-                .filter((p) => p.activadas + p.renovadas + p.bajas > 0)
-                .map((p) => [p.dia, entero(p.activadas), entero(p.renovadas), entero(p.bajas)])}
-              vacio="Sin movimiento diario en el periodo."
-            />
-          </section>
+          <PanelGrafico
+            titulo="Altas y bajas, día a día"
+            pregunta="¿El mes creció, o solo se movió?"
+            periodo={periodo}
+            nota="La línea punteada son las bajas —canceladas y vencidas juntas—. Cuando se acerca a la de altas, el negocio está reponiendo, no creciendo. Las renovaciones no entran en el dibujo porque no cambian el tamaño de la base: van en la tabla."
+            grafico={
+              <GraficoTendencia
+                datos={serie.map((p) => ({ dia: p.dia, valor: p.activadas, anterior: p.bajas }))}
+                etiqueta="Activaciones"
+                etiquetaAnterior="Bajas"
+                formato={fEntero}
+              />
+            }
+            tabla={
+              <Tabla
+                encabezados={['Día', 'Activaciones', 'Renovaciones', 'Bajas']}
+                filas={serie
+                  .filter((p) => p.activadas + p.renovadas + p.bajas > 0)
+                  .map((p) => [
+                    p.dia,
+                    num(p.activadas, entero(p.activadas)),
+                    num(p.renovadas, entero(p.renovadas)),
+                    num(p.bajas, entero(p.bajas)),
+                  ])}
+                vacio="Sin movimiento diario en el periodo."
+              />
+            }
+          />
         </>
       )}
 
@@ -200,6 +278,18 @@ export function ReporteMembresiasVista({
         <Link href={detalle('CAMBIO_PLAN')} className="underline">
           cambios de plan
         </Link>
+        {' · '}
+        <Link href={detalle('AJUSTADA')} className="underline">
+          ajustes
+        </Link>
+        {' · '}
+        <Link href={detalle('CREADA')} className="underline">
+          creadas
+        </Link>
+        {' · '}
+        <Link href={detalle('RECHAZADA')} className="underline">
+          rechazadas
+        </Link>
       </p>
     </ReporteImprimible>
   )
@@ -211,52 +301,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

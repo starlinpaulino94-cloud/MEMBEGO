@@ -1,7 +1,15 @@
+import Link from 'next/link'
+import { formatoEntero } from '@/modules/reportes/formato'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
+import { serieParaGrafico } from '@/modules/reportes/serie'
 import type { FilaOperacion, ReporteOperacion } from '@/modules/reportes/operacion'
+import { TablaReporte as Tabla } from '@/components/reportes/TablaReporte'
+import { num } from '@/modules/reportes/tabla'
 import { KpiReporte } from '@/components/reportes/KpiReporte'
+import { PanelGrafico } from '@/components/reportes/graficos/PanelGrafico'
+import { GraficoTendencia } from '@/components/reportes/graficos/GraficoTendencia'
+import { GraficoRanking } from '@/components/reportes/graficos/GraficoRanking'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
 import { StatusBanner } from '@/components/ui/status-banner'
@@ -10,11 +18,17 @@ import { EmptyState } from '@/components/ui/empty-state'
 /**
  * OPERACIÓN.
  *
- * Sin gráficas, y es una decisión, no una carencia: `ResponsiveContainer` de
- * Recharts sale en blanco en `@media print` —está documentado en
- * `docs/REPORTES.md`— y este reporte se imprime más de lo que se mira, porque
- * quien lo usa lo usa para cuadrar el turno. Las tablas dicen lo mismo, se
- * imprimen bien y son la alternativa textual para un lector de pantalla.
+ * Durante mucho tiempo esta pantalla NO tuvo gráficas, y estaba escrito aquí
+ * que era una decisión: `ResponsiveContainer` de Recharts sale en blanco en
+ * `@media print`, y este reporte se imprime más de lo que se mira porque quien
+ * lo usa lo usa para cuadrar el turno.
+ *
+ * El problema era real; la conclusión, ya no. `PanelGrafico` existe justo para
+ * eso: **exige** la tabla equivalente además del gráfico, así que la hoja sale
+ * con los mismos números de siempre y la pantalla gana la forma —un pico, una
+ * caída— que una columna de cifras no enseña. Las tablas no se han quitado de
+ * ningún sitio: están dentro del panel, y siguen siendo la alternativa textual
+ * para un lector de pantalla.
  *
  * El desglose por empleado puede no venir: sin el permiso `ver_empleados` la
  * consulta ni se lanza. En ese caso la sección no se pinta vacía —se dice por
@@ -25,6 +39,7 @@ export function ReporteOperacionVista({
   rango,
   empresa,
   generadoEn,
+  qs,
   eyebrow,
   controles,
 }: {
@@ -32,10 +47,33 @@ export function ReporteOperacionVista({
   rango: Rango
   empresa: string
   generadoEn: string
+  /** Query string del rango y los filtros, para que el detalle abra igual. */
+  qs?: string
   eyebrow?: React.ReactNode
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+  const fEntero = formatoEntero(null)
+  const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
+
+  // La serie se pliega a la granularidad del periodo: un año en días son 365
+  // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
+  // la base, así que la semana nunca puede discrepar del día.
+  const serie = serieParaGrafico(r.serie, rango.granularidad)
+  const detalle = (vista: string) =>
+    `/admin/reportes/operacion/detalle?vista=${vista}${qs ? `&${qs}` : ''}`
+
+  // El recorte se lee con NOMBRES, y viene del reporte, no de la URL: si un id
+  // pedido no se aplicó (inventado, de otra empresa, sin permiso), aquí no
+  // sale, y así la pantalla nunca dice un filtro que los números no llevan.
+  const filtroEtiqueta = r.filtro
+    ? [
+        r.filtro.sucursal && `la sucursal «${r.filtro.sucursal.nombre}»`,
+        r.filtro.empleado && `el empleado «${r.filtro.empleado.nombre}»`,
+      ]
+        .filter(Boolean)
+        .join(' y ')
+    : null
 
   return (
     <ReporteImprimible
@@ -53,6 +91,15 @@ export function ReporteOperacionVista({
       }
     >
       {eyebrow && <div className="print:hidden">{eyebrow}</div>}
+
+      {/* Se imprime a propósito: un papel con cifras filtradas y sin la línea
+          que lo dice sería indistinguible del reporte de toda la empresa. */}
+      {filtroEtiqueta && (
+        <p className="rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-small text-foreground print:border-black">
+          <span className="font-semibold">Filtrado:</span> solo {filtroEtiqueta}. Todas las
+          cifras, la comparación y la serie llevan el recorte.
+        </p>
+      )}
 
       {r.incompleto && (
         <StatusBanner variant="warning" title="El reporte está incompleto">
@@ -85,6 +132,18 @@ export function ReporteOperacionVista({
         />
       </div>
 
+      {/* El detalle no puede vivir escondido: es LA pantalla que responde
+          «¿quién canjeó, cuándo y qué servicio?». Un número que no se puede
+          abrir hasta sus filas es una afirmación, no un reporte. */}
+      <div className="print:hidden">
+        <Link
+          href={detalle('CANJES')}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-small font-semibold text-primary hover:bg-muted/40"
+        >
+          Ver el detalle canje por canje: quién, cuándo y qué servicio →
+        </Link>
+      </div>
+
       {r.canjes.valor === 0 ? (
         <EmptyState
           title="Sin canjes en este periodo"
@@ -92,10 +151,47 @@ export function ReporteOperacionVista({
         />
       ) : (
         <>
-          <section>
-            <SectionHeader title="Por sucursal" />
-            <TablaOperacion filas={r.porSucursal} columna="Sucursal" entero={entero} />
-          </section>
+          <PanelGrafico
+            titulo="Canjes, día a día"
+            pregunta="¿El mostrador va parejo, o todo se acumula en dos días?"
+            periodo={periodo}
+            nota="La línea punteada son los canjes que descontaron un uso. La distancia entre las dos líneas son las cortesías y los planes ilimitados."
+            grafico={
+              <GraficoTendencia
+                datos={serie.map((p) => ({ dia: p.dia, valor: p.canjes, anterior: p.descontados }))}
+                etiqueta="Canjes"
+                etiquetaAnterior="Descontaron un uso"
+                formato={fEntero}
+              />
+            }
+            tabla={
+              <Tabla
+                encabezados={['Día', 'Canjes', 'Descontaron']}
+                filas={serie
+                  .filter((p) => p.canjes > 0)
+                  .map((p) => [
+                    p.dia,
+                    num(p.canjes, entero(p.canjes)),
+                    num(p.descontados, entero(p.descontados)),
+                  ])}
+                vacio="Sin canjes diarios en el periodo."
+              />
+            }
+          />
+
+          <PanelGrafico
+            titulo="Dónde se canjea"
+            pregunta="¿Qué mostradores mueven el volumen?"
+            periodo={periodo}
+            nota="«(sin asignar)» son visitas registradas antes de que la app guardara la sucursal. No se esconden: si se escondieran, los subtotales dejarían de sumar el total."
+            grafico={
+              <GraficoRanking
+                filas={r.porSucursal.map((f) => ({ nombre: f.nombre, valor: f.canjes }))}
+                formato={fEntero}
+              />
+            }
+            tabla={<TablaOperacion filas={r.porSucursal} columna="Sucursal" entero={entero} />}
+          />
 
           <section>
             <SectionHeader
@@ -120,16 +216,6 @@ export function ReporteOperacionVista({
             <TablaOperacion filas={r.porServicio} columna="Beneficio" entero={entero} />
           </section>
 
-          <section>
-            <SectionHeader title="Día a día" />
-            <Tabla
-              encabezados={['Día', 'Canjes', 'Descontaron']}
-              filas={r.serie
-                .filter((p) => p.canjes > 0)
-                .map((p) => [p.dia, entero(p.canjes), entero(p.descontados)])}
-              vacio="Sin canjes diarios en el periodo."
-            />
-          </section>
         </>
       )}
 
@@ -138,15 +224,24 @@ export function ReporteOperacionVista({
           title="Códigos QR"
           description="Sale de la bitácora, no de las visitas: por eso puede no cuadrar con los canjes de arriba. Un QR se genera al activar una membresía y al terminar cada canje."
         />
-        <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3">
-          <Celda label="Generados" valor={entero(r.qrGenerados)} />
-          <Celda label="Usados" valor={entero(r.qrUsados)} />
-          <Celda
-            label="Compartidos"
-            valor={entero(r.qrCompartidos)}
-            nota="Compartir no consume el código"
-          />
-        </div>
+        {r.filtro ? (
+          // Un total de empresa pintado bajo un reporte filtrado sería un
+          // número mentiroso; mejor decir por qué no está.
+          <p className="text-small text-muted-foreground">
+            Con un filtro activo los QR no se enseñan: la bitácora no guarda ni la sucursal ni el
+            empleado, así que no hay forma de repartirlos. Quita el filtro para verlos.
+          </p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3">
+            <Celda label="Generados" valor={entero(r.qrGenerados)} />
+            <Celda label="Usados" valor={entero(r.qrUsados)} />
+            <Celda
+              label="Compartidos"
+              valor={entero(r.qrCompartidos)}
+              nota="Compartir no consume el código"
+            />
+          </div>
+        )}
       </section>
 
       <section>
@@ -158,6 +253,25 @@ export function ReporteOperacionVista({
           <Celda label="Revertidas en el periodo" valor={entero(r.revertidas)} />
         </div>
       </section>
+
+      <p className="print:hidden text-caption text-muted-foreground">
+        Abre el detalle de cada cifra:{' '}
+        <Link href={detalle('CANJES')} className="underline">
+          canjes
+        </Link>
+        {' · '}
+        <Link href={detalle('DESCONTADOS')} className="underline">
+          descontaron un uso
+        </Link>
+        {' · '}
+        <Link href={detalle('SIN_DESCONTAR')} className="underline">
+          sin descontar
+        </Link>
+        {' · '}
+        <Link href={detalle('REVERTIDAS')} className="underline">
+          revertidas
+        </Link>
+      </p>
     </ReporteImprimible>
   )
 }
@@ -174,7 +288,7 @@ function TablaOperacion({
   return (
     <Tabla
       encabezados={[columna, 'Canjes', 'Descontaron']}
-      filas={filas.map((f) => [f.nombre, entero(f.canjes), entero(f.descontados)])}
+      filas={filas.map((f) => [f.nombre, num(f.canjes, entero(f.canjes)), num(f.descontados, entero(f.descontados))])}
       vacio="Sin canjes en el periodo."
     />
   )
@@ -186,52 +300,6 @@ function Celda({ label, valor, nota }: { label: string; valor: string; nota?: st
       <p className="text-overline">{label}</p>
       <p className="mt-1 text-h3 tabular-nums text-foreground">{valor}</p>
       {nota && <p className="mt-0.5 text-caption text-muted-foreground">{nota}</p>}
-    </div>
-  )
-}
-
-function Tabla({
-  encabezados,
-  filas,
-  vacio,
-}: {
-  encabezados: string[]
-  filas: string[][]
-  vacio: string
-}) {
-  if (filas.length === 0) {
-    return vacio ? <p className="text-small text-muted-foreground">{vacio}</p> : null
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-small">
-        <thead>
-          <tr className="border-b border-border text-left">
-            {encabezados.map((h, i) => (
-              <th
-                key={h}
-                className={`py-2 text-overline ${i === 0 ? '' : 'text-right tabular-nums'}`}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((fila) => (
-            <tr key={fila.join('|')} className="border-b border-border/60">
-              {fila.map((celda, i) => (
-                <td
-                  key={i}
-                  className={`py-2 ${i === 0 ? 'text-foreground' : 'text-right tabular-nums text-foreground'}`}
-                >
-                  {celda}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

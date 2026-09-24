@@ -31,6 +31,31 @@ Altos de la §3 lo llevaría a ~55 % con unas 6–8 semanas de trabajo. La parid
 real (§5) es un programa de 6–9 meses, y buena parte de él no debería hacerse:
 la §6 propone qué copiar y qué no.
 
+### 0.1 · Estado de los hallazgos (actualizado 2026-09-17)
+
+Casi todos los hallazgos de la §3 quedaron cerrados en las tandas posteriores a
+la auditoría. El detalle vive en cada sección (`✅ RESUELTO`); este es el mapa.
+
+| Grupo | Estado |
+|---|---|
+| **A-1 … A-7** (reintentos, firma+timestamp, panel de entregas, selector de eventos, fan-out paralelo, rotación de secretos) | ✅ cerrados |
+| **A-8/A-9/A-10** (SMS, correo desde el dominio, calendario bidireccional) | 🔵 Fase 3 (canales), pendientes |
+| **B-1, B-2, B-6** (webhook entrante + acción HTTP, app de Zapier, paginación por cursor) | ✅ cerrados |
+| **B-3** (salud activa de conexiones) | ✅ cerrado — caducidad local + inspección activa vía `debug_token` para el token de sistema de WhatsApp |
+| **B-4** (catálogo de eventos) | ◐ ampliado (7→~20) y con ciclo de membresía y `cita.cancelada`; citas/pagos esperan su flujo |
+| **B-5** (CRUD de la API pública) | ✅ cerrado — editar, listar, **cancelar cita** (`POST …/cancel`) y **borrar** (`DELETE`) |
+| **B-7** (métricas de uso por credencial) | ✅ cerrado — integrador Y vista del superadmin (pestaña «Uso de la API») |
+| **B-8** (deuda legado `SistemaConectado`) | 🟡 documentada; contracción no programada |
+| **Barrido de bugs ocultos** (SSRF, listados que callaban, guard por-petición, rate-limit, fan-out idempotente + lease, compare-and-set) | ✅ cerrados (#1–#5, #7, #8) |
+| **Seguridad · concurrencia de salida por empresa** | ✅ cerrado (`enParaleloPorClave`) |
+| **Seguridad · alerta de fuga de clave** | ✅ cerrado (endpoint firmado de GitHub Secret Scanning) |
+| **Aislamiento RLS en base** | ◐ código listo (Fase 0); falta el cutover operativo — `docs/runbooks/rls-encender.md` |
+
+**Lo que queda, por tamaño:** el cutover de RLS (operativo, con runbook), la
+«versión fuerte» de RLS (segundo rol para `sinEmpresa`), y las Fases 3–4 (canales
+SMS/correo/calendario y el marketplace de terceros), que son el grueso del camino
+a paridad.
+
 ---
 
 ## 1. Lo que está bien, y hay que proteger
@@ -114,12 +139,13 @@ que prometen.
 
 ### 2.3 Eventos
 
-- **8 eventos se reenvían a satélites** (`integraciones/nucleo.ts`,
+- **10 eventos se reenvían a satélites** (`integraciones/nucleo.ts`,
   `EVENTOS_REENVIADOS`): registro, edición de cliente, primera visita, visita,
-  compra, primera compra, membresía activada, referido convertido. Estrecho a
-  propósito: un satélite no debe recibir lo que no atiende.
-- **~18 eventos son elegibles por un webhook de empresa** (B-4,
-  `EVENTOS_EMITIDOS`): los ocho de arriba más las promociones
+  compra, primera compra, membresía activada/cancelada/vencida, referido
+  convertido. Estrecho a propósito: solo los hechos que un satélite atiende y las
+  proyecciones CORE que mantiene.
+- **~20 eventos son elegibles por un webhook de empresa** (B-4,
+  `EVENTOS_EMITIDOS`): los de arriba más las promociones
   (creada/actualizada/eliminada/duplicada/activada/pausada/archivada), el mensaje
   entrante, el prospecto creado, el invitado registrado y la reserva pagada.
   Antes de B-4 estos ya llegaban a quien se suscribía a «todo», pero con su
@@ -128,8 +154,7 @@ que prometen.
   quedan reservados en el mapa hasta que su flujo los dispare.
 - El propio código sigue listando lo que falta: `eventosDeProyeccionSinEmisor()`
   (`modules/plataforma/eventos.ts`) enumera los eventos que el contrato de
-  proyección exige y el bus aún no emite (citas, sucursales, empresa, membresía
-  cancelada/vencida, vehículos).
+  proyección exige y el bus aún no emite (citas, sucursales, empresa, vehículos).
 - GoHighLevel expone del orden de **30–40 tipos** de webhook.
 
 ---
@@ -558,7 +583,7 @@ integraciones» sin escribir ninguna. **Esfuerzo: 1 semana.**
 
 </details>
 
-### ◐ B-3 · Salud activa de las conexiones — HECHO por caducidad local (17/09/2026)
+### ✅ B-3 · Salud activa de las conexiones — RESUELTO (caducidad local + `debug_token`) (18/09/2026)
 
 > **Hecho.** El estado de una conexión ya no cambia solo cuando un envío falla:
 > un chequeo diario mira la caducidad de las credenciales SIN refresco de
@@ -585,13 +610,20 @@ integraciones» sin escribir ninguna. **Esfuerzo: 1 semana.**
 > su botón «Reconectar», antes de que se rompa. El cron limpia el aviso cuando la
 > conexión vuelve a estar sana.
 >
-> **Falta, a propósito:** la inspección ACTIVA vía `debug_token` para las
-> conexiones cuya caducidad NO se guardó (el token de sistema de WhatsApp, que se
-> guarda sin `expiresAt`). Requiere descifrar el token y llamar a Meta por
-> conexión —una dependencia externa y frágil dentro de un cron—, y su valor
-> incremental sobre el chequeo local es pequeño: la mayoría de lo que caduca de
-> verdad (Facebook Login, acceso a datos) ya se cubre por la fecha guardada. Las
-> piezas para hacerlo existen (`inspeccionarToken`, `pideReautorizar`).
+> **Cerrada la inspección ACTIVA (18/09/2026).** El token de sistema de WhatsApp
+> se guarda sin `expiresAt` —no vence por fecha, pero SÍ se invalida si quien lo
+> emitió pierde el acceso—, así que el chequeo local no puede juzgarlo. Ahora
+> `inspeccionarSaludWhatsapp` (`salud-whatsapp.ts`) le pregunta a Meta con
+> `debug_token` y marca `reautorizarAt` con la MISMA máquina que el chequeo local
+> (`transicionSalud` sobre `pideReautorizar`). Vive en su propio archivo, aparte
+> del chequeo local, para que la promesa de aquel —«nunca llama a un proveedor»—
+> siga siendo cierta y comprobable.
+>
+> Por ser externa y frágil, va acotada como los barridos: **nunca decide sin
+> respuesta de Meta** (un apagón de Meta no traduce a «reconéctate» para todas las
+> empresas: se reintenta mañana), corre acotada por concurrencia y por tiempo, y
+> va la ÚLTIMA del cron —si la plataforma corta la función, lo único que se pierde
+> es esto, lo menos urgente—.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -645,17 +677,27 @@ no hay nada que lo encienda a tiempo. **Esfuerzo: 3–4 días.**
 > una edición y desfasada tras la otra, el peor de los mundos porque parece que
 > funciona. Es el único de la lista que además se reenvía a satélites, por eso.
 >
-> **Sigue pendiente, a propósito:** cita creada/movida/cancelada, pago
-> recibido/fallido y membresía cancelada/vencida NO se conectaron. La razón es la
-> regla que este mismo hallazgo defiende: un evento entra al catálogo solo cuando
-> tiene un emisor REAL en el código. Esos flujos aún no disparan nada en el bus
-> (`membresia.cancelada` es una constante que nadie emite; no hay módulo de citas
-> que emita), y meter su nombre sin emisor recrea el problema de B-4 al revés —una
-> casilla que no recibe nada y una tarde buscando por qué—. Se emitirán cuando el
-> flujo que los produce exista. `eventosDeProyeccionSinEmisor()` los sigue listando
-> para que ese hueco sea visible y no una sorpresa. `reserva.creada` y
-> `venta.generada` quedan igual: nombres reservados en el mapa, fuera del catálogo
-> hasta que su flujo los dispare.
+> **Después se conectó la membresía (18/09/2026).** `membresia.cancelada` y
+> `membresia.vencida` YA se emiten: la baja de una membresía se registraba en su
+> historia y nunca llegaba a un satélite ni a un webhook, así que la proyección
+> `MembershipSummary` se quedaba diciendo «activa» algo cancelado o vencido. Se
+> emiten desde los CUATRO flujos que producen la baja —el vencimiento automático
+> del cron (el más común), la cancelación desde el panel de empresa, la
+> cancelación desde superadmin y la desactivación manual— por un mapa único
+> (`emitirCambioMembresiaAlBus`) para que ninguno diga algo distinto del mismo
+> hecho. Como `customer.updated`, van también a satélites: son proyección CORE.
+> `ACTIVADA` no entra en ese mapa —ya la emite el punto de activación con su
+> payload rico, y meterla ahí la emitiría dos veces—.
+>
+> **Sigue pendiente, a propósito:** cita creada/movida/cancelada y pago
+> recibido/fallido. La razón es la regla que este hallazgo defiende: un evento
+> entra al catálogo solo cuando tiene un emisor REAL. Esos flujos aún no existen
+> en el bus (no hay módulo de citas ni de pagos que emita), y meter su nombre sin
+> emisor recrea el problema al revés —una casilla que no recibe nada—. Se emitirán
+> cuando el flujo que los produce exista; `eventosDeProyeccionSinEmisor()` los
+> sigue listando para que el hueco sea visible. `reserva.creada` y `venta.generada`
+> quedan igual: nombres reservados en el mapa, fuera del catálogo hasta que su
+> flujo los dispare.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -673,7 +715,7 @@ una sorpresa a los tres meses — buena decisión, pero la lista sigue sin vacia
 
 </details>
 
-### ◐ B-5 · Editar clientes HECHO; cancelar citas y borrar, pendientes (17/09/2026)
+### ✅ B-5 · CRUD completo de la API pública — RESUELTO (17/09/2026)
 
 > **Hecho, con una decisión de producto detrás.** La API ya no es solo lectura y
 > alta: `PATCH /customers/{id}` edita la ficha de contacto de un cliente, y
@@ -696,9 +738,27 @@ una sorpresa a los tres meses — buena decisión, pero la lista sigue sin vacia
 > recalcula, y escribirlo también aquí sería una segunda verdad que se olvida y
 > rompe la búsqueda.
 >
-> **Sigue pendiente:** cancelar una cita (una máquina de estados propia, no un
-> simple PATCH) y borrar un cliente (cascada + cumplimiento). Se dejaron fuera a
-> propósito: cada una es su propio riesgo y merece su propia conversación.
+> **Cerrado (17/09/2026):** las dos piezas que faltaban, cada una con su riesgo.
+>
+> **Cancelar una cita** (`POST /appointments/{id}/cancel`, scope
+> `appointments:manage`) es una transición de la máquina de estados, no un
+> borrado —por eso una acción con nombre y no un `DELETE`—: pasa a `CANCELADA`
+> conservando quién y por qué, es idempotente (repetir devuelve `applied:false`),
+> y un estado terminal (COMPLETADA/NO_ASISTIO) es `no_cancelable`. La decisión
+> que evita divergencia: un SOLO emisor del evento `cita.cancelada`, lo cancele
+> quien lo cancele —el panel, el cliente o la API—, con el mismo helper (como el
+> ciclo de membresía en B-4). No se reenvía a satélites: no hay contrato de
+> proyección de agenda como el de Customer.
+>
+> **Borrar un cliente** (`DELETE /customers/{id}`, scope PROPIO `customers:delete`,
+> separado de `:manage` porque borrar no es editar) purga la ficha y todo lo suyo
+> en cascada y anula sus transacciones (reusa `purgarClienteRow`, el mismo
+> cumplimiento que el borrado del superadmin). La frontera clave: borra la
+> RELACIÓN de la empresa, NO la cuenta global de la persona —una clave de empresa
+> no alcanza la identidad de alguien que quizá es cliente de otro negocio; eso es
+> del superadmin—. Emite `customer.deleted` a satélites, cerrando el ciclo
+> created/updated/deleted de la proyección de Customer para que nadie se quede con
+> un cliente fantasma.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -750,7 +810,7 @@ se lleva 500 y no se entera. **Esfuerzo: 1 semana.**
 
 </details>
 
-### ◐ B-7 · Métricas de uso por credencial — HECHO para el integrador (17/09/2026)
+### ✅ B-7 · Métricas de uso por credencial — RESUELTO (integrador + superadmin) (17/09/2026)
 
 > **Hecho.** De cada credencial se sabía una sola cosa —`lastUsedAt`, cuándo se
 > usó por última vez—. Ahora hay un AGREGADO DIARIO por credencial: peticiones
@@ -781,14 +841,19 @@ se lleva 500 y no se entera. **Esfuerzo: 1 semana.**
 > la petición, como `anotarUsoClave` y la bitácora. Un fallo de telemetría no
 > añade latencia ni tumba una llamada de la API.
 >
-> **Falta, a propósito:** la vista del SUPERADMIN sobre las credenciales de
-> satélite. El dato ya se recoge (`origen: 'SISTEMA'`) y la lectura existe
-> (`usoDeSistema`), pero la PANTALLA del superadmin se dejó fuera de este corte:
-> la superficie de más valor —y la que la auditoría citaba con su nota— es la del
-> integrador, y es la que se cerró. Tampoco se capturan los 4xx/5xx del cuerpo del
-> handler (validación, no encontrado): se miden en el borde de auth, que es lo que
-> caracteriza la salud de UNA credencial; añadir el estado del handler exigiría
-> envolver las ~25 rutas, y eso es su propio cambio.
+> **Cerrada la vista del SUPERADMIN (17/09/2026).** Nueva pestaña «Uso de la API»
+> en el hub de integraciones (`/superadmin/integraciones/uso`): una tarjeta por
+> satélite con sus llamadas, su tasa de error y sus endpoints más usados, en una
+> ventana de 7/30/90 días. Agrega POR SISTEMA —un satélite puede tener varias
+> credenciales por rotación— con `usoDeSatelites`: dos consultas (credenciales +
+> agregado del periodo) y el cruce en memoria, por el camino omnisciente porque
+> un satélite no es de una empresa. Reusa el mismo `resumirUso` puro que la vista
+> del integrador, así que los números se calculan en un solo sitio.
+>
+> **Sigue fuera, a propósito:** los 4xx/5xx del CUERPO del handler (validación, no
+> encontrado). Se mide el desenlace en el borde de auth (OK / permiso
+> insuficiente), que es lo que caracteriza la salud de UNA credencial; capturar el
+> estado del handler exigiría envolver las ~25 rutas, y eso es su propio cambio.
 
 <details>
 <summary>El hallazgo original</summary>
@@ -820,7 +885,8 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 |---|---|
 | Secretos hasheados/sellados | ✅ scrypt, AES-256-GCM con AAD y rotación de claves maestras |
 | SSRF en webhooks salientes | ✅ `webhooksNucleo.ts:31` por nombre y rango, y `redirect: 'manual'` en los cinco caminos de salida |
-| Aislamiento multiempresa | ✅ `conEmpresa`/`sinEmpresa` con motivo obligatorio, RLS con pruebas de cobertura |
+| Aislamiento multiempresa (aplicación) | ✅ `conEmpresa`/`sinEmpresa` con motivo obligatorio; cobertura completa verificada por gate en CI |
+| Aislamiento multiempresa (RLS en base) | ◐ políticas escritas, probadas (`rls:probar` 6/6) y encendidas en las 137 tablas; el CÓDIGO está listo (Fase 0: drift de `conectores` cerrado + preflight como gate de CI). Falta el cutover operativo —cambiar `DATABASE_URL` al rol `membego_app`—, con runbook en `docs/runbooks/rls-encender.md`. Hasta entonces el aislamiento depende solo de la aplicación |
 | Uso único de token SSO | ✅ por clave primaria, sin ventana de carrera |
 | Idempotencia de escrituras | ✅ `ClaveIdempotencia` con huella SHA-256 del cuerpo |
 | Rate limit de la API | ✅ distribuido con Upstash, fail-open al local (`lib/rate-limit.ts:4`) |
@@ -828,9 +894,9 @@ el `catch` con el esquema viejo) que habrá que recordar borrar.
 | `appsecret_proof` a Meta | ✅ `meta/graph.ts:97` |
 | Firma de webhooks de empresa | ✅ v2 sobre `timestamp.entregaId.cuerpo`, con la v1 en migración |
 | Rotación de secretos | ✅ webhooks y secreto de satélite con solape de 7 días (A-7) |
-| **Rate limit de salida** | ❌ sin tope de concurrencia por empresa (A-6) |
+| Concurrencia de salida por empresa | ✅ los dos barridos acotan la concurrencia GLOBAL y POR EMPRESA (`enParaleloPorClave`, `CONCURRENCIA_POR_EMPRESA`): un inquilino con el endpoint caído ya no acapara el trabajador compartido ni amplifica contra un tercero |
 | Caducidad de credenciales | ✅ se hace cumplir en las dos rutas; el cron de salud (B-3) AVISA antes de que venza (credenciales sin refresco) |
-| **Alerta de fuga de clave** | ❌ el prefijo `mbk_` es detectable por escáneres; no hay endpoint de revocación automática |
+| Alerta de fuga de clave | ✅ endpoint firmado del GitHub Secret Scanning Partner Program (`/api/connect/secret-scanning`): revoca sola la clave filtrada tras verificar la firma ECDSA de GitHub; solo el secreto completo revoca (nunca el prefijo público) |
 
 ---
 
@@ -849,7 +915,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Número de integraciones nativas** | **1** | 5 | 5 reales vs. decenas |
 | **Marketplace de apps de terceros** | **0** | 5 | No existe el concepto (A-3) |
 | **Superficie de la API** | **4** | 5 | 29 rutas con GET/POST/PATCH/DELETE, listados paginados y un editar cliente; falta cancelar cita y borrar |
-| **Catálogo de eventos** | **3** | 5 | ~18 elegibles (bus separado de reenvío a satélite, `customer.updated` emitido); faltan citas/pagos/membresía por su flujo (B-4) |
+| **Catálogo de eventos** | **4** | 5 | ~20 elegibles; ciclo de membresía (cancelada/vencida) y `customer.updated` emitidos; faltan citas y pagos por su flujo (B-4) |
 | **Operación de webhooks (log, prueba, reenvío)** | **4** | 5 | Log, cuerpo, prueba con diagnóstico y reenvío (A-4 resuelto) |
 | **Cadencia de reintentos** | **4** | 5 | 30 s → 24 h con jitter (A-1 resuelto) |
 | Webhook entrante / acción HTTP en flujos | **4** | 5 | Circuito completo; falta el constructor de reglas con condiciones (B-1) |
@@ -859,7 +925,7 @@ Puntuación de 0 a 5 sobre lo que GHL ofrece hoy.
 | **Pasarelas de pago** | **2** | 5 | CardNET + Azul (buen encaje local) vs. Stripe/PayPal/Square/NMI/Authorize |
 | **Zapier / Make** | **4** | 5 | App de Zapier con REST Hooks; Make por OpenAPI (B-2) |
 | **Métricas de uso de la API** | **3** | 4 | Agregado diario por credencial: peticiones/día, por endpoint y tasa de error, visible en cada clave; falta la vista del superadmin (B-7) |
-| **Salud activa de conexiones** | **3** | 4 | Cron diario avisa por caducidad local antes de que un envío falle; falta la inspección activa vía `debug_token` (B-3) |
+| **Salud activa de conexiones** | **4** | 4 | Cron diario avisa antes de que un envío falle: caducidad local para todas y `debug_token` en vivo para el token de sistema de WhatsApp (B-3) |
 
 **Media ponderada ≈ 35 % de la superficie de GHL**, con una distribución muy
 marcada: MembeGo **gana** en los cimientos y **pierde** en todo lo que es
@@ -885,7 +951,7 @@ Sin esto, cada integración nueva multiplica los tickets de soporte.
 | ~~4~~ | ~~Selector de eventos en el formulario~~ ✅ hecho | 1 | A-5 |
 | ~~5~~ | ~~Fan-out encolado y en paralelo con tope~~ ✅ hecho | 2 | A-6 |
 | ~~6~~ | ~~Rotación con solapamiento — webhooks y secreto de satélite~~ ✅ hecho | 4 | A-7 |
-| ◐ 7 | Cron de salud ✅ por caducidad local → `REAUTORIZAR`; falta la inspección activa vía `debug_token` | 3 | B-3 |
+| ~~7~~ | ~~Cron de salud → `REAUTORIZAR`: caducidad local + inspección activa vía `debug_token`~~ ✅ hecho | 3 | B-3 |
 
 **Resultado: el módulo pasa de ~35 % a ~45 %** y —más importante— deja de
 generar trabajo manual por cada cliente conectado.
@@ -896,10 +962,10 @@ generar trabajo manual por cada cliente conectado.
 |---|---|:-:|---|
 | ~~8~~ | ~~Trigger de webhook entrante + acción HTTP a medida en flujos~~ ✅ hecho | 2 | B-1 |
 | ~~9~~ | ~~App de Zapier sobre lo que ya existe~~ ✅ hecho (5 disparadores, 1 búsqueda) | 1 | B-2 |
-| ◐ 10 | Catálogo de eventos ✅ ampliado (7→~18, `customer.updated` emitido) · citas/pagos/membresía pendientes de su flujo | 2 | B-4 |
-| ◐ 11 | `PATCH` cliente + `GET` listado ✅ hecho · cancelar cita y borrar, pendientes | 2 | B-5 |
+| ◐ 10 | Catálogo de eventos ✅ ampliado (7→~20, `customer.updated` y ciclo de membresía emitidos) · citas/pagos pendientes de su flujo | 2 | B-4 |
+| ~~11~~ | ~~`PATCH`/`GET` cliente, cancelar cita (`POST …/cancel`) y borrar (`DELETE`)~~ ✅ hecho | 2 | B-5 |
 | ~~12~~ | ~~Paginación por cursor en las listas de colección~~ ✅ hecho | 1 | B-6 |
-| ◐ 13 | Métricas de uso por credencial ✅ hechas para el integrador · falta la vista del superadmin | 1 | B-7 |
+| ~~13~~ | ~~Métricas de uso por credencial: integrador Y vista del superadmin (pestaña «Uso de la API»)~~ ✅ hecho | 1 | B-7 |
 
 **Resultado: ~58 %.** Aquí es donde la curva de valor por semana es más alta:
 los puntos 8 y 9 juntos cuestan tres semanas y abren, en la práctica, la
@@ -954,9 +1020,10 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   de admitir un replay con el timestamp refrescado; una empresa puede por fin
   recibir solo lo que le interesa; rotar un secreto de webhook dejó de exigir un
   corte; y el barrido dejó de drenar su primer 6 % y parecer que funcionaba.
-  **B-3** (salud activa de las conexiones) ya avisa por caducidad antes de que un
-  envío falle; queda su rabo, la inspección activa vía `debug_token` para el token
-  de WhatsApp sin fecha guardada. Y **A-7 está entero**: el secreto compartido con
+  **B-3** (salud activa de las conexiones) ya avisa antes de que un envío falle,
+  y entero: caducidad local para todas las conexiones y `debug_token` en vivo para
+  el token de sistema de WhatsApp, que no lleva fecha guardada. Y **A-7 está
+  entero**: el secreto compartido con
   los satélites ya rota con solape de 7 días —al revés que el de webhooks, porque
   el token SSO es una firma única que no admite lista—, y su revisión aparte, que
   era el motivo de separarlo, ya se hizo. Con esto **la Fase 1 queda cerrada**.
@@ -970,13 +1037,13 @@ mantenimiento permanente a cambio de nada. La señal para empezarlo es tener
   ellos conectar MembeGo con algo que no hemos integrado a mano dejó de exigir
   que lo integremos a mano. De la Fase 2, la superficie de API está casi
   entera: la edición de clientes y la paginación hechas, el catálogo de eventos
-  (B-4) ampliado —un Zapier de empresa pasa de 7 a ~18 eventos elegibles y
-  `customer.updated` por fin se emite—, y las métricas de uso por credencial
-  (B-7) medidas y visibles en cada clave. Lo que queda son rabos: la vista del
-  superadmin sobre esas métricas, lo que resta de B-4 (citas, pagos, membresía
-  cancelada, que esperan a que su flujo exista para no ofrecer una casilla sin
-  emisor) y las dos piezas de B-5 que se dejaron fuera a propósito (cancelar
-  cita, borrar cliente).
+  (B-4) ampliado —un Zapier de empresa pasa de 7 a ~20 eventos elegibles, y
+  `customer.updated` y el ciclo de membresía (cancelada/vencida) por fin se
+  emiten—, y las métricas de uso por credencial (B-7) medidas y visibles en cada
+  clave. Lo que queda son rabos: la vista del superadmin sobre esas métricas, lo
+  que resta de B-4 (citas y pagos, que esperan a que su flujo exista para no
+  ofrecer una casilla sin emisor) y las dos piezas de B-5 que se dejaron fuera a
+  propósito (cancelar cita, borrar cliente).
 
   La frase original decía que eran tres semanas de trabajo que hacen por la
   cobertura lo que treinta conectores harían en un año.

@@ -15,6 +15,7 @@ import {
 } from '@/lib/payments/cardnet'
 import { sinTarjeta, mensajeParaCliente } from '@/lib/payments/cardnet-core'
 import { crearIntento, marcarRedirigido, confirmarIntento } from '@/modules/pagos/intentos'
+import { resolverCobroMembresia } from '@/modules/pagos/membresiaCobrable'
 
 /**
  * ORQUESTACIÓN DEL COBRO CON TARJETA (CardNET 3DS).
@@ -81,13 +82,22 @@ export type InicioResultado =
 
 const MONEDA_DOP = '214'
 
+const NO_ENCONTRADO = 'No se encontró qué pagar, o ya no está pendiente.'
+
+export type MontoObjetivo =
+  | { ok: true; pesos: number; descripcion: string }
+  | { ok: false; motivo: string }
+
 /**
- * Cuánto se cobra por este objetivo, leído de la base. Devuelve null si el
- * objetivo no existe, no es de la empresa, o no está en un estado cobrable.
+ * Cuánto se cobra por este objetivo, leído de la base.
+ *
+ * Devuelve `ok: false` con un motivo explícito si el objetivo no existe, no es
+ * de la empresa, o su membresía NO admite cobro con tarjeta. Esa última puerta
+ * vive en `resolverCobroMembresia` y es el único lugar por el que pasan los tres
+ * caminos de tarjeta: un estado no cobrable (o un cambio ya cubierto por su
+ * comprobante) se rechaza ANTES de crear ningún `PagoIntento`.
  */
-export async function montoDeObjetivo(
-  obj: ObjetivoPago
-): Promise<{ pesos: number; descripcion: string } | null> {
+export async function montoDeObjetivo(obj: ObjetivoPago): Promise<MontoObjetivo> {
   if (obj.membershipId) {
     const membershipId = obj.membershipId
     const m = await sinEmpresa(
@@ -98,16 +108,15 @@ export async function montoDeObjetivo(
           include: { plan: true, planSolicitado: true, cliente: true },
         })
     ).catch(() => null)
-    if (!m || m.cliente.companyId !== obj.companyId || m.clienteId !== obj.clienteId) return null
+    if (!m || m.cliente.companyId !== obj.companyId || m.clienteId !== obj.clienteId) {
+      return { ok: false, motivo: NO_ENCONTRADO }
+    }
 
-    // Cambio de plan pendiente: se cobra el plan SOLICITADO. Si no, el actual.
-    const esCambio = m.estado === 'ACTIVA' && m.planIdSolicitado != null
-    const plan = esCambio ? m.planSolicitado : m.plan
-    if (!plan) return null
-    // El descuento de bienvenida solo en la primera activación (fechaInicio null).
-    const descuento = m.fechaInicio == null ? Number(m.descuentoBienvenida ?? 0) : 0
-    const pesos = Math.max(0, Number(plan.precio) - descuento)
-    return { pesos, descripcion: `${esCambio ? 'Cambio a ' : 'Plan '}${plan.nombre}` }
+    // Cobrabilidad + importe, en una función pura y probada. El cambio de plan
+    // cobra la DIFERENCIA prorrateada (nunca el precio completo del plan
+    // solicitado ni un importe que venga del cliente): la fórmula vive en
+    // `calcularPagoCambioPlan`, la misma que usa la pantalla.
+    return resolverCobroMembresia(m)
   }
 
   if (obj.compraId) {
@@ -120,12 +129,14 @@ export async function montoDeObjetivo(
           include: { promocion: true },
         })
     ).catch(() => null)
-    if (!c || c.companyId !== obj.companyId || c.clienteId !== obj.clienteId) return null
+    if (!c || c.companyId !== obj.companyId || c.clienteId !== obj.clienteId) {
+      return { ok: false, motivo: NO_ENCONTRADO }
+    }
     const pesos = Number(c.precioCongelado ?? c.promocion?.precio ?? 0)
-    return { pesos, descripcion: c.promocion?.titulo ?? 'Compra' }
+    return { ok: true, pesos, descripcion: c.promocion?.titulo ?? 'Compra' }
   }
 
-  return null
+  return { ok: false, motivo: NO_ENCONTRADO }
 }
 
 /** ¿Puede esta empresa cobrar con CardNET ahora mismo? Última puerta. */
@@ -222,7 +233,7 @@ export async function iniciarPagoTarjeta(input: {
   }
 
   const monto = await montoDeObjetivo(input.objetivo)
-  if (!monto) return { estado: 'error', motivo: 'No se encontró qué pagar, o ya no está pendiente.' }
+  if (!monto.ok) return { estado: 'rechazado', motivo: monto.motivo }
   if (monto.pesos <= 0) return { estado: 'error', motivo: 'El monto a pagar no es válido.' }
 
   const intento = await crearIntento({

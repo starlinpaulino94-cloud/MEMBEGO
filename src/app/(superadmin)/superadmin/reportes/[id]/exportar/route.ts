@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireRole } from '@/lib/auth/guards'
 import { sinEmpresa } from '@/lib/tenant'
-import { TZ_PLATAFORMA } from '@/lib/format'
+import { zonaSegura } from '@/lib/zona-horaria'
 import { respuestaCsv } from '@/lib/csv'
 import { leerRango } from '@/modules/reportes/rango'
 import { getReporte, reporteToCsv } from '@/modules/reportes/queries'
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     sp[k] = v
   })
 
-  const timeZone = empresa.zonaHoraria || TZ_PLATAFORMA
+  const timeZone = zonaSegura(empresa.zonaHoraria)
   const rango = leerRango(sp, timeZone)
   const reporte = await getReporte(id, rango, timeZone)
 

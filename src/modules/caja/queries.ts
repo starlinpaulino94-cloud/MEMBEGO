@@ -1,5 +1,6 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
+import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
 
 /**
  * Caja (POS) · consultas del turno y búsqueda de órdenes pendientes.
@@ -550,7 +551,7 @@ export async function buscarOrdenesPendientes(
         },
         include: {
           cliente: { select: { nombre: true, telefono: true, email: true } },
-          plan: { select: { nombre: true, precio: true } },
+          plan: { select: { nombre: true, precio: true, vigenciaDias: true } },
           planSolicitado: { select: { nombre: true, precio: true } },
           sucursalPago: { select: { nombre: true } },
         },
@@ -580,7 +581,18 @@ export async function buscarOrdenesPendientes(
     ...memberships.map((m): OrdenPendiente => {
       const esCambio = m.estado === 'ACTIVA' && m.planIdSolicitado != null
       const plan = esCambio ? m.planSolicitado : m.plan
-      const descuento = m.fechaInicio == null ? Number(m.descuentoBienvenida ?? 0) : 0
+      const monto = esCambio && m.planSolicitado
+        ? calcularPagoCambioPlan({
+            precioNuevo: Number(m.planSolicitado.precio),
+            precioVigente: Number(m.plan.precio),
+            fechaVencimiento: m.fechaVencimiento,
+            vigenciaDias: m.plan.vigenciaDias,
+          }).aPagar
+        : Math.max(
+            0,
+            Number(plan?.precio ?? 0) -
+              (m.fechaInicio == null ? Number(m.descuentoBienvenida ?? 0) : 0)
+          )
       return {
         tipo: 'MEMBRESIA',
         id: m.id,
@@ -590,7 +602,7 @@ export async function buscarOrdenesPendientes(
         clienteTelefono: m.cliente.telefono,
         clienteEmail: m.cliente.email,
         detalle: `${esCambio ? 'Cambio a ' : 'Plan '}${plan?.nombre ?? '—'}`,
-        monto: Math.max(0, Number(plan?.precio ?? 0) - descuento),
+        monto,
         sucursalPago: m.sucursalPago?.nombre ?? null,
         createdAt: m.createdAt,
       }

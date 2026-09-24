@@ -18,6 +18,7 @@ import {
   type ReporteEmpleadoDia,
 } from '@/modules/caja/queries'
 import { calcularArqueo, etiquetaArqueo } from '@/modules/caja/arqueo'
+import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { primerErrorZod } from '@/lib/validacion'
 import { capturarErrorInesperado } from '@/lib/sentry'
@@ -431,7 +432,7 @@ export async function cobrarOrden(
         where: { id: ordenId, cliente: { companyId: auth.companyId } },
         include: {
           cliente: { select: { id: true, nombre: true, supabaseId: true } },
-          plan: { select: { nombre: true, precio: true } },
+          plan: { select: { nombre: true, precio: true, vigenciaDias: true } },
           planSolicitado: { select: { nombre: true, precio: true } },
         },
       })
@@ -440,12 +441,20 @@ export async function cobrarOrden(
     const esCambio = m.estado === 'ACTIVA' && m.planIdSolicitado != null
     if (m.estado === 'ACTIVA' && !esCambio) return { error: 'Esta membresía ya está activa (cobro duplicado).' }
 
-    const plan = esCambio ? m.planSolicitado : m.plan
-    const descuento = m.fechaInicio == null ? Number(m.descuentoBienvenida ?? 0) : 0
-    monto = Math.max(0, Number(plan?.precio ?? 0) - descuento)
+    if (esCambio && m.planSolicitado) {
+      monto = calcularPagoCambioPlan({
+        precioNuevo: Number(m.planSolicitado.precio),
+        precioVigente: Number(m.plan.precio),
+        fechaVencimiento: m.fechaVencimiento,
+        vigenciaDias: m.plan.vigenciaDias,
+      }).aPagar
+    } else {
+      const descuento = m.fechaInicio == null ? Number(m.descuentoBienvenida ?? 0) : 0
+      monto = Math.max(0, Number(m.plan.precio) - descuento)
+    }
     clienteId = m.cliente.id
     clienteNombre = m.cliente.nombre
-    detalle = `${esCambio ? 'Cambio a ' : 'Plan '}${plan?.nombre ?? ''}`.trim()
+    detalle = `${esCambio ? 'Cambio a ' : 'Plan '}${(esCambio ? m.planSolicitado : m.plan)?.nombre ?? ''}`.trim()
     membershipId = m.id
 
     const errMixto = validarMixto(monto)

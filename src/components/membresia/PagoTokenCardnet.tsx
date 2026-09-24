@@ -67,8 +67,10 @@ declare global {
   }
 }
 
+export type ObjetivoPagoCliente = { membershipId: string } | { compraId: string }
+
 interface Props {
-  membershipId: string
+  objetivo: ObjetivoPagoCliente
   /** Texto del monto para el botón (ej. "RD$1,600"). */
   montoTexto: string
   /** Config PÚBLICA de la pasarela (no incluye la llave privada). */
@@ -139,7 +141,7 @@ interface RespuestaPago {
 const rastro = (...datos: unknown[]) => console.warn(...datos)
 
 export function PagoTokenCardnet({
-  membershipId,
+  objetivo,
   montoTexto,
   publicKey,
   scriptUrl: scriptUrlProp,
@@ -148,6 +150,7 @@ export function PagoTokenCardnet({
   urlExito,
   onElegirOtroMetodo,
 }: Props) {
+  const producto = 'compraId' in objetivo ? 'promoción' : 'membresía'
   const router = useRouter()
   /**
    * De dónde se carga el widget. Arranca con el valor de la configuración y
@@ -261,13 +264,13 @@ export function PagoTokenCardnet({
       await fetch('/api/pagos/cardnet-token/guardar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ membershipId, ...refs }),
+        body: JSON.stringify({ ...objetivo, ...refs }),
       })
     } catch {
       // No es crítico para el cobro (que ya aprobó): si falla, el cliente
       // simplemente no queda con renovación automática. No se le alarma.
     }
-  }, [membershipId])
+  }, [objetivo])
 
   // Cobra en nuestro servidor con el token que devolvió el iframe.
   const cobrar = useCallback(
@@ -284,7 +287,7 @@ export function PagoTokenCardnet({
         const resp = await fetch('/api/pagos/cardnet-token/cobrar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ membershipId, trxToken }),
+          body: JSON.stringify({ ...objetivo, trxToken }),
         })
         const data = (await resp.json().catch(() => ({}))) as RespuestaPago
         rastro('[pago] resultado del cobro:', data.estado ?? resp.status, data.motivo ?? '')
@@ -292,7 +295,7 @@ export function PagoTokenCardnet({
           if (guardarRef.current) await guardarTarjeta()
           anotarComprobante(data)
           setEstado('aprobado')
-          toast.success('¡Pago aprobado! Tu membresía está activa.')
+          toast.success(`¡Pago aprobado! Tu ${producto} está activa.`)
           // El refresco ya NO es automático: lo dispara el cliente desde la
           // pantalla de pago aprobado. Ver la nota larga en esa pantalla.
           if (urlExito) router.push(urlExito)
@@ -331,7 +334,7 @@ export function PagoTokenCardnet({
         cobrandoRef.current = false
       }
     },
-    [membershipId, router, urlExito, guardarTarjeta, anotarComprobante]
+    [objetivo, producto, router, urlExito, guardarTarjeta, anotarComprobante]
   )
 
   // Carga el script de CardNET una sola vez y engancha el callback del token.
@@ -514,7 +517,7 @@ export function PagoTokenCardnet({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          membershipId,
+          ...objetivo,
           guardar: guardarRef.current,
           conteoAntes: conteoAntesRef.current,
           customerId: customerIdRef.current,
@@ -525,7 +528,7 @@ export function PagoTokenCardnet({
       if (data.estado === 'aprobado') {
         anotarComprobante(data)
         setEstado('aprobado')
-        toast.success('¡Pago aprobado! Tu membresía está activa.')
+        toast.success(`¡Pago aprobado! Tu ${producto} está activa.`)
         if (urlExito) router.push(urlExito)
         return true
       }
@@ -560,7 +563,7 @@ export function PagoTokenCardnet({
     } finally {
       confirmandoRef.current = false
     }
-  }, [membershipId, router, urlExito, anotarComprobante])
+  }, [objetivo, producto, router, urlExito, anotarComprobante])
 
   // OJO: NO se consulta al proveedor mientras la ventana está abierta —
   // cualquier operación sobre el Customer invalida el UniqueID de la ventana
@@ -892,7 +895,7 @@ export function PagoTokenCardnet({
         // gastar otro de sus 3 intentos.
         signal: AbortSignal.timeout(70_000),
         body: JSON.stringify({
-          membershipId,
+          ...objetivo,
           // Se manda el YA normalizado para que «Se enviará: XXXXXX» sea
           // literalmente cierto. El servidor lo normaliza igual (no se confía
           // en el navegador); normalizar lo normalizado no lo cambia.
@@ -909,7 +912,7 @@ export function PagoTokenCardnet({
         setTarjetaPendiente(null)
         anotarComprobante(data)
         setEstado('aprobado')
-        toast.success('¡Tarjeta activada y pago aprobado! Tu membresía está activa.')
+        toast.success(`¡Tarjeta activada y pago aprobado! Tu ${producto} está activa.`)
         if (urlExito) router.push(urlExito)
         return
       }
@@ -963,7 +966,7 @@ export function PagoTokenCardnet({
     } finally {
       setActivando(false)
     }
-  }, [activando, codigoNormalizado, membershipId, router, urlExito, anotarComprobante])
+  }, [activando, codigoNormalizado, objetivo, producto, router, urlExito, anotarComprobante])
 
   /* PAGO COMPLETADO.
 
@@ -1006,7 +1009,7 @@ export function PagoTokenCardnet({
             Pago completado
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Tu membresía quedó activa al instante.
+            Tu {producto} quedó activa al instante.
           </p>
         </div>
 
@@ -1047,7 +1050,7 @@ export function PagoTokenCardnet({
             onClick={() => router.refresh()}
             className="w-full rounded-full py-6 text-base font-semibold"
           >
-            Ver mi membresía
+            Ver mi {producto}
           </Button>
           <p className="text-center text-xs leading-relaxed text-muted-foreground">
             Te enviamos el comprobante de este pago a tu correo.
@@ -1097,7 +1100,7 @@ export function PagoTokenCardnet({
             {tipoError === 'rechazo' ? (
               <p className="rounded-xl border border-border/60 bg-muted/30 p-3 text-center text-xs leading-relaxed text-muted-foreground">
                 <strong className="font-semibold text-foreground">
-                  No se aplicó ningún cargo por tu membresía.
+                  No se aplicó ningún cargo por tu {producto}.
                 </strong>{' '}
                 Puedes intentar con la misma tarjeta o registrar otra.
               </p>
@@ -1229,6 +1232,36 @@ export function PagoTokenCardnet({
                 <span className="shrink-0 font-mono text-sm text-muted-foreground">RD$1.00</span>
               </div>
             </div>
+
+            {/* LAS DOS NEGATIVAS, JUNTO AL EJEMPLO.
+
+                El ejemplo enseña QUÉ buscar. Faltaba lo que hace que la gente
+                no llegue a buscarlo nunca:
+
+                  · NO llega por mensaje. El cliente acaba de pasar el 3DS de
+                    su banco —con su SMS de verdad— dentro de la ventana de
+                    captura. Pedirle «un código» media pantalla después hace
+                    que espere otro mensaje, y mientras espera no abre el
+                    movimiento, que es el único sitio donde el código existe.
+
+                  · NO es inmediato. El código aparece cuando el cargo se
+                    ASIENTA: minutos u horas. Quien mira a los treinta segundos
+                    no ve nada y concluye que el pago se rompió.
+
+                Van en amarillo y no en gris: esto no es letra pequeña, es la
+                instrucción sin la cual la pantalla no se puede completar. */}
+            <p className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 p-3 text-xs leading-relaxed text-muted-foreground">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+              <span>
+                <strong className="font-semibold text-foreground">
+                  No te va a llegar ningún mensaje.
+                </strong>{' '}
+                El código no viene por SMS ni por correo: está dentro del detalle
+                de ese movimiento, en tu app del banco. Y puede tardar de unos
+                minutos a varias horas en aparecer — si todavía no está, sal con{' '}
+                «Lo haré después» y vuelve: tu tarjeta sigue registrada.
+              </span>
+            </p>
 
             <div>
               <label
@@ -1435,7 +1468,7 @@ export function PagoTokenCardnet({
               <strong className="font-semibold text-foreground">
                 No se te ha cobrado nada.
               </strong>{' '}
-              Puedes completar tu membresía con otra forma de pago ahora mismo.
+              Puedes completar tu {producto} con otra forma de pago ahora mismo.
             </p>
             {onElegirOtroMetodo ? (
               <Button

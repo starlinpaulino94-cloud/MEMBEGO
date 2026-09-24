@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { conEmpresa } from '@/lib/tenant'
 import Form from 'next/form'
 import { requireSection } from '@/lib/auth/guards'
-import { getAuditoria, ACCION_LABEL } from '@/modules/auditoria/queries'
+import { getAuditoria, opcionesDeAccion } from '@/modules/auditoria/queries'
 import { BitacoraTabla } from '@/components/auditoria/BitacoraTabla'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -77,7 +77,10 @@ export default async function ActividadPage({
           className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
         >
           <option value="">Todas las acciones</option>
-          {Object.entries(ACCION_LABEL).map(([valor, label]) => (
+          {/* Acciones y sub-tipos en una sola lista alfabética: «Vigencia de
+              membresía extendida» se filtra igual que «Cobro registrado», sin
+              que quien filtra tenga que saber cómo se guarda por dentro. */}
+          {opcionesDeAccion().map(({ valor, label }) => (
             <option key={valor} value={valor}>
               {label}
             </option>

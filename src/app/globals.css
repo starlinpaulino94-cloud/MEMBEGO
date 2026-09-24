@@ -794,6 +794,55 @@
   .grad-vibe-cyan {
     background: linear-gradient(90deg, #06b6d4 0%, #2563eb 100%);
   }
+  /* ── VIBE · los seis colores de las fichas de categoría del Inicio.
+     Estaban escritos como clases sueltas de la paleta de Tailwind
+     (`from-amber-500 to-orange-500`…), que NO cambian con el tema: en modo
+     oscuro se veían exactamente igual que en claro, y la guardia de deuda de
+     diseño las contaba una a una.
+
+     Aquí conservan el color EXACTO —son los mismos valores oklch que emite
+     Tailwind para esas clases, copiados del CSS compilado, no reconstruidos de
+     memoria—, así que la pantalla se ve igual que antes. La diferencia es que
+     ahora tienen un solo sitio donde darles una variante oscura el día que el
+     violeta del Inicio la tenga.
+
+     La primera ficha no está aquí: usa `grad-vibe`, que ya existía. */
+  .grad-categoria-1 {
+    background-image: linear-gradient(
+      to right,
+      oklch(76.9% 0.188 70.08),
+      oklch(70.5% 0.213 47.604)
+    );
+  }
+  .grad-categoria-2 {
+    background-image: linear-gradient(
+      to right,
+      oklch(69.6% 0.17 162.48),
+      oklch(70.4% 0.14 182.503)
+    );
+  }
+  .grad-categoria-3 {
+    background-image: linear-gradient(
+      to right,
+      oklch(71.5% 0.143 215.221),
+      oklch(68.5% 0.169 237.323)
+    );
+  }
+  .grad-categoria-4 {
+    background-image: linear-gradient(
+      to right,
+      oklch(58.5% 0.233 277.117),
+      oklch(62.3% 0.214 259.815)
+    );
+  }
+  .grad-categoria-5 {
+    background-image: linear-gradient(
+      to right,
+      oklch(65.6% 0.241 354.308),
+      oklch(64.5% 0.246 16.439)
+    );
+  }
+
   .grad-vibe-noche {
     background: linear-gradient(to top, #0b0f19 0%, rgb(30 27 75 / 0.5) 50%, transparent 100%);
   }

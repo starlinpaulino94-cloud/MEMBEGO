@@ -8,6 +8,7 @@ import {
   Flame,
   Search,
 } from 'lucide-react'
+import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 import type { LucideIcon } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import {
@@ -180,27 +181,29 @@ export default async function ExcursionesDisponiblesPage({
       {/* Chips de categoría - Scroll horizontal táctil sin barra */}
       {categorias.length > 0 && (
         <nav aria-label="Categorías">
-          <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
-            {[{ slug: null, name: 'Todas' }, ...categorias].map((cat) => {
-              const activa = (cat.slug?.toLowerCase() || null) === (categoria?.toLowerCase() || null)
-              return (
-                <li key={cat.slug ?? 'todas'} className="shrink-0">
-                  <Link
-                    href={hrefCon({ categoria: cat.slug })}
-                    aria-current={activa ? 'page' : undefined}
-                    className={cn(
-                      'inline-flex min-h-10 sm:min-h-11 items-center rounded-full px-4 text-xs sm:text-small font-semibold transition-colors',
-                      activa
-                        ? 'bg-primary text-primary-foreground'
-                        : 'border border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                    )}
-                  >
-                    {cat.name}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
+          <RailOverflowHint className="from-background via-background/90 to-transparent text-primary">
+            <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 pr-12 sm:mx-0 sm:px-0 sm:pr-12">
+              {[{ slug: null, name: 'Todas' }, ...categorias].map((cat) => {
+                const activa = (cat.slug?.toLowerCase() || null) === (categoria?.toLowerCase() || null)
+                return (
+                  <li key={cat.slug ?? 'todas'} className="shrink-0">
+                    <Link
+                      href={hrefCon({ categoria: cat.slug })}
+                      aria-current={activa ? 'page' : undefined}
+                      className={cn(
+                        'inline-flex min-h-10 sm:min-h-11 items-center rounded-full px-4 text-xs sm:text-small font-semibold transition-colors',
+                        activa
+                          ? 'bg-primary text-primary-foreground'
+                          : 'border border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                      )}
+                    >
+                      {cat.name}
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </RailOverflowHint>
         </nav>
       )}
 

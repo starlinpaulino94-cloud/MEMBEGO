@@ -66,6 +66,15 @@ export interface ReporteMembresias {
   renovadasAutomaticas: number
   canceladas: Kpi
   vencidas: Kpi
+  /**
+   * El resto del ciclo, que existía en la tabla y el reporte callaba (F3):
+   * nacimientos PENDIENTES, pagos rechazados y ajustes manuales (vigencia
+   * extendida, lavados corregidos). `contarPorTipo` ya los traía — agrupaba
+   * por tipo sin filtrar — y aquí simplemente se dejaban caer.
+   */
+  creadas: Kpi
+  rechazadas: Kpi
+  ajustadas: Kpi
   cambiosDePlan: CambiosDePlan
   /**
    * Renovadas ÷ (renovadas + bajas). `null` cuando no hubo ninguna de las dos:
@@ -329,6 +338,9 @@ export async function getReporteMembresias(
     renovadasAutomaticas: automaticas,
     canceladas: kpi(actual.CANCELADA ?? 0, anterior.CANCELADA ?? 0),
     vencidas: kpi(actual.VENCIDA ?? 0, anterior.VENCIDA ?? 0),
+    creadas: kpi(actual.CREADA ?? 0, anterior.CREADA ?? 0),
+    rechazadas: kpi(actual.RECHAZADA ?? 0, anterior.RECHAZADA ?? 0),
+    ajustadas: kpi(actual.AJUSTADA ?? 0, anterior.AJUSTADA ?? 0),
     cambiosDePlan: cambios,
     tasaRenovacion: tasaRenovacion(renovadas, bajas),
     serie,

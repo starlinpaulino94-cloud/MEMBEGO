@@ -3,13 +3,15 @@ import { requireRole, requireSection } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
-import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
+import { formatDateTime } from '@/lib/format'
+import { zonaSegura } from '@/lib/zona-horaria'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
 import { getReporteFinanzas } from '@/modules/reportes/finanzas'
 import { RangoFechas } from '@/components/reportes/RangoFechas'
+import { FiltroReporteForm } from '@/components/reportes/FiltroReporteForm'
 import { ReporteFinanzasVista } from '@/components/reportes/ReporteFinanzasVista'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
-import { BotonExportar } from '@/components/ui/boton-exportar'
+import { BotonesExportar } from '@/components/reportes/BotonesExportar'
 import { EmptyState } from '@/components/ui/empty-state'
 
 export const dynamic = 'force-dynamic'
@@ -39,17 +41,41 @@ export default async function ReporteFinanzasPage({
   const companyId = await requireCompanyContext(user)
 
   const sp = await searchParams
-  const empresa = await conEmpresa(companyId, (tx) =>
-    tx.company
-      .findUnique({ where: { id: companyId }, select: { name: true, zonaHoraria: true } })
-      .catch(() => null)
+  const sucursalPedida = (() => {
+    const v = Array.isArray(sp.sucursal) ? sp.sucursal[0] : sp.sucursal
+    return typeof v === 'string' ? v.trim() : ''
+  })()
+
+  const [empresa, sucursales] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.company
+        .findUnique({ where: { id: companyId }, select: { name: true, zonaHoraria: true } })
+        .catch(() => null),
+      tx.sucursal
+        .findMany({
+          where: { companyId },
+          select: { id: true, nombre: true },
+          orderBy: { nombre: 'asc' },
+        })
+        .catch(() => []),
+    ])
   )
-  const timeZone = empresa?.zonaHoraria || TZ_PLATAFORMA
+  const timeZone = zonaSegura(empresa?.zonaHoraria)
 
   const rango = leerRango(sp, timeZone)
   const prefs = await getRegionalPrefs(companyId)
-  const r = await getReporteFinanzas(companyId, rango)
+  const r = await getReporteFinanzas(companyId, rango, timeZone, new Date(), {
+    filtro: { sucursalId: sucursalPedida || undefined },
+  })
+
+  // Lo que viaja pegado a los enlaces es el filtro APLICADO, no el pedido: un
+  // id que la consulta descartó no sobrevive en los presets ni en el export.
+  const extra = new URLSearchParams()
+  if (r.filtro) extra.set('sucursal', r.filtro.sucursal.id)
   const qs = paramsDeRango(rango)
+  const spExport = new URLSearchParams(qs ? qs.slice(1) : '')
+  for (const [k, v] of extra) spExport.set(k, v)
+  const qsExport = spExport.toString()
 
   return (
     <ReporteFinanzasVista
@@ -58,10 +84,23 @@ export default async function ReporteFinanzasPage({
       prefs={prefs}
       empresa={empresa?.name ?? 'Tu negocio'}
       generadoEn={formatDateTime(new Date(), prefs)}
-      eyebrow={<RangoFechas rango={rango} accion="/admin/reportes/finanzas" />}
+      // El detalle abre con EL MISMO periodo y el MISMO filtro: es la misma
+      // query string que se lleva la exportación.
+      qs={qsExport}
+      eyebrow={
+        <div className="space-y-3">
+          <RangoFechas rango={rango} accion="/admin/reportes/finanzas" extra={extra} />
+          <FiltroReporteForm
+            accion="/admin/reportes/finanzas"
+            rango={rango}
+            sucursales={sucursales}
+            sucursalId={r.filtro?.sucursal.id ?? ''}
+          />
+        </div>
+      }
       controles={
         <>
-          <BotonExportar href={`/admin/reportes/finanzas/export${qs}`} />
+          <BotonesExportar base="/admin/reportes/finanzas/export" qs={qsExport} />
           <BotonImprimir />
         </>
       }

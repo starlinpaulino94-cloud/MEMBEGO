@@ -16,13 +16,19 @@ import { safeInternalPath } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { QRDisplay } from '@/components/qr/QRDisplay'
-import { ComprobanteCompraForm } from '@/components/cliente/ComprobanteCompraForm'
 import { CancelarCompraButton } from '@/components/cliente/CancelarCompraButton'
+import { ComprobantePagoForm } from '@/components/cliente/ComprobantePagoForm'
+import { OpcionesPago } from '@/components/membresia/OpcionesPago'
 import { SharePromocionMenu } from '@/components/public/SharePromocionMenu'
 import { compraEstadoUi, compraEstadoVisual } from '@/components/cliente/compra-estado'
 import { Button } from '@/components/ui/button'
 import { getAgendaConfig } from '@/modules/citas/queries'
-import { getCuentasTransferencia, ofrecerTransferencia } from '@/modules/pagos/metodosDisponibles'
+import {
+  getCuentasTransferencia,
+  getMetodosParaCompraNueva,
+  ofrecerTransferencia,
+} from '@/modules/pagos/metodosDisponibles'
+import { getTokensPublicConfig } from '@/lib/payments/cardnet-tokens'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
 
 export const dynamic = 'force-dynamic'
@@ -64,7 +70,7 @@ export default async function MiCompraPage({
         where: { id },
         include: {
           promocion: true,
-          company: { select: { name: true, zonaHoraria: true } },
+          company: { select: { name: true, zonaHoraria: true, logoUrl: true } },
           metodoPago: true,
           transiciones: { orderBy: { createdAt: 'asc' } },
           qrTokens: { where: { activo: true }, orderBy: { createdAt: 'desc' }, take: 1 },
@@ -158,6 +164,16 @@ export default async function MiCompraPage({
   const transferenciaActiva =
     esperaPago && (await ofrecerTransferencia(compra.companyId, comprometidaConTransferencia))
   const metodosPago = transferenciaActiva ? await getCuentasTransferencia(compra.companyId) : []
+
+  // Tarjeta (CardNET): misma puerta de tres condiciones que membresías. Si la
+  // consulta falla se degrada a tarjeta NO disponible para no romper la página.
+  const tarjetaDisponible = esperaPago
+    ? await getMetodosParaCompraNueva(compra.companyId)
+        .then((m) => m.disponibles.includes('CARDNET'))
+        .catch(() => false)
+    : false
+  // La config pública (sin llave privada) solo se calcula si la tarjeta aplica.
+  const tokensConfig = tarjetaDisponible ? getTokensPublicConfig() : null
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -316,12 +332,11 @@ export default async function MiCompraPage({
         </Card>
       )}
 
-      {/* Pago pendiente: instrucciones + comprobante */}
-      {transferenciaActiva && (
+      {esperaPago && (transferenciaActiva || tarjetaDisponible) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Landmark className="h-4 w-4 text-primary" /> Pago por transferencia
+              <Landmark className="h-4 w-4 text-primary" /> Completa el pago
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -335,38 +350,30 @@ export default async function MiCompraPage({
               </div>
             )}
 
-            <p className="text-sm text-muted-foreground">
-              Transfiere <span className="font-semibold text-foreground">{fmtRD(precio)}</span> a
-              una de estas cuentas y sube el comprobante. Un administrador validará
-              tu pago para activar la promoción.
-            </p>
-
-            {metodosPago.length === 0 ? (
-              <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning">
-                La empresa aún no configuró cuentas de transferencia. Contáctala
-                directamente para coordinar el pago.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {metodosPago.map((m) => (
-                  <div key={m.id} className="rounded-lg border border-border p-3 text-sm">
-                    <p className="font-semibold text-foreground">{m.nombre}</p>
-                    {m.numeroCuenta && (
-                      <p className="text-muted-foreground">
-                        {m.numeroCuenta}
-                        {m.tipoCuenta ? ` (${m.tipoCuenta})` : ''}
-                      </p>
-                    )}
-                    {m.titular && <p className="text-muted-foreground">Titular: {m.titular}</p>}
-                    {m.instrucciones && (
-                      <p className="mt-1 text-xs text-muted-foreground">{m.instrucciones}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <ComprobanteCompraForm compraId={compra.id} metodosPago={metodosPago} />
+            <OpcionesPago
+              objetivo={{ compraId: compra.id }}
+              companyName={compra.company.name}
+              transferencias={metodosPago}
+              transferenciaDisponible={transferenciaActiva}
+              tarjetaDisponible={tarjetaDisponible}
+              comprobanteForm={
+                <ComprobantePagoForm
+                  objetivo={{ compraId: compra.id }}
+                  metodosPago={metodosPago}
+                />
+              }
+              montoTexto={fmtRD(precio)}
+              tokensConfig={
+                tokensConfig
+                  ? {
+                      publicKey: tokensConfig.publicKey,
+                      captureUrl: tokensConfig.captureUrl,
+                      scriptUrl: tokensConfig.scriptUrl,
+                    }
+                  : null
+              }
+              logoUrl={compra.company.logoUrl}
+            />
 
             <div className="flex justify-center border-t border-border/60 pt-3">
               <CancelarCompraButton compraId={compra.id} />
