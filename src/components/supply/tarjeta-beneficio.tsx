@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useEffect, useState, type ReactNode } from 'react'
 import { Gift, MapPin, QrCode } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -30,6 +30,55 @@ interface Beneficio {
   exigeReserva: boolean
   reservaAt: Date | null
   precioPagado: number
+  /** Lo resuelve quien lee los datos: `Date.now()` en el render es impuro. */
+  vencePronto: boolean
+}
+
+/**
+ * El código y su cuenta atrás, remontados en cada QR nuevo.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ESTÁ APARTE
+ *
+ * El contador se reiniciaba llamando a `setRestante(...)` en el cuerpo de un
+ * efecto de la tarjeta, que es lo que el compilador de React rechaza: fuerza
+ * un render de más por cada QR y es la puerta de entrada a las cascadas de
+ * renders. Remontar con `key` es el reinicio que React recomienda para esto —
+ * el estado NACE con el valor correcto y ya no hay efecto que lo corrija
+ * después.
+ *
+ * De paso deja de contar ticks y pasa a restar contra un instante fijo: un
+ * `setInterval` en una pestaña de fondo se retrasa, y la cuenta llegaba a cero
+ * más tarde que el código de verdad. Ahora el contador dice lo que el servidor
+ * va a hacer, que es el único motivo por el que está en pantalla.
+ *
+ * `alExpirar` es lo que se pinta cuando el plazo se agota — el mismo botón de
+ * «Usar beneficio»—. Llega como nodo en vez de como aviso al padre para que
+ * no haya que subir el estado: el plazo lo sabe quien lo cuenta.
+ */
+function CodigoConCuentaAtras({ nonce, alExpirar }: { nonce: string; alExpirar: ReactNode }) {
+  const [restante, setRestante] = useState(MINUTOS_QR * 60)
+
+  useEffect(() => {
+    const fin = Date.now() + MINUTOS_QR * 60_000
+    const t = setInterval(
+      () => setRestante(Math.max(0, Math.round((fin - Date.now()) / 1000))),
+      1000
+    )
+    return () => clearInterval(t)
+  }, [])
+
+  if (restante <= 0) return <>{alExpirar}</>
+
+  return (
+    <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
+      <p className="text-caption text-muted-foreground">Enséñale este código al empleado</p>
+      <p className="break-all font-mono text-sm font-semibold">{nonce}</p>
+      <p className="text-caption text-muted-foreground">
+        Válido {Math.floor(restante / 60)}:{String(restante % 60).padStart(2, '0')}
+      </p>
+    </div>
+  )
 }
 
 interface Sucursal {
@@ -77,22 +126,29 @@ export function TarjetaBeneficio({
   )
 
   const [sucursalId, setSucursalId] = useState(sucursales[0]?.id ?? '')
-  const [restante, setRestante] = useState(0)
   const [reportar, setReportar] = useState(false)
 
-  // Cuenta atrás del QR. Cuando llega a cero el código deja de servir de verdad
-  // —el servidor lo rechaza— así que esconderlo aquí no es cosmética: evita que
-  // alguien enseñe un código muerto y crea que el sitio falló.
-  useEffect(() => {
-    if (!qr.success) return
-    setRestante(MINUTOS_QR * 60)
-    const t = setInterval(() => setRestante((s) => Math.max(0, s - 1)), 1000)
-    return () => clearInterval(t)
-  }, [qr.success])
-
-  const vencePronto = beneficio.venceAt.getTime() - Date.now() < 7 * 86_400_000
   const faltaReserva = beneficio.exigeReserva && !beneficio.reservaAt
-  const qrVivo = Boolean(qr.success) && restante > 0
+
+  // El botón de pedir el código. Se pinta tal cual cuando no hay QR, y también
+  // dentro del contador cuando el plazo se agota: que el código deje de servir
+  // no puede dejar a nadie sin manera de pedir otro.
+  const formularioQr = (
+    <form action={accionQr}>
+      <input type="hidden" name="voucherId" value={beneficio.voucherId ?? ''} />
+      <input type="hidden" name="clienteId" value={clienteId} />
+      <input type="hidden" name="sucursalId" value={sucursalId} />
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={generandoQr || !beneficio.voucherId || faltaReserva}
+      >
+        <QrCode className="mr-2 size-4" aria-hidden />
+        {generandoQr ? 'Generando…' : faltaReserva ? 'Reserva primero' : 'Usar beneficio'}
+      </Button>
+      {qr.error && <p className="mt-2 text-caption text-destructive">{qr.error}</p>}
+    </form>
+  )
 
   return (
     <Card>
@@ -108,7 +164,7 @@ export function TarjetaBeneficio({
             </p>
             <p className="text-caption text-muted-foreground">{beneficio.proveedor}</p>
             <div className="mt-1 flex flex-wrap gap-1.5">
-              <Badge variant={vencePronto ? 'warning' : 'outline'}>
+              <Badge variant={beneficio.vencePronto ? 'warning' : 'outline'}>
                 Vence el{' '}
                 {new Intl.DateTimeFormat('es-DO', { day: 'numeric', month: 'long' }).format(
                   beneficio.venceAt
@@ -192,31 +248,16 @@ export function TarjetaBeneficio({
           </form>
         )}
 
-        {qrVivo ? (
-          <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
-            <p className="text-caption text-muted-foreground">
-              Enséñale este código al empleado
-            </p>
-            <p className="break-all font-mono text-sm font-semibold">{qr.success}</p>
-            <p className="text-caption text-muted-foreground">
-              Válido {Math.floor(restante / 60)}:{String(restante % 60).padStart(2, '0')}
-            </p>
-          </div>
+        {qr.success ? (
+          /* `key` en la sesión: cada QR nuevo remonta el contador con su plazo
+             entero, sin que nadie tenga que reiniciarlo a mano. */
+          <CodigoConCuentaAtras
+            key={qr.id ?? qr.success}
+            nonce={qr.success}
+            alExpirar={formularioQr}
+          />
         ) : (
-          <form action={accionQr}>
-            <input type="hidden" name="voucherId" value={beneficio.voucherId ?? ''} />
-            <input type="hidden" name="clienteId" value={clienteId} />
-            <input type="hidden" name="sucursalId" value={sucursalId} />
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={generandoQr || !beneficio.voucherId || faltaReserva}
-            >
-              <QrCode className="mr-2 size-4" aria-hidden />
-              {generandoQr ? 'Generando…' : faltaReserva ? 'Reserva primero' : 'Usar beneficio'}
-            </Button>
-            {qr.error && <p className="mt-2 text-caption text-destructive">{qr.error}</p>}
-          </form>
+          formularioQr
         )}
 
         {reportar ? (
