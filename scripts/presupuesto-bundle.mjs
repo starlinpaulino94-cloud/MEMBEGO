@@ -76,7 +76,7 @@ const PRESUPUESTOS = [
   {
     id: 'total',
     nombre: 'JavaScript de cliente (todo)',
-    techoKB: 7500, // 2026-09-02: subido de 7000 por el módulo CRM (169 KB en 5 rutas de cliente). No es una librería: es funcionalidad. Se sube con margen porque un techo a 3 KB del valor real no es un presupuesto, es un cable trampa
+    techoKB: 8100, // 2026-09-24: subido de 7500 por Membego Supply (pantallas de superadmin, panel y cliente; medido 7646 KB). Mismo caso que el CRM: no entró ninguna librería —la entrada compartida sigue en 856 KB y el mayor trozo en 520 KB, ambos intactos—, entró un módulo entero. Se mantiene el margen por el mismo motivo de siempre
     porque: 'Indicador general de peso del proyecto. Ningún usuario lo descarga entero.',
   },
   {
