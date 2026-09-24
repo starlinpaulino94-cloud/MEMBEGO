@@ -14,7 +14,7 @@ export async function crearSucursal(
   _prev: SucursalState,
   formData: FormData
 ): Promise<SucursalState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('sucursales')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId =
@@ -46,7 +46,7 @@ export async function actualizarSucursal(
   _prev: SucursalState,
   formData: FormData
 ): Promise<SucursalState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('sucursales')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -82,7 +82,7 @@ export async function eliminarSucursal(
   _prev: SucursalState,
   formData: FormData
 ): Promise<SucursalState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('sucursales')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()

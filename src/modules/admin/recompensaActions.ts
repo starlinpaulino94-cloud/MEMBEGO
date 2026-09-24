@@ -14,7 +14,7 @@ export async function crearReglaRecompensa(
   _prev: ReglaRecompensaState,
   formData: FormData
 ): Promise<ReglaRecompensaState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('crecimiento')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId =
@@ -64,7 +64,7 @@ export async function actualizarReglaRecompensa(
   _prev: ReglaRecompensaState,
   formData: FormData
 ): Promise<ReglaRecompensaState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('crecimiento')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -100,7 +100,7 @@ export async function eliminarReglaRecompensa(
   _prev: ReglaRecompensaState,
   formData: FormData
 ): Promise<ReglaRecompensaState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('crecimiento')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()

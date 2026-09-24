@@ -1222,7 +1222,7 @@ export async function crearEmpleado(
 ): Promise<AdminActionState> {
   try {
     // Gestión de equipo: solo admin pleno (no Supervisor/Marketing).
-    const user = await requireAdminUser()
+    const user = await requireAdminUser('empleados')
     if (!user) return { error: 'No autorizado.' }
 
     const companyId = user.metadata.companyId
@@ -1316,7 +1316,7 @@ export async function eliminarEmpleado(
 ): Promise<AdminActionState> {
   try {
     // Gestión de equipo: solo admin pleno.
-    const user = await requireAdminUser()
+    const user = await requireAdminUser('empleados')
     if (!user) return { error: 'No autorizado.' }
 
     const empleadoId = String(formData.get('empleadoId') ?? '')
@@ -1484,7 +1484,7 @@ export async function guardarBienvenida(
   formData: FormData
 ): Promise<AdminActionState> {
   try {
-    const user = await requireAdminUser()
+    const user = await requireAdminUser('planes')
     if (!user) return { error: 'No autorizado.' }
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Esta configuración es por empresa.' }

@@ -34,7 +34,7 @@ export async function actualizarPerfilPublico(
   _prev: PerfilState,
   formData: FormData
 ): Promise<PerfilState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('perfil')
   if (!user) return { error: 'No autorizado.' }
 
   // Superadmin: empresa del formulario o, si no viene, la ACTIVA del
@@ -177,7 +177,7 @@ export async function publicarMiEmpresa(
   _prev: PerfilState,
   _formData: FormData
 ): Promise<PerfilState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('perfil')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = user.metadata.companyId

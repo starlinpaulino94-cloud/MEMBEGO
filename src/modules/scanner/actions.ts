@@ -20,7 +20,7 @@ export interface EscanerModoState {
 
 export async function guardarEscanerModoEmpresa(modo: string): Promise<EscanerModoState> {
   try {
-    const user = await requireAdminUser()
+    const user = await requireAdminUser('scanner')
     if (!user) return { error: 'No autorizado.' }
     const companyId = user.metadata.companyId
     if (!companyId) return { error: 'Tu cuenta no tiene una empresa asignada.' }

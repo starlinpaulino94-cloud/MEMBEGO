@@ -9,6 +9,8 @@ import {
   permisosDesdeSeleccion,
   puedeEditarPermisos,
   canAccessAdminSection,
+  puedeEntrarAlPanel,
+  seccionConcedida,
   adminSectionForPath,
   ADMIN_SECTIONS,
 } from '../src/lib/auth/permissions'
@@ -16,8 +18,10 @@ import {
   navForRole,
   allLinks,
   hrefsNegadosPorPermisos,
+  visibleWorkspaces,
+  visibleGroups,
 } from '../src/components/layout/nav-config'
-import type { AppRole } from '../src/types'
+import { FULL_ADMIN_ROLES, type AppRole } from '../src/types'
 
 /**
  * Módulo de PERMISOS por empleado (14-08-2026): el rol da la base y el
@@ -80,10 +84,13 @@ test('negar una función bloquea esa función y solo esa', () => {
     v: 1,
     funciones: { promociones: { eliminar: false } },
   })
-  assert.equal(funcionPermitida('CAJERO', 'promociones', 'eliminar', p), false)
-  assert.equal(funcionPermitida('CAJERO', 'promociones', 'crear', p), true)
+  // Con GERENTE y no con CAJERO: desde que el mostrador está acotado por
+  // oficio, el cajero no trae 'promociones' y la prueba mediría otra cosa
+  // —una sección que su rol ya no da— en vez de la negación quirúrgica.
+  assert.equal(funcionPermitida('GERENTE', 'promociones', 'eliminar', p), false)
+  assert.equal(funcionPermitida('GERENTE', 'promociones', 'crear', p), true)
   // La sección sigue abierta: la negación fue quirúrgica.
-  assert.equal(seccionPermitida('CAJERO', 'promociones', p), true)
+  assert.equal(seccionPermitida('GERENTE', 'promociones', p), true)
 })
 
 test('una sección negada cierra también todas sus funciones', () => {
@@ -235,17 +242,24 @@ const RAIZ = join(__dirname, '..')
 
 test('Sinónimos de búsqueda es una sección gobernable', () => {
   const p = resolverPermisosUsuario({ v: 1, secciones: { sinonimos: false } })
-  assert.equal(seccionPermitida('GERENTE', 'sinonimos', p), false)
+  // Con ADMINISTRADOR y no con GERENTE: los sinónimos son configuración del
+  // catálogo y desde que el gerente está acotado por oficio ya no los trae de
+  // serie. Probarlo con él comprobaría que se niega algo que su rol tampoco da.
+  assert.equal(seccionPermitida('ADMINISTRADOR', 'sinonimos', p), false)
   // Su vecina en el menú («Experiencia cliente») no se toca.
-  assert.equal(seccionPermitida('GERENTE', 'personalizacion', p), true)
+  assert.equal(seccionPermitida('ADMINISTRADOR', 'personalizacion', p), true)
   // Y con la columna limpia sigue siendo lo que su rol dice.
-  assert.equal(seccionPermitida('GERENTE', 'sinonimos', null), true)
+  assert.equal(seccionPermitida('ADMINISTRADOR', 'sinonimos', null), true)
 })
 
 test('los sinónimos no se le conceden a ningún rol acotado', () => {
   // El menú nunca se los enseñó; ahora la sección dice lo mismo, y las
   // actions —que son la barrera real— también.
-  for (const role of ['MARKETING', 'SUPERVISOR'] as const) {
+  //
+  // CAJERO y GERENTE entran ahora en este bucle, y no como excepción: desde
+  // que tienen paquete por oficio son roles acotados como los otros dos. El
+  // título de esta prueba lo pedía desde el principio.
+  for (const role of ['MARKETING', 'SUPERVISOR', 'CAJERO', 'GERENTE'] as const) {
     assert.equal(
       canAccessAdminSection(role, 'sinonimos'),
       false,
@@ -253,7 +267,6 @@ test('los sinónimos no se le conceden a ningún rol acotado', () => {
     )
   }
   assert.equal(canAccessAdminSection('ADMINISTRADOR', 'sinonimos'), true)
-  assert.equal(canAccessAdminSection('GERENTE', 'sinonimos'), true)
 })
 
 test('negar Sinónimos lo borra también del menú', () => {
@@ -395,4 +408,314 @@ test('el CRM tiene UNA sección, no cinco', () => {
   )
   assert.deepEqual(delCrm, ['leads'])
   assert.equal(adminSectionForPath('/admin/crm/conversaciones'), 'leads')
+})
+
+// -- El mostrador y la operación, acotados por oficio -------------------------
+
+/**
+ * LO QUE ESTO VIENE A ARREGLAR.
+ *
+ * `canAccessAdminSection` miraba PRIMERO `FULL_ADMIN_ROLES`, así que un CAJERO
+ * y un GERENTE traían las 44 secciones: campañas, audiencia, automatizaciones
+ * y la configuración comercial incluidas. El módulo de Permisos no estaba
+ * roto —negar funcionaba— pero no había nada que negar hasta que alguien se
+ * sentaba a quitar cuarenta casillas por empleado, una por una.
+ */
+test('el mostrador no trae marketing ni configuración', () => {
+  for (const s of ['campanas', 'audiencia', 'adquisicion', 'marketing',
+                   'automatizaciones', 'publicaciones', 'planes', 'metodos-pago',
+                   'personalizacion', 'integraciones', 'empleados'] as const) {
+    assert.equal(
+      canAccessAdminSection('CAJERO', s),
+      false,
+      `un cajero no debería traer ${s} de serie`
+    )
+  }
+})
+
+test('el mostrador sí trae lo suyo', () => {
+  for (const s of ['dashboard', 'clientes', 'membresias', 'pagos', 'facturas',
+                   'citas', 'scanner', 'conciliacion'] as const) {
+    assert.equal(
+      canAccessAdminSection('CAJERO', s),
+      true,
+      `un cajero necesita ${s} para trabajar`
+    )
+  }
+})
+
+test('la operación dirige, pero no hace marketing ni toca la configuración comercial', () => {
+  for (const s of ['reportes', 'actividad', 'empleados', 'sucursales', 'seguimiento'] as const) {
+    assert.equal(canAccessAdminSection('GERENTE', s), true, `un gerente necesita ${s}`)
+  }
+  for (const s of ['campanas', 'audiencia', 'adquisicion', 'marketing',
+                   'automatizaciones', 'planes', 'metodos-pago', 'perfil',
+                   'personalizacion', 'integraciones'] as const) {
+    assert.equal(
+      canAccessAdminSection('GERENTE', s),
+      false,
+      `un gerente no debería traer ${s} de serie`
+    )
+  }
+})
+
+test('quien administra de verdad sigue trayéndolo todo', () => {
+  for (const role of ['SUPERADMIN', 'ADMINISTRADOR', 'ADMIN_EMPRESA'] as const) {
+    for (const s of ADMIN_SECTIONS) {
+      assert.equal(
+        canAccessAdminSection(role, s),
+        true,
+        `${role} dejó de traer ${s}: acotar al equipo no puede acotar a quien manda`
+      )
+    }
+  }
+})
+
+/**
+ * LA TRAMPA QUE ESTO VIGILA, Y NO ES TEÓRICA.
+ *
+ * `FULL_ADMIN_ROLES` parece «qué secciones trae el rol» y NO es eso: responde
+ * «¿es admin pleno para MUTAR?», y la consultan 41 guardias de server action
+ * (`requireAdminUser`), el reparto de avisos, los comprobantes y el
+ * onboarding.
+ *
+ * El arreglo obvio para acotar al cajero era sacarlo de esa lista. Le habría
+ * dejado el panel a la vista y las manos atadas: vería sus clientes y no
+ * podría cobrar. Por eso el acotado se hace con un PAQUETE y esa lista no se
+ * toca — y por eso esta prueba existe, para que el atajo no vuelva.
+ */
+test('acotar por sección no desarma las mutaciones', () => {
+  for (const role of ['CAJERO', 'GERENTE'] as const) {
+    assert.ok(
+      FULL_ADMIN_ROLES.includes(role),
+      `${role} salió de FULL_ADMIN_ROLES: eso no acota su panel, le quita las 41 ` +
+        'guardias de mutación que dependen de esa lista'
+    )
+  }
+})
+
+test('acotar a un rol no le quita lo que se le conceda a mano', () => {
+  // El paquete es el PUNTO DE PARTIDA, no un techo: un gerente que sí lleva
+  // las campañas las recupera desde su pantalla de Permisos, sin cambiarle el
+  // rol ni tocar el paquete de los demás.
+  const p = resolverPermisosUsuario({ v: 1, secciones: { campanas: true } })
+  assert.equal(seccionPermitida('GERENTE', 'campanas', null), false)
+  assert.equal(seccionPermitida('GERENTE', 'campanas', p), true)
+})
+
+// -- Conceder a un empleado tiene que servir para algo ------------------------
+
+/**
+ * EL FALLO QUE ESTO ARREGLA, TAL COMO SE VIO.
+ *
+ * A una empleada se le concedieron Clientes, Membresías, Pagos, Comprobantes
+ * y Citas. La pantalla decía «Concedido», se guardaba en la base… y su menú
+ * seguía teniendo dos cosas: escanear y caja.
+ *
+ * Había tres puertas cerradas antes de que nadie mirara un permiso: el proxy
+ * y el layout decidían la entrada a /admin SOLO por rol, y el menú del
+ * mostrador ni siquiera construía el árbol del panel. Cinco módulos
+ * concedidos y ninguno alcanzable: el módulo de Permisos prometía algo que
+ * esas tres líneas deshacían.
+ */
+const empleadaCon = (...secciones: string[]) =>
+  resolverPermisosUsuario({
+    v: 1,
+    secciones: Object.fromEntries(secciones.map((s) => [s, true])),
+  })
+
+test('un rol sin panel entra si se le concede algo, y no antes', () => {
+  assert.equal(puedeEntrarAlPanel('EMPLEADO', null), false)
+  assert.equal(puedeEntrarAlPanel('EMPLEADO', empleadaCon('clientes')), true)
+  // Negar no abre nada: solo el `true` explícito es una concesión.
+  const negada = resolverPermisosUsuario({ v: 1, secciones: { clientes: false } })
+  assert.equal(puedeEntrarAlPanel('EMPLEADO', negada), false)
+  assert.equal(seccionConcedida('clientes', negada), false)
+})
+
+test('quien tiene panel por su rol sigue entrando sin concesiones', () => {
+  for (const role of ['ADMINISTRADOR', 'GERENTE', 'CAJERO', 'MARKETING', 'SUPERVISOR'] as const) {
+    assert.equal(puedeEntrarAlPanel(role, null), true, `${role} perdió la entrada al panel`)
+  }
+  // Y quien no es del equipo no entra ni con la puerta nueva.
+  assert.equal(puedeEntrarAlPanel('CLIENTE', null), false)
+})
+
+test('entrar por concesión abre SOLO lo concedido, ni siquiera el panel de inicio', () => {
+  const p = empleadaCon('clientes')
+  assert.equal(seccionPermitida('EMPLEADO', 'clientes', p), true)
+  for (const s of ['membresias', 'pagos', 'campanas', 'empleados', 'dashboard'] as const) {
+    assert.equal(
+      seccionPermitida('EMPLEADO', s, p),
+      false,
+      `conceder clientes no puede abrir ${s}`
+    )
+  }
+})
+
+test('el menú del mostrador enseña lo concedido, y solo eso', () => {
+  const enlaces = (permisos: ReturnType<typeof resolverPermisosUsuario>) => {
+    const ctx = { role: 'EMPLEADO' as AppRole, scope: 'COMPANY' as const, permisos }
+    return visibleWorkspaces(ctx)
+      .flatMap((w) => visibleGroups(w, ctx))
+      .flatMap((g) => allLinks([g]))
+      .map((l) => l.href)
+  }
+  // Sin concesiones, su menú es el de siempre: ni un enlace del panel.
+  assert.ok(!enlaces(null).some((h) => h.startsWith('/admin')))
+  // Con dos concedidas, aparecen esas dos. Y ninguna más del panel.
+  const con = enlaces(empleadaCon('clientes', 'membresias'))
+  const delPanel = con.filter((h) => h.startsWith('/admin'))
+  assert.deepEqual(delPanel.sort(), ['/admin/clientes', '/admin/membresias'])
+})
+
+// -- La barrera viva, sección por sección ------------------------------------
+
+/**
+ * CADA SECCIÓN CON CARPETA TIENE SU GUARDIA EN EL LAYOUT.
+ *
+ * Es más estricta que «toda sección se exige en algún sitio», y a propósito.
+ * Aquella acepta que baste con tener carpeta, porque entonces el proxy cierra
+ * la vista — pero el proxy lee los permisos del TOKEN. Quitarle un módulo a
+ * alguien no le cerraba la puerta hasta que su sesión se refrescara, y de las
+ * 147 pantallas del panel había 92 que no tenían ninguna barrera viva detrás.
+ *
+ * El layout la tiene: `requireSection` lee la base en cada render, y cubre
+ * todo el subárbol —incluidas las pantallas que alguien añada mañana sin
+ * acordarse de la guardia—.
+ *
+ * `dashboard` queda fuera, y es la única excepción: es el destino al que
+ * rebota todo lo negado, aquí y en el proxy, así que guardarlo sería rebotar
+ * a sí mismo.
+ */
+test('cada sección del panel tiene guardia viva en su layout', () => {
+  const BASE = join(RAIZ, 'src/app/(admin)/admin')
+  const SIN_GUARDIA = new Set(['dashboard'])
+
+  const sinCubrir: string[] = []
+  for (const d of readdirSync(BASE, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue
+    if (!(ADMIN_SECTIONS as readonly string[]).includes(d.name)) continue
+    if (SIN_GUARDIA.has(d.name)) continue
+    const lay = join(BASE, d.name, 'layout.tsx')
+    let src = ''
+    try {
+      src = readFileSync(lay, 'utf8')
+    } catch {
+      sinCubrir.push(`${d.name} (sin layout)`)
+      continue
+    }
+    // Sin comentarios: el porqué de esto está escrito en la fábrica y nombra
+    // a `requireSection`, así que un fichero que solo lo MENCIONE pasaría.
+    const codigo = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+    const guarda =
+      /guardarSeccion\(/.test(codigo) || /requireSection\(/.test(codigo)
+    if (!guarda) sinCubrir.push(`${d.name} (layout sin guardia)`)
+  }
+
+  assert.deepEqual(
+    sinCubrir,
+    [],
+    'estas secciones no tienen barrera VIVA: sus pantallas solo las cierra el ' +
+      'proxy, que lee los permisos del token y va con un refresco de retraso'
+  )
+})
+
+test('la sección que se guarda es la de su carpeta, no otra', () => {
+  // Una fábrica hace muy fácil copiar el fichero de al lado y olvidar cambiar
+  // el nombre: el layout de «pagos» guardando 'clientes' pasaría la prueba de
+  // arriba y dejaría pagos abierto a quien tenga clientes.
+  const BASE = join(RAIZ, 'src/app/(admin)/admin')
+  const cruzadas: string[] = []
+  for (const d of readdirSync(BASE, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue
+    if (!(ADMIN_SECTIONS as readonly string[]).includes(d.name)) continue
+    let src = ''
+    try {
+      src = readFileSync(join(BASE, d.name, 'layout.tsx'), 'utf8')
+    } catch {
+      continue
+    }
+    const m = /guardarSeccion\('([a-z-]+)'\)/.exec(src)
+    if (m && m[1] !== d.name) cruzadas.push(`${d.name} guarda '${m[1]}'`)
+  }
+  assert.deepEqual(cruzadas, [], 'un layout guarda una sección que no es la suya')
+})
+
+// -- Las server actions también dicen de qué módulo son ----------------------
+
+/**
+ * UNA ACTION SE DESPACHA POR SU ID, NO POR SU RUTA.
+ *
+ * El gate por sección del proxy mira el path, y el guardia del layout vive en
+ * el render: ninguno de los dos toca una server action. La única barrera de
+ * una action es la que lleva dentro.
+ *
+ * `requireAdminUser` solo preguntaba «¿es admin pleno?», y esa lista incluye
+ * al cajero y al gerente. Mientras traían las 44 secciones daba igual; desde
+ * que están acotados por oficio dejaba un hueco con forma concreta: un cajero
+ * ya no VE las campañas, y una action de campañas guardada solo así no le
+ * habría dicho que no.
+ */
+test('ninguna server action pide admin pleno sin decir su sección', () => {
+  const fuente = readdirSync(join(RAIZ, 'src'), { recursive: true, encoding: 'utf8' })
+    .filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('guards.ts'))
+  const desnudas: string[] = []
+  for (const f of fuente) {
+    const src = readFileSync(join(RAIZ, 'src', f), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '')
+    if (/requireAdminUser\(\s*\)/.test(src)) desnudas.push(f)
+  }
+  assert.deepEqual(
+    desnudas,
+    [],
+    'estas actions piden admin pleno sin sección: un cajero acotado las ' +
+      'ejecutaría igual, porque una action no pasa por el proxy ni por el layout'
+  )
+})
+
+/**
+ * LA EXCEPCIÓN, ENUMERADA.
+ *
+ * `requireAdminSinSeccion` existe para lo que de verdad no tiene sección: hoy
+ * el conmutador de empresa, que vive en la cabecera y no dentro de un módulo.
+ * Pedirle una a martillazos sería mentir sobre qué permiso lo gobierna.
+ *
+ * La lista está escrita para que la excepción no se extienda sola: añadir un
+ * llamador nuevo obliga a pasar por aquí y a justificarlo.
+ */
+test('la salida sin sección tiene un solo llamador, y está escrito', () => {
+  const PERMITIDOS = new Set(['modules/admin/empresaActivaActions.ts'])
+  const fuente = readdirSync(join(RAIZ, 'src'), { recursive: true, encoding: 'utf8' })
+    .filter((f) => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('guards.ts'))
+  const usan = fuente.filter((f) => {
+    const src = readFileSync(join(RAIZ, 'src', f), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '')
+    return /requireAdminSinSeccion\(/.test(src)
+  })
+  const nuevos = usan.filter((f) => !PERMITIDOS.has(f.replace(/\\/g, '/')))
+  assert.deepEqual(
+    nuevos,
+    [],
+    'un llamador nuevo de la salida sin sección: si de verdad no tiene módulo, ' +
+      'añádelo a la lista con su motivo; si lo tiene, usa requireAdminUser(seccion)'
+  )
+})
+
+test('la sección que pide una action es una del catálogo', () => {
+  // Una cadena suelta —un typo, o una sección que se renombró— haría que
+  // `seccionPermitida` devolviera siempre false y la action quedara muerta
+  // para todo el mundo. Falla ruidoso aquí antes que en silencio allí.
+  const fuente = readdirSync(join(RAIZ, 'src'), { recursive: true, encoding: 'utf8' })
+    .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+  const malas: string[] = []
+  for (const f of fuente) {
+    const src = readFileSync(join(RAIZ, 'src', f), 'utf8')
+    for (const m of src.matchAll(/requireAdminUser\('([^']+)'\)/g)) {
+      if (!(ADMIN_SECTIONS as readonly string[]).includes(m[1]!)) malas.push(`${f}: '${m[1]}'`)
+    }
+  }
+  assert.deepEqual(malas, [], 'una action pide una sección que no existe')
 })

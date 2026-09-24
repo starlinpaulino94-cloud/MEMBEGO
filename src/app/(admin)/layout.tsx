@@ -1,4 +1,4 @@
-import { requireRole } from '@/lib/auth/guards'
+import { requirePanel } from '@/lib/auth/guards'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import {
   ROLES_EXENTOS_PERMISOS,
@@ -9,7 +9,6 @@ import { hrefsNegadosPorPermisos } from '@/components/layout/nav-config'
 import { AppShell } from '@/components/layout/AppShell'
 import { AdminCompanySwitcher } from '@/components/admin/AdminCompanySwitcher'
 import { SentryUserSync } from '@/components/SentryUserSync'
-import { ADMIN_ROLES } from '@/types'
 import { getUnreadCount } from '@/modules/notificaciones/actions'
 import { BannerDemo } from '@/components/system/BannerDemo'
 import { nombreSiEsDemo } from '@/modules/demo'
@@ -84,7 +83,11 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  const user = await requireRole(ADMIN_ROLES)
+  // `requirePanel` y no `requireRole(ADMIN_ROLES)`: el rol abre el panel de
+  // par en par, y a quien no lo tiene se lo abre una sección CONCEDIDA, solo
+  // para lo concedido. Con el guardia por rol, conceder Clientes a un empleado
+  // se guardaba en la base y este layout lo echaba antes de mirarlo.
+  const user = await requirePanel()
   // `hiddenNav` ya no lo alimenta nada aquí.
   //
   // Había una función que escondía del menú lateral las entradas «que ya viven
