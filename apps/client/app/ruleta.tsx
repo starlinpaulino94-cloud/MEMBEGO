@@ -17,6 +17,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import Svg, { Path, Text as SvgText, G, Circle, Line } from 'react-native-svg'
 import { useRouter } from 'expo-router'
+import { goBackOr } from '../src/lib/navigation'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -517,7 +518,7 @@ export default function RuletaScreen() {
     return (
       <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <View className="flex-row items-center gap-3 px-4 pb-3">
-          <Pressable onPress={() => router.back()} className="p-2">
+          <Pressable onPress={() => goBackOr(router, '/(tabs)/beneficios')} className="p-2">
             <ArrowLeft size={20} color="#71717a" />
           </Pressable>
           <Text className="text-h2 font-inter-bold text-foreground">
@@ -551,7 +552,7 @@ export default function RuletaScreen() {
       {/* Header */}
       <View className="px-4 pb-3">
         <View className="flex-row items-center gap-3">
-          <Pressable onPress={() => router.back()} className="p-2">
+          <Pressable onPress={() => goBackOr(router, '/(tabs)/beneficios')} className="p-2">
             <ArrowLeft size={20} color="#71717a" />
           </Pressable>
           <Text className="text-h2 font-inter-bold text-foreground">

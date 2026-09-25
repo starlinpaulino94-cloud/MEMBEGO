@@ -1,7 +1,7 @@
 /**
  * Contrato retail del cliente (F1 · Stitch S01–S04).
  *
- * 4 destinos fijos (Inicio · Cuenta · Mi QR · Menú), carcasa propia del
+ * 5 destinos fijos (Inicio · Cuenta · Mi QR · Beneficios · Menú), carcasa propia del
  * cliente, Inter y azules comerciales en ámbito .retail. AppShell quedó para
  * el personal, sin dock inferior.
  *
@@ -20,14 +20,14 @@ import {
 const RAIZ = join(__dirname, '..')
 const leer = (r: string) => readFileSync(join(RAIZ, r), 'utf8')
 
-test('la navegación del cliente son exactamente 4 destinos, en su orden', () => {
+test('la navegación del cliente son exactamente 5 destinos, en su orden', () => {
   assert.deepEqual(
     DESTINOS_CLIENTE.map((d) => d.href),
-    ['/cliente/inicio', '/cliente/perfil', '/cliente/qr', '/cliente/menu']
+    ['/cliente/inicio', '/cliente/perfil', '/cliente/qr', '/cliente/promociones', '/cliente/menu']
   )
   assert.deepEqual(
     DESTINOS_CLIENTE.map((d) => d.label),
-    ['Inicio', 'Cuenta', 'Mi QR', 'Menú']
+    ['Inicio', 'Cuenta', 'Mi QR', 'Beneficios', 'Menú']
   )
 })
 
@@ -58,7 +58,7 @@ test('las pestañas de escritorio dicen en cuál estás', () => {
   assert.match(
     tabs,
     /aria-current=\{activo \? 'page' : undefined\}/,
-    'Sin `aria-current` las cuatro pestañas se ven y se anuncian iguales.'
+    'Sin `aria-current` las cinco pestañas se ven y se anuncian iguales.'
   )
 })
 
@@ -77,8 +77,9 @@ test('el layout del cliente usa CustomerShell + Inter + retail, no AppShell', ()
 
 test('CustomerShell: header, ubicación, pestañas y dock', () => {
   const src = leer('src/components/layout/CustomerShell.tsx')
+  const destinos = leer('src/components/layout/destinos-cliente.ts')
   assert.match(src, /action="\/cliente\/buscar"/)
-  assert.match(src, /href="\/cliente\/qr"/)
+  assert.match(destinos, /href: '\/cliente\/qr'/)
   assert.match(src, /href="\/cliente\/cerca"/)
   assert.match(src, /href="\/cliente\/perfil"/)
   assert.match(src, /<BottomNav \/>/)
@@ -135,7 +136,7 @@ test('el diseño del Inicio es el estado por defecto, no un premio por publicar'
   const pantalla = leer('src/components/cliente/inicio/InicioRetail.tsx')
   assert.match(
     pantalla,
-    /comercial: InicioVista\n/,
+    /comercial: InicioVista(?:\r?\n|,)/,
     'La mitad comercial ya no es opcional: la vista siempre existe.'
   )
   assert.doesNotMatch(

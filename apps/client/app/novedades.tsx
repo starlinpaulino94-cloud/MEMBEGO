@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Bell, AlertCircle } from 'lucide-react-native';
 import { useAuth } from '../src/lib/auth-context';
+import { goBackOr } from '../src/lib/navigation';
 import { useNovedades } from '../src/hooks/useNovedades';
 import { Button } from '../src/components/ui/Button';
 import { EmptyState } from '../src/components/ui/EmptyState';
@@ -45,7 +46,7 @@ export default function NovedadesScreen() {
           }}
         >
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/(tabs)/inicio')}
             className="p-2 rounded-lg active:bg-muted"
             accessibilityRole="button"
             accessibilityLabel="Volver"
@@ -88,7 +89,7 @@ export default function NovedadesScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/(tabs)/inicio')}
           className="p-2 rounded-lg active:bg-muted"
           accessibilityRole="button"
           accessibilityLabel="Volver"

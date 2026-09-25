@@ -20,7 +20,7 @@ import type { VehiculoTipo } from '../../lib/api'
  * Asistente de 7 pasos para registrar un vehículo (port de web AgregarVehiculoWizard.tsx).
  *
  * Pasos: categoría → marca → modelo → año → color → placa → confirmar.
- * Usa useCrearVehiculo para guardar y router.back() al éxito.
+ * Usa useCrearVehiculo para guardar y volver a vehículos al éxito.
  */
 export interface AgregarVehiculoWizardProps {
   tipos: VehiculoTipo[]
@@ -112,7 +112,7 @@ export function AgregarVehiculoWizard({ tipos, onSuccess }: AgregarVehiculoWizar
       onSuccess: () => {
         Alert.alert('Vehículo guardado', 'Tu vehículo se registró correctamente.')
         onSuccess?.()
-        router.back()
+        router.replace('/vehiculos')
       },
       onError: (err: Error) => {
         Alert.alert('Error', err.message || 'No se pudo guardar el vehículo.')

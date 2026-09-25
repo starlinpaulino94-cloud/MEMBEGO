@@ -1,6 +1,7 @@
 import React from 'react'
 import { View, Text, ScrollView, ActivityIndicator, Pressable } from 'react-native'
 import { useRouter } from 'expo-router'
+import { goBackOr } from '../../src/lib/navigation'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeft, AlertCircle, Car } from 'lucide-react-native'
 import { useAuth } from '../../src/lib/auth-context'
@@ -54,7 +55,7 @@ export default function NuevoVehiculoScreen() {
         {/* Back bar */}
         <View className="mb-4 flex-row items-center gap-2">
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/vehiculos')}
             className="h-10 w-10 items-center justify-center rounded-xl border border-border bg-background active:opacity-70"
           >
             <ArrowLeft size={18} color="#111827" />
@@ -99,7 +100,7 @@ export default function NuevoVehiculoScreen() {
         {data && data.tipos.length > 0 && (
           <AgregarVehiculoWizard
             tipos={data.tipos}
-            onSuccess={() => router.back()}
+          onSuccess={() => router.replace('/vehiculos')}
           />
         )}
       </ScrollView>

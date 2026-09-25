@@ -20,6 +20,7 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import { useAuth } from '../src/lib/auth-context';
+import { goBackOr } from '../src/lib/navigation';
 import { useMisExcursiones } from '../src/hooks/useExcursiones';
 import { formatDate, formatMoney } from '../src/lib/format';
 import { Button } from '../src/components/ui/Button';
@@ -81,7 +82,7 @@ export default function MisExcursionesScreen() {
       <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/(tabs)/inicio')}
             className="flex-row items-center gap-1.5"
           >
             <ArrowLeft size={16} color="#71717a" />
@@ -114,7 +115,7 @@ export default function MisExcursionesScreen() {
       {/* Back bar */}
       <View className="px-4 py-3 border-b border-border bg-card">
         <Pressable
-          onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/(tabs)/inicio')}
           className="flex-row items-center gap-1.5"
         >
           <ArrowLeft size={16} color="#71717a" />

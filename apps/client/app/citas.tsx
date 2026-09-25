@@ -17,6 +17,7 @@ import {
   Gift,
 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
+import { goBackOr } from '../src/lib/navigation'
 import { useCitas } from '../src/hooks/useCitas'
 import { Button } from '../src/components/ui/Button'
 import { Card } from '../src/components/ui/Card'
@@ -166,7 +167,7 @@ export default function CitasScreen() {
       }}
     >
       <Pressable
-        onPress={() => router.back()}
+        onPress={() => goBackOr(router, '/(tabs)/inicio')}
         className="p-2 rounded-lg active:bg-muted"
         accessibilityRole="button"
         accessibilityLabel="Volver"

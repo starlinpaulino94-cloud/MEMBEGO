@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeft, Car, Plus, AlertCircle } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
+import { goBackOr } from '../src/lib/navigation'
 import { useVehiculos } from '../src/hooks/useVehiculos'
 import { Button } from '../src/components/ui/Button'
 import { Card } from '../src/components/ui/Card'
@@ -61,7 +62,7 @@ export default function VehiculosScreen() {
         {/* Back bar */}
         <View className="mb-4 flex-row items-center gap-2">
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/(tabs)/cuenta')}
             className="h-10 w-10 items-center justify-center rounded-xl border border-border bg-background active:opacity-70"
           >
             <ArrowLeft size={18} color="#111827" />

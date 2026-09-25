@@ -18,6 +18,7 @@ import {
   Clock,
 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
+import { goBackOr } from '../src/lib/navigation'
 import { useMisPromociones } from '../src/hooks/useMisPromociones'
 import { formatDate } from '../src/lib/format'
 import { cn } from '../src/lib/cn'
@@ -188,7 +189,7 @@ export default function MisPromocionesScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/(tabs)/beneficios')}
           className="p-2 rounded-lg active:bg-muted"
           accessibilityRole="button"
           accessibilityLabel="Volver"

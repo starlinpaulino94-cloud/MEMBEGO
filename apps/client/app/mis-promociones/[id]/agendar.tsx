@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
+import { goBackOr } from '../../../src/lib/navigation'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -79,7 +80,7 @@ export default function AgendarCitaScreen() {
       {
         onSuccess: (res) => {
           Alert.alert('Cita agendada', res.mensaje ?? 'Tu cita fue agendada correctamente.', [
-            { text: 'OK', onPress: () => router.back() },
+            { text: 'OK', onPress: () => router.replace('/mis-promociones') },
           ])
         },
         onError: (err: Error) => {
@@ -102,7 +103,7 @@ export default function AgendarCitaScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/mis-promociones')}
           className="p-2 rounded-lg active:bg-muted"
           accessibilityRole="button"
           accessibilityLabel="Volver"
@@ -212,7 +213,7 @@ export default function AgendarCitaScreen() {
                     </>
                   )}
                 </Button>
-                <Button variant="outline" onPress={() => router.back()}>
+                <Button variant="outline" onPress={() => goBackOr(router, '/mis-promociones')}>
                   <Text className="font-inter-semibold text-foreground">Omitir por ahora</Text>
                 </Button>
               </View>

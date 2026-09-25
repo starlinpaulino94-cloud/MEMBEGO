@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
+import { goBackOr } from '../../src/lib/navigation'
 import { ArrowLeft, History, Car, Clock, Calendar, Share2, Download } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -184,7 +185,7 @@ export default function MembresiaDetailScreen() {
         contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8 }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/mis-membresias')}
           className="flex-row items-center gap-1.5 mb-4"
         >
           <ArrowLeft size={20} color="#4b5563" />
@@ -238,7 +239,7 @@ export default function MembresiaDetailScreen() {
       <View className="max-w-xl self-center w-full">
         {/* Back Row */}
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/mis-membresias')}
           className="flex-row items-center gap-1.5 mb-4"
         >
           <ArrowLeft size={20} color="#4b5563" />

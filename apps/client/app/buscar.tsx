@@ -9,7 +9,6 @@ import {
   Keyboard,
 } from 'react-native'
 import { useRouter } from 'expo-router'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Search, Tag, Compass, ChevronRight, Store, AlertCircle } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { useBuscar } from '../src/hooks/useBuscar'
@@ -39,7 +38,6 @@ import type { BuscarParams } from '../src/lib/api'
  */
 export default function BuscarScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
 
   // Search state
@@ -156,7 +154,7 @@ export default function BuscarScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+    <View className="flex-1 bg-background">
       <ScrollView
         className="flex-1"
         contentContainerClassName="px-4 pb-8"

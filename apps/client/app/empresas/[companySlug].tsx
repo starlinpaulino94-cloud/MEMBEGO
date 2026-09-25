@@ -9,6 +9,7 @@ import {
   Linking,
 } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import { goBackOr } from '../../src/lib/navigation'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -104,7 +105,7 @@ export default function EmpresaDetalleScreen() {
           }}
         >
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/empresas')}
             className="rounded-lg p-2"
             accessibilityRole="button"
             accessibilityLabel="Volver"
@@ -138,7 +139,7 @@ export default function EmpresaDetalleScreen() {
           }}
         >
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/empresas')}
             className="rounded-lg p-2"
             accessibilityRole="button"
             accessibilityLabel="Volver"
@@ -174,7 +175,7 @@ export default function EmpresaDetalleScreen() {
           }}
         >
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/empresas')}
             className="rounded-lg p-2"
             accessibilityRole="button"
             accessibilityLabel="Volver"
@@ -207,7 +208,7 @@ export default function EmpresaDetalleScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/empresas')}
           className="rounded-lg p-2 active:bg-muted"
           accessibilityRole="button"
           accessibilityLabel="Volver"

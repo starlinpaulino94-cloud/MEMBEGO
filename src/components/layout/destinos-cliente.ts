@@ -1,7 +1,7 @@
 /**
- * LOS CUATRO DESTINOS DEL CLIENTE — una sola fuente (contrato Stitch S01).
+ * LOS CINCO DESTINOS DEL CLIENTE — una sola fuente (contrato Stitch S01).
  *
- * Inicio · Cuenta · Mi QR · Menú, siempre los mismos y en el mismo orden para
+ * Inicio · Cuenta · Mi QR · Beneficios · Menú, siempre los mismos y en el mismo orden para
  * todas las empresas y en todos los tamaños de pantalla. La disponibilidad por
  * empresa o capacidad se decide DENTRO de esas pantallas (Menú y Cuenta filtran
  * sus filas), nunca cambiando los destinos: la barra de la app no puede

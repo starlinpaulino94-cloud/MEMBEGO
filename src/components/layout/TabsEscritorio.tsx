@@ -6,10 +6,10 @@ import { cn } from '@/lib/utils'
 import { DESTINOS_CLIENTE, esDestinoActivo } from './destinos-cliente'
 
 /**
- * Fila de pestañas del cliente en escritorio — los MISMOS cuatro destinos del
+ * Fila de pestañas del cliente en escritorio — los MISMOS cinco destinos del
  * dock móvil, con el mismo vocabulario y el mismo orden.
  *
- * Marca dónde estás: sin `aria-current` ni indicador visible, las cuatro
+ * Marca dónde estás: sin `aria-current` ni indicador visible, las cinco
  * pestañas se ven idénticas en cualquier pantalla y la barra deja de orientar
  * (y un lector de pantalla no puede anunciar la sección actual).
  *

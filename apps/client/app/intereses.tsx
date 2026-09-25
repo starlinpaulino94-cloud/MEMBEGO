@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Sparkles, AlertCircle } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
+import { goBackOr } from '../src/lib/navigation'
 import { useIntereses } from '../src/hooks/useIntereses'
 import { InteresesForm } from '../src/components/cliente/InteresesForm'
 import { Button } from '../src/components/ui/Button'
@@ -85,7 +86,7 @@ export default function InteresesScreen() {
         <Button
           variant="outline"
           size="icon"
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/(tabs)/cuenta')}
           className="h-9 w-9"
         >
           <Text className="text-sm font-inter-semibold text-foreground">←</Text>

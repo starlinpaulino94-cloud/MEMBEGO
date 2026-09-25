@@ -8,6 +8,7 @@ import {
   Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { goBackOr } from '../../src/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
@@ -150,7 +151,7 @@ export default function MisExcursionDetalleScreen() {
       <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/mis-excursiones')}
             className="flex-row items-center gap-1.5"
           >
             <ArrowLeft size={16} color="#71717a" />
@@ -179,7 +180,7 @@ export default function MisExcursionDetalleScreen() {
       <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/mis-excursiones')}
             className="flex-row items-center gap-1.5"
           >
             <ArrowLeft size={16} color="#71717a" />
@@ -205,7 +206,7 @@ export default function MisExcursionDetalleScreen() {
       <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => goBackOr(router, '/mis-excursiones')}
             className="flex-row items-center gap-1.5"
           >
             <ArrowLeft size={16} color="#71717a" />

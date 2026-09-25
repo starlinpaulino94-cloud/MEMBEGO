@@ -21,6 +21,7 @@ import {
   AlertCircle,
 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
+import { goBackOr } from '../src/lib/navigation'
 import { useHistorial } from '../src/hooks/useHistorial'
 import { formatDateTime } from '../src/lib/format'
 import { Button } from '../src/components/ui/Button'
@@ -225,7 +226,7 @@ export default function HistorialScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/(tabs)/cuenta')}
           className="p-2 rounded-lg active:bg-muted"
           accessibilityRole="button"
           accessibilityLabel="Volver"

@@ -14,6 +14,7 @@ import {
 } from '@expo-google-fonts/inter'
 import { View, ActivityIndicator } from 'react-native'
 import { AuthProvider } from '../src/lib/auth-context'
+import { ClientShell } from '../src/components/layout/ClientShell'
 
 export default function RootLayout() {
   const [queryClient] = useState(
@@ -28,7 +29,7 @@ export default function RootLayout() {
       })
   )
 
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -36,7 +37,7 @@ export default function RootLayout() {
     Inter_800ExtraBold,
   })
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !fontError) {
     return (
       <View className="flex-1 items-center justify-center bg-vibe-fondo">
         <ActivityIndicator size="large" color="#7c3aed" />
@@ -49,13 +50,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <StatusBar style="light" />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="establecer-contrasena" />
-            <Stack.Screen name="bienvenida-ref/[companySlug]" />
-          </Stack>
+          <ClientShell />
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>

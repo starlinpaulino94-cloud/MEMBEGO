@@ -220,7 +220,6 @@ test('plataforma, mostrador y empresa se pintan en una columna; el cliente no', 
   // riel deja de tener a quién repartir en el ámbito de empresa.
   //
   // El cliente conserva sus espacios: su navegación no es este hub, son los
-  // cuatro destinos del dock.
   assert.equal(menuEnUnaColumna(visibleWorkspaces(PLATFORM)), true)
   assert.equal(menuEnUnaColumna(visibleWorkspaces({ role: 'EMPLEADO' })), true)
   assert.equal(menuEnUnaColumna(visibleWorkspaces(EMPRESA_COMO_SA)), true)

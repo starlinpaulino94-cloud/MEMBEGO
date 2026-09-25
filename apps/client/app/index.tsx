@@ -4,7 +4,7 @@ import { View, ActivityIndicator } from 'react-native'
 import { useAuth } from '../src/lib/auth-context'
 
 export default function IndexPage() {
-  const { isLoading } = useAuth()
+  const { isLoading, isAuthenticated } = useAuth()
 
   if (isLoading) {
     return (
@@ -14,5 +14,5 @@ export default function IndexPage() {
     )
   }
 
-  return <Redirect href="/(tabs)/inicio" />
+  return <Redirect href={isAuthenticated ? '/(tabs)/inicio' : '/login'} />
 }

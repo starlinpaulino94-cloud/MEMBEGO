@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
+import { goBackOr } from '../../src/lib/navigation'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -123,7 +124,7 @@ export default function PromocionDetalleScreen() {
       >
         {/* Back button */}
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/(tabs)/beneficios')}
           className="flex-row items-center px-4 py-3 active:opacity-70"
           accessibilityRole="button"
           accessibilityLabel="Volver a ofertas"

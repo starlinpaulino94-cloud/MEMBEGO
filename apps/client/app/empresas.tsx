@@ -9,8 +9,7 @@ import {
   Keyboard,
 } from 'react-native'
 import { useRouter } from 'expo-router'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ArrowLeft, Search, Store } from 'lucide-react-native'
+import { Search, Store } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { useExplorar } from '../src/hooks/useExplorar'
 import { ExplorarEmpresasList } from '../src/components/cliente/ExplorarEmpresasList'
@@ -29,7 +28,6 @@ import type { BusinessCardData } from '../src/components/marketplace/BusinessCar
  */
 export default function MisEmpresasScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
 
   const [searchInput, setSearchInput] = useState('')
@@ -80,29 +78,6 @@ export default function MisEmpresasScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      {/* ── Header con back + título ─────────────────────────────────── */}
-      <View
-        className="flex-row items-center gap-2 border-b border-border bg-background"
-        style={{
-          paddingLeft: insets.left + 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-        }}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          className="rounded-lg p-2 active:bg-muted"
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-        >
-          <ArrowLeft size={20} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-inter-bold text-foreground">
-          Mis empresas
-        </Text>
-      </View>
-
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ padding: 16 }}

@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeft, Search, Store } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
+import { goBackOr } from '../src/lib/navigation'
 import { useExplorar } from '../src/hooks/useExplorar'
 import { ExplorarEmpresasList } from '../src/components/cliente/ExplorarEmpresasList'
 import { EmptyState } from '../src/components/ui/EmptyState'
@@ -92,7 +93,7 @@ export default function ExplorarScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/(tabs)/inicio')}
           className="rounded-lg p-2 active:bg-muted"
           accessibilityRole="button"
           accessibilityLabel="Volver"

@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   CreditCard,
@@ -131,7 +130,6 @@ function EstadoDot({ estado }: { estado: string }) {
 
 export default function PagosScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
   const params = useLocalSearchParams<{ pago?: string }>();
   const { data, isLoading, isError, refetch } = usePagos(isAuthenticated);
@@ -162,34 +160,10 @@ export default function PagosScreen() {
     );
   }
 
-  /* ── Barra con back + título ───────────────────────────────────────── */
-  const header = (
-    <View
-      className="flex-row items-center gap-2 bg-background border-b border-border"
-      style={{
-        paddingLeft: insets.left + 16,
-        paddingRight: 16,
-        paddingTop: 12,
-        paddingBottom: 12,
-      }}
-    >
-      <Pressable
-        onPress={() => router.back()}
-        className="rounded-lg p-2 active:bg-muted"
-        accessibilityRole="button"
-        accessibilityLabel="Volver"
-      >
-        <ArrowLeft size={20} color="#111827" />
-      </Pressable>
-      <Text className="text-lg font-inter-bold text-foreground">Mis pagos</Text>
-    </View>
-  );
-
   /* ── Loading ───────────────────────────────────────────────────────── */
   if (isLoading) {
     return (
       <View className="flex-1 bg-background">
-        {header}
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
@@ -210,7 +184,6 @@ export default function PagosScreen() {
   if (isError) {
     return (
       <View className="flex-1 bg-background">
-        {header}
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
@@ -234,7 +207,6 @@ export default function PagosScreen() {
   if (!membership) {
     return (
       <View className="flex-1 bg-background">
-        {header}
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
@@ -283,7 +255,6 @@ export default function PagosScreen() {
   /* ── Data ──────────────────────────────────────────────────────────── */
   return (
     <View className="flex-1 bg-background">
-      {header}
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ padding: 16 }}

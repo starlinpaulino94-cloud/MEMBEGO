@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
+import { goBackOr } from '../../src/lib/navigation'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -101,7 +102,7 @@ export default function MisPromocionDetalleScreen() {
         }}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => goBackOr(router, '/mis-promociones')}
           className="p-2 rounded-lg active:bg-muted"
           accessibilityRole="button"
           accessibilityLabel="Volver"

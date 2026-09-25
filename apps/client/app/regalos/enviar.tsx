@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { goBackOr } from '../../src/lib/navigation'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -84,7 +85,7 @@ export default function EnviarRegaloScreen() {
       {
         onSuccess: (res) => {
           Alert.alert('Regalo enviado', res.detalle ?? 'Tu regalo se envió correctamente.', [
-            { text: 'OK', onPress: () => router.back() },
+            { text: 'OK', onPress: () => router.replace('/regalos') },
           ])
         },
         onError: (err: Error) => {
@@ -100,7 +101,7 @@ export default function EnviarRegaloScreen() {
       contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24, paddingHorizontal: 16 }}
     >
       {/* Back link */}
-      <Pressable onPress={() => router.back()} className="flex-row items-center mb-3">
+      <Pressable onPress={() => goBackOr(router, '/regalos')} className="flex-row items-center mb-3">
         <ArrowLeft size={16} color="#0284c7" />
         <Text className="ml-1.5 text-sm font-inter-medium text-primary">Regalos</Text>
       </Pressable>

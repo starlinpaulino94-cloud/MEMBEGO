@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { goBackOr } from '../../src/lib/navigation'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ArrowLeft,
@@ -62,7 +63,7 @@ export default function GiftCardScreen() {
           icon={<AlertCircle size={32} color="#e7000b" />}
           title="No se pudo cargar la configuración"
           description="Revisa tu conexión e intenta de nuevo."
-          action={<Button variant="outline" onPress={() => router.back()}>Volver</Button>}
+          action={<Button variant="outline" onPress={() => goBackOr(router, '/regalos')}>Volver</Button>}
         />
       </ScrollView>
     )
@@ -112,7 +113,7 @@ export default function GiftCardScreen() {
       contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24, paddingHorizontal: 16 }}
     >
       {/* Back link */}
-      <Pressable onPress={() => router.back()} className="flex-row items-center mb-3">
+      <Pressable onPress={() => goBackOr(router, '/regalos')} className="flex-row items-center mb-3">
         <ArrowLeft size={16} color="#0284c7" />
         <Text className="ml-1.5 text-sm font-inter-medium text-primary">Regalos</Text>
       </Pressable>
