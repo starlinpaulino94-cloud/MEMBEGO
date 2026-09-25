@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import {
@@ -430,4 +430,100 @@ test('la campanita sabe dibujar los diez tipos de supply', () => {
   for (const t of tipos) {
     assert.ok(src.includes(`${t}: {`), `${t} saldría con el icono genérico`)
   }
+})
+
+// ── «Producto listo» · la última pieza de la Fase 40 ────────────────────────
+//
+// No se pudo hacer en su día porque el modelo no tenía el concepto de pedido
+// preparado: guardaba la hora que el cliente eligió y nada más. Ahora hay un
+// estado LISTA, y lo que se prueba aquí es el riesgo que ese estado introduce.
+
+import {
+  dedupeProductoListo,
+  textoProductoListo,
+} from '../src/modules/supply/avisos'
+import {
+  puedeTransicionar,
+  RESERVA_OCUPA_CUPO,
+  TRANSICIONES_RESERVA,
+} from '../src/modules/supply/estados'
+
+test('EL CUPO · una reserva LISTA sigue ocupando el día', () => {
+  // La trampa del estado nuevo: la pizza está hecha, el horno la produjo. Si
+  // LISTA saliera del cupo, el comercio aceptaría una reserva de más por cada
+  // pedido preparado.
+  assert.ok(RESERVA_OCUPA_CUPO.includes('CONFIRMADA'))
+  assert.ok(RESERVA_OCUPA_CUPO.includes('LISTA'))
+  // Y lo que ya no es trabajo pendiente, no ocupa.
+  for (const muerto of ['CUMPLIDA', 'CANCELADA', 'NO_ASISTIO'] as const) {
+    assert.ok(!RESERVA_OCUPA_CUPO.includes(muerto), muerto)
+  }
+})
+
+test('ningún sitio cuenta el cupo mirando solo CONFIRMADA', () => {
+  const dir = join(__dirname, '..', 'src', 'modules', 'supply')
+  for (const f of readdirSync(dir).filter((n) => n.endsWith('.ts'))) {
+    const src = readFileSync(join(dir, f), 'utf8')
+    // El `create` sí pone 'CONFIRMADA': ese es el estado inicial, no un filtro.
+    const filtros = src.match(/where:[^}]*estado: 'CONFIRMADA'/g) ?? []
+    assert.equal(filtros.length, 0, `${f} filtra reservas solo por CONFIRMADA y se saltaría las listas`)
+  }
+})
+
+test('LISTA está EN MEDIO: se puede saltar y de ahí aún se cancela', () => {
+  assert.ok(puedeTransicionar(TRANSICIONES_RESERVA, 'CONFIRMADA', 'LISTA'))
+  // Quien hace un café no va a pulsar un botón antes de dárselo.
+  assert.ok(puedeTransicionar(TRANSICIONES_RESERVA, 'CONFIRMADA', 'CUMPLIDA'))
+  assert.ok(puedeTransicionar(TRANSICIONES_RESERVA, 'LISTA', 'CUMPLIDA'))
+  // Que la comida esté hecha no obliga al cliente a aparecer.
+  assert.ok(puedeTransicionar(TRANSICIONES_RESERVA, 'LISTA', 'NO_ASISTIO'))
+  assert.ok(puedeTransicionar(TRANSICIONES_RESERVA, 'LISTA', 'CANCELADA'))
+})
+
+test('lo terminal es terminal: no se marca listo algo ya entregado', () => {
+  for (const fin of ['CUMPLIDA', 'CANCELADA', 'NO_ASISTIO'] as const) {
+    assert.equal(puedeTransicionar(TRANSICIONES_RESERVA, fin, 'LISTA'), false, fin)
+  }
+})
+
+test('el aviso al cliente dice dónde, y una vez por reserva', () => {
+  const t = textoProductoListo({
+    item: 'Pizza Grande',
+    proveedorNombre: 'Litre Pizza',
+    sucursal: 'Bávaro',
+  })
+  assert.match(t.titulo, /Pizza Grande ya está listo/)
+  assert.match(t.mensaje, /Litre Pizza · Bávaro/)
+  assert.equal(t.href, '/cliente/beneficios')
+  assert.equal(dedupeProductoListo('r1'), dedupeProductoListo('r1'))
+  assert.notEqual(dedupeProductoListo('r1'), dedupeProductoListo('r2'))
+})
+
+test('sin sucursal el mensaje no queda con un hueco', () => {
+  const t = textoProductoListo({ item: 'Café', proveedorNombre: 'La Braza', sucursal: null })
+  assert.ok(!t.mensaje.includes('·'), t.mensaje)
+  assert.ok(!t.mensaje.includes('null'), t.mensaje)
+})
+
+test('SEGURIDAD · marcar listo acota por empresa en el WHERE, no solo antes', () => {
+  const src = readFileSync(join(__dirname, '..', 'src', 'modules', 'supply', 'reservas.ts'), 'utf8')
+  const i = src.indexOf('export async function marcarLista(')
+  const fn = src.slice(i, src.indexOf('\n}', src.indexOf('avisarProductoListo', i)))
+  assert.match(fn, /where: \{ id: reservaId, proveedorId \}/,
+    'un id de reserva ajeno marcaría listo el pedido de otro comercio')
+  assert.match(fn, /puedeTransicionar\(TRANSICIONES_RESERVA/)
+  // Y el aviso, fuera de la transacción.
+  assert.ok(fn.indexOf('avisarProductoListo') > fn.indexOf('supplyReserva.update'))
+})
+
+test('el índice que impide dos recogidas vivas incluye LISTA', () => {
+  const mig = readFileSync(
+    join(__dirname, '..', 'prisma', 'migrations', '20261004_supply_reserva_lista', 'migration.sql'),
+    'utf8'
+  )
+  // Sin esto, el cliente apartaría una SEGUNDA recogida del mismo beneficio
+  // mientras la primera está hecha en el mostrador. Un `if` no vale: dos
+  // peticiones a la vez lo pasan las dos.
+  assert.match(mig, /WHERE "estado" IN \('CONFIRMADA', 'LISTA'\)/)
+  assert.match(mig, /ADD VALUE IF NOT EXISTS 'SUPPLY_PRODUCTO_LISTO'/)
 })

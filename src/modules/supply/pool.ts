@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
+import { RESERVA_OCUPA_CUPO } from './estados'
 import { economiaCampana, scorecard, type ScorecardProveedor } from './economia'
 import { ambitoProveedor } from './permisos'
 import type { EstrategiaSeleccion, LoteElegible } from './fefo'
@@ -718,7 +719,7 @@ export async function beneficiosDelCliente(
           },
         },
         vouchers: { where: { estado: 'ACTIVO' }, select: { id: true }, take: 1 },
-        reservas: { where: { estado: 'CONFIRMADA' }, select: { inicioAt: true }, take: 1 },
+        reservas: { where: { estado: { in: [...RESERVA_OCUPA_CUPO] } }, select: { inicioAt: true }, take: 1 },
       },
     })
 

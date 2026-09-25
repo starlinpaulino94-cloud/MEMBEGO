@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { sinEmpresa, type Tx } from '@/lib/tenant'
+import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
+import { puedeTransicionar, RESERVA_OCUPA_CUPO, TRANSICIONES_RESERVA, type SupplyReservaEstado } from './estados'
 import {
   diaLocal,
   evaluarCapacidad,
@@ -43,10 +44,10 @@ export async function ocupacion(
   hora?: number | null
 ): Promise<{ delDia: number; deLaHora: number }> {
   const [delDia, deLaHora] = await Promise.all([
-    tx.supplyReserva.count({ where: { proveedorId, dia, estado: 'CONFIRMADA' } }),
+    tx.supplyReserva.count({ where: { proveedorId, dia, estado: { in: [...RESERVA_OCUPA_CUPO] } } }),
     hora == null
       ? Promise.resolve(0)
-      : tx.supplyReserva.count({ where: { proveedorId, dia, hora, estado: 'CONFIRMADA' } }),
+      : tx.supplyReserva.count({ where: { proveedorId, dia, hora, estado: { in: [...RESERVA_OCUPA_CUPO] } } }),
   ])
   return { delDia, deLaHora }
 }
@@ -116,7 +117,7 @@ async function reservarEnTx(d: DatosReserva): Promise<ResultadoReserva> {
     if (!veredicto.cabe) return { ok: false, mensaje: veredicto.mensaje }
 
     await tx.supplyReserva.updateMany({
-      where: { derechoId: d.derechoId, estado: 'CONFIRMADA' },
+      where: { derechoId: d.derechoId, estado: { in: [...RESERVA_OCUPA_CUPO] } },
       data: { estado: 'CANCELADA', canceladaAt: new Date() },
     })
 
@@ -150,7 +151,7 @@ export async function cancelarReserva(derechoId: string, clienteId: string): Pro
     })
     if (!derecho || derecho.clienteId !== clienteId) throw new Error('Reserva no encontrada.')
     await tx.supplyReserva.updateMany({
-      where: { derechoId, estado: 'CONFIRMADA' },
+      where: { derechoId, estado: { in: [...RESERVA_OCUPA_CUPO] } },
       data: { estado: 'CANCELADA', canceladaAt: new Date() },
     })
   })
@@ -200,7 +201,7 @@ export async function disponibilidadDelDia(
     }
 
     const reservas = await tx.supplyReserva.findMany({
-      where: { proveedorId: derecho.proveedorId, dia, estado: 'CONFIRMADA' },
+      where: { proveedorId: derecho.proveedorId, dia, estado: { in: [...RESERVA_OCUPA_CUPO] } },
       select: { hora: true },
     })
     const porHora: Record<number, number> = {}
@@ -229,7 +230,7 @@ export async function usoDeHoy(
 ): Promise<{ dia: string; usadas: number; capacidad: number | null }> {
   const dia = diaLocal(new Date())
   const [reservas, entregas] = await Promise.all([
-    tx.supplyReserva.count({ where: { proveedorId, dia, estado: 'CONFIRMADA' } }),
+    tx.supplyReserva.count({ where: { proveedorId, dia, estado: { in: [...RESERVA_OCUPA_CUPO] } } }),
     tx.supplyRedencion.count({
       where: {
         proveedorId,
@@ -244,3 +245,90 @@ export async function usoDeHoy(
 }
 
 export type { VeredictoCapacidad }
+
+export interface PedidoDeHoy {
+  reservaId: string
+  cliente: string
+  item: string
+  sucursal: string
+  inicioAt: Date
+  estado: SupplyReservaEstado
+}
+
+/**
+ * Lo que el comercio tiene que preparar hoy.
+ *
+ * Solo lo que sigue vivo: una reserva entregada o caída ya no es trabajo
+ * pendiente y llenaría la lista de ruido a las tres horas de abrir.
+ */
+export async function pedidosDeHoy(proveedorId: string, ahora = new Date()): Promise<PedidoDeHoy[]> {
+  const dia = diaLocal(ahora)
+  const filas = await conEmpresa(proveedorId, (tx) =>
+    tx.supplyReserva.findMany({
+      where: { proveedorId, dia, estado: { in: [...RESERVA_OCUPA_CUPO] } },
+      orderBy: { inicioAt: 'asc' },
+      take: 100,
+      select: {
+        id: true,
+        inicioAt: true,
+        estado: true,
+        sucursal: { select: { nombre: true } },
+        derecho: {
+          select: {
+            cliente: { select: { nombre: true } },
+            lote: { select: { snapshotItemNombre: true } },
+          },
+        },
+      },
+    })
+  )
+  return filas.map((f) => ({
+    reservaId: f.id,
+    cliente: f.derecho.cliente.nombre,
+    item: f.derecho.lote.snapshotItemNombre,
+    sucursal: f.sucursal?.nombre ?? '',
+    inicioAt: f.inicioAt,
+    estado: f.estado as SupplyReservaEstado,
+  }))
+}
+
+/**
+ * El comercio marca que ya lo preparó.
+ *
+ * `proveedorId` se EXIGE y entra en el `where`, no solo en una comprobación
+ * previa: el portal ya guarda por empresa, pero el aislamiento de este módulo
+ * nunca depende de una sola barrera. Sin esto, un id de reserva ajeno colado en
+ * el formulario marcaría listo un pedido de otro comercio.
+ *
+ * La transición se valida contra la máquina de estados en vez de con un `if`
+ * suelto: marcar listo algo ya entregado o cancelado no es una corrección, es
+ * un error, y el mensaje tiene que decir de dónde a dónde no se puede ir.
+ */
+export async function marcarLista(
+  reservaId: string,
+  proveedorId: string
+): Promise<{ ok: true } | { ok: false; mensaje: string }> {
+  const actual = await conEmpresa(proveedorId, (tx) =>
+    tx.supplyReserva.findFirst({
+      where: { id: reservaId, proveedorId },
+      select: { estado: true },
+    })
+  )
+  if (!actual) return { ok: false, mensaje: 'Esa reserva no es de tu empresa.' }
+
+  const desde = actual.estado as SupplyReservaEstado
+  if (desde === 'LISTA') return { ok: true } // idempotente: dos clics, un aviso
+  if (!puedeTransicionar(TRANSICIONES_RESERVA, desde, 'LISTA')) {
+    return { ok: false, mensaje: `Una reserva ${desde.toLowerCase()} ya no se puede marcar lista.` }
+  }
+
+  await conEmpresa(proveedorId, (tx) =>
+    tx.supplyReserva.update({ where: { id: reservaId }, data: { estado: 'LISTA' } })
+  )
+
+  // Fuera de la transacción: avisar abre la suya, y que falle la campanita no
+  // puede deshacer que la pizza esté hecha.
+  const { avisarProductoListo } = await import('./notificar')
+  await avisarProductoListo(reservaId)
+  return { ok: true }
+}

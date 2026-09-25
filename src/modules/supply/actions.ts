@@ -720,6 +720,38 @@ export interface EstadoEscaneo {
  * Acepta el nonce de un QR dinámico o el código del voucher directamente (por
  * si el cliente enseña el código desde su historial o lo dicta por teléfono).
  */
+/**
+ * El comercio marca que ya preparó un pedido reservado (Fase 40).
+ *
+ * Guardada con `guardiaProveedor`, igual que el escáner: exige la sección
+ * `supply` Y que la empresa tenga encendida la capacidad de proveedora. El
+ * `companyId` viaja en el formulario y se comprueba; el id de la reserva se
+ * vuelve a acotar por empresa dentro de `marcarLista`, que es donde de verdad
+ * importa.
+ */
+export async function marcarPedidoListoAction(
+  _prev: EstadoAccion,
+  fd: FormData
+): Promise<EstadoAccion> {
+  try {
+    const companyId = texto(fd, 'companyId', 60)
+    const user = await guardiaProveedor(companyId)
+    if (!user) return { error: 'No tienes permiso para gestionar los pedidos de Membego aquí.' }
+
+    const reservaId = texto(fd, 'reservaId', 60)
+    if (!reservaId) return { error: 'Falta la reserva.' }
+
+    const { marcarLista } = await import('./reservas')
+    const res = await marcarLista(reservaId, companyId)
+    if (!res.ok) return { error: res.mensaje }
+
+    revalidatePath('/admin/supply')
+    return { success: 'Listo. Se le avisó al cliente.' }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
 export async function escanearSupplyAction(
   _prev: EstadoEscaneo,
   fd: FormData
