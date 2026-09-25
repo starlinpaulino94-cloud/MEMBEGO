@@ -1,6 +1,5 @@
 import React from 'react'
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native'
-import { Link } from 'expo-router'
+import { View, Text, TouchableOpacity } from 'react-native'
 import {
   Car,
   Compass,
@@ -12,9 +11,17 @@ import {
   Sparkles,
   UtensilsCrossed,
   Wrench,
+  X,
+  type LucideIcon,
 } from 'lucide-react-native'
+import { colors } from '../../theme/tokens'
+import { VibeCategoriaChip } from './VibeCategoriaChip'
+import { useInicioAccent } from '../layout/InicioAccentContext'
+import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
 
-const ICONOS: Record<string, any> = {
+type Categoria = { id: string; slug: string; name: string }
+
+const ICONOS: Record<string, LucideIcon> = {
   lavado: Car, lavados: Car, carwash: Car, automotriz: Car, vehiculos: Car,
   gastronomia: UtensilsCrossed, restaurante: UtensilsCrossed, restaurantes: UtensilsCrossed, comida: UtensilsCrossed,
   tours: Compass, turismo: Compass, excursiones: Compass,
@@ -25,9 +32,16 @@ const ICONOS: Record<string, any> = {
   tienda: ShoppingBag, tiendas: ShoppingBag, comercio: ShoppingBag,
 }
 
-const ACENTOS = ['#7c3aed', '#2563eb', '#06b6d4'] as const
-
-export function VibeCategorias({ categorias }: { categorias: any[] }) {
+export function VibeCategorias({
+  categorias,
+  categoriaActiva,
+  onSeleccionar,
+}: {
+  categorias: Categoria[]
+  categoriaActiva: string | null
+  onSeleccionar: (slug: string | null, gradientIndex: number | null) => void
+}) {
+  const { accent } = useInicioAccent()
   if (!categorias || categorias.length === 0) {
     return (
       <View className="px-4 py-8 items-center justify-center">
@@ -41,42 +55,47 @@ export function VibeCategorias({ categorias }: { categorias: any[] }) {
 
   return (
     <View className="mt-4 mb-4">
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
-      >
-        <Link href="/explorar" asChild>
+      <HorizontalScrollWithFade contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+          <VibeCategoriaChip
+            categoria={{ label: 'Todos', icon: LayoutGrid, gradient: colors.gradient.categories[0] }}
+            seleccionada={categoriaActiva === null}
+            atenuada={Boolean(categoriaActiva)}
+            onPress={() => onSeleccionar(null, null)}
+          />
+
+          {categorias.map((c, i) => {
+            const Icono = ICONOS[c.slug?.toLowerCase()] ?? LayoutGrid
+            const activa = categoriaActiva === c.slug
+            const gradiente = colors.gradient.categories[(i + 1) % colors.gradient.categories.length]
+
+            return (
+              <VibeCategoriaChip
+                key={c.id}
+                categoria={{ label: c.name, icon: Icono, gradient: gradiente }}
+                seleccionada={activa}
+                atenuada={Boolean(categoriaActiva && !activa)}
+                onPress={() => onSeleccionar(activa ? null : c.slug, activa ? null : (i + 1) % colors.gradient.categories.length)}
+              />
+            )
+          })}
+      </HorizontalScrollWithFade>
+      {categoriaActiva ? (
+        <View className="mt-2.5 flex-row items-center justify-between px-4">
+          <Text className="flex-1 text-small text-muted-foreground" numberOfLines={1}>
+            Filtrando por: <Text className="font-bold text-foreground">{categorias.find((item) => item.slug === categoriaActiva)?.name ?? categoriaActiva}</Text>
+          </Text>
           <TouchableOpacity
-            activeOpacity={0.8}
-            className="flex-row items-center gap-2 rounded-full bg-vibe-violet px-4 py-2"
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Mostrar todas las categorías"
+            onPress={() => onSeleccionar(null, null)}
+            className="flex-row items-center gap-1 rounded-full px-2.5 py-1"
           >
-            <LayoutGrid size={16} color="#ffffff" />
-            <Text className="text-[12px] font-bold text-white">
-              Todos
-            </Text>
+            <X size={14} color={accent.color} />
+            <Text className="text-label-sm font-bold" style={{ color: accent.color }}>Mostrar todas</Text>
           </TouchableOpacity>
-        </Link>
-        
-        {categorias.map((c, i) => {
-          const Icono = ICONOS[c.slug?.toLowerCase()] ?? LayoutGrid
-          const color = ACENTOS[i % ACENTOS.length]
-          
-          return (
-            <Link key={c.id} href={`/explorar?category=${encodeURIComponent(c.slug)}`} asChild>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                className="flex-row items-center gap-2 rounded-full border border-vibe-chip bg-card px-4 py-2 elevation-1 shadow-sm"
-              >
-                <Icono size={16} color={color} />
-                <Text className="text-[12px] font-bold text-foreground">
-                  {c.name}
-                </Text>
-              </TouchableOpacity>
-            </Link>
-          )
-        })}
-      </ScrollView>
+        </View>
+      ) : null}
     </View>
   )
 }

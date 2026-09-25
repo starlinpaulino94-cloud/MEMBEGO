@@ -1,13 +1,17 @@
 import React from 'react'
-import { View, Text, TouchableOpacity, Image } from 'react-native'
-import { Link } from 'expo-router'
+import { View, Text, TouchableOpacity, Image, useWindowDimensions } from 'react-native'
+import { Link, useRouter } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Star } from 'lucide-react-native'
 import { SectionHeader } from '../ui/SectionHeader'
 import { EmptyState } from '../ui/EmptyState'
 import { rnHref } from '../../lib/rutas'
+import { colors } from '../../theme/tokens'
+import { MarketplaceCard } from '../marketplace/MarketplaceCard'
+import { useInicioAccent } from '../layout/InicioAccentContext'
+import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
 
-function Estrellas({ valoracion }: { valoracion: number }) {
+function Estrellas({ valoracion, accentColor }: { valoracion: number; accentColor: string }) {
   const llenas = Math.round(valoracion)
   return (
     <View className="flex-row">
@@ -15,8 +19,8 @@ function Estrellas({ valoracion }: { valoracion: number }) {
         <Star
           key={n}
           size={14}
-          color={n <= llenas ? '#7c3aed' : '#ddd6fe'}
-          fill={n <= llenas ? '#7c3aed' : 'transparent'}
+          color={n <= llenas ? accentColor : colors.vibe.chip}
+          fill={n <= llenas ? accentColor : 'transparent'}
         />
       ))}
     </View>
@@ -30,13 +34,35 @@ export function VibeRelacionado({
   planes: any[]
   total: number
 }) {
+  const router = useRouter()
+  const { accent } = useInicioAccent()
+  const { width } = useWindowDimensions()
+  const isDesktop = width >= 1024
+
   if (!planes || planes.length === 0) {
     return (
       <View className="mt-6 px-4">
+        <SectionHeader
+          title="Membresías recomendadas"
+          action={total > 0 ? (
+            <Link href="/planes" asChild>
+              <TouchableOpacity activeOpacity={0.7}>
+                <Text className="text-label-sm font-inter-bold" style={{ color: accent.color }}>
+                  Ver todas ({total})
+                </Text>
+              </TouchableOpacity>
+            </Link>
+          ) : undefined}
+        />
         <EmptyState
-          title="Relacionado contigo"
-          description="Cuando haya membresías publicadas, aparecerán aquí."
+          title="No hay membresías para mostrar"
+          description={
+            total > 0
+              ? 'Puedes consultar las membresías publicadas en el catálogo.'
+              : 'Cuando haya membresías para esta selección, aparecerán aquí.'
+          }
           variant="card"
+          className="mt-3"
         />
       </View>
     )
@@ -45,78 +71,96 @@ export function VibeRelacionado({
   return (
     <View className="mt-6 px-4">
       <SectionHeader
-        title="Relacionado con los artículos que viste"
+        title="Membresías recomendadas"
         action={
-          <Link href="/explorar" asChild>
+          <Link href="/planes" asChild>
             <TouchableOpacity activeOpacity={0.7}>
-              <Text className="text-label-sm font-inter-bold text-vibe-violet">
-                Ver más{total > 0 ? ` (${total})` : ''}
+              <Text className="text-label-sm font-inter-bold" style={{ color: accent.color }}>
+                Ver todas{total > 0 ? ` (${total})` : ''}
               </Text>
             </TouchableOpacity>
           </Link>
         }
       />
 
-      <View className="mt-3 flex-row flex-wrap gap-3">
+      <HorizontalScrollWithFade
+        contentContainerStyle={{ gap: 12 }}
+        className="mt-3"
+      >
         {planes.slice(0, 4).map((p) => (
-          <Link key={p.id} href={rnHref(p.href) as any} asChild>
-            <TouchableOpacity
-              activeOpacity={0.9}
-              className="w-[48%] rounded-xl border border-vibe-borde bg-card p-3 elevation-1 shadow-card"
-            >
-              <View className="relative h-32 w-full overflow-hidden rounded-lg bg-vibe-niebla">
-                {p.imagen ? (
-                  <Image
-                    source={{ uri: p.imagen }}
-                    style={{ flex: 1 }}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View className="flex-1 items-center justify-center">
-                    <Text className="text-h1 text-vibe-violet">
-                      {p.empresa?.slice(0, 1).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              <Text
-                className="mt-2 text-label-md font-inter-bold text-foreground"
-                numberOfLines={2}
-              >
-                {p.empresa} · {p.nombre}
-              </Text>
-
-              {p.valoracion != null && Number.isFinite(Number(p.valoracion)) ? (
-                <View className="mt-1 flex-row items-center gap-1">
-                  <Estrellas valoracion={Number(p.valoracion)} />
-                  <Text className="text-label-sm font-inter-medium text-muted-foreground">
-                    {Number(p.resenas ?? 0).toLocaleString('es-DO')}
-                  </Text>
-                </View>
-              ) : null}
-
-              <View className="mt-1 flex-row items-baseline">
-                <Text className="text-h3 text-foreground">{p.precio}</Text>
-                <Text className="ml-1 text-small text-muted-foreground">
-                  {p.periodo}
-                </Text>
-              </View>
-
+          <MarketplaceCard
+            key={p.id}
+            onPress={() => router.push(rnHref(p.href) as any)}
+            accessibilityLabel={`Ver membresía de ${p.empresa}`}
+            variant="flush"
+            footer={
               <LinearGradient
-                colors={['#7c3aed', '#2563eb', '#06b6d4']}
+                colors={accent.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                className="mt-3 w-full items-center rounded-full py-2"
+                style={{ width: '100%', borderRadius: 9999, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' }}
               >
                 <Text className="text-label-sm font-inter-bold text-white">
                   Aprovechar
                 </Text>
               </LinearGradient>
-            </TouchableOpacity>
-          </Link>
+            }
+          >
+            <View className="relative aspect-video h-28 w-full overflow-hidden rounded-lg bg-vibe-niebla">
+              {p.imagen ? (
+                <Image
+                  source={{ uri: p.imagen }}
+                  style={{ flex: 1 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View className="flex-1 items-center justify-center">
+                  <Text className="text-h1" style={{ color: accent.color }}>
+                    {p.empresa?.slice(0, 1).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              {p.esCliente ? (
+                <View className="absolute left-2 bottom-2 rounded-full bg-card/95 px-2 py-1">
+                  <Text
+                    className="text-label-sm font-inter-semibold"
+                    style={{ color: accent.color }}
+                  >
+                    De tus negocios
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View className="mt-2 flex-1 justify-between">
+              <View>
+                <Text
+                  className="text-label-md font-inter-bold text-foreground"
+                  numberOfLines={2}
+                >
+                  {p.empresa} · {p.nombre}
+                </Text>
+
+                {p.valoracion != null && Number.isFinite(Number(p.valoracion)) ? (
+                  <View className="mt-1 flex-row items-center gap-1">
+                    <Estrellas valoracion={Number(p.valoracion)} accentColor={accent.color} />
+                    <Text className="text-label-sm font-inter-medium text-muted-foreground">
+                      {Number(p.resenas ?? 0).toLocaleString('es-DO')}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <View className="flex-row items-baseline">
+                <Text className="text-price-lg" style={{ color: accent.color }}>{p.precio}</Text>
+                <Text className="ml-1 text-small text-muted-foreground">
+                  {p.periodo}
+                </Text>
+              </View>
+            </View>
+          </MarketplaceCard>
         ))}
-      </View>
+      </HorizontalScrollWithFade>
     </View>
   )
 }

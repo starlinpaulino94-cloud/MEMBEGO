@@ -192,6 +192,9 @@ export async function getInicioVista(
   ])
 
   const misEmpresasIds = new Set(misEmpresas.map((me) => me.company.id))
+  const misEmpresasClienteIds = new Set(
+    misEmpresas.filter((me) => me.esCliente).map((me) => me.company.id)
+  )
   const empresasIdsDeCategoria = new Set(empresas.map((e) => e.id))
 
   // Scroll horizontal híbrido de empresas: primero las que sigue o donde es cliente,
@@ -212,6 +215,7 @@ export async function getInicioVista(
       valoracion: null,
       resenas: 0,
       esMia: true,
+      esFavorita: me.esFavorita,
       etiquetaRelacion: me.esCliente ? 'Miembro' : me.esFavorita ? 'Favorita' : 'Siguiendo',
     })
   }
@@ -231,6 +235,7 @@ export async function getInicioVista(
         valoracion: fe.averageRating,
         resenas: 0,
         esMia: misEmpresasIds.has(fe.id),
+        esFavorita: false,
         etiquetaRelacion: null,
       })
     }
@@ -282,6 +287,7 @@ export async function getInicioVista(
     id: p.id,
     nombre: p.nombre,
     empresa: p.company.name,
+    esCliente: misEmpresasClienteIds.has(p.company.id),
     descripcion: p.descripcion,
     imagen: p.imagenUrl ?? p.company.logoUrl,
     href: `/cliente/planes/${p.id}`,

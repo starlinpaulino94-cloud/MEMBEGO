@@ -1,9 +1,14 @@
 import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, ScrollView, Image } from 'react-native'
-import { Link } from 'expo-router'
-import { Sparkles, Tag, Flame, Clock } from 'lucide-react-native'
+import { View, Text, TouchableOpacity, Image } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+import { Link, useRouter } from 'expo-router'
+import { Sparkles, Tag, Flame, Clock, ChevronRight } from 'lucide-react-native'
 import { SectionHeader } from '../ui/SectionHeader'
 import { rnHref } from '../../lib/rutas'
+import { colors } from '../../theme/tokens'
+import { MarketplaceCard } from '../marketplace/MarketplaceCard'
+import { useInicioAccent } from '../layout/InicioAccentContext'
+import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
 
 interface PromoNovedadItem {
   id: string
@@ -41,8 +46,8 @@ type TabKey = 'paraTi' | 'exclusivas' | 'descuentos' | 'porVencer'
 
 const TABS: { key: TabKey; label: string; icon: typeof Sparkles }[] = [
   { key: 'paraTi', label: 'Para ti', icon: Sparkles },
-  { key: 'exclusivas', label: 'Exclusivas', icon: Tag },
-  { key: 'descuentos', label: 'Descuentos', icon: Flame },
+  { key: 'exclusivas', label: 'Exclusivas miembros', icon: Tag },
+  { key: 'descuentos', label: '2x1 / Descuentos', icon: Flame },
   { key: 'porVencer', label: 'Por vencer', icon: Clock },
 ]
 
@@ -51,6 +56,8 @@ export function VibePromocionesNovedades({
 }: {
   promociones: PromocionesNovedadesVista
 }) {
+  const router = useRouter()
+  const { accent } = useInicioAccent()
   const [activeTab, setActiveTab] = useState<TabKey>('paraTi')
 
   if (promociones.total === 0) return null
@@ -60,27 +67,24 @@ export function VibePromocionesNovedades({
   if (items.length === 0) return null
 
   return (
-    <View className="mt-6 mb-4">
+    <View className="mt-6 mb-4 px-4">
       <SectionHeader
-        title="Novedades y promociones"
+        title="Promociones"
         action={
           <Link href="/promociones" asChild>
-            <TouchableOpacity activeOpacity={0.7}>
-              <Text className="text-label-sm font-inter-bold text-vibe-violet">
+            <TouchableOpacity activeOpacity={0.7} className="flex-row items-center">
+              <Text className="text-label-sm font-inter-bold" style={{ color: accent.color }}>
                 Ver todas ({promociones.total})
               </Text>
+              <ChevronRight size={14} color={accent.color} />
             </TouchableOpacity>
           </Link>
         }
+        Icon={Sparkles}
       />
 
       {/* Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
-        className="mt-3"
-      >
+      <HorizontalScrollWithFade className="mt-3" contentContainerStyle={{ gap: 8 }}>
         {TABS.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.key
@@ -88,120 +92,154 @@ export function VibePromocionesNovedades({
 
           if (count === 0) return null
 
+          const content = (
+            <>
+              <Icon size={14} className={`${isActive ? 'text-white' : 'text-foreground/60'}`} />
+              <Text
+                className={`text-label-sm font-inter-bold ${isActive ? 'text-white' : 'text-foreground/60'
+                  }`}
+              >
+                {tab.label}
+              </Text>
+              <View
+                className={`rounded-full px-1.5 ${isActive ? 'bg-white/20' : 'bg-vibe-niebla'}`}
+                style={{ backgroundColor: isActive ? 'rgba(255, 255, 255, 0.2)' : accent.color + '33' }} // 33 = 20% opacity
+              >
+                <Text
+                  className={`text-caption font-inter-semibold ${isActive ? 'text-white/80' : 'text-muted-foreground'
+                    }`}
+                >
+                  {count}
+                </Text>
+              </View>
+            </>
+          )
+
           return (
             <TouchableOpacity
               key={tab.key}
               onPress={() => setActiveTab(tab.key)}
-              className={`flex-row items-center gap-1.5 rounded-full px-4 py-2 ${
-                isActive ? 'bg-vibe-violet' : 'border border-vibe-borde bg-card'
-              }`}
               activeOpacity={0.8}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              className="rounded-full"
             >
-              <Icon size={14} color={isActive ? '#ffffff' : '#7c3aed'} />
-              <Text
-                className={`text-label-sm font-inter-bold ${
-                  isActive ? 'text-white' : 'text-foreground'
-                }`}
-              >
-                {tab.label}
-              </Text>
-              <Text
-                className={`text-caption font-inter-semibold ${
-                  isActive ? 'text-white/80' : 'text-muted-foreground'
-                }`}
-              >
-                {count}
-              </Text>
+              {isActive ? (
+                <LinearGradient
+                  colors={accent.gradient}
+                  locations={accent.gradient.length === 4 ? [0, 0.35, 0.7, 1] : [0, 1]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    shadowColor: accent.shadow,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 4,
+                    elevation: 2,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    borderRadius: 999,
+                    paddingHorizontal: 16,
+                    paddingVertical: 4,
+                  }}
+                >
+                  {content}
+                </LinearGradient>
+              ) : (
+                <View className="flex-row items-center gap-1.5 rounded-full px-4 py-1 border border-vibe-borde bg-card">
+                  {content}
+                </View>
+              )}
             </TouchableOpacity>
           )
         })}
-      </ScrollView>
+      </HorizontalScrollWithFade>
 
       {/* Items grid */}
-      <View className="mt-3 flex-row flex-wrap gap-3 px-4">
+      <HorizontalScrollWithFade className="mt-3" contentContainerStyle={{ gap: 12 }}>
         {items.slice(0, 6).map((item) => (
-          <Link key={item.id} href={rnHref(item.href) as any} asChild>
-            <TouchableOpacity
-              activeOpacity={0.9}
-              className="w-[48%] rounded-xl border border-vibe-borde bg-card p-3 elevation-1 shadow-card"
+          <MarketplaceCard
+            key={item.id}
+            onPress={() => router.push(rnHref(item.href) as any)}
+            accessibilityLabel={`Ver ${item.titulo}`}
+          >
+            {/* Image */}
+            <View className="relative aspect-video h-28 w-full overflow-hidden rounded-lg bg-vibe-niebla">
+              {item.imagenUrl ? (
+                <Image
+                  source={{ uri: item.imagenUrl }}
+                  style={{ flex: 1 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View className="flex-1 items-center justify-center">
+                  <Text className="text-h1" style={{ color: accent.color }}>
+                    {item.titulo.slice(0, 1).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+
+              {/* Discount badge */}
+              {item.descuentoTexto && (
+                <View className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: accent.color }}>
+                  <Text className="text-caption font-inter-bold text-background">
+                    {item.descuentoTexto}
+                  </Text>
+                </View>
+              )}
+
+              {/* Exclusive badge */}
+              {item.esPrivadaMiembros && (
+                <View className="absolute right-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: accent.color }}>
+                  <Text className="text-overline font-bold text-white">
+                    Exclusiva
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Title */}
+            <Text
+              className="mt-2 text-label-md font-inter-bold text-foreground"
+              numberOfLines={2}
             >
-              {/* Image */}
-              <View className="relative h-28 w-full overflow-hidden rounded-lg bg-vibe-niebla">
-                {item.imagenUrl ? (
-                  <Image
-                    source={{ uri: item.imagenUrl }}
-                    style={{ flex: 1 }}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View className="flex-1 items-center justify-center">
-                    <Text className="text-h1 text-vibe-violet">
-                      {item.titulo.slice(0, 1).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
+              {item.titulo}
+            </Text>
 
-                {/* Discount badge */}
-                {item.descuentoTexto && (
-                  <View className="absolute left-1.5 top-1.5 rounded-full bg-foreground/85 px-2 py-0.5">
-                    <Text className="text-caption font-inter-bold text-background">
-                      {item.descuentoTexto}
-                    </Text>
-                  </View>
-                )}
+            {/* Company */}
+            <Text
+              className="mt-0.5 text-caption text-muted-foreground"
+              numberOfLines={1}
+            >
+              {item.empresa.nombre}
+            </Text>
 
-                {/* Exclusive badge */}
-                {item.esPrivadaMiembros && (
-                  <View className="absolute right-1.5 top-1.5 rounded-full bg-vibe-violet px-2 py-0.5">
-                    <Text className="text-[10px] font-bold text-white">
-                      Exclusiva
-                    </Text>
-                  </View>
-                )}
+            {/* Price */}
+            {item.precioTexto && (
+              <View className="mt-1.5 flex-row items-baseline gap-1">
+                <Text className="text-h4 font-inter-bold text-foreground">
+                  {item.precioTexto}
+                </Text>
               </View>
+            )}
 
-              {/* Title */}
-              <Text
-                className="mt-2 text-label-md font-inter-bold text-foreground"
-                numberOfLines={2}
-              >
-                {item.titulo}
-              </Text>
-
-              {/* Company */}
-              <Text
-                className="mt-0.5 text-caption text-muted-foreground"
-                numberOfLines={1}
-              >
-                {item.empresa.nombre}
-              </Text>
-
-              {/* Price */}
-              {item.precioTexto && (
-                <View className="mt-1.5 flex-row items-baseline gap-1">
-                  <Text className="text-h4 font-inter-bold text-foreground">
-                    {item.precioTexto}
-                  </Text>
-                </View>
-              )}
-
-              {/* Days remaining */}
-              {item.diasRestantes != null && item.diasRestantes <= 7 && (
-                <View className="mt-1.5 flex-row items-center gap-1">
-                  <Clock size={10} color="#e7000b" />
-                  <Text className="text-caption font-inter-semibold text-destructive">
-                    {item.diasRestantes === 0
-                      ? 'Hoy'
-                      : item.diasRestantes === 1
-                        ? '1 día'
-                        : `${item.diasRestantes} días`}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </Link>
+            {/* Days remaining */}
+            {item.diasRestantes != null && item.diasRestantes <= 7 && (
+              <View className="mt-1.5 flex-row items-center gap-1">
+                <Clock size={10} color={colors.state.danger} />
+                <Text className="text-caption font-inter-semibold text-destructive">
+                  {item.diasRestantes === 0
+                    ? 'Hoy'
+                    : item.diasRestantes === 1
+                      ? '1 día'
+                      : `${item.diasRestantes} días`}
+                </Text>
+              </View>
+            )}
+          </MarketplaceCard>
         ))}
-      </View>
+      </HorizontalScrollWithFade>
     </View>
   )
 }

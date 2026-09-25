@@ -35,6 +35,7 @@ export interface PlanInicio {
   readonly id: string
   readonly nombre: string
   readonly empresa: string
+  readonly esCliente?: boolean
   readonly descripcion: string | null
   readonly imagen: string | null
   readonly href: string
@@ -119,6 +120,7 @@ export interface EmpresaScrollItem {
   readonly resenas: number
   readonly planes?: number
   readonly esMia: boolean
+  readonly esFavorita?: boolean
   readonly etiquetaRelacion: string | null
 }
 

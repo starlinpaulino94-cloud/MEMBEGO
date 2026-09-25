@@ -1,9 +1,10 @@
 import React from 'react'
-import { View, Text, Image, Pressable } from 'react-native'
+import { View, Text, Image } from 'react-native'
 import { useRouter } from 'expo-router'
 import { MapPin, Gift, Users, Star } from 'lucide-react-native'
 import { cn } from '../../lib/cn'
 import { formatMoney } from '../../lib/format'
+import { MarketplaceCard } from './MarketplaceCard'
 
 /**
  * BUSINESS CARD — RN port de src/components/marketplace/BusinessCard.tsx.
@@ -136,85 +137,81 @@ export function BusinessCard({
   const precio = company.desdePlan
 
   return (
-    <Pressable
-      onPress={() => router.push(href as any)}
-      className={cn(
-        'overflow-hidden rounded-xl border border-border bg-card',
-        'active:opacity-90',
-        className,
-      )}
-      accessibilityRole="button"
-      accessibilityLabel={`Ver ${company.name}`}
-    >
-      {/* Banner */}
-      <View className="relative w-full bg-muted" style={{ aspectRatio: 16 / 10 }}>
-        {company.bannerUrl ? (
-          <Image
-            source={{ uri: company.bannerUrl }}
-            className="size-full"
-            resizeMode="cover"
-          />
-        ) : (
-          <View className="size-full items-center justify-center bg-primary/10">
-            <Text className="text-3xl font-inter-bold text-primary">
-              {company.name.slice(0, 2).toUpperCase()}
-            </Text>
-          </View>
-        )}
-        {/* Badges */}
-        {company.ciudad ? (
-          <View className="absolute left-2 top-2 rounded-full bg-card/95 px-2 py-0.5">
-            <Text className="text-xs font-inter-semibold text-foreground">
-              {company.ciudad}
-            </Text>
-          </View>
-        ) : null}
-        {company.isFeatured ? (
-          <View className="absolute right-2 top-2 flex-row items-center gap-1 rounded-full bg-card/95 px-2 py-0.5">
-            <Star size={10} color="#eab308" fill="#eab308" />
-            <Text className="text-xs font-inter-semibold text-foreground">
-              Destacada
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      {/* Body */}
-      <View className="gap-1 p-3">
-        <View className="flex-row items-center gap-2.5">
-          <Logo company={company} size="sm" />
-          <View className="min-w-0 flex-1">
-            <Text
-              className="text-base font-inter-bold text-foreground"
-              numberOfLines={1}
-            >
-              {company.name}
-            </Text>
-            <Meta company={company} />
-          </View>
-          {action ? <View className="shrink-0">{action}</View> : null}
+    <View className={cn('relative overflow-hidden rounded-xl', className)}>
+      <MarketplaceCard
+        variant="flush"
+        onPress={() => router.push(href as any)}
+        accessibilityLabel={`Ver ${company.name}`}
+        className="overflow-hidden"
+      >
+        <View className="relative w-full bg-muted" style={{ aspectRatio: 16 / 10 }}>
+          {company.bannerUrl ? (
+            <Image
+              source={{ uri: company.bannerUrl }}
+              className="size-full"
+              resizeMode="cover"
+            />
+          ) : (
+            <View className="size-full items-center justify-center bg-primary/10">
+              <Text className="text-3xl font-inter-bold text-primary">
+                {company.name.slice(0, 2).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          {company.ciudad ? (
+            <View className="absolute left-2 top-2 rounded-full bg-card/95 px-2 py-0.5">
+              <Text className="text-xs font-inter-semibold text-foreground">
+                {company.ciudad}
+              </Text>
+            </View>
+          ) : null}
+          {company.isFeatured ? (
+            <View className="absolute right-2 top-2 flex-row items-center gap-1 rounded-full bg-card/95 px-2 py-0.5">
+              <Star size={10} color="#eab308" fill="#eab308" />
+              <Text className="text-xs font-inter-semibold text-foreground">
+                Destacada
+              </Text>
+            </View>
+          ) : null}
         </View>
 
-        {company.descripcion ? (
-          <Text
-            className="mt-1 text-xs text-muted-foreground leading-relaxed"
-            numberOfLines={2}
-          >
-            {company.descripcion}
-          </Text>
-        ) : null}
-
-        <Stats company={company} />
-
-        {precio ? (
-          <View className="mt-1.5 flex-row items-center self-start rounded-full border border-border px-3 py-1">
-            <Text className="text-xs text-primary">{precio.nombre} </Text>
-            <Text className="text-xs font-inter-bold text-primary tabular-nums">
-              {formatMoney(precio.precio)}
-            </Text>
+        <View className={cn('gap-1 p-3', action ? 'pr-16' : undefined)}>
+          <View className="flex-row items-center gap-2.5">
+            <Logo company={company} size="sm" />
+            <View className="min-w-0 flex-1">
+              <Text
+                className="text-base font-inter-bold text-foreground"
+                numberOfLines={1}
+              >
+                {company.name}
+              </Text>
+              <Meta company={company} />
+            </View>
           </View>
-        ) : null}
-      </View>
-    </Pressable>
+
+          {company.descripcion ? (
+            <Text
+              className="mt-1 text-xs leading-relaxed text-muted-foreground"
+              numberOfLines={2}
+            >
+              {company.descripcion}
+            </Text>
+          ) : null}
+
+          <Stats company={company} />
+
+          {precio ? (
+            <View className="mt-1.5 flex-row items-center self-start rounded-full border border-border px-3 py-1">
+              <Text className="text-xs text-primary">{precio.nombre} </Text>
+              <Text className="text-xs font-inter-bold text-primary tabular-nums">
+                {formatMoney(precio.precio)}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </MarketplaceCard>
+
+      {action ? <View className="absolute bottom-3 right-3">{action}</View> : null}
+    </View>
   )
 }

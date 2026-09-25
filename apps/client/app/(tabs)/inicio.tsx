@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   View,
   Text,
@@ -16,26 +16,42 @@ import { VibeRelampago } from '../../src/components/inicio/VibeRelampago'
 import { VibeReferidos } from '../../src/components/inicio/VibeReferidos'
 import { VibeOnboarding } from '../../src/components/inicio/VibeOnboarding'
 import { Skeleton } from '../../src/components/ui/Skeleton'
+import { colors } from '../../src/theme/tokens'
+import { BannerDemo } from '../../src/components/ui/BannerDemo'
+import { useInicioAccent } from '../../src/components/layout/InicioAccentContext'
 
 export default function InicioScreen() {
-  const { data, isLoading, isError, refetch, isRefetching } = useInicio()
+  const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null)
+  const { setAccentIndex, accent } = useInicioAccent()
+  const { data, isLoading, isError, refetch, isRefetching } = useInicio(categoriaActiva)
 
   const comercial = data?.comercial
   const personal = data?.personal
+  type BloqueInicio = 'CABECERA' | 'HERO' | 'CATEGORIAS' | 'DESTACADAS' | 'MEMBRESIAS' | 'BANNER_QR' | 'EXPERIENCIAS'
+  const bloques: BloqueInicio[] = Array.isArray(comercial?.bloques)
+    ? comercial.bloques
+    : ['HERO', 'CATEGORIAS', 'DESTACADAS', 'MEMBRESIAS', 'EXPERIENCIAS']
+
+  const seleccionarCategoria = (slug: string | null, gradientIndex: number | null) => {
+    setCategoriaActiva(slug)
+    setAccentIndex(gradientIndex)
+  }
 
   return (
     <ScrollView
       className="flex-1 bg-vibe-fondo"
-      contentContainerStyle={{ paddingVertical: 16 }}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ flexGrow: 1, paddingVertical: 16 }}
       refreshControl={
         <RefreshControl
           refreshing={isRefetching}
           onRefresh={refetch}
-          tintColor="#0284c7"
-          colors={['#0284c7']}
+          tintColor={accent.color}
+          colors={[accent.color]}
         />
       }
     >
+      {data?.demoNombre ? <BannerDemo nombreEmpresa={data.demoNombre} /> : null}
       {isLoading && !data ? (
         <View className="px-4 gap-4">
           <Skeleton className="h-40 w-full rounded-2xl" />
@@ -54,7 +70,9 @@ export default function InicioScreen() {
           </Text>
           <TouchableOpacity
             onPress={() => refetch()}
-            className="rounded-xl bg-primary px-5 py-2.5"
+            className="rounded-xl px-5 min-h-11 justify-center"
+            style={{ backgroundColor: accent.color }}
+            accessibilityRole="button"
           >
             <Text className="text-sm font-inter-bold text-white">Reintentar</Text>
           </TouchableOpacity>
@@ -63,33 +81,48 @@ export default function InicioScreen() {
 
       {comercial ? (
         <>
-          {/* 1. Novedades (hero carousel or empty state) */}
-          <VibeHero heroes={comercial.heroes} />
-
-          {/* 2. Novedades y promociones con tabs (Para ti, Exclusivas, Descuentos, Por vencer) */}
-          {comercial.promocionesNovedades && (
-            <VibePromocionesNovedades promociones={comercial.promocionesNovedades} />
-          )}
-
-          {/* 3. Category chips */}
-          <VibeCategorias categorias={comercial.categorias} />
-
-          {/* 4. Empresas destacadas (scroll horizontal) */}
-          {comercial.empresasScroll && (
-            <VibeEmpresasScroll
-              empresas={comercial.empresasScroll}
-              total={comercial.empresasTotal}
-            />
-          )}
-
-          {/* 5. Relacionado con los artículos que viste (2-col grid) */}
-          <VibeRelacionado
-            planes={comercial.planes}
-            total={comercial.planesTotal}
-          />
-
-          {/* 6. Ofertas Relámpago (only if data exists) */}
-          <VibeRelampago relampago={comercial.relampago} />
+          {bloques.map((bloque) => {
+            switch (bloque) {
+              case 'HERO':
+                return (
+                  <React.Fragment key={bloque}>
+                    <VibeHero heroes={comercial.heroes} />
+                    {comercial.promocionesNovedades ? (
+                      <VibePromocionesNovedades promociones={comercial.promocionesNovedades} />
+                    ) : null}
+                  </React.Fragment>
+                )
+              case 'CATEGORIAS':
+                return (
+                  <VibeCategorias
+                    key={bloque}
+                    categorias={comercial.categorias}
+                    categoriaActiva={categoriaActiva}
+                    onSeleccionar={seleccionarCategoria}
+                  />
+                )
+              case 'DESTACADAS':
+                return comercial.empresasScroll ? (
+                  <VibeEmpresasScroll
+                    key={bloque}
+                    empresas={comercial.empresasScroll}
+                    total={comercial.empresasTotal}
+                  />
+                ) : null
+              case 'MEMBRESIAS':
+                return (
+                  <VibeRelacionado
+                    key={bloque}
+                    planes={comercial.planes}
+                    total={comercial.planesTotal}
+                  />
+                )
+              case 'EXPERIENCIAS':
+                return <VibeRelampago key={bloque} relampago={comercial.relampago} />
+              default:
+                return null
+            }
+          })}
         </>
       ) : null}
 
