@@ -10,9 +10,17 @@ import path from 'node:path'
  */
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:3000'
+const RN_BASE_URL = process.env.E2E_RN_BASE_URL ?? 'http://localhost:8081'
+const RUN_RN_E2E = process.env.E2E_RUN_RN === '1'
 const EMAIL = process.env.E2E_CLIENTE_EMAIL ?? 'cliente@membego.com'
 const PASSWORD = process.env.E2E_CLIENTE_PASSWORD ?? 'cliente123'
 const SHOT_DIR = path.resolve('.omo/evidence/qa')
+
+const PARITY_MANIFEST = JSON.parse(
+  fs.readFileSync(path.resolve('docs/design/client-parity-manifest.json'), 'utf8'),
+) as {
+  webRoutes: Array<{ webPath: string; family: string; auth: string }>
+}
 
 const VIEWPORTS = [
   { name: 'mobile', width: 375, height: 812 },
@@ -20,19 +28,33 @@ const VIEWPORTS = [
   { name: 'desktop', width: 1440, height: 900 },
 ]
 
-const ROUTES = [
-  { family: 'marketplace', path: '/cliente/inicio', auth: true },
-  { family: 'marketplace', path: '/cliente/empresas', auth: true },
-  { family: 'wallet', path: '/mis-membresias', auth: true },
-  { family: 'qr', path: '/cliente/qr', auth: true },
-  { family: 'account', path: '/cliente/perfil', auth: true },
-  { family: 'growth', path: '/cliente/invita-y-gana', auth: true },
-  { family: 'excursions', path: '/cliente/excursiones', auth: true },
-  { family: 'help', path: '/cliente/ayuda', auth: true },
-  { family: 'maps', path: '/cliente/cerca', auth: true },
-  { family: 'auth-gate', path: '/cliente/inicio', auth: false },
-  { family: 'auth-gate', path: '/mis-membresias', auth: false },
+const RN_VIEWPORTS = [
+  { name: 'mobile', width: 375, height: 812 },
+  { name: 'tablet', width: 768, height: 1024 },
+  { name: 'tablet-wide', width: 820, height: 1024 },
+  { name: 'tablet-max', width: 1023, height: 900 },
+  { name: 'desktop-min', width: 1024, height: 900 },
+  { name: 'desktop', width: 1440, height: 900 },
 ]
+
+const DYNAMIC_ROUTE_VALUES: Record<string, string> = {
+  companySlug: 'tonis-restaurante',
+  id: 'demo',
+  invitadoId: 'demo',
+  membresiaId: 'demo',
+  planId: 'cmt90uf5i00bbuikw56fq8sgi',
+  reservaId: 'demo',
+}
+
+function materializeRoute(pathname: string): string {
+  return pathname.replace(/\[([^\]]+)\]/g, (_, key: string) => DYNAMIC_ROUTE_VALUES[key] ?? 'demo')
+}
+
+const ROUTES = PARITY_MANIFEST.webRoutes.map((route) => ({
+  family: route.family,
+  path: materializeRoute(route.webPath),
+  auth: route.auth === 'client-authenticated',
+}))
 
 test('client parity visual smoke', async ({ }) => {
   test.setTimeout(300_000)
@@ -172,4 +194,103 @@ test('client parity visual smoke', async ({ }) => {
     timestamp: new Date().toISOString(),
   }
   fs.writeFileSync(path.join(SHOT_DIR, '_summary.json'), JSON.stringify(summary, null, 2))
+})
+
+test('client RN shell keeps collection chrome and direct detail navigation', async () => {
+  test.skip(!RUN_RN_E2E, 'Set E2E_RUN_RN=1 with an authenticated RN web session to run this smoke.')
+  test.setTimeout(240_000)
+
+  const { chromium } = await import('@playwright/test')
+  let browser
+  let engine = 'msedge'
+  try {
+    browser = await chromium.launch({ channel: 'msedge' })
+  } catch {
+    browser = await chromium.launch()
+    engine = 'chromium'
+  }
+
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  const consoleErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      consoleErrors.push(message.text())
+    }
+  })
+
+  try {
+    const envText = fs.readFileSync(path.resolve('apps/client/.env.local'), 'utf8')
+    const readEnv = (name: string) => {
+      const value = process.env[name] ?? envText.match(new RegExp(`^${name}=([^\\r\\n]+)`, 'm'))?.[1]
+      return value?.trim().replace(/^['"]|['"]$/g, '')
+    }
+    const supabaseUrl = readEnv('EXPO_PUBLIC_SUPABASE_URL')
+    const anonKey = readEnv('EXPO_PUBLIC_SUPABASE_ANON_KEY')
+    expect(supabaseUrl).toBeTruthy()
+    expect(anonKey).toBeTruthy()
+
+    const authResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { apikey: anonKey ?? '', 'content-type': 'application/json' },
+      body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+    })
+    expect(authResponse.ok).toBeTruthy()
+    const session = await authResponse.json()
+
+    await page.goto(`${RN_BASE_URL}/login`, { waitUntil: 'domcontentloaded' })
+    await page.evaluate(
+      (value) => window.localStorage.setItem('sb-localhost-auth-token', JSON.stringify(value)),
+      session,
+    )
+    await page.goto(`${RN_BASE_URL}/inicio`, { waitUntil: 'domcontentloaded' })
+
+    for (const viewport of RN_VIEWPORTS) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height })
+      await page.goto(`${RN_BASE_URL}/inicio`, { waitUntil: 'domcontentloaded' })
+
+      await expect(page.getByText('Mi QR', { exact: true }).last()).toBeVisible()
+      const dock = page.getByTestId('client-dock')
+      const tabs = page.getByTestId('client-tabs')
+      if (viewport.width < 1024) {
+        await expect(dock).toBeVisible()
+        await expect(tabs).not.toBeVisible()
+      } else {
+        await expect(dock).not.toBeVisible()
+        await expect(tabs).toBeVisible()
+      }
+      const businessCard = page.locator('a[href*="/empresas/"]').first()
+      await expect(businessCard).toBeVisible()
+      await page.screenshot({
+        path: path.join(SHOT_DIR, `rn-shell-${viewport.name}.png`),
+        fullPage: false,
+      })
+      await businessCard.click()
+      await expect(page).toHaveURL(/\/empresas\/[^/]+$/)
+      await expect(page.getByText('Mi QR', { exact: true })).toHaveCount(0)
+      await page.getByRole('button', { name: 'Volver' }).first().click()
+      await expect(page).toHaveURL(/\/inicio$/)
+
+      await page.goto(`${RN_BASE_URL}/inicio`, { waitUntil: 'domcontentloaded' })
+      const homePlanCard = page.locator('a[href*="/planes/"]').first()
+      await expect(homePlanCard).toHaveAttribute('href', /\/planes\/[^/]+$/)
+      await page.goto(`${RN_BASE_URL}/planes`, { waitUntil: 'domcontentloaded' })
+      const planCard = page.getByRole('button', { name: /Suscribirse|Aprovechar/ }).first()
+      await expect(planCard).toBeVisible()
+      await planCard.click()
+      await expect(page).toHaveURL(/\/planes\/[^/]+$/)
+      await expect(page.getByText('Mi QR', { exact: true })).toHaveCount(0)
+      await page.getByRole('button', { name: 'Volver' }).first().click()
+      await expect(page).toHaveURL(/\/planes$/)
+    }
+
+    expect(consoleErrors).toEqual([])
+    fs.writeFileSync(
+      path.join(SHOT_DIR, 'rn-shell-navigation-summary.json'),
+      JSON.stringify({ engine, baseUrl: RN_BASE_URL, viewports: RN_VIEWPORTS, consoleErrors }, null, 2),
+    )
+  } finally {
+    await context.close()
+    await browser.close()
+  }
 })
