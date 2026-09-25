@@ -48,6 +48,25 @@ module.exports = {
           sky: '#38bdf8',
           aqua: '#67e8f9',
         },
+        category: {
+          amber: '#f59e0b',
+          orange: '#f97316',
+          emerald: '#10b981',
+          teal: '#14b8a6',
+          cyan: '#06b6d4',
+          sky: '#0ea5e9',
+          indigo: '#6366f1',
+          blue: '#3b82f6',
+          pink: '#ec4899',
+          rose: '#f43f5e',
+        },
+        categoryText: {
+          orange: '#c2410c',
+          teal: '#0f766e',
+          sky: '#0369a1',
+          blue: '#1d4ed8',
+          rose: '#be123c',
+        },
 
         // ── Surfaces (aligned to .retail scope in globals.css) ────────
         background: '#ffffff',
@@ -121,11 +140,11 @@ module.exports = {
         small: [14, { lineHeight: 1.5 }],
         caption: [12.5, { lineHeight: 1.45 }],
         overline: [12, { lineHeight: 1.4, letterSpacing: 0.96, fontWeight: '600' }],
-        'label-sm': [12, { lineHeight: 14, fontWeight: '500' }],
-        'label-md': [12, { lineHeight: 16, fontWeight: '500' }],
-        'label-lg': [14, { lineHeight: 18, fontWeight: '600' }],
-        'price-sm': [13, { lineHeight: 16, fontWeight: '600' }],
-        'price-lg': [20, { lineHeight: 24, letterSpacing: -0.2, fontWeight: '700' }],
+        'label-sm': [12, { lineHeight: 14 / 12, fontWeight: '500' }],
+        'label-md': [12, { lineHeight: 16 / 12, fontWeight: '500' }],
+        'label-lg': [14, { lineHeight: 18 / 14, fontWeight: '600' }],
+        'price-sm': [13, { lineHeight: 16 / 13, fontWeight: '600' }],
+        'price-lg': [20, { lineHeight: 24 / 20, letterSpacing: -0.2, fontWeight: '700' }],
       },
 
       // ── Border radius (existing — preserved) ───────────────────────

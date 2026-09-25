@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, Text, ActivityIndicator, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { cn } from '../../lib/cn';
+import { colors } from '../../theme/tokens';
 
 type ButtonVariant =
   | 'default'
@@ -52,11 +53,11 @@ const variantClasses: Record<string, string> = {
 };
 
 const sizeClasses: Record<string, string> = {
-  default: 'h-10 px-4 min-w-[40px]',
-  sm: 'h-9 rounded-lg px-3',
+  default: 'h-11 px-4 min-w-[44px]',
+  sm: 'h-11 rounded-lg px-3',
   lg: 'h-11 px-6',
   xl: 'h-12 px-8',
-  icon: 'size-10 rounded-xl',
+  icon: 'size-11 rounded-xl',
 };
 
 const textClasses: Record<string, string> = {
@@ -70,15 +71,17 @@ const textClasses: Record<string, string> = {
 
 const textSizeClasses: Record<string, string> = {
   default: 'text-sm',
-  sm: 'text-[13px]',
+  sm: 'text-caption',
   lg: 'text-base',
   xl: 'text-base',
   icon: 'text-sm',
 };
 
-const gradientColors: Record<string, [string, string]> = {
-  gradient: ['#006bed', '#06b6d4'],
-  premium: ['#006bed', '#06b6d4'],
+type GradientColors = readonly [string, string, ...string[]]
+
+const gradientColors: Record<string, GradientColors> = {
+  gradient: colors.gradient.primary,
+  premium: colors.gradient.premium,
 };
 
 export function Button({
@@ -95,21 +98,27 @@ export function Button({
   const resolvedSize = sizeMap[size] ?? size;
   const isGradient = resolvedVariant === 'gradient' || resolvedVariant === 'premium';
 
+  const label = typeof children === 'string' || typeof children === 'number' ? (
+    <Text
+      className={cn(
+        textClasses[resolvedVariant],
+        textSizeClasses[resolvedSize],
+      )}
+    >
+      {children}
+    </Text>
+  ) : (
+    <View className="flex-row items-center">{children}</View>
+  )
+
   const content = (
     <>
       {loading ? (
-        <ActivityIndicator color="#ffffff" size="small" className="mr-2" />
+        <ActivityIndicator color={colors.surface.background} size="small" className="mr-2" />
       ) : icon ? (
         <View className="mr-2">{icon}</View>
       ) : null}
-      <Text
-        className={cn(
-          textClasses[resolvedVariant],
-          textSizeClasses[resolvedSize],
-        )}
-      >
-        {children}
-      </Text>
+      {label}
     </>
   );
 

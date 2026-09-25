@@ -9,7 +9,7 @@ export interface SkeletonProps {
 export function Skeleton({ className = '' }: SkeletonProps) {
   return (
     <View
-      className={cn('rounded-lg bg-muted', className)}
+      className={cn('rounded-lg bg-muted animate-pulse', className)}
       accessibilityLabel="Cargando..."
     />
   );

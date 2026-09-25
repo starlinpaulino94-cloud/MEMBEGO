@@ -78,6 +78,10 @@ Canónica en F1 líneas 158-169 (`@theme`). F4 líneas 35-48 la replica.
 | `vibe-sky` | `#38bdf8` | 168 | 46 |
 | `vibe-aqua` | `#67e8f9` | 169 | 47 |
 
+Los chips de categoría de Inicio usan además la paleta `category` de Tailwind (valores 500): amber `#f59e0b` → orange `#f97316`, emerald `#10b981` → teal `#14b8a6`, cyan `#06b6d4` → sky `#0ea5e9`, indigo `#6366f1` → blue `#3b82f6` y pink `#ec4899` → rose `#f43f5e`. El primer gradiente es `vibe-violet` → `vibe-cobalt`.
+
+Para el texto y los iconos sobre superficies claras, Inicio usa los tonos de contraste 700 de cada familia: orange `#c2410c`, teal `#0f766e`, sky `#0369a1`, blue `#1d4ed8` y rose `#be123c`.
+
 ## 4. Superficies
 
 | Token | Hex (light) | F1 línea | F4 línea |

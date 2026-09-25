@@ -1,6 +1,7 @@
 import React from 'react';
 import { TextInput, type TextInputProps } from 'react-native';
 import { cn } from '../../lib/cn';
+import { colors } from '../../theme/tokens';
 
 export interface InputProps extends TextInputProps {
   className?: string;
@@ -15,7 +16,7 @@ export function Input({ className, placeholderTextColor, ...props }: InputProps)
         'focus:border-ring',
         className,
       )}
-      placeholderTextColor={placeholderTextColor ?? '#4b5563'}
+      placeholderTextColor={placeholderTextColor ?? colors.surface.mutedForeground}
       {...props}
     />
   );

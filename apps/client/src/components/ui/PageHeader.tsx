@@ -21,7 +21,15 @@ export function PageHeader({
     <View className={cn('mb-6', className)}>
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1 min-w-0">
-          {eyebrow && <View className="mb-1">{eyebrow}</View>}
+          {eyebrow && (
+            <View className="mb-1">
+              {typeof eyebrow === 'string' ? (
+                <Text className="text-xs font-inter-semibold uppercase tracking-widest text-primary">
+                  {eyebrow}
+                </Text>
+              ) : eyebrow}
+            </View>
+          )}
           <Text className="text-h1 font-inter-extrabold tracking-tight text-foreground">
             {title}
           </Text>
