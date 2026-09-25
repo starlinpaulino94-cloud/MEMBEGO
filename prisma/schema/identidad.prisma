@@ -45,6 +45,40 @@ enum NotifTipo {
   CITA_NUEVA
   CITA_CONFIRMADA
   CITA_CANCELADA
+  // ── Membego Supply (Fase 40) ─────────────────────────────────────────────
+  // El cron de supply ya calculaba estos dos avisos y los devolvía en el JSON
+  // de su respuesta, que no lee nadie. Un aviso que solo existe si alguien
+  // entra a mirar el panel no es un aviso.
+  /// Un lote cruza un umbral de vencimiento (30, 14, 7, 3 o 1 días). A Membego
+  /// se le dice cuánto dinero está a punto de evaporarse; al proveedor, cuántas
+  /// unidades de su compromiso quedan sin entregar.
+  SUPPLY_POR_VENCER
+  /// La conciliación encontró algo que invalida cifras: invariante roto,
+  /// redención duplicada, asiento que falta. Solo CRÍTICA y ALTA.
+  SUPPLY_DESCUADRE
+  // Avisos de EVENTO: nacen de algo que alguien acaba de hacer, no de un
+  // barrido. Al CLIENTE:
+  /// Recibió una unidad comprada por Membego, del canal que sea.
+  SUPPLY_BENEFICIO_NUEVO
+  /// Su beneficio se le vence en la mano. Es lo que evita que Membego pague
+  /// una pizza que nadie recoge: la razón número uno de que no se use es que
+  /// se olvida.
+  SUPPLY_BENEFICIO_POR_VENCER
+  /// Apartó día, hora y sucursal para recoger.
+  SUPPLY_RESERVA_CONFIRMADA
+  /// El comercio registró la entrega. Es el RECIBO del cliente: si se marca
+  /// una entrega que no ocurrió, esto se la enseña el mismo día en vez del mes
+  /// siguiente, cuando vaya a usar su beneficio y no esté.
+  SUPPLY_ENTREGA_COMPLETADA
+  // Al PROVEEDOR:
+  /// Un voucher suyo entró en circulación y puede presentarse cualquier día.
+  SUPPLY_VOUCHER_NUEVO
+  /// Su cupo comprometido del día pasó del 80%.
+  SUPPLY_CAPACIDAD_AL_LIMITE
+  /// Un cliente reportó un problema con una entrega suya.
+  SUPPLY_INCIDENCIA
+  /// Membego confirmó un pago por sus entregas.
+  SUPPLY_LIQUIDACION
 }
 
 enum AuditAccion {

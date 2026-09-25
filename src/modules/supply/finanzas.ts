@@ -158,6 +158,11 @@ export async function confirmarPago(pagoId: string, actorId?: string | null): Pr
       data: { estado: 'CONFIRMADO', confirmadoAt: new Date() },
     })
   })
+
+  // Fuera de la transacción: avisar abre la suya, y un fallo de la campanita no
+  // puede deshacer un pago confirmado.
+  const { avisarLiquidacion } = await import('./notificar')
+  await avisarLiquidacion(pagoId)
 }
 
 export interface SaldoProveedor {

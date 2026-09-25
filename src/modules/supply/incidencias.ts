@@ -47,6 +47,13 @@ export interface DatosIncidencia {
  * existiendo si el voucher se archiva.
  */
 export async function abrirIncidencia(d: DatosIncidencia): Promise<{ id: string }> {
+  const res = await abrirIncidenciaEnTx(d)
+  const { avisarIncidencia } = await import('./notificar')
+  await avisarIncidencia(res.id)
+  return res
+}
+
+async function abrirIncidenciaEnTx(d: DatosIncidencia): Promise<{ id: string }> {
   if (!d.detalle.trim()) throw new Error('Una incidencia necesita una descripción.')
   if (!d.voucherId && !d.derechoId && !d.redencionId) {
     throw new Error('Una incidencia tiene que apuntar a un beneficio concreto.')

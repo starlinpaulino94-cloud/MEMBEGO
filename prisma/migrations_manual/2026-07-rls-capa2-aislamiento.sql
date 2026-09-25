@@ -216,6 +216,69 @@ BEGIN
     RAISE NOTICE 'companies cubierta por su propia clave primaria.';
   END IF;
 
+  -- ── Nivel 0.5: la tabla apunta DIRECTO a `companies` ──────────────────────
+  --
+  -- POR QUÉ ESTE NIVEL EXISTE, Y QUÉ FALLO REAL TAPA
+  --
+  -- Las rondas de abajo recorren las claves foráneas en orden ALFABÉTICO de
+  -- columna y se quedan con la primera que llega a una tabla ya cubierta. Eso
+  -- basta cuando hay un solo camino, y elige mal cuando hay varios.
+  --
+  -- Pasó con Membego Supply (medido el 25-09-2026). `supply_derechos` tiene
+  -- tres claves NOT NULL: `clienteId`, `loteId` y `proveedorId`. Alfabéticamente
+  -- gana `clienteId`, así que la política ataba el derecho a la empresa donde
+  -- la PERSONA tiene su ficha — y no es la misma empresa que lo cumple: alguien
+  -- registrado en Car Town puede recibir una pizza de Litre Pizza. Dos
+  -- consecuencias, las dos malas:
+  --
+  --   · Litre Pizza, mirando su propio portal, no vería NI UNO de sus derechos
+  --     ni de sus entregas. El módulo se apaga para el proveedor.
+  --   · Y Car Town SÍ podría leer esas filas, que llevan `costoUnitario` — lo
+  --     que Membego negoció con OTRA empresa. Una fuga entre inquilinos por el
+  --     camino que se eligió sin mirar.
+  --
+  -- La regla es la que ya estaba implícita en el resto del esquema: si una
+  -- tabla tiene una clave foránea NOT NULL a `companies`, ESA es su empresa.
+  -- No hay que deducir nada por un tercero.
+  --
+  -- Medido antes de escribirlo, y esto es lo que lo hace seguro: de las 77
+  -- tablas con clave directa a `companies`, 75 ya resolvían por `companyId`
+  -- propio o por este mismo camino. Las ÚNICAS dos que cambian son
+  -- `supply_derechos` y `supply_redenciones`, que son las que estaban mal.
+  -- Ninguna tabla tiene dos claves NOT NULL a `companies`, así que la elección
+  -- nunca es ambigua.
+  nuevas := 0;   -- se declara sin valor, y NULL + 1 es NULL: el recuento saldría vacío.
+  FOR fk IN
+    SELECT hija.relname AS tabla, att.attname AS columna
+      FROM pg_constraint con
+      JOIN pg_class  hija  ON hija.oid  = con.conrelid
+      JOIN pg_class  madre ON madre.oid = con.confrelid
+      JOIN pg_namespace n  ON n.oid     = hija.relnamespace
+      JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = con.conkey[1]
+     WHERE con.contype = 'f'
+       AND n.nspname = 'public'
+       AND cardinality(con.conkey) = 1
+       AND att.attnotnull
+       AND madre.relname = 'companies'
+       AND hija.relname <> 'companies'
+       AND NOT (hija.relname = ANY (cubiertas))
+     ORDER BY hija.relname, att.attname
+  LOOP
+    CONTINUE WHEN fk.tabla = ANY (cubiertas);
+    cond := format(
+      '(current_setting(''app.omnisciente'', true) = ''on'' OR EXISTS ('
+      || 'SELECT 1 FROM public.companies p WHERE p.id = public.%I.%I))',
+      fk.tabla, fk.columna);
+    EXECUTE format(
+      'CREATE POLICY membego_inquilino ON public.%I FOR ALL TO membego_app USING (%s) WITH CHECK (%s)',
+      fk.tabla, cond, cond);
+    cubiertas := cubiertas || fk.tabla;
+    nuevas    := nuevas + 1;
+  END LOOP;
+
+  RAISE NOTICE 'Nivel 0.5 — con clave foránea directa a companies: %', nuevas;
+  nuevas := 0;
+
   -- ── Niveles 1..N: se llega al inquilino por una clave foránea NOT NULL ────
   LOOP
     ronda  := ronda + 1;

@@ -155,6 +155,11 @@ function limpiar() {
   // claves foráneas lo impiden.
   try {
     comoOmnisciente(`
+      delete from supply_redenciones where id = '${A}_sr';
+      delete from supply_vouchers    where id = '${A}_sv';
+      delete from supply_derechos    where id = '${A}_sd';
+      delete from supply_lotes       where id = '${A}_sl';
+      delete from supply_acuerdos    where id = '${A}_sa';
       delete from home_bloques    where "revisionId" in ('${A}_h', '${B}_h');
       delete from home_revisiones where id in ('${A}_h', '${B}_h');
       delete from visits      where "clienteId" in ('${A}_k', '${B}_k');
@@ -229,6 +234,32 @@ try {
     insert into home_bloques (id, "revisionId", tipo, orden, "updatedAt") values
       ('${A}_hb', '${A}_h', 'CABECERA', 0, now()),
       ('${B}_hb', '${B}_h', 'CABECERA', 0, now());
+
+    -- MEMBEGO SUPPLY · el caso cruzado, que es el que importa.
+    --
+    -- El proveedor es A. El cliente que recibe el beneficio es el de B: una
+    -- persona registrada en otra empresa que recibe una pizza de A. Eso NO es
+    -- un caso raro, es el normal — el marketplace de Membego cruza empresas a
+    -- propósito— y es exactamente el que se colaba.
+    insert into supply_acuerdos (id, codigo, "proveedorId", tipo, "itemNombre",
+                                 cantidad, "costoUnitario", "inicioAt", "finAt", "updatedAt")
+      values ('${A}_sa', 'MBG-A-001', '${A}', 'ON_DEMAND', 'Pizza Grande',
+              1000, 300, now(), now() + interval '90 days', now());
+    insert into supply_lotes (id, codigo, "acuerdoId", "proveedorId", "snapshotItemNombre",
+                              "snapshotCostoUnitario", "snapshotModelo", "snapshotTipo",
+                              "inicioAt", "venceAt", "updatedAt")
+      values ('${A}_sl', 'MBG-A-001-L1', '${A}_sa', '${A}', 'Pizza Grande',
+              300, 'COMPRA_UNIDAD_COMPLETA', 'ON_DEMAND',
+              now(), now() + interval '90 days', now());
+    insert into supply_derechos (id, "loteId", "clienteId", "proveedorId", origen,
+                                 "costoUnitario", "vencAt", "updatedAt")
+      values ('${A}_sd', '${A}_sl', '${B}_k', '${A}', 'REGALO',
+              300, now() + interval '30 days', now());
+    insert into supply_vouchers (id, "derechoId", codigo, "proveedorId", "vigenteHasta", "updatedAt")
+      values ('${A}_sv', '${A}_sd', 'MBG-PRUEBA-1', '${A}', now() + interval '30 days', now());
+    insert into supply_redenciones (id, "voucherId", "derechoId", "clienteId", "proveedorId",
+                                    "loteId", "acuerdoId", "costoUnitario")
+      values ('${A}_sr', '${A}_sv', '${A}_sd', '${B}_k', '${A}', '${A}_sl', '${A}_sa', 300);
   `)
 
   // ── 1. El `where` olvidado ────────────────────────────────────────────────
@@ -326,6 +357,64 @@ try {
       A,
       `insert into home_bloques (id,"revisionId",tipo,orden,"updatedAt")
        values ('${A}_intruso','${B}_h','HERO',1,now());`
+    )
+  )
+
+  // ── 8. Membego Supply: el inquilino de un derecho es QUIEN LO CUMPLE ──────
+  //
+  // Estas cuatro comprobaciones nacieron de un fallo medido el 25-09-2026, y
+  // las cuatro fallaban antes de arreglarlo.
+  //
+  // Las políticas se deducen recorriendo claves foráneas en orden ALFABÉTICO de
+  // columna. `supply_derechos` tiene tres NOT NULL —`clienteId`, `loteId`,
+  // `proveedorId`— y ganaba `clienteId`, así que el derecho quedaba atado a la
+  // empresa donde la PERSONA tiene su ficha. No es la misma que lo cumple.
+  //
+  // Resultado: el proveedor no veía ni uno de sus propios derechos (su portal y
+  // su escáner se apagaban), y la empresa de la ficha del cliente SÍ los veía
+  // —con `costoUnitario` dentro, que es lo que Membego negoció con un TERCERO—.
+  //
+  // Por eso se siembra al cliente en B y el proveedor en A: con las dos cosas
+  // en la misma empresa, una política mal puesta pasa la prueba.
+  const derechosA = comoInquilino(A, `select id from supply_derechos where id = '${A}_sd';`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Supply: el PROVEEDOR ve sus propios derechos, aunque el cliente sea de otra empresa',
+    derechosA.length === 1,
+    `el proveedor no ve su derecho: devolvió ${JSON.stringify(derechosA)}`
+  )
+
+  const derechosB = comoInquilino(B, `select id from supply_derechos where id = '${A}_sd';`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Supply · FUGA: la empresa de la ficha del cliente NO ve el derecho (lleva el costo de Membego)',
+    derechosB.length === 0,
+    `${B} llegó a leer el derecho de ${A}: ${JSON.stringify(derechosB)}`
+  )
+
+  const redenA = comoInquilino(A, `select id from supply_redenciones where id = '${A}_sr';`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Supply: el proveedor ve sus propias entregas',
+    redenA.length === 1,
+    `devolvió: ${JSON.stringify(redenA)}`
+  )
+
+  const redenB = comoInquilino(B, `select id from supply_redenciones where id = '${A}_sr';`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Supply · FUGA: otra empresa no ve las entregas del proveedor',
+    redenB.length === 0,
+    `${B} llegó a leer la entrega de ${A}: ${JSON.stringify(redenB)}`
+  )
+
+  comprobar(
+    'Supply: B no puede colgar un derecho del lote de A',
+    fallaComoInquilino(
+      B,
+      `insert into supply_derechos (id,"loteId","clienteId","proveedorId",origen,
+                                   "costoUnitario","vencAt","updatedAt")
+       values ('${B}_intruso','${A}_sl','${B}_k','${B}','REGALO',300,now(),now());`
     )
   )
 } catch (e) {
