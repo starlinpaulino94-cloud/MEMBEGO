@@ -110,6 +110,19 @@ function rechazo(
  * una discusión en el mostrador en una llamada a soporte.
  */
 export async function redimir(d: DatosRedencion): Promise<ResultadoRedencion> {
+  const res = await redimirEnTx(d)
+  // El aviso sale también cuando la redención se reutiliza por idempotencia: el
+  // cliente tiene que enterarse UNA vez, y de eso se encarga la clave, no un
+  // `if` aquí. Lo que no puede pasar es que un reintento de la red deje al
+  // cliente sin su recibo.
+  if (res.ok) {
+    const { avisarEntregaCompletada } = await import('./notificar')
+    await avisarEntregaCompletada(res.redencion.redencionId)
+  }
+  return res
+}
+
+async function redimirEnTx(d: DatosRedencion): Promise<ResultadoRedencion> {
   return sinEmpresa('Membego Supply: el comercio entrega una unidad comprada', async (tx) => {
     if (d.claveIdempotencia) {
       const previa = await tx.supplyRedencion.findUnique({

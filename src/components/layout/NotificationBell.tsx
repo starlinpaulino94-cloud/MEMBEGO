@@ -10,9 +10,14 @@ import {
   CheckCircle2,
   ExternalLink,
   FileText,
+  CalendarCheck,
+  Gauge,
   Gift,
+  MessageSquareWarning,
+  PackageCheck,
   Scale,
   TimerOff,
+  Wallet,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -35,6 +40,14 @@ const TIPO_ICON: Record<string, { icon: LucideIcon; cls: string }> = {
   // Membego Supply: lo que está a punto de perderse y lo que no cuadra.
   SUPPLY_POR_VENCER: { icon: TimerOff, cls: 'bg-warning/15 text-warning' },
   SUPPLY_DESCUADRE: { icon: Scale, cls: 'bg-destructive/10 text-destructive' },
+  SUPPLY_BENEFICIO_NUEVO: { icon: Gift, cls: 'bg-primary/10 text-primary' },
+  SUPPLY_BENEFICIO_POR_VENCER: { icon: TimerOff, cls: 'bg-warning/15 text-warning' },
+  SUPPLY_RESERVA_CONFIRMADA: { icon: CalendarCheck, cls: 'bg-success/10 text-success' },
+  SUPPLY_ENTREGA_COMPLETADA: { icon: PackageCheck, cls: 'bg-success/10 text-success' },
+  SUPPLY_VOUCHER_NUEVO: { icon: Gift, cls: 'bg-info/10 text-info' },
+  SUPPLY_CAPACIDAD_AL_LIMITE: { icon: Gauge, cls: 'bg-warning/15 text-warning' },
+  SUPPLY_INCIDENCIA: { icon: MessageSquareWarning, cls: 'bg-destructive/10 text-destructive' },
+  SUPPLY_LIQUIDACION: { icon: Wallet, cls: 'bg-success/10 text-success' },
 }
 
 function timeAgo(date: Date) {

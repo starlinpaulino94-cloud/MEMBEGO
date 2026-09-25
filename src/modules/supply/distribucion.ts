@@ -71,6 +71,18 @@ export type ResultadoEntrega =
  * el derecho que ya existe en vez de emitir otro.
  */
 export async function entregar(p: PeticionEntrega): Promise<ResultadoEntrega> {
+  const res = await entregarEnTx(p)
+  // FUERA de la transacción, a propósito y por dos razones: avisar abre su
+  // propia transacción —dentro sería una anidada, el riesgo número uno de este
+  // código— y un fallo de la campanita no puede deshacer una entrega.
+  if (res.ok) {
+    const { avisarBeneficioEntregado } = await import('./notificar')
+    await avisarBeneficioEntregado(res.derechoId, res.reutilizado)
+  }
+  return res
+}
+
+async function entregarEnTx(p: PeticionEntrega): Promise<ResultadoEntrega> {
   return sinEmpresa('Membego Supply: entregar una unidad desde un canal', async (tx) => {
     let loteId = p.loteId ?? null
 

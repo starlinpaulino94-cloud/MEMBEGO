@@ -145,3 +145,207 @@ export function textoDescuadre(
     href: `/superadmin/supply/conciliacion`,
   }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// AVISOS DE EVENTO (Fase 40, segunda mitad)
+//
+// Los de arriba nacen de un barrido: el cron mira y decide. Estos nacen de algo
+// que alguien acaba de hacer, y por eso su clave es más simple — el hecho ya es
+// único (un derecho, una reserva, una redención). La clave no está aquí para
+// espaciar avisos en el tiempo sino para que un doble clic, un reintento de la
+// cola o una acción reejecutada no manden el aviso dos veces.
+//
+// Un caso pide clave con umbral igual que los del cron: el beneficio que se le
+// vence al CLIENTE en la mano. Ese sí es un barrido.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Día y hora en la zona del comercio, para un mensaje que se lee de un vistazo. */
+export function cuando(fecha: Date, zona = 'America/Santo_Domingo'): string {
+  const f = new Intl.DateTimeFormat('es-DO', {
+    timeZone: zona,
+    day: 'numeric',
+    month: 'long',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+  return f.format(fecha)
+}
+
+export function soloDia(fecha: Date, zona = 'America/Santo_Domingo'): string {
+  return new Intl.DateTimeFormat('es-DO', { timeZone: zona, day: 'numeric', month: 'long' }).format(
+    fecha
+  )
+}
+
+// ── Cliente · recibe un beneficio ───────────────────────────────────────────
+
+export function dedupeBeneficio(derechoId: string): string {
+  return `supply-beneficio|${derechoId}`
+}
+
+export function textoBeneficioNuevo(d: {
+  item: string
+  proveedorNombre: string
+  vencAt: Date
+}): { titulo: string; mensaje: string; href: string } {
+  return {
+    titulo: `Tienes un beneficio nuevo: ${d.item}`,
+    // La FECHA LÍMITE va en el mensaje y no en la pantalla de detalle: un
+    // beneficio que nadie usa es dinero que Membego ya pagó, y la razón número
+    // uno de que no se use es que se olvida.
+    mensaje: `Cortesía de Membego en ${d.proveedorNombre}. Úsalo antes del ${soloDia(d.vencAt)}.`,
+    href: '/cliente/beneficios',
+  }
+}
+
+// ── Cliente · se le vence en la mano ────────────────────────────────────────
+
+export function dedupeBeneficioPorVencer(derechoId: string, umbral: number): string {
+  return `supply-beneficio-vence|${derechoId}|${umbral}`
+}
+
+export function textoBeneficioPorVencer(
+  d: { item: string; proveedorNombre: string },
+  umbral: number
+): { titulo: string; mensaje: string; href: string } {
+  const cuando_ = umbral === 1 ? 'mañana' : `en ${umbral} días`
+  return {
+    titulo: `Tu ${d.item} vence ${cuando_}`,
+    mensaje: `Recógelo en ${d.proveedorNombre} antes de que se pierda. No se puede renovar.`,
+    href: '/cliente/beneficios',
+  }
+}
+
+// ── Cliente · reserva y entrega ─────────────────────────────────────────────
+
+export function dedupeReserva(reservaId: string): string {
+  return `supply-reserva|${reservaId}`
+}
+
+export function textoReserva(d: {
+  item: string
+  proveedorNombre: string
+  sucursal: string | null
+  inicioAt: Date
+}): { titulo: string; mensaje: string; href: string } {
+  const donde = d.sucursal ? `${d.proveedorNombre} · ${d.sucursal}` : d.proveedorNombre
+  return {
+    titulo: 'Reserva confirmada',
+    mensaje: `${d.item} en ${donde}, el ${cuando(d.inicioAt)}. Lleva tu código.`,
+    href: '/cliente/beneficios',
+  }
+}
+
+export function dedupeEntrega(redencionId: string): string {
+  return `supply-entrega|${redencionId}`
+}
+
+export function textoEntrega(d: {
+  item: string
+  proveedorNombre: string
+  sucursal: string | null
+}): { titulo: string; mensaje: string; href: string } {
+  const donde = d.sucursal ? `${d.proveedorNombre} · ${d.sucursal}` : d.proveedorNombre
+  return {
+    titulo: `Entregado: ${d.item}`,
+    // Este aviso no es cortesía: es el RECIBO del cliente. Si el comercio marca
+    // una entrega que no ocurrió, esto es lo que se la enseña el mismo día, no
+    // el mes siguiente cuando vaya a usar su beneficio y no esté.
+    mensaje: `Se registró la entrega en ${donde}. Si no lo recibiste, repórtalo desde tus beneficios.`,
+    href: '/cliente/beneficios',
+  }
+}
+
+// ── Proveedor · un voucher suyo entra en circulación ────────────────────────
+
+export function dedupeVoucherProveedor(derechoId: string): string {
+  return `supply-voucher-nuevo|${derechoId}`
+}
+
+export function textoVoucherNuevo(d: { item: string; codigo: string }): {
+  titulo: string
+  mensaje: string
+  href: string
+} {
+  return {
+    titulo: 'Nuevo voucher de Membego en circulación',
+    // NUNCA el nombre del cliente: el proveedor lo verá al escanear, en el
+    // mostrador, y no antes. Y nunca el costo, que es información de contrato.
+    mensaje: `${d.item} · código ${d.codigo}. Puede presentarse en cualquier momento dentro de la vigencia.`,
+    href: '/admin/supply',
+  }
+}
+
+// ── Proveedor · su capacidad del día se está llenando ───────────────────────
+
+export function dedupeCapacidad(proveedorId: string, dia: string): string {
+  // Por día, no por reserva: avisar en cada reserva a partir del 80% sería un
+  // aviso cada dos minutos en la hora punta.
+  return `supply-capacidad|${proveedorId}|${dia}`
+}
+
+/** A partir de aquí se avisa. Por debajo, el dato está en su portal. */
+export const UMBRAL_CAPACIDAD = 0.8
+
+export function textoCapacidad(d: { usadas: number; cupo: number; dia: Date }): {
+  titulo: string
+  mensaje: string
+  href: string
+} {
+  return {
+    titulo: `Tu cupo del ${soloDia(d.dia)} se está llenando`,
+    mensaje: `${d.usadas} de ${d.cupo} unidades comprometidas con Membego. Al llegar al máximo no se aceptan más reservas ese día.`,
+    href: '/admin/supply',
+  }
+}
+
+// ── Proveedor · incidencia y liquidación ────────────────────────────────────
+
+export function dedupeIncidencia(incidenciaId: string, destinatario: 'proveedor' | 'membego'): string {
+  return `supply-incidencia|${incidenciaId}|${destinatario}`
+}
+
+export function textoIncidenciaProveedor(d: { tipo: string; item: string }): {
+  titulo: string
+  mensaje: string
+  href: string
+} {
+  return {
+    titulo: 'Un cliente reportó un problema con un voucher',
+    // Sin el detalle que escribió el cliente: puede llevar nombres, números de
+    // teléfono o lo que se le ocurra, y esto entra en la campanita de un
+    // tercero. El detalle lo ve Membego, que es quien media.
+    mensaje: `${d.tipo} · ${d.item}. Membego lo está revisando y puede contactarte.`,
+    href: '/admin/supply',
+  }
+}
+
+export function textoIncidenciaMembego(d: {
+  tipo: string
+  item: string
+  proveedorNombre: string
+}): { titulo: string; mensaje: string; href: string } {
+  return {
+    titulo: `Incidencia de cumplimiento: ${d.proveedorNombre}`,
+    mensaje: `${d.tipo} · ${d.item}. Entra a resolverla antes de que el cliente vuelva a escribir.`,
+    href: '/superadmin/supply/incidencias',
+  }
+}
+
+export function dedupeLiquidacion(pagoId: string): string {
+  return `supply-liquidacion|${pagoId}`
+}
+
+export function textoLiquidacion(d: { monto: number; referencia: string | null }): {
+  titulo: string
+  mensaje: string
+  href: string
+} {
+  const ref = d.referencia ? ` Referencia: ${d.referencia}.` : ''
+  return {
+    titulo: `Liquidación confirmada: ${dineroRD(d.monto)}`,
+    mensaje: `Membego confirmó un pago de ${dineroRD(d.monto)} por tus entregas.${ref}`,
+    href: '/admin/supply',
+  }
+}

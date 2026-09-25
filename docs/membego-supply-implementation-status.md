@@ -139,7 +139,7 @@ Las 80 fases del encargo, con dónde vive cada una.
 
 | # | Fase | Estado | Nota |
 | --- | --- | --- | --- |
-| 40 | Notificaciones | ✅ las del cron · ⚠️ faltan las de evento | Vencimientos y descuadres SALEN por `Notificacion`, deduplicados. Las de evento (nuevo voucher, reserva confirmada, redención, incidencia, liquidación) siguen pendientes |
+| 40 | Notificaciones | ✅ completo salvo «producto listo» | Diez avisos por `Notificacion`, todos deduplicados: tres de barrido y siete de evento. Falta «producto listo» porque no existe el concepto de *pedido preparado* en el modelo |
 | 41 | Roles y permisos | ✅ | Los 8 permisos del encargo resueltos contra el RBAC existente |
 | 42 | Multi-tenancy | ✅ | `conEmpresa` + `where` explícito + `proveedorId` denormalizado; prueba automática |
 | 43 | Auditoría | ✅ | 19 acciones `SUPPLY_*` con etiqueta y filtro |
@@ -198,10 +198,13 @@ relaciones inversas) y `vercel.json` (el cron).
    declarado y `COBRO_MEMBEGO_DISPONIBLE = false` lo dice en voz alta: la
    vitrina no publica precios que nadie puede cobrar. **El camino que funciona
    hoy de punta a punta es el regalo.**
-2. **Notificaciones de EVENTO sin enviar.** Las del cron ya salen (ver abajo).
-   Faltan las que nacen de una acción y no de un barrido: nuevo voucher y nueva
-   incidencia para el proveedor, reserva confirmada y redención completada para
-   el cliente, liquidación disponible. Son ~8 avisos repartidos por las actions.
+2. **«Producto listo» sin implementar** (único hueco de la fase 40). El modelo
+   no tiene el concepto de *pedido preparado*: `SupplyReserva` guarda la hora
+   acordada, pero nadie en el comercio marca «ya está hecho». Implementarlo es
+   añadir un estado a la reserva y un botón en el portal del proveedor, no un
+   aviso. Los avisos de MEMBEGO ADMIN que quedan (proveedor con muchas
+   incidencias, riesgo de presupuesto, problema de capacidad global) son
+   analíticos: salen del scorecard y de la economía, no de un evento.
 3. **Políticas RLS.** El módulo usa `conEmpresa` en todo lo de empresa, y una
    prueba vigila que el portal del proveedor no lea fuera de la suya, así que no
    hay fuga hoy — pero es UNA capa donde el resto del proyecto tiene dos. Las
@@ -225,7 +228,7 @@ relaciones inversas) y `vercel.json` (el cron).
   base, que la suite no tiene. Lo que estaba en duda era si el bloqueo
   serializa, y serializa.
 
-## Los avisos del cron (Fase 40) · 25-09-2026
+## Los diez avisos (Fase 40) · 25-09-2026
 
 `avisos.ts` (puro) decide qué se dice y con qué clave; `notificar.ts`
 (server-only) escribe. La separación existe porque **la parte que se rompe en
@@ -238,6 +241,31 @@ avisos del mismo lote y nadie vuelve a mirar la campanita.
 | Supply por vencer | superadmins | `supply-vence\|lote\|umbral` | al cruzar cada umbral (30, 14, 7, 3, 1) |
 | Tu compromiso vence | admins del proveedor | la misma `\|proveedor` | igual |
 | Descuadre CRÍTICA/ALTA | superadmins | `supply-descuadre\|tipo\|entidad\|id\|semanaISO` | una vez por semana mientras siga ahí |
+| Beneficio por vencer | cliente | `supply-beneficio-vence\|derecho\|umbral` | 7, 3 y 1 días (barrido) |
+| Beneficio nuevo | cliente | `supply-beneficio\|derecho` | nunca: un hecho, un aviso |
+| Reserva confirmada | cliente | `supply-reserva\|reserva` | nunca |
+| Entrega completada | cliente | `supply-entrega\|redención` | nunca |
+| Voucher nuevo | admins del proveedor | `supply-voucher-nuevo\|derecho` | nunca |
+| Cupo del día al 80% | admins del proveedor | `supply-capacidad\|proveedor\|día` | una vez por día |
+| Incidencia | superadmins **y** proveedor, con mensajes distintos | `supply-incidencia\|id\|destinatario` | nunca |
+| Liquidación confirmada | admins del proveedor | `supply-liquidacion\|pago` | nunca |
+
+Los de evento se enganchan en las funciones de DOMINIO (`entregar`, `reservar`,
+`redimir`, `abrirIncidencia`, `confirmarPago`), no en las actions: `entregar` es
+el embudo de todos los canales —regalo, oferta, membresía, recompensa,
+referido—, y colgar el aviso de la action habría dejado sin avisar a casi todos.
+Cada gancho va **después de que cierre la transacción**: avisar abre la suya, y
+dentro sería una transacción anidada. Hay una prueba que lo comprueba leyendo la
+fuente, y el guardia del CI también.
+
+El aviso de entrega es el **recibo del cliente**, no una cortesía: si un comercio
+marca entregado algo que no entregó, esto se lo enseña el mismo día en vez del
+mes siguiente, cuando vaya a usar su beneficio y ya no esté.
+
+Lo que NO viaja: al proveedor nunca se le manda el nombre del cliente (lo verá
+al escanear, en el mostrador) ni el texto libre de una incidencia (lo escribe
+una persona enfadada, puede llevar nombres y teléfonos, y esto entra en la
+campanita de un tercero). Dos pruebas lo vigilan.
 
 Decisiones: a Membego se le dice el **dinero primero** («RD$51.000 en 170
 unidades») porque «170 unidades» se lee como inventario y la cifra se lee como

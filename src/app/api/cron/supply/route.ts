@@ -3,7 +3,11 @@ import { autorizarCron } from '@/lib/cron-auth'
 import { soltarHoldsVencidos } from '@/modules/supply/derechos'
 import { alertasDeVencimiento, cerrarVencidos, umbralDelDia } from '@/modules/supply/vencimientos'
 import { conciliar } from '@/modules/supply/conciliacion'
-import { avisarDescuadres, avisarVencimientos } from '@/modules/supply/notificar'
+import {
+  avisarBeneficiosPorVencer,
+  avisarDescuadres,
+  avisarVencimientos,
+} from '@/modules/supply/notificar'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -54,12 +58,16 @@ export async function GET(req: NextRequest) {
   // vencido mueven el ledger, y no van a quedarse a medias porque la campanita
   // falle. Cada aviso lleva su clave estable, así que correr el cron dos veces
   // el mismo día no duplica nada.
-  const avisos = { vencimientos: 0, proveedor: 0, descuadres: 0 }
+  const avisos = { vencimientos: 0, proveedor: 0, descuadres: 0, clientes: 0 }
   try {
     const v = await avisarVencimientos(enUmbral)
     avisos.vencimientos = v.membego
     avisos.proveedor = v.proveedor
     avisos.descuadres = await avisarDescuadres(conciliacion)
+    // El que más dinero salva: un lote con unidades sin repartir se reasigna a
+    // otra campaña, pero una unidad YA ENTREGADA solo se usa si su dueño se
+    // acuerda. Nadie más puede hacer nada por ella.
+    avisos.clientes = await avisarBeneficiosPorVencer()
   } catch (e) {
     console.error('[cron supply] no se pudieron enviar los avisos', e)
   }

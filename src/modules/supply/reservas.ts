@@ -60,6 +60,15 @@ export async function ocupacion(
  * cupos ocupados por la misma persona.
  */
 export async function reservar(d: DatosReserva): Promise<ResultadoReserva> {
+  const res = await reservarEnTx(d)
+  if (res.ok) {
+    const { avisarReservaConfirmada } = await import('./notificar')
+    await avisarReservaConfirmada(res.reservaId)
+  }
+  return res
+}
+
+async function reservarEnTx(d: DatosReserva): Promise<ResultadoReserva> {
   return sinEmpresa('Membego Supply: el cliente aparta su recogida', async (tx) => {
     const derecho = await tx.supplyDerecho.findUnique({
       where: { id: d.derechoId },
