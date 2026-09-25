@@ -1,32 +1,19 @@
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 import { supabase } from './supabase'
+import { resolveApiBaseUrl } from './runtimeUrls'
 
 function getApiBaseUrl(): string {
-  const configured = process.env.EXPO_PUBLIC_API_URL
-
-  // 1. En dispositivo móvil (Expo Go en celular físico o emulador)
-  if (Platform.OS !== 'web') {
-    const hostUri = Constants.expoConfig?.hostUri
-    if (hostUri) {
-      const ip = hostUri.split(':')[0]
-      return `http://${ip}:3000`
-    }
-    if (configured) {
-      return configured.replace('127.0.0.1', '10.0.0.154').replace('localhost', '10.0.0.154')
-    }
-    return 'http://10.0.0.154:3000'
-  }
-
-  // 2. En el navegador web
-  if (typeof window !== 'undefined' && window.location) {
-    if (window.location.port && window.location.port !== '3000') {
-      return `${window.location.protocol}//${window.location.hostname}:3000`
-    }
-    return window.location.origin
-  }
-
-  return configured || 'http://10.0.0.154:3000'
+  return resolveApiBaseUrl({
+    configuredUrl: process.env.EXPO_PUBLIC_API_URL,
+    platform: Platform.OS === 'web' ? 'web' : 'native',
+    hostUri: Constants.expoConfig?.hostUri,
+    nativeHost: process.env.EXPO_PUBLIC_DEVICE_HOST,
+    browserOrigin:
+      Platform.OS === 'web' && typeof window !== 'undefined'
+        ? window.location.origin
+        : undefined,
+  })
 }
 
 export async function fetchBff<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -339,6 +326,18 @@ export interface PlanesEmpresaResponse {
   vitrina: boolean
   planesPublicados: number
   requiereVehiculo: boolean
+  cliente: {
+    nombre: string | null
+    empresaNombre: string
+    membership: {
+      id: string
+      estado: string
+      planId: string
+      planIdSolicitado: string | null
+      plan: { nombre: string }
+      planSolicitado: { nombre: string } | null
+    } | null
+  } | null
 }
 
 export type PlanesResponse = PlanesGlobalResponse | PlanesEmpresaResponse
@@ -678,11 +677,17 @@ export interface AyudaResponse {
     empresaNombre: string | null
   }[]
   contacto: {
+    empresaNombre: string
     whatsappUrl: string | null
     whatsappNumero: string | null
     correo: string | null
     horario: string | null
   }
+  onboarding: {
+    items: { key: string; label: string; done: boolean; href: string; cta: string }[]
+    completados: number
+    total: number
+  } | null
 }
 
 export interface TicketAyudaResponse {
@@ -697,6 +702,18 @@ export interface TicketAyudaResponse {
     empresa: { id: string; name: string } | null
     mensajes: { id: string; autorTipo: string; autorNombre: string; cuerpo: string; createdAt: string }[]
   }
+}
+
+export interface CrearTicketAyudaBody {
+  asunto: string
+  descripcion: string
+  categoria: string
+}
+
+export interface CrearTicketAyudaResponse {
+  success: true
+  ticketId: string
+  message: string
 }
 
 // --- Social: referidos ---
@@ -771,6 +788,16 @@ export interface RegalosResponse {
   enviados: RegaloItem[]
   pendientesRecibidos: number
   giftCards: GiftCardItem[]
+}
+
+export interface RegaloActionBody {
+  regaloId: string
+  decision: 'aceptar' | 'rechazar' | 'cancelar'
+}
+
+export interface RegaloActionResponse {
+  success: true
+  detalle?: string
 }
 
 export interface EnviarRegaloBody {
@@ -879,7 +906,8 @@ function postJson<T>(path: string, body: unknown): Promise<T> {
 
 export const api = {
   // --- Base (existentes) ---
-  getInicio: () => fetchBff<any>('/api/v1/cliente/inicio'),
+  getInicio: (categoria?: string | null) =>
+    fetchBff<any>(`/api/v1/cliente/inicio${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ''}`),
   getQr: (id?: string) => fetchBff<any>(`/api/v1/cliente/qr${id ? `?id=${encodeURIComponent(id)}` : ''}`),
   getPerfil: () => fetchBff<any>('/api/v1/cliente/perfil'),
   getMenu: () => fetchBff<any>('/api/v1/cliente/menu'),
@@ -956,6 +984,8 @@ export const api = {
 
   // --- Cuenta: ayuda ---
   getAyuda: () => fetchBff<AyudaResponse>('/api/v1/cliente/ayuda'),
+  crearTicketAyuda: (body: CrearTicketAyudaBody) =>
+    postJson<CrearTicketAyudaResponse>('/api/v1/cliente/ayuda', body),
   getTicketAyuda: (id: string) =>
     fetchBff<TicketAyudaResponse>(`/api/v1/cliente/ayuda/${encodeURIComponent(id)}`),
 
@@ -965,6 +995,8 @@ export const api = {
 
   // --- Social: regalos ---
   getRegalos: () => fetchBff<RegalosResponse>('/api/v1/cliente/regalos'),
+  procesarRegalo: (body: RegaloActionBody) =>
+    postJson<RegaloActionResponse>('/api/v1/cliente/regalos/accion', body),
   enviarRegalo: (body: EnviarRegaloBody) =>
     postJson<EnviarRegaloResponse>('/api/v1/cliente/regalos/enviar', body),
   getGiftcardConfig: () => fetchBff<GiftcardConfigResponse>('/api/v1/cliente/regalos/giftcard'),
