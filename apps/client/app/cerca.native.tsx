@@ -1,14 +1,3 @@
-/**
- * Pantalla "Cerca de mí" — native (react-native-maps).
- *
- * NOTA: requiere dev build (`expo run:android` / `expo run:ios`).
- * NO funciona en Expo Go — react-native-maps es un módulo nativo.
- *
- * ponytail: sin expo-location instalado, el permiso de GPS queda como banner
- * de consentimiento. Agregar `expo-location` + `Location.getCurrentPositionAsync`
- * cuando se permita instalar dependencias.
- */
-
 import { useState } from 'react'
 import {
   View,
@@ -20,6 +9,7 @@ import {
   Platform,
 } from 'react-native'
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps'
+import * as Location from 'expo-location'
 import { Home, LocateFixed, MapPin, Navigation, Search, Star, X } from 'lucide-react-native'
 import { cn } from '../src/lib/cn'
 import { Sheet } from '../src/components/ui/Sheet'
@@ -55,11 +45,19 @@ export default function CercaNativeScreen() {
   const [busqueda, setBusqueda] = useState('')
   const [sugerenciaAbierta, setSugerenciaAbierta] = useState(false)
   const [consentimientoVisible, setConsentimientoVisible] = useState(false)
+  const [gpsState, setGpsState] = useState<'idle' | 'requesting' | 'ready' | 'denied'>('idle')
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(null)
 
   const filtrosStr = tipoActivo ? JSON.stringify({ tiposNegocio: [tipoActivo] }) : undefined
 
   const { data, isLoading, isError } = useGeoCercanos(
-    { contexto, radioKm, filtros: filtrosStr },
+    {
+      contexto,
+      radioKm,
+      lat: currentLocation?.latitude,
+      lng: currentLocation?.longitude,
+      filtros: filtrosStr,
+    },
     true,
   )
 
@@ -69,14 +67,34 @@ export default function CercaNativeScreen() {
   const resultados = data?.resultados ?? []
   const tiposVistos = [...new Set(resultados.map((r) => (r.tipo as string) || '').filter(Boolean))].sort()
 
-  const toggleContexto = (ctx: 'HOME' | 'CURRENT') => {
+  const toggleContexto = async (ctx: 'HOME' | 'CURRENT') => {
     if (ctx === 'CURRENT') {
-      // GPS not available on native without expo-location dependency.
-      // Show explicit unavailable state instead of fake consent banner.
-      // Web uses navigator.geolocation at cerca.web.tsx:156-168.
-      // To enable: install expo-location + Location.getCurrentPositionAsync().
-      setConsentimientoVisible(true)
+      setGpsState('requesting')
+      setConsentimientoVisible(false)
+
+      const permission = await Location.requestForegroundPermissionsAsync()
+      if (permission.status !== Location.PermissionStatus.GRANTED) {
+        setGpsState('denied')
+        setConsentimientoVisible(true)
+        return
+      }
+
+      try {
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        })
+        setCurrentLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        })
+        setGpsState('ready')
+        setContexto('CURRENT')
+      } catch {
+        setGpsState('denied')
+        setConsentimientoVisible(true)
+      }
     } else {
+      setGpsState(currentLocation ? 'ready' : 'idle')
       setContexto('HOME')
     }
   }
@@ -219,8 +237,8 @@ export default function CercaNativeScreen() {
         <MapView
           style={{ flex: 1 }}
           provider={PROVIDER_DEFAULT}
-          initialRegion={DEFAULT_CENTER}
-          showsUserLocation={contexto === 'CURRENT'}
+          region={currentLocation ? { ...currentLocation, latitudeDelta: 0.05, longitudeDelta: 0.05 } : DEFAULT_CENTER}
+          showsUserLocation={gpsState === 'ready'}
           showsMyLocationButton={false}
         >
           {resultados.map((item) => {
@@ -291,11 +309,11 @@ export default function CercaNativeScreen() {
       {consentimientoVisible && (
         <View className="mx-4 mb-2 rounded-xl border border-warning/40 bg-warning/10 p-4">
           <Text className="text-h4 font-inter-bold text-foreground">
-            Ubicación no disponible
+            No pudimos obtener tu ubicación
           </Text>
           <Text className="mt-1 text-caption text-muted-foreground">
-            La ubicación GPS requiere una compilación de desarrollo con expo-location.{'\n'}
-            Por ahora, usa "Mi vivienda" o busca una dirección manualmente.
+            Activa el permiso de ubicación para buscar negocios cerca de ti. Por ahora,
+            puedes usar "Mi vivienda" o buscar una dirección manualmente.
           </Text>
           <View className="mt-3 flex-row gap-2">
             <Pressable
