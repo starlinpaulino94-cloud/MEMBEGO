@@ -62,6 +62,7 @@ const PUROS = [
   'contrato.ts',
   'hallazgos.ts',
   'minutos-qr.ts',
+  'avisos.ts',
 ]
 
 // ── El dominio puro sigue siendo puro ───────────────────────────────────────
@@ -265,7 +266,16 @@ test('la sección `supply` existe y no la tienen los roles acotados', async () =
 test('toda acción de supply de la bitácora tiene etiqueta', () => {
   const esquema = readFileSync(join(RAIZ, 'prisma', 'schema', 'identidad.prisma'), 'utf8')
   const queries = readFileSync(join(RAIZ, 'src', 'modules', 'auditoria', 'queries.ts'), 'utf8')
-  const acciones = [...esquema.matchAll(/^\s{2}(SUPPLY_[A-Z_]+)$/gm)].map((m) => m[1])
+  // Se recorta el cuerpo de `enum AuditAccion` ANTES de buscar. Barrer el
+  // archivo entero parecía equivalente y no lo era: `identidad.prisma` tiene
+  // varios enums con la misma sangría, así que en cuanto `NotifTipo` estrenó
+  // `SUPPLY_POR_VENCER` (Fase 40) esta prueba exigió una etiqueta de BITÁCORA
+  // para un tipo de NOTIFICACIÓN. Un guardia que señala a quien no es enseña a
+  // ignorarlo.
+  const abre = esquema.indexOf('enum AuditAccion {')
+  assert.notEqual(abre, -1, 'no se encontró `enum AuditAccion` en el esquema')
+  const cuerpo = esquema.slice(abre, esquema.indexOf('\n}', abre))
+  const acciones = [...cuerpo.matchAll(/^\s{2}(SUPPLY_[A-Z_]+)$/gm)].map((m) => m[1])
 
   assert.ok(acciones.length >= 15, 'se esperaban al menos quince acciones de supply')
   for (const a of acciones) {

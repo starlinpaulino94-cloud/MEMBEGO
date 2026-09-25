@@ -45,6 +45,17 @@ enum NotifTipo {
   CITA_NUEVA
   CITA_CONFIRMADA
   CITA_CANCELADA
+  // ── Membego Supply (Fase 40) ─────────────────────────────────────────────
+  // El cron de supply ya calculaba estos dos avisos y los devolvía en el JSON
+  // de su respuesta, que no lee nadie. Un aviso que solo existe si alguien
+  // entra a mirar el panel no es un aviso.
+  /// Un lote cruza un umbral de vencimiento (30, 14, 7, 3 o 1 días). A Membego
+  /// se le dice cuánto dinero está a punto de evaporarse; al proveedor, cuántas
+  /// unidades de su compromiso quedan sin entregar.
+  SUPPLY_POR_VENCER
+  /// La conciliación encontró algo que invalida cifras: invariante roto,
+  /// redención duplicada, asiento que falta. Solo CRÍTICA y ALTA.
+  SUPPLY_DESCUADRE
 }
 
 enum AuditAccion {

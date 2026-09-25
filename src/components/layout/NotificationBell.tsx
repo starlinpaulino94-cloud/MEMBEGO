@@ -11,6 +11,8 @@ import {
   ExternalLink,
   FileText,
   Gift,
+  Scale,
+  TimerOff,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -30,6 +32,9 @@ const TIPO_ICON: Record<string, { icon: LucideIcon; cls: string }> = {
   MEMBRESIA_ACTIVADA: { icon: BadgeCheck, cls: 'bg-success/10 text-success' },
   PROMOCION_NUEVA: { icon: Gift, cls: 'bg-primary/10 text-primary' },
   SISTEMA: { icon: Bell, cls: 'bg-muted text-muted-foreground' },
+  // Membego Supply: lo que está a punto de perderse y lo que no cuadra.
+  SUPPLY_POR_VENCER: { icon: TimerOff, cls: 'bg-warning/15 text-warning' },
+  SUPPLY_DESCUADRE: { icon: Scale, cls: 'bg-destructive/10 text-destructive' },
 }
 
 function timeAgo(date: Date) {

@@ -12,6 +12,13 @@ export async function crearNotificacion(data: {
   titulo: string
   mensaje: string
   href?: string
+  /**
+   * Identidad estable del hecho que provoca el aviso. Con el índice único
+   * `(userId, dedupeKey)`, repetir el mismo hecho no duplica la notificación.
+   * Sin clave, cada llamada crea una fila — correcto para un aviso que nace de
+   * un clic, y un generador de ruido para uno que nace de un cron.
+   */
+  dedupeKey?: string
 }) {
   try {
     await sinEmpresa('notificaciones: crear por usuario (un usuario puede ser de varias empresas)', (tx) =>
@@ -36,7 +43,7 @@ export async function crearNotificacion(data: {
  */
 export async function notificarAdmins(
   companyId: string,
-  payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string }
+  payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string; dedupeKey?: string }
 ) {
   try {
     await conEmpresa(companyId, async (tx) => {
@@ -47,6 +54,9 @@ export async function notificarAdmins(
       if (admins.length === 0) return
       await tx.notificacion.createMany({
         data: admins.map((a) => ({ userId: a.id, ...payload })),
+        // Solo muerde cuando el payload trae `dedupeKey`: sin clave, Postgres
+        // permite tantos NULL como quiera y esto no cambia nada.
+        skipDuplicates: true,
       })
     })
   } catch (e) {
@@ -104,4 +114,44 @@ export async function notificarSeguidoresEmpresa(
   payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string }
 ) {
   await encolarFanOut(companyId, 'seguidores', payload)
+}
+
+/**
+ * Notifica a los SUPERADMIN de la plataforma.
+ *
+ * Cruza inquilinos por naturaleza y por eso va con `sinEmpresa`: un superadmin
+ * no pertenece a ninguna empresa, y lo que se le avisa —supply a punto de
+ * vencer, un descuadre en la conciliación— es de la plataforma entera.
+ *
+ * Fail-open, como el resto de este archivo: si el aviso no se puede escribir se
+ * anota en el log y quien llamó sigue. Una notificación no puede tumbar un cron
+ * ni una operación.
+ */
+export async function notificarSuperadmins(payload: {
+  tipo: NotifTipo
+  titulo: string
+  mensaje: string
+  href?: string
+  dedupeKey?: string
+}): Promise<number> {
+  try {
+    return await sinEmpresa(
+      'notificaciones: avisar a los superadmin (no pertenecen a ninguna empresa)',
+      async (tx) => {
+        const supers = await tx.user.findMany({
+          where: { role: 'SUPERADMIN' },
+          select: { id: true },
+        })
+        if (supers.length === 0) return 0
+        const r = await tx.notificacion.createMany({
+          data: supers.map((u) => ({ userId: u.id, ...payload })),
+          skipDuplicates: true,
+        })
+        return r.count
+      }
+    )
+  } catch (e) {
+    console.error('[notificacion] notificarSuperadmins error', e)
+    return 0
+  }
 }
