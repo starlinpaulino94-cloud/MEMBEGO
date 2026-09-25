@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "MembeGo",
-    "slug": "membego-client",
+    "slug": "membego",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -35,6 +35,13 @@
           "androidGoogleMapsApiKey": ""
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "bc01217c-3f1f-4293-a64f-5e33fafe8aa5"
+      }
+    },
+    "owner": "havelgo"
   }
 }
