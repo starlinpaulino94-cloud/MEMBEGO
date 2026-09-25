@@ -8,7 +8,7 @@ import {
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Sparkles, CalendarDays, Crown, ArrowRight } from 'lucide-react'
+import { Sparkles, CalendarDays, Crown, ArrowRight } from 'lucide-react-native'
 import { api, type EmpresaDetalleResponse, type ExcursionCardData } from '../../src/lib/api'
 import { Card } from '../../src/components/ui/Card'
 import { Button } from '../../src/components/ui/Button'

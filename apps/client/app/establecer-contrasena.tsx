@@ -8,7 +8,7 @@ import {
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Lock } from 'lucide-react'
+import { Lock } from 'lucide-react-native'
 import { supabase } from '../src/lib/supabase'
 import { Card } from '../src/components/ui/Card'
 import { Input } from '../src/components/ui/Input'
