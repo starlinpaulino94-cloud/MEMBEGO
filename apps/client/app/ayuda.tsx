@@ -6,11 +6,10 @@ import {
   Pressable,
   Linking,
   ActivityIndicator,
+  TextInput,
 } from 'react-native'
 import { useRouter } from 'expo-router'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  ArrowLeft,
   HelpCircle,
   MessageCircle,
   Mail,
@@ -19,15 +18,22 @@ import {
   ChevronRight,
   ChevronDown,
   AlertCircle,
+  ArrowRight,
+  CheckCircle2,
+  Circle,
+  Sparkles,
 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
-import { useAyuda } from '../src/hooks/useAyuda'
+import { useAyuda, useCrearTicketAyuda } from '../src/hooks/useAyuda'
 import { Button } from '../src/components/ui/Button'
 import { Card } from '../src/components/ui/Card'
 import { Badge } from '../src/components/ui/Badge'
 import { EmptyState } from '../src/components/ui/EmptyState'
 import { Skeleton } from '../src/components/ui/Skeleton'
+import { PageHeader } from '../src/components/ui/PageHeader'
 import { cn } from '../src/lib/cn'
+import { rnHref } from '../src/lib/rutas'
+import { colors } from '../src/theme/tokens'
 import type { AyudaResponse } from '../src/lib/api'
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -137,13 +143,70 @@ function TicketRow({
   )
 }
 
+function OnboardingCard({
+  onboarding,
+  onNavigate,
+}: {
+  onboarding: NonNullable<AyudaResponse['onboarding']>
+  onNavigate: (href: string) => void
+}) {
+  if (onboarding.completados >= onboarding.total) return null
+  const percentage = onboarding.total > 0
+    ? Math.round((onboarding.completados / onboarding.total) * 100)
+    : 0
+
+  return (
+    <Card className="mb-6 border-info/30 bg-info/10">
+      <View className="flex-row items-center justify-between gap-3">
+        <View className="flex-row items-center gap-2">
+          <Sparkles size={18} color={colors.primary.DEFAULT} />
+          <Text className="text-base font-inter-semibold text-info">Saca el máximo a MembeGo</Text>
+        </View>
+        <Text className="text-sm font-inter-semibold text-info">
+          {onboarding.completados}/{onboarding.total}
+        </Text>
+      </View>
+      <View className="mt-3 h-2 overflow-hidden rounded-full bg-info/15">
+        <View className="h-full rounded-full bg-primary" style={{ width: `${percentage}%` }} />
+      </View>
+      <View className="mt-3 gap-2">
+        {onboarding.items.map((item) => (
+          <View key={item.key} className="flex-row items-center justify-between gap-3 rounded-lg bg-card p-2.5">
+            <View className="flex-1 flex-row items-center gap-2">
+              {item.done ? (
+                <CheckCircle2 size={16} color={colors.state.success} />
+              ) : (
+                <Circle size={16} color={colors.surface.mutedForeground} />
+              )}
+              <Text className={cn('flex-1 text-small', item.done ? 'text-muted-foreground line-through' : 'text-foreground')}>
+                {item.label}
+              </Text>
+            </View>
+            {!item.done && item.cta ? (
+              <Pressable onPress={() => onNavigate(item.href)} className="min-h-10 flex-row items-center rounded-lg border border-border px-3">
+                <Text className="text-caption font-inter-semibold text-foreground">{item.cta}</Text>
+                <ArrowRight size={13} color={colors.surface.foreground} />
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
+      </View>
+    </Card>
+  )
+}
+
 /* ── Screen ────────────────────────────────────────────────────────────── */
 
 export default function AyudaScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const { data, isLoading, isError, refetch } = useAyuda(isAuthenticated)
+  const crearTicket = useCrearTicketAyuda()
+  const [formVisible, setFormVisible] = useState(false)
+  const [asunto, setAsunto] = useState('')
+  const [descripcion, setDescripcion] = useState('')
+  const [categoria, setCategoria] = useState('OTRO')
+  const [formError, setFormError] = useState<string | null>(null)
 
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (authLoading) {
@@ -177,6 +240,7 @@ export default function AyudaScreen() {
   const temas = ayuda?.temas ?? []
   const tickets = ayuda?.tickets ?? []
   const contacto = ayuda?.contacto
+  const onboarding = ayuda?.onboarding
 
   const handleWhatsApp = () => {
     const url =
@@ -190,32 +254,39 @@ export default function AyudaScreen() {
     Linking.openURL(`mailto:${correo}?subject=${encodeURIComponent('Soporte')}`).catch(() => {})
   }
 
+  const handleCrearTicket = async () => {
+    if (!asunto.trim() || !descripcion.trim()) {
+      setFormError('Escribe un asunto y una descripción.')
+      return
+    }
+
+    setFormError(null)
+    try {
+      await crearTicket.mutateAsync({
+        asunto: asunto.trim(),
+        descripcion: descripcion.trim(),
+        categoria,
+      })
+      setAsunto('')
+      setDescripcion('')
+      setCategoria('OTRO')
+      setFormVisible(false)
+      await refetch()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'No se pudo enviar el reporte.')
+    }
+  }
+
   return (
     <View className="flex-1 bg-background">
-      {/* ── Header ──────────────────────────────────────────────────── */}
-      <View
-        className="flex-row items-center gap-2 bg-background border-b border-border"
-        style={{
-          paddingLeft: insets.left + 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-        }}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          className="p-2 rounded-lg active:bg-muted"
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-        >
-          <ArrowLeft size={20} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-inter-bold text-foreground">
-          Centro de ayuda
-        </Text>
-      </View>
-
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
+      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+        <PageHeader
+          title="Centro de ayuda"
+          description={`Contáctanos o encuentra respuestas rápidas · ${contacto?.empresaNombre ?? 'MembeGo'}`}
+        />
+        {onboarding ? (
+          <OnboardingCard onboarding={onboarding} onNavigate={(href) => router.push(rnHref(href))} />
+        ) : null}
         {/* ── Contacto rápido ───────────────────────────────────────── */}
         <View className="flex-row gap-3 mb-6">
           {/* WhatsApp */}
@@ -269,6 +340,68 @@ export default function AyudaScreen() {
             </Text>
           </View>
         ) : null}
+
+        <Card>
+          <View className="flex-row items-center justify-between gap-3">
+            <View className="flex-1">
+              <Text className="font-inter-semibold text-base text-foreground">
+                ¿Necesitas más ayuda?
+              </Text>
+              <Text className="mt-1 text-xs text-muted-foreground">
+                Crea un reporte y dale seguimiento desde esta pantalla.
+              </Text>
+            </View>
+            <Button variant="outline" size="sm" onPress={() => setFormVisible((visible) => !visible)}>
+              {formVisible ? 'Cerrar' : 'Crear ticket'}
+            </Button>
+          </View>
+          {formVisible && (
+            <View className="mt-4 gap-3">
+              <TextInput
+                value={asunto}
+                onChangeText={setAsunto}
+                placeholder="Asunto del problema"
+                placeholderTextColor="#6b7280"
+                className="rounded-xl border border-border bg-background px-3 py-3 text-small text-foreground"
+                accessibilityLabel="Asunto del problema"
+              />
+              <View className="flex-row flex-wrap gap-2">
+                {['OTRO', 'PAGO', 'MEMBRESIA', 'BENEFICIOS'].map((option) => (
+                  <Pressable
+                    key={option}
+                    onPress={() => setCategoria(option)}
+                    className={cn(
+                      'rounded-full border px-3 py-2',
+                      categoria === option ? 'border-primary bg-primary' : 'border-border bg-background',
+                    )}
+                  >
+                    <Text className={cn(
+                      'text-caption font-inter-semibold',
+                      categoria === option ? 'text-primary-foreground' : 'text-foreground',
+                    )}>
+                      {option === 'OTRO' ? 'Otro' : option.charAt(0) + option.slice(1).toLowerCase()}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <TextInput
+                value={descripcion}
+                onChangeText={setDescripcion}
+                placeholder="Cuéntanos qué ocurrió…"
+                placeholderTextColor="#6b7280"
+                multiline
+                numberOfLines={5}
+                textAlignVertical="top"
+                className="min-h-28 rounded-xl border border-border bg-background px-3 py-3 text-small text-foreground"
+                accessibilityLabel="Descripción del problema"
+              />
+              {formError && <Text className="text-caption text-destructive">{formError}</Text>}
+              <Button disabled={crearTicket.isPending} onPress={() => void handleCrearTicket()}>
+                {crearTicket.isPending ? 'Enviando…' : 'Enviar reporte'}
+              </Button>
+            </View>
+          )}
+        </Card>
 
         {/* ── Content states ────────────────────────────────────────── */}
         {isLoading ? (

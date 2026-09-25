@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../lib/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, type CrearTicketAyudaBody } from '../lib/api'
 
 export function useAyuda(enabled = true) {
   return useQuery({
@@ -16,5 +16,15 @@ export function useTicketAyuda(id: string | undefined, enabled = true) {
     queryFn: () => api.getTicketAyuda(id as string),
     staleTime: 1000 * 60,
     enabled: enabled && !!id,
+  })
+}
+
+export function useCrearTicketAyuda() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CrearTicketAyudaBody) => api.crearTicketAyuda(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cliente', 'ayuda'] })
+    },
   })
 }
