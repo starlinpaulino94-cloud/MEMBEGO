@@ -1,0 +1,114 @@
+name: Ensayo de RLS Capa 2
+
+# SE DISPARA A MANO, y a propósito.
+#
+# No entra en el CI de cada PR por dos razones: tarda (siembra cinco empresas
+# con imágenes) y lo que contesta no cambia con cada commit, sino con cada tabla
+# nueva. El CI ya vigila lo que sí cambia siempre —que las políticas se apliquen
+# y que el aislamiento aguante— en el trabajo «Esquema de base de datos».
+#
+# Esto es el PASO 4 del runbook `docs/runbooks/rls-encender.md`: «ejercitar la
+# app entera con membego_app buscando pantallas vacías». Córrelo antes del
+# cutover, y otra vez cada vez que se añadan tablas.
+on:
+  workflow_dispatch:
+
+jobs:
+  ensayo:
+    name: ¿Qué pantalla se quedaría en blanco?
+    runs-on: ubuntu-latest
+
+    # Base DESECHABLE de verdad: nace con el trabajo y muere con él. Es la
+    # condición que el runbook pone en mayúsculas — «nunca la primera vez en
+    # producción»— y aquí no hay forma de equivocarse de base.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ensayo
+          POSTGRES_DB: ensayo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Sin secretos: esta base existe durante seis minutos y nadie más la
+      # alcanza. Meter aquí la contraseña real de `membego_app` no añadiría
+      # seguridad y sí una forma de filtrarla.
+      URL: postgresql://postgres:ensayo@localhost:5432/ensayo
+      CLAVE_ROL: clave-de-ensayo-no-es-un-secreto
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Extensiones que el esquema necesita
+        run: psql "$URL" -v ON_ERROR_STOP=1
+             -c "create extension if not exists pg_trgm"
+             -c "create extension if not exists pgcrypto"
+
+      - name: El esquema, solo con migraciones (como producción)
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ env.URL }}
+          DIRECT_URL: ${{ env.URL }}
+
+      - name: Capa 1 · cerrar la puerta de PostgREST
+        run: psql "$URL" -v ON_ERROR_STOP=1
+             -f prisma/migrations/20260771_rls_barrera_publica/migration.sql
+
+      - name: Capa 2 · el rol y las políticas
+        run: psql "$URL" -v ON_ERROR_STOP=1
+             -c "set membego.clave = '$CLAVE_ROL'"
+             -f prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql
+
+      - name: Aislamiento entre empresas
+        run: npm run rls:probar
+        env:
+          DATABASE_URL: ${{ env.URL }}
+
+      # Sin datos no hay nada que medir: una tabla vacía no puede enseñar que se
+      # queda a oscuras. El sembrador llena las pantallas del panel, del cliente
+      # y del marketplace, que es donde se notaría.
+      - name: Sembrar cinco empresas con todo lleno
+        run: node --import tsx scripts/sembrar-demo.mts
+        env:
+          DATABASE_URL: ${{ env.URL }}
+          DIRECT_URL: ${{ env.URL }}
+          SEMBRAR_DEMO_BASE_DESECHABLE: 'si'
+
+      - name: EL ENSAYO · ¿alguna tabla se queda a oscuras?
+        id: ensayo
+        run: |
+          set -o pipefail
+          npm run ensayo:rls 2>&1 | tee salida-ensayo.txt
+        env:
+          DATABASE_URL: ${{ env.URL }}
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo '## Ensayo de RLS Capa 2'
+            echo
+            if [ "${{ steps.ensayo.outcome }}" = 'success' ]; then
+              echo '✅ Ninguna tabla con datos se quedaría a oscuras.'
+              echo
+              echo 'Queda el smoke test del runbook: esto no ejercita el pooler ni'
+              echo 'una conexión nueva con la contraseña real.'
+            else
+              echo '❌ Hay tablas que se verían vacías. **No cambies `DATABASE_URL`.**'
+            fi
+            echo
+            echo '```'
+            sed -E 's/\x1b\[[0-9;]*m//g' salida-ensayo.txt | tail -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

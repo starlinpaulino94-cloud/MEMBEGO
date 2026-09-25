@@ -40,6 +40,37 @@ plataforma (solo omnisciente)—. No se enciende nada con el preflight en rojo.
 
 ## 1 · Ensayo en una base DESECHABLE (nunca la primera vez en producción)
 
+> ### ⚡ Automatizado el 25-09-2026 — no hace falta terminal
+>
+> Actions → **«Ensayo de RLS Capa 2»** → *Run workflow*. Levanta un PostgreSQL 16
+> de usar y tirar, aplica las migraciones y las dos capas, corre el aislamiento
+> (14 comprobaciones), siembra cinco empresas con todas las secciones llenas y
+> pasa el detector. El resumen del trabajo dice si alguna tabla se quedaría a
+> oscuras y cuál.
+>
+> **Lo que sustituye del paso 4:** clicar doscientas pantallas buscando listas
+> vacías. Una pantalla vacía es siempre la misma cosa por debajo —una tabla que
+> tiene filas y devuelve cero con el contexto de su empresa puesto— y eso se
+> pregunta tabla por tabla. Para las tablas vacías, donde los datos no pueden
+> contestar, `scripts/ensayo-rls.mjs` **lee la política que hay en la base** y
+> sigue su cadena de `EXISTS` hasta una columna de inquilino: 197 de las 203
+> tablas quedan con veredicto, y las 6 restantes son las que están denegadas a
+> propósito (catálogos geo, búsquedas y credenciales de sistema).
+>
+> **Lo que NO sustituye,** y por eso el paso 5 sigue existiendo: el detector
+> cambia de rol con `SET LOCAL ROLE`, no abre una conexión nueva con la
+> contraseña de `membego_app`. Las políticas y los permisos de tabla se
+> comportan igual, pero no se ejercita el pooler, ni el `search_path` de una
+> sesión nueva, ni que la contraseña sea correcta.
+>
+> **Y una limitación que conviene tener presente:** la parte empírica solo mide
+> las tablas que tienen filas, y con datos de demo son 17. Si quieres el ensayo
+> fuerte, restaura una copia del respaldo de producción en un proyecto Supabase
+> aparte y corre `npm run ensayo:rls` contra ella con
+> `RLS_PERMITIR_REMOTA=si` — ahí sí tiene filas todo lo que importa.
+
+### A mano, si prefieres seguirlo paso a paso
+
 El objetivo es descubrir las tablas denegadas donde no cuesta nada: en una base
 de usar y tirar, no en la de los clientes.
 
