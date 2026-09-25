@@ -132,6 +132,56 @@ export function quitarCita(texto: string): string {
  *  lee en pantalla. */
 const MAX_CUERPO = 20_000
 
+/** Solo el correo, sin el «Nombre <...>» que traen los gestores. */
+function soloBuzon(direccion: string): string {
+  const m = /<([^>]+)>/.exec(direccion)
+  return (m ? m[1] : direccion).trim().toLowerCase()
+}
+
+/**
+ * ¿Escribió el CLIENTE o el NEGOCIO?
+ *
+ * Desde hoy las dos partes reciben la misma dirección de respuesta firmada: el
+ * negocio en el correo de «ticket nuevo» y el cliente en el de «te
+ * respondieron». Las dos respuestas entran por aquí, así que archivarlas todas
+ * como CLIENTE —que es lo que se hacía cuando solo escribía el negocio— haría
+ * que la respuesta del negocio apareciera en el hilo como si la hubiera
+ * escrito el cliente. Un hilo de soporte con los papeles cambiados es peor que
+ * uno incompleto.
+ *
+ * SE DECIDE POR COMPARACIÓN, Y HACIA EL LADO SEGURO. Solo se marca ADMIN
+ * cuando el remitente coincide con el correo de soporte que la empresa
+ * configuró. Cualquier otra cosa —el cliente, un reenvío, una dirección que no
+ * reconocemos— entra como CLIENTE, que es lo que ya hacía.
+ *
+ * Esto NO autentica nada: el `From` se falsifica en diez segundos. Lo que
+ * autentica el mensaje es el token firmado de la dirección de destino, y eso ya
+ * se comprobó antes de llegar aquí. Esto solo elige una etiqueta para que el
+ * hilo se lea bien.
+ */
+async function quienEscribe(
+  remitente: string,
+  companyId: string,
+  emailCliente: string | null
+): Promise<'CLIENTE' | 'ADMIN'> {
+  const de = soloBuzon(remitente)
+  if (!de) return 'CLIENTE'
+  if (emailCliente && de === emailCliente.trim().toLowerCase()) return 'CLIENTE'
+  try {
+    const config = await conEmpresa(companyId, (tx) =>
+      tx.whatsAppConfig.findUnique({
+        where: { companyId },
+        select: { correoSoporte: true },
+      })
+    )
+    const soporte = config?.correoSoporte?.trim().toLowerCase()
+    if (soporte && de === soporte) return 'ADMIN'
+  } catch (e) {
+    console.error('[correo-entrante] no se pudo resolver el autor', e)
+  }
+  return 'CLIENTE'
+}
+
 /**
  * Procesa un evento `email.received` ya verificado criptográficamente.
  *
@@ -163,7 +213,13 @@ export async function procesarCorreoRecibido(
     (tx) =>
       tx.supportTicket.findUnique({
         where: { id: ticketId },
-        select: { id: true, companyId: true, estado: true },
+        select: {
+          id: true,
+          companyId: true,
+          estado: true,
+          // Para saber QUIÉN escribió. Ver `quienEscribe` más abajo.
+          cliente: { select: { email: true } },
+        },
       })
   ).catch(() => null)
   if (!ticket) return { guardado: false, motivo: 'el ticket no existe' }
@@ -184,17 +240,19 @@ export async function procesarCorreoRecibido(
   if (!limpio) return { guardado: false, motivo: 'cuerpo vacío' }
 
   const remitente = evento.from?.trim() || 'Desconocido'
+  const autorTipo = await quienEscribe(remitente, ticket.companyId, ticket.cliente?.email ?? null)
 
   await conEmpresa(ticket.companyId, (tx) =>
     Promise.all([
       tx.ticketMensaje.create({
         data: {
           ticketId: ticket.id,
-          // Entra como CLIENTE: es una respuesta que llega de fuera del panel.
-          // El nombre lleva el remitente real para que el admin vea de quién
-          // vino sin tener que fiarse de él — el `From` de un correo es
-          // falsificable; lo que autentica el mensaje es el token, no esto.
-          autorTipo: 'CLIENTE',
+          // Quién lo escribió se decide comparando el remitente (ver
+          // `quienEscribe`). El nombre lleva el `From` tal cual para que el
+          // admin vea de dónde vino sin tener que fiarse de él: el `From` de un
+          // correo es falsificable, y lo que autentica el mensaje es el token
+          // de la dirección, no esto.
+          autorTipo,
           autorNombre: remitente,
           cuerpo: limpio,
         },
