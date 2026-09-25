@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type EnviarRegaloBody, type RegalarBody } from '../lib/api'
+import { api, type EnviarRegaloBody, type RegalarBody, type RegaloActionBody } from '../lib/api'
 
 export function useRegalos(enabled = true) {
   return useQuery({
@@ -33,6 +33,17 @@ export function useRegalar() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (body: RegalarBody) => api.regalar(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cliente', 'regalos'] })
+      queryClient.invalidateQueries({ queryKey: ['cliente', 'mis-promociones'] })
+    },
+  })
+}
+
+export function useProcesarRegalo() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: RegaloActionBody) => api.procesarRegalo(body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cliente', 'regalos'] })
       queryClient.invalidateQueries({ queryKey: ['cliente', 'mis-promociones'] })

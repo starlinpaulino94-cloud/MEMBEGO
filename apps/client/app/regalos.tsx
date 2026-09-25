@@ -15,7 +15,7 @@ import {
   AlertCircle,
 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
-import { useRegalos } from '../src/hooks/useRegalos'
+import { useProcesarRegalo, useRegalos } from '../src/hooks/useRegalos'
 import { formatMoney } from '../src/lib/format'
 import { cn } from '../src/lib/cn'
 import { Button } from '../src/components/ui/Button'
@@ -65,7 +65,17 @@ function badgeVariantGiftcard(estado: string): 'warning' | 'success' | 'destruct
 
 /* ── Sub-components ───────────────────────────────────────────────────── */
 
-function RegaloRow({ regalo, tipo }: { regalo: RegaloItem; tipo: 'recibido' | 'enviado' }) {
+function RegaloRow({
+  regalo,
+  tipo,
+  onAction,
+  pending,
+}: {
+  regalo: RegaloItem
+  tipo: 'recibido' | 'enviado'
+  onAction: (id: string, decision: 'aceptar' | 'rechazar' | 'cancelar') => void
+  pending: boolean
+}) {
   const esRecibido = tipo === 'recibido'
   const contraparte = regalo.contraparte ?? 'Usuario'
   const titulo = esRecibido ? `De ${contraparte}` : `Para ${contraparte}`
@@ -94,6 +104,38 @@ function RegaloRow({ regalo, tipo }: { regalo: RegaloItem; tipo: 'recibido' | 'e
               </Text>
             )}
           </View>
+          {regalo.estado === 'PENDIENTE' && (
+            <View className="mt-3 flex-row gap-2">
+              {esRecibido ? (
+                <>
+                  <Pressable
+                    onPress={() => onAction(regalo.id, 'aceptar')}
+                    disabled={pending}
+                    className="rounded-lg bg-primary px-3 py-2"
+                  >
+                    <Text className="text-caption font-inter-semibold text-primary-foreground">
+                      {pending ? 'Procesando…' : 'Aceptar'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => onAction(regalo.id, 'rechazar')}
+                    disabled={pending}
+                    className="rounded-lg border border-border px-3 py-2"
+                  >
+                    <Text className="text-caption font-inter-semibold text-foreground">Rechazar</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Pressable
+                  onPress={() => onAction(regalo.id, 'cancelar')}
+                  disabled={pending}
+                  className="rounded-lg border border-destructive/40 px-3 py-2"
+                >
+                  <Text className="text-caption font-inter-semibold text-destructive">Cancelar regalo</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
         </View>
       </View>
     </Card>
@@ -155,7 +197,10 @@ export default function RegalosScreen() {
   const insets = useSafeAreaInsets()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const { data, isLoading, isError, refetch } = useRegalos(isAuthenticated)
+  const procesarRegalo = useProcesarRegalo()
   const [tab, setTab] = useState<TabKey>('recibidos')
+  const [actionId, setActionId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   if (authLoading || isLoading) {
     return (
@@ -196,8 +241,23 @@ export default function RegalosScreen() {
   const giftCards = data?.giftCards ?? []
   const isEmpty = recibidos.length === 0 && enviados.length === 0 && giftCards.length === 0
 
+  const handleRegaloAction = (regaloId: string, decision: 'aceptar' | 'rechazar' | 'cancelar') => {
+    setActionId(regaloId)
+    setActionError(null)
+    procesarRegalo.mutate(
+      { regaloId, decision },
+      {
+        onSuccess: () => setActionId(null),
+        onError: (error) => {
+          setActionId(null)
+          setActionError(error instanceof Error ? error.message : 'No se pudo procesar el regalo.')
+        },
+      },
+    )
+  }
+
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}>
+    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ paddingTop: 16, paddingBottom: insets.bottom + 24 }}>
       <View className="px-4">
         {/* Header */}
         <PageHeader
@@ -232,6 +292,11 @@ export default function RegalosScreen() {
             Transferir mis usos
           </Button>
         </View>
+        {actionError && (
+          <View className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2">
+            <Text className="text-caption text-destructive">{actionError}</Text>
+          </View>
+        )}
 
         {/* Empty state */}
         {isEmpty ? (
@@ -280,7 +345,15 @@ export default function RegalosScreen() {
                   description="Cuando alguien te envíe un regalo, aparecerá aquí."
                 />
               ) : (
-                recibidos.map((r) => <RegaloRow key={r.id} regalo={r} tipo="recibido" />)
+                recibidos.map((r) => (
+                  <RegaloRow
+                    key={r.id}
+                    regalo={r}
+                    tipo="recibido"
+                    onAction={handleRegaloAction}
+                    pending={actionId === r.id}
+                  />
+                ))
               )
             )}
 
@@ -293,7 +366,15 @@ export default function RegalosScreen() {
                   description="Cuando envíes un regalo a un amigo, aparecerá aquí."
                 />
               ) : (
-                enviados.map((r) => <RegaloRow key={r.id} regalo={r} tipo="enviado" />)
+                enviados.map((r) => (
+                  <RegaloRow
+                    key={r.id}
+                    regalo={r}
+                    tipo="enviado"
+                    onAction={handleRegaloAction}
+                    pending={actionId === r.id}
+                  />
+                ))
               )
             )}
 

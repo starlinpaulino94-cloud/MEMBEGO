@@ -20,6 +20,7 @@ import {
 import { generarCodigo } from '@/lib/codes'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
+import type { SessionUser } from '@/types'
 
 /**
  * Regalos P2P · Fase R1 (docs/REGALOS-P2P.md).
@@ -419,9 +420,10 @@ export async function enviarTransferencia(
 /** Acepta o rechaza un regalo PENDIENTE dirigido al usuario autenticado. */
 export async function responderRegalo(
   _prev: RegaloActionState,
-  formData: FormData
+  formData: FormData,
+  authenticatedUser?: SessionUser,
 ): Promise<RegaloActionState> {
-  const user = await getUser()
+  const user = authenticatedUser ?? await getUser()
   if (!user || user.metadata.role !== 'CLIENTE') return { error: 'No autorizado.' }
 
   /**
@@ -641,9 +643,10 @@ export async function responderRegalo(
 /** El remitente cancela un regalo PENDIENTE: recupera sus usos. */
 export async function cancelarRegalo(
   _prev: RegaloActionState,
-  formData: FormData
+  formData: FormData,
+  authenticatedUser?: SessionUser,
 ): Promise<RegaloActionState> {
-  const user = await getUser()
+  const user = authenticatedUser ?? await getUser()
   if (!user || user.metadata.role !== 'CLIENTE') return { error: 'No autorizado.' }
   // Igual que al responder: el regalo pudo enviarse desde cualquiera de sus
   // fichas. Con la ficha activa, «Cancelar» fallaba sobre un regalo que el
