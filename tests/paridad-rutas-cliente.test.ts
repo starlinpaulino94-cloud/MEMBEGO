@@ -332,14 +332,15 @@ test('cada ruta web "missing" tiene una acción documentada', () => {
   }
 })
 
-// ── 7. La ruta /cliente/planes/[planId] es la única "missing" documentada ────
+// ── 7. El baseline de rutas web "missing" ───────────────────────────────────
 //
-// El manifiesto actual tiene una sola ruta missing: /cliente/planes/[planId].
-// Si aparecen más, es señal de que una migración añadió una ruta web sin su
-// contraparte nativa — debe quedar documentado, no silenciado.
+// El baseline actual es 0: /cliente/planes/[planId] ya tiene contraparte
+// nativa (apps/client/app/planes/[planId].tsx). Si vuelve a aparecer una
+// missing, es señal de que una migración añadió una ruta web sin su
+// contraparte nativa — debe quedar documentada con acción, no silenciada.
 
 test('el número de rutas web "missing" se mantiene en el baseline documentado', () => {
-  const BASELINE_MISSING = 1
+  const BASELINE_MISSING = 0
   const missing = manifest.webRoutes.filter((r) => r.status === 'missing')
   assert.ok(
     missing.length >= BASELINE_MISSING,
@@ -348,14 +349,11 @@ test('el número de rutas web "missing" se mantiene en el baseline documentado',
   // Si crece por encima del baseline, que se sepa — no es un fail automático,
   // pero el mensaje apunta al owner decision que debe documentarse.
   if (missing.length > BASELINE_MISSING) {
-    const nuevas = missing
-      .filter((r) => r.webPath !== '/cliente/planes/[planId]')
-      .map((r) => r.webPath)
+    const nuevas = missing.map((r) => r.webPath)
     assert.ok(
-      nuevas.length === 0 ||
-        nuevas.every((p) =>
-          manifest.webRoutes.find((r) => r.webPath === p)?.action
-        ),
+      nuevas.every((p) =>
+        manifest.webRoutes.find((r) => r.webPath === p)?.action
+      ),
       'Nuevas rutas missing sin acción documentada:\n  ' + nuevas.join('\n  ')
     )
   }

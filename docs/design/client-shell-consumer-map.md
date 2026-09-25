@@ -47,7 +47,7 @@ HEAD `c95a00b2cc7f4e2cd5d7340e92685f8a915d199e` (see
 
 - Defines: `src/components/layout/destinos-cliente.ts:21` (`DESTINOS_CLIENTE`), `:45` (`esDestinoActivo`).
 - Consumers: `src/components/layout/BottomNav.tsx:14`, `src/components/layout/TabsEscritorio.tsx:6`, `tests/cliente-retail.test.ts:15-18` (imports and asserts values).
-- **Contract divergence**: the doc comment at `destinos-cliente.ts:1-8` and `tests/cliente-retail.test.ts:23-32` say exactly four destinations (`/cliente/inicio`, `/cliente/perfil`, `/cliente/qr`, `/cliente/menu`), but the array at `destinos-cliente.ts:21-42` has **five** entries, inserting `{ href: '/cliente/promociones', label: 'Beneficios' }` at `:40`. The assertion at `tests/cliente-retail.test.ts:24-27` fails today (evidence file).
+- The client shell now has five canonical destinations: Inicio, Cuenta, Mi QR, Beneficios and Menú. The native descriptor in `apps/client/src/components/layout/destinos-cliente.ts` is the source for tabs, dock, active state and parity QA.
 
 ### 1.5 Shell-rendered supporting components (shared outside the client shell)
 
@@ -99,7 +99,7 @@ Native shell surfaces live in `apps/client/src/components/layout/`.
 - `AuthProvider` / `useAuth`: `apps/client/src/lib/auth-context.tsx:17` / `:76`; `isAuthenticated = !!user` at `:51`; `isCliente` computed at `:53` but **never consumed** (grep for `isCliente` returns only `auth-context.tsx:10,53,60,71`).
 - `HeaderVibe` consumes `useAuth` at `HeaderVibe.tsx:18` for the avatar (`:60-76`).
 
-## 3. Four persistent destinations — as coded today, both platforms
+## 3. Five persistent destinations — as coded today, both platforms
 
 ### 3.1 Web (`src/components/layout/destinos-cliente.ts:21-42`)
 
@@ -107,7 +107,7 @@ Native shell surfaces live in `apps/client/src/components/layout/`.
 { href: '/cliente/inicio',      label: 'Inicio' }
 { href: '/cliente/perfil',      label: 'Cuenta', match: ['/cliente/pagos','/cliente/historial','/cliente/ayuda','/cliente/empresas','/cliente/vehiculos','/cliente/intereses'] }
 { href: '/cliente/qr',          label: 'Mi QR',  match: ['/membresia','/mis-membresias','/cliente/mis-promociones'] }
-{ href: '/cliente/promociones', label: 'Beneficios' }      ← 5th entry in a "4 destinations" contract
+{ href: '/cliente/promociones', label: 'Beneficios' }      ← canonical fifth destination
 { href: '/cliente/menu',        label: 'Menú' }
 ```
 

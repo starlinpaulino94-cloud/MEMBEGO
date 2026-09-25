@@ -8,12 +8,12 @@
     "stateDetection": "States are source-inspected per file (imports/keywords: Skeleton/ActivityIndicator/isLoading, error/retry, EmptyState/empty, real paginators, QR libs, map libs), not inferred from filenames.",
     "planClaim": {
       "webRoutes": 47,
-      "nativeRouteFiles": 50
+      "nativeRouteFiles": 53
     }
   },
   "counts": {
     "webRoutes": 47,
-    "nativeRouteFiles": 50,
+    "nativeRouteFiles": 53,
     "webMatchesPlanClaim": true,
     "nativeMatchesPlanClaim": true
   },
@@ -77,7 +77,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Residual BFF gap: native cannot create tickets (BFF exposes only GET; web uses the crearTicket server action). See debt ledger."
+      "action": "Native POST ticket flow and form are implemented; visual confirmation and ticket detail remain platform-specific."
     },
     {
       "webPath": "/cliente/ayuda/[id]",
@@ -221,7 +221,7 @@
         "map": true
       },
       "status": "partial",
-      "action": "Residual: native GPS unavailable (expo-location not installed) and no demo-banner equivalent; Leaflet vs react-native-maps split preserved (Todo 8). See debt ledger."
+      "action": "GPS permission and current-location states use expo-location; Leaflet vs react-native-maps remains a platform-specific implementation."
     },
     {
       "webPath": "/cliente/citas",
@@ -255,7 +255,8 @@
       "redirectTo": "/mis-membresias",
       "family": "wallet",
       "nativeFiles": [
-        "apps/client/app/index.tsx"
+        "apps/client/app/index.tsx",
+        "apps/client/app/dashboard.tsx"
       ],
       "webDataSource": [],
       "auth": "client-authenticated",
@@ -844,8 +845,11 @@
         "qr": false,
         "map": false
       },
-      "status": "missing",
-      "action": "Accepted fallback: no native plan-detail route; src/lib/rutas.ts routes /plan/ to /planes with a ?from=plan-detail banner. See debt ledger."
+      "nativeFiles": [
+        "apps/client/app/planes/[planId].tsx"
+      ],
+      "status": "partial",
+      "action": "Native plan detail exists and resolves back safely; purchase/elegibility parity remains dependent on the native BFF flow."
     },
     {
       "webPath": "/cliente/promociones",
@@ -853,7 +857,8 @@
       "kind": "page",
       "family": "marketplace",
       "nativeFiles": [
-        "apps/client/app/promociones.tsx"
+        "apps/client/app/promociones.tsx",
+        "apps/client/app/(tabs)/beneficios.tsx"
       ],
       "webDataSource": [
         "src/modules/marketplace/cached.ts",
@@ -1252,7 +1257,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Shell aligned (Todo 4/11): header bell routes to /novedades and the location pill to /cerca. Residual: 4 destinations vs 5 on web (open owner decision) and no demo-banner equivalent. See debt ledger."
+      "action": "Shell aligned: header bell routes to /novedades, location to /cerca, and the five destination descriptor drives dock, desktop tabs, and active state."
     },
     {
       "nativeFile": "apps/client/app/(tabs)/inicio.tsx",
@@ -1467,7 +1472,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Mirrors /cliente/ayuda: Residual BFF gap: native cannot create tickets (BFF exposes only GET; web uses the crearTicket server action). See debt ledger."
+      "action": "Mirrors /cliente/ayuda: native POST ticket flow and form are implemented; visual confirmation and ticket detail remain platform-specific."
     },
     {
       "nativeFile": "apps/client/app/ayuda/[id].tsx",
@@ -1647,7 +1652,7 @@
         "map": false
       },
       "status": "partial",
-      "action": "Mirrors /cliente/cerca: Residual: native GPS unavailable (expo-location not installed) and no demo-banner equivalent; Leaflet vs react-native-maps split preserved (Todo 8). See debt ledger."
+      "action": "Mirrors /cliente/cerca: GPS permission and current-location states use expo-location; map rendering remains platform-specific."
     },
     {
       "nativeFile": "apps/client/app/cerca.web.tsx",
@@ -1678,7 +1683,7 @@
         "map": true
       },
       "status": "partial",
-      "action": "Mirrors /cliente/cerca: Residual: native GPS unavailable (expo-location not installed) and no demo-banner equivalent; Leaflet vs react-native-maps split preserved (Todo 8). See debt ledger."
+      "action": "Mirrors /cliente/cerca: GPS permission and current-location states use expo-location; map rendering remains platform-specific."
     },
     {
       "nativeFile": "apps/client/app/cerca.native.tsx",
@@ -1709,7 +1714,7 @@
         "map": true
       },
       "status": "partial",
-      "action": "Mirrors /cliente/cerca: Residual: native GPS unavailable (expo-location not installed) and no demo-banner equivalent; Leaflet vs react-native-maps split preserved (Todo 8). See debt ledger."
+      "action": "Mirrors /cliente/cerca: GPS permission and current-location states use expo-location; map rendering remains platform-specific."
     },
     {
       "nativeFile": "apps/client/app/citas.tsx",
@@ -2696,6 +2701,84 @@
       },
       "status": "complete",
       "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/(tabs)/beneficios.tsx",
+      "route": "/(tabs)/beneficios",
+      "kind": "alias",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/promociones"
+      ],
+      "hooks": [],
+      "api": [],
+      "components": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Alias for the five-destination Beneficios tab; the canonical promotions screen owns the web parity contract."
+    },
+    {
+      "nativeFile": "apps/client/app/dashboard.tsx",
+      "route": "/dashboard",
+      "kind": "redirect",
+      "redirectTo": "/(tabs)/inicio",
+      "family": "shell",
+      "webPaths": [
+        "/cliente/dashboard"
+      ],
+      "hooks": [],
+      "api": [],
+      "components": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Legacy dashboard alias; native root now uses the authenticated shell and keeps the redirect explicit."
+    },
+    {
+      "nativeFile": "apps/client/app/planes/[planId].tsx",
+      "route": "/planes/[planId]",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/planes/[planId]"
+      ],
+      "hooks": [
+        "usePlanes"
+      ],
+      "api": [
+        "api.getPlanes"
+      ],
+      "components": [
+        "src/components/ui/Card",
+        "src/components/ui/PageHeader",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Native plan detail is mapped; purchase and eligibility behavior remains a documented parity gap."
     }
   ]
 }
