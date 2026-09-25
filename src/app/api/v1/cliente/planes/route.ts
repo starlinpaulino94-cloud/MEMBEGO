@@ -41,7 +41,28 @@ export async function GET(request: Request) {
     // REGLA DE COMPATIBILIDAD (web): quien ya tiene membresía en la empresa
     // recibe VITRINA en vez de bloqueo si le faltan requisitos.
     const membership = await conEmpresa(companyId, (tx) =>
-      tx.membership.findFirst({ where: { clienteId }, select: { id: true } })
+      tx.membership.findFirst({
+        where: { clienteId },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          id: true,
+          estado: true,
+          planId: true,
+          planIdSolicitado: true,
+          plan: { select: { nombre: true } },
+          planSolicitado: { select: { nombre: true } },
+        },
+      })
+    ).catch(() => null)
+
+    const cliente = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findUnique({
+        where: { id: clienteId },
+        select: {
+          nombre: true,
+          company: { select: { name: true } },
+        },
+      })
     ).catch(() => null)
 
     const resultado = await planesElegibles({
@@ -78,6 +99,13 @@ export async function GET(request: Request) {
       vitrina: resultado.vitrina,
       planesPublicados: resultado.planesPublicados,
       requiereVehiculo: resultado.requiereVehiculo,
+      cliente: cliente
+        ? {
+            nombre: cliente.nombre,
+            empresaNombre: cliente.company.name,
+            membership,
+          }
+        : null,
     }, { headers: corsHeaders(request) })
   } catch (error) {
     console.error('[api/v1/cliente/planes] Error cargando planes:', error)

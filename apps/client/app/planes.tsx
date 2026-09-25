@@ -1,19 +1,22 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
   View,
   Text,
   ScrollView,
   Pressable,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native'
-import { useRouter, useLocalSearchParams } from 'expo-router'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
 import {
   ArrowLeft,
+  ArrowRightLeft,
   Sparkles,
   Zap,
   Calendar,
   Check,
+  Clock,
+  CreditCard,
   Store,
   Car,
 } from 'lucide-react-native'
@@ -26,6 +29,7 @@ import { Card } from '../src/components/ui/Card'
 import { Badge } from '../src/components/ui/Badge'
 import { EmptyState } from '../src/components/ui/EmptyState'
 import { Skeleton } from '../src/components/ui/Skeleton'
+import { colors } from '../src/theme/tokens'
 import type {
   PlanPublic,
   PlanEmpresaItem,
@@ -56,14 +60,16 @@ function handleComprar(_planId: string) {
 
 /* ── PlanCard ──────────────────────────────────────────────────────────── */
 
-function PlanCard({
+export function PlanCard({
   plan,
   destacado,
   onPress,
+  className,
 }: {
   plan: PlanPublic | PlanEmpresaItem
   destacado: boolean
   onPress: () => void
+  className?: string
 }) {
   const { base, variante } = parseNombre(plan.nombre)
   const precioPorUso =
@@ -75,6 +81,7 @@ function PlanCard({
     <Card
       className={cn(
         'p-5',
+        className,
         destacado && 'border-primary bg-primary/[0.02]',
       )}
     >
@@ -198,6 +205,8 @@ function PlanCard({
   )
 }
 
+const PENDIENTE_PAGO_ESTADOS = new Set(['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA'])
+
 /* ── Loading skeletons ─────────────────────────────────────────────────── */
 
 function PlanCardSkeleton() {
@@ -220,11 +229,13 @@ function PlanCardSkeleton() {
 
 export default function PlanesScreen() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
+  const { width } = useWindowDimensions()
   const { isAuthenticated } = useAuth()
-  const { from } = useLocalSearchParams<{ from?: string }>()
   const { data, isLoading, isError, refetch } = usePlanes(undefined, isAuthenticated)
-  const showPlanDetailFallback = from === 'plan-detail'
+  const [selectedPlanId, setSelectedPlanId] = useState('')
+  const isDesktop = width >= 1024
+  const isTablet = width >= 768 && width < 1024
+  const isPlanGrid = isTablet || isDesktop
 
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
@@ -248,44 +259,96 @@ export default function PlanesScreen() {
 
   const planes = getPlanesFromResponse(data)
   const destacadoIdx = planes.length > 1 ? 1 : 0
+  const activePlanId = planes.some((plan) => plan.id === selectedPlanId)
+    ? selectedPlanId
+    : planes[0]?.id ?? ''
+  const context = data?.modo === 'empresa' ? data.cliente : null
+  const membership = context?.membership ?? null
+  const pendingPayment = membership && PENDIENTE_PAGO_ESTADOS.has(membership.estado)
+    ? membership
+    : null
+  const pendingChange = membership?.estado === 'ACTIVA' && membership.planIdSolicitado
+    ? membership
+    : null
 
   return (
     <View className="flex-1 bg-background">
-      {/* ── Barra con back + título ──────────────────────────────────── */}
-      <View
-        className="flex-row items-center gap-2 border-b border-border bg-background"
-        style={{
-          paddingLeft: insets.left + 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-        }}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          className="rounded-lg p-2 active:bg-muted"
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-        >
-          <ArrowLeft size={20} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-inter-bold text-foreground">Planes</Text>
-      </View>
-
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
-        {/* ── Encabezado ─────────────────────────────────────────────── */}
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 }}>
         <View className="mb-6">
-          <Text className="text-overline font-inter-semibold text-primary">
-            Membresías
+          <View className="flex-row flex-wrap items-center justify-between gap-2">
+            <Text className="min-w-0 flex-1 text-overline font-inter-semibold text-primary">
+              {context ? `Membresías · ${context.empresaNombre}` : 'Membresías'}
+            </Text>
+            {context && (
+              <View className="flex-row items-center gap-1">
+                <Pressable
+                  onPress={() => router.push('/planes?todos=1')}
+                  className="min-h-10 flex-row items-center rounded-full px-2 active:bg-muted"
+                  accessibilityRole="button"
+                >
+                  <Store size={15} color={colors.surface.mutedForeground} />
+                  <Text className="ml-1 text-caption text-muted-foreground">Otros negocios</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push('/mis-membresias')}
+                  className="min-h-10 flex-row items-center rounded-full px-2 active:bg-muted"
+                  accessibilityRole="button"
+                >
+                  <ArrowLeft size={15} color={colors.surface.mutedForeground} />
+                  <Text className="ml-1 text-caption text-muted-foreground">Mis membresías</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+          <Text className="mt-2 text-h2 font-inter-bold text-foreground">
+            {context?.nombre ? `Hola ${context.nombre.split(' ')[0]}, elige tu plan ideal` : 'Elige tu plan ideal'}
           </Text>
-          <Text className="mt-2 text-h1 font-inter-extrabold tracking-tight text-foreground">
-            Elige tu plan ideal
-          </Text>
-          <Text className="mt-1.5 text-small text-muted-foreground leading-relaxed">
-            Paga menos por lo que ya haces. Aquí tienes cada plan con todos
-            sus detalles para decidir con calma.
+          <Text className="mt-1.5 text-small leading-relaxed text-muted-foreground">
+            Paga menos por lo que ya haces. Aquí tienes cada plan con todos sus detalles para decidir con calma.
           </Text>
         </View>
+
+        {pendingPayment && (
+          <View className="mb-4 flex-row items-center gap-3 rounded-xl border border-warning/25 bg-warning/10 p-4">
+            <View className="h-9 w-9 items-center justify-center rounded-lg bg-warning/15">
+              <Clock size={18} color={colors.state.warning} />
+            </View>
+            <View className="flex-1 min-w-0">
+              <Text className="text-h4 font-inter-semibold text-foreground">
+                Plan {pendingPayment.plan.nombre} pendiente de pago
+              </Text>
+              <Text className="mt-0.5 text-small text-muted-foreground">
+                {pendingPayment.estado === 'RECHAZADA'
+                  ? 'Tu comprobante fue rechazado. Envía uno nuevo para activarlo.'
+                  : 'Sube tu comprobante para que el equipo active tu membresía.'}
+              </Text>
+            </View>
+            <Button
+              size="sm"
+              className="shrink-0 rounded-full"
+              icon={<CreditCard size={15} color={colors.surface.background} />}
+              onPress={() => router.push(`/membresia/${pendingPayment.id}`)}
+            >
+              Completar pago
+            </Button>
+          </View>
+        )}
+
+        {pendingChange && (
+          <View className="mb-4 flex-row items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+            <View className="h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <ArrowRightLeft size={18} color={colors.primary.DEFAULT} />
+            </View>
+            <View className="flex-1 min-w-0">
+              <Text className="text-h4 font-inter-semibold text-foreground">
+                Cambio a {pendingChange.planSolicitado?.nombre ?? 'otro plan'} solicitado
+              </Text>
+              <Text className="mt-0.5 text-small text-muted-foreground">
+                Sube el comprobante del nuevo plan para completar el cambio.
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* ── Aviso vitrina / requiere vehículo (modo empresa) ──────── */}
         {data && data.modo === 'empresa' && data.requiereVehiculo && data.vitrina && (
@@ -297,23 +360,6 @@ export default function PlanesScreen() {
               Registra tu vehículo para ver el precio exacto de tu categoría
               y comprar en línea.
             </Text>
-          </Card>
-        )}
-
-        {/* ── Banner fallback de detalle de plan ───────────────────── */}
-        {showPlanDetailFallback && (
-          <Card className="mb-4 flex-row items-center gap-3 border-primary/30 bg-primary/5 p-4">
-            <View className="h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <Sparkles size={18} color="#0284c7" />
-            </View>
-            <View className="flex-1 gap-0.5">
-              <Text className="text-small font-inter-semibold text-foreground">
-                Detalle de plan no disponible en la app
-              </Text>
-              <Text className="text-caption text-muted-foreground">
-                Te redirigimos al listado de planes. El detalle completo está en la web.
-              </Text>
-            </View>
           </Card>
         )}
 
@@ -355,22 +401,76 @@ export default function PlanesScreen() {
 
         {/* ── Lista de planes ────────────────────────────────────────── */}
         {!isLoading && !isError && planes.length > 0 && (
-          <View className="gap-5">
-            {planes.map((plan, idx) => (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                destacado={idx === destacadoIdx}
-                onPress={() => handleComprar(plan.id)}
-              />
-            ))}
+          <View>
+            {planes.length > 1 && !isPlanGrid && (
+              <View className="mb-5 flex-row gap-1.5 rounded-xl bg-retail-mist p-1.5">
+                {planes.map((plan) => {
+                  const { base, variante } = parseNombre(plan.nombre)
+                  const active = activePlanId === plan.id
+                  return (
+                    <Pressable
+                      key={plan.id}
+                      onPress={() => setSelectedPlanId(plan.id)}
+                      className={cn(
+                        'min-h-10 flex-1 items-center justify-center rounded-lg px-3',
+                        active ? 'bg-card shadow-sm' : 'bg-transparent',
+                      )}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text className={cn('text-label-lg font-inter-semibold', active ? 'text-foreground' : 'text-muted-foreground')}>
+                        {variante ?? base}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            )}
+            <View className="gap-5">
+              <View
+                className="gap-5"
+                style={isPlanGrid
+                  ? {
+                      flexDirection: 'row',
+                      flexWrap: isTablet ? 'wrap' : 'nowrap',
+                      alignItems: 'stretch',
+                    }
+                  : undefined}
+              >
+                {planes.map((plan, idx) => {
+                  const visible = isPlanGrid || activePlanId === plan.id
 
-            {/* Confianza */}
-            <View className="mt-4 items-center gap-2">
-              <View className="flex-row flex-wrap items-center justify-center gap-x-6 gap-y-2">
-                <TrustItem text="Pago verificado por el equipo" />
-                <TrustItem text="Tu QR se activa al aprobarse" />
-                <TrustItem text="Sin contratos ni permanencia" />
+                  return (
+                    <View
+                      key={plan.id}
+                      className={visible ? 'flex' : 'hidden'}
+                      style={isPlanGrid
+                        ? {
+                            width: isDesktop ? '32%' : '48%',
+                            minWidth: 0,
+                            flexGrow: 0,
+                            flexShrink: 0,
+                          }
+                        : undefined}
+                    >
+                      <PlanCard
+                        plan={plan}
+                        destacado={idx === destacadoIdx}
+                        onPress={() => router.push(`/planes/${plan.id}`)}
+                        className="flex-1"
+                      />
+                    </View>
+                  )
+                })}
+              </View>
+
+              {/* Confianza */}
+              <View className="mt-4 items-center gap-2">
+                <View className="flex-row flex-wrap items-center justify-center gap-x-6 gap-y-2">
+                  <TrustItem text="Pago verificado por el equipo" />
+                  <TrustItem text="Tu QR se activa al aprobarse" />
+                  <TrustItem text="Sin contratos ni permanencia" />
+                </View>
               </View>
             </View>
           </View>

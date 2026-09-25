@@ -155,6 +155,7 @@ function revalidatePlanes() {
   revalidatePath('/cliente/planes')
   revalidatePath('/empresas', 'layout')
   revalidateTag(NAV_CLIENTE_TAG, 'max')
+  revalidateTag('marketplace', 'max')
 }
 
 /**
