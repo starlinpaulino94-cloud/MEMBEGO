@@ -16,13 +16,18 @@ import {
 import type { InicioVista } from '@/modules/home/vista'
 import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 import { cn } from '@/lib/utils'
+import { colorDeCategoria } from '@/modules/home/categorias-color'
 import { RetailEmptyState } from './RetailEmptyState'
 
 /**
  * Chips de categoría del rediseño violeta: «Todos» abre la fila en violeta
  * sólido (el único activo honesto en el Inicio: lleva al catálogo completo)
  * y cada categoría real va en píldora con SU color de la gama —tinte de
- * fondo, borde e icono— en ciclo.
+ * fondo, borde e icono—.
+ *
+ * SU color, y no el que le toque: el reparto vive en `categorias-color.ts` y
+ * sale del slug, no de la posición en la lista. Antes ciclaba por índice, así
+ * que «Lavados» cambiaba de color el día que se añadiera una categoría antes.
  *
  * El texto va en tinta oscura siempre: el color es decorativo y así se lee
  * igual con cualquier acento, sin depender del contraste de cada uno.
@@ -43,23 +48,16 @@ const ICONOS: Record<string, LucideIcon> = {
 }
 
 const CLASE_BOTON = 'flex items-center rounded-full px-4 py-2 text-sm font-bold text-white shadow-sm outline-none transition-[box-shadow,transform,border-color] duration-fast focus-visible:ring-2 focus-visible:ring-vibe-violet active:scale-95'
+
 /**
- * Los seis colores de las fichas, como clases de `globals.css`.
+ * El violeta de la marca, solo para «Todos».
  *
- * Estaban escritos con la paleta de Tailwind (`from-amber-500 to-orange-500`…),
- * que no cambia con el tema: en modo oscuro se veían igual que en claro. Los
- * degradados del rediseño violeta ya vivían en el CSS por esa misma razón —está
- * explicado junto a `grad-vibe-header`— y estos se les unen, con el color
- * exacto de antes. Ahora hay un solo sitio donde darles una variante oscura.
+ * Los degradados viven como clases de `globals.css` —no con la paleta de
+ * Tailwind, que no cambia con el tema— y está explicado junto a
+ * `grad-vibe-header`. Los de las categorías están en `COLORES_CATEGORIA`, y
+ * este NO entra ahí: es el héroe, los botones y los sellos.
  */
-const COLORES = [
-  'grad-vibe',
-  'grad-categoria-1',
-  'grad-categoria-2',
-  'grad-categoria-3',
-  'grad-categoria-4',
-  'grad-categoria-5',
-] as const
+const COLOR_TODOS = 'grad-vibe'
 
 export function VibeCategorias({
   categorias,
@@ -90,7 +88,7 @@ export function VibeCategorias({
             aria-current={!hayFiltro ? 'page' : undefined}
             className={cn(
               CLASE_BOTON,
-              COLORES[0],
+              COLOR_TODOS,
               !hayFiltro
                 ? 'px-2 py-2 shadow-md'
                 : 'opacity-75 hover:opacity-100'
@@ -101,7 +99,7 @@ export function VibeCategorias({
               Todos
             </div>
           </Link>
-          {categorias.map((c, i) => {
+          {categorias.map((c) => {
             const Icono = ICONOS[c.slug.toLowerCase()] ?? LayoutGrid
             const esActiva = categoriaActiva === c.slug
             const href = esActiva
@@ -116,7 +114,7 @@ export function VibeCategorias({
                 aria-current={esActiva ? 'page' : undefined}
                 className={cn(
                   CLASE_BOTON,
-                  COLORES[(i + 1) % COLORES.length],
+                  colorDeCategoria(c.slug),
                   esActiva
                     ? 'shadow-md px-2 py-2'
                     : hayFiltro
