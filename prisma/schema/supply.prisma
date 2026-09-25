@@ -302,6 +302,12 @@ model SupplyAcuerdo {
   @@index([servicioId])
   @@index([promocionId])
   @@map("supply_acuerdos")
+
+  /// Apuntada por una clave COMPUESTA: el hijo no puede colgar de un padre de
+  /// otro proveedor. Nace de un agujero medido el 25-09-2026 — la política de
+  /// RLS ata la fila por su `proveedorId`, así que nadie miraba de quién era el
+  /// padre, y una empresa podía colgar un derecho del lote de otra.
+  @@unique([id, proveedorId])
 }
 
 /// CAMBIO CONTRACTUAL AUDITADO (Fase 20). El comercio ve sus números pero no
@@ -347,7 +353,7 @@ model SupplyOrden {
   /// Correlativo legible: "MBG-PO-000127".
   numero      String        @unique
   acuerdoId   String
-  acuerdo     SupplyAcuerdo @relation(fields: [acuerdoId], references: [id], onDelete: Restrict)
+  acuerdo     SupplyAcuerdo @relation(fields: [acuerdoId, proveedorId], references: [id, proveedorId], onDelete: Restrict)
   /// Denormalizado desde el acuerdo: el portal del proveedor filtra por aquí y
   /// no puede depender de un join para su aislamiento.
   proveedorId String
@@ -425,7 +431,7 @@ model SupplyLote {
   codigo String @unique
 
   acuerdoId   String
-  acuerdo     SupplyAcuerdo     @relation(fields: [acuerdoId], references: [id], onDelete: Restrict)
+  acuerdo     SupplyAcuerdo     @relation(fields: [acuerdoId, proveedorId], references: [id, proveedorId], onDelete: Restrict)
   ordenId     String?
   orden       SupplyOrden?      @relation(fields: [ordenId], references: [id], onDelete: SetNull)
   lineaId     String?
@@ -481,6 +487,10 @@ model SupplyLote {
   @@index([acuerdoId])
   @@index([ordenId])
   @@map("supply_lotes")
+
+  /// Apuntada por la clave compuesta de `SupplyDerecho`: un derecho no puede
+  /// colgar de un lote de OTRO proveedor.
+  @@unique([id, proveedorId])
 }
 
 /// EL LEDGER. Un asiento = un traslado de `cantidad` unidades de la cubeta
@@ -583,7 +593,7 @@ model SupplyAsignacion {
 model SupplyDerecho {
   id           String            @id @default(cuid())
   loteId       String
-  lote         SupplyLote        @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  lote         SupplyLote        @relation(fields: [loteId, proveedorId], references: [id, proveedorId], onDelete: Restrict)
   asignacionId String?
   asignacion   SupplyAsignacion? @relation(fields: [asignacionId], references: [id], onDelete: SetNull)
 
@@ -634,6 +644,12 @@ model SupplyDerecho {
   @@index([estado, vencAt])
   @@index([estado, retencionExpiraAt])
   @@map("supply_derechos")
+
+  /// Apuntada por una clave COMPUESTA: el hijo no puede colgar de un padre de
+  /// otro proveedor. Nace de un agujero medido el 25-09-2026 — la política de
+  /// RLS ata la fila por su `proveedorId`, así que nadie miraba de quién era el
+  /// padre, y una empresa podía colgar un derecho del lote de otra.
+  @@unique([id, proveedorId])
 }
 
 /// CÓMO SE PRESENTA EL DERECHO EN EL MOSTRADOR (Fase 12).
@@ -645,7 +661,7 @@ model SupplyDerecho {
 model SupplyVoucher {
   id        String        @id @default(cuid())
   derechoId String
-  derecho   SupplyDerecho @relation(fields: [derechoId], references: [id], onDelete: Cascade)
+  derecho   SupplyDerecho @relation(fields: [derechoId, proveedorId], references: [id, proveedorId], onDelete: Cascade)
 
   /// Código al portador. 24 bytes de `randomBytes` en base64url, igual que los
   /// QR de membresía: no es un identificador, es una credencial.
@@ -676,6 +692,12 @@ model SupplyVoucher {
   @@index([proveedorId, estado])
   @@index([estado, vigenteHasta])
   @@map("supply_vouchers")
+
+  /// Apuntada por una clave COMPUESTA: el hijo no puede colgar de un padre de
+  /// otro proveedor. Nace de un agujero medido el 25-09-2026 — la política de
+  /// RLS ata la fila por su `proveedorId`, así que nadie miraba de quién era el
+  /// padre, y una empresa podía colgar un derecho del lote de otra.
+  @@unique([id, proveedorId])
 }
 
 /// QR DINÁMICO (Fase 13). El cliente pulsa "Usar beneficio" y se abre una
@@ -713,7 +735,7 @@ model SupplyQrSesion {
 model SupplyReserva {
   id        String        @id @default(cuid())
   derechoId String
-  derecho   SupplyDerecho @relation(fields: [derechoId], references: [id], onDelete: Cascade)
+  derecho   SupplyDerecho @relation(fields: [derechoId, proveedorId], references: [id, proveedorId], onDelete: Cascade)
 
   proveedorId String
   proveedor   Company  @relation("SupplyProveedorReservas", fields: [proveedorId], references: [id], onDelete: Restrict)
@@ -754,7 +776,7 @@ model SupplyReserva {
 model SupplyRedencion {
   id        String        @id @default(cuid())
   voucherId String
-  voucher   SupplyVoucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+  voucher   SupplyVoucher @relation(fields: [voucherId, proveedorId], references: [id, proveedorId], onDelete: Restrict)
 
   derechoId String
   clienteId String
@@ -867,7 +889,7 @@ model SupplyIncidencia {
 model SupplyPago {
   id          String        @id @default(cuid())
   acuerdoId   String
-  acuerdo     SupplyAcuerdo @relation(fields: [acuerdoId], references: [id], onDelete: Restrict)
+  acuerdo     SupplyAcuerdo @relation(fields: [acuerdoId, proveedorId], references: [id, proveedorId], onDelete: Restrict)
   ordenId     String?
   orden       SupplyOrden?  @relation(fields: [ordenId], references: [id], onDelete: SetNull)
   proveedorId String

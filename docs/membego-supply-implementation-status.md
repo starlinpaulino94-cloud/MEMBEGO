@@ -205,10 +205,61 @@ relaciones inversas) y `vercel.json` (el cron).
    aviso. Los avisos de MEMBEGO ADMIN que quedan (proveedor con muchas
    incidencias, riesgo de presupuesto, problema de capacidad global) son
    analíticos: salen del scorecard y de la economía, no de un evento.
-3. **Políticas RLS.** El módulo usa `conEmpresa` en todo lo de empresa, y una
-   prueba vigila que el portal del proveedor no lea fuera de la suya, así que no
-   hay fuga hoy — pero es UNA capa donde el resto del proyecto tiene dos. Las
-   políticas de `supply_*` no están escritas.
+3. ~~**Políticas RLS**~~ · **cerrado el 25-09-2026, y no como se esperaba.**
+   Las políticas nunca hubo que escribirlas: se DEDUCEN del esquema recorriendo
+   claves foráneas, así que las 15 tablas de supply ya tenían una. El problema
+   era otro y peor: **dos de ellas tenían la política EQUIVOCADA**. Ver abajo.
+
+## Aislamiento entre inquilinos (Fase 42) · 25-09-2026
+
+Medido contra PostgreSQL 16 con el esquema completo, no razonado. Dos fallos, y
+el segundo lo encontró la prueba que se escribió para el primero.
+
+### 1 · El derecho estaba atado a la empresa equivocada
+
+La derivación de políticas recorre las claves foráneas en orden **alfabético de
+columna** y se queda con la primera que llega a una tabla ya cubierta.
+`supply_derechos` tiene tres NOT NULL —`clienteId`, `loteId`, `proveedorId`— y
+ganaba `clienteId`. Igual en `supply_redenciones`.
+
+Eso ataba el derecho a la empresa donde la **persona** tiene su ficha, que no es
+la que lo cumple: alguien registrado en Car Town puede recibir una pizza de Litre
+Pizza. Dos consecuencias, las dos malas, y las dos medidas:
+
+- Litre Pizza, en su propio portal, **no vería ni uno** de sus derechos ni de sus
+  entregas. El módulo se apaga para el proveedor.
+- Y Car Town **sí** leería esas filas, que llevan `costoUnitario` dentro — lo que
+  Membego negoció con otra empresa.
+
+Arreglado en la derivación, no con excepciones a mano: se añadió un **Nivel 0.5**
+—si una tabla tiene clave foránea NOT NULL a `companies`, ESA es su empresa—.
+Medido antes de escribirlo: de las 77 tablas con clave directa a `companies`, 75
+ya resolvían igual; las únicas dos que cambian son las dos que estaban mal.
+Ninguna tabla tiene dos claves NOT NULL a `companies`, así que la elección nunca
+es ambigua. Cobertura idéntica (191 políticas) y converge en una ronda menos.
+
+### 2 · Y B podía colgar un derecho del lote de A
+
+Lo encontró la prueba nueva. La política ata la fila por su `proveedorId`, así
+que si B pone `proveedorId = B` el `WITH CHECK` pasa — y nadie miraba de quién
+era el LOTE. El resultado sería una fila que consume el lote de A y que A no
+puede ver: aparecería en la contabilidad del lote (que se consulta por `loteId`)
+siendo invisible para su dueño.
+
+No era solo ese par: hay **siete** pares padre-hijo en supply donde las dos
+tablas llevan `proveedorId` y nada garantizaba que coincidieran. Se cierran con
+claves foráneas **compuestas** (`20261003_supply_coherencia_proveedor`), no con
+otra política, por tres razones: aplican aunque la aplicación se conecte como
+`postgres` —que hoy es el caso y se salta RLS—, no dependen de que alguien
+acierte con el orden de las claves, y un script manual de madrugada también las
+respeta. La migración se para y nombra la tabla si ya hubiera filas incoherentes.
+
+### La prueba
+
+`npm run rls:probar` pasa de 9 a **14 comprobaciones**. Las cinco nuevas siembran
+al proveedor en una empresa y al cliente en OTRA, que es el único montaje donde
+el fallo se ve: con los dos en la misma, una política mal puesta aprueba. Probado
+por mutación: sin el Nivel 0.5 caen 4 de las 5; sin la clave compuesta, la quinta.
 
 ## Riesgos cerrados
 
