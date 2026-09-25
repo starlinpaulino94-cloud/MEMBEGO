@@ -7,7 +7,7 @@ import { AutoReplySection } from './auto-reply-section'
 export const dynamic = 'force-dynamic'
 
 export default async function AutoReplyPage() {
-  const user = await requireSection('clientes', 'auto_reply_leer')
+  const user = await requireSection('leads', 'auto_reply_leer')
   if (!user) redirect('/login')
 
   const companyId = await requireCompanyContext(user)

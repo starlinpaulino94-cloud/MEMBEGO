@@ -14,9 +14,8 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
-import { conEmpresa } from '@/lib/tenant'
+import { conEmpresa, conEmpresaOTodas, sinEmpresa } from '@/lib/tenant'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getRequestMeta } from '@/lib/server-utils'
 import { anotarFallo } from '@/lib/prisma-errors'
@@ -53,10 +52,19 @@ export async function guardarPermisosEmpleado(
       return { error: 'No puedes editar tus propios permisos.' }
     }
 
-    const objetivo = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, supabaseId: true, role: true, companyId: true, name: true },
-    })
+    // Cruza inquilinos A PROPÓSITO y con envoltorio: el superadmin ajusta a
+    // cualquiera, así que la empresa se DERIVA del empleado en vez de acotar
+    // por ella. Quien no es superadmin choca justo debajo con la comprobación
+    // de que el empleado sea de su empresa — esa es la barrera, no esta
+    // consulta. Iba con `prisma` a pelo, fuera de toda transacción.
+    const objetivo = await sinEmpresa(
+      'permisos: localizar al empleado por su id antes de saber de qué empresa es',
+      (tx) =>
+        tx.user.findUnique({
+          where: { id: userId },
+          select: { id: true, supabaseId: true, role: true, companyId: true, name: true },
+        })
+    )
     if (!objetivo) return { error: 'Empleado no encontrado.' }
     if (
       user.metadata.role !== 'SUPERADMIN' &&
@@ -105,10 +113,17 @@ export async function guardarPermisosEmpleado(
 
     const permisos = permisosDesdeSeleccion(objetivo.role, { secciones, funcionesNegadas })
 
-    await prisma.user.update({
-      where: { id: objetivo.id },
-      data: { permisos: permisos ? (permisos as unknown as Prisma.InputJsonValue) : Prisma.DbNull },
-    })
+    await conEmpresaOTodas(
+      objetivo.companyId,
+      'permisos: guardar el ajuste de un empleado sin empresa (solo superadmin)',
+      (tx) =>
+        tx.user.update({
+          where: { id: objetivo.id },
+          data: {
+            permisos: permisos ? (permisos as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+          },
+        })
+    )
 
     // Espejo al token (gate de vista del proxy). Best-effort: si falla, la
     // barrera real (server actions + menú, que leen la base) ya aplica.
