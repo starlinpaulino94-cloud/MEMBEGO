@@ -1,7 +1,7 @@
 import React from 'react'
-import { View, Text, ScrollView } from 'react-native'
+import { View, Text, ScrollView, useWindowDimensions } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Stack, Link } from 'expo-router'
+import { Slot, Link } from 'expo-router'
 
 /**
  * Superficie de autenticación — BLANCA (DS 2.0 · Fase 2).
@@ -11,31 +11,31 @@ import { Stack, Link } from 'expo-router'
  * pie con Privacidad y Términos. El navy sobrevive solo en el pie.
  */
 export default function AuthLayout() {
+  const { width } = useWindowDimensions()
+  const topPadding = width >= 768 ? 64 : 40
+  const brandMarginBottom = width >= 768 ? 41 : 39
+
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView
-        contentContainerClassName="flex-grow items-center justify-center px-4 py-10"
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Brand block */}
-        <View className="mb-8 items-center">
-          <Text className="text-2xl font-extrabold tracking-tight text-foreground">
-            Membe<Text className="text-primary">Go</Text>
-          </Text>
-          <Text className="mt-2.5 text-overline text-muted-foreground">
-            Conecta · Disfruta · Ahorra
-          </Text>
-        </View>
+    <SafeAreaView className="flex-1 bg-background" style={{ paddingTop: topPadding }}>
+      <View className="w-full items-center px-4" style={{ flexGrow: 1 }}>
+        <View className="flex-1 items-center justify-center w-full">
+          <View className="items-center" style={{ marginBottom: brandMarginBottom }}>
+            <Text className="text-2xl font-extrabold tracking-tight text-foreground">
+              Membe<Text className="text-primary">Go</Text>
+            </Text>
+            <Text className="mt-2.5 text-overline text-muted-foreground">
+              Conecta · Disfruta · Ahorra
+            </Text>
+          </View>
 
-        {/* Content slot — child routes (login, recuperar, registro) render here */}
-        <View className="w-full max-w-md">
-          <Stack screenOptions={{ headerShown: false }} />
+          <View className="w-full" style={{ maxWidth: 448 }}>
+            <Slot />
+          </View>
         </View>
-      </ScrollView>
+      </View>
 
-      {/* Footer */}
-      <View className="border-t border-border bg-muted py-5 items-center">
-        <Text className="text-caption text-muted-foreground text-center">
+      <View className="w-full items-center border-t border-border bg-muted py-5">
+        <Text className="text-caption text-center text-muted-foreground">
           © 2026 MembeGo ·{' '}
           <Link href="/privacy" className="text-primary underline">
             Privacidad

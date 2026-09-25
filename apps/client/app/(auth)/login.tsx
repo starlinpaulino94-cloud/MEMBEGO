@@ -4,16 +4,15 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
 } from 'react-native'
 import { useRouter } from 'expo-router'
-import { LinearGradient } from 'expo-linear-gradient'
+import { Eye, EyeOff } from 'lucide-react-native'
 import { useAuth } from '../../src/lib/auth-context'
 import { Button } from '../../src/components/ui/Button'
 import { Card } from '../../src/components/ui/Card'
+import { colors } from '../../src/theme/tokens'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -21,117 +20,118 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
-      setErrorMsg('Por favor completa todos los campos.')
+      setErrorMsg('Escribe tu correo y tu contraseña.')
       return
     }
 
     setLoading(true)
     setErrorMsg(null)
 
-    const { error } = await signIn(email.trim(), password)
-    setLoading(false)
+    try {
+      const { error } = await signIn(email.trim(), password)
 
-    if (error) {
-      setErrorMsg(error.message || 'Credenciales inválidas.')
-    } else {
+      if (error) {
+        setErrorMsg('Correo o contraseña incorrectos.')
+        return
+      }
+
       router.replace('/(tabs)/inicio')
+    } catch (error) {
+      if (error instanceof TypeError) {
+        setErrorMsg('No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.')
+        return
+      }
+
+      throw error
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-vibe-fondo"
+      className="w-full"
     >
-      <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}
-        className="p-4"
-        keyboardShouldPersistTaps="handled"
-      >
-        <View className="w-full max-w-md">
-          {/* Brand Header */}
-          <LinearGradient
-            colors={['#7c3aed', '#2563eb']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            className="mb-6 items-center rounded-2xl p-6 shadow-lg"
-          >
-            <Text className="text-3xl font-extrabold tracking-wider text-white">
-              MembeGo
-            </Text>
-            <Text className="mt-1 text-sm font-medium text-white/80">
-              Tu portal de membresías y beneficios
-            </Text>
-          </LinearGradient>
+      <View className="w-full">
+        <Card className="w-full border border-border bg-card p-6">
+          <Text className="text-2xl font-inter-semibold text-foreground">
+            Iniciar sesión
+          </Text>
+          <Text className="mt-1 text-small text-muted-foreground">
+            Accede a tu cuenta de MembeGo.
+          </Text>
 
-          <Card className="bg-slate-900/90 border border-slate-800 p-6">
-            <Text className="text-xl font-bold text-white mb-2">
-              Iniciar Sesión
-            </Text>
-            <Text className="text-sm text-slate-400 mb-5">
-              Accede a tus pases, códigos QR y beneficios exclusivos
-            </Text>
-
-            {errorMsg && (
-              <View className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 p-3">
-                <Text className="text-sm text-red-400">{errorMsg}</Text>
-              </View>
-            )}
-
-            <View className="mb-4">
-              <Text className="mb-1 text-sm font-medium text-slate-300">
-                Correo electrónico
-              </Text>
-              <TextInput
-                className="h-12 w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 text-white text-base"
-                placeholder="ejemplo@correo.com"
-                placeholderTextColor="#64748b"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+          {errorMsg && (
+            <View className="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3">
+              <Text className="text-small text-danger">{errorMsg}</Text>
             </View>
+          )}
 
-            <View className="mb-6">
-              <Text className="mb-1 text-sm font-medium text-slate-300">
-                Contraseña
-              </Text>
+          <View className="mt-6">
+            <Text className="mb-2 text-small font-inter-semibold text-foreground" style={{ lineHeight: 14 }}>
+              Correo electrónico
+            </Text>
+            <TextInput
+              className="h-14 w-full rounded-xl border border-input bg-background px-4 text-small text-foreground"
+              placeholder="tu@correo.com"
+              placeholderTextColor={colors.surface.mutedForeground}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          <View className="mt-4">
+            <Text className="mb-2 text-small font-inter-semibold text-foreground" style={{ lineHeight: 14 }}>
+              Contraseña
+            </Text>
+            <View className="relative">
               <TextInput
-                className="h-12 w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 text-white text-base"
+                className="h-14 w-full rounded-xl border border-input bg-background px-4 pr-12 text-small text-foreground"
                 placeholder="••••••••"
-                placeholderTextColor="#64748b"
+                placeholderTextColor={colors.surface.mutedForeground}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
               />
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                onPress={() => setShowPassword((visible) => !visible)}
+                className="absolute right-0 top-0 h-14 w-11 items-center justify-center"
+              >
+                {showPassword ? (
+                  <EyeOff size={18} color={colors.surface.mutedForeground} />
+                ) : (
+                  <Eye size={18} color={colors.surface.mutedForeground} />
+                )}
+              </TouchableOpacity>
             </View>
+          </View>
 
-            <Button
-              onPress={handleSubmit}
-              loading={loading}
-              className="mb-3"
-            >
-              Entrar a mi cuenta
-            </Button>
+          <Button onPress={handleSubmit} loading={loading} className="mt-4 h-10 w-full">
+            Entrar
+          </Button>
 
-            <TouchableOpacity
-              onPress={() => router.replace('/(tabs)/inicio')}
-              className="h-11 items-center justify-center rounded-xl"
-            >
-              <Text className="text-sm font-medium text-slate-400">
-                Continuar explorando como invitado
-              </Text>
-            </TouchableOpacity>
-          </Card>
-        </View>
-      </ScrollView>
+          <View className="mt-4 items-center gap-2">
+            <Text className="text-small text-muted-foreground">
+              ¿Olvidaste tu contraseña?
+            </Text>
+            <Text className="text-small text-muted-foreground">
+              ¿No tienes cuenta? <Text className="text-primary">Regístrate</Text>
+            </Text>
+          </View>
+        </Card>
+      </View>
     </KeyboardAvoidingView>
   )
 }
