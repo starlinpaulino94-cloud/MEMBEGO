@@ -79,6 +79,10 @@ enum NotifTipo {
   SUPPLY_INCIDENCIA
   /// Membego confirmó un pago por sus entregas.
   SUPPLY_LIQUIDACION
+  /// El comercio preparó lo que el cliente reservó y lo está esperando. Es el
+  /// único aviso de la Fase 40 que no se pudo hacer en su día: no existía el
+  /// concepto de «pedido preparado», solo la hora acordada.
+  SUPPLY_PRODUCTO_LISTO
 }
 
 enum AuditAccion {

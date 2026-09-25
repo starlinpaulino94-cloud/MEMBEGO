@@ -15,6 +15,7 @@ import {
   Gift,
   MessageSquareWarning,
   PackageCheck,
+  ChefHat,
   Scale,
   TimerOff,
   Wallet,
@@ -48,6 +49,7 @@ const TIPO_ICON: Record<string, { icon: LucideIcon; cls: string }> = {
   SUPPLY_CAPACIDAD_AL_LIMITE: { icon: Gauge, cls: 'bg-warning/15 text-warning' },
   SUPPLY_INCIDENCIA: { icon: MessageSquareWarning, cls: 'bg-destructive/10 text-destructive' },
   SUPPLY_LIQUIDACION: { icon: Wallet, cls: 'bg-success/10 text-success' },
+  SUPPLY_PRODUCTO_LISTO: { icon: ChefHat, cls: 'bg-success/10 text-success' },
 }
 
 function timeAgo(date: Date) {

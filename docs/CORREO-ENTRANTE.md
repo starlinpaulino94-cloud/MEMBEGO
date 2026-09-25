@@ -40,6 +40,37 @@ tampoco puede redirigirlo a otro ticket sin el secreto.
 Ambas guardias se verificaron por mutación: al desactivar la comparación de
 firma, las pruebas fallan.
 
+## El bucle, cerrado por los dos lados (25-09-2026)
+
+Hasta hoy el soporte era de ida y media vuelta: al negocio le llegaba el correo
+del ticket nuevo y, desde agosto, también la respuesta del cliente. Pero cuando
+el negocio respondía, el cliente solo se enteraba si volvía a entrar a la app.
+Un soporte al que hay que ir a mirar no es soporte.
+
+Ahora `responderTicket` también le manda un correo al cliente, con el mismo
+`Reply-To` firmado: puede contestar desde su gestor y su respuesta vuelve al
+ticket. Nada para empresas de demostración —sus clientes son inventados y los
+rebotes ensucian la reputación del dominio—, el cuerpo va escapado y el asunto
+no (va en `subject`, que es texto plano). Fail-open: si el correo no sale, la
+respuesta ya está guardada y la notificación de la app también.
+
+### Y por eso `entrante.ts` ya no da por hecho quién escribe
+
+Con las dos partes usando la misma dirección de respuesta, archivar todo como
+`CLIENTE` —que era correcto cuando solo escribía el negocio— haría que la
+respuesta del negocio apareciera en el hilo como si la hubiera escrito el
+cliente. Un hilo de soporte con los papeles cambiados es peor que uno
+incompleto.
+
+`quienEscribe` compara el remitente con el correo de soporte de la empresa y
+**solo entonces** marca `ADMIN`. Todo lo demás —el cliente, un reenvío, una
+dirección desconocida— sigue entrando como `CLIENTE`, que es lo que ya hacía:
+el cambio no puede empeorar ningún caso que hoy funcione.
+
+Esto **no autentica** nada. El `From` se falsifica en diez segundos; lo que
+autentica el mensaje es el token firmado de la dirección de destino, y eso se
+comprueba antes. Esto solo elige una etiqueta para que el hilo se lea bien.
+
 ## Configuración
 
 ### 1. DNS — subdominio, nunca la raíz

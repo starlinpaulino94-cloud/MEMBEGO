@@ -349,3 +349,24 @@ export function textoLiquidacion(d: { monto: number; referencia: string | null }
     href: '/admin/supply',
   }
 }
+
+// ── Cliente · su pedido ya está hecho ───────────────────────────────────────
+
+export function dedupeProductoListo(reservaId: string): string {
+  return `supply-listo|${reservaId}`
+}
+
+export function textoProductoListo(d: {
+  item: string
+  proveedorNombre: string
+  sucursal: string | null
+}): { titulo: string; mensaje: string; href: string } {
+  const donde = d.sucursal ? `${d.proveedorNombre} · ${d.sucursal}` : d.proveedorNombre
+  return {
+    titulo: `Tu ${d.item} ya está listo`,
+    // Sin hora: el comercio pulsa el botón cuando ya lo tiene hecho, así que
+    // «ya» es más exacto que repetir la hora que se acordó ayer.
+    mensaje: `Puedes pasar a recogerlo en ${donde}. Lleva tu código.`,
+    href: '/cliente/beneficios',
+  }
+}

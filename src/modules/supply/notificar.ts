@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { sinEmpresa } from '@/lib/tenant'
+import { RESERVA_OCUPA_CUPO } from './estados'
 import {
   crearNotificacion,
   notificarAdmins,
@@ -17,6 +18,7 @@ import {
   dedupeLiquidacion,
   dedupeBeneficioPorVencer,
   dedupeCapacidad,
+  dedupeProductoListo,
   dedupeReserva,
   dedupeVencimiento,
   dedupeVoucherProveedor,
@@ -29,6 +31,7 @@ import {
   textoIncidenciaMembego,
   textoIncidenciaProveedor,
   textoLiquidacion,
+  textoProductoListo,
   textoReserva,
   textoVencimiento,
   textoVencimientoProveedor,
@@ -312,7 +315,7 @@ async function avisarCupoDelDia(
 ): Promise<void> {
   if (!capacidadDiaria || capacidadDiaria <= 0) return
   const usadas = await sinEmpresa('Membego Supply: uso del día de un proveedor', (tx) =>
-    tx.supplyReserva.count({ where: { proveedorId, dia, estado: 'CONFIRMADA' } })
+    tx.supplyReserva.count({ where: { proveedorId, dia, estado: { in: [...RESERVA_OCUPA_CUPO] } } })
   )
   if (usadas / capacidadDiaria < UMBRAL_CAPACIDAD) return
   await notificarAdmins(proveedorId, {
@@ -471,5 +474,47 @@ export async function avisarLiquidacion(pagoId: string): Promise<void> {
     })
   } catch (e) {
     console.error('[supply] no se pudo avisar de la liquidación', pagoId, e)
+  }
+}
+
+/**
+ * El comercio preparó el pedido y el cliente lo está esperando.
+ *
+ * Es el único aviso de la Fase 40 que no se pudo hacer en su día: el modelo
+ * guardaba la hora acordada, pero nadie en el comercio marcaba «ya está hecho».
+ * Ahora existe el estado LISTA y esto lo cuenta.
+ */
+export async function avisarProductoListo(reservaId: string): Promise<void> {
+  try {
+    const r = await sinEmpresa('Membego Supply: reserva lista para avisar al cliente', (tx) =>
+      tx.supplyReserva.findUnique({
+        where: { id: reservaId },
+        select: {
+          sucursal: { select: { nombre: true } },
+          derecho: {
+            select: {
+              clienteId: true,
+              proveedor: { select: { name: true } },
+              lote: { select: { snapshotItemNombre: true } },
+            },
+          },
+        },
+      })
+    )
+    if (!r) return
+    const userId = await usuarioDelCliente(r.derecho.clienteId)
+    if (!userId) return
+    await crearNotificacion({
+      userId,
+      tipo: 'SUPPLY_PRODUCTO_LISTO',
+      ...textoProductoListo({
+        item: r.derecho.lote.snapshotItemNombre,
+        proveedorNombre: r.derecho.proveedor.name,
+        sucursal: r.sucursal?.nombre ?? null,
+      }),
+      dedupeKey: dedupeProductoListo(reservaId),
+    })
+  } catch (e) {
+    console.error('[supply] no se pudo avisar de que el pedido está listo', reservaId, e)
   }
 }
