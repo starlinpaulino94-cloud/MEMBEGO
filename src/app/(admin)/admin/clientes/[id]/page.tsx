@@ -385,6 +385,8 @@ export default async function ClienteDetailPage({
                       lavadosRegalo={membership.lavadosBonoRestantes}
                       vigenciaDias={membership.plan.vigenciaDias ?? 30}
                       vence={membership.fechaVencimiento?.toISOString() ?? null}
+                      estado={membership.estado}
+                      lavadosRestantes={membership.lavadosRestantes}
                     />
                   )}
                   {membership.estado === 'ACTIVA' && (

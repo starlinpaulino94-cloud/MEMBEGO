@@ -181,21 +181,45 @@ test('y la pantalla ya no manda ese campo oculto', () => {
 // ───────────────────── M60 · renovar no roba días ─────────────────────
 
 /**
+ * EL INVARIANTE SIGUE SIENDO EL MISMO; LA FORMA DE CUMPLIRLO, NO.
+ *
  * A quien renovaba con 20 días por delante se le daban 30 y se le quitaban 20.
  * El único que iba a notarlo era el cliente, semanas después.
+ *
+ * La primera respuesta fue ENCADENAR el período: arrancarlo donde terminaba el
+ * anterior. Resolvía el robo de días y traía otro problema, reportado desde el
+ * mostrador con captura: movía también `fechaInicio` a esa fecha futura, así
+ * que una membresía renovada hoy se leía «Inicio 26 oct · Vencimiento 26 nov»
+ * mientras el cliente la estaba usando.
+ *
+ * La respuesta de ahora (dueño, 26-09-2026) va un paso antes: una membresía
+ * vigente y con usos NO SE RENUEVA. Si no se puede pagar por adelantado, no
+ * hay días que encadenar ni que perder — y el período vuelve a empezar el día
+ * que se cobró. La regla vive en `renovacion.ts` y sus casos están en
+ * `tests/renovacion-membresia.test.ts`; aquí se comprueba que esta acción la
+ * hace cumplir y que ya no encadena.
  */
-test('renovar encadena el período cuando aún está vigente', () => {
-  assert.match(
-    ACCIONES,
-    /const sigueVigente = membership\.fechaVencimiento != null && membership\.fechaVencimiento > now/
-  )
-  assert.match(ACCIONES, /const arranque = sigueVigente \? membership\.fechaVencimiento! : now/)
-  assert.match(ACCIONES, /fechaVencimiento: periodEnd\(arranque, vigenciaDias\)/)
+test('renovar no le cobra a quien todavía tiene tiempo y usos', () => {
+  const bloque = ACCIONES.slice(ACCIONES.indexOf('export async function renovarMembresia'))
+  assert.match(bloque, /motivoNoRenovable\(/)
+  assert.match(bloque, /if \(bloqueo\)/, 'comprobarlo y no actuar sería peor que no comprobarlo')
 })
 
-test('pero el cobro se fecha HOY, no en el futuro', () => {
+test('y el período que resulta empieza hoy, sin encadenar', () => {
+  const bloque = ACCIONES.slice(ACCIONES.indexOf('export async function renovarMembresia'))
+  assert.match(bloque, /const arranque = now/)
+  assert.match(bloque, /fechaVencimiento: periodEnd\(arranque, vigenciaDias\)/)
+  assert.doesNotMatch(
+    bloque,
+    /arranque = sigueVigente/,
+    'el encadenado es lo que ponía `fechaInicio` en una fecha futura'
+  )
+})
+
+test('el cobro se fecha HOY', () => {
   // `fechaPago` es cuándo entró el dinero, y de ahí salen los ingresos del mes.
-  // Encadenarla al período rompería los informes de caja.
+  // Además es lo que permite reconstruir el período bueno de las filas que el
+  // encadenado dejó mal (ver `2026-09-renovaciones-encadenadas.sql`).
   assert.match(ACCIONES, /fechaPago: now/)
 })
 

@@ -311,6 +311,7 @@ export default async function SuperadminMembresiasPage({
                       lavadosRegalo: m.usosRegaloRestantes,
                       vigenciaDias: m.planVigenciaDias,
                       vence: m.fechaVencimiento?.toISOString() ?? null,
+                      lavadosRestantes: m.usosRestantes,
                     }}
                   />
                   {/* Borrar solo aparece habilitado para las membresías que

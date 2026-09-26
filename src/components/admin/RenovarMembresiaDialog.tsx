@@ -6,6 +6,11 @@ import { Loader2, Printer, CheckCircle2, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { renovarMembresia } from '@/modules/admin/actions'
 import {
+  explicarNoRenovable,
+  motivoNoRenovable,
+  type MembresiaParaRenovar,
+} from '@/modules/membresia/renovacion'
+import {
   METODOS_COBRO_MEMBRESIA,
   METODO_COBRO_LABEL,
   exigeReferencia,
@@ -55,6 +60,8 @@ export function RenovarMembresiaDialog({
   lavadosRegalo,
   vigenciaDias,
   vence,
+  estado,
+  lavadosRestantes,
 }: {
   membershipId: string
   clienteId: string
@@ -66,8 +73,11 @@ export function RenovarMembresiaDialog({
   /** Lavados de regalo que el cliente ya tiene y que la renovación conserva. */
   lavadosRegalo: number
   vigenciaDias: number
-  /** Vencimiento actual, para poder decir si el período se encadena. */
+  /** Vencimiento actual, para saber si la membresía sigue viva. */
   vence: string | null
+  /** Estado y usos actuales: deciden si hoy se puede renovar. */
+  estado: string
+  lavadosRestantes: number
 }) {
   const router = useRouter()
   const [state, action, pending] = useActionState(renovarMembresia, {})
@@ -84,8 +94,26 @@ export function RenovarMembresiaDialog({
     }
   }, [state.success, router])
 
-  const sigueVigente = vence != null && new Date(vence) > new Date()
   const necesitaReferencia = exigeReferencia(metodo)
+
+  /**
+   * NO SE OFRECE LO QUE EL SERVIDOR VA A RECHAZAR.
+   *
+   * Una membresía viva y con usos no se renueva (la regla y su porqué, en
+   * `renovacion.ts`). El botón sigue estando —y abre— para poder DECIR por
+   * qué: un botón que solo se apaga manda a adivinar, y desde el mostrador
+   * lo que hace falta saber es «le quedan 3 usos», no que algo no funciona.
+   *
+   * Esto es comodidad, no la barrera: la de verdad está dentro de la action,
+   * porque una server action se despacha por su id sin pasar por esta pantalla.
+   */
+  const paraRenovar: MembresiaParaRenovar = {
+    estado,
+    fechaVencimiento: vence ? new Date(vence) : null,
+    lavadosRestantes,
+    esIlimitado: lavadosPlan == null,
+  }
+  const bloqueo = motivoNoRenovable(paraRenovar)
 
   return (
     <Dialog
@@ -107,7 +135,27 @@ export function RenovarMembresiaDialog({
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-md">
-        {aplicada ? (
+        {bloqueo ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Todavía no toca renovar</DialogTitle>
+              <DialogDescription>
+                {clienteNombre} · {planNombre}
+              </DialogDescription>
+            </DialogHeader>
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" aria-hidden />
+              <AlertDescription>{explicarNoRenovable(bloqueo, lavadosRestantes)}</AlertDescription>
+            </Alert>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Entendido
+              </Button>
+            </DialogFooter>
+          </>
+        ) : aplicada ? (
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -170,8 +218,7 @@ export function RenovarMembresiaDialog({
               <div className="flex justify-between gap-3">
                 <dt className="text-muted-foreground">Período</dt>
                 <dd className="text-right text-foreground">
-                  {vigenciaDias} días
-                  {sigueVigente ? ' · desde que vence el actual' : ' · desde hoy'}
+                  {vigenciaDias} días · desde hoy
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
