@@ -19,6 +19,7 @@ import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/membresia/eventos'
 import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
 import { motivoCambioDirectoBloqueado } from '@/modules/membresia/cambio-plan-pendiente'
+import { explicarNoRenovable, motivoNoRenovable } from '@/modules/membresia/renovacion'
 
 /**
  * Ensure the membership belongs to the admin's company (superadmin = any).
@@ -951,14 +952,32 @@ export async function renovarMembresia(
   const membership = await assertOwnership(membershipId, user)
   if (!membership) return { error: 'Membresía no encontrada.' }
 
-  // CANCELADA incluida: el negocio puede reactivar/renovar una membresía que
-  // canceló (p. ej. cancelación por error o cliente que regresa).
-  const ESTADOS_RENOVABLES = ['ACTIVA', 'VENCIDA', 'CANCELADA']
-  if (!ESTADOS_RENOVABLES.includes(membership.estado)) {
-    return { error: `No se puede renovar una membresía en estado ${membership.estado}.` }
-  }
-
   const now = new Date()
+
+  /**
+   * UNA MEMBRESÍA VIVA NO SE RENUEVA.
+   *
+   * La regla y su porqué están en `renovacion.ts`. Aquí es donde se hace
+   * cumplir: esta acción ESCRIBE UN COBRO, así que la barrera tiene que estar
+   * en el servidor y no solo en el botón — el diálogo ya no lo ofrece, pero
+   * una action se despacha por su id desde cualquier sitio.
+   *
+   * CANCELADA sigue admitida: el negocio puede reactivar una membresía que
+   * canceló por error o a un cliente que vuelve. Lo que no se puede es cobrarle
+   * otra vez a quien todavía tiene tiempo Y usos.
+   */
+  const bloqueo = motivoNoRenovable(
+    {
+      estado: membership.estado,
+      fechaVencimiento: membership.fechaVencimiento,
+      lavadosRestantes: membership.lavadosRestantes,
+      esIlimitado: membership.plan.esIlimitado,
+    },
+    now
+  )
+  if (bloqueo) {
+    return { error: explicarNoRenovable(bloqueo, membership.lavadosRestantes) }
+  }
 
   /**
    * EL MONTO LO DECIDE EL SERVIDOR, NO EL FORMULARIO.
@@ -976,20 +995,40 @@ export async function renovarMembresia(
   const vigenciaDias = membership.plan.vigenciaDias ?? 30
 
   /**
-   * RENOVAR NO PUEDE QUITAR LOS DÍAS QUE QUEDAN.
+   * EL PERÍODO NUEVO EMPIEZA HOY, SIN ENCADENAR.
    *
-   * El período nuevo empezaba SIEMPRE hoy. A quien renovaba con 20 días por
-   * delante se le daban 30 y se le quitaban 20 — y el único que lo iba a notar
-   * era el cliente, semanas después.
+   * Aquí hubo un encadenado —arrancar donde terminaba el período anterior—
+   * puesto para no quitarle a nadie los días que le quedaban. El problema que
+   * resolvía es real; la forma tenía un precio que no se vio: movía también
+   * `fechaInicio` a una fecha FUTURA, así que una membresía renovada hoy se
+   * leía «Inicio 26 oct · Vencimiento 26 nov» mientras el cliente la estaba
+   * usando. Reportado desde el mostrador con captura.
    *
-   * Ahora se encadena: si todavía está vigente, el período nuevo arranca donde
-   * terminaba el anterior. Si ya venció (o nunca tuvo fecha), arranca hoy.
+   * Con la guardia de arriba el encadenado deja de hacer falta: a una
+   * membresía vigente y con usos ya no se le cobra, así que no quedan días que
+   * perder. Las que sí llegan aquí o vencieron —su tiempo se acabó— o se
+   * quedaron sin usos, y entonces los días que les sobran no valen nada.
    *
-   * `fechaInicio` sí pasa a ser el arranque del período nuevo, que es lo que
-   * significa el campo; lo que no se pierde es el tiempo pagado.
+   * Es además lo que ya hacían las otras dos vías: `activacion.ts` arranca hoy
+   * y la renovación por tarjeta nunca toca `fechaInicio`.
    */
-  const sigueVigente = membership.fechaVencimiento != null && membership.fechaVencimiento > now
-  const arranque = sigueVigente ? membership.fechaVencimiento! : now
+  const arranque = now
+
+  /**
+   * POR QUÉ SE PUDO RENOVAR, para el registro.
+   *
+   * Sustituye a `encadenada`, que describía un encadenado que ya no ocurre:
+   * dejarlo habría sido guardar `false` en todas las filas para siempre.
+   * Esto sí se va a querer saber dentro de tres meses —«¿renovó porque se le
+   * acabó el tiempo o porque gastó los lavados?»— y es justo lo que la guardia
+   * acaba de comprobar.
+   */
+  const motivoRenovacion =
+    membership.estado !== 'ACTIVA'
+      ? 'reactivacion'
+      : membership.fechaVencimiento === null || membership.fechaVencimiento <= now
+        ? 'vencida'
+        : 'sin_usos'
 
   const registroId = await conEmpresa(membership.cliente.companyId, async (tx) => {
     await tx.membership.update({
@@ -1088,11 +1127,11 @@ export async function renovarMembresia(
           // no contra qué conciliarlo.
           metodo,
           referencia: referencia || null,
-          // Encadenada o desde hoy: es lo que explica la fecha resultante
-          // cuando alguien la revise dentro de tres meses.
+          // El período que quedó, y por qué se pudo renovar: es lo que explica
+          // la fecha resultante cuando alguien la revise dentro de tres meses.
           desde: arranque.toISOString(),
           hasta: periodEnd(arranque, vigenciaDias).toISOString(),
-          encadenada: sigueVigente,
+          motivo: motivoRenovacion,
           plan: membership.plan.nombre,
           cliente: membership.cliente.nombre,
           // Los dos contadores, para que el comprobante pueda decir la verdad:
@@ -1122,7 +1161,7 @@ export async function renovarMembresia(
       monto,
       actorUserId: user.metadata.dbUserId ?? null,
       ocurridoEn: now,
-      payload: { metodo, encadenada: sigueVigente },
+      payload: { metodo, motivo: motivoRenovacion },
     })
 
     return asiento.id
