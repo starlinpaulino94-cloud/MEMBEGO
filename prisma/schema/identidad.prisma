@@ -83,6 +83,19 @@ enum NotifTipo {
   /// único aviso de la Fase 40 que no se pudo hacer en su día: no existía el
   /// concepto de «pedido preparado», solo la hora acordada.
   SUPPLY_PRODUCTO_LISTO
+  // Analíticos: nacen de una TENDENCIA, no de un hecho. Los umbrales viven
+  // todos juntos en `UMBRALES_RIESGO` porque son una estimación —cuando se
+  // escribieron nadie había visto la tasa real de incumplimiento de un
+  // proveedor— y hay que poder moverlos sin tocar la lógica.
+  /// Un proveedor acumula incidencias por su parte sobre suficientes entregas.
+  SUPPLY_PROVEEDOR_EN_RIESGO
+  /// Lo que queda vivo de un lote no cabe en los días que faltan a la
+  /// capacidad que el contrato declara. Se sabe hoy, no el último día.
+  SUPPLY_NO_CABE
+  /// Dinero comprometido que no se está consumiendo, a mitad de vigencia.
+  /// Sustituye al «riesgo de presupuesto» de la Fase 40: no existe el concepto
+  /// de presupuesto en el modelo, así que se mide lo que sí hay.
+  SUPPLY_CAPITAL_DORMIDO
 }
 
 enum AuditAccion {

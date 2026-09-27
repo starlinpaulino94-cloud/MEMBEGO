@@ -19,6 +19,9 @@ import {
   dedupeBeneficioPorVencer,
   dedupeCapacidad,
   dedupeProductoListo,
+  dedupeCapitalDormido,
+  dedupeNoCabe,
+  dedupeProveedorEnRiesgo,
   dedupeReserva,
   dedupeVencimiento,
   dedupeVoucherProveedor,
@@ -32,6 +35,13 @@ import {
   textoIncidenciaProveedor,
   textoLiquidacion,
   textoProductoListo,
+  riesgoCabida,
+  riesgoCapitalDormido,
+  riesgoProveedor,
+  textoCapitalDormido,
+  textoNoCabe,
+  textoProveedorEnRiesgo,
+  unidadesQueNoCaben,
   textoReserva,
   textoVencimiento,
   textoVencimientoProveedor,
@@ -517,4 +527,154 @@ export async function avisarProductoListo(reservaId: string): Promise<void> {
   } catch (e) {
     console.error('[supply] no se pudo avisar de que el pedido está listo', reservaId, e)
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// AVISOS ANALÍTICOS DE PLATAFORMA
+//
+// Una pasada semanal sobre los proveedores y los lotes activos. Van SOLO a los
+// superadmin: son decisiones de plataforma —a quién volver a comprarle, qué
+// reasignar— y nada de esto le toca al comercio.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Proveedores que acumulan incumplimientos sobre suficientes entregas. */
+export async function avisarProveedoresEnRiesgo(ahora: Date = new Date()): Promise<number> {
+  let enviados = 0
+  try {
+    const { reporteProveedores } = await import('./pool')
+    const filas = await reporteProveedores()
+    for (const f of filas) {
+      const nivel = riesgoProveedor({
+        redimidas: f.redimidas,
+        tasaIncumplimiento: f.scorecard.tasaIncumplimiento,
+        puntaje: f.scorecard.puntaje,
+      })
+      if (!nivel) continue
+      const escritas = await notificarSuperadmins({
+        tipo: 'SUPPLY_PROVEEDOR_EN_RIESGO',
+        ...textoProveedorEnRiesgo(
+          {
+            proveedor: f.proveedor,
+            redimidas: f.redimidas,
+            incumplimientos: f.scorecard.incumplimientos,
+            tasaIncumplimiento: f.scorecard.tasaIncumplimiento,
+            puntaje: f.scorecard.puntaje,
+          },
+          nivel
+        ),
+        dedupeKey: dedupeProveedorEnRiesgo(f.proveedorId, ahora),
+      })
+      if (escritas > 0) enviados += escritas
+    }
+  } catch (e) {
+    console.error('[supply] no se pudieron avisar los proveedores en riesgo', e)
+  }
+  return enviados
+}
+
+/**
+ * Lotes que no caben y lotes con el dinero parado.
+ *
+ * Los dos salen del MISMO recorrido de lotes activos: piden los mismos campos y
+ * se evalúan sobre la misma fila. Separarlos en dos funciones costaría dos
+ * consultas idénticas sobre la tabla que más crece del módulo.
+ */
+export async function avisarRiesgosDeLote(
+  ahora: Date = new Date()
+): Promise<{ noCaben: number; dormidos: number }> {
+  const out = { noCaben: 0, dormidos: 0 }
+  try {
+    const lotes = await sinEmpresa(
+      'Membego Supply: lotes activos para los avisos analíticos de plataforma',
+      (tx) =>
+        tx.supplyLote.findMany({
+          where: { estado: 'ACTIVO', venceAt: { gt: ahora } },
+          select: {
+            id: true,
+            codigo: true,
+            inicioAt: true,
+            venceAt: true,
+            compradas: true,
+            disponibles: true,
+            asignadas: true,
+            retenidas: true,
+            emitidas: true,
+            redimidas: true,
+            snapshotItemNombre: true,
+            snapshotCostoUnitario: true,
+            snapshotCapacidadDiaria: true,
+            proveedor: { select: { name: true } },
+          },
+          take: 500,
+        })
+    )
+
+    for (const l of lotes) {
+      const costoUnitario = Number(l.snapshotCostoUnitario)
+      // Vivas = todo lo que el comercio todavía tiene que poder entregar. Lo
+      // emitido cuenta: esas unidades también ocupan un día de cocina cuando su
+      // dueño aparezca.
+      const vivas = l.disponibles + l.asignadas + l.retenidas + l.emitidas
+      const diasRestantes = Math.max(
+        0,
+        Math.ceil((l.venceAt.getTime() - ahora.getTime()) / 86_400_000)
+      )
+
+      const cabida = riesgoCabida({
+        vivas,
+        diasRestantes,
+        capacidadDiaria: l.snapshotCapacidadDiaria,
+        exposicion: vivas * costoUnitario,
+      })
+      if (cabida) {
+        const escritas = await notificarSuperadmins({
+          tipo: 'SUPPLY_NO_CABE',
+          ...textoNoCabe({
+            codigo: l.codigo,
+            item: l.snapshotItemNombre,
+            proveedorNombre: l.proveedor.name,
+            vivas,
+            diasRestantes,
+            capacidadDiaria: l.snapshotCapacidadDiaria ?? 0,
+            sobran: unidadesQueNoCaben({
+              vivas,
+              diasRestantes,
+              capacidadDiaria: l.snapshotCapacidadDiaria,
+            }),
+            costoUnitario,
+          }),
+          dedupeKey: dedupeNoCabe(l.id, ahora),
+        })
+        if (escritas > 0) out.noCaben += escritas
+      }
+
+      const dormido = riesgoCapitalDormido({
+        inicioAt: l.inicioAt,
+        venceAt: l.venceAt,
+        compradas: l.compradas,
+        redimidas: l.redimidas,
+        costoUnitario,
+        ahora,
+      })
+      if (dormido) {
+        const escritas = await notificarSuperadmins({
+          tipo: 'SUPPLY_CAPITAL_DORMIDO',
+          ...textoCapitalDormido({
+            codigo: l.codigo,
+            item: l.snapshotItemNombre,
+            proveedorNombre: l.proveedor.name,
+            compradas: l.compradas,
+            redimidas: l.redimidas,
+            costoUnitario,
+            diasRestantes,
+          }),
+          dedupeKey: dedupeCapitalDormido(l.id, ahora),
+        })
+        if (escritas > 0) out.dormidos += escritas
+      }
+    }
+  } catch (e) {
+    console.error('[supply] no se pudieron avisar los riesgos de lote', e)
+  }
+  return out
 }

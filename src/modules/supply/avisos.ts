@@ -370,3 +370,230 @@ export function textoProductoListo(d: {
     href: '/cliente/beneficios',
   }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// AVISOS ANALÍTICOS DE PLATAFORMA (Fase 40 · los tres que faltaban)
+//
+// Los de arriba nacen de un hecho —un lote cruza un umbral, alguien pulsa un
+// botón—. Estos nacen de una TENDENCIA, y por eso son los últimos que se
+// escribieron: hay que elegir a partir de qué número algo deja de ser un mal
+// día y pasa a ser un patrón.
+//
+// ────────────────────────────────────────────────────────────────────────────
+// LOS NÚMEROS SON UNA ESTIMACIÓN, NO UNA MEDICIÓN
+//
+// Cuando se escribieron, el módulo llevaba días en producción: nadie había
+// visto todavía la tasa real de incumplimiento de un proveedor de Membego. Por
+// eso viven TODOS aquí, con nombre y juntos: con dos meses de datos reales se
+// suben o se bajan sin tocar una línea de lógica.
+//
+// Si algún día resultan ruidosos, lo primero que se toca es la CADENCIA —son
+// semanales— y no el umbral. Un aviso correcto que llega a diario se deja de
+// leer igual que uno equivocado.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const UMBRALES_RIESGO = {
+  /**
+   * Entregas mínimas antes de juzgar a un proveedor.
+   *
+   * Sin suelo, un comercio que entregó 3 y falló 1 sale con 33% y parece un
+   * desastre. Con 20, un fallo es 5% y el ruido se aplana. Es la diferencia
+   * entre medir y acusar.
+   */
+  ENTREGAS_MINIMAS: 20,
+  /** 1 de cada 20 clientes se va con las manos vacías. Ya es un patrón. */
+  INCUMPLIMIENTO_AVISO: 5,
+  /** 1 de cada 7. A esa altura el acuerdo no se está respetando. */
+  INCUMPLIMIENTO_URGENTE: 15,
+  /** El puntaje ya penaliza reversas e incumplimientos; por debajo, urgente. */
+  PUNTAJE_URGENTE: 50,
+
+  /**
+   * Cuánta de su capacidad diaria haría falta, todos los días que quedan, para
+   * entregar lo que sigue vivo. Por encima de esto no llega con holgura.
+   */
+  CABIDA_AVISO: 0.8,
+  /** Por encima de 1 no es apretado: es aritméticamente imposible. */
+  CABIDA_IMPOSIBLE: 1,
+
+  /** A mitad de vigencia se espera haber consumido al menos esto. */
+  CONSUMO_ESPERADO_A_MITAD: 0.3,
+  /** Mitad de la vigencia. */
+  PROGRESO_PARA_JUZGAR: 0.5,
+
+  /**
+   * Dinero por debajo del cual no se avisa aunque el porcentaje cuadre.
+   *
+   * Un lote de RD$900 que va lento no es un problema de plataforma, y avisar de
+   * él gasta la atención que hace falta para el de RD$60.000.
+   */
+  EXPOSICION_MINIMA: 25_000,
+} as const
+
+export type NivelRiesgo = 'AVISO' | 'URGENTE'
+
+// ── 1 · El proveedor no está cumpliendo ─────────────────────────────────────
+
+export function riesgoProveedor(d: {
+  redimidas: number
+  tasaIncumplimiento: number
+  puntaje: number
+}): NivelRiesgo | null {
+  // El suelo va PRIMERO: sin él, todo lo de abajo mide ruido.
+  if (d.redimidas < UMBRALES_RIESGO.ENTREGAS_MINIMAS) return null
+  if (
+    d.tasaIncumplimiento >= UMBRALES_RIESGO.INCUMPLIMIENTO_URGENTE ||
+    d.puntaje < UMBRALES_RIESGO.PUNTAJE_URGENTE
+  ) {
+    return 'URGENTE'
+  }
+  if (d.tasaIncumplimiento >= UMBRALES_RIESGO.INCUMPLIMIENTO_AVISO) return 'AVISO'
+  return null
+}
+
+export function dedupeProveedorEnRiesgo(proveedorId: string, ahora: Date): string {
+  return `supply-proveedor-riesgo|${proveedorId}|${semanaIso(ahora)}`
+}
+
+export function textoProveedorEnRiesgo(
+  d: { proveedor: string; redimidas: number; incumplimientos: number; tasaIncumplimiento: number; puntaje: number },
+  nivel: NivelRiesgo
+): { titulo: string; mensaje: string; href: string } {
+  return {
+    titulo:
+      nivel === 'URGENTE'
+        ? `${d.proveedor} no está cumpliendo`
+        : `${d.proveedor} acumula incumplimientos`,
+    // Las cifras crudas ANTES del porcentaje: «3 de 40» se discute con el
+    // proveedor; «7,5%» no se discute con nadie.
+    mensaje: `${d.incumplimientos} de ${d.redimidas} entregas con incidencia por su parte (${d.tasaIncumplimiento}%). Puntaje ${d.puntaje}/100.`,
+    href: '/superadmin/supply/proveedores',
+  }
+}
+
+// ── 2 · El supply no cabe antes de vencer ───────────────────────────────────
+
+/**
+ * ¿Le da tiempo al comercio a entregar lo que queda?
+ *
+ * No es una corazonada: es una división. Quedan 400 pizzas, vencen en 10 días y
+ * el contrato dice 20 al día → caben 200 y sobran 200. Eso se sabe HOY, no el
+ * día nueve, y por eso este aviso vale lo que vale.
+ *
+ * Sin capacidad declarada no se juzga: `null` significa SIN límite, no cero.
+ */
+export function riesgoCabida(d: {
+  vivas: number
+  diasRestantes: number
+  capacidadDiaria: number | null
+  exposicion: number
+}): NivelRiesgo | null {
+  if (!d.capacidadDiaria || d.capacidadDiaria <= 0) return null
+  if (d.vivas <= 0) return null
+
+  const dias = Math.max(1, d.diasRestantes)
+  const ratio = d.vivas / dias / d.capacidadDiaria
+
+  // Cabe con holgura: no hay nada que decir, por mucho dinero que sea. El
+  // dinero solo AGRAVA un problema de cabida; no lo crea.
+  if (ratio <= UMBRALES_RIESGO.CABIDA_AVISO) return null
+  // No cabe ni llenando el comercio todos los días.
+  if (ratio > UMBRALES_RIESGO.CABIDA_IMPOSIBLE) return 'URGENTE'
+  // Cabe justo, pero hay demasiado en juego para dejarlo al azar de un día malo.
+  if (d.exposicion >= UMBRALES_RIESGO.EXPOSICION_MINIMA) return 'URGENTE'
+  return 'AVISO'
+}
+
+/** Cuántas unidades no caben. Cero si caben todas. */
+export function unidadesQueNoCaben(d: {
+  vivas: number
+  diasRestantes: number
+  capacidadDiaria: number | null
+}): number {
+  if (!d.capacidadDiaria || d.capacidadDiaria <= 0) return 0
+  const caben = Math.max(1, d.diasRestantes) * d.capacidadDiaria
+  return Math.max(0, d.vivas - caben)
+}
+
+export function dedupeNoCabe(loteId: string, ahora: Date): string {
+  return `supply-no-cabe|${loteId}|${semanaIso(ahora)}`
+}
+
+export function textoNoCabe(d: {
+  codigo: string
+  item: string
+  proveedorNombre: string
+  vivas: number
+  diasRestantes: number
+  capacidadDiaria: number
+  sobran: number
+  costoUnitario: number
+}): { titulo: string; mensaje: string; href: string } {
+  const perdida = dineroRD(d.sobran * d.costoUnitario)
+  return {
+    titulo:
+      d.sobran > 0
+        ? `No caben ${d.sobran} unidades de ${d.codigo}`
+        : `${d.codigo} va justo de capacidad`,
+    mensaje:
+      d.sobran > 0
+        ? `${d.vivas} ${d.item} para ${d.diasRestantes} día(s) a ${d.capacidadDiaria}/día en ${d.proveedorNombre}: sobran ${d.sobran} y son ${perdida}. Repártelas o renegocia la capacidad.`
+        : `${d.vivas} ${d.item} en ${d.diasRestantes} día(s) con cupo de ${d.capacidadDiaria}/día. Cabe, pero sin margen para un día malo.`,
+    href: '/superadmin/supply/vencimientos',
+  }
+}
+
+// ── 3 · Capital dormido ─────────────────────────────────────────────────────
+
+/**
+ * Dinero comprometido que no se está consumiendo.
+ *
+ * Sustituye al «riesgo de presupuesto» que pedía la Fase 40, y el cambio es
+ * deliberado: **no existe el concepto de presupuesto en el modelo** —ni tabla,
+ * ni tope por campaña o período— así que cualquier umbral sería inventarse una
+ * cifra y llamarla riesgo. Esto sí se puede calcular con lo que hay.
+ *
+ * A mitad de la vigencia con menos de un tercio entregado, o la campaña no está
+ * repartiendo o el producto no interesa. Lo que importa es que TODAVÍA DA
+ * TIEMPO a reasignarlo: por eso se mira a la mitad y no al final.
+ */
+export function riesgoCapitalDormido(d: {
+  inicioAt: Date
+  venceAt: Date
+  compradas: number
+  redimidas: number
+  costoUnitario: number
+  ahora: Date
+}): NivelRiesgo | null {
+  const total = d.venceAt.getTime() - d.inicioAt.getTime()
+  if (total <= 0 || d.compradas <= 0) return null
+  const progreso = (d.ahora.getTime() - d.inicioAt.getTime()) / total
+  if (progreso < UMBRALES_RIESGO.PROGRESO_PARA_JUZGAR || progreso >= 1) return null
+  const consumido = d.redimidas / d.compradas
+  if (consumido >= UMBRALES_RIESGO.CONSUMO_ESPERADO_A_MITAD) return null
+  const dormido = (d.compradas - d.redimidas) * d.costoUnitario
+  if (dormido < UMBRALES_RIESGO.EXPOSICION_MINIMA) return null
+  return 'AVISO'
+}
+
+export function dedupeCapitalDormido(loteId: string, ahora: Date): string {
+  return `supply-capital-dormido|${loteId}|${semanaIso(ahora)}`
+}
+
+export function textoCapitalDormido(d: {
+  codigo: string
+  item: string
+  proveedorNombre: string
+  compradas: number
+  redimidas: number
+  costoUnitario: number
+  diasRestantes: number
+}): { titulo: string; mensaje: string; href: string } {
+  const dormido = dineroRD((d.compradas - d.redimidas) * d.costoUnitario)
+  const pct = Math.round((d.redimidas / d.compradas) * 100)
+  return {
+    titulo: `${dormido} parados en ${d.codigo}`,
+    mensaje: `${d.redimidas} de ${d.compradas} ${d.item} entregadas (${pct}%) y quedan ${d.diasRestantes} día(s) en ${d.proveedorNombre}. Todavía da tiempo a repartirlo.`,
+    href: '/superadmin/supply/lotes',
+  }
+}

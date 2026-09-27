@@ -139,7 +139,7 @@ Las 80 fases del encargo, con dónde vive cada una.
 
 | # | Fase | Estado | Nota |
 | --- | --- | --- | --- |
-| 40 | Notificaciones | ✅ completo | Once avisos por `Notificacion`, todos deduplicados: tres de barrido y ocho de evento |
+| 40 | Notificaciones | ✅ completo | Catorce avisos por `Notificacion`, todos deduplicados: tres de barrido, ocho de evento y tres analíticos |
 | 41 | Roles y permisos | ✅ | Los 8 permisos del encargo resueltos contra el RBAC existente |
 | 42 | Multi-tenancy | ✅ | `conEmpresa` + `where` explícito + `proveedorId` denormalizado; prueba automática |
 | 43 | Auditoría | ✅ | 19 acciones `SUPPLY_*` con etiqueta y filtro |
@@ -206,6 +206,37 @@ relaciones inversas) y `vercel.json` (el cron).
    Las políticas nunca hubo que escribirlas: se DEDUCEN del esquema recorriendo
    claves foráneas, así que las 15 tablas de supply ya tenían una. El problema
    era otro y peor: **dos de ellas tenían la política EQUIVOCADA**. Ver abajo.
+
+## Los tres avisos analíticos (Fase 40, cierre) · 27-09-2026
+
+Los otros once nacen de un hecho. Estos nacen de una **tendencia**, y por eso
+fueron los últimos: hay que elegir a partir de qué número algo deja de ser un
+mal día y pasa a ser un patrón.
+
+| aviso | dispara | por qué ese número |
+|---|---|---|
+| Proveedor en riesgo | ≥5% de entregas con incidencia suya (urgente ≥15% o puntaje <50), **sobre 20 entregas mínimo** | Sin el suelo, quien entregó 3 y falló 1 sale con 33% y parece un desastre |
+| El supply no cabe | hace falta >80% de su capacidad diaria todos los días que quedan | Es una división: 400 unidades / 10 días / 20 al día = sobran 200 |
+| Capital dormido | a mitad de vigencia con <30% entregado y >RD$25.000 parados | A mitad todavía da tiempo a reasignarlo; al final ya no |
+
+### «Riesgo de presupuesto» no se pudo hacer como pedía la fase
+
+**No existe el concepto de presupuesto en el modelo**: ni tabla, ni tope por
+campaña o período. Cualquier umbral habría sido inventarse una cifra y llamarla
+riesgo. Se sustituye por **capital dormido**, que mide lo que sí hay. Si algún
+día se lleva un techo mensual de compras, se añade encima sin tirar esto.
+
+### Los números son una estimación, no una medición
+
+Cuando se escribieron, el módulo llevaba días en producción: nadie había visto
+todavía la tasa real de incumplimiento de un proveedor. Por eso viven **todos
+juntos en `UMBRALES_RIESGO`**, con nombre, y hay una prueba que falla si alguien
+escribe uno a mano en la lógica. Con dos meses de datos se mueven sin tocar
+código.
+
+Si resultan ruidosos, lo primero que se toca es la **cadencia** —son
+semanales— y no el umbral: un aviso correcto que llega a diario se deja de leer
+igual que uno equivocado.
 
 ## «Producto listo» (Fase 40, última pieza) · 25-09-2026
 
@@ -328,6 +359,9 @@ avisos del mismo lote y nadie vuelve a mirar la campanita.
 | Incidencia | superadmins **y** proveedor, con mensajes distintos | `supply-incidencia\|id\|destinatario` | nunca |
 | Liquidación confirmada | admins del proveedor | `supply-liquidacion\|pago` | nunca |
 | Producto listo | cliente | `supply-listo\|reserva` | nunca |
+| Proveedor en riesgo | superadmins | `…\|proveedor\|semanaISO` | semanal mientras siga |
+| El supply no cabe | superadmins | `…\|lote\|semanaISO` | semanal mientras siga |
+| Capital dormido | superadmins | `…\|lote\|semanaISO` | semanal mientras siga |
 
 Los de evento se enganchan en las funciones de DOMINIO (`entregar`, `reservar`,
 `redimir`, `abrirIncidencia`, `confirmarPago`), no en las actions: `entregar` es
