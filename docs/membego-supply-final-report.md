@@ -145,14 +145,35 @@ no en el navegador.
 
 ## 16 · Riesgos
 
+Al corte del 23-09-2026 esta sección listaba cinco. Cuatro se cerraron después;
+el detalle de cada cierre está en `membego-supply-implementation-status.md`.
+
+**Abiertos:**
+
 1. **Sin cobro a nombre de la plataforma** → la venta de supply no se puede
    completar hoy. Se declara en voz alta y la vitrina no publica precios.
-2. **Notificaciones sin enviar** → el cron calcula los avisos; falta escribir en
-   `Notificacion`.
-3. **Migración sin aplicar** contra Postgres real (no hay base en este entorno).
-4. **Sin prueba de carrera real** → el bloqueo está escrito y probado en su
-   forma, no bajo concurrencia real.
-5. **Políticas RLS de `supply_*`** todavía sin escribir.
+2. **«Producto listo» sin implementar** → único hueco de la Fase 40. El modelo
+   no tiene el concepto de *pedido preparado*: `SupplyReserva` guarda la hora
+   acordada, pero nadie en el comercio marca «ya está hecho».
+
+**Cerrados:**
+
+- ~~Notificaciones sin enviar~~ · **cerrado.** `notificar.ts` escribe los diez
+  avisos vía `@/modules/notificaciones/service`, enganchados en las funciones de
+  dominio (`entregar`, `reservar`, `redimir`, `abrirIncidencia`, `confirmarPago`)
+  y siempre después de que cierre la transacción. 39 pruebas en
+  `supply-avisos.test.ts` vigilan las claves de deduplicación y lo que no viaja.
+- ~~Migración sin aplicar~~ · **cerrado el 25-09-2026.** El check `Esquema de
+  base de datos` del CI levanta su propio PostgreSQL 16 y replica las migraciones
+  desde cero en cada PR; los seis `CHECK` se probaron uno a uno contra PG 16.
+- ~~Sin prueba de carrera real~~ · **cerrado el 25-09-2026.** Dos clientes
+  simultáneos contra PG 16 peleando por la última unidad con el patrón de
+  `bloquearLote`: el bloqueo serializa y el lote sigue cuadrando.
+- ~~Políticas RLS de `supply_*`~~ · **cerrado el 25-09-2026.** No había que
+  escribirlas — se deducen del esquema —, pero dos tablas tenían la política
+  equivocada. Corregido con el Nivel 0.5 en la derivación y con claves foráneas
+  compuestas (`20261003_supply_coherencia_proveedor`). `npm run rls:probar` pasa
+  de 9 a 14 comprobaciones.
 
 ## 17 · Deuda técnica
 
@@ -165,7 +186,7 @@ explicadas en el código, no olvidos.
 | Qué | Estado | Qué falta |
 | --- | --- | --- |
 | Venta de supply (Fases 22-23) | Puerto declarado | Cobro a nombre de la plataforma |
-| Notificaciones (Fase 40) | Cálculo hecho | Escribir en `Notificacion` |
+| «Producto listo» (Fase 40) | Los diez avisos escriben | El concepto de *pedido preparado* no existe en el modelo |
 | Transferencia entre lotes | Tipo en el ledger | Acción y pantalla |
 | Automatización de vencimientos | Propone | Aplicar acciones (por diseño: se negocian) |
 
