@@ -448,6 +448,18 @@ publica precios que no se pueden cobrar». Una cuenta nace APAGADA salvo que se
 diga lo contrario, no se borra ni se edita —un pedido guarda a qué cuenta se le
 pidió transferir— y apagar la última avisa de que la venta se detiene.
 
+**El comprobante vive en el bucket privado.** No en un enlace que el cliente
+teclea: eso dejaba la prueba de un pago donde el interesado quisiera, y podía
+cambiarla o borrarla después de que se la aprobaran. Se reusa
+`modules/storage/comprobantes.ts` —el que resolvió la auditoría C-01 para
+membresías y compras— con un tipo nuevo, `'pedido'`: la ruta la genera el
+servidor con 16 bytes aleatorios, el cliente sube con un token de un solo uso
+que no vale para otra ruta, y cada lectura se firma en el momento
+(`urlComprobante`, cinco minutos) previa comprobación de quién pregunta. La
+columna se llama `comprobantePath` porque guarda una ruta. Un **admin de empresa
+no puede leerlo**: el comprobante lleva el banco y la cuenta de alguien que pagó
+A MEMBEGO por una unidad que el comercio ya cobró por contrato.
+
 **Invariantes en la base:** monto no negativo, revisión completa (estado final
 ⇔ revisor y fecha), rechazo motivado, y EN_REVISION implica comprobante. Los
 cuatro probados uno a uno contra PostgreSQL 16: rechazan lo que deben y aceptan

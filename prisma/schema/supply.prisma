@@ -1068,7 +1068,9 @@ model SupplyPedido {
   cuentaId String?            @map("cuentaId")
   cuenta   SupplyCuentaCobro? @relation(fields: [cuentaId], references: [id], onDelete: Restrict)
 
-  comprobanteUrl  String?
+  /// RUTA dentro del bucket privado `comprobantes`, no una URL: el bucket es
+  /// privado y cada lectura se firma en el momento con `urlComprobante`.
+  comprobantePath String?
   comprobanteNota String?
   comprobanteAt   DateTime?
 

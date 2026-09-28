@@ -120,6 +120,20 @@ async function puedeSubir(
       )
       return c?.cliente?.supabaseId === supabaseId
     }
+    if (tipo === 'pedido') {
+      // Membego Supply: un pedido del cliente A MEMBEGO. Lo adjunta quien lo
+      // abrió, y nadie más. `sinEmpresa` porque el pedido no es de ninguna
+      // empresa: es de la plataforma.
+      const ped = await sinEmpresa(
+        'comprobantes: pedido de supply por id para comprobar permiso (plataforma)',
+        (tx) =>
+          tx.supplyPedido.findUnique({
+            where: { id },
+            select: { cliente: { select: { supabaseId: true } } },
+          })
+      )
+      return ped?.cliente?.supabaseId === supabaseId
+    }
     // Soporte: el ticket todavía no existe cuando se adjunta el archivo (el
     // adjunto se sube antes de crear el ticket). El identificador es el propio
     // supabaseId de quien reporta, así que la ruta ya queda atada a la persona.
@@ -294,6 +308,11 @@ async function esDeSuEmpresa(
         0
       )
     }
+    // 'pedido' cae aquí a propósito, y con `false`. Un pedido de Membego Supply
+    // no es de ninguna empresa: el comprobante lleva el banco y la cuenta de una
+    // persona que le pagó A MEMBEGO por una unidad que el comercio ya cobró por
+    // contrato. El único que lo revisa es plataforma, y ese ya salió arriba por
+    // `role === 'SUPERADMIN'`. Un admin de empresa no tiene nada que ver aquí.
     return false
   } catch {
     return false

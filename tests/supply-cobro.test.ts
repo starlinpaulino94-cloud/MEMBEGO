@@ -185,3 +185,60 @@ test('apagar la última cuenta avisa de que se apaga la venta', () => {
   const acciones = fuente('actions.ts')
   assert.match(acciones, /res\.sinCobro/)
 })
+
+// ── El comprobante vive en el bucket privado ────────────────────────────────
+
+test('la ruta del comprobante se valida contra ESTE pedido', () => {
+  const src = fuente('cobro.ts')
+  // El token de subida ata la ruta a quien la pidió, pero nada impediría enviar
+  // la ruta de OTRO pedido propio y hacerla pasar por la de este.
+  assert.match(src, /rutaValida\('pedido', pedidoId, ruta\)/)
+  assert.match(src, /no corresponde a este pedido/)
+})
+
+test('la columna guarda una ruta, y se llama como lo que guarda', () => {
+  const src = fuente('cobro.ts')
+  assert.match(src, /comprobantePath/)
+  // Un campo llamado `Url` con una ruta dentro acaba en un <img src> roto.
+  assert.doesNotMatch(src, /comprobanteUrl/)
+})
+
+test('el cliente nunca teclea un enlace: sube un archivo', () => {
+  const src = readFileSync(
+    join(process.cwd(), 'src/components/supply/mis-pedidos.tsx'),
+    'utf8'
+  )
+  assert.match(src, /pedirSubidaComprobante\('pedido', pedido\.id, ext\)/)
+  assert.match(src, /uploadToSignedUrl/)
+  assert.match(src, /type="file"/)
+  // Sin ruta subida no se puede enviar.
+  assert.match(src, /disabled=\{enviando \|\| !ruta\}/)
+})
+
+test('la pantalla de revisión firma la URL, no enlaza la ruta', () => {
+  const src = readFileSync(
+    join(process.cwd(), 'src/app/(superadmin)/superadmin/supply/cobros/page.tsx'),
+    'utf8'
+  )
+  assert.match(src, /urlComprobante\('pedido', p\.id, p\.comprobantePath\)/)
+})
+
+test('un admin de empresa no puede leer el comprobante de un pedido', () => {
+  const src = readFileSync(
+    join(process.cwd(), 'src/modules/storage/comprobantes.ts'),
+    'utf8'
+  )
+  // El comprobante lleva el banco y la cuenta de alguien que pagó A MEMBEGO por
+  // una unidad que el comercio ya cobró por contrato. Solo plataforma lo revisa.
+  const bloque = src.slice(src.indexOf('async function esDeSuEmpresa'))
+  assert.match(bloque, /'pedido' cae aquí a propósito, y con `false`/)
+})
+
+test('solo quien abrió el pedido puede adjuntarle un comprobante', () => {
+  const src = readFileSync(
+    join(process.cwd(), 'src/modules/storage/comprobantes.ts'),
+    'utf8'
+  )
+  assert.match(src, /tipo === 'pedido'[\s\S]{0,400}supplyPedido\.findUnique/)
+  assert.match(src, /ped\?\.cliente\?\.supabaseId === supabaseId/)
+})
