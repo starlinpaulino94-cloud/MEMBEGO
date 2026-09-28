@@ -72,7 +72,31 @@ if (sinSellar.length > 0) {
 
 const filas = dirs.map((n, i) => `  (${i + 1},'${n}','${sumas.get(n)}')`)
 
-console.log(`-- ════════════════════════════════════════════════════════════════════════
+// ── El SQL que emitimos tiene que ser UNA sentencia ─────────────────────────
+//
+// El SQL Editor de Supabase trocea el texto por punto y coma sin mirar si está
+// dentro de una cadena o de un comentario. Uno de más no da un error legible:
+// da «syntax error at end of input» apuntando a la linea 0, que no dice nada y
+// manda a buscar el fallo donde no esta. Ya paso una vez.
+//
+// Por eso el unico punto y coma admisible es el que cierra el archivo. Se
+// comprueba aqui, sobre el texto ya generado, en vez de confiar en que nadie
+// lo rompa al editarlo.
+function comprobarUnaSolaSentencia(sql) {
+  const cuerpo = sql.trimEnd()
+  if (!cuerpo.endsWith(';')) {
+    console.error('\u2717 El SQL generado no termina en punto y coma.')
+    process.exit(1)
+  }
+  const sobrantes = (cuerpo.slice(0, -1).match(/;/g) || []).length
+  if (sobrantes > 0) {
+    console.error(`\u2717 El SQL generado tiene ${sobrantes} punto(s) y coma de mas (solo vale el final).`)
+    console.error('  Supabase trocea por ese caracter y devolveria «syntax error at end of input».')
+    process.exit(1)
+  }
+}
+
+const sql = `-- ════════════════════════════════════════════════════════════════════════
 -- MIGRACIONES PENDIENTES · generado desde prisma/migrations/SUMAS.txt
 -- ${dirs.length} migraciones en el repositorio · SOLO LECTURA, no escribe nada
 --
@@ -89,16 +113,16 @@ console.log(`-- ═════════════════════�
 --   · db:doctor lista lo que falta → el cambio NO está → migrate deploy
 -- ════════════════════════════════════════════════════════════════════════
 
--- ── PASO 0 · ¿existe siquiera el registro? ──────────────────────────────────
--- Si el PASO 1 falla con «relation "_prisma_migrations" does not exist»,
--- la respuesta es que NINGUNA migración está registrada. Corre el PASO 0 solo.
-SELECT CASE
-  WHEN to_regclass('public._prisma_migrations') IS NULL
-    THEN 'NO EXISTE _prisma_migrations — ninguna migración registrada. Empieza por: npm run migraciones:baseline'
-  ELSE 'Existe. Sigue con el PASO 1.'
-END AS paso_0;
+-- SI FALLA CON «relation "_prisma_migrations" does not exist»:
+-- esa ES la respuesta. No hay registro ninguno, así que no hay nada que
+-- comparar. Empieza por:  npm run migraciones:baseline
+--
+-- Este archivo es UNA SOLA sentencia a propósito. El SQL Editor de Supabase
+-- trocea el texto por punto y coma sin respetar comillas ni comentarios, así
+-- que varias sentencias —o un punto y coma dentro de una cadena— acaban en
+-- «syntax error at end of input» apuntando a la línea 0. Si lo editas, no
+-- metas puntos y coma: el único que vale es el que cierra el archivo.
 
--- ── PASO 1 · qué falta, qué falló y qué sobra ───────────────────────────────
 WITH esperadas(orden, nombre, suma) AS (VALUES
 ${filas.join(',\n')}
 ),
@@ -130,7 +154,9 @@ sobrantes AS (
 problemas AS (
   SELECT orden, estado, nombre,
     CASE estado
-      WHEN 'FALTA'     THEN 'Prisma no lo tiene. Comprueba con db:doctor:sql si el cambio YA está: si está, baseline; si no, migrate deploy'
+      -- Sin punto y coma dentro del texto: el SQL Editor trocea por ese
+      -- carácter sin respetar las comillas y partiría la cadena por la mitad.
+      WHEN 'FALTA'     THEN 'Prisma no lo tiene. Mira con db:doctor:sql si el cambio YA está. Si está --> baseline. Si no --> migrate deploy'
       WHEN 'REVERTIDA' THEN 'Se marcó como revertida. Hay que decidir a mano si se vuelve a aplicar'
       WHEN 'A MEDIAS'  THEN 'Empezó y no terminó. La base puede estar a medio migrar: REVÍSALA ANTES DE TOCAR NADA'
       WHEN 'EDITADA'   THEN 'Aplicada, pero el archivo cambió después. El SQL del repo ya no es lo que corrió en la base'
@@ -165,4 +191,7 @@ SELECT "#", "estado", "migración", "qué hacer" FROM (
     END,
     1000001
 ) t
-ORDER BY _orden, "migración";`)
+ORDER BY _orden, "migración";`
+
+comprobarUnaSolaSentencia(sql)
+console.log(sql)
