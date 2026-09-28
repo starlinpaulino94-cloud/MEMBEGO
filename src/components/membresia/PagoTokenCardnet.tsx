@@ -77,6 +77,11 @@ interface Props {
   publicKey: string
   captureUrl: string
   scriptUrl: string
+  /**
+   * Ambiente de la pasarela. En `pruebas` CardNET NO hace el cargo real de
+   * RD$1.00, así que el código de activación jamás llega al banco.
+   */
+  ambiente?: 'pruebas' | 'produccion'
   /** Marca que ve el cliente dentro de la ventana de pago. */
   companyName?: string
   /** Logo (URL absoluta) que la ventana de pago muestra en su cabecera. */
@@ -145,6 +150,7 @@ export function PagoTokenCardnet({
   montoTexto,
   publicKey,
   scriptUrl: scriptUrlProp,
+  ambiente,
   companyName,
   logoUrl,
   urlExito,
@@ -1210,6 +1216,23 @@ export function PagoTokenCardnet({
           </div>
 
           <div className="space-y-5 px-6 pb-6 pt-4">
+            {/* AMBIENTE DE PRUEBAS: en laboratorio CardNET no cobra el
+                RD$1.00 y ningún banco muestra un código. Sin este aviso, esa
+                configuración parece una demora del banco. */}
+            {ambiente === 'pruebas' && (
+              <p
+                role="alert"
+                className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-xs leading-relaxed text-foreground"
+              >
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden />
+                <span>
+                  <strong className="font-semibold">Pasarela en modo de pruebas.</strong>{' '}
+                  En este modo el banco no envía ningún código real. El
+                  administrador debe configurar el ambiente de producción
+                  (CARDNET_TOKENS_AMBIENTE=produccion).
+                </span>
+              </p>
+            )}
             <p className="text-center text-sm leading-relaxed text-muted-foreground">
               Tu banco hizo un cargo de{' '}
               <strong className="font-semibold text-foreground">RD$1.00</strong> para

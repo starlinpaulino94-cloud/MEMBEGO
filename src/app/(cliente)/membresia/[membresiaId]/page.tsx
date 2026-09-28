@@ -436,6 +436,7 @@ export default async function MembershipDetail({
                         publicKey: tokensConfig.publicKey,
                         captureUrl: tokensConfig.captureUrl,
                         scriptUrl: tokensConfig.scriptUrl,
+                        ambiente: tokensConfig.ambiente,
                       }
                     : null
                 }

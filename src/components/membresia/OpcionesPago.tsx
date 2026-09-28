@@ -61,7 +61,12 @@ interface Props {
    * Config PÚBLICA de la pasarela hospedada de CardNET (llave pública + URLs).
    * No incluye la llave privada. Solo llega cuando `tarjetaDisponible`.
    */
-  tokensConfig?: { publicKey: string; captureUrl: string; scriptUrl: string } | null
+  tokensConfig?: {
+    publicKey: string
+    captureUrl: string
+    scriptUrl: string
+    ambiente?: 'pruebas' | 'produccion'
+  } | null
   /** Logo de la empresa para la cabecera de la ventana de pago. */
   logoUrl?: string | null
   /**
@@ -197,6 +202,7 @@ export function OpcionesPago({
           publicKey={tokensConfig.publicKey}
           captureUrl={tokensConfig.captureUrl}
           scriptUrl={tokensConfig.scriptUrl}
+          ambiente={tokensConfig.ambiente}
           companyName={companyName}
           logoUrl={logoUrl}
           /* Cuando la pasarela no está disponible, el componente de tarjeta
