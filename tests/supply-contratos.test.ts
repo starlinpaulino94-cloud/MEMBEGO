@@ -318,14 +318,39 @@ test('el portal del proveedor no lee fuera de su empresa', () => {
   for (const archivo of readdirSync(ruta, { recursive: true, encoding: 'utf8' })) {
     if (!archivo.endsWith('.tsx')) continue
     const src = readFileSync(join(ruta, archivo), 'utf8')
+
+    // Esto vale para TODO lo que haya aquí, guarde o no: cruzar inquilinos en
+    // el portal de una empresa no tiene lectura correcta.
     assert.ok(
       !src.includes('sinEmpresa('),
       `admin/supply/${archivo} usa sinEmpresa: el proveedor A podría ver al B`
     )
-    assert.ok(
-      src.includes('guardiaProveedor'),
-      `admin/supply/${archivo} no comprueba que la empresa sea proveedora`
-    )
+
+    /**
+     * La guardia se exige donde se ENTRA, no en cada archivo.
+     *
+     * Antes se pedía en todos los `.tsx` de la carpeta, y eso confundía dos
+     * cosas: un componente de cliente no puede llamar a `guardiaProveedor`
+     * —es server-only— y tampoco lee la base: recibe props de una página que
+     * sí está guardada. Exigírselo obligaría a inventar una comprobación falsa
+     * para callar la prueba, que es la peor forma de tener un guardia.
+     *
+     * Así que a las páginas y layouts se les exige la guardia, y a todo lo
+     * demás se le exige lo que de verdad importa: que no toque la base por su
+     * cuenta. Un componente sin acceso a datos no puede filtrar nada.
+     */
+    const esEntrada = /(^|\/)(page|layout)\.tsx$/.test(archivo)
+    if (esEntrada) {
+      assert.ok(
+        src.includes('guardiaProveedor'),
+        `admin/supply/${archivo} es una entrada y no comprueba que la empresa sea proveedora`
+      )
+    } else {
+      assert.ok(
+        !src.includes("from '@/lib/tenant'") && !src.includes("from '@/lib/prisma'"),
+        `admin/supply/${archivo} lee la base sin ser una entrada guardada`
+      )
+    }
   }
 })
 

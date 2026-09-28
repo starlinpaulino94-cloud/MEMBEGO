@@ -2,6 +2,7 @@ import 'server-only'
 
 import { Prisma } from '@prisma/client'
 import { sinEmpresa, type Tx } from '@/lib/tenant'
+import { RESERVA_OCUPA_CUPO } from './estados'
 import { registrarMovimientos } from './movimientos'
 import { clientePagaAlComercio } from './catalogo'
 
@@ -183,7 +184,12 @@ async function redimirEnTx(d: DatosRedencion): Promise<ResultadoRedencion> {
             },
             asignacion: { select: { destinoTipo: true, destinoId: true } },
             reservas: {
-              where: { estado: 'CONFIRMADA' },
+              // LISTA también, y es el caso que más duele si falta: el comercio
+              // marca el pedido preparado y después lo entrega. Con solo
+              // CONFIRMADA, ese escaneo no encontraría su reserva — se saltaría
+              // la validación de sucursal y la reserva se quedaría viva
+              // ocupando cupo del día para siempre.
+              where: { estado: { in: [...RESERVA_OCUPA_CUPO] } },
               select: { id: true, sucursalId: true },
               take: 1,
             },
@@ -450,7 +456,7 @@ export async function fichaDeVoucher(tx: Tx, voucherId: string): Promise<FichaEs
         select: {
           cliente: { select: { nombre: true } },
           asignacion: { select: { etiqueta: true } },
-          reservas: { where: { estado: 'CONFIRMADA' }, select: { sucursalId: true }, take: 1 },
+          reservas: { where: { estado: { in: [...RESERVA_OCUPA_CUPO] } }, select: { sucursalId: true }, take: 1 },
           lote: {
             select: {
               codigo: true,

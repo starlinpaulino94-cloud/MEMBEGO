@@ -6,6 +6,8 @@ import { conciliar } from '@/modules/supply/conciliacion'
 import {
   avisarBeneficiosPorVencer,
   avisarDescuadres,
+  avisarProveedoresEnRiesgo,
+  avisarRiesgosDeLote,
   avisarVencimientos,
 } from '@/modules/supply/notificar'
 
@@ -58,7 +60,15 @@ export async function GET(req: NextRequest) {
   // vencido mueven el ledger, y no van a quedarse a medias porque la campanita
   // falle. Cada aviso lleva su clave estable, así que correr el cron dos veces
   // el mismo día no duplica nada.
-  const avisos = { vencimientos: 0, proveedor: 0, descuadres: 0, clientes: 0 }
+  const avisos = {
+    vencimientos: 0,
+    proveedor: 0,
+    descuadres: 0,
+    clientes: 0,
+    proveedoresEnRiesgo: 0,
+    noCaben: 0,
+    capitalDormido: 0,
+  }
   try {
     const v = await avisarVencimientos(enUmbral)
     avisos.vencimientos = v.membego
@@ -68,6 +78,16 @@ export async function GET(req: NextRequest) {
     // otra campaña, pero una unidad YA ENTREGADA solo se usa si su dueño se
     // acuerda. Nadie más puede hacer nada por ella.
     avisos.clientes = await avisarBeneficiosPorVencer()
+
+    // Analíticos: miran TENDENCIAS, no hechos, y su clave lleva la semana ISO.
+    // Correrlos a diario no los repite: el primer día de cada semana suenan y
+    // los otros seis son no-op. Se dejan aquí, y no en un cron aparte, porque
+    // un segundo horario que alguien tenga que recordar es un horario que se
+    // apaga solo.
+    avisos.proveedoresEnRiesgo = await avisarProveedoresEnRiesgo()
+    const lote = await avisarRiesgosDeLote()
+    avisos.noCaben = lote.noCaben
+    avisos.capitalDormido = lote.dormidos
   } catch (e) {
     console.error('[cron supply] no se pudieron enviar los avisos', e)
   }

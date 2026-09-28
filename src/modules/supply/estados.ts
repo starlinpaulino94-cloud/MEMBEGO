@@ -121,6 +121,37 @@ export const TRANSICIONES_INCIDENCIA: Transiciones<SupplyIncidenciaEstado> = {
 
 // ── Comprobación genérica ───────────────────────────────────────────────────
 
+// ── Reserva de recogida ─────────────────────────────────────────────────────
+
+export type SupplyReservaEstado = 'CONFIRMADA' | 'LISTA' | 'CUMPLIDA' | 'CANCELADA' | 'NO_ASISTIO'
+
+/**
+ * LISTA está EN MEDIO, no al final: el comercio avisa de que lo preparó y
+ * después entrega. Se puede saltar —quien hace un café no va a pulsar un botón
+ * antes de dárselo— así que CONFIRMADA llega a CUMPLIDA directamente.
+ *
+ * De LISTA todavía se puede cancelar y se puede marcar NO_ASISTIO: que la
+ * comida esté hecha no obliga al cliente a aparecer, y el comercio necesita
+ * poder cerrar esa reserva para que deje de ocuparle el cupo del día.
+ */
+export const TRANSICIONES_RESERVA: Transiciones<SupplyReservaEstado> = {
+  CONFIRMADA: ['LISTA', 'CUMPLIDA', 'CANCELADA', 'NO_ASISTIO'],
+  LISTA: ['CUMPLIDA', 'CANCELADA', 'NO_ASISTIO'],
+  CUMPLIDA: [],
+  CANCELADA: [],
+  NO_ASISTIO: [],
+}
+
+/**
+ * Reservas que siguen ocupando el cupo del día.
+ *
+ * Existe para que nadie tenga que acordarse: el cupo se cuenta en cinco sitios
+ * distintos y, cuando LISTA entró, un solo `estado: 'CONFIRMADA'` olvidado
+ * habría liberado cupo por una pizza que estaba hecha y encima del mostrador.
+ * El comercio habría aceptado una reserva de más por cada pedido preparado.
+ */
+export const RESERVA_OCUPA_CUPO: readonly SupplyReservaEstado[] = ['CONFIRMADA', 'LISTA']
+
 export function puedeTransicionar<E extends string>(
   tabla: Transiciones<E>,
   desde: E,

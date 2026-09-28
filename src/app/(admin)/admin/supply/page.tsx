@@ -15,7 +15,8 @@ import { guardiaProveedor } from '@/modules/supply/permisos'
 import { compromisosDelProveedor } from '@/modules/supply/pool'
 import { saldoDeProveedor } from '@/modules/supply/finanzas'
 import { resumenIncidencias } from '@/modules/supply/incidencias'
-import { usoDeHoy } from '@/modules/supply/reservas'
+import { pedidosDeHoy, usoDeHoy } from '@/modules/supply/reservas'
+import { PedidosDeHoy } from './pedidos-de-hoy'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Membego Supply' }
@@ -54,7 +55,7 @@ export default async function SupplyComercioPage() {
   const permitido = await guardiaProveedor(companyId)
   if (!permitido) redirect('/admin/dashboard')
 
-  const [compromisos, saldo, incidencias, redenciones, hoy] = await Promise.all([
+  const [compromisos, saldo, incidencias, redenciones, hoy, pedidos] = await Promise.all([
     compromisosDelProveedor(companyId),
     // `conEmpresa` en TODA lectura de esta pantalla: es el portal de UNA
     // empresa y nada de lo que se enseña aquí cruza inquilinos. El proveedor A
@@ -89,6 +90,9 @@ export default async function SupplyComercioPage() {
       })
       return usoDeHoy(tx, companyId, lote?.snapshotCapacidadDiaria ?? null)
     }),
+    // Lo que hay que preparar hoy. Va con el resto de lecturas de la pantalla:
+    // es lo primero que mira quien abre esto por la mañana.
+    pedidosDeHoy(companyId),
   ])
 
   const contratadas = compromisos.reduce((t, c) => t + c.contratadas, 0)
@@ -110,6 +114,8 @@ export default async function SupplyComercioPage() {
           </Link>
         }
       />
+
+      <PedidosDeHoy companyId={companyId} pedidos={pedidos} />
 
       {compromisos.length === 0 ? (
         <EmptyState

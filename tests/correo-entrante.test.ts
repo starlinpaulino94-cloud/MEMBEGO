@@ -213,3 +213,102 @@ test('un cuerpo normal sin cita se queda intacto', () => {
   const t = 'Hola, tengo un problema con mi membresía.\n\nGracias.'
   assert.equal(quitarCita(t), t)
 })
+
+// ── Quién escribió: el cliente o el negocio ─────────────────────────────────
+//
+// Desde el 25-09-2026 las DOS partes reciben la misma dirección de respuesta
+// firmada: el negocio en el correo de «ticket nuevo» y el cliente en el de «te
+// respondieron». Las dos respuestas entran por el mismo webhook.
+//
+// Antes solo escribía el negocio y todo se archivaba como CLIENTE. Ahora eso
+// haría que la respuesta del negocio apareciera en el hilo como si la hubiera
+// escrito el cliente — un hilo de soporte con los papeles cambiados, que es
+// peor que uno incompleto.
+//
+// Se prueba la parte PURA de esa decisión: extraer el buzón de un `From`. La
+// comparación con el correo de soporte necesita base y la vigila la prueba de
+// arquitectura de abajo.
+
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const ENTRANTE = readFileSync(join(__dirname, '..', 'src', 'modules', 'soporte', 'entrante.ts'), 'utf8')
+
+test('el autor se DECIDE, ya no se da por hecho', () => {
+  // La línea que estaba antes: `autorTipo: 'CLIENTE'` fijo.
+  assert.ok(
+    !/autorTipo:\s*'CLIENTE'/.test(ENTRANTE),
+    'entrante.ts vuelve a archivar todo como CLIENTE sin mirar quién escribió'
+  )
+  assert.match(ENTRANTE, /autorTipo,/)
+  assert.match(ENTRANTE, /function quienEscribe\(/)
+})
+
+test('SEGURIDAD · solo se marca ADMIN al coincidir con el correo de soporte', () => {
+  const i = ENTRANTE.indexOf('function quienEscribe(')
+  const cuerpo = ENTRANTE.slice(i, ENTRANTE.indexOf('\n}', i))
+  // Un solo camino hacia ADMIN, y pasa por comparar con `correoSoporte`.
+  assert.equal((cuerpo.match(/return 'ADMIN'/g) ?? []).length, 1)
+  assert.match(cuerpo, /correoSoporte/)
+  // Y ante cualquier duda, CLIENTE: es lo que ya hacía, así que el cambio no
+  // puede empeorar ningún caso que hoy funcione.
+  assert.match(cuerpo, /return 'CLIENTE'\s*$/m)
+})
+
+test('el buzón se extrae de «Nombre <buzon>» y se compara sin mayúsculas', () => {
+  const i = ENTRANTE.indexOf('function soloBuzon(')
+  const cuerpo = ENTRANTE.slice(i, ENTRANTE.indexOf('\n}', i))
+  assert.match(cuerpo, /<\(\[\^>\]\+\)>|<\(\[\^>\]\+\)>/)
+  assert.match(cuerpo, /toLowerCase\(\)/)
+})
+
+// ── El correo al cliente cuando le responden ────────────────────────────────
+
+const ACTIONS = readFileSync(join(__dirname, '..', 'src', 'modules', 'soporte', 'actions.ts'), 'utf8')
+
+test('responder un ticket AVISA al cliente por correo, no solo en la app', () => {
+  const i = ACTIONS.indexOf('export async function responderTicket(')
+  const cuerpo = ACTIONS.slice(i, ACTIONS.indexOf('export async function responderTicketCliente', i))
+  assert.match(cuerpo, /avisarAlClientePorCorreo\(/, 'el cliente solo se entera si entra a la app')
+  assert.match(cuerpo, /crearNotificacion\(/, 'la notificación en la app sigue haciendo falta')
+})
+
+test('SEGURIDAD · el cuerpo va escapado y el asunto no', () => {
+  const i = ACTIONS.indexOf('async function avisarAlClientePorCorreo(')
+  const fn = ACTIONS.slice(i, ACTIONS.indexOf('\n}', ACTIONS.indexOf('encolarEmail', i)))
+  assert.match(fn, /escaparHtml\(cuerpo\)/, 'un < en la respuesta rompería el HTML del correo')
+  assert.match(fn, /escaparHtml\(ticket\.asunto\)/)
+  // `subject` es texto plano: escaparlo se leería como `&lt;` en la bandeja.
+  assert.ok(!/subject:.*escaparHtml/.test(fn), 'el asunto no debe escaparse')
+})
+
+test('a las empresas de demostración NO se les manda correo', () => {
+  const i = ACTIONS.indexOf('async function avisarAlClientePorCorreo(')
+  const fn = ACTIONS.slice(i, i + 2500)
+  // Se exige la SALIDA TEMPRANA, no que se mencione `esEmpresaDemo`. La
+  // primera versión de esta prueba comprobaba lo segundo y no servía: al quitar
+  // el `if`, el `import` seguía ahí y la prueba pasaba tan contenta.
+  assert.match(
+    fn,
+    /if \(await esEmpresaDemo\([^)]*\)\) return/,
+    'sus clientes son inventados: los rebotes ensucian la reputación del dominio'
+  )
+  const guarda = fn.search(/if \(await esEmpresaDemo/)
+  assert.ok(guarda !== -1 && guarda < fn.indexOf('encolarEmail'), 'la guarda va ANTES del envío')
+})
+
+test('el aviso NO puede tumbar la respuesta del administrador', () => {
+  const i = ACTIONS.indexOf('async function avisarAlClientePorCorreo(')
+  const fn = ACTIONS.slice(i, ACTIONS.indexOf('export async function responderTicket(', i))
+  assert.match(fn, /try \{/)
+  assert.match(fn, /catch/)
+})
+
+test('el cliente puede contestar por correo: lleva Reply-To firmado', () => {
+  const i = ACTIONS.indexOf('async function avisarAlClientePorCorreo(')
+  const fn = ACTIONS.slice(i, ACTIONS.indexOf('export async function responderTicket(', i))
+  assert.match(fn, /crearDireccionRespuesta\(ticket\.id\)/)
+  assert.match(fn, /replyTo,/)
+  // Y si no hay dominio configurado, se avisa igual y se le dice que entre.
+  assert.match(fn, /Entra a tu cuenta/)
+})

@@ -750,7 +750,13 @@ model SupplyReserva {
   hora     Int?
   inicioAt DateTime
 
-  /// 'CONFIRMADA' | 'CANCELADA' | 'CUMPLIDA' | 'NO_ASISTIO'.
+  /// 'CONFIRMADA' | 'LISTA' | 'CANCELADA' | 'CUMPLIDA' | 'NO_ASISTIO'.
+  ///
+  /// LISTA (25-09-2026): el comercio ya lo preparó y espera al cliente. Sigue
+  /// OCUPANDO el cupo del día igual que CONFIRMADA —la pizza está hecha, el
+  /// horno la produjo— así que toda cuenta de capacidad tiene que incluir las
+  /// dos. Solo sale del cupo cuando se entrega (CUMPLIDA) o se cae
+  /// (CANCELADA / NO_ASISTIO).
   estado String @default("CONFIRMADA")
 
   canceladaAt DateTime?

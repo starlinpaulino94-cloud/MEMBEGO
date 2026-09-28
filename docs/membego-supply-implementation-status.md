@@ -139,7 +139,7 @@ Las 80 fases del encargo, con dónde vive cada una.
 
 | # | Fase | Estado | Nota |
 | --- | --- | --- | --- |
-| 40 | Notificaciones | ✅ completo salvo «producto listo» | Diez avisos por `Notificacion`, todos deduplicados: tres de barrido y siete de evento. Falta «producto listo» porque no existe el concepto de *pedido preparado* en el modelo |
+| 40 | Notificaciones | ✅ completo | Catorce avisos por `Notificacion`, todos deduplicados: tres de barrido, ocho de evento y tres analíticos |
 | 41 | Roles y permisos | ✅ | Los 8 permisos del encargo resueltos contra el RBAC existente |
 | 42 | Multi-tenancy | ✅ | `conEmpresa` + `where` explícito + `proveedorId` denormalizado; prueba automática |
 | 43 | Auditoría | ✅ | 19 acciones `SUPPLY_*` con etiqueta y filtro |
@@ -198,17 +198,75 @@ relaciones inversas) y `vercel.json` (el cron).
    declarado y `COBRO_MEMBEGO_DISPONIBLE = false` lo dice en voz alta: la
    vitrina no publica precios que nadie puede cobrar. **El camino que funciona
    hoy de punta a punta es el regalo.**
-2. **«Producto listo» sin implementar** (único hueco de la fase 40). El modelo
-   no tiene el concepto de *pedido preparado*: `SupplyReserva` guarda la hora
-   acordada, pero nadie en el comercio marca «ya está hecho». Implementarlo es
-   añadir un estado a la reserva y un botón en el portal del proveedor, no un
-   aviso. Los avisos de MEMBEGO ADMIN que quedan (proveedor con muchas
-   incidencias, riesgo de presupuesto, problema de capacidad global) son
-   analíticos: salen del scorecard y de la economía, no de un evento.
+2. **Avisos analíticos de MEMBEGO ADMIN** (proveedor con muchas incidencias,
+   riesgo de presupuesto, problema de capacidad global). Salen del scorecard y
+   de la economía, no de un evento: hay que decidir el umbral de cada uno antes
+   de escribirlos.
 3. ~~**Políticas RLS**~~ · **cerrado el 25-09-2026, y no como se esperaba.**
    Las políticas nunca hubo que escribirlas: se DEDUCEN del esquema recorriendo
    claves foráneas, así que las 15 tablas de supply ya tenían una. El problema
    era otro y peor: **dos de ellas tenían la política EQUIVOCADA**. Ver abajo.
+
+## Los tres avisos analíticos (Fase 40, cierre) · 27-09-2026
+
+Los otros once nacen de un hecho. Estos nacen de una **tendencia**, y por eso
+fueron los últimos: hay que elegir a partir de qué número algo deja de ser un
+mal día y pasa a ser un patrón.
+
+| aviso | dispara | por qué ese número |
+|---|---|---|
+| Proveedor en riesgo | ≥5% de entregas con incidencia suya (urgente ≥15% o puntaje <50), **sobre 20 entregas mínimo** | Sin el suelo, quien entregó 3 y falló 1 sale con 33% y parece un desastre |
+| El supply no cabe | hace falta >80% de su capacidad diaria todos los días que quedan | Es una división: 400 unidades / 10 días / 20 al día = sobran 200 |
+| Capital dormido | a mitad de vigencia con <30% entregado y >RD$25.000 parados | A mitad todavía da tiempo a reasignarlo; al final ya no |
+
+### «Riesgo de presupuesto» no se pudo hacer como pedía la fase
+
+**No existe el concepto de presupuesto en el modelo**: ni tabla, ni tope por
+campaña o período. Cualquier umbral habría sido inventarse una cifra y llamarla
+riesgo. Se sustituye por **capital dormido**, que mide lo que sí hay. Si algún
+día se lleva un techo mensual de compras, se añade encima sin tirar esto.
+
+### Los números son una estimación, no una medición
+
+Cuando se escribieron, el módulo llevaba días en producción: nadie había visto
+todavía la tasa real de incumplimiento de un proveedor. Por eso viven **todos
+juntos en `UMBRALES_RIESGO`**, con nombre, y hay una prueba que falla si alguien
+escribe uno a mano en la lógica. Con dos meses de datos se mueven sin tocar
+código.
+
+Si resultan ruidosos, lo primero que se toca es la **cadencia** —son
+semanales— y no el umbral: un aviso correcto que llega a diario se deja de leer
+igual que uno equivocado.
+
+## «Producto listo» (Fase 40, última pieza) · 25-09-2026
+
+El modelo guardaba la hora que el cliente eligió y nada más: nadie en el
+comercio marcaba «ya está hecho», así que el cliente no tenía forma de saber si
+pasar ya o esperar. Ahora `SupplyReserva` tiene el estado **LISTA**, el portal
+del proveedor enseña «Para preparar hoy» con un botón por pedido, y al pulsarlo
+le llega el aviso al cliente.
+
+### El riesgo que introduce un estado nuevo, y dónde estaba
+
+Una reserva LISTA **sigue ocupando el cupo del día** —la pizza está hecha, el
+horno la produjo— así que toda cuenta de capacidad tiene que incluir las dos.
+El estado se consultaba en **diez sitios**; ocho eran filtros y había que
+cambiarlos. `RESERVA_OCUPA_CUPO` existe para que nadie tenga que acordarse.
+
+El peor de los ocho lo encontró la prueba, no yo: `redencion.ts` buscaba la
+reserva viva del voucher con `estado: 'CONFIRMADA'`. Con solo eso, **escanear un
+pedido ya preparado no habría encontrado su reserva**: se salta la validación de
+sucursal y la reserva se queda viva ocupando cupo para siempre.
+
+### Y el índice único, que es donde de verdad se cierra
+
+`supply_reservas_derecho_viva` filtraba por `estado = 'CONFIRMADA'`. Con LISTA
+fuera, el cliente podía apartar una **segunda** recogida del mismo beneficio
+mientras la primera estaba hecha en el mostrador — el comercio prepararía dos
+por un derecho que paga una. Un `if` no vale: dos peticiones a la vez lo pasan
+las dos. Se recrea con `WHERE estado IN ('CONFIRMADA','LISTA')` y se comprobó
+contra PostgreSQL 16: con el índice nuevo la segunda entrada se rechaza; con el
+viejo, entra.
 
 ## Aislamiento entre inquilinos (Fase 42) · 25-09-2026
 
@@ -300,6 +358,10 @@ avisos del mismo lote y nadie vuelve a mirar la campanita.
 | Cupo del día al 80% | admins del proveedor | `supply-capacidad\|proveedor\|día` | una vez por día |
 | Incidencia | superadmins **y** proveedor, con mensajes distintos | `supply-incidencia\|id\|destinatario` | nunca |
 | Liquidación confirmada | admins del proveedor | `supply-liquidacion\|pago` | nunca |
+| Producto listo | cliente | `supply-listo\|reserva` | nunca |
+| Proveedor en riesgo | superadmins | `…\|proveedor\|semanaISO` | semanal mientras siga |
+| El supply no cabe | superadmins | `…\|lote\|semanaISO` | semanal mientras siga |
+| Capital dormido | superadmins | `…\|lote\|semanaISO` | semanal mientras siga |
 
 Los de evento se enganchan en las funciones de DOMINIO (`entregar`, `reservar`,
 `redimir`, `abrirIncidencia`, `confirmarPago`), no en las actions: `entregar` es
