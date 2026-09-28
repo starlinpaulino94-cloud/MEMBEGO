@@ -101,6 +101,11 @@ export default async function CobrosPage() {
               plataforma activa, así que la vitrina solo publica lo que es gratis. En cuanto exista
               una cuenta activa, las ofertas de pago se publican solas.
             </p>
+            <p className="mt-2 text-body">
+              <Link href="/superadmin/supply/cobros/cuentas" className="underline">
+                Dar de alta una cuenta de cobro
+              </Link>
+            </p>
           </CardContent>
         </Card>
       )}
@@ -199,7 +204,11 @@ export default async function CobrosPage() {
       {cuentas.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Cuentas de cobro de Membego</CardTitle>
+            <CardTitle>
+              <Link href="/superadmin/supply/cobros/cuentas" className="hover:underline">
+                Cuentas de cobro de Membego
+              </Link>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <TablaReporte

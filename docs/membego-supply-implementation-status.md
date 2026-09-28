@@ -440,6 +440,14 @@ RETENIDO, más único por `derechoId`); y el monto se compara contra el precio
 congelado, con tolerancia de un centavo — no del 1%, que regalaría cuatro pesos
 por venta sin aparecer en ningún descuadre.
 
+**El alta de cuentas es el interruptor.** No hay una casilla de «vender supply:
+sí/no» en ningún sitio: la venta está encendida si —y solo si— hay una cuenta
+activa en `/superadmin/supply/cobros/cuentas`. Dos llaves para lo mismo acaban
+con una en el estado que nadie esperaba, y aquí ese estado sería «la vitrina
+publica precios que no se pueden cobrar». Una cuenta nace APAGADA salvo que se
+diga lo contrario, no se borra ni se edita —un pedido guarda a qué cuenta se le
+pidió transferir— y apagar la última avisa de que la venta se detiene.
+
 **Invariantes en la base:** monto no negativo, revisión completa (estado final
 ⇔ revisor y fecha), rechazo motivado, y EN_REVISION implica comprobante. Los
 cuatro probados uno a uno contra PostgreSQL 16: rechazan lo que deben y aceptan

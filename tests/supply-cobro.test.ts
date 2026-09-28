@@ -146,3 +146,42 @@ test('un comprobante que llega tarde no revive el pedido', () => {
   const src = fuente('cobro.ts')
   assert.match(src, /pedido\.expiraAt <= new Date\(\)/)
 })
+
+// ── El alta de cuentas es el interruptor de la venta ────────────────────────
+
+test('una cuenta de transferencia sin número no se da de alta', () => {
+  const src = fuente('cobro.ts')
+  // Publicar una cuenta a la que nadie puede transferir enciende la venta y la
+  // rompe en el mismo gesto.
+  assert.match(src, /d\.tipo === 'TRANSFERENCIA' && !numero/)
+  assert.match(src, /necesita su número/)
+})
+
+test('la cuenta se crea activa solo si quien la da de alta lo dice', () => {
+  const src = fuente('actions.ts')
+  assert.match(src, /const activa = String\(fd\.get\('activa'\) \?\? ''\) === 'on'/)
+})
+
+test('el número de cuenta no viaja a la bitácora', () => {
+  const src = fuente('actions.ts')
+  const alta = src.slice(
+    src.indexOf('SUPPLY_CUENTA_COBRO_ALTA'),
+    src.indexOf('refrescarPlataforma', src.indexOf('SUPPLY_CUENTA_COBRO_ALTA'))
+  )
+  assert.doesNotMatch(alta, /numeroCuenta/, 'la bitácora se exporta: no esparce cuentas bancarias')
+})
+
+test('una cuenta se apaga, nunca se borra', () => {
+  const src = fuente('cobro.ts')
+  // Un pedido guarda a qué cuenta se pidió transferir. Borrarla deja sin
+  // respuesta «¿dónde dije que pagara?».
+  assert.doesNotMatch(src, /supplyCuentaCobro\.delete/)
+  assert.match(src, /export async function cambiarEstadoCuenta/)
+})
+
+test('apagar la última cuenta avisa de que se apaga la venta', () => {
+  const src = fuente('cobro.ts')
+  assert.match(src, /sinCobro: quedan === 0/)
+  const acciones = fuente('actions.ts')
+  assert.match(acciones, /res\.sinCobro/)
+})
