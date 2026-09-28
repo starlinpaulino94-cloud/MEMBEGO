@@ -607,7 +607,7 @@ export async function adjuntarComprobanteAction(
     const res = await adjuntarComprobante(
       texto(fd, 'pedidoId', 60),
       texto(fd, 'clienteId', 60),
-      texto(fd, 'comprobanteUrl', 500),
+      texto(fd, 'comprobantePath', 500),
       texto(fd, 'nota', 500) || null
     )
     if (!res.ok) return { error: res.mensaje }

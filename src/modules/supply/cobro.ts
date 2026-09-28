@@ -54,6 +54,7 @@ import 'server-only'
 
 import { sinEmpresa } from '@/lib/tenant'
 import type { MetodoPagoTipo, Prisma } from '@prisma/client'
+import { rutaValida } from '@/modules/storage/comprobantes'
 import { montoCuadra } from './cobro-nucleo'
 import { numeroPedido } from './codigos'
 import { cancelarDerecho, confirmarHold, retener, MINUTOS_HOLD } from './derechos'
@@ -363,10 +364,20 @@ async function siguienteNumero(tx: Tx): Promise<string> {
 export async function adjuntarComprobante(
   pedidoId: string,
   clienteId: string,
-  comprobanteUrl: string,
+  comprobantePath: string,
   nota?: string | null
 ): Promise<{ ok: true } | { ok: false; mensaje: string }> {
-  if (!comprobanteUrl.trim()) return { ok: false, mensaje: 'Falta el comprobante.' }
+  const ruta = comprobantePath.trim()
+  if (!ruta) return { ok: false, mensaje: 'Falta el comprobante.' }
+
+  // La ruta viene del navegador, así que se comprueba que sea de ESTE pedido.
+  // El token de subida ya la ató a quien la pidió, pero nada impediría enviar
+  // aquí la ruta de OTRO pedido —una que la persona vio en su propia sesión— y
+  // hacer pasar ese comprobante por el de este. La forma de la ruta es lo único
+  // que hay que mirar, y es barato.
+  if (!(await rutaValida('pedido', pedidoId, ruta))) {
+    return { ok: false, mensaje: 'Ese comprobante no corresponde a este pedido.' }
+  }
 
   return sinEmpresa('Membego Supply: adjuntar comprobante a un pedido', async (tx) => {
     const pedido = await tx.supplyPedido.findUnique({
@@ -393,7 +404,7 @@ export async function adjuntarComprobante(
       where: { id: pedidoId },
       data: {
         estado: 'EN_REVISION',
-        comprobanteUrl: comprobanteUrl.trim(),
+        comprobantePath: ruta,
         comprobanteNota: nota?.trim() || null,
         comprobanteAt: new Date(),
       },
@@ -572,7 +583,7 @@ export interface PedidoEnCola {
   proveedor: string
   monto: number
   moneda: string
-  comprobanteUrl: string | null
+  comprobantePath: string | null
   comprobanteNota: string | null
   comprobanteAt: Date | null
   expiraAt: Date
@@ -590,7 +601,7 @@ export async function colaDeRevision(limite = 100): Promise<PedidoEnCola[]> {
         numero: true,
         monto: true,
         moneda: true,
-        comprobanteUrl: true,
+        comprobantePath: true,
         comprobanteNota: true,
         comprobanteAt: true,
         expiraAt: true,
@@ -612,7 +623,7 @@ export async function colaDeRevision(limite = 100): Promise<PedidoEnCola[]> {
     proveedor: f.derecho.lote.proveedor.name,
     monto: Number(f.monto),
     moneda: f.moneda,
-    comprobanteUrl: f.comprobanteUrl,
+    comprobantePath: f.comprobantePath,
     comprobanteNota: f.comprobanteNota,
     comprobanteAt: f.comprobanteAt,
     expiraAt: f.expiraAt,

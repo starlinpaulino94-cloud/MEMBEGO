@@ -10,6 +10,7 @@ import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
 import { FormRevisarPedido } from '@/components/supply/form-revisar-pedido'
 import { colaDeRevision, cuentasDeCobro } from '@/modules/supply/cobro'
+import { urlComprobante } from '@/modules/storage/comprobantes'
 import { TEXTO_ESTADO_PEDIDO, type EstadoPedido } from '@/modules/supply/cobro-nucleo'
 
 export const dynamic = 'force-dynamic'
@@ -33,7 +34,7 @@ export const metadata = { title: 'Cobros a clientes' }
 export default async function CobrosPage() {
   await requireRole('SUPERADMIN')
 
-  const [cola, cuentas, resumen] = await Promise.all([
+  const [colaCruda, cuentas, resumen] = await Promise.all([
     colaDeRevision(100),
     cuentasDeCobro(),
     sinEmpresa('Membego Supply: resumen de cobros a clientes', async (tx) => {
@@ -76,6 +77,17 @@ export default async function CobrosPage() {
       return { enRevision, cobrados, rechazados, expirados, ultimos }
     }),
   ])
+
+  // La URL de cada comprobante se firma aquí, una por una, y vive cinco
+  // minutos. `urlComprobante` vuelve a comprobar QUIÉN pregunta antes de
+  // firmar: la ruta sola no abre nada, así que esta página no puede filtrar un
+  // comprobante ni por error ni si alguien copia el HTML.
+  const cola = await Promise.all(
+    colaCruda.map(async (p) => ({
+      ...p,
+      comprobanteUrl: await urlComprobante('pedido', p.id, p.comprobantePath),
+    }))
+  )
 
   const cobrado = Number(resumen.cobrados._sum.monto ?? 0)
   const enEspera = Number(resumen.enRevision._sum.monto ?? 0)

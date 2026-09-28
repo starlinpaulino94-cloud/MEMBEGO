@@ -1,6 +1,10 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase/client'
+import { BUCKET_COMPROBANTES } from '@/modules/storage/tipos'
+import { pedirSubidaComprobante } from '@/modules/storage/comprobantes'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -83,6 +87,56 @@ function Pedido({
     {}
   )
 
+  const [ruta, setRuta] = useState('')
+  const [nombreArchivo, setNombreArchivo] = useState('')
+  const [subiendo, setSubiendo] = useState(false)
+  const archivoRef = useRef<HTMLInputElement>(null)
+
+  /**
+   * Sube el archivo al bucket PRIVADO y se queda con la ruta.
+   *
+   * La ruta y el permiso los decide el SERVIDOR: el navegador solo dice qué
+   * extensión trae y recibe un token que sirve para esa ruta y para ninguna
+   * otra. El archivo no pasa por la server action —las server actions tienen un
+   * tope de tamaño y una foto de un comprobante lo roza— sino directo al bucket
+   * con ese token.
+   */
+  async function subir(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Tope de comodidad para el usuario, no una defensa: el navegador es del
+    // atacante. El límite de verdad lo impone el bucket.
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('El archivo pasa de 5 MB. Sube una foto más liviana.')
+      return
+    }
+
+    setSubiendo(true)
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const permiso = await pedirSubidaComprobante('pedido', pedido.id, ext)
+      if (permiso.error || !permiso.subida) {
+        toast.error(permiso.error ?? 'No se pudo preparar la subida.')
+        return
+      }
+
+      const { error } = await createClient()
+        .storage.from(BUCKET_COMPROBANTES)
+        .uploadToSignedUrl(permiso.subida.path, permiso.subida.token, file)
+      if (error) throw error
+
+      setRuta(permiso.subida.path)
+      setNombreArchivo(file.name)
+      toast.success('Comprobante adjuntado. Ahora pulsa «Enviar comprobante».')
+    } catch (err) {
+      console.error('[supply-pedido] subida de comprobante:', err)
+      toast.error('No se pudo subir el archivo. Intenta de nuevo.')
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
   const esperandoComprobante = pedido.estado === 'INICIADO' && !envio.success
   const limite = new Intl.DateTimeFormat('es-DO', {
     day: 'numeric',
@@ -138,20 +192,39 @@ function Pedido({
             <form action={enviar} className="space-y-2">
               <input type="hidden" name="pedidoId" value={pedido.id} />
               <input type="hidden" name="clienteId" value={clienteId} />
+              {/* La RUTA que devolvió el servidor, no un enlace que teclee
+                  nadie. Sin archivo subido no hay ruta, y sin ruta el botón de
+                  enviar no se habilita. */}
+              <input type="hidden" name="comprobantePath" value={ruta} />
+
               <input
-                name="comprobanteUrl"
-                required
-                maxLength={500}
-                placeholder="Enlace a la foto del comprobante"
-                className="h-10 w-full rounded-lg border border-input bg-background px-3 text-body"
+                ref={archivoRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={subir}
+                className="hidden"
               />
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                disabled={subiendo}
+                onClick={() => archivoRef.current?.click()}
+              >
+                {subiendo
+                  ? 'Subiendo…'
+                  : ruta
+                    ? `Cambiar archivo (${nombreArchivo})`
+                    : 'Adjuntar foto o PDF del comprobante'}
+              </Button>
+
               <input
                 name="nota"
                 maxLength={500}
                 placeholder="Nota (opcional): banco, hora de la transferencia…"
                 className="h-10 w-full rounded-lg border border-input bg-background px-3 text-body"
               />
-              <Button type="submit" className="w-full" disabled={enviando}>
+              <Button type="submit" className="w-full" disabled={enviando || !ruta}>
                 {enviando ? 'Enviando…' : 'Enviar comprobante'}
               </Button>
             </form>
