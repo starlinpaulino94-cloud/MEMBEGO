@@ -155,6 +155,7 @@ function limpiar() {
   // claves foráneas lo impiden.
   try {
     comoOmnisciente(`
+      delete from supply_pedidos     where id = '${A}_sped';
       delete from supply_redenciones where id = '${A}_sr';
       delete from supply_vouchers    where id = '${A}_sv';
       delete from supply_derechos    where id = '${A}_sd';
@@ -255,6 +256,10 @@ try {
                                  "costoUnitario", "vencAt", "updatedAt")
       values ('${A}_sd', '${A}_sl', '${B}_k', '${A}', 'REGALO',
               300, now() + interval '30 days', now());
+    insert into supply_pedidos (id, numero, estado, "clienteId", "derechoId",
+                                monto, "expiraAt", "updatedAt")
+      values ('${A}_sped', 'MBG-P-RLS', 'INICIADO', '${B}_k', '${A}_sd',
+              399, now() + interval '1 hour', now());
     insert into supply_vouchers (id, "derechoId", codigo, "proveedorId", "vigenteHasta", "updatedAt")
       values ('${A}_sv', '${A}_sd', 'MBG-PRUEBA-1', '${A}', now() + interval '30 days', now());
     insert into supply_redenciones (id, "voucherId", "derechoId", "clienteId", "proveedorId",
@@ -406,6 +411,36 @@ try {
     'Supply · FUGA: otra empresa no ve las entregas del proveedor',
     redenB.length === 0,
     `${B} llegó a leer la entrega de ${A}: ${JSON.stringify(redenB)}`
+  )
+
+  // ── 9. El cobro de la PLATAFORMA no es de ningún inquilino ────────────────
+  //
+  // `supply_pedidos` lleva `monto`: lo que el cliente le paga a MEMBEGO por una
+  // unidad que Membego ya le compró al comercio. Ese número es el margen de la
+  // plataforma y no es de nadie más.
+  //
+  // La trampa es que la derivación automática NO lo deja fuera: `clienteId` es
+  // NOT NULL, así que le pone una política por la empresa de la ficha del
+  // cliente — el mismo fallo del 25-09, otra vez, en una tabla nueva. Por eso la
+  // Capa 2 la declara a mano y DEJA CAER esa política derivada.
+  //
+  // Las dos comprobaciones de aquí fallan si alguien quita esa declaración: la
+  // primera porque B vería el pedido, y la segunda porque A —el proveedor, que
+  // cumple la unidad— tampoco debe ver a cuánto la revende Membego.
+  const pedidoB = comoInquilino(B, `select id from supply_pedidos where id = '${A}_sped';`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Supply · FUGA: la empresa de la ficha del cliente NO ve el pedido (lleva el margen de Membego)',
+    pedidoB.length === 0,
+    `${B} llegó a leer el pedido: ${JSON.stringify(pedidoB)}`
+  )
+
+  const pedidoA = comoInquilino(A, `select id from supply_pedidos where id = '${A}_sped';`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Supply · FUGA: el propio proveedor NO ve a cuánto revende Membego su unidad',
+    pedidoA.length === 0,
+    `${A} llegó a leer el pedido: ${JSON.stringify(pedidoA)}`
   )
 
   comprobar(

@@ -26,6 +26,13 @@ import { cancelarReserva, reservar } from './reservas'
 import { esDestino, ORIGEN_POR_DESTINO } from './catalogo'
 import { entregar } from './distribucion'
 import { claveIdempotencia } from './codigos'
+import {
+  abrirPedido,
+  adjuntarComprobante,
+  cancelarPedido,
+  confirmarPedido,
+  rechazarPedido,
+} from './cobro'
 
 /**
  * MEMBEGO SUPPLY · server actions.
@@ -447,6 +454,149 @@ export async function abrirQrAction(_prev: EstadoAccion, fd: FormData): Promise<
 
     revalidatePath('/cliente/beneficios')
     return { success: sesion.nonce, id: sesion.id }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+// ── Cobro a nombre de la plataforma (Fases 22-23) ───────────────────────────
+//
+// Las tres del cliente piden `clienteId` por formulario y el DOMINIO lo compara
+// contra el dueño del pedido. Sin esa comparación, cualquiera con un id de
+// pedido podría colgarle un comprobante —o cancelarlo— al pedido de otro.
+//
+// Las dos de Membego exigen `MEMBEGO_SUPPLY_COBRAR`. Confirmar un pago es una
+// decisión financiera: activa un derecho que el proveedor tendrá que cumplir, y
+// lo hace sobre la palabra de quien firma.
+
+export async function abrirPedidoAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
+  try {
+    const user = await getUser()
+    if (!user) return { error: 'Inicia sesión para comprar.' }
+
+    const clienteId = texto(fd, 'clienteId', 60)
+    const asignacionId = texto(fd, 'asignacionId', 60)
+    if (!clienteId || !asignacionId) return { error: 'Faltan datos del pedido.' }
+
+    // El precio NO viene del formulario: se lee de la asignación. Si viniera del
+    // navegador, cualquiera compraría una pizza por un peso cambiando un campo
+    // oculto — y el pedido quedaría perfectamente cuadrado por ese peso.
+    const oferta = await sinEmpresa('Membego Supply: precio de la asignación a comprar', (tx) =>
+      tx.supplyAsignacion.findUnique({
+        where: { id: asignacionId },
+        select: { precioCliente: true, loteId: true, activa: true },
+      })
+    )
+    if (!oferta?.activa) return { error: 'Esa oferta ya no está disponible.' }
+
+    const res = await abrirPedido({
+      clienteId,
+      loteId: oferta.loteId,
+      asignacionId,
+      precio: Number(oferta.precioCliente),
+      claveIdempotencia: claveIdempotencia('pedido', clienteId, asignacionId),
+    })
+    if (!res.ok) return { error: res.mensaje }
+
+    await auditar('SUPPLY_PEDIDO_ABIERTO', 'SupplyPedido', res.pedidoId, {
+      numero: res.numero,
+      monto: res.monto,
+    })
+    revalidatePath('/cliente/beneficios')
+    return { success: `Pedido ${res.numero} abierto.`, id: res.pedidoId }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+export async function adjuntarComprobanteAction(
+  _prev: EstadoAccion,
+  fd: FormData
+): Promise<EstadoAccion> {
+  try {
+    const user = await getUser()
+    if (!user) return { error: 'Inicia sesión para enviar tu comprobante.' }
+
+    const res = await adjuntarComprobante(
+      texto(fd, 'pedidoId', 60),
+      texto(fd, 'clienteId', 60),
+      texto(fd, 'comprobanteUrl', 500),
+      texto(fd, 'nota', 500) || null
+    )
+    if (!res.ok) return { error: res.mensaje }
+
+    revalidatePath('/cliente/beneficios')
+    return { success: 'Recibimos tu comprobante. Te avisamos al verificarlo.' }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+export async function cancelarPedidoAction(
+  _prev: EstadoAccion,
+  fd: FormData
+): Promise<EstadoAccion> {
+  try {
+    const user = await getUser()
+    if (!user) return { error: 'Inicia sesión.' }
+
+    const res = await cancelarPedido(texto(fd, 'pedidoId', 60), texto(fd, 'clienteId', 60))
+    if (!res.ok) return { error: res.mensaje }
+
+    revalidatePath('/cliente/beneficios')
+    return { success: 'Pedido cancelado.' }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+export async function confirmarPedidoAction(
+  _prev: EstadoAccion,
+  fd: FormData
+): Promise<EstadoAccion> {
+  try {
+    // Lanza si no es plataforma, y `comoError` lo convierte en un mensaje.
+    const user = await exigirPlataforma('MEMBEGO_SUPPLY_COBRAR')
+    const revisor = user.metadata.dbUserId
+    // Sin revisor identificable no se confirma nada: la base exige revisor en
+    // todo pedido pagado, y un pago sin firma no se le puede preguntar a nadie.
+    if (!revisor) return { error: 'No se pudo identificar quién confirma.' }
+
+    const pedidoId = texto(fd, 'pedidoId', 60)
+    const montoVisto = numero(fd, 'montoVisto')
+    if (montoVisto === null) {
+      return { error: 'Escribe el monto que viste en la cuenta: se compara con el del pedido.' }
+    }
+
+    const res = await confirmarPedido(pedidoId, revisor, montoVisto)
+    if (!res.ok) return { error: res.mensaje }
+
+    await auditar('SUPPLY_PEDIDO_COBRADO', 'SupplyPedido', pedidoId, { montoVisto })
+    refrescarPlataforma('cobros')
+    revalidatePath('/cliente/beneficios')
+    return { success: 'Pago confirmado. El beneficio ya es utilizable.' }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+export async function rechazarPedidoAction(
+  _prev: EstadoAccion,
+  fd: FormData
+): Promise<EstadoAccion> {
+  try {
+    const user = await exigirPlataforma('MEMBEGO_SUPPLY_COBRAR')
+    const revisor = user.metadata.dbUserId
+    if (!revisor) return { error: 'No se pudo identificar quién rechaza.' }
+
+    const pedidoId = texto(fd, 'pedidoId', 60)
+    const res = await rechazarPedido(pedidoId, revisor, texto(fd, 'motivo', 500))
+    if (!res.ok) return { error: res.mensaje }
+
+    await auditar('SUPPLY_PEDIDO_RECHAZADO', 'SupplyPedido', pedidoId, {})
+    refrescarPlataforma('cobros')
+    revalidatePath('/cliente/beneficios')
+    return { success: 'Pedido rechazado y unidad devuelta al pool.' }
   } catch (e) {
     return comoError(e)
   }

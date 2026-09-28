@@ -133,6 +133,7 @@ model Cliente {
   // persona. No son beneficios de ESTA empresa: son derechos financiados por
   // la plataforma que un proveedor está obligado a cumplir.
   supplyDerechos    SupplyDerecho[]
+  supplyPedidos     SupplyPedido[]
   supplyRedenciones SupplyRedencion[]  @relation("SupplyRedencionCliente")
   supplyIncidencias SupplyIncidencia[] @relation("SupplyIncidenciaCliente")
 

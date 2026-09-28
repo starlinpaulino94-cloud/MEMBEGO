@@ -148,12 +148,21 @@ no en el navegador.
 Al corte del 23-09-2026 esta sección listaba cinco. Cuatro se cerraron después;
 el detalle de cada cierre está en `membego-supply-implementation-status.md`.
 
-**Abierto — uno:**
-
-1. **Sin cobro a nombre de la plataforma** → la venta de supply no se puede
-   completar hoy. Se declara en voz alta y la vitrina no publica precios.
+**Abierto:** ninguno de los cinco originales. Queda la deuda técnica de §17 y
+las funcionalidades de §18, que no son riesgos sino alcance no hecho.
 
 **Cerrados:**
+
+- ~~Sin cobro a nombre de la plataforma~~ · **cerrado el 28-09-2026** (Fases
+  22-23). El carril es transferencia a cuentas de MEMBEGO —`supply_cuentas_cobro`,
+  de plataforma, sin `companyId`— con verificación por una persona de Membego.
+  `supply_pedidos` guarda el pedido del cliente; `retener` aparta la unidad al
+  abrirlo y `confirmarHold` la emite cuando el dinero está, así que el cobro no
+  duplica ni una línea de aritmética de cubetas. El precio vive en la asignación
+  (`precioCliente`), y la vitrina solo publica ofertas de pago si existe una
+  cuenta activa: la constante `COBRO_MEMBEGO_DISPONIBLE = false` se sustituyó por
+  una pregunta a la base. La pasarela sigue siendo un puerto declarado
+  (`PuertoCobroMembego`), para enchufar cuando exista la cuenta de comercio.
 
 - ~~«Producto listo»~~ · **cerrado el 25-09-2026**, la última pieza de la Fase
   40. `SupplyReserva` tiene el estado `LISTA`, el comercio la marca desde
@@ -189,7 +198,7 @@ explicadas en el código, no olvidos.
 
 | Qué | Estado | Qué falta |
 | --- | --- | --- |
-| Venta de supply (Fases 22-23) | Puerto declarado | Cobro a nombre de la plataforma |
+| Pasarela de tarjeta a nombre de Membego | Puerto declarado | La cuenta de comercio. El cobro por transferencia ya funciona |
 | Transferencia entre lotes | Tipo en el ledger | Acción y pantalla |
 | Automatización de vencimientos | Propone | Aplicar acciones (por diseño: se negocian) |
 
