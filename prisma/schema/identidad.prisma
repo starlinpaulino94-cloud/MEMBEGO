@@ -265,6 +265,8 @@ enum AuditAccion {
   SUPPLY_PEDIDO_ABIERTO
   SUPPLY_PEDIDO_COBRADO
   SUPPLY_PEDIDO_RECHAZADO
+  SUPPLY_CUENTA_COBRO_ALTA
+  SUPPLY_CUENTA_COBRO_ESTADO
   /// Se corrigió el ledger de un lote con un ajuste manual.
   SUPPLY_AJUSTE_LEDGER
   /// Se recalcularon los contadores de un lote desde el ledger.

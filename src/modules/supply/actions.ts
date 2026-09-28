@@ -29,8 +29,10 @@ import { claveIdempotencia } from './codigos'
 import {
   abrirPedido,
   adjuntarComprobante,
+  cambiarEstadoCuenta,
   cancelarPedido,
   confirmarPedido,
+  crearCuentaCobro,
   rechazarPedido,
 } from './cobro'
 
@@ -468,6 +470,91 @@ export async function abrirQrAction(_prev: EstadoAccion, fd: FormData): Promise<
 // Las dos de Membego exigen `MEMBEGO_SUPPLY_COBRAR`. Confirmar un pago es una
 // decisión financiera: activa un derecho que el proveedor tendrá que cumplir, y
 // lo hace sobre la palabra de quien firma.
+
+export async function crearCuentaCobroAction(
+  _prev: EstadoAccion,
+  fd: FormData
+): Promise<EstadoAccion> {
+  try {
+    const user = await exigirPlataforma('MEMBEGO_SUPPLY_COBRAR')
+
+    const tipo = texto(fd, 'tipo', 20)
+    if (tipo !== 'TRANSFERENCIA' && tipo !== 'PRESENCIAL') {
+      return { error: 'Tipo de cuenta no válido.' }
+    }
+
+    // Nace apagada salvo que se diga lo contrario: dar de alta una cuenta y
+    // publicar precios en la vitrina son dos decisiones, y quien teclea un
+    // número de cuenta suele querer revisarlo antes de que el mundo lo vea.
+    const activa = String(fd.get('activa') ?? '') === 'on'
+
+    const res = await crearCuentaCobro(
+      {
+        tipo,
+        nombre: texto(fd, 'nombre', 120),
+        titular: texto(fd, 'titular', 120) || null,
+        numeroCuenta: texto(fd, 'numeroCuenta', 60) || null,
+        tipoCuenta: texto(fd, 'tipoCuenta', 40) || null,
+        instrucciones: texto(fd, 'instrucciones', 500) || null,
+        moneda: texto(fd, 'moneda', 3) || 'DOP',
+      },
+      activa
+    )
+    if (!res.ok) return { error: res.mensaje }
+
+    // El número NO va a la bitácora: el registro de auditoría se lee en
+    // pantalla y se exporta, y una cuenta bancaria repetida en cada línea es
+    // un dato que se esparce sin que nadie lo decida. Queda el id, que lleva
+    // a la ficha.
+    await auditar('SUPPLY_CUENTA_COBRO_ALTA', 'SupplyCuentaCobro', res.id, {
+      nombre: texto(fd, 'nombre', 120),
+      activa,
+      por: user.metadata.dbUserId ?? null,
+    })
+    refrescarPlataforma('cobros/cuentas')
+    return {
+      success: activa
+        ? 'Cuenta dada de alta y activa. La vitrina ya puede publicar ofertas de pago.'
+        : 'Cuenta dada de alta, apagada. Actívala cuando quieras empezar a cobrar.',
+      id: res.id,
+    }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+export async function cambiarEstadoCuentaAction(
+  _prev: EstadoAccion,
+  fd: FormData
+): Promise<EstadoAccion> {
+  try {
+    const user = await exigirPlataforma('MEMBEGO_SUPPLY_COBRAR')
+
+    const cuentaId = texto(fd, 'cuentaId', 60)
+    const activa = String(fd.get('activa') ?? '') === 'true'
+    const res = await cambiarEstadoCuenta(cuentaId, activa)
+    if (!res.ok) return { error: res.mensaje }
+
+    await auditar('SUPPLY_CUENTA_COBRO_ESTADO', 'SupplyCuentaCobro', cuentaId, {
+      activa,
+      por: user.metadata.dbUserId ?? null,
+    })
+    refrescarPlataforma('cobros/cuentas')
+    revalidatePath('/cliente/beneficios/disponibles')
+
+    // Apagar la última cuenta apaga la venta. Se dice aquí y no se impide: si la
+    // cuenta se cerró en el banco, seguir publicándola es peor.
+    if (res.sinCobro) {
+      return {
+        success:
+          'Cuenta desactivada. Era la última activa, así que Membego deja de cobrar y la vitrina vuelve a publicar solo lo gratuito.',
+      }
+    }
+    return { success: activa ? 'Cuenta activada.' : 'Cuenta desactivada.' }
+  } catch (e) {
+    return comoError(e)
+  }
+}
 
 export async function abrirPedidoAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
   try {

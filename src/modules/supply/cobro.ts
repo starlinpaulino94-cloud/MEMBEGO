@@ -53,7 +53,7 @@
 import 'server-only'
 
 import { sinEmpresa } from '@/lib/tenant'
-import type { Prisma } from '@prisma/client'
+import type { MetodoPagoTipo, Prisma } from '@prisma/client'
 import { montoCuadra } from './cobro-nucleo'
 import { numeroPedido } from './codigos'
 import { cancelarDerecho, confirmarHold, retener, MINUTOS_HOLD } from './derechos'
@@ -115,6 +115,133 @@ export async function cobroMembegoDisponible(): Promise<boolean> {
     tx.supplyCuentaCobro.count({ where: { activa: true } })
   )
   return cuantas > 0
+}
+
+// ── Administrar las cuentas ─────────────────────────────────────────────────
+
+export interface CuentaAdmin {
+  id: string
+  tipo: MetodoPagoTipo
+  nombre: string
+  titular: string | null
+  numeroCuenta: string | null
+  tipoCuenta: string | null
+  instrucciones: string | null
+  moneda: string
+  activa: boolean
+  /** Cuántos pedidos la señalan. Una cuenta con historia no se borra. */
+  pedidos: number
+  createdAt: Date
+}
+
+/** Todas, activas e inactivas: es la vista de quien las administra. */
+export async function cuentasParaAdministrar(): Promise<CuentaAdmin[]> {
+  const filas = await sinEmpresa('Membego Supply: administrar cuentas de cobro', (tx) =>
+    tx.supplyCuentaCobro.findMany({
+      orderBy: [{ activa: 'desc' }, { nombre: 'asc' }],
+      include: { _count: { select: { pedidos: true } } },
+    })
+  )
+  return filas.map((c) => ({
+    id: c.id,
+    tipo: c.tipo,
+    nombre: c.nombre,
+    titular: c.titular,
+    numeroCuenta: c.numeroCuenta,
+    tipoCuenta: c.tipoCuenta,
+    instrucciones: c.instrucciones,
+    moneda: c.moneda,
+    activa: c.activa,
+    pedidos: c._count.pedidos,
+    createdAt: c.createdAt,
+  }))
+}
+
+export interface DatosCuenta {
+  tipo: MetodoPagoTipo
+  nombre: string
+  titular?: string | null
+  numeroCuenta?: string | null
+  tipoCuenta?: string | null
+  instrucciones?: string | null
+  moneda?: string
+}
+
+/**
+ * Da de alta una cuenta de cobro de Membego.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * ESTE ES EL DATO QUE ENCIENDE LA VENTA
+ *
+ * En cuanto existe una cuenta activa, `cobroMembegoDisponible` devuelve `true` y
+ * la vitrina empieza a publicar las ofertas de pago. No hay un interruptor
+ * aparte, y es deliberado: un sistema con dos llaves —«hay cuenta» y «vender
+ * está encendido»— acaba con una de las dos en el estado que nadie esperaba.
+ *
+ * Por eso una cuenta se crea ACTIVA solo si quien la da de alta lo dice. El
+ * formulario lo pregunta en vez de asumirlo.
+ */
+export async function crearCuentaCobro(
+  d: DatosCuenta,
+  activa: boolean
+): Promise<{ ok: true; id: string } | { ok: false; mensaje: string }> {
+  const nombre = d.nombre.trim()
+  if (!nombre) return { ok: false, mensaje: 'La cuenta necesita un nombre.' }
+
+  // Una transferencia sin número de cuenta no se puede hacer. Se exige aquí y
+  // no solo en el formulario: publicar una cuenta a la que nadie puede
+  // transferir enciende la venta y la rompe en el mismo gesto.
+  const numero = d.numeroCuenta?.trim() || null
+  if (d.tipo === 'TRANSFERENCIA' && !numero) {
+    return { ok: false, mensaje: 'Una cuenta de transferencia necesita su número.' }
+  }
+
+  const id = await sinEmpresa('Membego Supply: alta de una cuenta de cobro', async (tx) => {
+    const creada = await tx.supplyCuentaCobro.create({
+      data: {
+        tipo: d.tipo,
+        nombre,
+        titular: d.titular?.trim() || null,
+        numeroCuenta: numero,
+        tipoCuenta: d.tipoCuenta?.trim() || null,
+        instrucciones: d.instrucciones?.trim() || null,
+        moneda: (d.moneda || 'DOP').trim().toUpperCase().slice(0, 3),
+        activa,
+      },
+      select: { id: true },
+    })
+    return creada.id
+  })
+  return { ok: true, id }
+}
+
+/**
+ * Enciende o apaga una cuenta.
+ *
+ * No hay borrado, y no es un descuido: un pedido guarda a QUÉ cuenta se le pidió
+ * transferir, y esa es la respuesta a «¿dónde dije que pagara?» seis meses
+ * después. Apagarla la retira de la vitrina y deja la historia intacta, que es
+ * lo que pide la Fase 63.
+ *
+ * Apagar la última cuenta activa APAGA LA VENTA. Se avisa, no se impide: puede
+ * ser justo lo que alguien quiere hacer si la cuenta se cerró en el banco.
+ */
+export async function cambiarEstadoCuenta(
+  cuentaId: string,
+  activa: boolean
+): Promise<{ ok: true; sinCobro: boolean } | { ok: false; mensaje: string }> {
+  return sinEmpresa('Membego Supply: activar o desactivar una cuenta de cobro', async (tx) => {
+    const cuenta = await tx.supplyCuentaCobro.findUnique({
+      where: { id: cuentaId },
+      select: { id: true, activa: true },
+    })
+    if (!cuenta) return { ok: false as const, mensaje: 'Cuenta no encontrada.' }
+    if (cuenta.activa === activa) return { ok: true as const, sinCobro: false }
+
+    await tx.supplyCuentaCobro.update({ where: { id: cuentaId }, data: { activa } })
+    const quedan = await tx.supplyCuentaCobro.count({ where: { activa: true } })
+    return { ok: true as const, sinCobro: quedan === 0 }
+  })
 }
 
 // ── Abrir el pedido ─────────────────────────────────────────────────────────

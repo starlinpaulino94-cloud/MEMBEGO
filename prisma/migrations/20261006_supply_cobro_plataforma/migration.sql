@@ -220,3 +220,11 @@ END $$;
 ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_PEDIDO_ABIERTO';
 ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_PEDIDO_COBRADO';
 ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_PEDIDO_RECHAZADO';
+
+-- ── 8. La bitácora del alta de cuentas ──────────────────────────────────────
+--
+-- Dar de alta una cuenta de cobro ENCIENDE la venta de supply, y desactivar la
+-- última la apaga. Es una palanca de negocio, no configuración: queda con actor
+-- y fecha como cualquier otro movimiento de dinero.
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_CUENTA_COBRO_ALTA';
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_CUENTA_COBRO_ESTADO';
