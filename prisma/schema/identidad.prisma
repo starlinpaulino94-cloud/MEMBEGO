@@ -262,6 +262,9 @@ enum AuditAccion {
   SUPPLY_PAGO_REGISTRADO
   /// Se confirmó un pago y se asentó en el ledger financiero.
   SUPPLY_PAGO_CONFIRMADO
+  SUPPLY_PEDIDO_ABIERTO
+  SUPPLY_PEDIDO_COBRADO
+  SUPPLY_PEDIDO_RECHAZADO
   /// Se corrigió el ledger de un lote con un ajuste manual.
   SUPPLY_AJUSTE_LEDGER
   /// Se recalcularon los contadores de un lote desde el ledger.
@@ -392,6 +395,7 @@ model User {
   supplyOrdenesAprobadas      SupplyOrden[]              @relation("SupplyOrdenAprobadaPor")
   supplyMovimientos           SupplyMovimiento[]         @relation("SupplyMovimientoActor")
   supplyAsignacionesCreadas   SupplyAsignacion[]         @relation("SupplyAsignacionCreadaPor")
+  supplyPedidosRevisados      SupplyPedido[]             @relation("SupplyPedidoRevisor")
   supplyQrConsumidos          SupplyQrSesion[]           @relation("SupplyQrConsumidoPor")
   supplyRedencionesEntregadas SupplyRedencion[]          @relation("SupplyRedencionEmpleado")
   supplyRedencionesReversadas SupplyRedencion[]          @relation("SupplyRedencionReversadaPor")

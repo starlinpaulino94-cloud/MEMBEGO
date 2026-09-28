@@ -567,6 +567,12 @@ model SupplyAsignacion {
   /// Unidades devueltas al lote por liberación explícita o por cierre.
   liberadas Int @default(0)
 
+  /// Lo que el cliente le paga a MEMBEGO por una unidad de esta asignación.
+  /// 0 = se regala. Vive aquí y no en el lote porque el mismo lote se reparte a
+  /// la vez entre una campaña de bienvenida (gratis) y una oferta (RD$399): el
+  /// precio es de la asignación, no de lo comprado.
+  precioCliente Decimal @default(0) @db.Decimal(12, 2)
+
   activa    Boolean   @default(true)
   cerradaAt DateTime?
 
@@ -637,6 +643,9 @@ model SupplyDerecho {
   vouchers SupplyVoucher[]
   reservas SupplyReserva[]
 
+
+  /// El pedido que lo paga, si esta unidad se vendió en vez de regalarse.
+  pedido SupplyPedido?
   @@index([clienteId, estado])
   @@index([loteId, estado])
   @@index([proveedorId, estado])
@@ -964,4 +973,123 @@ model SupplyAsientoFinanciero {
   @@index([pagoId])
   @@index([redencionId])
   @@map("supply_asientos_financieros")
+}
+
+// ── Cobro a nombre de la plataforma (Fases 22-23) ───────────────────────────
+//
+// QUÉ PROBLEMA RESUELVE, Y POR QUÉ NO VALÍA LO QUE YA HABÍA
+//
+// Cuando Membego compró la unidad entera y la revende, ese dinero lo cobra
+// MEMBEGO: el comercio ya cobró por contrato, y volver a cobrarle al cliente
+// por la unidad base sería cobrarla dos veces. Pero toda la infraestructura de
+// pagos existente cobra a nombre de una EMPRESA: `PaymentContext` lleva
+// `companyId`, `MetodoPago` cuelga de `companies` y el proveedor de
+// transferencia dice, literalmente, «a las cuentas de la empresa».
+//
+// De ahí estas dos tablas. Son de PLATAFORMA: no llevan `companyId` y no lo
+// llevan a propósito. Un pedido de un cliente a Membego no pertenece a ninguna
+// empresa — ni a la del proveedor, que no debe ver a qué precio revende
+// Membego, ni a la empresa donde el cliente tiene su ficha, que no tiene nada
+// que ver con esta compra.
+
+/// Las cuentas de cobro de MEMBEGO. No son de ninguna empresa.
+///
+/// Se guardan aquí y no como `MetodoPago` porque `MetodoPago.companyId` es NOT
+/// NULL: meter las cuentas de la plataforma ahí obligaría a inventar una
+/// empresa «Membego», y esa empresa fantasma se colaría en los listados, los
+/// reportes y la derivación de políticas RLS —que deduce el dueño de una fila
+/// por su clave foránea a `companies`—.
+model SupplyCuentaCobro {
+  id            String         @id @default(cuid())
+  tipo          MetodoPagoTipo
+  /// "Banco Popular · Membego SRL"
+  nombre        String
+  titular       String?
+  numeroCuenta  String?
+  tipoCuenta    String?
+  /// Texto libre que ve el cliente al pagar.
+  instrucciones String?
+  moneda        String         @default("DOP")
+  activa        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  pedidos SupplyPedido[]
+
+  @@index([activa])
+  @@map("supply_cuentas_cobro")
+}
+
+enum SupplyPedidoEstado {
+  /// Hold puesto, cliente todavía no dijo que pagó.
+  INICIADO
+  /// El cliente subió comprobante. Espera a que Membego lo mire.
+  EN_REVISION
+  /// Membego vio el dinero. El derecho ya es utilizable.
+  PAGADO
+  /// Membego no vio el dinero. El hold se soltó.
+  RECHAZADO
+  /// Se agotó el hold sin comprobante. La unidad volvió al pool.
+  EXPIRADO
+  /// El cliente se echó atrás antes de pagar.
+  CANCELADO
+}
+
+/// Un pedido de un cliente A MEMBEGO. El otro lado de `SupplyOrden`, que es lo
+/// que Membego le compra al proveedor.
+///
+/// LO QUE ESTA TABLA NO HACE
+///
+/// No mueve el supply. El movimiento vive donde siempre: `retener` puso el
+/// derecho en RETENIDO al abrir el pedido, y `confirmarHold` lo pasa a EMITIDO
+/// cuando el dinero está. Esta tabla solo responde «¿pagó?», y por eso el
+/// campo que de verdad importa es `revisadoPor`: una persona de Membego que
+/// mira un comprobante y responde con su nombre encima.
+model SupplyPedido {
+  id     String             @id @default(cuid())
+  /// Código legible: MBG-P-000123.
+  numero String             @unique
+  estado SupplyPedidoEstado @default(INICIADO)
+
+  clienteId String  @map("clienteId")
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+
+  /// El derecho retenido que este pedido paga. Uno por pedido: el índice único
+  /// impide que dos pedidos vivos peleen por la misma unidad retenida.
+  derechoId String        @unique
+  derecho   SupplyDerecho @relation(fields: [derechoId], references: [id], onDelete: Restrict)
+
+  /// Lo que el cliente debe pagar, congelado al abrir el pedido. Al confirmar
+  /// se compara contra esto: un monto que no cuadra no activa nada, igual que
+  /// en `confirmarIntento` de las compras de empresa.
+  monto  Decimal @db.Decimal(12, 2)
+  moneda String  @default("DOP")
+
+  cuentaId String?            @map("cuentaId")
+  cuenta   SupplyCuentaCobro? @relation(fields: [cuentaId], references: [id], onDelete: Restrict)
+
+  comprobanteUrl  String?
+  comprobanteNota String?
+  comprobanteAt   DateTime?
+
+  /// Quién de Membego lo aprobó o lo rechazó, y cuándo. Nunca el cliente.
+  revisadoPor    String?
+  revisor        User?     @relation("SupplyPedidoRevisor", fields: [revisadoPor], references: [id], onDelete: Restrict)
+  revisadoAt     DateTime?
+  motivoRechazo  String?
+
+  /// Hasta cuándo aguanta el hold. Se copia del derecho para poder barrer sin
+  /// mirar la otra tabla.
+  expiraAt DateTime
+
+  /// Una petición repetida no abre dos pedidos ni retiene dos unidades.
+  claveIdempotencia String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([estado, expiraAt])
+  @@index([clienteId, estado])
+  @@index([estado, comprobanteAt])
+  @@map("supply_pedidos")
 }

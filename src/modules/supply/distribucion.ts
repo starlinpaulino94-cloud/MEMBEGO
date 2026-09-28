@@ -3,6 +3,7 @@ import 'server-only'
 import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { claveIdempotencia } from './codigos'
 import { emitirDerechoEnTx, retener, type ResultadoEmision } from './derechos'
+import { cobroMembegoDisponible } from './cobro'
 import { cupoPorEmitir } from './asignaciones'
 import { candidatosParaEntregar } from './pool'
 import { ORIGEN_POR_DESTINO, type SupplyDestino } from './catalogo'
@@ -320,12 +321,26 @@ export interface PuertoCobroMembego {
   estado(referenciaPasarela: string): Promise<'PENDIENTE' | 'PAGADO' | 'FALLIDO'>
 }
 
-/** Todavía no hay pasarela a nombre de la plataforma. Se dice, no se finge. */
-export const COBRO_MEMBEGO_DISPONIBLE = false
-
-/** Lectura simple: ¿puede Membego vender supply hoy? */
-export function puedeVenderSupply(): boolean {
-  return COBRO_MEMBEGO_DISPONIBLE
+/**
+ * ¿Puede Membego vender supply hoy?
+ *
+ * Esto era `const COBRO_MEMBEGO_DISPONIBLE = false`: una constante que decía en
+ * voz alta que no había con qué cobrar. Ahora es una PREGUNTA A LA BASE, y la
+ * responde `modules/supply/cobro.ts`: sí, si existe al menos una cuenta de
+ * cobro de la plataforma activa.
+ *
+ * Sigue siendo una comprobación y no una bandera de entorno por el mismo motivo
+ * de antes: lo que hay que evitar es que la vitrina publique un precio que nadie
+ * puede cobrar. Una bandera se enciende «para probar» y se queda encendida; una
+ * cuenta activa es un hecho, y si alguien la desactiva la vitrina se apaga con
+ * ella.
+ *
+ * El puerto de arriba sigue en pie para la pasarela: cuando exista la cuenta de
+ * comercio a nombre de Membego, se implementa `PuertoCobroMembego` y el checkout
+ * gana un carril sin tocar nada de esto.
+ */
+export async function puedeVenderSupply(): Promise<boolean> {
+  return cobroMembegoDisponible()
 }
 
 // ── Marketplace (Fases 55, 56) ──────────────────────────────────────────────
@@ -360,6 +375,7 @@ export interface OfertaMarketplace {
  * (Fase 55), y una vez que un dato sale en una API pública ya no vuelve.
  */
 export async function ofertasDisponibles(limite = 50): Promise<OfertaMarketplace[]> {
+  const cobrable = await cobroMembegoDisponible()
   return sinEmpresa('Membego Supply: vitrina pública de supply', async (tx) => {
     const asignaciones = await tx.supplyAsignacion.findMany({
       where: {
@@ -375,6 +391,7 @@ export async function ofertasDisponibles(limite = 50): Promise<OfertaMarketplace
         cantidad: true,
         emitidas: true,
         liberadas: true,
+        precioCliente: true,
         destinoTipo: true,
         lote: {
           select: {
@@ -392,6 +409,7 @@ export async function ofertasDisponibles(limite = 50): Promise<OfertaMarketplace
     return asignaciones
       .map((a) => {
         const disponibles = Math.max(0, a.cantidad - a.emitidas - a.liberadas)
+        const precio = Number(a.precioCliente)
         return {
           asignacionId: a.id,
           loteId: a.lote.id,
@@ -405,14 +423,20 @@ export async function ofertasDisponibles(limite = 50): Promise<OfertaMarketplace
           precioReferencia: a.lote.snapshotPrecioReferencia
             ? Number(a.lote.snapshotPrecioReferencia)
             : null,
-          // Vender supply exige el puerto de cobro; mientras no exista, todo lo
-          // que se publica es gratis. Enseñar un precio que nadie puede cobrar
-          // sería prometer una compra que termina en error.
-          precioMembego: 0,
-          esGratis: true,
+          // El precio sale de la asignación, y solo se publica si Membego
+          // puede cobrarlo: `cobrable` es falso cuando no hay ninguna cuenta de
+          // cobro activa, y entonces las ofertas de pago no se listan. Enseñar
+          // un precio que nadie puede cobrar promete una compra que acaba en
+          // error, y ese fue el motivo por el que esto estuvo fijo en 0.
+          precioMembego: precio,
+          esGratis: precio === 0,
         }
       })
       .filter((o) => o.disponibles > 0)
+      // Sin cuenta de cobro activa, lo de pago no se publica. Lo gratis sí:
+      // regalar nunca necesitó pasarela, y es el camino que lleva funcionando
+      // desde el principio.
+      .filter((o) => o.esGratis || cobrable)
   })
 }
 

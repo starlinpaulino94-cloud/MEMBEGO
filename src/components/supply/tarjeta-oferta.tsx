@@ -5,7 +5,7 @@ import { Gift } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { reclamarOfertaAction, type EstadoAccion } from '@/modules/supply/actions'
+import { abrirPedidoAction, reclamarOfertaAction, type EstadoAccion } from '@/modules/supply/actions'
 
 interface Oferta {
   asignacionId: string
@@ -16,6 +16,8 @@ interface Oferta {
   disponibles: number
   venceAt: string
   precioReferencia: number | null
+  /** Lo que el cliente le paga a Membego. 0 = regalo. */
+  precioMembego: number
   esGratis: boolean
 }
 
@@ -26,6 +28,17 @@ interface Oferta {
  * decorativo: si la escasez que se enseña no es la que el servidor aplica, la
  * persona pulsa «Obtener» sobre algo que ya se acabó y el sitio queda como que
  * miente.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * REGALO Y VENTA NO SON EL MISMO BOTÓN
+ *
+ * Un regalo se obtiene y ya está: no hay dinero, así que el derecho se emite en
+ * el acto. Una venta ABRE UN PEDIDO —aparta la unidad y espera el pago—, y hasta
+ * que Membego vea el dinero el beneficio no es utilizable.
+ *
+ * Por eso son dos actions distintas y dos textos distintos. Un «Obtener» que a
+ * veces cobra y a veces no es la clase de botón que hace que alguien crea que ya
+ * tiene la pizza cuando lo que tiene es una transferencia pendiente.
  */
 export function TarjetaOferta({
   oferta,
@@ -37,7 +50,7 @@ export function TarjetaOferta({
   yaLoTengo: boolean
 }) {
   const [estado, accion, pendiente] = useActionState<EstadoAccion, FormData>(
-    reclamarOfertaAction,
+    oferta.esGratis ? reclamarOfertaAction : abrirPedidoAction,
     {}
   )
   const obtenido = Boolean(estado.success) || yaLoTengo
@@ -63,10 +76,17 @@ export function TarjetaOferta({
           <Badge variant="outline">{oferta.disponibles} disponibles</Badge>
           {oferta.precioReferencia && (
             <Badge variant="secondary">
-              Valor RD${oferta.precioReferencia.toLocaleString('es-DO')}
+              {oferta.esGratis ? 'Valor' : 'Antes'} RD$
+              {oferta.precioReferencia.toLocaleString('es-DO')}
             </Badge>
           )}
         </div>
+
+        {!oferta.esGratis && (
+          <p className="text-h3 font-semibold">
+            RD${oferta.precioMembego.toLocaleString('es-DO')}
+          </p>
+        )}
 
         <p className="text-caption text-muted-foreground">
           Válido hasta el{' '}
@@ -77,14 +97,23 @@ export function TarjetaOferta({
 
         {obtenido ? (
           <p className="rounded-lg bg-success/10 p-3 text-caption text-success">
-            {estado.success ?? 'Ya tienes este beneficio. Búscalo en «Beneficios Membego».'}
+            {estado.success ??
+              (oferta.esGratis
+                ? 'Ya tienes este beneficio. Búscalo en «Beneficios Membego».'
+                : 'Ya tienes un pedido de este beneficio. Sigue en «Beneficios Membego».')}
           </p>
         ) : (
           <form action={accion}>
             <input type="hidden" name="asignacionId" value={oferta.asignacionId} />
             <input type="hidden" name="clienteId" value={clienteId} />
             <Button type="submit" className="w-full" disabled={pendiente || !clienteId}>
-              {pendiente ? 'Obteniendo…' : 'Obtener'}
+              {pendiente
+                ? oferta.esGratis
+                  ? 'Obteniendo…'
+                  : 'Apartando…'
+                : oferta.esGratis
+                  ? 'Obtener'
+                  : `Comprar por RD$${oferta.precioMembego.toLocaleString('es-DO')}`}
             </Button>
           </form>
         )}

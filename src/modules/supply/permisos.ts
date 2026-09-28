@@ -32,6 +32,7 @@ export const PERMISOS_SUPPLY = [
   'MEMBEGO_SUPPLY_CREATE',
   'MEMBEGO_SUPPLY_APPROVE',
   'MEMBEGO_SUPPLY_ALLOCATE',
+  'MEMBEGO_SUPPLY_COBRAR',
   'SUPPLIER_VIEW_COMMITMENTS',
   'SUPPLIER_REDEEM',
   'SUPPLIER_REPORT_INCIDENT',
@@ -44,6 +45,7 @@ export const PERMISO_SUPPLY_LABELS: Record<PermisoSupply, string> = {
   MEMBEGO_SUPPLY_CREATE: 'Crear acuerdos y órdenes de compra',
   MEMBEGO_SUPPLY_APPROVE: 'Aprobar compromisos financieros',
   MEMBEGO_SUPPLY_ALLOCATE: 'Asignar unidades a campañas',
+  MEMBEGO_SUPPLY_COBRAR: 'Confirmar o rechazar los pagos de los clientes',
   SUPPLIER_VIEW_COMMITMENTS: 'Ver los compromisos de la empresa con Membego',
   SUPPLIER_REDEEM: 'Escanear y entregar vouchers de Membego',
   SUPPLIER_REPORT_INCIDENT: 'Reportar incidencias de cumplimiento',
@@ -56,6 +58,7 @@ export const PERMISOS_DE_PLATAFORMA: readonly PermisoSupply[] = [
   'MEMBEGO_SUPPLY_CREATE',
   'MEMBEGO_SUPPLY_APPROVE',
   'MEMBEGO_SUPPLY_ALLOCATE',
+  'MEMBEGO_SUPPLY_COBRAR',
 ]
 
 /** Permisos del lado proveedor. */

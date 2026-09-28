@@ -417,6 +417,40 @@ BEGIN
   -- pública. Y no puede quedarse sin política, porque entonces RLS la deniega
   -- también en modo omnisciente y la API no autenticaría a NADIE: fallo
   -- cerrado, sí, pero cerrado del todo y sin decir por qué.
+  -- ── Membego Supply · el cobro de la PLATAFORMA ────────────────────────────
+  --
+  -- `supply_cuentas_cobro` son las cuentas bancarias de MEMBEGO, y
+  -- `supply_pedidos` lo que un cliente le paga a MEMBEGO por una unidad que
+  -- Membego ya le compró al comercio. Ninguna de las dos es de ninguna empresa.
+  --
+  -- `supply_pedidos` ESTÁ AQUÍ POR UN MOTIVO QUE NO SE VE, Y ES EL IMPORTANTE.
+  --
+  -- El preflight no la marca: tiene `clienteId` NOT NULL, así que la derivación
+  -- automática le da una política sola, por la empresa donde el CLIENTE tiene su
+  -- ficha. Esa política está mal, y es el mismo fallo que se encontró en
+  -- `supply_derechos` el 25-09-2026: la fila lleva `monto` —lo que Membego cobra
+  -- por revender lo que compró a RD$300—, y con esa política la empresa donde
+  -- Carlos se registró podría leer el margen de Membego sobre una compra en la
+  -- que no participa.
+  --
+  -- Por eso se declara a mano y se DEJA CAER la política derivada: aquí no basta
+  -- con añadir una regla, hay que quitar la que la derivación puso. Un pedido no
+  -- se lee nunca en modo inquilino, solo en omnisciente, que es como lo consulta
+  -- `modules/supply/cobro.ts`.
+  FOREACH cond IN ARRAY ARRAY['supply_cuentas_cobro', 'supply_pedidos'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    -- La derivada, si la hubo. `supply_pedidos` la tiene; la otra no.
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Cobro de plataforma (cuentas y pedidos): solo en modo omnisciente.';
+
   FOREACH cond IN ARRAY ARRAY['credenciales_sistema'] LOOP
     CONTINUE WHEN NOT EXISTS (
       SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
