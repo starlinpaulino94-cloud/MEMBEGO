@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { autorizarCron } from '@/lib/cron-auth'
 import { soltarHoldsVencidos } from '@/modules/supply/derechos'
+import { expirarPedidosVencidos } from '@/modules/supply/cobro'
 import { alertasDeVencimiento, cerrarVencidos, umbralDelDia } from '@/modules/supply/vencimientos'
 import { conciliar } from '@/modules/supply/conciliacion'
 import {
@@ -42,6 +43,11 @@ export async function GET(req: NextRequest) {
   if (denegado) return denegado
 
   const holdsLiberados = await soltarHoldsVencidos(300)
+  // Los pedidos se cierran DESPUÉS de soltar los holds, y a propósito: soltar es
+  // lo que devuelve la unidad al pool, y es lo que no puede quedarse sin hacer.
+  // Esto solo pone al día el estado que ve el cliente, para que no le quede un
+  // «esperando pago» eterno sobre una unidad que ya se fue.
+  const pedidosExpirados = await expirarPedidosVencidos(300)
   const cierre = await cerrarVencidos()
 
   // Solo los lotes que hoy CRUZAN un umbral (30, 14, 7, 3, 1 días). Avisar
@@ -95,6 +101,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     holdsLiberados,
+    pedidosExpirados,
     cierre,
     porVencer: {
       lotes: enUmbral.length,

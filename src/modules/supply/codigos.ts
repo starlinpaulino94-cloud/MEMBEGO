@@ -67,6 +67,18 @@ export function numeroOrden(secuencia: number): string {
 }
 
 /**
+ * Número de pedido de un cliente A MEMBEGO: `MBG-P-000123`.
+ *
+ * Distinto prefijo que `numeroOrden` —`PO` es lo que Membego COMPRA, `P` lo que
+ * Membego VENDE— porque los dos números van a aparecer en la misma pantalla de
+ * conciliación, y dos códigos parecidos para los dos lados del dinero es la
+ * clase de detalle que hace que alguien liquide contra la fila equivocada.
+ */
+export function numeroPedido(secuencia: number): string {
+  return `MBG-P-${String(secuencia).padStart(6, '0')}`
+}
+
+/**
  * Código de lote. Cuando una orden genera varios lotes (varias líneas), el
  * sufijo los distingue: `MBG-LITRE-2026-001-L2`. El primero va sin sufijo
  * porque el caso abrumadoramente normal es un lote por acuerdo y

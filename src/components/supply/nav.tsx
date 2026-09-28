@@ -22,6 +22,7 @@ export const SECCIONES_SUPPLY = [
   { slug: 'lotes', label: 'Lotes' },
   { slug: 'derechos', label: 'Derechos' },
   { slug: 'redenciones', label: 'Redenciones' },
+  { slug: 'cobros', label: 'Cobros' },
   { slug: 'incidencias', label: 'Incidencias' },
   { slug: 'vencimientos', label: 'Vencimientos' },
   { slug: 'liquidaciones', label: 'Liquidaciones' },

@@ -17,7 +17,7 @@ la línea base — el módulo no añadió ninguno.
 | **B · Supply Management** | Pool, asignación, concurrencia, FEFO, vencimientos | ✅ completo |
 | **C · Customer Distribution** | Derechos, vouchers, QR dinámico, elegibilidad, holds | ✅ completo |
 | **D · Merchant Fulfillment** | Escáner, redención, reversa, capacidad, reservas, portal, enmiendas, incidencias | ✅ completo |
-| **E · Commercial Distribution** | Regalos, membresías, recompensas, referidos, marketplace, cross-selling | ✅ completo · **venta con cobro: puerto sin implementar** (ver §Pendientes) |
+| **E · Commercial Distribution** | Regalos, membresías, recompensas, referidos, marketplace, cross-selling | ✅ completo · venta con cobro cerrada el 28-09-2026 |
 | **F · Financial Control** | Pagos, ledger financiero, liquidaciones, conciliación, costos separados | ✅ completo |
 | **G · Analytics** | Unit economics, economía de campaña, CAC, LTV, scorecard, riesgo, 12 reportes | ✅ completo |
 
@@ -103,8 +103,8 @@ Las 80 fases del encargo, con dónde vive cada una.
 | # | Fase | Estado | Dónde |
 | --- | --- | --- | --- |
 | 21 | Regalos | ✅ | `distribucion.ts:regalar` + `/cliente/beneficios/disponibles` |
-| 22 | Venta con descuento | ⚠️ | modelo listo; el **cobro** depende del puerto (Fase 23) |
-| 23 | Checkout Membego | ⚠️ | `PuertoCobroMembego` declarado, `COBRO_MEMBEGO_DISPONIBLE = false` |
+| 22 | Venta con descuento | ✅ | `precioCliente` en la asignación; la vitrina publica el precio si hay cuenta activa |
+| 23 | Checkout Membego | ✅ | `SupplyPedido` + `SupplyCuentaCobro`, `modules/supply/cobro.ts`. Pasarela: puerto declarado |
 | 24 | Subsidized offers | ✅ | `SUBSIDIO` separado, `desglosarSubsidio` lanza si se confunde (ADR-0003) |
 | 25 | Membresías | ✅ | `porMembresia(clienteId, asignacionId, periodo)` |
 | 26 | Rewards | ✅ | `porRecompensa(clienteId, canjeId, …)` |
@@ -398,3 +398,70 @@ no se quedan a medias porque falle un aviso.
   de solo lectura que se congela en el lote.
 - La conciliación recorre lotes de uno en uno (tope 200). Con miles de lotes
   habrá que paginarla o moverla a un trabajo en cola.
+
+## El cobro a nombre de la plataforma (Fases 22-23) · 28-09-2026
+
+Era el último hueco: Membego podía comprar 1.000 pizzas, asignarlas, regalarlas
+y verlas redimir, pero no podía VENDER una.
+
+El motivo no era pereza. Cuando Membego compra la unidad entera a RD$300 y la
+revende a RD$399, ese dinero lo cobra MEMBEGO —el comercio ya cobró por
+contrato—, y **toda** la infraestructura de pagos cobra a nombre de una EMPRESA:
+`PaymentContext` lleva `companyId`, `metodos_pago` cuelga de `companies`, y el
+proveedor de transferencia dice «a las cuentas de la empresa».
+
+**El carril.** Transferencia a cuentas de Membego con verificación por una
+persona, que es el único que funciona hoy: CardNET sigue incompleto a propósito
+—falta el manual de integración que dan al abrir la cuenta de comercio— y no se
+finge lo que no hay. `PuertoCobroMembego` sigue declarado para enchufarla.
+
+**Dos tablas, ninguna con `companyId`.** `supply_cuentas_cobro` (las cuentas de
+Membego) y `supply_pedidos` (lo que un cliente le paga a Membego). No son de
+ninguna empresa: ni del proveedor —que no debe ver a qué precio revende Membego
+lo que le vendió— ni de la empresa donde el cliente tiene su ficha.
+
+**El fallo que casi se repite.** `supply_pedidos` tiene `clienteId` NOT NULL, así
+que la derivación de políticas RLS le daba una sola —por la empresa de la ficha
+del cliente—, exactamente el fallo de `supply_derechos` del 25-09. Y la fila
+lleva `monto`, o sea el margen de Membego. El preflight **no** lo marca (para él
+la tabla está cubierta), así que se declara a mano en la Capa 2 y se DEJA CAER la
+política derivada. `npm run rls:probar` pasa de 14 a **16** comprobaciones; las
+dos nuevas fallan si alguien quita esa declaración, probado por mutación.
+
+**El cobro no mueve supply.** Ni una unidad. `retener` aparta al abrir el pedido
+y `confirmarHold` emite cuando el dinero está — las dos ya existían. Hay una
+prueba que falla si `cobro.ts` empieza a llamar a `registrarMovimientos`: un
+invariante en dos sitios es un invariante que algún día discrepa.
+
+**Las tres reglas de `docs/PAGOS.md`, sostenidas.** La aprobación la decide el
+servidor y además la firma una persona (la base exige revisor en todo pedido
+pagado); todo se activa una vez (`confirmarHold` lanza si el derecho no está
+RETENIDO, más único por `derechoId`); y el monto se compara contra el precio
+congelado, con tolerancia de un centavo — no del 1%, que regalaría cuatro pesos
+por venta sin aparecer en ningún descuadre.
+
+**El alta de cuentas es el interruptor.** No hay una casilla de «vender supply:
+sí/no» en ningún sitio: la venta está encendida si —y solo si— hay una cuenta
+activa en `/superadmin/supply/cobros/cuentas`. Dos llaves para lo mismo acaban
+con una en el estado que nadie esperaba, y aquí ese estado sería «la vitrina
+publica precios que no se pueden cobrar». Una cuenta nace APAGADA salvo que se
+diga lo contrario, no se borra ni se edita —un pedido guarda a qué cuenta se le
+pidió transferir— y apagar la última avisa de que la venta se detiene.
+
+**El comprobante vive en el bucket privado.** No en un enlace que el cliente
+teclea: eso dejaba la prueba de un pago donde el interesado quisiera, y podía
+cambiarla o borrarla después de que se la aprobaran. Se reusa
+`modules/storage/comprobantes.ts` —el que resolvió la auditoría C-01 para
+membresías y compras— con un tipo nuevo, `'pedido'`: la ruta la genera el
+servidor con 16 bytes aleatorios, el cliente sube con un token de un solo uso
+que no vale para otra ruta, y cada lectura se firma en el momento
+(`urlComprobante`, cinco minutos) previa comprobación de quién pregunta. La
+columna se llama `comprobantePath` porque guarda una ruta. Un **admin de empresa
+no puede leerlo**: el comprobante lleva el banco y la cuenta de alguien que pagó
+A MEMBEGO por una unidad que el comercio ya cobró por contrato.
+
+**Invariantes en la base:** monto no negativo, revisión completa (estado final
+⇔ revisor y fecha), rechazo motivado, y EN_REVISION implica comprobante. Los
+cuatro probados uno a uno contra PostgreSQL 16: rechazan lo que deben y aceptan
+lo que deben.
+

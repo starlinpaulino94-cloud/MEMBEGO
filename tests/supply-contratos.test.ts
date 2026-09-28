@@ -370,14 +370,34 @@ test('el filtro de ámbito del proveedor exige la empresa', () => {
 
 // ── El puerto de cobro no finge ─────────────────────────────────────────────
 
-test('la venta de supply no simula una pasarela que no existe', () => {
+test('la vitrina no publica un precio que nadie puede cobrar', () => {
   const src = codigo(leer('distribucion.ts'))
-  assert.match(
-    src,
-    /export const COBRO_MEMBEGO_DISPONIBLE = false/,
-    'mientras no haya cobro a nombre de la plataforma, esto tiene que decir que no'
-  )
-  // Y la vitrina no puede publicar un precio que nadie puede cobrar.
-  assert.match(src, /precioMembego: 0/)
-  assert.match(src, /esGratis: true/)
+  // La bandera muerta se fue: ahora se le pregunta a la base si hay con qué
+  // cobrar. Lo que NO puede volver es publicar precio sin comprobarlo.
+  assert.doesNotMatch(src, /COBRO_MEMBEGO_DISPONIBLE\s*=\s*false/)
+  assert.match(src, /const cobrable = await cobroMembegoDisponible\(\)/)
+  assert.match(src, /o\.esGratis \|\| cobrable/)
+})
+
+test('el precio de venta se congela en el pedido y se compara al confirmar', () => {
+  const src = codigo(leer('cobro.ts'))
+  // El monto no se confía: se compara contra lo congelado (regla 3.3 de
+  // docs/PAGOS.md). Si esto se va, un comprobante por RD$39 aprueba un pedido
+  // de RD$399 y el derecho queda perfectamente emitido.
+  assert.match(src, /montoCuadra\(montoVisto, esperado\)/)
+  assert.match(src, /No se activa nada/)
+})
+
+test('nadie confirma su propio pedido', () => {
+  const src = codigo(leer('cobro.ts'))
+  assert.match(src, /revisorId === pedido\.clienteId/)
+})
+
+test('el cobro no mueve supply por su cuenta', () => {
+  const src = codigo(leer('cobro.ts'))
+  // El movimiento vive en derechos.ts. Si este archivo empieza a registrar
+  // movimientos, el invariante de las cubetas pasa a estar en dos sitios.
+  assert.doesNotMatch(src, /registrarMovimientos/)
+  assert.match(src, /confirmarHold\(/)
+  assert.match(src, /cancelarDerecho\(/)
 })

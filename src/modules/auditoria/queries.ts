@@ -133,6 +133,11 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPPLY_INCIDENCIA_RESUELTA: 'Supply · incidencia resuelta',
   SUPPLY_PAGO_REGISTRADO: 'Supply · pago a proveedor registrado',
   SUPPLY_PAGO_CONFIRMADO: 'Supply · pago a proveedor confirmado',
+  SUPPLY_PEDIDO_ABIERTO: 'Supply · pedido de cliente abierto',
+  SUPPLY_PEDIDO_COBRADO: 'Supply · pago de cliente confirmado',
+  SUPPLY_PEDIDO_RECHAZADO: 'Supply · pago de cliente rechazado',
+  SUPPLY_CUENTA_COBRO_ALTA: 'Supply · cuenta de cobro dada de alta',
+  SUPPLY_CUENTA_COBRO_ESTADO: 'Supply · cuenta de cobro activada o desactivada',
   SUPPLY_AJUSTE_LEDGER: 'Supply · ajuste del ledger',
   SUPPLY_LOTE_RECALCULADO: 'Supply · lote recalculado',
   // Campañas conjuntas: reparto y retirada en varias empresas a la vez.

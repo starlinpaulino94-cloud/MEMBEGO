@@ -7,6 +7,9 @@ import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { beneficiosDelCliente } from '@/modules/supply/pool'
 import { TarjetaBeneficio } from '@/components/supply/tarjeta-beneficio'
+import { MisPedidos } from '@/components/supply/mis-pedidos'
+import { cuentasDeCobro, pedidosDelCliente } from '@/modules/supply/cobro'
+import type { EstadoPedido } from '@/modules/supply/cobro-nucleo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Beneficios Membego' }
@@ -53,6 +56,18 @@ export default async function BeneficiosPage() {
   ).catch(() => [])
   const titular = new Map(derechos.map((d) => [d.id, d]))
 
+  // Los pedidos vivos y las cuentas a las que transferir. Van juntos porque de
+  // nada sirve decirle a alguien que debe transferir si no se le dice adónde.
+  // `.catch` en los dos: un fallo leyendo pedidos no puede dejar sin ver los
+  // beneficios que la persona YA tiene, que es para lo que abrió la pantalla.
+  const [pedidos, cuentas] = await Promise.all([
+    clienteIds.length > 0 ? pedidosDelCliente(clienteIds[0]!, 20).catch(() => []) : [],
+    cuentasDeCobro().catch(() => []),
+  ])
+  const pedidosVivos = pedidos.filter(
+    (p) => p.estado === 'INICIADO' || p.estado === 'EN_REVISION' || p.estado === 'RECHAZADO'
+  )
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -66,6 +81,20 @@ export default async function BeneficiosPage() {
             Ver disponibles
           </Link>
         }
+      />
+
+      <MisPedidos
+        pedidos={pedidosVivos.map((p) => ({
+          id: p.id,
+          numero: p.numero,
+          estado: p.estado as EstadoPedido,
+          producto: p.derecho.lote.snapshotItemNombre,
+          monto: Number(p.monto),
+          motivoRechazo: p.motivoRechazo,
+          expiraAt: p.expiraAt.toISOString(),
+        }))}
+        cuentas={cuentas}
+        clienteId={clienteIds[0] ?? ''}
       />
 
       {beneficios.length === 0 ? (
