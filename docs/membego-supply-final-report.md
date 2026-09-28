@@ -148,15 +148,19 @@ no en el navegador.
 Al corte del 23-09-2026 esta sección listaba cinco. Cuatro se cerraron después;
 el detalle de cada cierre está en `membego-supply-implementation-status.md`.
 
-**Abiertos:**
+**Abierto — uno:**
 
 1. **Sin cobro a nombre de la plataforma** → la venta de supply no se puede
    completar hoy. Se declara en voz alta y la vitrina no publica precios.
-2. **«Producto listo» sin implementar** → único hueco de la Fase 40. El modelo
-   no tiene el concepto de *pedido preparado*: `SupplyReserva` guarda la hora
-   acordada, pero nadie en el comercio marca «ya está hecho».
 
 **Cerrados:**
+
+- ~~«Producto listo»~~ · **cerrado el 25-09-2026**, la última pieza de la Fase
+  40. `SupplyReserva` tiene el estado `LISTA`, el comercio la marca desde
+  «Pedidos de hoy» en su portal y el cliente recibe `SUPPLY_PRODUCTO_LISTO`.
+  La migración `20261004_supply_reserva_lista` amplía además el índice único de
+  recogidas vivas para que una reserva ya preparada siga contando: si no, el
+  cliente podría apartar una segunda recogida del mismo derecho.
 
 - ~~Notificaciones sin enviar~~ · **cerrado.** `notificar.ts` escribe los diez
   avisos vía `@/modules/notificaciones/service`, enganchados en las funciones de
@@ -186,7 +190,6 @@ explicadas en el código, no olvidos.
 | Qué | Estado | Qué falta |
 | --- | --- | --- |
 | Venta de supply (Fases 22-23) | Puerto declarado | Cobro a nombre de la plataforma |
-| «Producto listo» (Fase 40) | Los diez avisos escriben | El concepto de *pedido preparado* no existe en el modelo |
 | Transferencia entre lotes | Tipo en el ledger | Acción y pantalla |
 | Automatización de vencimientos | Propone | Aplicar acciones (por diseño: se negocian) |
 

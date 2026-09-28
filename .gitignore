@@ -115,3 +115,6 @@ examples/*
 /playwright/.cache/
 /playwright/.auth/
 .playwright-mcp/
+
+# Generado por `npm run migraciones:pendientes` — snapshot, se regenera
+migraciones-pendientes.sql
