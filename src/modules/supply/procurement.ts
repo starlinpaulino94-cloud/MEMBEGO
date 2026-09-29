@@ -96,6 +96,9 @@ export async function crearAcuerdo(d: DatosAcuerdo): Promise<{ id: string; codig
         metodoLiquidacion: d.metodoLiquidacion ?? null,
         politicaDevoluciones: d.politicaDevoluciones ?? null,
         slaTexto: d.slaTexto ?? null,
+        tipoAcuerdo: d.tipoAcuerdo ?? undefined,
+        alcance: d.alcance ?? undefined,
+        categoriaCodigo: d.categoriaCodigo?.trim() || null,
         inicioAt: d.inicioAt,
         finAt: d.finAt,
         sucursalIds: d.sucursalIds ?? [],
@@ -162,6 +165,7 @@ const CAMPOS_VERSIONADOS = [
   'cantidad', 'costoUnitario', 'precioReferencia', 'aporteMembego', 'moneda', 'anticipoPorcentaje',
   'condicionesPago', 'comisionPorcentaje', 'descuentoPorcentaje', 'impuestoPorcentaje', 'plazoPagoDias',
   'frecuenciaCorte', 'metodoLiquidacion', 'politicaDevoluciones', 'slaTexto', 'inicioAt', 'finAt',
+  'tipoAcuerdo', 'alcance', 'categoriaCodigo',
   'sucursalIds', 'capacidadDiaria', 'capacidadHoraria', 'diasBloqueados', 'horarioTexto',
   'reglasRedencion', 'reglasSustitucion', 'reglasCumplimiento', 'politicaCancelacion',
 ] as const

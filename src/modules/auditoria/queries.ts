@@ -164,6 +164,13 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPPLY_VENTA_CANCELADA: 'Supply · venta sin precompra cancelada',
   SUPPLY_PAGO_ANULADO: 'Supply · pago a proveedor anulado',
   SUPPLY_FEFO_OVERRIDE: 'Supply · entrega saltándose FEFO',
+  SUPPLY_PROVEEDOR_HABILITADO: 'Supply · empresa habilitada como proveedora',
+  SUPPLY_OFERTA_CREADA: 'Supply · oferta creada',
+  SUPPLY_LOTE_TRANSFERENCIA: 'Supply · unidades transferidas entre lotes',
+  SUPPLY_LOTE_AJUSTE: 'Supply · ajuste de lote',
+  SUPPLY_LOTE_CANCELACION: 'Supply · unidades canceladas',
+  SUPPLY_LOTE_VENCIMIENTO_EXTENDIDO: 'Supply · vencimiento de lote extendido',
+  SUPPLY_PEDIDO_REEMBOLSADO: 'Supply · cobro reembolsado',
   // Campañas conjuntas: reparto y retirada en varias empresas a la vez.
   CAMPANA_APLICADA: 'Campaña conjunta aplicada',
   CAMPANA_ARCHIVADA: 'Campaña conjunta archivada',

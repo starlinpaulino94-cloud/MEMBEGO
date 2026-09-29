@@ -21,6 +21,7 @@ import {
 import {
   convertirProveedorEnEmpresa,
   guardarPerfilProveedor,
+  habilitarProveedorExistente,
   registrarProveedorExterno,
 } from './proveedores'
 import { aplicarDeposito, cerrarDeposito, devolverDeposito, registrarDeposito } from './depositos'
@@ -70,6 +71,12 @@ function perfilDeFormulario(fd: FormData) {
     tipoCuenta: texto(fd, 'tipoCuenta', 40) || null,
     plazoPagoDias: numero(fd, 'plazoPagoDias'),
     notas: texto(fd, 'notas', 2000) || null,
+    whatsapp: texto(fd, 'whatsapp', 40) || null,
+    direccion: texto(fd, 'direccion', 300) || null,
+    pais: texto(fd, 'pais', 80) || null,
+    moneda: texto(fd, 'moneda', 3) || null,
+    condicionesPago: texto(fd, 'condicionesPago', 1000) || null,
+    documentos: documentos(fd),
   }
 }
 
@@ -89,6 +96,8 @@ export async function registrarProveedorExternoAction(
         telefono: texto(fd, 'telefono', 40) || null,
         ciudad: texto(fd, 'ciudad', 80) || null,
         ...perfilDeFormulario(fd),
+        contactoTelefono: texto(fd, 'contactoTelefono', 40) || texto(fd, 'telefono', 40) || null,
+        contactoEmail: texto(fd, 'contactoEmail', 160) || texto(fd, 'email', 160) || null,
       },
       user.metadata.dbUserId ?? null
     )
@@ -103,6 +112,27 @@ export async function registrarProveedorExternoAction(
     return {
       success: res.reutilizado ? 'Ese proveedor ya existía: se reutilizó.' : `Proveedor «${nombre}» registrado.`,
       id: res.companyId,
+    }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+export async function habilitarProveedorExistenteAction(
+  _prev: EstadoAccion,
+  fd: FormData
+): Promise<EstadoAccion> {
+  try {
+    const user = await exigirPlataforma('MEMBEGO_SUPPLIER_MANAGE')
+    const companyId = texto(fd, 'companyId', 60)
+    if (!companyId) return { error: 'Elige la empresa.' }
+    const res = await habilitarProveedorExistente(companyId, perfilDeFormulario(fd), user.metadata.dbUserId ?? null)
+    await auditar('SUPPLY_PROVEEDOR_HABILITADO', 'SupplyProveedor', res.perfilId, { companyId, yaEra: res.yaEra }, companyId)
+    refrescarPlataforma('proveedores')
+    refrescarPlataforma('acuerdos')
+    return {
+      success: res.yaEra ? 'Esa empresa ya era proveedora: se actualizó su perfil.' : 'Empresa habilitada como proveedora de Membego.',
+      id: companyId,
     }
   } catch (e) {
     return comoError(e)

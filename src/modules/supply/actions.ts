@@ -17,6 +17,7 @@ import {
 } from './actions-util'
 import { anularPago } from './finanzas'
 import { entregarVenta, fichaDeVentaPorCodigo } from './ventas'
+import { derivarDeTipoAcuerdo } from './contrato'
 import { ESTRATEGIA_POR_DEFECTO, ESTRATEGIAS_SELECCION, type EstrategiaSeleccion } from './fefo'
 import {
   crearAcuerdo,
@@ -82,6 +83,8 @@ export async function crearAcuerdoAction(
 
     const inicioAt = fecha(fd, 'inicioAt')
     const finAt = fecha(fd, 'finAt')
+    const tipoAcuerdo = texto(fd, 'tipoAcuerdo', 30)
+    const derivado = tipoAcuerdo ? derivarDeTipoAcuerdo(tipoAcuerdo as never) : null
     if (!inicioAt || !finAt) return { error: 'Hace falta la vigencia del contrato.' }
 
     const cantidad = numero(fd, 'cantidad')
@@ -93,8 +96,11 @@ export async function crearAcuerdoAction(
     const { id, codigo } = await crearAcuerdo({
       proveedorId: texto(fd, 'proveedorId', 60),
       tipo: texto(fd, 'tipo', 40) as never,
-      modeloComercial: (texto(fd, 'modeloComercial', 40) || 'COMPRA_UNIDAD_COMPLETA') as never,
-      modalidadPago: (texto(fd, 'modalidadPago', 40) || 'PREPAGO_PARCIAL') as never,
+      modeloComercial: (texto(fd, 'modeloComercial', 40) || derivado?.modeloComercial || 'COMPRA_UNIDAD_COMPLETA') as never,
+      modalidadPago: (texto(fd, 'modalidadPago', 40) || derivado?.modalidadPago || 'PREPAGO_PARCIAL') as never,
+      tipoAcuerdo: (tipoAcuerdo || null) as never,
+      alcance: (texto(fd, 'alcance', 20) || 'ITEM') as never,
+      categoriaCodigo: texto(fd, 'categoriaCodigo', 80) || null,
       politicaSobrante: (texto(fd, 'politicaSobrante', 40) || 'EXPIRAR') as never,
       itemNombre: texto(fd, 'itemNombre', 200),
       itemDescripcion: texto(fd, 'itemDescripcion', 1000) || null,
@@ -122,7 +128,7 @@ export async function crearAcuerdoAction(
       politicaCancelacion: texto(fd, 'politicaCancelacion', 2000) || null,
       notas: texto(fd, 'notas', 2000) || null,
       creadoPorId: user.metadata.dbUserId ?? null,
-      comisionPorcentaje: numero(fd, 'comisionPorcentaje'),
+      comisionPorcentaje: fd.getAll('comisionPorcentaje').map(String).map((v) => Number(v.trim())).find((n) => Number.isFinite(n) && n > 0) ?? null,
       descuentoPorcentaje: numero(fd, 'descuentoPorcentaje'),
       impuestoPorcentaje: numero(fd, 'impuestoPorcentaje'),
       plazoPagoDias: numero(fd, 'plazoPagoDias'),

@@ -304,6 +304,13 @@ enum AuditAccion {
   SUPPLY_PAGO_ANULADO
   /// Se entregó saltándose FEFO con una estrategia distinta, a mano.
   SUPPLY_FEFO_OVERRIDE
+  SUPPLY_PROVEEDOR_HABILITADO
+  SUPPLY_OFERTA_CREADA
+  SUPPLY_LOTE_TRANSFERENCIA
+  SUPPLY_LOTE_AJUSTE
+  SUPPLY_LOTE_CANCELACION
+  SUPPLY_LOTE_VENCIMIENTO_EXTENDIDO
+  SUPPLY_PEDIDO_REEMBOLSADO
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas

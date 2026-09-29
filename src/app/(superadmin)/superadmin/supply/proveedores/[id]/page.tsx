@@ -13,7 +13,11 @@ import { reporteLotes, reporteProveedores } from '@/modules/supply/pool'
 import { asientosDeProveedor, saldoDeProveedor } from '@/modules/supply/finanzas'
 import { conciliar } from '@/modules/supply/conciliacion'
 import { SUPPLY_ASIENTO_TIPO_LABELS, SUPPLY_PROVEEDOR_ORIGEN_LABELS } from '@/modules/supply/catalogo'
-import { perfilDeProveedor } from '@/modules/supply/proveedores'
+import { kpisDeProveedor, perfilDeProveedor } from '@/modules/supply/proveedores'
+import { listarConciliaciones } from '@/modules/supply/conciliacion-proveedor'
+import { listarVentas } from '@/modules/supply/ventas'
+import { SUPPLY_CONCILIACION_ESTADO_LABELS, SUPPLY_INCIDENCIA_ESTADO_LABELS, SUPPLY_INCIDENCIA_TIPO_LABELS, SUPPLY_ORDEN_ESTADO_LABELS, SUPPLY_VENTA_ESTADO_LABELS } from '@/modules/supply/catalogo'
+import { formatDateTime } from '@/lib/format'
 import { FormAccion } from '@/components/supply/form-accion'
 import { convertirProveedorAction, guardarPerfilProveedorAction } from '@/modules/supply/actions-finanzas'
 import { listarCuentasPorPagar } from '@/modules/supply/cuentas'
@@ -40,7 +44,7 @@ export default async function ProveedorDetallePage({
   await requireRole('SUPERADMIN')
   const { id } = await params
 
-  const [ficha, lotes, financiero, conciliacion, perfil, cuentas, liquidaciones, depositos] = await Promise.all([
+  const [ficha, lotes, financiero, conciliacion, perfil, cuentas, liquidaciones, depositos, kpis, conciliaciones, ventas, operacion] = await Promise.all([
     reporteProveedores({ proveedorId: id }).then((f) => f[0] ?? null),
     reporteLotes({ proveedorId: id }),
     sinEmpresa('Membego Supply: dinero con un proveedor', async (tx) => {
@@ -57,6 +61,18 @@ export default async function ProveedorDetallePage({
     listarCuentasPorPagar({ proveedorId: id, limite: 40 }),
     listarLiquidaciones({ proveedorId: id, limite: 20 }),
     listarDepositos({ proveedorId: id, limite: 20 }),
+    kpisDeProveedor(id),
+    listarConciliaciones({ proveedorId: id, limite: 10 }),
+    listarVentas({ proveedorId: id, limite: 10 }),
+    sinEmpresa('Membego Supply: operación reciente de un proveedor', async (tx) => {
+      const [ordenes, redenciones, incidencias, ingresos] = await Promise.all([
+        tx.supplyOrden.findMany({ where: { proveedorId: id }, orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, numero: true, estado: true, total: true, montoPagado: true, createdAt: true, acuerdo: { select: { codigo: true } } } }),
+        tx.supplyRedencion.findMany({ where: { proveedorId: id }, orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, createdAt: true, reversadaAt: true, costoUnitario: true, cliente: { select: { nombre: true } }, sucursal: { select: { nombre: true } }, voucher: { select: { derecho: { select: { lote: { select: { snapshotItemNombre: true } } } } } } } }),
+        tx.supplyIncidencia.findMany({ where: { proveedorId: id }, orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, tipo: true, estado: true, detalle: true, createdAt: true } }),
+        tx.supplyDerecho.aggregate({ where: { proveedorId: id, estado: 'REDIMIDO' }, _sum: { precioCliente: true } }),
+      ])
+      return { ordenes, redenciones, incidencias, ingresosClientes: Number(ingresos._sum.precioCliente ?? 0) }
+    }),
   ])
 
   if (!financiero) notFound()
@@ -103,6 +119,20 @@ export default async function ProveedorDetallePage({
           />
         </div>
       )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatCard label="Total comprado" value={formatMoneyRD(kpis.totalComprado)} sub={`pagado ${formatMoneyRD(kpis.totalPagado)}`} />
+        <StatCard label="Supply disponible" value={kpis.unidadesDisponibles.toLocaleString('es-DO')} sub={formatMoneyRD(kpis.valorDisponible)} accent="brand" />
+        <StatCard label="Consumido" value={kpis.unidadesConsumidas.toLocaleString('es-DO')} sub={formatMoneyRD(kpis.valorConsumido)} accent="success" />
+        <StatCard label="Vencido / cancelado" value={kpis.unidadesVencidas.toLocaleString('es-DO')} sub={formatMoneyRD(kpis.valorVencido)} accent={kpis.unidadesVencidas > 0 ? 'warning' : undefined} />
+        <StatCard label="Incidencias abiertas" value={kpis.incidenciasAbiertas} sub={`${kpis.redenciones} redenciones`} accent={kpis.incidenciasAbiertas > 0 ? 'danger' : undefined} />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Membego le debe" value={formatMoneyRD(kpis.deudaMembego)} accent={kpis.deudaMembego > 0 ? 'warning' : undefined} href={`/superadmin/supply/finanzas/cuentas-por-pagar?proveedor=${id}`} hrefLabel="Cuentas por pagar" />
+        <StatCard label="Le debe a Membego" value={formatMoneyRD(kpis.deudaProveedor)} href={`/superadmin/supply/finanzas/cuentas-por-cobrar?proveedor=${id}`} hrefLabel="Cuentas por cobrar" />
+        <StatCard label="Ventas a comisión" value={formatMoneyRD(kpis.ventasBruto)} sub={`${kpis.ventasEntregadas} entregadas · comisión ${formatMoneyRD(kpis.comisionMembego)}`} />
+        <StatCard label="Rentabilidad" value={formatMoneyRD(operacion.ingresosClientes + kpis.comisionMembego - kpis.valorConsumido)} sub={`ingresos ${formatMoneyRD(operacion.ingresosClientes + kpis.comisionMembego)} − costo consumido ${formatMoneyRD(kpis.valorConsumido)}`} accent={operacion.ingresosClientes + kpis.comisionMembego - kpis.valorConsumido >= 0 ? 'success' : 'danger'} />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -353,6 +383,127 @@ export default async function ProveedorDetallePage({
           />
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Órdenes de compra</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TablaReporte
+              columnas={[
+                { clave: 'numero', titulo: 'Orden' },
+                { clave: 'acuerdo', titulo: 'Acuerdo' },
+                { clave: 'total', titulo: 'Total', alinearDerecha: true },
+                { clave: 'pagado', titulo: 'Pagado', alinearDerecha: true },
+                { clave: 'estado', titulo: 'Estado' },
+              ]}
+              filas={operacion.ordenes.map((o) => ({
+                __clave: o.id,
+                numero: (
+                  <Link href={`/superadmin/supply/ordenes/${o.id}`} className="underline-offset-4 hover:underline">
+                    {o.numero}
+                  </Link>
+                ),
+                acuerdo: o.acuerdo.codigo,
+                total: formatMoneyRD(Number(o.total)),
+                pagado: formatMoneyRD(Number(o.montoPagado)),
+                estado: SUPPLY_ORDEN_ESTADO_LABELS[o.estado],
+              }))}
+              vacio="Sin órdenes de compra."
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Redenciones recientes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TablaReporte
+              columnas={[
+                { clave: 'fecha', titulo: 'Cuándo' },
+                { clave: 'cliente', titulo: 'Cliente' },
+                { clave: 'producto', titulo: 'Producto' },
+                { clave: 'sucursal', titulo: 'Sucursal' },
+                { clave: 'estado', titulo: 'Estado' },
+              ]}
+              filas={operacion.redenciones.map((r) => ({
+                __clave: r.id,
+                fecha: formatDateTime(r.createdAt),
+                cliente: r.cliente.nombre,
+                producto: r.voucher.derecho.lote.snapshotItemNombre,
+                sucursal: r.sucursal?.nombre ?? '—',
+                estado: r.reversadaAt ? <Badge variant="destructive">Reversada</Badge> : <Badge variant="success">Entregada</Badge>,
+              }))}
+              vacio="Sin redenciones."
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Incidencias</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TablaReporte
+              columnas={[
+                { clave: 'fecha', titulo: 'Cuándo' },
+                { clave: 'tipo', titulo: 'Tipo' },
+                { clave: 'detalle', titulo: 'Detalle' },
+                { clave: 'estado', titulo: 'Estado' },
+              ]}
+              filas={operacion.incidencias.map((i) => ({
+                __clave: i.id,
+                fecha: formatDate(i.createdAt),
+                tipo: SUPPLY_INCIDENCIA_TIPO_LABELS[i.tipo],
+                detalle: i.detalle.slice(0, 80),
+                estado: SUPPLY_INCIDENCIA_ESTADO_LABELS[i.estado],
+              }))}
+              vacio="Sin incidencias."
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Conciliaciones y ventas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <TablaReporte
+              columnas={[
+                { clave: 'codigo', titulo: 'Conciliación' },
+                { clave: 'periodo', titulo: 'Período' },
+                { clave: 'estado', titulo: 'Estado' },
+              ]}
+              filas={conciliaciones.map((c) => ({
+                __clave: c.id,
+                codigo: (
+                  <Link href={`/superadmin/supply/conciliacion/${c.id}`} className="underline-offset-4 hover:underline">
+                    {c.codigo}
+                  </Link>
+                ),
+                periodo: `${formatDate(c.periodoDesde)} → ${formatDate(c.periodoHasta)}`,
+                estado: SUPPLY_CONCILIACION_ESTADO_LABELS[c.estado],
+              }))}
+              vacio="Sin conciliaciones."
+            />
+            <TablaReporte
+              columnas={[
+                { clave: 'numero', titulo: 'Venta' },
+                { clave: 'producto', titulo: 'Producto' },
+                { clave: 'bruto', titulo: 'Bruto', alinearDerecha: true },
+                { clave: 'estado', titulo: 'Estado' },
+              ]}
+              filas={ventas.map((v) => ({
+                __clave: v.id,
+                numero: v.numero,
+                producto: `${v.itemNombre} × ${v.cantidad}`,
+                bruto: formatMoneyRD(Number(v.montoBruto)),
+                estado: SUPPLY_VENTA_ESTADO_LABELS[v.estado],
+              }))}
+              vacio="Sin ventas a comisión."
+            />
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>

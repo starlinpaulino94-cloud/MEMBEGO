@@ -4,6 +4,8 @@ import type {
   SupplyModeloComercial,
   SupplyPoliticaSobrante,
   SupplyTipo,
+  SupplyTipoAcuerdo,
+  SupplyAlcanceAcuerdo,
 } from '@prisma/client'
 
 /**
@@ -55,6 +57,10 @@ export interface DatosAcuerdo {
   metodoLiquidacion?: string | null
   politicaDevoluciones?: string | null
   slaTexto?: string | null
+  // Wizard (encargo 2026-09 bis): tipo y alcance.
+  tipoAcuerdo?: SupplyTipoAcuerdo | null
+  alcance?: SupplyAlcanceAcuerdo | null
+  categoriaCodigo?: string | null
 }
 
 function porcentajeValido(n: number | null | undefined): boolean {
@@ -69,8 +75,48 @@ function porcentajeValido(n: number | null | undefined): boolean {
  * significa que Membego paga más de lo que vale — casi siempre un dedo de más
  * al teclear, y si no lo es, hay que decirlo a mano en una enmienda.
  */
+/**
+ * Lo que cada tipo del wizard implica en el dominio. El tipo es la etiqueta
+ * con la que se elige; modelo comercial y modalidad de pago son lo que las
+ * reglas de abajo y el resto del módulo siguen mirando.
+ */
+export function derivarDeTipoAcuerdo(tipo: SupplyTipoAcuerdo): {
+  modeloComercial: DatosAcuerdo['modeloComercial']
+  modalidadPago: DatosAcuerdo['modalidadPago']
+} {
+  switch (tipo) {
+    case 'COMPRA_PREPAGO':
+      return { modeloComercial: 'COMPRA_UNIDAD_COMPLETA', modalidadPago: 'PREPAGO_TOTAL' }
+    case 'DEPOSITO_ABIERTO':
+    case 'PAGO_POSTERIOR':
+      return { modeloComercial: 'COMPRA_UNIDAD_COMPLETA', modalidadPago: 'PAGO_POR_REDENCION' }
+    case 'VENTA_COMISION':
+      return { modeloComercial: 'COMISION', modalidadPago: 'PAGO_POR_REDENCION' }
+    case 'HIBRIDO':
+      return { modeloComercial: 'SUBSIDIO', modalidadPago: 'SUBSIDIO' }
+  }
+}
+
 export function validarAcuerdo(d: DatosAcuerdo): string | null {
   if (!d.itemNombre.trim()) return 'Hace falta decir qué se está comprando.'
+  if (d.tipoAcuerdo) {
+    const esperado = derivarDeTipoAcuerdo(d.tipoAcuerdo)
+    if (esperado.modeloComercial !== d.modeloComercial) {
+      return `Un acuerdo de tipo ${d.tipoAcuerdo} va con el modelo comercial ${esperado.modeloComercial}.`
+    }
+  }
+  if (d.alcance && d.alcance !== 'ITEM') {
+    // «15% sobre todo el menú»: sin descuento ni comisión no hay acuerdo que aplicar.
+    if ((d.descuentoPorcentaje ?? 0) <= 0 && (d.comisionPorcentaje ?? 0) <= 0) {
+      return 'Un acuerdo por categoría o catálogo necesita un descuento o una comisión que aplicar.'
+    }
+    if (d.alcance === 'CATEGORIA' && !d.categoriaCodigo?.trim()) {
+      return 'Un acuerdo por categoría tiene que decir cuál.'
+    }
+    if (d.modeloComercial !== 'COMISION') {
+      return 'Hoy el alcance por categoría o catálogo se ofrece con el modelo de venta a comisión: Membego no precompra unidades de todo un menú.'
+    }
+  }
   if (!Number.isInteger(d.cantidad) || d.cantidad <= 0) {
     return 'La cantidad contratada tiene que ser un entero positivo.'
   }

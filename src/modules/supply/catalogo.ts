@@ -1,4 +1,6 @@
 import type {
+  SupplyTipoAcuerdo,
+  SupplyAlcanceAcuerdo,
   SupplyAcuerdoEstado,
   SupplyAsientoTipo,
   SupplyConciliacionEstado,
@@ -589,4 +591,28 @@ export const SUPPLY_VENTA_ESTADO_LABELS: Record<SupplyVentaEstado, string> = {
   ENTREGADA: 'Entregada',
   CANCELADA: 'Cancelada',
   REEMBOLSADA: 'Reembolsada',
+}
+
+// ── Wizard de acuerdos (encargo 2026-09 bis, §3) ────────────────────────────
+
+export const SUPPLY_TIPO_ACUERDO_LABELS: Record<SupplyTipoAcuerdo, string> = {
+  COMPRA_PREPAGO: 'Compra anticipada',
+  DEPOSITO_ABIERTO: 'Depósito abierto',
+  PAGO_POSTERIOR: 'Compra con pago posterior',
+  VENTA_COMISION: 'Venta a comisión',
+  HIBRIDO: 'Híbrido (subsidio)',
+}
+
+export const SUPPLY_TIPO_ACUERDO_EXPLICACION: Record<SupplyTipoAcuerdo, string> = {
+  COMPRA_PREPAGO: 'Membego compra unidades concretas y las paga por adelantado. Nacen lotes al activar la orden.',
+  DEPOSITO_ABIERTO: 'Membego deposita dinero a cuenta; las compras y facturas se van aplicando al saldo del depósito.',
+  PAGO_POSTERIOR: 'Membego compra unidades y le paga al proveedor a plazo o a medida que se consumen.',
+  VENTA_COMISION: 'Membego no compra nada: vende lo del proveedor, cobra al cliente y retiene una comisión.',
+  HIBRIDO: 'Membego subsidia parte del precio; el cliente paga el resto al comercio.',
+}
+
+export const SUPPLY_ALCANCE_LABELS: Record<SupplyAlcanceAcuerdo, string> = {
+  ITEM: 'Un producto o servicio concreto',
+  CATEGORIA: 'Una categoría del catálogo',
+  CATALOGO: 'Todo el catálogo del proveedor',
 }
