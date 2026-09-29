@@ -341,12 +341,23 @@ export async function redencionesRecientes(tx: Tx, limite = 8) {
   })
 }
 
-/** Cuentas que ya deberían estar saldadas: obligaciones vencidas del tablero. */
+/** Cuentas que ya deberían estar saldadas: obligaciones vencidas del tablero, por pagar y por cobrar. */
 export async function obligacionesVencidas(tx: Tx, ahora = new Date(), limite = 8) {
-  return tx.supplyCuentaPorPagar.findMany({
-    where: { estado: { in: [...CUENTA_VIVA] }, vencimientoAt: { lt: ahora } },
-    orderBy: { vencimientoAt: 'asc' },
-    take: limite,
-    select: { id: true, codigo: true, descripcion: true, montoNeto: true, montoSaldado: true, vencimientoAt: true, proveedor: { select: { name: true } } },
+  const sel = { id: true, codigo: true, descripcion: true, montoNeto: true, montoSaldado: true, vencimientoAt: true, proveedor: { select: { name: true } } } as const
+  const [cxp, cxc] = await Promise.all([
+    tx.supplyCuentaPorPagar.findMany({ where: { estado: { in: [...CUENTA_VIVA] }, vencimientoAt: { lt: ahora } }, orderBy: { vencimientoAt: 'asc' }, take: limite, select: sel }),
+    tx.supplyCuentaPorCobrar.findMany({ where: { estado: { in: [...CUENTA_VIVA] }, vencimientoAt: { lt: ahora } }, orderBy: { vencimientoAt: 'asc' }, take: limite, select: sel }),
+  ])
+  const fila = (lado: 'CXP' | 'CXC') => (c: (typeof cxp)[number]) => ({
+    lado,
+    id: c.id,
+    codigo: c.codigo,
+    descripcion: c.descripcion,
+    proveedor: c.proveedor.name,
+    pendiente: Number(c.montoNeto) - Number(c.montoSaldado),
+    vencimientoAt: c.vencimientoAt as Date,
   })
+  return [...cxp.map(fila('CXP')), ...cxc.map(fila('CXC'))]
+    .sort((a, b) => a.vencimientoAt.getTime() - b.vencimientoAt.getTime())
+    .slice(0, limite)
 }

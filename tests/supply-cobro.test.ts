@@ -217,7 +217,7 @@ test('el cliente nunca teclea un enlace: sube un archivo', () => {
 
 test('la pantalla de revisión firma la URL, no enlaza la ruta', () => {
   const src = readFileSync(
-    join(process.cwd(), 'src/app/(superadmin)/superadmin/supply/cobros/page.tsx'),
+    join(process.cwd(), 'src/app/(superadmin)/superadmin/supply/finanzas/cobros-clientes/page.tsx'),
     'utf8'
   )
   assert.match(src, /urlComprobante\('pedido', p\.id, p\.comprobantePath\)/)
