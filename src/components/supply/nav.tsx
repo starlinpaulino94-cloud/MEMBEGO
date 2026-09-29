@@ -21,8 +21,8 @@ export const SECCIONES_SUPPLY = [
   { slug: 'proveedores', label: 'Proveedores', grupo: 'COMERCIAL' },
   { slug: 'acuerdos', label: 'Acuerdos', grupo: 'COMERCIAL' },
   { slug: 'ordenes', label: 'Compras', grupo: 'COMERCIAL' },
-  { slug: 'lotes', label: 'Lotes y asignaciones', grupo: 'INVENTARIO' },
-  { slug: 'derechos', label: 'Derechos', grupo: 'INVENTARIO' },
+  { slug: 'lotes', label: 'Lotes y asignaciones', grupo: 'POOL' },
+  { slug: 'derechos', label: 'Derechos', grupo: 'POOL' },
   { slug: 'redenciones', label: 'Redenciones', grupo: 'OPERACION' },
   { slug: 'ventas', label: 'Ventas', grupo: 'OPERACION' },
   { slug: 'incidencias', label: 'Incidencias', grupo: 'OPERACION' },
@@ -35,7 +35,7 @@ export const SECCIONES_SUPPLY = [
 
 export const GRUPOS_SUPPLY = [
   { id: 'COMERCIAL', label: 'Comercial' },
-  { id: 'INVENTARIO', label: 'Inventario' },
+  { id: 'POOL', label: 'Pool de supply' },
   { id: 'OPERACION', label: 'Operación' },
   { id: 'FINANZAS', label: 'Finanzas' },
   { id: 'ANALITICA', label: 'Analítica' },
