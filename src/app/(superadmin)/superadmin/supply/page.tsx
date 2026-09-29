@@ -11,7 +11,7 @@ import { formatMoneyRD } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
 import { resumenPool, reporteProveedores } from '@/modules/supply/pool'
 import { alertasDeVencimiento, vencimientosProximos } from '@/modules/supply/vencimientos'
-import { redencionesRecientes, resumenFinanciero, supplyPorCategoria } from '@/modules/supply/tablero'
+import { actividadReciente, economiaGlobal, redencionesRecientes, resumenFinanciero, supplyPorCategoria } from '@/modules/supply/tablero'
 import { sinEmpresa } from '@/lib/tenant'
 import { formatDateTime } from '@/lib/format'
 
@@ -35,7 +35,7 @@ export const metadata = { title: 'Membego Supply' }
 export default async function SupplyResumenPage() {
   await requireRole('SUPERADMIN')
 
-  const [pool, proveedores, alertas, fin, categorias, recientes, otrosVencimientos] = await Promise.all([
+  const [pool, proveedores, alertas, fin, categorias, recientes, otrosVencimientos, eco, actividad] = await Promise.all([
     resumenPool(),
     reporteProveedores(),
     alertasDeVencimiento(30),
@@ -43,6 +43,8 @@ export default async function SupplyResumenPage() {
     supplyPorCategoria(),
     sinEmpresa('Membego Supply: últimas redenciones del tablero', (tx) => redencionesRecientes(tx, 8)),
     vencimientosProximos(30),
+    economiaGlobal(),
+    actividadReciente(12),
   ])
 
   const criticas = alertas.filter((a) => a.nivel === 'CRITICO' || a.nivel === 'ALTO')
@@ -58,6 +60,17 @@ export default async function SupplyResumenPage() {
         nav={<NavSupply activa="" />}
       />
 
+      {/* Acciones principales (§38): el centro de gravedad es operar, no mirar. */}
+      <div className="flex flex-wrap gap-2">
+        <AccionRapida href="/superadmin/supply/proveedores#nuevo">Nuevo proveedor</AccionRapida>
+        <AccionRapida href="/superadmin/supply/acuerdos#nuevo">Nuevo acuerdo</AccionRapida>
+        <AccionRapida href="/superadmin/supply/ordenes#nueva">Nueva compra</AccionRapida>
+        <AccionRapida href="/superadmin/supply/finanzas/depositos">Nuevo depósito</AccionRapida>
+        <AccionRapida href="/superadmin/supply/lotes">Crear oferta / campaña</AccionRapida>
+        <AccionRapida href="/superadmin/supply/derechos#emitir">Emitir beneficio</AccionRapida>
+        <AccionRapida href="/superadmin/supply/finanzas/liquidaciones">Nueva liquidación</AccionRapida>
+      </div>
+
       {!hayAlgo ? (
         <EmptyState
           variant="card"
@@ -65,10 +78,15 @@ export default async function SupplyResumenPage() {
           description="Cuando Membego firme un acuerdo con una empresa y active su orden de compra, los derechos adquiridos aparecen aquí."
           action={
             <Link
-              href="/superadmin/supply/acuerdos"
+              href="/superadmin/supply/proveedores#nuevo"
               className="text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
-              Crear el primer acuerdo
+              1 · Agregar un proveedor
+            </Link>
+          }
+          secondaryAction={
+            <Link href="/superadmin/supply/acuerdos#nuevo" className="text-sm font-medium underline-offset-4 hover:underline">
+              2 · Crear el primer acuerdo
             </Link>
           }
         />
@@ -170,6 +188,13 @@ export default async function SupplyResumenPage() {
               href="/superadmin/supply/finanzas/liquidaciones"
               hrefLabel="Ver liquidaciones"
             />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="GMV" value={formatMoneyRD(eco.gmv)} sub="unidades vendidas + ventas a comisión" href="/superadmin/supply/economia" hrefLabel="Ver economía" />
+            <StatCard label="Ingresos de Membego" value={formatMoneyRD(eco.ingresos)} sub="cobros a clientes + comisiones" accent="brand" />
+            <StatCard label="Margen bruto" value={formatMoneyRD(eco.margenBruto)} sub={`neto estimado ${formatMoneyRD(eco.margenNetoEstimado)}`} accent={eco.margenBruto >= 0 ? 'success' : 'danger'} />
+            <StatCard label="Supply reservado" value={pool.retenidas.toLocaleString('es-DO')} sub={`${pool.asignadas.toLocaleString('es-DO')} asignadas a campañas`} />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -306,6 +331,29 @@ export default async function SupplyResumenPage() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle>Actividad reciente</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {actividad.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Todavía no hay actividad en Supply.</p>
+              ) : (
+                <ul className="divide-y divide-border text-sm">
+                  {actividad.map((a) => (
+                    <li key={a.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+                      <span>
+                        <strong>{a.quien}</strong> · {a.accion}
+                        {a.detalle ? <span className="text-muted-foreground"> · {a.detalle}</span> : null}
+                      </span>
+                      <span className="text-caption text-muted-foreground">{formatDateTime(a.fecha)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -361,6 +409,14 @@ export default async function SupplyResumenPage() {
         </>
       )}
     </div>
+  )
+}
+
+function AccionRapida({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link href={href} className="inline-flex h-9 items-center rounded-lg border border-primary/40 bg-primary/5 px-3 text-sm font-medium text-primary hover:bg-primary/10">
+      {children}
+    </Link>
   )
 }
 

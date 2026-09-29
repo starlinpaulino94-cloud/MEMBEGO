@@ -1,5 +1,8 @@
 import 'server-only'
 
+import { $Enums } from '@prisma/client'
+import { ACCION_LABEL } from '@/modules/auditoria/queries'
+
 import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { CUENTA_VIVA, INCIDENCIA_VIVA } from './catalogo'
 import { resumenCuentas } from './cuentas'
@@ -360,4 +363,134 @@ export async function obligacionesVencidas(tx: Tx, ahora = new Date(), limite = 
   return [...cxp.map(fila('CXP')), ...cxc.map(fila('CXC'))]
     .sort((a, b) => a.vencimientoAt.getTime() - b.vencimientoAt.getTime())
     .slice(0, limite)
+}
+
+
+// ── Economía global (§35) y actividad reciente (§37) ────────────────────────
+
+export interface EconomiaGlobal {
+  capitalInvertido: number
+  /** Valor total transaccionado: unidades vendidas a clientes + ventas a comisión (bruto). */
+  gmv: number
+  /** Lo que entra a Membego: cobros de unidades precompradas + comisiones. */
+  ingresos: number
+  costoSupplyConsumido: number
+  margenBruto: number
+  /** Margen bruto menos el costo del supply regalado (CAC) y vencido. */
+  margenNetoEstimado: number
+  subsidios: number
+  regalado: { unidades: number; valor: number }
+  vendido: { unidades: number; valor: number; ingresos: number }
+  vencido: { unidades: number; valor: number }
+  cacReal: number
+  clientesAdquiridos: number
+  ltvObservado: number
+  ventasComision: { ventas: number; bruto: number; comision: number }
+}
+
+export async function economiaGlobal(ahora: Date = new Date()): Promise<EconomiaGlobal> {
+  return sinEmpresa('Membego Supply: economía global con datos reales', async (tx) => {
+    const [lotes, redimidos, depositos, ventas] = await Promise.all([
+      tx.supplyLote.findMany({
+        where: { estado: { notIn: ['CANCELADO'] } },
+        select: { compradas: true, cerradas: true, snapshotCostoUnitario: true, snapshotModelo: true, snapshotAporteMembego: true },
+      }),
+      tx.supplyDerecho.findMany({
+        where: { estado: 'REDIMIDO' },
+        select: { clienteId: true, precioCliente: true, costoUnitario: true, lote: { select: { snapshotModelo: true, snapshotAporteMembego: true } } },
+        take: 20_000,
+      }),
+      saldoDepositos(tx),
+      tx.supplyVentaDirecta.findMany({ where: { estado: 'ENTREGADA' }, select: { montoBruto: true, comisionMonto: true } }),
+    ])
+    let capital = 0, vencidoU = 0, vencidoV = 0
+    for (const l of lotes) {
+      const c = Number(l.snapshotCostoUnitario)
+      capital += l.compradas * c
+      vencidoU += l.cerradas
+      vencidoV += l.cerradas * c
+    }
+    let regaladoU = 0, regaladoV = 0, vendidoU = 0, vendidoV = 0, ingresosVenta = 0, subsidios = 0, costoConsumido = 0
+    const clientes = new Set<string>()
+    for (const d of redimidos) {
+      const costo = Number(d.costoUnitario)
+      const precio = Number(d.precioCliente)
+      costoConsumido += costo
+      clientes.add(d.clienteId)
+      if (d.lote.snapshotModelo === 'SUBSIDIO') subsidios += Number(d.lote.snapshotAporteMembego ?? costo)
+      if (precio > 0) {
+        vendidoU += 1
+        vendidoV += costo
+        ingresosVenta += precio
+      } else {
+        regaladoU += 1
+        regaladoV += costo
+      }
+    }
+    const comision = ventas.reduce((t, v) => t + Number(v.comisionMonto), 0)
+    const brutoVentas = ventas.reduce((t, v) => t + Number(v.montoBruto), 0)
+    const ingresos = ingresosVenta + comision
+    const margenBruto = ingresos - vendidoV
+    const cacReal = clientes.size > 0 ? regaladoV / clientes.size : 0
+    // LTV observado: lo que esos clientes gastaron después en toda la red.
+    let ltv = 0
+    if (clientes.size > 0) {
+      const gasto = await tx.transaction.aggregate({ where: { clienteId: { in: [...clientes] }, estado: 'APPLIED', createdAt: { lte: ahora } }, _sum: { monto: true } }).catch(() => ({ _sum: { monto: null } }))
+      ltv = Number(gasto._sum.monto ?? 0) / clientes.size
+    }
+    return {
+      capitalInvertido: redondear2(capital + depositos.disponible),
+      gmv: redondear2(ingresosVenta + brutoVentas),
+      ingresos: redondear2(ingresos),
+      costoSupplyConsumido: redondear2(costoConsumido),
+      margenBruto: redondear2(margenBruto),
+      margenNetoEstimado: redondear2(margenBruto - regaladoV - vencidoV),
+      subsidios: redondear2(subsidios),
+      regalado: { unidades: regaladoU, valor: redondear2(regaladoV) },
+      vendido: { unidades: vendidoU, valor: redondear2(vendidoV), ingresos: redondear2(ingresosVenta) },
+      vencido: { unidades: vencidoU, valor: redondear2(vencidoV) },
+      cacReal: redondear2(cacReal),
+      clientesAdquiridos: clientes.size,
+      ltvObservado: redondear2(ltv),
+      ventasComision: { ventas: ventas.length, bruto: redondear2(brutoVentas), comision: redondear2(comision) },
+    }
+  })
+}
+
+export interface ActividadReciente {
+  id: string
+  fecha: Date
+  quien: string
+  accion: string
+  entidadTipo: string
+  entidadId: string
+  detalle: string | null
+}
+
+/** «Starlin creó PO #123»: las últimas acciones SUPPLY_* de la bitácora (§37). */
+export async function actividadReciente(limite = 15): Promise<ActividadReciente[]> {
+  const acciones = Object.values($Enums.AuditAccion).filter((a) => a.startsWith('SUPPLY_'))
+  const filas = await sinEmpresa('Membego Supply: actividad reciente del tablero', (tx) =>
+    tx.auditLog.findMany({
+      where: { accion: { in: acciones } },
+      orderBy: { createdAt: 'desc' },
+      take: limite,
+      select: { id: true, createdAt: true, accion: true, entidadTipo: true, entidadId: true, payload: true, user: { select: { name: true } } },
+    })
+  )
+  return filas.map((f) => {
+    const p = (f.payload ?? {}) as Record<string, unknown>
+    const ref = [p.numero, p.codigo].find((v) => typeof v === 'string') as string | undefined
+    const monto = [p.monto, p.netoLiquidar, p.montoBruto].find((v) => typeof v === 'number') as number | undefined
+    const detalle = [ref, monto != null ? `RD$${monto.toLocaleString('es-DO')}` : null].filter(Boolean).join(' · ') || null
+    return {
+      id: f.id,
+      fecha: f.createdAt,
+      quien: f.user?.name ?? 'Sistema',
+      accion: ACCION_LABEL[f.accion] ?? f.accion,
+      entidadTipo: f.entidadTipo,
+      entidadId: f.entidadId,
+      detalle,
+    }
+  })
 }
