@@ -43,6 +43,12 @@ enum SupplyTipo {
 enum SupplyModeloComercial {
   COMPRA_UNIDAD_COMPLETA
   SUBSIDIO
+  /// VENTA SIN PRECOMPRA (§14 del encargo). Membego NO compra nada: vende el
+  /// producto del proveedor, cobra al cliente, y cuando el proveedor entrega
+  /// nace una CUENTA POR PAGAR por el neto (bruto − comisión). No hay lote, no
+  /// hay derecho, no hay ledger de cubetas: es otro modelo económico y vive en
+  /// `supply_ventas_directas`, no en `supply_lotes`.
+  COMISION
 }
 
 /// Cuándo cobra el proveedor. Protege el flujo de caja de Membego: prometer
@@ -70,9 +76,19 @@ enum SupplyAcuerdoEstado {
   PENDIENTE_APROBACION
   APROBADO
   ACTIVO
+  /// Pausado por decisión de Membego (incidencias, deuda, renegociación). No
+  /// emite ni vende; las obligaciones ya nacidas siguen vivas. Vuelve a ACTIVO.
+  SUSPENDIDO
   COMPLETADO
   VENCIDO
   CANCELADO
+}
+
+/// Cada cuánto se corta y se liquida un acuerdo.
+enum SupplyFrecuenciaCorte {
+  SEMANAL
+  QUINCENAL
+  MENSUAL
 }
 
 enum SupplyOrdenEstado {
@@ -171,15 +187,35 @@ enum SupplyIncidenciaTipo {
   EMPRESA_CERRADA
   CALIDAD_INSUFICIENTE
   SUCURSAL_NO_ACEPTO
+  /// El escáner no reconoció el código (§19).
+  QR_INVALIDO
+  /// Se entregó una cantidad distinta de la comprada.
+  CANTIDAD_INCORRECTA
+  /// El cliente llegó con un derecho ya vencido.
+  DERECHO_VENCIDO
+  /// Se intentó, o se registró, la misma unidad dos veces.
+  DOBLE_REDENCION
+  /// Sospecha de fraude: código compartido, suplantación, entrega ficticia.
+  SOSPECHA_FRAUDE
+  /// Error de quien operó: escaneó al cliente equivocado, marcó entregado sin entregar.
+  ERROR_HUMANO
+  /// Reclamo general del cliente que no encaja en los anteriores.
+  RECLAMO_CLIENTE
   OTRO
 }
 
 enum SupplyIncidenciaEstado {
   ABIERTA
   EN_REVISION
+  /// Membego pidió información o una acción al proveedor y espera.
+  ESPERANDO_PROVEEDOR
+  /// Membego pidió información al cliente y espera.
+  ESPERANDO_CLIENTE
   RESUELTA_CLIENTE
   RESUELTA_COMERCIO
   RESUELTA_MEMBEGO
+  /// Se revisó y no procede: la operación original se sostiene.
+  RECHAZADA
   CERRADA
 }
 
@@ -195,6 +231,12 @@ enum SupplyAsientoTipo {
   CREDITO
   AJUSTE
   REVERSA
+  /// Nació una cuenta por pagar (factura del proveedor, venta directa
+  /// entregada, ajuste): a favor del proveedor, positivo.
+  CUENTA_POR_PAGAR
+  /// Nació una cuenta por cobrar (reembolso pendiente, penalización,
+  /// diferencia conciliada): a favor de Membego, negativo.
+  CUENTA_POR_COBRAR
 }
 
 enum SupplyPagoTipo {
@@ -245,6 +287,8 @@ model SupplyAcuerdo {
   varianteEtiqueta String?
 
   // ── Economía contratada ──────────────────────────────────────────────────
+  /// En COMISION no se compra nada: `cantidad` es el TOPE de unidades que
+  /// Membego se compromete a vender bajo este acuerdo y `costoUnitario` es 0.
   cantidad           Int
   costoUnitario      Decimal  @db.Decimal(12, 2)
   /// Precio público de referencia al firmar. Sirve para medir el descuento
@@ -257,6 +301,27 @@ model SupplyAcuerdo {
   /// Porcentaje de anticipo en PREPAGO_PARCIAL (0-100).
   anticipoPorcentaje Decimal? @db.Decimal(5, 2)
   condicionesPago    String?
+
+  // ── Condiciones comerciales y de liquidación (§4 del encargo) ───────────
+  /// En COMISION: lo que Membego retiene de cada venta (0-100). Se congela en
+  /// cada venta al abrirla: cambiarlo después no altera ventas históricas.
+  comisionPorcentaje   Decimal?               @db.Decimal(5, 2)
+  /// Descuento negociado sobre el precio público, informativo.
+  descuentoPorcentaje  Decimal?               @db.Decimal(5, 2)
+  /// Impuesto aplicable a las facturas del proveedor (ITBIS), informativo.
+  impuestoPorcentaje   Decimal?               @db.Decimal(5, 2)
+  /// Días de plazo desde el corte para pagar la liquidación.
+  plazoPagoDias        Int?
+  frecuenciaCorte      SupplyFrecuenciaCorte?
+  /// Cómo se paga la liquidación: "Transferencia", "Cheque", "Compensación con depósito"…
+  metodoLiquidacion    String?
+  politicaDevoluciones String?
+  slaTexto             String?
+  /// Versión vigente de las condiciones. Cada enmienda o cambio aprobado la
+  /// incrementa y guarda un snapshot en `supply_acuerdo_versiones`: una
+  /// liquidación histórica apunta a la versión con la que se calculó.
+  version              Int                    @default(1)
+  suspendidoMotivo     String?
 
   // ── Vigencia y alcance ───────────────────────────────────────────────────
   inicioAt DateTime
@@ -297,17 +362,25 @@ model SupplyAcuerdo {
   pagos     SupplyPago[]
   asientos  SupplyAsientoFinanciero[]
 
-  @@index([proveedorId, estado])
-  @@index([estado, finAt])
-  @@index([servicioId])
-  @@index([promocionId])
-  @@map("supply_acuerdos")
+  versiones        SupplyAcuerdoVersion[]
+  depositos        SupplyDeposito[]
+  facturas         SupplyFacturaProveedor[]
+  ventas           SupplyVentaDirecta[]
+  cuentasPorPagar  SupplyCuentaPorPagar[]
+  cuentasPorCobrar SupplyCuentaPorCobrar[]
+  liquidaciones    SupplyLiquidacion[]
+  conciliaciones   SupplyConciliacion[]
 
   /// Apuntada por una clave COMPUESTA: el hijo no puede colgar de un padre de
   /// otro proveedor. Nace de un agujero medido el 25-09-2026 — la política de
   /// RLS ata la fila por su `proveedorId`, así que nadie miraba de quién era el
   /// padre, y una empresa podía colgar un derecho del lote de otra.
   @@unique([id, proveedorId])
+  @@index([proveedorId, estado])
+  @@index([estado, finAt])
+  @@index([servicioId])
+  @@index([promocionId])
+  @@map("supply_acuerdos")
 }
 
 /// CAMBIO CONTRACTUAL AUDITADO (Fase 20). El comercio ve sus números pero no
@@ -369,6 +442,13 @@ model SupplyOrden {
   condicionesPago String?
   notas           String?
 
+  /// Suma de los pagos CONFIRMADOS con `ordenId`. Caché del ledger financiero:
+  /// es lo que decide PARCIALMENTE_FONDEADA / FONDEADA sin que nadie lo marque
+  /// a mano (hallazgo H4 de la auditoría del 29-09-2026).
+  montoPagado Decimal  @default(0) @db.Decimal(14, 2)
+  /// Rutas o referencias de documentos adjuntos (cotización, contrato firmado).
+  documentos  String[] @default([])
+
   creadoPorId     String?
   creadoPor       User?     @relation("SupplyOrdenCreadaPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
   aprobadoPorId   String?
@@ -385,6 +465,7 @@ model SupplyOrden {
   lotes    SupplyLote[]
   pagos    SupplyPago[]
   asientos SupplyAsientoFinanciero[]
+  facturas SupplyFacturaProveedor[]
 
   @@index([proveedorId, estado])
   @@index([acuerdoId])
@@ -482,15 +563,14 @@ model SupplyLote {
   asignaciones SupplyAsignacion[]
   derechos     SupplyDerecho[]
 
+  /// Apuntada por la clave compuesta de `SupplyDerecho`: un derecho no puede
+  /// colgar de un lote de OTRO proveedor.
+  @@unique([id, proveedorId])
   @@index([proveedorId, estado])
   @@index([estado, venceAt])
   @@index([acuerdoId])
   @@index([ordenId])
   @@map("supply_lotes")
-
-  /// Apuntada por la clave compuesta de `SupplyDerecho`: un derecho no puede
-  /// colgar de un lote de OTRO proveedor.
-  @@unique([id, proveedorId])
 }
 
 /// EL LEDGER. Un asiento = un traslado de `cantidad` unidades de la cubeta
@@ -521,6 +601,13 @@ model SupplyMovimiento {
   /// una transferencia. Los dos asientos de una transferencia la comparten.
   referencia   String?
   motivo       String?
+
+  /// Las seis cubetas ANTES y DESPUÉS de este asiento (§8 del encargo:
+  /// «previous balance / new balance»). Redundante con la suma del ledger a
+  /// propósito: permite leer un asiento suelto y saber qué dejó, y detectar en
+  /// conciliación un asiento que se coló fuera de orden.
+  saldoAntes   Json @default("{}")
+  saldoDespues Json @default("{}")
 
   actorId       String?
   actor         User?   @relation("SupplyMovimientoActor", fields: [actorId], references: [id], onDelete: SetNull)
@@ -643,9 +730,14 @@ model SupplyDerecho {
   vouchers SupplyVoucher[]
   reservas SupplyReserva[]
 
-
   /// El pedido que lo paga, si esta unidad se vendió en vez de regalarse.
   pedido SupplyPedido?
+
+  /// Apuntada por una clave COMPUESTA: el hijo no puede colgar de un padre de
+  /// otro proveedor. Nace de un agujero medido el 25-09-2026 — la política de
+  /// RLS ata la fila por su `proveedorId`, así que nadie miraba de quién era el
+  /// padre, y una empresa podía colgar un derecho del lote de otra.
+  @@unique([id, proveedorId])
   @@index([clienteId, estado])
   @@index([loteId, estado])
   @@index([proveedorId, estado])
@@ -653,12 +745,6 @@ model SupplyDerecho {
   @@index([estado, vencAt])
   @@index([estado, retencionExpiraAt])
   @@map("supply_derechos")
-
-  /// Apuntada por una clave COMPUESTA: el hijo no puede colgar de un padre de
-  /// otro proveedor. Nace de un agujero medido el 25-09-2026 — la política de
-  /// RLS ata la fila por su `proveedorId`, así que nadie miraba de quién era el
-  /// padre, y una empresa podía colgar un derecho del lote de otra.
-  @@unique([id, proveedorId])
 }
 
 /// CÓMO SE PRESENTA EL DERECHO EN EL MOSTRADOR (Fase 12).
@@ -697,16 +783,15 @@ model SupplyVoucher {
   sesionesQr  SupplyQrSesion[]
   redenciones SupplyRedencion[]
 
-  @@index([derechoId])
-  @@index([proveedorId, estado])
-  @@index([estado, vigenteHasta])
-  @@map("supply_vouchers")
-
   /// Apuntada por una clave COMPUESTA: el hijo no puede colgar de un padre de
   /// otro proveedor. Nace de un agujero medido el 25-09-2026 — la política de
   /// RLS ata la fila por su `proveedorId`, así que nadie miraba de quién era el
   /// padre, y una empresa podía colgar un derecho del lote de otra.
   @@unique([id, proveedorId])
+  @@index([derechoId])
+  @@index([proveedorId, estado])
+  @@index([estado, vigenteHasta])
+  @@map("supply_vouchers")
 }
 
 /// QR DINÁMICO (Fase 13). El cliente pulsa "Usar beneficio" y se abre una
@@ -726,7 +811,11 @@ model SupplyQrSesion {
 
   /// Sucursal que el cliente eligió al abrir la sesión, si la hubo. El escáner
   /// de otra sucursal rechaza el código.
-  sucursalId String?
+  sucursalId           String?
+  /// Dispositivo que abrió la sesión (user-agent recortado) y el que la
+  /// consumió. Sirven para investigar un código compartido (§12).
+  dispositivo          String?
+  consumidoDispositivo String?
 
   consumidoAt    DateTime?
   consumidoPorId String?
@@ -866,7 +955,7 @@ model SupplyIncidencia {
   cliente   Cliente? @relation("SupplyIncidenciaCliente", fields: [clienteId], references: [id], onDelete: SetNull)
 
   redencionId String?
-  redencion   SupplyRedencion? @relation(fields: [redencionId], references: [id], onDelete: SetNull)
+  redencion   SupplyRedencion?    @relation(fields: [redencionId], references: [id], onDelete: SetNull)
   voucherId   String?
   derechoId   String?
   loteId      String?
@@ -874,6 +963,9 @@ model SupplyIncidencia {
   sucursalId  String?
   destinoTipo String?
   destinoId   String?
+  /// Venta sin precompra afectada, cuando la incidencia es sobre una venta.
+  ventaId     String?
+  venta       SupplyVentaDirecta? @relation(fields: [ventaId], references: [id], onDelete: SetNull)
 
   tipo   SupplyIncidenciaTipo
   estado SupplyIncidenciaEstado @default(ABIERTA)
@@ -924,19 +1016,29 @@ model SupplyPago {
   periodoDesde DateTime?
   periodoHasta DateTime?
 
+  /// Cuenta por pagar que salda este pago, si paga UNA obligación concreta
+  /// (una factura pagada aparte sin tocar el depósito, §3 B del encargo).
+  cuentaPorPagarId String?
+  cuentaPorPagar   SupplyCuentaPorPagar? @relation(fields: [cuentaPorPagarId], references: [id], onDelete: SetNull)
+
   registradoPorId String?
   registradoPor   User?     @relation("SupplyPagoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
   confirmadoAt    DateTime?
+  anuladoAt       DateTime?
+  anuladoMotivo   String?
 
   claveIdempotencia String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  asientos SupplyAsientoFinanciero[]
+  asientos    SupplyAsientoFinanciero[]
+  deposito    SupplyDeposito?
+  liquidacion SupplyLiquidacion?
 
   @@index([proveedorId, estado])
   @@index([acuerdoId, createdAt])
+  @@index([ordenId])
   @@map("supply_pagos")
 }
 
@@ -963,6 +1065,12 @@ model SupplyAsientoFinanciero {
   referencia  String?
   motivo      String?
 
+  /// Liquidación que absorbió este asiento (una redención por pagar entra en
+  /// UNA liquidación y solo una: el reclamo se hace con `UPDATE … WHERE
+  /// "liquidacionId" IS NULL`, que es atómico).
+  liquidacionId String?
+  liquidacion   SupplyLiquidacion? @relation(fields: [liquidacionId], references: [id], onDelete: SetNull)
+
   actorId String?
   actor   User?   @relation("SupplyAsientoActor", fields: [actorId], references: [id], onDelete: SetNull)
 
@@ -972,6 +1080,7 @@ model SupplyAsientoFinanciero {
   @@index([acuerdoId, tipo])
   @@index([pagoId])
   @@index([redencionId])
+  @@index([liquidacionId])
   @@map("supply_asientos_financieros")
 }
 
@@ -1056,8 +1165,15 @@ model SupplyPedido {
 
   /// El derecho retenido que este pedido paga. Uno por pedido: el índice único
   /// impide que dos pedidos vivos peleen por la misma unidad retenida.
-  derechoId String        @unique
-  derecho   SupplyDerecho @relation(fields: [derechoId], references: [id], onDelete: Restrict)
+  ///
+  /// Opcional desde la venta sin precompra: un pedido paga O un derecho
+  /// retenido O una venta directa, nunca los dos ni ninguno
+  /// (`CHECK supply_pedidos_un_solo_objeto`).
+  derechoId String?             @unique
+  derecho   SupplyDerecho?      @relation(fields: [derechoId], references: [id], onDelete: Restrict)
+  /// La venta sin precompra que este pedido paga (§14).
+  ventaId   String?             @unique
+  venta     SupplyVentaDirecta? @relation(fields: [ventaId], references: [id], onDelete: Restrict)
 
   /// Lo que el cliente debe pagar, congelado al abrir el pedido. Al confirmar
   /// se compara contra esto: un monto que no cuadra no activa nada, igual que
@@ -1075,10 +1191,10 @@ model SupplyPedido {
   comprobanteAt   DateTime?
 
   /// Quién de Membego lo aprobó o lo rechazó, y cuándo. Nunca el cliente.
-  revisadoPor    String?
-  revisor        User?     @relation("SupplyPedidoRevisor", fields: [revisadoPor], references: [id], onDelete: Restrict)
-  revisadoAt     DateTime?
-  motivoRechazo  String?
+  revisadoPor   String?
+  revisor       User?     @relation("SupplyPedidoRevisor", fields: [revisadoPor], references: [id], onDelete: Restrict)
+  revisadoAt    DateTime?
+  motivoRechazo String?
 
   /// Hasta cuándo aguanta el hold. Se copia del derecho para poder barrer sin
   /// mirar la otra tabla.
@@ -1094,4 +1210,736 @@ model SupplyPedido {
   @@index([clienteId, estado])
   @@index([estado, comprobanteAt])
   @@map("supply_pedidos")
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CAPA FINANCIERA (auditoría del 29-09-2026 · §3 B, §5, §14-§18, §21)
+//
+// Hasta aquí el módulo sabía comprar, repartir y entregar. Lo que faltaba era
+// la mitad del dinero: depósitos abiertos, facturas del proveedor, cuentas por
+// pagar y por cobrar, liquidaciones con snapshot, conciliación CONTRA el
+// proveedor y la venta sin precompra. Cada uno es una entidad con su estado y
+// su signo; la pantalla «Finanzas» solo los agrupa.
+//
+// EL LEDGER FINANCIERO SIGUE SIENDO LA VERDAD DEL SALDO (ADR-0008). Estas
+// tablas son sub-libros: dicen QUÉ obligación concreta queda abierta y cuánto
+// de ella se saldó, y cada escritura suya deja también su asiento. Si un día
+// discrepan, manda el ledger.
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Proveedor ───────────────────────────────────────────────────────────────
+
+enum SupplyProveedorOrigen {
+  /// Empresa que ya opera en Membego y además le vende supply.
+  REGISTRADA
+  /// Proveedor que todavía no usa la plataforma: se le crea una `Company`
+  /// mínima e inactiva para colgar de ella el historial. Convertirlo en
+  /// empresa registrada es activar esa misma `Company`, no crear otra.
+  EXTERNA
+}
+
+/// FICHA DEL PROVEEDOR (§5). La identidad sigue siendo `Company`: esto es lo
+/// que la relación comercial necesita saber y una empresa normal no tiene
+/// (contacto de facturación, banco donde se le paga, plazo, RNC).
+model SupplyProveedor {
+  id        String  @id @default(cuid())
+  companyId String  @unique
+  company   Company @relation("SupplyProveedorPerfil", fields: [companyId], references: [id], onDelete: Restrict)
+
+  origen SupplyProveedorOrigen @default(REGISTRADA)
+  activo Boolean               @default(true)
+
+  rnc              String?
+  razonSocial      String?
+  contactoNombre   String?
+  contactoEmail    String?
+  contactoTelefono String?
+  banco            String?
+  cuentaBancaria   String?
+  tipoCuenta       String?
+  plazoPagoDias    Int?
+  notas            String?
+
+  /// Cuándo pasó de EXTERNA a REGISTRADA. El historial no se toca.
+  convertidoAt DateTime?
+
+  creadoPorId String?
+  creadoPor   User?   @relation("SupplyProveedorCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([origen, activo])
+  @@map("supply_proveedores")
+}
+
+// ── Versionado del acuerdo (§4) ─────────────────────────────────────────────
+
+/// SNAPSHOT COMPLETO DE LAS CONDICIONES en cada versión. Una liquidación o una
+/// venta guardan el número de versión con el que se calcularon: enmendar el
+/// acuerdo crea la versión siguiente y NUNCA reescribe la anterior.
+model SupplyAcuerdoVersion {
+  id        String        @id @default(cuid())
+  acuerdoId String
+  acuerdo   SupplyAcuerdo @relation(fields: [acuerdoId], references: [id], onDelete: Cascade)
+
+  version      Int
+  snapshot     Json
+  motivo       String
+  enmiendaId   String?   @unique
+  vigenteDesde DateTime  @default(now())
+  vigenteHasta DateTime?
+
+  creadoPorId String?
+  creadoPor   User?    @relation("SupplyAcuerdoVersionCreadaPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@unique([acuerdoId, version])
+  @@map("supply_acuerdo_versiones")
+}
+
+// ── Depósito abierto (§3 B) ─────────────────────────────────────────────────
+
+enum SupplyDepositoEstado {
+  /// Registrado; el pago que lo fondea todavía no se confirmó.
+  PENDIENTE
+  ABIERTO
+  PARCIALMENTE_APLICADO
+  /// Sin saldo: se aplicó entero.
+  AGOTADO
+  /// Cerrado por decisión (con o sin saldo devuelto).
+  CERRADO
+  CANCELADO
+}
+
+enum SupplyDepositoMovimientoTipo {
+  APERTURA
+  /// Se aplicó parte del saldo a una factura o cuenta por pagar.
+  APLICACION
+  /// Se deshizo una aplicación (factura anulada, disputa).
+  REVERSA_APLICACION
+  /// El proveedor devolvió saldo no usado.
+  DEVOLUCION
+  AJUSTE
+}
+
+/// DINERO ENTREGADO SIN COMPRA CONCRETA. RD$100.000 al proveedor «a cuenta»:
+/// después llegan facturas y Membego decide, factura a factura, si aplica el
+/// depósito, paga aparte o lo deja vivo. El saldo disponible es
+/// original − aplicado − devuelto, y cada cambio deja un movimiento con saldo
+/// antes y después.
+model SupplyDeposito {
+  id     String @id @default(cuid())
+  /// MBG-DEP-000001
+  codigo String @unique
+
+  proveedorId String
+  proveedor   Company        @relation("SupplyProveedorDepositos", fields: [proveedorId], references: [id], onDelete: Restrict)
+  acuerdoId   String?
+  acuerdo     SupplyAcuerdo? @relation(fields: [acuerdoId], references: [id], onDelete: SetNull)
+  /// El pago que lo fondea. Al confirmarse ese pago el depósito se ABRE.
+  pagoId      String?        @unique
+  pago        SupplyPago?    @relation(fields: [pagoId], references: [id], onDelete: SetNull)
+
+  estado SupplyDepositoEstado @default(PENDIENTE)
+
+  montoOriginal Decimal @db.Decimal(14, 2)
+  /// Cachés de los movimientos. La verdad es `supply_deposito_movimientos`.
+  montoAplicado Decimal @default(0) @db.Decimal(14, 2)
+  montoDevuelto Decimal @default(0) @db.Decimal(14, 2)
+  moneda        String  @default("DOP")
+
+  referencia String?
+  notas      String?
+  documentos String[] @default([])
+
+  abiertoAt     DateTime?
+  /// Fecha prevista de cierre: alimenta los avisos de vencimiento (§20).
+  cierraAt      DateTime?
+  cerradoAt     DateTime?
+  cerradoMotivo String?
+
+  registradoPorId String?
+  registradoPor   User?   @relation("SupplyDepositoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
+  aprobadoPorId   String?
+  aprobadoPor     User?   @relation("SupplyDepositoAprobadoPor", fields: [aprobadoPorId], references: [id], onDelete: SetNull)
+
+  claveIdempotencia String? @unique
+  version           Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movimientos SupplyDepositoMovimiento[]
+
+  @@index([proveedorId, estado])
+  @@index([estado, cierraAt])
+  @@map("supply_depositos")
+}
+
+model SupplyDepositoMovimiento {
+  id         String         @id @default(cuid())
+  depositoId String
+  deposito   SupplyDeposito @relation(fields: [depositoId], references: [id], onDelete: Restrict)
+
+  tipo         SupplyDepositoMovimientoTipo
+  /// Siempre positivo; el sentido lo da el tipo.
+  monto        Decimal                      @db.Decimal(14, 2)
+  /// Saldo DISPONIBLE antes y después (§3 B: nunca se pierde trazabilidad).
+  saldoAntes   Decimal                      @db.Decimal(14, 2)
+  saldoDespues Decimal                      @db.Decimal(14, 2)
+
+  facturaId        String?
+  factura          SupplyFacturaProveedor? @relation(fields: [facturaId], references: [id], onDelete: SetNull)
+  cuentaPorPagarId String?
+  cuentaPorPagar   SupplyCuentaPorPagar?   @relation(fields: [cuentaPorPagarId], references: [id], onDelete: SetNull)
+  liquidacionId    String?
+  liquidacion      SupplyLiquidacion?      @relation(fields: [liquidacionId], references: [id], onDelete: SetNull)
+
+  motivo     String?
+  referencia String?
+
+  actorId String?
+  actor   User?   @relation("SupplyDepositoMovimientoActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([depositoId, createdAt])
+  @@map("supply_deposito_movimientos")
+}
+
+// ── Facturas del proveedor (§21) ────────────────────────────────────────────
+
+enum SupplyFacturaTipo {
+  FACTURA
+  /// A favor de Membego: genera una cuenta por cobrar.
+  NOTA_CREDITO
+  /// A favor del proveedor: genera una cuenta por pagar.
+  NOTA_DEBITO
+}
+
+enum SupplyFacturaEstado {
+  REGISTRADA
+  PARCIALMENTE_PAGADA
+  PAGADA
+  DISPUTADA
+  ANULADA
+}
+
+/// DOCUMENTO QUE EL PROVEEDOR EMITE A MEMBEGO. No se implementa legislación
+/// fiscal (§21): se guarda el documento y la relación financiera correcta.
+/// Registrarla crea su cuenta por pagar (o por cobrar, si es nota de crédito).
+model SupplyFacturaProveedor {
+  id     String @id @default(cuid())
+  /// Correlativo interno: MBG-FP-000001.
+  codigo String @unique
+  /// Número del documento tal como lo emitió el proveedor.
+  numero String
+
+  proveedorId String
+  proveedor   Company        @relation("SupplyProveedorFacturas", fields: [proveedorId], references: [id], onDelete: Restrict)
+  acuerdoId   String?
+  acuerdo     SupplyAcuerdo? @relation(fields: [acuerdoId], references: [id], onDelete: SetNull)
+  ordenId     String?
+  orden       SupplyOrden?   @relation(fields: [ordenId], references: [id], onDelete: SetNull)
+
+  tipo   SupplyFacturaTipo   @default(FACTURA)
+  estado SupplyFacturaEstado @default(REGISTRADA)
+
+  fechaEmision     DateTime
+  fechaVencimiento DateTime?
+
+  subtotal     Decimal @db.Decimal(14, 2)
+  impuestos    Decimal @default(0) @db.Decimal(14, 2)
+  total        Decimal @db.Decimal(14, 2)
+  moneda       String  @default("DOP")
+  /// Caché de lo saldado por pagos + depósito aplicado. Refleja la CxP.
+  montoSaldado Decimal @default(0) @db.Decimal(14, 2)
+
+  documentoPath String?
+  notas         String?
+
+  registradoPorId String?
+  registradoPor   User?   @relation("SupplyFacturaRegistradaPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
+
+  claveIdempotencia String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cuentaPorPagar       SupplyCuentaPorPagar?
+  cuentaPorCobrar      SupplyCuentaPorCobrar?
+  aplicacionesDeposito SupplyDepositoMovimiento[]
+
+  @@unique([proveedorId, numero])
+  @@index([proveedorId, estado])
+  @@index([estado, fechaVencimiento])
+  @@map("supply_facturas_proveedor")
+}
+
+// ── Cuentas por pagar y por cobrar (§15, §16) ───────────────────────────────
+
+enum SupplyCuentaEstado {
+  ABIERTA
+  PARCIALMENTE_SALDADA
+  SALDADA
+  DISPUTADA
+  CANCELADA
+}
+
+enum SupplyCuentaPorPagarOrigen {
+  FACTURA_PROVEEDOR
+  VENTA_DIRECTA
+  AJUSTE
+  DIFERENCIA_CONCILIACION
+  MANUAL
+}
+
+enum SupplyCuentaPorCobrarOrigen {
+  REEMBOLSO
+  AJUSTE
+  PENALIZACION
+  DIFERENCIA_CONCILIACION
+  SUBSIDIO
+  CARGO
+  NOTA_CREDITO
+  OTRO
+}
+
+/// LO QUE MEMBEGO DEBE A UN PROVEEDOR, obligación por obligación. Nace de una
+/// factura, de una venta directa entregada, de un ajuste o de una conciliación.
+/// Se salda por pago directo, por aplicación de depósito o dentro de una
+/// liquidación; cada camino deja su rastro y su asiento.
+model SupplyCuentaPorPagar {
+  id     String @id @default(cuid())
+  /// MBG-CXP-000001
+  codigo String @unique
+
+  proveedorId String
+  proveedor   Company        @relation("SupplyProveedorCuentasPorPagar", fields: [proveedorId], references: [id], onDelete: Restrict)
+  acuerdoId   String?
+  acuerdo     SupplyAcuerdo? @relation(fields: [acuerdoId], references: [id], onDelete: SetNull)
+
+  origen      SupplyCuentaPorPagarOrigen
+  descripcion String
+
+  facturaId      String?                 @unique
+  factura        SupplyFacturaProveedor? @relation(fields: [facturaId], references: [id], onDelete: SetNull)
+  ventaId        String?                 @unique
+  venta          SupplyVentaDirecta?     @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+  discrepanciaId String?                 @unique
+  discrepancia   SupplyDiscrepancia?     @relation("SupplyDiscrepanciaCxP", fields: [discrepanciaId], references: [id], onDelete: SetNull)
+
+  montoBruto   Decimal @db.Decimal(14, 2)
+  comision     Decimal @default(0) @db.Decimal(14, 2)
+  descuentos   Decimal @default(0) @db.Decimal(14, 2)
+  impuestos    Decimal @default(0) @db.Decimal(14, 2)
+  /// Lo que de verdad se debe: bruto − comisión − descuentos + impuestos.
+  montoNeto    Decimal @db.Decimal(14, 2)
+  montoSaldado Decimal @default(0) @db.Decimal(14, 2)
+  moneda       String  @default("DOP")
+
+  estado        SupplyCuentaEstado @default(ABIERTA)
+  vencimientoAt DateTime?
+
+  /// Liquidación que la incluyó. Se reclama con `UPDATE … WHERE NULL`.
+  liquidacionId String?
+  liquidacion   SupplyLiquidacion? @relation(fields: [liquidacionId], references: [id], onDelete: SetNull)
+
+  disputaMotivo String?
+  notas         String?
+  documentos    String[] @default([])
+
+  creadoPorId String?
+  creadoPor   User?   @relation("SupplyCxPCreadaPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+
+  claveIdempotencia String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pagos                SupplyPago[]
+  aplicacionesDeposito SupplyDepositoMovimiento[]
+
+  @@index([proveedorId, estado])
+  @@index([estado, vencimientoAt])
+  @@index([liquidacionId])
+  @@map("supply_cuentas_por_pagar")
+}
+
+/// LO QUE UN PROVEEDOR DEBE A MEMBEGO: reembolso pendiente, penalización,
+/// diferencia conciliada, subsidio a recuperar, nota de crédito.
+model SupplyCuentaPorCobrar {
+  id     String @id @default(cuid())
+  /// MBG-CXC-000001
+  codigo String @unique
+
+  proveedorId String
+  proveedor   Company        @relation("SupplyProveedorCuentasPorCobrar", fields: [proveedorId], references: [id], onDelete: Restrict)
+  acuerdoId   String?
+  acuerdo     SupplyAcuerdo? @relation(fields: [acuerdoId], references: [id], onDelete: SetNull)
+
+  origen      SupplyCuentaPorCobrarOrigen
+  descripcion String
+
+  facturaId      String?                 @unique
+  factura        SupplyFacturaProveedor? @relation(fields: [facturaId], references: [id], onDelete: SetNull)
+  discrepanciaId String?                 @unique
+  discrepancia   SupplyDiscrepancia?     @relation("SupplyDiscrepanciaCxC", fields: [discrepanciaId], references: [id], onDelete: SetNull)
+
+  montoNeto    Decimal @db.Decimal(14, 2)
+  montoSaldado Decimal @default(0) @db.Decimal(14, 2)
+  moneda       String  @default("DOP")
+
+  estado        SupplyCuentaEstado @default(ABIERTA)
+  vencimientoAt DateTime?
+
+  liquidacionId String?
+  liquidacion   SupplyLiquidacion? @relation(fields: [liquidacionId], references: [id], onDelete: SetNull)
+
+  disputaMotivo String?
+  notas         String?
+  documentos    String[] @default([])
+
+  creadoPorId String?
+  creadoPor   User?   @relation("SupplyCxCCreadaPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+
+  claveIdempotencia String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([proveedorId, estado])
+  @@index([estado, vencimientoAt])
+  @@index([liquidacionId])
+  @@map("supply_cuentas_por_cobrar")
+}
+
+// ── Liquidaciones (§17) ─────────────────────────────────────────────────────
+
+enum SupplyLiquidacionEstado {
+  BORRADOR
+  CALCULADA
+  EN_REVISION
+  APROBADA
+  PAGADA
+  CONCILIADA
+  DISPUTADA
+  CANCELADA
+}
+
+enum SupplyLiquidacionLineaTipo {
+  CUENTA_POR_PAGAR
+  CUENTA_POR_COBRAR
+  REDENCION
+  DEPOSITO_APLICADO
+  AJUSTE
+}
+
+/// EL CORTE. Agrupa lo devengado en un período —redenciones por pagar, cuentas
+/// por pagar y por cobrar— y lo convierte en UN número a transferir. Guarda el
+/// SNAPSHOT: cambiar el acuerdo después no altera una liquidación histórica.
+model SupplyLiquidacion {
+  id     String @id @default(cuid())
+  /// MBG-LIQ-000001
+  codigo String @unique
+
+  proveedorId    String
+  proveedor      Company        @relation("SupplyProveedorLiquidaciones", fields: [proveedorId], references: [id], onDelete: Restrict)
+  acuerdoId      String?
+  acuerdo        SupplyAcuerdo? @relation(fields: [acuerdoId], references: [id], onDelete: SetNull)
+  /// Versión del acuerdo con la que se calculó.
+  acuerdoVersion Int?
+
+  estado SupplyLiquidacionEstado @default(BORRADOR)
+
+  periodoDesde DateTime
+  periodoHasta DateTime
+  moneda       String   @default("DOP")
+
+  // ── Snapshot financiero ──────────────────────────────────────────────────
+  ventasBrutas     Decimal @default(0) @db.Decimal(14, 2)
+  comisionMembego  Decimal @default(0) @db.Decimal(14, 2)
+  montoProveedor   Decimal @default(0) @db.Decimal(14, 2)
+  redencionesMonto Decimal @default(0) @db.Decimal(14, 2)
+  reembolsos       Decimal @default(0) @db.Decimal(14, 2)
+  ajustes          Decimal @default(0) @db.Decimal(14, 2)
+  impuestos        Decimal @default(0) @db.Decimal(14, 2)
+  depositoAplicado Decimal @default(0) @db.Decimal(14, 2)
+  /// Lo que hay que transferir. Puede ser negativo: el proveedor debe a Membego.
+  netoLiquidar     Decimal @default(0) @db.Decimal(14, 2)
+  redenciones      Int     @default(0)
+  ventas           Int     @default(0)
+  snapshot         Json    @default("{}")
+
+  pagoId String?     @unique
+  pago   SupplyPago? @relation(fields: [pagoId], references: [id], onDelete: SetNull)
+
+  calculadaPorId String?
+  calculadaPor   User?     @relation("SupplyLiquidacionCalculadaPor", fields: [calculadaPorId], references: [id], onDelete: SetNull)
+  calculadaAt    DateTime?
+  aprobadaPorId  String?
+  aprobadaPor    User?     @relation("SupplyLiquidacionAprobadaPor", fields: [aprobadaPorId], references: [id], onDelete: SetNull)
+  aprobadaAt     DateTime?
+  pagadaAt       DateTime?
+  conciliadaAt   DateTime?
+  disputaMotivo  String?
+  notas          String?
+  documentos     String[]  @default([])
+
+  claveIdempotencia String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineas               SupplyLiquidacionLinea[]
+  cuentasPorPagar      SupplyCuentaPorPagar[]
+  cuentasPorCobrar     SupplyCuentaPorCobrar[]
+  asientos             SupplyAsientoFinanciero[]
+  aplicacionesDeposito SupplyDepositoMovimiento[]
+  conciliaciones       SupplyConciliacion[]
+
+  @@index([proveedorId, estado])
+  @@index([estado, periodoHasta])
+  @@map("supply_liquidaciones")
+}
+
+model SupplyLiquidacionLinea {
+  id            String            @id @default(cuid())
+  liquidacionId String
+  liquidacion   SupplyLiquidacion @relation(fields: [liquidacionId], references: [id], onDelete: Cascade)
+
+  tipo        SupplyLiquidacionLineaTipo
+  referencia  String
+  descripcion String
+  /// Con signo: positivo a favor del proveedor, negativo a favor de Membego.
+  monto       Decimal                    @db.Decimal(14, 2)
+
+  cuentaPorPagarId  String?
+  cuentaPorCobrarId String?
+  redencionId       String?
+  depositoId        String?
+
+  createdAt DateTime @default(now())
+
+  @@index([liquidacionId])
+  @@index([redencionId])
+  @@map("supply_liquidacion_lineas")
+}
+
+// ── Conciliación con el proveedor (§18) ─────────────────────────────────────
+
+enum SupplyConciliacionEstado {
+  ABIERTA
+  EN_REVISION
+  CERRADA
+}
+
+enum SupplyDiscrepanciaTipo {
+  MISSING_REDEMPTION
+  DUPLICATE
+  VALUE_DIFFERENCE
+  PRODUCT_DIFFERENCE
+  DATE_DIFFERENCE
+  PAYMENT_DIFFERENCE
+  /// Hallazgo de la conciliación interna (contadores vs ledger) importado.
+  INTERNA
+}
+
+enum SupplyDiscrepanciaEstado {
+  ABIERTA
+  EN_INVESTIGACION
+  RESUELTA
+  /// Resuelta generando un ajuste (cuenta por pagar o por cobrar).
+  AJUSTADA
+  APROBADA
+  RECHAZADA
+}
+
+/// MEMBEGO CONTRA EL PROVEEDOR. Membego registra 125 redenciones; el proveedor
+/// dice 123. Aquí se guardan las dos cifras, se crean las discrepancias y se
+/// investigan una a una con documentos y comentarios hasta cerrar.
+model SupplyConciliacion {
+  id     String @id @default(cuid())
+  /// MBG-CON-000001
+  codigo String @unique
+
+  proveedorId   String
+  proveedor     Company            @relation("SupplyProveedorConciliaciones", fields: [proveedorId], references: [id], onDelete: Restrict)
+  acuerdoId     String?
+  acuerdo       SupplyAcuerdo?     @relation(fields: [acuerdoId], references: [id], onDelete: SetNull)
+  liquidacionId String?
+  liquidacion   SupplyLiquidacion? @relation(fields: [liquidacionId], references: [id], onDelete: SetNull)
+
+  estado SupplyConciliacionEstado @default(ABIERTA)
+
+  periodoDesde DateTime
+  periodoHasta DateTime
+
+  // Lo que dice Membego (calculado) y lo que declaró el proveedor.
+  membegoRedenciones   Int     @default(0)
+  membegoMonto         Decimal @default(0) @db.Decimal(14, 2)
+  membegoVentas        Int     @default(0)
+  membegoVentasMonto   Decimal @default(0) @db.Decimal(14, 2)
+  proveedorRedenciones Int     @default(0)
+  proveedorMonto       Decimal @default(0) @db.Decimal(14, 2)
+  proveedorVentas      Int     @default(0)
+  proveedorVentasMonto Decimal @default(0) @db.Decimal(14, 2)
+  proveedorDetalle     Json    @default("{}")
+
+  notas      String?
+  documentos String[] @default([])
+
+  creadoPorId  String?
+  creadoPor    User?     @relation("SupplyConciliacionCreadaPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  cerradoPorId String?
+  cerradoPor   User?     @relation("SupplyConciliacionCerradaPor", fields: [cerradoPorId], references: [id], onDelete: SetNull)
+  cerradaAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  discrepancias SupplyDiscrepancia[]
+
+  @@index([proveedorId, estado])
+  @@index([estado, periodoHasta])
+  @@map("supply_conciliaciones")
+}
+
+model SupplyDiscrepancia {
+  id             String             @id @default(cuid())
+  conciliacionId String
+  conciliacion   SupplyConciliacion @relation(fields: [conciliacionId], references: [id], onDelete: Cascade)
+
+  tipo   SupplyDiscrepanciaTipo
+  estado SupplyDiscrepanciaEstado @default(ABIERTA)
+
+  titulo  String
+  detalle String
+
+  cantidadMembego   Int?
+  cantidadProveedor Int?
+  montoMembego      Decimal? @db.Decimal(14, 2)
+  montoProveedor    Decimal? @db.Decimal(14, 2)
+  /// Positivo = Membego dice más que el proveedor.
+  montoDiferencia   Decimal? @db.Decimal(14, 2)
+
+  entidad     String?
+  entidadId   String?
+  redencionId String?
+  ventaId     String?
+
+  resolucion    String?
+  resueltoPorId String?
+  resueltoPor   User?     @relation("SupplyDiscrepanciaResueltaPor", fields: [resueltoPorId], references: [id], onDelete: SetNull)
+  resueltoAt    DateTime?
+  aprobadoPorId String?
+  aprobadoPor   User?     @relation("SupplyDiscrepanciaAprobadaPor", fields: [aprobadoPorId], references: [id], onDelete: SetNull)
+  aprobadoAt    DateTime?
+
+  documentos String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notas           SupplyDiscrepanciaNota[]
+  /// Ajuste generado al resolver, si lo hubo.
+  cuentaPorPagar  SupplyCuentaPorPagar?    @relation("SupplyDiscrepanciaCxP")
+  cuentaPorCobrar SupplyCuentaPorCobrar?   @relation("SupplyDiscrepanciaCxC")
+
+  @@index([conciliacionId, estado])
+  @@map("supply_discrepancias")
+}
+
+/// Comentario o documento adjunto durante la investigación. Nunca se borra.
+model SupplyDiscrepanciaNota {
+  id             String             @id @default(cuid())
+  discrepanciaId String
+  discrepancia   SupplyDiscrepancia @relation(fields: [discrepanciaId], references: [id], onDelete: Cascade)
+
+  texto         String
+  documentoPath String?
+
+  actorId String?
+  actor   User?   @relation("SupplyDiscrepanciaNotaActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([discrepanciaId, createdAt])
+  @@map("supply_discrepancia_notas")
+}
+
+// ── Venta sin precompra (§14) ───────────────────────────────────────────────
+
+enum SupplyVentaEstado {
+  /// Abierta, esperando el pago del cliente a Membego.
+  INICIADA
+  /// Membego vio el dinero. El cliente puede recogerla.
+  PAGADA
+  /// El proveedor entregó. Aquí nace la cuenta por pagar.
+  ENTREGADA
+  CANCELADA
+  /// Se devolvió el dinero al cliente después de pagada.
+  REEMBOLSADA
+}
+
+/// VENTA A COMISIÓN. Membego vende RD$1.000 de un producto del proveedor sin
+/// haberlo comprado. El cliente le paga a Membego; el proveedor entrega; y solo
+/// entonces Membego le debe RD$900 (bruto − 10%). No toca lotes ni ledger de
+/// cubetas: es otro modelo económico (§14: «no mezclar con lotes prepagados»).
+model SupplyVentaDirecta {
+  id     String @id @default(cuid())
+  /// MBG-V-000001
+  numero String @unique
+
+  proveedorId    String
+  proveedor      Company       @relation("SupplyProveedorVentas", fields: [proveedorId], references: [id], onDelete: Restrict)
+  acuerdoId      String
+  acuerdo        SupplyAcuerdo @relation(fields: [acuerdoId, proveedorId], references: [id, proveedorId], onDelete: Restrict)
+  acuerdoVersion Int
+
+  clienteId  String
+  cliente    Cliente   @relation("SupplyVentaCliente", fields: [clienteId], references: [id], onDelete: Restrict)
+  sucursalId String?
+  sucursal   Sucursal? @relation("SupplyVentaSucursal", fields: [sucursalId], references: [id], onDelete: SetNull)
+
+  estado SupplyVentaEstado @default(INICIADA)
+
+  itemNombre         String
+  varianteEtiqueta   String?
+  cantidad           Int     @default(1)
+  precioUnitario     Decimal @db.Decimal(12, 2)
+  montoBruto         Decimal @db.Decimal(12, 2)
+  /// Congelados al abrir la venta desde la versión del acuerdo.
+  comisionPorcentaje Decimal @db.Decimal(5, 2)
+  comisionMonto      Decimal @db.Decimal(12, 2)
+  montoProveedor     Decimal @db.Decimal(12, 2)
+  moneda             String  @default("DOP")
+
+  /// Credencial al portador para recoger (24 bytes aleatorios). El escáner la
+  /// acepta igual que un voucher, pero no toca ningún lote.
+  codigoEntrega String @unique
+
+  pagadaAt        DateTime?
+  entregadaAt     DateTime?
+  entregadaPorId  String?
+  entregadaPor    User?     @relation("SupplyVentaEntregadaPor", fields: [entregadaPorId], references: [id], onDelete: SetNull)
+  canceladaAt     DateTime?
+  canceladaMotivo String?
+
+  claveIdempotencia String? @unique
+  meta              Json    @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pedido         SupplyPedido?
+  cuentaPorPagar SupplyCuentaPorPagar?
+  incidencias    SupplyIncidencia[]
+
+  @@index([proveedorId, estado])
+  @@index([clienteId, estado])
+  @@index([acuerdoId, createdAt])
+  @@index([estado, entregadaAt])
+  @@map("supply_ventas_directas")
 }
