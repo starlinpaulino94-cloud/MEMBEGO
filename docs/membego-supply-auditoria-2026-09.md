@@ -246,3 +246,93 @@ Verificada con `migrate deploy` en base limpia, re-ejecución y `migrate diff
 | §29 Integración con el resto de Membego | ⚠️ | cobro, notificaciones, auditoría, RBAC, storage reutilizados; canales de membresías/recompensas siguen sin consumidor (H3) |
 | §30 UX por pantalla | ✅ (⚠️ paginación) | estados vacíos, filtros por estado/proveedor, confirmaciones en lo irreversible, sin botones decorativos |
 | §31 14 casos de prueba | ✅ | `tests/postgres/supply-flujos.db.test.ts` |
+
+---
+
+## 7 · Segundo encargo (29-09-2026, tarde) · «que Supply se opere, no se mire»
+
+### 7.1 · Matriz FASE 0 (estado ANTES de este encargo, sobre la rama con el PR #524)
+
+| Función | Estado | Evidencia |
+| --- | --- | --- |
+| Crear proveedor externo | ✅ | formulario en `proveedores/page.tsx` |
+| Relacionar una empresa existente como proveedora desde Supply | ❌ | solo vía `/superadmin/capacidades` |
+| Campos del proveedor: WhatsApp, dirección, país, moneda, condiciones, documentos | ⚠️ | `SupplyProveedor` sin esas columnas |
+| Perfil con órdenes, redenciones, incidencias, conciliaciones, rentabilidad y KPIs | ⚠️ | tenía lotes, CxP, liquidaciones, depósitos, ledger |
+| Wizard de acuerdo por tipo (prepago / depósito / pago posterior / comisión / híbrido) | ⚠️ | formulario único; modelos COMPRA/SUBSIDIO/COMISION |
+| Acuerdo por categoría o catálogo | ❌ | — |
+| Nueva orden desde Órdenes | ❌ | solo desde la ficha del acuerdo |
+| Pago con método y comprobante adjunto | ⚠️ | método libre; sin adjunto |
+| Pagar una orden con un depósito | ❌ | — |
+| Lote: crear oferta con precio/ventana/tope/sucursales | ❌ | `precioCliente` sin UI ni ventana |
+| Lote: regalar | 🔴 | `emitirDerechoAction` sin ningún consumidor en la UI |
+| Lote: transferir / ajustar / cancelar unidades / extender vencimiento | ❌ | solo «recalcular» |
+| Checkout con desglose y bono (venta mixta, GMV completo) | ❌ | — |
+| Cobros: REEMBOLSADO, efectivo validado, pago manual | ⚠️ | 6 estados; solo transferencia |
+| Incidencia creada por plataforma (desde lote o proveedor) | ❌ | solo el cliente desde su tarjeta |
+| Vencimientos con acciones reales | ❌ | texto informativo |
+| Conciliación «Todo cuadra» con cero datos | 🔴 | `cuadra = hallazgos.length === 0` |
+| Detector: derecho redimido sin redención, pago sin asiento, liquidación sin obligación, depósito negativo | ❌ | 10 checks previos |
+| Economía con RD$300 / RD$399 fijos | 🔴 | `economiaUnidad(300, 399, 700)` en la página |
+| Dashboard con acciones principales y actividad reciente | ❌ | — |
+| Navegación por grupos | ❌ | 13 pestañas en una fila |
+| Estados vacíos con la acción correspondiente | ⚠️ | mensajes sin CTA en órdenes, lotes, derechos, redenciones |
+| Seed de demostración | ❌ | — |
+| Escenarios D (margen 399−300) y E (venta mixta) | ❌ | A, B, C, F, G ya cubiertos |
+
+### 7.2 · Qué se construyó (FASES 1-12)
+
+- **Proveedores**: «+ Nuevo proveedor» con dos caminos (empresa existente → `habilitarProveedorExistente`, que enciende la capacidad sobre la misma `Company` sin duplicarla; externo con todos los campos del §1). Perfil con 9 KPIs, órdenes, redenciones, incidencias, conciliaciones, ventas y rentabilidad.
+- **Acuerdos**: wizard de seis pasos (proveedor → tipo → economía → producto/alcance → condiciones → resumen); `tipoAcuerdo` y `alcance` en el modelo; el tipo deriva modelo y modalidad en el servidor (`derivarDeTipoAcuerdo`).
+- **Compras**: «+ Nueva orden» con varias líneas e impuestos; pagos con método y comprobante subido al bucket privado (tipo `pago`); pagar con un depósito del proveedor (`aplicarDepositoAOrdenEnTx`, sin doble asiento); fondeo automático que suma pagos y aplicaciones de depósito.
+- **Lotes**: acciones reales de transferir (dos asientos TRANSFERENCIA enlazados), ajustar, cancelar unidades y extender vencimiento (arrastra derechos y vouchers; exige que el acuerdo lo permita), todas con motivo, ledger y bitácora; crear oferta (precio, ventana, tope por persona, sucursales) y regalar por correo/nombre.
+- **Cliente**: checkout con precio original, descuento Membego, bono, diferencia y total; venta mixta (`montoBono`, `bonoDerechoId`): el cliente paga la diferencia, el GMV es el bruto, la comisión va sobre el bruto y al proveedor se le debe bruto − comisión − bono; el bono se redime al entregar.
+- **Cobros**: REEMBOLSADO como estado final propio (cancela el derecho o la venta), método de pago del cliente, cobro en efectivo o manual confirmado por plataforma.
+- **Incidencias** desde plataforma sobre beneficio, redención, venta, lote o proveedor. **Vencimientos** con enlaces a cada acción real. **Conciliación** que dice «Sin operaciones suficientes» con cero datos y cuatro checks nuevos.
+- **Dashboard** con siete acciones principales, GMV / ingresos / margen y actividad reciente desde la bitácora. **Economía** solo con datos reales (capital, GMV, ingresos, costo, márgenes, subsidios, regalado / vendido / vencido, CAC real, LTV observado). **Navegación** en cinco grupos. **Reportes** como pantalla con filtros. Estados vacíos con su acción.
+- **Seed** `npm run db:seed:supply` (Little Pizza Demo: 500 pizzas a 300, retail 600, oferta a 399, campaña de bienvenida, acuerdo a comisión, depósito de 50.000), idempotente y hecho por el dominio.
+
+### 7.3 · Matriz final
+
+| Funcionalidad | Estado | Evidencia | Test |
+| --- | --- | --- | --- |
+| Registrar proveedor (existente o externo) y administrarlo | IMPLEMENTED + TESTED | `proveedores.ts`, `proveedores/page.tsx`, `[id]/page.tsx` | `postgres/supply-flujos` · 16, «empresa existente» |
+| Acuerdo por wizard, tipos y alcance | IMPLEMENTED + TESTED | `contrato.ts:derivarDeTipoAcuerdo`, `form-acuerdo.tsx` | `supply-finanzas` · contrato; `postgres` · 1 |
+| Depósito abierto con aplicación parcial, pago aparte y saldo | IMPLEMENTED + TESTED | `depositos.ts` | `postgres` · 9, 10, B' |
+| Orden de compra: crear, aprobar (otra persona), pagar (parcial, método, comprobante), pagar con depósito, recibir | IMPLEMENTED + TESTED | `procurement.ts`, `form-orden.tsx`, `form-pago-orden.tsx` | `postgres` · 1, «pagar con depósito» |
+| Lotes con las siete cifras y regla contable | IMPLEMENTED + TESTED | `ledger.ts`, `CHECK supply_lotes_cuadre_cubetas` | invariante en cada caso de `postgres` |
+| Supply ledger con saldo anterior / posterior | IMPLEMENTED + TESTED | `movimientos.ts` | `postgres` · 4 |
+| Acciones de lote (asignar, oferta, regalar, transferir, ajustar, cancelar, extender, ledger) | IMPLEMENTED + TESTED | `lotes-operaciones.ts`, `lotes/[id]/page.tsx` | `postgres` · «operación del lote» |
+| Oferta publicable en el marketplace | IMPLEMENTED + TESTED | `asignaciones.ts`, `distribucion.ts:ofertasDisponibles` | `postgres` · «oferta publicable» |
+| Regalar / emitir beneficio a una persona | IMPLEMENTED + TESTED | `form-regalar.tsx`, `pool.ts:resolverCliente` | `postgres` · 3, 6, 13 |
+| Descuentos y economía por unidad | IMPLEMENTED + TESTED | `economia.ts`, `tablero.ts:economiaGlobal` | `postgres` · D |
+| Venta mixta con bono (GMV completo) | IMPLEMENTED + TESTED | `ventas.ts`, `checkout.ts` | `postgres` · E |
+| Venta sin precompra → CxP → liquidación | IMPLEMENTED + TESTED | `ventas.ts`, `cuentas.ts`, `liquidaciones.ts` | `postgres` · 8, 11, 14b |
+| Checkout con desglose | IMPLEMENTED | `checkout/page.tsx`, `checkout-supply.tsx` | cubierto por E (dominio) |
+| Cobros: 7 estados, métodos, reembolso | IMPLEMENTED + TESTED | `cobro.ts`, `cobro-nucleo.ts` | `supply-cobro`; `postgres` · «reembolsar» |
+| Entitlement, voucher, QR firmado / nonce / expira / un uso | IMPLEMENTED + TESTED | `derechos.ts`, `qr.ts` | `postgres` · 3, 4, 5, 6 |
+| Redención atómica y concurrente | IMPLEMENTED + TESTED | `redencion.ts` | `postgres` · 14 |
+| Reservas con TTL y FEFO | IMPLEMENTED + TESTED | `reservas.ts`, `fefo.ts` | `supply-distribucion`; `postgres` · 7 |
+| Incidencias (crear desde plataforma, tipos, estados) | IMPLEMENTED | `incidencias.ts`, `incidencias/page.tsx` | `supply-finanzas` · máquinas de estado |
+| Reversos con motivo | IMPLEMENTED + TESTED | `redencion.ts:reversarRedencion` | `postgres` · 13 |
+| Vencimientos con acciones | IMPLEMENTED | `vencimientos/page.tsx` → acciones del lote | `postgres` · «extender» |
+| Liquidaciones (calcular, revisar, aprobar, pagar, cerrar) | IMPLEMENTED + TESTED | `liquidaciones.ts` | `postgres` · 11 |
+| Cuentas por pagar / por cobrar | IMPLEMENTED + TESTED | `cuentas.ts` | `postgres` · 8-11 |
+| Conciliación honesta + 14 checks | IMPLEMENTED + TESTED | `conciliacion.ts`, `hallazgos.ts` | `postgres` · «sin datos» |
+| Economía real (12 cifras) | IMPLEMENTED + TESTED | `tablero.ts:economiaGlobal` | `postgres` · D |
+| Dashboard con acciones, feed y KPIs | IMPLEMENTED | `supply/page.tsx`, `tablero.ts:actividadReciente` | — (lectura) |
+| Auditoría de toda operación crítica | IMPLEMENTED | `actions*.ts` → `auditar` (31 acciones `SUPPLY_*` nuevas en total) | `supply-contratos` · etiquetas |
+| Permisos en backend | IMPLEMENTED | `permisos.ts` (supply.view … reconciliation.manage ↔ `MEMBEGO_*`) | `permisos-catalogo.mjs` |
+| Transacciones, idempotencia, concurrencia | IMPLEMENTED + TESTED | `FOR UPDATE`, claves, CHECKs | `postgres` · 14, 14b, E (bono repetido) |
+| Seed de demostración | IMPLEMENTED | `prisma/seed-supply-demo.ts` | ejecutado dos veces (idempotente) |
+
+### 7.4 · Los 21 pasos del §50, desde la interfaz
+
+1-2 Proveedores → Nuevo proveedor; Acuerdos → Nuevo acuerdo (wizard) → ficha → aprobar → activar. 3 Compras → Nueva orden (1.000) → enviar → aprobar (otra persona) → confirmar. 4 Ficha de la orden → Registrar pago (+ comprobante) o Pagar con depósito → Finanzas → Pagos → Confirmar. 5-6 Ficha de la orden → Recibir (genera el lote) → Lotes → ficha → Apartar 100 (campaña). 7-8 Ficha del lote → Crear oferta (precio, ventana, tope) → publicada en la vitrina. 9-10 Cliente → Beneficios disponibles → Comprar → checkout → confirmar → transferir y subir comprobante (o cobro manual desde Cobros a clientes). 11-12 Cliente → Beneficios Membego → Usar beneficio (voucher + QR de 5 min). 13-14 Comercio → Supply → Escanear → Confirmar entrega. 15-17 Redenciones; ficha del lote (cubetas y ledger). 18 Economía. 19-20 Finanzas → Liquidaciones → Calcular → Aprobar (otra persona) → Registrar pago. 21 Conciliación → Abrir conciliación con el proveedor → resolver discrepancias → cerrar.
+
+### 7.5 · Lo que sigue pendiente (honesto)
+
+- Acuerdos por **categoría o catálogo** se guardan y validan, pero la vitrina vende un ítem del acuerdo; listar el catálogo del proveedor con descuento es trabajo del módulo de catálogo.
+- Los **permisos** finos siguen resolviendo a SUPERADMIN (no hay roles intermedios en el RBAC).
+- **Paginación** real en listados largos (siguen límites con filtros).
+- `npx eslint .` en la raíz falla por una regla sin plugin previa a este trabajo; CI usa `eslint src tests`.

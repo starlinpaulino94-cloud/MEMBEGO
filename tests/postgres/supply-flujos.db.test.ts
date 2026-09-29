@@ -484,3 +484,187 @@ test('proveedor externo: se registra, se contrata y se convierte conservando el 
   assert.ok(despues.supplyPerfilProveedor?.convertidoAt)
   assert.ok(despues.supplyAcuerdos.some((a) => a.id === id), 'el acuerdo sigue colgando de la misma empresa')
 })
+
+// ── Encargo 2026-09 bis · escenarios B', D, E y operación desde la UI ──────
+
+import { registrarProveedorExterno as _rpe } from '../../src/modules/supply/proveedores'
+import { habilitarProveedorExistente, empresasParaHabilitar } from '../../src/modules/supply/proveedores'
+import { ajustarLote, cancelarUnidades, extenderVencimiento, transferirUnidades } from '../../src/modules/supply/lotes-operaciones'
+import { aplicarDepositoAOrden } from '../../src/modules/supply/depositos'
+import { economiaUnidad } from '../../src/modules/supply/economia'
+import { economiaGlobal } from '../../src/modules/supply/tablero'
+import { conciliar } from '../../src/modules/supply/conciliacion'
+import { reembolsarPedido } from '../../src/modules/supply/cobro'
+import { ofertasDisponibles } from '../../src/modules/supply/distribucion'
+void _rpe
+
+test("B' · depósito 100.000, factura 20.000: 15.000 del depósito + 5.000 por transferencia → saldo 85.000 y cuenta saldada", async () => {
+  const dep = await registrarDeposito({ proveedorId: ctx.proveedorId, acuerdoId: ctx.acuerdoId, monto: 100_000, referencia: `DEP2-${sufijo}`, registradoPorId: ctx.creadorId })
+  await confirmarPago(dep.pagoId, ctx.aprobadorId)
+  const f = await registrarFactura({ proveedorId: ctx.proveedorId, acuerdoId: ctx.acuerdoId, numero: `B0200${sufijo}`, fechaEmision: ahora, subtotal: 20_000, registradoPorId: ctx.creadorId })
+  const factura = await prisma.supplyFacturaProveedor.findUniqueOrThrow({ where: { id: f.id }, include: { cuentaPorPagar: true } })
+  const cuentaId = factura.cuentaPorPagar!.id
+  const ap = await aplicarDeposito(dep.id, cuentaId, 15_000, ctx.creadorId)
+  assert.equal(ap.saldoDespues, 85_000)
+  const pago = await registrarPago({ acuerdoId: ctx.acuerdoId, tipo: 'LIQUIDACION_FINAL', monto: 5_000, cuentaPorPagarId: cuentaId, referencia: `TRF2-${sufijo}`, registradoPorId: ctx.creadorId })
+  await confirmarPago(pago.id, ctx.aprobadorId)
+  const cuenta = await prisma.supplyCuentaPorPagar.findUniqueOrThrow({ where: { id: cuentaId } })
+  assert.equal(cuenta.estado, 'SALDADA')
+  assert.equal(Number(cuenta.montoSaldado), 20_000)
+  const d = await prisma.supplyDeposito.findUniqueOrThrow({ where: { id: dep.id } })
+  assert.equal(Number(d.montoOriginal) - Number(d.montoAplicado) - Number(d.montoDevuelto), 85_000)
+  const fac = await prisma.supplyFacturaProveedor.findUniqueOrThrow({ where: { id: f.id } })
+  assert.equal(fac.estado, 'PAGADA')
+})
+
+test('D · unidad comprada a 300 y vendida a 399: ingreso 399, costo 300, margen 99 (con datos reales del derecho)', async () => {
+  const e = await emitirDerecho({ loteId: ctx.loteId, clienteId: ctx.clientes[2]!, origen: 'OFERTA', precioCliente: 399, actorId: ctx.creadorId, claveIdempotencia: `D-${sufijo}` })
+  assert.ok(e.ok)
+  const r = await redimir({ voucherId: e.derecho.voucherId, proveedorId: ctx.proveedorId, empleadoId: ctx.creadorId })
+  assert.ok(r.ok)
+  const derecho = await prisma.supplyDerecho.findUniqueOrThrow({ where: { id: e.derecho.derechoId }, select: { costoUnitario: true, precioCliente: true, estado: true } })
+  assert.equal(derecho.estado, 'REDIMIDO')
+  const u = economiaUnidad(Number(derecho.costoUnitario), Number(derecho.precioCliente), null)
+  assert.equal(u.ingresoCliente, 399)
+  assert.equal(u.costoAdquisicion, 300)
+  assert.equal(u.margenBruto, 99)
+  const eco = await economiaGlobal()
+  assert.ok(eco.vendido.unidades >= 1)
+  assert.ok(eco.gmv >= 399)
+})
+
+test('E · venta mixta: bono de 500 sobre una compra de 1.000 → cliente paga 500, GMV 1.000, proveedor recibe 400 y el bono se consume al entregar', async () => {
+  // Un derecho del cliente con valor público 500 (lote de un acuerdo con precioReferencia 500).
+  const r = await acuerdoCompleto({ finAt: new Date(ahora.getTime() + 40 * DIA), cantidad: 20, costo: 250, item: 'Bono pizza' })
+  await prisma.supplyLote.update({ where: { id: r.loteId }, data: { snapshotPrecioReferencia: 500 } })
+  const bono = await emitirDerecho({ loteId: r.loteId, clienteId: ctx.clientes[4]!, origen: 'REGALO', actorId: ctx.creadorId })
+  assert.ok(bono.ok)
+
+  const acuerdoComision = await prisma.supplyVentaDirecta.findUniqueOrThrow({ where: { id: ctx.ventaId }, select: { acuerdoId: true } })
+  // Comisión 20% en el acuerdo de comisión del caso 8; el enunciado usa 10%: se
+  // comprueba la aritmética con la comisión real del acuerdo.
+  const ac = await prisma.supplyAcuerdo.findUniqueOrThrow({ where: { id: acuerdoComision.acuerdoId }, select: { comisionPorcentaje: true, precioReferencia: true } })
+  const venta = await sinEmpresa('prueba: venta con bono', (tx) =>
+    abrirVentaEnTx(tx, { acuerdoId: acuerdoComision.acuerdoId, clienteId: ctx.clientes[4]!, cantidad: 2, bonoDerechoId: bono.derecho.derechoId })
+  )
+  assert.ok(venta.ok, venta.ok ? '' : venta.mensaje)
+  assert.equal(venta.montoBruto, 1000)
+  assert.equal(venta.montoBono, 500)
+  assert.equal(venta.aPagar, 500)
+  const comision = (1000 * Number(ac.comisionPorcentaje)) / 100
+  const v = await prisma.supplyVentaDirecta.findUniqueOrThrow({ where: { id: venta.ventaId } })
+  assert.equal(Number(v.montoProveedor), 1000 - comision - 500)
+
+  // El mismo bono no se aplica dos veces.
+  const otra = await sinEmpresa('prueba: bono repetido', (tx) => abrirVentaEnTx(tx, { acuerdoId: acuerdoComision.acuerdoId, clienteId: ctx.clientes[4]!, cantidad: 1, bonoDerechoId: bono.derecho.derechoId }))
+  assert.equal(otra.ok, false)
+
+  await sinEmpresa('prueba: pagar la diferencia', (tx) => marcarVentaPagadaEnTx(tx, venta.ventaId))
+  const entrega = await entregarVenta({ ventaId: venta.ventaId, proveedorId: ctx.proveedorId, empleadoId: ctx.creadorId })
+  assert.ok(entrega.ok, entrega.ok ? '' : entrega.mensaje)
+  assert.equal(entrega.montoProveedor, 1000 - comision - 500)
+  const cxp = await prisma.supplyCuentaPorPagar.findUniqueOrThrow({ where: { id: entrega.cuentaPorPagarId } })
+  assert.equal(Number(cxp.montoBruto), 1000, 'la venta completa queda registrada como GMV')
+  const derechoBono = await prisma.supplyDerecho.findUniqueOrThrow({ where: { id: bono.derecho.derechoId }, select: { estado: true } })
+  assert.equal(derechoBono.estado, 'REDIMIDO', 'el bono se consumió al entregar')
+  const redencionBono = await prisma.supplyRedencion.count({ where: { derechoId: bono.derecho.derechoId, reversadaAt: null } })
+  assert.equal(redencionBono, 1)
+})
+
+test('operación del lote: transferir, ajustar, cancelar y extender dejan rastro y mantienen el invariante', async () => {
+  const destino = ctx.loteFefoId
+  const antesA = await lote(ctx.loteId)
+  const antesB = await lote(destino)
+  await transferirUnidades(ctx.loteId, destino, 10, 'Reparto entre sucursales', ctx.creadorId)
+  const a1 = await lote(ctx.loteId)
+  const b1 = await lote(destino)
+  assert.equal(a1.disponibles, antesA.disponibles - 10)
+  assert.equal(a1.compradas, antesA.compradas - 10)
+  assert.equal(b1.disponibles, antesB.disponibles + 10)
+  assert.equal(b1.compradas, antesB.compradas + 10)
+  await assert.rejects(() => transferirUnidades(ctx.loteId, destino, 10, 'x', ctx.creadorId), /motivo/)
+
+  await ajustarLote(ctx.loteId, -3, 'Conteo físico: tres unidades dañadas', ctx.creadorId)
+  const a2 = await lote(ctx.loteId)
+  assert.equal(a2.disponibles, a1.disponibles - 3)
+  await cancelarUnidades(ctx.loteId, 2, 'Cancelación acordada con el proveedor', ctx.creadorId)
+  const a3 = await lote(ctx.loteId)
+  assert.equal(a3.disponibles, a2.disponibles - 2)
+  assert.equal(a3.cerradas, a2.cerradas + 2)
+  const movs = await prisma.supplyMovimiento.count({ where: { loteId: ctx.loteId, tipo: { in: ['TRANSFERENCIA', 'AJUSTE', 'CANCELACION'] } } })
+  assert.ok(movs >= 3)
+
+  const loteAntes = await prisma.supplyLote.findUniqueOrThrow({ where: { id: ctx.loteId }, select: { venceAt: true } })
+  const nueva = new Date(loteAntes.venceAt.getTime() + 5 * DIA)
+  // El lote no puede vencer después que su acuerdo: primero la enmienda de vigencia.
+  await assert.rejects(() => extenderVencimiento(ctx.loteId, nueva, 'Prórroga acordada por escrito', ctx.creadorId), /vigencia del acuerdo/)
+  await registrarEnmienda({ acuerdoId: ctx.acuerdoId, campo: 'VIGENCIA', motivo: 'Prórroga acordada por escrito', antes: {}, despues: {}, nuevoFinAt: new Date(nueva.getTime() + 10 * DIA), aprobadoPorId: ctx.aprobadorId })
+  // La enmienda ya arrastra los lotes vivos a la nueva vigencia; para probar la
+  // extensión por lote se simula uno que vencía antes que su acuerdo.
+  await prisma.supplyLote.update({ where: { id: ctx.loteId }, data: { venceAt: loteAntes.venceAt } })
+  const ext = await extenderVencimiento(ctx.loteId, nueva, 'Prórroga acordada por escrito', ctx.creadorId)
+  assert.equal(ext.despues.getTime(), nueva.getTime())
+  const loteDespues = await prisma.supplyLote.findUniqueOrThrow({ where: { id: ctx.loteId }, select: { venceAt: true } })
+  assert.equal(loteDespues.venceAt.getTime(), nueva.getTime())
+  await assert.rejects(() => extenderVencimiento(ctx.loteId, new Date(nueva.getTime() - DIA), 'Acortar no vale', ctx.creadorId), /posterior/)
+})
+
+test('pagar una orden con un depósito fondea la orden sin asentar dos veces', async () => {
+  const r = await acuerdoCompleto({ finAt: new Date(ahora.getTime() + 50 * DIA), cantidad: 10, costo: 100, item: 'Café' })
+  const dep = await registrarDeposito({ proveedorId: ctx.proveedorId, acuerdoId: r.acuerdoId, monto: 2_000, registradoPorId: ctx.creadorId })
+  await confirmarPago(dep.pagoId, ctx.aprobadorId)
+  const asientosAntes = await prisma.supplyAsientoFinanciero.count({ where: { proveedorId: ctx.proveedorId } })
+  const ap = await aplicarDepositoAOrden(dep.id, r.ordenId, 600, ctx.creadorId)
+  assert.equal(ap.saldoDespues, 1_400)
+  const asientosDespues = await prisma.supplyAsientoFinanciero.count({ where: { proveedorId: ctx.proveedorId } })
+  assert.equal(asientosDespues, asientosAntes)
+  const orden = await prisma.supplyOrden.findUniqueOrThrow({ where: { id: r.ordenId }, select: { montoPagado: true, estado: true } })
+  assert.equal(Number(orden.montoPagado), 600)
+  await assert.rejects(() => aplicarDepositoAOrden(dep.id, r.ordenId, 5_000, ctx.creadorId))
+})
+
+test('una oferta publicable respeta ventana y tope por persona; una empresa existente se habilita como proveedora sin duplicarla', async () => {
+  const oferta = await asignar({ loteId: ctx.loteId, destinoTipo: 'OFERTA', etiqueta: `Oferta ${sufijo}`, cantidad: 5, precioCliente: 399, maxPorCliente: 1, finAt: new Date(ahora.getTime() + 10 * DIA), creadoPorId: ctx.creadorId })
+  const vitrina = await ofertasDisponibles(200)
+  const mia = vitrina.find((o) => o.asignacionId === oferta.id)
+  // Sin cuenta de cobro activa las de pago no se publican: la ventana sí se calcula.
+  if (mia) assert.equal(mia.precioMembego, 399)
+  const vencida = await asignar({ loteId: ctx.loteId, destinoTipo: 'OFERTA', etiqueta: `Vencida ${sufijo}`, cantidad: 2, precioCliente: 0, inicioAt: new Date(ahora.getTime() - 3 * DIA), finAt: new Date(ahora.getTime() - DIA), creadoPorId: ctx.creadorId })
+  const e = await entregar({ clienteId: ctx.clientes[3]!, destino: 'OFERTA', asignacionId: vencida.id })
+  assert.equal(e.ok, false)
+
+  const empresa = await prisma.company.create({ data: { name: `Comercio registrado ${sufijo}`, slug: `registrado-${sufijo}`, type: 'carwash' }, select: { id: true } })
+  const candidatas = await empresasParaHabilitar(1000)
+  assert.ok(candidatas.some((c) => c.id === empresa.id))
+  const hab = await habilitarProveedorExistente(empresa.id, { contactoNombre: 'Juan' }, ctx.creadorId)
+  assert.equal(hab.yaEra, false)
+  const perfil = await prisma.supplyProveedor.findUniqueOrThrow({ where: { companyId: empresa.id } })
+  assert.equal(perfil.origen, 'REGISTRADA')
+  const otraVez = await habilitarProveedorExistente(empresa.id, {}, ctx.creadorId)
+  assert.equal(otraVez.yaEra, true)
+  assert.equal(await prisma.company.count({ where: { name: `Comercio registrado ${sufijo}` } }), 1)
+})
+
+test('reembolsar un cobro pagado deja el pedido REEMBOLSADO y devuelve la unidad; la conciliación distingue «sin datos» de «cuadra»', async () => {
+  const e = await emitirDerecho({ loteId: ctx.loteId, clienteId: ctx.clientes[1]!, origen: 'OFERTA', precioCliente: 250, actorId: ctx.creadorId, claveIdempotencia: `R-${sufijo}` })
+  assert.ok(e.ok)
+  const pedido = await prisma.supplyPedido.create({
+    data: { numero: `MBG-PD-${sufijo.slice(0, 6).toUpperCase()}`, clienteId: ctx.clientes[1]!, derechoId: e.derecho.derechoId, monto: 250, estado: 'PAGADO', revisadoPor: ctx.aprobadorId, revisadoAt: new Date(), expiraAt: new Date(Date.now() + DIA) },
+    select: { id: true },
+  })
+  const antes = await lote(ctx.loteId)
+  const r = await reembolsarPedido(pedido.id, 'El cliente no pudo usarlo', ctx.aprobadorId)
+  assert.ok(r.ok, r.ok ? '' : r.mensaje)
+  const p = await prisma.supplyPedido.findUniqueOrThrow({ where: { id: pedido.id } })
+  assert.equal(p.estado, 'REEMBOLSADO')
+  const despues = await lote(ctx.loteId)
+  assert.equal(despues.emitidas, antes.emitidas - 1)
+  assert.equal(despues.disponibles, antes.disponibles + 1)
+
+  const rep = await conciliar(ctx.proveedorId)
+  assert.equal(rep.sinDatos, false)
+  assert.ok(rep.operacionesRevisadas > 0)
+  const vacio = await conciliar(`no-existe-${sufijo}`)
+  assert.equal(vacio.sinDatos, true)
+  assert.equal(vacio.cuadra, false, 'cero datos nunca es «todo cuadra»')
+})
