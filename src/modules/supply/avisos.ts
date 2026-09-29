@@ -597,3 +597,54 @@ export function textoCapitalDormido(d: {
     href: '/superadmin/supply/lotes',
   }
 }
+
+// ── Capa financiera (29-09-2026): acuerdos, depósitos y liquidaciones ───────
+
+export function dedupeAcuerdoPorVencer(acuerdoId: string, umbral: number): string {
+  return `supply-acuerdo-vence|${acuerdoId}|${umbral}`
+}
+
+export function textoAcuerdoPorVencer(d: { codigo: string; item: string; proveedorNombre: string }, umbral: number): {
+  titulo: string
+  mensaje: string
+  href: string
+} {
+  return {
+    titulo: `El acuerdo ${d.codigo} vence en ${umbral} día${umbral === 1 ? '' : 's'}`,
+    mensaje: `${d.item} con ${d.proveedorNombre}. Decide si se renueva, se enmienda la vigencia o se deja terminar.`,
+    href: '/superadmin/supply/vencimientos',
+  }
+}
+
+export function dedupeDepositoPorCerrar(depositoId: string, umbral: number): string {
+  return `supply-deposito-cierra|${depositoId}|${umbral}`
+}
+
+export function textoDepositoPorCerrar(d: { codigo: string; proveedorNombre: string; disponible: number }, umbral: number): {
+  titulo: string
+  mensaje: string
+  href: string
+} {
+  return {
+    titulo: `${dineroRD(d.disponible)} de depósito sin aplicar vencen en ${umbral} día${umbral === 1 ? '' : 's'}`,
+    mensaje: `El depósito ${d.codigo} con ${d.proveedorNombre} llega a su fecha de cierre con saldo. Aplícalo a una factura, pide la devolución o extiende la fecha.`,
+    href: '/superadmin/supply/finanzas/depositos',
+  }
+}
+
+/** Una por liquidación y semana: recordar cada día lo mismo es ruido. */
+export function dedupeLiquidacionPendiente(liquidacionId: string, ahora: Date): string {
+  return `supply-liquidacion-pendiente|${liquidacionId}|${semanaIso(ahora)}`
+}
+
+export function textoLiquidacionPendiente(d: { codigo: string; proveedorNombre: string; neto: number; estado: string }): {
+  titulo: string
+  mensaje: string
+  href: string
+} {
+  return {
+    titulo: `Liquidación ${d.codigo} ${d.estado === 'APROBADA' ? 'aprobada sin pagar' : 'pendiente de aprobar'}`,
+    mensaje: `${dineroRD(Math.abs(d.neto))} con ${d.proveedorNombre}. ${d.estado === 'APROBADA' ? 'Regístrale el pago.' : 'Revísala y apruébala.'}`,
+    href: '/superadmin/supply/finanzas/liquidaciones',
+  }
+}

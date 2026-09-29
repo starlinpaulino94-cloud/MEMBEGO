@@ -1,12 +1,23 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import type { AuditAccion, Prisma } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
-import { getRequestMeta } from '@/lib/server-utils'
-import { anotarFallo } from '@/lib/prisma-errors'
 import { getUser } from '@/lib/auth'
 import { exigirPlataforma, guardiaProveedor, usuarioDePlataforma } from './permisos'
+import {
+  auditar,
+  comoError,
+  dispositivoActual,
+  fecha,
+  numero,
+  refrescarPlataforma,
+  texto,
+  type EstadoAccion,
+} from './actions-util'
+import { anularPago } from './finanzas'
+import { entregarVenta, fichaDeVentaPorCodigo } from './ventas'
+import { ESTRATEGIA_POR_DEFECTO, ESTRATEGIAS_SELECCION, type EstrategiaSeleccion } from './fefo'
 import {
   crearAcuerdo,
   crearOrden,
@@ -58,66 +69,7 @@ import {
  * su compra de RD$300.000 se registró o no.
  */
 
-export interface EstadoAccion {
-  error?: string
-  success?: string
-  /** Id de lo recién creado, para que la pantalla pueda navegar. */
-  id?: string
-}
-
-// ── Bitácora ────────────────────────────────────────────────────────────────
-
-async function auditar(
-  accion: AuditAccion,
-  entidadTipo: string,
-  entidadId: string,
-  payload: Prisma.InputJsonValue,
-  companyId?: string | null
-): Promise<void> {
-  const user = await getUser()
-  const meta = await getRequestMeta()
-  await sinEmpresa('Membego Supply: bitácora de una acción de plataforma', (tx) =>
-    tx.auditLog.create({
-      data: {
-        companyId: companyId ?? null,
-        userId: user?.metadata.dbUserId ?? null,
-        accion,
-        entidadTipo,
-        entidadId,
-        payload,
-        ...meta,
-      },
-    })
-  ).catch(anotarFallo('supply:auditLog.create'))
-}
-
-function refrescarPlataforma(sufijo = ''): void {
-  revalidatePath('/superadmin/supply')
-  if (sufijo) revalidatePath(`/superadmin/supply/${sufijo}`)
-}
-
-/** Convierte cualquier fallo en un mensaje que se puede enseñar. */
-function comoError(e: unknown): EstadoAccion {
-  return { error: e instanceof Error ? e.message : 'No se pudo completar la operación.' }
-}
-
-function texto(fd: FormData, clave: string, max = 500): string {
-  return String(fd.get(clave) ?? '').trim().slice(0, max)
-}
-
-function numero(fd: FormData, clave: string): number | null {
-  const v = String(fd.get(clave) ?? '').trim()
-  if (!v) return null
-  const n = Number(v)
-  return Number.isFinite(n) ? n : null
-}
-
-function fecha(fd: FormData, clave: string): Date | null {
-  const v = String(fd.get(clave) ?? '').trim()
-  if (!v) return null
-  const d = new Date(v)
-  return Number.isNaN(d.getTime()) ? null : d
-}
+export type { EstadoAccion }
 
 // ── Acuerdos ────────────────────────────────────────────────────────────────
 
@@ -170,6 +122,14 @@ export async function crearAcuerdoAction(
       politicaCancelacion: texto(fd, 'politicaCancelacion', 2000) || null,
       notas: texto(fd, 'notas', 2000) || null,
       creadoPorId: user.metadata.dbUserId ?? null,
+      comisionPorcentaje: numero(fd, 'comisionPorcentaje'),
+      descuentoPorcentaje: numero(fd, 'descuentoPorcentaje'),
+      impuestoPorcentaje: numero(fd, 'impuestoPorcentaje'),
+      plazoPagoDias: numero(fd, 'plazoPagoDias'),
+      frecuenciaCorte: (texto(fd, 'frecuenciaCorte', 20) || null) as never,
+      metodoLiquidacion: texto(fd, 'metodoLiquidacion', 120) || null,
+      politicaDevoluciones: texto(fd, 'politicaDevoluciones', 2000) || null,
+      slaTexto: texto(fd, 'slaTexto', 2000) || null,
     })
 
     await auditar('SUPPLY_ACUERDO_CREADO', 'SupplyAcuerdo', id, {
@@ -193,9 +153,16 @@ export async function moverAcuerdoAction(
     const user = await exigirPlataforma('MEMBEGO_SUPPLY_APPROVE')
     const acuerdoId = texto(fd, 'acuerdoId', 60)
     const hasta = texto(fd, 'estado', 40)
+    const motivo = texto(fd, 'motivo', 500) || null
 
-    await moverAcuerdo(acuerdoId, hasta as never, user.metadata.dbUserId ?? null)
-    await auditar('SUPPLY_ACUERDO_ESTADO', 'SupplyAcuerdo', acuerdoId, { despues: hasta })
+    const antes = await sinEmpresa('Membego Supply: estado previo del acuerdo para la bitácora', (tx) =>
+      tx.supplyAcuerdo.findUnique({ where: { id: acuerdoId }, select: { estado: true } })
+    )
+    await moverAcuerdo(acuerdoId, hasta as never, user.metadata.dbUserId ?? null, motivo)
+    await auditar('SUPPLY_ACUERDO_ESTADO', 'SupplyAcuerdo', acuerdoId, { antes: antes?.estado ?? null, despues: hasta, motivo })
+    if (hasta === 'APROBADO') {
+      await auditar('SUPPLY_ACUERDO_VERSION', 'SupplyAcuerdo', acuerdoId, { motivo: 'Condiciones aprobadas.' })
+    }
     refrescarPlataforma('acuerdos')
     return { success: `Acuerdo ${hasta.toLowerCase()}.` }
   } catch (e) {
@@ -222,6 +189,8 @@ export async function enmendarAcuerdoAction(
       loteId: texto(fd, 'loteId', 60) || null,
       unidadesExtra: numero(fd, 'unidadesExtra'),
       nuevoFinAt: fecha(fd, 'nuevoFinAt'),
+      nuevoCostoUnitario: numero(fd, 'nuevoCostoUnitario'),
+      nuevaComisionPorcentaje: numero(fd, 'nuevaComisionPorcentaje'),
       solicitadoPorId: user.metadata.dbUserId ?? null,
       aprobadoPorId: user.metadata.dbUserId ?? null,
     })
@@ -283,8 +252,11 @@ export async function moverOrdenAction(_prev: EstadoAccion, fd: FormData): Promi
     const ordenId = texto(fd, 'ordenId', 60)
     const hasta = texto(fd, 'estado', 40)
 
+    const antes = await sinEmpresa('Membego Supply: estado previo de la orden para la bitácora', (tx) =>
+      tx.supplyOrden.findUnique({ where: { id: ordenId }, select: { estado: true } })
+    )
     await moverOrden(ordenId, hasta as never, user.metadata.dbUserId ?? null, texto(fd, 'motivo', 500) || null)
-    await auditar('SUPPLY_ORDEN_ESTADO', 'SupplyOrden', ordenId, { despues: hasta })
+    await auditar('SUPPLY_ORDEN_ESTADO', 'SupplyOrden', ordenId, { antes: antes?.estado ?? null, despues: hasta })
 
     // ACTIVA es el momento en que el supply existe de verdad: se generan los
     // lotes y se asienta la compra en el ledger, en la misma petición.
@@ -369,11 +341,39 @@ export async function emitirDerechoAction(
 ): Promise<EstadoAccion> {
   try {
     const user = await exigirPlataforma('MEMBEGO_SUPPLY_ALLOCATE')
-    const loteId = texto(fd, 'loteId', 60)
+    let loteId = texto(fd, 'loteId', 60)
     const clienteId = texto(fd, 'clienteId', 60)
     const asignacionId = texto(fd, 'asignacionId', 60) || null
     const destinoTipo = texto(fd, 'destinoTipo', 40)
     const origen = esDestino(destinoTipo) ? ORIGEN_POR_DESTINO[destinoTipo] : 'MANUAL'
+
+    // Sin lote concreto, se elige por FEFO entre los candidatos del proveedor y
+    // producto. Elegir OTRA estrategia es un override administrativo (§10) y
+    // queda en la bitácora con la estrategia y el lote que salió.
+    const estrategiaPedida = texto(fd, 'estrategia', 20)
+    const estrategia: EstrategiaSeleccion = (ESTRATEGIAS_SELECCION as readonly string[]).includes(estrategiaPedida)
+      ? (estrategiaPedida as EstrategiaSeleccion)
+      : ESTRATEGIA_POR_DEFECTO
+    if (!loteId) {
+      const { candidatosParaEntregar } = await import('./pool')
+      const candidatos = await sinEmpresa('Membego Supply: elegir lote para una emisión manual', (tx) =>
+        candidatosParaEntregar(tx, {
+          proveedorId: texto(fd, 'proveedorId', 60) || null,
+          item: texto(fd, 'item', 200) || null,
+          estrategia,
+          exigirDisponibles: !asignacionId,
+        })
+      )
+      loteId = candidatos[0]?.id ?? ''
+      if (!loteId) return { error: 'No hay ningún lote con unidades para ese producto.' }
+      if (estrategia !== ESTRATEGIA_POR_DEFECTO) {
+        await auditar('SUPPLY_FEFO_OVERRIDE', 'SupplyLote', loteId, {
+          estrategia,
+          motivo: texto(fd, 'motivoEstrategia', 500) || null,
+          candidatos: candidatos.slice(0, 5).map((c) => ({ id: c.id, codigo: c.codigo, venceAt: c.venceAt.toISOString() })),
+        })
+      }
+    }
 
     const res = await emitirDerecho({
       loteId,
@@ -452,7 +452,7 @@ export async function abrirQrAction(_prev: EstadoAccion, fd: FormData): Promise<
 
     const voucherId = texto(fd, 'voucherId', 60)
     const clienteId = texto(fd, 'clienteId', 60)
-    const sesion = await abrirSesionQr(voucherId, clienteId, texto(fd, 'sucursalId', 60) || null)
+    const sesion = await abrirSesionQr(voucherId, clienteId, texto(fd, 'sucursalId', 60) || null, await dispositivoActual())
 
     revalidatePath('/cliente/beneficios')
     return { success: sesion.nonce, id: sesion.id }
@@ -739,6 +739,7 @@ export async function reportarIncidenciaAction(
       derechoId: texto(fd, 'derechoId', 60) || null,
       voucherId: texto(fd, 'voucherId', 60) || null,
       redencionId: texto(fd, 'redencionId', 60) || null,
+      ventaId: texto(fd, 'ventaId', 60) || null,
       clienteId: texto(fd, 'clienteId', 60) || null,
       sucursalId: texto(fd, 'sucursalId', 60) || null,
       reportadoPorId: user.metadata.dbUserId ?? null,
@@ -763,6 +764,30 @@ export async function redimirAction(_prev: EstadoAccion, fd: FormData): Promise<
       return { error: 'No tienes permiso para entregar beneficios de Membego en esta empresa.' }
     }
 
+    // Venta sin precompra: el mismo botón «Confirmar entrega», otro dominio.
+    // No mueve ninguna cubeta: nace la cuenta por pagar por el neto (§14).
+    const ventaId = texto(fd, 'ventaId', 60)
+    if (ventaId) {
+      const entrega = await entregarVenta({
+        ventaId,
+        proveedorId: companyId,
+        sucursalId: texto(fd, 'sucursalId', 60) || null,
+        empleadoId: user.metadata.dbUserId ?? null,
+      })
+      if (!entrega.ok) {
+        const detalle = entrega.detalle ? ` Se entregó el ${entrega.detalle.fecha.toLocaleDateString('es-DO')}.` : ''
+        return { error: entrega.mensaje + detalle }
+      }
+      await auditar('SUPPLY_VENTA_ENTREGADA', 'SupplyVentaDirecta', ventaId, {
+        cuentaPorPagarId: entrega.cuentaPorPagarId,
+        montoProveedor: entrega.montoProveedor,
+        reutilizada: entrega.reutilizada,
+      }, companyId)
+      revalidatePath('/admin/supply')
+      refrescarPlataforma('ventas')
+      return { success: entrega.reutilizada ? 'Ya estaba registrada.' : 'Entrega confirmada. Membego le debe al proveedor el neto de la venta.', id: ventaId }
+    }
+
     const voucherId = texto(fd, 'voucherId', 60)
     const res = await redimir({
       voucherId,
@@ -770,6 +795,7 @@ export async function redimirAction(_prev: EstadoAccion, fd: FormData): Promise<
       sucursalId: texto(fd, 'sucursalId', 60) || null,
       empleadoId: user.metadata.dbUserId ?? null,
       sesionQrId: texto(fd, 'sesionQrId', 60) || null,
+      dispositivo: await dispositivoActual(),
       extrasMonto: numero(fd, 'extrasMonto') ?? 0,
       extrasNota: texto(fd, 'extrasNota', 500) || null,
       aporteClienteComercio: numero(fd, 'aporteCliente') ?? 0,
@@ -835,8 +861,11 @@ export async function resolverIncidenciaAction(
     const estado = texto(fd, 'estado', 40)
     const resolucion = texto(fd, 'resolucion', 2000)
 
+    const antes = await sinEmpresa('Membego Supply: estado previo de la incidencia para la bitácora', (tx) =>
+      tx.supplyIncidencia.findUnique({ where: { id: incidenciaId }, select: { estado: true } })
+    )
     await moverIncidencia(incidenciaId, estado as never, resolucion || null, user.metadata.dbUserId ?? null)
-    await auditar('SUPPLY_INCIDENCIA_RESUELTA', 'SupplyIncidencia', incidenciaId, { estado, resolucion })
+    await auditar('SUPPLY_INCIDENCIA_RESUELTA', 'SupplyIncidencia', incidenciaId, { antes: antes?.estado ?? null, despues: estado, resolucion })
     refrescarPlataforma('incidencias')
     return { success: 'Incidencia actualizada.' }
   } catch (e) {
@@ -867,13 +896,29 @@ export async function registrarPagoAction(
       notas: texto(fd, 'notas', 1000) || null,
       periodoDesde: fecha(fd, 'periodoDesde'),
       periodoHasta: fecha(fd, 'periodoHasta'),
+      cuentaPorPagarId: texto(fd, 'cuentaPorPagarId', 60) || null,
       registradoPorId: user.metadata.dbUserId ?? null,
       claveIdempotencia: texto(fd, 'claveIdempotencia', 190) || null,
     })
 
-    await auditar('SUPPLY_PAGO_REGISTRADO', 'SupplyPago', id, { acuerdoId, tipo, monto, reutilizado })
-    refrescarPlataforma('liquidaciones')
+    await auditar('SUPPLY_PAGO_REGISTRADO', 'SupplyPago', id, { acuerdoId, tipo, monto, reutilizado, cuentaPorPagarId: texto(fd, 'cuentaPorPagarId', 60) || null })
+    refrescarPlataforma('finanzas/pagos')
+    refrescarPlataforma('finanzas/cuentas-por-pagar')
     return { success: reutilizado ? 'El pago ya estaba registrado.' : 'Pago registrado como pendiente.', id }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+export async function anularPagoAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
+  try {
+    const user = await exigirPlataforma('MEMBEGO_SUPPLY_APPROVE')
+    const pagoId = texto(fd, 'pagoId', 60)
+    const motivo = texto(fd, 'motivo', 500)
+    await anularPago(pagoId, motivo, user.metadata.dbUserId ?? null)
+    await auditar('SUPPLY_PAGO_ANULADO', 'SupplyPago', pagoId, { antes: 'PENDIENTE', despues: 'ANULADO', motivo })
+    refrescarPlataforma('finanzas/pagos')
+    return { success: 'Pago anulado.' }
   } catch (e) {
     return comoError(e)
   }
@@ -888,8 +933,10 @@ export async function confirmarPagoAction(
     const pagoId = texto(fd, 'pagoId', 60)
 
     await confirmarPago(pagoId, user.metadata.dbUserId ?? null)
-    await auditar('SUPPLY_PAGO_CONFIRMADO', 'SupplyPago', pagoId, {})
-    refrescarPlataforma('liquidaciones')
+    await auditar('SUPPLY_PAGO_CONFIRMADO', 'SupplyPago', pagoId, { antes: 'PENDIENTE', despues: 'CONFIRMADO' })
+    refrescarPlataforma('finanzas/pagos')
+    refrescarPlataforma('finanzas/depositos')
+    refrescarPlataforma('finanzas/cuentas-por-pagar')
     return { success: 'Pago confirmado y asentado.' }
   } catch (e) {
     return comoError(e)
@@ -930,6 +977,18 @@ export async function puedeAdministrarSupply(): Promise<boolean> {
 
 export interface EstadoEscaneo {
   error?: string
+  /** Venta sin precompra: el mismo escáner, otro objeto (§14). */
+  venta?: {
+    ventaId: string
+    numero: string
+    cliente: string
+    producto: string
+    variante: string | null
+    cantidad: number
+    proveedor: string
+    montoBruto: number
+    avisoCobro: string
+  }
   /** Ficha del voucher cuando el código es válido: lo que el empleado confirma. */
   ficha?: {
     voucherId: string
@@ -1021,7 +1080,31 @@ export async function escanearSupplyAction(
       voucherId = directo?.id ?? null
     }
 
-    if (!voucherId) return { error: 'Este código no es de Membego Supply.' }
+    if (!voucherId) {
+      // ¿Es el código de recogida de una venta sin precompra?
+      const venta = await sinEmpresa('Membego Supply: el comercio busca una venta por su código', (tx) =>
+        fichaDeVentaPorCodigo(tx, leido)
+      )
+      if (venta) {
+        return {
+          venta: {
+            ventaId: venta.ventaId,
+            numero: venta.numero,
+            cliente: venta.cliente,
+            producto: venta.producto,
+            variante: venta.variante,
+            cantidad: venta.cantidad,
+            proveedor: venta.proveedor,
+            montoBruto: venta.montoBruto,
+            avisoCobro:
+              venta.estado === 'PAGADA'
+                ? 'El cliente ya le pagó a Membego. No se le cobra nada: Membego te liquida el neto.'
+                : `Esta venta está ${venta.estado.toLowerCase()}: no se puede entregar.`,
+          },
+        }
+      }
+      return { error: 'Este código no es de Membego Supply.' }
+    }
 
     const ficha = await sinEmpresa('Membego Supply: ficha del voucher escaneado', (tx) =>
       fichaDeVoucher(tx, voucherId)

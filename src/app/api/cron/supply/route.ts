@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { autorizarCron } from '@/lib/cron-auth'
 import { soltarHoldsVencidos } from '@/modules/supply/derechos'
 import { expirarPedidosVencidos } from '@/modules/supply/cobro'
-import { alertasDeVencimiento, cerrarVencidos, umbralDelDia } from '@/modules/supply/vencimientos'
+import { alertasDeVencimiento, cerrarVencidos, umbralDelDia, vencimientosProximos } from '@/modules/supply/vencimientos'
 import { conciliar } from '@/modules/supply/conciliacion'
 import {
   avisarBeneficiosPorVencer,
@@ -10,6 +10,8 @@ import {
   avisarProveedoresEnRiesgo,
   avisarRiesgosDeLote,
   avisarVencimientos,
+  avisarVencimientosFinancieros,
+  avisarLiquidacionesPendientes,
 } from '@/modules/supply/notificar'
 
 export const dynamic = 'force-dynamic'
@@ -53,7 +55,9 @@ export async function GET(req: NextRequest) {
   // Solo los lotes que hoy CRUZAN un umbral (30, 14, 7, 3, 1 días). Avisar
   // todos los días durante un mes hace que el aviso deje de leerse a la semana,
   // que es peor que no avisar.
-  const alertas = await alertasDeVencimiento(30)
+  const alertas = await alertasDeVencimiento(90)
+  // Acuerdos que terminan y depósitos con saldo que llegan a su cierre (§20).
+  const financieros = await vencimientosProximos(90)
   const enUmbral = alertas.filter((a) => umbralDelDia(a.diasRestantes) !== null)
   const exposicion = enUmbral.reduce((t, a) => t + a.exposicionFinanciera, 0)
 
@@ -74,6 +78,9 @@ export async function GET(req: NextRequest) {
     proveedoresEnRiesgo: 0,
     noCaben: 0,
     capitalDormido: 0,
+    acuerdos: 0,
+    depositos: 0,
+    liquidacionesPendientes: 0,
   }
   try {
     const v = await avisarVencimientos(enUmbral)
@@ -94,6 +101,10 @@ export async function GET(req: NextRequest) {
     const lote = await avisarRiesgosDeLote()
     avisos.noCaben = lote.noCaben
     avisos.capitalDormido = lote.dormidos
+    const fin = await avisarVencimientosFinancieros(financieros)
+    avisos.acuerdos = fin.acuerdos
+    avisos.depositos = fin.depositos
+    avisos.liquidacionesPendientes = await avisarLiquidacionesPendientes()
   } catch (e) {
     console.error('[cron supply] no se pudieron enviar los avisos', e)
   }

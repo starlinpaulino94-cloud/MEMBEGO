@@ -47,7 +47,14 @@ import {
   textoVencimientoProveedor,
   textoVoucherNuevo,
   UMBRAL_CAPACIDAD,
+  dedupeAcuerdoPorVencer,
+  dedupeDepositoPorCerrar,
+  dedupeLiquidacionPendiente,
+  textoAcuerdoPorVencer,
+  textoDepositoPorCerrar,
+  textoLiquidacionPendiente,
 } from './avisos'
+import type { VencimientoGenerico } from './vencimientos'
 
 /**
  * MEMBEGO SUPPLY · ENVÍO DE LOS AVISOS (Fase 40).
@@ -677,4 +684,68 @@ export async function avisarRiesgosDeLote(
     console.error('[supply] no se pudieron avisar los riesgos de lote', e)
   }
   return out
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CAPA FINANCIERA (29-09-2026): lo que vence que no es un lote
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Acuerdos que terminan y depósitos con saldo que llegan a su cierre, EN el
+ * umbral que hoy cruzan. Los derechos de clientes ya tienen su aviso propio
+ * (`avisarBeneficiosPorVencer`), así que aquí se saltan.
+ */
+export async function avisarVencimientosFinancieros(
+  vencimientos: readonly VencimientoGenerico[]
+): Promise<{ acuerdos: number; depositos: number }> {
+  const r = { acuerdos: 0, depositos: 0 }
+  for (const v of vencimientos) {
+    const umbral = umbralDelDia(v.diasRestantes)
+    if (umbral === null) continue
+    try {
+      if (v.tipo === 'ACUERDO') {
+        const escritas = await notificarSuperadmins({
+          tipo: 'SUPPLY_ACUERDO_POR_VENCER',
+          ...textoAcuerdoPorVencer({ codigo: v.codigo, item: v.descripcion, proveedorNombre: v.proveedorNombre }, umbral),
+          dedupeKey: dedupeAcuerdoPorVencer(v.id, umbral),
+        })
+        if (escritas > 0) r.acuerdos += escritas
+      } else if (v.tipo === 'DEPOSITO') {
+        const escritas = await notificarSuperadmins({
+          tipo: 'SUPPLY_DEPOSITO_POR_CERRAR',
+          ...textoDepositoPorCerrar({ codigo: v.codigo, proveedorNombre: v.proveedorNombre, disponible: v.monto }, umbral),
+          dedupeKey: dedupeDepositoPorCerrar(v.id, umbral),
+        })
+        if (escritas > 0) r.depositos += escritas
+      }
+    } catch (e) {
+      console.error('[supply] no se pudo avisar de un vencimiento financiero', v.id, e)
+    }
+  }
+  return r
+}
+
+/** Liquidaciones calculadas o aprobadas que llevan esperando: una vez por semana. */
+export async function avisarLiquidacionesPendientes(ahora: Date = new Date()): Promise<number> {
+  let enviados = 0
+  try {
+    const pendientes = await sinEmpresa('Membego Supply: liquidaciones que esperan', (tx) =>
+      tx.supplyLiquidacion.findMany({
+        where: { estado: { in: ['CALCULADA', 'EN_REVISION', 'APROBADA'] } },
+        select: { id: true, codigo: true, estado: true, netoLiquidar: true, proveedor: { select: { name: true } } },
+        take: 200,
+      })
+    )
+    for (const l of pendientes) {
+      const escritas = await notificarSuperadmins({
+        tipo: 'SUPPLY_LIQUIDACION_PENDIENTE',
+        ...textoLiquidacionPendiente({ codigo: l.codigo, proveedorNombre: l.proveedor.name, neto: Number(l.netoLiquidar), estado: l.estado }),
+        dedupeKey: dedupeLiquidacionPendiente(l.id, ahora),
+      })
+      if (escritas > 0) enviados += escritas
+    }
+  } catch (e) {
+    console.error('[supply] no se pudieron avisar las liquidaciones pendientes', e)
+  }
+  return enviados
 }
