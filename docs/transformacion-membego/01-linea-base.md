@@ -19,7 +19,7 @@ datos ni comportamiento.
 
 | Pieza | Versión (package.json) | Notas |
 |---|---|---|
-| Next.js | `^16.1.1` (16.2.12 instalada) | **App Router**, build con webpack (`next build --webpack`) |
+| Next.js | `^16.1.1` (16.2.12 instalada) | **App Router**, build con Turbopack (`next build`; hasta 2026-09-29 `--webpack`, retirado por OOM en Vercel) |
 | React | `^19.0.0` | Server Components por defecto; `'use client'` explícito |
 | TypeScript | `^5` | `strict`; el chequeo vive en CI (`npx tsc --noEmit`), **no** en el build de Vercel (decisión deliberada, ver §5) |
 | Tailwind CSS | `^4` | Tokens en `src/app/globals.css` vía `@theme` (color, motion, tipografía) |

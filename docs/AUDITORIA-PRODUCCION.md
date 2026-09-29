@@ -14,7 +14,7 @@ miles de escaneos QR/min · miles de pagos y notificaciones simultáneos.
 
 | Declarado | Real (evidencia) |
 |---|---|
-| Next.js App Router | ✅ Next 16, `src/proxy.ts` (el middleware se llama `proxy` en Next 16), `build: next build --webpack` |
+| Next.js App Router | ✅ Next 16, `src/proxy.ts` (el middleware se llama `proxy` en Next 16), `build: next build` (Turbopack desde 2026-09-29; antes `--webpack`, que moría por OOM en Vercel) |
 | React / TypeScript | ✅ `tsconfig.json`, 129.356 líneas TS/TSX en `src/` |
 | PostgreSQL + Prisma | ✅ 112 modelos, 214 `@@index`, 31 `@@unique`. Eran 4.003 líneas en `prisma/schema.prisma`; desde la Fase 7 están repartidas en `prisma/schema/` por dominio |
 | Supabase | ✅ Auth (`@supabase/ssr`), Storage (14 puntos de subida), **sin Realtime**, **sin RLS** |
