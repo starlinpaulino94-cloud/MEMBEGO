@@ -1208,7 +1208,11 @@ model SupplyPedido {
 
   @@index([estado, expiraAt])
   @@index([clienteId, estado])
-  @@index([estado, comprobanteAt])
+  // La cola de revisión (`supply_pedidos_cola_revision_idx`) es un índice
+  // PARCIAL —`ON (comprobanteAt) WHERE estado = 'EN_REVISION'`— y vive solo en
+  // la migración 20261006: Prisma no expresa índices parciales. Declararlo aquí
+  // como `[estado, comprobanteAt]` hacía que `migrate diff` exigiera un índice
+  // que ninguna migración crea (y rompía el check «Esquema de base de datos»).
   @@map("supply_pedidos")
 }
 
