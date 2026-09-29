@@ -3,7 +3,7 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import type { SupplyAcuerdoEstado, SupplyOrdenEstado } from '@prisma/client'
 import { sinEmpresa, type Tx } from '@/lib/tenant'
-import { codigoAcuerdo, codigoLote, numeroOrden } from './codigos'
+import { codigoAcuerdo, codigoLote, numeroOrden, siglaProveedor } from './codigos'
 import {
   ORDEN_PUEDE_GENERAR_LOTE,
   TRANSICIONES_ACUERDO,
@@ -49,16 +49,26 @@ export async function crearAcuerdo(d: DatosAcuerdo): Promise<{ id: string; codig
     if (!proveedor) throw new Error('Proveedor no encontrado.')
 
     const anio = d.inicioAt.getFullYear()
-    // El correlativo se cuenta DENTRO de la transacción: dos altas simultáneas
-    // del mismo proveedor chocarían en el índice único de `codigo` y la
-    // segunda reintenta, en vez de crear dos acuerdos con el mismo código.
-    const previos = await tx.supplyAcuerdo.count({
-      where: { proveedorId: d.proveedorId, codigo: { startsWith: `MBG-` }, createdAt: { gte: new Date(anio, 0, 1) } },
-    })
+    // El correlativo se cuenta por SIGLA y año, no por proveedor: el código es
+    // único en toda la tabla y dos proveedores con la misma sigla («Pizzería
+    // Roma» y «Pizzería Real» → PIZZE) chocaban en el índice. Se cuenta dentro
+    // de la transacción y, si aun así choca, se reintenta con el siguiente.
+    const sigla = siglaProveedor(proveedor.name)
+    const prefijo = `MBG-${sigla}-${anio}-`
+    const previos = await tx.supplyAcuerdo.count({ where: { codigo: { startsWith: prefijo } } })
+    const codigoLibre = async (): Promise<string> => {
+      for (let n = previos + 1; n < previos + 50; n++) {
+        const codigo = codigoAcuerdo(proveedor.name, anio, n)
+        const ocupado = await tx.supplyAcuerdo.findUnique({ where: { codigo }, select: { id: true } })
+        if (!ocupado) return codigo
+      }
+      throw new Error('No se pudo asignar un código de acuerdo libre.')
+    }
+    const codigo = await codigoLibre()
 
     const creado = await tx.supplyAcuerdo.create({
       data: {
-        codigo: codigoAcuerdo(proveedor.name, anio, previos + 1),
+        codigo,
         proveedorId: d.proveedorId,
         estado: 'BORRADOR',
         tipo: d.tipo,

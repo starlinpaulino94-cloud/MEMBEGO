@@ -63,7 +63,7 @@ export async function registrarProveedorExterno(
   return sinEmpresa('Membego Supply: alta de un proveedor externo', async (tx) => {
     const base = slugify(nombre) || 'proveedor'
     const existente = await tx.supplyProveedor.findFirst({
-      where: { origen: 'EXTERNA', company: { slug: { startsWith: base } , name: { equals: nombre, mode: 'insensitive' } } },
+      where: { origen: 'EXTERNA', company: { slug: { startsWith: `prov-${base}` }, name: { equals: nombre, mode: 'insensitive' } } },
       select: { id: true, companyId: true },
     })
     if (existente) return { companyId: existente.companyId, perfilId: existente.id, reutilizado: true }

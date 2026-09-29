@@ -63,6 +63,8 @@ const PUROS = [
   'hallazgos.ts',
   'minutos-qr.ts',
   'avisos.ts',
+  'dinero.ts',
+  'conciliacion-cifras.ts',
 ]
 
 // ── El dominio puro sigue siendo puro ───────────────────────────────────────
