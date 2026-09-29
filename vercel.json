@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
   "build": {
     "env": {
       "SENTRY_UPLOAD": "off"

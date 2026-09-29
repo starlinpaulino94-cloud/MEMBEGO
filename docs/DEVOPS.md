@@ -98,16 +98,27 @@ y está escrito en «El registro se desactualiza solo».
      IPv4 y en proyectos nuevos ese host es solo IPv6—, sirve el **Session
      pooler**, que también escucha en el 5432 y admite DDL. El que nunca
      sirve es el 6543.
-   - `VERCEL_DEPLOY_HOOK_URL` — el deploy hook del proyecto en Vercel. Si
-     falta, el flujo migra igual y avisa sin desplegar.
-3. **Desactivar el auto-deploy de Vercel desde Git** para `main`, o el
-   despliegue saldría en paralelo a la migración y se perdería el orden.
+   - `VERCEL_DEPLOY_HOOK_URL` — el deploy hook del proyecto en Vercel
+     (Vercel → proyecto → Settings → Git → **Deploy Hooks** → «Create Hook»,
+     rama `main`; copiar la URL tal cual, lleva el token dentro). Desde el
+     29-09-2026 **es obligatorio**: si falta, el paso «Desplegar en Vercel»
+     sale rojo y ese push no llega a producción (ver punto 3).
+3. **El auto-deploy de Vercel desde Git está desactivado para `main`** en
+   `vercel.json` (`git.deploymentEnabled.main = false`) desde el 29-09-2026.
+   Antes el despliegue salía en paralelo a la migración y se perdía el orden;
+   ahora producción solo se despliega desde el flujo, después de
+   `migrate deploy`. Las ramas de PR siguen generando previews solas: el
+   interruptor es solo para `main`.
 
-   ⚠️ **NO toques todavía el auto-deploy de Vercel.** De los dos secretos del
-   punto 2 solo está `MIGRATIONS_DATABASE_URL`; `VERCEL_DEPLOY_HOOK_URL` sigue
-   vacío —verificado en el run 202 del 14-09-2026, que avisó «sin configurar;
-   se omite el despliegue»—. Con el hook vacío, desactivar el auto-deploy
-   dejaría a `main` mezclando y **sin desplegar nada por ningún camino**.
+   ⚠️ **Consecuencia:** con el hook vacío, `main` mezcla y **no despliega por
+   ningún camino**. Por eso el flujo lo dice en rojo, con los tres pasos para
+   arreglarlo en el resumen del job, y por eso el secreto hay que ponerlo
+   ANTES de mezclar el cambio que apaga el auto-deploy (o justo después y
+   relanzar el flujo con «Run workflow»). Verificado el 14-09-2026 (run 202)
+   que el hook estaba vacío; comprobar en el primer run tras este cambio.
+
+   Para volver atrás sin tocar secretos: quitar el bloque `git` de
+   `vercel.json` y el auto-deploy vuelve en el siguiente push.
 
    ⚠️ **Desde que el secreto existe, TODO push a `main` ejecuta
    `migrate deploy`**, traiga migraciones o no: el paso solo mira si el secreto
