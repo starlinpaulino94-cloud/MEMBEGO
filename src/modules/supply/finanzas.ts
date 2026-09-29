@@ -57,6 +57,8 @@ export interface DatosPago {
   periodoHasta?: Date | null
   /** Cuenta por pagar que este pago salda (una factura pagada aparte). */
   cuentaPorPagarId?: string | null
+  /** Ruta del comprobante en el bucket privado (tipo 'pago'). */
+  comprobantePath?: string | null
   registradoPorId?: string | null
   claveIdempotencia?: string | null
 }
@@ -117,6 +119,7 @@ export async function registrarPagoEnTx(tx: Tx, d: DatosPago): Promise<{ id: str
       periodoDesde: d.periodoDesde ?? null,
       periodoHasta: d.periodoHasta ?? null,
       cuentaPorPagarId: d.cuentaPorPagarId ?? null,
+      comprobantePath: d.comprobantePath ?? null,
       registradoPorId: d.registradoPorId ?? null,
       claveIdempotencia: d.claveIdempotencia ?? null,
     },
@@ -301,5 +304,15 @@ export async function asientosDeProveedor(tx: Tx, proveedorId: string, limite = 
       createdAt: true,
       acuerdo: { select: { codigo: true } },
     },
+  })
+}
+
+/** Adjunta (o sustituye) el comprobante de un pago ya registrado. La ruta la validó el storage. */
+export async function adjuntarComprobantePago(pagoId: string, comprobantePath: string): Promise<void> {
+  await sinEmpresa('Membego Supply: comprobante de un pago a proveedor', async (tx) => {
+    const pago = await tx.supplyPago.findUnique({ where: { id: pagoId }, select: { id: true, anuladoAt: true } })
+    if (!pago) throw new Error('Pago no encontrado.')
+    if (pago.anuladoAt) throw new Error('Este pago está anulado.')
+    await tx.supplyPago.update({ where: { id: pagoId }, data: { comprobantePath } })
   })
 }

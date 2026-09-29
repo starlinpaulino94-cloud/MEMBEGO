@@ -87,12 +87,21 @@ async function entregarEnTx(p: PeticionEntrega): Promise<ResultadoEntrega> {
   return sinEmpresa('Membego Supply: entregar una unidad desde un canal', async (tx) => {
     let loteId = p.loteId ?? null
 
-    if (!loteId && p.asignacionId) {
+    let reglasOferta: { maxPorCampana?: number | null } = {}
+    if (p.asignacionId) {
       const asignacion = await tx.supplyAsignacion.findUnique({
         where: { id: p.asignacionId },
-        select: { loteId: true },
+        select: { loteId: true, activa: true, inicioAt: true, finAt: true, maxPorCliente: true, sucursalIds: true },
       })
-      loteId = asignacion?.loteId ?? null
+      if (!asignacion || !asignacion.activa) return { ok: false, mensaje: 'Esa oferta ya no está activa.' }
+      const ahora = new Date()
+      if (asignacion.inicioAt && asignacion.inicioAt > ahora) return { ok: false, mensaje: 'Esta oferta todavía no empieza.' }
+      if (asignacion.finAt && asignacion.finAt <= ahora) return { ok: false, mensaje: 'Esta oferta ya terminó.' }
+      if (p.sucursalId && asignacion.sucursalIds.length > 0 && !asignacion.sucursalIds.includes(p.sucursalId)) {
+        return { ok: false, mensaje: 'Esta oferta no aplica en esa sucursal.' }
+      }
+      if (asignacion.maxPorCliente != null) reglasOferta = { maxPorCampana: asignacion.maxPorCliente }
+      if (!loteId) loteId = asignacion.loteId
     }
 
     if (!loteId) {
@@ -125,6 +134,7 @@ async function entregarEnTx(p: PeticionEntrega): Promise<ResultadoEntrega> {
       origen: ORIGEN_POR_DESTINO[p.destino],
       precioCliente: p.precioCliente ?? 0,
       actorId: p.actorId ?? null,
+      reglas: { ...reglasOferta, sucursalId: p.sucursalId ?? null },
       claveIdempotencia: claveIdempotencia(
         p.destino,
         p.asignacionId ?? loteId,
@@ -361,6 +371,8 @@ export interface OfertaMarketplace {
   /** Lo que el cliente pagaría a Membego. 0 = gratis. */
   precioMembego: number
   esGratis: boolean
+  maxPorCliente: number | null
+  sucursalIds: string[]
 }
 
 /**
@@ -382,6 +394,8 @@ export async function ofertasDisponibles(limite = 50): Promise<OfertaMarketplace
         activa: true,
         destinoTipo: { in: ['CAMPANA', 'OFERTA', 'REGALO'] },
         lote: { estado: 'ACTIVO', venceAt: { gt: new Date() } },
+        OR: [{ inicioAt: null }, { inicioAt: { lte: new Date() } }],
+        AND: [{ OR: [{ finAt: null }, { finAt: { gt: new Date() } }] }],
       },
       orderBy: { createdAt: 'desc' },
       take: limite,
@@ -393,6 +407,9 @@ export async function ofertasDisponibles(limite = 50): Promise<OfertaMarketplace
         liberadas: true,
         precioCliente: true,
         destinoTipo: true,
+        finAt: true,
+        maxPorCliente: true,
+        sucursalIds: true,
         lote: {
           select: {
             id: true,
@@ -419,7 +436,9 @@ export async function ofertasDisponibles(limite = 50): Promise<OfertaMarketplace
           proveedor: a.lote.proveedor.name,
           proveedorSlug: a.lote.proveedor.slug,
           disponibles,
-          venceAt: a.lote.venceAt,
+          venceAt: a.finAt && a.finAt < a.lote.venceAt ? a.finAt : a.lote.venceAt,
+          maxPorCliente: a.maxPorCliente,
+          sucursalIds: a.sucursalIds,
           precioReferencia: a.lote.snapshotPrecioReferencia
             ? Number(a.lote.snapshotPrecioReferencia)
             : null,

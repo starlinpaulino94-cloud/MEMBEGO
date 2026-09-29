@@ -10,6 +10,7 @@ import {
   comoError,
   dispositivoActual,
   fecha,
+  fechaFinDeDia,
   numero,
   refrescarPlataforma,
   texto,
@@ -298,6 +299,7 @@ export async function asignarAction(_prev: EstadoAccion, fd: FormData): Promise<
     const cantidad = numero(fd, 'cantidad')
     if (cantidad == null) return { error: 'Hace falta la cantidad a asignar.' }
 
+    const precioCliente = numero(fd, 'precioCliente')
     const res = await asignar({
       loteId: texto(fd, 'loteId', 60),
       destinoTipo,
@@ -305,14 +307,22 @@ export async function asignarAction(_prev: EstadoAccion, fd: FormData): Promise<
       etiqueta: texto(fd, 'etiqueta', 200),
       cantidad,
       creadoPorId: user.metadata.dbUserId ?? null,
+      precioCliente,
+      inicioAt: fecha(fd, 'inicioAt'),
+      finAt: fechaFinDeDia(fd, 'finAt'),
+      maxPorCliente: numero(fd, 'maxPorCliente'),
+      sucursalIds: fd.getAll('sucursalIds').map(String).filter(Boolean),
     })
 
-    await auditar('SUPPLY_ASIGNACION_CREADA', 'SupplyAsignacion', res.id, {
+    const esOferta = destinoTipo === 'OFERTA' || (precioCliente ?? 0) > 0
+    await auditar(esOferta ? 'SUPPLY_OFERTA_CREADA' : 'SUPPLY_ASIGNACION_CREADA', 'SupplyAsignacion', res.id, {
       loteId: res.loteId,
       destinoTipo,
       cantidad,
+      precioCliente: precioCliente ?? 0,
       disponiblesRestantes: res.disponiblesRestantes,
     })
+    revalidatePath('/cliente/beneficios/disponibles')
     refrescarPlataforma('lotes')
     return { success: `${cantidad} unidades apartadas. Quedan ${res.disponiblesRestantes} sin asignar.`, id: res.id }
   } catch (e) {
@@ -348,8 +358,16 @@ export async function emitirDerechoAction(
   try {
     const user = await exigirPlataforma('MEMBEGO_SUPPLY_ALLOCATE')
     let loteId = texto(fd, 'loteId', 60)
-    const clienteId = texto(fd, 'clienteId', 60)
+    let clienteId = texto(fd, 'clienteId', 60)
     const asignacionId = texto(fd, 'asignacionId', 60) || null
+    if (!clienteId) {
+      // Regalar «a alguien»: correo, nombre exacto o id. Ambiguo = no se regala.
+      const { resolverCliente } = await import('./pool')
+      const busqueda = texto(fd, 'clienteBusqueda', 160)
+      const encontrado = busqueda ? await sinEmpresa('Membego Supply: a quién se regala', (tx) => resolverCliente(tx, busqueda)) : null
+      if (!encontrado) return { error: 'No se encontró una sola persona con ese correo, nombre o id.' }
+      clienteId = encontrado.id
+    }
     const destinoTipo = texto(fd, 'destinoTipo', 40)
     const origen = esDestino(destinoTipo) ? ORIGEN_POR_DESTINO[destinoTipo] : 'MANUAL'
 
@@ -903,6 +921,7 @@ export async function registrarPagoAction(
       periodoDesde: fecha(fd, 'periodoDesde'),
       periodoHasta: fecha(fd, 'periodoHasta'),
       cuentaPorPagarId: texto(fd, 'cuentaPorPagarId', 60) || null,
+      comprobantePath: texto(fd, 'comprobantePath', 500) || null,
       registradoPorId: user.metadata.dbUserId ?? null,
       claveIdempotencia: texto(fd, 'claveIdempotencia', 190) || null,
     })

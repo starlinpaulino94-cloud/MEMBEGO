@@ -10,6 +10,8 @@ import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavFinanzas } from '@/components/supply/nav'
 import { FormAccion } from '@/components/supply/form-accion'
 import { anularPagoAction } from '@/modules/supply/actions'
+import { FormComprobantePago } from '@/components/supply/form-comprobante-pago'
+import { urlComprobante } from '@/modules/storage/comprobantes'
 import { saldoDeProveedor } from '@/modules/supply/finanzas'
 import { FormPago } from '@/components/supply/form-pago'
 import { FormConfirmar } from '@/components/supply/form-confirmar-pago'
@@ -74,6 +76,8 @@ export default async function PagosPage() {
         createdAt: true,
         confirmadoAt: true,
         anuladoAt: true,
+        metodo: true,
+        comprobantePath: true,
         proveedor: { select: { name: true } },
         acuerdo: { select: { codigo: true } },
         registradoPor: { select: { name: true } },
@@ -97,6 +101,7 @@ export default async function PagosPage() {
     return { filas, pagos, asientos }
   })
 
+  const pagosConUrl = await Promise.all(datos.pagos.map(async (p) => ({ ...p, url: await urlComprobante('pago', p.id, p.comprobantePath) })))
   const porPagar = datos.filas.reduce((t, f) => t + f.saldo.saldoPorPagar, 0)
   const depositado = datos.filas.reduce((t, f) => t + f.saldo.depositado, 0)
   const contratado = datos.filas.reduce((t, f) => t + f.saldo.contratado, 0)
@@ -205,17 +210,27 @@ export default async function PagosPage() {
               { clave: 'tipo', titulo: 'Tipo' },
               { clave: 'monto', titulo: 'Monto', alinearDerecha: true },
               { clave: 'referencia', titulo: 'Referencia' },
+              { clave: 'comprobante', titulo: 'Comprobante' },
               { clave: 'registrado', titulo: 'Registró' },
               { clave: 'estado', titulo: 'Estado' },
             ]}
-            filas={datos.pagos.map((p) => ({
+            filas={pagosConUrl.map((p) => ({
               __clave: p.id,
               fecha: formatDate(p.createdAt),
               acuerdo: p.acuerdo.codigo,
               proveedor: p.proveedor.name,
               tipo: SUPPLY_PAGO_TIPO_LABELS[p.tipo],
               monto: formatMoneyRD(Number(p.monto)),
-              referencia: p.referencia ?? '—',
+              referencia: [p.metodo, p.referencia].filter(Boolean).join(' · ') || '—',
+              comprobante: p.url ? (
+                <a href={p.url} target="_blank" rel="noreferrer" className="underline">
+                  Ver
+                </a>
+              ) : p.estado === 'ANULADO' ? (
+                '—'
+              ) : (
+                <FormComprobantePago pagoId={p.id} compacto />
+              ),
               registrado: p.registradoPor?.name ?? '—',
               estado: p.anuladoAt || p.estado === 'ANULADO' ? (
                 <Badge variant="outline">Anulado</Badge>

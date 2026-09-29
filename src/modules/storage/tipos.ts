@@ -11,4 +11,4 @@
 export const BUCKET_COMPROBANTES = 'comprobantes'
 
 /** A qué se adjunta el comprobante. Determina quién puede subirlo y verlo. */
-export type TipoComprobante = 'membresia' | 'compra' | 'soporte' | 'pedido'
+export type TipoComprobante = 'membresia' | 'compra' | 'soporte' | 'pedido' | 'pago'

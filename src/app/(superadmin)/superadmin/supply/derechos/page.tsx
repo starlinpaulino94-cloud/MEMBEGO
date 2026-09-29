@@ -11,6 +11,8 @@ import { TablaReporte } from '@/components/ui/reporte-imprimible'
 import Form from 'next/form'
 import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
+import { FormRegalar } from '@/components/supply/form-regalar'
+import { proveedoresElegibles } from '@/modules/supply/proveedores'
 import {
   SUPPLY_DERECHO_ESTADO_LABELS,
   SUPPLY_ORIGEN_LABELS,
@@ -36,6 +38,7 @@ export default async function DerechosPage({
   await requireRole('SUPERADMIN')
   const { estado, q } = await searchParams
   const busqueda = (q ?? '').trim().slice(0, 80)
+  const proveedores = await proveedoresElegibles()
 
   const { derechos, conteo } = await sinEmpresa(
     'Membego Supply: derechos emitidos en toda la plataforma',
@@ -124,6 +127,12 @@ export default async function DerechosPage({
         />
       </div>
 
+      <Card id="emitir">
+        <CardContent className="pt-6">
+          <FormRegalar proveedores={proveedores.map((p) => ({ id: p.id, nombre: p.nombre }))} />
+        </CardContent>
+      </Card>
+
       <Form action="/superadmin/supply/derechos" className="flex flex-wrap gap-2">
         <Input
           name="q"
@@ -201,7 +210,7 @@ export default async function DerechosPage({
                 </Badge>
               ),
             }))}
-            vacio="Todavía no se ha emitido ningún derecho."
+            vacio="Todavía no se ha emitido ningún derecho. Emite el primero arriba o regala desde un lote."
           />
         </CardContent>
       </Card>

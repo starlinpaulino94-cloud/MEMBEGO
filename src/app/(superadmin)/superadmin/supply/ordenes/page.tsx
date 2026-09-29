@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { TablaReporte } from '@/components/ui/reporte-imprimible'
 import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
+import { FormOrden } from '@/components/supply/form-orden'
+import { CardHeader, CardTitle } from '@/components/ui/card'
 import { SUPPLY_ORDEN_ESTADO_LABELS } from '@/modules/supply/catalogo'
 
 export const dynamic = 'force-dynamic'
@@ -45,6 +47,13 @@ export default async function OrdenesPage() {
   )
 
   const pendientes = ordenes.filter((o) => o.estado === 'PENDIENTE_APROBACION')
+  const acuerdos = await sinEmpresa('Membego Supply: acuerdos contra los que se puede comprar', (tx) =>
+    tx.supplyAcuerdo.findMany({
+      where: { estado: { in: ['APROBADO', 'ACTIVO'] }, modeloComercial: { in: ['COMPRA_UNIDAD_COMPLETA', 'SUBSIDIO'] } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, codigo: true, itemNombre: true, cantidad: true, costoUnitario: true, impuestoPorcentaje: true, proveedor: { select: { name: true } } },
+    })
+  )
 
   return (
     <div className="space-y-6">
@@ -57,6 +66,11 @@ export default async function OrdenesPage() {
           </Link>
         }
         nav={<NavSupply activa="ordenes" />}
+        action={
+          <a href="#nueva" className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground">
+            + Nueva orden de compra
+          </a>
+        }
       />
 
       {pendientes.length > 0 && (
@@ -128,7 +142,26 @@ export default async function OrdenesPage() {
                 </Badge>
               ),
             }))}
-            vacio="Sin órdenes todavía."
+            vacio="Sin órdenes todavía. Crea la primera abajo: elige el acuerdo, las líneas y el total."
+          />
+        </CardContent>
+      </Card>
+
+      <Card id="nueva">
+        <CardHeader>
+          <CardTitle>Nueva orden de compra</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FormOrden
+            acuerdos={acuerdos.map((a) => ({
+              id: a.id,
+              codigo: a.codigo,
+              proveedor: a.proveedor.name,
+              itemNombre: a.itemNombre,
+              cantidad: a.cantidad,
+              costoUnitario: Number(a.costoUnitario),
+              impuestoPorcentaje: a.impuestoPorcentaje != null ? Number(a.impuestoPorcentaje) : null,
+            }))}
           />
         </CardContent>
       </Card>

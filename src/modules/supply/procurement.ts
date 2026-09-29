@@ -218,7 +218,11 @@ export async function fondearOrdenEnTx(tx: Tx, ordenId: string): Promise<void> {
     where: { ordenId, estado: 'CONFIRMADO', tipo: { in: ['ANTICIPO', 'DEPOSITO', 'LIQUIDACION_REDENCIONES', 'LIQUIDACION_FINAL'] } },
     _sum: { monto: true },
   })
-  const pagado = redondear2(Number(suma._sum.monto ?? 0))
+  const conDeposito = await tx.supplyDepositoMovimiento.aggregate({
+    where: { ordenId, tipo: 'APLICACION' },
+    _sum: { monto: true },
+  })
+  const pagado = redondear2(Number(suma._sum.monto ?? 0) + Number(conDeposito._sum.monto ?? 0))
   const total = Number(orden.total)
   const destino: SupplyOrdenEstado | null =
     pagado <= 0 ? null : pagado + 0.005 >= total ? 'FONDEADA' : 'PARCIALMENTE_FONDEADA'

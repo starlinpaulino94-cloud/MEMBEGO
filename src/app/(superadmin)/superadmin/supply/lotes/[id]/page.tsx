@@ -20,6 +20,10 @@ import {
   type SupplyDestino,
 } from '@/modules/supply/catalogo'
 import { FormAsignar } from '@/components/supply/form-asignar'
+import { FormRegalar } from '@/components/supply/form-regalar'
+import { FormAccion } from '@/components/supply/form-accion'
+import { lotesCompatibles } from '@/modules/supply/lotes-operaciones'
+import { ajustarLoteAction, cancelarUnidadesAction, extenderVencimientoAction, transferirUnidadesAction } from '@/modules/supply/actions-lotes'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,7 +75,7 @@ export default async function LoteDetallePage({ params }: { params: Promise<{ id
     })
     if (!lote) return null
 
-    const [asignaciones, movimientos] = await Promise.all([
+    const [asignaciones, movimientos, sucursales] = await Promise.all([
       asignacionesDeLote(tx, id),
       tx.supplyMovimiento.findMany({
         where: { loteId: id },
@@ -89,12 +93,15 @@ export default async function LoteDetallePage({ params }: { params: Promise<{ id
           actor: { select: { name: true } },
         },
       }),
+      tx.sucursal.findMany({ where: { companyId: lote.proveedor.id, activa: true }, select: { id: true, nombre: true } }),
     ])
-    return { lote, asignaciones, movimientos }
+    return { lote, asignaciones, movimientos, sucursales }
   })
 
   if (!datos) notFound()
-  const { lote, asignaciones, movimientos } = datos
+  const { lote, asignaciones, movimientos, sucursales } = datos
+  const compatibles = await lotesCompatibles(id)
+  const vivo = lote.estado === 'ACTIVO' || lote.estado === 'PROGRAMADO' || lote.estado === 'AGOTADO'
 
   const costoUnitario = Number(lote.snapshotCostoUnitario)
   const costos = costosDeLote(
@@ -245,6 +252,96 @@ export default async function LoteDetallePage({ params }: { params: Promise<{ id
 
           {lote.estado === 'ACTIVO' && lote.disponibles > 0 && (
             <FormAsignar loteId={lote.id} disponibles={lote.disponibles} />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card id="acciones">
+        <CardHeader>
+          <CardTitle>Acciones sobre el lote</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {lote.estado === 'ACTIVO' && lote.disponibles > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <FormAsignar
+                loteId={lote.id}
+                disponibles={lote.disponibles}
+                modo="oferta"
+                sucursales={sucursales}
+                precioReferencia={lote.snapshotPrecioReferencia ? Number(lote.snapshotPrecioReferencia) : null}
+                costoUnitario={costoUnitario}
+              />
+              <FormRegalar loteId={lote.id} />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sin unidades disponibles: no hay nada que ofrecer ni regalar desde este lote.</p>
+          )}
+
+          {vivo && (
+            <div className="grid gap-4 lg:grid-cols-4">
+              <div className="rounded-lg border border-border p-4">
+                <p className="mb-2 text-sm font-medium">Transferir a otro lote</p>
+                {compatibles.length === 0 ? (
+                  <p className="text-caption text-muted-foreground">No hay otro lote vivo del mismo producto y proveedor.</p>
+                ) : (
+                  <FormAccion
+                    accion={transferirUnidadesAction}
+                    ocultos={{ loteId: lote.id }}
+                    etiqueta="Transferir"
+                    recargar
+                    campos={[
+                      { name: 'destinoLoteId', label: 'Lote de destino', tipo: 'select', opciones: compatibles.map((c) => ({ value: c.id, label: `${c.codigo} · vence ${formatDate(c.venceAt)} · ${c.disponibles} disp.` })) },
+                      { name: 'cantidad', label: 'Cantidad', tipo: 'number', step: '1', min: 1, max: lote.disponibles, required: true },
+                      { name: 'motivo', label: 'Motivo', required: true, maxLength: 500 },
+                    ]}
+                  />
+                )}
+              </div>
+              <div className="rounded-lg border border-border p-4">
+                <p className="mb-2 text-sm font-medium">Ajustar</p>
+                <FormAccion
+                  accion={ajustarLoteAction}
+                  ocultos={{ loteId: lote.id }}
+                  etiqueta="Registrar ajuste"
+                  variant="secondary"
+                  recargar
+                  confirmar="Un ajuste cambia lo comprado sin una orden de por medio y queda en el ledger y en la bitácora. ¿Continuar?"
+                  campos={[
+                    { name: 'delta', label: 'Unidades (+ entran, − salen)', tipo: 'number', step: '1', required: true, placeholder: '-3' },
+                    { name: 'motivo', label: 'Motivo', required: true, maxLength: 500 },
+                  ]}
+                />
+              </div>
+              <div className="rounded-lg border border-border p-4">
+                <p className="mb-2 text-sm font-medium">Cancelar unidades</p>
+                <FormAccion
+                  accion={cancelarUnidadesAction}
+                  ocultos={{ loteId: lote.id }}
+                  etiqueta="Cancelar unidades"
+                  variant="outline"
+                  recargar
+                  confirmar="Las unidades canceladas pasan a cerradas y no vuelven al pool. ¿Continuar?"
+                  campos={[
+                    { name: 'cantidad', label: 'Cantidad', tipo: 'number', step: '1', min: 1, max: lote.disponibles, required: true },
+                    { name: 'motivo', label: 'Motivo', required: true, maxLength: 500 },
+                  ]}
+                />
+              </div>
+              <div className="rounded-lg border border-border p-4">
+                <p className="mb-2 text-sm font-medium">Extender vencimiento</p>
+                <FormAccion
+                  accion={extenderVencimientoAction}
+                  ocultos={{ loteId: lote.id }}
+                  etiqueta="Extender"
+                  variant="secondary"
+                  recargar
+                  campos={[
+                    { name: 'nuevaFecha', label: `Nueva fecha (hoy vence ${formatDate(lote.venceAt)})`, tipo: 'date', required: true },
+                    { name: 'motivo', label: 'Motivo (acordado con el proveedor)', required: true, maxLength: 500 },
+                  ]}
+                />
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

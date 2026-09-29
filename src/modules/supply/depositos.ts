@@ -233,6 +233,63 @@ export async function aplicarDepositoEnTx(
   return { movimientoId: mov.id, saldoAntes: r.saldoAntes, saldoDespues: r.saldoDespues, montoAplicado: r.montoAplicado }
 }
 
+/**
+ * Paga (total o parcialmente) una ORDEN DE COMPRA con el saldo de un depósito.
+ * No asienta nada en el ledger financiero: el depósito ya se asentó al abrirse
+ * y la compra se asentó al activar el lote; aquí solo se dice con qué dinero
+ * se cubrió. Sube `montoPagado` de la orden y la fondea si corresponde.
+ */
+export async function aplicarDepositoAOrdenEnTx(
+  tx: Tx,
+  depositoId: string,
+  ordenId: string,
+  monto: number,
+  ctx: { actorId?: string | null } = {}
+): Promise<AplicacionHecha> {
+  const dep = await bloquearDeposito(tx, depositoId)
+  if (!DEPOSITO_VIVO.includes(dep.estado)) {
+    throw new Error(`El depósito está ${dep.estado.toLowerCase()}: no tiene saldo aplicable.`)
+  }
+  const orden = await tx.supplyOrden.findUnique({
+    where: { id: ordenId },
+    select: { proveedorId: true, total: true, montoPagado: true, estado: true },
+  })
+  if (!orden) throw new Error('Orden no encontrada.')
+  if (orden.proveedorId !== dep.proveedorId) throw new Error('El depósito y la orden son de proveedores distintos.')
+  if (orden.estado === 'BORRADOR' || orden.estado === 'PENDIENTE_APROBACION' || orden.estado === 'CANCELADA') {
+    throw new Error('Solo se paga una orden aprobada.')
+  }
+  const pendiente = redondear2(Math.max(0, Number(orden.total) - Number(orden.montoPagado)))
+  const r = calcularAplicacion(dep, monto, pendiente)
+  if (!r.ok) throw new Error(r.error)
+
+  const nuevo = { ...dep, montoAplicado: redondear2(dep.montoAplicado + r.montoAplicado) }
+  await tx.supplyDeposito.update({
+    where: { id: depositoId },
+    data: { montoAplicado: new Prisma.Decimal(nuevo.montoAplicado), estado: reestado(dep.estado, nuevo), version: { increment: 1 } },
+  })
+  const mov = await tx.supplyDepositoMovimiento.create({
+    data: {
+      depositoId,
+      tipo: 'APLICACION',
+      monto: new Prisma.Decimal(r.montoAplicado),
+      saldoAntes: new Prisma.Decimal(r.saldoAntes),
+      saldoDespues: new Prisma.Decimal(r.saldoDespues),
+      ordenId,
+      motivo: 'Pago de una orden de compra con el depósito.',
+      actorId: ctx.actorId ?? null,
+    },
+    select: { id: true },
+  })
+  const { fondearOrdenEnTx } = await import('./procurement')
+  await fondearOrdenEnTx(tx, ordenId)
+  return { movimientoId: mov.id, saldoAntes: r.saldoAntes, saldoDespues: r.saldoDespues, montoAplicado: r.montoAplicado }
+}
+
+export async function aplicarDepositoAOrden(depositoId: string, ordenId: string, monto: number, actorId?: string | null): Promise<AplicacionHecha> {
+  return sinEmpresa('Membego Supply: pagar una orden con un depósito', (tx) => aplicarDepositoAOrdenEnTx(tx, depositoId, ordenId, monto, { actorId }))
+}
+
 export async function aplicarDeposito(
   depositoId: string,
   cuentaPorPagarId: string,

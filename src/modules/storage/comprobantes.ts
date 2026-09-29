@@ -134,6 +134,15 @@ async function puedeSubir(
       )
       return ped?.cliente?.supabaseId === supabaseId
     }
+    if (tipo === 'pago') {
+      // Membego Supply: comprobante de un pago DE MEMBEGO a un proveedor. Lo
+      // adjunta plataforma; el id es el del pago (que ya existe: se registra
+      // antes de subir) y solo el rol de plataforma puede escribir aquí.
+      const u = await sinEmpresa('comprobantes: rol de quien adjunta un comprobante de pago a proveedor', (tx) =>
+        tx.user.findUnique({ where: { supabaseId }, select: { role: true } })
+      )
+      return u?.role === 'SUPERADMIN'
+    }
     // Soporte: el ticket todavía no existe cuando se adjunta el archivo (el
     // adjunto se sube antes de crear el ticket). El identificador es el propio
     // supabaseId de quien reporta, así que la ruta ya queda atada a la persona.

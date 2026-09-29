@@ -746,3 +746,22 @@ export async function beneficiosDelCliente(
     }))
   })
 }
+
+
+/**
+ * Encuentra la ficha de cliente a la que regalar o emitir: por id, por correo
+ * (exacto, sin distinguir mayúsculas) o por nombre exacto normalizado. Devuelve
+ * null si no hay una sola coincidencia inequívoca: regalar a la persona
+ * equivocada no se deshace con un clic.
+ */
+export async function resolverCliente(tx: Tx, termino: string): Promise<{ id: string; nombre: string; companyId: string } | null> {
+  const t = termino.trim()
+  if (!t) return null
+  const porId = await tx.cliente.findUnique({ where: { id: t }, select: { id: true, nombre: true, companyId: true } }).catch(() => null)
+  if (porId) return porId
+  const porCorreo = await tx.cliente.findMany({ where: { email: { equals: t, mode: 'insensitive' } }, select: { id: true, nombre: true, companyId: true }, take: 2 })
+  if (porCorreo.length === 1) return porCorreo[0]!
+  const porNombre = await tx.cliente.findMany({ where: { nombre: { equals: t, mode: 'insensitive' } }, select: { id: true, nombre: true, companyId: true }, take: 2 })
+  if (porNombre.length === 1) return porNombre[0]!
+  return null
+}
