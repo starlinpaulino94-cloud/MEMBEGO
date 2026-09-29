@@ -92,3 +92,157 @@ signo; la interfaz solo los agrupa. `/superadmin/supply/cobros` redirige.
 
 Ver `docs/membego-supply-final-report.md` (actualizado al cierre) para el
 detalle de lo implementado, corregido, agregado, migraciones, pruebas y riesgos.
+
+---
+
+## 6 · Cierre de la auditoría (FASES 1-9) · 2026-09-29
+
+### IMPLEMENTADO
+
+- **Capa financiera** (ADR-0009): depósitos con saldo y movimientos, facturas de
+  proveedor (factura / nota de crédito / nota de débito), cuentas por pagar y por
+  cobrar con cinco estados, liquidaciones con líneas y snapshot, pago con
+  neteo y aplicación planificada de depósitos, conciliación Membego vs proveedor
+  con seis tipos de discrepancia, investigación, notas, ajuste y aprobación.
+- **Venta sin precompra**: acuerdo a `COMISION`, `SupplyVentaDirecta`, cobro por
+  el flujo de pedidos existente, entrega por el escáner con código al portador,
+  cuenta por pagar por el neto al entregar. Ningún lote se mueve.
+- **Agreement engine**: comisión %, descuento %, impuesto %, plazo de pago,
+  frecuencia de corte, método de liquidación, política de devoluciones, SLA;
+  estado `SUSPENDIDO` con motivo; versionado (`SupplyAcuerdoVersion`) al aprobar
+  y en cada enmienda.
+- **Proveedor externo**: `SupplyProveedor` sobre una `Company` inactiva;
+  conversión = activar la misma empresa (mismo id, mismo historial).
+- **Ledger de unidades** con saldo anterior y posterior por movimiento.
+- **QR**: dispositivo del cliente y del escáner guardados.
+- **FEFO con override auditado** (`SUPPLY_FEFO_OVERRIDE`) desde la emisión manual.
+- **Órdenes**: `montoPagado` y fondeo automático al confirmar pagos; documentos.
+- **Incidencias**: 15 causas, 9 estados; aplican a ventas.
+- **Vencimientos**: umbrales 90/60/30/15/7/1 configurables
+  (`SUPPLY_UMBRALES_VENCIMIENTO`); alertas de lotes, derechos, depósitos y
+  acuerdos; tres avisos nuevos en la campanita.
+- **Dashboard**: 16 KPIs + bloques (cubetas, categoría, redenciones recientes,
+  obligaciones vencidas, vencimientos de depósitos/acuerdos).
+- **Reportes**: 16 bloques CSV con filtros de campaña, cliente, sucursal y
+  estado; unit economics con las nueve preguntas y el modelo a comisión.
+- **Auditoría**: 23 acciones nuevas; `antes`/`despues` en cada cambio de estado.
+- **Permisos**: `MEMBEGO_SUPPLIER_MANAGE`, `MEMBEGO_SETTLEMENT_MANAGE`,
+  `MEMBEGO_RECONCILIATION_MANAGE`, `MEMBEGO_SUPPLY_ADJUST`, `MEMBEGO_SUPPLY_AUDIT`
+  sobre el RBAC existente.
+- **UI**: sección **Finanzas** con sub-navegación (Pagos · Depósitos · Facturas ·
+  CxP · CxC · Liquidaciones · Cobros a clientes), Ventas, Conciliación con
+  fichas, perfil de proveedor, portal del proveedor con lo que se le debe, sus
+  liquidaciones y sus ventas por entregar; vitrina y «Mis compras» del cliente.
+  `/superadmin/supply/cobros` y `/superadmin/supply/liquidaciones` redirigen.
+
+### CORREGIDO
+
+| Hallazgo | Corrección |
+| --- | --- |
+| H1 · `REEMBOLSO` con signo invertido | `dinero.ts:signoDeAsiento`; prueba pura + caso 9 contra PostgreSQL |
+| H2 · `proponerLiquidacion` muerto | Sustituido por `liquidaciones.ts` (calcular → revisar → aprobar → pagar → conciliar) |
+| H4 · Fondeo manual de órdenes | `fondearOrdenEnTx` al confirmar un pago con `ordenId` |
+| H7 · Umbrales constantes | `parsearUmbrales` + variable de entorno |
+| H8 · Proveedor externo invisible | `proveedoresElegibles()` (registrados y externos) en acuerdos y finanzas |
+| Nuevo · Código de acuerdo por proveedor con unicidad global | Correlativo por sigla y año, con búsqueda de hueco (lo destapó el caso 8) |
+| Nuevo · Deduplicación de proveedores externos nunca coincidía | El slug se compara con su prefijo `prov-` (lo destapó el caso 16) |
+| `Cobros` ambiguo | Sección Finanzas |
+
+H3 (canales de distribución sin consumidor), H5 (numeración de órdenes) y H6
+(paginación de `conciliar`) quedan documentados como riesgos pendientes.
+
+### AGREGADO (archivos)
+
+Dominio: `dinero.ts`, `cuentas.ts`, `depositos.ts`, `facturas.ts`,
+`liquidaciones.ts`, `conciliacion-cifras.ts`, `conciliacion-proveedor.ts`,
+`proveedores.ts`, `ventas.ts`, `tablero.ts`, `opciones.ts`, `actions-util.ts`,
+`actions-finanzas.ts`, `actions-ventas.ts`. Componentes: `form-accion.tsx`,
+`filtros-finanzas.tsx`, `variantes.ts`, `tarjeta-venta.tsx`, `mis-ventas.tsx`.
+Páginas: `finanzas/*` (10), `ventas`, `conciliacion/[id]`. Pruebas:
+`tests/supply-finanzas.test.ts`, `tests/postgres/supply-flujos.db.test.ts`
+(+ `scripts/supply-db/` para ejecutarla fuera de Next). CI: paso «Flujos de
+Membego Supply contra PostgreSQL» en el trabajo *Esquema*.
+
+### MIGRACIONES
+
+`prisma/migrations/20261008_supply_capa_financiera/migration.sql`
+(idempotente; 12 tablas nuevas, 20+ columnas, 8 enums ampliados, 10 `CHECK`,
+índices parciales de unicidad para liquidaciones vivas y de consulta para
+depósitos/CxP/acuerdos; repara la deriva previa del índice de pedidos).
+Verificada con `migrate deploy` en base limpia, re-ejecución y `migrate diff
+--exit-code` (sin diferencias). Sellada en `SUMAS.txt`.
+
+### TESTS
+
+| Suite | Casos | Qué cubre |
+| --- | --- | --- |
+| `tests/supply-finanzas.test.ts` (puro) | 18 | Signos, depósito 100k→80k, saldar, reparto de venta, neteo, máquinas de estado, contrato a comisión, los seis tipos de discrepancia, umbrales, códigos |
+| `tests/postgres/supply-flujos.db.test.ts` (PostgreSQL) | 16 | Los 14 obligatorios: compra 1.000 · asignación 100 · entitlement · redención por QR · doble redención · vencido · FEFO · venta sin precompra → CxP · depósito 100k/20k · factura pagada por fuera · liquidación (snapshot inmutable ante enmienda) · conciliación con discrepancia · reversión · **carrera real de tres redenciones concurrentes** (+ carrera de entregas de venta, + proveedor externo convertido) |
+| Suites existentes | 3.211 → 3.229 | Contratos actualizados (PUROS, rutas, `server-only` en `actions-*`) |
+
+### RIESGOS PENDIENTES
+
+1. **Integración con membresías/recompensas/referidos (H3)**: los canales de
+   `distribucion.ts` siguen sin consumidor; el marketplace y la emisión manual
+   son las únicas entradas. Cablearlos es trabajo de los módulos consumidores.
+2. **Numeración de órdenes y pedidos por `count()+1` (H5)**: sin reintento en
+   colisión. Improbable en plataforma; documentado.
+3. **`conciliar()` interna con `take: 200` (H6)**: paginar cuando haya miles de lotes.
+4. **Permisos finos**: los nueve permisos existen como vocabulario y guardias,
+   pero todos los de plataforma resuelven a `SUPERADMIN` (no hay roles
+   intermedios en el RBAC actual).
+5. **Documentos** (facturas, depósitos, conciliación) se guardan como rutas o
+   referencias; no hay subida al storage desde estas pantallas.
+6. **Paginación**: los listados usan límites (200-300 filas) con filtros por
+   estado y proveedor, no paginación real.
+7. **`npx eslint .`** falla por una regla `react-hooks` sin plugin en la
+   configuración raíz; es previo a este trabajo y CI usa `eslint src tests`,
+   que está limpio.
+
+### VERIFICACIÓN FINAL
+
+| Comprobación | Resultado |
+| --- | --- |
+| `npx tsc --noEmit` | limpio |
+| `npx eslint src tests` | 0 errores · 15 avisos (previos) |
+| `npm test` | 3.229 / 3.229 |
+| `npm run test:db` (PostgreSQL 16, base migrada) | 16 / 16, dos ejecuciones consecutivas |
+| `npm run build` | correcto |
+| `prisma migrate diff --exit-code` | sin diferencias |
+| `transacciones-anidadas` · `rls-cobertura` · `permisos-catalogo` · `rls-capa2-preflight` | ✓ |
+
+### Estado por requisito
+
+| Requisito | Estado | Evidencia |
+| --- | --- | --- |
+| §1 Separación de capas (inventario / supply / derechos / venta directa / finanzas) | ✅ | ADR-0009; `SupplyVentaDirecta` sin lote; sub-libros |
+| §3 A Compra anticipada | ✅ | caso 1 |
+| §3 B Depósito abierto | ✅ | `depositos.ts`; casos 9-10 |
+| §4 Agreement engine + estados + versionado | ✅ | `contrato.ts`, `SupplyAcuerdoVersion`; caso 11 |
+| §5 Proveedor registrado / externo convertible | ✅ | `proveedores.ts`; caso 16 |
+| §6 Orden de compra con pagos parciales, facturas, documentos | ✅ | `montoPagado`, `fondearOrdenEnTx`, `SupplyFacturaProveedor.ordenId`, `documentos` |
+| §7 Lotes | ✅ | sin cambios; invariante comprobado en cada caso |
+| §8 Ledger con saldo anterior/posterior | ✅ | `saldoAntes`/`saldoDespues`; caso 4 |
+| §9 Asignaciones | ✅ | caso 2 |
+| §10 FEFO + override auditado | ✅ | `emitirDerechoAction` + `SUPPLY_FEFO_OVERRIDE`; caso 7 |
+| §11 Entitlement | ✅ | caso 3 |
+| §12 QR con dispositivo | ✅ | caso 4 |
+| §13 Redención sin doble canje | ✅ | casos 5 y 14 (carrera real) |
+| §14 Venta sin precompra → CxP → liquidación | ✅ | casos 8, 11, 14b |
+| §15 Cuentas por pagar | ✅ | `cuentas.ts`; casos 8-11 |
+| §16 Cuentas por cobrar | ✅ | caso 11 |
+| §17 Liquidaciones con snapshot | ✅ | caso 11 |
+| §18 Conciliación con discrepancias | ✅ | caso 12; seis tipos en prueba pura |
+| §19 Incidencias 11 causas / 7 estados | ✅ | enums ampliados, `resuelveIncidencia` |
+| §20 Vencimientos 90/60/30/15/7/1 configurables | ✅ | `vencimientosProximos`, cron, avisos |
+| §21 Facturación (factura, NC, ND) | ✅ | `facturas.ts`; caso 10 |
+| §22 Pagos (transferencia/depósito/manual; split futuro) | ✅ | `finanzas.ts`; `PuertoCobroMembego` intacto |
+| §23 Dashboard 16 KPIs + bloques | ✅ | `tablero.ts:resumenFinanciero`; Resumen y Finanzas |
+| §24 16 reportes con filtros y exportación | ✅ | `exportar/route.ts` |
+| §25 Unit economics (nueve preguntas) | ✅ | `rentabilidad()`, `economiaComision` |
+| §26 Auditoría con antes/después | ✅ | `actions-util.ts:auditar`; 23 acciones nuevas |
+| §27 Permisos en backend | ✅ (⚠️ roles intermedios) | `permisos.ts` |
+| §28 Concurrencia e idempotencia | ✅ | `FOR UPDATE`, claims atómicos, claves; casos 14 y 14b |
+| §29 Integración con el resto de Membego | ⚠️ | cobro, notificaciones, auditoría, RBAC, storage reutilizados; canales de membresías/recompensas siguen sin consumidor (H3) |
+| §30 UX por pantalla | ✅ (⚠️ paginación) | estados vacíos, filtros por estado/proveedor, confirmaciones en lo irreversible, sin botones decorativos |
+| §31 14 casos de prueba | ✅ | `tests/postgres/supply-flujos.db.test.ts` |

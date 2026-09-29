@@ -17,7 +17,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "geo:seed": "tsx scripts/geo-seed.ts",
     "test": "tsx --test tests/*.test.ts",
-    "test:db": "tsx --conditions react-server --import ./tests/db/shim-next.mjs --test tests/db/*.db.test.ts",
+    "test:db": "tsx --conditions react-server --import ./scripts/supply-db/shim-next.mjs --test tests/postgres/*.db.test.ts",
     "migraciones:sellar": "node scripts/sellar-migraciones.mjs",
     "certificar:referidos": "tsx --tsconfig tsconfig.json scripts/certificar-referidos.ts",
     "respaldo:verificar": "node scripts/verificar-respaldo.mjs",

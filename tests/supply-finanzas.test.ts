@@ -28,7 +28,7 @@ import { nuevoCodigoEntrega, codigoDeposito, codigoLiquidacion } from '../src/mo
  * MEMBEGO SUPPLY · capa financiera, la parte PURA (auditoría 2026-09).
  *
  * Lo que aquí se prueba no toca la base: es la aritmética que la base luego
- * persiste. Los flujos completos (con PostgreSQL) viven en tests/db/.
+ * persiste. Los flujos completos (con PostgreSQL) viven en tests/postgres/.
  */
 
 // ── Signo de los asientos (hallazgo H1) ─────────────────────────────────────
