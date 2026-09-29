@@ -51,7 +51,8 @@ export interface SesionQr {
 export async function abrirSesionQr(
   voucherId: string,
   clienteId: string,
-  sucursalId?: string | null
+  sucursalId?: string | null,
+  dispositivo?: string | null
 ): Promise<SesionQr> {
   return sinEmpresa('Membego Supply: el cliente abre su QR para canjear', async (tx) => {
     const voucher = await tx.supplyVoucher.findUnique({
@@ -93,6 +94,8 @@ export async function abrirSesionQr(
         nonce: nuevoNonceQr(),
         expiraAt: new Date(Date.now() + MINUTOS_QR * 60_000),
         sucursalId: sucursalId ?? null,
+        // User-agent recortado: para investigar un código compartido (§12).
+        dispositivo: dispositivo?.slice(0, 200) ?? null,
       },
       select: { id: true, nonce: true, expiraAt: true, voucherId: true, sucursalId: true },
     })

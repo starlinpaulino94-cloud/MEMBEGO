@@ -96,6 +96,13 @@ enum NotifTipo {
   /// Sustituye al «riesgo de presupuesto» de la Fase 40: no existe el concepto
   /// de presupuesto en el modelo, así que se mide lo que sí hay.
   SUPPLY_CAPITAL_DORMIDO
+  // Capa financiera (29-09-2026).
+  /// Un acuerdo termina su vigencia pronto (90/60/30/15/7/1 días).
+  SUPPLY_ACUERDO_POR_VENCER
+  /// Un depósito abierto llega a su fecha prevista de cierre con saldo.
+  SUPPLY_DEPOSITO_POR_CERRAR
+  /// Hay una liquidación calculada esperando aprobación o pago.
+  SUPPLY_LIQUIDACION_PENDIENTE
 }
 
 enum AuditAccion {
@@ -271,6 +278,39 @@ enum AuditAccion {
   SUPPLY_AJUSTE_LEDGER
   /// Se recalcularon los contadores de un lote desde el ledger.
   SUPPLY_LOTE_RECALCULADO
+  // Capa financiera de supply (29-09-2026): cada una mueve dinero o una
+  // obligación entre Membego y un proveedor.
+  SUPPLY_PROVEEDOR_REGISTRADO
+  SUPPLY_PROVEEDOR_ACTUALIZADO
+  SUPPLY_ACUERDO_VERSION
+  SUPPLY_DEPOSITO_REGISTRADO
+  SUPPLY_DEPOSITO_APLICADO
+  SUPPLY_DEPOSITO_DEVUELTO
+  SUPPLY_DEPOSITO_CERRADO
+  SUPPLY_FACTURA_REGISTRADA
+  SUPPLY_FACTURA_ESTADO
+  SUPPLY_CXP_CREADA
+  SUPPLY_CXP_ESTADO
+  SUPPLY_CXC_CREADA
+  SUPPLY_CXC_ESTADO
+  SUPPLY_LIQUIDACION_CALCULADA
+  SUPPLY_LIQUIDACION_ESTADO
+  SUPPLY_CONCILIACION_ABIERTA
+  SUPPLY_CONCILIACION_ESTADO
+  SUPPLY_DISCREPANCIA_ESTADO
+  SUPPLY_VENTA_ABIERTA
+  SUPPLY_VENTA_ENTREGADA
+  SUPPLY_VENTA_CANCELADA
+  SUPPLY_PAGO_ANULADO
+  /// Se entregó saltándose FEFO con una estrategia distinta, a mano.
+  SUPPLY_FEFO_OVERRIDE
+  SUPPLY_PROVEEDOR_HABILITADO
+  SUPPLY_OFERTA_CREADA
+  SUPPLY_LOTE_TRANSFERENCIA
+  SUPPLY_LOTE_AJUSTE
+  SUPPLY_LOTE_CANCELACION
+  SUPPLY_LOTE_VENCIMIENTO_EXTENDIDO
+  SUPPLY_PEDIDO_REEMBOLSADO
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas
@@ -318,14 +358,14 @@ model User {
   /// Copia del nombre sin acentos y en minúsculas, SOLO para buscar. La
   /// mantiene un disparador en la base: la aplicación nunca la escribe, así
   /// que no puede quedarse desfasada porque alguien olvidara actualizarla.
-  nombreBusqueda     String?
-  role               AppRole   @default(CLIENTE)
-  companyId          String?
-  company            Company?  @relation(fields: [companyId], references: [id])
+  nombreBusqueda       String?
+  role                 AppRole   @default(CLIENTE)
+  companyId            String?
+  company              Company?  @relation(fields: [companyId], references: [id])
   /// Módulo de PERMISOS: ajustes por empleado sobre lo que su rol trae de
   /// serie ({v:1, secciones:{sec:bool}, funciones:{sec:{fn:false}}}). Solo
   /// diferencias; null = hereda el rol tal cual. Ver lib/auth/permissions.ts.
-  permisos           Json?
+  permisos             Json?
   /// Reportes: qué cifras del resumen ejecutivo ve ESTA persona y en qué orden
   /// ({v:1, ocultas:[clave], orden:[clave]}). Se guarda lo OCULTO, no lo
   /// visible: así una cifra nueva aparece sola para todos en vez de quedar
@@ -334,12 +374,12 @@ model User {
   preferenciasReportes Json?
   // Consentimiento (cumplimiento): rastro auditable de aceptación de términos
   // y opt-in de comunicaciones de marketing, con la versión y el momento.
-  termsAcceptedAt    DateTime?
-  termsVersion       String?
-  marketingConsent   Boolean   @default(false)
-  marketingConsentAt DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  termsAcceptedAt      DateTime?
+  termsVersion         String?
+  marketingConsent     Boolean   @default(false)
+  marketingConsentAt   DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   memberships      Membership[]
   eventosMembresia MembresiaEvento[]   @relation("EventosMembresia")
@@ -363,48 +403,65 @@ model User {
   geoConsents       GeoConsent[]
 
   // Listados de empleados por empresa (/admin/empleados) y conteos por empresa.
-  transaccionesComoEmpleado   Transaction[]              @relation("TransactionEmpleado")
-  cajasAbiertas               CajaSesion[]               @relation("CajaAbiertaPor")
-  cajasCerradas               CajaSesion[]               @relation("CajaCerradaPor")
-  transicionesTransaccion     TransactionTransicion[]
-  impresionesRecibo           ReceiptImpresion[]
-  citasAtendidas              Cita[]                     @relation("CitaAtendidaPor")
-  ofertasCreadas              OfertaPrivada[]            @relation("OfertaCreadaPor")
-  ofertaUsosRegistrados       OfertaUso[]                @relation("OfertaUsoRegistradoPor")
-  comprasAprobadas            ProductoCompra[]           @relation("CompraAprobadaPor")
-  transicionesCompra          ProductoCompraTransicion[]
+  transaccionesComoEmpleado    Transaction[]              @relation("TransactionEmpleado")
+  cajasAbiertas                CajaSesion[]               @relation("CajaAbiertaPor")
+  cajasCerradas                CajaSesion[]               @relation("CajaCerradaPor")
+  transicionesTransaccion      TransactionTransicion[]
+  impresionesRecibo            ReceiptImpresion[]
+  citasAtendidas               Cita[]                     @relation("CitaAtendidaPor")
+  ofertasCreadas               OfertaPrivada[]            @relation("OfertaCreadaPor")
+  ofertaUsosRegistrados        OfertaUso[]                @relation("OfertaUsoRegistradoPor")
+  comprasAprobadas             ProductoCompra[]           @relation("CompraAprobadaPor")
+  transicionesCompra           ProductoCompraTransicion[]
   // App Car Wash · E5.
-  colaRegistrada              ColaVehiculo[]             @relation("ColaRegistradaPor")
-  colaAtendida                ColaVehiculo[]             @relation("ColaAtendidaPor")
-  campanasGlobales            CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
-  movimientosInventario       MovimientoInventario[]     @relation("MovInventarioPor")
-  evidenciasSubidas           EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
+  colaRegistrada               ColaVehiculo[]             @relation("ColaRegistradaPor")
+  colaAtendida                 ColaVehiculo[]             @relation("ColaAtendidaPor")
+  campanasGlobales             CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
+  movimientosInventario        MovimientoInventario[]     @relation("MovInventarioPor")
+  evidenciasSubidas            EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
   // App Car Wash · Fase 2.
-  comisiones                  Comision[]                 @relation("ComisionLavador")
-  incidenciasReportadas       Incidencia[]               @relation("IncidenciaReportadaPor")
-  incidenciasAsignadas        Incidencia[]               @relation("IncidenciaResponsable")
+  comisiones                   Comision[]                 @relation("ComisionLavador")
+  incidenciasReportadas        Incidencia[]               @relation("IncidenciaReportadaPor")
+  incidenciasAsignadas         Incidencia[]               @relation("IncidenciaResponsable")
   // App Car Wash · Fase 3.
-  ordenesCompra               OrdenCompra[]              @relation("OrdenCompraCreadaPor")
-  mantenimientos              Mantenimiento[]            @relation("MantenimientoPor")
-  turnos                      Turno[]                    @relation("TurnoEmpleado")
-  turnosCerrados              Turno[]                    @relation("TurnoCerradoPor")
+  ordenesCompra                OrdenCompra[]              @relation("OrdenCompraCreadaPor")
+  mantenimientos               Mantenimiento[]            @relation("MantenimientoPor")
+  turnos                       Turno[]                    @relation("TurnoEmpleado")
+  turnosCerrados               Turno[]                    @relation("TurnoCerradoPor")
   // ── Membego Supply ────────────────────────────────────────────────────────
-  supplyAcuerdosCreados       SupplyAcuerdo[]            @relation("SupplyAcuerdoCreadoPor")
-  supplyAcuerdosAprobados     SupplyAcuerdo[]            @relation("SupplyAcuerdoAprobadoPor")
-  supplyEnmiendasSolicitadas  SupplyEnmienda[]           @relation("SupplyEnmiendaSolicitadaPor")
-  supplyEnmiendasAprobadas    SupplyEnmienda[]           @relation("SupplyEnmiendaAprobadaPor")
-  supplyOrdenesCreadas        SupplyOrden[]              @relation("SupplyOrdenCreadaPor")
-  supplyOrdenesAprobadas      SupplyOrden[]              @relation("SupplyOrdenAprobadaPor")
-  supplyMovimientos           SupplyMovimiento[]         @relation("SupplyMovimientoActor")
-  supplyAsignacionesCreadas   SupplyAsignacion[]         @relation("SupplyAsignacionCreadaPor")
-  supplyPedidosRevisados      SupplyPedido[]             @relation("SupplyPedidoRevisor")
-  supplyQrConsumidos          SupplyQrSesion[]           @relation("SupplyQrConsumidoPor")
-  supplyRedencionesEntregadas SupplyRedencion[]          @relation("SupplyRedencionEmpleado")
-  supplyRedencionesReversadas SupplyRedencion[]          @relation("SupplyRedencionReversadaPor")
-  supplyIncidenciasReportadas SupplyIncidencia[]         @relation("SupplyIncidenciaReportadaPor")
-  supplyIncidenciasResueltas  SupplyIncidencia[]         @relation("SupplyIncidenciaResueltaPor")
-  supplyPagosRegistrados      SupplyPago[]               @relation("SupplyPagoRegistradoPor")
-  supplyAsientosFinancieros   SupplyAsientoFinanciero[]  @relation("SupplyAsientoActor")
+  supplyAcuerdosCreados        SupplyAcuerdo[]            @relation("SupplyAcuerdoCreadoPor")
+  supplyAcuerdosAprobados      SupplyAcuerdo[]            @relation("SupplyAcuerdoAprobadoPor")
+  supplyEnmiendasSolicitadas   SupplyEnmienda[]           @relation("SupplyEnmiendaSolicitadaPor")
+  supplyEnmiendasAprobadas     SupplyEnmienda[]           @relation("SupplyEnmiendaAprobadaPor")
+  supplyOrdenesCreadas         SupplyOrden[]              @relation("SupplyOrdenCreadaPor")
+  supplyOrdenesAprobadas       SupplyOrden[]              @relation("SupplyOrdenAprobadaPor")
+  supplyMovimientos            SupplyMovimiento[]         @relation("SupplyMovimientoActor")
+  supplyAsignacionesCreadas    SupplyAsignacion[]         @relation("SupplyAsignacionCreadaPor")
+  supplyPedidosRevisados       SupplyPedido[]             @relation("SupplyPedidoRevisor")
+  supplyQrConsumidos           SupplyQrSesion[]           @relation("SupplyQrConsumidoPor")
+  supplyRedencionesEntregadas  SupplyRedencion[]          @relation("SupplyRedencionEmpleado")
+  supplyRedencionesReversadas  SupplyRedencion[]          @relation("SupplyRedencionReversadaPor")
+  supplyIncidenciasReportadas  SupplyIncidencia[]         @relation("SupplyIncidenciaReportadaPor")
+  supplyIncidenciasResueltas   SupplyIncidencia[]         @relation("SupplyIncidenciaResueltaPor")
+  supplyPagosRegistrados       SupplyPago[]               @relation("SupplyPagoRegistradoPor")
+  supplyAsientosFinancieros    SupplyAsientoFinanciero[]  @relation("SupplyAsientoActor")
+  // Capa financiera (29-09-2026).
+  supplyProveedoresCreados     SupplyProveedor[]          @relation("SupplyProveedorCreadoPor")
+  supplyAcuerdoVersiones       SupplyAcuerdoVersion[]     @relation("SupplyAcuerdoVersionCreadaPor")
+  supplyDepositosRegistrados   SupplyDeposito[]           @relation("SupplyDepositoRegistradoPor")
+  supplyDepositosAprobados     SupplyDeposito[]           @relation("SupplyDepositoAprobadoPor")
+  supplyDepositoMovimientos    SupplyDepositoMovimiento[] @relation("SupplyDepositoMovimientoActor")
+  supplyFacturasRegistradas    SupplyFacturaProveedor[]   @relation("SupplyFacturaRegistradaPor")
+  supplyCxPCreadas             SupplyCuentaPorPagar[]     @relation("SupplyCxPCreadaPor")
+  supplyCxCCreadas             SupplyCuentaPorCobrar[]    @relation("SupplyCxCCreadaPor")
+  supplyLiquidacionesCalc      SupplyLiquidacion[]        @relation("SupplyLiquidacionCalculadaPor")
+  supplyLiquidacionesAprob     SupplyLiquidacion[]        @relation("SupplyLiquidacionAprobadaPor")
+  supplyConciliacionesCreadas  SupplyConciliacion[]       @relation("SupplyConciliacionCreadaPor")
+  supplyConciliacionesCerradas SupplyConciliacion[]       @relation("SupplyConciliacionCerradaPor")
+  supplyDiscrepanciasResueltas SupplyDiscrepancia[]       @relation("SupplyDiscrepanciaResueltaPor")
+  supplyDiscrepanciasAprobadas SupplyDiscrepancia[]       @relation("SupplyDiscrepanciaAprobadaPor")
+  supplyDiscrepanciaNotas      SupplyDiscrepanciaNota[]   @relation("SupplyDiscrepanciaNotaActor")
+  supplyVentasEntregadas       SupplyVentaDirecta[]       @relation("SupplyVentaEntregadaPor")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)
@@ -653,16 +710,25 @@ model Company {
   // ── Membego Supply (docs/membego-supply-architecture.md) ──────────────────
   // La MISMA organización es comercio y proveedora de Membego cuando tiene la
   // capacidad MEMBEGO_SUPPLIER encendida. No hay una segunda empresa.
-  supplyAcuerdos    SupplyAcuerdo[]           @relation("SupplyProveedorAcuerdos")
-  supplyOrdenes     SupplyOrden[]             @relation("SupplyProveedorOrdenes")
-  supplyLotes       SupplyLote[]              @relation("SupplyProveedorLotes")
-  supplyDerechos    SupplyDerecho[]           @relation("SupplyProveedorDerechos")
-  supplyVouchers    SupplyVoucher[]           @relation("SupplyProveedorVouchers")
-  supplyReservas    SupplyReserva[]           @relation("SupplyProveedorReservas")
-  supplyRedenciones SupplyRedencion[]         @relation("SupplyProveedorRedenciones")
-  supplyIncidencias SupplyIncidencia[]        @relation("SupplyProveedorIncidencias")
-  supplyPagos       SupplyPago[]              @relation("SupplyProveedorPagos")
-  supplyAsientos    SupplyAsientoFinanciero[] @relation("SupplyProveedorAsientos")
+  supplyAcuerdos         SupplyAcuerdo[]           @relation("SupplyProveedorAcuerdos")
+  supplyOrdenes          SupplyOrden[]             @relation("SupplyProveedorOrdenes")
+  supplyLotes            SupplyLote[]              @relation("SupplyProveedorLotes")
+  supplyDerechos         SupplyDerecho[]           @relation("SupplyProveedorDerechos")
+  supplyVouchers         SupplyVoucher[]           @relation("SupplyProveedorVouchers")
+  supplyReservas         SupplyReserva[]           @relation("SupplyProveedorReservas")
+  supplyRedenciones      SupplyRedencion[]         @relation("SupplyProveedorRedenciones")
+  supplyIncidencias      SupplyIncidencia[]        @relation("SupplyProveedorIncidencias")
+  supplyPagos            SupplyPago[]              @relation("SupplyProveedorPagos")
+  supplyAsientos         SupplyAsientoFinanciero[] @relation("SupplyProveedorAsientos")
+  // Capa financiera (29-09-2026).
+  supplyPerfilProveedor  SupplyProveedor?          @relation("SupplyProveedorPerfil")
+  supplyDepositos        SupplyDeposito[]          @relation("SupplyProveedorDepositos")
+  supplyFacturas         SupplyFacturaProveedor[]  @relation("SupplyProveedorFacturas")
+  supplyCuentasPorPagar  SupplyCuentaPorPagar[]    @relation("SupplyProveedorCuentasPorPagar")
+  supplyCuentasPorCobrar SupplyCuentaPorCobrar[]   @relation("SupplyProveedorCuentasPorCobrar")
+  supplyLiquidaciones    SupplyLiquidacion[]       @relation("SupplyProveedorLiquidaciones")
+  supplyConciliaciones   SupplyConciliacion[]      @relation("SupplyProveedorConciliaciones")
+  supplyVentas           SupplyVentaDirecta[]      @relation("SupplyProveedorVentas")
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -695,8 +761,9 @@ model Sucursal {
   bahias          Bahia[]
 
   // Membego Supply: dónde se recoge y dónde se entrega.
-  supplyReservas    SupplyReserva[]   @relation("SupplyReservaSucursal")
-  supplyRedenciones SupplyRedencion[] @relation("SupplyRedencionSucursal")
+  supplyReservas    SupplyReserva[]      @relation("SupplyReservaSucursal")
+  supplyRedenciones SupplyRedencion[]    @relation("SupplyRedencionSucursal")
+  supplyVentas      SupplyVentaDirecta[] @relation("SupplyVentaSucursal")
 
   // ── Geolocalización (docs/GEOLOCALIZACION.md §3.3) ─────────────────────────
   // Normalizado: las claves del catálogo geo cuando la dirección se resuelve.

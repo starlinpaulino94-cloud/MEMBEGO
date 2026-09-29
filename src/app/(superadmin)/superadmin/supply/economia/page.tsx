@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { TablaReporte } from '@/components/ui/reporte-imprimible'
 import { formatMoneyRD } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
+import { economiaGlobal } from '@/modules/supply/tablero'
 import { reporteCampanas } from '@/modules/supply/pool'
 import { economiaUnidad, ltvVsCac, metricasAdquisicion } from '@/modules/supply/economia'
 import { SUPPLY_DESTINO_LABELS, type SupplyDestino } from '@/modules/supply/catalogo'
@@ -92,10 +93,14 @@ export default async function EconomiaPage() {
     gmvPosterior: gmv.gmv,
   })
 
-  // Ejemplo del prompt, calculado con las mismas funciones que los reportes:
-  // así lo que se enseña como explicación no puede desviarse de lo que se usa.
-  const regalada = economiaUnidad(300, 0, 700)
-  const vendida = economiaUnidad(300, 399, 700)
+  // Economía por unidad con DATOS REALES: el costo medio de lo comprado y el
+  // precio medio al que se vendió. Sin unidades todavía, la tarjeta lo dice en
+  // vez de enseñar un ejemplo (§35: nada ficticio mezclado con métricas).
+  const eco = await economiaGlobal()
+  const costoMedio = eco.vendido.unidades + eco.regalado.unidades > 0 ? (eco.vendido.valor + eco.regalado.valor) / (eco.vendido.unidades + eco.regalado.unidades) : 0
+  const precioMedio = eco.vendido.unidades > 0 ? eco.vendido.ingresos / eco.vendido.unidades : 0
+  const regalada = eco.regalado.unidades > 0 ? economiaUnidad(eco.regalado.valor / eco.regalado.unidades, 0, null) : null
+  const vendida = eco.vendido.unidades > 0 ? economiaUnidad(costoMedio, precioMedio, null) : null
 
   return (
     <div className="space-y-6">
@@ -109,6 +114,19 @@ export default async function EconomiaPage() {
         }
         nav={<NavSupply activa="economia" />}
       />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Capital invertido" value={formatMoneyRD(eco.capitalInvertido)} sub="lotes comprados + depósitos vivos" />
+        <StatCard label="GMV" value={formatMoneyRD(eco.gmv)} sub={`${eco.ventasComision.ventas} ventas a comisión por ${formatMoneyRD(eco.ventasComision.bruto)}`} />
+        <StatCard label="Ingresos" value={formatMoneyRD(eco.ingresos)} sub={`cobros ${formatMoneyRD(eco.vendido.ingresos)} + comisiones ${formatMoneyRD(eco.ventasComision.comision)}`} accent="brand" />
+        <StatCard label="Margen bruto" value={formatMoneyRD(eco.margenBruto)} sub={`neto estimado ${formatMoneyRD(eco.margenNetoEstimado)} (tras regalos y vencidos)`} accent={eco.margenBruto >= 0 ? 'success' : 'danger'} />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Supply regalado" value={eco.regalado.unidades.toLocaleString('es-DO')} sub={`${formatMoneyRD(eco.regalado.valor)} de costo (CAC)`} />
+        <StatCard label="Supply vendido" value={eco.vendido.unidades.toLocaleString('es-DO')} sub={`${formatMoneyRD(eco.vendido.ingresos)} cobrados · costo ${formatMoneyRD(eco.vendido.valor)}`} />
+        <StatCard label="Supply vencido" value={eco.vencido.unidades.toLocaleString('es-DO')} sub={`${formatMoneyRD(eco.vencido.valor)} perdidos`} accent={eco.vencido.unidades > 0 ? 'warning' : undefined} />
+        <StatCard label="CAC real / LTV observado" value={`${formatMoneyRD(eco.cacReal)} / ${formatMoneyRD(eco.ltvObservado)}`} sub={`${eco.clientesAdquiridos} clientes que canjearon · subsidios ${formatMoneyRD(eco.subsidios)}`} />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -138,28 +156,31 @@ export default async function EconomiaPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Economía por unidad</CardTitle>
+            <CardTitle>Economía por unidad (promedios reales)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
-            <div>
-              <p className="font-medium">Unidad regalada</p>
-              <Linea label="Costo de adquisición" valor={formatMoneyRD(regalada.costoAdquisicion)} />
-              <Linea label="Ingreso del cliente" valor={formatMoneyRD(regalada.ingresoCliente)} />
-              <Linea label="CAC imputado" valor={formatMoneyRD(regalada.cac)} destacado />
-              <p className="mt-1 text-caption text-muted-foreground">
-                No es pérdida: es costo de adquisición de cliente.
-              </p>
-            </div>
-            <div className="border-t border-border pt-4">
-              <p className="font-medium">Unidad vendida con descuento</p>
-              <Linea label="Costo de adquisición" valor={formatMoneyRD(vendida.costoAdquisicion)} />
-              <Linea label="Precio al cliente" valor={formatMoneyRD(vendida.ingresoCliente)} />
-              <Linea label="Margen bruto" valor={formatMoneyRD(vendida.margenBruto)} destacado />
-              <p className="mt-1 text-caption text-muted-foreground">
-                Antes de comisiones de pasarela, impuestos, soporte y reembolsos. Esos se restan
-                cuando existan datos reales, no con supuestos.
-              </p>
-            </div>
+            {!regalada && !vendida ? (
+              <p className="text-muted-foreground">Todavía no se ha entregado ninguna unidad: cuando haya redenciones, aquí sale el costo medio, el precio medio y el margen por unidad.</p>
+            ) : (
+              <>
+                {regalada && (
+                  <div>
+                    <p className="font-medium">Unidad regalada ({eco.regalado.unidades.toLocaleString('es-DO')})</p>
+                    <Linea label="Costo medio de adquisición" valor={formatMoneyRD(regalada.costoAdquisicion)} />
+                    <Linea label="Ingreso del cliente" valor={formatMoneyRD(regalada.ingresoCliente)} />
+                    <Linea label="CAC imputado" valor={formatMoneyRD(regalada.cac)} destacado />
+                  </div>
+                )}
+                {vendida && (
+                  <div>
+                    <p className="font-medium">Unidad vendida ({eco.vendido.unidades.toLocaleString('es-DO')})</p>
+                    <Linea label="Costo medio de adquisición" valor={formatMoneyRD(vendida.costoAdquisicion)} />
+                    <Linea label="Precio medio al cliente" valor={formatMoneyRD(vendida.ingresoCliente)} />
+                    <Linea label="Margen bruto por unidad" valor={formatMoneyRD(vendida.margenBruto)} destacado />
+                  </div>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
 

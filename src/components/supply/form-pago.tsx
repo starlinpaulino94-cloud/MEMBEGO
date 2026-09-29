@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { registrarPagoAction, type EstadoAccion } from '@/modules/supply/actions'
 import { SUPPLY_PAGO_TIPO_LABELS } from '@/modules/supply/catalogo'
+import { METODOS_PAGO_PROVEEDOR } from './form-pago-orden'
 
 /**
  * Registra un pago a un proveedor. Nace PENDIENTE y NO mueve el saldo: el
@@ -65,7 +66,13 @@ export function FormPago({
       <div className="grid gap-4 sm:grid-cols-4">
         <div>
           <Label htmlFor="metodo">Método</Label>
-          <Input id="metodo" name="metodo" maxLength={100} placeholder="Transferencia" />
+          <select id="metodo" name="metodo" defaultValue="TRANSFERENCIA" className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm">
+            {METODOS_PAGO_PROVEEDOR.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <Label htmlFor="referencia">Referencia</Label>

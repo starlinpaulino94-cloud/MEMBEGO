@@ -13,7 +13,7 @@ import {
   SUPPLY_MODELO_LABELS,
   SUPPLY_TIPO_LABELS,
 } from '@/modules/supply/catalogo'
-import { capacidadesDeEmpresa } from '@/modules/capacidades/catalogo'
+import { proveedoresElegibles } from '@/modules/supply/proveedores'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Acuerdos de supply' }
@@ -32,51 +32,32 @@ export const metadata = { title: 'Acuerdos de supply' }
 export default async function AcuerdosPage() {
   await requireRole('SUPERADMIN')
 
-  const { acuerdos, proveedores } = await sinEmpresa(
-    'Membego Supply: contratos de la plataforma con sus proveedores',
-    async (tx) => {
-      const [acuerdos, empresas] = await Promise.all([
-        tx.supplyAcuerdo.findMany({
-          orderBy: { createdAt: 'desc' },
-          take: 200,
-          select: {
-            id: true,
-            codigo: true,
-            estado: true,
-            tipo: true,
-            modeloComercial: true,
-            itemNombre: true,
-            varianteEtiqueta: true,
-            cantidad: true,
-            costoUnitario: true,
-            precioReferencia: true,
-            inicioAt: true,
-            finAt: true,
-            proveedor: { select: { id: true, name: true } },
-            _count: { select: { ordenes: true, lotes: true, enmiendas: true } },
-          },
-        }),
-        tx.company.findMany({
-          where: { isActive: true },
-          orderBy: { name: 'asc' },
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            tipoNegocioCodigo: true,
-            capacidades: true,
-            sucursales: { where: { activa: true }, select: { id: true, nombre: true } },
-          },
-        }),
-      ])
-      return {
-        acuerdos,
-        proveedores: empresas.filter((e) =>
-          capacidadesDeEmpresa(e).activas.has('MEMBEGO_SUPPLIER')
-        ),
-      }
-    }
-  )
+  const [acuerdos, proveedores] = await Promise.all([
+    sinEmpresa('Membego Supply: contratos de la plataforma con sus proveedores', (tx) =>
+      tx.supplyAcuerdo.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: {
+          id: true,
+          codigo: true,
+          estado: true,
+          tipo: true,
+          modeloComercial: true,
+          itemNombre: true,
+          varianteEtiqueta: true,
+          cantidad: true,
+          costoUnitario: true,
+          precioReferencia: true,
+          inicioAt: true,
+          finAt: true,
+          proveedor: { select: { id: true, name: true } },
+          _count: { select: { ordenes: true, lotes: true, enmiendas: true } },
+        },
+      })
+    ),
+    // Registradas Y externas: exigir `isActive` dejaba fuera al proveedor externo (H8).
+    proveedoresElegibles(),
+  ])
 
   return (
     <div className="space-y-6">
@@ -89,6 +70,11 @@ export default async function AcuerdosPage() {
           </Link>
         }
         nav={<NavSupply activa="acuerdos" />}
+        action={
+          <a href="#nuevo" className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground">
+            + Nuevo acuerdo
+          </a>
+        }
       />
 
       <Card>
@@ -154,7 +140,7 @@ export default async function AcuerdosPage() {
           <CardTitle>Nuevo acuerdo</CardTitle>
         </CardHeader>
         <CardContent>
-          <FormAcuerdo proveedores={proveedores.map((p) => ({ id: p.id, nombre: p.name, sucursales: p.sucursales }))} />
+          <FormAcuerdo proveedores={proveedores.map((p) => ({ id: p.id, nombre: p.origen === 'EXTERNA' ? `${p.nombre} (externo)` : p.nombre, sucursales: p.sucursales }))} />
         </CardContent>
       </Card>
     </div>

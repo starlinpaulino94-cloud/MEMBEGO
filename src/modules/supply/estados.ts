@@ -1,9 +1,16 @@
 import type {
   SupplyAcuerdoEstado,
+  SupplyConciliacionEstado,
+  SupplyCuentaEstado,
+  SupplyDepositoEstado,
   SupplyDerechoEstado,
+  SupplyDiscrepanciaEstado,
+  SupplyFacturaEstado,
   SupplyIncidenciaEstado,
+  SupplyLiquidacionEstado,
   SupplyLoteEstado,
   SupplyOrdenEstado,
+  SupplyVentaEstado,
   SupplyVoucherEstado,
 } from '@prisma/client'
 
@@ -27,7 +34,13 @@ export const TRANSICIONES_ACUERDO: Transiciones<SupplyAcuerdoEstado> = {
   BORRADOR: ['PENDIENTE_APROBACION', 'CANCELADO'],
   PENDIENTE_APROBACION: ['APROBADO', 'BORRADOR', 'CANCELADO'],
   APROBADO: ['ACTIVO', 'CANCELADO'],
-  ACTIVO: ['COMPLETADO', 'VENCIDO', 'CANCELADO'],
+  ACTIVO: ['SUSPENDIDO', 'COMPLETADO', 'VENCIDO', 'CANCELADO'],
+  /**
+   * SUSPENDIDO es una pausa, no un final: ni emite, ni vende, ni compra, pero
+   * las obligaciones ya nacidas siguen vivas y se liquidan. Vuelve a ACTIVO o
+   * se cancela. También vence por calendario.
+   */
+  SUSPENDIDO: ['ACTIVO', 'VENCIDO', 'CANCELADO'],
   COMPLETADO: [],
   VENCIDO: [],
   CANCELADO: [],
@@ -110,13 +123,121 @@ export const TRANSICIONES_VOUCHER: Transiciones<SupplyVoucherEstado> = {
 
 // ── Incidencias ─────────────────────────────────────────────────────────────
 
+const RESUELVE_INCIDENCIA: readonly SupplyIncidenciaEstado[] = [
+  'RESUELTA_CLIENTE',
+  'RESUELTA_COMERCIO',
+  'RESUELTA_MEMBEGO',
+  'RECHAZADA',
+]
+
 export const TRANSICIONES_INCIDENCIA: Transiciones<SupplyIncidenciaEstado> = {
-  ABIERTA: ['EN_REVISION', 'RESUELTA_CLIENTE', 'RESUELTA_COMERCIO', 'RESUELTA_MEMBEGO', 'CERRADA'],
-  EN_REVISION: ['RESUELTA_CLIENTE', 'RESUELTA_COMERCIO', 'RESUELTA_MEMBEGO', 'CERRADA'],
+  ABIERTA: ['EN_REVISION', 'ESPERANDO_PROVEEDOR', 'ESPERANDO_CLIENTE', ...RESUELVE_INCIDENCIA, 'CERRADA'],
+  EN_REVISION: ['ESPERANDO_PROVEEDOR', 'ESPERANDO_CLIENTE', ...RESUELVE_INCIDENCIA, 'CERRADA'],
+  ESPERANDO_PROVEEDOR: ['EN_REVISION', 'ESPERANDO_CLIENTE', ...RESUELVE_INCIDENCIA, 'CERRADA'],
+  ESPERANDO_CLIENTE: ['EN_REVISION', 'ESPERANDO_PROVEEDOR', ...RESUELVE_INCIDENCIA, 'CERRADA'],
   RESUELTA_CLIENTE: ['CERRADA'],
   RESUELTA_COMERCIO: ['CERRADA'],
   RESUELTA_MEMBEGO: ['CERRADA'],
+  RECHAZADA: ['CERRADA'],
   CERRADA: [],
+}
+
+/** ¿El estado cierra la investigación (con o sin razón para el reclamante)? */
+export function resuelveIncidencia(estado: SupplyIncidenciaEstado): boolean {
+  return RESUELVE_INCIDENCIA.includes(estado)
+}
+
+// ── Capa financiera (29-09-2026) ────────────────────────────────────────────
+
+/**
+ * Un depósito nace PENDIENTE hasta que se confirma el pago que lo fondea; a
+ * partir de ahí sube y baja según se aplique. CERRADO es una decisión (con
+ * devolución del saldo o sin ella); AGOTADO es aritmética.
+ */
+export const TRANSICIONES_DEPOSITO: Transiciones<SupplyDepositoEstado> = {
+  PENDIENTE: ['ABIERTO', 'CANCELADO'],
+  ABIERTO: ['PARCIALMENTE_APLICADO', 'AGOTADO', 'CERRADO'],
+  PARCIALMENTE_APLICADO: ['ABIERTO', 'AGOTADO', 'CERRADO'],
+  AGOTADO: ['PARCIALMENTE_APLICADO', 'CERRADO'],
+  CERRADO: [],
+  CANCELADO: [],
+}
+
+export const TRANSICIONES_FACTURA: Transiciones<SupplyFacturaEstado> = {
+  REGISTRADA: ['PARCIALMENTE_PAGADA', 'PAGADA', 'DISPUTADA', 'ANULADA'],
+  PARCIALMENTE_PAGADA: ['PAGADA', 'DISPUTADA', 'ANULADA'],
+  DISPUTADA: ['REGISTRADA', 'PARCIALMENTE_PAGADA', 'ANULADA'],
+  PAGADA: [],
+  ANULADA: [],
+}
+
+/**
+ * Cuentas por pagar y por cobrar comparten máquina. DISPUTADA congela: no se
+ * salda ni entra en liquidación hasta volver a ABIERTA/PARCIAL. CANCELADA es
+ * terminal y exige motivo (lo comprueba el dominio).
+ */
+export const TRANSICIONES_CUENTA: Transiciones<SupplyCuentaEstado> = {
+  ABIERTA: ['PARCIALMENTE_SALDADA', 'SALDADA', 'DISPUTADA', 'CANCELADA'],
+  PARCIALMENTE_SALDADA: ['SALDADA', 'DISPUTADA', 'CANCELADA'],
+  DISPUTADA: ['ABIERTA', 'PARCIALMENTE_SALDADA', 'CANCELADA'],
+  SALDADA: [],
+  CANCELADA: [],
+}
+
+/**
+ * BORRADOR existe para poder crear el corte y calcularlo después; CALCULADA
+ * es la que se revisa; APROBADA la firma otra persona; PAGADA la asienta; y
+ * CONCILIADA es el cierre contra el proveedor. DISPUTADA vuelve a CALCULADA
+ * (se recalcula) o se cancela. Cancelar suelta lo que había reclamado.
+ */
+export const TRANSICIONES_LIQUIDACION: Transiciones<SupplyLiquidacionEstado> = {
+  BORRADOR: ['CALCULADA', 'CANCELADA'],
+  CALCULADA: ['EN_REVISION', 'APROBADA', 'DISPUTADA', 'CANCELADA'],
+  EN_REVISION: ['APROBADA', 'DISPUTADA', 'CANCELADA'],
+  APROBADA: ['PAGADA', 'DISPUTADA', 'CANCELADA'],
+  PAGADA: ['CONCILIADA', 'DISPUTADA'],
+  DISPUTADA: ['CALCULADA', 'EN_REVISION', 'CANCELADA'],
+  CONCILIADA: [],
+  CANCELADA: [],
+}
+
+/** Liquidaciones que ya comprometieron dinero: no se pueden cancelar sin más. */
+export const LIQUIDACION_PAGADA: readonly SupplyLiquidacionEstado[] = ['PAGADA', 'CONCILIADA']
+
+export const TRANSICIONES_CONCILIACION: Transiciones<SupplyConciliacionEstado> = {
+  ABIERTA: ['EN_REVISION', 'CERRADA'],
+  EN_REVISION: ['CERRADA'],
+  CERRADA: [],
+}
+
+export const TRANSICIONES_DISCREPANCIA: Transiciones<SupplyDiscrepanciaEstado> = {
+  ABIERTA: ['EN_INVESTIGACION', 'RESUELTA', 'AJUSTADA', 'RECHAZADA'],
+  EN_INVESTIGACION: ['RESUELTA', 'AJUSTADA', 'RECHAZADA'],
+  RESUELTA: ['APROBADA', 'EN_INVESTIGACION'],
+  AJUSTADA: ['APROBADA', 'EN_INVESTIGACION'],
+  APROBADA: [],
+  RECHAZADA: [],
+}
+
+/** Discrepancias que todavía impiden cerrar la conciliación. */
+export const DISCREPANCIA_VIVA: readonly SupplyDiscrepanciaEstado[] = [
+  'ABIERTA',
+  'EN_INVESTIGACION',
+  'RESUELTA',
+  'AJUSTADA',
+]
+
+/**
+ * De ENTREGADA no se vuelve: la cuenta por pagar ya nació. Si la entrega fue
+ * un error, se cancela la CxP con motivo y se reembolsa al cliente, que es
+ * otro hecho con su propio rastro.
+ */
+export const TRANSICIONES_VENTA: Transiciones<SupplyVentaEstado> = {
+  INICIADA: ['PAGADA', 'CANCELADA'],
+  PAGADA: ['ENTREGADA', 'REEMBOLSADA', 'CANCELADA'],
+  ENTREGADA: ['REEMBOLSADA'],
+  CANCELADA: [],
+  REEMBOLSADA: [],
 }
 
 // ── Comprobación genérica ───────────────────────────────────────────────────

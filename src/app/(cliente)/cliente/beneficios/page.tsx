@@ -8,6 +8,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { beneficiosDelCliente } from '@/modules/supply/pool'
 import { TarjetaBeneficio } from '@/components/supply/tarjeta-beneficio'
 import { MisPedidos } from '@/components/supply/mis-pedidos'
+import { MisVentas } from '@/components/supply/mis-ventas'
+import { ventasDelCliente } from '@/modules/supply/ventas'
 import { cuentasDeCobro, pedidosDelCliente } from '@/modules/supply/cobro'
 import type { EstadoPedido } from '@/modules/supply/cobro-nucleo'
 
@@ -60,9 +62,10 @@ export default async function BeneficiosPage() {
   // nada sirve decirle a alguien que debe transferir si no se le dice adónde.
   // `.catch` en los dos: un fallo leyendo pedidos no puede dejar sin ver los
   // beneficios que la persona YA tiene, que es para lo que abrió la pantalla.
-  const [pedidos, cuentas] = await Promise.all([
+  const [pedidos, cuentas, ventas] = await Promise.all([
     clienteIds.length > 0 ? pedidosDelCliente(clienteIds[0]!, 20).catch(() => []) : [],
     cuentasDeCobro().catch(() => []),
+    ventasDelCliente(clienteIds, 20).catch(() => []),
   ])
   const pedidosVivos = pedidos.filter(
     (p) => p.estado === 'INICIADO' || p.estado === 'EN_REVISION' || p.estado === 'RECHAZADO'
@@ -88,13 +91,30 @@ export default async function BeneficiosPage() {
           id: p.id,
           numero: p.numero,
           estado: p.estado as EstadoPedido,
-          producto: p.derecho.lote.snapshotItemNombre,
+          producto: p.derecho?.lote.snapshotItemNombre ?? p.venta?.itemNombre ?? '—',
           monto: Number(p.monto),
           motivoRechazo: p.motivoRechazo,
           expiraAt: p.expiraAt.toISOString(),
         }))}
         cuentas={cuentas}
         clienteId={clienteIds[0] ?? ''}
+      />
+
+      <MisVentas
+        ventas={ventas
+          .filter((v) => v.estado === 'PAGADA' || v.estado === 'ENTREGADA' || v.estado === 'INICIADA')
+          .map((v) => ({
+            id: v.id,
+            numero: v.numero,
+            estado: v.estado,
+            producto: v.varianteEtiqueta ? `${v.itemNombre} · ${v.varianteEtiqueta}` : v.itemNombre,
+            cantidad: v.cantidad,
+            proveedor: v.proveedor.name,
+            sucursal: v.sucursal?.nombre ?? null,
+            montoBruto: Number(v.montoBruto),
+            codigoEntrega: v.estado === 'PAGADA' ? v.codigoEntrega : null,
+            entregadaAt: v.entregadaAt?.toISOString() ?? null,
+          }))}
       />
 
       {beneficios.length === 0 ? (

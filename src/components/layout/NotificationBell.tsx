@@ -56,6 +56,9 @@ const TIPO_ICON: Record<string, { icon: LucideIcon; cls: string }> = {
   SUPPLY_PROVEEDOR_EN_RIESGO: { icon: ShieldAlert, cls: 'bg-destructive/10 text-destructive' },
   SUPPLY_NO_CABE: { icon: CalendarX, cls: 'bg-warning/15 text-warning' },
   SUPPLY_CAPITAL_DORMIDO: { icon: Banknote, cls: 'bg-warning/15 text-warning' },
+  SUPPLY_ACUERDO_POR_VENCER: { icon: TimerOff, cls: 'bg-warning/15 text-warning' },
+  SUPPLY_DEPOSITO_POR_CERRAR: { icon: Banknote, cls: 'bg-warning/15 text-warning' },
+  SUPPLY_LIQUIDACION_PENDIENTE: { icon: Wallet, cls: 'bg-info/10 text-info' },
 }
 
 function timeAgo(date: Date) {

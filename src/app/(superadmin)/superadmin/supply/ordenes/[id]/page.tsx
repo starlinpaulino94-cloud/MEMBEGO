@@ -10,6 +10,13 @@ import { TablaReporte } from '@/components/ui/reporte-imprimible'
 import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
 import { AccionesOrden } from '@/components/supply/acciones-orden'
+import { FormAccion } from '@/components/supply/form-accion'
+import { FormPagoOrden } from '@/components/supply/form-pago-orden'
+import { FormComprobantePago } from '@/components/supply/form-comprobante-pago'
+import { aplicarDepositoAOrdenAction } from '@/modules/supply/actions-lotes'
+import { listarDepositos } from '@/modules/supply/depositos'
+import { DEPOSITO_VIVO, SUPPLY_PAGO_TIPO_LABELS } from '@/modules/supply/catalogo'
+import { urlComprobante } from '@/modules/storage/comprobantes'
 import { SUPPLY_ORDEN_ESTADO_LABELS } from '@/modules/supply/catalogo'
 import { TRANSICIONES_ORDEN } from '@/modules/supply/estados'
 
@@ -43,11 +50,16 @@ export default async function OrdenDetallePage({ params }: { params: Promise<{ i
         lotes: {
           select: { id: true, codigo: true, compradas: true, disponibles: true, redimidas: true },
         },
+        pagos: { orderBy: { createdAt: 'desc' }, select: { id: true, tipo: true, monto: true, estado: true, metodo: true, referencia: true, comprobantePath: true, createdAt: true } },
       },
     })
   )
 
   if (!orden) notFound()
+  const depositos = (await listarDepositos({ proveedorId: orden.proveedorId })).filter((d) => DEPOSITO_VIVO.includes(d.estado) && d.disponible > 0)
+  const pendientePago = Math.max(0, Number(orden.total) - Number(orden.montoPagado))
+  const pagosConUrl = await Promise.all(orden.pagos.map(async (p) => ({ ...p, url: await urlComprobante('pago', p.id, p.comprobantePath) })))
+  const pagable = ['APROBADA', 'CONFIRMADA', 'PARCIALMENTE_FONDEADA', 'FONDEADA', 'ACTIVA'].includes(orden.estado)
 
   const siguientes = TRANSICIONES_ORDEN[orden.estado]
   const soyElCreador = Boolean(
@@ -120,6 +132,17 @@ export default async function OrdenDetallePage({ params }: { params: Promise<{ i
             <Dato label="Total">
               <strong>{formatMoneyRD(Number(orden.total))}</strong>
             </Dato>
+            <Dato label="Pagado">
+              {formatMoneyRD(Number(orden.montoPagado))}
+              {Number(orden.total) > 0 && (
+                <span className="ml-1 text-caption text-muted-foreground">
+                  ({Math.round((Number(orden.montoPagado) / Number(orden.total)) * 100)}%)
+                </span>
+              )}
+            </Dato>
+            {orden.documentos.length > 0 && (
+              <Dato label="Documentos">{orden.documentos.join(', ')}</Dato>
+            )}
             <Dato label="Creada">{formatDate(orden.createdAt)}</Dato>
             <Dato label="Creada por">{orden.creadoPor?.name ?? '—'}</Dato>
             <Dato label="Aprobada por">
@@ -131,6 +154,77 @@ export default async function OrdenDetallePage({ params }: { params: Promise<{ i
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Pagos de esta orden</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm">
+            Total {formatMoneyRD(Number(orden.total))} · pagado {formatMoneyRD(Number(orden.montoPagado))} ·{' '}
+            <strong>pendiente {formatMoneyRD(pendientePago)}</strong>
+          </p>
+          {!pagable ? (
+            <p className="text-caption text-muted-foreground">Se paga una vez aprobada.</p>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border border-border p-4">
+                <p className="mb-2 text-sm font-medium">Registrar un pago</p>
+                <FormPagoOrden acuerdoId={orden.acuerdo.id} ordenId={orden.id} pendiente={pendientePago} />
+              </div>
+              <div className="rounded-lg border border-border p-4">
+                <p className="mb-2 text-sm font-medium">Pagar con un depósito del proveedor</p>
+                {depositos.length === 0 ? (
+                  <p className="text-caption text-muted-foreground">Este proveedor no tiene depósitos con saldo.</p>
+                ) : (
+                  <FormAccion
+                    accion={aplicarDepositoAOrdenAction}
+                    ocultos={{ ordenId: orden.id }}
+                    etiqueta="Aplicar depósito"
+                    variant="secondary"
+                    recargar
+                    campos={[
+                      { name: 'depositoId', label: 'Depósito', tipo: 'select', opciones: depositos.map((d) => ({ value: d.id, label: `${d.codigo} · disponible ${formatMoneyRD(d.disponible)}` })) },
+                      { name: 'monto', label: 'Monto', tipo: 'number', min: 0.01, max: pendientePago, required: true, defaultValue: pendientePago > 0 ? pendientePago.toFixed(2) : '' },
+                    ]}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+          {pagosConUrl.length > 0 && (
+            <TablaReporte
+              columnas={[
+                { clave: 'fecha', titulo: 'Fecha' },
+                { clave: 'tipo', titulo: 'Tipo' },
+                { clave: 'monto', titulo: 'Monto', alinearDerecha: true },
+                { clave: 'metodo', titulo: 'Método' },
+                { clave: 'referencia', titulo: 'Referencia' },
+                { clave: 'estado', titulo: 'Estado' },
+                { clave: 'comprobante', titulo: 'Comprobante' },
+              ]}
+              filas={pagosConUrl.map((p) => ({
+                __clave: p.id,
+                fecha: formatDate(p.createdAt),
+                tipo: SUPPLY_PAGO_TIPO_LABELS[p.tipo],
+                monto: formatMoneyRD(Number(p.monto)),
+                metodo: p.metodo ?? '—',
+                referencia: p.referencia ?? '—',
+                estado: <Badge variant={p.estado === 'CONFIRMADO' ? 'success' : p.estado === 'ANULADO' ? 'outline' : 'warning'}>{p.estado}</Badge>,
+                comprobante: p.url ? (
+                  <a href={p.url} target="_blank" rel="noreferrer" className="underline">
+                    Ver
+                  </a>
+                ) : p.estado === 'ANULADO' ? (
+                  '—'
+                ) : (
+                  <FormComprobantePago pagoId={p.id} compacto />
+                ),
+              }))}
+            />
+          )}
+        </CardContent>
+      </Card>
 
       <AccionesOrden
         ordenId={orden.id}

@@ -86,6 +86,10 @@ export function AccionesAcuerdo({
                   </option>
                 ))}
               </select>
+              <div>
+                <Label htmlFor="motivoEstado">Motivo (obligatorio para suspender o cancelar)</Label>
+                <Input id="motivoEstado" name="motivo" maxLength={500} />
+              </div>
               <Button type="submit" size="sm" disabled={moviendo}>
                 {moviendo ? 'Aplicando…' : 'Aplicar'}
               </Button>
@@ -175,7 +179,8 @@ export function AccionesAcuerdo({
                 <option value="CAPACIDAD">Cambiar capacidad</option>
                 <option value="SUCURSALES">Añadir sucursal</option>
                 <option value="SUSTITUCION">Producto sustituto</option>
-                <option value="POLITICA">Política de sobrantes</option>
+                <option value="POLITICA">Política de sobrantes / % de comisión</option>
+                <option value="COSTO">Costo unitario</option>
               </select>
             </div>
 
@@ -189,6 +194,19 @@ export function AccionesAcuerdo({
                 <Input id="unidadesExtra" name="unidadesExtra" type="number" min={1} />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="nuevoCostoUnitario">Nuevo costo unitario</Label>
+                <Input id="nuevoCostoUnitario" name="nuevoCostoUnitario" type="number" min={0} step="0.01" />
+              </div>
+              <div>
+                <Label htmlFor="nuevaComisionPorcentaje">Nueva comisión %</Label>
+                <Input id="nuevaComisionPorcentaje" name="nuevaComisionPorcentaje" type="number" min={0.01} max={100} step="0.01" />
+              </div>
+            </div>
+            <p className="text-caption text-muted-foreground">
+              Sobre un acuerdo aprobado o activo, cada enmienda crea una versión nueva: las liquidaciones ya calculadas conservan la anterior.
+            </p>
 
             {lotes.length > 0 && (
               <div>

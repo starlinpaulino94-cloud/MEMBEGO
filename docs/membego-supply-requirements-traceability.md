@@ -146,3 +146,24 @@ Leyenda: ✅ implementado · ⚠️ parcial (la nota dice qué falta)
 | ¿Puedo saber cuánto le debo? | Sí | `/superadmin/supply/liquidaciones` |
 | ¿Puedo calcular el CAC y comparar campañas? | Sí | `/superadmin/supply/economia` |
 | ¿Sirve la misma arquitectura para servicios? | Sí | Cuatro `SupplyTipo`, capacidad por contrato |
+
+## 9 · Capa financiera y venta sin precompra (auditoría 2026-09)
+
+| Requisito | Dominio | Entidad | UI | Prueba | Estado |
+| --- | --- | --- | --- | --- | --- |
+| Depósito abierto con saldo original/aplicado/devuelto/disponible | `depositos.ts`, `dinero.ts` | `SupplyDeposito`, `SupplyDepositoMovimiento` | `/superadmin/supply/finanzas/depositos[/id]` | `supply-finanzas` · depósito; `postgres/supply-flujos` · 9, 10 | ✅ |
+| Facturas de proveedor, notas de crédito y débito | `facturas.ts` | `SupplyFacturaProveedor` | `/superadmin/supply/finanzas/facturas` | `postgres/supply-flujos` · 10 | ✅ |
+| Cuentas por pagar (5 estados) | `cuentas.ts` | `SupplyCuentaPorPagar` | `/superadmin/supply/finanzas/cuentas-por-pagar` | `postgres/supply-flujos` · 8-11 | ✅ |
+| Cuentas por cobrar | `cuentas.ts` | `SupplyCuentaPorCobrar` | `/superadmin/supply/finanzas/cuentas-por-cobrar` | `postgres/supply-flujos` · 11 | ✅ |
+| Liquidación con líneas, snapshot y aprobador ≠ calculador | `liquidaciones.ts` | `SupplyLiquidacion`, `SupplyLiquidacionLinea` | `/superadmin/supply/finanzas/liquidaciones[/id]` | `supply-finanzas` · neteo; `postgres/supply-flujos` · 11 | ✅ |
+| Conciliación Membego vs proveedor con 6 tipos de discrepancia | `conciliacion-cifras.ts`, `conciliacion-proveedor.ts` | `SupplyConciliacion`, `SupplyDiscrepancia`, `SupplyDiscrepanciaNota` | `/superadmin/supply/conciliacion[/id]` | `supply-finanzas` · tipos; `postgres/supply-flujos` · 12 | ✅ |
+| Venta sin precompra → entrega → CxP → liquidación | `ventas.ts`, `cobro.ts:abrirPedidoDeVenta` | `SupplyVentaDirecta`, `SupplyPedido.ventaId` | `/superadmin/supply/ventas`, escáner, vitrina, «Mis compras» | `supply-finanzas` · reparto; `postgres/supply-flujos` · 8, 14b | ✅ |
+| Acuerdo a comisión y términos comerciales | `contrato.ts` | `SupplyAcuerdo.comisionPorcentaje…` | Formulario de acuerdo | `supply-finanzas` · contrato | ✅ |
+| Acuerdo suspendido y versionado | `procurement.ts` | `SupplyAcuerdoVersion` | Ficha del acuerdo | `postgres/supply-flujos` · 1, 11 | ✅ |
+| Proveedor externo convertible sin perder historial | `proveedores.ts` | `SupplyProveedor` | `/superadmin/supply/proveedores[/id]` | `postgres/supply-flujos` · 16 | ✅ |
+| Ledger con saldo anterior/posterior | `movimientos.ts` | `SupplyMovimiento.saldoAntes/Despues` | Ficha del lote | `postgres/supply-flujos` · 4 | ✅ |
+| Dispositivo en QR y redención | `qr.ts`, `redencion.ts` | `SupplyQrSesion.dispositivo` | — | `postgres/supply-flujos` · 4 | ✅ |
+| FEFO con override auditado | `actions.ts:emitirDerechoAction` | `AuditAccion.SUPPLY_FEFO_OVERRIDE` | Emisión manual | `postgres/supply-flujos` · 7 | ✅ |
+| Vencimientos de derechos, depósitos y acuerdos con umbrales configurables | `vencimientos.ts`, `notificar.ts` | `NotifTipo.SUPPLY_*` | `/superadmin/supply/vencimientos`, cron | `supply-finanzas` · umbrales | ✅ |
+| Dashboard financiero y reportes ampliados | `tablero.ts`, `exportar/route.ts` | — | Resumen, Finanzas, exportación | — | ✅ |
+| Doble redención bajo concurrencia real | `redencion.ts` | índice único parcial + `FOR UPDATE` | Escáner | `postgres/supply-flujos` · 14 | ✅ |

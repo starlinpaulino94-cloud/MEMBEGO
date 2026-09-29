@@ -134,8 +134,9 @@ model Cliente {
   // la plataforma que un proveedor está obligado a cumplir.
   supplyDerechos    SupplyDerecho[]
   supplyPedidos     SupplyPedido[]
-  supplyRedenciones SupplyRedencion[]  @relation("SupplyRedencionCliente")
-  supplyIncidencias SupplyIncidencia[] @relation("SupplyIncidenciaCliente")
+  supplyRedenciones SupplyRedencion[]    @relation("SupplyRedencionCliente")
+  supplyIncidencias SupplyIncidencia[]   @relation("SupplyIncidenciaCliente")
+  supplyVentas      SupplyVentaDirecta[] @relation("SupplyVentaCliente")
 
   @@unique([supabaseId, companyId])
   // Filtros frecuentes solo por empresa (adminMetrics, reportes, /admin/clientes).

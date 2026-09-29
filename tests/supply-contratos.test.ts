@@ -63,6 +63,8 @@ const PUROS = [
   'hallazgos.ts',
   'minutos-qr.ts',
   'avisos.ts',
+  'dinero.ts',
+  'conciliacion-cifras.ts',
 ]
 
 // ── El dominio puro sigue siendo puro ───────────────────────────────────────
@@ -88,7 +90,7 @@ test('los módulos puros no importan server-only ni Prisma en ejecución', () =>
 
 test('los módulos con acceso a datos declaran server-only', () => {
   const conDatos = ARCHIVOS.filter(
-    (f) => !PUROS.includes(f) && !f.startsWith('codigos') && f !== 'actions.ts'
+    (f) => !PUROS.includes(f) && !f.startsWith('codigos') && !f.startsWith('actions')
   )
   for (const archivo of conDatos) {
     const src = leer(archivo)

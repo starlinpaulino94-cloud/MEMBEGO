@@ -38,6 +38,12 @@ export interface DatosAsignacion {
   etiqueta: string
   cantidad: number
   creadoPorId?: string | null
+  /** Oferta publicable (§14): precio al cliente, ventana, tope y sucursales. */
+  precioCliente?: number | null
+  inicioAt?: Date | null
+  finAt?: Date | null
+  maxPorCliente?: number | null
+  sucursalIds?: string[]
 }
 
 export interface ResultadoAsignacion {
@@ -56,6 +62,8 @@ export interface ResultadoAsignacion {
  * dice cuántas quedaban.
  */
 export async function asignar(d: DatosAsignacion): Promise<ResultadoAsignacion> {
+  if (d.inicioAt && d.finAt && d.finAt <= d.inicioAt) throw new Error('La oferta termina antes de empezar.')
+  if (d.precioCliente != null && (!Number.isFinite(d.precioCliente) || d.precioCliente < 0)) throw new Error('El precio al cliente no puede ser negativo.')
   if (!Number.isInteger(d.cantidad) || d.cantidad <= 0) {
     throw new Error('La cantidad a asignar tiene que ser un entero positivo.')
   }
@@ -72,6 +80,11 @@ export async function asignar(d: DatosAsignacion): Promise<ResultadoAsignacion> 
         etiqueta: d.etiqueta.trim(),
         cantidad: d.cantidad,
         creadoPorId: d.creadoPorId ?? null,
+        precioCliente: d.precioCliente != null && d.precioCliente > 0 ? d.precioCliente : 0,
+        inicioAt: d.inicioAt ?? null,
+        finAt: d.finAt ?? null,
+        maxPorCliente: d.maxPorCliente != null && d.maxPorCliente > 0 ? Math.floor(d.maxPorCliente) : null,
+        sucursalIds: d.sucursalIds ?? [],
       },
       select: { id: true },
     })

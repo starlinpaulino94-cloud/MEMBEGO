@@ -8,7 +8,7 @@ import { TablaReporte } from '@/components/ui/reporte-imprimible'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
-import { alertasDeVencimiento } from '@/modules/supply/vencimientos'
+import { alertasDeVencimiento, umbralesVencimiento, vencimientosProximos } from '@/modules/supply/vencimientos'
 import {
   ACCION_VENCIMIENTO_LABELS,
   SUPPLY_POLITICA_SOBRANTE_LABELS,
@@ -39,7 +39,11 @@ export default async function VencimientosPage({
   const { dias } = await searchParams
   const ventana = Math.min(180, Math.max(1, Number(dias) || 30))
 
-  const alertas = await alertasDeVencimiento(ventana)
+  const [alertas, otros] = await Promise.all([alertasDeVencimiento(ventana), vencimientosProximos(ventana)])
+  const derechos = otros.filter((v) => v.tipo === 'DERECHO')
+  const depositos = otros.filter((v) => v.tipo === 'DEPOSITO')
+  const acuerdos = otros.filter((v) => v.tipo === 'ACUERDO')
+  const umbrales = umbralesVencimiento()
   const exposicionTotal = alertas.reduce((t, a) => t + a.exposicionFinanciera, 0)
   const unidades = alertas.reduce((t, a) => t + a.enRiesgo + a.expuestas, 0)
   const criticas = alertas.filter((a) => a.nivel === 'CRITICO')
@@ -58,7 +62,7 @@ export default async function VencimientosPage({
       />
 
       <div className="flex flex-wrap gap-2">
-        {[7, 14, 30, 60, 90].map((d) => (
+        {[...new Set([1, 7, 15, 30, 60, 90, ...umbrales])].sort((a, b) => a - b).map((d) => (
           <Link
             key={d}
             href={`/superadmin/supply/vencimientos?dias=${d}`}
@@ -71,13 +75,17 @@ export default async function VencimientosPage({
         ))}
       </div>
 
-      {alertas.length === 0 ? (
+      <p className="text-caption text-muted-foreground">
+        Umbrales de aviso: {umbrales.join(' · ')} días (variable <code>SUPPLY_UMBRALES_VENCIMIENTO</code>). Cada día el cron avisa por lo que cruza un umbral: lotes, derechos en manos de clientes, depósitos con saldo y acuerdos.
+      </p>
+
+      {alertas.length === 0 && otros.length === 0 ? (
         <EmptyState
           variant="card"
           title={`Nada vence en los próximos ${ventana} días`}
-          description="No hay supply en riesgo en esta ventana. Amplía el rango para mirar más lejos."
+          description="No hay supply, derechos, depósitos ni acuerdos en riesgo en esta ventana. Amplía el rango para mirar más lejos."
         />
-      ) : (
+      ) : alertas.length === 0 ? null : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
@@ -153,8 +161,15 @@ export default async function VencimientosPage({
                       a.politicaSobrante as SupplyPoliticaSobranteLabelKey
                     ] ?? a.politicaSobrante,
                   acciones: (
-                    <span className="text-caption text-muted-foreground">
-                      {a.acciones.map((ac) => ACCION_VENCIMIENTO_LABELS[ac] ?? ac).join(' · ')}
+                    <span className="flex flex-col gap-1 text-caption">
+                      <span className="text-muted-foreground">{a.acciones.map((ac) => ACCION_VENCIMIENTO_LABELS[ac] ?? ac).join(' · ')}</span>
+                      <span className="flex flex-wrap gap-2">
+                        <Link href={`/superadmin/supply/lotes/${a.loteId}#acciones`} className="underline underline-offset-4">Crear oferta / regalar</Link>
+                        <Link href={`/superadmin/supply/lotes/${a.loteId}#acciones`} className="underline underline-offset-4">Transferir</Link>
+                        <Link href={`/superadmin/supply/lotes/${a.loteId}#acciones`} className="underline underline-offset-4">Extender fecha</Link>
+                        <Link href={`/superadmin/supply/lotes/${a.loteId}#acciones`} className="underline underline-offset-4">Cancelar unidades</Link>
+                        <Link href={`/superadmin/supply/acuerdos/${a.acuerdoId}`} className="underline underline-offset-4">Negociar (enmienda)</Link>
+                      </span>
                     </span>
                   ),
                 }))}
@@ -163,6 +178,78 @@ export default async function VencimientosPage({
           </Card>
         </>
       )}
+
+      <SeccionVencimientos
+        titulo="Derechos en manos de clientes"
+        descripcion="Vouchers activos que caducan sin usarse: la unidad ya está pagada."
+        filas={derechos}
+        href={(v) => `/superadmin/supply/lotes/${v.id.split(':')[0]}`}
+        unidades
+      />
+      <SeccionVencimientos
+        titulo="Depósitos con saldo que llegan a su cierre"
+        descripcion="Dinero entregado al proveedor que hay que aplicar, prorrogar o recuperar."
+        filas={depositos}
+        href={(v) => `/superadmin/supply/finanzas/depositos/${v.id}`}
+      />
+      <SeccionVencimientos
+        titulo="Acuerdos que terminan"
+        descripcion="Al vencer, ya no se compra ni se vende contra ellos: renovar o cerrar."
+        filas={acuerdos}
+        href={(v) => `/superadmin/supply/acuerdos/${v.id}`}
+      />
     </div>
+  )
+}
+
+function SeccionVencimientos({
+  titulo,
+  descripcion,
+  filas,
+  href,
+  unidades = false,
+}: {
+  titulo: string
+  descripcion: string
+  filas: Awaited<ReturnType<typeof vencimientosProximos>>
+  href: (v: Awaited<ReturnType<typeof vencimientosProximos>>[number]) => string
+  unidades?: boolean
+}) {
+  if (filas.length === 0) return null
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <h2 className="text-base font-semibold">{titulo}</h2>
+        <p className="mb-3 text-caption text-muted-foreground">{descripcion}</p>
+        <TablaReporte
+          titulo={titulo}
+          columnas={[
+            { clave: 'codigo', titulo: 'Código' },
+            { clave: 'proveedor', titulo: 'Proveedor' },
+            { clave: 'descripcion', titulo: 'Qué pasa' },
+            ...(unidades ? [{ clave: 'unidades', titulo: 'Unidades', alinearDerecha: true }] : []),
+            { clave: 'monto', titulo: 'En juego', alinearDerecha: true },
+            { clave: 'vence', titulo: 'Vence' },
+            { clave: 'dias', titulo: 'Días', alinearDerecha: true },
+          ]}
+          filas={filas.map((v) => ({
+            __clave: v.id,
+            codigo: (
+              <Link href={href(v)} className="font-medium underline-offset-4 hover:underline">
+                {v.codigo}
+              </Link>
+            ),
+            proveedor: v.proveedorNombre,
+            descripcion: v.descripcion,
+            unidades: v.unidades.toLocaleString('es-DO'),
+            monto: formatMoneyRD(v.monto),
+            vence: formatDate(v.venceAt),
+            dias: (
+              <Badge variant={v.nivel === 'CRITICO' ? 'destructive' : v.nivel === 'ALTO' ? 'warning' : 'outline'}>{v.diasRestantes}</Badge>
+            ),
+          }))}
+        />
+      </CardContent>
+    </Card>
   )
 }

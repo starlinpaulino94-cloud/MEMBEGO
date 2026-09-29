@@ -2,7 +2,8 @@ import 'server-only'
 
 import type { SupplyIncidenciaEstado, SupplyIncidenciaTipo } from '@prisma/client'
 import { conEmpresaOTodas, sinEmpresa } from '@/lib/tenant'
-import { TRANSICIONES_INCIDENCIA, exigirTransicion } from './estados'
+import { TRANSICIONES_INCIDENCIA, exigirTransicion, resuelveIncidencia } from './estados'
+import { INCIDENCIA_VIVA } from './catalogo'
 
 /**
  * MEMBEGO SUPPLY · INCIDENCIAS Y DISPUTAS (Fases 29, 30).
@@ -32,9 +33,14 @@ export interface DatosIncidencia {
   voucherId?: string | null
   derechoId?: string | null
   redencionId?: string | null
+  /** Venta sin precompra afectada (§14): la incidencia no pasa por un derecho. */
+  ventaId?: string | null
   clienteId?: string | null
   sucursalId?: string | null
   reportadoPorId?: string | null
+  /** Desde un lote o un proveedor (§26): sin beneficio ni venta concretos. */
+  loteId?: string | null
+  proveedorId?: string | null
 }
 
 /**
@@ -55,11 +61,56 @@ export async function abrirIncidencia(d: DatosIncidencia): Promise<{ id: string 
 
 async function abrirIncidenciaEnTx(d: DatosIncidencia): Promise<{ id: string }> {
   if (!d.detalle.trim()) throw new Error('Una incidencia necesita una descripción.')
-  if (!d.voucherId && !d.derechoId && !d.redencionId) {
-    throw new Error('Una incidencia tiene que apuntar a un beneficio concreto.')
+  if (!d.voucherId && !d.derechoId && !d.redencionId && !d.ventaId && !d.loteId && !d.proveedorId) {
+    throw new Error('Una incidencia tiene que apuntar a un beneficio, una venta, un lote o un proveedor.')
   }
 
   return sinEmpresa('Membego Supply: incidencia de cumplimiento', async (tx) => {
+    if (!d.voucherId && !d.derechoId && !d.redencionId && !d.ventaId) {
+      // Sobre un lote o un proveedor, sin cliente de por medio.
+      const lote = d.loteId
+        ? await tx.supplyLote.findUnique({ where: { id: d.loteId }, select: { id: true, proveedorId: true, acuerdoId: true } })
+        : null
+      if (d.loteId && !lote) throw new Error('Lote no encontrado.')
+      const proveedorId = lote?.proveedorId ?? d.proveedorId
+      if (!proveedorId) throw new Error('Falta el proveedor de la incidencia.')
+      return tx.supplyIncidencia.create({
+        data: {
+          proveedorId,
+          loteId: lote?.id ?? null,
+          acuerdoId: lote?.acuerdoId ?? null,
+          clienteId: d.clienteId ?? null,
+          sucursalId: d.sucursalId ?? null,
+          tipo: d.tipo,
+          estado: 'ABIERTA',
+          detalle: d.detalle.trim(),
+          reportadoPorId: d.reportadoPorId ?? null,
+        },
+        select: { id: true },
+      })
+    }
+    if (d.ventaId) {
+      const venta = await tx.supplyVentaDirecta.findUnique({
+        where: { id: d.ventaId },
+        select: { proveedorId: true, clienteId: true, acuerdoId: true, sucursalId: true },
+      })
+      if (!venta) throw new Error('Venta no encontrada.')
+      return tx.supplyIncidencia.create({
+        data: {
+          proveedorId: venta.proveedorId,
+          clienteId: d.clienteId ?? venta.clienteId,
+          ventaId: d.ventaId,
+          acuerdoId: venta.acuerdoId,
+          sucursalId: d.sucursalId ?? venta.sucursalId,
+          tipo: d.tipo,
+          estado: 'ABIERTA',
+          detalle: d.detalle.trim(),
+          reportadoPorId: d.reportadoPorId ?? null,
+        },
+        select: { id: true },
+      })
+    }
+
     let derechoId = d.derechoId ?? null
     let voucherId = d.voucherId ?? null
 
@@ -129,7 +180,7 @@ export async function moverIncidencia(
     if (!inc) throw new Error('Incidencia no encontrada.')
     exigirTransicion(TRANSICIONES_INCIDENCIA, inc.estado, hasta, 'Incidencia de supply')
 
-    const resuelve = hasta.startsWith('RESUELTA_')
+    const resuelve = resuelveIncidencia(hasta)
     if (resuelve && !(resolucion ?? '').trim()) {
       throw new Error('Resolver una disputa exige decir cómo se resolvió.')
     }
@@ -171,7 +222,7 @@ export async function resumenIncidencias(proveedorId?: string): Promise<ResumenI
 
       return {
         abiertas: cuenta('ABIERTA'),
-        enRevision: cuenta('EN_REVISION'),
+        enRevision: INCIDENCIA_VIVA.filter((e) => e !== 'ABIERTA').reduce((t, e) => t + cuenta(e), 0),
         resueltas:
           cuenta('RESUELTA_CLIENTE') + cuenta('RESUELTA_COMERCIO') + cuenta('RESUELTA_MEMBEGO'),
         total: porEstado.reduce((t, g) => t + g._count._all, 0),

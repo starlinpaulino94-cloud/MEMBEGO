@@ -19,7 +19,7 @@ import { confirmarPedidoAction, rechazarPedidoAction, type EstadoAccion } from '
  * que se aprueba a sí mismo. El servidor compara igual; esto es para que la
  * persona mire.
  */
-export function FormRevisarPedido({ pedidoId, monto }: { pedidoId: string; monto: number }) {
+export function FormRevisarPedido({ pedidoId, monto, manual = false }: { pedidoId: string; monto: number; manual?: boolean }) {
   const [okEstado, confirmar, confirmando] = useActionState<EstadoAccion, FormData>(
     confirmarPedidoAction,
     {}
@@ -33,8 +33,14 @@ export function FormRevisarPedido({ pedidoId, monto }: { pedidoId: string; monto
     <div className="flex flex-col gap-2">
       <form action={confirmar} className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="pedidoId" value={pedidoId} />
+        {manual && (
+          <select name="metodoManual" defaultValue="EFECTIVO" aria-label="Cómo se cobró" className="h-9 rounded-lg border border-input bg-background px-2 text-body">
+            <option value="EFECTIVO">Efectivo validado</option>
+            <option value="MANUAL">Pago manual</option>
+          </select>
+        )}
         <label className="text-caption text-muted-foreground" htmlFor={`monto-${pedidoId}`}>
-          Monto del comprobante
+          {manual ? 'Monto recibido' : 'Monto del comprobante'}
         </label>
         <input
           id={`monto-${pedidoId}`}
@@ -47,7 +53,7 @@ export function FormRevisarPedido({ pedidoId, monto }: { pedidoId: string; monto
           className="h-9 w-36 rounded-lg border border-input bg-background px-2 text-body"
         />
         <Button type="submit" size="sm" disabled={confirmando}>
-          {confirmando ? 'Confirmando…' : 'Confirmar pago'}
+          {confirmando ? 'Confirmando…' : manual ? 'Confirmar cobro' : 'Confirmar pago'}
         </Button>
       </form>
 

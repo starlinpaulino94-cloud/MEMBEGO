@@ -165,6 +165,27 @@ jobs:
               exit 1
             }
 
+      # ── Membego Supply: los catorce casos contra PostgreSQL ─────────────────
+      #
+      # Compra → asignación → entitlement → QR → redención (y su doble, su
+      # vencido, su reversa y su carrera), venta sin precompra → cuenta por
+      # pagar, depósito → aplicación → saldo, factura pagada por fuera,
+      # liquidación con snapshot y conciliación con discrepancia. Sobre una
+      # base migrada con el historial real (`migrate deploy`), para que los
+      # CHECK y los índices parciales de la migración financiera cuenten.
+      - name: Flujos de Membego Supply contra PostgreSQL
+        env:
+          DATABASE_URL: postgresql://postgres:ci@localhost:5432/supplytest
+          DIRECT_URL: postgresql://postgres:ci@localhost:5432/supplytest
+          NEXT_PUBLIC_SUPABASE_URL: https://ci.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci
+          SUPABASE_SERVICE_ROLE_KEY: ci
+        run: |
+          psql postgresql://postgres:ci@localhost:5432/sombra -v ON_ERROR_STOP=1 -c 'create database supplytest'
+          npx prisma migrate deploy
+          npx prisma generate
+          npm run test:db
+
       # ── Aislamiento entre empresas (auditoría · A-01) ──────────────────────
       #
       # Las políticas de RLS se DEDUCEN del esquema: 80 tablas por su columna

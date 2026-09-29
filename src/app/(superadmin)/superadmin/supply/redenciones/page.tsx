@@ -95,7 +95,7 @@ export default async function RedencionesPage({
                 <Badge variant="success">Entregada</Badge>
               ),
             }))}
-            vacio="Todavía no se ha entregado ninguna unidad."
+            vacio="Todavía no se ha entregado ninguna unidad. Emite un beneficio en Derechos y el comercio lo escanea desde su portal."
           />
         </CardContent>
       </Card>

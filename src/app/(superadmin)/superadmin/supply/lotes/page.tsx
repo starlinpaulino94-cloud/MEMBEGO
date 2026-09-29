@@ -61,6 +61,11 @@ export default async function LotesPage({
           </Link>
         }
         nav={<NavSupply activa="lotes" />}
+        action={
+          <Link href="/superadmin/supply/ordenes#nueva" className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground">
+            + Nueva orden de compra
+          </Link>
+        }
       />
 
       <Form action="/superadmin/supply/lotes" className="flex gap-2">
@@ -155,7 +160,7 @@ export default async function LotesPage({
               costoTotal: formatMoneyRD(totales.costoTotal),
               costoConsumido: formatMoneyRD(totales.costoConsumido),
             }}
-            vacio="Todavía no hay lotes. Se crean al activar una orden de compra."
+            vacio="Todavía no hay lotes. Se crean al confirmar y recibir una orden de compra: crea la primera en Órdenes."
           />
         </CardContent>
       </Card>

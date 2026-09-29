@@ -1,6 +1,23 @@
 import type {
+  SupplyTipoAcuerdo,
+  SupplyAlcanceAcuerdo,
   SupplyAcuerdoEstado,
   SupplyAsientoTipo,
+  SupplyConciliacionEstado,
+  SupplyCuentaEstado,
+  SupplyCuentaPorCobrarOrigen,
+  SupplyCuentaPorPagarOrigen,
+  SupplyDepositoEstado,
+  SupplyDepositoMovimientoTipo,
+  SupplyDiscrepanciaEstado,
+  SupplyDiscrepanciaTipo,
+  SupplyFacturaEstado,
+  SupplyFacturaTipo,
+  SupplyFrecuenciaCorte,
+  SupplyLiquidacionEstado,
+  SupplyLiquidacionLineaTipo,
+  SupplyProveedorOrigen,
+  SupplyVentaEstado,
   SupplyCubeta,
   SupplyDerechoEstado,
   SupplyIncidenciaEstado,
@@ -69,7 +86,14 @@ export function usaCapacidad(tipo: SupplyTipo): boolean {
 export const SUPPLY_MODELO_LABELS: Record<SupplyModeloComercial, string> = {
   COMPRA_UNIDAD_COMPLETA: 'Compra de unidad completa',
   SUBSIDIO: 'Oferta subsidiada',
+  COMISION: 'Venta sin precompra (comisión)',
 }
+
+export const SUPPLY_MODELOS = [
+  'COMPRA_UNIDAD_COMPLETA',
+  'SUBSIDIO',
+  'COMISION',
+] as const satisfies readonly SupplyModeloComercial[]
 
 /**
  * LA FRASE QUE EVITA EL LÍO CONTABLE MÁS CARO DEL MÓDULO.
@@ -83,6 +107,13 @@ export const SUPPLY_MODELO_EXPLICACION: Record<SupplyModeloComercial, string> = 
     'Membego compró la unidad entera. El cliente no le paga la unidad base al comercio; solo los extras.',
   SUBSIDIO:
     'Membego financia una parte del precio. El cliente le paga el resto al comercio.',
+  COMISION:
+    'Membego no compra nada: vende el producto del proveedor, cobra al cliente y, cuando el proveedor entrega, le debe el neto (bruto menos comisión). No hay lote ni derecho.',
+}
+
+/** ¿Este modelo compra supply (lotes, ledger de cubetas)? COMISION no. */
+export function modeloCompraSupply(modelo: SupplyModeloComercial): boolean {
+  return modelo !== 'COMISION'
 }
 
 /** ¿El cliente le paga la unidad base al comercio en este modelo? */
@@ -203,6 +234,7 @@ export const SUPPLY_ACUERDO_ESTADO_LABELS: Record<SupplyAcuerdoEstado, string> =
   PENDIENTE_APROBACION: 'Pendiente de aprobación',
   APROBADO: 'Aprobado',
   ACTIVO: 'Activo',
+  SUSPENDIDO: 'Suspendido',
   COMPLETADO: 'Completado',
   VENCIDO: 'Vencido',
   CANCELADO: 'Cancelado',
@@ -325,17 +357,35 @@ export const SUPPLY_INCIDENCIA_TIPO_LABELS: Record<SupplyIncidenciaTipo, string>
   EMPRESA_CERRADA: 'La empresa estaba cerrada',
   CALIDAD_INSUFICIENTE: 'La calidad no era la ofrecida',
   SUCURSAL_NO_ACEPTO: 'La sucursal no aceptó el voucher',
+  QR_INVALIDO: 'El código QR no era válido',
+  CANTIDAD_INCORRECTA: 'La cantidad entregada no era la correcta',
+  DERECHO_VENCIDO: 'El beneficio ya estaba vencido',
+  DOBLE_REDENCION: 'Se intentó usar dos veces la misma unidad',
+  SOSPECHA_FRAUDE: 'Sospecha de fraude',
+  ERROR_HUMANO: 'Error de quien operó',
+  RECLAMO_CLIENTE: 'Reclamo del cliente',
   OTRO: 'Otro',
 }
 
 export const SUPPLY_INCIDENCIA_ESTADO_LABELS: Record<SupplyIncidenciaEstado, string> = {
   ABIERTA: 'Abierta',
   EN_REVISION: 'En revisión',
+  ESPERANDO_PROVEEDOR: 'Esperando al proveedor',
+  ESPERANDO_CLIENTE: 'Esperando al cliente',
   RESUELTA_CLIENTE: 'Resuelta a favor del cliente',
   RESUELTA_COMERCIO: 'Resuelta a favor del comercio',
   RESUELTA_MEMBEGO: 'Resuelta por Membego',
+  RECHAZADA: 'Rechazada (no procede)',
   CERRADA: 'Cerrada',
 }
+
+/** Estados de incidencia que siguen exigiendo atención. */
+export const INCIDENCIA_VIVA: readonly SupplyIncidenciaEstado[] = [
+  'ABIERTA',
+  'EN_REVISION',
+  'ESPERANDO_PROVEEDOR',
+  'ESPERANDO_CLIENTE',
+]
 
 /**
  * Incidencias que, por sí solas, ponen en duda que la unidad se entregara.
@@ -347,6 +397,8 @@ export const INCIDENCIAS_DE_INCUMPLIMIENTO: readonly SupplyIncidenciaTipo[] = [
   'PRODUCTO_NO_DISPONIBLE',
   'SUCURSAL_NO_ACEPTO',
   'EMPRESA_CERRADA',
+  'CANTIDAD_INCORRECTA',
+  'DOBLE_REDENCION',
 ]
 
 // ── Dinero con el proveedor ─────────────────────────────────────────────────
@@ -370,6 +422,8 @@ export const SUPPLY_ASIENTO_TIPO_LABELS: Record<SupplyAsientoTipo, string> = {
   CREDITO: 'Crédito',
   AJUSTE: 'Ajuste',
   REVERSA: 'Reversa',
+  CUENTA_POR_PAGAR: 'Cuenta por pagar',
+  CUENTA_POR_COBRAR: 'Cuenta por cobrar',
 }
 
 /**
@@ -385,13 +439,180 @@ export const ASIENTOS_MEMORANDO: readonly SupplyAsientoTipo[] = ['COMPROMISO_COM
 
 // ── Umbrales de vencimiento (Fase 39) ───────────────────────────────────────
 
-/** Días de antelación con los que el motor de vencimientos avisa. */
-export const UMBRALES_VENCIMIENTO = [30, 14, 7, 3, 1] as const
+/**
+ * Días de antelación con los que el motor de vencimientos avisa (§20 del
+ * encargo: 90, 60, 30, 15, 7 y 1). Es el DEFAULT; `umbralesVencimiento()`
+ * en `vencimientos.ts` lo lee de `SUPPLY_UMBRALES_VENCIMIENTO` si existe.
+ */
+export const UMBRALES_VENCIMIENTO = [90, 60, 30, 15, 7, 1] as const
+
+/**
+ * Convierte "90,60,30" en umbrales válidos. Puro para poder probarlo: una
+ * variable mal escrita tiene que caer en el default, no en cero avisos.
+ */
+export function parsearUmbrales(texto: string | null | undefined): readonly number[] {
+  if (!texto) return UMBRALES_VENCIMIENTO
+  const n = [...new Set(texto.split(/[\s,;]+/).map(Number).filter((d) => Number.isInteger(d) && d > 0))]
+  return n.length > 0 ? n.sort((a, b) => b - a) : UMBRALES_VENCIMIENTO
+}
 
 /** Etiqueta de riesgo por días restantes. Determinista, sin IA (Fase 54). */
 export function nivelRiesgoVencimiento(diasRestantes: number): 'CRITICO' | 'ALTO' | 'MEDIO' | 'BAJO' {
   if (diasRestantes <= 3) return 'CRITICO'
   if (diasRestantes <= 7) return 'ALTO'
-  if (diasRestantes <= 14) return 'MEDIO'
+  if (diasRestantes <= 15) return 'MEDIO'
   return 'BAJO'
+}
+
+// ── Capa financiera (29-09-2026) ────────────────────────────────────────────
+
+export const SUPPLY_FRECUENCIA_CORTE_LABELS: Record<SupplyFrecuenciaCorte, string> = {
+  SEMANAL: 'Semanal',
+  QUINCENAL: 'Quincenal',
+  MENSUAL: 'Mensual',
+}
+
+export const SUPPLY_PROVEEDOR_ORIGEN_LABELS: Record<SupplyProveedorOrigen, string> = {
+  REGISTRADA: 'Empresa registrada en Membego',
+  EXTERNA: 'Proveedor externo (sin cuenta)',
+}
+
+export const SUPPLY_DEPOSITO_ESTADO_LABELS: Record<SupplyDepositoEstado, string> = {
+  PENDIENTE: 'Pendiente de confirmar el pago',
+  ABIERTO: 'Abierto',
+  PARCIALMENTE_APLICADO: 'Parcialmente aplicado',
+  AGOTADO: 'Agotado',
+  CERRADO: 'Cerrado',
+  CANCELADO: 'Cancelado',
+}
+
+export const SUPPLY_DEPOSITO_MOVIMIENTO_LABELS: Record<SupplyDepositoMovimientoTipo, string> = {
+  APERTURA: 'Apertura',
+  APLICACION: 'Aplicación a una obligación',
+  REVERSA_APLICACION: 'Reversa de una aplicación',
+  DEVOLUCION: 'Devolución del proveedor',
+  AJUSTE: 'Ajuste',
+}
+
+/** Depósitos con saldo que todavía se puede aplicar. */
+export const DEPOSITO_VIVO: readonly SupplyDepositoEstado[] = ['ABIERTO', 'PARCIALMENTE_APLICADO']
+
+export const SUPPLY_FACTURA_TIPO_LABELS: Record<SupplyFacturaTipo, string> = {
+  FACTURA: 'Factura',
+  NOTA_CREDITO: 'Nota de crédito',
+  NOTA_DEBITO: 'Nota de débito',
+}
+
+export const SUPPLY_FACTURA_ESTADO_LABELS: Record<SupplyFacturaEstado, string> = {
+  REGISTRADA: 'Registrada',
+  PARCIALMENTE_PAGADA: 'Parcialmente pagada',
+  PAGADA: 'Pagada',
+  DISPUTADA: 'Disputada',
+  ANULADA: 'Anulada',
+}
+
+export const SUPPLY_CUENTA_ESTADO_LABELS: Record<SupplyCuentaEstado, string> = {
+  ABIERTA: 'Abierta',
+  PARCIALMENTE_SALDADA: 'Parcialmente saldada',
+  SALDADA: 'Saldada',
+  DISPUTADA: 'Disputada',
+  CANCELADA: 'Cancelada',
+}
+
+/** Cuentas que todavía deben algo. */
+export const CUENTA_VIVA: readonly SupplyCuentaEstado[] = ['ABIERTA', 'PARCIALMENTE_SALDADA']
+
+export const SUPPLY_CXP_ORIGEN_LABELS: Record<SupplyCuentaPorPagarOrigen, string> = {
+  FACTURA_PROVEEDOR: 'Factura del proveedor',
+  VENTA_DIRECTA: 'Venta sin precompra entregada',
+  AJUSTE: 'Ajuste',
+  DIFERENCIA_CONCILIACION: 'Diferencia conciliada',
+  MANUAL: 'Registro manual',
+}
+
+export const SUPPLY_CXC_ORIGEN_LABELS: Record<SupplyCuentaPorCobrarOrigen, string> = {
+  REEMBOLSO: 'Reembolso pendiente',
+  AJUSTE: 'Ajuste',
+  PENALIZACION: 'Penalización',
+  DIFERENCIA_CONCILIACION: 'Diferencia conciliada',
+  SUBSIDIO: 'Subsidio a recuperar',
+  CARGO: 'Cargo',
+  NOTA_CREDITO: 'Nota de crédito del proveedor',
+  OTRO: 'Otro',
+}
+
+export const SUPPLY_LIQUIDACION_ESTADO_LABELS: Record<SupplyLiquidacionEstado, string> = {
+  BORRADOR: 'Borrador',
+  CALCULADA: 'Calculada',
+  EN_REVISION: 'En revisión',
+  APROBADA: 'Aprobada',
+  PAGADA: 'Pagada',
+  CONCILIADA: 'Conciliada',
+  DISPUTADA: 'Disputada',
+  CANCELADA: 'Cancelada',
+}
+
+export const SUPPLY_LIQUIDACION_LINEA_LABELS: Record<SupplyLiquidacionLineaTipo, string> = {
+  CUENTA_POR_PAGAR: 'Cuenta por pagar',
+  CUENTA_POR_COBRAR: 'Cuenta por cobrar',
+  REDENCION: 'Redención por pagar',
+  DEPOSITO_APLICADO: 'Depósito aplicado',
+  AJUSTE: 'Ajuste',
+}
+
+export const SUPPLY_CONCILIACION_ESTADO_LABELS: Record<SupplyConciliacionEstado, string> = {
+  ABIERTA: 'Abierta',
+  EN_REVISION: 'En revisión',
+  CERRADA: 'Cerrada',
+}
+
+export const SUPPLY_DISCREPANCIA_TIPO_LABELS: Record<SupplyDiscrepanciaTipo, string> = {
+  MISSING_REDEMPTION: 'Redención que el proveedor no registró',
+  DUPLICATE: 'Redención duplicada (el proveedor cuenta de más)',
+  VALUE_DIFFERENCE: 'Diferencia de valor',
+  PRODUCT_DIFFERENCE: 'Diferencia de producto',
+  DATE_DIFFERENCE: 'Diferencia de fecha',
+  PAYMENT_DIFFERENCE: 'Diferencia de pago',
+  INTERNA: 'Descuadre interno (contadores vs ledger)',
+}
+
+export const SUPPLY_DISCREPANCIA_ESTADO_LABELS: Record<SupplyDiscrepanciaEstado, string> = {
+  ABIERTA: 'Abierta',
+  EN_INVESTIGACION: 'En investigación',
+  RESUELTA: 'Resuelta',
+  AJUSTADA: 'Resuelta con ajuste',
+  APROBADA: 'Aprobada',
+  RECHAZADA: 'Rechazada',
+}
+
+export const SUPPLY_VENTA_ESTADO_LABELS: Record<SupplyVentaEstado, string> = {
+  INICIADA: 'Esperando el pago',
+  PAGADA: 'Pagada, pendiente de entrega',
+  ENTREGADA: 'Entregada',
+  CANCELADA: 'Cancelada',
+  REEMBOLSADA: 'Reembolsada',
+}
+
+// ── Wizard de acuerdos (encargo 2026-09 bis, §3) ────────────────────────────
+
+export const SUPPLY_TIPO_ACUERDO_LABELS: Record<SupplyTipoAcuerdo, string> = {
+  COMPRA_PREPAGO: 'Compra anticipada',
+  DEPOSITO_ABIERTO: 'Depósito abierto',
+  PAGO_POSTERIOR: 'Compra con pago posterior',
+  VENTA_COMISION: 'Venta a comisión',
+  HIBRIDO: 'Híbrido (subsidio)',
+}
+
+export const SUPPLY_TIPO_ACUERDO_EXPLICACION: Record<SupplyTipoAcuerdo, string> = {
+  COMPRA_PREPAGO: 'Membego compra unidades concretas y las paga por adelantado. Nacen lotes al activar la orden.',
+  DEPOSITO_ABIERTO: 'Membego deposita dinero a cuenta; las compras y facturas se van aplicando al saldo del depósito.',
+  PAGO_POSTERIOR: 'Membego compra unidades y le paga al proveedor a plazo o a medida que se consumen.',
+  VENTA_COMISION: 'Membego no compra nada: vende lo del proveedor, cobra al cliente y retiene una comisión.',
+  HIBRIDO: 'Membego subsidia parte del precio; el cliente paga el resto al comercio.',
+}
+
+export const SUPPLY_ALCANCE_LABELS: Record<SupplyAlcanceAcuerdo, string> = {
+  ITEM: 'Un producto o servicio concreto',
+  CATEGORIA: 'Una categoría del catálogo',
+  CATALOGO: 'Todo el catálogo del proveedor',
 }

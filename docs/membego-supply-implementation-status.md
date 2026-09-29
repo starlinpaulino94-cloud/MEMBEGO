@@ -465,3 +465,12 @@ A MEMBEGO por una unidad que el comercio ya cobró por contrato.
 cuatro probados uno a uno contra PostgreSQL 16: rechazan lo que deben y aceptan
 lo que deben.
 
+
+## Auditoría y finalización (capa financiera) · 29-09-2026
+
+Ver `docs/membego-supply-auditoria-2026-09.md` (matriz, hallazgos y cierre) y
+el ADR-0009. En una línea: el módulo pasa de «compra → lote → derecho →
+redención → saldo» a cubrir también depósitos, facturas, cuentas por pagar y
+por cobrar, liquidaciones con snapshot, conciliación con el proveedor y venta
+sin precompra, con la pestaña «Cobros» disuelta en una sección Finanzas y una
+suite de 16 casos contra PostgreSQL en CI (`npm run test:db`).

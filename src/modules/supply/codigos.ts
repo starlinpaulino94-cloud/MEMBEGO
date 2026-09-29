@@ -88,6 +88,59 @@ export function codigoLote(codigoDelAcuerdo: string, indice: number): string {
   return indice <= 1 ? codigoDelAcuerdo : `${codigoDelAcuerdo}-L${indice}`
 }
 
+// ── Capa financiera (29-09-2026) ────────────────────────────────────────────
+//
+// Cada documento financiero lleva su propio prefijo. Van a convivir en la
+// misma pantalla de Finanzas y en la misma conversación con el proveedor, y
+// «el 000127» no dice si es una orden, un depósito o una liquidación.
+
+function correlativo(prefijo: string, secuencia: number): string {
+  return `MBG-${prefijo}-${String(secuencia).padStart(6, '0')}`
+}
+
+/** `MBG-DEP-000001` · depósito abierto a un proveedor. */
+export function codigoDeposito(secuencia: number): string {
+  return correlativo('DEP', secuencia)
+}
+
+/** `MBG-FP-000001` · factura del proveedor (correlativo interno de Membego). */
+export function codigoFactura(secuencia: number): string {
+  return correlativo('FP', secuencia)
+}
+
+/** `MBG-CXP-000001` · cuenta por pagar. */
+export function codigoCuentaPorPagar(secuencia: number): string {
+  return correlativo('CXP', secuencia)
+}
+
+/** `MBG-CXC-000001` · cuenta por cobrar. */
+export function codigoCuentaPorCobrar(secuencia: number): string {
+  return correlativo('CXC', secuencia)
+}
+
+/** `MBG-LIQ-000001` · liquidación. */
+export function codigoLiquidacion(secuencia: number): string {
+  return correlativo('LIQ', secuencia)
+}
+
+/** `MBG-CON-000001` · conciliación con el proveedor. */
+export function codigoConciliacion(secuencia: number): string {
+  return correlativo('CON', secuencia)
+}
+
+/** `MBG-V-000001` · venta sin precompra. Prefijo distinto de `P` (pedido). */
+export function numeroVenta(secuencia: number): string {
+  return correlativo('V', secuencia)
+}
+
+/**
+ * Código de entrega de una venta sin precompra. Es una CREDENCIAL, igual que
+ * el voucher: vale un producto que el cliente ya pagó.
+ */
+export function nuevoCodigoEntrega(): string {
+  return randomBytes(24).toString('base64url')
+}
+
 // ── Idempotencia ────────────────────────────────────────────────────────────
 
 /**

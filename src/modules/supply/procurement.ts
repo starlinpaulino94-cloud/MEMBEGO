@@ -3,7 +3,7 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import type { SupplyAcuerdoEstado, SupplyOrdenEstado } from '@prisma/client'
 import { sinEmpresa, type Tx } from '@/lib/tenant'
-import { codigoAcuerdo, codigoLote, numeroOrden } from './codigos'
+import { codigoAcuerdo, codigoLote, numeroOrden, siglaProveedor } from './codigos'
 import {
   ORDEN_PUEDE_GENERAR_LOTE,
   TRANSICIONES_ACUERDO,
@@ -12,6 +12,8 @@ import {
 } from './estados'
 import { registrarMovimientos } from './movimientos'
 import { validarAcuerdo, type DatosAcuerdo } from './contrato'
+import { modeloCompraSupply } from './catalogo'
+import { redondear2 } from './dinero'
 
 export { validarAcuerdo }
 export type { DatosAcuerdo }
@@ -47,16 +49,26 @@ export async function crearAcuerdo(d: DatosAcuerdo): Promise<{ id: string; codig
     if (!proveedor) throw new Error('Proveedor no encontrado.')
 
     const anio = d.inicioAt.getFullYear()
-    // El correlativo se cuenta DENTRO de la transacción: dos altas simultáneas
-    // del mismo proveedor chocarían en el índice único de `codigo` y la
-    // segunda reintenta, en vez de crear dos acuerdos con el mismo código.
-    const previos = await tx.supplyAcuerdo.count({
-      where: { proveedorId: d.proveedorId, codigo: { startsWith: `MBG-` }, createdAt: { gte: new Date(anio, 0, 1) } },
-    })
+    // El correlativo se cuenta por SIGLA y año, no por proveedor: el código es
+    // único en toda la tabla y dos proveedores con la misma sigla («Pizzería
+    // Roma» y «Pizzería Real» → PIZZE) chocaban en el índice. Se cuenta dentro
+    // de la transacción y, si aun así choca, se reintenta con el siguiente.
+    const sigla = siglaProveedor(proveedor.name)
+    const prefijo = `MBG-${sigla}-${anio}-`
+    const previos = await tx.supplyAcuerdo.count({ where: { codigo: { startsWith: prefijo } } })
+    const codigoLibre = async (): Promise<string> => {
+      for (let n = previos + 1; n < previos + 50; n++) {
+        const codigo = codigoAcuerdo(proveedor.name, anio, n)
+        const ocupado = await tx.supplyAcuerdo.findUnique({ where: { codigo }, select: { id: true } })
+        if (!ocupado) return codigo
+      }
+      throw new Error('No se pudo asignar un código de acuerdo libre.')
+    }
+    const codigo = await codigoLibre()
 
     const creado = await tx.supplyAcuerdo.create({
       data: {
-        codigo: codigoAcuerdo(proveedor.name, anio, previos + 1),
+        codigo,
         proveedorId: d.proveedorId,
         estado: 'BORRADOR',
         tipo: d.tipo,
@@ -76,6 +88,17 @@ export async function crearAcuerdo(d: DatosAcuerdo): Promise<{ id: string; codig
         anticipoPorcentaje:
           d.anticipoPorcentaje != null ? new Prisma.Decimal(d.anticipoPorcentaje) : null,
         condicionesPago: d.condicionesPago ?? null,
+        comisionPorcentaje: d.comisionPorcentaje != null ? new Prisma.Decimal(d.comisionPorcentaje) : null,
+        descuentoPorcentaje: d.descuentoPorcentaje != null ? new Prisma.Decimal(d.descuentoPorcentaje) : null,
+        impuestoPorcentaje: d.impuestoPorcentaje != null ? new Prisma.Decimal(d.impuestoPorcentaje) : null,
+        plazoPagoDias: d.plazoPagoDias ?? null,
+        frecuenciaCorte: d.frecuenciaCorte ?? null,
+        metodoLiquidacion: d.metodoLiquidacion ?? null,
+        politicaDevoluciones: d.politicaDevoluciones ?? null,
+        slaTexto: d.slaTexto ?? null,
+        tipoAcuerdo: d.tipoAcuerdo ?? undefined,
+        alcance: d.alcance ?? undefined,
+        categoriaCodigo: d.categoriaCodigo?.trim() || null,
         inicioAt: d.inicioAt,
         finAt: d.finAt,
         sucursalIds: d.sucursalIds ?? [],
@@ -100,12 +123,16 @@ export async function crearAcuerdo(d: DatosAcuerdo): Promise<{ id: string; codig
 export async function moverAcuerdo(
   acuerdoId: string,
   hasta: SupplyAcuerdoEstado,
-  aprobadoPorId?: string | null
+  aprobadoPorId?: string | null,
+  motivo?: string | null
 ): Promise<void> {
+  if (hasta === 'SUSPENDIDO' && !motivo?.trim()) {
+    throw new Error('Suspender un acuerdo exige un motivo: el proveedor lo va a leer.')
+  }
   await sinEmpresa('Membego Supply: ciclo de vida de un contrato', async (tx) => {
     const acuerdo = await tx.supplyAcuerdo.findUnique({
       where: { id: acuerdoId },
-      select: { estado: true },
+      select: { estado: true, version: true },
     })
     if (!acuerdo) throw new Error('Acuerdo no encontrado.')
     exigirTransicion(TRANSICIONES_ACUERDO, acuerdo.estado, hasta, 'Acuerdo de supply')
@@ -117,9 +144,97 @@ export async function moverAcuerdo(
         ...(hasta === 'APROBADO'
           ? { aprobadoPorId: aprobadoPorId ?? null, aprobadoAt: new Date() }
           : {}),
+        ...(hasta === 'SUSPENDIDO' ? { suspendidoMotivo: motivo!.trim() } : {}),
+        ...(hasta === 'ACTIVO' && acuerdo.estado === 'SUSPENDIDO' ? { suspendidoMotivo: null } : {}),
       },
     })
+
+    // La primera versión nace al APROBAR: es la foto de lo que se firmó. Las
+    // siguientes las crea cada enmienda.
+    if (hasta === 'APROBADO') {
+      await crearVersionEnTx(tx, acuerdoId, 'Condiciones aprobadas.', aprobadoPorId ?? null, null)
+    }
   })
+}
+
+// ── Versionado (§4) ─────────────────────────────────────────────────────────
+
+/** Campos que forman las CONDICIONES del acuerdo, y por tanto su versión. */
+const CAMPOS_VERSIONADOS = [
+  'tipo', 'modeloComercial', 'modalidadPago', 'politicaSobrante', 'itemNombre', 'varianteEtiqueta',
+  'cantidad', 'costoUnitario', 'precioReferencia', 'aporteMembego', 'moneda', 'anticipoPorcentaje',
+  'condicionesPago', 'comisionPorcentaje', 'descuentoPorcentaje', 'impuestoPorcentaje', 'plazoPagoDias',
+  'frecuenciaCorte', 'metodoLiquidacion', 'politicaDevoluciones', 'slaTexto', 'inicioAt', 'finAt',
+  'tipoAcuerdo', 'alcance', 'categoriaCodigo',
+  'sucursalIds', 'capacidadDiaria', 'capacidadHoraria', 'diasBloqueados', 'horarioTexto',
+  'reglasRedencion', 'reglasSustitucion', 'reglasCumplimiento', 'politicaCancelacion',
+] as const
+
+/**
+ * Congela las condiciones vigentes como una versión numerada.
+ *
+ * `version` del acuerdo es la vigente; las anteriores quedan con
+ * `vigenteHasta`. Una liquidación o una venta guardan el número con el que se
+ * calcularon, y una enmienda posterior no las altera: crea la siguiente.
+ */
+export async function crearVersionEnTx(
+  tx: Tx,
+  acuerdoId: string,
+  motivo: string,
+  creadoPorId: string | null,
+  enmiendaId: string | null
+): Promise<{ version: number }> {
+  const acuerdo = await tx.supplyAcuerdo.findUniqueOrThrow({ where: { id: acuerdoId } })
+  const ultima = await tx.supplyAcuerdoVersion.findFirst({
+    where: { acuerdoId },
+    orderBy: { version: 'desc' },
+    select: { id: true, version: true },
+  })
+  // La primera foto lleva el número que el acuerdo ya tiene (1); las siguientes
+  // suben el contador del acuerdo y el de la versión a la vez.
+  const version = ultima ? ultima.version + 1 : acuerdo.version
+  const snapshot: Record<string, unknown> = {}
+  for (const campo of CAMPOS_VERSIONADOS) {
+    const v = acuerdo[campo]
+    snapshot[campo] = v instanceof Prisma.Decimal ? Number(v) : v instanceof Date ? v.toISOString() : v
+  }
+  if (ultima) {
+    await tx.supplyAcuerdoVersion.update({ where: { id: ultima.id }, data: { vigenteHasta: new Date() } })
+  }
+  await tx.supplyAcuerdoVersion.create({
+    data: { acuerdoId, version, snapshot: snapshot as Prisma.InputJsonValue, motivo, enmiendaId, creadoPorId },
+  })
+  if (version !== acuerdo.version) {
+    await tx.supplyAcuerdo.update({ where: { id: acuerdoId }, data: { version } })
+  }
+  return { version }
+}
+
+/** Marca la orden como PARCIALMENTE_FONDEADA o FONDEADA según lo pagado (hallazgo H4). */
+export async function fondearOrdenEnTx(tx: Tx, ordenId: string): Promise<void> {
+  const orden = await tx.supplyOrden.findUnique({ where: { id: ordenId }, select: { estado: true, total: true } })
+  if (!orden) return
+  const suma = await tx.supplyPago.aggregate({
+    where: { ordenId, estado: 'CONFIRMADO', tipo: { in: ['ANTICIPO', 'DEPOSITO', 'LIQUIDACION_REDENCIONES', 'LIQUIDACION_FINAL'] } },
+    _sum: { monto: true },
+  })
+  const conDeposito = await tx.supplyDepositoMovimiento.aggregate({
+    where: { ordenId, tipo: 'APLICACION' },
+    _sum: { monto: true },
+  })
+  const pagado = redondear2(Number(suma._sum.monto ?? 0) + Number(conDeposito._sum.monto ?? 0))
+  const total = Number(orden.total)
+  const destino: SupplyOrdenEstado | null =
+    pagado <= 0 ? null : pagado + 0.005 >= total ? 'FONDEADA' : 'PARCIALMENTE_FONDEADA'
+  // Solo se mueve sola mientras la orden está en la fase de pago: una orden
+  // ACTIVA sigue activa (lo que cambia es `montoPagado`), y una cancelada no
+  // revive porque llegue un pago tarde.
+  const data: Prisma.SupplyOrdenUpdateInput = { montoPagado: new Prisma.Decimal(pagado) }
+  if (destino && destino !== orden.estado && ['CONFIRMADA', 'PARCIALMENTE_FONDEADA'].includes(orden.estado)) {
+    exigirTransicion(TRANSICIONES_ORDEN, orden.estado, destino, 'Orden de supply')
+    data.estado = destino
+  }
+  await tx.supplyOrden.update({ where: { id: ordenId }, data })
 }
 
 // ── Órdenes de compra ───────────────────────────────────────────────────────
@@ -161,11 +276,14 @@ export async function crearOrden(d: DatosOrden): Promise<{ id: string; numero: s
   return sinEmpresa('Membego Supply: la plataforma emite una orden de compra', async (tx) => {
     const acuerdo = await tx.supplyAcuerdo.findUnique({
       where: { id: d.acuerdoId },
-      select: { id: true, proveedorId: true, estado: true, moneda: true, condicionesPago: true },
+      select: { id: true, proveedorId: true, estado: true, moneda: true, condicionesPago: true, modeloComercial: true },
     })
     if (!acuerdo) throw new Error('Acuerdo no encontrado.')
-    if (acuerdo.estado === 'CANCELADO' || acuerdo.estado === 'VENCIDO') {
-      throw new Error('No se puede comprar contra un acuerdo cancelado o vencido.')
+    if (acuerdo.estado === 'CANCELADO' || acuerdo.estado === 'VENCIDO' || acuerdo.estado === 'SUSPENDIDO') {
+      throw new Error('No se puede comprar contra un acuerdo cancelado, vencido o suspendido.')
+    }
+    if (!modeloCompraSupply(acuerdo.modeloComercial)) {
+      throw new Error('Un acuerdo a comisión no compra supply: las ventas se registran en Ventas, no con una orden.')
     }
 
     const subtotal = d.lineas.reduce((t, l) => t + l.cantidad * l.costoUnitario, 0)
@@ -406,6 +524,10 @@ export interface DatosEnmienda {
   unidadesExtra?: number | null
   /** Nueva fecha de vencimiento cuando el campo es VIGENCIA. */
   nuevoFinAt?: Date | null
+  /** Nuevo costo unitario cuando el campo es COSTO. Solo afecta a lo futuro. */
+  nuevoCostoUnitario?: number | null
+  /** Nueva comisión cuando el campo es POLITICA en un acuerdo a comisión. */
+  nuevaComisionPorcentaje?: number | null
 }
 
 /**
@@ -467,6 +589,28 @@ export async function registrarEnmienda(d: DatosEnmienda): Promise<{ id: string 
       })
     }
 
+    if (d.campo === 'COSTO' && d.nuevoCostoUnitario != null) {
+      if (!Number.isFinite(d.nuevoCostoUnitario) || d.nuevoCostoUnitario < 0) {
+        throw new Error('El costo unitario no puede ser negativo.')
+      }
+      // Solo el CONTRATO cambia: los lotes ya activados conservan su snapshot y
+      // los derechos ya emitidos su costo. Es la regla del versionado (§4).
+      await tx.supplyAcuerdo.update({
+        where: { id: acuerdo.id },
+        data: { costoUnitario: new Prisma.Decimal(d.nuevoCostoUnitario) },
+      })
+    }
+
+    if (d.campo === 'POLITICA' && d.nuevaComisionPorcentaje != null) {
+      if (d.nuevaComisionPorcentaje < 0 || d.nuevaComisionPorcentaje > 100) {
+        throw new Error('La comisión tiene que estar entre 0 y 100 por ciento.')
+      }
+      await tx.supplyAcuerdo.update({
+        where: { id: acuerdo.id },
+        data: { comisionPorcentaje: new Prisma.Decimal(d.nuevaComisionPorcentaje) },
+      })
+    }
+
     const enmienda = await tx.supplyEnmienda.create({
       data: {
         acuerdoId: acuerdo.id,
@@ -481,6 +625,19 @@ export async function registrarEnmienda(d: DatosEnmienda): Promise<{ id: string 
       },
       select: { id: true },
     })
+
+    // Toda enmienda es una versión nueva de las condiciones, aunque solo
+    // cambie el texto de las reglas: lo que se liquide a partir de ahora
+    // apunta a esta versión, y lo anterior a la anterior.
+    if (acuerdo.estado !== 'BORRADOR' && acuerdo.estado !== 'PENDIENTE_APROBACION') {
+      await crearVersionEnTx(
+        tx,
+        acuerdo.id,
+        `Enmienda (${d.campo}): ${d.motivo.trim()}`,
+        d.aprobadoPorId ?? d.solicitadoPorId ?? null,
+        enmienda.id
+      )
+    }
     return enmienda
   })
 }

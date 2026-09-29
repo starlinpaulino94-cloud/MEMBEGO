@@ -58,6 +58,7 @@ import { rutaValida } from '@/modules/storage/comprobantes'
 import { montoCuadra } from './cobro-nucleo'
 import { numeroPedido } from './codigos'
 import { cancelarDerecho, confirmarHold, retener, MINUTOS_HOLD } from './derechos'
+import { abrirVentaEnTx, marcarVentaPagadaEnTx } from './ventas'
 
 type Tx = Prisma.TransactionClient
 
@@ -280,7 +281,7 @@ export async function abrirPedido(d: DatosPedido): Promise<ResultadoPedido> {
         ok: true,
         pedidoId: previo.id,
         numero: previo.numero,
-        derechoId: previo.derechoId,
+        derechoId: previo.derechoId ?? '',
         monto: Number(previo.monto),
         expiraAt: previo.expiraAt,
       }
@@ -339,6 +340,71 @@ export async function abrirPedido(d: DatosPedido): Promise<ResultadoPedido> {
   }
 }
 
+// ── Venta sin precompra (§14) ───────────────────────────────────────────────
+
+/**
+ * Abre una venta a comisión Y su pedido en la misma transacción. No retiene
+ * ninguna unidad: no hay lote. Lo que congela es el precio (en la venta) y el
+ * monto a cobrar (en el pedido), y el pedido expira igual que los demás para
+ * que una venta que nadie paga no se quede abierta contando contra el tope.
+ */
+export async function abrirPedidoDeVenta(d: {
+  clienteId: string
+  acuerdoId: string
+  cantidad?: number
+  sucursalId?: string | null
+  cuentaId?: string | null
+  minutos?: number
+  claveIdempotencia?: string | null
+  /** Venta mixta: derecho del cliente que cubre parte del valor. */
+  bonoDerechoId?: string | null
+}): Promise<ResultadoPedido & { ventaId?: string; montoBono?: number }> {
+  if (!(await cobroMembegoDisponible())) {
+    return { ok: false, mensaje: 'Membego no tiene ninguna cuenta de cobro activa, así que no puede cobrar todavía.' }
+  }
+  const minutos = d.minutos ?? MINUTOS_HOLD * 4
+  return sinEmpresa('Membego Supply: abrir una venta sin precompra y su pedido', async (tx) => {
+    if (d.claveIdempotencia) {
+      const previo = await tx.supplyPedido.findUnique({
+        where: { claveIdempotencia: d.claveIdempotencia },
+        select: { id: true, numero: true, ventaId: true, monto: true, expiraAt: true },
+      })
+      if (previo) {
+        return { ok: true as const, pedidoId: previo.id, numero: previo.numero, derechoId: '', ventaId: previo.ventaId ?? undefined, monto: Number(previo.monto), expiraAt: previo.expiraAt }
+      }
+    }
+    const venta = await abrirVentaEnTx(tx, {
+      acuerdoId: d.acuerdoId,
+      clienteId: d.clienteId,
+      cantidad: d.cantidad,
+      sucursalId: d.sucursalId,
+      bonoDerechoId: d.bonoDerechoId ?? null,
+      claveIdempotencia: d.claveIdempotencia ? `${d.claveIdempotencia}:venta` : null,
+    })
+    if (!venta.ok) return { ok: false as const, mensaje: venta.mensaje }
+    const expiraAt = new Date(Date.now() + minutos * 60_000)
+    const numero = await siguienteNumero(tx)
+    // El pedido cobra la DIFERENCIA (bruto − bono). Si el bono cubre todo, el
+    // pedido nace pagado con monto cero y la venta queda lista para entregar.
+    const cubiertoPorBono = venta.aPagar <= 0
+    const pedido = await tx.supplyPedido.create({
+      data: {
+        numero,
+        clienteId: d.clienteId,
+        ventaId: venta.ventaId,
+        monto: venta.aPagar,
+        cuentaId: d.cuentaId ?? null,
+        expiraAt,
+        claveIdempotencia: d.claveIdempotencia ?? null,
+        ...(cubiertoPorBono ? { estado: 'PAGADO' as const, revisadoAt: new Date(), metodo: 'BONO' } : {}),
+      },
+      select: { id: true, numero: true },
+    })
+    if (cubiertoPorBono) await marcarVentaPagadaEnTx(tx, venta.ventaId)
+    return { ok: true as const, pedidoId: pedido.id, numero: pedido.numero, derechoId: '', ventaId: venta.ventaId, monto: venta.aPagar, montoBono: venta.montoBono, expiraAt }
+  })
+}
+
 /**
  * El siguiente número de pedido, contando lo que ya hay.
  *
@@ -365,7 +431,8 @@ export async function adjuntarComprobante(
   pedidoId: string,
   clienteId: string,
   comprobantePath: string,
-  nota?: string | null
+  nota?: string | null,
+  metodo?: string | null
 ): Promise<{ ok: true } | { ok: false; mensaje: string }> {
   const ruta = comprobantePath.trim()
   if (!ruta) return { ok: false, mensaje: 'Falta el comprobante.' }
@@ -407,6 +474,7 @@ export async function adjuntarComprobante(
         comprobantePath: ruta,
         comprobanteNota: nota?.trim() || null,
         comprobanteAt: new Date(),
+        metodo: metodo?.trim() || 'TRANSFERENCIA',
       },
     })
     return { ok: true as const }
@@ -427,16 +495,19 @@ export async function adjuntarComprobante(
 export async function confirmarPedido(
   pedidoId: string,
   revisorId: string,
-  montoVisto: number
+  montoVisto: number,
+  /** EFECTIVO o MANUAL: Membego vio el dinero sin comprobante del cliente (§20). */
+  metodoManual?: 'EFECTIVO' | 'MANUAL' | null
 ): Promise<{ ok: true; derechoId: string } | { ok: false; mensaje: string }> {
   const pedido = await sinEmpresa('Membego Supply: leer pedido a confirmar', (tx) =>
     tx.supplyPedido.findUnique({
       where: { id: pedidoId },
-      select: { id: true, estado: true, derechoId: true, clienteId: true, monto: true, expiraAt: true },
+      select: { id: true, estado: true, derechoId: true, ventaId: true, clienteId: true, monto: true, expiraAt: true },
     })
   )
   if (!pedido) return { ok: false, mensaje: 'Pedido no encontrado.' }
-  if (pedido.estado !== 'EN_REVISION') {
+  const manualValido = metodoManual && pedido.estado === 'INICIADO' && pedido.expiraAt > new Date()
+  if (pedido.estado !== 'EN_REVISION' && !manualValido) {
     return {
       ok: false,
       mensaje:
@@ -460,6 +531,22 @@ export async function confirmarPedido(
     }
   }
 
+  if (pedido.ventaId) {
+    // Venta sin precompra: no hay hold que confirmar. La venta pasa a PAGADA y
+    // el cliente recibe su código de recogida; la cuenta por pagar nace al
+    // ENTREGAR, no aquí.
+    const ventaId = pedido.ventaId
+    await sinEmpresa('Membego Supply: marcar pagados el pedido y su venta', async (tx) => {
+      await marcarVentaPagadaEnTx(tx, ventaId)
+      await tx.supplyPedido.update({
+        where: { id: pedidoId },
+        data: { estado: 'PAGADO', revisadoPor: revisorId, revisadoAt: new Date(), ...(metodoManual ? { metodo: metodoManual } : {}) },
+      })
+    })
+    return { ok: true, derechoId: '' }
+  }
+  if (!pedido.derechoId) return { ok: false, mensaje: 'El pedido no tiene derecho ni venta.' }
+
   // `confirmarHold` es quien mueve el supply y crea el voucher, y quien vuelve a
   // comprobar que la retención sigue viva. Si expiró, lanza, y el pedido NO se
   // marca pagado: es correcto, porque no hay nada que entregar.
@@ -468,11 +555,18 @@ export async function confirmarPedido(
   await sinEmpresa('Membego Supply: marcar el pedido como pagado', (tx) =>
     tx.supplyPedido.update({
       where: { id: pedidoId },
-      data: { estado: 'PAGADO', revisadoPor: revisorId, revisadoAt: new Date() },
+      data: { estado: 'PAGADO', revisadoPor: revisorId, revisadoAt: new Date(), ...(metodoManual ? { metodo: metodoManual } : {}) },
     })
   )
 
   return { ok: true, derechoId: pedido.derechoId }
+}
+
+/** Una venta cuyo pedido se rechaza, cancela o expira se cierra con ella. */
+async function cerrarVentaDePedido(ventaId: string | null, motivo: string): Promise<void> {
+  if (!ventaId) return
+  const { cerrarVenta } = await import('./ventas')
+  await cerrarVenta(ventaId, 'CANCELADA', motivo).catch(() => undefined)
 }
 
 
@@ -487,7 +581,7 @@ export async function rechazarPedido(
   const pedido = await sinEmpresa('Membego Supply: leer pedido a rechazar', (tx) =>
     tx.supplyPedido.findUnique({
       where: { id: pedidoId },
-      select: { id: true, estado: true, derechoId: true },
+      select: { id: true, estado: true, derechoId: true, ventaId: true },
     })
   )
   if (!pedido) return { ok: false, mensaje: 'Pedido no encontrado.' }
@@ -497,7 +591,10 @@ export async function rechazarPedido(
 
   // La unidad vuelve al pool: nadie pagó por ella, así que no es una pérdida,
   // es una venta que no ocurrió.
-  await cancelarDerecho(pedido.derechoId, `Pedido rechazado: ${motivo.trim()}`, true, revisorId)
+  if (pedido.derechoId) {
+    await cancelarDerecho(pedido.derechoId, `Pedido rechazado: ${motivo.trim()}`, true, revisorId)
+  }
+  await cerrarVentaDePedido(pedido.ventaId, `Pedido rechazado: ${motivo.trim()}`)
 
   await sinEmpresa('Membego Supply: marcar el pedido como rechazado', (tx) =>
     tx.supplyPedido.update({
@@ -521,7 +618,7 @@ export async function cancelarPedido(
   const pedido = await sinEmpresa('Membego Supply: leer pedido a cancelar', (tx) =>
     tx.supplyPedido.findUnique({
       where: { id: pedidoId },
-      select: { id: true, clienteId: true, estado: true, derechoId: true },
+      select: { id: true, clienteId: true, estado: true, derechoId: true, ventaId: true },
     })
   )
   if (!pedido || pedido.clienteId !== clienteId) {
@@ -534,7 +631,8 @@ export async function cancelarPedido(
     return { ok: false, mensaje: `No puedes cancelar un pedido ${pedido.estado}.` }
   }
 
-  await cancelarDerecho(pedido.derechoId, 'El cliente canceló el pedido.', true)
+  if (pedido.derechoId) await cancelarDerecho(pedido.derechoId, 'El cliente canceló el pedido.', true)
+  await cerrarVentaDePedido(pedido.ventaId, 'El cliente canceló el pedido.')
   await sinEmpresa('Membego Supply: marcar el pedido como cancelado', (tx) =>
     tx.supplyPedido.update({ where: { id: pedidoId }, data: { estado: 'CANCELADO' } })
   )
@@ -560,7 +658,7 @@ export async function expirarPedidosVencidos(limite = 200): Promise<number> {
   return sinEmpresa('Membego Supply: expirar pedidos con el hold caducado', async (tx) => {
     const vencidos = await tx.supplyPedido.findMany({
       where: { estado: { in: ['INICIADO', 'EN_REVISION'] }, expiraAt: { lte: new Date() } },
-      select: { id: true },
+      select: { id: true, ventaId: true },
       take: limite,
       orderBy: { expiraAt: 'asc' },
     })
@@ -569,6 +667,15 @@ export async function expirarPedidosVencidos(limite = 200): Promise<number> {
       where: { id: { in: vencidos.map((v) => v.id) }, estado: { in: ['INICIADO', 'EN_REVISION'] } },
       data: { estado: 'EXPIRADO' },
     })
+    // Las ventas sin precompra no tienen hold que soltar: se cierran aquí para
+    // que dejen de contar contra el tope del acuerdo.
+    const ventas = vencidos.map((v) => v.ventaId).filter((v): v is string => Boolean(v))
+    if (ventas.length > 0) {
+      await tx.supplyVentaDirecta.updateMany({
+        where: { id: { in: ventas }, estado: 'INICIADA' },
+        data: { estado: 'CANCELADA', canceladaAt: new Date(), canceladaMotivo: 'El pedido expiró sin pago.' },
+      })
+    }
     return r.count
   })
 }
@@ -611,6 +718,7 @@ export async function colaDeRevision(limite = 100): Promise<PedidoEnCola[]> {
             lote: { select: { snapshotItemNombre: true, proveedor: { select: { name: true } } } },
           },
         },
+        venta: { select: { itemNombre: true, proveedor: { select: { name: true } } } },
       },
     })
   )
@@ -619,8 +727,8 @@ export async function colaDeRevision(limite = 100): Promise<PedidoEnCola[]> {
     id: f.id,
     numero: f.numero,
     cliente: f.cliente.nombre,
-    producto: f.derecho.lote.snapshotItemNombre,
-    proveedor: f.derecho.lote.proveedor.name,
+    producto: f.derecho?.lote.snapshotItemNombre ?? f.venta?.itemNombre ?? '—',
+    proveedor: f.derecho?.lote.proveedor.name ?? f.venta?.proveedor.name ?? '—',
     monto: Number(f.monto),
     moneda: f.moneda,
     comprobantePath: f.comprobantePath,
@@ -647,7 +755,46 @@ export async function pedidosDelCliente(clienteId: string, limite = 50) {
         expiraAt: true,
         createdAt: true,
         derecho: { select: { lote: { select: { snapshotItemNombre: true } } } },
+        venta: { select: { itemNombre: true } },
       },
     })
   )
+}
+
+/**
+ * Membego devolvió el dinero de un pedido PAGADO. El pedido pasa a REEMBOLSADO
+ * (estado final propio, con motivo y revisor); el derecho que financiaba se
+ * cancela y vuelve al pool si nadie lo canjeó; una venta sin precompra pasa a
+ * REEMBOLSADA (y su cuenta por pagar, si nació, se cancela).
+ */
+export async function reembolsarPedido(
+  pedidoId: string,
+  motivo: string,
+  revisorId: string
+): Promise<{ ok: true } | { ok: false; mensaje: string }> {
+  if (!motivo.trim()) return { ok: false, mensaje: 'Reembolsar exige un motivo.' }
+  const pedido = await sinEmpresa('Membego Supply: leer pedido a reembolsar', (tx) =>
+    tx.supplyPedido.findUnique({
+      where: { id: pedidoId },
+      select: { id: true, estado: true, derechoId: true, ventaId: true, derecho: { select: { estado: true } } },
+    })
+  )
+  if (!pedido) return { ok: false, mensaje: 'Pedido no encontrado.' }
+  if (pedido.estado !== 'PAGADO') return { ok: false, mensaje: `Solo se reembolsa un pedido pagado; este está ${pedido.estado}.` }
+
+  if (pedido.derechoId && pedido.derecho && (pedido.derecho.estado === 'ACTIVO' || pedido.derecho.estado === 'RETENIDO')) {
+    const { cancelarDerecho } = await import('./derechos')
+    await cancelarDerecho(pedido.derechoId, `Reembolso: ${motivo.trim()}`, true, revisorId)
+  }
+  if (pedido.ventaId) {
+    const { cerrarVenta } = await import('./ventas')
+    await cerrarVenta(pedido.ventaId, 'REEMBOLSADA', motivo.trim(), revisorId)
+  }
+  await sinEmpresa('Membego Supply: marcar el pedido como reembolsado', (tx) =>
+    tx.supplyPedido.update({
+      where: { id: pedidoId },
+      data: { estado: 'REEMBOLSADO', reembolsadoAt: new Date(), reembolsoMotivo: motivo.trim(), revisadoPor: revisorId },
+    })
+  )
+  return { ok: true }
 }

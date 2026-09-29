@@ -3,10 +3,21 @@ import 'server-only'
 import { sinEmpresa } from '@/lib/tenant'
 import {
   ACCIONES_POR_POLITICA,
+  DEPOSITO_VIVO,
   UMBRALES_VENCIMIENTO,
   nivelRiesgoVencimiento,
+  parsearUmbrales,
 } from './catalogo'
 import { registrarMovimientos } from './movimientos'
+import { saldoDisponibleDeposito } from './dinero'
+
+/**
+ * Umbrales de aviso VIGENTES. Configurables por entorno (§20 del encargo):
+ * `SUPPLY_UMBRALES_VENCIMIENTO="90,60,30,15,7,1"`. Sin variable, el default.
+ */
+export function umbralesVencimiento(): readonly number[] {
+  return parsearUmbrales(process.env.SUPPLY_UMBRALES_VENCIMIENTO)
+}
 
 /**
  * MEMBEGO SUPPLY · MOTOR DE VENCIMIENTOS (Fase 39).
@@ -30,6 +41,7 @@ import { registrarMovimientos } from './movimientos'
 
 export interface AlertaVencimiento {
   loteId: string
+  acuerdoId: string
   codigo: string
   proveedorId: string
   proveedorNombre: string
@@ -59,7 +71,7 @@ function diasHasta(fecha: Date, ahora: Date): number {
  * listarlo llenaría la alerta de ruido que nadie puede accionar.
  */
 export async function alertasDeVencimiento(
-  dias: number = Math.max(...UMBRALES_VENCIMIENTO),
+  dias: number = Math.max(...umbralesVencimiento(), ...UMBRALES_VENCIMIENTO),
   ahora: Date = new Date()
 ): Promise<AlertaVencimiento[]> {
   const limite = new Date(ahora.getTime() + dias * 86_400_000)
@@ -79,6 +91,7 @@ export async function alertasDeVencimiento(
         snapshotItemNombre: true,
         snapshotCostoUnitario: true,
         proveedor: { select: { name: true } },
+        acuerdoId: true,
         acuerdo: { select: { politicaSobrante: true } },
       },
       orderBy: { venceAt: 'asc' },
@@ -91,6 +104,7 @@ export async function alertasDeVencimiento(
         const diasRestantes = diasHasta(l.venceAt, ahora)
         return {
           loteId: l.id,
+          acuerdoId: l.acuerdoId,
           codigo: l.codigo,
           proveedorId: l.proveedorId,
           proveedorNombre: l.proveedor.name,
@@ -219,6 +233,90 @@ export async function cerrarVencidos(ahora: Date = new Date(), limite = 500): Pr
  * umbrales (30, 14, 7, 3, 1), no todos los días entre medias. Un aviso diario
  * durante un mes deja de leerse a la semana.
  */
-export function umbralDelDia(diasRestantes: number): number | null {
-  return UMBRALES_VENCIMIENTO.find((u) => u === diasRestantes) ?? null
+export function umbralDelDia(diasRestantes: number, umbrales: readonly number[] = umbralesVencimiento()): number | null {
+  return umbrales.find((u) => u === diasRestantes) ?? null
+}
+
+// ── Lo demás que vence (§20): derechos, depósitos, acuerdos ─────────────────
+
+export interface VencimientoGenerico {
+  tipo: 'DERECHO' | 'DEPOSITO' | 'ACUERDO'
+  id: string
+  codigo: string
+  proveedorId: string
+  proveedorNombre: string
+  descripcion: string
+  venceAt: Date
+  diasRestantes: number
+  nivel: 'CRITICO' | 'ALTO' | 'MEDIO' | 'BAJO'
+  /** Unidades (derechos) o dinero (depósitos, acuerdos) en juego. */
+  unidades: number
+  monto: number
+}
+
+/**
+ * Derechos activos, depósitos con saldo y acuerdos activos que terminan
+ * dentro de `dias`. Un derecho vence en manos del cliente; un depósito con
+ * saldo llega a su fecha prevista de cierre con dinero parado; un acuerdo que
+ * termina deja de poder vender o comprar.
+ */
+export async function vencimientosProximos(dias = 90, ahora: Date = new Date()): Promise<VencimientoGenerico[]> {
+  const limite = new Date(ahora.getTime() + dias * 86_400_000)
+  return sinEmpresa('Membego Supply: derechos, depósitos y acuerdos a punto de vencer', async (tx) => {
+    const [derechos, depositos, acuerdos] = await Promise.all([
+      tx.supplyDerecho.groupBy({
+        by: ['proveedorId', 'loteId', 'vencAt'],
+        where: { estado: 'ACTIVO', vencAt: { lte: limite, gt: ahora } },
+        _count: { _all: true },
+        _sum: { costoUnitario: true },
+      }),
+      tx.supplyDeposito.findMany({
+        where: { estado: { in: [...DEPOSITO_VIVO] }, cierraAt: { lte: limite, gt: ahora } },
+        select: { id: true, codigo: true, proveedorId: true, cierraAt: true, montoOriginal: true, montoAplicado: true, montoDevuelto: true, proveedor: { select: { name: true } } },
+      }),
+      tx.supplyAcuerdo.findMany({
+        where: { estado: { in: ['ACTIVO', 'SUSPENDIDO'] }, finAt: { lte: limite, gt: ahora } },
+        select: { id: true, codigo: true, proveedorId: true, finAt: true, itemNombre: true, cantidad: true, costoUnitario: true, modeloComercial: true, proveedor: { select: { name: true } } },
+      }),
+    ])
+    const lotes = derechos.length
+      ? await tx.supplyLote.findMany({
+          where: { id: { in: [...new Set(derechos.map((d) => d.loteId))] } },
+          select: { id: true, codigo: true, snapshotItemNombre: true, proveedor: { select: { name: true } } },
+        })
+      : []
+    const porLote = new Map(lotes.map((l) => [l.id, l]))
+    const out: VencimientoGenerico[] = []
+    for (const d of derechos) {
+      const lote = porLote.get(d.loteId)
+      const diasRestantes = diasHasta(d.vencAt, ahora)
+      out.push({
+        tipo: 'DERECHO', id: `${d.loteId}:${d.vencAt.toISOString()}`, codigo: lote?.codigo ?? d.loteId,
+        proveedorId: d.proveedorId, proveedorNombre: lote?.proveedor.name ?? '—',
+        descripcion: `${d._count._all} derecho(s) de ${lote?.snapshotItemNombre ?? 'supply'} en manos de clientes`,
+        venceAt: d.vencAt, diasRestantes, nivel: nivelRiesgoVencimiento(diasRestantes),
+        unidades: d._count._all, monto: Number(d._sum.costoUnitario ?? 0),
+      })
+    }
+    for (const dep of depositos) {
+      const disponible = saldoDisponibleDeposito({ montoOriginal: Number(dep.montoOriginal), montoAplicado: Number(dep.montoAplicado), montoDevuelto: Number(dep.montoDevuelto) })
+      if (disponible <= 0 || !dep.cierraAt) continue
+      const diasRestantes = diasHasta(dep.cierraAt, ahora)
+      out.push({
+        tipo: 'DEPOSITO', id: dep.id, codigo: dep.codigo, proveedorId: dep.proveedorId, proveedorNombre: dep.proveedor.name,
+        descripcion: 'Depósito con saldo que llega a su fecha de cierre',
+        venceAt: dep.cierraAt, diasRestantes, nivel: nivelRiesgoVencimiento(diasRestantes), unidades: 0, monto: disponible,
+      })
+    }
+    for (const a of acuerdos) {
+      const diasRestantes = diasHasta(a.finAt, ahora)
+      out.push({
+        tipo: 'ACUERDO', id: a.id, codigo: a.codigo, proveedorId: a.proveedorId, proveedorNombre: a.proveedor.name,
+        descripcion: `Acuerdo de ${a.itemNombre} termina su vigencia`,
+        venceAt: a.finAt, diasRestantes, nivel: nivelRiesgoVencimiento(diasRestantes),
+        unidades: a.cantidad, monto: a.modeloComercial === 'COMISION' ? 0 : Number((a.cantidad * Number(a.costoUnitario)).toFixed(2)),
+      })
+    }
+    return out.sort((x, y) => x.diasRestantes - y.diasRestantes || y.monto - x.monto)
+  })
 }

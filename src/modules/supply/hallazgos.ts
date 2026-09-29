@@ -17,6 +17,10 @@ export const TIPOS_HALLAZGO = [
   'DERECHO_VENCIDO_ACTIVO',
   'VOUCHER_HUERFANO',
   'CAPACIDAD_EXCEDIDA',
+  'DERECHO_REDIMIDO_SIN_REDENCION',
+  'PAGO_SIN_ASIENTO',
+  'LIQUIDACION_SIN_OBLIGACION',
+  'DEPOSITO_NEGATIVO',
 ] as const
 export type TipoHallazgo = (typeof TIPOS_HALLAZGO)[number]
 
@@ -31,6 +35,10 @@ export const HALLAZGO_LABELS: Record<TipoHallazgo, string> = {
   DERECHO_VENCIDO_ACTIVO: 'Un derecho vencido sigue marcado como activo',
   VOUCHER_HUERFANO: 'Un voucher activo sobre un derecho que ya no lo está',
   CAPACIDAD_EXCEDIDA: 'Un día superó la capacidad pactada',
+  DERECHO_REDIMIDO_SIN_REDENCION: 'Un derecho figura redimido sin ninguna redención',
+  PAGO_SIN_ASIENTO: 'Un pago confirmado no tiene su asiento en el ledger financiero',
+  LIQUIDACION_SIN_OBLIGACION: 'Una liquidación pagada tiene líneas cuya obligación no quedó saldada',
+  DEPOSITO_NEGATIVO: 'Un depósito tiene aplicado o devuelto más de lo que entró',
 }
 
 export type Gravedad = 'CRITICA' | 'ALTA' | 'MEDIA'
@@ -49,4 +57,8 @@ export const GRAVEDAD_HALLAZGO: Record<TipoHallazgo, Gravedad> = {
   VOUCHER_HUERFANO: 'ALTA',
   DERECHO_VENCIDO_ACTIVO: 'MEDIA',
   CAPACIDAD_EXCEDIDA: 'MEDIA',
+  DERECHO_REDIMIDO_SIN_REDENCION: 'CRITICA',
+  PAGO_SIN_ASIENTO: 'CRITICA',
+  LIQUIDACION_SIN_OBLIGACION: 'ALTA',
+  DEPOSITO_NEGATIVO: 'CRITICA',
 }

@@ -1,5 +1,10 @@
 # MEMBEGO SUPPLY — Reporte final
 
+> **Actualización 2026-09-29:** la auditoría y finalización del módulo (capa
+> financiera, venta sin precompra, conciliación con el proveedor) está en
+> `docs/membego-supply-auditoria-2026-09.md` § 6 y en el ADR-0009. Este
+> reporte describe el estado previo.
+
 **Fecha:** 2026-09-23 · **Rama:** `claude/project-analysis-ojg18w`
 
 Documentos hermanos: `membego-supply-architecture.md` (el diseño),
