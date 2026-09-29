@@ -1,4 +1,5 @@
 import type {
+  SupplyFrecuenciaCorte,
   SupplyModalidadPago,
   SupplyModeloComercial,
   SupplyPoliticaSobrante,
@@ -45,6 +46,19 @@ export interface DatosAcuerdo {
   politicaCancelacion?: string | null
   notas?: string | null
   creadoPorId?: string | null
+  // Condiciones comerciales y de liquidación (§4).
+  comisionPorcentaje?: number | null
+  descuentoPorcentaje?: number | null
+  impuestoPorcentaje?: number | null
+  plazoPagoDias?: number | null
+  frecuenciaCorte?: SupplyFrecuenciaCorte | null
+  metodoLiquidacion?: string | null
+  politicaDevoluciones?: string | null
+  slaTexto?: string | null
+}
+
+function porcentajeValido(n: number | null | undefined): boolean {
+  return n == null || (Number.isFinite(n) && n >= 0 && n <= 100)
 }
 
 /**
@@ -71,6 +85,30 @@ export function validarAcuerdo(d: DatosAcuerdo): string | null {
     if (d.precioReferencia != null && aporte > d.precioReferencia) {
       return 'El aporte de Membego no puede superar el precio público de la unidad.'
     }
+  }
+
+  if (d.modeloComercial === 'COMISION') {
+    // Membego no compra: no hay costo unitario. Lo que hay es una comisión,
+    // y sin ella no se sabe cuánto se le debe al proveedor por cada venta.
+    if (d.costoUnitario !== 0) {
+      return 'En una venta sin precompra Membego no paga la unidad: el costo unitario tiene que ser 0.'
+    }
+    if (d.comisionPorcentaje == null || d.comisionPorcentaje <= 0 || d.comisionPorcentaje > 100) {
+      return 'Una venta sin precompra tiene que declarar la comisión de Membego (entre 0 y 100 por ciento).'
+    }
+    if (d.precioReferencia == null || d.precioReferencia <= 0) {
+      return 'Una venta sin precompra necesita el precio al que se vende la unidad (precio público).'
+    }
+    if (d.modalidadPago !== 'PAGO_POR_REDENCION') {
+      return 'En una venta sin precompra el proveedor cobra al entregar: la modalidad tiene que ser «se paga al redimirse».'
+    }
+  }
+
+  if (!porcentajeValido(d.comisionPorcentaje) || !porcentajeValido(d.descuentoPorcentaje) || !porcentajeValido(d.impuestoPorcentaje)) {
+    return 'Los porcentajes tienen que estar entre 0 y 100.'
+  }
+  if (d.plazoPagoDias != null && (!Number.isInteger(d.plazoPagoDias) || d.plazoPagoDias < 0)) {
+    return 'El plazo de pago se expresa en días enteros, cero o más.'
   }
 
   if (d.modalidadPago === 'PREPAGO_PARCIAL') {

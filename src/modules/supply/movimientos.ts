@@ -154,8 +154,15 @@ export async function registrarMovimientos(
     saldo = aplicarMovimiento(saldo, entrada)
   }
 
+  // Cada asiento guarda las cubetas que encontró y las que dejó (§8: previous
+  // / new balance). Se recorre otra vez desde el saldo bloqueado, en el mismo
+  // orden en que se validó, así que el `saldoDespues` del último coincide con
+  // lo que se escribe en el lote.
+  let saldoEnCurso = saldoDeFila(lote)
   const movimientoIds: string[] = []
   for (const entrada of entradas) {
+    const saldoAntes = saldoEnCurso
+    saldoEnCurso = aplicarMovimiento(saldoEnCurso, entrada)
     const creado = await tx.supplyMovimiento.create({
       data: {
         loteId,
@@ -163,6 +170,8 @@ export async function registrarMovimientos(
         origen: entrada.origen,
         destino: entrada.destino,
         cantidad: entrada.cantidad,
+        saldoAntes,
+        saldoDespues: saldoEnCurso,
         asignacionId: entrada.asignacionId ?? null,
         derechoId: entrada.derechoId ?? null,
         redencionId: entrada.redencionId ?? null,

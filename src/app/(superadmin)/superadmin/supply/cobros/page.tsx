@@ -71,6 +71,7 @@ export default async function CobrosPage() {
           derecho: {
             select: { lote: { select: { snapshotItemNombre: true } } },
           },
+          venta: { select: { itemNombre: true } },
         },
       })
 
@@ -194,7 +195,7 @@ export default async function CobrosPage() {
               __clave: p.id,
               pedido: p.numero,
               cliente: p.cliente.nombre,
-              producto: p.derecho.lote.snapshotItemNombre,
+              producto: p.derecho?.lote.snapshotItemNombre ?? p.venta?.itemNombre ?? '—',
               monto: formatMoneyRD(Number(p.monto)),
               estado: (
                 <span className="flex flex-col gap-1">

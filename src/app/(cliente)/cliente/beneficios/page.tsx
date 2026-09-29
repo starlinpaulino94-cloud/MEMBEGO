@@ -88,7 +88,7 @@ export default async function BeneficiosPage() {
           id: p.id,
           numero: p.numero,
           estado: p.estado as EstadoPedido,
-          producto: p.derecho.lote.snapshotItemNombre,
+          producto: p.derecho?.lote.snapshotItemNombre ?? p.venta?.itemNombre ?? '—',
           monto: Number(p.monto),
           motivoRechazo: p.motivoRechazo,
           expiraAt: p.expiraAt.toISOString(),

@@ -4,6 +4,10 @@ import { Prisma } from '@prisma/client'
 import type { SupplyAsientoTipo, SupplyPagoTipo } from '@prisma/client'
 import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { ASIENTOS_MEMORANDO } from './catalogo'
+import { ASIENTO_DE_PAGO, redondear2, signoDeAsiento } from './dinero'
+import { activarDepositoEnTx } from './depositos'
+import { saldarCuentaPorPagarEnTx } from './cuentas'
+import { fondearOrdenEnTx } from './procurement'
 
 /**
  * MEMBEGO SUPPLY · dinero con el proveedor (Fases 33, 34, 62).
@@ -20,19 +24,25 @@ import { ASIENTOS_MEMORANDO } from './catalogo'
  * EL SIGNO
  *
  * `monto` positivo = A FAVOR DEL PROVEEDOR (Membego le debe más).
- * `monto` negativo = a favor de Membego (un pago, un reembolso, una reversa).
- *
- * Con una sola columna con signo, el saldo es una suma y no hay forma de que
- * dos lecturas del mismo dato den cifras distintas. Con `debe`/`haber` habría
- * que acordarse de restar en el sitio correcto cada vez.
+ * `monto` negativo = a favor de Membego (un pago, un depósito, una cuenta por
+ * cobrar). La regla vive en `dinero.ts:signoDeAsiento`, que es puro y se
+ * prueba: la auditoría del 29-09-2026 encontró el reembolso al revés.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * COMPROMISO_COMPRA NO ES DEUDA
  *
  * Firmar un contrato por RD$300.000 no significa deber RD$300.000 hoy: en
  * PAGO_POR_REDENCION no se debe nada hasta que alguien consuma. Por eso es un
- * asiento MEMORANDO y queda fuera del saldo por pagar, aunque sí entra en el
- * reporte de "contratado vs pagado".
+ * asiento MEMORANDO y queda fuera del saldo por pagar.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LO QUE PASA AL CONFIRMAR UN PAGO (auditoría H4)
+ *
+ * Además del asiento: si el pago fondea un DEPÓSITO, el depósito se abre; si
+ * lleva `ordenId`, la orden pasa sola a PARCIALMENTE_FONDEADA o FONDEADA; si
+ * lleva `cuentaPorPagarId`, esa cuenta se salda en lo que cubra el pago. Todo
+ * en la MISMA transacción: un pago confirmado a medias es la clase de estado
+ * que luego nadie sabe explicar.
  */
 
 export interface DatosPago {
@@ -45,6 +55,8 @@ export interface DatosPago {
   notas?: string | null
   periodoDesde?: Date | null
   periodoHasta?: Date | null
+  /** Cuenta por pagar que este pago salda (una factura pagada aparte). */
+  cuentaPorPagarId?: string | null
   registradoPorId?: string | null
   claveIdempotencia?: string | null
 }
@@ -57,112 +69,156 @@ export interface DatosPago {
  * mienta durante el fin de semana.
  */
 export async function registrarPago(d: DatosPago): Promise<{ id: string; reutilizado: boolean }> {
-  if (d.monto <= 0) throw new Error('El monto de un pago tiene que ser positivo.')
-
-  return sinEmpresa('Membego Supply: pago de la plataforma a un proveedor', async (tx) => {
-    if (d.claveIdempotencia) {
-      const previo = await tx.supplyPago.findUnique({
-        where: { claveIdempotencia: d.claveIdempotencia },
-        select: { id: true },
-      })
-      if (previo) return { id: previo.id, reutilizado: true }
-    }
-
-    const acuerdo = await tx.supplyAcuerdo.findUnique({
-      where: { id: d.acuerdoId },
-      select: { id: true, proveedorId: true, moneda: true },
-    })
-    if (!acuerdo) throw new Error('Acuerdo no encontrado.')
-
-    const pago = await tx.supplyPago.create({
-      data: {
-        acuerdoId: acuerdo.id,
-        ordenId: d.ordenId ?? null,
-        proveedorId: acuerdo.proveedorId,
-        tipo: d.tipo,
-        monto: new Prisma.Decimal(d.monto),
-        moneda: acuerdo.moneda,
-        estado: 'PENDIENTE',
-        metodo: d.metodo ?? null,
-        referencia: d.referencia ?? null,
-        notas: d.notas ?? null,
-        periodoDesde: d.periodoDesde ?? null,
-        periodoHasta: d.periodoHasta ?? null,
-        registradoPorId: d.registradoPorId ?? null,
-        claveIdempotencia: d.claveIdempotencia ?? null,
-      },
-      select: { id: true },
-    })
-    return { id: pago.id, reutilizado: false }
-  })
+  return sinEmpresa('Membego Supply: pago de la plataforma a un proveedor', (tx) => registrarPagoEnTx(tx, d))
 }
 
-/** Tipo de asiento que le corresponde a cada tipo de pago. */
-const ASIENTO_DE_PAGO: Record<SupplyPagoTipo, SupplyAsientoTipo> = {
-  ANTICIPO: 'DEPOSITO',
-  DEPOSITO: 'DEPOSITO',
-  LIQUIDACION_REDENCIONES: 'PAGO',
-  LIQUIDACION_FINAL: 'PAGO',
-  REEMBOLSO: 'REEMBOLSO',
-  AJUSTE: 'AJUSTE',
-  CREDITO: 'CREDITO',
+export async function registrarPagoEnTx(tx: Tx, d: DatosPago): Promise<{ id: string; reutilizado: boolean }> {
+  if (!Number.isFinite(d.monto) || d.monto <= 0) throw new Error('El monto de un pago tiene que ser positivo.')
+
+  if (d.claveIdempotencia) {
+    const previo = await tx.supplyPago.findUnique({
+      where: { claveIdempotencia: d.claveIdempotencia },
+      select: { id: true },
+    })
+    if (previo) return { id: previo.id, reutilizado: true }
+  }
+
+  const acuerdo = await tx.supplyAcuerdo.findUnique({
+    where: { id: d.acuerdoId },
+    select: { id: true, proveedorId: true, moneda: true },
+  })
+  if (!acuerdo) throw new Error('Acuerdo no encontrado.')
+
+  if (d.cuentaPorPagarId) {
+    const cxp = await tx.supplyCuentaPorPagar.findUnique({
+      where: { id: d.cuentaPorPagarId },
+      select: { proveedorId: true, estado: true },
+    })
+    if (!cxp || cxp.proveedorId !== acuerdo.proveedorId) {
+      throw new Error('La cuenta por pagar no es de este proveedor.')
+    }
+    if (cxp.estado === 'SALDADA' || cxp.estado === 'CANCELADA') {
+      throw new Error(`La cuenta por pagar ya está ${cxp.estado.toLowerCase()}.`)
+    }
+  }
+
+  const pago = await tx.supplyPago.create({
+    data: {
+      acuerdoId: acuerdo.id,
+      ordenId: d.ordenId ?? null,
+      proveedorId: acuerdo.proveedorId,
+      tipo: d.tipo,
+      monto: new Prisma.Decimal(redondear2(d.monto)),
+      moneda: acuerdo.moneda,
+      estado: 'PENDIENTE',
+      metodo: d.metodo ?? null,
+      referencia: d.referencia ?? null,
+      notas: d.notas ?? null,
+      periodoDesde: d.periodoDesde ?? null,
+      periodoHasta: d.periodoHasta ?? null,
+      cuentaPorPagarId: d.cuentaPorPagarId ?? null,
+      registradoPorId: d.registradoPorId ?? null,
+      claveIdempotencia: d.claveIdempotencia ?? null,
+    },
+    select: { id: true },
+  })
+  return { id: pago.id, reutilizado: false }
 }
 
 /**
- * Confirma un pago y lo asienta.
- *
- * Un pago SALE de Membego, así que reduce lo que se le debe al proveedor: el
- * asiento va en negativo. Un REEMBOLSO viene del proveedor hacia Membego y
- * también reduce el saldo. Un CREDITO es a favor del proveedor y suma.
+ * Confirma un pago y lo asienta, con todos sus efectos en una transacción.
  */
 export async function confirmarPago(pagoId: string, actorId?: string | null): Promise<void> {
-  await sinEmpresa('Membego Supply: confirmación de un pago a proveedor', async (tx) => {
-    const pago = await tx.supplyPago.findUnique({
-      where: { id: pagoId },
-      select: {
-        id: true,
-        estado: true,
-        tipo: true,
-        monto: true,
-        moneda: true,
-        proveedorId: true,
-        acuerdoId: true,
-        ordenId: true,
-        referencia: true,
-      },
-    })
-    if (!pago) throw new Error('Pago no encontrado.')
-    if (pago.estado === 'CONFIRMADO') return
-    if (pago.estado === 'ANULADO') throw new Error('Un pago anulado no se puede confirmar.')
-
-    const tipoAsiento = ASIENTO_DE_PAGO[pago.tipo]
-    const signo = tipoAsiento === 'CREDITO' ? 1 : -1
-
-    await tx.supplyAsientoFinanciero.create({
-      data: {
-        proveedorId: pago.proveedorId,
-        acuerdoId: pago.acuerdoId,
-        ordenId: pago.ordenId,
-        pagoId: pago.id,
-        tipo: tipoAsiento,
-        monto: signo === 1 ? pago.monto : pago.monto.negated(),
-        moneda: pago.moneda,
-        referencia: pago.referencia,
-        motivo: `Pago ${pago.tipo} confirmado.`,
-        actorId: actorId ?? null,
-      },
-    })
-
-    await tx.supplyPago.update({
-      where: { id: pagoId },
-      data: { estado: 'CONFIRMADO', confirmadoAt: new Date() },
-    })
-  })
+  await sinEmpresa('Membego Supply: confirmación de un pago a proveedor', (tx) =>
+    confirmarPagoEnTx(tx, pagoId, actorId)
+  )
 
   // Fuera de la transacción: avisar abre la suya, y un fallo de la campanita no
   // puede deshacer un pago confirmado.
   const { avisarLiquidacion } = await import('./notificar')
   await avisarLiquidacion(pagoId)
+}
+
+export async function confirmarPagoEnTx(tx: Tx, pagoId: string, actorId?: string | null): Promise<void> {
+  const pago = await tx.supplyPago.findUnique({
+    where: { id: pagoId },
+    select: {
+      id: true,
+      estado: true,
+      tipo: true,
+      monto: true,
+      moneda: true,
+      proveedorId: true,
+      acuerdoId: true,
+      ordenId: true,
+      referencia: true,
+      cuentaPorPagarId: true,
+      deposito: { select: { id: true } },
+    },
+  })
+  if (!pago) throw new Error('Pago no encontrado.')
+  if (pago.estado === 'CONFIRMADO') return
+  if (pago.estado === 'ANULADO') throw new Error('Un pago anulado no se puede confirmar.')
+
+  const tipoAsiento = ASIENTO_DE_PAGO[pago.tipo]
+  const signo = signoDeAsiento(tipoAsiento)
+
+  await tx.supplyAsientoFinanciero.create({
+    data: {
+      proveedorId: pago.proveedorId,
+      acuerdoId: pago.acuerdoId,
+      ordenId: pago.ordenId,
+      pagoId: pago.id,
+      tipo: tipoAsiento,
+      monto: signo === 1 ? pago.monto : pago.monto.negated(),
+      moneda: pago.moneda,
+      referencia: pago.referencia,
+      motivo: `Pago ${pago.tipo} confirmado.`,
+      actorId: actorId ?? null,
+    },
+  })
+
+  await tx.supplyPago.update({
+    where: { id: pagoId },
+    data: { estado: 'CONFIRMADO', confirmadoAt: new Date() },
+  })
+
+  if (pago.deposito) await activarDepositoEnTx(tx, pago.deposito.id, actorId)
+  if (pago.ordenId) await fondearOrdenEnTx(tx, pago.ordenId)
+  if (pago.cuentaPorPagarId && signo === -1) {
+    await saldarCuentaPorPagarEnTx(tx, pago.cuentaPorPagarId, Number(pago.monto), {
+      via: 'PAGO',
+      referencia: pago.id,
+      actorId,
+    })
+  }
+}
+
+/**
+ * Anula un pago PENDIENTE. Un pago confirmado no se anula: se registra un
+ * reembolso o un ajuste, que es un hecho nuevo con su propio asiento.
+ */
+export async function anularPago(pagoId: string, motivo: string, actorId?: string | null): Promise<void> {
+  if (!motivo.trim()) throw new Error('Anular un pago exige un motivo.')
+  await sinEmpresa('Membego Supply: anular un pago pendiente', async (tx) => {
+    const pago = await tx.supplyPago.findUnique({
+      where: { id: pagoId },
+      select: { estado: true, deposito: { select: { id: true, estado: true } } },
+    })
+    if (!pago) throw new Error('Pago no encontrado.')
+    if (pago.estado !== 'PENDIENTE') throw new Error(`Solo se anula un pago pendiente; este está ${pago.estado}.`)
+    await tx.supplyPago.update({
+      where: { id: pagoId },
+      data: { estado: 'ANULADO', anuladoAt: new Date(), anuladoMotivo: motivo.trim() },
+    })
+    if (pago.deposito && pago.deposito.estado === 'PENDIENTE') {
+      await tx.supplyDeposito.update({
+        where: { id: pago.deposito.id },
+        data: { estado: 'CANCELADO', cerradoAt: new Date(), cerradoMotivo: `Pago anulado: ${motivo.trim()}` },
+      })
+    }
+    void actorId
+  })
 }
 
 export interface SaldoProveedor {
@@ -174,12 +230,16 @@ export interface SaldoProveedor {
   depositado: number
   /** Redenciones que generaron cuenta por pagar. */
   devengado: number
+  /** Cuentas por pagar nacidas (facturas, ventas, ajustes). */
+  cuentasPorPagar: number
+  /** Cuentas por cobrar nacidas (a favor de Membego). */
+  cuentasPorCobrar: number
   /** Pagos confirmados (liquidaciones). */
   pagado: number
   reembolsos: number
   creditos: number
   ajustes: number
-  /** Lo que Membego le debe HOY. Positivo = se le debe. */
+  /** Lo que Membego le debe HOY. Positivo = se le debe; negativo = le deben. */
   saldoPorPagar: number
 }
 
@@ -202,7 +262,7 @@ export async function saldoDeProveedor(
   })
 
   const por = (tipo: SupplyAsientoTipo) =>
-    Number(grupos.find((g) => g.tipo === tipo)?._sum.monto ?? 0)
+    grupos.filter((g) => g.tipo === tipo).reduce((t, g) => t + Number(g._sum.monto ?? 0), 0)
 
   const moneda = grupos[0]?.moneda ?? 'DOP'
   const saldo = grupos
@@ -212,79 +272,17 @@ export async function saldoDeProveedor(
   return {
     proveedorId,
     moneda,
-    contratado: por('COMPROMISO_COMPRA'),
-    depositado: Math.abs(por('DEPOSITO')),
-    devengado: por('REDENCION_POR_PAGAR'),
-    pagado: Math.abs(por('PAGO')),
-    reembolsos: Math.abs(por('REEMBOLSO')),
-    creditos: por('CREDITO'),
-    ajustes: por('AJUSTE') + por('REVERSA'),
-    saldoPorPagar: Number(saldo.toFixed(2)),
+    contratado: redondear2(por('COMPROMISO_COMPRA')),
+    depositado: redondear2(Math.abs(por('DEPOSITO'))),
+    devengado: redondear2(por('REDENCION_POR_PAGAR')),
+    cuentasPorPagar: redondear2(por('CUENTA_POR_PAGAR')),
+    cuentasPorCobrar: redondear2(Math.abs(por('CUENTA_POR_COBRAR'))),
+    pagado: redondear2(Math.abs(por('PAGO'))),
+    reembolsos: redondear2(por('REEMBOLSO')),
+    creditos: redondear2(por('CREDITO')),
+    ajustes: redondear2(por('AJUSTE') + por('REVERSA')),
+    saldoPorPagar: redondear2(saldo),
   }
-}
-
-export interface LiquidacionPropuesta {
-  acuerdoId: string
-  proveedorId: string
-  desde: Date
-  hasta: Date
-  redenciones: number
-  montoRedenciones: number
-  /** Lo ya depositado que todavía cubre estas redenciones. */
-  aplicableDeDeposito: number
-  /** Lo que habría que transferir de verdad. */
-  aPagar: number
-  moneda: string
-}
-
-/**
- * Propone la liquidación de un período.
- *
- * NO paga: calcula. Quien decide es una persona, y este número es lo que
- * tiene delante cuando lo hace.
- *
- * Las redenciones REVERSADAS quedan fuera —`reversadaAt: null`— porque una
- * entrega que se deshizo no se paga. Es la diferencia entre conciliar y
- * confiar en el conteo del comercio.
- */
-export async function proponerLiquidacion(
-  acuerdoId: string,
-  desde: Date,
-  hasta: Date
-): Promise<LiquidacionPropuesta> {
-  return sinEmpresa('Membego Supply: propuesta de liquidación a un proveedor', async (tx) => {
-    const acuerdo = await tx.supplyAcuerdo.findUnique({
-      where: { id: acuerdoId },
-      select: { id: true, proveedorId: true, moneda: true, modalidadPago: true },
-    })
-    if (!acuerdo) throw new Error('Acuerdo no encontrado.')
-
-    const redenciones = await tx.supplyRedencion.findMany({
-      where: { acuerdoId, reversadaAt: null, createdAt: { gte: desde, lte: hasta } },
-      select: { costoUnitario: true },
-    })
-    const monto = redenciones.reduce((t, r) => t + Number(r.costoUnitario), 0)
-
-    const saldo = await saldoDeProveedor(tx, acuerdo.proveedorId, acuerdoId)
-
-    // Lo prepagado se consume antes de transferir de nuevo: en PREPAGO_TOTAL o
-    // PARCIAL, esas redenciones ya están cubiertas y volver a pagarlas sería
-    // pagar dos veces la misma pizza.
-    const yaCubierto = Math.max(0, saldo.depositado - saldo.pagado)
-    const aplicable = Math.min(yaCubierto, monto)
-
-    return {
-      acuerdoId,
-      proveedorId: acuerdo.proveedorId,
-      desde,
-      hasta,
-      redenciones: redenciones.length,
-      montoRedenciones: Number(monto.toFixed(2)),
-      aplicableDeDeposito: Number(aplicable.toFixed(2)),
-      aPagar: Number((monto - aplicable).toFixed(2)),
-      moneda: acuerdo.moneda,
-    }
-  })
 }
 
 /** Movimientos del ledger financiero de un proveedor, para su pantalla. */

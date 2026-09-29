@@ -1026,8 +1026,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS "supply_liquidaciones_periodo_viva"
   WHERE "estado" <> 'CANCELADA';
 
 -- ── Una redención entra en UNA liquidación ──────────────────────────────────
-CREATE UNIQUE INDEX IF NOT EXISTS "supply_liquidacion_lineas_redencion_unica"
-  ON "supply_liquidacion_lineas" ("redencionId") WHERE "redencionId" IS NOT NULL;
+--
+-- No es un índice sobre las líneas: una liquidación CANCELADA conserva sus
+-- líneas como historia y la redención tiene que poder entrar en el corte
+-- siguiente. El reclamo es sobre el ASIENTO (`supply_asientos_financieros.
+-- liquidacionId`), con `UPDATE … WHERE "liquidacionId" IS NULL`, que es
+-- atómico, y cancelar la liquidación lo suelta.
 
 -- ── Rendimiento: los recorridos del cron y del tablero ──────────────────────
 CREATE INDEX IF NOT EXISTS "supply_depositos_abiertos_cierre"

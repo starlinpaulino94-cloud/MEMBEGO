@@ -48,6 +48,8 @@ export interface DatosRedencion {
   /** En SUBSIDIO: lo que el cliente le pagó al comercio por la unidad base. */
   aporteClienteComercio?: number
   canal?: string
+  /** Dispositivo del escáner (user-agent recortado), para investigar fraudes. */
+  dispositivo?: string | null
   claveIdempotencia?: string | null
 }
 
@@ -300,7 +302,7 @@ async function redimirEnTx(d: DatosRedencion): Promise<ResultadoRedencion> {
     if (d.sesionQrId) {
       await tx.supplyQrSesion.updateMany({
         where: { id: d.sesionQrId, consumidoAt: null },
-        data: { consumidoAt: new Date(), consumidoPorId: d.empleadoId ?? null },
+        data: { consumidoAt: new Date(), consumidoPorId: d.empleadoId ?? null, consumidoDispositivo: d.dispositivo?.slice(0, 200) ?? null },
       })
     }
     if (reserva) {
