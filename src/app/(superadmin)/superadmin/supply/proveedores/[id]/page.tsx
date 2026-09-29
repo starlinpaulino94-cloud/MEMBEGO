@@ -12,7 +12,14 @@ import { NavSupply } from '@/components/supply/nav'
 import { reporteLotes, reporteProveedores } from '@/modules/supply/pool'
 import { asientosDeProveedor, saldoDeProveedor } from '@/modules/supply/finanzas'
 import { conciliar } from '@/modules/supply/conciliacion'
-import { SUPPLY_ASIENTO_TIPO_LABELS } from '@/modules/supply/catalogo'
+import { SUPPLY_ASIENTO_TIPO_LABELS, SUPPLY_PROVEEDOR_ORIGEN_LABELS } from '@/modules/supply/catalogo'
+import { perfilDeProveedor } from '@/modules/supply/proveedores'
+import { FormAccion } from '@/components/supply/form-accion'
+import { convertirProveedorAction, guardarPerfilProveedorAction } from '@/modules/supply/actions-finanzas'
+import { listarCuentasPorPagar } from '@/modules/supply/cuentas'
+import { listarLiquidaciones } from '@/modules/supply/liquidaciones'
+import { listarDepositos } from '@/modules/supply/depositos'
+import { SUPPLY_CUENTA_ESTADO_LABELS, SUPPLY_DEPOSITO_ESTADO_LABELS, SUPPLY_LIQUIDACION_ESTADO_LABELS } from '@/modules/supply/catalogo'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +40,7 @@ export default async function ProveedorDetallePage({
   await requireRole('SUPERADMIN')
   const { id } = await params
 
-  const [ficha, lotes, financiero, conciliacion] = await Promise.all([
+  const [ficha, lotes, financiero, conciliacion, perfil, cuentas, liquidaciones, depositos] = await Promise.all([
     reporteProveedores({ proveedorId: id }).then((f) => f[0] ?? null),
     reporteLotes({ proveedorId: id }),
     sinEmpresa('Membego Supply: dinero con un proveedor', async (tx) => {
@@ -46,9 +53,14 @@ export default async function ProveedorDetallePage({
       }
     }),
     conciliar(id),
+    perfilDeProveedor(id),
+    listarCuentasPorPagar({ proveedorId: id, limite: 40 }),
+    listarLiquidaciones({ proveedorId: id, limite: 20 }),
+    listarDepositos({ proveedorId: id, limite: 20 }),
   ])
 
   if (!financiero) notFound()
+  const esExterna = perfil ? perfil.origen === 'EXTERNA' && !perfil.company.isActive : false
   const { empresa, saldo, asientos } = financiero
 
   return (
@@ -169,6 +181,134 @@ export default async function ProveedorDetallePage({
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            Perfil de proveedor
+            {perfil && <Badge variant={esExterna ? 'outline' : 'secondary'}>{SUPPLY_PROVEEDOR_ORIGEN_LABELS[perfil.origen]}</Badge>}
+            {perfil && !perfil.activo && <Badge variant="destructive">Inactivo</Badge>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <FormAccion
+            accion={guardarPerfilProveedorAction}
+            ocultos={{ companyId: id }}
+            etiqueta="Guardar perfil"
+            campos={[
+              { name: 'razonSocial', label: 'Razón social', maxLength: 200, defaultValue: perfil?.razonSocial ?? '' },
+              { name: 'rnc', label: 'RNC', maxLength: 40, defaultValue: perfil?.rnc ?? '' },
+              { name: 'contactoNombre', label: 'Contacto', maxLength: 120, defaultValue: perfil?.contactoNombre ?? '' },
+              { name: 'contactoEmail', label: 'Correo', maxLength: 160, defaultValue: perfil?.contactoEmail ?? perfil?.company.email ?? '' },
+              { name: 'contactoTelefono', label: 'Teléfono', maxLength: 40, defaultValue: perfil?.contactoTelefono ?? perfil?.company.telefono ?? '' },
+              { name: 'plazoPagoDias', label: 'Plazo de pago (días)', tipo: 'number', step: '1', min: 0, defaultValue: perfil?.plazoPagoDias?.toString() ?? '' },
+              { name: 'banco', label: 'Banco', maxLength: 120, defaultValue: perfil?.banco ?? '' },
+              { name: 'cuentaBancaria', label: 'Cuenta bancaria', maxLength: 60, defaultValue: perfil?.cuentaBancaria ?? '' },
+              { name: 'tipoCuenta', label: 'Tipo de cuenta', maxLength: 40, defaultValue: perfil?.tipoCuenta ?? '' },
+              { name: 'activo', label: 'Proveedor activo (se le puede contratar)', tipo: 'checkbox', defaultValue: perfil?.activo === false ? '' : 'on' },
+              { name: 'notas', label: 'Notas', tipo: 'textarea', defaultValue: perfil?.notas ?? '' },
+            ]}
+          />
+          {esExterna && (
+            <div className="rounded-lg border border-border p-3">
+              <p className="mb-2 text-sm">
+                Este proveedor es <strong>externo</strong>: no opera en Membego. Convertirlo activa la misma empresa (mismo id, mismos acuerdos, mismo ledger) para que entre al panel como comercio.
+              </p>
+              <FormAccion
+                accion={convertirProveedorAction}
+                ocultos={{ companyId: id }}
+                etiqueta="Convertir en empresa registrada"
+                variant="secondary"
+                confirmar="Activa la empresa en Membego conservando todo su historial. ¿Continuar?"
+                recargar
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Cuentas por pagar</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TablaReporte
+              columnas={[
+                { clave: 'codigo', titulo: 'Cuenta' },
+                { clave: 'pendiente', titulo: 'Pendiente', alinearDerecha: true },
+                { clave: 'estado', titulo: 'Estado' },
+              ]}
+              filas={cuentas.slice(0, 10).map((c) => ({
+                __clave: c.id,
+                codigo: c.codigo,
+                pendiente: formatMoneyRD(Number(c.montoNeto) - Number(c.montoSaldado)),
+                estado: SUPPLY_CUENTA_ESTADO_LABELS[c.estado],
+              }))}
+              vacio="Sin cuentas por pagar."
+            />
+            <Link href={`/superadmin/supply/finanzas/cuentas-por-pagar?proveedor=${id}`} className="mt-2 inline-block text-caption underline underline-offset-4">
+              Ver todas
+            </Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Liquidaciones</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TablaReporte
+              columnas={[
+                { clave: 'codigo', titulo: 'Liquidación' },
+                { clave: 'neto', titulo: 'Neto', alinearDerecha: true },
+                { clave: 'estado', titulo: 'Estado' },
+              ]}
+              filas={liquidaciones.slice(0, 10).map((l) => ({
+                __clave: l.id,
+                codigo: (
+                  <Link href={`/superadmin/supply/finanzas/liquidaciones/${l.id}`} className="underline-offset-4 hover:underline">
+                    {l.codigo}
+                  </Link>
+                ),
+                neto: formatMoneyRD(Number(l.netoLiquidar)),
+                estado: SUPPLY_LIQUIDACION_ESTADO_LABELS[l.estado],
+              }))}
+              vacio="Sin liquidaciones."
+            />
+            <Link href={`/superadmin/supply/finanzas/liquidaciones?proveedor=${id}`} className="mt-2 inline-block text-caption underline underline-offset-4">
+              Ver todas
+            </Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Depósitos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TablaReporte
+              columnas={[
+                { clave: 'codigo', titulo: 'Depósito' },
+                { clave: 'disponible', titulo: 'Disponible', alinearDerecha: true },
+                { clave: 'estado', titulo: 'Estado' },
+              ]}
+              filas={depositos.slice(0, 10).map((d) => ({
+                __clave: d.id,
+                codigo: (
+                  <Link href={`/superadmin/supply/finanzas/depositos/${d.id}`} className="underline-offset-4 hover:underline">
+                    {d.codigo}
+                  </Link>
+                ),
+                disponible: formatMoneyRD(d.disponible),
+                estado: SUPPLY_DEPOSITO_ESTADO_LABELS[d.estado],
+              }))}
+              vacio="Sin depósitos."
+            />
+            <Link href={`/superadmin/supply/finanzas/depositos?proveedor=${id}`} className="mt-2 inline-block text-caption underline underline-offset-4">
+              Ver todos
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>

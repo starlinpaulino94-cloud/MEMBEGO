@@ -35,13 +35,17 @@ export async function abrirVentaAction(_prev: EstadoAccion, fd: FormData): Promi
     if (!mias.includes(clienteId)) return { error: 'Esa ficha de cliente no es tuya.' }
 
     const cantidad = Math.max(1, Math.min(20, numero(fd, 'cantidad') ?? 1))
+    // Dos toques de «Comprar» en cinco minutos abren UN pedido; una compra
+    // igual más tarde es otra compra. El cliente no manda la clave: la
+    // fabrica el servidor.
+    const ventana = Math.floor(Date.now() / 300_000)
     const res = await abrirPedidoDeVenta({
       clienteId,
       acuerdoId,
       cantidad,
       sucursalId: texto(fd, 'sucursalId', 60) || null,
       cuentaId: texto(fd, 'cuentaId', 60) || null,
-      claveIdempotencia: claveIdempotencia('venta', clienteId, acuerdoId, String(cantidad), texto(fd, 'intento', 40) || 'unico'),
+      claveIdempotencia: claveIdempotencia('venta', clienteId, acuerdoId, String(cantidad), String(ventana)),
     })
     if (!res.ok) return { error: res.mensaje }
 

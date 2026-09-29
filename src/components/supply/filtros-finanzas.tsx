@@ -43,7 +43,7 @@ function chip(activo: boolean): string {
   return `rounded-full border px-3 py-1 text-sm ${activo ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'}`
 }
 
-/** Un `<select>` de proveedor que navega al cambiar (formulario GET). */
+/** Selector de proveedor que navega al enviar (formulario GET). */
 export function FiltroProveedor({
   base,
   actual,
@@ -57,7 +57,7 @@ export function FiltroProveedor({
 }) {
   return (
     <form action={base} method="get" className="flex items-center gap-2">
-      {Object.entries(otros).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null))}
+      {Object.entries(otros).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} aria-label={k} /> : null))}
       <label htmlFor="proveedor" className="text-sm text-muted-foreground">
         Proveedor
       </label>

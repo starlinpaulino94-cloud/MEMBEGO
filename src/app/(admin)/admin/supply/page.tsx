@@ -17,6 +17,7 @@ import { saldoDeProveedor } from '@/modules/supply/finanzas'
 import { resumenIncidencias } from '@/modules/supply/incidencias'
 import { pedidosDeHoy, usoDeHoy } from '@/modules/supply/reservas'
 import { PedidosDeHoy } from './pedidos-de-hoy'
+import { SUPPLY_CUENTA_ESTADO_LABELS, SUPPLY_LIQUIDACION_ESTADO_LABELS, SUPPLY_VENTA_ESTADO_LABELS } from '@/modules/supply/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Membego Supply' }
@@ -55,7 +56,7 @@ export default async function SupplyComercioPage() {
   const permitido = await guardiaProveedor(companyId)
   if (!permitido) redirect('/admin/dashboard')
 
-  const [compromisos, saldo, incidencias, redenciones, hoy, pedidos] = await Promise.all([
+  const [compromisos, saldo, incidencias, redenciones, hoy, pedidos, finanzas] = await Promise.all([
     compromisosDelProveedor(companyId),
     // `conEmpresa` en TODA lectura de esta pantalla: es el portal de UNA
     // empresa y nada de lo que se enseña aquí cruza inquilinos. El proveedor A
@@ -93,7 +94,33 @@ export default async function SupplyComercioPage() {
     // Lo que hay que preparar hoy. Va con el resto de lecturas de la pantalla:
     // es lo primero que mira quien abre esto por la mañana.
     pedidosDeHoy(companyId),
+    // Lo que Membego le debe a ESTA empresa y cómo se lo liquida (§27):
+    // cuentas por pagar vivas, liquidaciones y ventas que entregó.
+    conEmpresa(companyId, async (tx) => {
+      const [cuentas, liquidaciones, ventas] = await Promise.all([
+        tx.supplyCuentaPorPagar.findMany({
+          where: { proveedorId: companyId, estado: { in: ['ABIERTA', 'PARCIALMENTE_SALDADA', 'DISPUTADA'] } },
+          orderBy: [{ vencimientoAt: 'asc' }, { createdAt: 'desc' }],
+          take: 30,
+          select: { id: true, codigo: true, descripcion: true, montoNeto: true, montoSaldado: true, estado: true, vencimientoAt: true, liquidacion: { select: { codigo: true } } },
+        }),
+        tx.supplyLiquidacion.findMany({
+          where: { proveedorId: companyId, estado: { notIn: ['CANCELADA', 'BORRADOR'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 12,
+          select: { id: true, codigo: true, estado: true, periodoDesde: true, periodoHasta: true, netoLiquidar: true, pagadaAt: true },
+        }),
+        tx.supplyVentaDirecta.findMany({
+          where: { proveedorId: companyId, estado: { in: ['PAGADA', 'ENTREGADA'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 30,
+          select: { id: true, numero: true, estado: true, itemNombre: true, cantidad: true, montoProveedor: true, entregadaAt: true, cliente: { select: { nombre: true } }, sucursal: { select: { nombre: true } } },
+        }),
+      ])
+      return { cuentas, liquidaciones, ventas }
+    }),
   ])
+  const porEntregar = finanzas.ventas.filter((v) => v.estado === 'PAGADA')
 
   const contratadas = compromisos.reduce((t, c) => t + c.contratadas, 0)
   const entregadas = compromisos.reduce((t, c) => t + c.entregadas, 0)
@@ -117,11 +144,39 @@ export default async function SupplyComercioPage() {
 
       <PedidosDeHoy companyId={companyId} pedidos={pedidos} />
 
-      {compromisos.length === 0 ? (
+      {porEntregar.length > 0 && (
+        <Card className="border-warning/40">
+          <CardHeader>
+            <CardTitle>Ventas de Membego por entregar ({porEntregar.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-caption text-muted-foreground">
+              El cliente ya le pagó a Membego. Cuando venga con su código, escanéalo y confirma la entrega: en ese momento Membego te debe el neto.
+            </p>
+            <TablaReporte
+              columnas={[
+                { clave: 'numero', titulo: 'Venta' },
+                { clave: 'cliente', titulo: 'Cliente' },
+                { clave: 'producto', titulo: 'Producto' },
+                { clave: 'neto', titulo: 'Te corresponde', alinearDerecha: true },
+              ]}
+              filas={porEntregar.map((v) => ({
+                __clave: v.id,
+                numero: v.numero,
+                cliente: v.cliente.nombre,
+                producto: `${v.itemNombre} × ${v.cantidad}`,
+                neto: formatMoneyRD(Number(v.montoProveedor)),
+              }))}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {compromisos.length === 0 && finanzas.cuentas.length === 0 && finanzas.liquidaciones.length === 0 && finanzas.ventas.length === 0 ? (
         <EmptyState
           variant="card"
           title="Todavía no hay compromisos"
-          description="Cuando Membego te compre unidades por adelantado, aquí verás cuántas son, cuántas llevas entregadas y cuántos vouchers están vivos."
+          description="Cuando Membego te compre unidades por adelantado o venda por tu cuenta, aquí verás cuántas son, cuántas llevas entregadas y cuánto te corresponde."
         />
       ) : (
         <>
@@ -220,6 +275,90 @@ export default async function SupplyComercioPage() {
               </p>
             </CardContent>
           </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Lo que Membego te debe</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TablaReporte
+                  columnas={[
+                    { clave: 'codigo', titulo: 'Cuenta' },
+                    { clave: 'descripcion', titulo: 'Concepto' },
+                    { clave: 'pendiente', titulo: 'Pendiente', alinearDerecha: true },
+                    { clave: 'vence', titulo: 'Vence' },
+                    { clave: 'estado', titulo: 'Estado' },
+                  ]}
+                  filas={finanzas.cuentas.map((c) => ({
+                    __clave: c.id,
+                    codigo: c.codigo,
+                    descripcion: c.liquidacion ? `${c.descripcion} · en ${c.liquidacion.codigo}` : c.descripcion,
+                    pendiente: formatMoneyRD(Number(c.montoNeto) - Number(c.montoSaldado)),
+                    vence: c.vencimientoAt ? formatDate(c.vencimientoAt) : '—',
+                    estado: SUPPLY_CUENTA_ESTADO_LABELS[c.estado],
+                  }))}
+                  vacio="No hay cuentas pendientes."
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Liquidaciones</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TablaReporte
+                  columnas={[
+                    { clave: 'codigo', titulo: 'Liquidación' },
+                    { clave: 'periodo', titulo: 'Período' },
+                    { clave: 'neto', titulo: 'Neto', alinearDerecha: true },
+                    { clave: 'estado', titulo: 'Estado' },
+                  ]}
+                  filas={finanzas.liquidaciones.map((l) => ({
+                    __clave: l.id,
+                    codigo: l.codigo,
+                    periodo: `${formatDate(l.periodoDesde)} → ${formatDate(l.periodoHasta)}`,
+                    neto: formatMoneyRD(Number(l.netoLiquidar)),
+                    estado: `${SUPPLY_LIQUIDACION_ESTADO_LABELS[l.estado]}${l.pagadaAt ? ` · ${formatDate(l.pagadaAt)}` : ''}`,
+                  }))}
+                  vacio="Membego todavía no ha calculado ninguna liquidación contigo."
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {finanzas.ventas.some((v) => v.estado === 'ENTREGADA') && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Ventas de Membego entregadas</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TablaReporte
+                  columnas={[
+                    { clave: 'numero', titulo: 'Venta' },
+                    { clave: 'cliente', titulo: 'Cliente' },
+                    { clave: 'producto', titulo: 'Producto' },
+                    { clave: 'sucursal', titulo: 'Sucursal' },
+                    { clave: 'entregada', titulo: 'Entregada' },
+                    { clave: 'neto', titulo: 'Te corresponde', alinearDerecha: true },
+                    { clave: 'estado', titulo: 'Estado' },
+                  ]}
+                  filas={finanzas.ventas
+                    .filter((v) => v.estado === 'ENTREGADA')
+                    .map((v) => ({
+                      __clave: v.id,
+                      numero: v.numero,
+                      cliente: v.cliente.nombre,
+                      producto: `${v.itemNombre} × ${v.cantidad}`,
+                      sucursal: v.sucursal?.nombre ?? '—',
+                      entregada: v.entregadaAt ? formatDateTime(v.entregadaAt) : '—',
+                      neto: formatMoneyRD(Number(v.montoProveedor)),
+                      estado: SUPPLY_VENTA_ESTADO_LABELS[v.estado],
+                    }))}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

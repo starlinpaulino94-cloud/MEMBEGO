@@ -10,7 +10,10 @@ import { TablaReporte } from '@/components/ui/reporte-imprimible'
 import { formatMoneyRD } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
 import { resumenPool, reporteProveedores } from '@/modules/supply/pool'
-import { alertasDeVencimiento } from '@/modules/supply/vencimientos'
+import { alertasDeVencimiento, vencimientosProximos } from '@/modules/supply/vencimientos'
+import { redencionesRecientes, resumenFinanciero, supplyPorCategoria } from '@/modules/supply/tablero'
+import { sinEmpresa } from '@/lib/tenant'
+import { formatDateTime } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Membego Supply' }
@@ -32,13 +35,19 @@ export const metadata = { title: 'Membego Supply' }
 export default async function SupplyResumenPage() {
   await requireRole('SUPERADMIN')
 
-  const [pool, proveedores, alertas] = await Promise.all([
+  const [pool, proveedores, alertas, fin, categorias, recientes, otrosVencimientos] = await Promise.all([
     resumenPool(),
     reporteProveedores(),
     alertasDeVencimiento(30),
+    resumenFinanciero(),
+    supplyPorCategoria(),
+    sinEmpresa('Membego Supply: últimas redenciones del tablero', (tx) => redencionesRecientes(tx, 8)),
+    vencimientosProximos(30),
   ])
 
   const criticas = alertas.filter((a) => a.nivel === 'CRITICO' || a.nivel === 'ALTO')
+  const otrosCriticos = otrosVencimientos.filter((v) => v.tipo !== 'DERECHO' && (v.nivel === 'CRITICO' || v.nivel === 'ALTO'))
+  const hayAlgo = pool.unidadesCompradas > 0 || fin.acuerdosActivos > 0 || fin.ventasMes.ventas > 0 || fin.depositos.depositos > 0
 
   return (
     <div className="space-y-6">
@@ -49,7 +58,7 @@ export default async function SupplyResumenPage() {
         nav={<NavSupply activa="" />}
       />
 
-      {pool.unidadesCompradas === 0 ? (
+      {!hayAlgo ? (
         <EmptyState
           variant="card"
           title="Todavía no hay supply comprado"
@@ -129,6 +138,82 @@ export default async function SupplyResumenPage() {
               </p>
             </CardContent>
           </Card>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Capital comprometido"
+              value={formatMoneyRD(fin.capitalInvertido)}
+              sub={`lotes + ${formatMoneyRD(fin.depositos.disponible)} en depósitos`}
+              href="/superadmin/supply/finanzas/depositos"
+              hrefLabel="Ver depósitos"
+            />
+            <StatCard
+              label="Por pagar a proveedores"
+              value={formatMoneyRD(fin.cuentasPorPagar.montoPendiente)}
+              sub={`${fin.cuentasPorPagar.vencidas} vencidas · ${formatMoneyRD(fin.cuentasPorPagar.montoVencido)}`}
+              accent={fin.cuentasPorPagar.montoVencido > 0 ? 'warning' : undefined}
+              href="/superadmin/supply/finanzas/cuentas-por-pagar"
+              hrefLabel="Ver cuentas por pagar"
+            />
+            <StatCard
+              label="Por cobrar a proveedores"
+              value={formatMoneyRD(fin.cuentasPorCobrar.montoPendiente)}
+              sub={`${fin.cuentasPorCobrar.abiertas} cuentas abiertas`}
+              href="/superadmin/supply/finanzas/cuentas-por-cobrar"
+              hrefLabel="Ver cuentas por cobrar"
+            />
+            <StatCard
+              label="Liquidaciones pendientes"
+              value={fin.liquidaciones.pendientes}
+              sub={`${formatMoneyRD(fin.liquidaciones.montoPendiente)} · ${fin.liquidaciones.disputadas} disputadas`}
+              accent={fin.liquidaciones.disputadas > 0 ? 'danger' : undefined}
+              href="/superadmin/supply/finanzas/liquidaciones"
+              hrefLabel="Ver liquidaciones"
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Redenciones hoy / mes" value={`${fin.redencionesHoy} / ${fin.redencionesMes}`} href="/superadmin/supply/redenciones" hrefLabel="Ver redenciones" />
+            <StatCard label="Ventas del mes" value={formatMoneyRD(fin.ventasMes.bruto)} sub={`${fin.ventasMes.ventas} ventas · comisión ${formatMoneyRD(fin.ventasMes.comision)}`} href="/superadmin/supply/ventas" hrefLabel="Ver ventas" />
+            <StatCard label="Incidencias abiertas" value={fin.incidenciasAbiertas} accent={fin.incidenciasAbiertas > 0 ? 'warning' : 'success'} href="/superadmin/supply/incidencias" hrefLabel="Ver incidencias" />
+            <StatCard label="Discrepancias abiertas" value={fin.discrepanciasAbiertas} sub={`${fin.acuerdosActivos} acuerdos activos · ${fin.acuerdosSuspendidos} suspendidos · ${fin.proveedoresActivos} proveedores`} accent={fin.discrepanciasAbiertas > 0 ? 'danger' : 'success'} href="/superadmin/supply/conciliacion" hrefLabel="Ver conciliación" />
+          </div>
+
+          {otrosCriticos.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-warning">
+                  <AlertTriangle className="size-4" aria-hidden />
+                  Depósitos y acuerdos que vencen pronto
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TablaReporte
+                  columnas={[
+                    { clave: 'tipo', titulo: 'Tipo' },
+                    { clave: 'codigo', titulo: 'Código' },
+                    { clave: 'proveedor', titulo: 'Proveedor' },
+                    { clave: 'descripcion', titulo: 'Qué pasa' },
+                    { clave: 'dias', titulo: 'Días', alinearDerecha: true },
+                    { clave: 'monto', titulo: 'En juego', alinearDerecha: true },
+                  ]}
+                  filas={otrosCriticos.slice(0, 8).map((v) => ({
+                    __clave: v.id,
+                    tipo: v.tipo === 'DEPOSITO' ? 'Depósito' : 'Acuerdo',
+                    codigo: (
+                      <Link href={v.tipo === 'DEPOSITO' ? `/superadmin/supply/finanzas/depositos/${v.id}` : `/superadmin/supply/acuerdos/${v.id}`} className="underline-offset-4 hover:underline">
+                        {v.codigo}
+                      </Link>
+                    ),
+                    proveedor: v.proveedorNombre,
+                    descripcion: v.descripcion,
+                    dias: <Badge variant={v.nivel === 'CRITICO' ? 'destructive' : 'warning'}>{v.diasRestantes}</Badge>,
+                    monto: formatMoneyRD(v.monto),
+                  }))}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {criticas.length > 0 && (
             <Card>
@@ -220,6 +305,59 @@ export default async function SupplyResumenPage() {
               />
             </CardContent>
           </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Supply por categoría</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TablaReporte
+                  columnas={[
+                    { clave: 'categoria', titulo: 'Categoría' },
+                    { clave: 'lotes', titulo: 'Lotes', alinearDerecha: true },
+                    { clave: 'compradas', titulo: 'Compradas', alinearDerecha: true },
+                    { clave: 'redimidas', titulo: 'Redimidas', alinearDerecha: true },
+                    { clave: 'valor', titulo: 'Adquirido', alinearDerecha: true },
+                  ]}
+                  filas={categorias.map((c) => ({
+                    __clave: c.categoria,
+                    categoria: c.categoria,
+                    lotes: c.lotes,
+                    compradas: c.compradas.toLocaleString('es-DO'),
+                    redimidas: c.redimidas.toLocaleString('es-DO'),
+                    valor: formatMoneyRD(c.valorAdquirido),
+                  }))}
+                  vacio="Sin lotes."
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Últimas redenciones</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TablaReporte
+                  columnas={[
+                    { clave: 'fecha', titulo: 'Cuándo' },
+                    { clave: 'cliente', titulo: 'Cliente' },
+                    { clave: 'producto', titulo: 'Producto' },
+                    { clave: 'proveedor', titulo: 'Dónde' },
+                    { clave: 'costo', titulo: 'Costo', alinearDerecha: true },
+                  ]}
+                  filas={recientes.map((r) => ({
+                    __clave: r.id,
+                    fecha: formatDateTime(r.createdAt),
+                    cliente: r.cliente.nombre,
+                    producto: r.voucher.derecho.lote.snapshotItemNombre,
+                    proveedor: r.sucursal ? `${r.proveedor.name} · ${r.sucursal.nombre}` : r.proveedor.name,
+                    costo: formatMoneyRD(Number(r.costoUnitario)),
+                  }))}
+                  vacio="Todavía nadie ha canjeado un beneficio."
+                />
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
     </div>

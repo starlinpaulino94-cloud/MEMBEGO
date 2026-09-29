@@ -129,9 +129,9 @@ export async function registrarPagoEnTx(tx: Tx, d: DatosPago): Promise<{ id: str
  * Confirma un pago y lo asienta, con todos sus efectos en una transacción.
  */
 export async function confirmarPago(pagoId: string, actorId?: string | null): Promise<void> {
-  await sinEmpresa('Membego Supply: confirmación de un pago a proveedor', (tx) =>
-    confirmarPagoEnTx(tx, pagoId, actorId)
-  )
+  await sinEmpresa('Membego Supply: confirmación de un pago a proveedor', async (tx) => {
+    await confirmarPagoEnTx(tx, pagoId, actorId)
+  })
 
   // Fuera de la transacción: avisar abre la suya, y un fallo de la campanita no
   // puede deshacer un pago confirmado.

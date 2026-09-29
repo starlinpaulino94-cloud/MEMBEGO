@@ -59,7 +59,6 @@ export function TarjetaVenta({ oferta, clienteId }: { oferta: OfertaVentaVista; 
           <form action={accion} className="space-y-2">
             <input type="hidden" name="acuerdoId" value={oferta.acuerdoId} />
             <input type="hidden" name="clienteId" value={clienteId} />
-            <input type="hidden" name="intento" value={String(Date.now())} />
             <label className="flex items-center gap-2 text-sm">
               Cantidad
               <input

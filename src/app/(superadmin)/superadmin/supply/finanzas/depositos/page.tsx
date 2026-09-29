@@ -43,6 +43,8 @@ export default async function DepositosPage({ searchParams }: { searchParams: Pr
   const disponible = vivos.reduce((t, d) => t + d.disponible, 0)
   const aplicado = depositos.reduce((t, d) => t + d.montoAplicado, 0)
   const pendientes = depositos.filter((d) => d.estado === 'PENDIENTE')
+  const limite30 = new Date()
+  limite30.setDate(limite30.getDate() + 30)
 
   return (
     <div className="space-y-6">
@@ -61,7 +63,7 @@ export default async function DepositosPage({ searchParams }: { searchParams: Pr
         <StatCard label="Saldo disponible" value={formatMoneyRD(disponible)} sub={`${vivos.length} depósitos vivos`} accent="brand" />
         <StatCard label="Aplicado" value={formatMoneyRD(aplicado)} sub="a facturas y cuentas por pagar" />
         <StatCard label="Pendientes de confirmar" value={pendientes.length} sub={formatMoneyRD(pendientes.reduce((t, d) => t + d.montoOriginal, 0))} accent={pendientes.length > 0 ? 'warning' : undefined} />
-        <StatCard label="Por cerrar en 30 días" value={vivos.filter((d) => d.cierraAt && d.cierraAt.getTime() - Date.now() < 30 * 86_400_000).length} sub="con saldo que devolver o consumir" />
+        <StatCard label="Por cerrar en 30 días" value={vivos.filter((d) => d.cierraAt && d.cierraAt < limite30).length} sub="con saldo que devolver o consumir" />
       </div>
 
       <Card>
