@@ -102,9 +102,11 @@ ALTER TABLE "supply_pedidos" ADD COLUMN IF NOT EXISTS "reembolsadoAt" TIMESTAMP(
 ALTER TABLE "supply_pedidos" ADD COLUMN IF NOT EXISTS "reembolsoMotivo" TEXT;
 
 -- Un pedido REEMBOLSADO también lleva firma: quien devolvió el dinero y cuándo.
--- El CHECK original solo contemplaba PAGADO y RECHAZADO.
+-- El CHECK original solo contemplaba PAGADO y RECHAZADO. Se compara sobre ::text
+-- porque REEMBOLSADO se añade al enum en esta misma transacción y PostgreSQL no
+-- deja usar un valor nuevo del enum hasta que esté confirmado.
 ALTER TABLE "supply_pedidos" DROP CONSTRAINT IF EXISTS "supply_pedidos_revision_completa";
 DO $$ BEGIN
   ALTER TABLE "supply_pedidos" ADD CONSTRAINT "supply_pedidos_revision_completa"
-    CHECK (("estado" IN ('PAGADO', 'RECHAZADO', 'REEMBOLSADO')) = ("revisadoPor" IS NOT NULL AND "revisadoAt" IS NOT NULL));
+    CHECK (("estado"::text IN ('PAGADO', 'RECHAZADO', 'REEMBOLSADO')) = ("revisadoPor" IS NOT NULL AND "revisadoAt" IS NOT NULL));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
