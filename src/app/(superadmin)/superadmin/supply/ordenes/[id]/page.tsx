@@ -10,6 +10,8 @@ import { TablaReporte } from '@/components/ui/reporte-imprimible'
 import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
 import { AccionesOrden } from '@/components/supply/acciones-orden'
+import { FormAccion } from '@/components/supply/form-accion'
+import { registrarPagoAction } from '@/modules/supply/actions'
 import { SUPPLY_ORDEN_ESTADO_LABELS } from '@/modules/supply/catalogo'
 import { TRANSICIONES_ORDEN } from '@/modules/supply/estados'
 
@@ -120,6 +122,17 @@ export default async function OrdenDetallePage({ params }: { params: Promise<{ i
             <Dato label="Total">
               <strong>{formatMoneyRD(Number(orden.total))}</strong>
             </Dato>
+            <Dato label="Pagado">
+              {formatMoneyRD(Number(orden.montoPagado))}
+              {Number(orden.total) > 0 && (
+                <span className="ml-1 text-caption text-muted-foreground">
+                  ({Math.round((Number(orden.montoPagado) / Number(orden.total)) * 100)}%)
+                </span>
+              )}
+            </Dato>
+            {orden.documentos.length > 0 && (
+              <Dato label="Documentos">{orden.documentos.join(', ')}</Dato>
+            )}
             <Dato label="Creada">{formatDate(orden.createdAt)}</Dato>
             <Dato label="Creada por">{orden.creadoPor?.name ?? '—'}</Dato>
             <Dato label="Aprobada por">
@@ -131,6 +144,29 @@ export default async function OrdenDetallePage({ params }: { params: Promise<{ i
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Pagar esta orden</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-caption text-muted-foreground">
+            Anticipo o pago final contra el acuerdo. Nace pendiente y, al confirmarse en Finanzas → Pagos, suma a «Pagado» de esta orden.
+          </p>
+          <FormAccion
+            accion={registrarPagoAction}
+            ocultos={{ acuerdoId: orden.acuerdo.id, ordenId: orden.id }}
+            etiqueta="Registrar pago"
+            etiquetaPendiente="Registrando…"
+            campos={[
+              { name: 'tipo', label: 'Tipo', tipo: 'select', opciones: [{ value: 'ANTICIPO', label: 'Anticipo' }, { value: 'LIQUIDACION_FINAL', label: 'Pago final' }] },
+              { name: 'monto', label: 'Monto', tipo: 'number', min: 0.01, required: true, defaultValue: String(Math.max(0, Number(orden.total) - Number(orden.montoPagado))) },
+              { name: 'metodo', label: 'Método', placeholder: 'Transferencia', maxLength: 100 },
+              { name: 'referencia', label: 'Referencia', maxLength: 200 },
+            ]}
+          />
+        </CardContent>
+      </Card>
 
       <AccionesOrden
         ordenId={orden.id}

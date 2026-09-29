@@ -56,6 +56,7 @@ export function EscanerSupply({
   const [sucursalId, setSucursalId] = useState(sucursales[0]?.id ?? '')
 
   const ficha = escaneo.ficha
+  const venta = escaneo.venta
   const entregada = Boolean(entrega.success)
 
   return (
@@ -78,7 +79,7 @@ export function EscanerSupply({
         </div>
       )}
 
-      {!ficha && !entregada && (
+      {!ficha && !venta && !entregada && (
         <Card>
           <CardContent className="space-y-4 pt-6">
             {manual ? (
@@ -192,14 +193,51 @@ export function EscanerSupply({
         </Card>
       )}
 
+      {venta && !entregada && (
+        <Card className="border-success/40">
+          <CardContent className="space-y-4 pt-6">
+            <p className="flex items-center gap-2 font-semibold text-success">
+              <CheckCircle2 className="size-5" aria-hidden />
+              VENTA DE MEMBEGO · {venta.numero}
+            </p>
+
+            <dl className="space-y-1 text-sm">
+              <Fila termino="Cliente" valor={venta.cliente} />
+              <Fila
+                termino="Producto"
+                valor={`${venta.variante ? `${venta.producto} · ${venta.variante}` : venta.producto} × ${venta.cantidad}`}
+              />
+              <Fila termino="Proveedor" valor={venta.proveedor} />
+              <Fila termino="Pagado a Membego" valor={`RD$${venta.montoBruto.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`} />
+            </dl>
+
+            <p className="rounded-lg bg-muted/40 p-3 text-caption">{venta.avisoCobro}</p>
+
+            <form action={accionRedimir} className="space-y-3">
+              <input type="hidden" name="companyId" value={companyId} />
+              <input type="hidden" name="ventaId" value={venta.ventaId} />
+              <input type="hidden" name="sucursalId" value={sucursalId} />
+              <Button type="submit" className="w-full" disabled={redimiendo}>
+                {redimiendo ? 'Registrando…' : 'CONFIRMAR ENTREGA'}
+              </Button>
+            </form>
+
+            {entrega.error && (
+              <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{entrega.error}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {entregada && (
         <Card className="border-success/40">
           <CardContent className="space-y-3 pt-6 text-center">
             <CheckCircle2 className="mx-auto size-10 text-success" aria-hidden />
             <p className="font-semibold">Entrega registrada</p>
             <p className="text-caption text-muted-foreground">
-              El voucher quedó utilizado y no se puede volver a canjear. La entrega ya está en tu
-              historial y en el de Membego: los dos leen los mismos movimientos.
+              {venta
+                ? 'La venta quedó entregada y Membego te debe el neto: aparece en tu liquidación. El código no sirve una segunda vez.'
+                : 'El voucher quedó utilizado y no se puede volver a canjear. La entrega ya está en tu historial y en el de Membego: los dos leen los mismos movimientos.'}
             </p>
             <Button type="button" onClick={() => window.location.reload()}>
               Escanear otro

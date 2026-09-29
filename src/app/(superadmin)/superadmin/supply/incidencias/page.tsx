@@ -11,6 +11,7 @@ import { NavSupply } from '@/components/supply/nav'
 import { resumenIncidencias } from '@/modules/supply/incidencias'
 import { FormResolverIncidencia } from '@/components/supply/form-resolver-incidencia'
 import {
+  INCIDENCIA_VIVA,
   SUPPLY_INCIDENCIA_ESTADO_LABELS,
   SUPPLY_INCIDENCIA_TIPO_LABELS,
 } from '@/modules/supply/catalogo'
@@ -91,7 +92,7 @@ export default async function IncidenciasPage() {
         <div className="space-y-3">
           {incidencias.map((i) => {
             const siguientes = TRANSICIONES_INCIDENCIA[i.estado]
-            const abierta = i.estado === 'ABIERTA' || i.estado === 'EN_REVISION'
+            const abierta = INCIDENCIA_VIVA.includes(i.estado)
             return (
               <Card key={i.id} className={abierta ? 'border-warning/40' : undefined}>
                 <CardContent className="space-y-3 pt-6">
@@ -108,9 +109,11 @@ export default async function IncidenciasPage() {
                       variant={
                         i.estado === 'ABIERTA'
                           ? 'destructive'
-                          : i.estado === 'EN_REVISION'
+                          : abierta
                             ? 'warning'
-                            : 'success'
+                            : i.estado === 'RECHAZADA'
+                              ? 'outline'
+                              : 'success'
                       }
                     >
                       {SUPPLY_INCIDENCIA_ESTADO_LABELS[i.estado]}

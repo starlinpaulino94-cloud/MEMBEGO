@@ -32,6 +32,7 @@ export default async function OrdenesPage() {
         numero: true,
         estado: true,
         total: true,
+        montoPagado: true,
         createdAt: true,
         aprobadoAt: true,
         proveedor: { select: { name: true } },
@@ -79,6 +80,7 @@ export default async function OrdenesPage() {
               { clave: 'fecha', titulo: 'Fecha' },
               { clave: 'lineas', titulo: 'Líneas', alinearDerecha: true },
               { clave: 'total', titulo: 'Total', alinearDerecha: true },
+              { clave: 'pagado', titulo: 'Pagado', alinearDerecha: true },
               { clave: 'creador', titulo: 'Creada por' },
               { clave: 'aprobador', titulo: 'Aprobada por' },
               { clave: 'lotes', titulo: 'Lotes', alinearDerecha: true },
@@ -106,6 +108,7 @@ export default async function OrdenesPage() {
               fecha: formatDate(o.createdAt),
               lineas: o._count.lineas,
               total: formatMoneyRD(Number(o.total)),
+              pagado: `${formatMoneyRD(Number(o.montoPagado))}${Number(o.total) > 0 ? ` (${Math.round((Number(o.montoPagado) / Number(o.total)) * 100)}%)` : ''}`,
               creador: o.creadoPor?.name ?? '—',
               aprobador: o.aprobadoPor?.name ?? (
                 <span className="text-warning">Sin aprobar</span>

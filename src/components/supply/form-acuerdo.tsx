@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { crearAcuerdoAction, type EstadoAccion } from '@/modules/supply/actions'
 import {
+  SUPPLY_FRECUENCIA_CORTE_LABELS,
   SUPPLY_MODALIDAD_PAGO_LABELS,
   SUPPLY_MODELO_EXPLICACION,
   SUPPLY_MODELO_LABELS,
@@ -39,9 +40,10 @@ export function FormAcuerdo({ proveedores }: { proveedores: Proveedor[] }) {
   const [estado, accion, pendiente] = useActionState<EstadoAccion, FormData>(crearAcuerdoAction, {})
   const [proveedorId, setProveedorId] = useState(proveedores[0]?.id ?? '')
   const [tipo, setTipo] = useState<(typeof SUPPLY_TIPOS)[number]>('ON_DEMAND')
-  const [modelo, setModelo] = useState<'COMPRA_UNIDAD_COMPLETA' | 'SUBSIDIO'>(
+  const [modelo, setModelo] = useState<'COMPRA_UNIDAD_COMPLETA' | 'SUBSIDIO' | 'COMISION'>(
     'COMPRA_UNIDAD_COMPLETA'
   )
+  const esComision = modelo === 'COMISION'
   const [cantidad, setCantidad] = useState('')
   const [costo, setCosto] = useState('')
 
@@ -126,7 +128,7 @@ export function FormAcuerdo({ proveedores }: { proveedores: Proveedor[] }) {
           onChange={(e) => setModelo(e.target.value as typeof modelo)}
           className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
         >
-          {(['COMPRA_UNIDAD_COMPLETA', 'SUBSIDIO'] as const).map((m) => (
+          {(['COMPRA_UNIDAD_COMPLETA', 'SUBSIDIO', 'COMISION'] as const).map((m) => (
             <option key={m} value={m}>
               {SUPPLY_MODELO_LABELS[m]}
             </option>
@@ -151,20 +153,37 @@ export function FormAcuerdo({ proveedores }: { proveedores: Proveedor[] }) {
             placeholder="1000"
           />
         </div>
-        <div>
-          <Label htmlFor="costoUnitario">Costo Membego</Label>
-          <Input
-            id="costoUnitario"
-            name="costoUnitario"
-            type="number"
-            min={0}
-            step="0.01"
-            required
-            value={costo}
-            onChange={(e) => setCosto(e.target.value)}
-            placeholder="300"
-          />
-        </div>
+        {esComision ? (
+          <div>
+            <Label htmlFor="comisionPorcentaje">% comisión Membego</Label>
+            <Input
+              id="comisionPorcentaje"
+              name="comisionPorcentaje"
+              type="number"
+              min={0.01}
+              max={100}
+              step="0.01"
+              required
+              placeholder="15"
+            />
+            <input type="hidden" name="costoUnitario" value="0" />
+          </div>
+        ) : (
+          <div>
+            <Label htmlFor="costoUnitario">Costo Membego</Label>
+            <Input
+              id="costoUnitario"
+              name="costoUnitario"
+              type="number"
+              min={0}
+              step="0.01"
+              required
+              value={costo}
+              onChange={(e) => setCosto(e.target.value)}
+              placeholder="300"
+            />
+          </div>
+        )}
         <div>
           <Label htmlFor="precioReferencia">Precio público</Label>
           <Input
@@ -191,7 +210,7 @@ export function FormAcuerdo({ proveedores }: { proveedores: Proveedor[] }) {
         )}
       </div>
 
-      {inversion > 0 && (
+      {!esComision && inversion > 0 && (
         <p className="rounded-lg bg-muted/40 p-3 text-sm">
           Inversión total:{' '}
           <strong className="tabular-nums">
@@ -217,7 +236,8 @@ export function FormAcuerdo({ proveedores }: { proveedores: Proveedor[] }) {
           <select
             id="modalidadPago"
             name="modalidadPago"
-            defaultValue="PREPAGO_PARCIAL"
+            key={esComision ? 'comision' : 'compra'}
+            defaultValue={esComision ? 'PAGO_POR_REDENCION' : 'PREPAGO_PARCIAL'}
             className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
           >
             {(Object.keys(SUPPLY_MODALIDAD_PAGO_LABELS) as (keyof typeof SUPPLY_MODALIDAD_PAGO_LABELS)[]).map(
@@ -258,6 +278,54 @@ export function FormAcuerdo({ proveedores }: { proveedores: Proveedor[] }) {
           </select>
         </div>
       </div>
+
+      <fieldset className="space-y-3 rounded-lg border border-border p-3">
+        <legend className="px-1 text-sm font-medium">Términos comerciales</legend>
+        <div className="grid gap-4 sm:grid-cols-4">
+          <div>
+            <Label htmlFor="descuentoPorcentaje">% descuento</Label>
+            <Input id="descuentoPorcentaje" name="descuentoPorcentaje" type="number" min={0} max={100} step="0.01" placeholder="0" />
+          </div>
+          <div>
+            <Label htmlFor="impuestoPorcentaje">% impuestos</Label>
+            <Input id="impuestoPorcentaje" name="impuestoPorcentaje" type="number" min={0} max={100} step="0.01" placeholder="18" />
+          </div>
+          <div>
+            <Label htmlFor="plazoPagoDias">Plazo de pago (días)</Label>
+            <Input id="plazoPagoDias" name="plazoPagoDias" type="number" min={0} max={365} step="1" placeholder="30" />
+          </div>
+          <div>
+            <Label htmlFor="frecuenciaCorte">Frecuencia de corte</Label>
+            <select
+              id="frecuenciaCorte"
+              name="frecuenciaCorte"
+              defaultValue=""
+              className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+            >
+              <option value="">Sin definir</option>
+              {(Object.keys(SUPPLY_FRECUENCIA_CORTE_LABELS) as (keyof typeof SUPPLY_FRECUENCIA_CORTE_LABELS)[]).map((f) => (
+                <option key={f} value={f}>
+                  {SUPPLY_FRECUENCIA_CORTE_LABELS[f]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <Label htmlFor="metodoLiquidacion">Método de liquidación</Label>
+            <Input id="metodoLiquidacion" name="metodoLiquidacion" maxLength={120} placeholder="Transferencia bancaria" />
+          </div>
+          <div>
+            <Label htmlFor="politicaDevoluciones">Política de devoluciones</Label>
+            <Input id="politicaDevoluciones" name="politicaDevoluciones" maxLength={2000} placeholder="Reembolso total si no se entrega" />
+          </div>
+          <div>
+            <Label htmlFor="slaTexto">SLA</Label>
+            <Input id="slaTexto" name="slaTexto" maxLength={2000} placeholder="Entrega en 30 min desde el escaneo" />
+          </div>
+        </div>
+      </fieldset>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
