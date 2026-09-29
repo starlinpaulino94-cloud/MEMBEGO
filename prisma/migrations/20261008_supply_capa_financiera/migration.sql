@@ -1043,11 +1043,6 @@ CREATE INDEX IF NOT EXISTS "supply_cxp_abiertas_vencimiento"
 CREATE INDEX IF NOT EXISTS "supply_acuerdos_activos_fin"
   ON "supply_acuerdos" ("finAt") WHERE "estado" = 'ACTIVO';
 
--- ── Deriva heredada: el índice declarado en el esquema que nunca se creó ────
---
--- `SupplyPedido` declara `@@index([estado, comprobanteAt])` desde el
--- 28-09-2026, pero su migración creó en su lugar el índice PARCIAL de la cola
--- de revisión y nunca este. `migrate diff` lo señalaba como pendiente. Se crea
--- aquí para que esquema y base vuelvan a decir lo mismo.
-CREATE INDEX IF NOT EXISTS "supply_pedidos_estado_comprobanteAt_idx"
-  ON "supply_pedidos" ("estado", "comprobanteAt");
+-- (El índice `[estado, comprobanteAt]` que el esquema declaraba se retiró del
+-- esquema en #523: la cola de revisión usa el índice PARCIAL de la migración
+-- 20261006 y no hace falta otro.)
