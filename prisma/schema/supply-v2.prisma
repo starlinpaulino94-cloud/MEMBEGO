@@ -1,0 +1,567 @@
+// ──────────────────────────────────────────────────────────────────────────
+// MEMBEGO SUPPLY 2.0 · VERTICAL SLICE 1 — PROCUREMENT
+//
+//   Proveedor → Producto → Acuerdo → Orden de compra → Aprobación → Recepción
+//   → Supply disponible
+//
+// Dominio NUEVO y AISLADO. Convive con Supply V1 (`supply.prisma`, tablas
+// `supply_*`) sin tocarlo: las tablas de aquí llevan el prefijo `supply_v2_`,
+// que es temporal —cuando V2 sustituya a V1 se renombrarán, no se crearán dos
+// sistemas permanentes.
+//
+// Lo que SÍ se comparte con Membego Core, por referencia y nunca por copia:
+// `Company` (un proveedor puede ser una empresa ya registrada), `User`
+// (quién creó, aprobó, recibió), `Sucursal` (dónde se recibió), `Servicio` y
+// `ProductoInventario` (un ítem del catálogo del proveedor puede apuntar a lo
+// que la empresa ya vende). No existen SupplyV2User, SupplyV2Company ni
+// SupplyV2Branch.
+//
+// El invariante del lote, escrito también como CHECK en la base:
+//
+//   quantityReceived = available + allocated + reserved + issued + redeemed + closed
+//
+// Ninguna cubeta baja de cero. Los contadores del lote son CACHÉ del ledger
+// (`supply_v2_ledger_entries`): el ledger es la verdad.
+// ──────────────────────────────────────────────────────────────────────────
+
+enum SupplyV2SupplierSource {
+  /// Una `Company` que ya existe en Membego (companyId obligatorio).
+  REGISTERED_COMPANY
+  /// Proveedor que todavía no usa Membego (companyId nulo). Se puede asociar después.
+  EXTERNAL
+}
+
+enum SupplyV2SupplierStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum SupplyV2CatalogItemType {
+  PRODUCT
+  SERVICE
+  EXPERIENCE
+  CAPACITY
+}
+
+enum SupplyV2Unit {
+  UNIT
+  SERVICE
+  PERSON
+  HOUR
+  DAY
+  TICKET
+  CUSTOM
+}
+
+enum SupplyV2CatalogItemStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum SupplyV2AgreementType {
+  PREPAID_PURCHASE
+  OPEN_DEPOSIT
+  PAY_LATER
+  COMMISSION
+  HYBRID
+}
+
+enum SupplyV2AgreementScope {
+  ITEM
+  CATEGORY
+  CATALOG
+}
+
+enum SupplyV2AgreementStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  TERMINATED
+}
+
+enum SupplyV2PurchaseOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+  CLOSED
+}
+
+enum SupplyV2PaymentMode {
+  PREPAID
+  PARTIAL
+  PAY_LATER
+}
+
+/// Lo que le pasó a una orden: el historial de aprobación (§35, «mantener historial»).
+enum SupplyV2PurchaseOrderEventType {
+  CREATED
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELLED
+  RECEIPT_CONFIRMED
+  RECEIVED
+}
+
+enum SupplyV2ReceiptStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+enum SupplyV2LotStatus {
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+  CANCELLED
+  CLOSED
+}
+
+enum SupplyV2Bucket {
+  AVAILABLE
+  ALLOCATED
+  RESERVED
+  ISSUED
+  REDEEMED
+  CLOSED
+}
+
+enum SupplyV2LedgerEntryType {
+  RECEIPT
+  ALLOCATION
+  RELEASE_ALLOCATION
+  RESERVATION
+  RELEASE_RESERVATION
+  ISSUE
+  REDEMPTION
+  REVERSAL
+  EXPIRATION
+  ADJUSTMENT
+  CANCELLATION
+  TRANSFER
+}
+
+enum SupplyV2ReferenceType {
+  PURCHASE_RECEIPT
+  ADJUSTMENT
+  CANCELLATION
+}
+
+// ── Proveedor ──────────────────────────────────────────────────────────────
+
+model SupplyV2Supplier {
+  id String @id @default(cuid())
+
+  /// La empresa de Membego cuando el proveedor ya está registrado. UNA
+  /// relación comercial por empresa: no se crea otra `Company` ni otro
+  /// proveedor para la misma.
+  companyId String?  @unique
+  company   Company? @relation("SupplyV2SupplierCompany", fields: [companyId], references: [id], onDelete: Restrict)
+
+  source SupplyV2SupplierSource
+  status SupplyV2SupplierStatus @default(ACTIVE)
+
+  commercialName String
+  legalName      String?
+  taxId          String?
+
+  contactName String?
+  phone       String?
+  whatsapp    String?
+  email       String?
+
+  address     String?
+  city        String?
+  countryCode String  @default("DO")
+
+  currency String @default("DOP")
+
+  paymentTermsDays Int?
+  paymentTermsText String?
+
+  notes String?
+
+  createdById String?
+  createdBy   User?   @relation("SupplyV2SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  catalogItems   SupplyV2CatalogItem[]
+  agreements     SupplyV2Agreement[]
+  purchaseOrders SupplyV2PurchaseOrder[]
+  receipts       SupplyV2PurchaseReceipt[]
+  lots           SupplyV2Lot[]
+
+  @@index([status, commercialName])
+  @@map("supply_v2_suppliers")
+}
+
+// ── Catálogo del proveedor ─────────────────────────────────────────────────
+
+model SupplyV2CatalogItem {
+  id         String           @id @default(cuid())
+  supplierId String
+  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  type SupplyV2CatalogItemType
+
+  name        String
+  /// Identificador legible dentro del proveedor; el nombre NO es el identificador.
+  slug        String
+  description String?
+
+  sku               String?
+  externalReference String?
+  category          String?
+
+  publicPrice Decimal? @db.Decimal(12, 2)
+  currency    String   @default("DOP")
+
+  unit SupplyV2Unit @default(UNIT)
+
+  imagePath String?
+
+  /// Vínculo OPCIONAL con lo que la empresa ya vende en Membego. Nunca se
+  /// escribe sobre esas tablas; solo se apunta.
+  existingProductId String?
+  existingProduct   ProductoInventario? @relation("SupplyV2CatalogItemProducto", fields: [existingProductId], references: [id], onDelete: SetNull)
+  existingServiceId String?
+  existingService   Servicio?           @relation("SupplyV2CatalogItemServicio", fields: [existingServiceId], references: [id], onDelete: SetNull)
+
+  status SupplyV2CatalogItemStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agreements SupplyV2Agreement[]
+  orderLines SupplyV2PurchaseOrderLine[]
+  lots       SupplyV2Lot[]
+
+  /// `supplierId + sku` único cuando hay SKU (índice parcial en la migración).
+  @@unique([supplierId, sku])
+  @@unique([supplierId, slug])
+  @@index([supplierId, status])
+  @@map("supply_v2_catalog_items")
+}
+
+// ── Acuerdo comercial ──────────────────────────────────────────────────────
+
+model SupplyV2Agreement {
+  id         String           @id @default(cuid())
+  supplierId String
+  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  /// Legible: "MBG-AG-2026-000001".
+  code    String @unique
+  /// Versión vigente. Nace en 1 al ACTIVAR; cada cambio posterior la incrementa
+  /// y deja una fila en `supply_v2_agreement_versions`.
+  version Int    @default(0)
+
+  type  SupplyV2AgreementType
+  scope SupplyV2AgreementScope @default(ITEM)
+
+  catalogItemId String?
+  catalogItem   SupplyV2CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  category      String?
+
+  currency String @default("DOP")
+
+  negotiatedUnitCost   Decimal? @db.Decimal(12, 2)
+  discountPercentage   Decimal? @db.Decimal(5, 2)
+  commissionPercentage Decimal? @db.Decimal(5, 2)
+
+  paymentTermsDays Int?
+
+  startsAt DateTime
+  endsAt   DateTime?
+
+  status SupplyV2AgreementStatus @default(DRAFT)
+
+  notes String?
+
+  createdById  String
+  createdBy    User      @relation("SupplyV2AgreementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById String?
+  approvedBy   User?     @relation("SupplyV2AgreementApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions       SupplyV2AgreementVersion[]
+  purchaseOrders SupplyV2PurchaseOrder[]
+  lots           SupplyV2Lot[]
+
+  @@index([supplierId, status])
+  @@index([catalogItemId, status])
+  @@map("supply_v2_agreements")
+}
+
+model SupplyV2AgreementVersion {
+  id          String            @id @default(cuid())
+  agreementId String
+  agreement   SupplyV2Agreement @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+
+  version  Int
+  /// Foto completa de las condiciones en esa versión. Una orden histórica
+  /// apunta a su versión y no cambia aunque el acuerdo cambie después.
+  snapshot Json
+
+  createdById String
+  createdBy   User   @relation("SupplyV2AgreementVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  purchaseOrders SupplyV2PurchaseOrder[]
+  lots           SupplyV2Lot[]
+
+  @@unique([agreementId, version])
+  @@map("supply_v2_agreement_versions")
+}
+
+// ── Orden de compra ────────────────────────────────────────────────────────
+
+model SupplyV2PurchaseOrder {
+  id     String @id @default(cuid())
+  /// "MBG-PO-2026-000001". Numeración serializada en la transacción (nunca count()+1).
+  number String @unique
+
+  supplierId         String
+  supplier           SupplyV2Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  agreementId        String
+  agreement          SupplyV2Agreement        @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  agreementVersionId String
+  agreementVersion   SupplyV2AgreementVersion @relation(fields: [agreementVersionId], references: [id], onDelete: Restrict)
+
+  currency String @default("DOP")
+
+  subtotal Decimal @db.Decimal(14, 2)
+  /// Porcentaje aplicado para llegar a `taxes`; se guarda para poder reproducir el cálculo.
+  taxRate  Decimal @default(0) @db.Decimal(5, 2)
+  taxes    Decimal @default(0) @db.Decimal(14, 2)
+  total    Decimal @db.Decimal(14, 2)
+
+  status      SupplyV2PurchaseOrderStatus @default(DRAFT)
+  paymentMode SupplyV2PaymentMode         @default(PREPAID)
+
+  notes String?
+
+  createdById  String
+  createdBy    User      @relation("SupplyV2PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById String?
+  approvedBy   User?     @relation("SupplyV2PurchaseOrderApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines    SupplyV2PurchaseOrderLine[]
+  receipts SupplyV2PurchaseReceipt[]
+  lots     SupplyV2Lot[]
+  events   SupplyV2PurchaseOrderEvent[]
+
+  @@index([supplierId, status])
+  @@index([status, createdAt])
+  @@map("supply_v2_purchase_orders")
+}
+
+model SupplyV2PurchaseOrderLine {
+  id              String                @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   SupplyV2PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  catalogItemId   String
+  catalogItem     SupplyV2CatalogItem   @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  /// Nombre del ítem al comprar: sobrevive a que el catálogo cambie.
+  descriptionSnapshot String
+
+  quantity Int
+  unitCost Decimal @db.Decimal(12, 2)
+  subtotal Decimal @db.Decimal(14, 2)
+
+  /// Suma de las recepciones CONFIRMADAS. Nunca supera `quantity` (CHECK).
+  receivedQuantity Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  receiptLines SupplyV2PurchaseReceiptLine[]
+  lots         SupplyV2Lot[]
+
+  @@index([purchaseOrderId])
+  @@index([catalogItemId])
+  @@map("supply_v2_purchase_order_lines")
+}
+
+model SupplyV2PurchaseOrderEvent {
+  id              String                         @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   SupplyV2PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  type            SupplyV2PurchaseOrderEventType
+  fromStatus      SupplyV2PurchaseOrderStatus?
+  toStatus        SupplyV2PurchaseOrderStatus?
+  /// Obligatorio al rechazar o cancelar.
+  reason          String?
+  actorId         String?
+  actor           User?                          @relation("SupplyV2PurchaseOrderEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt       DateTime                       @default(now())
+
+  @@index([purchaseOrderId, createdAt])
+  @@map("supply_v2_purchase_order_events")
+}
+
+// ── Recepción ──────────────────────────────────────────────────────────────
+
+model SupplyV2PurchaseReceipt {
+  id     String @id @default(cuid())
+  /// "MBG-RC-2026-000001".
+  number String @unique
+
+  purchaseOrderId String
+  purchaseOrder   SupplyV2PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  supplierId      String
+  supplier        SupplyV2Supplier      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  receivedAt DateTime
+
+  branchId  String?
+  branch    Sucursal? @relation("SupplyV2ReceiptBranch", fields: [branchId], references: [id], onDelete: SetNull)
+  reference String?
+  notes     String?
+
+  receivedById String
+  receivedBy   User   @relation("SupplyV2ReceiptReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+
+  status SupplyV2ReceiptStatus @default(CONFIRMED)
+
+  /// Protección contra el doble clic: dos confirmaciones con la misma clave
+  /// devuelven la misma recepción en vez de crear dos lotes.
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+
+  lines SupplyV2PurchaseReceiptLine[]
+  lots  SupplyV2Lot[]
+
+  @@index([purchaseOrderId, createdAt])
+  @@map("supply_v2_purchase_receipts")
+}
+
+model SupplyV2PurchaseReceiptLine {
+  id                  String                    @id @default(cuid())
+  receiptId           String
+  receipt             SupplyV2PurchaseReceipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  purchaseOrderLineId String
+  purchaseOrderLine   SupplyV2PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+
+  quantity Int
+
+  expiresAt DateTime?
+  notes     String?
+
+  lot SupplyV2Lot?
+
+  @@index([purchaseOrderLineId])
+  @@map("supply_v2_purchase_receipt_lines")
+}
+
+// ── Lote y ledger ──────────────────────────────────────────────────────────
+
+model SupplyV2Lot {
+  id   String @id @default(cuid())
+  /// "LOT-2026-000001".
+  code String @unique
+
+  supplierId    String
+  supplier      SupplyV2Supplier    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  catalogItemId String
+  catalogItem   SupplyV2CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  purchaseOrderId     String
+  purchaseOrder       SupplyV2PurchaseOrder     @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  purchaseOrderLineId String
+  purchaseOrderLine   SupplyV2PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+
+  receiptId     String
+  receipt       SupplyV2PurchaseReceipt     @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  receiptLineId String                      @unique
+  receiptLine   SupplyV2PurchaseReceiptLine @relation(fields: [receiptLineId], references: [id], onDelete: Restrict)
+
+  agreementId        String
+  agreement          SupplyV2Agreement        @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  agreementVersionId String
+  agreementVersion   SupplyV2AgreementVersion @relation(fields: [agreementVersionId], references: [id], onDelete: Restrict)
+
+  quantityReceived Int
+
+  // Cubetas: caché del ledger. CHECK de cuadre y de no-negatividad en la base.
+  quantityAvailable Int @default(0)
+  quantityAllocated Int @default(0)
+  quantityReserved  Int @default(0)
+  quantityIssued    Int @default(0)
+  quantityRedeemed  Int @default(0)
+  quantityClosed    Int @default(0)
+
+  unitCost Decimal @db.Decimal(12, 2)
+  currency String  @default("DOP")
+
+  receivedAt DateTime
+  expiresAt  DateTime?
+
+  status SupplyV2LotStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+
+  ledgerEntries SupplyV2LedgerEntry[]
+
+  @@index([catalogItemId, status])
+  @@index([supplierId, status])
+  @@index([purchaseOrderId])
+  @@map("supply_v2_lots")
+}
+
+model SupplyV2LedgerEntry {
+  id    String      @id @default(cuid())
+  lotId String
+  lot   SupplyV2Lot @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  type SupplyV2LedgerEntryType
+
+  /// Traslado entre cubetas: `null` en origen = entra al lote desde fuera
+  /// (recepción); `null` en destino = sale del lote.
+  sourceBucket      SupplyV2Bucket?
+  destinationBucket SupplyV2Bucket?
+
+  /// SIEMPRE positiva: el sentido lo da el par (origen, destino).
+  quantity Int
+
+  /// Disponibles del lote antes y después de este asiento.
+  balanceBefore Int
+  balanceAfter  Int
+  /// Las seis cubetas antes y después, para leer un asiento suelto.
+  bucketsBefore Json @default("{}")
+  bucketsAfter  Json @default("{}")
+
+  referenceType SupplyV2ReferenceType
+  referenceId   String
+
+  reason String?
+
+  actorId String?
+  actor   User?   @relation("SupplyV2LedgerActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([lotId, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("supply_v2_ledger_entries")
+}

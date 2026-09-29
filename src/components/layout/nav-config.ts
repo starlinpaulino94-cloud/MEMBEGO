@@ -1179,6 +1179,13 @@ const G_SA_OPERACION: NavGroup = {
       ],
     },
     {
+      href: '/superadmin/supply-v2',
+      label: 'Supply 2.0',
+      icon: PackageSearch,
+      description: 'Procurement: proveedores, acuerdos, compras y recepciones (nuevo motor, en paralelo).',
+      keywords: ['supply', 'supply 2.0', 'procurement', 'proveedores', 'compras', 'recepciones', 'lotes'],
+    },
+    {
       href: '/superadmin/connect',
       label: 'Connect',
       icon: Blocks,

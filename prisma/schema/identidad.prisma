@@ -311,6 +311,18 @@ enum AuditAccion {
   SUPPLY_LOTE_CANCELACION
   SUPPLY_LOTE_VENCIMIENTO_EXTENDIDO
   SUPPLY_PEDIDO_REEMBOLSADO
+  // ── Membego Supply 2.0 · Slice 1 (procurement) ────────────────────────────
+  SUPPLY_V2_SUPPLIER_CREATED
+  SUPPLY_V2_CATALOG_ITEM_CREATED
+  SUPPLY_V2_AGREEMENT_CREATED
+  SUPPLY_V2_AGREEMENT_ACTIVATED
+  SUPPLY_V2_PO_CREATED
+  SUPPLY_V2_PO_SUBMITTED
+  SUPPLY_V2_PO_APPROVED
+  SUPPLY_V2_PO_REJECTED
+  SUPPLY_V2_PO_CANCELLED
+  SUPPLY_V2_RECEIPT_CONFIRMED
+  SUPPLY_V2_LOT_CREATED
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas
@@ -462,6 +474,16 @@ model User {
   supplyDiscrepanciasAprobadas SupplyDiscrepancia[]       @relation("SupplyDiscrepanciaAprobadaPor")
   supplyDiscrepanciaNotas      SupplyDiscrepanciaNota[]   @relation("SupplyDiscrepanciaNotaActor")
   supplyVentasEntregadas       SupplyVentaDirecta[]       @relation("SupplyVentaEntregadaPor")
+  // ── Membego Supply 2.0 (supply-v2.prisma) ─────────────────────────────────
+  supplyV2ProveedoresCreados   SupplyV2Supplier[]           @relation("SupplyV2SupplierCreatedBy")
+  supplyV2AcuerdosCreados      SupplyV2Agreement[]          @relation("SupplyV2AgreementCreatedBy")
+  supplyV2AcuerdosAprobados    SupplyV2Agreement[]          @relation("SupplyV2AgreementApprovedBy")
+  supplyV2VersionesCreadas     SupplyV2AgreementVersion[]   @relation("SupplyV2AgreementVersionCreatedBy")
+  supplyV2OrdenesCreadas       SupplyV2PurchaseOrder[]      @relation("SupplyV2PurchaseOrderCreatedBy")
+  supplyV2OrdenesAprobadas     SupplyV2PurchaseOrder[]      @relation("SupplyV2PurchaseOrderApprovedBy")
+  supplyV2OrdenEventos         SupplyV2PurchaseOrderEvent[] @relation("SupplyV2PurchaseOrderEventActor")
+  supplyV2Recepciones          SupplyV2PurchaseReceipt[]    @relation("SupplyV2ReceiptReceivedBy")
+  supplyV2Asientos             SupplyV2LedgerEntry[]        @relation("SupplyV2LedgerActor")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)
@@ -729,6 +751,8 @@ model Company {
   supplyLiquidaciones    SupplyLiquidacion[]       @relation("SupplyProveedorLiquidaciones")
   supplyConciliaciones   SupplyConciliacion[]      @relation("SupplyProveedorConciliaciones")
   supplyVentas           SupplyVentaDirecta[]      @relation("SupplyProveedorVentas")
+  // ── Membego Supply 2.0 (supply-v2.prisma) · referencia, no duplicado ─────
+  supplyV2Supplier       SupplyV2Supplier?         @relation("SupplyV2SupplierCompany")
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -764,6 +788,8 @@ model Sucursal {
   supplyReservas    SupplyReserva[]      @relation("SupplyReservaSucursal")
   supplyRedenciones SupplyRedencion[]    @relation("SupplyRedencionSucursal")
   supplyVentas      SupplyVentaDirecta[] @relation("SupplyVentaSucursal")
+  // Membego Supply 2.0: dónde se recibió una compra.
+  supplyV2Recepciones SupplyV2PurchaseReceipt[] @relation("SupplyV2ReceiptBranch")
 
   // ── Geolocalización (docs/GEOLOCALIZACION.md §3.3) ─────────────────────────
   // Normalizado: las claves del catálogo geo cuando la dirección se resuelve.

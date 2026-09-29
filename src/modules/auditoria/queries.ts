@@ -171,6 +171,18 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPPLY_LOTE_CANCELACION: 'Supply · unidades canceladas',
   SUPPLY_LOTE_VENCIMIENTO_EXTENDIDO: 'Supply · vencimiento de lote extendido',
   SUPPLY_PEDIDO_REEMBOLSADO: 'Supply · cobro reembolsado',
+  // Membego Supply 2.0 · Slice 1 (procurement).
+  SUPPLY_V2_SUPPLIER_CREATED: 'Supply 2.0 · proveedor creado',
+  SUPPLY_V2_CATALOG_ITEM_CREATED: 'Supply 2.0 · producto del proveedor creado',
+  SUPPLY_V2_AGREEMENT_CREATED: 'Supply 2.0 · acuerdo creado',
+  SUPPLY_V2_AGREEMENT_ACTIVATED: 'Supply 2.0 · acuerdo activado',
+  SUPPLY_V2_PO_CREATED: 'Supply 2.0 · orden de compra creada',
+  SUPPLY_V2_PO_SUBMITTED: 'Supply 2.0 · orden enviada a aprobación',
+  SUPPLY_V2_PO_APPROVED: 'Supply 2.0 · orden aprobada',
+  SUPPLY_V2_PO_REJECTED: 'Supply 2.0 · orden rechazada',
+  SUPPLY_V2_PO_CANCELLED: 'Supply 2.0 · orden cancelada',
+  SUPPLY_V2_RECEIPT_CONFIRMED: 'Supply 2.0 · recepción confirmada',
+  SUPPLY_V2_LOT_CREATED: 'Supply 2.0 · lote creado',
   // Campañas conjuntas: reparto y retirada en varias empresas a la vez.
   CAMPANA_APLICADA: 'Campaña conjunta aplicada',
   CAMPANA_ARCHIVADA: 'Campaña conjunta archivada',

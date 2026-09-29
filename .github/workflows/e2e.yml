@@ -51,9 +51,20 @@ jobs:
       DIRECT_URL: postgresql://postgres:e2e@localhost:5432/membego_e2e
       # Valores de relleno: el recorrido público no toca Supabase. Tienen que
       # existir porque el build los exige.
-      NEXT_PUBLIC_SUPABASE_URL: https://e2e.supabase.co
+      #
+      # La URL apunta a un puerto local sin nadie escuchando, a propósito: así
+      # `supabase.auth.getUser()` falla con un error de red (transitorio) y la
+      # aplicación cae a la verificación LOCAL del token con
+      # `SUPABASE_JWT_SECRET`. Es lo que permite que el recorrido de Supply 2.0
+      # (`tests/e2e/supply-v2-slice1.spec.ts`) entre con dos sesiones firmadas
+      # aquí mismo, sin proyecto de Supabase. Un host inventado bajo un dominio
+      # real podría resolver y devolver un 401, que NO es transitorio.
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54329
       NEXT_PUBLIC_SUPABASE_ANON_KEY: e2e-anon
       SUPABASE_SERVICE_ROLE_KEY: e2e-service
+      # Secreto de RELLENO, solo para firmar sesiones de prueba contra esta
+      # base efímera. No es el de ningún entorno real.
+      SUPABASE_JWT_SECRET: e2e-jwt-secret-solo-para-pruebas-0123456789
       NEXT_PUBLIC_APP_URL: http://localhost:3210
       E2E_BASE_URL: http://localhost:3210
       NEXT_TELEMETRY_DISABLED: '1'
