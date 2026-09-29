@@ -7,6 +7,9 @@ import { ajustarLote, cancelarUnidades, extenderVencimiento, transferirUnidades 
 import { aplicarDepositoAOrden } from './depositos'
 import { adjuntarComprobantePago } from './finanzas'
 import { rutaValida } from '@/modules/storage/comprobantes'
+import { abrirIncidencia } from './incidencias'
+import { sinEmpresa } from '@/lib/tenant'
+import { resolverCliente } from './pool'
 
 /**
  * MEMBEGO SUPPLY · server actions de operación sobre lotes y pagos de órdenes
@@ -117,6 +120,36 @@ export async function adjuntarComprobantePagoAction(_prev: EstadoAccion, fd: For
     refrescarPlataforma('finanzas/pagos')
     refrescarPlataforma('ordenes')
     return { success: 'Comprobante adjuntado.' }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+/** Plataforma abre una incidencia desde un beneficio, una redención, una venta, un lote o un proveedor (§26). */
+export async function abrirIncidenciaAdminAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
+  try {
+    const user = await exigirPlataforma('MEMBEGO_SUPPLY_APPROVE')
+    const tipo = texto(fd, 'tipo', 40)
+    const detalle = texto(fd, 'detalle', 2000)
+    if (!tipo || !detalle) return { error: 'Faltan el tipo y el detalle.' }
+    const busqueda = texto(fd, 'clienteBusqueda', 160)
+    const cliente = busqueda ? await sinEmpresa('Membego Supply: cliente de una incidencia', (tx) => resolverCliente(tx, busqueda)) : null
+    const { id } = await abrirIncidencia({
+      tipo: tipo as never,
+      detalle,
+      derechoId: texto(fd, 'derechoId', 60) || null,
+      voucherId: texto(fd, 'voucherId', 60) || null,
+      redencionId: texto(fd, 'redencionId', 60) || null,
+      ventaId: texto(fd, 'ventaId', 60) || null,
+      loteId: texto(fd, 'loteId', 60) || null,
+      proveedorId: texto(fd, 'proveedorId', 60) || null,
+      clienteId: cliente?.id ?? null,
+      sucursalId: texto(fd, 'sucursalId', 60) || null,
+      reportadoPorId: user.metadata.dbUserId ?? null,
+    })
+    await auditar('SUPPLY_INCIDENCIA_ABIERTA', 'SupplyIncidencia', id, { tipo, desde: 'plataforma' })
+    refrescarPlataforma('incidencias')
+    return { success: 'Incidencia abierta.', id }
   } catch (e) {
     return comoError(e)
   }

@@ -1,11 +1,11 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useState } from 'react'
+import Link from 'next/link'
 import { ShoppingBag } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { abrirVentaAction, type EstadoAccion } from '@/modules/supply/actions-ventas'
 
 export interface OfertaVentaVista {
   acuerdoId: string
@@ -26,7 +26,6 @@ export interface OfertaVentaVista {
  * negocio escanea al entregar.
  */
 export function TarjetaVenta({ oferta, clienteId }: { oferta: OfertaVentaVista; clienteId: string }) {
-  const [estado, accion, pendiente] = useActionState<EstadoAccion, FormData>(abrirVentaAction, {})
   const [cantidad, setCantidad] = useState(1)
   const total = oferta.precio * cantidad
 
@@ -53,30 +52,22 @@ export function TarjetaVenta({ oferta, clienteId }: { oferta: OfertaVentaVista; 
           Membego por transferencia y recoges en el negocio con tu código.
         </p>
 
-        {estado.success ? (
-          <p className="rounded-lg bg-success/10 p-3 text-caption text-success">{estado.success}</p>
-        ) : (
-          <form action={accion} className="space-y-2">
-            <input type="hidden" name="acuerdoId" value={oferta.acuerdoId} />
-            <input type="hidden" name="clienteId" value={clienteId} />
-            <label className="flex items-center gap-2 text-sm">
-              Cantidad
-              <input
-                type="number"
-                name="cantidad"
-                min={1}
-                max={Math.min(20, oferta.disponibles)}
-                value={cantidad}
-                onChange={(e) => setCantidad(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-                className="h-9 w-20 rounded-lg border border-input bg-transparent px-3 text-sm"
-              />
-            </label>
-            <Button type="submit" className="w-full" disabled={pendiente || !clienteId}>
-              {pendiente ? 'Abriendo pedido…' : `Comprar por RD$${total.toLocaleString('es-DO')}`}
-            </Button>
-          </form>
-        )}
-        {estado.error && <p className="text-caption text-destructive">{estado.error}</p>}
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm">
+            Cantidad
+            <input
+              type="number"
+              min={1}
+              max={Math.min(20, oferta.disponibles)}
+              value={cantidad}
+              onChange={(e) => setCantidad(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+              className="h-9 w-20 rounded-lg border border-input bg-transparent px-3 text-sm"
+            />
+          </label>
+          <Button asChild className="w-full" disabled={!clienteId}>
+            <Link href={`/cliente/beneficios/checkout?venta=${oferta.acuerdoId}&cantidad=${cantidad}`}>Comprar por RD${total.toLocaleString('es-DO')}</Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

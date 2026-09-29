@@ -41,6 +41,7 @@ export function umbralesVencimiento(): readonly number[] {
 
 export interface AlertaVencimiento {
   loteId: string
+  acuerdoId: string
   codigo: string
   proveedorId: string
   proveedorNombre: string
@@ -90,6 +91,7 @@ export async function alertasDeVencimiento(
         snapshotItemNombre: true,
         snapshotCostoUnitario: true,
         proveedor: { select: { name: true } },
+        acuerdoId: true,
         acuerdo: { select: { politicaSobrante: true } },
       },
       orderBy: { venceAt: 'asc' },
@@ -102,6 +104,7 @@ export async function alertasDeVencimiento(
         const diasRestantes = diasHasta(l.venceAt, ahora)
         return {
           loteId: l.id,
+          acuerdoId: l.acuerdoId,
           codigo: l.codigo,
           proveedorId: l.proveedorId,
           proveedorNombre: l.proveedor.name,

@@ -184,9 +184,11 @@ export default async function ProveedorDetallePage({
           <CardTitle>Conciliación</CardTitle>
         </CardHeader>
         <CardContent className="text-sm">
-          {conciliacion.cuadra ? (
+          {conciliacion.sinDatos ? (
+            <p className="text-muted-foreground">Sin operaciones suficientes para conciliar con este proveedor.</p>
+          ) : conciliacion.cuadra ? (
             <p className="text-success">
-              Los {conciliacion.lotesRevisados} lotes de este proveedor cuadran contra su ledger.
+              Las {conciliacion.operacionesRevisadas} operaciones de este proveedor cuadran contra su ledger.
             </p>
           ) : (
             <>

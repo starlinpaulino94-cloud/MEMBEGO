@@ -38,6 +38,9 @@ export interface DatosIncidencia {
   clienteId?: string | null
   sucursalId?: string | null
   reportadoPorId?: string | null
+  /** Desde un lote o un proveedor (§26): sin beneficio ni venta concretos. */
+  loteId?: string | null
+  proveedorId?: string | null
 }
 
 /**
@@ -58,11 +61,34 @@ export async function abrirIncidencia(d: DatosIncidencia): Promise<{ id: string 
 
 async function abrirIncidenciaEnTx(d: DatosIncidencia): Promise<{ id: string }> {
   if (!d.detalle.trim()) throw new Error('Una incidencia necesita una descripción.')
-  if (!d.voucherId && !d.derechoId && !d.redencionId && !d.ventaId) {
-    throw new Error('Una incidencia tiene que apuntar a un beneficio o a una venta concretos.')
+  if (!d.voucherId && !d.derechoId && !d.redencionId && !d.ventaId && !d.loteId && !d.proveedorId) {
+    throw new Error('Una incidencia tiene que apuntar a un beneficio, una venta, un lote o un proveedor.')
   }
 
   return sinEmpresa('Membego Supply: incidencia de cumplimiento', async (tx) => {
+    if (!d.voucherId && !d.derechoId && !d.redencionId && !d.ventaId) {
+      // Sobre un lote o un proveedor, sin cliente de por medio.
+      const lote = d.loteId
+        ? await tx.supplyLote.findUnique({ where: { id: d.loteId }, select: { id: true, proveedorId: true, acuerdoId: true } })
+        : null
+      if (d.loteId && !lote) throw new Error('Lote no encontrado.')
+      const proveedorId = lote?.proveedorId ?? d.proveedorId
+      if (!proveedorId) throw new Error('Falta el proveedor de la incidencia.')
+      return tx.supplyIncidencia.create({
+        data: {
+          proveedorId,
+          loteId: lote?.id ?? null,
+          acuerdoId: lote?.acuerdoId ?? null,
+          clienteId: d.clienteId ?? null,
+          sucursalId: d.sucursalId ?? null,
+          tipo: d.tipo,
+          estado: 'ABIERTA',
+          detalle: d.detalle.trim(),
+          reportadoPorId: d.reportadoPorId ?? null,
+        },
+        select: { id: true },
+      })
+    }
     if (d.ventaId) {
       const venta = await tx.supplyVentaDirecta.findUnique({
         where: { id: d.ventaId },

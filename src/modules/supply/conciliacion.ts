@@ -55,6 +55,10 @@ export interface Hallazgo {
 export interface ReporteConciliacion {
   generadoAt: Date
   lotesRevisados: number
+  /** Lotes, pagos, liquidaciones, depósitos y derechos contrastados. */
+  operacionesRevisadas: number
+  /** true = no había nada que conciliar; nunca se enseña como «todo cuadra». */
+  sinDatos: boolean
   hallazgos: Hallazgo[]
   /** Resumen por gravedad, para el semáforo. */
   criticos: number
@@ -378,6 +382,86 @@ export async function conciliar(
     }
 
     // ── 7 · Reversas sin original ──────────────────────────────────────────
+    // §34 · Derecho REDIMIDO sin redención que lo respalde.
+    const redimidosSinRedencion = await tx.supplyDerecho.findMany({
+      where: { ...ambito, estado: 'REDIMIDO', vouchers: { none: { redenciones: { some: { reversadaAt: null } } } } },
+      select: { id: true, loteId: true, proveedorId: true },
+      take: 100,
+    })
+    for (const d of redimidosSinRedencion) {
+      hallazgos.push({
+        tipo: 'DERECHO_REDIMIDO_SIN_REDENCION',
+        gravedad: GRAVEDAD_HALLAZGO.DERECHO_REDIMIDO_SIN_REDENCION,
+        titulo: 'Derecho redimido sin redención',
+        detalle: 'El derecho está en REDIMIDO pero ningún voucher suyo tiene una redención viva.',
+        entidad: 'SupplyDerecho',
+        entidadId: d.id,
+        loteId: d.loteId,
+        proveedorId: d.proveedorId,
+      })
+    }
+
+    // §34 · Pago CONFIRMADO sin asiento financiero.
+    const pagosSinAsiento = await tx.supplyPago.findMany({
+      where: { ...(proveedorId ? { proveedorId } : {}), estado: 'CONFIRMADO', asientos: { none: {} } },
+      select: { id: true, proveedorId: true, monto: true },
+      take: 100,
+    })
+    for (const p of pagosSinAsiento) {
+      hallazgos.push({
+        tipo: 'PAGO_SIN_ASIENTO',
+        gravedad: GRAVEDAD_HALLAZGO.PAGO_SIN_ASIENTO,
+        titulo: 'Pago confirmado sin asiento',
+        detalle: `Un pago de ${Number(p.monto).toFixed(2)} está confirmado y no movió el ledger financiero: el saldo del proveedor miente.`,
+        entidad: 'SupplyPago',
+        entidadId: p.id,
+        proveedorId: p.proveedorId,
+      })
+    }
+
+    // §34 · Liquidación PAGADA con obligaciones que no quedaron saldadas.
+    const liquidacionesPagadas = await tx.supplyLiquidacion.findMany({
+      where: { ...(proveedorId ? { proveedorId } : {}), estado: { in: ['PAGADA', 'CONCILIADA'] } },
+      select: { id: true, codigo: true, proveedorId: true, lineas: { where: { cuentaPorPagarId: { not: null } }, select: { cuentaPorPagarId: true } } },
+      take: 100,
+    })
+    for (const l of liquidacionesPagadas) {
+      const ids = l.lineas.map((x) => x.cuentaPorPagarId!).filter(Boolean)
+      if (ids.length === 0) continue
+      const sinSaldar = await tx.supplyCuentaPorPagar.count({ where: { id: { in: ids }, estado: { notIn: ['SALDADA', 'CANCELADA'] } } })
+      if (sinSaldar > 0) {
+        hallazgos.push({
+          tipo: 'LIQUIDACION_SIN_OBLIGACION',
+          gravedad: GRAVEDAD_HALLAZGO.LIQUIDACION_SIN_OBLIGACION,
+          titulo: `${l.codigo}: pagada con cuentas sin saldar`,
+          detalle: `${sinSaldar} cuenta(s) por pagar de esta liquidación siguen abiertas después de pagarla.`,
+          entidad: 'SupplyLiquidacion',
+          entidadId: l.id,
+          proveedorId: l.proveedorId,
+        })
+      }
+    }
+
+    // §34 · Depósito en negativo (defensa en profundidad: la base ya lo impide).
+    const depositos = await tx.supplyDeposito.findMany({
+      where: proveedorId ? { proveedorId } : {},
+      select: { id: true, codigo: true, proveedorId: true, montoOriginal: true, montoAplicado: true, montoDevuelto: true },
+      take: 500,
+    })
+    for (const d of depositos) {
+      if (Number(d.montoAplicado) + Number(d.montoDevuelto) > Number(d.montoOriginal) + 0.005) {
+        hallazgos.push({
+          tipo: 'DEPOSITO_NEGATIVO',
+          gravedad: GRAVEDAD_HALLAZGO.DEPOSITO_NEGATIVO,
+          titulo: `${d.codigo}: saldo negativo`,
+          detalle: `Aplicado ${Number(d.montoAplicado).toFixed(2)} + devuelto ${Number(d.montoDevuelto).toFixed(2)} supera lo depositado ${Number(d.montoOriginal).toFixed(2)}.`,
+          entidad: 'SupplyDeposito',
+          entidadId: d.id,
+          proveedorId: d.proveedorId,
+        })
+      }
+    }
+
     const reversas = await tx.supplyMovimiento.findMany({
       where: { tipo: 'REVERSA_REDENCION', ...(proveedorId ? { lote: { proveedorId } } : {}) },
       select: { id: true, redencionId: true, loteId: true },
@@ -401,14 +485,20 @@ export async function conciliar(
     const orden: Record<Gravedad, number> = { CRITICA: 0, ALTA: 1, MEDIA: 2 }
     hallazgos.sort((a, b) => orden[a.gravedad] - orden[b.gravedad])
 
+    // Cero operaciones NO es «todo cuadra»: es «no hay nada que contrastar».
+    // Lo que se revisó cuenta operaciones de todos los libros, no solo lotes.
+    const operacionesRevisadas =
+      lotes.length + pagosSinAsiento.length + liquidacionesPagadas.length + depositos.length + redimidosSinRedencion.length
     return {
       generadoAt: ahora,
       lotesRevisados: lotes.length,
+      operacionesRevisadas,
       hallazgos,
       criticos: hallazgos.filter((h) => h.gravedad === 'CRITICA').length,
       altos: hallazgos.filter((h) => h.gravedad === 'ALTA').length,
       medios: hallazgos.filter((h) => h.gravedad === 'MEDIA').length,
-      cuadra: hallazgos.length === 0,
+      cuadra: operacionesRevisadas > 0 && hallazgos.length === 0,
+      sinDatos: operacionesRevisadas === 0,
     }
   })
 }

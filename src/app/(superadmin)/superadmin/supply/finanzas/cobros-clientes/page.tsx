@@ -9,6 +9,7 @@ import { TablaReporte } from '@/components/ui/reporte-imprimible'
 import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavFinanzas } from '@/components/supply/nav'
 import { FormRevisarPedido } from '@/components/supply/form-revisar-pedido'
+import { FormReembolsarPedido } from '@/components/supply/form-reembolsar-pedido'
 import { colaDeRevision, cuentasDeCobro } from '@/modules/supply/cobro'
 import { urlComprobante } from '@/modules/storage/comprobantes'
 import { TEXTO_ESTADO_PEDIDO, type EstadoPedido } from '@/modules/supply/cobro-nucleo'
@@ -53,8 +54,19 @@ export default async function CobrosPage() {
         tx.supplyPedido.count({ where: { estado: 'EXPIRADO' } }),
       ])
 
+      const iniciados = await tx.supplyPedido.findMany({
+        where: { estado: 'INICIADO', expiraAt: { gt: new Date() } },
+        orderBy: { createdAt: 'desc' },
+        take: 60,
+        select: {
+          id: true, numero: true, monto: true, expiraAt: true,
+          cliente: { select: { nombre: true } },
+          derecho: { select: { lote: { select: { snapshotItemNombre: true } } } },
+          venta: { select: { itemNombre: true } },
+        },
+      })
       const ultimos = await tx.supplyPedido.findMany({
-        where: { estado: { notIn: ['EN_REVISION'] } },
+        where: { estado: { notIn: ['EN_REVISION', 'INICIADO'] } },
         orderBy: { updatedAt: 'desc' },
         take: 60,
         select: {
@@ -64,6 +76,8 @@ export default async function CobrosPage() {
           monto: true,
           moneda: true,
           motivoRechazo: true,
+          metodo: true,
+          reembolsoMotivo: true,
           revisadoAt: true,
           createdAt: true,
           cliente: { select: { nombre: true } },
@@ -75,7 +89,7 @@ export default async function CobrosPage() {
         },
       })
 
-      return { enRevision, cobrados, rechazados, expirados, ultimos }
+      return { enRevision, cobrados, rechazados, expirados, ultimos, iniciados }
     }),
   ])
 
@@ -130,6 +144,7 @@ export default async function CobrosPage() {
         <StatCard
           label="Rechazados / expirados"
           value={`${resumen.rechazados} / ${resumen.expirados}`}
+          sub="Estados: pendiente · en revisión · confirmado · rechazado · expirado · reembolsado"
         />
       </div>
 
@@ -178,6 +193,37 @@ export default async function CobrosPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Esperando pago ({resumen.iniciados.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-caption text-muted-foreground">
+            Pedidos abiertos sin comprobante todavía. Si el cliente pagó en efectivo o por un canal manual y Membego ya vio el dinero, confírmalo aquí con el monto recibido.
+          </p>
+          <TablaReporte
+            columnas={[
+              { clave: 'pedido', titulo: 'Pedido' },
+              { clave: 'cliente', titulo: 'Cliente' },
+              { clave: 'producto', titulo: 'Producto' },
+              { clave: 'monto', titulo: 'Monto', alinearDerecha: true },
+              { clave: 'expira', titulo: 'Expira' },
+              { clave: 'decision', titulo: 'Cobro manual' },
+            ]}
+            filas={resumen.iniciados.map((p) => ({
+              __clave: p.id,
+              pedido: p.numero,
+              cliente: p.cliente.nombre,
+              producto: p.derecho?.lote.snapshotItemNombre ?? p.venta?.itemNombre ?? '—',
+              monto: formatMoneyRD(Number(p.monto)),
+              expira: formatDate(p.expiraAt),
+              decision: <FormRevisarPedido pedidoId={p.id} monto={Number(p.monto)} manual />,
+            }))}
+            vacio="Ningún pedido esperando pago."
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Historial</CardTitle>
         </CardHeader>
         <CardContent>
@@ -190,6 +236,7 @@ export default async function CobrosPage() {
               { clave: 'estado', titulo: 'Estado' },
               { clave: 'reviso', titulo: 'Revisó' },
               { clave: 'fecha', titulo: 'Fecha' },
+              { clave: 'accion', titulo: '' },
             ]}
             filas={resumen.ultimos.map((p) => ({
               __clave: p.id,
@@ -205,10 +252,15 @@ export default async function CobrosPage() {
                   {p.motivoRechazo && (
                     <span className="text-caption text-muted-foreground">{p.motivoRechazo}</span>
                   )}
+                  {p.reembolsoMotivo && (
+                    <span className="text-caption text-muted-foreground">{p.reembolsoMotivo}</span>
+                  )}
+                  {p.metodo && <span className="text-caption text-muted-foreground">{p.metodo}</span>}
                 </span>
               ),
               reviso: p.revisor?.name ?? '—',
               fecha: formatDate(p.revisadoAt ?? p.createdAt),
+              accion: p.estado === 'PAGADO' ? <FormReembolsarPedido pedidoId={p.id} /> : null,
             }))}
           />
         </CardContent>

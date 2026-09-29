@@ -47,6 +47,7 @@ import {
   confirmarPedido,
   crearCuentaCobro,
   rechazarPedido,
+  reembolsarPedido,
 } from './cobro'
 
 /**
@@ -632,7 +633,8 @@ export async function adjuntarComprobanteAction(
       texto(fd, 'pedidoId', 60),
       texto(fd, 'clienteId', 60),
       texto(fd, 'comprobantePath', 500),
-      texto(fd, 'nota', 500) || null
+      texto(fd, 'nota', 500) || null,
+      texto(fd, 'metodo', 30) || null
     )
     if (!res.ok) return { error: res.mensaje }
 
@@ -679,13 +681,32 @@ export async function confirmarPedidoAction(
       return { error: 'Escribe el monto que viste en la cuenta: se compara con el del pedido.' }
     }
 
-    const res = await confirmarPedido(pedidoId, revisor, montoVisto)
+    const metodoManual = texto(fd, 'metodoManual', 20)
+    const res = await confirmarPedido(pedidoId, revisor, montoVisto, metodoManual === 'EFECTIVO' || metodoManual === 'MANUAL' ? metodoManual : null)
     if (!res.ok) return { error: res.mensaje }
 
-    await auditar('SUPPLY_PEDIDO_COBRADO', 'SupplyPedido', pedidoId, { montoVisto })
+    await auditar('SUPPLY_PEDIDO_COBRADO', 'SupplyPedido', pedidoId, { montoVisto, metodoManual: metodoManual || null })
     refrescarPlataforma('cobros')
     revalidatePath('/cliente/beneficios')
     return { success: 'Pago confirmado. El beneficio ya es utilizable.' }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+export async function reembolsarPedidoAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
+  try {
+    const user = await exigirPlataforma('MEMBEGO_SUPPLY_COBRAR')
+    const revisor = user.metadata.dbUserId
+    if (!revisor) return { error: 'No se pudo identificar quién reembolsa.' }
+    const pedidoId = texto(fd, 'pedidoId', 60)
+    const motivo = texto(fd, 'motivo', 500)
+    const res = await reembolsarPedido(pedidoId, motivo, revisor)
+    if (!res.ok) return { error: res.mensaje }
+    await auditar('SUPPLY_PEDIDO_REEMBOLSADO', 'SupplyPedido', pedidoId, { antes: 'PAGADO', despues: 'REEMBOLSADO', motivo })
+    refrescarPlataforma('finanzas/cobros-clientes')
+    revalidatePath('/cliente/beneficios')
+    return { success: 'Reembolso registrado. El beneficio volvió al pool y el pedido quedó reembolsado.' }
   } catch (e) {
     return comoError(e)
   }

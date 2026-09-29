@@ -43,13 +43,25 @@ export interface DatosVenta {
   clienteId: string
   cantidad?: number
   sucursalId?: string | null
+  /** Venta mixta (§17): derecho activo del cliente que cubre parte del valor. */
+  bonoDerechoId?: string | null
   claveIdempotencia?: string | null
   actorId?: string | null
 }
 
 export type ResultadoVenta =
-  | { ok: true; ventaId: string; numero: string; montoBruto: number; reutilizada: boolean }
+  | { ok: true; ventaId: string; numero: string; montoBruto: number; montoBono: number; aPagar: number; reutilizada: boolean }
   | { ok: false; mensaje: string }
+
+/**
+ * Valor con el que un derecho del cliente cubre parte de una compra: el precio
+ * público que el lote congeló (lo que valdría en el mostrador) o, si no lo
+ * hay, lo que Membego pagó por la unidad.
+ */
+export function valorDeBono(lote: { snapshotPrecioReferencia: Prisma.Decimal | number | null; snapshotCostoUnitario: Prisma.Decimal | number }): number {
+  const ref = lote.snapshotPrecioReferencia != null ? Number(lote.snapshotPrecioReferencia) : 0
+  return ref > 0 ? ref : Number(lote.snapshotCostoUnitario)
+}
 
 /**
  * Abre la venta (INICIADA) con el reparto congelado. NO abre el pedido: eso lo
@@ -64,9 +76,9 @@ export async function abrirVentaEnTx(tx: Tx, d: DatosVenta): Promise<ResultadoVe
   if (d.claveIdempotencia) {
     const previa = await tx.supplyVentaDirecta.findUnique({
       where: { claveIdempotencia: d.claveIdempotencia },
-      select: { id: true, numero: true, montoBruto: true },
+      select: { id: true, numero: true, montoBruto: true, montoBono: true },
     })
-    if (previa) return { ok: true, ventaId: previa.id, numero: previa.numero, montoBruto: Number(previa.montoBruto), reutilizada: true }
+    if (previa) return { ok: true, ventaId: previa.id, numero: previa.numero, montoBruto: Number(previa.montoBruto), montoBono: Number(previa.montoBono), aPagar: redondear2(Number(previa.montoBruto) - Number(previa.montoBono)), reutilizada: true }
   }
 
   const acuerdo = await tx.supplyAcuerdo.findUnique({
@@ -101,6 +113,35 @@ export async function abrirVentaEnTx(tx: Tx, d: DatosVenta): Promise<ResultadoVe
   }
 
   const reparto = repartirVenta(Number(acuerdo.precioReferencia), cantidad, Number(acuerdo.comisionPorcentaje))
+
+  // Venta mixta: el bono es un derecho ACTIVO del cliente con este proveedor,
+  // con voucher vivo, sin otra venta que lo esté usando. Cubre hasta su valor;
+  // la comisión se calcula sobre el bruto completo (el GMV no cambia) y al
+  // proveedor se le debe bruto − comisión − bono, porque la unidad del bono ya
+  // se la pagó Membego al comprarla.
+  let montoBono = 0
+  if (d.bonoDerechoId) {
+    const bono = await tx.supplyDerecho.findUnique({
+      where: { id: d.bonoDerechoId },
+      select: {
+        id: true, estado: true, clienteId: true, proveedorId: true, vencAt: true,
+        lote: { select: { snapshotPrecioReferencia: true, snapshotCostoUnitario: true } },
+        vouchers: { where: { estado: 'ACTIVO' }, select: { id: true }, take: 1 },
+        ventaComoBono: { select: { id: true, estado: true } },
+      },
+    })
+    if (!bono || bono.clienteId !== d.clienteId) return { ok: false, mensaje: 'Ese bono no es tuyo.' }
+    if (bono.proveedorId !== acuerdo.proveedorId) return { ok: false, mensaje: 'Ese bono es de otro negocio.' }
+    if (bono.estado !== 'ACTIVO' || bono.vouchers.length === 0 || bono.vencAt <= ahora) return { ok: false, mensaje: 'Ese bono ya no está disponible.' }
+    if (bono.ventaComoBono && !['CANCELADA', 'REEMBOLSADA'].includes(bono.ventaComoBono.estado)) {
+      return { ok: false, mensaje: 'Ese bono ya está aplicado a otra compra.' }
+    }
+    montoBono = redondear2(Math.min(valorDeBono(bono.lote), reparto.montoBruto))
+    if (reparto.montoProveedor - montoBono < -0.005) {
+      return { ok: false, mensaje: 'El bono vale más que lo que le tocaría al proveedor por esta venta: no se puede aplicar.' }
+    }
+  }
+  const montoProveedor = redondear2(reparto.montoProveedor - montoBono)
   const secuencia = (await tx.supplyVentaDirecta.count()) + 1
   const venta = await tx.supplyVentaDirecta.create({
     data: {
@@ -118,7 +159,9 @@ export async function abrirVentaEnTx(tx: Tx, d: DatosVenta): Promise<ResultadoVe
       montoBruto: new Prisma.Decimal(reparto.montoBruto),
       comisionPorcentaje: new Prisma.Decimal(reparto.comisionPorcentaje),
       comisionMonto: new Prisma.Decimal(reparto.comisionMonto),
-      montoProveedor: new Prisma.Decimal(reparto.montoProveedor),
+      montoProveedor: new Prisma.Decimal(montoProveedor),
+      montoBono: new Prisma.Decimal(montoBono),
+      bonoDerechoId: montoBono > 0 ? d.bonoDerechoId : null,
       moneda: acuerdo.moneda,
       codigoEntrega: nuevoCodigoEntrega(),
       claveIdempotencia: d.claveIdempotencia ?? null,
@@ -126,7 +169,7 @@ export async function abrirVentaEnTx(tx: Tx, d: DatosVenta): Promise<ResultadoVe
     },
     select: { id: true, numero: true },
   })
-  return { ok: true, ventaId: venta.id, numero: venta.numero, montoBruto: reparto.montoBruto, reutilizada: false }
+  return { ok: true, ventaId: venta.id, numero: venta.numero, montoBruto: reparto.montoBruto, montoBono, aPagar: redondear2(reparto.montoBruto - montoBono), reutilizada: false }
 }
 
 /** Membego vio el dinero (lo llama `confirmarPedido`). */
@@ -166,6 +209,38 @@ export async function entregarVenta(d: {
   sucursalId?: string | null
   empleadoId?: string | null
 }): Promise<ResultadoEntregaVenta> {
+  const res = await entregarVentaEnTx(d)
+  // El bono se redime DESPUÉS, con su propia transacción e idempotencia: la
+  // entrega ya está hecha y una segunda llamada encuentra el bono ya usado.
+  if (res.ok && !res.reutilizada) {
+    const bono = await sinEmpresa('Membego Supply: bono aplicado a una venta entregada', (tx) =>
+      tx.supplyVentaDirecta.findUnique({
+        where: { id: res.ventaId },
+        select: { bonoDerechoId: true, bonoDerecho: { select: { vouchers: { where: { estado: 'ACTIVO' }, select: { id: true }, take: 1 } } } },
+      })
+    )
+    const voucherId = bono?.bonoDerecho?.vouchers[0]?.id
+    if (voucherId) {
+      const { redimir } = await import('./redencion')
+      await redimir({
+        voucherId,
+        proveedorId: d.proveedorId,
+        sucursalId: d.sucursalId ?? null,
+        empleadoId: d.empleadoId ?? null,
+        canal: 'VENTA_MIXTA',
+        claveIdempotencia: `bono:${res.ventaId}`,
+      })
+    }
+  }
+  return res
+}
+
+async function entregarVentaEnTx(d: {
+  ventaId: string
+  proveedorId: string
+  sucursalId?: string | null
+  empleadoId?: string | null
+}): Promise<ResultadoEntregaVenta> {
   return sinEmpresa('Membego Supply: el proveedor entrega una venta sin precompra', async (tx) => {
     const filas = await tx.$queryRaw<{ id: string; estado: SupplyVentaEstado; entregadaAt: Date | null }[]>`
       SELECT "id", "estado", "entregadaAt" FROM "supply_ventas_directas" WHERE "id" = ${d.ventaId} FOR UPDATE
@@ -175,8 +250,9 @@ export async function entregarVenta(d: {
       where: { id: d.ventaId },
       select: {
         id: true, estado: true, proveedorId: true, acuerdoId: true, sucursalId: true, numero: true, itemNombre: true,
-        cantidad: true, montoBruto: true, comisionMonto: true, montoProveedor: true, moneda: true, entregadaAt: true,
+        cantidad: true, montoBruto: true, comisionMonto: true, montoProveedor: true, montoBono: true, moneda: true, entregadaAt: true,
         cuentaPorPagar: { select: { id: true } },
+        bonoDerecho: { select: { estado: true, vouchers: { where: { estado: 'ACTIVO' }, select: { id: true }, take: 1 } } },
         acuerdo: { select: { plazoPagoDias: true, sucursalIds: true } },
       },
     })
@@ -194,15 +270,20 @@ export async function entregarVenta(d: {
       return { ok: false, motivo: 'OTRA_SUCURSAL', mensaje: MENSAJE_RECHAZO.OTRA_SUCURSAL }
     }
 
+    if (Number(v.montoBono) > 0 && (!v.bonoDerecho || v.bonoDerecho.estado !== 'ACTIVO' || v.bonoDerecho.vouchers.length === 0)) {
+      return { ok: false, motivo: 'NO_PAGADA', mensaje: 'El bono aplicado a esta venta ya no está activo: no se puede entregar.' }
+    }
+
     const ahora = new Date()
     const vencimiento = v.acuerdo.plazoPagoDias != null ? new Date(ahora.getTime() + v.acuerdo.plazoPagoDias * 86_400_000) : null
     const cxp = await crearCuentaPorPagarEnTx(tx, {
       proveedorId: v.proveedorId,
       acuerdoId: v.acuerdoId,
       origen: 'VENTA_DIRECTA',
-      descripcion: `Venta ${v.numero} · ${v.cantidad} × ${v.itemNombre}`,
+      descripcion: `Venta ${v.numero} · ${v.cantidad} × ${v.itemNombre}${Number(v.montoBono) > 0 ? ` · bono ${Number(v.montoBono).toFixed(2)}` : ''}`,
       montoBruto: Number(v.montoBruto),
       comision: Number(v.comisionMonto),
+      descuentos: Number(v.montoBono),
       moneda: v.moneda,
       vencimientoAt: vencimiento,
       ventaId: v.id,

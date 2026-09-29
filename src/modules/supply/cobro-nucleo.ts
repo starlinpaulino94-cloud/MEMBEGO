@@ -22,6 +22,7 @@ export type EstadoPedido =
   | 'RECHAZADO'
   | 'EXPIRADO'
   | 'CANCELADO'
+  | 'REEMBOLSADO'
 
 /**
  * Compara dos montos de dinero con una tolerancia de un centavo.
@@ -59,10 +60,13 @@ export const TRANSICIONES_PEDIDO: Record<EstadoPedido, readonly EstadoPedido[]> 
   // Los cuatro finales. Un pedido que llegó aquí no vuelve a moverse: si hay que
   // devolver dinero, eso es un reembolso —un hecho nuevo, con su propio rastro—
   // y no un pedido que retrocede de estado.
-  PAGADO: [],
+  // Salvo REEMBOLSADO: devolver el dinero es un hecho nuevo con su propio
+  // rastro (motivo, quién, cuándo) y el único paso posible después de PAGADO.
+  PAGADO: ['REEMBOLSADO'],
   RECHAZADO: [],
   EXPIRADO: [],
   CANCELADO: [],
+  REEMBOLSADO: [],
 }
 
 /** ¿Se puede pasar de `desde` a `hacia`? */
@@ -89,6 +93,7 @@ export const TEXTO_ESTADO_PEDIDO: Record<EstadoPedido, string> = {
   RECHAZADO: 'No pudimos confirmar el pago',
   EXPIRADO: 'El tiempo se agotó y la unidad volvió a estar disponible',
   CANCELADO: 'Cancelaste este pedido',
+  REEMBOLSADO: 'Membego te devolvió el dinero',
 }
 
 /**

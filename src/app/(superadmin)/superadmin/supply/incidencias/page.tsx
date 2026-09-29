@@ -10,6 +10,10 @@ import { formatDateTime } from '@/lib/format'
 import { NavSupply } from '@/components/supply/nav'
 import { resumenIncidencias } from '@/modules/supply/incidencias'
 import { FormResolverIncidencia } from '@/components/supply/form-resolver-incidencia'
+import { FormAccion } from '@/components/supply/form-accion'
+import { abrirIncidenciaAdminAction } from '@/modules/supply/actions-lotes'
+import { proveedoresElegibles } from '@/modules/supply/proveedores'
+import { CardHeader, CardTitle } from '@/components/ui/card'
 import {
   INCIDENCIA_VIVA,
   SUPPLY_INCIDENCIA_ESTADO_LABELS,
@@ -35,6 +39,12 @@ export const metadata = { title: 'Incidencias de cumplimiento' }
 export default async function IncidenciasPage() {
   await requireRole('SUPERADMIN')
 
+  const [proveedores, lotes] = await Promise.all([
+    proveedoresElegibles(),
+    sinEmpresa('Membego Supply: lotes para abrir incidencia', (tx) =>
+      tx.supplyLote.findMany({ where: { estado: { in: ['ACTIVO', 'AGOTADO'] } }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, codigo: true, snapshotItemNombre: true, proveedor: { select: { name: true } } } })
+    ),
+  ])
   const [resumen, incidencias] = await Promise.all([
     resumenIncidencias(),
     sinEmpresa('Membego Supply: incidencias de cumplimiento', (tx) =>
@@ -82,11 +92,34 @@ export default async function IncidenciasPage() {
         <StatCard label="Total" value={resumen.total} />
       </div>
 
+      <Card id="crear">
+        <CardHeader>
+          <CardTitle>Crear incidencia</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FormAccion
+            accion={abrirIncidenciaAdminAction}
+            etiqueta="Abrir incidencia"
+            nota="Apunta a un beneficio, una redención, una venta, un lote o un proveedor. Lo que se sepa: cuanto más, mejor conciliación."
+            campos={[
+              { name: 'tipo', label: 'Tipo', tipo: 'select', opciones: Object.entries(SUPPLY_INCIDENCIA_TIPO_LABELS).map(([value, label]) => ({ value, label })) },
+              { name: 'proveedorId', label: 'Proveedor', tipo: 'select', opciones: [{ value: '', label: '—' }, ...proveedores.map((p) => ({ value: p.id, label: p.nombre }))] },
+              { name: 'loteId', label: 'Lote', tipo: 'select', opciones: [{ value: '', label: '—' }, ...lotes.map((l) => ({ value: l.id, label: `${l.codigo} · ${l.snapshotItemNombre} · ${l.proveedor.name}` }))] },
+              { name: 'clienteBusqueda', label: 'Cliente (correo o nombre exacto)', maxLength: 160 },
+              { name: 'derechoId', label: 'Id de derecho', maxLength: 60 },
+              { name: 'redencionId', label: 'Id de redención', maxLength: 60 },
+              { name: 'ventaId', label: 'Id de venta', maxLength: 60 },
+              { name: 'detalle', label: 'Qué pasó', tipo: 'textarea', required: true, maxLength: 2000 },
+            ]}
+          />
+        </CardContent>
+      </Card>
+
       {incidencias.length === 0 ? (
         <EmptyState
           variant="card"
           title="Sin incidencias"
-          description="Nadie ha reportado problemas con los beneficios entregados. Los clientes pueden abrir una desde su pantalla de beneficios."
+          description="Nadie ha reportado problemas con los beneficios entregados. Los clientes pueden abrir una desde su pantalla de beneficios, y plataforma desde el formulario de arriba."
         />
       ) : (
         <div className="space-y-3">

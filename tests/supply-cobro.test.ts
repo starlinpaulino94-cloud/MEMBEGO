@@ -54,11 +54,13 @@ test('basura no cuadra con nada', () => {
 
 // ── La máquina de estados ───────────────────────────────────────────────────
 
-test('de PAGADO no se sale', () => {
-  assert.equal(esFinal('PAGADO'), true)
+test('de PAGADO solo se sale a REEMBOLSADO (devolver el dinero es un hecho nuevo)', () => {
+  assert.equal(esFinal('PAGADO'), false)
+  assert.equal(transicionLegal('PAGADO', 'REEMBOLSADO'), true)
   for (const hacia of ['INICIADO', 'EN_REVISION', 'RECHAZADO', 'EXPIRADO', 'CANCELADO'] as const) {
     assert.equal(transicionLegal('PAGADO', hacia), false, `PAGADO → ${hacia} no puede ser legal`)
   }
+  assert.equal(esFinal('REEMBOLSADO'), true)
 })
 
 test('de EXPIRADO no se sale: la unidad ya volvió al pool', () => {
@@ -81,9 +83,9 @@ test('el cliente puede cancelar antes de pagar, y expirar siempre es posible', (
   assert.equal(transicionLegal('EN_REVISION', 'CANCELADO'), false)
 })
 
-test('los cuatro estados finales son exactamente cuatro', () => {
+test('los estados finales son exactamente cuatro: cancelado, expirado, rechazado y reembolsado', () => {
   const finales = (Object.keys(TRANSICIONES_PEDIDO) as EstadoPedido[]).filter(esFinal)
-  assert.deepEqual(finales.sort(), ['CANCELADO', 'EXPIRADO', 'PAGADO', 'RECHAZADO'])
+  assert.deepEqual(finales.sort(), ['CANCELADO', 'EXPIRADO', 'RECHAZADO', 'REEMBOLSADO'])
 })
 
 test('cada estado tiene texto para el cliente', () => {

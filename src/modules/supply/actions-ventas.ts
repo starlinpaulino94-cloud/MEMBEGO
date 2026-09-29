@@ -45,7 +45,8 @@ export async function abrirVentaAction(_prev: EstadoAccion, fd: FormData): Promi
       cantidad,
       sucursalId: texto(fd, 'sucursalId', 60) || null,
       cuentaId: texto(fd, 'cuentaId', 60) || null,
-      claveIdempotencia: claveIdempotencia('venta', clienteId, acuerdoId, String(cantidad), String(ventana)),
+      bonoDerechoId: texto(fd, 'bonoDerechoId', 60) || null,
+      claveIdempotencia: claveIdempotencia('venta', clienteId, acuerdoId, String(cantidad), texto(fd, 'bonoDerechoId', 60) || 'sin-bono', String(ventana)),
     })
     if (!res.ok) return { error: res.mensaje }
 
@@ -56,11 +57,18 @@ export async function abrirVentaAction(_prev: EstadoAccion, fd: FormData): Promi
         cantidad,
         pedidoId: res.pedidoId,
         monto: res.monto,
+        montoBono: res.montoBono ?? 0,
       })
     }
     revalidatePath('/cliente/beneficios')
     revalidatePath('/cliente/explorar')
-    return { success: `Pedido ${res.numero} abierto. Paga y sube el comprobante.`, id: res.pedidoId }
+    return {
+      success:
+        res.monto <= 0
+          ? `Pedido ${res.numero} cubierto con tu bono: ya puedes recogerlo con el código de «Mis compras».`
+          : `Pedido ${res.numero} abierto por RD$${res.monto.toLocaleString('es-DO')}. Paga y sube el comprobante.`,
+      id: res.pedidoId,
+    }
   } catch (e) {
     return comoError(e)
   }

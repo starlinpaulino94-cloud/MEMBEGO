@@ -161,8 +161,15 @@ export default async function VencimientosPage({
                       a.politicaSobrante as SupplyPoliticaSobranteLabelKey
                     ] ?? a.politicaSobrante,
                   acciones: (
-                    <span className="text-caption text-muted-foreground">
-                      {a.acciones.map((ac) => ACCION_VENCIMIENTO_LABELS[ac] ?? ac).join(' · ')}
+                    <span className="flex flex-col gap-1 text-caption">
+                      <span className="text-muted-foreground">{a.acciones.map((ac) => ACCION_VENCIMIENTO_LABELS[ac] ?? ac).join(' · ')}</span>
+                      <span className="flex flex-wrap gap-2">
+                        <Link href={`/superadmin/supply/lotes/${a.loteId}#acciones`} className="underline underline-offset-4">Crear oferta / regalar</Link>
+                        <Link href={`/superadmin/supply/lotes/${a.loteId}#acciones`} className="underline underline-offset-4">Transferir</Link>
+                        <Link href={`/superadmin/supply/lotes/${a.loteId}#acciones`} className="underline underline-offset-4">Extender fecha</Link>
+                        <Link href={`/superadmin/supply/lotes/${a.loteId}#acciones`} className="underline underline-offset-4">Cancelar unidades</Link>
+                        <Link href={`/superadmin/supply/acuerdos/${a.acuerdoId}`} className="underline underline-offset-4">Negociar (enmienda)</Link>
+                      </span>
                     </span>
                   ),
                 }))}

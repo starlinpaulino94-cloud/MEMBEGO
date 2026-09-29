@@ -67,7 +67,7 @@ export default async function ConciliacionPage() {
       <div className="grid gap-4 sm:grid-cols-4">
         <StatCard label="Conciliaciones abiertas" value={abiertas.length} sub="con proveedores" accent={abiertas.length > 0 ? 'warning' : undefined} />
         <StatCard label="Discrepancias vivas" value={discrepanciasVivas} accent={discrepanciasVivas > 0 ? 'danger' : 'success'} />
-        <StatCard label="Hallazgos internos críticos" value={reporte.criticos} sub={`${reporte.lotesRevisados} lotes revisados · ${formatDateTime(reporte.generadoAt)}`} accent={reporte.criticos > 0 ? 'danger' : 'success'} />
+        <StatCard label="Hallazgos internos críticos" value={reporte.criticos} sub={`${reporte.operacionesRevisadas} operaciones revisadas · ${formatDateTime(reporte.generadoAt)}`} accent={reporte.criticos > 0 ? 'danger' : reporte.sinDatos ? undefined : 'success'} />
         <StatCard label="Hallazgos altos / medios" value={`${reporte.altos} / ${reporte.medios}`} accent={reporte.altos > 0 ? 'warning' : undefined} />
       </div>
 
@@ -148,11 +148,22 @@ export default async function ConciliacionPage() {
         </CardContent>
       </Card>
 
-      {reporte.cuadra ? (
+      {reporte.sinDatos ? (
         <EmptyState
           variant="card"
-          title="Por dentro, todo cuadra"
-          description="Los contadores coinciden con el ledger, no hay redenciones duplicadas ni campañas que hayan repartido de más. El invariante se cumple en todos los lotes revisados."
+          title="Sin operaciones suficientes para conciliar"
+          description="Todavía no hay lotes, pagos, depósitos ni liquidaciones que contrastar. Cero datos no es una conciliación correcta: cuando exista operación, aquí se cruzan órdenes, pagos, lotes, ledger, derechos, redenciones y liquidaciones."
+          action={
+            <Link href="/superadmin/supply/ordenes#nueva" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              Crear la primera orden de compra
+            </Link>
+          }
+        />
+      ) : reporte.cuadra ? (
+        <EmptyState
+          variant="card"
+          title={`Por dentro, todo cuadra (${reporte.operacionesRevisadas} operaciones revisadas)`}
+          description="Los contadores coinciden con el ledger, cada pago tiene su asiento, cada liquidación pagada dejó saldadas sus cuentas, ningún depósito está en negativo y no hay redenciones duplicadas ni derechos redimidos sin entrega."
         />
       ) : (
         <Card>

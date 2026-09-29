@@ -356,7 +356,9 @@ export async function abrirPedidoDeVenta(d: {
   cuentaId?: string | null
   minutos?: number
   claveIdempotencia?: string | null
-}): Promise<ResultadoPedido & { ventaId?: string }> {
+  /** Venta mixta: derecho del cliente que cubre parte del valor. */
+  bonoDerechoId?: string | null
+}): Promise<ResultadoPedido & { ventaId?: string; montoBono?: number }> {
   if (!(await cobroMembegoDisponible())) {
     return { ok: false, mensaje: 'Membego no tiene ninguna cuenta de cobro activa, así que no puede cobrar todavía.' }
   }
@@ -376,24 +378,30 @@ export async function abrirPedidoDeVenta(d: {
       clienteId: d.clienteId,
       cantidad: d.cantidad,
       sucursalId: d.sucursalId,
+      bonoDerechoId: d.bonoDerechoId ?? null,
       claveIdempotencia: d.claveIdempotencia ? `${d.claveIdempotencia}:venta` : null,
     })
     if (!venta.ok) return { ok: false as const, mensaje: venta.mensaje }
     const expiraAt = new Date(Date.now() + minutos * 60_000)
     const numero = await siguienteNumero(tx)
+    // El pedido cobra la DIFERENCIA (bruto − bono). Si el bono cubre todo, el
+    // pedido nace pagado con monto cero y la venta queda lista para entregar.
+    const cubiertoPorBono = venta.aPagar <= 0
     const pedido = await tx.supplyPedido.create({
       data: {
         numero,
         clienteId: d.clienteId,
         ventaId: venta.ventaId,
-        monto: venta.montoBruto,
+        monto: venta.aPagar,
         cuentaId: d.cuentaId ?? null,
         expiraAt,
         claveIdempotencia: d.claveIdempotencia ?? null,
+        ...(cubiertoPorBono ? { estado: 'PAGADO' as const, revisadoAt: new Date(), metodo: 'BONO' } : {}),
       },
       select: { id: true, numero: true },
     })
-    return { ok: true as const, pedidoId: pedido.id, numero: pedido.numero, derechoId: '', ventaId: venta.ventaId, monto: venta.montoBruto, expiraAt }
+    if (cubiertoPorBono) await marcarVentaPagadaEnTx(tx, venta.ventaId)
+    return { ok: true as const, pedidoId: pedido.id, numero: pedido.numero, derechoId: '', ventaId: venta.ventaId, monto: venta.aPagar, montoBono: venta.montoBono, expiraAt }
   })
 }
 
@@ -423,7 +431,8 @@ export async function adjuntarComprobante(
   pedidoId: string,
   clienteId: string,
   comprobantePath: string,
-  nota?: string | null
+  nota?: string | null,
+  metodo?: string | null
 ): Promise<{ ok: true } | { ok: false; mensaje: string }> {
   const ruta = comprobantePath.trim()
   if (!ruta) return { ok: false, mensaje: 'Falta el comprobante.' }
@@ -465,6 +474,7 @@ export async function adjuntarComprobante(
         comprobantePath: ruta,
         comprobanteNota: nota?.trim() || null,
         comprobanteAt: new Date(),
+        metodo: metodo?.trim() || 'TRANSFERENCIA',
       },
     })
     return { ok: true as const }
@@ -485,7 +495,9 @@ export async function adjuntarComprobante(
 export async function confirmarPedido(
   pedidoId: string,
   revisorId: string,
-  montoVisto: number
+  montoVisto: number,
+  /** EFECTIVO o MANUAL: Membego vio el dinero sin comprobante del cliente (§20). */
+  metodoManual?: 'EFECTIVO' | 'MANUAL' | null
 ): Promise<{ ok: true; derechoId: string } | { ok: false; mensaje: string }> {
   const pedido = await sinEmpresa('Membego Supply: leer pedido a confirmar', (tx) =>
     tx.supplyPedido.findUnique({
@@ -494,7 +506,8 @@ export async function confirmarPedido(
     })
   )
   if (!pedido) return { ok: false, mensaje: 'Pedido no encontrado.' }
-  if (pedido.estado !== 'EN_REVISION') {
+  const manualValido = metodoManual && pedido.estado === 'INICIADO' && pedido.expiraAt > new Date()
+  if (pedido.estado !== 'EN_REVISION' && !manualValido) {
     return {
       ok: false,
       mensaje:
@@ -527,7 +540,7 @@ export async function confirmarPedido(
       await marcarVentaPagadaEnTx(tx, ventaId)
       await tx.supplyPedido.update({
         where: { id: pedidoId },
-        data: { estado: 'PAGADO', revisadoPor: revisorId, revisadoAt: new Date() },
+        data: { estado: 'PAGADO', revisadoPor: revisorId, revisadoAt: new Date(), ...(metodoManual ? { metodo: metodoManual } : {}) },
       })
     })
     return { ok: true, derechoId: '' }
@@ -542,7 +555,7 @@ export async function confirmarPedido(
   await sinEmpresa('Membego Supply: marcar el pedido como pagado', (tx) =>
     tx.supplyPedido.update({
       where: { id: pedidoId },
-      data: { estado: 'PAGADO', revisadoPor: revisorId, revisadoAt: new Date() },
+      data: { estado: 'PAGADO', revisadoPor: revisorId, revisadoAt: new Date(), ...(metodoManual ? { metodo: metodoManual } : {}) },
     })
   )
 
@@ -746,4 +759,42 @@ export async function pedidosDelCliente(clienteId: string, limite = 50) {
       },
     })
   )
+}
+
+/**
+ * Membego devolvió el dinero de un pedido PAGADO. El pedido pasa a REEMBOLSADO
+ * (estado final propio, con motivo y revisor); el derecho que financiaba se
+ * cancela y vuelve al pool si nadie lo canjeó; una venta sin precompra pasa a
+ * REEMBOLSADA (y su cuenta por pagar, si nació, se cancela).
+ */
+export async function reembolsarPedido(
+  pedidoId: string,
+  motivo: string,
+  revisorId: string
+): Promise<{ ok: true } | { ok: false; mensaje: string }> {
+  if (!motivo.trim()) return { ok: false, mensaje: 'Reembolsar exige un motivo.' }
+  const pedido = await sinEmpresa('Membego Supply: leer pedido a reembolsar', (tx) =>
+    tx.supplyPedido.findUnique({
+      where: { id: pedidoId },
+      select: { id: true, estado: true, derechoId: true, ventaId: true, derecho: { select: { estado: true } } },
+    })
+  )
+  if (!pedido) return { ok: false, mensaje: 'Pedido no encontrado.' }
+  if (pedido.estado !== 'PAGADO') return { ok: false, mensaje: `Solo se reembolsa un pedido pagado; este está ${pedido.estado}.` }
+
+  if (pedido.derechoId && pedido.derecho && (pedido.derecho.estado === 'ACTIVO' || pedido.derecho.estado === 'RETENIDO')) {
+    const { cancelarDerecho } = await import('./derechos')
+    await cancelarDerecho(pedido.derechoId, `Reembolso: ${motivo.trim()}`, true, revisorId)
+  }
+  if (pedido.ventaId) {
+    const { cerrarVenta } = await import('./ventas')
+    await cerrarVenta(pedido.ventaId, 'REEMBOLSADA', motivo.trim(), revisorId)
+  }
+  await sinEmpresa('Membego Supply: marcar el pedido como reembolsado', (tx) =>
+    tx.supplyPedido.update({
+      where: { id: pedidoId },
+      data: { estado: 'REEMBOLSADO', reembolsadoAt: new Date(), reembolsoMotivo: motivo.trim(), revisadoPor: revisorId },
+    })
+  )
+  return { ok: true }
 }

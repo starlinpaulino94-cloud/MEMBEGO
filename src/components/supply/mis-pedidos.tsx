@@ -218,6 +218,16 @@ function Pedido({
                     : 'Adjuntar foto o PDF del comprobante'}
               </Button>
 
+              <select
+                name="metodo"
+                defaultValue="TRANSFERENCIA"
+                aria-label="Cómo pagaste"
+                className="h-10 w-full rounded-lg border border-input bg-background px-3 text-body"
+              >
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="DEPOSITO">Depósito bancario</option>
+                <option value="EFECTIVO">Efectivo en Membego</option>
+              </select>
               <input
                 name="nota"
                 maxLength={500}

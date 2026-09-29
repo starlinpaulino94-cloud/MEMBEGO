@@ -1,11 +1,12 @@
 'use client'
 
 import { useActionState } from 'react'
+import Link from 'next/link'
 import { Gift } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { abrirPedidoAction, reclamarOfertaAction, type EstadoAccion } from '@/modules/supply/actions'
+import { reclamarOfertaAction, type EstadoAccion } from '@/modules/supply/actions'
 
 interface Oferta {
   asignacionId: string
@@ -49,10 +50,7 @@ export function TarjetaOferta({
   clienteId: string
   yaLoTengo: boolean
 }) {
-  const [estado, accion, pendiente] = useActionState<EstadoAccion, FormData>(
-    oferta.esGratis ? reclamarOfertaAction : abrirPedidoAction,
-    {}
-  )
+  const [estado, accion, pendiente] = useActionState<EstadoAccion, FormData>(reclamarOfertaAction, {})
   const obtenido = Boolean(estado.success) || yaLoTengo
 
   return (
@@ -102,20 +100,18 @@ export function TarjetaOferta({
                 ? 'Ya tienes este beneficio. Búscalo en «Beneficios Membego».'
                 : 'Ya tienes un pedido de este beneficio. Sigue en «Beneficios Membego».')}
           </p>
-        ) : (
+        ) : oferta.esGratis ? (
           <form action={accion}>
             <input type="hidden" name="asignacionId" value={oferta.asignacionId} />
             <input type="hidden" name="clienteId" value={clienteId} />
             <Button type="submit" className="w-full" disabled={pendiente || !clienteId}>
-              {pendiente
-                ? oferta.esGratis
-                  ? 'Obteniendo…'
-                  : 'Apartando…'
-                : oferta.esGratis
-                  ? 'Obtener'
-                  : `Comprar por RD$${oferta.precioMembego.toLocaleString('es-DO')}`}
+              {pendiente ? 'Obteniendo…' : 'Obtener'}
             </Button>
           </form>
+        ) : (
+          <Button asChild className="w-full" disabled={!clienteId}>
+            <Link href={`/cliente/beneficios/checkout?oferta=${oferta.asignacionId}`}>Comprar por RD${oferta.precioMembego.toLocaleString('es-DO')}</Link>
+          </Button>
         )}
 
         {estado.error && <p className="text-caption text-destructive">{estado.error}</p>}
