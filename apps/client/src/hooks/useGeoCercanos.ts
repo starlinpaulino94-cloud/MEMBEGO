@@ -6,6 +6,8 @@ export interface GeoCercanosParams {
   radioKm?: number | null
   lat?: number
   lng?: number
+  cityId?: string
+  sectorId?: string
   viewport?: string
   filtros?: string
 }
@@ -23,6 +25,8 @@ export function useGeoCercanos(params: GeoCercanosParams, enabled = true) {
     params.radioKm ?? '',
     params.lat ?? '',
     params.lng ?? '',
+    params.cityId ?? '',
+    params.sectorId ?? '',
     params.viewport ?? '',
     params.filtros ?? '',
   ]
@@ -35,6 +39,8 @@ export function useGeoCercanos(params: GeoCercanosParams, enabled = true) {
       if (params.radioKm != null) qs.radioKm = params.radioKm
       if (params.lat != null) qs.lat = params.lat
       if (params.lng != null) qs.lng = params.lng
+      if (params.cityId) qs.cityId = params.cityId
+      if (params.sectorId) qs.sectorId = params.sectorId
       if (params.viewport) qs.viewport = params.viewport
       if (params.filtros) qs.filtros = params.filtros
       return api.getGeoCercanos(qs)
