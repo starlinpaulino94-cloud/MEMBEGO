@@ -7,19 +7,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // ── Primary scale (existing — preserved) ──────────────────────
+        // ── Primary scale (aligned to the Vibe purple palette) ─────────
         primary: {
-          50: '#f0f6ff',
-          100: '#ddecff',
-          200: '#bedcff',
-          300: '#92c4ff',
-          400: '#52a2ff',
-          500: '#0084ff',
-          600: '#006bed',
-          700: '#0059ce',
-          800: '#0049a7',
-          900: '#004087',
-          DEFAULT: '#0284c7',
+          50: '#f5f3ff',
+          100: '#ede9fe',
+          200: '#ddd6fe',
+          300: '#c4b5fd',
+          400: '#a78bfa',
+          500: '#8b5cf6',
+          600: '#7c3aed',
+          700: '#5b21b6',
+          800: '#4c1d95',
+          900: '#3b0764',
+          DEFAULT: '#5b21b6',
           foreground: '#ffffff',
         },
 
@@ -85,7 +85,7 @@ module.exports = {
         },
         border: '#e5e7eb',
         input: '#e5e7eb',
-        ring: '#0284c7',
+        ring: '#5b21b6',
 
         // ── Semantic states (hex from oklch in :root) ─────────────────
         success: {
@@ -109,8 +109,8 @@ module.exports = {
 
         // ── Brand aliases (from DS 2.0 alias block) ───────────────────
         brand: {
-          'primary-soft': '#ddecff',
-          'primary-hover': '#0059ce',
+          'primary-soft': '#ddd6fe',
+          'primary-hover': '#4c1d95',
         },
       },
 

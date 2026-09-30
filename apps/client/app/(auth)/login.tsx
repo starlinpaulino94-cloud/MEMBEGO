@@ -23,6 +23,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null)
 
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
@@ -80,10 +81,14 @@ export default function LoginPage() {
             </Text>
             <TextInput
               className="h-14 w-full rounded-xl border border-input bg-background px-4 text-small text-foreground"
+              style={{ borderColor: focusedField === 'email' ? colors.retail.blue : undefined }}
               placeholder="tu@correo.com"
               placeholderTextColor={colors.surface.mutedForeground}
+              selectionColor={colors.retail.blue}
               value={email}
               onChangeText={setEmail}
+              onFocus={() => setFocusedField('email')}
+              onBlur={() => setFocusedField(null)}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -97,10 +102,14 @@ export default function LoginPage() {
             <View className="relative">
               <TextInput
                 className="h-14 w-full rounded-xl border border-input bg-background px-4 pr-12 text-small text-foreground"
+                style={{ borderColor: focusedField === 'password' ? colors.retail.blue : undefined }}
                 placeholder="••••••••"
                 placeholderTextColor={colors.surface.mutedForeground}
+                selectionColor={colors.retail.blue}
                 value={password}
                 onChangeText={setPassword}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
                 secureTextEntry={!showPassword}
               />
               <TouchableOpacity
@@ -118,7 +127,12 @@ export default function LoginPage() {
             </View>
           </View>
 
-          <Button onPress={handleSubmit} loading={loading} className="mt-4 h-10 w-full">
+          <Button
+            onPress={handleSubmit}
+            loading={loading}
+            className="mt-4 h-10 w-full"
+            style={{ backgroundColor: colors.retail.blue }}
+          >
             Entrar
           </Button>
 
@@ -127,7 +141,7 @@ export default function LoginPage() {
               ¿Olvidaste tu contraseña?
             </Text>
             <Text className="text-small text-muted-foreground">
-              ¿No tienes cuenta? <Text className="text-primary">Regístrate</Text>
+              ¿No tienes cuenta? <Text style={{ color: colors.retail.blue }}>Regístrate</Text>
             </Text>
           </View>
         </Card>

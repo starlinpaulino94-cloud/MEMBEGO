@@ -75,6 +75,7 @@ export default function MenuScreen() {
   return (
     <ScrollView
       className="flex-1 bg-background"
+      showsVerticalScrollIndicator={false}
       contentContainerStyle={{ padding: 16 }}
     >
       <Text className="text-[22px] font-inter-bold tracking-tight text-foreground mb-3 px-1">
@@ -90,7 +91,7 @@ export default function MenuScreen() {
           accessibilityState={{ expanded: categoriasAbiertas }}
         >
           <View className="h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-            <LayoutGrid size={20} color="#0284c7" />
+            <LayoutGrid size={20} className='text-primary' />
           </View>
           <Text className="flex-1 text-[15px] font-inter-semibold text-foreground">
             Explorar por categorías
@@ -103,7 +104,7 @@ export default function MenuScreen() {
         {categoriasAbiertas && (
           <View className="border-t border-border">
             {isLoading ? (
-              <ActivityIndicator size="small" color="#0284c7" style={{ padding: 12 }} />
+              <ActivityIndicator size="small" className="text-primary" style={{ padding: 12 }} />
             ) : categorias.length === 0 ? (
               <Text className="text-sm text-muted-foreground p-4">
                 No hay categorías disponibles por ahora.
@@ -149,7 +150,7 @@ export default function MenuScreen() {
               accessibilityRole="link"
             >
               <View className="h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                <Icon size={20} color="#0284c7" />
+                <Icon size={20} className='text-primary' />
               </View>
               <Text className="flex-1 text-[15px] font-inter-semibold text-foreground">
                 {item.label}
@@ -195,8 +196,8 @@ export default function MenuScreen() {
         </TouchableOpacity>
       )}
 
-      <View className="flex-row items-start gap-2 rounded-xl bg-muted/60 p-4">
-        <Info size={16} color="#0284c7" />
+      <View className="flex flex-row items-start gap-2 rounded-xl bg-muted/60 p-4">
+        <Info size={16} className='text-primary' />
         <Text className="flex-1 text-[13px] text-muted-foreground leading-relaxed">
           ¿Buscas la configuración? Vive en{' '}
           <Text

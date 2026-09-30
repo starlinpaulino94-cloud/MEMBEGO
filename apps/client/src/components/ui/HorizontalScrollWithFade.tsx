@@ -7,20 +7,23 @@ import {
   type NativeSyntheticEvent,
   type ScrollViewProps,
 } from 'react-native'
+import type { Ref } from 'react'
 import { LinearGradient } from 'expo-linear-gradient'
 import { cn } from '../../lib/cn'
 import { colors } from '../../theme/tokens'
 
 export interface HorizontalScrollWithFadeProps
-  extends Omit<ScrollViewProps, 'horizontal' | 'showsHorizontalScrollIndicator'> {
+  extends Omit<ScrollViewProps, 'horizontal' | 'showsHorizontalScrollIndicator' | 'fadeScrollRef'> {
   readonly className?: string
   readonly fadeWidth?: number
+  readonly fadeScrollRef?: Ref<ScrollView>
 }
 
 export function HorizontalScrollWithFade({
   children,
   className,
-  fadeWidth = 32,
+  fadeWidth = 16,
+  fadeScrollRef,
   style,
   onContentSizeChange,
   onLayout,
@@ -69,10 +72,11 @@ export function HorizontalScrollWithFade({
   return (
     <View className={cn('relative', className)}>
       <ScrollView
+        ref={fadeScrollRef}
         {...scrollViewProps}
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={[{ flexGrow: 0 }, style]}
+        style={[{ flexGrow: 0, minHeight: 44 }, style]}
         onContentSizeChange={handleContentSizeChange}
         onLayout={handleLayout}
         onScroll={handleScroll}

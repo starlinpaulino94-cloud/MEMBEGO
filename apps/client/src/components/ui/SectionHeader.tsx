@@ -22,11 +22,15 @@ export function SectionHeader({
   const { accent } = useInicioAccent();
 
   return (
-    <View className={cn('flex-row items-center justify-between gap-3', className)}>
-      <View className="flex-row items-center gap-2 min-w-0">
-        {Icon && <Icon size={20} color={accent.color} />}
+    <View className={cn('flex-row items-start justify-between gap-3', className)}>
+      <View className="flex-1 flex-row items-center gap-2 min-w-0">
+        {Icon && (
+          <View className="mt-1 shrink-0">
+            <Icon size={20} color={accent.color} />
+          </View>
+        )}
         <View className="flex-1 min-w-0">
-          <Text className="text-h2 font-inter-bold text-foreground">{title}</Text>
+          <Text className="text-lg md:text-h2 font-inter-bold text-foreground">{title}</Text>
           {description && (
             <Text className="mt-1 text-small text-muted-foreground">
               {description}
@@ -34,7 +38,7 @@ export function SectionHeader({
           )}
         </View>
       </View>
-      {action && <View className="shrink-0 self-start justify-center">{action}</View>}
+      {action && <View className="shrink-0 self-center">{action}</View>}
     </View>
   );
 }

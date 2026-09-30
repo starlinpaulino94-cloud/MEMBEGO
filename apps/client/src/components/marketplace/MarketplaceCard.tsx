@@ -36,7 +36,7 @@ export function MarketplaceCard({
           <View className={cn('flex-1', variant === 'horizontal' && 'flex-row gap-2')}>
             {children}
           </View>
-          <View className={cn(variant == "standard" ? "border-t border-border" : '', 'mt-3')}>{footer}</View>
+          <View className={cn(variant == "standard" ? "border-t border-border mt-3 pb-1" : '', 'pt-2')}>{footer}</View>
         </View>
       )}
     </Card>

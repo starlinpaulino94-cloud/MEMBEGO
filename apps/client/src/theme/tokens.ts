@@ -11,17 +11,17 @@
  */
 export const colors = {
   primary: {
-    50: '#f0f6ff',
-    100: '#ddecff',
-    200: '#bedcff',
-    300: '#92c4ff',
-    400: '#52a2ff',
-    500: '#0084ff',
-    600: '#006bed',
-    700: '#0059ce',
-    800: '#0049a7',
-    900: '#004087',
-    DEFAULT: '#0284c7',
+    50: '#f5f3ff',
+    100: '#ede9fe',
+    200: '#ddd6fe',
+    300: '#c4b5fd',
+    400: '#a78bfa',
+    500: '#8b5cf6',
+    600: '#7c3aed',
+    700: '#5b21b6',
+    800: '#4c1d95',
+    900: '#3b0764',
+    DEFAULT: '#5b21b6',
   },
   retail: {
     blue: '#0284c7',
@@ -78,7 +78,7 @@ export const colors = {
     mutedForeground: '#4b5563',
     border: '#e5e7eb',
     input: '#e5e7eb',
-    ring: '#0284c7',
+    ring: '#5b21b6',
   },
   overlay: {
     transparent: 'transparent',
@@ -87,7 +87,7 @@ export const colors = {
     whiteTransparent: 'rgba(255, 255, 255, 0)',
   },
   gradient: {
-    primary: ['#006bed', '#06b6d4'] as const,
+    primary: ['#5b21b6', '#7c3aed', '#2563eb', '#06b6d4'] as const,
     premium: ['#5b21b6', '#2563eb', '#06b6d4'] as const,
     categories: [
       ['#7c3aed', '#2563eb'],

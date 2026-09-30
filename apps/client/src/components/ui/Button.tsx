@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, ActivityIndicator, View } from 'react-native';
+import { Pressable, Text, ActivityIndicator, View, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { cn } from '../../lib/cn';
 import { colors } from '../../theme/tokens';
@@ -38,6 +38,7 @@ export interface ButtonProps {
   loading?: boolean;
   className?: string;
   icon?: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
 }
 
 const baseClasses =
@@ -93,6 +94,7 @@ export function Button({
   loading = false,
   className = '',
   icon,
+  style,
 }: ButtonProps) {
   const resolvedVariant = legacyMap[variant] ?? variant;
   const resolvedSize = sizeMap[size] ?? size;
@@ -134,6 +136,7 @@ export function Button({
           disabled && 'opacity-50',
           className,
         )}
+        style={style}
         accessibilityRole="button"
         accessibilityState={{ disabled: disabled || loading }}
       >
@@ -164,6 +167,7 @@ export function Button({
         disabled && 'opacity-50',
         className,
       )}
+      style={style}
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading }}
     >
