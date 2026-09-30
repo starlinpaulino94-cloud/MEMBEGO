@@ -160,7 +160,7 @@ localmente (`tests/e2e/supply-v2-sesion.ts`: roles compras, finanzas, cliente, c
 | 4 | Checkout atómico sin overselling, TTL configurable, idempotente | ✅ | DB **B**, **B2**, **E**, **E2**; dominio «TTL» |
 | 5 | Pago real mínimo (transferencia + confirmación manual) | ✅ | §6; DB **D**, **F2** |
 | 6 | Entitlement por unidad con costo real del lote y precio del cliente | ✅ | DB **D** (costo 300), **G2** (costo 280 del segundo lote), **D3** (precio congelado); SQL: 30 derechos, `quantity` min = max = 1 |
-| 7 | Cron idempotente: expira reservas, activa programadas, cierra vencidas | ✅ | DB **F**, **J**; E2E expiración |
+| 7 | Cron idempotente: expira reservas, activa programadas, cierra vencidas; y el checkout expira por sí mismo las reservas caducadas de la oferta | ✅ | DB **F**, **J**, **N**; E2E expiración |
 | 8 | Pausar / reanudar / finalizar / cancelar liberando lo no usado sin tocar lo emitido | ✅ | DB **H**, **I**, **M**; cancelar con checkouts en curso se rechaza (**M**) |
 | 9 | Pool muestra disponible / asignado / reservado / emitido | ✅ | `supply/page.tsx`, `supply/[catalogItemId]/page.tsx`; E2E `producto-*` |
 | 10 | Rutas admin `/superadmin/supply-v2/ofertas` + pestaña «Ofertas» | ✅ | `ofertas/{page,nueva,[id],ventas}`, `nav.tsx`; `next build` las lista |
@@ -200,7 +200,7 @@ localmente (`tests/e2e/supply-v2-sesion.ts`: roles compras, finanzas, cliente, c
 | Riesgo | Detalle | Mitigación / decisión |
 | --- | --- | --- |
 | Slice 1 no está en `main` | Si se mezcla otra cosa en `main` antes que esta rama, habrá que rebasar dos slices juntos. | Mezclar Slice 1 + Slice 2 en un solo PR desde esta rama, o Slice 1 primero. |
-| Cron cada hora | Una reserva vencida puede tardar hasta 60 min en liberarse; mientras tanto `motivoNoComprable` ya la trata como caducada en el checkout del mismo cliente, pero la unidad sigue `RESERVED` para los demás. | Bajar la frecuencia en `vercel.json` si el volumen lo pide (el barrido es idempotente). |
+| Cron diario (plan Hobby de Vercel) | Vercel solo admite crons diarios; el barrido corre una vez al día. Para que el stock no dependa de él, cada checkout expira primero las reservas caducadas de esa oferta bajo el mismo candado (`expirarCaducadasDeOfertaEnTx`, DB **N**). El contador «quedan N» del marketplace puede ir por detrás hasta el siguiente checkout o barrido. | Documentado; si el plan cambia, basta subir la frecuencia en `vercel.json`. |
 | Pago avisado que nunca se revisa | Una orden `AWAITING_PAYMENT` retiene su unidad indefinidamente hasta que Finanzas confirme o rechace. | Decisión explícita del slice (no perder pagos reales). La pantalla de ventas los lista; conviene una alerta en Slice 3. |
 | Cuenta de cobro única | El checkout usa la primera cuenta activa de `supply_cuentas_cobro`; sin ninguna, no se puede comprar (mensaje claro). | Seed/alta de cuenta es responsabilidad operativa; el E2E la siembra por arnés. |
 | Monto visto manual | La confirmación depende del monto tecleado por Finanzas (tolerancia 1 centavo). | Conciliación bancaria es Slice 3+. |

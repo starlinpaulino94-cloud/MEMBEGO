@@ -69,6 +69,10 @@ export async function abrirOrdenClienteEnTx(tx: Tx, d: DatosCheckout, ctx: Conte
     }
   }
 
+  // 2b. Reservas caducadas de ESTA oferta: se sueltan aquí mismo, bajo el mismo
+  // candado, para que el stock no dependa de cuándo pase el cron (§25, §37).
+  await expirarCaducadasDeOfertaEnTx(tx, d.offerId, { ...ctx, actorId: null })
+
   const oferta = await tx.supplyV2Offer.findUnique({
     where: { id: d.offerId },
     select: {
@@ -272,6 +276,23 @@ export async function expirarOrdenEnTx(tx: Tx, orderId: string, ctx: ContextoAud
   await tx.supplyV2CustomerOrder.update({ where: { id: o.id }, data: { status: 'EXPIRED', expiredAt: ahora } })
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_ORDER_EXPIRED', 'SupplyV2CustomerOrder', o.id, { number: o.number, soltadas }, o.lines[0]?.offer.supplier.companyId ?? null)
   return true
+}
+
+/**
+ * Expira las órdenes PENDING de una oferta cuya reserva ya caducó. Se llama con
+ * la oferta bloqueada (checkout) y desde el barrido; ambas rutas pasan por
+ * `expirarOrdenEnTx`, que solo actúa una vez por orden. Devuelve cuántas expiró.
+ */
+export async function expirarCaducadasDeOfertaEnTx(tx: Tx, offerId: string, ctx: ContextoAuditoria, ahora = new Date()): Promise<number> {
+  const caducadas = await tx.supplyV2CustomerOrder.findMany({
+    where: { status: 'PENDING', expiresAt: { lte: ahora }, lines: { some: { offerId } } },
+    select: { id: true },
+    orderBy: { expiresAt: 'asc' },
+    take: 50,
+  })
+  let expiradas = 0
+  for (const o of caducadas) if (await expirarOrdenEnTx(tx, o.id, ctx, ahora)) expiradas++
+  return expiradas
 }
 
 /** Membego revisó y NO vio el dinero: la reserva se suelta y la orden se cancela. */

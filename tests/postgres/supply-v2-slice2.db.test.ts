@@ -431,6 +431,30 @@ test('M · cancelar la oferta se rechaza con checkouts en curso; sin ellos liber
   await assert.rejects(comprar(ctx.cliente1, cancelable.id, 1), /cancel|no está disponible/)
 })
 
+test('N · sin cron: el checkout de otro cliente expira por sí mismo la reserva caducada de la oferta y se queda la última unidad', async () => {
+  const ultima = await ofertaPublicada(1, { perCustomerLimit: 1 })
+  const abandonada = await comprar(ctx.cliente1, ultima.id, 1)
+  await assert.rejects(comprar(ctx.cliente2, ultima.id, 1), /agotó|queda|unidades/)
+  // El arnés adelanta el reloj: la reserva caducó y nadie ha corrido el barrido.
+  await prisma.supplyV2CustomerOrder.update({ where: { id: abandonada.id }, data: { expiresAt: new Date(Date.now() - 1000) } })
+  const ganadora = await comprar(ctx.cliente2, ultima.id, 1)
+  assert.equal(ganadora.repetida, false)
+  const [a, b] = await Promise.all([
+    prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: abandonada.id } }),
+    prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: ganadora.id } }),
+  ])
+  assert.equal(a.status, 'EXPIRED')
+  assert.equal(b.status, 'PENDING')
+  const al = await asignacion(ultima.allocationId)
+  assert.deepEqual([al.allocatedQuantity, al.reservedQuantity, al.issuedQuantity], [1, 1, 0])
+  assert.ok(await prisma.auditLog.findFirst({ where: { accion: 'SUPPLY_V2_ORDER_EXPIRED', entidadId: abandonada.id } }))
+  // El barrido después no vuelve a tocar nada de esta oferta.
+  const r = await barridoSupplyV2()
+  assert.equal((await prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: ganadora.id } })).status, 'PENDING')
+  assert.ok(r.ordenesExpiradas >= 0)
+  await sinEmpresa('prueba', (tx) => cancelarOrdenClienteEnTx(tx, ganadora.id, ctx.cliente2, como(ctx.cliente2)))
+})
+
 test('K · el ledger de cada lote cuadra al final y la base no acepta contadores por encima de lo asignado', async () => {
   await lote(ctx.lotA)
   await lote(ctx.lotB)

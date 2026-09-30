@@ -13,11 +13,12 @@ export const maxDuration = 60
  * finaliza ofertas vencidas liberando lo no usado. Idempotente: correrlo dos
  * veces no mueve nada dos veces.
  *
- * Vercel lo dispara cada hora; el TTL de la reserva es de minutos, así que un
- * checkout abandonado puede quedar unos minutos más «pendiente» de lo que
- * dice su hora de vencimiento. La disponibilidad no se ve afectada: las
- * unidades reservadas nunca se venden dos veces, y el cliente ya no puede
- * avisar un pago con la reserva vencida (`avisarPagoEnTx`).
+ * Vercel lo dispara una vez al día (el plan Hobby no admite crons más
+ * frecuentes), pero el stock NO depende de él: cada checkout expira primero,
+ * bajo el candado de la oferta, las reservas caducadas de esa oferta
+ * (`expirarCaducadasDeOfertaEnTx`), y el cliente ya no puede avisar un pago
+ * con la reserva vencida (`avisarPagoEnTx`). El barrido diario solo recoge lo
+ * que ningún checkout tocó y cierra/activa ofertas por vigencia.
  */
 export async function GET(req: NextRequest) {
   const denegado = autorizarCron(req)
