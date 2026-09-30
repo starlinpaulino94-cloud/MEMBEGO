@@ -62,6 +62,9 @@ export async function crearAcuerdoEnTx(tx: Tx, d: DatosAcuerdo, ctx: ContextoAud
       commissionPercentage:
         d.commissionPercentage != null && d.commissionPercentage !== '' ? new Prisma.Decimal(d.commissionPercentage) : null,
       paymentTermsDays: d.paymentTermsDays ?? null,
+      payableRecognition: d.payableRecognition ?? 'ON_INVOICE',
+      allowDepositApplication: d.allowDepositApplication ?? true,
+      settlementFrequency: d.settlementFrequency?.trim() || null,
       startsAt: d.startsAt,
       endsAt: d.endsAt ?? null,
       notes: d.notes?.trim() || null,

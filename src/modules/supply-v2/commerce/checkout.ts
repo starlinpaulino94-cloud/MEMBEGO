@@ -18,6 +18,7 @@ import { registrarAsientoEnTx } from '../pool/lotes'
 import { unidadesLibres } from '../offers/domain'
 import { marcarAgotadaSiCorrespondeEnTx } from '../offers/service'
 import type { PaymentAccountRef } from '../contracts/gateways'
+import { reconocerVentaEnTx } from '../economics/service'
 
 /**
  * MEMBEGO SUPPLY 2.0 · CHECKOUT, RESERVA, PAGO Y DERECHO (§21–§37).
@@ -441,6 +442,8 @@ export async function confirmarPagoEnTx(
       actualUnitCost: e.actualUnitCost,
       customerId: o.customerId,
     }, companyId)
+    // Slice 4 (§24–§25, §29): ingreso + costo de la unidad, reconocidos UNA vez, aquí.
+    await reconocerVentaEnTx(tx, e.id, ctx)
   }
   return { id: o.id, number: o.number, entitlements, repetido: false }
 }

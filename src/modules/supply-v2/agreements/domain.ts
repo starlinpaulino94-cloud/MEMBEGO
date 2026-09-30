@@ -1,4 +1,4 @@
-import type { SupplyV2AgreementScope, SupplyV2AgreementType } from '@prisma/client'
+import type { SupplyV2AgreementScope, SupplyV2AgreementType, SupplyV2PayableRecognition } from '@prisma/client'
 import { AGREEMENT_TYPES_SLICE1 } from '../core/catalogo'
 
 /**
@@ -19,10 +19,16 @@ export interface DatosAcuerdo {
   discountPercentage?: number | string | null
   commissionPercentage?: number | string | null
   paymentTermsDays?: number | null
+  // Slice 4 · política financiera (§20)
+  payableRecognition?: SupplyV2PayableRecognition | null
+  allowDepositApplication?: boolean | null
+  settlementFrequency?: string | null
   startsAt: Date
   endsAt?: Date | null
   notes?: string | null
 }
+
+export const PAYABLE_RECOGNITIONS: readonly SupplyV2PayableRecognition[] = ['ON_INVOICE', 'ON_RECEIPT', 'ON_REDEMPTION']
 
 function pct(v: number | string | null | undefined, nombre: string): string | null {
   if (v == null || v === '') return null
@@ -56,6 +62,12 @@ export function validarAcuerdo(d: DatosAcuerdo): string | null {
   if (e2) return e2
   if (d.paymentTermsDays != null && (!Number.isInteger(d.paymentTermsDays) || d.paymentTermsDays < 0)) {
     return 'Los días de pago tienen que ser un entero no negativo.'
+  }
+  if (d.payableRecognition && !PAYABLE_RECOGNITIONS.includes(d.payableRecognition)) {
+    return 'La política de reconocimiento de la deuda no es válida.'
+  }
+  if (d.type === 'PREPAID_PURCHASE' && d.payableRecognition === 'ON_REDEMPTION') {
+    return 'Una compra anticipada se paga antes de entregar: la deuda no puede nacer al redimir.'
   }
   return null
 }
@@ -106,6 +118,9 @@ export function snapshotDeAcuerdo(a: {
   discountPercentage: { toString(): string } | null
   commissionPercentage: { toString(): string } | null
   paymentTermsDays: number | null
+  payableRecognition?: SupplyV2PayableRecognition | null
+  allowDepositApplication?: boolean | null
+  settlementFrequency?: string | null
   startsAt: Date
   endsAt: Date | null
   notes: string | null
@@ -122,6 +137,10 @@ export function snapshotDeAcuerdo(a: {
     discountPercentage: a.discountPercentage?.toString() ?? null,
     commissionPercentage: a.commissionPercentage?.toString() ?? null,
     paymentTermsDays: a.paymentTermsDays,
+    // Slice 4: la política se congela en la versión; las obligaciones la leen de aquí (§21).
+    payableRecognition: a.payableRecognition ?? 'ON_INVOICE',
+    allowDepositApplication: a.allowDepositApplication ?? true,
+    settlementFrequency: a.settlementFrequency ?? null,
     startsAt: a.startsAt.toISOString(),
     endsAt: a.endsAt?.toISOString() ?? null,
     notes: a.notes,

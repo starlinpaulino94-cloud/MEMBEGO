@@ -353,6 +353,25 @@ enum AuditAccion {
   SUPPLY_V2_REDEMPTION_REVERSED
   SUPPLY_V2_REDEMPTION_INCIDENT
   SUPPLY_V2_ENTITLEMENT_EXPIRED
+  // Slice 4 · finanzas del proveedor y economía del supply
+  SUPPLY_V2_INVOICE_CREATED
+  SUPPLY_V2_INVOICE_APPROVED
+  SUPPLY_V2_INVOICE_CANCELLED
+  SUPPLY_V2_DEPOSIT_CREATED
+  SUPPLY_V2_DEPOSIT_APPLIED
+  SUPPLY_V2_DEPOSIT_REVERSED
+  SUPPLY_V2_PAYMENT_CREATED
+  SUPPLY_V2_PAYMENT_CONFIRMED
+  SUPPLY_V2_PAYMENT_APPLIED
+  SUPPLY_V2_PAYMENT_REVERSED
+  SUPPLY_V2_PAYMENT_CANCELLED
+  SUPPLY_V2_OBLIGATION_RECOGNIZED
+  SUPPLY_V2_OBLIGATION_PAID
+  SUPPLY_V2_OBLIGATION_CANCELLED
+  SUPPLY_V2_ECONOMIC_EVENT_CREATED
+  SUPPLY_V2_RECONCILIATION_CREATED
+  SUPPLY_V2_RECONCILIATION_RESOLVED
+  SUPPLY_V2_LOT_EXPIRED
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas
@@ -529,6 +548,17 @@ model User {
   supplyV2Entregas             SupplyV2Redemption[]         @relation("SupplyV2RedemptionEmployee")
   supplyV2ReversasHechas       SupplyV2Redemption[]         @relation("SupplyV2RedemptionReversedBy")
   supplyV2Incidencias          SupplyV2RedemptionIncident[] @relation("SupplyV2IncidentEmployee")
+  // Slice 4 · finanzas del proveedor
+  supplyV2FacturasCreadas        SupplyV2SupplierInvoice[]         @relation("SupplyV2InvoiceCreatedBy")
+  supplyV2FacturasAprobadas      SupplyV2SupplierInvoice[]         @relation("SupplyV2InvoiceApprovedBy")
+  supplyV2DepositosCreados       SupplyV2SupplierDeposit[]         @relation("SupplyV2DepositCreatedBy")
+  supplyV2MovimientosDeposito    SupplyV2SupplierDepositMovement[] @relation("SupplyV2DepositMovementActor")
+  supplyV2PagosProveedorCreados  SupplyV2SupplierPayment[]         @relation("SupplyV2PaymentCreatedBy")
+  supplyV2PagosProveedorConfirm  SupplyV2SupplierPayment[]         @relation("SupplyV2PaymentConfirmedBy")
+  supplyV2AplicacionesCreadas    SupplyV2PaymentApplication[]      @relation("SupplyV2ApplicationCreatedBy")
+  supplyV2AplicacionesReversadas SupplyV2PaymentApplication[]      @relation("SupplyV2ApplicationReversedBy")
+  supplyV2ConciliacionesCreadas  SupplyV2Reconciliation[]          @relation("SupplyV2ReconciliationCreatedBy")
+  supplyV2ConciliacionesResuelt  SupplyV2Reconciliation[]          @relation("SupplyV2ReconciliationResolvedBy")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)

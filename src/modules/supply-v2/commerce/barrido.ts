@@ -4,7 +4,9 @@ import { sinEmpresa } from '@/lib/tenant'
 import type { ContextoAuditoria } from '../core/auditoria'
 import { cerrarOfertaEnTx } from '../offers/service'
 import { expirarOrdenEnTx } from './checkout'
-import { expirarDerechosEnTx, expirarVouchersEnTx } from '../redemption/service'
+import { derechosPorVencerEnTx, expirarDerechoEnTx, expirarVouchersEnTx } from '../redemption/service'
+import { expirarLoteEnTx, lotesPorVencerEnTx } from '../pool/vencimientos'
+import { proyectarVentasSinEventoEnTx } from '../economics/service'
 
 /**
  * MEMBEGO SUPPLY 2.0 · BARRIDO del cron (§25, §37, §39, §64).
@@ -26,10 +28,17 @@ export interface ResultadoBarrido {
   /** Slice 3 (§58) */
   vouchersVencidos: number
   derechosVencidos: number
+  /** Derechos vencidos que no se pudieron cerrar (inconsistencia registrada en el log). */
+  derechosConError: number
+  /** Slice 4 (§48–§49) */
+  lotesVencidos: number
+  unidadesVencidasSinVender: number
+  /** Slice 4 (§24): ventas PAID anteriores sin evento económico, proyectadas. */
+  ventasProyectadas: number
 }
 
 export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise<ResultadoBarrido> {
-  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0 }
+  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0, derechosConError: 0, lotesVencidos: 0, unidadesVencidasSinVender: 0, ventasProyectadas: 0 }
 
   const vencidas = await sinEmpresa('Supply 2.0 cron: checkouts con la reserva caducada', (tx) =>
     tx.supplyV2CustomerOrder.findMany({ where: { status: 'PENDING', expiresAt: { lte: ahora } }, select: { id: true }, take: limite, orderBy: { expiresAt: 'asc' } })
@@ -59,7 +68,27 @@ export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise
   }
 
   // Slice 3: derechos y vouchers vencidos. Las sesiones QR expiradas se quedan como historial (§58–§59).
-  r.derechosVencidos = await sinEmpresa('Supply 2.0 cron: derechos vencidos', (tx) => expirarDerechosEnTx(tx, CTX, ahora, limite))
+  // Slice 4: cada derecho en su propia transacción; uno inconsistente (su unidad
+  // no está ISSUED en el ledger) se registra y NO bloquea a los demás.
+  for (const id of await sinEmpresa('Supply 2.0 cron: derechos por vencer', (tx) => derechosPorVencerEnTx(tx, ahora, limite))) {
+    try {
+      if (await sinEmpresa('Supply 2.0 cron: vencer un derecho', (tx) => expirarDerechoEnTx(tx, id, CTX, ahora))) r.derechosVencidos++
+    } catch (e) {
+      r.derechosConError++
+      console.error(`[supply-v2:cron] no se pudo vencer el derecho ${id}:`, e instanceof Error ? e.message : e)
+    }
+  }
   r.vouchersVencidos = await sinEmpresa('Supply 2.0 cron: vouchers vencidos', (tx) => expirarVouchersEnTx(tx, CTX, ahora, limite))
+
+  // Slice 4: lotes vencidos (cada lote en su transacción; RESERVED/ISSUED no se tocan) y ventas sin evento.
+  const lotes = await sinEmpresa('Supply 2.0 cron: lotes vencidos con unidades sin vender', (tx) => lotesPorVencerEnTx(tx, ahora, limite))
+  for (const lotId of lotes) {
+    const v = await sinEmpresa('Supply 2.0 cron: expirar un lote', (tx) => expirarLoteEnTx(tx, lotId, CTX, ahora))
+    if (v) {
+      r.lotesVencidos++
+      r.unidadesVencidasSinVender += v.cerradasDisponibles + v.cerradasAsignadas
+    }
+  }
+  r.ventasProyectadas = await sinEmpresa('Supply 2.0 cron: proyectar ventas sin evento económico', (tx) => proyectarVentasSinEventoEnTx(tx, CTX, limite))
   return r
 }

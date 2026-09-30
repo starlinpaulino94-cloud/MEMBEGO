@@ -13,7 +13,7 @@ import { fallo } from '../core/errores'
  */
 
 export interface ReferenciaAsiento {
-  referenceType: 'PURCHASE_RECEIPT' | 'ADJUSTMENT' | 'CANCELLATION' | 'ALLOCATION' | 'CUSTOMER_ORDER' | 'ENTITLEMENT' | 'OFFER' | 'REDEMPTION'
+  referenceType: 'PURCHASE_RECEIPT' | 'ADJUSTMENT' | 'CANCELLATION' | 'ALLOCATION' | 'CUSTOMER_ORDER' | 'ENTITLEMENT' | 'OFFER' | 'REDEMPTION' | 'LOT'
   referenceId: string
 }
 

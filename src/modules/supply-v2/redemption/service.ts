@@ -6,6 +6,8 @@ import { fallo } from '../core/errores'
 import { exigirTransicion, TRANSICIONES_DERECHO, TRANSICIONES_VOUCHER } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
 import { registrarAsientoEnTx } from '../pool/lotes'
+import { cancelarObligacionDeRedencionEnTx, reconocerObligacionPorRedencionEnTx } from '../finance/obligations'
+import { registrarBreakageEnTx } from '../economics/service'
 import {
   MENSAJES_RECHAZO,
   motivoNoCanjeable,
@@ -390,6 +392,10 @@ export async function confirmarEntregaEnTx(
     ctx.actorId
   )
 
+  // 6b. Slice 4 (§2, §19): la deuda con el proveedor nace aquí SOLO si la versión
+  //     del acuerdo del lote dice ON_REDEMPTION. PREPAID no crea CxP nueva.
+  await reconocerObligacionPorRedencionEnTx(tx, r.id, ctx)
+
   // 7. Bitácora.
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_QR_SESSION_CONSUMED', 'SupplyV2QrSession', s.id, { redemptionId: r.id, employeeId: d.empleado.userId }, d.empleado.companyId)
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_REDEMPTION_CONFIRMED', 'SupplyV2Redemption', r.id, {
@@ -461,11 +467,15 @@ export async function reversarRedencionEnTx(tx: Tx, redemptionId: string, motivo
     ctx.actorId
   )
 
+  // 3b. Slice 4: si la entrega había creado deuda (ON_REDEMPTION) y nadie la pagó, se cancela.
+  const obligacion = await cancelarObligacionDeRedencionEnTx(tx, r.id, `Reversa de ${r.number}: ${motivo.trim()}`, ctx)
+
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_REDEMPTION_REVERSED', 'SupplyV2Redemption', r.id, {
     number: r.number,
     entitlementId: r.entitlementId,
     motivo: motivo.trim(),
     voucherReactivado,
+    obligacion,
   }, r.supplier.companyId)
   return { id: r.id, number: r.number, entitlementId: r.entitlementId, voucherReactivado }
 }
@@ -512,17 +522,43 @@ export async function expirarVouchersEnTx(tx: Tx, ctx: ContextoAuditoria, ahora 
   return n
 }
 
-/** Un derecho vencido deja de ser canjeable; su unidad sigue ISSUED en el ledger (cerrarla es del Slice 4). */
+/**
+ * Un derecho vencido deja de ser canjeable Y cierra su unidad (Slice 4, §27, §66):
+ *
+ *   entitlement ACTIVE + vencido → EXPIRED → ledger ISSUED → CLOSED → BREAKAGE +1
+ *
+ * Nunca vuelve a AVAILABLE: esa unidad ya se vendió. El ingreso se conserva y
+ * el costo no se duplica (ya se reconoció al vender). Devuelve `false` si el
+ * derecho ya no estaba ACTIVE o todavía no venció (idempotente).
+ */
+export async function expirarDerechoEnTx(tx: Tx, entitlementId: string, ctx: ContextoAuditoria, ahora = new Date()): Promise<boolean> {
+  await tx.$queryRaw`SELECT "id" FROM "supply_v2_entitlements" WHERE "id" = ${entitlementId} FOR UPDATE`
+  const d = await tx.supplyV2Entitlement.findUnique({ where: { id: entitlementId }, select: { id: true, status: true, expiresAt: true, lotId: true, quantity: true, supplier: { select: { companyId: true } } } })
+  if (!d || d.status !== 'ACTIVE' || !d.expiresAt || d.expiresAt > ahora) return false
+  const r = await tx.supplyV2Entitlement.updateMany({ where: { id: d.id, status: 'ACTIVE' }, data: { status: 'EXPIRED' } })
+  if (r.count !== 1) return false
+  await tx.supplyV2Voucher.updateMany({ where: { entitlementId: d.id, status: 'ACTIVE' }, data: { status: 'EXPIRED' } })
+  await registrarAsientoEnTx(
+    tx,
+    d.lotId,
+    { type: 'EXPIRATION', sourceBucket: 'ISSUED', destinationBucket: 'CLOSED', quantity: d.quantity, reason: 'Derecho vencido sin redimir (breakage).' },
+    { referenceType: 'ENTITLEMENT', referenceId: d.id },
+    ctx.actorId
+  )
+  await registrarBreakageEnTx(tx, d.id, ctx, ahora)
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_ENTITLEMENT_EXPIRED', 'SupplyV2Entitlement', d.id, { ledger: 'ISSUED→CLOSED', breakage: 1 }, d.supplier.companyId)
+  return true
+}
+
+/** Candidatos a vencer: derechos ACTIVE con fecha de vencimiento pasada. */
+export async function derechosPorVencerEnTx(tx: Tx, ahora = new Date(), limite = 200): Promise<string[]> {
+  const filas = await tx.supplyV2Entitlement.findMany({ where: { status: 'ACTIVE', expiresAt: { lte: ahora } }, select: { id: true }, take: limite, orderBy: { expiresAt: 'asc' } })
+  return filas.map((f) => f.id)
+}
+
+/** Todos los vencidos en UNA transacción (para pruebas y usos pequeños); el cron va uno a uno. */
 export async function expirarDerechosEnTx(tx: Tx, ctx: ContextoAuditoria, ahora = new Date(), limite = 200): Promise<number> {
-  const vencidos = await tx.supplyV2Entitlement.findMany({ where: { status: 'ACTIVE', expiresAt: { lte: ahora } }, select: { id: true, supplier: { select: { companyId: true } } }, take: limite })
   let n = 0
-  for (const d of vencidos) {
-    const r = await tx.supplyV2Entitlement.updateMany({ where: { id: d.id, status: 'ACTIVE' }, data: { status: 'EXPIRED' } })
-    if (r.count === 1) {
-      n++
-      await tx.supplyV2Voucher.updateMany({ where: { entitlementId: d.id, status: 'ACTIVE' }, data: { status: 'EXPIRED' } })
-      await auditarEnTx(tx, ctx, 'SUPPLY_V2_ENTITLEMENT_EXPIRED', 'SupplyV2Entitlement', d.id, {}, d.supplier.companyId)
-    }
-  }
+  for (const id of await derechosPorVencerEnTx(tx, ahora, limite)) if (await expirarDerechoEnTx(tx, id, ctx, ahora)) n++
   return n
 }

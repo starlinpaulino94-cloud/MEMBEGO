@@ -27,7 +27,7 @@ export default async function VentasPage() {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="font-medium">
-            {c.number} · {c.customer.name ?? c.customer.email}
+            <Link href={`/superadmin/supply-v2/ofertas/ventas/${c.id}`} className="underline-offset-4 hover:underline" data-testid="link-venta">{c.number}</Link> · {c.customer.name ?? c.customer.email}
           </p>
           <p className="text-caption text-muted-foreground">
             {c.lines.map((l) => `${l.quantity} × ${l.titleSnapshot}`).join(', ')} · {formatDateTime(c.createdAt)}
