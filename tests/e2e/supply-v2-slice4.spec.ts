@@ -201,7 +201,7 @@ async function prepaidYVencimiento(browser: Browser) {
   await compras.getByTestId('factura-costo').fill('1')
   await compras.getByTestId('factura-numero').fill(`LP-${d.sufijo}-001`)
   await compras.getByTestId('btn-registrar-factura').click()
-  await expect(compras.getByRole('alert')).toContainText('ya está registrada')
+  await expect(compras.getByTestId('form-factura').getByRole('alert')).toContainText('ya está registrada')
 
   // ── FINANZAS aprueba: nace la obligación ───────────────────────────────
   await finanzas.goto(urlFactura)
