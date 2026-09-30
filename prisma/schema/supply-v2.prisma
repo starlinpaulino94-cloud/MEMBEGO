@@ -159,6 +159,8 @@ enum SupplyV2ReferenceType {
   CUSTOMER_ORDER
   ENTITLEMENT
   OFFER
+  // Slice 3
+  REDEMPTION
 }
 
 // ── Proveedor ──────────────────────────────────────────────────────────────
@@ -208,6 +210,9 @@ model SupplyV2Supplier {
   lots           SupplyV2Lot[]
   offers         SupplyV2Offer[]
   entitlements   SupplyV2Entitlement[]
+  vouchers       SupplyV2Voucher[]
+  redemptions    SupplyV2Redemption[]
+  incidents      SupplyV2RedemptionIncident[]
 
   @@index([status, commercialName])
   @@map("supply_v2_suppliers")
@@ -256,6 +261,8 @@ model SupplyV2CatalogItem {
   allocations  SupplyV2Allocation[]
   offers       SupplyV2Offer[]
   entitlements SupplyV2Entitlement[]
+  vouchers     SupplyV2Voucher[]
+  redemptions  SupplyV2Redemption[]
 
   /// `supplierId + sku` único cuando hay SKU (índice parcial en la migración).
   @@unique([supplierId, sku])
@@ -535,6 +542,7 @@ model SupplyV2Lot {
   allocationLines SupplyV2AllocationLine[]
   reservations    SupplyV2OrderReservation[]
   entitlements    SupplyV2Entitlement[]
+  redemptions     SupplyV2Redemption[]
 
   @@index([catalogItemId, status])
   @@index([supplierId, status])
@@ -661,6 +669,8 @@ enum SupplyV2EntitlementStatus {
   ACTIVE
   CANCELLED
   EXPIRED
+  // Slice 3: entregado físicamente
+  REDEEMED
 }
 
 // ── Asignación ─────────────────────────────────────────────────────────────
@@ -923,8 +933,193 @@ model SupplyV2Entitlement {
 
   createdAt DateTime @default(now())
 
+  vouchers    SupplyV2Voucher[]
+  redemptions SupplyV2Redemption[]
+
   @@index([customerId, status])
   @@index([offerId])
   @@index([lotId])
   @@map("supply_v2_entitlements")
+}
+
+// ============================================================================
+// SLICE 3 · VOUCHER · QR TEMPORAL · REDENCIÓN · REVERSA
+// ============================================================================
+//
+// Un VOUCHER representa un derecho (§5): no es un cupón, no cambia precios y
+// no es el QR. Su `code` es una credencial opaca. El QR que enseña el cliente
+// es una SESIÓN temporal con un `nonce` (§7–§9) que solo vale unos minutos y
+// una sola vez. La REDENCIÓN deja quién, dónde, cuándo y qué se entregó, con
+// el costo del lote y el precio del cliente congelados (§21). Nada se borra:
+// la reversa marca la redención y devuelve la unidad (§37–§40).
+
+enum SupplyV2VoucherStatus {
+  ACTIVE
+  REDEEMED
+  EXPIRED
+  CANCELLED
+  REVOKED
+}
+
+enum SupplyV2RedemptionChannel {
+  QR_SCAN
+  MANUAL_CODE
+}
+
+enum SupplyV2IncidentType {
+  INVALID_QR
+  PRODUCT_UNAVAILABLE
+  WRONG_CUSTOMER
+  WRONG_BRANCH
+  OTHER
+}
+
+model SupplyV2Voucher {
+  id String @id @default(cuid())
+
+  entitlementId String
+  entitlement   SupplyV2Entitlement @relation(fields: [entitlementId], references: [id], onDelete: Restrict)
+  customerId    String
+  customer      User                @relation("SupplyV2VoucherCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  supplierId    String
+  supplier      SupplyV2Supplier    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  catalogItemId String
+  catalogItem   SupplyV2CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  /// Credencial opaca (32 bytes aleatorios en base64url). Nunca va en el QR.
+  code String @unique
+
+  status SupplyV2VoucherStatus @default(ACTIVE)
+
+  validFrom  DateTime  @default(now())
+  validUntil DateTime?
+
+  revokedAt     DateTime?
+  revokedReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  qrSessions  SupplyV2QrSession[]
+  redemptions SupplyV2Redemption[]
+
+  @@index([entitlementId, status])
+  @@index([customerId, status])
+  @@map("supply_v2_vouchers")
+}
+
+/// Sesión QR: lo único que viaja en el QR es `nonce`. Estado DERIVADO (§44):
+/// activa si no venció ni se consumió; expirada si venció; consumida si tiene
+/// `consumedAt`. Nunca se borra ni se «desconsume».
+model SupplyV2QrSession {
+  id String @id @default(cuid())
+
+  voucherId String
+  voucher   SupplyV2Voucher @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+
+  /// ≥ 128 bits de entropía, único: se trata como una credencial.
+  nonce String @unique
+
+  expiresAt DateTime
+
+  branchId String?
+  branch   Sucursal? @relation("SupplyV2QrSessionBranch", fields: [branchId], references: [id], onDelete: Restrict)
+
+  openedByCustomerId String
+  openedBy           User   @relation("SupplyV2QrSessionOpenedBy", fields: [openedByCustomerId], references: [id], onDelete: Restrict)
+  deviceInfo         String?
+
+  consumedAt         DateTime?
+  consumedByUserId   String?
+  consumedBy         User?     @relation("SupplyV2QrSessionConsumedBy", fields: [consumedByUserId], references: [id], onDelete: Restrict)
+  consumedDeviceInfo String?
+
+  createdAt DateTime @default(now())
+
+  redemption SupplyV2Redemption?
+  incidents  SupplyV2RedemptionIncident[]
+
+  @@index([voucherId, createdAt])
+  @@index([expiresAt])
+  @@map("supply_v2_qr_sessions")
+}
+
+/// La entrega física: quién, dónde, cuándo y qué. Snapshots en Decimal.
+model SupplyV2Redemption {
+  id     String @id @default(cuid())
+  number String @unique
+
+  entitlementId String
+  entitlement   SupplyV2Entitlement @relation(fields: [entitlementId], references: [id], onDelete: Restrict)
+  voucherId     String
+  voucher       SupplyV2Voucher     @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+  qrSessionId   String              @unique
+  qrSession     SupplyV2QrSession   @relation(fields: [qrSessionId], references: [id], onDelete: Restrict)
+
+  customerId    String
+  customer      User                @relation("SupplyV2RedemptionCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  supplierId    String
+  supplier      SupplyV2Supplier    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  catalogItemId String
+  catalogItem   SupplyV2CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  lotId         String
+  lot           SupplyV2Lot         @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  branchId   String?
+  branch     Sucursal? @relation("SupplyV2RedemptionBranch", fields: [branchId], references: [id], onDelete: Restrict)
+  employeeId String
+  employee   User      @relation("SupplyV2RedemptionEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+
+  quantity Int @default(1)
+
+  unitCostSnapshot          Decimal @db.Decimal(12, 2)
+  customerUnitPriceSnapshot Decimal @db.Decimal(12, 2)
+  /// Lo que el cliente paga al comercio en la entrega. Precompra completa: 0 (§50).
+  customerPaysMerchant      Decimal @default(0) @db.Decimal(12, 2)
+  currency                  String  @default("DOP")
+
+  channel    SupplyV2RedemptionChannel @default(QR_SCAN)
+  deviceInfo String?
+
+  redeemedAt DateTime @default(now())
+
+  reversedAt     DateTime?
+  reversedById   String?
+  reversedBy     User?     @relation("SupplyV2RedemptionReversedBy", fields: [reversedById], references: [id], onDelete: Restrict)
+  reversalReason String?
+
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([supplierId, redeemedAt])
+  @@index([entitlementId])
+  @@index([customerId])
+  @@index([branchId])
+  @@map("supply_v2_redemptions")
+}
+
+/// Incidencia operacional mínima desde el escáner (§41). Historial, no flujo.
+model SupplyV2RedemptionIncident {
+  id String @id @default(cuid())
+
+  supplierId String
+  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  branchId   String?
+  branch     Sucursal?        @relation("SupplyV2IncidentBranch", fields: [branchId], references: [id], onDelete: Restrict)
+  employeeId String
+  employee   User             @relation("SupplyV2IncidentEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+
+  qrSessionId String?
+  qrSession   SupplyV2QrSession? @relation(fields: [qrSessionId], references: [id], onDelete: Restrict)
+  /// Lo que se escaneó cuando no resolvió a ninguna sesión (recortado).
+  codeSeen    String?
+
+  type  SupplyV2IncidentType
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  @@index([supplierId, createdAt])
+  @@map("supply_v2_redemption_incidents")
 }

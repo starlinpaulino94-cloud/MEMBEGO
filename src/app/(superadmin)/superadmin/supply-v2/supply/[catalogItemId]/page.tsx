@@ -46,7 +46,7 @@ export default async function SupplyProductoPage({ params }: { params: Promise<{
         <StatCard label="Recibido" value={item.resumen.recibido.toLocaleString('es-DO')} sub={`${item.resumen.compradoTotal.toLocaleString('es-DO')} compradas en órdenes aprobadas`} />
         <StatCard label="Disponible" value={<span data-testid="producto-disponible">{item.resumen.disponible.toLocaleString('es-DO')}</span>} accent="brand" sub={`${dinero(item.resumen.valorDisponible, item.currency)} de valor`} />
         <StatCard label="Asignadas · Reservadas" value={<span><span data-testid="producto-asignadas">{item.resumen.asignadas.toLocaleString('es-DO')}</span> · <span data-testid="producto-reservadas">{item.resumen.reservadas.toLocaleString('es-DO')}</span></span>} sub="destinadas a ofertas · en checkout" />
-        <StatCard label="Emitidas" value={<span data-testid="producto-emitidas">{item.resumen.emitidas.toLocaleString('es-DO')}</span>} sub={`${dinero(item.resumen.valorAdquirido, item.currency)} valor adquirido total`} accent="success" />
+        <StatCard label="Emitidas · Redimidas" value={<span><span data-testid="producto-emitidas">{item.resumen.emitidas.toLocaleString('es-DO')}</span> · <span data-testid="producto-redimidas">{item.resumen.redimidas.toLocaleString('es-DO')}</span></span>} sub={`vendidas sin entregar · entregadas · ${dinero(item.resumen.valorAdquirido, item.currency)} adquirido`} accent="success" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -108,7 +108,7 @@ export default async function SupplyProductoPage({ params }: { params: Promise<{
                     <th className="py-1 pr-3">Lote</th>
                     <th className="py-1 pr-3 text-right">Recibidas</th>
                     <th className="py-1 pr-3 text-right">Disponibles</th>
-                    <th className="py-1 pr-3 text-right">Asig. · Res. · Emit.</th>
+                    <th className="py-1 pr-3 text-right">Asig. · Res. · Emit. · Red.</th>
                     <th className="py-1 pr-3 text-right">Costo</th>
                     <th className="py-1 pr-3">Vence</th>
                     <th className="py-1 pr-3">Orden</th>
@@ -125,7 +125,7 @@ export default async function SupplyProductoPage({ params }: { params: Promise<{
                       </td>
                       <td className="py-2 pr-3 text-right tabular-nums">{l.quantityReceived.toLocaleString('es-DO')}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{l.quantityAvailable.toLocaleString('es-DO')}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.quantityAllocated} · {l.quantityReserved} · {l.quantityIssued}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{l.quantityAllocated} · {l.quantityReserved} · {l.quantityIssued} · {l.quantityRedeemed}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{dinero(l.unitCost, l.currency)}</td>
                       <td className="py-2 pr-3">{l.expiresAt ? formatDate(l.expiresAt) : '—'}</td>
                       <td className="py-2 pr-3">

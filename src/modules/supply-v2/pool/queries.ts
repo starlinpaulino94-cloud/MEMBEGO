@@ -121,6 +121,7 @@ export interface SupplyPorProducto {
   asignadas: number
   reservadas: number
   emitidas: number
+  redimidas: number
   recibidas: number
   valorDisponible: number
   moneda: string
@@ -139,6 +140,7 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
         quantityAllocated: true,
         quantityReserved: true,
         quantityIssued: true,
+        quantityRedeemed: true,
         quantityReceived: true,
         unitCost: true,
         currency: true,
@@ -160,6 +162,7 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
       asignadas: 0,
       reservadas: 0,
       emitidas: 0,
+      redimidas: 0,
       recibidas: 0,
       valorDisponible: 0,
       moneda: l.currency,
@@ -170,6 +173,7 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
     g.asignadas += l.quantityAllocated
     g.reservadas += l.quantityReserved
     g.emitidas += l.quantityIssued
+    g.redimidas += l.quantityRedeemed
     g.recibidas += l.quantityReceived
     g.valorDisponible += l.quantityAvailable * aNumero(l.unitCost)
     g.lotes += 1
@@ -205,6 +209,7 @@ export async function fichaProductoSupply(catalogItemId: string) {
             quantityAllocated: true,
             quantityReserved: true,
             quantityIssued: true,
+            quantityRedeemed: true,
             unitCost: true,
             currency: true,
             receivedAt: true,
@@ -247,9 +252,10 @@ export async function fichaProductoSupply(catalogItemId: string) {
     const asignadas = item.lots.reduce((t, l) => t + l.quantityAllocated, 0)
     const reservadas = item.lots.reduce((t, l) => t + l.quantityReserved, 0)
     const emitidas = item.lots.reduce((t, l) => t + l.quantityIssued, 0)
+    const redimidas = item.lots.reduce((t, l) => t + l.quantityRedeemed, 0)
     const valorAdquirido = item.lots.reduce((t, l) => t + l.quantityReceived * aNumero(l.unitCost), 0)
     const valorDisponible = item.lots.reduce((t, l) => t + l.quantityAvailable * aNumero(l.unitCost), 0)
-    return { ...item, resumen: { compradoTotal, recibido, disponible, asignadas, reservadas, emitidas, valorAdquirido, valorDisponible } }
+    return { ...item, resumen: { compradoTotal, recibido, disponible, asignadas, reservadas, emitidas, redimidas, valorAdquirido, valorDisponible } }
   })
 }
 

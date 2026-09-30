@@ -1,5 +1,6 @@
 import 'server-only'
 
+import type { SupplyV2EntitlementStatus } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import type { PaymentAccountRef } from '../contracts/gateways'
 
@@ -115,11 +116,13 @@ export interface DerechoCliente {
   proveedor: string
   precio: string
   currency: string
-  status: string
+  status: SupplyV2EntitlementStatus
   issuedAt: Date
   expiresAt: Date | null
   orderNumber: string
   orderId: string
+  /** Slice 3: si ya se entregó, cuándo y dónde (sin datos internos). */
+  redencion: { redeemedAt: Date; sucursal: string | null } | null
 }
 
 export async function misDerechos(customerId: string): Promise<DerechoCliente[]> {
@@ -138,6 +141,7 @@ export async function misDerechos(customerId: string): Promise<DerechoCliente[]>
         catalogItem: { select: { name: true } },
         supplier: { select: { commercialName: true } },
         order: { select: { id: true, number: true } },
+        redemptions: { where: { reversedAt: null }, take: 1, select: { redeemedAt: true, branch: { select: { nombre: true } } } },
       },
     })
   )
@@ -152,5 +156,6 @@ export async function misDerechos(customerId: string): Promise<DerechoCliente[]>
     expiresAt: e.expiresAt,
     orderNumber: e.order.number,
     orderId: e.order.id,
+    redencion: e.redemptions[0] ? { redeemedAt: e.redemptions[0].redeemedAt, sucursal: e.redemptions[0].branch?.nombre ?? null } : null,
   }))
 }

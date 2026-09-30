@@ -634,6 +634,16 @@ const G_ADM_CONEXIONES: NavGroup = {
       keywords: ['supply', 'membego', 'compromisos', 'vouchers', 'liquidacion', 'contratos'],
     },
     {
+      // Membego Supply 2.0: el escáner y las entregas de los beneficios que
+      // los clientes compraron a Membego. Misma capacidad que Supply V1.
+      href: '/admin/supply-v2',
+      label: 'Entregas Membego',
+      icon: ScanLine,
+      description: 'Escanea el QR del cliente, confirma la entrega y revisa las entregas del día.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['supply', 'membego', 'entregas', 'escaner', 'qr', 'beneficios', 'redenciones'],
+    },
+    {
       href: '/admin/integraciones',
       label: 'Integraciones',
       icon: Plug,
@@ -798,7 +808,8 @@ const HUB_AJUSTES: NavGroup = {
     '/admin/sucursales',
     '/admin/empleados',
     '/admin/integraciones',
-    '/admin/supply'
+    '/admin/supply',
+    '/admin/supply-v2'
   ),
 }
 

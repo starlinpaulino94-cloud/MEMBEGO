@@ -81,6 +81,10 @@ export default async function SupplyPoolPage() {
                     <dd className="tabular-nums" data-testid="pool-emitidas">{p.emitidas.toLocaleString('es-DO')}</dd>
                   </div>
                   <div>
+                    <dt className="text-muted-foreground">Redimidas</dt>
+                    <dd className="tabular-nums" data-testid="pool-redimidas">{p.redimidas.toLocaleString('es-DO')}</dd>
+                  </div>
+                  <div>
                     <dt className="text-muted-foreground">Lotes</dt>
                     <dd className="tabular-nums">{p.lotes}</dd>
                   </div>

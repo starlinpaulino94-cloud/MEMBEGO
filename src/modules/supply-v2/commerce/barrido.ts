@@ -4,6 +4,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import type { ContextoAuditoria } from '../core/auditoria'
 import { cerrarOfertaEnTx } from '../offers/service'
 import { expirarOrdenEnTx } from './checkout'
+import { expirarDerechosEnTx, expirarVouchersEnTx } from '../redemption/service'
 
 /**
  * MEMBEGO SUPPLY 2.0 · BARRIDO del cron (§25, §37, §39, §64).
@@ -22,10 +23,13 @@ export interface ResultadoBarrido {
   ofertasActivadas: number
   ofertasFinalizadas: number
   unidadesLiberadas: number
+  /** Slice 3 (§58) */
+  vouchersVencidos: number
+  derechosVencidos: number
 }
 
 export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise<ResultadoBarrido> {
-  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0 }
+  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0 }
 
   const vencidas = await sinEmpresa('Supply 2.0 cron: checkouts con la reserva caducada', (tx) =>
     tx.supplyV2CustomerOrder.findMany({ where: { status: 'PENDING', expiresAt: { lte: ahora } }, select: { id: true }, take: limite, orderBy: { expiresAt: 'asc' } })
@@ -53,5 +57,9 @@ export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise
     r.ofertasFinalizadas++
     r.unidadesLiberadas += res.liberadas
   }
+
+  // Slice 3: derechos y vouchers vencidos. Las sesiones QR expiradas se quedan como historial (§58–§59).
+  r.derechosVencidos = await sinEmpresa('Supply 2.0 cron: derechos vencidos', (tx) => expirarDerechosEnTx(tx, CTX, ahora, limite))
+  r.vouchersVencidos = await sinEmpresa('Supply 2.0 cron: vouchers vencidos', (tx) => expirarVouchersEnTx(tx, CTX, ahora, limite))
   return r
 }

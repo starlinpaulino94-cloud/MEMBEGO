@@ -1,9 +1,11 @@
-import type { SupplyV2AgreementStatus, SupplyV2CustomerOrderStatus, SupplyV2LotStatus, SupplyV2OfferStatus, SupplyV2PurchaseOrderStatus, SupplyV2SupplierStatus } from '@prisma/client'
+import type { SupplyV2AgreementStatus, SupplyV2CustomerOrderStatus, SupplyV2EntitlementStatus, SupplyV2LotStatus, SupplyV2OfferStatus, SupplyV2PurchaseOrderStatus, SupplyV2SupplierStatus } from '@prisma/client'
 import { StatusChip } from '@/components/ui/status-chip'
 import {
   AGREEMENT_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_LABELS,
   CUSTOMER_ORDER_STATUS_TONE,
+  ENTITLEMENT_STATUS_LABELS,
+  ENTITLEMENT_STATUS_TONE,
   LOT_STATUS_LABELS,
   OFFER_STATUS_LABELS,
   OFFER_STATUS_TONE,
@@ -47,6 +49,23 @@ export function ChipCompra({ estado }: { estado: SupplyV2CustomerOrderStatus }) 
   return (
     <StatusChip tone={CUSTOMER_ORDER_STATUS_TONE[estado]} pulso={estado === 'PENDING' || estado === 'AWAITING_PAYMENT'} data-testid="estado-compra">
       {CUSTOMER_ORDER_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+/** Slice 3: estado del beneficio del cliente (Disponible / Utilizado / Vencido / Cancelado). */
+export function ChipDerecho({ estado }: { estado: SupplyV2EntitlementStatus }) {
+  return (
+    <StatusChip tone={ENTITLEMENT_STATUS_TONE[estado]} data-testid="derecho-estado">
+      {ENTITLEMENT_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+export function ChipRedencion({ reversada }: { reversada: boolean }) {
+  return (
+    <StatusChip tone={reversada ? 'warning' : 'success'} data-testid="estado-redencion">
+      {reversada ? 'Reversada' : 'Entregada'}
     </StatusChip>
   )
 }

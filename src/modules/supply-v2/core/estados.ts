@@ -1,4 +1,6 @@
 import type {
+  SupplyV2EntitlementStatus,
+  SupplyV2VoucherStatus,
   SupplyV2AgreementStatus,
   SupplyV2CustomerOrderStatus,
   SupplyV2OfferStatus,
@@ -190,4 +192,23 @@ export function validarLimitePorCliente(perCustomerLimit: number, yaCuenta: numb
       : `Solo puedes comprar ${restan} más en esta oferta (máximo ${perCustomerLimit} por persona).`
   }
   return null
+}
+
+// ── Slice 3 · voucher y derecho (§42–§43) ────────────────────────────────────
+
+/** Un voucher vuelve a ACTIVE solo por una reversa; lo demás es terminal. */
+export const TRANSICIONES_VOUCHER: Transiciones<SupplyV2VoucherStatus> = {
+  ACTIVE: ['REDEEMED', 'EXPIRED', 'CANCELLED', 'REVOKED'],
+  REDEEMED: ['ACTIVE'],
+  EXPIRED: [],
+  CANCELLED: [],
+  REVOKED: [],
+}
+
+/** Un derecho REDEEMED vuelve a ACTIVE solo por una reversa. */
+export const TRANSICIONES_DERECHO: Transiciones<SupplyV2EntitlementStatus> = {
+  ACTIVE: ['REDEEMED', 'EXPIRED', 'CANCELLED'],
+  REDEEMED: ['ACTIVE'],
+  EXPIRED: [],
+  CANCELLED: [],
 }

@@ -1,4 +1,7 @@
 import type {
+  SupplyV2EntitlementStatus,
+  SupplyV2IncidentType,
+  SupplyV2VoucherStatus,
   SupplyV2CustomerOrderStatus,
   SupplyV2OfferStatus,
   SupplyV2PaymentMethod,
@@ -184,3 +187,38 @@ export const PAYMENT_METHODS_CLIENTE: readonly SupplyV2PaymentMethod[] = ['TRANS
 
 export const RUTA_OFERTAS_PUBLICAS = '/promociones/membego'
 export const RUTA_COMPRAS_CLIENTE = '/cliente/compras'
+
+// ── Slice 3 ─────────────────────────────────────────────────────────────────
+
+export const ENTITLEMENT_STATUS_LABELS: Record<SupplyV2EntitlementStatus, string> = {
+  ACTIVE: 'Disponible',
+  REDEEMED: 'Utilizado',
+  EXPIRED: 'Vencido',
+  CANCELLED: 'Cancelado',
+}
+
+export const ENTITLEMENT_STATUS_TONE: Record<SupplyV2EntitlementStatus, 'neutral' | 'warning' | 'info' | 'success' | 'danger'> = {
+  ACTIVE: 'success',
+  REDEEMED: 'info',
+  EXPIRED: 'neutral',
+  CANCELLED: 'danger',
+}
+
+export const VOUCHER_STATUS_LABELS: Record<SupplyV2VoucherStatus, string> = {
+  ACTIVE: 'Activo',
+  REDEEMED: 'Utilizado',
+  EXPIRED: 'Vencido',
+  CANCELLED: 'Cancelado',
+  REVOKED: 'Revocado',
+}
+
+export const INCIDENT_TYPE_LABELS: Record<SupplyV2IncidentType, string> = {
+  INVALID_QR: 'QR inválido',
+  PRODUCT_UNAVAILABLE: 'Producto no disponible',
+  WRONG_CUSTOMER: 'Cliente incorrecto',
+  WRONG_BRANCH: 'Sucursal incorrecta',
+  OTHER: 'Otro',
+}
+
+export const RUTA_PORTAL_PROVEEDOR = '/admin/supply-v2'
+export const RUTA_REDENCIONES = `${BASE_SUPPLY_V2}/redenciones`
