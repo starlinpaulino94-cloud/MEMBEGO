@@ -1,6 +1,6 @@
 'use server'
 
-import type { SupplyV2AgreementType, SupplyV2CatalogItemType, SupplyV2PaymentMode, SupplyV2Unit } from '@prisma/client'
+import type { SupplyV2AgreementType, SupplyV2CatalogItemType, SupplyV2PayableRecognition, SupplyV2PaymentMode, SupplyV2Unit } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { exigirPermisoSupplyV2 } from './permisos'
 import { companyGateway } from './contracts/adapters'
@@ -178,6 +178,10 @@ export async function crearAcuerdoAction(
           currency: texto(fd, 'currency', 3) || null,
           negotiatedUnitCost: texto(fd, 'negotiatedUnitCost', 20) || null,
           paymentTermsDays: entero(fd, 'paymentTermsDays'),
+          // Slice 4 (§20): política financiera; se congela en la versión 1.
+          payableRecognition: (texto(fd, 'payableRecognition', 20) || 'ON_INVOICE') as SupplyV2PayableRecognition,
+          allowDepositApplication: texto(fd, 'allowDepositApplication', 5) !== 'no',
+          settlementFrequency: texto(fd, 'settlementFrequency', 60) || null,
           startsAt,
           endsAt: fechaFinDeDia(fd, 'endsAt'),
           notes: texto(fd, 'notes', 2000) || null,

@@ -4,6 +4,7 @@ import { fallo } from '../core/errores'
 import { estadoTrasRecepcion, ORDEN_RECIBIBLE, validarCantidadRecibida } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
 import { registrarAsientoEnTx } from '../pool/lotes'
+import { reconocerObligacionPorRecepcionEnTx } from '../finance/obligations'
 
 /**
  * MEMBEGO SUPPLY 2.0 · RECEPCIÓN (§15–§22).
@@ -245,6 +246,10 @@ export async function confirmarRecepcionEnTx(
       actorId: ctx.actorId,
     },
   })
+
+  // 6b. Slice 4 (§19): si la versión del acuerdo reconoce la deuda AL RECIBIR,
+  //     nace la obligación aquí; PREPAID / ON_INVOICE no crean nada.
+  await reconocerObligacionPorRecepcionEnTx(tx, recepcion.id, ctx)
 
   // 7. Bitácora.
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_RECEIPT_CONFIRMED', 'SupplyV2PurchaseReceipt', recepcion.id, {

@@ -50,6 +50,13 @@ export const SUPPLY_V2_PERMISSIONS = [
   'SUPPLY_V2_REDEEM',
   'SUPPLY_V2_REDEMPTION_VIEW',
   'SUPPLY_V2_REDEMPTION_REVERSE',
+  // Slice 4 · finanzas (§40): permisos separados, no uno solo
+  'SUPPLY_V2_FINANCE_VIEW',
+  'SUPPLY_V2_INVOICE_MANAGE',
+  'SUPPLY_V2_DEPOSIT_MANAGE',
+  'SUPPLY_V2_PAYMENT_CREATE',
+  'SUPPLY_V2_PAYMENT_APPROVE',
+  'SUPPLY_V2_RECONCILE',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -65,6 +72,12 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_REDEEM: 'Escanear y confirmar entregas (proveedor)',
   SUPPLY_V2_REDEMPTION_VIEW: 'Ver redenciones',
   SUPPLY_V2_REDEMPTION_REVERSE: 'Reversar redenciones',
+  SUPPLY_V2_FINANCE_VIEW: 'Ver finanzas y economía de Supply 2.0',
+  SUPPLY_V2_INVOICE_MANAGE: 'Registrar, aprobar y cancelar facturas de proveedor',
+  SUPPLY_V2_DEPOSIT_MANAGE: 'Crear y aplicar depósitos de proveedor',
+  SUPPLY_V2_PAYMENT_CREATE: 'Registrar pagos a proveedores',
+  SUPPLY_V2_PAYMENT_APPROVE: 'Confirmar pagos a proveedores y reversar aplicaciones',
+  SUPPLY_V2_RECONCILE: 'Conciliar con proveedores',
 }
 
 export interface CompanyGateway {

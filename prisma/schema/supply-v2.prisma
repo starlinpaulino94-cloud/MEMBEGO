@@ -161,6 +161,8 @@ enum SupplyV2ReferenceType {
   OFFER
   // Slice 3
   REDEMPTION
+  // Slice 4: vencimiento de un lote
+  LOT
 }
 
 // ── Proveedor ──────────────────────────────────────────────────────────────
@@ -203,16 +205,23 @@ model SupplyV2Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  catalogItems   SupplyV2CatalogItem[]
-  agreements     SupplyV2Agreement[]
-  purchaseOrders SupplyV2PurchaseOrder[]
-  receipts       SupplyV2PurchaseReceipt[]
-  lots           SupplyV2Lot[]
-  offers         SupplyV2Offer[]
-  entitlements   SupplyV2Entitlement[]
-  vouchers       SupplyV2Voucher[]
-  redemptions    SupplyV2Redemption[]
-  incidents      SupplyV2RedemptionIncident[]
+  catalogItems    SupplyV2CatalogItem[]
+  agreements      SupplyV2Agreement[]
+  purchaseOrders  SupplyV2PurchaseOrder[]
+  receipts        SupplyV2PurchaseReceipt[]
+  lots            SupplyV2Lot[]
+  offers          SupplyV2Offer[]
+  entitlements    SupplyV2Entitlement[]
+  vouchers        SupplyV2Voucher[]
+  redemptions     SupplyV2Redemption[]
+  incidents       SupplyV2RedemptionIncident[]
+  // Slice 4
+  invoices        SupplyV2SupplierInvoice[]
+  deposits        SupplyV2SupplierDeposit[]
+  payments        SupplyV2SupplierPayment[]
+  obligations     SupplyV2SupplierObligation[]
+  economicEvents  SupplyV2EconomicEvent[]
+  reconciliations SupplyV2Reconciliation[]
 
   @@index([status, commercialName])
   @@map("supply_v2_suppliers")
@@ -255,14 +264,17 @@ model SupplyV2CatalogItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  agreements   SupplyV2Agreement[]
-  orderLines   SupplyV2PurchaseOrderLine[]
-  lots         SupplyV2Lot[]
-  allocations  SupplyV2Allocation[]
-  offers       SupplyV2Offer[]
-  entitlements SupplyV2Entitlement[]
-  vouchers     SupplyV2Voucher[]
-  redemptions  SupplyV2Redemption[]
+  agreements     SupplyV2Agreement[]
+  orderLines     SupplyV2PurchaseOrderLine[]
+  lots           SupplyV2Lot[]
+  allocations    SupplyV2Allocation[]
+  offers         SupplyV2Offer[]
+  entitlements   SupplyV2Entitlement[]
+  vouchers       SupplyV2Voucher[]
+  redemptions    SupplyV2Redemption[]
+  // Slice 4
+  invoiceLines   SupplyV2SupplierInvoiceLine[]
+  economicEvents SupplyV2EconomicEvent[]
 
   /// `supplierId + sku` único cuando hay SKU (índice parcial en la migración).
   @@unique([supplierId, sku])
@@ -299,6 +311,14 @@ model SupplyV2Agreement {
 
   paymentTermsDays Int?
 
+  // Slice 4 · política financiera (§20). Se congela en cada versión.
+  /// Cuándo nace la deuda con el proveedor: al aprobar la factura (por defecto), al recibir o al redimir.
+  payableRecognition      SupplyV2PayableRecognition @default(ON_INVOICE)
+  /// Si una factura de este acuerdo puede cubrirse con depósito del proveedor.
+  allowDepositApplication Boolean                    @default(true)
+  /// Texto libre («mensual», «quincenal»); solo informativo en el Slice 4.
+  settlementFrequency     String?
+
   startsAt DateTime
   endsAt   DateTime?
 
@@ -318,6 +338,7 @@ model SupplyV2Agreement {
   versions       SupplyV2AgreementVersion[]
   purchaseOrders SupplyV2PurchaseOrder[]
   lots           SupplyV2Lot[]
+  obligations    SupplyV2SupplierObligation[]
 
   @@index([supplierId, status])
   @@index([catalogItemId, status])
@@ -341,6 +362,7 @@ model SupplyV2AgreementVersion {
 
   purchaseOrders SupplyV2PurchaseOrder[]
   lots           SupplyV2Lot[]
+  obligations    SupplyV2SupplierObligation[]
 
   @@unique([agreementId, version])
   @@map("supply_v2_agreement_versions")
@@ -382,10 +404,13 @@ model SupplyV2PurchaseOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lines    SupplyV2PurchaseOrderLine[]
-  receipts SupplyV2PurchaseReceipt[]
-  lots     SupplyV2Lot[]
-  events   SupplyV2PurchaseOrderEvent[]
+  lines       SupplyV2PurchaseOrderLine[]
+  receipts    SupplyV2PurchaseReceipt[]
+  lots        SupplyV2Lot[]
+  events      SupplyV2PurchaseOrderEvent[]
+  // Slice 4
+  invoices    SupplyV2SupplierInvoice[]
+  obligations SupplyV2SupplierObligation[]
 
   @@index([supplierId, status])
   @@index([status, createdAt])
@@ -413,6 +438,7 @@ model SupplyV2PurchaseOrderLine {
 
   receiptLines SupplyV2PurchaseReceiptLine[]
   lots         SupplyV2Lot[]
+  invoiceLines SupplyV2SupplierInvoiceLine[]
 
   @@index([purchaseOrderId])
   @@index([catalogItemId])
@@ -466,8 +492,9 @@ model SupplyV2PurchaseReceipt {
 
   createdAt DateTime @default(now())
 
-  lines SupplyV2PurchaseReceiptLine[]
-  lots  SupplyV2Lot[]
+  lines       SupplyV2PurchaseReceiptLine[]
+  lots        SupplyV2Lot[]
+  obligations SupplyV2SupplierObligation[]
 
   @@index([purchaseOrderId, createdAt])
   @@map("supply_v2_purchase_receipts")
@@ -543,6 +570,7 @@ model SupplyV2Lot {
   reservations    SupplyV2OrderReservation[]
   entitlements    SupplyV2Entitlement[]
   redemptions     SupplyV2Redemption[]
+  economicEvents  SupplyV2EconomicEvent[]
 
   @@index([catalogItemId, status])
   @@index([supplierId, status])
@@ -683,7 +711,7 @@ model SupplyV2Allocation {
   purpose SupplyV2AllocationPurpose @default(OFFER)
 
   /// Cuántas unidades se pidieron apartar.
-  quantity Int
+  quantity          Int
   // Contadores de la asignación (caché de sus líneas).
   allocatedQuantity Int @default(0)
   reservedQuantity  Int @default(0)
@@ -810,8 +838,8 @@ model SupplyV2CustomerOrder {
   expiresAt DateTime
 
   // ── Pago (transferencia o depósito a una cuenta de Membego, confirmado a mano) ──
-  paymentMethod    SupplyV2PaymentMethod?
-  paymentReference String?
+  paymentMethod          SupplyV2PaymentMethod?
+  paymentReference       String?
   /// Foto de la cuenta de cobro que se le mostró al cliente: nombre, titular,
   /// número. Referencia por id a `supply_cuentas_cobro` sin FK: la cuenta puede
   /// cambiar o borrarse y la orden sigue diciendo lo que se le dijo al cliente.
@@ -819,8 +847,8 @@ model SupplyV2CustomerOrder {
   paymentAccountSnapshot Json?
   paymentSubmittedAt     DateTime?
   paymentConfirmedById   String?
-  paymentConfirmedBy     User?     @relation("SupplyV2CustomerOrderConfirmedBy", fields: [paymentConfirmedById], references: [id], onDelete: SetNull)
-  paymentAmountSeen      Decimal?  @db.Decimal(14, 2)
+  paymentConfirmedBy     User?                  @relation("SupplyV2CustomerOrderConfirmedBy", fields: [paymentConfirmedById], references: [id], onDelete: SetNull)
+  paymentAmountSeen      Decimal?               @db.Decimal(14, 2)
   paymentRejectedReason  String?
 
   /// El doble clic no abre dos órdenes ni reserva dos veces.
@@ -832,8 +860,9 @@ model SupplyV2CustomerOrder {
   cancelledAt DateTime?
   expiredAt   DateTime?
 
-  lines        SupplyV2CustomerOrderLine[]
-  entitlements SupplyV2Entitlement[]
+  lines          SupplyV2CustomerOrderLine[]
+  entitlements   SupplyV2Entitlement[]
+  economicEvents SupplyV2EconomicEvent[]
 
   @@index([customerId, status])
   @@index([status, expiresAt])
@@ -851,7 +880,7 @@ model SupplyV2CustomerOrderLine {
   /// Nombre de la oferta al comprar: sobrevive a que la oferta cambie.
   titleSnapshot String
 
-  quantity Int
+  quantity        Int
   // Precios CONGELADOS al abrir la orden.
   publicUnitPrice Decimal @db.Decimal(12, 2)
   saleUnitPrice   Decimal @db.Decimal(12, 2)
@@ -933,8 +962,9 @@ model SupplyV2Entitlement {
 
   createdAt DateTime @default(now())
 
-  vouchers    SupplyV2Voucher[]
-  redemptions SupplyV2Redemption[]
+  vouchers       SupplyV2Voucher[]
+  redemptions    SupplyV2Redemption[]
+  economicEvents SupplyV2EconomicEvent[]
 
   @@index([customerId, status])
   @@index([offerId])
@@ -1026,7 +1056,7 @@ model SupplyV2QrSession {
   branch   Sucursal? @relation("SupplyV2QrSessionBranch", fields: [branchId], references: [id], onDelete: Restrict)
 
   openedByCustomerId String
-  openedBy           User   @relation("SupplyV2QrSessionOpenedBy", fields: [openedByCustomerId], references: [id], onDelete: Restrict)
+  openedBy           User    @relation("SupplyV2QrSessionOpenedBy", fields: [openedByCustomerId], references: [id], onDelete: Restrict)
   deviceInfo         String?
 
   consumedAt         DateTime?
@@ -1092,6 +1122,10 @@ model SupplyV2Redemption {
 
   createdAt DateTime @default(now())
 
+  // Slice 4
+  obligation     SupplyV2SupplierObligation?
+  economicEvents SupplyV2EconomicEvent[]
+
   @@index([supplierId, redeemedAt])
   @@index([entitlementId])
   @@index([customerId])
@@ -1122,4 +1156,605 @@ model SupplyV2RedemptionIncident {
 
   @@index([supplierId, createdAt])
   @@map("supply_v2_redemption_incidents")
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SLICE 4 · SUPPLIER FINANCE + SUPPLY ECONOMICS
+//
+//   PURCHASE ORDER → SUPPLIER INVOICE → PAYMENT / DEPOSIT APPLICATION →
+//   SUPPLIER BALANCE → RECEIPT / SUPPLY → CUSTOMER SALE → REDEMPTION /
+//   EXPIRATION → COST RECOGNITION → UNIT ECONOMICS → STATEMENT / RECONCILIATION
+//
+// Dos subdominios, dos familias de tablas (no una tabla financiera única):
+//
+//   A · SUPPLIER FINANCE (subledger de proveedores, NO contabilidad general)
+//       factura (documento del proveedor) · depósito (dinero adelantado, con
+//       su propio libro de movimientos) · pago (dinero que sale) · aplicación
+//       (qué dinero cubre qué deuda) · obligación (lo que se debe, con el
+//       motivo por el que nació) · conciliación (Membego vs proveedor).
+//
+//   B · SUPPLY ECONOMICS
+//       eventos económicos: ingreso de la venta, costo reconocido, breakage y
+//       supply vencido sin vender. Los importes viven aquí congelados; nunca
+//       se recalculan desde precios actuales.
+//
+// MODELO DE COSTO ELEGIDO (auditado sobre Slices 2 y 3): el costo de una
+// unidad vendida se reconoce UNA sola vez, al emitir el derecho (venta PAID),
+// porque en ese instante ya se comprometió una unidad concreta de un lote
+// concreto (`actualUnitCost`). Redimir, reversar y vencer son cambios
+// OPERACIONALES de esa misma unidad: no crean ni duplican costo. Ver
+// docs/membego-supply-v2-slice4-auditoria.md § COST RECOGNITION.
+//
+// REGLA CRÍTICA: NO TODA REDENCIÓN CREA CxP. La obligación con el proveedor
+// nace donde lo dice la VERSIÓN del acuerdo (`payableRecognition`): al
+// aprobar la factura (ON_INVOICE, lo normal), al recibir (ON_RECEIPT) o al
+// redimir (ON_REDEMPTION). Una compra PREPAID ya pagada no genera deuda nueva
+// ni al recibir ni al redimir.
+//
+// Todo dinero es Decimal. Nada de aquí se borra: estados y reversas.
+// ══════════════════════════════════════════════════════════════════════════
+
+/// Cuándo nace la deuda con el proveedor. Va en el acuerdo y se congela en
+/// cada versión: una obligación histórica apunta a su versión.
+enum SupplyV2PayableRecognition {
+  ON_RECEIPT
+  ON_INVOICE
+  ON_REDEMPTION
+}
+
+enum SupplyV2InvoiceStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+  /// Reservado: nota de crédito del proveedor (no se construye en el Slice 4).
+  CREDITED
+}
+
+enum SupplyV2DepositStatus {
+  ACTIVE
+  EXHAUSTED
+  CANCELLED
+  REFUNDED
+}
+
+/// El libro del depósito: la suma de `amount` reconstruye `availableAmount`.
+enum SupplyV2DepositMovementType {
+  DEPOSIT_CREATED
+  DEPOSIT_APPLIED
+  DEPOSIT_RELEASED
+  DEPOSIT_REFUNDED
+  ADJUSTMENT
+}
+
+enum SupplyV2SupplierPaymentMethod {
+  BANK_TRANSFER
+  CASH
+  /// Reservado para asientos contables (no representa dinero nuevo saliendo).
+  DEPOSIT
+  OTHER
+}
+
+/// Quien crea un pago no lo confirma (§41): PENDING hasta que otra persona
+/// autorizada lo confirma; solo un pago CONFIRMED se aplica a una deuda.
+enum SupplyV2SupplierPaymentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum SupplyV2ApplicationType {
+  PAYMENT_TO_INVOICE
+  DEPOSIT_TO_INVOICE
+  PAYMENT_TO_OBLIGATION
+  DEPOSIT_TO_OBLIGATION
+  /// Un pago (o su excedente) financia un depósito. Explícito, nunca oculto (§56).
+  PAYMENT_TO_DEPOSIT
+  /// Deshace otra aplicación por error administrativo. La original se conserva.
+  REVERSAL
+}
+
+enum SupplyV2ObligationSource {
+  INVOICE
+  PURCHASE_RECEIPT
+  REDEMPTION
+  MANUAL
+}
+
+/// Por qué nació la obligación (§18). Explícito en cada fila.
+enum SupplyV2RecognitionBasis {
+  PO_APPROVAL
+  RECEIPT
+  REDEMPTION
+  INVOICE
+  MANUAL
+}
+
+enum SupplyV2ObligationStatus {
+  OPEN
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+/// Tipos de evento económico. Con el modelo «costo al emitir»:
+///   SALE_REVENUE     venta PAID, por derecho: ingreso + costo + margen (aquí y solo aquí se reconoce el costo)
+///   BREAKAGE         derecho vencido sin redimir: unidad +1, sin costo adicional (ya reconocido)
+///   EXPIRATION_COST  supply vencido SIN VENDER (lote): costo real perdido = unidades × costo del lote
+///   REDEMPTION_COST  reservado para modelos que reconocen costo al entregar (Slice 5, comisión); el modelo prepago no lo escribe
+///   REVERSAL         reversa de un evento con dinero (p. ej. reembolso futuro); la reversa de una redención no mueve dinero
+///   ADJUSTMENT       corrección manual con motivo
+enum SupplyV2EconomicEventType {
+  SALE_REVENUE
+  REDEMPTION_COST
+  EXPIRATION_COST
+  BREAKAGE
+  REVERSAL
+  ADJUSTMENT
+}
+
+enum SupplyV2EconomicReferenceType {
+  ENTITLEMENT
+  REDEMPTION
+  LOT
+  CUSTOMER_ORDER
+  MANUAL
+}
+
+enum SupplyV2ReconciliationStatus {
+  OPEN
+  MATCHED
+  DISCREPANCY
+  RESOLVED
+}
+
+enum SupplyV2ReconciliationLineType {
+  INVOICE
+  PAYMENT
+  DEPOSIT
+  DEPOSIT_APPLICATION
+  OBLIGATION
+  REDEMPTION
+}
+
+// ── A · SUPPLIER FINANCE ───────────────────────────────────────────────────
+
+/// El documento del proveedor. `supplierId + supplierInvoiceNumber` es único
+/// cuando hay número (índice parcial en la migración, excluyendo canceladas).
+///   amountPaid    = Σ aplicaciones vivas de PAGOS (transferencia, efectivo…)
+///   amountApplied = Σ aplicaciones vivas de DEPÓSITOS
+///   amountDue     = total − amountPaid − amountApplied   (CHECK ≥ 0)
+model SupplyV2SupplierInvoice {
+  id     String @id @default(cuid())
+  /// "MBG-SI-2026-000001".
+  number String @unique
+
+  supplierId      String
+  supplier        SupplyV2Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrderId String?
+  purchaseOrder   SupplyV2PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+
+  supplierInvoiceNumber String?
+  documentDate          DateTime
+  dueDate               DateTime?
+
+  currency String @default("DOP")
+
+  subtotal Decimal @db.Decimal(14, 2)
+  taxRate  Decimal @default(0) @db.Decimal(5, 2)
+  taxes    Decimal @default(0) @db.Decimal(14, 2)
+  total    Decimal @db.Decimal(14, 2)
+
+  status SupplyV2InvoiceStatus @default(PENDING_APPROVAL)
+
+  amountApplied Decimal @default(0) @db.Decimal(14, 2)
+  amountPaid    Decimal @default(0) @db.Decimal(14, 2)
+  amountDue     Decimal @db.Decimal(14, 2)
+
+  /// Ruta en el storage existente (bucket privado de comprobantes). Sin FK.
+  attachmentPath String?
+  notes          String?
+
+  createdById  String
+  createdBy    User      @relation("SupplyV2InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById String?
+  approvedBy   User?     @relation("SupplyV2InvoiceApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  cancelledAt     DateTime?
+  cancelledReason String?
+
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines        SupplyV2SupplierInvoiceLine[]
+  applications SupplyV2PaymentApplication[]
+  obligations  SupplyV2SupplierObligation[]
+  payments     SupplyV2SupplierPayment[]     @relation("SupplyV2PaymentIntendedInvoice")
+
+  @@index([supplierId, status])
+  @@index([status, dueDate])
+  @@index([purchaseOrderId])
+  @@index([createdAt])
+  @@map("supply_v2_supplier_invoices")
+}
+
+model SupplyV2SupplierInvoiceLine {
+  id        String                  @id @default(cuid())
+  invoiceId String
+  invoice   SupplyV2SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  purchaseOrderLineId String?
+  purchaseOrderLine   SupplyV2PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  catalogItemId       String?
+  catalogItem         SupplyV2CatalogItem?       @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  /// Nombre del ítem al facturar: sobrevive a que el catálogo cambie.
+  descriptionSnapshot String
+
+  quantity Int
+  unitCost Decimal @db.Decimal(12, 2)
+  subtotal Decimal @db.Decimal(14, 2)
+  taxes    Decimal @default(0) @db.Decimal(14, 2)
+  total    Decimal @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([purchaseOrderLineId])
+  @@map("supply_v2_supplier_invoice_lines")
+}
+
+/// Dinero adelantado al proveedor a cuenta de compras futuras (§11).
+///   availableAmount = originalAmount − appliedAmount − refundedAmount   (CHECK ≥ 0)
+/// Cada cambio deja un movimiento; la suma de movimientos reconstruye el saldo.
+model SupplyV2SupplierDeposit {
+  id     String @id @default(cuid())
+  /// "MBG-SD-2026-000001".
+  number String @unique
+
+  supplierId String
+  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  currency        String  @default("DOP")
+  originalAmount  Decimal @db.Decimal(14, 2)
+  availableAmount Decimal @db.Decimal(14, 2)
+  appliedAmount   Decimal @default(0) @db.Decimal(14, 2)
+  refundedAmount  Decimal @default(0) @db.Decimal(14, 2)
+
+  status SupplyV2DepositStatus @default(ACTIVE)
+
+  /// El pago (dinero que salió) que financió el depósito. Un pago financia a lo sumo un depósito.
+  paymentId String?                  @unique
+  payment   SupplyV2SupplierPayment? @relation("SupplyV2DepositFundedBy", fields: [paymentId], references: [id], onDelete: Restrict)
+
+  reference String?
+  notes     String?
+
+  createdById String
+  createdBy   User   @relation("SupplyV2DepositCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movements    SupplyV2SupplierDepositMovement[]
+  applications SupplyV2PaymentApplication[]
+
+  @@index([supplierId, status])
+  @@map("supply_v2_supplier_deposits")
+}
+
+model SupplyV2SupplierDepositMovement {
+  id        String                  @id @default(cuid())
+  depositId String
+  deposit   SupplyV2SupplierDeposit @relation(fields: [depositId], references: [id], onDelete: Restrict)
+
+  type         SupplyV2DepositMovementType
+  /// Con signo: + entra al saldo disponible, − sale.
+  amount       Decimal                     @db.Decimal(14, 2)
+  balanceAfter Decimal                     @db.Decimal(14, 2)
+
+  applicationId String?
+  application   SupplyV2PaymentApplication? @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+
+  reason  String?
+  actorId String?
+  actor   User?   @relation("SupplyV2DepositMovementActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([depositId, createdAt])
+  @@map("supply_v2_supplier_deposit_movements")
+}
+
+/// Dinero que sale hacia el proveedor (§13). Nace PENDING; otra persona lo
+/// confirma (segregación, en el servidor). Al confirmarse se aplica a lo que
+/// se declaró al crearlo (factura, obligación o depósito) hasta lo que quepa;
+/// el resto queda como `amount − appliedAmount`, visible y aplicable después.
+model SupplyV2SupplierPayment {
+  id     String @id @default(cuid())
+  /// "MBG-SP-2026-000001".
+  number String @unique
+
+  supplierId String
+  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  method        SupplyV2SupplierPaymentMethod
+  currency      String                        @default("DOP")
+  amount        Decimal                       @db.Decimal(14, 2)
+  /// Σ aplicaciones vivas de este pago (CHECK ≤ amount).
+  appliedAmount Decimal                       @default(0) @db.Decimal(14, 2)
+
+  reference String?
+  paidAt    DateTime
+
+  /// Ruta del comprobante en el storage existente. Sin FK.
+  proofPath String?
+  notes     String?
+
+  status SupplyV2SupplierPaymentStatus @default(PENDING)
+
+  /// A qué se aplica al confirmarse (declarado al crearlo).
+  intendedInvoiceId    String?
+  intendedInvoice      SupplyV2SupplierInvoice?    @relation("SupplyV2PaymentIntendedInvoice", fields: [intendedInvoiceId], references: [id], onDelete: SetNull)
+  intendedObligationId String?
+  intendedObligation   SupplyV2SupplierObligation? @relation("SupplyV2PaymentIntendedObligation", fields: [intendedObligationId], references: [id], onDelete: SetNull)
+  /// true = este pago es un anticipo: al confirmarse crea un depósito por el monto.
+  intendedDeposit      Boolean                     @default(false)
+
+  createdById   String
+  createdBy     User      @relation("SupplyV2PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  confirmedById String?
+  confirmedBy   User?     @relation("SupplyV2PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  confirmedAt   DateTime?
+
+  cancelledAt     DateTime?
+  cancelledReason String?
+
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications  SupplyV2PaymentApplication[]
+  fundedDeposit SupplyV2SupplierDeposit?     @relation("SupplyV2DepositFundedBy")
+
+  @@index([supplierId, status])
+  @@index([status, paidAt])
+  @@index([paidAt])
+  @@map("supply_v2_supplier_payments")
+}
+
+/// Relaciona DINERO (pago o depósito) con DEUDA (factura u obligación) o con
+/// un depósito nuevo (§14). Nunca se borra: una reversa es otra fila de tipo
+/// REVERSAL que apunta a la original (`reversalOfId`), y la original queda
+/// marcada con `reversedAt`. Las sumas siempre se hacen sobre aplicaciones
+/// VIVAS (`reversedAt IS NULL` y tipo ≠ REVERSAL).
+model SupplyV2PaymentApplication {
+  id String @id @default(cuid())
+
+  type SupplyV2ApplicationType
+
+  paymentId    String?
+  payment      SupplyV2SupplierPayment?    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  depositId    String?
+  deposit      SupplyV2SupplierDeposit?    @relation(fields: [depositId], references: [id], onDelete: Restrict)
+  invoiceId    String?
+  invoice      SupplyV2SupplierInvoice?    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  obligationId String?
+  obligation   SupplyV2SupplierObligation? @relation(fields: [obligationId], references: [id], onDelete: Restrict)
+
+  amount   Decimal @db.Decimal(14, 2)
+  currency String  @default("DOP")
+
+  reversedAt     DateTime?
+  reversedById   String?
+  reversedBy     User?     @relation("SupplyV2ApplicationReversedBy", fields: [reversedById], references: [id], onDelete: SetNull)
+  reversalReason String?
+
+  /// Solo en filas REVERSAL: la aplicación que deshace (una reversa por aplicación).
+  reversalOfId String?                     @unique
+  reversalOf   SupplyV2PaymentApplication? @relation("SupplyV2ApplicationReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy_  SupplyV2PaymentApplication? @relation("SupplyV2ApplicationReversal")
+
+  idempotencyKey String? @unique
+
+  createdById String
+  createdBy   User   @relation("SupplyV2ApplicationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  depositMovements SupplyV2SupplierDepositMovement[]
+
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@index([depositId])
+  @@index([obligationId])
+  @@index([createdAt])
+  @@map("supply_v2_payment_applications")
+}
+
+/// Lo que Membego DEBE a un proveedor y por qué (§17–§19). Una por origen
+/// (`sourceType + sourceId` único): una recepción, una factura o una
+/// redención no generan la misma deuda dos veces. Apunta a la versión del
+/// acuerdo que decidió cuándo nacer.
+///   outstandingAmount = grossAmount − paidAmount   (CHECK ≥ 0)
+model SupplyV2SupplierObligation {
+  id     String @id @default(cuid())
+  /// "MBG-OB-2026-000001".
+  number String @unique
+
+  supplierId String
+  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  sourceType SupplyV2ObligationSource
+  sourceId   String
+
+  purchaseOrderId String?
+  purchaseOrder   SupplyV2PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  receiptId       String?
+  receipt         SupplyV2PurchaseReceipt? @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  redemptionId    String?                  @unique
+  redemption      SupplyV2Redemption?      @relation(fields: [redemptionId], references: [id], onDelete: Restrict)
+  invoiceId       String?
+  invoice         SupplyV2SupplierInvoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  agreementId        String?
+  agreement          SupplyV2Agreement?        @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  agreementVersionId String?
+  agreementVersion   SupplyV2AgreementVersion? @relation(fields: [agreementVersionId], references: [id], onDelete: Restrict)
+
+  currency          String  @default("DOP")
+  grossAmount       Decimal @db.Decimal(14, 2)
+  paidAmount        Decimal @default(0) @db.Decimal(14, 2)
+  outstandingAmount Decimal @db.Decimal(14, 2)
+
+  recognitionBasis SupplyV2RecognitionBasis
+  status           SupplyV2ObligationStatus @default(OPEN)
+
+  recognizedAt DateTime  @default(now())
+  dueAt        DateTime?
+
+  cancelledAt     DateTime?
+  cancelledReason String?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications     SupplyV2PaymentApplication[]
+  intendedPayments SupplyV2SupplierPayment[]    @relation("SupplyV2PaymentIntendedObligation")
+
+  @@unique([sourceType, sourceId])
+  @@index([supplierId, status])
+  @@index([status, dueAt])
+  @@index([purchaseOrderId])
+  @@index([invoiceId])
+  @@index([recognizedAt])
+  @@map("supply_v2_supplier_obligations")
+}
+
+// ── B · SUPPLY ECONOMICS ───────────────────────────────────────────────────
+
+/// Un hecho económico congelado (§22). NO es un libro mayor: no hay cuentas
+/// ni partida doble; hay ingreso, costo y margen por unidad vendida, y
+/// marcadores de breakage y de supply vencido. Idempotente por
+/// `type + referenceType + referenceId`.
+///   gmvAmount      lo que el cliente pagó (valor vendido)
+///   revenueAmount  ingreso reconocido por Membego (en prepago, = gmv)
+///   costAmount     costo del supply asociado
+///   grossMargin    revenue − cost
+///   units          unidades que representa (+1 venta, +1 breakage, N vencidas)
+model SupplyV2EconomicEvent {
+  id String @id @default(cuid())
+
+  type          SupplyV2EconomicEventType
+  referenceType SupplyV2EconomicReferenceType
+  referenceId   String
+
+  supplierId      String
+  supplier        SupplyV2Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  catalogItemId   String?
+  catalogItem     SupplyV2CatalogItem?   @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  lotId           String?
+  lot             SupplyV2Lot?           @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  entitlementId   String?
+  entitlement     SupplyV2Entitlement?   @relation(fields: [entitlementId], references: [id], onDelete: Restrict)
+  redemptionId    String?
+  redemption      SupplyV2Redemption?    @relation(fields: [redemptionId], references: [id], onDelete: Restrict)
+  customerOrderId String?
+  customerOrder   SupplyV2CustomerOrder? @relation(fields: [customerOrderId], references: [id], onDelete: Restrict)
+
+  currency String @default("DOP")
+  units    Int    @default(0)
+
+  gmvAmount         Decimal @default(0) @db.Decimal(14, 2)
+  revenueAmount     Decimal @default(0) @db.Decimal(14, 2)
+  costAmount        Decimal @default(0) @db.Decimal(14, 2)
+  grossMarginAmount Decimal @default(0) @db.Decimal(14, 2)
+
+  occurredAt DateTime
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+
+  @@unique([type, referenceType, referenceId])
+  @@index([occurredAt])
+  @@index([supplierId, occurredAt])
+  @@index([catalogItemId, occurredAt])
+  @@index([entitlementId])
+  @@index([type, occurredAt])
+  @@map("supply_v2_economic_events")
+}
+
+// ── Conciliación (§43–§46) ─────────────────────────────────────────────────
+
+/// Lo que Membego tiene registrado con un proveedor en un periodo, frente a
+/// lo que el proveedor dice. Sin estado de cuenta del proveedor NO hay
+/// MATCHED: queda OPEN con «Sin información del proveedor».
+model SupplyV2Reconciliation {
+  id     String @id @default(cuid())
+  /// "MBG-RN-2026-000001".
+  number String @unique
+
+  supplierId String
+  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  status SupplyV2ReconciliationStatus @default(OPEN)
+
+  currency         String   @default("DOP")
+  internalAmount   Decimal  @db.Decimal(14, 2)
+  supplierAmount   Decimal? @db.Decimal(14, 2)
+  differenceAmount Decimal? @db.Decimal(14, 2)
+
+  notes String?
+
+  createdById     String
+  createdBy       User      @relation("SupplyV2ReconciliationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  resolvedById    String?
+  resolvedBy      User?     @relation("SupplyV2ReconciliationResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt      DateTime?
+  resolutionNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines SupplyV2ReconciliationLine[]
+
+  @@unique([supplierId, periodStart, periodEnd])
+  @@index([supplierId, status])
+  @@map("supply_v2_reconciliations")
+}
+
+model SupplyV2ReconciliationLine {
+  id               String                 @id @default(cuid())
+  reconciliationId String
+  reconciliation   SupplyV2Reconciliation @relation(fields: [reconciliationId], references: [id], onDelete: Cascade)
+
+  type          SupplyV2ReconciliationLineType
+  referenceType String
+  referenceId   String
+  description   String
+
+  internalAmount Decimal  @db.Decimal(14, 2)
+  supplierAmount Decimal? @db.Decimal(14, 2)
+  difference     Decimal? @db.Decimal(14, 2)
+
+  status SupplyV2ReconciliationStatus @default(OPEN)
+  notes  String?
+
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([reconciliationId])
+  @@map("supply_v2_reconciliation_lines")
 }

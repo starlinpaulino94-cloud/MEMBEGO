@@ -12,6 +12,9 @@ import { AccionesOrden } from '@/components/supply-v2/acciones-orden'
 import { FormRecepcion } from '@/components/supply-v2/form-recepcion'
 import { TimelineOrden } from '@/components/supply-v2/timeline-orden'
 import { fichaOrden, sucursalesDeProveedor } from '@/modules/supply-v2/procurement/queries'
+import { timelineFinancieroOrden } from '@/modules/supply-v2/finance/queries'
+import { TimelineFinanciero } from '@/components/supply-v2/finanzas/timeline-financiero'
+import { RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 import { puedeSupplyV2 } from '@/modules/supply-v2/permisos'
 import { AGREEMENT_TYPE_LABELS, PAYMENT_MODE_LABELS } from '@/modules/supply-v2/core/catalogo'
 import { ORDEN_RECIBIBLE } from '@/modules/supply-v2/core/estados'
@@ -36,7 +39,7 @@ export default async function CompraDetallePage({ params }: { params: Promise<{ 
     puedeSupplyV2('SUPPLY_V2_RECEIVE'),
   ])
   if (!orden) notFound()
-  const sucursales = await sucursalesDeProveedor(orden.supplierId)
+  const [sucursales, hitosFinancieros] = await Promise.all([sucursalesDeProveedor(orden.supplierId), timelineFinancieroOrden(orden.id)])
 
   const soyElCreador = Boolean(user?.metadata.dbUserId && orden.createdById === user.metadata.dbUserId)
   const compradas = orden.lines.reduce((t, l) => t + l.quantity, 0)
@@ -135,6 +138,17 @@ export default async function CompraDetallePage({ params }: { params: Promise<{ 
             </CardHeader>
             <CardContent>
               <TimelineOrden estado={orden.status} eventos={orden.events} compradas={compradas} recibidas={recibidas} />
+            </CardContent>
+          </Card>
+          <Card data-testid="timeline-financiero-orden">
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardTitle>Dinero</CardTitle>
+              {!['DRAFT', 'PENDING_APPROVAL', 'CANCELLED'].includes(orden.status) && (
+                <Button asChild variant="outline" size="sm"><Link href={`${RUTA_FINANZAS}/facturas/nueva?proveedor=${orden.supplierId}&orden=${orden.id}`} data-testid="btn-factura-orden">+ Factura</Link></Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              <TimelineFinanciero hitos={hitosFinancieros} moneda={orden.currency} vacio="Sin factura ni pagos todavía." testId="timeline-dinero" />
             </CardContent>
           </Card>
           <Card>

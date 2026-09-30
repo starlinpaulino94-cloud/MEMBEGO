@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { crearAcuerdoAction, type AcuerdoResumen, type EstadoAccion } from '@/modules/supply-v2/actions'
-import { AGREEMENT_TYPES_SLICE1, AGREEMENT_TYPE_EXPLICACION, AGREEMENT_TYPE_LABELS, MONEDAS_SUPPLY_V2 } from '@/modules/supply-v2/core/catalogo'
+import { AGREEMENT_TYPES_SLICE1, AGREEMENT_TYPE_EXPLICACION, AGREEMENT_TYPE_LABELS, MONEDAS_SUPPLY_V2, PAYABLE_RECOGNITION_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 export interface ProductoParaAcuerdo {
   id: string
@@ -115,6 +115,22 @@ export function FormAcuerdo({
         <div>
           <Label htmlFor="paymentTermsDays">Días de pago</Label>
           <Input id="paymentTermsDays" name="paymentTermsDays" type="number" min={0} step={1} placeholder={tipo === 'PAY_LATER' ? '30' : '0'} />
+        </div>
+        <div>
+          <Label htmlFor="payableRecognition">Cuándo nace la deuda</Label>
+          <select id="payableRecognition" name="payableRecognition" className={select} defaultValue="ON_INVOICE" data-testid="acuerdo-politica">
+            {(['ON_INVOICE', 'ON_RECEIPT', 'ON_REDEMPTION'] as const).filter((p) => tipo !== 'PREPAID_PURCHASE' || p !== 'ON_REDEMPTION').map((p) => (
+              <option key={p} value={p}>{PAYABLE_RECOGNITION_LABELS[p]}</option>
+            ))}
+          </select>
+          <p className="text-caption text-muted-foreground">Se congela en cada versión del acuerdo: las compras históricas no cambian.</p>
+        </div>
+        <div>
+          <Label htmlFor="allowDepositApplication">Cubrir facturas con depósito</Label>
+          <select id="allowDepositApplication" name="allowDepositApplication" className={select} defaultValue="si">
+            <option value="si">Sí, se puede aplicar depósito</option>
+            <option value="no">No</option>
+          </select>
         </div>
         <div className="sm:col-span-2">
           <Label htmlFor="acuerdoNotas">Notas</Label>

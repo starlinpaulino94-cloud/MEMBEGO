@@ -222,3 +222,157 @@ export const INCIDENT_TYPE_LABELS: Record<SupplyV2IncidentType, string> = {
 
 export const RUTA_PORTAL_PROVEEDOR = '/admin/supply-v2'
 export const RUTA_REDENCIONES = `${BASE_SUPPLY_V2}/redenciones`
+
+// ── Slice 4 · finanzas y economía ───────────────────────────────────────────
+
+import type {
+  SupplyV2ApplicationType,
+  SupplyV2DepositMovementType,
+  SupplyV2DepositStatus,
+  SupplyV2EconomicEventType,
+  SupplyV2InvoiceStatus,
+  SupplyV2ObligationStatus,
+  SupplyV2PayableRecognition,
+  SupplyV2RecognitionBasis,
+  SupplyV2ReconciliationStatus,
+  SupplyV2SupplierPaymentMethod,
+  SupplyV2SupplierPaymentStatus,
+} from '@prisma/client'
+
+type Tono = 'neutral' | 'warning' | 'info' | 'success' | 'danger'
+
+export const RUTA_FINANZAS = `${BASE_SUPPLY_V2}/finanzas`
+export const RUTA_ECONOMIA = `${BASE_SUPPLY_V2}/economia`
+
+export const PAYABLE_RECOGNITION_LABELS: Record<SupplyV2PayableRecognition, string> = {
+  ON_INVOICE: 'Al aprobar la factura',
+  ON_RECEIPT: 'Al recibir la mercancía',
+  ON_REDEMPTION: 'Al entregar al cliente',
+}
+
+export const PAYABLE_RECOGNITION_EXPLICACION: Record<SupplyV2PayableRecognition, string> = {
+  ON_INVOICE: 'La deuda con el proveedor nace cuando Membego aprueba su factura. Lo normal en compra anticipada.',
+  ON_RECEIPT: 'La deuda nace con cada recepción; la factura posterior se enlaza sin duplicarla.',
+  ON_REDEMPTION: 'La deuda nace con cada entrega al cliente (pagar después, por unidad consumida).',
+}
+
+export const INVOICE_STATUS_LABELS: Record<SupplyV2InvoiceStatus, string> = {
+  DRAFT: 'Borrador',
+  PENDING_APPROVAL: 'Pendiente de aprobación',
+  APPROVED: 'Aprobada',
+  PARTIALLY_PAID: 'Parcialmente pagada',
+  PAID: 'Pagada',
+  CANCELLED: 'Cancelada',
+  CREDITED: 'Con nota de crédito',
+}
+
+export const INVOICE_STATUS_TONE: Record<SupplyV2InvoiceStatus, Tono> = {
+  DRAFT: 'neutral',
+  PENDING_APPROVAL: 'warning',
+  APPROVED: 'info',
+  PARTIALLY_PAID: 'info',
+  PAID: 'success',
+  CANCELLED: 'danger',
+  CREDITED: 'neutral',
+}
+
+export const DEPOSIT_STATUS_LABELS: Record<SupplyV2DepositStatus, string> = {
+  ACTIVE: 'Activo',
+  EXHAUSTED: 'Agotado',
+  CANCELLED: 'Cancelado',
+  REFUNDED: 'Reembolsado',
+}
+
+export const DEPOSIT_STATUS_TONE: Record<SupplyV2DepositStatus, Tono> = {
+  ACTIVE: 'success',
+  EXHAUSTED: 'neutral',
+  CANCELLED: 'danger',
+  REFUNDED: 'info',
+}
+
+export const DEPOSIT_MOVEMENT_LABELS: Record<SupplyV2DepositMovementType, string> = {
+  DEPOSIT_CREATED: 'Depósito creado',
+  DEPOSIT_APPLIED: 'Aplicado',
+  DEPOSIT_RELEASED: 'Liberado (reversa)',
+  DEPOSIT_REFUNDED: 'Reembolsado',
+  ADJUSTMENT: 'Ajuste',
+}
+
+export const SUPPLIER_PAYMENT_METHOD_LABELS: Record<SupplyV2SupplierPaymentMethod, string> = {
+  BANK_TRANSFER: 'Transferencia',
+  CASH: 'Efectivo',
+  DEPOSIT: 'Depósito (asiento)',
+  OTHER: 'Otro',
+}
+
+export const SUPPLIER_PAYMENT_STATUS_LABELS: Record<SupplyV2SupplierPaymentStatus, string> = {
+  PENDING: 'Pendiente de confirmar',
+  CONFIRMED: 'Confirmado',
+  CANCELLED: 'Cancelado',
+}
+
+export const SUPPLIER_PAYMENT_STATUS_TONE: Record<SupplyV2SupplierPaymentStatus, Tono> = {
+  PENDING: 'warning',
+  CONFIRMED: 'success',
+  CANCELLED: 'danger',
+}
+
+export const APPLICATION_TYPE_LABELS: Record<SupplyV2ApplicationType, string> = {
+  PAYMENT_TO_INVOICE: 'Pago a factura',
+  DEPOSIT_TO_INVOICE: 'Depósito a factura',
+  PAYMENT_TO_OBLIGATION: 'Pago a obligación',
+  DEPOSIT_TO_OBLIGATION: 'Depósito a obligación',
+  PAYMENT_TO_DEPOSIT: 'Pago que financia un depósito',
+  REVERSAL: 'Reversa',
+}
+
+export const OBLIGATION_STATUS_LABELS: Record<SupplyV2ObligationStatus, string> = {
+  OPEN: 'Pendiente',
+  PARTIALLY_PAID: 'Parcialmente pagada',
+  PAID: 'Pagada',
+  CANCELLED: 'Cancelada',
+}
+
+export const OBLIGATION_STATUS_TONE: Record<SupplyV2ObligationStatus, Tono> = {
+  OPEN: 'warning',
+  PARTIALLY_PAID: 'info',
+  PAID: 'success',
+  CANCELLED: 'danger',
+}
+
+export const RECOGNITION_BASIS_LABELS: Record<SupplyV2RecognitionBasis, string> = {
+  PO_APPROVAL: 'Aprobación de la compra',
+  RECEIPT: 'Recepción',
+  REDEMPTION: 'Entrega al cliente',
+  INVOICE: 'Factura',
+  MANUAL: 'Manual',
+}
+
+export const RECONCILIATION_STATUS_LABELS: Record<SupplyV2ReconciliationStatus, string> = {
+  OPEN: 'Abierta',
+  MATCHED: 'Cuadra',
+  DISCREPANCY: 'Con diferencia',
+  RESOLVED: 'Resuelta',
+}
+
+export const RECONCILIATION_STATUS_TONE: Record<SupplyV2ReconciliationStatus, Tono> = {
+  OPEN: 'neutral',
+  MATCHED: 'success',
+  DISCREPANCY: 'warning',
+  RESOLVED: 'info',
+}
+
+export const ECONOMIC_EVENT_LABELS: Record<SupplyV2EconomicEventType, string> = {
+  SALE_REVENUE: 'Venta (ingreso y costo)',
+  REDEMPTION_COST: 'Costo al entregar',
+  EXPIRATION_COST: 'Supply vencido sin vender',
+  BREAKAGE: 'Derecho vencido sin usar',
+  REVERSAL: 'Reversa',
+  ADJUSTMENT: 'Ajuste',
+}
+
+/** Formato de dinero para las pantallas de finanzas: dos decimales siempre (§52: el texto ya viene redondeado). */
+export function dineroSupplyV2(n: string | number | { toString(): string }, moneda = 'DOP'): string {
+  const v = Number(typeof n === 'object' ? n.toString() : n)
+  return `${moneda === 'DOP' ? 'RD$' : `${moneda} `}${v.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}

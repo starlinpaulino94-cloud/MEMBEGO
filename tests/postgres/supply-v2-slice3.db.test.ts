@@ -380,16 +380,32 @@ test('H · la segunda reversa falla y no duplica ledger; la base rechaza una seg
 })
 
 test('I · el barrido vence derechos y vouchers caducados, y una segunda pasada no repite', async () => {
-  await prisma.supplyV2Entitlement.update({ where: { id: ctx.derecho1 }, data: { status: 'ACTIVE', expiresAt: new Date(Date.now() - 1000) } })
-  await prisma.supplyV2Voucher.updateMany({ where: { entitlementId: ctx.derecho1 }, data: { status: 'ACTIVE', validFrom: new Date(Date.now() - 2 * DIA), validUntil: new Date(Date.now() - 1000) } })
+  // Un derecho NUEVO, ACTIVE y con su unidad ISSUED en el ledger: el arnés solo
+  // adelanta su reloj. Desde el Slice 4 vencer un derecho también cierra su
+  // unidad (ISSUED → CLOSED), así que el estado tiene que ser coherente.
+  const oferta = await prisma.supplyV2Offer.findFirstOrThrow({ where: { catalogItemId: ctx.itemId }, select: { id: true } })
+  const derecho3 = await sinEmpresa('prueba', async (tx) => {
+    const orden = await abrirOrdenClienteEnTx(tx, { customerId: ctx.cliente, offerId: oferta.id, quantity: 1 }, como(ctx.cliente))
+    const pago = await confirmarPagoEnTx(tx, { orderId: orden.id, amountSeen: '399.00' }, como(ctx.admin))
+    return pago.entitlements[0]!.id
+  })
+  await emitirVoucherEnTx_(derecho3)
+  const antes = await lote(ctx.lotId)
+  await prisma.supplyV2Entitlement.update({ where: { id: derecho3 }, data: { expiresAt: new Date(Date.now() - 1000) } })
+  await prisma.supplyV2Voucher.updateMany({ where: { entitlementId: derecho3, status: 'ACTIVE' }, data: { validFrom: new Date(Date.now() - 2 * DIA), validUntil: new Date(Date.now() - 1000) } })
   const r = await barridoSupplyV2()
   assert.ok(r.derechosVencidos >= 1)
-  assert.equal((await derecho(ctx.derecho1)).status, 'EXPIRED')
-  assert.equal(await prisma.supplyV2Voucher.count({ where: { entitlementId: ctx.derecho1, status: 'ACTIVE' } }), 0)
+  assert.equal((await derecho(derecho3)).status, 'EXPIRED')
+  assert.equal(await prisma.supplyV2Voucher.count({ where: { entitlementId: derecho3, status: 'ACTIVE' } }), 0)
+  const despues = await lote(ctx.lotId)
+  assert.equal(despues.quantityIssued, antes.quantityIssued - 1, 'ISSUED −1')
+  assert.equal(despues.quantityClosed, antes.quantityClosed + 1, 'CLOSED +1')
   const r2 = await barridoSupplyV2()
   assert.equal(r2.derechosVencidos, 0)
-  await assert.rejects(abrirQr(ctx.derecho1), /venció/)
+  await assert.rejects(abrirQr(derecho3), /venció/)
 })
+
+const emitirVoucherEnTx_ = (entitlementId: string) => sinEmpresa('prueba', (tx) => emitirVoucherEnTx(tx, entitlementId, ctx.cliente, como(ctx.cliente)))
 
 test('J · el ledger de cada lote cuadra al final', async () => {
   const l = await lote(ctx.lotId)

@@ -12,19 +12,22 @@ import { DialogoFormulario } from '@/components/supply-v2/dialogo'
 import { FormProducto, type VinculoExistente } from '@/components/supply-v2/form-producto'
 import { FormAcuerdo } from '@/components/supply-v2/form-acuerdo'
 import { fichaProveedor } from '@/modules/supply-v2/suppliers/queries'
+import { perfilFinancieroProveedor } from '@/modules/supply-v2/finance/queries'
+import { TimelineFinanciero } from '@/components/supply-v2/finanzas/timeline-financiero'
+import { dineroSupplyV2, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 import { AGREEMENT_TYPE_LABELS, CATALOG_ITEM_TYPE_LABELS, SUPPLIER_SOURCE_LABELS } from '@/modules/supply-v2/core/catalogo'
 import { sinEmpresa } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * MEMBEGO SUPPLY 2.0 · perfil del proveedor (§28–§31): datos, catálogo,
- * acuerdos, compras y supply adquirido. Sin finanzas todavía.
+ * MEMBEGO SUPPLY 2.0 · perfil del proveedor (§28–§31; Slice 4 §34): datos,
+ * catálogo, acuerdos, compras, supply adquirido y su perfil financiero.
  */
 export default async function ProveedorDetallePage({ params }: { params: Promise<{ id: string }> }) {
   await requireRole('SUPERADMIN')
   const { id } = await params
-  const p = await fichaProveedor(id)
+  const [p, fin] = await Promise.all([fichaProveedor(id), perfilFinancieroProveedor(id)])
   if (!p) notFound()
 
   // Lo que la empresa ya vende en Membego, para el vínculo opcional del producto.
@@ -64,6 +67,31 @@ export default async function ProveedorDetallePage({ params }: { params: Promise
         <StatCard label="Valor disponible" value={formatMoneyRD(p.resumen.valorDisponible)} accent="brand" />
         <StatCard label="Compras" value={p.purchaseOrders.length.toLocaleString('es-DO')} sub={`${p.agreements.filter((a) => a.status === 'ACTIVE').length} acuerdos vigentes`} />
       </div>
+
+      {fin && (
+        <Card data-testid="perfil-financiero">
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle>Finanzas con este proveedor</CardTitle>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm"><Link href={`${RUTA_FINANZAS}/pagos/nuevo?proveedor=${p.id}&destino=DEPOSITO`}>+ Anticipo</Link></Button>
+              <Button asChild variant="outline" size="sm"><Link href={`${RUTA_FINANZAS}/facturas/nueva?proveedor=${p.id}`} data-testid="btn-factura-proveedor">+ Factura</Link></Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <StatCard label="Saldo a pagar" value={<span data-testid="fin-saldo">{dineroSupplyV2(fin.saldoAPagar, fin.currency)}</span>} accent={Number(fin.saldoAPagar) > 0 ? 'warning' : 'success'} />
+              <StatCard label="Facturas pendientes" value={<span data-testid="fin-facturas">{fin.facturasPendientes.toLocaleString('es-DO')}</span>} sub={dineroSupplyV2(fin.facturasPendientesMonto, fin.currency)} href={`${RUTA_FINANZAS}/facturas?proveedor=${p.id}`} hrefLabel="Ver facturas" />
+              <StatCard label="Depósito disponible" value={<span data-testid="fin-deposito">{dineroSupplyV2(fin.depositoDisponible, fin.currency)}</span>} href={`${RUTA_FINANZAS}/depositos?proveedor=${p.id}`} hrefLabel="Ver depósitos" />
+              <StatCard label="Pagado histórico" value={<span data-testid="fin-pagado">{dineroSupplyV2(fin.pagadoHistorico, fin.currency)}</span>} href={`${RUTA_FINANZAS}/pagos?proveedor=${p.id}`} hrefLabel="Ver pagos" />
+              <StatCard label="Supply adquirido" value={dineroSupplyV2(fin.supplyAdquirido, fin.currency)} sub={`${fin.unidadesAdquiridas.toLocaleString('es-DO')} unidades a costo real`} />
+            </div>
+            <div>
+              <p className="mb-2 text-caption font-medium uppercase text-muted-foreground">Recorrido financiero</p>
+              <TimelineFinanciero hitos={fin.timeline} moneda={fin.currency} vacio="Sin movimientos financieros todavía." testId="timeline-proveedor" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">

@@ -134,8 +134,9 @@ async function puedeSubir(
       )
       return ped?.cliente?.supabaseId === supabaseId
     }
-    if (tipo === 'pago') {
-      // Membego Supply: comprobante de un pago DE MEMBEGO a un proveedor. Lo
+    if (tipo === 'pago' || tipo === 'supply-v2') {
+      // Membego Supply (V1 `pago`; Supply 2.0 `supply-v2`: factura o pago a
+      // proveedor, el id es el de esa entidad, que ya existe al adjuntar). Lo
       // adjunta plataforma; el id es el del pago (que ya existe: se registra
       // antes de subir) y solo el rol de plataforma puede escribir aquí.
       const u = await sinEmpresa('comprobantes: rol de quien adjunta un comprobante de pago a proveedor', (tx) =>
