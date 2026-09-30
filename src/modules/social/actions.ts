@@ -54,16 +54,11 @@ export interface SocialResult {
   guardada?: boolean
 }
 
-/** Seguir / dejar de seguir una empresa. */
-export async function toggleSeguirEmpresa(
+/** Seguir / dejar de seguir una empresa con userId explícito (BFF y actions). */
+export async function toggleSeguirEmpresaDirecto(
+  userId: string,
   companyId: string
 ): Promise<SocialResult> {
-  const user = await getUser()
-  if (!user?.metadata.dbUserId || user.metadata.role !== 'CLIENTE') {
-    return { error: 'Inicia sesión como cliente para seguir empresas.' }
-  }
-  const userId = user.metadata.dbUserId
-
   try {
     return await conEmpresa(companyId, async (tx) => {
       const company = await tx.company.findUnique({
@@ -73,9 +68,6 @@ export async function toggleSeguirEmpresa(
       if (!company || !company.isActive || !company.isPublished) {
         return { error: 'Empresa no disponible.' }
       }
-      // Una empresa de práctica no se sigue: seguirla la metería en el feed y en
-      // "mis empresas" de alguien que nunca pidió verla. Al entrenamiento se
-      // entra por el enlace de registro, que es otra cosa.
       if (company.esDemo) return { error: 'Empresa no disponible.' }
 
       const existing = await tx.companyFollow.findUnique({
@@ -95,29 +87,37 @@ export async function toggleSeguirEmpresa(
       return { following }
     }).then((result) => {
       if (!result.error) {
-        revalidatePath('/cliente/empresas')
-        revalidatePath('/cliente/explorar')
-        revalidatePath('/mis-membresias')
-        revalidatePath('/cliente/ayuda')
+        try {
+          revalidatePath('/cliente/empresas')
+          revalidatePath('/cliente/explorar')
+          revalidatePath('/mis-membresias')
+          revalidatePath('/cliente/ayuda')
+        } catch {}
       }
       return result
     })
   } catch (e) {
-    console.error('[social] toggleSeguirEmpresa', e)
+    console.error('[social] toggleSeguirEmpresaDirecto', e)
     return { error: 'No se pudo completar. Intenta de nuevo.' }
   }
 }
 
-/** Marcar / desmarcar una empresa seguida como favorita. */
-export async function toggleFavoritaEmpresa(
+/** Seguir / dejar de seguir una empresa (Server Action). */
+export async function toggleSeguirEmpresa(
   companyId: string
 ): Promise<SocialResult> {
   const user = await getUser()
   if (!user?.metadata.dbUserId || user.metadata.role !== 'CLIENTE') {
-    return { error: 'Inicia sesión como cliente.' }
+    return { error: 'Inicia sesión como cliente para seguir empresas.' }
   }
-  const userId = user.metadata.dbUserId
+  return toggleSeguirEmpresaDirecto(user.metadata.dbUserId, companyId)
+}
 
+/** Marcar / desmarcar una empresa seguida como favorita con userId explícito. */
+export async function toggleFavoritaEmpresaDirecto(
+  userId: string,
+  companyId: string
+): Promise<SocialResult> {
   try {
     return await conEmpresa(companyId, async (tx) => {
       const follow = await tx.companyFollow.findUnique({
@@ -129,7 +129,9 @@ export async function toggleFavoritaEmpresa(
         await tx.companyFollow.create({
           data: { userId, companyId, esFavorita: true },
         })
-        revalidatePath('/cliente/empresas')
+        try {
+          revalidatePath('/cliente/empresas')
+        } catch {}
         return { following: true, esFavorita: true }
       }
 
@@ -138,13 +140,26 @@ export async function toggleFavoritaEmpresa(
         data: { esFavorita: !follow.esFavorita },
         select: { esFavorita: true },
       })
-      revalidatePath('/cliente/empresas')
+      try {
+        revalidatePath('/cliente/empresas')
+      } catch {}
       return { following: true, esFavorita: updated.esFavorita }
     })
   } catch (e) {
-    console.error('[social] toggleFavoritaEmpresa', e)
+    console.error('[social] toggleFavoritaEmpresaDirecto', e)
     return { error: 'No se pudo completar. Intenta de nuevo.' }
   }
+}
+
+/** Marcar / desmarcar una empresa seguida como favorita (Server Action). */
+export async function toggleFavoritaEmpresa(
+  companyId: string
+): Promise<SocialResult> {
+  const user = await getUser()
+  if (!user?.metadata.dbUserId || user.metadata.role !== 'CLIENTE') {
+    return { error: 'Inicia sesión como cliente.' }
+  }
+  return toggleFavoritaEmpresaDirecto(user.metadata.dbUserId, companyId)
 }
 
 /** Guardar / quitar una promoción de "Mis promociones guardadas". */

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -28,11 +29,14 @@ import {
 } from 'lucide-react-native'
 import { useAuth } from '../../src/lib/auth-context'
 import { useEmpresa } from '../../src/hooks/useEmpresa'
+import { useQueryClient } from '@tanstack/react-query'
+import { api } from '../../src/lib/api'
 import { EmptyState } from '../../src/components/ui/EmptyState'
 import { SectionHeader } from '../../src/components/ui/SectionHeader'
 import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { Button } from '../../src/components/ui/Button'
+import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 import { Skeleton } from '../../src/components/ui/Skeleton'
 import { cn } from '../../src/lib/cn'
 import { formatMoney } from '../../src/lib/format'
@@ -52,9 +56,10 @@ const TIPO_LABEL: Record<string, string> = {
   excursiones: 'Excursiones',
 }
 
-export default function EmpresaDetalleScreen() {
+function EmpresaDetalleScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const queryClient = useQueryClient()
   const { companySlug } = useLocalSearchParams<{ companySlug: string }>()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
 
@@ -63,14 +68,19 @@ export default function EmpresaDetalleScreen() {
     isAuthenticated,
   )
 
-  // ponytail: follow/unfollow BFF endpoint pending (F4). Local optimistic toggle.
   const [sigoLocal, setSigoLocal] = useState(false)
   const [sigoInitialized, setSigoInitialized] = useState(false)
+  const [esFavoritaLocal, setEsFavoritaLocal] = useState(false)
+  const [favoritaInitialized, setFavoritaInitialized] = useState(false)
 
   // Sync from server data (state adjustment during render, no extra commit)
   if (data?.sigo !== undefined && !sigoInitialized) {
     setSigoLocal(data.sigo)
     setSigoInitialized(true)
+  }
+  if (data?.esFavorita !== undefined && !favoritaInitialized) {
+    setEsFavoritaLocal(data.esFavorita)
+    setFavoritaInitialized(true)
   }
 
   useEffect(() => {
@@ -87,8 +97,35 @@ export default function EmpresaDetalleScreen() {
     )
   }
 
-  function toggleSeguir() {
-    setSigoLocal((prev) => !prev)
+  async function toggleSeguir() {
+    if (!companySlug) return
+    const nuevo = !sigoLocal
+    setSigoLocal(nuevo)
+    if (!nuevo) setEsFavoritaLocal(false)
+    try {
+      const res = await api.toggleSeguirEmpresa(companySlug)
+      if (res.following !== undefined) setSigoLocal(res.following)
+      queryClient.invalidateQueries({ queryKey: ['cliente'] })
+      refetch()
+    } catch {
+      setSigoLocal(!nuevo)
+    }
+  }
+
+  async function toggleFavorita() {
+    if (!companySlug) return
+    const nuevo = !esFavoritaLocal
+    setEsFavoritaLocal(nuevo)
+    if (nuevo) setSigoLocal(true)
+    try {
+      const res = await api.toggleFavoritaEmpresa(companySlug)
+      if (res.following !== undefined) setSigoLocal(res.following)
+      if (res.esFavorita !== undefined) setEsFavoritaLocal(res.esFavorita)
+      queryClient.invalidateQueries({ queryKey: ['cliente'] })
+      refetch()
+    } catch {
+      setEsFavoritaLocal(!nuevo)
+    }
   }
 
   // ── Loading skeleton ────────────────────────────────────────────────────
@@ -113,7 +150,7 @@ export default function EmpresaDetalleScreen() {
             <ArrowLeft size={20} color="#111827" />
           </Pressable>
         </View>
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
           <Skeleton className="h-48 w-full rounded-2xl" />
           <View className="mt-4 gap-3">
             <Skeleton className="h-8 w-3/4 rounded-lg" />
@@ -198,15 +235,11 @@ export default function EmpresaDetalleScreen() {
   return (
     <View className="flex-1 bg-background">
       {/* ── Header con back ──────────────────────────────────────────── */}
-      <View
-        className="flex-row items-center justify-between border-b border-border bg-background"
-        style={{
-          paddingLeft: insets.left + 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-        }}
-      >
+      <View className="border-b border-border bg-background">
+        <DetailPageFrame
+          className="flex-row items-center justify-between px-4"
+          style={{ paddingLeft: insets.left + 16, paddingRight: 16, paddingTop: 12, paddingBottom: 12 }}
+        >
         <Pressable
           onPress={() => goBackOr(router, '/empresas')}
           className="rounded-lg p-2 active:bg-muted"
@@ -215,36 +248,55 @@ export default function EmpresaDetalleScreen() {
         >
           <ArrowLeft size={20} color="#111827" />
         </Pressable>
-        <Pressable
-          onPress={toggleSeguir}
-          className={cn(
-            'flex-row items-center gap-1.5 rounded-full border px-3 py-1.5',
-            sigoLocal
-              ? 'border-success bg-success/10'
-              : 'border-border bg-card',
-          )}
-          accessibilityRole="button"
-          accessibilityLabel={sigoLocal ? 'Dejar de seguir' : 'Seguir'}
-        >
-          {sigoLocal ? (
-            <>
-              <Check size={16} color="#22c55e" />
-              <Text className="text-sm font-inter-semibold text-success">
-                Siguiendo
-              </Text>
-            </>
-          ) : (
-            <>
-              <Heart size={16} color="#9ca3af" />
+        <View className="flex-row items-center gap-2">
+          <Pressable
+            onPress={toggleFavorita}
+            className={cn(
+              'size-9 items-center justify-center rounded-full border',
+              esFavoritaLocal
+                ? 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40'
+                : 'border-border bg-card'
+            )}
+            accessibilityRole="button"
+            accessibilityLabel={esFavoritaLocal ? 'Quitar de favoritos' : 'Marcar como favorito'}
+          >
+            <Heart
+              size={18}
+              color={esFavoritaLocal ? '#ef4444' : '#9ca3af'}
+              fill={esFavoritaLocal ? '#ef4444' : 'transparent'}
+            />
+          </Pressable>
+
+          <Pressable
+            onPress={toggleSeguir}
+            className={cn(
+              'flex-row items-center gap-1.5 rounded-full border px-3 py-1.5',
+              sigoLocal
+                ? 'border-success bg-success/10'
+                : 'border-border bg-card',
+            )}
+            accessibilityRole="button"
+            accessibilityLabel={sigoLocal ? 'Dejar de seguir' : 'Seguir'}
+          >
+            {sigoLocal ? (
+              <>
+                <Check size={16} color="#22c55e" />
+                <Text className="text-sm font-inter-semibold text-success">
+                  Siguiendo
+                </Text>
+              </>
+            ) : (
               <Text className="text-sm font-inter-semibold text-muted-foreground">
                 Seguir
               </Text>
-            </>
-          )}
-        </Pressable>
+            )}
+          </Pressable>
+        </View>
+        </DetailPageFrame>
       </View>
 
-      <ScrollView className="flex-1">
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <DetailPageFrame>
         {/* ── Banner ─────────────────────────────────────────────────── */}
         <View className="relative w-full bg-muted" style={{ height: 200 }}>
           {company.bannerUrl ? (
@@ -631,7 +683,16 @@ export default function EmpresaDetalleScreen() {
 
         {/* ── Bottom spacer ──────────────────────────────────────────── */}
         <View style={{ height: insets.bottom + 32 }} />
+        </DetailPageFrame>
       </ScrollView>
     </View>
+  )
+}
+
+export default function EmpresaDetalleScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <EmpresaDetalleScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

@@ -24,6 +24,8 @@ export interface EmpresaSeguida {
     bannerUrl: string | null
     ciudad: string | null
     activePromotionsCount: number
+    createdAt?: Date | string | null
+    averageRating?: number | string | Prisma.Decimal | null
   }
 }
 
@@ -37,6 +39,8 @@ const EMPRESA_EN_MI_LISTA = {
   bannerUrl: true,
   ciudad: true,
   activePromotionsCount: true,
+  createdAt: true,
+  averageRating: true,
 } as const
 
 /**

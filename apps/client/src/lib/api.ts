@@ -118,6 +118,20 @@ export interface PlanPublic {
   descripcion: string | null
   beneficios: string[]
   vigenciaDias: number
+  imagenUrl?: string | null
+}
+
+export interface PlanGlobalItem extends PlanPublic {
+  company: {
+    id: string
+    name: string
+    slug: string
+    logoUrl: string | null
+    ciudad: string | null
+    moneda: string
+    idioma: string
+    averageRating: number | null
+  }
 }
 
 export interface PlanEmpresaItem extends PlanPublic {
@@ -235,6 +249,50 @@ export interface InteresesResponse {
   seleccion: string[]
 }
 
+export interface PerfilClienteResponse {
+  readonly cliente: {
+    readonly id: string
+    readonly nombre: string
+    readonly email: string | null
+    readonly telefono: string | null
+    readonly companyId: string
+  } | null
+  readonly email: string
+  readonly vehiculos: readonly unknown[]
+  readonly memberships: readonly unknown[]
+  readonly resumen: {
+    readonly activas: number
+    readonly vencidas: number
+    readonly total: number
+  }
+}
+
+export interface CuentaMembresia {
+  readonly id: string
+  readonly companyId: string
+  readonly companyName: string
+  readonly companySlug: string
+  readonly companyLogoUrl: string | null
+  readonly companyColorPrimario: string | null
+  readonly planId: string
+  readonly planNombre: string
+  readonly planEsIlimitado: boolean
+  readonly planLavadosIncluidos: number | null
+  readonly estado: string
+  readonly fechaInicio: string
+  readonly fechaVencimiento: string | null
+  readonly lavadosRestantes: number | null
+  readonly qrToken: string | null
+}
+
+export interface MembresiasResponse {
+  readonly membresias: readonly CuentaMembresia[]
+  readonly activas: readonly CuentaMembresia[]
+  readonly porVencer: readonly CuentaMembresia[]
+  readonly vencidas: readonly CuentaMembresia[]
+  readonly puntos: number | null
+}
+
 export type CercanoItem = JsonObject
 export interface ResultadoCercanos {
   resultados: CercanoItem[]
@@ -288,6 +346,7 @@ export interface EmpresaDetalleResponse {
   sucursales: SucursalPublic[]
   esCliente: boolean
   sigo: boolean
+  esFavorita?: boolean
 }
 
 // --- Promociones ---
@@ -315,7 +374,7 @@ export interface PromocionDetalleResponse {
 // --- Planes ---
 export interface PlanesGlobalResponse {
   modo: 'global'
-  planes: PlanPublic[]
+  planes: PlanGlobalItem[]
   categorias: CategoryPublic[]
 }
 
@@ -909,9 +968,9 @@ export const api = {
   getInicio: (categoria?: string | null) =>
     fetchBff<any>(`/api/v1/cliente/inicio${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ''}`),
   getQr: (id?: string) => fetchBff<any>(`/api/v1/cliente/qr${id ? `?id=${encodeURIComponent(id)}` : ''}`),
-  getPerfil: () => fetchBff<any>('/api/v1/cliente/perfil'),
+  getPerfil: () => fetchBff<PerfilClienteResponse>('/api/v1/cliente/perfil'),
   getMenu: () => fetchBff<any>('/api/v1/cliente/menu'),
-  getMembresias: () => fetchBff<any>('/api/v1/cliente/membresias'),
+  getMembresias: () => fetchBff<MembresiasResponse>('/api/v1/cliente/membresias'),
   getHistorial: (page?: number) => fetchBff<any>(`/api/v1/cliente/historial?page=${page ?? 1}`),
 
   // --- Exploración ---
@@ -931,6 +990,16 @@ export const api = {
   // --- Empresa / catálogo ---
   getEmpresa: (slug: string) =>
     fetchBff<EmpresaDetalleResponse>(`/api/v1/cliente/empresas/${encodeURIComponent(slug)}`),
+  toggleFavoritaEmpresa: (slug: string) =>
+    postJson<{ following?: boolean; esFavorita?: boolean; error?: string }>(
+      `/api/v1/cliente/empresas/${encodeURIComponent(slug)}`,
+      { accion: 'favorita' }
+    ),
+  toggleSeguirEmpresa: (slug: string) =>
+    postJson<{ following?: boolean; esFavorita?: boolean; error?: string }>(
+      `/api/v1/cliente/empresas/${encodeURIComponent(slug)}`,
+      { accion: 'seguir' }
+    ),
   getPromociones: (params?: PromocionesParams) =>
     fetchBff<PromocionesResponse>(`/api/v1/cliente/promociones${qs(params)}`),
   getPromocion: (id: string) =>
