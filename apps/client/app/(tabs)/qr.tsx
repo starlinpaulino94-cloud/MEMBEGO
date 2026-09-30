@@ -22,6 +22,27 @@ const CTA_GRADIENT: [string, string, string] = ['#7c3aed', '#2563eb', '#06b6d4']
 /** QR frame gradient: emerald-500 → teal-400 → emerald-600 */
 const QR_FRAME_GRADIENT: [string, string, string] = ['#10b981', '#2dd4bf', '#059669']
 
+const ESTADO_MEMBRESIA_LABEL: Record<string, string> = {
+  ACTIVA: 'Activa',
+  PENDIENTE: 'Esperando pago',
+  PENDIENTE_PAGO: 'Esperando pago',
+  VENCIDA: 'Vencida',
+  CANCELADA: 'Cancelada',
+  RECHAZADA: 'Rechazada',
+}
+
+function getEstadoMembresiaLabel(estado: string): string {
+  const label = ESTADO_MEMBRESIA_LABEL[estado]
+  if (label) return label
+
+  return estado
+    .replaceAll('_', ' ')
+    .toLocaleLowerCase('es')
+    .split(' ')
+    .map((palabra) => palabra.charAt(0).toLocaleUpperCase('es') + palabra.slice(1))
+    .join(' ')
+}
+
 export default function QrScreen() {
   const router = useRouter()
   const { isAuthenticated } = useAuth()
@@ -83,6 +104,7 @@ export default function QrScreen() {
     <ScrollView
       className="flex-1 bg-vibe-fondo"
       contentContainerStyle={{ padding: 16 }}
+      showsVerticalScrollIndicator={false}
     >
       {usable ? (
         <View className="gap-4">
@@ -137,8 +159,7 @@ export default function QrScreen() {
                 colors={CTA_GRADIENT}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={{ borderRadius: 9999, minHeight: 44 }}
-                className="items-center justify-center px-4"
+                style={{ borderRadius: 9999, minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}
               >
                 <Text className="text-label-lg font-inter-bold text-white">
                   Ver detalle y movimientos
@@ -167,11 +188,14 @@ export default function QrScreen() {
                       )}
                     >
                       <View className="flex-1 mr-2">
-                        <Text className="text-label-lg text-foreground" numberOfLines={1}>
-                          {m.companyName} · {m.planNombre}
+                        <Text className="text-label-md text-muted-foreground">
+                          {m.companyName}
+                        </Text>
+                        <Text className="text-label-lg text-foreground">
+                          {m.planNombre}
                         </Text>
                         <Text className="text-label-md text-muted-foreground">
-                          {m.estado}
+                          {getEstadoMembresiaLabel(m.estado)}
                         </Text>
                       </View>
                       <ChevronRight size={16} color="#4b5563" />
@@ -192,7 +216,9 @@ export default function QrScreen() {
             </Text>
             <View className="my-5 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 p-6">
               <View className="rounded-full bg-vibe-lavanda px-3 py-1">
-                <Text className="text-xs font-inter-semibold text-vibe-violet">{elegida.estado}</Text>
+                <Text className="text-xs font-inter-semibold text-vibe-violet">
+                  {getEstadoMembresiaLabel(elegida.estado)}
+                </Text>
               </View>
               <Text className="mt-3 text-center text-small text-muted-foreground px-2">
                 {elegida.estado === 'PENDIENTE' || elegida.estado === 'PENDIENTE_PAGO'
@@ -211,8 +237,7 @@ export default function QrScreen() {
                 colors={CTA_GRADIENT}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={{ borderRadius: 9999, minHeight: 44 }}
-                className="items-center justify-center px-4"
+                style={{ borderRadius: 9999, minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}
               >
                 <Text className="text-label-lg font-inter-bold text-white">
                   {elegida.estado === 'PENDIENTE' || elegida.estado === 'PENDIENTE_PAGO'
@@ -240,10 +265,15 @@ export default function QrScreen() {
                       )}
                     >
                       <View className="flex-1 mr-2">
-                        <Text className="text-label-lg text-foreground" numberOfLines={1}>
-                          {m.companyName} · {m.planNombre}
+                        <Text className="text-label-md text-muted-foreground">
+                          {m.companyName}
                         </Text>
-                        <Text className="text-label-md text-muted-foreground">{m.estado}</Text>
+                        <Text className="text-label-lg text-foreground">
+                          {m.planNombre}
+                        </Text>
+                        <Text className="text-label-md text-muted-foreground">
+                          {getEstadoMembresiaLabel(m.estado)}
+                        </Text>
                       </View>
                       <ChevronRight size={16} color="#4b5563" />
                     </TouchableOpacity>

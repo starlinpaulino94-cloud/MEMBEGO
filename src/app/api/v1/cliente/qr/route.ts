@@ -41,6 +41,13 @@ export async function GET(request: Request) {
       activas.find((m) => m.qrToken) ??
       activas[0] ??
       null
+    const membresias = memberships.map((m) => ({
+      id: m.id,
+      companyName: m.company.name,
+      planNombre: m.plan.nombre,
+      estado: m.estado,
+      fechaVencimiento: m.fechaVencimiento,
+    }))
 
     const ahora = new Date()
     const usable =
@@ -93,7 +100,7 @@ export async function GET(request: Request) {
 
       return NextResponse.json({
         usable: null,
-        memberships,
+        memberships: membresias,
         sinBeneficio: {
           destacadas: tarjetas,
           bienvenida,
@@ -119,13 +126,7 @@ export async function GET(request: Request) {
         vencimiento,
         fechaVencimiento: usable.fechaVencimiento,
       },
-      memberships: memberships.map((m) => ({
-        id: m.id,
-        companyName: m.company.name,
-        planNombre: m.plan.nombre,
-        estado: m.estado,
-        fechaVencimiento: m.fechaVencimiento,
-      })),
+      memberships: membresias,
       sinBeneficio: null,
     }, { headers: corsHeaders(request) })
   } catch (error) {
