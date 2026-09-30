@@ -32,7 +32,9 @@ export interface UsuarioE2E {
   supabaseId: string
   email: string
   nombre: string
-  role: 'SUPERADMIN' | 'CLIENTE'
+  role: 'SUPERADMIN' | 'CLIENTE' | 'ADMINISTRADOR'
+  /** Empresa activa de la sesión (empleados del proveedor). */
+  companyId: string | null
 }
 
 const USUARIOS = {
@@ -40,6 +42,10 @@ const USUARIOS = {
   finanzas: { email: 'e2e.supply2.finanzas@membego.test', nombre: 'Finanzas E2E', role: 'SUPERADMIN' },
   cliente: { email: 'e2e.supply2.cliente@membego.test', nombre: 'Ana Cliente E2E', role: 'CLIENTE' },
   cliente2: { email: 'e2e.supply2.cliente2@membego.test', nombre: 'Luis Cliente E2E', role: 'CLIENTE' },
+  /** Slice 3: quien escanea en el comercio. Necesita `companyId`: ver `asegurarEmpleado`. */
+  empleado: { email: 'e2e.supply2.empleado@membego.test', nombre: 'Pedro Encargado E2E', role: 'ADMINISTRADOR' },
+  /** Segundo encargado, para que escritorio y móvil corran a la vez sin pisarse la empresa. */
+  empleado2: { email: 'e2e.supply2.empleado2@membego.test', nombre: 'Rosa Encargada E2E', role: 'ADMINISTRADOR' },
 } as const
 
 export type RolE2E = keyof typeof USUARIOS
@@ -50,16 +56,35 @@ function cliente(): PrismaClient {
   return prisma
 }
 
-export async function asegurarUsuario(rol: RolE2E): Promise<UsuarioE2E> {
+export async function asegurarUsuario(rol: RolE2E, companyId: string | null = null): Promise<UsuarioE2E> {
   const { email, nombre, role } = USUARIOS[rol]
   const supabaseId = `e2e-supply2-${rol}`
   const u = await cliente().user.upsert({
     where: { email },
-    update: { role, supabaseId },
-    create: { email, name: nombre, role, supabaseId },
+    update: { role, supabaseId, companyId },
+    create: { email, name: nombre, role, supabaseId, companyId },
     select: { id: true },
   })
-  return { id: u.id, supabaseId, email, nombre, role }
+  return { id: u.id, supabaseId, email, nombre, role, companyId }
+}
+
+/**
+ * Slice 3: la empresa del proveedor (registrada en Membego, con la capacidad
+ * MEMBEGO_SUPPLIER y una sucursal) y su encargado. En producción la empresa se
+ * da de alta desde el panel; aquí la siembra el arnés porque el recorrido
+ * empieza en «vincular empresa existente como proveedor».
+ */
+export async function asegurarEmpresaProveedora(nombre: string, sucursal = 'Bávaro'): Promise<{ id: string; sucursalId: string }> {
+  const slug = nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+  const c = await cliente().company.upsert({
+    where: { slug },
+    update: { name: nombre, capacidades: { overrides: { MEMBEGO_SUPPLIER: true } }, isActive: true },
+    create: { name: nombre, slug, type: 'restaurante', capacidades: { overrides: { MEMBEGO_SUPPLIER: true } } },
+    select: { id: true },
+  })
+  const s = await cliente().sucursal.findFirst({ where: { companyId: c.id, nombre: sucursal }, select: { id: true } })
+  const sucursalId = s?.id ?? (await cliente().sucursal.create({ data: { companyId: c.id, nombre: sucursal }, select: { id: true } })).id
+  return { id: c.id, sucursalId }
 }
 
 function nombreCookie(): string {
@@ -73,7 +98,7 @@ export async function cookieDeSesion(u: UsuarioE2E): Promise<{ name: string; val
   if (!secreto) throw new Error('Falta SUPABASE_JWT_SECRET para firmar la sesión de prueba.')
   const ahora = Math.floor(Date.now() / 1000)
   const exp = ahora + 60 * 60
-  const appMetadata = { role: u.role, dbUserId: u.id, clienteId: null, companyId: null }
+  const appMetadata = { role: u.role, dbUserId: u.id, clienteId: null, companyId: u.companyId }
   const accessToken = await new SignJWT({ email: u.email, role: 'authenticated', app_metadata: appMetadata, user_metadata: {} })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(u.supabaseId)
@@ -94,8 +119,8 @@ export async function cookieDeSesion(u: UsuarioE2E): Promise<{ name: string; val
 }
 
 /** Deja el contexto del navegador con la sesión de ese rol puesta. */
-export async function entrarComo(context: BrowserContext, rol: RolE2E, baseURL: string): Promise<UsuarioE2E> {
-  const u = await asegurarUsuario(rol)
+export async function entrarComo(context: BrowserContext, rol: RolE2E, baseURL: string, companyId: string | null = null): Promise<UsuarioE2E> {
+  const u = await asegurarUsuario(rol, companyId)
   const c = await cookieDeSesion(u)
   await context.addCookies([{ ...c, url: baseURL, httpOnly: true, sameSite: 'Lax' }])
   return u

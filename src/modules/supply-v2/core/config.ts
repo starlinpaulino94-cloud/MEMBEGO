@@ -17,3 +17,18 @@ export function ttlReservaMinutos(): number {
 export function vencimientoDeReserva(desde = new Date(), minutos = ttlReservaMinutos()): Date {
   return new Date(desde.getTime() + minutos * 60_000)
 }
+
+// ── Slice 3 ─────────────────────────────────────────────────────────────────
+
+/** TTL del QR temporal (§9): un solo sitio. Sin variable de entorno, 5 minutos. */
+export const TTL_QR_POR_DEFECTO_MIN = 5
+
+export function ttlQrMinutos(): number {
+  const crudo = process.env.SUPPLY_V2_QR_TTL_MINUTES
+  const n = crudo ? Number(crudo) : NaN
+  return Number.isFinite(n) && n > 0 ? n : TTL_QR_POR_DEFECTO_MIN
+}
+
+export function vencimientoDeQr(desde = new Date(), minutos = ttlQrMinutos()): Date {
+  return new Date(desde.getTime() + minutos * 60_000)
+}

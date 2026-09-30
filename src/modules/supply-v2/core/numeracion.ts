@@ -18,7 +18,7 @@ import type { Tx } from '@/lib/tenant'
  * `LOT-2026-000001`, `MBG-OF-2026-000001` (oferta), `MBG-SO-2026-000001` (orden de cliente).
  */
 
-export type PrefijoNumeracion = 'MBG-PO' | 'MBG-RC' | 'MBG-AG' | 'LOT' | 'MBG-OF' | 'MBG-SO'
+export type PrefijoNumeracion = 'MBG-PO' | 'MBG-RC' | 'MBG-AG' | 'LOT' | 'MBG-OF' | 'MBG-SO' | 'MBG-RD'
 
 export function formatearNumero(prefijo: PrefijoNumeracion, anio: number, secuencia: number): string {
   return `${prefijo}-${anio}-${String(secuencia).padStart(6, '0')}`

@@ -340,6 +340,19 @@ enum AuditAccion {
   SUPPLY_V2_ORDER_PAID
   SUPPLY_V2_ORDER_PAYMENT_REJECTED
   SUPPLY_V2_ENTITLEMENT_ISSUED
+  // Slice 3
+  SUPPLY_V2_VOUCHER_CREATED
+  SUPPLY_V2_VOUCHER_REISSUED
+  SUPPLY_V2_VOUCHER_EXPIRED
+  SUPPLY_V2_QR_SESSION_CREATED
+  SUPPLY_V2_QR_SESSION_EXPIRED
+  SUPPLY_V2_QR_SESSION_CONSUMED
+  SUPPLY_V2_REDEMPTION_PREVIEWED
+  SUPPLY_V2_REDEMPTION_CONFIRMED
+  SUPPLY_V2_REDEMPTION_REJECTED
+  SUPPLY_V2_REDEMPTION_REVERSED
+  SUPPLY_V2_REDEMPTION_INCIDENT
+  SUPPLY_V2_ENTITLEMENT_EXPIRED
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas
@@ -508,6 +521,14 @@ model User {
   supplyV2ComprasComoCliente   SupplyV2CustomerOrder[]      @relation("SupplyV2CustomerOrderCustomer")
   supplyV2PagosConfirmados     SupplyV2CustomerOrder[]      @relation("SupplyV2CustomerOrderConfirmedBy")
   supplyV2Derechos             SupplyV2Entitlement[]        @relation("SupplyV2EntitlementCustomer")
+  // Membego Supply 2.0 · Slice 3
+  supplyV2Vouchers             SupplyV2Voucher[]            @relation("SupplyV2VoucherCustomer")
+  supplyV2SesionesQrAbiertas   SupplyV2QrSession[]          @relation("SupplyV2QrSessionOpenedBy")
+  supplyV2SesionesQrConsumidas SupplyV2QrSession[]          @relation("SupplyV2QrSessionConsumedBy")
+  supplyV2Redenciones          SupplyV2Redemption[]         @relation("SupplyV2RedemptionCustomer")
+  supplyV2Entregas             SupplyV2Redemption[]         @relation("SupplyV2RedemptionEmployee")
+  supplyV2ReversasHechas       SupplyV2Redemption[]         @relation("SupplyV2RedemptionReversedBy")
+  supplyV2Incidencias          SupplyV2RedemptionIncident[] @relation("SupplyV2IncidentEmployee")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)
@@ -814,6 +835,10 @@ model Sucursal {
   supplyVentas      SupplyVentaDirecta[] @relation("SupplyVentaSucursal")
   // Membego Supply 2.0: dónde se recibió una compra.
   supplyV2Recepciones SupplyV2PurchaseReceipt[] @relation("SupplyV2ReceiptBranch")
+  // Membego Supply 2.0 · Slice 3: dónde se entregó.
+  supplyV2SesionesQr  SupplyV2QrSession[]          @relation("SupplyV2QrSessionBranch")
+  supplyV2Redenciones SupplyV2Redemption[]         @relation("SupplyV2RedemptionBranch")
+  supplyV2Incidencias SupplyV2RedemptionIncident[] @relation("SupplyV2IncidentBranch")
 
   // ── Geolocalización (docs/GEOLOCALIZACION.md §3.3) ─────────────────────────
   // Normalizado: las claves del catálogo geo cuando la dirección se resuelve.

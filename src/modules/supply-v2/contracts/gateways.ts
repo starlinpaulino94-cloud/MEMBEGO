@@ -46,6 +46,10 @@ export const SUPPLY_V2_PERMISSIONS = [
   'SUPPLY_V2_RECEIVE',
   'SUPPLY_V2_OFFER_MANAGE',
   'SUPPLY_V2_OFFER_PUBLISH',
+  // Slice 3
+  'SUPPLY_V2_REDEEM',
+  'SUPPLY_V2_REDEMPTION_VIEW',
+  'SUPPLY_V2_REDEMPTION_REVERSE',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -58,6 +62,9 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_RECEIVE: 'Registrar recepciones',
   SUPPLY_V2_OFFER_MANAGE: 'Crear, pausar y finalizar ofertas; confirmar pagos de clientes',
   SUPPLY_V2_OFFER_PUBLISH: 'Publicar ofertas (aparta supply)',
+  SUPPLY_V2_REDEEM: 'Escanear y confirmar entregas (proveedor)',
+  SUPPLY_V2_REDEMPTION_VIEW: 'Ver redenciones',
+  SUPPLY_V2_REDEMPTION_REVERSE: 'Reversar redenciones',
 }
 
 export interface CompanyGateway {

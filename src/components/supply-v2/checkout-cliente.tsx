@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { avisarPagoAction, cancelarCompraAction } from '@/modules/supply-v2/actions-cliente'
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 import type { CompraCliente } from '@/modules/supply-v2/commerce/queries'
-import { PAYMENT_METHODS_CLIENTE, PAYMENT_METHOD_LABELS } from '@/modules/supply-v2/core/catalogo'
+import { ENTITLEMENT_STATUS_LABELS, PAYMENT_METHODS_CLIENTE, PAYMENT_METHOD_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 function dinero(n: string, moneda: string): string {
   return `${moneda === 'DOP' ? 'RD$' : `${moneda} `}${Number(n).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
@@ -131,7 +131,7 @@ export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
                   <span className="font-medium">{d.producto}</span> · {d.proveedor}
                   {d.expiresAt ? <span className="block text-caption text-muted-foreground">Válido hasta {new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium' }).format(new Date(d.expiresAt))}</span> : null}
                 </span>
-                <span className="rounded-full border border-success/30 px-2 py-0.5 text-caption text-success" data-testid="derecho-estado">{d.status === 'ACTIVE' ? 'Disponible' : d.status}</span>
+                <span className="rounded-full border border-success/30 px-2 py-0.5 text-caption text-success" data-testid="derecho-estado">{ENTITLEMENT_STATUS_LABELS[d.status as keyof typeof ENTITLEMENT_STATUS_LABELS] ?? d.status}</span>
               </li>
             ))}
           </ul>
