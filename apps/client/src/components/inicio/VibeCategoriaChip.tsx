@@ -39,7 +39,7 @@ export function VibeCategoriaChip({
       >
         <View
           className="flex-row items-center gap-2"
-          style={seleccionada ? { borderWidth: 3, borderColor: colors.surface.background, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 } : undefined}
+          style={seleccionada ? { borderWidth: 2, borderColor: colors.surface.background, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 } : undefined}
         >
           <Icono size={16} color={colors.surface.background} />
           <Text className="text-overline font-bold text-white">{categoria.label}</Text>

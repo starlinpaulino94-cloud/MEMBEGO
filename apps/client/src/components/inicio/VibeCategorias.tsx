@@ -44,7 +44,7 @@ export function VibeCategorias({
   const { accent } = useInicioAccent()
   if (!categorias || categorias.length === 0) {
     return (
-      <View className="px-4 py-8 items-center justify-center">
+      <View className="px-4 pb-8 items-center justify-center">
         <Text className="text-xl font-bold text-foreground">Categorías</Text>
         <Text className="text-sm text-muted-foreground mt-2 text-center">
           No hay categorías disponibles para explorar ahora.
@@ -54,30 +54,30 @@ export function VibeCategorias({
   }
 
   return (
-    <View className="mt-4 mb-4">
-      <HorizontalScrollWithFade contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-          <VibeCategoriaChip
-            categoria={{ label: 'Todos', icon: LayoutGrid, gradient: colors.gradient.categories[0] }}
-            seleccionada={categoriaActiva === null}
-            atenuada={Boolean(categoriaActiva)}
-            onPress={() => onSeleccionar(null, null)}
-          />
+    <View>
+      <HorizontalScrollWithFade contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }} >
+        <VibeCategoriaChip
+          categoria={{ label: 'Todos', icon: LayoutGrid, gradient: colors.gradient.categories[0] }}
+          seleccionada={categoriaActiva === null}
+          atenuada={Boolean(categoriaActiva)}
+          onPress={() => onSeleccionar(null, null)}
+        />
 
-          {categorias.map((c, i) => {
-            const Icono = ICONOS[c.slug?.toLowerCase()] ?? LayoutGrid
-            const activa = categoriaActiva === c.slug
-            const gradiente = colors.gradient.categories[(i + 1) % colors.gradient.categories.length]
+        {categorias.map((c, i) => {
+          const Icono = ICONOS[c.slug?.toLowerCase()] ?? LayoutGrid
+          const activa = categoriaActiva === c.slug
+          const gradiente = colors.gradient.categories[(i + 1) % colors.gradient.categories.length]
 
-            return (
-              <VibeCategoriaChip
-                key={c.id}
-                categoria={{ label: c.name, icon: Icono, gradient: gradiente }}
-                seleccionada={activa}
-                atenuada={Boolean(categoriaActiva && !activa)}
-                onPress={() => onSeleccionar(activa ? null : c.slug, activa ? null : (i + 1) % colors.gradient.categories.length)}
-              />
-            )
-          })}
+          return (
+            <VibeCategoriaChip
+              key={c.id}
+              categoria={{ label: c.name, icon: Icono, gradient: gradiente }}
+              seleccionada={activa}
+              atenuada={Boolean(categoriaActiva && !activa)}
+              onPress={() => onSeleccionar(activa ? null : c.slug, activa ? null : (i + 1) % colors.gradient.categories.length)}
+            />
+          )
+        })}
       </HorizontalScrollWithFade>
       {categoriaActiva ? (
         <View className="mt-2.5 flex-row items-center justify-between px-4">

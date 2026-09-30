@@ -9,11 +9,13 @@ import { excursionesDestacadas } from '@/modules/excursiones/catalogo/search-que
 import { getMisEmpresas, getPromoFeed } from '@/modules/social/queries'
 import { formatMoney } from '@/lib/format'
 import { formatDescuento, PROMO_TIPO_LABEL } from '@/lib/promociones'
+import { EMPRESA_EN_VITRINA, promocionVigente } from '@/modules/promociones/vigencia'
 import type { SessionUser } from '@/types'
 import { getHomePublicada } from './composicion'
 import { HeroSlide, Segmentacion, TIPOS_BLOQUE, type TipoBloque } from './esquema'
 import { admiteAudienciaHome } from './audiencia'
 import { heroPublico } from './hero-publico'
+import { seleccionarNovedadesHero } from './novedades'
 import { contextoHeroPorDefecto, duracionLegible, hechosDeEmpresas, totalesVitrina } from './vitrina'
 import type {
   EmpresaInicio,
@@ -21,10 +23,123 @@ import type {
   ExperienciaInicio,
   HeroInicio,
   InicioVista,
+  NovedadHero,
   PlanInicio,
   PromoNovedadItem,
   PromocionesNovedadesVista,
 } from './vista'
+
+async function novedadesHero(categoriaSlug: string | undefined, ahora: Date): Promise<readonly NovedadHero[]> {
+  const categoria = categoriaSlug
+    ? { categories: { some: { category: { slug: categoriaSlug } } } }
+    : {}
+  const companyVitrina = { ...EMPRESA_EN_VITRINA, ...categoria }
+
+  const [promociones, planes, empresas] = await sinEmpresa(
+    'inicio: novedades públicas recientes de promociones, planes y empresas',
+    (tx) => Promise.all([
+      tx.promocion.findMany({
+        where: {
+          ...promocionVigente(ahora),
+          visibilidad: 'publica',
+          company: companyVitrina,
+        },
+        select: {
+          id: true,
+          titulo: true,
+          descripcion: true,
+          imagenUrl: true,
+          tipo: true,
+          descuento: true,
+          vigenciaHasta: true,
+          createdAt: true,
+          company: { select: { name: true, logoUrl: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      tx.plan.findMany({
+        where: { activo: true, company: companyVitrina },
+        select: {
+          id: true,
+          nombre: true,
+          descripcion: true,
+          imagenUrl: true,
+          precio: true,
+          vigenciaDias: true,
+          esIlimitado: true,
+          lavadosIncluidos: true,
+          createdAt: true,
+          company: { select: { name: true, slug: true, logoUrl: true, moneda: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+      tx.company.findMany({
+        where: { ...companyVitrina },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          type: true,
+          description: true,
+          logoUrl: true,
+          bannerUrl: true,
+          ciudad: true,
+          averageRating: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+    ]),
+  )
+
+  const candidatas: NovedadHero[] = [
+    ...promociones.map((promo): NovedadHero => ({
+      tipo: 'PROMOCION',
+      id: promo.id,
+      creadoEn: promo.createdAt.toISOString(),
+      titulo: promo.titulo,
+      descripcion: promo.descripcion,
+      empresa: promo.company.name,
+      imagen: promo.imagenUrl ?? promo.company.logoUrl,
+      href: `/cliente/promociones/${promo.id}`,
+      descuento: promo.descuento != null
+        ? formatDescuento(Number(promo.descuento), promo.tipo)
+        : promo.tipo === '2x1' ? '2×1' : promo.tipo === '3x2' ? '3×2' : null,
+      vigenciaHasta: promo.vigenciaHasta?.toISOString() ?? null,
+    })),
+    ...planes.map((plan): NovedadHero => ({
+      tipo: 'MEMBRESIA',
+      id: plan.id,
+      creadoEn: plan.createdAt.toISOString(),
+      titulo: plan.nombre,
+      descripcion: plan.descripcion ?? (plan.lavadosIncluidos != null
+        ? `Incluye ${plan.lavadosIncluidos} servicios`
+        : plan.esIlimitado ? 'Servicios ilimitados' : null),
+      empresa: plan.company.name,
+      imagen: plan.imagenUrl ?? plan.company.logoUrl,
+      href: `/cliente/planes/${plan.id}`,
+      precio: formatMoney(Number(plan.precio), plan.company),
+      periodo: plan.vigenciaDias ? `/${plan.vigenciaDias} días` : plan.esIlimitado ? 'Ilimitada' : '',
+    })),
+    ...empresas.map((empresa): NovedadHero => ({
+      tipo: 'EMPRESA',
+      id: empresa.id,
+      creadoEn: empresa.createdAt.toISOString(),
+      titulo: empresa.name,
+      descripcion: empresa.description ?? empresa.type,
+      empresa: empresa.name,
+      imagen: empresa.bannerUrl ?? empresa.logoUrl,
+      href: `/cliente/empresas/${empresa.slug}`,
+      ciudad: empresa.ciudad,
+      valoracion: empresa.averageRating != null ? Number(empresa.averageRating) : null,
+    })),
+  ]
+
+  return seleccionarNovedadesHero(candidatas, ahora)
+}
 
 /**
  * EL INICIO DEL DISEÑO ES EL ESTADO POR DEFECTO, NO UN PREMIO POR PUBLICAR.
@@ -151,8 +266,60 @@ export async function getInicioVista(
 ): Promise<InicioVista> {
   const publicada = await composicionAdmitida(user).catch(() => null)
   const tipos: readonly TipoBloque[] = publicada?.tipos ?? TIPOS_BLOQUE
-  const dbUserId = user.metadata.dbUserId
+  let dbUserId = user.metadata.dbUserId
   const ahora = new Date()
+
+  if (!dbUserId && (user.supabaseId || user.email)) {
+    const dbUser = await sinEmpresa('resolver o vincular dbUserId para inicio', async (tx) => {
+      let u = user.supabaseId
+        ? await tx.user.findUnique({
+            where: { supabaseId: user.supabaseId },
+            select: { id: true, supabaseId: true },
+          })
+        : null
+
+      if (!u && user.email) {
+        u = await tx.user.findUnique({
+          where: { email: user.email },
+          select: { id: true, supabaseId: true },
+        })
+        if (u && user.supabaseId && u.supabaseId !== user.supabaseId) {
+          await tx.user.update({
+            where: { id: u.id },
+            data: { supabaseId: user.supabaseId },
+          })
+        }
+      }
+
+      if (!u && user.supabaseId && user.email) {
+        u = await tx.user
+          .create({
+            data: {
+              supabaseId: user.supabaseId,
+              email: user.email,
+              name: user.email.split('@')[0],
+              role: 'CLIENTE',
+            },
+            select: { id: true, supabaseId: true },
+          })
+          .catch(() => null)
+      }
+
+      return u
+    }).catch(() => null)
+
+    if (dbUser) {
+      dbUserId = dbUser.id
+    }
+  }
+
+  const userIds = [dbUserId, user.supabaseId].filter(
+    (id): id is string => typeof id === 'string' && id.length > 0
+  )
+  const userIdentities = [
+    ...(user.supabaseId ? [{ supabaseId: user.supabaseId }] : []),
+    ...(user.email ? [{ email: user.email }] : []),
+  ]
 
   const [
     categorias,
@@ -164,9 +331,13 @@ export async function getInicioVista(
     misEmpresas,
     promoFeed,
     planesActivosIds,
+    novedadesHeroData,
+    userFollows,
+    clientesEmpresas,
+    membresiasEmpresas,
   ] = await Promise.all([
     tipos.includes('CATEGORIAS') ? getCategoriesPublic() : Promise.resolve([]),
-    getCompaniesPublic({ category: categoriaSlug, limit: 10 }),
+    getCompaniesPublic({ category: categoriaSlug, limit: 15, sortBy: 'rating' }),
     getPlanesPublic({ category: categoriaSlug, limit: 20 }),
     tipos.includes('EXPERIENCIAS') && (!categoriaSlug || ['tours', 'turismo', 'excursiones'].includes(categoriaSlug.toLowerCase()))
       ? excursionesDestacadas(4)
@@ -189,20 +360,77 @@ export async function getInicioVista(
       })
       return new Set(rows.map((r) => r.planId))
     }).catch(() => new Set<string>()),
+    novedadesHero(categoriaSlug, ahora),
+    userIds.length > 0
+      ? sinEmpresa('lectura: follows directos para favoritos', (tx) =>
+          tx.companyFollow.findMany({
+            where: { userId: { in: userIds } },
+            select: { companyId: true, esFavorita: true },
+          })
+        ).catch(() => [])
+      : Promise.resolve([]),
+    userIdentities.length > 0
+      ? sinEmpresa('lectura: empresas cliente directo', (tx) =>
+          tx.cliente.findMany({
+            where: {
+              OR: userIdentities,
+              company: { isActive: true },
+            },
+            select: { companyId: true },
+          })
+        ).catch(() => [])
+      : Promise.resolve([]),
+    userIdentities.length > 0
+      ? sinEmpresa('lectura: empresas membresia activa', (tx) =>
+          tx.membership.findMany({
+            where: {
+              cliente: { OR: userIdentities },
+              estado: 'ACTIVA',
+              OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gt: ahora } }],
+            },
+            select: { companyId: true },
+          })
+        ).catch(() => [])
+      : Promise.resolve([]),
   ])
 
   const misEmpresasIds = new Set(misEmpresas.map((me) => me.company.id))
-  const misEmpresasClienteIds = new Set(
-    misEmpresas.filter((me) => me.esCliente).map((me) => me.company.id)
-  )
+  const misEmpresasClienteIds = new Set([
+    ...misEmpresas.filter((me) => me.esCliente).map((me) => me.company.id),
+    ...clientesEmpresas.map((c) => c.companyId),
+    ...membresiasEmpresas.map((m) => m.companyId),
+  ])
   const empresasIdsDeCategoria = new Set(empresas.map((e) => e.id))
 
-  // Scroll horizontal híbrido de empresas: primero las que sigue o donde es cliente,
-  // completadas con empresas populares del marketplace (máx. 10).
+  const favoritasSet = new Set<string>()
+  const seguidasSet = new Set<string>()
+  for (const f of userFollows) {
+    if (f.esFavorita) favoritasSet.add(f.companyId)
+    seguidasSet.add(f.companyId)
+  }
+  for (const me of misEmpresas) {
+    if (me.esFavorita) favoritasSet.add(me.company.id)
+    if (me.sigo) seguidasSet.add(me.company.id)
+  }
+  const misEmpresasMap = new Map(misEmpresas.map((me) => [me.company.id, me]))
+
+  const UN_MES_MS = 30 * 24 * 60 * 60 * 1000
+  const esNuevaFn = (createdAt?: Date | string | null) => {
+    if (!createdAt) return false
+    const fecha = new Date(createdAt)
+    const diff = ahora.getTime() - fecha.getTime()
+    return diff >= 0 && diff < UN_MES_MS
+  }
+
+  // Scroll horizontal de empresas: ordenadas por mejor valoración (calificación y reseñas),
+  // combinando las empresas de la persona y las del marketplace (máx. 10).
   const scrollMap = new Map<string, EmpresaScrollItem>()
   for (const me of misEmpresas) {
-    if (scrollMap.size >= 10) break
+    if (scrollMap.size >= 20) break
     if (categoriaSlug && !empresasIdsDeCategoria.has(me.company.id)) continue
+    const esFav = favoritasSet.has(me.company.id) || Boolean(me.esFavorita)
+    const esCliente = misEmpresasClienteIds.has(me.company.id) || me.esCliente
+    const sigo = seguidasSet.has(me.company.id) || Boolean(me.sigo)
     scrollMap.set(me.company.id, {
       id: me.company.id,
       nombre: me.company.name,
@@ -212,17 +440,25 @@ export async function getInicioVista(
       logoUrl: me.company.logoUrl,
       bannerUrl: me.company.bannerUrl,
       href: `/cliente/empresas/${me.company.slug}`,
-      valoracion: null,
+      valoracion: me.company.averageRating != null ? Number(me.company.averageRating) : null,
       resenas: 0,
       esMia: true,
-      esFavorita: me.esFavorita,
-      etiquetaRelacion: me.esCliente ? 'Miembro' : me.esFavorita ? 'Favorita' : 'Siguiendo',
+      esFavorita: esFav,
+      etiquetaRelacion: esCliente ? 'Miembro' : (sigo || esFav) ? 'Siguiendo' : null,
+      esNueva: esNuevaFn(me.company.createdAt),
+      creadoEn: me.company.createdAt ? new Date(me.company.createdAt).toISOString() : null,
     })
   }
 
   for (const fe of empresas) {
-    if (scrollMap.size >= 10) break
+    if (scrollMap.size >= 20) break
     if (!scrollMap.has(fe.id)) {
+      const relacion = misEmpresasMap.get(fe.id)
+      const esFav = favoritasSet.has(fe.id) || Boolean(relacion?.esFavorita)
+      const sigo = seguidasSet.has(fe.id) || Boolean(relacion?.sigo)
+      const esCliente = misEmpresasClienteIds.has(fe.id) || Boolean(relacion?.esCliente)
+      const esMia = esCliente || sigo || esFav || misEmpresasIds.has(fe.id)
+
       scrollMap.set(fe.id, {
         id: fe.id,
         nombre: fe.name,
@@ -232,11 +468,13 @@ export async function getInicioVista(
         logoUrl: fe.logoUrl,
         bannerUrl: fe.bannerUrl,
         href: `/cliente/empresas/${fe.slug}`,
-        valoracion: fe.averageRating,
+        valoracion: fe.averageRating != null ? Number(fe.averageRating) : null,
         resenas: 0,
-        esMia: misEmpresasIds.has(fe.id),
-        esFavorita: false,
-        etiquetaRelacion: null,
+        esMia,
+        esFavorita: esFav,
+        etiquetaRelacion: esCliente ? 'Miembro' : (sigo || esFav) ? 'Siguiendo' : null,
+        esNueva: esNuevaFn(fe.createdAt),
+        creadoEn: fe.createdAt ? new Date(fe.createdAt).toISOString() : null,
       })
     }
   }
@@ -250,12 +488,31 @@ export async function getInicioVista(
     ...empresasScrollBase.map((e) => e.id),
   ])
 
-  const empresasScroll: EmpresaScrollItem[] = empresasScrollBase.map((e) => ({
-    ...e,
-    valoracion: e.valoracion ?? null,
-    resenas: hechos.get(e.id)?.resenas ?? e.resenas,
-    planes: hechos.get(e.id)?.planes ?? 0,
-  }))
+  const empresasScroll: EmpresaScrollItem[] = empresasScrollBase
+    .map((e) => ({
+      ...e,
+      valoracion: e.valoracion ?? null,
+      resenas: hechos.get(e.id)?.resenas ?? e.resenas,
+      planes: hechos.get(e.id)?.planes ?? 0,
+    }))
+    .sort((a, b) => {
+      // 1. Mayor valoración (estrellas)
+      const valA = a.valoracion != null ? Number(a.valoracion) : 0
+      const valB = b.valoracion != null ? Number(b.valoracion) : 0
+      if (valB !== valA) return valB - valA
+
+      // 2. Más reseñas
+      if (b.resenas !== a.resenas) return b.resenas - a.resenas
+
+      // 3. Desempate por afinidad (favoritas y miembros primero si tienen igual valoración)
+      const afinidadA = (a.esFavorita ? 2 : 0) + (a.esMia ? 1 : 0)
+      const afinidadB = (b.esFavorita ? 2 : 0) + (b.esMia ? 1 : 0)
+      if (afinidadB !== afinidadA) return afinidadB - afinidadA
+
+      // 4. Más planes activos
+      return (b.planes ?? 0) - (a.planes ?? 0)
+    })
+    .slice(0, 10)
 
   // 1. Excluir planes activos del usuario para no ofrecer lo que ya compró
   const planesDisponibles = planesRaw.filter((p) => !planesActivosIds.has(p.id))
@@ -342,20 +599,20 @@ export async function getInicioVista(
 
   const promoFeedCandidatas = categoriaSlug
     ? [
-        ...(promoFeed?.misEmpresas ?? []),
-        ...(promoFeed?.nuevas ?? []),
-        ...(promoFeed?.destacadas ?? []),
-        ...(promoFeed?.recomendadas ?? []),
-      ].filter((p: any) => {
-        const compId = p.company?.id ?? p.empresa?.id
-        return compId && empresasIdsDeCategoria.has(compId)
-      })
+      ...(promoFeed?.misEmpresas ?? []),
+      ...(promoFeed?.nuevas ?? []),
+      ...(promoFeed?.destacadas ?? []),
+      ...(promoFeed?.recomendadas ?? []),
+    ].filter((p: any) => {
+      const compId = p.company?.id ?? p.empresa?.id
+      return compId && empresasIdsDeCategoria.has(compId)
+    })
     : [
-        ...(promoFeed?.misEmpresas ?? []),
-        ...(promoFeed?.nuevas ?? []),
-        ...(promoFeed?.destacadas ?? []),
-        ...(promoFeed?.recomendadas ?? []),
-      ]
+      ...(promoFeed?.misEmpresas ?? []),
+      ...(promoFeed?.nuevas ?? []),
+      ...(promoFeed?.destacadas ?? []),
+      ...(promoFeed?.recomendadas ?? []),
+    ]
 
   const poolPromos: any[] = [
     ...promoFeedCandidatas,
@@ -433,8 +690,8 @@ export async function getInicioVista(
   // Las promociones activas alimentan el Hero principal en la sección de novedades
   const heroesPublicados = publicada
     ? (await Promise.all(publicada.slides.map((slide) => heroPublico(publicada.companyId, slide)))).filter(
-        (h): h is HeroInicio => h !== null
-      )
+      (h): h is HeroInicio => h !== null
+    )
     : []
 
   const heroesPromos = await heroesPorDefecto(
@@ -456,6 +713,7 @@ export async function getInicioVista(
     categoriaActiva: categoriaSlug ?? null,
     bloques: [...tipos],
     heroes,
+    novedadesHero: novedadesHeroData,
     categorias,
     empresasTotal: categoriaSlug ? empresas.length : totales.empresas,
     empresasScroll,
@@ -478,18 +736,18 @@ export async function getInicioVista(
     }] : []),
     relampago: urgentes.length > 0 && urgentes[0].vigenciaHasta
       ? {
-          hasta: new Date(urgentes[0].vigenciaHasta).toISOString(),
-          promos: urgentes.map((p) => ({
-            id: p.id,
-            titulo: p.titulo,
-            empresa: p.company.name,
-            imagen: p.imagenUrl,
-            href: `/cliente/promociones/${p.id}`,
-            precio: p.venta ? formatMoney(p.venta.precio) : null,
-            descuento: p.descuento != null ? formatDescuento(Number(p.descuento), p.tipo) : null,
-            hasta: new Date(p.vigenciaHasta!).toISOString(),
-          })),
-        }
+        hasta: new Date(urgentes[0].vigenciaHasta).toISOString(),
+        promos: urgentes.map((p) => ({
+          id: p.id,
+          titulo: p.titulo,
+          empresa: p.company.name,
+          imagen: p.imagenUrl,
+          href: `/cliente/promociones/${p.id}`,
+          precio: p.venta ? formatMoney(p.venta.precio) : null,
+          descuento: p.descuento != null ? formatDescuento(Number(p.descuento), p.tipo) : null,
+          hasta: new Date(p.vigenciaHasta!).toISOString(),
+        })),
+      }
       : null,
   }
 }

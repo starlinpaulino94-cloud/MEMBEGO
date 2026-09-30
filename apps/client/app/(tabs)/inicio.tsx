@@ -41,7 +41,7 @@ export default function InicioScreen() {
     <ScrollView
       className="flex-1 bg-vibe-fondo"
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ flexGrow: 1, paddingVertical: 16 }}
+      contentContainerStyle={{ flexGrow: 1, paddingVertical: 16, gap: 8 }}
       refreshControl={
         <RefreshControl
           refreshing={isRefetching}
@@ -86,7 +86,7 @@ export default function InicioScreen() {
               case 'HERO':
                 return (
                   <React.Fragment key={bloque}>
-                    <VibeHero heroes={comercial.heroes} />
+                    <VibeHero heroes={comercial.novedadesHero} />
                     {comercial.promocionesNovedades ? (
                       <VibePromocionesNovedades promociones={comercial.promocionesNovedades} />
                     ) : null}

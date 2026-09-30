@@ -1,13 +1,12 @@
 import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, Image } from 'react-native'
+import { View, Text, TouchableOpacity, Image, Pressable } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Link, useRouter } from 'expo-router'
-import { Sparkles, Tag, Flame, Clock, ChevronRight } from 'lucide-react-native'
+import { Sparkles, Tag, Flame, Clock, ChevronRight, ArrowRight } from 'lucide-react-native'
 import { SectionHeader } from '../ui/SectionHeader'
 import { rnHref } from '../../lib/rutas'
-import { colors } from '../../theme/tokens'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
-import { useInicioAccent } from '../layout/InicioAccentContext'
+import { useInicioAccent, type InicioAccent } from '../layout/InicioAccentContext'
 import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
 
 interface PromoNovedadItem {
@@ -51,6 +50,114 @@ const TABS: { key: TabKey; label: string; icon: typeof Sparkles }[] = [
   { key: 'porVencer', label: 'Por vencer', icon: Clock },
 ]
 
+export interface PromoCardItemProps {
+  item: PromoNovedadItem
+  accent: InicioAccent
+  onPress: () => void
+}
+
+export function PromoCardItem({
+  item,
+  accent,
+  onPress,
+}: PromoCardItemProps) {
+  const [isHovered, setIsHovered] = useState(false)
+
+  return (
+    <MarketplaceCard
+      onPress={onPress}
+      onHoverIn={() => setIsHovered(true)}
+      onHoverOut={() => setIsHovered(false)}
+      accessibilityLabel={`Ver ${item.titulo}`}
+      className="group hover:scale-[1.01] transition-all"
+      footer={
+        <View className="flex-row justify-between items-center">
+          <Text className="text-muted-foreground text-caption">Ver beneficio</Text>
+          <View className="flex-row items-center">
+            <Text style={{ color: accent.color }} className="text-caption">Aprovecha </Text>
+            <ArrowRight size={14} color={accent.color} />
+          </View>
+        </View>
+      }
+    >
+      {/* Image */}
+      <View className="relative aspect-video h-28 w-full overflow-hidden rounded-lg bg-vibe-niebla">
+        {item.imagenUrl ? (
+          <Image
+            source={{ uri: item.imagenUrl }}
+            style={{ flex: 1 }}
+            resizeMode="cover"
+          />
+        ) : (
+          <View className="flex-1 items-center justify-center">
+            <Text className="text-h1" style={{ color: accent.color }}>
+              {item.titulo.slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+        )}
+
+        {/* Discount badge */}
+        {item.descuentoTexto && (
+          <View className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: accent.color }}>
+            <Text className="text-caption font-inter-bold text-background">
+              {item.descuentoTexto}
+            </Text>
+          </View>
+        )}
+
+        {/* Exclusive badge */}
+        {item.esPrivadaMiembros && (
+          <View className="absolute right-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: accent.color }}>
+            <Text className="text-overline font-bold text-white">
+              Exclusiva
+            </Text>
+          </View>
+        )}
+
+        {/* Expiration badge */}
+        {item.diasRestantes != null && item.diasRestantes <= 7 && (
+          <View className="absolute right-1.5 bottom-1.5 rounded-full flex-row items-center gap-1 px-2 py-0.5 bg-destructive">
+            <Clock size={10} color="white" />
+            <Text className="text-overline font-bold text-white">
+              {item.diasRestantes === 0
+                ? 'Hoy'
+                : item.diasRestantes === 1
+                  ? '1 día'
+                  : `${item.diasRestantes} días`}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Company */}
+      <Text
+        className="mt-2 text-md text-muted-foreground"
+        numberOfLines={1}
+      >
+        {item.empresa.nombre}
+      </Text>
+
+      {/* Title */}
+      <Text
+        className="mt-0.5 text-label-md text-foreground"
+        style={isHovered ? { color: accent.color } : undefined}
+        numberOfLines={2}
+      >
+        {item.titulo}
+      </Text>
+
+      {/* Price */}
+      {item.precioTexto && (
+        <View className="mt-1.5 flex-row items-baseline gap-1">
+          <Text className="text-h4 font-inter-bold text-foreground">
+            {item.precioTexto}
+          </Text>
+        </View>
+      )}
+    </MarketplaceCard>
+  )
+}
+
 export function VibePromocionesNovedades({
   promociones,
 }: {
@@ -59,6 +166,7 @@ export function VibePromocionesNovedades({
   const router = useRouter()
   const { accent } = useInicioAccent()
   const [activeTab, setActiveTab] = useState<TabKey>('paraTi')
+  const [hoveredTab, setHoveredTab] = useState<TabKey | null>(null)
 
   if (promociones.total === 0) return null
 
@@ -88,26 +196,27 @@ export function VibePromocionesNovedades({
         {TABS.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.key
+          const isTabHovered = hoveredTab === tab.key && !isActive
           const count = promociones[tab.key].length
 
           if (count === 0) return null
 
           const content = (
             <>
-              <Icon size={14} className={`${isActive ? 'text-white' : 'text-foreground/60'}`} />
+              <Icon size={14} color={isActive ? 'white' : isTabHovered ? accent.color : 'rgb(17 24 39 / 0.6)'} />
               <Text
-                className={`text-label-sm font-inter-bold ${isActive ? 'text-white' : 'text-foreground/60'
-                  }`}
+                className={`text-label-sm font-inter-bold ${isActive ? 'text-white' : 'text-foreground/60'}`}
+                style={isTabHovered ? { color: accent.color } : undefined}
               >
                 {tab.label}
               </Text>
               <View
                 className={`rounded-full px-1.5 ${isActive ? 'bg-white/20' : 'bg-vibe-niebla'}`}
-                style={{ backgroundColor: isActive ? 'rgba(255, 255, 255, 0.2)' : accent.color + '33' }} // 33 = 20% opacity
+                style={{ backgroundColor: isActive ? 'rgba(255, 255, 255, 0.2)' : isTabHovered ? accent.color + '22' : accent.color + '33' }}
               >
                 <Text
-                  className={`text-caption font-inter-semibold ${isActive ? 'text-white/80' : 'text-muted-foreground'
-                    }`}
+                  className={`text-caption font-inter-semibold ${isActive ? 'text-white/80' : 'text-muted-foreground'}`}
+                  style={isTabHovered ? { color: accent.color } : undefined}
                 >
                   {count}
                 </Text>
@@ -116,10 +225,11 @@ export function VibePromocionesNovedades({
           )
 
           return (
-            <TouchableOpacity
+            <Pressable
               key={tab.key}
               onPress={() => setActiveTab(tab.key)}
-              activeOpacity={0.8}
+              onHoverIn={() => setHoveredTab(tab.key)}
+              onHoverOut={() => setHoveredTab(null)}
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
               className="rounded-full"
@@ -147,11 +257,14 @@ export function VibePromocionesNovedades({
                   {content}
                 </LinearGradient>
               ) : (
-                <View className="flex-row items-center gap-1.5 rounded-full px-4 py-1 border border-vibe-borde bg-card">
+                <View
+                  className="flex-row items-center gap-1.5 rounded-full px-4 py-1 border transition border-vibe-borde bg-card"
+                  style={isTabHovered ? { borderColor: accent.color } : undefined}
+                >
                   {content}
                 </View>
               )}
-            </TouchableOpacity>
+            </Pressable>
           )
         })}
       </HorizontalScrollWithFade>
@@ -159,85 +272,12 @@ export function VibePromocionesNovedades({
       {/* Items grid */}
       <HorizontalScrollWithFade className="mt-3" contentContainerStyle={{ gap: 12 }}>
         {items.slice(0, 6).map((item) => (
-          <MarketplaceCard
+          <PromoCardItem
             key={item.id}
+            item={item}
+            accent={accent}
             onPress={() => router.push(rnHref(item.href) as any)}
-            accessibilityLabel={`Ver ${item.titulo}`}
-          >
-            {/* Image */}
-            <View className="relative aspect-video h-28 w-full overflow-hidden rounded-lg bg-vibe-niebla">
-              {item.imagenUrl ? (
-                <Image
-                  source={{ uri: item.imagenUrl }}
-                  style={{ flex: 1 }}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View className="flex-1 items-center justify-center">
-                  <Text className="text-h1" style={{ color: accent.color }}>
-                    {item.titulo.slice(0, 1).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-
-              {/* Discount badge */}
-              {item.descuentoTexto && (
-                <View className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: accent.color }}>
-                  <Text className="text-caption font-inter-bold text-background">
-                    {item.descuentoTexto}
-                  </Text>
-                </View>
-              )}
-
-              {/* Exclusive badge */}
-              {item.esPrivadaMiembros && (
-                <View className="absolute right-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: accent.color }}>
-                  <Text className="text-overline font-bold text-white">
-                    Exclusiva
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Title */}
-            <Text
-              className="mt-2 text-label-md font-inter-bold text-foreground"
-              numberOfLines={2}
-            >
-              {item.titulo}
-            </Text>
-
-            {/* Company */}
-            <Text
-              className="mt-0.5 text-caption text-muted-foreground"
-              numberOfLines={1}
-            >
-              {item.empresa.nombre}
-            </Text>
-
-            {/* Price */}
-            {item.precioTexto && (
-              <View className="mt-1.5 flex-row items-baseline gap-1">
-                <Text className="text-h4 font-inter-bold text-foreground">
-                  {item.precioTexto}
-                </Text>
-              </View>
-            )}
-
-            {/* Days remaining */}
-            {item.diasRestantes != null && item.diasRestantes <= 7 && (
-              <View className="mt-1.5 flex-row items-center gap-1">
-                <Clock size={10} color={colors.state.danger} />
-                <Text className="text-caption font-inter-semibold text-destructive">
-                  {item.diasRestantes === 0
-                    ? 'Hoy'
-                    : item.diasRestantes === 1
-                      ? '1 día'
-                      : `${item.diasRestantes} días`}
-                </Text>
-              </View>
-            )}
-          </MarketplaceCard>
+          />
         ))}
       </HorizontalScrollWithFade>
     </View>

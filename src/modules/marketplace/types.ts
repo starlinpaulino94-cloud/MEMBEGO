@@ -119,6 +119,7 @@ export interface MarketplaceFilters {
   featured?: boolean
   limit?: number
   offset?: number
+  sortBy?: 'rating' | 'recent' | 'name'
 }
 
 export interface PromotionFilters {

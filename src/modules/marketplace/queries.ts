@@ -26,6 +26,7 @@ export async function getCompaniesPublic(filters: MarketplaceFilters = {}): Prom
     featured,
     limit = 50,
     offset = 0,
+    sortBy,
   } = filters
 
   try {
@@ -98,7 +99,15 @@ export async function getCompaniesPublic(filters: MarketplaceFilters = {}): Prom
         },
         orderBy: [
           { isFeatured: 'desc' },
-          { createdAt: 'desc' },
+          ...(sortBy === 'rating'
+            ? [
+                { averageRating: { sort: 'desc' as const, nulls: 'last' as const } },
+                { totalMembersCount: 'desc' as const },
+                { createdAt: 'desc' as const },
+              ]
+            : sortBy === 'name'
+              ? [{ name: 'asc' as const }]
+              : [{ createdAt: 'desc' as const }]),
         ],
         take: limit,
         skip: offset,

@@ -6,7 +6,7 @@ import { Clock, Timer, ChevronRight } from 'lucide-react-native'
 import { rnHref } from '../../lib/rutas'
 import { Card } from '../ui/Card'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
-import { useInicioAccent } from '../layout/InicioAccentContext'
+import { useInicioAccent, type InicioAccent } from '../layout/InicioAccentContext'
 
 function fechaCorta(d: string) {
   try {
@@ -53,6 +53,88 @@ function VibeCountdown({ hasta, accentColor }: { hasta: string; accentColor: str
   return <Text className="text-overline font-inter-bold tracking-tight" style={{ color: accentColor }}>{timeLeft}</Text>
 }
 
+export interface RelampagoCardItemProps {
+  promo: any
+  accent: InicioAccent
+  onPress: () => void
+}
+
+export function RelampagoCardItem({ promo, accent, onPress }: RelampagoCardItemProps) {
+  const [isHovered, setIsHovered] = useState(false)
+
+  return (
+    <MarketplaceCard
+      variant="horizontal"
+      onPress={onPress}
+      onHoverIn={() => setIsHovered(true)}
+      onHoverOut={() => setIsHovered(false)}
+      accessibilityLabel={`Ver ${promo.titulo}`}
+      className="group hover:scale-[1.01] transition-all"
+    >
+      <View className="relative h-28 w-28 overflow-hidden rounded-lg bg-vibe-niebla">
+        {promo.imagen ? (
+          <Image source={{ uri: promo.imagen }} style={{ flex: 1 }} resizeMode="cover" />
+        ) : (
+          <View className="flex-1 items-center justify-center">
+            <Text className="text-4xl font-inter-bold" style={{ color: accent.color }}>
+              {promo.titulo.slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        {promo.descuento ? (
+          <LinearGradient
+            colors={accent.gradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            className="absolute bottom-1 left-1 rounded px-1.5 py-0.5"
+          >
+            <Text className="text-overline font-inter-bold text-white">{promo.descuento}</Text>
+          </LinearGradient>
+        ) : null}
+      </View>
+
+      <View className="flex-1 justify-between py-1 pr-1">
+        <View>
+          <View className="flex-row items-center gap-1">
+            <Clock size={14} color={accent.color} />
+            <Text className="text-overline font-inter-medium text-muted-foreground">
+              Hasta el {fechaCorta(promo.hasta)}
+            </Text>
+          </View>
+          <Text
+            className="text-h4 text-foreground mt-1"
+            style={isHovered ? { color: accent.color } : undefined}
+            numberOfLines={2}
+          >
+            {promo.titulo}
+          </Text>
+          <Text className="text-small text-muted-foreground mt-0.5" numberOfLines={1}>
+            {promo.empresa}
+          </Text>
+        </View>
+
+        <View className="mt-2 flex-row items-end justify-between">
+          {promo.precio ? (
+            <Text className="text-price-sm font-inter-bold" style={{ color: accent.color }}>
+              {promo.precio}
+            </Text>
+          ) : (
+            <View />
+          )}
+          <LinearGradient
+            colors={accent.gradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            className="rounded-full px-3 min-h-11 justify-center"
+          >
+            <Text className="text-overline font-inter-bold text-white">Canjear</Text>
+          </LinearGradient>
+        </View>
+      </View>
+    </MarketplaceCard>
+  )
+}
+
 export function VibeRelampago({ relampago }: { relampago: any }) {
   const router = useRouter()
   const { accent } = useInicioAccent()
@@ -81,70 +163,13 @@ export function VibeRelampago({ relampago }: { relampago: any }) {
         </View>
 
         <View className="gap-3">
-          {relampago.promos.map((p: any, i: number) => (
-            <MarketplaceCard
-              variant="horizontal"
+          {relampago.promos.map((p: any) => (
+            <RelampagoCardItem
               key={p.id}
+              promo={p}
+              accent={accent}
               onPress={() => router.push(rnHref(p.href) as any)}
-              accessibilityLabel={`Ver ${p.titulo}`}
-            >
-                <View className="relative h-28 w-28 overflow-hidden rounded-lg bg-vibe-niebla">
-                  {p.imagen ? (
-                    <Image source={{ uri: p.imagen }} style={{ flex: 1 }} resizeMode="cover" />
-                  ) : (
-                    <View className="flex-1 items-center justify-center">
-                      <Text className="text-4xl font-inter-bold" style={{ color: accent.color }}>
-                        {p.titulo.slice(0, 1).toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-                  {p.descuento ? (
-                    <LinearGradient
-                      colors={accent.gradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      className="absolute bottom-1 left-1 rounded px-1.5 py-0.5"
-                    >
-                      <Text className="text-overline font-inter-bold text-white">{p.descuento}</Text>
-                    </LinearGradient>
-                  ) : null}
-                </View>
-
-                <View className="flex-1 justify-between py-1 pr-1">
-                  <View>
-                    <View className="flex-row items-center gap-1">
-                      <Clock size={14} color={accent.color} />
-                      <Text className="text-overline font-inter-medium text-muted-foreground">
-                        Hasta el {fechaCorta(p.hasta)}
-                      </Text>
-                    </View>
-                    <Text className="text-h4 text-foreground mt-1" numberOfLines={2}>
-                      {p.titulo}
-                    </Text>
-                    <Text className="text-small text-muted-foreground mt-0.5" numberOfLines={1}>
-                      {p.empresa}
-                    </Text>
-                  </View>
-                  
-                  <View className="mt-2 flex-row items-end justify-between">
-                    {p.precio ? (
-                      <Text className="text-price-sm font-inter-bold" style={{ color: accent.color }}>
-                        {p.precio}
-                      </Text>
-                    ) : (
-                      <View />
-                    )}
-                    <LinearGradient
-                      colors={accent.gradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      className="rounded-full px-3 min-h-11 justify-center"
-                    >
-                      <Text className="text-overline font-inter-bold text-white">Canjear</Text>
-                    </LinearGradient>
-                  </View>
-                </View>
-            </MarketplaceCard>
+            />
           ))}
         </View>
       </Card>

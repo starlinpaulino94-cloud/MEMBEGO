@@ -122,7 +122,47 @@ export interface EmpresaScrollItem {
   readonly esMia: boolean
   readonly esFavorita?: boolean
   readonly etiquetaRelacion: string | null
+  readonly esNueva?: boolean
+  readonly creadoEn?: string | null
 }
+
+export type NovedadHero =
+  | {
+    readonly tipo: 'PROMOCION'
+    readonly id: string
+    readonly creadoEn: string
+    readonly titulo: string
+    readonly descripcion: string | null
+    readonly empresa: string
+    readonly imagen: string | null
+    readonly href: string
+    readonly descuento: string | null
+    readonly vigenciaHasta: string | null
+  }
+  | {
+    readonly tipo: 'MEMBRESIA'
+    readonly id: string
+    readonly creadoEn: string
+    readonly titulo: string
+    readonly descripcion: string | null
+    readonly empresa: string
+    readonly imagen: string | null
+    readonly href: string
+    readonly precio: string
+    readonly periodo: string
+  }
+  | {
+    readonly tipo: 'EMPRESA'
+    readonly id: string
+    readonly creadoEn: string
+    readonly titulo: string
+    readonly descripcion: string | null
+    readonly empresa: string
+    readonly imagen: string | null
+    readonly href: string
+    readonly ciudad: string | null
+    readonly valoracion: number | null
+  }
 
 export interface PromoNovedadItem {
   readonly id: string
@@ -162,6 +202,7 @@ export interface InicioVista {
   readonly categoriaActiva?: string | null
   readonly bloques: readonly TipoBloque[]
   readonly heroes: readonly HeroInicio[]
+  readonly novedadesHero: readonly NovedadHero[]
   readonly categorias: readonly CategoriaInicio[]
   readonly empresas: readonly EmpresaInicio[]
   /** Total de empresas publicadas, para «Explorar más de N empresas». */
