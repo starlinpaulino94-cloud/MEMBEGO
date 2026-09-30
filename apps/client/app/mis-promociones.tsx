@@ -1,4 +1,5 @@
 import React from 'react'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -144,7 +145,7 @@ function Seccion({
 
 /* ── Screen ─────────────────────────────────────────────────────────── */
 
-export default function MisPromocionesScreen() {
+function MisPromocionesScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -153,7 +154,7 @@ export default function MisPromocionesScreen() {
   /* ── Auth gate ────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
+      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
         <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/20 mb-4">
           <Sparkles size={32} color="#0284c7" />
         </View>
@@ -177,10 +178,10 @@ export default function MisPromocionesScreen() {
   const pendientes = compras.filter((c) => PENDIENTES.includes(c.estado))
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-vibe-fondo">
       {/* ── Back bar ─────────────────────────────────────────────────── */}
       <View
-        className="flex-row items-center gap-2 bg-background border-b border-border"
+        className="flex-row items-center gap-2 bg-vibe-fondo border-b border-border"
         style={{
           paddingLeft: insets.left + 16,
           paddingRight: 16,
@@ -299,5 +300,13 @@ export default function MisPromocionesScreen() {
         )}
       </ScrollView>
     </View>
+  )
+}
+
+export default function MisPromocionesScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <MisPromocionesScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

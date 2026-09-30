@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -24,6 +25,7 @@ import {
 import { useAuth } from '../../src/lib/auth-context'
 import { usePromocion } from '../../src/hooks/usePromociones'
 import { SavePromoButton } from '../../src/components/cliente/SavePromoButton'
+import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 import { Button } from '../../src/components/ui/Button'
 import { EmptyState } from '../../src/components/ui/EmptyState'
 import { cn } from '../../src/lib/cn'
@@ -40,7 +42,7 @@ import type { PromotionPublic } from '../../src/lib/api'
  * expo-clipboard cuando se permita instalar dependencias.
  * ponytail: CTA de canje es visual (no hay endpoint BFF de canje). F4 candidate.
  */
-export default function PromocionDetalleScreen() {
+function PromocionDetalleScreenContent() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const insets = useSafeAreaInsets()
@@ -114,62 +116,74 @@ export default function PromocionDetalleScreen() {
   }
 
   const promotion = data.promotion
+  const codigo = promotion.codigo
   const guardada = (data as any).guardada ?? false
 
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Back button */}
-        <Pressable
-          onPress={() => goBackOr(router, '/(tabs)/beneficios')}
-          className="flex-row items-center px-4 py-3 active:opacity-70"
-          accessibilityRole="button"
-          accessibilityLabel="Volver a ofertas"
-        >
-          <ArrowLeft size={20} color="#71717a" />
-          <Text className="ml-2 text-sm text-muted-foreground">
-            Volver a ofertas
-          </Text>
-        </Pressable>
+        <DetailPageFrame>
+          <PromoHero
+            promotion={promotion}
+            onBack={() => goBackOr(router, '/(tabs)/beneficios')}
+          />
 
-        {/* Hero image */}
-        <PromoHero promotion={promotion} />
-
-        {/* Content */}
-        <View className="px-4 mt-4">
-          {/* Title + company */}
-          <Text className="text-h1 font-inter-bold text-foreground">
-            {promotion.titulo}
-          </Text>
-          <View className="flex-row items-center mt-2 gap-2">
-            <Store size={14} color="#71717a" />
-            <Text className="text-sm text-muted-foreground">
-              {promotion.company.name}
+          <View className="mt-4 px-4">
+            {/* Title + company */}
+            <Text className="text-h1 font-inter-bold text-foreground">
+              {promotion.titulo}
             </Text>
+            <View className="flex-row items-center mt-2 gap-2">
+              <Store size={14} color="#71717a" />
+              <Text className="text-sm text-muted-foreground">
+                {promotion.company.name}
+              </Text>
+            </View>
+
+            {/* Description */}
+            {promotion.descripcion ? (
+              <Text className="mt-4 text-base text-foreground leading-relaxed">
+                {promotion.descripcion}
+              </Text>
+            ) : null}
+
+            {/* Price + discount */}
+            <PrecioYDescuento promotion={promotion} />
+
+            {/* Tags */}
+            {promotion.tags.length > 0 ? (
+              <View className="mt-5 flex-row flex-wrap gap-2">
+                {promotion.tags.map((tag) => (
+                  <View
+                    key={tag}
+                    className="rounded-full bg-info/10 px-3 py-1"
+                  >
+                    <Text className="text-xs font-inter-medium text-info">
+                      {tag}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
           </View>
+        </DetailPageFrame>
+      </ScrollView>
 
-          {/* Description */}
-          {promotion.descripcion ? (
-            <Text className="mt-4 text-base text-foreground leading-relaxed">
-              {promotion.descripcion}
-            </Text>
-          ) : null}
-
-          {/* Price + discount */}
-          <PrecioYDescuento promotion={promotion} />
-
-          {/* Code (dashed, copiable) */}
-          {promotion.codigo ? (
-            <View className="mt-5">
-              <Text className="text-sm font-inter-semibold text-muted-foreground mb-2">
+      <View className="border-t border-border bg-background px-4 pt-3" style={{ paddingBottom: insets.bottom + 12 }}>
+        <DetailPageFrame className="gap-2 px-4">
+          {codigo ? (
+            <View>
+              <Text className="mb-1.5 text-sm font-inter-semibold text-muted-foreground">
                 Código de canje
               </Text>
               <Pressable
-                onPress={() => handleCopyCode(promotion.codigo!)}
-                className="flex-row items-center self-start rounded-lg border border-dashed border-border px-4 py-2.5 active:opacity-80"
+                onPress={() => handleCopyCode(codigo)}
+                className="w-full flex-row items-center justify-between rounded-2xl border border-dashed border-border bg-muted/50 px-4 py-3 active:opacity-80"
                 accessibilityRole="button"
                 accessibilityLabel="Copiar código"
               >
@@ -178,8 +192,8 @@ export default function PromocionDetalleScreen() {
                 ) : (
                   <Copy size={16} color="#71717a" />
                 )}
-                <Text className="ml-2 text-base font-inter-bold text-foreground">
-                  {promotion.codigo}
+                <Text className="ml-2 flex-1 text-base font-inter-bold text-foreground">
+                  {codigo}
                 </Text>
                 <Text className="ml-2 text-xs text-muted-foreground">
                   {copied ? 'Copiado' : 'Toca para copiar'}
@@ -187,75 +201,41 @@ export default function PromocionDetalleScreen() {
               </Pressable>
             </View>
           ) : null}
-
-          {/* Vigencia */}
           <Vigencia promotion={promotion} />
-
-          {/* Tags */}
-          {promotion.tags.length > 0 ? (
-            <View className="mt-5 flex-row flex-wrap gap-2">
-              {promotion.tags.map((tag) => (
-                <View
-                  key={tag}
-                  className="rounded-full bg-info/10 px-3 py-1"
-                >
-                  <Text className="text-xs font-inter-medium text-info">
-                    {tag}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {/* CTA de canje */}
-          <View className="mt-8 gap-3">
+          <Button
+            size="xl"
+            className="rounded-2xl"
+            onPress={() =>
+              Alert.alert(
+                'Canjear oferta',
+                'Muestra este código en el establecimiento para canjear tu oferta.',
+              )
+            }
+          >
+            <Tag size={18} color="#ffffff" />
+            <Text className="ml-2 text-base font-inter-bold text-primary-foreground">
+              Canjear oferta
+            </Text>
+          </Button>
+          <View className="flex-row gap-3">
             <Button
-              size="xl"
-              className="rounded-2xl"
-              onPress={() =>
-                Alert.alert(
-                  'Canjear oferta',
-                  'Muestra este código en el establecimiento para canjear tu oferta.',
-                )
-              }
+              variant="outline"
+              className="flex-1 rounded-2xl"
+              onPress={() => Alert.alert('Compartir', 'Función próximamente disponible.')}
             >
-              <Tag size={18} color="#ffffff" />
-              <Text className="ml-2 text-base font-inter-bold text-primary-foreground">
-                Canjear oferta
-              </Text>
+              <Share2 size={16} color="#5b21b6" />
+              <Text className="ml-2 text-sm font-inter-semibold text-primary">Compartir</Text>
             </Button>
-
-            {/* Share + Save row */}
-            <View className="flex-row gap-3">
-              <Button
-                variant="outline"
-                className="flex-1 rounded-2xl"
-                onPress={() =>
-                  Alert.alert('Compartir', 'Función próximamente disponible.')
-                }
-              >
-                <Share2 size={16} color="#0284c7" />
-                <Text className="ml-2 text-sm font-inter-semibold text-primary">
-                  Compartir
-                </Text>
-              </Button>
-              <View className="flex-1 relative">
-                <Button
-                  variant="outline"
-                  className="rounded-2xl"
-                  onPress={() =>
-                    Alert.alert('Guardar', 'Función próximamente disponible.')
-                  }
-                >
-                  <Text className="text-sm font-inter-semibold text-foreground">
-                    Guardar
-                  </Text>
-                </Button>
-              </View>
-            </View>
+            <Button
+              variant="outline"
+              className="flex-1 rounded-2xl"
+              onPress={() => Alert.alert('Guardar', 'Función próximamente disponible.')}
+            >
+              <Text className="text-sm font-inter-semibold text-foreground">Guardar</Text>
+            </Button>
           </View>
-        </View>
-      </ScrollView>
+        </DetailPageFrame>
+      </View>
     </View>
   )
 
@@ -268,9 +248,17 @@ export default function PromocionDetalleScreen() {
   }
 }
 
+export default function PromocionDetalleScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <PromocionDetalleScreenContent />
+    </ResponsiveDetailSheet>
+  )
+}
+
 /* ── Sub-componentes ─────────────────────────────────────────────────────── */
 
-function PromoHero({ promotion }: { promotion: PromotionPublic }) {
+function PromoHero({ promotion, onBack }: { promotion: PromotionPublic; onBack: () => void }) {
   const isExpired =
     promotion.vigenciaHasta != null &&
     new Date(promotion.vigenciaHasta) < new Date()
@@ -302,8 +290,15 @@ function PromoHero({ promotion }: { promotion: PromotionPublic }) {
         </View>
       ) : null}
 
-      {/* Save button overlay */}
-      <View className="absolute right-4 top-4">
+      <View className="absolute left-4 right-4 top-4 flex-row items-center justify-between">
+        <Pressable
+          onPress={onBack}
+          className="size-11 items-center justify-center rounded-full bg-card"
+          accessibilityRole="button"
+          accessibilityLabel="Volver a ofertas"
+        >
+          <ArrowLeft size={21} color="#71717a" />
+        </Pressable>
         <SavePromoButton promocionId={promotion.id} />
       </View>
 
@@ -356,7 +351,7 @@ function Vigencia({ promotion }: { promotion: PromotionPublic }) {
     promotion.vigenciaHasta != null &&
     new Date(promotion.vigenciaHasta) > ahora &&
     new Date(promotion.vigenciaHasta).getTime() - ahora.getTime() <
-      72 * 60 * 60 * 1000
+    72 * 60 * 60 * 1000
 
   if (!promotion.vigenciaHasta) return null
 

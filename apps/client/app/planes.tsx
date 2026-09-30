@@ -5,6 +5,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Image,
   useWindowDimensions,
 } from 'react-native'
 import { useRouter } from 'expo-router'
@@ -32,6 +33,7 @@ import { Skeleton } from '../src/components/ui/Skeleton'
 import { colors } from '../src/theme/tokens'
 import type {
   PlanPublic,
+  PlanGlobalItem,
   PlanEmpresaItem,
   PlanesResponse,
 } from '../src/lib/api'
@@ -65,11 +67,13 @@ export function PlanCard({
   destacado,
   onPress,
   className,
+  mostrarNegocio = true,
 }: {
-  plan: PlanPublic | PlanEmpresaItem
+  plan: PlanPublic | PlanGlobalItem | PlanEmpresaItem
   destacado: boolean
   onPress: () => void
   className?: string
+  mostrarNegocio?: boolean
 }) {
   const { base, variante } = parseNombre(plan.nombre)
   const precioPorUso =
@@ -80,116 +84,135 @@ export function PlanCard({
   return (
     <Card
       className={cn(
-        'p-5',
+        'p-5 flex-col justify-between',
         className,
-        destacado && 'border-primary bg-primary/[0.02]',
+        destacado && 'border-2 border-primary bg-primary/[0.02]',
       )}
     >
-      {/* Badge "Recomendado" para el destacado */}
-      {destacado && (
-        <View className="mb-3 self-start">
-          <Badge variant="default">
-            <Sparkles size={12} color="#ffffff" />
-            <Text className="ml-1 text-xs font-inter-semibold text-primary-foreground">
-              Recomendado
-            </Text>
-          </Badge>
-        </View>
-      )}
+      <View>
 
-      {/* Nombre + variante */}
-      <View className="flex-row flex-wrap items-center gap-2">
-        <Text className="text-h3 font-inter-bold text-foreground">{base}</Text>
-        {variante && (
-          <Badge variant="secondary">{variante}</Badge>
-        )}
-        {plan.esIlimitado && (
-          <Badge variant="secondary">Ilimitado</Badge>
-        )}
-      </View>
-
-      {/* Precio */}
-      <View className="mt-3 items-baseline flex-row gap-1.5">
-        <Text className="text-h1 font-inter-extrabold tabular-nums text-foreground">
-          {formatMoney(plan.precio)}
-        </Text>
-        <Text className="text-small font-inter-medium text-muted-foreground">
-          /mes
-        </Text>
-      </View>
-      {precioPorUso != null && (
-        <Text className="mt-1 text-caption text-muted-foreground">
-          Equivale a {formatMoney(precioPorUso)} por uso
-        </Text>
-      )}
-
-      {/* Usos + vigencia */}
-      <View className="mt-4 flex-row gap-3 rounded-xl bg-retail-mist p-3">
-        <View className="flex-1 flex-row items-center gap-2.5">
-          <View className="h-8 w-8 items-center justify-center rounded-lg bg-card">
-            <Zap size={16} color="#0284c7" />
-          </View>
-          <View>
-            <Text className="text-small font-inter-bold text-foreground">
-              {plan.esIlimitado ? 'Ilimitados' : plan.lavadosIncluidos ?? '—'}
-            </Text>
-            <Text className="text-caption text-muted-foreground">
-              usos incluidos
-            </Text>
-          </View>
-        </View>
-        <View className="flex-1 flex-row items-center gap-2.5">
-          <View className="h-8 w-8 items-center justify-center rounded-lg bg-card">
-            <Calendar size={16} color="#0284c7" />
-          </View>
-          <View>
-            <Text className="text-small font-inter-bold text-foreground">
-              {plan.vigenciaDias} días
-            </Text>
-            <Text className="text-caption text-muted-foreground">
-              de vigencia
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Descripción */}
-      {plan.descripcion && (
-        <Text className="mt-4 text-small leading-relaxed text-foreground/75">
-          {plan.descripcion}
-        </Text>
-      )}
-
-      {/* Beneficios */}
-      {plan.beneficios && plan.beneficios.length > 0 && (
-        <View className="mt-4">
-          <Text className="mb-2 text-overline font-inter-semibold text-muted-foreground">
-            BENEFICIOS
-          </Text>
-          {plan.beneficios.map((b) => (
-            <View key={b} className="mb-2 flex-row items-start gap-2.5">
-              <View className="mt-0.5">
-                <Check size={16} color="#00864d" />
+        {mostrarNegocio && 'company' in plan && (
+          <View className="mb-3 flex-row items-center gap-2">
+            {plan.company.logoUrl ? (
+              <Image
+                source={{ uri: plan.company.logoUrl }}
+                accessibilityLabel={`Logo de ${plan.company.name}`}
+                className="h-7 w-7 rounded-full"
+              />
+            ) : (
+              <View className="h-7 w-7 items-center justify-center rounded-full bg-primary/10">
+                <Store size={14} color={colors.primary.DEFAULT} />
               </View>
-              <Text className="flex-1 text-small leading-relaxed text-foreground/80">
-                {b}
+            )}
+            <Text className="text-small font-inter-semibold text-muted-foreground">
+              {plan.company.name}
+            </Text>
+          </View>
+        )}
+
+        {/* Badge "Recomendado" para el destacado */}
+        {destacado && (
+          <View className="mb-3 self-start">
+            <Badge variant="default" className="flex-row border-primary bg-primary">
+              Recomendado
+            </Badge>
+          </View>
+        )}
+
+        {/* Nombre + variante */}
+        <View className="flex-row flex-wrap items-center gap-2">
+          <Text className="text-h3 font-inter-bold text-foreground">{base}</Text>
+          {variante && (
+            <Badge variant="secondary">{variante}</Badge>
+          )}
+          {plan.esIlimitado && (
+            <Badge variant="secondary">Ilimitado</Badge>
+          )}
+        </View>
+
+        {/* Precio */}
+        <View className="mt-3 items-baseline flex-row gap-1.5">
+          <Text className="text-h1 font-inter-extrabold tabular-nums text-foreground">
+            {formatMoney(plan.precio)}
+          </Text>
+          <Text className="text-small font-inter-medium text-muted-foreground">
+            /mes
+          </Text>
+        </View>
+        {precioPorUso != null && (
+          <Text className="mt-1 text-caption text-muted-foreground">
+            Equivale a {formatMoney(precioPorUso)} por uso
+          </Text>
+        )}
+
+        {/* Usos + vigencia */}
+        <View className="mt-4 flex-row gap-3 rounded-xl bg-retail-mist p-3">
+          <View className="flex-1 flex-row items-center gap-2.5">
+            <View className="h-8 w-8 items-center justify-center rounded-lg bg-card">
+              <Zap size={16} color="#0284c7" />
+            </View>
+            <View>
+              <Text className="text-small font-inter-bold text-foreground">
+                {plan.esIlimitado ? 'Ilimitados' : plan.lavadosIncluidos ?? '—'}
+              </Text>
+              <Text className="text-caption text-muted-foreground">
+                usos incluidos
               </Text>
             </View>
-          ))}
+          </View>
+          <View className="flex-1 flex-row items-center gap-2.5">
+            <View className="h-8 w-8 items-center justify-center rounded-lg bg-card">
+              <Calendar size={16} color="#0284c7" />
+            </View>
+            <View>
+              <Text className="text-small font-inter-bold text-foreground">
+                {plan.vigenciaDias} días
+              </Text>
+              <Text className="text-caption text-muted-foreground">
+                de vigencia
+              </Text>
+            </View>
+          </View>
         </View>
-      )}
 
-      {/* Condiciones (solo modo empresa) */}
-      {'condiciones' in plan && plan.condiciones && (
-        <View className="mt-4">
-          <Text className="mb-1 text-overline font-inter-semibold text-muted-foreground">
-            CONDICIONES
+        {/* Descripción */}
+        {plan.descripcion && (
+          <Text className="mt-4 text-small leading-relaxed text-foreground/75">
+            {plan.descripcion}
           </Text>
-          <Text className="text-caption leading-relaxed text-muted-foreground">
-            {plan.condiciones}
-          </Text>
-        </View>
-      )}
+        )}
+
+        {/* Beneficios */}
+        {plan.beneficios && plan.beneficios.length > 0 && (
+          <View className="mt-4">
+            <Text className="mb-2 text-overline font-inter-semibold text-muted-foreground">
+              BENEFICIOS
+            </Text>
+            {plan.beneficios.map((b) => (
+              <View key={b} className="mb-2 flex-row items-start gap-2.5">
+                <View className="mt-0.5">
+                  <Check size={16} color="#00864d" />
+                </View>
+                <Text className="flex-1 text-small leading-relaxed text-foreground/80">
+                  {b}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Condiciones (solo modo empresa) */}
+        {'condiciones' in plan && plan.condiciones && (
+          <View className="mt-4">
+            <Text className="mb-1 text-overline font-inter-semibold text-muted-foreground">
+              CONDICIONES
+            </Text>
+            <Text className="text-caption leading-relaxed text-muted-foreground">
+              {plan.condiciones}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {/* CTA */}
       <View className="mt-5">
@@ -231,8 +254,12 @@ export default function PlanesScreen() {
   const router = useRouter()
   const { width } = useWindowDimensions()
   const { isAuthenticated } = useAuth()
-  const { data, isLoading, isError, refetch } = usePlanes(undefined, isAuthenticated)
+  const { data, isLoading, isError, refetch } = usePlanes(
+    { todos: 1 },
+    isAuthenticated,
+  )
   const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [planesSeleccionados, setPlanesSeleccionados] = useState<Record<string, string>>({})
   const isDesktop = width >= 1024
   const isTablet = width >= 768 && width < 1024
   const isPlanGrid = isTablet || isDesktop
@@ -258,6 +285,9 @@ export default function PlanesScreen() {
   }
 
   const planes = getPlanesFromResponse(data)
+  const gruposDeNegocios = data?.modo === 'global'
+    ? agruparPlanesPorNegocio(data.planes)
+    : []
   const destacadoIdx = planes.length > 1 ? 1 : 0
   const activePlanId = planes.some((plan) => plan.id === selectedPlanId)
     ? selectedPlanId
@@ -277,18 +307,18 @@ export default function PlanesScreen() {
         <View className="mb-6">
           <View className="flex-row flex-wrap items-center justify-between gap-2">
             <Text className="min-w-0 flex-1 text-overline font-inter-semibold text-primary">
-              {context ? `Membresías · ${context.empresaNombre}` : 'Membresías'}
+              Membresías · Todos los negocios
             </Text>
+            <Pressable
+              onPress={() => router.push('/mis-membresias')}
+              className="min-h-10 flex-row items-center rounded-full px-2 active:bg-muted"
+              accessibilityRole="button"
+            >
+              <Store size={15} color={colors.surface.mutedForeground} />
+              <Text className="ml-1 text-caption text-muted-foreground">Mis membresías</Text>
+            </Pressable>
             {context && (
               <View className="flex-row items-center gap-1">
-                <Pressable
-                  onPress={() => router.push('/planes?todos=1')}
-                  className="min-h-10 flex-row items-center rounded-full px-2 active:bg-muted"
-                  accessibilityRole="button"
-                >
-                  <Store size={15} color={colors.surface.mutedForeground} />
-                  <Text className="ml-1 text-caption text-muted-foreground">Otros negocios</Text>
-                </Pressable>
                 <Pressable
                   onPress={() => router.push('/mis-membresias')}
                   className="min-h-10 flex-row items-center rounded-full px-2 active:bg-muted"
@@ -301,10 +331,10 @@ export default function PlanesScreen() {
             )}
           </View>
           <Text className="mt-2 text-h2 font-inter-bold text-foreground">
-            {context?.nombre ? `Hola ${context.nombre.split(' ')[0]}, elige tu plan ideal` : 'Elige tu plan ideal'}
+            Planes para cada negocio
           </Text>
           <Text className="mt-1.5 text-small leading-relaxed text-muted-foreground">
-            Paga menos por lo que ya haces. Aquí tienes cada plan con todos sus detalles para decidir con calma.
+            Compara las opciones disponibles y encuentra los planes de cada negocio.
           </Text>
         </View>
 
@@ -400,7 +430,140 @@ export default function PlanesScreen() {
         )}
 
         {/* ── Lista de planes ────────────────────────────────────────── */}
-        {!isLoading && !isError && planes.length > 0 && (
+        {!isLoading && !isError && data?.modo === 'global' && gruposDeNegocios.length > 0 && (
+          <View className="gap-6">
+            {gruposDeNegocios.map(({ company, planes: planesDelNegocio }) => {
+              const planSeleccionado = planesDelNegocio.find(
+                (plan) => plan.id === planesSeleccionados[company.id],
+              ) ?? planesDelNegocio[0]
+              const indiceSeleccionado = planesDelNegocio.findIndex(
+                (plan) => plan.id === planSeleccionado.id,
+              )
+
+              return (
+                <View key={company.id} className="gap-3">
+                  <Card className="flex-row items-center gap-3 border-border bg-card p-4">
+                    {company.logoUrl ? (
+                      <Image
+                        source={{ uri: company.logoUrl }}
+                        accessibilityLabel={`Logo de ${company.name}`}
+                        className="h-12 w-12 rounded-xl bg-muted"
+                      />
+                    ) : (
+                      <View className="h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                        <Store size={22} color={colors.primary.DEFAULT} />
+                      </View>
+                    )}
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-h3 font-inter-bold text-foreground" numberOfLines={1}>
+                        {company.name}
+                      </Text>
+                      <Text className="mt-0.5 text-caption text-muted-foreground" numberOfLines={1}>
+                        {company.ciudad ? `${company.ciudad} · ` : ''}
+                        {planesDelNegocio.length} {planesDelNegocio.length === 1 ? 'plan' : 'planes'}
+                      </Text>
+                    </View>
+                  </Card>
+
+                  {isPlanGrid ? (
+                    <View
+                      className="gap-4"
+                      style={{
+                        flexDirection: 'row',
+                        flexWrap: 'wrap',
+                        alignItems: 'stretch',
+                      }}
+                    >
+                      {planesDelNegocio.map((plan, index) => (
+                        <View
+                          key={plan.id}
+                          className="flex"
+                          style={{
+                            width: isDesktop ? '32%' : '48%',
+                            minWidth: 0,
+                            flexGrow: 0,
+                            flexShrink: 0,
+                          }}
+                        >
+                          <PlanCard
+                            plan={plan}
+                            destacado={index === (planesDelNegocio.length > 1 ? 1 : 0)}
+                            mostrarNegocio={false}
+                            onPress={() => router.push(`/planes/${plan.id}`)}
+                            className="flex-1"
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <View className="gap-3">
+                      {planesDelNegocio.length > 1 && (
+                        <View className="rounded-xl bg-retail-mist p-1.5">
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={{ width: '100%' }}
+                            contentContainerStyle={{ gap: 6, flexGrow: 1 }}
+                            accessibilityRole="radiogroup"
+                            accessibilityLabel={`Planes de ${company.name}`}
+                          >
+                            {planesDelNegocio.map((plan) => {
+                              const seleccionado = plan.id === planSeleccionado.id
+                              const { base, variante } = parseNombre(plan.nombre)
+
+                              return (
+                                <Pressable key={plan.id} style={{ flexGrow: 1 }}
+                                  onPress={() => setPlanesSeleccionados((actuales) => ({
+                                    ...actuales,
+                                    [company.id]: plan.id,
+                                  }))}
+                                  className={cn(
+                                    'min-h-11 flex-row items-center justify-center rounded-lg px-4',
+                                    seleccionado && 'bg-card',
+                                  )}
+                                  accessibilityRole="radio"
+                                  accessibilityLabel={`${plan.nombre}, ${formatMoney(plan.precio)}`}
+                                  accessibilityState={{ checked: seleccionado }}
+                                >
+                                  <Text
+                                    className={cn(
+                                      'text-label-lg font-inter-semibold',
+                                      seleccionado ? 'text-foreground' : 'text-muted-foreground',
+                                    )}
+                                    numberOfLines={1}
+                                  >
+                                    {variante ?? base}
+                                  </Text>
+                                </Pressable>
+                              )
+                            })}
+                          </ScrollView>
+                        </View>
+                      )}
+
+                      <PlanCard
+                        plan={planSeleccionado}
+                        destacado={indiceSeleccionado === (planesDelNegocio.length > 1 ? 1 : 0)}
+                        mostrarNegocio={false}
+                        onPress={() => router.push(`/planes/${planSeleccionado.id}`)}
+                      />
+                    </View>
+                  )}
+                </View>
+              )
+            })}
+
+            <View className="mt-2 items-center gap-2">
+              <View className="flex-row flex-wrap items-center justify-center gap-x-6 gap-y-2">
+                <TrustItem text="Pago verificado por el equipo" />
+                <TrustItem text="Tu QR se activa al aprobarse" />
+                <TrustItem text="Sin contratos ni permanencia" />
+              </View>
+            </View>
+          </View>
+        )}
+
+        {!isLoading && !isError && data?.modo === 'empresa' && planes.length > 0 && (
           <View>
             {planes.length > 1 && !isPlanGrid && (
               <View className="mb-5 flex-row gap-1.5 rounded-xl bg-retail-mist p-1.5">
@@ -431,10 +594,10 @@ export default function PlanesScreen() {
                 className="gap-5"
                 style={isPlanGrid
                   ? {
-                      flexDirection: 'row',
-                      flexWrap: isTablet ? 'wrap' : 'nowrap',
-                      alignItems: 'stretch',
-                    }
+                    flexDirection: 'row',
+                    flexWrap: isTablet ? 'wrap' : 'nowrap',
+                    alignItems: 'stretch',
+                  }
                   : undefined}
               >
                 {planes.map((plan, idx) => {
@@ -446,11 +609,11 @@ export default function PlanesScreen() {
                       className={visible ? 'flex' : 'hidden'}
                       style={isPlanGrid
                         ? {
-                            width: isDesktop ? '32%' : '48%',
-                            minWidth: 0,
-                            flexGrow: 0,
-                            flexShrink: 0,
-                          }
+                          width: isDesktop ? '32%' : '48%',
+                          minWidth: 0,
+                          flexGrow: 0,
+                          flexShrink: 0,
+                        }
                         : undefined}
                     >
                       <PlanCard
@@ -498,4 +661,19 @@ function getPlanesFromResponse(
 ): Array<PlanPublic | PlanEmpresaItem> {
   if (!data) return []
   return data.planes
+}
+
+function agruparPlanesPorNegocio(planes: readonly PlanGlobalItem[]) {
+  const grupos = new Map<string, { company: PlanGlobalItem['company']; planes: PlanGlobalItem[] }>()
+
+  for (const plan of planes) {
+    const grupo = grupos.get(plan.company.id)
+    if (grupo) {
+      grupo.planes.push(plan)
+    } else {
+      grupos.set(plan.company.id, { company: plan.company, planes: [plan] })
+    }
+  }
+
+  return [...grupos.values()].sort((a, b) => a.company.name.localeCompare(b.company.name, 'es'))
 }

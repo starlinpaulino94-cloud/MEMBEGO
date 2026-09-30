@@ -1,4 +1,5 @@
 import React from 'react'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -14,8 +15,9 @@ import { useIntereses } from '../src/hooks/useIntereses'
 import { InteresesForm } from '../src/components/cliente/InteresesForm'
 import { Button } from '../src/components/ui/Button'
 import { Card } from '../src/components/ui/Card'
+import { BackHeader } from '../src/components/ui/BackHeader'
 
-export default function InteresesScreen() {
+function InteresesScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -24,7 +26,7 @@ export default function InteresesScreen() {
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
+      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
         <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-4">
           <Sparkles size={32} color="#0284c7" />
         </View>
@@ -44,7 +46,7 @@ export default function InteresesScreen() {
   /* ── Loading ───────────────────────────────────────────────────────── */
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
+      <View className="flex-1 items-center justify-center bg-vibe-fondo">
         <ActivityIndicator size="large" color="#0284c7" />
       </View>
     )
@@ -53,7 +55,7 @@ export default function InteresesScreen() {
   /* ── Error ─────────────────────────────────────────────────────────── */
   if (isError) {
     return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
+      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
         <View className="h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10 mb-4">
           <AlertCircle size={32} color="#e7000b" />
         </View>
@@ -72,29 +74,13 @@ export default function InteresesScreen() {
   const seleccion = data?.seleccion ?? []
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-vibe-fondo">
       {/* ── Barra con back + titulo ─────────────────────────────────── */}
-      <View
-        className="flex-row items-center gap-2 bg-background border-b border-border"
-        style={{
-          paddingLeft: insets.left + 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-        }}
-      >
-        <Button
-          variant="outline"
-          size="icon"
-          onPress={() => goBackOr(router, '/(tabs)/cuenta')}
-          className="h-9 w-9"
-        >
-          <Text className="text-sm font-inter-semibold text-foreground">←</Text>
-        </Button>
-        <Text className="text-lg font-inter-bold text-foreground">
-          Tus intereses
-        </Text>
-      </View>
+      <BackHeader
+        title="Tus intereses"
+        leftInset={insets.left}
+        onBack={() => goBackOr(router, '/(tabs)/cuenta')}
+      />
 
       <ScrollView
         className="flex-1"
@@ -123,5 +109,13 @@ export default function InteresesScreen() {
         </Card>
       </ScrollView>
     </View>
+  )
+}
+
+export default function InteresesScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <InteresesScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

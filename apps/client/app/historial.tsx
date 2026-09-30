@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -173,7 +174,7 @@ function VisitRow({ visita }: { visita: Visita }) {
 
 /* ── Screen ────────────────────────────────────────────────────────────── */
 
-export default function HistorialScreen() {
+function HistorialScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -189,7 +190,7 @@ export default function HistorialScreen() {
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
+      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
         <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/20 mb-4">
           <History size={32} color="#0284c7" />
         </View>
@@ -214,10 +215,10 @@ export default function HistorialScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-vibe-fondo">
       {/* ── Barra con back + título ──────────────────────────────────── */}
       <View
-        className="flex-row items-center gap-2 bg-background border-b border-border"
+        className="flex-row items-center gap-2 bg-vibe-fondo border-b border-border"
         style={{
           paddingLeft: insets.left + 16,
           paddingRight: 16,
@@ -380,5 +381,13 @@ export default function HistorialScreen() {
         )}
       </ScrollView>
     </View>
+  )
+}
+
+export default function HistorialScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <HistorialScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

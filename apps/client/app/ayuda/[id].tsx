@@ -1,4 +1,5 @@
 import React from 'react'
+import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -21,6 +22,7 @@ import { Button } from '../../src/components/ui/Button'
 import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { Skeleton } from '../../src/components/ui/Skeleton'
+import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 import type { TicketAyudaResponse } from '../../src/lib/api'
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -115,7 +117,7 @@ function MessageBubble({
 
 /* ── Screen ────────────────────────────────────────────────────────────── */
 
-export default function TicketDetalleScreen() {
+function TicketDetalleScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -178,7 +180,12 @@ export default function TicketDetalleScreen() {
         </Text>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <DetailPageFrame className="gap-4">
         {isLoading ? (
           <View className="gap-3">
             <Skeleton className="h-16 rounded-xl" />
@@ -261,7 +268,16 @@ export default function TicketDetalleScreen() {
             </Card>
           </View>
         )}
+        </DetailPageFrame>
       </ScrollView>
     </View>
+  )
+}
+
+export default function TicketDetalleScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <TicketDetalleScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

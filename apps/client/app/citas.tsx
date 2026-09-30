@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -9,7 +10,6 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  ArrowLeft,
   CalendarDays,
   CalendarX2,
   Clock,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { goBackOr } from '../src/lib/navigation'
+import { BackHeader } from '../src/components/ui/BackHeader'
 import { useCitas } from '../src/hooks/useCitas'
 import { Button } from '../src/components/ui/Button'
 import { Card } from '../src/components/ui/Card'
@@ -83,7 +84,7 @@ const ACTIVAS = ['PENDIENTE', 'CONFIRMADA']
 
 // ── Screen ──────────────────────────────────────────────────────────────────
 
-export default function CitasScreen() {
+function CitasScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -138,7 +139,7 @@ export default function CitasScreen() {
   // ── Auth gate ───────────────────────────────────────────────────────────
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
+      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
         <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/20 mb-4">
           <CalendarDays size={32} color="#0284c7" />
         </View>
@@ -157,31 +158,17 @@ export default function CitasScreen() {
 
   // ── Back bar ────────────────────────────────────────────────────────────
   const BackBar = (
-    <View
-      className="flex-row items-center gap-2 bg-background border-b border-border"
-      style={{
-        paddingLeft: insets.left + 16,
-        paddingRight: 16,
-        paddingTop: 12,
-        paddingBottom: 12,
-      }}
-    >
-      <Pressable
-        onPress={() => goBackOr(router, '/(tabs)/inicio')}
-        className="p-2 rounded-lg active:bg-muted"
-        accessibilityRole="button"
-        accessibilityLabel="Volver"
-      >
-        <ArrowLeft size={20} color="#111827" />
-      </Pressable>
-      <Text className="text-lg font-inter-bold text-foreground">Mis citas</Text>
-    </View>
+    <BackHeader
+      title="Mis citas"
+      leftInset={insets.left}
+      onBack={() => goBackOr(router, '/(tabs)/inicio')}
+    />
   )
 
   // ── Loading ─────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-vibe-fondo">
         {BackBar}
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#0284c7" />
@@ -193,7 +180,7 @@ export default function CitasScreen() {
   // ── Error ───────────────────────────────────────────────────────────────
   if (isError) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-vibe-fondo">
         {BackBar}
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
           <Card className="border-destructive/30 bg-destructive/5">
@@ -215,7 +202,7 @@ export default function CitasScreen() {
   // ── Empty: no agenda activa ─────────────────────────────────────────────
   if (!agenda?.activa) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-vibe-fondo">
         {BackBar}
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
           <EmptyState
@@ -231,7 +218,7 @@ export default function CitasScreen() {
   // ── Empty: no open days ─────────────────────────────────────────────────
   if (diasAbiertos.length === 0) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-vibe-fondo">
         {BackBar}
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
           <EmptyState
@@ -248,7 +235,7 @@ export default function CitasScreen() {
 
   // ── Main render ─────────────────────────────────────────────────────────
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-vibe-fondo">
       {BackBar}
 
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
@@ -408,5 +395,13 @@ function CitaCard({ cita, tz }: { cita: CitaItem; tz: string }) {
         <CancelarCitaButton citaId={cita.id} />
       </View>
     </Card>
+  )
+}
+
+export default function CitasScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <CitasScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

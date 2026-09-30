@@ -1,5 +1,6 @@
 import React from 'react'
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native'
+import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { goBackOr } from '../../src/lib/navigation'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -10,13 +11,16 @@ import { formatMoney } from '../../src/lib/format'
 import { Button } from '../../src/components/ui/Button'
 import { Card } from '../../src/components/ui/Card'
 import { EmptyState } from '../../src/components/ui/EmptyState'
+import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 
-export default function PlanDetalleScreen() {
+function PlanDetalleScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const { width } = useWindowDimensions()
   const { planId } = useLocalSearchParams<{ planId: string }>()
   const { isAuthenticated } = useAuth()
-  const { data, isLoading, isError, refetch } = usePlanes(undefined, isAuthenticated)
+  const showAsSheet = width >= 768 && router.canGoBack()
+  const { data, isLoading, isError, refetch } = usePlanes({ todos: 1 }, isAuthenticated)
   const handleBack = () => {
     goBackOr(router, '/planes')
   }
@@ -38,14 +42,16 @@ export default function PlanDetalleScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View
-        className="flex-row items-center gap-2 border-b border-border bg-background"
-        style={{ paddingTop: 8, paddingBottom: 8, paddingHorizontal: 16 }}
-      >
-        <Pressable onPress={handleBack} className="rounded-lg p-2" accessibilityLabel="Volver">
-          <ArrowLeft size={20} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-inter-bold text-foreground">Detalle del plan</Text>
+      <View className="border-b border-border bg-background">
+        <DetailPageFrame
+          className="flex-row items-center gap-2 px-4"
+          style={{ paddingTop: 8, paddingBottom: 8 }}
+        >
+          <Pressable onPress={handleBack} className="rounded-lg p-2" accessibilityLabel="Volver">
+            <ArrowLeft size={20} color="#111827" />
+          </Pressable>
+          <Text className="text-lg font-inter-bold text-foreground">Detalle del plan</Text>
+        </DetailPageFrame>
       </View>
 
       {isLoading ? (
@@ -71,8 +77,28 @@ export default function PlanDetalleScreen() {
           />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}>
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 32 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <DetailPageFrame>
           <Card className="border-primary/30 bg-primary/[0.03] p-5">
+            {'company' in plan && (
+              <View className="mb-3 flex-row items-center gap-2">
+                {plan.company.logoUrl ? (
+                  <Image
+                    source={{ uri: plan.company.logoUrl }}
+                    accessibilityLabel={`Logo de ${plan.company.name}`}
+                    className="h-8 w-8 rounded-full"
+                  />
+                ) : (
+                  <View className="h-8 w-8 rounded-full bg-primary/10" />
+                )}
+                <Text className="text-small font-inter-semibold text-muted-foreground">
+                  {plan.company.name}
+                </Text>
+              </View>
+            )}
             <Text className="text-overline font-inter-semibold text-primary">Membresía</Text>
             <Text className="mt-2 text-h1 font-inter-extrabold text-foreground">{plan.nombre}</Text>
             <View className="mt-4 flex-row items-baseline gap-2">
@@ -106,11 +132,30 @@ export default function PlanDetalleScreen() {
             </View>
           </Card>
 
-          <Button className="mt-5" onPress={() => router.push('/planes')}>
-            Volver a planes
-          </Button>
+          {!showAsSheet && (
+            <Button className="mt-5" onPress={() => router.replace('/planes')}>
+              Ver planes de todos los negocios
+            </Button>
+          )}
+          </DetailPageFrame>
         </ScrollView>
       )}
     </View>
+  )
+}
+
+export default function PlanDetalleScreen() {
+  const router = useRouter()
+
+  return (
+    <ResponsiveDetailSheet
+      footer={
+        <Button className="w-full" onPress={() => router.replace('/planes')}>
+          Ver planes de todos los negocios
+        </Button>
+      }
+    >
+      <PlanDetalleScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

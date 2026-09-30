@@ -21,6 +21,7 @@ import { Input } from '../src/components/ui/Input'
 import { EmptyState } from '../src/components/ui/EmptyState'
 import { SectionHeader } from '../src/components/ui/SectionHeader'
 import { Skeleton } from '../src/components/ui/Skeleton'
+import { BackHeader } from '../src/components/ui/BackHeader'
 
 export default function AjustesScreen() {
   const router = useRouter()
@@ -59,7 +60,7 @@ export default function AjustesScreen() {
   // Auth gate
   if (authLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background" style={{ paddingBottom: insets.bottom }}>
+      <View className="flex-1 items-center justify-center bg-vibe-fondo" style={{ paddingBottom: insets.bottom }}>
         <ActivityIndicator color="#0284c7" size="large" />
       </View>
     )
@@ -67,7 +68,7 @@ export default function AjustesScreen() {
 
   if (!user) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingBottom: insets.bottom }}>
+      <View className="flex-1 bg-vibe-fondo" style={{ paddingBottom: insets.bottom }}>
         <EmptyState
           icon={<User size={40} color="#0284c7" />}
           title="Inicia sesión"
@@ -130,7 +131,14 @@ export default function AjustesScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-vibe-fondo">
+      {/* Back bar */}
+      <BackHeader
+        title='Configuración'
+        leftInset={insets.left}
+        onBack={() => goBackOr(router, '/(tabs)/cuenta')}
+      />
+
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
@@ -139,17 +147,6 @@ export default function AjustesScreen() {
           paddingBottom: insets.bottom + 32,
         }}
       >
-        {/* Back bar */}
-        <View className="mb-4 flex-row items-center gap-2">
-          <Pressable
-            onPress={() => goBackOr(router, '/(tabs)/cuenta')}
-            className="h-10 w-10 items-center justify-center rounded-xl border border-border bg-background active:opacity-70"
-          >
-            <ArrowLeft size={18} color="#111827" />
-          </Pressable>
-          <Text className="text-h2 font-inter-bold text-foreground">Configuración</Text>
-        </View>
-
         <SectionHeader
           title="Ajustes"
           description="Tus datos, seguridad y preferencias."

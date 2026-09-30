@@ -1,4 +1,5 @@
 import React from 'react'
+import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -29,6 +30,7 @@ import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { EmptyState } from '../../src/components/ui/EmptyState'
 import { Skeleton } from '../../src/components/ui/Skeleton'
+import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 
 /* ── Estado visual (paridad con web compraEstadoVisual) ──────────────── */
 
@@ -67,7 +69,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 /* ── Screen ─────────────────────────────────────────────────────────── */
 
-export default function MisPromocionDetalleScreen() {
+function MisPromocionDetalleScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -92,32 +94,31 @@ export default function MisPromocionDetalleScreen() {
   return (
     <View className="flex-1 bg-background">
       {/* ── Back bar ─────────────────────────────────────────────────── */}
-      <View
-        className="flex-row items-center gap-2 bg-background border-b border-border"
-        style={{
-          paddingLeft: insets.left + 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-        }}
-      >
-        <Pressable
-          onPress={() => goBackOr(router, '/mis-promociones')}
-          className="p-2 rounded-lg active:bg-muted"
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
+      <View className="border-b border-border bg-background">
+        <DetailPageFrame
+          className="flex-row items-center gap-2 px-4"
+          style={{ paddingLeft: insets.left + 16, paddingRight: 16, paddingTop: 12, paddingBottom: 12 }}
         >
-          <ArrowLeft size={20} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-inter-bold text-foreground" numberOfLines={1}>
-          Detalle del beneficio
-        </Text>
+          <Pressable
+            onPress={() => goBackOr(router, '/mis-promociones')}
+            className="p-2 rounded-lg active:bg-muted"
+            accessibilityRole="button"
+            accessibilityLabel="Volver"
+          >
+            <ArrowLeft size={20} color="#111827" />
+          </Pressable>
+          <Text className="text-lg font-inter-bold text-foreground" numberOfLines={1}>
+            Detalle del beneficio
+          </Text>
+        </DetailPageFrame>
       </View>
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}
+        showsVerticalScrollIndicator={false}
       >
+        <DetailPageFrame className="gap-4">
         {/* ── Content states ─────────────────────────────────────────── */}
         {isLoading ? (
           <View className="gap-4">
@@ -152,8 +153,17 @@ export default function MisPromocionDetalleScreen() {
         ) : (
           <DetalleContent data={data} router={router} />
         )}
+        </DetailPageFrame>
       </ScrollView>
     </View>
+  )
+}
+
+export default function MisPromocionDetalleScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <MisPromocionDetalleScreenContent />
+    </ResponsiveDetailSheet>
   )
 }
 

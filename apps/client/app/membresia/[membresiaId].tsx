@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react'
+import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -17,6 +18,7 @@ import { useAuth } from '../../src/lib/auth-context'
 import { useMembresias } from '../../src/hooks/useMembresias'
 import { useHistorial } from '../../src/hooks/useHistorial'
 import { Button } from '../../src/components/ui/Button'
+import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 import { Skeleton } from '../../src/components/ui/Skeleton'
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -132,7 +134,7 @@ function isUnlimited(m: Membership): boolean {
   )
 }
 
-export default function MembresiaDetailScreen() {
+function MembresiaDetailScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { membresiaId } = useLocalSearchParams<{ membresiaId: string }>()
@@ -142,8 +144,7 @@ export default function MembresiaDetailScreen() {
   const { data: historialData } = useHistorial(1, isAuthenticated)
 
   const membresia = useMemo(() => {
-    const memberships: Membership[] =
-      membresiasData?.membresias ?? membresiasData ?? []
+    const memberships = membresiasData?.membresias ?? []
     return memberships.find((m) => m.id === membresiaId)
   }, [membresiasData, membresiaId])
 
@@ -169,6 +170,7 @@ export default function MembresiaDetailScreen() {
       <ScrollView
         className="flex-1 bg-vibe-fondo"
         contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8 }}
+        showsVerticalScrollIndicator={false}
       >
         <Skeleton className="h-8 w-32 mb-4" />
         <Skeleton className="h-12 w-full mb-6" />
@@ -183,6 +185,7 @@ export default function MembresiaDetailScreen() {
       <ScrollView
         className="flex-1 bg-vibe-fondo"
         contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8 }}
+        showsVerticalScrollIndicator={false}
       >
         <Pressable
           onPress={() => goBackOr(router, '/mis-membresias')}
@@ -235,8 +238,9 @@ export default function MembresiaDetailScreen() {
     <ScrollView
       className="flex-1 bg-vibe-fondo"
       contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8, paddingBottom: 32 }}
+      showsVerticalScrollIndicator={false}
     >
-      <View className="max-w-xl self-center w-full">
+      <DetailPageFrame>
         {/* Back Row */}
         <Pressable
           onPress={() => goBackOr(router, '/mis-membresias')}
@@ -435,8 +439,16 @@ export default function MembresiaDetailScreen() {
             Cancelar membresía
           </Text>
         </Pressable>
-      </View>
+      </DetailPageFrame>
     </ScrollView>
+  )
+}
+
+export default function MembresiaDetailScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <MembresiaDetailScreenContent />
+    </ResponsiveDetailSheet>
   )
 }
 

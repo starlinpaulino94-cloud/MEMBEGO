@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
-import { View, Text, Pressable, Image, StyleSheet, Linking } from 'react-native'
+import React, { useRef, useState } from 'react'
+import { View, Text, Pressable, Image, StyleSheet } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
+import { BlurTargetView, BlurView } from 'expo-blur'
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -47,7 +48,7 @@ function esHex(c?: string | null): c is string {
 
 function getGradientColors(data: WalletCardData): [string, string, ...string[]] {
   const brand =
-    data.tone === 'active' && esHex(data.company.colorPrimario)
+    esHex(data.company.colorPrimario)
       ? data.company.colorPrimario.trim()
       : null
   if (brand) {
@@ -78,6 +79,7 @@ export function WalletCard({
 }: WalletCardProps) {
   const [flipped, setFlipped] = useState(false)
   const rotation = useSharedValue(0)
+  const blurTarget = useRef<View>(null)
 
   const canFlip = !!qrToken && !!isActive
 
@@ -110,6 +112,7 @@ export function WalletCard({
   const usagePct = getUsagePercentage(data)
   const unlimited = data.esIlimitado
   const gradientColors = getGradientColors(data)
+  const isInactive = data.tone !== 'active'
   const logoInitial = data.company.name
     ? data.company.name.slice(0, 2).toUpperCase()
     : '?'
@@ -119,119 +122,159 @@ export function WalletCard({
       {/* ── Front Face ── */}
       <Animated.View style={[styles.card, frontAnimatedStyle]}>
         <Pressable onPress={handlePress} style={styles.cardInner}>
-          <LinearGradient colors={gradientColors} style={styles.gradient}>
-            {/* Textura sutil */}
-            <View style={styles.textureOverlay} />
-            <View style={styles.glowOrb} />
+          <LinearGradient
+            colors={gradientColors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.gradient}
+          >
+            <BlurTargetView ref={blurTarget} style={StyleSheet.absoluteFill}>
+              {/* Textura sutil */}
+              <View style={styles.textureOverlay} />
+              <View style={styles.glowOrb} />
 
-            <View style={styles.cardContent}>
-              {/* Top: company + logo */}
-              <View style={styles.topRow}>
-                <View style={styles.companyBlock}>
-                  <Text className="text-[15px] font-inter-semibold leading-tight text-white" numberOfLines={1}>
-                    {data.company.name}
-                  </Text>
-                  <View className="mt-0.5 flex-row items-center gap-1">
-                    <Shield size={12} color="rgba(255,255,255,0.7)" />
-                    <Text className="text-[12px] text-white/70">Membresía digital</Text>
-                  </View>
-                </View>
-                {data.company.logoUrl ? (
-                  <View style={styles.logoContainer}>
-                    <Image
-                      source={{ uri: data.company.logoUrl }}
-                      style={styles.logoImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-                ) : (
-                  <View style={styles.logoPlaceholder}>
-                    <Text className="text-xs font-inter-bold text-white/80">
-                      {logoInitial}
+              <View style={styles.cardContent}>
+                {/* Top: company + logo */}
+                <View style={styles.topRow}>
+                  <View style={styles.companyBlock}>
+                    <Text className="text-[15px] font-inter-semibold leading-tight text-white" numberOfLines={1}>
+                      {data.company.name}
                     </Text>
+                    <View className="mt-0.5 flex-row items-center gap-1">
+                      <Shield size={12} color="rgba(255,255,255,0.7)" />
+                      <Text className="text-[12px] text-white/70">Membresía digital</Text>
+                    </View>
                   </View>
-                )}
-              </View>
-
-              {/* Plan */}
-              <View>
-                <Text className="text-[12px] font-inter-medium uppercase tracking-[3px] text-white/60">
-                  Plan
-                </Text>
-                <Text
-                  className="mt-0.5 text-xl font-inter-bold uppercase tracking-widest text-white"
-                  numberOfLines={1}
-                >
-                  {data.planNombre}
-                </Text>
-              </View>
-
-              {/* Bottom: usage + expiry + status */}
-              <View>
-                {/* Usage meter */}
-                <View style={styles.meterTrack}>
-                  {unlimited ? (
-                    <LinearGradient
-                      colors={['#7c3aed', '#06b6d4']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={[styles.meterFill, { width: '100%' }]}
-                    />
-                  ) : (
-                    <View style={[styles.meterFill, { width: `${usagePct}%` }]}>
-                      <LinearGradient
-                        colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={styles.meterFillInner}
+                  {data.company.logoUrl ? (
+                    <View style={styles.logoContainer}>
+                      <Image
+                        source={{ uri: data.company.logoUrl }}
+                        style={styles.logoImage}
+                        resizeMode="cover"
                       />
                     </View>
-                  )}
-                </View>
-                <Text className="text-xs text-white/70 mb-2">
-                  {unlimited
-                    ? 'Ilimitado'
-                    : `${data.usosRestantes} / ${data.usosTotales} usos restantes`}
-                </Text>
-
-                {/* Expiry + status chip */}
-                <View style={styles.bottomRow}>
-                  {data.expiryText ? (
-                    <View className="flex-row items-center gap-1.5 flex-1 mr-2">
-                      <Clock size={12} color="rgba(255,255,255,0.75)" />
-                      <Text className="text-[12px] text-white/75 flex-1" numberOfLines={1}>
-                        {data.expiryText}
+                  ) : (
+                    <View style={styles.logoPlaceholder}>
+                      <Text className="text-xs font-inter-bold text-white/80">
+                        {logoInitial}
                       </Text>
                     </View>
-                  ) : (
-                    <View className="flex-1" />
                   )}
-                  <View
-                    className={cn(
-                      'rounded-full px-2.5 py-0.5',
-                      data.tone === 'active'
-                        ? 'bg-white/15 border border-white/25'
-                        : data.tone === 'pending'
-                          ? 'bg-warning/25 border border-warning/30'
-                          : 'bg-destructive/25 border border-destructive/30'
+                </View>
+
+                {/* Plan */}
+                <View>
+                  <Text className="text-[12px] font-inter-medium uppercase tracking-[3px] text-white/60">
+                    Plan
+                  </Text>
+                  <Text
+                    className="mt-0.5 text-xl font-inter-bold uppercase tracking-widest text-white"
+                    numberOfLines={1}
+                  >
+                    {data.planNombre}
+                  </Text>
+                </View>
+
+                {/* Bottom: usage + expiry + status */}
+                <View>
+                  {/* Usage meter */}
+                  <View style={styles.meterTrack}>
+                    {unlimited ? (
+                      <LinearGradient
+                        colors={['#7c3aed', '#06b6d4']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.meterFill, { width: '100%' }]}
+                      />
+                    ) : (
+                      <View style={[styles.meterFill, { width: `${usagePct}%` }]}>
+                        <LinearGradient
+                          colors={['rgba(255,255,255,0.9)', 'rgba(255,255,255,0.7)']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.meterFillInner}
+                        />
+                      </View>
                     )}
+                  </View>
+                  <Text className="text-xs text-white/70 mb-2">
+                    {unlimited
+                      ? 'Ilimitado'
+                      : `${data.usosRestantes} / ${data.usosTotales} usos restantes`}
+                  </Text>
+
+                  {/* Expiry + status chip */}
+                  <View style={styles.bottomRow}>
+                    {data.expiryText ? (
+                      <View className="flex-row items-center gap-1.5 flex-1 mr-2">
+                        <Clock size={12} color="rgba(255,255,255,0.75)" />
+                        <Text className="text-[12px] text-white/75 flex-1" numberOfLines={1}>
+                          {data.expiryText}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View className="flex-1" />
+                    )}
+                    <View
+                      className={cn(
+                        'rounded-full px-2.5 py-0.5',
+                        data.tone === 'active'
+                          ? 'bg-white/15 border border-white/25'
+                          : data.tone === 'pending'
+                            ? 'bg-warning/25 border border-warning/30'
+                            : 'bg-destructive/25 border border-destructive/30'
+                      )}
+                    >
+                      <Text
+                        className={cn(
+                          'text-[12px] font-inter-semibold',
+                          data.tone === 'active'
+                            ? 'text-white'
+                            : data.tone === 'pending'
+                              ? 'text-warning'
+                              : 'text-destructive'
+                        )}
+                      >
+                        {data.estadoLabel}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </BlurTargetView>
+            {isInactive && (
+              <>
+                <BlurView
+                  blurTarget={blurTarget}
+                  intensity={44}
+                  tint="dark"
+                  blurMethod="dimezisBlurView"
+                  style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+                />
+                <View style={styles.inactiveScrim} />
+                <View style={styles.statusBadgeWrap}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      data.tone === 'pending'
+                        ? styles.pendingBadge
+                        : styles.expiredBadge,
+                    ]}
                   >
                     <Text
-                      className={cn(
-                        'text-[12px] font-inter-semibold',
-                        data.tone === 'active'
-                          ? 'text-white'
-                          : data.tone === 'pending'
-                            ? 'text-warning'
-                            : 'text-destructive'
-                      )}
+                      style={[
+                        styles.statusBadgeText,
+                        data.tone === 'pending'
+                          ? styles.pendingBadgeText
+                          : styles.expiredBadgeText,
+                      ]}
                     >
                       {data.estadoLabel}
                     </Text>
                   </View>
                 </View>
-              </View>
-            </View>
+              </>
+            )}
           </LinearGradient>
         </Pressable>
       </Animated.View>
@@ -309,10 +352,10 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
-    padding: 20,
   },
   cardContent: {
     flex: 1,
+    padding: 20,
     justifyContent: 'space-between',
   },
   topRow: {
@@ -388,5 +431,55 @@ const styles = StyleSheet.create({
     height: 192,
     borderRadius: 9999,
     backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  inactiveScrim: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    pointerEvents: 'none',
+    backgroundColor: 'rgba(15, 23, 42, 0.24)',
+  },
+  statusBadgeWrap: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    pointerEvents: 'none',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  statusBadge: {
+    minHeight: 58,
+    maxWidth: '100%',
+    paddingHorizontal: 24,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9999,
+    borderWidth: 1,
+  },
+  pendingBadge: {
+    backgroundColor: 'rgba(255, 247, 237, 0.96)',
+    borderColor: '#f59e0b',
+  },
+  expiredBadge: {
+    backgroundColor: 'rgba(254, 242, 242, 0.96)',
+    borderColor: '#ba1a1a',
+  },
+  statusBadgeText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 17,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  pendingBadgeText: {
+    color: '#7c2d12',
+  },
+  expiredBadgeText: {
+    color: '#991b1b',
   },
 })

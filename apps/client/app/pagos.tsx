@@ -1,4 +1,5 @@
 import React from 'react';
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet';
 import {
   View,
   Text,
@@ -128,7 +129,7 @@ function EstadoDot({ estado }: { estado: string }) {
 
 /* ── Screen ────────────────────────────────────────────────────────────── */
 
-export default function PagosScreen() {
+function PagosScreenContent() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const params = useLocalSearchParams<{ pago?: string }>();
@@ -143,7 +144,7 @@ export default function PagosScreen() {
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
+      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
         <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/20 mb-4">
           <Receipt size={32} color="#0284c7" />
         </View>
@@ -163,7 +164,7 @@ export default function PagosScreen() {
   /* ── Loading ───────────────────────────────────────────────────────── */
   if (isLoading) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-vibe-fondo">
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
@@ -183,7 +184,7 @@ export default function PagosScreen() {
   /* ── Error ─────────────────────────────────────────────────────────── */
   if (isError) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-vibe-fondo">
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
@@ -206,7 +207,7 @@ export default function PagosScreen() {
   /* ── Empty (sin membresía) ─────────────────────────────────────────── */
   if (!membership) {
     return (
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-vibe-fondo">
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
@@ -254,7 +255,7 @@ export default function PagosScreen() {
 
   /* ── Data ──────────────────────────────────────────────────────────── */
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-vibe-fondo">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ padding: 16 }}
@@ -433,4 +434,12 @@ function AvisoBanner({
       </Text>
     </View>
   );
+}
+
+export default function PagosScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <PagosScreenContent />
+    </ResponsiveDetailSheet>
+  )
 }

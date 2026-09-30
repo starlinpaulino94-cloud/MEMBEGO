@@ -1,4 +1,5 @@
 import React from 'react'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
 import { View, Text, ScrollView, ActivityIndicator, Pressable } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -17,7 +18,7 @@ const DESCRIPCION =
   'Los que usas en tus visitas. El principal viene preseleccionado al comprar; ' +
   'el precio siempre sigue al vehículo que elijas.'
 
-export default function VehiculosScreen() {
+function VehiculosScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { user, isLoading: authLoading } = useAuth()
@@ -26,7 +27,7 @@ export default function VehiculosScreen() {
   // Auth gate
   if (authLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background" style={{ paddingBottom: insets.bottom }}>
+      <View className="flex-1 items-center justify-center bg-vibe-fondo" style={{ paddingBottom: insets.bottom }}>
         <ActivityIndicator color="#0284c7" size="large" />
       </View>
     )
@@ -34,7 +35,7 @@ export default function VehiculosScreen() {
 
   if (!user) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingBottom: insets.bottom }}>
+      <View className="flex-1 bg-vibe-fondo" style={{ paddingBottom: insets.bottom }}>
         <EmptyState
           icon={<Car size={40} color="#0284c7" />}
           title="Inicia sesión"
@@ -50,7 +51,7 @@ export default function VehiculosScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-vibe-fondo">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
@@ -143,5 +144,13 @@ export default function VehiculosScreen() {
         )}
       </ScrollView>
     </View>
+  )
+}
+
+export default function VehiculosScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <VehiculosScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

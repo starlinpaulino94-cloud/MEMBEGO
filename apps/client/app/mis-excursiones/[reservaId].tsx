@@ -1,4 +1,5 @@
 import React from 'react';
+import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -32,6 +33,7 @@ import { Card } from '../../src/components/ui/Card';
 import { Badge } from '../../src/components/ui/Badge';
 import { EmptyState } from '../../src/components/ui/EmptyState';
 import { Skeleton } from '../../src/components/ui/Skeleton';
+import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame';
 import { cn } from '../../src/lib/cn';
 import {
   ESTADO_RESERVA_LABEL,
@@ -127,7 +129,7 @@ const POLITICA_DEFAULT: PoliticaReembolso = {
   horasLimiteReembolso: 24,
 };
 
-export default function MisExcursionDetalleScreen() {
+function MisExcursionDetalleScreenContent() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { reservaId } = useLocalSearchParams<{ reservaId: string }>();
@@ -189,12 +191,16 @@ export default function MisExcursionDetalleScreen() {
             </Text>
           </Pressable>
         </View>
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
-          <View className="px-4 py-6 gap-4">
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <DetailPageFrame className="px-4 py-6 gap-4">
             <Skeleton className="h-48 rounded-2xl" />
             <Skeleton className="h-32 rounded-2xl" />
             <Skeleton className="h-64 rounded-2xl" />
-          </View>
+          </DetailPageFrame>
         </ScrollView>
       </View>
     );
@@ -263,23 +269,26 @@ export default function MisExcursionDetalleScreen() {
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
       {/* Back bar */}
-      <View className="px-4 py-3 border-b border-border bg-card">
-        <Pressable
-          onPress={() => router.push('/mis-excursiones')}
-          className="flex-row items-center gap-1.5"
-        >
-          <ArrowLeft size={16} color="#71717a" />
-          <Text className="text-sm font-inter-semibold text-muted-foreground">
-            Mis excursiones
-          </Text>
-        </Pressable>
+      <View className="border-b border-border bg-card">
+        <DetailPageFrame className="px-4 py-3">
+          <Pressable
+            onPress={() => router.push('/mis-excursiones')}
+            className="flex-row items-center gap-1.5"
+          >
+            <ArrowLeft size={16} color="#71717a" />
+            <Text className="text-sm font-inter-semibold text-muted-foreground">
+              Mis excursiones
+            </Text>
+          </Pressable>
+        </DetailPageFrame>
       </View>
 
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+        showsVerticalScrollIndicator={false}
       >
-        <View className="px-4 py-6 gap-6">
+        <DetailPageFrame className="px-4 py-6 gap-6">
           {/* QR de embarque */}
           <ReservaCheckinQrDisplay
             checkinToken={checkinToken}
@@ -688,8 +697,16 @@ export default function MisExcursionDetalleScreen() {
               Explorar más
             </Button>
           </View>
-        </View>
+        </DetailPageFrame>
       </ScrollView>
     </View>
   );
+}
+
+export default function MisExcursionDetalleScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <MisExcursionDetalleScreenContent />
+    </ResponsiveDetailSheet>
+  )
 }
