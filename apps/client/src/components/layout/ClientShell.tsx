@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, View, useWindowDimensions } from 'react-native'
 import { Stack, usePathname, useRouter } from 'expo-router'
 import { HeaderVibe } from './HeaderVibe'
@@ -7,6 +7,7 @@ import { BottomTabDock } from './BottomTabDock'
 import { useAuth } from '../../lib/auth-context'
 import {
   getClientRoutePresentation,
+  isClientDetailRoute,
   requiresClientAuthentication,
 } from '../../lib/client-route-presentation'
 import { colors } from '../../theme/tokens'
@@ -28,17 +29,28 @@ function isPublicPath(pathname: string): boolean {
 export function ClientShell() {
   const { width } = useWindowDimensions()
   const pathname = usePathname()
+  const previousPathRef = useRef(pathname)
+  const [previousPath, setPreviousPath] = useState<string | null>(null)
   const router = useRouter()
   const { isLoading, isAuthenticated } = useAuth()
   const isDesktop = width >= 1024
+  const isDetailSheet = width >= 768 && router.canGoBack() && isClientDetailRoute(pathname)
+  const shellPathname = isDetailSheet ? previousPath ?? pathname : pathname
   const requiresAuth = requiresClientAuthentication(pathname)
+
+  useEffect(() => {
+    if (previousPathRef.current === pathname) return
+    setPreviousPath(previousPathRef.current)
+    previousPathRef.current = pathname
+  }, [pathname])
+
   const showNavigation =
     !isLoading &&
     isAuthenticated &&
     !isPublicPath(pathname) &&
     pathname !== '/' &&
-    getClientRoutePresentation(pathname) === 'navigation'
-  const isInicio = pathname.endsWith('/inicio')
+    getClientRoutePresentation(shellPathname) === 'navigation'
+  const isInicio = shellPathname.endsWith('/inicio')
 
   useEffect(() => {
     if (!requiresAuth || isLoading || isAuthenticated) return

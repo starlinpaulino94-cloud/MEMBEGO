@@ -15,11 +15,11 @@ export const DESTINOS_CLIENTE_NATIVE: readonly DestinoClienteNative[] = [
     activePrefixes: [],
   },
   {
-    id: 'cuenta',
-    href: '/(tabs)/cuenta',
-    webHref: '/cliente/perfil',
-    label: 'Cuenta',
-    activePrefixes: ['pagos', 'historial', 'ayuda', 'empresas', 'vehiculos', 'intereses', 'ajustes', 'citas'],
+    id: 'beneficios',
+    href: '/(tabs)/beneficios',
+    webHref: '/cliente/promociones',
+    label: 'Beneficios',
+    activePrefixes: ['promociones', 'mis-promociones', 'ruleta', 'regalos', 'invita-y-gana', 'referidos'],
   },
   {
     id: 'qr',
@@ -29,11 +29,11 @@ export const DESTINOS_CLIENTE_NATIVE: readonly DestinoClienteNative[] = [
     activePrefixes: ['membresia', 'mis-membresias'],
   },
   {
-    id: 'beneficios',
-    href: '/(tabs)/beneficios',
-    webHref: '/cliente/promociones',
-    label: 'Beneficios',
-    activePrefixes: ['promociones', 'mis-promociones', 'ruleta', 'regalos', 'invita-y-gana', 'referidos'],
+    id: 'cuenta',
+    href: '/(tabs)/cuenta',
+    webHref: '/cliente/perfil',
+    label: 'Cuenta',
+    activePrefixes: ['pagos', 'historial', 'ayuda', 'empresas', 'vehiculos', 'intereses', 'ajustes', 'citas'],
   },
   {
     id: 'menu',

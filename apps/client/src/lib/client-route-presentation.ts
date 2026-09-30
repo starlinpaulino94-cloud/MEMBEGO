@@ -1,7 +1,18 @@
 export type ClientRoutePresentation = 'navigation' | 'bare'
 
+const CLIENT_DETAIL_ROUTE_PATTERNS: readonly RegExp[] = [
+  /^\/ayuda\/[^/]+$/,
+  /^\/empresas\/[^/]+$/,
+  /^\/membresia\/[^/]+$/,
+  /^\/mis-excursiones\/[^/]+$/,
+  /^\/mis-promociones\/[^/]+$/,
+  /^\/planes\/[^/]+$/,
+  /^\/promociones\/[^/]+$/,
+]
+
 const BARE_ROUTE_EXACT: readonly string[] = [
   '/vehiculos/nuevo',
+  '/cerca',
 ]
 
 const BARE_ROUTE_PREFIXES: readonly string[] = [
@@ -14,6 +25,10 @@ const BARE_ROUTE_PREFIXES: readonly string[] = [
   '/ayuda/',
   '/regalos/',
 ]
+
+export function isClientDetailRoute(pathname: string): boolean {
+  return CLIENT_DETAIL_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname))
+}
 
 const PUBLIC_ROUTE_EXACT: readonly string[] = ['/']
 
