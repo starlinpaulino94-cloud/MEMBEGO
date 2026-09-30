@@ -38,9 +38,9 @@ export default async function SupplyV2ResumenPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Valor Supply disponible" value={<span data-testid="kpi-valor">{formatMoneyRD(resumen.valorDisponible)}</span>} sub="unidades disponibles × costo de compra" icon={Coins} accent="brand" />
-        <StatCard label="Unidades disponibles" value={<span data-testid="kpi-unidades">{resumen.unidadesDisponibles.toLocaleString('es-DO')}</span>} sub={`${resumen.unidadesRecibidas.toLocaleString('es-DO')} recibidas en total`} icon={Boxes} href="/superadmin/supply-v2/supply" hrefLabel="Ver el supply" />
+        <StatCard label="Unidades disponibles" value={<span data-testid="kpi-unidades">{resumen.unidadesDisponibles.toLocaleString('es-DO')}</span>} sub={`${resumen.unidadesAsignadas.toLocaleString('es-DO')} en ofertas · ${resumen.unidadesEmitidas.toLocaleString('es-DO')} vendidas · ${resumen.unidadesRecibidas.toLocaleString('es-DO')} recibidas`} icon={Boxes} href="/superadmin/supply-v2/supply" hrefLabel="Ver el supply" />
         <StatCard label="Compras abiertas" value={<span data-testid="kpi-compras">{resumen.comprasAbiertas.toLocaleString('es-DO')}</span>} sub="borrador, pendientes o en recepción" icon={ShoppingCart} href="/superadmin/supply-v2/compras" hrefLabel="Ver las compras" />
-        <StatCard label="Proveedores activos" value={<span data-testid="kpi-proveedores">{resumen.proveedoresActivos.toLocaleString('es-DO')}</span>} icon={Handshake} href="/superadmin/supply-v2/proveedores" hrefLabel="Ver los proveedores" />
+        <StatCard label="Proveedores activos" value={<span data-testid="kpi-proveedores">{resumen.proveedoresActivos.toLocaleString('es-DO')}</span>} sub={`${resumen.ofertasActivas.toLocaleString('es-DO')} ofertas activas`} icon={Handshake} href="/superadmin/supply-v2/proveedores" hrefLabel="Ver los proveedores" />
       </div>
 
       {!hayAlgo ? (

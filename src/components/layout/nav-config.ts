@@ -898,6 +898,15 @@ const G_CLI_MIO: NavGroup = {
       keywords: ['beneficios', 'membego', 'gratis', 'regalo', 'voucher', 'supply'],
     },
     {
+      // Supply 2.0: compras hechas a MEMBEGO (no a una empresa) y los
+      // beneficios que nacen de ellas. Va en Mi Membego porque ya es suyo.
+      href: '/cliente/compras',
+      label: 'Compras Membego',
+      icon: Tag,
+      description: 'Ofertas Membego que compraste y tus beneficios.',
+      keywords: ['compras', 'membego', 'ofertas', 'beneficios', 'supply'],
+    },
+    {
       href: '/cliente/mis-promociones',
       label: 'Mis beneficios',
       icon: Ticket,

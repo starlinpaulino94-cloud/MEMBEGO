@@ -323,6 +323,23 @@ enum AuditAccion {
   SUPPLY_V2_PO_CANCELLED
   SUPPLY_V2_RECEIPT_CONFIRMED
   SUPPLY_V2_LOT_CREATED
+  // ── Membego Supply 2.0 · Slice 2 (oferta, checkout, pago, derecho) ────────
+  SUPPLY_V2_ALLOCATION_CREATED
+  SUPPLY_V2_ALLOCATION_RELEASED
+  SUPPLY_V2_OFFER_CREATED
+  SUPPLY_V2_OFFER_PUBLISHED
+  SUPPLY_V2_OFFER_PAUSED
+  SUPPLY_V2_OFFER_RESUMED
+  SUPPLY_V2_OFFER_ENDED
+  SUPPLY_V2_OFFER_CANCELLED
+  SUPPLY_V2_ORDER_CREATED
+  SUPPLY_V2_ORDER_RESERVED
+  SUPPLY_V2_ORDER_PAYMENT_SUBMITTED
+  SUPPLY_V2_ORDER_CANCELLED
+  SUPPLY_V2_ORDER_EXPIRED
+  SUPPLY_V2_ORDER_PAID
+  SUPPLY_V2_ORDER_PAYMENT_REJECTED
+  SUPPLY_V2_ENTITLEMENT_ISSUED
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas
@@ -484,6 +501,13 @@ model User {
   supplyV2OrdenEventos         SupplyV2PurchaseOrderEvent[] @relation("SupplyV2PurchaseOrderEventActor")
   supplyV2Recepciones          SupplyV2PurchaseReceipt[]    @relation("SupplyV2ReceiptReceivedBy")
   supplyV2Asientos             SupplyV2LedgerEntry[]        @relation("SupplyV2LedgerActor")
+  // Slice 2
+  supplyV2AsignacionesCreadas  SupplyV2Allocation[]         @relation("SupplyV2AllocationCreatedBy")
+  supplyV2OfertasCreadas       SupplyV2Offer[]              @relation("SupplyV2OfferCreatedBy")
+  supplyV2OfertasPublicadas    SupplyV2Offer[]              @relation("SupplyV2OfferPublishedBy")
+  supplyV2ComprasComoCliente   SupplyV2CustomerOrder[]      @relation("SupplyV2CustomerOrderCustomer")
+  supplyV2PagosConfirmados     SupplyV2CustomerOrder[]      @relation("SupplyV2CustomerOrderConfirmedBy")
+  supplyV2Derechos             SupplyV2Entitlement[]        @relation("SupplyV2EntitlementCustomer")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)

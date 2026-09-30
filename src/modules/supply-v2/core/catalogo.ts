@@ -1,4 +1,8 @@
 import type {
+  SupplyV2CustomerOrderStatus,
+  SupplyV2OfferStatus,
+  SupplyV2PaymentMethod,
+  SupplyV2PaymentStatus,
   SupplyV2AgreementStatus,
   SupplyV2AgreementType,
   SupplyV2CatalogItemType,
@@ -120,3 +124,63 @@ export const LOT_STATUS_LABELS: Record<SupplyV2LotStatus, string> = {
 export const MONEDAS_SUPPLY_V2 = ['DOP', 'USD', 'EUR'] as const
 
 export const BASE_SUPPLY_V2 = '/superadmin/supply-v2'
+
+// ── Slice 2 ─────────────────────────────────────────────────────────────────
+
+export const OFFER_STATUS_LABELS: Record<SupplyV2OfferStatus, string> = {
+  DRAFT: 'Borrador',
+  SCHEDULED: 'Programada',
+  ACTIVE: 'Activa',
+  PAUSED: 'Pausada',
+  SOLD_OUT: 'Agotada',
+  ENDED: 'Finalizada',
+  CANCELLED: 'Cancelada',
+}
+
+export const OFFER_STATUS_TONE: Record<SupplyV2OfferStatus, 'neutral' | 'warning' | 'info' | 'success' | 'danger'> = {
+  DRAFT: 'neutral',
+  SCHEDULED: 'info',
+  ACTIVE: 'success',
+  PAUSED: 'warning',
+  SOLD_OUT: 'info',
+  ENDED: 'neutral',
+  CANCELLED: 'danger',
+}
+
+export const CUSTOMER_ORDER_STATUS_LABELS: Record<SupplyV2CustomerOrderStatus, string> = {
+  PENDING: 'Pendiente de pago',
+  AWAITING_PAYMENT: 'Pago en revisión',
+  PAID: 'Pagada',
+  CANCELLED: 'Cancelada',
+  EXPIRED: 'Expirada',
+  REFUNDED: 'Reembolsada',
+}
+
+export const CUSTOMER_ORDER_STATUS_TONE: Record<SupplyV2CustomerOrderStatus, 'neutral' | 'warning' | 'info' | 'success' | 'danger'> = {
+  PENDING: 'warning',
+  AWAITING_PAYMENT: 'info',
+  PAID: 'success',
+  CANCELLED: 'neutral',
+  EXPIRED: 'neutral',
+  REFUNDED: 'danger',
+}
+
+export const PAYMENT_STATUS_LABELS: Record<SupplyV2PaymentStatus, string> = {
+  UNPAID: 'Sin pagar',
+  SUBMITTED: 'Pago avisado',
+  CONFIRMED: 'Confirmado',
+  REJECTED: 'Rechazado',
+}
+
+export const PAYMENT_METHOD_LABELS: Record<SupplyV2PaymentMethod, string> = {
+  TRANSFER: 'Transferencia',
+  DEPOSIT: 'Depósito',
+  CASH: 'Efectivo',
+  MANUAL: 'Manual',
+}
+
+/** Formas de pago que el cliente puede declarar en el Slice 2. */
+export const PAYMENT_METHODS_CLIENTE: readonly SupplyV2PaymentMethod[] = ['TRANSFER', 'DEPOSIT']
+
+export const RUTA_OFERTAS_PUBLICAS = '/promociones/membego'
+export const RUTA_COMPRAS_CLIENTE = '/cliente/compras'

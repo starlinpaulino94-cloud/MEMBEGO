@@ -14,24 +14,31 @@ export interface ResumenSupplyV2 {
   valorDisponible: number
   unidadesDisponibles: number
   unidadesRecibidas: number
+  unidadesAsignadas: number
+  unidadesEmitidas: number
+  ofertasActivas: number
   comprasAbiertas: number
   proveedoresActivos: number
 }
 
 export async function resumenSupplyV2(): Promise<ResumenSupplyV2> {
   return sinEmpresa('Supply 2.0: tablero', async (tx) => {
-    const [lotes, comprasAbiertas, proveedoresActivos] = await Promise.all([
+    const [lotes, comprasAbiertas, proveedoresActivos, ofertasActivas] = await Promise.all([
       tx.supplyV2Lot.findMany({
         where: { status: { in: ['ACTIVE', 'EXHAUSTED'] } },
-        select: { quantityAvailable: true, quantityReceived: true, unitCost: true },
+        select: { quantityAvailable: true, quantityAllocated: true, quantityIssued: true, quantityReceived: true, unitCost: true },
       }),
       tx.supplyV2PurchaseOrder.count({ where: { status: { in: [...ORDEN_ABIERTA] } } }),
       tx.supplyV2Supplier.count({ where: { status: 'ACTIVE' } }),
+      tx.supplyV2Offer.count({ where: { status: 'ACTIVE' } }),
     ])
     return {
       valorDisponible: lotes.reduce((t, l) => t + l.quantityAvailable * aNumero(l.unitCost), 0),
       unidadesDisponibles: lotes.reduce((t, l) => t + l.quantityAvailable, 0),
       unidadesRecibidas: lotes.reduce((t, l) => t + l.quantityReceived, 0),
+      unidadesAsignadas: lotes.reduce((t, l) => t + l.quantityAllocated, 0),
+      unidadesEmitidas: lotes.reduce((t, l) => t + l.quantityIssued, 0),
+      ofertasActivas,
       comprasAbiertas,
       proveedoresActivos,
     }
@@ -111,6 +118,9 @@ export interface SupplyPorProducto {
   proveedorId: string
   unidad: string
   disponibles: number
+  asignadas: number
+  reservadas: number
+  emitidas: number
   recibidas: number
   valorDisponible: number
   moneda: string
@@ -126,6 +136,9 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
       select: {
         catalogItemId: true,
         quantityAvailable: true,
+        quantityAllocated: true,
+        quantityReserved: true,
+        quantityIssued: true,
         quantityReceived: true,
         unitCost: true,
         currency: true,
@@ -144,6 +157,9 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
       proveedorId: l.supplier.id,
       unidad: l.catalogItem.unit,
       disponibles: 0,
+      asignadas: 0,
+      reservadas: 0,
+      emitidas: 0,
       recibidas: 0,
       valorDisponible: 0,
       moneda: l.currency,
@@ -151,6 +167,9 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
       proximoVencimiento: null,
     }
     g.disponibles += l.quantityAvailable
+    g.asignadas += l.quantityAllocated
+    g.reservadas += l.quantityReserved
+    g.emitidas += l.quantityIssued
     g.recibidas += l.quantityReceived
     g.valorDisponible += l.quantityAvailable * aNumero(l.unitCost)
     g.lotes += 1
@@ -183,6 +202,9 @@ export async function fichaProductoSupply(catalogItemId: string) {
             status: true,
             quantityReceived: true,
             quantityAvailable: true,
+            quantityAllocated: true,
+            quantityReserved: true,
+            quantityIssued: true,
             unitCost: true,
             currency: true,
             receivedAt: true,
@@ -194,6 +216,26 @@ export async function fichaProductoSupply(catalogItemId: string) {
         orderLines: {
           select: { quantity: true, receivedQuantity: true, purchaseOrder: { select: { status: true } } },
         },
+        allocations: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            purpose: true,
+            status: true,
+            quantity: true,
+            allocatedQuantity: true,
+            reservedQuantity: true,
+            issuedQuantity: true,
+            releasedQuantity: true,
+            createdAt: true,
+            offer: { select: { id: true, code: true, title: true, status: true } },
+            lines: { select: { quantity: true, lot: { select: { code: true } } } },
+          },
+        },
+        offers: {
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, code: true, title: true, status: true, salePrice: true, publicPrice: true, currency: true, startsAt: true, endsAt: true },
+        },
       },
     })
     if (!item) return null
@@ -202,9 +244,12 @@ export async function fichaProductoSupply(catalogItemId: string) {
       .reduce((t, l) => t + l.quantity, 0)
     const recibido = item.lots.reduce((t, l) => t + l.quantityReceived, 0)
     const disponible = item.lots.reduce((t, l) => t + l.quantityAvailable, 0)
+    const asignadas = item.lots.reduce((t, l) => t + l.quantityAllocated, 0)
+    const reservadas = item.lots.reduce((t, l) => t + l.quantityReserved, 0)
+    const emitidas = item.lots.reduce((t, l) => t + l.quantityIssued, 0)
     const valorAdquirido = item.lots.reduce((t, l) => t + l.quantityReceived * aNumero(l.unitCost), 0)
     const valorDisponible = item.lots.reduce((t, l) => t + l.quantityAvailable * aNumero(l.unitCost), 0)
-    return { ...item, resumen: { compradoTotal, recibido, disponible, valorAdquirido, valorDisponible } }
+    return { ...item, resumen: { compradoTotal, recibido, disponible, asignadas, reservadas, emitidas, valorAdquirido, valorDisponible } }
   })
 }
 

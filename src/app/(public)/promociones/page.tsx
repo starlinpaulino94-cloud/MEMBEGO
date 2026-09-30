@@ -4,6 +4,8 @@ import { Tag } from 'lucide-react'
 import { SearchBar } from '@/components/public/SearchBar'
 import { PromotionGrid } from '@/components/public/PromotionGrid'
 import { getPromotionsPublic } from '@/modules/marketplace/cached'
+import { ofertasPublicas } from '@/modules/supply-v2/marketplace/read-model'
+import { OfertaMembegoCard } from '@/components/supply-v2/oferta-membego-card'
 
 interface PromotionsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>
@@ -38,7 +40,12 @@ export default async function PromotionsPage({
     offset: 0,
   }
 
-  const promotions = await getPromotionsPublic(filters)
+  const [promotions, ofertasMembego] = await Promise.all([
+    getPromotionsPublic(filters),
+    // Supply 2.0 entra al marketplace por su read model público: solo ofertas
+    // comprables hoy, sin costos ni lotes. Sin filtros: son de Membego, no de una empresa.
+    filters.search || filters.type || filters.tag || filters.company ? Promise.resolve([]) : ofertasPublicas(12).catch(() => []),
+  ])
 
   return (
     <div className="min-h-screen bg-card">
@@ -94,6 +101,25 @@ export default async function PromotionsPage({
           ))}
         </div>
       </section>
+
+      {/* Ofertas Membego (Supply 2.0): solo si hay alguna comprable hoy. */}
+      {ofertasMembego.length > 0 && (
+        <section className="pt-12" data-testid="ofertas-membego">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <h2 className="text-h2">Ofertas Membego</h2>
+                <p className="text-small text-muted-foreground">Productos que Membego ya pagó a precio negociado. Compra y úsalo en el negocio.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {ofertasMembego.map((o) => (
+                <OfertaMembegoCard key={o.id} oferta={o} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Main Content */}
       <section className="py-12">

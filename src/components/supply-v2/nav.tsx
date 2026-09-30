@@ -3,14 +3,15 @@ import { TabsNav } from '@/components/ui/tabs-nav'
 import { BASE_SUPPLY_V2 } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · navegación inicial (§25): solo cuatro pestañas.
- * Ventas, QR, finanzas, campañas y reportes esperan al Slice 2.
+ * MEMBEGO SUPPLY 2.0 · navegación (§25, §42): cinco pestañas.
+ * QR, finanzas, campañas y reportes esperan a slices posteriores.
  */
 export const SECCIONES_SUPPLY_V2 = [
   { slug: '', label: 'Resumen' },
   { slug: 'compras', label: 'Compras' },
   { slug: 'proveedores', label: 'Proveedores' },
   { slug: 'supply', label: 'Supply' },
+  { slug: 'ofertas', label: 'Ofertas' },
 ] as const
 
 export type SeccionSupplyV2 = (typeof SECCIONES_SUPPLY_V2)[number]['slug']

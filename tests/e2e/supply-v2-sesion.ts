@@ -32,11 +32,14 @@ export interface UsuarioE2E {
   supabaseId: string
   email: string
   nombre: string
+  role: 'SUPERADMIN' | 'CLIENTE'
 }
 
 const USUARIOS = {
-  compras: { email: 'e2e.supply2.compras@membego.test', nombre: 'Compras E2E' },
-  finanzas: { email: 'e2e.supply2.finanzas@membego.test', nombre: 'Finanzas E2E' },
+  compras: { email: 'e2e.supply2.compras@membego.test', nombre: 'Compras E2E', role: 'SUPERADMIN' },
+  finanzas: { email: 'e2e.supply2.finanzas@membego.test', nombre: 'Finanzas E2E', role: 'SUPERADMIN' },
+  cliente: { email: 'e2e.supply2.cliente@membego.test', nombre: 'Ana Cliente E2E', role: 'CLIENTE' },
+  cliente2: { email: 'e2e.supply2.cliente2@membego.test', nombre: 'Luis Cliente E2E', role: 'CLIENTE' },
 } as const
 
 export type RolE2E = keyof typeof USUARIOS
@@ -48,15 +51,15 @@ function cliente(): PrismaClient {
 }
 
 export async function asegurarUsuario(rol: RolE2E): Promise<UsuarioE2E> {
-  const { email, nombre } = USUARIOS[rol]
+  const { email, nombre, role } = USUARIOS[rol]
   const supabaseId = `e2e-supply2-${rol}`
   const u = await cliente().user.upsert({
     where: { email },
-    update: { role: 'SUPERADMIN', supabaseId },
-    create: { email, name: nombre, role: 'SUPERADMIN', supabaseId },
+    update: { role, supabaseId },
+    create: { email, name: nombre, role, supabaseId },
     select: { id: true },
   })
-  return { id: u.id, supabaseId, email, nombre }
+  return { id: u.id, supabaseId, email, nombre, role }
 }
 
 function nombreCookie(): string {
@@ -70,7 +73,7 @@ export async function cookieDeSesion(u: UsuarioE2E): Promise<{ name: string; val
   if (!secreto) throw new Error('Falta SUPABASE_JWT_SECRET para firmar la sesión de prueba.')
   const ahora = Math.floor(Date.now() / 1000)
   const exp = ahora + 60 * 60
-  const appMetadata = { role: 'SUPERADMIN', dbUserId: u.id, clienteId: null, companyId: null }
+  const appMetadata = { role: u.role, dbUserId: u.id, clienteId: null, companyId: null }
   const accessToken = await new SignJWT({ email: u.email, role: 'authenticated', app_metadata: appMetadata, user_metadata: {} })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(u.supabaseId)
@@ -105,3 +108,8 @@ export async function cerrarPrisma(): Promise<void> {
 
 /** Sin secreto o sin base no hay forma de firmar sesiones: las pruebas se saltan. */
 export const SESION_LOCAL_DISPONIBLE = Boolean(process.env.SUPABASE_JWT_SECRET && process.env.DATABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_URL)
+
+/** Acceso directo a la base para el ARNÉS (adelantar un reloj, sembrar una cuenta de cobro). Nunca para lo que la prueba debe hacer por la interfaz. */
+export function prismaDeArnes(): PrismaClient {
+  return cliente()
+}

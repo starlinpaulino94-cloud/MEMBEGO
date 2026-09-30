@@ -9,6 +9,9 @@ import type {
   BranchRef,
   CompanyGateway,
   CompanyRef,
+  CustomerGateway,
+  PaymentAccountGateway,
+  PaymentAccountRef,
   SupplyV2Permission,
   UserGateway,
 } from './gateways'
@@ -137,5 +140,51 @@ export const authorizationGateway: AuthorizationGateway = {
   async can(userId, permission) {
     const u = await userGateway.findById(userId)
     return u ? rolPuede(u.role, permission) : false
+  },
+}
+
+// ── Slice 2 · cliente y cuentas de cobro ────────────────────────────────────
+
+/**
+ * EL CLIENTE ES EL USUARIO. Una ficha `Cliente` de Membego pertenece a UNA
+ * empresa (es la afiliación de una persona a un comercio); una compra a
+ * Membego no pertenece a ningún comercio, así que Supply 2.0 referencia al
+ * `User` con rol CLIENTE. Cuando el Slice 3 entregue en una sucursal, el
+ * puente hacia la ficha de esa empresa se resuelve con `misClienteIds`, sin
+ * tabla nueva.
+ */
+export const customerGateway: CustomerGateway = {
+  async current() {
+    const user = await getUser()
+    if (!user || user.metadata.role !== 'CLIENTE') throw new Error('Inicia sesión como cliente para comprar.')
+    if (!user.metadata.dbUserId) throw new Error('La sesión no tiene un usuario asociado.')
+    return { id: user.metadata.dbUserId, email: user.email, name: null }
+  },
+}
+
+/**
+ * Las cuentas a las que un cliente le paga a MEMBEGO son las de
+ * `supply_cuentas_cobro`: la única entidad del proyecto que representa un
+ * cobro a nombre de la plataforma (todo lo demás cobra a nombre de una
+ * empresa). Se LEE por este adaptador; Supply 2.0 nunca escribe en ella y la
+ * orden congela una foto de la cuenta, sin clave foránea.
+ */
+export const paymentAccountGateway: PaymentAccountGateway = {
+  async activas(): Promise<PaymentAccountRef[]> {
+    return sinEmpresa('Supply 2.0: cuentas de cobro de la plataforma', (tx) =>
+      tx.supplyCuentaCobro.findMany({
+        where: { activa: true },
+        orderBy: { nombre: 'asc' },
+        select: { id: true, tipo: true, nombre: true, titular: true, numeroCuenta: true, tipoCuenta: true, instrucciones: true, moneda: true },
+      })
+    )
+  },
+  async findById(id) {
+    return sinEmpresa('Supply 2.0: una cuenta de cobro por id', (tx) =>
+      tx.supplyCuentaCobro.findFirst({
+        where: { id, activa: true },
+        select: { id: true, tipo: true, nombre: true, titular: true, numeroCuenta: true, tipoCuenta: true, instrucciones: true, moneda: true },
+      })
+    )
   },
 }

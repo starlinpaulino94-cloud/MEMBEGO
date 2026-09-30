@@ -44,6 +44,8 @@ export const SUPPLY_V2_PERMISSIONS = [
   'SUPPLY_V2_PURCHASE_CREATE',
   'SUPPLY_V2_PURCHASE_APPROVE',
   'SUPPLY_V2_RECEIVE',
+  'SUPPLY_V2_OFFER_MANAGE',
+  'SUPPLY_V2_OFFER_PUBLISH',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -54,6 +56,8 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_PURCHASE_CREATE: 'Crear y enviar órdenes de compra',
   SUPPLY_V2_PURCHASE_APPROVE: 'Aprobar o rechazar órdenes de compra',
   SUPPLY_V2_RECEIVE: 'Registrar recepciones',
+  SUPPLY_V2_OFFER_MANAGE: 'Crear, pausar y finalizar ofertas; confirmar pagos de clientes',
+  SUPPLY_V2_OFFER_PUBLISH: 'Publicar ofertas (aparta supply)',
 }
 
 export interface CompanyGateway {
@@ -73,4 +77,33 @@ export interface BranchGateway {
 
 export interface AuthorizationGateway {
   can(userId: string, permission: SupplyV2Permission): Promise<boolean>
+}
+
+/** Cliente de la plataforma: el USUARIO con rol CLIENTE (ver auditoría del Slice 2). */
+export interface CustomerRef {
+  id: string
+  email: string
+  name: string | null
+}
+
+export interface CustomerGateway {
+  /** Cliente de la petición actual. Lanza si no hay sesión de cliente. */
+  current(): Promise<CustomerRef>
+}
+
+/** Una cuenta a la que un cliente puede pagarle a Membego (transferencia o depósito). */
+export interface PaymentAccountRef {
+  id: string
+  tipo: string
+  nombre: string
+  titular: string | null
+  numeroCuenta: string | null
+  tipoCuenta: string | null
+  instrucciones: string | null
+  moneda: string
+}
+
+export interface PaymentAccountGateway {
+  activas(): Promise<PaymentAccountRef[]>
+  findById(id: string): Promise<PaymentAccountRef | null>
 }

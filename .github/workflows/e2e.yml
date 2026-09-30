@@ -65,6 +65,12 @@ jobs:
       # Secreto de RELLENO, solo para firmar sesiones de prueba contra esta
       # base efímera. No es el de ningún entorno real.
       SUPABASE_JWT_SECRET: e2e-jwt-secret-solo-para-pruebas-0123456789
+      # El cron de Supply 2.0 (`/api/cron/supply-v2`) se dispara desde el E2E
+      # de expiración con este secreto de relleno (§59 del Slice 2).
+      CRON_SECRET: e2e-cron-secret-solo-para-pruebas
+      # TTL corto de la reserva en pruebas: el E2E adelanta el reloj, pero un
+      # valor pequeño evita que un checkout olvidado bloquee otra prueba.
+      SUPPLY_V2_RESERVATION_TTL_MINUTES: '5'
       NEXT_PUBLIC_APP_URL: http://localhost:3210
       E2E_BASE_URL: http://localhost:3210
       NEXT_TELEMETRY_DISABLED: '1'

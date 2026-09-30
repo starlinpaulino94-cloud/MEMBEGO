@@ -1,0 +1,168 @@
+'use client'
+
+import { useActionState, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { avisarPagoAction, cancelarCompraAction } from '@/modules/supply-v2/actions-cliente'
+import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
+import type { CompraCliente } from '@/modules/supply-v2/commerce/queries'
+import { PAYMENT_METHODS_CLIENTE, PAYMENT_METHOD_LABELS } from '@/modules/supply-v2/core/catalogo'
+
+function dinero(n: string, moneda: string): string {
+  return `${moneda === 'DOP' ? 'RD$' : `${moneda} `}${Number(n).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+}
+
+function CuentaAtras({ hasta }: { hasta: Date }) {
+  const [restante, setRestante] = useState(() => hasta.getTime() - Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setRestante(hasta.getTime() - Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [hasta])
+  if (restante <= 0) return <span className="text-destructive">La reserva venció.</span>
+  const m = Math.floor(restante / 60_000)
+  const s = Math.floor((restante % 60_000) / 1000)
+  return (
+    <span data-testid="cuenta-atras">
+      Tu unidad está reservada {m}:{String(s).padStart(2, '0')} más.
+    </span>
+  )
+}
+
+/**
+ * MEMBEGO SUPPLY 2.0 · CHECKOUT del cliente (§27, §29, §36). Desglose con
+ * precios congelados, cuenta de Membego para pagar, aviso de pago y
+ * cancelación. Sin bonos, sin QR.
+ */
+export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
+  const [aviso, avisar, avisando] = useActionState<EstadoAccion, FormData>(avisarPagoAction, {})
+  const [cancel, cancelar, cancelando] = useActionState<EstadoAccion, FormData>(cancelarCompraAction, {})
+  const router = useRouter()
+  const visto = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const exito = aviso.success ?? cancel.success
+    if (exito && visto.current !== exito) {
+      visto.current = exito
+      toast.success(exito)
+      router.refresh()
+    }
+  }, [aviso, cancel, router])
+  const select = 'h-10 w-full rounded-lg border border-input bg-background px-3 text-sm'
+  const enCurso = compra.status === 'PENDING' || compra.status === 'AWAITING_PAYMENT'
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border bg-card p-4">
+        {compra.lineas.map((l, i) => (
+          <div key={i} className="space-y-1 text-sm">
+            <p className="font-semibold" data-testid="checkout-producto">{l.titulo}</p>
+            <p className="text-caption text-muted-foreground">{l.proveedor}</p>
+            <dl className="mt-2 space-y-1">
+              <Fila t="Cantidad" v={String(l.quantity)} />
+              <Fila t="Precio regular" v={dinero(l.publicUnitPrice, compra.currency)} />
+              <Fila t="Descuento Membego" v={`−${dinero(String(Number(l.publicUnitPrice) - Number(l.saleUnitPrice)), compra.currency)}`} />
+              <Fila t="Subtotal" v={dinero(l.total, compra.currency)} />
+            </dl>
+          </div>
+        ))}
+        <div className="mt-3 flex items-baseline justify-between border-t border-border pt-2">
+          <span className="font-medium">Total</span>
+          <span className="text-h2 tabular-nums" data-testid="checkout-total">{dinero(compra.total, compra.currency)}</span>
+        </div>
+      </div>
+
+      {compra.status === 'PENDING' && (
+        <>
+          <p className="text-sm text-muted-foreground"><CuentaAtras hasta={compra.expiresAt} /></p>
+          {compra.cuenta && (
+            <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm" data-testid="checkout-cuenta">
+              <p className="font-medium">Paga a Membego por transferencia o depósito</p>
+              <dl className="mt-2 space-y-1">
+                <Fila t="Cuenta" v={compra.cuenta.nombre} />
+                {compra.cuenta.titular && <Fila t="Titular" v={compra.cuenta.titular} />}
+                {compra.cuenta.numeroCuenta && <Fila t="Número" v={compra.cuenta.numeroCuenta} />}
+                {compra.cuenta.tipoCuenta && <Fila t="Tipo" v={compra.cuenta.tipoCuenta} />}
+                <Fila t="Monto exacto" v={dinero(compra.total, compra.currency)} />
+              </dl>
+              {compra.cuenta.instrucciones && <p className="mt-2 text-caption text-muted-foreground">{compra.cuenta.instrucciones}</p>}
+            </div>
+          )}
+          <form action={avisar} className="space-y-3 rounded-xl border border-border p-4" data-testid="form-avisar-pago">
+            <input type="hidden" name="orderId" value={compra.id} />
+            <p className="text-sm font-medium">Ya pagué</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="metodoPago">¿Cómo pagaste?</Label>
+                <select id="metodoPago" name="method" defaultValue="TRANSFER" className={select}>
+                  {PAYMENT_METHODS_CLIENTE.map((m) => (
+                    <option key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="referenciaPago">Referencia (opcional)</Label>
+                <Input id="referenciaPago" name="reference" maxLength={120} placeholder="Nº de transferencia" />
+              </div>
+            </div>
+            <Button type="submit" className="w-full" disabled={avisando} loading={avisando} data-testid="btn-avisar-pago">Confirmar que pagué</Button>
+            {aviso.error && <p className="text-sm text-destructive" role="alert">{aviso.error}</p>}
+          </form>
+        </>
+      )}
+
+      {compra.status === 'AWAITING_PAYMENT' && (
+        <div className="rounded-xl border border-info/30 bg-info/5 p-4 text-sm" data-testid="checkout-en-revision">
+          <p className="font-medium">Pago en revisión</p>
+          <p className="text-muted-foreground">Membego está revisando tu pago{compra.paymentReference ? ` (ref. ${compra.paymentReference})` : ''}. Tu unidad sigue reservada; cuando se confirme, tu beneficio aparecerá aquí.</p>
+        </div>
+      )}
+
+      {compra.status === 'PAID' && (
+        <div className="rounded-xl border border-success/30 bg-success/5 p-4 text-sm" data-testid="checkout-pagada">
+          <p className="text-h4">Compra confirmada.</p>
+          <p className="text-muted-foreground">Tu beneficio está disponible.</p>
+          <ul className="mt-2 space-y-1">
+            {compra.derechos.map((d) => (
+              <li key={d.id} className="flex items-baseline justify-between gap-3" data-testid="derecho">
+                <span>
+                  <span className="font-medium">{d.producto}</span> · {d.proveedor}
+                  {d.expiresAt ? <span className="block text-caption text-muted-foreground">Válido hasta {new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium' }).format(new Date(d.expiresAt))}</span> : null}
+                </span>
+                <span className="rounded-full border border-success/30 px-2 py-0.5 text-caption text-success" data-testid="derecho-estado">{d.status === 'ACTIVE' ? 'Disponible' : d.status}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(compra.status === 'CANCELLED' || compra.status === 'EXPIRED') && (
+        <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm" data-testid="checkout-cerrada">
+          <p className="font-medium">{compra.status === 'EXPIRED' ? 'La reserva venció.' : 'Compra cancelada.'}</p>
+          {compra.paymentRejectedReason && <p className="text-muted-foreground">Motivo: {compra.paymentRejectedReason}</p>}
+          <p className="text-muted-foreground">Si todavía la quieres, vuelve a la oferta y compra de nuevo.</p>
+          <Link href={`/promociones/membego/${compra.lineas[0]?.offerSlug ?? ''}`} className="mt-2 inline-block text-primary underline-offset-4 hover:underline">Ver la oferta</Link>
+        </div>
+      )}
+
+      {enCurso && (
+        <form action={cancelar}>
+          <input type="hidden" name="orderId" value={compra.id} />
+          <Button type="submit" variant="ghost" size="sm" disabled={cancelando} data-testid="btn-cancelar-compra">Cancelar compra</Button>
+          {cancel.error && <p className="text-sm text-destructive" role="alert">{cancel.error}</p>}
+        </form>
+      )}
+    </div>
+  )
+}
+
+function Fila({ t, v }: { t: string; v: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-muted-foreground">{t}</dt>
+      <dd className="text-right font-medium tabular-nums">{v}</dd>
+    </div>
+  )
+}

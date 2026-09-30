@@ -1,5 +1,7 @@
 import type {
   SupplyV2AgreementStatus,
+  SupplyV2CustomerOrderStatus,
+  SupplyV2OfferStatus,
   SupplyV2PurchaseOrderStatus,
   SupplyV2ReceiptStatus,
 } from '@prisma/client'
@@ -116,6 +118,76 @@ export function puedeAprobar(
 ): string | null {
   if (!permitirAutoaprobacion && orden.createdById && orden.createdById === actorId) {
     return 'Una orden de compra no la puede aprobar quien la creó.'
+  }
+  return null
+}
+
+// ── Slice 2 · Oferta ────────────────────────────────────────────────────────
+
+export const TRANSICIONES_OFERTA: Transiciones<SupplyV2OfferStatus> = {
+  DRAFT: ['SCHEDULED', 'ACTIVE', 'CANCELLED'],
+  SCHEDULED: ['ACTIVE', 'PAUSED', 'ENDED', 'CANCELLED'],
+  ACTIVE: ['PAUSED', 'SOLD_OUT', 'ENDED', 'CANCELLED'],
+  /** Pausada no vende; reanudar vuelve a ACTIVE sin tocar la asignación. */
+  PAUSED: ['ACTIVE', 'ENDED', 'CANCELLED'],
+  SOLD_OUT: ['ENDED', 'CANCELLED'],
+  ENDED: [],
+  CANCELLED: [],
+}
+
+/** Estado con el que nace una oferta al publicarla, según su vigencia (§14). */
+export function estadoInicialOferta(startsAt: Date, ahora = new Date()): 'SCHEDULED' | 'ACTIVE' {
+  return startsAt > ahora ? 'SCHEDULED' : 'ACTIVE'
+}
+
+export interface OfertaParaComprar {
+  status: SupplyV2OfferStatus
+  startsAt: Date
+  endsAt: Date | null
+}
+
+/** Mensaje de error o `null`: ¿se puede comprar esta oferta ahora? (§18, §45) */
+export function motivoNoComprable(o: OfertaParaComprar, unidadesLibres: number, ahora = new Date()): string | null {
+  if (o.status === 'SCHEDULED' || o.startsAt > ahora) return 'Esta oferta todavía no ha empezado.'
+  if (o.status === 'PAUSED') return 'Esta oferta está pausada.'
+  if (o.status === 'SOLD_OUT') return 'Esta oferta se agotó.'
+  if (o.status === 'ENDED' || (o.endsAt && o.endsAt <= ahora)) return 'Esta oferta ya terminó.'
+  if (o.status !== 'ACTIVE') return 'Esta oferta no está disponible.'
+  if (unidadesLibres <= 0) return 'Esta oferta se agotó.'
+  return null
+}
+
+// ── Slice 2 · Orden del cliente ─────────────────────────────────────────────
+
+export const TRANSICIONES_ORDEN_CLIENTE: Transiciones<SupplyV2CustomerOrderStatus> = {
+  PENDING: ['AWAITING_PAYMENT', 'PAID', 'CANCELLED', 'EXPIRED'],
+  /** Con pago avisado, la reserva aguanta hasta que Membego lo revise. */
+  AWAITING_PAYMENT: ['PAID', 'CANCELLED'],
+  PAID: ['REFUNDED'],
+  CANCELLED: [],
+  EXPIRED: [],
+  REFUNDED: [],
+}
+
+/** Estados en los que la orden retiene unidades. */
+export const ORDEN_CLIENTE_CON_RESERVA: readonly SupplyV2CustomerOrderStatus[] = ['PENDING', 'AWAITING_PAYMENT']
+
+/** Cuántas unidades de esta oferta cuentan contra el límite por cliente (§35): pagadas y reservas vivas. */
+export function unidadesQueCuentanParaLimite(
+  ordenes: readonly { status: SupplyV2CustomerOrderStatus; quantity: number }[]
+): number {
+  return ordenes
+    .filter((o) => o.status === 'PAID' || ORDEN_CLIENTE_CON_RESERVA.includes(o.status))
+    .reduce((t, o) => t + o.quantity, 0)
+}
+
+export function validarLimitePorCliente(perCustomerLimit: number, yaCuenta: number, quiere: number): string | null {
+  if (!Number.isInteger(quiere) || quiere <= 0) return 'La cantidad tiene que ser un entero positivo.'
+  if (yaCuenta + quiere > perCustomerLimit) {
+    const restan = Math.max(0, perCustomerLimit - yaCuenta)
+    return restan === 0
+      ? `Ya alcanzaste el máximo de ${perCustomerLimit} por persona en esta oferta.`
+      : `Solo puedes comprar ${restan} más en esta oferta (máximo ${perCustomerLimit} por persona).`
   }
   return null
 }
