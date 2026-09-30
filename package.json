@@ -16,6 +16,7 @@
     "db:reset": "prisma migrate reset",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:supply": "tsx --conditions react-server --import ./scripts/supply-db/shim-next.mjs prisma/seed-supply-demo.ts",
+    "db:seed:supply-v2": "tsx --conditions react-server --import ./scripts/supply-db/shim-next.mjs prisma/seed-supply-v2.ts",
     "geo:seed": "tsx scripts/geo-seed.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:db": "tsx --conditions react-server --import ./scripts/supply-db/shim-next.mjs --test tests/postgres/*.db.test.ts",
