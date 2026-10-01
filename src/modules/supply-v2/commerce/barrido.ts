@@ -10,6 +10,7 @@ import { proyectarVentasSinEventoEnTx } from '../economics/service'
 import { expirarBeneficiosEnTx } from '../benefits/service'
 import { barridoCampanasEnTx } from '../campaigns/service'
 import { expirarCuponesEnTx } from '../campaigns/coupons'
+import { activarProgramadasEnTx, vencerMembresiasEnTx } from '../loyalty/memberships'
 
 /**
  * MEMBEGO SUPPLY 2.0 · BARRIDO del cron (§25, §37, §39, §64).
@@ -45,10 +46,13 @@ export interface ResultadoBarrido {
   campanasActivadas: number
   campanasTerminadas: number
   cuponesVencidos: number
+  /** Slice 8 (§12–§13): períodos comprados por adelantado que ya empiezan y membresías cuyo período acabó. */
+  membresiasActivadas: number
+  membresiasVencidas: number
 }
 
 export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise<ResultadoBarrido> {
-  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0, derechosConError: 0, lotesVencidos: 0, unidadesVencidasSinVender: 0, ventasProyectadas: 0, beneficiosVencidos: 0, asignacionesVencidas: 0, campanasActivadas: 0, campanasTerminadas: 0, cuponesVencidos: 0 }
+  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0, derechosConError: 0, lotesVencidos: 0, unidadesVencidasSinVender: 0, ventasProyectadas: 0, beneficiosVencidos: 0, asignacionesVencidas: 0, campanasActivadas: 0, campanasTerminadas: 0, cuponesVencidos: 0, membresiasActivadas: 0, membresiasVencidas: 0 }
 
   const vencidas = await sinEmpresa('Supply 2.0 cron: checkouts con la reserva caducada', (tx) =>
     tx.supplyV2CustomerOrder.findMany({ where: { status: 'PENDING', expiresAt: { lte: ahora } }, select: { id: true }, take: limite, orderBy: { expiresAt: 'asc' } })
@@ -116,5 +120,14 @@ export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise
   r.campanasActivadas = camp.activadas
   r.campanasTerminadas = camp.terminadas
   r.cuponesVencidos = await sinEmpresa('Supply 2.0 cron: cupones vencidos', (tx) => expirarCuponesEnTx(tx, ahora, limite))
+
+  // Slice 8 (§12–§13): SE VENCE PRIMERO Y SE ACTIVA DESPUÉS, en este orden y no
+  // al revés. Solo puede haber UNA membresía ACTIVE por plan y persona —lo
+  // sostiene el índice único parcial `supply_v2_membresia_activa_por_plan`—,
+  // así que activar el período nuevo antes de cerrar el que acaba choca contra
+  // la base. Y no se pierde ningún día: el período nuevo arranca exactamente
+  // cuando termina el anterior, de modo que cuando uno vence el otro ya toca.
+  r.membresiasVencidas = await sinEmpresa('Supply 2.0 cron: vencer membresías', (tx) => vencerMembresiasEnTx(tx, CTX, ahora, limite))
+  r.membresiasActivadas = await sinEmpresa('Supply 2.0 cron: activar membresías programadas', (tx) => activarProgramadasEnTx(tx, CTX, ahora, limite))
   return r
 }

@@ -7,6 +7,14 @@ import { crearItemCatalogoEnTx } from '../../src/modules/supply-v2/catalog/servi
 import { activarAcuerdoEnTx, crearAcuerdoEnTx } from '../../src/modules/supply-v2/agreements/service'
 import { crearOfertaComisionEnTx, publicarOfertaEnTx } from '../../src/modules/supply-v2/offers/service'
 import { aprobarBeneficioEnTx, crearBeneficioEnTx } from '../../src/modules/supply-v2/benefits/service'
+import { confirmarPagoEnTx, cancelarOrdenClienteEnTx, expirarOrdenEnTx } from '../../src/modules/supply-v2/commerce/checkout'
+import {
+  activarProgramadasEnTx,
+  cancelarMembresiaEnTx,
+  contratarMembresiaEnTx,
+  otorgarMembresiaEnTx,
+  vencerMembresiasEnTx,
+} from '../../src/modules/supply-v2/loyalty/memberships'
 import {
   actualizarPlanEnTx,
   adjuntarBeneficioAPlanEnTx,
@@ -569,4 +577,263 @@ test('un beneficio de plan tiene que ser de los que se ASIGNAN, y no se repite',
   )
   await sinEmpresa('prueba', (tx) => adjuntarBeneficioAPlanEnTx(tx, plan.id, { kind: 'POINTS_MULTIPLIER', pointsMultiplier: 2 }, como(ctx.compras)))
   assert.equal(await prisma.supplyV2MembershipBenefit.count({ where: { planId: plan.id } }), 2)
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// A · MEMBRESÍA: compra confirmada → activa → beneficios disponibles
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Plan de pago publicado con un beneficio exclusivo del Slice 6. */
+async function planConBeneficio(d: { supplierId: string; nombre: string; precio: number; dias?: number; usos?: number }) {
+  const programId = await programaActivo({ nombre: `Prog ${d.nombre}`, supplierId: d.supplierId, owner: 'SUPPLIER' })
+  return sinEmpresa('prueba', async (tx) => {
+    const b = await crearBeneficioEnTx(
+      tx,
+      {
+        name: `Bono ${d.nombre} ${sufijo}`,
+        funding: 'SUPPLIER',
+        valueType: 'FIXED_AMOUNT',
+        supplierValue: 200,
+        scope: 'SUPPLIER',
+        supplierId: d.supplierId,
+        requiresAssignment: true,
+        perCustomerLimit: 4,
+        startsAt: new Date(ahora.getTime() - DIA),
+      },
+      como(ctx.compras)
+    )
+    await aprobarBeneficioEnTx(tx, b.id, como(ctx.finanzas))
+    const plan = await crearPlanEnTx(tx, programId, { name: `${d.nombre} ${sufijo}`, kind: 'PAID', price: d.precio, durationDays: d.dias ?? 30 }, como(ctx.compras))
+    await adjuntarBeneficioAPlanEnTx(tx, plan.id, { kind: 'BENEFIT', benefitId: b.id, usesPerPeriod: d.usos ?? 4 }, como(ctx.compras))
+    await publicarPlanEnTx(tx, plan.id, como(ctx.compras))
+    return { programId, planId: plan.id, benefitId: b.id }
+  })
+}
+
+test('A · comprar una membresía: el pago la activa y los beneficios quedan en la cuenta del cliente', async () => {
+  const { programId, planId, benefitId } = await planConBeneficio({ supplierId: ctx.supplierA, nombre: 'Gold', precio: 1499 })
+
+  const compra = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente }, como(ctx.cliente)))
+  assert.equal(compra.status, 'PENDING_PAYMENT', 'NO se activa antes de cobrarla')
+  assert.equal(compra.total, '1499.00')
+  assert.ok(compra.orderId)
+
+  // El pedido es de membresía, sin líneas, sin lote y sin allocation.
+  const orden = await prisma.supplyV2CustomerOrder.findUniqueOrThrow({
+    where: { id: compra.orderId! },
+    select: { kind: true, membershipPlanId: true, total: true, contractualValue: true, _count: { select: { lines: true } } },
+  })
+  assert.equal(orden.kind, 'MEMBERSHIP')
+  assert.equal(orden.membershipPlanId, planId)
+  assert.equal(orden._count.lines, 0, 'no se simula con inventario ficticio')
+  assert.equal(orden.total.toFixed(2), '1499.00')
+
+  // Antes de pagar, el cliente NO tiene el beneficio.
+  assert.equal(await prisma.supplyV2CustomerBenefit.count({ where: { benefitId, customerId: ctx.cliente } }), 0)
+
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: compra.orderId!, amountSeen: 1499, method: 'TRANSFER' }, como(ctx.finanzas)))
+
+  const m = await prisma.supplyV2CustomerMembership.findUniqueOrThrow({
+    where: { id: compra.id },
+    select: { status: true, activatedAt: true, expiresAt: true, pricePaid: true, planVersion: true },
+  })
+  assert.equal(m.status, 'ACTIVE')
+  assert.equal(m.pricePaid.toFixed(2), '1499.00')
+  assert.ok(m.activatedAt && m.expiresAt && m.expiresAt > m.activatedAt)
+  assert.equal(Math.round((m.expiresAt!.getTime() - m.activatedAt!.getTime()) / DIA), 30, 'dura los 30 días del plan')
+
+  // Y ahora SÍ tiene su beneficio, con los usos del plan y sin pasar del vencimiento.
+  const cb = await prisma.supplyV2CustomerBenefit.findFirstOrThrow({
+    where: { benefitId, customerId: ctx.cliente },
+    select: { usesAllowed: true, status: true, expiresAt: true, membershipId: true },
+  })
+  assert.equal(cb.usesAllowed, 4)
+  assert.equal(cb.status, 'AVAILABLE')
+  assert.equal(cb.membershipId, compra.id, 'queda de qué membresía vino')
+  assert.ok(cb.expiresAt && cb.expiresAt <= m.expiresAt!, 'el beneficio no dura más que la membresía')
+
+  // Confirmar dos veces no duplica nada.
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: compra.orderId!, amountSeen: 1499, method: 'TRANSFER' }, como(ctx.finanzas)))
+  assert.equal(await prisma.supplyV2CustomerBenefit.count({ where: { benefitId, customerId: ctx.cliente } }), 1)
+  assert.equal(await prisma.supplyV2CustomerMembership.count({ where: { programId, customerId: ctx.cliente } }), 1)
+})
+
+test('A2 · la clave de idempotencia impide que el doble clic compre dos membresías', async () => {
+  const { planId } = await planConBeneficio({ supplierId: ctx.supplierA, nombre: 'Idem', precio: 999 })
+  const clave = `idem-${sufijo}`
+  const a = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente2, idempotencyKey: clave }, como(ctx.cliente2)))
+  const b = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente2, idempotencyKey: clave }, como(ctx.cliente2)))
+  assert.equal(b.repetida, true)
+  assert.equal(a.id, b.id)
+  assert.equal(await prisma.supplyV2CustomerMembership.count({ where: { planId, customerId: ctx.cliente2 } }), 1)
+
+  // Y la clave de otro no se puede reutilizar.
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente3, idempotencyKey: clave }, como(ctx.cliente3))),
+    /no es tuya/
+  )
+})
+
+test('A3 · una compra sin pagar bloquea la siguiente, y al caerse la desbloquea', async () => {
+  const { planId } = await planConBeneficio({ supplierId: ctx.supplierA, nombre: 'Bloqueo', precio: 500 })
+  const primera = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente3 }, como(ctx.cliente3)))
+
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente3 }, como(ctx.cliente3))),
+    /pendiente de pago/
+  )
+
+  // Al cancelar el pedido, la membresía sin pagar se suelta con él.
+  await sinEmpresa('prueba', (tx) => cancelarOrdenClienteEnTx(tx, primera.orderId!, ctx.cliente3, como(ctx.cliente3)))
+  assert.equal((await prisma.supplyV2CustomerMembership.findUniqueOrThrow({ where: { id: primera.id }, select: { status: true } })).status, 'CANCELLED')
+
+  // Y ahora sí se puede volver a intentar.
+  const segunda = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente3 }, como(ctx.cliente3)))
+  assert.equal(segunda.status, 'PENDING_PAYMENT')
+  assert.notEqual(segunda.id, primera.id)
+})
+
+test('A4 · un checkout de membresía vencido suelta la membresía, sin tocar nada más', async () => {
+  const { planId } = await planConBeneficio({ supplierId: ctx.supplierA, nombre: 'Vence', precio: 700 })
+  const compra = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente }, como(ctx.cliente)))
+  // Se fuerza el vencimiento de la reserva, como haría el paso del tiempo.
+  await prisma.supplyV2CustomerOrder.update({ where: { id: compra.orderId! }, data: { expiresAt: new Date(ahora.getTime() - 60_000) } })
+  const expirada = await sinEmpresa('prueba', (tx) => expirarOrdenEnTx(tx, compra.orderId!, como(null)))
+  assert.equal(expirada, true)
+  assert.equal((await prisma.supplyV2CustomerMembership.findUniqueOrThrow({ where: { id: compra.id }, select: { status: true } })).status, 'CANCELLED')
+})
+
+test('A5 · membresía GRATUITA: se activa en el acto; OTORGADA: exige motivo', async () => {
+  const programId = await programaActivo({ nombre: 'Gratis', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  const gratis = await sinEmpresa('prueba', async (tx) => {
+    const p = await crearPlanEnTx(tx, programId, { name: `Free ${sufijo}`, kind: 'FREE', price: 0, durationDays: 15 }, como(ctx.compras))
+    await publicarPlanEnTx(tx, p.id, como(ctx.compras))
+    return p
+  })
+  const m = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId: gratis.id, customerId: ctx.cliente2 }, como(ctx.cliente2)))
+  assert.equal(m.status, 'ACTIVE', 'una gratuita no espera ningún pago')
+  assert.equal(m.orderId, null, 'y no genera pedido: no hay nada que cobrar')
+  assert.equal(m.total, '0.00')
+
+  const otorgado = await sinEmpresa('prueba', async (tx) => {
+    const p = await crearPlanEnTx(tx, programId, { name: `Cortesia ${sufijo}`, kind: 'GRANTED', price: 0, durationDays: 90 }, como(ctx.compras))
+    await publicarPlanEnTx(tx, p.id, como(ctx.compras))
+    return p
+  })
+  // Una membresía otorgada NO se compra.
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId: otorgado.id, customerId: ctx.cliente3 }, como(ctx.cliente3))),
+    /la concede el negocio/
+  )
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => otorgarMembresiaEnTx(tx, { planId: otorgado.id, customerId: ctx.cliente3, motivo: '' }, como(ctx.compras))),
+    /motivo escrito/
+  )
+  const dada = await sinEmpresa('prueba', (tx) =>
+    otorgarMembresiaEnTx(tx, { planId: otorgado.id, customerId: ctx.cliente3, motivo: 'Cliente histórico, cortesía aprobada por gerencia' }, como(ctx.compras))
+  )
+  assert.equal(dada.status, 'ACTIVE')
+  const fila = await prisma.supplyV2CustomerMembership.findUniqueOrThrow({ where: { id: dada.id }, select: { grantedById: true, grantReason: true, pricePaid: true } })
+  assert.equal(fila.grantedById, ctx.compras)
+  assert.match(fila.grantReason!, /cortesía/i)
+  assert.equal(fila.pricePaid.toFixed(2), '0.00', 'una otorgada no la paga el cliente')
+})
+
+test('A6 · renovar NO solapa: el período nuevo nace SCHEDULED y el barrido lo activa', async () => {
+  const { planId } = await planConBeneficio({ supplierId: ctx.supplierA, nombre: 'Renueva', precio: 1000, dias: 10 })
+  const primera = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente }, como(ctx.cliente)))
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: primera.orderId!, amountSeen: 1000, method: 'TRANSFER' }, como(ctx.finanzas)))
+  const m1 = await prisma.supplyV2CustomerMembership.findUniqueOrThrow({ where: { id: primera.id }, select: { expiresAt: true, status: true } })
+  assert.equal(m1.status, 'ACTIVE')
+
+  // Renovación: se compra el siguiente período mientras el primero corre.
+  const segunda = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente }, como(ctx.cliente)))
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: segunda.orderId!, amountSeen: 1000, method: 'TRANSFER' }, como(ctx.finanzas)))
+  const m2 = await prisma.supplyV2CustomerMembership.findUniqueOrThrow({ where: { id: segunda.id }, select: { status: true, activatedAt: true, expiresAt: true, renewalCount: true } })
+  assert.equal(m2.status, 'SCHEDULED', 'el período nuevo espera su turno')
+  assert.equal(m2.renewalCount, 1)
+  assert.equal(m2.activatedAt!.toISOString(), m1.expiresAt!.toISOString(), 'empieza EXACTAMENTE cuando acaba el anterior')
+  assert.equal(Math.round((m2.expiresAt!.getTime() - m2.activatedAt!.getTime()) / DIA), 10, 'y dura sus 10 días completos')
+
+  // Un tercer período pasaría del tope de adelanto (1 por defecto).
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente }, como(ctx.cliente))),
+    /se pueden adelantar/
+  )
+
+  // Cuando llega la fecha, el barrido vence la primera y activa la segunda.
+  const despues = new Date(m1.expiresAt!.getTime() + 60_000)
+  // El mismo orden que el cron: vencer y después activar.
+  await sinEmpresa('prueba', (tx) => vencerMembresiasEnTx(tx, como(null), despues))
+  await sinEmpresa('prueba', (tx) => activarProgramadasEnTx(tx, como(null), despues))
+  assert.equal((await prisma.supplyV2CustomerMembership.findUniqueOrThrow({ where: { id: primera.id }, select: { status: true } })).status, 'EXPIRED')
+  assert.equal((await prisma.supplyV2CustomerMembership.findUniqueOrThrow({ where: { id: segunda.id }, select: { status: true } })).status, 'ACTIVE')
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// B · AISLAMIENTO: el mismo cliente, dos empresas, sin mezclar
+// ════════════════════════════════════════════════════════════════════════════
+
+test('B · un cliente con membresía en DOS empresas: cada una con sus beneficios, sin mezclarse', async () => {
+  const a = await planConBeneficio({ supplierId: ctx.supplierA, nombre: 'CarTownGold', precio: 1499 })
+  const b = await planConBeneficio({ supplierId: ctx.supplierB, nombre: 'RestoGold', precio: 899 })
+
+  for (const { planId, precio } of [{ planId: a.planId, precio: 1499 }, { planId: b.planId, precio: 899 }]) {
+    const c = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente2 }, como(ctx.cliente2)))
+    await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: c.orderId!, amountSeen: precio, method: 'TRANSFER' }, como(ctx.finanzas)))
+  }
+
+  // Dos membresías vivas, una por programa, cada una en su empresa.
+  const suyas = await prisma.supplyV2CustomerMembership.findMany({
+    where: { customerId: ctx.cliente2, status: 'ACTIVE', programId: { in: [a.programId, b.programId] } },
+    select: { programId: true, planId: true, pricePaid: true },
+  })
+  assert.equal(suyas.length, 2)
+  assert.deepEqual(new Set(suyas.map((s) => s.programId)), new Set([a.programId, b.programId]))
+
+  // Y los beneficios NO se mezclan: el bono de Car Town no vale en Resto.
+  const bonoA = await prisma.supplyV2CustomerBenefit.findFirstOrThrow({ where: { benefitId: a.benefitId, customerId: ctx.cliente2 }, select: { id: true, benefit: { select: { supplierId: true } } } })
+  const bonoB = await prisma.supplyV2CustomerBenefit.findFirstOrThrow({ where: { benefitId: b.benefitId, customerId: ctx.cliente2 }, select: { id: true, benefit: { select: { supplierId: true } } } })
+  assert.equal(bonoA.benefit.supplierId, ctx.supplierA)
+  assert.equal(bonoB.benefit.supplierId, ctx.supplierB)
+  assert.notEqual(bonoA.id, bonoB.id)
+
+  // SQL: ninguna asignación de un programa apunta a un beneficio de otro negocio.
+  const [{ cruzados }] = await prisma.$queryRaw<{ cruzados: bigint }[]>`
+    SELECT count(*) AS cruzados
+    FROM "supply_v2_customer_benefits" cb
+    JOIN "supply_v2_customer_memberships" m ON m."id" = cb."membershipId"
+    JOIN "supply_v2_loyalty_programs" p ON p."id" = m."programId"
+    JOIN "supply_v2_benefits" b ON b."id" = cb."benefitId"
+    WHERE p."supplierId" IS NOT NULL AND b."supplierId" IS NOT NULL AND b."supplierId" <> p."supplierId"`
+  assert.equal(Number(cruzados), 0, 'un beneficio de membresía nunca es de otro negocio que el del programa')
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// H (membresías) · vencer una no toca las de otros programas
+// ════════════════════════════════════════════════════════════════════════════
+
+test('H1 · vencer la membresía de un programa no toca la del otro', async () => {
+  const a = await planConBeneficio({ supplierId: ctx.supplierA, nombre: 'VenceA', precio: 100, dias: 1 })
+  const b = await planConBeneficio({ supplierId: ctx.supplierB, nombre: 'VenceB', precio: 100, dias: 60 })
+  const ma = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId: a.planId, customerId: ctx.cliente3 }, como(ctx.cliente3)))
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: ma.orderId!, amountSeen: 100, method: 'TRANSFER' }, como(ctx.finanzas)))
+  const mb = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId: b.planId, customerId: ctx.cliente3 }, como(ctx.cliente3)))
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: mb.orderId!, amountSeen: 100, method: 'TRANSFER' }, como(ctx.finanzas)))
+
+  const dentroDeDosDias = new Date(ahora.getTime() + 2 * DIA)
+  const vencidas = await sinEmpresa('prueba', (tx) => vencerMembresiasEnTx(tx, como(null), dentroDeDosDias))
+  assert.ok(vencidas >= 1)
+  assert.equal((await prisma.supplyV2CustomerMembership.findUniqueOrThrow({ where: { id: ma.id }, select: { status: true } })).status, 'EXPIRED')
+  assert.equal((await prisma.supplyV2CustomerMembership.findUniqueOrThrow({ where: { id: mb.id }, select: { status: true } })).status, 'ACTIVE', 'la del otro programa sigue viva')
+})
+
+test('cancelar una membresía exige motivo y es idempotente', async () => {
+  const { planId } = await planConBeneficio({ supplierId: ctx.supplierB, nombre: 'Cancelable', precio: 300 })
+  const m = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente }, como(ctx.cliente)))
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: m.orderId!, amountSeen: 300, method: 'TRANSFER' }, como(ctx.finanzas)))
+  await assert.rejects(() => sinEmpresa('prueba', (tx) => cancelarMembresiaEnTx(tx, m.id, '  ', como(ctx.compras))), /necesita un motivo/)
+  await sinEmpresa('prueba', (tx) => cancelarMembresiaEnTx(tx, m.id, 'El cliente lo pidió por soporte', como(ctx.compras)))
+  const otra = await sinEmpresa('prueba', (tx) => cancelarMembresiaEnTx(tx, m.id, 'El cliente lo pidió por soporte', como(ctx.compras)))
+  assert.equal(otra.repetida, true)
 })

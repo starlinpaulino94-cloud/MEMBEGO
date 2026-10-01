@@ -21,6 +21,7 @@ import { repartirEnUnidades } from '../core/comision'
 import { calcularRepartoLinea, fotoDeReparto, type RepartoFinanciado, type UnidadFinanciada } from '../core/financiacion'
 import { politicaDeVersion } from '../finance/domain'
 import { aplicarReservaEnTx, liberarReservaEnTx, reservarBeneficioEnTx, type ReservaDeBeneficio } from '../benefits/service'
+import { activarMembresiaPorPagoEnTx, soltarMembresiaDeOrdenEnTx } from '../loyalty/memberships'
 import { consolidarCuponEnTx, liberarCuponEnTx, registrarAplicacionCuponEnTx, resolverCuponEnTx, type CuponResuelto } from '../campaigns/coupons'
 import { promocionAutomaticaEnTx } from '../campaigns/service'
 import { MENSAJES_CUPON, MENSAJE_CUPON_OPACO } from '../campaigns/domain'
@@ -526,6 +527,8 @@ async function ordenBloqueada(tx: Tx, orderId: string) {
       sourceType: true,
       agreementId: true,
       agreementVersionId: true,
+      // Slice 8: una compra de membresía no lleva líneas ni derechos.
+      kind: true,
       lines: {
         select: {
           id: true,
@@ -606,6 +609,7 @@ export async function cancelarOrdenClienteEnTx(tx: Tx, orderId: string, customer
   exigirTransicion(TRANSICIONES_ORDEN_CLIENTE, o.status, 'CANCELLED', 'Compra')
   const soltadas = await soltarReservasEnTx(tx, o, `Cancelada por el cliente (${o.number}).`, ctx.actorId)
   await tx.supplyV2CustomerOrder.update({ where: { id: o.id }, data: { status: 'CANCELLED', cancelledAt: new Date() } })
+  if (o.kind === 'MEMBERSHIP') await soltarMembresiaDeOrdenEnTx(tx, o.id, `Compra cancelada por el cliente (${o.number}).`, ctx)
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_ORDER_CANCELLED', 'SupplyV2CustomerOrder', o.id, { number: o.number, antes: o.status, soltadas }, o.lines[0]?.offer.supplier.companyId ?? null)
 }
 
@@ -616,6 +620,7 @@ export async function expirarOrdenEnTx(tx: Tx, orderId: string, ctx: ContextoAud
   if (o.expiresAt > ahora) return false
   const soltadas = await soltarReservasEnTx(tx, o, `Reserva expirada (${o.number}).`, ctx.actorId, 'EXPIRED')
   await tx.supplyV2CustomerOrder.update({ where: { id: o.id }, data: { status: 'EXPIRED', expiredAt: ahora } })
+  if (o.kind === 'MEMBERSHIP') await soltarMembresiaDeOrdenEnTx(tx, o.id, `Compra vencida sin pagar (${o.number}).`, ctx)
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_ORDER_EXPIRED', 'SupplyV2CustomerOrder', o.id, { number: o.number, soltadas }, o.lines[0]?.offer.supplier.companyId ?? null)
   return true
 }
@@ -647,6 +652,7 @@ export async function rechazarPagoEnTx(tx: Tx, orderId: string, motivo: string, 
     where: { id: o.id },
     data: { status: 'CANCELLED', paymentStatus: 'REJECTED', paymentRejectedReason: motivo.trim(), cancelledAt: new Date() },
   })
+  if (o.kind === 'MEMBERSHIP') await soltarMembresiaDeOrdenEnTx(tx, o.id, `Pago rechazado (${o.number}): ${motivo.trim()}`, ctx)
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_ORDER_PAYMENT_REJECTED', 'SupplyV2CustomerOrder', o.id, { number: o.number, motivo: motivo.trim(), soltadas }, o.lines[0]?.offer.supplier.companyId ?? null)
 }
 
@@ -718,6 +724,10 @@ export async function confirmarPagoEnTx(
     },
   })
   await auditarPagoYVentaEnTx(tx, o, entitlements, { amountSeen: String(d.amountSeen) }, ctx)
+  // Slice 8 (§12, §16): si lo que se compró es una membresía, se activa AQUÍ,
+  // con el pago ya confirmado y dentro de la misma transacción. No hay otra
+  // puerta: una membresía de pago no se activa antes de cobrarla.
+  if (o.kind === 'MEMBERSHIP') await activarMembresiaPorPagoEnTx(tx, o.id, ctx)
   return { id: o.id, number: o.number, entitlements, repetido: false }
 }
 
