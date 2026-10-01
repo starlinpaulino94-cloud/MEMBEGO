@@ -228,7 +228,8 @@ async function armarValidacion(tx: Tx, s: SesionCargada, empleado: EmpleadoProve
     empleado: { supplierId: empleado.supplierId, companyId: empleado.companyId },
     sucursal: sucursal ? { id: sucursal.id, companyId: sucursal.companyId, activa: sucursal.activa } : null,
     proveedorTieneSucursales: tieneSucursales,
-    lotIssued: e.lot.quantityIssued,
+    // Slice 5: un derecho a comisión no tiene lote; el ledger no opina.
+    lotIssued: e.lot ? e.lot.quantityIssued : null,
   }
   return { c, sucursal: sucursal ? { id: sucursal.id, nombre: sucursal.nombre } : null }
 }
@@ -336,7 +337,7 @@ export async function confirmarEntregaEnTx(
     fallo(veto, MENSAJES_RECHAZO[veto])
   }
   const e = s.voucher.entitlement
-  const derecho = await tx.supplyV2Entitlement.findUniqueOrThrow({ where: { id: e.id }, select: { actualUnitCost: true, customerUnitPrice: true, currency: true, status: true } })
+  const derecho = await tx.supplyV2Entitlement.findUniqueOrThrow({ where: { id: e.id }, select: { actualUnitCost: true, customerUnitPrice: true, currency: true, status: true, sourceType: true, commissionPercentage: true, commissionAmount: true, supplierNet: true } })
   exigirTransicion(TRANSICIONES_DERECHO, derecho.status, 'REDEEMED', 'Beneficio')
   exigirTransicion(TRANSICIONES_VOUCHER, s.voucher.status, 'REDEEMED', 'Voucher')
 
@@ -374,6 +375,11 @@ export async function confirmarEntregaEnTx(
       unitCostSnapshot: derecho.actualUnitCost,
       customerUnitPriceSnapshot: derecho.customerUnitPrice,
       customerPaysMerchant: 0,
+      // Slice 5: la foto de la comisión viaja con la entrega (de ella nace el neto del proveedor).
+      sourceType: derecho.sourceType,
+      commissionPercentageSnapshot: derecho.sourceType === 'COMMISSION' ? derecho.commissionPercentage : null,
+      commissionAmountSnapshot: derecho.sourceType === 'COMMISSION' ? derecho.commissionAmount : null,
+      supplierNetSnapshot: derecho.sourceType === 'COMMISSION' ? derecho.supplierNet : null,
       currency: derecho.currency,
       channel: d.channel ?? 'QR_SCAN',
       deviceInfo: dispositivo(d.deviceInfo),
@@ -384,16 +390,21 @@ export async function confirmarEntregaEnTx(
   })
 
   // 6. Ledger: ISSUED → REDEEMED en el lote real del derecho (§30).
-  await registrarAsientoEnTx(
-    tx,
-    e.lotId,
-    { type: 'REDEMPTION', sourceBucket: 'ISSUED', destinationBucket: 'REDEEMED', quantity: 1, reason: `Entrega ${r.number} al cliente.` },
-    { referenceType: 'REDEMPTION', referenceId: r.id },
-    ctx.actorId
-  )
+  //    Slice 5: en COMISIÓN no hay lote y NO se escribe ningún asiento (§27).
+  if (e.lotId) {
+    await registrarAsientoEnTx(
+      tx,
+      e.lotId,
+      { type: 'REDEMPTION', sourceBucket: 'ISSUED', destinationBucket: 'REDEEMED', quantity: 1, reason: `Entrega ${r.number} al cliente.` },
+      { referenceType: 'REDEMPTION', referenceId: r.id },
+      ctx.actorId
+    )
+  }
 
   // 6b. Slice 4 (§2, §19): la deuda con el proveedor nace aquí SOLO si la versión
   //     del acuerdo del lote dice ON_REDEMPTION. PREPAID no crea CxP nueva.
+  //     Slice 5 (§28–§30): en COMISIÓN la entrega ES el cumplimiento: nace la
+  //     obligación por el neto del proveedor (idempotente por redención).
   await reconocerObligacionPorRedencionEnTx(tx, r.id, ctx)
 
   // 7. Bitácora.
@@ -438,7 +449,7 @@ export async function reversarRedencionEnTx(tx: Tx, redemptionId: string, motivo
   await tx.$queryRaw`SELECT "id" FROM "supply_v2_vouchers" WHERE "id" = ${r.voucherId} FOR UPDATE`
   const derecho = await tx.supplyV2Entitlement.findUniqueOrThrow({ where: { id: r.entitlementId }, select: { status: true, expiresAt: true, lot: { select: { quantityRedeemed: true } } } })
   if (derecho.status !== 'REDEEMED') fallo('INCONSISTENTE', `El beneficio está ${derecho.status}, no REDEEMED: no se puede reversar.`)
-  if (derecho.lot.quantityRedeemed < 1) fallo('LEDGER_INCONSISTENT', MENSAJES_RECHAZO.LEDGER_INCONSISTENT)
+  if (derecho.lot && derecho.lot.quantityRedeemed < 1) fallo('LEDGER_INCONSISTENT', MENSAJES_RECHAZO.LEDGER_INCONSISTENT)
   const otraViva = await tx.supplyV2Redemption.count({ where: { entitlementId: r.entitlementId, reversedAt: null, id: { not: r.id } } })
   if (otraViva > 0) fallo('INCONSISTENTE', 'Hay otra redención viva de este beneficio.')
 
@@ -458,16 +469,19 @@ export async function reversarRedencionEnTx(tx: Tx, redemptionId: string, motivo
   }
   // La sesión QR consumida NO se «desconsume» (§38): el cliente genera una nueva.
 
-  // 3. Ledger: REDEEMED → ISSUED.
-  await registrarAsientoEnTx(
-    tx,
-    r.lotId,
-    { type: 'REVERSAL', sourceBucket: 'REDEEMED', destinationBucket: 'ISSUED', quantity: 1, reason: `Reversa de ${r.number}: ${motivo.trim()}` },
-    { referenceType: 'REDEMPTION', referenceId: r.id },
-    ctx.actorId
-  )
+  // 3. Ledger: REDEEMED → ISSUED. (Slice 5: sin lote, sin asiento.)
+  if (r.lotId) {
+    await registrarAsientoEnTx(
+      tx,
+      r.lotId,
+      { type: 'REVERSAL', sourceBucket: 'REDEEMED', destinationBucket: 'ISSUED', quantity: 1, reason: `Reversa de ${r.number}: ${motivo.trim()}` },
+      { referenceType: 'REDEMPTION', referenceId: r.id },
+      ctx.actorId
+    )
+  }
 
   // 3b. Slice 4: si la entrega había creado deuda (ON_REDEMPTION) y nadie la pagó, se cancela.
+  //     Slice 5 (§33): si ya se pagó (liquidada), NO se deshace en silencio: queda una incidencia explícita.
   const obligacion = await cancelarObligacionDeRedencionEnTx(tx, r.id, `Reversa de ${r.number}: ${motivo.trim()}`, ctx)
 
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_REDEMPTION_REVERSED', 'SupplyV2Redemption', r.id, {
@@ -538,15 +552,18 @@ export async function expirarDerechoEnTx(tx: Tx, entitlementId: string, ctx: Con
   const r = await tx.supplyV2Entitlement.updateMany({ where: { id: d.id, status: 'ACTIVE' }, data: { status: 'EXPIRED' } })
   if (r.count !== 1) return false
   await tx.supplyV2Voucher.updateMany({ where: { entitlementId: d.id, status: 'ACTIVE' }, data: { status: 'EXPIRED' } })
-  await registrarAsientoEnTx(
-    tx,
-    d.lotId,
-    { type: 'EXPIRATION', sourceBucket: 'ISSUED', destinationBucket: 'CLOSED', quantity: d.quantity, reason: 'Derecho vencido sin redimir (breakage).' },
-    { referenceType: 'ENTITLEMENT', referenceId: d.id },
-    ctx.actorId
-  )
+  // Slice 5: un derecho a comisión no tiene lote; vence sin asiento y sin deuda al proveedor (no se entregó).
+  if (d.lotId) {
+    await registrarAsientoEnTx(
+      tx,
+      d.lotId,
+      { type: 'EXPIRATION', sourceBucket: 'ISSUED', destinationBucket: 'CLOSED', quantity: d.quantity, reason: 'Derecho vencido sin redimir (breakage).' },
+      { referenceType: 'ENTITLEMENT', referenceId: d.id },
+      ctx.actorId
+    )
+  }
   await registrarBreakageEnTx(tx, d.id, ctx, ahora)
-  await auditarEnTx(tx, ctx, 'SUPPLY_V2_ENTITLEMENT_EXPIRED', 'SupplyV2Entitlement', d.id, { ledger: 'ISSUED→CLOSED', breakage: 1 }, d.supplier.companyId)
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_ENTITLEMENT_EXPIRED', 'SupplyV2Entitlement', d.id, { ledger: d.lotId ? 'ISSUED→CLOSED' : 'sin lote (comisión)', breakage: 1 }, d.supplier.companyId)
   return true
 }
 

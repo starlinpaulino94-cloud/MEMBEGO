@@ -11,7 +11,7 @@ import { NavSupplyV2 } from '@/components/supply-v2/nav'
 import { ChipConciliacion } from '@/components/supply-v2/finanzas/chips'
 import { listarConciliaciones } from '@/modules/supply-v2/finance/queries'
 import { SIN_INFORMACION_DEL_PROVEEDOR } from '@/modules/supply-v2/finance/domain'
-import { dineroSupplyV2, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
+import { dineroSupplyV2, RECONCILIATION_KIND_LABELS, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Conciliaciones · Supply 2.0' }
@@ -42,7 +42,7 @@ export default async function ConciliacionesPage({ searchParams }: { searchParam
                 <tbody>
                   {filas.map((r) => (
                     <tr key={r.id} className="border-t border-border" data-testid="conciliacion">
-                      <td className="py-2 pr-3 font-medium"><Link href={`${RUTA_FINANZAS}/conciliaciones/${r.id}`} className="underline-offset-4 hover:underline">{r.number}</Link><span className="block text-caption text-muted-foreground">{r.lineas} líneas</span></td>
+                      <td className="py-2 pr-3 font-medium"><Link href={`${RUTA_FINANZAS}/conciliaciones/${r.id}`} className="underline-offset-4 hover:underline">{r.number}</Link><span className="block text-caption text-muted-foreground">{RECONCILIATION_KIND_LABELS[r.kind]} · {r.lineas} líneas</span></td>
                       <td className="py-2 pr-3">{r.proveedor}</td>
                       <td className="py-2 pr-3">{formatDate(r.periodStart)} – {formatDate(r.periodEnd)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(r.internalAmount, r.currency)}</td>

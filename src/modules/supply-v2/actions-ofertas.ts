@@ -5,7 +5,8 @@ import type { SupplyV2PaymentMethod } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { exigirPermisoSupplyV2 } from './permisos'
 import { comoError, contextoDeAuditoria, entero, fecha, fechaFinDeDia, refrescarSupplyV2, texto, type EstadoAccion } from './actions-util'
-import { cerrarOfertaEnTx, crearOfertaEnTx, pausarOfertaEnTx, publicarOfertaEnTx, reanudarOfertaEnTx, type OfertaCreada } from './offers/service'
+import type { SupplyV2AvailabilityMode } from '@prisma/client'
+import { cerrarOfertaEnTx, crearOfertaComisionEnTx, crearOfertaEnTx, pausarOfertaEnTx, publicarOfertaEnTx, reanudarOfertaEnTx, type OfertaCreada } from './offers/service'
 import { confirmarPagoEnTx, rechazarPagoEnTx, type PagoConfirmado } from './commerce/checkout'
 import { RUTA_OFERTAS_PUBLICAS } from './core/catalogo'
 
@@ -50,6 +51,43 @@ export async function crearYPublicarOfertaAction(_prev: EstadoAccion<OfertaCread
     return { success: `Oferta ${r.code} publicada.`, id: r.id, data: r }
   } catch (e) {
     return comoError(e, 'crearYPublicarOferta')
+  }
+}
+
+/**
+ * Slice 5 (§10–§12): oferta a COMISIÓN. Sin lote ni asignación: lo que se
+ * congela es el acuerdo (resuelto en el servidor) y la disponibilidad propia.
+ */
+export async function crearYPublicarOfertaComisionAction(_prev: EstadoAccion<OfertaCreada>, fd: FormData): Promise<EstadoAccion<OfertaCreada>> {
+  try {
+    const actor = await exigirPermisoSupplyV2('SUPPLY_V2_COMMISSION_OFFER_MANAGE')
+    const ctx = await contextoDeAuditoria(actor)
+    const startsAt = fecha(fd, 'startsAt') ?? new Date()
+    const availabilityMode = (texto(fd, 'availabilityMode', 20) || 'UNLIMITED') as SupplyV2AvailabilityMode
+    const r = await sinEmpresa('Supply 2.0: crear y publicar una oferta a comisión', async (tx) => {
+      const creada = await crearOfertaComisionEnTx(
+        tx,
+        {
+          catalogItemId: texto(fd, 'catalogItemId', 60),
+          title: texto(fd, 'title', 160),
+          description: texto(fd, 'description', 2000) || null,
+          publicPrice: texto(fd, 'publicPrice', 20),
+          salePrice: texto(fd, 'salePrice', 20),
+          availabilityMode,
+          availabilityQuantity: availabilityMode === 'UNLIMITED' ? null : entero(fd, 'availabilityQuantity'),
+          perCustomerLimit: entero(fd, 'perCustomerLimit') ?? 1,
+          startsAt,
+          endsAt: fechaFinDeDia(fd, 'endsAt'),
+        },
+        ctx
+      )
+      const pub = await publicarOfertaEnTx(tx, creada.id, ctx)
+      return { ...creada, status: pub.status }
+    })
+    refrescarOfertas(r.id)
+    return { success: `Oferta a comisión ${r.code} publicada (${r.commissionPercentage} % según el acuerdo ${r.agreementCode}).`, id: r.id, data: r }
+  } catch (e) {
+    return comoError(e, 'crearYPublicarOfertaComision')
   }
 }
 

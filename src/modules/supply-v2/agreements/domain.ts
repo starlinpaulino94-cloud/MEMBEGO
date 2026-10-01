@@ -1,5 +1,6 @@
 import type { SupplyV2AgreementScope, SupplyV2AgreementType, SupplyV2PayableRecognition } from '@prisma/client'
-import { AGREEMENT_TYPES_SLICE1 } from '../core/catalogo'
+import { AGREEMENT_TYPES_SLICE1, AGREEMENT_TYPES_SLICE5 } from '../core/catalogo'
+import { validarPorcentajeComision } from '../core/comision'
 
 /**
  * MEMBEGO SUPPLY 2.0 · acuerdos: reglas puras (§9–§11).
@@ -39,12 +40,13 @@ function pct(v: number | string | null | undefined, nombre: string): string | nu
 
 export function validarAcuerdo(d: DatosAcuerdo): string | null {
   if (!d.supplierId) return 'El acuerdo necesita un proveedor.'
-  if (!AGREEMENT_TYPES_SLICE1.includes(d.type)) {
-    return 'En esta versión solo se pueden crear acuerdos de compra anticipada o de pagar después.'
+  if (!AGREEMENT_TYPES_SLICE5.includes(d.type)) {
+    return 'En esta versión solo se pueden crear acuerdos de compra anticipada, de pagar después o a comisión.'
   }
   const scope = d.scope ?? 'ITEM'
   if (scope === 'ITEM' && !d.catalogItemId) return 'Un acuerdo por producto necesita el producto.'
   if (scope === 'CATEGORY' && !d.category?.trim()) return 'Un acuerdo por categoría necesita la categoría.'
+  if (d.type === 'COMMISSION') return validarAcuerdoComision(d)
   if (!(d.startsAt instanceof Date) || Number.isNaN(d.startsAt.getTime())) return 'La fecha de inicio no es válida.'
   if (d.endsAt) {
     if (Number.isNaN(d.endsAt.getTime())) return 'La fecha de fin no es válida.'
@@ -70,6 +72,77 @@ export function validarAcuerdo(d: DatosAcuerdo): string | null {
     return 'Una compra anticipada se paga antes de entregar: la deuda no puede nacer al redimir.'
   }
   return null
+}
+
+/**
+ * Slice 5 (§7–§9): un acuerdo a COMISIÓN no compra nada. No lleva costo
+ * negociado, exige el porcentaje y su deuda nace SIEMPRE al entregar
+ * (ON_REDEMPTION): Membego no debe nada antes de que el proveedor cumpla.
+ */
+function validarAcuerdoComision(d: DatosAcuerdo): string | null {
+  const e = validarPorcentajeComision(d.commissionPercentage)
+  if (e) return e
+  if (d.payableRecognition && d.payableRecognition !== 'ON_REDEMPTION') {
+    return 'En un acuerdo a comisión la deuda con el proveedor nace al entregar (ON_REDEMPTION).'
+  }
+  if (d.paymentTermsDays != null && (!Number.isInteger(d.paymentTermsDays) || d.paymentTermsDays < 0)) {
+    return 'Los días de pago tienen que ser un entero no negativo.'
+  }
+  if (d.negotiatedUnitCost != null && d.negotiatedUnitCost !== '' && Number(d.negotiatedUnitCost) !== 0) {
+    return 'Un acuerdo a comisión no tiene costo negociado: Membego no compra las unidades.'
+  }
+  return null
+}
+
+export interface AcuerdoComisionCandidato {
+  id: string
+  code: string
+  status: string
+  type: SupplyV2AgreementType
+  scope: SupplyV2AgreementScope
+  catalogItemId: string | null
+  category: string | null
+  startsAt: Date
+  endsAt: Date | null
+  version: number
+}
+
+const PRECEDENCIA: Record<SupplyV2AgreementScope, number> = { ITEM: 0, CATEGORY: 1, CATALOG: 2 }
+
+/**
+ * Resuelve QUÉ acuerdo a comisión rige un producto (§9): ITEM > CATEGORY >
+ * CATALOG. Entre varios del mismo alcance gana el que empezó más tarde (el
+ * más reciente); a igualdad, el código mayor. Devuelve null si ninguno vigente
+ * cubre el producto. PURO: quien llama trae los candidatos del proveedor.
+ */
+export function resolverAcuerdoComision<A extends AcuerdoComisionCandidato>(
+  candidatos: readonly A[],
+  item: { id: string; category: string | null },
+  ahora = new Date()
+): A | null {
+  const cubre = (a: A): boolean => {
+    if (a.status !== 'ACTIVE' || a.type !== 'COMMISSION') return false
+    if (a.startsAt > ahora) return false
+    if (a.endsAt && a.endsAt < ahora) return false
+    switch (a.scope) {
+      case 'ITEM':
+        return a.catalogItemId === item.id
+      case 'CATEGORY':
+        return Boolean(a.category && item.category && a.category.trim().toLowerCase() === item.category.trim().toLowerCase())
+      case 'CATALOG':
+        return true
+    }
+  }
+  const vivos = candidatos.filter(cubre)
+  if (vivos.length === 0) return null
+  vivos.sort((x, y) => {
+    const p = PRECEDENCIA[x.scope] - PRECEDENCIA[y.scope]
+    if (p !== 0) return p
+    const t = y.startsAt.getTime() - x.startsAt.getTime()
+    if (t !== 0) return t
+    return y.code.localeCompare(x.code)
+  })
+  return vivos[0]!
 }
 
 export interface AcuerdoParaCompatibilidad {

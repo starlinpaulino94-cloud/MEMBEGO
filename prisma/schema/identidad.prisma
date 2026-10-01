@@ -372,6 +372,19 @@ enum AuditAccion {
   SUPPLY_V2_RECONCILIATION_CREATED
   SUPPLY_V2_RECONCILIATION_RESOLVED
   SUPPLY_V2_LOT_EXPIRED
+  // Slice 5 · comisión y liquidaciones
+  SUPPLY_V2_COMMISSION_OFFER_CREATED
+  SUPPLY_V2_COMMISSION_ORDER_PAID
+  SUPPLY_V2_COMMISSION_OBLIGATION_CREATED
+  SUPPLY_V2_SETTLEMENT_CREATED
+  SUPPLY_V2_SETTLEMENT_APPROVED
+  SUPPLY_V2_SETTLEMENT_PAYMENT_APPLIED
+  SUPPLY_V2_SETTLEMENT_PAID
+  SUPPLY_V2_SETTLEMENT_CANCELLED
+  SUPPLY_V2_COMMISSION_RECONCILIATION_CREATED
+  SUPPLY_V2_COMMISSION_RECONCILIATION_RESOLVED
+  SUPPLY_V2_FINANCE_INCIDENT_CREATED
+  SUPPLY_V2_FINANCE_INCIDENT_RESOLVED
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas
@@ -559,6 +572,10 @@ model User {
   supplyV2AplicacionesReversadas SupplyV2PaymentApplication[]      @relation("SupplyV2ApplicationReversedBy")
   supplyV2ConciliacionesCreadas  SupplyV2Reconciliation[]          @relation("SupplyV2ReconciliationCreatedBy")
   supplyV2ConciliacionesResuelt  SupplyV2Reconciliation[]          @relation("SupplyV2ReconciliationResolvedBy")
+  // Slice 5 · liquidaciones e incidencias
+  supplyV2LiquidacionesCreadas   SupplyV2Settlement[]              @relation("SupplyV2SettlementCreatedBy")
+  supplyV2LiquidacionesAprobadas SupplyV2Settlement[]              @relation("SupplyV2SettlementApprovedBy")
+  supplyV2IncidenciasResueltas   SupplyV2FinanceIncident[]         @relation("SupplyV2FinanceIncidentResolvedBy")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)

@@ -4,7 +4,38 @@ import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
 import { exigirTransicion, TRANSICIONES_ACUERDO } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
-import { snapshotDeAcuerdo, validarAcuerdo, type DatosAcuerdo } from './domain'
+import { resolverAcuerdoComision, snapshotDeAcuerdo, validarAcuerdo, type DatosAcuerdo } from './domain'
+
+export interface AcuerdoComisionResuelto {
+  agreementId: string
+  agreementVersionId: string
+  code: string
+  version: number
+  scope: 'ITEM' | 'CATEGORY' | 'CATALOG'
+  commissionPercentage: Prisma.Decimal
+  paymentTermsDays: number | null
+}
+
+/**
+ * Slice 5 (§9): QUÉ acuerdo a comisión rige este producto hoy, con
+ * precedencia ITEM > CATEGORY > CATALOG. Lee los acuerdos vigentes del
+ * proveedor del producto y la versión activa de cada uno. `null` si ninguno
+ * cubre el producto (no se puede vender a comisión sin acuerdo).
+ */
+export async function resolverAcuerdoComisionDeItemEnTx(tx: Tx, catalogItemId: string, ahora = new Date()): Promise<AcuerdoComisionResuelto | null> {
+  const item = await tx.supplyV2CatalogItem.findUnique({ where: { id: catalogItemId }, select: { id: true, category: true, supplierId: true } })
+  if (!item) fallo('ITEM_NO_ENCONTRADO', 'El producto no existe.')
+  const candidatos = await tx.supplyV2Agreement.findMany({
+    where: { supplierId: item.supplierId, type: 'COMMISSION', status: 'ACTIVE' },
+    select: { id: true, code: true, status: true, type: true, scope: true, catalogItemId: true, category: true, startsAt: true, endsAt: true, version: true, commissionPercentage: true, paymentTermsDays: true },
+  })
+  const ganador = resolverAcuerdoComision(candidatos, item, ahora)
+  if (!ganador) return null
+  if (ganador.commissionPercentage == null) fallo('ACUERDO_SIN_COMISION', `El acuerdo ${ganador.code} no tiene porcentaje de comisión.`)
+  const v = await tx.supplyV2AgreementVersion.findUnique({ where: { agreementId_version: { agreementId: ganador.id, version: ganador.version } }, select: { id: true } })
+  if (!v) fallo('ACUERDO_SIN_VERSION', `El acuerdo ${ganador.code} no tiene versión activa.`)
+  return { agreementId: ganador.id, agreementVersionId: v.id, code: ganador.code, version: ganador.version, scope: ganador.scope, commissionPercentage: ganador.commissionPercentage, paymentTermsDays: ganador.paymentTermsDays }
+}
 
 export interface AcuerdoCreado {
   id: string
@@ -62,7 +93,8 @@ export async function crearAcuerdoEnTx(tx: Tx, d: DatosAcuerdo, ctx: ContextoAud
       commissionPercentage:
         d.commissionPercentage != null && d.commissionPercentage !== '' ? new Prisma.Decimal(d.commissionPercentage) : null,
       paymentTermsDays: d.paymentTermsDays ?? null,
-      payableRecognition: d.payableRecognition ?? 'ON_INVOICE',
+      // Slice 5: a comisión la deuda nace SIEMPRE al entregar.
+      payableRecognition: d.type === 'COMMISSION' ? 'ON_REDEMPTION' : d.payableRecognition ?? 'ON_INVOICE',
       allowDepositApplication: d.allowDepositApplication ?? true,
       settlementFrequency: d.settlementFrequency?.trim() || null,
       startsAt: d.startsAt,

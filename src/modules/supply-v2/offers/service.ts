@@ -5,7 +5,8 @@ import { estadoInicialOferta, exigirTransicion, TRANSICIONES_OFERTA } from '../c
 import { siguienteNumero } from '../core/numeracion'
 import { calcularPrecioOferta } from '../core/precios'
 import { asignarEnTx, liberarAsignacionEnTx } from '../allocations/service'
-import { slugDeOferta, validarOferta, type DatosOferta } from './domain'
+import { resolverAcuerdoComisionDeItemEnTx } from '../agreements/service'
+import { slugDeOferta, unidadesLibresComision, validarOferta, validarOfertaComision, type DatosOferta, type DatosOfertaComision } from './domain'
 
 /**
  * MEMBEGO SUPPLY 2.0 · OFERTAS (§7–§16, §38–§39).
@@ -73,20 +74,116 @@ export async function crearOfertaEnTx(tx: Tx, d: DatosOferta, ctx: ContextoAudit
 }
 
 /**
+ * Slice 5 (§10–§12) · OFERTA A COMISIÓN: sin PO, sin recepción, sin lote, sin
+ * asignación. Exige un acuerdo a comisión vigente que cubra el producto
+ * (ITEM > CATEGORY > CATALOG) y congela acuerdo, versión y porcentaje en la
+ * oferta. La disponibilidad es propia (sin tope, cantidad fija o capacidad).
+ */
+export async function crearOfertaComisionEnTx(tx: Tx, d: DatosOfertaComision, ctx: ContextoAuditoria): Promise<OfertaCreada & { commissionPercentage: string; agreementCode: string; commissionScope: string }> {
+  if (!ctx.actorId) fallo('SIN_ACTOR', 'Una oferta necesita quién la crea.')
+  const error = validarOfertaComision(d)
+  if (error) fallo('OFERTA_INVALIDA', error)
+  const item = await tx.supplyV2CatalogItem.findUnique({
+    where: { id: d.catalogItemId },
+    select: { id: true, name: true, status: true, supplierId: true, currency: true, supplier: { select: { status: true, companyId: true } } },
+  })
+  if (!item) fallo('ITEM_NO_ENCONTRADO', 'El producto no existe.')
+  if (item.status !== 'ACTIVE') fallo('ITEM_INACTIVO', 'El producto no está activo.')
+  if (item.supplier.status !== 'ACTIVE') fallo('PROVEEDOR_INACTIVO', 'El proveedor no está activo.')
+  const acuerdo = await resolverAcuerdoComisionDeItemEnTx(tx, item.id)
+  if (!acuerdo) fallo('SIN_ACUERDO_COMISION', 'Este producto no tiene un acuerdo a comisión vigente (por producto, categoría o catálogo). Crea y activa uno antes de vender a comisión.')
+
+  const precio = calcularPrecioOferta(d.publicPrice, d.salePrice)
+  const code = await siguienteNumero(tx, 'MBG-OF', async (prefijo) => {
+    const u = await tx.supplyV2Offer.findFirst({ where: { code: { startsWith: prefijo } }, orderBy: { code: 'desc' }, select: { code: true } })
+    return u?.code ?? null
+  })
+  const sinTope = d.availabilityMode === 'UNLIMITED'
+  const creada = await tx.supplyV2Offer.create({
+    data: {
+      supplierId: item.supplierId,
+      catalogItemId: item.id,
+      code,
+      slug: slugDeOferta(d.title, code),
+      title: d.title.trim(),
+      description: d.description?.trim() || null,
+      sourceType: 'COMMISSION',
+      publicPrice: precio.publicPrice,
+      salePrice: precio.salePrice,
+      currency: item.currency,
+      // quantityLimit es informativo en comisión: lo que manda es availabilityMode/Quantity.
+      quantityLimit: sinTope ? 0 : d.availabilityQuantity!,
+      perCustomerLimit: d.perCustomerLimit ?? 1,
+      agreementId: acuerdo.agreementId,
+      agreementVersionId: acuerdo.agreementVersionId,
+      commissionPercentage: acuerdo.commissionPercentage,
+      commissionScope: acuerdo.scope,
+      availabilityMode: d.availabilityMode,
+      availabilityQuantity: sinTope ? null : d.availabilityQuantity!,
+      startsAt: d.startsAt,
+      endsAt: d.endsAt ?? null,
+      imagePath: d.imagePath ?? null,
+      status: 'DRAFT',
+      createdById: ctx.actorId,
+    },
+    select: { id: true, code: true, slug: true, status: true },
+  })
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_COMMISSION_OFFER_CREATED', 'SupplyV2Offer', creada.id, {
+    code: creada.code,
+    catalogItemId: item.id,
+    agreementId: acuerdo.agreementId,
+    agreementCode: acuerdo.code,
+    agreementVersionId: acuerdo.agreementVersionId,
+    commissionPercentage: acuerdo.commissionPercentage.toFixed(2),
+    commissionScope: acuerdo.scope,
+    availabilityMode: d.availabilityMode,
+    availabilityQuantity: sinTope ? null : d.availabilityQuantity,
+    publicPrice: precio.publicPrice.toString(),
+    salePrice: precio.salePrice.toString(),
+  }, item.supplier.companyId)
+  return { ...creada, commissionPercentage: acuerdo.commissionPercentage.toFixed(2), agreementCode: acuerdo.code, commissionScope: acuerdo.scope }
+}
+
+/**
  * PUBLICAR (§16): aparta el supply y activa. Idempotente: publicar una oferta
  * ya publicada devuelve lo que hay sin asignar dos veces.
+ * Slice 5: una oferta a COMISIÓN no aparta nada; al publicar se vuelve a
+ * resolver el acuerdo (sigue vigente y cubre el producto) y se congela.
  */
-export async function publicarOfertaEnTx(tx: Tx, offerId: string, ctx: ContextoAuditoria): Promise<{ id: string; status: string; allocationId: string }> {
+export async function publicarOfertaEnTx(tx: Tx, offerId: string, ctx: ContextoAuditoria): Promise<{ id: string; status: string; allocationId: string | null }> {
   if (!ctx.actorId) fallo('SIN_ACTOR', 'Publicar una oferta necesita quién la publica.')
   await tx.$queryRaw`SELECT "id" FROM "supply_v2_offers" WHERE "id" = ${offerId} FOR UPDATE`
   const o = await tx.supplyV2Offer.findUnique({
     where: { id: offerId },
-    select: { id: true, code: true, title: true, status: true, allocationId: true, catalogItemId: true, quantityLimit: true, startsAt: true, endsAt: true, supplier: { select: { companyId: true } } },
+    select: { id: true, code: true, title: true, status: true, sourceType: true, allocationId: true, catalogItemId: true, quantityLimit: true, startsAt: true, endsAt: true, supplier: { select: { companyId: true } } },
   })
   if (!o) fallo('OFERTA_NO_ENCONTRADA', 'La oferta no existe.')
-  if (o.allocationId && o.status !== 'DRAFT') return { id: o.id, status: o.status, allocationId: o.allocationId }
+  if (o.status !== 'DRAFT' && (o.allocationId || o.sourceType === 'COMMISSION')) return { id: o.id, status: o.status, allocationId: o.allocationId }
   if (o.status !== 'DRAFT') fallo('OFERTA_NO_PUBLICABLE', `Una oferta ${o.status} no se puede publicar.`)
   if (o.endsAt && o.endsAt <= new Date()) fallo('OFERTA_VENCIDA', 'La vigencia de la oferta ya pasó: cambia la fecha de fin antes de publicar.')
+
+  if (o.sourceType === 'COMMISSION') {
+    const acuerdo = await resolverAcuerdoComisionDeItemEnTx(tx, o.catalogItemId)
+    if (!acuerdo) fallo('SIN_ACUERDO_COMISION', 'El producto ya no tiene un acuerdo a comisión vigente: no se puede publicar.')
+    const status = estadoInicialOferta(o.startsAt)
+    exigirTransicion(TRANSICIONES_OFERTA, o.status, status, 'Oferta')
+    await tx.supplyV2Offer.update({
+      where: { id: o.id },
+      data: { status, agreementId: acuerdo.agreementId, agreementVersionId: acuerdo.agreementVersionId, commissionPercentage: acuerdo.commissionPercentage, commissionScope: acuerdo.scope, publishedById: ctx.actorId, publishedAt: new Date() },
+    })
+    await auditarEnTx(tx, ctx, 'SUPPLY_V2_OFFER_PUBLISHED', 'SupplyV2Offer', o.id, {
+      code: o.code,
+      antes: 'DRAFT',
+      despues: status,
+      sourceType: 'COMMISSION',
+      agreementId: acuerdo.agreementId,
+      agreementVersionId: acuerdo.agreementVersionId,
+      commissionPercentage: acuerdo.commissionPercentage.toFixed(2),
+      commissionScope: acuerdo.scope,
+      allocationId: null,
+    }, o.supplier.companyId)
+    return { id: o.id, status, allocationId: null }
+  }
 
   const asignacion = await asignarEnTx(
     tx,
@@ -146,7 +243,7 @@ export async function cerrarOfertaEnTx(
   exigirTransicion(TRANSICIONES_OFERTA, o.status, modo, 'Oferta')
   const reservasVivas = o.allocationId
     ? await tx.supplyV2OrderReservation.count({ where: { allocationLine: { allocationId: o.allocationId }, status: 'ACTIVE' } })
-    : 0
+    : await tx.supplyV2CommissionReservation.count({ where: { offerId: o.id, status: 'ACTIVE' } })
   if (reservasVivas > 0 && modo === 'CANCELLED') {
     fallo('OFERTA_CON_RESERVAS', 'Hay checkouts en curso sobre esta oferta: pausa la oferta y espera a que se paguen o expiren antes de cancelarla.')
   }
@@ -169,12 +266,25 @@ export async function cerrarOfertaEnTx(
 export async function marcarAgotadaSiCorrespondeEnTx(tx: Tx, offerId: string): Promise<void> {
   const o = await tx.supplyV2Offer.findUnique({
     where: { id: offerId },
-    select: { id: true, status: true, allocation: { select: { allocatedQuantity: true, issuedQuantity: true, releasedQuantity: true, reservedQuantity: true } } },
+    select: { id: true, status: true, sourceType: true, availabilityMode: true, availabilityQuantity: true, allocation: { select: { allocatedQuantity: true, issuedQuantity: true, releasedQuantity: true, reservedQuantity: true } } },
   })
-  if (!o?.allocation || o.status !== 'ACTIVE') return
+  if (!o || o.status !== 'ACTIVE') return
+  if (o.sourceType === 'COMMISSION') {
+    const libres = await unidadesLibresDeOfertaComisionEnTx(tx, o)
+    if (libres === 0) await tx.supplyV2Offer.update({ where: { id: o.id }, data: { status: 'SOLD_OUT' } })
+    return
+  }
+  if (!o.allocation) return
   const a = o.allocation
   if (a.issuedQuantity + a.releasedQuantity >= a.allocatedQuantity && a.reservedQuantity === 0) {
     await tx.supplyV2Offer.update({ where: { id: o.id }, data: { status: 'SOLD_OUT' } })
     await tx.supplyV2Allocation.updateMany({ where: { offer: { id: o.id } }, data: { status: 'EXHAUSTED' } })
   }
+}
+
+/** Slice 5 (§14): tope − (reservas ACTIVE + CONSUMED). `null` sin tope. Llamar con la oferta bloqueada cuando importe. */
+export async function unidadesLibresDeOfertaComisionEnTx(tx: Tx, o: { id: string; availabilityMode: 'UNLIMITED' | 'FIXED_QUANTITY' | 'CAPACITY' | null; availabilityQuantity: number | null }): Promise<number | null> {
+  if (!o.availabilityMode || o.availabilityMode === 'UNLIMITED') return null
+  const r = await tx.supplyV2CommissionReservation.aggregate({ where: { offerId: o.id, status: { in: ['ACTIVE', 'CONSUMED'] } }, _sum: { quantity: true } })
+  return unidadesLibresComision(o, r._sum.quantity ?? 0)
 }

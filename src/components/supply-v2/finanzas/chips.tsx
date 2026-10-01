@@ -28,3 +28,15 @@ export function ChipObligacion({ estado }: { estado: SupplyV2ObligationStatus })
 export function ChipConciliacion({ estado }: { estado: SupplyV2ReconciliationStatus }) {
   return <StatusChip tone={RECONCILIATION_STATUS_TONE[estado]} data-testid="estado-conciliacion">{RECONCILIATION_STATUS_LABELS[estado]}</StatusChip>
 }
+
+// ── Slice 5 ──────────────────────────────────────────────────────────────────
+import type { SupplyV2OfferSource, SupplyV2SettlementStatus } from '@prisma/client'
+import { OFFER_SOURCE_LABELS, SETTLEMENT_STATUS_LABELS, SETTLEMENT_STATUS_TONE } from '@/modules/supply-v2/core/catalogo'
+
+export function ChipLiquidacion({ estado }: { estado: SupplyV2SettlementStatus }) {
+  return <StatusChip tone={SETTLEMENT_STATUS_TONE[estado]} pulso={estado === 'PENDING_APPROVAL'} data-testid="estado-liquidacion">{SETTLEMENT_STATUS_LABELS[estado]}</StatusChip>
+}
+/** Modelo de la oferta / venta: supply adquirido o comisión (§64). */
+export function ChipModelo({ fuente }: { fuente: SupplyV2OfferSource }) {
+  return <StatusChip tone={fuente === 'COMMISSION' ? 'info' : 'neutral'} data-testid="chip-modelo">{OFFER_SOURCE_LABELS[fuente]}</StatusChip>
+}

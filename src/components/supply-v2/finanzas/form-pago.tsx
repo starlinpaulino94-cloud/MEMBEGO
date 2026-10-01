@@ -29,6 +29,8 @@ export function FormPago({
   invoiceId,
   invoiceNumber,
   obligationId,
+  settlementId,
+  settlementNumber,
   destinoInicial,
   montoSugerido,
   idempotencyKey,
@@ -40,7 +42,10 @@ export function FormPago({
   invoiceId?: string
   invoiceNumber?: string
   obligationId?: string
-  destinoInicial?: 'FACTURA' | 'OBLIGACION' | 'DEPOSITO' | 'NINGUNO'
+  /** Slice 5: una liquidación aprobada; el pago se reparte entre sus entregas, la más antigua primero. */
+  settlementId?: string
+  settlementNumber?: string
+  destinoInicial?: 'FACTURA' | 'OBLIGACION' | 'LIQUIDACION' | 'DEPOSITO' | 'NINGUNO'
   montoSugerido?: string
   /** Clave generada en el servidor al pintar la página: el doble clic no registra dos pagos. */
   idempotencyKey: string
@@ -48,7 +53,7 @@ export function FormPago({
   compacto?: boolean
 }) {
   const [estado, enviar, pendiente] = useActionState<EstadoAccion<PagoCreado>, FormData>(crearPagoProveedorAction, {})
-  const [destino, setDestino] = useState<'FACTURA' | 'OBLIGACION' | 'DEPOSITO' | 'NINGUNO'>(destinoInicial ?? (invoiceId ? 'FACTURA' : obligationId ? 'OBLIGACION' : 'NINGUNO'))
+  const [destino, setDestino] = useState<'FACTURA' | 'OBLIGACION' | 'LIQUIDACION' | 'DEPOSITO' | 'NINGUNO'>(destinoInicial ?? (invoiceId ? 'FACTURA' : obligationId ? 'OBLIGACION' : settlementId ? 'LIQUIDACION' : 'NINGUNO'))
   const router = useRouter()
   const visto = useRef<string | undefined>(undefined)
   useEffect(() => {
@@ -67,6 +72,7 @@ export function FormPago({
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       {invoiceId && <input type="hidden" name="invoiceId" value={invoiceId} />}
       {obligationId && <input type="hidden" name="obligationId" value={obligationId} />}
+      {settlementId && <input type="hidden" name="settlementId" value={settlementId} />}
       <div className={`grid gap-3 ${compacto ? '' : 'sm:grid-cols-2'}`}>
         <div>
           <Label htmlFor="pagoProveedor">Proveedor</Label>
@@ -108,6 +114,7 @@ export function FormPago({
           <select id="pagoDestino" name="destino" className={select} value={destino} onChange={(e) => setDestino(e.target.value as typeof destino)} data-testid="pago-destino">
             {invoiceId && <option value="FACTURA">La factura {invoiceNumber ?? ''}</option>}
             {obligationId && <option value="OBLIGACION">Esta obligación</option>}
+            {settlementId && <option value="LIQUIDACION">La liquidación {settlementNumber ?? ''}</option>}
             <option value="DEPOSITO">Un depósito nuevo (anticipo al proveedor)</option>
             <option value="NINGUNO">Nada todavía (queda sin aplicar)</option>
           </select>

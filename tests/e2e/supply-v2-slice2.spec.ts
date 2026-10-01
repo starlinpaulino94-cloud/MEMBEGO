@@ -144,22 +144,24 @@ test.describe('Supply 2.0 · Slice 2', () => {
     await anonimo.close()
 
     // ── CLIENTE · ver, comprar, reservar, checkout, avisar pago ───────────
+    // Next 16.3 deja unos instantes la página anterior OCULTA en el DOM al navegar:
+    // se filtra por visible (igual que los arneses de los Slices 3 y 4).
     const ctxCliente = await browser.newContext()
     const cliente = await ctxCliente.newPage()
     await entrarComo(ctxCliente, 'cliente', BASE)
     await cliente.goto(urlPublica)
-    await expect(cliente.getByTestId('oferta-titulo')).toHaveText(OFERTA)
-    await expect(cliente.getByTestId('oferta-precio-regular')).toContainText('600')
-    await expect(cliente.getByTestId('oferta-precio-membego')).toContainText('399')
-    await expect(cliente.getByTestId('oferta-ahorro')).toContainText('201')
-    await cliente.getByTestId('btn-comprar').click()
+    await expect(cliente.getByTestId('oferta-titulo').filter({ visible: true })).toHaveText(OFERTA)
+    await expect(cliente.getByTestId('oferta-precio-regular').filter({ visible: true })).toContainText('600')
+    await expect(cliente.getByTestId('oferta-precio-membego').filter({ visible: true })).toContainText('399')
+    await expect(cliente.getByTestId('oferta-ahorro').filter({ visible: true })).toContainText('201')
+    await cliente.getByTestId('btn-comprar').filter({ visible: true }).click()
     await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
     const urlCompra = cliente.url()
-    await expect(cliente.getByTestId('estado-compra')).toHaveText('Pendiente de pago')
-    await expect(cliente.getByTestId('checkout-producto')).toHaveText(OFERTA)
-    await expect(cliente.getByTestId('checkout-total')).toContainText('399.00')
-    await expect(cliente.getByTestId('checkout-cuenta')).toContainText('000-111-222')
-    await expect(cliente.getByTestId('cuenta-atras')).toBeVisible()
+    await expect(cliente.getByTestId('estado-compra').filter({ visible: true })).toHaveText('Pendiente de pago')
+    await expect(cliente.getByTestId('checkout-producto').filter({ visible: true })).toHaveText(OFERTA)
+    await expect(cliente.getByTestId('checkout-total').filter({ visible: true })).toContainText('399.00')
+    await expect(cliente.getByTestId('checkout-cuenta').filter({ visible: true })).toContainText('000-111-222')
+    await expect(cliente.getByTestId('cuenta-atras').filter({ visible: true })).toBeVisible()
     await cliente.screenshot({ path: 'test-results/shots/supply-v2-checkout.png', fullPage: true })
 
     // La reserva ya descuenta de la oferta.
@@ -167,10 +169,10 @@ test.describe('Supply 2.0 · Slice 2', () => {
     await expect(compras.getByTestId('oferta-reservadas')).toHaveText('1')
     await expect(compras.getByTestId('oferta-disponibles')).toHaveText('99')
 
-    await cliente.locator('#referenciaPago').fill('TRX-E2E-001')
-    await cliente.getByTestId('btn-avisar-pago').click()
-    await expect(cliente.getByTestId('checkout-en-revision')).toBeVisible()
-    await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
+    await cliente.locator('#referenciaPago').filter({ visible: true }).fill('TRX-E2E-001')
+    await cliente.getByTestId('btn-avisar-pago').filter({ visible: true }).click()
+    await expect(cliente.getByTestId('checkout-en-revision').filter({ visible: true })).toBeVisible()
+    await expect(cliente.getByTestId('estado-compra').filter({ visible: true })).toHaveText('Pago en revisión')
 
     // ── ADMIN · confirmar el pago ─────────────────────────────────────────
     await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
@@ -182,12 +184,12 @@ test.describe('Supply 2.0 · Slice 2', () => {
 
     // ── CLIENTE · compra PAID y beneficio disponible ──────────────────────
     await cliente.goto(urlCompra)
-    await expect(cliente.getByTestId('estado-compra')).toHaveText('Pagada')
-    await expect(cliente.getByTestId('checkout-pagada')).toContainText('Tu beneficio está disponible')
-    await expect(cliente.getByTestId('derecho')).toHaveCount(1)
-    await expect(cliente.getByTestId('derecho-estado')).toHaveText('Disponible')
+    await expect(cliente.getByTestId('estado-compra').filter({ visible: true })).toHaveText('Pagada')
+    await expect(cliente.getByTestId('checkout-pagada').filter({ visible: true })).toContainText('Tu beneficio está disponible')
+    await expect(cliente.getByTestId('derecho').filter({ visible: true })).toHaveCount(1)
+    await expect(cliente.getByTestId('derecho-estado').filter({ visible: true })).toHaveText('Disponible')
     await cliente.goto('/cliente/compras')
-    await expect(cliente.getByTestId('mis-derechos')).toContainText(PRODUCTO)
+    await expect(cliente.getByTestId('mis-derechos').filter({ visible: true })).toContainText(PRODUCTO)
     await cliente.screenshot({ path: 'test-results/shots/supply-v2-cliente-beneficio.png', fullPage: true })
 
     // ── ADMIN · la oferta y el pool reflejan la venta ─────────────────────
@@ -215,7 +217,7 @@ test.describe('Supply 2.0 · Slice 2', () => {
 
     // ── EXPIRACIÓN · segunda compra, reloj adelantado, cron ───────────────
     await cliente.goto(urlPublica)
-    await cliente.getByTestId('btn-comprar').click()
+    await cliente.getByTestId('btn-comprar').filter({ visible: true }).click()
     await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
     const urlSegunda = cliente.url()
     const idSegunda = urlSegunda.split('/').pop()!
@@ -227,8 +229,8 @@ test.describe('Supply 2.0 · Slice 2', () => {
     expect(cron.ok()).toBe(true)
     expect((await cron.json()).ordenesExpiradas).toBeGreaterThanOrEqual(1)
     await cliente.goto(urlSegunda)
-    await expect(cliente.getByTestId('estado-compra')).toHaveText('Expirada')
-    await expect(cliente.getByTestId('checkout-cerrada')).toContainText('La reserva venció')
+    await expect(cliente.getByTestId('estado-compra').filter({ visible: true })).toHaveText('Expirada')
+    await expect(cliente.getByTestId('checkout-cerrada').filter({ visible: true })).toContainText('La reserva venció')
     await compras.goto(urlOferta)
     await expect(compras.getByTestId('oferta-reservadas')).toHaveText('0')
     await expect(compras.getByTestId('oferta-disponibles')).toHaveText('99')

@@ -57,6 +57,13 @@ export const SUPPLY_V2_PERMISSIONS = [
   'SUPPLY_V2_PAYMENT_CREATE',
   'SUPPLY_V2_PAYMENT_APPROVE',
   'SUPPLY_V2_RECONCILE',
+  // Slice 5 · comisión + liquidaciones (§85)
+  'SUPPLY_V2_COMMISSION_OFFER_MANAGE',
+  'SUPPLY_V2_SETTLEMENT_VIEW',
+  'SUPPLY_V2_SETTLEMENT_CREATE',
+  'SUPPLY_V2_SETTLEMENT_APPROVE',
+  'SUPPLY_V2_SETTLEMENT_PAY',
+  'SUPPLY_V2_COMMISSION_RECONCILE',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -78,6 +85,12 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_PAYMENT_CREATE: 'Registrar pagos a proveedores',
   SUPPLY_V2_PAYMENT_APPROVE: 'Confirmar pagos a proveedores y reversar aplicaciones',
   SUPPLY_V2_RECONCILE: 'Conciliar con proveedores',
+  SUPPLY_V2_COMMISSION_OFFER_MANAGE: 'Crear y publicar ofertas a comisión',
+  SUPPLY_V2_SETTLEMENT_VIEW: 'Ver liquidaciones a proveedores',
+  SUPPLY_V2_SETTLEMENT_CREATE: 'Generar y cancelar liquidaciones',
+  SUPPLY_V2_SETTLEMENT_APPROVE: 'Aprobar liquidaciones (segregación: no quien las generó)',
+  SUPPLY_V2_SETTLEMENT_PAY: 'Registrar pagos de liquidaciones',
+  SUPPLY_V2_COMMISSION_RECONCILE: 'Conciliar ventas a comisión con proveedores',
 }
 
 export interface CompanyGateway {

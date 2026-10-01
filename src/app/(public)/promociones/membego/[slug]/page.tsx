@@ -27,7 +27,8 @@ export default async function OfertaMembegoPage({ params }: { params: Promise<{ 
   const [o, user] = await Promise.all([ofertaPublicaPorSlug(slug), getUser()])
   if (!o) notFound()
   const sesion = !user ? 'ninguna' : user.metadata.role === 'CLIENTE' ? 'cliente' : 'otro'
-  const maximo = Math.max(1, Math.min(o.perCustomerLimit, o.remaining))
+  // Slice 5: una oferta a comisión sin tope no limita por unidades, solo por persona.
+  const maximo = o.unlimited ? o.perCustomerLimit : Math.max(1, Math.min(o.perCustomerLimit, o.remaining))
 
   return (
     <main className="container max-w-3xl py-10">
@@ -46,7 +47,7 @@ export default async function OfertaMembegoPage({ params }: { params: Promise<{ 
             <li className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-success" aria-hidden /> {o.available ? 'Disponible' : 'No disponible ahora mismo'}</li>
             {o.endsAt && <li className="flex items-center gap-2"><CalendarClock className="h-4 w-4" aria-hidden /> Válido hasta {new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium' }).format(new Date(o.endsAt))}</li>}
             <li className="flex items-center gap-2"><Users className="h-4 w-4" aria-hidden /> Máximo {o.perCustomerLimit} por persona</li>
-            {o.available && o.remaining <= 5 && <li className="text-warning">Quedan {o.remaining}</li>}
+            {o.available && !o.unlimited && o.remaining <= 5 && <li className="text-warning">Quedan {o.remaining}</li>}
           </ul>
         </div>
         <div className="space-y-3 rounded-xl border border-border bg-background p-4">

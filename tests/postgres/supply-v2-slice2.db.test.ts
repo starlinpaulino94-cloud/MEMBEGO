@@ -71,7 +71,7 @@ async function ofertaPublicada(cantidad: number, opciones: { perCustomerLimit?: 
       como(ctx.admin)
     )
     const p = await publicarOfertaEnTx(tx, o.id, como(ctx.admin))
-    return { id: o.id, allocationId: p.allocationId, status: p.status }
+    return { id: o.id, allocationId: p.allocationId!, status: p.status }
   })
 }
 const comprar = (customerId: string, offerId: string, quantity = 1, idempotencyKey?: string) =>
@@ -127,10 +127,10 @@ test('A · crear oferta deja borrador sin tocar supply; publicar asigna 100 por 
 
   const pub = await sinEmpresa('prueba', (tx) => publicarOfertaEnTx(tx, borrador.id, como(ctx.admin)))
   ctx.oferta1 = borrador.id
-  ctx.oferta1Alloc = pub.allocationId
+  ctx.oferta1Alloc = pub.allocationId!
   assert.equal(pub.status, 'ACTIVE')
   assert.deepEqual(await cubetasProducto(), { AVAILABLE: 900, ALLOCATED: 100, RESERVED: 0, ISSUED: 0 })
-  const lineas = await prisma.supplyV2AllocationLine.findMany({ where: { allocationId: pub.allocationId } })
+  const lineas = await prisma.supplyV2AllocationLine.findMany({ where: { allocationId: pub.allocationId! } })
   assert.equal(lineas.length, 1)
   assert.equal(lineas[0]!.lotId, ctx.lotA)
   assert.equal((await lote(ctx.lotA)).quantityAllocated, 100)

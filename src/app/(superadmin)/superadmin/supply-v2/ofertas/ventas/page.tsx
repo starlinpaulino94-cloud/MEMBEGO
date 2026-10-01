@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { formatDateTime } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
 import { ChipCompra } from '@/components/supply-v2/chips'
+import { ChipModelo } from '@/components/supply-v2/finanzas/chips'
 import { FormConfirmarPago } from '@/components/supply-v2/form-confirmar-pago'
 import { listarComprasClientes } from '@/modules/supply-v2/offers/queries'
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS } from '@/modules/supply-v2/core/catalogo'
@@ -37,7 +38,11 @@ export default async function VentasPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-medium tabular-nums">{dinero(c.total, c.currency)}</span>
+          <span className="text-right tabular-nums">
+            <span className="block font-medium">{dinero(c.total, c.currency)}</span>
+            {c.sourceType === 'COMMISSION' && <span className="block text-caption text-muted-foreground" data-testid="venta-reparto">comisión {dinero(c.commissionAmount, c.currency)} · neto {dinero(c.supplierNet, c.currency)}</span>}
+          </span>
+          <ChipModelo fuente={c.sourceType} />
           <ChipCompra estado={c.status} />
         </div>
       </div>

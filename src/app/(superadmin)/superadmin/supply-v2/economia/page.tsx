@@ -103,6 +103,30 @@ export default async function EconomiaPage({ searchParams }: { searchParams: Pro
             <StatCard label="Unidades vencidas (breakage)" value={<span data-testid="eco-vencidas">{e.unitsExpired.toLocaleString('es-DO')}</span>} sub={e.breakageRate != null ? `${e.breakageRate.toLocaleString('es-DO')} % de lo vendido` : '—'} accent={e.unitsExpired > 0 ? 'warning' : undefined} />
             <StatCard label="Supply vencido sin vender" value={<span data-testid="eco-supply-vencido">{dineroSupplyV2(e.expiredSupplyCost)}</span>} sub={`${e.expiredSupplyUnits.toLocaleString('es-DO')} unidades · costo histórico`} accent={e.expiredSupplyUnits > 0 ? 'danger' : undefined} />
           </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card data-testid="eco-prepago">
+              <CardHeader><CardTitle>Supply adquirido (prepago / pagar después)</CardTitle></CardHeader>
+              <CardContent>
+                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  <div><dt className="text-muted-foreground">GMV</dt><dd className="font-medium tabular-nums" data-testid="eco-prepago-gmv">{dineroSupplyV2(e.prepurchase.gmv)}</dd></div>
+                  <div><dt className="text-muted-foreground">Ingreso (= GMV)</dt><dd className="font-medium tabular-nums" data-testid="eco-prepago-revenue">{dineroSupplyV2(e.prepurchase.revenue)}</dd></div>
+                  <div><dt className="text-muted-foreground">Costo real del supply</dt><dd className="font-medium tabular-nums" data-testid="eco-prepago-cost">{dineroSupplyV2(e.prepurchase.cost)}</dd></div>
+                  <div><dt className="text-muted-foreground">Unidades vendidas</dt><dd className="font-medium tabular-nums">{e.prepurchase.unitsSold.toLocaleString('es-DO')}</dd></div>
+                </dl>
+              </CardContent>
+            </Card>
+            <Card data-testid="eco-comision">
+              <CardHeader><CardTitle>Venta a comisión (sin inventario de Membego)</CardTitle></CardHeader>
+              <CardContent>
+                <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                  <div><dt className="text-muted-foreground">GMV (lo que pagó el cliente)</dt><dd className="font-medium tabular-nums" data-testid="eco-comision-gmv">{dineroSupplyV2(e.commission.gmv)}</dd></div>
+                  <div><dt className="text-muted-foreground">Ingreso de Membego (comisión)</dt><dd className="font-medium tabular-nums" data-testid="eco-comision-revenue">{dineroSupplyV2(e.commission.revenue)}</dd></div>
+                  <div><dt className="text-muted-foreground">Neto de proveedores (no es ingreso ni costo)</dt><dd className="font-medium tabular-nums" data-testid="eco-comision-neto">{dineroSupplyV2(e.commission.supplierNet)}</dd></div>
+                  <div><dt className="text-muted-foreground">Unidades vendidas</dt><dd className="font-medium tabular-nums" data-testid="eco-comision-unidades">{e.commission.unitsSold.toLocaleString('es-DO')}</dd></div>
+                </dl>
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
 
@@ -111,7 +135,7 @@ export default async function EconomiaPage({ searchParams }: { searchParams: Pro
         <CardContent>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div><dt className="font-medium">GMV</dt><dd className="text-muted-foreground">Valor vendido al cliente (lo que pagó).</dd></div>
-            <div><dt className="font-medium">Ingreso</dt><dd className="text-muted-foreground">Ingreso reconocido por Membego. En compra anticipada coincide con el GMV.</dd></div>
+            <div><dt className="font-medium">Ingreso</dt><dd className="text-muted-foreground">Ingreso reconocido por Membego. En compra anticipada coincide con el GMV; a comisión es SOLO la comisión (cliente paga 1 000 al 10 % → ingreso 100, neto del proveedor 900).</dd></div>
             <div><dt className="font-medium">Costo</dt><dd className="text-muted-foreground">Costo real del lote de cada unidad vendida, congelado en el derecho. Nunca el precio público.</dd></div>
             <div><dt className="font-medium">Margen bruto</dt><dd className="text-muted-foreground">Ingreso − costo. Se reconoce al vender; redimir, reversar o vencer no lo cambian.</dd></div>
             <div><dt className="font-medium">Breakage</dt><dd className="text-muted-foreground">Derechos vendidos que vencieron sin redimirse. El ingreso se conserva y el costo no se duplica.</dd></div>

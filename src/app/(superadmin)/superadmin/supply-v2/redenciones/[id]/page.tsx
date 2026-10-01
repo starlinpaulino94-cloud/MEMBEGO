@@ -59,7 +59,13 @@ export default async function RedencionPage({ params }: { params: Promise<{ id: 
               <Dato label="Costo del lote (real)"><span data-testid="redencion-costo">{dinero(r.unitCostSnapshot, r.currency)}</span></Dato>
               <Dato label="Precio que pagó el cliente">{dinero(r.customerUnitPriceSnapshot, r.currency)}</Dato>
               <Dato label="Cliente pagó al comercio">{dinero(r.customerPaysMerchant, r.currency)}</Dato>
-              <Dato label="Lote"><Link href={`${BASE_SUPPLY_V2}/supply/lotes/${r.lot.id}`} className="underline-offset-4 hover:underline">{r.lot.code}</Link></Dato>
+              <Dato label="Lote">{r.lot ? <Link href={`${BASE_SUPPLY_V2}/supply/lotes/${r.lot.id}`} className="underline-offset-4 hover:underline">{r.lot.code}</Link> : <span data-testid="redencion-sin-lote">Sin lote · venta a comisión</span>}</Dato>
+              {r.sourceType === 'COMMISSION' ? (
+                <>
+                  <Dato label="Comisión de Membego"><span data-testid="redencion-comision">{dinero(r.commissionAmountSnapshot ?? 0, r.currency)}</span> ({r.commissionPercentageSnapshot?.toString() ?? '—'} %)</Dato>
+                  <Dato label="Neto del proveedor"><span data-testid="redencion-neto">{dinero(r.supplierNetSnapshot ?? 0, r.currency)}</span></Dato>
+                </>
+              ) : null}
               <Dato label="Oferta"><Link href={`${BASE_SUPPLY_V2}/ofertas/${r.entitlement.offer.id}`} className="underline-offset-4 hover:underline">{r.entitlement.offer.code}</Link></Dato>
               <Dato label="Orden del cliente">{r.entitlement.order.number}</Dato>
               <Dato label="Derecho"><span className="font-mono text-caption">{r.entitlement.id}</span> <ChipDerecho estado={r.entitlement.status} /></Dato>

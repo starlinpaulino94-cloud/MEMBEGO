@@ -5,6 +5,7 @@ import { redondear2, type Decimal } from '../core/dinero'
 import { fallo } from '../core/errores'
 import { siguienteNumero } from '../core/numeracion'
 import { CERO, creaObligacion, OBLIGACION_VIVA, politicaDeVersion, vencimientoDeObligacion, type PoliticaFinanciera } from './domain'
+import { recalcularTotalesDeLiquidacionEnTx } from './applications'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 4 · OBLIGACIONES (§17–§21).
@@ -143,9 +144,11 @@ export async function reconocerObligacionPorRecepcionEnTx(tx: Tx, receiptId: str
 export async function reconocerObligacionPorRedencionEnTx(tx: Tx, redemptionId: string, ctx: ContextoAuditoria): Promise<ObligacionReconocida | null> {
   const r = await tx.supplyV2Redemption.findUnique({
     where: { id: redemptionId },
-    select: { id: true, number: true, redeemedAt: true, supplierId: true, quantity: true, unitCostSnapshot: true, currency: true, lot: { select: { purchaseOrderId: true, agreementId: true, agreementVersionId: true, agreementVersion: { select: { snapshot: true } } } }, supplier: { select: { companyId: true } } },
+    select: { id: true, number: true, redeemedAt: true, supplierId: true, quantity: true, unitCostSnapshot: true, currency: true, sourceType: true, commissionPercentageSnapshot: true, commissionAmountSnapshot: true, supplierNetSnapshot: true, customerUnitPriceSnapshot: true, lot: { select: { purchaseOrderId: true, agreementId: true, agreementVersionId: true, agreementVersion: { select: { snapshot: true } } } }, entitlement: { select: { agreementId: true, agreementVersionId: true, agreementVersion: { select: { snapshot: true } } } }, supplier: { select: { companyId: true } } },
   })
   if (!r) fallo('REDENCION_NO_ENCONTRADA', 'La redención no existe.')
+  if (r.sourceType === 'COMMISSION') return reconocerObligacionDeComisionEnTx(tx, r, ctx)
+  if (!r.lot) fallo('REDENCION_SIN_LOTE', `La redención ${r.number} no es a comisión y no tiene lote.`)
   const politica = politicaDeVersion(r.lot.agreementVersion.snapshot)
   if (!creaObligacion(politica, 'REDEMPTION')) return null
   return reconocerObligacionEnTx(tx, {
@@ -166,14 +169,84 @@ export async function reconocerObligacionPorRedencionEnTx(tx: Tx, redemptionId: 
   }, ctx)
 }
 
-/** La reversa de una redención cancela su obligación si nadie la pagó todavía; si ya se pagó, queda y se avisa. */
+type RedencionParaComision = {
+  id: string
+  number: string
+  redeemedAt: Date
+  supplierId: string
+  currency: string
+  commissionPercentageSnapshot: Decimal | null
+  commissionAmountSnapshot: Decimal | null
+  supplierNetSnapshot: Decimal | null
+  customerUnitPriceSnapshot: Decimal
+  entitlement: { agreementId: string | null; agreementVersionId: string | null; agreementVersion: { snapshot: unknown } | null }
+  supplier: { companyId: string | null }
+}
+
+/**
+ * Slice 5 (§28–§31): en COMISIÓN la entrega es el cumplimiento del proveedor y
+ * ahí nace lo que Membego le debe: el NETO congelado en el derecho (lo que
+ * pagó el cliente menos la comisión). Nunca el bruto. Idempotente por
+ * redención (`sourceType + sourceId`). Si la redención no trae su foto no se
+ * inventa: se rechaza.
+ */
+async function reconocerObligacionDeComisionEnTx(tx: Tx, r: RedencionParaComision, ctx: ContextoAuditoria): Promise<ObligacionReconocida> {
+  if (r.supplierNetSnapshot == null || r.commissionAmountSnapshot == null) {
+    fallo('REDENCION_SIN_FOTO', `La entrega ${r.number} a comisión no tiene la foto del neto del proveedor.`)
+  }
+  const politica = politicaDeVersion(r.entitlement.agreementVersion?.snapshot ?? null)
+  const o = await reconocerObligacionEnTx(tx, {
+    supplierId: r.supplierId,
+    sourceType: 'REDEMPTION',
+    sourceId: r.id,
+    recognitionBasis: 'REDEMPTION',
+    grossAmount: r.supplierNetSnapshot,
+    currency: r.currency,
+    redemptionId: r.id,
+    agreementId: r.entitlement.agreementId,
+    agreementVersionId: r.entitlement.agreementVersionId,
+    recognizedAt: r.redeemedAt,
+    dueAt: vencimientoDeObligacion(r.redeemedAt, politica.paymentTermsDays),
+    notes: `Entrega ${r.number} a comisión: cliente pagó ${r.customerUnitPriceSnapshot.toFixed(2)}, comisión ${r.commissionAmountSnapshot.toFixed(2)} (${r.commissionPercentageSnapshot?.toFixed(2) ?? '?'} %), neto ${r.supplierNetSnapshot.toFixed(2)}.`,
+    companyId: r.supplier.companyId,
+  }, ctx)
+  if (!o.repetida) {
+    await auditarEnTx(tx, ctx, 'SUPPLY_V2_COMMISSION_OBLIGATION_CREATED', 'SupplyV2SupplierObligation', o.id, {
+      number: o.number,
+      redemptionId: r.id,
+      redemptionNumber: r.number,
+      gross: r.customerUnitPriceSnapshot.toFixed(2),
+      commission: r.commissionAmountSnapshot.toFixed(2),
+      supplierNet: r.supplierNetSnapshot.toFixed(2),
+    }, r.supplier.companyId)
+  }
+  return o
+}
+
+/**
+ * La reversa de una redención cancela su obligación si nadie la pagó todavía.
+ * Si ya se pagó (Slice 5, §33) NO se deshace en silencio: la obligación se
+ * conserva y queda una INCIDENCIA financiera abierta hasta que alguien la
+ * resuelva (nota de crédito, descuento en la próxima liquidación...).
+ */
 export async function cancelarObligacionDeRedencionEnTx(tx: Tx, redemptionId: string, motivo: string, ctx: ContextoAuditoria): Promise<'CANCELADA' | 'PAGADA_SE_CONSERVA' | 'SIN_OBLIGACION'> {
-  const o = await tx.supplyV2SupplierObligation.findUnique({ where: { redemptionId }, select: { id: true, number: true, status: true, paidAmount: true, supplier: { select: { companyId: true } } } })
+  const o = await tx.supplyV2SupplierObligation.findUnique({ where: { redemptionId }, select: { id: true, number: true, status: true, paidAmount: true, currency: true, supplierId: true, settlementId: true, supplier: { select: { companyId: true } } } })
   if (!o) return 'SIN_OBLIGACION'
   if (o.status === 'CANCELLED') return 'CANCELADA'
   if (o.paidAmount.greaterThan(0)) {
     await tx.supplyV2SupplierObligation.update({ where: { id: o.id }, data: { notes: `Redención reversada con pago ya aplicado: ${motivo}` } })
+    const inc = await tx.supplyV2FinanceIncident.create({
+      data: { supplierId: o.supplierId, type: 'REDEMPTION_REVERSED_AFTER_PAYMENT', status: 'OPEN', obligationId: o.id, redemptionId, currency: o.currency, amount: o.paidAmount, notes: `La obligación ${o.number} ya tenía ${o.paidAmount.toFixed(2)} pagados cuando se reversó la entrega: ${motivo}` },
+      select: { id: true },
+    })
+    await auditarEnTx(tx, ctx, 'SUPPLY_V2_FINANCE_INCIDENT_CREATED', 'SupplyV2FinanceIncident', inc.id, { type: 'REDEMPTION_REVERSED_AFTER_PAYMENT', obligationId: o.id, number: o.number, amount: o.paidAmount.toFixed(2), motivo }, o.supplier.companyId)
     return 'PAGADA_SE_CONSERVA'
+  }
+  if (o.settlementId) {
+    // Está en una liquidación viva pero sin dinero aplicado: sale de ella y la liquidación se recalcula.
+    await tx.supplyV2SettlementLine.deleteMany({ where: { settlementId: o.settlementId, obligationId: o.id } })
+    await tx.supplyV2SupplierObligation.update({ where: { id: o.id }, data: { settlementId: null } })
+    await recalcularTotalesDeLiquidacionEnTx(tx, o.settlementId)
   }
   await tx.supplyV2SupplierObligation.update({ where: { id: o.id }, data: { status: 'CANCELLED', outstandingAmount: CERO, cancelledAt: new Date(), cancelledReason: motivo } })
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_OBLIGATION_CANCELLED', 'SupplyV2SupplierObligation', o.id, { number: o.number, motivo }, o.supplier.companyId)
@@ -206,7 +279,8 @@ export async function enlazarObligacionesAFacturaEnTx(
     politica.payableRecognition === 'ON_RECEIPT' && f.purchaseOrderId
       ? await tx.supplyV2SupplierObligation.findMany({ where: { purchaseOrderId: f.purchaseOrderId, sourceType: 'PURCHASE_RECEIPT', invoiceId: null, status: { in: [...OBLIGACION_VIVA] }, currency: f.currency }, orderBy: [{ recognizedAt: 'asc' }, { id: 'asc' }], select: { id: true, grossAmount: true } })
       : politica.payableRecognition === 'ON_REDEMPTION'
-        ? await tx.supplyV2SupplierObligation.findMany({ where: { supplierId: f.supplierId, sourceType: 'REDEMPTION', invoiceId: null, status: { in: [...OBLIGACION_VIVA] }, currency: f.currency, ...(f.purchaseOrderId ? { purchaseOrderId: f.purchaseOrderId } : {}) }, orderBy: [{ recognizedAt: 'asc' }, { id: 'asc' }], select: { id: true, grossAmount: true } })
+        // Slice 5: las entregas a comisión se LIQUIDAN, nunca se facturan: fuera de aquí.
+        ? await tx.supplyV2SupplierObligation.findMany({ where: { supplierId: f.supplierId, sourceType: 'REDEMPTION', invoiceId: null, settlementId: null, status: { in: [...OBLIGACION_VIVA] }, currency: f.currency, redemption: { sourceType: { not: 'COMMISSION' } }, ...(f.purchaseOrderId ? { purchaseOrderId: f.purchaseOrderId } : {}) }, orderBy: [{ recognizedAt: 'asc' }, { id: 'asc' }], select: { id: true, grossAmount: true } })
         : []
   let acumulado = CERO
   const enlazadas: string[] = []
