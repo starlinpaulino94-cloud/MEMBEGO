@@ -38,6 +38,12 @@ export type PrefijoNumeracion =
   | 'MBG-BN'
   // Slice 7: campaña comercial
   | 'MBG-CP'
+  // Slice 8: fidelización — programa, plan, membresía, recompensa, reclamación
+  | 'MBG-FD'
+  | 'MBG-MP'
+  | 'MBG-MS'
+  | 'MBG-RW'
+  | 'MBG-RK'
 
 export function formatearNumero(prefijo: PrefijoNumeracion, anio: number, secuencia: number): string {
   return `${prefijo}-${anio}-${String(secuencia).padStart(6, '0')}`

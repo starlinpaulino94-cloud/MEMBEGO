@@ -20,6 +20,8 @@ export const MENSAJES_SEGREGACION = {
   liquidacion: 'Una liquidación no la aprueba la misma persona que la generó: pídele a otra persona autorizada que la apruebe.',
   beneficio: 'Un beneficio no lo aprueba la misma persona que lo creó: pídele a otra persona autorizada que lo apruebe.',
   campana: 'Una campaña no la aprueba la misma persona que la creó: pídele a otra persona autorizada que la apruebe.',
+  programaFidelizacion: 'Un programa de fidelización no lo aprueba la misma persona que lo creó: pídele a otra persona autorizada que lo apruebe.',
+  recompensa: 'Una recompensa no la aprueba la misma persona que la creó: pídele a otra persona autorizada que la apruebe.',
 } as const
 
 export type ClaveSegregacion = keyof typeof MENSAJES_SEGREGACION
