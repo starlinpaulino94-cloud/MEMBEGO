@@ -17,7 +17,7 @@ import { decimal, type Decimal } from '../core/dinero'
  */
 
 export interface EventoEconomico {
-  type: 'SALE_REVENUE' | 'REDEMPTION_COST' | 'EXPIRATION_COST' | 'BREAKAGE' | 'REVERSAL' | 'ADJUSTMENT'
+  type: 'SALE_REVENUE' | 'REDEMPTION_COST' | 'EXPIRATION_COST' | 'BREAKAGE' | 'REVERSAL' | 'ADJUSTMENT' | 'COMMISSION_REVENUE'
   units: number
   gmvAmount: Decimal | string | number
   revenueAmount: Decimal | string | number
@@ -40,6 +40,20 @@ export interface Economia {
   /** Supply comprado que venció SIN venderse: unidades y costo real perdido. */
   expiredSupplyUnits: number
   expiredSupplyCost: Decimal
+  /** Slice 5 (§53–§56): la venta a comisión, separada. GMV = lo que pagó el cliente; ingreso = comisión; neto = lo del proveedor. */
+  commission: {
+    gmv: Decimal
+    revenue: Decimal
+    supplierNet: Decimal
+    unitsSold: number
+  }
+  /** Supply adquirido (prepago / pagar después), separado del anterior. */
+  prepurchase: {
+    gmv: Decimal
+    revenue: Decimal
+    cost: Decimal
+    unitsSold: number
+  }
 }
 
 const CERO = new Prisma.Decimal(0)
@@ -54,6 +68,8 @@ export function agregarEconomia(eventos: readonly EventoEconomico[], unidadesRed
   let unitsExpired = 0
   let expiredSupplyUnits = 0
   let expiredSupplyCost = CERO
+  const commission = { gmv: CERO, revenue: CERO, supplierNet: CERO, unitsSold: 0 }
+  const prepurchase = { gmv: CERO, revenue: CERO, cost: CERO, unitsSold: 0 }
   for (const e of eventos) {
     switch (e.type) {
       case 'SALE_REVENUE':
@@ -64,8 +80,28 @@ export function agregarEconomia(eventos: readonly EventoEconomico[], unidadesRed
         revenue = revenue.plus(decimal(e.revenueAmount))
         cost = cost.plus(decimal(e.costAmount))
         grossMargin = grossMargin.plus(decimal(e.grossMarginAmount))
-        if (e.type === 'SALE_REVENUE') unitsSold += e.units
+        if (e.type === 'SALE_REVENUE') {
+          unitsSold += e.units
+          prepurchase.unitsSold += e.units
+          prepurchase.gmv = prepurchase.gmv.plus(decimal(e.gmvAmount))
+          prepurchase.revenue = prepurchase.revenue.plus(decimal(e.revenueAmount))
+          prepurchase.cost = prepurchase.cost.plus(decimal(e.costAmount))
+        }
         break
+      case 'COMMISSION_REVENUE': {
+        // GMV completo; ingreso SOLO la comisión; sin costo (Membego no compró nada); el neto NO es ni ingreso ni costo.
+        const g = decimal(e.gmvAmount)
+        const rev = decimal(e.revenueAmount)
+        gmv = gmv.plus(g)
+        revenue = revenue.plus(rev)
+        grossMargin = grossMargin.plus(decimal(e.grossMarginAmount))
+        unitsSold += e.units
+        commission.unitsSold += e.units
+        commission.gmv = commission.gmv.plus(g)
+        commission.revenue = commission.revenue.plus(rev)
+        commission.supplierNet = commission.supplierNet.plus(g.minus(rev))
+        break
+      }
       case 'BREAKAGE':
         unitsExpired += e.units
         // Sin dinero: el costo ya se reconoció al vender (§28).
@@ -88,6 +124,8 @@ export function agregarEconomia(eventos: readonly EventoEconomico[], unidadesRed
     breakageRate: unitsSold > 0 ? Number(new Prisma.Decimal(unitsExpired).dividedBy(unitsSold).times(100).toDecimalPlaces(2)) : null,
     expiredSupplyUnits,
     expiredSupplyCost,
+    commission,
+    prepurchase,
   }
 }
 

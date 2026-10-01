@@ -118,8 +118,8 @@ export interface CanjeParaValidar {
   sucursal: { id: string; companyId: string; activa: boolean } | null
   /** ¿El proveedor tiene sucursales? Si sí, la entrega exige una. */
   proveedorTieneSucursales: boolean
-  /** ISSUED del lote: al canjear debe haber al menos 1. */
-  lotIssued: number
+  /** ISSUED del lote: al canjear debe haber al menos 1. `null` en COMISIÓN (Slice 5): no hay lote. */
+  lotIssued: number | null
 }
 
 /**
@@ -155,7 +155,7 @@ export function motivoNoCanjeable(c: CanjeParaValidar, ahora = new Date()): Codi
     return 'BRANCH_REQUIRED'
   }
 
-  if (c.lotIssued < 1) return 'LEDGER_INCONSISTENT'
+  if (c.lotIssued !== null && c.lotIssued < 1) return 'LEDGER_INCONSISTENT'
   return null
 }
 

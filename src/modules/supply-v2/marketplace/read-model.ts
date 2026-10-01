@@ -1,9 +1,10 @@
 import 'server-only'
 
+import type { Prisma } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { motivoNoComprable } from '../core/estados'
 import { calcularPrecioOferta } from '../core/precios'
-import { unidadesLibres } from '../offers/domain'
+import { SIN_TOPE, unidadesLibres, unidadesLibresComision } from '../offers/domain'
 import { RUTA_OFERTAS_PUBLICAS } from '../core/catalogo'
 
 /**
@@ -35,6 +36,8 @@ export interface MarketplaceSupplyOffer {
   available: boolean
   /** Cuántas quedan; se muestra solo cuando son pocas. */
   remaining: number
+  /** Slice 5: oferta sin tope (comisión UNLIMITED): `remaining` no aplica. */
+  unlimited: boolean
   perCustomerLimit: number
   href: string
 }
@@ -53,32 +56,22 @@ const SELECT = {
   startsAt: true,
   endsAt: true,
   perCustomerLimit: true,
+  sourceType: true,
+  availabilityMode: true,
+  availabilityQuantity: true,
   supplier: { select: { commercialName: true } },
   catalogItem: { select: { name: true } },
   allocation: { select: { allocatedQuantity: true, reservedQuantity: true, issuedQuantity: true, releasedQuantity: true } },
-} as const
+  // Solo para contar disponibilidad en comisión; NUNCA sale al DTO (ni comisión, ni neto, ni acuerdo).
+  commissionReservations: { where: { status: { in: ['ACTIVE', 'CONSUMED'] } }, select: { quantity: true } },
+} satisfies Prisma.SupplyV2OfferSelect
 
-type Fila = {
-  id: string
-  slug: string
-  code: string
-  title: string
-  description: string | null
-  imagePath: string | null
-  status: 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'PAUSED' | 'SOLD_OUT' | 'ENDED' | 'CANCELLED'
-  publicPrice: { toString(): string }
-  salePrice: { toString(): string }
-  currency: string
-  startsAt: Date
-  endsAt: Date | null
-  perCustomerLimit: number
-  supplier: { commercialName: string }
-  catalogItem: { name: string }
-  allocation: { allocatedQuantity: number; reservedQuantity: number; issuedQuantity: number; releasedQuantity: number } | null
-}
+type Fila = Prisma.SupplyV2OfferGetPayload<{ select: typeof SELECT }>
 
 function aDto(o: Fila, ahora: Date): MarketplaceSupplyOffer {
-  const libres = o.allocation ? unidadesLibres(o.allocation) : 0
+  const libresComision = o.sourceType === 'COMMISSION' ? unidadesLibresComision(o, o.commissionReservations.reduce((t, r) => t + r.quantity, 0)) : 0
+  const unlimited = o.sourceType === 'COMMISSION' && libresComision === null
+  const libres = o.sourceType === 'COMMISSION' ? (libresComision ?? SIN_TOPE) : o.allocation ? unidadesLibres(o.allocation) : 0
   const precio = calcularPrecioOferta(o.publicPrice.toString(), o.salePrice.toString())
   return {
     id: o.id,
@@ -97,7 +90,8 @@ function aDto(o: Fila, ahora: Date): MarketplaceSupplyOffer {
     startsAt: o.startsAt.toISOString(),
     endsAt: o.endsAt?.toISOString() ?? null,
     available: motivoNoComprable(o, libres, ahora) === null,
-    remaining: libres,
+    remaining: unlimited ? 0 : libres,
+    unlimited,
     perCustomerLimit: o.perCustomerLimit,
     href: `${RUTA_OFERTAS_PUBLICAS}/${o.slug}`,
   }

@@ -70,6 +70,8 @@ export const AGREEMENT_TYPE_EXPLICACION: Record<SupplyV2AgreementType, string> =
 
 /** Los únicos tipos que el Slice 1 construye de verdad (§10). */
 export const AGREEMENT_TYPES_SLICE1: readonly SupplyV2AgreementType[] = ['PREPAID_PURCHASE', 'PAY_LATER']
+/** Slice 5 añade la venta a comisión (§7): el proveedor sigue siendo dueño del inventario. */
+export const AGREEMENT_TYPES_SLICE5: readonly SupplyV2AgreementType[] = ['PREPAID_PURCHASE', 'PAY_LATER', 'COMMISSION']
 
 export const AGREEMENT_STATUS_LABELS: Record<SupplyV2AgreementStatus, string> = {
   DRAFT: 'Borrador',
@@ -369,6 +371,102 @@ export const ECONOMIC_EVENT_LABELS: Record<SupplyV2EconomicEventType, string> = 
   BREAKAGE: 'Derecho vencido sin usar',
   REVERSAL: 'Reversa',
   ADJUSTMENT: 'Ajuste',
+  COMMISSION_REVENUE: 'Venta a comisión (ingreso = comisión)',
+}
+
+// ── Slice 5 · comisión + liquidaciones ──────────────────────────────────────
+
+import type {
+  SupplyV2AvailabilityMode,
+  SupplyV2CommissionReservationStatus,
+  SupplyV2FinanceIncidentStatus,
+  SupplyV2FinanceIncidentType,
+  SupplyV2OfferSource,
+  SupplyV2ReconciliationKind,
+  SupplyV2ResolutionType,
+  SupplyV2SettlementFrequency,
+  SupplyV2SettlementStatus,
+} from '@prisma/client'
+
+export const RUTA_LIQUIDACIONES = `${RUTA_FINANZAS}/liquidaciones`
+export const RUTA_INCIDENCIAS_FINANCIERAS = `${RUTA_FINANZAS}/incidencias`
+export const RUTA_PORTAL_VENTAS = `${RUTA_PORTAL_PROVEEDOR}/ventas`
+export const RUTA_PORTAL_LIQUIDACIONES = `${RUTA_PORTAL_PROVEEDOR}/liquidaciones`
+
+export const OFFER_SOURCE_LABELS: Record<SupplyV2OfferSource, string> = {
+  PREPURCHASED_SUPPLY: 'Supply adquirido',
+  COMMISSION: 'Comisión',
+}
+
+export const OFFER_SOURCE_EXPLICACION: Record<SupplyV2OfferSource, string> = {
+  PREPURCHASED_SUPPLY: 'Membego ya compró las unidades: la oferta aparta supply de un lote.',
+  COMMISSION: 'El proveedor sigue siendo dueño del inventario: Membego vende, cobra, retiene su comisión y liquida el neto al entregar.',
+}
+
+export const AVAILABILITY_MODE_LABELS: Record<SupplyV2AvailabilityMode, string> = {
+  UNLIMITED: 'Sin tope',
+  FIXED_QUANTITY: 'Cantidad fija',
+  CAPACITY: 'Capacidad',
+}
+
+export const AVAILABILITY_MODE_EXPLICACION: Record<SupplyV2AvailabilityMode, string> = {
+  UNLIMITED: 'El proveedor entrega lo que se venda; no se reserva nada.',
+  FIXED_QUANTITY: 'Un tope de unidades (p. ej. 100 excursiones); cada compra reserva las suyas.',
+  CAPACITY: 'Capacidad declarada por el proveedor (cupos, mesas, plazas); misma reserva que la cantidad fija.',
+}
+
+export const COMMISSION_RESERVATION_STATUS_LABELS: Record<SupplyV2CommissionReservationStatus, string> = {
+  ACTIVE: 'Reservada',
+  RELEASED: 'Liberada',
+  CONSUMED: 'Consumida',
+  EXPIRED: 'Expirada',
+}
+
+export const SETTLEMENT_STATUS_LABELS: Record<SupplyV2SettlementStatus, string> = {
+  DRAFT: 'Borrador',
+  PENDING_APPROVAL: 'Pendiente de aprobación',
+  APPROVED: 'Aprobada',
+  PARTIALLY_PAID: 'Parcialmente pagada',
+  PAID: 'Pagada',
+  CANCELLED: 'Cancelada',
+}
+
+export const SETTLEMENT_STATUS_TONE: Record<SupplyV2SettlementStatus, Tono> = {
+  DRAFT: 'neutral',
+  PENDING_APPROVAL: 'warning',
+  APPROVED: 'info',
+  PARTIALLY_PAID: 'info',
+  PAID: 'success',
+  CANCELLED: 'danger',
+}
+
+export const SETTLEMENT_FREQUENCY_LABELS: Record<SupplyV2SettlementFrequency, string> = {
+  DAILY: 'Diaria',
+  WEEKLY: 'Semanal',
+  BIWEEKLY: 'Quincenal',
+  MONTHLY: 'Mensual',
+  MANUAL: 'Manual',
+}
+
+export const RECONCILIATION_KIND_LABELS: Record<SupplyV2ReconciliationKind, string> = {
+  SUPPLY: 'Supply adquirido',
+  COMMISSION: 'Ventas a comisión',
+}
+
+export const RESOLUTION_TYPE_LABELS: Record<SupplyV2ResolutionType, string> = {
+  ACCEPT_INTERNAL: 'Se acepta la cifra de Membego',
+  ACCEPT_SUPPLIER: 'Se acepta la cifra del proveedor',
+  ADJUSTED: 'Se ajustó con un documento aparte',
+  OTHER: 'Otra resolución (explicada en las notas)',
+}
+
+export const FINANCE_INCIDENT_TYPE_LABELS: Record<SupplyV2FinanceIncidentType, string> = {
+  REDEMPTION_REVERSED_AFTER_PAYMENT: 'Entrega reversada con el neto ya pagado',
+}
+
+export const FINANCE_INCIDENT_STATUS_LABELS: Record<SupplyV2FinanceIncidentStatus, string> = {
+  OPEN: 'Abierta',
+  RESOLVED: 'Resuelta',
 }
 
 /** Formato de dinero para las pantallas de finanzas: dos decimales siempre (§52: el texto ya viene redondeado). */

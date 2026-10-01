@@ -222,6 +222,9 @@ model SupplyV2Supplier {
   obligations     SupplyV2SupplierObligation[]
   economicEvents  SupplyV2EconomicEvent[]
   reconciliations SupplyV2Reconciliation[]
+  // Slice 5
+  settlements      SupplyV2Settlement[]
+  financeIncidents SupplyV2FinanceIncident[]
 
   @@index([status, commercialName])
   @@map("supply_v2_suppliers")
@@ -339,6 +342,10 @@ model SupplyV2Agreement {
   purchaseOrders SupplyV2PurchaseOrder[]
   lots           SupplyV2Lot[]
   obligations    SupplyV2SupplierObligation[]
+  // Slice 5
+  offers         SupplyV2Offer[]         @relation("SupplyV2OfferAgreement")
+  customerOrders SupplyV2CustomerOrder[] @relation("SupplyV2CustomerOrderAgreement")
+  entitlements   SupplyV2Entitlement[]   @relation("SupplyV2EntitlementAgreement")
 
   @@index([supplierId, status])
   @@index([catalogItemId, status])
@@ -363,6 +370,10 @@ model SupplyV2AgreementVersion {
   purchaseOrders SupplyV2PurchaseOrder[]
   lots           SupplyV2Lot[]
   obligations    SupplyV2SupplierObligation[]
+  // Slice 5
+  offers         SupplyV2Offer[]         @relation("SupplyV2OfferAgreementVersion")
+  customerOrders SupplyV2CustomerOrder[] @relation("SupplyV2CustomerOrderAgreementVersion")
+  entitlements   SupplyV2Entitlement[]   @relation("SupplyV2EntitlementAgreementVersion")
 
   @@unique([agreementId, version])
   @@map("supply_v2_agreement_versions")
@@ -648,6 +659,8 @@ enum SupplyV2AllocationStatus {
 
 enum SupplyV2OfferSource {
   PREPURCHASED_SUPPLY
+  /// Slice 5: Membego vende lo del proveedor sin comprarlo; retiene comisión.
+  COMMISSION
 }
 
 enum SupplyV2OfferStatus {
@@ -788,6 +801,18 @@ model SupplyV2Offer {
   quantityLimit    Int
   perCustomerLimit Int @default(1)
 
+  // ── Slice 5 · solo ofertas COMMISSION: sin lote, con acuerdo y disponibilidad propia ──
+  agreementId        String?
+  agreement          SupplyV2Agreement?        @relation("SupplyV2OfferAgreement", fields: [agreementId], references: [id], onDelete: Restrict)
+  agreementVersionId String?
+  agreementVersion   SupplyV2AgreementVersion? @relation("SupplyV2OfferAgreementVersion", fields: [agreementVersionId], references: [id], onDelete: Restrict)
+  /// Comisión resuelta al publicar (ITEM > CATEGORY > CATALOG), congelada.
+  commissionPercentage Decimal?                @db.Decimal(5, 2)
+  /// Qué regla la resolvió (para la administración; nunca al cliente).
+  commissionScope      SupplyV2AgreementScope?
+  availabilityMode     SupplyV2AvailabilityMode?
+  availabilityQuantity Int?
+
   startsAt DateTime
   endsAt   DateTime?
 
@@ -805,11 +830,13 @@ model SupplyV2Offer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orderLines   SupplyV2CustomerOrderLine[]
-  entitlements SupplyV2Entitlement[]
+  orderLines             SupplyV2CustomerOrderLine[]
+  entitlements           SupplyV2Entitlement[]
+  commissionReservations SupplyV2CommissionReservation[]
 
   @@index([status, startsAt, endsAt])
   @@index([catalogItemId])
+  @@index([sourceType, status])
   @@map("supply_v2_offers")
 }
 
@@ -854,15 +881,28 @@ model SupplyV2CustomerOrder {
   /// El doble clic no abre dos órdenes ni reserva dos veces.
   idempotencyKey String? @unique
 
+  // ── Slice 5 · foto del origen y de la comisión al abrir la orden (§8, §19, §24) ──
+  sourceType           SupplyV2OfferSource       @default(PREPURCHASED_SUPPLY)
+  agreementId          String?
+  agreement            SupplyV2Agreement?        @relation("SupplyV2CustomerOrderAgreement", fields: [agreementId], references: [id], onDelete: Restrict)
+  agreementVersionId   String?
+  agreementVersion     SupplyV2AgreementVersion? @relation("SupplyV2CustomerOrderAgreementVersion", fields: [agreementVersionId], references: [id], onDelete: Restrict)
+  commissionPercentage Decimal?                  @db.Decimal(5, 2)
+  /// Comisión de Membego sobre el total (0 en precompra).
+  commissionAmount     Decimal                   @default(0) @db.Decimal(14, 2)
+  /// Lo que le corresponde al proveedor por esta orden (0 en precompra).
+  supplierNet          Decimal                   @default(0) @db.Decimal(14, 2)
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   paidAt      DateTime?
   cancelledAt DateTime?
   expiredAt   DateTime?
 
-  lines          SupplyV2CustomerOrderLine[]
-  entitlements   SupplyV2Entitlement[]
-  economicEvents SupplyV2EconomicEvent[]
+  lines                  SupplyV2CustomerOrderLine[]
+  entitlements           SupplyV2Entitlement[]
+  economicEvents         SupplyV2EconomicEvent[]
+  commissionReservations SupplyV2CommissionReservation[]
 
   @@index([customerId, status])
   @@index([status, expiresAt])
@@ -888,8 +928,16 @@ model SupplyV2CustomerOrderLine {
   discount        Decimal @default(0) @db.Decimal(14, 2)
   total           Decimal @db.Decimal(14, 2)
 
-  reservations SupplyV2OrderReservation[]
-  entitlements SupplyV2Entitlement[]
+  // Slice 5 · comisión congelada por línea (§24): unitario y totales.
+  commissionPercentage Decimal? @db.Decimal(5, 2)
+  commissionUnitAmount Decimal  @default(0) @db.Decimal(12, 2)
+  supplierUnitNet      Decimal  @default(0) @db.Decimal(12, 2)
+  commissionAmount     Decimal  @default(0) @db.Decimal(14, 2)
+  supplierNet          Decimal  @default(0) @db.Decimal(14, 2)
+
+  reservations           SupplyV2OrderReservation[]
+  entitlements           SupplyV2Entitlement[]
+  commissionReservations SupplyV2CommissionReservation[]
 
   @@index([orderId])
   @@index([offerId])
@@ -939,21 +987,34 @@ model SupplyV2Entitlement {
   orderLineId String
   orderLine   SupplyV2CustomerOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
 
-  allocationId     String
-  allocation       SupplyV2Allocation     @relation(fields: [allocationId], references: [id], onDelete: Restrict)
-  allocationLineId String
-  allocationLine   SupplyV2AllocationLine @relation(fields: [allocationLineId], references: [id], onDelete: Restrict)
-  lotId            String
-  lot              SupplyV2Lot            @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  /// Slice 5: en COMMISSION no hay asignación ni lote (CHECK en la migración: solo entonces pueden ser nulos).
+  allocationId     String?
+  allocation       SupplyV2Allocation?     @relation(fields: [allocationId], references: [id], onDelete: Restrict)
+  allocationLineId String?
+  allocationLine   SupplyV2AllocationLine? @relation(fields: [allocationLineId], references: [id], onDelete: Restrict)
+  lotId            String?
+  lot              SupplyV2Lot?            @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   quantity Int @default(1)
 
   origin SupplyV2EntitlementOrigin @default(PURCHASE)
 
   /// Costo REAL del lote que lo financió y precio que pagó el cliente, congelados.
+  /// En COMMISSION Membego no compró la unidad: `actualUnitCost` = 0 y lo que se
+  /// le debe al proveedor va en `supplierNet` (no es costo de Membego, §20).
   actualUnitCost    Decimal @db.Decimal(12, 2)
   customerUnitPrice Decimal @db.Decimal(12, 2)
   currency          String  @default("DOP")
+
+  // ── Slice 5 · trazabilidad y comisión congelada (§25–§26) ──
+  sourceType           SupplyV2OfferSource       @default(PREPURCHASED_SUPPLY)
+  agreementId          String?
+  agreement            SupplyV2Agreement?        @relation("SupplyV2EntitlementAgreement", fields: [agreementId], references: [id], onDelete: Restrict)
+  agreementVersionId   String?
+  agreementVersion     SupplyV2AgreementVersion? @relation("SupplyV2EntitlementAgreementVersion", fields: [agreementVersionId], references: [id], onDelete: Restrict)
+  commissionPercentage Decimal?                  @db.Decimal(5, 2)
+  commissionAmount     Decimal?                  @db.Decimal(12, 2)
+  supplierNet          Decimal?                  @db.Decimal(12, 2)
 
   status SupplyV2EntitlementStatus @default(ACTIVE)
 
@@ -969,6 +1030,7 @@ model SupplyV2Entitlement {
   @@index([customerId, status])
   @@index([offerId])
   @@index([lotId])
+  @@index([sourceType, supplierId])
   @@map("supply_v2_entitlements")
 }
 
@@ -1092,8 +1154,9 @@ model SupplyV2Redemption {
   supplier      SupplyV2Supplier    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   catalogItemId String
   catalogItem   SupplyV2CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
-  lotId         String
-  lot           SupplyV2Lot         @relation(fields: [lotId], references: [id], onDelete: Restrict)
+  /// Slice 5: nulo en COMMISSION (no hay lote que mover).
+  lotId         String?
+  lot           SupplyV2Lot?        @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   branchId   String?
   branch     Sucursal? @relation("SupplyV2RedemptionBranch", fields: [branchId], references: [id], onDelete: Restrict)
@@ -1110,6 +1173,12 @@ model SupplyV2Redemption {
 
   channel    SupplyV2RedemptionChannel @default(QR_SCAN)
   deviceInfo String?
+
+  // ── Slice 5 · la entrega es el fulfillment: de aquí nace la obligación (§30–§31, §69) ──
+  sourceType                   SupplyV2OfferSource @default(PREPURCHASED_SUPPLY)
+  commissionPercentageSnapshot Decimal?            @db.Decimal(5, 2)
+  commissionAmountSnapshot     Decimal?            @db.Decimal(12, 2)
+  supplierNetSnapshot          Decimal?            @db.Decimal(12, 2)
 
   redeemedAt DateTime @default(now())
 
@@ -1288,6 +1357,8 @@ enum SupplyV2ObligationStatus {
 ///   ADJUSTMENT       corrección manual con motivo
 enum SupplyV2EconomicEventType {
   SALE_REVENUE
+  /// Slice 5: venta a comisión pagada. gmv = lo que pagó el cliente; revenue = comisión de Membego; cost = 0; metadata.supplierNet = lo del proveedor (NO es ingreso ni costo de Membego).
+  COMMISSION_REVENUE
   REDEMPTION_COST
   EXPIRATION_COST
   BREAKAGE
@@ -1317,6 +1388,8 @@ enum SupplyV2ReconciliationLineType {
   DEPOSIT_APPLICATION
   OBLIGATION
   REDEMPTION
+  /// Slice 5
+  SETTLEMENT
 }
 
 // ── A · SUPPLIER FINANCE ───────────────────────────────────────────────────
@@ -1507,6 +1580,9 @@ model SupplyV2SupplierPayment {
   intendedObligation   SupplyV2SupplierObligation? @relation("SupplyV2PaymentIntendedObligation", fields: [intendedObligationId], references: [id], onDelete: SetNull)
   /// true = este pago es un anticipo: al confirmarse crea un depósito por el monto.
   intendedDeposit      Boolean                     @default(false)
+  /// Slice 5: liquidación a la que se aplica al confirmarse (sus obligaciones, la más antigua primero).
+  intendedSettlementId String?
+  intendedSettlement   SupplyV2Settlement?         @relation("SupplyV2PaymentIntendedSettlement", fields: [intendedSettlementId], references: [id], onDelete: SetNull)
 
   createdById   String
   createdBy     User      @relation("SupplyV2PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -1618,6 +1694,10 @@ model SupplyV2SupplierObligation {
   recognitionBasis SupplyV2RecognitionBasis
   status           SupplyV2ObligationStatus @default(OPEN)
 
+  /// Slice 5: liquidación viva que la incluye (una sola; se limpia si la liquidación se cancela).
+  settlementId String?
+  settlement   SupplyV2Settlement? @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+
   recognizedAt DateTime  @default(now())
   dueAt        DateTime?
 
@@ -1630,8 +1710,11 @@ model SupplyV2SupplierObligation {
 
   applications     SupplyV2PaymentApplication[]
   intendedPayments SupplyV2SupplierPayment[]    @relation("SupplyV2PaymentIntendedObligation")
+  settlementLines  SupplyV2SettlementLine[]
+  incidents        SupplyV2FinanceIncident[]
 
   @@unique([sourceType, sourceId])
+  @@index([settlementId])
   @@index([supplierId, status])
   @@index([status, dueAt])
   @@index([purchaseOrderId])
@@ -1706,6 +1789,9 @@ model SupplyV2Reconciliation {
   supplierId String
   supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
 
+  /// Slice 5: SUPPLY (Slice 4) o COMMISSION (ventas, comisión, neto y pagos frente al proveedor).
+  kind SupplyV2ReconciliationKind @default(SUPPLY)
+
   periodStart DateTime
   periodEnd   DateTime
 
@@ -1715,6 +1801,16 @@ model SupplyV2Reconciliation {
   internalAmount   Decimal  @db.Decimal(14, 2)
   supplierAmount   Decimal? @db.Decimal(14, 2)
   differenceAmount Decimal? @db.Decimal(14, 2)
+
+  // Slice 5 · lado Membego y lado proveedor en comisión (§48–§50)
+  grossSalesInternal Decimal?                @db.Decimal(14, 2)
+  commissionInternal Decimal?                @db.Decimal(14, 2)
+  netInternal        Decimal?                @db.Decimal(14, 2)
+  paymentsInternal   Decimal?                @db.Decimal(14, 2)
+  grossClaimed       Decimal?                @db.Decimal(14, 2)
+  commissionClaimed  Decimal?                @db.Decimal(14, 2)
+  netClaimed         Decimal?                @db.Decimal(14, 2)
+  resolutionType     SupplyV2ResolutionType?
 
   notes String?
 
@@ -1730,7 +1826,7 @@ model SupplyV2Reconciliation {
 
   lines SupplyV2ReconciliationLine[]
 
-  @@unique([supplierId, periodStart, periodEnd])
+  @@unique([supplierId, kind, periodStart, periodEnd])
   @@index([supplierId, status])
   @@map("supply_v2_reconciliations")
 }
@@ -1757,4 +1853,208 @@ model SupplyV2ReconciliationLine {
 
   @@index([reconciliationId])
   @@map("supply_v2_reconciliation_lines")
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SLICE 5 · VENTA SIN PRECOMPRA (COMISIÓN) + SETTLEMENT
+//
+//   SUPPLIER CATALOG → COMMISSION AGREEMENT (ITEM > CATEGORY > CATALOG) →
+//   COMMISSION OFFER (sin lote) → MARKETPLACE → CHECKOUT (reserva de
+//   capacidad propia) → MEMBEGO COBRA → ENTITLEMENT (lotId = null) →
+//   FULFILLMENT = REDEMPTION → SUPPLIER OBLIGATION (neto) → SETTLEMENT →
+//   PAGO (motor del Slice 4) → RECONCILIATION
+//
+// REGLA PRINCIPAL: MEMBEGO NO ES DUEÑO DEL INVENTARIO. Ninguna oferta a
+// comisión crea PO, recepción, lote ni asignación; ningún asiento del ledger
+// de lotes se escribe por una venta a comisión.
+//
+// ECONOMÍA (§20, §53–§56): cliente paga 1 000 · comisión 10 % → GMV 1 000,
+// ingreso de Membego 100, dinero del proveedor 900 (obligación al entregar).
+// El dinero del proveedor NO es ingreso ni costo de Membego.
+// ══════════════════════════════════════════════════════════════════════════
+
+enum SupplyV2AvailabilityMode {
+  /// Sin tope: el proveedor entrega lo que se venda.
+  UNLIMITED
+  /// Tope declarado (p. ej. 100 excursiones): se reserva al comprar.
+  FIXED_QUANTITY
+  /// Capacidad declarada por el proveedor; misma mecánica de reserva que FIXED_QUANTITY.
+  CAPACITY
+}
+
+enum SupplyV2CommissionReservationStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+  EXPIRED
+}
+
+enum SupplyV2SettlementStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum SupplyV2SettlementFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  MANUAL
+}
+
+enum SupplyV2ReconciliationKind {
+  SUPPLY
+  COMMISSION
+}
+
+enum SupplyV2ResolutionType {
+  ACCEPT_INTERNAL
+  ACCEPT_SUPPLIER
+  ADJUSTED
+  OTHER
+}
+
+enum SupplyV2FinanceIncidentType {
+  /// Se reversó una entrega cuya obligación ya estaba (parcialmente) pagada: no se deshace en silencio.
+  REDEMPTION_REVERSED_AFTER_PAYMENT
+}
+
+enum SupplyV2FinanceIncidentStatus {
+  OPEN
+  RESOLVED
+}
+
+/// Reserva COMERCIAL de capacidad de una oferta a comisión (§13–§15). No es
+/// un lote ni toca el ledger. Σ(ACTIVE + CONSUMED) ≤ availabilityQuantity, bajo
+/// el candado de la oferta.
+model SupplyV2CommissionReservation {
+  id          String                    @id @default(cuid())
+  offerId     String
+  offer       SupplyV2Offer             @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  orderId     String
+  order       SupplyV2CustomerOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderLineId String
+  orderLine   SupplyV2CustomerOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+
+  quantity Int
+  status   SupplyV2CommissionReservationStatus @default(ACTIVE)
+
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  releasedAt DateTime?
+  consumedAt DateTime?
+
+  @@index([offerId, status])
+  @@index([orderId])
+  @@map("supply_v2_commission_reservations")
+}
+
+/// LIQUIDACIÓN (§35–§47): agrupa obligaciones de comisión (OPEN /
+/// PARTIALLY_PAID, sin liquidación viva) de un proveedor en un periodo. Las
+/// líneas son FOTO: cambios posteriores en acuerdo, catálogo o comisión no la
+/// alteran. Se paga con el motor del Slice 4 (pago → obligaciones, la más
+/// antigua primero) y su estado deriva de sus obligaciones.
+model SupplyV2Settlement {
+  id     String @id @default(cuid())
+  /// "MBG-ST-2026-000001".
+  number String @unique
+
+  supplierId String
+  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  frequency   SupplyV2SettlementFrequency @default(MANUAL)
+  periodStart DateTime
+  periodEnd   DateTime
+
+  currency         String  @default("DOP")
+  grossSales       Decimal @db.Decimal(14, 2)
+  commissionAmount Decimal @db.Decimal(14, 2)
+  supplierNet      Decimal @db.Decimal(14, 2)
+  paidAmount       Decimal @default(0) @db.Decimal(14, 2)
+
+  status SupplyV2SettlementStatus @default(PENDING_APPROVAL)
+
+  notes String?
+
+  createdById  String
+  createdBy    User      @relation("SupplyV2SettlementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById String?
+  approvedBy   User?     @relation("SupplyV2SettlementApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+  paidAt       DateTime?
+
+  cancelledAt     DateTime?
+  cancelledReason String?
+
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines            SupplyV2SettlementLine[]
+  obligations      SupplyV2SupplierObligation[]
+  intendedPayments SupplyV2SupplierPayment[]    @relation("SupplyV2PaymentIntendedSettlement")
+
+  @@index([supplierId, status])
+  @@index([status, periodEnd])
+  @@map("supply_v2_settlements")
+}
+
+model SupplyV2SettlementLine {
+  id           String             @id @default(cuid())
+  settlementId String
+  settlement   SupplyV2Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  obligationId String
+  obligation   SupplyV2SupplierObligation @relation(fields: [obligationId], references: [id], onDelete: Restrict)
+  /// La entrega que originó la obligación (sin FK: la línea es foto).
+  redemptionId String?
+
+  descriptionSnapshot String
+
+  grossAmount      Decimal @db.Decimal(14, 2)
+  commissionAmount Decimal @db.Decimal(14, 2)
+  supplierNet      Decimal @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+
+  /// Una obligación aparece una sola vez por liquidación; la barrera entre
+  /// liquidaciones VIVAS es `supplier_obligations.settlementId`.
+  @@unique([settlementId, obligationId])
+  @@index([obligationId])
+  @@map("supply_v2_settlement_lines")
+}
+
+/// Incidencia financiera EXPLÍCITA (§33): lo que no se puede deshacer en
+/// silencio queda aquí hasta que alguien lo resuelva.
+model SupplyV2FinanceIncident {
+  id String @id @default(cuid())
+
+  supplierId String
+  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  type   SupplyV2FinanceIncidentType
+  status SupplyV2FinanceIncidentStatus @default(OPEN)
+
+  obligationId String?
+  obligation   SupplyV2SupplierObligation? @relation(fields: [obligationId], references: [id], onDelete: Restrict)
+  redemptionId String?
+
+  currency String  @default("DOP")
+  amount   Decimal @db.Decimal(14, 2)
+
+  notes           String
+  resolvedById    String?
+  resolvedBy      User?     @relation("SupplyV2FinanceIncidentResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt      DateTime?
+  resolutionNotes String?
+
+  createdAt DateTime @default(now())
+
+  @@index([supplierId, status])
+  @@map("supply_v2_finance_incidents")
 }

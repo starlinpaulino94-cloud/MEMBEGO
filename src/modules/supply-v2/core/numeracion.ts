@@ -32,6 +32,8 @@ export type PrefijoNumeracion =
   | 'MBG-SP'
   | 'MBG-OB'
   | 'MBG-RN'
+  // Slice 5: liquidación a proveedor (comisión)
+  | 'MBG-ST'
 
 export function formatearNumero(prefijo: PrefijoNumeracion, anio: number, secuencia: number): string {
   return `${prefijo}-${anio}-${String(secuencia).padStart(6, '0')}`

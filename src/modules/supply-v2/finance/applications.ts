@@ -4,6 +4,7 @@ import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { decimal, type Decimal } from '../core/dinero'
 import { fallo } from '../core/errores'
 import { puedeTransicionar, TRANSICIONES_ORDEN } from '../core/estados'
+import { estadoLiquidacionSegunPago } from './settlements-domain'
 import {
   CERO,
   estadoDepositoSegunSaldo,
@@ -50,7 +51,7 @@ async function sumaViva(tx: Tx, where: Record<string, unknown>): Promise<Decimal
 export async function recalcularObligacionEnTx(tx: Tx, obligationId: string, ctx: ContextoAuditoria): Promise<{ status: string; outstanding: Decimal }> {
   const o = await tx.supplyV2SupplierObligation.findUniqueOrThrow({
     where: { id: obligationId },
-    select: { id: true, number: true, status: true, grossAmount: true, supplier: { select: { companyId: true } } },
+    select: { id: true, number: true, status: true, grossAmount: true, settlementId: true, supplier: { select: { companyId: true } } },
   })
   const paid = await sumaViva(tx, { obligationId })
   const outstanding = o.grossAmount.minus(paid)
@@ -60,7 +61,37 @@ export async function recalcularObligacionEnTx(tx: Tx, obligationId: string, ctx
   if (status === 'PAID' && o.status !== 'PAID') {
     await auditarEnTx(tx, ctx, 'SUPPLY_V2_OBLIGATION_PAID', 'SupplyV2SupplierObligation', o.id, { number: o.number, grossAmount: o.grossAmount.toFixed(2) }, o.supplier.companyId)
   }
+  // Slice 5 (§42): la liquidación que la contiene deriva su estado de sus obligaciones.
+  if (o.settlementId) await recalcularLiquidacionEnTx(tx, o.settlementId, ctx)
   return { status, outstanding }
+}
+
+/**
+ * Slice 5: `paidAmount` y estado de una liquidación = suma de lo pagado en sus
+ * obligaciones vivas (las aplicaciones siguen siendo la verdad). Solo se
+ * deriva estando aprobada; PENDING_APPROVAL y CANCELLED no cambian aquí.
+ */
+export async function recalcularLiquidacionEnTx(tx: Tx, settlementId: string, ctx: ContextoAuditoria): Promise<{ status: string; paidAmount: Decimal }> {
+  await tx.$queryRaw`SELECT "id" FROM "supply_v2_settlements" WHERE "id" = ${settlementId} FOR UPDATE`
+  const s = await tx.supplyV2Settlement.findUniqueOrThrow({
+    where: { id: settlementId },
+    select: { id: true, number: true, status: true, supplierNet: true, paidAmount: true, obligations: { select: { paidAmount: true, status: true } }, supplier: { select: { companyId: true } } },
+  })
+  const paidAmount = s.obligations.filter((o) => o.status !== 'CANCELLED').reduce((t, o) => t.plus(o.paidAmount), CERO)
+  let status = s.status
+  if (['APPROVED', 'PARTIALLY_PAID', 'PAID'].includes(s.status)) status = estadoLiquidacionSegunPago(s.supplierNet, paidAmount)
+  await tx.supplyV2Settlement.update({ where: { id: s.id }, data: { paidAmount, status, ...(status === 'PAID' && s.status !== 'PAID' ? { paidAt: new Date() } : {}), ...(status !== 'PAID' && s.status === 'PAID' ? { paidAt: null } : {}) } })
+  if (status === 'PAID' && s.status !== 'PAID') {
+    await auditarEnTx(tx, ctx, 'SUPPLY_V2_SETTLEMENT_PAID', 'SupplyV2Settlement', s.id, { number: s.number, supplierNet: s.supplierNet.toFixed(2), paidAmount: paidAmount.toFixed(2) }, s.supplier.companyId)
+  }
+  return { status, paidAmount }
+}
+
+/** Slice 5: vuelve a sumar las líneas de una liquidación (cuando una obligación sale de ella antes de pagarse). */
+export async function recalcularTotalesDeLiquidacionEnTx(tx: Tx, settlementId: string): Promise<void> {
+  const lineas = await tx.supplyV2SettlementLine.findMany({ where: { settlementId }, select: { grossAmount: true, commissionAmount: true, supplierNet: true } })
+  const t = lineas.reduce((acc, l) => ({ g: acc.g.plus(l.grossAmount), c: acc.c.plus(l.commissionAmount), n: acc.n.plus(l.supplierNet) }), { g: CERO, c: CERO, n: CERO })
+  await tx.supplyV2Settlement.update({ where: { id: settlementId }, data: { grossSales: t.g, commissionAmount: t.c, supplierNet: t.n } })
 }
 
 export async function recalcularFacturaEnTx(tx: Tx, invoiceId: string): Promise<{ status: string; amountDue: Decimal }> {
