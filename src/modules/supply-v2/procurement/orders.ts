@@ -3,7 +3,9 @@ import type { Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { calcularTotales, decimal } from '../core/dinero'
 import { fallo } from '../core/errores'
-import { exigirTransicion, puedeAprobar, TRANSICIONES_ORDEN } from '../core/estados'
+import { personasAutorizadasEnTx } from '../core/autorizadas'
+import { exigirTransicion, TRANSICIONES_ORDEN } from '../core/estados'
+import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
 import { PAYMENT_MODES_SLICE1 } from '../core/catalogo'
 import { siguienteNumero } from '../core/numeracion'
 import { acuerdoCompatible } from '../agreements/domain'
@@ -162,25 +164,39 @@ export async function enviarAprobacionEnTx(tx: Tx, id: string, ctx: ContextoAudi
   }, o.supplier.companyId)
 }
 
-/** Aprueba: el servidor rechaza la autoaprobación aunque la interfaz la pida (§23). */
+/**
+ * Aprueba. El servidor rechaza que la apruebe quien la creó MIENTRAS HAYA otra
+ * persona autorizada; si es la única, la aprobación se permite y queda marcada
+ * como tal en el evento y en la bitácora (§23).
+ */
 export async function aprobarOrdenEnTx(tx: Tx, id: string, ctx: ContextoAuditoria): Promise<void> {
   if (!ctx.actorId) fallo('SIN_ACTOR', 'Aprobar una orden necesita quién la aprueba.')
   const o = await ordenParaMover(tx, id)
   exigirTransicion(TRANSICIONES_ORDEN, o.status, 'APPROVED', 'Orden de compra')
-  const veto = puedeAprobar(o, ctx.actorId)
-  if (veto) fallo('AUTOAPROBACION', veto)
+  const personasAutorizadas = await personasAutorizadasEnTx(tx)
+  const segregacion = revisarSegregacion(o.createdById, ctx.actorId, personasAutorizadas, 'ordenCompra')
+  if (!segregacion.permitido) fallo('AUTOAPROBACION', segregacion.motivo)
   await tx.supplyV2PurchaseOrder.update({
     where: { id },
     data: { status: 'APPROVED', approvedById: ctx.actorId, approvedAt: new Date() },
   })
   await tx.supplyV2PurchaseOrderEvent.create({
-    data: { purchaseOrderId: id, type: 'APPROVED', fromStatus: o.status, toStatus: 'APPROVED', actorId: ctx.actorId },
+    data: {
+      purchaseOrderId: id,
+      type: 'APPROVED',
+      fromStatus: o.status,
+      toStatus: 'APPROVED',
+      reason: segregacion.autoaprobada ? MOTIVO_AUTOAPROBACION : null,
+      actorId: ctx.actorId,
+    },
   })
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_PO_APPROVED', 'SupplyV2PurchaseOrder', id, {
     number: o.number,
     antes: o.status,
     despues: 'APPROVED',
     createdById: o.createdById,
+    autoaprobada: segregacion.autoaprobada,
+    personasAutorizadas,
   }, o.supplier.companyId)
 }
 

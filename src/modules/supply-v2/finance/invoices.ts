@@ -3,7 +3,9 @@ import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
 import { exigirTransicion } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
-import { calcularTotalesFactura, puedeAprobarFactura, TRANSICIONES_FACTURA, validarLineasContraOrden, type LineaFacturaEntrada } from './domain'
+import { personasAutorizadasEnTx } from '../core/autorizadas'
+import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
+import { calcularTotalesFactura, TRANSICIONES_FACTURA, validarLineasContraOrden, type LineaFacturaEntrada } from './domain'
 import { enlazarObligacionesAFacturaEnTx } from './obligations'
 import { bloquearFila, recalcularFacturaEnTx } from './applications'
 
@@ -140,11 +142,6 @@ export async function crearFacturaEnTx(tx: Tx, d: DatosFactura, ctx: ContextoAud
   return { id: f.id, number: f.number, total: f.total.toFixed(2), repetida: false }
 }
 
-/** Cuántas personas pueden aprobar/confirmar: la segregación solo aplica si hay más de una (§41). */
-export async function personasAutorizadasEnTx(tx: Tx): Promise<number> {
-  return tx.user.count({ where: { role: 'SUPERADMIN' } })
-}
-
 export async function aprobarFacturaEnTx(tx: Tx, invoiceId: string, ctx: ContextoAuditoria): Promise<{ id: string; number: string; obligaciones: number; repetida: boolean }> {
   if (!ctx.actorId) fallo('SIN_ACTOR', 'Aprobar una factura necesita quién la aprueba.')
   await bloquearFila(tx, 'supply_v2_supplier_invoices', invoiceId)
@@ -158,8 +155,9 @@ export async function aprobarFacturaEnTx(tx: Tx, invoiceId: string, ctx: Context
     return { id: f.id, number: f.number, obligaciones: n, repetida: true }
   }
   exigirTransicion(TRANSICIONES_FACTURA, f.status, 'APPROVED', 'Factura')
-  const veto = puedeAprobarFactura(f, ctx.actorId, await personasAutorizadasEnTx(tx))
-  if (veto) fallo('AUTOAPROBACION', veto)
+  const personasAutorizadas = await personasAutorizadasEnTx(tx)
+  const segregacion = revisarSegregacion(f.createdById, ctx.actorId, personasAutorizadas, 'factura')
+  if (!segregacion.permitido) fallo('AUTOAPROBACION', segregacion.motivo)
   const ahora = new Date()
   await tx.supplyV2SupplierInvoice.update({ where: { id: f.id }, data: { status: 'APPROVED', approvedById: ctx.actorId, approvedAt: ahora } })
   const r = await enlazarObligacionesAFacturaEnTx(tx, { ...f, approvedAt: ahora, companyId: f.supplier.companyId }, ctx)
@@ -171,6 +169,9 @@ export async function aprobarFacturaEnTx(tx: Tx, invoiceId: string, ctx: Context
     obligacionesEnlazadas: r.enlazadas,
     obligacionCreada: r.creada,
     createdById: f.createdById,
+    autoaprobada: segregacion.autoaprobada,
+    personasAutorizadas,
+    ...(segregacion.autoaprobada ? { motivo: MOTIVO_AUTOAPROBACION } : {}),
   }, f.supplier.companyId)
   return { id: f.id, number: f.number, obligaciones: r.enlazadas.length + (r.creada ? 1 : 0), repetida: false }
 }

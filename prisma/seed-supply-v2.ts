@@ -14,6 +14,7 @@
  *   npm run db:seed:supply-v2
  */
 import { prisma } from '../src/lib/prisma'
+import { PREFIJO_CUENTA_SIN_LOGIN } from '../src/modules/supply-v2/core/autorizadas'
 import { sinEmpresa } from '../src/lib/tenant'
 import { crearProveedorExternoEnTx } from '../src/modules/supply-v2/suppliers/service'
 import { crearItemCatalogoEnTx } from '../src/modules/supply-v2/catalog/service'
@@ -23,11 +24,17 @@ import { aprobarOrdenEnTx, crearOrdenEnTx, enviarAprobacionEnTx } from '../src/m
 const NOMBRE = 'Little Pizza Demo (Supply 2.0)'
 const DIA = 86_400_000
 
+/**
+ * Cuenta de DEMOSTRACIÓN para atribuir autoría: no existe en Supabase Auth,
+ * así que no puede iniciar sesión ni aprobar nada. El prefijo sale de
+ * `PREFIJO_CUENTA_SIN_LOGIN` para que el contador de personas autorizadas la
+ * descarte sin posibilidad de desincronizarse.
+ */
 async function usuario(email: string, name: string) {
   return prisma.user.upsert({
     where: { email },
     update: {},
-    create: { email, name, role: 'SUPERADMIN', supabaseId: `demo-${email}` },
+    create: { email, name, role: 'SUPERADMIN', supabaseId: `${PREFIJO_CUENTA_SIN_LOGIN}${email}` },
     select: { id: true },
   })
 }

@@ -7,8 +7,9 @@ import { exigirTransicion } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
 import { aplicarEnTx, bloquearFila, recalcularPagoEnTx } from './applications'
 import { crearDepositoDesdePagoEnTx } from './deposits'
-import { CERO, FACTURA_PAGABLE, OBLIGACION_VIVA, puedeConfirmarPago, TRANSICIONES_PAGO_PROVEEDOR } from './domain'
-import { personasAutorizadasEnTx } from './invoices'
+import { personasAutorizadasEnTx } from '../core/autorizadas'
+import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
+import { CERO, FACTURA_PAGABLE, OBLIGACION_VIVA, TRANSICIONES_PAGO_PROVEEDOR } from './domain'
 import { obligacionesDeLiquidacionBloqueadasEnTx } from './settlements'
 import { LIQUIDACION_PAGABLE, repartirPagoMasAntiguoPrimero } from './settlements-domain'
 
@@ -155,10 +156,18 @@ export async function confirmarPagoProveedorEnTx(tx: Tx, paymentId: string, ctx:
     return { id: p.id, number: p.number, aplicado: p.appliedAmount.toFixed(2), sinAplicar: p.amount.minus(p.appliedAmount).toFixed(2), depositId: p.fundedDeposit?.id ?? null, repetido: true }
   }
   exigirTransicion(TRANSICIONES_PAGO_PROVEEDOR, p.status, 'CONFIRMED', 'Pago')
-  const veto = puedeConfirmarPago(p, ctx.actorId, await personasAutorizadasEnTx(tx))
-  if (veto) fallo('AUTOCONFIRMACION', veto)
+  const personasAutorizadas = await personasAutorizadasEnTx(tx)
+  const segregacion = revisarSegregacion(p.createdById, ctx.actorId, personasAutorizadas, 'pago')
+  if (!segregacion.permitido) fallo('AUTOCONFIRMACION', segregacion.motivo)
   await tx.supplyV2SupplierPayment.update({ where: { id: p.id }, data: { status: 'CONFIRMED', confirmedById: ctx.actorId, confirmedAt: new Date() } })
-  await auditarEnTx(tx, ctx, 'SUPPLY_V2_PAYMENT_CONFIRMED', 'SupplyV2SupplierPayment', p.id, { number: p.number, amount: p.amount.toFixed(2), createdById: p.createdById }, p.supplier.companyId)
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_PAYMENT_CONFIRMED', 'SupplyV2SupplierPayment', p.id, {
+    number: p.number,
+    amount: p.amount.toFixed(2),
+    createdById: p.createdById,
+    autoaprobada: segregacion.autoaprobada,
+    personasAutorizadas,
+    ...(segregacion.autoaprobada ? { motivo: MOTIVO_AUTOAPROBACION } : {}),
+  }, p.supplier.companyId)
 
   let depositId: string | null = null
   if (p.intendedInvoiceId) {
