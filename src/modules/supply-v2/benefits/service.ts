@@ -6,8 +6,9 @@ import { fallo } from '../core/errores'
 import { exigirTransicion } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
 import { calcularRepartoLinea, type BeneficioParaCalculo, type RepartoFinanciado } from '../core/financiacion'
-import { personasAutorizadasEnTx } from '../finance/invoices'
-import { estadoAsignacionSegunUsos, MENSAJES_NO_ELEGIBLE, motivoNoElegible, puedeAprobarBeneficio, TRANSICIONES_BENEFICIO, validarBeneficio, type DatosBeneficio } from './domain'
+import { personasAutorizadasEnTx } from '../core/autorizadas'
+import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
+import { estadoAsignacionSegunUsos, MENSAJES_NO_ELEGIBLE, motivoNoElegible, TRANSICIONES_BENEFICIO, validarBeneficio, type DatosBeneficio } from './domain'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 6 · BENEFICIOS (§7–§12, §16, §20, §27).
@@ -150,10 +151,18 @@ export async function aprobarBeneficioEnTx(tx: Tx, benefitId: string, ctx: Conte
   if (b.status === 'ACTIVE') return { id: b.id, code: b.code, status: b.status, repetido: true }
   exigirTransicion(TRANSICIONES_BENEFICIO, b.status, 'ACTIVE', 'Beneficio')
   if (b.status !== 'DRAFT') fallo('BENEFICIO_NO_APROBABLE', `Un beneficio ${b.status} no se aprueba; se reactiva.`)
-  const veto = puedeAprobarBeneficio(b, ctx.actorId, await personasAutorizadasEnTx(tx))
-  if (veto) fallo('AUTOAPROBACION', veto)
+  const personasAutorizadas = await personasAutorizadasEnTx(tx)
+  const segregacion = revisarSegregacion(b.createdById, ctx.actorId, personasAutorizadas, 'beneficio')
+  if (!segregacion.permitido) fallo('AUTOAPROBACION', segregacion.motivo)
   await tx.supplyV2Benefit.update({ where: { id: b.id }, data: { status: 'ACTIVE', approvedById: ctx.actorId, approvedAt: new Date() } })
-  await auditarEnTx(tx, ctx, 'SUPPLY_V2_BENEFIT_APPROVED', 'SupplyV2Benefit', b.id, { code: b.code, createdById: b.createdById, budgetTotal: b.budgetTotal?.toFixed(2) ?? null }, b.supplier?.companyId ?? null)
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_BENEFIT_APPROVED', 'SupplyV2Benefit', b.id, {
+    code: b.code,
+    createdById: b.createdById,
+    budgetTotal: b.budgetTotal?.toFixed(2) ?? null,
+    autoaprobada: segregacion.autoaprobada,
+    personasAutorizadas,
+    ...(segregacion.autoaprobada ? { motivo: MOTIVO_AUTOAPROBACION } : {}),
+  }, b.supplier?.companyId ?? null)
   return { id: b.id, code: b.code, status: 'ACTIVE', repetido: false }
 }
 
