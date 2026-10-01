@@ -49,6 +49,16 @@ import {
   reclamarRecompensaEnTx,
   reversarReclamacionEnTx,
 } from '../../src/modules/supply-v2/loyalty/rewards'
+import {
+  anularReferidoEnTx,
+  aprobarYConcederEnTx,
+  atribuirRegistroEnTx,
+  barridoReferidosEnTx,
+  codigoDeReferidoEnTx,
+  configurarReferidosEnTx,
+  estadisticasDeReferidosEnTx,
+  registrarAperturaEnTx,
+} from '../../src/modules/supply-v2/loyalty/referrals'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 8 contra PostgreSQL de verdad (§45).
@@ -1364,4 +1374,239 @@ test('una recompensa pide aprobación de OTRA persona antes de repartir nada', a
   await assert.rejects(() => sinEmpresa('prueba', (tx) => aprobarRecompensaEnTx(tx, creada.id, como(ctx.compras))), /no la aprueba la misma persona/)
   const ok = await sinEmpresa('prueba', (tx) => aprobarRecompensaEnTx(tx, creada.id, como(ctx.finanzas)))
   assert.equal(ok.repetido, false)
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// C y D · REFERIDOS (§18–§23)
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Un cliente RECIÉN creado, sin ninguna compra previa. Los referidos exigen
+ * la PRIMERA compra del invitado, y los clientes compartidos de este archivo
+ * ya han comprado en pruebas anteriores: reutilizarlos probaría otra cosa.
+ */
+let invitados = 0
+async function clienteNuevo(): Promise<string> {
+  invitados++
+  return usuario(`inv${invitados}`, 'CLIENTE')
+}
+
+/** Programa con referidos que pagan en puntos. */
+async function programaConReferidos(d: { nombre: string; puntos?: number; espera?: number; maxPorReferidor?: number | null; minCompra?: number | null }) {
+  const programId = await programaActivo({ nombre: d.nombre, supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  await sinEmpresa('prueba', (tx) =>
+    configurarReferidosEnTx(
+      tx,
+      programId,
+      {
+        rewardKind: 'POINTS',
+        rewardPoints: d.puntos ?? 500,
+        requiresFirstPurchase: true,
+        minPurchaseAmount: d.minCompra ?? null,
+        requiresPaymentConfirmed: true,
+        waitingPeriodDays: d.espera ?? 0,
+        maxPerReferrer: d.maxPorReferidor === null ? null : (d.maxPorReferidor ?? 10),
+      },
+      como(ctx.compras)
+    )
+  )
+  return programId
+}
+
+test('19 · el código de invitación es seguro y estable: no es un id interno', async () => {
+  const programId = await programaConReferidos({ nombre: 'Codigos' })
+  const a = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente))
+  const b = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente))
+  assert.equal(a.code, b.code, 'la misma persona recibe siempre el suyo')
+  assert.equal(b.repetido, true)
+  assert.equal(a.code.length, 10)
+  assert.match(a.code, /^[ACDEFGHJKMNPQRTVWXY34679]{10}$/, 'alfabeto sin caracteres que se confundan al dictarlos')
+  assert.ok(!a.code.includes(ctx.cliente.slice(0, 4)), 'no sale de ningún id interno')
+
+  // Dos personas, dos códigos distintos.
+  const otro = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente2))
+  assert.notEqual(a.code, otro.code)
+
+  // Un código que no existe no dice si no existe o si no vale: mensaje opaco.
+  await assert.rejects(() => sinEmpresa('prueba', (tx) => registrarAperturaEnTx(tx, 'XXXXXXXXXX')), /no existe o no se puede usar/)
+  await assert.rejects(() => sinEmpresa('prueba', (tx) => registrarAperturaEnTx(tx, 'ab')), /no existe o no se puede usar/)
+
+  // Y resolverlo NO distingue mayúsculas: el índice sobre upper(code) manda.
+  const abierto = await sinEmpresa('prueba', (tx) => registrarAperturaEnTx(tx, a.code.toLowerCase()))
+  assert.equal(abierto.ownerId, ctx.cliente)
+})
+
+test('D · AUTORREFERIDO rechazado, y nadie entra por dos invitaciones', async () => {
+  const programId = await programaConReferidos({ nombre: 'Fraude' })
+  const juan = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente))
+
+  // Juan con su propio código: NO.
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: ctx.cliente }, como(ctx.cliente))),
+    /No puedes recomendarte a ti mismo/
+  )
+  assert.equal(await prisma.supplyV2Referral.count({ where: { programId, referredId: ctx.cliente } }), 0)
+
+  // María sí.
+  const r = await sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: ctx.cliente2 }, como(ctx.cliente2)))
+  assert.equal(r.status, 'SIGNED_UP')
+  // Repetir el mismo enlace es un reintento, no un referido nuevo.
+  const otra = await sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: ctx.cliente2 }, como(ctx.cliente2)))
+  assert.equal(otra.repetido, true)
+  assert.equal(otra.id, r.id)
+
+  // Y con el enlace de OTRA persona tampoco: no se cambia de padrino.
+  const luis = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente3))
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: luis.code, referredId: ctx.cliente2 }, como(ctx.cliente2))),
+    /ya entró por otra invitación/
+  )
+  assert.equal(await prisma.supplyV2Referral.count({ where: { programId, referredId: ctx.cliente2 } }), 1)
+})
+
+test('C · una primera compra válida genera EXACTAMENTE una recompensa', async () => {
+  const programId = await programaConReferidos({ nombre: 'UnaSolaVez', puntos: 500 })
+  const juan = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente))
+  const maria = await clienteNuevo()
+  const ref = await sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: maria }, como(maria)))
+
+  // Antes de comprar, Juan no ha cobrado nada.
+  const antes = await prisma.supplyV2PointsAccount.findUnique({ where: { programId_customerId: { programId, customerId: ctx.cliente } }, select: { available: true } })
+  assert.equal(antes?.available ?? 0, 0, 'abrir el enlace y registrarse no paga')
+
+  // María compra. La confirmación del pago dispara la evaluación.
+  await compraConfirmada(ctx.offerA, maria)
+
+  const r = await prisma.supplyV2Referral.findUniqueOrThrow({ where: { id: ref.id }, select: { status: true, rewardPoints: true, eligibleOrderId: true, rewardGrantedAt: true } })
+  assert.equal(r.status, 'REWARD_GRANTED')
+  assert.equal(r.rewardPoints, 500)
+  assert.ok(r.eligibleOrderId && r.rewardGrantedAt)
+
+  const juanCuenta = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId, customerId: ctx.cliente } }, select: { id: true, available: true } })
+  assert.equal(juanCuenta.available, 500, 'Juan cobró su recompensa')
+
+  // EXACTAMENTE UNA: una segunda compra de María no vuelve a pagar.
+  await compraConfirmada(ctx.offerA, maria)
+  assert.equal(
+    (await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: juanCuenta.id }, select: { available: true } })).available,
+    500,
+    'la segunda compra de la misma persona no paga otra vez'
+  )
+  // Ni volver a llamar a conceder a mano.
+  const otra = await sinEmpresa('prueba', (tx) => aprobarYConcederEnTx(tx, ref.id, como(ctx.compras)))
+  assert.equal(otra.concedida, false)
+  assert.equal(otra.motivo, 'YA_RECOMPENSADO')
+  assert.equal(await prisma.supplyV2PointsMovement.count({ where: { referralId: ref.id, type: 'EARNED' } }), 1, 'un solo movimiento de puntos por invitación')
+
+  // Y el contador del código lo refleja.
+  const stats = await sinEmpresa('prueba', (tx) => estadisticasDeReferidosEnTx(tx, programId, ctx.cliente))
+  assert.equal(stats!.validos, 1)
+  assert.equal(stats!.recompensados, 1)
+})
+
+test('C2 · si no es la PRIMERA compra, no hay recompensa', async () => {
+  const programId = await programaConReferidos({ nombre: 'PrimeraCompra' })
+  // El cliente3 ya compró antes de que lo invitaran.
+  await compraConfirmada(ctx.offerA, ctx.cliente3)
+
+  const juan = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente))
+  const ref = await sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: ctx.cliente3 }, como(ctx.cliente3)))
+  await compraConfirmada(ctx.offerA, ctx.cliente3)
+
+  const r = await prisma.supplyV2Referral.findUniqueOrThrow({ where: { id: ref.id }, select: { status: true } })
+  assert.notEqual(r.status, 'REWARD_GRANTED', 'ya había comprado: no es su primera compra')
+})
+
+test('C3 · la compra mínima se respeta', async () => {
+  const programId = await programaConReferidos({ nombre: 'Minima', minCompra: 5000 })
+  const juan = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente2))
+  const maria = await clienteNuevo()
+  const ref = await sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: maria }, como(maria)))
+  // La oferta vale 1 000: no llega al mínimo de 5 000.
+  await compraConfirmada(ctx.offerA, maria)
+  assert.notEqual((await prisma.supplyV2Referral.findUniqueOrThrow({ where: { id: ref.id }, select: { status: true } })).status, 'REWARD_GRANTED')
+})
+
+test('C4 · PERÍODO DE ESPERA: la recompensa aguanta, y una cancelación dentro del plazo la anula', async () => {
+  const programId = await programaConReferidos({ nombre: 'Espera', espera: 7 })
+  const juan = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente))
+  const maria = await clienteNuevo()
+  const ref = await sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: maria }, como(maria)))
+  const orderId = await compraConfirmada(ctx.offerA, maria)
+
+  // Dentro del plazo no se paga.
+  let r = await prisma.supplyV2Referral.findUniqueOrThrow({ where: { id: ref.id }, select: { status: true, voidReason: true } })
+  assert.equal(r.status, 'REWARD_PENDING', 'espera a que pase el plazo')
+  await sinEmpresa('prueba', (tx) => barridoReferidosEnTx(tx, como(null), ahora))
+  assert.equal((await prisma.supplyV2Referral.findUniqueOrThrow({ where: { id: ref.id }, select: { status: true } })).status, 'REWARD_PENDING')
+
+  // La compra se cae DENTRO del plazo: la invitación se anula con su motivo.
+  await prisma.supplyV2CustomerOrder.update({ where: { id: orderId }, data: { status: 'CANCELLED' } })
+  await sinEmpresa('prueba', (tx) => barridoReferidosEnTx(tx, como(null), new Date(ahora.getTime() + 8 * DIA)))
+  r = await prisma.supplyV2Referral.findUniqueOrThrow({ where: { id: ref.id }, select: { status: true, voidReason: true } })
+  assert.equal(r.status, 'REWARD_VOIDED', 'una compra caída no paga recompensa')
+  assert.match(r.voidReason!, /canceló|devolvió/i)
+
+  const cuenta = await prisma.supplyV2PointsAccount.findUnique({ where: { programId_customerId: { programId, customerId: ctx.cliente } }, select: { available: true } })
+  assert.equal(cuenta?.available ?? 0, 0, 'y Juan no cobró nada')
+})
+
+test('C5 · el tope por participante se respeta', async () => {
+  const programId = await programaConReferidos({ nombre: 'Tope', maxPorReferidor: 1 })
+  const juan = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente3))
+  // Primer invitado: cobra.
+  const uno = await clienteNuevo()
+  await sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: uno }, como(uno)))
+  await compraConfirmada(ctx.offerA, uno)
+  const tras1 = await prisma.supplyV2Referral.count({ where: { programId, referrerId: ctx.cliente3, status: 'REWARD_GRANTED' } })
+
+  // Segundo invitado: ya alcanzó el tope.
+  const dos = await clienteNuevo()
+  const ref2 = await sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: dos }, como(dos)))
+  await compraConfirmada(ctx.offerA, dos)
+  const r2 = await prisma.supplyV2Referral.findUniqueOrThrow({ where: { id: ref2.id }, select: { status: true } })
+  assert.equal(tras1, 1)
+  assert.notEqual(r2.status, 'REWARD_GRANTED', 'el tope por participante manda')
+})
+
+test('C6 · anular una invitación exige motivo y es definitivo', async () => {
+  const programId = await programaConReferidos({ nombre: 'Anular' })
+  const juan = await sinEmpresa('prueba', (tx) => codigoDeReferidoEnTx(tx, programId, ctx.cliente))
+  const maria = await clienteNuevo()
+  const ref = await sinEmpresa('prueba', (tx) => atribuirRegistroEnTx(tx, { codigo: juan.code, referredId: maria }, como(maria)))
+  await assert.rejects(() => sinEmpresa('prueba', (tx) => anularReferidoEnTx(tx, ref.id, ' ', como(ctx.compras))), /necesita un motivo/)
+  await sinEmpresa('prueba', (tx) => anularReferidoEnTx(tx, ref.id, 'Cuenta duplicada detectada por soporte', como(ctx.compras)))
+  const r = await prisma.supplyV2Referral.findUniqueOrThrow({ where: { id: ref.id }, select: { status: true, voidReason: true } })
+  assert.equal(r.status, 'REWARD_VOIDED')
+  assert.match(r.voidReason!, /duplicada/)
+
+  // Una compra posterior ya no lo resucita.
+  await compraConfirmada(ctx.offerA, maria)
+  assert.equal((await prisma.supplyV2Referral.findUniqueOrThrow({ where: { id: ref.id }, select: { status: true } })).status, 'REWARD_VOIDED')
+})
+
+test('SQL · ninguna invitación paga dos veces, y ningún autorreferido existe', async () => {
+  const [{ dobles }] = await prisma.$queryRaw<{ dobles: bigint }[]>`
+    SELECT count(*) AS dobles FROM (
+      SELECT "referralId" FROM "supply_v2_points_movements"
+      WHERE "referralId" IS NOT NULL AND "type" = 'EARNED'
+      GROUP BY "referralId" HAVING count(*) > 1
+    ) t`
+  assert.equal(Number(dobles), 0, 'una invitación, como mucho un pago en puntos')
+
+  const [{ autos }] = await prisma.$queryRaw<{ autos: bigint }[]>`
+    SELECT count(*) AS autos FROM "supply_v2_referrals" WHERE "referredId" = "referrerId"`
+  assert.equal(Number(autos), 0)
+
+  const [{ concedidosSinFecha }] = await prisma.$queryRaw<{ concedidosSinFecha: bigint }[]>`
+    SELECT count(*) AS "concedidosSinFecha" FROM "supply_v2_referrals"
+    WHERE "status" = 'REWARD_GRANTED' AND "rewardGrantedAt" IS NULL`
+  assert.equal(Number(concedidosSinFecha), 0)
+
+  const [{ reclamacionesDobles }] = await prisma.$queryRaw<{ reclamacionesDobles: bigint }[]>`
+    SELECT count(*) AS "reclamacionesDobles" FROM (
+      SELECT "referralId" FROM "supply_v2_reward_claims"
+      WHERE "referralId" IS NOT NULL GROUP BY "referralId" HAVING count(*) > 1
+    ) t`
+  assert.equal(Number(reclamacionesDobles), 0, 'una invitación, como mucho una reclamación')
 })

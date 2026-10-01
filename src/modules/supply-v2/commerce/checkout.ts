@@ -23,6 +23,7 @@ import { politicaDeVersion } from '../finance/domain'
 import { aplicarReservaEnTx, liberarReservaEnTx, reservarBeneficioEnTx, type ReservaDeBeneficio } from '../benefits/service'
 import { activarMembresiaPorPagoEnTx, soltarMembresiaDeOrdenEnTx } from '../loyalty/memberships'
 import { acumularPorCompraEnTodosEnTx } from '../loyalty/points'
+import { evaluarCompraEnTx } from '../loyalty/referrals'
 import { consolidarCuponEnTx, liberarCuponEnTx, registrarAplicacionCuponEnTx, resolverCuponEnTx, type CuponResuelto } from '../campaigns/coupons'
 import { promocionAutomaticaEnTx } from '../campaigns/service'
 import { MENSAJES_CUPON, MENSAJE_CUPON_OPACO } from '../campaigns/domain'
@@ -733,6 +734,9 @@ export async function confirmarPagoEnTx(
   // regla congelada en el movimiento y una clave de idempotencia por pedido y
   // programa, así que un reintento de la confirmación no suma dos veces.
   await acumularPorCompraEnTodosEnTx(tx, o.id, ctx)
+  // Slice 8 (§18, §21): ¿hace esta compra elegible a alguna invitación? La
+  // elegibilidad se calcula entera en el servidor; abrir el enlace no paga.
+  await evaluarCompraEnTx(tx, o.id, ctx)
   return { id: o.id, number: o.number, entitlements, repetido: false }
 }
 
@@ -767,6 +771,7 @@ export async function confirmarCoberturaTotalEnTx(tx: Tx, d: { orderId: string; 
   }, o.lines[0]?.offer.supplier.companyId ?? null)
   await auditarPagoYVentaEnTx(tx, o, entitlements, { amountSeen: '0' }, ctx)
   await acumularPorCompraEnTodosEnTx(tx, o.id, ctx)
+  await evaluarCompraEnTx(tx, o.id, ctx)
   return { id: o.id, number: o.number, entitlements, repetido: false }
 }
 
