@@ -71,6 +71,14 @@ export const SUPPLY_V2_PERMISSIONS = [
   'SUPPLY_V2_BENEFIT_ASSIGN',
   'SUPPLY_V2_BENEFIT_CANCEL',
   'SUPPLY_V2_BENEFIT_FINANCE_VIEW',
+  // Slice 7 · campañas, promociones y cupones (§27)
+  'SUPPLY_V2_CAMPAIGN_VIEW',
+  'SUPPLY_V2_CAMPAIGN_CREATE',
+  'SUPPLY_V2_CAMPAIGN_APPROVE',
+  'SUPPLY_V2_CAMPAIGN_PUBLISH',
+  'SUPPLY_V2_COUPON_MANAGE',
+  'SUPPLY_V2_CAMPAIGN_FINANCE_VIEW',
+  'SUPPLY_V2_CAMPAIGN_REPORT_VIEW',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -104,6 +112,13 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_BENEFIT_ASSIGN: 'Asignar beneficios a clientes',
   SUPPLY_V2_BENEFIT_CANCEL: 'Cancelar beneficios y asignaciones; reversar aplicaciones',
   SUPPLY_V2_BENEFIT_FINANCE_VIEW: 'Ver presupuestos, subsidios y resultado económico de los beneficios',
+  SUPPLY_V2_CAMPAIGN_VIEW: 'Ver campañas y promociones',
+  SUPPLY_V2_CAMPAIGN_CREATE: 'Crear y editar campañas, y pausarlas',
+  SUPPLY_V2_CAMPAIGN_APPROVE: 'Aprobar o rechazar campañas (segregación: no quien las creó)',
+  SUPPLY_V2_CAMPAIGN_PUBLISH: 'Publicar campañas aprobadas y cancelarlas',
+  SUPPLY_V2_COUPON_MANAGE: 'Generar, asignar y cancelar cupones',
+  SUPPLY_V2_CAMPAIGN_FINANCE_VIEW: 'Ver presupuesto, subsidio y resultado económico de las campañas',
+  SUPPLY_V2_CAMPAIGN_REPORT_VIEW: 'Ver los reportes y el tablero de campañas',
 }
 
 export interface CompanyGateway {

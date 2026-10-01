@@ -410,13 +410,37 @@ export async function misBeneficios(customerId: string, ahora = new Date()): Pro
     })
   )
   if (filas.length === 0) return []
-  const ofertas = await sinEmpresa('Supply 2.0: ofertas vivas donde valen los beneficios del cliente', (tx) =>
-    tx.supplyV2Offer.findMany({
-      where: { status: 'ACTIVE', startsAt: { lte: ahora }, OR: [{ endsAt: null }, { endsAt: { gt: ahora } }] },
-      take: 300,
-      select: { id: true, slug: true, title: true, catalogItemId: true, supplierId: true, sourceType: true, currency: true, salePrice: true, supplier: { select: { commercialName: true } } },
-    })
-  )
+  /**
+   * Se pregunta SOLO por las ofertas que los beneficios de este cliente
+   * pueden cubrir (oferta concreta, producto o proveedor, los tres alcances
+   * del §9). Antes se pedía una página de 300 ofertas activas cualesquiera y
+   * se filtraba en memoria: con el catálogo crecido, la oferta del beneficio
+   * se quedaba fuera de esa página y la pantalla decía «no hay ofertas donde
+   * usarlo» teniéndolas. La base filtra, no el servidor.
+   */
+  const alcance = { ofertas: [] as string[], productos: [] as string[], proveedores: [] as string[] }
+  for (const g of filas) {
+    const b = g.benefit
+    if (b.scope === 'SPECIFIC_OFFER' && b.offerId) alcance.ofertas.push(b.offerId)
+    else if (b.scope === 'CATALOG_ITEM' && b.catalogItemId) alcance.productos.push(b.catalogItemId)
+    else if (b.scope === 'SUPPLIER' && b.supplierId) alcance.proveedores.push(b.supplierId)
+  }
+  const candidatas = [
+    ...(alcance.ofertas.length > 0 ? [{ id: { in: alcance.ofertas } }] : []),
+    ...(alcance.productos.length > 0 ? [{ catalogItemId: { in: alcance.productos } }] : []),
+    ...(alcance.proveedores.length > 0 ? [{ supplierId: { in: alcance.proveedores } }] : []),
+  ]
+  const ofertas =
+    candidatas.length === 0
+      ? []
+      : await sinEmpresa('Supply 2.0: ofertas vivas donde valen los beneficios del cliente', (tx) =>
+          tx.supplyV2Offer.findMany({
+            where: { status: 'ACTIVE', startsAt: { lte: ahora }, AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: ahora } }] }, { OR: candidatas }] },
+            orderBy: { startsAt: 'desc' },
+            take: 300,
+            select: { id: true, slug: true, title: true, catalogItemId: true, supplierId: true, sourceType: true, currency: true, salePrice: true, supplier: { select: { commercialName: true } } },
+          })
+        )
   return filas.map((g) => {
     const b = g.benefit
     const elegibles = ofertas.filter((o) => cubreOferta(b, o) && b.currency === o.currency && (b.funding === 'MEMBEGO' || (b.supplierId === o.supplierId && o.sourceType === 'COMMISSION')))

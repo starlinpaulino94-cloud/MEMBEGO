@@ -553,7 +553,7 @@ export async function fichaLiquidacion(id: string, p: Paginacion) {
   )
   return {
     ...s,
-    lineas: lineas.map((l) => ({ id: l.id, obligationId: l.obligationId, obligationNumber: l.obligation.number, obligationStatus: l.obligation.status, redemptionId: l.redemptionId, descripcion: l.descriptionSnapshot, grossAmount: l.grossAmount.toFixed(2), commissionAmount: l.commissionAmount.toFixed(2), supplierNet: l.supplierNet.toFixed(2), paidAmount: l.obligation.paidAmount.toFixed(2), outstandingAmount: l.obligation.outstandingAmount.toFixed(2), recognizedAt: l.obligation.recognizedAt, contractualAmount: l.contractualAmount.toFixed(2), supplierDiscountAmount: l.supplierDiscountAmount.toFixed(2), membegoSubsidyAmount: l.membegoSubsidyAmount.toFixed(2), customerPaidAmount: l.customerPaidAmount.toFixed(2) })),
+    lineas: lineas.map((l) => ({ id: l.id, obligationId: l.obligationId, obligationNumber: l.obligation.number, obligationStatus: l.obligation.status, redemptionId: l.redemptionId, descripcion: l.descriptionSnapshot, grossAmount: l.grossAmount.toFixed(2), commissionAmount: l.commissionAmount.toFixed(2), supplierNet: l.supplierNet.toFixed(2), paidAmount: l.obligation.paidAmount.toFixed(2), outstandingAmount: l.obligation.outstandingAmount.toFixed(2), recognizedAt: l.obligation.recognizedAt, alreadyPaidAmount: l.alreadyPaidAmount.toFixed(2), contractualAmount: l.contractualAmount.toFixed(2), supplierDiscountAmount: l.supplierDiscountAmount.toFixed(2), membegoSubsidyAmount: l.membegoSubsidyAmount.toFixed(2), customerPaidAmount: l.customerPaidAmount.toFixed(2) })),
     totalLineas: s._count.lines,
     pendiente: s.supplierNet.minus(s.paidAmount).toFixed(2),
     creadoPor: nombre(s.createdBy),
@@ -574,16 +574,18 @@ export async function previsualizarLiquidacion(supplierId: string, periodStart: 
     const gross = filas.reduce((t, o) => t.plus(brutoDe(o)), CERO)
     const commission = filas.reduce((t, o) => t.plus(o.redemption?.commissionAmountSnapshot ?? CERO), CERO)
     const net = filas.reduce((t, o) => t.plus(o.outstandingAmount), CERO)
+    const adelantado = filas.reduce((t, o) => t.plus(o.paidAmount), CERO)
     const subsidio = filas.reduce((t, o) => t.plus(o.redemption?.membegoSubsidySnapshot ?? CERO), CERO)
     const descuento = filas.reduce((t, o) => t.plus(o.redemption?.supplierDiscountSnapshot ?? CERO), CERO)
     const cobrado = filas.reduce((t, o) => t.plus(o.redemption?.customerUnitPriceSnapshot ?? CERO), CERO)
     return {
       proveedor: s.commercialName,
       currency: s.currency,
-      entregas: filas.map((o) => ({ id: o.id, number: o.number, redemptionNumber: o.redemption?.number ?? null, producto: o.redemption?.catalogItem.name ?? '', cliente: o.redemption?.customer.name?.trim() || o.redemption?.customer.email || '', redeemedAt: o.redemption?.redeemedAt ?? o.recognizedAt, gross: brutoDe(o).toFixed(2), commission: o.redemption?.commissionAmountSnapshot?.toFixed(2) ?? '0.00', net: o.outstandingAmount.toFixed(2), subsidio: (o.redemption?.membegoSubsidySnapshot ?? CERO).toFixed(2), descuento: (o.redemption?.supplierDiscountSnapshot ?? CERO).toFixed(2) })),
+      entregas: filas.map((o) => ({ id: o.id, number: o.number, redemptionNumber: o.redemption?.number ?? null, producto: o.redemption?.catalogItem.name ?? '', cliente: o.redemption?.customer.name?.trim() || o.redemption?.customer.email || '', redeemedAt: o.redemption?.redeemedAt ?? o.recognizedAt, gross: brutoDe(o).toFixed(2), commission: o.redemption?.commissionAmountSnapshot?.toFixed(2) ?? '0.00', net: o.outstandingAmount.toFixed(2), adelantado: o.paidAmount.toFixed(2), subsidio: (o.redemption?.membegoSubsidySnapshot ?? CERO).toFixed(2), descuento: (o.redemption?.supplierDiscountSnapshot ?? CERO).toFixed(2) })),
       grossSales: gross.toFixed(2),
       commissionAmount: commission.toFixed(2),
       supplierNet: net.toFixed(2),
+      alreadyPaidTotal: adelantado.toFixed(2),
       membegoSubsidyTotal: subsidio.toFixed(2),
       supplierDiscountTotal: descuento.toFixed(2),
       customerPaidTotal: cobrado.toFixed(2),

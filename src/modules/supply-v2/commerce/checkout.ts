@@ -21,6 +21,9 @@ import { repartirEnUnidades } from '../core/comision'
 import { calcularRepartoLinea, fotoDeReparto, type RepartoFinanciado, type UnidadFinanciada } from '../core/financiacion'
 import { politicaDeVersion } from '../finance/domain'
 import { aplicarReservaEnTx, liberarReservaEnTx, reservarBeneficioEnTx, type ReservaDeBeneficio } from '../benefits/service'
+import { consolidarCuponEnTx, liberarCuponEnTx, registrarAplicacionCuponEnTx, resolverCuponEnTx, type CuponResuelto } from '../campaigns/coupons'
+import { promocionAutomaticaEnTx } from '../campaigns/service'
+import { MENSAJES_CUPON, MENSAJE_CUPON_OPACO } from '../campaigns/domain'
 import type { PaymentAccountRef } from '../contracts/gateways'
 import { reconocerVentaEnTx } from '../economics/service'
 
@@ -49,6 +52,8 @@ export interface DatosCheckout {
   /** Slice 6 (§16–§17): beneficio de la cuenta del cliente (asignación) o beneficio público. El servidor lo revalida todo. */
   customerBenefitId?: string | null
   benefitId?: string | null
+  /** Slice 7 (§20): el código que el cliente escribió en el checkout. */
+  couponCode?: string | null
 }
 
 // ── Slice 6 · financiación de la línea (§13–§15, §19) ──────────────────────────
@@ -75,21 +80,79 @@ function baseDeComision(oferta: OfertaParaFinanciar): 'CONTRACTUAL_SALE_VALUE' |
  * asignación, valida la elegibilidad y reserva el presupuesto; el reparto que
  * devuelve es el que la orden CONGELA (§15).
  */
-async function financiarLineaEnTx(tx: Tx, d: DatosCheckout, oferta: OfertaParaFinanciar, orderId: string, orderLineId: string, expiresAt: Date, ctx: ContextoAuditoria): Promise<{ reparto: RepartoFinanciado; reserva: ReservaDeBeneficio | null }> {
+async function financiarLineaEnTx(tx: Tx, d: DatosCheckout, oferta: OfertaParaFinanciar, orderId: string, orderLineId: string, expiresAt: Date, ctx: ContextoAuditoria): Promise<{ reparto: RepartoFinanciado; reserva: ReservaDeBeneficio | null; cupon: CuponResuelto | null }> {
   const commissionBase = baseDeComision(oferta)
-  if (!d.customerBenefitId && !d.benefitId) {
-    return { reparto: calcularRepartoLinea({ saleUnitPrice: oferta.salePrice, quantity: d.quantity, sourceType: oferta.sourceType, commissionPercentage: oferta.commissionPercentage, commissionBase }), reserva: null }
+  const plano = () => calcularRepartoLinea({ saleUnitPrice: oferta.salePrice, quantity: d.quantity, sourceType: oferta.sourceType, commissionPercentage: oferta.commissionPercentage, commissionBase })
+
+  // Slice 7 (§20): el CUPÓN se resuelve primero y deja el cupón bloqueado; el
+  // beneficio al que apunta es el que se reserva. Un código que no sirve NO
+  // rompe la compra con un error técnico: se explica y se para aquí.
+  let cupon: CuponResuelto | null = null
+  let benefitId = d.benefitId ?? null
+  if (d.couponCode?.trim()) {
+    const r = await resolverCuponEnTx(tx, { codigo: d.couponCode, customerId: d.customerId, oferta: { id: oferta.id, salePrice: oferta.salePrice, currency: oferta.currency }, quantity: d.quantity })
+    if (r.motivo) {
+      // «No existe» y «no es tuyo» comparten mensaje: quien prueba códigos a
+      // mano no debe poder distinguirlos (§28). Al dueño del cupón sí se le
+      // explica lo que puede corregir.
+      const opaco = r.motivo === 'CUPON_NO_ENCONTRADO' || r.motivo === 'CUPON_AJENO' || r.motivo === 'CODIGO_INVALIDO'
+      fallo(`CUPON_${r.motivo}`, opaco ? MENSAJE_CUPON_OPACO : MENSAJES_CUPON[r.motivo])
+    }
+    cupon = r.cupon!
+    if (d.customerBenefitId) fallo('CUPON_Y_BENEFICIO', 'Usa el cupón o un beneficio de tu cuenta, no los dos en la misma compra.')
+    benefitId = cupon.benefitId
   }
+
+  // Slice 7 (§20, §25): si el cliente no eligió nada, una promoción de campaña
+  // SIN código y SIN asignación se aplica sola. Es «opcional»: si ya no cabe
+  // —presupuesto agotado, límite, público— la compra sigue a precio normal, que
+  // es lo correcto cuando el cliente no pidió esa promoción.
+  const automatica = !d.customerBenefitId && !benefitId
+  if (automatica) {
+    const auto = await promocionAutomaticaEnTx(tx, {
+      offerId: oferta.id,
+      customerId: d.customerId,
+      quantity: d.quantity,
+      sourceType: oferta.sourceType,
+      salePrice: oferta.salePrice,
+      commissionPercentage: oferta.commissionPercentage,
+      commissionBase,
+    })
+    if (auto) benefitId = auto.benefitId
+  }
+
+  if (!d.customerBenefitId && !benefitId) return { reparto: plano(), reserva: null, cupon: null }
+
   const reserva = await reservarBeneficioEnTx(
     tx,
-    { customerId: d.customerId, customerBenefitId: d.customerBenefitId, benefitId: d.benefitId, oferta: { id: oferta.id, catalogItemId: oferta.catalogItemId, supplierId: oferta.supplierId, sourceType: oferta.sourceType, currency: oferta.currency, salePrice: oferta.salePrice, commissionPercentage: oferta.commissionPercentage, commissionBase }, quantity: d.quantity, orderId, orderLineId, expiresAt },
+    {
+      customerId: d.customerId,
+      customerBenefitId: d.customerBenefitId,
+      benefitId,
+      oferta: { id: oferta.id, catalogItemId: oferta.catalogItemId, supplierId: oferta.supplierId, sourceType: oferta.sourceType, currency: oferta.currency, salePrice: oferta.salePrice, commissionPercentage: oferta.commissionPercentage, commissionBase },
+      quantity: d.quantity,
+      orderId,
+      orderLineId,
+      expiresAt,
+      conCupon: cupon !== null,
+      opcional: automatica,
+    },
     ctx
   )
-  return { reparto: reserva.reparto, reserva }
+  // La promoción automática que ya no cabía: se compra a precio normal.
+  if (!reserva) return { reparto: plano(), reserva: null, cupon: null }
+  if (cupon) {
+    await registrarAplicacionCuponEnTx(
+      tx,
+      { couponId: cupon.couponId, reservationId: reserva.reservationId, customerId: d.customerId, orderId, membegoAmount: reserva.reparto.membegoSubsidy, supplierAmount: reserva.reparto.supplierDiscount },
+      ctx
+    )
+  }
+  return { reparto: reserva.reparto, reserva, cupon }
 }
 
 /** Escribe en orden y línea la financiación congelada. `total` = lo que paga el cliente. */
-async function congelarFinanciacionEnTx(tx: Tx, orderId: string, orderLineId: string, r: RepartoFinanciado, reserva: ReservaDeBeneficio | null): Promise<void> {
+async function congelarFinanciacionEnTx(tx: Tx, orderId: string, orderLineId: string, r: RepartoFinanciado, reserva: ReservaDeBeneficio | null, atribucion: { campaignId: string | null; couponCode: string | null } = { campaignId: null, couponCode: null }): Promise<void> {
   await tx.supplyV2CustomerOrderLine.update({
     where: { id: orderLineId },
     data: {
@@ -117,6 +180,11 @@ async function congelarFinanciacionEnTx(tx: Tx, orderId: string, orderLineId: st
       commissionAmount: r.commissionAmount,
       supplierNet: r.supplierNet,
       benefitFundingSnapshot: fotoDeReparto(r, reserva ? reserva.beneficio : null),
+      // Slice 7 (§25): la atribución se CONGELA aquí. Una compra pertenece a UNA
+      // campaña —la del beneficio aplicado—, así que una oferta que participa en
+      // varias no puede duplicar su GMV.
+      campaignId: atribucion.campaignId,
+      couponCodeSnapshot: atribucion.couponCode,
     },
   })
 }
@@ -274,7 +342,10 @@ export async function abrirOrdenClienteEnTx(tx: Tx, d: DatosCheckout, ctx: Conte
 
   // 5b. Slice 6 (§16–§17): financiación de la línea (beneficio opcional) y foto congelada.
   const fin = await financiarLineaEnTx(tx, d, oferta, orden.id, orden.lines[0]!.id, expiresAt, ctx)
-  await congelarFinanciacionEnTx(tx, orden.id, orden.lines[0]!.id, fin.reparto, fin.reserva)
+  await congelarFinanciacionEnTx(tx, orden.id, orden.lines[0]!.id, fin.reparto, fin.reserva, {
+    campaignId: fin.reserva?.beneficio.campaignId ?? null,
+    couponCode: fin.cupon?.code ?? null,
+  })
   orden.total = fin.reparto.customerPayable
 
   // 6. ALLOCATED → RESERVED en cada lote, y los contadores.
@@ -406,7 +477,10 @@ async function abrirOrdenComisionEnTx(tx: Tx, d: DatosCheckout, oferta: OfertaCo
   // Slice 6: financiación (beneficio opcional) → reparto congelado con la base de comisión de la versión del acuerdo (§14).
   const fin = await financiarLineaEnTx(tx, d, oferta, orden.id, orden.lines[0]!.id, expiresAt, ctx)
   const reparto = fin.reparto
-  await congelarFinanciacionEnTx(tx, orden.id, orden.lines[0]!.id, reparto, fin.reserva)
+  await congelarFinanciacionEnTx(tx, orden.id, orden.lines[0]!.id, reparto, fin.reserva, {
+    campaignId: fin.reserva?.beneficio.campaignId ?? null,
+    couponCode: fin.cupon?.code ?? null,
+  })
   orden.total = reparto.customerPayable
   await tx.supplyV2CommissionReservation.create({
     data: { offerId: oferta.id, orderId: orden.id, orderLineId: orden.lines[0]!.id, quantity: d.quantity, status: 'ACTIVE', expiresAt },
@@ -487,7 +561,12 @@ async function soltarReservasEnTx(tx: Tx, o: OrdenBloqueada, motivo: string, act
     await tx.$queryRaw`SELECT "id" FROM "supply_v2_offers" WHERE "id" = ${l.offerId} FOR UPDATE`
     // Slice 6 (§27): la reserva del beneficio vuelve al presupuesto.
     if (l.benefitReservation?.status === 'ACTIVE') {
-      await liberarReservaEnTx(tx, l.benefitReservation.id, destino, motivo, { actorId, ipAddress: null, userAgent: 'checkout' })
+      const ctxSoltar = { actorId, ipAddress: null, userAgent: 'checkout' }
+      // Slice 7: el uso del cupón se suelta con la reserva que abrió. Si se
+      // liberara el presupuesto y no el cupón, el cliente perdería su cupón sin
+      // haber comprado nada.
+      await liberarCuponEnTx(tx, l.benefitReservation.id, motivo, ctxSoltar)
+      await liberarReservaEnTx(tx, l.benefitReservation.id, destino, motivo, ctxSoltar)
     }
     // Slice 5: la reserva comercial de una oferta a comisión se libera (o expira) sin tocar ningún lote.
     for (const r of l.commissionReservations) {
@@ -686,7 +765,12 @@ async function emitirDerechosDeOrdenEnTx(tx: Tx, o: OrdenBloqueada, ctx: Context
   if (reservadas !== pedidas) fallo('RESERVA_INCOMPLETA', 'La reserva de esta compra ya no está completa: no se puede emitir.')
   // Slice 6 (§20): el beneficio se consolida ANTES de emitir; si su reserva ya no vive, nada se emite.
   for (const l of o.lines) {
-    if (l.benefitReservation) await aplicarReservaEnTx(tx, l.benefitReservation.id, ctx)
+    if (l.benefitReservation) {
+      await aplicarReservaEnTx(tx, l.benefitReservation.id, ctx)
+      // Slice 7 (§12): el uso del cupón se consolida con la reserva, en la misma
+      // transacción. Aplicar un cupón no entrega nada: la entrega es el QR.
+      await consolidarCuponEnTx(tx, l.benefitReservation.id, ctx)
+    }
   }
 
   const entitlements: PagoConfirmado['entitlements'] = []

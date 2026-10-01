@@ -3,8 +3,8 @@ import { TabsNav } from '@/components/ui/tabs-nav'
 import { BASE_SUPPLY_V2 } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · navegación (§25, §42, §63; Slice 4 §33, §68): nueve pestañas.
- * Campañas y reportes esperan a slices posteriores.
+ * MEMBEGO SUPPLY 2.0 · navegación (§25, §42, §63; Slice 4 §33, §68): diez pestañas.
+ * Los reportes avanzados esperan a slices posteriores.
  */
 export const SECCIONES_SUPPLY_V2 = [
   { slug: '', label: 'Resumen' },
@@ -15,6 +15,8 @@ export const SECCIONES_SUPPLY_V2 = [
   { slug: 'redenciones', label: 'Redenciones' },
   // Slice 6
   { slug: 'beneficios', label: 'Beneficios' },
+  // Slice 7
+  { slug: 'campanas', label: 'Campañas' },
   // Slice 4
   { slug: 'finanzas', label: 'Finanzas' },
   { slug: 'economia', label: 'Economía' },

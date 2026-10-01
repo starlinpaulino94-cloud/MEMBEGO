@@ -5,6 +5,8 @@ import { SearchBar } from '@/components/public/SearchBar'
 import { PromotionGrid } from '@/components/public/PromotionGrid'
 import { getPromotionsPublic } from '@/modules/marketplace/cached'
 import { ofertasPublicas } from '@/modules/supply-v2/marketplace/read-model'
+import { campanasPublicas } from '@/modules/supply-v2/campaigns/queries'
+import { RUTA_CAMPANAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
 import { OfertaMembegoCard } from '@/components/supply-v2/oferta-membego-card'
 
 interface PromotionsPageProps {
@@ -40,11 +42,15 @@ export default async function PromotionsPage({
     offset: 0,
   }
 
-  const [promotions, ofertasMembego] = await Promise.all([
+  const sinFiltros = !filters.search && !filters.type && !filters.tag && !filters.company
+  const [promotions, ofertasMembego, campanas] = await Promise.all([
     getPromotionsPublic(filters),
     // Supply 2.0 entra al marketplace por su read model público: solo ofertas
     // comprables hoy, sin costos ni lotes. Sin filtros: son de Membego, no de una empresa.
-    filters.search || filters.type || filters.tag || filters.company ? Promise.resolve([]) : ofertasPublicas(12).catch(() => []),
+    sinFiltros ? ofertasPublicas(12).catch(() => []) : Promise.resolve([]),
+    // Slice 7 (§18): las campañas activas y vigentes AHORA. La vigencia y el
+    // horario se comprueban en la consulta, no se dan por buenos.
+    sinFiltros ? campanasPublicas(null, new Date(), 6).catch(() => []) : Promise.resolve([]),
   ])
 
   return (
@@ -101,6 +107,34 @@ export default async function PromotionsPage({
           ))}
         </div>
       </section>
+
+      {/* Campañas Membego (Supply 2.0 · Slice 7): una sección DENTRO de este
+          marketplace, no otro marketplace. Solo si hay alguna activa y vigente. */}
+      {campanas.length > 0 && (
+        <section className="pt-12" data-testid="campanas-marketplace">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-h2">Campañas y promociones</h2>
+                <p className="text-small text-muted-foreground">Promociones por tiempo limitado en los comercios de la red.</p>
+              </div>
+              <Link href={RUTA_CAMPANAS_PUBLICAS} className="text-small text-primary underline-offset-4 hover:underline" data-testid="link-todas-campanas">
+                Ver todas las campañas
+              </Link>
+            </div>
+            <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {campanas.slice(0, 3).map((c) => (
+                <li key={c.id} className="rounded-2xl border border-border/70 bg-card p-5 shadow-premium" data-testid="campana-marketplace">
+                  <Link href={`${RUTA_CAMPANAS_PUBLICAS}/${c.code}`} className="text-h3 underline-offset-4 hover:underline">{c.name}</Link>
+                  <p className="mt-1 text-caption text-muted-foreground">{c.empresas.slice(0, 3).join(' · ')}</p>
+                  {c.description && <p className="mt-2 line-clamp-2 text-small text-muted-foreground">{c.description}</p>}
+                  <p className="mt-2 text-caption text-muted-foreground">{c.ofertas.length} producto(s) participan{c.endsAt ? ` · hasta el ${new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium' }).format(new Date(c.endsAt))}` : ''}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/* Ofertas Membego (Supply 2.0): solo si hay alguna comprable hoy. */}
       {ofertasMembego.length > 0 && (

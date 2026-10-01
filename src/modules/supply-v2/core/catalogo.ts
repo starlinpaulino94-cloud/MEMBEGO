@@ -545,5 +545,116 @@ export const COMMISSION_BASE_LABELS: Record<SupplyV2CommissionBase, string> = {
 /** Formato de dinero para las pantallas de finanzas: dos decimales siempre (§52: el texto ya viene redondeado). */
 export function dineroSupplyV2(n: string | number | { toString(): string }, moneda = 'DOP'): string {
   const v = Number(typeof n === 'object' ? n.toString() : n)
-  return `${moneda === 'DOP' ? 'RD$' : `${moneda} `}${v.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  // El signo va DELANTE del símbolo: «-RD$228.00», no «RD$-228.00». Las
+  // contribuciones de campaña y los saldos pueden ser negativos y se leen a
+  // simple vista.
+  const signo = v < 0 ? '-' : ''
+  return `${signo}${moneda === 'DOP' ? 'RD$' : `${moneda} `}${Math.abs(v).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
+
+// ── Slice 7 · campañas, promociones y cupones ───────────────────────────────
+
+import type {
+  SupplyV2CampaignAudience,
+  SupplyV2CampaignEventType,
+  SupplyV2CampaignOrganizer,
+  SupplyV2CampaignStatus,
+  SupplyV2CouponKind,
+  SupplyV2CouponRedemptionStatus,
+  SupplyV2CouponStatus,
+} from '@prisma/client'
+
+export const RUTA_CAMPANAS = `${BASE_SUPPLY_V2}/campanas`
+export const RUTA_CAMPANAS_PUBLICAS = '/promociones/campanas'
+export const RUTA_CUPONES_CLIENTE = '/cliente/cupones'
+export const RUTA_PORTAL_CAMPANAS = `${RUTA_PORTAL_PROVEEDOR}/campanas`
+
+export const CAMPAIGN_STATUS_LABELS: Record<SupplyV2CampaignStatus, string> = {
+  DRAFT: 'Borrador',
+  PENDING_APPROVAL: 'En revisión',
+  SCHEDULED: 'Programada',
+  ACTIVE: 'Activa',
+  PAUSED: 'Pausada',
+  COMPLETED: 'Terminada',
+  CANCELLED: 'Cancelada',
+}
+export const CAMPAIGN_STATUS_TONE: Record<SupplyV2CampaignStatus, Tono> = {
+  DRAFT: 'neutral',
+  PENDING_APPROVAL: 'warning',
+  SCHEDULED: 'info',
+  ACTIVE: 'success',
+  PAUSED: 'warning',
+  COMPLETED: 'neutral',
+  CANCELLED: 'danger',
+}
+export const CAMPAIGN_ORGANIZER_LABELS: Record<SupplyV2CampaignOrganizer, string> = {
+  MEMBEGO: 'La organiza Membego',
+  SUPPLIER: 'La propone el proveedor',
+}
+export const CAMPAIGN_AUDIENCE_LABELS: Record<SupplyV2CampaignAudience, string> = {
+  ALL: 'Todos los clientes elegibles',
+  NEW_CUSTOMERS: 'Clientes nuevos (sin compras todavía)',
+  RETURNING_CUSTOMERS: 'Clientes con compras anteriores',
+  PAST_CAMPAIGN: 'Clientes que ya usaron una promoción',
+  SELECTED: 'Lista de clientes seleccionados',
+}
+export const CAMPAIGN_AUDIENCE_EXPLICACION: Record<SupplyV2CampaignAudience, string> = {
+  ALL: 'Cualquiera que cumpla las condiciones de la oferta.',
+  NEW_CUSTOMERS: 'Quien todavía no ha comprado nada en Membego Supply.',
+  RETURNING_CUSTOMERS: 'Quien ya compró al menos una vez y pagó.',
+  PAST_CAMPAIGN: 'Quien ya aplicó la promoción de alguna campaña.',
+  SELECTED: 'Solo los clientes a quienes se les asigne la campaña a mano.',
+}
+export const COUPON_KIND_LABELS: Record<SupplyV2CouponKind, string> = {
+  PUBLIC: 'Público (cualquier cliente elegible)',
+  PRIVATE: 'Privado (de un cliente concreto)',
+}
+export const COUPON_STATUS_LABELS: Record<SupplyV2CouponStatus, string> = {
+  ACTIVE: 'Disponible',
+  EXHAUSTED: 'Agotado',
+  EXPIRED: 'Vencido',
+  CANCELLED: 'Cancelado',
+}
+export const COUPON_STATUS_TONE: Record<SupplyV2CouponStatus, Tono> = {
+  ACTIVE: 'success',
+  EXHAUSTED: 'info',
+  EXPIRED: 'neutral',
+  CANCELLED: 'danger',
+}
+export const COUPON_REDEMPTION_STATUS_LABELS: Record<SupplyV2CouponRedemptionStatus, string> = {
+  RESERVED: 'En un checkout en curso',
+  APPLIED: 'Aplicado',
+  RELEASED: 'Liberado',
+  REVERSED: 'Reversado',
+}
+export const CAMPAIGN_EVENT_LABELS: Record<SupplyV2CampaignEventType, string> = {
+  CREATED: 'Creada',
+  SUBMITTED: 'Enviada a revisión',
+  APPROVED: 'Aprobada',
+  REJECTED: 'Devuelta a borrador',
+  PUBLISHED: 'Publicada',
+  PAUSED: 'Pausada',
+  RESUMED: 'Reactivada',
+  COMPLETED: 'Terminada',
+  CANCELLED: 'Cancelada',
+  OFFER_ADDED: 'Oferta añadida',
+  OFFER_REMOVED: 'Oferta retirada',
+  BENEFIT_ATTACHED: 'Promoción configurada',
+  COUPONS_GENERATED: 'Cupones generados',
+  AUDIENCE_ASSIGNED: 'Campaña asignada a un cliente',
+  BUDGET_WAIVED: 'Autorizada sin presupuesto máximo',
+}
+
+/** Tipos de promoción del §6, en el orden en que los enseña el asistente. */
+export const TIPOS_DE_PROMOCION = [
+  { clave: 'DESCUENTO_FIJO', label: 'Descuento de importe fijo', explicacion: 'Rebaja un importe fijo del precio Membego.' },
+  { clave: 'DESCUENTO_PORCENTUAL', label: 'Descuento porcentual', explicacion: 'Rebaja un porcentaje del precio Membego, con tope opcional.' },
+  { clave: 'CUPON_FIJO', label: 'Cupón de importe fijo', explicacion: 'Un código que rebaja un importe fijo.' },
+  { clave: 'CUPON_PORCENTUAL', label: 'Cupón porcentual', explicacion: 'Un código que rebaja un porcentaje, con tope opcional.' },
+  { clave: 'BIENVENIDA', label: 'Oferta de bienvenida', explicacion: 'Para clientes que todavía no han comprado.' },
+  { clave: 'TIEMPO_LIMITADO', label: 'Oferta por tiempo limitado', explicacion: 'Vale solo dentro de un horario, además de la vigencia.' },
+  { clave: 'BONO_ASIGNADO', label: 'Bono promocional asignado', explicacion: 'Se asigna cliente por cliente, sin código.' },
+  { clave: 'COMPARTIDA', label: 'Financiación compartida', explicacion: 'Parte la pone el proveedor y parte Membego.' },
+] as const
+
+export type TipoDePromocion = (typeof TIPOS_DE_PROMOCION)[number]['clave']

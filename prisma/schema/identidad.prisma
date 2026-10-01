@@ -398,6 +398,21 @@ enum AuditAccion {
   SUPPLY_V2_BENEFIT_RELEASED
   SUPPLY_V2_BENEFIT_REVERSED
   SUPPLY_V2_ORDER_COVERED_BY_BENEFIT
+  // Slice 7 · campañas, promociones y cupones
+  SUPPLY_V2_CAMPAIGN_CREATED
+  SUPPLY_V2_CAMPAIGN_SUBMITTED
+  SUPPLY_V2_CAMPAIGN_APPROVED
+  SUPPLY_V2_CAMPAIGN_REJECTED
+  SUPPLY_V2_CAMPAIGN_PUBLISHED
+  SUPPLY_V2_CAMPAIGN_PAUSED
+  SUPPLY_V2_CAMPAIGN_RESUMED
+  SUPPLY_V2_CAMPAIGN_CANCELLED
+  SUPPLY_V2_CAMPAIGN_COMPLETED
+  SUPPLY_V2_CAMPAIGN_BUDGET_WAIVED
+  SUPPLY_V2_COUPONS_GENERATED
+  SUPPLY_V2_COUPON_CANCELLED
+  SUPPLY_V2_COUPON_APPLIED
+  SUPPLY_V2_COUPON_RELEASED
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas
@@ -595,6 +610,17 @@ model User {
   supplyV2BeneficiosOtorgados     SupplyV2CustomerBenefit[]    @relation("SupplyV2CustomerBenefitGrantedBy")
   supplyV2ReservasDeBeneficio     SupplyV2BenefitReservation[] @relation("SupplyV2BenefitReservationCustomer")
   supplyV2MovimientosDeBeneficio  SupplyV2BenefitMovement[]    @relation("SupplyV2BenefitMovementActor")
+
+  // Slice 7 · campañas, promociones y cupones
+  supplyV2CampanasCreadas         SupplyV2Campaign[]             @relation("SupplyV2CampaignCreatedBy")
+  supplyV2CampanasAprobadas       SupplyV2Campaign[]             @relation("SupplyV2CampaignApprovedBy")
+  supplyV2CampanasPublicadas      SupplyV2Campaign[]             @relation("SupplyV2CampaignPublishedBy")
+  supplyV2CampanasSinTope         SupplyV2Campaign[]             @relation("SupplyV2CampaignBudgetWaiverBy")
+  supplyV2CampanaEventos          SupplyV2CampaignEvent[]        @relation("SupplyV2CampaignEventActor")
+  supplyV2LotesDeCupones          SupplyV2CampaignDistribution[] @relation("SupplyV2CampaignDistributionCreatedBy")
+  supplyV2CuponesCreados          SupplyV2Coupon[]               @relation("SupplyV2CouponCreatedBy")
+  supplyV2CuponesPropios          SupplyV2Coupon[]               @relation("SupplyV2CouponCustomer")
+  supplyV2CuponesAplicados        SupplyV2CouponRedemption[]     @relation("SupplyV2CouponRedemptionCustomer")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)

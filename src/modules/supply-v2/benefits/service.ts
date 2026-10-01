@@ -123,6 +123,7 @@ export async function crearBeneficioEnTx(tx: Tx, d: DatosBeneficio, ctx: Context
       budgetTotal: d.budgetTotal != null && d.budgetTotal !== '' ? redondear2(decimal(d.budgetTotal)) : null,
       perCustomerLimit: d.perCustomerLimit ?? 1,
       requiresAssignment: d.requiresAssignment ?? true,
+      requiresCoupon: d.requiresCoupon ?? false,
       combinable: d.combinable ?? false,
       startsAt: d.startsAt,
       endsAt: d.endsAt ?? null,
@@ -241,7 +242,7 @@ export interface ReservaDeBeneficio {
   benefitId: string
   customerBenefitId: string | null
   reparto: RepartoFinanciado
-  beneficio: { id: string; code: string; name: string; funding: string; valueType: string; membegoValue: string; supplierValue: string }
+  beneficio: { id: string; code: string; name: string; funding: string; valueType: string; membegoValue: string; supplierValue: string; campaignId: string | null }
 }
 
 export interface OfertaParaReserva {
@@ -264,10 +265,30 @@ export interface OfertaParaReserva {
  */
 export async function reservarBeneficioEnTx(
   tx: Tx,
-  d: { customerId: string; customerBenefitId?: string | null; benefitId?: string | null; oferta: OfertaParaReserva; quantity: number; orderId: string; orderLineId: string; expiresAt: Date },
+  d: {
+    customerId: string
+    customerBenefitId?: string | null
+    benefitId?: string | null
+    oferta: OfertaParaReserva
+    quantity: number
+    orderId: string
+    orderLineId: string
+    expiresAt: Date
+    /** Slice 7 (§9): quien llama ya resolvió y bloqueó un cupón para este beneficio. */
+    conCupon?: boolean
+    /**
+     * Slice 7 (§20): promoción que se aplica SOLA. Si ya no cabe —presupuesto
+     * agotado, límite del cliente, público— no se puede romper la compra: el
+     * cliente no pidió esa promoción. Devuelve `null` y quien llama sigue a
+     * precio normal. Se decide DENTRO del candado del beneficio, así que dos
+     * checkouts por los últimos pesos no se sobregiran: el segundo ve el
+     * presupuesto ya reservado y se va sin rebaja.
+     */
+    opcional?: boolean
+  },
   ctx: ContextoAuditoria,
   ahora = new Date()
-): Promise<ReservaDeBeneficio> {
+): Promise<ReservaDeBeneficio | null> {
   let benefitId = d.benefitId ?? null
   let customerBenefitId = d.customerBenefitId ?? null
   if (customerBenefitId) {
@@ -300,9 +321,15 @@ export async function reservarBeneficioEnTx(
     commissionPercentage: d.oferta.commissionPercentage,
     commissionBase: d.oferta.commissionBase,
   })
-  const veto = motivoNoElegible(b, d.oferta, d.customerId, asignacion, usosVivos, reparto.membegoSubsidy, ahora)
-  if (veto) fallo(veto, MENSAJES_NO_ELEGIBLE[veto])
-  if (reparto.benefitApplied.lessThanOrEqualTo(0)) fallo('BENEFICIO_SIN_EFECTO', 'Este beneficio no rebaja nada en esta compra.')
+  const veto = motivoNoElegible(b, d.oferta, d.customerId, asignacion, usosVivos, reparto.membegoSubsidy, ahora, d.conCupon ?? false)
+  if (veto) {
+    if (d.opcional) return null
+    fallo(veto, MENSAJES_NO_ELEGIBLE[veto])
+  }
+  if (reparto.benefitApplied.lessThanOrEqualTo(0)) {
+    if (d.opcional) return null
+    fallo('BENEFICIO_SIN_EFECTO', 'Este beneficio no rebaja nada en esta compra.')
+  }
 
   const r = await tx.supplyV2BenefitReservation.create({
     data: {
@@ -337,7 +364,7 @@ export async function reservarBeneficioEnTx(
     benefitId: b.id,
     customerBenefitId,
     reparto,
-    beneficio: { id: b.id, code: b.code, name: b.name, funding: b.funding, valueType: b.valueType, membegoValue: b.membegoValue.toFixed(2), supplierValue: b.supplierValue.toFixed(2) },
+    beneficio: { id: b.id, code: b.code, name: b.name, funding: b.funding, valueType: b.valueType, membegoValue: b.membegoValue.toFixed(2), supplierValue: b.supplierValue.toFixed(2), campaignId: b.campaignId },
   }
 }
 
@@ -398,6 +425,10 @@ export async function reversarAplicacionBeneficioEnTx(tx: Tx, reservationId: str
   }
   const b = await bloquearBeneficio(tx, r.benefitId)
   await tx.supplyV2BenefitReservation.update({ where: { id: r.id }, data: { status: 'REVERSED', reversedAt: ahora, reversedReason: motivo.trim() } })
+  // Slice 7: si la reserva se abrió con un cupón, su uso se reversa con ella y
+  // el cupón vuelve a estar disponible.
+  const { liberarCuponEnTx } = await import('../campaigns/coupons')
+  await liberarCuponEnTx(tx, r.id, motivo.trim(), ctx, 'REVERSED')
   await movimiento(tx, b, { type: 'REVERSED', consumedDelta: r.membegoAmount.negated(), supplierAmount: r.supplierAmount, customerBenefitId: r.customerBenefitId, reservationId: r.id, reason: motivo.trim() }, ctx.actorId)
   if (r.customerBenefitId) {
     const g = await tx.supplyV2CustomerBenefit.findUniqueOrThrow({ where: { id: r.customerBenefitId } })

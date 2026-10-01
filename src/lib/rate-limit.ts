@@ -165,6 +165,18 @@ export const paymentSessionLimiter = createRateLimiter({
   name: 'payment-session',
 })
 
+/**
+ * Comprobación de un CÓDIGO DE CUPÓN (Supply 2.0 · Slice 7 §28). Un cupón vale
+ * dinero y su código se teclea: sin freno, probar códigos a mano es una
+ * estrategia viable. 12 intentos cada 5 minutos por cliente dan margen a
+ * teclear mal y cierran la puerta a barrer el espacio de códigos.
+ */
+export const couponLimiter = createRateLimiter({
+  interval: 5 * 60 * 1000,
+  maxRequests: 12,
+  name: 'cupon',
+})
+
 export const formSubmitLimiter = createRateLimiter({
   interval: 60 * 1000,
   maxRequests: 20,

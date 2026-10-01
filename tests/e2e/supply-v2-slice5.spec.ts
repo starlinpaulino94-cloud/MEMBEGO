@@ -353,7 +353,8 @@ async function comisionCompleta(browser: Browser) {
   await expect(finanzas.getByTestId('conc-comision')).toHaveText(RD(100))
   await expect(finanzas.getByTestId('conc-neto')).toHaveText(RD(900))
   await expect(finanzas.getByTestId('conc-pagos')).toHaveText(RD(900))
-  await expect(finanzas.getByTestId('conciliacion-diferencia')).toHaveText(RD(-50))
+  // El signo va delante del símbolo: «-RD$50.00».
+  await expect(finanzas.getByTestId('conciliacion-diferencia')).toHaveText(`-${RD(50)}`)
   await finanzas.getByTestId('btn-resolver-conciliacion').click()
   await finanzas.getByTestId('tipo-resolucion').selectOption('ACCEPT_INTERNAL')
   await finanzas.getByTestId('notas-resolucion').fill('El proveedor contó una venta no entregada.')

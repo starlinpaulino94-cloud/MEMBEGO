@@ -47,6 +47,7 @@ function beneficio(p: Partial<BeneficioParaElegibilidad> = {}): BeneficioParaEle
     startsAt: new Date('2026-06-01T00:00:00.000Z'),
     endsAt: new Date('2026-07-01T00:00:00.000Z'),
     requiresAssignment: true,
+    requiresCoupon: false,
     perCustomerLimit: 1,
     budgetTotal: D(10_000),
     budgetReserved: D(0),

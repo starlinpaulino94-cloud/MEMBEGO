@@ -85,7 +85,9 @@ export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
         {Number(beneficioTotal) > 0 && (
           <p className="mt-2 rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-sm text-success" data-testid="checkout-beneficio-aviso">
             Beneficio aplicado: ahorras {dinero(beneficioTotal, compra.currency)}
-            {compra.beneficio ? ` con «${compra.beneficio.name}»` : ''}.
+            {compra.beneficio ? ` con «${compra.beneficio.name}»` : ''}
+            {compra.cupon ? ` (cupón ${compra.cupon})` : ''}.
+            {compra.campana ? <span className="block text-caption" data-testid="checkout-campana">Campaña: {compra.campana.name}</span> : null}
           </p>
         )}
         <div className="mt-3 flex items-baseline justify-between border-t border-border pt-2">
