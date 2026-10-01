@@ -25,6 +25,8 @@ export interface DatosBeneficio {
   budgetTotal?: number | string | null
   perCustomerLimit?: number | null
   requiresAssignment?: boolean | null
+  /** Slice 7 (§9): solo se abre presentando un cupón válido. */
+  requiresCoupon?: boolean | null
   combinable?: boolean | null
   startsAt: Date
   endsAt?: Date | null
@@ -94,6 +96,8 @@ export interface BeneficioParaElegibilidad {
   startsAt: Date
   endsAt: Date | null
   requiresAssignment: boolean
+  /** Slice 7 (§9): solo se abre presentando un cupón válido. */
+  requiresCoupon: boolean
   perCustomerLimit: number
   budgetTotal: Decimal | null
   budgetReserved: Decimal
@@ -124,6 +128,7 @@ export type MotivoNoElegible =
   | 'PRODUCTO_NO_ELEGIBLE'
   | 'PROVEEDOR_NO_FINANCIA'
   | 'DESCUENTO_SOLO_COMISION'
+  | 'EXIGE_CUPON'
   | 'SIN_ASIGNACION'
   | 'ASIGNACION_AJENA'
   | 'ASIGNACION_INACTIVA'
@@ -140,6 +145,7 @@ export const MENSAJES_NO_ELEGIBLE: Record<MotivoNoElegible, string> = {
   PRODUCTO_NO_ELEGIBLE: 'Este beneficio no aplica a este producto.',
   PROVEEDOR_NO_FINANCIA: 'Este descuento lo asume otro proveedor.',
   DESCUENTO_SOLO_COMISION: 'Un descuento del proveedor solo aplica a ofertas vendidas a comisión.',
+  EXIGE_CUPON: 'Esta promoción se usa con su código: escríbelo en el checkout.',
   SIN_ASIGNACION: 'Este beneficio no está en tu cuenta.',
   ASIGNACION_AJENA: 'Este beneficio no es tuyo.',
   ASIGNACION_INACTIVA: 'Este beneficio ya no está disponible.',
@@ -178,7 +184,9 @@ export function motivoNoElegible(
   asignacion: AsignacionParaElegibilidad | null,
   usosVivos: number,
   subsidioNecesario: Decimal,
-  ahora = new Date()
+  ahora = new Date(),
+  /** Slice 7: true si quien llama YA validó un cupón para este beneficio. */
+  conCupon = false
 ): MotivoNoElegible | null {
   if (b.status !== 'ACTIVE') return b.status === 'EXPIRED' ? 'BENEFICIO_VENCIDO' : 'BENEFICIO_INACTIVO'
   if (b.startsAt > ahora) return 'BENEFICIO_NO_VIGENTE'
@@ -190,6 +198,9 @@ export function motivoNoElegible(
     // En precompra Membego ya compró y pagó la unidad: el proveedor no tiene precio que rebajar (§25).
     if (o.sourceType !== 'COMMISSION') return 'DESCUENTO_SOLO_COMISION'
   }
+  // Slice 7 (§9, §28): un beneficio de cupón no se puede reservar mandando su
+  // id al checkout; sin el código, el código no protegería nada.
+  if (b.requiresCoupon && !conCupon) return 'EXIGE_CUPON'
   if (b.requiresAssignment) {
     if (!asignacion) return 'SIN_ASIGNACION'
     if (asignacion.customerId !== customerId) return 'ASIGNACION_AJENA'

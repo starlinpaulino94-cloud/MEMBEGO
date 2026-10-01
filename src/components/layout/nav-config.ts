@@ -41,6 +41,7 @@ import {
   Store,
   Tag,
   Ticket,
+  TicketPercent,
   TrendingUp,
   TriangleAlert,
   Trophy,
@@ -928,6 +929,15 @@ const G_CLI_MIO: NavGroup = {
       icon: BadgePercent,
       description: 'Bonos que Membego te asignó para pagar menos.',
       keywords: ['bonos', 'descuentos', 'beneficio', 'bono', 'subsidio', 'supply'],
+    },
+    {
+      // Supply 2.0 · Slice 7: los códigos de las campañas. Van aparte de los
+      // bonos porque se usan distinto: un cupón se teclea en el checkout.
+      href: '/cliente/cupones',
+      label: 'Mis cupones',
+      icon: TicketPercent,
+      description: 'Códigos de las campañas de Membego.',
+      keywords: ['cupones', 'cupon', 'codigo', 'promocion', 'campana', 'supply'],
     },
     {
       href: '/cliente/mis-promociones',

@@ -1,4 +1,4 @@
-import type { SupplyV2AgreementStatus, SupplyV2BenefitFunding, SupplyV2BenefitReservationStatus, SupplyV2BenefitStatus, SupplyV2CustomerBenefitStatus, SupplyV2CustomerOrderStatus, SupplyV2EntitlementStatus, SupplyV2LotStatus, SupplyV2OfferStatus, SupplyV2PurchaseOrderStatus, SupplyV2SupplierStatus } from '@prisma/client'
+import type { SupplyV2CampaignStatus, SupplyV2CouponKind, SupplyV2CouponStatus, SupplyV2AgreementStatus, SupplyV2BenefitFunding, SupplyV2BenefitReservationStatus, SupplyV2BenefitStatus, SupplyV2CustomerBenefitStatus, SupplyV2CustomerOrderStatus, SupplyV2EntitlementStatus, SupplyV2LotStatus, SupplyV2OfferStatus, SupplyV2PurchaseOrderStatus, SupplyV2SupplierStatus } from '@prisma/client'
 import { StatusChip } from '@/components/ui/status-chip'
 import {
   AGREEMENT_STATUS_LABELS,
@@ -17,6 +17,11 @@ import {
   BENEFIT_STATUS_LABELS,
   BENEFIT_STATUS_TONE,
   CUSTOMER_BENEFIT_STATUS_LABELS,
+  CAMPAIGN_STATUS_LABELS,
+  CAMPAIGN_STATUS_TONE,
+  COUPON_KIND_LABELS,
+  COUPON_STATUS_LABELS,
+  COUPON_STATUS_TONE,
 } from '@/modules/supply-v2/core/catalogo'
 
 export function ChipOrden({ estado }: { estado: SupplyV2PurchaseOrderStatus }) {
@@ -109,6 +114,33 @@ export function ChipReservaBeneficio({ estado }: { estado: SupplyV2BenefitReserv
   return (
     <StatusChip tone={tone} data-testid="estado-reserva-beneficio">
       {BENEFIT_RESERVATION_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+// ── Slice 7 · campañas y cupones (§18, §21, §26) ────────────────────────────
+
+export function ChipCampana({ estado }: { estado: SupplyV2CampaignStatus }) {
+  return (
+    <StatusChip tone={CAMPAIGN_STATUS_TONE[estado]} pulso={estado === 'ACTIVE'} data-testid="estado-campana">
+      {CAMPAIGN_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+export function ChipCupon({ estado }: { estado: SupplyV2CouponStatus }) {
+  return (
+    <StatusChip tone={COUPON_STATUS_TONE[estado]} data-testid="estado-cupon">
+      {COUPON_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+/** Público o privado: se dice siempre, porque cambia quién puede usarlo. */
+export function ChipTipoCupon({ kind }: { kind: SupplyV2CouponKind }) {
+  return (
+    <StatusChip tone={kind === 'PUBLIC' ? 'info' : 'neutral'} data-testid="tipo-cupon">
+      {COUPON_KIND_LABELS[kind]}
     </StatusChip>
   )
 }

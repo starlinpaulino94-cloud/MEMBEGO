@@ -8,6 +8,13 @@ import { paymentAccountGateway } from './contracts/adapters'
 import { comoError, contextoDeAuditoria, entero, texto, type EstadoAccion } from './actions-util'
 import { abrirOrdenClienteEnTx, avisarPagoEnTx, cancelarOrdenClienteEnTx, confirmarCoberturaTotalEnTx, type OrdenClienteAbierta } from './commerce/checkout'
 import { beneficiosParaOferta, type BeneficioAplicable } from './benefits/queries'
+import { promocionesParaOferta, type PromocionDeOferta } from './campaigns/queries'
+import { resolverCuponEnTx } from './campaigns/coupons'
+import { calcularRepartoLinea } from './core/financiacion'
+import { politicaDeVersion } from './finance/domain'
+import { MENSAJES_CUPON, MENSAJE_CUPON_OPACO, normalizarCodigoCupon } from './campaigns/domain'
+import { couponLimiter } from '@/lib/rate-limit'
+import { getRequestMeta } from '@/lib/server-utils'
 import { PAYMENT_METHODS_CLIENTE, RUTA_BENEFICIOS_CLIENTE, RUTA_COMPRAS_CLIENTE } from './core/catalogo'
 
 /**
@@ -47,6 +54,9 @@ export async function comprarOfertaAction(_prev: EstadoAccion<OrdenClienteAbiert
           cuenta,
           // Slice 6 (§17): el cliente elige un beneficio SUYO; el servidor lo revalida y lo reserva.
           customerBenefitId: texto(fd, 'customerBenefitId', 60) || null,
+          // Slice 7 (§20): el código que escribió; el servidor lo resuelve, lo
+          // bloquea y reserva el beneficio al que abre.
+          couponCode: texto(fd, 'couponCode', 32) || null,
         },
         ctx
       )
@@ -127,4 +137,77 @@ export async function beneficiosParaOfertaAction(offerId: string, quantity: numb
   const cliente = await exigirCliente()
   const q = Number.isInteger(quantity) && quantity > 0 ? Math.min(quantity, 100) : 1
   return beneficiosParaOferta(cliente.id, offerId, q)
+}
+
+/**
+ * Slice 7 (§20, §28) · COMPROBAR UN CUPÓN antes de comprar. Devuelve el
+ * desglose o el motivo en castellano, SIN crear nada: la reserva ocurre al
+ * comprar, con la oferta y el cupón bloqueados.
+ *
+ * Lleva FRENO por cliente (`couponLimiter`): un cupón vale dinero y su código
+ * se teclea, así que probar códigos a mano no puede ser gratis. Y «no existe»
+ * y «no es tuyo» comparten mensaje, para no convertir el formulario en un
+ * oráculo que diga qué códigos existen.
+ */
+export async function comprobarCuponAction(
+  _prev: EstadoAccion<PromocionDeOferta>,
+  fd: FormData
+): Promise<EstadoAccion<PromocionDeOferta>> {
+  try {
+    const cliente = await exigirCliente()
+    // El freno cuenta por CLIENTE y por IP: así ni una cuenta ni una máquina
+    // pueden barrer el espacio de códigos, y dos personas en la misma red no se
+    // bloquean entre ellas.
+    const meta = await getRequestMeta()
+    const permitido = await couponLimiter(`cliente:${cliente.id}`)
+    const permitidoIp = meta.ipAddress ? await couponLimiter(`ip:${meta.ipAddress}`) : true
+    if (!permitido || !permitidoIp) return { error: 'Demasiados intentos con códigos. Espera unos minutos y vuelve a probar.' }
+
+    const codigo = normalizarCodigoCupon(texto(fd, 'couponCode', 32))
+    const offerId = texto(fd, 'offerId', 60)
+    const quantity = entero(fd, 'quantity') ?? 1
+    if (!codigo) return { error: 'Escribe el código del cupón.' }
+
+    const r = await sinEmpresa('Supply 2.0: comprobar un cupón', async (tx) => {
+      const oferta = await tx.supplyV2Offer.findUnique({
+        where: { id: offerId },
+        select: { id: true, salePrice: true, currency: true, sourceType: true, commissionPercentage: true, agreementVersion: { select: { snapshot: true } } },
+      })
+      if (!oferta) return { error: 'Esa oferta no existe.' as string }
+      const resuelto = await resolverCuponEnTx(tx, { codigo, customerId: cliente.id, oferta: { id: oferta.id, salePrice: oferta.salePrice, currency: oferta.currency }, quantity })
+      if (resuelto.motivo) {
+        const opaco = resuelto.motivo === 'CUPON_NO_ENCONTRADO' || resuelto.motivo === 'CUPON_AJENO' || resuelto.motivo === 'CODIGO_INVALIDO'
+        return { error: opaco ? MENSAJE_CUPON_OPACO : MENSAJES_CUPON[resuelto.motivo] }
+      }
+      const beneficio = await tx.supplyV2Benefit.findUniqueOrThrow({ where: { id: resuelto.cupon!.benefitId } })
+      const commissionBase = oferta.sourceType === 'COMMISSION' ? politicaDeVersion(oferta.agreementVersion?.snapshot ?? null).commissionBase : null
+      const reparto = calcularRepartoLinea({ saleUnitPrice: oferta.salePrice, quantity, beneficio, sourceType: oferta.sourceType, commissionPercentage: oferta.commissionPercentage, commissionBase })
+      const promo: PromocionDeOferta = {
+        campaignId: resuelto.cupon!.campaignId,
+        campaignCode: resuelto.cupon!.campaignCode,
+        campaignName: resuelto.cupon!.campaignName,
+        benefitId: beneficio.id,
+        nombre: beneficio.name,
+        exigeCupon: beneficio.requiresCoupon,
+        descuentoProveedor: reparto.supplierDiscount.toFixed(2),
+        bonoMembego: reparto.membegoSubsidy.toFixed(2),
+        beneficioTotal: reparto.benefitApplied.toFixed(2),
+        aPagar: reparto.customerPayable.toFixed(2),
+        cubreTodo: reparto.customerPayable.isZero(),
+      }
+      return { promo }
+    })
+    if ('error' in r && r.error) return { error: r.error }
+    const promo = (r as { promo: PromocionDeOferta }).promo
+    return { success: `Cupón ${codigo} aplicado: ${promo.campaignName}.`, data: promo }
+  } catch (e) {
+    return comoError<PromocionDeOferta>(e, 'comprobarCupon')
+  }
+}
+
+/** Promociones de campaña de una oferta para el cliente de la sesión (§20). */
+export async function promocionesParaOfertaAction(offerId: string, quantity: number): Promise<PromocionDeOferta[]> {
+  const cliente = await exigirCliente()
+  const q = Number.isInteger(quantity) && quantity > 0 ? Math.min(quantity, 100) : 1
+  return promocionesParaOferta(cliente.id, offerId, q)
 }

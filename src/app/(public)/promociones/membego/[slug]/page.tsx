@@ -4,6 +4,7 @@ import { BadgeCheck, CalendarClock, Sparkles, Users } from 'lucide-react'
 import { getUser } from '@/lib/auth'
 import { ofertaPublicaPorSlug } from '@/modules/supply-v2/marketplace/read-model'
 import { beneficiosParaOferta } from '@/modules/supply-v2/benefits/queries'
+import { promocionesParaOferta } from '@/modules/supply-v2/campaigns/queries'
 import { BotonComprar } from '@/components/supply-v2/boton-comprar'
 
 export const dynamic = 'force-dynamic'
@@ -23,13 +24,16 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
  * producto, proveedor, precio regular, precio Membego, ahorro, vigencia y
  * máximo por persona. Nada de lotes, ledger ni costos.
  */
-export default async function OfertaMembegoPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ beneficio?: string }> }) {
+export default async function OfertaMembegoPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ beneficio?: string; cupon?: string }> }) {
   const { slug } = await params
   const [o, user, q] = await Promise.all([ofertaPublicaPorSlug(slug), getUser(), searchParams])
   if (!o) notFound()
   const sesion = !user ? 'ninguna' : user.metadata.role === 'CLIENTE' ? 'cliente' : 'otro'
   // Slice 6 (§17): los beneficios son del cliente de la sesión y se calculan en el servidor.
   const beneficios = sesion === 'cliente' && user?.metadata.dbUserId ? await beneficiosParaOferta(user.metadata.dbUserId, o.id, 1) : []
+  // Slice 7 (§20): las promociones de campaña de esta oferta. Las automáticas
+  // se anuncian; las de cupón piden su código en el checkout.
+  const promociones = await promocionesParaOferta(sesion === 'cliente' ? (user?.metadata.dbUserId ?? null) : null, o.id, 1)
   // Slice 5: una oferta a comisión sin tope no limita por unidades, solo por persona.
   const maximo = o.unlimited ? o.perCustomerLimit : Math.max(1, Math.min(o.perCustomerLimit, o.remaining))
 
@@ -69,6 +73,8 @@ export default async function OfertaMembegoPage({ params, searchParams }: { para
             precio={o.salePrice}
             beneficios={beneficios}
             beneficioPreseleccionado={q.beneficio}
+            promociones={promociones}
+            cuponPreseleccionado={q.cupon}
           />
         </div>
       </div>

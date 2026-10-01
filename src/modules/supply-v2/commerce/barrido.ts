@@ -8,6 +8,8 @@ import { derechosPorVencerEnTx, expirarDerechoEnTx, expirarVouchersEnTx } from '
 import { expirarLoteEnTx, lotesPorVencerEnTx } from '../pool/vencimientos'
 import { proyectarVentasSinEventoEnTx } from '../economics/service'
 import { expirarBeneficiosEnTx } from '../benefits/service'
+import { barridoCampanasEnTx } from '../campaigns/service'
+import { expirarCuponesEnTx } from '../campaigns/coupons'
 
 /**
  * MEMBEGO SUPPLY 2.0 · BARRIDO del cron (§25, §37, §39, §64).
@@ -39,10 +41,14 @@ export interface ResultadoBarrido {
   /** Slice 6 (§27): beneficios y asignaciones cuya vigencia pasó. */
   beneficiosVencidos: number
   asignacionesVencidas: number
+  /** Slice 7 (§7): campañas programadas que ya empiezan, vencidas que se cierran y cupones caducados. */
+  campanasActivadas: number
+  campanasTerminadas: number
+  cuponesVencidos: number
 }
 
 export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise<ResultadoBarrido> {
-  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0, derechosConError: 0, lotesVencidos: 0, unidadesVencidasSinVender: 0, ventasProyectadas: 0, beneficiosVencidos: 0, asignacionesVencidas: 0 }
+  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0, derechosConError: 0, lotesVencidos: 0, unidadesVencidasSinVender: 0, ventasProyectadas: 0, beneficiosVencidos: 0, asignacionesVencidas: 0, campanasActivadas: 0, campanasTerminadas: 0, cuponesVencidos: 0 }
 
   const vencidas = await sinEmpresa('Supply 2.0 cron: checkouts con la reserva caducada', (tx) =>
     tx.supplyV2CustomerOrder.findMany({ where: { status: 'PENDING', expiresAt: { lte: ahora } }, select: { id: true }, take: limite, orderBy: { expiresAt: 'asc' } })
@@ -101,5 +107,14 @@ export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise
   const ben = await sinEmpresa('Supply 2.0 cron: beneficios y asignaciones vencidos', (tx) => expirarBeneficiosEnTx(tx, CTX, ahora, limite))
   r.beneficiosVencidos = ben.beneficios
   r.asignacionesVencidas = ben.asignaciones
+
+  // Slice 7 (§7): el cron MANTIENE estados —activa las programadas que ya
+  // empiezan y cierra las vencidas— pero NO es la protección: cada checkout
+  // comprueba la vigencia y el horario en el servidor, así que una pasada
+  // tarde no deja valer una promoción terminada.
+  const camp = await sinEmpresa('Supply 2.0 cron: campañas programadas y vencidas', (tx) => barridoCampanasEnTx(tx, CTX, ahora, limite))
+  r.campanasActivadas = camp.activadas
+  r.campanasTerminadas = camp.terminadas
+  r.cuponesVencidos = await sinEmpresa('Supply 2.0 cron: cupones vencidos', (tx) => expirarCuponesEnTx(tx, ahora, limite))
   return r
 }

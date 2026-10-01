@@ -30,6 +30,9 @@ export interface CompraCliente {
   supplierDiscountTotal: string
   membegoSubsidyTotal: string
   beneficio: { id: string; code: string; name: string; funding: string } | null
+  /** Slice 7 (§25): la campaña y el cupón congelados en la compra. */
+  campana: { code: string; name: string } | null
+  cupon: string | null
   expiresAt: Date
   createdAt: Date
   paidAt: Date | null
@@ -40,6 +43,7 @@ export interface CompraCliente {
 const INCLUDE = {
   lines: { include: { offer: { select: { slug: true, catalogItem: { select: { name: true } }, supplier: { select: { commercialName: true } } } }, benefit: { select: { id: true, code: true, name: true, funding: true } } } },
   entitlements: { include: { catalogItem: { select: { name: true } }, supplier: { select: { commercialName: true } } }, orderBy: { issuedAt: 'asc' as const } },
+  campaign: { select: { code: true, name: true } },
 } satisfies Prisma.SupplyV2CustomerOrderInclude
 
 type Fila = Prisma.SupplyV2CustomerOrderGetPayload<{ include: typeof INCLUDE }>
@@ -63,6 +67,8 @@ function aDto(o: Fila): CompraCliente {
     supplierDiscountTotal: o.supplierDiscountTotal.toFixed(2),
     membegoSubsidyTotal: o.membegoSubsidyTotal.toFixed(2),
     beneficio: beneficio ? { id: beneficio.id, code: beneficio.code, name: beneficio.name, funding: beneficio.funding } : null,
+    campana: o.campaign ? { code: o.campaign.code, name: o.campaign.name } : null,
+    cupon: o.couponCodeSnapshot,
     expiresAt: o.expiresAt,
     createdAt: o.createdAt,
     paidAt: o.paidAt,

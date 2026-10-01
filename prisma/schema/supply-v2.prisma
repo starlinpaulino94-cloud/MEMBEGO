@@ -226,6 +226,7 @@ model SupplyV2Supplier {
   settlements      SupplyV2Settlement[]
   financeIncidents SupplyV2FinanceIncident[]
   benefits         SupplyV2Benefit[]
+  campaigns        SupplyV2Campaign[]
 
   @@index([status, commercialName])
   @@map("supply_v2_suppliers")
@@ -840,6 +841,7 @@ model SupplyV2Offer {
   entitlements           SupplyV2Entitlement[]
   commissionReservations SupplyV2CommissionReservation[]
   benefits               SupplyV2Benefit[]
+  campaignOffers         SupplyV2CampaignOffer[]
 
   @@index([status, startsAt, endsAt])
   @@index([catalogItemId])
@@ -908,6 +910,12 @@ model SupplyV2CustomerOrder {
   commissionBase        SupplyV2CommissionBase? 
   /// Foto completa del reparto (beneficio, importes, política) al abrir la orden.
   benefitFundingSnapshot Json?
+  /// Slice 7 (§25): la campaña y el cupón con los que se cerró esta compra,
+  /// CONGELADOS. Una compra se atribuye a UNA campaña como máximo: la del
+  /// beneficio aplicado. Sin esto, una oferta en dos campañas duplicaría GMV.
+  campaignId String?
+  campaign   SupplyV2Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  couponCodeSnapshot String?
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -920,6 +928,7 @@ model SupplyV2CustomerOrder {
   economicEvents         SupplyV2EconomicEvent[]
   commissionReservations SupplyV2CommissionReservation[]
   benefitReservations    SupplyV2BenefitReservation[]
+  couponRedemptions      SupplyV2CouponRedemption[]
 
   @@index([customerId, status])
   @@index([status, expiresAt])
@@ -2241,6 +2250,10 @@ model SupplyV2Benefit {
   perCustomerLimit    Int     @default(1)
   /// Si es false, cualquier cliente puede usarlo sin asignación (p. ej. descuento público del proveedor).
   requiresAssignment  Boolean @default(true)
+  /// Slice 7 (§9, §28): solo se puede reservar PRESENTANDO UN CUPÓN válido. Sin
+  /// esto, un beneficio de cupón público sería usable mandando su id al
+  /// checkout y el código no protegería nada.
+  requiresCoupon      Boolean @default(false)
   /// ¿Puede convivir con otro descuento del proveedor en la misma línea? (§18) Hoy: un beneficio por línea.
   combinable          Boolean @default(false)
 
@@ -2260,15 +2273,23 @@ model SupplyV2Benefit {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Slice 7: la campaña que lo creó. El presupuesto de la campaña es la suma
+  /// de los presupuestos de SUS beneficios: aquí no hay un segundo contador.
+  campaignId String?
+  campaign   SupplyV2Campaign? @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+
   grants       SupplyV2CustomerBenefit[]
   reservations SupplyV2BenefitReservation[]
   movements    SupplyV2BenefitMovement[]
   orderLines   SupplyV2CustomerOrderLine[]
+  coupons      SupplyV2Coupon[]
+  campaignOffers SupplyV2CampaignOffer[]
 
   @@index([status, startsAt, endsAt])
   @@index([supplierId])
   @@index([offerId])
   @@index([catalogItemId])
+  @@index([campaignId])
   @@map("supply_v2_benefits")
 }
 
@@ -2336,6 +2357,9 @@ model SupplyV2BenefitReservation {
   createdAt DateTime @default(now())
 
   movements SupplyV2BenefitMovement[]
+  /// Slice 7: el cupón que abrió esta reserva, si fue por cupón. La aplicación
+  /// del cupón NO es un descuento aparte: es ESTA reserva.
+  couponRedemption SupplyV2CouponRedemption?
 
   @@index([benefitId, status])
   @@index([customerId, benefitId, status])
@@ -2375,4 +2399,306 @@ model SupplyV2BenefitMovement {
   @@index([benefitId, createdAt])
   @@index([reservationId])
   @@map("supply_v2_benefit_movements")
+}
+
+// ── SLICE 7 · CAMPAÑAS, PROMOCIONES Y CUPONES (§1–§29) ──────────────────────
+
+/// Una CAMPAÑA agrupa ofertas, un público y un presupuesto, y usa el motor
+/// económico del Slice 6 para rebajar lo que paga el cliente. No calcula
+/// precios ni descuentos: eso lo hacen sus BENEFICIOS. No crea inventario: las
+/// ofertas siguen siendo de quien las publicó, con su acuerdo y su precio.
+///
+/// Presupuesto (§16): `budgetTotal` es el techo APROBADO de la campaña y la
+/// suma de los presupuestos de sus beneficios no puede pasarlo. Lo reservado y
+/// lo consumido NO se duplican aquí: se leen del ledger de los beneficios.
+model SupplyV2Campaign {
+  id   String @id @default(cuid())
+  /// "MBG-CP-2026-000001".
+  code String @unique
+
+  name        String
+  description String?
+  /// Para qué se hace (atraer clientes nuevos, llenar martes flojos…).
+  objective   String?
+
+  /// Quién la organiza: Membego, o un proveedor que la propone para su catálogo.
+  organizer SupplyV2CampaignOrganizer @default(MEMBEGO)
+  /// Proveedor que la propone (organizer SUPPLIER) o que la financia.
+  supplierId String?
+  supplier   SupplyV2Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  funding SupplyV2BenefitFunding
+
+  currency String @default("DOP")
+  /// Techo aprobado del subsidio de Membego. Obligatorio salvo autorización
+  /// financiera excepcional (§17), que queda registrada aquí y en la bitácora.
+  budgetTotal           Decimal? @db.Decimal(14, 2)
+  /// Autorización excepcional para una campaña SIN techo: quién y por qué.
+  budgetWaiverReason    String?
+  budgetWaiverById      String?
+  budgetWaiverBy        User?     @relation("SupplyV2CampaignBudgetWaiverBy", fields: [budgetWaiverById], references: [id], onDelete: SetNull)
+  budgetWaiverAt        DateTime?
+
+  audience SupplyV2CampaignAudience @default(ALL)
+
+  startsAt DateTime
+  endsAt   DateTime?
+  /// Hora local de activación y desactivación dentro de la vigencia (§7). Sin
+  /// ellas la campaña vale todo el día. El servidor las comprueba en cada
+  /// checkout: el cron no es la única protección.
+  activeFromMinute Int?
+  activeToMinute   Int?
+
+  /// Tope de aplicaciones de toda la campaña y por cliente (§7).
+  maxRedemptions    Int?
+  maxPerCustomer    Int     @default(1)
+
+  status SupplyV2CampaignStatus @default(DRAFT)
+
+  createdById   String
+  createdBy     User      @relation("SupplyV2CampaignCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById  String?
+  approvedBy    User?     @relation("SupplyV2CampaignApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt    DateTime?
+  publishedById String?
+  publishedBy   User?     @relation("SupplyV2CampaignPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  publishedAt   DateTime?
+  /// Propuesta de un proveedor: quién la revisó y qué se le autorizó.
+  reviewNotes     String?
+  cancelledAt     DateTime?
+  cancelledReason String?
+  completedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  offers        SupplyV2CampaignOffer[]
+  benefits      SupplyV2Benefit[]
+  coupons       SupplyV2Coupon[]
+  distributions SupplyV2CampaignDistribution[]
+  events        SupplyV2CampaignEvent[]
+  orders        SupplyV2CustomerOrder[]
+
+  @@index([status, startsAt, endsAt])
+  @@index([supplierId])
+  @@map("supply_v2_campaigns")
+}
+
+/// Una oferta participante. Conserva su proveedor, su precio y su acuerdo: la
+/// campaña solo dice «esta oferta participa, con ESTE beneficio».
+model SupplyV2CampaignOffer {
+  id         String           @id @default(cuid())
+  campaignId String
+  campaign   SupplyV2Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  offerId    String
+  offer      SupplyV2Offer    @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  /// El beneficio del Slice 6 que aplica a esta oferta dentro de la campaña.
+  benefitId  String?
+  benefit    SupplyV2Benefit? @relation(fields: [benefitId], references: [id], onDelete: Restrict)
+  /// Orden de presentación en la ficha de la campaña.
+  position   Int              @default(0)
+  /// Destacada en el marketplace.
+  featured   Boolean          @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([campaignId, offerId])
+  @@index([offerId])
+  @@map("supply_v2_campaign_offers")
+}
+
+/// Un CUPÓN es la puerta comercial a un beneficio. El código es una referencia
+/// que se enseña y se teclea, NO una credencial que salte las reglas: la
+/// elegibilidad (cliente, oferta, vigencia, usos, presupuesto) se comprueba
+/// siempre en el servidor con el motor del Slice 6.
+model SupplyV2Coupon {
+  id   String @id @default(cuid())
+  /// Lo que teclea el cliente, en mayúsculas y sin espacios: "BIENVENIDO200".
+  code String @unique
+
+  campaignId String
+  campaign   SupplyV2Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  /// El beneficio que se reserva al aplicarlo. Ahí vive la economía.
+  benefitId  String
+  benefit    SupplyV2Benefit  @relation(fields: [benefitId], references: [id], onDelete: Restrict)
+
+  kind SupplyV2CouponKind
+  /// Cupón PRIVADO: de quién es. Público: null.
+  customerId String?
+  customer   User?   @relation("SupplyV2CouponCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  /// Lote de generación masiva, si vino de uno.
+  distributionId String?
+  distribution   SupplyV2CampaignDistribution? @relation(fields: [distributionId], references: [id], onDelete: SetNull)
+
+  /// Topes propios del cupón; si son null manda la campaña.
+  maxRedemptions Int?
+  maxPerCustomer Int     @default(1)
+  /// Compra mínima para que el cupón valga (sobre el precio Membego de la línea).
+  minPurchase    Decimal? @db.Decimal(12, 2)
+  /// Usos consolidados; es caché del conteo de aplicaciones APLICADAS.
+  timesRedeemed  Int     @default(0)
+  expiresAt      DateTime?
+
+  status SupplyV2CouponStatus @default(ACTIVE)
+
+  createdById String
+  createdBy   User     @relation("SupplyV2CouponCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  redemptions SupplyV2CouponRedemption[]
+
+  @@index([campaignId, status])
+  @@index([customerId, status])
+  @@index([benefitId])
+  @@map("supply_v2_coupons")
+}
+
+/// La APLICACIÓN de un cupón en una compra. Cuelga de la reserva del beneficio
+/// (uno a uno): el dinero lo mueve la reserva, esta fila solo dice «fue con
+/// este cupón». Así un cupón no se cuenta como un descuento aparte.
+model SupplyV2CouponRedemption {
+  id       String         @id @default(cuid())
+  couponId String
+  coupon   SupplyV2Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  /// La reserva del beneficio que esta aplicación abrió. Única: una reserva es
+  /// de un cupón como máximo.
+  reservationId String                     @unique
+  reservation   SupplyV2BenefitReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  customerId String
+  customer   User   @relation("SupplyV2CouponRedemptionCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  orderId    String
+  order      SupplyV2CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// Foto de lo que el cupón rebajó, para la analítica de la campaña.
+  membegoAmount  Decimal @default(0) @db.Decimal(14, 2)
+  supplierAmount Decimal @default(0) @db.Decimal(14, 2)
+
+  status SupplyV2CouponRedemptionStatus @default(APPLIED)
+
+  createdAt DateTime @default(now())
+
+  @@index([couponId, status])
+  @@index([customerId, couponId])
+  @@index([orderId])
+  @@map("supply_v2_coupon_redemptions")
+}
+
+/// Un LOTE de cupones generados de una vez (§10): deja el rastro de cuántos se
+/// pidieron, con qué forma y quién lo hizo.
+model SupplyV2CampaignDistribution {
+  id         String           @id @default(cuid())
+  campaignId String
+  campaign   SupplyV2Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  name     String
+  kind     SupplyV2CouponKind
+  /// Cuántos se pidieron y cuántos se crearon de verdad.
+  requested Int
+  generated Int     @default(0)
+  /// Prefijo de los códigos generados ("BIENVENIDO").
+  prefix    String?
+
+  createdById String
+  createdBy   User     @relation("SupplyV2CampaignDistributionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  coupons SupplyV2Coupon[]
+
+  @@index([campaignId])
+  @@map("supply_v2_campaign_distributions")
+}
+
+/// Bitácora de la campaña: creación, aprobación, publicación, pausas, lotes,
+/// asignaciones y ajustes. No se borra: con esto se reconstruye la operación.
+model SupplyV2CampaignEvent {
+  id         String           @id @default(cuid())
+  campaignId String
+  campaign   SupplyV2Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  type    SupplyV2CampaignEventType
+  detail  String?
+  payload Json?
+
+  actorId String?
+  actor   User?   @relation("SupplyV2CampaignEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId, createdAt])
+  @@map("supply_v2_campaign_events")
+}
+
+enum SupplyV2CampaignOrganizer {
+  /// La monta Membego.
+  MEMBEGO
+  /// La propone un proveedor para su catálogo; Membego la revisa.
+  SUPPLIER
+}
+
+enum SupplyV2CampaignStatus {
+  DRAFT
+  PENDING_APPROVAL
+  SCHEDULED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum SupplyV2CampaignAudience {
+  /// Cualquier cliente elegible.
+  ALL
+  /// Clientes sin compras anteriores en Supply 2.0.
+  NEW_CUSTOMERS
+  /// Clientes con al menos una compra pagada.
+  RETURNING_CUSTOMERS
+  /// Clientes que ya usaron un beneficio de otra campaña.
+  PAST_CAMPAIGN
+  /// Lista elegida a mano por administración.
+  SELECTED
+}
+
+enum SupplyV2CouponKind {
+  /// Lo puede usar cualquier cliente que cumpla las condiciones.
+  PUBLIC
+  /// Está asignado a un cliente concreto.
+  PRIVATE
+}
+
+enum SupplyV2CouponStatus {
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+  CANCELLED
+}
+
+enum SupplyV2CouponRedemptionStatus {
+  /// Reservado en un checkout en curso.
+  RESERVED
+  /// Consolidado: la compra se confirmó.
+  APPLIED
+  /// El checkout se canceló, expiró o se rechazó el pago.
+  RELEASED
+  /// Se reversó la aplicación del beneficio.
+  REVERSED
+}
+
+enum SupplyV2CampaignEventType {
+  CREATED
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PUBLISHED
+  PAUSED
+  RESUMED
+  COMPLETED
+  CANCELLED
+  OFFER_ADDED
+  OFFER_REMOVED
+  BENEFIT_ATTACHED
+  COUPONS_GENERATED
+  AUDIENCE_ASSIGNED
+  BUDGET_WAIVED
 }
