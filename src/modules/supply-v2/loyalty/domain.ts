@@ -686,7 +686,11 @@ export function validarRecompensa(d: DatosRecompensa): string | null {
   if ((d.kind === 'FREE_PRODUCT' || d.kind === 'SERVICE') && !d.offerId) {
     return 'Una recompensa que entrega un producto o un servicio necesita la oferta con la que se entrega.'
   }
-  if ((d.kind === 'BENEFIT' || d.kind === 'COUPON' || d.kind === 'PARTIAL_BONUS') && !d.benefitId) {
+  // TODA recompensa necesita su beneficio: es lo que la paga y lo que el
+  // cliente usa en el checkout de siempre. Una que regala un producto apunta
+  // además a la oferta con la que se entrega. Sin beneficio, reclamarla no
+  // daría nada y el cliente habría gastado sus puntos a cambio de aire.
+  if (!d.benefitId) {
     return 'Esta recompensa necesita el beneficio que se le concede al cliente.'
   }
   if (d.unitCost != null && d.unitCost !== '') {

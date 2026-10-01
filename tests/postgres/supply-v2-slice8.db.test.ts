@@ -40,6 +40,15 @@ import {
   publicarPlanEnTx,
   reanudarProgramaEnTx,
 } from '../../src/modules/supply-v2/loyalty/programs'
+import {
+  aprobarRecompensaEnTx,
+  conciliarEntregasEnTx,
+  crearRecompensaEnTx,
+  economiaDelProgramaEnTx,
+  marcarEntregadaEnTx,
+  reclamarRecompensaEnTx,
+  reversarReclamacionEnTx,
+} from '../../src/modules/supply-v2/loyalty/rewards'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 8 contra PostgreSQL de verdad (§45).
@@ -1108,4 +1117,251 @@ test('22 · los puntos de dos programas NO se mezclan', async () => {
        OR a."reserved" <> COALESCE(m.re,0) OR a."redeemed" <> COALESCE(m.rd,0)
        OR a."expired" <> COALESCE(m.ex,0)`
   assert.equal(descuadradas.length, 0, 'ninguna cuenta de puntos miente respecto a su ledger')
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// F · RECOMPENSAS (§30–§35)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Programa con una recompensa ACTIVA que cuesta puntos y paga con un bono. */
+async function programaConRecompensa(d: { nombre: string; costoPuntos: number; costoUnidad?: number; presupuesto?: number | null; maxClaims?: number | null }) {
+  const programId = await programaActivo({ nombre: d.nombre, supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  return sinEmpresa('prueba', async (tx) => {
+    const b = await crearBeneficioEnTx(
+      tx,
+      {
+        name: `Premio ${d.nombre} ${sufijo}`,
+        funding: 'SUPPLIER',
+        valueType: 'FIXED_AMOUNT',
+        supplierValue: d.costoUnidad ?? 200,
+        scope: 'SPECIFIC_OFFER',
+        offerId: ctx.offerA,
+        supplierId: ctx.supplierA,
+        requiresAssignment: true,
+        perCustomerLimit: 1,
+        startsAt: new Date(ahora.getTime() - DIA),
+      },
+      como(ctx.compras)
+    )
+    await aprobarBeneficioEnTx(tx, b.id, como(ctx.finanzas))
+    const r = await crearRecompensaEnTx(
+      tx,
+      programId,
+      {
+        name: `Recompensa ${d.nombre} ${sufijo}`,
+        kind: 'FREE_PRODUCT',
+        pointsCost: d.costoPuntos,
+        benefitId: b.id,
+        offerId: ctx.offerA,
+        unitCost: d.costoUnidad ?? 200,
+        budgetTotal: d.presupuesto === null ? null : (d.presupuesto ?? 10000),
+        maxClaims: d.maxClaims ?? null,
+        maxPerCustomer: 1,
+        startsAt: new Date(ahora.getTime() - DIA),
+      },
+      como(ctx.compras)
+    )
+    await aprobarRecompensaEnTx(tx, r.id, como(ctx.finanzas))
+    return { programId, rewardId: r.id, benefitId: b.id, code: r.code }
+  })
+}
+
+test('19c-db · una recompensa necesita SU BENEFICIO: sin él no se crea, ni por SQL', async () => {
+  const programId = await programaActivo({ nombre: 'SinBenef', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  await assert.rejects(
+    () =>
+      sinEmpresa('prueba', (tx) =>
+        crearRecompensaEnTx(tx, programId, { name: `Vacía ${sufijo}`, kind: 'FREE_PRODUCT', pointsCost: 100, offerId: ctx.offerA, startsAt: new Date(ahora.getTime() - DIA) }, como(ctx.compras))
+      ),
+    /necesita el beneficio/
+  )
+  // Y la base lo sostiene aunque alguien escriba directo.
+  await assert.rejects(
+    () =>
+      prisma.$executeRaw`INSERT INTO "supply_v2_rewards" ("id","code","programId","name","kind","pointsCost","funding","maxPerCustomer","timesClaimed","requiresMembership","startsAt","status","createdById","createdAt","updatedAt")
+        VALUES (${`ilegal-rw-${sufijo}`}, ${`MBG-RW-9999-${sufijo.slice(0, 6)}`}, ${programId}, ${`Ilegal ${sufijo}`}, 'BENEFIT', 10, 'MEMBEGO', 1, 0, false, now(), 'DRAFT', ${ctx.compras}, now(), now())`,
+    /supply_v2_rewards_shape/
+  )
+})
+
+test('F · reclamar consume puntos y crea el beneficio correcto, en una sola transacción', async () => {
+  const { programId, rewardId, benefitId, code } = await programaConRecompensa({ nombre: 'Lavado', costoPuntos: 300 })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: 500, motivo: 'Carga inicial para la prueba de canje' }, como(ctx.compras)))
+
+  const r = await sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId, customerId: ctx.cliente }, como(ctx.cliente)))
+  assert.equal(r.status, 'CLAIMED')
+  assert.equal(r.puntosConsumidos, 300)
+  assert.ok(r.customerBenefitId, 'la reclamación crea el beneficio del cliente')
+  assert.match(r.code, /^MBG-RK-\d{4}-\d{6}$/)
+  assert.ok(code.startsWith('MBG-RW-'))
+
+  // Los puntos: 500 − 300 = 200 disponibles, 300 canjeados, 0 reservados.
+  const cuenta = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId, customerId: ctx.cliente } }, select: { id: true, available: true, reserved: true, redeemed: true } })
+  assert.deepEqual([cuenta.available, cuenta.reserved, cuenta.redeemed], [200, 0, 300])
+  const rec = await sinEmpresa('prueba', (tx) => saldoReconstruidoEnTx(tx, cuenta.id))
+  assert.deepEqual([rec.available, rec.reserved, rec.redeemed], [200, 0, 300])
+
+  // Y el beneficio es el de la recompensa, asignado a ESTE cliente.
+  const cb = await prisma.supplyV2CustomerBenefit.findUniqueOrThrow({ where: { id: r.customerBenefitId! }, select: { benefitId: true, customerId: true, usesAllowed: true, status: true } })
+  assert.equal(cb.benefitId, benefitId)
+  assert.equal(cb.customerId, ctx.cliente)
+  assert.equal(cb.usesAllowed, 1)
+  assert.equal(cb.status, 'AVAILABLE')
+
+  // La reclamación NO está entregada todavía: entregar es usarla.
+  assert.equal((await prisma.supplyV2RewardClaim.findUniqueOrThrow({ where: { id: r.id }, select: { status: true, cost: true } })).status, 'CLAIMED')
+})
+
+test('18-db · SALDO INSUFICIENTE: sin puntos no hay recompensa, y no se gasta nada', async () => {
+  const { programId, rewardId } = await programaConRecompensa({ nombre: 'Cara', costoPuntos: 1000 })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente2, puntos: 100, motivo: 'Saldo corto a propósito para la prueba' }, como(ctx.compras)))
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId, customerId: ctx.cliente2 }, como(ctx.cliente2))),
+    /No te alcanzan los puntos/
+  )
+  const cuenta = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId, customerId: ctx.cliente2 } }, select: { available: true, reserved: true } })
+  assert.deepEqual([cuenta.available, cuenta.reserved], [100, 0], 'nada quedó apartado en el limbo')
+  assert.equal(await prisma.supplyV2RewardClaim.count({ where: { rewardId } }), 0, 'ni una reclamación a medias')
+})
+
+test('F2 · entregar la recompensa es USARLA: ahí, y no antes, se reconoce el costo (§35)', async () => {
+  const { programId, rewardId } = await programaConRecompensa({ nombre: 'Entrega', costoPuntos: 100, costoUnidad: 250 })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente3, puntos: 100, motivo: 'Saldo justo para canjear la recompensa' }, como(ctx.compras)))
+  const r = await sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId, customerId: ctx.cliente3 }, como(ctx.cliente3)))
+
+  // Al reclamar, el costo todavía NO es dinero gastado.
+  const e1 = await sinEmpresa('prueba', (tx) => economiaDelProgramaEnTx(tx, programId))
+  assert.equal(e1.costoRealizado.toFixed(2), '0.00', 'reclamar no es entregar')
+  assert.equal(e1.costoPendiente.toFixed(2), '250.00', 'queda como compromiso, no como gasto')
+
+  // El cliente usa el beneficio: el checkout lo aplica y el uso se consume.
+  await sinEmpresa('prueba', async (tx) => {
+    const o = await abrirOrdenClienteEnTx(tx, { customerId: ctx.cliente3, offerId: ctx.offerA, quantity: 1, customerBenefitId: r.customerBenefitId! }, como(ctx.cliente3))
+    await confirmarPagoEnTx(tx, { orderId: o.id, amountSeen: o.total, method: 'TRANSFER' }, como(ctx.finanzas))
+  })
+  const usos = await prisma.supplyV2CustomerBenefit.findUniqueOrThrow({ where: { id: r.customerBenefitId! }, select: { usesConsumed: true } })
+  assert.equal(usos.usesConsumed, 1, 'el beneficio se usó de verdad, por el checkout de siempre')
+
+  // El barrido lo concilia: la reclamación pasa a ENTREGADA con su costo.
+  const entregadas = await sinEmpresa('prueba', (tx) => conciliarEntregasEnTx(tx, como(null)))
+  assert.ok(entregadas >= 1)
+  const claim = await prisma.supplyV2RewardClaim.findUniqueOrThrow({ where: { id: r.id }, select: { status: true, cost: true, deliveredAt: true } })
+  assert.equal(claim.status, 'DELIVERED')
+  assert.equal(claim.cost!.toFixed(2), '250.00')
+  assert.ok(claim.deliveredAt)
+
+  // Y AHORA sí es costo realizado.
+  const e2 = await sinEmpresa('prueba', (tx) => economiaDelProgramaEnTx(tx, programId))
+  assert.equal(e2.costoRealizado.toFixed(2), '250.00')
+  assert.equal(e2.costoPendiente.toFixed(2), '0.00')
+
+  // Conciliar dos veces no entrega dos veces.
+  await sinEmpresa('prueba', (tx) => conciliarEntregasEnTx(tx, como(null)))
+  const e3 = await sinEmpresa('prueba', (tx) => economiaDelProgramaEnTx(tx, programId))
+  assert.equal(e3.costoRealizado.toFixed(2), '250.00', 'el costo no se duplica')
+})
+
+test('I · el costo de una recompensa NO se duplica, ni al reclamar ni al reversar', async () => {
+  const { programId, rewardId } = await programaConRecompensa({ nombre: 'NoDuplica', costoPuntos: 50, costoUnidad: 400 })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: 50, motivo: 'Saldo justo para la prueba de costos' }, como(ctx.compras)))
+  const r = await sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId, customerId: ctx.cliente }, como(ctx.cliente)))
+  await sinEmpresa('prueba', (tx) => marcarEntregadaEnTx(tx, r.id, como(ctx.compras)))
+  await sinEmpresa('prueba', (tx) => marcarEntregadaEnTx(tx, r.id, como(ctx.compras)))
+
+  const [{ veces }] = await prisma.$queryRaw<{ veces: bigint }[]>`
+    SELECT count(*) AS veces FROM "supply_v2_reward_claims" WHERE "id" = ${r.id} AND "status" = 'DELIVERED'`
+  assert.equal(Number(veces), 1)
+  const e = await sinEmpresa('prueba', (tx) => economiaDelProgramaEnTx(tx, programId))
+  assert.equal(e.costoRealizado.toFixed(2), '400.00', 'una entrega, un costo')
+})
+
+test('20-db · REVERSA: lo no usado devuelve puntos; lo ya entregado, no (§34)', async () => {
+  // a) Reclamada y SIN usar: los puntos vuelven.
+  const a = await programaConRecompensa({ nombre: 'RevA', costoPuntos: 200 })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId: a.programId, customerId: ctx.cliente2, puntos: 200, motivo: 'Saldo para la prueba de reversa sin usar' }, como(ctx.compras)))
+  const ra = await sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId: a.rewardId, customerId: ctx.cliente2 }, como(ctx.cliente2)))
+  await assert.rejects(() => sinEmpresa('prueba', (tx) => reversarReclamacionEnTx(tx, ra.id, '', como(ctx.compras))), /necesita un motivo/)
+  const va = await sinEmpresa('prueba', (tx) => reversarReclamacionEnTx(tx, ra.id, 'El cliente se arrepintió antes de usarla', como(ctx.compras)))
+  assert.equal(va.puntosDevueltos, 200)
+  const cA = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId: a.programId, customerId: ctx.cliente2 } }, select: { id: true, available: true, redeemed: true } })
+  assert.equal(cA.available, 200, 'los puntos volvieron')
+  assert.equal(cA.redeemed, 0)
+  // Y el beneficio queda cancelado: no se puede usar después de reversar.
+  assert.equal((await prisma.supplyV2CustomerBenefit.findUniqueOrThrow({ where: { id: ra.customerBenefitId! }, select: { status: true } })).status, 'CANCELLED')
+
+  // b) Ya ENTREGADA: los puntos NO vuelven.
+  const b = await programaConRecompensa({ nombre: 'RevB', costoPuntos: 200 })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId: b.programId, customerId: ctx.cliente3, puntos: 200, motivo: 'Saldo para la prueba de reversa ya entregada' }, como(ctx.compras)))
+  const rb = await sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId: b.rewardId, customerId: ctx.cliente3 }, como(ctx.cliente3)))
+  await sinEmpresa('prueba', (tx) => marcarEntregadaEnTx(tx, rb.id, como(ctx.compras)))
+  const vb = await sinEmpresa('prueba', (tx) => reversarReclamacionEnTx(tx, rb.id, 'Incidencia: se entregó por error', como(ctx.compras)))
+  assert.equal(vb.puntosDevueltos, 0, 'lo ya consumido no se regala dos veces')
+  const cB = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId: b.programId, customerId: ctx.cliente3 } }, select: { available: true, redeemed: true } })
+  assert.equal(cB.available, 0)
+  assert.equal(cB.redeemed, 200, 'siguen contando como canjeados')
+
+  // En los dos casos queda historial con su motivo.
+  for (const id of [ra.id, rb.id]) {
+    const c = await prisma.supplyV2RewardClaim.findUniqueOrThrow({ where: { id }, select: { status: true, reverseReason: true, reversedAt: true } })
+    assert.equal(c.status, 'REVERSED')
+    assert.ok(c.reverseReason && c.reversedAt)
+  }
+})
+
+test('19a-db · dos reclamaciones en curso de la misma recompensa: la base lo impide', async () => {
+  const { programId, rewardId } = await programaConRecompensa({ nombre: 'UnaSola', costoPuntos: 10 })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: 100, motivo: 'Saldo para la prueba del tope por cliente' }, como(ctx.compras)))
+  await sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId, customerId: ctx.cliente }, como(ctx.cliente)))
+  // maxPerCustomer = 1.
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId, customerId: ctx.cliente }, como(ctx.cliente))),
+    /máximo de veces/
+  )
+})
+
+test('21-db · PRESUPUESTO: el techo del programa manda sobre sus recompensas', async () => {
+  const programId = await programaActivo({ nombre: 'Techo', supplierId: null, owner: 'MEMBEGO', presupuesto: 1000 })
+  const benefitId = await sinEmpresa('prueba', async (tx) => {
+    const b = await crearBeneficioEnTx(
+      tx,
+      { name: `BonoTecho ${sufijo}`, funding: 'MEMBEGO', valueType: 'FIXED_AMOUNT', membegoValue: 100, scope: 'SPECIFIC_OFFER', offerId: ctx.offerA, requiresAssignment: true, startsAt: new Date(ahora.getTime() - DIA) },
+      como(ctx.compras)
+    )
+    await aprobarBeneficioEnTx(tx, b.id, como(ctx.finanzas))
+    return b.id
+  })
+  const nueva = (nombre: string, techo: number) =>
+    sinEmpresa('prueba', (tx) =>
+      crearRecompensaEnTx(tx, programId, { name: `${nombre} ${sufijo}`, kind: 'BENEFIT', pointsCost: 10, benefitId, unitCost: 100, budgetTotal: techo, startsAt: new Date(ahora.getTime() - DIA) }, como(ctx.compras))
+    )
+  await nueva('R1', 700)
+  // 700 + 500 = 1 200 > 1 000.
+  await assert.rejects(() => nueva('R2', 500), /sumarían 1200\.00 y el presupuesto aprobado es 1000\.00/)
+  await nueva('R3', 300)
+
+  const e = await sinEmpresa('prueba', (tx) => economiaDelProgramaEnTx(tx, programId))
+  assert.equal(e.comprometido.toFixed(2), '1000.00')
+  assert.equal(e.aprobado!.toFixed(2), '1000.00')
+  assert.equal(e.algunaRecompensaSinTope, false)
+})
+
+test('una recompensa pide aprobación de OTRA persona antes de repartir nada', async () => {
+  const programId = await programaActivo({ nombre: 'AprobRec', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  const creada = await sinEmpresa('prueba', async (tx) => {
+    const b = await crearBeneficioEnTx(
+      tx,
+      { name: `BonoAprob ${sufijo}`, funding: 'SUPPLIER', valueType: 'FIXED_AMOUNT', supplierValue: 100, scope: 'SPECIFIC_OFFER', offerId: ctx.offerA, supplierId: ctx.supplierA, requiresAssignment: true, startsAt: new Date(ahora.getTime() - DIA) },
+      como(ctx.compras)
+    )
+    await aprobarBeneficioEnTx(tx, b.id, como(ctx.finanzas))
+    return crearRecompensaEnTx(tx, programId, { name: `PorAprobar ${sufijo}`, kind: 'BENEFIT', pointsCost: 10, benefitId: b.id, unitCost: 100, startsAt: new Date(ahora.getTime() - DIA) }, como(ctx.compras))
+  })
+  // En DRAFT no se puede reclamar.
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId: creada.id, customerId: ctx.cliente }, como(ctx.cliente))),
+    /no está disponible/
+  )
+  await assert.rejects(() => sinEmpresa('prueba', (tx) => aprobarRecompensaEnTx(tx, creada.id, como(ctx.compras))), /no la aprueba la misma persona/)
+  const ok = await sinEmpresa('prueba', (tx) => aprobarRecompensaEnTx(tx, creada.id, como(ctx.finanzas)))
+  assert.equal(ok.repetido, false)
 })

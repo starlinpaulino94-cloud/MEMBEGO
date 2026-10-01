@@ -556,14 +556,20 @@ test('19b · recompensa inactiva, no vigente, vencida o agotada, cada una con su
   assert.equal(estadoRecompensaSegunUsos({ status: 'ACTIVE', maxClaims: null, timesClaimed: 9, endsAt: new Date('2026-01-01') }, AHORA), 'EXPIRED')
 })
 
-test('19c · una recompensa que entrega algo necesita CON QUÉ entregarlo', () => {
+test('19c · una recompensa que entrega algo necesita CON QUÉ entregarlo Y CON QUÉ pagarlo', () => {
   const base: DatosRecompensa = { name: 'Lavado gratis', kind: 'FREE_PRODUCT', pointsCost: 300, startsAt: new Date('2026-01-01') }
+  // Una que regala un producto necesita la OFERTA con la que se entrega…
   assert.match(validarRecompensa(base)!, /necesita la oferta/)
-  assert.equal(validarRecompensa({ ...base, offerId: 'of-1' }), null)
+  // …y además el BENEFICIO que la paga: es lo que el cliente usa en el
+  // checkout de siempre. Sin él, reclamarla no daría nada y la persona habría
+  // gastado sus puntos a cambio de aire.
+  assert.match(validarRecompensa({ ...base, offerId: 'of-1' })!, /necesita el beneficio/)
+  assert.equal(validarRecompensa({ ...base, offerId: 'of-1', benefitId: 'bn-1' }), null)
+
   assert.match(validarRecompensa({ ...base, kind: 'BENEFIT' })!, /necesita el beneficio/)
   assert.equal(validarRecompensa({ ...base, kind: 'BENEFIT', benefitId: 'bn-1' }), null)
-  assert.match(validarRecompensa({ ...base, offerId: 'of-1', pointsCost: -1 })!, /no sea negativo/)
-  assert.match(validarRecompensa({ ...base, offerId: 'of-1', requiredPlanId: 'p1' })!, /solo para miembros/)
+  assert.match(validarRecompensa({ ...base, offerId: 'of-1', benefitId: 'bn-1', pointsCost: -1 })!, /no sea negativo/)
+  assert.match(validarRecompensa({ ...base, offerId: 'of-1', benefitId: 'bn-1', requiredPlanId: 'p1' })!, /solo para miembros/)
 })
 
 // ── 20 · Reversa ────────────────────────────────────────────────────────────
