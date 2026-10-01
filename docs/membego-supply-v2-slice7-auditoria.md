@@ -387,9 +387,9 @@ tablero. Capturas en `test-results/shots/supply-v2-s7-*.png`.
 | `eslint src tests` | **0 errores** (15 avisos preexistentes, ninguno en código nuevo) | ✅ |
 | `next build` (producción) | compila; rutas nuevas presentes: `/superadmin/supply-v2/campanas`, `/campanas/nueva`, `/campanas/[id]`, `/promociones/campanas`, `/promociones/campanas/[code]`, `/cliente/cupones`, `/admin/supply-v2/campanas` | ✅ |
 | `npm test` (dominio completo) | **3 391 tests · 3 385 pass · 0 fail · 6 skip** (3 357 antes del slice) | ✅ con nota ⚠️ |
-| `npm run test:db` (todas las suites de base) | **161 pass · 0 fail** (132 antes del slice) | ✅ |
+| `npm run test:db` (todas las suites de base) | **163 pass · 0 fail · 0 skip** (132 antes del slice) | ✅ |
 | E2E Slice 7 (escritorio + móvil) | 2 passed | ✅ |
-| E2E regresión Slices 1–6 | ver §20 | ✅ |
+| E2E regresión Slices 1–6 | Slices 1–4: **10 passed**; Slices 5–6: **4 passed**; 0 failed. Detalle y los tres fallos que destapó, en §20 | ✅ |
 | Migraciones desde base vacía | base `membego_s7_fresh` creada desde cero: **174 migraciones aplicadas**, las 6 tablas nuevas y los 4 CHECK y 2 índices únicos presentes | ✅ |
 | Segunda pasada de `migrate deploy` | «No pending migrations to apply» | ✅ |
 | Drift | `prisma migrate diff`: **No difference detected** (exit 0) | ✅ |
@@ -451,7 +451,10 @@ dejar rastro visible en una base que comparten las demás: se le añadió un
 `after` que borra su relleno, y se purgaron las 640 filas que ya estaban.
 Comprobado: tras correr la prueba, `MBG-OF-RELLENO-%` = 0 filas.
 
-Resultado tras las correcciones: ver la tabla de §19.
+Tercera pasada, con la base limpia y las tres correcciones puestas: Slices 5 y 6
+**4 passed · 0 failed** (escritorio y móvil de cada uno), Slices 1–4
+**10 passed · 0 failed**. La regresión queda verde en los seis slices,
+escritorio y móvil.
 
 ## 21 · RIESGOS REALES QUE QUEDAN
 
