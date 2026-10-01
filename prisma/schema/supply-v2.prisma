@@ -229,6 +229,10 @@ model SupplyV2Supplier {
   campaigns        SupplyV2Campaign[]
 
   @@index([status, commercialName])
+
+  // Slice 8 · programas de fidelización que organiza o cofinancia.
+  loyaltyPrograms SupplyV2LoyaltyProgram[] @relation("SupplyV2LoyaltyProgramSupplier")
+
   @@map("supply_v2_suppliers")
 }
 
@@ -846,6 +850,10 @@ model SupplyV2Offer {
   @@index([status, startsAt, endsAt])
   @@index([catalogItemId])
   @@index([sourceType, status])
+
+  // Slice 8 · recompensas que entregan esta oferta.
+  loyaltyRewards SupplyV2Reward[] @relation("SupplyV2RewardOffer")
+
   @@map("supply_v2_offers")
 }
 
@@ -890,6 +898,14 @@ model SupplyV2CustomerOrder {
   /// El doble clic no abre dos órdenes ni reserva dos veces.
   idempotencyKey String? @unique
 
+  // ── Slice 8 · qué se está comprando (§16) ──
+  /// `OFFER` es todo lo anterior al Slice 8. `MEMBERSHIP` es la compra de una
+  /// membresía: NO lleva líneas, ni lote, ni allocation, ni derecho. No se
+  /// simula con inventario ficticio; lo que se entrega es la membresía.
+  kind             SupplyV2OrderKind       @default(OFFER)
+  membershipPlanId String?
+  membershipPlan   SupplyV2MembershipPlan? @relation("SupplyV2CustomerOrderMembershipPlan", fields: [membershipPlanId], references: [id], onDelete: Restrict)
+
   // ── Slice 5 · foto del origen y de la comisión al abrir la orden (§8, §19, §24) ──
   sourceType           SupplyV2OfferSource       @default(PREPURCHASED_SUPPLY)
   agreementId          String?
@@ -933,6 +949,12 @@ model SupplyV2CustomerOrder {
   @@index([customerId, status])
   @@index([status, expiresAt])
   @@index([paymentStatus, status])
+
+  // Slice 8 · fidelización.
+  membership        SupplyV2CustomerMembership? @relation("SupplyV2CustomerOrderMembership")
+  pointsMovements   SupplyV2PointsMovement[]    @relation("SupplyV2PointsMovementOrder")
+  referralElegible  SupplyV2Referral?           @relation("SupplyV2ReferralEligibleOrder")
+
   @@map("supply_v2_customer_orders")
 }
 
@@ -1071,6 +1093,10 @@ model SupplyV2Entitlement {
   @@index([offerId])
   @@index([lotId])
   @@index([sourceType, supplierId])
+
+  // Slice 8 · la reclamación de recompensa que emitió este derecho.
+  rewardClaim SupplyV2RewardClaim? @relation("SupplyV2RewardClaimEntitlement")
+
   @@map("supply_v2_entitlements")
 }
 
@@ -2290,6 +2316,13 @@ model SupplyV2Benefit {
   @@index([offerId])
   @@index([catalogItemId])
   @@index([campaignId])
+
+  // Slice 8 · dónde se usa este beneficio como parte de la fidelización.
+  membershipBenefits SupplyV2MembershipBenefit[] @relation("SupplyV2MembershipBenefitBenefit")
+  referralPrograms   SupplyV2ReferralProgram[]   @relation("SupplyV2ReferralProgramBenefit")
+  referralRewards    SupplyV2Referral[]          @relation("SupplyV2ReferralRewardBenefit")
+  loyaltyRewards     SupplyV2Reward[]            @relation("SupplyV2RewardBenefit")
+
   @@map("supply_v2_benefits")
 }
 
@@ -2320,6 +2353,12 @@ model SupplyV2CustomerBenefit {
 
   @@unique([benefitId, customerId])
   @@index([customerId, status])
+
+  // Slice 8 · de qué membresía o reclamación vino esta asignación.
+  membershipId String?
+  membership   SupplyV2CustomerMembership? @relation("SupplyV2CustomerBenefitMembership", fields: [membershipId], references: [id], onDelete: SetNull)
+  rewardClaim  SupplyV2RewardClaim?        @relation("SupplyV2RewardClaimCustomerBenefit")
+
   @@map("supply_v2_customer_benefits")
 }
 

@@ -413,6 +413,47 @@ enum AuditAccion {
   SUPPLY_V2_COUPON_CANCELLED
   SUPPLY_V2_COUPON_APPLIED
   SUPPLY_V2_COUPON_RELEASED
+
+  // ── Supply 2.0 · Slice 8 · fidelización (01-10-2026) ─────────────────────
+  // Programas, membresías, referidos, puntos y recompensas. Un ajuste manual
+  // de puntos exige motivo y queda aquí: no hay forma de borrar un movimiento
+  // para tapar un error.
+  SUPPLY_V2_LOYALTY_PROGRAM_CREATED
+  SUPPLY_V2_LOYALTY_PROGRAM_SUBMITTED
+  SUPPLY_V2_LOYALTY_PROGRAM_APPROVED
+  SUPPLY_V2_LOYALTY_PROGRAM_REJECTED
+  SUPPLY_V2_LOYALTY_PROGRAM_PAUSED
+  SUPPLY_V2_LOYALTY_PROGRAM_RESUMED
+  SUPPLY_V2_LOYALTY_PROGRAM_CANCELLED
+  SUPPLY_V2_LOYALTY_PROGRAM_COMPLETED
+  SUPPLY_V2_LOYALTY_BUDGET_WAIVED
+  SUPPLY_V2_MEMBERSHIP_PLAN_CREATED
+  SUPPLY_V2_MEMBERSHIP_PLAN_UPDATED
+  SUPPLY_V2_MEMBERSHIP_PLAN_PUBLISHED
+  SUPPLY_V2_MEMBERSHIP_PLAN_PAUSED
+  SUPPLY_V2_MEMBERSHIP_PLAN_ARCHIVED
+  SUPPLY_V2_MEMBERSHIP_STARTED
+  SUPPLY_V2_MEMBERSHIP_ACTIVATED
+  SUPPLY_V2_MEMBERSHIP_RENEWED
+  SUPPLY_V2_MEMBERSHIP_GRANTED
+  SUPPLY_V2_MEMBERSHIP_CANCELLED
+  SUPPLY_V2_MEMBERSHIP_SUSPENDED
+  SUPPLY_V2_MEMBERSHIP_EXPIRED
+  SUPPLY_V2_REFERRAL_CODE_CREATED
+  SUPPLY_V2_REFERRAL_SIGNED_UP
+  SUPPLY_V2_REFERRAL_ELIGIBLE
+  SUPPLY_V2_REFERRAL_REWARD_APPROVED
+  SUPPLY_V2_REFERRAL_REWARD_GRANTED
+  SUPPLY_V2_REFERRAL_REWARD_VOIDED
+  SUPPLY_V2_POINTS_EARNED
+  SUPPLY_V2_POINTS_AVAILABLE
+  SUPPLY_V2_POINTS_EXPIRED
+  SUPPLY_V2_POINTS_ADJUSTED
+  SUPPLY_V2_REWARD_CREATED
+  SUPPLY_V2_REWARD_APPROVED
+  SUPPLY_V2_REWARD_CLAIMED
+  SUPPLY_V2_REWARD_DELIVERED
+  SUPPLY_V2_REWARD_REVERSED
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas
@@ -621,6 +662,24 @@ model User {
   supplyV2CuponesCreados          SupplyV2Coupon[]               @relation("SupplyV2CouponCreatedBy")
   supplyV2CuponesPropios          SupplyV2Coupon[]               @relation("SupplyV2CouponCustomer")
   supplyV2CuponesAplicados        SupplyV2CouponRedemption[]     @relation("SupplyV2CouponRedemptionCustomer")
+
+  // Slice 8 · fidelización: membresías, referidos, puntos y recompensas
+  supplyV2ProgramasCreados        SupplyV2LoyaltyProgram[]        @relation("SupplyV2LoyaltyProgramCreatedBy")
+  supplyV2ProgramasAprobados      SupplyV2LoyaltyProgram[]        @relation("SupplyV2LoyaltyProgramApprovedBy")
+  supplyV2ProgramasSinTope        SupplyV2LoyaltyProgram[]        @relation("SupplyV2LoyaltyProgramBudgetWaiverBy")
+  supplyV2PlanesCreados           SupplyV2MembershipPlan[]        @relation("SupplyV2MembershipPlanCreatedBy")
+  supplyV2VersionesDePlan         SupplyV2MembershipPlanVersion[] @relation("SupplyV2MembershipPlanVersionCreatedBy")
+  supplyV2Membresias              SupplyV2CustomerMembership[]    @relation("SupplyV2CustomerMembershipCustomer")
+  supplyV2MembresiasOtorgadas     SupplyV2CustomerMembership[]    @relation("SupplyV2CustomerMembershipGrantedBy")
+  supplyV2CodigosDeReferido       SupplyV2ReferralCode[]          @relation("SupplyV2ReferralCodeOwner")
+  supplyV2ReferidosHechos         SupplyV2Referral[]              @relation("SupplyV2ReferralReferrer")
+  supplyV2ReferidoPor             SupplyV2Referral[]              @relation("SupplyV2ReferralReferred")
+  supplyV2CuentasDePuntos         SupplyV2PointsAccount[]         @relation("SupplyV2PointsAccountCustomer")
+  supplyV2MovimientosDePuntos     SupplyV2PointsMovement[]        @relation("SupplyV2PointsMovementActor")
+  supplyV2RecompensasCreadas      SupplyV2Reward[]                @relation("SupplyV2RewardCreatedBy")
+  supplyV2RecompensasAprobadas    SupplyV2Reward[]                @relation("SupplyV2RewardApprovedBy")
+  supplyV2RecompensasReclamadas   SupplyV2RewardClaim[]           @relation("SupplyV2RewardClaimCustomer")
+  supplyV2FidelizacionEventos     SupplyV2LoyaltyEvent[]          @relation("SupplyV2LoyaltyEventActor")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)
@@ -960,6 +1019,9 @@ model Sucursal {
 
   // Campañas geosegmentadas por radio alrededor de esta sucursal.
   campanasDirigidas CampanaDirigida[]
+
+  // Slice 8 · sucursales participantes de un programa de fidelización.
+  supplyV2ProgramasFidelizacion SupplyV2LoyaltyProgramBranch[] @relation("SupplyV2LoyaltyProgramBranchSucursal")
 
   @@index([companyId])
   @@index([companyId, activa, mostrarEnMapa])

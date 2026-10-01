@@ -26,6 +26,10 @@
 //   soporte       Tickets, FAQ y WhatsApp.
 //   carwash       Operación de pista (detrás de capacidades por empresa).
 //   pagos         Rastro de los cobros por pasarela.
+//   supply        Membego Supply V1.
+//   supply-v2     Membego Supply 2.0: compras, ofertas, finanzas, campañas.
+//   supply-v2-loyalty  Supply 2.0 · fidelización: membresías, referidos,
+//                 puntos y recompensas.
 //
 // AL AÑADIR UN MODELO: va al archivo de su dominio. Si no encaja en ninguno,
 // eso es una señal de que hace falta un dominio nuevo — no de que da igual
