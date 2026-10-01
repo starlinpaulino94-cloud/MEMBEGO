@@ -239,7 +239,7 @@ Todo dentro de la misma transacción que el cambio (`auditarEnTx`).
 | --- | --- | --- |
 | escritorio · COMISIÓN completa | proveedor → 2 productos → acuerdo CATÁLOGO 5 % → acuerdo PRODUCTO 10 % (override; el wizard muestra «10.00 % · regla por producto») → oferta Saona 1 000 × 10 → oferta Gorra 250 sin tope (5 %, «de todo el catálogo») → cliente compra Saona → finanzas ve «comisión RD$100.00 · neto RD$900.00» y confirma → **SQL: sin lote / asignación / PO / ledger** → portal: 1 pendiente, neto 900, pendiente de pago 0 → QR + escáner → obligación 900 → ficha de redención sin lote → economía 1 000 / 100 / 0 / 900 → compras genera liquidación (vista previa 900), **no puede aprobarla**, segunda generación vacía → finanzas aprueba → finanzas registra pago 900 → compras confirma → liquidación PAGADA, obligación Pagada → portal: pagado 900, liquidación Pagada con el pago → conciliación de comisión reclamando 950 ⇒ «Con diferencia» −50 ⇒ resuelta ACCEPT_INTERNAL → cliente 2 compra la gorra (12.50 / 237.50) sin inventario | ✅ 1 passed (1.4 min) |
 | móvil (Pixel 7) · cliente + proveedor | ficha pública sin «comisión» y sin scroll horizontal → checkout 1 000 → aviso → confirmación → portal del proveedor en teléfono: 1 pendiente, neto 900, sin scroll horizontal; liquidaciones vacías | ✅ 1 passed (27 s) |
-| Regresión E2E S1–S4 (escritorio + móvil) | `supply-v2-slice1..4.spec.ts` contra el mismo servidor | REGRESION_E2E_PLACEHOLDER |
+| Regresión E2E S1–S5 (escritorio + móvil) | `supply-v2-slice1..5.spec.ts` contra el mismo servidor, una sola corrida | ✅ **12 passed · 0 failed** (7.3 min): S1 4, S2 1, S3 2, S4 3, S5 2 |
 
 Capturas: `test-results/shots/supply-v2-s5-{acuerdos,oferta-comision,portal-ventas,economia,liquidacion,portal-liquidacion,movil-checkout,movil-portal}.png`.
 
@@ -247,8 +247,8 @@ Capturas: `test-results/shots/supply-v2-s5-{acuerdos,oferta-comision,portal-vent
 
 | Puerta | Resultado |
 | --- | --- |
-| `npm run test:db` (S1–S5, PostgreSQL real) | TESTDB_PLACEHOLDER |
-| `npm test` (dominio, 3 300+ pruebas) | NPMTEST_PLACEHOLDER |
+| `npm run test:db` (S1–S5, PostgreSQL real) | **114 pass · 0 fail** (95 de S1–S4 + 19 de S5) |
+| `npm test` (dominio) | **3 325 pass · 0 fail** (incluye los 22 de S5 y `bitacora-etiquetas` con las 12 acciones nuevas) |
 | `tsc --noEmit` | exit 0 |
 | `eslint src tests` | 0 errores (15 avisos preexistentes, ninguno en archivos del slice) |
 | `next build` | ✓ Compiled successfully (2.0 min), exit 0 |
@@ -256,7 +256,8 @@ Capturas: `test-results/shots/supply-v2-s5-{acuerdos,oferta-comision,portal-vent
 | `scripts/rls-cobertura.mjs` | ✓ |
 | `scripts/transacciones-anidadas.mjs` | ✓ ninguna |
 | Migración nueva (dos archivos) | `20261014_supply_v2_slice5_enums` (solo `CREATE TYPE` / `ADD VALUE IF NOT EXISTS`: PostgreSQL no permite usar un valor de enum nuevo en la misma transacción) + `20261015_supply_v2_slice5` (tablas, columnas, índices, 9 CHECK, todo idempotente). Base nueva: `migrate deploy` ⇒ **169 aplicadas**; segunda pasada ⇒ «No pending migrations»; `migrate diff --from-migrations --to-schema-datamodel` ⇒ **sin diferencias** (exit 0); `sellar-migraciones` ⇒ 169 selladas; `rls-capa2-preflight` ⇒ ✓. Migraciones previas: sin cambios. |
-| Fixtures de slices previos tocados | `supply-v2-slice2.db.test.ts` (3 `!` por `allocationId` ahora opcional), `supply-v2-slice4.spec.ts` (2 `!` por `lotId` opcional), `supply-v2-dominio.test.ts` (COMMISSION ya es válido; se prueba `HYBRID`). Ninguna aserción de comportamiento previa se relajó. |
+| Fixtures de slices previos tocados | `supply-v2-slice2.db.test.ts` (3 `!` por `allocationId` ahora opcional), `supply-v2-slice4.spec.ts` (2 `!` por `lotId` opcional), `supply-v2-dominio.test.ts` (COMMISSION ya es válido; se prueba `HYBRID`), `supply-v2-slice2.spec.ts` (selectores del cliente filtrados por `visible: true`, ver nota). Ninguna aserción de comportamiento previa se relajó. |
+| ⚠️ Nota E2E S2 | En la primera corrida de regresión el E2E del Slice 2 falló por «strict mode violation» (dos `estado-compra` / `mis-derechos`). Se reprodujo con una sonda: Next 16.3 (subido por `origin/main`) deja unos instantes la página anterior **oculta** (`hidden`) en el DOM al navegar, y Playwright la cuenta. Los arneses de S3 y S4 ya filtraban por visible; se aplicó lo mismo a S2. No es un cambio de comportamiento de la aplicación: la sonda sobre `/cliente/compras` muestra **una** lista. |
 
 ## 21 · SUPPLY V1 INTACT
 
