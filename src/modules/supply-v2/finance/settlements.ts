@@ -79,7 +79,7 @@ export async function obligacionesLiquidablesEnTx(tx: Tx, supplierId: string, pe
       grossAmount: true,
       outstandingAmount: true,
       recognizedAt: true,
-      redemption: { select: { id: true, number: true, redeemedAt: true, customerUnitPriceSnapshot: true, commissionAmountSnapshot: true, supplierNetSnapshot: true, commissionPercentageSnapshot: true, catalogItem: { select: { name: true } }, customer: { select: { name: true, email: true } } } },
+      redemption: { select: { id: true, number: true, redeemedAt: true, customerUnitPriceSnapshot: true, commissionAmountSnapshot: true, supplierNetSnapshot: true, commissionPercentageSnapshot: true, contractualValueSnapshot: true, supplierDiscountSnapshot: true, membegoSubsidySnapshot: true, catalogItem: { select: { name: true } }, customer: { select: { name: true, email: true } } } },
     },
   })
   return elegibles(filas, periodStart, periodEnd, currency)
@@ -113,19 +113,27 @@ export async function generarLiquidacionEnTx(tx: Tx, d: DatosLiquidacion, ctx: C
 
   const lineas = obligaciones.map((o) => {
     const r = o.redemption!
-    const gross = r.customerUnitPriceSnapshot
+    // Slice 6 (§26): GMV = contractual + descuento del proveedor; el cliente pagó contractual − subsidio.
+    const contractual = r.contractualValueSnapshot ?? r.customerUnitPriceSnapshot
+    const discount = r.supplierDiscountSnapshot ?? CERO
+    const subsidy = r.membegoSubsidySnapshot ?? CERO
     const commission = r.commissionAmountSnapshot ?? CERO
     return {
       obligationId: o.id,
       redemptionId: r.id,
-      descriptionSnapshot: `Entrega ${r.number} · ${r.catalogItem.name} · ${r.customer.name?.trim() || r.customer.email} · ${r.redeemedAt.toISOString().slice(0, 10)} · comisión ${r.commissionPercentageSnapshot?.toFixed(2) ?? '?'} %`,
-      grossAmount: gross,
+      descriptionSnapshot: `Entrega ${r.number} · ${r.catalogItem.name} · ${r.customer.name?.trim() || r.customer.email} · ${r.redeemedAt.toISOString().slice(0, 10)} · comisión ${r.commissionPercentageSnapshot?.toFixed(2) ?? '?'} %${subsidy.greaterThan(0) ? ` · bono Membego ${subsidy.toFixed(2)}` : ''}${discount.greaterThan(0) ? ` · descuento proveedor ${discount.toFixed(2)}` : ''}`,
+      grossAmount: contractual.plus(discount),
       commissionAmount: commission,
       // El neto liquidable es lo que la obligación todavía debe (una obligación parcialmente pagada entra por su saldo).
       supplierNet: o.outstandingAmount,
+      contractualAmount: contractual,
+      supplierDiscountAmount: discount,
+      membegoSubsidyAmount: subsidy,
+      customerPaidAmount: r.customerUnitPriceSnapshot,
     }
   })
   const totales = totalesDeLiquidacion(lineas)
+  const suma = (k: 'contractualAmount' | 'supplierDiscountAmount' | 'membegoSubsidyAmount' | 'customerPaidAmount') => lineas.reduce((t, l) => t.plus(l[k]), CERO)
   const number = await numeroLiquidacion(tx, periodEnd)
   const s = await tx.supplyV2Settlement.create({
     data: {
@@ -139,6 +147,10 @@ export async function generarLiquidacionEnTx(tx: Tx, d: DatosLiquidacion, ctx: C
       commissionAmount: totales.commissionAmount,
       supplierNet: totales.supplierNet,
       paidAmount: CERO,
+      contractualValue: suma('contractualAmount'),
+      supplierDiscountTotal: suma('supplierDiscountAmount'),
+      membegoSubsidyTotal: suma('membegoSubsidyAmount'),
+      customerPaidTotal: suma('customerPaidAmount'),
       status: 'PENDING_APPROVAL',
       notes: d.notes?.trim() || null,
       createdById: ctx.actorId,
@@ -160,6 +172,10 @@ export async function generarLiquidacionEnTx(tx: Tx, d: DatosLiquidacion, ctx: C
     grossSales: totales.grossSales.toFixed(2),
     commissionAmount: totales.commissionAmount.toFixed(2),
     supplierNet: totales.supplierNet.toFixed(2),
+    contractualValue: suma('contractualAmount').toFixed(2),
+    membegoSubsidy: suma('membegoSubsidyAmount').toFixed(2),
+    supplierDiscount: suma('supplierDiscountAmount').toFixed(2),
+    customerPaid: suma('customerPaidAmount').toFixed(2),
   }, proveedor.companyId)
   return { id: s.id, number: s.number, status: s.status, lineas: lineas.length, grossSales: totales.grossSales.toFixed(2), commissionAmount: totales.commissionAmount.toFixed(2), supplierNet: totales.supplierNet.toFixed(2), repetida: false }
 }

@@ -1,5 +1,6 @@
 import {
   Activity,
+  BadgePercent,
   BarChart3,
   Banknote,
   Bell,
@@ -916,6 +917,17 @@ const G_CLI_MIO: NavGroup = {
       icon: Tag,
       description: 'Ofertas Membego que compraste y tus beneficios.',
       keywords: ['compras', 'membego', 'ofertas', 'beneficios', 'supply'],
+    },
+    {
+      // Supply 2.0 · Slice 6: bonos y descuentos que Membego le asignó a esta
+      // persona y que rebajan lo que paga al comprar una oferta. No son
+      // unidades ya pagadas (eso es «Beneficios Membego») ni promociones que
+      // ella compró (eso es «Mis beneficios»): es dinero a su favor.
+      href: '/cliente/bonos',
+      label: 'Bonos y descuentos',
+      icon: BadgePercent,
+      description: 'Bonos que Membego te asignó para pagar menos.',
+      keywords: ['bonos', 'descuentos', 'beneficio', 'bono', 'subsidio', 'supply'],
     },
     {
       href: '/cliente/mis-promociones',

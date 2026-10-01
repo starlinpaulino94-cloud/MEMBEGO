@@ -7,6 +7,7 @@ import { expirarOrdenEnTx } from './checkout'
 import { derechosPorVencerEnTx, expirarDerechoEnTx, expirarVouchersEnTx } from '../redemption/service'
 import { expirarLoteEnTx, lotesPorVencerEnTx } from '../pool/vencimientos'
 import { proyectarVentasSinEventoEnTx } from '../economics/service'
+import { expirarBeneficiosEnTx } from '../benefits/service'
 
 /**
  * MEMBEGO SUPPLY 2.0 · BARRIDO del cron (§25, §37, §39, §64).
@@ -35,10 +36,13 @@ export interface ResultadoBarrido {
   unidadesVencidasSinVender: number
   /** Slice 4 (§24): ventas PAID anteriores sin evento económico, proyectadas. */
   ventasProyectadas: number
+  /** Slice 6 (§27): beneficios y asignaciones cuya vigencia pasó. */
+  beneficiosVencidos: number
+  asignacionesVencidas: number
 }
 
 export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise<ResultadoBarrido> {
-  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0, derechosConError: 0, lotesVencidos: 0, unidadesVencidasSinVender: 0, ventasProyectadas: 0 }
+  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0, derechosConError: 0, lotesVencidos: 0, unidadesVencidasSinVender: 0, ventasProyectadas: 0, beneficiosVencidos: 0, asignacionesVencidas: 0 }
 
   const vencidas = await sinEmpresa('Supply 2.0 cron: checkouts con la reserva caducada', (tx) =>
     tx.supplyV2CustomerOrder.findMany({ where: { status: 'PENDING', expiresAt: { lte: ahora } }, select: { id: true }, take: limite, orderBy: { expiresAt: 'asc' } })
@@ -90,5 +94,12 @@ export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise
     }
   }
   r.ventasProyectadas = await sinEmpresa('Supply 2.0 cron: proyectar ventas sin evento económico', (tx) => proyectarVentasSinEventoEnTx(tx, CTX, limite))
+
+  // Slice 6 (§27): el beneficio vencido deja de valer y sus asignaciones con él.
+  // Las RESERVAS vencen con su orden (`expirarOrdenEnTx`, arriba): el presupuesto
+  // vuelve por el mismo camino que lo apartó.
+  const ben = await sinEmpresa('Supply 2.0 cron: beneficios y asignaciones vencidos', (tx) => expirarBeneficiosEnTx(tx, CTX, ahora, limite))
+  r.beneficiosVencidos = ben.beneficios
+  r.asignacionesVencidas = ben.asignaciones
   return r
 }

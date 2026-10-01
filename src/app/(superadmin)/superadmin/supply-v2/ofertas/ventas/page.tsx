@@ -36,10 +36,22 @@ export default async function VentasPage() {
             {c.paymentReference ? ` · ref. ${c.paymentReference}` : ''}
             {' · '}{PAYMENT_STATUS_LABELS[c.paymentStatus]}
           </p>
+          {c.lines.find((l) => l.benefit) && (
+            <p className="text-caption text-muted-foreground" data-testid="venta-beneficio">
+              Beneficio aplicado: {c.lines.find((l) => l.benefit)!.benefit!.name} ({c.lines.find((l) => l.benefit)!.benefit!.code})
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-right tabular-nums">
             <span className="block font-medium">{dinero(c.total, c.currency)}</span>
+            {(Number(c.membegoSubsidyTotal) > 0 || Number(c.supplierDiscountTotal) > 0) && (
+              <span className="block text-caption text-muted-foreground" data-testid="venta-financiacion">
+                contractual {dinero(c.contractualValue, c.currency)}
+                {Number(c.supplierDiscountTotal) > 0 ? ` · descuento proveedor ${dinero(c.supplierDiscountTotal, c.currency)}` : ''}
+                {Number(c.membegoSubsidyTotal) > 0 ? ` · bono Membego ${dinero(c.membegoSubsidyTotal, c.currency)}` : ''}
+              </span>
+            )}
             {c.sourceType === 'COMMISSION' && <span className="block text-caption text-muted-foreground" data-testid="venta-reparto">comisión {dinero(c.commissionAmount, c.currency)} · neto {dinero(c.supplierNet, c.currency)}</span>}
           </span>
           <ChipModelo fuente={c.sourceType} />

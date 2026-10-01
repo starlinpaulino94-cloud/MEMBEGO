@@ -17,12 +17,17 @@ import { decimal, type Decimal } from '../core/dinero'
  */
 
 export interface EventoEconomico {
-  type: 'SALE_REVENUE' | 'REDEMPTION_COST' | 'EXPIRATION_COST' | 'BREAKAGE' | 'REVERSAL' | 'ADJUSTMENT' | 'COMMISSION_REVENUE'
+  type: 'SALE_REVENUE' | 'REDEMPTION_COST' | 'EXPIRATION_COST' | 'BREAKAGE' | 'REVERSAL' | 'ADJUSTMENT' | 'COMMISSION_REVENUE' | 'MEMBEGO_SUBSIDY'
   units: number
   gmvAmount: Decimal | string | number
   revenueAmount: Decimal | string | number
   costAmount: Decimal | string | number
   grossMarginAmount: Decimal | string | number
+  /** Slice 6 (§28): financiación de la venta. Ausentes en eventos anteriores = 0. */
+  contractualAmount?: Decimal | string | number
+  supplierDiscountAmount?: Decimal | string | number
+  subsidyAmount?: Decimal | string | number
+  customerPaidAmount?: Decimal | string | number
 }
 
 export interface Economia {
@@ -54,6 +59,17 @@ export interface Economia {
     cost: Decimal
     unitsSold: number
   }
+  /** Slice 6 (§28): financiación separada. Nada se compensa en silencio. */
+  supplierDiscount: Decimal
+  /** Subsidio financiado por Membego = costo promocional. */
+  membegoSubsidy: Decimal
+  promotionalCost: Decimal
+  /** Lo que los clientes pagaron de verdad. */
+  customerCollections: Decimal
+  /** Lo que se debe a proveedores por ventas a comisión (neto contractual). */
+  supplierObligations: Decimal
+  /** Margen bruto − subsidio: lo que queda DESPUÉS de la promoción. Puede ser negativo. */
+  contributionAfterSubsidy: Decimal
 }
 
 const CERO = new Prisma.Decimal(0)
@@ -70,8 +86,20 @@ export function agregarEconomia(eventos: readonly EventoEconomico[], unidadesRed
   let expiredSupplyCost = CERO
   const commission = { gmv: CERO, revenue: CERO, supplierNet: CERO, unitsSold: 0 }
   const prepurchase = { gmv: CERO, revenue: CERO, cost: CERO, unitsSold: 0 }
+  let supplierDiscount = CERO
+  let membegoSubsidy = CERO
+  let customerCollections = CERO
+  let supplierObligations = CERO
   for (const e of eventos) {
+    if (e.type === 'SALE_REVENUE' || e.type === 'COMMISSION_REVENUE') {
+      supplierDiscount = supplierDiscount.plus(decimal(e.supplierDiscountAmount ?? 0))
+      customerCollections = customerCollections.plus(decimal(e.customerPaidAmount ?? 0))
+    }
     switch (e.type) {
+      case 'MEMBEGO_SUBSIDY':
+        // Costo promocional: no es costo del supply ni reduce el ingreso; se resta en la contribución.
+        membegoSubsidy = membegoSubsidy.plus(decimal(e.subsidyAmount ?? e.costAmount))
+        break
       case 'SALE_REVENUE':
       case 'REDEMPTION_COST':
       case 'REVERSAL':
@@ -99,7 +127,10 @@ export function agregarEconomia(eventos: readonly EventoEconomico[], unidadesRed
         commission.unitsSold += e.units
         commission.gmv = commission.gmv.plus(g)
         commission.revenue = commission.revenue.plus(rev)
-        commission.supplierNet = commission.supplierNet.plus(g.minus(rev))
+        // Neto del proveedor = valor contractual − comisión (si el evento no trae contractual, = gmv).
+        const contractual = e.contractualAmount != null && !decimal(e.contractualAmount).isZero() ? decimal(e.contractualAmount) : g
+        commission.supplierNet = commission.supplierNet.plus(contractual.minus(rev))
+        supplierObligations = supplierObligations.plus(contractual.minus(rev))
         break
       }
       case 'BREAKAGE':
@@ -126,6 +157,12 @@ export function agregarEconomia(eventos: readonly EventoEconomico[], unidadesRed
     expiredSupplyCost,
     commission,
     prepurchase,
+    supplierDiscount,
+    membegoSubsidy,
+    promotionalCost: membegoSubsidy,
+    customerCollections,
+    supplierObligations,
+    contributionAfterSubsidy: grossMargin.minus(membegoSubsidy),
   }
 }
 
@@ -135,19 +172,25 @@ export interface SnapshotVenta {
   publicPrice: Decimal
   discount: Decimal
   actualUnitCost: Decimal
+  /** Slice 6: ingreso reconocido de la unidad (valor contractual). */
+  contractualValue: Decimal
   grossMargin: Decimal
 }
 
-export function snapshotDeVenta(d: { customerUnitPrice: Decimal | string | number; publicUnitPrice: Decimal | string | number; actualUnitCost: Decimal | string | number }): SnapshotVenta {
+export function snapshotDeVenta(d: { customerUnitPrice: Decimal | string | number; publicUnitPrice: Decimal | string | number; actualUnitCost: Decimal | string | number; contractualUnitValue?: Decimal | string | number | null }): SnapshotVenta {
   const customerPaid = decimal(d.customerUnitPrice)
   const publicPrice = decimal(d.publicUnitPrice)
   const actualUnitCost = decimal(d.actualUnitCost)
+  // Slice 6: el ingreso de una venta de supply es su valor CONTRACTUAL (lo que pagó el cliente + lo que
+  // financió Membego). Ventas anteriores sin foto: contractual = lo que pagó el cliente.
+  const contractual = d.contractualUnitValue != null && !decimal(d.contractualUnitValue).isZero() ? decimal(d.contractualUnitValue) : customerPaid
   return {
     customerPaid,
     publicPrice,
-    discount: publicPrice.minus(customerPaid),
+    discount: publicPrice.minus(contractual),
     actualUnitCost,
-    grossMargin: customerPaid.minus(actualUnitCost),
+    contractualValue: contractual,
+    grossMargin: contractual.minus(actualUnitCost),
   }
 }
 

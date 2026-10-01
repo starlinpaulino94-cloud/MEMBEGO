@@ -29,6 +29,24 @@ export default async function VentaPage({ params }: { params: Promise<{ id: stri
         nav={<NavSupplyV2 activa="ofertas" />}
         action={<ChipCompra estado={t.order.status as SupplyV2CustomerOrderStatus} />}
       />
+      {(Number(t.order.membegoSubsidyTotal) > 0 || Number(t.order.supplierDiscountTotal) > 0) && (
+        <Card data-testid="venta-financiacion">
+          <CardHeader><CardTitle>Financiación de esta venta</CardTitle></CardHeader>
+          <CardContent>
+            <dl className="grid gap-2 text-sm sm:grid-cols-4">
+              <Fila label="Valor contractual"><span data-testid="venta-contractual">{dineroSupplyV2(t.order.contractualValue, m)}</span></Fila>
+              <Fila label="Descuento del proveedor">{dineroSupplyV2(t.order.supplierDiscountTotal, m)}</Fila>
+              <Fila label="Bono de Membego"><span data-testid="venta-subsidio">{dineroSupplyV2(t.order.membegoSubsidyTotal, m)}</span></Fila>
+              <Fila label="Pagó el cliente">{dineroSupplyV2(t.order.total, m)}</Fila>
+            </dl>
+            {t.order.beneficio && (
+              <p className="mt-2 text-caption text-muted-foreground">
+                Beneficio {t.order.beneficio.code} · {t.order.beneficio.name}. El bono de Membego es costo promocional: el proveedor cobra su importe contractual completo.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
       {t.derechos.length === 0 ? (
         <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Sin derechos emitidos: la economía nace cuando se confirma el pago.</p></CardContent></Card>
       ) : (
@@ -46,6 +64,9 @@ export default async function VentaPage({ params }: { params: Promise<{ id: stri
                     <Fila label="Cliente pagó"><span data-testid="eco-cliente-pago">{dineroSupplyV2(d.venta.customerPaid, m)}</span></Fila>
                     <Fila label="Precio público">{dineroSupplyV2(d.venta.publicPrice, m)}</Fila>
                     <Fila label="Descuento">{dineroSupplyV2(d.venta.discount, m)}</Fila>
+                    <Fila label="Valor contractual de la unidad">{dineroSupplyV2(d.venta.contractual, m)}</Fila>
+                    {Number(d.venta.descuentoProveedor) > 0 && <Fila label="Descuento del proveedor">{dineroSupplyV2(d.venta.descuentoProveedor, m)}</Fila>}
+                    {Number(d.venta.subsidio) > 0 && <Fila label="Bono de Membego (subsidio)"><span data-testid="eco-subsidio-unidad">{dineroSupplyV2(d.venta.subsidio, m)}</span></Fila>}
                     <Fila label="Costo real de la unidad"><span data-testid="eco-costo">{dineroSupplyV2(d.venta.actualUnitCost, m)}</span></Fila>
                     <Fila label="Margen bruto"><span data-testid="eco-margen">{dineroSupplyV2(d.venta.grossMargin, m)}</span></Fila>
                   </dl>

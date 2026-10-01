@@ -36,7 +36,7 @@ export async function calcularEconomia(f: FiltroEconomia, ahora = new Date()): P
   }
   const [eventos, redimidas] = await sinEmpresa('Supply 2.0: economía del supply', (tx) =>
     Promise.all([
-      tx.supplyV2EconomicEvent.findMany({ where: comun, select: { type: true, units: true, gmvAmount: true, revenueAmount: true, costAmount: true, grossMarginAmount: true } }),
+      tx.supplyV2EconomicEvent.findMany({ where: comun, select: { type: true, units: true, gmvAmount: true, revenueAmount: true, costAmount: true, grossMarginAmount: true, contractualAmount: true, supplierDiscountAmount: true, subsidyAmount: true, customerPaidAmount: true } }),
       tx.supplyV2Redemption.count({
         where: {
           reversedAt: null,
@@ -70,7 +70,10 @@ export interface HitoEconomico {
 }
 
 /** Timeline económico de UNA compra del cliente (§62): venta → derecho → costo → margen → redención / vencimiento. Sin precios actuales. */
-export async function timelineEconomicoDeCompra(orderId: string): Promise<{ order: { id: string; number: string; status: string; total: string; currency: string; customer: string; paidAt: Date | null }; derechos: { id: string; status: string; producto: string; proveedor: string; hitos: HitoEconomico[]; venta: { customerPaid: string; publicPrice: string; discount: string; actualUnitCost: string; grossMargin: string } | null }[] } | null> {
+export async function timelineEconomicoDeCompra(orderId: string): Promise<{
+  order: { id: string; number: string; status: string; total: string; currency: string; customer: string; paidAt: Date | null; contractualValue: string; supplierDiscountTotal: string; membegoSubsidyTotal: string; beneficio: { code: string; name: string; funding: string } | null }
+  derechos: { id: string; status: string; producto: string; proveedor: string; hitos: HitoEconomico[]; venta: { customerPaid: string; publicPrice: string; discount: string; actualUnitCost: string; grossMargin: string; contractual: string; descuentoProveedor: string; subsidio: string } | null }[]
+} | null> {
   const o = await sinEmpresa('Supply 2.0: timeline económico de una compra', (tx) =>
     tx.supplyV2CustomerOrder.findUnique({
       where: { id: orderId },
@@ -82,7 +85,11 @@ export async function timelineEconomicoDeCompra(orderId: string): Promise<{ orde
         currency: true,
         paidAt: true,
         createdAt: true,
+        contractualValue: true,
+        supplierDiscountTotal: true,
+        membegoSubsidyTotal: true,
         customer: { select: { name: true, email: true } },
+        lines: { select: { benefit: { select: { code: true, name: true, funding: true } } } },
         entitlements: {
           orderBy: { issuedAt: 'asc' },
           select: {
@@ -91,9 +98,12 @@ export async function timelineEconomicoDeCompra(orderId: string): Promise<{ orde
             issuedAt: true,
             expiresAt: true,
             currency: true,
+            contractualUnitValue: true,
+            supplierDiscountAmount: true,
+            membegoSubsidyAmount: true,
             catalogItem: { select: { name: true } },
             supplier: { select: { commercialName: true } },
-            economicEvents: { orderBy: { occurredAt: 'asc' }, select: { type: true, occurredAt: true, revenueAmount: true, costAmount: true, grossMarginAmount: true, metadata: true } },
+            economicEvents: { orderBy: { occurredAt: 'asc' }, select: { type: true, occurredAt: true, revenueAmount: true, costAmount: true, grossMarginAmount: true, metadata: true, subsidyAmount: true, contractualAmount: true, supplierDiscountAmount: true, customerPaidAmount: true } },
             redemptions: { orderBy: { redeemedAt: 'asc' }, select: { number: true, redeemedAt: true, reversedAt: true, reversalReason: true, branch: { select: { nombre: true } } } },
           },
         },
@@ -103,7 +113,19 @@ export async function timelineEconomicoDeCompra(orderId: string): Promise<{ orde
   if (!o) return null
   const dinero = (n: { toFixed(d: number): string }, moneda: string) => `${moneda === 'DOP' ? 'RD$' : `${moneda} `}${Number(n.toFixed(2)).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
   return {
-    order: { id: o.id, number: o.number, status: o.status, total: o.total.toFixed(2), currency: o.currency, customer: o.customer.name ?? o.customer.email, paidAt: o.paidAt },
+    order: {
+      id: o.id,
+      number: o.number,
+      status: o.status,
+      total: o.total.toFixed(2),
+      currency: o.currency,
+      customer: o.customer.name ?? o.customer.email,
+      paidAt: o.paidAt,
+      contractualValue: o.contractualValue.toFixed(2),
+      supplierDiscountTotal: o.supplierDiscountTotal.toFixed(2),
+      membegoSubsidyTotal: o.membegoSubsidyTotal.toFixed(2),
+      beneficio: o.lines.find((l) => l.benefit)?.benefit ?? null,
+    },
     derechos: o.entitlements.map((e) => {
       const venta = e.economicEvents.find((x) => x.type === 'SALE_REVENUE')
       const meta = (venta?.metadata ?? null) as Record<string, string> | null
@@ -120,6 +142,11 @@ export async function timelineEconomicoDeCompra(orderId: string): Promise<{ orde
         hitos.push({ cuando: r.redeemedAt, titulo: `Redención ${r.number}`, detalle: r.branch?.nombre ?? null, tono: 'success' })
         if (r.reversedAt) hitos.push({ cuando: r.reversedAt, titulo: 'Redención reversada', detalle: r.reversalReason, tono: 'warning' })
       }
+      // Slice 6 (§28): el subsidio es un evento APARTE, no un descuento del ingreso.
+      const subsidio = e.economicEvents.find((x) => x.type === 'MEMBEGO_SUBSIDY')
+      if (subsidio) {
+        hitos.push({ cuando: subsidio.occurredAt, titulo: `Subsidio de Membego ${dinero(subsidio.subsidyAmount ?? e.membegoSubsidyAmount, e.currency)}`, detalle: 'Costo promocional: lo financió Membego, no el proveedor.', tono: 'warning' })
+      }
       const breakage = e.economicEvents.find((x) => x.type === 'BREAKAGE')
       if (breakage) hitos.push({ cuando: breakage.occurredAt, titulo: 'Venció sin usarse (breakage)', detalle: 'El ingreso se conserva; el costo no se duplica.', tono: 'warning' })
       hitos.sort((a, b) => a.cuando.getTime() - b.cuando.getTime())
@@ -129,7 +156,18 @@ export async function timelineEconomicoDeCompra(orderId: string): Promise<{ orde
         producto: e.catalogItem.name,
         proveedor: e.supplier.commercialName,
         hitos,
-        venta: meta ? { customerPaid: meta.customerPaid ?? '0.00', publicPrice: meta.publicPrice ?? '0.00', discount: meta.discount ?? '0.00', actualUnitCost: meta.actualUnitCost ?? '0.00', grossMargin: meta.grossMargin ?? '0.00' } : null,
+        venta: meta
+          ? {
+              customerPaid: meta.customerPaid ?? '0.00',
+              publicPrice: meta.publicPrice ?? '0.00',
+              discount: meta.discount ?? '0.00',
+              actualUnitCost: meta.actualUnitCost ?? '0.00',
+              grossMargin: meta.grossMargin ?? '0.00',
+              contractual: (venta?.contractualAmount ?? e.contractualUnitValue).toFixed(2),
+              descuentoProveedor: e.supplierDiscountAmount.toFixed(2),
+              subsidio: e.membegoSubsidyAmount.toFixed(2),
+            }
+          : null,
       }
     }),
   }

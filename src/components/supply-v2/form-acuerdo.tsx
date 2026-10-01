@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { crearAcuerdoAction, type AcuerdoResumen, type EstadoAccion } from '@/modules/supply-v2/actions'
-import { AGREEMENT_TYPES_SLICE5, AGREEMENT_TYPE_EXPLICACION, AGREEMENT_TYPE_LABELS, MONEDAS_SUPPLY_V2, PAYABLE_RECOGNITION_LABELS } from '@/modules/supply-v2/core/catalogo'
+import { AGREEMENT_TYPES_SLICE5, AGREEMENT_TYPE_EXPLICACION, AGREEMENT_TYPE_LABELS, COMMISSION_BASE_LABELS, MONEDAS_SUPPLY_V2, PAYABLE_RECOGNITION_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 export interface ProductoParaAcuerdo {
   id: string
@@ -123,11 +123,29 @@ export function FormAcuerdo({
           </div>
         </div>
         {comision ? (
-          <div>
-            <Label htmlFor="commissionPercentage">Comisión de Membego (%)</Label>
-            <Input id="commissionPercentage" name="commissionPercentage" type="number" min={0} max={100} step="0.01" required placeholder="10" data-testid="acuerdo-comision" />
-            <p className="text-caption text-muted-foreground">Sobre lo que paga el cliente. El resto es el neto del proveedor, que se liquida al entregar.</p>
-          </div>
+          <>
+            <div>
+              <Label htmlFor="commissionPercentage">Comisión de Membego (%)</Label>
+              <Input id="commissionPercentage" name="commissionPercentage" type="number" min={0} max={100} step="0.01" required placeholder="10" data-testid="acuerdo-comision" />
+              <p className="text-caption text-muted-foreground">El resto es el neto del proveedor, que se liquida al entregar.</p>
+            </div>
+            {/* Slice 6 (§14): con beneficios, «lo que paga el cliente» y «el valor
+                contractual» dejan de ser lo mismo. Sobre cuál se calcula la comisión
+                lo decide el ACUERDO y queda congelado en su versión. */}
+            <div>
+              <Label htmlFor="commissionBase">Base de la comisión</Label>
+              <select id="commissionBase" name="commissionBase" defaultValue="CONTRACTUAL_SALE_VALUE" className={select} data-testid="acuerdo-base-comision">
+                {(['CONTRACTUAL_SALE_VALUE', 'CUSTOMER_PAID_AMOUNT'] as const).map((b) => (
+                  <option key={b} value={b}>
+                    {COMMISSION_BASE_LABELS[b]}
+                  </option>
+                ))}
+              </select>
+              <p className="text-caption text-muted-foreground">
+                Sin beneficios las dos dan lo mismo. Con un bono de Membego, el valor contractual mantiene la comisión y el neto del proveedor como si no hubiera bono; sobre lo pagado por el cliente, Membego cobra menos.
+              </p>
+            </div>
+          </>
         ) : (
           <div>
             <Label htmlFor="negotiatedUnitCost">Costo negociado por unidad</Label>

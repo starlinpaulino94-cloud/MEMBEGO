@@ -1,4 +1,4 @@
-import type { SupplyV2AgreementScope, SupplyV2AgreementType, SupplyV2PayableRecognition } from '@prisma/client'
+import type { SupplyV2AgreementScope, SupplyV2AgreementType, SupplyV2CommissionBase, SupplyV2PayableRecognition } from '@prisma/client'
 import { AGREEMENT_TYPES_SLICE1, AGREEMENT_TYPES_SLICE5 } from '../core/catalogo'
 import { validarPorcentajeComision } from '../core/comision'
 
@@ -24,6 +24,8 @@ export interface DatosAcuerdo {
   payableRecognition?: SupplyV2PayableRecognition | null
   allowDepositApplication?: boolean | null
   settlementFrequency?: string | null
+  /** Slice 6 (§14): base de la comisión cuando interviene un beneficio. */
+  commissionBase?: SupplyV2CommissionBase | null
   startsAt: Date
   endsAt?: Date | null
   notes?: string | null
@@ -194,6 +196,7 @@ export function snapshotDeAcuerdo(a: {
   payableRecognition?: SupplyV2PayableRecognition | null
   allowDepositApplication?: boolean | null
   settlementFrequency?: string | null
+  commissionBase?: SupplyV2CommissionBase | null
   startsAt: Date
   endsAt: Date | null
   notes: string | null
@@ -214,6 +217,8 @@ export function snapshotDeAcuerdo(a: {
     payableRecognition: a.payableRecognition ?? 'ON_INVOICE',
     allowDepositApplication: a.allowDepositApplication ?? true,
     settlementFrequency: a.settlementFrequency ?? null,
+    // Slice 6 (§14): la base de comisión también se congela en la versión.
+    commissionBase: a.commissionBase ?? 'CONTRACTUAL_SALE_VALUE',
     startsAt: a.startsAt.toISOString(),
     endsAt: a.endsAt?.toISOString() ?? null,
     notes: a.notes,

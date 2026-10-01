@@ -188,6 +188,8 @@ export interface PoliticaFinanciera {
   allowDepositApplication: boolean
   paymentTermsDays: number | null
   type: string
+  /** Slice 6 (§14): base de la comisión cuando interviene un beneficio. Versiones anteriores: valor contractual. */
+  commissionBase: 'CONTRACTUAL_SALE_VALUE' | 'CUSTOMER_PAID_AMOUNT'
 }
 
 const RECOGNITIONS: readonly SupplyV2PayableRecognition[] = ['ON_RECEIPT', 'ON_INVOICE', 'ON_REDEMPTION']
@@ -206,6 +208,7 @@ export function politicaDeVersion(snapshot: unknown): PoliticaFinanciera {
     allowDepositApplication: typeof s.allowDepositApplication === 'boolean' ? s.allowDepositApplication : true,
     paymentTermsDays: typeof terms === 'number' && Number.isInteger(terms) && terms >= 0 ? terms : null,
     type: typeof s.type === 'string' ? s.type : 'PREPAID_PURCHASE',
+    commissionBase: s.commissionBase === 'CUSTOMER_PAID_AMOUNT' ? 'CUSTOMER_PAID_AMOUNT' : 'CONTRACTUAL_SALE_VALUE',
   }
 }
 

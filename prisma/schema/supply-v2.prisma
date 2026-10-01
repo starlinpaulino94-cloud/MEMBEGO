@@ -225,6 +225,7 @@ model SupplyV2Supplier {
   // Slice 5
   settlements      SupplyV2Settlement[]
   financeIncidents SupplyV2FinanceIncident[]
+  benefits         SupplyV2Benefit[]
 
   @@index([status, commercialName])
   @@map("supply_v2_suppliers")
@@ -273,6 +274,7 @@ model SupplyV2CatalogItem {
   allocations    SupplyV2Allocation[]
   offers         SupplyV2Offer[]
   entitlements   SupplyV2Entitlement[]
+  benefits       SupplyV2Benefit[]
   vouchers       SupplyV2Voucher[]
   redemptions    SupplyV2Redemption[]
   // Slice 4
@@ -317,6 +319,8 @@ model SupplyV2Agreement {
   // Slice 4 · política financiera (§20). Se congela en cada versión.
   /// Cuándo nace la deuda con el proveedor: al aprobar la factura (por defecto), al recibir o al redimir.
   payableRecognition      SupplyV2PayableRecognition @default(ON_INVOICE)
+  /// Slice 6 (§14): sobre qué importe se calcula la comisión cuando interviene un beneficio. Va en la foto de la versión.
+  commissionBase          SupplyV2CommissionBase     @default(CONTRACTUAL_SALE_VALUE)
   /// Si una factura de este acuerdo puede cubrirse con depósito del proveedor.
   allowDepositApplication Boolean                    @default(true)
   /// Texto libre («mensual», «quincenal»); solo informativo en el Slice 4.
@@ -687,6 +691,8 @@ enum SupplyV2PaymentStatus {
   SUBMITTED
   CONFIRMED
   REJECTED
+  /// Slice 6 (§21): el beneficio cubrió el 100 %; no hubo pago bancario del cliente.
+  COVERED_BY_BENEFIT
 }
 
 enum SupplyV2PaymentMethod {
@@ -833,6 +839,7 @@ model SupplyV2Offer {
   orderLines             SupplyV2CustomerOrderLine[]
   entitlements           SupplyV2Entitlement[]
   commissionReservations SupplyV2CommissionReservation[]
+  benefits               SupplyV2Benefit[]
 
   @@index([status, startsAt, endsAt])
   @@index([catalogItemId])
@@ -893,6 +900,15 @@ model SupplyV2CustomerOrder {
   /// Lo que le corresponde al proveedor por esta orden (0 en precompra).
   supplierNet          Decimal                   @default(0) @db.Decimal(14, 2)
 
+  // ── Slice 6 · financiación congelada (§15, §19). `total` = lo que paga el cliente. ──
+  /// Valor contractual: precio Membego × unidades − descuento del proveedor.
+  contractualValue      Decimal                 @default(0) @db.Decimal(14, 2)
+  supplierDiscountTotal Decimal                 @default(0) @db.Decimal(14, 2)
+  membegoSubsidyTotal   Decimal                 @default(0) @db.Decimal(14, 2)
+  commissionBase        SupplyV2CommissionBase? 
+  /// Foto completa del reparto (beneficio, importes, política) al abrir la orden.
+  benefitFundingSnapshot Json?
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   paidAt      DateTime?
@@ -903,6 +919,7 @@ model SupplyV2CustomerOrder {
   entitlements           SupplyV2Entitlement[]
   economicEvents         SupplyV2EconomicEvent[]
   commissionReservations SupplyV2CommissionReservation[]
+  benefitReservations    SupplyV2BenefitReservation[]
 
   @@index([customerId, status])
   @@index([status, expiresAt])
@@ -935,9 +952,17 @@ model SupplyV2CustomerOrderLine {
   commissionAmount     Decimal  @default(0) @db.Decimal(14, 2)
   supplierNet          Decimal  @default(0) @db.Decimal(14, 2)
 
+  // ── Slice 6 · financiación de la línea (§15). `total` = lo que paga el cliente por la línea. ──
+  contractualValue       Decimal @default(0) @db.Decimal(14, 2)
+  supplierDiscountAmount Decimal @default(0) @db.Decimal(14, 2)
+  membegoSubsidyAmount   Decimal @default(0) @db.Decimal(14, 2)
+  benefitId              String?
+  benefit                SupplyV2Benefit? @relation(fields: [benefitId], references: [id], onDelete: Restrict)
+
   reservations           SupplyV2OrderReservation[]
   entitlements           SupplyV2Entitlement[]
   commissionReservations SupplyV2CommissionReservation[]
+  benefitReservation     SupplyV2BenefitReservation?
 
   @@index([orderId])
   @@index([offerId])
@@ -1015,6 +1040,12 @@ model SupplyV2Entitlement {
   commissionPercentage Decimal?                  @db.Decimal(5, 2)
   commissionAmount     Decimal?                  @db.Decimal(12, 2)
   supplierNet          Decimal?                  @db.Decimal(12, 2)
+
+  // ── Slice 6 · economía por unidad (§22). `customerUnitPrice` = lo que PAGÓ el cliente por la unidad. ──
+  /// Valor contractual de la unidad (precio Membego − descuento del proveedor). Sin beneficio = customerUnitPrice.
+  contractualUnitValue   Decimal @default(0) @db.Decimal(12, 2)
+  supplierDiscountAmount Decimal @default(0) @db.Decimal(12, 2)
+  membegoSubsidyAmount   Decimal @default(0) @db.Decimal(12, 2)
 
   status SupplyV2EntitlementStatus @default(ACTIVE)
 
@@ -1179,6 +1210,10 @@ model SupplyV2Redemption {
   commissionPercentageSnapshot Decimal?            @db.Decimal(5, 2)
   commissionAmountSnapshot     Decimal?            @db.Decimal(12, 2)
   supplierNetSnapshot          Decimal?            @db.Decimal(12, 2)
+  /// Slice 6: la financiación de la unidad entregada, congelada (§23, §32).
+  contractualValueSnapshot     Decimal?            @db.Decimal(12, 2)
+  supplierDiscountSnapshot     Decimal?            @db.Decimal(12, 2)
+  membegoSubsidySnapshot       Decimal?            @db.Decimal(12, 2)
 
   redeemedAt DateTime @default(now())
 
@@ -1364,6 +1399,8 @@ enum SupplyV2EconomicEventType {
   BREAKAGE
   REVERSAL
   ADJUSTMENT
+  /// Slice 6 (§28): subsidio financiado por Membego en una venta: costo promocional. gmv/revenue/cost = 0; `subsidyAmount` lleva el importe.
+  MEMBEGO_SUBSIDY
 }
 
 enum SupplyV2EconomicReferenceType {
@@ -1761,6 +1798,11 @@ model SupplyV2EconomicEvent {
   revenueAmount     Decimal @default(0) @db.Decimal(14, 2)
   costAmount        Decimal @default(0) @db.Decimal(14, 2)
   grossMarginAmount Decimal @default(0) @db.Decimal(14, 2)
+  // ── Slice 6 · financiación (§28), reconstruible por venta ──
+  contractualAmount      Decimal @default(0) @db.Decimal(14, 2)
+  supplierDiscountAmount Decimal @default(0) @db.Decimal(14, 2)
+  subsidyAmount          Decimal @default(0) @db.Decimal(14, 2)
+  customerPaidAmount     Decimal @default(0) @db.Decimal(14, 2)
 
   occurredAt DateTime
   metadata   Json?
@@ -1975,6 +2017,11 @@ model SupplyV2Settlement {
   commissionAmount Decimal @db.Decimal(14, 2)
   supplierNet      Decimal @db.Decimal(14, 2)
   paidAmount       Decimal @default(0) @db.Decimal(14, 2)
+  // ── Slice 6 (§26): la financiación del periodo, separada ──
+  contractualValue      Decimal @default(0) @db.Decimal(14, 2)
+  supplierDiscountTotal Decimal @default(0) @db.Decimal(14, 2)
+  membegoSubsidyTotal   Decimal @default(0) @db.Decimal(14, 2)
+  customerPaidTotal     Decimal @default(0) @db.Decimal(14, 2)
 
   status SupplyV2SettlementStatus @default(PENDING_APPROVAL)
 
@@ -2019,6 +2066,11 @@ model SupplyV2SettlementLine {
   grossAmount      Decimal @db.Decimal(14, 2)
   commissionAmount Decimal @db.Decimal(14, 2)
   supplierNet      Decimal @db.Decimal(14, 2)
+  // Slice 6 (§26)
+  contractualAmount      Decimal @default(0) @db.Decimal(14, 2)
+  supplierDiscountAmount Decimal @default(0) @db.Decimal(14, 2)
+  membegoSubsidyAmount   Decimal @default(0) @db.Decimal(14, 2)
+  customerPaidAmount     Decimal @default(0) @db.Decimal(14, 2)
 
   createdAt DateTime @default(now())
 
@@ -2057,4 +2109,264 @@ model SupplyV2FinanceIncident {
 
   @@index([supplierId, status])
   @@map("supply_v2_finance_incidents")
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SLICE 6 · BENEFICIOS ECONÓMICOS: BONOS, DESCUENTOS Y FINANCIACIÓN COMBINADA
+//
+//   BENEFIT (quién financia, cuánto, a qué aplica, presupuesto, vigencia)
+//   → CUSTOMER BENEFIT (asignación administrativa a un cliente)
+//   → BENEFIT RESERVATION (al abrir el checkout; APPLIED al confirmar el pago)
+//   → MOVEMENTS (ledger económico del beneficio: reconstruye reservado y consumido)
+//
+// PRINCIPIO (§3): ningún campo `price` representa varias cosas. En la orden,
+// la línea y el derecho conviven, con nombre propio: precio regular, precio
+// Membego, descuento del proveedor, valor contractual, subsidio de Membego y
+// lo que pagó el cliente. La comisión se calcula sobre la BASE que dice la
+// versión del acuerdo (§14) y el neto del proveedor sale del valor contractual.
+// ══════════════════════════════════════════════════════════════════════════
+
+/// Sobre qué importe se calcula la comisión cuando interviene un beneficio (§14).
+enum SupplyV2CommissionBase {
+  /// Precio Membego después del descuento REAL del proveedor (lo normal).
+  CONTRACTUAL_SALE_VALUE
+  /// Lo que pagó el cliente (después del subsidio de Membego).
+  CUSTOMER_PAID_AMOUNT
+}
+
+enum SupplyV2BenefitFunding {
+  /// Membego asume el valor: subsidio (costo promocional de Membego).
+  MEMBEGO
+  /// El proveedor rebaja su precio contractual: descuento (no es dinero de Membego).
+  SUPPLIER
+  /// Parte descuento del proveedor, parte subsidio de Membego.
+  SHARED
+}
+
+enum SupplyV2BenefitValueType {
+  FIXED_AMOUNT
+  PERCENTAGE
+}
+
+enum SupplyV2BenefitScope {
+  SPECIFIC_OFFER
+  CATALOG_ITEM
+  SUPPLIER
+}
+
+enum SupplyV2BenefitStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  EXHAUSTED
+  EXPIRED
+  CANCELLED
+}
+
+enum SupplyV2CustomerBenefitStatus {
+  AVAILABLE
+  EXHAUSTED
+  EXPIRED
+  CANCELLED
+}
+
+enum SupplyV2BenefitReservationStatus {
+  /// Reservado al abrir el checkout; vence con la orden.
+  ACTIVE
+  /// Consolidado al confirmar el pago (o la cobertura total): es la APLICACIÓN.
+  APPLIED
+  /// Checkout cancelado o pago rechazado.
+  RELEASED
+  /// Checkout vencido.
+  EXPIRED
+  /// Aplicación deshecha por una cancelación explícita (nunca en silencio).
+  REVERSED
+}
+
+enum SupplyV2BenefitMovementType {
+  GRANTED
+  RESERVED
+  APPLIED
+  RELEASED
+  EXPIRED
+  REVERSED
+}
+
+/// Un BENEFICIO (§7): quién lo financia, cuánto vale, a qué aplica y con qué
+/// presupuesto. `budgetReserved` / `budgetConsumed` son caché del ledger de
+/// movimientos (§12): Σ movimientos los reconstruye.
+model SupplyV2Benefit {
+  id   String @id @default(cuid())
+  /// "MBG-BN-2026-000001".
+  code String @unique
+
+  name        String
+  description String?
+  /// Para qué se crea (campaña, retención, lanzamiento…). Texto libre.
+  objective   String?
+
+  funding   SupplyV2BenefitFunding
+  valueType SupplyV2BenefitValueType
+  /// Parte que asume Membego (importe fijo o %); 0 si la financia solo el proveedor.
+  membegoValue  Decimal @default(0) @db.Decimal(12, 2)
+  /// Parte que asume el proveedor (importe fijo o %); 0 si la financia solo Membego.
+  supplierValue Decimal @default(0) @db.Decimal(12, 2)
+  /// Tope por unidad del subsidio de Membego (p. ej. 15 % con máximo 300).
+  maxMembegoAmount  Decimal? @db.Decimal(12, 2)
+  /// Tope por unidad del descuento del proveedor.
+  maxSupplierAmount Decimal? @db.Decimal(12, 2)
+
+  scope         SupplyV2BenefitScope
+  offerId       String?
+  offer         SupplyV2Offer?       @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  catalogItemId String?
+  catalogItem   SupplyV2CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  /// Proveedor que financia (obligatorio si funding ≠ MEMBEGO) o cuyas ofertas son elegibles (scope SUPPLIER).
+  supplierId    String?
+  supplier      SupplyV2Supplier?    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  currency String @default("DOP")
+  /// Presupuesto TOTAL del subsidio de Membego; null = sin tope (§11).
+  budgetTotal    Decimal? @db.Decimal(14, 2)
+  budgetReserved Decimal  @default(0) @db.Decimal(14, 2)
+  budgetConsumed Decimal  @default(0) @db.Decimal(14, 2)
+
+  /// Usos por cliente (aplicaciones consolidadas + reservas vivas).
+  perCustomerLimit    Int     @default(1)
+  /// Si es false, cualquier cliente puede usarlo sin asignación (p. ej. descuento público del proveedor).
+  requiresAssignment  Boolean @default(true)
+  /// ¿Puede convivir con otro descuento del proveedor en la misma línea? (§18) Hoy: un beneficio por línea.
+  combinable          Boolean @default(false)
+
+  startsAt DateTime
+  endsAt   DateTime?
+
+  status SupplyV2BenefitStatus @default(DRAFT)
+
+  createdById  String
+  createdBy    User      @relation("SupplyV2BenefitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById String?
+  approvedBy   User?     @relation("SupplyV2BenefitApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+  cancelledAt     DateTime?
+  cancelledReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grants       SupplyV2CustomerBenefit[]
+  reservations SupplyV2BenefitReservation[]
+  movements    SupplyV2BenefitMovement[]
+  orderLines   SupplyV2CustomerOrderLine[]
+
+  @@index([status, startsAt, endsAt])
+  @@index([supplierId])
+  @@index([offerId])
+  @@index([catalogItemId])
+  @@map("supply_v2_benefits")
+}
+
+/// ASIGNACIÓN (§10): el beneficio en la cuenta de UN cliente. `usesConsumed`
+/// es caché; las aplicaciones (reservas APPLIED) son la verdad.
+model SupplyV2CustomerBenefit {
+  id         String          @id @default(cuid())
+  benefitId  String
+  benefit    SupplyV2Benefit @relation(fields: [benefitId], references: [id], onDelete: Restrict)
+  customerId String
+  customer   User            @relation("SupplyV2CustomerBenefitCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+
+  usesAllowed  Int @default(1)
+  usesConsumed Int @default(0)
+  /// Vencimiento propio (si es anterior al del beneficio).
+  expiresAt DateTime?
+
+  status SupplyV2CustomerBenefitStatus @default(AVAILABLE)
+  note   String?
+
+  grantedById String
+  grantedBy   User     @relation("SupplyV2CustomerBenefitGrantedBy", fields: [grantedById], references: [id], onDelete: Restrict)
+  grantedAt   DateTime @default(now())
+  cancelledAt DateTime?
+
+  reservations SupplyV2BenefitReservation[]
+  movements    SupplyV2BenefitMovement[]
+
+  @@unique([benefitId, customerId])
+  @@index([customerId, status])
+  @@map("supply_v2_customer_benefits")
+}
+
+/// RESERVA → APLICACIÓN del beneficio en una línea de pedido (§16, §20). Una
+/// sola por línea; los importes quedan congelados al reservar y son la foto
+/// de la aplicación cuando pasa a APPLIED. Sustituye a una tabla aparte de
+/// aplicaciones: misma fila, estado explícito, sin duplicar importes.
+model SupplyV2BenefitReservation {
+  id                String                   @id @default(cuid())
+  benefitId         String
+  benefit           SupplyV2Benefit          @relation(fields: [benefitId], references: [id], onDelete: Restrict)
+  customerBenefitId String?
+  customerBenefit   SupplyV2CustomerBenefit? @relation(fields: [customerBenefitId], references: [id], onDelete: Restrict)
+  customerId        String
+  customer          User                     @relation("SupplyV2BenefitReservationCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+
+  orderId     String
+  order       SupplyV2CustomerOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderLineId String                    @unique
+  orderLine   SupplyV2CustomerOrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+
+  quantity       Int
+  /// Descuento del proveedor en la línea (no es dinero de Membego).
+  supplierAmount Decimal @default(0) @db.Decimal(14, 2)
+  /// Subsidio de Membego en la línea (sale del presupuesto).
+  membegoAmount  Decimal @default(0) @db.Decimal(14, 2)
+
+  status    SupplyV2BenefitReservationStatus @default(ACTIVE)
+  expiresAt DateTime
+  appliedAt  DateTime?
+  releasedAt DateTime?
+  reversedAt DateTime?
+  reversedReason String?
+
+  createdAt DateTime @default(now())
+
+  movements SupplyV2BenefitMovement[]
+
+  @@index([benefitId, status])
+  @@index([customerId, benefitId, status])
+  @@index([orderId])
+  @@map("supply_v2_benefit_reservations")
+}
+
+/// LEDGER del beneficio (§12): cada movimiento con su importe firmado sobre
+/// el presupuesto de Membego y el descuento del proveedor. Separado del ledger
+/// físico de lotes. Σ(RESERVED − RELEASED − EXPIRED − APPLIED_reserva) = reservado;
+/// Σ(APPLIED − REVERSED) = consumido.
+model SupplyV2BenefitMovement {
+  id                String                      @id @default(cuid())
+  benefitId         String
+  benefit           SupplyV2Benefit             @relation(fields: [benefitId], references: [id], onDelete: Restrict)
+  customerBenefitId String?
+  customerBenefit   SupplyV2CustomerBenefit?    @relation(fields: [customerBenefitId], references: [id], onDelete: Restrict)
+  reservationId     String?
+  reservation       SupplyV2BenefitReservation? @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+
+  type SupplyV2BenefitMovementType
+  /// Efecto sobre el presupuesto RESERVADO de Membego (+ reserva, − libera/aplica).
+  reservedDelta Decimal @default(0) @db.Decimal(14, 2)
+  /// Efecto sobre el presupuesto CONSUMIDO de Membego (+ aplica, − reversa).
+  consumedDelta Decimal @default(0) @db.Decimal(14, 2)
+  /// Descuento del proveedor implicado (informativo; no es presupuesto de Membego).
+  supplierAmount Decimal @default(0) @db.Decimal(14, 2)
+  reservedAfter  Decimal @default(0) @db.Decimal(14, 2)
+  consumedAfter  Decimal @default(0) @db.Decimal(14, 2)
+
+  reason  String?
+  actorId String?
+  actor   User?   @relation("SupplyV2BenefitMovementActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([benefitId, createdAt])
+  @@index([reservationId])
+  @@map("supply_v2_benefit_movements")
 }

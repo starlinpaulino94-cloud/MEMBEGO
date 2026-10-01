@@ -280,7 +280,12 @@ export async function listarComprasClientes(filtro: 'PENDIENTES' | 'TODAS' = 'TO
         sourceType: true,
         commissionAmount: true,
         supplierNet: true,
-        lines: { select: { titleSnapshot: true, quantity: true, offer: { select: { id: true, code: true, sourceType: true } } } },
+        // Slice 6 (§24): la financiación congelada; el total es lo que paga el cliente.
+        contractualValue: true,
+        supplierDiscountTotal: true,
+        membegoSubsidyTotal: true,
+        commissionBase: true,
+        lines: { select: { titleSnapshot: true, quantity: true, benefit: { select: { code: true, name: true, funding: true } }, offer: { select: { id: true, code: true, sourceType: true } } } },
       },
     })
   )

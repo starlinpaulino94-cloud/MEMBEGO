@@ -97,6 +97,7 @@ export async function crearAcuerdoEnTx(tx: Tx, d: DatosAcuerdo, ctx: ContextoAud
       payableRecognition: d.type === 'COMMISSION' ? 'ON_REDEMPTION' : d.payableRecognition ?? 'ON_INVOICE',
       allowDepositApplication: d.allowDepositApplication ?? true,
       settlementFrequency: d.settlementFrequency?.trim() || null,
+      commissionBase: d.commissionBase ?? 'CONTRACTUAL_SALE_VALUE',
       startsAt: d.startsAt,
       endsAt: d.endsAt ?? null,
       notes: d.notes?.trim() || null,

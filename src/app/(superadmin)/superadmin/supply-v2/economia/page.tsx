@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Coins, Receipt, TrendingUp, Wallet } from 'lucide-react'
+import { BadgePercent, Coins, Receipt, TrendingUp, Wallet } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatCard } from '@/components/ui/stat-card'
@@ -39,6 +39,9 @@ function fechaDe(v: string | undefined, finDeDia = false): Date | null {
  *   GMV = valor vendido al cliente · Revenue = ingreso reconocido por Membego
  *   Cost = costo real del supply vendido · Gross Margin = Revenue − Cost
  *   Breakage = derechos emitidos que vencieron sin redención
+ *   Slice 6 (§28): el descuento del proveedor, el subsidio de Membego, lo
+ *   cobrado al cliente y la contribución tras el subsidio son cifras APARTE.
+ *   Nada se compensa en silencio: una promoción que quema margen se ve.
  */
 export default async function EconomiaPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireRole('SUPERADMIN')
@@ -103,6 +106,19 @@ export default async function EconomiaPage({ searchParams }: { searchParams: Pro
             <StatCard label="Unidades vencidas (breakage)" value={<span data-testid="eco-vencidas">{e.unitsExpired.toLocaleString('es-DO')}</span>} sub={e.breakageRate != null ? `${e.breakageRate.toLocaleString('es-DO')} % de lo vendido` : '—'} accent={e.unitsExpired > 0 ? 'warning' : undefined} />
             <StatCard label="Supply vencido sin vender" value={<span data-testid="eco-supply-vencido">{dineroSupplyV2(e.expiredSupplyCost)}</span>} sub={`${e.expiredSupplyUnits.toLocaleString('es-DO')} unidades · costo histórico`} accent={e.expiredSupplyUnits > 0 ? 'danger' : undefined} />
           </div>
+          {/* Slice 6 (§28): la promoción se ve aparte. Un GMV alto con contribución
+              negativa es una campaña que está comprando ventas, y hay que verlo. */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="eco-financiacion">
+            <StatCard label="Descuento de proveedores" value={<span data-testid="eco-descuento-proveedor">{dineroSupplyV2(e.supplierDiscount)}</span>} sub="lo rebajaron ellos; no es dinero de Membego" />
+            <StatCard label="Subsidio de Membego" value={<span data-testid="eco-subsidio">{dineroSupplyV2(e.membegoSubsidy)}</span>} sub="costo promocional del periodo" accent={Number(e.membegoSubsidy) > 0 ? 'warning' : undefined} icon={BadgePercent} />
+            <StatCard label="Cobrado a clientes" value={<span data-testid="eco-cobrado">{dineroSupplyV2(e.customerCollections)}</span>} sub="lo que entró de verdad" />
+            <StatCard
+              label="Contribución tras el subsidio"
+              value={<span data-testid="eco-contribucion">{dineroSupplyV2(e.contributionAfterSubsidy)}</span>}
+              sub="margen bruto − subsidio"
+              accent={Number(e.contributionAfterSubsidy) < 0 ? 'danger' : 'success'}
+            />
+          </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <Card data-testid="eco-prepago">
               <CardHeader><CardTitle>Supply adquirido (prepago / pagar después)</CardTitle></CardHeader>
@@ -123,6 +139,7 @@ export default async function EconomiaPage({ searchParams }: { searchParams: Pro
                   <div><dt className="text-muted-foreground">Ingreso de Membego (comisión)</dt><dd className="font-medium tabular-nums" data-testid="eco-comision-revenue">{dineroSupplyV2(e.commission.revenue)}</dd></div>
                   <div><dt className="text-muted-foreground">Neto de proveedores (no es ingreso ni costo)</dt><dd className="font-medium tabular-nums" data-testid="eco-comision-neto">{dineroSupplyV2(e.commission.supplierNet)}</dd></div>
                   <div><dt className="text-muted-foreground">Unidades vendidas</dt><dd className="font-medium tabular-nums" data-testid="eco-comision-unidades">{e.commission.unitsSold.toLocaleString('es-DO')}</dd></div>
+                  <div><dt className="text-muted-foreground">Obligaciones con proveedores</dt><dd className="font-medium tabular-nums" data-testid="eco-obligaciones">{dineroSupplyV2(e.supplierObligations)}</dd></div>
                 </dl>
               </CardContent>
             </Card>
@@ -140,6 +157,10 @@ export default async function EconomiaPage({ searchParams }: { searchParams: Pro
             <div><dt className="font-medium">Margen bruto</dt><dd className="text-muted-foreground">Ingreso − costo. Se reconoce al vender; redimir, reversar o vencer no lo cambian.</dd></div>
             <div><dt className="font-medium">Breakage</dt><dd className="text-muted-foreground">Derechos vendidos que vencieron sin redimirse. El ingreso se conserva y el costo no se duplica.</dd></div>
             <div><dt className="font-medium">Supply vencido sin vender</dt><dd className="text-muted-foreground">Unidades compradas que caducaron sin venderse: pérdida a costo histórico real.</dd></div>
+            <div><dt className="font-medium">Descuento del proveedor</dt><dd className="text-muted-foreground">Lo que el proveedor rebaja de su propio precio. Baja el GMV contractual y la base de la comisión; no sale de ningún presupuesto de Membego.</dd></div>
+            <div><dt className="font-medium">Subsidio de Membego</dt><dd className="text-muted-foreground">Lo que Membego financia con un bono: costo promocional. El proveedor cobra su importe contractual completo igual.</dd></div>
+            <div><dt className="font-medium">Contribución tras el subsidio</dt><dd className="text-muted-foreground">Margen bruto − subsidio. Puede ser negativa: una venta de 1 000 con bono de 500 y comisión de 80 deja −420. Se enseña tal cual.</dd></div>
+            <div><dt className="font-medium">Cobrado a clientes</dt><dd className="text-muted-foreground">Dinero que de verdad entró. Con cobertura total es cero y no hay pago bancario que buscar.</dd></div>
           </dl>
         </CardContent>
       </Card>

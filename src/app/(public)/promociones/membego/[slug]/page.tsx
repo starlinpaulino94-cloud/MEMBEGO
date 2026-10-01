@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { BadgeCheck, CalendarClock, Sparkles, Users } from 'lucide-react'
 import { getUser } from '@/lib/auth'
 import { ofertaPublicaPorSlug } from '@/modules/supply-v2/marketplace/read-model'
+import { beneficiosParaOferta } from '@/modules/supply-v2/benefits/queries'
 import { BotonComprar } from '@/components/supply-v2/boton-comprar'
 
 export const dynamic = 'force-dynamic'
@@ -22,11 +23,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
  * producto, proveedor, precio regular, precio Membego, ahorro, vigencia y
  * máximo por persona. Nada de lotes, ledger ni costos.
  */
-export default async function OfertaMembegoPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function OfertaMembegoPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ beneficio?: string }> }) {
   const { slug } = await params
-  const [o, user] = await Promise.all([ofertaPublicaPorSlug(slug), getUser()])
+  const [o, user, q] = await Promise.all([ofertaPublicaPorSlug(slug), getUser(), searchParams])
   if (!o) notFound()
   const sesion = !user ? 'ninguna' : user.metadata.role === 'CLIENTE' ? 'cliente' : 'otro'
+  // Slice 6 (§17): los beneficios son del cliente de la sesión y se calculan en el servidor.
+  const beneficios = sesion === 'cliente' && user?.metadata.dbUserId ? await beneficiosParaOferta(user.metadata.dbUserId, o.id, 1) : []
   // Slice 5: una oferta a comisión sin tope no limita por unidades, solo por persona.
   const maximo = o.unlimited ? o.perCustomerLimit : Math.max(1, Math.min(o.perCustomerLimit, o.remaining))
 
@@ -56,7 +59,17 @@ export default async function OfertaMembegoPage({ params }: { params: Promise<{ 
             <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Precio Membego</dt><dd className="text-h2 tabular-nums" data-testid="oferta-precio-membego">{dinero(o.salePrice, o.currency)}</dd></div>
             <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Ahorras</dt><dd className="font-semibold text-success tabular-nums" data-testid="oferta-ahorro">{dinero(o.savings, o.currency)}</dd></div>
           </dl>
-          <BotonComprar offerId={o.id} href={o.href} sesion={sesion} maximo={maximo} disponible={o.available} />
+          <BotonComprar
+            offerId={o.id}
+            href={o.href}
+            sesion={sesion}
+            maximo={maximo}
+            disponible={o.available}
+            moneda={o.currency}
+            precio={o.salePrice}
+            beneficios={beneficios}
+            beneficioPreseleccionado={q.beneficio}
+          />
         </div>
       </div>
     </main>

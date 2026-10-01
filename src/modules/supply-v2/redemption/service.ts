@@ -337,7 +337,7 @@ export async function confirmarEntregaEnTx(
     fallo(veto, MENSAJES_RECHAZO[veto])
   }
   const e = s.voucher.entitlement
-  const derecho = await tx.supplyV2Entitlement.findUniqueOrThrow({ where: { id: e.id }, select: { actualUnitCost: true, customerUnitPrice: true, currency: true, status: true, sourceType: true, commissionPercentage: true, commissionAmount: true, supplierNet: true } })
+  const derecho = await tx.supplyV2Entitlement.findUniqueOrThrow({ where: { id: e.id }, select: { actualUnitCost: true, customerUnitPrice: true, currency: true, status: true, sourceType: true, commissionPercentage: true, commissionAmount: true, supplierNet: true, contractualUnitValue: true, supplierDiscountAmount: true, membegoSubsidyAmount: true } })
   exigirTransicion(TRANSICIONES_DERECHO, derecho.status, 'REDEEMED', 'Beneficio')
   exigirTransicion(TRANSICIONES_VOUCHER, s.voucher.status, 'REDEEMED', 'Voucher')
 
@@ -380,6 +380,10 @@ export async function confirmarEntregaEnTx(
       commissionPercentageSnapshot: derecho.sourceType === 'COMMISSION' ? derecho.commissionPercentage : null,
       commissionAmountSnapshot: derecho.sourceType === 'COMMISSION' ? derecho.commissionAmount : null,
       supplierNetSnapshot: derecho.sourceType === 'COMMISSION' ? derecho.supplierNet : null,
+      // Slice 6 (§23, §32): la financiación de la unidad entregada, congelada.
+      contractualValueSnapshot: derecho.contractualUnitValue,
+      supplierDiscountSnapshot: derecho.supplierDiscountAmount,
+      membegoSubsidySnapshot: derecho.membegoSubsidyAmount,
       currency: derecho.currency,
       channel: d.channel ?? 'QR_SCAN',
       deviceInfo: dispositivo(d.deviceInfo),

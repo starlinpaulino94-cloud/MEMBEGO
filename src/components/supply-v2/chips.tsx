@@ -1,4 +1,4 @@
-import type { SupplyV2AgreementStatus, SupplyV2CustomerOrderStatus, SupplyV2EntitlementStatus, SupplyV2LotStatus, SupplyV2OfferStatus, SupplyV2PurchaseOrderStatus, SupplyV2SupplierStatus } from '@prisma/client'
+import type { SupplyV2AgreementStatus, SupplyV2BenefitFunding, SupplyV2BenefitReservationStatus, SupplyV2BenefitStatus, SupplyV2CustomerBenefitStatus, SupplyV2CustomerOrderStatus, SupplyV2EntitlementStatus, SupplyV2LotStatus, SupplyV2OfferStatus, SupplyV2PurchaseOrderStatus, SupplyV2SupplierStatus } from '@prisma/client'
 import { StatusChip } from '@/components/ui/status-chip'
 import {
   AGREEMENT_STATUS_LABELS,
@@ -12,6 +12,11 @@ import {
   PO_STATUS_LABELS,
   PO_STATUS_TONE,
   SUPPLIER_STATUS_LABELS,
+  BENEFIT_FUNDING_LABELS,
+  BENEFIT_RESERVATION_STATUS_LABELS,
+  BENEFIT_STATUS_LABELS,
+  BENEFIT_STATUS_TONE,
+  CUSTOMER_BENEFIT_STATUS_LABELS,
 } from '@/modules/supply-v2/core/catalogo'
 
 export function ChipOrden({ estado }: { estado: SupplyV2PurchaseOrderStatus }) {
@@ -66,6 +71,44 @@ export function ChipRedencion({ reversada }: { reversada: boolean }) {
   return (
     <StatusChip tone={reversada ? 'warning' : 'success'} data-testid="estado-redencion">
       {reversada ? 'Reversada' : 'Entregada'}
+    </StatusChip>
+  )
+}
+
+// ── Slice 6 · beneficios económicos (§29, §31, §32) ─────────────────────────
+
+export function ChipBeneficio({ estado }: { estado: SupplyV2BenefitStatus }) {
+  return (
+    <StatusChip tone={BENEFIT_STATUS_TONE[estado]} pulso={estado === 'ACTIVE'} data-testid="estado-beneficio">
+      {BENEFIT_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+/** Quién financia: se dice siempre, para que nadie confunda un bono con un descuento del proveedor (§4). */
+export function ChipFinanciacion({ funding }: { funding: SupplyV2BenefitFunding }) {
+  const tone = funding === 'MEMBEGO' ? 'info' : funding === 'SUPPLIER' ? 'neutral' : 'warning'
+  return (
+    <StatusChip tone={tone} data-testid="chip-financiacion">
+      {BENEFIT_FUNDING_LABELS[funding]}
+    </StatusChip>
+  )
+}
+
+export function ChipAsignacion({ estado }: { estado: SupplyV2CustomerBenefitStatus }) {
+  const tone = estado === 'AVAILABLE' ? 'success' : estado === 'EXHAUSTED' ? 'info' : estado === 'CANCELLED' ? 'danger' : 'neutral'
+  return (
+    <StatusChip tone={tone} data-testid="estado-asignacion">
+      {CUSTOMER_BENEFIT_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+export function ChipReservaBeneficio({ estado }: { estado: SupplyV2BenefitReservationStatus }) {
+  const tone = estado === 'APPLIED' ? 'success' : estado === 'ACTIVE' ? 'warning' : estado === 'REVERSED' ? 'danger' : 'neutral'
+  return (
+    <StatusChip tone={tone} data-testid="estado-reserva-beneficio">
+      {BENEFIT_RESERVATION_STATUS_LABELS[estado]}
     </StatusChip>
   )
 }

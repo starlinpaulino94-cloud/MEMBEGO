@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { SupplyV2EntitlementStatus } from '@prisma/client'
+import type { Prisma, SupplyV2EntitlementStatus } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import type { PaymentAccountRef } from '../contracts/gateways'
 
@@ -15,7 +15,7 @@ export interface CompraCliente {
   id: string
   number: string
   status: 'PENDING' | 'AWAITING_PAYMENT' | 'PAID' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED'
-  paymentStatus: 'UNPAID' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED'
+  paymentStatus: 'UNPAID' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED' | 'COVERED_BY_BENEFIT'
   paymentMethod: string | null
   paymentReference: string | null
   paymentRejectedReason: string | null
@@ -23,40 +23,29 @@ export interface CompraCliente {
   currency: string
   subtotal: string
   discount: string
+  /** Lo que paga el cliente (§15). */
   total: string
+  /** Slice 6: valor contractual, descuento del proveedor y bono de Membego, congelados. */
+  contractualValue: string
+  supplierDiscountTotal: string
+  membegoSubsidyTotal: string
+  beneficio: { id: string; code: string; name: string; funding: string } | null
   expiresAt: Date
   createdAt: Date
   paidAt: Date | null
-  lineas: { titulo: string; producto: string; proveedor: string; offerSlug: string; quantity: number; publicUnitPrice: string; saleUnitPrice: string; total: string }[]
+  lineas: { titulo: string; producto: string; proveedor: string; offerSlug: string; quantity: number; publicUnitPrice: string; saleUnitPrice: string; total: string; contractualValue: string; supplierDiscountAmount: string; membegoSubsidyAmount: string }[]
   derechos: { id: string; producto: string; proveedor: string; precio: string; status: string; expiresAt: Date | null; issuedAt: Date }[]
 }
 
 const INCLUDE = {
-  lines: { include: { offer: { select: { slug: true, catalogItem: { select: { name: true } }, supplier: { select: { commercialName: true } } } } } },
+  lines: { include: { offer: { select: { slug: true, catalogItem: { select: { name: true } }, supplier: { select: { commercialName: true } } } }, benefit: { select: { id: true, code: true, name: true, funding: true } } } },
   entitlements: { include: { catalogItem: { select: { name: true } }, supplier: { select: { commercialName: true } } }, orderBy: { issuedAt: 'asc' as const } },
-} as const
+} satisfies Prisma.SupplyV2CustomerOrderInclude
 
-type Fila = {
-  id: string
-  number: string
-  status: CompraCliente['status']
-  paymentStatus: CompraCliente['paymentStatus']
-  paymentMethod: string | null
-  paymentReference: string | null
-  paymentRejectedReason: string | null
-  paymentAccountSnapshot: unknown
-  currency: string
-  subtotal: { toFixed(n: number): string }
-  discount: { toFixed(n: number): string }
-  total: { toFixed(n: number): string }
-  expiresAt: Date
-  createdAt: Date
-  paidAt: Date | null
-  lines: { quantity: number; titleSnapshot: string; publicUnitPrice: { toFixed(n: number): string }; saleUnitPrice: { toFixed(n: number): string }; total: { toFixed(n: number): string }; offer: { slug: string; catalogItem: { name: string }; supplier: { commercialName: string } } }[]
-  entitlements: { id: string; status: string; expiresAt: Date | null; issuedAt: Date; customerUnitPrice: { toFixed(n: number): string }; catalogItem: { name: string }; supplier: { commercialName: string } }[]
-}
+type Fila = Prisma.SupplyV2CustomerOrderGetPayload<{ include: typeof INCLUDE }>
 
 function aDto(o: Fila): CompraCliente {
+  const beneficio = o.lines.find((l) => l.benefit)?.benefit ?? null
   return {
     id: o.id,
     number: o.number,
@@ -70,6 +59,10 @@ function aDto(o: Fila): CompraCliente {
     subtotal: o.subtotal.toFixed(2),
     discount: o.discount.toFixed(2),
     total: o.total.toFixed(2),
+    contractualValue: o.contractualValue.toFixed(2),
+    supplierDiscountTotal: o.supplierDiscountTotal.toFixed(2),
+    membegoSubsidyTotal: o.membegoSubsidyTotal.toFixed(2),
+    beneficio: beneficio ? { id: beneficio.id, code: beneficio.code, name: beneficio.name, funding: beneficio.funding } : null,
     expiresAt: o.expiresAt,
     createdAt: o.createdAt,
     paidAt: o.paidAt,
@@ -82,6 +75,9 @@ function aDto(o: Fila): CompraCliente {
       publicUnitPrice: l.publicUnitPrice.toFixed(2),
       saleUnitPrice: l.saleUnitPrice.toFixed(2),
       total: l.total.toFixed(2),
+      contractualValue: l.contractualValue.toFixed(2),
+      supplierDiscountAmount: l.supplierDiscountAmount.toFixed(2),
+      membegoSubsidyAmount: l.membegoSubsidyAmount.toFixed(2),
     })),
     derechos: o.entitlements.map((e) => ({
       id: e.id,

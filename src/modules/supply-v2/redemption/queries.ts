@@ -319,8 +319,14 @@ export interface VentaProveedor {
   cliente: string
   ofertaCodigo: string
   vendidoEl: Date
-  /** Lo que pagó el cliente a Membego (bruto). */
+  /** Lo que pagó el cliente a Membego (tras el beneficio, si hubo). */
   bruto: string
+  /** Slice 6 (§32): el valor contractual de la venta, que es la base del neto del proveedor. */
+  valorContractual: string
+  /** Lo que el PROVEEDOR descontó de su precio (suyo, no de Membego). */
+  descuentoProveedor: string
+  /** Lo que financió MEMBEGO: informativo, nunca se le descuenta al proveedor. */
+  bonoMembego: string
   /** Lo que recibirá el proveedor al entregar. */
   neto: string
   status: 'ACTIVE' | 'REDEEMED' | 'EXPIRED' | 'CANCELLED'
@@ -342,6 +348,9 @@ export async function ventasDelProveedor(supplierId: string, filtro: 'TODAS' | '
         status: true,
         issuedAt: true,
         customerUnitPrice: true,
+        contractualUnitValue: true,
+        supplierDiscountAmount: true,
+        membegoSubsidyAmount: true,
         supplierNet: true,
         catalogItem: { select: { name: true } },
         customer: { select: { name: true, email: true } },
@@ -361,6 +370,9 @@ export async function ventasDelProveedor(supplierId: string, filtro: 'TODAS' | '
       ofertaCodigo: e.offer.code,
       vendidoEl: e.issuedAt,
       bruto: e.customerUnitPrice.toFixed(2),
+      valorContractual: e.contractualUnitValue.toFixed(2),
+      descuentoProveedor: e.supplierDiscountAmount.toFixed(2),
+      bonoMembego: e.membegoSubsidyAmount.toFixed(2),
       neto: (e.supplierNet ?? new Prisma.Decimal(0)).toFixed(2),
       status: e.status,
       entregadaEl: r?.redeemedAt ?? null,
@@ -419,7 +431,13 @@ export async function liquidacionDelProveedor(supplierId: string, id: string) {
     pendiente: s.supplierNet.minus(s.paidAmount).toFixed(2),
     approvedAt: s.approvedAt,
     paidAt: s.paidAt,
-    lineas: s.lines.map((l) => ({ id: l.id, descripcion: l.descriptionSnapshot, gross: l.grossAmount.toFixed(2), commission: l.commissionAmount.toFixed(2), net: l.supplierNet.toFixed(2) })),
+    // Slice 6 (§26, §32): su descuento y el valor contractual son suyos; el bono de
+    // Membego se informa aparte y nunca se le descuenta del neto.
+    contractualValue: s.contractualValue.toFixed(2),
+    supplierDiscountTotal: s.supplierDiscountTotal.toFixed(2),
+    membegoSubsidyTotal: s.membegoSubsidyTotal.toFixed(2),
+    customerPaidTotal: s.customerPaidTotal.toFixed(2),
+    lineas: s.lines.map((l) => ({ id: l.id, descripcion: l.descriptionSnapshot, gross: l.grossAmount.toFixed(2), commission: l.commissionAmount.toFixed(2), net: l.supplierNet.toFixed(2), contractual: l.contractualAmount.toFixed(2), descuentoProveedor: l.supplierDiscountAmount.toFixed(2), bonoMembego: l.membegoSubsidyAmount.toFixed(2) })),
     pagos: s.intendedPayments.map((p) => ({ id: p.id, number: p.number, amount: p.appliedAmount.toFixed(2), paidAt: p.paidAt, reference: p.reference, method: p.method })),
   }
 }
