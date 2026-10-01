@@ -2022,6 +2022,8 @@ model SupplyV2Settlement {
   supplierDiscountTotal Decimal @default(0) @db.Decimal(14, 2)
   membegoSubsidyTotal   Decimal @default(0) @db.Decimal(14, 2)
   customerPaidTotal     Decimal @default(0) @db.Decimal(14, 2)
+  /// Suma de los anticipos ya aplicados a las obligaciones que entran aquí.
+  alreadyPaidTotal      Decimal @default(0) @db.Decimal(14, 2)
 
   status SupplyV2SettlementStatus @default(PENDING_APPROVAL)
 
@@ -2071,6 +2073,10 @@ model SupplyV2SettlementLine {
   supplierDiscountAmount Decimal @default(0) @db.Decimal(14, 2)
   membegoSubsidyAmount   Decimal @default(0) @db.Decimal(14, 2)
   customerPaidAmount     Decimal @default(0) @db.Decimal(14, 2)
+  /// Lo que YA se le había adelantado a esta obligación antes de liquidarla.
+  /// Explica por qué el neto de la línea es el saldo y no el neto completo:
+  /// neto = bruto − descuento del proveedor − comisión − ya pagado.
+  alreadyPaidAmount      Decimal @default(0) @db.Decimal(14, 2)
 
   createdAt DateTime @default(now())
 

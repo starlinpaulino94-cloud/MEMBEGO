@@ -67,17 +67,26 @@ export async function recalcularObligacionEnTx(tx: Tx, obligationId: string, ctx
 }
 
 /**
- * Slice 5: `paidAmount` y estado de una liquidación = suma de lo pagado en sus
+ * Slice 5: `paidAmount` y estado de una liquidación = lo pagado en sus
  * obligaciones vivas (las aplicaciones siguen siendo la verdad). Solo se
  * deriva estando aprobada; PENDING_APPROVAL y CANCELLED no cambian aquí.
+ *
+ * CORRECCIÓN previa al Slice 7: se descuenta lo que YA se había adelantado a
+ * esas obligaciones ANTES de generar la liquidación (`alreadyPaidTotal`). El
+ * neto de la liquidación es el SALDO de sus obligaciones, así que lo pagado
+ * tiene que medirse desde la misma línea de salida. Sumando todo, una
+ * liquidación de 500 sobre una obligación con 400 adelantados nacía con 400
+ * pagados y 100 pendientes: al proveedor se le quedaban debiendo 400.
  */
 export async function recalcularLiquidacionEnTx(tx: Tx, settlementId: string, ctx: ContextoAuditoria): Promise<{ status: string; paidAmount: Decimal }> {
   await tx.$queryRaw`SELECT "id" FROM "supply_v2_settlements" WHERE "id" = ${settlementId} FOR UPDATE`
   const s = await tx.supplyV2Settlement.findUniqueOrThrow({
     where: { id: settlementId },
-    select: { id: true, number: true, status: true, supplierNet: true, paidAmount: true, obligations: { select: { paidAmount: true, status: true } }, supplier: { select: { companyId: true } } },
+    select: { id: true, number: true, status: true, supplierNet: true, paidAmount: true, alreadyPaidTotal: true, obligations: { select: { paidAmount: true, status: true } }, supplier: { select: { companyId: true } } },
   })
-  const paidAmount = s.obligations.filter((o) => o.status !== 'CANCELLED').reduce((t, o) => t.plus(o.paidAmount), CERO)
+  const pagadoEnObligaciones = s.obligations.filter((o) => o.status !== 'CANCELLED').reduce((t, o) => t.plus(o.paidAmount), CERO)
+  const contraEstaLiquidacion = pagadoEnObligaciones.minus(s.alreadyPaidTotal)
+  const paidAmount = contraEstaLiquidacion.isNegative() ? CERO : contraEstaLiquidacion
   let status = s.status
   if (['APPROVED', 'PARTIALLY_PAID', 'PAID'].includes(s.status)) status = estadoLiquidacionSegunPago(s.supplierNet, paidAmount)
   await tx.supplyV2Settlement.update({ where: { id: s.id }, data: { paidAmount, status, ...(status === 'PAID' && s.status !== 'PAID' ? { paidAt: new Date() } : {}), ...(status !== 'PAID' && s.status === 'PAID' ? { paidAt: null } : {}) } })
@@ -89,9 +98,39 @@ export async function recalcularLiquidacionEnTx(tx: Tx, settlementId: string, ct
 
 /** Slice 5: vuelve a sumar las líneas de una liquidación (cuando una obligación sale de ella antes de pagarse). */
 export async function recalcularTotalesDeLiquidacionEnTx(tx: Tx, settlementId: string): Promise<void> {
-  const lineas = await tx.supplyV2SettlementLine.findMany({ where: { settlementId }, select: { grossAmount: true, commissionAmount: true, supplierNet: true } })
-  const t = lineas.reduce((acc, l) => ({ g: acc.g.plus(l.grossAmount), c: acc.c.plus(l.commissionAmount), n: acc.n.plus(l.supplierNet) }), { g: CERO, c: CERO, n: CERO })
-  await tx.supplyV2Settlement.update({ where: { id: settlementId }, data: { grossSales: t.g, commissionAmount: t.c, supplierNet: t.n } })
+  const lineas = await tx.supplyV2SettlementLine.findMany({
+    where: { settlementId },
+    select: { grossAmount: true, commissionAmount: true, supplierNet: true, contractualAmount: true, supplierDiscountAmount: true, membegoSubsidyAmount: true, customerPaidAmount: true, alreadyPaidAmount: true },
+  })
+  // Se vuelven a sumar TODAS las columnas, no solo tres: si se dejara alguna
+  // sin recalcular, la cabecera dejaría de cuadrar con sus líneas y el CHECK
+  // de la base rechazaría el cambio (o, peor, lo dejaría pasar descuadrado).
+  const t = lineas.reduce(
+    (acc, l) => ({
+      g: acc.g.plus(l.grossAmount),
+      c: acc.c.plus(l.commissionAmount),
+      n: acc.n.plus(l.supplierNet),
+      contractual: acc.contractual.plus(l.contractualAmount),
+      descuento: acc.descuento.plus(l.supplierDiscountAmount),
+      subsidio: acc.subsidio.plus(l.membegoSubsidyAmount),
+      cobrado: acc.cobrado.plus(l.customerPaidAmount),
+      adelantado: acc.adelantado.plus(l.alreadyPaidAmount),
+    }),
+    { g: CERO, c: CERO, n: CERO, contractual: CERO, descuento: CERO, subsidio: CERO, cobrado: CERO, adelantado: CERO }
+  )
+  await tx.supplyV2Settlement.update({
+    where: { id: settlementId },
+    data: {
+      grossSales: t.g,
+      commissionAmount: t.c,
+      supplierNet: t.n,
+      contractualValue: t.contractual,
+      supplierDiscountTotal: t.descuento,
+      membegoSubsidyTotal: t.subsidio,
+      customerPaidTotal: t.cobrado,
+      alreadyPaidTotal: t.adelantado,
+    },
+  })
 }
 
 export async function recalcularFacturaEnTx(tx: Tx, invoiceId: string): Promise<{ status: string; amountDue: Decimal }> {

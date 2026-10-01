@@ -77,6 +77,7 @@ export async function obligacionesLiquidablesEnTx(tx: Tx, supplierId: string, pe
       settlementId: true,
       currency: true,
       grossAmount: true,
+      paidAmount: true,
       outstandingAmount: true,
       recognizedAt: true,
       redemption: { select: { id: true, number: true, redeemedAt: true, customerUnitPriceSnapshot: true, commissionAmountSnapshot: true, supplierNetSnapshot: true, commissionPercentageSnapshot: true, contractualValueSnapshot: true, supplierDiscountSnapshot: true, membegoSubsidySnapshot: true, catalogItem: { select: { name: true } }, customer: { select: { name: true, email: true } } } },
@@ -124,16 +125,20 @@ export async function generarLiquidacionEnTx(tx: Tx, d: DatosLiquidacion, ctx: C
       descriptionSnapshot: `Entrega ${r.number} · ${r.catalogItem.name} · ${r.customer.name?.trim() || r.customer.email} · ${r.redeemedAt.toISOString().slice(0, 10)} · comisión ${r.commissionPercentageSnapshot?.toFixed(2) ?? '?'} %${subsidy.greaterThan(0) ? ` · bono Membego ${subsidy.toFixed(2)}` : ''}${discount.greaterThan(0) ? ` · descuento proveedor ${discount.toFixed(2)}` : ''}`,
       grossAmount: contractual.plus(discount),
       commissionAmount: commission,
-      // El neto liquidable es lo que la obligación todavía debe (una obligación parcialmente pagada entra por su saldo).
+      // El neto liquidable es lo que la obligación todavía debe (una obligación
+      // parcialmente pagada entra por su saldo), y `alreadyPaidAmount` explica la
+      // diferencia para que la identidad de la línea cierre exacta:
+      //   neto = bruto − descuento − comisión − ya pagado.
       supplierNet: o.outstandingAmount,
       contractualAmount: contractual,
       supplierDiscountAmount: discount,
       membegoSubsidyAmount: subsidy,
       customerPaidAmount: r.customerUnitPriceSnapshot,
+      alreadyPaidAmount: o.paidAmount,
     }
   })
   const totales = totalesDeLiquidacion(lineas)
-  const suma = (k: 'contractualAmount' | 'supplierDiscountAmount' | 'membegoSubsidyAmount' | 'customerPaidAmount') => lineas.reduce((t, l) => t.plus(l[k]), CERO)
+  const suma = (k: 'contractualAmount' | 'supplierDiscountAmount' | 'membegoSubsidyAmount' | 'customerPaidAmount' | 'alreadyPaidAmount') => lineas.reduce((t, l) => t.plus(l[k]), CERO)
   const number = await numeroLiquidacion(tx, periodEnd)
   const s = await tx.supplyV2Settlement.create({
     data: {
@@ -151,6 +156,7 @@ export async function generarLiquidacionEnTx(tx: Tx, d: DatosLiquidacion, ctx: C
       supplierDiscountTotal: suma('supplierDiscountAmount'),
       membegoSubsidyTotal: suma('membegoSubsidyAmount'),
       customerPaidTotal: suma('customerPaidAmount'),
+      alreadyPaidTotal: suma('alreadyPaidAmount'),
       status: 'PENDING_APPROVAL',
       notes: d.notes?.trim() || null,
       createdById: ctx.actorId,
