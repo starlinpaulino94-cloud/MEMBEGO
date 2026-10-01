@@ -59,6 +59,16 @@ import {
   estadisticasDeReferidosEnTx,
   registrarAperturaEnTx,
 } from '../../src/modules/supply-v2/loyalty/referrals'
+import {
+  membresiasEnElMarketplace,
+  misInvitaciones,
+  misMembresias,
+  misPuntos,
+  recompensasParaElCliente,
+  tableroDeFidelizacion,
+  fichaDePrograma,
+  fidelizacionDelProveedor,
+} from '../../src/modules/supply-v2/loyalty/queries'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 8 contra PostgreSQL de verdad (§45).
@@ -182,8 +192,12 @@ async function programaActivo(d: {
       },
       como(ctx.compras)
     )
-    // Hace falta algo que ofrecer para poder enviarlo a revisión.
-    await crearPlanEnTx(tx, p.id, { name: `Base ${sufijo}`, kind: 'FREE', price: 0, durationDays: 30 }, como(ctx.compras))
+    // Hace falta algo que ofrecer para poder enviarlo a revisión. Un programa
+    // de Membego no lleva planes —una membresía es siempre de un negocio—,
+    // pero sí su regla de puntos, que ya es algo que ofrecer.
+    if (d.supplierId) {
+      await crearPlanEnTx(tx, p.id, { name: `Base ${sufijo}`, kind: 'FREE', price: 0, durationDays: 30 }, como(ctx.compras))
+    }
     await enviarProgramaARevisionEnTx(tx, p.id, como(ctx.compras))
     // Aprueba OTRA persona: la segregación de funciones manda.
     await aprobarProgramaEnTx(tx, p.id, como(ctx.finanzas))
@@ -1609,4 +1623,114 @@ test('SQL · ninguna invitación paga dos veces, y ningún autorreferido existe'
       WHERE "referralId" IS NOT NULL GROUP BY "referralId" HAVING count(*) > 1
     ) t`
   assert.equal(Number(reclamacionesDobles), 0, 'una invitación, como mucho una reclamación')
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// ECONOMÍA Y LECTURAS (§35–§41)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Recorre un objeto y devuelve todas las claves, a cualquier profundidad. */
+function clavesProfundas(v: unknown, acc: string[] = []): string[] {
+  if (Array.isArray(v)) {
+    for (const x of v) clavesProfundas(x, acc)
+  } else if (v && typeof v === 'object') {
+    for (const [k, x] of Object.entries(v)) {
+      acc.push(k)
+      clavesProfundas(x, acc)
+    }
+  }
+  return acc
+}
+
+test('EL CLIENTE NO VE presupuesto, costo ni comisión: no es que se oculte, es que no sale', async () => {
+  const { programId, rewardId } = await programaConRecompensa({ nombre: 'DTO', costoPuntos: 10 })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: 100, motivo: 'Saldo para mirar el DTO del cliente' }, como(ctx.compras)))
+  await sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId, customerId: ctx.cliente }, como(ctx.cliente)))
+
+  const vistas = [
+    await misMembresias(ctx.cliente),
+    await misPuntos(ctx.cliente),
+    await recompensasParaElCliente(ctx.cliente, programId),
+    await misInvitaciones(ctx.cliente),
+    await membresiasEnElMarketplace(),
+  ]
+  const prohibidas = /budget|presupuesto|costo|cost|comision|comisión|margen|margin|supplierNet|neto/i
+  for (const v of vistas) {
+    const claves = clavesProfundas(v)
+    const filtradas = claves.filter((k) => prohibidas.test(k))
+    assert.deepEqual(filtradas, [], `el DTO del cliente no puede llevar ${filtradas.join(', ')}`)
+  }
+  // Y sí lleva lo que el cliente necesita.
+  const puntos = await misPuntos(ctx.cliente)
+  assert.ok(puntos.some((p) => p.disponibles >= 0 && p.historial.length > 0))
+})
+
+test('§38 · la venta de una membresía deja su evento económico, y no se duplica', async () => {
+  const { planId } = await planConBeneficio({ supplierId: ctx.supplierA, nombre: 'Economia', precio: 1499 })
+  const compra = await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId, customerId: ctx.cliente3 }, como(ctx.cliente3)))
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: compra.orderId!, amountSeen: 1499, method: 'TRANSFER' }, como(ctx.finanzas)))
+
+  const ev = await prisma.supplyV2EconomicEvent.findMany({
+    where: { customerOrderId: compra.orderId!, type: 'SALE_REVENUE' },
+    select: { revenueAmount: true, costAmount: true, gmvAmount: true, units: true, metadata: true, referenceType: true },
+  })
+  assert.equal(ev.length, 1, 'un evento, uno solo')
+  assert.equal(ev[0]!.referenceType, 'CUSTOMER_ORDER')
+  assert.equal(ev[0]!.revenueAmount.toFixed(2), '1499.00')
+  assert.equal(ev[0]!.costAmount.toFixed(2), '0.00', 'una membresía no consume inventario')
+  assert.equal((ev[0]!.metadata as Record<string, unknown>).origen, 'MEMBRESIA')
+
+  // Confirmar de nuevo no crea otro.
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: compra.orderId!, amountSeen: 1499, method: 'TRANSFER' }, como(ctx.finanzas)))
+  assert.equal(await prisma.supplyV2EconomicEvent.count({ where: { customerOrderId: compra.orderId!, type: 'SALE_REVENUE' } }), 1)
+})
+
+test('§37 · el tablero separa lo gastado de lo ESTIMADO, y lo dice', async () => {
+  const tablero = await tableroDeFidelizacion()
+  assert.ok(tablero.programas.length > 0)
+  assert.match(tablero.totales.costoRealizado, /^-?RD\$/)
+  assert.match(tablero.totales.costoPotencialEstimado, /^-?RD\$/)
+  assert.match(tablero.totales.estimacionAdvertencia, /no deuda/i, 'la advertencia viaja con la cifra')
+  // Las dos cifras son DISTINTAS claves: nadie puede sumarlas por accidente
+  // creyendo que las dos son dinero debido.
+  assert.ok('costoRealizado' in tablero.totales && 'costoPotencialEstimado' in tablero.totales)
+})
+
+test('§41 · la ficha del programa enseña presupuesto, puntos y bitácora, con la estimación marcada', async () => {
+  const { programId } = await programaConRecompensa({ nombre: 'Ficha', costoPuntos: 20, presupuesto: 5000 })
+  const ficha = await fichaDePrograma(programId)
+  assert.ok(ficha)
+  // Este programa lo financia el NEGOCIO, así que no lleva techo de Membego;
+  // lo comprometido sale de los topes de sus recompensas.
+  assert.equal(ficha!.presupuesto.aprobado, null)
+  assert.equal(ficha!.presupuesto.comprometido, 'RD$5,000.00')
+  assert.equal(ficha!.puntos.esEstimacion, true, 'la estimación se identifica como tal en la propia ficha')
+  assert.match(ficha!.reglaDePuntos!, /1 punto por cada RD\$100\.00/)
+  assert.ok(ficha!.bitacora.length > 0, 'la bitácora del programa cuenta su historia')
+  assert.ok(ficha!.recompensas.length >= 1)
+})
+
+test('§40 · el proveedor ve lo suyo y SOLO lo suyo', async () => {
+  await programaActivo({ nombre: 'DelA', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  await programaActivo({ nombre: 'DelB', supplierId: ctx.supplierB, owner: 'SUPPLIER' })
+
+  const deA = await fidelizacionDelProveedor(ctx.supplierA)
+  const deB = await fidelizacionDelProveedor(ctx.supplierB)
+  assert.ok(deA.length > 0 && deB.length > 0)
+
+  const idsA = new Set(deA.map((p) => p.id))
+  const idsB = new Set(deB.map((p) => p.id))
+  for (const id of idsA) assert.ok(!idsB.has(id), 'ningún programa aparece en los dos portales')
+
+  // Y lo que ve A son programas cuyo supplierId es A, comprobado contra la base.
+  const filas = await prisma.supplyV2LoyaltyProgram.findMany({ where: { id: { in: [...idsA] } }, select: { supplierId: true } })
+  for (const f of filas) assert.equal(f.supplierId, ctx.supplierA)
+})
+
+test('un plan de membresía necesita el programa de un NEGOCIO concreto', async () => {
+  const global = await programaActivo({ nombre: 'GlobalSinPlanes', supplierId: null, owner: 'MEMBEGO' })
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => crearPlanEnTx(tx, global, { name: `Imposible ${sufijo}`, kind: 'PAID', price: 100, durationDays: 30 }, como(ctx.compras))),
+    /tiene que pertenecer al programa de un negocio/
+  )
 })

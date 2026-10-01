@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
-import { type Decimal } from '../core/dinero'
+import { decimal, type Decimal } from '../core/dinero'
 import { fallo } from '../core/errores'
 import { snapshotDeVenta } from './domain'
 
@@ -331,4 +331,78 @@ export async function proyectarVentasSinEventoEnTx(tx: Tx, ctx: ContextoAuditori
     if (!r.repetido) n++
   }
   return n
+}
+
+/**
+ * Slice 8 (§38) · VENTA DE UNA MEMBRESÍA.
+ *
+ * Una membresía no tiene derecho ni lote, así que no pasa por
+ * `reconocerVentaEnTx`: sin este evento, el dinero de una membresía no se
+ * vería en ninguna parte de la economía. Es ingreso de Membego (o del
+ * negocio, según quién la vende) y NO tiene costo de supply: no se compró
+ * ninguna unidad.
+ *
+ * Idempotente por pedido: la clave natural del evento es
+ * (tipo, CUSTOMER_ORDER, pedido), así que confirmar dos veces no lo duplica.
+ */
+export async function reconocerVentaDeMembresiaEnTx(tx: Tx, orderId: string, ctx: ContextoAuditoria): Promise<EventoCreado | null> {
+  const orden = await tx.supplyV2CustomerOrder.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      number: true,
+      kind: true,
+      status: true,
+      total: true,
+      currency: true,
+      paidAt: true,
+      membershipPlan: { select: { id: true, code: true, name: true, program: { select: { id: true, code: true, supplierId: true, supplier: { select: { companyId: true } } } } } },
+    },
+  })
+  if (!orden || orden.kind !== 'MEMBERSHIP' || orden.status !== 'PAID' || !orden.membershipPlan) return null
+  if (orden.total.lessThanOrEqualTo(0)) return null
+  // Todo evento económico cuelga de un proveedor. Un plan solo existe dentro
+  // del programa de un negocio (lo exige `crearPlanEnTx`), así que esto no
+  // debería pasar; si pasara, es mejor no inventarse un proveedor.
+  const supplierId = orden.membershipPlan.program.supplierId
+  if (!supplierId) return null
+
+  const previo = await tx.supplyV2EconomicEvent.findUnique({
+    where: { type_referenceType_referenceId: { type: 'SALE_REVENUE', referenceType: 'CUSTOMER_ORDER', referenceId: orden.id } },
+    select: { id: true },
+  })
+  if (previo) return { id: previo.id, repetido: true }
+
+  const ev = await tx.supplyV2EconomicEvent.create({
+    data: {
+      type: 'SALE_REVENUE',
+      referenceType: 'CUSTOMER_ORDER',
+      referenceId: orden.id,
+      supplierId,
+      customerOrderId: orden.id,
+      currency: orden.currency,
+      units: 1,
+      gmvAmount: orden.total,
+      revenueAmount: orden.total,
+      // Una membresía no consume inventario: no hay costo de supply que
+      // reconocer aquí. Lo que cueste entregar sus beneficios se reconoce
+      // cuando esos beneficios se usan, por su propio camino.
+      costAmount: decimal(0),
+      grossMarginAmount: orden.total,
+      contractualAmount: orden.total,
+      customerPaidAmount: orden.total,
+      occurredAt: orden.paidAt ?? new Date(),
+      metadata: {
+        origen: 'MEMBRESIA',
+        planCode: orden.membershipPlan.code,
+        planNombre: orden.membershipPlan.name,
+        programaCode: orden.membershipPlan.program.code,
+        orderNumber: orden.number,
+        costModel: 'SIN_COSTO_DE_SUPPLY',
+      } satisfies Prisma.InputJsonValue,
+    },
+    select: { id: true },
+  })
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_ECONOMIC_EVENT_CREATED', 'SupplyV2EconomicEvent', ev.id, { type: 'SALE_REVENUE', origen: 'MEMBRESIA', orderId: orden.id, revenue: orden.total.toFixed(2) }, orden.membershipPlan.program.supplier?.companyId ?? null)
+  return { id: ev.id, repetido: false }
 }

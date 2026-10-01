@@ -22,6 +22,7 @@ import { calcularRepartoLinea, fotoDeReparto, type RepartoFinanciado, type Unida
 import { politicaDeVersion } from '../finance/domain'
 import { aplicarReservaEnTx, liberarReservaEnTx, reservarBeneficioEnTx, type ReservaDeBeneficio } from '../benefits/service'
 import { activarMembresiaPorPagoEnTx, soltarMembresiaDeOrdenEnTx } from '../loyalty/memberships'
+import { reconocerVentaDeMembresiaEnTx } from '../economics/service'
 import { acumularPorCompraEnTodosEnTx } from '../loyalty/points'
 import { evaluarCompraEnTx } from '../loyalty/referrals'
 import { consolidarCuponEnTx, liberarCuponEnTx, registrarAplicacionCuponEnTx, resolverCuponEnTx, type CuponResuelto } from '../campaigns/coupons'
@@ -729,7 +730,12 @@ export async function confirmarPagoEnTx(
   // Slice 8 (§12, §16): si lo que se compró es una membresía, se activa AQUÍ,
   // con el pago ya confirmado y dentro de la misma transacción. No hay otra
   // puerta: una membresía de pago no se activa antes de cobrarla.
-  if (o.kind === 'MEMBERSHIP') await activarMembresiaPorPagoEnTx(tx, o.id, ctx)
+  if (o.kind === 'MEMBERSHIP') {
+    await activarMembresiaPorPagoEnTx(tx, o.id, ctx)
+    // §38: sin este evento el dinero de una membresía no se vería en la
+    // economía, porque no hay derecho que lo reconozca.
+    await reconocerVentaDeMembresiaEnTx(tx, o.id, ctx)
+  }
   // Slice 8 (§27): los puntos se acumulan con la venta YA confirmada, con la
   // regla congelada en el movimiento y una clave de idempotencia por pedido y
   // programa, así que un reintento de la confirmación no suma dos veces.
