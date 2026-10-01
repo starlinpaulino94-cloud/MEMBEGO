@@ -11,6 +11,7 @@ import { expirarBeneficiosEnTx } from '../benefits/service'
 import { barridoCampanasEnTx } from '../campaigns/service'
 import { expirarCuponesEnTx } from '../campaigns/coupons'
 import { activarProgramadasEnTx, vencerMembresiasEnTx } from '../loyalty/memberships'
+import { liberarPendientesEnTx, vencerPuntosEnTx } from '../loyalty/points'
 
 /**
  * MEMBEGO SUPPLY 2.0 · BARRIDO del cron (§25, §37, §39, §64).
@@ -49,10 +50,13 @@ export interface ResultadoBarrido {
   /** Slice 8 (§12–§13): períodos comprados por adelantado que ya empiezan y membresías cuyo período acabó. */
   membresiasActivadas: number
   membresiasVencidas: number
+  /** Slice 8 (§28–§29): puntos que maduran y lotes que caducan. */
+  puntosLiberados: number
+  puntosVencidos: number
 }
 
 export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise<ResultadoBarrido> {
-  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0, derechosConError: 0, lotesVencidos: 0, unidadesVencidasSinVender: 0, ventasProyectadas: 0, beneficiosVencidos: 0, asignacionesVencidas: 0, campanasActivadas: 0, campanasTerminadas: 0, cuponesVencidos: 0, membresiasActivadas: 0, membresiasVencidas: 0 }
+  const r: ResultadoBarrido = { ordenesExpiradas: 0, ofertasActivadas: 0, ofertasFinalizadas: 0, unidadesLiberadas: 0, vouchersVencidos: 0, derechosVencidos: 0, derechosConError: 0, lotesVencidos: 0, unidadesVencidasSinVender: 0, ventasProyectadas: 0, beneficiosVencidos: 0, asignacionesVencidas: 0, campanasActivadas: 0, campanasTerminadas: 0, cuponesVencidos: 0, membresiasActivadas: 0, membresiasVencidas: 0, puntosLiberados: 0, puntosVencidos: 0 }
 
   const vencidas = await sinEmpresa('Supply 2.0 cron: checkouts con la reserva caducada', (tx) =>
     tx.supplyV2CustomerOrder.findMany({ where: { status: 'PENDING', expiresAt: { lte: ahora } }, select: { id: true }, take: limite, orderBy: { expiresAt: 'asc' } })
@@ -129,5 +133,11 @@ export async function barridoSupplyV2(ahora = new Date(), limite = 200): Promise
   // cuando termina el anterior, de modo que cuando uno vence el otro ya toca.
   r.membresiasVencidas = await sinEmpresa('Supply 2.0 cron: vencer membresías', (tx) => vencerMembresiasEnTx(tx, CTX, ahora, limite))
   r.membresiasActivadas = await sinEmpresa('Supply 2.0 cron: activar membresías programadas', (tx) => activarProgramadasEnTx(tx, CTX, ahora, limite))
+
+  // Slice 8 (§28–§29): primero maduran los pendientes y después vencen los
+  // lotes caducados. En ese orden: unos puntos que maduran el mismo día que
+  // caducan existen de verdad ese día, y el cliente tiene que poder gastarlos.
+  r.puntosLiberados = await sinEmpresa('Supply 2.0 cron: puntos pendientes que maduran', (tx) => liberarPendientesEnTx(tx, CTX, ahora, limite))
+  r.puntosVencidos = await sinEmpresa('Supply 2.0 cron: lotes de puntos vencidos', (tx) => vencerPuntosEnTx(tx, CTX, ahora, limite))
   return r
 }

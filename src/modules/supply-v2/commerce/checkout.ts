@@ -22,6 +22,7 @@ import { calcularRepartoLinea, fotoDeReparto, type RepartoFinanciado, type Unida
 import { politicaDeVersion } from '../finance/domain'
 import { aplicarReservaEnTx, liberarReservaEnTx, reservarBeneficioEnTx, type ReservaDeBeneficio } from '../benefits/service'
 import { activarMembresiaPorPagoEnTx, soltarMembresiaDeOrdenEnTx } from '../loyalty/memberships'
+import { acumularPorCompraEnTodosEnTx } from '../loyalty/points'
 import { consolidarCuponEnTx, liberarCuponEnTx, registrarAplicacionCuponEnTx, resolverCuponEnTx, type CuponResuelto } from '../campaigns/coupons'
 import { promocionAutomaticaEnTx } from '../campaigns/service'
 import { MENSAJES_CUPON, MENSAJE_CUPON_OPACO } from '../campaigns/domain'
@@ -728,6 +729,10 @@ export async function confirmarPagoEnTx(
   // con el pago ya confirmado y dentro de la misma transacción. No hay otra
   // puerta: una membresía de pago no se activa antes de cobrarla.
   if (o.kind === 'MEMBERSHIP') await activarMembresiaPorPagoEnTx(tx, o.id, ctx)
+  // Slice 8 (§27): los puntos se acumulan con la venta YA confirmada, con la
+  // regla congelada en el movimiento y una clave de idempotencia por pedido y
+  // programa, así que un reintento de la confirmación no suma dos veces.
+  await acumularPorCompraEnTodosEnTx(tx, o.id, ctx)
   return { id: o.id, number: o.number, entitlements, repetido: false }
 }
 
@@ -761,6 +766,7 @@ export async function confirmarCoberturaTotalEnTx(tx: Tx, d: { orderId: string; 
     entitlements: entitlements.length,
   }, o.lines[0]?.offer.supplier.companyId ?? null)
   await auditarPagoYVentaEnTx(tx, o, entitlements, { amountSeen: '0' }, ctx)
+  await acumularPorCompraEnTodosEnTx(tx, o.id, ctx)
   return { id: o.id, number: o.number, entitlements, repetido: false }
 }
 

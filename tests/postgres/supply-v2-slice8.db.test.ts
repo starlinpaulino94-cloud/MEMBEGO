@@ -8,6 +8,16 @@ import { activarAcuerdoEnTx, crearAcuerdoEnTx } from '../../src/modules/supply-v
 import { crearOfertaComisionEnTx, publicarOfertaEnTx } from '../../src/modules/supply-v2/offers/service'
 import { aprobarBeneficioEnTx, crearBeneficioEnTx } from '../../src/modules/supply-v2/benefits/service'
 import { confirmarPagoEnTx, cancelarOrdenClienteEnTx, expirarOrdenEnTx } from '../../src/modules/supply-v2/commerce/checkout'
+import { abrirOrdenClienteEnTx } from '../../src/modules/supply-v2/commerce/checkout'
+import {
+  ajustarPuntosEnTx,
+  cuentaDePuntosEnTx,
+  liberarPendientesEnTx,
+  reservarPuntosEnTx,
+  reversarPuntosDeCompraEnTx,
+  saldoReconstruidoEnTx,
+  vencerPuntosEnTx,
+} from '../../src/modules/supply-v2/loyalty/points'
 import {
   activarProgramadasEnTx,
   cancelarMembresiaEnTx,
@@ -836,4 +846,266 @@ test('cancelar una membresía exige motivo y es idempotente', async () => {
   await sinEmpresa('prueba', (tx) => cancelarMembresiaEnTx(tx, m.id, 'El cliente lo pidió por soporte', como(ctx.compras)))
   const otra = await sinEmpresa('prueba', (tx) => cancelarMembresiaEnTx(tx, m.id, 'El cliente lo pidió por soporte', como(ctx.compras)))
   assert.equal(otra.repetida, true)
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// PUNTOS (§24–§29)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Compra una oferta de 1.000 y confirma el pago. Devuelve el pedido. */
+async function compraConfirmada(offerId: string, customerId: string, cantidad = 1): Promise<string> {
+  return sinEmpresa('prueba', async (tx) => {
+    const o = await abrirOrdenClienteEnTx(tx, { customerId, offerId, quantity: cantidad }, como(customerId))
+    await confirmarPagoEnTx(tx, { orderId: o.id, amountSeen: o.total, method: 'TRANSFER' }, como(ctx.finanzas))
+    return o.id
+  })
+}
+
+test('13 · una compra de 1.000 da 10 puntos con la regla «1 por cada 100», y la regla queda CONGELADA', async () => {
+  const programId = await programaActivo({ nombre: 'Puntos', supplierId: ctx.supplierA, owner: 'SUPPLIER', puntosPorUnidad: 1, importePorPunto: 100 })
+  const orderId = await compraConfirmada(ctx.offerA, ctx.cliente)
+
+  const cuenta = await prisma.supplyV2PointsAccount.findUniqueOrThrow({
+    where: { programId_customerId: { programId, customerId: ctx.cliente } },
+    select: { id: true, available: true, pending: true },
+  })
+  assert.equal(cuenta.available, 10)
+  assert.equal(cuenta.pending, 0)
+
+  const mov = await prisma.supplyV2PointsMovement.findFirstOrThrow({
+    where: { accountId: cuenta.id, orderId },
+    select: { type: true, points: true, availableDelta: true, availableAfter: true, ruleSnapshot: true, idempotencyKey: true },
+  })
+  assert.equal(mov.type, 'EARNED')
+  assert.equal(mov.points, 10)
+  assert.equal(mov.availableAfter, 10)
+  const foto = mov.ruleSnapshot as Record<string, unknown>
+  assert.equal(foto.pointsPerUnit, 1)
+  assert.equal(foto.amountPerPoint, '100.00')
+  assert.equal(foto.basis, 'CONTRACTUAL_VALUE')
+  assert.equal(foto.baseUsada, '1000.00')
+  assert.equal(mov.idempotencyKey, `compra:${orderId}:programa:${programId}`)
+
+  // La caché coincide EXACTAMENTE con lo reconstruido desde los movimientos.
+  const reconstruido = await sinEmpresa('prueba', (tx) => saldoReconstruidoEnTx(tx, cuenta.id))
+  assert.equal(reconstruido.available, 10)
+
+  // Cambiar la regla NO reescribe lo ya ganado.
+  await prisma.supplyV2LoyaltyProgram.update({ where: { id: programId }, data: { pointsPerUnit: 5 } })
+  const despues = await prisma.supplyV2PointsMovement.findFirstOrThrow({ where: { accountId: cuenta.id, orderId }, select: { points: true, ruleSnapshot: true } })
+  assert.equal(despues.points, 10, 'lo ganado no cambia porque cambie la regla')
+  assert.equal((despues.ruleSnapshot as Record<string, unknown>).pointsPerUnit, 1)
+})
+
+test('23 · IDEMPOTENCIA: confirmar el pago dos veces no suma los puntos dos veces', async () => {
+  const programId = await programaActivo({ nombre: 'Idem puntos', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  const orderId = await sinEmpresa('prueba', async (tx) => {
+    const o = await abrirOrdenClienteEnTx(tx, { customerId: ctx.cliente2, offerId: ctx.offerA, quantity: 1 }, como(ctx.cliente2))
+    await confirmarPagoEnTx(tx, { orderId: o.id, amountSeen: o.total, method: 'TRANSFER' }, como(ctx.finanzas))
+    return o.id
+  })
+  // Segunda confirmación: idempotente aguas arriba y aguas abajo.
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId, amountSeen: 1000, method: 'TRANSFER' }, como(ctx.finanzas)))
+
+  const cuenta = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId, customerId: ctx.cliente2 } }, select: { id: true, available: true } })
+  assert.equal(cuenta.available, 10, 'diez, no veinte')
+  assert.equal(await prisma.supplyV2PointsMovement.count({ where: { accountId: cuenta.id, orderId } }), 1, 'un solo movimiento')
+})
+
+test('14 · el multiplicador de la membresía se aplica, y siempre hacia abajo', async () => {
+  const programId = await programaActivo({ nombre: 'Multi', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  const plan = await sinEmpresa('prueba', async (tx) => {
+    const p = await crearPlanEnTx(tx, programId, { name: `Gold multi ${sufijo}`, kind: 'FREE', price: 0, durationDays: 60 }, como(ctx.compras))
+    await adjuntarBeneficioAPlanEnTx(tx, p.id, { kind: 'POINTS_MULTIPLIER', pointsMultiplier: '1.5' }, como(ctx.compras))
+    await publicarPlanEnTx(tx, p.id, como(ctx.compras))
+    return p
+  })
+  await sinEmpresa('prueba', (tx) => contratarMembresiaEnTx(tx, { planId: plan.id, customerId: ctx.cliente3 }, como(ctx.cliente3)))
+
+  await compraConfirmada(ctx.offerA, ctx.cliente3)
+  const cuenta = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId, customerId: ctx.cliente3 } }, select: { available: true } })
+  // 1 000 / 100 = 10 puntos × 1,5 = 15.
+  assert.equal(cuenta.available, 15)
+})
+
+test('15 · puntos PENDIENTES: no son gastables hasta que maduran', async () => {
+  const programId = await programaActivo({ nombre: 'Pendientes', supplierId: ctx.supplierB, owner: 'SUPPLIER', diasPendientes: 7 })
+  await compraConfirmada(ctx.offerB, ctx.cliente)
+
+  const cuenta = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId, customerId: ctx.cliente } }, select: { id: true, available: true, pending: true } })
+  assert.equal(cuenta.pending, 10)
+  assert.equal(cuenta.available, 0, 'pendiente no es gastable')
+
+  // Antes de tiempo el barrido no los suelta.
+  await sinEmpresa('prueba', (tx) => liberarPendientesEnTx(tx, como(null), ahora))
+  assert.equal((await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: cuenta.id }, select: { available: true } })).available, 0)
+
+  // Pasados los 7 días, sí.
+  await sinEmpresa('prueba', (tx) => liberarPendientesEnTx(tx, como(null), new Date(ahora.getTime() + 8 * DIA)))
+  const despues = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: cuenta.id }, select: { available: true, pending: true } })
+  assert.equal(despues.available, 10)
+  assert.equal(despues.pending, 0)
+
+  // Y una segunda pasada no vuelve a soltarlos.
+  await sinEmpresa('prueba', (tx) => liberarPendientesEnTx(tx, como(null), new Date(ahora.getTime() + 9 * DIA)))
+  assert.equal((await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: cuenta.id }, select: { available: true } })).available, 10)
+})
+
+test('G · una compra CANCELADA no deja puntos disponibles (§28)', async () => {
+  const programId = await programaActivo({ nombre: 'Cancelada', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  const orderId = await compraConfirmada(ctx.offerA, ctx.cliente2)
+  const cuenta = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId, customerId: ctx.cliente2 } }, select: { id: true, available: true } })
+  const antes = cuenta.available
+  assert.ok(antes >= 10)
+
+  // Una misma compra acumula en TODOS los programas de puntos que la cubren
+  // (el del negocio y los globales de Membego), así que la reversa total
+  // abarca todos ellos. Lo que se comprueba aquí es la cuenta de ESTE.
+  const reversados = await sinEmpresa('prueba', (tx) => reversarPuntosDeCompraEnTx(tx, orderId, 'La compra se canceló', como(ctx.finanzas)))
+  assert.ok(reversados >= 10, `se esperaban al menos 10 puntos reversados, hubo ${reversados}`)
+  const despues = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: cuenta.id }, select: { available: true } })
+  assert.equal(despues.available, antes - 10)
+
+  // Reversar dos veces no quita el doble.
+  const otra = await sinEmpresa('prueba', (tx) => reversarPuntosDeCompraEnTx(tx, orderId, 'reintento', como(ctx.finanzas)))
+  assert.equal(otra, 0)
+  assert.equal((await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: cuenta.id }, select: { available: true } })).available, antes - 10)
+
+  // El movimiento de reversa NO borra el original: el ledger no se reescribe.
+  assert.equal(await prisma.supplyV2PointsMovement.count({ where: { accountId: cuenta.id, orderId } }), 2)
+})
+
+test('H2 · VENCIMIENTO: se consume primero lo que vence antes y vencer no toca otros programas', async () => {
+  const conVencimiento = await programaActivo({ nombre: 'Vencen', supplierId: ctx.supplierA, owner: 'SUPPLIER', diasVencimiento: 30 })
+  const sinVencimiento = await programaActivo({ nombre: 'NoVencen', supplierId: ctx.supplierB, owner: 'SUPPLIER', diasVencimiento: null })
+
+  await compraConfirmada(ctx.offerA, ctx.cliente3)
+  await compraConfirmada(ctx.offerB, ctx.cliente3)
+
+  const cA = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId: conVencimiento, customerId: ctx.cliente3 } }, select: { id: true, available: true } })
+  const cB = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId: sinVencimiento, customerId: ctx.cliente3 } }, select: { id: true, available: true } })
+  assert.equal(cA.available, 10)
+  assert.equal(cB.available, 10)
+
+  const dentroDe40Dias = new Date(ahora.getTime() + 40 * DIA)
+  const vencidos = await sinEmpresa('prueba', (tx) => vencerPuntosEnTx(tx, como(null), dentroDe40Dias))
+  assert.ok(vencidos >= 10)
+
+  const despuesA = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: cA.id }, select: { available: true, expired: true } })
+  assert.equal(despuesA.available, 0, 'los de 30 días vencieron')
+  assert.equal(despuesA.expired, 10)
+  assert.equal((await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: cB.id }, select: { available: true } })).available, 10, 'los del otro programa, intactos')
+
+  // Y la caché sigue coincidiendo con el ledger.
+  const r = await sinEmpresa('prueba', (tx) => saldoReconstruidoEnTx(tx, cA.id))
+  assert.equal(r.available, 0)
+  assert.equal(r.expired, 10)
+})
+
+test('H3 · el lote que vence ANTES se gasta primero', async () => {
+  const programId = await programaActivo({ nombre: 'FIFO', supplierId: ctx.supplierA, owner: 'SUPPLIER', diasVencimiento: 10 })
+  const cuenta = await sinEmpresa('prueba', async (tx) => {
+    const c = await cuentaDePuntosEnTx(tx, programId, ctx.cliente)
+    // Dos lotes a mano, con vencimientos distintos: el ajuste exige motivo.
+    await ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: 50, motivo: 'Lote que vence pronto, carga inicial' }, como(ctx.compras), ahora)
+    return c
+  })
+  // El segundo lote vence mucho más tarde.
+  await prisma.supplyV2LoyaltyProgram.update({ where: { id: programId }, data: { pointsExpireDays: 300 } })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: 50, motivo: 'Lote que vence tarde, carga posterior' }, como(ctx.compras), ahora))
+
+  const lotes = await prisma.supplyV2PointsMovement.findMany({ where: { accountId: cuenta.id, type: 'ADMIN_ADJUSTMENT' }, select: { id: true, expiresAt: true }, orderBy: { createdAt: 'asc' } })
+  assert.equal(lotes.length, 2)
+  const pronto = lotes[0]!
+
+  // Se reservan 30: tienen que salir del que vence antes.
+  await sinEmpresa('prueba', async (tx) => {
+    const c = await cuentaDePuntosEnTx(tx, programId, ctx.cliente)
+    await reservarPuntosEnTx(tx, c, { puntos: 30, reason: 'prueba FIFO' }, como(ctx.cliente))
+  })
+  const loteP = await prisma.supplyV2PointsMovement.findUniqueOrThrow({ where: { id: pronto.id }, select: { consumedFromLot: true } })
+  assert.equal(loteP.consumedFromLot, 30, 'se gastó del que caduca antes, no del otro')
+})
+
+test('E · CONCURRENCIA: dos reservas por los últimos puntos; solo una pasa', async () => {
+  const programId = await programaActivo({ nombre: 'Carrera', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente2, puntos: 100, motivo: 'Saldo inicial para la prueba de concurrencia' }, como(ctx.compras)))
+
+  const intento = () =>
+    sinEmpresa('prueba', async (tx) => {
+      const c = await cuentaDePuntosEnTx(tx, programId, ctx.cliente2)
+      return reservarPuntosEnTx(tx, c, { puntos: 100, reason: 'carrera' }, como(ctx.cliente2))
+    })
+
+  const r = await Promise.allSettled([intento(), intento()])
+  const ok = r.filter((x) => x.status === 'fulfilled')
+  const ko = r.filter((x): x is PromiseRejectedResult => x.status === 'rejected')
+  assert.equal(ok.length, 1, 'el candado de la cuenta serializa las dos reservas')
+  assert.equal(ko.length, 1)
+  assert.match(String((ko[0]!.reason as Error).message), /No alcanzan los puntos/)
+
+  const cuenta = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId, customerId: ctx.cliente2 } }, select: { id: true, available: true, reserved: true } })
+  assert.equal(cuenta.available, 0)
+  assert.equal(cuenta.reserved, 100, 'ni 200 reservados ni saldo negativo')
+  const rec = await sinEmpresa('prueba', (tx) => saldoReconstruidoEnTx(tx, cuenta.id))
+  assert.deepEqual([rec.available, rec.reserved], [0, 100])
+})
+
+test('24 · un ajuste a mano exige motivo, y quitar no deja la cuenta negativa', async () => {
+  const programId = await programaActivo({ nombre: 'Ajustes', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: 10, motivo: 'no' }, como(ctx.compras))),
+    /demasiado corto/
+  )
+  await assert.rejects(
+    () => sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: 10, motivo: 'Motivo suficientemente largo' }, como(null))),
+    /quién lo hace/
+  )
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: 40, motivo: 'Compensación por el incidente del 12/06' }, como(ctx.compras)))
+  const r = await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId, customerId: ctx.cliente, puntos: -100, motivo: 'Reverso del ajuste duplicado 881' }, como(ctx.compras)))
+  assert.equal(r.saldo, 0, 'quita como mucho lo que hay: la cuenta no queda negativa')
+
+  // Y el motivo queda escrito en el movimiento, no solo en la bitácora.
+  const mov = await prisma.supplyV2PointsMovement.findUniqueOrThrow({ where: { id: r.movimientoId }, select: { reason: true, actorId: true, type: true } })
+  assert.match(mov.reason!, /Reverso del ajuste duplicado/)
+  assert.equal(mov.actorId, ctx.compras)
+  assert.equal(mov.type, 'ADMIN_ADJUSTMENT')
+})
+
+test('22 · los puntos de dos programas NO se mezclan', async () => {
+  const pA = await programaActivo({ nombre: 'MixA', supplierId: ctx.supplierA, owner: 'SUPPLIER' })
+  const pB = await programaActivo({ nombre: 'MixB', supplierId: ctx.supplierB, owner: 'SUPPLIER' })
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId: pA, customerId: ctx.cliente3, puntos: 700, motivo: 'Carga de prueba del programa A' }, como(ctx.compras)))
+  await sinEmpresa('prueba', (tx) => ajustarPuntosEnTx(tx, { programId: pB, customerId: ctx.cliente3, puntos: 100, motivo: 'Carga de prueba del programa B' }, como(ctx.compras)))
+
+  const a = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId: pA, customerId: ctx.cliente3 } }, select: { id: true, available: true } })
+  const b = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { programId_customerId: { programId: pB, customerId: ctx.cliente3 } }, select: { id: true, available: true } })
+  assert.equal(a.available, 700)
+  assert.equal(b.available, 100)
+  assert.notEqual(a.id, b.id)
+
+  // Gastar en A no toca B.
+  await sinEmpresa('prueba', async (tx) => {
+    const c = await cuentaDePuntosEnTx(tx, pA, ctx.cliente3)
+    await reservarPuntosEnTx(tx, c, { puntos: 700, reason: 'todo A' }, como(ctx.cliente3))
+  })
+  assert.equal((await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: a.id }, select: { available: true } })).available, 0)
+  assert.equal((await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: b.id }, select: { available: true } })).available, 100, 'el otro programa, intacto')
+
+  // SQL sobre toda la base: la caché de cada cuenta coincide con su ledger.
+  const descuadradas = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT a."id" FROM "supply_v2_points_accounts" a
+    LEFT JOIN (
+      SELECT "accountId",
+             COALESCE(sum("availableDelta"),0) AS av,
+             COALESCE(sum("pendingDelta"),0)   AS pe,
+             COALESCE(sum("reservedDelta"),0)  AS re,
+             COALESCE(sum("redeemedDelta"),0)  AS rd,
+             COALESCE(sum("expiredDelta"),0)   AS ex
+      FROM "supply_v2_points_movements" GROUP BY "accountId"
+    ) m ON m."accountId" = a."id"
+    WHERE a."available" <> COALESCE(m.av,0) OR a."pending" <> COALESCE(m.pe,0)
+       OR a."reserved" <> COALESCE(m.re,0) OR a."redeemed" <> COALESCE(m.rd,0)
+       OR a."expired" <> COALESCE(m.ex,0)`
+  assert.equal(descuadradas.length, 0, 'ninguna cuenta de puntos miente respecto a su ledger')
 })
