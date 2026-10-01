@@ -80,14 +80,6 @@ export const TRANSICIONES_BENEFICIO: Transiciones<SupplyV2BenefitStatus> = {
   CANCELLED: [],
 }
 
-/** Segregación (§34): quien crea el beneficio no lo aprueba si hay más de una persona autorizada. */
-export function puedeAprobarBeneficio(b: { createdById: string }, actorId: string, personasAutorizadas: number): string | null {
-  if (personasAutorizadas > 1 && b.createdById === actorId) {
-    return 'Un beneficio no lo aprueba la misma persona que lo creó: pídele a otra persona autorizada que lo apruebe.'
-  }
-  return null
-}
-
 // ── Elegibilidad (§9, §16, §18) ──────────────────────────────────────────────
 
 export interface BeneficioParaElegibilidad {

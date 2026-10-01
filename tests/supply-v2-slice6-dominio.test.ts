@@ -7,7 +7,6 @@ import {
   estadoAsignacionSegunUsos,
   motivoNoElegible,
   presupuestoDisponible,
-  puedeAprobarBeneficio,
   saldoDeMovimientosBeneficio,
   TRANSICIONES_BENEFICIO,
   validarBeneficio,
@@ -17,6 +16,7 @@ import {
 } from '../src/modules/supply-v2/benefits/domain'
 import { agregarEconomia, snapshotDeVenta, type EventoEconomico } from '../src/modules/supply-v2/economics/domain'
 import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
+import { revisarSegregacion } from '../src/modules/supply-v2/core/segregacion'
 import { politicaDeVersion } from '../src/modules/supply-v2/finance/domain'
 import { SUPPLY_V2_PERMISSIONS } from '../src/modules/supply-v2/contracts/gateways'
 
@@ -262,10 +262,12 @@ test('21 · estados del beneficio: DRAFT → ACTIVE → PAUSED/EXHAUSTED → ACT
 })
 
 test('22 · quien crea un beneficio no lo aprueba cuando hay más de una persona autorizada (§34)', () => {
-  assert.ok(puedeAprobarBeneficio({ createdById: 'u1' }, 'u1', 2))
-  assert.equal(puedeAprobarBeneficio({ createdById: 'u1' }, 'u2', 2), null)
-  // Con una sola persona autorizada el sistema no se bloquea.
-  assert.equal(puedeAprobarBeneficio({ createdById: 'u1' }, 'u1', 1), null)
+  const veto = revisarSegregacion('u1', 'u1', 2, 'beneficio')
+  assert.equal(veto.permitido, false)
+  assert.match(veto.permitido === false ? veto.motivo : '', /no lo aprueba la misma persona que lo creó/)
+  assert.deepEqual(revisarSegregacion('u1', 'u2', 2, 'beneficio'), { permitido: true, autoaprobada: false })
+  // Con una sola persona autorizada el sistema no se bloquea, pero queda marcado.
+  assert.deepEqual(revisarSegregacion('u1', 'u1', 1, 'beneficio'), { permitido: true, autoaprobada: true })
 })
 
 test('23 · el ledger es la verdad del presupuesto: reservar, aplicar, liberar y reversar cuadran', () => {
