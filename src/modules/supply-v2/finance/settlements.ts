@@ -1,18 +1,18 @@
 import type { Prisma, SupplyV2SettlementFrequency } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
+import { personasAutorizadasEnTx } from '../core/autorizadas'
 import { fallo } from '../core/errores'
 import { exigirTransicion } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
+import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
 import { recalcularLiquidacionEnTx } from './applications'
 import { CERO } from './domain'
-import { personasAutorizadasEnTx } from './invoices'
 import {
   elegibles,
   LIQUIDACION_CANCELABLE,
   LIQUIDACION_VIVA,
   periodoDeFrecuencia,
-  puedeAprobarLiquidacion,
   totalesDeLiquidacion,
   TRANSICIONES_LIQUIDACION,
   validarPeriodo,
@@ -180,10 +180,18 @@ export async function aprobarLiquidacionEnTx(tx: Tx, settlementId: string, ctx: 
   const s = await liquidacionBloqueada(tx, settlementId)
   if (['APPROVED', 'PARTIALLY_PAID', 'PAID'].includes(s.status)) return { id: s.id, number: s.number, status: s.status, repetida: true }
   exigirTransicion(TRANSICIONES_LIQUIDACION, s.status, 'APPROVED', 'Liquidación')
-  const veto = puedeAprobarLiquidacion(s, ctx.actorId, await personasAutorizadasEnTx(tx))
-  if (veto) fallo('AUTOAPROBACION', veto)
+  const personasAutorizadas = await personasAutorizadasEnTx(tx)
+  const segregacion = revisarSegregacion(s.createdById, ctx.actorId, personasAutorizadas, 'liquidacion')
+  if (!segregacion.permitido) fallo('AUTOAPROBACION', segregacion.motivo)
   await tx.supplyV2Settlement.update({ where: { id: s.id }, data: { status: 'APPROVED', approvedById: ctx.actorId, approvedAt: new Date() } })
-  await auditarEnTx(tx, ctx, 'SUPPLY_V2_SETTLEMENT_APPROVED', 'SupplyV2Settlement', s.id, { number: s.number, supplierNet: s.supplierNet.toFixed(2), createdById: s.createdById }, s.supplier.companyId)
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_SETTLEMENT_APPROVED', 'SupplyV2Settlement', s.id, {
+    number: s.number,
+    supplierNet: s.supplierNet.toFixed(2),
+    createdById: s.createdById,
+    autoaprobada: segregacion.autoaprobada,
+    personasAutorizadas,
+    ...(segregacion.autoaprobada ? { motivo: MOTIVO_AUTOAPROBACION } : {}),
+  }, s.supplier.companyId)
   // Por si hubo pagos sueltos a sus obligaciones antes de aprobar: el estado deriva de lo pagado.
   const r = await recalcularLiquidacionEnTx(tx, s.id, ctx)
   return { id: s.id, number: s.number, status: r.status, repetida: false }

@@ -10,12 +10,12 @@ import {
   estadoLiquidacionSegunPago,
   motivoNoLiquidable,
   periodoDeFrecuencia,
-  puedeAprobarLiquidacion,
   repartirPagoMasAntiguoPrimero,
   totalesDeLiquidacion,
   TRANSICIONES_LIQUIDACION,
   validarPeriodo,
 } from '../src/modules/supply-v2/finance/settlements-domain'
+import { revisarSegregacion } from '../src/modules/supply-v2/core/segregacion'
 import { creaObligacion, politicaDeVersion } from '../src/modules/supply-v2/finance/domain'
 import { agregarEconomia } from '../src/modules/supply-v2/economics/domain'
 import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
@@ -215,9 +215,14 @@ test('16 · totales y estado derivado del pago', () => {
 })
 
 test('17 · segregación: quien generó la liquidación no la aprueba si hay más de una persona autorizada', () => {
-  assert.match(puedeAprobarLiquidacion({ createdById: 'ana' }, 'ana', 2)!, /misma persona/)
-  assert.equal(puedeAprobarLiquidacion({ createdById: 'ana' }, 'luis', 2), null)
-  assert.equal(puedeAprobarLiquidacion({ createdById: 'ana' }, 'ana', 1), null, 'con una sola persona no hay a quién pasársela')
+  const veto = revisarSegregacion('ana', 'ana', 2, 'liquidacion')
+  assert.match(veto.permitido === false ? veto.motivo : '', /misma persona/)
+  assert.deepEqual(revisarSegregacion('ana', 'luis', 2, 'liquidacion'), { permitido: true, autoaprobada: false })
+  assert.deepEqual(
+    revisarSegregacion('ana', 'ana', 1, 'liquidacion'),
+    { permitido: true, autoaprobada: true },
+    'con una sola persona no hay a quién pasársela'
+  )
 })
 
 test('18 · repartir un pago: la más antigua primero, nunca más que lo pendiente; el resto queda sin aplicar', () => {

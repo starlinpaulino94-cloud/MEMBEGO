@@ -88,14 +88,15 @@ export function FormLiquidacion({ proveedores, supplierId, periodStart, periodEn
   )
 }
 
-export function AprobarLiquidacion({ settlementId, soyElCreador }: { settlementId: string; soyElCreador: boolean }) {
+export function AprobarLiquidacion({ settlementId, soyElCreador, soyElUnicoAutorizado }: { settlementId: string; soyElCreador: boolean; soyElUnicoAutorizado: boolean }) {
   const [estado, enviar, pendiente] = useActionState<EstadoAccion, FormData>(aprobarLiquidacionAction, {})
   useRefrescoAlExito(estado)
   return (
     <form action={enviar} className="space-y-2">
       <input type="hidden" name="settlementId" value={settlementId} />
       <Button type="submit" disabled={pendiente} loading={pendiente} data-testid="btn-aprobar-liquidacion">Aprobar liquidación</Button>
-      {soyElCreador && <p className="text-caption text-muted-foreground">Generaste esta liquidación: si hay otra persona autorizada, le toca a ella aprobarla.</p>}
+      {soyElCreador && !soyElUnicoAutorizado && <p className="text-caption text-muted-foreground">Generaste esta liquidación: le toca aprobarla a otra persona autorizada.</p>}
+      {soyElCreador && soyElUnicoAutorizado && <p className="text-caption text-muted-foreground" data-testid="aviso-unico-autorizado">Eres la única persona autorizada; esta aprobación queda registrada a tu nombre.</p>}
       {estado.error && <p className="text-sm text-destructive" role="alert">{estado.error}</p>}
     </form>
   )

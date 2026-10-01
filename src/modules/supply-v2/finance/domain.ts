@@ -172,26 +172,6 @@ export const TRANSICIONES_PAGO_PROVEEDOR: Transiciones<SupplyV2SupplierPaymentSt
   CANCELLED: [],
 }
 
-/**
- * Segregación de funciones (§41), en el servidor: quien creó el pago no lo
- * confirma cuando hay más de una persona autorizada. Con una sola persona
- * autorizada no hay a quién pasarle el pago, y se permite.
- */
-export function puedeConfirmarPago(pago: { createdById: string }, actorId: string, personasAutorizadas: number): string | null {
-  if (personasAutorizadas > 1 && pago.createdById === actorId) {
-    return 'Un pago no lo confirma la misma persona que lo registró: pídele a otra persona autorizada que lo confirme.'
-  }
-  return null
-}
-
-/** Lo mismo para aprobar una factura registrada por uno mismo. */
-export function puedeAprobarFactura(factura: { createdById: string }, actorId: string, personasAutorizadas: number): string | null {
-  if (personasAutorizadas > 1 && factura.createdById === actorId) {
-    return 'Una factura no la aprueba la misma persona que la registró.'
-  }
-  return null
-}
-
 // ── Obligación (§17–§19, §39) ────────────────────────────────────────────────
 
 export function estadoObligacionSegunSaldo(gross: Decimal, paid: Decimal): SupplyV2ObligationStatus {

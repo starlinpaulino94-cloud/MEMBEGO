@@ -84,14 +84,6 @@ export function estadoLiquidacionSegunPago(supplierNet: Decimal, paid: Decimal):
   return 'PARTIALLY_PAID'
 }
 
-/** Segregación (§40): quien generó la liquidación no la aprueba si hay más gente autorizada. */
-export function puedeAprobarLiquidacion(l: { createdById: string }, actorId: string, personasAutorizadas: number): string | null {
-  if (personasAutorizadas > 1 && l.createdById === actorId) {
-    return 'Una liquidación no la aprueba la misma persona que la generó: pídele a otra persona autorizada que la apruebe.'
-  }
-  return null
-}
-
 export interface ObligacionParaRepartir {
   id: string
   outstandingAmount: Decimal | string | number

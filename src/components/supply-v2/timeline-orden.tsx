@@ -50,7 +50,8 @@ export function TimelineOrden({
       pasos.push({ etiqueta: 'Pendiente de aprobación', estado: 'actual' })
       pasos.push({ etiqueta: 'Aprobada', estado: 'pendiente' })
     } else {
-      pasos.push({ etiqueta: `Aprobada${quien(aprobada)}${cuando(aprobada)}`, estado: 'hecho' })
+      // `reason` solo viene cuando se aprobó sin segunda persona: el recorrido lo dice, igual que en un rechazo.
+      pasos.push({ etiqueta: `Aprobada${quien(aprobada)}${cuando(aprobada)}${aprobada?.reason ? ` · ${aprobada.reason}` : ''}`, estado: 'hecho' })
     }
 
     const aprobadaYa = !['DRAFT', 'PENDING_APPROVAL'].includes(estado)

@@ -108,22 +108,6 @@ export function validarCantidadRecibida(
   return null
 }
 
-/**
- * Política de segregación (§23): quien creó la orden no la aprueba. Se aplica
- * siempre que se conozca al creador; `permitirAutoaprobacion` existe para que
- * la política sea configurable, no para saltársela por defecto.
- */
-export function puedeAprobar(
-  orden: { createdById: string | null },
-  actorId: string,
-  permitirAutoaprobacion = false
-): string | null {
-  if (!permitirAutoaprobacion && orden.createdById && orden.createdById === actorId) {
-    return 'Una orden de compra no la puede aprobar quien la creó.'
-  }
-  return null
-}
-
 // ── Slice 2 · Oferta ────────────────────────────────────────────────────────
 
 export const TRANSICIONES_OFERTA: Transiciones<SupplyV2OfferStatus> = {

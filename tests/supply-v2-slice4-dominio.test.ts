@@ -9,8 +9,6 @@ import {
   estadoFacturaSegunSaldo,
   estadoObligacionSegunSaldo,
   politicaDeVersion,
-  puedeAprobarFactura,
-  puedeConfirmarPago,
   saldoDeMovimientos,
   TRANSICIONES_FACTURA,
   TRANSICIONES_PAGO_PROVEEDOR,
@@ -18,6 +16,7 @@ import {
   validarLineasContraOrden,
   vencimientoDeObligacion,
 } from '../src/modules/supply-v2/finance/domain'
+import { revisarSegregacion } from '../src/modules/supply-v2/core/segregacion'
 import { agregarEconomia, rangoDeVentana, snapshotDeVenta } from '../src/modules/supply-v2/economics/domain'
 import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
 import { aplicarMovimiento, cubetasVacias, saldoDeAsientos } from '../src/modules/supply-v2/core/ledger'
@@ -242,11 +241,17 @@ test('20 · conciliación: sin monto del proveedor queda OPEN; con monto, MATCHE
 })
 
 test('21 · segregación de funciones: quien registra no confirma si hay más de una persona autorizada', () => {
-  assert.match(puedeConfirmarPago({ createdById: 'ana' }, 'ana', 2)!, /no lo confirma la misma persona/)
-  assert.equal(puedeConfirmarPago({ createdById: 'ana' }, 'luis', 2), null)
-  assert.equal(puedeConfirmarPago({ createdById: 'ana' }, 'ana', 1), null, 'con una sola persona autorizada se permite')
-  assert.match(puedeAprobarFactura({ createdById: 'ana' }, 'ana', 3)!, /no la aprueba la misma persona/)
-  assert.equal(puedeAprobarFactura({ createdById: 'ana' }, 'luis', 3), null)
+  const pago = revisarSegregacion('ana', 'ana', 2, 'pago')
+  assert.match(pago.permitido === false ? pago.motivo : '', /no lo confirma la misma persona/)
+  assert.deepEqual(revisarSegregacion('ana', 'luis', 2, 'pago'), { permitido: true, autoaprobada: false })
+  assert.deepEqual(
+    revisarSegregacion('ana', 'ana', 1, 'pago'),
+    { permitido: true, autoaprobada: true },
+    'con una sola persona autorizada se permite, marcado como autoaprobación'
+  )
+  const factura = revisarSegregacion('ana', 'ana', 3, 'factura')
+  assert.match(factura.permitido === false ? factura.motivo : '', /no la aprueba la misma persona/)
+  assert.deepEqual(revisarSegregacion('ana', 'luis', 3, 'factura'), { permitido: true, autoaprobada: false })
 })
 
 test('22 · ventanas del reporte económico', () => {

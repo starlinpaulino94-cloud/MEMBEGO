@@ -8,6 +8,7 @@ import { activarAcuerdoEnTx, crearAcuerdoEnTx, modificarCondicionesEnTx } from '
 import { aprobarOrdenEnTx, crearOrdenEnTx, enviarAprobacionEnTx, rechazarOrdenEnTx } from '../../src/modules/supply-v2/procurement/orders'
 import { confirmarRecepcionEnTx } from '../../src/modules/supply-v2/procurement/receipts'
 import { cubetasDeLote, invarianteCumplido, saldoDeAsientos } from '../../src/modules/supply-v2/core/ledger'
+import { personasAutorizadasEnTx, PREFIJO_CUENTA_SIN_LOGIN } from '../../src/modules/supply-v2/core/autorizadas'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 1 contra PostgreSQL de verdad (§49).
@@ -197,13 +198,36 @@ test('8 · enviar a aprobación; rechazar exige motivo y devuelve a DRAFT con hi
 })
 
 test('9 · el creador NO puede aprobar su propia orden; otro usuario sí', async () => {
+  // El fixture crea DOS superadmins reales, así que la segregación sigue protegiendo.
   await assert.rejects(sinEmpresa('prueba', (tx) => aprobarOrdenEnTx(tx, ctx.ordenId, como(ctx.creadorId))), /no la puede aprobar quien la creó/)
   assert.equal((await orden(ctx.ordenId)).status, 'PENDING_APPROVAL')
   await sinEmpresa('prueba', (tx) => aprobarOrdenEnTx(tx, ctx.ordenId, como(ctx.aprobadorId)))
   const db = await orden(ctx.ordenId)
   assert.equal(db.status, 'APPROVED')
   assert.equal(db.approvedById, ctx.aprobadorId)
-  assert.ok(await prisma.auditLog.findFirst({ where: { accion: 'SUPPLY_V2_PO_APPROVED', entidadId: ctx.ordenId } }))
+  const bitacora = await prisma.auditLog.findFirst({ where: { accion: 'SUPPLY_V2_PO_APPROVED', entidadId: ctx.ordenId } })
+  assert.ok(bitacora)
+  // Aprobó otra persona: la bitácora NO la marca como autoaprobación.
+  assert.equal((bitacora.payload as { autoaprobada?: boolean }).autoaprobada, false)
+  const evento = await prisma.supplyV2PurchaseOrderEvent.findFirst({ where: { purchaseOrderId: ctx.ordenId, type: 'APPROVED' } })
+  assert.equal(evento?.reason, null)
+})
+
+test('9a · una cuenta sembrada (sin login) NO cuenta como persona autorizada', async () => {
+  const antes = await sinEmpresa('prueba', (tx) => personasAutorizadasEnTx(tx))
+  // Es SUPERADMIN en `users`, pero no existe en Supabase Auth: jamás podrá aprobar nada.
+  const demo = await prisma.user.create({
+    data: {
+      supabaseId: `${PREFIJO_CUENTA_SIN_LOGIN}v2-demo-${sufijo}@prueba.test`,
+      email: `v2-demo-${sufijo}@prueba.test`,
+      name: 'Demo sin login',
+      role: 'SUPERADMIN',
+    },
+    select: { id: true },
+  })
+  const despues = await sinEmpresa('prueba', (tx) => personasAutorizadasEnTx(tx))
+  assert.equal(despues, antes, 'contarla bloquearía al único operador real sin que nadie pueda desbloquearlo')
+  await prisma.user.delete({ where: { id: demo.id } })
 })
 
 test('9b · no se recibe contra una orden que no está aprobada', async () => {

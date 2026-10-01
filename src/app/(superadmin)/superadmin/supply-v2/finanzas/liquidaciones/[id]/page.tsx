@@ -15,6 +15,8 @@ import { FormPago } from '@/components/supply-v2/finanzas/form-pago'
 import { ConfirmarPago } from '@/components/supply-v2/finanzas/acciones-pago'
 import { fichaLiquidacion, proveedoresParaFinanzas } from '@/modules/supply-v2/finance/queries'
 import { exigirPermisoSupplyV2, puedeSupplyV2 } from '@/modules/supply-v2/permisos'
+import { personasAutorizadasEnTx } from '@/modules/supply-v2/core/autorizadas'
+import { sinEmpresa } from '@/lib/tenant'
 import { dineroSupplyV2, RUTA_FINANZAS, RUTA_LIQUIDACIONES, SETTLEMENT_FREQUENCY_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +39,8 @@ export default async function LiquidacionPage({ params, searchParams }: { params
   if (!l) notFound()
   const m = l.currency
   const pagable = l.status === 'APPROVED' || l.status === 'PARTIALLY_PAID'
+  /** Sin segunda persona la segregación no protege nada: el servidor deja aprobar y el texto tiene que decirlo. */
+  const soyElUnicoAutorizado = (await sinEmpresa('Supply 2.0: personas que pueden aprobar', (tx) => personasAutorizadasEnTx(tx))) <= 1
   return (
     <div className="space-y-6">
       <PageHeader
@@ -64,7 +68,7 @@ export default async function LiquidacionPage({ params, searchParams }: { params
             {l.status === 'DRAFT' && 'Borrador.'}
           </p>
           <div className="flex flex-wrap items-start gap-3">
-            {puedeAprobar && l.status === 'PENDING_APPROVAL' && <AprobarLiquidacion settlementId={l.id} soyElCreador={l.createdById === actor.id} />}
+            {puedeAprobar && l.status === 'PENDING_APPROVAL' && <AprobarLiquidacion settlementId={l.id} soyElCreador={l.createdById === actor.id} soyElUnicoAutorizado={soyElUnicoAutorizado} />}
             {puedeCancelar && (l.status === 'PENDING_APPROVAL' || l.status === 'APPROVED') && Number(l.paidAmount) === 0 && <CancelarLiquidacion settlementId={l.id} />}
           </div>
           {l.notes && <p className="text-caption text-muted-foreground">Notas: {l.notes}</p>}
