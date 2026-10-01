@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Banknote, Coins, FileText, Landmark, PiggyBank, Receipt, TrendingUp, Wallet } from 'lucide-react'
+import { AlertTriangle, Banknote, Coins, FileText, Landmark, Percent, PiggyBank, Receipt, TrendingUp, Wallet } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatCard } from '@/components/ui/stat-card'
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
 import { resumenFinanzas } from '@/modules/supply-v2/finance/queries'
-import { dineroSupplyV2, RUTA_ECONOMIA, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
+import { dineroSupplyV2, RUTA_ECONOMIA, RUTA_FINANZAS, RUTA_LIQUIDACIONES } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Finanzas · Supply 2.0' }
@@ -18,7 +18,9 @@ const SECCIONES = [
   { href: `${RUTA_FINANZAS}/depositos`, label: 'Depósitos', icon: PiggyBank, texto: 'Dinero adelantado a proveedores y su saldo disponible.' },
   { href: `${RUTA_FINANZAS}/pagos`, label: 'Pagos', icon: Banknote, texto: 'Dinero que sale. Quien registra no confirma.' },
   { href: `${RUTA_FINANZAS}/obligaciones`, label: 'Obligaciones', icon: Landmark, texto: 'Lo que Membego debe y por qué nació cada deuda.' },
-  { href: `${RUTA_FINANZAS}/conciliaciones`, label: 'Conciliaciones', icon: Receipt, texto: 'Membego frente al estado de cuenta del proveedor.' },
+  { href: `${RUTA_FINANZAS}/conciliaciones`, label: 'Conciliaciones', icon: Receipt, texto: 'Membego frente al estado de cuenta del proveedor (supply y comisión).' },
+  { href: RUTA_LIQUIDACIONES, label: 'Liquidaciones', icon: Percent, texto: 'Ventas a comisión entregadas: bruto, comisión y neto a pagar por periodo.' },
+  { href: `${RUTA_FINANZAS}/incidencias`, label: 'Incidencias', icon: AlertTriangle, texto: 'Lo que no se deshace en silencio: entregas reversadas ya pagadas.' },
   { href: RUTA_ECONOMIA, label: 'Economía', icon: TrendingUp, texto: 'GMV, ingreso, costo, margen, breakage.' },
 ] as const
 
@@ -73,6 +75,18 @@ export default async function FinanzasPage() {
           <p className="mt-3 text-caption text-muted-foreground">
             <Link href={RUTA_ECONOMIA} className="underline-offset-4 hover:underline">Reporte completo con filtros →</Link>
           </p>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="finanzas-comision">
+        <CardHeader><CardTitle>Ventas a comisión</CardTitle></CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Comisión del mes (ingreso)" value={<span data-testid="kpi-comision-ingreso">{dineroSupplyV2(r.comision.ingresoMes)}</span>} sub={`GMV ${dineroSupplyV2(r.comision.gmvMes)} · ${r.comision.unidadesMes.toLocaleString('es-DO')} unidades`} icon={Percent} accent="brand" />
+            <StatCard label="Neto de proveedores (mes)" value={<span data-testid="kpi-comision-neto">{dineroSupplyV2(r.comision.netoProveedoresMes)}</span>} sub="cobrado por cuenta del proveedor; no es ingreso ni costo" />
+            <StatCard label="Pendiente de liquidar" value={<span data-testid="kpi-sin-liquidar">{dineroSupplyV2(r.comision.netoPendienteDeLiquidar)}</span>} sub={`${r.comision.entregasPendientesDeLiquidar.toLocaleString('es-DO')} entrega(s) sin liquidación`} accent={r.comision.entregasPendientesDeLiquidar > 0 ? 'warning' : undefined} href={`${RUTA_LIQUIDACIONES}/nueva`} hrefLabel="Generar liquidación" />
+            <StatCard label="Liquidaciones por pagar" value={<span data-testid="kpi-liq-por-pagar">{dineroSupplyV2(r.comision.liquidacionesPorPagarMonto)}</span>} sub={`${r.comision.liquidacionesPorPagar} aprobada(s) · ${r.comision.liquidacionesPendientesDeAprobar} pendiente(s) de aprobar${r.comision.incidenciasAbiertas > 0 ? ` · ${r.comision.incidenciasAbiertas} incidencia(s)` : ''}`} accent={r.comision.liquidacionesPendientesDeAprobar > 0 || r.comision.incidenciasAbiertas > 0 ? 'warning' : undefined} href={RUTA_LIQUIDACIONES} hrefLabel="Ver liquidaciones" />
+          </div>
         </CardContent>
       </Card>
 

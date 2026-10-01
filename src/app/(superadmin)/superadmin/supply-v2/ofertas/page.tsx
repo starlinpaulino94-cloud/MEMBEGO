@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { formatDate } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
 import { ChipOferta } from '@/components/supply-v2/chips'
+import { ChipModelo } from '@/components/supply-v2/finanzas/chips'
 import { AccionesOferta } from '@/components/supply-v2/acciones-oferta'
 import { listarOfertas } from '@/modules/supply-v2/offers/queries'
 import { sinEmpresa } from '@/lib/tenant'
@@ -30,7 +31,7 @@ export default async function OfertasPage() {
     <div className="space-y-6">
       <PageHeader
         title="Ofertas"
-        description="Supply que Membego pone a la venta con precio Membego. Publicar aparta las unidades; finalizar devuelve las que no se vendieron."
+        description="Supply que Membego pone a la venta con precio Membego: con supply adquirido (publicar aparta unidades) o a comisión (sin lote; el proveedor entrega y Membego le liquida el neto)."
         eyebrow="Supply 2.0"
         nav={<NavSupplyV2 activa="ofertas" />}
         action={
@@ -67,6 +68,7 @@ export default async function OfertasPage() {
                   <tr>
                     <th className="px-4 py-2">Oferta</th>
                     <th className="px-4 py-2">Proveedor · Producto</th>
+                    <th className="px-4 py-2">Modelo</th>
                     <th className="px-4 py-2 text-right">Asignadas</th>
                     <th className="px-4 py-2 text-right">Vendidas</th>
                     <th className="px-4 py-2 text-right">Reservadas</th>
@@ -85,10 +87,11 @@ export default async function OfertasPage() {
                         <span className="block font-mono text-caption text-muted-foreground">{o.code}</span>
                       </td>
                       <td className="px-4 py-2">{o.proveedor}<span className="block text-caption text-muted-foreground">{o.producto}</span></td>
-                      <td className="px-4 py-2 text-right tabular-nums">{o.asignadas.toLocaleString('es-DO')}</td>
+                      <td className="px-4 py-2"><ChipModelo fuente={o.sourceType} />{o.sourceType === 'COMMISSION' && <span className="block text-caption text-muted-foreground">{o.commissionPercentage} %</span>}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{o.sourceType === 'COMMISSION' && o.disponiblesComision === null ? '∞' : o.asignadas.toLocaleString('es-DO')}</td>
                       <td className="px-4 py-2 text-right tabular-nums">{o.vendidas.toLocaleString('es-DO')}</td>
                       <td className="px-4 py-2 text-right tabular-nums">{o.reservadas.toLocaleString('es-DO')}</td>
-                      <td className="px-4 py-2 text-right tabular-nums" data-testid="oferta-disponibles">{o.disponibles.toLocaleString('es-DO')}</td>
+                      <td className="px-4 py-2 text-right tabular-nums" data-testid="oferta-disponibles">{o.sourceType === 'COMMISSION' && o.disponiblesComision === null ? 'Sin tope' : o.disponibles.toLocaleString('es-DO')}</td>
                       <td className="px-4 py-2 text-right tabular-nums">
                         {dinero(o.salePrice, o.currency)}
                         <span className="block text-caption text-muted-foreground line-through">{dinero(o.publicPrice, o.currency)}</span>

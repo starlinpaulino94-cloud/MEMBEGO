@@ -74,6 +74,7 @@ export async function fichaProveedor(id: string) {
             scope: true,
             status: true,
             negotiatedUnitCost: true,
+            commissionPercentage: true,
             currency: true,
             paymentTermsDays: true,
             startsAt: true,

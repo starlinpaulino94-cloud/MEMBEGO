@@ -563,3 +563,71 @@ test('J · un derecho a comisión vencido: EXPIRED, breakage, sin asiento y sin 
   assert.equal((await prisma.supplyV2Offer.findUniqueOrThrow({ where: { id: s.offerId } })).status, 'ENDED')
   await sinInventario(s.offerId)
 })
+
+// ── DEMO §92 · exactamente los números del prompt ────────────────────────────
+
+test('DEMO · Little Pizza: acuerdo COMMISSION CATALOG 10 %, Pizza Grande 1 000 → GMV 1 000 / Membego 100 / proveedor 900 → obligación 900 → liquidación 900 → pago 900 → PAID, PAID, pendiente 0; sin PO, recepción, lote ni asignación', async () => {
+  const empresa = await prisma.company.create({ data: { name: `Little Pizza DEMO ${sufijo}`, slug: `little-pizza-demo-${sufijo}`, type: 'restaurante', capacidades: { overrides: { MEMBEGO_SUPPLIER: true } } }, select: { id: true } })
+  const sucursal = await prisma.sucursal.create({ data: { companyId: empresa.id, nombre: 'Centro' }, select: { id: true } })
+  const cajero = await prisma.user.create({ data: { supabaseId: `sb-s5-demo-${sufijo}`, email: `s5-demo-${sufijo}@prueba.test`, name: 'cajero', role: 'ADMINISTRADOR', companyId: empresa.id }, select: { id: true } })
+  const { supplierId, itemId } = await sinEmpresa('prueba', async (tx) => {
+    const p = await vincularEmpresaComoProveedorEnTx(tx, empresa.id, {}, como(ctx.compras))
+    const i = await crearItemCatalogoEnTx(tx, { supplierId: p.id, type: 'PRODUCT', name: 'Pizza Grande', category: 'Pizzas', publicPrice: 1200 }, como(ctx.compras))
+    const a = await crearAcuerdoEnTx(tx, { supplierId: p.id, type: 'COMMISSION', scope: 'CATALOG', commissionPercentage: 10, startsAt: new Date(ahora.getTime() - DIA) }, como(ctx.compras))
+    await activarAcuerdoEnTx(tx, a.id, como(ctx.finanzas))
+    return { supplierId: p.id, itemId: i.id }
+  })
+  const empleado: EmpleadoProveedor = { userId: cajero.id, companyId: empresa.id, supplierId }
+  const o = await crearYPublicarComision(itemId, { availabilityMode: 'UNLIMITED', salePrice: 1000, publicPrice: 1200, titulo: 'Pizza Grande demo' })
+  assert.deepEqual([o.commissionPercentage, o.commissionScope], ['10.00', 'CATALOG'])
+  const c = await comprar(o.id, ctx.cliente)
+  assert.equal(c.total, '1000.00')
+  const ev = await prisma.supplyV2EconomicEvent.findFirstOrThrow({ where: { entitlementId: c.entitlements[0]! } })
+  assert.deepEqual([ev.type, ev.gmvAmount.toFixed(2), ev.revenueAmount.toFixed(2), ev.costAmount.toFixed(2)], ['COMMISSION_REVENUE', '1000.00', '100.00', '0.00'])
+  const s = await sinEmpresa('prueba', (tx) => abrirSesionQrEnTx(tx, { entitlementId: c.entitlements[0]!, customerId: ctx.cliente, branchId: sucursal.id }, como(ctx.cliente)))
+  const r = await sinEmpresa('prueba', (tx) => confirmarEntregaEnTx(tx, { nonce: s.nonce, empleado, branchId: sucursal.id }, como(cajero.id)))
+  const ob = await obligacionDe(r.id)
+  assert.equal(ob?.grossAmount.toFixed(2), '900.00')
+  const l = await sinEmpresa('prueba', (tx) => generarLiquidacionEnTx(tx, { supplierId, frequency: 'MANUAL', ...periodo }, como(ctx.compras)))
+  assert.equal(l.supplierNet, '900.00')
+  await sinEmpresa('prueba', (tx) => aprobarLiquidacionEnTx(tx, l.id, como(ctx.finanzas)))
+  const p = await sinEmpresa('prueba', (tx) => crearPagoEnTx(tx, { supplierId, method: 'BANK_TRANSFER', amount: 900, settlementId: l.id }, como(ctx.compras)))
+  await sinEmpresa('prueba', (tx) => confirmarPagoProveedorEnTx(tx, p.id, como(ctx.finanzas)))
+  assert.equal((await prisma.supplyV2Settlement.findUniqueOrThrow({ where: { id: l.id } })).status, 'PAID')
+  assert.equal((await obligacionDe(r.id))?.status, 'PAID')
+  const pendiente = await prisma.supplyV2SupplierObligation.aggregate({ where: { supplierId, status: { in: ['OPEN', 'PARTIALLY_PAID'] } }, _sum: { outstandingAmount: true } })
+  assert.equal((pendiente._sum.outstandingAmount ?? D(0)).toFixed(2), '0.00', 'supplier outstanding RD$0')
+  // No Purchase Order · No Receipt · No Supply Lot · No fake allocation.
+  assert.equal(await prisma.supplyV2PurchaseOrder.count({ where: { supplierId } }), 0)
+  assert.equal(await prisma.supplyV2PurchaseReceipt.count({ where: { supplierId } }), 0)
+  assert.equal(await prisma.supplyV2Lot.count({ where: { supplierId } }), 0)
+  assert.equal(await prisma.supplyV2Allocation.count({ where: { catalogItem: { supplierId } } }), 0)
+  await sinInventario(o.id)
+})
+
+test('DEMO · precedencia: catálogo 10 % · categoría Pizzas 12 % · Premium Pizza 15 % → venta 1 000: comisión 150, proveedor 850', async () => {
+  const { supplierId, premium, clasica, otra } = await sinEmpresa('prueba', async (tx) => {
+    const p = await crearProveedorExternoEnTx(tx, { commercialName: `Pizzería DEMO ${sufijo}` }, como(ctx.compras))
+    const premium = await crearItemCatalogoEnTx(tx, { supplierId: p.id, type: 'PRODUCT', name: 'Premium Pizza', category: 'Pizzas', publicPrice: 1200 }, como(ctx.compras))
+    const clasica = await crearItemCatalogoEnTx(tx, { supplierId: p.id, type: 'PRODUCT', name: 'Pizza Clásica', category: 'Pizzas', publicPrice: 800 }, como(ctx.compras))
+    const otra = await crearItemCatalogoEnTx(tx, { supplierId: p.id, type: 'PRODUCT', name: 'Refresco', category: 'Bebidas', publicPrice: 100 }, como(ctx.compras))
+    for (const d of [
+      { scope: 'CATALOG' as const, pct: 10 },
+      { scope: 'CATEGORY' as const, pct: 12, category: 'Pizzas' },
+      { scope: 'ITEM' as const, pct: 15, catalogItemId: premium.id },
+    ]) {
+      const a = await crearAcuerdoEnTx(tx, { supplierId: p.id, type: 'COMMISSION', scope: d.scope, category: d.category ?? null, catalogItemId: d.catalogItemId ?? null, commissionPercentage: d.pct, startsAt: new Date(ahora.getTime() - DIA) }, como(ctx.compras))
+      await activarAcuerdoEnTx(tx, a.id, como(ctx.finanzas))
+    }
+    return { supplierId: p.id, premium: premium.id, clasica: clasica.id, otra: otra.id }
+  })
+  const [rp, rc, ro] = await sinEmpresa('prueba', (tx) => Promise.all([resolverAcuerdoComisionDeItemEnTx(tx, premium), resolverAcuerdoComisionDeItemEnTx(tx, clasica), resolverAcuerdoComisionDeItemEnTx(tx, otra)]))
+  assert.deepEqual([rp?.scope, rp?.commissionPercentage.toFixed(2)], ['ITEM', '15.00'])
+  assert.deepEqual([rc?.scope, rc?.commissionPercentage.toFixed(2)], ['CATEGORY', '12.00'])
+  assert.deepEqual([ro?.scope, ro?.commissionPercentage.toFixed(2)], ['CATALOG', '10.00'])
+  const o = await crearYPublicarComision(premium, { availabilityMode: 'UNLIMITED', salePrice: 1000, publicPrice: 1200, titulo: 'Premium demo' })
+  const c = await comprar(o.id, ctx.cliente2)
+  const orden = await prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: c.orderId } })
+  assert.deepEqual([orden.total.toFixed(2), orden.commissionAmount.toFixed(2), orden.supplierNet.toFixed(2)], ['1000.00', '150.00', '850.00'])
+  void supplierId
+})

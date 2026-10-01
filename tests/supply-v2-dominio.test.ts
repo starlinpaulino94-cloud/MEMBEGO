@@ -158,7 +158,9 @@ test('acuerdo · valida fechas, costo y tipos del Slice 1', () => {
   assert.equal(validarAcuerdo(ok), null)
   assert.match(validarAcuerdo({ ...ok, endsAt: new Date('2025-12-31') })!, /posterior/)
   assert.match(validarAcuerdo({ ...ok, negotiatedUnitCost: -1 })!, /negativo/)
-  assert.match(validarAcuerdo({ ...ok, type: 'COMMISSION' })!, /solo se pueden crear/)
+  // Slice 5 abrió COMMISSION (con sus propias reglas); HYBRID y OPEN_DEPOSIT siguen fuera.
+  assert.match(validarAcuerdo({ ...ok, type: 'HYBRID' })!, /solo se pueden crear/)
+  assert.match(validarAcuerdo({ ...ok, type: 'COMMISSION', negotiatedUnitCost: null })!, /porcentaje/)
   assert.match(validarAcuerdo({ ...ok, catalogItemId: null })!, /necesita el producto/)
 })
 

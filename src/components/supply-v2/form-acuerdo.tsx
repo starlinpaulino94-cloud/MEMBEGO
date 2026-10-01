@@ -8,12 +8,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { crearAcuerdoAction, type AcuerdoResumen, type EstadoAccion } from '@/modules/supply-v2/actions'
-import { AGREEMENT_TYPES_SLICE1, AGREEMENT_TYPE_EXPLICACION, AGREEMENT_TYPE_LABELS, MONEDAS_SUPPLY_V2, PAYABLE_RECOGNITION_LABELS } from '@/modules/supply-v2/core/catalogo'
+import { AGREEMENT_TYPES_SLICE5, AGREEMENT_TYPE_EXPLICACION, AGREEMENT_TYPE_LABELS, MONEDAS_SUPPLY_V2, PAYABLE_RECOGNITION_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 export interface ProductoParaAcuerdo {
   id: string
   name: string
+  category?: string | null
 }
+
+const ALCANCES = [
+  { v: 'ITEM', label: 'Por producto', ayuda: 'Solo este producto. Gana sobre categoría y catálogo.' },
+  { v: 'CATEGORY', label: 'Por categoría', ayuda: 'Todos los productos del proveedor con esa categoría.' },
+  { v: 'CATALOG', label: 'Todo el catálogo', ayuda: 'Cualquier producto del proveedor sin regla más específica.' },
+] as const
 
 /**
  * MEMBEGO SUPPLY 2.0 · CREAR ACUERDO (§31). Solo compra anticipada y pagar
@@ -36,6 +43,9 @@ export function FormAcuerdo({
 }) {
   const [estado, accion, pendiente] = useActionState<EstadoAccion<AcuerdoResumen>, FormData>(crearAcuerdoAction, {})
   const [tipo, setTipo] = useState<string>('PREPAID_PURCHASE')
+  const [alcance, setAlcance] = useState<'ITEM' | 'CATEGORY' | 'CATALOG'>('ITEM')
+  const comision = tipo === 'COMMISSION'
+  const categorias = Array.from(new Set(productos.map((p) => p.category?.trim()).filter((c): c is string => Boolean(c))))
   const router = useRouter()
   const visto = useRef<string | undefined>(undefined)
   useEffect(() => {
@@ -56,7 +66,28 @@ export function FormAcuerdo({
           <Label>Proveedor</Label>
           <p className="h-9 rounded-lg border border-border bg-muted/40 px-3 text-sm leading-9">{proveedorNombre}</p>
         </div>
-        <div>
+        {comision && (
+          <div className="sm:col-span-2">
+            <Label>Alcance de la comisión</Label>
+            <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Alcance" data-testid="acuerdo-alcance">
+              {ALCANCES.map((a) => (
+                <label key={a.v} className={`cursor-pointer rounded-lg border p-3 text-sm ${alcance === a.v ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`}>
+                  <input type="radio" name="scope" value={a.v} checked={alcance === a.v} onChange={() => setAlcance(a.v)} className="mr-2" />
+                  <span className="font-medium">{a.label}</span>
+                  <span className="block pl-5 text-caption text-muted-foreground">{a.ayuda}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {comision && alcance === 'CATEGORY' && (
+          <div>
+            <Label htmlFor="acuerdoCategoria">Categoría</Label>
+            <Input id="acuerdoCategoria" name="category" list="acuerdo-categorias" required maxLength={120} placeholder="Tours" data-testid="acuerdo-categoria" />
+            <datalist id="acuerdo-categorias">{categorias.map((c) => <option key={c} value={c} />)}</datalist>
+          </div>
+        )}
+        <div className={comision && alcance !== 'ITEM' ? 'hidden' : undefined}>
           <Label htmlFor="acuerdoProducto">Producto</Label>
           {productoId ? (
             <>
@@ -66,7 +97,7 @@ export function FormAcuerdo({
               </p>
             </>
           ) : (
-            <select id="acuerdoProducto" name="catalogItemId" required className={select} defaultValue={productos[0]?.id ?? ''}>
+            <select id="acuerdoProducto" name={comision && alcance !== 'ITEM' ? undefined : 'catalogItemId'} required={!comision || alcance === 'ITEM'} className={select} defaultValue={productos[0]?.id ?? ''}>
               {productos.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -78,10 +109,11 @@ export function FormAcuerdo({
         <div className="sm:col-span-2">
           <Label htmlFor="acuerdoTipo">Tipo de acuerdo</Label>
           <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de acuerdo">
-            {AGREEMENT_TYPES_SLICE1.map((t) => (
+            {AGREEMENT_TYPES_SLICE5.map((t) => (
               <label
                 key={t}
                 className={`cursor-pointer rounded-lg border p-3 text-sm ${tipo === t ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`}
+                data-testid={`acuerdo-tipo-${t}`}
               >
                 <input type="radio" name="type" value={t} checked={tipo === t} onChange={() => setTipo(t)} className="mr-2" />
                 <span className="font-medium">{AGREEMENT_TYPE_LABELS[t]}</span>
@@ -90,10 +122,18 @@ export function FormAcuerdo({
             ))}
           </div>
         </div>
-        <div>
-          <Label htmlFor="negotiatedUnitCost">Costo negociado por unidad</Label>
-          <Input id="negotiatedUnitCost" name="negotiatedUnitCost" type="number" min={0} step="0.01" required placeholder="300" />
-        </div>
+        {comision ? (
+          <div>
+            <Label htmlFor="commissionPercentage">Comisión de Membego (%)</Label>
+            <Input id="commissionPercentage" name="commissionPercentage" type="number" min={0} max={100} step="0.01" required placeholder="10" data-testid="acuerdo-comision" />
+            <p className="text-caption text-muted-foreground">Sobre lo que paga el cliente. El resto es el neto del proveedor, que se liquida al entregar.</p>
+          </div>
+        ) : (
+          <div>
+            <Label htmlFor="negotiatedUnitCost">Costo negociado por unidad</Label>
+            <Input id="negotiatedUnitCost" name="negotiatedUnitCost" type="number" min={0} step="0.01" required placeholder="300" />
+          </div>
+        )}
         <div>
           <Label htmlFor="acuerdoMoneda">Moneda</Label>
           <select id="acuerdoMoneda" name="currency" defaultValue={moneda} className={select}>
@@ -118,12 +158,22 @@ export function FormAcuerdo({
         </div>
         <div>
           <Label htmlFor="payableRecognition">Cuándo nace la deuda</Label>
-          <select id="payableRecognition" name="payableRecognition" className={select} defaultValue="ON_INVOICE" data-testid="acuerdo-politica">
-            {(['ON_INVOICE', 'ON_RECEIPT', 'ON_REDEMPTION'] as const).filter((p) => tipo !== 'PREPAID_PURCHASE' || p !== 'ON_REDEMPTION').map((p) => (
-              <option key={p} value={p}>{PAYABLE_RECOGNITION_LABELS[p]}</option>
-            ))}
-          </select>
-          <p className="text-caption text-muted-foreground">Se congela en cada versión del acuerdo: las compras históricas no cambian.</p>
+          {comision ? (
+            <>
+              <input type="hidden" name="payableRecognition" value="ON_REDEMPTION" />
+              <p className="h-9 rounded-lg border border-border bg-muted/40 px-3 text-sm leading-9" data-testid="acuerdo-politica-fija">{PAYABLE_RECOGNITION_LABELS.ON_REDEMPTION}</p>
+              <p className="text-caption text-muted-foreground">A comisión Membego no debe nada hasta que el proveedor entrega.</p>
+            </>
+          ) : (
+            <>
+              <select id="payableRecognition" name="payableRecognition" className={select} defaultValue="ON_INVOICE" data-testid="acuerdo-politica">
+                {(['ON_INVOICE', 'ON_RECEIPT', 'ON_REDEMPTION'] as const).filter((p) => tipo !== 'PREPAID_PURCHASE' || p !== 'ON_REDEMPTION').map((p) => (
+                  <option key={p} value={p}>{PAYABLE_RECOGNITION_LABELS[p]}</option>
+                ))}
+              </select>
+              <p className="text-caption text-muted-foreground">Se congela en cada versión del acuerdo: las compras históricas no cambian.</p>
+            </>
+          )}
         </div>
         <div>
           <Label htmlFor="allowDepositApplication">Cubrir facturas con depósito</Label>

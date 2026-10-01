@@ -44,7 +44,7 @@ export default async function ProveedorDetallePage({ params }: { params: Promise
       })
     : []
 
-  const productosParaAcuerdo = p.catalogItems.map((i) => ({ id: i.id, name: i.name }))
+  const productosParaAcuerdo = p.catalogItems.map((i) => ({ id: i.id, name: i.name, category: i.category }))
   const dinero = (n: { toString(): string } | null, moneda: string) =>
     n == null ? '—' : `${moneda === 'DOP' ? 'RD$' : `${moneda} `}${Number(n).toLocaleString('es-DO', { minimumFractionDigits: 0 })}`
 
@@ -160,7 +160,7 @@ export default async function ProveedorDetallePage({ params }: { params: Promise
                       {a.code} · {AGREEMENT_TYPE_LABELS[a.type]} · v{a.version}
                     </p>
                     <p className="text-caption text-muted-foreground">
-                      {a.catalogItem?.name ?? a.category ?? 'Todo el catálogo'} · {a.negotiatedUnitCost ? `${dinero(a.negotiatedUnitCost, a.currency)} / unidad` : 'sin costo fijo'} · desde {formatDate(a.startsAt)}
+                      {a.catalogItem?.name ?? a.category ?? 'Todo el catálogo'} · {a.type === 'COMMISSION' ? <span data-testid="acuerdo-comision-pct">{`comisión ${a.commissionPercentage?.toString() ?? '?'} % (${a.scope === 'ITEM' ? 'por producto' : a.scope === 'CATEGORY' ? 'por categoría' : 'todo el catálogo'})`}</span> : a.negotiatedUnitCost ? `${dinero(a.negotiatedUnitCost, a.currency)} / unidad` : 'sin costo fijo'} · desde {formatDate(a.startsAt)}
                       {a.endsAt ? ` hasta ${formatDate(a.endsAt)}` : ''}
                       {a.paymentTermsDays != null ? ` · ${a.paymentTermsDays} días de pago` : ''}
                     </p>

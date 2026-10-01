@@ -43,6 +43,7 @@ export interface AcuerdoResumen {
   catalogItemId: string | null
   category: string | null
   negotiatedUnitCost: string | null
+  commissionPercentage?: string | null
   currency: string
   paymentTermsDays: number | null
   startsAt: string
@@ -173,10 +174,13 @@ export async function crearAcuerdoAction(
         {
           supplierId,
           type: (texto(fd, 'type', 30) || 'PREPAID_PURCHASE') as SupplyV2AgreementType,
-          scope: 'ITEM',
+          // Slice 5 (§8): el alcance solo se elige a comisión; la compra sigue siendo por producto.
+          scope: texto(fd, 'type', 30) === 'COMMISSION' ? ((texto(fd, 'scope', 20) || 'ITEM') as 'ITEM' | 'CATEGORY' | 'CATALOG') : 'ITEM',
           catalogItemId: texto(fd, 'catalogItemId', 60) || null,
+          category: texto(fd, 'category', 120) || null,
           currency: texto(fd, 'currency', 3) || null,
           negotiatedUnitCost: texto(fd, 'negotiatedUnitCost', 20) || null,
+          commissionPercentage: texto(fd, 'commissionPercentage', 10) || null,
           paymentTermsDays: entero(fd, 'paymentTermsDays'),
           // Slice 4 (§20): política financiera; se congela en la versión 1.
           payableRecognition: (texto(fd, 'payableRecognition', 20) || 'ON_INVOICE') as SupplyV2PayableRecognition,
@@ -200,6 +204,7 @@ export async function crearAcuerdoAction(
         catalogItemId: a.catalogItemId,
         category: a.category,
         negotiatedUnitCost: a.negotiatedUnitCost?.toFixed(2) ?? null,
+        commissionPercentage: a.commissionPercentage?.toFixed(2) ?? null,
         currency: a.currency,
         paymentTermsDays: a.paymentTermsDays,
         startsAt: a.startsAt.toISOString(),

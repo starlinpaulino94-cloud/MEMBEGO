@@ -5,6 +5,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import type { Paginacion } from '@/lib/paginacion'
 import { calcularEconomia } from '../economics/queries'
 import { CERO, OBLIGACION_VIVA } from './domain'
+import { obligacionesLiquidablesEnTx } from './settlements'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 4 · lecturas de finanzas (§33–§38, §47, §61).
@@ -37,11 +38,24 @@ export interface ResumenFinanzas {
   supplyVencidoUnidades: number
   supplyVencidoCosto: string
   hayDatos: boolean
+  /** Slice 5 (§57): métricas de comisión, separadas de las de supply adquirido. */
+  comision: {
+    gmvMes: string
+    ingresoMes: string
+    netoProveedoresMes: string
+    unidadesMes: number
+    netoPendienteDeLiquidar: string
+    entregasPendientesDeLiquidar: number
+    liquidacionesPendientesDeAprobar: number
+    liquidacionesPorPagar: number
+    liquidacionesPorPagarMonto: string
+    incidenciasAbiertas: number
+  }
 }
 
 export async function resumenFinanzas(ahora = new Date()): Promise<ResumenFinanzas> {
   const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-  const [cxp, pendientes, depositos, pagosMes, pagosPendientes, vencido] = await sinEmpresa('Supply 2.0: tablero de finanzas', (tx) =>
+  const [cxp, pendientes, depositos, pagosMes, pagosPendientes, vencido, sinLiquidar, liqPendientes, liqPorPagar, incidencias] = await sinEmpresa('Supply 2.0: tablero de finanzas', (tx) =>
     Promise.all([
       tx.supplyV2SupplierObligation.aggregate({ where: { status: { in: [...OBLIGACION_VIVA] } }, _sum: { outstandingAmount: true } }),
       tx.supplyV2SupplierInvoice.aggregate({ where: { status: { in: ['APPROVED', 'PARTIALLY_PAID'] } }, _sum: { amountDue: true }, _count: { _all: true } }),
@@ -49,6 +63,10 @@ export async function resumenFinanzas(ahora = new Date()): Promise<ResumenFinanz
       tx.supplyV2SupplierPayment.aggregate({ where: { status: 'CONFIRMED', paidAt: { gte: inicioMes } }, _sum: { amount: true } }),
       tx.supplyV2SupplierPayment.count({ where: { status: 'PENDING' } }),
       tx.supplyV2EconomicEvent.aggregate({ where: { type: 'EXPIRATION_COST' }, _sum: { units: true, costAmount: true } }),
+      tx.supplyV2SupplierObligation.aggregate({ where: { status: { in: [...OBLIGACION_VIVA] }, settlementId: null, redemption: { sourceType: 'COMMISSION' } }, _sum: { outstandingAmount: true }, _count: { _all: true } }),
+      tx.supplyV2Settlement.count({ where: { status: 'PENDING_APPROVAL' } }),
+      tx.supplyV2Settlement.aggregate({ where: { status: { in: ['APPROVED', 'PARTIALLY_PAID'] } }, _sum: { supplierNet: true, paidAmount: true }, _count: { _all: true } }),
+      tx.supplyV2FinanceIncident.count({ where: { status: 'OPEN' } }),
     ])
   )
   const econ = await calcularEconomia({ ventana: 'MES' }, ahora)
@@ -72,6 +90,18 @@ export async function resumenFinanzas(ahora = new Date()): Promise<ResumenFinanz
     supplyVencidoUnidades: vencido._sum.units ?? 0,
     supplyVencidoCosto: (vencido._sum.costAmount ?? CERO).toFixed(2),
     hayDatos,
+    comision: {
+      gmvMes: econ.commission.gmv.toFixed(2),
+      ingresoMes: econ.commission.revenue.toFixed(2),
+      netoProveedoresMes: econ.commission.supplierNet.toFixed(2),
+      unidadesMes: econ.commission.unitsSold,
+      netoPendienteDeLiquidar: (sinLiquidar._sum.outstandingAmount ?? CERO).toFixed(2),
+      entregasPendientesDeLiquidar: sinLiquidar._count._all ?? 0,
+      liquidacionesPendientesDeAprobar: liqPendientes,
+      liquidacionesPorPagar: liqPorPagar._count._all ?? 0,
+      liquidacionesPorPagarMonto: (liqPorPagar._sum.supplierNet ?? CERO).minus(liqPorPagar._sum.paidAmount ?? CERO).toFixed(2),
+      incidenciasAbiertas: incidencias,
+    },
   }
 }
 
@@ -310,15 +340,15 @@ export async function listarObligaciones(f: { supplierId?: string | null; status
 
 // ── Conciliaciones (§43) ─────────────────────────────────────────────────────
 
-export async function listarConciliaciones(f: { supplierId?: string | null }, p: Paginacion) {
-  const where: Prisma.SupplyV2ReconciliationWhereInput = f.supplierId ? { supplierId: f.supplierId } : {}
+export async function listarConciliaciones(f: { supplierId?: string | null; kind?: 'SUPPLY' | 'COMMISSION' | null }, p: Paginacion) {
+  const where: Prisma.SupplyV2ReconciliationWhereInput = { ...(f.supplierId ? { supplierId: f.supplierId } : {}), ...(f.kind ? { kind: f.kind } : {}) }
   const [filas, total] = await sinEmpresa('Supply 2.0: conciliaciones', (tx) =>
     Promise.all([
       tx.supplyV2Reconciliation.findMany({ where, orderBy: { createdAt: 'desc' }, skip: p.saltar, take: p.tomar, include: { supplier: { select: { id: true, commercialName: true } }, _count: { select: { lines: true } } } }),
       tx.supplyV2Reconciliation.count({ where }),
     ])
   )
-  return { filas: filas.map((r) => ({ id: r.id, number: r.number, proveedor: r.supplier.commercialName, periodStart: r.periodStart, periodEnd: r.periodEnd, status: r.status, currency: r.currency, internalAmount: r.internalAmount.toFixed(2), supplierAmount: fmt(r.supplierAmount), differenceAmount: fmt(r.differenceAmount), lineas: r._count.lines, createdAt: r.createdAt })), total }
+  return { filas: filas.map((r) => ({ id: r.id, number: r.number, kind: r.kind, proveedor: r.supplier.commercialName, periodStart: r.periodStart, periodEnd: r.periodEnd, status: r.status, currency: r.currency, internalAmount: r.internalAmount.toFixed(2), supplierAmount: fmt(r.supplierAmount), differenceAmount: fmt(r.differenceAmount), lineas: r._count.lines, createdAt: r.createdAt })), total }
 }
 
 export async function fichaConciliacion(id: string, p: Paginacion) {
@@ -464,4 +494,107 @@ export async function depositosActivosDe(supplierId: string) {
 export async function pagosConSaldoDe(supplierId: string) {
   const filas = await sinEmpresa('Supply 2.0: pagos confirmados con saldo sin aplicar', (tx) => tx.supplyV2SupplierPayment.findMany({ where: { supplierId, status: 'CONFIRMED' }, orderBy: { paidAt: 'asc' }, select: { id: true, number: true, amount: true, appliedAmount: true, currency: true, reference: true } }))
   return filas.filter((p) => p.amount.greaterThan(p.appliedAmount)).map((p) => ({ id: p.id, number: p.number, sinAplicar: p.amount.minus(p.appliedAmount).toFixed(2), currency: p.currency, reference: p.reference }))
+}
+
+// ── Slice 5 · liquidaciones (§45–§47) e incidencias (§33) ───────────────────
+
+export interface LiquidacionFila {
+  id: string
+  number: string
+  proveedor: string
+  proveedorId: string
+  frequency: string
+  periodStart: Date
+  periodEnd: Date
+  currency: string
+  grossSales: string
+  commissionAmount: string
+  supplierNet: string
+  paidAmount: string
+  pendiente: string
+  status: string
+  lineas: number
+  createdAt: Date
+}
+
+export async function listarLiquidaciones(f: { supplierId?: string | null; status?: string | null }, p: Paginacion): Promise<{ filas: LiquidacionFila[]; total: number }> {
+  const where: Prisma.SupplyV2SettlementWhereInput = {
+    ...(f.supplierId ? { supplierId: f.supplierId } : {}),
+    ...(f.status === 'VIVAS' ? { status: { in: ['PENDING_APPROVAL', 'APPROVED', 'PARTIALLY_PAID'] } } : f.status ? { status: f.status as never } : {}),
+  }
+  const [filas, total] = await sinEmpresa('Supply 2.0: liquidaciones', (tx) =>
+    Promise.all([
+      tx.supplyV2Settlement.findMany({ where, orderBy: { createdAt: 'desc' }, skip: p.saltar, take: p.tomar, include: { supplier: { select: { id: true, commercialName: true } }, _count: { select: { lines: true } } } }),
+      tx.supplyV2Settlement.count({ where }),
+    ])
+  )
+  return {
+    filas: filas.map((s) => ({ id: s.id, number: s.number, proveedor: s.supplier.commercialName, proveedorId: s.supplier.id, frequency: s.frequency, periodStart: s.periodStart, periodEnd: s.periodEnd, currency: s.currency, grossSales: s.grossSales.toFixed(2), commissionAmount: s.commissionAmount.toFixed(2), supplierNet: s.supplierNet.toFixed(2), paidAmount: s.paidAmount.toFixed(2), pendiente: s.supplierNet.minus(s.paidAmount).toFixed(2), status: s.status, lineas: s._count.lines, createdAt: s.createdAt })),
+    total,
+  }
+}
+
+export async function fichaLiquidacion(id: string, p: Paginacion) {
+  const s = await sinEmpresa('Supply 2.0: ficha de una liquidación', (tx) =>
+    tx.supplyV2Settlement.findUnique({
+      where: { id },
+      include: {
+        supplier: { select: { id: true, commercialName: true, currency: true } },
+        createdBy: { select: { name: true, email: true } },
+        approvedBy: { select: { name: true, email: true } },
+        intendedPayments: { orderBy: { createdAt: 'desc' }, select: { id: true, number: true, status: true, amount: true, appliedAmount: true, paidAt: true, reference: true, createdBy: { select: { name: true, email: true } }, confirmedBy: { select: { name: true, email: true } } } },
+        _count: { select: { lines: true } },
+      },
+    })
+  )
+  if (!s) return null
+  const lineas = await sinEmpresa('Supply 2.0: líneas de una liquidación', (tx) =>
+    tx.supplyV2SettlementLine.findMany({ where: { settlementId: id }, orderBy: { createdAt: 'asc' }, skip: p.saltar, take: p.tomar, include: { obligation: { select: { id: true, number: true, status: true, paidAmount: true, outstandingAmount: true, recognizedAt: true } } } })
+  )
+  return {
+    ...s,
+    lineas: lineas.map((l) => ({ id: l.id, obligationId: l.obligationId, obligationNumber: l.obligation.number, obligationStatus: l.obligation.status, redemptionId: l.redemptionId, descripcion: l.descriptionSnapshot, grossAmount: l.grossAmount.toFixed(2), commissionAmount: l.commissionAmount.toFixed(2), supplierNet: l.supplierNet.toFixed(2), paidAmount: l.obligation.paidAmount.toFixed(2), outstandingAmount: l.obligation.outstandingAmount.toFixed(2), recognizedAt: l.obligation.recognizedAt })),
+    totalLineas: s._count.lines,
+    pendiente: s.supplierNet.minus(s.paidAmount).toFixed(2),
+    creadoPor: nombre(s.createdBy),
+    aprobadoPor: nombre(s.approvedBy),
+    pagos: s.intendedPayments.map((pg) => ({ id: pg.id, number: pg.number, status: pg.status, amount: pg.amount.toFixed(2), appliedAmount: pg.appliedAmount.toFixed(2), paidAt: pg.paidAt, reference: pg.reference, registradoPor: nombre(pg.createdBy), confirmadoPor: nombre(pg.confirmedBy) })),
+  }
+}
+
+/** Vista previa de lo que entraría en una liquidación (sin candados, sin crear nada). */
+export async function previsualizarLiquidacion(supplierId: string, periodStart: Date, periodEnd: Date) {
+  return sinEmpresa('Supply 2.0: previsualizar liquidación', async (tx) => {
+    const s = await tx.supplyV2Supplier.findUnique({ where: { id: supplierId }, select: { currency: true, commercialName: true } })
+    if (!s) return null
+    const filas = await obligacionesLiquidablesEnTx(tx, supplierId, periodStart, periodEnd, s.currency)
+    const gross = filas.reduce((t, o) => t.plus(o.redemption?.customerUnitPriceSnapshot ?? CERO), CERO)
+    const commission = filas.reduce((t, o) => t.plus(o.redemption?.commissionAmountSnapshot ?? CERO), CERO)
+    const net = filas.reduce((t, o) => t.plus(o.outstandingAmount), CERO)
+    return {
+      proveedor: s.commercialName,
+      currency: s.currency,
+      entregas: filas.map((o) => ({ id: o.id, number: o.number, redemptionNumber: o.redemption?.number ?? null, producto: o.redemption?.catalogItem.name ?? '', cliente: o.redemption?.customer.name?.trim() || o.redemption?.customer.email || '', redeemedAt: o.redemption?.redeemedAt ?? o.recognizedAt, gross: o.redemption?.customerUnitPriceSnapshot.toFixed(2) ?? '0.00', commission: o.redemption?.commissionAmountSnapshot?.toFixed(2) ?? '0.00', net: o.outstandingAmount.toFixed(2) })),
+      grossSales: gross.toFixed(2),
+      commissionAmount: commission.toFixed(2),
+      supplierNet: net.toFixed(2),
+    }
+  })
+}
+
+export async function listarIncidenciasFinancieras(f: { status?: 'OPEN' | 'RESOLVED' | null }, p: Paginacion) {
+  const where: Prisma.SupplyV2FinanceIncidentWhereInput = f.status ? { status: f.status } : {}
+  const [filas, total] = await sinEmpresa('Supply 2.0: incidencias financieras', (tx) =>
+    Promise.all([
+      tx.supplyV2FinanceIncident.findMany({ where, orderBy: [{ status: 'asc' }, { createdAt: 'desc' }], skip: p.saltar, take: p.tomar, include: { supplier: { select: { id: true, commercialName: true } }, obligation: { select: { id: true, number: true, settlementId: true } }, resolvedBy: { select: { name: true, email: true } } } }),
+      tx.supplyV2FinanceIncident.count({ where }),
+    ])
+  )
+  return { filas: filas.map((i) => ({ id: i.id, type: i.type, status: i.status, proveedor: i.supplier.commercialName, proveedorId: i.supplier.id, obligationNumber: i.obligation?.number ?? null, obligationId: i.obligationId, settlementId: i.obligation?.settlementId ?? null, redemptionId: i.redemptionId, currency: i.currency, amount: i.amount.toFixed(2), notes: i.notes, resolutionNotes: i.resolutionNotes, resueltoPor: nombre(i.resolvedBy), resolvedAt: i.resolvedAt, createdAt: i.createdAt })), total }
+}
+
+/** Liquidaciones aprobadas con saldo de un proveedor (para el formulario de pago). */
+export async function liquidacionesPagablesDe(supplierId: string) {
+  const filas = await sinEmpresa('Supply 2.0: liquidaciones pagables', (tx) => tx.supplyV2Settlement.findMany({ where: { supplierId, status: { in: ['APPROVED', 'PARTIALLY_PAID'] } }, orderBy: { periodEnd: 'asc' }, select: { id: true, number: true, supplierNet: true, paidAmount: true } }))
+  return filas.map((s) => ({ id: s.id, number: s.number, pendiente: s.supplierNet.minus(s.paidAmount).toFixed(2) }))
 }
