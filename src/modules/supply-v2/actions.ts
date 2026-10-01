@@ -186,6 +186,7 @@ export async function crearAcuerdoAction(
           payableRecognition: (texto(fd, 'payableRecognition', 20) || 'ON_INVOICE') as SupplyV2PayableRecognition,
           allowDepositApplication: texto(fd, 'allowDepositApplication', 5) !== 'no',
           settlementFrequency: texto(fd, 'settlementFrequency', 60) || null,
+          commissionBase: texto(fd, 'commissionBase', 30) === 'CUSTOMER_PAID_AMOUNT' ? 'CUSTOMER_PAID_AMOUNT' : 'CONTRACTUAL_SALE_VALUE',
           startsAt,
           endsAt: fechaFinDeDia(fd, 'endsAt'),
           notes: texto(fd, 'notes', 2000) || null,

@@ -22,8 +22,10 @@ const ESTADO: Record<string, string> = { ACTIVE: 'Vendida, pendiente de entregar
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 5 · portal del proveedor: VENTAS MEMBEGO (§58–§60).
- * Lo que Membego vendió por su cuenta: bruto, neto que recibirá, estado de
- * entrega y de cobro. Nunca la comisión como margen de Membego ni economía interna.
+ * Lo que Membego vendió por su cuenta: valor contractual, neto que recibirá,
+ * estado de entrega y de cobro. Nunca la comisión como margen de Membego ni
+ * economía interna. Slice 6 (§32): si hubo beneficio, se separa lo que el
+ * proveedor descontó (suyo) de lo que financió Membego (que no le rebaja nada).
  */
 export default async function VentasProveedorPage({ searchParams }: { searchParams: Promise<{ filtro?: string }> }) {
   const proveedor = await proveedorDeLaSesion()
@@ -68,6 +70,13 @@ export default async function VentasProveedorPage({ searchParams }: { searchPara
                   </span>
                   <span className="text-right tabular-nums">
                     <span className="block font-medium" data-testid="venta-neto">{dineroSupplyV2(v.neto, r.currency)}</span>
+                    <span className="block text-caption text-muted-foreground" data-testid="venta-contractual">valor contractual {dineroSupplyV2(v.valorContractual, r.currency)}</span>
+                    {Number(v.descuentoProveedor) > 0 && (
+                      <span className="block text-caption text-muted-foreground" data-testid="venta-descuento-proveedor">incluye tu descuento de {dineroSupplyV2(v.descuentoProveedor, r.currency)}</span>
+                    )}
+                    {Number(v.bonoMembego) > 0 && (
+                      <span className="block text-caption text-muted-foreground" data-testid="venta-bono-membego">Membego financió {dineroSupplyV2(v.bonoMembego, r.currency)}: no sale de tu neto</span>
+                    )}
                     <span className="block text-caption text-muted-foreground">cliente pagó {dineroSupplyV2(v.bruto, r.currency)}</span>
                   </span>
                 </li>

@@ -36,6 +36,9 @@ export async function reconocerVentaEnTx(tx: Tx, entitlementId: string, ctx: Con
       commissionPercentage: true,
       commissionAmount: true,
       supplierNet: true,
+      contractualUnitValue: true,
+      supplierDiscountAmount: true,
+      membegoSubsidyAmount: true,
       currency: true,
       issuedAt: true,
       supplierId: true,
@@ -50,10 +53,17 @@ export async function reconocerVentaEnTx(tx: Tx, entitlementId: string, ctx: Con
     },
   })
   if (!e) fallo('DERECHO_NO_ENCONTRADO', 'El derecho no existe.')
-  if (e.sourceType === 'COMMISSION') return reconocerVentaComisionEnTx(tx, e, ctx)
+  if (e.sourceType === 'COMMISSION') {
+    const r = await reconocerVentaComisionEnTx(tx, e, ctx)
+    await registrarSubsidioEnTx(tx, e, ctx)
+    return r
+  }
   const previo = await tx.supplyV2EconomicEvent.findUnique({ where: { type_referenceType_referenceId: { type: 'SALE_REVENUE', referenceType: 'ENTITLEMENT', referenceId: entitlementId } }, select: { id: true } })
-  if (previo) return { id: previo.id, repetido: true }
-  const s = snapshotDeVenta({ customerUnitPrice: e.customerUnitPrice, publicUnitPrice: e.orderLine.publicUnitPrice, actualUnitCost: e.actualUnitCost })
+  if (previo) {
+    await registrarSubsidioEnTx(tx, e, ctx)
+    return { id: previo.id, repetido: true }
+  }
+  const s = snapshotDeVenta({ customerUnitPrice: e.customerUnitPrice, publicUnitPrice: e.orderLine.publicUnitPrice, actualUnitCost: e.actualUnitCost, contractualUnitValue: e.contractualUnitValue })
   const q = e.quantity
   const ev = await tx.supplyV2EconomicEvent.create({
     data: {
@@ -67,13 +77,21 @@ export async function reconocerVentaEnTx(tx: Tx, entitlementId: string, ctx: Con
       customerOrderId: e.orderId,
       currency: e.currency,
       units: q,
-      gmvAmount: s.customerPaid.times(q),
-      revenueAmount: s.customerPaid.times(q),
+      // Slice 6 (§28): GMV = valor contractual + descuento del proveedor (lo que vale la venta); ingreso = valor contractual.
+      gmvAmount: s.contractualValue.plus(e.supplierDiscountAmount).times(q),
+      revenueAmount: s.contractualValue.times(q),
       costAmount: s.actualUnitCost.times(q),
       grossMarginAmount: s.grossMargin.times(q),
+      contractualAmount: s.contractualValue.times(q),
+      supplierDiscountAmount: e.supplierDiscountAmount.times(q),
+      subsidyAmount: e.membegoSubsidyAmount.times(q),
+      customerPaidAmount: s.customerPaid.times(q),
       occurredAt: e.issuedAt,
       metadata: {
         customerPaid: s.customerPaid.toFixed(2),
+        contractualValue: s.contractualValue.toFixed(2),
+        membegoSubsidy: e.membegoSubsidyAmount.toFixed(2),
+        supplierDiscount: e.supplierDiscountAmount.toFixed(2),
         publicPrice: s.publicPrice.toFixed(2),
         discount: s.discount.toFixed(2),
         actualUnitCost: s.actualUnitCost.toFixed(2),
@@ -86,7 +104,52 @@ export async function reconocerVentaEnTx(tx: Tx, entitlementId: string, ctx: Con
     },
     select: { id: true },
   })
-  await auditarEnTx(tx, ctx, 'SUPPLY_V2_ECONOMIC_EVENT_CREATED', 'SupplyV2EconomicEvent', ev.id, { type: 'SALE_REVENUE', entitlementId: e.id, revenue: s.customerPaid.times(q).toFixed(2), cost: s.actualUnitCost.times(q).toFixed(2) }, e.supplier.companyId)
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_ECONOMIC_EVENT_CREATED', 'SupplyV2EconomicEvent', ev.id, { type: 'SALE_REVENUE', entitlementId: e.id, revenue: s.contractualValue.times(q).toFixed(2), cost: s.actualUnitCost.times(q).toFixed(2), subsidy: e.membegoSubsidyAmount.times(q).toFixed(2) }, e.supplier.companyId)
+  await registrarSubsidioEnTx(tx, e, ctx)
+  return { id: ev.id, repetido: false }
+}
+
+/**
+ * Slice 6 (§28) · SUBSIDIO DE MEMBEGO: lo que Membego financió en la venta es
+ * un COSTO PROMOCIONAL aparte. Evento propio (idempotente por derecho): no se
+ * resta del ingreso ni se suma al costo del supply; se ve en la contribución
+ * después de subsidio. Sin subsidio no hay evento.
+ */
+export async function registrarSubsidioEnTx(
+  tx: Tx,
+  e: { id: string; quantity: number; membegoSubsidyAmount: Decimal; supplierDiscountAmount: Decimal; contractualUnitValue: Decimal; customerUnitPrice: Decimal; currency: string; issuedAt: Date; supplierId: string; catalogItemId: string; lotId: string | null; orderId: string; supplier: { companyId: string | null } },
+  ctx: ContextoAuditoria
+): Promise<EventoCreado | null> {
+  if (e.membegoSubsidyAmount.lessThanOrEqualTo(0)) return null
+  const previo = await tx.supplyV2EconomicEvent.findUnique({ where: { type_referenceType_referenceId: { type: 'MEMBEGO_SUBSIDY', referenceType: 'ENTITLEMENT', referenceId: e.id } }, select: { id: true } })
+  if (previo) return { id: previo.id, repetido: true }
+  const q = e.quantity
+  const ev = await tx.supplyV2EconomicEvent.create({
+    data: {
+      type: 'MEMBEGO_SUBSIDY',
+      referenceType: 'ENTITLEMENT',
+      referenceId: e.id,
+      supplierId: e.supplierId,
+      catalogItemId: e.catalogItemId,
+      lotId: e.lotId,
+      entitlementId: e.id,
+      customerOrderId: e.orderId,
+      currency: e.currency,
+      units: q,
+      gmvAmount: 0,
+      revenueAmount: 0,
+      costAmount: 0,
+      grossMarginAmount: 0,
+      contractualAmount: e.contractualUnitValue.times(q),
+      supplierDiscountAmount: e.supplierDiscountAmount.times(q),
+      subsidyAmount: e.membegoSubsidyAmount.times(q),
+      customerPaidAmount: e.customerUnitPrice.times(q),
+      occurredAt: e.issuedAt,
+      metadata: { note: 'Subsidio financiado por Membego: costo promocional, separado del margen bruto.', subsidy: e.membegoSubsidyAmount.times(q).toFixed(2) } satisfies Prisma.InputJsonValue,
+    },
+    select: { id: true },
+  })
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_ECONOMIC_EVENT_CREATED', 'SupplyV2EconomicEvent', ev.id, { type: 'MEMBEGO_SUBSIDY', entitlementId: e.id, subsidy: e.membegoSubsidyAmount.times(q).toFixed(2) }, e.supplier.companyId)
   return { id: ev.id, repetido: false }
 }
 
@@ -94,6 +157,9 @@ type DerechoComision = {
   id: string
   quantity: number
   customerUnitPrice: Decimal
+  contractualUnitValue: Decimal
+  supplierDiscountAmount: Decimal
+  membegoSubsidyAmount: Decimal
   commissionPercentage: Decimal | null
   commissionAmount: Decimal | null
   supplierNet: Decimal | null
@@ -119,7 +185,9 @@ async function reconocerVentaComisionEnTx(tx: Tx, e: DerechoComision, ctx: Conte
   const previo = await tx.supplyV2EconomicEvent.findUnique({ where: { type_referenceType_referenceId: { type: 'COMMISSION_REVENUE', referenceType: 'ENTITLEMENT', referenceId: e.id } }, select: { id: true } })
   if (previo) return { id: previo.id, repetido: true }
   if (e.commissionAmount == null || e.supplierNet == null) fallo('DERECHO_SIN_FOTO', 'El derecho a comisión no tiene la foto de la comisión.')
-  const gmv = e.customerUnitPrice.times(e.quantity)
+  // Slice 6: contractual = lo que pagó el cliente + subsidio de Membego; GMV = contractual + descuento del proveedor.
+  const contractual = e.contractualUnitValue.isZero() ? e.customerUnitPrice : e.contractualUnitValue
+  const gmv = contractual.plus(e.supplierDiscountAmount).times(e.quantity)
   const ev = await tx.supplyV2EconomicEvent.create({
     data: {
       type: 'COMMISSION_REVENUE',
@@ -136,9 +204,16 @@ async function reconocerVentaComisionEnTx(tx: Tx, e: DerechoComision, ctx: Conte
       revenueAmount: e.commissionAmount,
       costAmount: 0,
       grossMarginAmount: e.commissionAmount,
+      contractualAmount: contractual.times(e.quantity),
+      supplierDiscountAmount: e.supplierDiscountAmount.times(e.quantity),
+      subsidyAmount: e.membegoSubsidyAmount.times(e.quantity),
+      customerPaidAmount: e.customerUnitPrice.times(e.quantity),
       occurredAt: e.issuedAt,
       metadata: {
-        customerPaid: gmv.toFixed(2),
+        customerPaid: e.customerUnitPrice.times(e.quantity).toFixed(2),
+        contractualValue: contractual.times(e.quantity).toFixed(2),
+        membegoSubsidy: e.membegoSubsidyAmount.times(e.quantity).toFixed(2),
+        supplierDiscount: e.supplierDiscountAmount.times(e.quantity).toFixed(2),
         publicPrice: e.orderLine.publicUnitPrice.times(e.quantity).toFixed(2),
         commissionPercentage: e.commissionPercentage?.toFixed(2) ?? null,
         commissionAmount: e.commissionAmount.toFixed(2),

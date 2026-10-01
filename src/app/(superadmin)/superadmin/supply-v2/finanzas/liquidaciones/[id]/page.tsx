@@ -53,6 +53,14 @@ export default async function LiquidacionPage({ params, searchParams }: { params
         <StatCard label="Pagado · pendiente" value={<span data-testid="liq-pagado">{dineroSupplyV2(l.paidAmount, m)}</span>} sub={`${dineroSupplyV2(l.pendiente, m)} pendiente`} accent={l.status === 'PAID' ? 'success' : undefined} />
       </div>
 
+      {/* Slice 6 (§26): el GMV, el valor contractual y lo que de verdad pagó el cliente son tres cifras distintas. */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="liq-financiacion">
+        <StatCard label="Valor contractual" value={<span data-testid="liq-contractual">{dineroSupplyV2(l.contractualValue, m)}</span>} sub="base de la comisión y del neto" />
+        <StatCard label="Descuento del proveedor" value={<span data-testid="liq-descuento-proveedor">{dineroSupplyV2(l.supplierDiscountTotal, m)}</span>} sub="lo rebajó el proveedor; no es dinero de Membego" />
+        <StatCard label="Bono de Membego" value={<span data-testid="liq-subsidio">{dineroSupplyV2(l.membegoSubsidyTotal, m)}</span>} sub="costo promocional; no rebaja el neto del proveedor" accent="warning" />
+        <StatCard label="Cobrado a los clientes" value={<span data-testid="liq-cobrado">{dineroSupplyV2(l.customerPaidTotal, m)}</span>} sub="lo que entró al banco por estas ventas" />
+      </div>
+
       <Card data-testid="liq-siguiente-paso">
         <CardContent className="space-y-3 pt-6">
           <p className="text-sm font-medium">
@@ -102,13 +110,16 @@ export default async function LiquidacionPage({ params, searchParams }: { params
           {l.totalLineas === 0 ? <p className="text-sm text-muted-foreground">Sin líneas: las entregas salieron de esta liquidación antes de pagarse.</p> : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm" data-testid="liq-lineas">
-                <thead className="text-left text-caption text-muted-foreground"><tr><th className="py-1 pr-3">Entrega</th><th className="py-1 pr-3">Obligación</th><th className="py-1 pr-3 text-right">Bruto</th><th className="py-1 pr-3 text-right">Comisión</th><th className="py-1 pr-3 text-right">Neto</th><th className="py-1 pr-3 text-right">Pagado</th><th className="py-1">Estado</th></tr></thead>
+                <thead className="text-left text-caption text-muted-foreground"><tr><th className="py-1 pr-3">Entrega</th><th className="py-1 pr-3">Obligación</th><th className="py-1 pr-3 text-right">Bruto</th><th className="py-1 pr-3 text-right">Contractual</th><th className="py-1 pr-3 text-right">Bono Membego</th><th className="py-1 pr-3 text-right">Pagó el cliente</th><th className="py-1 pr-3 text-right">Comisión</th><th className="py-1 pr-3 text-right">Neto</th><th className="py-1 pr-3 text-right">Pagado</th><th className="py-1">Estado</th></tr></thead>
                 <tbody>
                   {l.lineas.map((x) => (
                     <tr key={x.id} className="border-t border-border" data-testid="liq-linea">
                       <td className="py-2 pr-3">{x.redemptionId ? <Link href={`/superadmin/supply-v2/redenciones/${x.redemptionId}`} className="underline-offset-4 hover:underline">{x.descripcion}</Link> : x.descripcion}</td>
                       <td className="py-2 pr-3 font-mono text-caption">{x.obligationNumber}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.grossAmount, m)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.contractualAmount, m)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.membegoSubsidyAmount, m)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.customerPaidAmount, m)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.commissionAmount, m)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums font-medium">{dineroSupplyV2(x.supplierNet, m)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.paidAmount, m)}</td>

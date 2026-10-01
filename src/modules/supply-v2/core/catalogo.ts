@@ -171,6 +171,7 @@ export const CUSTOMER_ORDER_STATUS_TONE: Record<SupplyV2CustomerOrderStatus, 'ne
 }
 
 export const PAYMENT_STATUS_LABELS: Record<SupplyV2PaymentStatus, string> = {
+  COVERED_BY_BENEFIT: 'Cubierto por un beneficio (sin pago bancario)',
   UNPAID: 'Sin pagar',
   SUBMITTED: 'Pago avisado',
   CONFIRMED: 'Confirmado',
@@ -372,6 +373,7 @@ export const ECONOMIC_EVENT_LABELS: Record<SupplyV2EconomicEventType, string> = 
   REVERSAL: 'Reversa',
   ADJUSTMENT: 'Ajuste',
   COMMISSION_REVENUE: 'Venta a comisión (ingreso = comisión)',
+  MEMBEGO_SUBSIDY: 'Subsidio de Membego (costo promocional)',
 }
 
 // ── Slice 5 · comisión + liquidaciones ──────────────────────────────────────
@@ -392,6 +394,8 @@ export const RUTA_LIQUIDACIONES = `${RUTA_FINANZAS}/liquidaciones`
 export const RUTA_INCIDENCIAS_FINANCIERAS = `${RUTA_FINANZAS}/incidencias`
 export const RUTA_PORTAL_VENTAS = `${RUTA_PORTAL_PROVEEDOR}/ventas`
 export const RUTA_PORTAL_LIQUIDACIONES = `${RUTA_PORTAL_PROVEEDOR}/liquidaciones`
+/** Slice 6 (§32): beneficios que afectan a las ofertas del proveedor. */
+export const RUTA_PORTAL_BENEFICIOS = `${RUTA_PORTAL_PROVEEDOR}/beneficios`
 
 export const OFFER_SOURCE_LABELS: Record<SupplyV2OfferSource, string> = {
   PREPURCHASED_SUPPLY: 'Supply adquirido',
@@ -467,6 +471,75 @@ export const FINANCE_INCIDENT_TYPE_LABELS: Record<SupplyV2FinanceIncidentType, s
 export const FINANCE_INCIDENT_STATUS_LABELS: Record<SupplyV2FinanceIncidentStatus, string> = {
   OPEN: 'Abierta',
   RESOLVED: 'Resuelta',
+}
+
+// ── Slice 6 · beneficios económicos ─────────────────────────────────────────
+
+import type { SupplyV2BenefitFunding, SupplyV2BenefitMovementType, SupplyV2BenefitReservationStatus, SupplyV2BenefitScope, SupplyV2BenefitStatus, SupplyV2BenefitValueType, SupplyV2CommissionBase, SupplyV2CustomerBenefitStatus } from '@prisma/client'
+
+export const RUTA_BENEFICIOS = `${BASE_SUPPLY_V2}/beneficios`
+export const RUTA_BENEFICIOS_CLIENTE = '/cliente/bonos'
+
+export const BENEFIT_FUNDING_LABELS: Record<SupplyV2BenefitFunding, string> = {
+  MEMBEGO: 'Bono financiado por Membego',
+  SUPPLIER: 'Descuento financiado por el proveedor',
+  SHARED: 'Financiación compartida',
+}
+export const BENEFIT_FUNDING_EXPLICACION: Record<SupplyV2BenefitFunding, string> = {
+  MEMBEGO: 'Membego asume el valor: sale de un presupuesto y es costo promocional. El proveedor cobra su importe contractual completo.',
+  SUPPLIER: 'El proveedor rebaja su precio: no es dinero de Membego. Solo en ofertas vendidas a comisión.',
+  SHARED: 'Parte la rebaja el proveedor y parte la financia Membego. Solo en ofertas vendidas a comisión.',
+}
+export const BENEFIT_VALUE_TYPE_LABELS: Record<SupplyV2BenefitValueType, string> = {
+  FIXED_AMOUNT: 'Importe fijo',
+  PERCENTAGE: 'Porcentaje',
+}
+export const BENEFIT_SCOPE_LABELS: Record<SupplyV2BenefitScope, string> = {
+  SPECIFIC_OFFER: 'Una oferta concreta',
+  CATALOG_ITEM: 'Un producto (todas sus ofertas)',
+  SUPPLIER: 'Todas las ofertas de un proveedor',
+}
+export const BENEFIT_STATUS_LABELS: Record<SupplyV2BenefitStatus, string> = {
+  DRAFT: 'Borrador',
+  ACTIVE: 'Activo',
+  PAUSED: 'Pausado',
+  EXHAUSTED: 'Agotado',
+  EXPIRED: 'Vencido',
+  CANCELLED: 'Cancelado',
+}
+export const BENEFIT_STATUS_TONE: Record<SupplyV2BenefitStatus, Tono> = {
+  DRAFT: 'neutral',
+  ACTIVE: 'success',
+  PAUSED: 'warning',
+  EXHAUSTED: 'warning',
+  EXPIRED: 'neutral',
+  CANCELLED: 'danger',
+}
+export const CUSTOMER_BENEFIT_STATUS_LABELS: Record<SupplyV2CustomerBenefitStatus, string> = {
+  AVAILABLE: 'Disponible',
+  EXHAUSTED: 'Usado',
+  EXPIRED: 'Vencido',
+  CANCELLED: 'Cancelado',
+}
+export const BENEFIT_RESERVATION_STATUS_LABELS: Record<SupplyV2BenefitReservationStatus, string> = {
+  ACTIVE: 'Reservado',
+  APPLIED: 'Aplicado',
+  RELEASED: 'Liberado',
+  EXPIRED: 'Expirado',
+  REVERSED: 'Reversado',
+}
+export const BENEFIT_MOVEMENT_LABELS: Record<SupplyV2BenefitMovementType, string> = {
+  GRANTED: 'Asignado a un cliente',
+  RESERVED: 'Reservado por un checkout',
+  APPLIED: 'Aplicado (compra confirmada)',
+  RELEASED: 'Liberado (compra cancelada o rechazada)',
+  EXPIRED: 'Expirado',
+  REVERSED: 'Reversado',
+}
+
+export const COMMISSION_BASE_LABELS: Record<SupplyV2CommissionBase, string> = {
+  CONTRACTUAL_SALE_VALUE: 'Sobre el valor contractual (precio tras el descuento real del proveedor)',
+  CUSTOMER_PAID_AMOUNT: 'Sobre lo que pagó el cliente (tras el subsidio de Membego)',
 }
 
 /** Formato de dinero para las pantallas de finanzas: dos decimales siempre (§52: el texto ya viene redondeado). */

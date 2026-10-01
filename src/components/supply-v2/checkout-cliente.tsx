@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { avisarPagoAction, cancelarCompraAction } from '@/modules/supply-v2/actions-cliente'
+import { avisarPagoAction, cancelarCompraAction, confirmarCoberturaTotalAction } from '@/modules/supply-v2/actions-cliente'
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 import type { CompraCliente } from '@/modules/supply-v2/commerce/queries'
 import { ENTITLEMENT_STATUS_LABELS, PAYMENT_METHODS_CLIENTE, PAYMENT_METHOD_LABELS } from '@/modules/supply-v2/core/catalogo'
@@ -33,25 +33,32 @@ function CuentaAtras({ hasta }: { hasta: Date }) {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · CHECKOUT del cliente (§27, §29, §36). Desglose con
- * precios congelados, cuenta de Membego para pagar, aviso de pago y
- * cancelación. Sin bonos, sin QR.
+ * MEMBEGO SUPPLY 2.0 · CHECKOUT del cliente (§27, §29, §36; Slice 6 §17, §21).
+ *
+ * Desglose con los precios y la financiación CONGELADOS: precio regular,
+ * descuento Membego, descuento del proveedor, beneficio aplicado y lo que
+ * queda por pagar. Si el beneficio cubre el total no hay cuenta bancaria ni
+ * aviso de pago: el propio cliente confirma y recibe su código.
  */
 export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
   const [aviso, avisar, avisando] = useActionState<EstadoAccion, FormData>(avisarPagoAction, {})
   const [cancel, cancelar, cancelando] = useActionState<EstadoAccion, FormData>(cancelarCompraAction, {})
+  const [cobertura, confirmarCobertura, confirmandoCobertura] = useActionState<EstadoAccion, FormData>(confirmarCoberturaTotalAction, {})
   const router = useRouter()
   const visto = useRef<string | undefined>(undefined)
   useEffect(() => {
-    const exito = aviso.success ?? cancel.success
+    const exito = aviso.success ?? cancel.success ?? cobertura.success
     if (exito && visto.current !== exito) {
       visto.current = exito
       toast.success(exito)
       router.refresh()
     }
-  }, [aviso, cancel, router])
+  }, [aviso, cancel, cobertura, router])
   const select = 'h-10 w-full rounded-lg border border-input bg-background px-3 text-sm'
   const enCurso = compra.status === 'PENDING' || compra.status === 'AWAITING_PAYMENT'
+  // Slice 6: cubierta por completo = no hay saldo que pagar y hay un beneficio detrás.
+  const cubiertaPorBeneficio = Number(compra.total) === 0
+  const beneficioTotal = (Number(compra.supplierDiscountTotal) + Number(compra.membegoSubsidyTotal)).toFixed(2)
 
   return (
     <div className="space-y-4">
@@ -64,22 +71,49 @@ export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
               <Fila t="Cantidad" v={String(l.quantity)} />
               <Fila t="Precio regular" v={dinero(l.publicUnitPrice, compra.currency)} />
               <Fila t="Descuento Membego" v={`−${dinero(String(Number(l.publicUnitPrice) - Number(l.saleUnitPrice)), compra.currency)}`} />
+              <Fila t="Precio Membego" v={dinero(String(Number(l.saleUnitPrice) * l.quantity), compra.currency)} />
+              {Number(l.supplierDiscountAmount) > 0 && (
+                <Fila t="Descuento del proveedor" v={`−${dinero(l.supplierDiscountAmount, compra.currency)}`} />
+              )}
+              {Number(l.membegoSubsidyAmount) > 0 && (
+                <Fila t={`Beneficio aplicado${compra.beneficio ? `: ${compra.beneficio.name}` : ''}`} v={`−${dinero(l.membegoSubsidyAmount, compra.currency)}`} testid="checkout-beneficio" />
+              )}
               <Fila t="Subtotal" v={dinero(l.total, compra.currency)} />
             </dl>
           </div>
         ))}
+        {Number(beneficioTotal) > 0 && (
+          <p className="mt-2 rounded-lg border border-success/30 bg-success/5 px-3 py-2 text-sm text-success" data-testid="checkout-beneficio-aviso">
+            Beneficio aplicado: ahorras {dinero(beneficioTotal, compra.currency)}
+            {compra.beneficio ? ` con «${compra.beneficio.name}»` : ''}.
+          </p>
+        )}
         <div className="mt-3 flex items-baseline justify-between border-t border-border pt-2">
-          <span className="font-medium">Total</span>
+          <span className="font-medium">{cubiertaPorBeneficio ? 'A pagar' : 'Total'}</span>
           <span className="text-h2 tabular-nums" data-testid="checkout-total">{dinero(compra.total, compra.currency)}</span>
         </div>
       </div>
 
-      {compra.status === 'PENDING' && (
+      {compra.status === 'PENDING' && cubiertaPorBeneficio && (
+        <>
+          <p className="text-sm text-muted-foreground"><CuentaAtras hasta={compra.expiresAt} /></p>
+          <form action={confirmarCobertura} className="space-y-2 rounded-xl border border-success/30 bg-success/5 p-4" data-testid="form-cobertura-total">
+            <input type="hidden" name="orderId" value={compra.id} />
+            <p className="text-sm font-medium">Tu beneficio cubre el total: no tienes que pagar nada.</p>
+            <p className="text-caption text-muted-foreground">No hay transferencia que hacer ni cuenta a la que pagar. Confirma y tu código queda activo al instante.</p>
+            <Button type="submit" className="w-full" disabled={confirmandoCobertura} loading={confirmandoCobertura} data-testid="btn-confirmar-cobertura">Confirmar y recibir mi código</Button>
+            {cobertura.error && <p className="text-sm text-destructive" role="alert">{cobertura.error}</p>}
+          </form>
+        </>
+      )}
+
+      {compra.status === 'PENDING' && !cubiertaPorBeneficio && (
         <>
           <p className="text-sm text-muted-foreground"><CuentaAtras hasta={compra.expiresAt} /></p>
           {compra.cuenta && (
             <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm" data-testid="checkout-cuenta">
               <p className="font-medium">Paga a Membego por transferencia o depósito</p>
+              {Number(beneficioTotal) > 0 && <p className="text-caption text-muted-foreground">El beneficio no se paga en el banco: transfiere solo la diferencia.</p>}
               <dl className="mt-2 space-y-1">
                 <Fila t="Cuenta" v={compra.cuenta.nombre} />
                 {compra.cuenta.titular && <Fila t="Titular" v={compra.cuenta.titular} />}
@@ -123,7 +157,11 @@ export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
       {compra.status === 'PAID' && (
         <div className="rounded-xl border border-success/30 bg-success/5 p-4 text-sm" data-testid="checkout-pagada">
           <p className="text-h4">Compra confirmada.</p>
-          <p className="text-muted-foreground">Tu beneficio está disponible.</p>
+          <p className="text-muted-foreground">
+            {compra.paymentStatus === 'COVERED_BY_BENEFIT'
+              ? 'Tu beneficio cubrió el total: no hubo pago. Tu código ya está activo.'
+              : 'Tu beneficio está disponible.'}
+          </p>
           <ul className="mt-2 space-y-1">
             {compra.derechos.map((d) => (
               <li key={d.id} className="flex items-baseline justify-between gap-3" data-testid="derecho">
@@ -158,11 +196,11 @@ export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
   )
 }
 
-function Fila({ t, v }: { t: string; v: string }) {
+function Fila({ t, v, testid }: { t: string; v: string; testid?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="text-muted-foreground">{t}</dt>
-      <dd className="text-right font-medium tabular-nums">{v}</dd>
+      <dd className="text-right font-medium tabular-nums" data-testid={testid}>{v}</dd>
     </div>
   )
 }

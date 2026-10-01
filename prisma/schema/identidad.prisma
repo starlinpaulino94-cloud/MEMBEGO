@@ -385,6 +385,19 @@ enum AuditAccion {
   SUPPLY_V2_COMMISSION_RECONCILIATION_RESOLVED
   SUPPLY_V2_FINANCE_INCIDENT_CREATED
   SUPPLY_V2_FINANCE_INCIDENT_RESOLVED
+  // Slice 6 · beneficios económicos
+  SUPPLY_V2_BENEFIT_CREATED
+  SUPPLY_V2_BENEFIT_APPROVED
+  SUPPLY_V2_BENEFIT_PAUSED
+  SUPPLY_V2_BENEFIT_RESUMED
+  SUPPLY_V2_BENEFIT_CANCELLED
+  SUPPLY_V2_BENEFIT_GRANTED
+  SUPPLY_V2_BENEFIT_GRANT_CANCELLED
+  SUPPLY_V2_BENEFIT_RESERVED
+  SUPPLY_V2_BENEFIT_APPLIED
+  SUPPLY_V2_BENEFIT_RELEASED
+  SUPPLY_V2_BENEFIT_REVERSED
+  SUPPLY_V2_ORDER_COVERED_BY_BENEFIT
   // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
   // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
   // alguien había pasado por el hueco de permisos que tenían estas mismas
@@ -576,6 +589,12 @@ model User {
   supplyV2LiquidacionesCreadas   SupplyV2Settlement[]              @relation("SupplyV2SettlementCreatedBy")
   supplyV2LiquidacionesAprobadas SupplyV2Settlement[]              @relation("SupplyV2SettlementApprovedBy")
   supplyV2IncidenciasResueltas   SupplyV2FinanceIncident[]         @relation("SupplyV2FinanceIncidentResolvedBy")
+  supplyV2BeneficiosCreados       SupplyV2Benefit[]            @relation("SupplyV2BenefitCreatedBy")
+  supplyV2BeneficiosAprobados     SupplyV2Benefit[]            @relation("SupplyV2BenefitApprovedBy")
+  supplyV2BeneficiosAsignados     SupplyV2CustomerBenefit[]    @relation("SupplyV2CustomerBenefitCustomer")
+  supplyV2BeneficiosOtorgados     SupplyV2CustomerBenefit[]    @relation("SupplyV2CustomerBenefitGrantedBy")
+  supplyV2ReservasDeBeneficio     SupplyV2BenefitReservation[] @relation("SupplyV2BenefitReservationCustomer")
+  supplyV2MovimientosDeBeneficio  SupplyV2BenefitMovement[]    @relation("SupplyV2BenefitMovementActor")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)

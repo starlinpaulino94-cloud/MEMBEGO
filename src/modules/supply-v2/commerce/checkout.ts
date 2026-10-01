@@ -17,7 +17,10 @@ import { calcularLineaCliente, montoCuadra } from '../core/precios'
 import { registrarAsientoEnTx } from '../pool/lotes'
 import { SIN_TOPE, unidadesLibres } from '../offers/domain'
 import { marcarAgotadaSiCorrespondeEnTx, unidadesLibresDeOfertaComisionEnTx } from '../offers/service'
-import { calcularLineaComision } from '../core/comision'
+import { repartirEnUnidades } from '../core/comision'
+import { calcularRepartoLinea, fotoDeReparto, type RepartoFinanciado, type UnidadFinanciada } from '../core/financiacion'
+import { politicaDeVersion } from '../finance/domain'
+import { aplicarReservaEnTx, liberarReservaEnTx, reservarBeneficioEnTx, type ReservaDeBeneficio } from '../benefits/service'
 import type { PaymentAccountRef } from '../contracts/gateways'
 import { reconocerVentaEnTx } from '../economics/service'
 
@@ -43,6 +46,92 @@ export interface DatosCheckout {
   idempotencyKey?: string | null
   /** Cuenta de cobro elegida; se congela como foto en la orden. */
   cuenta?: PaymentAccountRef | null
+  /** Slice 6 (§16–§17): beneficio de la cuenta del cliente (asignación) o beneficio público. El servidor lo revalida todo. */
+  customerBenefitId?: string | null
+  benefitId?: string | null
+}
+
+// ── Slice 6 · financiación de la línea (§13–§15, §19) ──────────────────────────
+
+type OfertaParaFinanciar = {
+  id: string
+  catalogItemId: string
+  supplierId: string
+  sourceType: 'PREPURCHASED_SUPPLY' | 'COMMISSION'
+  currency: string
+  salePrice: Prisma.Decimal
+  commissionPercentage: Prisma.Decimal | null
+  agreementVersion: { snapshot: unknown } | null
+}
+
+function baseDeComision(oferta: OfertaParaFinanciar): 'CONTRACTUAL_SALE_VALUE' | 'CUSTOMER_PAID_AMOUNT' | null {
+  if (oferta.sourceType !== 'COMMISSION') return null
+  return politicaDeVersion(oferta.agreementVersion?.snapshot ?? null).commissionBase
+}
+
+/**
+ * Reparto de la línea: sin beneficio es plano (contractual = lo que paga el
+ * cliente). Con beneficio, `reservarBeneficioEnTx` bloquea beneficio y
+ * asignación, valida la elegibilidad y reserva el presupuesto; el reparto que
+ * devuelve es el que la orden CONGELA (§15).
+ */
+async function financiarLineaEnTx(tx: Tx, d: DatosCheckout, oferta: OfertaParaFinanciar, orderId: string, orderLineId: string, expiresAt: Date, ctx: ContextoAuditoria): Promise<{ reparto: RepartoFinanciado; reserva: ReservaDeBeneficio | null }> {
+  const commissionBase = baseDeComision(oferta)
+  if (!d.customerBenefitId && !d.benefitId) {
+    return { reparto: calcularRepartoLinea({ saleUnitPrice: oferta.salePrice, quantity: d.quantity, sourceType: oferta.sourceType, commissionPercentage: oferta.commissionPercentage, commissionBase }), reserva: null }
+  }
+  const reserva = await reservarBeneficioEnTx(
+    tx,
+    { customerId: d.customerId, customerBenefitId: d.customerBenefitId, benefitId: d.benefitId, oferta: { id: oferta.id, catalogItemId: oferta.catalogItemId, supplierId: oferta.supplierId, sourceType: oferta.sourceType, currency: oferta.currency, salePrice: oferta.salePrice, commissionPercentage: oferta.commissionPercentage, commissionBase }, quantity: d.quantity, orderId, orderLineId, expiresAt },
+    ctx
+  )
+  return { reparto: reserva.reparto, reserva }
+}
+
+/** Escribe en orden y línea la financiación congelada. `total` = lo que paga el cliente. */
+async function congelarFinanciacionEnTx(tx: Tx, orderId: string, orderLineId: string, r: RepartoFinanciado, reserva: ReservaDeBeneficio | null): Promise<void> {
+  await tx.supplyV2CustomerOrderLine.update({
+    where: { id: orderLineId },
+    data: {
+      total: r.customerPayable,
+      contractualValue: r.contractualSaleValue,
+      supplierDiscountAmount: r.supplierDiscount,
+      membegoSubsidyAmount: r.membegoSubsidy,
+      benefitId: reserva?.benefitId ?? null,
+      commissionPercentage: r.commissionPercentage,
+      commissionAmount: r.commissionAmount,
+      supplierNet: r.supplierNet,
+      commissionUnitAmount: r.porUnidad[0]?.commissionAmount ?? 0,
+      supplierUnitNet: r.porUnidad[0]?.supplierNet ?? 0,
+    },
+  })
+  await tx.supplyV2CustomerOrder.update({
+    where: { id: orderId },
+    data: {
+      total: r.customerPayable,
+      contractualValue: r.contractualSaleValue,
+      supplierDiscountTotal: r.supplierDiscount,
+      membegoSubsidyTotal: r.membegoSubsidy,
+      commissionBase: r.commissionBase,
+      commissionPercentage: r.commissionPercentage,
+      commissionAmount: r.commissionAmount,
+      supplierNet: r.supplierNet,
+      benefitFundingSnapshot: fotoDeReparto(r, reserva ? reserva.beneficio : null),
+    },
+  })
+}
+
+/** Reconstruye el reparto POR UNIDAD desde lo congelado en la línea (determinista, §22). */
+export function unidadesDesdeLinea(l: { quantity: number; saleUnitPrice: Prisma.Decimal; supplierDiscountAmount: Prisma.Decimal; membegoSubsidyAmount: Prisma.Decimal; commissionAmount: Prisma.Decimal }, esComision: boolean): UnidadFinanciada[] {
+  const d = repartirEnUnidades(l.supplierDiscountAmount, l.quantity)
+  const m = repartirEnUnidades(l.membegoSubsidyAmount, l.quantity)
+  const c = repartirEnUnidades(l.commissionAmount, l.quantity)
+  const out: UnidadFinanciada[] = []
+  for (let i = 0; i < l.quantity; i++) {
+    const contractual = l.saleUnitPrice.minus(d[i]!)
+    out.push({ contractualValue: contractual, supplierDiscount: d[i]!, membegoSubsidy: m[i]!, customerPaid: contractual.minus(m[i]!), commissionAmount: esComision ? c[i]! : new Prisma.Decimal(0), supplierNet: esComision ? contractual.minus(c[i]!) : new Prisma.Decimal(0) })
+  }
+  return out
 }
 
 export interface OrdenClienteAbierta {
@@ -94,6 +183,9 @@ export async function abrirOrdenClienteEnTx(tx: Tx, d: DatosCheckout, ctx: Conte
       commissionPercentage: true,
       availabilityMode: true,
       availabilityQuantity: true,
+      catalogItemId: true,
+      supplierId: true,
+      agreementVersion: { select: { snapshot: true } },
       supplier: { select: { companyId: true } },
       allocation: {
         select: {
@@ -151,6 +243,9 @@ export async function abrirOrdenClienteEnTx(tx: Tx, d: DatosCheckout, ctx: Conte
       subtotal: linea.subtotal,
       discount: linea.discount,
       total: linea.total,
+      // Slice 6: nace sin beneficio (contractual = lo que paga el cliente); `congelarFinanciacionEnTx`
+      // reescribe las cuatro cifras juntas si hay beneficio. Así el CHECK de la base cuadra en los dos pasos.
+      contractualValue: linea.total,
       status: 'PENDING',
       paymentStatus: 'UNPAID',
       expiresAt,
@@ -167,14 +262,20 @@ export async function abrirOrdenClienteEnTx(tx: Tx, d: DatosCheckout, ctx: Conte
           subtotal: linea.subtotal,
           discount: linea.discount,
           total: linea.total,
+          contractualValue: linea.total,
           reservations: {
             create: reparto.map((r) => ({ allocationLineId: r.id, lotId: lineaPorId.get(r.id)!.lotId, quantity: r.cantidad, status: 'ACTIVE' })),
           },
         },
       },
     },
-    select: { id: true, number: true, total: true, expiresAt: true },
+    select: { id: true, number: true, total: true, expiresAt: true, lines: { select: { id: true } } },
   })
+
+  // 5b. Slice 6 (§16–§17): financiación de la línea (beneficio opcional) y foto congelada.
+  const fin = await financiarLineaEnTx(tx, d, oferta, orden.id, orden.lines[0]!.id, expiresAt, ctx)
+  await congelarFinanciacionEnTx(tx, orden.id, orden.lines[0]!.id, fin.reparto, fin.reserva)
+  orden.total = fin.reparto.customerPayable
 
   // 6. ALLOCATED → RESERVED en cada lote, y los contadores.
   for (const r of reparto) {
@@ -195,6 +296,10 @@ export async function abrirOrdenClienteEnTx(tx: Tx, d: DatosCheckout, ctx: Conte
     offerId: oferta.id,
     quantity: d.quantity,
     total: orden.total.toString(),
+    contractualValue: fin.reparto.contractualSaleValue.toFixed(2),
+    membegoSubsidy: fin.reparto.membegoSubsidy.toFixed(2),
+    supplierDiscount: fin.reparto.supplierDiscount.toFixed(2),
+    benefitId: fin.reserva?.benefitId ?? null,
   }, oferta.supplier.companyId)
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_ORDER_RESERVED', 'SupplyV2CustomerOrder', orden.id, {
     number: orden.number,
@@ -211,6 +316,7 @@ type OfertaComisionParaComprar = {
   id: string
   code: string
   title: string
+  sourceType: 'PREPURCHASED_SUPPLY' | 'COMMISSION'
   status: 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'PAUSED' | 'SOLD_OUT' | 'ENDED' | 'CANCELLED'
   startsAt: Date
   endsAt: Date | null
@@ -223,6 +329,9 @@ type OfertaComisionParaComprar = {
   commissionPercentage: Prisma.Decimal | null
   availabilityMode: 'UNLIMITED' | 'FIXED_QUANTITY' | 'CAPACITY' | null
   availabilityQuantity: number | null
+  catalogItemId: string
+  supplierId: string
+  agreementVersion: { snapshot: unknown } | null
   supplier: { companyId: string | null }
 }
 
@@ -251,7 +360,6 @@ async function abrirOrdenComisionEnTx(tx: Tx, d: DatosCheckout, oferta: OfertaCo
   if (limite) fallo('LIMITE_POR_CLIENTE', limite)
 
   const linea = calcularLineaCliente(oferta.publicPrice, oferta.salePrice, d.quantity)
-  const reparto = calcularLineaComision(linea.saleUnitPrice, d.quantity, oferta.commissionPercentage)
   const number = await siguienteNumero(tx, 'MBG-SO', async (prefijo) => {
     const u = await tx.supplyV2CustomerOrder.findFirst({ where: { number: { startsWith: prefijo } }, orderBy: { number: 'desc' }, select: { number: true } })
     return u?.number ?? null
@@ -265,6 +373,9 @@ async function abrirOrdenComisionEnTx(tx: Tx, d: DatosCheckout, oferta: OfertaCo
       subtotal: linea.subtotal,
       discount: linea.discount,
       total: linea.total,
+      // Slice 6: nace sin beneficio (contractual = lo que paga el cliente); `congelarFinanciacionEnTx`
+      // reescribe las cuatro cifras juntas si hay beneficio. Así el CHECK de la base cuadra en los dos pasos.
+      contractualValue: linea.total,
       status: 'PENDING',
       paymentStatus: 'UNPAID',
       expiresAt,
@@ -274,9 +385,7 @@ async function abrirOrdenComisionEnTx(tx: Tx, d: DatosCheckout, oferta: OfertaCo
       sourceType: 'COMMISSION',
       agreementId: oferta.agreementId,
       agreementVersionId: oferta.agreementVersionId,
-      commissionPercentage: reparto.commissionPercentage,
-      commissionAmount: reparto.commissionAmount,
-      supplierNet: reparto.netSupplierAmount,
+      commissionPercentage: oferta.commissionPercentage,
       lines: {
         create: {
           offerId: oferta.id,
@@ -287,16 +396,18 @@ async function abrirOrdenComisionEnTx(tx: Tx, d: DatosCheckout, oferta: OfertaCo
           subtotal: linea.subtotal,
           discount: linea.discount,
           total: linea.total,
-          commissionPercentage: reparto.commissionPercentage,
-          commissionUnitAmount: reparto.commissionUnitAmount,
-          supplierUnitNet: reparto.supplierUnitNet,
-          commissionAmount: reparto.commissionAmount,
-          supplierNet: reparto.netSupplierAmount,
+          contractualValue: linea.total,
+          commissionPercentage: oferta.commissionPercentage,
         },
       },
     },
     select: { id: true, number: true, total: true, expiresAt: true, lines: { select: { id: true } } },
   })
+  // Slice 6: financiación (beneficio opcional) → reparto congelado con la base de comisión de la versión del acuerdo (§14).
+  const fin = await financiarLineaEnTx(tx, d, oferta, orden.id, orden.lines[0]!.id, expiresAt, ctx)
+  const reparto = fin.reparto
+  await congelarFinanciacionEnTx(tx, orden.id, orden.lines[0]!.id, reparto, fin.reserva)
+  orden.total = reparto.customerPayable
   await tx.supplyV2CommissionReservation.create({
     data: { offerId: oferta.id, orderId: orden.id, orderLineId: orden.lines[0]!.id, quantity: d.quantity, status: 'ACTIVE', expiresAt },
   })
@@ -306,9 +417,14 @@ async function abrirOrdenComisionEnTx(tx: Tx, d: DatosCheckout, oferta: OfertaCo
     sourceType: 'COMMISSION',
     quantity: d.quantity,
     total: orden.total.toString(),
-    commissionPercentage: reparto.commissionPercentage.toFixed(2),
+    commissionPercentage: reparto.commissionPercentage?.toFixed(2) ?? null,
+    commissionBase: reparto.commissionBase,
     commissionAmount: reparto.commissionAmount.toFixed(2),
-    supplierNet: reparto.netSupplierAmount.toFixed(2),
+    supplierNet: reparto.supplierNet.toFixed(2),
+    contractualValue: reparto.contractualSaleValue.toFixed(2),
+    membegoSubsidy: reparto.membegoSubsidy.toFixed(2),
+    supplierDiscount: reparto.supplierDiscount.toFixed(2),
+    benefitId: fin.reserva?.benefitId ?? null,
   }, oferta.supplier.companyId)
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_ORDER_RESERVED', 'SupplyV2CustomerOrder', orden.id, {
     number: orden.number,
@@ -345,6 +461,11 @@ async function ordenBloqueada(tx: Tx, orderId: string) {
           commissionPercentage: true,
           commissionAmount: true,
           supplierNet: true,
+          contractualValue: true,
+          supplierDiscountAmount: true,
+          membegoSubsidyAmount: true,
+          benefitId: true,
+          benefitReservation: { select: { id: true, status: true } },
           offer: { select: { id: true, code: true, sourceType: true, supplierId: true, catalogItemId: true, allocationId: true, endsAt: true, supplier: { select: { companyId: true } } } },
           reservations: { where: { status: 'ACTIVE' }, select: { id: true, allocationLineId: true, lotId: true, quantity: true } },
           commissionReservations: { where: { status: 'ACTIVE' }, select: { id: true, quantity: true } },
@@ -364,6 +485,10 @@ async function soltarReservasEnTx(tx: Tx, o: OrdenBloqueada, motivo: string, act
   for (const l of o.lines) {
     // Bloquear la oferta para que el contador no compita con un checkout.
     await tx.$queryRaw`SELECT "id" FROM "supply_v2_offers" WHERE "id" = ${l.offerId} FOR UPDATE`
+    // Slice 6 (§27): la reserva del beneficio vuelve al presupuesto.
+    if (l.benefitReservation?.status === 'ACTIVE') {
+      await liberarReservaEnTx(tx, l.benefitReservation.id, destino, motivo, { actorId, ipAddress: null, userAgent: 'checkout' })
+    }
     // Slice 5: la reserva comercial de una oferta a comisión se libera (o expira) sin tocar ningún lote.
     for (const r of l.commissionReservations) {
       await tx.supplyV2CommissionReservation.update({ where: { id: r.id }, data: { status: destino, releasedAt: new Date() } })
@@ -457,6 +582,7 @@ export async function avisarPagoEnTx(
   const o = await ordenBloqueada(tx, d.orderId)
   if (o.customerId !== d.customerId) fallo('ORDEN_AJENA', 'Esa compra no es tuya.')
   if (o.status === 'AWAITING_PAYMENT') return
+  if (o.total.isZero()) fallo('COBERTURA_TOTAL', 'Esta compra está cubierta por completo por tu beneficio: confírmala sin pago.')
   exigirTransicion(TRANSICIONES_ORDEN_CLIENTE, o.status, 'AWAITING_PAYMENT', 'Compra')
   if (o.expiresAt <= new Date()) fallo('RESERVA_VENCIDA', 'La reserva de esta compra ya venció. Vuelve a comprar.')
   await tx.supplyV2CustomerOrder.update({
@@ -496,29 +622,89 @@ export async function confirmarPagoEnTx(
     return { id: o.id, number: o.number, entitlements: existentes.map((e) => ({ ...e, actualUnitCost: e.actualUnitCost.toFixed(2) })), repetido: true }
   }
   exigirTransicion(TRANSICIONES_ORDEN_CLIENTE, o.status, 'PAID', 'Compra')
+  if (o.total.isZero()) fallo('COBERTURA_TOTAL', 'Esta compra está cubierta por completo por un beneficio: no hay pago bancario que confirmar. El cliente la confirma sin pago.')
   if (!montoCuadra(d.amountSeen, o.total)) {
     fallo('MONTO_NO_CUADRA', `El monto visto (${d.amountSeen}) no coincide con el total de la compra (${o.total.toFixed(2)}).`)
   }
+  const entitlements = await emitirDerechosDeOrdenEnTx(tx, o, ctx)
+  await tx.supplyV2CustomerOrder.update({
+    where: { id: o.id },
+    data: {
+      status: 'PAID',
+      paymentStatus: 'CONFIRMED',
+      paidAt: new Date(),
+      paymentConfirmedById: ctx.actorId,
+      paymentAmountSeen: String(d.amountSeen),
+      ...(d.method ? { paymentMethod: d.method } : {}),
+    },
+  })
+  await auditarPagoYVentaEnTx(tx, o, entitlements, { amountSeen: String(d.amountSeen) }, ctx)
+  return { id: o.id, number: o.number, entitlements, repetido: false }
+}
+
+/**
+ * Slice 6 (§21) · COBERTURA TOTAL: el beneficio cubre el 100 % y no hay
+ * transferencia que esperar. El propio cliente (dueño de la orden) confirma;
+ * el servidor exige total 0 y una reserva de beneficio viva. NO se marca como
+ * pago bancario: `paymentStatus = COVERED_BY_BENEFIT`, importe visto 0.
+ */
+export async function confirmarCoberturaTotalEnTx(tx: Tx, d: { orderId: string; customerId: string }, ctx: ContextoAuditoria): Promise<PagoConfirmado> {
+  const o = await ordenBloqueada(tx, d.orderId)
+  if (o.customerId !== d.customerId) fallo('ORDEN_AJENA', 'Esa compra no es tuya.')
+  if (o.status === 'PAID') {
+    const existentes = await tx.supplyV2Entitlement.findMany({ where: { orderId: o.id }, select: { id: true, lotId: true, actualUnitCost: true } })
+    return { id: o.id, number: o.number, entitlements: existentes.map((e) => ({ ...e, actualUnitCost: e.actualUnitCost.toFixed(2) })), repetido: true }
+  }
+  exigirTransicion(TRANSICIONES_ORDEN_CLIENTE, o.status, 'PAID', 'Compra')
+  if (!o.total.isZero()) fallo('SALDO_PENDIENTE', `Esta compra tiene un saldo de ${o.total.toFixed(2)} que pagar: no es una cobertura total.`)
+  if (!o.lines.some((l) => l.benefitReservation?.status === 'ACTIVE')) fallo('SIN_BENEFICIO', 'Esta compra no tiene un beneficio reservado que la cubra.')
+  if (o.expiresAt <= new Date()) fallo('RESERVA_VENCIDA', 'La reserva de esta compra ya venció. Vuelve a comprar.')
+  const entitlements = await emitirDerechosDeOrdenEnTx(tx, o, ctx)
+  await tx.supplyV2CustomerOrder.update({
+    where: { id: o.id },
+    data: { status: 'PAID', paymentStatus: 'COVERED_BY_BENEFIT', paidAt: new Date(), paymentAmountSeen: 0 },
+  })
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_ORDER_COVERED_BY_BENEFIT', 'SupplyV2CustomerOrder', o.id, {
+    number: o.number,
+    contractualValue: o.lines.reduce((t, l) => t.plus(l.contractualValue), new Prisma.Decimal(0)).toFixed(2),
+    membegoSubsidy: o.lines.reduce((t, l) => t.plus(l.membegoSubsidyAmount), new Prisma.Decimal(0)).toFixed(2),
+    supplierDiscount: o.lines.reduce((t, l) => t.plus(l.supplierDiscountAmount), new Prisma.Decimal(0)).toFixed(2),
+    entitlements: entitlements.length,
+  }, o.lines[0]?.offer.supplier.companyId ?? null)
+  await auditarPagoYVentaEnTx(tx, o, entitlements, { amountSeen: '0' }, ctx)
+  return { id: o.id, number: o.number, entitlements, repetido: false }
+}
+
+/**
+ * Emite los derechos de una orden (ambas fuentes), consolidando antes la
+ * reserva del beneficio (§20). Compartido por el pago confirmado y por la
+ * cobertura total. No cambia el estado de la orden: lo hace quien llama.
+ */
+async function emitirDerechosDeOrdenEnTx(tx: Tx, o: OrdenBloqueada, ctx: ContextoAuditoria): Promise<PagoConfirmado['entitlements']> {
   const reservadas = o.lines.reduce((t, l) => t + l.reservations.reduce((s, r) => s + r.quantity, 0) + l.commissionReservations.reduce((s, r) => s + r.quantity, 0), 0)
   const pedidas = o.lines.reduce((t, l) => t + l.quantity, 0)
   if (reservadas !== pedidas) fallo('RESERVA_INCOMPLETA', 'La reserva de esta compra ya no está completa: no se puede emitir.')
+  // Slice 6 (§20): el beneficio se consolida ANTES de emitir; si su reserva ya no vive, nada se emite.
+  for (const l of o.lines) {
+    if (l.benefitReservation) await aplicarReservaEnTx(tx, l.benefitReservation.id, ctx)
+  }
 
   const entitlements: PagoConfirmado['entitlements'] = []
   for (const l of o.lines) {
     await tx.$queryRaw`SELECT "id" FROM "supply_v2_offers" WHERE "id" = ${l.offerId} FOR UPDATE`
     // Slice 5 (§18–§19): a COMISIÓN la reserva comercial se CONSUME y nace un
     // derecho por unidad sin lote, con costo 0 y la foto de comisión/neto.
+    const unidades = unidadesDesdeLinea(l, l.offer.sourceType === 'COMMISSION')
     if (l.offer.sourceType === 'COMMISSION') {
       if (o.sourceType !== 'COMMISSION' || l.commissionPercentage == null) fallo('ORDEN_INCONSISTENTE', 'La orden no tiene la foto de la comisión.')
-      const reparto = calcularLineaComision(l.saleUnitPrice, l.quantity, l.commissionPercentage)
-      if (!reparto.commissionAmount.equals(l.commissionAmount) || !reparto.netSupplierAmount.equals(l.supplierNet)) {
+      if (!l.contractualValue.minus(l.commissionAmount).equals(l.supplierNet)) {
         fallo('ORDEN_INCONSISTENTE', 'El reparto congelado en la orden no cuadra con el motor de precios.')
       }
       for (const r of l.commissionReservations) {
         await tx.supplyV2CommissionReservation.update({ where: { id: r.id }, data: { status: 'CONSUMED', consumedAt: new Date() } })
       }
       for (let i = 0; i < l.quantity; i++) {
-        const u = reparto.porUnidad[i]!
+        const u = unidades[i]!
         const e = await tx.supplyV2Entitlement.create({
           data: {
             customerId: o.customerId,
@@ -536,7 +722,10 @@ export async function confirmarPagoEnTx(
             quantity: 1,
             origin: 'PURCHASE',
             actualUnitCost: 0,
-            customerUnitPrice: l.saleUnitPrice,
+            customerUnitPrice: u.customerPaid,
+            contractualUnitValue: u.contractualValue,
+            supplierDiscountAmount: u.supplierDiscount,
+            membegoSubsidyAmount: u.membegoSubsidy,
             commissionPercentage: l.commissionPercentage,
             commissionAmount: u.commissionAmount,
             supplierNet: u.supplierNet,
@@ -551,6 +740,7 @@ export async function confirmarPagoEnTx(
       await marcarAgotadaSiCorrespondeEnTx(tx, l.offerId)
       continue
     }
+    let emitidasEnLinea = 0
     for (const r of l.reservations) {
       const lote = await tx.supplyV2Lot.findUniqueOrThrow({ where: { id: r.lotId }, select: { unitCost: true, currency: true, expiresAt: true } })
       await registrarAsientoEnTx(
@@ -566,6 +756,7 @@ export async function confirmarPagoEnTx(
       })
       await tx.supplyV2OrderReservation.update({ where: { id: r.id }, data: { status: 'ISSUED', issuedAt: new Date() } })
       for (let i = 0; i < r.quantity; i++) {
+        const u = unidades[emitidasEnLinea++]!
         const e = await tx.supplyV2Entitlement.create({
           data: {
             customerId: o.customerId,
@@ -580,7 +771,10 @@ export async function confirmarPagoEnTx(
             quantity: 1,
             origin: 'PURCHASE',
             actualUnitCost: lote.unitCost,
-            customerUnitPrice: l.saleUnitPrice,
+            customerUnitPrice: u.customerPaid,
+            contractualUnitValue: u.contractualValue,
+            supplierDiscountAmount: u.supplierDiscount,
+            membegoSubsidyAmount: u.membegoSubsidy,
             currency: lote.currency,
             status: 'ACTIVE',
             expiresAt: lote.expiresAt,
@@ -599,22 +793,15 @@ export async function confirmarPagoEnTx(
     }
     await marcarAgotadaSiCorrespondeEnTx(tx, l.offerId)
   }
-  await tx.supplyV2CustomerOrder.update({
-    where: { id: o.id },
-    data: {
-      status: 'PAID',
-      paymentStatus: 'CONFIRMED',
-      paidAt: new Date(),
-      paymentConfirmedById: ctx.actorId,
-      paymentAmountSeen: String(d.amountSeen),
-      ...(d.method ? { paymentMethod: d.method } : {}),
-    },
-  })
+  return entitlements
+}
+
+async function auditarPagoYVentaEnTx(tx: Tx, o: OrdenBloqueada, entitlements: PagoConfirmado['entitlements'], d: { amountSeen: string }, ctx: ContextoAuditoria): Promise<void> {
   const companyId = o.lines[0]?.offer.supplier.companyId ?? null
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_ORDER_PAID', 'SupplyV2CustomerOrder', o.id, {
     number: o.number,
     total: o.total.toString(),
-    amountSeen: String(d.amountSeen),
+    amountSeen: d.amountSeen,
     entitlements: entitlements.length,
   }, companyId)
   if (o.sourceType === 'COMMISSION') {
@@ -637,5 +824,4 @@ export async function confirmarPagoEnTx(
     // Slice 4 (§24–§25, §29): ingreso + costo de la unidad, reconocidos UNA vez, aquí.
     await reconocerVentaEnTx(tx, e.id, ctx)
   }
-  return { id: o.id, number: o.number, entitlements, repetido: false }
 }

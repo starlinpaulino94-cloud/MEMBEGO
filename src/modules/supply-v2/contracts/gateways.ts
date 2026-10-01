@@ -64,6 +64,13 @@ export const SUPPLY_V2_PERMISSIONS = [
   'SUPPLY_V2_SETTLEMENT_APPROVE',
   'SUPPLY_V2_SETTLEMENT_PAY',
   'SUPPLY_V2_COMMISSION_RECONCILE',
+  // Slice 6 · beneficios económicos (§34)
+  'SUPPLY_V2_BENEFIT_VIEW',
+  'SUPPLY_V2_BENEFIT_CREATE',
+  'SUPPLY_V2_BENEFIT_APPROVE',
+  'SUPPLY_V2_BENEFIT_ASSIGN',
+  'SUPPLY_V2_BENEFIT_CANCEL',
+  'SUPPLY_V2_BENEFIT_FINANCE_VIEW',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -91,6 +98,12 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_SETTLEMENT_APPROVE: 'Aprobar liquidaciones (segregación: no quien las generó)',
   SUPPLY_V2_SETTLEMENT_PAY: 'Registrar pagos de liquidaciones',
   SUPPLY_V2_COMMISSION_RECONCILE: 'Conciliar ventas a comisión con proveedores',
+  SUPPLY_V2_BENEFIT_VIEW: 'Ver beneficios económicos (bonos y descuentos)',
+  SUPPLY_V2_BENEFIT_CREATE: 'Crear beneficios y pausarlos',
+  SUPPLY_V2_BENEFIT_APPROVE: 'Aprobar beneficios (segregación: no quien los creó)',
+  SUPPLY_V2_BENEFIT_ASSIGN: 'Asignar beneficios a clientes',
+  SUPPLY_V2_BENEFIT_CANCEL: 'Cancelar beneficios y asignaciones; reversar aplicaciones',
+  SUPPLY_V2_BENEFIT_FINANCE_VIEW: 'Ver presupuestos, subsidios y resultado económico de los beneficios',
 }
 
 export interface CompanyGateway {
