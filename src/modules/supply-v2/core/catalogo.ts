@@ -381,8 +381,10 @@ export const ECONOMIC_EVENT_LABELS: Record<SupplyV2EconomicEventType, string> = 
 import type {
   SupplyV2AvailabilityMode,
   SupplyV2CommissionReservationStatus,
+  SupplyV2FinanceIncidentSeverity,
   SupplyV2FinanceIncidentStatus,
   SupplyV2FinanceIncidentType,
+  SupplyV2PaymentIncidentResolution,
   SupplyV2OfferSource,
   SupplyV2ReconciliationKind,
   SupplyV2ResolutionType,
@@ -466,10 +468,40 @@ export const RESOLUTION_TYPE_LABELS: Record<SupplyV2ResolutionType, string> = {
 
 export const FINANCE_INCIDENT_TYPE_LABELS: Record<SupplyV2FinanceIncidentType, string> = {
   REDEMPTION_REVERSED_AFTER_PAYMENT: 'Entrega reversada con el neto ya pagado',
+  EXTERNAL_PAYMENT_MISMATCH: 'Pago externo que no coincide con Membego',
+}
+
+/// Por qué no coincide. Texto y no enum en la base (un motivo nuevo no debe
+/// pedir una migración), así que la etiqueta se resuelve con respaldo.
+export const PAYMENT_INCIDENT_REASON_LABELS: Record<string, string> = {
+  AMOUNT_MISMATCH: 'El importe cobrado no es el de la compra',
+  CURRENCY_MISMATCH: 'Se cobró en otra moneda',
+  UNKNOWN_ORDER: 'La compra que dice el cobro no existe',
+  STATE_CONFLICT: 'Los dos lados dicen cosas incompatibles',
+  DUPLICATE_TRANSACTION: 'La misma transacción apareció en otra compra',
+}
+
+export function etiquetaDeMotivoDePago(motivo: string | null | undefined): string {
+  if (!motivo) return 'Sin motivo registrado'
+  return PAYMENT_INCIDENT_REASON_LABELS[motivo] ?? motivo
+}
+
+export const FINANCE_INCIDENT_SEVERITY_LABELS: Record<SupplyV2FinanceIncidentSeverity, string> = {
+  LOW: 'Baja',
+  MEDIUM: 'Media',
+  HIGH: 'Alta',
+}
+
+export const PAYMENT_INCIDENT_RESOLUTION_LABELS: Record<SupplyV2PaymentIncidentResolution, string> = {
+  ACCEPT_INTERNAL: 'Lo nuestro es correcto',
+  ACCEPT_EXTERNAL: 'La evidencia externa es correcta',
+  MARK_FALSE_POSITIVE: 'Falso positivo',
+  MANUAL_CORRECTION_REQUIRED: 'Necesita una corrección manual',
 }
 
 export const FINANCE_INCIDENT_STATUS_LABELS: Record<SupplyV2FinanceIncidentStatus, string> = {
   OPEN: 'Abierta',
+  INVESTIGATING: 'En investigación',
   RESOLVED: 'Resuelta',
 }
 

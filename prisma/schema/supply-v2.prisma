@@ -948,6 +948,9 @@ model SupplyV2CustomerOrder {
 
   /// Slice 9 · eventos externos que apuntan a esta compra (webhook inbox).
   externalEvents SupplyV2ExternalEvent[] @relation("SupplyV2ExternalEventOrder")
+  /// Slice 9 · bloque 3: incidentes y comprobaciones de pago sobre esta compra.
+  paymentIncidents       SupplyV2FinanceIncident[]       @relation("SupplyV2IncidentOrder")
+  paymentReconciliations SupplyV2PaymentReconciliation[] @relation("SupplyV2ReconciliationOrder")
 
   @@index([customerId, status])
   @@index([status, expiresAt])
@@ -2001,11 +2004,51 @@ enum SupplyV2ResolutionType {
 enum SupplyV2FinanceIncidentType {
   /// Se reversó una entrega cuya obligación ya estaba (parcialmente) pagada: no se deshace en silencio.
   REDEMPTION_REVERSED_AFTER_PAYMENT
+
+  /// SLICE 9 · lo que dice la pasarela no coincide con lo que dice Membego.
+  ///
+  /// UN solo tipo para los seis casos del bloque 3 —monto, moneda, orden
+  /// inexistente, conflicto de estado, transacción duplicada— y el motivo
+  /// concreto en `reasonCode`. Seis tipos de enum serían seis migraciones
+  /// futuras y una lista que se queda corta el día que una pasarela invente un
+  /// séptimo desacuerdo; un tipo estable más un motivo en texto no.
+  EXTERNAL_PAYMENT_MISMATCH
 }
 
 enum SupplyV2FinanceIncidentStatus {
   OPEN
+  /// SLICE 9 · alguien lo está mirando. Existe para que dos personas no
+  /// investiguen lo mismo sin saberlo, y para que un incidente parado se
+  /// distinga de uno que nadie ha abierto todavía.
+  INVESTIGATING
   RESOLVED
+}
+
+/// SLICE 9 · cuánto corre. No es una etiqueta de ánimo: ordena la cola de
+/// trabajo y decide a qué se mira primero.
+enum SupplyV2FinanceIncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/// SLICE 9 · cómo se cerró un incidente de pago externo.
+///
+/// Enum propio y no `SupplyV2ResolutionType` (ACCEPT_INTERNAL / ACCEPT_SUPPLIER
+/// / ADJUSTED), que es de la conciliación con PROVEEDORES: compartirlo haría
+/// que una conciliación de liquidación pudiera cerrarse como «falso positivo»
+/// y un incidente de pasarela como «ajustado», y las dos listas acabarían
+/// siendo una unión sin significado.
+enum SupplyV2PaymentIncidentResolution {
+  /// Lo nuestro es correcto; lo que manda la pasarela no se acepta.
+  ACCEPT_INTERNAL
+  /// La evidencia externa es correcta. NO mueve dinero por sí misma: lo mueve
+  /// el servicio oficial de confirmación, que es quien sabe hacerlo.
+  ACCEPT_EXTERNAL
+  /// No había problema: la detección se equivocó.
+  MARK_FALSE_POSITIVE
+  /// Hace falta una corrección que este flujo no puede hacer solo.
+  MANUAL_CORRECTION_REQUIRED
 }
 
 /// Reserva COMERCIAL de capacidad de una oferta a comisión (§13–§15). No es
@@ -2130,11 +2173,29 @@ model SupplyV2SettlementLine {
 model SupplyV2FinanceIncident {
   id String @id @default(cuid())
 
-  supplierId String
-  supplier   SupplyV2Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  /// OPCIONAL DESDE EL SLICE 9, y es el cambio estructural del bloque 3.
+  ///
+  /// Hasta aquí todo incidente era de un proveedor, porque el único tipo
+  /// hablaba de una obligación: dinero que Membego le debe a alguien concreto.
+  /// Un aviso de pago de una pasarela no es eso. Es dinero que un CLIENTE le
+  /// paga a Membego, y puede llegar para una compra cuyo proveedor no se puede
+  /// resolver —o para una referencia que no existe, que es justo el caso más
+  /// grave—.
+  ///
+  /// Lo que NO se hace: inventar un «proveedor sistema» para rellenar la
+  /// columna. Sería mentir en la clave foránea y contaminar los informes por
+  /// proveedor con filas que no son de nadie. Un CHECK exige el proveedor en
+  /// los tipos que lo necesitan y lo deja libre en los que no.
+  supplierId String?
+  supplier   SupplyV2Supplier? @relation(fields: [supplierId], references: [id], onDelete: Restrict)
 
   type   SupplyV2FinanceIncidentType
   status SupplyV2FinanceIncidentStatus @default(OPEN)
+
+  /// Slice 9. `MEDIUM` por defecto para que las filas históricas tengan un
+  /// valor honesto: nadie les asignó severidad, y la del medio no miente ni
+  /// hacia arriba ni hacia abajo.
+  severity SupplyV2FinanceIncidentSeverity @default(MEDIUM)
 
   obligationId String?
   obligation   SupplyV2SupplierObligation? @relation(fields: [obligationId], references: [id], onDelete: Restrict)
@@ -2143,16 +2204,136 @@ model SupplyV2FinanceIncident {
   currency String  @default("DOP")
   amount   Decimal @db.Decimal(14, 2)
 
+  // ── SLICE 9 · el pago externo que no cuadra ───────────────────────────────
+
+  /// Por qué no cuadra: `AMOUNT_MISMATCH`, `CURRENCY_MISMATCH`,
+  /// `UNKNOWN_ORDER`, `STATE_CONFLICT`, `DUPLICATE_TRANSACTION`. Texto y no
+  /// enum: un motivo nuevo no debe pedir una migración.
+  reasonCode String?
+
+  /// Quién lo reportó (`TEST_GATEWAY`, `CARDNET`…) y con qué identificadores.
+  provider              String?
+  externalTransactionId String?
+
+  /// La fila del inbox que lo provocó. Es el vínculo con el evento: desde el
+  /// incidente se llega al cuerpo saneado, a la firma verificada y a la hora.
+  externalEventRowId String?
+  externalEvent      SupplyV2ExternalEvent? @relation("SupplyV2IncidentExternalEvent", fields: [externalEventRowId], references: [id], onDelete: SetNull)
+
+  /// La compra, cuando se pudo resolver. NULL es un caso legítimo y esperado:
+  /// el evento que llegó con una referencia inexistente.
+  orderId String?
+  order   SupplyV2CustomerOrder? @relation("SupplyV2IncidentOrder", fields: [orderId], references: [id], onDelete: Restrict)
+
+  /// El hilo del Bloque 2, para contar la historia completa desde el incidente.
+  correlationId String?
+
+  /// Lo que decía cada lado cuando se detectó. Se guarda porque el estado de la
+  /// orden cambia después y el incidente tiene que seguir explicando qué se vio.
+  internalStatus String?
+  externalStatus String?
+
+  /// IDENTIDAD ESTABLE DEL PROBLEMA: `provider:referencia:orden:motivo`. Es lo
+  /// que impide que cinco entregas del mismo webhook abran cinco incidentes.
+  /// Único, y NULL en todas las filas históricas (PostgreSQL admite varios
+  /// NULL en un índice único: el pasado no se altera).
+  dedupeKey String? @unique
+
   notes           String
+  resolution      SupplyV2PaymentIncidentResolution?
   resolvedById    String?
-  resolvedBy      User?     @relation("SupplyV2FinanceIncidentResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedBy      User?                              @relation("SupplyV2FinanceIncidentResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
   resolvedAt      DateTime?
   resolutionNotes String?
 
   createdAt DateTime @default(now())
 
+  reconciliations SupplyV2PaymentReconciliation[] @relation("SupplyV2ReconciliationIncident")
+
   @@index([supplierId, status])
+  @@index([status, severity, createdAt])
+  @@index([type, status])
+  @@index([orderId])
+  @@index([provider, externalTransactionId])
+  @@index([correlationId])
   @@map("supply_v2_finance_incidents")
+}
+
+/// UNA COMPROBACIÓN DE UN PAGO EXTERNO CONTRA LA REALIDAD INTERNA (§6).
+///
+/// ──────────────────────────────────────────────────────────────────────────
+/// POR QUÉ NO ES `SupplyV2Reconciliation`
+///
+/// Esa tabla es la conciliación PERIÓDICA con un PROVEEDOR: su identidad es
+/// `(supplierId, kind, periodStart, periodEnd)`, su `supplierId` y su
+/// `createdById` son obligatorios —la crea una persona—, y sus importes son
+/// agregados de un periodo (ventas brutas, comisión, neto, pagos).
+///
+/// Esto es otra cosa en los cinco ejes que importan:
+///
+///   · la unidad es UNA transacción, no un periodo;
+///   · la contraparte es una pasarela, no un proveedor —y puede no haber
+///     proveedor ninguno—;
+///   · el dinero va en la otra dirección: lo que el CLIENTE le paga a Membego,
+///     no lo que Membego le debe al proveedor;
+///   · la crea una máquina (el webhook o el barrido), no una persona;
+///   · su identidad es `provider + transacción`, no `(proveedor, periodo)`.
+///
+/// Meterlo ahí habría pedido: `supplierId` opcional, `createdById` opcional, un
+/// tercer `kind`, romper la clave única del periodo y seis columnas nuevas que
+/// serían NULL en todas las filas existentes. Eso no es extender un modelo: es
+/// vaciarlo de significado para que acepte otro.
+model SupplyV2PaymentReconciliation {
+  id String @id @default(cuid())
+
+  provider              String
+  externalTransactionId String?
+  /// La fila del inbox, cuando la comprobación nace de un evento recibido.
+  externalEventRowId    String?
+  externalEvent         SupplyV2ExternalEvent? @relation("SupplyV2ReconciliationExternalEvent", fields: [externalEventRowId], references: [id], onDelete: SetNull)
+
+  orderId String?
+  order   SupplyV2CustomerOrder? @relation("SupplyV2ReconciliationOrder", fields: [orderId], references: [id], onDelete: Restrict)
+
+  correlationId String?
+
+  /// Lo que esperábamos y lo que nos dijeron. En `Decimal`, nunca en coma
+  /// flotante: un importe en `Number` es cómo aparecen las diferencias de un
+  /// centavo que nadie sabe explicar.
+  expectedAmount   Decimal? @db.Decimal(14, 2)
+  reportedAmount   Decimal? @db.Decimal(14, 2)
+  expectedCurrency String?
+  reportedCurrency String?
+  differenceAmount Decimal? @db.Decimal(14, 2)
+
+  internalStatus String?
+  externalStatus String?
+
+  /// `MATCHED` | `MISMATCH` | `WAITING` | `IGNORED`, de la matriz pura.
+  outcome    String
+  reasonCode String?
+  severity   SupplyV2FinanceIncidentSeverity @default(LOW)
+
+  /// Cuántas veces se ha comprobado esto y cuándo fue la última. La fila se
+  /// REFRESCA en vez de duplicarse: cinco entregas del mismo webhook no son
+  /// cinco comprobaciones distintas, son la misma mirada repetida.
+  checks    Int      @default(1)
+  checkedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  incidentId String?
+  incident   SupplyV2FinanceIncident? @relation("SupplyV2ReconciliationIncident", fields: [incidentId], references: [id], onDelete: SetNull)
+
+  /// `provider:referencia:orden`. Lo que hace que comprobar dos veces lo mismo
+  /// deje una fila y no dos.
+  dedupeKey String @unique
+
+  @@index([outcome, checkedAt])
+  @@index([provider, externalTransactionId])
+  @@index([orderId])
+  @@index([correlationId])
+  @@index([incidentId])
+  @@map("supply_v2_payment_reconciliations")
 }
 
 // ══════════════════════════════════════════════════════════════════════════

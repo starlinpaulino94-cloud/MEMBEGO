@@ -17,5 +17,8 @@ export async function resolverIncidenciaFinancieraEnTx(tx: Tx, incidentId: strin
   if (!i) fallo('INCIDENCIA_NO_ENCONTRADA', 'La incidencia no existe.')
   if (i.status === 'RESOLVED') return
   await tx.supplyV2FinanceIncident.update({ where: { id: i.id }, data: { status: 'RESOLVED', resolvedById: ctx.actorId, resolvedAt: new Date(), resolutionNotes: notas.trim() } })
-  await auditarEnTx(tx, ctx, 'SUPPLY_V2_FINANCE_INCIDENT_RESOLVED', 'SupplyV2FinanceIncident', i.id, { type: i.type, amount: i.amount.toFixed(2), notas: notas.trim() }, i.supplier.companyId)
+  // `supplier` es opcional desde el Slice 9 (un incidente de pago externo puede
+  // no tener proveedor resoluble), así que la empresa de la bitácora también lo
+  // es: `null` significa «de plataforma», que es lo que esos incidentes son.
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_FINANCE_INCIDENT_RESOLVED', 'SupplyV2FinanceIncident', i.id, { type: i.type, amount: i.amount.toFixed(2), notas: notas.trim() }, i.supplier?.companyId ?? null)
 }

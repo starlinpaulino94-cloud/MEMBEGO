@@ -280,6 +280,8 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPPLY_V2_EXTERNAL_EVENT_RETRIED: 'Supply 2.0 · evento externo reintentado a mano',
   SUPPLY_V2_OUTBOX_DEAD_LETTER: 'Supply 2.0 · efecto pendiente sin salida',
   SUPPLY_V2_OUTBOX_RETRIED: 'Supply 2.0 · efecto pendiente reintentado a mano',
+  SUPPLY_V2_PAYMENT_RECONCILIATION_CREATED: 'Supply 2.0 · pago externo conciliado',
+  SUPPLY_V2_FINANCE_INCIDENT_INVESTIGATING: 'Supply 2.0 · incidencia en investigación',
   // Slice 8 · fidelización
   SUPPLY_V2_LOYALTY_PROGRAM_CREATED: 'Supply 2.0 · programa de fidelización creado',
   SUPPLY_V2_LOYALTY_PROGRAM_SUBMITTED: 'Supply 2.0 · programa de fidelización enviado a revisión',

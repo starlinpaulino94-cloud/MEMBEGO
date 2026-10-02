@@ -601,7 +601,7 @@ export async function listarIncidenciasFinancieras(f: { status?: 'OPEN' | 'RESOL
       tx.supplyV2FinanceIncident.count({ where }),
     ])
   )
-  return { filas: filas.map((i) => ({ id: i.id, type: i.type, status: i.status, proveedor: i.supplier.commercialName, proveedorId: i.supplier.id, obligationNumber: i.obligation?.number ?? null, obligationId: i.obligationId, settlementId: i.obligation?.settlementId ?? null, redemptionId: i.redemptionId, currency: i.currency, amount: i.amount.toFixed(2), notes: i.notes, resolutionNotes: i.resolutionNotes, resueltoPor: nombre(i.resolvedBy), resolvedAt: i.resolvedAt, createdAt: i.createdAt })), total }
+  return { filas: filas.map((i) => ({ id: i.id, type: i.type, status: i.status, proveedor: i.supplier?.commercialName ?? null, proveedorId: i.supplier?.id ?? null, obligationNumber: i.obligation?.number ?? null, obligationId: i.obligationId, settlementId: i.obligation?.settlementId ?? null, redemptionId: i.redemptionId, currency: i.currency, amount: i.amount.toFixed(2), notes: i.notes, resolutionNotes: i.resolutionNotes, resueltoPor: nombre(i.resolvedBy), resolvedAt: i.resolvedAt, createdAt: i.createdAt })), total }
 }
 
 /** Liquidaciones aprobadas con saldo de un proveedor (para el formulario de pago). */
