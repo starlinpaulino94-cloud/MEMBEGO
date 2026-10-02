@@ -79,6 +79,19 @@ export const SUPPLY_V2_PERMISSIONS = [
   'SUPPLY_V2_COUPON_MANAGE',
   'SUPPLY_V2_CAMPAIGN_FINANCE_VIEW',
   'SUPPLY_V2_CAMPAIGN_REPORT_VIEW',
+  // Slice 8 · fidelización. Crear no es aprobar, aprobar no es otorgar, y
+  // ajustar puntos a mano tiene el suyo porque vale dinero.
+  'SUPPLY_V2_LOYALTY_VIEW',
+  'SUPPLY_V2_LOYALTY_PROGRAM_CREATE',
+  'SUPPLY_V2_LOYALTY_PROGRAM_APPROVE',
+  'SUPPLY_V2_MEMBERSHIP_MANAGE',
+  'SUPPLY_V2_MEMBERSHIP_GRANT',
+  'SUPPLY_V2_REFERRAL_MANAGE',
+  'SUPPLY_V2_POINTS_RULES_MANAGE',
+  'SUPPLY_V2_POINTS_ADJUST',
+  'SUPPLY_V2_REWARD_APPROVE',
+  'SUPPLY_V2_LOYALTY_FINANCE_VIEW',
+  'SUPPLY_V2_LOYALTY_REPORT_VIEW',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -119,6 +132,17 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_COUPON_MANAGE: 'Generar, asignar y cancelar cupones',
   SUPPLY_V2_CAMPAIGN_FINANCE_VIEW: 'Ver presupuesto, subsidio y resultado económico de las campañas',
   SUPPLY_V2_CAMPAIGN_REPORT_VIEW: 'Ver los reportes y el tablero de campañas',
+  SUPPLY_V2_LOYALTY_VIEW: 'Ver los programas de fidelización',
+  SUPPLY_V2_LOYALTY_PROGRAM_CREATE: 'Crear y configurar programas de fidelización',
+  SUPPLY_V2_LOYALTY_PROGRAM_APPROVE: 'Aprobar un programa de fidelización',
+  SUPPLY_V2_MEMBERSHIP_MANAGE: 'Crear y publicar planes de membresía',
+  SUPPLY_V2_MEMBERSHIP_GRANT: 'Otorgar o cancelar la membresía de un cliente',
+  SUPPLY_V2_REFERRAL_MANAGE: 'Configurar el programa de referidos y aprobar sus recompensas',
+  SUPPLY_V2_POINTS_RULES_MANAGE: 'Cambiar las reglas de acumulación de puntos',
+  SUPPLY_V2_POINTS_ADJUST: 'Ajustar a mano los puntos de un cliente',
+  SUPPLY_V2_REWARD_APPROVE: 'Crear y aprobar recompensas',
+  SUPPLY_V2_LOYALTY_FINANCE_VIEW: 'Ver el presupuesto y los costos de fidelización',
+  SUPPLY_V2_LOYALTY_REPORT_VIEW: 'Ver los reportes y el tablero de fidelización',
 }
 
 export interface CompanyGateway {
