@@ -1,5 +1,5 @@
 import React from 'react'
-import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -118,6 +118,7 @@ function MessageBubble({
 /* ── Screen ────────────────────────────────────────────────────────────── */
 
 function TicketDetalleScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -130,7 +131,7 @@ function TicketDetalleScreenContent() {
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (authLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card" : "flex-1 items-center justify-center bg-background"}>
         <ActivityIndicator size="large" color="#0284c7" />
       </View>
     )
@@ -138,7 +139,7 @@ function TicketDetalleScreenContent() {
 
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card p-6" : "flex-1 items-center justify-center bg-background p-6"}>
         <Text className="text-lg font-inter-bold text-foreground mb-4 text-center">
           Inicia sesión para ver este ticket
         </Text>
@@ -153,10 +154,10 @@ function TicketDetalleScreenContent() {
   const ticket = ticketData?.ticket
 
   return (
-    <View className="flex-1 bg-background">
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"}>
       {/* ── Header ──────────────────────────────────────────────────── */}
       <View
-        className="flex-row items-center gap-2 bg-background border-b border-border"
+        className={sheetBackgroundClass === 'bg-surface-card' ? "flex-row items-center gap-2 bg-surface-card border-b border-border" : "flex-row items-center gap-2 bg-background border-b border-border"}
         style={{
           paddingLeft: insets.left + 16,
           paddingRight: 16,

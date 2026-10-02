@@ -26,7 +26,7 @@ export function Sheet({
   const { height } = useWindowDimensions();
   const [modalVisible, setModalVisible] = React.useState(visible);
   const isMounted = React.useRef(visible);
-  const animationProgress = React.useRef(new Animated.Value(0)).current;
+  const animationProgress = React.useMemo(() => new Animated.Value(0), []);
   const animation = React.useRef<Animated.CompositeAnimation | null>(null);
   const animationFrame = React.useRef<number | null>(null);
   const translateY = animationProgress.interpolate({
@@ -37,9 +37,9 @@ export function Sheet({
   React.useEffect(() => {
     if (visible) {
       isMounted.current = true;
-      setModalVisible(true);
       animationProgress.setValue(0);
       animationFrame.current = requestAnimationFrame(() => {
+        setModalVisible(true);
         animation.current = Animated.timing(animationProgress, {
           toValue: 1,
           duration: 250,
@@ -107,11 +107,12 @@ export function Sheet({
           />
         </Pressable>
         <Animated.View
+          className="bg-surface-card"
           style={[
             {
               paddingBottom: insets.bottom,
-              backgroundColor: colors.surface.card,
               borderTopColor: colors.surface.border,
+              backgroundColor: colors.surface.card,
               borderTopWidth: 1,
               borderTopLeftRadius: radii['2xl'],
               borderTopRightRadius: radii['2xl'],

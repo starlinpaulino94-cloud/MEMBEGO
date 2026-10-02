@@ -1,5 +1,5 @@
 import React from 'react'
-import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { Card } from '../src/components/ui/Card'
 import { BackHeader } from '../src/components/ui/BackHeader'
 
 function InteresesScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -26,7 +27,7 @@ function InteresesScreenContent() {
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card p-6" : "flex-1 items-center justify-center bg-vibe-fondo p-6"}>
         <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-4">
           <Sparkles size={32} color="#0284c7" />
         </View>
@@ -46,7 +47,7 @@ function InteresesScreenContent() {
   /* ── Loading ───────────────────────────────────────────────────────── */
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-vibe-fondo">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card" : "flex-1 items-center justify-center bg-vibe-fondo"}>
         <ActivityIndicator size="large" color="#0284c7" />
       </View>
     )
@@ -55,7 +56,7 @@ function InteresesScreenContent() {
   /* ── Error ─────────────────────────────────────────────────────────── */
   if (isError) {
     return (
-      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card p-6" : "flex-1 items-center justify-center bg-vibe-fondo p-6"}>
         <View className="h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10 mb-4">
           <AlertCircle size={32} color="#e7000b" />
         </View>
@@ -74,7 +75,7 @@ function InteresesScreenContent() {
   const seleccion = data?.seleccion ?? []
 
   return (
-    <View className="flex-1 bg-vibe-fondo">
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
       {/* ── Barra con back + titulo ─────────────────────────────────── */}
       <BackHeader
         title="Tus intereses"

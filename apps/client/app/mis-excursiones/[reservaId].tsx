@@ -1,5 +1,5 @@
 import React from 'react';
-import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -130,6 +130,7 @@ const POLITICA_DEFAULT: PoliticaReembolso = {
 };
 
 function MisExcursionDetalleScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { reservaId } = useLocalSearchParams<{ reservaId: string }>();
@@ -142,7 +143,7 @@ function MisExcursionDetalleScreenContent() {
   // Auth gate
   if (authLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card" : "flex-1 items-center justify-center bg-background"}>
         <ActivityIndicator color="#0284c7" size="large" />
       </View>
     );
@@ -150,7 +151,7 @@ function MisExcursionDetalleScreenContent() {
 
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
             onPress={() => goBackOr(router, '/mis-excursiones')}
@@ -179,7 +180,7 @@ function MisExcursionDetalleScreenContent() {
   // Loading
   if (isLoading) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
             onPress={() => goBackOr(router, '/mis-excursiones')}
@@ -209,7 +210,7 @@ function MisExcursionDetalleScreenContent() {
   // Error
   if (isError || !data) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
             onPress={() => goBackOr(router, '/mis-excursiones')}
@@ -267,7 +268,7 @@ function MisExcursionDetalleScreenContent() {
       : excursion?.horaRegreso?.trim().slice(0, 5) || null;
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
       {/* Back bar */}
       <View className="border-b border-border bg-card">
         <DetailPageFrame className="px-4 py-3">
@@ -510,7 +511,7 @@ function MisExcursionDetalleScreenContent() {
               {/* Fecha y hora */}
               <View className="flex-row gap-3">
                 <View className="flex-1 flex-row items-center gap-3 p-3 rounded-xl bg-muted/40">
-                  <View className="h-9 w-9 rounded-lg bg-background items-center justify-center">
+                  <View className={sheetBackgroundClass === 'bg-surface-card' ? "h-9 w-9 rounded-lg bg-surface-card items-center justify-center" : "h-9 w-9 rounded-lg bg-background items-center justify-center"}>
                     <CalendarDays size={20} color="#0284c7" />
                   </View>
                   <View>
@@ -524,7 +525,7 @@ function MisExcursionDetalleScreenContent() {
                 </View>
                 {reserva.hora && (
                   <View className="flex-1 flex-row items-center gap-3 p-3 rounded-xl bg-muted/40">
-                    <View className="h-9 w-9 rounded-lg bg-background items-center justify-center">
+                    <View className={sheetBackgroundClass === 'bg-surface-card' ? "h-9 w-9 rounded-lg bg-surface-card items-center justify-center" : "h-9 w-9 rounded-lg bg-background items-center justify-center"}>
                       <Clock size={20} color="#0284c7" />
                     </View>
                     <View>
@@ -541,7 +542,7 @@ function MisExcursionDetalleScreenContent() {
 
               {/* Pasajeros */}
               <View className="flex-row items-center gap-3 p-3 rounded-xl bg-muted/40">
-                <View className="h-9 w-9 rounded-lg bg-background items-center justify-center">
+                <View className={sheetBackgroundClass === 'bg-surface-card' ? "h-9 w-9 rounded-lg bg-surface-card items-center justify-center" : "h-9 w-9 rounded-lg bg-background items-center justify-center"}>
                   <Users size={20} color="#0284c7" />
                 </View>
                 <View>
@@ -665,7 +666,7 @@ function MisExcursionDetalleScreenContent() {
                     {reserva.pagos.map((pago) => (
                       <View
                         key={pago.id}
-                        className="flex-row items-center justify-between p-2.5 rounded-xl bg-background border border-border"
+                        className={sheetBackgroundClass === 'bg-surface-card' ? "flex-row items-center justify-between p-2.5 rounded-xl bg-surface-card border border-border" : "flex-row items-center justify-between p-2.5 rounded-xl bg-background border border-border"}
                       >
                         <Text className="text-xs text-muted-foreground">
                           {formatDate(pago.createdAt, { moneda })}

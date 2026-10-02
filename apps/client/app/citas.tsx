@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -85,6 +85,7 @@ const ACTIVAS = ['PENDIENTE', 'CONFIRMADA']
 // ── Screen ──────────────────────────────────────────────────────────────────
 
 function CitasScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -139,7 +140,7 @@ function CitasScreenContent() {
   // ── Auth gate ───────────────────────────────────────────────────────────
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card p-6" : "flex-1 items-center justify-center bg-vibe-fondo p-6"}>
         <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/20 mb-4">
           <CalendarDays size={32} color="#0284c7" />
         </View>
@@ -168,7 +169,7 @@ function CitasScreenContent() {
   // ── Loading ─────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <View className="flex-1 bg-vibe-fondo">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
         {BackBar}
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#0284c7" />
@@ -180,7 +181,7 @@ function CitasScreenContent() {
   // ── Error ───────────────────────────────────────────────────────────────
   if (isError) {
     return (
-      <View className="flex-1 bg-vibe-fondo">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
         {BackBar}
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
           <Card className="border-destructive/30 bg-destructive/5">
@@ -202,7 +203,7 @@ function CitasScreenContent() {
   // ── Empty: no agenda activa ─────────────────────────────────────────────
   if (!agenda?.activa) {
     return (
-      <View className="flex-1 bg-vibe-fondo">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
         {BackBar}
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
           <EmptyState
@@ -218,7 +219,7 @@ function CitasScreenContent() {
   // ── Empty: no open days ─────────────────────────────────────────────────
   if (diasAbiertos.length === 0) {
     return (
-      <View className="flex-1 bg-vibe-fondo">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
         {BackBar}
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
           <EmptyState
@@ -235,7 +236,7 @@ function CitasScreenContent() {
 
   // ── Main render ─────────────────────────────────────────────────────────
   return (
-    <View className="flex-1 bg-vibe-fondo">
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
       {BackBar}
 
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>

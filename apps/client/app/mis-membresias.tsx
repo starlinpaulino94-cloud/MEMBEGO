@@ -1,5 +1,5 @@
 import React from 'react'
-import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../src/components/ui/ResponsiveDetailSheet'
 import { View, Text, ScrollView } from 'react-native'
 import { useRouter } from 'expo-router'
 import { AlertCircle, CreditCard } from 'lucide-react-native'
@@ -85,6 +85,7 @@ function toWalletItem(membership: ApiMembership): WalletStackItem {
 }
 
 function MisMembresiasScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -100,7 +101,7 @@ function MisMembresiasScreenContent() {
 
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card p-6" : "flex-1 items-center justify-center bg-vibe-fondo p-6"}>
         <View className="mb-4 h-16 w-16 items-center justify-center rounded-full bg-primary/10">
           <CreditCard size={32} color="#0284c7" />
         </View>
@@ -117,7 +118,7 @@ function MisMembresiasScreenContent() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-vibe-fondo">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
         {backHeader}
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
           <View className="gap-4">
@@ -132,7 +133,7 @@ function MisMembresiasScreenContent() {
 
   if (isError) {
     return (
-      <View className="flex-1 bg-vibe-fondo">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
         {backHeader}
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
           <EmptyState
@@ -152,16 +153,13 @@ function MisMembresiasScreenContent() {
   }
 
   return (
-    <View className="flex-1 bg-vibe-fondo">
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
       {backHeader}
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 80 }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="mb-4 text-sm text-muted-foreground">
-          Consulta tus beneficios, usos disponibles y códigos QR de cada plan.
-        </Text>
         {memberships.length === 0 ? (
           <EmptyState
             variant="card"

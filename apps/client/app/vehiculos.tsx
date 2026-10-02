@@ -1,5 +1,5 @@
 import React from 'react'
-import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../src/components/ui/ResponsiveDetailSheet'
 import { View, Text, ScrollView, ActivityIndicator, Pressable } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -19,6 +19,7 @@ const DESCRIPCION =
   'el precio siempre sigue al vehículo que elijas.'
 
 function VehiculosScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { user, isLoading: authLoading } = useAuth()
@@ -27,7 +28,7 @@ function VehiculosScreenContent() {
   // Auth gate
   if (authLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-vibe-fondo" style={{ paddingBottom: insets.bottom }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card" : "flex-1 items-center justify-center bg-vibe-fondo"} style={{ paddingBottom: insets.bottom }}>
         <ActivityIndicator color="#0284c7" size="large" />
       </View>
     )
@@ -35,7 +36,7 @@ function VehiculosScreenContent() {
 
   if (!user) {
     return (
-      <View className="flex-1 bg-vibe-fondo" style={{ paddingBottom: insets.bottom }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"} style={{ paddingBottom: insets.bottom }}>
         <EmptyState
           icon={<Car size={40} color="#0284c7" />}
           title="Inicia sesión"
@@ -51,7 +52,7 @@ function VehiculosScreenContent() {
   }
 
   return (
-    <View className="flex-1 bg-vibe-fondo">
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
@@ -64,7 +65,7 @@ function VehiculosScreenContent() {
         <View className="mb-4 flex-row items-center gap-2">
           <Pressable
             onPress={() => goBackOr(router, '/(tabs)/cuenta')}
-            className="h-10 w-10 items-center justify-center rounded-xl border border-border bg-background active:opacity-70"
+            className={sheetBackgroundClass === 'bg-surface-card' ? "h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface-card active:opacity-70" : "h-10 w-10 items-center justify-center rounded-xl border border-border bg-vibe-fondo active:opacity-70"}
           >
             <ArrowLeft size={18} color="#111827" />
           </Pressable>

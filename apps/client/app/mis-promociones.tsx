@@ -1,5 +1,5 @@
 import React from 'react'
-import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -146,6 +146,7 @@ function Seccion({
 /* ── Screen ─────────────────────────────────────────────────────────── */
 
 function MisPromocionesScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -154,7 +155,7 @@ function MisPromocionesScreenContent() {
   /* ── Auth gate ────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card p-6" : "flex-1 items-center justify-center bg-vibe-fondo p-6"}>
         <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/20 mb-4">
           <Sparkles size={32} color="#0284c7" />
         </View>
@@ -178,10 +179,10 @@ function MisPromocionesScreenContent() {
   const pendientes = compras.filter((c) => PENDIENTES.includes(c.estado))
 
   return (
-    <View className="flex-1 bg-vibe-fondo">
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
       {/* ── Back bar ─────────────────────────────────────────────────── */}
       <View
-        className="flex-row items-center gap-2 bg-vibe-fondo border-b border-border"
+        className={sheetBackgroundClass === 'bg-surface-card' ? "flex-row items-center gap-2 bg-surface-card border-b border-border" : "flex-row items-center gap-2 bg-vibe-fondo border-b border-border"}
         style={{
           paddingLeft: insets.left + 16,
           paddingRight: 16,
