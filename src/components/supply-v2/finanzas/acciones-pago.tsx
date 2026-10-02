@@ -27,15 +27,14 @@ function useRefrescoAlExito(estado: EstadoAccion<unknown>) {
 }
 
 /** Confirmar un pago (§41): lo hace OTRA persona; el servidor lo impone. */
-export function ConfirmarPago({ paymentId, soyElCreador, soyElUnicoAutorizado = false, compacto = false }: { paymentId: string; soyElCreador: boolean; soyElUnicoAutorizado?: boolean; compacto?: boolean }) {
+export function ConfirmarPago({ paymentId, soyElCreador, compacto = false }: { paymentId: string; soyElCreador: boolean; compacto?: boolean }) {
   const [estado, enviar, pendiente] = useActionState<EstadoAccion<PagoConfirmadoProveedor>, FormData>(confirmarPagoProveedorAction, {})
   useRefrescoAlExito(estado)
   return (
     <form action={enviar} className={compacto ? 'flex flex-wrap items-center gap-2' : 'space-y-2'}>
       <input type="hidden" name="paymentId" value={paymentId} />
       <Button type="submit" size={compacto ? 'sm' : 'default'} disabled={pendiente} loading={pendiente} data-testid="btn-confirmar-pago-proveedor">Confirmar pago</Button>
-      {soyElCreador && !compacto && !soyElUnicoAutorizado && <p className="text-caption text-muted-foreground">Registraste este pago: le toca confirmarlo a otra persona autorizada.</p>}
-      {soyElCreador && !compacto && soyElUnicoAutorizado && <p className="text-caption text-muted-foreground" data-testid="aviso-unico-autorizado">Eres la única persona autorizada; esta confirmación queda registrada a tu nombre.</p>}
+      {soyElCreador && !compacto && <p className="text-caption text-muted-foreground" data-testid="aviso-autoaprobacion">Registraste este pago y lo confirmas tú: queda registrado a tu nombre en la bitácora.</p>}
       {estado.error && <p className="text-sm text-destructive" role="alert">{estado.error}</p>}
     </form>
   )

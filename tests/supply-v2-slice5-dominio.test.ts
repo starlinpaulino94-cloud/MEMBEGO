@@ -15,7 +15,7 @@ import {
   TRANSICIONES_LIQUIDACION,
   validarPeriodo,
 } from '../src/modules/supply-v2/finance/settlements-domain'
-import { revisarSegregacion } from '../src/modules/supply-v2/core/segregacion'
+import { esAutoaprobacion } from '../src/modules/supply-v2/core/segregacion'
 import { creaObligacion, politicaDeVersion } from '../src/modules/supply-v2/finance/domain'
 import { agregarEconomia } from '../src/modules/supply-v2/economics/domain'
 import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
@@ -214,15 +214,9 @@ test('16 · totales y estado derivado del pago', () => {
   assert.equal(estadoLiquidacionSegunPago(D(900), D(900)), 'PAID')
 })
 
-test('17 · segregación: quien generó la liquidación no la aprueba si hay más de una persona autorizada', () => {
-  const veto = revisarSegregacion('ana', 'ana', 2, 'liquidacion')
-  assert.match(veto.permitido === false ? veto.motivo : '', /misma persona/)
-  assert.deepEqual(revisarSegregacion('ana', 'luis', 2, 'liquidacion'), { permitido: true, autoaprobada: false })
-  assert.deepEqual(
-    revisarSegregacion('ana', 'ana', 1, 'liquidacion'),
-    { permitido: true, autoaprobada: true },
-    'con una sola persona no hay a quién pasársela'
-  )
+test('17 · quien genera la liquidación TAMBIÉN la aprueba, y queda marcado', () => {
+  assert.equal(esAutoaprobacion('ana', 'ana'), true)
+  assert.equal(esAutoaprobacion('ana', 'luis'), false)
 })
 
 test('18 · repartir un pago: la más antigua primero, nunca más que lo pendiente; el resto queda sin aplicar', () => {

@@ -164,7 +164,7 @@ export function FormFactura({ proveedores, ordenes, supplierId, purchaseOrderId,
       </div>
       {estado.error && <p className="text-sm text-destructive" role="alert">{estado.error}</p>}
       <Button type="submit" disabled={pendiente} loading={pendiente} data-testid="btn-registrar-factura">Registrar factura</Button>
-      <p className="text-caption text-muted-foreground">La factura queda pendiente de aprobación por otra persona; al aprobarse nace (o se enlaza) la obligación con el proveedor.</p>
+      <p className="text-caption text-muted-foreground">La factura queda pendiente de aprobación; al aprobarse nace (o se enlaza) la obligación con el proveedor.</p>
     </form>
   )
 }

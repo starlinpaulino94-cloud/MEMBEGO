@@ -16,8 +16,6 @@ import { timelineFinancieroOrden } from '@/modules/supply-v2/finance/queries'
 import { TimelineFinanciero } from '@/components/supply-v2/finanzas/timeline-financiero'
 import { RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 import { puedeSupplyV2 } from '@/modules/supply-v2/permisos'
-import { personasAutorizadasEnTx } from '@/modules/supply-v2/core/autorizadas'
-import { sinEmpresa } from '@/lib/tenant'
 import { AGREEMENT_TYPE_LABELS, PAYMENT_MODE_LABELS } from '@/modules/supply-v2/core/catalogo'
 import { ORDEN_RECIBIBLE } from '@/modules/supply-v2/core/estados'
 
@@ -41,15 +39,12 @@ export default async function CompraDetallePage({ params }: { params: Promise<{ 
     puedeSupplyV2('SUPPLY_V2_RECEIVE'),
   ])
   if (!orden) notFound()
-  const [sucursales, hitosFinancieros, personasAutorizadas] = await Promise.all([
+  const [sucursales, hitosFinancieros] = await Promise.all([
     sucursalesDeProveedor(orden.supplierId),
     timelineFinancieroOrden(orden.id),
-    sinEmpresa('Supply 2.0: personas que pueden aprobar', (tx) => personasAutorizadasEnTx(tx)),
   ])
 
   const soyElCreador = Boolean(user?.metadata.dbUserId && orden.createdById === user.metadata.dbUserId)
-  /** Sin segunda persona la segregación no protege nada: el servidor deja aprobar y la interfaz tiene que decirlo. */
-  const soyElUnicoAutorizado = personasAutorizadas <= 1
   const compradas = orden.lines.reduce((t, l) => t + l.quantity, 0)
   const recibidas = orden.lines.reduce((t, l) => t + l.receivedQuantity, 0)
   const recibible = ORDEN_RECIBIBLE.includes(orden.status) && puedoRecibir
@@ -74,8 +69,7 @@ export default async function CompraDetallePage({ params }: { params: Promise<{ 
         <CardContent className="space-y-3 pt-6">
           <p className="text-sm font-medium">
             {orden.status === 'DRAFT' && 'Orden creada correctamente. Siguiente paso: enviarla para aprobación.'}
-            {orden.status === 'PENDING_APPROVAL' &&
-              (soyElCreador && !soyElUnicoAutorizado ? 'Esperando a que otra persona la apruebe.' : 'Esta orden espera tu aprobación.')}
+            {orden.status === 'PENDING_APPROVAL' && 'Esta orden espera tu aprobación.'}
             {orden.status === 'APPROVED' && 'Orden aprobada. Siguiente paso: registrar la primera recepción.'}
             {orden.status === 'PARTIALLY_RECEIVED' && `${recibidas.toLocaleString('es-DO')} / ${compradas.toLocaleString('es-DO')} recibidas. Siguiente paso: registrar otra recepción.`}
             {orden.status === 'RECEIVED' && `Orden completa: ${recibidas.toLocaleString('es-DO')} unidades recibidas y disponibles en Supply.`}
@@ -86,7 +80,6 @@ export default async function CompraDetallePage({ params }: { params: Promise<{ 
             ordenId={orden.id}
             estado={orden.status}
             soyElCreador={soyElCreador}
-            soyElUnicoAutorizado={soyElUnicoAutorizado}
             puedoAprobar={puedoAprobar}
             puedoCrear={puedoCrear}
           />

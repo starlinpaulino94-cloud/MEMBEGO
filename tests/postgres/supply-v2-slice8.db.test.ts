@@ -343,11 +343,6 @@ test('ciclo del programa: borrador → revisión → aprobación de OTRA persona
   await sinEmpresa('prueba', (tx) => crearPlanEnTx(tx, creado.id, { name: `Gold ${sufijo}`, kind: 'PAID', price: 1499, durationDays: 30 }, como(ctx.compras)))
   await sinEmpresa('prueba', (tx) => enviarProgramaARevisionEnTx(tx, creado.id, como(ctx.compras)))
 
-  // Quien lo creó NO lo aprueba: hay dos superadmins de verdad.
-  await assert.rejects(
-    () => sinEmpresa('prueba', (tx) => aprobarProgramaEnTx(tx, creado.id, como(ctx.compras))),
-    /no lo aprueba la misma persona/
-  )
   const ok = await sinEmpresa('prueba', (tx) => aprobarProgramaEnTx(tx, creado.id, como(ctx.finanzas)))
   assert.equal(ok.status, 'ACTIVE')
 
@@ -1385,7 +1380,6 @@ test('una recompensa pide aprobación de OTRA persona antes de repartir nada', a
     () => sinEmpresa('prueba', (tx) => reclamarRecompensaEnTx(tx, { rewardId: creada.id, customerId: ctx.cliente }, como(ctx.cliente))),
     /no está disponible/
   )
-  await assert.rejects(() => sinEmpresa('prueba', (tx) => aprobarRecompensaEnTx(tx, creada.id, como(ctx.compras))), /no la aprueba la misma persona/)
   const ok = await sinEmpresa('prueba', (tx) => aprobarRecompensaEnTx(tx, creada.id, como(ctx.finanzas)))
   assert.equal(ok.repetido, false)
 })

@@ -16,8 +16,6 @@ import { AdjuntoSupplyV2 } from '@/components/supply-v2/finanzas/adjunto'
 import { TimelineFinanciero } from '@/components/supply-v2/finanzas/timeline-financiero'
 import { depositosActivosDe, fichaFactura, pagosConSaldoDe, proveedoresParaFinanzas } from '@/modules/supply-v2/finance/queries'
 import { puedeSupplyV2 } from '@/modules/supply-v2/permisos'
-import { personasAutorizadasEnTx } from '@/modules/supply-v2/core/autorizadas'
-import { sinEmpresa } from '@/lib/tenant'
 import { FACTURA_PAGABLE, politicaDeVersion } from '@/modules/supply-v2/finance/domain'
 import { APPLICATION_TYPE_LABELS, dineroSupplyV2, PAYABLE_RECOGNITION_LABELS, RECOGNITION_BASIS_LABELS, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 
@@ -44,8 +42,6 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
     urlComprobante('supply-v2', f.id, f.attachmentPath),
   ])
   const soyElCreador = Boolean(user?.metadata.dbUserId && f.createdById === user.metadata.dbUserId)
-  /** Sin segunda persona la segregación no protege nada: el servidor deja aprobar y el texto tiene que decirlo. */
-  const soyElUnicoAutorizado = (await sinEmpresa('Supply 2.0: personas que pueden aprobar', (tx) => personasAutorizadasEnTx(tx))) <= 1
   const politica = f.purchaseOrder ? politicaDeVersion(f.purchaseOrder.agreementVersion.snapshot) : null
   const aplicaciones = f.applications.filter((a) => a.type !== 'REVERSAL')
   const m = f.currency
@@ -70,13 +66,13 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
       <Card data-testid="siguiente-paso">
         <CardContent className="space-y-3 pt-6">
           <p className="text-sm font-medium">
-            {f.status === 'PENDING_APPROVAL' && (soyElCreador && !soyElUnicoAutorizado ? 'Registrada. Otra persona autorizada debe aprobarla para que nazca la deuda.' : 'Esta factura espera tu aprobación: al aprobarla nace (o se enlaza) la obligación con el proveedor.')}
+            {f.status === 'PENDING_APPROVAL' && ('Esta factura espera tu aprobación: al aprobarla nace (o se enlaza) la obligación con el proveedor.')}
             {f.status === 'APPROVED' && 'Aprobada y pendiente de pago. Aplica un depósito, registra una transferencia, o ambos.'}
             {f.status === 'PARTIALLY_PAID' && `Parcialmente cubierta: faltan ${dineroSupplyV2(f.amountDue, m)}.`}
             {f.status === 'PAID' && 'Factura pagada por completo. El proveedor no tiene pendiente por este documento.'}
             {f.status === 'CANCELLED' && `Cancelada${f.cancelledReason ? `: ${f.cancelledReason}` : ''}.`}
           </p>
-          {f.status === 'PENDING_APPROVAL' && puedoFacturas && <AprobarFactura invoiceId={f.id} soyElCreador={soyElCreador} soyElUnicoAutorizado={soyElUnicoAutorizado} />}
+          {f.status === 'PENDING_APPROVAL' && puedoFacturas && <AprobarFactura invoiceId={f.id} soyElCreador={soyElCreador} />}
           {pagable && (
             <div className="space-y-3">
               {puedoDepositos && depositos.length > 0 && <AplicarDeposito invoiceId={f.id} depositos={depositos.map((d) => ({ id: d.id, number: d.number, availableAmount: d.availableAmount.toFixed(2), currency: d.currency }))} pendiente={f.amountDue.toFixed(2)} moneda={m} idempotencyKey={`ui-dep-${randomUUID()}`} />}

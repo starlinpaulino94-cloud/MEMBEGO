@@ -3,8 +3,7 @@ import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
 import { exigirTransicion } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
-import { personasAutorizadasEnTx } from '../core/autorizadas'
-import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
+import { esAutoaprobacion, MOTIVO_AUTOAPROBACION } from '../core/segregacion'
 import { calcularTotalesFactura, TRANSICIONES_FACTURA, validarLineasContraOrden, type LineaFacturaEntrada } from './domain'
 import { enlazarObligacionesAFacturaEnTx } from './obligations'
 import { bloquearFila, recalcularFacturaEnTx } from './applications'
@@ -155,9 +154,7 @@ export async function aprobarFacturaEnTx(tx: Tx, invoiceId: string, ctx: Context
     return { id: f.id, number: f.number, obligaciones: n, repetida: true }
   }
   exigirTransicion(TRANSICIONES_FACTURA, f.status, 'APPROVED', 'Factura')
-  const personasAutorizadas = await personasAutorizadasEnTx(tx)
-  const segregacion = revisarSegregacion(f.createdById, ctx.actorId, personasAutorizadas, 'factura')
-  if (!segregacion.permitido) fallo('AUTOAPROBACION', segregacion.motivo)
+  const autoaprobada = esAutoaprobacion(f.createdById, ctx.actorId)
   const ahora = new Date()
   await tx.supplyV2SupplierInvoice.update({ where: { id: f.id }, data: { status: 'APPROVED', approvedById: ctx.actorId, approvedAt: ahora } })
   const r = await enlazarObligacionesAFacturaEnTx(tx, { ...f, approvedAt: ahora, companyId: f.supplier.companyId }, ctx)
@@ -169,9 +166,8 @@ export async function aprobarFacturaEnTx(tx: Tx, invoiceId: string, ctx: Context
     obligacionesEnlazadas: r.enlazadas,
     obligacionCreada: r.creada,
     createdById: f.createdById,
-    autoaprobada: segregacion.autoaprobada,
-    personasAutorizadas,
-    ...(segregacion.autoaprobada ? { motivo: MOTIVO_AUTOAPROBACION } : {}),
+    autoaprobada: autoaprobada,
+    ...(autoaprobada ? { motivo: MOTIVO_AUTOAPROBACION } : {}),
   }, f.supplier.companyId)
   return { id: f.id, number: f.number, obligaciones: r.enlazadas.length + (r.creada ? 1 : 0), repetida: false }
 }

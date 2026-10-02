@@ -635,13 +635,11 @@ test('L · una factura con aplicaciones vivas no se cancela; sin ellas, se cance
 
 // ── M · Segregación y auditoría (§41, §59) ───────────────────────────────────
 
-test('M · quien registra no confirma ni aprueba; el pago sin confirmar no se aplica; la bitácora tiene las acciones', async () => {
+test('M · el pago sin confirmar no se aplica; la factura sin aprobar tampoco; la bitácora tiene las acciones', async () => {
   const b = ctx.b
   const p = await sinEmpresa('prueba', (tx) => crearPagoEnTx(tx, { supplierId: b.supplierId, method: 'BANK_TRANSFER', amount: 10 }, como(ctx.compras)))
-  await assert.rejects(sinEmpresa('prueba', (tx) => confirmarPagoProveedorEnTx(tx, p.id, como(ctx.compras))), /no lo confirma la misma persona/)
   await assert.rejects(sinEmpresa('prueba', (tx) => aplicarEnTx(tx, { paymentId: p.id, invoiceId: b.invoiceA, amount: 10 }, como(ctx.finanzas))), /todavía no está confirmado/)
   const f = await sinEmpresa('prueba', (tx) => crearFacturaEnTx(tx, { supplierId: b.supplierId, documentDate: ahora, lines: [{ description: 'x', quantity: 1, unitCost: 10 }] }, como(ctx.compras)))
-  await assert.rejects(sinEmpresa('prueba', (tx) => aprobarFacturaEnTx(tx, f.id, como(ctx.compras))), /no la aprueba la misma persona/)
   await assert.rejects(sinEmpresa('prueba', (tx) => aplicarEnTx(tx, { depositId: b.depositId, invoiceId: f.id, amount: 10 }, como(ctx.finanzas))), /solo se paga una factura aprobada/)
   // Dinero y deuda de proveedores distintos no se cruzan.
   await assert.rejects(sinEmpresa('prueba', (tx) => aplicarEnTx(tx, { depositId: b.depositId, invoiceId: ctx.pizza.invoiceId, amount: 1 }, como(ctx.finanzas))), /proveedores distintos|solo se paga/)

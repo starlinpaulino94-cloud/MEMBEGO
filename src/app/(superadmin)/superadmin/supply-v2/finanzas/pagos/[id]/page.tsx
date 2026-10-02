@@ -14,8 +14,6 @@ import { CancelarPago, ConfirmarPago, ConvertirEnDeposito, ReversarAplicacion } 
 import { AdjuntoSupplyV2 } from '@/components/supply-v2/finanzas/adjunto'
 import { fichaPago } from '@/modules/supply-v2/finance/queries'
 import { puedeSupplyV2 } from '@/modules/supply-v2/permisos'
-import { personasAutorizadasEnTx } from '@/modules/supply-v2/core/autorizadas'
-import { sinEmpresa } from '@/lib/tenant'
 import { APPLICATION_TYPE_LABELS, dineroSupplyV2, RUTA_FINANZAS, SUPPLIER_PAYMENT_METHOD_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
@@ -28,8 +26,6 @@ export default async function PagoPage({ params }: { params: Promise<{ id: strin
   if (!p) notFound()
   const comprobanteUrl = await urlComprobante('supply-v2', p.id, p.proofPath)
   const soyElCreador = Boolean(user?.metadata.dbUserId && p.createdById === user.metadata.dbUserId)
-  /** Sin segunda persona la segregación no protege nada: el servidor deja confirmar y el texto tiene que decirlo. */
-  const soyElUnicoAutorizado = (await sinEmpresa('Supply 2.0: personas que pueden aprobar', (tx) => personasAutorizadasEnTx(tx))) <= 1
   const sinAplicar = p.amount.minus(p.appliedAmount)
   const m = p.currency
   const vivas = p.applications.filter((a) => a.type !== 'REVERSAL')
@@ -50,7 +46,7 @@ export default async function PagoPage({ params }: { params: Promise<{ id: strin
       <Card data-testid="siguiente-paso">
         <CardContent className="space-y-3 pt-6">
           <p className="text-sm font-medium">
-            {p.status === 'PENDING' && (soyElCreador && !soyElUnicoAutorizado ? 'Registrado. Otra persona autorizada debe confirmarlo.' : 'Este pago espera confirmación: al confirmarlo se aplica a lo declarado.')}
+            {p.status === 'PENDING' && ('Este pago espera confirmación: al confirmarlo se aplica a lo declarado.')}
             {p.status === 'CONFIRMED' && (sinAplicar.greaterThan(0) ? `Confirmado con ${dineroSupplyV2(sinAplicar, m)} sin aplicar: aplícalo desde una factura o conviértelo en depósito.` : 'Confirmado y aplicado por completo.')}
             {p.status === 'CANCELLED' && `Cancelado${p.cancelledReason ? `: ${p.cancelledReason}` : ''}.`}
           </p>
@@ -58,7 +54,7 @@ export default async function PagoPage({ params }: { params: Promise<{ id: strin
             Destino declarado: {p.intendedInvoice ? <Link href={`${RUTA_FINANZAS}/facturas/${p.intendedInvoice.id}`} className="underline-offset-4 hover:underline">factura {p.intendedInvoice.number}</Link> : p.intendedObligation ? `obligación ${p.intendedObligation.number}` : p.intendedDeposit ? 'depósito (anticipo)' : 'ninguno'}
             {p.fundedDeposit && <> · financia el <Link href={`${RUTA_FINANZAS}/depositos/${p.fundedDeposit.id}`} className="underline-offset-4 hover:underline">depósito {p.fundedDeposit.number}</Link></>}
           </p>
-          {p.status === 'PENDING' && puedoConfirmar && <ConfirmarPago paymentId={p.id} soyElCreador={soyElCreador} soyElUnicoAutorizado={soyElUnicoAutorizado} />}
+          {p.status === 'PENDING' && puedoConfirmar && <ConfirmarPago paymentId={p.id} soyElCreador={soyElCreador} />}
           {p.status === 'CONFIRMED' && sinAplicar.greaterThan(0) && puedoDepositos && !p.fundedDeposit && <ConvertirEnDeposito paymentId={p.id} sinAplicar={sinAplicar.toFixed(2)} moneda={m} idempotencyKey={`ui-dep-${randomUUID()}`} />}
           {p.status !== 'CANCELLED' && puedoConfirmar && vivas.every((a) => a.reversedAt) && <CancelarPago paymentId={p.id} />}
         </CardContent>
