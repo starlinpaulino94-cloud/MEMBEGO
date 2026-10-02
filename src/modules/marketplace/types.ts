@@ -5,6 +5,7 @@ export interface CompanyPublic {
   name: string
   slug: string
   type: string
+  colorPrimario?: string | null
   description: string | null
   logoUrl: string | null
   bannerUrl: string | null
@@ -55,6 +56,7 @@ export interface PromotionPublic {
     name: string
     slug: string
     logoUrl: string | null
+    colorPrimario?: string | null
     /**
      * ¿La empresa tiene planes de membresía publicados? Solo lo trae el detalle
      * (`getPromotionDetail`); en los listados viaja `undefined` y la UI no

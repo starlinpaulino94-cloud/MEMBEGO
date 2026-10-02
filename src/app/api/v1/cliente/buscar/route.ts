@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     const fh = searchParams.get('fh') ?? ''
     const stock = searchParams.get('stock') ?? ''
 
-    const resultado = await buscarUnificado(q)
+    const resultado = await buscarUnificado(q, user)
     if ('error' in resultado) {
       return NextResponse.json(
         { error: resultado.error },

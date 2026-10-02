@@ -11,6 +11,7 @@ function promocion(id: number, creadoEn: string): NovedadHero {
     titulo: `Oferta ${id}`,
     descripcion: null,
     empresa: 'Negocio',
+    colorPrimario: null,
     imagen: null,
     href: `/cliente/promociones/${id}`,
     descuento: null,

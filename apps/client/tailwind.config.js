@@ -75,6 +75,9 @@ module.exports = {
           DEFAULT: '#ffffff',
           foreground: '#111827',
         },
+        surface: {
+          card: '#ffffff',
+        },
         muted: {
           DEFAULT: '#f3f4f6',
           foreground: '#4b5563',

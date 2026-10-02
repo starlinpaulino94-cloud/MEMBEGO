@@ -19,6 +19,7 @@ import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { cookies } from 'next/headers'
 import { VENDEDOR_COOKIE } from '@/modules/excursiones/atribucion/registrar'
+import type { SessionUser } from '@/types'
 
 export interface ClienteActionState {
   error?: string
@@ -259,6 +260,7 @@ export interface EmpresaResumen {
   slug: string
   name: string
   logoUrl: string | null
+  colorPrimario?: string | null
 }
 
 export interface BuscadorUnificadoResult {
@@ -318,14 +320,15 @@ export interface BuscadorUnificadoResult {
  * Prioriza promociones en los resultados.
  */
 export async function buscarUnificado(
-  query: string
+  query: string,
+  validatedUser?: SessionUser,
 ): Promise<BuscadorUnificadoResult | { error: string }> {
   if (!query.trim()) {
     return { promociones: [], excursiones: [] }
   }
 
   try {
-    const user = await getUser()
+    const user = validatedUser ?? await getUser()
     if (!user || user.metadata.role !== 'CLIENTE') {
       return { promociones: [], excursiones: [] }
     }
@@ -359,7 +362,7 @@ export async function buscarUnificado(
             shareCount: true,
             createdAt: true,
             tags: true,
-            company: { select: { id: true, slug: true, name: true, logoUrl: true, moneda: true } },
+            company: { select: { id: true, slug: true, name: true, logoUrl: true, colorPrimario: true, moneda: true } },
           },
           take: 12,
         }),
@@ -392,7 +395,7 @@ export async function buscarUnificado(
             shareCount: true,
             createdAt: true,
             tags: true,
-            company: { select: { id: true, slug: true, name: true, logoUrl: true, moneda: true } },
+            company: { select: { id: true, slug: true, name: true, logoUrl: true, colorPrimario: true, moneda: true } },
           },
           take: 12,
         }),
@@ -407,6 +410,7 @@ export async function buscarUnificado(
             name: true,
             slug: true,
             type: true,
+            colorPrimario: true,
             description: true,
             logoUrl: true,
             bannerUrl: true,
@@ -434,6 +438,7 @@ export async function buscarUnificado(
       name: c.name,
       slug: c.slug,
       type: c.type,
+      colorPrimario: c.colorPrimario,
       logoUrl: c.logoUrl,
       bannerUrl: c.bannerUrl,
       ciudad: c.ciudad,

@@ -35,6 +35,7 @@ export interface PlanInicio {
   readonly id: string
   readonly nombre: string
   readonly empresa: string
+  readonly colorPrimario: string | null
   readonly esCliente?: boolean
   readonly descripcion: string | null
   readonly imagen: string | null
@@ -90,6 +91,7 @@ export interface RelampagoInicio {
   readonly id: string
   readonly titulo: string
   readonly empresa: string
+  readonly colorPrimario: string | null
   readonly imagen: string | null
   readonly href: string
   /** Ya formateado: «RD$2,900». Null = sin venta en línea. */
@@ -114,6 +116,7 @@ export interface EmpresaScrollItem {
   readonly rubro: string | null
   readonly ciudad: string | null
   readonly logoUrl: string | null
+  readonly colorPrimario: string | null
   readonly bannerUrl: string | null
   readonly href: string
   readonly valoracion: number | null
@@ -134,6 +137,7 @@ export type NovedadHero =
     readonly titulo: string
     readonly descripcion: string | null
     readonly empresa: string
+    readonly colorPrimario: string | null
     readonly imagen: string | null
     readonly href: string
     readonly descuento: string | null
@@ -146,6 +150,7 @@ export type NovedadHero =
     readonly titulo: string
     readonly descripcion: string | null
     readonly empresa: string
+    readonly colorPrimario: string | null
     readonly imagen: string | null
     readonly href: string
     readonly precio: string
@@ -158,6 +163,7 @@ export type NovedadHero =
     readonly titulo: string
     readonly descripcion: string | null
     readonly empresa: string
+    readonly colorPrimario: string | null
     readonly imagen: string | null
     readonly href: string
     readonly ciudad: string | null
@@ -182,6 +188,7 @@ export interface PromoNovedadItem {
     readonly nombre: string
     readonly slug: string
     readonly logoUrl: string | null
+    readonly colorPrimario: string | null
   }
   readonly esPrivadaMiembros: boolean
   readonly esDeMiEmpresa: boolean
