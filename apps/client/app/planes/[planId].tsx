@@ -1,5 +1,5 @@
 import React from 'react'
-import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { goBackOr } from '../../src/lib/navigation'
@@ -14,6 +14,7 @@ import { EmptyState } from '../../src/components/ui/EmptyState'
 import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 
 function PlanDetalleScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
@@ -27,7 +28,7 @@ function PlanDetalleScreenContent() {
 
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-background p-6">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card p-6" : "flex-1 items-center justify-center bg-background p-6"}>
         <EmptyState
           icon={<Sparkles size={32} color="#0284c7" />}
           title="Inicia sesión para ver el plan"
@@ -41,8 +42,8 @@ function PlanDetalleScreenContent() {
   const plan = data?.planes.find((item) => item.id === planId)
 
   return (
-    <View className="flex-1 bg-background">
-      <View className="border-b border-border bg-background">
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "border-b border-border bg-surface-card" : "border-b border-border bg-background"}>
         <DetailPageFrame
           className="flex-row items-center gap-2 px-4"
           style={{ paddingTop: 8, paddingBottom: 8 }}
@@ -82,61 +83,61 @@ function PlanDetalleScreenContent() {
           showsVerticalScrollIndicator={false}
         >
           <DetailPageFrame>
-          <Card className="border-primary/30 bg-primary/[0.03] p-5">
-            {'company' in plan && (
-              <View className="mb-3 flex-row items-center gap-2">
-                {plan.company.logoUrl ? (
-                  <Image
-                    source={{ uri: plan.company.logoUrl }}
-                    accessibilityLabel={`Logo de ${plan.company.name}`}
-                    className="h-8 w-8 rounded-full"
-                  />
-                ) : (
-                  <View className="h-8 w-8 rounded-full bg-primary/10" />
-                )}
-                <Text className="text-small font-inter-semibold text-muted-foreground">
-                  {plan.company.name}
-                </Text>
-              </View>
-            )}
-            <Text className="text-overline font-inter-semibold text-primary">Membresía</Text>
-            <Text className="mt-2 text-h1 font-inter-extrabold text-foreground">{plan.nombre}</Text>
-            <View className="mt-4 flex-row items-baseline gap-2">
-              <Text className="text-h1 font-inter-extrabold text-foreground">{formatMoney(plan.precio)}</Text>
-              <Text className="text-small text-muted-foreground">/mes</Text>
-            </View>
-            <Text className="mt-1 text-caption text-muted-foreground">Vigencia de {plan.vigenciaDias} días</Text>
-            {plan.lavadosIncluidos != null && (
-              <Text className="mt-4 text-small font-inter-semibold text-foreground">
-                {plan.esIlimitado ? 'Usos ilimitados' : `${plan.lavadosIncluidos} usos incluidos`}
-              </Text>
-            )}
-          </Card>
-
-          {plan.descripcion && (
-            <Card className="mt-4">
-              <Text className="text-h4 font-inter-bold text-foreground">Descripción</Text>
-              <Text className="mt-2 text-small leading-5 text-muted-foreground">{plan.descripcion}</Text>
-            </Card>
-          )}
-
-          <Card className="mt-4">
-            <Text className="text-h4 font-inter-bold text-foreground">Incluye</Text>
-            <View className="mt-3 gap-3">
-              {plan.beneficios.map((beneficio) => (
-                <View key={beneficio} className="flex-row items-start gap-2.5">
-                  <Check size={17} color="#00864d" />
-                  <Text className="flex-1 text-small text-foreground">{beneficio}</Text>
+            <Card className="border-primary/30 bg-primary/[0.03] p-5">
+              {'company' in plan && (
+                <View className="mb-3 flex-row items-center gap-2">
+                  {plan.company.logoUrl ? (
+                    <Image
+                      source={{ uri: plan.company.logoUrl }}
+                      accessibilityLabel={`Logo de ${plan.company.name}`}
+                      className="h-8 w-8 rounded-full"
+                    />
+                  ) : (
+                    <View className="h-8 w-8 rounded-full bg-primary/10" />
+                  )}
+                  <Text className="text-small font-inter-semibold text-muted-foreground">
+                    {plan.company.name}
+                  </Text>
                 </View>
-              ))}
-            </View>
-          </Card>
+              )}
+              <Text className="text-overline font-inter-semibold text-primary">Membresía</Text>
+              <Text className="mt-2 text-h1 font-inter-extrabold text-foreground">{plan.nombre}</Text>
+              <View className="mt-4 flex-row items-baseline gap-2">
+                <Text className="text-h1 font-inter-extrabold text-foreground">{formatMoney(plan.precio)}</Text>
+                <Text className="text-small text-muted-foreground">/mes</Text>
+              </View>
+              <Text className="mt-1 text-caption text-muted-foreground">Vigencia de {plan.vigenciaDias} días</Text>
+              {plan.lavadosIncluidos != null && (
+                <Text className="mt-4 text-small font-inter-semibold text-foreground">
+                  {plan.esIlimitado ? 'Usos ilimitados' : `${plan.lavadosIncluidos} usos incluidos`}
+                </Text>
+              )}
+            </Card>
 
-          {!showAsSheet && (
-            <Button className="mt-5" onPress={() => router.replace('/planes')}>
-              Ver planes de todos los negocios
-            </Button>
-          )}
+            {plan.descripcion && (
+              <Card className="mt-4">
+                <Text className="text-h4 font-inter-bold text-foreground">Descripción</Text>
+                <Text className="mt-2 text-small leading-5 text-muted-foreground">{plan.descripcion}</Text>
+              </Card>
+            )}
+
+            <Card className="mt-4">
+              <Text className="text-h4 font-inter-bold text-foreground">Incluye</Text>
+              <View className="mt-3 gap-3">
+                {plan.beneficios.map((beneficio) => (
+                  <View key={beneficio} className="flex-row items-start gap-2.5">
+                    <Check size={17} color="#00864d" />
+                    <Text className="flex-1 text-small text-foreground">{beneficio}</Text>
+                  </View>
+                ))}
+              </View>
+            </Card>
+
+            {!showAsSheet && (
+              <Button className="mt-5" onPress={() => router.replace('/planes')}>
+                Ver planes de todos los negocios
+              </Button>
+            )}
           </DetailPageFrame>
         </ScrollView>
       )}

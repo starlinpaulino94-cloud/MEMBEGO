@@ -31,6 +31,7 @@ import { Badge } from '../src/components/ui/Badge'
 import { EmptyState } from '../src/components/ui/EmptyState'
 import { Skeleton } from '../src/components/ui/Skeleton'
 import { colors } from '../src/theme/tokens'
+import { brandColor, brandForeground } from '../src/lib/brand-color'
 import type {
   PlanPublic,
   PlanGlobalItem,
@@ -68,18 +69,23 @@ export function PlanCard({
   onPress,
   className,
   mostrarNegocio = true,
+  colorPrimario,
 }: {
   plan: PlanPublic | PlanGlobalItem | PlanEmpresaItem
   destacado: boolean
   onPress: () => void
   className?: string
   mostrarNegocio?: boolean
+  colorPrimario?: string | null
 }) {
   const { base, variante } = parseNombre(plan.nombre)
   const precioPorUso =
     !plan.esIlimitado && plan.lavadosIncluidos && plan.lavadosIncluidos > 0
       ? Math.round(plan.precio / plan.lavadosIncluidos)
       : null
+  const rawCompanyColor = 'company' in plan ? plan.company.colorPrimario : colorPrimario
+  const companyColor = brandColor(rawCompanyColor, colors.primary.DEFAULT)
+  const hasCompany = 'company' in plan || colorPrimario != null
 
   return (
     <Card
@@ -88,6 +94,7 @@ export function PlanCard({
         className,
         destacado && 'border-2 border-primary bg-primary/[0.02]',
       )}
+      style={hasCompany && !destacado ? { borderColor: `${companyColor}40` } : undefined}
     >
       <View>
 
@@ -100,11 +107,11 @@ export function PlanCard({
                 className="h-7 w-7 rounded-full"
               />
             ) : (
-              <View className="h-7 w-7 items-center justify-center rounded-full bg-primary/10">
-                <Store size={14} color={colors.primary.DEFAULT} />
+              <View className="h-7 w-7 items-center justify-center rounded-full bg-primary/10" style={{ backgroundColor: `${companyColor}1A` }}>
+                <Store size={14} color={companyColor} />
               </View>
             )}
-            <Text className="text-small font-inter-semibold text-muted-foreground">
+            <Text className="text-small font-inter-semibold" style={{ color: companyColor }}>
               {plan.company.name}
             </Text>
           </View>
@@ -132,7 +139,7 @@ export function PlanCard({
 
         {/* Precio */}
         <View className="mt-3 items-baseline flex-row gap-1.5">
-          <Text className="text-h1 font-inter-extrabold tabular-nums text-foreground">
+          <Text className="text-h1 font-inter-extrabold tabular-nums" style={{ color: companyColor }}>
             {formatMoney(plan.precio)}
           </Text>
           <Text className="text-small font-inter-medium text-muted-foreground">
@@ -146,10 +153,10 @@ export function PlanCard({
         )}
 
         {/* Usos + vigencia */}
-        <View className="mt-4 flex-row gap-3 rounded-xl bg-retail-mist p-3">
+        <View className="mt-4 flex-row gap-3 rounded-xl bg-retail-mist p-3" style={{ backgroundColor: `${companyColor}0D` }}>
           <View className="flex-1 flex-row items-center gap-2.5">
             <View className="h-8 w-8 items-center justify-center rounded-lg bg-card">
-              <Zap size={16} color="#0284c7" />
+              <Zap size={16} color={companyColor} />
             </View>
             <View>
               <Text className="text-small font-inter-bold text-foreground">
@@ -162,7 +169,7 @@ export function PlanCard({
           </View>
           <View className="flex-1 flex-row items-center gap-2.5">
             <View className="h-8 w-8 items-center justify-center rounded-lg bg-card">
-              <Calendar size={16} color="#0284c7" />
+              <Calendar size={16} color={companyColor} />
             </View>
             <View>
               <Text className="text-small font-inter-bold text-foreground">
@@ -215,11 +222,12 @@ export function PlanCard({
       </View>
 
       {/* CTA */}
-      <View className="mt-5">
-        <Button
-          variant={destacado ? 'default' : 'outline'}
-          className="w-full rounded-full"
-          onPress={onPress}
+        <View className="mt-5">
+          <Button
+            variant={destacado ? 'default' : 'outline'}
+            className="w-full rounded-full"
+            style={hasCompany && !destacado ? { borderColor: companyColor } : undefined}
+            onPress={onPress}
         >
           {destacado ? 'Aprovechar' : 'Suscribirse'}
         </Button>
@@ -433,6 +441,7 @@ export default function PlanesScreen() {
         {!isLoading && !isError && data?.modo === 'global' && gruposDeNegocios.length > 0 && (
           <View className="gap-6">
             {gruposDeNegocios.map(({ company, planes: planesDelNegocio }) => {
+              const companyColor = brandColor(company.colorPrimario, colors.primary.DEFAULT)
               const planSeleccionado = planesDelNegocio.find(
                 (plan) => plan.id === planesSeleccionados[company.id],
               ) ?? planesDelNegocio[0]
@@ -442,7 +451,7 @@ export default function PlanesScreen() {
 
               return (
                 <View key={company.id} className="gap-3">
-                  <Card className="flex-row items-center gap-3 border-border bg-card p-4">
+                  <Card className="flex-row items-center gap-3 border-border bg-card p-4" style={{ borderColor: `${companyColor}40` }}>
                     {company.logoUrl ? (
                       <Image
                         source={{ uri: company.logoUrl }}
@@ -450,12 +459,12 @@ export default function PlanesScreen() {
                         className="h-12 w-12 rounded-xl bg-muted"
                       />
                     ) : (
-                      <View className="h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-                        <Store size={22} color={colors.primary.DEFAULT} />
+                      <View className="h-12 w-12 items-center justify-center rounded-xl bg-primary/10" style={{ backgroundColor: `${companyColor}1A` }}>
+                        <Store size={22} color={companyColor} />
                       </View>
                     )}
                     <View className="min-w-0 flex-1">
-                      <Text className="text-h3 font-inter-bold text-foreground" numberOfLines={1}>
+                      <Text className="text-h3 font-inter-bold" style={{ color: companyColor }} numberOfLines={1}>
                         {company.name}
                       </Text>
                       <Text className="mt-0.5 text-caption text-muted-foreground" numberOfLines={1}>
@@ -489,6 +498,7 @@ export default function PlanesScreen() {
                             plan={plan}
                             destacado={index === (planesDelNegocio.length > 1 ? 1 : 0)}
                             mostrarNegocio={false}
+                            colorPrimario={company.colorPrimario}
                             onPress={() => router.push(`/planes/${plan.id}`)}
                             className="flex-1"
                           />
@@ -545,6 +555,7 @@ export default function PlanesScreen() {
                         plan={planSeleccionado}
                         destacado={indiceSeleccionado === (planesDelNegocio.length > 1 ? 1 : 0)}
                         mostrarNegocio={false}
+                        colorPrimario={company.colorPrimario}
                         onPress={() => router.push(`/planes/${planSeleccionado.id}`)}
                       />
                     </View>

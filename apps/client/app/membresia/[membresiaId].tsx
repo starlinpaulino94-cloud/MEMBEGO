@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Pressable,
   Share,
   Alert,
+  useWindowDimensions,
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { goBackOr } from '../../src/lib/navigation'
@@ -20,6 +21,8 @@ import { useHistorial } from '../../src/hooks/useHistorial'
 import { Button } from '../../src/components/ui/Button'
 import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 import { Skeleton } from '../../src/components/ui/Skeleton'
+import { BackHeader } from '../../src/components/ui/BackHeader'
+import { brandColor, hasBrandColor } from '../../src/lib/brand-color'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVA: 'Activa',
@@ -135,8 +138,11 @@ function isUnlimited(m: Membership): boolean {
 }
 
 function MembresiaDetailScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  const { width } = useWindowDimensions()
+  const isDetailSheet = width >= 768 && router.canGoBack()
   const { membresiaId } = useLocalSearchParams<{ membresiaId: string }>()
   const { isAuthenticated } = useAuth()
   const { data: membresiasData, isLoading: loadingMembresias } =
@@ -154,7 +160,7 @@ function MembresiaDetailScreenContent() {
 
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 items-center justify-center bg-vibe-fondo p-6">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card p-6" : "flex-1 items-center justify-center bg-vibe-fondo p-6"}>
         <Text className="text-lg font-bold text-foreground mb-4">
           Inicia sesión para ver el detalle
         </Text>
@@ -168,7 +174,7 @@ function MembresiaDetailScreenContent() {
   if (loadingMembresias) {
     return (
       <ScrollView
-        className="flex-1 bg-vibe-fondo"
+        className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}
         contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8 }}
         showsVerticalScrollIndicator={false}
       >
@@ -183,7 +189,7 @@ function MembresiaDetailScreenContent() {
   if (!membresia) {
     return (
       <ScrollView
-        className="flex-1 bg-vibe-fondo"
+        className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}
         contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8 }}
         showsVerticalScrollIndicator={false}
       >
@@ -207,6 +213,8 @@ function MembresiaDetailScreenContent() {
   const statusTextColor = getStatusTextColor(membresia.estado)
   const unlimited = isUnlimited(membresia)
   const daysRemaining = getDaysRemaining(membresia.fechaVencimiento)
+  const companyAccent = brandColor(membresia.companyColorPrimario, '#0284c7')
+  const hasCompanyColor = hasBrandColor(membresia.companyColorPrimario)
   const estadoLabel = ESTADO_LABEL[membresia.estado] ?? membresia.estado
   const isActive = membresia.estado === 'ACTIVA' && (!membresia.fechaVencimiento || new Date(membresia.fechaVencimiento) > new Date())
   const showQr = isActive && !!membresia.qrToken
@@ -235,212 +243,219 @@ function MembresiaDetailScreenContent() {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-vibe-fondo"
-      contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8, paddingBottom: 32 }}
-      showsVerticalScrollIndicator={false}
-    >
-      <DetailPageFrame>
-        {/* Back Row */}
-        <Pressable
-          onPress={() => goBackOr(router, '/mis-membresias')}
-          className="flex-row items-center gap-1.5 mb-4"
-        >
-          <ArrowLeft size={20} color="#4b5563" />
-          <Text className="text-sm text-muted-foreground">Mis membresías</Text>
-        </Pressable>
-
-        {/* Header */}
-        <View className="flex-row items-start justify-between mb-6">
-          <View className="flex-1 mr-4">
-            <Text className="text-xs uppercase tracking-widest text-muted-foreground mb-1 font-inter-semibold">
-              {membresia.companyName}
-            </Text>
-            <Text className="text-[28px] font-inter-extrabold text-foreground leading-tight">
-              {membresia.planNombre}
-            </Text>
-          </View>
-          <View className={`rounded-full px-3 py-1 border ${statusChipStyle}`}>
-            <Text className={`text-xs font-inter-semibold ${statusTextColor}`}>
-              {estadoLabel}
-            </Text>
-          </View>
-        </View>
-
-        <View className="rounded-2xl border border-border/60 bg-card py-6 px-5 items-center mb-6">
-          <Text className="text-lg font-inter-bold text-foreground mb-1.5 text-center">
-            Tu llave de acceso
-          </Text>
-          <Text className="text-sm text-muted-foreground text-center mb-4 leading-5 px-2">
-            Muéstralo en {membresia.companyName} y listo: tu membresía se valida al instante.
-          </Text>
-
-          {daysRemaining !== null && daysRemaining <= 7 && (
-            <View className="flex-row items-center gap-1.5 rounded-full bg-warning/10 border border-warning/30 px-3.5 py-1.5 mb-5">
-              <Clock size={14} color="#ab6300" />
-              <Text className="text-sm font-inter-semibold text-warning">
-                {daysRemaining === 0 ? 'Vence hoy' : `Te quedan ${daysRemaining} ${daysRemaining === 1 ? 'día' : 'días'}`}
-              </Text>
-            </View>
-          )}
-
-          {showQr ? (
-            <>
-              {/* QR Frame */}
-              <View className="rounded-[28px] p-[3px] mb-5">
-                <LinearGradient
-                  colors={['#10b981', '#2dd4bf', '#059669']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{ borderRadius: 28, padding: 3 }}
-                >
-                  <View className="bg-card rounded-2xl p-4 items-center justify-center">
-                    <QRCode
-                      value={membresia.qrToken!}
-                      size={220}
-                      color="#0f172a"
-                      backgroundColor="#ffffff"
-                    />
-                  </View>
-                </LinearGradient>
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8, paddingBottom: 16 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <DetailPageFrame>
+          <BackHeader
+            className="mb-6"
+            title={
+              <View className="flex-row items-start justify-between">
+                <View className="flex-1 mr-4">
+                  <Text className="text-xs uppercase tracking-widest text-muted-foreground mb-1 font-inter-semibold" style={hasCompanyColor ? { color: companyAccent } : undefined}>
+                    {membresia.companyName}
+                  </Text>
+                  <Text className="text-[28px] font-inter-extrabold text-foreground leading-tight">
+                    {membresia.planNombre}
+                  </Text>
+                </View>
+                <View className={`rounded-full px-3 py-1 border ${statusChipStyle}`}>
+                  <Text className={`text-xs font-inter-semibold ${statusTextColor}`}>
+                    {estadoLabel}
+                  </Text>
+                </View>
               </View>
+            }
+            leftInset={insets.left}
+            onBack={() => goBackOr(router, '/mis-membresias')}
+            border={false}
+          />
 
-              <View className="flex-row gap-3 w-full">
-                <Pressable
-                  onPress={handleShare}
-                  className="flex-1 flex-row items-center justify-center gap-2 h-11 rounded-xl bg-foreground active:opacity-90"
-                >
-                  <Share2 size={16} color="#ffffff" />
-                  <Text className="text-sm font-inter-semibold text-background">Compartir</Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleDownload}
-                  className="flex-1 flex-row items-center justify-center gap-2 h-11 rounded-xl border border-border bg-card active:bg-muted"
-                >
-                  <Download size={16} color="#334155" />
-                  <Text className="text-sm font-inter-semibold text-foreground">Descargar</Text>
-                </Pressable>
-              </View>
-            </>
-          ) : isActive && !unlimited && (membresia.lavadosRestantes ?? 0) <= 0 ? (
-            <View className="py-6 px-4 items-center">
-              <Text className="text-sm text-muted-foreground text-center">
-                Sin usos disponibles en este período. Renueva tu membresía para seguir usando tus beneficios.
-              </Text>
-            </View>
-          ) : isActive ? (
-            <View className="py-6 px-4 items-center">
-              <Text className="text-sm text-muted-foreground text-center">
-                Tu código para canjear se está generando. Vuelve a cargar la página en un momento.
-              </Text>
-            </View>
-          ) : (
-            <View className="py-6 px-4 items-center">
-              <Text className="text-sm text-muted-foreground text-center">
-                {membresia.estado === 'PENDIENTE' || membresia.estado === 'PENDIENTE_PAGO'
-                  ? 'Esta membresía está pendiente de pago. Completa el pago para activar tu código QR.'
-                  : membresia.estado === 'VENCIDA' || membresia.estado === 'CANCELADA'
-                    ? 'Esta membresía no se encuentra activa. Renueva tu plan para volver a generar tu código QR.'
-                    : 'El código QR no está disponible en este momento.'}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Visits Section */}
-        <View className="mb-6">
-          <View className="flex-row items-center gap-2 mb-3">
-            <View className="h-7 w-7 rounded-lg bg-vibe-violet/10 items-center justify-center">
-              <History size={14} color="#7c3aed" />
-            </View>
-            <Text className="text-base font-inter-bold text-foreground">
-              Visitas
+          <View className="rounded-2xl border border-border/60 bg-card py-6 px-5 items-center mb-6">
+            <Text className="text-lg font-inter-bold text-foreground mb-1.5 text-center">
+              Tu llave de acceso
             </Text>
+            <Text className="text-sm text-muted-foreground text-center mb-4 leading-5 px-2">
+              Muéstralo en {membresia.companyName} y listo: tu membresía se valida al instante.
+            </Text>
+
+            {daysRemaining !== null && daysRemaining <= 7 && (
+              <View className="flex-row items-center gap-1.5 rounded-full bg-warning/10 border border-warning/30 px-3.5 py-1.5 mb-5">
+                <Clock size={14} color="#ab6300" />
+                <Text className="text-sm font-inter-semibold text-warning">
+                  {daysRemaining === 0 ? 'Vence hoy' : `Te quedan ${daysRemaining} ${daysRemaining === 1 ? 'día' : 'días'}`}
+                </Text>
+              </View>
+            )}
+
+            {showQr ? (
+              <>
+                {/* QR Frame */}
+                <View className="rounded-[28px] p-[3px] mb-5">
+                  <LinearGradient
+                    colors={hasCompanyColor ? [companyAccent, companyAccent] : ['#10b981', '#2dd4bf', '#059669']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{ borderRadius: 28, padding: 3 }}
+                  >
+                    <View className="bg-card rounded-2xl p-4 items-center justify-center">
+                      <QRCode
+                        value={membresia.qrToken!}
+                        size={220}
+                        color="#0f172a"
+                        backgroundColor="#ffffff"
+                      />
+                    </View>
+                  </LinearGradient>
+                </View>
+
+                <View className="flex-row gap-3 w-full">
+                  <Pressable
+                    onPress={handleShare}
+                    className="flex-1 flex-row items-center justify-center gap-2 h-11 rounded-xl bg-primary active:opacity-90"
+                    style={hasCompanyColor ? { backgroundColor: companyAccent } : undefined}
+                  >
+                    <Share2 size={16} color="#ffffff" />
+                    <Text className="text-sm font-inter-semibold text-background">Compartir</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleDownload}
+                    className="flex-1 flex-row items-center justify-center gap-2 h-11 rounded-xl border border-border bg-card active:bg-muted"
+                  >
+                    <Download size={16} color="#334155" />
+                    <Text className="text-sm font-inter-semibold text-foreground">Descargar</Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : isActive && !unlimited && (membresia.lavadosRestantes ?? 0) <= 0 ? (
+              <View className="py-6 px-4 items-center">
+                <Text className="text-sm text-muted-foreground text-center">
+                  Sin usos disponibles en este período. Renueva tu membresía para seguir usando tus beneficios.
+                </Text>
+              </View>
+            ) : isActive ? (
+              <View className="py-6 px-4 items-center">
+                <Text className="text-sm text-muted-foreground text-center">
+                  Tu código para canjear se está generando. Vuelve a cargar la página en un momento.
+                </Text>
+              </View>
+            ) : (
+              <View className="py-6 px-4 items-center">
+                <Text className="text-sm text-muted-foreground text-center">
+                  {membresia.estado === 'PENDIENTE' || membresia.estado === 'PENDIENTE_PAGO'
+                    ? 'Esta membresía está pendiente de pago. Completa el pago para activar tu código QR.'
+                    : membresia.estado === 'VENCIDA' || membresia.estado === 'CANCELADA'
+                      ? 'Esta membresía no se encuentra activa. Renueva tu plan para volver a generar tu código QR.'
+                      : 'El código QR no está disponible en este momento.'}
+                </Text>
+              </View>
+            )}
           </View>
-          {visitas.length > 0 ? (
-            <View className="rounded-xl border border-border bg-card p-4">
-              {visitas.slice(0, 5).map((visita, idx) => (
-                <View
-                  key={visita.id}
-                  className={`flex-row gap-3 py-3 ${
-                    idx < Math.min(visitas.length, 5) - 1
+
+          {/* Visits Section */}
+          <View className="mb-6">
+            <View className="flex-row items-center gap-2 mb-3">
+              <View className="h-7 w-7 rounded-lg items-center justify-center" style={{ backgroundColor: `${hasCompanyColor ? companyAccent : '#7c3aed'}1A` }}>
+                <History size={14} color={hasCompanyColor ? companyAccent : '#7c3aed'} />
+              </View>
+              <Text className="text-base font-inter-bold text-foreground">
+                Visitas
+              </Text>
+            </View>
+            {visitas.length > 0 ? (
+              <View className="rounded-xl border border-border bg-card p-4">
+                {visitas.slice(0, 5).map((visita, idx) => (
+                  <View
+                    key={visita.id}
+                    className={`flex-row gap-3 py-3 ${idx < Math.min(visitas.length, 5) - 1
                       ? 'border-b border-border/50'
                       : ''
-                  }`}
-                >
-                  <View className="h-9 w-9 rounded-xl bg-primary/10 items-center justify-center">
-                    {visita.vehiculo ? (
-                      <Car size={18} color="#0284c7" />
-                    ) : (
-                      <Clock size={18} color="#0284c7" />
-                    )}
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-sm font-inter-semibold text-foreground">
-                      {visita.servicio || 'Servicio'}
-                    </Text>
-                    <Text className="text-xs text-muted-foreground">
-                      {formatDate(visita.fecha)}
-                    </Text>
-                    {visita.sucursal && (
-                      <Text className="text-xs text-muted-foreground mt-0.5">
-                        {visita.sucursal}
+                      }`}
+                  >
+                      <View className="h-9 w-9 rounded-xl items-center justify-center" style={{ backgroundColor: `${companyAccent}1A` }}>
+                      {visita.vehiculo ? (
+                        <Car size={18} color={companyAccent} />
+                      ) : (
+                        <Clock size={18} color={companyAccent} />
+                      )}
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-sm font-inter-semibold text-foreground">
+                        {visita.servicio || 'Servicio'}
                       </Text>
-                    )}
+                      <Text className="text-xs text-muted-foreground">
+                        {formatDate(visita.fecha)}
+                      </Text>
+                      {visita.sucursal && (
+                        <Text className="text-xs text-muted-foreground mt-0.5">
+                          {visita.sucursal}
+                        </Text>
+                      )}
+                    </View>
                   </View>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View className="rounded-xl border border-dashed border-border bg-muted/20 py-8 px-4 items-center">
-              <View className="h-10 w-10 rounded-xl bg-muted items-center justify-center mb-3">
-                <Clock size={20} color="#94a3b8" />
+                ))}
               </View>
-              <Text className="text-sm text-muted-foreground text-center leading-5">
-                Cuando uses tu membresía, tus visitas aparecerán aquí.
+            ) : (
+              <View className="rounded-xl border border-dashed border-border bg-muted/20 py-8 px-4 items-center">
+                <View className="h-10 w-10 rounded-xl bg-muted items-center justify-center mb-3">
+                  <Clock size={20} color="#94a3b8" />
+                </View>
+                <Text className="text-sm text-muted-foreground text-center leading-5">
+                  Cuando uses tu membresía, tus visitas aparecerán aquí.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View className="rounded-xl border border-border bg-card p-5 mb-6">
+            <View className="flex-row items-center gap-2 mb-4">
+              <View className="h-7 w-7 rounded-lg bg-muted items-center justify-center">
+                <Calendar size={14} color="#64748b" />
+              </View>
+              <Text className="text-base font-inter-bold text-foreground">
+                Detalles de la membresía
               </Text>
             </View>
-          )}
-        </View>
-
-        <View className="rounded-xl border border-border bg-card p-5 mb-6">
-          <View className="flex-row items-center gap-2 mb-4">
-            <View className="h-7 w-7 rounded-lg bg-muted items-center justify-center">
-              <Calendar size={14} color="#64748b" />
+            <View>
+              <DetailRow
+                label="Fecha de inicio"
+                value={formatDateLong(membresia.fechaInicio)}
+                isLast={false}
+              />
+              <DetailRow
+                label="Fecha de vencimiento"
+                value={formatDateLong(membresia.fechaVencimiento)}
+                isLast={false}
+              />
+              <DetailRow
+                label="Usos restantes"
+                value={unlimited ? 'Ilimitado' : `${membresia.lavadosRestantes ?? 0}`}
+                isLast={true}
+              />
             </View>
-            <Text className="text-base font-inter-bold text-foreground">
-              Detalles de la membresía
-            </Text>
           </View>
-          <View>
-            <DetailRow
-              label="Fecha de inicio"
-              value={formatDateLong(membresia.fechaInicio)}
-              isLast={false}
-            />
-            <DetailRow
-              label="Fecha de vencimiento"
-              value={formatDateLong(membresia.fechaVencimiento)}
-              isLast={false}
-            />
-            <DetailRow
-              label="Usos restantes"
-              value={unlimited ? 'Ilimitado' : `${membresia.lavadosRestantes ?? 0}`}
-              isLast={true}
-            />
-          </View>
-        </View>
 
-        <Pressable
-          onPress={handleCancel}
-          className="items-center py-3"
-        >
-          <Text className="text-sm font-inter-semibold text-destructive">
-            Cancelar membresía
-          </Text>
-        </Pressable>
-      </DetailPageFrame>
-    </ScrollView>
+        </DetailPageFrame>
+      </ScrollView>
+      <View
+        className={sheetBackgroundClass === 'bg-surface-card' ? "border-t border-border bg-surface-card px-4 pt-3" : "border-t border-border bg-vibe-fondo px-4 pt-3"}
+        style={{ paddingBottom: isDetailSheet ? 12 : insets.bottom + 12 }}
+      >
+        <DetailPageFrame>
+          <Pressable
+            onPress={handleCancel}
+            className="items-center py-3"
+          >
+            <Text className="text-sm font-inter-semibold text-destructive">
+              Cancelar membresía
+            </Text>
+          </Pressable>
+        </DetailPageFrame>
+      </View>
+    </View>
   )
 }
 
@@ -463,9 +478,8 @@ function DetailRow({
 }) {
   return (
     <View
-      className={`flex-row justify-between py-3 ${
-        !isLast ? 'border-b border-border/50' : ''
-      }`}
+      className={`flex-row justify-between py-3 ${!isLast ? 'border-b border-border/50' : ''
+        }`}
     >
       <Text className="text-sm text-muted-foreground">{label}</Text>
       <Text className="text-sm font-medium text-foreground">{value}</Text>

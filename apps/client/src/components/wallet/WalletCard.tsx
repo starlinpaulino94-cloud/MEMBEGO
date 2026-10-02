@@ -12,6 +12,7 @@ import Animated, {
 import { RotateCcw, Clock, Shield, ChevronRight } from 'lucide-react-native'
 import QRCode from 'react-native-qrcode-svg'
 import { cn } from '../../lib/cn'
+import { brandColor, hasBrandColor } from '../../lib/brand-color'
 
 export type WalletCardTone = 'active' | 'pending' | 'expired'
 
@@ -42,15 +43,10 @@ export interface WalletCardProps {
   className?: string
 }
 
-function esHex(c?: string | null): c is string {
-  return !!c && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c.trim())
-}
-
 function getGradientColors(data: WalletCardData): [string, string, ...string[]] {
-  const brand =
-    esHex(data.company.colorPrimario)
-      ? data.company.colorPrimario.trim()
-      : null
+  const brand = hasBrandColor(data.company.colorPrimario)
+    ? brandColor(data.company.colorPrimario, '#0f172a')
+    : null
   if (brand) {
     return [brand, '#0b1220', brand]
   }
@@ -111,6 +107,9 @@ export function WalletCard({
 
   const usagePct = getUsagePercentage(data)
   const unlimited = data.esIlimitado
+  const companyAccent = hasBrandColor(data.company.colorPrimario)
+    ? brandColor(data.company.colorPrimario, '#0f172a')
+    : null
   const gradientColors = getGradientColors(data)
   const isInactive = data.tone !== 'active'
   const logoInitial = data.company.name
@@ -181,7 +180,7 @@ export function WalletCard({
                   <View style={styles.meterTrack}>
                     {unlimited ? (
                       <LinearGradient
-                        colors={['#7c3aed', '#06b6d4']}
+                        colors={companyAccent ? [companyAccent, companyAccent] : ['#7c3aed', '#06b6d4']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
                         style={[styles.meterFill, { width: '100%' }]}

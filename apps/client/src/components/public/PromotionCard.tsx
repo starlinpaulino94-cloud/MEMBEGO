@@ -1,9 +1,11 @@
 import React from 'react'
 import { View, Text, Image, Pressable } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Clock, Star } from 'lucide-react-native'
+import { Clock, Star, Zap } from 'lucide-react-native'
 import { cn } from '../../lib/cn'
 import { formatMoney } from '../../lib/format'
+import { brandColor, hasBrandColor } from '../../lib/brand-color'
+import { isFlashOffer } from '../marketplace/FlashOfferStatus'
 import type { PromotionPublic } from '../../lib/api'
 
 /**
@@ -63,6 +65,9 @@ export function PromotionCard({
   const descuentoText = formatDescuento(promotion.descuento, promotion.tipo)
   const precio = promotion.venta?.precio ?? promotion.precio
   const agotada = promotion.venta?.agotada ?? false
+  const companyColor = brandColor(promotion.company.colorPrimario, '#0284c7')
+  const hasCompanyColor = hasBrandColor(promotion.company.colorPrimario)
+  const esRelampago = isFlashOffer(promotion)
 
   // Por vencer: menos de 72h
   const ahora = new Date()
@@ -80,6 +85,7 @@ export function PromotionCard({
         'active:opacity-90',
         className,
       )}
+      style={hasCompanyColor ? { borderTopColor: companyColor, borderTopWidth: 3 } : undefined}
       accessibilityRole="button"
       accessibilityLabel={`Ver ${promotion.titulo}`}
     >
@@ -92,8 +98,8 @@ export function PromotionCard({
             resizeMode="cover"
           />
         ) : (
-          <View className="size-full items-center justify-center bg-primary/10">
-            <Text className="text-4xl font-inter-bold text-primary">
+          <View className="size-full items-center justify-center bg-primary/10" style={hasCompanyColor ? { backgroundColor: `${companyColor}1A` } : undefined}>
+            <Text className="text-4xl font-inter-bold text-primary" style={hasCompanyColor ? { color: companyColor } : undefined}>
               {promotion.titulo.slice(0, 1).toUpperCase()}
             </Text>
           </View>
@@ -115,6 +121,14 @@ export function PromotionCard({
               <Star size={10} color="#eab308" fill="#eab308" />
               <Text className="text-xs font-inter-semibold text-foreground">
                 Destacada
+              </Text>
+            </View>
+          ) : null}
+          {esRelampago ? (
+            <View className="flex-row items-center gap-1 rounded-full bg-card/95 px-2 py-0.5">
+              <Zap size={10} color={companyColor} fill={companyColor} />
+              <Text className="text-xs font-inter-semibold" style={{ color: companyColor }}>
+                Relámpago
               </Text>
             </View>
           ) : null}
@@ -151,13 +165,13 @@ export function PromotionCard({
         <Text className="text-base font-inter-bold text-foreground" numberOfLines={2}>
           {promotion.titulo}
         </Text>
-        <Text className="mt-0.5 text-xs text-muted-foreground" numberOfLines={1}>
+        <Text className="mt-0.5 text-xs text-muted-foreground" style={hasCompanyColor ? { color: companyColor } : undefined} numberOfLines={1}>
           {promotion.company.name}
         </Text>
 
         {/* Precio */}
         {precio != null && precio > 0 && !isExpired ? (
-          <Text className="mt-1.5 text-xl font-inter-bold text-foreground tabular-nums">
+          <Text className="mt-1.5 text-xl font-inter-bold text-foreground tabular-nums" style={hasCompanyColor ? { color: companyColor } : undefined}>
             {formatMoney(precio)}
           </Text>
         ) : null}

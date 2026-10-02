@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { View, Text, TouchableOpacity, TextInput, useWindowDimensions } from 'react-native'
 import { useRouter } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -15,6 +15,7 @@ export function HeaderVibe() {
   const insets = useSafeAreaInsets()
   const { user, isAuthenticated } = useAuth()
   const { accent } = useInicioAccent()
+  const [searchText, setSearchText] = useState('')
   const gutter = width >= 768 ? 24 : 16
   const topMargin = width >= 768 ? 16 : 12
 
@@ -58,7 +59,12 @@ export function HeaderVibe() {
               className="flex-1 ml-2 text-sm text-foreground"
               autoCapitalize="none"
               returnKeyType="search"
-              onSubmitEditing={() => router.push('/buscar')}
+              value={searchText}
+              onChangeText={setSearchText}
+              onSubmitEditing={() => {
+                const q = searchText.trim()
+                router.push(q ? { pathname: '/buscar', params: { q } } : '/buscar')
+              }}
             />
             <Mic size={16} color={accent.color} />
           </View>

@@ -7,6 +7,7 @@ import { rnHref } from '../../lib/rutas'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { InicioAccent, useInicioAccent } from '../layout/InicioAccentContext'
 import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
+import { brandColor, brandForeground } from '../../lib/brand-color'
 
 export interface EmpresaScrollItem {
   id: string
@@ -15,6 +16,7 @@ export interface EmpresaScrollItem {
   rubro: string | null
   ciudad: string | null
   logoUrl: string | null
+  colorPrimario?: string | null
   bannerUrl: string | null
   href: string
   valoracion: number | null
@@ -116,6 +118,7 @@ export function EmpresaCardItem({
   if (!empresa) return null
 
   const esNueva = calcularEsNueva(empresa)
+  const companyColor = brandColor(empresa.colorPrimario, accent.color)
 
   return (
     <MarketplaceCard
@@ -123,10 +126,11 @@ export function EmpresaCardItem({
       onHoverOut={() => setIsHovered(false)}
       onPress={onPress}
       className="group hover:scale-[1.01] transition-all"
+      style={{ borderColor: `${companyColor}40` }}
       accessibilityLabel={`Ver ${empresa.nombre}${empresa.esFavorita ? ', marcada como favorita' : ''}${esNueva ? ', empresa nueva' : ''}`}
     >
       {/* Logo */}
-      <View className="relative aspect-video h-28 w-full overflow-hidden rounded-lg bg-vibe-niebla">
+      <View className="relative aspect-video h-28 w-full overflow-hidden rounded-lg bg-vibe-niebla" style={{ backgroundColor: `${companyColor}0D` }}>
         {empresa.logoUrl ? (
           <Image
             source={{ uri: empresa.logoUrl }}
@@ -135,7 +139,7 @@ export function EmpresaCardItem({
           />
         ) : (
           <View className="flex-1 w-full items-center justify-center">
-            <Text className="text-h2" style={{ color: accent.color }}>
+            <Text className="text-h2" style={{ color: companyColor }}>
               {empresa.nombre.slice(0, 2).toUpperCase()}
             </Text>
           </View>
@@ -145,9 +149,9 @@ export function EmpresaCardItem({
         {esNueva ? (
           <View
             className="rounded-full px-2 py-0.5 absolute left-2 top-2 shadow-sm"
-            style={{ backgroundColor: accent.color, zIndex: 10 }}
+            style={{ backgroundColor: companyColor, zIndex: 10 }}
           >
-            <Text className="text-overline font-inter-bold text-white">
+            <Text className="text-overline font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>
               Nuevo
             </Text>
           </View>
@@ -159,7 +163,7 @@ export function EmpresaCardItem({
             className="absolute right-2 top-2 size-8 items-center justify-center rounded-full bg-card/95 shadow-sm"
             style={{ zIndex: 10 }}
           >
-            <Heart size={16} color={accent.color} fill={accent.color} />
+            <Heart size={16} color={companyColor} fill={companyColor} />
           </View>
         ) : null}
 
@@ -169,7 +173,7 @@ export function EmpresaCardItem({
             className="absolute left-2 bottom-2 bg-card/95 rounded-full px-2 py-0.5 shadow-sm"
             style={{ zIndex: 10 }}
           >
-            <Text className="text-overline font-inter-bold" style={{ color: accent.color }}>
+            <Text className="text-overline font-inter-bold" style={{ color: companyColor }}>
               {empresa.etiquetaRelacion}
             </Text>
           </View>
@@ -179,7 +183,7 @@ export function EmpresaCardItem({
       {/* Name */}
       <Text
         className="mt-2 text-label-md font-inter-bold text-foreground"
-        style={isHovered ? { color: accent.color } : undefined}
+        style={isHovered ? { color: companyColor } : undefined}
         numberOfLines={1}
       >
         {empresa.nombre}
@@ -198,7 +202,7 @@ export function EmpresaCardItem({
       {/* Rating */}
       {empresa.valoracion != null && Number.isFinite(Number(empresa.valoracion)) ? (
         <View className="mt-1.5 flex-row items-center gap-1">
-          <Star size={12} color={accent.color} fill={accent.color} />
+          <Star size={12} color={companyColor} fill={companyColor} />
           <Text className="text-caption font-inter-semibold text-foreground">
             {Number(empresa.valoracion).toFixed(1)}
           </Text>
@@ -212,7 +216,7 @@ export function EmpresaCardItem({
 
       {/* Plans count */}
       {empresa.planes && empresa.planes > 0 ? (
-        <Text className="mt-1 text-caption font-inter-medium" style={{ color: accent.color }}>
+        <Text className="mt-1 text-caption font-inter-medium" style={{ color: companyColor }}>
           {empresa.planes} {empresa.planes === 1 ? 'plan' : 'planes'}
         </Text>
       ) : null}

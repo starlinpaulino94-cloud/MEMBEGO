@@ -123,6 +123,9 @@ export default function InicioScreen() {
                 return null
             }
           })}
+          {!bloques.includes('EXPERIENCIAS') ? (
+            <VibeRelampago relampago={comercial.relampago} />
+          ) : null}
         </>
       ) : null}
 

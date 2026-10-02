@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router'
 import { MapPin, Gift, Users, Star } from 'lucide-react-native'
 import { cn } from '../../lib/cn'
 import { formatMoney } from '../../lib/format'
+import { brandColor, hasBrandColor } from '../../lib/brand-color'
 import { MarketplaceCard } from './MarketplaceCard'
 
 /**
@@ -21,6 +22,7 @@ export interface BusinessCardData {
   logoUrl: string | null
   bannerUrl: string | null
   ciudad: string | null
+  colorPrimario?: string | null
   descripcion?: string | null
   totalMembersCount?: number
   activePromotionsCount?: number
@@ -47,6 +49,9 @@ interface BusinessCardProps {
 function Logo({ company, size }: { company: BusinessCardData; size: 'sm' | 'md' }) {
   const clases = size === 'sm' ? 'h-10 w-10' : 'h-12 w-12'
   const textClase = size === 'sm' ? 'text-xs' : 'text-sm'
+  const companyColor = hasBrandColor(company.colorPrimario)
+    ? brandColor(company.colorPrimario, '#7c3aed')
+    : null
 
   if (company.logoUrl) {
     return (
@@ -65,8 +70,12 @@ function Logo({ company, size }: { company: BusinessCardData; size: 'sm' | 'md' 
         'shrink-0 items-center justify-center rounded-lg bg-primary/10',
         clases,
       )}
+      style={companyColor ? { backgroundColor: `${companyColor}1A` } : undefined}
     >
-      <Text className={cn('font-inter-bold text-primary', textClase)}>
+      <Text
+        className={cn('font-inter-bold text-primary', textClase)}
+        style={companyColor ? { color: companyColor } : undefined}
+      >
         {company.name.slice(0, 2).toUpperCase()}
       </Text>
     </View>
@@ -144,6 +153,9 @@ export function BusinessCard({
         accessibilityLabel={`Ver ${company.name}`}
         className="overflow-hidden"
       >
+        {hasBrandColor(company.colorPrimario) ? (
+          <View className="h-1 w-full" style={{ backgroundColor: brandColor(company.colorPrimario, '#7c3aed') }} />
+        ) : null}
         <View className="relative w-full bg-muted" style={{ aspectRatio: 16 / 10 }}>
           {company.bannerUrl ? (
             <Image

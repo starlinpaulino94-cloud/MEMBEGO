@@ -10,6 +10,8 @@ import { colors } from '../../theme/tokens'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { useInicioAccent, type InicioAccent } from '../layout/InicioAccentContext'
 import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
+import { brandColor, brandForeground } from '../../lib/brand-color'
+import type { PlanInicio } from '../../../../../src/modules/home/vista'
 
 function Estrellas({ valoracion, accentColor }: { valoracion: number; accentColor: string }) {
   const llenas = Math.round(valoracion)
@@ -31,6 +33,7 @@ export interface PlanRelacionadoItem {
   id: string
   nombre: string
   empresa: string
+  colorPrimario?: string | null
   href: string
   imagen?: string | null
   esCliente?: boolean
@@ -48,6 +51,7 @@ export interface PlanCardItemProps {
 
 export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
   const [isHovered, setIsHovered] = useState(false)
+  const companyColor = brandColor(plan.colorPrimario, accent.color)
 
   return (
     <MarketplaceCard
@@ -57,14 +61,15 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
       accessibilityLabel={`Ver membresía de ${plan.empresa}`}
       variant="flush"
       className="group hover:scale-[1.01] transition-all"
+      style={{ borderColor: `${companyColor}40` }}
       footer={
         <LinearGradient
-          colors={accent.gradient}
+          colors={[companyColor, companyColor]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={{ width: '100%', borderRadius: 9999, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' }}
         >
-          <Text className="text-label-sm font-inter-bold text-white">
+          <Text className="text-label-sm font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>
             Aprovechar
           </Text>
         </LinearGradient>
@@ -79,7 +84,7 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
           />
         ) : (
           <View className="flex-1 items-center justify-center">
-            <Text className="text-h1" style={{ color: accent.color }}>
+            <Text className="text-h1" style={{ color: companyColor }}>
               {plan.empresa?.slice(0, 1).toUpperCase()}
             </Text>
           </View>
@@ -88,7 +93,7 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
           <View className="absolute left-2 bottom-2 rounded-full bg-card/95 px-2 py-1">
             <Text
               className="text-label-sm font-inter-semibold"
-              style={{ color: accent.color }}
+              style={{ color: companyColor }}
             >
               De tus negocios
             </Text>
@@ -100,7 +105,7 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
         <View>
           <Text
             className="text-label-md text-foreground"
-            style={isHovered ? { color: accent.color } : undefined}
+            style={isHovered ? { color: companyColor } : undefined}
             numberOfLines={2}
           >
             {plan.empresa} · {plan.nombre}
@@ -108,7 +113,7 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
 
           {plan.valoracion != null && Number.isFinite(Number(plan.valoracion)) ? (
             <View className="mt-1 flex-row items-center gap-1">
-              <Estrellas valoracion={Number(plan.valoracion)} accentColor={accent.color} />
+          <Estrellas valoracion={Number(plan.valoracion)} accentColor={companyColor} />
               <Text className="text-label-sm font-inter-medium text-muted-foreground">
                 {Number(plan.resenas ?? 0).toLocaleString('es-DO')}
               </Text>
@@ -117,7 +122,7 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
         </View>
 
         <View className="flex-row items-baseline">
-          <Text className="text-price-lg" style={{ color: accent.color }}>{plan.precio}</Text>
+          <Text className="text-price-lg" style={{ color: companyColor }}>{plan.precio}</Text>
           <Text className="ml-1 text-small text-muted-foreground">
             {plan.periodo}
           </Text>
@@ -131,7 +136,7 @@ export function VibeRelacionado({
   planes,
   total,
 }: {
-  planes: any[]
+  planes: readonly PlanInicio[]
   total: number
 }) {
   const router = useRouter()

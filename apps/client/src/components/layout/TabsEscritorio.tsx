@@ -48,9 +48,9 @@ export function TabsEscritorio() {
                 </LinearGradient>
               ) : (
                 <Text
-                    className={`text-sm font-inter-semibold ${isActive ? '' : 'text-muted-foreground'
+                  className={`text-sm font-inter-semibold ${isActive ? '' : 'text-muted-foreground'
                     }`}
-                    style={isActive ? { color: accent.color } : undefined}
+                  style={isActive ? { color: accent.color } : undefined}
                 >
                   {tab.label}
                 </Text>

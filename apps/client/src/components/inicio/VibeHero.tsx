@@ -17,6 +17,7 @@ import { colors, radii } from '../../theme/tokens'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { useInicioAccent } from '../layout/InicioAccentContext'
 import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
+import { brandColor, brandForeground } from '../../lib/brand-color'
 import type { NovedadHero } from '../../../../../src/modules/home/vista'
 
 const GRAD_OVERLAY = [colors.overlay.transparent, colors.overlay.heroMid, colors.overlay.heroDeep] as const
@@ -193,6 +194,7 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
       >
         {repeatedHeroes.map((hero, i) => {
           const detalle = datoNovedad(hero)
+          const companyColor = brandColor(hero.colorPrimario, accent.color)
           return (
             <MarketplaceCard
               variant="flush"
@@ -210,8 +212,7 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
                 <Image source={{ uri: hero.imagen }} style={StyleSheet.absoluteFill} resizeMode="cover" />
               ) : (
                 <LinearGradient
-                  colors={accent.gradient}
-                  locations={accent.gradient.length === 4 ? [0, 0.35, 0.7, 1] : [0, 1]}
+                  colors={[companyColor, companyColor]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
@@ -227,7 +228,7 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
               <View className="relative z-10 flex-1 justify-between p-4 pt-14">
                 <Text
                   className="absolute left-4 top-3 overflow-hidden rounded-full px-3 py-1 text-overline font-bold uppercase tracking-wider text-white"
-                  style={{ backgroundColor: accent.gradient[1] }}
+                  style={{ backgroundColor: companyColor, color: brandForeground(companyColor, accent.color) }}
                 >
                   {etiquetaTipo(hero.tipo)}
                 </Text>
@@ -253,12 +254,12 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
                     ) : null}
                   </View>
                   <LinearGradient
-                    colors={accent.gradient}
+                    colors={[companyColor, companyColor]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={{ minHeight: 48, paddingHorizontal: 14, borderRadius: radii.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
-                    <Text className="text-label-sm font-bold text-white">{ctaTipo(hero.tipo)}</Text>
+                    <Text className="text-label-sm font-bold" style={{ color: brandForeground(companyColor, accent.color) }}>{ctaTipo(hero.tipo)}</Text>
                     <ArrowRight size={16} color={colors.surface.background} />
                   </LinearGradient>
                 </View>

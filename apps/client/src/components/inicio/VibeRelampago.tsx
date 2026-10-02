@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { View, Text, TouchableOpacity, Image } from 'react-native'
 import { Link, useRouter } from 'expo-router'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Clock, Timer, ChevronRight } from 'lucide-react-native'
 import { rnHref } from '../../lib/rutas'
 import { Card } from '../ui/Card'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { useInicioAccent, type InicioAccent } from '../layout/InicioAccentContext'
+import { brandColor, brandForeground } from '../../lib/brand-color'
 
 function fechaCorta(d: string) {
   try {
@@ -53,14 +53,30 @@ function VibeCountdown({ hasta, accentColor }: { hasta: string; accentColor: str
   return <Text className="text-overline font-inter-bold tracking-tight" style={{ color: accentColor }}>{timeLeft}</Text>
 }
 
-export interface RelampagoCardItemProps {
-  promo: any
-  accent: InicioAccent
-  onPress: () => void
+interface RelampagoPromo {
+  readonly id: string
+  readonly titulo: string
+  readonly empresa: string
+  readonly colorPrimario?: string | null
+  readonly imagen: string | null
+  readonly href: string
+  readonly precio: string | null
+  readonly descuento: string | null
+  readonly hasta: string
 }
 
-export function RelampagoCardItem({ promo, accent, onPress }: RelampagoCardItemProps) {
+interface RelampagoData {
+  readonly hasta: string
+  readonly promos: readonly RelampagoPromo[]
+}
+
+export function RelampagoCardItem({ promo, accent, onPress }: {
+  promo: RelampagoPromo
+  accent: InicioAccent
+  onPress: () => void
+}) {
   const [isHovered, setIsHovered] = useState(false)
+  const companyColor = brandColor(promo.colorPrimario, accent.color)
 
   return (
     <MarketplaceCard
@@ -69,41 +85,40 @@ export function RelampagoCardItem({ promo, accent, onPress }: RelampagoCardItemP
       onHoverIn={() => setIsHovered(true)}
       onHoverOut={() => setIsHovered(false)}
       accessibilityLabel={`Ver ${promo.titulo}`}
-      className="group hover:scale-[1.01] transition-all"
+      className="w-full min-w-0 group hover:scale-[1.01] transition-all"
+      style={{ borderColor: `${companyColor}40` }}
     >
-      <View className="relative h-28 w-28 overflow-hidden rounded-lg bg-vibe-niebla">
+      <View className="relative h-28 w-28 overflow-hidden rounded-lg bg-vibe-niebla" style={{ backgroundColor: `${companyColor}0D` }}>
         {promo.imagen ? (
           <Image source={{ uri: promo.imagen }} style={{ flex: 1 }} resizeMode="cover" />
         ) : (
           <View className="flex-1 items-center justify-center">
-            <Text className="text-4xl font-inter-bold" style={{ color: accent.color }}>
+            <Text className="text-4xl font-inter-bold" style={{ color: companyColor }}>
               {promo.titulo.slice(0, 1).toUpperCase()}
             </Text>
           </View>
         )}
         {promo.descuento ? (
-          <LinearGradient
-            colors={accent.gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
+          <View
             className="absolute bottom-1 left-1 rounded px-1.5 py-0.5"
+            style={{ backgroundColor: companyColor }}
           >
-            <Text className="text-overline font-inter-bold text-white">{promo.descuento}</Text>
-          </LinearGradient>
+            <Text className="text-overline font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>{promo.descuento}</Text>
+          </View>
         ) : null}
       </View>
 
-      <View className="flex-1 justify-between py-1 pr-1">
+      <View className="min-w-0 flex-1 justify-between py-1 pr-1">
         <View>
           <View className="flex-row items-center gap-1">
-            <Clock size={14} color={accent.color} />
+            <Clock size={14} color={companyColor} />
             <Text className="text-overline font-inter-medium text-muted-foreground">
               Hasta el {fechaCorta(promo.hasta)}
             </Text>
           </View>
           <Text
             className="text-h4 text-foreground mt-1"
-            style={isHovered ? { color: accent.color } : undefined}
+            style={isHovered ? { color: companyColor } : undefined}
             numberOfLines={2}
           >
             {promo.titulo}
@@ -113,32 +128,31 @@ export function RelampagoCardItem({ promo, accent, onPress }: RelampagoCardItemP
           </Text>
         </View>
 
-        <View className="mt-2 flex-row items-end justify-between">
+        <View className="mt-2 flex-row items-end justify-between gap-2">
           {promo.precio ? (
-            <Text className="text-price-sm font-inter-bold" style={{ color: accent.color }}>
+            <Text className="text-price-sm font-inter-bold" style={{ color: companyColor }} numberOfLines={1}>
               {promo.precio}
             </Text>
           ) : (
             <View />
           )}
-          <LinearGradient
-            colors={accent.gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            className="rounded-full px-3 min-h-11 justify-center"
+          <View
+            className="shrink-0 rounded-full px-3 min-h-11 justify-center"
+            style={{ backgroundColor: companyColor }}
           >
-            <Text className="text-overline font-inter-bold text-white">Canjear</Text>
-          </LinearGradient>
+            <Text className="text-overline font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>Canjear</Text>
+          </View>
         </View>
       </View>
     </MarketplaceCard>
   )
 }
 
-export function VibeRelampago({ relampago }: { relampago: any }) {
+export function VibeRelampago({ relampago }: { relampago: RelampagoData | null | undefined }) {
   const router = useRouter()
   const { accent } = useInicioAccent()
-  if (!relampago || !relampago.promos || relampago.promos.length === 0) return null
+  const promos = relampago?.promos ?? []
+  const sectionColor = accent.color
 
   return (
     <View className="mt-6 px-4">
@@ -146,32 +160,42 @@ export function VibeRelampago({ relampago }: { relampago: any }) {
         <Text className="text-price-lg text-foreground">Experiencias y excursiones</Text>
         <Link href="/explorar" asChild>
           <TouchableOpacity activeOpacity={0.7} className="rounded-full p-1">
-            <ChevronRight size={20} color={accent.color} />
+            <ChevronRight size={20} color={sectionColor} />
           </TouchableOpacity>
         </Link>
       </View>
 
-      <Card className="bg-vibe-lavanda p-4 shadow-none">
+      <Card className="p-4 shadow-none">
         <View className="mb-3 flex-row items-center justify-between">
           <View className="flex-row items-center gap-2">
-            <Timer size={20} color={accent.color} />
+            <Timer size={20} color={sectionColor} />
             <Text className="text-h3 text-foreground">Ofertas Relámpago</Text>
           </View>
-          <View className="rounded-full border border-vibe-chip bg-card px-2.5 py-1">
-            <VibeCountdown hasta={relampago.hasta} accentColor={accent.color} />
-          </View>
+          {relampago && promos.length > 0 ? (
+            <View className="rounded-full border border-vibe-chip bg-card px-2.5 py-1">
+              <VibeCountdown hasta={relampago.hasta} accentColor={sectionColor} />
+            </View>
+          ) : null}
         </View>
 
-        <View className="gap-3">
-          {relampago.promos.map((p: any) => (
-            <RelampagoCardItem
-              key={p.id}
-              promo={p}
-              accent={accent}
-              onPress={() => router.push(rnHref(p.href) as any)}
-            />
-          ))}
-        </View>
+        {promos.length > 0 ? (
+          <View className="gap-3">
+            {promos.map((promo) => (
+              <RelampagoCardItem
+                key={promo.id}
+                promo={promo}
+                accent={accent}
+                onPress={() => router.push(rnHref(promo.href) as any)}
+              />
+            ))}
+          </View>
+        ) : (
+          <View className="min-h-24 items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-4 py-6">
+            <Text className="text-sm text-muted-foreground text-center leading-5">
+              No hay ofertas relámpago disponibles por ahora
+            </Text>
+          </View>
+        )}
       </Card>
     </View>
   )

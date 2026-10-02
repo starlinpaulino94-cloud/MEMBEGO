@@ -8,6 +8,7 @@ import { rnHref } from '../../lib/rutas'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { useInicioAccent, type InicioAccent } from '../layout/InicioAccentContext'
 import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
+import { brandColor, brandForeground } from '../../lib/brand-color'
 
 interface PromoNovedadItem {
   id: string
@@ -27,6 +28,7 @@ interface PromoNovedadItem {
     nombre: string
     slug: string
     logoUrl: string | null
+    colorPrimario?: string | null
   }
   esPrivadaMiembros: boolean
   esDeMiEmpresa: boolean
@@ -62,6 +64,7 @@ export function PromoCardItem({
   onPress,
 }: PromoCardItemProps) {
   const [isHovered, setIsHovered] = useState(false)
+  const companyColor = brandColor(item.empresa.colorPrimario, accent.color)
 
   return (
     <MarketplaceCard
@@ -70,12 +73,13 @@ export function PromoCardItem({
       onHoverOut={() => setIsHovered(false)}
       accessibilityLabel={`Ver ${item.titulo}`}
       className="group hover:scale-[1.01] transition-all"
+      style={{ borderColor: `${companyColor}40` }}
       footer={
         <View className="flex-row justify-between items-center">
           <Text className="text-muted-foreground text-caption">Ver beneficio</Text>
           <View className="flex-row items-center">
-            <Text style={{ color: accent.color }} className="text-caption">Aprovecha </Text>
-            <ArrowRight size={14} color={accent.color} />
+            <Text style={{ color: companyColor }} className="text-caption">Aprovecha </Text>
+            <ArrowRight size={14} color={companyColor} />
           </View>
         </View>
       }
@@ -90,7 +94,7 @@ export function PromoCardItem({
           />
         ) : (
           <View className="flex-1 items-center justify-center">
-            <Text className="text-h1" style={{ color: accent.color }}>
+            <Text className="text-h1" style={{ color: companyColor }}>
               {item.titulo.slice(0, 1).toUpperCase()}
             </Text>
           </View>
@@ -98,8 +102,8 @@ export function PromoCardItem({
 
         {/* Discount badge */}
         {item.descuentoTexto && (
-          <View className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: accent.color }}>
-            <Text className="text-caption font-inter-bold text-background">
+          <View className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: companyColor }}>
+            <Text className="text-caption font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>
               {item.descuentoTexto}
             </Text>
           </View>
@@ -107,8 +111,8 @@ export function PromoCardItem({
 
         {/* Exclusive badge */}
         {item.esPrivadaMiembros && (
-          <View className="absolute right-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: accent.color }}>
-            <Text className="text-overline font-bold text-white">
+          <View className="absolute right-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: companyColor }}>
+            <Text className="text-overline font-bold" style={{ color: brandForeground(companyColor, accent.color) }}>
               Exclusiva
             </Text>
           </View>
@@ -140,7 +144,7 @@ export function PromoCardItem({
       {/* Title */}
       <Text
         className="mt-0.5 text-label-md text-foreground"
-        style={isHovered ? { color: accent.color } : undefined}
+        style={isHovered ? { color: companyColor } : undefined}
         numberOfLines={2}
       >
         {item.titulo}

@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Keyboard,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Search, Tag, Compass, ChevronRight, Store, AlertCircle } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { useBuscar } from '../src/hooks/useBuscar'
@@ -38,12 +38,19 @@ import type { BuscarParams } from '../src/lib/api'
  */
 export default function BuscarScreen() {
   const router = useRouter()
+  const { q: initialQuery } = useLocalSearchParams<{ q?: string | string[] }>()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
 
   // Search state
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [filtros, setFiltros] = useState<BuscarParams>({})
+
+  useEffect(() => {
+    const query = Array.isArray(initialQuery) ? initialQuery[0] ?? '' : initialQuery ?? ''
+    setSearchInput(query)
+    setSearchQuery(query.trim())
+  }, [initialQuery])
 
   // Auth gate
   useEffect(() => {
@@ -70,6 +77,7 @@ export default function BuscarScreen() {
       logoUrl: e.logoUrl,
       bannerUrl: e.bannerUrl,
       ciudad: e.ciudad,
+      colorPrimario: e.colorPrimario,
       descripcion: e.descripcion,
       totalMembersCount: e.totalMembersCount,
       activePromotionsCount: e.activePromotionsCount,
