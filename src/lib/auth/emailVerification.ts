@@ -29,7 +29,8 @@ export function isEmailVerificationEnabled(): boolean {
 export async function sendVerificationEmail(
   admin: SupabaseClient,
   email: string,
-  name: string
+  name: string,
+  options: { mobile?: boolean; returnTo?: string } = {},
 ): Promise<boolean> {
   const { data, error } = await admin.auth.admin.generateLink({
     type: 'magiclink',
@@ -42,15 +43,22 @@ export async function sendVerificationEmail(
     return false
   }
 
-  const confirmUrl = `${getAppUrl()}/confirmar?token_hash=${encodeURIComponent(
-    hashedToken
-  )}&type=magiclink`
+  const confirmUrl = new URL('/confirmar', getAppUrl())
+  confirmUrl.searchParams.set('token_hash', hashedToken)
+  confirmUrl.searchParams.set('type', 'magiclink')
+  if (options.mobile) {
+    confirmUrl.searchParams.set('source', 'mobile')
+    const returnTo = options.returnTo?.trim() ?? ''
+    if (returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+      confirmUrl.searchParams.set('returnTo', returnTo)
+    }
+  }
 
   const res = await sendEmail({
     to: email,
     subject: `Confirma tu correo · ${SITE_NAME}`,
-    html: verificationEmailHtml(name, confirmUrl),
-    text: `Hola ${name}, confirma tu correo para activar tu cuenta en ${SITE_NAME}: ${confirmUrl}`,
+    html: verificationEmailHtml(name, confirmUrl.toString()),
+    text: `Hola ${name}, confirma tu correo para activar tu cuenta en ${SITE_NAME}: ${confirmUrl.toString()}`,
   })
 
   if (!res.sent) {

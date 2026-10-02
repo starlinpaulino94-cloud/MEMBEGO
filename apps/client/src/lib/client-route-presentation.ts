@@ -37,6 +37,8 @@ const PUBLIC_ROUTE_PREFIXES: readonly string[] = [
   '/establecer-contrasena',
   '/bienvenida',
   '/bienvenida-ref',
+  '/registro',
+  '/eliminar-cuenta',
 ]
 
 export function getClientRoutePresentation(

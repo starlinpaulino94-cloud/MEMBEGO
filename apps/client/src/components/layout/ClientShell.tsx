@@ -18,6 +18,8 @@ const PUBLIC_PATH_PREFIXES = [
   '/establecer-contrasena',
   '/bienvenida',
   '/bienvenida-ref',
+  '/registro',
+  '/eliminar-cuenta',
 ] as const
 
 function isPublicPath(pathname: string): boolean {

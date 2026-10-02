@@ -59,6 +59,21 @@ export async function GET(request: NextRequest) {
   // Sesión abierta: llevar al usuario directo a su panel según el rol.
   const { data } = await supabase.auth.getUser()
 
+  if (searchParams.get('purpose') === 'delete-account') {
+    if (data.user?.app_metadata?.role !== 'CLIENTE') return loginError
+    return redirectWithCookies(new URL('/eliminar-cuenta/confirmar', getAppUrl()), carrier)
+  }
+
+  if (searchParams.get('source') === 'mobile') {
+    if (data.user?.app_metadata?.role !== 'CLIENTE') return loginError
+    const returnTo = searchParams.get('returnTo') ?? ''
+    const callback = new URL('membego://registro/verificado')
+    if (returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+      callback.searchParams.set('returnTo', returnTo)
+    }
+    return NextResponse.redirect(callback)
+  }
+
   // Fase E6 · Embudo de referidos: correo verificado (una vez por referido).
   if (data.user?.id) await registrarVerificacionReferido(data.user.id)
   const role = (data.user?.app_metadata?.role ?? 'CLIENTE') as AppRole
