@@ -21,6 +21,15 @@ import { GET, POST } from '../../src/app/api/webhooks/supply-v2/[provider]/route
 import { olvidarActorDelWebhook, recibirEventoExterno } from '../../src/modules/supply-v2/operations/entrada'
 import { firmaHmac } from '../../src/modules/supply-v2/operations/firma'
 import { despacharEfectos, entregarEfecto, recuperarArriendos } from '../../src/modules/supply-v2/operations/worker'
+// ── Bloque 3 ──
+import {
+  conciliarPagoExterno,
+  conciliacionesDe,
+  incidentesDePago,
+  resumenDeIncidentesDePago,
+} from '../../src/modules/supply-v2/operations/conciliacion'
+import { barrerConciliacionDePagos, conciliarAPeticion } from '../../src/modules/supply-v2/operations/barrido-conciliacion'
+import { marcarInvestigando, resolverIncidenteDePago } from '../../src/modules/supply-v2/operations/resolucion'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 1 contra PostgreSQL de verdad.
@@ -62,7 +71,15 @@ const ahora = new Date()
 const como = (actorId: string | null) => ({ actorId, ipAddress: '127.0.0.1', userAgent: 'test' })
 
 const ctx = {
+  /** La cuenta con la que corre la INTEGRACIÓN. No resuelve incidentes. */
   ops: '',
+  /**
+   * La PERSONA autorizada que investiga y resuelve. Tiene que ser distinta de
+   * `ops`: el bloque 3 prohíbe que quien procesa los eventos cierre la
+   * investigación sobre lo que él mismo procesó, y esta suite lo respeta
+   * teniendo dos cuentas de verdad.
+   */
+  finanzas: '',
   cliente: '',
   empresaId: '',
   supplierId: '',
@@ -129,6 +146,10 @@ async function limpiar() {
   // Y los avisos que los efectos del bloque 2 crearon: su `dedupeKey` es la
   // identidad del efecto, así que se reconocen sin tocar nada ajeno.
   await prisma.notificacion.deleteMany({ where: { dedupeKey: { startsWith: 'supply.order.' } } })
+  // Bloque 3: las comprobaciones y los incidentes de pago externo que esta
+  // suite abre. Solo los suyos —el tipo los identifica—, nunca los del Slice 5.
+  await prisma.supplyV2PaymentReconciliation.deleteMany({ where: { provider: 'TEST_GATEWAY' } })
+  await prisma.supplyV2FinanceIncident.deleteMany({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH', provider: 'TEST_GATEWAY' } })
   if (mios.length) {
     await prisma.supplyV2ExternalEvent.deleteMany({ where: { id: { in: mios.map((e) => e.id) } } })
   }
@@ -152,16 +173,18 @@ before(async () => {
   // las pruebas, ni en el repositorio.
   process.env.SUPPLY_V2_TEST_GATEWAY_SECRET = SECRETO_B2
 
-  const [ops, cliente, empleado] = await Promise.all(
+  const [ops, finanzas, cliente, empleado] = await Promise.all(
     (
       [
         ['ops', 'SUPERADMIN'],
+        ['fin', 'SUPERADMIN'],
         ['cli', 'CLIENTE'],
         ['emp', 'ADMINISTRADOR'],
       ] as const
     ).map(([k, role]) => prisma.user.create({ data: { supabaseId: `sb-s9-${k}-${sufijo}`, email: `s9-${k}-${sufijo}@prueba.test`, name: k, role }, select: { id: true } }))
   )
   ctx.ops = ops.id
+  ctx.finanzas = finanzas.id
   ctx.cliente = cliente.id
   const empresa = await prisma.company.create({
     data: { name: `Operaciones S9 ${sufijo}`, slug: `operaciones-s9-${sufijo}`, type: 'restaurante', capacidades: { overrides: { MEMBEGO_SUPPLIER: true } } },
@@ -693,12 +716,14 @@ function cuerpoProveedor(d: {
   currency?: string
   status?: string
   kind?: string
+  /** Bloque 3: la MISMA transacción puede aparecer en dos eventos distintos. */
+  txId?: string
   extra?: Record<string, unknown>
 }): string {
   return JSON.stringify({
     event: { id: d.eventId, kind: d.kind ?? 'payment.updated' },
     transaction: {
-      id: `TX-${d.eventId}`,
+      id: d.txId ?? `TX-${d.eventId}`,
       status: d.status ?? 'APPROVED',
       amount: d.amount ?? null,
       currency: d.currency ?? 'DOP',
@@ -1283,4 +1308,632 @@ test('B2 · una entrega repetida NO puede devolver a FAILED un evento ya resuelt
   assert.equal(despues.attempts, antes.attempts, 'no se le contó un intento')
   assert.equal(despues.lastError, null)
   assert.equal(await derechosDe(orden.id), 1)
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// BLOQUE 3 · CUANDO LA PASARELA Y MEMBEGO NO COINCIDEN
+//
+// Al acabar el bloque 2, un evento que no cuadraba quedaba rechazado con su
+// código, su bitácora y cero efecto financiero. Eso evitaba el daño y no
+// dejaba NADA que una persona pudiera trabajar. Lo que se demuestra aquí es
+// ese hueco cerrado: la discrepancia se convierte en UN incidente investigable,
+// con dueño, severidad, motivo y vínculo con el evento y la compra; una persona
+// autorizada lo resuelve por los servicios financieros oficiales; y en ningún
+// camino se corrige dinero en silencio.
+// ════════════════════════════════════════════════════════════════════════════
+
+const incidentesDe = (orderId: string) =>
+  prisma.supplyV2FinanceIncident.findMany({
+    where: { type: 'EXTERNAL_PAYMENT_MISMATCH', orderId },
+    orderBy: { createdAt: 'asc' },
+  })
+
+const incidentePorEvento = (externalEventRowId: string) =>
+  prisma.supplyV2FinanceIncident.findFirst({ where: { externalEventRowId } })
+
+const conciliacionesDeOrden = (orderId: string) =>
+  prisma.supplyV2PaymentReconciliation.findMany({ where: { orderId }, orderBy: { createdAt: 'asc' } })
+
+const eventosEconomicosDe = (orderId: string) =>
+  prisma.supplyV2EconomicEvent.count({ where: { entitlement: { orderId } } })
+
+// ── A · el importe no cuadra ────────────────────────────────────────────────
+
+test('B3·A · importe distinto: UN incidente abierto y la compra intacta', async () => {
+  const orden = await compraPendiente()
+  const eventId = idExterno('b3a')
+  // 1000 internos contra 900 externos.
+  const r = await postWebhook(cuerpoProveedor({ eventId, orderNumber: orden.number, amount: '900.00' }))
+  assert.equal(r.status, 200, 'ya decidimos: el proveedor no tiene que reintentar')
+  assert.equal(r.codigo, 'EVENT_REJECTED')
+
+  const incidentes = await incidentesDe(orden.id)
+  assert.equal(incidentes.length, 1, 'un incidente')
+  const i = incidentes[0]!
+  assert.equal(i.status, 'OPEN')
+  assert.equal(i.reasonCode, 'AMOUNT_MISMATCH')
+  assert.equal(i.severity, 'HIGH')
+  assert.equal(i.provider, 'TEST_GATEWAY')
+  assert.equal(i.correlationId, r.correlationId, 'el hilo del bloque 2 llega hasta el incidente')
+  assert.ok(i.externalEventRowId, 'y el vínculo con el evento que lo provocó')
+  assert.equal(i.internalStatus, 'PENDING')
+  assert.equal(i.externalStatus, 'PAID')
+  assert.match(i.notes, /900\.00/)
+  assert.equal(i.resolution, null, 'nadie lo ha resuelto todavía')
+
+  // La compra, intacta. Esto es lo que el bloque existe para garantizar.
+  const o = await ordenDe(orden.id)
+  assert.equal(o.status, 'PENDING')
+  assert.equal(o.paidAt, null)
+  assert.equal(await derechosDe(orden.id), 0)
+  assert.equal((await efectosDe(orden.id)).length, 0)
+
+  // Y la comprobación quedó escrita, con los dos lados y la diferencia.
+  const [c] = await conciliacionesDeOrden(orden.id)
+  assert.equal(c!.outcome, 'MISMATCH')
+  assert.equal(c!.reasonCode, 'AMOUNT_MISMATCH')
+  assert.equal(c!.expectedAmount?.toFixed(2), Number(orden.total).toFixed(2))
+  assert.equal(c!.reportedAmount?.toFixed(2), '900.00')
+  assert.equal(c!.differenceAmount?.toFixed(2), '-100.00', 'cobró 100 de menos')
+  assert.equal(c!.incidentId, i.id, 'la comprobación apunta a su incidente')
+})
+
+// ── B · la moneda no cuadra ─────────────────────────────────────────────────
+
+test('B3·B · otra moneda: incidente abierto, y el motivo es la moneda', async () => {
+  const orden = await compraPendiente()
+  const eventId = idExterno('b3b')
+  const r = await postWebhook(cuerpoProveedor({ eventId, orderNumber: orden.number, amount: String(orden.total), currency: 'USD' }))
+  assert.equal(r.codigo, 'EVENT_REJECTED')
+
+  const [i] = await incidentesDe(orden.id)
+  assert.ok(i, 'hay incidente')
+  assert.equal(i!.reasonCode, 'CURRENCY_MISMATCH')
+  assert.equal(i!.severity, 'HIGH')
+  assert.equal(i!.currency, 'DOP', 'el incidente guarda NUESTRA moneda')
+  assert.match(i!.notes, /USD/)
+  assert.equal((await ordenDe(orden.id)).status, 'PENDING')
+  assert.equal(await derechosDe(orden.id), 0)
+})
+
+// ── C · la compra no existe ─────────────────────────────────────────────────
+
+test('B3·C · cobró una compra inexistente: incidente con orderId NULL, sin inventar una orden', async () => {
+  const eventId = idExterno('b3c')
+  const r = await postWebhook(
+    cuerpoProveedor({ eventId, orderNumber: `MBG-SO-FANTASMA-${sufijo}`, amount: '1000.00' })
+  )
+  assert.equal(r.status, 200)
+  assert.equal(r.codigo, 'EVENT_REJECTED')
+
+  const fila = await prisma.supplyV2ExternalEvent.findFirstOrThrow({ where: { externalEventId: eventId } })
+  const i = await incidentePorEvento(fila.id)
+  assert.ok(i, 'el evento sin compra SÍ abre incidente: hay dinero en la pasarela y no sabemos de qué es')
+  assert.equal(i!.orderId, null, 'sin compra a la que apuntar, y no se inventa ninguna')
+  assert.equal(i!.supplierId, null, 'ni un proveedor ficticio para rellenar la columna')
+  assert.equal(i!.reasonCode, 'UNKNOWN_ORDER')
+  assert.equal(i!.severity, 'HIGH')
+  assert.equal(i!.type, 'EXTERNAL_PAYMENT_MISMATCH')
+  assert.ok(i!.notes.length > 10)
+})
+
+// ── D · el mismo webhook cinco veces ────────────────────────────────────────
+
+test('B3·D · cinco entregas del mismo webhook que no cuadra: UN incidente', async () => {
+  const orden = await compraPendiente()
+  const cuerpo = cuerpoProveedor({ eventId: idExterno('b3d'), orderNumber: orden.number, amount: '1.00' })
+
+  const codigos: string[] = []
+  for (let i = 0; i < 5; i++) codigos.push((await postWebhook(cuerpo)).codigo)
+  assert.equal(codigos[0], 'EVENT_REJECTED')
+  // De la segunda en adelante el evento ya está resuelto (IGNORED): ni se
+  // reprocesa ni se vuelve a abrir nada.
+  for (const c of codigos.slice(1)) assert.equal(c, 'EVENT_REPEATED')
+
+  assert.equal((await incidentesDe(orden.id)).length, 1, 'cinco entregas, un incidente')
+  assert.equal((await conciliacionesDeOrden(orden.id)).length, 1, 'y una comprobación, refrescada')
+  assert.equal((await ordenDe(orden.id)).status, 'PENDING')
+})
+
+test('B3·D · conciliar lo mismo otra vez REFRESCA la comprobación en vez de duplicarla', async () => {
+  const orden = await compraPendiente()
+  const cuerpo = cuerpoProveedor({ eventId: idExterno('b3d2'), orderNumber: orden.number, amount: '500.00' })
+  await postWebhook(cuerpo)
+
+  const antes = (await conciliacionesDeOrden(orden.id))[0]!
+  assert.equal(antes.checks, 1)
+
+  // La conciliación manual mira lo mismo otra vez.
+  const manual = await conciliarAPeticion({ orderId: orden.id }, como(ctx.ops))
+  assert.equal(manual.revisados, 1)
+  assert.equal(manual.discrepancias, 1)
+  assert.equal(manual.incidentesAbiertos.length, 0, 'el incidente ya existía: no se abre otro')
+
+  const despues = await conciliacionesDeOrden(orden.id)
+  assert.equal(despues.length, 1, 'una fila')
+  assert.equal(despues[0]!.checks, 2, 'con la cuenta de cuántas veces se miró')
+  assert.ok(despues[0]!.checkedAt >= antes.checkedAt)
+  assert.equal((await incidentesDe(orden.id)).length, 1)
+})
+
+// ── E · la misma transacción en dos compras ─────────────────────────────────
+
+test('B3·E · una transacción que ya era de otra compra: se conserva la primera y la segunda se rechaza', async () => {
+  const primera = await compraPendiente()
+  const segunda = await compraPendiente()
+  const tx = `TX-COMPARTIDA-${sufijo}`
+
+  // La primera asociación es legítima y cuadra: la compra se paga.
+  const ok = await postWebhook(
+    cuerpoProveedor({ eventId: idExterno('b3e1'), orderNumber: primera.number, amount: String(primera.total), txId: tx })
+  )
+  assert.equal(ok.codigo, 'EVENT_ACCEPTED')
+  assert.equal((await ordenDe(primera.id)).status, 'PAID')
+
+  // Y ahora la MISMA transacción aparece en otra compra.
+  const mala = await postWebhook(
+    cuerpoProveedor({ eventId: idExterno('b3e2'), orderNumber: segunda.number, amount: String(segunda.total), txId: tx })
+  )
+  assert.equal(mala.status, 200)
+  assert.equal(mala.codigo, 'EVENT_REJECTED', 'la segunda asociación NO se acepta')
+
+  const [i] = await incidentesDe(segunda.id)
+  assert.ok(i, 'y queda incidente')
+  assert.equal(i!.reasonCode, 'DUPLICATE_TRANSACTION')
+  assert.equal(i!.severity, 'HIGH')
+  assert.equal(i!.externalTransactionId, tx)
+  assert.match(i!.notes, new RegExp(primera.number), 'el incidente dice de qué compra era')
+
+  // La primera se conserva intacta; la segunda no se paga.
+  assert.equal((await ordenDe(primera.id)).status, 'PAID')
+  assert.equal(await derechosDe(primera.id), 1)
+  assert.equal((await ordenDe(segunda.id)).status, 'PENDING')
+  assert.equal(await derechosDe(segunda.id), 0)
+})
+
+// ── F y G · quién puede resolver ────────────────────────────────────────────
+
+test('B3·F · una persona autorizada: OPEN → INVESTIGATING → RESOLVED con nota', async () => {
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b3f'), orderNumber: orden.number, amount: '777.00' }))
+  const [i] = await incidentesDe(orden.id)
+  assert.equal(i!.status, 'OPEN')
+
+  const inv = await marcarInvestigando(i!.id, como(ctx.finanzas))
+  assert.equal(inv.estaba, 'OPEN')
+  assert.equal((await prisma.supplyV2FinanceIncident.findUniqueOrThrow({ where: { id: i!.id } })).status, 'INVESTIGATING')
+  assert.ok(
+    await prisma.auditLog.findFirst({ where: { accion: 'SUPPLY_V2_FINANCE_INCIDENT_INVESTIGATING', entidadId: i!.id } }),
+    'investigar queda en la bitácora'
+  )
+
+  // Marcarlo dos veces no hace nada dos veces.
+  assert.equal((await marcarInvestigando(i!.id, como(ctx.finanzas))).estaba, 'INVESTIGATING')
+
+  const res = await resolverIncidenteDePago(
+    { incidentId: i!.id, resolucion: 'ACCEPT_INTERNAL', nota: 'La pasarela cobró de menos por un error suyo; nos manda nota de crédito.' },
+    como(ctx.finanzas)
+  )
+  assert.equal(res.repetido, false)
+  assert.equal(res.pagoConfirmado, false, 'ACCEPT_INTERNAL no mueve dinero')
+
+  const final = await prisma.supplyV2FinanceIncident.findUniqueOrThrow({ where: { id: i!.id } })
+  assert.equal(final.status, 'RESOLVED')
+  assert.equal(final.resolution, 'ACCEPT_INTERNAL')
+  assert.equal(final.resolvedById, ctx.finanzas, 'quien resuelve es la PERSONA, no la integración')
+  assert.ok(final.resolvedAt)
+  assert.match(final.resolutionNotes!, /nota de crédito/)
+  assert.ok(
+    await prisma.auditLog.findFirst({ where: { accion: 'SUPPLY_V2_FINANCE_INCIDENT_RESOLVED', entidadId: i!.id } }),
+    'y resolver también'
+  )
+  // Y la compra sigue sin pagarse: aceptar lo nuestro era decir que no se cobró.
+  assert.equal((await ordenDe(orden.id)).status, 'PENDING')
+})
+
+test('B3·F · sin nota no hay resolución', async () => {
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b3fn'), orderNumber: orden.number, amount: '123.00' }))
+  const [i] = await incidentesDe(orden.id)
+  for (const nota of ['', '   ']) {
+    await assert.rejects(
+      resolverIncidenteDePago({ incidentId: i!.id, resolucion: 'MARK_FALSE_POSITIVE', nota }, como(ctx.finanzas)),
+      /explicar cómo se resolvió/
+    )
+  }
+  assert.equal((await prisma.supplyV2FinanceIncident.findUniqueOrThrow({ where: { id: i!.id } })).status, 'OPEN')
+})
+
+test('B3·G · ni un actor sin permiso ni la cuenta de la integración pueden resolver', async () => {
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b3g'), orderNumber: orden.number, amount: '321.00' }))
+  const [i] = await incidentesDe(orden.id)
+
+  // Sin actor.
+  await assert.rejects(
+    resolverIncidenteDePago({ incidentId: i!.id, resolucion: 'ACCEPT_INTERNAL', nota: 'x'.repeat(20) }, como(null)),
+    /necesita quién/
+  )
+
+  // La cuenta con la que corre la integración: procesar eventos e investigarlos
+  // son responsabilidades distintas (§12).
+  await assert.rejects(
+    resolverIncidenteDePago(
+      { incidentId: i!.id, resolucion: 'ACCEPT_INTERNAL', nota: 'lo cierro yo mismo' },
+      como(process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID!)
+    ),
+    /no puede resolver incidentes/
+  )
+  await assert.rejects(marcarInvestigando(i!.id, como(process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID!)), /no puede resolver incidentes/)
+
+  // Un usuario real pero sin el permiso.
+  const sinPermiso = await prisma.user.create({
+    data: { supabaseId: `sb-s9-b3-nop-${sufijo}`, email: `s9-b3-nop-${sufijo}@prueba.test`, name: 'sin permiso', role: 'CLIENTE' },
+    select: { id: true },
+  })
+  await assert.rejects(
+    resolverIncidenteDePago({ incidentId: i!.id, resolucion: 'ACCEPT_INTERNAL', nota: 'me autorizo solo' }, como(sinPermiso.id)),
+    /Hace falta permiso/
+  )
+
+  // Y uno que no existe.
+  await assert.rejects(
+    resolverIncidenteDePago({ incidentId: i!.id, resolucion: 'ACCEPT_INTERNAL', nota: 'fantasma' }, como(`no-existe-${sufijo}`)),
+    /no existe como usuario/
+  )
+
+  // Nada de eso movió el incidente.
+  const sigue = await prisma.supplyV2FinanceIncident.findUniqueOrThrow({ where: { id: i!.id } })
+  assert.equal(sigue.status, 'OPEN')
+  assert.equal(sigue.resolvedById, null)
+})
+
+// ── H · aceptar la evidencia externa pasa por el servicio oficial ───────────
+
+test('B3·H · ACCEPT_EXTERNAL confirma por el servicio oficial: un pago, un juego de derechos, un evento económico', async () => {
+  const orden = await compraPendiente()
+  // La pasarela dice que cobró el importe correcto, pero la compra se quedó sin
+  // confirmar (el camino seguro no llegó a hacerlo).
+  const conciliado = await conciliarPagoExterno(
+    {
+      provider: 'TEST_GATEWAY',
+      externalTransactionId: `TX-EXT-${sufijo}`,
+      orderId: orden.id,
+      correlationId: `sv2-acepta-externo-${sufijo}`,
+      externo: { estado: 'PAID', monto: String(orden.total), moneda: 'DOP' },
+    },
+    como(ctx.ops)
+  )
+  assert.equal(conciliado.veredicto.resultado, 'MISMATCH')
+  assert.equal(conciliado.veredicto.motivo, 'STATE_CONFLICT')
+  assert.equal(conciliado.veredicto.severidad, 'MEDIUM', 'el importe cuadra: no es lo más grave')
+  assert.ok(conciliado.incidentId)
+  assert.equal((await ordenDe(orden.id)).status, 'PENDING', 'conciliar NO confirmó nada')
+
+  // Aceptar la evidencia externa exige escribir el importe que se autoriza.
+  await assert.rejects(
+    resolverIncidenteDePago({ incidentId: conciliado.incidentId!, resolucion: 'ACCEPT_EXTERNAL', nota: 'la evidencia es buena' }, como(ctx.finanzas)),
+    /importe que se está autorizando/
+  )
+  // Y si el importe no cuadra con la compra, el servicio oficial lo rechaza:
+  // aceptar lo externo no es poder cobrar cualquier cifra.
+  await assert.rejects(
+    resolverIncidenteDePago(
+      { incidentId: conciliado.incidentId!, resolucion: 'ACCEPT_EXTERNAL', nota: 'cobro inventado', montoExterno: '5.00' },
+      como(ctx.finanzas)
+    ),
+    /no coincide con el total/
+  )
+  assert.equal((await ordenDe(orden.id)).status, 'PENDING', 'el intento con mal importe no movió nada')
+
+  const res = await resolverIncidenteDePago(
+    {
+      incidentId: conciliado.incidentId!,
+      resolucion: 'ACCEPT_EXTERNAL',
+      nota: 'Comprobado en el portal de la pasarela: el cobro existe y es de esta compra.',
+      montoExterno: String(orden.total),
+    },
+    como(ctx.finanzas)
+  )
+  assert.equal(res.pagoConfirmado, true)
+
+  // El pago pasó por el camino bueno: la compra queda EXACTAMENTE como si se
+  // hubiera confirmado por el flujo normal.
+  const o = await ordenDe(orden.id)
+  assert.equal(o.status, 'PAID')
+  assert.ok(o.paidAt)
+  assert.equal(await derechosDe(orden.id), 1, 'un juego de derechos')
+  assert.equal(await eventosEconomicosDe(orden.id), 1, 'un evento económico')
+  const efectos = await efectosDe(orden.id)
+  assert.equal(efectos.length, 1, 'y un efecto para avisar al cliente')
+  assert.equal(efectos[0]!.eventType, 'supply.order.paid')
+
+  const final = await prisma.supplyV2FinanceIncident.findUniqueOrThrow({ where: { id: conciliado.incidentId! } })
+  assert.equal(final.status, 'RESOLVED')
+  assert.equal(final.resolution, 'ACCEPT_EXTERNAL')
+  const auditoria = await prisma.auditLog.findFirst({
+    where: { accion: 'SUPPLY_V2_FINANCE_INCIDENT_RESOLVED', entidadId: conciliado.incidentId! },
+  })
+  assert.equal((auditoria!.payload as { pagoConfirmado: boolean }).pagoConfirmado, true, 'la bitácora dice que movió dinero')
+})
+
+test('B3·H · aceptar lo externo sin compra a la que apuntar no puede confirmar nada', async () => {
+  const eventId = idExterno('b3h2')
+  await postWebhook(cuerpoProveedor({ eventId, orderNumber: `MBG-SO-NADA-${sufijo}`, amount: '1000.00' }))
+  const fila = await prisma.supplyV2ExternalEvent.findFirstOrThrow({ where: { externalEventId: eventId } })
+  const i = await incidentePorEvento(fila.id)
+  await assert.rejects(
+    resolverIncidenteDePago(
+      { incidentId: i!.id, resolucion: 'ACCEPT_EXTERNAL', nota: 'la evidencia es buena', montoExterno: '1000.00' },
+      como(ctx.finanzas)
+    ),
+    /no apunta a ninguna compra/
+  )
+  assert.equal((await prisma.supplyV2FinanceIncident.findUniqueOrThrow({ where: { id: i!.id } })).status, 'OPEN')
+})
+
+// ── I · resolver dos veces ──────────────────────────────────────────────────
+
+test('B3·I · resolver un incidente ya resuelto es idempotente y no ejecuta una segunda corrección', async () => {
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b3i'), orderNumber: orden.number, amount: '456.00' }))
+  const [i] = await incidentesDe(orden.id)
+
+  const primera = await resolverIncidenteDePago(
+    { incidentId: i!.id, resolucion: 'MARK_FALSE_POSITIVE', nota: 'Era una prueba del proveedor, no un cobro real.' },
+    como(ctx.finanzas)
+  )
+  assert.equal(primera.repetido, false)
+
+  const segunda = await resolverIncidenteDePago(
+    { incidentId: i!.id, resolucion: 'ACCEPT_EXTERNAL', nota: 'intento de cambiar la decisión', montoExterno: String(orden.total) },
+    como(ctx.finanzas)
+  )
+  assert.equal(segunda.repetido, true, 'ya estaba resuelto')
+  assert.equal(segunda.pagoConfirmado, false, 'y NO se ejecutó un cobro por intentarlo otra vez')
+
+  const final = await prisma.supplyV2FinanceIncident.findUniqueOrThrow({ where: { id: i!.id } })
+  assert.equal(final.resolution, 'MARK_FALSE_POSITIVE', 'la primera decisión manda')
+  assert.match(final.resolutionNotes!, /prueba del proveedor/)
+  assert.equal((await ordenDe(orden.id)).status, 'PENDING')
+})
+
+// ── J · lo que NO es un incidente financiero ────────────────────────────────
+
+test('B3·J · firma inválida y replay no crean ni un incidente financiero', async () => {
+  const orden = await compraPendiente()
+  const antes = await prisma.supplyV2FinanceIncident.count({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH' } })
+
+  const mala = await postWebhook(cuerpoProveedor({ eventId: idExterno('b3j1'), orderNumber: orden.number, amount: String(orden.total) }), {
+    firma: 'v1=0000000000000000000000000000000000000000000000000000000000000000',
+  })
+  assert.equal(mala.status, 401)
+
+  const viejo = Math.floor(Date.now() / 1000) - 7200
+  const replay = await postWebhook(cuerpoProveedor({ eventId: idExterno('b3j2'), orderNumber: orden.number, amount: String(orden.total) }), { ts: viejo })
+  assert.equal(replay.status, 400)
+
+  const ilegible = await postWebhook('{roto')
+  assert.equal(ilegible.status, 400)
+
+  const desconocido = await postWebhook(cuerpoProveedor({ eventId: idExterno('b3j3') }), {}, 'CARDNET')
+  assert.equal(desconocido.status, 404)
+
+  assert.equal(
+    await prisma.supplyV2FinanceIncident.count({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH' } }),
+    antes,
+    'la basura de entrada no contamina la cola de finanzas: es seguridad de la integración'
+  )
+  assert.equal((await incidentesDe(orden.id)).length, 0)
+  assert.equal((await conciliacionesDeOrden(orden.id)).length, 0)
+})
+
+test('B3·J · una orden ya pagada o un tipo que no manejamos tampoco abren incidente', async () => {
+  const orden = await compraPendiente()
+  // Pagada por el camino normal.
+  const ok = await postWebhook(cuerpoProveedor({ eventId: idExterno('b3j4'), orderNumber: orden.number, amount: String(orden.total) }))
+  assert.equal(ok.codigo, 'EVENT_ACCEPTED')
+  const trasPago = (await incidentesDe(orden.id)).length
+
+  // Otro aviso del mismo cobro llegando tarde: descartable, no desacuerdo.
+  const tarde = await postWebhook(cuerpoProveedor({ eventId: idExterno('b3j5'), orderNumber: orden.number, amount: String(orden.total) }))
+  assert.equal(tarde.codigo, 'EVENT_REJECTED')
+  // Un tipo que no manejamos.
+  const otro = await postWebhook(cuerpoProveedor({ eventId: idExterno('b3j6'), orderNumber: orden.number, amount: String(orden.total), kind: 'customer.created' }))
+  assert.equal(otro.codigo, 'EVENT_REJECTED')
+
+  assert.equal((await incidentesDe(orden.id)).length, trasPago, 'lo descartable no abre tarea')
+  assert.equal((await ordenDe(orden.id)).status, 'PAID')
+  assert.equal(await derechosDe(orden.id), 1)
+})
+
+// ── §23 · concurrencia ─────────────────────────────────────────────────────
+
+test('B3·§23 · dos procesos detectan la MISMA discrepancia a la vez: un solo incidente', async () => {
+  const orden = await compraPendiente()
+  const d = {
+    provider: 'TEST_GATEWAY',
+    externalTransactionId: `TX-CARRERA-${sufijo}`,
+    orderId: orden.id,
+    correlationId: `sv2-carrera-${sufijo}`,
+    externo: { estado: 'PAID' as const, monto: '1.00', moneda: 'DOP' },
+  }
+
+  const resultados = await Promise.all([
+    conciliarPagoExterno(d, como(ctx.ops)),
+    conciliarPagoExterno(d, como(ctx.ops)),
+    conciliarPagoExterno(d, como(ctx.ops)),
+  ])
+  const ids = new Set(resultados.map((r) => r.incidentId))
+  assert.equal(ids.size, 1, 'los tres acabaron en el mismo incidente')
+  assert.equal(resultados.filter((r) => !r.incidenteRepetido).length, 1, 'exactamente uno lo abrió')
+  assert.equal((await incidentesDe(orden.id)).length, 1)
+  assert.equal((await conciliacionesDeOrden(orden.id)).length, 1, 'y una sola comprobación')
+})
+
+test('B3·§23 · dos personas resuelven a la vez: una gana, la otra ve el estado final, una sola corrección', async () => {
+  const orden = await compraPendiente()
+  const conciliado = await conciliarPagoExterno(
+    {
+      provider: 'TEST_GATEWAY',
+      externalTransactionId: `TX-DOSMANOS-${sufijo}`,
+      orderId: orden.id,
+      correlationId: `sv2-dos-manos-${sufijo}`,
+      externo: { estado: 'PAID', monto: String(orden.total), moneda: 'DOP' },
+    },
+    como(ctx.ops)
+  )
+  assert.ok(conciliado.incidentId)
+
+  const otraPersona = await prisma.user.create({
+    data: { supabaseId: `sb-s9-b3-ops2-${sufijo}`, email: `s9-b3-ops2-${sufijo}@prueba.test`, name: 'ops2', role: 'SUPERADMIN' },
+    select: { id: true },
+  })
+
+  const [a, b] = await Promise.all([
+    resolverIncidenteDePago(
+      { incidentId: conciliado.incidentId!, resolucion: 'ACCEPT_EXTERNAL', nota: 'Confirmado en el portal: el cobro existe.', montoExterno: String(orden.total) },
+      como(ctx.finanzas)
+    ),
+    resolverIncidenteDePago(
+      { incidentId: conciliado.incidentId!, resolucion: 'ACCEPT_EXTERNAL', nota: 'Confirmado también por mí.', montoExterno: String(orden.total) },
+      como(otraPersona.id)
+    ),
+  ])
+
+  const repetidos = [a, b].filter((r) => r.repetido)
+  assert.equal(repetidos.length, 1, 'una gana y la otra ve el estado final')
+  assert.equal([a, b].filter((r) => r.pagoConfirmado).length, 1, 'UNA sola corrección financiera')
+
+  // Y la compra queda pagada una vez, con un solo juego de derechos.
+  assert.equal((await ordenDe(orden.id)).status, 'PAID')
+  assert.equal(await derechosDe(orden.id), 1)
+  assert.equal(await eventosEconomicosDe(orden.id), 1)
+  assert.equal((await efectosDe(orden.id)).length, 1)
+})
+
+// ── La base sostiene las reglas ─────────────────────────────────────────────
+
+test('B3 · los CHECK de la base no admiten un incidente que no se pueda investigar', async () => {
+  // Un incidente de proveedor SIGUE exigiendo proveedor: relajar la columna no
+  // perdió esa regla, solo la condicionó al tipo.
+  await assert.rejects(
+    prisma.$executeRaw`
+      INSERT INTO "supply_v2_finance_incidents" ("id","type","status","currency","amount","notes")
+      VALUES (${`mal-${sufijo}`}, 'REDEMPTION_REVERSED_AFTER_PAYMENT', 'OPEN', 'DOP', 10, 'sin proveedor')`,
+    /check constraint|violates/i,
+    'un incidente de proveedor sin proveedor no es un estado posible'
+  )
+
+  // Y uno de pago externo exige de quién vino y por qué no cuadra.
+  await assert.rejects(
+    prisma.$executeRaw`
+      INSERT INTO "supply_v2_finance_incidents" ("id","type","status","currency","amount","notes")
+      VALUES (${`mal2-${sufijo}`}, 'EXTERNAL_PAYMENT_MISMATCH', 'OPEN', 'DOP', 10, 'sin proveedor ni motivo')`,
+    /check constraint|violates/i
+  )
+
+  // Cerrar uno de pago externo exige decir CÓMO se cerró.
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b3chk'), orderNumber: orden.number, amount: '9.00' }))
+  const [i] = await incidentesDe(orden.id)
+  await assert.rejects(
+    prisma.$executeRaw`UPDATE "supply_v2_finance_incidents" SET "status" = 'RESOLVED', "resolvedById" = ${ctx.ops}, "resolvedAt" = now() WHERE "id" = ${i!.id}`,
+    /check constraint|violates/i,
+    'resuelto sin resolución no se puede escribir'
+  )
+
+  // Y una comprobación que no cuadra tiene que decir por qué.
+  await assert.rejects(
+    prisma.$executeRaw`
+      INSERT INTO "supply_v2_payment_reconciliations" ("id","provider","outcome","dedupeKey")
+      VALUES (${`mal3-${sufijo}`}, 'TEST_GATEWAY', 'MISMATCH', ${`clave-mal-${sufijo}`})`,
+    /check constraint|violates/i
+  )
+  // Ni un veredicto que la matriz no puede dar.
+  await assert.rejects(
+    prisma.$executeRaw`
+      INSERT INTO "supply_v2_payment_reconciliations" ("id","provider","outcome","dedupeKey")
+      VALUES (${`mal4-${sufijo}`}, 'TEST_GATEWAY', 'LO_QUE_SEA', ${`clave-mal4-${sufijo}`})`,
+    /check constraint|violates/i
+  )
+})
+
+test('B3 · los incidentes históricos del Slice 5 siguen intactos', async () => {
+  // La migración relajó `supplierId` y añadió columnas: lo de antes tiene que
+  // seguir leyéndose y resolviéndose por su propio camino.
+  const previos = await prisma.supplyV2FinanceIncident.findMany({
+    where: { type: 'REDEMPTION_REVERSED_AFTER_PAYMENT' },
+    take: 5,
+    select: { id: true, supplierId: true, severity: true, resolution: true, dedupeKey: true },
+  })
+  for (const p of previos) {
+    assert.ok(p.supplierId, 'siguen teniendo su proveedor')
+    assert.equal(p.severity, 'MEDIUM', 'y una severidad honesta: nadie se la asignó')
+    assert.equal(p.resolution, null, 'sin resolución del bloque 3, que no existía')
+    assert.equal(p.dedupeKey, null, 'y sin identidad nueva: PostgreSQL admite varios NULL en el único')
+  }
+})
+
+// ── Barrido y lectura para el futuro panel ─────────────────────────────────
+
+test('B3 · el barrido revisa lo reciente y no corrige nada', async () => {
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b3bar'), orderNumber: orden.number, amount: '650.00' }))
+
+  const r = await barrerConciliacionDePagos(como(ctx.ops))
+  assert.ok(r.revisados >= 1)
+  assert.ok(r.discrepancias >= 1)
+  // Lo ya detectado no se vuelve a abrir.
+  const segunda = await barrerConciliacionDePagos(como(ctx.ops))
+  assert.equal(segunda.incidentesAbiertos.length, 0, 'una segunda pasada no abre incidentes nuevos')
+
+  assert.equal((await incidentesDe(orden.id)).length, 1)
+  assert.equal((await ordenDe(orden.id)).status, 'PENDING', 'el barrido mira; no corrige')
+})
+
+test('B3 · la conciliación manual se puede pedir por compra, por transacción y por pasarela', async () => {
+  const orden = await compraPendiente()
+  const tx = `TX-MANUAL-${sufijo}`
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b3man'), orderNumber: orden.number, amount: '430.00', txId: tx }))
+
+  const porOrden = await conciliarAPeticion({ orderId: orden.id }, como(ctx.ops))
+  assert.equal(porOrden.revisados, 1)
+  const porTransaccion = await conciliarAPeticion({ externalTransactionId: tx }, como(ctx.ops))
+  assert.equal(porTransaccion.revisados, 1, 'se encuentra por el id de transacción del proveedor')
+  const porPasarela = await conciliarAPeticion({ provider: 'test_gateway', limite: 5 }, como(ctx.ops))
+  assert.ok(porPasarela.revisados >= 1)
+
+  await assert.rejects(conciliarAPeticion({}, como(ctx.ops)), /qué conciliar/)
+})
+
+test('B3 · las consultas que el Centro de Operaciones va a necesitar ya contestan', async () => {
+  const orden = await compraPendiente()
+  const tx = `TX-LECTURA-${sufijo}`
+  const hilo = `sv2-lectura-${sufijo}`
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b3read'), orderNumber: orden.number, amount: '222.00', txId: tx }), {
+    correlationId: hilo,
+  })
+
+  const abiertos = await incidentesDePago({ status: 'OPEN' })
+  assert.ok(abiertos.some((i) => i.order?.id === orden.id), 'por estado')
+  const graves = await incidentesDePago({ severity: 'HIGH' })
+  assert.ok(graves.length >= 1, 'por severidad')
+  assert.equal((await incidentesDePago({ orderId: orden.id })).length, 1, 'por compra')
+  assert.equal((await incidentesDePago({ externalTransactionId: tx })).length, 1, 'por transacción')
+  assert.equal((await incidentesDePago({ correlationId: hilo })).length, 1, 'por hilo')
+  assert.ok((await incidentesDePago({ provider: 'test_gateway' })).length >= 1, 'por pasarela')
+
+  // El incidente trae lo necesario para trabajarlo sin otra consulta.
+  const [uno] = await incidentesDePago({ orderId: orden.id })
+  assert.equal(uno!.order?.number, orden.number)
+  assert.ok(uno!.externalEvent?.externalEventId, 'con el evento que lo provocó')
+  assert.equal(uno!.correlationId, hilo)
+
+  const resumen = await resumenDeIncidentesDePago()
+  assert.ok(resumen.some((f) => f.status === 'OPEN' && f.total >= 1))
+
+  const comprobaciones = await conciliacionesDe({ correlationId: hilo })
+  assert.equal(comprobaciones.length, 1)
+  assert.equal(comprobaciones[0]!.outcome, 'MISMATCH')
 })

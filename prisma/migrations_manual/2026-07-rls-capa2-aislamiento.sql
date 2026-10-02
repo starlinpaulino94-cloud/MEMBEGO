@@ -500,6 +500,68 @@ BEGIN
   END LOOP;
   RAISE NOTICE 'Supply 2.0 · inbox y outbox: solo en modo omnisciente.';
 
+  -- ── Membego Supply 2.0 · CONCILIACIÓN DE PAGOS EXTERNOS (Slice 9, bloque 3) ─
+  --
+  -- `supply_v2_payment_reconciliations` es la comprobación de lo que una
+  -- pasarela dice haber cobrado contra lo que Membego tiene escrito. Por los
+  -- mismos motivos que el inbox y el outbox: no lleva `companyId`, su `orderId`
+  -- es NULL justo en las filas que más importan —el cobro de una compra que no
+  -- existe— y su contenido nombra la operación de un cliente y el importe que
+  -- se cobró. La lee el camino del webhook y el barrido, los dos en
+  -- `sinEmpresa`, y el panel que la mostrará es de plataforma.
+  --
+  -- Los INCIDENTES (`supply_v2_finance_incidents`) no están aquí a propósito:
+  -- esa tabla ya tenía su política derivada por `supplierId`, y desde el bloque
+  -- 3 esa columna admite NULL. Una fila sin proveedor queda fuera de la
+  -- política del inquilino —invisible salvo en modo omnisciente—, que es
+  -- exactamente lo que debe pasarle a un incidente de plataforma.
+  FOREACH cond IN ARRAY ARRAY['supply_v2_payment_reconciliations'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Supply 2.0 · conciliación de pagos externos: solo en modo omnisciente.';
+
+  -- ── Membego Supply 2.0 · INCIDENCIAS FINANCIERAS, con DOS dueños posibles ──
+  --
+  -- Esta tabla tenía política DERIVADA por `supplierId`, que era NOT NULL. El
+  -- bloque 3 del Slice 9 la hizo opcional —un aviso de pago de una pasarela
+  -- puede llegar para una compra cuyo proveedor no se resuelve, o para una
+  -- referencia que no existe—, y la derivación solo sigue claves NOT NULL (ver
+  -- la nota de los niveles 1..N). Sin esto, la tabla se quedaría SIN política:
+  -- RLS la denegaría entera y el panel de incidencias del Slice 5 aparecería
+  -- vacío sin un solo error en los logs.
+  --
+  -- Se declara a mano con la MISMA forma que tenía la derivada, más la
+  -- condición que la columna opcional exige:
+  --
+  --   · con proveedor  → se ve si su proveedor se ve (igual que antes);
+  --   · sin proveedor  → solo en modo omnisciente, que es lo que debe pasarle
+  --     a un incidente de plataforma: su `payload` y su importe hablan de la
+  --     operación de un cliente y del cobro de una pasarela.
+  FOREACH cond IN ARRAY ARRAY['supply_v2_finance_incidents'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_inquilino ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'' OR ('
+      || '"supplierId" IS NOT NULL AND EXISTS (SELECT 1 FROM public.supply_v2_suppliers p '
+      || 'WHERE p.id = public.%I."supplierId"))) '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'' OR ('
+      || '"supplierId" IS NOT NULL AND EXISTS (SELECT 1 FROM public.supply_v2_suppliers p '
+      || 'WHERE p.id = public.%I."supplierId")))', cond, cond, cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Supply 2.0 · incidencias: del proveedor si lo tienen, de plataforma si no.';
+
   -- ── Lo que quedó fuera ────────────────────────────────────────────────────
   --
   -- Sin política, RLS deniega. Aquí no debería quedar nada: si aparece algo, es

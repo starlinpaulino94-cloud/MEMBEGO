@@ -22,6 +22,7 @@ import {
   type IdentidadEvento,
 } from './domain'
 import { emitirEfectoEnTx } from './outbox'
+import { conciliarPagoExternoEnTx, transaccionYaUsadaEnTx } from './conciliacion'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 9 · INBOX DE EVENTOS EXTERNOS (§4A, §4B).
@@ -186,7 +187,8 @@ export type ResultadoProceso =
   | { resultado: 'PROCESADO'; orderId: string; correlationId: string }
   | { resultado: 'REPETIDO'; status: SupplyV2ExternalEventStatus; correlationId: string }
   | { resultado: 'IGNORADO'; codigo: CodigoDeFallo; motivo: string; correlationId: string }
-  | { resultado: 'RECHAZADO'; codigo: CodigoDeFallo; motivo: string; correlationId: string }
+  /** `incidentId` desde el bloque 3: el rechazo ya viene con su tarea abierta. */
+  | { resultado: 'RECHAZADO'; codigo: CodigoDeFallo; motivo: string; correlationId: string; incidentId: string | null }
   | { resultado: 'REINTENTABLE'; motivo: string; proximoIntento: Date | null; correlationId: string }
 
 /**
@@ -270,8 +272,42 @@ export async function procesarEventoExterno(
         { provider: fila.provider, eventType: fila.eventType, codigo, clase, correlationId: fila.correlationId, orderNumber: orden?.number ?? null },
         null
       )
+      // ── SLICE 9 · BLOQUE 3: el rechazo deja TAREA, no solo rastro ────────
+      //
+      // Hasta el bloque 2 esto acababa aquí: evento rechazado, bitácora puesta,
+      // cero efecto financiero. Evitaba el daño y no dejaba nada que nadie
+      // pudiera trabajar. Lo que no cuadra abre ahora un incidente —en ESTA
+      // misma transacción, para que el rechazo y su explicación sean la misma
+      // escritura— con dueño, severidad y motivo.
+      //
+      // Solo lo DESCARTABLE se queda sin incidente, y es deliberado: una orden
+      // ya pagada o un tipo que no manejamos no son desacuerdos financieros.
+      // Lo de la puerta —firma, frescura, cuerpo, proveedor— no llega hasta
+      // aquí y tampoco debe: eso es seguridad de la integración, no finanzas.
+      let incidentId: string | null = null
+      if (clase === 'INCIDENTE') {
+        const r = await conciliarPagoExternoEnTx(
+          tx,
+          {
+            provider: fila.provider,
+            externalTransactionId: transaccionDelPayload(fila.payload),
+            externalEventRowId: fila.id,
+            orderId: orden?.id ?? null,
+            correlationId: fila.correlationId,
+            externo: {
+              estado: fila.eventType === 'PAYMENT_REJECTED' ? 'FAILED' : 'PAID',
+              monto: pago.amount ?? null,
+              moneda: pago.currency ?? null,
+            },
+          },
+          ctx,
+          ahora
+        )
+        incidentId = r.incidentId
+      }
+
       return clase === 'INCIDENTE'
-        ? { resultado: 'RECHAZADO' as const, codigo, motivo, correlationId: fila.correlationId }
+        ? { resultado: 'RECHAZADO' as const, codigo, motivo, correlationId: fila.correlationId, incidentId }
         : { resultado: 'IGNORADO' as const, codigo, motivo, correlationId: fila.correlationId }
     }
 
@@ -279,6 +315,58 @@ export async function procesarEventoExterno(
 
     // ── El dinero, en la misma transacción ───────────────────────────────
     if (fila.eventType === 'PAYMENT_CONFIRMED') {
+      // ── SLICE 9 · BLOQUE 3: ¿esta transacción ya era de otra compra? ────
+      //
+      // Se mira ANTES de confirmar, y ese orden es la regla: una vez pagada la
+      // compra, descubrir que el cobro era de otra es un problema que ya costó
+      // dinero. Un identificador de transacción es único en el sistema del
+      // proveedor; verlo en dos compras significa que o se reutilizó, o el
+      // proveedor se equivocó, o estamos a punto de dar por pagadas dos
+      // compras con un solo cobro. La segunda asociación NO se acepta.
+      const transaccion = transaccionDelPayload(fila.payload)
+      if (transaccion) {
+        const yaUsada = await transaccionYaUsadaEnTx(tx, fila.provider, transaccion, orden.id)
+        if (yaUsada) {
+          const r = await conciliarPagoExternoEnTx(
+            tx,
+            {
+              provider: fila.provider,
+              externalTransactionId: transaccion,
+              externalEventRowId: fila.id,
+              orderId: orden.id,
+              correlationId: fila.correlationId,
+              externo: { estado: 'PAID', monto: pago.amount ?? null, moneda: pago.currency ?? null },
+            },
+            ctx,
+            ahora
+          )
+          await tx.supplyV2ExternalEvent.update({
+            where: { id: fila.id },
+            data: {
+              status: 'IGNORED',
+              orderId: orden.id,
+              lastError: `TRANSACCION_DUPLICADA: ya estaba asociada a ${yaUsada.numero}`,
+              nextAttemptAt: null,
+            },
+          })
+          await auditarEnTx(tx, ctx, 'SUPPLY_V2_EXTERNAL_EVENT_FAILED', 'SupplyV2ExternalEvent', fila.id, {
+            provider: fila.provider,
+            eventType: fila.eventType,
+            codigo: 'TRANSACCION_DUPLICADA',
+            clase: 'INCIDENTE',
+            correlationId: fila.correlationId,
+            ordenOriginal: yaUsada.numero,
+          }, null)
+          return {
+            resultado: 'RECHAZADO' as const,
+            codigo: 'ESTADO_IMPOSIBLE' as const,
+            motivo: `Esa transacción ya estaba asociada a la compra ${yaUsada.numero}.`,
+            correlationId: fila.correlationId,
+            incidentId: r.incidentId,
+          }
+        }
+      }
+
       await confirmarPagoEnTx(tx, { orderId: orden.id, amountSeen: String(pago.amount ?? orden.total) }, ctx)
       await emitirEfectoEnTx(tx, {
         eventType: 'supply.order.paid',
@@ -301,6 +389,27 @@ export async function procesarEventoExterno(
       // tipo a `TIPOS_QUE_MANEJAMOS` sin darle camino falle a la vista.
       fallo('TIPO_SIN_CAMINO', `El tipo ${fila.eventType} está declarado como manejado pero no tiene proceso.`)
     }
+
+    // La comprobación de lo que SÍ cuadró (bloque 3). No es contabilidad
+    // decorativa: esta tabla es el registro de las asociaciones ACEPTADAS, y es
+    // lo que permite ver, la próxima vez, que una transacción ya se usó.
+    await conciliarPagoExternoEnTx(
+      tx,
+      {
+        provider: fila.provider,
+        externalTransactionId: transaccionDelPayload(fila.payload),
+        externalEventRowId: fila.id,
+        orderId: orden.id,
+        correlationId: fila.correlationId,
+        externo: {
+          estado: fila.eventType === 'PAYMENT_REJECTED' ? 'FAILED' : 'PAID',
+          monto: pago.amount ?? null,
+          moneda: pago.currency ?? null,
+        },
+      },
+      ctx,
+      ahora
+    )
 
     await tx.supplyV2ExternalEvent.update({
       where: { id: fila.id },
@@ -474,6 +583,25 @@ async function buscarOrden(tx: Tx, pago: EventoDePago) {
   }
   if (pago.orderNumber) {
     return tx.supplyV2CustomerOrder.findUnique({ where: { number: pago.orderNumber }, select })
+  }
+  return null
+}
+
+
+/**
+ * El id de transacción del proveedor, tal como el adaptador lo dejó en el
+ * cuerpo conservado. Null cuando el proveedor no lo manda: entonces la
+ * identidad del problema cae en el id del evento, que siempre existe.
+ */
+function transaccionDelPayload(payload: Prisma.JsonValue | null): string | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const raiz = payload as Record<string, unknown>
+  const directo = raiz.externalTransactionId
+  if (typeof directo === 'string' && directo.trim()) return directo.trim()
+  const cuerpo = raiz.cuerpo
+  if (cuerpo && typeof cuerpo === 'object' && !Array.isArray(cuerpo)) {
+    const dentro = (cuerpo as Record<string, unknown>).externalTransactionId
+    if (typeof dentro === 'string' && dentro.trim()) return dentro.trim()
   }
   return null
 }

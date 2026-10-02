@@ -92,6 +92,11 @@ export const SUPPLY_V2_PERMISSIONS = [
   'SUPPLY_V2_REWARD_APPROVE',
   'SUPPLY_V2_LOYALTY_FINANCE_VIEW',
   'SUPPLY_V2_LOYALTY_REPORT_VIEW',
+  // Slice 9 · bloque 3. Resolver un incidente de pago externo NO es aprobar
+  // una liquidación (eso es con un proveedor) ni confirmar un pago de cliente
+  // (eso es `SUPPLY_V2_OFFER_MANAGE`): es decidir sobre una discrepancia con
+  // una pasarela, y quien procesa la integración no lo tiene.
+  'SUPPLY_V2_PAYMENT_INCIDENT_RESOLVE',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -143,6 +148,7 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_REWARD_APPROVE: 'Crear y aprobar recompensas',
   SUPPLY_V2_LOYALTY_FINANCE_VIEW: 'Ver el presupuesto y los costos de fidelización',
   SUPPLY_V2_LOYALTY_REPORT_VIEW: 'Ver los reportes y el tablero de fidelización',
+  SUPPLY_V2_PAYMENT_INCIDENT_RESOLVE: 'Investigar y resolver incidentes de pagos externos (no la cuenta de la integración)',
 }
 
 export interface CompanyGateway {

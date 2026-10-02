@@ -138,6 +138,10 @@ model SupplyV2ExternalEvent {
   retriedBy   User?     @relation("SupplyV2ExternalEventRetriedBy", fields: [retriedById], references: [id], onDelete: SetNull)
   retriedAt   DateTime?
 
+  /// SLICE 9 · BLOQUE 3: lo que este evento provocó, si no cuadró.
+  incidentes      SupplyV2FinanceIncident[]       @relation("SupplyV2IncidentExternalEvent")
+  conciliaciones  SupplyV2PaymentReconciliation[] @relation("SupplyV2ReconciliationExternalEvent")
+
   /// LA identidad idempotente. Lo que hace que cinco entregas del mismo
   /// evento no puedan ser cinco filas.
   @@unique([provider, externalEventId, eventType])

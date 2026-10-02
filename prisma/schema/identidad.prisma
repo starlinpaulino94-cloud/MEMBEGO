@@ -424,6 +424,11 @@ enum AuditAccion {
   SUPPLY_V2_OUTBOX_DEAD_LETTER
   SUPPLY_V2_OUTBOX_RETRIED
 
+  // Slice 9 · bloque 3: conciliación de pagos externos. `_INCIDENT_CREATED` y
+  // `_INCIDENT_RESOLVED` ya existen del Slice 5 y se reutilizan tal cual.
+  SUPPLY_V2_PAYMENT_RECONCILIATION_CREATED
+  SUPPLY_V2_FINANCE_INCIDENT_INVESTIGATING
+
   // ── Supply 2.0 · Slice 8 · fidelización (01-10-2026) ─────────────────────
   // Programas, membresías, referidos, puntos y recompensas. Un ajuste manual
   // de puntos exige motivo y queda aquí: no hay forma de borrar un movimiento
