@@ -275,15 +275,21 @@ test('F · el barrido expira la reserva caducada: RESERVED → ALLOCATED, orden 
   assert.equal((await prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: compra.id } })).status, 'PENDING')
   // El arnés adelanta el reloj: la reserva venció hace un minuto.
   await prisma.supplyV2CustomerOrder.update({ where: { id: compra.id }, data: { expiresAt: new Date(Date.now() - 60_000) } })
-  const r1 = await barridoSupplyV2()
-  assert.equal(r1.ordenesExpiradas, 1)
+  await barridoSupplyV2()
+  // El barrido es GLOBAL y varios archivos de prueba lo llaman en paralelo: sus
+  // contadores suman lo de todos, así que no son una afirmación segura. Lo que
+  // se comprueba es el EFECTO sobre lo que esta prueba posee.
   const db = await prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: compra.id }, include: { lines: { include: { reservations: true } } } })
   assert.equal(db.status, 'EXPIRED')
   assert.ok(db.lines[0]!.reservations.every((r) => r.status === 'RELEASED'))
   const a = await asignacion(o.allocationId)
   assert.deepEqual([a.allocatedQuantity, a.reservedQuantity, a.issuedQuantity], [3, 0, 0])
-  const r2 = await barridoSupplyV2()
-  assert.equal(r2.ordenesExpiradas, 0)
+  // «Una segunda pasada no repite» se comprueba sobre ESTA orden —el estado y
+  // los números de la asignación no se mueven, y expirarla otra vez devuelve
+  // false, dos líneas más abajo—, no sobre el contador global.
+  await barridoSupplyV2()
+  const trasSegunda = await asignacion(o.allocationId)
+  assert.deepEqual([trasSegunda.allocatedQuantity, trasSegunda.reservedQuantity, trasSegunda.issuedQuantity], [3, 0, 0])
   await assert.rejects(sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: compra.id, amountSeen: 798 }, como(ctx.admin))), /no se puede pasar/)
   // El barrido directo sobre una orden ya expirada tampoco duplica movimientos.
   assert.equal(await sinEmpresa('prueba', (tx) => expirarOrdenEnTx(tx, compra.id, como(null))), false)
@@ -378,13 +384,14 @@ test('J · una oferta futura no se puede comprar y una vencida tampoco; el barri
   assert.equal(futura.status, 'SCHEDULED')
   await assert.rejects(comprar(ctx.cliente1, futura.id, 1), /todavía no/)
   await prisma.supplyV2Offer.update({ where: { id: futura.id }, data: { startsAt: new Date(Date.now() - 1000) } })
-  const r = await barridoSupplyV2()
-  assert.ok(r.ofertasActivadas >= 1)
+  await barridoSupplyV2()
+  // El barrido es GLOBAL y varios archivos de prueba lo llaman en paralelo: sus
+  // contadores suman lo de todos, así que no son una afirmación segura. Lo que
+  // se comprueba es el EFECTO sobre lo que esta prueba posee.
   assert.equal((await prisma.supplyV2Offer.findUniqueOrThrow({ where: { id: futura.id } })).status, 'ACTIVE')
   await prisma.supplyV2Offer.update({ where: { id: futura.id }, data: { endsAt: new Date(Date.now() - 1000) } })
   await assert.rejects(comprar(ctx.cliente1, futura.id, 1), /terminó/)
-  const r2 = await barridoSupplyV2()
-  assert.ok(r2.ofertasFinalizadas >= 1)
+  await barridoSupplyV2()
   assert.equal((await prisma.supplyV2Offer.findUniqueOrThrow({ where: { id: futura.id } })).status, 'ENDED')
   assert.equal((await asignacion(futura.allocationId)).releasedQuantity, 1)
 })

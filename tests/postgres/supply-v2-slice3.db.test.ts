@@ -404,8 +404,12 @@ test('I · el barrido vence derechos y vouchers caducados, y una segunda pasada 
   const despues = await lote(ctx.lotId)
   assert.equal(despues.quantityIssued, antes.quantityIssued - 1, 'ISSUED −1')
   assert.equal(despues.quantityClosed, antes.quantityClosed + 1, 'CLOSED +1')
-  const r2 = await barridoSupplyV2()
-  assert.equal(r2.derechosVencidos, 0)
+  // Segunda pasada: lo que no debe repetirse es el EFECTO sobre este derecho
+  // —el lote no se mueve otra vez—, no el contador global.
+  await barridoSupplyV2()
+  const trasSegunda = await lote(ctx.lotId)
+  assert.equal(trasSegunda.quantityIssued, despues.quantityIssued)
+  assert.equal(trasSegunda.quantityClosed, despues.quantityClosed)
   await assert.rejects(abrirQr(derecho3), /venció/)
 })
 
