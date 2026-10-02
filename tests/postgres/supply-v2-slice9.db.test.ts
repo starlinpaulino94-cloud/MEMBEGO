@@ -16,6 +16,11 @@ import {
 } from '../../src/modules/supply-v2/operations/inbox'
 import { emitirEfectoEnTx, marcarEntregado, marcarFallido, reclamarEfectos, reintentarEfecto } from '../../src/modules/supply-v2/operations/outbox'
 import { MAX_INTENTOS } from '../../src/modules/integraciones/reintentos'
+// ── Bloque 2 ──
+import { GET, POST } from '../../src/app/api/webhooks/supply-v2/[provider]/route'
+import { olvidarActorDelWebhook, recibirEventoExterno } from '../../src/modules/supply-v2/operations/entrada'
+import { firmaHmac } from '../../src/modules/supply-v2/operations/firma'
+import { despacharEfectos, entregarEfecto, recuperarArriendos } from '../../src/modules/supply-v2/operations/worker'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 1 contra PostgreSQL de verdad.
@@ -121,15 +126,31 @@ async function limpiar() {
     await prisma.supplyV2OutboxEvent.deleteMany({ where: { aggregateId: { in: ordenes } } })
   }
   await prisma.supplyV2OutboxEvent.deleteMany({ where: { eventType: { startsWith: 'supply.test.' } } })
+  // Y los avisos que los efectos del bloque 2 crearon: su `dedupeKey` es la
+  // identidad del efecto, así que se reconocen sin tocar nada ajeno.
+  await prisma.notificacion.deleteMany({ where: { dedupeKey: { startsWith: 'supply.order.' } } })
   if (mios.length) {
     await prisma.supplyV2ExternalEvent.deleteMany({ where: { id: { in: mios.map((e) => e.id) } } })
   }
 }
 
-after(limpiar)
+const secretoPrevio = process.env.SUPPLY_V2_TEST_GATEWAY_SECRET
+const actorPrevio = process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+
+after(async () => {
+  await limpiar()
+  if (secretoPrevio === undefined) delete process.env.SUPPLY_V2_TEST_GATEWAY_SECRET
+  else process.env.SUPPLY_V2_TEST_GATEWAY_SECRET = secretoPrevio
+  if (actorPrevio === undefined) delete process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+  else process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID = actorPrevio
+  olvidarActorDelWebhook()
+})
 
 before(async () => {
   await limpiar()
+  // El proveedor de prueba firma con esto. Nunca una credencial real: ni en
+  // las pruebas, ni en el repositorio.
+  process.env.SUPPLY_V2_TEST_GATEWAY_SECRET = SECRETO_B2
 
   const [ops, cliente, empleado] = await Promise.all(
     (
@@ -164,6 +185,11 @@ before(async () => {
     await publicarOfertaEnTx(tx, o.id, como(ctx.ops))
     ctx.offerId = o.id
   })
+
+  // La cuenta con la que actúa la integración (bloque 2): una cuenta REAL de
+  // Membego designada para eso, no un usuario de sistema inventado.
+  process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID = ctx.ops
+  olvidarActorDelWebhook()
 })
 
 // ── A · el evento duplicado ─────────────────────────────────────────────────
@@ -639,4 +665,622 @@ test('J · un volcado del inbox no puede contener firmas, tokens ni datos de tar
   for (const prohibido of ['FIRMA-SECRETA', 'TOKEN-NO-GUARDAR', '4111111111111111']) {
     assert.ok(!todo.includes(prohibido), `el outbox tampoco guarda ${prohibido}`)
   }
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// BLOQUE 2 · DEL PROVEEDOR EXTERNO AL EFECTO ENTREGADO
+//
+// Lo del bloque 1 demostraba el NÚCLEO llamando a las funciones. Esto demuestra
+// la FRONTERA que entonces no existía: un POST firmado que entra por la ruta
+// HTTP, se verifica, se adapta, se registra, se procesa, apunta su efecto, lo
+// despacha por la cola que ya existe y lo entrega —o se recupera, o acaba en
+// dead letter—. Y en ningún camino hay una segunda consecuencia financiera.
+//
+// Van en ESTE archivo y no en uno nuevo a propósito: las pruebas de un mismo
+// archivo corren en serie, y las de archivos distintos en paralelo. Dos
+// archivos tocando el mismo inbox y el mismo outbox se robarían las filas
+// —el despachador de uno reclamaría lo que el otro está comprobando— y la
+// limpieza de uno borraría lo que el otro tiene en vuelo.
+// ════════════════════════════════════════════════════════════════════════════
+
+const SECRETO_B2 = `sv2-secreto-${sufijo}`
+
+/** Un cuerpo en el vocabulario DEL PROVEEDOR, no en el nuestro. */
+function cuerpoProveedor(d: {
+  eventId: string
+  orderNumber?: string | null
+  amount?: string | null
+  currency?: string
+  status?: string
+  kind?: string
+  extra?: Record<string, unknown>
+}): string {
+  return JSON.stringify({
+    event: { id: d.eventId, kind: d.kind ?? 'payment.updated' },
+    transaction: {
+      id: `TX-${d.eventId}`,
+      status: d.status ?? 'APPROVED',
+      amount: d.amount ?? null,
+      currency: d.currency ?? 'DOP',
+      order_reference: d.orderNumber ?? null,
+    },
+    ...(d.extra ?? {}),
+  })
+}
+
+/** Una petición HTTP de verdad, firmada como la firmaría el proveedor. */
+function peticionHttp(cuerpo: string, d: { ts?: number; firma?: string; correlationId?: string } = {}): Request {
+  const ts = String(d.ts ?? Math.floor(Date.now() / 1000))
+  const cabeceras: Record<string, string> = {
+    'content-type': 'application/json',
+    'user-agent': 'TestGateway/1.0',
+    'x-sv2-timestamp': ts,
+    'x-sv2-signature': d.firma ?? `v1=${firmaHmac(SECRETO_B2, ts, cuerpo)}`,
+  }
+  if (d.correlationId) cabeceras['x-correlation-id'] = d.correlationId
+  return new Request('https://membego.test/api/webhooks/supply-v2/TEST_GATEWAY', {
+    method: 'POST',
+    headers: cabeceras,
+    body: cuerpo,
+  })
+}
+
+/** Las cabeceras que el proveedor pondría, para llamar a la entrada sin HTTP. */
+function cabecerasFirmadas(cuerpo: string, correlationId?: string): Record<string, string | null> {
+  const ts = String(Math.floor(Date.now() / 1000))
+  return {
+    'x-sv2-timestamp': ts,
+    'x-sv2-signature': `v1=${firmaHmac(SECRETO_B2, ts, cuerpo)}`,
+    'x-correlation-id': correlationId ?? null,
+  }
+}
+
+const params = (provider = 'TEST_GATEWAY') => ({ params: Promise.resolve({ provider }) })
+
+/** POST contra el route handler de verdad, y su cuerpo ya leído. */
+async function postWebhook(cuerpo: string, d: Parameters<typeof peticionHttp>[1] = {}, provider = 'TEST_GATEWAY') {
+  const res = await POST(peticionHttp(cuerpo, d), params(provider))
+  const json = (await res.json()) as { codigo: string; mensaje: string; correlationId?: string }
+  return { status: res.status, ...json, cabeceraHilo: res.headers.get('x-correlation-id') }
+}
+
+const avisosDe = (orderId: string) =>
+  prisma.notificacion.count({ where: { dedupeKey: { endsWith: `:${orderId}` } } })
+
+const efectoDe = (orderId: string) =>
+  prisma.supplyV2OutboxEvent.findFirstOrThrow({ where: { aggregateId: orderId }, orderBy: { createdAt: 'asc' } })
+
+// ── A · el mismo webhook cinco veces ────────────────────────────────────────
+
+test('B2·A · el mismo webhook entregado cinco veces: un inbox, un pago, un efecto, un aviso', async () => {
+  const orden = await compraPendiente()
+  const cuerpo = cuerpoProveedor({ eventId: idExterno('b2a'), orderNumber: orden.number, amount: String(orden.total) })
+
+  const respuestas = []
+  for (let i = 0; i < 5; i++) respuestas.push(await postWebhook(cuerpo))
+
+  assert.equal(respuestas[0]!.status, 200)
+  assert.equal(respuestas[0]!.codigo, 'EVENT_ACCEPTED')
+  for (const r of respuestas.slice(1)) {
+    assert.equal(r.status, 200, 'una entrega repetida no es un error del proveedor')
+    assert.equal(r.codigo, 'EVENT_REPEATED')
+  }
+  // Todas hablan de la MISMA operación: el hilo no cambia entre entregas.
+  const hilos = new Set(respuestas.map((r) => r.correlationId))
+  assert.equal(hilos.size, 1, 'cinco entregas, un hilo')
+
+  const filas = await prisma.supplyV2ExternalEvent.count({
+    where: { provider: 'TEST_GATEWAY', externalEventId: JSON.parse(cuerpo).event.id },
+  })
+  assert.equal(filas, 1, 'un inbox')
+  assert.equal(await ordenDe(orden.id).then((o) => o.status), 'PAID', 'un pago')
+  assert.equal(await derechosDe(orden.id), 1, 'un juego de derechos')
+  assert.equal((await efectosDe(orden.id)).length, 1, 'un efecto')
+  assert.equal(await avisosDe(orden.id), 1, 'y un solo aviso al cliente')
+})
+
+// ── §14 · el camino completo, por HTTP ──────────────────────────────────────
+
+test('B2·§14 · HTTP POST → firma → adaptador → inbox → orden → outbox → cola → efecto', async () => {
+  const orden = await compraPendiente()
+  const eventId = idExterno('b2http')
+  const hilo = `sv2-prueba-http-${sufijo}`
+  const cuerpo = cuerpoProveedor({
+    eventId,
+    orderNumber: orden.number,
+    amount: String(orden.total),
+    // Secretos dentro del cuerpo: el camino entero tiene que dejarlos fuera.
+    extra: { signature: 'FIRMA-HTTP-NO-GUARDAR', authorization: 'Bearer TOKEN-HTTP-NO-GUARDAR' },
+  })
+
+  const r = await postWebhook(cuerpo, { correlationId: hilo })
+  assert.equal(r.status, 200)
+  assert.equal(r.codigo, 'EVENT_ACCEPTED')
+  assert.equal(r.correlationId, hilo, 'el hilo que trajo el proveedor se respeta')
+  assert.equal(r.cabeceraHilo, hilo, 'y vuelve en la cabecera de la respuesta')
+  assert.ok(!JSON.stringify(r).includes('MBG-SO'), 'la respuesta no dice nada de nuestra operación')
+
+  // El inbox: la fila existe, apunta a la orden y lleva el hilo.
+  const fila = await prisma.supplyV2ExternalEvent.findFirstOrThrow({
+    where: { provider: 'TEST_GATEWAY', externalEventId: eventId },
+  })
+  assert.equal(fila.status, 'PROCESSED')
+  assert.equal(fila.orderId, orden.id)
+  assert.equal(fila.correlationId, hilo)
+  assert.equal(fila.eventType, 'PAYMENT_CONFIRMED', 'el adaptador tradujo APPROVED a nuestro vocabulario')
+  const guardado = JSON.stringify(fila.payload)
+  assert.ok(!guardado.includes('FIRMA-HTTP-NO-GUARDAR'), 'ni la firma')
+  assert.ok(!guardado.includes('TOKEN-HTTP-NO-GUARDAR'), 'ni el token llegan a la base')
+  assert.ok(guardado.includes(`TX-${eventId}`), 'el id de la transacción sí: es lo que se concilia')
+
+  // La orden: pagada, con sus derechos.
+  const o = await ordenDe(orden.id)
+  assert.equal(o.status, 'PAID')
+  assert.equal(await derechosDe(orden.id), 1)
+
+  // El outbox: el efecto se apuntó, se despachó y se entregó en la misma
+  // petición (sin QStash, `encolar` ejecuta en línea: degradación honesta).
+  const efecto = await efectoDe(orden.id)
+  assert.equal(efecto.eventType, 'supply.order.paid')
+  assert.equal(efecto.correlationId, hilo, 'el hilo llega hasta el efecto')
+  assert.equal(efecto.status, 'DELIVERED')
+  assert.ok(efecto.processedAt)
+  assert.ok(efecto.claimedAt, 'quedó marca de cuándo se reclamó')
+
+  // El efecto, de verdad: el cliente tiene su aviso.
+  const aviso = await prisma.notificacion.findFirstOrThrow({ where: { dedupeKey: efecto.dedupeKey } })
+  assert.equal(aviso.userId, ctx.cliente)
+  assert.equal(aviso.tipo, 'PAGO_APROBADO')
+  assert.ok(aviso.mensaje.includes(orden.number))
+})
+
+test('B2·§14 · la puerta: solo POST, solo proveedores conocidos, solo cuerpos de tamaño razonable', async () => {
+  const get = await GET()
+  assert.equal(get.status, 405)
+  assert.equal(get.headers.get('Allow'), 'POST')
+
+  const desconocido = await postWebhook(cuerpoProveedor({ eventId: idExterno('b2desc') }), {}, 'CARDNET')
+  assert.equal(desconocido.status, 404, 'CardNET no está conectado a Supply: la ruta no existe para él')
+  assert.equal(desconocido.codigo, 'UNKNOWN_PROVIDER')
+
+  const enorme = JSON.stringify({ event: { id: idExterno('b2big') }, relleno: 'x'.repeat(70 * 1024) })
+  const grande = await postWebhook(enorme)
+  assert.equal(grande.status, 413)
+  assert.equal(grande.codigo, 'PAYLOAD_TOO_LARGE')
+
+  const ilegible = await postWebhook('{no soy json')
+  assert.equal(ilegible.status, 400)
+  assert.equal(ilegible.codigo, 'INVALID_PAYLOAD')
+})
+
+// ── B · dos peticiones simultáneas ──────────────────────────────────────────
+
+test('B2·B · dos peticiones HTTP simultáneas del mismo evento: UNA consecuencia financiera', async () => {
+  const orden = await compraPendiente()
+  const cuerpo = cuerpoProveedor({ eventId: idExterno('b2b'), orderNumber: orden.number, amount: String(orden.total) })
+
+  const [a, b] = await Promise.all([postWebhook(cuerpo), postWebhook(cuerpo)])
+  const codigos = [a.codigo, b.codigo].sort()
+  assert.deepEqual(codigos, ['EVENT_ACCEPTED', 'EVENT_REPEATED'], 'una procesa, la otra ve que ya estaba')
+  assert.equal(a.status, 200)
+  assert.equal(b.status, 200)
+
+  assert.equal(await derechosDe(orden.id), 1, 'un juego de derechos')
+  assert.equal((await efectosDe(orden.id)).length, 1, 'un efecto')
+  assert.equal(await avisosDe(orden.id), 1, 'un aviso')
+})
+
+// ── C · firma inválida ──────────────────────────────────────────────────────
+
+test('B2·C · una firma que no cuadra no deja NADA en el inbox ni toca la orden', async () => {
+  const orden = await compraPendiente()
+  const eventId = idExterno('b2c')
+  const cuerpo = cuerpoProveedor({ eventId, orderNumber: orden.number, amount: String(orden.total) })
+
+  const r = await postWebhook(cuerpo, { firma: 'v1=0000000000000000000000000000000000000000000000000000000000000000' })
+  assert.equal(r.status, 401)
+  assert.equal(r.codigo, 'INVALID_SIGNATURE')
+  assert.equal(r.mensaje, 'firma inválida')
+  assert.ok(!JSON.stringify(r).match(/hmac|esperada|secreto/i), 'no se le explica POR QUÉ no cuadró')
+
+  assert.equal(
+    await prisma.supplyV2ExternalEvent.count({ where: { provider: 'TEST_GATEWAY', externalEventId: eventId } }),
+    0,
+    'lo que no está firmado NO entra en la base'
+  )
+  assert.equal(await ordenDe(orden.id).then((o) => o.status), 'PENDING')
+  assert.equal(await derechosDe(orden.id), 0)
+  assert.equal((await efectosDe(orden.id)).length, 0)
+
+  // El cuerpo alterado con la firma del original: el caso que de verdad importa.
+  const subido = cuerpo.replace(`"${orden.total}"`, '"999999.00"')
+  const ts = Math.floor(Date.now() / 1000)
+  const conFirmaVieja = await postWebhook(subido, { ts, firma: `v1=${firmaHmac(SECRETO_B2, String(ts), cuerpo)}` })
+  assert.equal(conFirmaVieja.status, 401, 'cambiar el monto invalida la firma')
+  assert.equal(await ordenDe(orden.id).then((o) => o.status), 'PENDING')
+})
+
+// ── D · replay ──────────────────────────────────────────────────────────────
+
+test('B2·D · un evento bien firmado pero vencido se rechaza y no produce efecto financiero', async () => {
+  const orden = await compraPendiente()
+  const eventId = idExterno('b2d')
+  const cuerpo = cuerpoProveedor({ eventId, orderNumber: orden.number, amount: String(orden.total) })
+
+  // Firma auténtica, de hace una hora. La idempotencia no lo pararía: para el
+  // inbox esta identidad es nueva. Lo para la ventana FIRMADA.
+  const viejo = Math.floor(Date.now() / 1000) - 3600
+  const r = await postWebhook(cuerpo, { ts: viejo })
+  assert.equal(r.status, 400, 'un 4xx: reintentarlo no lo hace más fresco')
+  assert.equal(r.codigo, 'REPLAY_REJECTED')
+
+  assert.equal(
+    await prisma.supplyV2ExternalEvent.count({ where: { provider: 'TEST_GATEWAY', externalEventId: eventId } }),
+    0,
+    'no se inserta como evento financiero procesable'
+  )
+  assert.equal(await ordenDe(orden.id).then((o) => o.status), 'PENDING')
+  assert.equal(await derechosDe(orden.id), 0)
+
+  // Y el mismo evento con fecha de ahora sí entra: lo que se rechazó fue la
+  // antigüedad, no el evento.
+  const fresco = await postWebhook(cuerpo)
+  assert.equal(fresco.codigo, 'EVENT_ACCEPTED')
+  assert.equal(await derechosDe(orden.id), 1)
+})
+
+test('B2·D · un evento que no cuadra entra, queda rechazado y contesta 200', async () => {
+  const orden = await compraPendiente()
+  const eventId = idExterno('b2d2')
+  // Firma buena, fecha buena, monto que no es el nuestro.
+  const r = await postWebhook(cuerpoProveedor({ eventId, orderNumber: orden.number, amount: '1.00' }))
+  assert.equal(r.status, 200, 'ya decidimos: reintentarlo no lo haría cuadrar')
+  assert.equal(r.codigo, 'EVENT_REJECTED')
+
+  const fila = await prisma.supplyV2ExternalEvent.findFirstOrThrow({ where: { externalEventId: eventId } })
+  assert.equal(fila.status, 'IGNORED')
+  assert.match(fila.lastError!, /MONTO_NO_CUADRA/)
+  assert.equal(await ordenDe(orden.id).then((o) => o.status), 'PENDING', 'cero efecto financiero')
+  assert.equal(await derechosDe(orden.id), 0)
+  assert.equal(await avisosDe(orden.id), 0, 'y nadie recibe un aviso de algo que no pasó')
+})
+
+// ── E · dos despachadores ───────────────────────────────────────────────────
+
+test('B2·E · dos despachadores a la vez: la fila se encola UNA sola vez', async () => {
+  const orden = await compraPendiente()
+  // Se registra y procesa SIN despachar, para poder despachar a mano después.
+  const cuerpo = cuerpoProveedor({ eventId: idExterno('b2e'), orderNumber: orden.number, amount: String(orden.total) })
+  const entrada = await recibirEventoExterno({
+    provider: 'TEST_GATEWAY',
+    cuerpoCrudo: cuerpo,
+    cabeceras: cabecerasFirmadas(cuerpo),
+    despachar: false,
+  })
+  assert.equal(entrada.codigo, 'EVENT_ACCEPTED')
+
+  const efecto = await efectoDe(orden.id)
+  assert.equal(efecto.status, 'PENDING', 'apuntado y sin despachar')
+
+  const [uno, dos] = await Promise.all([
+    despacharEfectos(como(ctx.ops), 100),
+    despacharEfectos(como(ctx.ops), 100),
+  ])
+  const veces = [...uno.encolados, ...dos.encolados].filter((id) => id === efecto.id).length
+  assert.equal(veces, 1, 'dos despachadores simultáneos, un solo trabajo')
+
+  const tras = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: efecto.id } })
+  assert.equal(tras.status, 'DELIVERED', 'y el que se lo llevó lo entregó')
+  assert.equal(await avisosDe(orden.id), 1, 'un solo aviso')
+})
+
+// ── F · el reintento del worker ─────────────────────────────────────────────
+
+test('B2·F · la primera entrega falla, la segunda funciona: DELIVERED sin duplicar el efecto', async () => {
+  const orden = await compraPendiente()
+  // Un efecto que apunta a una compra que no existe: el destino «no está».
+  const inexistente = `sin-orden-${sufijo}`
+  const efecto = await sinEmpresa('prueba', (tx) =>
+    emitirEfectoEnTx(tx, {
+      eventType: 'supply.order.paid',
+      aggregateType: 'SupplyV2CustomerOrder',
+      aggregateId: inexistente,
+      correlationId: `sv2-reintento-${sufijo}`,
+      payload: {},
+    })
+  )
+
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { status: 'PROCESSING', claimedAt: new Date() } })
+  )
+  const primera = await entregarEfecto(efecto.id, como(ctx.ops))
+  assert.equal(primera.estado, 'FAILED', 'el fallo se reconoce y se reprograma')
+  let fila = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: efecto.id } })
+  assert.equal(fila.attempts, 1)
+  assert.ok(fila.availableAt > new Date(), 'la escalera compartida lo manda al futuro')
+  assert.ok(fila.lastError)
+
+  // Ahora el destino sí está: el efecto apunta a una compra de verdad.
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({
+      where: { id: efecto.id },
+      data: { aggregateId: orden.id, status: 'PROCESSING', claimedAt: new Date() },
+    })
+  )
+  const segunda = await entregarEfecto(efecto.id, como(ctx.ops))
+  assert.equal(segunda.estado, 'DELIVERED')
+  fila = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: efecto.id } })
+  assert.equal(fila.status, 'DELIVERED')
+  assert.ok(fila.processedAt)
+
+  // Y entregarlo otra vez —reintento de la cola sobre un trabajo que sí
+  // funcionó— no manda un segundo aviso.
+  const tercera = await entregarEfecto(efecto.id, como(ctx.ops))
+  assert.equal(tercera.estado, 'YA_ESTABA')
+  assert.equal(
+    await prisma.notificacion.count({ where: { dedupeKey: fila.dedupeKey } }),
+    1,
+    'un aviso, aunque se entregue tres veces'
+  )
+})
+
+test('B2·F · §8 caso 2: el proceso muere DESPUÉS de hacer el efecto y antes de marcarlo', async () => {
+  const orden = await compraPendiente()
+  const efecto = await sinEmpresa('prueba', (tx) =>
+    emitirEfectoEnTx(tx, {
+      eventType: 'supply.order.payment_rejected',
+      aggregateType: 'SupplyV2CustomerOrder',
+      aggregateId: orden.id,
+      correlationId: `sv2-muerte-tardia-${sufijo}`,
+      payload: {},
+    })
+  )
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { status: 'PROCESSING', claimedAt: new Date() } })
+  )
+
+  // Primera entrega: el aviso se crea… y aquí muere el proceso, sin marcar.
+  const primera = await entregarEfecto(efecto.id, como(ctx.ops))
+  assert.equal(primera.estado, 'DELIVERED')
+  assert.equal(await prisma.notificacion.count({ where: { dedupeKey: efecto.id ? (await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: efecto.id }, select: { dedupeKey: true } })).dedupeKey : '' } }), 1)
+
+  // Se simula la muerte: la fila vuelve a estar reclamada, como si nunca se
+  // hubiera marcado.
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({
+      where: { id: efecto.id },
+      data: { status: 'PROCESSING', claimedAt: new Date(), processedAt: null },
+    })
+  )
+
+  // El reintento REPITE el efecto. Y no pasa nada peligroso: la clave estable
+  // choca con el índice único de notificaciones y se trata como ya hecho.
+  const segunda = await entregarEfecto(efecto.id, como(ctx.ops))
+  assert.equal(segunda.estado, 'DELIVERED')
+  assert.match(segunda.detalle, /ya existía/)
+  const fila = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: efecto.id } })
+  assert.equal(
+    await prisma.notificacion.count({ where: { dedupeKey: fila.dedupeKey } }),
+    1,
+    'UN aviso, aunque el efecto se hizo dos veces'
+  )
+})
+
+// ── G · muerte y rescate del worker ─────────────────────────────────────────
+
+test('B2·G · §8 caso 1: el worker reclama y muere antes de entregar; el arriendo lo rescata', async () => {
+  const orden = await compraPendiente()
+  const efecto = await sinEmpresa('prueba', (tx) =>
+    emitirEfectoEnTx(tx, {
+      eventType: 'supply.order.paid',
+      aggregateType: 'SupplyV2CustomerOrder',
+      aggregateId: orden.id,
+      correlationId: `sv2-huerfano-${sufijo}`,
+      payload: {},
+    })
+  )
+
+  // Reclamado por un worker que ya no está: `claimedAt` viejo.
+  const hace20min = new Date(Date.now() - 20 * 60 * 1000)
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { status: 'PROCESSING', claimedAt: hace20min } })
+  )
+
+  // Un reclamo normal NO lo ve: está en PROCESSING, que no es reclamable.
+  const reclamo = await reclamarEfectos(VENTANA)
+  assert.ok(!reclamo.some((x) => x.id === efecto.id), 'el despachador no roba trabajo reclamado')
+
+  // El rescate sí, y lo trata como un FALLO: consume un intento. Devolverlo
+  // limpio sería un bucle infinito para una fila que mata al worker.
+  const rescate = await recuperarArriendos(como(ctx.ops), 5 * 60 * 1000)
+  assert.ok(rescate.recuperados.includes(efecto.id), 'lo abandonado vuelve a la vida')
+  const fila = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: efecto.id } })
+  assert.equal(fila.status, 'FAILED')
+  assert.equal(fila.attempts, 1)
+  assert.match(fila.lastError!, /RECLAMO_ABANDONADO/)
+
+  // Y uno reclamado hace un segundo NO se toca: no se le roba a un worker vivo.
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { status: 'PROCESSING', claimedAt: new Date() } })
+  )
+  const segundo = await recuperarArriendos(como(ctx.ops), 5 * 60 * 1000)
+  assert.ok(!segundo.recuperados.includes(efecto.id), 'lo que está vivo se respeta')
+
+  // Hasta que vence: entonces se rescata, se despacha y se entrega.
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { claimedAt: hace20min } })
+  )
+  await recuperarArriendos(como(ctx.ops), 5 * 60 * 1000)
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { availableAt: new Date() } })
+  )
+  const despacho = await despacharEfectos(como(ctx.ops), VENTANA)
+  assert.ok(despacho.encolados.includes(efecto.id))
+  const final = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: efecto.id } })
+  assert.equal(final.status, 'DELIVERED', 'el efecto huérfano acabó entregándose')
+})
+
+test('B2·G · la base no admite una fila reclamada sin marca de reclamo', async () => {
+  const orden = await compraPendiente()
+  const efecto = await sinEmpresa('prueba', (tx) =>
+    emitirEfectoEnTx(tx, {
+      eventType: 'supply.test.arriendo',
+      aggregateType: 'SupplyV2CustomerOrder',
+      aggregateId: orden.id,
+      correlationId: `sv2-check-arriendo-${sufijo}`,
+      payload: {},
+    })
+  )
+  // Sin esto, una fila sin marca en PROCESSING sería invisible para el rescate:
+  // exactamente el fallo que la columna existe para cerrar.
+  await assert.rejects(
+    prisma.$executeRaw`UPDATE "supply_v2_outbox_events" SET "status" = 'PROCESSING' WHERE "id" = ${efecto.id}`,
+    /check constraint|violates/i
+  )
+})
+
+// ── H · dead letter ─────────────────────────────────────────────────────────
+
+test('B2·H · agotados los intentos el efecto muere, y el estado financiero no se mueve', async () => {
+  const orden = await compraPendiente()
+  // Pagada de verdad: lo que se demuestra es que la muerte del AVISO no toca
+  // el dinero que ya se movió.
+  const cuerpo = cuerpoProveedor({ eventId: idExterno('b2h'), orderNumber: orden.number, amount: String(orden.total) })
+  const entrada = await recibirEventoExterno({
+    provider: 'TEST_GATEWAY',
+    cuerpoCrudo: cuerpo,
+    cabeceras: cabecerasFirmadas(cuerpo),
+    despachar: false,
+  })
+  assert.equal(entrada.codigo, 'EVENT_ACCEPTED')
+  const antes = { estado: (await ordenDe(orden.id)).status, derechos: await derechosDe(orden.id) }
+
+  // El efecto apunta a una compra que no existe: falla siempre.
+  const efecto = await efectoDe(orden.id)
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { aggregateId: `fantasma-${sufijo}` } })
+  )
+
+  const estados: string[] = []
+  for (let i = 0; i < MAX_INTENTOS; i++) {
+    await sinEmpresa('prueba', (tx) =>
+      tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { status: 'PROCESSING', claimedAt: new Date() } })
+    )
+    const r = await entregarEfecto(efecto.id, como(ctx.ops))
+    estados.push(r.estado)
+  }
+  assert.equal(estados[MAX_INTENTOS - 1], 'DEAD_LETTER', `muere en el intento ${MAX_INTENTOS}`)
+  const fila = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: efecto.id } })
+  assert.equal(fila.status, 'DEAD_LETTER')
+  assert.equal(fila.attempts, MAX_INTENTOS)
+  const muerte = await prisma.auditLog.findFirst({
+    where: { accion: 'SUPPLY_V2_OUTBOX_DEAD_LETTER', entidadId: efecto.id },
+  })
+  assert.ok(muerte, 'la muerte del efecto queda auditada')
+
+  // Lo que importa: el dinero no se movió por esto.
+  assert.equal((await ordenDe(orden.id)).status, antes.estado, 'la compra sigue pagada')
+  assert.equal(await derechosDe(orden.id), antes.derechos, 'con los mismos derechos')
+  const inbox = await prisma.supplyV2ExternalEvent.findFirstOrThrow({ where: { id: entrada.inboxId! } })
+  assert.equal(inbox.status, 'PROCESSED', 'y el evento externo sigue procesado: el aviso no lo deshace')
+})
+
+test('B2·H · un tipo de efecto sin ejecutor no desaparece en silencio', async () => {
+  const orden = await compraPendiente()
+  const efecto = await sinEmpresa('prueba', (tx) =>
+    emitirEfectoEnTx(tx, {
+      eventType: 'supply.order.inventado',
+      aggregateType: 'SupplyV2CustomerOrder',
+      aggregateId: orden.id,
+      correlationId: `sv2-sin-ejecutor-${sufijo}`,
+      payload: {},
+    })
+  )
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { status: 'PROCESSING', claimedAt: new Date() } })
+  )
+  const r = await entregarEfecto(efecto.id, como(ctx.ops))
+  assert.ok(['FAILED', 'DEAD_LETTER'].includes(r.estado))
+  const fila = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: efecto.id } })
+  assert.match(fila.lastError!, /EFECTO_SIN_EJECUTOR/)
+})
+
+test('B2 · sin cuenta designada para la integración no se mueve dinero: el evento espera', async () => {
+  const orden = await compraPendiente()
+  const eventId = idExterno('b2sinactor')
+  const cuerpo = cuerpoProveedor({ eventId, orderNumber: orden.number, amount: String(orden.total) })
+
+  const previo = process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+  try {
+    delete process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+    olvidarActorDelWebhook()
+    const r = await postWebhook(cuerpo)
+    assert.equal(r.status, 500, 'es un fallo NUESTRO de configuración: que lo reintenten')
+    assert.equal(r.codigo, 'INTERNAL_ERROR')
+    assert.equal(r.mensaje, 'error interno', 'y no se le cuenta al proveedor qué nos falta')
+
+    // El evento NO se pierde: quedó guardado, reprogramado y auditado.
+    const fila = await prisma.supplyV2ExternalEvent.findFirstOrThrow({ where: { externalEventId: eventId } })
+    assert.equal(fila.status, 'FAILED')
+    assert.equal(fila.attempts, 1)
+    assert.ok(fila.nextAttemptAt, 'con hora para volver a intentarlo')
+    assert.match(fila.lastError!, /SIN_ACTOR_CONFIGURADO/)
+
+    // Y nada de dinero se movió sin responsable.
+    assert.equal((await ordenDe(orden.id)).status, 'PENDING')
+    assert.equal(await derechosDe(orden.id), 0)
+    assert.equal((await efectosDe(orden.id)).length, 0)
+
+    // Un id mal copiado en la configuración se trata igual que no tenerla:
+    // no se usa a ciegas una clave foránea que no existe.
+    process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID = `no-existe-${sufijo}`
+    olvidarActorDelWebhook()
+    const malo = await postWebhook(cuerpoProveedor({ eventId: idExterno('b2actormalo'), orderNumber: orden.number, amount: String(orden.total) }))
+    assert.equal(malo.status, 500)
+    assert.equal((await ordenDe(orden.id)).status, 'PENDING')
+  } finally {
+    if (previo === undefined) delete process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+    else process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID = previo
+    olvidarActorDelWebhook()
+  }
+
+  // Con la cuenta puesta, el mismo evento se procesa: lo que faltaba era la
+  // configuración, no el evento.
+  const reintento = await postWebhook(cuerpo)
+  assert.equal(reintento.codigo, 'EVENT_ACCEPTED')
+  assert.equal((await ordenDe(orden.id)).status, 'PAID')
+  assert.equal(await derechosDe(orden.id), 1, 'y un solo juego de derechos tras el reintento')
+})
+
+test('B2 · una entrega repetida NO puede devolver a FAILED un evento ya resuelto', async () => {
+  const orden = await compraPendiente()
+  const eventId = idExterno('b2resuelto')
+  const cuerpo = cuerpoProveedor({ eventId, orderNumber: orden.number, amount: String(orden.total) })
+
+  assert.equal((await postWebhook(cuerpo)).codigo, 'EVENT_ACCEPTED')
+  const antes = await prisma.supplyV2ExternalEvent.findFirstOrThrow({ where: { externalEventId: eventId } })
+  assert.equal(antes.status, 'PROCESSED')
+
+  // El proveedor lo reenvía justo cuando la configuración de la integración
+  // falta. La entrega repetida tiene que contestar «ya lo tenía» y dejar la
+  // fila como estaba: un estado final no se deshace por un problema de
+  // configuración.
+  const previo = process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+  try {
+    delete process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+    olvidarActorDelWebhook()
+    const r = await postWebhook(cuerpo)
+    assert.equal(r.status, 200)
+    assert.equal(r.codigo, 'EVENT_REPEATED')
+  } finally {
+    if (previo === undefined) delete process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+    else process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID = previo
+    olvidarActorDelWebhook()
+  }
+
+  const despues = await prisma.supplyV2ExternalEvent.findFirstOrThrow({ where: { externalEventId: eventId } })
+  assert.equal(despues.status, 'PROCESSED', 'sigue resuelto')
+  assert.equal(despues.attempts, antes.attempts, 'no se le contó un intento')
+  assert.equal(despues.lastError, null)
+  assert.equal(await derechosDe(orden.id), 1)
 })

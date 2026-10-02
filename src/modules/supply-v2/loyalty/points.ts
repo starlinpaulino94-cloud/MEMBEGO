@@ -375,10 +375,40 @@ export async function liberarPendientesEnTx(tx: Tx, ctx: ContextoAuditoria, ahor
   return liberados
 }
 
-/** Vence los lotes caducados. Vencer en un programa no toca los demás (§29). */
+/**
+ * Vence los lotes caducados. Vencer en un programa no toca los demás (§29).
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ LA CONSULTA EXCLUYE LOS LOTES YA CONSUMIDOS (corrección · Slice 9)
+ *
+ * Un lote gastado conserva su `availableDelta` —el ledger no se reescribe— y lo
+ * que queda vivo en él es `availableDelta - consumedFromLot`. La versión
+ * anterior solo pedía `availableDelta > 0`, así que los lotes YA CONSUMIDOS
+ * seguían cumpliendo el filtro, y como son los más viejos ocupaban la ventana
+ * de `limite` filas entera. El bucle los saltaba uno por uno con `continue` y
+ * la función devolvía 0.
+ *
+ * El efecto no era una lentitud: era que **los puntos dejaban de vencer para
+ * siempre**. En cuanto se acumulaban `limite` lotes consumidos con fecha de
+ * caducidad, el cron barría cada día los mismos lotes muertos y no llegaba
+ * nunca a los vivos. Membego seguía debiendo recompensas que debían haber
+ * caducado.
+ *
+ * Se encontró con datos reales de la base de pruebas —202 lotes consumidos
+ * frente a un tope de 200, y 33 lotes vivos que ya debían haber vencido— al
+ * repetir la suite del Slice 9. La prueba `H2b` lo fija.
+ */
 export async function vencerPuntosEnTx(tx: Tx, ctx: ContextoAuditoria, ahora = new Date(), limite = 200): Promise<number> {
   const lotes = await tx.supplyV2PointsMovement.findMany({
-    where: { type: { in: [...TIPOS_QUE_ABREN_LOTE] }, availableDelta: { gt: 0 }, expiresAt: { lte: ahora } },
+    where: {
+      type: { in: [...TIPOS_QUE_ABREN_LOTE] },
+      availableDelta: { gt: 0 },
+      expiresAt: { lte: ahora },
+      // Solo lo que de verdad le queda vivo al lote. La comparación entre dos
+      // columnas la hace la base (referencia de campo de Prisma): calcularla en
+      // JavaScript es justo lo que obligaba a traerse los muertos.
+      consumedFromLot: { lt: tx.supplyV2PointsMovement.fields.availableDelta },
+    },
     select: { id: true, availableDelta: true, consumedFromLot: true, accountId: true, account: { select: { programId: true, customerId: true } } },
     orderBy: { expiresAt: 'asc' },
     take: limite,

@@ -97,7 +97,12 @@ export async function reclamarEfectos(limite = 20, ahora = new Date()): Promise<
     for (const c of candidatos) {
       const tomado = await tx.supplyV2OutboxEvent.updateMany({
         where: { id: c.id, status: { in: ['PENDING', 'FAILED'] } },
-        data: { status: 'PROCESSING' },
+        // `claimedAt` es el ARRIENDO (Bloque 2): sin él, una fila que un
+        // proceso muerto dejó en PROCESSING es indistinguible de una que
+        // alguien está entregando ahora mismo, y el rescate no podría correr
+        // sin robarle el trabajo a un worker vivo. Un CHECK de la base exige
+        // que toda fila en PROCESSING la tenga.
+        data: { status: 'PROCESSING', claimedAt: ahora },
       })
       if (tomado.count === 0) continue // otro worker se lo llevó
       const fila = await tx.supplyV2OutboxEvent.findUniqueOrThrow({

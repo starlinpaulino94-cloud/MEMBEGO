@@ -54,6 +54,18 @@ export async function ejecutarTrabajo(carga: CargaTrabajo): Promise<ResultadoTra
     }
     case 'reintento-entrega':
       return reintentarEntrega(carga)
+    case 'supply-v2-efecto': {
+      // Idempotente por construcción: una fila ya entregada no se vuelve a
+      // entregar, y el efecto lleva una clave estable para que el destino
+      // tampoco la repita. Ver `supply-v2/operations/worker.ts`.
+      const { entregarEfecto } = await import('@/modules/supply-v2/operations/worker')
+      const r = await entregarEfecto(carga.outboxId, {
+        actorId: null,
+        ipAddress: null,
+        userAgent: 'cola:supply-v2-efecto',
+      })
+      return { procesados: r.estado === 'DELIVERED' ? 1 : 0, detalle: `${r.estado}: ${r.detalle}` }
+    }
   }
 }
 
