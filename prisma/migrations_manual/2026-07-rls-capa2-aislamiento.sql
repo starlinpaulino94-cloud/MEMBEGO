@@ -562,6 +562,27 @@ BEGIN
   END LOOP;
   RAISE NOTICE 'Supply 2.0 · incidencias: del proveedor si lo tienen, de plataforma si no.';
 
+  -- ── Membego Supply 2.0 · OPERACIÓN (Slice 9, bloque 4) ────────────────────
+  --
+  -- `supply_v2_operational_switches` son los interruptores de la PLATAFORMA
+  -- —apagar los pagos externos no es una decisión de un inquilino— y
+  -- `supply_v2_operational_alerts` son las condiciones que vigila el Centro de
+  -- Operaciones, que es de superadmin. Ninguna de las dos lleva `companyId` y
+  -- ninguna debe verse en modo inquilino: una alerta dice cuántos efectos van
+  -- atrasados en todo Membego, y un interruptor es un control global.
+  FOREACH cond IN ARRAY ARRAY['supply_v2_operational_switches', 'supply_v2_operational_alerts'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Supply 2.0 · interruptores y alertas: solo en modo omnisciente.';
+
   -- ── Lo que quedó fuera ────────────────────────────────────────────────────
   --
   -- Sin política, RLS deniega. Aquí no debería quedar nada: si aparece algo, es

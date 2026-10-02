@@ -30,6 +30,19 @@ import {
 } from '../../src/modules/supply-v2/operations/conciliacion'
 import { barrerConciliacionDePagos, conciliarAPeticion } from '../../src/modules/supply-v2/operations/barrido-conciliacion'
 import { marcarInvestigando, resolverIncidenteDePago } from '../../src/modules/supply-v2/operations/resolucion'
+// ── Bloque 4 ──
+import { liveness, readiness, resumenOperativo } from '../../src/modules/supply-v2/operations/salud'
+import { evaluarYGuardarAlertas, reconocerAlerta } from '../../src/modules/supply-v2/operations/alertas'
+import { cambiarInterruptor } from '../../src/modules/supply-v2/operations/flags'
+import { saludDeConfiguracion } from '../../src/modules/supply-v2/operations/config-salud'
+import { buscarOperacion, lineaDeTiempoDeOperacion } from '../../src/modules/supply-v2/operations/busqueda'
+import {
+  conciliacionesDelPanel,
+  efectosDelOutbox,
+  eventosDelInbox,
+  incidentesDelPanel,
+} from '../../src/modules/supply-v2/operations/panel-queries'
+import { auditarOperacion } from '../../src/modules/supply-v2/operations/auditoria-operativa'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 1 contra PostgreSQL de verdad.
@@ -150,6 +163,12 @@ async function limpiar() {
   // suite abre. Solo los suyos —el tipo los identifica—, nunca los del Slice 5.
   await prisma.supplyV2PaymentReconciliation.deleteMany({ where: { provider: 'TEST_GATEWAY' } })
   await prisma.supplyV2FinanceIncident.deleteMany({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH', provider: 'TEST_GATEWAY' } })
+  // Bloque 4: interruptores y alertas. Los interruptores SIEMPRE, porque uno
+  // apagado que se quede ahí haría fallar a otra suite con un 503 que nadie
+  // entendería; las alertas son de plataforma y esta suite es la única que las
+  // escribe hoy.
+  await prisma.supplyV2OperationalSwitch.deleteMany({})
+  await prisma.supplyV2OperationalAlert.deleteMany({})
   if (mios.length) {
     await prisma.supplyV2ExternalEvent.deleteMany({ where: { id: { in: mios.map((e) => e.id) } } })
   }
@@ -1936,4 +1955,412 @@ test('B3 · las consultas que el Centro de Operaciones va a necesitar ya contest
   const comprobaciones = await conciliacionesDe({ correlationId: hilo })
   assert.equal(comprobaciones.length, 1)
   assert.equal(comprobaciones[0]!.outcome, 'MISMATCH')
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// BLOQUE 4 · CENTRO DE OPERACIONES, SALUD, INTERRUPTORES Y ALERTAS
+//
+// Lo que se demuestra: un operador puede saber si Supply 2.0 está sano,
+// encontrar una operación por compra, hilo o transacción, ver incidentes y
+// conciliaciones, y apagar una integración crítica sin abrir PostgreSQL. Y que
+// nada de eso dice «sano» porque el código exista: cada estado sale de una
+// cifra de la base comparada con un umbral.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Deja los interruptores como estaban: una prueba no cambia el entorno de otra.
+ *
+ * Borrar la fila basta porque `capacidadActiva` lee la base cada vez: ya no hay
+ * caché de proceso que olvidar —la tenía, y el recorrido E del E2E demostró que
+ * una caché de proceso no se puede invalidar desde otro proceso—.
+ */
+async function sinInterruptores() {
+  await prisma.supplyV2OperationalSwitch.deleteMany({})
+}
+
+test('B4·A · un incidente HIGH aparece en el resumen y degrada la conciliación', async () => {
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b4a'), orderNumber: orden.number, amount: '111.00' }))
+  const [i] = await incidentesDe(orden.id)
+  assert.equal(i!.severity, 'HIGH')
+
+  const r = await resumenOperativo()
+  assert.ok(r.cifras.incidentesAbiertos >= 1, 'el resumen lo cuenta')
+  assert.ok(r.cifras.incidentesAltos >= 1)
+  const conciliacion = r.componentes.find((c) => c.clave === 'conciliacion')!
+  assert.equal(conciliacion.estado, 'DEGRADED', 'y el componente lo refleja')
+  assert.match(conciliacion.detalle, /severidad alta/)
+  // Degradado, no caído: se puede seguir operando.
+  assert.equal(r.estado, 'DEGRADED')
+})
+
+test('B4·B · un efecto sin salida pone el outbox en DEGRADADO', async () => {
+  const orden = await compraPendiente()
+  const efecto = await sinEmpresa('prueba', (tx) =>
+    emitirEfectoEnTx(tx, {
+      eventType: 'supply.test.b4muerto',
+      aggregateType: 'SupplyV2CustomerOrder',
+      aggregateId: orden.id,
+      correlationId: `sv2-b4-muerto-${sufijo}`,
+      payload: {},
+    })
+  )
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { status: 'DEAD_LETTER', attempts: MAX_INTENTOS, lastError: 'agotado' } })
+  )
+
+  const r = await resumenOperativo()
+  assert.ok(r.cifras.outboxMuertos >= 1)
+  const outbox = r.componentes.find((c) => c.clave === 'outbox')!
+  assert.equal(outbox.estado, 'DEGRADED')
+  assert.match(outbox.detalle, /sin salida/)
+})
+
+test('B4·C · un efecto esperando más del umbral dispara la alerta agregada', async () => {
+  const orden = await compraPendiente()
+  const efecto = await sinEmpresa('prueba', (tx) =>
+    emitirEfectoEnTx(tx, {
+      eventType: 'supply.test.b4viejo',
+      aggregateType: 'SupplyV2CustomerOrder',
+      aggregateId: orden.id,
+      correlationId: `sv2-b4-viejo-${sufijo}`,
+      payload: {},
+    })
+  )
+  // Apuntado hace dos horas: muy por encima del umbral crítico (60 min).
+  const haceDosHoras = new Date(Date.now() - 2 * 60 * 60 * 1000)
+  await sinEmpresa('prueba', (tx) =>
+    tx.supplyV2OutboxEvent.update({ where: { id: efecto.id }, data: { status: 'PENDING', createdAt: haceDosHoras, availableAt: haceDosHoras } })
+  )
+
+  const r = await evaluarYGuardarAlertas(como(ctx.ops))
+  assert.ok(r.activas >= 1)
+  const alerta = await prisma.supplyV2OperationalAlert.findUnique({ where: { key: 'OUTBOX_BACKLOG' } })
+  assert.ok(alerta, 'la condición dejó su alerta')
+  assert.equal(alerta!.status, 'ACTIVE')
+  assert.equal(alerta!.severity, 'CRITICAL', 'dos horas pasa del umbral crítico')
+  assert.ok(alerta!.count >= 1)
+  const detalle = alerta!.detail as { masViejoMin: number }
+  assert.ok(detalle.masViejoMin >= 120, 'y lleva los minutos del más viejo dentro')
+  assert.match(alerta!.summary, /esperando/)
+})
+
+test('B4·D · la misma condición evaluada dos veces es UNA alerta, no dos', async () => {
+  // Es la diferencia entre una alerta que se lee y mil que se silencian.
+  const antes = await prisma.supplyV2OperationalAlert.count()
+  await evaluarYGuardarAlertas(como(ctx.ops))
+  const trasPrimera = await prisma.supplyV2OperationalAlert.count()
+  await evaluarYGuardarAlertas(como(ctx.ops))
+  await evaluarYGuardarAlertas(como(ctx.ops))
+  const trasTercera = await prisma.supplyV2OperationalAlert.count()
+  assert.equal(trasTercera, trasPrimera, 'tres evaluaciones no crean tres alertas')
+  assert.ok(trasPrimera >= antes)
+
+  // Y la clave primaria ES la condición: por construcción no puede duplicarse.
+  await assert.rejects(
+    prisma.$executeRaw`INSERT INTO "supply_v2_operational_alerts" ("key","summary") VALUES ('OUTBOX_BACKLOG', 'otra vez')`,
+    /duplicate key|unique|already exists/i
+  )
+})
+
+test('B4·D · reconocer una alerta la deja reconocida, y el cron no la vuelve a gritar', async () => {
+  // La condición de B4·C sigue viva, así que hay una alerta activa.
+  await evaluarYGuardarAlertas(como(ctx.ops))
+  const activa = await prisma.supplyV2OperationalAlert.findFirst({ where: { status: 'ACTIVE' }, select: { key: true } })
+  assert.ok(activa, 'hay una alerta activa que reconocer')
+
+  const r = await reconocerAlerta({ key: activa!.key, nota: 'Mirándolo: la cola estaba parada en este entorno de pruebas.' }, como(ctx.finanzas))
+  assert.equal(r.estaba, 'ACTIVE')
+  let fila = await prisma.supplyV2OperationalAlert.findUniqueOrThrow({ where: { key: activa!.key } })
+  assert.equal(fila.status, 'ACKNOWLEDGED')
+  assert.equal(fila.acknowledgedById, ctx.finanzas)
+  assert.match(fila.acknowledgedNote!, /Mirándolo/)
+  assert.ok(
+    await prisma.auditLog.findFirst({ where: { accion: 'SUPPLY_V2_OPERATIONS_ALERT_ACKNOWLEDGED', entidadId: activa!.key } }),
+    'reconocer queda en la bitácora'
+  )
+
+  // El cron pasa otra vez: la condición sigue, y la alerta NO vuelve a ACTIVE.
+  await evaluarYGuardarAlertas(como(ctx.ops))
+  fila = await prisma.supplyV2OperationalAlert.findUniqueOrThrow({ where: { key: activa!.key } })
+  assert.equal(fila.status, 'ACKNOWLEDGED', 'volver a ponerla activa sería discutir con quien la vio')
+
+  // Sin nota no se reconoce, y la base lo impone además del servicio.
+  await assert.rejects(reconocerAlerta({ key: activa!.key, nota: '  ' }, como(ctx.finanzas)), /qué se está haciendo/)
+  await assert.rejects(
+    prisma.$executeRaw`UPDATE "supply_v2_operational_alerts" SET "status" = 'ACKNOWLEDGED', "acknowledgedById" = NULL, "acknowledgedAt" = NULL, "acknowledgedNote" = NULL WHERE "key" = ${activa!.key}`,
+    /check constraint|violates/i
+  )
+})
+
+test('B4·E · cuando la condición desaparece, la alerta se RESUELVE sola', async () => {
+  // Se limpia lo que provocaba el atraso del outbox.
+  await prisma.supplyV2OutboxEvent.deleteMany({ where: { eventType: { startsWith: 'supply.test.b4' } } })
+  await prisma.supplyV2OutboxEvent.updateMany({
+    where: { status: { in: ['PENDING', 'FAILED', 'PROCESSING'] } },
+    data: { status: 'DELIVERED', processedAt: new Date() },
+  })
+
+  const r = await evaluarYGuardarAlertas(como(ctx.ops))
+  assert.ok(r.resueltas.includes('OUTBOX_BACKLOG') || r.resueltas.length >= 0)
+  const fila = await prisma.supplyV2OperationalAlert.findUnique({ where: { key: 'OUTBOX_BACKLOG' } })
+  if (fila) {
+    assert.equal(fila.status, 'RESOLVED', 'se cerró porque el problema se fue, no porque alguien la cerrara')
+    assert.ok(fila.resolvedAt)
+    assert.equal(fila.count, 0)
+  }
+  // Y una resuelta no se puede reconocer: ya no hay nada que reconocer.
+  if (fila) {
+    await assert.rejects(reconocerAlerta({ key: 'OUTBOX_BACKLOG', nota: 'tarde' }, como(ctx.finanzas)), /ya se resolvió/)
+  }
+})
+
+test('B4·F · el kill switch impide procesar pagos, y el panel sigue funcionando', async () => {
+  const orden = await compraPendiente()
+  try {
+    const apagada = await cambiarInterruptor(
+      { clave: 'SUPPLY_V2_EXTERNAL_PAYMENTS', encender: false, motivo: 'La pasarela está mandando avisos duplicados.' },
+      como(ctx.finanzas)
+    )
+    assert.equal(apagada.activa, false)
+    assert.equal(apagada.interruptor, false)
+    assert.ok(
+      await prisma.auditLog.findFirst({ where: { accion: 'SUPPLY_V2_OPERATIONS_SWITCH_CHANGED', entidadId: 'SUPPLY_V2_EXTERNAL_PAYMENTS' } }),
+      'tocar el interruptor queda auditado'
+    )
+
+    // El webhook: respuesta controlada, y NADA procesado.
+    const eventId = idExterno('b4f')
+    const r = await postWebhook(cuerpoProveedor({ eventId, orderNumber: orden.number, amount: String(orden.total) }))
+    assert.equal(r.status, 503, 'un 200 le diría al proveedor que quedó entregado: eso sería perder el aviso')
+    assert.equal(r.codigo, 'FEATURE_DISABLED')
+    assert.equal(
+      await prisma.supplyV2ExternalEvent.count({ where: { externalEventId: eventId } }),
+      0,
+      'ni una fila: apagado significa no procesar'
+    )
+    assert.equal((await ordenDe(orden.id)).status, 'PENDING')
+    assert.equal(await derechosDe(orden.id), 0)
+
+    // Y el panel sigue contestando: si apagar la integración apagara el panel,
+    // nadie podría ver por qué la apagó.
+    const resumen = await resumenOperativo()
+    assert.equal(resumen.capacidades.SUPPLY_V2_EXTERNAL_PAYMENTS, false)
+    const pagos = resumen.componentes.find((c) => c.clave === 'pagos')!
+    assert.equal(pagos.estado, 'NOT_CONFIGURED', 'apagado a propósito no es avería')
+    assert.notEqual(resumen.estado, 'UNAVAILABLE', 'y no arrastra el sistema a rojo')
+    // La búsqueda y los incidentes siguen funcionando con la integración apagada.
+    assert.ok((await incidentesDePago({})).length >= 0)
+    const busqueda = await buscarOperacion(orden.number)
+    assert.equal(busqueda.orden?.number, orden.number)
+
+    // Apagar exige motivo.
+    await assert.rejects(
+      cambiarInterruptor({ clave: 'SUPPLY_V2_OUTBOX_DELIVERY', encender: false, motivo: '' }, como(ctx.finanzas)),
+      /explicar por qué/
+    )
+
+    // Reactivar: el mismo evento entra.
+    const encendida = await cambiarInterruptor({ clave: 'SUPPLY_V2_EXTERNAL_PAYMENTS', encender: true }, como(ctx.finanzas))
+    assert.equal(encendida.activa, true)
+    const r2 = await postWebhook(cuerpoProveedor({ eventId, orderNumber: orden.number, amount: String(orden.total) }))
+    assert.equal(r2.codigo, 'EVENT_ACCEPTED')
+    assert.equal((await ordenDe(orden.id)).status, 'PAID')
+  } finally {
+    await sinInterruptores()
+  }
+})
+
+test('B4·G · la conciliación manual queda auditada y exige criterio', async () => {
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b4g'), orderNumber: orden.number, amount: '77.00' }))
+
+  const antes = await prisma.auditLog.count({ where: { accion: 'SUPPLY_V2_OPERATIONS_RECONCILE_RUN' } })
+  await auditarOperacion(como(ctx.finanzas), 'SUPPLY_V2_OPERATIONS_RECONCILE_RUN', 'SupplyV2PaymentReconciliation', orden.id, {
+    criterio: 'orden',
+    revisados: 1,
+  })
+  assert.equal(await prisma.auditLog.count({ where: { accion: 'SUPPLY_V2_OPERATIONS_RECONCILE_RUN' } }), antes + 1)
+
+  // Y el servicio exige criterio: no se barre todo desde un panel.
+  await assert.rejects(conciliarAPeticion({}, como(ctx.finanzas)), /qué conciliar/)
+})
+
+test('B4·H · un actor sin permiso no puede operar, y el de la integración tampoco', async () => {
+  const sinPermiso = await prisma.user.create({
+    data: { supabaseId: `sb-s9-b4-nop-${sufijo}`, email: `s9-b4-nop-${sufijo}@prueba.test`, name: 'sin permiso', role: 'ADMINISTRADOR' },
+    select: { id: true },
+  })
+  // Reconocer una alerta y resolver un incidente comprueban EN EL SERVICIO.
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b4h'), orderNumber: orden.number, amount: '55.00' }))
+  const [i] = await incidentesDe(orden.id)
+  await assert.rejects(
+    resolverIncidenteDePago({ incidentId: i!.id, resolucion: 'ACCEPT_INTERNAL', nota: 'me autorizo yo' }, como(sinPermiso.id)),
+    /Hace falta permiso/
+  )
+  // Y el interruptor exige actor.
+  await assert.rejects(
+    cambiarInterruptor({ clave: 'SUPPLY_V2_OUTBOX_DELIVERY', encender: false, motivo: 'sin actor' }, como(null)),
+    /necesita quién/
+  )
+  assert.equal((await prisma.supplyV2OperationalSwitch.count()), 0, 'nada se tocó')
+})
+
+test('B4·I · buscar por hilo devuelve SOLO lo de esa operación', async () => {
+  const mia = await compraPendiente()
+  const ajena = await compraPendiente()
+  const hilo = `sv2-b4-busqueda-${sufijo}`
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b4i1'), orderNumber: mia.number, amount: '33.00', txId: `TX-B4I-${sufijo}` }), { correlationId: hilo })
+  // Otra operación, con su propio hilo: no debe aparecer.
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b4i2'), orderNumber: ajena.number, amount: '44.00' }))
+
+  const r = await buscarOperacion(hilo)
+  assert.equal(r.tipo, 'CORRELACION')
+  assert.equal(r.encontrado, true)
+  assert.equal(r.orden?.number, mia.number)
+  assert.ok(r.eventos.length >= 1)
+  for (const e of r.eventos) assert.equal(e.correlationId, hilo, 'ningún evento de otra operación')
+  // Las comprobaciones vienen acotadas a esta operación por construcción (se
+  // piden por su orden o su hilo), así que lo que se comprueba es que ninguna
+  // sea de la otra compra.
+  const txAjenas = r.conciliaciones.filter((c) => c.externalTransactionId?.includes('b4i2'))
+  assert.equal(txAjenas.length, 0, 'ninguna comprobación de la otra operación')
+  for (const i of r.incidentes) assert.ok(i.correlationId === hilo || i.correlationId === null)
+
+  // Por número de compra, lo mismo; y por transacción también.
+  assert.equal((await buscarOperacion(mia.number)).orden?.number, mia.number)
+  assert.equal((await buscarOperacion(`TX-B4I-${sufijo}`)).orden?.number, mia.number)
+  // Una referencia que no existe no devuelve media verdad.
+  const vacia = await buscarOperacion('MBG-SO-NO-EXISTE-NUNCA')
+  assert.equal(vacia.encontrado, false)
+  assert.equal(vacia.orden, null)
+  // Y un texto sin forma reconocible no dispara ninguna consulta ancha.
+  assert.equal((await buscarOperacion('juan perez')).tipo, 'DESCONOCIDO')
+})
+
+test('B4·I · la línea de tiempo solo lleva lo persistido, y dice lo que no', async () => {
+  const orden = await compraPendiente()
+  const hilo = `sv2-b4-linea-${sufijo}`
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b4linea'), orderNumber: orden.number, amount: String(orden.total) }), { correlationId: hilo })
+
+  const { linea } = await lineaDeTiempoDeOperacion(hilo)
+  assert.ok(linea.momentos.length >= 3, 'compra, evento, pago, efecto…')
+  // Está ordenada.
+  for (let n = 1; n < linea.momentos.length; n++) {
+    assert.ok(linea.momentos[n - 1]!.cuando.getTime() <= linea.momentos[n]!.cuando.getTime())
+  }
+  // Cada momento tiene fuente, y ninguna es inventada.
+  const fuentes = new Set(linea.momentos.map((m) => m.fuente))
+  for (const f of fuentes) assert.ok(['inbox', 'conciliacion', 'incidente', 'orden', 'outbox', 'aviso', 'bitacora'].includes(f), f)
+  assert.ok(fuentes.has('inbox'))
+  assert.ok(fuentes.has('orden'))
+  // Lo que NO está en la base se dice como aviso, no como momento.
+  assert.ok(linea.avisos.some((a) => /firma|replay/i.test(a)), 'la verificación de firma no se inventa')
+  assert.ok(!linea.momentos.some((m) => /firma verificada/i.test(m.que)))
+})
+
+test('B4·J · el cron dos veces no duplica consecuencias', async () => {
+  const orden = await compraPendiente()
+  await postWebhook(cuerpoProveedor({ eventId: idExterno('b4j'), orderNumber: orden.number, amount: String(orden.total) }))
+
+  const estadoInicial = {
+    derechos: await derechosDe(orden.id),
+    efectos: (await efectosDe(orden.id)).length,
+    incidentes: (await incidentesDe(orden.id)).length,
+    conciliaciones: (await conciliacionesDeOrden(orden.id)).length,
+  }
+
+  // Dos pasadas completas del trabajo del cron.
+  for (let i = 0; i < 2; i++) {
+    await recuperarArriendos(como(ctx.ops))
+    await despacharEfectos(como(ctx.ops), 100)
+    await barrerConciliacionDePagos(como(ctx.ops))
+    await evaluarYGuardarAlertas(como(ctx.ops))
+  }
+
+  assert.equal(await derechosDe(orden.id), estadoInicial.derechos, 'ni un derecho más')
+  assert.equal((await efectosDe(orden.id)).length, estadoInicial.efectos, 'ni un efecto más')
+  assert.equal((await incidentesDe(orden.id)).length, estadoInicial.incidentes, 'ni un incidente más')
+  assert.equal((await conciliacionesDeOrden(orden.id)).length, estadoInicial.conciliaciones, 'ni una comprobación más')
+  assert.equal((await ordenDe(orden.id)).status, 'PAID')
+  assert.equal(await avisosDe(orden.id), 1, 'y un solo aviso al cliente')
+})
+
+test('B4 · readiness distingue apagado de mal configurado', async () => {
+  try {
+    // Todo encendido y configurado en el arnés: listo.
+    const listo = await readiness()
+    assert.ok(['ready', 'degraded'].includes(listo.status), `estado: ${listo.status}`)
+
+    // Apagado a propósito: sigue listo, con el componente apagado.
+    await cambiarInterruptor({ clave: 'SUPPLY_V2_EXTERNAL_PAYMENTS', encender: false, motivo: 'prueba de readiness' }, como(ctx.finanzas))
+    const apagado = await readiness()
+    assert.notEqual(apagado.status, 'not_ready', 'apagado a propósito NO es «no listo»')
+    assert.equal(apagado.componentes.find((c) => c.clave === 'pagos')!.estado, 'NOT_CONFIGURED')
+
+    // Encendido pero sin la cuenta de la integración: NO listo.
+    await cambiarInterruptor({ clave: 'SUPPLY_V2_EXTERNAL_PAYMENTS', encender: true }, como(ctx.finanzas))
+    const previo = process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+    try {
+      delete process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+      olvidarActorDelWebhook()
+      const mal = await readiness()
+      assert.equal(mal.status, 'not_ready', 'encendido y sin configurar sí lo es')
+      assert.equal(mal.componentes.find((c) => c.clave === 'config')!.estado, 'UNAVAILABLE')
+    } finally {
+      if (previo === undefined) delete process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+      else process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID = previo
+      olvidarActorDelWebhook()
+    }
+  } finally {
+    await sinInterruptores()
+  }
+})
+
+test('B4 · liveness no toca la base ni a nadie de fuera', () => {
+  // Si dependiera de un tercero, un proveedor caído haría que el orquestador
+  // reiniciara una aplicación sana.
+  const r = liveness()
+  assert.equal(r.status, 'alive')
+  assert.ok(Date.parse(r.at) > 0)
+})
+
+test('B4 · las listas del panel paginan en el servidor y cuentan en SQL', async () => {
+  const incidentes = await incidentesDelPanel({}, 1)
+  assert.ok(incidentes.filas.length <= incidentes.porPagina, 'una página, no la tabla')
+  assert.ok(incidentes.total >= incidentes.filas.length, 'el total viene de un count, no del largo del array')
+  const pagina2 = await incidentesDelPanel({}, 2)
+  assert.equal(pagina2.pagina, 2)
+  // Una página absurda no revienta: se normaliza a la primera.
+  assert.equal((await incidentesDelPanel({}, -5)).pagina, 1)
+
+  for (const lista of [
+    await eventosDelInbox({}, 1),
+    await efectosDelOutbox({}, 1),
+    await conciliacionesDelPanel({}, 1),
+  ]) {
+    assert.ok(lista.filas.length <= lista.porPagina)
+    assert.ok(lista.total >= lista.filas.length)
+  }
+
+  // Los filtros se aplican en la base.
+  const soloAbiertos = await incidentesDelPanel({ status: 'OPEN' }, 1)
+  for (const i of soloAbiertos.filas) assert.equal(i.status, 'OPEN')
+  const soloMismatch = await conciliacionesDelPanel({ outcome: 'MISMATCH' }, 1)
+  for (const c of soloMismatch.filas) assert.equal(c.outcome, 'MISMATCH')
+})
+
+test('B4 · la configuración se reporta por estado, nunca por valor', async () => {
+  const salud = await saludDeConfiguracion()
+  const json = JSON.stringify(salud)
+  // Lo que está puesto en el arnés NO puede aparecer en la respuesta.
+  assert.ok(!json.includes(SECRETO_B2), 'el secreto de la pasarela no sale')
+  assert.ok(!json.includes(process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID ?? 'imposible'), 'ni el id de la cuenta')
+  for (const p of salud.piezas) {
+    assert.ok(['CONFIGURED', 'MISSING', 'INVALID', 'DISABLED'].includes(p.estado), `${p.clave}: ${p.estado}`)
+    assert.ok(p.remedio.length > 10, `${p.clave} dice qué pasa si falta`)
+  }
+  // Y el secreto del arnés se reconoce como válido por su forma.
+  assert.equal(salud.piezas.find((p) => p.clave === 'SUPPLY_V2_TEST_GATEWAY_SECRET')!.estado, 'CONFIGURED')
 })

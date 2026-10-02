@@ -429,6 +429,13 @@ enum AuditAccion {
   SUPPLY_V2_PAYMENT_RECONCILIATION_CREATED
   SUPPLY_V2_FINANCE_INCIDENT_INVESTIGATING
 
+  // Slice 9 · bloque 4: lo que un operador hace desde el panel. No se audita
+  // la LECTURA —un panel que registra cada mirada llena la bitácora de ruido y
+  // esconde las decisiones—, solo lo que cambia algo.
+  SUPPLY_V2_OPERATIONS_SWITCH_CHANGED
+  SUPPLY_V2_OPERATIONS_RECONCILE_RUN
+  SUPPLY_V2_OPERATIONS_ALERT_ACKNOWLEDGED
+
   // ── Supply 2.0 · Slice 8 · fidelización (01-10-2026) ─────────────────────
   // Programas, membresías, referidos, puntos y recompensas. Un ajuste manual
   // de puntos exige motivo y queda aquí: no hay forma de borrar un movimiento
@@ -681,6 +688,10 @@ model User {
   // Slice 9 · quién reintentó a mano un evento externo o un efecto del outbox.
   supplyV2EventosReintentados SupplyV2ExternalEvent[]        @relation("SupplyV2ExternalEventRetriedBy")
   supplyV2OutboxReintentados  SupplyV2OutboxEvent[]          @relation("SupplyV2OutboxRetriedBy")
+
+  // Slice 9 · bloque 4 · quién tocó un interruptor y quién reconoció una alerta.
+  supplyV2Interruptores       SupplyV2OperationalSwitch[]    @relation("SupplyV2SwitchChangedBy")
+  supplyV2AlertasReconocidas  SupplyV2OperationalAlert[]     @relation("SupplyV2AlertAcknowledgedBy")
 
   // Slice 8 · fidelización: membresías, referidos, puntos y recompensas
   supplyV2ProgramasCreados        SupplyV2LoyaltyProgram[]        @relation("SupplyV2LoyaltyProgramCreatedBy")

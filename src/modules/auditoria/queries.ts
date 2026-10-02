@@ -282,6 +282,9 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPPLY_V2_OUTBOX_RETRIED: 'Supply 2.0 · efecto pendiente reintentado a mano',
   SUPPLY_V2_PAYMENT_RECONCILIATION_CREATED: 'Supply 2.0 · pago externo conciliado',
   SUPPLY_V2_FINANCE_INCIDENT_INVESTIGATING: 'Supply 2.0 · incidencia en investigación',
+  SUPPLY_V2_OPERATIONS_SWITCH_CHANGED: 'Supply 2.0 · interruptor operativo cambiado',
+  SUPPLY_V2_OPERATIONS_RECONCILE_RUN: 'Supply 2.0 · conciliación lanzada a mano',
+  SUPPLY_V2_OPERATIONS_ALERT_ACKNOWLEDGED: 'Supply 2.0 · alerta reconocida',
   // Slice 8 · fidelización
   SUPPLY_V2_LOYALTY_PROGRAM_CREATED: 'Supply 2.0 · programa de fidelización creado',
   SUPPLY_V2_LOYALTY_PROGRAM_SUBMITTED: 'Supply 2.0 · programa de fidelización enviado a revisión',

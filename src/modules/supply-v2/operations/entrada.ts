@@ -3,6 +3,7 @@ import type { ContextoAuditoria } from '../core/auditoria'
 import { adaptadorDe, type EventoExternoAdaptado } from './adaptadores'
 import { normalizarCorrelationId } from './correlacion'
 import { EVENTO_RESUELTO, sanearError } from './domain'
+import { capacidadActiva } from './flags'
 import { verificadorDe } from './firma'
 import { anotarFalloDeProceso, procesarEventoExterno, registrarEventoExterno } from './inbox'
 import { anotarSupply, anotarYContar } from './log'
@@ -76,6 +77,25 @@ export async function recibirEventoExterno(p: PeticionEntrante): Promise<Resulta
     actorId: null,
     ipAddress: p.ip ?? null,
     userAgent: p.userAgent ?? 'webhook:supply-v2',
+  }
+
+  // ── 0 · ¿está encendida la integración? (bloque 4 · §10, §11) ────────────
+  //
+  // Lo PRIMERO, antes de verificar la firma y antes de tocar la base. Si está
+  // apagada no se procesa NADA y se responde 503: el proveedor lo reintentará
+  // cuando se reactive. Lo que no se hace es aceptar en silencio —un 200 sin
+  // procesar le diría que quedó entregado y no volvería a mandarlo, que es
+  // perder un aviso de pago con todas las letras—.
+  //
+  // Esto apaga el PROCESAMIENTO. El Centro de Operaciones, la búsqueda, la
+  // investigación y la resolución manual siguen funcionando: si apagar la
+  // integración apagara el panel, nadie podría ver por qué la apagó.
+  if (!(await capacidadActiva('SUPPLY_V2_EXTERNAL_PAYMENTS'))) {
+    return fin(
+      { codigo: 'FEATURE_DISABLED', correlationId, detalle: 'pagos externos apagados' },
+      { provider: p.provider },
+      'capacidad_apagada'
+    )
   }
 
   // ── 1 · ¿sabemos quién es? ────────────────────────────────────────────────
@@ -222,7 +242,7 @@ export async function recibirEventoExterno(p: PeticionEntrante): Promise<Resulta
     // respuesta: si encolar falla, el efecto se queda apuntado y lo recoge el
     // cron. Lo que se le contesta al proveedor describe qué pasó con el pago,
     // no si el aviso salió.
-    if (p.despachar !== false) {
+    if (p.despachar !== false && (await capacidadActiva('SUPPLY_V2_OUTBOX_DELIVERY'))) {
       try {
         // Con la hora DE AHORA, no con la del principio de la petición: el
         // efecto se acaba de escribir, así que su `availableAt` es posterior a

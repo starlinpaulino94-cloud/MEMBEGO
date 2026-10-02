@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { autorizarCron } from '@/lib/cron-auth'
 import { barridoSupplyV2 } from '@/modules/supply-v2/commerce/barrido'
 import { despacharEfectos, recuperarArriendos } from '@/modules/supply-v2/operations/worker'
+import { barrerConciliacionDePagos } from '@/modules/supply-v2/operations/barrido-conciliacion'
+import { evaluarYGuardarAlertas } from '@/modules/supply-v2/operations/alertas'
+import { capacidadActiva } from '@/modules/supply-v2/operations/flags'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -45,16 +48,55 @@ export async function GET(req: NextRequest) {
   if (denegado) return denegado
   const ctx = { actorId: null, ipAddress: null, userAgent: 'cron:supply-v2' }
   const resultado = await barridoSupplyV2()
-  const rescate = await recuperarArriendos(ctx)
-  const despacho = await despacharEfectos(ctx, 100)
+
+  // ── SLICE 9 · BLOQUE 4 · el resto del trabajo operativo ──────────────────
+  //
+  // Orden deliberado, y cada paso respeta su interruptor:
+  //
+  //   1. RESCATAR arriendos abandonados, para que lo que un worker muerto dejó
+  //      reclamado vuelva a estar disponible antes de despachar.
+  //   2. DESPACHAR el outbox: lo recién rescatado se va en la misma pasada.
+  //   3. CONCILIAR lo reciente: detecta desacuerdos que el webhook no vio
+  //      —un aviso perdido, una orden cancelada después de pagarse—.
+  //   4. EVALUAR alertas AL FINAL, cuando las cifras ya reflejan lo que acaba
+  //      de hacerse. Evaluarlas primero avisaría de un atraso que esta misma
+  //      pasada estaba a punto de resolver.
+  //
+  // Los cuatro son IDEMPOTENTES y toleran retraso: el plan puede ejecutar el
+  // cron una vez al día, así que cada uno procesa el acumulado y se puede
+  // volver a correr sin consecuencias dobles.
+  const entregaActiva = await capacidadActiva('SUPPLY_V2_OUTBOX_DELIVERY')
+  const rescate = entregaActiva ? await recuperarArriendos(ctx) : { recuperados: [], muertos: [] }
+  const despacho = entregaActiva ? await despacharEfectos(ctx, 200) : { encolados: [], devueltos: [] }
+
+  const conciliacion = (await capacidadActiva('SUPPLY_V2_RECONCILIATION_SWEEP'))
+    ? await barrerConciliacionDePagos(ctx)
+    : null
+
+  const alertas = await evaluarYGuardarAlertas(ctx)
+
   return NextResponse.json({
     ok: true,
     ...resultado,
     outbox: {
+      activo: entregaActiva,
       rescatados: rescate.recuperados.length,
       muertos: rescate.muertos.length,
       encolados: despacho.encolados.length,
       devueltos: despacho.devueltos.length,
+    },
+    conciliacion: conciliacion
+      ? {
+          revisados: conciliacion.revisados,
+          cuadraron: conciliacion.cuadraron,
+          discrepancias: conciliacion.discrepancias,
+          incidentesAbiertos: conciliacion.incidentesAbiertos.length,
+        }
+      : { activo: false },
+    alertas: {
+      activas: alertas.activas,
+      nuevas: alertas.nuevas.length,
+      resueltas: alertas.resueltas.length,
     },
     at: new Date().toISOString(),
   })
