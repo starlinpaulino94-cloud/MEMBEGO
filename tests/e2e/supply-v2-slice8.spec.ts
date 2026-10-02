@@ -261,7 +261,7 @@ async function recorridoCompleto(browser: Browser) {
   await expect(cliente.getByTestId('membresias-marketplace')).toBeVisible()
   await cliente.getByTestId('link-todas-membresias').click()
   await cliente.waitForURL(/\/promociones\/membresias$/)
-  const tarjeta = cliente.getByTestId('plan-publico').filter({ hasText: d.planPago })
+  const tarjeta = cliente.getByTestId('plan-publico').filter({ hasText: d.planPago }).filter({ visible: true })
   await expect(tarjeta.getByTestId('plan-publico-precio')).toHaveText(RD(500))
   await expect(tarjeta.getByTestId('plan-publico-duracion')).toHaveText('30 días')
   await expect(tarjeta.getByTestId('plan-publico-incluye')).toContainText(d.beneficio)
@@ -290,7 +290,7 @@ async function recorridoCompleto(browser: Browser) {
 
   // La membresía está activa y su beneficio quedó en la cuenta de la clienta.
   await cliente.goto('/cliente/fidelizacion')
-  const mem = cliente.getByTestId('tarjeta-membresia').filter({ hasText: d.planPago })
+  const mem = cliente.getByTestId('tarjeta-membresia').filter({ hasText: d.planPago }).filter({ visible: true })
   await expect(mem.getByTestId('estado-membresia')).toHaveText('Activa')
   await expect(mem.getByTestId('membresia-beneficios')).toContainText(d.beneficio)
   await expect(mem.getByTestId('membresia-dias')).toContainText('30 día')
@@ -310,11 +310,20 @@ async function recorridoCompleto(browser: Browser) {
   const venta2 = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `PTS-${d.sufijo}` })
   await venta2.getByTestId('btn-confirmar-pago').click()
   await venta2.getByTestId('btn-confirmar-pago-confirmar').click()
+  await expect(finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `PTS-${d.sufijo}` })).toHaveCount(0)
 
   await cliente.goto('/cliente/fidelizacion')
-  await expect(cliente.getByTestId('fidelizacion-puntos-total')).toHaveText('10')
-  const puntos = cliente.getByTestId('tarjeta-puntos').filter({ hasText: d.programa })
-  await expect(puntos.getByTestId('puntos-disponibles')).toHaveText('10')
+  /**
+   * Se mira el saldo DE ESTE programa, no el total de la persona: la clienta
+   * del arnés arrastra puntos de otros programas de corridas anteriores, y los
+   * puntos de dos programas no se mezclan.
+   *
+   * Son 15: la membresía de 500 ya dio 5 puntos al pagarse —una membresía es
+   * una compra como cualquier otra— y esta oferta de 1 000 da los otros 10.
+   * La regla «1 por cada 100» se aplica a lo que la clienta paga de verdad.
+   */
+  const puntos = cliente.getByTestId('tarjeta-puntos').filter({ hasText: d.programa }).filter({ visible: true })
+  await expect(puntos.getByTestId('puntos-disponibles')).toHaveText('15')
 
   // ── 9 · una recompensa de 10 puntos, aprobada por otra persona ──────────
   await compras.goto(urlPrograma)
@@ -336,10 +345,13 @@ async function recorridoCompleto(browser: Browser) {
 
   // ── 10 · la clienta canjea sus puntos ───────────────────────────────────
   await cliente.goto('/cliente/fidelizacion')
-  const rec = cliente.getByTestId('tarjeta-recompensa').filter({ hasText: d.recompensa })
+  const rec = cliente.getByTestId('tarjeta-recompensa').filter({ hasText: d.recompensa }).filter({ visible: true })
   await expect(rec.getByTestId('recompensa-puntos')).toHaveText('10 puntos')
   await rec.getByTestId('btn-reclamar-recompensa').click()
-  await expect(cliente.getByTestId('fidelizacion-puntos-total')).toHaveText('0')
+  // El canje gastó 10 de los 15: quedan 5.
+  await expect(
+    cliente.getByTestId('tarjeta-puntos').filter({ hasText: d.programa }).filter({ visible: true }).getByTestId('puntos-disponibles')
+  ).toHaveText('5')
   await cliente.screenshot({ path: 'test-results/shots/supply-v2-s8-canje.png', fullPage: true })
 
   // ── 11 · su código de invitación ────────────────────────────────────────
@@ -351,18 +363,18 @@ async function recorridoCompleto(browser: Browser) {
   await expect(compras.getByTestId('referidos-config')).toContainText('50 puntos')
 
   await cliente.goto('/cliente/fidelizacion')
-  await cliente.getByTestId('btn-pedir-codigo').click()
-  const codigo = (await cliente.getByTestId('mi-codigo-referido').innerText()).trim()
+  await cliente.getByTestId('btn-pedir-codigo').filter({ visible: true }).first().click()
+  const codigo = (await cliente.getByTestId('mi-codigo-referido').filter({ visible: true }).first().innerText()).trim()
   expect(codigo.length).toBeGreaterThanOrEqual(6)
   // Pedirlo otra vez devuelve el MISMO código: es estable.
   await cliente.reload()
-  await expect(cliente.getByTestId('mi-codigo-referido')).toHaveText(codigo)
+  await expect(cliente.getByTestId('mi-codigo-referido').filter({ visible: true }).first()).toHaveText(codigo)
 
   // ── 12 · el negocio ve lo suyo ──────────────────────────────────────────
   await empleado.goto('/admin/supply-v2/fidelizacion')
   const prov = empleado.getByTestId('programa-proveedor').filter({ hasText: d.programa })
   await expect(prov.getByTestId('programa-prov-miembros')).toHaveText('1')
-  await expect(prov.getByTestId('programa-prov-puntos')).toHaveText('10')
+  await expect(prov.getByTestId('programa-prov-puntos')).toHaveText('15')
   await empleado.screenshot({ path: 'test-results/shots/supply-v2-s8-portal-proveedor.png', fullPage: true })
 
   // ── 13 · el tablero de Membego: cifras reales y estimación marcada ──────
@@ -371,13 +383,13 @@ async function recorridoCompleto(browser: Browser) {
   await expect(finanzas.getByTestId('tablero-advertencia')).toContainText(/estimaci|no es/i)
   const fila = finanzas.getByTestId('fila-programa').filter({ hasText: d.programa })
   await expect(fila.getByTestId('programa-miembros')).toHaveText('1')
-  await expect(fila.getByTestId('programa-puntos')).toHaveText('10')
+  await expect(fila.getByTestId('programa-puntos')).toHaveText('15')
   await expect(fila.getByTestId('programa-canjes')).toHaveText('1')
   await expect(fila.getByTestId('programa-presupuesto')).toHaveText(RD(50000))
   await finanzas.screenshot({ path: 'test-results/shots/supply-v2-s8-tablero.png', fullPage: true })
 
   await finanzas.goto(urlPrograma)
-  await expect(finanzas.getByTestId('programa-puntos-emitidos')).toHaveText('10')
+  await expect(finanzas.getByTestId('programa-puntos-emitidos')).toHaveText('15')
   await expect(finanzas.getByTestId('programa-estimacion-aviso')).toContainText('ESTIMACIÓN')
   await expect(finanzas.getByTestId('historial-programa')).toContainText('Recompensa reclamada')
 
@@ -418,7 +430,7 @@ async function recorridoCompleto(browser: Browser) {
   expect(ganados[0]!.ruleSnapshot).not.toBeNull()
   // El canje consumió exactamente esos 10 y el saldo cuadra con el ledger.
   expect(cuenta.redeemed).toBe(10)
-  expect(cuenta.available).toBe(0)
+  expect(cuenta.available).toBe(5)
   const suma = (campo: 'availableDelta' | 'redeemedDelta') => cuenta.movements.reduce((t, m) => t + m[campo], 0)
   expect(cuenta.available).toBe(suma('availableDelta'))
   expect(cuenta.redeemed).toBe(suma('redeemedDelta'))
@@ -461,14 +473,14 @@ async function movil(browser: Browser) {
 
   // ── El escaparate y la contratación en el teléfono ──────────────────────
   await cliente.goto('/promociones/membresias')
-  const tarjeta = cliente.getByTestId('plan-publico').filter({ hasText: d.planGratis })
+  const tarjeta = cliente.getByTestId('plan-publico').filter({ hasText: d.planGratis }).filter({ visible: true })
   await expect(tarjeta.getByTestId('plan-publico-precio')).toHaveText('Gratis')
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await cliente.screenshot({ path: 'test-results/shots/supply-v2-s8-movil-escaparate.png', fullPage: true })
 
   await tarjeta.getByTestId('btn-contratar-membresia').click()
   await cliente.waitForURL(/\/cliente\/fidelizacion/)
-  const mem = cliente.getByTestId('tarjeta-membresia').filter({ hasText: d.planGratis })
+  const mem = cliente.getByTestId('tarjeta-membresia').filter({ hasText: d.planGratis }).filter({ visible: true })
   await expect(mem.getByTestId('estado-membresia')).toHaveText('Activa')
   await expect(mem.getByTestId('membresia-beneficios')).toContainText(d.beneficio)
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
