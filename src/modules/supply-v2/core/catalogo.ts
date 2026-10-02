@@ -562,9 +562,6 @@ import type {
   SupplyV2CouponKind,
   SupplyV2CouponRedemptionStatus,
   SupplyV2CouponStatus,
-  SupplyV2CustomerMembershipStatus,
-  SupplyV2LoyaltyProgramStatus,
-  SupplyV2MembershipPlanKind,
 } from '@prisma/client'
 
 export const RUTA_CAMPANAS = `${BASE_SUPPLY_V2}/campanas`
