@@ -7,10 +7,11 @@ import {
   Pressable,
   Switch,
   Alert,
+  Linking,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ArrowLeft, AlertCircle, User, ShieldCheck, Settings, Lock } from 'lucide-react-native'
+import { AlertCircle, User, ShieldCheck, Settings, Lock, Trash2 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { goBackOr } from '../src/lib/navigation'
 import { useAjustes, useActualizarAjustes } from '../src/hooks/useAjustes'
@@ -22,11 +23,12 @@ import { EmptyState } from '../src/components/ui/EmptyState'
 import { SectionHeader } from '../src/components/ui/SectionHeader'
 import { Skeleton } from '../src/components/ui/Skeleton'
 import { BackHeader } from '../src/components/ui/BackHeader'
+import { fetchBff } from '../src/lib/api'
 
 export default function AjustesScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading, signOut } = useAuth()
   const { data, isLoading, isError, refetch } = useAjustes(!!user)
   const actualizar = useActualizarAjustes()
 
@@ -43,6 +45,7 @@ export default function AjustesScreen() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
   // Hydrate form when data loads (state adjustment during render, no extra commit)
   const [hydratedData, setHydratedData] = useState<typeof data | null>(null)
@@ -128,6 +131,32 @@ export default function AjustesScreen() {
       setNewPassword('')
       setConfirmPassword('')
     }
+  }
+
+  const handleEliminarCuenta = () => {
+    Alert.alert(
+      'Eliminar cuenta',
+      'Se eliminarán tus fichas de cliente, membresías y datos asociados. Los registros contables que deban conservarse por ley quedarán desvinculados de tu perfil. Esta acción no se puede deshacer.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar cuenta',
+          style: 'destructive',
+          onPress: () => {
+            setDeletingAccount(true)
+            void fetchBff<{ success: boolean }>('/api/v1/auth/cuenta', { method: 'DELETE' })
+              .then(async () => {
+                await signOut()
+                router.replace('/(auth)/login')
+              })
+              .catch((error: unknown) => {
+                Alert.alert('No se pudo eliminar', error instanceof Error ? error.message : 'Intenta de nuevo o usa membego.com/eliminar-cuenta.')
+              })
+              .finally(() => setDeletingAccount(false))
+          },
+        },
+      ],
+    )
   }
 
   return (
@@ -264,6 +293,29 @@ export default function AjustesScreen() {
                 </View>
               </View>
             </Card>
+
+            <Card>
+              <View className="mb-2 flex-row items-center gap-2">
+                <Trash2 size={16} color="#b91c1c" />
+                <Text className="text-h4 font-inter-semibold text-foreground">Eliminar cuenta</Text>
+              </View>
+              <Text className="mb-3 text-small text-muted-foreground">
+                Elimina tu acceso y las fichas de cliente asociadas. Los registros contables que deban conservarse por ley quedarán desvinculados de tu perfil.
+              </Text>
+              <Button variant="destructive" onPress={handleEliminarCuenta} loading={deletingAccount}>
+                Eliminar mi cuenta
+              </Button>
+            </Card>
+
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL('https://membego.com/privacy')}
+              className="items-center py-2"
+            >
+              <Text className="text-small font-inter-medium" style={{ color: '#0284c7' }}>
+                Política de privacidad
+              </Text>
+            </Pressable>
 
             {/* Preferencias */}
             {data.prefs && (
