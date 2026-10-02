@@ -1,0 +1,200 @@
+// ──────────────────────────────────────────────────────────────────────────
+// MEMBEGO SUPPLY 2.0 · SLICE 9 · NÚCLEO OPERATIVO
+//
+// Dos tablas: el INBOX de eventos externos y el OUTBOX transaccional.
+//
+// ──────────────────────────────────────────────────────────────────────────
+// QUÉ SE REUTILIZA, Y POR TANTO NO ESTÁ AQUÍ
+//
+//   · La ESCALERA de reintentos: `modules/integraciones/reintentos.ts`
+//     (MAX_INTENTOS = 8, de 30 s a 24 h, con jitter). Es pura, está probada y
+//     la comparten las dos colas de salida de Connect. Supply 2.0 usa la
+//     MISMA: una segunda escalera con otros números sería una segunda
+//     promesa de tiempo que nadie decidió.
+//   · La ENTREGA fuera de la transacción: `modules/jobs/cola.ts` (`encolar`),
+//     con sus reintentos de QStash, su deduplicación y su dead letter en
+//     `trabajos_muertos`, que ya tiene panel para reencolar.
+//   · Los INCIDENTES: `SupplyV2FinanceIncident` del Slice 4. Un evento
+//     externo que no cuadra abre un incidente; no se inventa otro registro.
+//   · La BITÁCORA: `auditarEnTx`, como todo el resto de Supply 2.0.
+//
+// ──────────────────────────────────────────────────────────────────────────
+// POR QUÉ ESTAS DOS TABLAS SÍ SON NUEVAS
+//
+// No es por no haber mirado. Lo que hay no sirve, y conviene dejar escrito
+// por qué para que nadie lo «arregle» uniéndolas más adelante:
+//
+//   · `WebhookEntrante` (Connect) NO es un inbox de eventos: es el ENDPOINT
+//     que una empresa configuró —nombre, slug, prefijo, secreto con scrypt,
+//     contador de recibidos—. Guarda la puerta, no lo que entró por ella.
+//
+//   · `ClaveIdempotencia` NO sirve como identidad de un evento externo: su
+//     clave es `(sistemaId, clave)` y `sistemaId` es un FK obligatorio a
+//     `SistemaConectado`. Una pasarela de pago no es un satélite conectado
+//     —ese modelo arrastra usuarios SSO, credenciales y tipos de negocio—, y
+//     la tabla guarda una RESPUESTA HTTP con fecha de caducidad: es una
+//     caché de respuestas de API, no un registro de proceso con estados.
+//
+//   · `EventoSaliente` NO sirve como outbox de Supply: también cuelga de
+//     `SistemaConectado` con `onDelete: Cascade`, su identidad idempotente es
+//     `(sistemaId, domainEventId)` y su worker resuelve la URL y el secreto
+//     DEL SATÉLITE para entregar. El destino de un evento del outbox de
+//     Supply no es la URL de un satélite: es un trabajo de la cola
+//     (notificación, correo, aviso interno). Hacer `sistemaId` opcional para
+//     meter aquí lo de Supply tocaría una tabla viva de Connect para ganar
+//     una columna que nunca se usaría en la mitad de las filas.
+//
+// ──────────────────────────────────────────────────────────────────────────
+// ORDEN DE CANDADOS (§5) — el mismo que ya usa Supply 2.0, extendido por
+// arriba, para que ningún camino los tome en orden distinto:
+//
+//   INBOX (advisory por provider+id externo+tipo)
+//     → ORDEN (`FOR UPDATE`)
+//       → oferta / lote / beneficio (lo que ya hacía el checkout)
+//         → OUTBOX (solo INSERT; nunca se bloquea)
+//
+// El candado del inbox es el MÁS EXTERNO y solo lo toma el procesador de
+// eventos externos. Ningún checkout lo pide, así que no puede haber abrazo
+// mortal con una compra en curso. El outbox no se bloquea nunca: se escribe
+// dentro de la transacción financiera y se lee después, fuera de ella.
+// ──────────────────────────────────────────────────────────────────────────
+
+/// Estado de un evento externo recibido.
+enum SupplyV2ExternalEventStatus {
+  /// Guardado, sin procesar todavía.
+  RECEIVED
+  /// Alguien lo está procesando AHORA (con el candado puesto).
+  PROCESSING
+  /// Procesado con efecto. Estado final.
+  PROCESSED
+  /// Falló y se reintentará según la escalera compartida.
+  FAILED
+  /// Agotó los intentos. Estado final: necesita que alguien decida.
+  DEAD_LETTER
+  /// Se recibió y a propósito no produce efecto (duplicado semántico, tipo
+  /// que no nos interesa, operación ya resuelta). Estado final.
+  IGNORED
+}
+
+/// Estado de un evento del outbox.
+enum SupplyV2OutboxStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+  DEAD_LETTER
+}
+
+/// UN EVENTO EXTERNO RECIBIDO (webhook inbox).
+///
+/// La identidad idempotente es `(provider, externalEventId, eventType)` y la
+/// sostiene un índice único: dos entregas del mismo evento son LA MISMA fila,
+/// no dos. El `payloadHash` distingue «lo mismo otra vez» —un reintento del
+/// proveedor— de «otra cosa con el id de antes», que es un error y se dice.
+///
+/// NO guarda el cuerpo crudo: guarda lo necesario ya saneado. Un volcado de
+/// esta tabla no puede contener la firma, ni cabeceras de autorización, ni
+/// datos de tarjeta.
+model SupplyV2ExternalEvent {
+  id String @id @default(cuid())
+
+  /// Quién lo manda: `TEST_GATEWAY`, `CARDNET`… Es texto y no un enum a
+  /// propósito: añadir una pasarela no debe pedir una migración de enum.
+  provider        String
+  /// El id que el proveedor le da al evento. Es SU identidad, no la nuestra.
+  externalEventId String
+  /// Qué dice que pasó: `PAYMENT_CONFIRMED`, `PAYMENT_REJECTED`…
+  eventType       String
+
+  /// SHA-256 del cuerpo recibido. Mismo papel que `ClaveIdempotencia.huellaPeticion`.
+  payloadHash String
+  /// Lo que se conserva del cuerpo, YA SANEADO (sin firmas ni secretos).
+  payload     Json?
+
+  /// La operación de Supply a la que apunta, cuando se pudo resolver. Null
+  /// cuando el evento llegó con una referencia que no existe: esa fila es la
+  /// prueba de que llegó, y es lo que se mira al investigar.
+  orderId String?
+  order   SupplyV2CustomerOrder? @relation("SupplyV2ExternalEventOrder", fields: [orderId], references: [id], onDelete: Restrict)
+
+  /// Hilo que une todo lo que pasó por esta operación (§25). Se propaga al
+  /// outbox, a la bitácora y a los logs.
+  correlationId String
+
+  status   SupplyV2ExternalEventStatus @default(RECEIVED)
+  attempts Int                         @default(0)
+
+  /// Error de la última vez, SANEADO. Nunca lleva secretos ni cuerpos crudos.
+  lastError     String?
+  /// Cuándo toca el siguiente intento. NULL = ya vencido, lo barre el cron.
+  /// Misma convención que `EntregaWebhook` y `EventoSaliente`.
+  nextAttemptAt DateTime?
+
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  /// Quién lo reintentó a mano, si alguien lo hizo (§4E del bloque 1).
+  retriedById String?
+  retriedBy   User?     @relation("SupplyV2ExternalEventRetriedBy", fields: [retriedById], references: [id], onDelete: SetNull)
+  retriedAt   DateTime?
+
+  /// LA identidad idempotente. Lo que hace que cinco entregas del mismo
+  /// evento no puedan ser cinco filas.
+  @@unique([provider, externalEventId, eventType])
+  @@index([status, nextAttemptAt])
+  @@index([provider, receivedAt])
+  @@index([correlationId])
+  @@index([orderId])
+  @@map("supply_v2_external_events")
+}
+
+/// UN EFECTO EXTERNO PENDIENTE (outbox transaccional).
+///
+/// Se escribe DENTRO de la transacción que mueve el dinero, y se entrega
+/// DESPUÉS, fuera de ella. Así una notificación que falla no puede revertir
+/// una compra confirmada, que es la propiedad que el outbox existe para dar.
+///
+/// La entrega no la hace esta tabla: la hace `encolar()` de la cola de
+/// trabajos que ya existe. Esta tabla es la garantía de que el efecto quedó
+/// APUNTADO aunque el proceso muriera justo después de confirmar.
+model SupplyV2OutboxEvent {
+  id String @id @default(cuid())
+
+  /// Qué pasó, en nuestro vocabulario: `supply.order.paid`, `supply.order.rejected`…
+  eventType String
+
+  /// Sobre qué pasó. `aggregateType` + `aggregateId` permiten encontrar todos
+  /// los efectos de una orden sin abrir JSON.
+  aggregateType String
+  aggregateId   String
+
+  /// Lo que necesita quien lo entregue. Saneado: ni secretos ni tarjetas.
+  payload Json
+
+  /// El mismo hilo del inbox y de la operación.
+  correlationId String
+
+  /// Identidad idempotente de la EMISIÓN: dos veces el mismo efecto para la
+  /// misma operación es una sola fila. La calcula quien emite, porque solo él
+  /// sabe qué cuenta como «el mismo efecto».
+  dedupeKey String @unique
+
+  status   SupplyV2OutboxStatus @default(PENDING)
+  attempts Int                  @default(0)
+
+  lastError   String?
+  /// Cuándo se puede intentar. Igual que `nextAttemptAt` del inbox.
+  availableAt DateTime  @default(now())
+  processedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  retriedById String?
+  retriedBy   User?     @relation("SupplyV2OutboxRetriedBy", fields: [retriedById], references: [id], onDelete: SetNull)
+  retriedAt   DateTime?
+
+  @@index([status, availableAt])
+  @@index([aggregateType, aggregateId])
+  @@index([correlationId])
+  @@map("supply_v2_outbox_events")
+}

@@ -414,6 +414,16 @@ enum AuditAccion {
   SUPPLY_V2_COUPON_APPLIED
   SUPPLY_V2_COUPON_RELEASED
 
+  // Slice 9 · núcleo operativo: lo que un evento externo deja escrito.
+  SUPPLY_V2_EXTERNAL_EVENT_RECEIVED
+  SUPPLY_V2_EXTERNAL_EVENT_PROCESSED
+  SUPPLY_V2_EXTERNAL_EVENT_IGNORED
+  SUPPLY_V2_EXTERNAL_EVENT_FAILED
+  SUPPLY_V2_EXTERNAL_EVENT_DEAD_LETTER
+  SUPPLY_V2_EXTERNAL_EVENT_RETRIED
+  SUPPLY_V2_OUTBOX_DEAD_LETTER
+  SUPPLY_V2_OUTBOX_RETRIED
+
   // ── Supply 2.0 · Slice 8 · fidelización (01-10-2026) ─────────────────────
   // Programas, membresías, referidos, puntos y recompensas. Un ajuste manual
   // de puntos exige motivo y queda aquí: no hay forma de borrar un movimiento
@@ -662,6 +672,10 @@ model User {
   supplyV2CuponesCreados          SupplyV2Coupon[]               @relation("SupplyV2CouponCreatedBy")
   supplyV2CuponesPropios          SupplyV2Coupon[]               @relation("SupplyV2CouponCustomer")
   supplyV2CuponesAplicados        SupplyV2CouponRedemption[]     @relation("SupplyV2CouponRedemptionCustomer")
+
+  // Slice 9 · quién reintentó a mano un evento externo o un efecto del outbox.
+  supplyV2EventosReintentados SupplyV2ExternalEvent[]        @relation("SupplyV2ExternalEventRetriedBy")
+  supplyV2OutboxReintentados  SupplyV2OutboxEvent[]          @relation("SupplyV2OutboxRetriedBy")
 
   // Slice 8 · fidelización: membresías, referidos, puntos y recompensas
   supplyV2ProgramasCreados        SupplyV2LoyaltyProgram[]        @relation("SupplyV2LoyaltyProgramCreatedBy")

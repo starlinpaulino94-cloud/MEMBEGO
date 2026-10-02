@@ -463,6 +463,43 @@ BEGIN
   END LOOP;
   RAISE NOTICE 'Credenciales de sistema: solo en modo omnisciente.';
 
+  -- ── Membego Supply 2.0 · el NÚCLEO OPERATIVO (Slice 9) ────────────────────
+  --
+  -- `supply_v2_external_events` es lo que una pasarela de pago le manda a
+  -- MEMBEGO, y `supply_v2_outbox_events` los efectos que Membego se debe a sí
+  -- misma. Ninguna de las dos es de una empresa:
+  --
+  --   · No llevan `companyId`, y no es un olvido: un aviso de pago llega a
+  --     Membego, no a un inquilino. La empresa aparece —si aparece— al final de
+  --     la cadena, a través de la orden del cliente.
+  --   · Darles camino por `orderId` sería peor que no dárselo: `orderId` es
+  --     NULL justo en las filas que importan al investigar —el evento que llegó
+  --     con una referencia que no existe—, y una política que deriva del
+  --     inquilino dejaría esas filas invisibles para todos salvo en modo
+  --     omnisciente, con el resto visibles. Media tabla con una regla y media
+  --     con otra es exactamente lo que no se quiere al perseguir un pago.
+  --   · Y abrirlas a lectura de inquilino filtraría de una empresa a otra: el
+  --     `payload` y el `correlationId` de un evento nombran la operación de un
+  --     cliente y el proveedor que la sirve.
+  --
+  -- Nadie las lee en modo inquilino: el inbox y el outbox corren en
+  -- `sinEmpresa` (`modules/supply-v2/operations/`), igual que el resto del
+  -- motor de Supply 2.0, y el panel que las mostrará es de plataforma.
+  FOREACH cond IN ARRAY ARRAY['supply_v2_external_events', 'supply_v2_outbox_events'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    -- La derivada, si alguna vez la hubo (`orderId` es opcional, así que hoy no
+    -- la hay; se deja caer por si una columna futura se la ganara).
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Supply 2.0 · inbox y outbox: solo en modo omnisciente.';
+
   -- ── Lo que quedó fuera ────────────────────────────────────────────────────
   --
   -- Sin política, RLS deniega. Aquí no debería quedar nada: si aparece algo, es
