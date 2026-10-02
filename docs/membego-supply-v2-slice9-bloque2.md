@@ -7,7 +7,7 @@
 | Base del bloque | `bac225ba` (cierre del bloque 1) |
 | Base del Slice 9 | `4283786a` (fusión del PR #544, Slice 8 completo) |
 | Rama | `claude/jolly-brahmagupta-dmhml9` |
-| Commit del bloque | *(ver §12)* |
+| Commit del bloque | `9fef954f` |
 | Fecha | 2026-10-02 |
 | Estado | Bloque 2 terminado y verificado. **No fusionado, no desplegado.** |
 
