@@ -588,7 +588,7 @@ segura**; el estado de la fila propia sí.
 | `npx tsc --noEmit` | **0 errores** |
 | ESLint sobre lo nuevo y lo tocado | **0 avisos** |
 | `npm test` | **3482 pasan**, 0 fallan, 6 omitidas (las mismas de siempre) |
-| `npm run test:db` | **254 pasan**, 0 fallan (236 de antes + 17 del bloque 2 + la regresión `H2b` del Slice 8) |
+| `npm run test:db` | **254 pasan, 0 fallan, en tres corridas seguidas** (236 de antes + 17 del bloque 2 + la regresión `H2b` del Slice 8). Tres y no una porque las dos pruebas inestables de §13 ter solo se ven repitiendo. |
 | Suite del Slice 9 (bloques 1+2) repetida | **34/34 en cuatro corridas aparte**, más las que van dentro de cada `test:db` (la concurrencia no es determinista: una corrida no demuestra nada) |
 | Dominio del bloque 2 | 24/24 |
 | `scripts/transacciones-anidadas.mjs` | **Ninguna transacción anidada** |
