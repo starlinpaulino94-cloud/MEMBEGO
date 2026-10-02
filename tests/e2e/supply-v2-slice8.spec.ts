@@ -528,7 +528,11 @@ test.describe('Supply 2.0 · Slice 8', () => {
 
   test('móvil · contrata un plan gratuito y ve su fidelización en un teléfono', async ({ browser }, testInfo) => {
     test.skip(testInfo.project.name !== 'movil', 'solo en el proyecto móvil')
-    test.setTimeout(420_000)
+    // El mismo margen que el escritorio: el móvil monta por interfaz todo lo
+    // que necesita un plan —proveedor, producto, acuerdo, oferta y beneficio—
+    // antes de llegar a lo suyo, y en un viewport de teléfono eso no es más
+    // rápido. Con 420 s se quedaba corto por poco.
+    test.setTimeout(600_000)
     await movil(browser)
   })
 })
