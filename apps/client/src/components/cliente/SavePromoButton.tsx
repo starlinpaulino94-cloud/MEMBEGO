@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
-import { Pressable, ActivityIndicator } from 'react-native'
+import { Pressable } from 'react-native'
 import { Heart, Loader2 } from 'lucide-react-native'
 import { cn } from '../../lib/cn'
+import { colors } from '../../theme/tokens'
 
 /**
  * SAVE PROMO BUTTON — RN port de src/components/cliente/SavePromoButton.tsx.
@@ -18,12 +19,14 @@ interface SavePromoButtonProps {
   promocionId: string
   guardada?: boolean
   onToggle?: (promocionId: string, nueva: boolean) => void
+  className?: string
 }
 
 export function SavePromoButton({
   promocionId,
   guardada = false,
   onToggle,
+  className,
 }: SavePromoButtonProps) {
   const [saved, setSaved] = useState(guardada)
   const [pending, setPending] = useState(false)
@@ -46,22 +49,24 @@ export function SavePromoButton({
       onPress={handleToggle}
       disabled={pending}
       className={cn(
-        'absolute right-2 top-2 z-10 rounded-full border p-2',
+        'absolute right-2 top-2 z-10 h-11 w-11 items-center justify-center rounded-full border',
         'active:opacity-80',
         saved
           ? 'border-destructive/25 bg-card/95'
           : 'border-border bg-card/95',
+        className,
       )}
       accessibilityRole="button"
       accessibilityLabel={saved ? 'Quitar de guardadas' : 'Guardar promoción'}
+      accessibilityState={{ selected: saved, disabled: pending }}
     >
       {pending ? (
-        <Loader2 size={16} color="#71717a" />
+        <Loader2 size={18} color={colors.surface.mutedForeground} />
       ) : (
         <Heart
-          size={16}
-          color={saved ? '#e7000b' : '#71717a'}
-          fill={saved ? '#e7000b' : 'transparent'}
+          size={18}
+          color={saved ? colors.state.danger : colors.surface.mutedForeground}
+          fill={saved ? colors.state.danger : 'transparent'}
         />
       )}
     </Pressable>

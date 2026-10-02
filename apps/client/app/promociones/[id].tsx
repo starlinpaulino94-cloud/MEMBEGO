@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { ResponsiveDetailSheet } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -30,6 +30,9 @@ import { Button } from '../../src/components/ui/Button'
 import { EmptyState } from '../../src/components/ui/EmptyState'
 import { cn } from '../../src/lib/cn'
 import { formatMoney } from '../../src/lib/format'
+import { brandColor } from '../../src/lib/brand-color'
+import { colors } from '../../src/theme/tokens'
+import { FlashOfferStatus, isFlashOffer } from '../../src/components/marketplace/FlashOfferStatus'
 import type { PromotionPublic } from '../../src/lib/api'
 
 /**
@@ -43,6 +46,7 @@ import type { PromotionPublic } from '../../src/lib/api'
  * ponytail: CTA de canje es visual (no hay endpoint BFF de canje). F4 candidate.
  */
 function PromocionDetalleScreenContent() {
+  const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const insets = useSafeAreaInsets()
@@ -61,7 +65,7 @@ function PromocionDetalleScreenContent() {
   // Auth loading
   if (authLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card" : "flex-1 items-center justify-center bg-background"}>
         <ActivityIndicator color="#0284c7" size="large" />
       </View>
     )
@@ -70,7 +74,7 @@ function PromocionDetalleScreenContent() {
   // Not authenticated
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
         <EmptyState
           icon={<Tag size={40} color="#0284c7" />}
           title="Inicia sesión para ver esta oferta"
@@ -88,7 +92,7 @@ function PromocionDetalleScreenContent() {
   // Loading
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card" : "flex-1 items-center justify-center bg-background"}>
         <ActivityIndicator color="#0284c7" size="large" />
         <Text className="mt-3 text-sm text-muted-foreground">
           Cargando oferta…
@@ -100,7 +104,7 @@ function PromocionDetalleScreenContent() {
   // Error
   if (isError || !data?.promotion) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
         <EmptyState
           icon={<AlertCircle size={40} color="#e7000b" />}
           title="No pudimos cargar la oferta"
@@ -120,7 +124,7 @@ function PromocionDetalleScreenContent() {
   const guardada = (data as any).guardada ?? false
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 24 }}
@@ -174,7 +178,7 @@ function PromocionDetalleScreenContent() {
         </DetailPageFrame>
       </ScrollView>
 
-      <View className="border-t border-border bg-background px-4 pt-3" style={{ paddingBottom: insets.bottom + 12 }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "border-t border-border bg-surface-card px-4 pt-3" : "border-t border-border bg-background px-4 pt-3"} style={{ paddingBottom: insets.bottom + 12 }}>
         <DetailPageFrame className="gap-2 px-4">
           {codigo ? (
             <View>
@@ -259,6 +263,7 @@ export default function PromocionDetalleScreen() {
 /* ── Sub-componentes ─────────────────────────────────────────────────────── */
 
 function PromoHero({ promotion, onBack }: { promotion: PromotionPublic; onBack: () => void }) {
+  const companyColor = brandColor(promotion.company.colorPrimario, colors.primary.DEFAULT)
   const isExpired =
     promotion.vigenciaHasta != null &&
     new Date(promotion.vigenciaHasta) < new Date()
@@ -274,8 +279,8 @@ function PromoHero({ promotion, onBack }: { promotion: PromotionPublic; onBack: 
           resizeMode="cover"
         />
       ) : (
-        <View className="size-full items-center justify-center bg-primary/10">
-          <Text className="text-6xl font-inter-bold text-primary">
+        <View className="size-full items-center justify-center bg-primary/10" style={{ backgroundColor: `${companyColor}1A` }}>
+          <Text className="text-6xl font-inter-bold" style={{ color: companyColor }}>
             {promotion.titulo.slice(0, 1).toUpperCase()}
           </Text>
         </View>
@@ -326,7 +331,7 @@ function PrecioYDescuento({ promotion }: { promotion: PromotionPublic }) {
 
   return (
     <View className="mt-4 flex-row items-baseline gap-3">
-      <Text className="text-3xl font-inter-bold text-foreground tabular-nums">
+      <Text className="text-3xl font-inter-bold tabular-nums" style={{ color: brandColor(promotion.company.colorPrimario, colors.primary.DEFAULT) }}>
         {formatMoney(precio)}
       </Text>
       {promotion.venta?.agotada ? (
@@ -357,25 +362,33 @@ function Vigencia({ promotion }: { promotion: PromotionPublic }) {
 
   const fechaTexto = fechaLarga(promotion.vigenciaHasta)
 
+  const esRelampago = isFlashOffer(promotion)
+  const companyColor = brandColor(promotion.company.colorPrimario, colors.primary.DEFAULT)
+
   return (
-    <View className="mt-4 flex-row items-center gap-2">
-      <Clock size={16} color={porVencer ? '#e7000b' : '#71717a'} />
-      <Text
-        className={cn(
-          'text-sm',
-          porVencer
-            ? 'font-inter-semibold text-destructive'
-            : isExpired
+    <View className="mt-4 gap-2">
+      {esRelampago ? (
+        <FlashOfferStatus hasta={promotion.vigenciaHasta!} color={companyColor} />
+      ) : null}
+      <View className="flex-row items-center gap-2">
+        <Clock size={16} color={porVencer ? '#e7000b' : '#71717a'} />
+        <Text
+          className={cn(
+            'text-sm',
+            porVencer
               ? 'font-inter-semibold text-destructive'
-              : 'text-muted-foreground',
-        )}
-      >
-        {isExpired
-          ? `Expiró el ${fechaTexto}`
-          : porVencer
-            ? `Vence pronto — ${fechaTexto}`
-            : `Válida hasta el ${fechaTexto}`}
-      </Text>
+              : isExpired
+                ? 'font-inter-semibold text-destructive'
+                : 'text-muted-foreground',
+          )}
+        >
+          {isExpired
+            ? `Expiró el ${fechaTexto}`
+            : porVencer
+              ? `Vence pronto — ${fechaTexto}`
+              : `Válida hasta el ${fechaTexto}`}
+        </Text>
+      </View>
     </View>
   )
 }
