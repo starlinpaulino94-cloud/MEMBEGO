@@ -1,7 +1,13 @@
 # MEMBEGO SUPPLY 2.0 — Auditoría del Vertical Slice 8
 
-Fecha: **2026-10-02** · Rama auditada: `main` = **`c5cdce0e`** · Auditoría hecha
-desde `claude/jolly-brahmagupta-dmhml9`, reiniciada sobre ese commit.
+Fecha: **2026-10-02** · Rama: `claude/jolly-brahmagupta-dmhml9` · Base:
+`c5cdce0e` (`main`, con el motor del Slice 8 ya fusionado).
+
+**Dos partes, hechas en momentos distintos y por sesiones distintas.** La
+primera auditoría (§1–§5) revisó el Slice 8 tal como llegó a `main`: motor
+completo, interfaz inexistente. Después, en esta misma sesión, se escribió la
+interfaz que faltaba y su recorrido de navegador (§6–§9). Las dos partes se
+conservan: la primera explica por qué hacía falta la segunda.
 
 Alcance del Slice 8: **FIDELIZACIÓN** — programas, planes de membresía,
 referidos, puntos y recompensas.
@@ -23,20 +29,21 @@ Leyenda: ✅ verificado con evidencia · ⚠️ observación o riesgo · ❌ no 
 
 ---
 
-## VEREDICTO EN UNA FRASE
+## VEREDICTO
 
-**El motor está terminado y bien probado; la interfaz no existe.** El Slice 8
-tiene 4 116 líneas de dominio y servicios, 102 pruebas en verde y todos los
-invariantes de dinero y de puntos cuadrados en PostgreSQL — pero **ni una
-página, ni un componente, ni una server action, ni una prueba de navegador.**
-Hoy ningún ser humano puede contratar una membresía, ver sus puntos ni canjear
-una recompensa desde Membego.
+**Primera auditoría (motor en `main`):** el motor estaba terminado y bien
+probado; la interfaz no existía. 4 116 líneas de dominio y servicios, 102
+pruebas en verde, todos los invariantes cuadrados — y ni una página, ni una
+acción, ni un recorrido de navegador. Ningún ser humano podía contratar una
+membresía, ver sus puntos ni canjear una recompensa.
 
-Por el criterio que esta misma serie de slices viene aplicando —«si el
-recorrido no funciona desde la interfaz, el slice no está terminado»— el
-**Slice 8 está a medias: la mitad que está, está muy bien.**
+**Después de completarlo:** la interfaz existe, los once permisos por fin se
+exigen, y **el recorrido completo de 14 pasos pasa en escritorio y en móvil**,
+con sus consecuencias comprobadas en PostgreSQL.
 
----
+El recorrido destapó **dos fallos reales del producto que las 102 pruebas del
+motor no veían** (§7). Es la razón de ser de este filtro, y la razón por la que
+«hay código y las pruebas pasan» no equivale a «la persona puede hacerlo».
 
 ## 1 · QUÉ ENTRÓ, COMMIT POR COMMIT
 
@@ -129,7 +136,7 @@ primero y se activa después**, porque solo puede haber una membresía `ACTIVE`
 por plan y persona y activar el período nuevo antes de cerrar el viejo choca
 contra el índice único. Está comentado en el código y probado (`A6`, `H1`).
 
-## 3 · PUERTAS OBLIGATORIAS — ejecutadas hoy sobre `c5cdce0e`
+## 3 · PUERTAS DEL MOTOR — ejecutadas sobre `c5cdce0e`
 
 | Puerta | Resultado | Estado |
 | --- | --- | --- |
@@ -140,7 +147,7 @@ contra el índice único. Está comentado en el código y probado (`A6`, `H1`).
 | Dominio Slice 8 | **47 pass · 0 fail** | ✅ |
 | `npm run test:db` | **218 pass · 0 fail · 0 skip** | ✅ |
 | PostgreSQL Slice 8 | **55 pass · 0 fail** | ✅ |
-| **E2E Slice 8** | **no existe el archivo** | ❌ |
+| **E2E Slice 8** | no existía el archivo entonces; ver §7 | ❌→✅ |
 | Migraciones | 3 nuevas (enums aparte + una correctiva), aplican limpio | ✅ |
 | Drift | «No difference detected» (exit 0) | ✅ |
 | Sello de migraciones | `tests/migraciones-inmutables.test.ts` **2 pass** | ✅ |
@@ -167,11 +174,11 @@ puntos, 1 576 movimientos. Todos los invariantes en cero:
 | Lotes de puntos consumidos de más | 0 |
 | Pedidos de membresía sin plan (o al revés) | 0 |
 
-## 4 · LO QUE FALTA
+## 4 · LO QUE FALTABA CUANDO LLEGÓ A `main`
 
-### 4.1 · ❌ No hay interfaz. Ninguna.
+### 4.1 · ❌ No había interfaz. Ninguna.
 
-Esto es lo que impide dar el slice por terminado:
+Esto era lo que impedía dar el slice por terminado. **Resuelto en §6.**
 
 | Pieza | Estado |
 | --- | --- |
@@ -195,7 +202,9 @@ público —cliente, negocio, proveedor, tablero— y su **único consumidor es 
 prueba de PostgreSQL**. La capa de lectura está escrita para pantallas que no
 existen.
 
-### 4.2 · ⚠️ Los 11 permisos están declarados pero no se exigen en ninguna parte
+### 4.2 · ⚠️ Los 11 permisos estaban declarados y no se exigían en ninguna parte
+
+**Resuelto en §6.2.**
 
 `contracts/gateways.ts` declara once permisos nuevos con sus etiquetas
 (`SUPPLY_V2_LOYALTY_VIEW`, `_PROGRAM_CREATE`, `_PROGRAM_APPROVE`,
@@ -210,7 +219,9 @@ permisos está sin estrenar**: nadie ha comprobado que la separación entre ver,
 crear, aprobar, otorgar y ajustar puntos funcione de verdad. En el Slice 7 ese
 reparto solo se validó al escribir las acciones.
 
-### 4.3 · ❌ No hay recorrido de navegador
+### 4.3 · ❌ No había recorrido de navegador
+
+**Resuelto en §7.**
 
 No existe `tests/e2e/supply-v2-slice8.spec.ts`. En los Slices 6 y 7 el E2E fue
 justamente lo que destapó los defectos que las pruebas de base no veían: el
@@ -221,40 +232,164 @@ puede hacerlo».
 
 ### 4.4 · ❌ No había informe de auditoría
 
-Los Slices 3 a 7 tienen el suyo en `docs/`. El Slice 8 no tenía ninguno; este
-documento lo cubre en parte, con la limitación del aviso de método.
+Los Slices 3 a 7 tienen el suyo en `docs/`. El Slice 8 no tenía ninguno. **Este
+documento lo cubre**, con la limitación del aviso de método para la parte del
+motor.
 
 ## 5 · RIESGOS Y OBSERVACIONES
 
 | # | Riesgo | Detalle | Gravedad |
 | --- | --- | --- | --- |
 | 1 | **El esquema se congeló antes de tener interfaz** | Las migraciones están aplicadas y selladas; si al escribir las pantallas falta una columna, habrá que añadir migración nueva. Ya pasó una vez (`20261023`, el CHECK de la recompensa) y se resolvió bien. Conviene presupuestar una o dos más. | ⚠️ |
-| 2 | **Dos sistemas de fidelización en paralelo** | Supply V1 ya tiene `/admin/membresias`, `/admin/referidos`, `/admin/crecimiento/recompensas`, `/cliente/referidos` y `/mis-membresias` **en producción**. El Slice 8 construye otro al lado, igual que Supply V2 convive con V1. Cuando llegue la interfaz, **dos menús llamados «Membresías» van a confundir a quien opera**. Hay que decidir el nombre y la ruta antes de escribir la primera página, no después. | ⚠️ alta para la operación |
-| 3 | **Permisos sin estrenar** | §4.2. | ⚠️ |
-| 4 | **El multiplicador de membresía siempre trunca** | Decisión explícita y probada (dominio 14). Es conservadora a favor de Membego: el cliente recibe el entero inferior. Correcta, pero conviene que esté dicha en la letra pequeña del programa cuando haya interfaz. | ⚠️ baja |
-| 5 | **El costo potencial es una estimación** | Puntos emitidos y no canjeados son un pasivo probable, no dinero adeudado. El tablero lo separa y lo etiqueta (§37, probado). Bien resuelto; el riesgo es que alguien lo lea como deuda en un reporte. | ⚠️ baja |
+| 2 | **Dos sistemas de fidelización en paralelo** | Supply V1 ya tiene `/admin/membresias`, `/admin/referidos`, `/admin/crecimiento/recompensas`, `/cliente/referidos` y `/mis-membresias` **en producción**. **Resuelto en §6.1:** todo el Slice 8 vive bajo «Fidelización», palabra que V1 no usa en ninguna pantalla. | ✅ resuelto |
+| 3 | **Permisos sin estrenar** | **Resuelto en §6.2:** las 26 server actions los exigen, y el recorrido comprueba el rechazo por segregación. | ✅ resuelto |
+| 4 | **El multiplicador de membresía siempre trunca** | Decisión explícita y probada (dominio 14). Conservadora a favor de Membego: el cliente recibe el entero inferior. El formulario del plan ya lo dice en pantalla («siempre se redondean hacia abajo»). | ⚠️ baja |
+| 5 | **El costo potencial es una estimación** | Puntos emitidos y no canjeados son un pasivo probable, no dinero adeudado. El tablero y la ficha lo separan, lo pintan en color de aviso y llevan la advertencia al lado; el recorrido comprueba que la palabra «ESTIMACIÓN» está en pantalla. | ⚠️ baja |
 | 6 | **No audité el prompt original** | Ver el aviso de método. Si el Slice 8 pedía algo que no dejó rastro en código, esquema ni pruebas, esta auditoría no lo detecta. | ⚠️ |
 
-## 6 · RECOMENDACIÓN
+## 6 · LA INTERFAZ QUE FALTABA (añadida en esta sesión)
 
-El motor no necesita retoques: está probado donde importa y los invariantes
-cuadran. Lo que falta es la mitad visible, y conviene hacerla en este orden:
+Commits `260cbc7b`, `76b24852`, `e80c788f`, `5128b08f`. **3 494 líneas** en 21
+archivos: 11 nuevos y 10 modificados.
 
-1. **Decidir el nombre y la ruta** frente a la fidelización V1 que ya está en
-   producción (riesgo 2). Es una decisión de producto, no técnica, y bloquea
-   todo lo demás.
-2. **Rutas, etiquetas y chips** en `core/catalogo.ts` — hoy vacío para
-   fidelización.
-3. **Server actions** detrás de los once permisos ya declarados, que es lo que
-   por fin los pone a prueba.
-4. **Pantallas**: superadmin (programa, planes, recompensas, tablero), cliente
-   (membresía, puntos, recompensas, invitaciones), proveedor (lo suyo y solo lo
-   suyo).
-5. **E2E de escritorio y móvil** con el recorrido completo: contratar una
-   membresía pagando → ver los beneficios en la cuenta → acumular puntos con una
-   compra → canjear una recompensa → entregarla por QR → invitar a alguien → que
-   su primera compra pague al que invitó. Y comprobarlo después en PostgreSQL.
-6. **Cerrar el informe** con la evidencia de ese recorrido.
+### 6.1 · El nombre, que era la decisión bloqueante (✅)
+
+Supply V1 tiene **en producción** `/admin/membresias`, `/admin/referidos`,
+`/admin/crecimiento/recompensas`, `/cliente/referidos` y `/mis-membresias`. Dos
+menús con el mismo nombre confunden a quien opera, y eso no se arregla después.
+
+Todo el Slice 8 vive bajo **«Fidelización»**, palabra que V1 no usa en ninguna
+pantalla. Es la misma solución que ya se aplicó en el Slice 6 (`/cliente/bonos`,
+porque V1 tenía `/cliente/beneficios`) y en el 7 (`/cliente/cupones`).
+
+| Ruta | Para quién |
+| --- | --- |
+| `/superadmin/supply-v2/fidelizacion` | tablero de Membego |
+| `…/fidelizacion/nuevo` | alta del programa |
+| `…/fidelizacion/[id]` | ficha: planes, recompensas, referidos, puntos, presupuesto, bitácora |
+| `/admin/supply-v2/fidelizacion` | portal del negocio, **solo lectura** |
+| `/cliente/fidelizacion` | su membresía, sus puntos, sus canjes y su código |
+| `/promociones/membresias` | escaparate, **dentro** del marketplace que ya existe |
+
+Más la pestaña «Fidelización» en el nav de Supply 2.0, la entrada «Mi
+fidelización» en el menú del cliente, una sección de membresías en
+`/promociones` y el enlace en el portal del proveedor.
+
+### 6.2 · Los once permisos, por fin exigidos (✅)
+
+`actions-fidelizacion.ts` (670 líneas, **26 server actions**). Cada una empieza
+por su `exigirPermisoSupplyV2`, y las tres del cliente por `exigirCliente`:
+
+| Permiso | Qué abre |
+| --- | --- |
+| `_LOYALTY_VIEW` · `_LOYALTY_REPORT_VIEW` | ver programas · ver el tablero |
+| `_LOYALTY_PROGRAM_CREATE` | crear, editar y pausar |
+| `_LOYALTY_PROGRAM_APPROVE` | aprobar, rechazar y cancelar |
+| `_MEMBERSHIP_MANAGE` | crear, publicar, pausar y archivar planes |
+| `_MEMBERSHIP_GRANT` | otorgar, suspender y cancelar la membresía de alguien |
+| `_REFERRAL_MANAGE` | configurar referidos y conceder sus premios |
+| `_POINTS_ADJUST` | **ajustar puntos a mano** (el suyo propio: es lo que más se puede abusar) |
+| `_REWARD_APPROVE` | crear, aprobar, pausar y reversar recompensas |
+| `_LOYALTY_FINANCE_VIEW` | presupuesto, costos y estimación |
+
+Ver un programa **no** es ver lo que cuesta: el presupuesto y la economía solo
+se renderizan con `_LOYALTY_FINANCE_VIEW`.
+
+### 6.3 · Lo que la interfaz no deja hacer (✅)
+
+* El importe de una membresía **no viaja en el formulario**: lo pone el
+  servidor desde el plan.
+* El botón de canje **no decide** si alcanza; lo decide el servidor dentro del
+  candado de la cuenta de puntos.
+* Las claves de idempotencia se crean **al enviar** y viven en una ref, así que
+  el doble clic manda la misma clave y el servidor devuelve lo que ya hizo.
+  (Generarlas en el render es impuro y la guardia de React del proyecto lo
+  rechaza; guardarlas con estado en un efecto, también.)
+* El portal del negocio es de **lectura**: no hay ninguna acción de escritura
+  sobre presupuestos ni condiciones financieras, y lo que se le muestra se
+  filtra por el `supplierId` de su sesión.
+* Otorgar una membresía y ajustar puntos **exigen motivo escrito**, y la
+  pantalla dice que queda en la bitácora con el nombre de quien lo hizo.
+
+## 7 · EL RECORRIDO DE NAVEGADOR, Y LOS DOS FALLOS QUE DESTAPÓ
+
+`tests/e2e/supply-v2-slice8.spec.ts` (534 líneas). **Escritorio: 1 passed
+(8,2 min). Móvil: 1 passed (37 s).**
+
+Los 14 pasos, en este orden y desde la interfaz: programa con sus cuatro
+modalidades y regla de 1 punto por cada RD$100 → plan de pago de RD$500 con un
+beneficio del catálogo → **lo aprueba otra persona** (quien lo creó recibe el
+rechazo por segregación) → publicado → escaparate → contratado → pedido de
+membresía por el checkout de siempre → pagado → confirmado por finanzas →
+**membresía activa con su beneficio en la cuenta** → 5 puntos por la membresía y
+10 por una oferta de RD$1 000 → recompensa aprobada por otra persona → canje de
+10 puntos → código de invitación estable → portal del negocio → tablero.
+
+Comprobado después en PostgreSQL: el pedido es `kind = MEMBERSHIP` con **0
+líneas y 0 derechos**, hay **un solo** evento económico `SALE_REVENUE`, el
+movimiento de puntos lleva su `ruleSnapshot` congelado, el saldo cuadra con la
+suma de los deltas del ledger, la reclamación cuelga de su `customerBenefitId`
+y quien aprobó el programa **no** es quien lo creó.
+
+### Los dos fallos reales del producto que las 102 pruebas del motor no veían
+
+| # | Fallo | Por qué importaba |
+| --- | --- | --- |
+| 1 | **La página de compra del cliente no sabía renderizar un pedido de membresía.** `kind = MEMBERSHIP` existía en la base desde el modelo de datos, pero `CompraCliente` no lo exponía: el checkout mapeaba `lineas` —vacío en una membresía— y además componía un enlace roto a `/promociones/membego/`. | Quien contratara una membresía habría llegado a un checkout **vacío**, sin saber qué estaba pagando. Es el camino con dinero del slice. |
+| 2 | **El formulario dejaba crear un programa de membresías sin negocio.** El servidor exige que un plan pertenezca al programa de un negocio concreto, así que el programa nacía inservible: ningún plan se podía crear. | Se perdía el trabajo de configurar un programa entero para descubrirlo al final, con un error que no explicaba qué hacer. |
+
+Ninguno de los dos aparece en las 47 pruebas de dominio ni en las 55 de
+PostgreSQL, **y las dos suites estaban en verde**. Eso es exactamente lo que
+este filtro añade.
+
+### Cinco errores míos en el test, y el patrón que los une
+
+Las siete corridas que costó cerrar el recorrido dejaron una lección que vale
+más que el test: **el arnés de E2E usa usuarios compartidos entre corridas.**
+Tres aserciones distintas —el total de puntos de la persona, la tarjeta de
+invitación con `.first()`, el saldo global— daban por supuesto un usuario
+limpio, y las tres fallaron por lo mismo. La regla, ahora escrita en los
+comentarios del spec: *toda aserción sobre datos del cliente se acota al
+programa, cupón u oferta de ESTA corrida, nunca a un agregado de la persona.*
+
+Los otros dos: el orden del recorrido (un plan no se publica hasta que su
+programa está activo — el equivocado era el test, no el servicio) y una carrera
+por no esperar a que el segundo pago saliera de la bandeja de finanzas.
+
+Y un cambio de margen que **no** es tapar una prueba inestable: el móvil pasó
+de 420 s a 600 s porque monta por interfaz todo lo que un plan necesita
+—proveedor, producto, acuerdo, oferta y beneficio— antes de llegar a lo suyo, y
+el escritorio tardaba 492 s haciendo más pasos. Queda dicho al lado del número
+para que nadie lo lea como flakiness.
+
+## 8 · PUERTAS, CON LA INTERFAZ DENTRO
+
+| Puerta | Resultado | Estado |
+| --- | --- | --- |
+| `tsc --noEmit` | exit 0 | ✅ |
+| `eslint src tests` | **0 errores** (15 avisos preexistentes) | ✅ |
+| `next build` | compila; **las 6 rutas nuevas presentes** | ✅ |
+| E2E Slice 8 escritorio | **1 passed** (8,2 min), 14 pasos | ✅ |
+| E2E Slice 8 móvil | **1 passed** (37 s), sin desbordamiento lateral | ✅ |
+| `scripts/auditar-diseno.mjs` | **0 radios fuera del vocabulario** | ✅ |
+| `scripts/campos-sin-etiqueta.mjs` | 94, el techo: la interfaz nueva **no añadió ninguno** | ✅ |
+
+## 9 · LO QUE SIGUE FUERA DE ALCANCE
+
+La interfaz cubre el recorrido completo del slice, pero no todo lo que el motor
+sabe hacer. Queda sin pantalla, a propósito y anotado:
+
+* **Reversar una reclamación** y **anular un referido** tienen su formulario,
+  pero no hay una bandeja que los liste: hoy se llega a ellos desde la ficha
+  del programa.
+* **Suspender y reactivar** una membresía existen como acción, sin pantalla
+  propia de gestión de miembros uno por uno.
+* **Fijar sucursales participantes** (`fijarSucursalesEnTx`) no tiene interfaz.
+* El **historial de puntos de un cliente** se ve desde su propia cuenta, no
+  desde una ficha de cliente en superadmin.
+
+Nada de eso bloquea el recorrido ni mueve dinero sin control; son pantallas de
+operación que conviene añadir cuando haya volumen que las justifique.
 
 ---
 
@@ -262,15 +397,23 @@ cuadran. Lo que falta es la mitad visible, y conviene hacerla en este orden:
 
 | | |
 | --- | --- |
-| Backend | ✅ 4 116 líneas, cinco servicios, dominio puro separado |
-| Pruebas automáticas | ✅ **102** propias (47 dominio + 55 PostgreSQL), 0 fallos |
+| Motor (dominio y servicios) | ✅ 4 116 líneas, cinco servicios, dominio puro separado |
+| Interfaz | ✅ 3 494 líneas: 6 rutas, 26 server actions, 5 componentes |
+| Pruebas del motor | ✅ **102** (47 dominio + 55 PostgreSQL), 0 fallos |
+| Recorrido de navegador | ✅ **escritorio 1 passed · móvil 1 passed**, 14 pasos |
 | Invariantes en PostgreSQL | ✅ 8 de 8 en cero, sobre 1 576 movimientos reales |
 | Puertas estáticas y de migración | ✅ 14 de 14 |
-| Interfaz | ❌ no existe |
-| Recorrido de navegador | ❌ no existe |
-| **Estado del slice** | **a medias — motor terminado, producto no entregable** |
+| Los once permisos | ✅ exigidos en las 26 acciones |
+| Regresión E2E Slices 1–7 | ⏳ **en curso** al escribir este informe; se anota aquí su resultado en cuanto cierre |
+| **Estado del slice** | **motor probado y producto usable; a falta de la regresión de los slices anteriores** |
 
-Lo que está hecho está hecho con el mismo cuidado que los Slices 6 y 7: sin
-motores duplicados, con el ledger como verdad, con los puntos fuera del dinero
-y con el antifraude apoyado en hechos de la operación y no en señales de
-dispositivo. Falta que alguien pueda usarlo.
+Lo que el motor traía ya estaba hecho con el mismo cuidado que los Slices 6 y
+7: sin motores duplicados, con el ledger como verdad, con los puntos fuera del
+dinero y con el antifraude apoyado en hechos de la operación y no en señales de
+dispositivo. Lo que faltaba era que alguien pudiera usarlo, y eso es lo que
+añade esta parte.
+
+**La conclusión que me llevo de este slice:** un motor con 102 pruebas en verde
+y todos los invariantes cuadrados seguía teniendo **dos fallos en el camino del
+dinero** que solo aparecieron al hacer clic. «Las pruebas pasan» no es «la
+persona puede hacerlo».
