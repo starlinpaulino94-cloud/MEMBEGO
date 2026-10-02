@@ -137,14 +137,22 @@ export default function RegistroPage() {
     if (stepIndex !== 4) return
     const geoStep = !countryId ? 'country' : !regionId ? 'region' : !cityId ? 'city' : !sectorId ? 'sector' : ''
     if (!geoStep) {
-      setGeoError('')
-      setTimeout(() => { setGeoOptions([]) }, 0)
-      return
+      const timeoutId: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+        setGeoError('')
+        setGeoOptions([])
+      }, 0)
+      return () => {
+        if (timeoutId) clearTimeout(timeoutId)
+      }
     }
     const parentId = geoStep === 'region' ? countryId : geoStep === 'city' ? regionId : geoStep === 'sector' ? cityId : ''
     let active = true
-    setGeoLoading(true)
-    setGeoError('')
+    const timeoutId: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+      if (active) {
+        setGeoLoading(true)
+        setGeoError('')
+      }
+    }, 0)
     void fetchBff<unknown>(`/api/v1/auth/registro/geo?step=${geoStep}${parentId ? `&parentId=${encodeURIComponent(parentId)}` : ''}`)
       .then((value) => {
         const optionSchema = z.object({ id: z.string(), name: z.string(), latitud: z.number().nullable().optional(), longitud: z.number().nullable().optional(), isoCode: z.string().optional(), regionLabel: z.string().optional() })
@@ -154,7 +162,10 @@ export default function RegistroPage() {
       })
       .catch((cause: unknown) => { if (active) setGeoError(cause instanceof Error ? cause.message : 'No se pudo cargar la ubicación.') })
       .finally(() => { if (active) setGeoLoading(false) })
-    return () => { active = false }
+    return () => {
+      active = false
+      if (timeoutId) clearTimeout(timeoutId)
+    }
   }, [stepIndex, countryId, regionId, cityId, sectorId])
 
   useEffect(() => {
@@ -259,104 +270,104 @@ export default function RegistroPage() {
 
   return (
     <View className="w-full">
-        <View className="mb-2 flex-row justify-between">
-          <Text className="text-caption text-muted-foreground">Paso {stepIndex + 1} de {steps.length}</Text>
-          <Text className="text-caption text-muted-foreground">{progress}%</Text>
-        </View>
-        <View className="mb-4 h-1.5 overflow-hidden rounded-full bg-muted">
-          <View style={{ width: `${progress}%`, backgroundColor: accent }} className="h-full rounded-full" />
-        </View>
-        <Card className="w-full border border-border bg-card p-6">
-          {configError ? <Text accessibilityRole="alert" className="mb-3 text-small text-danger">{configError}</Text> : null}
-          {hello ? <Text className="mb-1 text-small" style={{ color: accent }}>{hello}</Text> : null}
-          <Text className="text-2xl font-inter-semibold text-foreground">{TITLES[step]}</Text>
-          {step === 'email' ? <Text className="mt-1 text-small text-muted-foreground">Será tu usuario para entrar.</Text> : null}
+      <View className="mb-2 flex-row justify-between">
+        <Text className="text-caption text-muted-foreground">Paso {stepIndex + 1} de {steps.length}</Text>
+        <Text className="text-caption text-muted-foreground">{progress}%</Text>
+      </View>
+      <View className="mb-4 h-1.5 overflow-hidden rounded-full bg-muted">
+        <View style={{ width: `${progress}%`, backgroundColor: accent }} className="h-full rounded-full" />
+      </View>
+      <Card className="w-full border border-border bg-card p-6">
+        {configError ? <Text accessibilityRole="alert" className="mb-3 text-small text-danger">{configError}</Text> : null}
+        {hello ? <Text className="mb-1 text-small" style={{ color: accent }}>{hello}</Text> : null}
+        <Text className="text-2xl font-inter-semibold text-foreground">{TITLES[step]}</Text>
+        {step === 'email' ? <Text className="mt-1 text-small text-muted-foreground">Será tu usuario para entrar.</Text> : null}
 
-          {step === 'password' ? <Text className="mt-1 text-small text-muted-foreground">Mínimo 6 caracteres.</Text> : null}
-          {step === 'ubicacion' ? <Text className="mt-1 text-small text-muted-foreground">Es opcional: úsala para encontrar negocios y ofertas cerca de ti.</Text> : null}
-          {step === 'telefono' ? <Text className="mt-1 text-small text-muted-foreground">Lo usamos para confirmar tus citas y beneficios.</Text> : null}
-          {error ? <Text accessibilityRole="alert" className="mt-4 text-small text-danger">{error}</Text> : null}
+        {step === 'password' ? <Text className="mt-1 text-small text-muted-foreground">Mínimo 6 caracteres.</Text> : null}
+        {step === 'ubicacion' ? <Text className="mt-1 text-small text-muted-foreground">Es opcional: úsala para encontrar negocios y ofertas cerca de ti.</Text> : null}
+        {step === 'telefono' ? <Text className="mt-1 text-small text-muted-foreground">Lo usamos para confirmar tus citas y beneficios.</Text> : null}
+        {error ? <Text accessibilityRole="alert" className="mt-4 text-small text-danger">{error}</Text> : null}
 
-          {step === 'nombre' ? <Field label="Nombre y apellido" value={nombre} onChangeText={setNombre} autoComplete="name" autoCapitalize="words" /> : null}
-          {step === 'email' ? <Field label="tucorreo@ejemplo.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" /> : null}
-          {step === 'password' ? <Field label="Mínimo 6 caracteres" value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" /> : null}
-          {step === 'telefono' ? <Field label="809-555-0000" value={telefono} onChangeText={setTelefono} keyboardType="phone-pad" autoComplete="tel" /> : null}
-          {step === 'ubicacion' ? (
-            <View className="mt-5 gap-3">
-              <Text className="text-small text-muted-foreground">Elige tu país, provincia, ciudad y sector. Puedes omitir tu ubicación.</Text>
-              <Text className="text-caption text-muted-foreground">{!countryId ? 'País' : !regionId ? regionLabel : !cityId ? 'Municipio o ciudad' : !sectorId ? 'Sector' : 'Ubicación elegida'}</Text>
-              {geoLoading ? <ActivityIndicator color={accent} /> : !sectorId ? <GeoSelect
-                accessibilityLabel={`Seleccionar ${!countryId ? 'país' : !regionId ? regionLabel.toLowerCase() : !cityId ? 'municipio o ciudad' : 'sector'}`}
-                placeholder={`Selecciona ${!countryId ? 'tu país' : !regionId ? `tu ${regionLabel.toLowerCase()}` : !cityId ? 'tu municipio o ciudad' : 'tu sector'}`}
-                value={!countryId ? countryName : ''}
-                options={geoOptions}
-                accent={accent}
-                onSelect={(option) => {
-                  if (!countryId) { setCountryId(option.id); setCountryName(option.name); setRegionLabel(option.regionLabel ?? 'Provincia'); setRegion(''); setRegionId(''); setCityId(''); setSectorId(''); setCiudad(''); setSector(''); setGeoLat(''); setGeoLng('') }
-                  else if (!regionId) { setRegionId(option.id); setRegion(option.name); setCityId(''); setSectorId(''); setCiudad(''); setSector(''); setGeoLat(''); setGeoLng('') }
-                  else if (!cityId) { setCityId(option.id); setCiudad(option.name); setSectorId(''); setSector(''); setGeoLat(''); setGeoLng('') }
-                  else { setSectorId(option.id); setSector(option.name); setGeoLat(option.latitud == null ? '' : String(option.latitud)); setGeoLng(option.longitud == null ? '' : String(option.longitud)) }
-                }}
-              /> : null}
-              {geoError ? <Text accessibilityRole="alert" className="text-caption text-danger">{geoError}</Text> : null}
-              {countryId ? <Text className="text-caption text-muted-foreground">{[sector, ciudad, region, countryName].filter(Boolean).join(' · ')}</Text> : null}
-              {countryId ? <Pressable onPress={() => { if (sectorId) { setSectorId(''); setSector(''); setGeoLat(''); setGeoLng('') } else if (cityId) { setCityId(''); setCiudad('') } else if (regionId) { setRegionId(''); setRegion('') } else { setCountryId(''); setCountryName('') } }}><Text className="text-caption" style={{ color: accent }}>Cambiar selección anterior</Text></Pressable> : null}
-              {(region || ciudad || sector) ? <CheckRow label="Guardar esta ubicación para personalizar mi experiencia" value={guardarUbicacion} onChange={setGuardarUbicacion} /> : null}
-              {(region || ciudad || sector) ? <CheckRow label="Usar mi zona para enviarme ofertas (opcional)" value={marketingGeo} onChange={setMarketingGeo} /> : null}
-            </View>
-          ) : null}
-          {step === 'vehCategoria' ? (
-            <View className="mt-5 flex-row flex-wrap justify-between gap-2">
-              {config?.vehicleTypes.map((type) => {
-                const active = type.id === tipoVehiculoId
-                return (
-                  <Pressable key={type.id} onPress={() => { setTipoVehiculoId(type.id); setError(''); setStepIndex((value) => Math.min(value + 1, steps.length - 1)) }} className="w-[48%] rounded-xl border border-border p-4">
-                    {type.iconoUrl ? <Image source={{ uri: type.iconoUrl }} resizeMode="contain" className="mb-2 h-8 w-8" /> : <Car size={20} color={active ? accent : colors.surface.mutedForeground} />}
-                    <Text className="font-inter-semibold text-foreground">{type.nombre}</Text>{type.descripcion ? <Text className="text-small text-muted-foreground">{type.descripcion}</Text> : null}
-                    {active ? <Check size={18} color={accent} /> : null}
-                  </Pressable>
-                )
-              })}
-            </View>
-          ) : null}
-          {step === 'vehMarca' ? <View><Field label="Busca o escribe la marca" value={marca} onChangeText={setMarca} autoCapitalize="words" /><View className="mt-3 flex-row flex-wrap gap-2">{config?.brandSuggestions.map((item) => <Pressable key={item} onPress={() => setMarca(item)} className="rounded-full border border-border px-3 py-2"><Text className="text-small text-foreground">{item}</Text></Pressable>)}</View></View> : null}
-          {step === 'vehModelo' ? <Field label={marca ? `Modelo de tu ${marca}` : 'Modelo'} value={modelo} onChangeText={setModelo} autoCapitalize="words" /> : null}
-          {step === 'vehAnio' ? <Field label={String(new Date().getFullYear())} value={anio} onChangeText={setAnio} keyboardType="numeric" /> : null}
-          {step === 'vehColor' ? <View><Field label="Color del vehículo" value={color} onChangeText={setColor} autoCapitalize="words" /><View className="mt-3 flex-row flex-wrap gap-2">{config?.frequentColors.map((item) => <Pressable key={item} onPress={() => setColor(item)} className="rounded-full border border-border px-3 py-2"><Text className="text-small text-foreground">{item}</Text></Pressable>)}</View></View> : null}
-          {step === 'vehPlaca' ? <View><Field label="A123456" value={placa} onChangeText={setPlaca} autoCapitalize="characters" />{placa.trim() && placa.toUpperCase().replace(/[^A-Z0-9]/g, '') !== placa.trim().toUpperCase() ? <Text className="mt-2 text-caption text-muted-foreground">Se guardará como {placa.toUpperCase().replace(/[^A-Z0-9]/g, '')}.</Text> : null}</View> : null}
-
-          {step === 'confirmar' ? (
-            <View className="mt-5 gap-4">
-              <Text className="text-small text-muted-foreground">Ya casi, {nombre.trim().split(/\s+/)[0]}. {companySlug ? `Tu cuenta en ${companyName}.` : 'Tu cuenta MembeGo.'}</Text>
-              <View className="gap-2 rounded-xl border border-border bg-muted p-4">
-                <Summary label="Nombre" value={nombre} /><Summary label="Correo" value={email} /><Summary label="Teléfono" value={telefono} />
-                {[region, ciudad, sector].filter(Boolean).length ? <Summary label="Ubicación" value={[sector, ciudad, region].filter(Boolean).join(', ')} /> : null}
-                {config?.requiresVehicle ? <><Summary label="Vehículo" value={`${marca} ${modelo} ${anio}`} /><Summary label="Categoría" value={selectedType?.nombre ?? '—'} /><Summary label="Color" value={color} /><Summary label="Placa" value={placa.toUpperCase().replace(/[^A-Z0-9]/g, '')} /></> : null}
-              </View>
-              {!refCode ? <View className="gap-2"><Text className="text-small font-inter-medium text-foreground">¿Cómo nos conociste? *</Text><View className="flex-row flex-wrap gap-2">{config?.canalOptions.map((option) => <Pressable key={option.value} onPress={() => setCanalDeclarado(option.value)} className="rounded-full border px-3 py-2" style={{ borderColor: canalDeclarado === option.value ? accent : colors.surface.border, backgroundColor: canalDeclarado === option.value ? `${accent}20` : colors.surface.background }}><Text className="text-small text-foreground">{option.label}</Text></Pressable>)}</View></View> : null}
-              {companySlug ? <CheckRow label={`Seguir a ${companyName} para recibir promociones y novedades`} value={seguirEmpresa} onChange={setSeguirEmpresa} /> : null}
-              <Pressable onPress={() => setTerms(!terms)} accessibilityRole="checkbox" accessibilityState={{ checked: terms }} className="flex-row items-start gap-2"><CheckboxMark value={terms} /><Text className="flex-1 text-small text-muted-foreground">Acepto los <Text onPress={() => void Linking.openURL('https://membego.com/terms')} className="underline" style={{ color: accent }}>términos</Text> y la <Text onPress={() => void Linking.openURL('https://membego.com/privacy')} className="underline" style={{ color: accent }}>política de privacidad</Text>.</Text></Pressable>
-              <CheckRow label="Quiero recibir novedades y ofertas de MembeGo por correo (opcional)" value={marketing} onChange={setMarketing} />
-            </View>
-          ) : null}
-
-          <View className="mt-6 flex-row items-center gap-3">
-            {stepIndex > 0 ? <Button variant="outline" onPress={back} icon={<ArrowLeft size={16} color={colors.surface.foreground} />}>Atrás</Button> : null}
-            {step === 'confirmar' ? (
-              <Button onPress={submit} loading={loading} disabled={!terms || (!refCode && !canalDeclarado)} className="ml-auto" style={{ backgroundColor: accent }}>
-                Crear mi cuenta
-              </Button>
-            ) : step !== 'vehCategoria' ? (
-              <Button onPress={next} className="ml-auto" style={{ backgroundColor: accent }}>
-                <View className="flex-row items-center gap-2">
-                  <Text className="text-sm font-inter-semibold text-white">Continuar</Text>
-                  <ArrowRight size={16} color="white" />
-                </View>
-              </Button>
-            ) : null}
+        {step === 'nombre' ? <Field label="Nombre y apellido" value={nombre} onChangeText={setNombre} autoComplete="name" autoCapitalize="words" /> : null}
+        {step === 'email' ? <Field label="tucorreo@ejemplo.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" /> : null}
+        {step === 'password' ? <Field label="Mínimo 6 caracteres" value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" /> : null}
+        {step === 'telefono' ? <Field label="809-555-0000" value={telefono} onChangeText={setTelefono} keyboardType="phone-pad" autoComplete="tel" /> : null}
+        {step === 'ubicacion' ? (
+          <View className="mt-5 gap-3">
+            <Text className="text-small text-muted-foreground">Elige tu país, provincia, ciudad y sector. Puedes omitir tu ubicación.</Text>
+            <Text className="text-caption text-muted-foreground">{!countryId ? 'País' : !regionId ? regionLabel : !cityId ? 'Municipio o ciudad' : !sectorId ? 'Sector' : 'Ubicación elegida'}</Text>
+            {geoLoading ? <ActivityIndicator color={accent} /> : !sectorId ? <GeoSelect
+              accessibilityLabel={`Seleccionar ${!countryId ? 'país' : !regionId ? regionLabel.toLowerCase() : !cityId ? 'municipio o ciudad' : 'sector'}`}
+              placeholder={`Selecciona ${!countryId ? 'tu país' : !regionId ? `tu ${regionLabel.toLowerCase()}` : !cityId ? 'tu municipio o ciudad' : 'tu sector'}`}
+              value={!countryId ? countryName : ''}
+              options={geoOptions}
+              accent={accent}
+              onSelect={(option) => {
+                if (!countryId) { setCountryId(option.id); setCountryName(option.name); setRegionLabel(option.regionLabel ?? 'Provincia'); setRegion(''); setRegionId(''); setCityId(''); setSectorId(''); setCiudad(''); setSector(''); setGeoLat(''); setGeoLng('') }
+                else if (!regionId) { setRegionId(option.id); setRegion(option.name); setCityId(''); setSectorId(''); setCiudad(''); setSector(''); setGeoLat(''); setGeoLng('') }
+                else if (!cityId) { setCityId(option.id); setCiudad(option.name); setSectorId(''); setSector(''); setGeoLat(''); setGeoLng('') }
+                else { setSectorId(option.id); setSector(option.name); setGeoLat(option.latitud == null ? '' : String(option.latitud)); setGeoLng(option.longitud == null ? '' : String(option.longitud)) }
+              }}
+            /> : null}
+            {geoError ? <Text accessibilityRole="alert" className="text-caption text-danger">{geoError}</Text> : null}
+            {countryId ? <Text className="text-caption text-muted-foreground">{[sector, ciudad, region, countryName].filter(Boolean).join(' · ')}</Text> : null}
+            {countryId ? <Pressable onPress={() => { if (sectorId) { setSectorId(''); setSector(''); setGeoLat(''); setGeoLng('') } else if (cityId) { setCityId(''); setCiudad('') } else if (regionId) { setRegionId(''); setRegion('') } else { setCountryId(''); setCountryName('') } }}><Text className="text-caption" style={{ color: accent }}>Cambiar selección anterior</Text></Pressable> : null}
+            {(region || ciudad || sector) ? <CheckRow label="Guardar esta ubicación para personalizar mi experiencia" value={guardarUbicacion} onChange={setGuardarUbicacion} /> : null}
+            {(region || ciudad || sector) ? <CheckRow label="Usar mi zona para enviarme ofertas (opcional)" value={marketingGeo} onChange={setMarketingGeo} /> : null}
           </View>
-          {stepIndex === 0 ? <View className="mt-5 items-center"><Link href="/(auth)/login" className="text-small" style={{ color: accent }}>¿Ya tienes cuenta? Inicia sesión</Link></View> : null}
-        </Card>
+        ) : null}
+        {step === 'vehCategoria' ? (
+          <View className="mt-5 flex-row flex-wrap justify-between gap-2">
+            {config?.vehicleTypes.map((type) => {
+              const active = type.id === tipoVehiculoId
+              return (
+                <Pressable key={type.id} onPress={() => { setTipoVehiculoId(type.id); setError(''); setStepIndex((value) => Math.min(value + 1, steps.length - 1)) }} className="w-[48%] rounded-xl border border-border p-4">
+                  {type.iconoUrl ? <Image source={{ uri: type.iconoUrl }} resizeMode="contain" className="mb-2 h-8 w-8" /> : <Car size={20} color={active ? accent : colors.surface.mutedForeground} />}
+                  <Text className="font-inter-semibold text-foreground">{type.nombre}</Text>{type.descripcion ? <Text className="text-small text-muted-foreground">{type.descripcion}</Text> : null}
+                  {active ? <Check size={18} color={accent} /> : null}
+                </Pressable>
+              )
+            })}
+          </View>
+        ) : null}
+        {step === 'vehMarca' ? <View><Field label="Busca o escribe la marca" value={marca} onChangeText={setMarca} autoCapitalize="words" /><View className="mt-3 flex-row flex-wrap gap-2">{config?.brandSuggestions.map((item) => <Pressable key={item} onPress={() => setMarca(item)} className="rounded-full border border-border px-3 py-2"><Text className="text-small text-foreground">{item}</Text></Pressable>)}</View></View> : null}
+        {step === 'vehModelo' ? <Field label={marca ? `Modelo de tu ${marca}` : 'Modelo'} value={modelo} onChangeText={setModelo} autoCapitalize="words" /> : null}
+        {step === 'vehAnio' ? <Field label={String(new Date().getFullYear())} value={anio} onChangeText={setAnio} keyboardType="numeric" /> : null}
+        {step === 'vehColor' ? <View><Field label="Color del vehículo" value={color} onChangeText={setColor} autoCapitalize="words" /><View className="mt-3 flex-row flex-wrap gap-2">{config?.frequentColors.map((item) => <Pressable key={item} onPress={() => setColor(item)} className="rounded-full border border-border px-3 py-2"><Text className="text-small text-foreground">{item}</Text></Pressable>)}</View></View> : null}
+        {step === 'vehPlaca' ? <View><Field label="A123456" value={placa} onChangeText={setPlaca} autoCapitalize="characters" />{placa.trim() && placa.toUpperCase().replace(/[^A-Z0-9]/g, '') !== placa.trim().toUpperCase() ? <Text className="mt-2 text-caption text-muted-foreground">Se guardará como {placa.toUpperCase().replace(/[^A-Z0-9]/g, '')}.</Text> : null}</View> : null}
+
+        {step === 'confirmar' ? (
+          <View className="mt-5 gap-4">
+            <Text className="text-small text-muted-foreground">Ya casi, {nombre.trim().split(/\s+/)[0]}. {companySlug ? `Tu cuenta en ${companyName}.` : 'Tu cuenta MembeGo.'}</Text>
+            <View className="gap-2 rounded-xl border border-border bg-muted p-4">
+              <Summary label="Nombre" value={nombre} /><Summary label="Correo" value={email} /><Summary label="Teléfono" value={telefono} />
+              {[region, ciudad, sector].filter(Boolean).length ? <Summary label="Ubicación" value={[sector, ciudad, region].filter(Boolean).join(', ')} /> : null}
+              {config?.requiresVehicle ? <><Summary label="Vehículo" value={`${marca} ${modelo} ${anio}`} /><Summary label="Categoría" value={selectedType?.nombre ?? '—'} /><Summary label="Color" value={color} /><Summary label="Placa" value={placa.toUpperCase().replace(/[^A-Z0-9]/g, '')} /></> : null}
+            </View>
+            {!refCode ? <View className="gap-2"><Text className="text-small font-inter-medium text-foreground">¿Cómo nos conociste? *</Text><View className="flex-row flex-wrap gap-2">{config?.canalOptions.map((option) => <Pressable key={option.value} onPress={() => setCanalDeclarado(option.value)} className="rounded-full border px-3 py-2" style={{ borderColor: canalDeclarado === option.value ? accent : colors.surface.border, backgroundColor: canalDeclarado === option.value ? `${accent}20` : colors.surface.background }}><Text className="text-small text-foreground">{option.label}</Text></Pressable>)}</View></View> : null}
+            {companySlug ? <CheckRow label={`Seguir a ${companyName} para recibir promociones y novedades`} value={seguirEmpresa} onChange={setSeguirEmpresa} /> : null}
+            <Pressable onPress={() => setTerms(!terms)} accessibilityRole="checkbox" accessibilityState={{ checked: terms }} className="flex-row items-start gap-2"><CheckboxMark value={terms} /><Text className="flex-1 text-small text-muted-foreground">Acepto los <Text onPress={() => void Linking.openURL('https://membego.com/terms')} className="underline" style={{ color: accent }}>términos</Text> y la <Text onPress={() => void Linking.openURL('https://membego.com/privacy')} className="underline" style={{ color: accent }}>política de privacidad</Text>.</Text></Pressable>
+            <CheckRow label="Quiero recibir novedades y ofertas de MembeGo por correo (opcional)" value={marketing} onChange={setMarketing} />
+          </View>
+        ) : null}
+
+        <View className="mt-6 flex-row items-center gap-3">
+          {stepIndex > 0 ? <Button variant="outline" onPress={back} icon={<ArrowLeft size={16} color={colors.surface.foreground} />}>Atrás</Button> : null}
+          {step === 'confirmar' ? (
+            <Button onPress={submit} loading={loading} disabled={!terms || (!refCode && !canalDeclarado)} className="ml-auto" style={{ backgroundColor: accent }}>
+              Crear mi cuenta
+            </Button>
+          ) : step !== 'vehCategoria' ? (
+            <Button onPress={next} className="ml-auto" style={{ backgroundColor: accent }}>
+              <View className="flex-row items-center gap-2">
+                <Text className="text-sm font-inter-semibold text-white">Continuar</Text>
+                <ArrowRight size={16} color="white" />
+              </View>
+            </Button>
+          ) : null}
+        </View>
+        {stepIndex === 0 ? <View className="mt-5 items-center"><Link href="/(auth)/login" className="text-small" style={{ color: accent }}>¿Ya tienes cuenta? Inicia sesión</Link></View> : null}
+      </Card>
     </View>
   )
 }
@@ -411,12 +422,12 @@ function GeoSelect({ accessibilityLabel, placeholder, value, options, accent, on
         <View className="flex-1">
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar opciones de ubicación" onPress={toggleMenu} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
           <View style={{ position: 'absolute', top: menuPosition.top, left: menuPosition.left, width: menuPosition.width, zIndex: 50, elevation: 14 }} className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
-        <View className="relative border-b border-border/60">
-          <Search size={17} color={colors.surface.mutedForeground} style={{ position: 'absolute', left: 14, top: 13, zIndex: 1 }} />
-          <TextInput value={query} onChangeText={setQuery} placeholder={`Buscar ${accessibilityLabel.replace(/^Seleccionar\s+/i, '').toLowerCase()}…`} placeholderTextColor={colors.surface.mutedForeground} accessibilityLabel={`Buscar ${accessibilityLabel.replace(/^Seleccionar\s+/i, '').toLowerCase()}`} autoCapitalize="none" autoCorrect={false} className="h-11 rounded-full pl-11 pr-10 text-small text-foreground" />
-          {query.length > 0 ? <Pressable accessibilityRole="button" accessibilityLabel="Limpiar búsqueda de ubicación" onPress={() => setQuery('')} className="absolute right-3 top-3"><X size={16} color={colors.surface.mutedForeground} /></Pressable> : null}
-        </View>
-        {filteredOptions.length > 0 ? <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" className="max-h-48">{filteredOptions.map((option) => <Pressable key={option.id} onPress={() => { onSelect(option); setOpen(false); setQuery('') }} className="flex-row items-center border-b border-border/50 px-4 py-3"><Text className="text-small text-foreground">{option.name}</Text></Pressable>)}</ScrollView> : <Text className="px-4 py-3 text-small text-muted-foreground">No encontramos coincidencias.</Text>}
+            <View className="relative border-b border-border/60">
+              <Search size={17} color={colors.surface.mutedForeground} style={{ position: 'absolute', left: 14, top: 13, zIndex: 1 }} />
+              <TextInput value={query} onChangeText={setQuery} placeholder={`Buscar ${accessibilityLabel.replace(/^Seleccionar\s+/i, '').toLowerCase()}…`} placeholderTextColor={colors.surface.mutedForeground} accessibilityLabel={`Buscar ${accessibilityLabel.replace(/^Seleccionar\s+/i, '').toLowerCase()}`} autoCapitalize="none" autoCorrect={false} className="h-11 rounded-full pl-11 pr-10 text-small text-foreground" />
+              {query.length > 0 ? <Pressable accessibilityRole="button" accessibilityLabel="Limpiar búsqueda de ubicación" onPress={() => setQuery('')} className="absolute right-3 top-3"><X size={16} color={colors.surface.mutedForeground} /></Pressable> : null}
+            </View>
+            {filteredOptions.length > 0 ? <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" className="max-h-48">{filteredOptions.map((option) => <Pressable key={option.id} onPress={() => { onSelect(option); setOpen(false); setQuery('') }} className="flex-row items-center border-b border-border/50 px-4 py-3"><Text className="text-small text-foreground">{option.name}</Text></Pressable>)}</ScrollView> : <Text className="px-4 py-3 text-small text-muted-foreground">No encontramos coincidencias.</Text>}
           </View>
         </View>
       </Modal>
