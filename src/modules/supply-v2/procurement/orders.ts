@@ -3,9 +3,8 @@ import type { Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { calcularTotales, decimal } from '../core/dinero'
 import { fallo } from '../core/errores'
-import { personasAutorizadasEnTx } from '../core/autorizadas'
 import { exigirTransicion, TRANSICIONES_ORDEN } from '../core/estados'
-import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
+import { esAutoaprobacion, MOTIVO_AUTOAPROBACION } from '../core/segregacion'
 import { PAYMENT_MODES_SLICE1 } from '../core/catalogo'
 import { siguienteNumero } from '../core/numeracion'
 import { acuerdoCompatible } from '../agreements/domain'
@@ -173,9 +172,7 @@ export async function aprobarOrdenEnTx(tx: Tx, id: string, ctx: ContextoAuditori
   if (!ctx.actorId) fallo('SIN_ACTOR', 'Aprobar una orden necesita quién la aprueba.')
   const o = await ordenParaMover(tx, id)
   exigirTransicion(TRANSICIONES_ORDEN, o.status, 'APPROVED', 'Orden de compra')
-  const personasAutorizadas = await personasAutorizadasEnTx(tx)
-  const segregacion = revisarSegregacion(o.createdById, ctx.actorId, personasAutorizadas, 'ordenCompra')
-  if (!segregacion.permitido) fallo('AUTOAPROBACION', segregacion.motivo)
+  const autoaprobada = esAutoaprobacion(o.createdById, ctx.actorId)
   await tx.supplyV2PurchaseOrder.update({
     where: { id },
     data: { status: 'APPROVED', approvedById: ctx.actorId, approvedAt: new Date() },
@@ -186,7 +183,7 @@ export async function aprobarOrdenEnTx(tx: Tx, id: string, ctx: ContextoAuditori
       type: 'APPROVED',
       fromStatus: o.status,
       toStatus: 'APPROVED',
-      reason: segregacion.autoaprobada ? MOTIVO_AUTOAPROBACION : null,
+      reason: autoaprobada ? MOTIVO_AUTOAPROBACION : null,
       actorId: ctx.actorId,
     },
   })
@@ -195,8 +192,7 @@ export async function aprobarOrdenEnTx(tx: Tx, id: string, ctx: ContextoAuditori
     antes: o.status,
     despues: 'APPROVED',
     createdById: o.createdById,
-    autoaprobada: segregacion.autoaprobada,
-    personasAutorizadas,
+    autoaprobada: autoaprobada,
   }, o.supplier.companyId)
 }
 

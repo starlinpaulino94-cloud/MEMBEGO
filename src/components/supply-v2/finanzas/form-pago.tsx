@@ -126,7 +126,7 @@ export function FormPago({
       </div>
       {estado.error && <p className="text-sm text-destructive" role="alert">{estado.error}</p>}
       <Button type="submit" disabled={pendiente} loading={pendiente} data-testid="btn-registrar-pago">Registrar pago</Button>
-      <p className="text-caption text-muted-foreground">Quien registra el pago no puede confirmarlo: otra persona autorizada lo confirma y entonces se aplica.</p>
+      <p className="text-caption text-muted-foreground">El pago nace pendiente: se aplica a lo declarado cuando se confirma.</p>
     </form>
   )
 }

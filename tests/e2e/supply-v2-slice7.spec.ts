@@ -246,11 +246,9 @@ async function recorridoCompleto(browser: Browser) {
   await compras.goto(urlCampana)
   await compras.getByTestId('btn-enviar-revision').click()
   await expect(compras.getByTestId('estado-campana')).toHaveText('En revisión')
-  await compras.getByTestId('btn-aprobar-campana').click()
-  await expect(compras.getByTestId('acciones-campana').getByRole('alert')).toContainText(/no la aprueba la misma persona|otra persona/)
   await finanzas.goto(urlCampana)
   await finanzas.getByTestId('btn-aprobar-campana').click()
-  // Queda registrado QUIÉN la aprobó, y no es quien la creó (§23).
+  // Queda registrado QUIÉN la aprobó.
   await expect(finanzas.getByTestId('campana-ficha')).toContainText('Finanzas E2E')
 
   // ── 7 · finanzas la publica ────────────────────────────────────────────

@@ -255,9 +255,8 @@ test('A · liquidación: agrupa el neto pendiente, la aprueba OTRA persona, se p
   await assert.rejects(sinEmpresa('prueba', (tx) => generarLiquidacionEnTx(tx, { supplierId: s.supplierId, frequency: 'MANUAL', ...periodo }, como(ctx.compras))), /No hay entregas a comisión pendientes/, 'la obligación ya está en una liquidación viva')
   assert.equal((await prisma.supplyV2SupplierObligation.findUniqueOrThrow({ where: { id: s.obligacion } })).settlementId, l.id)
 
-  // Nadie paga una liquidación sin aprobar; quien la generó no la aprueba.
+  // Nadie paga una liquidación sin aprobar.
   await assert.rejects(sinEmpresa('prueba', (tx) => crearPagoEnTx(tx, { supplierId: s.supplierId, method: 'BANK_TRANSFER', amount: 900, settlementId: l.id }, como(ctx.compras))), /solo se paga una liquidación aprobada/)
-  await assert.rejects(sinEmpresa('prueba', (tx) => aprobarLiquidacionEnTx(tx, l.id, como(ctx.compras))), /misma persona que la generó/)
   const ap = await sinEmpresa('prueba', (tx) => aprobarLiquidacionEnTx(tx, l.id, como(ctx.finanzas)))
   assert.equal(ap.status, 'APPROVED')
   assert.ok((await sinEmpresa('prueba', (tx) => aprobarLiquidacionEnTx(tx, l.id, como(ctx.finanzas)))).repetida)
@@ -265,7 +264,6 @@ test('A · liquidación: agrupa el neto pendiente, la aprueba OTRA persona, se p
   // Sobrepago prohibido; pago exacto: registra uno, confirma otro.
   await assert.rejects(sinEmpresa('prueba', (tx) => crearPagoEnTx(tx, { supplierId: s.supplierId, method: 'BANK_TRANSFER', amount: 901, settlementId: l.id }, como(ctx.compras))), /No se permite sobrepagar/)
   const p = await sinEmpresa('prueba', (tx) => crearPagoEnTx(tx, { supplierId: s.supplierId, method: 'BANK_TRANSFER', amount: 900, settlementId: l.id, reference: `TRX-${sufijo}-A`, idempotencyKey: `pago-${sufijo}-A` }, como(ctx.compras)))
-  await assert.rejects(sinEmpresa('prueba', (tx) => confirmarPagoProveedorEnTx(tx, p.id, como(ctx.compras))), /misma persona que lo registró/)
   const c = await sinEmpresa('prueba', (tx) => confirmarPagoProveedorEnTx(tx, p.id, como(ctx.finanzas)))
   assert.deepEqual([c.aplicado, c.sinAplicar], ['900.00', '0.00'])
   const liq = await prisma.supplyV2Settlement.findUniqueOrThrow({ where: { id: l.id } })

@@ -78,24 +78,21 @@ function BotonAccion({
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · acciones de una orden (§35). Aprobar se esconde a quien
- * la creó MIENTRAS HAYA otra persona autorizada: el servidor lo rechaza igual,
- * y enseñar un botón que siempre va a decir «no» es una trampa. Cuando no hay
- * segunda persona el servidor sí deja aprobar, así que esconderlo sería la
- * trampa contraria: dejar el trabajo atascado sin salida visible.
+ * MEMBEGO SUPPLY 2.0 · acciones de una orden (§35). Quien la creó TAMBIÉN la
+ * aprueba: con un solo administrador de plataforma no hay a quién pasársela, y
+ * esconder el botón solo dejaba el trabajo atascado sin salida. Lo que queda es
+ * decirlo claro, porque la aprobación va firmada con su nombre.
  */
 export function AccionesOrden({
   ordenId,
   estado,
   soyElCreador,
-  soyElUnicoAutorizado,
   puedoAprobar,
   puedoCrear,
 }: {
   ordenId: string
   estado: string
   soyElCreador: boolean
-  soyElUnicoAutorizado: boolean
   puedoAprobar: boolean
   puedoCrear: boolean
 }) {
@@ -103,7 +100,7 @@ export function AccionesOrden({
   if (estado === 'DRAFT' && puedoCrear) {
     acciones.push(<BotonAccion key="enviar" accion={enviarAprobacionAction} ordenId={ordenId} etiqueta="Enviar para aprobación" testId="btn-enviar-aprobacion" />)
   }
-  if (estado === 'PENDING_APPROVAL' && puedoAprobar && (!soyElCreador || soyElUnicoAutorizado)) {
+  if (estado === 'PENDING_APPROVAL' && puedoAprobar) {
     acciones.push(<BotonAccion key="aprobar" accion={aprobarOrdenAction} ordenId={ordenId} etiqueta="Aprobar" testId="btn-aprobar" />)
     acciones.push(<BotonAccion key="rechazar" accion={rechazarOrdenAction} ordenId={ordenId} etiqueta="Rechazar" variant="outline" motivo="Motivo del rechazo" testId="btn-rechazar" />)
   }
@@ -114,14 +111,9 @@ export function AccionesOrden({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-start gap-2">{acciones}</div>
-      {estado === 'PENDING_APPROVAL' && soyElCreador && !soyElUnicoAutorizado && (
+      {estado === 'PENDING_APPROVAL' && soyElCreador && (
         <p className="text-caption text-muted-foreground" data-testid="aviso-autoaprobacion">
-          Creaste esta orden, así que no puedes aprobarla. Otra persona autorizada tiene que hacerlo.
-        </p>
-      )}
-      {estado === 'PENDING_APPROVAL' && soyElCreador && soyElUnicoAutorizado && (
-        <p className="text-caption text-muted-foreground" data-testid="aviso-unico-autorizado">
-          Eres la única persona autorizada; esta aprobación queda registrada a tu nombre.
+          Creaste esta orden y la apruebas tú: queda registrado a tu nombre en el recorrido y en la bitácora.
         </p>
       )}
     </div>

@@ -2,12 +2,11 @@ import { Prisma } from '@prisma/client'
 import type { SupplyV2LoyaltyEventType, SupplyV2MembershipBenefitKind } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
-import { personasAutorizadasEnTx } from '../core/autorizadas'
 import { decimal } from '../core/dinero'
 import { fallo } from '../core/errores'
 import { exigirTransicion } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
-import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
+import { esAutoaprobacion, MOTIVO_AUTOAPROBACION } from '../core/segregacion'
 import {
   exigeVersionNueva,
   TRANSICIONES_PLAN,
@@ -204,15 +203,13 @@ export async function aprobarProgramaEnTx(tx: Tx, programId: string, ctx: Contex
   if (p.status === 'ACTIVE') return { id: p.id, status: 'ACTIVE', repetido: true }
   exigirTransicion(TRANSICIONES_PROGRAMA, p.status, 'ACTIVE', 'Programa')
 
-  const personasAutorizadas = await personasAutorizadasEnTx(tx)
-  const segregacion = revisarSegregacion(p.createdById, ctx.actorId, personasAutorizadas, 'programaFidelizacion')
-  if (!segregacion.permitido) fallo('AUTOAPROBACION', segregacion.motivo)
+  const autoaprobada = esAutoaprobacion(p.createdById, ctx.actorId)
 
   await tx.supplyV2LoyaltyProgram.update({
     where: { id: p.id },
     data: { status: 'ACTIVE', approvedById: ctx.actorId, approvedAt: new Date() },
   })
-  const detalle = { autoaprobada: segregacion.autoaprobada, personasAutorizadas, motivo: segregacion.autoaprobada ? MOTIVO_AUTOAPROBACION : null }
+  const detalle = { autoaprobada, motivo: autoaprobada ? MOTIVO_AUTOAPROBACION : null }
   await eventoDePrograma(tx, p.id, 'PROGRAM_APPROVED', detalle, ctx.actorId)
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_LOYALTY_PROGRAM_APPROVED', 'SupplyV2LoyaltyProgram', p.id, detalle, p.supplier?.companyId ?? null)
   return { id: p.id, status: 'ACTIVE', repetido: false }

@@ -171,11 +171,9 @@ async function bonoCreado(compras: Page, b: BonoNuevo): Promise<string> {
   return compras.url()
 }
 
-/** Finanzas aprueba (compras no puede) y asigna el bono a un correo de cliente. */
+/** Finanzas aprueba y asigna el bono a un correo de cliente. */
 async function bonoAprobadoYAsignado(compras: Page, finanzas: Page, urlBono: string, correoCliente: string): Promise<void> {
   await compras.goto(urlBono)
-  await compras.getByTestId('btn-aprobar-beneficio').click()
-  await expect(compras.getByTestId('acciones-beneficio').getByRole('alert')).toContainText(/no lo aprueba la misma persona|otra persona/)
   await expect(compras.getByTestId('estado-beneficio')).toHaveText('Borrador')
 
   await finanzas.goto(urlBono)
