@@ -363,12 +363,20 @@ async function recorridoCompleto(browser: Browser) {
   await expect(compras.getByTestId('referidos-config')).toContainText('50 puntos')
 
   await cliente.goto('/cliente/fidelizacion')
-  await cliente.getByTestId('btn-pedir-codigo').filter({ visible: true }).first().click()
-  const codigo = (await cliente.getByTestId('mi-codigo-referido').filter({ visible: true }).first().innerText()).trim()
+  /**
+   * El código se pide en la tarjeta DE ESTE programa, no en la primera que
+   * salga: la clienta del arnés tiene invitaciones de programas de corridas
+   * anteriores, y `.first()` cogía la de otro.
+   */
+  const invitacion = cliente.getByTestId('tarjeta-invitacion').filter({ hasText: d.programa }).filter({ visible: true })
+  await invitacion.getByTestId('btn-pedir-codigo').click()
+  const codigo = (await invitacion.getByTestId('mi-codigo-referido').innerText()).trim()
   expect(codigo.length).toBeGreaterThanOrEqual(6)
   // Pedirlo otra vez devuelve el MISMO código: es estable.
   await cliente.reload()
-  await expect(cliente.getByTestId('mi-codigo-referido').filter({ visible: true }).first()).toHaveText(codigo)
+  await expect(
+    cliente.getByTestId('tarjeta-invitacion').filter({ hasText: d.programa }).filter({ visible: true }).getByTestId('mi-codigo-referido')
+  ).toHaveText(codigo)
 
   // ── 12 · el negocio ve lo suyo ──────────────────────────────────────────
   await empleado.goto('/admin/supply-v2/fidelizacion')
