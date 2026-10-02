@@ -1,4 +1,4 @@
-import type { SupplyV2CampaignStatus, SupplyV2CouponKind, SupplyV2CouponStatus, SupplyV2AgreementStatus, SupplyV2BenefitFunding, SupplyV2BenefitReservationStatus, SupplyV2BenefitStatus, SupplyV2CustomerBenefitStatus, SupplyV2CustomerOrderStatus, SupplyV2EntitlementStatus, SupplyV2LotStatus, SupplyV2OfferStatus, SupplyV2PurchaseOrderStatus, SupplyV2SupplierStatus } from '@prisma/client'
+import type { SupplyV2CustomerMembershipStatus, SupplyV2LoyaltyProgramStatus, SupplyV2MembershipPlanStatus, SupplyV2RewardClaimStatus, SupplyV2RewardStatus, SupplyV2ReferralStatus, SupplyV2CampaignStatus, SupplyV2CouponKind, SupplyV2CouponStatus, SupplyV2AgreementStatus, SupplyV2BenefitFunding, SupplyV2BenefitReservationStatus, SupplyV2BenefitStatus, SupplyV2CustomerBenefitStatus, SupplyV2CustomerOrderStatus, SupplyV2EntitlementStatus, SupplyV2LotStatus, SupplyV2OfferStatus, SupplyV2PurchaseOrderStatus, SupplyV2SupplierStatus } from '@prisma/client'
 import { StatusChip } from '@/components/ui/status-chip'
 import {
   AGREEMENT_STATUS_LABELS,
@@ -22,6 +22,18 @@ import {
   COUPON_KIND_LABELS,
   COUPON_STATUS_LABELS,
   COUPON_STATUS_TONE,
+  LOYALTY_PROGRAM_STATUS_LABELS,
+  LOYALTY_PROGRAM_STATUS_TONE,
+  MEMBERSHIP_PLAN_STATUS_LABELS,
+  MEMBERSHIP_PLAN_STATUS_TONE,
+  MEMBERSHIP_STATUS_LABELS,
+  MEMBERSHIP_STATUS_TONE,
+  REFERRAL_STATUS_LABELS,
+  REFERRAL_STATUS_TONE,
+  REWARD_CLAIM_STATUS_LABELS,
+  REWARD_CLAIM_STATUS_TONE,
+  REWARD_STATUS_LABELS,
+  REWARD_STATUS_TONE,
 } from '@/modules/supply-v2/core/catalogo'
 
 export function ChipOrden({ estado }: { estado: SupplyV2PurchaseOrderStatus }) {
@@ -141,6 +153,52 @@ export function ChipTipoCupon({ kind }: { kind: SupplyV2CouponKind }) {
   return (
     <StatusChip tone={kind === 'PUBLIC' ? 'info' : 'neutral'} data-testid="tipo-cupon">
       {COUPON_KIND_LABELS[kind]}
+    </StatusChip>
+  )
+}
+
+// ── Slice 8 · fidelización ──────────────────────────────────────────────────
+
+export function ChipPrograma({ estado }: { estado: SupplyV2LoyaltyProgramStatus }) {
+  return (
+    <StatusChip tone={LOYALTY_PROGRAM_STATUS_TONE[estado]} pulso={estado === 'PENDING_APPROVAL'} data-testid="estado-programa">
+      {LOYALTY_PROGRAM_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+export function ChipPlan({ estado }: { estado: SupplyV2MembershipPlanStatus }) {
+  return (
+    <StatusChip tone={MEMBERSHIP_PLAN_STATUS_TONE[estado]} data-testid="estado-plan">
+      {MEMBERSHIP_PLAN_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+export function ChipMembresia({ estado }: { estado: SupplyV2CustomerMembershipStatus }) {
+  return (
+    <StatusChip tone={MEMBERSHIP_STATUS_TONE[estado]} data-testid="estado-membresia">
+      {MEMBERSHIP_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+export function ChipRecompensa({ estado }: { estado: SupplyV2RewardStatus }) {
+  return (
+    <StatusChip tone={REWARD_STATUS_TONE[estado]} data-testid="estado-recompensa">
+      {REWARD_STATUS_LABELS[estado]}
+    </StatusChip>
+  )
+}
+
+export function ChipReclamacion({ estado }: { estado: SupplyV2RewardClaimStatus }) {
+  return <StatusChip tone={REWARD_CLAIM_STATUS_TONE[estado]}>{REWARD_CLAIM_STATUS_LABELS[estado]}</StatusChip>
+}
+
+export function ChipReferido({ estado }: { estado: SupplyV2ReferralStatus }) {
+  return (
+    <StatusChip tone={REFERRAL_STATUS_TONE[estado]} data-testid="estado-referido">
+      {REFERRAL_STATUS_LABELS[estado]}
     </StatusChip>
   )
 }

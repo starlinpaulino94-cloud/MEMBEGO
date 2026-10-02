@@ -658,3 +658,219 @@ export const TIPOS_DE_PROMOCION = [
 ] as const
 
 export type TipoDePromocion = (typeof TIPOS_DE_PROMOCION)[number]['clave']
+
+// ── Slice 8 · fidelización: programas, membresías, puntos y recompensas ─────
+//
+// El nombre importa: Supply V1 ya tiene en producción «Membresías»,
+// «Referidos» y «Recompensas» en sus propios menús. Todo lo del Slice 8 vive
+// bajo FIDELIZACIÓN, una palabra que V1 no usa en ninguna pantalla, para que
+// nadie confunda dos sistemas que conviven.
+
+import type {
+  SupplyV2CustomerMembershipStatus,
+  SupplyV2LoyaltyEventType,
+  SupplyV2LoyaltyModality,
+  SupplyV2LoyaltyOwner,
+  SupplyV2LoyaltyProgramStatus,
+  SupplyV2MembershipBenefitKind,
+  SupplyV2MembershipPlanKind,
+  SupplyV2MembershipPlanStatus,
+  SupplyV2PointsMovementType,
+  SupplyV2ReferralRewardKind,
+  SupplyV2ReferralStatus,
+  SupplyV2RewardClaimStatus,
+  SupplyV2RewardKind,
+  SupplyV2RewardStatus,
+} from '@prisma/client'
+
+export const RUTA_FIDELIZACION = `${BASE_SUPPLY_V2}/fidelizacion`
+export const RUTA_FIDELIZACION_CLIENTE = '/cliente/fidelizacion'
+export const RUTA_MEMBRESIAS_PUBLICAS = '/promociones/membresias'
+export const RUTA_PORTAL_FIDELIZACION = `${RUTA_PORTAL_PROVEEDOR}/fidelizacion`
+
+export const LOYALTY_PROGRAM_STATUS_LABELS: Record<SupplyV2LoyaltyProgramStatus, string> = {
+  DRAFT: 'Borrador',
+  PENDING_APPROVAL: 'En revisión',
+  ACTIVE: 'Activo',
+  PAUSED: 'Pausado',
+  COMPLETED: 'Terminado',
+  CANCELLED: 'Cancelado',
+}
+export const LOYALTY_PROGRAM_STATUS_TONE: Record<SupplyV2LoyaltyProgramStatus, Tono> = {
+  DRAFT: 'neutral',
+  PENDING_APPROVAL: 'warning',
+  ACTIVE: 'success',
+  PAUSED: 'warning',
+  COMPLETED: 'neutral',
+  CANCELLED: 'danger',
+}
+export const LOYALTY_OWNER_LABELS: Record<SupplyV2LoyaltyOwner, string> = {
+  MEMBEGO: 'Lo administra Membego',
+  SUPPLIER: 'Lo administra el negocio',
+}
+export const LOYALTY_MODALITY_LABELS: Record<SupplyV2LoyaltyModality, string> = {
+  MEMBERSHIPS: 'Membresías',
+  REFERRALS: 'Referidos',
+  POINTS: 'Puntos',
+  REWARDS: 'Recompensas',
+}
+export const LOYALTY_MODALITY_EXPLICACION: Record<SupplyV2LoyaltyModality, string> = {
+  MEMBERSHIPS: 'Planes que el cliente contrata, gratis o pagando, con beneficios mientras estén vigentes.',
+  REFERRALS: 'Cada cliente invita con su código y cobra cuando el invitado hace su primera compra válida.',
+  POINTS: 'El cliente acumula puntos con sus compras, según una regla que tú defines.',
+  REWARDS: 'Catálogo donde el cliente cambia sus puntos por algo concreto.',
+}
+export const MEMBERSHIP_PLAN_KIND_LABELS: Record<SupplyV2MembershipPlanKind, string> = {
+  FREE: 'Gratuita',
+  PAID: 'De pago',
+  GRANTED: 'Solo otorgada',
+}
+export const MEMBERSHIP_PLAN_STATUS_LABELS: Record<SupplyV2MembershipPlanStatus, string> = {
+  DRAFT: 'Borrador',
+  PUBLISHED: 'Publicado',
+  PAUSED: 'Pausado',
+  ARCHIVED: 'Archivado',
+}
+export const MEMBERSHIP_PLAN_STATUS_TONE: Record<SupplyV2MembershipPlanStatus, Tono> = {
+  DRAFT: 'neutral',
+  PUBLISHED: 'success',
+  PAUSED: 'warning',
+  ARCHIVED: 'neutral',
+}
+export const MEMBERSHIP_STATUS_LABELS: Record<SupplyV2CustomerMembershipStatus, string> = {
+  PENDING_PAYMENT: 'Pendiente de pago',
+  SCHEDULED: 'Programada',
+  ACTIVE: 'Activa',
+  SUSPENDED: 'Suspendida',
+  EXPIRED: 'Vencida',
+  CANCELLED: 'Cancelada',
+}
+export const MEMBERSHIP_STATUS_TONE: Record<SupplyV2CustomerMembershipStatus, Tono> = {
+  PENDING_PAYMENT: 'warning',
+  SCHEDULED: 'info',
+  ACTIVE: 'success',
+  SUSPENDED: 'warning',
+  EXPIRED: 'neutral',
+  CANCELLED: 'danger',
+}
+export const MEMBERSHIP_BENEFIT_KIND_LABELS: Record<SupplyV2MembershipBenefitKind, string> = {
+  BENEFIT: 'Un beneficio del catálogo',
+  COUPON: 'Un cupón exclusivo',
+  POINTS_MULTIPLIER: 'Multiplicador de puntos',
+  EARLY_ACCESS: 'Acceso anticipado',
+}
+export const REWARD_KIND_LABELS: Record<SupplyV2RewardKind, string> = {
+  COUPON: 'Un cupón del catálogo',
+  BENEFIT: 'Un beneficio',
+  FREE_PRODUCT: 'Un producto gratis',
+  SERVICE: 'Un servicio',
+  PARTIAL_BONUS: 'Un bono parcial',
+}
+export const REWARD_STATUS_LABELS: Record<SupplyV2RewardStatus, string> = {
+  DRAFT: 'Borrador',
+  ACTIVE: 'Activa',
+  PAUSED: 'Pausada',
+  EXHAUSTED: 'Agotada',
+  EXPIRED: 'Vencida',
+  CANCELLED: 'Cancelada',
+}
+export const REWARD_STATUS_TONE: Record<SupplyV2RewardStatus, Tono> = {
+  DRAFT: 'neutral',
+  ACTIVE: 'success',
+  PAUSED: 'warning',
+  EXHAUSTED: 'neutral',
+  EXPIRED: 'neutral',
+  CANCELLED: 'danger',
+}
+export const REWARD_CLAIM_STATUS_LABELS: Record<SupplyV2RewardClaimStatus, string> = {
+  RESERVED: 'Puntos reservados',
+  CLAIMED: 'Reclamada',
+  DELIVERED: 'Entregada',
+  EXPIRED: 'Vencida',
+  CANCELLED: 'Cancelada',
+  REVERSED: 'Reversada',
+}
+export const REWARD_CLAIM_STATUS_TONE: Record<SupplyV2RewardClaimStatus, Tono> = {
+  RESERVED: 'info',
+  CLAIMED: 'success',
+  DELIVERED: 'success',
+  EXPIRED: 'neutral',
+  CANCELLED: 'neutral',
+  REVERSED: 'danger',
+}
+export const REFERRAL_STATUS_LABELS: Record<SupplyV2ReferralStatus, string> = {
+  LINK_OPENED: 'Abrió el enlace',
+  SIGNED_UP: 'Se registró',
+  VERIFIED: 'Verificado',
+  PURCHASE_ELIGIBLE: 'Compró: con derecho a premio',
+  REWARD_PENDING: 'Premio en espera',
+  REWARD_APPROVED: 'Premio aprobado',
+  REWARD_GRANTED: 'Premio entregado',
+  REWARD_VOIDED: 'Premio anulado',
+}
+export const REFERRAL_STATUS_TONE: Record<SupplyV2ReferralStatus, Tono> = {
+  LINK_OPENED: 'neutral',
+  SIGNED_UP: 'info',
+  VERIFIED: 'info',
+  PURCHASE_ELIGIBLE: 'warning',
+  REWARD_PENDING: 'warning',
+  REWARD_APPROVED: 'info',
+  REWARD_GRANTED: 'success',
+  REWARD_VOIDED: 'danger',
+}
+export const REFERRAL_REWARD_KIND_LABELS: Record<SupplyV2ReferralRewardKind, string> = {
+  POINTS: 'Puntos',
+  BONUS: 'Un bono de Membego',
+  COUPON: 'Un cupón',
+  SUPPLIER_BENEFIT: 'Un beneficio del negocio',
+}
+export const POINTS_MOVEMENT_LABELS: Record<SupplyV2PointsMovementType, string> = {
+  EARNED: 'Ganados',
+  PENDING: 'En espera',
+  AVAILABLE: 'Disponibles',
+  RESERVED: 'Reservados',
+  REDEEMED: 'Canjeados',
+  RELEASED: 'Devueltos',
+  EXPIRED: 'Vencidos',
+  REVERSED: 'Reversados',
+  ADMIN_ADJUSTMENT: 'Ajuste manual',
+}
+export const LOYALTY_EVENT_LABELS: Record<SupplyV2LoyaltyEventType, string> = {
+  PROGRAM_CREATED: 'Programa creado',
+  PROGRAM_SUBMITTED: 'Enviado a revisión',
+  PROGRAM_APPROVED: 'Aprobado',
+  PROGRAM_REJECTED: 'Devuelto a borrador',
+  PROGRAM_PAUSED: 'Pausado',
+  PROGRAM_RESUMED: 'Reactivado',
+  PROGRAM_COMPLETED: 'Terminado',
+  PROGRAM_CANCELLED: 'Cancelado',
+  PLAN_CREATED: 'Plan creado',
+  PLAN_UPDATED: 'Plan modificado',
+  PLAN_PUBLISHED: 'Plan publicado',
+  PLAN_PAUSED: 'Plan pausado',
+  PLAN_ARCHIVED: 'Plan archivado',
+  MEMBERSHIP_STARTED: 'Membresía contratada',
+  MEMBERSHIP_ACTIVATED: 'Membresía activada',
+  MEMBERSHIP_RENEWED: 'Membresía renovada',
+  MEMBERSHIP_EXPIRED: 'Membresía vencida',
+  MEMBERSHIP_CANCELLED: 'Membresía cancelada',
+  MEMBERSHIP_SUSPENDED: 'Membresía suspendida',
+  MEMBERSHIP_GRANTED: 'Membresía otorgada sin cobro',
+  REFERRAL_CODE_CREATED: 'Código de invitación creado',
+  REFERRAL_SIGNED_UP: 'Alguien se registró con una invitación',
+  REFERRAL_VERIFIED: 'Invitación verificada',
+  REFERRAL_ELIGIBLE: 'Un invitado compró',
+  REFERRAL_REWARD_APPROVED: 'Premio de referido aprobado',
+  REFERRAL_REWARD_GRANTED: 'Premio de referido entregado',
+  REFERRAL_REWARD_VOIDED: 'Premio de referido anulado',
+  POINTS_EARNED: 'Puntos ganados',
+  POINTS_AVAILABLE: 'Puntos liberados',
+  POINTS_EXPIRED: 'Puntos vencidos',
+  POINTS_ADJUSTED: 'Puntos ajustados a mano',
+  REWARD_CREATED: 'Recompensa creada',
+  REWARD_PUBLISHED: 'Recompensa aprobada y publicada',
+  REWARD_CLAIMED: 'Recompensa reclamada',
+  REWARD_DELIVERED: 'Recompensa entregada',
+  REWARD_REVERSED: 'Recompensa reversada',
+  BUDGET_WAIVED: 'Autorizado sin presupuesto máximo',
+}

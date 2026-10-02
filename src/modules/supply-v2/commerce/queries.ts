@@ -33,6 +33,13 @@ export interface CompraCliente {
   /** Slice 7 (§25): la campaña y el cupón congelados en la compra. */
   campana: { code: string; name: string } | null
   cupon: string | null
+  /**
+   * Slice 8 (§16): qué se está comprando. Una membresía NO lleva líneas, ni
+   * lote, ni derecho: lo que se entrega es la membresía misma, así que la
+   * pantalla tiene que saberlo para no enseñar un carrito vacío.
+   */
+  kind: 'OFFER' | 'MEMBERSHIP'
+  membresia: { plan: string; programa: string; negocio: string | null; dias: number } | null
   expiresAt: Date
   createdAt: Date
   paidAt: Date | null
@@ -44,6 +51,7 @@ const INCLUDE = {
   lines: { include: { offer: { select: { slug: true, catalogItem: { select: { name: true } }, supplier: { select: { commercialName: true } } } }, benefit: { select: { id: true, code: true, name: true, funding: true } } } },
   entitlements: { include: { catalogItem: { select: { name: true } }, supplier: { select: { commercialName: true } } }, orderBy: { issuedAt: 'asc' as const } },
   campaign: { select: { code: true, name: true } },
+  membershipPlan: { select: { name: true, durationDays: true, program: { select: { name: true, supplier: { select: { commercialName: true } } } } } },
 } satisfies Prisma.SupplyV2CustomerOrderInclude
 
 type Fila = Prisma.SupplyV2CustomerOrderGetPayload<{ include: typeof INCLUDE }>
@@ -69,6 +77,15 @@ function aDto(o: Fila): CompraCliente {
     beneficio: beneficio ? { id: beneficio.id, code: beneficio.code, name: beneficio.name, funding: beneficio.funding } : null,
     campana: o.campaign ? { code: o.campaign.code, name: o.campaign.name } : null,
     cupon: o.couponCodeSnapshot,
+    kind: o.kind,
+    membresia: o.membershipPlan
+      ? {
+          plan: o.membershipPlan.name,
+          programa: o.membershipPlan.program.name,
+          negocio: o.membershipPlan.program.supplier?.commercialName ?? null,
+          dias: o.membershipPlan.durationDays,
+        }
+      : null,
     expiresAt: o.expiresAt,
     createdAt: o.createdAt,
     paidAt: o.paidAt,
