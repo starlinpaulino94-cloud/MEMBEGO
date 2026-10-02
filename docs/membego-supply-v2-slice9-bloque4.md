@@ -7,6 +7,7 @@
 | Base efectiva | `2c0ce6aa` (fusión del PR #548 en `main`) |
 | Rama | `claude/jolly-brahmagupta-dmhml9` |
 | Fecha | 2026-10-02 |
+| Commit | `3989cef0` |
 | Estado | Bloque 4 terminado y verificado. **No fusionado, no desplegado.** |
 
 ---
