@@ -369,10 +369,47 @@ para que nadie lo lea como flakiness.
 | `tsc --noEmit` | exit 0 | ✅ |
 | `eslint src tests` | **0 errores** (15 avisos preexistentes) | ✅ |
 | `next build` | compila; **las 6 rutas nuevas presentes** | ✅ |
+| `npm test` | **3 438 tests · 3 432 pass · 0 fail · 6 skip** | ✅ con nota ⚠️ |
+| `npm run test:db` | **218 pass · 0 fail · 0 skip** | ✅ |
 | E2E Slice 8 escritorio | **1 passed** (8,2 min), 14 pasos | ✅ |
 | E2E Slice 8 móvil | **1 passed** (37 s), sin desbordamiento lateral | ✅ |
+| **E2E regresión Slices 1–7** | **16 passed · 0 failed** tras quitar la carrera; ver abajo | ✅ |
+| Drift | «No difference detected» | ✅ |
+| Sello de migraciones | 2 pass; ninguna migración aplicada se editó | ✅ |
+| 7 scripts estáticos | 7 de 7 OK | ✅ |
 | `scripts/auditar-diseno.mjs` | **0 radios fuera del vocabulario** | ✅ |
 | `scripts/campos-sin-etiqueta.mjs` | 94, el techo: la interfaz nueva **no añadió ninguno** | ✅ |
+| Supply V1 intacto | `git diff` contra `main`: **vacío** | ✅ |
+
+⚠️ Las 6 omitidas son las de CardNET —cinco por falta de Supabase local, una
+marcada `BLOCKED` esperando claves de QA—. Ajenas a fidelización y presentes
+desde antes del Slice 7. **No se cuentan como aprobadas.**
+
+### La regresión encontró un defecto mío, y no era del Slice 8
+
+La primera pasada dejó **15 passed · 1 failed**: el móvil del Slice 7, agotado
+a los 420 s cuando corriendo solo pasaba en 44 s.
+
+Lo primero fue descartar que la causa fuera este cambio, que añade una consulta
+de membresías a `/promociones` —una página por la que pasa casi todo—:
+
+```
+/promociones             49 ms
+/promociones/membresias  31 ms
+/promociones/campanas    42 ms
+```
+
+No era lentitud. Era una **carrera en el propio test**, escrita en el Slice 7:
+se hace clic en «enviar a revisión» y se cambia de persona sin esperar a que el
+estado cambie. Si la acción no ha terminado, la segunda persona carga la ficha
+todavía en borrador y espera un botón que no existe. Sola gana la carrera;
+dentro de un lote de 32 pruebas, con el servidor en contención, la pierde.
+
+**El mismo patrón estaba en el test móvil del Slice 8, y había pasado por
+suerte.** Los dos esperan ahora la confirmación del cambio de estado. Subir el
+tiempo límite habría escondido la carrera en vez de quitarla.
+
+Segunda pasada de los dos móviles: **2 passed** (1,5 min).
 
 ## 9 · LO QUE SIGUE FUERA DE ALCANCE
 
@@ -404,8 +441,8 @@ operación que conviene añadir cuando haya volumen que las justifique.
 | Invariantes en PostgreSQL | ✅ 8 de 8 en cero, sobre 1 576 movimientos reales |
 | Puertas estáticas y de migración | ✅ 14 de 14 |
 | Los once permisos | ✅ exigidos en las 26 acciones |
-| Regresión E2E Slices 1–7 | ⏳ **en curso** al escribir este informe; se anota aquí su resultado en cuanto cierre |
-| **Estado del slice** | **motor probado y producto usable; a falta de la regresión de los slices anteriores** |
+| Regresión E2E Slices 1–7 | ✅ **16 passed · 0 failed** (tras quitar una carrera preexistente en el móvil del 7) |
+| **Estado del slice** | **TERMINADO: motor probado, producto usable, regresión en verde** |
 
 Lo que el motor traía ya estaba hecho con el mismo cuidado que los Slices 6 y
 7: sin motores duplicados, con el ledger como verdad, con los puntos fuera del
