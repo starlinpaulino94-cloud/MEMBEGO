@@ -9,6 +9,8 @@ import {
 } from '@/modules/marketplace/cached'
 import { getPromocionesDeEmpresaParaMi } from '@/modules/social/queries'
 import { fichaEnEmpresa } from '@/modules/cliente/afiliacion'
+import { getCompanyResenas, getMiResena } from '@/modules/resenas/queries'
+import { excursionesPublicas } from '@/modules/excursiones/catalogo/public-queries'
 import { toggleFavoritaEmpresaDirecto, toggleSeguirEmpresaDirecto } from '@/modules/social/actions'
 import { sinEmpresa } from '@/lib/tenant'
 
@@ -87,7 +89,7 @@ export async function GET(
       (id): id is string => typeof id === 'string' && id.length > 0
     )
 
-    const [stats, planes, promotions, posts, sucursales, ficha, follow] = await Promise.all([
+    const [stats, planes, promotions, posts, sucursales, ficha, follow, resenas, miResena, excursiones] = await Promise.all([
       getCompanyStats(slug).catch(() => null),
       getCompanyPlanesPublic(company.id).catch(() => []),
       getPromocionesDeEmpresaParaMi(company.id, user.supabaseId, 12).catch(() => []),
@@ -102,6 +104,9 @@ export async function GET(
             })
           ).catch(() => null)
         : Promise.resolve(null),
+      getCompanyResenas(company.id),
+      getMiResena(company.id, user.supabaseId),
+      excursionesPublicas(company.id).catch(() => []),
     ])
 
     return NextResponse.json({
@@ -110,6 +115,22 @@ export async function GET(
       planes,
       promotions,
       posts,
+      resenas,
+      puedeOpinar: miResena.esCliente,
+      miResena: miResena.resena,
+      excursiones: excursiones.map((excursion) => ({
+        id: excursion.id,
+        nombre: excursion.nombre,
+        slug: excursion.slug,
+        portadaUrl: excursion.portadaUrl,
+        categoria: excursion.categoria,
+        moneda: excursion.moneda,
+        duracionMin: excursion.duracionMin,
+        ubicacion: excursion.ubicacion,
+        precioDesde: excursion.variantes[0]?.precioAdulto ?? null,
+        agotadaGlobal: excursion.agotadaGlobal,
+        todasFechasPasadas: excursion.todasFechasPasadas,
+      })),
       sucursales,
       esCliente: ficha != null,
       sigo: follow != null,

@@ -60,6 +60,7 @@ export interface CompanyPublic {
   name: string
   slug: string
   type: string
+  colorPrimario?: string | null
   description: string | null
   logoUrl: string | null
   bannerUrl: string | null
@@ -127,6 +128,7 @@ export interface PlanGlobalItem extends PlanPublic {
     name: string
     slug: string
     logoUrl: string | null
+    colorPrimario?: string | null
     ciudad: string | null
     moneda: string
     idioma: string
@@ -167,7 +169,7 @@ export interface PromotionPublic {
   shareCount: number
   tags: string[]
   createdAt: string
-  company: { id: string; slug: string; name: string; logoUrl: string | null; tienePlanes?: boolean }
+  company: { id: string; slug: string; name: string; logoUrl: string | null; colorPrimario?: string | null; tienePlanes?: boolean }
   imagenes?: string[]
   venta?: PromotionVenta | null
 }
@@ -181,11 +183,54 @@ export interface PromoFeed {
   empresasRecomendadas: CompanyPublic[]
 }
 
-export type CompanyPostPublic = JsonObject
+export interface CompanyPostPublic {
+  readonly id: string
+  readonly tipo: string
+  readonly titulo: string
+  readonly contenido: string
+  readonly imagenUrl: string | null
+  readonly fechaEvento: string | null
+  readonly lugar: string | null
+  readonly publicadaEn: string
+}
+
 export interface CompanyPostsPublic {
-  beneficios: CompanyPostPublic[]
-  eventos: CompanyPostPublic[]
-  noticias: CompanyPostPublic[]
+  readonly beneficios: readonly CompanyPostPublic[]
+  readonly eventos: readonly CompanyPostPublic[]
+  readonly noticias: readonly CompanyPostPublic[]
+}
+
+export interface CompanyReviewPublic {
+  readonly id: string
+  readonly rating: number
+  readonly comment: string | null
+  readonly fecha: string
+  readonly clienteNombre: string
+}
+
+export interface CompanyReviewsPublic {
+  readonly promedio: number | null
+  readonly total: number
+  readonly items: readonly CompanyReviewPublic[]
+}
+
+export interface CompanyOwnReview {
+  readonly rating: number
+  readonly comment: string | null
+}
+
+export interface CompanyExcursionPublic {
+  readonly id: string
+  readonly nombre: string
+  readonly slug: string
+  readonly portadaUrl: string | null
+  readonly categoria: string | null
+  readonly moneda: string
+  readonly duracionMin: number | null
+  readonly ubicacion: string | null
+  readonly precioDesde: number | null
+  readonly agotadaGlobal: boolean
+  readonly todasFechasPasadas: boolean
 }
 
 export interface SucursalPublic {
@@ -219,6 +264,7 @@ export interface EmpresaResumen {
   slug: string
   name: string
   logoUrl: string | null
+  colorPrimario?: string | null
   type: string
   bannerUrl: string | null
   ciudad: string | null
@@ -343,6 +389,10 @@ export interface EmpresaDetalleResponse {
   planes: PlanPublic[]
   promotions: PromotionPublic[]
   posts: CompanyPostsPublic | null
+  resenas: CompanyReviewsPublic
+  puedeOpinar: boolean
+  miResena: CompanyOwnReview | null
+  excursiones: readonly CompanyExcursionPublic[]
   sucursales: SucursalPublic[]
   esCliente: boolean
   sigo: boolean
@@ -990,6 +1040,11 @@ export const api = {
   // --- Empresa / catálogo ---
   getEmpresa: (slug: string) =>
     fetchBff<EmpresaDetalleResponse>(`/api/v1/cliente/empresas/${encodeURIComponent(slug)}`),
+  guardarResenaEmpresa: (slug: string, body: CompanyOwnReview) =>
+    postJson<{ success: true }>(
+      `/api/v1/cliente/empresas/${encodeURIComponent(slug)}/resena`,
+      body
+    ),
   toggleFavoritaEmpresa: (slug: string) =>
     postJson<{ following?: boolean; esFavorita?: boolean; error?: string }>(
       `/api/v1/cliente/empresas/${encodeURIComponent(slug)}`,
