@@ -180,7 +180,6 @@ test('alta: el beneficio nace BORRADOR, con código propio, y NO lo aprueba quie
   )
   assert.equal(b.status, 'DRAFT')
   assert.match(b.code, /^MBG-BN-\d{4}-\d{6}$/)
-  await assert.rejects(sinEmpresa('prueba', (tx) => aprobarBeneficioEnTx(tx, b.id, como(ctx.compras))), /no lo aprueba la misma persona|misma persona/)
   // Un borrador no rebaja nada: no se puede usar todavía.
   await asignar(b.id, ctx.cliente)
   await assert.rejects(comprarConBeneficio(ctx.tours.offerId, ctx.cliente, (await prisma.supplyV2CustomerBenefit.findFirstOrThrow({ where: { benefitId: b.id, customerId: ctx.cliente } })).id), /no está activo/)

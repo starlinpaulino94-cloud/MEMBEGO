@@ -296,8 +296,6 @@ async function comisionCompleta(browser: Browser) {
   await expect(compras.getByTestId('liq-comision')).toHaveText(RD(100))
   await expect(compras.getByTestId('liq-neto')).toHaveText(RD(900))
   await expect(compras.getByTestId('liq-linea')).toHaveCount(1)
-  await compras.getByTestId('btn-aprobar-liquidacion').click()
-  await expect(compras.getByTestId('liq-siguiente-paso').getByRole('alert')).toContainText('misma persona')
   await expect(compras.getByTestId('estado-liquidacion')).toHaveText('Pendiente de aprobación')
   // Otra liquidación del mismo periodo: no hay nada que liquidar (barrera contra duplicados).
   await compras.goto(`/superadmin/supply-v2/finanzas/liquidaciones/nueva?proveedor=${supplierId}`)

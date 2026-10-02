@@ -6,8 +6,7 @@ import { decimal, redondear2 } from '../core/dinero'
 import { fallo } from '../core/errores'
 import { exigirTransicion } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
-import { personasAutorizadasEnTx } from '../core/autorizadas'
-import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
+import { esAutoaprobacion, MOTIVO_AUTOAPROBACION } from '../core/segregacion'
 import { crearBeneficioEnTx, type BeneficioCreado } from '../benefits/service'
 import { calcularRepartoLinea } from '../core/financiacion'
 import type { Decimal } from '../core/dinero'
@@ -467,24 +466,20 @@ export async function aprobarCampanaEnTx(tx: Tx, campaignId: string, ctx: Contex
   const c = await bloquearCampana(tx, campaignId)
   if (c.approvedAt) return { id: c.id, code: c.code, status: c.status, autoaprobada: false, repetida: true }
   if (c.status !== 'PENDING_APPROVAL') fallo('CAMPANA_NO_APROBABLE', `Una campaña ${c.status} no está esperando aprobación.`)
-  const personasAutorizadas = await personasAutorizadasEnTx(tx)
-  const segregacion = revisarSegregacion(c.createdById, ctx.actorId, personasAutorizadas, 'campana')
-  if (!segregacion.permitido) fallo('AUTOAPROBACION', segregacion.motivo)
+  const autoaprobada = esAutoaprobacion(c.createdById, ctx.actorId)
 
   await tx.supplyV2Campaign.update({ where: { id: c.id }, data: { approvedById: ctx.actorId, approvedAt: new Date() } })
-  await evento(tx, c.id, 'APPROVED', segregacion.autoaprobada ? MOTIVO_AUTOAPROBACION : 'Aprobada por una segunda persona autorizada.', {
-    autoaprobada: segregacion.autoaprobada,
-    personasAutorizadas,
+  await evento(tx, c.id, 'APPROVED', autoaprobada ? MOTIVO_AUTOAPROBACION : 'Aprobada por una segunda persona autorizada.', {
+    autoaprobada: autoaprobada,
   }, ctx.actorId)
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_CAMPAIGN_APPROVED', 'SupplyV2Campaign', c.id, {
     code: c.code,
     createdById: c.createdById,
-    autoaprobada: segregacion.autoaprobada,
-    personasAutorizadas,
+    autoaprobada: autoaprobada,
     budgetTotal: c.budgetTotal?.toFixed(2) ?? null,
-    ...(segregacion.autoaprobada ? { motivo: MOTIVO_AUTOAPROBACION } : {}),
+    ...(autoaprobada ? { motivo: MOTIVO_AUTOAPROBACION } : {}),
   }, c.supplier?.companyId ?? null)
-  return { id: c.id, code: c.code, status: c.status, autoaprobada: segregacion.autoaprobada, repetida: false }
+  return { id: c.id, code: c.code, status: c.status, autoaprobada: autoaprobada, repetida: false }
 }
 
 /** Rechazar una propuesta: vuelve a borrador con el motivo escrito (§23). */

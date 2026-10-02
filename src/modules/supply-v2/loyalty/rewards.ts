@@ -1,12 +1,11 @@
 import { Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
-import { personasAutorizadasEnTx } from '../core/autorizadas'
 import { decimal } from '../core/dinero'
 import { fallo } from '../core/errores'
 import { exigirTransicion } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
-import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../core/segregacion'
+import { esAutoaprobacion, MOTIVO_AUTOAPROBACION } from '../core/segregacion'
 import { asignarBeneficioEnTx } from '../benefits/service'
 import {
   cabeEnElPrograma,
@@ -137,12 +136,10 @@ export async function aprobarRecompensaEnTx(tx: Tx, rewardId: string, ctx: Conte
   exigirTransicion(TRANSICIONES_RECOMPENSA, r.status, 'ACTIVE', 'Recompensa')
   if (r.program.status !== 'ACTIVE') fallo('PROGRAMA_NO_ACTIVO', 'El programa tiene que estar activo para publicar una recompensa.')
 
-  const personasAutorizadas = await personasAutorizadasEnTx(tx)
-  const segregacion = revisarSegregacion(r.createdById, ctx.actorId, personasAutorizadas, 'recompensa')
-  if (!segregacion.permitido) fallo('AUTOAPROBACION', segregacion.motivo)
+  const autoaprobada = esAutoaprobacion(r.createdById, ctx.actorId)
 
   await tx.supplyV2Reward.update({ where: { id: r.id }, data: { status: 'ACTIVE', approvedById: ctx.actorId, approvedAt: new Date() } })
-  const detalle = { code: r.code, autoaprobada: segregacion.autoaprobada, personasAutorizadas, motivo: segregacion.autoaprobada ? MOTIVO_AUTOAPROBACION : null }
+  const detalle = { code: r.code, autoaprobada, motivo: autoaprobada ? MOTIVO_AUTOAPROBACION : null }
   await eventoDePrograma(tx, r.programId, 'REWARD_PUBLISHED', detalle, ctx.actorId)
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_REWARD_APPROVED', 'SupplyV2Reward', r.id, detalle, r.program.supplier?.companyId ?? null)
   return { id: r.id, repetido: false }

@@ -237,9 +237,8 @@ test('ciclo: borrador → revisión → aprobación de OTRA persona → publicad
   await sinEmpresa('prueba', (tx) => adjuntarPromocionEnTx(tx, { campaignId: c.id, offerId: ctx.offerId, valueType: 'FIXED_AMOUNT', membegoValue: 100, budgetTotal: 5000 }, como(ctx.compras)))
   await sinEmpresa('prueba', (tx) => enviarARevisionEnTx(tx, c.id, como(ctx.compras)))
 
-  // Publicar sin aprobar está prohibido, y quien la creó no la aprueba.
+  // Publicar sin aprobar está prohibido.
   await assert.rejects(sinEmpresa('prueba', (tx) => publicarCampanaEnTx(tx, c.id, como(ctx.finanzas))), /se aprueba antes/)
-  await assert.rejects(sinEmpresa('prueba', (tx) => aprobarCampanaEnTx(tx, c.id, como(ctx.compras))), /no la aprueba la misma persona/)
   const ap = await sinEmpresa('prueba', (tx) => aprobarCampanaEnTx(tx, c.id, como(ctx.finanzas)))
   assert.equal(ap.autoaprobada, false)
   const pub = await sinEmpresa('prueba', (tx) => publicarCampanaEnTx(tx, c.id, como(ctx.finanzas)))

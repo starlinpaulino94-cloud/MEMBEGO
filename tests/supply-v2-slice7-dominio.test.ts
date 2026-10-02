@@ -29,7 +29,7 @@ import {
 } from '../src/modules/supply-v2/campaigns/domain'
 import { calcularRepartoLinea } from '../src/modules/supply-v2/core/financiacion'
 import { motivoNoElegible, type BeneficioParaElegibilidad, type OfertaParaElegibilidad } from '../src/modules/supply-v2/benefits/domain'
-import { revisarSegregacion } from '../src/modules/supply-v2/core/segregacion'
+import { esAutoaprobacion } from '../src/modules/supply-v2/core/segregacion'
 import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
 import { SUPPLY_V2_PERMISSIONS } from '../src/modules/supply-v2/contracts/gateways'
 
@@ -387,15 +387,9 @@ test('22 · una promoción de cupón NO se abre mandando el id del beneficio (§
   assert.equal(motivoNoElegible(beneficio({ requiresCoupon: false }), oferta, 'cli1', null, 0, D(300), AHORA, false), null)
 })
 
-test('23 · segregación de funciones: quien crea la campaña no la aprueba mientras haya a quién pasársela', () => {
-  const veto = revisarSegregacion('u1', 'u1', 2, 'campana')
-  assert.equal(veto.permitido, false)
-  assert.match(veto.permitido === false ? veto.motivo : '', /no la aprueba la misma persona/)
-  const otra = revisarSegregacion('u1', 'u2', 2, 'campana')
-  assert.deepEqual([otra.permitido, otra.permitido === true && otra.autoaprobada], [true, false])
-  // Con una sola persona autorizada la regla no protege nada: pasa y deja rastro.
-  const sola = revisarSegregacion('u1', 'u1', 1, 'campana')
-  assert.deepEqual([sola.permitido, sola.permitido === true && sola.autoaprobada], [true, true])
+test('23 · quien crea la campaña TAMBIÉN la aprueba, y queda marcado', () => {
+  assert.equal(esAutoaprobacion('u1', 'u1'), true)
+  assert.equal(esAutoaprobacion('u1', 'u2'), false)
 })
 
 test('24 · validación de la campaña: nombre, proveedor, vigencia, horario y límites', () => {

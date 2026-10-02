@@ -14,7 +14,7 @@ import {
   TRANSICIONES_ORDEN,
   validarCantidadRecibida,
 } from '../src/modules/supply-v2/core/estados'
-import { MOTIVO_AUTOAPROBACION, revisarSegregacion } from '../src/modules/supply-v2/core/segregacion'
+import { esAutoaprobacion, MOTIVO_AUTOAPROBACION } from '../src/modules/supply-v2/core/segregacion'
 import { calcularTotales, validarLinea, valorDeLotes } from '../src/modules/supply-v2/core/dinero'
 import { formatearNumero, secuenciaDeNumero } from '../src/modules/supply-v2/core/numeracion'
 import { acuerdoCompatible, validarAcuerdo } from '../src/modules/supply-v2/agreements/domain'
@@ -72,30 +72,15 @@ test('orden · DRAFT → PENDING_APPROVAL → APPROVED; no se salta la aprobaci�
   assert.throws(() => exigirTransicion(TRANSICIONES_ORDEN, 'RECEIVED', 'DRAFT', 'Orden'), /no se puede pasar/)
 })
 
-test('orden · el creador no la aprueba mientras haya otra persona autorizada', () => {
-  const veto = revisarSegregacion('u1', 'u1', 2, 'ordenCompra')
-  assert.equal(veto.permitido, false)
-  assert.match(veto.permitido === false ? veto.motivo : '', /no la puede aprobar quien la creó/)
-
-  // Otra persona aprueba: ni veto ni marca de autoaprobación.
-  assert.deepEqual(revisarSegregacion('u1', 'u2', 2, 'ordenCompra'), { permitido: true, autoaprobada: false })
-})
-
-test('orden · con una sola persona autorizada se permite y queda MARCADA como autoaprobación', () => {
-  assert.deepEqual(revisarSegregacion('u1', 'u1', 1, 'ordenCompra'), { permitido: true, autoaprobada: true })
-  // Sin creador conocido no hay a quién segregar: no es autoaprobación.
-  assert.deepEqual(revisarSegregacion(null, 'u1', 1, 'ordenCompra'), { permitido: true, autoaprobada: false })
-  assert.match(MOTIVO_AUTOAPROBACION, /única persona autorizada/)
-})
-
-test('segregación · cada entidad veta con su propio mensaje', () => {
-  const motivo = (clave: Parameters<typeof revisarSegregacion>[3]) => {
-    const r = revisarSegregacion('ana', 'ana', 2, clave)
-    return r.permitido === false ? r.motivo : ''
-  }
-  assert.match(motivo('factura'), /no la aprueba la misma persona/)
-  assert.match(motivo('pago'), /no lo confirma la misma persona/)
-  assert.match(motivo('liquidacion'), /misma persona que la generó/)
+test('autoaprobación · quien crea TAMBIÉN aprueba; lo que queda es el rastro', () => {
+  // La segregación se retiró a propósito: con un solo administrador de
+  // plataforma no hay a quién pasarle la aprobación. Ya no existe veto.
+  assert.equal(esAutoaprobacion('u1', 'u1'), true, 'aprobar lo propio se marca')
+  assert.equal(esAutoaprobacion('u1', 'u2'), false, 'aprobar lo ajeno no es autoaprobación')
+  // Sin creador conocido no hay nada que marcar.
+  assert.equal(esAutoaprobacion(null, 'u1'), false)
+  assert.equal(esAutoaprobacion('', 'u1'), false)
+  assert.match(MOTIVO_AUTOAPROBACION, /misma persona que la creó/)
 })
 
 test('recepción · 500 de 1.000 deja PARTIALLY_RECEIVED; completar deja RECEIVED', () => {

@@ -110,11 +110,13 @@ test.describe('Supply 2.0 · Slice 1', () => {
     await expect(compras.getByRole('heading', { level: 1, name: /^MBG-PO-\d{4}-\d{6}$/ })).toBeVisible()
     await expect(compras.getByTestId('estado-orden')).toHaveText('Borrador')
 
-    // ── Enviar a aprobación: quien la creó no ve «Aprobar» ────────────────
+    // ── Enviar a aprobación: quien la creó TAMBIÉN puede aprobar ──────────
     await compras.getByTestId('btn-enviar-aprobacion').click()
     await expect(compras.getByTestId('estado-orden')).toHaveText('Pendiente de aprobación')
-    await expect(compras.getByTestId('aviso-autoaprobacion')).toBeVisible()
-    await expect(compras.getByTestId('btn-aprobar')).toHaveCount(0)
+    // El botón ya no se esconde: lo que la interfaz hace es AVISAR de que la
+    // aprobación irá firmada con su nombre.
+    await expect(compras.getByTestId('aviso-autoaprobacion')).toContainText('queda registrado a tu nombre')
+    await expect(compras.getByTestId('btn-aprobar')).toBeVisible()
 
     // ── Finanzas aprueba desde OTRA sesión ────────────────────────────────
     const ctxFinanzas = await browser.newContext()

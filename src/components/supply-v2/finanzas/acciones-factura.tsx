@@ -25,14 +25,13 @@ function useRefrescoAlExito(estado: EstadoAccion<unknown>) {
   }, [estado, router])
 }
 
-export function AprobarFactura({ invoiceId, soyElCreador, soyElUnicoAutorizado }: { invoiceId: string; soyElCreador: boolean; soyElUnicoAutorizado: boolean }) {
+export function AprobarFactura({ invoiceId, soyElCreador }: { invoiceId: string; soyElCreador: boolean }) {
   const [estado, enviar, pendiente] = useActionState<EstadoAccion, FormData>(aprobarFacturaAction, {})
   useRefrescoAlExito(estado)
   return (
     <form action={enviar} className="space-y-2">
       <input type="hidden" name="invoiceId" value={invoiceId} />
-      {soyElCreador && !soyElUnicoAutorizado && <p className="text-caption text-muted-foreground">Registraste esta factura: le toca aprobarla a otra persona autorizada.</p>}
-      {soyElCreador && soyElUnicoAutorizado && <p className="text-caption text-muted-foreground" data-testid="aviso-unico-autorizado">Eres la única persona autorizada; esta aprobación queda registrada a tu nombre.</p>}
+      {soyElCreador && <p className="text-caption text-muted-foreground" data-testid="aviso-autoaprobacion">Registraste esta factura y la apruebas tú: queda registrado a tu nombre en la bitácora.</p>}
       <Button type="submit" disabled={pendiente} loading={pendiente} data-testid="btn-aprobar-factura">Aprobar factura</Button>
       {estado.error && <p className="text-sm text-destructive" role="alert">{estado.error}</p>}
     </form>

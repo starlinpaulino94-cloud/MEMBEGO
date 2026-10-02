@@ -16,7 +16,7 @@ import {
   validarLineasContraOrden,
   vencimientoDeObligacion,
 } from '../src/modules/supply-v2/finance/domain'
-import { revisarSegregacion } from '../src/modules/supply-v2/core/segregacion'
+import { esAutoaprobacion } from '../src/modules/supply-v2/core/segregacion'
 import { agregarEconomia, rangoDeVentana, snapshotDeVenta } from '../src/modules/supply-v2/economics/domain'
 import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
 import { aplicarMovimiento, cubetasVacias, saldoDeAsientos } from '../src/modules/supply-v2/core/ledger'
@@ -240,18 +240,9 @@ test('20 · conciliación: sin monto del proveedor queda OPEN; con monto, MATCHE
   assert.equal(distinta.difference!.toFixed(2), '1500.00')
 })
 
-test('21 · segregación de funciones: quien registra no confirma si hay más de una persona autorizada', () => {
-  const pago = revisarSegregacion('ana', 'ana', 2, 'pago')
-  assert.match(pago.permitido === false ? pago.motivo : '', /no lo confirma la misma persona/)
-  assert.deepEqual(revisarSegregacion('ana', 'luis', 2, 'pago'), { permitido: true, autoaprobada: false })
-  assert.deepEqual(
-    revisarSegregacion('ana', 'ana', 1, 'pago'),
-    { permitido: true, autoaprobada: true },
-    'con una sola persona autorizada se permite, marcado como autoaprobación'
-  )
-  const factura = revisarSegregacion('ana', 'ana', 3, 'factura')
-  assert.match(factura.permitido === false ? factura.motivo : '', /no la aprueba la misma persona/)
-  assert.deepEqual(revisarSegregacion('ana', 'luis', 3, 'factura'), { permitido: true, autoaprobada: false })
+test('21 · quien registra un pago o una factura TAMBIÉN los aprueba, y queda marcado', () => {
+  assert.equal(esAutoaprobacion('ana', 'ana'), true)
+  assert.equal(esAutoaprobacion('ana', 'luis'), false)
 })
 
 test('22 · ventanas del reporte económico', () => {
