@@ -940,6 +940,16 @@ const G_CLI_MIO: NavGroup = {
       keywords: ['cupones', 'cupon', 'codigo', 'promocion', 'campana', 'supply'],
     },
     {
+      // Supply 2.0 · Slice 8: membresía, puntos, recompensas e invitaciones en
+      // una entrada. Se llama «fidelización» y no «membresías» porque V1 ya
+      // tiene su propia entrada con ese nombre.
+      href: '/cliente/fidelizacion',
+      label: 'Mi fidelización',
+      icon: Gift,
+      description: 'Tu membresía, tus puntos y tus recompensas.',
+      keywords: ['fidelizacion', 'membresia', 'puntos', 'recompensas', 'invitar', 'referidos', 'supply'],
+    },
+    {
       href: '/cliente/mis-promociones',
       label: 'Mis beneficios',
       icon: Ticket,

@@ -3,7 +3,7 @@ import { TabsNav } from '@/components/ui/tabs-nav'
 import { BASE_SUPPLY_V2 } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · navegación (§25, §42, §63; Slice 4 §33, §68): diez pestañas.
+ * MEMBEGO SUPPLY 2.0 · navegación (§25, §42, §63; Slice 4 §33, §68): once pestañas.
  * Los reportes avanzados esperan a slices posteriores.
  */
 export const SECCIONES_SUPPLY_V2 = [
@@ -17,6 +17,9 @@ export const SECCIONES_SUPPLY_V2 = [
   { slug: 'beneficios', label: 'Beneficios' },
   // Slice 7
   { slug: 'campanas', label: 'Campañas' },
+  // Slice 8 · «Fidelización», no «Membresías»: V1 ya usa ese nombre en su
+  // propio menú y dos entradas iguales confunden a quien opera.
+  { slug: 'fidelizacion', label: 'Fidelización' },
   // Slice 4
   { slug: 'finanzas', label: 'Finanzas' },
   { slug: 'economia', label: 'Economía' },

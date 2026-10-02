@@ -9,7 +9,8 @@ import { formatDateTime } from '@/lib/format'
 import { ChipRedencion } from '@/components/supply-v2/chips'
 import { proveedorDeLaSesion } from '@/modules/supply-v2/permisos'
 import { entregasDelProveedor, incidenciasDelProveedor, resumenProveedor, resumenVentasProveedor, type VentanaDias } from '@/modules/supply-v2/redemption/queries'
-import { dineroSupplyV2, INCIDENT_TYPE_LABELS, RUTA_PORTAL_BENEFICIOS, RUTA_PORTAL_CAMPANAS, RUTA_PORTAL_LIQUIDACIONES, RUTA_PORTAL_PROVEEDOR, RUTA_PORTAL_VENTAS } from '@/modules/supply-v2/core/catalogo'
+import { dineroSupplyV2, INCIDENT_TYPE_LABELS, RUTA_PORTAL_BENEFICIOS, RUTA_PORTAL_CAMPANAS,
+  RUTA_PORTAL_FIDELIZACION, RUTA_PORTAL_LIQUIDACIONES, RUTA_PORTAL_PROVEEDOR, RUTA_PORTAL_VENTAS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Entregas Membego' }
@@ -66,6 +67,7 @@ export default async function PortalProveedorPage({ searchParams }: { searchPara
             <Link href={RUTA_PORTAL_LIQUIDACIONES} className="underline-offset-4 hover:underline" data-testid="link-portal-liquidaciones">Liquidaciones</Link>
             <Link href={RUTA_PORTAL_BENEFICIOS} className="underline-offset-4 hover:underline" data-testid="link-portal-beneficios">Beneficios Membego</Link>
             <Link href={RUTA_PORTAL_CAMPANAS} className="underline-offset-4 hover:underline" data-testid="link-portal-campanas">Campañas Membego</Link>
+            <Link href={RUTA_PORTAL_FIDELIZACION} className="underline-offset-4 hover:underline" data-testid="link-portal-fidelizacion">Fidelización Membego</Link>
           </div>
         </CardHeader>
         <CardContent>

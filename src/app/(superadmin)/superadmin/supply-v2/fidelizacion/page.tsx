@@ -1,122 +1,142 @@
 import Link from 'next/link'
-import { Sparkles } from 'lucide-react'
+import { requireRole } from '@/lib/auth/guards'
 import { PageHeader } from '@/components/ui/page-header'
+import { StatCard } from '@/components/ui/stat-card'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { ChipPrograma } from '@/components/supply-v2/chips'
 import { tableroDeFidelizacion } from '@/modules/supply-v2/loyalty/queries'
 import { puedeSupplyV2 } from '@/modules/supply-v2/permisos'
-import { ESTADO_PROGRAMA, RUTA_FIDELIZACION } from '@/modules/supply-v2/core/catalogo'
+import { LOYALTY_MODALITY_LABELS, RUTA_FIDELIZACION } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Fidelización · Supply 2.0' }
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · el centro de fidelización de Membego (§41).
+ * MEMBEGO SUPPLY 2.0 · SLICE 8 · TABLERO DE FIDELIZACIÓN (§41).
  *
- * Las cifras de resultado son reales, leídas del ledger. La ÚNICA estimación
- * va marcada como tal y con su advertencia al lado: §41 prohíbe enseñar una
- * estimación como si fuera un resultado confirmado, y sumarla al gasto real
- * sería exactamente eso.
- *
- * El dinero solo se enseña con `SUPPLY_V2_LOYALTY_FINANCE_VIEW`: ver un
- * programa no es ver lo que cuesta.
+ * Las cifras de resultado son REALES: miembros activos, referidos pagados,
+ * puntos emitidos y costo ya realizado. La única estimación —lo que costarían
+ * los puntos que la gente todavía no ha canjeado— va marcada como tal y con su
+ * advertencia al lado, porque una estimación no se enseña como si fuera dinero
+ * que ya se debe.
  */
-export default async function FidelizacionAdminPage() {
-  const [tablero, veFinanzas] = await Promise.all([tableroDeFidelizacion(), puedeSupplyV2('SUPPLY_V2_LOYALTY_FINANCE_VIEW')])
+export default async function FidelizacionPage() {
+  await requireRole('SUPERADMIN')
+  const [tablero, puedeCrear, puedeFinanzas] = await Promise.all([
+    tableroDeFidelizacion(),
+    puedeSupplyV2('SUPPLY_V2_LOYALTY_PROGRAM_CREATE'),
+    puedeSupplyV2('SUPPLY_V2_LOYALTY_FINANCE_VIEW'),
+  ])
   const t = tablero.totales
-
-  const metricas = [
-    ['Programas activos', String(t.programasActivos), 'metrica-programas'],
-    ['Miembros activos', String(t.miembrosActivos), 'metrica-miembros'],
-    ['Referidos válidos', String(t.referidosValidos), 'metrica-referidos'],
-    ['Puntos emitidos', String(t.puntosEmitidos), 'metrica-puntos-emitidos'],
-    ['Puntos disponibles', String(t.puntosDisponibles), 'metrica-puntos-disponibles'],
-    ['Recompensas entregadas', String(t.recompensasEntregadas), 'metrica-entregadas'],
-  ] as const
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Fidelización"
-        description="Membresías, referidos, puntos y recompensas de todos los programas."
+        description="Membresías, referidos, puntos y recompensas. Los beneficios de un plan o de una recompensa son los del catálogo de siempre, con su presupuesto y su ledger: aquí se agrupan y se les pone el techo."
         eyebrow="Supply 2.0"
+        nav={<NavSupplyV2 activa="fidelizacion" />}
+        action={
+          puedeCrear ? (
+            <Button asChild>
+              <Link href={`${RUTA_FIDELIZACION}/nuevo`} data-testid="btn-crear-programa-nav">+ Crear programa</Link>
+            </Button>
+          ) : undefined
+        }
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        {metricas.map(([k, v, tid]) => (
-          <Card key={k}>
-            <CardContent className="pt-6">
-              <p className="text-caption uppercase text-muted-foreground">{k}</p>
-              <p className="text-h2 tabular-nums" data-testid={tid}>{v}</p>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="tablero-fidelizacion">
+        <StatCard label="Programas activos" value={<span data-testid="tablero-programas">{t.programasActivos.toLocaleString('es-DO')}</span>} sub={`${tablero.programas.length} en total`} accent="brand" />
+        <StatCard label="Miembros activos" value={<span data-testid="tablero-miembros">{t.miembrosActivos.toLocaleString('es-DO')}</span>} sub="membresías vigentes ahora" />
+        <StatCard label="Referidos pagados" value={<span data-testid="tablero-referidos">{t.referidosValidos.toLocaleString('es-DO')}</span>} sub="invitaciones que ya cobraron" />
+        <StatCard
+          label="Puntos emitidos"
+          value={<span data-testid="tablero-puntos">{t.puntosEmitidos.toLocaleString('es-DO')}</span>}
+          sub={`${t.puntosDisponibles.toLocaleString('es-DO')} sin canjear todavía`}
+        />
       </div>
 
-      {veFinanzas && (
-        <Card data-testid="bloque-economia">
-          <CardContent className="space-y-3 pt-6">
-            <div className="grid gap-3 sm:grid-cols-2">
+      {puedeFinanzas && (
+        <Card>
+          <CardHeader><CardTitle>El dinero de la fidelización</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <dl className="grid gap-4 sm:grid-cols-3">
               <div>
-                <p className="text-caption uppercase text-muted-foreground">Costo realizado</p>
-                <p className="text-h2 tabular-nums" data-testid="metrica-costo-realizado">{t.costoRealizado}</p>
-                <p className="text-caption text-muted-foreground">Recompensas ya entregadas. Esto se gastó.</p>
+                <dt className="text-caption text-muted-foreground">Costo ya realizado</dt>
+                <dd className="text-h2 tabular-nums" data-testid="tablero-costo-realizado">{t.costoRealizado}</dd>
+                <p className="text-caption text-muted-foreground">Recompensas entregadas y premios concedidos. Esto sí es dinero gastado.</p>
               </div>
               <div>
-                <p className="text-caption uppercase text-muted-foreground">Costo potencial estimado</p>
-                <p className="text-h2 tabular-nums" data-testid="metrica-costo-estimado">{t.costoPotencialEstimado}</p>
-                <p className="text-caption text-muted-foreground" data-testid="aviso-estimacion">{t.estimacionAdvertencia}</p>
+                <dt className="text-caption text-muted-foreground">Recompensas entregadas</dt>
+                <dd className="text-h2 tabular-nums" data-testid="tablero-entregadas">{t.recompensasEntregadas.toLocaleString('es-DO')}</dd>
               </div>
-            </div>
+              <div>
+                <dt className="text-caption text-muted-foreground">Costo potencial (estimación)</dt>
+                <dd className="text-h2 tabular-nums text-warning" data-testid="tablero-costo-estimado">{t.costoPotencialEstimado}</dd>
+                <p className="text-caption text-warning" data-testid="tablero-advertencia">{t.estimacionAdvertencia}</p>
+              </div>
+            </dl>
           </CardContent>
         </Card>
       )}
 
-      {tablero.programas.length === 0 ? (
-        <EmptyState
-          variant="card"
-          icon={<Sparkles className="h-6 w-6" aria-hidden />}
-          title="Todavía no hay programas de fidelización"
-          description="Crea el primero para empezar a ofrecer membresías, puntos y recompensas."
-        />
-      ) : (
-        <Card>
-          <CardContent className="overflow-x-auto pt-6">
-            <table className="w-full text-sm">
-              <caption className="sr-only">Programas de fidelización</caption>
-              <thead>
-                <tr className="border-b text-left text-caption uppercase text-muted-foreground">
-                  <th scope="col" className="py-2">Programa</th>
-                  <th scope="col">Dueño</th>
-                  <th scope="col">Estado</th>
-                  <th scope="col" className="text-right">Miembros</th>
-                  <th scope="col" className="text-right">Referidos</th>
-                  <th scope="col" className="text-right">Puntos</th>
-                  {veFinanzas && <th scope="col" className="text-right">Gastado</th>}
-                </tr>
-              </thead>
-              <tbody data-testid="tabla-programas">
-                {tablero.programas.map((p) => (
-                  <tr key={p.id} className="border-b last:border-0" data-testid="fila-programa">
-                    <td className="py-2">
-                      <Link className="underline" href={`${RUTA_FIDELIZACION}/${p.id}`} data-testid="enlace-programa">
-                        {p.nombre}
-                      </Link>
-                      <span className="block font-mono text-caption text-muted-foreground">{p.code}</span>
-                    </td>
-                    <td>{p.propietario}</td>
-                    <td data-testid="programa-estado">{ESTADO_PROGRAMA[p.estado] ?? p.estado}</td>
-                    <td className="text-right tabular-nums">{p.miembrosActivos}</td>
-                    <td className="text-right tabular-nums">{p.referidosValidos}</td>
-                    <td className="text-right tabular-nums">{p.puntosEmitidos}</td>
-                    {veFinanzas && <td className="text-right tabular-nums">{p.costoRealizado}</td>}
+      <Card>
+        <CardHeader><CardTitle>Programas ({tablero.programas.length})</CardTitle></CardHeader>
+        <CardContent>
+          {tablero.programas.length === 0 ? (
+            <EmptyState
+              title="Todavía no hay ningún programa"
+              description="Un programa de fidelización agrupa las membresías, los referidos, los puntos y las recompensas de un negocio o de Membego."
+              action={puedeCrear ? <Button asChild><Link href={`${RUTA_FIDELIZACION}/nuevo`}>Crear el primero</Link></Button> : undefined}
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="tabla-programas">
+                <thead>
+                  <tr className="border-b border-border text-left text-caption text-muted-foreground">
+                    <th className="py-2 pr-3">Programa</th>
+                    <th className="py-2 pr-3">Estado</th>
+                    <th className="py-2 pr-3 text-right">Miembros</th>
+                    <th className="py-2 pr-3 text-right">Referidos</th>
+                    <th className="py-2 pr-3 text-right">Puntos</th>
+                    <th className="py-2 pr-3 text-right">Canjes</th>
+                    {puedeFinanzas && <th className="py-2 pr-3 text-right">Presupuesto</th>}
+                    {puedeFinanzas && <th className="py-2 text-right">Gastado</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-      )}
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {tablero.programas.map((p) => (
+                    <tr key={p.id} data-testid="fila-programa">
+                      <td className="py-2 pr-3">
+                        <Link href={`${RUTA_FIDELIZACION}/${p.id}`} className="font-medium underline-offset-4 hover:underline" data-testid="programa-nombre">{p.nombre}</Link>
+                        <span className="block font-mono text-caption text-muted-foreground">{p.code} · {p.negocio ?? p.propietario}</span>
+                      </td>
+                      <td className="py-2 pr-3"><ChipPrograma estado={p.estado} /></td>
+                      <td className="py-2 pr-3 text-right tabular-nums" data-testid="programa-miembros">{p.miembrosActivos.toLocaleString('es-DO')}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums" data-testid="programa-referidos">{p.referidosValidos.toLocaleString('es-DO')}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums" data-testid="programa-puntos">{p.puntosEmitidos.toLocaleString('es-DO')}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums" data-testid="programa-canjes">{p.recompensasReclamadas.toLocaleString('es-DO')}</td>
+                      {puedeFinanzas && (
+                        <td className="py-2 pr-3 text-right tabular-nums" data-testid="programa-presupuesto">
+                          {p.presupuestoAprobado ?? <span className="text-warning">Sin tope</span>}
+                        </td>
+                      )}
+                      {puedeFinanzas && <td className="py-2 text-right tabular-nums" data-testid="programa-gastado">{p.costoRealizado}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <p className="text-caption text-muted-foreground">
+        Las modalidades posibles son {Object.values(LOYALTY_MODALITY_LABELS).join(', ').toLowerCase()}. Un programa puede combinarlas o quedarse con una.
+      </p>
     </div>
   )
 }
