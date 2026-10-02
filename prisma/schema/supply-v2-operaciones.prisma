@@ -187,6 +187,13 @@ model SupplyV2OutboxEvent {
   availableAt DateTime  @default(now())
   processedAt DateTime?
 
+  /// Cuándo lo reclamó un worker (Bloque 2). Es el ARRIENDO: sin esta marca,
+  /// una fila reclamada por un proceso que murió es indistinguible de una
+  /// reclamada hace un segundo, y la recuperación o le roba el trabajo a un
+  /// worker vivo o no corre nunca. `availableAt` no vale: dice cuándo se puede
+  /// intentar, no cuándo se tomó.
+  claimedAt   DateTime?
+
   createdAt DateTime @default(now())
 
   retriedById String?
@@ -194,6 +201,7 @@ model SupplyV2OutboxEvent {
   retriedAt   DateTime?
 
   @@index([status, availableAt])
+  @@index([status, claimedAt])
   @@index([aggregateType, aggregateId])
   @@index([correlationId])
   @@map("supply_v2_outbox_events")

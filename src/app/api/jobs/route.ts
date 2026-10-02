@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       accion: 'trabajo',
       ok: true,
       ms: Date.now() - t0,
-      companyId: carga.companyId ?? null,
+      companyId: 'companyId' in carga ? (carga.companyId ?? null) : null,
       extra: { tipo: carga.tipo },
     })
     return NextResponse.json({ ok: true, ...resultado })
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       accion: 'trabajo',
       ok: false,
       ms: Date.now() - t0,
-      companyId: carga.companyId ?? null,
+      companyId: 'companyId' in carga ? (carga.companyId ?? null) : null,
       motivo: 'ejecucion_fallida',
       extra: { tipo: carga.tipo },
     })

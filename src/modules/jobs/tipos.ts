@@ -129,6 +129,28 @@ export interface CargaReintentoEntrega {
   companyId: string
 }
 
+/**
+ * EFECTO DEL OUTBOX DE SUPPLY 2.0 (Slice 9 · bloque 2).
+ *
+ * El trabajo no lleva el efecto: lleva el ID de la fila del outbox. La fila es
+ * la fuente de la verdad —su estado, sus intentos, su payload— y el trabajo
+ * solo dice «ve a entregar esa». Llevar el payload dentro del mensaje haría que
+ * un reintento de la cola entregara una versión vieja de algo que la base ya
+ * cambió.
+ *
+ * `intentos` es los que la fila tenía al despacharse, con el mismo propósito
+ * que en `CargaReintentoEntrega`: distinguir el tercer intento del segundo en
+ * la clave de deduplicación, sin que dos publicaciones del MISMO tercero sean
+ * dos trabajos.
+ */
+export interface CargaEfectoSupplyV2 {
+  tipo: 'supply-v2-efecto'
+  outboxId: string
+  /** El hilo de la operación, para que los logs del worker lo lleven. */
+  correlationId: string
+  intentos: number
+}
+
 export type CargaTrabajo =
   | CargaNotificar
   | CargaAutomatizaciones
@@ -138,6 +160,7 @@ export type CargaTrabajo =
   | CargaCampanaDirigida
   | CargaEventoMeta
   | CargaReintentoEntrega
+  | CargaEfectoSupplyV2
 
 /** Tipos aceptados por el endpoint `/api/jobs` (cada caso del ejecutor). */
 export const TIPOS_TRABAJO = [
@@ -149,6 +172,7 @@ export const TIPOS_TRABAJO = [
   'campana-dirigida',
   'meta-evento',
   'reintento-entrega',
+  'supply-v2-efecto',
 ] as const
 
 /** Ruta del endpoint que ejecuta los trabajos. */

@@ -393,8 +393,12 @@ test('I · el barrido vence derechos y vouchers caducados, y una segunda pasada 
   const antes = await lote(ctx.lotId)
   await prisma.supplyV2Entitlement.update({ where: { id: derecho3 }, data: { expiresAt: new Date(Date.now() - 1000) } })
   await prisma.supplyV2Voucher.updateMany({ where: { entitlementId: derecho3, status: 'ACTIVE' }, data: { validFrom: new Date(Date.now() - 2 * DIA), validUntil: new Date(Date.now() - 1000) } })
-  const r = await barridoSupplyV2()
-  assert.ok(r.derechosVencidos >= 1)
+  await barridoSupplyV2()
+  // Lo que se comprueba es el EFECTO sobre este derecho, no el contador del
+  // barrido. El barrido es global y varios archivos de prueba lo llaman en
+  // paralelo: si otro lo corre primero, este derecho ya está vencido y nuestro
+  // contador dice 0 sin que nada esté mal. El contador no es una afirmación
+  // segura; el estado del derecho sí.
   assert.equal((await derecho(derecho3)).status, 'EXPIRED')
   assert.equal(await prisma.supplyV2Voucher.count({ where: { entitlementId: derecho3, status: 'ACTIVE' } }), 0)
   const despues = await lote(ctx.lotId)

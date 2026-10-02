@@ -1016,7 +1016,21 @@ test('H2 · VENCIMIENTO: se consume primero lo que vence antes y vencer no toca 
   assert.equal(cB.available, 10)
 
   const dentroDe40Dias = new Date(ahora.getTime() + 40 * DIA)
-  const vencidos = await sinEmpresa('prueba', (tx) => vencerPuntosEnTx(tx, como(null), dentroDe40Dias))
+  // El barrido vence COMO MÁXIMO 200 lotes por pasada —acotado a propósito, para
+  // no bloquear la tabla entera—, y esta base de pruebas es compartida entre
+  // corridas. Cuando los lotes VIVOS pendientes de vencer pasan de 200, la
+  // ventana no llega a la cuenta que esta prueba acaba de crear, y la prueba
+  // fallaría sin que nada del producto esté mal. Se vacía la cola llamando
+  // hasta que no quede nada, que es lo que el cron hace pasada a pasada.
+  //
+  // (Que los lotes YA CONSUMIDOS ocuparan esa ventana sí era un defecto del
+  // producto, y está corregido: ver `H2b`.)
+  let vencidos = 0
+  for (let pasada = 0; pasada < 50; pasada++) {
+    const n = await sinEmpresa('prueba', (tx) => vencerPuntosEnTx(tx, como(null), dentroDe40Dias))
+    vencidos += n
+    if (n === 0) break
+  }
   assert.ok(vencidos >= 10)
 
   const despuesA = await prisma.supplyV2PointsAccount.findUniqueOrThrow({ where: { id: cA.id }, select: { available: true, expired: true } })
@@ -1029,6 +1043,92 @@ test('H2 · VENCIMIENTO: se consume primero lo que vence antes y vencer no toca 
   assert.equal(r.available, 0)
   assert.equal(r.expired, 10)
 })
+
+test('H2b · los lotes YA CONSUMIDOS no ocupan la ventana del barrido (si no, los puntos dejan de vencer)', async () => {
+  // REGRESIÓN de un defecto encontrado al repetir la suite del Slice 9.
+  //
+  // Un lote gastado conserva su `availableDelta` —el ledger no se reescribe— y
+  // lo vivo es `availableDelta - consumedFromLot`. El barrido pedía solo
+  // `availableDelta > 0`, así que los lotes consumidos, que son los más viejos,
+  // llenaban la ventana de `limite` filas y el bucle los saltaba uno a uno: la
+  // función devolvía 0 y LOS PUNTOS DEJABAN DE VENCER PARA SIEMPRE. En la base
+  // de pruebas había 202 lotes consumidos frente a un tope de 200, y 33 lotes
+  // vivos que ya debían haber caducado.
+  //
+  // Se plantan lotes con fechas del año 2000 —más viejas que cualquier otro
+  // dato— y se barre con el tope justo en el número de consumidos: con el
+  // defecto, la ventana se agota en ellos y el lote vivo no se toca.
+  const programa = await programaActivo({ nombre: 'VentanaBarrido', supplierId: ctx.supplierA, owner: 'SUPPLIER', diasVencimiento: 30 })
+  const cuenta = await prisma.supplyV2PointsAccount.create({
+    // Los saldos cuadran con los movimientos que se plantan debajo: 5 lotes de
+    // 10 disponibles, 4 de ellos canjeados → 10 disponibles y 40 canjeados.
+    data: { programId: programa, customerId: ctx.cliente2, available: 10, redeemed: 40 },
+    select: { id: true },
+  })
+  const lote = (d: { consumido: number; dia: number }) => ({
+    accountId: cuenta.id,
+    type: 'EARNED' as const,
+    source: 'PURCHASE' as const,
+    points: 10,
+    availableDelta: 10,
+    consumedFromLot: d.consumido,
+    availableAfter: 10,
+    pendingAfter: 0,
+    reservedAfter: 0,
+    expiresAt: new Date(Date.UTC(2000, 0, d.dia)),
+  })
+  const CONSUMIDOS = 4
+  for (let i = 0; i < CONSUMIDOS; i++) {
+    await prisma.supplyV2PointsMovement.create({ data: lote({ consumido: 10, dia: 1 + i }) })
+    // Y su contrapartida, para que la cuenta plantada NO mienta respecto a su
+    // ledger: un lote consumido tiene su movimiento de canje. Sin esto, el
+    // invariante global de más abajo —y hace bien— delataría este montaje.
+    await prisma.supplyV2PointsMovement.create({
+      data: {
+        accountId: cuenta.id,
+        type: 'REDEEMED',
+        source: 'PROMOTION',
+        points: 10,
+        availableDelta: -10,
+        redeemedDelta: 10,
+        availableAfter: 10,
+        pendingAfter: 0,
+        reservedAfter: 0,
+      },
+    })
+  }
+  // El vivo vence DESPUÉS de todos los consumidos: con la ventana agotada en
+  // ellos, no se alcanza.
+  await prisma.supplyV2PointsMovement.create({ data: lote({ consumido: 0, dia: 1 + CONSUMIDOS }) })
+
+  const en2001 = new Date(Date.UTC(2001, 0, 1))
+  const vencidos = await sinEmpresa('prueba', (tx) => vencerPuntosEnTx(tx, como(null), en2001, CONSUMIDOS))
+  assert.equal(vencidos, 10, 'el lote vivo vence aunque haya más lotes consumidos que el tope de la ventana')
+  const despues = await prisma.supplyV2PointsAccount.findUniqueOrThrow({
+    where: { id: cuenta.id },
+    select: { available: true, expired: true },
+  })
+  assert.equal(despues.available, 0)
+  assert.equal(despues.expired, 10)
+
+  // Y una segunda pasada no vuelve a vencer nada: lo consumido no se revive.
+  const otra = await sinEmpresa('prueba', (tx) => vencerPuntosEnTx(tx, como(null), en2001, CONSUMIDOS))
+  assert.equal(otra, 0)
+
+  // La cuenta plantada sigue cuadrando con su ledger, que es lo que comprueba
+  // el invariante global.
+  const r = await sinEmpresa('prueba', (tx) => saldoReconstruidoEnTx(tx, cuenta.id))
+  assert.equal(r.available, 0)
+  assert.equal(r.expired, 10)
+  assert.equal(r.redeemed, 40)
+
+  // Y se retira el montaje. Esta base de pruebas es compartida entre corridas,
+  // y una cuenta plantada a mano que se queda ahí es una fila más que tendrán
+  // que mirar todos los invariantes globales de todas las corridas futuras.
+  await prisma.supplyV2PointsMovement.deleteMany({ where: { accountId: cuenta.id } })
+  await prisma.supplyV2PointsAccount.delete({ where: { id: cuenta.id } })
+})
+
 
 test('H3 · el lote que vence ANTES se gasta primero', async () => {
   const programId = await programaActivo({ nombre: 'FIFO', supplierId: ctx.supplierA, owner: 'SUPPLIER', diasVencimiento: 10 })

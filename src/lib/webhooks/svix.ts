@@ -43,8 +43,14 @@ export type ResultadoFirma =
  * Compara en tiempo constante. Las longitudes distintas se descartan antes:
  * `timingSafeEqual` lanza si difieren, y esa excepción sería en sí misma un
  * canal lateral.
+ *
+ * Se exporta —y es el único cambio que el Slice 9 hace en este archivo— para
+ * que el verificador de firmas de Supply 2.0 no escriba una segunda comparación
+ * en tiempo constante. Dos implementaciones de una primitiva de seguridad son
+ * dos sitios donde equivocarse, y la segunda nunca recibe la misma atención
+ * que la primera.
  */
-function igualesSeguro(a: string, b: string): boolean {
+export function igualesSeguro(a: string, b: string): boolean {
   const ba = Buffer.from(a)
   const bb = Buffer.from(b)
   if (ba.length !== bb.length) return false
