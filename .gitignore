@@ -115,3 +115,4 @@ examples/*
 /playwright/.cache/
 /playwright/.auth/
 .playwright-mcp/
+/artifacts/
