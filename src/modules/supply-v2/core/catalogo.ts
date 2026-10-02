@@ -562,6 +562,9 @@ import type {
   SupplyV2CouponKind,
   SupplyV2CouponRedemptionStatus,
   SupplyV2CouponStatus,
+  SupplyV2CustomerMembershipStatus,
+  SupplyV2LoyaltyProgramStatus,
+  SupplyV2MembershipPlanKind,
 } from '@prisma/client'
 
 export const RUTA_CAMPANAS = `${BASE_SUPPLY_V2}/campanas`
@@ -658,3 +661,47 @@ export const TIPOS_DE_PROMOCION = [
 ] as const
 
 export type TipoDePromocion = (typeof TIPOS_DE_PROMOCION)[number]['clave']
+
+// ── Slice 8 · fidelización ───────────────────────────────────────────────────
+//
+// Rutas y etiquetas de programas, membresías, puntos, recompensas y referidos.
+// Las rutas viven aquí y no sueltas por las pantallas: una ruta escrita a mano
+// en un `href` se queda atrás en silencio cuando la carpeta se mueve.
+
+export const RUTA_FIDELIZACION = `${BASE_SUPPLY_V2}/fidelizacion`
+export const RUTA_PORTAL_FIDELIZACION = `${RUTA_PORTAL_PROVEEDOR}/fidelizacion`
+export const RUTA_FIDELIZACION_CLIENTE = '/cliente/fidelizacion'
+export const RUTA_MEMBRESIAS_CLIENTE = '/cliente/membresias'
+export const RUTA_PUNTOS_CLIENTE = '/cliente/puntos'
+export const RUTA_RECOMPENSAS_CLIENTE = '/cliente/recompensas'
+export const RUTA_INVITAR_CLIENTE = '/cliente/invitar'
+export const RUTA_MEMBRESIAS_PUBLICAS = '/promociones/membresias'
+
+export const ESTADO_PROGRAMA: Record<SupplyV2LoyaltyProgramStatus, string> = {
+  DRAFT: 'Borrador',
+  PENDING_APPROVAL: 'En revisión',
+  ACTIVE: 'Activo',
+  PAUSED: 'Pausado',
+  COMPLETED: 'Terminado',
+  CANCELLED: 'Cancelado',
+}
+
+export const TIPO_DE_PLAN: Record<SupplyV2MembershipPlanKind, string> = {
+  FREE: 'Gratuito',
+  PAID: 'De pago',
+  GRANTED: 'Concedido',
+}
+
+/**
+ * `SCHEDULED` es un período ya PAGADO que todavía no empieza (§13): se compró
+ * por adelantado mientras el anterior sigue corriendo. Decirle «programada» a
+ * secas se confundiría con «pendiente de pago», que es justo lo contrario.
+ */
+export const ESTADO_MEMBRESIA: Record<SupplyV2CustomerMembershipStatus, string> = {
+  PENDING_PAYMENT: 'Pendiente de pago',
+  SCHEDULED: 'Pagada, empieza al terminar la actual',
+  ACTIVE: 'Activa',
+  EXPIRED: 'Vencida',
+  CANCELLED: 'Cancelada',
+  SUSPENDED: 'Suspendida',
+}
