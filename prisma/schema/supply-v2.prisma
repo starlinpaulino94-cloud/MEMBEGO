@@ -946,6 +946,9 @@ model SupplyV2CustomerOrder {
   benefitReservations    SupplyV2BenefitReservation[]
   couponRedemptions      SupplyV2CouponRedemption[]
 
+  /// Slice 9 · eventos externos que apuntan a esta compra (webhook inbox).
+  externalEvents SupplyV2ExternalEvent[] @relation("SupplyV2ExternalEventOrder")
+
   @@index([customerId, status])
   @@index([status, expiresAt])
   @@index([paymentStatus, status])
