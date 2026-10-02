@@ -437,6 +437,10 @@ async function movil(browser: Browser) {
   const codigo = (await compras.getByTestId('cupones-generados').locator('p').last().innerText()).trim()
 
   await compras.getByTestId('btn-enviar-revision').click()
+  // Se espera a que el estado CAMBIE antes de cambiar de persona: sin esto,
+  // finanzas puede cargar la ficha todavía en borrador y quedarse esperando un
+  // botón de aprobar que no existe hasta que la acción de compras termine.
+  await expect(compras.getByTestId('estado-campana')).toHaveText('En revisión')
   await finanzas.goto(urlCampana)
   await finanzas.getByTestId('btn-aprobar-campana').click()
   await finanzas.getByTestId('btn-publicar-campana').click()

@@ -474,6 +474,10 @@ async function movil(browser: Browser) {
   await planCreado(compras, urlPrograma, d.planGratis, null, d.beneficio)
   await compras.goto(urlPrograma)
   await compras.getByTestId('btn-enviar-revision-programa').click()
+  // Igual que en el escritorio: se confirma el cambio de estado antes de pasar
+  // a la otra persona. Sin esta espera la prueba depende de quién gane la
+  // carrera, y bajo carga la pierde.
+  await expect(compras.getByTestId('estado-programa')).toHaveText('En revisión')
   await finanzas.goto(urlPrograma)
   await finanzas.getByTestId('btn-aprobar-programa').click()
   await expect(finanzas.getByTestId('estado-programa')).toHaveText('Activo')
