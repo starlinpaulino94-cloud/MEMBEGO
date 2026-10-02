@@ -6,6 +6,7 @@
 |---|---|
 | Base efectiva del bloque | `998994c5` (fusión del PR #547 en `main`) |
 | Preparación | `b4f6526e` (estabilidad de pruebas, ver §1) |
+| Commit del bloque | `bddbfb86` |
 | Rama | `claude/jolly-brahmagupta-dmhml9` |
 | Fecha | 2026-10-02 |
 | Estado | Bloque 3 terminado y verificado. **No fusionado, no desplegado.** |
@@ -530,7 +531,7 @@ UNIQUE (dedupeKey)   -- comprobar dos veces lo mismo deja una fila
 | `npx tsc --noEmit` | **0 errores** |
 | ESLint sobre lo nuevo y lo tocado | **0 avisos** |
 | `npm test` | **3509 pasan**, 0 fallan, 6 omitidas |
-| `npm run test:db` ×3 | *(ver nota al final del informe)* |
+| `npm run test:db` ×3 | **275 pasan, 0 fallan** (254 de antes + 21 del bloque 3) |
 | Suite del Slice 9 (bloques 1+2+3) | **56/56 en tres corridas seguidas** |
 | Dominio del bloque 3 | 27/27 |
 | `scripts/transacciones-anidadas.mjs` | ninguna |
