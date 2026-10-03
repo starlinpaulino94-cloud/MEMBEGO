@@ -246,6 +246,9 @@ type Tono = 'neutral' | 'warning' | 'info' | 'success' | 'danger'
 
 export const RUTA_FINANZAS = `${BASE_SUPPLY_V2}/finanzas`
 export const RUTA_ECONOMIA = `${BASE_SUPPLY_V2}/economia`
+/// Slice 9 · bloque 4 · el centro operativo. No es un tablero comercial: es
+/// donde se mira si Supply 2.0 está sano y qué pasó con una operación.
+export const RUTA_OPERACIONES = `${BASE_SUPPLY_V2}/operaciones`
 
 export const PAYABLE_RECOGNITION_LABELS: Record<SupplyV2PayableRecognition, string> = {
   ON_INVOICE: 'Al aprobar la factura',

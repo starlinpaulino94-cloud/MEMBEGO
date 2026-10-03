@@ -1,11 +1,11 @@
 import type { NotifTipo, Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { sinEmpresa } from '@/lib/tenant'
 import { encolar } from '@/modules/jobs/cola'
 import type { ContextoAuditoria } from '../core/auditoria'
 import { sanearError } from './domain'
 import { anotarSupply, anotarYContar } from './log'
 import { marcarEntregado, marcarFallido, reclamarEfectos, type EfectoReclamado } from './outbox'
+import { EFECTOS_DE_AVISO } from '../notifications/efectos'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · DEL OUTBOX A LA COLA (§6, §7, §8).
@@ -91,6 +91,19 @@ export const EFECTOS: Record<string, EjecutorDeEfecto> = {
       mensaje: 'El pago de tu compra fue rechazado. Puedes intentarlo de nuevo desde tus compras.',
       href: '/cliente/compras',
     }),
+
+  /**
+   * Y los avisos del bloque 5, que se registran aquí en vez de repetir el
+   * mecanismo. Son los mismos efectos del outbox —con su escalera, su cola de
+   * difuntos y su panel— y lo único que cambia es por dónde salen: dentro de
+   * Membego o por correo, según el canal que lleve el efecto.
+   *
+   * Los dos de arriba se quedan como están. Se podrían reescribir sobre el
+   * mecanismo nuevo, pero son el camino del dinero y ya están probados contra
+   * PostgreSQL: cambiarlos sin necesidad es gastar el único crédito que vale,
+   * el de que esa parte funciona.
+   */
+  ...EFECTOS_DE_AVISO,
 }
 
 export interface ResultadoDespacho {
@@ -175,7 +188,14 @@ export async function entregarEfecto(
   ctx: ContextoAuditoria,
   ahora = new Date()
 ): Promise<{ estado: 'DELIVERED' | 'FAILED' | 'DEAD_LETTER' | 'YA_ESTABA'; detalle: string }> {
-  const fila = await prisma.supplyV2OutboxEvent.findUnique({
+  // `sinEmpresa` y no `prisma` a pelo: el outbox es una tabla de PLATAFORMA,
+  // pero «sin inquilino» no es «sin contexto». Con RLS encendida una consulta
+  // sin contexto no falla: devuelve CERO filas. Aquí cero filas se leería como
+  // «ese efecto no existe» y el despacho se quedaría mudo para siempre. El
+  // gate `rls:cobertura` no lo cazó porque mira por ARCHIVO y este ya tenía un
+  // `sinEmpresa` más abajo; eso no lo hace menos defecto.
+  const fila = await sinEmpresa('Supply 2.0: leer el efecto a entregar', (tx) =>
+    tx.supplyV2OutboxEvent.findUnique({
     where: { id: outboxId },
     select: {
       id: true,
@@ -188,7 +208,8 @@ export async function entregarEfecto(
       attempts: true,
       status: true,
     },
-  })
+    })
+  )
   if (!fila) {
     // La fila ya no está: no es un fallo del que reintentar sirva.
     anotarSupply({ event: 'efecto_inexistente', outboxId })
@@ -256,11 +277,19 @@ export async function recuperarArriendos(
   ahora = new Date()
 ): Promise<{ recuperados: string[]; muertos: string[] }> {
   const limite = new Date(ahora.getTime() - arriendoMs)
-  const abandonadas = await prisma.supplyV2OutboxEvent.findMany({
-    where: { status: 'PROCESSING', claimedAt: { lt: limite } },
-    select: { id: true, correlationId: true, attempts: true },
-    take: 100,
-  })
+  // `sinEmpresa` y no `prisma` a pelo: el outbox es una tabla de PLATAFORMA,
+  // pero «sin inquilino» no es «sin contexto». Con RLS encendida una consulta
+  // sin contexto no falla: devuelve CERO filas. Aquí cero filas se leería como
+  // «ese efecto no existe» y el despacho se quedaría mudo para siempre. El
+  // gate `rls:cobertura` no lo cazó porque mira por ARCHIVO y este ya tenía un
+  // `sinEmpresa` más abajo; eso no lo hace menos defecto.
+  const abandonadas = await sinEmpresa('Supply 2.0: efectos con el arriendo vencido', (tx) =>
+    tx.supplyV2OutboxEvent.findMany({
+      where: { status: 'PROCESSING', claimedAt: { lt: limite } },
+      select: { id: true, correlationId: true, attempts: true },
+      take: 100,
+    })
+  )
 
   const recuperados: string[] = []
   const muertos: string[] = []
@@ -306,10 +335,12 @@ async function avisarAlCliente(
   e: EfectoAEntregar,
   aviso: { tipo: NotifTipo; titulo: string; mensaje: string; href: string }
 ): Promise<{ detalle: string }> {
-  const orden = await prisma.supplyV2CustomerOrder.findUnique({
-    where: { id: e.aggregateId },
-    select: { customerId: true, number: true },
-  })
+  const orden = await sinEmpresa('Supply 2.0: a quién avisar de esta compra', (tx) =>
+    tx.supplyV2CustomerOrder.findUnique({
+      where: { id: e.aggregateId },
+      select: { customerId: true, number: true },
+    })
+  )
   if (!orden) {
     // Sin orden no hay a quién avisar. No es transitorio: no se reintenta
     // ocho veces una compra que no existe.
@@ -351,7 +382,9 @@ async function devolverSiSigueReclamado(
   ctx: ContextoAuditoria,
   ahora: Date
 ): Promise<void> {
-  const fila = await prisma.supplyV2OutboxEvent.findUnique({ where: { id }, select: { status: true } })
+  const fila = await sinEmpresa('Supply 2.0: estado del efecto antes de anotar el fallo', (tx) =>
+    tx.supplyV2OutboxEvent.findUnique({ where: { id }, select: { status: true } })
+  )
   if (fila?.status !== 'PROCESSING') return
   await marcarFallido(id, error, ctx, ahora)
 }

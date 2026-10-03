@@ -33,34 +33,59 @@ PostgreSQL, aplica el esquema, construye, arranca y recorre con Chromium.
 ### En local
 
 ```bash
-# 1) Una base desechable
-createdb membego_e2e
-export DATABASE_URL="postgresql://localhost:5432/membego_e2e"
-export DIRECT_URL="$DATABASE_URL"
-npx prisma db push --skip-generate --accept-data-loss
-
-# 2) La aplicación construida (no `dev`: se prueba lo que se despliega)
-npm run build
-npx next start -p 3210 &
-
-# 3) El recorrido
-npm run e2e
+npm run build          # se prueba lo que se despliega, no `next dev`
+npm run e2e:limpio
 ```
 
-Con un Chromium ya instalado en el sistema:
+Eso es todo. `scripts/e2e/correr.mjs` hace las cinco cosas en orden fijo:
+recrea la base desechable con el esquema de hoy, da de alta la cuenta con la
+que corre la integración de pagos, arranca `next start` contra ESA base, corre
+Playwright y apaga el servidor. Acepta los argumentos de Playwright:
 
 ```bash
-PLAYWRIGHT_CHROMIUM_PATH=/ruta/a/chrome npm run e2e
+npm run e2e:limpio -- tests/e2e/supply-v2-slice4.spec.ts
+npm run e2e:limpio -- --project=escritorio
 ```
 
+Solo la base, sin correr nada: `npm run e2e:base`.
+
+Con un Chromium ya instalado en el sistema:
+`PLAYWRIGHT_CHROMIUM_PATH=/ruta/a/chrome npm run e2e:limpio`.
+
 Para ver qué pasó en un fallo: `npx playwright show-trace test-results/…/trace.zip`.
+
+### Por qué un comando y no tres
+
+**No corras el E2E contra `membego_dev`.** Se hizo durante un tiempo y el
+resultado fue una suite en rojo —9 de 18— que se despachaba como «problema del
+entorno». Lo era, con una causa medible: la base de desarrollo lleva acumulada
+la basura de toda la historia del proyecto. El 2026-10-03 tenía 2 665 ofertas
+ACTIVAS, 1 303 campañas, 920 redenciones, 6 365 compras y 367 885 filas de
+bitácora. Con eso pasan dos cosas que no son del producto:
+
+1. **Tiempo.** Pantallas que listan cientos de filas tardan tanto que el
+   recorrido agota su plazo. Dos recorridos del Slice 4 morían a los 420 s y
+   480 s; sobre una base limpia el archivo entero corre en 1,6 min.
+2. **Primera página.** Las pruebas buscan SU fila en tablas que hoy tienen
+   cientos. Cuando la suya no entra en la primera página, la prueba concluye
+   que no existe.
+
+Subir los plazos habría tapado las dos y dejado la suite igual de frágil. El
+comando único existe para que la base limpia no sea un paso que se olvida: era
+fácil arrancar el servidor apuntando a un sitio y Playwright a otro, y el
+síntoma de eso es «pruebas inestables».
+
+`scripts/e2e/base-limpia.mjs` hace `DROP DATABASE`, así que exige que el nombre
+contenga `e2e` y rechaza cualquier otro. No hay bandera para saltárselo.
 
 ---
 
 ## 3. Qué se comprueba hoy
 
-**28 pruebas** (14 escenarios × móvil y escritorio), verdes contra una
-aplicación real con una base real.
+Dos capas, y conviene no confundirlas.
+
+**El recorrido público** — las 28 pruebas con las que nació esta fase (14
+escenarios × móvil y escritorio):
 
 | Grupo | Qué protege |
 |---|---|
@@ -85,18 +110,27 @@ lo demostró: pasaba en escritorio y fallaba en móvil.
 
 ---
 
-## 4. Lo que falta, y qué haría falta para tenerlo
+**El recorrido autenticado de Supply 2.0** — `supply-v2-slice1` … `slice9`,
+un archivo por slice. Cubre lo que esta sección decía que era imposible: alta
+de proveedor, acuerdo, orden de compra, oferta, checkout, pago, QR, canje,
+beneficios, cupones, fidelización y el centro de operaciones, en móvil y
+escritorio.
 
-**No está cubierto el recorrido autenticado**: registro → compra → pago → QR →
-canje. Es decir, justo el que mueve dinero.
+Se desbloqueó sin un proyecto de Supabase, y el truco está en
+`tests/e2e/supply-v2-sesion.ts`: el arnés **firma la cookie de sesión con
+`SUPABASE_JWT_SECRET`**. Cuando `supabase.auth.getUser()` falla con un error de
+red —en CI la URL apunta a un puerto local sin nadie escuchando, a propósito—
+la aplicación cae a la verificación LOCAL del token, que es la que acepta esa
+cookie. Lo que hacía falta no era un servicio externo: era un secreto de
+relleno y una base desechable.
 
-El motivo es concreto y no se arregla escribiendo más pruebas: la autenticación
-la hace **Supabase Auth**, un servicio externo. Sin un proyecto de Supabase no
-hay forma de crear una sesión, y usar el de producción para pruebas automáticas
-significaría crear y borrar usuarios de verdad en la misma base donde están los
-clientes reales.
+---
 
-Para cerrarlo hacen falta tres cosas, ninguna de código:
+## 4. Lo que todavía falta
+
+Del recorrido del cliente **de membresías** (el de `Cliente`/`Visita`, no el de
+Supply 2.0) sigue sin cubrirse el escaneo de QR en el mostrador y la caja. Para
+eso sí harían falta tres cosas, ninguna de código:
 
 1. **Un proyecto de Supabase de pruebas**, separado del de producción. En el
    plan gratuito basta.
@@ -143,3 +177,20 @@ Aprendidas escribiendo estas, no en abstracto:
 - **Una prueba sin aserción de negocio no vale.** Comprobar que una página
   devuelve 200 y nada más solo protege del error 500 — que es el único que sí
   aparece en Sentry.
+- **Cada prueba se queda con SUS datos.** Todo lo que crea lleva un sufijo de la
+  corrida y todo lo que busca filtra por él. Una prueba que mire «la primera
+  fila» de una tabla funciona hasta que alguien añade otra.
+- **Antes de usar un elemento filtrado por texto, afirma que hay uno.**
+  `await expect(x).toHaveCount(1)` y luego se pulsa. No es un margen de tiempo
+  disfrazado: es la invariante de verdad, Playwright reintenta hasta que se
+  cumple, y si la página llegara a duplicar la fila esa línea lo caza en vez de
+  esconderlo. Sin ella, durante una navegación del App Router el DOM puede
+  tener un instante dos copias del listado y el modo estricto aborta — pasó en
+  los Slices 3, 6 y 7.
+- **Un plazo no se sube para arreglar un problema de volumen.** Si una prueba
+  agota su tiempo, primero se mira contra qué base corre. Subir el plazo
+  convierte un fallo en una espera y deja la causa intacta.
+- **Lo que la prueba afirma tiene que ser lo que el producto promete hoy.** El
+  recorrido del Slice 8 afirmó durante un día que quien crea un programa no
+  puede aprobarlo, después de que el producto retirara ese veto a propósito. Una
+  prueba que defiende una regla que ya no existe no protege nada: estorba.
