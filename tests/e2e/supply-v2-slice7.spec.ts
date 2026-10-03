@@ -446,7 +446,15 @@ async function movil(browser: Browser) {
 
   // ── Descubrimiento, ficha, «Mis cupones» y checkout en el teléfono ────
   await cliente.goto('/promociones/campanas')
-  await expect(cliente.getByTestId('campana-publica').filter({ hasText: d.campana })).toBeVisible()
+  const tarjetaCampana = cliente.getByTestId('campana-publica').filter({ hasText: d.campana })
+  // `toHaveCount(1)` antes de usar el elemento, a propósito: no es un margen de
+  // tiempo disfrazado, es la invariante de verdad —de esto hay UNO— y Playwright
+  // reintenta hasta que se cumple. Durante una navegación del App Router el DOM
+  // puede tener un instante DOS copias del listado; el filtro por texto
+  // encontraba una en cada copia y el modo estricto abortaba. Si la página
+  // llegara a duplicar de verdad, esta misma línea lo caza: no lo esconde.
+  await expect(tarjetaCampana).toHaveCount(1)
+  await expect(tarjetaCampana).toBeVisible()
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await cliente.screenshot({ path: 'test-results/shots/supply-v2-s7-movil-campanas.png', fullPage: true })
 

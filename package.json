@@ -26,6 +26,8 @@
     "presupuesto": "node scripts/presupuesto-bundle.mjs",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
+    "e2e:base": "node scripts/e2e/base-limpia.mjs",
+    "e2e:limpio": "node scripts/e2e/correr.mjs",
     "migraciones:baseline": "node scripts/baseline-migraciones.mjs",
     "migraciones:pendientes": "node scripts/migraciones-pendientes.mjs",
     "db:doctor": "node scripts/db-doctor.mjs",

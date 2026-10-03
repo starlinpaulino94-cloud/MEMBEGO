@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { interpretarBusqueda, type TipoDeBusqueda } from './salud-dominio'
 
 /**
@@ -114,7 +114,23 @@ const VACIO = (tipo: TipoDeBusqueda, valor: string): ResultadoBusqueda => ({
 /** Lo más que se devuelve de cada tipo: un panel no es un volcado. */
 const TOPE = 25
 
+/**
+ * `sinEmpresa` y no `prisma` a pelo, en toda la búsqueda.
+ *
+ * Esto es una lectura de PLATAFORMA: cruza compras, eventos, conciliaciones,
+ * incidentes y efectos de cualquier empresa, que es justo lo que un operador
+ * necesita y lo que el portal del proveedor nunca debe recibir. Pero
+ * «cross-tenant» no significa «sin contexto»: con RLS encendida una consulta
+ * sin contexto NO falla, devuelve cero filas, y aquí cero filas se leería como
+ * «esa operación no existe» —el peor resultado posible en un panel que se abre
+ * justamente cuando algo no cuadra—. El gate `rls:cobertura` existe para no
+ * dejar pasar esto, y tenía razón.
+ */
 export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda> {
+  return sinEmpresa('Supply 2.0: búsqueda operativa', (tx) => buscarOperacionEnTx(tx, texto))
+}
+
+async function buscarOperacionEnTx(tx: Tx, texto: string): Promise<ResultadoBusqueda> {
   const { tipo, valor } = interpretarBusqueda(texto)
   if (tipo === 'DESCONOCIDO' || !valor) return VACIO(tipo, valor)
 
@@ -124,18 +140,18 @@ export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda>
   let correlationId: string | null = null
 
   if (tipo === 'ORDEN') {
-    const o = await prisma.supplyV2CustomerOrder.findUnique({ where: { number: valor }, select: { id: true } })
+    const o = await tx.supplyV2CustomerOrder.findUnique({ where: { number: valor }, select: { id: true } })
     orderId = o?.id ?? null
   } else if (tipo === 'CORRELACION') {
     correlationId = valor
-    const e = await prisma.supplyV2ExternalEvent.findFirst({ where: { correlationId: valor }, select: { orderId: true } })
+    const e = await tx.supplyV2ExternalEvent.findFirst({ where: { correlationId: valor }, select: { orderId: true } })
     orderId = e?.orderId ?? null
     if (!orderId) {
-      const c = await prisma.supplyV2PaymentReconciliation.findFirst({ where: { correlationId: valor }, select: { orderId: true } })
+      const c = await tx.supplyV2PaymentReconciliation.findFirst({ where: { correlationId: valor }, select: { orderId: true } })
       orderId = c?.orderId ?? null
     }
   } else if (tipo === 'TRANSACCION') {
-    const c = await prisma.supplyV2PaymentReconciliation.findFirst({
+    const c = await tx.supplyV2PaymentReconciliation.findFirst({
       where: { externalTransactionId: valor },
       select: { orderId: true, correlationId: true },
       orderBy: { createdAt: 'desc' },
@@ -143,7 +159,7 @@ export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda>
     orderId = c?.orderId ?? null
     correlationId = c?.correlationId ?? null
     if (!orderId && !correlationId) {
-      const i = await prisma.supplyV2FinanceIncident.findFirst({
+      const i = await tx.supplyV2FinanceIncident.findFirst({
         where: { externalTransactionId: valor },
         select: { orderId: true, correlationId: true },
       })
@@ -151,7 +167,7 @@ export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda>
       correlationId = i?.correlationId ?? null
     }
   } else if (tipo === 'EVENTO_EXTERNO') {
-    const e = await prisma.supplyV2ExternalEvent.findFirst({
+    const e = await tx.supplyV2ExternalEvent.findFirst({
       where: { externalEventId: valor },
       select: { orderId: true, correlationId: true },
     })
@@ -161,17 +177,17 @@ export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda>
     // Un cuid puede ser de cuatro cosas. Se prueban por clave primaria, que es
     // una búsqueda exacta y barata, y se para en la primera que exista.
     const [evento, conciliacion, incidente, efecto] = await Promise.all([
-      prisma.supplyV2ExternalEvent.findUnique({ where: { id: valor }, select: { orderId: true, correlationId: true } }),
-      prisma.supplyV2PaymentReconciliation.findUnique({ where: { id: valor }, select: { orderId: true, correlationId: true } }),
-      prisma.supplyV2FinanceIncident.findUnique({ where: { id: valor }, select: { orderId: true, correlationId: true } }),
-      prisma.supplyV2OutboxEvent.findUnique({ where: { id: valor }, select: { aggregateId: true, correlationId: true } }),
+      tx.supplyV2ExternalEvent.findUnique({ where: { id: valor }, select: { orderId: true, correlationId: true } }),
+      tx.supplyV2PaymentReconciliation.findUnique({ where: { id: valor }, select: { orderId: true, correlationId: true } }),
+      tx.supplyV2FinanceIncident.findUnique({ where: { id: valor }, select: { orderId: true, correlationId: true } }),
+      tx.supplyV2OutboxEvent.findUnique({ where: { id: valor }, select: { aggregateId: true, correlationId: true } }),
     ])
     const hallado = evento ?? conciliacion ?? incidente
     orderId = hallado?.orderId ?? efecto?.aggregateId ?? null
     correlationId = hallado?.correlationId ?? efecto?.correlationId ?? null
     // Puede ser el id de la compra misma.
     if (!orderId) {
-      const o = await prisma.supplyV2CustomerOrder.findUnique({ where: { id: valor }, select: { id: true } })
+      const o = await tx.supplyV2CustomerOrder.findUnique({ where: { id: valor }, select: { id: true } })
       orderId = o?.id ?? null
     }
   }
@@ -187,18 +203,18 @@ export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda>
 
   const [orden, eventos, conciliaciones, incidentes, efectos] = await Promise.all([
     orderId
-      ? prisma.supplyV2CustomerOrder.findUnique({
+      ? tx.supplyV2CustomerOrder.findUnique({
           where: { id: orderId },
           select: { id: true, number: true, status: true, total: true, currency: true, createdAt: true, paidAt: true, customerId: true },
         })
       : null,
-    prisma.supplyV2ExternalEvent.findMany({
+    tx.supplyV2ExternalEvent.findMany({
       where: porOrdenOHilo({ orderId: orderId ?? undefined }),
       orderBy: { receivedAt: 'asc' },
       take: TOPE,
       select: { id: true, provider: true, externalEventId: true, eventType: true, status: true, attempts: true, lastError: true, receivedAt: true, processedAt: true, correlationId: true },
     }),
-    prisma.supplyV2PaymentReconciliation.findMany({
+    tx.supplyV2PaymentReconciliation.findMany({
       where: porOrdenOHilo({ orderId: orderId ?? undefined }),
       orderBy: { createdAt: 'asc' },
       take: TOPE,
@@ -208,7 +224,7 @@ export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda>
         internalStatus: true, externalStatus: true, checks: true, checkedAt: true, incidentId: true,
       },
     }),
-    prisma.supplyV2FinanceIncident.findMany({
+    tx.supplyV2FinanceIncident.findMany({
       where: porOrdenOHilo({ orderId: orderId ?? undefined }),
       orderBy: { createdAt: 'asc' },
       take: TOPE,
@@ -219,13 +235,13 @@ export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda>
       },
     }),
     orderId
-      ? prisma.supplyV2OutboxEvent.findMany({
+      ? tx.supplyV2OutboxEvent.findMany({
           where: { aggregateId: orderId },
           orderBy: { createdAt: 'asc' },
           take: TOPE,
           select: { id: true, eventType: true, status: true, attempts: true, availableAt: true, claimedAt: true, processedAt: true, lastError: true, createdAt: true, correlationId: true, dedupeKey: true },
         })
-      : prisma.supplyV2OutboxEvent.findMany({
+      : tx.supplyV2OutboxEvent.findMany({
           where: { correlationId: correlationId! },
           orderBy: { createdAt: 'asc' },
           take: TOPE,
@@ -237,7 +253,7 @@ export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda>
   // se buscan por igualdad sobre las claves que acabamos de leer.
   const claves = efectos.map((e) => e.dedupeKey)
   const avisos = claves.length
-    ? await prisma.notificacion.findMany({
+    ? await tx.notificacion.findMany({
         where: { dedupeKey: { in: claves } },
         orderBy: { createdAt: 'asc' },
         take: TOPE,
@@ -408,12 +424,14 @@ export async function lineaDeTiempoDeOperacion(texto: string): Promise<{ busqued
     ...busqueda.efectos.map((o) => o.id),
   ]
   if (entidades.length) {
-    const bitacora = await prisma.auditLog.findMany({
-      where: { entidadId: { in: entidades } },
-      orderBy: { createdAt: 'asc' },
-      take: 60,
-      select: { accion: true, createdAt: true, user: { select: { name: true, email: true } } },
-    })
+    const bitacora = await sinEmpresa('Supply 2.0: bitácora de una operación', (tx) =>
+      tx.auditLog.findMany({
+        where: { entidadId: { in: entidades } },
+        orderBy: { createdAt: 'asc' },
+        take: 60,
+        select: { accion: true, createdAt: true, user: { select: { name: true, email: true } } },
+      })
+    )
     for (const b of bitacora) {
       momentos.push({
         cuando: b.createdAt,

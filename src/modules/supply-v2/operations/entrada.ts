@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import type { ContextoAuditoria } from '../core/auditoria'
 import { adaptadorDe, type EventoExternoAdaptado } from './adaptadores'
 import { normalizarCorrelationId } from './correlacion'
@@ -373,7 +373,15 @@ export async function actorDelWebhook(): Promise<string | null> {
   const configurado = process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID?.trim()
   if (!configurado) return null
   if (actorEnMemoria?.id === configurado) return actorEnMemoria.valido ? configurado : null
-  const existe = await prisma.user.findUnique({ where: { id: configurado }, select: { id: true } })
+  // `sinEmpresa` y no `prisma` a pelo: la cuenta de la integración no pertenece
+  // a ninguna empresa —es una cuenta de plataforma— pero la consulta tiene que
+  // declarar su contexto igual. Con RLS encendida, una consulta sin contexto no
+  // falla: devuelve CERO filas, y aquí cero filas significaría «la cuenta
+  // configurada no existe» y dejaría todos los eventos esperando por una avería
+  // invisible. El gate `rls:cobertura` existe justo para no dejar pasar esto.
+  const existe = await sinEmpresa('Supply 2.0: comprobar la cuenta de la integración', (tx) =>
+    tx.user.findUnique({ where: { id: configurado }, select: { id: true } })
+  )
   actorEnMemoria = { id: configurado, valido: Boolean(existe) }
   return existe ? configurado : null
 }

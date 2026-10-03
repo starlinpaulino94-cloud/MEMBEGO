@@ -421,7 +421,15 @@ async function recorridoCompleto(browser: Browser) {
   const quedan = await cliente.getByTestId('select-beneficio').locator('option').allTextContents().catch(() => [] as string[])
   expect(quedan.some((t) => t.includes(d.bonoCompartido))).toBe(false)
   await cliente.goto('/cliente/bonos')
-  await expect(cliente.getByTestId('tarjeta-bono').filter({ hasText: d.bonoCompartido }).getByTestId('bono-motivo')).toBeVisible()
+  const tarjetaCompartida = cliente.getByTestId('tarjeta-bono').filter({ hasText: d.bonoCompartido })
+  // `toHaveCount(1)` antes de usar el elemento, a propósito: no es un margen de
+  // tiempo disfrazado, es la invariante de verdad —de esto hay UNO— y Playwright
+  // reintenta hasta que se cumple. Durante una navegación del App Router el DOM
+  // puede tener un instante DOS copias del listado; el filtro por texto
+  // encontraba una en cada copia y el modo estricto abortaba. Si la página
+  // llegara a duplicar de verdad, esta misma línea lo caza: no lo esconde.
+  await expect(tarjetaCompartida).toHaveCount(1)
+  await expect(tarjetaCompartida.getByTestId('bono-motivo')).toBeVisible()
 
   // El listado de beneficios enseña las tres cifras del presupuesto por separado.
   await finanzas.goto('/superadmin/supply-v2/beneficios')

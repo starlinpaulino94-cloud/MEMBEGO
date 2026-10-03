@@ -282,11 +282,15 @@ test.describe('Slice 9 · bloque 4 · Centro de Operaciones', () => {
     // La historia dice lo que NO está persistido, en vez de inventarlo.
     await expect(page.getByTestId('aviso-de-linea').first()).toContainText(/firma/i)
 
-    // Se abre el incidente desde la lista.
+    // Se abre el incidente desde la lista, acotado a LA COMPRA de este
+    // recorrido y no con `.first()`: la lista acumula los incidentes de los
+    // demás recorridos de la suite, y coger «el primero» ataría esta prueba al
+    // orden en que corran las otras. La fila trae el número de compra, así que
+    // se filtra por él y se afirma que hay una.
     await page.goto(`${BASE}${RUTA}/incidentes?severity=HIGH`)
-    const abrir = page.getByTestId(/^abrir-incidente-/).first()
-    await expect(abrir).toBeVisible()
-    await abrir.click()
+    const fila = page.locator('tr').filter({ hasText: compra.numero })
+    await expect(fila).toHaveCount(1)
+    await fila.getByTestId(/^abrir-incidente-/).click()
 
     // La ficha trae todo lo que hace falta para decidir.
     await expect(page.getByTestId('detalle-severidad')).toContainText('HIGH')
@@ -317,7 +321,9 @@ test.describe('Slice 9 · bloque 4 · Centro de Operaciones', () => {
     await mandarWebhook(page, { eventId: `evt-e2e-c-${sufijo}`, orderNumber: compra.numero, amount: '900.00', hilo })
 
     await page.goto(`${BASE}${RUTA}/incidentes?status=OPEN`)
-    await page.getByTestId(/^abrir-incidente-/).first().click()
+    const filaC = page.locator('tr').filter({ hasText: compra.numero })
+    await expect(filaC).toHaveCount(1)
+    await filaC.getByTestId(/^abrir-incidente-/).click()
     await expect(page.getByTestId('detalle-estado')).toHaveText('OPEN')
 
     // OPEN → INVESTIGATING.
