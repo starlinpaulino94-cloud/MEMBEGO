@@ -318,6 +318,12 @@ async function recorridoCompleto(browser: Browser) {
   const orderCompra = cliente.url().split('/').pop()!
   await cliente.locator('#referenciaPago').fill(`PTS-${d.sufijo}`)
   await cliente.getByTestId('btn-avisar-pago').click()
+  // Esperar a que el aviso QUEDE antes de ir a la pantalla de finanzas: sin
+  // esto, la navegación de `finanzas` corre contra la server action que acaba
+  // de pulsar `cliente` y a veces llega antes de que la venta esté «por
+  // revisar». El fallo parece de la pantalla de finanzas y es una carrera de la
+  // prueba. (La misma familia de carrera estaba en los slices 6, 7 y 8.)
+  await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
   await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
   const venta2 = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `PTS-${d.sufijo}` })
   await venta2.getByTestId('btn-confirmar-pago').click()

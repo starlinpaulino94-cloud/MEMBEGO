@@ -398,6 +398,14 @@ async function recorridoCompleto(browser: Browser) {
   const urlCompraCompartida = await compraConBono(cliente, d.ofertaCompartida, d.bonoCompartido, { aPagar: 600, bono: 300, ahorroTotal: 400 })
   await cliente.locator('#referenciaPago').fill(`SHARED-${d.sufijo}`)
   await cliente.getByTestId('btn-avisar-pago').click()
+  // Esperar a que el aviso QUEDE antes de ir a la pantalla de finanzas.
+  //
+  // Sin esta línea, la navegación de `finanzas` corre contra la server action
+  // que acaba de pulsar `cliente`: a veces llega antes y la venta todavía no
+  // está «por revisar», con un fallo que parece de la pantalla de finanzas y es
+  // una carrera de la prueba. Dos párrafos más arriba (línea 317) esto ya se
+  // hacía; aquí se había quedado sin hacer.
+  await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
   await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
   const ventaShared = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `SHARED-${d.sufijo}` })
   await expect(ventaShared.getByTestId('venta-financiacion')).toContainText(RD(900))

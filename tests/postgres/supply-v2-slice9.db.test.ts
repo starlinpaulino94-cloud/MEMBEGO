@@ -2047,14 +2047,22 @@ test('B4·C · un efecto esperando más del umbral dispara la alerta agregada', 
 
 test('B4·D · la misma condición evaluada dos veces es UNA alerta, no dos', async () => {
   // Es la diferencia entre una alerta que se lee y mil que se silencian.
-  const antes = await prisma.supplyV2OperationalAlert.count()
+  //
+  // Se mira UNA condición concreta y no el total de la tabla: el evaluador
+  // recorre toda la base y `node --test` corre los archivos en paralelo, así
+  // que entre dos conteos globales puede aparecer una condición de otro
+  // archivo y el total cambiaría sin que la agregación estuviera mal. Lo que
+  // esta prueba defiende es que la MISMA condición no se duplica, y eso se
+  // comprueba sobre su fila.
+  const deOutbox = { where: { key: 'OUTBOX_BACKLOG' } }
   await evaluarYGuardarAlertas(como(ctx.ops))
-  const trasPrimera = await prisma.supplyV2OperationalAlert.count()
+  const trasPrimera = await prisma.supplyV2OperationalAlert.findUnique(deOutbox)
+  assert.ok(trasPrimera, 'la primera evaluación deja la alerta de atraso del outbox')
   await evaluarYGuardarAlertas(como(ctx.ops))
   await evaluarYGuardarAlertas(como(ctx.ops))
-  const trasTercera = await prisma.supplyV2OperationalAlert.count()
-  assert.equal(trasTercera, trasPrimera, 'tres evaluaciones no crean tres alertas')
-  assert.ok(trasPrimera >= antes)
+  const trasTercera = await prisma.supplyV2OperationalAlert.findMany({ where: { key: 'OUTBOX_BACKLOG' } })
+  assert.equal(trasTercera.length, 1, 'tres evaluaciones no crean tres alertas de la misma condición')
+  assert.equal(trasTercera[0]!.firstSeenAt.getTime(), trasPrimera.firstSeenAt.getTime(), 'se reutiliza la fila: no se reabre')
 
   // Y la clave primaria ES la condición: por construcción no puede duplicarse.
   await assert.rejects(
