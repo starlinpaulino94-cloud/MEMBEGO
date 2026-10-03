@@ -15,7 +15,10 @@ import {
   validarCantidadRecibida,
 } from '../src/modules/supply-v2/core/estados'
 import { esAutoaprobacion, MOTIVO_AUTOAPROBACION } from '../src/modules/supply-v2/core/segregacion'
-import { calcularTotales, validarLinea, valorDeLotes } from '../src/modules/supply-v2/core/dinero'
+import { OFERTA_EDITABLE, TRANSICIONES_OFERTA } from '../src/modules/supply-v2/core/estados'
+import { edicionCambiaElPrecio, validarEdicionOferta } from '../src/modules/supply-v2/offers/domain'
+import { calcularTotales, decimal, mismoMonto, validarLinea, valorDeLotes } from '../src/modules/supply-v2/core/dinero'
+import { montoCuadra } from '../src/modules/supply-v2/core/precios'
 import { formatearNumero, secuenciaDeNumero } from '../src/modules/supply-v2/core/numeracion'
 import { acuerdoCompatible, validarAcuerdo } from '../src/modules/supply-v2/agreements/domain'
 import { normalizarProveedor, validarProveedorExterno } from '../src/modules/supply-v2/suppliers/domain'
@@ -190,4 +193,80 @@ test('catálogo · el nombre no es el identificador: el slug se deriva y el SKU 
   assert.equal(n.sku, 'PIZ-PEP-G')
   assert.equal(n.publicPrice, '600')
   assert.equal(n.unit, 'UNIT')
+})
+
+// ── Editar una oferta (§7–§15) ───────────────────────────────────────────────
+
+const ofertaActual = { publicPrice: '1000.00', salePrice: '700.00', quantityLimit: 100, startsAt: new Date('2026-01-01') }
+const MANANA = new Date(Date.now() + 86_400_000)
+const AYER = new Date(Date.now() - 86_400_000)
+
+test('oferta editable · los estados terminales quedan fuera, y TODOS están clasificados', () => {
+  assert.deepEqual([...OFERTA_EDITABLE], ['DRAFT', 'SCHEDULED', 'ACTIVE', 'PAUSED'])
+  for (const terminal of ['SOLD_OUT', 'ENDED', 'CANCELLED'] as const) {
+    assert.ok(!OFERTA_EDITABLE.includes(terminal), `${terminal} no se edita: se publica otra`)
+  }
+  // Un estado nuevo en la máquina no puede colarse como editable por descuido.
+  for (const estado of Object.keys(TRANSICIONES_OFERTA)) {
+    const clasificado = OFERTA_EDITABLE.includes(estado as never) || ['SOLD_OUT', 'ENDED', 'CANCELLED'].includes(estado)
+    assert.ok(clasificado, `el estado ${estado} no está clasificado como editable o no editable`)
+  }
+})
+
+test('editar una oferta · el título y los precios se validan como par', () => {
+  assert.equal(validarEdicionOferta({ title: 'Lavado premium' }, ofertaActual), null)
+  assert.match(validarEdicionOferta({ title: '   ' }, ofertaActual)!, /necesita un título/)
+  assert.match(validarEdicionOferta({ title: 'x'.repeat(161) }, ofertaActual)!, /demasiado largo/)
+
+  // Solo baja el público: el Membego que NO cambia se toma del actual, así que
+  // la invariante se sigue comprobando entre los dos.
+  assert.match(validarEdicionOferta({ publicPrice: 500 }, ofertaActual)!, /no puede ser mayor que el precio público/)
+  assert.equal(validarEdicionOferta({ publicPrice: 1200 }, ofertaActual), null)
+  assert.equal(validarEdicionOferta({ salePrice: 0 }, ofertaActual), null, 'regalarla es legal')
+})
+
+test('editar una oferta · límite por persona y vigencia', () => {
+  assert.match(validarEdicionOferta({ perCustomerLimit: 0 }, ofertaActual)!, /entero positivo/)
+  assert.match(validarEdicionOferta({ perCustomerLimit: 101 }, ofertaActual)!, /no puede superar las unidades/)
+  assert.equal(validarEdicionOferta({ perCustomerLimit: 100 }, ofertaActual), null)
+
+  assert.equal(validarEdicionOferta({ endsAt: MANANA }, ofertaActual), null)
+  assert.equal(validarEdicionOferta({ endsAt: null }, ofertaActual), null, 'quitar el fin es legal')
+  // Acortar al pasado es terminar la oferta, y eso libera unidades.
+  assert.match(validarEdicionOferta({ endsAt: AYER }, ofertaActual)!, /usa «Finalizar»/)
+})
+
+test('editar una oferta · la guarda solo salta si de verdad cambia lo que se cobra', () => {
+  const actual = { publicPrice: '1000.00', salePrice: '700.00' }
+  assert.equal(edicionCambiaElPrecio({ title: 'Otro título' }, actual), false, 'cambiar el título no toca el dinero')
+  assert.equal(edicionCambiaElPrecio({ salePrice: '700.00' }, actual), false, 'reenviar el mismo precio no es un cambio')
+  assert.equal(edicionCambiaElPrecio({ salePrice: '650.00' }, actual), true)
+  assert.equal(edicionCambiaElPrecio({ publicPrice: '1200.00' }, actual), true)
+
+  // El mismo precio ESCRITO DE OTRA FORMA no es un cambio. Comparar dinero como
+  // texto fallaba justo aquí: la base devuelve «700.00» y el formulario manda
+  // «700», así que reenviar sin tocar nada se contaba como cambio de precio y,
+  // con un checkout vivo, se rechazaba una edición que no cambiaba nada.
+  for (const igual of ['700', 700, '700.0', '0700.00', ' 700 '.trim()] as const) {
+    assert.equal(
+      edicionCambiaElPrecio({ salePrice: igual }, actual),
+      false,
+      `${JSON.stringify(igual)} es el mismo precio que 700.00`
+    )
+  }
+  // Y un centavo SÍ es un cambio: aquí no hay tolerancia que valga.
+  assert.equal(edicionCambiaElPrecio({ salePrice: '699.99' }, actual), true)
+  assert.equal(edicionCambiaElPrecio({ salePrice: 700.01 }, actual), true)
+})
+
+test('mismoMonto · exacto, y distinto de la tolerancia de conciliación', () => {
+  assert.equal(mismoMonto('600', '600.00'), true)
+  assert.equal(mismoMonto(0, '0.00'), true)
+  assert.equal(mismoMonto(decimal('1000'), 1000), true)
+  // Un centavo: `montoCuadra` lo perdona porque un cobro bancario lo necesita;
+  // `mismoMonto` no, porque un centavo de precio es un precio distinto.
+  assert.equal(montoCuadra('600.00', '600.009'), true)
+  assert.equal(mismoMonto('600.00', '600.01'), false)
+  // Basura de entrada no se hace pasar por «igual».
+  assert.equal(mismoMonto('abc', '600'), false)
 })

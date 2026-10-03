@@ -121,6 +121,15 @@ export const TRANSICIONES_OFERTA: Transiciones<SupplyV2OfferStatus> = {
   CANCELLED: [],
 }
 
+/**
+ * Estados en los que una oferta se puede EDITAR.
+ *
+ * Fuera quedan los terminales y `SOLD_OUT`: editarlos resucitaría la oferta sin
+ * pasar por `publicarOfertaEnTx`, que es quien aparta el supply. Una oferta
+ * terminada no se retoca; se publica otra.
+ */
+export const OFERTA_EDITABLE: readonly SupplyV2OfferStatus[] = ['DRAFT', 'SCHEDULED', 'ACTIVE', 'PAUSED']
+
 /** Estado con el que nace una oferta al publicarla, según su vigencia (§14). */
 export function estadoInicialOferta(startsAt: Date, ahora = new Date()): 'SCHEDULED' | 'ACTIVE' {
   return startsAt > ahora ? 'SCHEDULED' : 'ACTIVE'

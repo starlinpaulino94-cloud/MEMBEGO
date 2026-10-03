@@ -7,7 +7,7 @@ import { crearItemCatalogoEnTx } from '../../src/modules/supply-v2/catalog/servi
 import { activarAcuerdoEnTx, crearAcuerdoEnTx } from '../../src/modules/supply-v2/agreements/service'
 import { aprobarOrdenEnTx, crearOrdenEnTx, enviarAprobacionEnTx } from '../../src/modules/supply-v2/procurement/orders'
 import { confirmarRecepcionEnTx } from '../../src/modules/supply-v2/procurement/receipts'
-import { cerrarOfertaEnTx, crearOfertaEnTx, pausarOfertaEnTx, publicarOfertaEnTx, reanudarOfertaEnTx } from '../../src/modules/supply-v2/offers/service'
+import { cerrarOfertaEnTx, crearOfertaEnTx, editarOfertaEnTx, pausarOfertaEnTx, publicarOfertaEnTx, reanudarOfertaEnTx } from '../../src/modules/supply-v2/offers/service'
 import { abrirOrdenClienteEnTx, avisarPagoEnTx, cancelarOrdenClienteEnTx, confirmarPagoEnTx, expirarOrdenEnTx, rechazarPagoEnTx } from '../../src/modules/supply-v2/commerce/checkout'
 import { barridoSupplyV2 } from '../../src/modules/supply-v2/commerce/barrido'
 import { ofertaPublicaPorSlug, ofertasPublicas } from '../../src/modules/supply-v2/marketplace/read-model'
@@ -472,5 +472,75 @@ test('K · el ledger de cada lote cuadra al final y la base no acepta contadores
   await assert.rejects(
     prisma.supplyV2Offer.update({ where: { id: ctx.oferta1 }, data: { salePrice: 700 } }),
     /supply_v2_offers_prices|check/i
+  )
+})
+
+// ── Editar una oferta publicada (§7–§15) ─────────────────────────────────────
+
+test('E1 · editar el título de una oferta ACTIVE cambia la oferta y deja rastro', async () => {
+  const o = await ofertaPublicada(10)
+  const r = await sinEmpresa('prueba', (tx) =>
+    editarOfertaEnTx(tx, o.id, { title: 'Lavado premium con cera', description: 'Incluye cera' }, como(ctx.admin))
+  )
+  assert.deepEqual(r.cambios.sort(), ['descripción', 'título'])
+  const db = await prisma.supplyV2Offer.findUniqueOrThrow({ where: { id: o.id } })
+  assert.equal(db.title, 'Lavado premium con cera')
+  assert.equal(db.status, 'ACTIVE', 'editar no cambia el estado')
+  assert.ok(await prisma.auditLog.findFirst({ where: { accion: 'SUPPLY_V2_OFFER_UPDATED', entidadId: o.id } }))
+})
+
+test('E2 · reenviar los mismos valores no es un cambio: no toca nada ni audita', async () => {
+  const o = await ofertaPublicada(11)
+  const antes = await prisma.auditLog.count({ where: { accion: 'SUPPLY_V2_OFFER_UPDATED', entidadId: o.id } })
+  const r = await sinEmpresa('prueba', (tx) => editarOfertaEnTx(tx, o.id, { publicPrice: '600', salePrice: '399' }, como(ctx.admin)))
+  assert.deepEqual(r.cambios, [])
+  assert.equal(await prisma.auditLog.count({ where: { accion: 'SUPPLY_V2_OFFER_UPDATED', entidadId: o.id } }), antes)
+})
+
+test('E3 · con un checkout vivo el PRECIO no se cambia, pero el título sí', async () => {
+  const o = await ofertaPublicada(12)
+  await comprar(ctx.cliente1, o.id)  // deja una reserva ACTIVE
+
+  await assert.rejects(
+    sinEmpresa('prueba', (tx) => editarOfertaEnTx(tx, o.id, { salePrice: '350' }, como(ctx.admin))),
+    /checkouts en curso/,
+    'quien está a punto de pagar lo prometido no puede ver cambiar el precio'
+  )
+  // Lo que no toca el dinero sigue permitido.
+  const r = await sinEmpresa('prueba', (tx) => editarOfertaEnTx(tx, o.id, { title: 'Otro título' }, como(ctx.admin)))
+  assert.deepEqual(r.cambios, ['título'])
+  const db = await prisma.supplyV2Offer.findUniqueOrThrow({ where: { id: o.id } })
+  assert.equal(db.salePrice.toFixed(2), '399.00', 'el precio quedó intacto')
+})
+
+test('E4 · una oferta finalizada ya no se edita', async () => {
+  const o = await ofertaPublicada(13)
+  await sinEmpresa('prueba', (tx) => cerrarOfertaEnTx(tx, o.id, 'ENDED', 'fin de temporada', como(ctx.admin)))
+  await assert.rejects(
+    sinEmpresa('prueba', (tx) => editarOfertaEnTx(tx, o.id, { title: 'Ya no' }, como(ctx.admin))),
+    /ya no se edita/
+  )
+})
+
+test('E5 · editar el precio NO altera lo que una orden ya pagada congeló', async () => {
+  const o = await ofertaPublicada(14)
+  const compra = await comprar(ctx.cliente1, o.id)
+  await sinEmpresa('prueba', (tx) => avisarPagoEnTx(tx, { orderId: compra.id, customerId: ctx.cliente1, method: 'TRANSFER' }, como(ctx.cliente1)))
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: compra.id, amountSeen: 399 }, como(ctx.admin)))
+
+  const lineaAntes = await prisma.supplyV2CustomerOrderLine.findFirstOrThrow({ where: { orderId: compra.id } })
+  // Sin reservas vivas (la compra ya se pagó), el precio sí se puede cambiar.
+  await sinEmpresa('prueba', (tx) => editarOfertaEnTx(tx, o.id, { salePrice: '250' }, como(ctx.admin)))
+
+  const lineaDespues = await prisma.supplyV2CustomerOrderLine.findFirstOrThrow({ where: { orderId: compra.id } })
+  assert.equal(lineaDespues.saleUnitPrice.toFixed(2), lineaAntes.saleUnitPrice.toFixed(2), 'un recibo emitido es intocable')
+  assert.equal(lineaDespues.total.toFixed(2), lineaAntes.total.toFixed(2))
+})
+
+test('E6 · acortar la vigencia al pasado se rechaza: eso es finalizar', async () => {
+  const o = await ofertaPublicada(15)
+  await assert.rejects(
+    sinEmpresa('prueba', (tx) => editarOfertaEnTx(tx, o.id, { endsAt: new Date(Date.now() - 60_000) }, como(ctx.admin))),
+    /Finalizar/
   )
 })

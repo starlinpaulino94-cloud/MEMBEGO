@@ -1,5 +1,6 @@
 import type { SupplyV2AvailabilityMode } from '@prisma/client'
 import { validarPreciosOferta } from '../core/precios'
+import { mismoMonto, type Monto } from '../core/dinero'
 
 /**
  * MEMBEGO SUPPLY 2.0 · ofertas: reglas puras (§7–§15).
@@ -34,6 +35,69 @@ export function validarOferta(d: DatosOferta): string | null {
     if (d.endsAt <= d.startsAt) return 'La fecha de fin tiene que ser posterior a la de inicio.'
   }
   return null
+}
+
+/**
+ * Lo que una edición PUEDE cambiar. Ausente = no se toca, que no es lo mismo
+ * que `null` (borrar la descripción o quitar la fecha de fin sí son cambios).
+ */
+export interface DatosEdicionOferta {
+  title?: string
+  description?: string | null
+  imagePath?: string | null
+  publicPrice?: number | string
+  salePrice?: number | string
+  perCustomerLimit?: number
+  startsAt?: Date
+  endsAt?: Date | null
+}
+
+/**
+ * Reglas PURAS de una edición (§7–§15). Lo que depende de la base —reservas
+ * vivas, estado editable— lo comprueba el servicio; aquí solo la forma.
+ *
+ * `quantityLimit` no está y nunca estará: no es un número sino el tamaño de la
+ * asignación, con sus líneas por lote y sus asientos en el ledger. Cambiarlo es
+ * una operación de inventario, no un campo de formulario.
+ */
+export function validarEdicionOferta(
+  d: DatosEdicionOferta,
+  actual: { publicPrice: number | string; salePrice: number | string; quantityLimit: number; startsAt: Date },
+  ahora = new Date()
+): string | null {
+  if (d.title !== undefined) {
+    if (!d.title.trim()) return 'La oferta necesita un título.'
+    if (d.title.trim().length > 160) return 'El título es demasiado largo.'
+  }
+  // Los precios se validan como PAR aunque solo venga uno: la invariante es
+  // entre los dos, así que el que no cambia se toma del actual.
+  if (d.publicPrice !== undefined || d.salePrice !== undefined) {
+    const precio = validarPreciosOferta(d.publicPrice ?? actual.publicPrice, d.salePrice ?? actual.salePrice)
+    if (precio) return precio
+  }
+  if (d.perCustomerLimit !== undefined) {
+    if (!Number.isInteger(d.perCustomerLimit) || d.perCustomerLimit <= 0) return 'El máximo por persona tiene que ser un entero positivo.'
+    if (d.perCustomerLimit > actual.quantityLimit) return 'El máximo por persona no puede superar las unidades de la oferta.'
+  }
+  if (d.startsAt !== undefined && Number.isNaN(d.startsAt.getTime())) return 'La fecha de inicio no es válida.'
+  if (d.endsAt !== undefined && d.endsAt !== null) {
+    if (Number.isNaN(d.endsAt.getTime())) return 'La fecha de fin no es válida.'
+    if (d.endsAt <= (d.startsAt ?? actual.startsAt)) return 'La fecha de fin tiene que ser posterior a la de inicio.'
+    // Acortar al pasado es terminar la oferta, y eso libera unidades: tiene su
+    // propia acción, que sí devuelve el supply no vendido.
+    if (d.endsAt <= ahora) return 'Para terminar la oferta ahora usa «Finalizar»: eso libera las unidades que no se vendieron.'
+  }
+  return null
+}
+
+/** ¿La edición toca lo que el cliente paga? Decide si hace falta la guarda. */
+export function edicionCambiaElPrecio(
+  d: DatosEdicionOferta,
+  actual: { publicPrice: Monto; salePrice: Monto }
+): boolean {
+  if (d.publicPrice !== undefined && !mismoMonto(d.publicPrice, actual.publicPrice)) return true
+  if (d.salePrice !== undefined && !mismoMonto(d.salePrice, actual.salePrice)) return true
+  return false
 }
 
 export function slugDeOferta(titulo: string, codigo: string): string {
