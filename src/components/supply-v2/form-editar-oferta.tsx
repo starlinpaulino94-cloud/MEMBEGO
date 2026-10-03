@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useRef } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -10,12 +10,16 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { editarOfertaAction } from '@/modules/supply-v2/actions-ofertas'
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
+import type { SupplyV2OfferPriceMode } from '@prisma/client'
 
 export interface OfertaEditable {
   title: string
   description: string
   publicPrice: string
   salePrice: string
+  priceMode: SupplyV2OfferPriceMode
+  /** Lo que se escribió, no el importe: una oferta al 35 % reabre en «35». */
+  priceModePercentage: string
   perCustomerLimit: number
   /** `yyyy-mm-dd` o vacío si la oferta no tiene fin. */
   endsAt: string
@@ -40,6 +44,8 @@ export function FormEditarOferta({
   moneda: string
   unidades: number
 }) {
+  const [modo, setModo] = useState<SupplyV2OfferPriceMode>(inicial.priceMode)
+  const [porcentaje, setPorcentaje] = useState(inicial.priceModePercentage)
   const [estado, enviar, pendiente] = useActionState<EstadoAccion, FormData>(editarOfertaAction, {})
   const router = useRouter()
   const visto = useRef<string | undefined>(undefined)
@@ -81,10 +87,53 @@ export function FormEditarOferta({
               <Input id="publicPrice" name="publicPrice" defaultValue={inicial.publicPrice} inputMode="decimal" required data-testid="editar-precio-publico" />
             </div>
             <div>
+              <Label htmlFor="priceMode">¿Cómo se fija?</Label>
+              <select
+                id="priceMode"
+                name="priceMode"
+                className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                value={modo}
+                onChange={(e) => setModo(e.target.value as SupplyV2OfferPriceMode)}
+                data-testid="editar-modo-precio"
+              >
+                <option value="FIXED">Un precio fijo</option>
+                <option value="PERCENTAGE">Un porcentaje de descuento</option>
+                <option value="FREE">Gratis</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Un solo campo visible según el modo, y solo ese se manda: el
+              servidor resuelve el importe. Mandar los dos dejaría que el
+              formulario decidiera el precio de una oferta por porcentaje. */}
+          {modo === 'FIXED' && (
+            <div>
               <Label htmlFor="salePrice">Precio Membego ({simbolo})</Label>
               <Input id="salePrice" name="salePrice" defaultValue={inicial.salePrice} inputMode="decimal" required data-testid="editar-precio-membego" />
             </div>
-          </div>
+          )}
+          {modo === 'PERCENTAGE' && (
+            <div>
+              <Label htmlFor="priceModePercentage">Descuento (%)</Label>
+              <Input
+                id="priceModePercentage"
+                name="priceModePercentage"
+                value={porcentaje}
+                onChange={(e) => setPorcentaje(e.target.value)}
+                inputMode="decimal"
+                required
+                data-testid="editar-porcentaje"
+              />
+              <p className="text-caption text-muted-foreground">
+                El precio Membego lo calcula el servidor sobre el precio público.
+              </p>
+            </div>
+          )}
+          {modo === 'FREE' && (
+            <p className="rounded-lg border border-success/30 bg-success/5 p-3 text-sm" data-testid="editar-gratis-aviso">
+              El cliente no paga nada y confirma su compra sin transferencia.
+            </p>
+          )}
           <p className="text-caption text-muted-foreground">
             El precio solo se puede cambiar si no hay compras en curso: quien ya tiene una reserva viva está a punto de
             pagar lo que la pantalla le prometió.

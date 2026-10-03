@@ -49,6 +49,8 @@ export default async function EditarOfertaPage({ params }: { params: Promise<{ i
             description: o.description ?? '',
             publicPrice: o.publicPrice.toString(),
             salePrice: o.salePrice.toString(),
+            priceMode: o.priceMode,
+            priceModePercentage: o.priceModePercentage?.toString() ?? '',
             perCustomerLimit: o.perCustomerLimit,
             endsAt: o.endsAt ? o.endsAt.toISOString().slice(0, 10) : '',
           }}

@@ -56,9 +56,13 @@ export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
   }, [aviso, cancel, cobertura, router])
   const select = 'h-10 w-full rounded-lg border border-input bg-background px-3 text-sm'
   const enCurso = compra.status === 'PENDING' || compra.status === 'AWAITING_PAYMENT'
-  // Slice 6: cubierta por completo = no hay saldo que pagar y hay un beneficio detrás.
-  const cubiertaPorBeneficio = Number(compra.total) === 0
+  // Total 0 = no hay nada que pagar, por uno de DOS motivos: un beneficio que
+  // lo cubre todo (Slice 6) o una oferta gratis de origen. La vía es la misma
+  // —confirmar sin pago—, pero el texto no: decirle «tu beneficio» a quien
+  // compró algo gratis le inventa un beneficio que no tiene.
+  const nadaQuePagar = Number(compra.total) === 0
   const beneficioTotal = (Number(compra.supplierDiscountTotal) + Number(compra.membegoSubsidyTotal)).toFixed(2)
+  const cubiertaPorBeneficio = nadaQuePagar && Number(beneficioTotal) > 0
 
   return (
     <div className="space-y-4">
@@ -107,17 +111,19 @@ export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
           </p>
         )}
         <div className="mt-3 flex items-baseline justify-between border-t border-border pt-2">
-          <span className="font-medium">{cubiertaPorBeneficio ? 'A pagar' : 'Total'}</span>
+          <span className="font-medium">{nadaQuePagar ? 'A pagar' : 'Total'}</span>
           <span className="text-h2 tabular-nums" data-testid="checkout-total">{dinero(compra.total, compra.currency)}</span>
         </div>
       </div>
 
-      {compra.status === 'PENDING' && cubiertaPorBeneficio && (
+      {compra.status === 'PENDING' && nadaQuePagar && (
         <>
           <p className="text-sm text-muted-foreground"><CuentaAtras hasta={compra.expiresAt} /></p>
           <form action={confirmarCobertura} className="space-y-2 rounded-xl border border-success/30 bg-success/5 p-4" data-testid="form-cobertura-total">
             <input type="hidden" name="orderId" value={compra.id} />
-            <p className="text-sm font-medium">Tu beneficio cubre el total: no tienes que pagar nada.</p>
+            <p className="text-sm font-medium">
+              {cubiertaPorBeneficio ? 'Tu beneficio cubre el total: no tienes que pagar nada.' : 'Esta oferta es gratis: no tienes que pagar nada.'}
+            </p>
             <p className="text-caption text-muted-foreground">No hay transferencia que hacer ni cuenta a la que pagar. Confirma y tu código queda activo al instante.</p>
             <Button type="submit" className="w-full" disabled={confirmandoCobertura} loading={confirmandoCobertura} data-testid="btn-confirmar-cobertura">Confirmar y recibir mi código</Button>
             {cobertura.error && <p className="text-sm text-destructive" role="alert">{cobertura.error}</p>}
@@ -125,7 +131,7 @@ export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
         </>
       )}
 
-      {compra.status === 'PENDING' && !cubiertaPorBeneficio && (
+      {compra.status === 'PENDING' && !nadaQuePagar && (
         <>
           <p className="text-sm text-muted-foreground"><CuentaAtras hasta={compra.expiresAt} /></p>
           {compra.cuenta && (

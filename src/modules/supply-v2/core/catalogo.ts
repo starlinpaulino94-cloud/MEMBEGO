@@ -172,6 +172,7 @@ export const CUSTOMER_ORDER_STATUS_TONE: Record<SupplyV2CustomerOrderStatus, 'ne
 
 export const PAYMENT_STATUS_LABELS: Record<SupplyV2PaymentStatus, string> = {
   COVERED_BY_BENEFIT: 'Cubierto por un beneficio (sin pago bancario)',
+  FREE_OFFER: 'Oferta gratis (sin pago)',
   UNPAID: 'Sin pagar',
   SUBMITTED: 'Pago avisado',
   CONFIRMED: 'Confirmado',

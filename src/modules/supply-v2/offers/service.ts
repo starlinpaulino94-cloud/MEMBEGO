@@ -4,9 +4,9 @@ import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
 import { estadoInicialOferta, exigirTransicion, OFERTA_EDITABLE, TRANSICIONES_OFERTA } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
-import { decimal, mismoMonto } from '../core/dinero'
+import { mismoMonto, type Monto } from '../core/dinero'
 import { OFFER_STATUS_LABELS } from '../core/catalogo'
-import { calcularPrecioOferta } from '../core/precios'
+import { resolverPrecioDeDatos, type PrecioResuelto } from '../core/precios'
 import { asignarEnTx, liberarAsignacionEnTx } from '../allocations/service'
 import { resolverAcuerdoComisionDeItemEnTx } from '../agreements/service'
 import { edicionCambiaElPrecio, slugDeOferta, unidadesLibresComision, validarEdicionOferta, validarOferta, validarOfertaComision, type DatosEdicionOferta, type DatosOferta, type DatosOfertaComision } from './domain'
@@ -39,7 +39,7 @@ export async function crearOfertaEnTx(tx: Tx, d: DatosOferta, ctx: ContextoAudit
   if (item.status !== 'ACTIVE') fallo('ITEM_INACTIVO', 'El producto no está activo.')
   if (item.supplier.status !== 'ACTIVE') fallo('PROVEEDOR_INACTIVO', 'El proveedor no está activo.')
 
-  const precio = calcularPrecioOferta(d.publicPrice, d.salePrice)
+  const precio = resolverPrecioDeDatos(d)
   const code = await siguienteNumero(tx, 'MBG-OF', async (prefijo) => {
     const u = await tx.supplyV2Offer.findFirst({ where: { code: { startsWith: prefijo } }, orderBy: { code: 'desc' }, select: { code: true } })
     return u?.code ?? null
@@ -55,6 +55,8 @@ export async function crearOfertaEnTx(tx: Tx, d: DatosOferta, ctx: ContextoAudit
       sourceType: 'PREPURCHASED_SUPPLY',
       publicPrice: precio.publicPrice,
       salePrice: precio.salePrice,
+      priceMode: precio.mode,
+      priceModePercentage: precio.percentage,
       currency: item.currency,
       quantityLimit: d.quantity,
       perCustomerLimit: d.perCustomerLimit ?? 1,
@@ -96,7 +98,7 @@ export async function crearOfertaComisionEnTx(tx: Tx, d: DatosOfertaComision, ct
   const acuerdo = await resolverAcuerdoComisionDeItemEnTx(tx, item.id)
   if (!acuerdo) fallo('SIN_ACUERDO_COMISION', 'Este producto no tiene un acuerdo a comisión vigente (por producto, categoría o catálogo). Crea y activa uno antes de vender a comisión.')
 
-  const precio = calcularPrecioOferta(d.publicPrice, d.salePrice)
+  const precio = resolverPrecioDeDatos(d)
   const code = await siguienteNumero(tx, 'MBG-OF', async (prefijo) => {
     const u = await tx.supplyV2Offer.findFirst({ where: { code: { startsWith: prefijo } }, orderBy: { code: 'desc' }, select: { code: true } })
     return u?.code ?? null
@@ -113,6 +115,8 @@ export async function crearOfertaComisionEnTx(tx: Tx, d: DatosOfertaComision, ct
       sourceType: 'COMMISSION',
       publicPrice: precio.publicPrice,
       salePrice: precio.salePrice,
+      priceMode: precio.mode,
+      priceModePercentage: precio.percentage,
       currency: item.currency,
       // quantityLimit es informativo en comisión: lo que manda es availabilityMode/Quantity.
       quantityLimit: sinTope ? 0 : d.availabilityQuantity!,
@@ -249,7 +253,8 @@ export async function editarOfertaEnTx(
     where: { id: offerId },
     select: {
       id: true, code: true, status: true, allocationId: true, title: true, description: true, imagePath: true,
-      publicPrice: true, salePrice: true, quantityLimit: true, perCustomerLimit: true, startsAt: true, endsAt: true,
+      publicPrice: true, salePrice: true, priceMode: true, priceModePercentage: true,
+      quantityLimit: true, perCustomerLimit: true, startsAt: true, endsAt: true,
       supplier: { select: { companyId: true } },
     },
   })
@@ -261,6 +266,8 @@ export async function editarOfertaEnTx(
   const error = validarEdicionOferta(d, {
     publicPrice: o.publicPrice.toFixed(2),
     salePrice: o.salePrice.toFixed(2),
+    priceMode: o.priceMode,
+    priceModePercentage: o.priceModePercentage?.toString() ?? null,
     quantityLimit: o.quantityLimit,
     startsAt: o.startsAt,
   })
@@ -271,7 +278,26 @@ export async function editarOfertaEnTx(
     fallo('EDICION_INVALIDA', 'La fecha de inicio no se cambia con la oferta ya publicada.')
   }
 
-  if (edicionCambiaElPrecio(d, o)) {
+  // El precio se RESUELVE entero cuando la edición toca cualquiera de sus
+  // cuatro piezas, nunca se escribe campo a campo. Subir el precio de lista de
+  // una oferta al 35 % tiene que recalcular el precio Membego: dejarlo como
+  // estaba cobraría un descuento que ya no es el 35 % y que nadie eligió.
+  const tocaElPrecio =
+    d.publicPrice !== undefined || d.salePrice !== undefined || d.priceMode !== undefined || d.priceModePercentage !== undefined
+  let resuelto: PrecioResuelto | null = null
+  if (tocaElPrecio) {
+    try {
+      resuelto = resolverPrecioDeDatos({
+        publicPrice: d.publicPrice ?? o.publicPrice,
+        salePrice: d.salePrice ?? o.salePrice,
+        priceMode: d.priceMode ?? o.priceMode,
+        priceModePercentage: d.priceModePercentage !== undefined ? d.priceModePercentage : o.priceModePercentage,
+      })
+    } catch (e) {
+      fallo('EDICION_INVALIDA', e instanceof Error ? e.message : 'El precio no es válido.')
+    }
+  }
+  if (edicionCambiaElPrecio(resuelto, o)) {
     const vivas = o.allocationId
       ? await tx.supplyV2OrderReservation.count({ where: { allocationLine: { allocationId: o.allocationId }, status: 'ACTIVE' } })
       : await tx.supplyV2CommissionReservation.count({ where: { offerId: o.id, status: 'ACTIVE' } })
@@ -287,14 +313,22 @@ export async function editarOfertaEnTx(
   }
   // El dinero NO se compara como texto: `'600'` y `'600.00'` son el mismo
   // precio y `anota` los daría por distintos.
-  const anotaMonto = (campo: string, antes: Prisma.Decimal, despues: number | string) => {
+  const anotaMonto = (campo: string, antes: Prisma.Decimal, despues: Monto) => {
     if (!mismoMonto(antes, despues)) cambios.push(campo)
   }
   if (d.title !== undefined) { anota('título', o.title, d.title.trim()); data.title = d.title.trim() }
   if (d.description !== undefined) { anota('descripción', o.description, d.description); data.description = d.description }
   if (d.imagePath !== undefined) { anota('imagen', o.imagePath, d.imagePath); data.imagePath = d.imagePath }
-  if (d.publicPrice !== undefined) { anotaMonto('precio público', o.publicPrice, d.publicPrice); data.publicPrice = decimal(d.publicPrice) }
-  if (d.salePrice !== undefined) { anotaMonto('precio Membego', o.salePrice, d.salePrice); data.salePrice = decimal(d.salePrice) }
+  if (resuelto) {
+    anotaMonto('precio público', o.publicPrice, resuelto.publicPrice)
+    anotaMonto('precio Membego', o.salePrice, resuelto.salePrice)
+    anota('modo de precio', o.priceMode, resuelto.mode)
+    anota('porcentaje', o.priceModePercentage?.toString() ?? null, resuelto.percentage?.toString() ?? null)
+    data.publicPrice = resuelto.publicPrice
+    data.salePrice = resuelto.salePrice
+    data.priceMode = resuelto.mode
+    data.priceModePercentage = resuelto.percentage
+  }
   if (d.perCustomerLimit !== undefined) { anota('máximo por persona', o.perCustomerLimit, d.perCustomerLimit); data.perCustomerLimit = d.perCustomerLimit }
   if (d.startsAt !== undefined) { anota('inicio', o.startsAt.toISOString(), d.startsAt.toISOString()); data.startsAt = d.startsAt }
   if (d.endsAt !== undefined) { anota('fin', o.endsAt?.toISOString() ?? null, d.endsAt?.toISOString() ?? null); data.endsAt = d.endsAt }

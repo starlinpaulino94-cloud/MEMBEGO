@@ -18,7 +18,8 @@ import { esAutoaprobacion, MOTIVO_AUTOAPROBACION } from '../src/modules/supply-v
 import { OFERTA_EDITABLE, TRANSICIONES_OFERTA } from '../src/modules/supply-v2/core/estados'
 import { edicionCambiaElPrecio, validarEdicionOferta } from '../src/modules/supply-v2/offers/domain'
 import { calcularTotales, decimal, mismoMonto, validarLinea, valorDeLotes } from '../src/modules/supply-v2/core/dinero'
-import { montoCuadra } from '../src/modules/supply-v2/core/precios'
+import { montoCuadra, resolverPrecioDeDatos, resolverPrecioOferta, validarModoPrecio } from '../src/modules/supply-v2/core/precios'
+import { calcularRepartoLinea } from '../src/modules/supply-v2/core/financiacion'
 import { formatearNumero, secuenciaDeNumero } from '../src/modules/supply-v2/core/numeracion'
 import { acuerdoCompatible, validarAcuerdo } from '../src/modules/supply-v2/agreements/domain'
 import { normalizarProveedor, validarProveedorExterno } from '../src/modules/supply-v2/suppliers/domain'
@@ -238,25 +239,46 @@ test('editar una oferta · límite por persona y vigencia', () => {
 
 test('editar una oferta · la guarda solo salta si de verdad cambia lo que se cobra', () => {
   const actual = { publicPrice: '1000.00', salePrice: '700.00' }
-  assert.equal(edicionCambiaElPrecio({ title: 'Otro título' }, actual), false, 'cambiar el título no toca el dinero')
-  assert.equal(edicionCambiaElPrecio({ salePrice: '700.00' }, actual), false, 'reenviar el mismo precio no es un cambio')
-  assert.equal(edicionCambiaElPrecio({ salePrice: '650.00' }, actual), true)
-  assert.equal(edicionCambiaElPrecio({ publicPrice: '1200.00' }, actual), true)
+  const resolver = (d: Parameters<typeof resolverPrecioDeDatos>[0]) => resolverPrecioDeDatos(d)
+
+  // Una edición que no toca el precio no resuelve nada, y entonces no hay guarda.
+  assert.equal(edicionCambiaElPrecio(null, actual), false, 'cambiar el título no toca el dinero')
+  assert.equal(edicionCambiaElPrecio(resolver({ publicPrice: '1000', salePrice: '700' }), actual), false, 'reenviar el mismo precio no es un cambio')
+  assert.equal(edicionCambiaElPrecio(resolver({ publicPrice: '1000', salePrice: '650' }), actual), true)
+  assert.equal(edicionCambiaElPrecio(resolver({ publicPrice: '1200', salePrice: '700' }), actual), true)
 
   // El mismo precio ESCRITO DE OTRA FORMA no es un cambio. Comparar dinero como
   // texto fallaba justo aquí: la base devuelve «700.00» y el formulario manda
   // «700», así que reenviar sin tocar nada se contaba como cambio de precio y,
   // con un checkout vivo, se rechazaba una edición que no cambiaba nada.
-  for (const igual of ['700', 700, '700.0', '0700.00', ' 700 '.trim()] as const) {
+  for (const igual of ['700', 700, '700.0', '0700.00']) {
     assert.equal(
-      edicionCambiaElPrecio({ salePrice: igual }, actual),
+      edicionCambiaElPrecio(resolver({ publicPrice: '1000.00', salePrice: igual }), actual),
       false,
       `${JSON.stringify(igual)} es el mismo precio que 700.00`
     )
   }
   // Y un centavo SÍ es un cambio: aquí no hay tolerancia que valga.
-  assert.equal(edicionCambiaElPrecio({ salePrice: '699.99' }, actual), true)
-  assert.equal(edicionCambiaElPrecio({ salePrice: 700.01 }, actual), true)
+  assert.equal(edicionCambiaElPrecio(resolver({ publicPrice: '1000.00', salePrice: '699.99' }), actual), true)
+
+  // Cambiar SOLO el modo cambia lo que se cobra sin que el formulario traiga un
+  // importe: por eso la pregunta se hace sobre el precio ya resuelto.
+  assert.equal(edicionCambiaElPrecio(resolver({ publicPrice: '1000.00', priceMode: 'FREE' }), actual), true, 'pasar a gratis es un cambio de precio')
+  // Y al revés: pasar de precio fijo a un 30 % que da EXACTAMENTE el mismo
+  // importe (1000 − 300 = 700) no es un cambio de precio. El modo sí cambia y
+  // se registra, pero nadie va a pagar algo distinto, así que no hay motivo
+  // para rechazar la edición por los checkouts en curso. Esto es justo lo que
+  // se perdería comparando los campos del formulario en vez del resultado.
+  assert.equal(
+    edicionCambiaElPrecio(resolver({ publicPrice: '1000.00', priceMode: 'PERCENTAGE', priceModePercentage: '30' }), actual),
+    false,
+    'el 30 % de 1000 deja el precio en 700, que es el que ya tenía'
+  )
+  assert.equal(
+    edicionCambiaElPrecio(resolver({ publicPrice: '1000.00', priceMode: 'PERCENTAGE', priceModePercentage: '35' }), actual),
+    true,
+    'el 35 % deja el precio en 650: eso sí cambia lo que se cobra'
+  )
 })
 
 test('mismoMonto · exacto, y distinto de la tolerancia de conciliación', () => {
@@ -269,4 +291,84 @@ test('mismoMonto · exacto, y distinto de la tolerancia de conciliación', () =>
   assert.equal(mismoMonto('600.00', '600.01'), false)
   // Basura de entrada no se hace pasar por «igual».
   assert.equal(mismoMonto('abc', '600'), false)
+})
+
+// ── Modos de precio de una oferta: fijo, porcentaje y gratis ─────────────────
+
+test('resolverPrecioOferta · los tres modos materializan siempre el precio Membego', () => {
+  const fijo = resolverPrecioOferta({ mode: 'FIXED', publicPrice: '1000', salePrice: '650' })
+  assert.equal(fijo.salePrice.toFixed(2), '650.00')
+  assert.equal(fijo.mode, 'FIXED')
+  assert.equal(fijo.percentage, null, 'el porcentaje solo se guarda en PERCENTAGE')
+
+  const pct = resolverPrecioOferta({ mode: 'PERCENTAGE', publicPrice: '1000', percentage: '35' })
+  assert.equal(pct.salePrice.toFixed(2), '650.00', '35 % de 1000 son 350: queda en 650')
+  assert.equal(pct.percentage?.toString(), '35')
+  assert.equal(pct.discountPercentage, 35, 'el porcentaje calculado coincide con el escrito')
+
+  // Gratis es gratis: 0, no «casi 0». El checkout lo exige y el CHECK también.
+  const gratis = resolverPrecioOferta({ mode: 'FREE', publicPrice: '1000' })
+  assert.equal(gratis.salePrice.toFixed(2), '0.00')
+  assert.equal(gratis.discount.toFixed(2), '1000.00')
+  assert.equal(gratis.discountPercentage, 100)
+  assert.equal(gratis.percentage, null)
+})
+
+test('resolverPrecioOferta · un porcentaje fuera de rango se rechaza, no se recorta', () => {
+  for (const malo of ['0', '-5', '101', '120']) {
+    assert.throws(
+      () => resolverPrecioOferta({ mode: 'PERCENTAGE', publicPrice: '1000', percentage: malo }),
+      /porcentaje/i,
+      `${malo} % no es un descuento`
+    )
+  }
+  // Recortar al 100 % en vez de rechazar convertiría un dedazo en una oferta gratis.
+  assert.equal(resolverPrecioOferta({ mode: 'PERCENTAGE', publicPrice: '1000', percentage: '100' }).salePrice.toFixed(2), '0.00')
+})
+
+test('resolverPrecioOferta · redondea igual que el motor de beneficios', () => {
+  // La razón de redondear el DESCUENTO y luego restar, en vez de redondear el
+  // resultado: una oferta al 35 % y un beneficio del 35 % sobre la misma base
+  // tienen que dar el mismo importe al céntimo. Si difirieran, ese céntimo
+  // aparecería como un descuadre en la liquidación al proveedor.
+  for (const base of ['333.33', '1000', '1250.55', '99.99', '7.77']) {
+    for (const p of ['35', '12.5', '7', '33.33']) {
+      const oferta = resolverPrecioOferta({ mode: 'PERCENTAGE', publicPrice: base, percentage: p })
+      const beneficio = calcularRepartoLinea({
+        saleUnitPrice: base,
+        quantity: 1,
+        sourceType: 'PREPURCHASED_SUPPLY',
+        beneficio: { valueType: 'PERCENTAGE', funding: 'SUPPLIER', membegoValue: 0, supplierValue: p },
+      })
+      assert.equal(
+        oferta.salePrice.toFixed(2),
+        beneficio.customerPayable.toFixed(2),
+        `${p} % sobre ${base}: la oferta y el beneficio tienen que coincidir`
+      )
+    }
+  }
+})
+
+test('resolverPrecioDeDatos · sin modo es FIXED, que es lo que han hecho siempre las ofertas', () => {
+  const sinModo = resolverPrecioDeDatos({ publicPrice: '1000', salePrice: '700' })
+  assert.equal(sinModo.mode, 'FIXED')
+  assert.equal(sinModo.salePrice.toFixed(2), '700.00')
+
+  // Cada modo exige lo que necesita, y lo dice en vez de inventarlo.
+  assert.throws(() => resolverPrecioDeDatos({ publicPrice: '1000', priceMode: 'PERCENTAGE' }), /necesita el porcentaje/)
+  assert.throws(() => resolverPrecioDeDatos({ publicPrice: '1000', priceMode: 'FIXED' }), /necesita el precio Membego/)
+  // FREE no necesita nada más: el precio es 0 por definición.
+  assert.equal(resolverPrecioDeDatos({ publicPrice: '1000', priceMode: 'FREE' }).salePrice.toFixed(2), '0.00')
+})
+
+test('validarModoPrecio · el modo y el porcentaje van emparejados, como en el CHECK', () => {
+  assert.equal(validarModoPrecio('FIXED', null), null)
+  assert.equal(validarModoPrecio('FREE', null), null)
+  assert.equal(validarModoPrecio('PERCENTAGE', '35'), null)
+  assert.match(validarModoPrecio('PERCENTAGE', null)!, /necesita el porcentaje/)
+  // Un porcentaje huérfano en una oferta de precio fijo es un número que
+  // alguien acabaría mostrando como si fuera el descuento vigente.
+  assert.match(validarModoPrecio('FIXED', '35')!, /solo se guarda/)
+  assert.match(validarModoPrecio('FREE', '35')!, /solo se guarda/)
+  assert.match(validarModoPrecio('PERCENTAGE', '101')!, /no puede superar 100/)
 })

@@ -281,7 +281,7 @@ test('B · cobertura total: saldo 0, el cliente confirma sin pago bancario y nad
   assert.equal(orden.total, '0.00')
 
   // No hay pago bancario que avisar ni que confirmar.
-  await assert.rejects(confirmar(orden.id, '0'), /cubierta por completo/)
+  await assert.rejects(confirmar(orden.id, '0'), /no tiene nada que cobrar/)
   // Y la orden es del cliente: otro no la confirma.
   await assert.rejects(sinEmpresa('prueba', (tx) => confirmarCoberturaTotalEnTx(tx, { orderId: orden.id, customerId: ctx.cliente }, como(ctx.cliente))), /no es tuya/)
 
@@ -591,4 +591,76 @@ test('J · una línea lleva UN solo beneficio: la reserva viva es única por ord
   assert.equal(unica.length, 1, 'el índice parcial que impide dos beneficios vivos por orden existe')
   const porLinea = await prisma.$queryRaw<{ indexname: string }[]>`SELECT indexname FROM pg_indexes WHERE tablename = 'supply_v2_benefit_reservations' AND indexdef LIKE '%UNIQUE%orderLineId%'`
   assert.ok(porLinea.length >= 1, 'una línea no puede tener dos reservas')
+})
+
+// ── K · oferta GRATIS de origen: el otro motivo de un total 0 ────────────────
+
+test('K · una oferta gratis se compra y se completa hasta el derecho, sin beneficio ninguno', async () => {
+  // Antes de los modos de precio esto NO tenía camino: la vía bancaria rechaza
+  // un total 0 y la vía sin pago exigía una reserva de beneficio viva, así que
+  // una oferta gratis creaba compras que se quedaban colgadas para siempre.
+  const offer = await sinEmpresa('prueba', async (tx) => {
+    const o = await crearOfertaComisionEnTx(
+      tx,
+      {
+        catalogItemId: ctx.tours.itemId,
+        title: `Lavado de regalo ${sufijo}`,
+        publicPrice: 1200,
+        priceMode: 'FREE',
+        availabilityMode: 'UNLIMITED',
+        perCustomerLimit: 1,
+        startsAt: new Date(ahora.getTime() - 60_000),
+        endsAt: new Date(ahora.getTime() + 30 * DIA),
+      },
+      como(ctx.compras)
+    )
+    await publicarOfertaEnTx(tx, o.id, como(ctx.compras))
+    return o.id
+  })
+
+  const guardada = await prisma.supplyV2Offer.findUniqueOrThrow({ where: { id: offer } })
+  assert.deepEqual(
+    [guardada.priceMode, guardada.salePrice.toFixed(2), guardada.publicPrice.toFixed(2), guardada.priceModePercentage],
+    ['FREE', '0.00', '1200.00', null],
+    'gratis se materializa en salePrice 0, con el precio de lista intacto'
+  )
+
+  const orden = await comprarConBeneficio(offer, ctx.cliente, null)
+  assert.equal(orden.total, '0.00')
+  // La vía bancaria sigue cerrada, y su mensaje ya no afirma un beneficio.
+  await assert.rejects(confirmar(orden.id, '0'), /no tiene nada que cobrar/)
+
+  const r = await sinEmpresa('prueba', (tx) => confirmarCoberturaTotalEnTx(tx, { orderId: orden.id, customerId: ctx.cliente }, como(ctx.cliente)))
+  assert.equal(r.entitlements.length, 1)
+  const o = await prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: orden.id } })
+  assert.equal(o.status, 'PAID')
+  // FREE_OFFER, NO COVERED_BY_BENEFIT: nadie financió esto. Confundirlos
+  // metería regalos en los informes de subsidio como si fueran pagados.
+  assert.equal(o.paymentStatus, 'FREE_OFFER')
+  assert.equal(o.membegoSubsidyTotal.toFixed(2), '0.00', 'un regalo no es un subsidio')
+  assert.equal(o.supplierDiscountTotal.toFixed(2), '0.00')
+
+  // El derecho es el de siempre, con su QR: gratis no significa de segunda.
+  const d = await prisma.supplyV2Entitlement.findUniqueOrThrow({ where: { id: r.entitlements[0]!.id } })
+  assert.equal(d.status, 'ACTIVE')
+  assert.equal(d.customerUnitPrice.toFixed(2), '0.00')
+  assert.equal(await redimir(d.id, ctx.cliente) !== null, true, 'se puede canjear igual que cualquier otro')
+
+  // Idempotente, como la cobertura por beneficio.
+  assert.equal((await sinEmpresa('prueba', (tx) => confirmarCoberturaTotalEnTx(tx, { orderId: orden.id, customerId: ctx.cliente }, como(ctx.cliente)))).repetido, true)
+})
+
+test('K · un total 0 sin motivo es IMPOSIBLE: la base lo rechaza antes que el servidor', async () => {
+  // `confirmarCoberturaTotalEnTx` exige un motivo para un total 0 —beneficio
+  // vivo u oferta gratis—, pero ese caso no se puede ni fabricar: el CHECK
+  // `supply_v2_customer_orders_amounts` no deja que una compra de 500 tenga
+  // total 0. Se afirma aquí a propósito, porque es la razón por la que la
+  // guarda del servidor es defensa en profundidad y no la única barrera.
+  const offer = await ofertaComision(ctx.tours.itemId, { salePrice: 500, titulo: 'Sin motivo' })
+  const orden = await comprarConBeneficio(offer, ctx.cliente2, null)
+  await assert.rejects(
+    prisma.supplyV2CustomerOrder.update({ where: { id: orden.id }, data: { total: 0 } }),
+    /supply_v2_customer_orders_amounts|check/i
+  )
+  assert.equal((await prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: orden.id } })).status, 'PENDING')
 })
