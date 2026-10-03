@@ -555,6 +555,7 @@ model User {
   auditLogs        AuditLog[]
   comprobantes     Comprobante[]
   notificaciones   Notificacion[]
+  preferenciasDeAviso PreferenciasDeAviso?
   follows          CompanyFollow[]
   promosGuardadas  PromocionGuardada[]
   notasCliente     ClienteNota[]
@@ -1087,6 +1088,68 @@ model AuditLog {
   /// las tres condiciones de una pasada.
   @@index([companyId, accion, createdAt])
   @@map("audit_logs")
+}
+
+/// PREFERENCIAS DE AVISO DE UNA PERSONA (Slice 9 · bloque 5 · §9).
+///
+/// ────────────────────────────────────────────────────────────────────────────
+/// POR QUÉ UNA TABLA NUEVA, Y POR QUÉ VIVE AQUÍ Y NO EN SUPPLY 2.0
+///
+/// Se buscó antes de crearla. NO hay un modelo de preferencias de aviso en el
+/// proyecto: `Notificacion` guarda el aviso YA creado y no tiene nada sobre
+/// consentimiento, y lo de `GeoConsent` es consentimiento de UBICACIÓN, que es
+/// otra cosa y mezclarlos sería exactamente el error que §3 prohíbe.
+///
+/// Vive en identidad y no en Supply 2.0 porque esto es de la PERSONA, no de
+/// una vertical: el día que las citas o el car wash quieran avisar por correo,
+/// la decisión de esta persona ya está tomada y no hay que preguntarle otra
+/// vez en otra pantalla. Supply 2.0 es el primero que lo necesita, no el
+/// dueño.
+///
+/// ────────────────────────────────────────────────────────────────────────────
+/// CINCO COLUMNAS Y NO UNA
+///
+/// «No quiero correos» y «no quiero publicidad» son decisiones distintas.
+/// Con un solo interruptor hay que elegir entre respetar la primera o entregar
+/// lo transaccional, y las dos opciones son malas: o la persona deja de
+/// enterarse de que su compra se confirmó, o el sistema manda publicidad que
+/// pidió no recibir.
+///
+/// Los nulos NO son «apagado»: son «no lo ha tocado», y entonces manda el
+/// valor por defecto del dominio (`POR_DEFECTO` en
+/// `modules/supply-v2/notifications/dominio.ts`): lo transaccional encendido,
+/// lo promocional APAGADO. Un consentimiento que nadie dio no es un
+/// consentimiento, así que no se presume a favor.
+///
+/// Lo OPERATIVO no está aquí a propósito: los avisos a quien tiene la guardia
+/// no se apagan desde una pantalla de preferencias personales. Eso dejaría el
+/// sistema sin vigilancia sin que nadie lo decidiera. Se quita el permiso o se
+/// saca a la persona de operaciones.
+model PreferenciasDeAviso {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Avisos dentro de Membego (la campana). Nulo = por defecto.
+  inApp Boolean?
+
+  /// Correo por algo que la persona hizo o compró. Nulo = por defecto.
+  emailTransactional Boolean?
+  /// Correo para vender. Nulo = por defecto (APAGADO).
+  emailMarketing Boolean?
+
+  /// WhatsApp. Hoy el canal está NO CONFIGURADO a nivel de plataforma (ver el
+  /// informe del bloque 5): las columnas existen para que la decisión de la
+  /// persona se pueda guardar desde ya y no haya que migrar después.
+  whatsappTransactional Boolean?
+  whatsappMarketing     Boolean?
+
+  /// Quién tocó esto por última vez y cuándo. Una preferencia de comunicación
+  /// es una decisión que alguien puede discutir más adelante.
+  actualizadoPor String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("preferencias_de_aviso")
 }
 
 model Notificacion {

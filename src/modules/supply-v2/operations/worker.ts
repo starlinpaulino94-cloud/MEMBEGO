@@ -1,11 +1,11 @@
 import type { NotifTipo, Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { sinEmpresa } from '@/lib/tenant'
 import { encolar } from '@/modules/jobs/cola'
 import type { ContextoAuditoria } from '../core/auditoria'
 import { sanearError } from './domain'
 import { anotarSupply, anotarYContar } from './log'
 import { marcarEntregado, marcarFallido, reclamarEfectos, type EfectoReclamado } from './outbox'
+import { EFECTOS_DE_AVISO } from '../notifications/efectos'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · DEL OUTBOX A LA COLA (§6, §7, §8).
@@ -91,6 +91,19 @@ export const EFECTOS: Record<string, EjecutorDeEfecto> = {
       mensaje: 'El pago de tu compra fue rechazado. Puedes intentarlo de nuevo desde tus compras.',
       href: '/cliente/compras',
     }),
+
+  /**
+   * Y los avisos del bloque 5, que se registran aquí en vez de repetir el
+   * mecanismo. Son los mismos efectos del outbox —con su escalera, su cola de
+   * difuntos y su panel— y lo único que cambia es por dónde salen: dentro de
+   * Membego o por correo, según el canal que lleve el efecto.
+   *
+   * Los dos de arriba se quedan como están. Se podrían reescribir sobre el
+   * mecanismo nuevo, pero son el camino del dinero y ya están probados contra
+   * PostgreSQL: cambiarlos sin necesidad es gastar el único crédito que vale,
+   * el de que esa parte funciona.
+   */
+  ...EFECTOS_DE_AVISO,
 }
 
 export interface ResultadoDespacho {
