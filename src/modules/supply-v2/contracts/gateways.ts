@@ -97,6 +97,14 @@ export const SUPPLY_V2_PERMISSIONS = [
   // (eso es `SUPPLY_V2_OFFER_MANAGE`): es decidir sobre una discrepancia con
   // una pasarela, y quien procesa la integración no lo tiene.
   'SUPPLY_V2_PAYMENT_INCIDENT_RESOLVE',
+  // Slice 9 · bloque 4. DOS y no cinco: el catálogo ya separa ver de actuar en
+  // todo lo demás, y `SUPPLY_V2_OPERATIONS_MANAGE` cubre tocar un interruptor,
+  // lanzar una conciliación y reconocer una alerta —son la misma
+  // responsabilidad: operar—. Reintentar un difunto de la cola sigue pidiendo
+  // SUPERADMIN en su propia acción, que ya existía. Crear cinco permisos para
+  // que los tenga siempre la misma persona es burocracia, no segregación.
+  'SUPPLY_V2_OPERATIONS_VIEW',
+  'SUPPLY_V2_OPERATIONS_MANAGE',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -149,6 +157,8 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_LOYALTY_FINANCE_VIEW: 'Ver el presupuesto y los costos de fidelización',
   SUPPLY_V2_LOYALTY_REPORT_VIEW: 'Ver los reportes y el tablero de fidelización',
   SUPPLY_V2_PAYMENT_INCIDENT_RESOLVE: 'Investigar y resolver incidentes de pagos externos (no la cuenta de la integración)',
+  SUPPLY_V2_OPERATIONS_VIEW: 'Ver el Centro de Operaciones de Supply 2.0',
+  SUPPLY_V2_OPERATIONS_MANAGE: 'Operar: interruptores, conciliación manual y reconocer alertas',
 }
 
 export interface CompanyGateway {

@@ -50,6 +50,16 @@ export type CodigoEntrada =
   | 'PAYLOAD_TOO_LARGE'
   /** Nos falló algo a nosotros. Es el único que invita a reintentar. */
   | 'INTERNAL_ERROR'
+  /**
+   * Bloque 4 · la capacidad está apagada a propósito (bandera o interruptor).
+   *
+   * 503 y no 200: el evento NO se procesa, así que decirle al proveedor que
+   * quedó aceptado sería tirarlo a la basura —él lo daría por entregado y no
+   * volvería a mandarlo—. Un 503 es exactamente «ahora no puedo, vuelve»: su
+   * reintento nos lo trae cuando la integración se reactive. Y tampoco es un
+   * 4xx, porque el que llama no tiene nada mal.
+   */
+  | 'FEATURE_DISABLED'
 
 export const HTTP_DE_CODIGO: Record<CodigoEntrada, number> = {
   // Nos hacemos cargo.
@@ -66,6 +76,8 @@ export const HTTP_DE_CODIGO: Record<CodigoEntrada, number> = {
 
   // Fallamos nosotros: aquí el reintento SÍ sirve.
   INTERNAL_ERROR: 500,
+  // Apagado a propósito: no es culpa de nadie y el reintento es lo que queremos.
+  FEATURE_DISABLED: 503,
 }
 
 /**
@@ -88,6 +100,7 @@ export const MENSAJE_DE_CODIGO: Record<CodigoEntrada, string> = {
   UNKNOWN_PROVIDER: 'proveedor desconocido',
   PAYLOAD_TOO_LARGE: 'cuerpo demasiado grande',
   INTERNAL_ERROR: 'error interno',
+  FEATURE_DISABLED: 'integración desactivada',
 }
 
 export function httpDe(codigo: CodigoEntrada): number {

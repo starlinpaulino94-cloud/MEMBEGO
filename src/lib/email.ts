@@ -33,6 +33,17 @@ export interface EmailPayload {
 export interface EmailResult {
   sent: boolean
   reason?: string
+  /**
+   * El código HTTP del proveedor, cuando hubo respuesta.
+   *
+   * Lo añadió el bloque 5 del Slice 9 y es aditivo: quien ya llamaba a esto no
+   * tiene que cambiar nada. Hace falta porque un aviso que sale por el outbox
+   * necesita distinguir «falló y vale la pena reintentar» (5xx, corte de red)
+   * de «falló y reintentar ocho veces es tirar el tiempo» (4xx). Sin el código,
+   * la única forma de saberlo sería leer la frase de `reason`, y una frase no
+   * es una interfaz.
+   */
+  status?: number
 }
 
 export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
@@ -77,7 +88,7 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
       console.error('[email] Resend error', res.status, detail)
-      return { sent: false, reason: `Resend ${res.status}` }
+      return { sent: false, reason: `Resend ${res.status}`, status: res.status }
     }
     return { sent: true }
   } catch (e) {

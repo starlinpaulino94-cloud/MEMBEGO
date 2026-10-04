@@ -446,7 +446,15 @@ async function movil(browser: Browser) {
 
   // ── Descubrimiento, ficha, «Mis cupones» y checkout en el teléfono ────
   await cliente.goto('/promociones/campanas')
-  await expect(cliente.getByTestId('campana-publica').filter({ hasText: d.campana })).toBeVisible()
+  const tarjetaCampana = cliente.getByTestId('campana-publica').filter({ hasText: d.campana })
+  // `toHaveCount(1)` antes de usar el elemento, a propósito: no es un margen de
+  // tiempo disfrazado, es la invariante de verdad —de esto hay UNO— y Playwright
+  // reintenta hasta que se cumple. Durante una navegación del App Router el DOM
+  // puede tener un instante DOS copias del listado; el filtro por texto
+  // encontraba una en cada copia y el modo estricto abortaba. Si la página
+  // llegara a duplicar de verdad, esta misma línea lo caza: no lo esconde.
+  await expect(tarjetaCampana).toHaveCount(1)
+  await expect(tarjetaCampana).toBeVisible()
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await cliente.screenshot({ path: 'test-results/shots/supply-v2-s7-movil-campanas.png', fullPage: true })
 
@@ -470,6 +478,12 @@ async function movil(browser: Browser) {
 
   await cliente.locator('#referenciaPago').fill(`MOV-${d.sufijo}`)
   await cliente.getByTestId('btn-avisar-pago').click()
+  // Esperar a que el aviso QUEDE antes de ir a la pantalla de finanzas: sin
+  // esto, la navegación de `finanzas` corre contra la server action que acaba
+  // de pulsar `cliente` y a veces llega antes de que la venta esté «por
+  // revisar». El fallo parece de la pantalla de finanzas y es una carrera de la
+  // prueba. (La misma familia de carrera estaba en los slices 6, 7 y 8.)
+  await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
   await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
   const venta = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `MOV-${d.sufijo}` })
   await venta.getByTestId('btn-confirmar-pago').click()

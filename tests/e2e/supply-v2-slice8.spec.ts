@@ -242,12 +242,24 @@ async function recorridoCompleto(browser: Browser) {
   // ── 3 · un plan de pago con su beneficio (nace borrador) ────────────────
   await planCreado(compras, urlPrograma, d.planPago, '500', d.beneficio)
 
-  // ── 4 · lo aprueba OTRA persona autorizada ──────────────────────────────
+  // ── 4 · revisión y aprobación ───────────────────────────────────────────
+  //
+  // Aquí había una comprobación de que quien crea el programa NO puede
+  // aprobarlo, y dejó de ser cierta: la segregación de funciones se retiró a
+  // propósito el 2026-10-02 (`src/modules/supply-v2/core/segregacion.ts`)
+  // porque Membego opera con un solo administrador de plataforma y el veto no
+  // protegía nada —solo dejaba programas atascados sin nadie capaz de
+  // desatascarlos—. La salvaguarda pasó a ser el RASTRO: quien aprueba lo que
+  // él mismo creó queda marcado en el evento y en la bitácora.
+  //
+  // Esa marca ya la comprueba `tests/postgres/supply-v2-slice1.db.test.ts`
+  // contra la base. Lo que este recorrido cubre es el camino normal —una
+  // persona lo manda a revisión y otra lo aprueba—, sin afirmar un veto que el
+  // producto decidió no tener. Era la última prueba que se quedó atrás en aquel
+  // cambio.
   await compras.goto(urlPrograma)
   await compras.getByTestId('btn-enviar-revision-programa').click()
   await expect(compras.getByTestId('estado-programa')).toHaveText('En revisión')
-  await compras.getByTestId('btn-aprobar-programa').click()
-  await expect(compras.getByTestId('acciones-programa').getByRole('alert')).toContainText(/no lo aprueba la misma persona|otra persona/)
   await finanzas.goto(urlPrograma)
   await finanzas.getByTestId('btn-aprobar-programa').click()
   await expect(finanzas.getByTestId('estado-programa')).toHaveText('Activo')
@@ -306,6 +318,12 @@ async function recorridoCompleto(browser: Browser) {
   const orderCompra = cliente.url().split('/').pop()!
   await cliente.locator('#referenciaPago').fill(`PTS-${d.sufijo}`)
   await cliente.getByTestId('btn-avisar-pago').click()
+  // Esperar a que el aviso QUEDE antes de ir a la pantalla de finanzas: sin
+  // esto, la navegación de `finanzas` corre contra la server action que acaba
+  // de pulsar `cliente` y a veces llega antes de que la venta esté «por
+  // revisar». El fallo parece de la pantalla de finanzas y es una carrera de la
+  // prueba. (La misma familia de carrera estaba en los slices 6, 7 y 8.)
+  await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
   await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
   const venta2 = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `PTS-${d.sufijo}` })
   await venta2.getByTestId('btn-confirmar-pago').click()

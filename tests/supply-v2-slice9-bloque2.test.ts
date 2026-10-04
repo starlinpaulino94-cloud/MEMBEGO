@@ -334,10 +334,17 @@ test('11 · cada código tiene su HTTP, y la regla es una sola', () => {
   for (const c of ['INVALID_SIGNATURE', 'REPLAY_REJECTED', 'INVALID_PAYLOAD', 'UNKNOWN_PROVIDER', 'PAYLOAD_TOO_LARGE'] as CodigoEntrada[]) {
     assert.ok(!invitaAReintentar(c), `${c} no debe invitar a reintentar eternamente`)
   }
-  // Fallamos nosotros: aquí el reintento sí sirve, y es el ÚNICO caso.
+  // Fallamos nosotros, o estamos apagados: los dos casos en los que el
+  // reintento del proveedor es exactamente lo que queremos.
   assert.equal(HTTP_DE_CODIGO.INTERNAL_ERROR, 500)
-  const invitan = (Object.keys(HTTP_DE_CODIGO) as CodigoEntrada[]).filter(invitaAReintentar)
-  assert.deepEqual(invitan, ['INTERNAL_ERROR'], 'solo nuestro propio fallo pide que lo manden otra vez')
+  // El bloque 4 añadió FEATURE_DISABLED (503). Es la segunda —y la única otra—
+  // respuesta que invita a reintentar, y por la misma razón que la primera: el
+  // evento NO se procesó, así que decirle al proveedor que quedó aceptado lo
+  // tiraría a la basura. La regla no cambió: 4xx es «tú tienes algo mal»,
+  // 2xx es «nos hacemos cargo», y lo demás pide que vuelvan.
+  assert.equal(HTTP_DE_CODIGO.FEATURE_DISABLED, 503)
+  const invitan = (Object.keys(HTTP_DE_CODIGO) as CodigoEntrada[]).filter(invitaAReintentar).sort()
+  assert.deepEqual(invitan, ['FEATURE_DISABLED', 'INTERNAL_ERROR'], 'nuestro fallo y nuestro apagado; nada más')
 })
 
 test('11a · un evento rechazado por no cuadrar contesta 200, y es a propósito', () => {
