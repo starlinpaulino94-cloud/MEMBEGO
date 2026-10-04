@@ -1,8 +1,9 @@
 import 'server-only'
 
+import type { SupplyV2CatalogItemType } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { aNumero } from '../core/dinero'
-import { ORDEN_ABIERTA } from '../core/estados'
+import { ORDEN_ABIERTA, ORDEN_POR_RECIBIR } from '../core/estados'
 
 /**
  * MEMBEGO SUPPLY 2.0 · lecturas del pool de supply (§24, §37–§39).
@@ -19,11 +20,19 @@ export interface ResumenSupplyV2 {
   ofertasActivas: number
   comprasAbiertas: number
   proveedoresActivos: number
+  /** Órdenes enviadas que esperan aprobación. */
+  comprasPorAprobar: number
+  /** Órdenes aprobadas (pagadas o no) con unidades todavía sin recibir. */
+  comprasPorRecibir: number
+  /** Órdenes que quedaron recibidas por completo en el mes en curso. */
+  comprasRecibidasMes: number
+  campanasActivas: number
 }
 
-export async function resumenSupplyV2(): Promise<ResumenSupplyV2> {
+export async function resumenSupplyV2(ahora = new Date()): Promise<ResumenSupplyV2> {
+  const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
   return sinEmpresa('Supply 2.0: tablero', async (tx) => {
-    const [lotes, comprasAbiertas, proveedoresActivos, ofertasActivas] = await Promise.all([
+    const [lotes, comprasAbiertas, proveedoresActivos, ofertasActivas, comprasPorAprobar, comprasPorRecibir, comprasRecibidasMes, campanasActivas] = await Promise.all([
       tx.supplyV2Lot.findMany({
         where: { status: { in: ['ACTIVE', 'EXHAUSTED'] } },
         select: { quantityAvailable: true, quantityAllocated: true, quantityIssued: true, quantityReceived: true, unitCost: true },
@@ -31,6 +40,10 @@ export async function resumenSupplyV2(): Promise<ResumenSupplyV2> {
       tx.supplyV2PurchaseOrder.count({ where: { status: { in: [...ORDEN_ABIERTA] } } }),
       tx.supplyV2Supplier.count({ where: { status: 'ACTIVE' } }),
       tx.supplyV2Offer.count({ where: { status: 'ACTIVE' } }),
+      tx.supplyV2PurchaseOrder.count({ where: { status: 'PENDING_APPROVAL' } }),
+      tx.supplyV2PurchaseOrder.count({ where: { status: { in: [...ORDEN_POR_RECIBIR] } } }),
+      tx.supplyV2PurchaseOrderEvent.count({ where: { type: 'RECEIVED', createdAt: { gte: inicioMes } } }),
+      tx.supplyV2Campaign.count({ where: { status: 'ACTIVE' } }),
     ])
     return {
       valorDisponible: lotes.reduce((t, l) => t + l.quantityAvailable * aNumero(l.unitCost), 0),
@@ -41,6 +54,10 @@ export async function resumenSupplyV2(): Promise<ResumenSupplyV2> {
       ofertasActivas,
       comprasAbiertas,
       proveedoresActivos,
+      comprasPorAprobar,
+      comprasPorRecibir,
+      comprasRecibidasMes,
+      campanasActivas,
     }
   })
 }
@@ -48,6 +65,13 @@ export async function resumenSupplyV2(): Promise<ResumenSupplyV2> {
 export interface ActividadSupplyV2 {
   id: string
   cuando: Date
+  /** Tipo del evento de la orden (`CREATED`, `RECEIVED`…) o del asiento del ledger (`RECEIPT`, `ALLOCATION`…). */
+  tipo: string
+  origen: 'ORDEN' | 'LEDGER'
+  /** Código que identifica el movimiento: número de la orden o código del lote. */
+  referencia: string
+  /** Motivo escrito al cancelar o rechazar (también va dentro de `detalle`). */
+  motivo: string | null
   titulo: string
   detalle: string
   href: string
@@ -91,10 +115,28 @@ export async function actividadRecienteSupplyV2(limite = 10): Promise<ActividadS
       RECEIPT_CONFIRMED: 'Recepción registrada',
       RECEIVED: 'Orden recibida por completo',
     }
+    const TITULO_LEDGER: Record<string, string> = {
+      RECEIPT: 'Supply recibido',
+      ALLOCATION: 'Asignado a oferta',
+      RELEASE_ALLOCATION: 'Asignación liberada',
+      RESERVATION: 'Reservado',
+      RELEASE_RESERVATION: 'Reserva liberada',
+      ISSUE: 'Emitido',
+      REDEMPTION: 'Redimido',
+      REVERSAL: 'Reverso',
+      EXPIRATION: 'Vencido',
+      ADJUSTMENT: 'Ajuste',
+      CANCELLATION: 'Cancelado',
+      TRANSFER: 'Transferido',
+    }
     const lista: ActividadSupplyV2[] = [
       ...eventos.map((e) => ({
         id: `e-${e.id}`,
         cuando: e.createdAt,
+        tipo: e.type,
+        origen: 'ORDEN' as const,
+        referencia: e.purchaseOrder.number,
+        motivo: e.type === 'CANCELLED' || e.type === 'REJECTED' ? e.reason : null,
         titulo: `${TITULO[e.type] ?? e.type} · ${e.purchaseOrder.number}`,
         detalle: [e.purchaseOrder.supplier.commercialName, e.actor?.name ?? e.actor?.email, e.reason].filter(Boolean).join(' · '),
         href: `/superadmin/supply-v2/compras/${e.purchaseOrder.id}`,
@@ -102,7 +144,11 @@ export async function actividadRecienteSupplyV2(limite = 10): Promise<ActividadS
       ...asientos.map((a) => ({
         id: `l-${a.id}`,
         cuando: a.createdAt,
-        titulo: `${a.type === 'RECEIPT' ? 'Supply recibido' : a.type} · +${a.quantity.toLocaleString('es-DO')} ${a.lot.catalogItem.name}`,
+        tipo: a.type,
+        origen: 'LEDGER' as const,
+        referencia: a.lot.code,
+        motivo: null,
+        titulo: `${TITULO_LEDGER[a.type] ?? a.type} · +${a.quantity.toLocaleString('es-DO')} ${a.lot.catalogItem.name}`,
         detalle: [a.lot.code, a.actor?.name ?? a.actor?.email].filter(Boolean).join(' · '),
         href: `/superadmin/supply-v2/supply/lotes/${a.lot.id}`,
       })),
@@ -114,6 +160,8 @@ export async function actividadRecienteSupplyV2(limite = 10): Promise<ActividadS
 export interface SupplyPorProducto {
   catalogItemId: string
   producto: string
+  sku: string | null
+  tipo: SupplyV2CatalogItemType
   proveedor: string
   proveedorId: string
   unidad: string
@@ -145,7 +193,7 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
         unitCost: true,
         currency: true,
         expiresAt: true,
-        catalogItem: { select: { name: true, unit: true } },
+        catalogItem: { select: { name: true, unit: true, sku: true, type: true } },
         supplier: { select: { id: true, commercialName: true } },
       },
     })
@@ -155,6 +203,8 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
     const g = grupos.get(l.catalogItemId) ?? {
       catalogItemId: l.catalogItemId,
       producto: l.catalogItem.name,
+      sku: l.catalogItem.sku,
+      tipo: l.catalogItem.type,
       proveedor: l.supplier.commercialName,
       proveedorId: l.supplier.id,
       unidad: l.catalogItem.unit,
