@@ -16,6 +16,8 @@ import {
 } from '../../src/modules/supply-v2/operations/inbox'
 import { emitirEfectoEnTx, marcarEntregado, marcarFallido, reclamarEfectos, reintentarEfecto } from '../../src/modules/supply-v2/operations/outbox'
 import { MAX_INTENTOS } from '../../src/modules/integraciones/reintentos'
+import { evaluarAutomatizaciones } from '../../src/modules/supply-v2/notifications/automatizaciones'
+import { emitirMetricasOperativas } from '../../src/modules/supply-v2/operations/metricas'
 // ── Bloque 2 ──
 import { GET, POST } from '../../src/app/api/webhooks/supply-v2/[provider]/route'
 import { olvidarActorDelWebhook, recibirEventoExterno } from '../../src/modules/supply-v2/operations/entrada'
@@ -2371,4 +2373,78 @@ test('B4 · la configuración se reporta por estado, nunca por valor', async () 
   }
   // Y el secreto del arnés se reconoce como válido por su forma.
   assert.equal(salud.piezas.find((p) => p.clave === 'SUPPLY_V2_TEST_GATEWAY_SECRET')!.estado, 'CONFIGURED')
+})
+
+// ── BLOQUE 5 · automatizaciones y métricas ──────────────────────────────────
+
+test('B5·D · una membresía por vencer deja UN aviso, y dos pasadas del cron siguen siendo uno', async () => {
+  // §25 D: «Membresía vence en 7 días → 1 notification. Ejecutar cron otra vez
+  // → still 1». La idempotencia no es una intención: la clave de
+  // deduplicación lleva el día dentro y `dedupeKey` es ÚNICO, así que la
+  // segunda pasada la rechaza PostgreSQL.
+  const r1 = await evaluarAutomatizaciones(como(null))
+  const r2 = await evaluarAutomatizaciones(como(null))
+
+  const membresias1 = r1.reglas.find((x) => x.regla === 'MEMBERSHIP_EXPIRING')!
+  const membresias2 = r2.reglas.find((x) => x.regla === 'MEMBERSHIP_EXPIRING')!
+  assert.equal(membresias1.encontrados, membresias2.encontrados, 'las dos pasadas ven lo mismo')
+  // Lo apuntado en la primera pasada aparece como REPETIDO en la segunda: eso
+  // es la deduplicación funcionando, no un aviso nuevo.
+  assert.equal(membresias2.apuntados, 0, 'la segunda pasada no apunta ni un aviso nuevo')
+  assert.equal(membresias2.repetidos, membresias1.apuntados + membresias1.repetidos)
+
+  // Y en base: por cada sujeto hay UN efecto de aviso por canal, no dos.
+  const efectos = await prisma.supplyV2OutboxEvent.groupBy({
+    by: ['dedupeKey'],
+    where: { eventType: 'supply.notify.membership_expiring' },
+    _count: true,
+  })
+  for (const e of efectos) assert.equal(e._count, 1, `la clave ${e.dedupeKey} está una sola vez`)
+})
+
+test('B5·E · un incidente de severidad alta avisa AGREGADO, no uno por fila', async () => {
+  // §13: la cuenta va DENTRO del aviso. Veinte incidentes son un aviso con
+  // «incidentes: 20», no veinte correos iguales de madrugada.
+  const r = await evaluarAutomatizaciones(como(null))
+  const altos = r.reglas.find((x) => x.regla === 'FINANCE_INCIDENT_HIGH')!
+  const periodo = new Date().toISOString().slice(0, 10)
+  const avisos = await prisma.supplyV2OutboxEvent.findMany({
+    where: { eventType: 'supply.notify.ops_incident_high', aggregateId: `dia:${periodo}` },
+    select: { payload: true, dedupeKey: true },
+  })
+  if (altos.encontrados > 0) {
+    assert.ok(avisos.length > 0, 'con incidentes altos tiene que haber aviso')
+    // Un aviso por persona de operaciones y por canal, no por incidente.
+    for (const a of avisos) {
+      const p = a.payload as Record<string, unknown>
+      assert.equal(typeof p.incidentes, 'number', 'la cuenta va dentro del aviso')
+      assert.ok(!('email' in p), 'el payload NO lleva direcciones: se ve en el panel')
+    }
+  } else {
+    assert.equal(avisos.length, 0, 'sin incidentes altos no se avisa de nada')
+  }
+})
+
+test('B5·F · si la condición desaparece, no se sigue avisando', async () => {
+  // §25 F. Se mira la regla de efectos sin salida: si no hay difuntos, no se
+  // apunta ningún aviso, ni se reutiliza el del día anterior.
+  const difuntos = await prisma.supplyV2OutboxEvent.count({ where: { status: 'DEAD_LETTER' } })
+  const r = await evaluarAutomatizaciones(como(null))
+  const muertos = r.reglas.find((x) => x.regla === 'OUTBOX_DEAD')!
+  assert.equal(muertos.encontrados, difuntos, 'lo que cuenta es lo que hay ahora')
+  if (difuntos === 0) {
+    assert.equal(muertos.apuntados, 0)
+    assert.equal(muertos.repetidos, 0, 'sin condición no se toca nada')
+  }
+})
+
+test('B5 · las métricas salen con etiquetas, sin un solo identificador', async () => {
+  const m = await emitirMetricasOperativas()
+  assert.ok(m, 'con la base viva las métricas se emiten')
+  // Todos los valores son números: ni un id, ni un correo, ni una frase.
+  for (const [clave, valor] of Object.entries(m!)) {
+    assert.equal(typeof valor, 'number', `${clave} tiene que ser un número`)
+    assert.ok(Number.isFinite(valor), `${clave} es finito`)
+  }
+  assert.ok([0, 1, 2, 3].includes(m!.readiness_status), 'readiness va como peso, no como frase')
 })

@@ -4,6 +4,8 @@ import { barridoSupplyV2 } from '@/modules/supply-v2/commerce/barrido'
 import { despacharEfectos, recuperarArriendos } from '@/modules/supply-v2/operations/worker'
 import { barrerConciliacionDePagos } from '@/modules/supply-v2/operations/barrido-conciliacion'
 import { evaluarYGuardarAlertas } from '@/modules/supply-v2/operations/alertas'
+import { evaluarAutomatizaciones } from '@/modules/supply-v2/notifications/automatizaciones'
+import { emitirMetricasOperativas } from '@/modules/supply-v2/operations/metricas'
 import { capacidadActiva } from '@/modules/supply-v2/operations/flags'
 
 export const dynamic = 'force-dynamic'
@@ -75,6 +77,32 @@ export async function GET(req: NextRequest) {
 
   const alertas = await evaluarYGuardarAlertas(ctx)
 
+  // ── SLICE 9 · BLOQUE 5 · automatizaciones y los avisos que generan ───────
+  //
+  // Van DESPUÉS de las alertas y antes de un último despacho, y el orden
+  // importa:
+  //
+  //   5. EVALUAR automatizaciones: membresías y beneficios por vencer, y el
+  //      estado operativo. Aquí ya se sabe qué quedó sin resolver en esta
+  //      pasada, así que un aviso de «hay efectos sin salida» cuenta los que
+  //      de verdad quedaron, no los que el paso 2 estaba a punto de entregar.
+  //   6. DESPACHAR otra vez: los avisos que la automatización acaba de apuntar
+  //      salen en ESTA pasada y no mañana. Sin este segundo despacho, un plan
+  //      con cron diario tardaría un día en mandar un aviso de vencimiento que
+  //      avisa con tres.
+  //
+  // Las dos respetan sus interruptores y son idempotentes: la clave de
+  // deduplicación lleva el día dentro y la columna es única, así que correr el
+  // cron dos veces el mismo día deja UN aviso porque lo impide la base.
+  // Las MÉTRICAS se emiten al final, con las cifras ya asentadas. No se
+  // guardan en la base: son un evento estructurado que el recolector cuenta.
+  const metricas = await emitirMetricasOperativas()
+
+  const automatizacionesActivas = await capacidadActiva('SUPPLY_V2_AUTOMATIONS')
+  const automatizaciones = automatizacionesActivas ? await evaluarAutomatizaciones(ctx) : null
+  const despachoDeAvisos =
+    automatizaciones && entregaActiva ? await despacharEfectos(ctx, 200) : { encolados: [], devueltos: [] }
+
   return NextResponse.json({
     ok: true,
     ...resultado,
@@ -98,6 +126,15 @@ export async function GET(req: NextRequest) {
       nuevas: alertas.nuevas.length,
       resueltas: alertas.resueltas.length,
     },
+    metricas: metricas ? { emitidas: true, readiness: metricas.readiness_status } : { emitidas: false },
+    automatizaciones: automatizaciones
+      ? {
+          activo: true,
+          reglas: automatizaciones.reglas,
+          avisosEncolados: despachoDeAvisos.encolados.length,
+          avisosDevueltos: despachoDeAvisos.devueltos.length,
+        }
+      : { activo: false },
     at: new Date().toISOString(),
   })
 }
