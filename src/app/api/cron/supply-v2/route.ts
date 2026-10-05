@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { autorizarCron } from '@/lib/cron-auth'
 import { barridoSupplyV2 } from '@/modules/supply-v2/commerce/barrido'
 import { despacharEfectos, recuperarArriendos } from '@/modules/supply-v2/operations/worker'
+import { barrerInbox } from '@/modules/supply-v2/operations/entrada'
 import { barrerConciliacionDePagos } from '@/modules/supply-v2/operations/barrido-conciliacion'
 import { evaluarYGuardarAlertas } from '@/modules/supply-v2/operations/alertas'
 import { evaluarAutomatizaciones } from '@/modules/supply-v2/notifications/automatizaciones'
@@ -55,6 +56,10 @@ export async function GET(req: NextRequest) {
   //
   // Orden deliberado, y cada paso respeta su interruptor:
   //
+  //   0. BARRER EL INBOX: eventos de pago que entraron y fallaron por algo
+  //      transitorio, cuya hora de reintento ya llegó. Primero porque lo que
+  //      se procese aquí apunta efectos que el paso 2 se lleva en la misma
+  //      pasada.
   //   1. RESCATAR arriendos abandonados, para que lo que un worker muerto dejó
   //      reclamado vuelva a estar disponible antes de despachar.
   //   2. DESPACHAR el outbox: lo recién rescatado se va en la misma pasada.
@@ -67,6 +72,12 @@ export async function GET(req: NextRequest) {
   // Los cuatro son IDEMPOTENTES y toleran retraso: el plan puede ejecutar el
   // cron una vez al día, así que cada uno procesa el acumulado y se puede
   // volver a correr sin consecuencias dobles.
+  // PASO 0 · el inbox. Va ANTES del outbox porque un evento que entra aquí
+  // apunta su efecto, y así ese efecto se va en el despacho de esta misma
+  // pasada en vez de esperar a la siguiente.
+  const pagosActivos = await capacidadActiva('SUPPLY_V2_EXTERNAL_PAYMENTS')
+  const inbox = pagosActivos ? await barrerInbox(ctx) : null
+
   const entregaActiva = await capacidadActiva('SUPPLY_V2_OUTBOX_DELIVERY')
   const rescate = entregaActiva ? await recuperarArriendos(ctx) : { recuperados: [], muertos: [] }
   const despacho = entregaActiva ? await despacharEfectos(ctx, 200) : { encolados: [], devueltos: [] }
@@ -106,6 +117,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     ...resultado,
+    inbox: inbox
+      ? { activo: true, procesados: inbox.procesados, fallidos: inbox.fallidos, saltados: inbox.saltados, motivo: inbox.motivo }
+      : { activo: false },
     outbox: {
       activo: entregaActiva,
       rescatados: rescate.recuperados.length,

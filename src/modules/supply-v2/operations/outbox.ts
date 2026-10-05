@@ -116,11 +116,16 @@ export async function reclamarEfectos(limite = 20, ahora = new Date()): Promise<
 }
 
 /** El efecto se entregó. Estado final. */
-export async function marcarEntregado(id: string): Promise<void> {
+export async function marcarEntregado(id: string, nota: string | null = null): Promise<void> {
   await sinEmpresa('Supply 2.0: outbox entregado', (tx) =>
     tx.supplyV2OutboxEvent.update({
       where: { id },
-      data: { status: 'DELIVERED', processedAt: new Date(), lastError: null, availableAt: new Date() },
+      // `nota` es para el efecto que TERMINÓ SIN SALIR —un correo rechazado con
+      // 4xx, un canal apagado— y se guarda en `lastError` porque es la columna
+      // que el panel ya enseña: sin ella, esa fila era indistinguible de un
+      // envío que sí salió. Con `null` se limpia, que es lo que debe pasar
+      // cuando un reintento acaba bien después de un fallo.
+      data: { status: 'DELIVERED', processedAt: new Date(), lastError: nota, availableAt: new Date() },
     })
   )
 }

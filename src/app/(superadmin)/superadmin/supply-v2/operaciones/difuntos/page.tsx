@@ -101,6 +101,16 @@ export default async function DifuntosPage({ searchParams }: { searchParams: Pro
           </p>
         </CardContent>
       </Card>
+
+      <p className="text-xs text-muted-foreground">
+        Falta un tercer sitio donde algo puede quedarse sin salida: los <strong>eventos externos</strong> que la
+        pasarela mandó y no se pudieron procesar. Viven en{' '}
+        <Link href={`${RUTA_OPERACIONES}/inbox?status=DEAD_LETTER`} className="underline" data-testid="ir-inbox-muertos">
+          el inbox, filtrado por «Sin salida»
+        </Link>
+        , con su propio reintento. No se traen aquí porque allí se ven junto a su pasarela, su tipo y su compra, que es
+        lo que hace falta para decidir.
+      </p>
     </div>
   )
 }

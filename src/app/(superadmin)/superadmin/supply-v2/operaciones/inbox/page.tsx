@@ -3,11 +3,20 @@ import { requireRole } from '@/lib/auth/guards'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dato, Edad, ErrorCorto, FiltroChips, Momento, Paginador, Tabla } from '@/components/supply-v2/operaciones/piezas'
+import { ReintentarEvento } from '@/components/supply-v2/operaciones/acciones'
 import { eventosDelInbox } from '@/modules/supply-v2/operations/panel-queries'
 import { RUTA_OPERACIONES } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Eventos externos · Operaciones' }
+
+/**
+ * Los estados desde los que reintentar significa algo. `PROCESSED` e
+ * `IGNORED` son finales con efecto decidido y el servicio los rechaza;
+ * `PROCESSING` tiene el candado puesto ahora mismo y reintentarlo sería pelear
+ * con quien lo está procesando.
+ */
+const REINTENTABLES: readonly string[] = ['FAILED', 'DEAD_LETTER']
 
 /**
  * SLICE 9 · BLOQUE 4 · §4D · EL INBOX.
@@ -51,7 +60,7 @@ export default async function InboxPage({
           {r.filas.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="sin-eventos">Ningún evento con ese filtro.</p>
           ) : (
-            <Tabla cabeceras={['Estado', 'Pasarela', 'Tipo', 'Id del proveedor', 'Compra', 'Int.', 'Último error', 'Recibido', 'Edad', '']}>
+            <Tabla cabeceras={['Estado', 'Pasarela', 'Tipo', 'Id del proveedor', 'Compra', 'Int.', 'Último error', 'Recibido', 'Edad', '', '']}>
               {r.filas.map((e) => (
                 <tr key={e.id} data-testid={`evento-${e.id}`}>
                   <td className="px-2 py-1.5 text-xs font-semibold" data-testid={`evento-estado-${e.id}`}>{e.status}</td>
@@ -68,11 +77,17 @@ export default async function InboxPage({
                       Historia
                     </Link>
                   </td>
+                  <td className="px-2 py-1.5">{REINTENTABLES.includes(e.status) ? <ReintentarEvento eventoId={e.id} /> : null}</td>
                 </tr>
               ))}
             </Tabla>
           )}
           <Paginador base={base} pagina={r.pagina} porPagina={r.porPagina} total={r.total} extra={q.status ? `status=${q.status}` : undefined} />
+          <p className="text-xs text-muted-foreground">
+            Reintentar un evento lo devuelve a <strong>RECEIVED</strong> con los intentos a cero y lo procesa el cron.
+            Vuelve a pasar por la identidad idempotente de la pasarela, así que reintentar nunca cobra dos veces ni
+            emite dos veces los derechos. Lo que ya está procesado o ignorado no se puede reintentar: está decidido.
+          </p>
         </CardContent>
       </Card>
     </div>

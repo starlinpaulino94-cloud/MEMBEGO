@@ -13,6 +13,7 @@ import {
   investigarIncidenteAction,
   reconocerAlertaAction,
   reintentarEfectoAction,
+  reintentarEventoAction,
   resolverIncidenteAction,
   type EstadoOperacion,
 } from '@/modules/supply-v2/actions-operaciones'
@@ -317,6 +318,25 @@ export function ReintentarEfecto({ outboxId }: { outboxId: string }) {
       <input type="hidden" name="outboxId" value={outboxId} />
       <Button type="submit" size="sm" variant="outline" disabled={pendiente} data-testid={`reintentar-${outboxId}`}>
         {pendiente ? 'Reintentando…' : 'Reintentar'}
+      </Button>
+    </form>
+  )
+}
+
+/**
+ * §4D · reintentar un evento externo fallido o sin salida.
+ *
+ * Solo aparece en las filas que se pueden reintentar: un `PROCESSED` o un
+ * `IGNORED` ya están resueltos y el servicio los rechaza, así que ofrecer el
+ * botón sería prometer algo que el dominio no va a hacer.
+ */
+export function ReintentarEvento({ eventoId }: { eventoId: string }) {
+  const [enviar, pendiente] = useAccion(reintentarEventoAction)
+  return (
+    <form action={enviar}>
+      <input type="hidden" name="eventoId" value={eventoId} />
+      <Button type="submit" size="sm" variant="outline" disabled={pendiente} data-testid={`reintentar-evento-${eventoId}`}>
+        {pendiente ? 'Reencolando…' : 'Reintentar'}
       </Button>
     </form>
   )

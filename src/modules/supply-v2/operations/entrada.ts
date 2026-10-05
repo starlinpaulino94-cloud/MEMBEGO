@@ -390,3 +390,118 @@ export async function actorDelWebhook(): Promise<string | null> {
 export function olvidarActorDelWebhook(): void {
   actorEnMemoria = null
 }
+
+/**
+ * EL BARRIDO DEL INBOX · la otra mitad de la escalera de entrada.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * EL FALLO QUE ESTO CIERRA
+ *
+ * Un evento que falla por algo transitorio queda en `FAILED` con sus intentos
+ * contados y su `nextAttemptAt` puesto: la escalera compartida ya estaba
+ * escrita, el índice `(status, nextAttemptAt)` ya existía y el comentario del
+ * esquema ya decía «NULL = ya vencido, lo barre el cron». Pero NADIE barría.
+ *
+ * El inbox se procesaba solo dentro de la propia petición del webhook, así que
+ * la única forma de volver a intentarlo era que el proveedor lo reentregara
+ * —y un proveedor reentrega unas horas, no un día—. Un evento que fallaba
+ * porque faltaba `SUPPLY_V2_WEBHOOK_ACTOR_ID`, o porque la base estaba
+ * saturada tres minutos, se quedaba esperando para siempre con un pago
+ * cobrado en la pasarela y sin derechos emitidos aquí. Y el reintento manual
+ * del panel tenía el mismo agujero: devolvía la fila a `RECEIVED` y no había
+ * quien la recogiera.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ES SEGURO CORRERLO SIEMPRE
+ *
+ * Cada evento vuelve a entrar por `procesarEventoExterno`, que empieza por el
+ * candado y por `EVENTO_RESUELTO`: lo que ya está procesado o ignorado sale por
+ * `REPETIDO` sin tocar un peso. Reprocesar no puede cobrar dos veces porque la
+ * idempotencia no vive aquí —vive en el procesador y en el índice único—.
+ *
+ * NO toca los `DEAD_LETTER`: agotaron sus ocho intentos y lo que necesitan es
+ * una decisión humana, que es el botón «Reintentar» del inbox. Barrerlos
+ * automáticamente convertiría «se agotó» en «se intenta para siempre», y el
+ * estado dejaría de significar nada.
+ */
+export async function barrerInbox(
+  ctx: ContextoAuditoria,
+  ahora = new Date(),
+  tope = 100
+): Promise<{ procesados: number; fallidos: number; saltados: number; motivo?: string }> {
+  const vacio = { procesados: 0, fallidos: 0, saltados: 0 }
+
+  // Fail-closed, y por el mismo motivo que en la puerta: sin cuenta de
+  // integración no hay responsable de la confirmación, y un pago sin
+  // responsable no se registra. El evento se queda esperando y el Centro de
+  // Operaciones lo dice —`config` en `NO DISPONIBLE`—.
+  const actor = await actorDelWebhook()
+  if (!actor) return { ...vacio, motivo: 'SIN_ACTOR_CONFIGURADO' }
+
+  const pendientes = await sinEmpresa('Supply 2.0: buscar eventos externos vencidos', (tx) =>
+    tx.supplyV2ExternalEvent.findMany({
+      where: {
+        OR: [
+          { status: 'RECEIVED' },
+          { status: 'FAILED', nextAttemptAt: null },
+          { status: 'FAILED', nextAttemptAt: { lte: ahora } },
+        ],
+      },
+      // Los más viejos primero: un evento de pago que lleva horas esperando
+      // importa más que el que acaba de llegar.
+      orderBy: { receivedAt: 'asc' },
+      take: tope,
+      select: { id: true, provider: true, correlationId: true },
+    })
+  )
+  if (pendientes.length === 0) return vacio
+
+  const ctxProceso: ContextoAuditoria = { ...ctx, actorId: actor }
+  let procesados = 0
+  let fallidos = 0
+
+  for (const e of pendientes) {
+    try {
+      const r = await procesarEventoExterno(e.id, ctxProceso, ahora)
+      // `REINTENTABLE` no es un éxito: el procesador ya lo reprogramó y vuelve
+      // en la siguiente pasada. Contarlo como procesado haría que el cron
+      // dijera que resolvió algo que sigue pendiente.
+      if (r.resultado === 'REINTENTABLE') fallidos += 1
+      else procesados += 1
+    } catch (fallo) {
+      fallidos += 1
+      // Un evento que explota no puede parar el barrido: anotar el fallo le
+      // devuelve su sitio en la escalera y se sigue con el siguiente.
+      try {
+        await anotarFalloDeProceso(e.id, fallo, ctxProceso, ahora)
+      } catch (anotando) {
+        anotarSupply({
+          event: 'barrido_inbox_sin_anotar',
+          provider: e.provider,
+          correlationId: e.correlationId,
+          inboxId: e.id,
+          errorCode: sanearError(anotando),
+        })
+      }
+    }
+  }
+
+  // `saltados` son los que quedaron fuera del tope: el cron los coge en la
+  // siguiente pasada, y el número está para que se vea que hay cola.
+  const saltados = pendientes.length === tope ? await contarPendientes(ahora) - procesados - fallidos : 0
+  return { procesados, fallidos, saltados: Math.max(0, saltados) }
+}
+
+async function contarPendientes(ahora: Date): Promise<number> {
+  return sinEmpresa('Supply 2.0: contar eventos externos vencidos', (tx) =>
+    tx.supplyV2ExternalEvent.count({
+      where: {
+        OR: [
+          { status: 'RECEIVED' },
+          { status: 'FAILED', nextAttemptAt: null },
+          { status: 'FAILED', nextAttemptAt: { lte: ahora } },
+        ],
+      },
+    })
+  )
+}

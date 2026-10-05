@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   AVISOS,
   AVISO_DEL_DISPARADOR,
@@ -276,4 +277,27 @@ test('la forma de una etiqueta impide que un dato personal entre como métrica',
   assert.equal(esEtiqueta('ana@ejemplo.com'), false, 'un correo no cabe')
   assert.equal(esEtiqueta('809-555-1234'), false, 'un teléfono tampoco')
   assert.equal(esEtiqueta('tel8095551234'), false, 'ni escondido detrás de una letra')
+})
+
+/**
+ * §23 · ningún aviso apuntado lleva una dirección dentro.
+ *
+ * El payload del outbox se VE en el Centro de Operaciones y se queda en la base
+ * para siempre. La dirección se resuelve al ENTREGAR, y por eso no puede estar
+ * en lo que se apunta. Esto se comprueba estáticamente porque el riesgo no es
+ * que la función esté mal: es que un `datos: { email: u.email }` se cuele en el
+ * próximo disparador que alguien añada, donde parecería lo más natural.
+ */
+test('§23 · lo que las automatizaciones apuntan no lleva correos ni teléfonos', () => {
+  const fuente = readFileSync('src/modules/supply-v2/notifications/automatizaciones.ts', 'utf8')
+  const datos = [...fuente.matchAll(/datos:\s*\{([^}]*)\}/g)].map((m) => m[1])
+  assert.ok(datos.length > 0, 'si no hay ningún `datos`, esta prueba dejó de comprobar algo')
+  for (const d of datos) {
+    for (const prohibida of ['email', 'correo', 'phone', 'telefono', 'whatsapp', 'direccion']) {
+      assert.ok(
+        !new RegExp(`\\b${prohibida}`, 'i').test(d),
+        `un aviso apunta «${prohibida}» en su payload: la dirección se resuelve al entregar, no se guarda`
+      )
+    }
+  }
 })
