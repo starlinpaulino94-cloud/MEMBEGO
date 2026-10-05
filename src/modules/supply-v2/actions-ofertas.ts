@@ -5,8 +5,8 @@ import type { SupplyV2PaymentMethod } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { exigirPermisoSupplyV2 } from './permisos'
 import { comoError, contextoDeAuditoria, entero, fecha, fechaFinDeDia, refrescarSupplyV2, texto, type EstadoAccion } from './actions-util'
-import type { SupplyV2AvailabilityMode } from '@prisma/client'
-import { cerrarOfertaEnTx, crearOfertaComisionEnTx, crearOfertaEnTx, pausarOfertaEnTx, publicarOfertaEnTx, reanudarOfertaEnTx, type OfertaCreada } from './offers/service'
+import type { SupplyV2AvailabilityMode, SupplyV2OfferPriceMode } from '@prisma/client'
+import { cerrarOfertaEnTx, crearOfertaComisionEnTx, crearOfertaEnTx, editarOfertaEnTx, pausarOfertaEnTx, publicarOfertaEnTx, reanudarOfertaEnTx, type OfertaCreada } from './offers/service'
 import { confirmarPagoEnTx, rechazarPagoEnTx, type PagoConfirmado } from './commerce/checkout'
 import { RUTA_OFERTAS_PUBLICAS } from './core/catalogo'
 
@@ -21,6 +21,33 @@ function refrescarOfertas(id?: string): void {
 }
 
 /** El wizard crea y PUBLICA en una sola transacción: sin borradores que bloqueen supply (§12). */
+const MODOS_PRECIO: readonly SupplyV2OfferPriceMode[] = ['FIXED', 'PERCENTAGE', 'FREE']
+
+/**
+ * Lee el modo de precio del formulario. Un modo que no reconocemos NO se
+ * convierte en `FIXED` por su cuenta: eso cobraría el precio de lista en una
+ * oferta que alguien quiso regalar. Se rechaza y se dice.
+ */
+function modoPrecio(fd: FormData): { priceMode: SupplyV2OfferPriceMode; priceModePercentage: string | null } {
+  const bruto = texto(fd, 'priceMode', 20)
+  const priceMode = (bruto || 'FIXED') as SupplyV2OfferPriceMode
+  if (!MODOS_PRECIO.includes(priceMode)) throw new Error('El modo de precio no es válido.')
+  const pct = texto(fd, 'priceModePercentage', 20)
+  return { priceMode, priceModePercentage: priceMode === 'PERCENTAGE' ? pct || null : null }
+}
+
+/**
+ * Igual, pero para EDITAR: si el formulario no manda el modo, no se toca.
+ *
+ * Aquí no vale el `?? 'FIXED'` de la creación: convertiría cada edición de una
+ * oferta al 35 % en una de precio fijo, y el porcentaje que el operador escribió
+ * desaparecería sin que nadie lo pidiera.
+ */
+function modoPrecioSiViene(fd: FormData): { priceMode?: SupplyV2OfferPriceMode; priceModePercentage?: string | null } {
+  if (!fd.has('priceMode')) return {}
+  return modoPrecio(fd)
+}
+
 export async function crearYPublicarOfertaAction(_prev: EstadoAccion<OfertaCreada>, fd: FormData): Promise<EstadoAccion<OfertaCreada>> {
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_OFFER_PUBLISH')
@@ -36,9 +63,12 @@ export async function crearYPublicarOfertaAction(_prev: EstadoAccion<OfertaCread
           title: texto(fd, 'title', 160),
           description: texto(fd, 'description', 2000) || null,
           publicPrice: texto(fd, 'publicPrice', 20),
-          salePrice: texto(fd, 'salePrice', 20),
+          salePrice: texto(fd, 'salePrice', 20) || null,
+          ...modoPrecio(fd),
           quantity,
-          perCustomerLimit: entero(fd, 'perCustomerLimit') ?? 1,
+          // Vacío = no se toca, NO «vuelve a 1»: reiniciar un límite que nadie
+      // escribió sería un cambio silencioso de las reglas de la oferta.
+      perCustomerLimit: entero(fd, 'perCustomerLimit') ?? undefined,
           startsAt,
           endsAt: fechaFinDeDia(fd, 'endsAt'),
         },
@@ -72,7 +102,8 @@ export async function crearYPublicarOfertaComisionAction(_prev: EstadoAccion<Ofe
           title: texto(fd, 'title', 160),
           description: texto(fd, 'description', 2000) || null,
           publicPrice: texto(fd, 'publicPrice', 20),
-          salePrice: texto(fd, 'salePrice', 20),
+          salePrice: texto(fd, 'salePrice', 20) || null,
+          ...modoPrecio(fd),
           availabilityMode,
           availabilityQuantity: availabilityMode === 'UNLIMITED' ? null : entero(fd, 'availabilityQuantity'),
           perCustomerLimit: entero(fd, 'perCustomerLimit') ?? 1,
@@ -101,6 +132,37 @@ export async function publicarOfertaAction(_prev: EstadoAccion, fd: FormData): P
     return { success: 'Oferta publicada.', id }
   } catch (e) {
     return comoError(e, 'publicarOferta')
+  }
+}
+
+/**
+ * EDITAR una oferta publicada. Permiso de gestión, no de publicación: editar no
+ * aparta supply. Solo viajan los campos que el formulario mandó: lo ausente no
+ * se toca, y `description`/`endsAt` vacíos SÍ son un cambio (se borran).
+ */
+export async function editarOfertaAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
+  const id = texto(fd, 'offerId', 60)
+  try {
+    const actor = await exigirPermisoSupplyV2('SUPPLY_V2_OFFER_MANAGE')
+    const ctx = await contextoDeAuditoria(actor)
+    const fin = fd.get('endsAt')
+    const d = {
+      title: texto(fd, 'title', 160),
+      description: texto(fd, 'description', 2000) || null,
+      publicPrice: texto(fd, 'publicPrice', 20),
+      salePrice: texto(fd, 'salePrice', 20) || undefined,
+      ...modoPrecioSiViene(fd),
+      perCustomerLimit: entero(fd, 'perCustomerLimit') ?? 1,
+      endsAt: typeof fin === 'string' && fin.trim() ? fechaFinDeDia(fd, 'endsAt') : null,
+    }
+    const r = await sinEmpresa('Supply 2.0: editar una oferta', (tx) => editarOfertaEnTx(tx, id, d, ctx))
+    refrescarOfertas(id)
+    return {
+      success: r.cambios.length ? `Oferta actualizada: ${r.cambios.join(', ')}.` : 'No había nada que cambiar.',
+      id,
+    }
+  } catch (e) {
+    return comoError(e, 'editarOferta')
   }
 }
 

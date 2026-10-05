@@ -11,12 +11,35 @@ import { Prisma } from '@prisma/client'
 
 export type Decimal = Prisma.Decimal
 
+/** Cualquier forma en la que viaja un monto: del formulario, del cálculo o de la base. */
+export type Monto = number | string | Prisma.Decimal
+
 export function decimal(n: number | string | Prisma.Decimal): Prisma.Decimal {
   return new Prisma.Decimal(n)
 }
 
 export function redondear2(d: Prisma.Decimal): Prisma.Decimal {
   return d.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
+}
+
+/**
+ * Dos montos son EL MISMO monto. Exacto, sin tolerancia.
+ *
+ * Existe porque comparar dinero como texto miente: `'600'` y `'600.00'` son el
+ * mismo precio y `String(a) !== String(b)` dice que no. Eso hacía que reenviar
+ * un formulario sin tocar nada se registrara como un cambio de precio —y, con
+ * un checkout vivo, que se rechazara una edición que no cambiaba nada.
+ *
+ * NO es `montoCuadra`: aquella tolera un centavo porque conciliar un cobro
+ * bancario lo necesita. Aquí un centavo de diferencia ES un cambio de precio,
+ * así que tolerarlo lo escondería.
+ */
+export function mismoMonto(a: Monto, b: Monto): boolean {
+  try {
+    return decimal(a).equals(decimal(b))
+  } catch {
+    return false
+  }
 }
 
 export interface LineaTotales {

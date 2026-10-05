@@ -1,5 +1,10 @@
 'use client'
 
+import Link from 'next/link'
+import type { SupplyV2OfferStatus } from '@prisma/client'
+import { OFERTA_EDITABLE } from '@/modules/supply-v2/core/estados'
+import { BASE_SUPPLY_V2 } from '@/modules/supply-v2/core/catalogo'
+
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -55,6 +60,13 @@ function Boton({ accion, offerId, etiqueta, variant = 'default', motivo, testId 
 export function AccionesOferta({ offerId, estado, compacto = false }: { offerId: string; estado: string; compacto?: boolean }) {
   const acciones: React.ReactNode[] = []
   if (estado === 'DRAFT') acciones.push(<Boton key="pub" accion={publicarOfertaAction} offerId={offerId} etiqueta="Publicar" testId="btn-publicar" />)
+  if (OFERTA_EDITABLE.includes(estado as SupplyV2OfferStatus) && !compacto) {
+    acciones.push(
+      <Button key="editar" asChild variant="outline" data-testid="btn-editar-oferta">
+        <Link href={`${BASE_SUPPLY_V2}/ofertas/${offerId}/editar`}>Editar</Link>
+      </Button>
+    )
+  }
   if (estado === 'ACTIVE' || estado === 'SCHEDULED') acciones.push(<Boton key="pausar" accion={pausarOfertaAction} offerId={offerId} etiqueta="Pausar" variant="outline" testId="btn-pausar" />)
   if (estado === 'PAUSED') acciones.push(<Boton key="reanudar" accion={reanudarOfertaAction} offerId={offerId} etiqueta="Reactivar" testId="btn-reanudar" />)
   if (['ACTIVE', 'SCHEDULED', 'PAUSED', 'SOLD_OUT'].includes(estado) && !compacto) {

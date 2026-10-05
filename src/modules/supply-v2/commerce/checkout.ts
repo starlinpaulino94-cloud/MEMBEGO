@@ -546,7 +546,7 @@ async function ordenBloqueada(tx: Tx, orderId: string) {
           membegoSubsidyAmount: true,
           benefitId: true,
           benefitReservation: { select: { id: true, status: true } },
-          offer: { select: { id: true, code: true, sourceType: true, supplierId: true, catalogItemId: true, allocationId: true, endsAt: true, supplier: { select: { companyId: true } } } },
+          offer: { select: { id: true, code: true, sourceType: true, supplierId: true, catalogItemId: true, allocationId: true, endsAt: true, priceMode: true, supplier: { select: { companyId: true } } } },
           reservations: { where: { status: 'ACTIVE' }, select: { id: true, allocationLineId: true, lotId: true, quantity: true } },
           commissionReservations: { where: { status: 'ACTIVE' }, select: { id: true, quantity: true } },
         },
@@ -670,7 +670,9 @@ export async function avisarPagoEnTx(
   const o = await ordenBloqueada(tx, d.orderId)
   if (o.customerId !== d.customerId) fallo('ORDEN_AJENA', 'Esa compra no es tuya.')
   if (o.status === 'AWAITING_PAYMENT') return
-  if (o.total.isZero()) fallo('COBERTURA_TOTAL', 'Esta compra está cubierta por completo por tu beneficio: confírmala sin pago.')
+  // El motivo del 0 puede ser un beneficio o una oferta gratis: el mensaje no
+  // afirma cuál, porque afirmar «tu beneficio» ante una oferta gratis miente.
+  if (o.total.isZero()) fallo('COBERTURA_TOTAL', 'Esta compra no tiene nada que pagar: confírmala sin pago.')
   exigirTransicion(TRANSICIONES_ORDEN_CLIENTE, o.status, 'AWAITING_PAYMENT', 'Compra')
   if (o.expiresAt <= new Date()) fallo('RESERVA_VENCIDA', 'La reserva de esta compra ya venció. Vuelve a comprar.')
   await tx.supplyV2CustomerOrder.update({
@@ -710,7 +712,7 @@ export async function confirmarPagoEnTx(
     return { id: o.id, number: o.number, entitlements: existentes.map((e) => ({ ...e, actualUnitCost: e.actualUnitCost.toFixed(2) })), repetido: true }
   }
   exigirTransicion(TRANSICIONES_ORDEN_CLIENTE, o.status, 'PAID', 'Compra')
-  if (o.total.isZero()) fallo('COBERTURA_TOTAL', 'Esta compra está cubierta por completo por un beneficio: no hay pago bancario que confirmar. El cliente la confirma sin pago.')
+  if (o.total.isZero()) fallo('COBERTURA_TOTAL', 'Esta compra no tiene nada que cobrar: no hay pago bancario que confirmar. El cliente la confirma sin pago.')
   if (!montoCuadra(d.amountSeen, o.total)) {
     fallo('MONTO_NO_CUADRA', `El monto visto (${d.amountSeen}) no coincide con el total de la compra (${o.total.toFixed(2)}).`)
   }
@@ -747,10 +749,22 @@ export async function confirmarPagoEnTx(
 }
 
 /**
- * Slice 6 (§21) · COBERTURA TOTAL: el beneficio cubre el 100 % y no hay
- * transferencia que esperar. El propio cliente (dueño de la orden) confirma;
- * el servidor exige total 0 y una reserva de beneficio viva. NO se marca como
- * pago bancario: `paymentStatus = COVERED_BY_BENEFIT`, importe visto 0.
+ * COBERTURA TOTAL: la compra no tiene nada que cobrar y no hay transferencia
+ * que esperar. El propio cliente (dueño de la orden) confirma; el servidor
+ * exige total 0 y un MOTIVO para ese 0. Nunca se marca como pago bancario.
+ *
+ * Hay DOS motivos legítimos, y se distinguen a propósito en el estado de pago:
+ *
+ * - Slice 6 (§21): una reserva de beneficio viva cubre el 100 % →
+ *   `COVERED_BY_BENEFIT`. Alguien financió esa compra y hay que liquidarlo.
+ * - La oferta es GRATIS de origen (`priceMode = FREE`) → `FREE_OFFER`. Nadie
+ *   financió nada: el precio de venta era 0 desde que se publicó.
+ *
+ * Tratar los dos igual metería regalos en los informes de subsidio y en la
+ * liquidación al proveedor como si alguien los hubiera pagado.
+ *
+ * Sin uno de los dos motivos, un total 0 se rechaza: una compra que no se
+ * puede explicar no se completa.
  */
 export async function confirmarCoberturaTotalEnTx(tx: Tx, d: { orderId: string; customerId: string }, ctx: ContextoAuditoria): Promise<PagoConfirmado> {
   const o = await ordenBloqueada(tx, d.orderId)
@@ -761,15 +775,23 @@ export async function confirmarCoberturaTotalEnTx(tx: Tx, d: { orderId: string; 
   }
   exigirTransicion(TRANSICIONES_ORDEN_CLIENTE, o.status, 'PAID', 'Compra')
   if (!o.total.isZero()) fallo('SALDO_PENDIENTE', `Esta compra tiene un saldo de ${o.total.toFixed(2)} que pagar: no es una cobertura total.`)
-  if (!o.lines.some((l) => l.benefitReservation?.status === 'ACTIVE')) fallo('SIN_BENEFICIO', 'Esta compra no tiene un beneficio reservado que la cubra.')
+  const conBeneficio = o.lines.some((l) => l.benefitReservation?.status === 'ACTIVE')
+  // Gratis de origen: TODAS las líneas, no «alguna». Una compra mixta con una
+  // línea gratis y otra cobrada no tiene total 0, así que no llega aquí; pero
+  // exigirlo en todas deja la regla dicha en vez de deducida.
+  const gratisDeOrigen = o.lines.length > 0 && o.lines.every((l) => l.offer.priceMode === 'FREE')
+  if (!conBeneficio && !gratisDeOrigen) {
+    fallo('SIN_MOTIVO_DE_COBERTURA', 'Esta compra no tiene nada que la explique: ni un beneficio reservado que la cubra ni una oferta gratis.')
+  }
   if (o.expiresAt <= new Date()) fallo('RESERVA_VENCIDA', 'La reserva de esta compra ya venció. Vuelve a comprar.')
   const entitlements = await emitirDerechosDeOrdenEnTx(tx, o, ctx)
   await tx.supplyV2CustomerOrder.update({
     where: { id: o.id },
-    data: { status: 'PAID', paymentStatus: 'COVERED_BY_BENEFIT', paidAt: new Date(), paymentAmountSeen: 0 },
+    data: { status: 'PAID', paymentStatus: conBeneficio ? 'COVERED_BY_BENEFIT' : 'FREE_OFFER', paidAt: new Date(), paymentAmountSeen: 0 },
   })
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_ORDER_COVERED_BY_BENEFIT', 'SupplyV2CustomerOrder', o.id, {
     number: o.number,
+    motivo: conBeneficio ? 'BENEFICIO' : 'OFERTA_GRATIS',
     contractualValue: o.lines.reduce((t, l) => t.plus(l.contractualValue), new Prisma.Decimal(0)).toFixed(2),
     membegoSubsidy: o.lines.reduce((t, l) => t.plus(l.membegoSubsidyAmount), new Prisma.Decimal(0)).toFixed(2),
     supplierDiscount: o.lines.reduce((t, l) => t.plus(l.supplierDiscountAmount), new Prisma.Decimal(0)).toFixed(2),

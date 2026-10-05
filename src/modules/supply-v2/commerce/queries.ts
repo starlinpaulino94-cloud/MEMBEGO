@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { Prisma, SupplyV2EntitlementStatus } from '@prisma/client'
+import type { Prisma, SupplyV2EntitlementStatus, SupplyV2CustomerOrderStatus, SupplyV2PaymentStatus } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import type { PaymentAccountRef } from '../contracts/gateways'
 
@@ -14,8 +14,10 @@ import type { PaymentAccountRef } from '../contracts/gateways'
 export interface CompraCliente {
   id: string
   number: string
-  status: 'PENDING' | 'AWAITING_PAYMENT' | 'PAID' | 'CANCELLED' | 'EXPIRED' | 'REFUNDED'
-  paymentStatus: 'UNPAID' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED' | 'COVERED_BY_BENEFIT'
+  // Los enums de Prisma, no una copia a mano: cuando se añadió `FREE_OFFER` la
+  // lista literal dejó de compilar aquí, y ese es justo el aviso que se quiere.
+  status: SupplyV2CustomerOrderStatus
+  paymentStatus: SupplyV2PaymentStatus
   paymentMethod: string | null
   paymentReference: string | null
   paymentRejectedReason: string | null
