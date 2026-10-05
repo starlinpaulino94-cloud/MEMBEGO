@@ -15,6 +15,7 @@ export function PaginacionSupplyV2({
   total,
   sustantivo,
   href,
+  extra,
 }: {
   pagina: number
   filas: number
@@ -22,6 +23,8 @@ export function PaginacionSupplyV2({
   /** «órdenes de compra», «productos»… */
   sustantivo: string
   href: (pagina: number, filas: number) => string
+  /** Dato adicional junto al contador (p. ej. «Total unidades acumuladas»). */
+  extra?: React.ReactNode
 }) {
   const paginas = Math.max(1, Math.ceil(total / filas))
   const desde = total === 0 ? 0 : (pagina - 1) * filas + 1
@@ -44,6 +47,12 @@ export function PaginacionSupplyV2({
         <span>
           Mostrando <strong className="text-foreground">{desde} - {hasta}</strong> de <strong className="text-foreground">{total.toLocaleString('es-DO')}</strong> {sustantivo}
         </span>
+        {extra && (
+          <>
+            <span aria-hidden className="hidden h-4 w-px bg-sv2-outline/40 @xl:block" />
+            {extra}
+          </>
+        )}
         <span aria-hidden className="hidden h-4 w-px bg-sv2-outline/40 @xl:block" />
         <SelectorFilas filas={filas} opciones={[10, 25, 50]} hrefs={Object.fromEntries([10, 25, 50].map((n) => [n, href(1, n)]))} />
       </div>
