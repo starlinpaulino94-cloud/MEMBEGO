@@ -1,4 +1,3 @@
-import { prisma } from '@/lib/prisma'
 import { sinEmpresa } from '@/lib/tenant'
 import type { ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
@@ -53,12 +52,18 @@ export async function barrerConciliacionDePagos(
   limite = 200
 ): Promise<ResultadoBarridoConciliacion> {
   const desde = new Date(ahora.getTime() - ventanaMs)
-  const eventos = await prisma.supplyV2ExternalEvent.findMany({
-    where: { receivedAt: { gte: desde }, eventType: { in: ['PAYMENT_CONFIRMED', 'PAYMENT_REJECTED'] } },
-    orderBy: { receivedAt: 'asc' },
-    take: limite,
-    select: { id: true, provider: true, externalEventId: true, eventType: true, payload: true, orderId: true, correlationId: true },
-  })
+  // `sinEmpresa` y no `prisma` a pelo: el inbox es una tabla de PLATAFORMA con
+  // política de capa 2 omnisciente. Sin contexto, con RLS encendida, esto
+  // devolvería cero eventos y el barrido diría «revisados: 0» tan tranquilo:
+  // una conciliación que no concilia nada y no se queja de nada.
+  const eventos = await sinEmpresa('Supply 2.0: eventos a conciliar', (tx) =>
+    tx.supplyV2ExternalEvent.findMany({
+      where: { receivedAt: { gte: desde }, eventType: { in: ['PAYMENT_CONFIRMED', 'PAYMENT_REJECTED'] } },
+      orderBy: { receivedAt: 'asc' },
+      take: limite,
+      select: { id: true, provider: true, externalEventId: true, eventType: true, payload: true, orderId: true, correlationId: true },
+    })
+  )
 
   const r: ResultadoBarridoConciliacion = {
     revisados: 0,
@@ -119,16 +124,18 @@ export async function conciliarAPeticion(
     fallo('SIN_CRITERIO', 'Hay que decir qué conciliar: una compra, una transacción o una pasarela.')
   }
 
-  const eventos = await prisma.supplyV2ExternalEvent.findMany({
-    where: {
-      eventType: { in: ['PAYMENT_CONFIRMED', 'PAYMENT_REJECTED'] },
-      ...(d.orderId ? { orderId: d.orderId } : {}),
-      ...(d.provider ? { provider: d.provider.trim().toUpperCase() } : {}),
-    },
-    orderBy: { receivedAt: 'desc' },
-    take: d.limite ?? 100,
-    select: { id: true, provider: true, eventType: true, payload: true, orderId: true, correlationId: true },
-  })
+  const eventos = await sinEmpresa('Supply 2.0: eventos a conciliar a petición', (tx) =>
+    tx.supplyV2ExternalEvent.findMany({
+      where: {
+        eventType: { in: ['PAYMENT_CONFIRMED', 'PAYMENT_REJECTED'] },
+        ...(d.orderId ? { orderId: d.orderId } : {}),
+        ...(d.provider ? { provider: d.provider.trim().toUpperCase() } : {}),
+      },
+      orderBy: { receivedAt: 'desc' },
+      take: d.limite ?? 100,
+      select: { id: true, provider: true, eventType: true, payload: true, orderId: true, correlationId: true },
+    })
+  )
 
   // Por transacción se filtra en memoria: vive dentro del cuerpo conservado, y
   // una consulta por JSON aquí sería un índice que nadie más necesita.

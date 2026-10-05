@@ -29,7 +29,7 @@
  */
 
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 
 const PUERTO = process.env.E2E_PORT || '3210'
 const BASE = `http://localhost:${PUERTO}`
@@ -102,6 +102,30 @@ if (ocupado) {
   console.error(`  Apágalo y vuelve a intentarlo:  pkill -f next-server`)
   process.exit(1)
 }
+/**
+ * El Chromium con el que correr, si el entorno trae uno puesto.
+ *
+ * En este contenedor hay navegadores en `/opt/pw-browsers` y Playwright, por su
+ * cuenta, busca un `chrome-headless-shell` que no está ahí: falla al lanzar y
+ * las 183 pruebas mueren en tres milisegundos cada una, con un mensaje que
+ * dice «instala los navegadores» y no «te falta una variable».
+ *
+ * Que eso dependa de que quien ejecuta se acuerde de exportar
+ * `PLAYWRIGHT_CHROMIUM_PATH` es exactamente la clase de trampa que este arnés
+ * existe para quitar —la misma lección que el servidor zombi—. Así que se
+ * resuelve aquí: si la variable viene, se respeta; si no, se busca el binario
+ * donde la imagen lo pone. Y si no hay ninguno, no se inventa nada: Playwright
+ * dirá lo que diga.
+ */
+const navegador = (() => {
+  if (process.env.PLAYWRIGHT_CHROMIUM_PATH) return process.env.PLAYWRIGHT_CHROMIUM_PATH
+  for (const ruta of ['/opt/pw-browsers/chromium', '/opt/pw-browsers/chromium/chrome']) {
+    if (existsSync(ruta) && statSync(ruta).isFile()) return ruta
+  }
+  return null
+})()
+if (navegador) console.log(`  navegador: ${navegador}`)
+
 const entorno = {
   ...process.env,
   DATABASE_URL: URL_BASE_DATOS,
@@ -111,8 +135,15 @@ const entorno = {
   // entorno real y la base donde actúa se borra en la siguiente corrida.
   SUPPLY_V2_TEST_GATEWAY_SECRET:
     process.env.SUPPLY_V2_TEST_GATEWAY_SECRET || 'e2e-secreto-de-pasarela-solo-para-pruebas-0123456789',
+  // Secreto del cron, también de relleno. Las pruebas del bloque 5 lanzan
+  // `/api/cron/supply-v2` por HTTP en vez de importar su servicio, y eso NO es
+  // un apaño: el servicio vive detrás de `server-only`, un spec de Playwright
+  // es código de cliente, y la ruta es además lo que corre de verdad en
+  // producción. Llamar a la puerta prueba más que llamar a la función.
+  CRON_SECRET: process.env.CRON_SECRET || 'e2e-secreto-de-cron-solo-para-pruebas-0123456789',
   NEXT_PUBLIC_APP_URL: BASE,
   E2E_BASE_URL: BASE,
+  ...(navegador ? { PLAYWRIGHT_CHROMIUM_PATH: navegador } : {}),
 }
 // El log del servidor se DEJA PASAR, no se descarta: las líneas `sv2 {...}`
 // del Slice 9 dicen por qué se rechazó un aviso de pago, y sin ellas un 401 en
