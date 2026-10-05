@@ -737,6 +737,14 @@ enum SupplyV2CustomerOrderStatus {
   REFUNDED
 }
 
+/// Cómo se fijó el precio de una oferta. Guarda la INTENCIÓN del operador;
+/// `salePrice` guarda el resultado, que es lo que se cobra.
+enum SupplyV2OfferPriceMode {
+  FIXED
+  PERCENTAGE
+  FREE
+}
+
 enum SupplyV2PaymentStatus {
   UNPAID
   SUBMITTED
@@ -744,6 +752,11 @@ enum SupplyV2PaymentStatus {
   REJECTED
   /// Slice 6 (§21): el beneficio cubrió el 100 %; no hubo pago bancario del cliente.
   COVERED_BY_BENEFIT
+  /// La oferta era GRATIS de origen (`priceMode = FREE`). Separado a propósito
+  /// de COVERED_BY_BENEFIT: regalar una oferta y que un bono la pague son cosas
+  /// distintas en los informes y en la liquidación al proveedor —en la primera
+  /// nadie financió nada, en la segunda hay un bono que alguien paga—.
+  FREE_OFFER
 }
 
 enum SupplyV2PaymentMethod {
@@ -853,6 +866,15 @@ model SupplyV2Offer {
   publicPrice Decimal @db.Decimal(12, 2)
   salePrice   Decimal @db.Decimal(12, 2)
   currency    String  @default("DOP")
+
+  /// Cómo se fijó el precio. `FIXED` por defecto es una afirmación VERDADERA
+  /// sobre las ofertas que ya existen —se crearon escribiendo dos montos—, no
+  /// un relleno.
+  priceMode           SupplyV2OfferPriceMode @default(FIXED)
+  /// Solo `PERCENTAGE`: el porcentaje que el operador ESCRIBIÓ. Es la
+  /// intención; `salePrice` es el resultado. Existe para que al editar se vea
+  /// «35 %» y no «RD$650», que es un número que nadie tecleó.
+  priceModePercentage Decimal?               @db.Decimal(5, 2)
 
   /// Unidades destinadas a la oferta (= cantidad de la asignación al publicar).
   quantityLimit    Int

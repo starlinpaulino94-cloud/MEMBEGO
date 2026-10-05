@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { crearYPublicarOfertaAction } from '@/modules/supply-v2/actions-ofertas'
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 import type { OfertaCreada } from '@/modules/supply-v2/offers/service'
+import type { SupplyV2OfferPriceMode } from '@prisma/client'
 
 export interface ProductoOfertable {
   id: string
@@ -43,6 +44,8 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
   const [cantidad, setCantidad] = useState('')
   const [precioPublico, setPrecioPublico] = useState(inicial?.publicPrice ?? '')
   const [precioMembego, setPrecioMembego] = useState('')
+  const [modo, setModo] = useState<SupplyV2OfferPriceMode>('FIXED')
+  const [porcentaje, setPorcentaje] = useState('')
   const hoy = new Date().toISOString().slice(0, 10)
   const [inicio, setInicio] = useState(hoy)
   const [fin, setFin] = useState('')
@@ -73,14 +76,27 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
   const moneda = producto?.currency ?? 'DOP'
   const q = Number(cantidad) || 0
   const pub = Number(precioPublico) || 0
-  const sale = Number(precioMembego) || 0
+  // El precio Membego es DERIVADO en los modos que no son fijo: el operador
+  // escribe un porcentaje o nada, y el importe sale de ahí. Es la misma cuenta
+  // que hace el servidor (redondea el descuento y luego resta), para que la
+  // pantalla no prometa un número y el servidor cobre otro.
+  const pctEscrito = Number(porcentaje) || 0
+  const sale =
+    modo === 'FREE' ? 0
+    : modo === 'PERCENTAGE' ? Math.max(0, pub - Math.round(pub * pctEscrito) / 100)
+    : Number(precioMembego) || 0
   const ahorro = pub - sale
   const pct = pub > 0 ? Math.round(((pub - sale) / pub) * 1000) / 10 : 0
   const margen = producto ? sale - producto.costoPromedio : 0
+  const precioListo =
+    pub > 0 &&
+    (modo === 'FREE' ||
+      (modo === 'PERCENTAGE' && pctEscrito > 0 && pctEscrito <= 100) ||
+      (modo === 'FIXED' && precioMembego !== '' && sale >= 0 && sale <= pub))
   const listo = [
     Boolean(producto),
     q > 0 && Boolean(producto) && q <= (producto?.disponibles ?? 0),
-    pub >= 0 && sale >= 0 && sale <= pub && precioMembego !== '' && precioPublico !== '',
+    precioListo && precioPublico !== '',
     Boolean(inicio) && (!fin || fin >= inicio),
     Number(limite) > 0 && Number(limite) <= q && titulo.trim().length > 0,
     true,
@@ -158,17 +174,52 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
           {paso === 3 && producto && (
             <section className="space-y-3">
               <h2 className="text-h3">¿A qué precio?</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label htmlFor="ofertaPrecioPublico">Precio público ({moneda})</Label>
-                  <Input id="ofertaPrecioPublico" type="number" min={0} step="0.01" inputMode="decimal" value={precioPublico} onChange={(e) => setPrecioPublico(e.target.value)} />
-                </div>
+              <div>
+                <Label htmlFor="ofertaPrecioPublico">Precio público ({moneda})</Label>
+                <Input id="ofertaPrecioPublico" type="number" min={0} step="0.01" inputMode="decimal" value={precioPublico} onChange={(e) => setPrecioPublico(e.target.value)} />
+                <p className="text-caption text-muted-foreground">Lo que cuesta normalmente. Es el ancla de cualquier descuento, así que va siempre.</p>
+              </div>
+
+              <div>
+                <Label htmlFor="ofertaModoPrecio">¿Cómo se fija el precio?</Label>
+                <select
+                  id="ofertaModoPrecio"
+                  className={select}
+                  value={modo}
+                  onChange={(e) => setModo(e.target.value as SupplyV2OfferPriceMode)}
+                  data-testid="oferta-modo-precio"
+                >
+                  <option value="FIXED">Un precio fijo</option>
+                  <option value="PERCENTAGE">Un porcentaje de descuento</option>
+                  <option value="FREE">Gratis</option>
+                </select>
+              </div>
+
+              {modo === 'FIXED' && (
                 <div>
                   <Label htmlFor="ofertaPrecioMembego">Precio Membego ({moneda})</Label>
                   <Input id="ofertaPrecioMembego" type="number" min={0} step="0.01" inputMode="decimal" value={precioMembego} onChange={(e) => setPrecioMembego(e.target.value)} placeholder="399" />
                 </div>
-              </div>
-              {sale > pub && <p className="text-sm text-destructive">El precio Membego no puede ser mayor que el público.</p>}
+              )}
+
+              {modo === 'PERCENTAGE' && (
+                <div>
+                  <Label htmlFor="ofertaPorcentaje">Descuento (%)</Label>
+                  <Input id="ofertaPorcentaje" type="number" min={0.01} max={100} step="0.01" inputMode="decimal" value={porcentaje} onChange={(e) => setPorcentaje(e.target.value)} placeholder="35" data-testid="oferta-porcentaje" />
+                  <p className="text-caption text-muted-foreground">
+                    Se guarda el porcentaje, no el importe: si mañana cambia el precio público, el descuento sigue siendo el que elegiste.
+                  </p>
+                </div>
+              )}
+
+              {modo === 'FREE' && (
+                <p className="rounded-lg border border-success/30 bg-success/5 p-3 text-sm" data-testid="oferta-gratis-aviso">
+                  El cliente no paga nada y confirma su compra sin transferencia. Tú sigues pagando el costo del lote, así que el margen será negativo: es el costo de regalarla.
+                </p>
+              )}
+
+              {modo === 'FIXED' && sale > pub && <p className="text-sm text-destructive">El precio Membego no puede ser mayor que el público.</p>}
+              {modo === 'PERCENTAGE' && pctEscrito > 100 && <p className="text-sm text-destructive">Un porcentaje no puede superar 100.</p>}
               <dl className="grid gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-4" data-testid="oferta-precio-resumen">
                 <Dato k="Descuento" v={`${pct} %`} />
                 <Dato k="Ahorro del cliente" v={dinero(ahorro, moneda)} />
@@ -225,7 +276,12 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
               <input type="hidden" name="title" value={titulo} />
               <input type="hidden" name="description" value={descripcion} />
               <input type="hidden" name="publicPrice" value={precioPublico} />
-              <input type="hidden" name="salePrice" value={precioMembego} />
+              {/* En PERCENTAGE y FREE no se manda importe: lo resuelve el
+                  servidor desde el modo. Mandar el número de la pantalla
+                  convertiría una estimación del navegador en el precio real. */}
+              {modo === 'FIXED' && <input type="hidden" name="salePrice" value={precioMembego} />}
+              <input type="hidden" name="priceMode" value={modo} />
+              {modo === 'PERCENTAGE' && <input type="hidden" name="priceModePercentage" value={porcentaje} />}
               <input type="hidden" name="quantity" value={cantidad} />
               <input type="hidden" name="perCustomerLimit" value={limite} />
               <input type="hidden" name="startsAt" value={inicio} />
