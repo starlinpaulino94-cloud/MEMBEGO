@@ -149,7 +149,7 @@ function leerPayload(p: unknown): { canal: CanalDeAviso | null; userId: string |
  * reintentar ocho veces algo que no puede cambiar llena la cola de difuntos y
  * esconde las averías de verdad.
  */
-export async function entregarAviso(e: EfectoDeAviso): Promise<{ detalle: string }> {
+export async function entregarAviso(e: EfectoDeAviso): Promise<{ detalle: string; entregado?: boolean }> {
   const definicion = definicionDeAviso(e.eventType)
   const redaccion = REDACCION[e.eventType]
   if (!definicion || !redaccion) {
@@ -195,15 +195,15 @@ export async function entregarAviso(e: EfectoDeAviso): Promise<{ detalle: string
       asunto: redaccion.asunto,
       texto: `${redaccion.mensaje}\n\n${redaccion.titulo}`,
     })
-    return r ?? { detalle: 'no se manda: la persona no tiene dirección de correo' }
+    return r ?? { detalle: 'no se manda: la persona no tiene dirección de correo', entregado: false }
   }
 
   // WhatsApp de plataforma no está configurado y `servicio.ts` no apunta sus
   // efectos. Si una fila llega aquí es de antes de esa decisión: se cierra con
   // su razón en vez de reintentarse hasta morir.
-  return { detalle: 'canal de WhatsApp NO CONFIGURADO: ver el informe del bloque 5' }
+  return { detalle: 'canal de WhatsApp NO CONFIGURADO: ver el informe del bloque 5', entregado: false }
 }
 
 /** Los tipos de efecto que este módulo sabe entregar, para el registro del worker. */
-export const EFECTOS_DE_AVISO: Readonly<Record<string, (e: EfectoDeAviso) => Promise<{ detalle: string }>>> =
+export const EFECTOS_DE_AVISO: Readonly<Record<string, (e: EfectoDeAviso) => Promise<{ detalle: string; entregado?: boolean }>>> =
   Object.fromEntries(Object.keys(REDACCION).map((clave) => [clave, entregarAviso]))

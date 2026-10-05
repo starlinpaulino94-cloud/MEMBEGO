@@ -52,8 +52,32 @@ export const ARRIENDO_MS = 5 * 60 * 1000
  * tragarse un fallo: si lanza, el worker reprograma; si devuelve, el worker
  * marca entregado. Un efecto que oculta su fallo convierte la escalera de
  * reintentos en decoración.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * `entregado: false` · CERRADO SIN SALIR
+ *
+ * Hay un tercer caso, y no tenerlo era un agujero real: el efecto TERMINÓ
+ * —reintentarlo no cambiaría nada— pero NO salió. Un correo que el proveedor
+ * rechazó con un 4xx, una persona que apagó el canal, una empresa de
+ * demostración. Ni `lanzar` (sería reintentar ocho veces algo que no va a
+ * cambiar) ni callar (la fila quedaba `DELIVERED` con `lastError` a null, igual
+ * que un envío que sí salió: en el panel no había forma de distinguirlos).
+ *
+ * Con `entregado: false` la fila se cierra —no vuelve a la escalera— y el
+ * motivo se GUARDA, así que la columna «Último error» del Centro de
+ * Operaciones dice por qué nadie recibió nada.
  */
-export type EjecutorDeEfecto = (e: EfectoAEntregar) => Promise<{ detalle: string }>
+export type EjecutorDeEfecto = (e: EfectoAEntregar) => Promise<ResultadoDeEfecto>
+
+export interface ResultadoDeEfecto {
+  detalle: string
+  /**
+   * `false` = terminó pero no salió, y el `detalle` se guarda en la fila.
+   * Ausente o `true` = salió. No es `fallo?: boolean` a propósito: lo normal
+   * —que salga— no debería tener que declararse.
+   */
+  entregado?: boolean
+}
 
 export interface EfectoAEntregar extends EfectoReclamado {
   /**
@@ -245,10 +269,14 @@ export async function entregarEfecto(
   // ── Fuera de toda transacción ─────────────────────────────────────────────
   try {
     const r = await ejecutor({ ...fila, idempotencyKey: fila.dedupeKey })
-    await marcarEntregado(outboxId)
+    // El motivo se guarda SOLO cuando no salió. Guardarlo siempre llenaría la
+    // columna «Último error» de «aceptado por el proveedor», y una columna
+    // donde todo es error no se mira.
+    const salio = r.entregado !== false
+    await marcarEntregado(outboxId, salio ? null : r.detalle)
     anotarYContar(
-      { event: 'efecto_entregado', outboxId, correlationId: fila.correlationId, attempt: fila.attempts, status: 'DELIVERED' },
-      { accion: 'efecto_entregado', ok: true }
+      { event: salio ? 'efecto_entregado' : 'efecto_cerrado_sin_salir', outboxId, correlationId: fila.correlationId, attempt: fila.attempts, status: 'DELIVERED' },
+      { accion: salio ? 'efecto_entregado' : 'efecto_cerrado_sin_salir', ok: true, motivo: salio ? undefined : 'no_salio' }
     )
     return { estado: 'DELIVERED', detalle: r.detalle }
   } catch (e) {

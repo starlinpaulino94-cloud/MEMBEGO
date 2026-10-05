@@ -17,6 +17,8 @@ import {
 import { emitirEfectoEnTx, marcarEntregado, marcarFallido, reclamarEfectos, reintentarEfecto } from '../../src/modules/supply-v2/operations/outbox'
 import { MAX_INTENTOS } from '../../src/modules/integraciones/reintentos'
 import { evaluarAutomatizaciones } from '../../src/modules/supply-v2/notifications/automatizaciones'
+import { apuntarAvisoEnTx } from '../../src/modules/supply-v2/notifications/servicio'
+import { LIMITACION_DE_IDEMPOTENCIA } from '../../src/modules/supply-v2/notifications/correo'
 import { emitirMetricasOperativas } from '../../src/modules/supply-v2/operations/metricas'
 // ── Bloque 2 ──
 import { GET, POST } from '../../src/app/api/webhooks/supply-v2/[provider]/route'
@@ -2567,4 +2569,239 @@ test('B5 · sin cuenta de integración el barrido no procesa nada y lo dice', as
   await barrerInbox(como(null))
   assert.equal((await filaDe(reg.id)).status, 'PROCESSED')
   assert.equal(await derechosDe(orden.id), 1)
+})
+
+// ── B5 · §24 · el correo se cae y el dinero no se mueve ─────────────────────
+//
+// INYECCIÓN DE FALLO DE VERDAD, no un mock del módulo. Se sustituye
+// `globalThis.fetch`, que es la frontera real por donde `lib/email.ts` habla
+// con Resend: así se ejercita el camino completo —`entregarEfecto` →
+// `entregarAviso` → `mandarCorreoDeAviso` → `sendEmail`— incluyendo la lectura
+// del código HTTP, que es lo que decide si se reintenta.
+//
+// Nunca se usa una credencial real: `RESEND_API_KEY` se pone a un valor de
+// prueba solo para que `sendEmail` tome el camino del proveedor en vez del de
+// «no configurado», y ninguna petición sale de la máquina porque `fetch` está
+// sustituido.
+
+/** Un aviso de correo recién apuntado y ya reclamado, listo para entregar. */
+async function avisoDeCorreoReclamado(orderId: string) {
+  const apuntados = await sinEmpresa('prueba', (tx) =>
+    apuntarAvisoEnTx(tx, {
+      aviso: 'supply.notify.order_paid',
+      userId: ctx.cliente,
+      agregadoType: 'SupplyV2CustomerOrder',
+      agregadoId: orderId,
+      correlationId: `sv2-correo-${orderId}`,
+    })
+  )
+  const correo = apuntados.find((a) => a.canal === 'EMAIL')
+  assert.ok(correo, 'el aviso de compra pagada tiene canal de correo')
+  const reclamados = await reclamarEfectos(VENTANA)
+  assert.ok(
+    reclamados.some((r) => r.id === correo!.outboxId),
+    'el efecto de correo queda reclamado para entregarlo'
+  )
+  return correo!.outboxId
+}
+
+/** Sustituye `fetch` por uno que contesta lo que se le diga. Devuelve cómo deshacerlo. */
+function fetchQueContesta(status: number, cuerpo: unknown) {
+  const original = globalThis.fetch
+  let llamadas = 0
+  globalThis.fetch = (async () => {
+    llamadas += 1
+    return new Response(JSON.stringify(cuerpo), { status, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return {
+    veces: () => llamadas,
+    restaurar: () => {
+      globalThis.fetch = original
+    },
+  }
+}
+
+test('§24A · el proveedor de correo devuelve 500: el dinero NO se mueve y el aviso queda FAILED', async () => {
+  // Una compra YA PAGADA. Es la condición del caso: lo que se comprueba es que
+  // un correo caído no deshace un pago hecho.
+  const orden = await compraPendiente()
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: orden.id, amountSeen: orden.total, method: 'TRANSFER' }, como(ctx.finanzas)))
+  const antes = await ordenDe(orden.id)
+  assert.equal(antes.status, 'PAID')
+  const derechosAntes = await derechosDe(orden.id)
+  assert.equal(derechosAntes, 1)
+
+  const outboxId = await avisoDeCorreoReclamado(orden.id)
+
+  const clavePrevia = process.env.RESEND_API_KEY
+  process.env.RESEND_API_KEY = 're_prueba_no_real'
+  const falso = fetchQueContesta(500, { message: 'Internal Server Error' })
+  let r
+  try {
+    r = await entregarEfecto(outboxId, como(null))
+  } finally {
+    falso.restaurar()
+    if (clavePrevia === undefined) delete process.env.RESEND_API_KEY
+    else process.env.RESEND_API_KEY = clavePrevia
+  }
+
+  assert.equal(falso.veces(), 1, 'se intentó mandar de verdad, una vez')
+  assert.equal(r.estado, 'FAILED', 'el aviso falló')
+
+  // 1 · LA TRANSACCIÓN FINANCIERA NO CAMBIÓ. Es la propiedad del outbox y la
+  // razón de que el correo salga FUERA de la transacción del pago.
+  const despues = await ordenDe(orden.id)
+  assert.equal(despues.status, 'PAID', 'la compra sigue pagada')
+  assert.equal(despues.paidAt?.getTime(), antes.paidAt?.getTime(), 'ni la fecha del pago cambió')
+  assert.equal(await derechosDe(orden.id), derechosAntes, 'los derechos siguen emitidos')
+
+  // 2 · EL AVISO QUEDÓ FAILED, con su error saneado.
+  const fila = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: outboxId } })
+  assert.equal(fila.status, 'FAILED')
+  assert.equal(fila.attempts, 1, 'un intento contado, no ocho')
+  assert.match(fila.lastError ?? '', /CORREO_TRANSITORIO/, 'se distingue de un rechazo definitivo')
+  assert.ok(!/re_prueba_no_real/.test(fila.lastError ?? ''), 'el error guardado no lleva la clave del proveedor')
+
+  // 3 · HAY REINTENTO PROGRAMADO, y no es inmediato.
+  assert.ok(fila.availableAt, 'queda con hora para volver')
+  assert.ok(fila.availableAt! > new Date(), 'la hora es futura: la escalera respeta su espera')
+})
+
+test('§24B · el segundo intento sale bien y el aviso queda DELIVERED, sin duplicar nada', async () => {
+  const orden = await compraPendiente()
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: orden.id, amountSeen: orden.total, method: 'TRANSFER' }, como(ctx.finanzas)))
+  const outboxId = await avisoDeCorreoReclamado(orden.id)
+
+  const clavePrevia = process.env.RESEND_API_KEY
+  process.env.RESEND_API_KEY = 're_prueba_no_real'
+  try {
+    // Primer intento: 500.
+    const fallo = fetchQueContesta(500, { message: 'Internal Server Error' })
+    try {
+      assert.equal((await entregarEfecto(outboxId, como(null))).estado, 'FAILED')
+    } finally {
+      fallo.restaurar()
+    }
+
+    // Segundo intento: el proveedor ya responde. Se vuelve a reclamar porque
+    // un FAILED no está reclamado —y entregarlo sin reclamar sería entregar lo
+    // que ahora es de otro—, con la hora puesta más allá de su espera.
+    const tras = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: outboxId }, select: { availableAt: true } })
+    const despues = new Date(tras.availableAt!.getTime() + 1_000)
+    const reclamados = await reclamarEfectos(VENTANA, despues)
+    assert.ok(reclamados.some((x) => x.id === outboxId), 'pasada su espera, se vuelve a reclamar')
+
+    const bien = fetchQueContesta(200, { id: 'email_prueba_1' })
+    try {
+      const r = await entregarEfecto(outboxId, como(null), despues)
+      assert.equal(r.estado, 'DELIVERED', 'el segundo intento entrega')
+      assert.match(r.detalle, /aceptado por el proveedor/, 'y no promete más que aceptación')
+    } finally {
+      bien.restaurar()
+    }
+  } finally {
+    if (clavePrevia === undefined) delete process.env.RESEND_API_KEY
+    else process.env.RESEND_API_KEY = clavePrevia
+  }
+
+  const fila = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: outboxId } })
+  assert.equal(fila.status, 'DELIVERED')
+  assert.ok(fila.processedAt, 'DELIVERED exige fecha: lo impone un CHECK de la base')
+  // `attempts` cuenta FALLOS, no entregas: queda en 1, el del 500. Un éxito no
+  // gasta intento —no tendría sentido que lo hiciera—.
+  assert.equal(fila.attempts, 1, 'el contador cuenta fallos: el del 500 y ninguno más')
+  assert.equal(fila.lastError, null, 'y el error del primer intento se limpia al salir bien')
+
+  // Y UN SOLO efecto de correo para esa compra: el reintento no apuntó otro.
+  const correos = await prisma.supplyV2OutboxEvent.count({
+    where: { aggregateId: orden.id, eventType: 'supply.notify.order_paid', payload: { path: ['canal'], equals: 'EMAIL' } },
+  })
+  assert.equal(correos, 1)
+})
+
+test('§24C · un 4xx NO gasta la escalera: se cierra con su razón', async () => {
+  // El reverso de A, y es tan importante como él: reintentar ocho veces una
+  // dirección que no existe tapa el problema real durante una semana y llena la
+  // cola de difuntos de algo que no va a cambiar.
+  const orden = await compraPendiente()
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: orden.id, amountSeen: orden.total, method: 'TRANSFER' }, como(ctx.finanzas)))
+  const outboxId = await avisoDeCorreoReclamado(orden.id)
+
+  const clavePrevia = process.env.RESEND_API_KEY
+  process.env.RESEND_API_KEY = 're_prueba_no_real'
+  const falso = fetchQueContesta(422, { message: 'Invalid `to` field' })
+  let r
+  try {
+    r = await entregarEfecto(outboxId, como(null))
+  } finally {
+    falso.restaurar()
+    if (clavePrevia === undefined) delete process.env.RESEND_API_KEY
+    else process.env.RESEND_API_KEY = clavePrevia
+  }
+
+  assert.equal(r.estado, 'DELIVERED', 'se cierra: no hay nada que reintentar')
+  assert.match(r.detalle, /no se reintenta/, 'y el detalle dice por qué')
+
+  const fila = await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: outboxId } })
+  assert.equal(fila.attempts, 0, 'no gastó un solo intento de la escalera')
+
+  // Y LO QUE ESTA PRUEBA DESTAPÓ: la fila se cerraba con `lastError` a null,
+  // exactamente igual que un correo que sí salió. En el panel, un rechazo del
+  // proveedor era indistinguible de una entrega. Ahora el motivo se guarda.
+  assert.match(fila.lastError ?? '', /el proveedor rechazó el correo \(422\)/, 'el panel puede decir que NADIE recibió nada')
+  assert.ok(!/re_prueba_no_real/.test(fila.lastError ?? ''), 'sin la clave del proveedor dentro')
+
+  assert.equal((await ordenDe(orden.id)).status, 'PAID', 'tampoco esto movió el dinero')
+})
+
+test('§24C · la ventana de duplicado se dice, no se finge', async () => {
+  // §6. Resend no acepta clave de idempotencia: si el proceso muere DESPUÉS de
+  // que el proveedor aceptara y ANTES de marcar entregado, el reintento manda
+  // un segundo correo. No se puede evitar desde aquí, y lo que se hace es
+  // decirlo —en el código, en el informe y aquí— en vez de afirmar una garantía
+  // que no existe.
+  //
+  // Lo que SÍ se puede demostrar es que el canal que tiene idempotencia la usa:
+  // el aviso dentro de Membego se apoya en el índice único
+  // `(userId, dedupeKey)`, así que una segunda entrega lo reconoce.
+  assert.match(LIMITACION_DE_IDEMPOTENCIA, /no acepta clave de idempotencia/)
+
+  const orden = await compraPendiente()
+  await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: orden.id, amountSeen: orden.total, method: 'TRANSFER' }, como(ctx.finanzas)))
+  const apuntados = await sinEmpresa('prueba', (tx) =>
+    apuntarAvisoEnTx(tx, {
+      aviso: 'supply.notify.order_paid',
+      userId: ctx.cliente,
+      agregadoType: 'SupplyV2CustomerOrder',
+      agregadoId: orden.id,
+      correlationId: `sv2-inapp-${orden.id}`,
+    })
+  )
+  const enApp = apuntados.find((a) => a.canal === 'IN_APP')!
+  await reclamarEfectos(VENTANA)
+  const primera = await entregarEfecto(enApp.outboxId, como(null))
+  assert.equal(primera.estado, 'DELIVERED')
+  assert.match(primera.detalle, /aviso creado dentro de Membego/)
+
+  // La segunda entrega del MISMO efecto: la base lo impide y eso se lee como
+  // «ya estaba hecho», no como un fallo.
+  const notificaciones = await prisma.notificacion.count({
+    where: { userId: ctx.cliente, dedupeKey: { not: null }, tipo: 'PAGO_APROBADO', href: '/cliente/compras' },
+  })
+  assert.ok(notificaciones >= 1, 'el aviso existe dentro de Membego')
+  await assert.rejects(
+    prisma.notificacion.create({
+      data: {
+        userId: ctx.cliente,
+        tipo: 'PAGO_APROBADO',
+        titulo: 'duplicado',
+        mensaje: 'duplicado',
+        // La `idempotencyKey` del efecto ES el `dedupeKey` de su fila: eso es
+        // lo que hace que la clave sea estable entre intentos.
+        dedupeKey: (await prisma.supplyV2OutboxEvent.findUniqueOrThrow({ where: { id: enApp.outboxId }, select: { dedupeKey: true } })).dedupeKey,
+      },
+    }),
+    /Unique constraint/,
+    'la base impide el aviso repetido: es demostrable, no una promesa'
+  )
 })
