@@ -1,5 +1,4 @@
 import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
 import { sinEmpresa } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
@@ -87,61 +86,76 @@ export async function evaluarYGuardarAlertas(ctx: ContextoAuditoria, ahora = new
   })
   const porCondicion = new Map<string, AlertaCalculada>(calculadas.map((a) => [a.condicion, a]))
 
-  const previas = await prisma.supplyV2OperationalAlert.findMany({
-    where: { key: { in: [...CONDICIONES] } },
-    select: { key: true, status: true },
-  })
-  const estadoPrevio = new Map(previas.map((p) => [p.key, p.status as EstadoAlerta]))
-
   const r: ResultadoEvaluacion = { activas: 0, nuevas: [], resueltas: [], reconocidasQueSiguen: [] }
 
-  for (const condicion of CONDICIONES) {
-    const calculada = porCondicion.get(condicion)
-    const previo = estadoPrevio.get(condicion) ?? null
-    const siguiente = transicionDeAlerta(previo, Boolean(calculada))
+  // ── Leer y escribir el estado de las alertas en UNA transacción ──────────
+  //
+  // `sinEmpresa` y no `prisma` a pelo: la política de capa 2 de
+  // `supply_v2_operational_alerts` solo deja tocarla en modo omnisciente —una
+  // alerta cuenta efectos de TODO Membego, no de un inquilino—. Sin contexto,
+  // con RLS encendida, la lectura devolvería cero filas y el estado previo se
+  // leería como «nunca hubo ninguna alerta»: cada pasada del cron las
+  // reabriría todas como NUEVAS y una reconocida volvería a gritar.
+  //
+  // Y en una sola transacción porque el conjunto es un estado coherente: dejar
+  // la mitad de las condiciones refrescadas y la otra mitad no es peor que no
+  // refrescar ninguna. `resumenOperativo` queda FUERA a propósito —ya abre la
+  // suya— para no anidar.
+  await sinEmpresa('Supply 2.0: evaluar y guardar alertas', async (tx) => {
+    const previas = await tx.supplyV2OperationalAlert.findMany({
+      where: { key: { in: [...CONDICIONES] } },
+      select: { key: true, status: true },
+    })
+    const estadoPrevio = new Map(previas.map((p) => [p.key, p.status as EstadoAlerta]))
 
-    if (calculada) {
-      r.activas++
-      // La fila se refresca SIEMPRE que la condición siga: las cifras cambian
-      // aunque el estado no, y un operador necesita el número de ahora.
-      await prisma.supplyV2OperationalAlert.upsert({
-        where: { key: condicion },
-        create: {
-          key: condicion,
-          status: 'ACTIVE',
-          severity: calculada.severidad,
-          count: calculada.cuenta,
-          detail: calculada.detalle as Prisma.InputJsonValue,
-          summary: calculada.resumen,
-          firstSeenAt: ahora,
-          lastSeenAt: ahora,
-        },
-        update: {
-          severity: calculada.severidad,
-          count: calculada.cuenta,
-          detail: calculada.detalle as Prisma.InputJsonValue,
-          summary: calculada.resumen,
-          lastSeenAt: ahora,
-          // Solo se reabre lo que estaba RESUELTO. Una reconocida se queda
-          // reconocida (el `transicionDeAlerta` lo decide; esto lo aplica).
-          ...(siguiente === 'ACTIVE'
-            ? { status: 'ACTIVE', resolvedAt: null, acknowledgedById: null, acknowledgedAt: null, acknowledgedNote: null, firstSeenAt: ahora }
-            : {}),
-        },
-      })
-      if (previo === null) r.nuevas.push(condicion)
-      else if (previo === 'ACKNOWLEDGED') r.reconocidasQueSiguen.push(condicion)
-      continue
-    }
+    for (const condicion of CONDICIONES) {
+      const calculada = porCondicion.get(condicion)
+      const previo = estadoPrevio.get(condicion) ?? null
+      const siguiente = transicionDeAlerta(previo, Boolean(calculada))
 
-    if (siguiente === 'RESOLVED') {
-      await prisma.supplyV2OperationalAlert.update({
-        where: { key: condicion },
-        data: { status: 'RESOLVED', resolvedAt: ahora, count: 0, lastSeenAt: ahora },
-      })
-      r.resueltas.push(condicion)
+      if (calculada) {
+        r.activas++
+        // La fila se refresca SIEMPRE que la condición siga: las cifras cambian
+        // aunque el estado no, y un operador necesita el número de ahora.
+        await tx.supplyV2OperationalAlert.upsert({
+          where: { key: condicion },
+          create: {
+            key: condicion,
+            status: 'ACTIVE',
+            severity: calculada.severidad,
+            count: calculada.cuenta,
+            detail: calculada.detalle as Prisma.InputJsonValue,
+            summary: calculada.resumen,
+            firstSeenAt: ahora,
+            lastSeenAt: ahora,
+          },
+          update: {
+            severity: calculada.severidad,
+            count: calculada.cuenta,
+            detail: calculada.detalle as Prisma.InputJsonValue,
+            summary: calculada.resumen,
+            lastSeenAt: ahora,
+            // Solo se reabre lo que estaba RESUELTO. Una reconocida se queda
+            // reconocida (el `transicionDeAlerta` lo decide; esto lo aplica).
+            ...(siguiente === 'ACTIVE'
+              ? { status: 'ACTIVE', resolvedAt: null, acknowledgedById: null, acknowledgedAt: null, acknowledgedNote: null, firstSeenAt: ahora }
+              : {}),
+          },
+        })
+        if (previo === null) r.nuevas.push(condicion)
+        else if (previo === 'ACKNOWLEDGED') r.reconocidasQueSiguen.push(condicion)
+        continue
+      }
+
+      if (siguiente === 'RESOLVED') {
+        await tx.supplyV2OperationalAlert.update({
+          where: { key: condicion },
+          data: { status: 'RESOLVED', resolvedAt: ahora, count: 0, lastSeenAt: ahora },
+        })
+        r.resueltas.push(condicion)
+      }
     }
-  }
+  })
 
   // No se audita la evaluación: la corre el cron cada vez y llenaría la
   // bitácora de líneas que no son decisiones de nadie. Lo que sí se audita es

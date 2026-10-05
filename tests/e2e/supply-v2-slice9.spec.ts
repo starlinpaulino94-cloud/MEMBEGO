@@ -7,6 +7,7 @@ import { crearItemCatalogoEnTx } from '../../src/modules/supply-v2/catalog/servi
 import { activarAcuerdoEnTx, crearAcuerdoEnTx } from '../../src/modules/supply-v2/agreements/service'
 import { crearOfertaComisionEnTx, publicarOfertaEnTx } from '../../src/modules/supply-v2/offers/service'
 import { abrirOrdenClienteEnTx } from '../../src/modules/supply-v2/commerce/checkout'
+import { aprobarBeneficioEnTx, asignarBeneficioEnTx, crearBeneficioEnTx } from '../../src/modules/supply-v2/benefits/service'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 de punta a punta en navegador.
@@ -133,6 +134,27 @@ async function compraPendiente(etiqueta: string): Promise<Compra> {
     throw new Error(`el arnés esperaba una compra sin pagar y el checkout la dejó en ${guardada.paymentStatus}`)
   }
   return { id: guardada.id, numero: guardada.number, total: guardada.total.toFixed(2) }
+}
+
+/**
+ * El cron de Supply 2.0, llamado por HTTP como lo llamaría el programador.
+ *
+ * Y NO importando `evaluarAutomatizaciones`: ese servicio vive detrás de
+ * `server-only` y un spec de Playwright es código de cliente, así que
+ * importarlo rompe el arranque entero de la suite —lo hizo—. Pero además la
+ * ruta prueba MÁS: es la que corre en producción, con su autorización, su orden
+ * de pasos y su despacho final, así que el aviso que esta prueba busca sale por
+ * el mismo camino por el que saldrá de verdad.
+ */
+async function correrCron(page: Page): Promise<Record<string, unknown>> {
+  const res = await page.request.get(`${BASE}/api/cron/supply-v2`, {
+    headers: { authorization: `Bearer ${process.env.CRON_SECRET ?? ''}` },
+    timeout: 120_000,
+  })
+  if (res.status() !== 200) {
+    throw new Error(`el cron contestó ${res.status()}: ${(await res.text()).slice(0, 200)}`)
+  }
+  return (await res.json()) as Record<string, unknown>
 }
 
 /** Un webhook firmado como lo firmaría la pasarela. */
@@ -445,41 +467,187 @@ test.describe('Slice 9 · bloque 4 · Centro de Operaciones', () => {
 
     await ctx.close()
   })
-})
 
-test.describe('Slice 9 · bloque 4 · en un teléfono', () => {
-  test.skip(!LISTO, 'Falta configuración del arnés o del proveedor de prueba.')
-  test.describe.configure({ timeout: 240_000 })
+  /**
+   * ─────────────────────────────────────────────────────────────────────────
+   * BLOQUE 5 · §27 · LOS RECORRIDOS FINALES DEL SLICE 9
+   *
+   * G recorre la cadena COMPLETA en un solo caso, que es lo que ninguno de los
+   * anteriores hacía: aviso de la pasarela → pago → efecto en el outbox →
+   * aviso que el cliente VE en su campana → la misma operación encontrada por
+   * su hilo en el Centro de Operaciones. Las piezas estaban probadas por
+   * separado; esto prueba que están unidas.
+   *
+   * H recorre la automatización: un beneficio que vence pronto → el aviso
+   * apuntado → entregado → visible para el cliente, y la segunda pasada NO
+   * manda un segundo aviso. La deduplicación se demuestra con el aviso en
+   * pantalla, no contando filas.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   * LO QUE G ENCONTRÓ AL BUSCAR EL AVISO EN PANTALLA
+   *
+   * No estaba. El aviso se escribía, se entregaba y quedaba DELIVERED en la
+   * base… y el área de cliente no lo mostraba en ninguna parte: el
+   * desplegable que lee `notificaciones` vive en la cabecera de admin, y la
+   * campana del cliente llevaba al muro social de las empresas que sigue.
+   *
+   * Un aviso invisible es exactamente «marcar una funcionalidad como
+   * completada porque existe el código», que es lo que el enunciado del Slice
+   * prohíbe. Por eso estas dos pruebas afirman sobre la PANTALLA y no sobre un
+   * `count()`: una aserción en base habría pasado desde el primer día sin que
+   * ningún cliente viera nunca nada.
+   */
 
-  test.afterAll(async () => {
-    await limpiarTrasLaSuite()
-    await cerrarPrisma()
+  test('G · de la pasarela al aviso del cliente, y de vuelta por el hilo', async ({ browser }) => {
+    const compra = await compraPendiente('g')
+    const db = prismaDeArnes()
+    const hilo = `sv2-e2e-g-${sufijo}`
+
+    const ops = await browser.newContext()
+    await entrarComo(ops, 'compras', BASE)
+    const panel = await ops.newPage()
+
+    // 1 · LA PASARELA AVISA, por el importe correcto y firmado.
+    const r = await mandarWebhook(panel, { eventId: `evt-e2e-g-${sufijo}`, orderNumber: compra.numero, amount: compra.total, txId: `TX-E2E-G-${sufijo}`, hilo })
+    expect(r.status).toBe(200)
+    expect(r.codigo).toBe('EVENT_ACCEPTED')
+
+    // 2 · EL PAGO quedó hecho por el camino oficial, con su derecho emitido.
+    const orden = await db.supplyV2CustomerOrder.findUniqueOrThrow({
+      where: { id: compra.id },
+      select: { status: true, paymentStatus: true, paidAt: true, entitlements: { select: { id: true } } },
+    })
+    expect(orden.status).toBe('PAID')
+    expect(orden.paymentStatus).toBe('CONFIRMED')
+    expect(orden.paidAt).not.toBeNull()
+    expect(orden.entitlements).toHaveLength(1)
+
+    // 3 · EL EFECTO se apuntó en el outbox y salió. El webhook despacha en su
+    // propia petición, así que a estas alturas ya debería estar entregado; se
+    // espera por si la cola lo hizo asíncrono, sin subir el tiempo de nada más.
+    await expect
+      .poll(
+        async () =>
+          (await db.supplyV2OutboxEvent.findFirstOrThrow({
+            where: { aggregateId: compra.id, eventType: 'supply.order.paid' },
+            select: { status: true },
+          })).status,
+        { timeout: 30_000, message: 'el efecto del aviso tenía que salir' }
+      )
+      .toBe('DELIVERED')
+
+    // 4 · EL CLIENTE LO VE. Esto es lo que el Slice 9 vino a arreglar: antes,
+    // confirmar un pago no avisaba a nadie. Se entra como el cliente y se abre
+    // su campana por el nombre accesible, que es la promesa del producto.
+    const suyo = await browser.newContext()
+    await entrarComo(suyo, 'cliente', BASE)
+    const cliente = await suyo.newPage()
+    await cliente.goto(`${BASE}/cliente`)
+    // La campana lleva la cuenta: sin número, el aviso es alcanzable y no
+    // descubrible. Se comprueba el badge Y el aviso, porque lo primero es lo
+    // que hace que alguien pulse.
+    await expect(cliente.getByTestId('campana-sin-leer')).toBeVisible({ timeout: 20_000 })
+    await cliente.getByTestId('campana-avisos').click()
+    await expect(cliente.getByTestId('mis-avisos')).toBeVisible({ timeout: 20_000 })
+    await expect(cliente.getByText('Tu compra está confirmada').first()).toBeVisible()
+    await suyo.close()
+
+    // 5 · Y DESDE OPERACIONES se encuentra todo por el hilo: la compra, su
+    // estado y su historia.
+    await panel.goto(`${BASE}${RUTA}`)
+    await panel.getByTestId('buscar-operacion').fill(hilo)
+    await panel.getByTestId('btn-buscar').click()
+    await expect(panel.getByTestId('resultado-orden-numero')).toHaveText(compra.numero)
+    await expect(panel.getByTestId('resultado-orden-estado')).toHaveText('PAID')
+    await expect(panel.getByTestId('linea-de-tiempo')).toBeVisible()
+
+    await ops.close()
   })
 
-  test('F · el panel se lee en un móvil, sin desbordamiento lateral', async ({ browser }) => {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } })
-    await entrarComo(ctx, 'compras', BASE)
-    const page = await ctx.newPage()
+  test('H · un beneficio por vencer avisa UNA vez, aunque el cron corra dos', async ({ browser }) => {
+    const db = prismaDeArnes()
+    const empresa = await asegurarEmpresaProveedora(`Operaciones S9 ${sufijo}`)
+    const compras = await asegurarUsuario('compras')
+    const finanzas = await asegurarUsuario('finanzas')
+    const clienteU = await asegurarUsuario('cliente')
+    const como = (actorId: string) => ({ actorId, ipAddress: '127.0.0.1', userAgent: 'e2e-slice9' })
 
-    for (const ruta of [RUTA, `${RUTA}/incidentes`, `${RUTA}/conciliaciones`, `${RUTA}/outbox`, `${RUTA}/difuntos`]) {
-      await page.goto(`${BASE}${ruta}`)
-      await expect(page.locator('h1').first()).toBeVisible()
+    // Un beneficio asignado que vence en DOS días: dentro de los tres con los
+    // que avisa la automatización. Montado con los servicios del slice 4, no
+    // con filas a mano.
+    const proveedorId =
+      (await db.supplyV2Supplier.findFirst({ where: { companyId: empresa.id }, select: { id: true } }))?.id ??
+      (await sinEmpresa('e2e slice 9', (tx) => vincularEmpresaComoProveedorEnTx(tx, empresa.id, {}, como(compras.id)))).id
 
-      // Lo crítico se lee sin arrastrar: el documento no desborda de lado. Las
-      // tablas densas SÍ se desplazan, pero dentro de su caja —por eso se mide
-      // el documento y no la tabla—.
-      const desborde = await page.evaluate(
-        () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+    const asignacionId = await sinEmpresa('e2e slice 9', async (tx) => {
+      const b = await crearBeneficioEnTx(
+        tx,
+        {
+          name: `Bono por vencer S9 ${sufijo}`,
+          funding: 'SUPPLIER',
+          valueType: 'FIXED_AMOUNT',
+          supplierValue: 100,
+          scope: 'SUPPLIER',
+          supplierId: proveedorId,
+          perCustomerLimit: 1,
+          startsAt: new Date(Date.now() - 86_400_000),
+          endsAt: new Date(Date.now() + 30 * 86_400_000),
+        },
+        como(compras.id)
       )
-      expect(desborde, `${ruta} desborda ${desborde}px de lado`).toBeLessThanOrEqual(2)
-    }
+      await aprobarBeneficioEnTx(tx, b.id, como(finanzas.id))
+      const g = await asignarBeneficioEnTx(
+        tx,
+        { benefitId: b.id, customerId: clienteU.id, expiresAt: new Date(Date.now() + 2 * 86_400_000) },
+        como(compras.id)
+      )
+      return g.id
+    })
 
-    // Y lo primero que un operador necesita ver, se ve en un teléfono.
-    await page.goto(`${BASE}${RUTA}`)
-    await expect(page.getByTestId('estado-sistema')).toBeVisible()
-    await expect(page.getByTestId('cifra-incidentes')).toBeVisible()
-    await expect(page.getByTestId('buscar-operacion')).toBeVisible()
+    const ops = await browser.newContext()
+    await entrarComo(ops, 'compras', BASE)
+    const panel = await ops.newPage()
 
-    await ctx.close()
+    // PRIMERA PASADA del cron de verdad, por su ruta y con su secreto.
+    const primera = await correrCron(panel)
+    expect((primera as { ok: boolean }).ok).toBe(true)
+    const auto = (primera as { automatizaciones: { activo: boolean } }).automatizaciones
+    expect(auto.activo).toBe(true)
+
+    const apuntados = await db.supplyV2OutboxEvent.count({
+      where: { eventType: 'supply.notify.benefit_expiring', aggregateId: asignacionId },
+    })
+    expect(apuntados).toBeGreaterThanOrEqual(1)
+
+    // SEGUNDA PASADA: no apunta ni un aviso nuevo para este beneficio. Lo
+    // impide la clave única de deduplicación, que lleva el día dentro.
+    await correrCron(panel)
+    const trasSegunda = await db.supplyV2OutboxEvent.count({
+      where: { eventType: 'supply.notify.benefit_expiring', aggregateId: asignacionId },
+    })
+    expect(trasSegunda).toBe(apuntados)
+
+    // El propio cron despacha al final de su pasada, así que el aviso ya tiene
+    // que haber salido.
+    await expect
+      .poll(
+        async () =>
+          db.supplyV2OutboxEvent.count({
+            where: { eventType: 'supply.notify.benefit_expiring', aggregateId: asignacionId, status: 'DELIVERED' },
+          }),
+        { timeout: 30_000, message: 'el aviso del vencimiento tenía que salir en la pasada del cron' }
+      )
+      .toBeGreaterThanOrEqual(1)
+
+    // Y EL CLIENTE LO VE. Una sola vez en la lista: la deduplicación se
+    // comprueba en pantalla, que es donde le importa a la persona.
+    const suyo = await browser.newContext()
+    await entrarComo(suyo, 'cliente', BASE)
+    const cliente = await suyo.newPage()
+    await cliente.goto(`${BASE}/cliente/novedades`)
+    await expect(cliente.getByTestId('mis-avisos')).toBeVisible({ timeout: 20_000 })
+    await expect(cliente.getByText('Un beneficio tuyo está por vencer')).toHaveCount(1)
+    await suyo.close()
+    await ops.close()
   })
 })

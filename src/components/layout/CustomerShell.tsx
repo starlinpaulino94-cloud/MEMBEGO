@@ -22,6 +22,7 @@ export function CustomerShell({
   companyId,
   zonaLabel,
   demoNombre,
+  avisosSinLeer = 0,
   children,
 }: {
   iniciales: string
@@ -31,6 +32,13 @@ export function CustomerShell({
   companyId: string | null
   zonaLabel: string | null
   demoNombre: string | null
+  /**
+   * Cuántos avisos propios tiene sin leer. La campana sin número era
+   * alcanzable pero no descubrible: nadie entra a mirar una campana que nunca
+   * dice nada, y los avisos del Slice 9 —«tu compra está confirmada»— se
+   * quedaban esperando a que alguien pasara por casualidad.
+   */
+  avisosSinLeer?: number
   children: React.ReactNode
 }) {
   return (
@@ -76,10 +84,31 @@ export function CustomerShell({
             </form>
             <Link
               href="/cliente/novedades"
-              aria-label="Novedades de tus empresas"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white bg-white text-vibe-deep outline-none shadow-sm transition-colors duration-fast hover:bg-vibe-niebla focus-visible:ring-2 focus-visible:ring-white active:scale-95"
+              // El nombre accesible lleva la cuenta dentro: un lector de
+              // pantalla no ve el punto rojo, y «Novedades» a secas no dice que
+              // haya algo esperando.
+              aria-label={
+                avisosSinLeer > 0
+                  ? `Tus avisos y novedades (${avisosSinLeer} sin leer)`
+                  : 'Tus avisos y novedades'
+              }
+              className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white bg-white text-vibe-deep outline-none shadow-sm transition-colors duration-fast hover:bg-vibe-niebla focus-visible:ring-2 focus-visible:ring-white active:scale-95"
+              data-testid="campana-avisos"
             >
               <Bell className="h-5 w-5" aria-hidden />
+              {avisosSinLeer > 0 && (
+                // 18px de alto para que el texto quepa a 12px, que es el suelo
+                // del sistema: a 10px se lee mal justo donde importa.
+                // `aria-hidden` porque la cuenta ya va en el `aria-label` —si
+                // no, el lector la anuncia dos veces—.
+                <span
+                  aria-hidden
+                  className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[12px] font-bold leading-none text-white"
+                  data-testid="campana-sin-leer"
+                >
+                  {avisosSinLeer > 9 ? '9+' : avisosSinLeer}
+                </span>
+              )}
             </Link>
             <Link
               href="/cliente/perfil"
