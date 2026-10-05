@@ -4,7 +4,7 @@ import { MONO, RecuadroIcono, Tarjeta } from './superficie'
 
 /**
  * Los tres pilares del Resumen (¿Qué tengo? / ¿Qué compro? / ¿Qué vendo?):
- * encabezado con icono, una cifra principal sobre pozo lavanda y dos
+ * encabezado con icono, una cifra principal sobre un pozo gris claro y dos
  * mini-métricas debajo.
  */
 export function TarjetaPilar({

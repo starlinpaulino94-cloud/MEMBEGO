@@ -42,7 +42,7 @@ export function PaginacionSupplyV2({
     )
   }
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 bg-sv2-well/70 px-3 py-2 text-[13px] leading-4">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-sv2-divider bg-card px-3 py-2 text-[13px] leading-4">
       <div className="flex flex-wrap items-center gap-2 font-medium text-sv2-ink-variant">
         <span>
           Mostrando <strong className="text-foreground">{desde} - {hasta}</strong> de <strong className="text-foreground">{total.toLocaleString('es-DO')}</strong> {sustantivo}

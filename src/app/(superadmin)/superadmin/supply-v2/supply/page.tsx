@@ -190,7 +190,7 @@ export default async function SupplyPoolPage({
                   <Link
                     href={href({ ...f, vence: !f.vence })}
                     aria-pressed={f.vence}
-                    className={cn('inline-flex h-9 items-center gap-1 rounded-[8px] px-3 text-[13px] font-semibold leading-4 transition-colors', f.vence ? 'bg-sv2-accent text-white hover:bg-sv2-accent-hover' : 'bg-sv2-soft text-foreground hover:bg-sv2-soft-hover')}
+                    className={cn('inline-flex h-10 items-center gap-1 rounded-[8px] px-3 text-[14px] font-semibold leading-5 transition-colors', f.vence ? 'bg-sv2-accent text-white hover:bg-sv2-accent-hover' : 'border border-sv2-border bg-card text-foreground hover:bg-sv2-soft')}
                     data-testid="btn-vencimientos"
                   >
                     <CalendarDays aria-hidden className="size-4" />

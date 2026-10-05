@@ -23,7 +23,7 @@ export function TablaSupply({ productos, ahora, pie }: { productos: SupplyPorPro
       <div className="@4xl:overflow-x-auto">
       <table className="block w-full border-collapse text-left text-[13px] leading-[18px] text-foreground @4xl:table">
         <thead className="hidden @4xl:table-header-group">
-          <tr className="h-11 bg-sv2-well">
+          <tr className="h-11 border-b border-sv2-border bg-sv2-head">
             <th scope="col" className={cn(th, 'min-w-[170px] pl-3')}>Producto / Servicio</th>
             <th scope="col" className={th}>Proveedor</th>
             <th scope="col" className={th}>Lotes activos</th>
@@ -35,7 +35,7 @@ export function TablaSupply({ productos, ahora, pie }: { productos: SupplyPorPro
             <th scope="col" className={cn(th, 'pr-3 text-right')}>Acciones</th>
           </tr>
         </thead>
-        <tbody className="block divide-y divide-sv2-well @4xl:table-row-group">
+        <tbody className="block divide-y divide-sv2-divider @4xl:table-row-group">
           {productos.map((p) => {
             const disp = pct(p.disponibles, p.recibidas)
             return (

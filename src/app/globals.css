@@ -54,6 +54,9 @@
   --font-sv2-mono: var(--font-sv2-jetbrains);
   --color-sv2-canvas: var(--sv2-canvas);
   --color-sv2-well: var(--sv2-well);
+  --color-sv2-head: var(--sv2-head);
+  --color-sv2-border: var(--sv2-border);
+  --color-sv2-divider: var(--sv2-divider);
   --color-sv2-soft: var(--sv2-soft);
   --color-sv2-soft-hover: var(--sv2-soft-hover);
   --color-sv2-track: var(--sv2-track);
@@ -534,32 +537,41 @@
    equivalente para que el modo oscuro no quede con superficies lavanda sobre
    negro. Solo los consumen los componentes de `components/supply-v2`. */
 :root {
-  --sv2-canvas: #f2f3ff;
-  --sv2-well: #f2f3ff;
-  --sv2-soft: #eaedff;
-  --sv2-soft-hover: #e2e7ff;
-  --sv2-track: #dae2fd;
+  /* Dirección visual «blanca» (oct 2026): el lienzo y las tarjetas son
+     blancos; los grises neutros (sin tinte lila) solo separan piezas internas
+     —filtros, cabeceras de tabla, pozos—. El color queda para detalles. */
+  --sv2-canvas: #ffffff;
+  --sv2-well: #f8f9fc;
+  --sv2-head: #fafafc;
+  --sv2-border: #e8eaf0;
+  --sv2-divider: #f0f1f5;
+  --sv2-soft: #f3f4f7;
+  --sv2-soft-hover: #ebedf1;
+  --sv2-track: #e8eaf0;
   --sv2-ink-variant: #434655;
   --sv2-outline: #737686;
   --sv2-accent: #2563eb;
   --sv2-accent-hover: #1d4ed8;
   --sv2-primary: #004ac6;
-  --sv2-primary-fixed: #dbe1ff;
-  --sv2-on-primary-fixed: #00174b;
-  --sv2-secondary: #006c4a;
-  --sv2-secondary-container: #82f5c1;
-  --sv2-on-secondary-container: #00714e;
-  --sv2-tertiary: #824500;
-  --sv2-tertiary-fixed: #ffdcc3;
-  --sv2-on-tertiary-fixed: #6e3900;
-  --sv2-error: #ba1a1a;
-  --sv2-error-container: #ffdad6;
+  --sv2-primary-fixed: #eaf0ff;
+  --sv2-on-primary-fixed: #0b3aa8;
+  --sv2-secondary: #057a55;
+  --sv2-secondary-container: #e3f8ee;
+  --sv2-on-secondary-container: #046c4b;
+  --sv2-tertiary: #9a5200;
+  --sv2-tertiary-fixed: #fff1e3;
+  --sv2-on-tertiary-fixed: #8a4600;
+  --sv2-error: #c4281c;
+  --sv2-error-container: #fdecea;
   --sv2-on-error-container: #93000a;
 }
 
 .dark {
   --sv2-canvas: var(--background);
-  --sv2-well: oklch(0.225 0.012 264);
+  --sv2-well: oklch(0.205 0.006 264);
+  --sv2-head: oklch(0.215 0.006 264);
+  --sv2-border: oklch(1 0 0 / 9%);
+  --sv2-divider: oklch(1 0 0 / 6%);
   --sv2-soft: oklch(0.26 0.016 264);
   --sv2-soft-hover: oklch(0.30 0.02 264);
   --sv2-track: oklch(0.32 0.02 264);

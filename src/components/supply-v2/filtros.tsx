@@ -4,7 +4,7 @@ import { ChevronDown, Filter, RotateCcw, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tarjeta } from './resumen/superficie'
 
-const CAMPO = 'h-9 w-full rounded-[8px] bg-sv2-well text-[13px] leading-[18px] text-foreground placeholder:text-sv2-outline focus:bg-card focus:outline-none focus:ring-1 focus:ring-sv2-accent'
+const CAMPO = 'h-10 w-full rounded-[8px] border border-sv2-border bg-card text-[14px] leading-5 text-foreground placeholder:text-sv2-outline focus:border-sv2-accent focus:outline-none focus:ring-2 focus:ring-sv2-accent/15'
 
 export interface SelectorFiltro {
   name: string
@@ -49,7 +49,7 @@ export function BarraFiltrosSupplyV2({
   testId?: string
 }) {
   return (
-    <Tarjeta className="flex flex-col gap-3 p-3" data-testid={testId}>
+    <Tarjeta className="flex flex-col gap-3 bg-sv2-well p-3 shadow-none" data-testid={testId}>
       <Form action={ruta} className="grid grid-cols-1 items-center gap-2 @xl:grid-cols-2 @5xl:grid-cols-12">
         <div className={cn('relative flex items-center @xl:col-span-2', extra ? '@5xl:col-span-3' : '@5xl:col-span-4')}>
           <Search aria-hidden className="pointer-events-none absolute left-2 size-[18px] text-sv2-ink-variant" />
@@ -70,21 +70,21 @@ export function BarraFiltrosSupplyV2({
           {extra}
           {variante === 'oscura' ? (
             <>
-              <button type="submit" className="inline-flex h-9 items-center gap-1 rounded-[8px] bg-foreground px-3 text-[13px] font-medium leading-4 text-background shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent" data-testid="btn-filtrar">
+              <button type="submit" className="inline-flex h-10 items-center gap-1 rounded-[8px] bg-foreground px-3 text-[13px] font-medium leading-4 text-background shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent" data-testid="btn-filtrar">
                 <Filter aria-hidden className="size-4" />
                 Filtrar
               </button>
-              <Link href={ruta} className="inline-flex h-9 items-center rounded-[8px] px-2 text-[13px] font-medium leading-4 text-sv2-outline transition-colors hover:text-foreground">
+              <Link href={ruta} className="inline-flex h-10 items-center rounded-[8px] px-2 text-[13px] font-medium leading-4 text-sv2-outline transition-colors hover:text-foreground">
                 Limpiar
               </Link>
             </>
           ) : (
             <>
-              <button type="submit" className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-[8px] bg-sv2-soft px-3 text-[13px] font-semibold leading-4 text-foreground transition-colors hover:bg-sv2-soft-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent" data-testid="btn-filtrar">
+              <button type="submit" className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-sv2-accent px-4 text-[14px] font-semibold leading-5 text-white shadow-sm transition-colors hover:bg-sv2-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent focus-visible:ring-offset-2" data-testid="btn-filtrar">
                 <Filter aria-hidden className="size-4" />
                 Aplicar
               </button>
-              <Link href={ruta} aria-label="Reiniciar filtros" title="Reiniciar filtros" className="inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-sv2-well text-sv2-ink-variant transition-colors hover:bg-sv2-soft hover:text-foreground">
+              <Link href={ruta} aria-label="Reiniciar filtros" title="Reiniciar filtros" className="inline-flex size-10 shrink-0 items-center justify-center rounded-[8px] border border-sv2-border bg-card text-sv2-ink-variant transition-colors hover:bg-sv2-soft hover:text-foreground">
                 <RotateCcw aria-hidden className="size-4" />
               </Link>
             </>
@@ -95,7 +95,7 @@ export function BarraFiltrosSupplyV2({
         <div className="flex flex-wrap items-center gap-1">
           <span className="text-sv2-outline">{chips.length > 0 ? 'Filtros aplicados:' : 'Sin filtros aplicados'}</span>
           {chips.map((c) => (
-            <span key={c.texto} className="inline-flex items-center gap-1 rounded-full bg-sv2-soft px-2 py-0.5 font-medium text-sv2-ink-variant">
+            <span key={c.texto} className="inline-flex items-center gap-1 rounded-full border border-sv2-border bg-card px-2 py-0.5 font-medium text-sv2-ink-variant">
               {c.texto}
               <Link href={c.quitar} aria-label={`Quitar ${c.texto}`} className="hover:text-sv2-error">
                 <X aria-hidden className="size-3.5" />
