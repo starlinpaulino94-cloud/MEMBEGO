@@ -16,6 +16,8 @@ export function DialogoFormulario({
   children,
   variant = 'default',
   testId,
+  className,
+  icono,
 }: {
   etiqueta: string
   titulo: string
@@ -23,12 +25,17 @@ export function DialogoFormulario({
   children: React.ReactNode
   variant?: React.ComponentProps<typeof Button>['variant']
   testId?: string
+  /** Clases extra del botón que abre el diálogo (p. ej. el botón suave del Resumen). */
+  className?: string
+  /** Icono delante de la etiqueta. */
+  icono?: React.ReactNode
 }) {
   const [abierto, setAbierto] = useState(false)
   return (
     <Dialog open={abierto} onOpenChange={setAbierto}>
       <DialogTrigger asChild>
-        <Button variant={variant} data-testid={testId}>
+        <Button variant={variant} data-testid={testId} className={className}>
+          {icono}
           {etiqueta}
         </Button>
       </DialogTrigger>
