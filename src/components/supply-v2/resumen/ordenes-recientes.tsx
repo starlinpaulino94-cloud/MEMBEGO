@@ -54,7 +54,7 @@ export function OrdenesRecientes({ ordenes, filtro }: { ordenes: OrdenEnLista[];
         <>
           <div className="hidden overflow-x-auto @2xl:block">
             <table className="w-full text-left text-[13px] leading-[18px]">
-              <thead className="bg-sv2-well text-[12px] font-semibold uppercase leading-4 tracking-[0.04em] text-sv2-ink-variant">
+              <thead className="bg-sv2-head text-[12px] font-semibold uppercase leading-4 tracking-[0.04em] text-sv2-ink-variant">
                 <tr>
                   <th scope="col" className="px-3 py-2.5 font-semibold">Orden</th>
                   <th scope="col" className="px-3 py-2.5 font-semibold">Proveedor</th>
@@ -85,7 +85,7 @@ export function OrdenesRecientes({ ordenes, filtro }: { ordenes: OrdenEnLista[];
               </tbody>
             </table>
           </div>
-          <ul className="flex flex-col divide-y divide-sv2-well @2xl:hidden">
+          <ul className="flex flex-col divide-y divide-sv2-divider @2xl:hidden">
             {ordenes.map((o) => (
               <li key={o.id} className="flex flex-col gap-1.5 px-3 py-3">
                 <div className="flex items-center justify-between gap-2">

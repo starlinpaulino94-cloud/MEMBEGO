@@ -141,8 +141,8 @@ export function TablaProveedores({ proveedores, pie }: { proveedores: ProveedorE
       <div className="hidden w-full overflow-x-auto @4xl:block">
         <table className="w-full border-collapse text-left text-[13px] leading-[18px] text-foreground">
           <thead>
-            <tr className="h-11 bg-sv2-well">
-              <th scope="col" className={cn(th, 'min-w-[180px] pl-3')}>Proveedor</th>
+            <tr className="h-11 border-b border-sv2-border bg-sv2-head">
+              <th scope="col" className={cn(th, 'min-w-[150px] pl-3')}>Proveedor</th>
               <th scope="col" className={cn(th)}>Origen / Vínculo</th>
               <th scope="col" className={cn(th)}>Contacto &amp; WhatsApp</th>
               <th scope="col" className={cn(th, 'min-w-[100px]')}>Categoría</th>
@@ -150,10 +150,10 @@ export function TablaProveedores({ proveedores, pie }: { proveedores: ProveedorE
               <th scope="col" className={cn(th, 'text-center')}>Compras abiertas</th>
               <th scope="col" className={cn(th, 'text-right')}>Total comprado</th>
               <th scope="col" className={cn(th, 'text-center')}>Estado</th>
-              <th scope="col" className={cn(th, 'pr-3 text-right')}>Acciones</th>
+              <th scope="col" className={cn(th, 'pr-2 text-right')}>Acciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-sv2-well">
+          <tbody className="divide-y divide-sv2-divider">
             {proveedores.map((p) => (
               <tr key={p.id} className="transition-colors hover:bg-sv2-well/60" data-testid="fila-proveedor">
                 <td className="py-3 pl-3 pr-1.5 align-middle">
@@ -167,9 +167,9 @@ export function TablaProveedores({ proveedores, pie }: { proveedores: ProveedorE
                 <td className="px-1.5 py-3 align-middle text-sv2-ink-variant">{textoCategorias(p.categorias) ?? <span className="text-sv2-outline">—</span>}</td>
                 <td className="px-1.5 py-3 text-center align-middle"><Catalogo p={p} /></td>
                 <td className="px-1.5 py-3 text-center align-middle"><ComprasAbiertas p={p} /></td>
-                <td className={cn(MONO, 'whitespace-nowrap px-1.5 py-3 text-right align-middle font-bold')}>{dinero(p.totalComprado, p.currency)}</td>
+                <td className={cn(MONO, 'whitespace-nowrap px-1.5 py-3 text-right align-middle font-bold')}>{dinero(p.totalComprado, p.currency).replace('RD$ ', 'RD$')}</td>
                 <td className="px-1.5 py-3 text-center align-middle"><ChipEstado estado={p.status} /></td>
-                <td className="py-3 pl-1.5 pr-3 align-middle">
+                <td className="py-3 pl-1 pr-2 align-middle">
                   <div className="flex items-center justify-end gap-1">
                     <Link href={`${RUTA}/${p.id}`} className="inline-flex items-center gap-0.5 whitespace-nowrap text-[13px] font-semibold leading-4 text-sv2-primary hover:underline">
                       Ver proveedor
@@ -183,7 +183,7 @@ export function TablaProveedores({ proveedores, pie }: { proveedores: ProveedorE
           </tbody>
         </table>
       </div>
-      <ul className="flex flex-col divide-y divide-sv2-well @4xl:hidden">
+      <ul className="flex flex-col divide-y divide-sv2-divider @4xl:hidden">
         {proveedores.map((p) => (
           <li key={p.id} className="flex flex-col gap-2 p-3" data-testid="tarjeta-proveedor">
             <div className="flex items-start justify-between gap-2">

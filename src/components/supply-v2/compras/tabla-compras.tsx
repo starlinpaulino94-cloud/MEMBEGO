@@ -86,7 +86,7 @@ export function TablaCompras({ ordenes, pie }: { ordenes: OrdenEnLista[]; pie: R
       <div className="hidden w-full overflow-x-auto @4xl:block">
         <table className="w-full border-collapse text-left text-[13px] leading-[18px] text-foreground">
           <thead>
-            <tr className="h-10 select-none bg-sv2-well text-[12px] font-bold uppercase leading-4 tracking-wider text-sv2-outline">
+            <tr className="h-10 select-none border-b border-sv2-border bg-sv2-head text-[12px] font-bold uppercase leading-4 tracking-wider text-sv2-outline">
               <th scope="col" className="min-w-[140px] px-2 font-bold">Compra &amp; Emisión</th>
               <th scope="col" className="min-w-[150px] px-2 font-bold">Proveedor</th>
               <th scope="col" className="min-w-[120px] px-2 font-bold">Producto / SKU</th>
@@ -98,7 +98,7 @@ export function TablaCompras({ ordenes, pie }: { ordenes: OrdenEnLista[]; pie: R
               <th scope="col" className="px-2 text-right font-bold">Acciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-sv2-well">
+          <tbody className="divide-y divide-sv2-divider">
             {ordenes.map((o) => (
               <tr key={o.id} className="transition-colors hover:bg-sv2-well/60" data-testid="fila-compra">
                 <td className="px-2 py-2 align-middle">
@@ -136,7 +136,7 @@ export function TablaCompras({ ordenes, pie }: { ordenes: OrdenEnLista[]; pie: R
           </tbody>
         </table>
       </div>
-      <ul className="flex flex-col divide-y divide-sv2-well @4xl:hidden">
+      <ul className="flex flex-col divide-y divide-sv2-divider @4xl:hidden">
         {ordenes.map((o) => (
           <li key={o.id} className="flex flex-col gap-2 p-3" data-testid="tarjeta-compra">
             <div className="flex items-start justify-between gap-2">
