@@ -15,10 +15,10 @@ const CHIP: Record<(typeof PO_STATUS_TONE)[SupplyV2PurchaseOrderStatus], { fondo
 }
 
 /** Estado de la orden con la geometría de Stitch (pastilla con punto); mismos textos y tonos que `ChipOrden`. */
-export function ChipOrdenSv2({ estado }: { estado: SupplyV2PurchaseOrderStatus }) {
+export function ChipOrdenSv2({ estado, className }: { estado: SupplyV2PurchaseOrderStatus; className?: string }) {
   const c = CHIP[PO_STATUS_TONE[estado]]
   return (
-    <span className={cn('inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold leading-4 tracking-[0.04em]', c.fondo)} data-testid="estado-orden">
+    <span className={cn('inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold leading-4 tracking-[0.04em]', c.fondo, className)} data-testid="estado-orden">
       <span aria-hidden className={cn('size-1.5 rounded-full', c.punto, estado === 'PENDING_APPROVAL' && 'animate-pulse')} />
       {PO_STATUS_LABELS[estado]}
     </span>
