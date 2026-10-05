@@ -62,6 +62,7 @@ function entrada(p: {
       SUPPLY_V2_OUTBOX_DELIVERY: true,
       SUPPLY_V2_RECONCILIATION_SWEEP: true,
       SUPPLY_V2_OPERATIONS_CENTER: true,
+      SUPPLY_V2_AUTOMATIONS: true,
       ...p.capacidades,
     },
     umbrales: UMBRALES,

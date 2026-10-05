@@ -229,3 +229,51 @@ test('con credencial pero sin plantillas aprobadas sigue siendo NOT_CONFIGURED',
   delete process.env.SUPPLY_V2_WHATSAPP_PHONE_ID
   delete process.env.SUPPLY_V2_WHATSAPP_TOKEN
 })
+
+// ── §10, §13 · el motor de automatizaciones ─────────────────────────────────
+
+test('las automatizaciones de operaciones van AGREGADAS: el agregado es el día, no la fila', () => {
+  // §13: «1 outbox failed = 1 alerta, 2 = otra» es la forma más rápida de que
+  // nadie lea ninguna. La clave de un aviso de operaciones lleva `dia:` dentro
+  // y no el id del incidente, así que veinte incidentes dejan UN aviso.
+  const dia = periodoDelDia(new Date('2026-10-05T04:00:00.000Z'))
+  const a = claveDeAviso({ aviso: 'supply.notify.ops_dead_letter', canal: 'EMAIL', userId: 'ops_1', agregadoId: `dia:${dia}`, eventoId: dia })
+  const b = claveDeAviso({ aviso: 'supply.notify.ops_dead_letter', canal: 'EMAIL', userId: 'ops_1', agregadoId: `dia:${dia}`, eventoId: dia })
+  assert.equal(a, b, 'dos evaluaciones el mismo día son el mismo aviso')
+  assert.match(a, /dia:2026-10-05/)
+})
+
+test('ninguna acción de automatización mueve dinero', () => {
+  // §10: las acciones posibles son avisar y abrir una alerta. Si algún día
+  // alguien añade un aviso cuyo nombre sugiera mover dinero, esto lo caza.
+  const prohibidas = /pagar|cobrar|confirmar_pago|emitir|liquidar|reembolsar|resolver/i
+  for (const clave of Object.keys(AVISOS)) {
+    assert.equal(prohibidas.test(clave), false, `el aviso ${clave} suena a mover dinero`)
+  }
+})
+
+test('cada aviso declarado tiene su redacción, y cada redacción su aviso', async () => {
+  // Un aviso sin texto reventaría al entregarlo, y un texto sin aviso es
+  // código muerto que alguien mantiene sin saber para qué.
+  const { EFECTOS_DE_AVISO } = await import('../src/modules/supply-v2/notifications/efectos')
+  assert.deepEqual(Object.keys(EFECTOS_DE_AVISO).sort(), Object.keys(AVISOS).sort())
+})
+
+// ── §14 · métricas sin alta cardinalidad ────────────────────────────────────
+
+test('la forma de una etiqueta impide que un dato personal entre como métrica', async () => {
+  // §14 pide no usar identificadores de alta cardinalidad como etiquetas, y la
+  // garantía no es acordarse: es la FORMA que `observabilidad` acepta en
+  // `extra` —números, booleanos y etiquetas `[a-z][a-z0-9_-]*` sin dígitos
+  // largos—. Se comprueba contra el validador de verdad, no de palabra.
+  //
+  // El módulo de métricas en sí (`operations/metricas.ts`) no se puede
+  // importar desde aquí: arrastra `server-only` por la cadena de Prisma, y
+  // esta suite corre sin la condición `react-server`. Su comprobación va en
+  // la suite de PostgreSQL, que sí la tiene.
+  const { esEtiqueta } = await import('../src/modules/observabilidad/eventos')
+  assert.equal(esEtiqueta('degraded'), true, 'un estado en etiqueta sí cabe')
+  assert.equal(esEtiqueta('ana@ejemplo.com'), false, 'un correo no cabe')
+  assert.equal(esEtiqueta('809-555-1234'), false, 'un teléfono tampoco')
+  assert.equal(esEtiqueta('tel8095551234'), false, 'ni escondido detrás de una letra')
+})
