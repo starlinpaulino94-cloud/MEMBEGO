@@ -175,6 +175,15 @@ export interface SupplyPorProducto {
   moneda: string
   lotes: number
   proximoVencimiento: Date | null
+  descripcion: string | null
+  /** Precio público del catálogo (para la proyección de GMV); null si no lo tiene. */
+  precioPublico: number | null
+  /** Costo por unidad del lote más reciente. */
+  costoUnitario: number
+  /** El lote recibido más recientemente: código y fecha. */
+  ultimoLote: { code: string; receivedAt: Date } | null
+  /** La primera oferta activa del producto (a la que van sus unidades asignadas). */
+  ofertaActiva: { code: string; title: string; salePrice: number } | null
 }
 
 /** El pool agrupado por producto (§37): lo que se ve primero, no los lotes técnicos. */
@@ -193,11 +202,22 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
         unitCost: true,
         currency: true,
         expiresAt: true,
-        catalogItem: { select: { name: true, unit: true, sku: true, type: true } },
+        code: true,
+        receivedAt: true,
+        catalogItem: { select: { name: true, unit: true, sku: true, type: true, description: true, publicPrice: true } },
         supplier: { select: { id: true, commercialName: true } },
       },
     })
   )
+  const ofertas = lotes.length
+    ? await sinEmpresa('Supply 2.0: ofertas activas del pool', (tx) =>
+        tx.supplyV2Offer.findMany({
+          where: { status: 'ACTIVE', catalogItemId: { in: [...new Set(lotes.map((l) => l.catalogItemId))] } },
+          orderBy: { createdAt: 'asc' },
+          select: { catalogItemId: true, code: true, title: true, salePrice: true },
+        })
+      )
+    : []
   const grupos = new Map<string, SupplyPorProducto>()
   for (const l of lotes) {
     const g = grupos.get(l.catalogItemId) ?? {
@@ -218,6 +238,11 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
       moneda: l.currency,
       lotes: 0,
       proximoVencimiento: null,
+      descripcion: l.catalogItem.description,
+      precioPublico: l.catalogItem.publicPrice === null ? null : aNumero(l.catalogItem.publicPrice),
+      costoUnitario: aNumero(l.unitCost),
+      ultimoLote: null,
+      ofertaActiva: null,
     }
     g.disponibles += l.quantityAvailable
     g.asignadas += l.quantityAllocated
@@ -227,12 +252,54 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
     g.recibidas += l.quantityReceived
     g.valorDisponible += l.quantityAvailable * aNumero(l.unitCost)
     g.lotes += 1
+    if (!g.ultimoLote || l.receivedAt > g.ultimoLote.receivedAt) {
+      g.ultimoLote = { code: l.code, receivedAt: l.receivedAt }
+      g.costoUnitario = aNumero(l.unitCost)
+    }
     if (l.expiresAt && l.quantityAvailable > 0 && (!g.proximoVencimiento || l.expiresAt < g.proximoVencimiento)) {
       g.proximoVencimiento = l.expiresAt
     }
     grupos.set(l.catalogItemId, g)
   }
+  for (const o of ofertas) {
+    const g = grupos.get(o.catalogItemId)
+    if (g && !g.ofertaActiva) g.ofertaActiva = { code: o.code, title: o.title, salePrice: aNumero(o.salePrice) }
+  }
   return [...grupos.values()].sort((a, b) => b.disponibles - a.disponibles || a.producto.localeCompare(b.producto))
+}
+
+export interface VerificacionesLotes {
+  /** Lotes cuyas cubetas suman lo recibido (disponible + asignado + reservado + emitido + redimido + cerrado). */
+  lotesCuadrados: number
+  lotesTotal: number
+  /** Lotes con unidades disponibles que vencen en los próximos 7 días (o ya vencieron). */
+  vencenPronto: number
+  /** Líneas de compra con recepción cuyo total recibido coincide con lo que suman sus lotes. */
+  lineasConciliadas: number
+  lineasConRecepcion: number
+}
+
+/** Tres verificaciones sobre los lotes y las compras recibidas, para el panel «Estado de lotes». */
+export async function verificacionesLotes(ahora = new Date()): Promise<VerificacionesLotes> {
+  const limite = new Date(ahora.getTime() + 7 * 86_400_000)
+  return sinEmpresa('Supply 2.0: verificaciones de lotes', async (tx) => {
+    const [lotes, lineas] = await Promise.all([
+      tx.supplyV2Lot.findMany({
+        select: { quantityReceived: true, quantityAvailable: true, quantityAllocated: true, quantityReserved: true, quantityIssued: true, quantityRedeemed: true, quantityClosed: true, expiresAt: true, status: true },
+      }),
+      tx.supplyV2PurchaseOrderLine.findMany({
+        where: { receivedQuantity: { gt: 0 } },
+        select: { receivedQuantity: true, lots: { select: { quantityReceived: true } } },
+      }),
+    ])
+    return {
+      lotesTotal: lotes.length,
+      lotesCuadrados: lotes.filter((l) => l.quantityAvailable + l.quantityAllocated + l.quantityReserved + l.quantityIssued + l.quantityRedeemed + l.quantityClosed === l.quantityReceived).length,
+      vencenPronto: lotes.filter((l) => l.status === 'ACTIVE' && l.quantityAvailable > 0 && l.expiresAt && l.expiresAt <= limite).length,
+      lineasConRecepcion: lineas.length,
+      lineasConciliadas: lineas.filter((ln) => ln.lots.reduce((t, l) => t + l.quantityReceived, 0) === ln.receivedQuantity).length,
+    }
+  })
 }
 
 export async function fichaProductoSupply(catalogItemId: string) {

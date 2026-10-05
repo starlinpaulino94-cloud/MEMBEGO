@@ -34,6 +34,7 @@ export function BarraFiltrosSupplyV2({
   chips,
   resumen,
   variante = 'oscura',
+  extra,
   testId,
 }: {
   ruta: string
@@ -43,12 +44,14 @@ export function BarraFiltrosSupplyV2({
   /** Texto a la derecha de los chips (p. ej. «4 órdenes de compra registradas»). */
   resumen?: React.ReactNode
   variante?: 'oscura' | 'suave'
+  /** Controles adicionales junto a los botones (p. ej. el interruptor «Vencimientos» de Supply). Van dentro del formulario. */
+  extra?: React.ReactNode
   testId?: string
 }) {
   return (
     <Tarjeta className="flex flex-col gap-3 p-3" data-testid={testId}>
       <Form action={ruta} className="grid grid-cols-1 items-center gap-2 @xl:grid-cols-2 @5xl:grid-cols-12">
-        <div className="relative flex items-center @xl:col-span-2 @5xl:col-span-4">
+        <div className={cn('relative flex items-center @xl:col-span-2', extra ? '@5xl:col-span-3' : '@5xl:col-span-4')}>
           <Search aria-hidden className="pointer-events-none absolute left-2 size-[18px] text-sv2-ink-variant" />
           <input name="q" type="search" defaultValue={busqueda.valor} aria-label={busqueda.etiqueta} placeholder={busqueda.placeholder} className={cn(CAMPO, 'pl-9 pr-3')} data-testid={busqueda.testId} />
         </div>
@@ -63,7 +66,8 @@ export function BarraFiltrosSupplyV2({
             <ChevronDown aria-hidden className="pointer-events-none absolute right-1.5 size-[18px] text-sv2-ink-variant" />
           </div>
         ))}
-        <div className={cn('flex items-center justify-end gap-1', selectores.length >= 3 ? '@5xl:col-span-2' : '@5xl:col-span-4')}>
+        <div className={cn('flex items-center justify-end gap-1', extra ? '@xl:col-span-2 @5xl:col-span-3' : selectores.length >= 3 ? '@5xl:col-span-2' : '@5xl:col-span-4')}>
+          {extra}
           {variante === 'oscura' ? (
             <>
               <button type="submit" className="inline-flex h-9 items-center gap-1 rounded-[8px] bg-foreground px-3 text-[13px] font-medium leading-4 text-background shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent" data-testid="btn-filtrar">
