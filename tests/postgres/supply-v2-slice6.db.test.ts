@@ -281,7 +281,7 @@ test('B · cobertura total: saldo 0, el cliente confirma sin pago bancario y nad
   assert.equal(orden.total, '0.00')
 
   // No hay pago bancario que avisar ni que confirmar.
-  await assert.rejects(confirmar(orden.id, '0'), /cubierta por completo/)
+  await assert.rejects(confirmar(orden.id, '0'), /no tiene nada que cobrar/)
   // Y la orden es del cliente: otro no la confirma.
   await assert.rejects(sinEmpresa('prueba', (tx) => confirmarCoberturaTotalEnTx(tx, { orderId: orden.id, customerId: ctx.cliente }, como(ctx.cliente))), /no es tuya/)
 
@@ -414,16 +414,49 @@ test('F · pausar, cancelar con reservas vivas, retirar una asignación y vencer
   // Vencimiento por el barrido: el beneficio y sus asignaciones vivas pasan a vencidos.
   const vence = await beneficioActivo({ name: 'Bono que vence', funding: 'MEMBEGO', valueType: 'FIXED_AMOUNT', membegoValue: 100, scope: 'SPECIFIC_OFFER', offerId: offer, endsAt: new Date(ahora.getTime() + 60_000), startsAt: new Date(ahora.getTime() - DIA) })
   const gv = await asignar(vence, ctx.cliente2)
-  const r = await sinEmpresa('prueba', (tx) => expirarBeneficiosEnTx(tx, como(null), new Date(ahora.getTime() + DIA)))
+  /**
+   * El reloj se adelanta DOS MINUTOS, no un día.
+   *
+   * `expirarBeneficiosEnTx` vence TODO beneficio de la base cuya vigencia haya
+   * pasado, no solo los de este archivo, y los archivos de prueba corren en
+   * paralelo. Con el reloj un día adelante, «vencido» incluiría los beneficios
+   * vivos de los Slices 7 y 8 y este archivo los apagaría sin que nadie
+   * entendiera por qué. El beneficio que esta prueba quiere vencer termina
+   * dentro de 60 segundos, así que con dos minutos basta: es el desplazamiento
+   * más pequeño que cubre su propio dato y no alcanza a nadie más.
+   */
+  const r = await sinEmpresa('prueba', (tx) => expirarBeneficiosEnTx(tx, como(null), new Date(ahora.getTime() + 120_000)))
   assert.ok(r.beneficios >= 1)
   assert.equal((await beneficioDe(vence)).status, 'EXPIRED')
   assert.equal((await prisma.supplyV2CustomerBenefit.findUniqueOrThrow({ where: { id: gv.id } })).status, 'EXPIRED')
   // Un beneficio vencido es final: ni se reactiva ni se usa.
   await assert.rejects(sinEmpresa('prueba', (tx) => reanudarBeneficioEnTx(tx, vence, como(ctx.compras))), /no se puede pasar de/)
   await assert.rejects(comprarConBeneficio(offer, ctx.cliente2, gv.id), /venció|no está activo/)
-  // El barrido del cron hace lo mismo y es idempotente.
-  const barrido = await barridoSupplyV2(new Date(ahora.getTime() + DIA))
+  /**
+   * El barrido del cron pasa por el mismo camino, y se corre con el reloj DE
+   * VERDAD.
+   *
+   * Antes esta línea era `barridoSupplyV2(ahora + 1 día)`, y eso rompía otros
+   * archivos de prueba. `barridoSupplyV2` expira TODA orden PENDING cuya
+   * reserva haya caducado, en toda la base: con el reloj un día adelante,
+   * «caducada» incluye cualquier reserva viva —la de reserva son 15 minutos—.
+   * Como `node --test` corre los archivos EN PARALELO, este barrido expiraba la
+   * orden recién creada del Slice 2 y su prueba N fallaba en una aserción que
+   * no tenía nada que ver con los beneficios. Tardó en aparecer porque depende
+   * de qué dos archivos coincidan en el tiempo.
+   *
+   * Y la aserción que había —`beneficiosVencidos >= 0`— no comprobaba nada:
+   * es cierta para cualquier número. Lo que de verdad importa aquí es que el
+   * barrido NO deshaga lo ya vencido, y eso sí se puede afirmar.
+   */
+  const barrido = await barridoSupplyV2()
   assert.ok(barrido.beneficiosVencidos >= 0)
+  assert.equal((await beneficioDe(vence)).status, 'EXPIRED', 'el barrido no resucita un beneficio vencido')
+  assert.equal(
+    (await prisma.supplyV2CustomerBenefit.findUniqueOrThrow({ where: { id: gv.id } })).status,
+    'EXPIRED',
+    'ni su asignación'
+  )
 })
 
 // ── G · comisión y base del acuerdo (§14, §25) ──────────────────────────────
@@ -591,4 +624,76 @@ test('J · una línea lleva UN solo beneficio: la reserva viva es única por ord
   assert.equal(unica.length, 1, 'el índice parcial que impide dos beneficios vivos por orden existe')
   const porLinea = await prisma.$queryRaw<{ indexname: string }[]>`SELECT indexname FROM pg_indexes WHERE tablename = 'supply_v2_benefit_reservations' AND indexdef LIKE '%UNIQUE%orderLineId%'`
   assert.ok(porLinea.length >= 1, 'una línea no puede tener dos reservas')
+})
+
+// ── K · oferta GRATIS de origen: el otro motivo de un total 0 ────────────────
+
+test('K · una oferta gratis se compra y se completa hasta el derecho, sin beneficio ninguno', async () => {
+  // Antes de los modos de precio esto NO tenía camino: la vía bancaria rechaza
+  // un total 0 y la vía sin pago exigía una reserva de beneficio viva, así que
+  // una oferta gratis creaba compras que se quedaban colgadas para siempre.
+  const offer = await sinEmpresa('prueba', async (tx) => {
+    const o = await crearOfertaComisionEnTx(
+      tx,
+      {
+        catalogItemId: ctx.tours.itemId,
+        title: `Lavado de regalo ${sufijo}`,
+        publicPrice: 1200,
+        priceMode: 'FREE',
+        availabilityMode: 'UNLIMITED',
+        perCustomerLimit: 1,
+        startsAt: new Date(ahora.getTime() - 60_000),
+        endsAt: new Date(ahora.getTime() + 30 * DIA),
+      },
+      como(ctx.compras)
+    )
+    await publicarOfertaEnTx(tx, o.id, como(ctx.compras))
+    return o.id
+  })
+
+  const guardada = await prisma.supplyV2Offer.findUniqueOrThrow({ where: { id: offer } })
+  assert.deepEqual(
+    [guardada.priceMode, guardada.salePrice.toFixed(2), guardada.publicPrice.toFixed(2), guardada.priceModePercentage],
+    ['FREE', '0.00', '1200.00', null],
+    'gratis se materializa en salePrice 0, con el precio de lista intacto'
+  )
+
+  const orden = await comprarConBeneficio(offer, ctx.cliente, null)
+  assert.equal(orden.total, '0.00')
+  // La vía bancaria sigue cerrada, y su mensaje ya no afirma un beneficio.
+  await assert.rejects(confirmar(orden.id, '0'), /no tiene nada que cobrar/)
+
+  const r = await sinEmpresa('prueba', (tx) => confirmarCoberturaTotalEnTx(tx, { orderId: orden.id, customerId: ctx.cliente }, como(ctx.cliente)))
+  assert.equal(r.entitlements.length, 1)
+  const o = await prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: orden.id } })
+  assert.equal(o.status, 'PAID')
+  // FREE_OFFER, NO COVERED_BY_BENEFIT: nadie financió esto. Confundirlos
+  // metería regalos en los informes de subsidio como si fueran pagados.
+  assert.equal(o.paymentStatus, 'FREE_OFFER')
+  assert.equal(o.membegoSubsidyTotal.toFixed(2), '0.00', 'un regalo no es un subsidio')
+  assert.equal(o.supplierDiscountTotal.toFixed(2), '0.00')
+
+  // El derecho es el de siempre, con su QR: gratis no significa de segunda.
+  const d = await prisma.supplyV2Entitlement.findUniqueOrThrow({ where: { id: r.entitlements[0]!.id } })
+  assert.equal(d.status, 'ACTIVE')
+  assert.equal(d.customerUnitPrice.toFixed(2), '0.00')
+  assert.equal(await redimir(d.id, ctx.cliente) !== null, true, 'se puede canjear igual que cualquier otro')
+
+  // Idempotente, como la cobertura por beneficio.
+  assert.equal((await sinEmpresa('prueba', (tx) => confirmarCoberturaTotalEnTx(tx, { orderId: orden.id, customerId: ctx.cliente }, como(ctx.cliente)))).repetido, true)
+})
+
+test('K · un total 0 sin motivo es IMPOSIBLE: la base lo rechaza antes que el servidor', async () => {
+  // `confirmarCoberturaTotalEnTx` exige un motivo para un total 0 —beneficio
+  // vivo u oferta gratis—, pero ese caso no se puede ni fabricar: el CHECK
+  // `supply_v2_customer_orders_amounts` no deja que una compra de 500 tenga
+  // total 0. Se afirma aquí a propósito, porque es la razón por la que la
+  // guarda del servidor es defensa en profundidad y no la única barrera.
+  const offer = await ofertaComision(ctx.tours.itemId, { salePrice: 500, titulo: 'Sin motivo' })
+  const orden = await comprarConBeneficio(offer, ctx.cliente2, null)
+  await assert.rejects(
+    prisma.supplyV2CustomerOrder.update({ where: { id: orden.id }, data: { total: 0 } }),
+    /supply_v2_customer_orders_amounts|check/i
+  )
+  assert.equal((await prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: orden.id } })).status, 'PENDING')
 })

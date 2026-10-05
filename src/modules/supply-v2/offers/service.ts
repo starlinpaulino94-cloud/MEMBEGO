@@ -1,12 +1,15 @@
+import { Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
-import { estadoInicialOferta, exigirTransicion, TRANSICIONES_OFERTA } from '../core/estados'
+import { estadoInicialOferta, exigirTransicion, OFERTA_EDITABLE, TRANSICIONES_OFERTA } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
-import { calcularPrecioOferta } from '../core/precios'
+import { mismoMonto, type Monto } from '../core/dinero'
+import { OFFER_STATUS_LABELS } from '../core/catalogo'
+import { resolverPrecioDeDatos, type PrecioResuelto } from '../core/precios'
 import { asignarEnTx, liberarAsignacionEnTx } from '../allocations/service'
 import { resolverAcuerdoComisionDeItemEnTx } from '../agreements/service'
-import { slugDeOferta, unidadesLibresComision, validarOferta, validarOfertaComision, type DatosOferta, type DatosOfertaComision } from './domain'
+import { edicionCambiaElPrecio, slugDeOferta, unidadesLibresComision, validarEdicionOferta, validarOferta, validarOfertaComision, type DatosEdicionOferta, type DatosOferta, type DatosOfertaComision } from './domain'
 
 /**
  * MEMBEGO SUPPLY 2.0 · OFERTAS (§7–§16, §38–§39).
@@ -36,7 +39,7 @@ export async function crearOfertaEnTx(tx: Tx, d: DatosOferta, ctx: ContextoAudit
   if (item.status !== 'ACTIVE') fallo('ITEM_INACTIVO', 'El producto no está activo.')
   if (item.supplier.status !== 'ACTIVE') fallo('PROVEEDOR_INACTIVO', 'El proveedor no está activo.')
 
-  const precio = calcularPrecioOferta(d.publicPrice, d.salePrice)
+  const precio = resolverPrecioDeDatos(d)
   const code = await siguienteNumero(tx, 'MBG-OF', async (prefijo) => {
     const u = await tx.supplyV2Offer.findFirst({ where: { code: { startsWith: prefijo } }, orderBy: { code: 'desc' }, select: { code: true } })
     return u?.code ?? null
@@ -52,6 +55,8 @@ export async function crearOfertaEnTx(tx: Tx, d: DatosOferta, ctx: ContextoAudit
       sourceType: 'PREPURCHASED_SUPPLY',
       publicPrice: precio.publicPrice,
       salePrice: precio.salePrice,
+      priceMode: precio.mode,
+      priceModePercentage: precio.percentage,
       currency: item.currency,
       quantityLimit: d.quantity,
       perCustomerLimit: d.perCustomerLimit ?? 1,
@@ -93,7 +98,7 @@ export async function crearOfertaComisionEnTx(tx: Tx, d: DatosOfertaComision, ct
   const acuerdo = await resolverAcuerdoComisionDeItemEnTx(tx, item.id)
   if (!acuerdo) fallo('SIN_ACUERDO_COMISION', 'Este producto no tiene un acuerdo a comisión vigente (por producto, categoría o catálogo). Crea y activa uno antes de vender a comisión.')
 
-  const precio = calcularPrecioOferta(d.publicPrice, d.salePrice)
+  const precio = resolverPrecioDeDatos(d)
   const code = await siguienteNumero(tx, 'MBG-OF', async (prefijo) => {
     const u = await tx.supplyV2Offer.findFirst({ where: { code: { startsWith: prefijo } }, orderBy: { code: 'desc' }, select: { code: true } })
     return u?.code ?? null
@@ -110,6 +115,8 @@ export async function crearOfertaComisionEnTx(tx: Tx, d: DatosOfertaComision, ct
       sourceType: 'COMMISSION',
       publicPrice: precio.publicPrice,
       salePrice: precio.salePrice,
+      priceMode: precio.mode,
+      priceModePercentage: precio.percentage,
       currency: item.currency,
       // quantityLimit es informativo en comisión: lo que manda es availabilityMode/Quantity.
       quantityLimit: sinTope ? 0 : d.availabilityQuantity!,
@@ -214,6 +221,128 @@ async function ofertaBloqueada(tx: Tx, offerId: string) {
   })
   if (!o) fallo('OFERTA_NO_ENCONTRADA', 'La oferta no existe.')
   return o
+}
+
+/**
+ * EDITAR una oferta ya publicada (§7–§15).
+ *
+ * Hasta ahora una errata en un título obligaba a cancelar la oferta y publicar
+ * otra, con código y enlace nuevos. Esto lo arregla, con dos guardas:
+ *
+ *  · El TÍTULO, la descripción y la imagen se cambian siempre. La línea de la
+ *    orden congela `titleSnapshot`, así que ningún recibo emitido se mueve.
+ *  · El PRECIO solo se cambia si no hay checkouts en curso. Quien ya tiene una
+ *    reserva viva está a punto de pagar lo que la pantalla le prometió.
+ *
+ * La guarda mira solo reservas ACTIVE, y no APPLIED como su hermana
+ * `ajustarPromocionEnTx`: allí el ledger del beneficio sigue moviéndose tras el
+ * pago, mientras que aquí una orden pagada ya congeló sus importes en la línea
+ * y es intocable por construcción. Esa diferencia es justo lo que hace que
+ * editar precios sea seguro.
+ *
+ * `quantityLimit` NO se edita: ver `validarEdicionOferta`.
+ */
+export async function editarOfertaEnTx(
+  tx: Tx,
+  offerId: string,
+  d: DatosEdicionOferta,
+  ctx: ContextoAuditoria
+): Promise<{ id: string; code: string; cambios: string[] }> {
+  await tx.$queryRaw`SELECT "id" FROM "supply_v2_offers" WHERE "id" = ${offerId} FOR UPDATE`
+  const o = await tx.supplyV2Offer.findUnique({
+    where: { id: offerId },
+    select: {
+      id: true, code: true, status: true, allocationId: true, title: true, description: true, imagePath: true,
+      publicPrice: true, salePrice: true, priceMode: true, priceModePercentage: true,
+      quantityLimit: true, perCustomerLimit: true, startsAt: true, endsAt: true,
+      supplier: { select: { companyId: true } },
+    },
+  })
+  if (!o) fallo('OFERTA_NO_ENCONTRADA', 'La oferta no existe.')
+  if (!OFERTA_EDITABLE.includes(o.status)) {
+    fallo('OFERTA_NO_EDITABLE', `Una oferta ${OFFER_STATUS_LABELS[o.status].toLowerCase()} ya no se edita: publica una nueva.`)
+  }
+
+  const error = validarEdicionOferta(d, {
+    publicPrice: o.publicPrice.toFixed(2),
+    salePrice: o.salePrice.toFixed(2),
+    priceMode: o.priceMode,
+    priceModePercentage: o.priceModePercentage?.toString() ?? null,
+    quantityLimit: o.quantityLimit,
+    startsAt: o.startsAt,
+  })
+  if (error) fallo('EDICION_INVALIDA', error)
+
+  // `startsAt` solo antes de arrancar: con la oferta viva ya decidió su estado.
+  if (d.startsAt !== undefined && !['DRAFT', 'SCHEDULED'].includes(o.status)) {
+    fallo('EDICION_INVALIDA', 'La fecha de inicio no se cambia con la oferta ya publicada.')
+  }
+
+  // El precio se RESUELVE entero cuando la edición toca cualquiera de sus
+  // cuatro piezas, nunca se escribe campo a campo. Subir el precio de lista de
+  // una oferta al 35 % tiene que recalcular el precio Membego: dejarlo como
+  // estaba cobraría un descuento que ya no es el 35 % y que nadie eligió.
+  const tocaElPrecio =
+    d.publicPrice !== undefined || d.salePrice !== undefined || d.priceMode !== undefined || d.priceModePercentage !== undefined
+  let resuelto: PrecioResuelto | null = null
+  if (tocaElPrecio) {
+    try {
+      resuelto = resolverPrecioDeDatos({
+        publicPrice: d.publicPrice ?? o.publicPrice,
+        salePrice: d.salePrice ?? o.salePrice,
+        priceMode: d.priceMode ?? o.priceMode,
+        priceModePercentage: d.priceModePercentage !== undefined ? d.priceModePercentage : o.priceModePercentage,
+      })
+    } catch (e) {
+      fallo('EDICION_INVALIDA', e instanceof Error ? e.message : 'El precio no es válido.')
+    }
+  }
+  if (edicionCambiaElPrecio(resuelto, o)) {
+    const vivas = o.allocationId
+      ? await tx.supplyV2OrderReservation.count({ where: { allocationLine: { allocationId: o.allocationId }, status: 'ACTIVE' } })
+      : await tx.supplyV2CommissionReservation.count({ where: { offerId: o.id, status: 'ACTIVE' } })
+    if (vivas > 0) {
+      fallo('OFERTA_CON_CHECKOUTS', 'Hay checkouts en curso sobre esta oferta: su precio no se puede cambiar ahora. Pausa la oferta y espera a que se paguen o expiren.')
+    }
+  }
+
+  const data: Prisma.SupplyV2OfferUpdateInput = {}
+  const cambios: string[] = []
+  const anota = (campo: string, antes: unknown, despues: unknown) => {
+    if (String(antes ?? '') !== String(despues ?? '')) cambios.push(campo)
+  }
+  // El dinero NO se compara como texto: `'600'` y `'600.00'` son el mismo
+  // precio y `anota` los daría por distintos.
+  const anotaMonto = (campo: string, antes: Prisma.Decimal, despues: Monto) => {
+    if (!mismoMonto(antes, despues)) cambios.push(campo)
+  }
+  if (d.title !== undefined) { anota('título', o.title, d.title.trim()); data.title = d.title.trim() }
+  if (d.description !== undefined) { anota('descripción', o.description, d.description); data.description = d.description }
+  if (d.imagePath !== undefined) { anota('imagen', o.imagePath, d.imagePath); data.imagePath = d.imagePath }
+  if (resuelto) {
+    anotaMonto('precio público', o.publicPrice, resuelto.publicPrice)
+    anotaMonto('precio Membego', o.salePrice, resuelto.salePrice)
+    anota('modo de precio', o.priceMode, resuelto.mode)
+    anota('porcentaje', o.priceModePercentage?.toString() ?? null, resuelto.percentage?.toString() ?? null)
+    data.publicPrice = resuelto.publicPrice
+    data.salePrice = resuelto.salePrice
+    data.priceMode = resuelto.mode
+    data.priceModePercentage = resuelto.percentage
+  }
+  if (d.perCustomerLimit !== undefined) { anota('máximo por persona', o.perCustomerLimit, d.perCustomerLimit); data.perCustomerLimit = d.perCustomerLimit }
+  if (d.startsAt !== undefined) { anota('inicio', o.startsAt.toISOString(), d.startsAt.toISOString()); data.startsAt = d.startsAt }
+  if (d.endsAt !== undefined) { anota('fin', o.endsAt?.toISOString() ?? null, d.endsAt?.toISOString() ?? null); data.endsAt = d.endsAt }
+
+  if (cambios.length === 0) return { id: o.id, code: o.code, cambios: [] }
+
+  await tx.supplyV2Offer.update({ where: { id: o.id }, data })
+  // La asignación guarda su propia vigencia: dejarla desfasada haría que el
+  // dato mintiera aunque hoy nadie la lea para decidir.
+  if (d.endsAt !== undefined && o.allocationId) {
+    await tx.supplyV2Allocation.update({ where: { id: o.allocationId }, data: { endsAt: d.endsAt } })
+  }
+  await auditarEnTx(tx, ctx, 'SUPPLY_V2_OFFER_UPDATED', 'SupplyV2Offer', o.id, { code: o.code, cambios }, o.supplier.companyId)
+  return { id: o.id, code: o.code, cambios }
 }
 
 export async function pausarOfertaEnTx(tx: Tx, offerId: string, ctx: ContextoAuditoria): Promise<void> {

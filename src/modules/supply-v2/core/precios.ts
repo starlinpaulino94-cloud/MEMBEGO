@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
-import { decimal, redondear2 } from './dinero'
+import type { SupplyV2OfferPriceMode } from '@prisma/client'
+import { decimal, redondear2, type Monto } from './dinero'
 
 /**
  * MEMBEGO SUPPLY 2.0 · precios de oferta y de compra (§8, §13, §48).
@@ -17,7 +18,7 @@ export interface PrecioOferta {
   discountPercentage: number
 }
 
-export function validarPreciosOferta(publicPrice: number | string, salePrice: number | string): string | null {
+export function validarPreciosOferta(publicPrice: Monto, salePrice: Monto): string | null {
   let pub: Prisma.Decimal
   let sale: Prisma.Decimal
   try {
@@ -32,7 +33,7 @@ export function validarPreciosOferta(publicPrice: number | string, salePrice: nu
   return null
 }
 
-export function calcularPrecioOferta(publicPrice: number | string, salePrice: number | string): PrecioOferta {
+export function calcularPrecioOferta(publicPrice: Monto, salePrice: Monto): PrecioOferta {
   const error = validarPreciosOferta(publicPrice, salePrice)
   if (error) throw new Error(error)
   const pub = redondear2(decimal(publicPrice))
@@ -40,6 +41,131 @@ export function calcularPrecioOferta(publicPrice: number | string, salePrice: nu
   const discount = pub.minus(sale)
   const pct = pub.isZero() ? 0 : Number(discount.times(100).dividedBy(pub).toDecimalPlaces(1, Prisma.Decimal.ROUND_HALF_UP))
   return { publicPrice: pub, salePrice: sale, discount, discountPercentage: pct }
+}
+
+/**
+ * Lo que el operador ELIGIÓ al fijar el precio de una oferta.
+ *
+ * `publicPrice` siempre: es el precio de lista, el ancla de cualquier
+ * descuento. Lo que varía es cómo se llega al precio Membego.
+ */
+export type EntradaPrecioOferta =
+  | { mode: 'FIXED'; publicPrice: Monto; salePrice: Monto }
+  | { mode: 'PERCENTAGE'; publicPrice: Monto; percentage: Monto }
+  | { mode: 'FREE'; publicPrice: Monto }
+
+export interface PrecioResuelto extends PrecioOferta {
+  mode: SupplyV2OfferPriceMode
+  /** Solo `PERCENTAGE`: lo que se escribió, para poder volver a mostrarlo. */
+  percentage: Prisma.Decimal | null
+}
+
+/**
+ * Resuelve el precio de una oferta en cualquiera de los tres modos.
+ *
+ * ÚNICO sitio donde se traduce «lo que dijo el operador» a «lo que se cobra»,
+ * y termina llamando a `calcularPrecioOferta`, así que la invariante
+ * `salePrice <= publicPrice` se comprueba una sola vez para los tres modos.
+ *
+ * `salePrice` se materializa SIEMPRE, también en PERCENTAGE y en FREE: el
+ * checkout, los snapshots de línea y el read-model dependen de él. El modo
+ * guarda la intención; `salePrice`, el importe.
+ *
+ * REDONDEO: se redondea el DESCUENTO y luego se resta, igual que
+ * `financiacion.ts`. Si se redondeara el resultado, una oferta al 35 % y un
+ * beneficio del 35 % sobre la misma base podrían diferir un centavo, y ese
+ * centavo aparecería como un descuadre en la liquidación al proveedor.
+ */
+export function resolverPrecioOferta(e: EntradaPrecioOferta): PrecioResuelto {
+  const pub = redondear2(decimal(e.publicPrice))
+  if (!pub.isFinite() || pub.isNegative()) throw new Error('El precio público no puede ser negativo.')
+
+  if (e.mode === 'FREE') {
+    return { ...calcularPrecioOferta(pub, 0), mode: 'FREE', percentage: null }
+  }
+  if (e.mode === 'FIXED') {
+    return { ...calcularPrecioOferta(pub, e.salePrice), mode: 'FIXED', percentage: null }
+  }
+
+  let pct: Prisma.Decimal
+  try {
+    pct = decimal(e.percentage)
+  } catch {
+    return (() => {
+      throw new Error('El porcentaje tiene que ser un número.')
+    })()
+  }
+  if (!pct.isFinite() || pct.lessThanOrEqualTo(0)) throw new Error('Un porcentaje de descuento tiene que ser mayor que cero.')
+  if (pct.greaterThan(100)) throw new Error('Un porcentaje no puede superar 100.')
+  const descuento = redondear2(pub.times(pct).dividedBy(100))
+  return { ...calcularPrecioOferta(pub, pub.minus(descuento)), mode: 'PERCENTAGE', percentage: pct }
+}
+
+/** Lo que un formulario manda sobre el precio, en cualquiera de los tres modos. */
+export interface DatosPrecio {
+  publicPrice: Monto
+  /** Solo se usa en `FIXED`. En PERCENTAGE y FREE lo calcula el servidor. */
+  salePrice?: Monto | null
+  priceMode?: SupplyV2OfferPriceMode | null
+  priceModePercentage?: Monto | null
+}
+
+/**
+ * Pasa de «lo que mandó el formulario» a un precio resuelto.
+ *
+ * Existe para que las TRES puertas por las que entra un precio —oferta de
+ * supply, oferta a comisión y edición— compartan la traducción. Antes cada una
+ * llamaba a `calcularPrecioOferta` con dos montos; si cada una interpretara el
+ * modo por su cuenta, el día que una se olvidara del porcentaje cobraría el
+ * precio de lista sin avisar.
+ *
+ * Sin modo = `FIXED`: es lo que han hecho siempre las ofertas que ya existen.
+ */
+export function resolverPrecioDeDatos(d: DatosPrecio): PrecioResuelto {
+  const mode = d.priceMode ?? 'FIXED'
+  if (mode === 'FREE') return resolverPrecioOferta({ mode: 'FREE', publicPrice: d.publicPrice })
+  if (mode === 'PERCENTAGE') {
+    if (d.priceModePercentage == null || d.priceModePercentage === '') {
+      throw new Error('Una oferta por porcentaje necesita el porcentaje.')
+    }
+    return resolverPrecioOferta({ mode: 'PERCENTAGE', publicPrice: d.publicPrice, percentage: d.priceModePercentage })
+  }
+  if (d.salePrice == null || d.salePrice === '') throw new Error('Una oferta de precio fijo necesita el precio Membego.')
+  return resolverPrecioOferta({ mode: 'FIXED', publicPrice: d.publicPrice, salePrice: d.salePrice })
+}
+
+/** Valida `DatosPrecio` sin lanzar. Devuelve el mensaje o `null`. */
+export function validarDatosPrecio(d: DatosPrecio): string | null {
+  const mode = d.priceMode ?? 'FIXED'
+  const porModo = validarModoPrecio(mode, d.priceModePercentage)
+  if (porModo) return porModo
+  try {
+    resolverPrecioDeDatos(d)
+  } catch (e) {
+    return e instanceof Error ? e.message : 'El precio no es válido.'
+  }
+  return null
+}
+
+/**
+ * Valida la coherencia entre modo y porcentaje ANTES de tocar la base. Devuelve
+ * el mensaje o `null`. Es la misma regla que los CHECK de la migración: aquí
+ * para dar un mensaje decente, allí para que no entre por otra puerta.
+ */
+export function validarModoPrecio(mode: SupplyV2OfferPriceMode, percentage: Monto | null | undefined): string | null {
+  const traePct = percentage != null && percentage !== ''
+  if (mode === 'PERCENTAGE' && !traePct) return 'Una oferta por porcentaje necesita el porcentaje.'
+  if (mode !== 'PERCENTAGE' && traePct) return 'El porcentaje solo se guarda en una oferta por porcentaje.'
+  if (!traePct) return null
+  let pct: Prisma.Decimal
+  try {
+    pct = decimal(percentage)
+  } catch {
+    return 'El porcentaje tiene que ser un número.'
+  }
+  if (!pct.isFinite() || pct.lessThanOrEqualTo(0)) return 'Un porcentaje de descuento tiene que ser mayor que cero.'
+  if (pct.greaterThan(100)) return 'Un porcentaje no puede superar 100.'
+  return null
 }
 
 /** Margen estimado por unidad = precio Membego − costo estimado (§13). */

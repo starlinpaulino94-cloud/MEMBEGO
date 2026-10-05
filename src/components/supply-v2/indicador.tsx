@@ -1,0 +1,64 @@
+import type { LucideIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Tarjeta } from './resumen/superficie'
+
+export type TonoIndicador = 'neutral' | 'exito' | 'aviso' | 'error' | 'primario'
+
+const TEXTO: Record<TonoIndicador, string> = {
+  neutral: 'text-sv2-outline',
+  exito: 'text-sv2-secondary',
+  aviso: 'text-sv2-tertiary',
+  error: 'text-sv2-error',
+  primario: 'text-sv2-primary',
+}
+const PUNTO: Record<TonoIndicador, string> = {
+  neutral: 'bg-sv2-outline',
+  exito: 'bg-sv2-secondary',
+  aviso: 'bg-sv2-tertiary',
+  error: 'bg-sv2-error',
+  primario: 'bg-sv2-primary',
+}
+
+/**
+ * Indicador de las pestañas de Supply 2.0 (Stitch): categoría en mayúsculas
+ * con su icono, cifra grande con unidad y una línea de estado al pie.
+ */
+export function TarjetaIndicador({
+  etiqueta,
+  icono: Icono,
+  tonoIcono = 'neutral',
+  valor,
+  unidad,
+  pie,
+  tonoPie = 'neutral',
+  iconoPie: IconoPie,
+  testId,
+}: {
+  etiqueta: string
+  icono: LucideIcon
+  tonoIcono?: TonoIndicador
+  valor: string
+  unidad?: string
+  pie: string
+  tonoPie?: TonoIndicador
+  /** Icono en lugar del punto al pie (p. ej. una flecha de ingreso). */
+  iconoPie?: LucideIcon
+  testId?: string
+}) {
+  return (
+    <Tarjeta className="flex flex-col justify-between p-3" data-testid={testId}>
+      <div className="mb-1 flex items-center justify-between gap-2 text-sv2-ink-variant">
+        <span className="text-[12px] font-bold uppercase leading-4 tracking-wider">{etiqueta}</span>
+        <Icono aria-hidden className={cn('size-[18px] shrink-0', TEXTO[tonoIcono])} strokeWidth={2} />
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className={cn('text-[28px] font-bold leading-8 tracking-[-0.025em] tabular-nums', tonoIcono === 'aviso' || tonoIcono === 'exito' ? TEXTO[tonoIcono] : 'text-foreground')}>{valor}</span>
+        {unidad && <span className="text-[12px] font-semibold leading-4 tracking-[0.04em] text-sv2-ink-variant">{unidad}</span>}
+      </div>
+      <div className={cn('mt-2 flex items-center gap-1 text-[12px] font-semibold leading-4 tracking-[0.04em]', TEXTO[tonoPie])}>
+        {IconoPie ? <IconoPie aria-hidden className="size-3.5 shrink-0" /> : <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', PUNTO[tonoPie])} />}
+        <span>{pie}</span>
+      </div>
+    </Tarjeta>
+  )
+}

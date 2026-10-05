@@ -332,6 +332,8 @@ enum AuditAccion {
   SUPPLY_V2_OFFER_RESUMED
   SUPPLY_V2_OFFER_ENDED
   SUPPLY_V2_OFFER_CANCELLED
+  /// Edición de una oferta ya publicada: el payload lleva qué campos cambiaron.
+  SUPPLY_V2_OFFER_UPDATED
   /// Cambio en el catálogo de categorías de vehículo de plataforma. Decide
   /// cuánto se cobra —mover un nivel cambia qué vehículos caen en él—, así que
   /// el payload lleva el antes y el después del nivel, no solo «cambió».

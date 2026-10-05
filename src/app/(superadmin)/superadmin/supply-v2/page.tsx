@@ -1,5 +1,3 @@
-import Link from 'next/link'
-import Form from 'next/form'
 import {
   ArrowLeftRight,
   Archive,
@@ -8,9 +6,7 @@ import {
   ClipboardCheck,
   Clock,
   Info,
-  ListFilter,
   Package,
-  Plus,
   Receipt,
   ReceiptText,
   ShoppingBag,
@@ -20,6 +16,7 @@ import {
 import { requireRole } from '@/lib/auth/guards'
 import { formatMoneyRD } from '@/lib/format'
 import { MarcoSupplyV2 } from '@/components/supply-v2/marco'
+import { AccionesCabeceraSupplyV2 } from '@/components/supply-v2/acciones-cabecera'
 import { PanelAbastecimiento } from '@/components/supply-v2/resumen/panel-abastecimiento'
 import { TarjetaAlerta } from '@/components/supply-v2/resumen/tarjeta-alerta'
 import { CifraPilar, MiniMetrica, TarjetaPilar } from '@/components/supply-v2/resumen/tarjeta-pilar'
@@ -97,31 +94,7 @@ export default async function SupplyV2ResumenPage({ searchParams }: { searchPara
     <MarcoSupplyV2
       activa=""
       contadores={{ compras: { valor: resumen.comprasAbiertas }, campanas: { valor: resumen.campanasActivas, tono: 'exito' } }}
-      acciones={
-        <>
-          <Form action="/superadmin/supply-v2" className="relative flex items-center" role="search">
-            <ListFilter aria-hidden className="pointer-events-none absolute left-2 size-[18px] text-sv2-ink-variant" />
-            <label htmlFor="filtro-rapido" className="sr-only">Filtro rápido por SKU o proveedor</label>
-            <input
-              id="filtro-rapido"
-              name="q"
-              type="search"
-              defaultValue={filtro}
-              placeholder="Filtro rápido SKU o proveedor..."
-              className="h-8 w-full rounded-[8px] bg-sv2-well pl-8 pr-2 text-[13px] leading-[18px] text-foreground placeholder:text-sv2-outline focus:outline-none focus:ring-1 focus:ring-sv2-accent @xl:w-60"
-              data-testid="filtro-rapido"
-            />
-          </Form>
-          <Link
-            href="/superadmin/supply-v2/compras/nueva"
-            data-testid="btn-nueva-compra"
-            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-[8px] bg-sv2-accent px-3 text-[13px] font-semibold leading-4 text-white transition-colors hover:bg-sv2-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent focus-visible:ring-offset-2"
-          >
-            <Plus aria-hidden className="size-4" />
-            <span>Nuevo Pedido</span>
-          </Link>
-        </>
-      }
+      acciones={<AccionesCabeceraSupplyV2 destino="/superadmin/supply-v2" filtro={filtro} />}
     >
       <div className="flex flex-col gap-4">
         <PanelAbastecimiento />

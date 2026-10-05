@@ -58,6 +58,7 @@ export async function resumenOperativo(ahora = new Date()): Promise<ResumenOpera
     SUPPLY_V2_OUTBOX_DELIVERY: await capacidadActiva('SUPPLY_V2_OUTBOX_DELIVERY'),
     SUPPLY_V2_RECONCILIATION_SWEEP: await capacidadActiva('SUPPLY_V2_RECONCILIATION_SWEEP'),
     SUPPLY_V2_OPERATIONS_CENTER: await capacidadActiva('SUPPLY_V2_OPERATIONS_CENTER'),
+    SUPPLY_V2_AUTOMATIONS: await capacidadActiva('SUPPLY_V2_AUTOMATIONS'),
   } satisfies Record<Capacidad, boolean>
 
   const configuracion = await saludDeConfiguracion()

@@ -288,6 +288,11 @@ export const CAPACIDADES = [
   'SUPPLY_V2_OUTBOX_DELIVERY',
   'SUPPLY_V2_RECONCILIATION_SWEEP',
   'SUPPLY_V2_OPERATIONS_CENTER',
+  // Bloque 5: las automatizaciones que avisan por vencimientos y por el estado
+  // operativo. Es una capacidad y no una tabla de reglas nueva porque lo que
+  // hay que poder decidir es «avisa o no avisa», y eso ya lo sabe hacer el
+  // interruptor del bloque 4 —desde el panel, con motivo y auditado—.
+  'SUPPLY_V2_AUTOMATIONS',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -296,6 +301,7 @@ export const ETIQUETA_CAPACIDAD: Record<Capacidad, string> = {
   SUPPLY_V2_OUTBOX_DELIVERY: 'Entrega de efectos del outbox',
   SUPPLY_V2_RECONCILIATION_SWEEP: 'Barrido de conciliación',
   SUPPLY_V2_OPERATIONS_CENTER: 'Centro de Operaciones',
+  SUPPLY_V2_AUTOMATIONS: 'Automatizaciones de aviso',
 }
 
 /**
@@ -323,6 +329,14 @@ export const QUE_APAGA: Record<Capacidad, { corta: readonly string[]; conserva: 
   SUPPLY_V2_OPERATIONS_CENTER: {
     corta: ['el panel de operaciones'],
     conserva: ['todo el procesamiento: apagar el panel no apaga el sistema'],
+  },
+  SUPPLY_V2_AUTOMATIONS: {
+    corta: ['los avisos por vencimiento y los de operaciones que nacen del cron'],
+    conserva: [
+      'los avisos de una compra o un pago (esos nacen del hecho, no del cron)',
+      'las alertas del panel',
+      'todo el procesamiento',
+    ],
   },
 }
 
