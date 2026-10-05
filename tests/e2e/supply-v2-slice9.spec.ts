@@ -542,7 +542,11 @@ test.describe('Slice 9 · bloque 4 · Centro de Operaciones', () => {
     const suyo = await browser.newContext()
     await entrarComo(suyo, 'cliente', BASE)
     const cliente = await suyo.newPage()
-    await cliente.goto(`${BASE}/cliente`)
+    // `/cliente` NO existe: el área de cliente no tiene índice y su portada es
+    // `/cliente/inicio`. Navegar a `/cliente` daba un 404 limpio en el que,
+    // por supuesto, no hay ninguna campana —y el fallo decía «no encuentro el
+    // badge» en vez de «te equivocaste de ruta»—.
+    await cliente.goto(`${BASE}/cliente/inicio`)
     // La campana lleva la cuenta: sin número, el aviso es alcanzable y no
     // descubrible. Se comprueba el badge Y el aviso, porque lo primero es lo
     // que hace que alguien pulse.
