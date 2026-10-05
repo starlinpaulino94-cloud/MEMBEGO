@@ -68,8 +68,9 @@ export default async function SupplyPoolPage({
   const ahora = new Date()
   const [todos, verificaciones] = await Promise.all([supplyPorProducto(), verificacionesLotes(ahora)])
 
-  // Lo recibido más recientemente primero: es lo que se está operando.
-  const productos = [...todos].sort((a, b) => (b.ultimoLote?.receivedAt.getTime() ?? 0) - (a.ultimoLote?.receivedAt.getTime() ?? 0) || a.producto.localeCompare(b.producto))
+  // Lo recibido más recientemente primero: es lo que se está operando. Por el momento
+  // en que se registró el lote (`receivedAt` solo guarda el día y empataría).
+  const productos = [...todos].sort((a, b) => (b.ultimoLote?.createdAt.getTime() ?? 0) - (a.ultimoLote?.createdAt.getTime() ?? 0) || a.producto.localeCompare(b.producto))
   const proveedores = [...new Map(productos.map((p) => [p.proveedorId, p.proveedor])).entries()].map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
   const q = normalizar(f.q)
   const filtrados = productos.filter(

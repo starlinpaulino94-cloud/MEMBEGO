@@ -179,6 +179,179 @@ export async function proveedoresConRedenciones(): Promise<{ id: string; nombre:
   return grupos.map((g) => ({ id: g.id, nombre: g.commercialName }))
 }
 
+// ── Superadmin · pantalla Redenciones (rediseño Stitch) ─────────────────────
+
+export interface FiltroBusquedaRedenciones extends FiltroRedenciones {
+  /** Código de la redención, de la orden, cliente (nombre o correo) o producto. */
+  q?: string | null
+  branchId?: string | null
+}
+
+export interface RedencionDetallada extends RedencionFila {
+  clienteCorreo: string
+  orden: string | null
+  proveedorId: string
+  canal: 'QR_SCAN' | 'MANUAL_CODE'
+  /** Lo que pagó el cliente por la unidad y lo que costó (congelados al entregar). */
+  valor: string
+  costo: string
+  moneda: string
+  modelo: 'PREPURCHASED_SUPPLY' | 'COMMISSION'
+  motivoReversa: string | null
+}
+
+function whereRedenciones(f: FiltroBusquedaRedenciones): Prisma.SupplyV2RedemptionWhereInput {
+  const where: Prisma.SupplyV2RedemptionWhereInput = {}
+  if (f.supplierId) where.supplierId = f.supplierId
+  if (f.branchId) where.branchId = f.branchId
+  if (f.estado === 'ENTREGADA') where.reversedAt = null
+  if (f.estado === 'REVERSADA') where.reversedAt = { not: null }
+  if (f.desde || f.hasta) where.redeemedAt = { ...(f.desde ? { gte: f.desde } : {}), ...(f.hasta ? { lte: f.hasta } : {}) }
+  const q = f.q?.trim()
+  if (q) {
+    where.OR = [
+      { number: { contains: q, mode: 'insensitive' } },
+      { entitlement: { order: { number: { contains: q, mode: 'insensitive' } } } },
+      { customer: { name: { contains: q, mode: 'insensitive' } } },
+      { customer: { email: { contains: q, mode: 'insensitive' } } },
+      { catalogItem: { name: { contains: q, mode: 'insensitive' } } },
+    ]
+  }
+  return where
+}
+
+/** Listado filtrado y paginado de la pantalla Redenciones: los filtros se aplican en la base. */
+export async function buscarRedenciones(f: FiltroBusquedaRedenciones, p: { pagina: number; filas: number }): Promise<{ filas: RedencionDetallada[]; total: number }> {
+  const where = whereRedenciones(f)
+  const [filas, total] = await sinEmpresa('Supply 2.0: búsqueda de redenciones (plataforma)', (tx) =>
+    Promise.all([
+      tx.supplyV2Redemption.findMany({
+        where,
+        orderBy: { redeemedAt: 'desc' },
+        skip: (p.pagina - 1) * p.filas,
+        take: p.filas,
+        select: {
+          id: true,
+          number: true,
+          redeemedAt: true,
+          reversedAt: true,
+          reversalReason: true,
+          channel: true,
+          sourceType: true,
+          quantity: true,
+          unitCostSnapshot: true,
+          customerUnitPriceSnapshot: true,
+          currency: true,
+          customer: { select: { name: true, email: true } },
+          catalogItem: { select: { name: true } },
+          supplier: { select: { id: true, commercialName: true } },
+          branch: { select: { nombre: true } },
+          employee: { select: { name: true, email: true } },
+          entitlement: { select: { order: { select: { number: true } } } },
+        },
+      }),
+      tx.supplyV2Redemption.count({ where }),
+    ])
+  )
+  return {
+    total,
+    filas: filas.map((r) => ({
+      id: r.id,
+      number: r.number,
+      redeemedAt: r.redeemedAt,
+      cliente: nombre(r.customer),
+      clienteCorreo: r.customer.email,
+      producto: r.catalogItem.name,
+      proveedor: r.supplier.commercialName,
+      proveedorId: r.supplier.id,
+      sucursal: r.branch?.nombre ?? null,
+      empleado: nombre(r.employee),
+      reversada: r.reversedAt !== null,
+      motivoReversa: r.reversalReason,
+      orden: r.entitlement.order?.number ?? null,
+      canal: r.channel,
+      modelo: r.sourceType,
+      valor: r.customerUnitPriceSnapshot.times(r.quantity).toFixed(2),
+      costo: r.unitCostSnapshot.times(r.quantity).toFixed(2),
+      moneda: r.currency,
+    })),
+  }
+}
+
+export interface ResumenRedenciones {
+  hoy: number
+  mes: number
+  valorMes: string
+  reversasMes: number
+  incidenciasMes: number
+  /** Entregas del mes por canal. */
+  porQr: number
+  porCodigo: number
+  /** Sucursales con entregas en el mes (las de más entregas primero), con la empresa a la que pertenecen. */
+  sucursales: { nombre: string; proveedor: string; entregas: number }[]
+}
+
+/** Indicadores de la pantalla Redenciones (día y mes en curso), sobre todas las entregas. */
+export async function resumenRedenciones(ahora = new Date()): Promise<ResumenRedenciones> {
+  const hoy = new Date(ahora)
+  hoy.setHours(0, 0, 0, 0)
+  const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
+  return sinEmpresa('Supply 2.0: indicadores de redenciones', async (tx) => {
+    const [deHoy, delMes, reversasMes, incidenciasMes, canales, porSucursal] = await Promise.all([
+      tx.supplyV2Redemption.count({ where: { redeemedAt: { gte: hoy }, reversedAt: null } }),
+      tx.supplyV2Redemption.findMany({ where: { redeemedAt: { gte: inicioMes }, reversedAt: null }, select: { quantity: true, customerUnitPriceSnapshot: true } }),
+      tx.supplyV2Redemption.count({ where: { reversedAt: { gte: inicioMes } } }),
+      tx.supplyV2RedemptionIncident.count({ where: { createdAt: { gte: inicioMes } } }),
+      tx.supplyV2Redemption.groupBy({ by: ['channel'], where: { redeemedAt: { gte: inicioMes }, reversedAt: null }, _count: { _all: true } }),
+      tx.supplyV2Redemption.groupBy({ by: ['branchId'], where: { redeemedAt: { gte: inicioMes }, reversedAt: null, branchId: { not: null } }, _count: { _all: true } }),
+    ])
+    const top = porSucursal.sort((a, b) => b._count._all - a._count._all).slice(0, 4)
+    const ramas = await tx.sucursal.findMany({ where: { id: { in: top.map((t) => t.branchId!) } }, select: { id: true, nombre: true, company: { select: { name: true } } } })
+    const valor = delMes.reduce((t, r) => t.plus(r.customerUnitPriceSnapshot.times(r.quantity)), new Prisma.Decimal(0))
+    return {
+      hoy: deHoy,
+      mes: delMes.length,
+      valorMes: valor.toFixed(2),
+      reversasMes,
+      incidenciasMes,
+      porQr: canales.find((c) => c.channel === 'QR_SCAN')?._count._all ?? 0,
+      porCodigo: canales.find((c) => c.channel === 'MANUAL_CODE')?._count._all ?? 0,
+      sucursales: top.map((t) => ({
+        nombre: ramas.find((r) => r.id === t.branchId)?.nombre ?? '—',
+        proveedor: ramas.find((r) => r.id === t.branchId)?.company.name ?? '—',
+        entregas: t._count._all,
+      })),
+    }
+  })
+}
+
+/** Sucursales donde hubo al menos una entrega, para el filtro. */
+export async function sucursalesConRedenciones(): Promise<{ id: string; nombre: string }[]> {
+  const grupos = await sinEmpresa('Supply 2.0: sucursales con redenciones', (tx) =>
+    tx.supplyV2Redemption.groupBy({ by: ['branchId'], where: { branchId: { not: null } } })
+  )
+  const ids = grupos.map((g) => g.branchId!).filter(Boolean)
+  if (!ids.length) return []
+  const ramas = await sinEmpresa('Supply 2.0: nombres de sucursales con redenciones', (tx) =>
+    tx.sucursal.findMany({ where: { id: { in: ids } }, select: { id: true, nombre: true }, orderBy: { nombre: 'asc' } })
+  )
+  return ramas
+}
+
+/** Redención por su código exacto (MBG-RED-…) o por el de la orden; para el buscador por código. */
+export async function redencionPorCodigo(codigo: string): Promise<string | null> {
+  const c = codigo.trim().toUpperCase()
+  if (!c) return null
+  const r = await sinEmpresa('Supply 2.0: redención por código', (tx) =>
+    tx.supplyV2Redemption.findFirst({
+      where: { OR: [{ number: c }, { entitlement: { order: { number: c } } }] },
+      orderBy: { redeemedAt: 'desc' },
+      select: { id: true },
+    })
+  )
+  return r?.id ?? null
+}
+
 export interface HitoTimeline {
   cuando: Date
   titulo: string
