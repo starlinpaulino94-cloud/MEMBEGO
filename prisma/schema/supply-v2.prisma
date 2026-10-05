@@ -236,6 +236,52 @@ model SupplyV2Supplier {
   @@map("supply_v2_suppliers")
 }
 
+// ── Categorías de vehículo de PLATAFORMA ───────────────────────────────────
+
+/// Categorías de vehículo de Membego, no de una empresa.
+///
+/// POR QUÉ DE PLATAFORMA Y NO POR EMPRESA: un lavado cuesta distinto según el
+/// vehículo, y una oferta de Supply necesita decir «la SUV cuesta X». Pero un
+/// proveedor de Supply puede ser EXTERNO y no tener empresa en Membego, así que
+/// no hay un `TipoVehiculo` suyo al que colgar el precio. Esta tabla es el
+/// catálogo único con el que Membego habla de vehículos.
+///
+/// CÓMO SE CASA CON LAS CATEGORÍAS DE CADA EMPRESA: por `nivelTarifario`, el
+/// mismo número que usa `TipoVehiculo` (`carwash.prisma:169`) y que el proyecto
+/// declara el contrato — «NUNCA el nombre de la categoría». Una empresa puede
+/// llamar «Jeepeta» a lo que otra llama «SUV»; si las dos lo pusieron en nivel
+/// 2, las dos cobran el precio del nivel 2.
+///
+/// SIN `companyId`, y no «por si acaso»: esto es de Membego. Ponerle empresa
+/// obligaría a elegir una arbitraria para un proveedor externo, que es
+/// exactamente el problema que esta tabla resuelve.
+model SupplyV2VehicleCategory {
+  id String @id @default(cuid())
+
+  /// Estable y legible, para semillas e informes: "SEDAN", "SUV", "PICKUP".
+  code   String @unique
+  nombre String @unique
+
+  /// ÚNICO a propósito: la resolución va nivel → categoría. Dos categorías con
+  /// el mismo nivel la harían ambigua, y el checkout tendría que elegir una por
+  /// orden de llegada. Mejor que la base lo impida.
+  nivelTarifario Int @unique
+
+  /// Menor = primero en los selectores.
+  orden Int     @default(0)
+  /// Baja LÓGICA, nunca borrado: una oferta ya publicada puede tener un precio
+  /// colgado de esta categoría, y borrarla reescribiría el pasado.
+  activo      Boolean @default(true)
+  descripcion String?
+  iconoUrl    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([activo, orden])
+  @@map("supply_v2_vehicle_categories")
+}
+
 // ── Catálogo del proveedor ─────────────────────────────────────────────────
 
 model SupplyV2CatalogItem {

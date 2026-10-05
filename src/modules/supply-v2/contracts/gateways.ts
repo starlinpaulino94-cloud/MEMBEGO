@@ -105,6 +105,12 @@ export const SUPPLY_V2_PERMISSIONS = [
   // que los tenga siempre la misma persona es burocracia, no segregación.
   'SUPPLY_V2_OPERATIONS_VIEW',
   'SUPPLY_V2_OPERATIONS_MANAGE',
+  // Precio por categoría de vehículo. UNO y no dos: el catálogo de categorías
+  // de plataforma es una lista de cuatro filas que se toca una vez al año, y
+  // verla ya la cubre `SUPPLY_V2_VIEW`. Separar ver de editar aquí sería
+  // burocracia. Lo que NO cubre es poner precios en una oferta: eso sigue
+  // siendo `SUPPLY_V2_OFFER_MANAGE`, porque es decidir cuánto se cobra.
+  'SUPPLY_V2_VEHICLE_CATEGORY_MANAGE',
 ] as const
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
@@ -159,6 +165,7 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_PAYMENT_INCIDENT_RESOLVE: 'Investigar y resolver incidentes de pagos externos (no la cuenta de la integración)',
   SUPPLY_V2_OPERATIONS_VIEW: 'Ver el Centro de Operaciones de Supply 2.0',
   SUPPLY_V2_OPERATIONS_MANAGE: 'Operar: interruptores, conciliación manual y reconocer alertas',
+  SUPPLY_V2_VEHICLE_CATEGORY_MANAGE: 'Gestionar las categorías de vehículo de plataforma',
 }
 
 export interface CompanyGateway {
