@@ -193,6 +193,7 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPPLY_V2_OFFER_ENDED: 'Supply 2.0 · oferta finalizada',
   SUPPLY_V2_OFFER_CANCELLED: 'Supply 2.0 · oferta cancelada',
   SUPPLY_V2_OFFER_UPDATED: 'Supply 2.0 · oferta editada',
+  SUPPLY_V2_VEHICLE_CATEGORY_CHANGED: 'Supply 2.0 · categoría de vehículo modificada',
   SUPPLY_V2_ORDER_CREATED: 'Supply 2.0 · compra de cliente creada',
   SUPPLY_V2_ORDER_RESERVED: 'Supply 2.0 · unidades reservadas para una compra',
   SUPPLY_V2_ORDER_PAYMENT_SUBMITTED: 'Supply 2.0 · cliente avisó su pago',

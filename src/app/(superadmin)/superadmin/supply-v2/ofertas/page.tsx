@@ -41,6 +41,15 @@ export default async function OfertasPage() {
                 Ventas y cobros{pagosPendientes > 0 ? ` (${pagosPendientes} por revisar)` : ''}
               </Link>
             </Button>
+            {/* El catálogo de categorías de vehículo no tiene pestaña propia
+                —ya hay once y son cuatro filas que se tocan una vez al año—,
+                así que se llega desde aquí: quien pone precios es quien
+                necesita mirarlo. */}
+            <Button asChild variant="outline">
+              <Link href="/superadmin/supply-v2/categorias" data-testid="link-categorias-vehiculo">
+                Categorías de vehículo
+              </Link>
+            </Button>
             <Button asChild>
               <Link href="/superadmin/supply-v2/ofertas/nueva" data-testid="btn-crear-oferta">+ Crear oferta</Link>
             </Button>
