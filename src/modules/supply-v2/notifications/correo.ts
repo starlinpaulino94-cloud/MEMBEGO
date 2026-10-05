@@ -1,6 +1,6 @@
 import { sendEmail } from '@/lib/email'
 import { sinEmpresa } from '@/lib/tenant'
-import { conPorDefecto, puedeMandarse, type DefinicionDeAviso, type PreferenciasDeAviso } from './dominio'
+import { puedeMandarse, type DefinicionDeAviso, type PreferenciasDeAviso } from './dominio'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · EL CORREO.

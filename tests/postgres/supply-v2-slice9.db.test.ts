@@ -20,7 +20,7 @@ import { evaluarAutomatizaciones } from '../../src/modules/supply-v2/notificatio
 import { emitirMetricasOperativas } from '../../src/modules/supply-v2/operations/metricas'
 // ── Bloque 2 ──
 import { GET, POST } from '../../src/app/api/webhooks/supply-v2/[provider]/route'
-import { olvidarActorDelWebhook, recibirEventoExterno } from '../../src/modules/supply-v2/operations/entrada'
+import { barrerInbox, olvidarActorDelWebhook, recibirEventoExterno } from '../../src/modules/supply-v2/operations/entrada'
 import { firmaHmac } from '../../src/modules/supply-v2/operations/firma'
 import { despacharEfectos, entregarEfecto, recuperarArriendos } from '../../src/modules/supply-v2/operations/worker'
 // ── Bloque 3 ──
@@ -2447,4 +2447,124 @@ test('B5 · las métricas salen con etiquetas, sin un solo identificador', async
     assert.ok(Number.isFinite(valor), `${clave} es finito`)
   }
   assert.ok([0, 1, 2, 3].includes(m!.readiness_status), 'readiness va como peso, no como frase')
+})
+
+// ── B5 · el barrido del inbox ───────────────────────────────────────────────
+//
+// Lo que se demuestra: que la escalera de ENTRADA la recorre alguien. Estaba
+// escrita —`anotarFalloDeProceso` reprograma, el índice `(status,
+// nextAttemptAt)` existe, el esquema dice «lo barre el cron»— y nadie barría:
+// el inbox solo se procesaba dentro de la propia petición del webhook.
+//
+// OJO con el alcance: `barrerInbox` es GLOBAL por naturaleza —es un cron—, así
+// que estas pruebas afirman sobre SU evento y nunca sobre cuentas totales. Un
+// `procesados === 1` sería mentira en cuanto otro caso dejara algo pendiente.
+
+test('B5 · el barrido procesa un evento FAILED cuya hora ya venció', async () => {
+  const orden = await compraPendiente()
+  const reg = await registrarEventoExterno(
+    evento({ externalEventId: idExterno('barrido-vencido'), orderNumber: orden.number, amount: orden.total, currency: 'DOP' })
+  )
+
+  // Un fallo transitorio, como el del caso D.
+  await anotarFalloDeProceso(reg.id, new Error('ERROR_TRANSITORIO: la base no contestó'), como(ctx.ops))
+  let fila = await filaDe(reg.id)
+  assert.equal(fila.status, 'FAILED')
+  assert.ok(fila.nextAttemptAt, 'queda con cita')
+
+  // La cita es futura, así que el barrido NO lo toca todavía: una escalera que
+  // se salta su propia espera no es una escalera.
+  const temprano = await barrerInbox(como(null), new Date(fila.nextAttemptAt!.getTime() - 1_000))
+  assert.equal(temprano.motivo, undefined, 'la cuenta de la integración está configurada en esta suite')
+  assert.equal((await filaDe(reg.id)).status, 'FAILED', 'antes de su hora sigue esperando')
+  assert.equal(await derechosDe(orden.id), 0, 'y no ha movido un peso')
+
+  // Pasada la hora, sí.
+  await barrerInbox(como(null), new Date(fila.nextAttemptAt!.getTime() + 1_000))
+  fila = await filaDe(reg.id)
+  assert.equal(fila.status, 'PROCESSED', 'el barrido lo procesó sin que nadie pulsara nada')
+  assert.equal(fila.orderId, orden.id)
+  assert.equal(await derechosDe(orden.id), 1, 'derechos emitidos UNA vez')
+  assert.equal((await ordenDe(orden.id)).status, 'PAID')
+
+  // Y el asiento lo firma la cuenta de la integración, no `null`: un pago
+  // confirmado por el cron tiene el mismo responsable que uno confirmado por
+  // el webhook.
+  const o = await prisma.supplyV2CustomerOrder.findUniqueOrThrow({
+    where: { id: orden.id },
+    select: { paymentConfirmedById: true },
+  })
+  assert.equal(o.paymentConfirmedById, ctx.ops, 'el responsable es la cuenta de la integración')
+})
+
+test('B5 · el barrido recoge un RECEIVED que se quedó sin procesar', async () => {
+  // Este es el caso del reintento manual: `reintentarEvento` devuelve la fila
+  // a RECEIVED y antes NADIE la recogía. Un difunto reintentado desde el panel
+  // se quedaba en RECEIVED para siempre.
+  const orden = await compraPendiente()
+  const reg = await registrarEventoExterno(
+    evento({ externalEventId: idExterno('barrido-recibido'), orderNumber: orden.number, amount: orden.total, currency: 'DOP' })
+  )
+  assert.equal((await filaDe(reg.id)).status, 'RECEIVED', 'registrado y sin procesar')
+
+  await barrerInbox(como(null))
+  assert.equal((await filaDe(reg.id)).status, 'PROCESSED')
+  assert.equal(await derechosDe(orden.id), 1)
+})
+
+test('B5 · el barrido NO resucita un difunto: eso lo decide una persona', async () => {
+  const orden = await compraPendiente()
+  const reg = await registrarEventoExterno(
+    evento({ externalEventId: idExterno('barrido-difunto'), orderNumber: orden.number, amount: orden.total, currency: 'DOP' })
+  )
+  for (let i = 0; i < MAX_INTENTOS; i++) {
+    await anotarFalloDeProceso(reg.id, new Error(`fallo ${i + 1}`), como(ctx.ops))
+  }
+  assert.equal((await filaDe(reg.id)).status, 'DEAD_LETTER')
+
+  await barrerInbox(como(null))
+
+  const fila = await filaDe(reg.id)
+  assert.equal(fila.status, 'DEAD_LETTER', 'sigue muerto: «se agotó» tiene que seguir significando algo')
+  assert.equal(fila.attempts, MAX_INTENTOS, 'el barrido no le gastó otro intento')
+  assert.equal(await derechosDe(orden.id), 0)
+})
+
+test('B5 · barrer dos veces no duplica dinero', async () => {
+  const orden = await compraPendiente()
+  await registrarEventoExterno(
+    evento({ externalEventId: idExterno('barrido-dos-veces'), orderNumber: orden.number, amount: orden.total, currency: 'DOP' })
+  )
+  await barrerInbox(como(null))
+  await barrerInbox(como(null))
+  assert.equal(await derechosDe(orden.id), 1, 'un juego de derechos')
+  assert.equal((await efectosDe(orden.id)).length, 1, 'un efecto apuntado')
+})
+
+test('B5 · sin cuenta de integración el barrido no procesa nada y lo dice', async () => {
+  // Fail-closed, igual que la puerta: un pago sin responsable no se registra.
+  // Lo que NO puede pasar es que calle y parezca que no había trabajo.
+  const orden = await compraPendiente()
+  const reg = await registrarEventoExterno(
+    evento({ externalEventId: idExterno('barrido-sin-actor'), orderNumber: orden.number, amount: orden.total, currency: 'DOP' })
+  )
+  const previo = process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+  try {
+    delete process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+    olvidarActorDelWebhook()
+    const r = await barrerInbox(como(null))
+    assert.equal(r.motivo, 'SIN_ACTOR_CONFIGURADO', 'dice por qué no hizo nada')
+    assert.equal(r.procesados, 0)
+    assert.equal((await filaDe(reg.id)).status, 'RECEIVED', 'el evento sigue esperando, no se pierde')
+    assert.equal(await derechosDe(orden.id), 0)
+  } finally {
+    if (previo === undefined) delete process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID
+    else process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID = previo
+    olvidarActorDelWebhook()
+  }
+  // Con la cuenta de vuelta, el mismo evento entra: lo que faltaba era
+  // configuración, no el evento.
+  await barrerInbox(como(null))
+  assert.equal((await filaDe(reg.id)).status, 'PROCESSED')
+  assert.equal(await derechosDe(orden.id), 1)
 })

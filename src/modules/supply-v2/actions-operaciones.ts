@@ -10,6 +10,8 @@ import { conciliarAPeticion } from './operations/barrido-conciliacion'
 import { evaluarYGuardarAlertas } from './operations/alertas'
 import { marcarInvestigando, resolverIncidenteDePago } from './operations/resolucion'
 import { reintentarEfecto } from './operations/outbox'
+import { procesarEventoExterno, reintentarEvento } from './operations/inbox'
+import { actorDelWebhook } from './operations/entrada'
 import { auditarOperacion } from './operations/auditoria-operativa'
 import { CAPACIDADES, type Capacidad } from './operations/salud-dominio'
 import { RESOLUCIONES, type Resolucion } from './operations/conciliacion-dominio'
@@ -199,4 +201,72 @@ export async function reintentarEfectoAction(_prev: EstadoOperacion, fd: FormDat
   } catch (e) {
     return comoError(e, 'reintentarEfecto')
   }
+}
+
+/**
+ * §4D · reintentar un EVENTO EXTERNO que falló o se quedó sin salida.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ EXISTE ESTA ACCIÓN Y NO EXISTÍA
+ *
+ * El bloque 1 ya traía `reintentarEvento` —con su candado, su bitácora
+ * `SUPPLY_V2_EXTERNAL_EVENT_RETRIED` y su devolución de escalera—, y el bloque 4
+ * ya traía la alerta `INBOX_DEAD`. Pero no había botón: el panel sabía DECIR
+ * que había eventos externos sin salida y no ofrecía nada que hacer con ellos.
+ * Un aviso sin palanca obliga a abrir una consola contra la base de producción,
+ * que es exactamente lo que el Centro de Operaciones existe para evitar.
+ *
+ * Reintentar vuelve a pasar por `procesarEventoExterno`, así que vuelve a pasar
+ * por la identidad idempotente `(provider, externalEventId, eventType)`: pulsar
+ * dos veces no cobra dos veces.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * SE PROCESA AQUÍ MISMO, NO «CUANDO PASE EL CRON»
+ *
+ * `reintentarEvento` devuelve la fila a `RECEIVED`; el barrido del cron la
+ * recogería, pero el plan puede correr el cron una vez al día y quien pulsa el
+ * botón está mirando un pago que no entró. Así que se procesa en el acto y lo
+ * que se contesta es el RESULTADO —entró, se ignoró, sigue sin cuadrar—, no un
+ * «quedó encolado» que no dice nada.
+ *
+ * La confirmación se atribuye a la cuenta de la integración, igual que si el
+ * aviso hubiera entrado solo: quién pulsó el botón ya quedó en la bitácora con
+ * `SUPPLY_V2_EXTERNAL_EVENT_RETRIED`, y el asiento financiero debe leerse igual
+ * viniera de la pasarela o de este reintento.
+ */
+export async function reintentarEventoAction(_prev: EstadoOperacion, fd: FormData): Promise<EstadoOperacion> {
+  try {
+    const actor = await exigirPermisoSupplyV2('SUPPLY_V2_OPERATIONS_MANAGE')
+    const ctx = await contextoDeAuditoria(actor)
+    const id = texto(fd, 'eventoId', 60)
+    if (!id) return { error: 'Falta el evento.' }
+    const r = await reintentarEvento(id, ctx)
+
+    const cuenta = await actorDelWebhook()
+    if (!cuenta) {
+      return {
+        success: `Reencolado (estaba ${r.estaba}), pero NO se pudo procesar: falta configurar la cuenta de la integración (SUPPLY_V2_WEBHOOK_ACTOR_ID). El evento espera.`,
+      }
+    }
+
+    const proceso = await procesarEventoExterno(id, { ...ctx, actorId: cuenta })
+    revalidatePath(`${RUTA}/inbox`)
+    revalidatePath(RUTA)
+    return { success: `${MENSAJE_DE_PROCESO[proceso.resultado]} (estaba ${r.estaba}).` }
+  } catch (e) {
+    return comoError(e, 'reintentarEvento')
+  }
+}
+
+/**
+ * Lo que se le dice al operador según lo que pasó de verdad. Ninguno de estos
+ * mensajes promete más de lo que ocurrió: «se procesó» solo cuando movió el
+ * dinero.
+ */
+const MENSAJE_DE_PROCESO: Record<string, string> = {
+  PROCESADO: 'Procesado: el pago quedó confirmado y los derechos emitidos',
+  REPETIDO: 'No hizo falta: el evento ya estaba resuelto',
+  IGNORADO: 'Recibido y descartado a propósito: mira el último error de la fila',
+  RECHAZADO: 'Rechazado: no cuadra con la compra. Queda un incidente abierto para revisarlo',
+  REINTENTABLE: 'Volvió a fallar por algo transitorio. Reprogramado: el cron lo reintentará',
 }
