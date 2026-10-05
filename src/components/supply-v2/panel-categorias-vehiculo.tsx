@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -34,32 +34,59 @@ function Aviso({ estado }: { estado: EstadoAccion }) {
   )
 }
 
-function useToast(estado: EstadoAccion) {
+/**
+ * Llamar a la acción y reaccionar DESDE EL MANEJADOR, no desde un efecto.
+ *
+ * Esto estaba con `useActionState` más un `useEffect` que cerraba el
+ * formulario al ver `estado.success`, y el linter lo rechaza con razón:
+ * «Calling setState synchronously within an effect can trigger cascading
+ * renders». No es solo una regla de estilo —era además frágil: el efecto se
+ * apoyaba en un `useRef` para no repetir el aviso, que es lo que hay que
+ * inventar cuando se usa un efecto para algo que no es sincronizar con un
+ * sistema externo—.
+ *
+ * Esperando la promesa aquí, el aviso, el refresco y el cierre del formulario
+ * ocurren una vez, en el orden escrito, sin necesidad de recordar qué ya se
+ * mostró. Es el mismo patrón que el Centro de Operaciones (bloque 4 del Slice
+ * 9) y por el mismo motivo.
+ */
+function useAccionDeCategoria(
+  accion: (prev: EstadoAccion, fd: FormData) => Promise<EstadoAccion>,
+  alTenerExito?: () => void
+) {
   const router = useRouter()
-  const visto = useRef<string | undefined>(undefined)
-  useEffect(() => {
-    if (estado.success && visto.current !== estado.success) {
-      visto.current = estado.success
-      toast.success(estado.success)
-      router.refresh()
+  const [pendiente, setPendiente] = useState(false)
+  const [estado, setEstado] = useState<EstadoAccion>({})
+
+  async function enviar(fd: FormData) {
+    setPendiente(true)
+    try {
+      const r = await accion({}, fd)
+      setEstado(r)
+      if (r.success) {
+        toast.success(r.success)
+        alTenerExito?.()
+        router.refresh()
+      }
+      if (r.error) toast.error(r.error)
+    } catch {
+      const fallo = 'No se pudo completar la acción. Vuelve a cargar la página y comprueba antes de repetirla.'
+      setEstado({ error: fallo })
+      toast.error(fallo)
+    } finally {
+      setPendiente(false)
     }
-    if (estado.error) toast.error(estado.error)
-  }, [estado, router])
+  }
+
+  return { enviar, pendiente, estado }
 }
 
 function FilaCategoria({ c }: { c: CategoriaVehiculoFila }) {
   const [editando, setEditando] = useState(false)
-  const [estado, guardar, pendiente] = useActionState<EstadoAccion, FormData>(editarCategoriaVehiculoAction, {})
-  const [estadoBaja, cambiarEstado, cambiando] = useActionState<EstadoAccion, FormData>(
-    cambiarEstadoCategoriaVehiculoAction,
-    {}
+  const { enviar: guardar, pendiente, estado } = useAccionDeCategoria(editarCategoriaVehiculoAction, () =>
+    setEditando(false)
   )
-  useToast(estado)
-  useToast(estadoBaja)
-
-  useEffect(() => {
-    if (estado.success) setEditando(false)
-  }, [estado.success])
+  const { enviar: cambiarEstado, pendiente: cambiando } = useAccionDeCategoria(cambiarEstadoCategoriaVehiculoAction)
 
   if (!editando) {
     return (
@@ -147,12 +174,10 @@ function FilaCategoria({ c }: { c: CategoriaVehiculoFila }) {
 }
 
 function FormNueva() {
-  const [estado, crear, pendiente] = useActionState<EstadoAccion, FormData>(crearCategoriaVehiculoAction, {})
   const [abierto, setAbierto] = useState(false)
-  useToast(estado)
-  useEffect(() => {
-    if (estado.success) setAbierto(false)
-  }, [estado.success])
+  const { enviar: crear, pendiente, estado } = useAccionDeCategoria(crearCategoriaVehiculoAction, () =>
+    setAbierto(false)
+  )
 
   if (!abierto) {
     return (
