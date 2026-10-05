@@ -103,7 +103,14 @@ comprobar('el Centro de Operaciones pide sesión', await pedir('/superadmin/supp
 // "no existe") · 503 = METRICAS_SECRET no está configurado, que es fail-closed
 // a propósito. Lo inaceptable es un 200.
 comprobar('las métricas NO son públicas', await pedir('/api/metricas'), [401, 403, 404, 503])
-comprobar('el cron no corre sin su secreto', await pedir('/api/cron/supply-v2'), [401, 403])
+// 401 = hay secreto y no lo llevamos · 503 = falta `CRON_SECRET` y el cron se
+// niega a correr, que es fail-closed. Las dos cierran la puerta; la segunda
+// además significa que el cron NO está corriendo (→ checklist § 1).
+const cron = await pedir('/api/cron/supply-v2')
+comprobar('el cron no corre sin su secreto', cron, [401, 403, 503])
+if (cron.status === 503) {
+  console.log(`  ${C.avi}⚠ falta CRON_SECRET: el cron no corre. No se barre el inbox ni se despacha el outbox.${C.off}`)
+}
 
 // El webhook SIN firma. Tiene que rechazar: 401 si la capacidad está encendida,
 // 503 si está apagada a propósito. Un 200 aquí sería el peor resultado posible
