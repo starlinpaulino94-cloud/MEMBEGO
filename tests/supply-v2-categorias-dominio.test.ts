@@ -7,6 +7,7 @@ import {
   type CategoriaDePlataforma,
   type OrigenCategoria,
 } from '../src/modules/supply-v2/core/categorias'
+import { validarCategoriaVehiculo } from '../src/modules/supply-v2/categories/service'
 
 /** El catálogo de plataforma tal como lo deja la semilla. */
 const CATALOGO: CategoriaDePlataforma[] = [
@@ -107,4 +108,37 @@ test('ORIGEN_CATEGORIA_LABEL · todo origen tiene texto, incluido uno que se añ
     assert.notEqual(etiqueta, o, `${o} tiene el enum como etiqueta`)
   }
   assert.equal(Object.keys(ORIGEN_CATEGORIA_LABEL).length, origenes.length, 'hay un origen sin probar')
+})
+
+// ── Reglas del catálogo (lo que se puede guardar) ───────────────────────────
+
+test('validarCategoriaVehiculo · el código es estable y legible, porque viaja fuera de la base', () => {
+  assert.equal(validarCategoriaVehiculo({ code: 'SEDAN' }), null)
+  assert.equal(validarCategoriaVehiculo({ code: 'SUV_GRANDE' }), null)
+  assert.equal(validarCategoriaVehiculo({ code: 'NIVEL2' }), null)
+  assert.match(validarCategoriaVehiculo({ code: '' })!, /necesita un código/)
+  // Un código con espacios o acentos se escribe distinto cada vez que alguien
+  // lo teclea, y este viaja a semillas e informes.
+  assert.match(validarCategoriaVehiculo({ code: 'SUV GRANDE' })!, /letras sin acentos/)
+  assert.match(validarCategoriaVehiculo({ code: 'SEDÁN' })!, /letras sin acentos/)
+  assert.match(validarCategoriaVehiculo({ code: 'suv-x' })!, /letras sin acentos/)
+  assert.match(validarCategoriaVehiculo({ code: 'X'.repeat(33) })!, /demasiado largo/)
+})
+
+test('validarCategoriaVehiculo · el nivel tiene que ser un nivel', () => {
+  assert.equal(validarCategoriaVehiculo({ nivelTarifario: 1 }), null)
+  assert.equal(validarCategoriaVehiculo({ nivelTarifario: 999 }), null)
+  // El 0 y los negativos no son «antes del sedán»: son datos corruptos, y
+  // `casarCategoria` ya los trata como sin correspondencia.
+  assert.match(validarCategoriaVehiculo({ nivelTarifario: 0 })!, /mayor que cero/)
+  assert.match(validarCategoriaVehiculo({ nivelTarifario: -3 })!, /mayor que cero/)
+  assert.match(validarCategoriaVehiculo({ nivelTarifario: 1.5 })!, /entero/)
+  assert.match(validarCategoriaVehiculo({ nivelTarifario: 1000 })!, /demasiado alto/)
+})
+
+test('validarCategoriaVehiculo · ausente = no se valida, para poder editar un solo campo', () => {
+  // Una edición que solo cambia el nombre no debe fallar por no traer nivel.
+  assert.equal(validarCategoriaVehiculo({}), null)
+  assert.equal(validarCategoriaVehiculo({ nombre: 'Jeepeta' }), null)
+  assert.match(validarCategoriaVehiculo({ nombre: '   ' })!, /necesita un nombre/)
 })
