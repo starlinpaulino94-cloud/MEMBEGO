@@ -16,8 +16,20 @@ export const metadata = { title: 'Proveedores · Supply 2.0' }
 export default async function ProveedoresPage() {
   await requireRole('SUPERADMIN')
   const proveedores = await listarProveedores()
-  const nuevo = (
-    <DialogoFormulario etiqueta="+ Nuevo proveedor" titulo="Nuevo proveedor" descripcion="Una empresa que ya está en Membego o un proveedor externo." testId="btn-nuevo-proveedor">
+  /**
+   * El mismo diálogo aparece en dos sitios: en la cabecera y, cuando todavía no
+   * hay ninguno, dentro del estado vacío. Son dos botones distintos y por eso
+   * llevan identificadores distintos.
+   *
+   * Antes compartían `testId`, y con la lista vacía el DOM acabó con dos
+   * elementos `btn-nuevo-proveedor`. Con proveedores en la base no se notaba
+   * —el estado vacío no se renderiza— y en una base limpia cualquier cosa que
+   * busque ese botón por identificador encuentra dos: un lector de pantalla
+   * anuncia dos acciones idénticas y la prueba de punta a punta no sabe cuál
+   * pulsar.
+   */
+  const nuevo = (etiquetaDePrueba: string) => (
+    <DialogoFormulario etiqueta="+ Nuevo proveedor" titulo="Nuevo proveedor" descripcion="Una empresa que ya está en Membego o un proveedor externo." testId={etiquetaDePrueba}>
       <FormProveedor />
     </DialogoFormulario>
   )
@@ -29,11 +41,11 @@ export default async function ProveedoresPage() {
         description="Con quién compra Membego: empresas de la plataforma o proveedores externos."
         eyebrow="Supply 2.0"
         nav={<NavSupplyV2 activa="proveedores" />}
-        action={nuevo}
+        action={nuevo('btn-nuevo-proveedor')}
       />
 
       {proveedores.length === 0 ? (
-        <EmptyState variant="card" title="No tienes proveedores" description="Registra el primero: una empresa de Membego o un proveedor externo." action={nuevo} />
+        <EmptyState variant="card" title="No tienes proveedores" description="Registra el primero: una empresa de Membego o un proveedor externo." action={nuevo('btn-nuevo-proveedor-vacio')} />
       ) : (
         <Card>
           <CardContent className="p-0">

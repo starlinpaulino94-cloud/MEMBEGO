@@ -80,7 +80,12 @@ test('1 · crear proveedor externo (companyId nulo) deja bitácora', async () =>
 })
 
 test('2 · vincular una Company existente no crea otra empresa y es idempotente', async () => {
-  const empresasAntes = await prisma.company.count()
+  // Se cuentan las empresas DE ESTA CORRIDA, no todas: `node --test` corre los
+  // archivos de prueba en paralelo y otro archivo creando su empresa haría
+  // fallar esto sin que nada de lo que comprueba estuviera mal. Lo que la
+  // prueba afirma —vincular no crea OTRA empresa— se sostiene igual acotando.
+  const mias = { slug: { startsWith: `little-pizza-${sufijo}` } }
+  const empresasAntes = await prisma.company.count({ where: mias })
   const p1 = await sinEmpresa('prueba', (tx) => vincularEmpresaComoProveedorEnTx(tx, ctx.companyId, {}, como(ctx.creadorId)))
   const p2 = await sinEmpresa('prueba', (tx) => vincularEmpresaComoProveedorEnTx(tx, ctx.companyId, {}, como(ctx.creadorId)))
   ctx.supplierEmpresaId = p1.id
@@ -88,7 +93,7 @@ test('2 · vincular una Company existente no crea otra empresa y es idempotente'
   assert.equal(p1.companyId, ctx.companyId)
   assert.equal(p2.id, p1.id)
   assert.equal(p2.reutilizado, true)
-  assert.equal(await prisma.company.count(), empresasAntes)
+  assert.equal(await prisma.company.count({ where: mias }), empresasAntes)
 })
 
 // ── 3–4 · Catálogo ──────────────────────────────────────────────────────────

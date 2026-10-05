@@ -1,8 +1,9 @@
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa } from '@/lib/tenant'
 import type { ContextoAuditoria } from '../core/auditoria'
 import { adaptadorDe, type EventoExternoAdaptado } from './adaptadores'
 import { normalizarCorrelationId } from './correlacion'
 import { EVENTO_RESUELTO, sanearError } from './domain'
+import { capacidadActiva } from './flags'
 import { verificadorDe } from './firma'
 import { anotarFalloDeProceso, procesarEventoExterno, registrarEventoExterno } from './inbox'
 import { anotarSupply, anotarYContar } from './log'
@@ -76,6 +77,25 @@ export async function recibirEventoExterno(p: PeticionEntrante): Promise<Resulta
     actorId: null,
     ipAddress: p.ip ?? null,
     userAgent: p.userAgent ?? 'webhook:supply-v2',
+  }
+
+  // ── 0 · ¿está encendida la integración? (bloque 4 · §10, §11) ────────────
+  //
+  // Lo PRIMERO, antes de verificar la firma y antes de tocar la base. Si está
+  // apagada no se procesa NADA y se responde 503: el proveedor lo reintentará
+  // cuando se reactive. Lo que no se hace es aceptar en silencio —un 200 sin
+  // procesar le diría que quedó entregado y no volvería a mandarlo, que es
+  // perder un aviso de pago con todas las letras—.
+  //
+  // Esto apaga el PROCESAMIENTO. El Centro de Operaciones, la búsqueda, la
+  // investigación y la resolución manual siguen funcionando: si apagar la
+  // integración apagara el panel, nadie podría ver por qué la apagó.
+  if (!(await capacidadActiva('SUPPLY_V2_EXTERNAL_PAYMENTS'))) {
+    return fin(
+      { codigo: 'FEATURE_DISABLED', correlationId, detalle: 'pagos externos apagados' },
+      { provider: p.provider },
+      'capacidad_apagada'
+    )
   }
 
   // ── 1 · ¿sabemos quién es? ────────────────────────────────────────────────
@@ -222,7 +242,7 @@ export async function recibirEventoExterno(p: PeticionEntrante): Promise<Resulta
     // respuesta: si encolar falla, el efecto se queda apuntado y lo recoge el
     // cron. Lo que se le contesta al proveedor describe qué pasó con el pago,
     // no si el aviso salió.
-    if (p.despachar !== false) {
+    if (p.despachar !== false && (await capacidadActiva('SUPPLY_V2_OUTBOX_DELIVERY'))) {
       try {
         // Con la hora DE AHORA, no con la del principio de la petición: el
         // efecto se acaba de escribir, así que su `availableAt` es posterior a
@@ -353,7 +373,15 @@ export async function actorDelWebhook(): Promise<string | null> {
   const configurado = process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID?.trim()
   if (!configurado) return null
   if (actorEnMemoria?.id === configurado) return actorEnMemoria.valido ? configurado : null
-  const existe = await prisma.user.findUnique({ where: { id: configurado }, select: { id: true } })
+  // `sinEmpresa` y no `prisma` a pelo: la cuenta de la integración no pertenece
+  // a ninguna empresa —es una cuenta de plataforma— pero la consulta tiene que
+  // declarar su contexto igual. Con RLS encendida, una consulta sin contexto no
+  // falla: devuelve CERO filas, y aquí cero filas significaría «la cuenta
+  // configurada no existe» y dejaría todos los eventos esperando por una avería
+  // invisible. El gate `rls:cobertura` existe justo para no dejar pasar esto.
+  const existe = await sinEmpresa('Supply 2.0: comprobar la cuenta de la integración', (tx) =>
+    tx.user.findUnique({ where: { id: configurado }, select: { id: true } })
+  )
   actorEnMemoria = { id: configurado, valido: Boolean(existe) }
   return existe ? configurado : null
 }

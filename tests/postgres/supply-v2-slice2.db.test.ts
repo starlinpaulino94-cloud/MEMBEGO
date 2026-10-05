@@ -142,9 +142,18 @@ test('A · crear oferta deja borrador sin tocar supply; publicar asigna 100 por 
 })
 
 test('A2 · asignar 1.001 con 900 disponibles falla y no deja asignación', async () => {
-  const antes = await prisma.supplyV2Allocation.count()
+  // Se cuentan las asignaciones DE ESTE PRODUCTO, no todas.
+  //
+  // `prisma.supplyV2Allocation.count()` a secas cuenta las de toda la base, y
+  // `node --test` corre los archivos de prueba en PARALELO: otro archivo
+  // publicando su propia oferta hacía crecer el contador entre la foto y la
+  // comprobación, y esta prueba fallaba por 826 !== 825 sin que nada de lo que
+  // comprueba estuviera mal. Es la misma familia de fallo que se arregló en
+  // `b4f6526e`; esta instancia se quedó atrás.
+  const mias = { catalogItemId: ctx.itemId }
+  const antes = await prisma.supplyV2Allocation.count({ where: mias })
   await assert.rejects(ofertaPublicada(1001), /Solo hay 900/)
-  assert.equal(await prisma.supplyV2Allocation.count(), antes)
+  assert.equal(await prisma.supplyV2Allocation.count({ where: mias }), antes)
   assert.deepEqual(await cubetasProducto(), { AVAILABLE: 900, ALLOCATED: 100, RESERVED: 0, ISSUED: 0 })
 })
 

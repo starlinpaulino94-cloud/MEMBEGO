@@ -46,6 +46,16 @@ const USUARIOS = {
   empleado: { email: 'e2e.supply2.empleado@membego.test', nombre: 'Pedro Encargado E2E', role: 'ADMINISTRADOR' },
   /** Segundo encargado, para que escritorio y móvil corran a la vez sin pisarse la empresa. */
   empleado2: { email: 'e2e.supply2.empleado2@membego.test', nombre: 'Rosa Encargada E2E', role: 'ADMINISTRADOR' },
+  /**
+   * Slice 9: la cuenta con la que CORRE la integración de pagos externos
+   * (`SUPPLY_V2_WEBHOOK_ACTOR_ID`), y con la que no entra nadie al navegador.
+   *
+   * Es una cuenta aparte a propósito, y no la de finanzas: el bloque 3 prohíbe
+   * que quien procesa el aviso de la pasarela sea quien cierra el incidente que
+   * ese aviso abrió. Si el arnés reutilizara aquí a `finanzas`, el recorrido de
+   * resolución fallaría con `ACTOR_DE_INTEGRACION` —y fallaría con razón—.
+   */
+  integracion: { email: 'e2e.supply2.integracion@membego.test', nombre: 'Integración Supply 2.0 E2E', role: 'SUPERADMIN' },
 } as const
 
 export type RolE2E = keyof typeof USUARIOS

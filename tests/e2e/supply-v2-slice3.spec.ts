@@ -87,7 +87,15 @@ async function ofertaPublicada(compras: Page, d: Datos): Promise<string> {
 
 async function compraPagada(cliente: Page, finanzas: Page, d: Datos): Promise<void> {
   await cliente.goto('/promociones')
-  await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.oferta }).click()
+  const tarjetaOferta = cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.oferta })
+  // `toHaveCount(1)` antes de usar el elemento, a propósito: no es un margen de
+  // tiempo disfrazado, es la invariante de verdad —de esto hay UNO— y Playwright
+  // reintenta hasta que se cumple. Durante una navegación del App Router el DOM
+  // puede tener un instante DOS copias del listado; el filtro por texto
+  // encontraba una en cada copia y el modo estricto abortaba. Si la página
+  // llegara a duplicar de verdad, esta misma línea lo caza: no lo esconde.
+  await expect(tarjetaOferta).toHaveCount(1)
+  await tarjetaOferta.click()
   await cliente.waitForURL(/\/promociones\/membego\//)
   await cliente.getByTestId('btn-comprar').click()
   await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
