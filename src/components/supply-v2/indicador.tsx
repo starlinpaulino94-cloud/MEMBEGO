@@ -19,6 +19,14 @@ const PUNTO: Record<TonoIndicador, string> = {
   primario: 'bg-sv2-primary',
 }
 
+const RECUADRO: Record<TonoIndicador, string> = {
+  neutral: 'bg-sv2-soft text-foreground',
+  exito: 'bg-sv2-secondary-container text-sv2-on-secondary-container',
+  aviso: 'bg-sv2-tertiary-fixed text-sv2-on-tertiary-fixed',
+  error: 'bg-sv2-error-container text-sv2-on-error-container',
+  primario: 'bg-sv2-primary-fixed text-sv2-on-primary-fixed',
+}
+
 /**
  * Indicador de las pestañas de Supply 2.0 (Stitch): categoría en mayúsculas
  * con su icono, cifra grande con unidad y una línea de estado al pie.
@@ -32,6 +40,7 @@ export function TarjetaIndicador({
   pie,
   tonoPie = 'neutral',
   iconoPie: IconoPie,
+  recuadro = false,
   testId,
 }: {
   etiqueta: string
@@ -43,13 +52,21 @@ export function TarjetaIndicador({
   tonoPie?: TonoIndicador
   /** Icono en lugar del punto al pie (p. ej. una flecha de ingreso). */
   iconoPie?: LucideIcon
+  /** Icono dentro de un recuadro de color (variante de Proveedores en Stitch). */
+  recuadro?: boolean
   testId?: string
 }) {
   return (
     <Tarjeta className="flex flex-col justify-between p-3" data-testid={testId}>
       <div className="mb-1 flex items-center justify-between gap-2 text-sv2-ink-variant">
         <span className="text-[12px] font-bold uppercase leading-4 tracking-wider">{etiqueta}</span>
-        <Icono aria-hidden className={cn('size-[18px] shrink-0', TEXTO[tonoIcono])} strokeWidth={2} />
+        {recuadro ? (
+          <span aria-hidden className={cn('flex size-9 shrink-0 items-center justify-center rounded-[8px]', RECUADRO[tonoIcono])}>
+            <Icono className="size-[18px]" strokeWidth={2} />
+          </span>
+        ) : (
+          <Icono aria-hidden className={cn('size-[18px] shrink-0', TEXTO[tonoIcono])} strokeWidth={2} />
+        )}
       </div>
       <div className="flex items-baseline gap-2">
         <span className={cn('text-[28px] font-bold leading-8 tracking-[-0.025em] tabular-nums', tonoIcono === 'aviso' || tonoIcono === 'exito' ? TEXTO[tonoIcono] : 'text-foreground')}>{valor}</span>
