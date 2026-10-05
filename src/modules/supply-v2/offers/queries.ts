@@ -24,7 +24,11 @@ export interface OfertaEnLista {
   /** `null` = sin tope (comisión UNLIMITED). */
   disponiblesComision: number | null
   proveedor: string
+  /** El proveedor es una empresa registrada en Membego. */
+  proveedorEnMembego: boolean
   producto: string
+  categoria: string | null
+  sku: string | null
   asignadas: number
   vendidas: number
   reservadas: number
@@ -32,43 +36,54 @@ export interface OfertaEnLista {
   publicPrice: string
   salePrice: string
   currency: string
+  /** Supply adquirido: costo por unidad de los lotes apartados (media ponderada); null a comisión. */
+  costoUnitario: string | null
+  /** Supply adquirido: código del primer lote apartado. */
+  lote: string | null
   startsAt: Date
   endsAt: Date | null
 }
 
-export async function listarOfertas(): Promise<OfertaEnLista[]> {
-  const filas = await sinEmpresa('Supply 2.0: listado de ofertas', (tx) =>
-    tx.supplyV2Offer.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      select: {
-        id: true,
-        code: true,
-        title: true,
-        status: true,
-        publicPrice: true,
-        salePrice: true,
-        currency: true,
-        startsAt: true,
-        endsAt: true,
-        quantityLimit: true,
-        sourceType: true,
-        commissionPercentage: true,
-        availabilityMode: true,
-        availabilityQuantity: true,
-        supplier: { select: { commercialName: true } },
-        catalogItem: { select: { name: true } },
-        allocation: { select: { allocatedQuantity: true, reservedQuantity: true, issuedQuantity: true, releasedQuantity: true } },
-        commissionReservations: { where: { status: { in: ['ACTIVE', 'CONSUMED'] } }, select: { status: true, quantity: true } },
-      },
-    })
-  )
-  return filas.map((o) => {
-    const comision = o.sourceType === 'COMMISSION'
-    const reservadasC = o.commissionReservations.filter((r) => r.status === 'ACTIVE').reduce((t, r) => t + r.quantity, 0)
-    const vendidasC = o.commissionReservations.filter((r) => r.status === 'CONSUMED').reduce((t, r) => t + r.quantity, 0)
-    const libresC = comision ? unidadesLibresComision(o, reservadasC + vendidasC) : null
-    return {
+const SELECT_OFERTA = {
+  id: true,
+  code: true,
+  title: true,
+  status: true,
+  publicPrice: true,
+  salePrice: true,
+  currency: true,
+  startsAt: true,
+  endsAt: true,
+  quantityLimit: true,
+  sourceType: true,
+  commissionPercentage: true,
+  availabilityMode: true,
+  availabilityQuantity: true,
+  supplier: { select: { commercialName: true, companyId: true } },
+  catalogItem: { select: { name: true, category: true, sku: true } },
+  allocation: {
+    select: {
+      allocatedQuantity: true,
+      reservedQuantity: true,
+      issuedQuantity: true,
+      releasedQuantity: true,
+      lines: { select: { quantity: true, lot: { select: { code: true, unitCost: true } } } },
+    },
+  },
+  commissionReservations: { where: { status: { in: ['ACTIVE', 'CONSUMED'] } }, select: { status: true, quantity: true } },
+} satisfies Prisma.SupplyV2OfferSelect
+
+type OfertaSeleccionada = Prisma.SupplyV2OfferGetPayload<{ select: typeof SELECT_OFERTA }>
+
+function aOfertaEnLista(o: OfertaSeleccionada): OfertaEnLista {
+  const comision = o.sourceType === 'COMMISSION'
+  const reservadasC = o.commissionReservations.filter((r) => r.status === 'ACTIVE').reduce((t, r) => t + r.quantity, 0)
+  const vendidasC = o.commissionReservations.filter((r) => r.status === 'CONSUMED').reduce((t, r) => t + r.quantity, 0)
+  const libresC = comision ? unidadesLibresComision(o, reservadasC + vendidasC) : null
+  const lineas = o.allocation?.lines ?? []
+  const unidadesLote = lineas.reduce((t, l) => t + l.quantity, 0)
+  const costo = !comision && unidadesLote > 0 ? lineas.reduce((t, l) => t + l.quantity * aNumero(l.lot.unitCost), 0) / unidadesLote : null
+  return {
     id: o.id,
     code: o.code,
     title: o.title,
@@ -78,7 +93,10 @@ export async function listarOfertas(): Promise<OfertaEnLista[]> {
     availabilityMode: o.availabilityMode,
     disponiblesComision: libresC,
     proveedor: o.supplier.commercialName,
+    proveedorEnMembego: o.supplier.companyId !== null,
     producto: o.catalogItem.name,
+    categoria: o.catalogItem.category,
+    sku: o.catalogItem.sku,
     asignadas: comision ? o.availabilityQuantity ?? 0 : o.allocation?.allocatedQuantity ?? 0,
     vendidas: comision ? vendidasC : o.allocation?.issuedQuantity ?? 0,
     reservadas: comision ? reservadasC : o.allocation?.reservedQuantity ?? 0,
@@ -86,10 +104,119 @@ export async function listarOfertas(): Promise<OfertaEnLista[]> {
     publicPrice: o.publicPrice.toFixed(2),
     salePrice: o.salePrice.toFixed(2),
     currency: o.currency,
+    costoUnitario: costo === null ? null : costo.toFixed(2),
+    lote: lineas[0]?.lot.code ?? null,
     startsAt: o.startsAt,
     endsAt: o.endsAt,
-    }
-  })
+  }
+}
+
+export async function listarOfertas(): Promise<OfertaEnLista[]> {
+  const filas = await sinEmpresa('Supply 2.0: listado de ofertas', (tx) =>
+    tx.supplyV2Offer.findMany({ orderBy: { createdAt: 'desc' }, take: 200, select: SELECT_OFERTA })
+  )
+  return filas.map(aOfertaEnLista)
+}
+
+export interface FiltroOfertas {
+  /** Título, código, producto, SKU o proveedor. */
+  q?: string | null
+  sourceType?: SupplyV2OfferSource | null
+  supplierId?: string | null
+  status?: SupplyV2OfferStatus | null
+}
+
+/** Listado filtrado y paginado de la pantalla Ofertas: los filtros se aplican en la base. */
+export async function buscarOfertas(f: FiltroOfertas, p: { pagina: number; filas: number }): Promise<{ filas: OfertaEnLista[]; total: number; adquiridas: number; comision: number }> {
+  const q = f.q?.trim()
+  const where: Prisma.SupplyV2OfferWhereInput = {
+    ...(f.sourceType ? { sourceType: f.sourceType } : {}),
+    ...(f.supplierId ? { supplierId: f.supplierId } : {}),
+    ...(f.status ? { status: f.status } : {}),
+    ...(q
+      ? {
+          OR: [
+            { title: { contains: q, mode: 'insensitive' } },
+            { code: { contains: q, mode: 'insensitive' } },
+            { supplier: { commercialName: { contains: q, mode: 'insensitive' } } },
+            { catalogItem: { name: { contains: q, mode: 'insensitive' } } },
+            { catalogItem: { sku: { contains: q, mode: 'insensitive' } } },
+          ],
+        }
+      : {}),
+  }
+  const [filas, porModelo] = await sinEmpresa('Supply 2.0: búsqueda de ofertas', (tx) =>
+    Promise.all([
+      tx.supplyV2Offer.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (p.pagina - 1) * p.filas, take: p.filas, select: SELECT_OFERTA }),
+      tx.supplyV2Offer.groupBy({ by: ['sourceType'], where, _count: { _all: true } }),
+    ])
+  )
+  const cuenta = (t: SupplyV2OfferSource) => porModelo.find((g) => g.sourceType === t)?._count._all ?? 0
+  const adquiridas = cuenta('PREPURCHASED_SUPPLY')
+  const comision = cuenta('COMMISSION')
+  return { filas: filas.map(aOfertaEnLista), total: adquiridas + comision, adquiridas, comision }
+}
+
+export interface ResumenOfertas {
+  activas: number
+  borradores: number
+  pausadas: number
+  /** Unidades asignadas a ofertas activas de supply adquirido. */
+  unidadesAsignadas: number
+  /** Lote de la oferta activa más reciente (para el pie del indicador). */
+  loteReciente: string | null
+  /** Disponibles de las ofertas activas × su precio Membego. */
+  gmvVitrina: number
+  /** Precio unitario de la oferta activa más reciente. */
+  precioReciente: number | null
+  /** Margen medio ponderado de las ofertas activas de supply adquirido (0–100). */
+  margenPct: number | null
+  costoMedio: number | null
+  utilidadMedia: number | null
+  /** Ofertas activas en campañas activas y recompensas activas de fidelización. */
+  enCampanas: number
+  enFidelizacion: number
+}
+
+/** Indicadores de la pantalla Ofertas, sobre todas las ofertas (no el filtro). */
+export async function resumenOfertas(): Promise<ResumenOfertas> {
+  const [conteos, activas, enCampanas, enFidelizacion] = await sinEmpresa('Supply 2.0: indicadores de ofertas', (tx) =>
+    Promise.all([
+      tx.supplyV2Offer.groupBy({ by: ['status'], _count: { _all: true } }),
+      tx.supplyV2Offer.findMany({ where: { status: 'ACTIVE' }, orderBy: { createdAt: 'desc' }, select: SELECT_OFERTA }),
+      tx.supplyV2CampaignOffer.count({ where: { campaign: { status: 'ACTIVE' }, offer: { status: 'ACTIVE' } } }),
+      tx.supplyV2Reward.count({ where: { status: 'ACTIVE', offerId: { not: null } } }),
+    ])
+  )
+  const cuenta = (e: SupplyV2OfferStatus) => conteos.find((c) => c.status === e)?._count._all ?? 0
+  const lista = activas.map(aOfertaEnLista)
+  const adquiridas = lista.filter((o) => o.sourceType === 'PREPURCHASED_SUPPLY' && o.costoUnitario !== null)
+  const pesos = adquiridas.map((o) => ({ u: Math.max(1, o.asignadas), venta: Number(o.salePrice), costo: Number(o.costoUnitario) }))
+  const totU = pesos.reduce((t, x) => t + x.u, 0)
+  const venta = pesos.reduce((t, x) => t + x.u * x.venta, 0)
+  const costo = pesos.reduce((t, x) => t + x.u * x.costo, 0)
+  return {
+    activas: cuenta('ACTIVE'),
+    borradores: cuenta('DRAFT'),
+    pausadas: cuenta('PAUSED'),
+    unidadesAsignadas: lista.filter((o) => o.sourceType === 'PREPURCHASED_SUPPLY').reduce((t, o) => t + o.asignadas, 0),
+    loteReciente: lista.find((o) => o.lote)?.lote ?? null,
+    gmvVitrina: lista.reduce((t, o) => t + (o.sourceType === 'COMMISSION' && o.disponiblesComision === null ? 0 : o.disponibles) * Number(o.salePrice), 0),
+    precioReciente: lista[0] ? Number(lista[0].salePrice) : null,
+    margenPct: venta > 0 ? ((venta - costo) / venta) * 100 : null,
+    costoMedio: totU > 0 ? costo / totU : null,
+    utilidadMedia: totU > 0 ? (venta - costo) / totU : null,
+    enCampanas,
+    enFidelizacion,
+  }
+}
+
+/** Proveedores con al menos una oferta, para el filtro. */
+export async function proveedoresConOfertas(): Promise<{ id: string; nombre: string }[]> {
+  const filas = await sinEmpresa('Supply 2.0: proveedores con ofertas', (tx) =>
+    tx.supplyV2Supplier.findMany({ where: { offers: { some: {} } }, orderBy: { commercialName: 'asc' }, select: { id: true, commercialName: true } })
+  )
+  return filas.map((f) => ({ id: f.id, nombre: f.commercialName }))
 }
 
 export async function fichaOferta(id: string) {
