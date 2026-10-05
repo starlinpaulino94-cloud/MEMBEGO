@@ -52,3 +52,26 @@ test('el catálogo de conectores tiene su decisión de RLS (no vuelve a driftar)
   const catalogos = sql.slice(sql.indexOf('FOREACH cond IN ARRAY ARRAY['))
   assert.match(catalogos.slice(0, 300), /'conectores'/, 'conectores no está entre los catálogos globales')
 })
+
+test('las categorías de vehículo de plataforma tienen su decisión de RLS', () => {
+  // Mismo guardia, mismo motivo, peor síntoma. `supply_v2_vehicle_categories`
+  // no tiene `companyId` a propósito —un proveedor de Supply puede ser externo
+  // y no tener empresa—, así que depende de esta decisión para no quedar
+  // denegada.
+  //
+  // Y aquí el drift NO daría una pantalla vacía: el precio por categoría hace
+  // fail-open al precio base por diseño, así que una lectura denegada se vería
+  // como «todas las ofertas cobran su precio base», sin un solo error en el
+  // log. Cobrar de menos en silencio es exactamente lo que este trabajo venía
+  // a evitar, así que la decisión se fija aquí.
+  const sql = readFileSync(
+    join(raiz, 'prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql'),
+    'utf8'
+  )
+  const catalogos = sql.slice(sql.indexOf('FOREACH cond IN ARRAY ARRAY['))
+  assert.match(
+    catalogos.slice(0, 400),
+    /'supply_v2_vehicle_categories'/,
+    'supply_v2_vehicle_categories no está entre los catálogos globales'
+  )
+})

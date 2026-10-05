@@ -46,6 +46,7 @@
     "permisos:catalogo": "node scripts/permisos-catalogo.mjs",
     "rls:preflight": "node scripts/rls-capa2-preflight.mjs",
     "auditar:placas": "node scripts/auditar-placas.mjs",
+    "auditar:niveles": "node scripts/auditar-niveles-tarifarios.mjs",
     "reparar:qrs-membresias": "node scripts/reparar-qrs-membresias-activas.mjs"
   },
   "dependencies": {

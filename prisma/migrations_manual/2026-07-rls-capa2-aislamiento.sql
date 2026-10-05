@@ -371,9 +371,20 @@ BEGIN
   -- lo administra MembeGo y lo lee toda empresa que abre el hub de integraciones.
   -- Se añadió después de escribir esta capa, así que el preflight la marcaba
   -- «sin ruta»: sin esta decisión, con `membego_app` el catálogo saldría vacío.
+  --
+  -- `supply_v2_vehicle_categories` son las categorías de vehículo de PLATAFORMA
+  -- (sedán, SUV, pickup, comercial) con las que Supply 2.0 pone precio por tipo
+  -- de carro. No tiene `companyId` A PROPÓSITO, y no por descuido: un proveedor
+  -- de Supply puede ser externo y no tener empresa en Membego, así que exigirle
+  -- una obligaría a inventarse una arbitraria. Lo administra Membego y lo lee
+  -- cualquiera que mire una oferta. Denegarla dejaría toda oferta cobrando el
+  -- precio base sin que nada lo avisara: el fail-open del precio por categoría
+  -- es por diseño, así que el síntoma NO sería un error sino cobrar de menos en
+  -- silencio, que es justo lo que este trabajo venía a evitar.
   FOREACH cond IN ARRAY ARRAY[
     'business_categories', 'campanas_globales', 'sistemas_conectados',
-    'tipos_negocio', 'sistemas_tipos_negocio', 'conectores'
+    'tipos_negocio', 'sistemas_tipos_negocio', 'conectores',
+    'supply_v2_vehicle_categories'
   ] LOOP
     CONTINUE WHEN NOT EXISTS (
       SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);

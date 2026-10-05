@@ -414,16 +414,49 @@ test('F · pausar, cancelar con reservas vivas, retirar una asignación y vencer
   // Vencimiento por el barrido: el beneficio y sus asignaciones vivas pasan a vencidos.
   const vence = await beneficioActivo({ name: 'Bono que vence', funding: 'MEMBEGO', valueType: 'FIXED_AMOUNT', membegoValue: 100, scope: 'SPECIFIC_OFFER', offerId: offer, endsAt: new Date(ahora.getTime() + 60_000), startsAt: new Date(ahora.getTime() - DIA) })
   const gv = await asignar(vence, ctx.cliente2)
-  const r = await sinEmpresa('prueba', (tx) => expirarBeneficiosEnTx(tx, como(null), new Date(ahora.getTime() + DIA)))
+  /**
+   * El reloj se adelanta DOS MINUTOS, no un día.
+   *
+   * `expirarBeneficiosEnTx` vence TODO beneficio de la base cuya vigencia haya
+   * pasado, no solo los de este archivo, y los archivos de prueba corren en
+   * paralelo. Con el reloj un día adelante, «vencido» incluiría los beneficios
+   * vivos de los Slices 7 y 8 y este archivo los apagaría sin que nadie
+   * entendiera por qué. El beneficio que esta prueba quiere vencer termina
+   * dentro de 60 segundos, así que con dos minutos basta: es el desplazamiento
+   * más pequeño que cubre su propio dato y no alcanza a nadie más.
+   */
+  const r = await sinEmpresa('prueba', (tx) => expirarBeneficiosEnTx(tx, como(null), new Date(ahora.getTime() + 120_000)))
   assert.ok(r.beneficios >= 1)
   assert.equal((await beneficioDe(vence)).status, 'EXPIRED')
   assert.equal((await prisma.supplyV2CustomerBenefit.findUniqueOrThrow({ where: { id: gv.id } })).status, 'EXPIRED')
   // Un beneficio vencido es final: ni se reactiva ni se usa.
   await assert.rejects(sinEmpresa('prueba', (tx) => reanudarBeneficioEnTx(tx, vence, como(ctx.compras))), /no se puede pasar de/)
   await assert.rejects(comprarConBeneficio(offer, ctx.cliente2, gv.id), /venció|no está activo/)
-  // El barrido del cron hace lo mismo y es idempotente.
-  const barrido = await barridoSupplyV2(new Date(ahora.getTime() + DIA))
+  /**
+   * El barrido del cron pasa por el mismo camino, y se corre con el reloj DE
+   * VERDAD.
+   *
+   * Antes esta línea era `barridoSupplyV2(ahora + 1 día)`, y eso rompía otros
+   * archivos de prueba. `barridoSupplyV2` expira TODA orden PENDING cuya
+   * reserva haya caducado, en toda la base: con el reloj un día adelante,
+   * «caducada» incluye cualquier reserva viva —la de reserva son 15 minutos—.
+   * Como `node --test` corre los archivos EN PARALELO, este barrido expiraba la
+   * orden recién creada del Slice 2 y su prueba N fallaba en una aserción que
+   * no tenía nada que ver con los beneficios. Tardó en aparecer porque depende
+   * de qué dos archivos coincidan en el tiempo.
+   *
+   * Y la aserción que había —`beneficiosVencidos >= 0`— no comprobaba nada:
+   * es cierta para cualquier número. Lo que de verdad importa aquí es que el
+   * barrido NO deshaga lo ya vencido, y eso sí se puede afirmar.
+   */
+  const barrido = await barridoSupplyV2()
   assert.ok(barrido.beneficiosVencidos >= 0)
+  assert.equal((await beneficioDe(vence)).status, 'EXPIRED', 'el barrido no resucita un beneficio vencido')
+  assert.equal(
+    (await prisma.supplyV2CustomerBenefit.findUniqueOrThrow({ where: { id: gv.id } })).status,
+    'EXPIRED',
+    'ni su asignación'
+  )
 })
 
 // ── G · comisión y base del acuerdo (§14, §25) ──────────────────────────────

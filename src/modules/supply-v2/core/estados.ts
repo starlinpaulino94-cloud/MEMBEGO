@@ -48,6 +48,9 @@ export const ORDEN_ABIERTA: readonly SupplyV2PurchaseOrderStatus[] = [
   'PARTIALLY_RECEIVED',
 ]
 
+/** Aprobadas y todavía con unidades por recibir (el subconjunto de `ORDEN_ABIERTA` que espera recepción). */
+export const ORDEN_POR_RECIBIR: readonly SupplyV2PurchaseOrderStatus[] = ['APPROVED', 'PARTIALLY_PAID', 'PAID', 'PARTIALLY_RECEIVED']
+
 /** Una orden aprobada no cambia cantidades ni costos en silencio (§42). */
 export const ORDEN_EDITABLE: readonly SupplyV2PurchaseOrderStatus[] = ['DRAFT']
 

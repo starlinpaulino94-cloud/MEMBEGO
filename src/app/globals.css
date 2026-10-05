@@ -48,6 +48,32 @@
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
 
+  /* Supply 2.0 · paleta del rediseño (Stitch). Solo la usan las pantallas de
+     Supply 2.0; los valores viven en el bloque `--sv2-*` más abajo. */
+  --font-sv2: var(--font-sv2-inter);
+  --font-sv2-mono: var(--font-sv2-jetbrains);
+  --color-sv2-canvas: var(--sv2-canvas);
+  --color-sv2-well: var(--sv2-well);
+  --color-sv2-soft: var(--sv2-soft);
+  --color-sv2-soft-hover: var(--sv2-soft-hover);
+  --color-sv2-track: var(--sv2-track);
+  --color-sv2-ink-variant: var(--sv2-ink-variant);
+  --color-sv2-outline: var(--sv2-outline);
+  --color-sv2-accent: var(--sv2-accent);
+  --color-sv2-accent-hover: var(--sv2-accent-hover);
+  --color-sv2-primary: var(--sv2-primary);
+  --color-sv2-primary-fixed: var(--sv2-primary-fixed);
+  --color-sv2-on-primary-fixed: var(--sv2-on-primary-fixed);
+  --color-sv2-secondary: var(--sv2-secondary);
+  --color-sv2-secondary-container: var(--sv2-secondary-container);
+  --color-sv2-on-secondary-container: var(--sv2-on-secondary-container);
+  --color-sv2-tertiary: var(--sv2-tertiary);
+  --color-sv2-tertiary-fixed: var(--sv2-tertiary-fixed);
+  --color-sv2-on-tertiary-fixed: var(--sv2-on-tertiary-fixed);
+  --color-sv2-error: var(--sv2-error);
+  --color-sv2-error-container: var(--sv2-error-container);
+  --color-sv2-on-error-container: var(--sv2-on-error-container);
+
   /* ── Radios ─────────────────────────────────────────────────────────
      DS 2.0 · Una familia, un radio. Los valores ya eran correctos; lo que
      faltaba era la regla de cuál usar:
@@ -501,6 +527,58 @@
      el boton azul con texto blanco de la misma pantalla. */
   --sidebar-selected: oklch(0.55 0.22 255);
   --sidebar-selected-foreground: oklch(0.99 0 0);
+}
+
+/* ── Supply 2.0 · paleta del rediseño (Stitch, "Precision Procurement Engine") ──
+   Los valores claros son los de la maqueta tal cual; los oscuros son su
+   equivalente para que el modo oscuro no quede con superficies lavanda sobre
+   negro. Solo los consumen los componentes de `components/supply-v2`. */
+:root {
+  --sv2-canvas: #f2f3ff;
+  --sv2-well: #f2f3ff;
+  --sv2-soft: #eaedff;
+  --sv2-soft-hover: #e2e7ff;
+  --sv2-track: #dae2fd;
+  --sv2-ink-variant: #434655;
+  --sv2-outline: #737686;
+  --sv2-accent: #2563eb;
+  --sv2-accent-hover: #1d4ed8;
+  --sv2-primary: #004ac6;
+  --sv2-primary-fixed: #dbe1ff;
+  --sv2-on-primary-fixed: #00174b;
+  --sv2-secondary: #006c4a;
+  --sv2-secondary-container: #82f5c1;
+  --sv2-on-secondary-container: #00714e;
+  --sv2-tertiary: #824500;
+  --sv2-tertiary-fixed: #ffdcc3;
+  --sv2-on-tertiary-fixed: #6e3900;
+  --sv2-error: #ba1a1a;
+  --sv2-error-container: #ffdad6;
+  --sv2-on-error-container: #93000a;
+}
+
+.dark {
+  --sv2-canvas: var(--background);
+  --sv2-well: oklch(0.225 0.012 264);
+  --sv2-soft: oklch(0.26 0.016 264);
+  --sv2-soft-hover: oklch(0.30 0.02 264);
+  --sv2-track: oklch(0.32 0.02 264);
+  --sv2-ink-variant: oklch(0.78 0.012 264);
+  --sv2-outline: oklch(0.64 0.012 264);
+  --sv2-accent: #2563eb;
+  --sv2-accent-hover: #3b74f0;
+  --sv2-primary: #b4c5ff;
+  --sv2-primary-fixed: oklch(0.32 0.08 264);
+  --sv2-on-primary-fixed: #dbe1ff;
+  --sv2-secondary: #68dba9;
+  --sv2-secondary-container: oklch(0.33 0.07 160);
+  --sv2-on-secondary-container: #85f8c4;
+  --sv2-tertiary: #ffb77d;
+  --sv2-tertiary-fixed: oklch(0.34 0.07 60);
+  --sv2-on-tertiary-fixed: #ffdcc3;
+  --sv2-error: #ffb4ab;
+  --sv2-error-container: oklch(0.34 0.09 25);
+  --sv2-on-error-container: #ffdad6;
 }
 
 /* ── El color por defecto del microcopy ────────────────────────────────────
