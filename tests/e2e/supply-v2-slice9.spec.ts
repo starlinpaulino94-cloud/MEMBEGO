@@ -553,7 +553,22 @@ test.describe('Slice 9 · bloque 4 · Centro de Operaciones', () => {
     await expect(cliente.getByTestId('campana-sin-leer')).toBeVisible({ timeout: 20_000 })
     await cliente.getByTestId('campana-avisos').click()
     await expect(cliente.getByTestId('mis-avisos')).toBeVisible({ timeout: 20_000 })
-    await expect(cliente.getByText('Tu compra está confirmada').first()).toBeVisible()
+
+    // El aviso DE ESTA COMPRA, localizado por el hilo que lo une al efecto, y
+    // no `getByText(...).first()`: con varios recorridos dejando compras
+    // pagadas a la misma clienta, «el primero con este texto» puede ser el de
+    // otro caso, y entonces esta prueba pasaría sin demostrar su propia
+    // cadena. Misma razón que en H.
+    const efecto = await db.supplyV2OutboxEvent.findFirstOrThrow({
+      where: { aggregateId: compra.id, eventType: 'supply.order.paid' },
+      select: { dedupeKey: true },
+    })
+    const avisoDeLaCompra = await db.notificacion.findFirstOrThrow({
+      where: { dedupeKey: efecto.dedupeKey },
+      select: { id: true },
+    })
+    await expect(cliente.getByTestId(`aviso-${avisoDeLaCompra.id}`)).toContainText('Tu compra está confirmada')
+    await expect(cliente.getByTestId(`aviso-${avisoDeLaCompra.id}`)).toContainText(compra.numero)
     await suyo.close()
 
     // 5 · Y DESDE OPERACIONES se encuentra todo por el hilo: la compra, su
@@ -643,14 +658,43 @@ test.describe('Slice 9 · bloque 4 · Centro de Operaciones', () => {
       )
       .toBeGreaterThanOrEqual(1)
 
-    // Y EL CLIENTE LO VE. Una sola vez en la lista: la deduplicación se
-    // comprueba en pantalla, que es donde le importa a la persona.
+    // Y EL CLIENTE LO VE.
+    //
+    // ─────────────────────────────────────────────────────────────────────
+    // POR QUÉ SE BUSCA ESTE AVISO Y NO «UN AVISO CON ESTE TEXTO»
+    //
+    // Esto afirmaba `getByText('Un beneficio tuyo está por vencer')` con
+    // `toHaveCount(1)`, y en la suite completa salieron DOS. No era un fallo
+    // del producto: era la aserción. Los recorridos anteriores dejan a esta
+    // misma clienta con otros beneficios por vencer, y cada uno tiene su
+    // aviso —con el mismo título, porque el título no lleva el nombre del
+    // beneficio—. Dos beneficios distintos son dos avisos, y eso es correcto.
+    //
+    // Lo que la prueba quiere decir es «el MÍO sale, y una sola vez», no «en
+    // toda la base hay un solo beneficio por vencer». Es exactamente la regla
+    // que `docs/PRUEBAS-E2E.md` pide y que esta prueba estaba incumpliendo:
+    // afirmar sobre lo propio, nunca sobre un contador global. La
+    // deduplicación de verdad ya quedó demostrada arriba contra la base, para
+    // ESTE beneficio.
+    const fila = await db.supplyV2OutboxEvent.findFirstOrThrow({
+      where: { eventType: 'supply.notify.benefit_expiring', aggregateId: asignacionId },
+      select: { dedupeKey: true },
+    })
+    // La `idempotencyKey` del efecto es el `dedupeKey` de su fila, y viaja al
+    // `dedupeKey` de la notificación: ese es el hilo entre el aviso apuntado y
+    // el aviso que se ve.
+    const aviso = await db.notificacion.findFirstOrThrow({
+      where: { userId: clienteU.id, dedupeKey: fila.dedupeKey },
+      select: { id: true },
+    })
+
     const suyo = await browser.newContext()
     await entrarComo(suyo, 'cliente', BASE)
     const cliente = await suyo.newPage()
     await cliente.goto(`${BASE}/cliente/novedades`)
     await expect(cliente.getByTestId('mis-avisos')).toBeVisible({ timeout: 20_000 })
-    await expect(cliente.getByText('Un beneficio tuyo está por vencer')).toHaveCount(1)
+    await expect(cliente.getByTestId(`aviso-${aviso.id}`)).toHaveCount(1)
+    await expect(cliente.getByTestId(`aviso-${aviso.id}`)).toContainText('Un beneficio tuyo está por vencer')
     await suyo.close()
     await ops.close()
   })
