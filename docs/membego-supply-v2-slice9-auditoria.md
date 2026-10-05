@@ -508,10 +508,10 @@ hecho.
 
 | Suite | Qué demuestra | Resultado |
 |---|---|---|
-| `npm test` (unitarias) | dominio, firmas, saneado, escalera, etiquetas de métrica | **3591 / 0**, 6 omitidas |
+| `npm test` (unitarias) | dominio, firmas, saneado, escalera, etiquetas de métrica | **3592 / 0**, 6 omitidas |
 | `npm run test:db` (PostgreSQL) | carreras, candados, idempotencia, barridos, inyección de fallo | **320 / 0** |
 | `npm run e2e:limpio` | los recorridos en navegador sobre base desechable | ver § 26 |
-| `tests/supply-v2-retencion.test.ts` | que nada financiero se borre en cascada | **6 / 0** |
+| `tests/supply-v2-retencion.test.ts` | que nada financiero se borre, y que nada consulte sin contexto | **7 / 0** |
 
 Lo que solo se puede demostrar contra PostgreSQL de verdad, y por eso está en
 la suite de base: el índice único bajo carrera, el advisory lock, el `FOR
@@ -538,6 +538,18 @@ las de E2E que se saltan por falta de configuración lo dicen en su mensaje de
 | F | el panel se lee en un móvil, sin desbordamiento lateral |
 | G | de la pasarela al aviso que el cliente VE, y de vuelta por el hilo |
 | H | un beneficio por vencer avisa UNA vez, aunque el cron corra dos |
+
+**Medición de la corrida completa del 2026-10-05** (`npm run e2e:limpio`, base
+desechable, 25,2 min): **65 pasadas, 114 omitidas, 2 fallos**, y los dos fallos
+eran el MISMO recorrido —G, en sus dos proyectos— por la causa del § 21.5: el
+aviso no estaba en pantalla porque el área de cliente no lo mostraba. Los
+Slices 1–8 pasaron enteros. La corrida de validación con el arreglo ya
+construido está en curso al escribir esto, y **este número se sustituye por el
+suyo cuando termine**: lo que vale es la última medida, no la mejor.
+
+Las 114 omitidas no son aprobadas: son los recorridos que el proyecto `movil`
+no ejecuta porque son de `escritorio` y al revés, más los que se saltan
+diciéndolo cuando falta configuración del arnés.
 
 G y H son del bloque 5. G recorre la cadena completa en un solo caso —aviso
 firmado → pago → efecto → aviso en la campana del cliente → la misma operación
