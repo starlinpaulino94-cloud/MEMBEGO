@@ -462,27 +462,28 @@ Hueco detectado: **ningún `ENABLE ROW LEVEL SECURITY` en migraciones posteriore
 
 ## 8. Calidad
 
-Medido el 2026-10-06 tras F2 (BD local desechable `membego_pg`, PostgreSQL 16, con `migrate deploy` y la Capa 2 aplicada; no producción). Se **repitieron** tsc, lint, unit, PostgreSQL, build, bundle, migraciones y todos los gates de RLS/permisos. Se repitió también la **suite E2E completa** (réplica local de `e2e.yml`).
+Medido el 2026-10-06 tras F2.5 (BD local desechable `membego_pg`, PostgreSQL 16, con `migrate deploy` y la Capa 2 aplicada; no producción). Se **repitieron** tsc, lint, unit, PostgreSQL, build, bundle, migraciones y todos los gates de RLS/permisos. Se repitió también la **suite E2E completa** (réplica local de `e2e.yml`).
 
 ```text
 TypeScript:          PASS   tsc --noEmit, 0 errores
 Lint:                PASS   npx eslint src tests (comando de CI): 0 errores, 16 warnings preexistentes
-Unit Tests:          3722/3728 PASS · 0 FAIL · 6 SKIP (5 requieren servidor dev; 1 BLOCKED: claves QA reales de CardNET)
+Unit Tests:          3742/3748 PASS · 0 FAIL · 6 SKIP (5 requieren servidor dev; 1 BLOCKED: claves QA reales de CardNET)
   · Supply V2:       354/354 PASS
   · F0 nuevos:       31/31 PASS (commerce-primitives 22, capacidades-fase0 9)
   · Higiene nuevos:  19/19 PASS (imagen-tipo 9, excursiones-imagen-guardia 10; este último falla 9/10 contra la versión vulnerable)
   · F1.1–F1.3 nuevos: 60/60 PASS (catalog-domain 19, catalogo-permisos 14, catalogo-publico 13, catalogo-api 9, catalog-formato 4, storage-rutas +1)
   · F2 nuevos:        28/28 PASS (inventory-domain 13, inventario-permisos 15)
+  · F2.5 nuevos:      15/15 PASS (supply-bridge) + catalogo-publico ampliado
 Integration Tests:   N/A    (no existe capa separada; los tests unitarios son puros o de texto fuente)
-PostgreSQL Tests:    403/403 PASS  npm run test:db (17 archivos; 55 de catálogo + 37 de inventario) sobre BD migrada con migrate deploy
-E2E (Playwright):    PASS parcial — 97 PASS · 0 FAIL · 128 SKIP (14,6 min; réplica de e2e.yml sobre PG local, build propio, tras añadir el spec de inventario). Antes: 93/0/124. `inventario-admin` pasó 3 corridas limpias seguidas y otra con el código final tras endurecer el servicio. No se hizo mutación sobre la interfaz del inventario (sí sobre el servicio, por PG)
-                     Los 128 SKIP = 114 por `AUTENTICADO=false` + 14 de los specs de catálogo e inventario que corren solo en escritorio (en móvil se saltan por diseño): sin Supabase de pruebas (docs/PRUEBAS-E2E.md §4). Con la misma
+PostgreSQL Tests:    423/423 PASS  npm run test:db (18 archivos; 55 de catálogo + 37 de inventario + 20 del puente) sobre BD migrada con migrate deploy
+E2E (Playwright):    PASS parcial — 100 PASS · 0 FAIL · 131 SKIP (14,3 min; réplica de e2e.yml sobre PG local, build propio, tras añadir el spec del puente). Antes: 97/0/128. `puente-supply` (3 pruebas, escritorio) pasó 3 corridas limpias seguidas con el código final. No se hizo mutación sobre la interfaz del inventario ni del puente (sí sobre sus servicios, por PG)
+                     Los 131 SKIP = 114 por `AUTENTICADO=false` + 17 de los specs de catálogo, inventario y puente que corren solo en escritorio (en móvil se saltan por diseño): sin Supabase de pruebas (docs/PRUEBAS-E2E.md §4). Con la misma
                      configuración de e2e.yml, los flujos AUTENTICADOS de cliente/admin/comisiones/sidebar no se ejercen.
                      Sí corrieron: recorrido público, registro v2 y los 9 slices de Supply V2 (sesión propia).
 Build:               PASS   next build, con las variables de relleno de CI (rutas `/admin/catalogo*`, `/admin/inventario*`, `/api/cron/inventario`, `/catalogo`, `/empresas/…/catalogo/…` y `/api/platform/v1/catalog-*` compiladas)
 E2E de catálogo:     PASS   26 pruebas (admin 3, público 7×2 proyectos, API 7); sesión firmada con el secreto de `e2e.yml`. Se omite «sin credenciales → 401» (en una app sin firma de tokens de satélite da 503 `PLATFORM_API_UNCONFIGURED`, igual que `/branches`)
 RLS Checks:          PASS   preflight 272/293 cubiertas (21 manuales; las 5 de catálogo y las 3 de inventario, generadas) · cobertura-app OK · probar-rls 29/29 (Capa 2 aplicada; +7 de inventario) · 0 grants anon
-Migration Checks:    PASS   prisma validate · migrate diff 0 deriva · migrate deploy 194/194 · test de inmutabilidad (sellado 194)
+Migration Checks:    PASS   prisma validate · migrate diff 0 deriva · migrate deploy 196/196 · test de inmutabilidad (sellado 196)
 Otros gates de CI:   PASS   transacciones-anidadas · permisos-catalogo (100 funciones) · accesibilidad-formularios y deuda-diseño (las pantallas nuevas llegaron a incumplirlos y se corrigieron)
 npm audit (prod):    FAIL   1 high — source-map-js (DoS); el job `dependencias` de CI lo bloquearía. Preexistente.
 Presupuesto bundle:  PASS   npm run presupuesto («Dentro de presupuesto»)
