@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { Prisma } from '@prisma/client'
-import type { SupplyV2CustomerMembershipStatus, SupplyV2LoyaltyProgramStatus } from '@prisma/client'
+import type { SupplyV2BenefitFunding, SupplyV2CustomerMembershipStatus, SupplyV2LoyaltyModality, SupplyV2LoyaltyProgramStatus } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { dineroSupplyV2 } from '../core/catalogo'
 import { compromisoDePuntos, membresiaVigente } from './domain'
@@ -364,6 +364,14 @@ export interface TableroDeFidelizacion {
     costoRealizado: string
     costoPendiente: string
     sinTope: boolean
+    modalidades: SupplyV2LoyaltyModality[]
+    funding: SupplyV2BenefitFunding
+    startsAt: Date
+    endsAt: Date | null
+    /** Días tras los que vencen los puntos; null = no vencen. */
+    puntosVencenEnDias: number | null
+    puntosEmitidosAcum: number
+    puntosVencidos: number
   }[]
   totales: {
     programasActivos: number
@@ -371,7 +379,11 @@ export interface TableroDeFidelizacion {
     referidosValidos: number
     puntosEmitidos: number
     puntosDisponibles: number
+    /** Puntos vencidos sin canjear, de todos los programas (dato real, no proyección). */
+    puntosVencidos: number
     recompensasEntregadas: number
+    /** Costo ya realizado entre recompensas entregadas; null si no hay entregas. */
+    ticketMedio: string | null
     costoRealizado: string
     /** §37: ESTIMACIÓN, no deuda. La etiqueta viaja con la cifra. */
     costoPotencialEstimado: string
@@ -389,13 +401,14 @@ export async function tableroDeFidelizacion(): Promise<TableroDeFidelizacion> {
     const programas = await tx.supplyV2LoyaltyProgram.findMany({
       orderBy: { createdAt: 'desc' },
       take: 50,
-      select: { id: true, code: true, name: true, status: true, owner: true, budgetTotal: true, supplier: { select: { commercialName: true } } },
+      select: { id: true, code: true, name: true, status: true, owner: true, budgetTotal: true, modalities: true, funding: true, startsAt: true, endsAt: true, pointsExpireDays: true, supplier: { select: { commercialName: true } } },
     })
     const filas: TableroDeFidelizacion['programas'] = []
     let miembros = 0
     let referidos = 0
     let emitidos = 0
     let disponibles = 0
+    let vencidosTotal = 0
     let entregadas = 0
     let realizadoTotal = new Prisma.Decimal(0)
     let potencialTotal = new Prisma.Decimal(0)
@@ -439,11 +452,19 @@ export async function tableroDeFidelizacion(): Promise<TableroDeFidelizacion> {
         costoRealizado: dineroSupplyV2(economia.costoRealizado),
         costoPendiente: dineroSupplyV2(economia.costoPendiente),
         sinTope: p.budgetTotal === null,
+        modalidades: p.modalities,
+        funding: p.funding,
+        startsAt: p.startsAt,
+        endsAt: p.endsAt,
+        puntosVencenEnDias: p.pointsExpireDays,
+        puntosEmitidosAcum: emit._sum.points ?? 0,
+        puntosVencidos: saldos._sum.expired ?? 0,
       })
       miembros += activas
       referidos += refs
       emitidos += emit._sum.points ?? 0
       disponibles += saldos._sum.available ?? 0
+      vencidosTotal += saldos._sum.expired ?? 0
       entregadas += entreg
       realizadoTotal = realizadoTotal.plus(economia.costoRealizado)
       potencialTotal = potencialTotal.plus(compromiso.costoPotencialEstimado)
@@ -457,7 +478,9 @@ export async function tableroDeFidelizacion(): Promise<TableroDeFidelizacion> {
         referidosValidos: referidos,
         puntosEmitidos: emitidos,
         puntosDisponibles: disponibles,
+        puntosVencidos: vencidosTotal,
         recompensasEntregadas: entregadas,
+        ticketMedio: entregadas > 0 ? dineroSupplyV2(realizadoTotal.dividedBy(entregadas).toDecimalPlaces(2)) : null,
         costoRealizado: dineroSupplyV2(realizadoTotal),
         costoPotencialEstimado: dineroSupplyV2(potencialTotal),
         estimacionAdvertencia:

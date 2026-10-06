@@ -51,7 +51,10 @@ export interface CampanaEnLista {
   budgetDisponible: string | null
   sinTopeAutorizado: boolean
   ofertas: number
+  /** Las primeras ofertas por su orden en la campaña (para el listado). */
+  ofertasNombres: string[]
   promociones: number
+  promocionesNombres: string[]
   cupones: number
   startsAt: Date
   endsAt: Date | null
@@ -90,7 +93,8 @@ export async function listarCampanas(f: FiltroCampanas = {}, ahora = new Date())
       take: 200,
       include: {
         supplier: { select: { commercialName: true } },
-        benefits: { select: { budgetTotal: true, budgetReserved: true, budgetConsumed: true } },
+        benefits: { select: { name: true, budgetTotal: true, budgetReserved: true, budgetConsumed: true } },
+        offers: { orderBy: { position: 'asc' }, take: 3, select: { offer: { select: { title: true } } } },
         _count: { select: { offers: true, coupons: true, benefits: true } },
         orders: { select: { id: true, status: true, contractualValue: true, supplierDiscountTotal: true, membegoSubsidyTotal: true, total: true, commissionAmount: true, supplierNet: true } },
       },
@@ -130,7 +134,9 @@ export async function listarCampanas(f: FiltroCampanas = {}, ahora = new Date())
       budgetDisponible: p.disponible ? p.disponible.toFixed(2) : null,
       sinTopeAutorizado: c.budgetTotal == null && c.budgetWaiverById != null,
       ofertas: c._count.offers,
+      ofertasNombres: c.offers.map((o) => o.offer.title),
       promociones: c._count.benefits,
+      promocionesNombres: c.benefits.slice(0, 2).map((b) => b.name),
       cupones: c._count.coupons,
       startsAt: c.startsAt,
       endsAt: c.endsAt,
@@ -155,6 +161,11 @@ export interface TableroCampanas {
   contribucion: string
   ventasConfirmadas: number
   pedidosEnCurso: number
+  /** Pedidos atribuidos en cualquier estado (primer paso del embudo). */
+  pedidos: number
+  derechosEmitidos: number
+  derechosRedimidos: number
+  derechosVencidos: number
   presupuestoAprobado: string
   presupuestoComprometido: string
   presupuestoConsumido: string
@@ -176,6 +187,10 @@ export async function tableroCampanas(f: FiltroCampanas = {}): Promise<TableroCa
     contribucion: metricas.contribucionTrasSubsidio.toFixed(2),
     ventasConfirmadas: metricas.ventasConfirmadas,
     pedidosEnCurso: metricas.pedidosEnCurso,
+    pedidos: metricas.pedidos,
+    derechosEmitidos: metricas.derechosEmitidos,
+    derechosRedimidos: metricas.derechosRedimidos,
+    derechosVencidos: metricas.derechosVencidos,
     presupuestoAprobado: suma('budgetTotal').toFixed(2),
     presupuestoComprometido: campanas.reduce((t, c) => t.plus(new Prisma.Decimal(c.budgetReservado)).plus(new Prisma.Decimal(c.budgetConsumido)), CERO).toFixed(2),
     presupuestoConsumido: suma('budgetConsumido').toFixed(2),
