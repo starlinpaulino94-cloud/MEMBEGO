@@ -50,11 +50,36 @@ export async function POST(request: Request) {
   }
 
   try {
-    if (user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId || !user.metadata.companyId) {
+    if (user.metadata.role !== 'CLIENTE') {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401, headers: corsHeaders(request) })
     }
-    const clienteId = user.metadata.clienteId
-    const companyId = user.metadata.companyId
+
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
+    const companyId = typeof body.companyId === 'string'
+      ? body.companyId.trim()
+      : user.metadata.companyId
+    if (!companyId) {
+      return NextResponse.json(
+        { error: 'Selecciona el negocio donde quieres registrar el vehículo.' },
+        { status: 400, headers: corsHeaders(request) }
+      )
+    }
+
+    const cliente = await sinEmpresa(
+      'cliente: validar mi ficha antes de registrar un vehículo por negocio',
+      (tx) =>
+        tx.cliente.findUnique({
+          where: { supabaseId_companyId: { supabaseId: user.supabaseId, companyId } },
+          select: { id: true },
+        })
+    )
+    if (!cliente) {
+      return NextResponse.json(
+        { error: 'No tienes una ficha de cliente en el negocio seleccionado.' },
+        { status: 403, headers: corsHeaders(request) }
+      )
+    }
+    const clienteId = cliente.id
 
     if (!(await formSubmitLimiter(clienteId))) {
       return NextResponse.json(
@@ -63,7 +88,6 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
     const r = validarVehiculoNuevo({
       tipoVehiculoId: String(body.tipoVehiculoId ?? ''),
       marca: String(body.marca ?? ''),

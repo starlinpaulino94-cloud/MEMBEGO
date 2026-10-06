@@ -787,10 +787,16 @@ export interface VehiculoTipo {
 }
 
 export interface VehiculoTiposResponse {
-  tipos: VehiculoTipo[]
+  empresas: {
+    id: string
+    nombre: string
+    tipos: VehiculoTipo[]
+  }[]
+  empresaActualId: string | null
 }
 
 export interface CrearVehiculoBody {
+  companyId: string
   tipoVehiculoId: string
   marca: string
   modelo: string

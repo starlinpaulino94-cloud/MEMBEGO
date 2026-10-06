@@ -1,16 +1,16 @@
 import React from 'react'
 import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../src/components/ui/ResponsiveDetailSheet'
-import { View, Text, ScrollView, ActivityIndicator, Pressable } from 'react-native'
+import { View, Text, ScrollView, ActivityIndicator } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ArrowLeft, Car, Plus, AlertCircle } from 'lucide-react-native'
+import { Car, Plus, AlertCircle } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { goBackOr } from '../src/lib/navigation'
 import { useVehiculos } from '../src/hooks/useVehiculos'
 import { Button } from '../src/components/ui/Button'
 import { Card } from '../src/components/ui/Card'
 import { EmptyState } from '../src/components/ui/EmptyState'
-import { PageHeader } from '../src/components/ui/PageHeader'
+import { BackHeader } from '../src/components/ui/BackHeader'
 import { Skeleton } from '../src/components/ui/Skeleton'
 import { VehicleCard } from '../src/components/cliente/VehicleCard'
 
@@ -24,12 +24,22 @@ function VehiculosScreenContent() {
   const insets = useSafeAreaInsets()
   const { user, isLoading: authLoading } = useAuth()
   const { data, isLoading, isError, refetch } = useVehiculos(!!user)
+  const backHeader = (
+    <BackHeader
+      title="Mis vehículos"
+      leftInset={insets.left}
+      onBack={() => goBackOr(router, '/(tabs)/cuenta')}
+    />
+  )
 
   // Auth gate
   if (authLoading) {
     return (
-      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card" : "flex-1 items-center justify-center bg-vibe-fondo"} style={{ paddingBottom: insets.bottom }}>
-        <ActivityIndicator color="#0284c7" size="large" />
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
+        {backHeader}
+        <View className="flex-1 items-center justify-center" style={{ paddingBottom: insets.bottom }}>
+          <ActivityIndicator color="#0284c7" size="large" />
+        </View>
       </View>
     )
   }
@@ -37,6 +47,7 @@ function VehiculosScreenContent() {
   if (!user) {
     return (
       <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"} style={{ paddingBottom: insets.bottom }}>
+        {backHeader}
         <EmptyState
           icon={<Car size={40} color="#0284c7" />}
           title="Inicia sesión"
@@ -53,6 +64,7 @@ function VehiculosScreenContent() {
 
   return (
     <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
+      {backHeader}
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
@@ -61,33 +73,18 @@ function VehiculosScreenContent() {
           paddingBottom: insets.bottom + 32,
         }}
       >
-        {/* Back bar */}
-        <View className="mb-4 flex-row items-center gap-2">
-          <Pressable
-            onPress={() => goBackOr(router, '/(tabs)/cuenta')}
-            className={sheetBackgroundClass === 'bg-surface-card' ? "h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface-card active:opacity-70" : "h-10 w-10 items-center justify-center rounded-xl border border-border bg-vibe-fondo active:opacity-70"}
-          >
-            <ArrowLeft size={18} color="#111827" />
-          </Pressable>
-          <Text className="text-h2 font-inter-bold text-foreground">Mis vehículos</Text>
+        <View className="mb-6 flex-row items-start justify-between gap-3">
+          <Text className="flex-1 text-small leading-relaxed text-muted-foreground">{DESCRIPCION}</Text>
+          {data && data.vehiculos.length > 0 && (
+            <Button
+              size="sm"
+              onPress={() => router.push('/vehiculos/nuevo')}
+              icon={<Plus size={16} color="#ffffff" />}
+            >
+              Añadir
+            </Button>
+          )}
         </View>
-
-        {/* Page header */}
-        <PageHeader
-          title="Mis vehículos"
-          description={DESCRIPCION}
-          action={
-            data && data.vehiculos.length > 0 ? (
-              <Button
-                size="sm"
-                onPress={() => router.push('/vehiculos/nuevo')}
-                icon={<Plus size={16} color="#ffffff" />}
-              >
-                Añadir
-              </Button>
-            ) : undefined
-          }
-        />
 
         {/* Loading */}
         {isLoading && (

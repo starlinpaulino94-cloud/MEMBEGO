@@ -36,6 +36,7 @@ export default function PlanDetalleScreen() {
     isAuthenticated,
   )
   const [submitting, setSubmitting] = useState(false)
+  const [solicitudEnviada, setSolicitudEnviada] = useState(false)
   const plan = data?.planes.find((item) => item.id === planId)
   const company = data?.modo === 'empresa'
     ? data.empresa
@@ -66,7 +67,8 @@ export default function PlanDetalleScreen() {
         queryClient.invalidateQueries({ queryKey: ['cliente', 'membresias'] }),
         queryClient.invalidateQueries({ queryKey: ['cliente', 'membresia-pago', result.membershipId] }),
       ])
-      router.replace(`/membresia/${result.membershipId}`)
+      setSolicitudEnviada(true)
+      router.push(`/membresia/${result.membershipId}`)
     } catch (error) {
       Alert.alert(
         membershipId ? 'No se pudo cambiar el plan' : 'No se pudo solicitar la membresía',
@@ -78,10 +80,10 @@ export default function PlanDetalleScreen() {
   }
 
   const planesAction = plan && (esCompra || puedeCambiar) ? (
-    <Button className="w-full" style={{ backgroundColor: accentColor }} onPress={handleSolicitar} disabled={submitting}>
+    <Button className="w-full" style={{ backgroundColor: accentColor }} onPress={handleSolicitar} disabled={submitting || solicitudEnviada}>
       {submitting ? <ActivityIndicator size="small" color={accentForeground} /> : (
         <Text className="text-sm font-inter-semibold" style={{ color: accentForeground }}>
-          {membershipId ? 'Cambiar a este plan' : 'Obtener membresía'}
+          {solicitudEnviada ? 'Solicitud enviada' : membershipId ? 'Cambiar a este plan' : 'Obtener membresía'}
         </Text>
       )}
     </Button>

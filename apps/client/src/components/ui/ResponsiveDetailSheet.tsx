@@ -1,4 +1,4 @@
-import { Stack, useRouter } from 'expo-router'
+import { Stack, useIsFocused, useRouter } from 'expo-router'
 import { createContext, useContext, type ReactNode } from 'react'
 import { Platform, useWindowDimensions } from 'react-native'
 import { Sheet } from './Sheet'
@@ -22,6 +22,7 @@ interface ResponsiveDetailSheetProps {
 
 export function ResponsiveDetailSheet({ children, footer }: ResponsiveDetailSheetProps) {
   const router = useRouter()
+  const isFocused = useIsFocused()
   const { width } = useWindowDimensions()
   const showAsSheet = width >= 768 && router.canGoBack()
 
@@ -37,7 +38,7 @@ export function ResponsiveDetailSheet({ children, footer }: ResponsiveDetailShee
         />
         {showAsSheet ? (
           <Sheet
-            visible
+            visible={isFocused}
             onClose={() => router.back()}
             contentClassName="min-h-0 flex-1 p-0"
             footer={footer}

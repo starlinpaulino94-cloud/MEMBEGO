@@ -514,7 +514,7 @@ function MembresiaDetailScreenContent() {
             <Button
               className="mb-2 w-full"
               style={{ backgroundColor: companyAccent }}
-              onPress={() => router.replace(`/planes?membershipId=${encodeURIComponent(membresia.id)}`)}
+              onPress={() => router.push(`/planes?membershipId=${encodeURIComponent(membresia.id)}`)}
               icon={<ArrowRightLeft size={16} color={brandDisplayForeground(companyAccent, '#0284c7')} />}
             >
               <Text className="text-sm font-inter-semibold" style={{ color: brandDisplayForeground(companyAccent, '#0284c7') }}>

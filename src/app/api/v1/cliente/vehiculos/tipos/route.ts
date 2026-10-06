@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getApiClientUser, corsHeaders, handleCorsPreflight } from '@/lib/auth/api-guard'
-import { conEmpresa } from '@/lib/tenant'
+import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +8,6 @@ export async function OPTIONS(request: Request) {
   return handleCorsPreflight(request)
 }
 
-/** Categorías de vehículo activas de la empresa activa — mismo query que /cliente/vehiculos/nuevo. */
 export async function GET(request: Request) {
   const user = await getApiClientUser(request)
   if (!user) {
@@ -16,17 +15,41 @@ export async function GET(request: Request) {
   }
 
   try {
-    const companyId = user.metadata.companyId
-    const tipos = companyId
-      ? await conEmpresa(companyId, (tx) =>
+    const fichas = await sinEmpresa(
+      'cliente: buscar negocios propios con categorías para registrar vehículos',
+      (tx) =>
+        tx.cliente.findMany({
+          where: { supabaseId: user.supabaseId },
+          select: {
+            companyId: true,
+            company: { select: { name: true, isActive: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+    )
+
+    const empresasUnicas = new Map(
+      fichas
+        .filter((ficha) => ficha.company.isActive)
+        .map((ficha) => [ficha.companyId, { id: ficha.companyId, nombre: ficha.company.name }])
+    )
+    const empresaActualId = user.metadata.companyId ?? null
+    const empresas = (await Promise.all(
+      [...empresasUnicas.values()].map(async (empresa) => ({
+        ...empresa,
+        tipos: await conEmpresa(empresa.id, (tx) =>
           tx.tipoVehiculo.findMany({
-            where: { companyId, activo: true },
+            where: { companyId: empresa.id, activo: true },
             select: { id: true, nombre: true, descripcion: true, iconoUrl: true },
             orderBy: { orden: 'asc' },
           })
-        ).catch(() => [])
-      : []
-    return NextResponse.json({ tipos }, { headers: corsHeaders(request) })
+        ),
+      }))
+    ))
+      .filter((empresa) => empresa.tipos.length > 0)
+      .sort((a, b) => Number(b.id === empresaActualId) - Number(a.id === empresaActualId))
+
+    return NextResponse.json({ empresas, empresaActualId }, { headers: corsHeaders(request) })
   } catch (error) {
     console.error('[api/v1/cliente/vehiculos/tipos] Error cargando categorías:', error)
     return NextResponse.json(

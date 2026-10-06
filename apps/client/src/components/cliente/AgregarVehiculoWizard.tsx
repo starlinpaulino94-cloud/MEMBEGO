@@ -23,6 +23,7 @@ import type { VehiculoTipo } from '../../lib/api'
  * Usa useCrearVehiculo para guardar y volver a vehículos al éxito.
  */
 export interface AgregarVehiculoWizardProps {
+  companyId: string
   tipos: VehiculoTipo[]
   onSuccess?: () => void
 }
@@ -49,7 +50,7 @@ interface Datos {
   placa: string
 }
 
-export function AgregarVehiculoWizard({ tipos, onSuccess }: AgregarVehiculoWizardProps) {
+export function AgregarVehiculoWizard({ companyId, tipos, onSuccess }: AgregarVehiculoWizardProps) {
   const router = useRouter()
   const mutation = useCrearVehiculo()
   const [idx, setIdx] = useState(0)
@@ -100,6 +101,7 @@ export function AgregarVehiculoWizard({ tipos, onSuccess }: AgregarVehiculoWizar
   function enviar() {
     if (mutation.isPending) return
     const body = {
+      companyId,
       tipoVehiculoId: datos.tipoVehiculoId,
       marca: datos.marca,
       modelo: datos.modelo,

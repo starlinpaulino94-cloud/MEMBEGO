@@ -32,17 +32,22 @@ export function ClientShell() {
   const { width } = useWindowDimensions()
   const pathname = usePathname()
   const previousPathRef = useRef(pathname)
-  const [previousPath, setPreviousPath] = useState<string | null>(null)
+  const [sheetBackgroundPath, setSheetBackgroundPath] = useState<string | null>(null)
   const router = useRouter()
   const { isLoading, isAuthenticated } = useAuth()
   const isDesktop = width >= 1024
   const isDetailSheet = width >= 768 && router.canGoBack() && isClientDetailRoute(pathname)
-  const shellPathname = isDetailSheet ? previousPath ?? pathname : pathname
+  const shellPathname = isDetailSheet ? sheetBackgroundPath ?? pathname : pathname
   const requiresAuth = requiresClientAuthentication(pathname)
 
   useEffect(() => {
     if (previousPathRef.current === pathname) return
-    setPreviousPath(previousPathRef.current)
+    const previousPath = previousPathRef.current
+    if (!isClientDetailRoute(pathname)) {
+      setSheetBackgroundPath(pathname)
+    } else if (!isClientDetailRoute(previousPath)) {
+      setSheetBackgroundPath(previousPath)
+    }
     previousPathRef.current = pathname
   }, [pathname])
 
