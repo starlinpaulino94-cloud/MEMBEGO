@@ -3,25 +3,25 @@
 > Memoria operativa del proyecto. **El código manda**: lo que aquí contradiga a otra documentación está registrado en §14 («Discrepancias»).
 > Estados permitidos: ✅ COMPLETED · 🟡 PARTIAL · 🔵 IN PROGRESS · ⚪ NOT STARTED · 🔴 BLOCKED · 🟣 DEPRECATED · 🙈 HIDDEN.
 > Regla de mantenimiento: se actualiza al cerrar cada fase o cambio importante, y **antes de terminar cualquier sesión de implementación**.
-> Fuente del plan: *Plan Maestro v2 (aprobado)* + 4 documentos estratégicos. **Ninguno está versionado en este repo** (vivían en el scratchpad/uploads de la sesión): ver §14 (HIGH) y §17-A. Lo esencial del plan está resumido en §2, §13 y §17.
+> Fuente del plan: **[`docs/PLAN_MAESTRO.md`](PLAN_MAESTRO.md)** (v2, aprobado el 2026-10-06; versionado tal cual con un aviso y erratas). Los 4 documentos estratégicos de origen (`reestructura_1`…`4`) **siguen sin versionarse** (ver §17-A). Lo esencial del plan está resumido en §2, §13 y §17.
 
 ## 1. Estado general
 
 ```text
 Fecha de actualización: 2026-10-06
 Branch:                 claude/wizardly-hypatia-x2l9av (sincronizada con origin; sin PR abierto)
-Commit actual:          3c73726  (código auditado; el commit de este documento lo sigue)
+Commit actual:          3c73726 (auditoría completa) + commit de higiene posterior (`subirImagenExcursion`, `docs/PLAN_MAESTRO.md`); ver `git log`
 Estado general:         🟡 PARTIAL — fundaciones casi cerradas; Commerce Core sin empezar
 Fase actual:            F0 Foundation Hardening — 🟡 (cierre pendiente de 2 decisiones)
 Última fase completada: ninguna al 100 % (F0: 4 de 6 ítems ✅, 2 🟡)
 Próxima fase:           F1 Commerce Catalog (CatalogItem + CatalogVariant desde el día 1)
 ```
 
-- Membego es hoy un monolito modular maduro (285 modelos, 190 migraciones, 3 621 tests unitarios) con **Supply V2 como módulo más completo** (9 slices) y **cero** entidades del Commerce Core objetivo.
+- Membego es hoy un monolito modular maduro (285 modelos, 190 migraciones, 3 640 tests unitarios) con **Supply V2 como módulo más completo** (9 slices) y **cero** entidades del Commerce Core objetivo.
 - Hecho en F0: capa `commerce-primitives` compartida; módulos secundarios ocultos por capacidades; CRM/Mensajería apagados por defecto en tenants nuevos; ruleta apagada también para el cliente.
 - Sin cambios de esquema en la rama: **0 archivos de `prisma/` tocados**, 0 migraciones nuevas.
-- Calidad verificada en este commit: tsc, lint, 3 615 unit, 311 PostgreSQL, build, bundle, RLS (estático y conductual) y deriva de migraciones en PASS; E2E 67 PASS / 114 SKIP (sin Supabase de pruebas). **Falla hoy:** `npm audit` (1 high, `source-map-js`).
-- Lo más urgente no es funcionalidad: **una clave `service_role` de Supabase está comprometida en git** y **una Server Action privilegiada no tiene guardia** (§14, §15).
+- Calidad verificada en este commit: tsc, lint, 3 634 unit, 311 PostgreSQL, build, bundle, RLS (estático y conductual) y deriva de migraciones en PASS; E2E 67 PASS / 114 SKIP (sin Supabase de pruebas). **Falla hoy:** `npm audit` (1 high, `source-map-js`).
+- Lo más urgente no es funcionalidad: **una clave `service_role` de Supabase está comprometida en git** (rotarla es del usuario, §14). La Server Action sin guardia (`subirImagenExcursion`) ya está **cerrada** (§14, «Deuda cerrada»).
 - Dos decisiones abiertas del usuario: **corte de RLS Capa 2 en producción** y **Supply V1** (§16).
 
 ## 2. Progreso por fases
@@ -56,6 +56,7 @@ Asegurar integridad (RLS), formalizar capacidades, ocultar módulos secundarios 
 - ✅ Gamificación (ruleta), Blog y Home Builder 🙈 para toda empresa; CRM y Mensajería 🙈 solo para tenants nuevos (override explícito al crear: `CAPACIDADES_OVERRIDE_TENANT_NUEVO`, en 4 sitios incl. `duplicarEmpresa`).
 - ✅ Correcciones de la auditoría F0: clave de cerrojo de numeración restaurada (`supply_v2`), acciones de servidor de ruleta/Home cerradas, ruleta del cliente apagada.
 - ✅ Auditoría RLS: la premisa del plan («escribir políticas por tabla») era errónea; ver §13.
+- ✅ Higiene post-auditoría: `subirImagenExcursion` cerrada (sesión + permiso + empresa de sesión + firma de archivo + `upsert:false`) y Plan Maestro versionado en `docs/PLAN_MAESTRO.md`.
 
 ### Parcial
 - 🟡 RLS: políticas Capa 2 generadas para 264/285 tablas (21 decididas a mano) y probadas conductualmente, pero **apagadas en producción**.
@@ -105,7 +106,7 @@ Ver §15. Específicos de F0: la ruleta se corta de golpe a empresas con premios
 | Módulos secundarios ocultos por capacidades | **PASS** — Gamificación, Blog, Home Builder |
 | CRM/Mensajería desactivados por defecto en tenants nuevos | **PASS** — test `capacidades-fase0` |
 | `commerce-primitives` funcional con Supply V2 consumiéndolas | **PASS** — 354 tests Supply V2 + 311 PostgreSQL |
-| Todos los tests pasan | **PASS** (unit 3 615, PG 311, E2E 67/0 fallos) — con 114 E2E omitidos (§8) |
+| Todos los tests pasan | **PASS** (unit 3 634, PG 311, E2E 67/0 fallos) — con 114 E2E omitidos (§8) |
 
 ## 4. Módulos del sistema
 
@@ -235,14 +236,15 @@ Hueco detectado: **ningún `ENABLE ROW LEVEL SECURITY` en migraciones posteriore
 
 ## 8. Calidad
 
-Medido en el commit `3c73726`, árbol limpio, el 2026-10-06. PostgreSQL 16.14 local y desechable (no producción).
+Medido el 2026-10-06. Auditoría completa en `3c73726`; tras el commit de higiene se **repitieron** tsc, lint, unit, build, bundle y los gates estáticos de RLS/permisos (todo PASS). **No se repitieron** PostgreSQL ni E2E (el commit no toca esquema ni lo que ellos ejercitan; sus cifras son las de `3c73726`). PostgreSQL 16.14 local y desechable (no producción).
 
 ```text
 TypeScript:          PASS   tsc --noEmit, 0 errores
 Lint:                PASS   npx eslint src tests (comando de CI): 0 errores, 16 warnings preexistentes
-Unit Tests:          3615/3621 PASS · 0 FAIL · 6 SKIP (5 requieren servidor dev; 1 BLOCKED: claves QA reales de CardNET)
+Unit Tests:          3634/3640 PASS · 0 FAIL · 6 SKIP (5 requieren servidor dev; 1 BLOCKED: claves QA reales de CardNET)
   · Supply V2:       354/354 PASS
   · F0 nuevos:       31/31 PASS (commerce-primitives 22, capacidades-fase0 9)
+  · Higiene nuevos:  19/19 PASS (imagen-tipo 9, excursiones-imagen-guardia 10; este último falla 9/10 contra la versión vulnerable)
 Integration Tests:   N/A    (no existe capa separada; los tests unitarios son puros o de texto fuente)
 PostgreSQL Tests:    311/311 PASS  npm run test:db (13 archivos) sobre BD migrada con migrate deploy
 E2E (Playwright):    PASS parcial — 67 PASS · 0 FAIL · 114 SKIP (13,1 min; replica de e2e.yml sobre PG local, build propio)
@@ -266,7 +268,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 |---|---|---|
 | Tenant isolation | 🟡 | `conEmpresa/sinEmpresa` + test estático; el gate `rls-cobertura.mjs:127` cuenta un archivo como cubierto si el texto `conEmpresa(` aparece en cualquier parte (incluso en un comentario): ~37 sitios `prisma.*` fuera de wrappers (p. ej. `excursiones/catalogo/public-queries.ts`, `solicitudes/actions.ts`). **Gate verde necesario pero no suficiente para Capa 2** |
 | RLS | 🟡 | Capa 1 viva según docs (no verificable); Capa 2 apagada (§16) |
-| Server authorization | 🟡 | `requireRole/requireSection/requireAdminUser`; **ningún test enumera `'use server'` sin guardia**; hueco real conocido: `subirImagenExcursion` |
+| Server authorization | 🟡 | `requireRole/requireSection/requireAdminUser`; **ningún test enumera `'use server'` sin guardia** (el escaneo manual halló 18 de 120 sin tokens de guardia estándar; salvo el hueco ya cerrado, públicas por diseño). `subirImagenExcursion` ✅ cerrada y con test de orden guardia→cliente privilegiado |
 | Permissions | ✅ | Lectura en vivo por petición; gate CI |
 | QR anti-replay | ✅ | 192 bits; `updateMany where activo:true` en la transacción + `qrTokenUsadoId @unique`; Supply V2 `nonce @unique`. Residual: tokens legacy con `expiraAt` nulo se aceptan |
 | Idempotency | ✅ | `ClaveIdempotencia`, 12 `idempotencyKey @unique` en Supply V2, outbox `dedupeKey`, `claveDedupe`, `jti`. Residual: el job `email` solo dedup de QStash |
@@ -343,8 +345,6 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 | Severidad | Problema | Impacto | Acción recomendada |
 |---|---|---|---|
 | **CRITICAL** | JWT `service_role` (y `anon`) de Supabase, ref `ybzhvfmybyyomwpjpaud`, embebido en `scripts/run-e2e-verify.mjs` y `scripts/run-auth-e2e.mjs`, en git desde 2026-09-18 (`506a350`), exp. 2036. `service_role` ignora RLS. ¿Es producción? UNKNOWN | Acceso total a la BD/Storage de ese proyecto si es real; está en el historial aunque se borre el archivo | **El usuario debe rotar la clave** y confirmar a qué proyecto pertenece; después sacar los valores a variables de entorno y añadir secret scanning a CI |
-| **HIGH** | `subirImagenExcursion` (`src/modules/excursiones/catalogo/imageActions.ts:11`) sin autenticación; sube con cliente `service_role`, `companyId` lo manda el llamador, `upsert:true`, MIME del cliente | Cualquiera puede escribir/sobrescribir en el bucket `promociones` bajo el prefijo de cualquier empresa | Exigir `requireSection('excursiones')`, derivar `companyId` de la sesión, validar el contenido real del archivo |
-| **HIGH** | Plan Maestro y documentos estratégicos no están en el repo | Una sesión nueva no puede consultar el plan aprobado | Versionar como `docs/PLAN_MAESTRO.md` + `docs/estrategia/` (decisión del usuario) |
 | **HIGH** | Capa 2 RLS apagada en producción; gate `rls-cobertura` con falsos negativos (~37 sitios) | El aislamiento depende solo de código de aplicación; encenderla sin arreglar esos sitios deja pantallas vacías | Sustituir el gate por uno por llamada; arreglar sitios; ensayo con `ensayo-rls.yml`; luego runbook |
 | **HIGH** | Portal de proveedor Supply V2 y V1 ocultos en el menú para todos (`MEMBEGO_SUPPLIER` ∉ `CAPACIDADES_DEL_MENU`); el registro V2 nunca enciende esa capacidad | El proveedor solo llega por URL directa; mismo interruptor para V1 y V2 | Separar capacidad V1/V2 y decidir qué se muestra (revela V1 si se «arregla» sin separar) |
 | **HIGH** | `POST /api/pagos/cardnet/iniciar` recibe PAN/CVV (ruta legacy viva, UI huérfana); `docs/PAGOS-CARDNET.md` dice «nunca vemos el PAN» | Alcance PCI mayor que el declarado | Retirar la ruta o gatearla; corregir el doc |
@@ -358,11 +358,18 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 | LOW | Comentarios/doc obsoletos: `ledger.ts:55-57`, «44 secciones» (son 42), `ci.yml`/`e2e.yml` «113/164 tests» (son 272 archivos), `PHASE3_STATUS`, `PRODUCTION_READINESS`, `SECURITY_ANALYSIS`, `MATURITY`, tablas «112/115/137» en docs RLS (son 285) | Confusión | Limpiar al tocar cada área |
 | LOW | `docs/membego-supply-*.md` describen solo V1; falta `...slice9-bloque5.md` | Doc de Supply engañosa | Reescribir desde §5 |
 
+### Deuda cerrada
+
+| Fecha | Problema | Cierre |
+|---|---|---|
+| 2026-10-06 | `subirImagenExcursion` sin autenticación, con cliente `service_role`, `companyId` y MIME del cliente, `upsert:true` | `requireSection('excursiones', catalogo_crear/editar)` antes del cliente privilegiado; empresa de la sesión (debe coincidir con la recibida); la excursión debe ser de esa empresa; tipo y extensión por **firma del archivo** (`src/lib/imagen-tipo.ts`: JPG/PNG/WebP, sin SVG); tamaño medido sobre los bytes; `upsert:false`. Tests: `imagen-tipo`, `excursiones-imagen-guardia` |
+| 2026-10-06 | Plan Maestro fuera del repo | Versionado en `docs/PLAN_MAESTRO.md` con aviso de aprobación y 6 erratas; el cuerpo no se reescribió. Los 4 documentos estratégicos de origen siguen sin versionar |
+
 ### Discrepancias documentación ↔ código (el código manda)
 
 | Documento | Dice | El código muestra |
 |---|---|---|
-| Plan Maestro v1/v2 | El sistema de capacidades eran «strings mágicos» | Catálogo formal con 22→25 claves, paquetes base y mapa de secciones |
+| Plan Maestro v1/v2 | El sistema de capacidades eran «strings mágicos» | Catálogo formal con 22→25 claves, paquetes base y mapa de secciones (anotado en las erratas de `docs/PLAN_MAESTRO.md`) |
 | Plan Maestro §10 F0 | Hay que escribir políticas RLS por tabla | Capa 2 las genera por introspección; 0 huecos; hacerlo a mano ya falló una vez |
 | Plan Maestro §12 | Supply V1 «se oculta con un flag» | Nav oculto por accidente; rutas/cron/cliente activos |
 | `PAGOS-CARDNET.md` | SAQ A, nunca se ve el PAN | Ruta legacy que recibe PAN/CVV |
@@ -390,7 +397,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 - Pagos de Supply V2 solo manuales; sin reembolsos al cliente.
 
 ### Seguridad
-- Clave `service_role` en git (§14, CRITICAL) y `subirImagenExcursion` sin guardia.
+- Clave `service_role` en git (§14, CRITICAL).
 - Sin secret scanning, sin test de «server action sin guardia», rate limiter fail-open, ruta legacy con PAN.
 
 ### Operacionales
@@ -410,9 +417,9 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 ## 17. Próximo trabajo exacto
 
 ### A. Antes de F1 (corto, recomendado)
-1. **(Usuario)** Rotar la clave `service_role`; confirmar si el ref `ybzhvfmybyyomwpjpaud` es producción.
-2. Cerrar `subirImagenExcursion`: `requireSection('excursiones')`, `companyId` desde la sesión, validar el archivo; test que enumere `'use server'` sin guardia.
-3. Versionar el Plan Maestro y los 4 documentos estratégicos en `docs/` (el usuario decide).
+1. **(Usuario)** Rotar la clave `service_role`; confirmar si el ref `ybzhvfmybyyomwpjpaud` es producción; luego sacar los valores de `scripts/run-e2e-verify.mjs` y `scripts/run-auth-e2e.mjs` a variables de entorno y añadir secret scanning a CI.
+2. ✅ ~~Cerrar `subirImagenExcursion`~~ (hecho, §14). **Pendiente derivado:** un test que enumere los `'use server'` sin guardia, con allowlist de las ~18 públicas por diseño (auth, registro, marketplace, geo, reset por token).
+3. ✅ ~~Versionar el Plan Maestro~~ (hecho). **Pendiente:** versionar los 4 documentos estratégicos de origen (decisión del usuario; solo si se quieren en el repo).
 4. Decidir Supply V1 (§16) y, si procede, separar la capacidad V1/V2.
 5. `npm audit fix` y revalidar `npm audit --omit=dev --audit-level=high`.
 
@@ -435,12 +442,13 @@ F2 Inventario y F2.5 Bridge en paralelo → F3 → F4 (ver §2).
 # CONTEXTO PARA CONTINUAR EN UNA NUEVA SESIÓN
 
 - **Qué construimos:** Membego pasa de membresías/promos a un *Commerce OS + Marketplace + Supply* para negocios locales de RD, como monolito modular (sin microservicios, sin reescribir).
-- **Fase actual:** F0 🟡. Última entrega: commits `99d87e6` (primitives), `2c2efe3` (ocultar módulos), `3c73726` (cerrar acciones, ruleta cliente, cerrojo). Rama `claude/wizardly-hypatia-x2l9av`, sin PR.
-- **Estado de calidad en `3c73726`:** tsc/lint/3 615 unit/311 PG/build/RLS/migraciones/bundle en PASS; E2E 67 PASS + 114 SKIP (sin Supabase de pruebas); `npm audit` FALLA (1 high). Sin acceso a producción (todo lo de prod = UNKNOWN).
+- **Fase actual:** F0 🟡. Última entrega: commits `99d87e6` (primitives), `2c2efe3` (ocultar módulos), `3c73726` (cerrar acciones, ruleta cliente, cerrojo), más un commit de higiene (`subirImagenExcursion` cerrada, `docs/PLAN_MAESTRO.md`). Rama `claude/wizardly-hypatia-x2l9av`, sin PR.
+- **Estado de calidad:** tsc/lint/3 634 unit/build/bundle/gates RLS en PASS (re-medido tras la higiene); 311 PG, migraciones y E2E medidos en `3c73726`; E2E 67 PASS + 114 SKIP (sin Supabase de pruebas); `npm audit` FALLA (1 high). Sin acceso a producción (todo lo de prod = UNKNOWN).
 - **Siguiente paso exacto:** §17-A (higiene) y luego F1.1 (§17-B): `catalogo.prisma` → migración `20261036_catalog_core` → RLS por introspección → capacidad/sección → servicio → tests.
 - **No cambiar:** CatalogVariant desde el día 1; Merchant Billing ≠ Supply Economics; Commerce Core no importa de `supply-v2`; CPA + 8 % por `verificationLevel`; sin wallet financiera; **no escribir políticas RLS a mano**; clave de cerrojo `supply_v2`; ocultar = apagar capacidad y conservar datos; toda alta de empresa usa `CAPACIDADES_OVERRIDE_TENANT_NUEVO`.
 - **Archivos clave:** `src/lib/commerce-primitives/*`, `src/modules/capacidades/catalogo.ts`, `src/modules/plataforma/conceptos.ts`, `src/components/layout/nav-config.ts`, `src/modules/navegacion/contexto.ts`, `src/lib/auth/{guards,permissions}.ts`, `src/lib/tenant.ts`, `docs/RLS.md`, `docs/runbooks/rls-encender.md`, `docs/CAPACIDADES.md`.
 - **Cómo verificar (todo corre aquí):** `npx tsc --noEmit` · `npx eslint src tests` · `npm test` · PG local: `pg_ctlcluster 16 main start` (clave `postgres`/`ci`; crear `pg_trgm`, `pgcrypto`, `unaccent`), luego `migrate deploy` + `npm run test:db`.
-- **Riesgos que no se olvidan:** clave `service_role` en git (CRITICAL, rotar); `subirImagenExcursion` sin guardia; Capa 2 apagada y `rls-cobertura` con falsos negativos; Supply V1 NO oculto y cron activo; el menú oculta Supply para todos por accidente.
-- **Decisiones del usuario aún abiertas:** corte Capa 2 en producción; qué hacer con Supply V1; versionar el Plan Maestro en `docs/`.
+- **Riesgos que no se olvidan:** clave `service_role` en git (CRITICAL, rotar); Capa 2 apagada y `rls-cobertura` con falsos negativos; Supply V1 NO oculto y cron activo; el menú oculta Supply para todos por accidente.
+- **Decisiones del usuario aún abiertas:** corte Capa 2 en producción; qué hacer con Supply V1; rotar la clave `service_role`; si se versionan los 4 documentos estratégicos de origen.
+- **Plan aprobado:** `docs/PLAN_MAESTRO.md` (con aviso y 6 erratas arriba del todo; léelas antes de fiarte de §9/§10-F0/§12).
 - **Regla:** el código manda sobre la doc; no marcar nada ✅ sin verificarlo; actualizar este archivo al cerrar cada fase o sesión.
