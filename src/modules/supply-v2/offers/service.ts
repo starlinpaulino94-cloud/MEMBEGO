@@ -12,7 +12,7 @@ import { resolverAcuerdoComisionDeItemEnTx } from '../agreements/service'
 import { edicionCambiaElPrecio, slugDeOferta, unidadesLibresComision, validarEdicionOferta, validarOferta, validarOfertaComision, type DatosEdicionOferta, type DatosOferta, type DatosOfertaComision } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · OFERTAS (§7–§16, §38–§39).
+ * MEMBEGO SUPPLY · OFERTAS (§7–§16, §38–§39).
  *
  * Crear deja un BORRADOR sin tocar supply. PUBLICAR es la transacción que
  * aparta: asignación FEFO + AVAILABLE → ALLOCATED + estado ACTIVE o

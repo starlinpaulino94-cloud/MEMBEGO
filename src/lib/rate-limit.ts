@@ -189,7 +189,7 @@ export const paymentSessionLimiter = createRateLimiter({
 })
 
 /**
- * Comprobación de un CÓDIGO DE CUPÓN (Supply 2.0 · Slice 7 §28). Un cupón vale
+ * Comprobación de un CÓDIGO DE CUPÓN (Supply · Slice 7 §28). Un cupón vale
  * dinero y su código se teclea: sin freno, probar códigos a mano es una
  * estrategia viable. 12 intentos cada 5 minutos por cliente dan margen a
  * teclear mal y cierran la puerta a barrer el espacio de códigos.

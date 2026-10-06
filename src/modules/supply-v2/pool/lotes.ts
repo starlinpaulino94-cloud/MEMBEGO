@@ -4,7 +4,7 @@ import { aplicarMovimiento, cubetasDeLote, invarianteCumplido, type Buckets, typ
 import { fallo } from '../core/errores'
 
 /**
- * MEMBEGO SUPPLY 2.0 · escritura del ledger.
+ * MEMBEGO SUPPLY · escritura del ledger.
  *
  * `registrarAsientoEnTx` es LA función que mueve unidades: lee el lote
  * (bloqueado por quien llama o aquí mismo), calcula las cubetas con el ledger

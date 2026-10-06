@@ -6,7 +6,7 @@ import { comoError, contextoDeAuditoria, entero, refrescarSupplyV2, texto, type 
 import { crearCategoriaVehiculoEnTx, editarCategoriaVehiculoEnTx } from './categories/service'
 
 /**
- * MEMBEGO SUPPLY 2.0 · categorías de vehículo de PLATAFORMA.
+ * MEMBEGO SUPPLY · categorías de vehículo de PLATAFORMA.
  *
  * EL PERMISO SE COMPRUEBA AQUÍ, no en el botón: una server action se despacha
  * por su identificador desde cualquier sitio, así que esconder el botón no
@@ -25,7 +25,7 @@ export async function crearCategoriaVehiculoAction(_prev: EstadoAccion, fd: Form
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_VEHICLE_CATEGORY_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: crear categoría de vehículo', (tx) =>
+    const r = await sinEmpresa('Supply: crear categoría de vehículo', (tx) =>
       crearCategoriaVehiculoEnTx(
         tx,
         {
@@ -52,7 +52,7 @@ export async function editarCategoriaVehiculoAction(_prev: EstadoAccion, fd: For
     const ctx = await contextoDeAuditoria(actor)
     const nivel = entero(fd, 'nivelTarifario')
     const orden = entero(fd, 'orden')
-    const r = await sinEmpresa('Supply 2.0: editar categoría de vehículo', (tx) =>
+    const r = await sinEmpresa('Supply: editar categoría de vehículo', (tx) =>
       editarCategoriaVehiculoEnTx(
         tx,
         id,
@@ -87,7 +87,7 @@ export async function cambiarEstadoCategoriaVehiculoAction(_prev: EstadoAccion, 
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_VEHICLE_CATEGORY_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
     const activo = texto(fd, 'activo', 10) === 'true'
-    await sinEmpresa('Supply 2.0: activar o desactivar categoría de vehículo', (tx) =>
+    await sinEmpresa('Supply: activar o desactivar categoría de vehículo', (tx) =>
       editarCategoriaVehiculoEnTx(tx, id, { activo }, ctx)
     )
     refrescar()

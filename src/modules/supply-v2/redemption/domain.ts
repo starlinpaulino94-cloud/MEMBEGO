@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto'
 import type { SupplyV2EntitlementStatus, SupplyV2VoucherStatus } from '@prisma/client'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 3 · reglas PURAS de voucher, QR y canje.
+ * MEMBEGO SUPPLY · SLICE 3 · reglas PURAS de voucher, QR y canje.
  *
  * Sin Prisma. Aquí se decide qué credencial vale, qué sesión QR está viva y
  * por qué se rechaza un canje. La base y los candados están en `service.ts`.

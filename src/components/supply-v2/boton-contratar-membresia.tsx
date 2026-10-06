@@ -10,7 +10,7 @@ import type { MembresiaCreada } from '@/modules/supply-v2/loyalty/memberships'
 import { RUTA_FIDELIZACION_CLIENTE } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · contratar un plan (§17).
+ * MEMBEGO SUPPLY · SLICE 8 · contratar un plan (§17).
  *
  * Si el plan es de pago, el servidor abre el pedido de membresía por el
  * checkout de siempre y aquí solo se navega a pagarlo. Si es gratuito, queda

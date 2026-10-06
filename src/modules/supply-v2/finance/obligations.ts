@@ -8,7 +8,7 @@ import { CERO, creaObligacion, OBLIGACION_VIVA, politicaDeVersion, vencimientoDe
 import { recalcularTotalesDeLiquidacionEnTx } from './applications'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · OBLIGACIONES (§17–§21).
+ * MEMBEGO SUPPLY · SLICE 4 · OBLIGACIONES (§17–§21).
  *
  * Una obligación es «Membego debe X al proveedor por este hecho». Nace donde
  * lo dice la VERSIÓN del acuerdo que rige la compra (nunca el acuerdo

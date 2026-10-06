@@ -23,7 +23,7 @@ import { aplicarMovimiento, cubetasVacias, saldoDeAsientos } from '../src/module
 import { snapshotDeAcuerdo, validarAcuerdo } from '../src/modules/supply-v2/agreements/domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · pruebas de DOMINIO (§70). Sin base de datos.
+ * MEMBEGO SUPPLY · SLICE 4 · pruebas de DOMINIO (§70). Sin base de datos.
  */
 
 const D = (n: number | string) => new Prisma.Decimal(n)

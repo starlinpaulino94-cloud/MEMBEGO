@@ -7,7 +7,7 @@ import { siguienteNumero } from '../core/numeracion'
 import { CERO, diferenciaConciliacion } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · CONCILIACIÓN (§43–§46).
+ * MEMBEGO SUPPLY · SLICE 4 · CONCILIACIÓN (§43–§46).
  *
  * Membego pone su lado (facturas, pagos, depósitos, obligaciones y
  * aplicaciones del periodo, y redenciones solo si la deuda nace al redimir)

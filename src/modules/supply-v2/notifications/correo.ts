@@ -3,7 +3,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import { puedeMandarse, type DefinicionDeAviso, type PreferenciasDeAviso } from './dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · EL CORREO.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · EL CORREO.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * NO SE CREA UN `EmailGateway`
@@ -76,7 +76,7 @@ export async function mandarCorreoDeAviso(
   userId: string,
   contenido: CorreoDeAviso
 ): Promise<ResultadoDeCorreo | null> {
-  const persona = await sinEmpresa('Supply 2.0: a qué dirección avisar', (tx) =>
+  const persona = await sinEmpresa('Supply: a qué dirección avisar', (tx) =>
     tx.user.findUnique({
       where: { id: userId },
       select: { email: true, companyId: true, preferenciasDeAviso: true },

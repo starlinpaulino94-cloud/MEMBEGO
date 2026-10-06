@@ -4,7 +4,7 @@ import { decimal, redondear2, type Decimal } from './dinero'
 import { repartirEnUnidades, validarPorcentajeComision } from './comision'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · MOTOR DE FINANCIACIÓN (§13–§15, §19, §22).
+ * MEMBEGO SUPPLY · SLICE 6 · MOTOR DE FINANCIACIÓN (§13–§15, §19, §22).
  *
  * Extiende el `SupplyV2PricingEngine` del Slice 5 para una línea con
  * BENEFICIO. PURO y con Decimal. Cada cifra tiene UN significado (§3):

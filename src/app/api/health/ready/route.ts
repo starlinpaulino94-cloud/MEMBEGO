@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 /**
  * GET /api/health/ready · READINESS (§7, §26).
  *
- * ¿Puede Supply 2.0 operar? Comprueba base, esquema, configuración crítica,
+ * ¿Puede Supply operar? Comprueba base, esquema, configuración crítica,
  * cuenta de la integración, secreto de la pasarela cuando la capacidad está
  * encendida, y la cola de trabajos.
  *

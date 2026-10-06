@@ -2,7 +2,7 @@ import { registrarEvento } from '@/modules/observabilidad/eventos'
 import { sanearError } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · LOGS DEL CAMINO EXTERNO (§10).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · LOGS DEL CAMINO EXTERNO (§10).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * POR QUÉ UNA LÍNEA PROPIA Y NO SOLO `registrarEvento`

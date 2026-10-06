@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · QUÉ SE AVISA, A QUIÉN Y POR DÓNDE.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · QUÉ SE AVISA, A QUIÉN Y POR DÓNDE.
  *
  * Todo lo de este archivo es PURO: se prueba sin base de datos y sin red. Lo
  * que decide es la POLÍTICA —qué clase de aviso es, por qué canales puede

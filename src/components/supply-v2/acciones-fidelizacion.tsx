@@ -34,7 +34,7 @@ import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 import { MEMBERSHIP_BENEFIT_KIND_LABELS, MEMBERSHIP_PLAN_KIND_LABELS, REFERRAL_REWARD_KIND_LABELS, REWARD_KIND_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · acciones de la ficha de un programa.
+ * MEMBEGO SUPPLY · SLICE 8 · acciones de la ficha de un programa.
  *
  * Cada formulario llama a su server action, y la action exige su permiso. Lo
  * que se ve aquí no decide nada: si alguien manda el formulario sin permiso,

@@ -45,7 +45,7 @@ function Recepcion({ o, compacto = false }: { o: OrdenEnLista; compacto?: boolea
 }
 
 function Accion({ o }: { o: OrdenEnLista }) {
-  const href = `/superadmin/supply-v2/compras/${o.id}`
+  const href = `/superadmin/supply/compras/${o.id}`
   return ORDEN_POR_RECIBIR.includes(o.status) ? (
     <Link href={href} className="inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-[8px] bg-sv2-accent px-2.5 text-[12px] font-semibold leading-4 tracking-[0.04em] text-white shadow-sm transition-colors hover:bg-sv2-accent-hover">
       Recepción
@@ -103,7 +103,7 @@ export function TablaCompras({ ordenes, pie }: { ordenes: OrdenEnLista[]; pie: R
               <tr key={o.id} className="transition-colors hover:bg-sv2-well/60" data-testid="fila-compra">
                 <td className="px-2 py-2 align-middle">
                   <div className="flex flex-col">
-                    <Link href={`/superadmin/supply-v2/compras/${o.id}`} className={cn(MONO, 'whitespace-nowrap font-bold text-sv2-primary hover:underline')}>{o.number}</Link>
+                    <Link href={`/superadmin/supply/compras/${o.id}`} className={cn(MONO, 'whitespace-nowrap font-bold text-sv2-primary hover:underline')}>{o.number}</Link>
                     <span className="whitespace-nowrap text-[12px] font-semibold leading-4 tracking-[0.04em] text-sv2-outline">{formatDate(o.createdAt)}</span>
                     {o.creadaPor && <span className="text-[12px] font-semibold leading-4 tracking-[0.04em] text-sv2-outline">Creada por {o.creadaPor}</span>}
                   </div>
@@ -141,7 +141,7 @@ export function TablaCompras({ ordenes, pie }: { ordenes: OrdenEnLista[]; pie: R
           <li key={o.id} className="flex flex-col gap-2 p-3" data-testid="tarjeta-compra">
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 flex-col">
-                <Link href={`/superadmin/supply-v2/compras/${o.id}`} className={cn(MONO, 'font-bold text-sv2-primary hover:underline')}>{o.number}</Link>
+                <Link href={`/superadmin/supply/compras/${o.id}`} className={cn(MONO, 'font-bold text-sv2-primary hover:underline')}>{o.number}</Link>
                 <span className="text-[12px] font-semibold leading-4 tracking-[0.04em] text-sv2-outline">
                   {formatDate(o.createdAt)}
                   {o.creadaPor && <> · {o.creadaPor}</>}

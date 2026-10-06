@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
- * Piezas base del rediseño Stitch de Supply 2.0: la tarjeta blanca con borde
+ * Piezas base del rediseño Stitch de Supply: la tarjeta blanca con borde
  * sutil y sombra mínima, la tarjeta con encabezado separado por una línea y el botón suave de
  * acciones secundarias. Todas las tarjetas del Resumen salen de aquí para no
  * repetir cinco variantes locales del mismo contenedor.

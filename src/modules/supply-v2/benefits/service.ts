@@ -10,7 +10,7 @@ import { esAutoaprobacion, MOTIVO_AUTOAPROBACION } from '../core/segregacion'
 import { estadoAsignacionSegunUsos, MENSAJES_NO_ELEGIBLE, motivoNoElegible, TRANSICIONES_BENEFICIO, validarBeneficio, type DatosBeneficio } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · BENEFICIOS (§7–§12, §16, §20, §27).
+ * MEMBEGO SUPPLY · SLICE 6 · BENEFICIOS (§7–§12, §16, §20, §27).
  *
  * TODO dentro de la `tx` de quien llama. Orden de candados: BENEFICIO
  * (`FOR UPDATE`) → ASIGNACIÓN (`FOR UPDATE`). El checkout ya trae la oferta

@@ -52,7 +52,7 @@ Próxima fase:             Cierre del rediseño (ver §17)
 
 | Programa / fase | Estado | Progreso | Objetivo | Resultado actual |
 |---|---|---:|---|---|
-| Supply V1 (releases A–G) | ✅ | 7/7 | Supply original (inventario patrocinado) | Doc `membego-supply-implementation-status.md`; migraciones `20260926…20261009` (10). Coexiste, no deprecado |
+| Supply V1 (releases A–G) | 🟣 retirado | 7/7 | Supply original (inventario patrocinado) | Doc `membego-supply-implementation-status.md`; migraciones `20260926…20261009` (10). Coexiste, no deprecado |
 | Supply 2.0 · S1 Procurement | ✅ | 1/9 | Proveedores, acuerdos, órdenes, lotes, ledger | `20261010`; `db.test` S1 verde |
 | · S2 Pool/Oferta/Checkout | ✅ | 2/9 | Asignación FEFO, ofertas, compra cliente | `20261011` |
 | · S3 Voucher/QR/Redención | ✅ | 3/9 | Entrega, reversa, incidencias | `20261012` |
@@ -177,7 +177,7 @@ Ver §15. Principales: consultas nuevas sin pruebas unitarias propias; Campañas
 | Redemptions | ✅ | `supply-v2/redemption` | Entrega, reversa, incidencias |
 | Merchant Billing | ⚪ | — | No existe (§2 F4) |
 | Revenue Attribution | 🟡 | `supply-v2/campaigns`, `growth`, `excursiones` | Sin atribución genérica |
-| Membego Supply V1 | ✅ | `modules/supply`, `/superadmin/supply`, `/admin/supply` | Visible; coexiste con V2 |
+| Membego Supply V1 | 🟣 | retirado (ver «Retiro de Supply V1» en §12) | Código y pantallas eliminados; tablas y migraciones se conservan |
 | Membego Supply V2 | 🔵 | `modules/supply-v2` | Backend ✅; UI en rediseño (§3) |
 | Supplier Finance | ✅ | `supply-v2/finance` | S4 |
 | Settlements | ✅ | `supply-v2/finance/settlements*` | S5 + liquidación parcial |
@@ -397,6 +397,18 @@ Riesgos pendientes: sin pentest externo; Capa 2 de RLS apagada; `app.omnisciente
 | Buscadores `BuscadorInicio/Unificado/Excursiones` | 🟣 sin consumidor (según plan F3) | — | — | Sí |
 
 > Si la intención era ocultar alguno de los cuatro primeros, **hoy no está oculto** y hay que decidirlo (§16).
+
+### Retiro de Supply V1 y cambio de nombre a «Supply»
+
+Pedido del usuario: eliminar el Supply original, dejar el 2.0 como el único y llamarlo «Supply».
+
+- **Eliminado:** `superadmin/supply` (33 archivos), `admin/supply`, `cliente/beneficios`, `api/cron/supply` (y su entrada en `vercel.json`), `modules/supply` (47), `components/supply` (26), 9 pruebas unitarias y 1 de PostgreSQL de V1, y las entradas de menú de V1.
+- **Conservado a propósito:** el esquema Prisma y las 10 migraciones de V1 (30 tablas). Dos siguen en uso: `SupplyCuentaCobro` (la lee el checkout de Supply) y `SupplyPedido` (permiso de comprobantes). Borrar tablas queda para una migración aparte, verificada contra producción.
+- **Rescatado de V1:** la administración de las cuentas de cobro de Membego (sin una activa nadie puede pagar), que solo existía en la pantalla de V1. Ahora vive en `/superadmin/supply/finanzas/cuentas-cobro` (`modules/supply-v2/payment-accounts`, `actions-cuentas.ts`), con el permiso `SUPPLY_V2_PAYMENT_CREATE` y bitácora en la misma transacción.
+- **Renombrado:** las rutas de pantalla `/superadmin/supply-v2` y `/admin/supply-v2` pasaron a `/supply`, con redirección desde las viejas; «Supply 2.0» pasó a «Supply» en los textos. NO cambiaron `/api/cron/supply-v2` ni `/api/webhooks/supply-v2` (integraciones externas). Los nombres internos de carpetas, módulos y permisos (`supply-v2`, `SUPPLY_V2_*`) tampoco.
+- **Redirección:** `/cliente/beneficios/*` lleva a `/cliente/compras`. Los clientes con beneficios del Supply original dejan de verlos en pantalla (los datos siguen en la BD).
+- **Hallazgos al verificar:** (1) 34 líneas de los e2e tenían regex con las URLs viejas (`\/supply-v2\/…`) que un reemplazo de texto no alcanza; corregidas. (2) La lista de Campañas ordenaba solo por estado y fecha de inicio: con varias empezando el mismo día, la nueva podía quedar fuera de la primera página; se añadió desempate por `createdAt` (solo lectura). (3) Postgres local se cae cuando se reinicia el contenedor; no es del código.
+- **No verificado:** producción (si hay datos de V1 en uso real); cómo se ve `/cliente/compras` como sustituto de `/cliente/beneficios`.
 
 ---
 

@@ -9,7 +9,7 @@ import { RUTA_OFERTAS_PUBLICAS } from '../core/catalogo'
 import { cubreOferta, motivoNoElegible, presupuestoDisponible, saldoDeMovimientosBeneficio, type MotivoNoElegible } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · lecturas de BENEFICIOS (§29, §31, §32).
+ * MEMBEGO SUPPLY · SLICE 6 · lecturas de BENEFICIOS (§29, §31, §32).
  *
  * Tres públicos, tres DTOs distintos:
  *   · ADMIN (§29): presupuesto, ledger, subsidio y resultado económico.
@@ -111,7 +111,7 @@ function aBeneficioEnLista(b: Prisma.SupplyV2BenefitGetPayload<{ select: typeof 
 }
 
 export async function listarBeneficios(): Promise<BeneficioEnLista[]> {
-  const filas = await sinEmpresa('Supply 2.0: listado de beneficios', (tx) =>
+  const filas = await sinEmpresa('Supply: listado de beneficios', (tx) =>
     tx.supplyV2Benefit.findMany({ orderBy: { createdAt: 'desc' }, take: 200, select: SELECT_BENEFICIO })
   )
   return filas.map(aBeneficioEnLista)
@@ -145,7 +145,7 @@ function whereBeneficios(f: FiltroBeneficios): Prisma.SupplyV2BenefitWhereInput 
 /** Listado filtrado y paginado del rediseño (§29). Mismo DTO que `listarBeneficios`. */
 export async function buscarBeneficios(f: FiltroBeneficios, p: { pagina: number; filas: number }): Promise<{ filas: BeneficioEnLista[]; total: number }> {
   const where = whereBeneficios(f)
-  const [filas, total] = await sinEmpresa('Supply 2.0: búsqueda de beneficios', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: búsqueda de beneficios', (tx) =>
     Promise.all([
       tx.supplyV2Benefit.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (p.pagina - 1) * p.filas, take: p.filas, select: SELECT_BENEFICIO }),
       tx.supplyV2Benefit.count({ where }),
@@ -174,7 +174,7 @@ export interface ResumenBeneficios {
 
 /** Indicadores de la cabecera de Beneficios: solo lecturas del presupuesto y de las reservas aplicadas. */
 export async function resumenBeneficios(): Promise<ResumenBeneficios> {
-  const [beneficios, aplicadas] = await sinEmpresa('Supply 2.0: resumen de beneficios', (tx) =>
+  const [beneficios, aplicadas] = await sinEmpresa('Supply: resumen de beneficios', (tx) =>
     Promise.all([
       tx.supplyV2Benefit.findMany({ select: { status: true, funding: true, budgetTotal: true, budgetReserved: true, budgetConsumed: true } }),
       tx.supplyV2BenefitReservation.findMany({
@@ -292,7 +292,7 @@ export interface FichaBeneficio {
 }
 
 export async function fichaBeneficio(id: string): Promise<FichaBeneficio | null> {
-  const b = await sinEmpresa('Supply 2.0: ficha de un beneficio', (tx) =>
+  const b = await sinEmpresa('Supply: ficha de un beneficio', (tx) =>
     tx.supplyV2Benefit.findUnique({
       where: { id },
       include: {
@@ -429,7 +429,7 @@ export interface OpcionesBeneficio {
 }
 
 export async function opcionesDeBeneficio(): Promise<OpcionesBeneficio> {
-  return sinEmpresa('Supply 2.0: opciones para crear un beneficio', async (tx) => {
+  return sinEmpresa('Supply: opciones para crear un beneficio', async (tx) => {
     const [ofertas, productos, proveedores] = await Promise.all([
       tx.supplyV2Offer.findMany({
         where: { status: { in: ['ACTIVE', 'SCHEDULED', 'DRAFT'] } },
@@ -467,7 +467,7 @@ export async function opcionesDeBeneficio(): Promise<OpcionesBeneficio> {
 export async function buscarClientesParaBeneficio(query: string): Promise<{ id: string; nombre: string; email: string }[]> {
   const q = query.trim()
   if (q.length < 2) return []
-  const filas = await sinEmpresa('Supply 2.0: buscar clientes para asignar un beneficio', (tx) =>
+  const filas = await sinEmpresa('Supply: buscar clientes para asignar un beneficio', (tx) =>
     tx.user.findMany({
       where: { role: 'CLIENTE', OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] },
       orderBy: { name: 'asc' },
@@ -518,7 +518,7 @@ const MOTIVO_CLIENTE: Partial<Record<MotivoNoElegible | 'SIN_OFERTAS', string>> 
  * (§31). Nunca presupuesto ni costos: solo su valor, hasta cuándo y dónde.
  */
 export async function misBeneficios(customerId: string, ahora = new Date()): Promise<BeneficioDelCliente[]> {
-  const filas = await sinEmpresa('Supply 2.0: beneficios del cliente de la sesión', (tx) =>
+  const filas = await sinEmpresa('Supply: beneficios del cliente de la sesión', (tx) =>
     tx.supplyV2CustomerBenefit.findMany({
       where: { customerId },
       orderBy: [{ status: 'asc' }, { grantedAt: 'desc' }],
@@ -550,7 +550,7 @@ export async function misBeneficios(customerId: string, ahora = new Date()): Pro
   const ofertas =
     candidatas.length === 0
       ? []
-      : await sinEmpresa('Supply 2.0: ofertas vivas donde valen los beneficios del cliente', (tx) =>
+      : await sinEmpresa('Supply: ofertas vivas donde valen los beneficios del cliente', (tx) =>
           tx.supplyV2Offer.findMany({
             where: { status: 'ACTIVE', startsAt: { lte: ahora }, AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: ahora } }] }, { OR: candidatas }] },
             orderBy: { startsAt: 'desc' },
@@ -609,7 +609,7 @@ export interface BeneficioAplicable {
  * checkout. Nunca inventa un beneficio que el cliente no tenga.
  */
 export async function beneficiosParaOferta(customerId: string, offerId: string, quantity = 1, ahora = new Date()): Promise<BeneficioAplicable[]> {
-  const datos = await sinEmpresa('Supply 2.0: beneficios del cliente aplicables a una oferta', async (tx) => {
+  const datos = await sinEmpresa('Supply: beneficios del cliente aplicables a una oferta', async (tx) => {
     const oferta = await tx.supplyV2Offer.findUnique({
       where: { id: offerId },
       select: { id: true, catalogItemId: true, supplierId: true, sourceType: true, currency: true, salePrice: true, commissionPercentage: true, agreementVersion: { select: { snapshot: true } } },
@@ -684,7 +684,7 @@ export interface BeneficioDelProveedor {
 }
 
 export async function beneficiosDelProveedor(supplierId: string): Promise<BeneficioDelProveedor[]> {
-  const filas = await sinEmpresa('Supply 2.0: beneficios que afectan a un proveedor', (tx) =>
+  const filas = await sinEmpresa('Supply: beneficios que afectan a un proveedor', (tx) =>
     tx.supplyV2Benefit.findMany({
       where: {
         OR: [{ supplierId }, { offer: { supplierId } }, { catalogItem: { supplierId } }],

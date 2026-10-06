@@ -49,7 +49,7 @@ import {
 import { auditarOperacion } from '../../src/modules/supply-v2/operations/auditoria-operativa'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 1 contra PostgreSQL de verdad.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 1 contra PostgreSQL de verdad.
  *
  * Lo que se demuestra aquí no se puede demostrar con SQLite ni con mocks: el
  * índice único bajo carrera, el advisory lock, el `FOR UPDATE` y el hecho de
@@ -478,7 +478,7 @@ test('F · otra moneda, una orden que no existe y un evento sin referencia: tres
 
 test('F · una orden ya pagada por otra vía y un tipo que no manejamos se ignoran sin tocar nada', async () => {
   const orden = await compraPendiente()
-  // Pagada a mano por finanzas, como se paga hoy en Supply 2.0 (transferencia).
+  // Pagada a mano por finanzas, como se paga hoy en Supply (transferencia).
   await sinEmpresa('prueba', (tx) => confirmarPagoEnTx(tx, { orderId: orden.id, amountSeen: orden.total }, como(ctx.ops)))
   const antes = await derechosDe(orden.id)
 
@@ -1964,7 +1964,7 @@ test('B3 · las consultas que el Centro de Operaciones va a necesitar ya contest
 // ════════════════════════════════════════════════════════════════════════════
 // BLOQUE 4 · CENTRO DE OPERACIONES, SALUD, INTERRUPTORES Y ALERTAS
 //
-// Lo que se demuestra: un operador puede saber si Supply 2.0 está sano,
+// Lo que se demuestra: un operador puede saber si Supply está sano,
 // encontrar una operación por compra, hilo o transacción, ver incidentes y
 // conciliaciones, y apagar una integración crítica sin abrir PostgreSQL. Y que
 // nada de eso dice «sano» porque el código exista: cada estado sale de una

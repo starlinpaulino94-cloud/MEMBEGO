@@ -30,7 +30,7 @@ export interface ProveedorParaFactura {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · registrar una FACTURA del proveedor (§7–§9, §35).
+ * MEMBEGO SUPPLY · registrar una FACTURA del proveedor (§7–§9, §35).
  * Prioridad: factura contra una orden de compra (las líneas se precargan con
  * lo que queda por facturar). Los totales los calcula el servidor con Decimal.
  */
@@ -57,7 +57,7 @@ export function FormFactura({ proveedores, ordenes, supplierId, purchaseOrderId,
     if (estado.success && estado.id && visto.current !== estado.id) {
       visto.current = estado.id
       toast.success(estado.success)
-      router.push(`/superadmin/supply-v2/finanzas/facturas/${estado.id}`)
+      router.push(`/superadmin/supply/finanzas/facturas/${estado.id}`)
     }
   }, [estado, router])
   const select = 'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm'

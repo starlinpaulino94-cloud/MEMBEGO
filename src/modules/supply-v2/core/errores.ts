@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · errores de dominio.
+ * MEMBEGO SUPPLY · errores de dominio.
  *
  * Un `SupplyV2Error` lleva un mensaje que se puede enseñar tal cual a la
  * persona. Cualquier otro error (Prisma, red) se traduce en las actions a un

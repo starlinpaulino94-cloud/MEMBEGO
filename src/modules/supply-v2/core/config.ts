@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · configuración del Slice 2.
+ * MEMBEGO SUPPLY · configuración del Slice 2.
  *
  * El TTL de la reserva del checkout vive AQUÍ y solo aquí (§25): quien lo
  * necesite lo lee de esta función. En producción viene de la variable de

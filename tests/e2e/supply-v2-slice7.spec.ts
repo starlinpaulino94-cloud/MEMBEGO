@@ -2,7 +2,7 @@ import { test, expect, type Browser, type BrowserContext, type Page } from '@pla
 import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 de punta a punta en navegador (§32–§33).
+ * MEMBEGO SUPPLY · SLICE 7 de punta a punta en navegador (§32–§33).
  *
  * EL RECORRIDO OBLIGATORIO, completo y en este orden:
  *   1  compras crea la campaña con el asistente de 8 pasos (ve la vista previa
@@ -68,18 +68,18 @@ async function cuentaDeCobro(): Promise<void> {
 // ── Montaje por interfaz ────────────────────────────────────────────────────
 
 async function proveedorVinculado(compras: Page, d: Datos): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/proveedores')
+  await compras.goto('/superadmin/supply/proveedores')
   await compras.getByTestId('btn-nuevo-proveedor').click()
   await compras.getByRole('button', { name: 'Sí, es una empresa de Membego' }).click()
   await compras.locator('#buscarEmpresa').fill(d.empresa)
   await compras.getByRole('option').filter({ hasText: d.empresa }).getByRole('button').click()
   await compras.getByRole('button', { name: /Vincular como proveedor|Usar este proveedor/ }).click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/proveedores\/[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/proveedores\/[a-z0-9]+$/)
   return compras.url().split('/').pop()!
 }
 
 async function producto(compras: Page, supplierId: string, nombre: string, precio: string): Promise<void> {
-  await compras.goto(`/superadmin/supply-v2/proveedores/${supplierId}`)
+  await compras.goto(`/superadmin/supply/proveedores/${supplierId}`)
   await compras.getByTestId('btn-agregar-producto').click()
   await compras.locator('#productoNombre').fill(nombre)
   await compras.locator('#productoCategoria').fill('Pizzas')
@@ -89,7 +89,7 @@ async function producto(compras: Page, supplierId: string, nombre: string, preci
 }
 
 async function acuerdoComision(compras: Page, supplierId: string): Promise<void> {
-  await compras.goto(`/superadmin/supply-v2/proveedores/${supplierId}`)
+  await compras.goto(`/superadmin/supply/proveedores/${supplierId}`)
   await compras.getByTestId('btn-crear-acuerdo').click()
   await compras.getByTestId('acuerdo-tipo-COMMISSION').click()
   await compras.getByTestId('acuerdo-alcance').getByRole('radio', { name: 'Todo el catálogo' }).check()
@@ -100,7 +100,7 @@ async function acuerdoComision(compras: Page, supplierId: string): Promise<void>
 }
 
 async function ofertaComision(compras: Page, producto: string, titulo: string, precio: string): Promise<void> {
-  await compras.goto('/superadmin/supply-v2/ofertas/nueva')
+  await compras.goto('/superadmin/supply/ofertas/nueva')
   await compras.getByTestId('fuente-comision').click()
   await compras.waitForURL(/fuente=COMMISSION/)
   const select = compras.getByTestId('comision-producto')
@@ -116,7 +116,7 @@ async function ofertaComision(compras: Page, producto: string, titulo: string, p
   await compras.locator('#ofertaLimiteC').fill('3')
   await compras.getByTestId('comision-continuar').click()
   await compras.getByTestId('btn-publicar-oferta-comision').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/ofertas\/(?!nueva)[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/ofertas\/(?!nueva)[a-z0-9]+$/)
   await expect(compras.getByTestId('estado-oferta')).toHaveText('Activa')
 }
 
@@ -125,7 +125,7 @@ async function ofertaComision(compras: Page, producto: string, titulo: string, p
  * ficha de la campaña, que nace en BORRADOR.
  */
 async function campanaCreada(compras: Page, d: Datos): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/campanas')
+  await compras.goto('/superadmin/supply/campanas')
   await compras.getByTestId('btn-crear-campana-nav').click()
   await expect(compras.getByTestId('wizard-campana')).toBeVisible()
 
@@ -167,7 +167,7 @@ async function campanaCreada(compras: Page, d: Datos): Promise<string> {
   await expect(ejemplo).toContainText(RD(828))
   await compras.screenshot({ path: 'test-results/shots/supply-v2-s7-wizard-resumen.png', fullPage: true })
   await compras.getByTestId('btn-crear-campana').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/campanas\/(?!nueva)[a-z0-9]+/)
+  await compras.waitForURL(/\/superadmin\/supply\/campanas\/(?!nueva)[a-z0-9]+/)
   await expect(compras.getByTestId('estado-campana')).toHaveText('Borrador')
   return compras.url().split('?')[0]!
 }
@@ -298,7 +298,7 @@ async function recorridoCompleto(browser: Browser) {
   await cliente.getByTestId('btn-avisar-pago').click()
   await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
 
-  await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+  await finanzas.goto('/superadmin/supply/ofertas/ventas')
   const venta = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `CP-${d.sufijo}` })
   await expect(venta.getByTestId('venta-financiacion')).toContainText(RD(900))
   await expect(venta.getByTestId('venta-reparto')).toContainText(`comisión ${RD(72)} · neto ${RD(828)}`)
@@ -312,7 +312,7 @@ async function recorridoCompleto(browser: Browser) {
   await expect(beneficio.getByTestId('derecho-estado')).toHaveText('Disponible')
   await beneficio.getByTestId('btn-usar-beneficio').click()
   const nonce = (await beneficio.getByTestId('qr-beneficio').getByTestId('qr-codigo').innerText()).trim()
-  await empleado.goto('/admin/supply-v2/escaner')
+  await empleado.goto('/admin/supply/escaner')
   await empleado.getByTestId('btn-codigo-manual').click()
   await empleado.getByTestId('input-codigo').fill(nonce)
   await empleado.getByTestId('btn-buscar-codigo').click()
@@ -323,7 +323,7 @@ async function recorridoCompleto(browser: Browser) {
   await expect(cliente.getByTestId('beneficio').filter({ hasText: d.pizza }).filter({ visible: true }).getByTestId('derecho-estado')).toHaveText('Utilizado')
 
   // El proveedor ve su campaña, su aporte y el de Membego por separado.
-  await empleado.goto('/admin/supply-v2/campanas')
+  await empleado.goto('/admin/supply/campanas')
   const campanaProv = empleado.getByTestId('campana-proveedor').filter({ hasText: d.campana })
   await expect(campanaProv.getByTestId('campana-prov-aporte')).toContainText(RD(100))
   await expect(campanaProv.getByTestId('campana-prov-membego')).toContainText(RD(300))
@@ -331,11 +331,11 @@ async function recorridoCompleto(browser: Browser) {
   await empleado.screenshot({ path: 'test-results/shots/supply-v2-s7-portal-proveedor.png', fullPage: true })
 
   // ── 16 · finanzas verifica el reparto en la liquidación ───────────────
-  await finanzas.goto('/superadmin/supply-v2/finanzas/liquidaciones/nueva')
+  await finanzas.goto('/superadmin/supply/finanzas/liquidaciones/nueva')
   const proveedores = await finanzas.getByTestId('liquidacion-proveedor').locator('option').allTextContents()
   await finanzas.getByTestId('liquidacion-proveedor').selectOption({ index: proveedores.findIndex((t) => t.includes(d.empresa)) })
   await finanzas.getByTestId('btn-generar-liquidacion').click()
-  await finanzas.waitForURL(/\/superadmin\/supply-v2\/finanzas\/liquidaciones\/(?!nueva)[a-z0-9]+/)
+  await finanzas.waitForURL(/\/superadmin\/supply\/finanzas\/liquidaciones\/(?!nueva)[a-z0-9]+/)
   await expect(finanzas.getByTestId('liq-contractual')).toHaveText(RD(900))
   await expect(finanzas.getByTestId('liq-subsidio')).toHaveText(RD(300))
   await expect(finanzas.getByTestId('liq-cobrado')).toHaveText(RD(600))
@@ -354,7 +354,7 @@ async function recorridoCompleto(browser: Browser) {
   await expect(finanzas.getByTestId('historial-campana')).toContainText('Cupones generados')
   await finanzas.screenshot({ path: 'test-results/shots/supply-v2-s7-ficha-campana.png', fullPage: true })
 
-  await finanzas.goto('/superadmin/supply-v2/campanas')
+  await finanzas.goto('/superadmin/supply/campanas')
   await expect(finanzas.getByTestId('tablero-campanas')).toBeVisible()
   const filaTablero = finanzas.getByTestId('tabla-campanas').locator('tr').filter({ hasText: d.campana })
   await expect(filaTablero.getByTestId('campana-ventas')).toHaveText('1')
@@ -400,7 +400,7 @@ async function movil(browser: Browser) {
   await ofertaComision(compras, d.pizza, d.ofertaPizza, '1000')
 
   // La campaña se monta por interfaz, con un cupón PRIVADO para esta clienta.
-  await compras.goto('/superadmin/supply-v2/campanas/nueva')
+  await compras.goto('/superadmin/supply/campanas/nueva')
   await compras.getByTestId('campana-nombre').fill(d.campana)
   await compras.getByTestId('campana-continuar').click()
   await compras.getByTestId('campana-continuar').click()
@@ -415,7 +415,7 @@ async function movil(browser: Browser) {
   await compras.getByTestId('campana-continuar').click()
   await compras.getByTestId('campana-continuar').click()
   await compras.getByTestId('btn-crear-campana').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/campanas\/(?!nueva)[a-z0-9]+/)
+  await compras.waitForURL(/\/superadmin\/supply\/campanas\/(?!nueva)[a-z0-9]+/)
   const urlCampana = compras.url().split('?')[0]!
 
   // El asistente la dejó completa: su oferta y su promoción con cupón.
@@ -484,7 +484,7 @@ async function movil(browser: Browser) {
   // revisar». El fallo parece de la pantalla de finanzas y es una carrera de la
   // prueba. (La misma familia de carrera estaba en los slices 6, 7 y 8.)
   await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
-  await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+  await finanzas.goto('/superadmin/supply/ofertas/ventas')
   const venta = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `MOV-${d.sufijo}` })
   await venta.getByTestId('btn-confirmar-pago').click()
   await venta.getByTestId('btn-confirmar-pago-confirmar').click()
@@ -493,13 +493,13 @@ async function movil(browser: Browser) {
   // Sus beneficios y el portal del proveedor, también en el teléfono.
   await cliente.goto('/cliente/compras')
   await expect(cliente.getByTestId('beneficio').filter({ visible: true }).first().getByTestId('derecho-estado')).toHaveText('Disponible')
-  await empleado.goto('/admin/supply-v2/campanas')
+  await empleado.goto('/admin/supply/campanas')
   await expect(empleado.getByTestId('campana-proveedor').filter({ hasText: d.campana })).toBeVisible()
   expect(await empleado.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await empleado.screenshot({ path: 'test-results/shots/supply-v2-s7-movil-portal.png', fullPage: true })
 }
 
-test.describe('Supply 2.0 · Slice 7', () => {
+test.describe('Supply · Slice 7', () => {
   test.beforeAll(() => {
     test.skip(!SESION_LOCAL_DISPONIBLE, 'requiere SUPABASE_JWT_SECRET, DATABASE_URL y NEXT_PUBLIC_SUPABASE_URL para firmar sesiones')
   })

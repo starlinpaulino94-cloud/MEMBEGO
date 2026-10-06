@@ -130,7 +130,7 @@ export interface CargaReintentoEntrega {
 }
 
 /**
- * EFECTO DEL OUTBOX DE SUPPLY 2.0 (Slice 9 · bloque 2).
+ * EFECTO DEL OUTBOX DE SUPPLY (Slice 9 · bloque 2).
  *
  * El trabajo no lleva el efecto: lleva el ID de la fila del outbox. La fila es
  * la fuente de la verdad —su estado, sus intentos, su payload— y el trabajo

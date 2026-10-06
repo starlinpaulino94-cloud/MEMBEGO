@@ -3,7 +3,7 @@ import { validarDatosPrecio } from '../core/precios'
 import { mismoMonto, type Monto } from '../core/dinero'
 
 /**
- * MEMBEGO SUPPLY 2.0 · ofertas: reglas puras (§7–§15).
+ * MEMBEGO SUPPLY · ofertas: reglas puras (§7–§15).
  */
 
 export interface DatosOferta {

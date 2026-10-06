@@ -17,8 +17,8 @@ import type {
 } from './gateways'
 
 /**
- * MEMBEGO SUPPLY 2.0 · adaptadores de los contratos sobre la infraestructura
- * actual de Membego. Es el ÚNICO lugar de Supply 2.0 que sabe cómo el Core
+ * MEMBEGO SUPPLY · adaptadores de los contratos sobre la infraestructura
+ * actual de Membego. Es el ÚNICO lugar de Supply que sabe cómo el Core
  * guarda empresas, usuarios, sucursales y roles.
  */
 
@@ -65,7 +65,7 @@ function aCompanyRef(c: FilaEmpresa): CompanyRef {
 
 export const companyGateway: CompanyGateway = {
   async findById(id) {
-    const c = await sinEmpresa('Supply 2.0: leer una empresa como posible proveedora', (tx) =>
+    const c = await sinEmpresa('Supply: leer una empresa como posible proveedora', (tx) =>
       tx.company.findUnique({ where: { id }, select: SELECT_EMPRESA })
     )
     return c ? aCompanyRef(c) : null
@@ -73,7 +73,7 @@ export const companyGateway: CompanyGateway = {
   async search(query) {
     const q = query.trim()
     if (q.length < 2) return []
-    const filas = await sinEmpresa('Supply 2.0: buscar empresas para vincular como proveedor', (tx) =>
+    const filas = await sinEmpresa('Supply: buscar empresas para vincular como proveedor', (tx) =>
       tx.company.findMany({
         where: {
           esDemo: false,
@@ -104,7 +104,7 @@ export const userGateway: UserGateway = {
     }
   },
   async findById(id) {
-    const u = await sinEmpresa('Supply 2.0: leer un usuario por id', (tx) =>
+    const u = await sinEmpresa('Supply: leer un usuario por id', (tx) =>
       tx.user.findUnique({ where: { id }, select: { id: true, name: true, email: true, role: true } })
     )
     return u ? { id: u.id, name: u.name, email: u.email, role: u.role } : null
@@ -113,7 +113,7 @@ export const userGateway: UserGateway = {
 
 export const branchGateway: BranchGateway = {
   async listForCompany(companyId): Promise<BranchRef[]> {
-    const filas = await sinEmpresa('Supply 2.0: sucursales de un proveedor registrado', (tx) =>
+    const filas = await sinEmpresa('Supply: sucursales de un proveedor registrado', (tx) =>
       tx.sucursal.findMany({
         where: { companyId, activa: true },
         orderBy: { nombre: 'asc' },
@@ -125,7 +125,7 @@ export const branchGateway: BranchGateway = {
 }
 
 /**
- * Política del Slice 1: todos los permisos de Supply 2.0 son de PLATAFORMA y
+ * Política del Slice 1: todos los permisos de Supply son de PLATAFORMA y
  * los tiene el rol SUPERADMIN. Se resuelve contra el rol del RBAC existente:
  * no hay una segunda tabla de permisos. Cuando el Slice 2 abra el lado
  * proveedor, esta función crecerá; la firma no cambia.
@@ -148,7 +148,7 @@ export const authorizationGateway: AuthorizationGateway = {
 /**
  * EL CLIENTE ES EL USUARIO. Una ficha `Cliente` de Membego pertenece a UNA
  * empresa (es la afiliación de una persona a un comercio); una compra a
- * Membego no pertenece a ningún comercio, así que Supply 2.0 referencia al
+ * Membego no pertenece a ningún comercio, así que Supply referencia al
  * `User` con rol CLIENTE. Cuando el Slice 3 entregue en una sucursal, el
  * puente hacia la ficha de esa empresa se resuelve con `misClienteIds`, sin
  * tabla nueva.
@@ -166,12 +166,12 @@ export const customerGateway: CustomerGateway = {
  * Las cuentas a las que un cliente le paga a MEMBEGO son las de
  * `supply_cuentas_cobro`: la única entidad del proyecto que representa un
  * cobro a nombre de la plataforma (todo lo demás cobra a nombre de una
- * empresa). Se LEE por este adaptador; Supply 2.0 nunca escribe en ella y la
+ * empresa). Se LEE por este adaptador; Supply nunca escribe en ella y la
  * orden congela una foto de la cuenta, sin clave foránea.
  */
 export const paymentAccountGateway: PaymentAccountGateway = {
   async activas(): Promise<PaymentAccountRef[]> {
-    return sinEmpresa('Supply 2.0: cuentas de cobro de la plataforma', (tx) =>
+    return sinEmpresa('Supply: cuentas de cobro de la plataforma', (tx) =>
       tx.supplyCuentaCobro.findMany({
         where: { activa: true },
         orderBy: { nombre: 'asc' },
@@ -180,7 +180,7 @@ export const paymentAccountGateway: PaymentAccountGateway = {
     )
   },
   async findById(id) {
-    return sinEmpresa('Supply 2.0: una cuenta de cobro por id', (tx) =>
+    return sinEmpresa('Supply: una cuenta de cobro por id', (tx) =>
       tx.supplyCuentaCobro.findFirst({
         where: { id, activa: true },
         select: { id: true, tipo: true, nombre: true, titular: true, numeroCuenta: true, tipoCuenta: true, instrucciones: true, moneda: true },

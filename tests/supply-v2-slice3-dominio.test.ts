@@ -19,7 +19,7 @@ import { aplicarMovimiento, invarianteCumplido, type Buckets } from '../src/modu
 import { ttlQrMinutos, vencimientoDeQr } from '../src/modules/supply-v2/core/config'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 3 · dominio puro (§71). Sin base de datos.
+ * MEMBEGO SUPPLY · SLICE 3 · dominio puro (§71). Sin base de datos.
  */
 
 const ahora = new Date('2026-10-01T12:00:00Z')

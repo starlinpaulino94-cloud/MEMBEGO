@@ -12,7 +12,7 @@ import {
 import { apuntarAvisoEnTx } from './servicio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · AUTOMATIZACIONES.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · AUTOMATIZACIONES.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * NO SE CONSTRUYE ZAPIER, Y TAMPOCO SE CREA OTRA TABLA DE REGLAS
@@ -152,7 +152,7 @@ async function evaluarUna(
   if (regla === 'MEMBERSHIP_EXPIRING') {
     const dias = diasDeAviso('SUPPLY_V2_MEMBERSHIP_EXPIRING_DAYS', 7)
     const hasta = new Date(ahora.getTime() + dias * 86_400_000)
-    await sinEmpresa('Supply 2.0: automatización · membresías por vencer', async (tx) => {
+    await sinEmpresa('Supply: automatización · membresías por vencer', async (tx) => {
       const filas = await tx.supplyV2CustomerMembership.findMany({
         where: { status: 'ACTIVE', expiresAt: { gt: ahora, lte: hasta } },
         select: { id: true, customerId: true, code: true },
@@ -178,7 +178,7 @@ async function evaluarUna(
   if (regla === 'BENEFIT_EXPIRING') {
     const dias = diasDeAviso('SUPPLY_V2_BENEFIT_EXPIRING_DAYS', 3)
     const hasta = new Date(ahora.getTime() + dias * 86_400_000)
-    await sinEmpresa('Supply 2.0: automatización · beneficios por vencer', async (tx) => {
+    await sinEmpresa('Supply: automatización · beneficios por vencer', async (tx) => {
       const filas = await tx.supplyV2CustomerBenefit.findMany({
         where: { status: 'AVAILABLE', expiresAt: { gt: ahora, lte: hasta } },
         select: { id: true, customerId: true },
@@ -211,7 +211,7 @@ async function evaluarUna(
    * de deduplicación deje un solo aviso por jornada.
    */
   if (regla === 'FINANCE_INCIDENT_HIGH') {
-    await sinEmpresa('Supply 2.0: automatización · incidentes de severidad alta', async (tx) => {
+    await sinEmpresa('Supply: automatización · incidentes de severidad alta', async (tx) => {
       const cuantos = await tx.supplyV2FinanceIncident.count({
         where: { status: { in: ['OPEN', 'INVESTIGATING'] }, severity: 'HIGH' },
       })
@@ -234,7 +234,7 @@ async function evaluarUna(
   }
 
   if (regla === 'OUTBOX_DEAD') {
-    await sinEmpresa('Supply 2.0: automatización · efectos sin salida', async (tx) => {
+    await sinEmpresa('Supply: automatización · efectos sin salida', async (tx) => {
       const cuantos = await tx.supplyV2OutboxEvent.count({ where: { status: 'DEAD_LETTER' } })
       encontrados = cuantos
       if (cuantos === 0) return

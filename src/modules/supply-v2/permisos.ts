@@ -10,7 +10,7 @@ import { SUPPLY_V2_PERMISSION_LABELS, type SupplyV2Permission } from './contract
 export type { SupplyV2Permission }
 
 /**
- * MEMBEGO SUPPLY 2.0 · guardia de servidor (§41).
+ * MEMBEGO SUPPLY · guardia de servidor (§41).
  *
  * Toda mutación pasa por aquí ANTES de abrir la transacción. Las server
  * actions se despachan por id sobre cualquier ruta, así que el middleware no
@@ -54,7 +54,7 @@ export async function exigirCliente(): Promise<ClienteSupplyV2> {
 // ── Slice 3 · el PROVEEDOR que escanea (§14, §18, §45, §47) ──────────────────
 
 /**
- * Empleado de un proveedor de Membego Supply 2.0. La EMPRESA sale de la
+ * Empleado de un proveedor de Membego Supply. La EMPRESA sale de la
  * sesión (nunca del formulario) y el proveedor se resuelve desde ella:
  * `SupplyV2Supplier.companyId` es único. La sección `supply` y la capacidad
  * MEMBEGO_SUPPLIER se comparten con el portal de Supply V1: quien puede entrar
@@ -74,7 +74,7 @@ export async function proveedorDeLaSesion(): Promise<ProveedorSupplyV2 | null> {
   if (!user) return null
   const companyId = user.metadata.companyId
   if (!companyId || !user.metadata.dbUserId) return null
-  const supplier = await sinEmpresa('Supply 2.0: resolver el proveedor de la empresa de la sesión', (tx) =>
+  const supplier = await sinEmpresa('Supply: resolver el proveedor de la empresa de la sesión', (tx) =>
     tx.supplyV2Supplier.findUnique({ where: { companyId }, select: { id: true, status: true, commercialName: true } })
   )
   if (!supplier || supplier.status !== 'ACTIVE') return null

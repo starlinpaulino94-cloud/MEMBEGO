@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · QUÉ SE LE CONTESTA AL PROVEEDOR.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · QUÉ SE LE CONTESTA AL PROVEEDOR.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * EL CÓDIGO HTTP NO ES COSMÉTICA: DECIDE SI NOS LLAMAN MIL VECES

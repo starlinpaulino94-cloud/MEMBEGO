@@ -3,7 +3,7 @@ import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 5 · INCIDENCIAS FINANCIERAS (§33).
+ * MEMBEGO SUPPLY · SLICE 5 · INCIDENCIAS FINANCIERAS (§33).
  *
  * Lo que no se puede deshacer en silencio (una entrega reversada cuyo neto ya
  * se pagó) queda aquí, abierto, hasta que una persona explique cómo se

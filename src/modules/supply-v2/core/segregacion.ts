@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · AUTOAPROBACIÓN, en un solo sitio.
+ * MEMBEGO SUPPLY · AUTOAPROBACIÓN, en un solo sitio.
  *
  * La segregación de funciones —quien crea algo no lo aprueba— se retiró a
  * propósito. Membego opera con un solo administrador de plataforma, y el rol
@@ -13,7 +13,7 @@
  * pero es lo que SÍ se puede sostener con una sola persona.
  *
  * Volver al veto el día que haya dos personas autorizadas es añadir una
- * condición AQUÍ: los ocho puntos de aprobación de Supply 2.0 ya pasan por
+ * condición AQUÍ: los ocho puntos de aprobación de Supply ya pasan por
  * esta función, así que no hay que buscarlos uno por uno.
  *
  * PURO: se prueba sin base de datos.

@@ -5,7 +5,7 @@ import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { claveDeEfecto, reprogramarTrasFallo, sanear, sanearError, type EfectoPendiente } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · OUTBOX TRANSACCIONAL (§4C).
+ * MEMBEGO SUPPLY · SLICE 9 · OUTBOX TRANSACCIONAL (§4C).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * LA PROPIEDAD QUE ESTO EXISTE PARA DAR
@@ -86,7 +86,7 @@ export interface EfectoReclamado {
  * comparten inbox, orden y beneficio.
  */
 export async function reclamarEfectos(limite = 20, ahora = new Date()): Promise<EfectoReclamado[]> {
-  return sinEmpresa('Supply 2.0: reclamar efectos del outbox', async (tx) => {
+  return sinEmpresa('Supply: reclamar efectos del outbox', async (tx) => {
     const candidatos = await tx.supplyV2OutboxEvent.findMany({
       where: { status: { in: ['PENDING', 'FAILED'] }, availableAt: { lte: ahora } },
       orderBy: { availableAt: 'asc' },
@@ -117,7 +117,7 @@ export async function reclamarEfectos(limite = 20, ahora = new Date()): Promise<
 
 /** El efecto se entregó. Estado final. */
 export async function marcarEntregado(id: string, nota: string | null = null): Promise<void> {
-  await sinEmpresa('Supply 2.0: outbox entregado', (tx) =>
+  await sinEmpresa('Supply: outbox entregado', (tx) =>
     tx.supplyV2OutboxEvent.update({
       where: { id },
       // `nota` es para el efecto que TERMINÓ SIN SALIR —un correo rechazado con
@@ -136,7 +136,7 @@ export async function marcarEntregado(id: string, nota: string | null = null): P
  * decida, y para decidir hay que saber que existe.
  */
 export async function marcarFallido(id: string, error: unknown, ctx: ContextoAuditoria, ahora = new Date()): Promise<'FAILED' | 'DEAD_LETTER'> {
-  return sinEmpresa('Supply 2.0: outbox fallido', async (tx) => {
+  return sinEmpresa('Supply: outbox fallido', async (tx) => {
     const fila = await tx.supplyV2OutboxEvent.findUniqueOrThrow({
       where: { id },
       select: { id: true, attempts: true, eventType: true, aggregateType: true, aggregateId: true, correlationId: true },
@@ -169,7 +169,7 @@ export async function marcarFallido(id: string, error: unknown, ctx: ContextoAud
  * que `reenviarEntregaAhora` en Connect, y se toma por la misma razón.
  */
 export async function reintentarEfecto(id: string, ctx: ContextoAuditoria): Promise<{ id: string; estaba: string }> {
-  return sinEmpresa('Supply 2.0: reintentar un efecto del outbox', async (tx) => {
+  return sinEmpresa('Supply: reintentar un efecto del outbox', async (tx) => {
     const fila = await tx.supplyV2OutboxEvent.findUniqueOrThrow({
       where: { id },
       select: { id: true, status: true, eventType: true, aggregateId: true, correlationId: true },
