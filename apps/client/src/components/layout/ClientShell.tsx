@@ -38,7 +38,8 @@ export function ClientShell() {
   const isDesktop = width >= 1024
   const isDetailSheet = width >= 768 && router.canGoBack() && isClientDetailRoute(pathname)
   const shellPathname = isDetailSheet ? previousPath ?? pathname : pathname
-  const requiresAuth = requiresClientAuthentication(pathname)
+  const showcaseIsPublic = __DEV__ && pathname === '/dev-cardnet-capture-showcase'
+  const requiresAuth = !showcaseIsPublic && requiresClientAuthentication(pathname)
 
   useEffect(() => {
     if (previousPathRef.current === pathname) return
