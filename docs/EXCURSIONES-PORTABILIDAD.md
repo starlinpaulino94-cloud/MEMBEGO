@@ -296,7 +296,8 @@ y dos columnas de `users` se declararon sin escribir la migración.
 
 - Capacidad `EXCURSIONES`, encendida de serie solo en empresas de categoría
   `EXCURSIONES`; cualquier otra la activa a mano. Convive con
-  `PAGO_TRANSFERENCIA`, `SEGUIMIENTO`, `RULETA`, `GIFT_CARDS`, `POS_CAJA`, `CRM`.
+  `PAGO_TRANSFERENCIA`, `SEGUIMIENTO`, `GIFT_CARDS`, `POS_CAJA`, `CRM`, `MENSAJERIA`
+  (`RULETA` salió del paquete base en la Fase 0; ver docs/CAPACIDADES.md).
 - Rol `VENDEDOR` con su propio portal (`/vendedor`), separado de los roles de
   administración.
 - **169 casos de prueba**, todos sobre la lógica pura — por eso corren sin base

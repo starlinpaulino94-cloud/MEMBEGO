@@ -166,6 +166,14 @@ export const CAPACIDADES = [
   // organización y la segunda solo donde de verdad hay personal escaneando.
   'MEMBEGO_SUPPLIER',
   'MEMBEGO_SUPPLY_FULFILLMENT',
+  // Fase 0 (Plan Maestro §8) — módulos secundarios que se ocultan para
+  // despejar el panel mientras el foco pasa a Commerce Core/Marketplace.
+  // Publicaciones y Mensajería SÍ cuelgan de una sección (ver
+  // SECCIONES_POR_CAPACIDAD); Home Builder no tiene sección propia (comparte
+  // página con "Personalización") y se revisa en el componente directamente.
+  'PUBLICACIONES',
+  'HOME_BUILDER',
+  'MENSAJERIA',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -192,6 +200,9 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   CRM: 'CRM: leads, seguimiento y pipeline comercial',
   MEMBEGO_SUPPLIER: 'Membego Supply: vender inventario a Membego',
   MEMBEGO_SUPPLY_FULFILLMENT: 'Membego Supply: escanear y entregar vouchers',
+  PUBLICACIONES: 'Publicaciones: eventos, noticias y beneficios en el perfil',
+  HOME_BUILDER: 'Editor de inicio: personalizar bloques de la página principal',
+  MENSAJERIA: 'Mensajería interna y WhatsApp avanzado',
 }
 
 /**
@@ -213,6 +224,11 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   // Apagar la capacidad cierra compromisos, redenciones, incidentes y
   // liquidaciones de una vez.
   MEMBEGO_SUPPLIER: ['supply'],
+  PUBLICACIONES: ['publicaciones'],
+  MENSAJERIA: ['comunicacion'],
+  // HOME_BUILDER no aparece aquí: comparte la sección 'personalizacion' con
+  // las opciones de marca/engagement, que NO se ocultan. Se revisa a mano en
+  // el componente de esa página (ver admin/personalizacion/page.tsx).
 }
 
 /** Índice inverso sección → capacidad que la controla (o undefined). */
@@ -236,6 +252,8 @@ export const SECCION_LABEL: Partial<Record<AdminSection, string>> = {
   gamificacion: 'Ruleta y gamificación',
   leads: 'Prospectos (todo el CRM)',
   supply: 'Membego Supply (compromisos con la plataforma)',
+  publicaciones: 'Publicaciones',
+  comunicacion: 'Mensajería y WhatsApp',
 }
 
 /** Las secciones del panel que se apagan al desactivar esta capacidad. */
@@ -249,13 +267,40 @@ export function seccionesQueApaga(cap: Capacidad): string[] {
  * lo que hoy está activo en producción (fail-open del D4); lo nuevo
  * (NAVEGACION_V2, INVENTARIO, COLA, EVIDENCIA) nace apagado.
  */
+/**
+ * Fase 0 (Plan Maestro §8): RULETA se retiró del paquete base de las 5
+ * categorías — se oculta para TODA empresa, nueva o existente, porque
+ * ningún override en el código la encendía explícitamente (a diferencia de
+ * MEMBEGO_SUPPLIER, que sí se activa a mano para proveedores reales). MENSAJERIA
+ * se agregó ENCENDIDA (empresas existentes la conservan sin cambios); los
+ * puntos de alta de empresa nueva escriben `overrides: { CRM: false,
+ * MENSAJERIA: false }` para que los tenants nuevos nazcan sin ella. Ver
+ * src/modules/registro/empresaActions.ts, src/modules/solicitudes/actions.ts
+ * y src/modules/empresas/actions.ts.
+ */
 export const CAPACIDADES_BASE: Record<CategoriaNegocio, Capacidad[]> = {
-  CAR_WASH: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'CITA_ANTES_DEL_QR', 'POS_CAJA', 'CRM'],
-  BARBERIA: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'CRM'],
-  RESTAURANTE: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'CRM'],
-  GYM: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'CRM'],
+  CAR_WASH: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'CITA_ANTES_DEL_QR', 'POS_CAJA', 'CRM', 'MENSAJERIA'],
+  BARBERIA: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'CRM', 'MENSAJERIA'],
+  RESTAURANTE: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'CRM', 'MENSAJERIA'],
+  GYM: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'CRM', 'MENSAJERIA'],
   // El módulo de Excursiones viene ENCENDIDO de serie en su categoría.
-  EXCURSIONES: ['PAGO_TRANSFERENCIA', 'SEGUIMIENTO', 'RULETA', 'GIFT_CARDS', 'POS_CAJA', 'EXCURSIONES', 'CRM'],
+  EXCURSIONES: ['PAGO_TRANSFERENCIA', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'EXCURSIONES', 'CRM', 'MENSAJERIA'],
+}
+
+/**
+ * Overrides que debe escribir toda alta de empresa NUEVA (Fase 0, Plan
+ * Maestro §8.5–§8.6): CRM y MENSAJERIA siguen en `CAPACIDADES_BASE` —las
+ * empresas existentes las conservan sin cambios—, pero un tenant que nace
+ * hoy arranca sin ellas. Se activan en cualquier momento desde el panel de
+ * capacidades.
+ *
+ * Ver src/modules/registro/empresaActions.ts (`registrarEmpresa`),
+ * src/modules/solicitudes/actions.ts (`crearEmpresaDesdeSolicitud`) y
+ * src/modules/empresas/actions.ts (`crearEmpresa`).
+ */
+export const CAPACIDADES_OVERRIDE_TENANT_NUEVO: Partial<Record<Capacidad, boolean>> = {
+  CRM: false,
+  MENSAJERIA: false,
 }
 
 // ── Configuración guardada (companies.capacidades) ───────────────────────────

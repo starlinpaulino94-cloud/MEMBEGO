@@ -1,4 +1,13 @@
 import type { SupplyV2Bucket, SupplyV2LedgerEntryType } from '@prisma/client'
+import {
+  type TraspasoPermitido,
+  cubetasVaciasGenerico,
+  sumaCubetasGenerico,
+  validarMovimientoGenerico,
+  aplicarMovimientoGenerico,
+  saldoDeAsientosGenerico,
+  invarianteCumplidoGenerico,
+} from '@/lib/commerce-primitives/ledger'
 
 /**
  * MEMBEGO SUPPLY 2.0 · EL LEDGER (Slice 1).
@@ -16,6 +25,10 @@ import type { SupplyV2Bucket, SupplyV2LedgerEntryType } from '@prisma/client'
  *
  * Con traslados se cumple solo: cada asiento resta de una cubeta lo que suma
  * a otra. Los contadores del lote son caché; la suma de asientos es la verdad.
+ *
+ * La mecánica de cubetas genéricas (suma, validación, aplicación, invariante)
+ * vive en src/lib/commerce-primitives/ledger.ts (Fase 0); las 6 cubetas y la
+ * tabla de traslados de abajo son el modelo específico de Supply V2.
  */
 
 export const BUCKETS: readonly SupplyV2Bucket[] = [
@@ -45,7 +58,7 @@ export interface LedgerMove {
  */
 export const MOVIMIENTOS_PERMITIDOS: Record<
   SupplyV2LedgerEntryType,
-  readonly { source: SupplyV2Bucket | null; destination: SupplyV2Bucket | null }[]
+  readonly TraspasoPermitido<SupplyV2Bucket>[]
 > = {
   RECEIPT: [{ source: null, destination: 'AVAILABLE' }],
   ALLOCATION: [{ source: 'AVAILABLE', destination: 'ALLOCATED' }],
@@ -92,7 +105,7 @@ export const TIPOS_CON_MOTIVO_OBLIGATORIO: readonly SupplyV2LedgerEntryType[] = 
 ]
 
 export function cubetasVacias(): Buckets {
-  return { AVAILABLE: 0, ALLOCATED: 0, RESERVED: 0, ISSUED: 0, REDEEMED: 0, CLOSED: 0 }
+  return cubetasVaciasGenerico(BUCKETS)
 }
 
 /** Lee las cubetas de una fila de lote (o de cualquier objeto con esos campos). */
@@ -115,28 +128,12 @@ export function cubetasDeLote(l: {
 }
 
 export function sumaCubetas(b: Buckets): number {
-  return BUCKETS.reduce((t, k) => t + b[k], 0)
+  return sumaCubetasGenerico(BUCKETS, b)
 }
 
 /** Devuelve el mensaje de error o `null` si el asiento es válido en abstracto. */
 export function validarMovimiento(m: LedgerMove): string | null {
-  if (!Number.isInteger(m.quantity) || m.quantity <= 0) {
-    return 'Un asiento del ledger mueve una cantidad entera positiva.'
-  }
-  if (m.sourceBucket === null && m.destinationBucket === null) {
-    return 'Un asiento necesita al menos una cubeta de origen o de destino.'
-  }
-  if (TIPOS_CON_MOTIVO_OBLIGATORIO.includes(m.type) && !m.reason?.trim()) {
-    return `Un asiento ${m.type} exige un motivo por escrito.`
-  }
-  const permitidos = MOVIMIENTOS_PERMITIDOS[m.type]
-  if (m.type === 'ADJUSTMENT') return null
-  const ok = permitidos.some(
-    (p) => p.source === m.sourceBucket && p.destination === m.destinationBucket
-  )
-  return ok
-    ? null
-    : `Un asiento ${m.type} no puede ir de ${m.sourceBucket ?? 'fuera'} a ${m.destinationBucket ?? 'fuera'}.`
+  return validarMovimientoGenerico(m, MOVIMIENTOS_PERMITIDOS, TIPOS_CON_MOTIVO_OBLIGATORIO, 'ADJUSTMENT')
 }
 
 /**
@@ -144,34 +141,17 @@ export function validarMovimiento(m: LedgerMove): string | null {
  * no es válido o dejaría una cubeta en negativo. No muta la entrada.
  */
 export function aplicarMovimiento(antes: Buckets, m: LedgerMove): Buckets {
-  const error = validarMovimiento(m)
-  if (error) throw new Error(error)
-  const despues: Buckets = { ...antes }
-  if (m.sourceBucket) {
-    if (despues[m.sourceBucket] < m.quantity) {
-      throw new Error(
-        `No hay ${m.quantity} unidades en ${m.sourceBucket}: solo ${despues[m.sourceBucket]}.`
-      )
-    }
-    despues[m.sourceBucket] -= m.quantity
-  }
-  if (m.destinationBucket) despues[m.destinationBucket] += m.quantity
-  return despues
+  return aplicarMovimientoGenerico(antes, m, MOVIMIENTOS_PERMITIDOS, TIPOS_CON_MOTIVO_OBLIGATORIO, 'ADJUSTMENT')
 }
 
 /** Lo recibido según las cubetas: lo que entró menos lo que salió del lote. */
 export function saldoDeAsientos(
   asientos: readonly Pick<LedgerMove, 'sourceBucket' | 'destinationBucket' | 'quantity'>[]
 ): Buckets {
-  const saldo = cubetasVacias()
-  for (const a of asientos) {
-    if (a.sourceBucket) saldo[a.sourceBucket] -= a.quantity
-    if (a.destinationBucket) saldo[a.destinationBucket] += a.quantity
-  }
-  return saldo
+  return saldoDeAsientosGenerico(BUCKETS, asientos)
 }
 
 /** El invariante del lote, para validarlo en dominio y en prueba. */
 export function invarianteCumplido(quantityReceived: number, b: Buckets): boolean {
-  return BUCKETS.every((k) => b[k] >= 0) && sumaCubetas(b) === quantityReceived
+  return invarianteCumplidoGenerico(BUCKETS, quantityReceived, b)
 }

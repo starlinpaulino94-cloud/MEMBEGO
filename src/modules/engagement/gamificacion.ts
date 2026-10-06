@@ -1,4 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
+import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
 import {
   calcularPuntos,
@@ -33,7 +34,7 @@ export interface GamificacionData {
   gastados: number
   /** Saldo disponible para gastar = ganados − gastados. */
   saldo: number
-  /** ¿La empresa tiene premios de ruleta activos? (para mostrar el acceso). */
+  /** ¿La ruleta está encendida (capacidad RULETA) y tiene premios activos? (para mostrar el acceso). */
   hayRuleta: boolean
   nivel: { nivel: number; nombre: string; color: string }
   siguiente: { nombre: string; min: number } | null
@@ -82,6 +83,11 @@ export async function getGamificacion(
       membresiasActivas,
     }
 
+    // La ruleta se apagó por defecto en la Fase 0 (capacidad RULETA fuera del
+    // paquete base): sin la capacidad, aunque queden premios activos, el
+    // cliente ya no ve el acceso. Los puntos y niveles NO dependen de ella.
+    const ruletaEncendida = premiosActivos > 0 && (await tieneCapacidad(companyId, 'RULETA'))
+
     const puntos = calcularPuntos(stats)
     const gastados = gastoAgg._sum.costoPuntos ?? 0
     const saldo = Math.max(0, puntos - gastados)
@@ -104,7 +110,7 @@ export async function getGamificacion(
       puntos,
       gastados,
       saldo,
-      hayRuleta: premiosActivos > 0,
+      hayRuleta: ruletaEncendida,
       nivel: { nivel: actual.nivel, nombre: actual.nombre, color: actual.color },
       siguiente: siguiente ? { nombre: siguiente.nombre, min: siguiente.min } : null,
       progreso,

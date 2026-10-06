@@ -10,7 +10,7 @@ torcido, y arreglarlo después obliga a migrar datos ya escritos.
 
 ## El problema
 
-`modules/capacidades/catalogo.ts` tiene **19 valores** bajo un solo nombre,
+`modules/capacidades/catalogo.ts` tiene **más de veinte valores** bajo un solo nombre,
 `CAPACIDADES`, y son dos cosas distintas:
 
 | Valor | Qué es en realidad |
@@ -36,6 +36,8 @@ Qué puede hacer una **empresa** dentro de MembeGo.
 ```
 NAVEGACION_V2  CITAS  SEGUIMIENTO  RULETA  GIFT_CARDS
 CITA_ANTES_DEL_QR  POS_CAJA  PAGO_TRANSFERENCIA  PAGO_CARDNET
+EXCURSIONES  CRM  MEMBEGO_SUPPLIER  MEMBEGO_SUPPLY_FULFILLMENT
+PUBLICACIONES  HOME_BUILDER  MENSAJERIA
 ```
 
 Vive en el Core para siempre. Se enciende por empresa, con paquete base por

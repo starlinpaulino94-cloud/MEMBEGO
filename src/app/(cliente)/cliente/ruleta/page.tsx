@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Sparkles, History, ArrowLeft, Trophy } from 'lucide-react'
 import { getUser } from '@/lib/auth'
 import { COSTO_RULETA } from '@/lib/gamificacion'
+import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { getGamificacion } from '@/modules/engagement/gamificacion'
 import { getRuletaPremiosActivos, getUltimasJugadas } from '@/modules/engagement/ruleta'
 import { formatDate } from '@/lib/format'
@@ -24,6 +25,8 @@ export default async function RuletaPage() {
   if (!user || user.metadata.role !== 'CLIENTE') redirect('/login')
   const { clienteId, companyId } = user.metadata
   if (!clienteId || !companyId) redirect('/mis-membresias')
+  // Fase 0: la ruleta nace apagada. Sin la capacidad no hay pantalla, ni por URL.
+  if (!(await tieneCapacidad(companyId, 'RULETA'))) redirect('/mis-membresias')
 
   const [game, premios, jugadas, engagement] = await Promise.all([
     getGamificacion(clienteId, companyId),

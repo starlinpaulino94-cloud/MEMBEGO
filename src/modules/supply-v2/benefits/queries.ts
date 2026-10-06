@@ -33,8 +33,12 @@ export interface BeneficioEnLista {
   valueType: SupplyV2BenefitValueType
   membegoValue: string
   supplierValue: string
+  maxMembegoAmount: string | null
+  maxSupplierAmount: string | null
   scope: SupplyV2BenefitScope
   alcance: string
+  /** Proveedor que financia o cuyas ofertas son elegibles; null en bonos solo de Membego por oferta/producto. */
+  proveedor: string | null
   currency: string
   budgetTotal: string | null
   budgetReserved: string
@@ -49,38 +53,35 @@ export interface BeneficioEnLista {
   endsAt: Date | null
 }
 
-export async function listarBeneficios(): Promise<BeneficioEnLista[]> {
-  const filas = await sinEmpresa('Supply 2.0: listado de beneficios', (tx) =>
-    tx.supplyV2Benefit.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        status: true,
-        funding: true,
-        valueType: true,
-        membegoValue: true,
-        supplierValue: true,
-        scope: true,
-        currency: true,
-        budgetTotal: true,
-        budgetReserved: true,
-        budgetConsumed: true,
-        perCustomerLimit: true,
-        requiresAssignment: true,
-        startsAt: true,
-        endsAt: true,
-        offer: { select: { title: true } },
-        catalogItem: { select: { name: true } },
-        supplier: { select: { commercialName: true } },
-        _count: { select: { grants: true } },
-        reservations: { select: { status: true } },
-      },
-    })
-  )
-  return filas.map((b) => ({
+const SELECT_BENEFICIO = {
+  id: true,
+  code: true,
+  name: true,
+  status: true,
+  funding: true,
+  valueType: true,
+  membegoValue: true,
+  supplierValue: true,
+  maxMembegoAmount: true,
+  maxSupplierAmount: true,
+  scope: true,
+  currency: true,
+  budgetTotal: true,
+  budgetReserved: true,
+  budgetConsumed: true,
+  perCustomerLimit: true,
+  requiresAssignment: true,
+  startsAt: true,
+  endsAt: true,
+  offer: { select: { title: true } },
+  catalogItem: { select: { name: true } },
+  supplier: { select: { commercialName: true } },
+  _count: { select: { grants: true } },
+  reservations: { select: { status: true } },
+} satisfies Prisma.SupplyV2BenefitSelect
+
+function aBeneficioEnLista(b: Prisma.SupplyV2BenefitGetPayload<{ select: typeof SELECT_BENEFICIO }>): BeneficioEnLista {
+  return {
     id: b.id,
     code: b.code,
     name: b.name,
@@ -89,8 +90,11 @@ export async function listarBeneficios(): Promise<BeneficioEnLista[]> {
     valueType: b.valueType,
     membegoValue: b.membegoValue.toFixed(2),
     supplierValue: b.supplierValue.toFixed(2),
+    maxMembegoAmount: d2(b.maxMembegoAmount),
+    maxSupplierAmount: d2(b.maxSupplierAmount),
     scope: b.scope,
     alcance: b.scope === 'SPECIFIC_OFFER' ? (b.offer?.title ?? '—') : b.scope === 'CATALOG_ITEM' ? (b.catalogItem?.name ?? '—') : (b.supplier?.commercialName ?? '—'),
+    proveedor: b.supplier?.commercialName ?? null,
     currency: b.currency,
     budgetTotal: d2(b.budgetTotal),
     budgetReserved: b.budgetReserved.toFixed(2),
@@ -103,7 +107,120 @@ export async function listarBeneficios(): Promise<BeneficioEnLista[]> {
     reservasVivas: b.reservations.filter((r) => r.status === 'ACTIVE').length,
     startsAt: b.startsAt,
     endsAt: b.endsAt,
-  }))
+  }
+}
+
+export async function listarBeneficios(): Promise<BeneficioEnLista[]> {
+  const filas = await sinEmpresa('Supply 2.0: listado de beneficios', (tx) =>
+    tx.supplyV2Benefit.findMany({ orderBy: { createdAt: 'desc' }, take: 200, select: SELECT_BENEFICIO })
+  )
+  return filas.map(aBeneficioEnLista)
+}
+
+export interface FiltroBeneficios {
+  q: string
+  funding: SupplyV2BenefitFunding | null
+  valueType: SupplyV2BenefitValueType | null
+  status: SupplyV2BenefitStatus | null
+  /** Vigentes en algún momento de [desde, hasta): el mes elegido. */
+  vigentesDesde: Date | null
+  vigentesHasta: Date | null
+}
+
+function whereBeneficios(f: FiltroBeneficios): Prisma.SupplyV2BenefitWhereInput {
+  const y: Prisma.SupplyV2BenefitWhereInput[] = []
+  if (f.q) {
+    const t = { contains: f.q, mode: 'insensitive' as const }
+    y.push({ OR: [{ name: t }, { code: t }, { supplier: { commercialName: t } }, { offer: { title: t } }, { catalogItem: { name: t } }] })
+  }
+  if (f.funding) y.push({ funding: f.funding })
+  if (f.valueType) y.push({ valueType: f.valueType })
+  if (f.status) y.push({ status: f.status })
+  if (f.vigentesDesde && f.vigentesHasta) {
+    y.push({ startsAt: { lt: f.vigentesHasta } }, { OR: [{ endsAt: null }, { endsAt: { gte: f.vigentesDesde } }] })
+  }
+  return y.length ? { AND: y } : {}
+}
+
+/** Listado filtrado y paginado del rediseño (§29). Mismo DTO que `listarBeneficios`. */
+export async function buscarBeneficios(f: FiltroBeneficios, p: { pagina: number; filas: number }): Promise<{ filas: BeneficioEnLista[]; total: number }> {
+  const where = whereBeneficios(f)
+  const [filas, total] = await sinEmpresa('Supply 2.0: búsqueda de beneficios', (tx) =>
+    Promise.all([
+      tx.supplyV2Benefit.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (p.pagina - 1) * p.filas, take: p.filas, select: SELECT_BENEFICIO }),
+      tx.supplyV2Benefit.count({ where }),
+    ])
+  )
+  return { filas: filas.map(aBeneficioEnLista), total }
+}
+
+export interface ResumenBeneficios {
+  activos: number
+  activosPorFinanciacion: Record<SupplyV2BenefitFunding, number>
+  borradores: number
+  total: number
+  /** Suma de los topes de presupuesto de Membego de los activos. */
+  presupuestoActivo: string
+  activosSinTope: number
+  /** Presupuesto autorizado de todos los beneficios (con tope). */
+  presupuestoTotal: string
+  consumido: string
+  reservado: string
+  /** Lo que dejó de pagar el cliente en compras confirmadas: bono de Membego + descuento del proveedor. */
+  ahorroClientes: string
+  /** Total cobrado en las órdenes que aplicaron algún beneficio (cada orden una vez). */
+  ventasConBeneficio: string
+}
+
+/** Indicadores de la cabecera de Beneficios: solo lecturas del presupuesto y de las reservas aplicadas. */
+export async function resumenBeneficios(): Promise<ResumenBeneficios> {
+  const [beneficios, aplicadas] = await sinEmpresa('Supply 2.0: resumen de beneficios', (tx) =>
+    Promise.all([
+      tx.supplyV2Benefit.findMany({ select: { status: true, funding: true, budgetTotal: true, budgetReserved: true, budgetConsumed: true } }),
+      tx.supplyV2BenefitReservation.findMany({
+        where: { status: 'APPLIED' },
+        select: { membegoAmount: true, supplierAmount: true, orderId: true, order: { select: { total: true } } },
+      }),
+    ])
+  )
+  const porFinanciacion: Record<SupplyV2BenefitFunding, number> = { MEMBEGO: 0, SUPPLIER: 0, SHARED: 0 }
+  let presupuestoActivo = CERO
+  let presupuestoTotal = CERO
+  let consumido = CERO
+  let reservado = CERO
+  let activosSinTope = 0
+  for (const b of beneficios) {
+    consumido = consumido.plus(b.budgetConsumed)
+    reservado = reservado.plus(b.budgetReserved)
+    if (b.budgetTotal) presupuestoTotal = presupuestoTotal.plus(b.budgetTotal)
+    if (b.status !== 'ACTIVE') continue
+    porFinanciacion[b.funding]++
+    if (b.budgetTotal) presupuestoActivo = presupuestoActivo.plus(b.budgetTotal)
+    else if (b.funding !== 'SUPPLIER') activosSinTope++
+  }
+  let ahorro = CERO
+  let ventas = CERO
+  const ordenes = new Set<string>()
+  for (const r of aplicadas) {
+    ahorro = ahorro.plus(r.membegoAmount).plus(r.supplierAmount)
+    if (!ordenes.has(r.orderId)) {
+      ordenes.add(r.orderId)
+      ventas = ventas.plus(r.order.total)
+    }
+  }
+  return {
+    activos: porFinanciacion.MEMBEGO + porFinanciacion.SUPPLIER + porFinanciacion.SHARED,
+    activosPorFinanciacion: porFinanciacion,
+    borradores: beneficios.filter((b) => b.status === 'DRAFT').length,
+    total: beneficios.length,
+    presupuestoActivo: presupuestoActivo.toFixed(2),
+    activosSinTope,
+    presupuestoTotal: presupuestoTotal.toFixed(2),
+    consumido: consumido.toFixed(2),
+    reservado: reservado.toFixed(2),
+    ahorroClientes: ahorro.toFixed(2),
+    ventasConBeneficio: ventas.toFixed(2),
+  }
 }
 
 // ── ADMIN: ficha (§29) ───────────────────────────────────────────────────────

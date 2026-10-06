@@ -136,15 +136,24 @@ export default async function MisMembresias() {
         description="Tus tarjetas y sus QR. Toca una para girarla y mostrar tu llave de acceso."
         action={
           gamificacion ? (
-            <Link
-              href="/cliente/ruleta"
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-caption font-semibold text-foreground outline-none transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <Trophy className="size-4 text-primary" aria-hidden />
-              {gamificacion.puntos.toLocaleString('es-DO')}
-              <span className="sr-only"> puntos acumulados</span>
-              <span aria-hidden> pts</span>
-            </Link>
+            gamificacion.hayRuleta ? (
+              <Link
+                href="/cliente/ruleta"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-caption font-semibold text-foreground outline-none transition hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Trophy className="size-4 text-primary" aria-hidden />
+                {gamificacion.puntos.toLocaleString('es-DO')}
+                <span className="sr-only"> puntos acumulados</span>
+                <span aria-hidden> pts</span>
+              </Link>
+            ) : (
+              <span className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-caption font-semibold text-foreground">
+                <Trophy className="size-4 text-primary" aria-hidden />
+                {gamificacion.puntos.toLocaleString('es-DO')}
+                <span className="sr-only"> puntos acumulados</span>
+                <span aria-hidden> pts</span>
+              </span>
+            )
           ) : undefined
         }
       />

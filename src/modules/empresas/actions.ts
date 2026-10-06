@@ -9,7 +9,10 @@ import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
 import { filasDeAcceso } from '@/modules/empresas/accesos'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { verticalValido } from '@/modules/empresas/verticales'
-import { capacidadesSinCategoriaContradictoria } from '@/modules/capacidades/catalogo'
+import {
+  capacidadesSinCategoriaContradictoria,
+  CAPACIDADES_OVERRIDE_TENANT_NUEVO,
+} from '@/modules/capacidades/catalogo'
 import { CAPACIDADES_TAG } from '@/modules/capacidades/resolver'
 import { Prisma } from '@prisma/client'
 
@@ -184,6 +187,9 @@ export async function crearEmpresa(
           categoria: String(formData.get('categoria') ?? '').trim() || null,
           website: String(formData.get('website') ?? '').trim() || null,
           isActive: true,
+          // Fase 0 (Plan Maestro §8.5–§8.6): tenant nuevo nace sin CRM ni
+          // mensajería avanzada; las empresas existentes no se tocan.
+          capacidades: { overrides: CAPACIDADES_OVERRIDE_TENANT_NUEVO },
         },
       })
     )
@@ -463,6 +469,9 @@ export async function duplicarEmpresa(id: string): Promise<ActionState> {
           categoria: company.categoria,
           website: company.website,
           isActive: false,
+          // La copia no hereda `capacidades` del original: nace como tenant
+          // nuevo y recibe sus mismos defaults (Plan Maestro §8.5–§8.6).
+          capacidades: { overrides: CAPACIDADES_OVERRIDE_TENANT_NUEVO },
         },
       })
     )
