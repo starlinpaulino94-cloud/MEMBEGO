@@ -7,15 +7,25 @@ import type {
   SupplyV2PurchaseOrderStatus,
   SupplyV2ReceiptStatus,
 } from '@prisma/client'
+import {
+  type Transiciones,
+  puedeTransicionar,
+  exigirTransicion,
+} from '@/lib/commerce-primitives/estados'
 
 /**
  * MEMBEGO SUPPLY 2.0 · máquinas de estado (Slice 1).
  *
  * Una transición que no esté declarada aquí NO OCURRE. PURO: se prueba sin
  * base de datos.
+ *
+ * La fábrica genérica (`Transiciones`, `puedeTransicionar`, `exigirTransicion`)
+ * vive en src/lib/commerce-primitives/estados.ts (Fase 0) y se reexporta
+ * aquí; las tablas de abajo son el estado-máquina específico de Supply V2.
  */
 
-export type Transiciones<E extends string> = Record<E, readonly E[]>
+export type { Transiciones }
+export { puedeTransicionar, exigirTransicion }
 
 export const TRANSICIONES_ORDEN: Transiciones<SupplyV2PurchaseOrderStatus> = {
   DRAFT: ['PENDING_APPROVAL', 'CANCELLED'],
@@ -67,21 +77,6 @@ export const TRANSICIONES_RECEPCION: Transiciones<SupplyV2ReceiptStatus> = {
   DRAFT: ['CONFIRMED', 'CANCELLED'],
   CONFIRMED: [],
   CANCELLED: [],
-}
-
-export function puedeTransicionar<E extends string>(tabla: Transiciones<E>, desde: E, hasta: E): boolean {
-  return tabla[desde].includes(hasta)
-}
-
-export function exigirTransicion<E extends string>(
-  tabla: Transiciones<E>,
-  desde: E,
-  hasta: E,
-  entidad: string
-): void {
-  if (!puedeTransicionar(tabla, desde, hasta)) {
-    throw new Error(`${entidad}: no se puede pasar de ${desde} a ${hasta}.`)
-  }
 }
 
 /**

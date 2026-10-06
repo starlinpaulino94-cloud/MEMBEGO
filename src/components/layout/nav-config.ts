@@ -118,6 +118,9 @@ export type CapacidadNav =
   | 'SEGUIMIENTO'
   | 'RULETA'
   | 'EXCURSIONES'
+  | 'CRM'
+  | 'PUBLICACIONES'
+  | 'MENSAJERIA'
   | 'POS_CAJA'
   | 'MEMBEGO_SUPPLIER'
 
@@ -433,6 +436,7 @@ const G_MKT_CONTENIDO: NavGroup = {
       icon: Newspaper,
       description: 'Contenido programado o publicado.',
       keywords: ['publicaciones', 'posts', 'muro', 'novedades'],
+      capacidad: 'PUBLICACIONES',
     },
     {
       // Ruta real que no está en el diseño de espacios: se conserva tal cual.
@@ -442,6 +446,7 @@ const G_MKT_CONTENIDO: NavGroup = {
       icon: Contact,
       description: 'Quién preguntó y todavía no compra.',
       keywords: ['crm', 'prospectos', 'leads', 'oportunidades'],
+      capacidad: 'CRM',
     },
   ],
 }
@@ -674,6 +679,7 @@ const G_SOPORTE: NavGroup = {
       icon: MessageCircle,
       description: 'Canales de contacto y conversaciones de soporte.',
       keywords: ['comunicacion', 'mensajes', 'chat', 'conversaciones'],
+      capacidad: 'MENSAJERIA',
     },
   ],
 }

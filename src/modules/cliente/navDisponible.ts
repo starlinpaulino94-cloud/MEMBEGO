@@ -4,6 +4,7 @@ import { getGrowthConfig } from '@/modules/growth/config'
 import {
   capacidadesDeEmpresa,
   rutasOcultasCliente,
+  RUTAS_POR_MODULO_CLIENTE,
   CATEGORIAS_CON_VEHICULO,
   type ModuloCliente,
 } from '@/modules/capacidades/catalogo'
@@ -154,7 +155,16 @@ export async function getNavOcultoCliente(
         vehiculos > 0,
     }
 
-    return rutasOcultasCliente(disponible, modulosCliente)
+    const ocultas = rutasOcultasCliente(disponible, modulosCliente)
+    // Fase 0: sin la capacidad RULETA el módulo no existe para el cliente. Va
+    // DESPUÉS de los forzados a propósito: un `MOSTRAR` viejo del panel no
+    // puede resucitar una pantalla cuya acción de giro ya está cerrada.
+    if (!activas.has('RULETA')) {
+      for (const ruta of RUTAS_POR_MODULO_CLIENTE.RULETA) {
+        if (!ocultas.includes(ruta)) ocultas.push(ruta)
+      }
+    }
+    return ocultas
   } catch (e) {
     console.error('[navDisponible]', e)
     // Ante un fallo, no ocultamos nada (mejor mostrar de más que romper el menú).

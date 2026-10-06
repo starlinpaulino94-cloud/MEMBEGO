@@ -48,7 +48,7 @@ test('ningún valor pertenece a los dos conceptos a la vez', () => {
   }
 })
 
-test('la clasificación cubre las 19 capacidades sin inventarse ninguna', () => {
+test('la clasificación cubre todas las capacidades sin inventarse ninguna', () => {
   const clasificadas = [...FUNCIONES_EMPRESA, ...Object.keys(MODULOS_VERTICAL)]
   assert.equal(
     new Set(clasificadas).size,
