@@ -3,7 +3,7 @@ import { randomInt } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { CARDNET_SESSION_STATES } from '@/modules/pagos/cardnetClientCore'
-import { CLAIM_STALE_MS } from '@/modules/pagos/cardnetClienteShared'
+import { ACTIVATION_CLAIM_STALE_MS, CLAIM_STALE_MS } from '@/modules/pagos/cardnetClienteShared'
 
 export type CardnetReceiptGateTransaction = Pick<Prisma.TransactionClient, 'cardnetCaptureSession'>
 
@@ -124,6 +124,44 @@ export async function setSessionState(
   ).catch(() => undefined)
 }
 
+export async function renewActivationClaim(
+  session: LoadedCardnetSession
+): Promise<LoadedCardnetSession | null> {
+  const updatedAt = new Date()
+  const renewed = await conEmpresa(session.companyId, (tx) =>
+    tx.cardnetCaptureSession.updateMany({
+      where: {
+        id: session.id,
+        authSubject: session.authSubject,
+        estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING,
+        updatedAt: session.updatedAt,
+      },
+      data: { updatedAt },
+    })
+  ).catch(() => ({ count: 0 }))
+  return renewed.count === 1 ? { ...session, updatedAt } : null
+}
+
+export async function setActivationClaimState(
+  session: LoadedCardnetSession,
+  state: string,
+  additional: Prisma.CardnetCaptureSessionUpdateManyMutationInput = {}
+): Promise<boolean> {
+  const updatedAt = new Date()
+  const updated = await conEmpresa(session.companyId, (tx) =>
+    tx.cardnetCaptureSession.updateMany({
+      where: {
+        id: session.id,
+        authSubject: session.authSubject,
+        estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING,
+        updatedAt: session.updatedAt,
+      },
+      data: { estado: state, ...additional, updatedAt },
+    })
+  ).catch(() => ({ count: 0 }))
+  return updated.count === 1
+}
+
 function stablePurchaseId(): string {
   return String(randomInt(100_000_000_000, 999_999_999_999))
 }
@@ -200,16 +238,17 @@ export async function claimProfileCheck(
 export async function claimStaleActivation(
   session: NonNullable<Awaited<ReturnType<typeof loadSession>>>
 ): Promise<boolean> {
-  const old = new Date(Date.now() - CLAIM_STALE_MS)
+  if (Date.now() - session.updatedAt.getTime() < ACTIVATION_CLAIM_STALE_MS) return false
+  const updatedAt = new Date()
   const claimed = await conEmpresa(session.companyId, (tx) =>
     tx.cardnetCaptureSession.updateMany({
       where: {
         id: session.id,
         authSubject: session.authSubject,
         estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING,
-        updatedAt: { lt: old },
+        updatedAt: session.updatedAt,
       },
-      data: { updatedAt: new Date() },
+      data: { updatedAt },
     })
   ).catch(() => ({ count: 0 }))
   return claimed.count === 1

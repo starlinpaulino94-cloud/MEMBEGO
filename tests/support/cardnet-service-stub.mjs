@@ -28,9 +28,11 @@ export async function obtenerCustomerId() {
 }
 
 export async function consultarClienteCardnet() {
-  scenario().providerCalls += 1
-  scenario().customerGets += 1
-  return scenario().customerResponse ?? null
+  const current = scenario()
+  current.providerCalls += 1
+  current.customerGets += 1
+  current.onCustomerRead?.()
+  return current.customerGetResponses?.shift() ?? current.customerResponse ?? null
 }
 
 export async function consultarComprasCardnet(params) {
@@ -52,8 +54,10 @@ export async function cobrarConToken(params) {
 }
 
 export async function activarPerfilCardnet() {
-  scenario().providerCalls += 1
-  return scenario().activationResult ?? null
+  const current = scenario()
+  current.providerCalls += 1
+  current.activationCalls = (current.activationCalls ?? 0) + 1
+  return current.activationResult ?? null
 }
 
 export async function montoDeObjetivo() {
@@ -82,6 +86,30 @@ export async function misClienteIds() {
 
 export async function registrarTransicionCompra() {
   return undefined
+}
+
+export function validarVentanaAdquisicion() {
+  return { ok: true }
+}
+
+export async function estadoLimiteCliente() {
+  return { alcanzado: false }
+}
+
+export function mensajeLimitePorCliente() {
+  return ''
+}
+
+export async function asegurarClienteEnEmpresa() {
+  return { clienteId: 'qa-client' }
+}
+
+export async function getRequestMeta() {
+  return {}
+}
+
+export async function activarCompraPromocion() {
+  return { ok: true }
 }
 
 export function revalidatePath() {

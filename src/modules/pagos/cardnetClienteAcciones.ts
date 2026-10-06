@@ -18,8 +18,8 @@ import {
 import {
   expireSession,
   loadSession,
-  setSessionState,
-  type LoadedCardnetSession,
+  renewActivationClaim,
+  setActivationClaimState,
 } from '@/modules/pagos/cardnetClienteSesionStore'
 import {
   interpretPurchase,
@@ -104,15 +104,23 @@ export async function activarPerfilSesionCardnet(
   if (!(await puedeCobrarToken(session.companyId).catch(() => false))) {
     return fail(502, 'El pago con tarjeta no está disponible.')
   }
+  const claimAt = new Date()
   const claimed = await conEmpresa(session.companyId, (tx) =>
     tx.cardnetCaptureSession.updateMany({
       where: { id: session.id, authSubject: user.supabaseId, estado: CARDNET_SESSION_STATES.ACTIVATION_REQUIRED },
-      data: { estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING },
+      data: { estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING, updatedAt: claimAt },
     })
   ).catch(() => ({ count: 0 }))
   if (claimed.count !== 1) return success(202, { status: 'pending' })
-  const profile = await getProfileForCharge({ ...session, estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING })
+  const activationSession = {
+    ...session,
+    estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING,
+    updatedAt: claimAt,
+  }
+  const profile = await getProfileForCharge(activationSession)
   if (!profile?.token) return success(202, { status: 'pending' })
+  const currentClaim = await renewActivationClaim(activationSession)
+  if (!currentClaim) return success(202, { status: 'pending' })
   if (!profile.habilitado) {
     const activated = await activarPerfilCardnet({
       customerId: session.customerId ?? '',
@@ -123,14 +131,22 @@ export async function activarPerfilSesionCardnet(
       return success(202, { status: 'pending' })
     }
     if (!activated.ok) {
-      await setSessionState(session, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
-      return success(200, { status: 'activation_required' })
+      const required = await setActivationClaimState(currentClaim, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
+      return required ? success(200, { status: 'activation_required' }) : success(202, { status: 'pending' })
     }
-    const refreshed = await getProfileForCharge({ ...session, estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING })
+    const postActivationClaim = await renewActivationClaim(currentClaim)
+    if (!postActivationClaim) return success(202, { status: 'pending' })
+    const refreshed = await getProfileForCharge(postActivationClaim)
     if (!refreshed?.token || !refreshed.habilitado) return success(202, { status: 'pending' })
-    return chargeWithProfile({ ...session, estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING }, refreshed, request)
+    const ready = await setActivationClaimState(postActivationClaim, CARDNET_SESSION_STATES.PROFILE_PENDING)
+    if (!ready) return success(202, { status: 'pending' })
+    const fresh = await loadSession(session.id, user.supabaseId)
+    return fresh ? chargeWithProfile(fresh, refreshed, request) : success(202, { status: 'pending' })
   }
-  return chargeWithProfile({ ...session, estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING }, profile, request)
+  const ready = await setActivationClaimState(currentClaim, CARDNET_SESSION_STATES.PROFILE_PENDING)
+  if (!ready) return success(202, { status: 'pending' })
+  const fresh = await loadSession(session.id, user.supabaseId)
+  return fresh ? chargeWithProfile(fresh, profile, request) : success(202, { status: 'pending' })
 }
 
 export async function estadoSesionCardnet(

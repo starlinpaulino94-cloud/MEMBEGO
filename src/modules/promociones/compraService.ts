@@ -77,6 +77,7 @@ export async function adquirirPromocion(
       error: viva.estado === 'ACTIVA'
         ? 'Ya tienes esta promoción activa.'
         : 'Ya tienes una compra de esta promoción en proceso.',
+      compraId: viva.id,
     }
   }
 

@@ -7,7 +7,7 @@ import {
   seleccionarPerfilNuevo,
 } from '@/modules/pagos/cardnetClientCore'
 import {
-  CLAIM_STALE_MS,
+  ACTIVATION_CLAIM_STALE_MS,
   fail,
   ownRecord,
   requestIp,
@@ -19,6 +19,7 @@ import {
   loadSession,
   claimStaleActivation,
   setSessionState,
+  setActivationClaimState,
   claimProfileCheck,
   type LoadedCardnetSession,
 } from '@/modules/pagos/cardnetClienteSesionStore'
@@ -96,7 +97,7 @@ export async function progressCapture(
     return associated ? success(200, { status: 'approved' }) : success(202, { status: 'pending' })
   }
   if (session.estado === CARDNET_SESSION_STATES.ACTIVATION_PROCESSING) {
-    if (Date.now() - session.updatedAt.getTime() < CLAIM_STALE_MS) {
+    if (Date.now() - session.updatedAt.getTime() < ACTIVATION_CLAIM_STALE_MS) {
       return success(202, { status: 'pending' })
     }
     if (!(await claimStaleActivation(session))) return success(202, { status: 'pending' })
@@ -105,10 +106,11 @@ export async function progressCapture(
     const profile = await getProfileForCharge(claimed)
     if (!profile) return success(202, { status: 'pending' })
     if (!profile.habilitado) {
-      await setSessionState(claimed, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
-      return success(200, { status: 'activation_required' })
+      const required = await setActivationClaimState(claimed, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
+      return required ? success(200, { status: 'activation_required' }) : success(202, { status: 'pending' })
     }
-    await setSessionState(claimed, CARDNET_SESSION_STATES.PROFILE_PENDING)
+    const ready = await setActivationClaimState(claimed, CARDNET_SESSION_STATES.PROFILE_PENDING)
+    if (!ready) return success(202, { status: 'pending' })
     const fresh = await loadSession(claimed.id, claimed.authSubject)
     return fresh ? chargeWithProfile(fresh, profile, request) : success(202, { status: 'pending' })
   }

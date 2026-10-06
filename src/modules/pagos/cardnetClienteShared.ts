@@ -5,6 +5,7 @@ import type { SessionUser } from '@/types'
 
 export const CAPTURE_TTL_MS = 10 * 60 * 1000
 export const CLAIM_STALE_MS = 45 * 1000
+export const ACTIVATION_CLAIM_STALE_MS = 120 * 1000
 export const PURCHASE_RETRY_MS = 60 * 1000
 
 export type CardnetReply = {

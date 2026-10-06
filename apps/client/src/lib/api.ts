@@ -1,8 +1,22 @@
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 import { z } from 'zod'
+import {
+  cardnetPaymentStatusSchema,
+  cardnetPromotionPurchaseSchema,
+  cardnetSessionStartSchema,
+  type CardnetSessionTarget,
+} from './cardnet-api-contracts'
 import { supabase } from './supabase'
 import { resolveApiBaseUrl } from './runtimeUrls'
+
+export type {
+  CardnetCaptureSession,
+  CardnetPaymentStatus,
+  CardnetPromotionPurchaseResult,
+  CardnetSessionStartResult,
+  CardnetSessionTarget,
+} from './cardnet-api-contracts'
 
 function getApiBaseUrl(): string {
   return resolveApiBaseUrl({
@@ -55,77 +69,9 @@ export async function fetchBff<T>(path: string, options: RequestInit = {}): Prom
 
 export type JsonObject = Record<string, unknown>
 
-const cardnetCaptureSessionSchema = z
-  .object({
-    sessionId: z.string().min(1),
-    captureNonce: z.string().min(1),
-    expiresAt: z.iso.datetime(),
-    amount: z.number().positive(),
-    currency: z.string().min(1),
-    captureUrl: z.url(),
-    scriptUrl: z.url(),
-    publicKey: z.string().min(1),
-    uniqueId: z.string().min(1),
-  })
-  .strip()
-  .readonly()
-
-const cardnetProcessingSessionSchema = z
-  .object({ status: z.literal('processing'), sessionId: z.string().min(1) })
-  .strip()
-  .readonly()
-
-const cardnetSessionStartSchema = z.union([
-  cardnetCaptureSessionSchema,
-  cardnetProcessingSessionSchema,
-])
-
-const cardnetPaymentStatusSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('pending') }).strip().readonly(),
-  z.object({ status: z.literal('approved') }).strip().readonly(),
-  z.object({ status: z.literal('declined') }).strip().readonly(),
-  z.object({ status: z.literal('activation_required') }).strip().readonly(),
-  z.object({ status: z.literal('expired') }).strip().readonly(),
-])
-
-const cardnetPromotionPurchaseSchema = z.discriminatedUnion('status', [
-  z
-    .object({
-      status: z.literal('free_activated'),
-      compraId: z.string().min(1),
-    })
-    .strip()
-    .readonly(),
-  z
-    .object({
-      status: z.literal('payment_required'),
-      compraId: z.string().min(1),
-      amount: z.number().positive(),
-      currency: z.string().min(1),
-    })
-    .strip()
-    .readonly(),
-])
-
 async function parseCardnetResponse<T>(request: Promise<unknown>, schema: z.ZodType<T>): Promise<T> {
   return schema.parse(await request)
 }
-
-export type CardnetSessionTarget =
-  | {
-      readonly kind: 'membership'
-      readonly membershipId: string
-      readonly guardarParaRenovacion?: boolean
-    }
-  | {
-      readonly kind: 'promotion'
-      readonly compraId: string
-    }
-
-export type CardnetCaptureSession = z.infer<typeof cardnetCaptureSessionSchema>
-export type CardnetSessionStartResult = z.infer<typeof cardnetSessionStartSchema>
-export type CardnetPaymentStatus = z.infer<typeof cardnetPaymentStatusSchema>
-export type CardnetPromotionPurchaseResult = z.infer<typeof cardnetPromotionPurchaseSchema>
 
 // --- Marketplace / catálogo ---
 export interface CompanyPublic {

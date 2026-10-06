@@ -630,6 +630,7 @@ test('ambiguous retries retain the Purchase UniqueID and serialize concurrent ch
 })
 
 test('stale activation recovery claims one lease before charging a persisted intent', async () => {
+  const { ACTIVATION_CLAIM_STALE_MS } = await import('../src/modules/pagos/cardnetClienteShared')
   const s = setup()
   s.customerResponse = {
     denegado: false, email: 'qa@example.test',
@@ -643,7 +644,8 @@ test('stale activation recovery claims one lease before charging a persisted int
     estado: 'ACTIVATION_PROCESSING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
     perfilBase: [], paymentProfileId: 'profile-fresh',
-    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - 90_000),
+    createdAt: new Date(Date.now() - 120_000),
+    updatedAt: new Date(Date.now() - ACTIVATION_CLAIM_STALE_MS - 1_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key' },
     reservaClienteKey: 'held-membership-reservation',
