@@ -2,7 +2,7 @@ import { test, expect, type Browser, type BrowserContext, type Page } from '@pla
 import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 5 de punta a punta en navegador (§84–§88).
+ * MEMBEGO SUPPLY · SLICE 5 de punta a punta en navegador (§84–§88).
  *
  *   COMISIÓN     Tours Caribe → acuerdo CATÁLOGO 5 % → acuerdo PRODUCTO 10 %
  *                (override) → oferta a comisión «Saona» 1 000 (10 unidades) →
@@ -43,18 +43,18 @@ async function contexto(browser: Browser, rol: 'compras' | 'finanzas' | 'cliente
 
 /** Vincula la empresa como proveedor desde la lista de proveedores. Devuelve el id del proveedor. */
 async function proveedorVinculado(compras: Page, d: Datos): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/proveedores')
+  await compras.goto('/superadmin/supply/proveedores')
   await compras.getByTestId('btn-nuevo-proveedor').click()
   await compras.getByRole('button', { name: 'Sí, es una empresa de Membego' }).click()
   await compras.locator('#buscarEmpresa').fill(d.empresa)
   await compras.getByRole('option').filter({ hasText: d.empresa }).getByRole('button').click()
   await compras.getByRole('button', { name: /Vincular como proveedor|Usar este proveedor/ }).click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/proveedores\/[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/proveedores\/[a-z0-9]+$/)
   return compras.url().split('/').pop()!
 }
 
 async function producto(compras: Page, supplierId: string, nombre: string, categoria: string, precio: string): Promise<void> {
-  await compras.goto(`/superadmin/supply-v2/proveedores/${supplierId}`)
+  await compras.goto(`/superadmin/supply/proveedores/${supplierId}`)
   await compras.getByTestId('btn-agregar-producto').click()
   await compras.locator('#productoNombre').fill(nombre)
   await compras.locator('#productoCategoria').fill(categoria)
@@ -65,7 +65,7 @@ async function producto(compras: Page, supplierId: string, nombre: string, categ
 
 /** Un acuerdo a COMISIÓN desde la ficha del proveedor: por catálogo o por producto. */
 async function acuerdoComision(compras: Page, supplierId: string, pct: string, alcance: 'CATALOG' | 'ITEM', productoNombre?: string): Promise<void> {
-  await compras.goto(`/superadmin/supply-v2/proveedores/${supplierId}`)
+  await compras.goto(`/superadmin/supply/proveedores/${supplierId}`)
   await compras.getByTestId('btn-crear-acuerdo').click()
   await compras.getByTestId('acuerdo-tipo-COMMISSION').click()
   await compras.getByTestId('acuerdo-alcance').getByRole('radio', { name: alcance === 'ITEM' ? 'Por producto' : 'Todo el catálogo' }).check()
@@ -78,7 +78,7 @@ async function acuerdoComision(compras: Page, supplierId: string, pct: string, a
 
 /** El wizard de comisión: comprueba la regla resuelta y publica. Devuelve la url de la oferta. */
 async function ofertaComisionPublicada(compras: Page, d: Datos, o: { producto: string; titulo: string; pctEsperado: string; reglaEsperada: string; precio: string; modo: 'FIXED_QUANTITY' | 'UNLIMITED'; cantidad?: string; limite: string; comisionEsperada: number; netoEsperado: number }): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/ofertas/nueva')
+  await compras.goto('/superadmin/supply/ofertas/nueva')
   await expect(compras.getByTestId('elegir-fuente')).toBeVisible()
   await compras.getByTestId('fuente-comision').click()
   await compras.waitForURL(/fuente=COMMISSION/)
@@ -103,7 +103,7 @@ async function ofertaComisionPublicada(compras: Page, d: Datos, o: { producto: s
   await compras.locator('#ofertaLimiteC').fill(o.limite)
   await compras.getByTestId('comision-continuar').click()
   await compras.getByTestId('btn-publicar-oferta-comision').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/ofertas\/(?!nueva)[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/ofertas\/(?!nueva)[a-z0-9]+$/)
   await expect(compras.getByTestId('estado-oferta')).toHaveText('Activa')
   await expect(compras.getByTestId('chip-modelo')).toHaveText('Comisión')
   await expect(compras.getByTestId('oferta-comision')).toBeVisible()
@@ -124,7 +124,7 @@ async function compraPagada(cliente: Page, finanzas: Page, titulo: string, ref: 
   await cliente.locator('#referenciaPago').fill(ref)
   await cliente.getByTestId('btn-avisar-pago').click()
   await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
-  await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+  await finanzas.goto('/superadmin/supply/ofertas/ventas')
   const venta = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: titulo }).filter({ hasText: ref })
   await expect(venta.getByTestId('chip-modelo')).toHaveText('Comisión')
   if (reparto) await expect(venta.getByTestId('venta-reparto')).toContainText(`comisión ${RD(reparto.comision)} · neto ${RD(reparto.neto)}`)
@@ -146,7 +146,7 @@ async function redimir(cliente: Page, empleado: Page, producto: string): Promise
   const qr = b.getByTestId('qr-beneficio')
   await expect(qr).toBeVisible()
   const nonce = (await qr.getByTestId('qr-codigo').innerText()).trim()
-  await empleado.goto('/admin/supply-v2/escaner')
+  await empleado.goto('/admin/supply/escaner')
   await empleado.getByTestId('btn-codigo-manual').click()
   await empleado.getByTestId('input-codigo').fill(nonce)
   await empleado.getByTestId('btn-buscar-codigo').click()
@@ -158,7 +158,7 @@ async function redimir(cliente: Page, empleado: Page, producto: string): Promise
 }
 
 async function confirmarPagoPendiente(quien: Page, texto: string): Promise<void> {
-  await quien.goto('/superadmin/supply-v2/finanzas/pagos?estado=PENDING')
+  await quien.goto('/superadmin/supply/finanzas/pagos?estado=PENDING')
   const fila = quien.getByTestId('pago').filter({ hasText: texto }).first()
   await fila.getByTestId('btn-confirmar-pago-proveedor').click()
   await expect(quien.getByTestId('pago').filter({ hasText: texto })).toHaveCount(0)
@@ -216,7 +216,7 @@ async function comisionCompleta(browser: Browser) {
   // Catálogo (§86): la gorra no tiene regla propia → 5 % de todo el catálogo, sin tope.
   await ofertaComisionPublicada(compras, d, { producto: d.gorra, titulo: d.ofertaGorra, pctEsperado: '5.00', reglaEsperada: 'de todo el catálogo', precio: '250', modo: 'UNLIMITED', limite: '3', comisionEsperada: 12.5, netoEsperado: 237.5 })
   await expect(compras.getByTestId('comision-libres')).toHaveText('Sin tope')
-  await compras.goto('/superadmin/supply-v2/ofertas')
+  await compras.goto('/superadmin/supply/ofertas')
   const filaSaona = compras.getByTestId('tabla-ofertas').locator('tr').filter({ hasText: d.ofertaSaona })
   await expect(filaSaona.getByTestId('chip-modelo')).toHaveText('Comisión')
   await expect(filaSaona.getByTestId('oferta-disponibles')).toHaveText('10')
@@ -234,14 +234,14 @@ async function comisionCompleta(browser: Browser) {
   await expect(compras.getByTestId('comision-devengado')).toHaveText(RD(0))
   await expect(compras.getByTestId('oferta-sin-ledger')).toBeVisible()
   // Todavía no se le debe nada al proveedor: no entregó.
-  await finanzas.goto(`/superadmin/supply-v2/finanzas/obligaciones?proveedor=${supplierId}&estado=`)
+  await finanzas.goto(`/superadmin/supply/finanzas/obligaciones?proveedor=${supplierId}&estado=`)
   await expect(finanzas.getByTestId('obligacion')).toHaveCount(0)
 
   // ── Portal del proveedor: la venta aparece pendiente de entregar, con su neto ──
-  await empleado.goto('/admin/supply-v2')
+  await empleado.goto('/admin/supply')
   await expect(empleado.getByTestId('portal-ventas-pendientes')).toHaveText('1')
   await empleado.getByTestId('link-portal-ventas').click()
-  await empleado.waitForURL(/\/admin\/supply-v2\/ventas/)
+  await empleado.waitForURL(/\/admin\/supply\/ventas/)
   await expect(empleado.getByTestId('ventas-pendientes')).toHaveText('1')
   await expect(empleado.getByTestId('ventas-entregadas')).toHaveText('0')
   await expect(empleado.getByTestId('ventas-monto-pendiente')).toHaveText(RD(0))
@@ -254,10 +254,10 @@ async function comisionCompleta(browser: Browser) {
 
   // ── Entrega = cumplimiento: nace la obligación por el neto (900) ──
   await redimir(cliente, empleado, d.saona)
-  await empleado.goto('/admin/supply-v2/ventas')
+  await empleado.goto('/admin/supply/ventas')
   await expect(empleado.getByTestId('ventas-entregadas')).toHaveText('1')
   await expect(empleado.getByTestId('ventas-monto-pendiente')).toHaveText(RD(900))
-  await finanzas.goto(`/superadmin/supply-v2/finanzas/obligaciones?proveedor=${supplierId}&estado=`)
+  await finanzas.goto(`/superadmin/supply/finanzas/obligaciones?proveedor=${supplierId}&estado=`)
   await expect(finanzas.getByTestId('obligacion')).toHaveCount(1)
   await expect(finanzas.getByTestId('obligacion').first().getByTestId('obligacion-pendiente')).toHaveText(RD(900))
   await expect(finanzas.getByTestId('obligacion').first().getByTestId('estado-obligacion')).toHaveText('Pendiente')
@@ -267,14 +267,14 @@ async function comisionCompleta(browser: Browser) {
   await expect(compras.getByTestId('comision-pendiente')).toHaveText(RD(900))
   await sinInventario(orderId, d.saona)
   // La ficha de la redención lo dice: sin lote, comisión 100, neto 900.
-  await finanzas.goto('/superadmin/supply-v2/redenciones')
-  await finanzas.locator('a[href*="/superadmin/supply-v2/redenciones/"]').first().click()
+  await finanzas.goto('/superadmin/supply/redenciones')
+  await finanzas.locator('a[href*="/superadmin/supply/redenciones/"]').first().click()
   await finanzas.waitForURL(/\/redenciones\/[a-z0-9]+$/)
   await expect(finanzas.getByTestId('redencion-sin-lote')).toBeVisible()
   await expect(finanzas.getByTestId('redencion-neto')).toContainText('RD$900')
 
   // ── Economía (§88): ingreso = comisión 100, costo 0; neto 900 separado; prepago 0 ──
-  await finanzas.goto(`/superadmin/supply-v2/economia?ventana=HOY&proveedor=${supplierId}`)
+  await finanzas.goto(`/superadmin/supply/economia?ventana=HOY&proveedor=${supplierId}`)
   await expect(finanzas.getByTestId('eco-gmv')).toHaveText(RD(1000))
   await expect(finanzas.getByTestId('eco-revenue')).toHaveText(RD(100))
   await expect(finanzas.getByTestId('eco-cost')).toHaveText(RD(0))
@@ -286,7 +286,7 @@ async function comisionCompleta(browser: Browser) {
   await finanzas.screenshot({ path: 'test-results/shots/supply-v2-s5-economia.png', fullPage: true })
 
   // ── Liquidación: compras la genera y NO puede aprobarla; finanzas sí ──
-  await compras.goto(`/superadmin/supply-v2/finanzas/liquidaciones/nueva?proveedor=${supplierId}`)
+  await compras.goto(`/superadmin/supply/finanzas/liquidaciones/nueva?proveedor=${supplierId}`)
   await expect(compras.getByTestId('preview-neto')).toHaveText(RD(900))
   await compras.getByTestId('btn-generar-liquidacion').click()
   await compras.waitForURL(/\/finanzas\/liquidaciones\/(?!nueva)[a-z0-9]+$/)
@@ -298,7 +298,7 @@ async function comisionCompleta(browser: Browser) {
   await expect(compras.getByTestId('liq-linea')).toHaveCount(1)
   await expect(compras.getByTestId('estado-liquidacion')).toHaveText('Pendiente de aprobación')
   // Otra liquidación del mismo periodo: no hay nada que liquidar (barrera contra duplicados).
-  await compras.goto(`/superadmin/supply-v2/finanzas/liquidaciones/nueva?proveedor=${supplierId}`)
+  await compras.goto(`/superadmin/supply/finanzas/liquidaciones/nueva?proveedor=${supplierId}`)
   await expect(compras.getByTestId('preview-vacia')).toBeVisible()
   await finanzas.goto(urlLiquidacion)
   await finanzas.getByTestId('btn-aprobar-liquidacion').click()
@@ -316,32 +316,32 @@ async function comisionCompleta(browser: Browser) {
   await compras.goto(urlLiquidacion)
   await expect(compras.getByTestId('estado-liquidacion')).toHaveText('Pagada')
   await expect(compras.getByTestId('liq-pagado')).toHaveText(RD(900))
-  await compras.goto(`/superadmin/supply-v2/finanzas/obligaciones?proveedor=${supplierId}&estado=`)
+  await compras.goto(`/superadmin/supply/finanzas/obligaciones?proveedor=${supplierId}&estado=`)
   await expect(compras.getByTestId('obligacion').first().getByTestId('estado-obligacion')).toHaveText('Pagada')
   await compras.goto(urlOfertaSaona)
   await expect(compras.getByTestId('comision-pagado')).toHaveText(RD(900))
   await expect(compras.getByTestId('comision-pendiente')).toHaveText(RD(0))
-  await compras.goto('/superadmin/supply-v2/finanzas')
+  await compras.goto('/superadmin/supply/finanzas')
   await expect(compras.getByTestId('finanzas-comision')).toBeVisible()
   await expect(compras.getByTestId('kpi-comision-ingreso')).toBeVisible()
 
   // ── Portal del proveedor: liquidación pagada y 900 cobrados ──
-  await empleado.goto('/admin/supply-v2/ventas')
+  await empleado.goto('/admin/supply/ventas')
   await expect(empleado.getByTestId('ventas-monto-pendiente')).toHaveText(RD(0))
   await expect(empleado.getByTestId('ventas-pagado')).toHaveText(RD(900))
   await empleado.getByTestId('link-liquidaciones').click()
-  await empleado.waitForURL(/\/admin\/supply-v2\/liquidaciones$/)
+  await empleado.waitForURL(/\/admin\/supply\/liquidaciones$/)
   const liq = empleado.getByTestId('liquidacion-proveedor').first()
   await expect(liq.getByTestId('estado-liquidacion')).toHaveText('Pagada')
   await liq.getByTestId('link-liquidacion-proveedor').click()
-  await empleado.waitForURL(/\/admin\/supply-v2\/liquidaciones\/[a-z0-9]+$/)
+  await empleado.waitForURL(/\/admin\/supply\/liquidaciones\/[a-z0-9]+$/)
   await expect(empleado.getByTestId('liq-prov-neto')).toHaveText(RD(900))
   await expect(empleado.getByTestId('liq-prov-pagado')).toHaveText(RD(900))
   await expect(empleado.getByTestId('liq-prov-pagos')).toContainText(`TRX-${d.sufijo}-LIQ`)
   await empleado.screenshot({ path: 'test-results/shots/supply-v2-s5-portal-liquidacion.png', fullPage: true })
 
   // ── Conciliación de comisión (§52): el proveedor reclama 950 → discrepancia → resuelta ──
-  await finanzas.goto('/superadmin/supply-v2/finanzas/conciliaciones/nueva?tipo=COMMISSION')
+  await finanzas.goto('/superadmin/supply/finanzas/conciliaciones/nueva?tipo=COMMISSION')
   await finanzas.getByTestId('conciliacion-proveedor').selectOption(supplierId)
   await finanzas.getByTestId('conciliacion-neto-proveedor').fill('950')
   await finanzas.getByTestId('btn-abrir-conciliacion-comision').click()
@@ -393,23 +393,23 @@ async function movil(browser: Browser) {
   await cliente.locator('#referenciaPago').fill(`MOV-${d.sufijo}`)
   await cliente.getByTestId('btn-avisar-pago').click()
   await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
-  await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+  await finanzas.goto('/superadmin/supply/ofertas/ventas')
   const venta = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `MOV-${d.sufijo}` })
   await venta.getByTestId('btn-confirmar-pago').click()
   await venta.getByTestId('btn-confirmar-pago-confirmar').click()
   await expect(finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `MOV-${d.sufijo}` })).toHaveCount(0)
 
   // El proveedor ve Ventas Membego en el teléfono.
-  await empleado.goto('/admin/supply-v2/ventas')
+  await empleado.goto('/admin/supply/ventas')
   await expect(empleado.getByTestId('ventas-pendientes')).toHaveText('1')
   await expect(empleado.getByTestId('venta-proveedor').filter({ hasText: d.saona }).getByTestId('venta-neto')).toHaveText(RD(900))
   expect(await empleado.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await empleado.screenshot({ path: 'test-results/shots/supply-v2-s5-movil-portal.png', fullPage: true })
-  await empleado.goto('/admin/supply-v2/liquidaciones')
+  await empleado.goto('/admin/supply/liquidaciones')
   await expect(empleado.getByTestId('liquidaciones-vacias')).toBeVisible()
 }
 
-test.describe('Supply 2.0 · Slice 5', () => {
+test.describe('Supply · Slice 5', () => {
   test.beforeAll(() => {
     test.skip(!SESION_LOCAL_DISPONIBLE, 'requiere SUPABASE_JWT_SECRET, DATABASE_URL y NEXT_PUBLIC_SUPABASE_URL para firmar sesiones')
   })

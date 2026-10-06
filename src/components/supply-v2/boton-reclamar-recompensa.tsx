@@ -9,7 +9,7 @@ import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 import type { ReclamacionHecha } from '@/modules/supply-v2/loyalty/rewards'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · canjear puntos por una recompensa (§31).
+ * MEMBEGO SUPPLY · SLICE 8 · canjear puntos por una recompensa (§31).
  *
  * El botón no decide si alcanza: lo decide el servidor dentro del candado de
  * la cuenta de puntos, así que dos pestañas pidiendo la última unidad no

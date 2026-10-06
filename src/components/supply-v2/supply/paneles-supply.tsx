@@ -104,7 +104,7 @@ export function PanelEstadoLotes({ v }: { v: VerificacionesLotes }) {
         <Fila icono={Clock} texto="Lotes que vencen en ≤ 7 días" valor={String(v.vencenPronto)} ok={v.vencenPronto === 0} />
         <Fila icono={ArrowLeftRight} texto="Recibido en compras = lotes" valor={`${v.lineasConciliadas}/${v.lineasConRecepcion} líneas`} ok={v.lineasConciliadas === v.lineasConRecepcion} />
       </ul>
-      <Link href="/superadmin/supply-v2/finanzas/conciliaciones" className={cn(claseBotonSuave, 'mt-auto h-9 w-full text-[13px] leading-4')}>
+      <Link href="/superadmin/supply/finanzas/conciliaciones" className={cn(claseBotonSuave, 'mt-auto h-9 w-full text-[13px] leading-4')}>
         <ReceiptText aria-hidden className="size-4" />
         Ver conciliación contable
       </Link>

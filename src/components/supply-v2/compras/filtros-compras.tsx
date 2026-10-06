@@ -10,7 +10,7 @@ export interface FiltrosCompras {
   pago: SupplyV2PaymentMode | ''
 }
 
-const RUTA = '/superadmin/supply-v2/compras'
+const RUTA = '/superadmin/supply/compras'
 
 /** Enlace a Compras con estos filtros (sin los vacíos). */
 export function hrefCompras(f: Partial<FiltrosCompras> & { pagina?: number; filas?: number }): string {

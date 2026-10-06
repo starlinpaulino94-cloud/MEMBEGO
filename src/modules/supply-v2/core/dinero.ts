@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 
 /**
- * MEMBEGO SUPPLY 2.0 · dinero.
+ * MEMBEGO SUPPLY · dinero.
  *
  * Todo cálculo financiero se hace con `Prisma.Decimal`, nunca con floats de
  * JavaScript como fuente final (§43). Los totales de una orden se recalculan

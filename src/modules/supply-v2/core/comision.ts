@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { decimal, redondear2, type Decimal } from './dinero'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 5 · MOTOR DE PRECIOS DE COMISIÓN (§20–§23, §53–§56).
+ * MEMBEGO SUPPLY · SLICE 5 · MOTOR DE PRECIOS DE COMISIÓN (§20–§23, §53–§56).
  *
  * `SupplyV2PricingEngine`: el ÚNICO sitio donde se reparte lo que paga el
  * cliente entre Membego (comisión) y el proveedor (neto). PURO y con

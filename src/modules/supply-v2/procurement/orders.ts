@@ -10,7 +10,7 @@ import { siguienteNumero } from '../core/numeracion'
 import { acuerdoCompatible } from '../agreements/domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · órdenes de compra (§12–§14, §23, §35).
+ * MEMBEGO SUPPLY · órdenes de compra (§12–§14, §23, §35).
  *
  * Todo dentro de la `tx` de quien llama. Los totales se calculan AQUÍ con
  * Decimal: el formulario manda cantidades y costos, nunca totales.

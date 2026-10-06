@@ -25,7 +25,7 @@ import {
 } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · ASISTENTE DE CAMPAÑAS, 8 pasos (§5).
+ * MEMBEGO SUPPLY · SLICE 7 · ASISTENTE DE CAMPAÑAS, 8 pasos (§5).
  *
  * El asistente enseña la economía ANTES de guardar: cuánto puede gastar
  * Membego, cuánto pone el proveedor y qué paga el cliente. El ejemplo de aquí

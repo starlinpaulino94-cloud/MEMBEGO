@@ -25,12 +25,12 @@ import { emitirEfectoEnTx } from './outbox'
 import { conciliarPagoExternoEnTx, transaccionYaUsadaEnTx } from './conciliacion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · INBOX DE EVENTOS EXTERNOS (§4A, §4B).
+ * MEMBEGO SUPPLY · SLICE 9 · INBOX DE EVENTOS EXTERNOS (§4A, §4B).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * GENÉRICO A PROPÓSITO, Y NO CARDNET
  *
- * Supply 2.0 no cobra hoy con CardNET: sus pagos son transferencia, depósito,
+ * Supply no cobra hoy con CardNET: sus pagos son transferencia, depósito,
  * efectivo o manual, y los confirma finanzas. Lo que falta no es «meter
  * CardNET», es poder RECIBIR un evento de pago de cualquier pasarela sin que
  * el dominio sepa de cuál.
@@ -111,7 +111,7 @@ export async function registrarEventoExterno(e: EventoExternoEntrante): Promise<
   const correlationId = e.correlationId?.trim() || nuevoCorrelationId()
 
   const leerPrevio = () =>
-    sinEmpresa('Supply 2.0: leer un evento externo ya registrado', (tx) =>
+    sinEmpresa('Supply: leer un evento externo ya registrado', (tx) =>
       tx.supplyV2ExternalEvent.findUniqueOrThrow({
         where: { provider_externalEventId_eventType: id },
         select: { id: true, status: true, correlationId: true, payloadHash: true },
@@ -122,7 +122,7 @@ export async function registrarEventoExterno(e: EventoExternoEntrante): Promise<
   // procesamos—: responder sin intentar un `INSERT` que se sabe que va a
   // chocar. Es solo un atajo: la corrección NO depende de él, porque dos
   // entregas simultáneas pasan las dos por aquí. De eso responde el índice.
-  const yaEstaba = await sinEmpresa('Supply 2.0: ¿este evento ya llegó?', (tx) =>
+  const yaEstaba = await sinEmpresa('Supply: ¿este evento ya llegó?', (tx) =>
     tx.supplyV2ExternalEvent.findUnique({
       where: { provider_externalEventId_eventType: id },
       select: { id: true, status: true, correlationId: true, payloadHash: true },
@@ -139,7 +139,7 @@ export async function registrarEventoExterno(e: EventoExternoEntrante): Promise<
   }
 
   try {
-    return await sinEmpresa('Supply 2.0: registrar un evento externo', async (tx) => {
+    return await sinEmpresa('Supply: registrar un evento externo', async (tx) => {
       const fila = await tx.supplyV2ExternalEvent.create({
         data: {
           ...id,
@@ -205,7 +205,7 @@ export async function procesarEventoExterno(
   ctx: ContextoAuditoria,
   ahora = new Date()
 ): Promise<ResultadoProceso> {
-  return sinEmpresa('Supply 2.0: procesar un evento externo', async (tx) => {
+  return sinEmpresa('Supply: procesar un evento externo', async (tx) => {
     const fila = await bloquearEvento(tx, eventoId)
 
     // Ya resuelto: no vuelve a entrar al camino del dinero. Esta es la otra
@@ -439,7 +439,7 @@ export async function anotarFalloDeProceso(
   ctx: ContextoAuditoria,
   ahora = new Date()
 ): Promise<{ status: 'FAILED' | 'DEAD_LETTER'; proximoIntento: Date | null }> {
-  return sinEmpresa('Supply 2.0: anotar el fallo de un evento externo', async (tx) => {
+  return sinEmpresa('Supply: anotar el fallo de un evento externo', async (tx) => {
     const fila = await tx.supplyV2ExternalEvent.findUniqueOrThrow({
       where: { id: eventoId },
       select: { id: true, attempts: true, provider: true, eventType: true, correlationId: true },
@@ -471,7 +471,7 @@ export async function anotarFalloDeProceso(
  * vuelve a pasar por la idempotencia: reintentar nunca duplica dinero.
  */
 export async function reintentarEvento(eventoId: string, ctx: ContextoAuditoria): Promise<{ id: string; estaba: SupplyV2ExternalEventStatus }> {
-  return sinEmpresa('Supply 2.0: reintentar un evento externo', async (tx) => {
+  return sinEmpresa('Supply: reintentar un evento externo', async (tx) => {
     const fila = await tx.supplyV2ExternalEvent.findUniqueOrThrow({
       where: { id: eventoId },
       select: { id: true, status: true, provider: true, eventType: true, correlationId: true },

@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mis bonos y descuentos' }
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · «MIS BENEFICIOS» del cliente (§31).
+ * MEMBEGO SUPPLY · SLICE 6 · «MIS BENEFICIOS» del cliente (§31).
  *
  * Lo que esta persona tiene en su cuenta: qué vale, dónde se puede usar,
  * cuántos usos le quedan y hasta cuándo. Lo que NO ve, nunca: el presupuesto

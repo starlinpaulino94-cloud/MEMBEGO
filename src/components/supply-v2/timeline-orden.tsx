@@ -9,7 +9,7 @@ export interface EventoOrden {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · TIMELINE de la orden (§34), derivado de datos reales:
+ * MEMBEGO SUPPLY · TIMELINE de la orden (§34), derivado de datos reales:
  * el estado actual, los eventos y las cantidades recibidas. Nada escrito a
  * mano.
  */

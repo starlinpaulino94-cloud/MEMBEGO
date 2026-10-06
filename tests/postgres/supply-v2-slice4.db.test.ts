@@ -25,7 +25,7 @@ import { calcularEconomia } from '../../src/modules/supply-v2/economics/queries'
 import { perfilFinancieroProveedor, resumenFinanzas } from '../../src/modules/supply-v2/finance/queries'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 contra PostgreSQL de verdad (§71).
+ * MEMBEGO SUPPLY · SLICE 4 contra PostgreSQL de verdad (§71).
  *
  *   E  PREPAID: PO → factura → pago → recepción → venta → redención → sin CxP nueva; 399 / 300 / 99
  *   A  Depósito 100k → factura 20k → depósito 15k → transferencia 5k → PAID y 85k

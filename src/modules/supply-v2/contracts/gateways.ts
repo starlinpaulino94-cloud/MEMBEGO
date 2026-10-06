@@ -1,7 +1,7 @@
 /**
- * MEMBEGO SUPPLY 2.0 · CONTRATOS CON MEMBEGO CORE (§5).
+ * MEMBEGO SUPPLY · CONTRATOS CON MEMBEGO CORE (§5).
  *
- * Supply 2.0 no importa servicios internos de Membego a discreción: lo que
+ * Supply no importa servicios internos de Membego a discreción: lo que
  * necesita del Core pasa por estas interfaces, y los adaptadores
  * (`adapters.ts`) son el único sitio que sabe cómo se resuelven contra la
  * infraestructura actual (Prisma, Supabase Auth, RBAC).
@@ -20,7 +20,7 @@ export interface CompanyRef {
   whatsapp: string | null
   legalName: string | null
   currency: string
-  /** Si ya tiene relación comercial en Supply 2.0, el id del proveedor. */
+  /** Si ya tiene relación comercial en Supply, el id del proveedor. */
   supplierId: string | null
 }
 
@@ -115,7 +115,7 @@ export const SUPPLY_V2_PERMISSIONS = [
 export type SupplyV2Permission = (typeof SUPPLY_V2_PERMISSIONS)[number]
 
 export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
-  SUPPLY_V2_VIEW: 'Ver Supply 2.0',
+  SUPPLY_V2_VIEW: 'Ver Supply',
   SUPPLY_V2_SUPPLIER_MANAGE: 'Registrar proveedores y su catálogo',
   SUPPLY_V2_AGREEMENT_MANAGE: 'Crear y activar acuerdos',
   SUPPLY_V2_PURCHASE_CREATE: 'Crear y enviar órdenes de compra',
@@ -126,7 +126,7 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_REDEEM: 'Escanear y confirmar entregas (proveedor)',
   SUPPLY_V2_REDEMPTION_VIEW: 'Ver redenciones',
   SUPPLY_V2_REDEMPTION_REVERSE: 'Reversar redenciones',
-  SUPPLY_V2_FINANCE_VIEW: 'Ver finanzas y economía de Supply 2.0',
+  SUPPLY_V2_FINANCE_VIEW: 'Ver finanzas y economía de Supply',
   SUPPLY_V2_INVOICE_MANAGE: 'Registrar, aprobar y cancelar facturas de proveedor',
   SUPPLY_V2_DEPOSIT_MANAGE: 'Crear y aplicar depósitos de proveedor',
   SUPPLY_V2_PAYMENT_CREATE: 'Registrar pagos a proveedores',
@@ -163,7 +163,7 @@ export const SUPPLY_V2_PERMISSION_LABELS: Record<SupplyV2Permission, string> = {
   SUPPLY_V2_LOYALTY_FINANCE_VIEW: 'Ver el presupuesto y los costos de fidelización',
   SUPPLY_V2_LOYALTY_REPORT_VIEW: 'Ver los reportes y el tablero de fidelización',
   SUPPLY_V2_PAYMENT_INCIDENT_RESOLVE: 'Investigar y resolver incidentes de pagos externos (no la cuenta de la integración)',
-  SUPPLY_V2_OPERATIONS_VIEW: 'Ver el Centro de Operaciones de Supply 2.0',
+  SUPPLY_V2_OPERATIONS_VIEW: 'Ver el Centro de Operaciones de Supply',
   SUPPLY_V2_OPERATIONS_MANAGE: 'Operar: interruptores, conciliación manual y reconocer alertas',
   SUPPLY_V2_VEHICLE_CATEGORY_MANAGE: 'Gestionar las categorías de vehículo de plataforma',
 }

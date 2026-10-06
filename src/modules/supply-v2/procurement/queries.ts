@@ -5,7 +5,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import { ORDEN_ABIERTA, ORDEN_POR_RECIBIR } from '../core/estados'
 
 /**
- * MEMBEGO SUPPLY 2.0 · lecturas de compras.
+ * MEMBEGO SUPPLY · lecturas de compras.
  */
 
 export interface OrdenEnLista {
@@ -77,7 +77,7 @@ function aOrdenEnLista(o: OrdenSeleccionada): OrdenEnLista {
 }
 
 export async function listarOrdenes(): Promise<OrdenEnLista[]> {
-  const filas = await sinEmpresa('Supply 2.0: listado de órdenes de compra', (tx) =>
+  const filas = await sinEmpresa('Supply: listado de órdenes de compra', (tx) =>
     tx.supplyV2PurchaseOrder.findMany({
       orderBy: { createdAt: 'desc' },
       take: 200,
@@ -113,7 +113,7 @@ export async function buscarOrdenes(f: FiltroOrdenes, p: { pagina: number; filas
         }
       : {}),
   }
-  const [filas, total] = await sinEmpresa('Supply 2.0: búsqueda de órdenes de compra', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: búsqueda de órdenes de compra', (tx) =>
     Promise.all([
       tx.supplyV2PurchaseOrder.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (p.pagina - 1) * p.filas, take: p.filas, select: SELECT_ORDEN }),
       tx.supplyV2PurchaseOrder.count({ where }),
@@ -136,7 +136,7 @@ export interface ResumenCompras {
 /** Los cuatro indicadores de la pantalla Compras. */
 export async function resumenCompras(ahora = new Date()): Promise<ResumenCompras> {
   const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-  return sinEmpresa('Supply 2.0: indicadores de compras', async (tx) => {
+  return sinEmpresa('Supply: indicadores de compras', async (tx) => {
     const [abiertas, borradores, porAprobar, porRecibir, siguiente, recibidasMes, unidadesMes] = await Promise.all([
       tx.supplyV2PurchaseOrder.count({ where: { status: { in: [...ORDEN_ABIERTA] } } }),
       tx.supplyV2PurchaseOrder.count({ where: { status: 'DRAFT' } }),
@@ -166,14 +166,14 @@ export async function resumenCompras(ahora = new Date()): Promise<ResumenCompras
 
 /** Proveedores para el filtro de Compras: los que tienen al menos una orden. */
 export async function proveedoresConOrdenes(): Promise<{ id: string; nombre: string }[]> {
-  const filas = await sinEmpresa('Supply 2.0: proveedores con órdenes de compra', (tx) =>
+  const filas = await sinEmpresa('Supply: proveedores con órdenes de compra', (tx) =>
     tx.supplyV2Supplier.findMany({ where: { purchaseOrders: { some: {} } }, orderBy: { commercialName: 'asc' }, select: { id: true, commercialName: true } })
   )
   return filas.map((f) => ({ id: f.id, nombre: f.commercialName }))
 }
 
 export async function fichaOrden(id: string) {
-  return sinEmpresa('Supply 2.0: ficha de una orden de compra', (tx) =>
+  return sinEmpresa('Supply: ficha de una orden de compra', (tx) =>
     tx.supplyV2PurchaseOrder.findUnique({
       where: { id },
       include: {
@@ -206,7 +206,7 @@ export async function fichaOrden(id: string) {
 
 /** Sucursales de un proveedor registrado (para «Sucursal opcional» al recibir). */
 export async function sucursalesDeProveedor(supplierId: string) {
-  return sinEmpresa('Supply 2.0: sucursales del proveedor para la recepción', async (tx) => {
+  return sinEmpresa('Supply: sucursales del proveedor para la recepción', async (tx) => {
     const p = await tx.supplyV2Supplier.findUnique({ where: { id: supplierId }, select: { companyId: true } })
     if (!p?.companyId) return []
     return tx.sucursal.findMany({

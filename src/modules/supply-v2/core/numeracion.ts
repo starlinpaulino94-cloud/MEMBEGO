@@ -1,7 +1,7 @@
 import type { Tx } from '@/lib/tenant'
 
 /**
- * MEMBEGO SUPPLY 2.0 · numeración correlativa SEGURA (§13).
+ * MEMBEGO SUPPLY · numeración correlativa SEGURA (§13).
  *
  * PROHIBIDO `count() + 1`: dos altas simultáneas leen el mismo conteo y la
  * segunda choca con el índice único.

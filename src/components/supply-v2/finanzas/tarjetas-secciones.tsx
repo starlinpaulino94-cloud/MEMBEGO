@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { AlertTriangle, ArrowRight, Banknote, FileText, Landmark, PiggyBank, Percent, Receipt, TrendingUp, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Banknote, FileText, Landmark, PiggyBank, Wallet, Percent, Receipt, TrendingUp, type LucideIcon } from 'lucide-react'
 import { RUTA_ECONOMIA, RUTA_FINANZAS, RUTA_LIQUIDACIONES } from '@/modules/supply-v2/core/catalogo'
 import { Tarjeta } from '../resumen/superficie'
 
@@ -12,6 +12,7 @@ const SECCIONES: { href: string; label: string; icon: LucideIcon; texto: string 
   { href: RUTA_LIQUIDACIONES, label: 'Liquidaciones', icon: Percent, texto: 'Ventas a comisión entregadas: bruto, comisión y neto a pagar por periodo.' },
   { href: `${RUTA_FINANZAS}/incidencias`, label: 'Incidencias', icon: AlertTriangle, texto: 'Lo que no se deshace en silencio: entregas reversadas ya pagadas.' },
   { href: RUTA_ECONOMIA, label: 'Economía', icon: TrendingUp, texto: 'GMV, ingreso, costo, margen, breakage.' },
+  { href: `${RUTA_FINANZAS}/cuentas-cobro`, label: 'Cuentas de cobro', icon: Wallet, texto: 'Las cuentas de Membego a las que paga el cliente. Sin una activa no se puede comprar.' },
 ]
 
 /** Las ocho entradas del módulo financiero; `avisos` pone una cifra viva junto a la etiqueta cuando existe. */

@@ -407,9 +407,9 @@ export function permisosDesdeSeleccion(
  */
 const SECCION_POR_PREFIJO: ReadonlyArray<readonly [string, AdminSection]> = [
   ['/admin/crm', 'leads'],
-  // Membego Supply 2.0: el portal del proveedor (escáner y entregas) cuelga de
+  // Membego Supply: el portal del proveedor (escáner y entregas) cuelga de
   // la misma sección y capacidad que Supply V1, `supply` / MEMBEGO_SUPPLIER.
-  ['/admin/supply-v2', 'supply'],
+  ['/admin/supply', 'supply'],
 ]
 
 /**

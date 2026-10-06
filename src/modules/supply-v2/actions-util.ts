@@ -8,7 +8,7 @@ import { SupplyV2Error } from './core/errores'
 import type { ActorSupplyV2 } from './permisos'
 
 /**
- * MEMBEGO SUPPLY 2.0 · lo que comparten las server actions.
+ * MEMBEGO SUPPLY · lo que comparten las server actions.
  */
 
 export interface EstadoAccion<T = undefined> {

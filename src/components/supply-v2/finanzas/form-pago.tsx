@@ -19,7 +19,7 @@ export interface ProveedorParaPago {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · registrar un PAGO a proveedor (§13, §37). Nace
+ * MEMBEGO SUPPLY · registrar un PAGO a proveedor (§13, §37). Nace
  * pendiente: otra persona lo confirma. Se declara a qué se aplicará al
  * confirmarse: una factura, una obligación, un depósito (anticipo) o nada.
  */

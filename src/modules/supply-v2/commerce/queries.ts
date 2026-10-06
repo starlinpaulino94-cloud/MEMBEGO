@@ -5,7 +5,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import type { PaymentAccountRef } from '../contracts/gateways'
 
 /**
- * MEMBEGO SUPPLY 2.0 · lecturas del CLIENTE (§46, §52–§53).
+ * MEMBEGO SUPPLY · lecturas del CLIENTE (§46, §52–§53).
  *
  * Todas reciben el `customerId` de la sesión y filtran por él en la consulta:
  * la propiedad se decide en el servidor. Devuelven DTOs sin costos ni lotes.
@@ -117,7 +117,7 @@ function aDto(o: Fila): CompraCliente {
 }
 
 export async function misCompras(customerId: string): Promise<CompraCliente[]> {
-  const filas = await sinEmpresa('Supply 2.0: compras del cliente de la sesión', (tx) =>
+  const filas = await sinEmpresa('Supply: compras del cliente de la sesión', (tx) =>
     tx.supplyV2CustomerOrder.findMany({ where: { customerId }, orderBy: { createdAt: 'desc' }, take: 100, include: INCLUDE })
   )
   return filas.map(aDto)
@@ -125,7 +125,7 @@ export async function misCompras(customerId: string): Promise<CompraCliente[]> {
 
 /** Solo si la compra es de este cliente; si no, `null` (no se distingue de «no existe»). */
 export async function miCompra(customerId: string, orderId: string): Promise<CompraCliente | null> {
-  const o = await sinEmpresa('Supply 2.0: una compra del cliente de la sesión', (tx) =>
+  const o = await sinEmpresa('Supply: una compra del cliente de la sesión', (tx) =>
     tx.supplyV2CustomerOrder.findFirst({ where: { id: orderId, customerId }, include: INCLUDE })
   )
   return o ? aDto(o) : null
@@ -147,7 +147,7 @@ export interface DerechoCliente {
 }
 
 export async function misDerechos(customerId: string): Promise<DerechoCliente[]> {
-  const filas = await sinEmpresa('Supply 2.0: derechos del cliente de la sesión', (tx) =>
+  const filas = await sinEmpresa('Supply: derechos del cliente de la sesión', (tx) =>
     tx.supplyV2Entitlement.findMany({
       where: { customerId },
       orderBy: { issuedAt: 'desc' },

@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { BASE_SUPPLY_V2 } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · navegación (§25, §42, §63; Slice 4 §33, §68): once pestañas.
+ * MEMBEGO SUPPLY · navegación (§25, §42, §63; Slice 4 §33, §68): once pestañas.
  *
  * Rediseño Stitch (dirección blanca): las pestañas van agrupadas por etapa del
  * ciclo (Operación, Comercial, Entrega, Clientes, Finanzas), con la etiqueta
@@ -45,7 +45,7 @@ export type ContadoresSupplyV2 = Partial<Record<SeccionSupplyV2, { valor: number
 
 export function NavSupplyV2({ activa, contadores }: { activa: SeccionSupplyV2; contadores?: ContadoresSupplyV2 }) {
   return (
-    <nav aria-label="Secciones de Supply 2.0" className="no-scrollbar -mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+    <nav aria-label="Secciones de Supply" className="no-scrollbar -mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
       <div className="flex min-w-max items-stretch">
         {GRUPOS.map((grupo, i) => (
           <div key={grupo} className={cn('flex flex-col gap-1.5', i > 0 && 'ml-3 border-l border-sv2-border pl-3')}>

@@ -6,7 +6,7 @@ import { SelectorFilas } from './selector-filas'
 const BOTON = 'flex size-8 items-center justify-center rounded-[8px] text-sv2-outline transition-colors hover:bg-sv2-soft hover:text-foreground'
 
 /**
- * Pie de tabla de Supply 2.0 (Stitch): «Mostrando a – b de N», filas por
+ * Pie de tabla de Supply (Stitch): «Mostrando a – b de N», filas por
  * página y saltos de página. Todo por URL: `href(pagina, filas)` arma el enlace.
  */
 export function PaginacionSupplyV2({

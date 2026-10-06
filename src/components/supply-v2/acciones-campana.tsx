@@ -28,7 +28,7 @@ import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 import type { CuponesGenerados } from '@/modules/supply-v2/campaigns/coupons'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · acciones de una campaña (§4, §23, §27).
+ * MEMBEGO SUPPLY · SLICE 7 · acciones de una campaña (§4, §23, §27).
  *
  * Cada botón es un formulario y lo que decide es el servidor. Lo que exige un
  * motivo lo pide aquí y no se manda vacío. Los permisos llegan como props

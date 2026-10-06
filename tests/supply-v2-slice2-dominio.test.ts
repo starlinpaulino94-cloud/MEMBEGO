@@ -16,7 +16,7 @@ import { ttlReservaMinutos, vencimientoDeReserva } from '../src/modules/supply-v
 import { unidadesLibres, validarOferta, slugDeOferta } from '../src/modules/supply-v2/offers/domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 2 · pruebas de dominio PURAS (§55).
+ * MEMBEGO SUPPLY · SLICE 2 · pruebas de dominio PURAS (§55).
  */
 
 const DIA = 86_400_000

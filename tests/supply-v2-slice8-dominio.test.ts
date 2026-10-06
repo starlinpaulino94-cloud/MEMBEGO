@@ -58,7 +58,7 @@ import {
 import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · pruebas de DOMINIO (§44). Sin base de datos.
+ * MEMBEGO SUPPLY · SLICE 8 · pruebas de DOMINIO (§44). Sin base de datos.
  *
  * Los 24 casos que pide el enunciado, más los que hicieron falta para no
  * dejar una regla sin comprobar. Lo que garantiza la BASE —candados, CHECK,

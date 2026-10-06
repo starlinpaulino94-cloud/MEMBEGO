@@ -19,7 +19,7 @@ const fecha = (d: Date) => new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium
 const fechaHora = (d: Date) => new Intl.DateTimeFormat('es-DO', { dateStyle: 'short', timeStyle: 'short' }).format(d)
 
 /**
- * MEMBEGO SUPPLY 2.0 · compras y beneficios del cliente (§46, §52; Slice 3 §12, §33).
+ * MEMBEGO SUPPLY · compras y beneficios del cliente (§46, §52; Slice 3 §12, §33).
  * Un beneficio Disponible ofrece «Usar beneficio»; el QR se genera solo al pulsarlo.
  * Un beneficio Utilizado muestra cuándo y dónde, sin datos internos.
  */

@@ -23,7 +23,7 @@ import { aprobarRecompensaEnTx, crearRecompensaEnTx } from './rewards'
 import { bloquearPrograma, eventoDePrograma } from './programs'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · REFERIDOS (§18–§23).
+ * MEMBEGO SUPPLY · SLICE 8 · REFERIDOS (§18–§23).
  *
  * El recorrido del enunciado: Juan comparte su enlace, María se registra con
  * él, María hace su PRIMERA COMPRA VÁLIDA y entonces —y solo entonces— Juan

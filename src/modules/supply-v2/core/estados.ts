@@ -9,7 +9,7 @@ import type {
 } from '@prisma/client'
 
 /**
- * MEMBEGO SUPPLY 2.0 · máquinas de estado (Slice 1).
+ * MEMBEGO SUPPLY · máquinas de estado (Slice 1).
  *
  * Una transición que no esté declarada aquí NO OCURRE. PURO: se prueba sin
  * base de datos.

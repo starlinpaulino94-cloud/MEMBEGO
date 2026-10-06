@@ -17,7 +17,7 @@ import { CAPACIDADES, type Capacidad } from './operations/salud-dominio'
 import { RESOLUCIONES, type Resolucion } from './operations/conciliacion-dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · LO QUE EL PANEL PUEDE HACER.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · LO QUE EL PANEL PUEDE HACER.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * EL PERMISO SE COMPRUEBA AQUÍ, NO EN EL BOTÓN
@@ -39,7 +39,7 @@ export interface EstadoOperacion {
   success?: string
 }
 
-const RUTA = '/superadmin/supply-v2/operaciones'
+const RUTA = '/superadmin/supply/operaciones'
 
 function texto(fd: FormData, clave: string, max: number): string {
   return String(fd.get(clave) ?? '').trim().slice(0, max)

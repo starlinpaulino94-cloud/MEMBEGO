@@ -3,7 +3,7 @@ import { capacidadActiva } from './flags'
 import { secretoValido, type EstadoConfig, type PiezaDeConfig } from './salud-dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · ¿ESTÁ ESTO CONFIGURADO? (§8)
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · ¿ESTÁ ESTO CONFIGURADO? (§8)
  *
  * ────────────────────────────────────────────────────────────────────────────
  * EL FALLO QUE ESTO EVITA

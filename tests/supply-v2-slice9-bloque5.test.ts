@@ -21,7 +21,7 @@ import { valeLaPenaReintentar, LIMITACION_DE_IDEMPOTENCIA } from '../src/modules
 import { estadoDeWhatsapp, whatsappDePlataformaDisponible } from '../src/modules/supply-v2/notifications/whatsapp'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · PRUEBAS DE DOMINIO.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · PRUEBAS DE DOMINIO.
  *
  * Todo esto es puro: no hay base de datos ni red. Lo que se prueba es la
  * POLÍTICA de los avisos, que es donde están las decisiones que importan y

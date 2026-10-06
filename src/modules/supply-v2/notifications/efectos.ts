@@ -4,7 +4,7 @@ import { definicionDeAviso, type CanalDeAviso } from './dominio'
 import { mandarCorreoDeAviso } from './correo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · LOS EJECUTORES DE AVISO.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · LOS EJECUTORES DE AVISO.
  *
  * Un ejecutor toma un efecto del outbox y lo entrega por su canal. Nada más:
  * la decisión de qué avisar y a quién ya la tomó `./servicio.ts` al apuntarlo,
@@ -92,42 +92,42 @@ const REDACCION: Readonly<Record<string, Redaccion>> = {
     tipoInApp: 'SISTEMA',
     titulo: 'Tienes una venta nueva',
     mensaje: 'Se vendió una de tus ofertas. Revisa la entrega pendiente.',
-    href: '/admin/supply-v2/ventas',
+    href: '/admin/supply/ventas',
     asunto: 'Tienes una venta nueva en Membego',
   },
   'supply.notify.supplier_settlement_paid': {
     tipoInApp: 'SISTEMA',
     titulo: 'Tu liquidación está pagada',
     mensaje: 'Membego pagó tu liquidación. Puedes ver el detalle en tu portal.',
-    href: '/admin/supply-v2/finanzas',
+    href: '/admin/supply/finanzas',
     asunto: 'Tu liquidación de Membego está pagada',
   },
   'supply.notify.ops_incident_high': {
     tipoInApp: 'SISTEMA',
     titulo: 'Incidente de pago de severidad alta',
     mensaje: 'Hay un incidente de pago externo sin resolver que necesita decisión.',
-    href: '/superadmin/supply-v2/operaciones/incidentes?severity=HIGH',
+    href: '/superadmin/supply/operaciones/incidentes?severity=HIGH',
     asunto: '[Membego · operaciones] Incidente de pago de severidad alta',
   },
   'supply.notify.ops_dead_letter': {
     tipoInApp: 'SISTEMA',
     titulo: 'Hay efectos sin salida',
     mensaje: 'Uno o más efectos agotaron sus intentos y esperan decisión.',
-    href: '/superadmin/supply-v2/operaciones/difuntos',
+    href: '/superadmin/supply/operaciones/difuntos',
     asunto: '[Membego · operaciones] Efectos sin salida',
   },
   'supply.notify.ops_readiness_degraded': {
     tipoInApp: 'SISTEMA',
-    titulo: 'Supply 2.0 está degradado',
+    titulo: 'Supply está degradado',
     mensaje: 'La comprobación de readiness dejó de estar sana. Revisa el estado del sistema.',
-    href: '/superadmin/supply-v2/operaciones',
-    asunto: '[Membego · operaciones] Supply 2.0 degradado',
+    href: '/superadmin/supply/operaciones',
+    asunto: '[Membego · operaciones] Supply degradado',
   },
   'supply.notify.ops_reconciliation_mismatch': {
     tipoInApp: 'SISTEMA',
     titulo: 'Hay desacuerdos de conciliación',
     mensaje: 'Una o más comprobaciones de pago no cuadran. Revisa las conciliaciones.',
-    href: '/superadmin/supply-v2/operaciones/conciliaciones?resultado=MISMATCH',
+    href: '/superadmin/supply/operaciones/conciliaciones?resultado=MISMATCH',
     asunto: '[Membego · operaciones] Desacuerdos de conciliación',
   },
 }
@@ -165,7 +165,7 @@ export async function entregarAviso(e: EfectoDeAviso): Promise<{ detalle: string
 
   if (canal === 'IN_APP') {
     try {
-      await sinEmpresa('Supply 2.0: aviso dentro de Membego', (tx) =>
+      await sinEmpresa('Supply: aviso dentro de Membego', (tx) =>
         tx.notificacion.create({
           data: {
             userId,

@@ -23,10 +23,6 @@
       "schedule": "0 13 * * *"
     },
     {
-      "path": "/api/cron/supply",
-      "schedule": "0 7 * * *"
-    },
-    {
       "path": "/api/cron/supply-v2",
       "schedule": "0 6 * * *"
     }

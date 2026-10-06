@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · FEFO — First Expire, First Out (§5, §33).
+ * MEMBEGO SUPPLY · FEFO — First Expire, First Out (§5, §33).
  *
  * PURO. Ordena candidatos (lotes al asignar, líneas de asignación al reservar)
  * por vencimiento más próximo; sin vencimiento, por recepción más antigua; y

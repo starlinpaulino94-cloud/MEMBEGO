@@ -18,7 +18,7 @@ import {
 } from './settlements-domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 5 · LIQUIDACIONES (§35–§47).
+ * MEMBEGO SUPPLY · SLICE 5 · LIQUIDACIONES (§35–§47).
  *
  * Una liquidación es la cuenta que Membego le rinde al proveedor por un
  * periodo de ventas a comisión ENTREGADAS: bruto vendido, comisión retenida

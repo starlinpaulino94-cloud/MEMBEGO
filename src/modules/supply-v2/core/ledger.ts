@@ -1,7 +1,7 @@
 import type { SupplyV2Bucket, SupplyV2LedgerEntryType } from '@prisma/client'
 
 /**
- * MEMBEGO SUPPLY 2.0 · EL LEDGER (Slice 1).
+ * MEMBEGO SUPPLY · EL LEDGER (Slice 1).
  *
  * PURO: sin Prisma, sin base de datos. Decide qué asiento es válido y qué
  * deja en las cubetas. Lo que escribe en la base es `pool/lotes.ts`.

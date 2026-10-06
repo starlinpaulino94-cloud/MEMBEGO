@@ -4,7 +4,7 @@ import { cifrasOperativas, resumenOperativo } from './salud'
 import { estadoDeWhatsapp } from '../notifications/whatsapp'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · MÉTRICAS OPERATIVAS (§14, §15).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · MÉTRICAS OPERATIVAS (§14, §15).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * NO SE CONSTRUYE UN PROMETHEUS CASERO
@@ -76,7 +76,7 @@ export async function emitirMetricasOperativas(ahora = new Date()): Promise<Metr
        * juzga nada. Como contador monótono sí vale para el recolector, que es
        * el que calcula el ritmo.
        */
-      sinEmpresa('Supply 2.0: métrica de eventos externos recibidos', (tx) => tx.supplyV2ExternalEvent.count()),
+      sinEmpresa('Supply: métrica de eventos externos recibidos', (tx) => tx.supplyV2ExternalEvent.count()),
     ])
     const m: MetricasOperativas = {
       payment_events_received: recibidos,

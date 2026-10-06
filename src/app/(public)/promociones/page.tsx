@@ -46,7 +46,7 @@ export default async function PromotionsPage({
   const sinFiltros = !filters.search && !filters.type && !filters.tag && !filters.company
   const [promotions, ofertasMembego, campanas, membresias] = await Promise.all([
     getPromotionsPublic(filters),
-    // Supply 2.0 entra al marketplace por su read model público: solo ofertas
+    // Supply entra al marketplace por su read model público: solo ofertas
     // comprables hoy, sin costos ni lotes. Sin filtros: son de Membego, no de una empresa.
     sinFiltros ? ofertasPublicas(12).catch(() => []) : Promise.resolve([]),
     // Slice 7 (§18): las campañas activas y vigentes AHORA. La vigencia y el
@@ -112,7 +112,7 @@ export default async function PromotionsPage({
         </div>
       </section>
 
-      {/* Campañas Membego (Supply 2.0 · Slice 7): una sección DENTRO de este
+      {/* Campañas Membego (Supply · Slice 7): una sección DENTRO de este
           marketplace, no otro marketplace. Solo si hay alguna activa y vigente. */}
       {campanas.length > 0 && (
         <section className="pt-12" data-testid="campanas-marketplace">
@@ -140,7 +140,7 @@ export default async function PromotionsPage({
         </section>
       )}
 
-      {/* Membresías Membego (Supply 2.0 · Slice 8): los planes publicados. */}
+      {/* Membresías Membego (Supply · Slice 8): los planes publicados. */}
       {membresias.length > 0 && (
         <section className="pt-12" data-testid="membresias-marketplace">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -167,7 +167,7 @@ export default async function PromotionsPage({
         </section>
       )}
 
-      {/* Ofertas Membego (Supply 2.0): solo si hay alguna comprable hoy. */}
+      {/* Ofertas Membego (Supply): solo si hay alguna comprable hoy. */}
       {ofertasMembego.length > 0 && (
         <section className="pt-12" data-testid="ofertas-membego">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

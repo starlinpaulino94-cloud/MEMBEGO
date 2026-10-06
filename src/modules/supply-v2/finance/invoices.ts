@@ -9,7 +9,7 @@ import { enlazarObligacionesAFacturaEnTx } from './obligations'
 import { bloquearFila, recalcularFacturaEnTx } from './applications'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · FACTURAS DEL PROVEEDOR (§7–§10, §58).
+ * MEMBEGO SUPPLY · SLICE 4 · FACTURAS DEL PROVEEDOR (§7–§10, §58).
  *
  * La factura es el DOCUMENTO del proveedor. Nace pendiente de aprobación;
  * al aprobarla (otra persona) nace o se enlaza la obligación; el dinero se

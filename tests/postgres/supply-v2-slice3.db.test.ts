@@ -21,7 +21,7 @@ import {
 import { cubetasDeLote, invarianteCumplido, saldoDeAsientos } from '../../src/modules/supply-v2/core/ledger'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 3 contra PostgreSQL de verdad (§68–§72).
+ * MEMBEGO SUPPLY · SLICE 3 contra PostgreSQL de verdad (§68–§72).
  *
  *   Little Pizza (empresa registrada, 2 sucursales) vende 1.000 → oferta 100
  *   → Ana compra 2 y paga → 2 derechos ACTIVE.

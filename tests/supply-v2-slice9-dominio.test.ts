@@ -25,7 +25,7 @@ import { ESPERAS_S, MAX_INTENTOS } from '../src/modules/integraciones/reintentos
 import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 1: el núcleo operativo, sin base.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 1: el núcleo operativo, sin base.
  *
  * Lo que se prueba aquí son las DECISIONES: qué identidad tiene un evento
  * externo, cuándo se reintenta, cuándo se da por muerto, qué puede y qué no

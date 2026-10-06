@@ -7,7 +7,7 @@ import type { ProveedorEnDirectorio } from '@/modules/supply-v2/suppliers/querie
 import { MONO, Tarjeta } from '../resumen/superficie'
 import { MenuProveedor } from './menu-proveedor'
 
-const RUTA = '/superadmin/supply-v2/proveedores'
+const RUTA = '/superadmin/supply/proveedores'
 
 function iniciales(nombre: string): string {
   const palabras = nombre.replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(Boolean)
@@ -105,7 +105,7 @@ function Catalogo({ p }: { p: ProveedorEnDirectorio }) {
 function ComprasAbiertas({ p }: { p: ProveedorEnDirectorio }) {
   const clase = cn(MONO, 'inline-flex size-8 items-center justify-center rounded-full font-bold', p.comprasAbiertas > 0 ? 'bg-sv2-tertiary-fixed text-sv2-on-tertiary-fixed hover:underline' : 'bg-sv2-well text-sv2-outline')
   return p.comprasAbiertas > 0 ? (
-    <Link href={`/superadmin/supply-v2/compras?proveedor=${p.id}`} className={clase} aria-label={`${p.comprasAbiertas} compras abiertas de ${p.commercialName}`}>{p.comprasAbiertas}</Link>
+    <Link href={`/superadmin/supply/compras?proveedor=${p.id}`} className={clase} aria-label={`${p.comprasAbiertas} compras abiertas de ${p.commercialName}`}>{p.comprasAbiertas}</Link>
   ) : (
     <span className={clase}>0</span>
   )

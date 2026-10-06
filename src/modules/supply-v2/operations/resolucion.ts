@@ -8,7 +8,7 @@ import { RESOLUCIONES, exigeServicioFinanciero, type Resolucion } from './concil
 import { anotarSupply } from './log'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 3 · QUIÉN DECIDE, Y CÓMO.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 3 · QUIÉN DECIDE, Y CÓMO.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * DOS RESPONSABILIDADES QUE NO SE MEZCLAN (§12)
@@ -149,11 +149,11 @@ export async function resolverIncidenteDePagoEnTx(
 
 /** La misma cosa en su propia transacción, para quien no tenga una abierta. */
 export async function resolverIncidenteDePago(d: ResolucionPedida, ctx: ContextoAuditoria): Promise<ResultadoResolucion> {
-  return sinEmpresa('Supply 2.0: resolver un incidente de pago externo', (tx) => resolverIncidenteDePagoEnTx(tx, d, ctx))
+  return sinEmpresa('Supply: resolver un incidente de pago externo', (tx) => resolverIncidenteDePagoEnTx(tx, d, ctx))
 }
 
 export async function marcarInvestigando(incidentId: string, ctx: ContextoAuditoria) {
-  return sinEmpresa('Supply 2.0: marcar un incidente en investigación', (tx) => marcarInvestigandoEnTx(tx, incidentId, ctx))
+  return sinEmpresa('Supply: marcar un incidente en investigación', (tx) => marcarInvestigandoEnTx(tx, incidentId, ctx))
 }
 
 // ── Internos ────────────────────────────────────────────────────────────────

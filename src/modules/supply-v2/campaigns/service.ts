@@ -22,7 +22,7 @@ import {
 } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · CAMPAÑAS: servicios transaccionales (§4–§17, §23).
+ * MEMBEGO SUPPLY · SLICE 7 · CAMPAÑAS: servicios transaccionales (§4–§17, §23).
  *
  * TODO dentro de la `tx` de quien llama. La campaña no mueve dinero por su
  * cuenta: crea y agrupa BENEFICIOS del Slice 6, y el dinero lo mueven ellos

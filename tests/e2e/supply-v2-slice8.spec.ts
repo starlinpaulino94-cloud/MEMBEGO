@@ -2,7 +2,7 @@ import { test, expect, type Browser, type BrowserContext, type Page } from '@pla
 import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 de punta a punta en navegador.
+ * MEMBEGO SUPPLY · SLICE 8 de punta a punta en navegador.
  *
  * EL RECORRIDO OBLIGATORIO, completo y en este orden:
  *   1  compras crea el programa de fidelización (membresías + puntos +
@@ -76,18 +76,18 @@ async function cuentaDeCobro(): Promise<void> {
 // ── Montaje por interfaz (lo de los slices anteriores) ──────────────────────
 
 async function proveedorVinculado(compras: Page, d: Datos): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/proveedores')
+  await compras.goto('/superadmin/supply/proveedores')
   await compras.getByTestId('btn-nuevo-proveedor').click()
   await compras.getByRole('button', { name: 'Sí, es una empresa de Membego' }).click()
   await compras.locator('#buscarEmpresa').fill(d.empresa)
   await compras.getByRole('option').filter({ hasText: d.empresa }).getByRole('button').click()
   await compras.getByRole('button', { name: /Vincular como proveedor|Usar este proveedor/ }).click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/proveedores\/[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/proveedores\/[a-z0-9]+$/)
   return compras.url().split('/').pop()!
 }
 
 async function productoYOferta(compras: Page, supplierId: string, d: Datos): Promise<string> {
-  await compras.goto(`/superadmin/supply-v2/proveedores/${supplierId}`)
+  await compras.goto(`/superadmin/supply/proveedores/${supplierId}`)
   await compras.getByTestId('btn-agregar-producto').click()
   await compras.locator('#productoNombre').fill(d.producto)
   await compras.locator('#productoCategoria').fill('Pizzas')
@@ -95,7 +95,7 @@ async function productoYOferta(compras: Page, supplierId: string, d: Datos): Pro
   await compras.getByRole('button', { name: 'Agregar producto' }).click()
   await expect(compras.getByTestId('tabla-catalogo')).toContainText(d.producto)
 
-  await compras.goto(`/superadmin/supply-v2/proveedores/${supplierId}`)
+  await compras.goto(`/superadmin/supply/proveedores/${supplierId}`)
   await compras.getByTestId('btn-crear-acuerdo').click()
   await compras.getByTestId('acuerdo-tipo-COMMISSION').click()
   await compras.getByTestId('acuerdo-alcance').getByRole('radio', { name: 'Todo el catálogo' }).check()
@@ -104,7 +104,7 @@ async function productoYOferta(compras: Page, supplierId: string, d: Datos): Pro
   await compras.getByRole('button', { name: 'Crear acuerdo' }).click()
   await expect(compras.getByTestId('lista-acuerdos')).toContainText('comisión 8')
 
-  await compras.goto('/superadmin/supply-v2/ofertas/nueva')
+  await compras.goto('/superadmin/supply/ofertas/nueva')
   await compras.getByTestId('fuente-comision').click()
   await compras.waitForURL(/fuente=COMMISSION/)
   const select = compras.getByTestId('comision-producto')
@@ -120,7 +120,7 @@ async function productoYOferta(compras: Page, supplierId: string, d: Datos): Pro
   await compras.locator('#ofertaLimiteC').fill('3')
   await compras.getByTestId('comision-continuar').click()
   await compras.getByTestId('btn-publicar-oferta-comision').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/ofertas\/(?!nueva)[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/ofertas\/(?!nueva)[a-z0-9]+$/)
   await expect(compras.getByTestId('estado-oferta')).toHaveText('Activa')
   // La dirección pública de la oferta sale de la propia pantalla, no de la base.
   return (await compras.getByTestId('link-ver-marketplace').getAttribute('href'))!
@@ -128,7 +128,7 @@ async function productoYOferta(compras: Page, supplierId: string, d: Datos): Pro
 
 /** Un beneficio del catálogo, de los que se ASIGNAN: es lo que un plan incluye. */
 async function beneficioAsignable(compras: Page, finanzas: Page, d: Datos): Promise<void> {
-  await compras.goto('/superadmin/supply-v2/beneficios')
+  await compras.goto('/superadmin/supply/beneficios')
   await compras.getByTestId('btn-crear-beneficio-nav').click()
   await compras.getByTestId('beneficio-nombre').fill(d.beneficio)
   await compras.getByTestId('beneficio-continuar').click()
@@ -147,7 +147,7 @@ async function beneficioAsignable(compras: Page, finanzas: Page, d: Datos): Prom
   await compras.getByTestId('beneficio-asignacion').selectOption('si')
   await compras.getByTestId('beneficio-continuar').click()
   await compras.getByTestId('btn-crear-beneficio').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/beneficios\/(?!nuevo)[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/beneficios\/(?!nuevo)[a-z0-9]+$/)
   const url = compras.url()
   // Lo aprueba otra persona: quien lo creó no puede.
   await finanzas.goto(url)
@@ -159,7 +159,7 @@ async function beneficioAsignable(compras: Page, finanzas: Page, d: Datos): Prom
 
 /** Pasos 1–2 del recorrido: el programa con sus cuatro modalidades. */
 async function programaCreado(compras: Page, d: Datos, supplierNombre: string): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/fidelizacion')
+  await compras.goto('/superadmin/supply/fidelizacion')
   await compras.getByTestId('btn-crear-programa-nav').click()
   await expect(compras.getByTestId('form-programa')).toBeVisible()
 
@@ -181,7 +181,7 @@ async function programaCreado(compras: Page, d: Datos, supplierNombre: string): 
   await compras.screenshot({ path: 'test-results/shots/supply-v2-s8-programa-nuevo.png', fullPage: true })
   await compras.getByTestId('btn-crear-programa').click()
 
-  await compras.waitForURL(/\/superadmin\/supply-v2\/fidelizacion\/(?!nuevo)[a-z0-9]+/)
+  await compras.waitForURL(/\/superadmin\/supply\/fidelizacion\/(?!nuevo)[a-z0-9]+/)
   await expect(compras.getByTestId('estado-programa')).toHaveText('Borrador')
   await expect(compras.getByTestId('programa-ficha')).toContainText('Membresías')
   return compras.url().split('?')[0]!
@@ -294,7 +294,7 @@ async function recorridoCompleto(browser: Browser) {
   await cliente.getByTestId('btn-avisar-pago').click()
   await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
 
-  await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+  await finanzas.goto('/superadmin/supply/ofertas/ventas')
   const venta = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `MEM-${d.sufijo}` })
   await venta.getByTestId('btn-confirmar-pago').click()
   await venta.getByTestId('btn-confirmar-pago-confirmar').click()
@@ -324,7 +324,7 @@ async function recorridoCompleto(browser: Browser) {
   // revisar». El fallo parece de la pantalla de finanzas y es una carrera de la
   // prueba. (La misma familia de carrera estaba en los slices 6, 7 y 8.)
   await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
-  await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+  await finanzas.goto('/superadmin/supply/ofertas/ventas')
   const venta2 = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `PTS-${d.sufijo}` })
   await venta2.getByTestId('btn-confirmar-pago').click()
   await venta2.getByTestId('btn-confirmar-pago-confirmar').click()
@@ -397,14 +397,14 @@ async function recorridoCompleto(browser: Browser) {
   ).toHaveText(codigo)
 
   // ── 12 · el negocio ve lo suyo ──────────────────────────────────────────
-  await empleado.goto('/admin/supply-v2/fidelizacion')
+  await empleado.goto('/admin/supply/fidelizacion')
   const prov = empleado.getByTestId('programa-proveedor').filter({ hasText: d.programa })
   await expect(prov.getByTestId('programa-prov-miembros')).toHaveText('1')
   await expect(prov.getByTestId('programa-prov-puntos')).toHaveText('15')
   await empleado.screenshot({ path: 'test-results/shots/supply-v2-s8-portal-proveedor.png', fullPage: true })
 
   // ── 13 · el tablero de Membego: cifras reales y estimación marcada ──────
-  await finanzas.goto('/superadmin/supply-v2/fidelizacion')
+  await finanzas.goto('/superadmin/supply/fidelizacion')
   await expect(finanzas.getByTestId('tablero-fidelizacion')).toBeVisible()
   await expect(finanzas.getByTestId('tablero-advertencia')).toContainText(/estimaci|no es/i)
   const fila = finanzas.getByTestId('fila-programa').filter({ hasText: d.programa })
@@ -528,13 +528,13 @@ async function movil(browser: Browser) {
   expect(membresia.customerBenefits.length).toBeGreaterThanOrEqual(1)
 
   // El portal del negocio, también en el teléfono.
-  await empleado.goto('/admin/supply-v2/fidelizacion')
+  await empleado.goto('/admin/supply/fidelizacion')
   await expect(empleado.getByTestId('programa-proveedor').filter({ hasText: d.programa })).toBeVisible()
   expect(await empleado.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await empleado.screenshot({ path: 'test-results/shots/supply-v2-s8-movil-portal.png', fullPage: true })
 }
 
-test.describe('Supply 2.0 · Slice 8', () => {
+test.describe('Supply · Slice 8', () => {
   test.beforeAll(() => {
     test.skip(!SESION_LOCAL_DISPONIBLE, 'requiere SUPABASE_JWT_SECRET, DATABASE_URL y NEXT_PUBLIC_SUPABASE_URL para firmar sesiones')
   })

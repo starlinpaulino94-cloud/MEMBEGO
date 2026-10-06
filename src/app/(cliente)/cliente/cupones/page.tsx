@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mis cupones' }
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · «MIS CUPONES» del cliente (§21).
+ * MEMBEGO SUPPLY · SLICE 7 · «MIS CUPONES» del cliente (§21).
  *
  * Los cupones privados de esta persona y los públicos de las campañas en cuyo
  * público encaja. Disponibles, usados y vencidos en una sola lista ordenada,
