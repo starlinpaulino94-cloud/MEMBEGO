@@ -4,9 +4,9 @@
  * ────────────────────────────────────────────────────────────────────────────
  * EL PROBLEMA QUE RESUELVE
  *
- * `modules/capacidades/catalogo.ts` tiene hoy DIECINUEVE valores en una sola
- * lista llamada `CAPACIDADES`, y son dos cosas distintas metidas en el mismo
- * saco:
+ * `modules/capacidades/catalogo.ts` tiene hoy varias decenas de valores en
+ * una sola lista llamada `CAPACIDADES`, y son dos cosas distintas metidas en
+ * el mismo saco:
  *
  *   · `POS_CAJA`, `RULETA`, `PAGO_CARDNET`  → funciones de MembeGo que una
  *     empresa enciende o apaga. Viven en el Core para siempre.
@@ -82,6 +82,11 @@ export const FUNCIONES_EMPRESA = [
   // cinco veces, que es el síntoma de un modelo mal diseñado (Fase 74).
   'MEMBEGO_SUPPLIER',
   'MEMBEGO_SUPPLY_FULFILLMENT',
+  // Publicaciones, editor de inicio y mensajería: misma razón que CRM — viven
+  // en el Core, se encienden por empresa, no son privativos de un vertical.
+  'PUBLICACIONES',
+  'HOME_BUILDER',
+  'MENSAJERIA',
 ] as const satisfies readonly Capacidad[]
 
 export type FuncionEmpresa = (typeof FUNCIONES_EMPRESA)[number]
