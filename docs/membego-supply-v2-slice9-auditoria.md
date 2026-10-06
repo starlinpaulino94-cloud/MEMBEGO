@@ -539,17 +539,27 @@ las de E2E que se saltan por falta de configuración lo dicen en su mensaje de
 | G | de la pasarela al aviso que el cliente VE, y de vuelta por el hilo |
 | H | un beneficio por vencer avisa UNA vez, aunque el cron corra dos |
 
-**Medición de la corrida completa del 2026-10-05** (`npm run e2e:limpio`, base
-desechable, 25,2 min): **65 pasadas, 114 omitidas, 2 fallos**, y los dos fallos
-eran el MISMO recorrido —G, en sus dos proyectos— por la causa del § 21.5: el
-aviso no estaba en pantalla porque el área de cliente no lo mostraba. Los
-Slices 1–8 pasaron enteros. La corrida de validación con el arreglo ya
-construido está en curso al escribir esto, y **este número se sustituye por el
-suyo cuando termine**: lo que vale es la última medida, no la mejor.
+**Medición, `npm run e2e:limpio` completo sobre base desechable, 2026-10-06:**
 
-Las 114 omitidas no son aprobadas: son los recorridos que el proyecto `movil`
-no ejecuta porque son de `escritorio` y al revés, más los que se saltan
-diciéndolo cuando falta configuración del arnés.
+| Corrida | Pasadas | Omitidas | Fallos | Duración |
+|---|---|---|---|---|
+| A (máquina sin otra carga) | 69 | 114 | **0** | 13,5 min |
+| B (máquina sin otra carga) | 69 | 114 | **0** | 13,9 min |
+
+Mismo resultado dos veces seguidas, con los Slices 1–8 y los recorridos A–H del
+Slice 9. Las 114 omitidas **no** son aprobadas: son los recorridos de un proyecto
+(`movil` o `escritorio`) que el otro no ejecuta, más los que se saltan diciéndolo
+cuando falta configuración del arnés.
+
+**Lo que NO está explicado, y se dice:** en una corrida anterior —hecha mientras
+yo ejecutaba `tsc`, `eslint` y compilaciones en la misma máquina— el recorrido de
+fidelización del Slice 8 (escritorio) falló una vez con `puntos-disponibles`
+= **45** donde esperaba **15**. No se repitió en ninguna de las tres corridas
+posteriores. Es exactamente 3 veces lo esperado, lo que no parece un retraso de
+pantalla sino un cálculo distinto, y se trata de puntos de fidelización, no de un
+texto. No encontré la causa y **no la atribuyo a la carga**: es una hipótesis, no
+un hallazgo. Queda como riesgo abierto (§ 28.9). No se "arregló" con un tiempo de
+espera, porque el valor recibido no era un valor intermedio sino otro.
 
 G y H son del bloque 5. G recorre la cadena completa en un solo caso —aviso
 firmado → pago → efecto → aviso en la campana del cliente → la misma operación
@@ -597,6 +607,12 @@ caminos antes de que eso haga falta es el error que esta separación previene.
    propósito: el camino automático tendría que elegir entre borrar dinero o
    incumplir, y eso no lo decide el código.
 8. **Nada de esto está desplegado.** El bloque 5 no está fusionado.
+9. **Un fallo intermitente sin causa encontrada** (§ 26): puntos de fidelización
+   45 en vez de 15 en una corrida del Slice 8, no reproducido en tres corridas
+   posteriores. Antes de dar por cerrada la fidelización conviene repetir ese
+   recorrido muchas veces y, si vuelve, mirar `membresiasVivasEnTx` y el
+   multiplicador en `acumularPorCompraEnTx`, que son lo único que puede dar un
+   múltiplo exacto.
 
 ## 29. Criterio de cierre
 
