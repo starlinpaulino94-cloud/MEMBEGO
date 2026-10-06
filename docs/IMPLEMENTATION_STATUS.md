@@ -13,15 +13,15 @@ Fecha de actualización:   2026-10-06
 Branch:                   claude/relaxed-brahmagupta-1shtlc
 Commit auditado:          2791c33  (origin/main = 2795490, PR #563). El commit de este documento es posterior
 Estado general:           Supply 2.0 (Slices 1–9) completo y fusionado en main; rediseño visual Stitch en curso
-Fase actual:              Rediseño visual Stitch de Supply 2.0 — pantalla 10 de 11 hecha (Finanzas); Economía sin empezar
-Última fase completada:   Pantalla 10/11 «Finanzas» (commit propio en la rama, sin PR)
-Próxima fase:             Economía (ver §17)
+Fase actual:              Rediseño visual Stitch de Supply 2.0 — pantalla 11 de 11 hecha (Economía), pendiente de fusionar a `main`
+Última fase completada:   Pantalla 11/11 «Economía» (commit propio en la rama; Finanzas ya está en `main` por #569)
+Próxima fase:             Cierre del rediseño (ver §17)
 ```
 
 - Supply 2.0 backend (S1–S9 + ofertas editables/precio/categorías de vehículo) está en `main` con 27 migraciones y 320 pruebas contra PostgreSQL en verde sobre una base creada con `migrate deploy`.
-- El rediseño Stitch lleva **10 de 11 pantallas**: 7 ya en `main`; **Campañas (`5f65988`), Fidelización (`2791c33`) y Finanzas están solo en esta rama**, sin PR.
+- El rediseño Stitch lleva **11 de 11 pantallas**: 10 ya en `main` (Campañas, Fidelización y Finanzas entraron por el PR #569); **Economía está solo en esta rama**, sin PR.
 - El rediseño no tocó dominio, servicios, permisos ni esquema: solo `queries.ts` (lecturas) y un valor en `core/estados.ts`.
-- Pendiente de Stitch: Economía (sin empezar). Otras 26 páginas de Supply 2.0 (detalle `[id]`, altas/wizards, `operaciones/*`, `categorias`, `ofertas/ventas`) siguen con el diseño anterior (`PageHeader`) y **no tienen pantalla Stitch**.
+- Stitch: las 11 pantallas están hechas. Otras 26 páginas de Supply 2.0 (detalle `[id]`, altas/wizards, `operaciones/*`, `categorias`, `ofertas/ventas`) siguen con el diseño anterior (`PageHeader`) y **no tienen pantalla Stitch**.
 - No hay pasarela de pago real conectada a Supply 2.0 (solo `TEST_GATEWAY`); WhatsApp es `NOT_CONFIGURED`; la Capa 2 de RLS está apagada.
 - Estado en producción: **no verificable desde este entorno** (§7, §16).
 
@@ -61,7 +61,7 @@ Próxima fase:             Economía (ver §17)
 | · S8 Fidelización | ✅ | 8/9 | Planes, referidos, puntos, recompensas | `20261021–23` |
 | · S9 Integraciones/Operación | ✅ | 9/9 | Webhooks, outbox, conciliación, centro de operaciones | `20261024–30`; bloque 5 fusionado (#562) |
 | Post-S9 · ofertas editables, precio %, gratis, categorías de vehículo (Fases 1–3) | ✅ | 3/3 | Editar oferta, modo de precio, catálogo de categorías | `524390b`, `49c22ba`, `4c16875`, `fd626a1`; migraciones `20261031–35` |
-| **Rediseño Stitch de Supply 2.0** | 🔵 | **10/11 pantallas** | Aplicar el diseño Stitch (dirección blanca) pantalla por pantalla | Ver §3 |
+| **Rediseño Stitch de Supply 2.0** | 🔵 | **11/11 pantallas** | Aplicar el diseño Stitch (dirección blanca) pantalla por pantalla | Ver §3 |
 | Transformación del cliente P0–F2c | ✅ | — | Retail del cliente | Acta en `docs/transformacion-membego/02-baseline-contratos.md` |
 | · F2d (retirar Inicio anterior) | ✅ | — | Quitar `InicioPrevio` | El doc dice «en curso»; **el código ya no tiene `InicioPrevio`** (§14) |
 | · F3–F8 | 🟡 | — | Descubrimiento … retirada | **No auditado**: docs congelados el 2026-09-17; rama fusionada (#459) |
@@ -86,14 +86,14 @@ Reproducir con máxima fidelidad el diseño de Google Stitch (`stitch_membego_su
 | 7 | Beneficios (A) | `7aef5bf` | sí (#563) |
 | 8 | Campañas (A) | `5f65988` | **no, solo rama** |
 | 9 | Fidelización (A) | `2791c33` | **no, solo rama** |
-| 10 | Finanzas (A) | ver `git log` (commit «rediseño Stitch de Finanzas») | **no, solo rama** |
+| 10 | Finanzas (A) | `6dbd0f9` | sí (#569) |
+| 11 | Economía (A) | ver `git log` (commit «rediseño Stitch de Economía») | **no, solo rama** |
 
 ### Parcial
 - Finanzas: solo la **raíz** `/finanzas` está rediseñada (nueva `extrasFinanzas()` de solo lectura: conciliaciones abiertas y proveedor con mayor deuda). Las otras 16 páginas bajo `/finanzas` siguen con `PageHeader`.
 
 ### Pendiente
 - Finanzas: sus 7 secciones (facturas, depósitos, pagos, obligaciones, conciliaciones, liquidaciones, incidencias) y sus altas/detalles (16 páginas) siguen con `PageHeader`; Stitch solo diseña la raíz.
-- Economía (sin analizar).
 - Fuera del Stitch (26 páginas, sin pantalla de diseño): detalle `[id]`, alta/wizards, `operaciones/*`, `categorias`, `ofertas/ventas`. Siguen con el diseño anterior.
 
 ### Bloqueadores
@@ -134,7 +134,7 @@ Ver §15. Principales: consultas nuevas sin pruebas unitarias propias; Campañas
 ### Criterios de aceptación
 | Criterio | Resultado |
 |---|---|
-| Pantallas con la estructura, información y navegación de Stitch, en dirección blanca (#FFFFFF, sin fondo gris/lila/azulado) | **PASS** (10/10 hechas) · **PENDING** (Economía) |
+| Pantallas con la estructura, información y navegación de Stitch, en dirección blanca (#FFFFFF, sin fondo gris/lila/azulado) | **PASS** (11/11 hechas) |
 | Sin cambios de lógica, cálculos, permisos, servicios, Prisma ni migraciones | **PASS** (los 11 commits solo tocan UI, `queries.ts` y `core/estados.ts`) |
 | Datos reales, sin contenido de maqueta; lo que no existe se omite o se dice | **PASS** (cada ausencia quedó en el plan: ITBIS, CTR, NCF, cierre fiscal, descargas .xlsx, «Auto 98%»…) |
 | typecheck, lint, build, unitarias | **PASS** (§8) |
@@ -143,7 +143,7 @@ Ver §15. Principales: consultas nuevas sin pruebas unitarias propias; Campañas
 | Modo oscuro legible | **PENDING** (revisado en Beneficios, Campañas, Fidelización; no re-verificado en las otras 6) |
 | Un commit por pantalla | **PASS** |
 | Finanzas implementada | **PASS** (typecheck, lint 0 errores, unit 3592/3598 con 6 omitidas, build, e2e Slice 4 y 5: 5 pasados, 0 fallos, capturas 1440/1024/768/390 sin desborde) |
-| Economía implementada | **PENDING** |
+| Economía implementada | **PASS** (typecheck, lint 0 errores, unit 3592/3598 con 6 omitidas, build, e2e Slices 4, 5 y 6: 7 pasados y 7 omitidos por diseño, capturas 1440/1024/768/390 sin desborde). Nueva lectura de solo lectura: `desglosePorProducto()`. En la primera corrida completa un test de Slice 4 (móvil, pagos pendientes) agotó el tiempo tras reiniciar el servidor; solo pasó en 13.8 s y en la corrida final no se repitió: no reproducido, causa no determinada |
 
 ---
 
@@ -452,7 +452,7 @@ Ninguno técnico. Decisiones que **necesitan al usuario** (no son bloqueadores):
 
 | Qué | Impacto | Qué necesita | Responsable |
 |---|---|---|---|
-| Aprobar propuesta A/B de Economía (tras los mockups) | No se puede implementar Economía | Respuesta del usuario | Usuario |
+| Fusionar a `main` el commit de Economía | Economía solo está en la rama | PR y revisión | Usuario |
 | Adjuntar el Plan Maestro F0–F7 | §2 y §6 no se pueden reconciliar | El documento | Usuario |
 | Decidir si Supply V1, Gamificación, Blog y Home Builder deben ocultarse | Hoy están visibles | Decisión y alcance | Usuario |
 | Acceso a producción (migraciones, RLS, deriva) | §7 y §9 no verificables | Ejecutar `migraciones:pendientes` y `db:doctor` allí | Usuario / DevOps |
@@ -461,9 +461,9 @@ Ninguno técnico. Decisiones que **necesitan al usuario** (no son bloqueadores):
 
 ## 17. Próximo trabajo exacto
 
-**Rediseño Stitch — Economía** (pantalla 11 de 11): analizar `economía/screen.png`, mockups A/B con etiquetas rosadas, plan con la plantilla, **parar y esperar aprobación**, implementar, probar (tsc, `eslint src tests`, `npm test`, `next build`, e2e de la slice que la cubra, capturas 1440/1024/768/390 + oscuro + vacío), commit aparte, informe PANTALLA TERMINADA.
+**Rediseño Stitch**: las 11 pantallas están hechas. Falta fusionar a `main` el commit de Economía.
 
-Cierre del rediseño: abrir PR con Campañas + Fidelización + Finanzas (+ Economía) hacia `main`; actualizar este archivo.
+Cierre del rediseño: abrir PR de Economía hacia `main`; actualizar este archivo.
 
 Hallazgos a atender cuando el usuario lo decida (no tocados): habilitar RLS en tablas de Supply; triggers append-only en ledgers; pruebas de las consultas nuevas; pasar a SQL los filtros en memoria.
 
@@ -472,8 +472,8 @@ Hallazgos a atender cuando el usuario lo decida (no tocados): habilitar RLS en t
 # CONTEXTO PARA CONTINUAR EN UNA NUEVA SESIÓN
 
 - **Qué construimos:** Membego (Next.js + Prisma + Supabase). El trabajo de esta sesión es el **rediseño visual Stitch de Supply 2.0**, pantalla por pantalla. El backend de Supply 2.0 (S1–S9) ya está terminado y en `main`.
-- **Rama:** `claude/relaxed-brahmagupta-1shtlc`. Commits por pantalla en §3. Campañas (`5f65988`), Fidelización (`2791c33`) y Finanzas **no están en main**.
-- **Estado:** 10 de 11 pantallas hechas. **Economía**: sin empezar.
+- **Rama:** `claude/relaxed-brahmagupta-1shtlc`. Commits por pantalla en §3. Campañas, Fidelización y Finanzas ya están en `main` (#569); Economía no.
+- **Estado:** 11 de 11 pantallas hechas; Economía pendiente de fusionar.
 - **Reglas del usuario (innegociables):** una pantalla a la vez; flujo = analizar → mockups A/B (con etiquetas rosadas numeradas) → plan con la plantilla (PANTALLA, RUTA, IMAGEN, ARCHIVOS, DATOS, ELEMENTOS, CAMBIOS, COMPONENTES, FUNCIONALIDAD QUE NO TOCO, RIESGOS, RESPONSIVE, RESULTADO) → **parar y esperar aprobación** → implementar → probar → informe PANTALLA TERMINADA → parar. Un commit por pantalla. No cambiar lógica, servicios, permisos, Prisma ni migraciones. Datos reales; lo inexistente se informa. **Fondo blanco siempre; prohibido fondo general gris, lila o azulado.**
 - **Imagen fuente:** `stitch_membego_supply_2.0_redesign (1).zip` en la raíz del repo (una carpeta por pantalla con `code.html` + `screen.png`).
 - **Patrón de código:** `MarcoSupplyV2` + `TarjetaIndicador` + `BarraFiltrosSupplyV2` + `PaginacionSupplyV2` + `Tarjeta`; tabla única que se reacomoda en tarjetas (`@4xl`); tokens `--sv2-*` en `globals.css`; filtros por URL. Plantilla a copiar: `redenciones/`, `beneficios/`, `campanas/`, `fidelizacion/`.
