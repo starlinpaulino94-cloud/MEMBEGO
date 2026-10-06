@@ -20,6 +20,7 @@ import {
   fail,
   hashNonce,
   sessionPayload,
+  success,
   type CardnetReply,
 } from '@/modules/pagos/cardnetClienteShared'
 import { resolveTarget, type TargetInfo } from '@/modules/pagos/cardnetClienteObjetivo'
@@ -30,10 +31,21 @@ import {
 } from '@/modules/pagos/cardnetClienteSesionStore'
 import type { SessionUser } from '@/types'
 
+const PROCESSING_STATES: ReadonlySet<string> = new Set([
+  CARDNET_SESSION_STATES.CAPTURE_CONSUMED,
+  CARDNET_SESSION_STATES.PROFILE_PENDING,
+  CARDNET_SESSION_STATES.ACTIVATION_REQUIRED,
+  CARDNET_SESSION_STATES.ACTIVATION_PROCESSING,
+  CARDNET_SESSION_STATES.PURCHASE_PENDING,
+  CARDNET_SESSION_STATES.FULFILLMENT_PENDING,
+  CARDNET_SESSION_STATES.ASSOCIATION_PENDING,
+])
+
 async function existingReservation(
   reservationKey: string,
   user: SessionUser,
-  target: TargetInfo
+  target: TargetInfo,
+  guardarRenovacion: boolean
 ): Promise<CardnetReply | null> {
   const existing = await conEmpresa(target.companyId, (tx) =>
     tx.cardnetCaptureSession.findUnique({ where: { reservaClienteKey: reservationKey } })
@@ -41,6 +53,8 @@ async function existingReservation(
   if (!existing) return null
   const sameTarget =
     existing.authSubject === user.supabaseId &&
+    existing.companyId === target.companyId &&
+    existing.clienteId === target.clienteId &&
     existing.membershipId === (target.membershipId ?? null) &&
     existing.compraId === (target.compraId ?? null)
   if (
@@ -58,7 +72,7 @@ async function existingReservation(
           venceAt: { gt: new Date() },
           captureNonce: existing.captureNonce,
         },
-        data: { captureNonce: hashNonce(nonce) },
+        data: { captureNonce: hashNonce(nonce), guardarRenovacion },
       })
     ).catch(() => ({ count: 0 }))
     if (resumed.count !== 1) return fail(409, 'El pago ya se está procesando. Intenta de nuevo.')
@@ -66,6 +80,10 @@ async function existingReservation(
     return session
       ? sessionPayload(session, nonce) ?? fail(409, 'No se pudo recuperar la sesión de pago.')
       : fail(409, 'No se pudo recuperar la sesión de pago.')
+  }
+
+  if (sameTarget && PROCESSING_STATES.has(existing.estado)) {
+    return success(200, { status: 'processing', sessionId: existing.id })
   }
 
   if (existing.estado === CARDNET_SESSION_STATES.CAPTURE_OPEN && existing.venceAt <= new Date()) {
@@ -91,14 +109,15 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
   if (parsed.data.guardarParaRenovacion && !target.allowRenewalConsent) {
     return fail(409, 'El objetivo no admite guardar la tarjeta para renovaciones.')
   }
+  const reservationKey = cardnetReservationKey(target.companyId, target.clienteId)
+  const guardarRenovacion = parsed.data.guardarParaRenovacion ?? false
+  const cached = await existingReservation(reservationKey, user, target, guardarRenovacion)
+  if (cached) return cached
+
   const config = getTokensPublicConfig()
   if (!config || !(await puedeCobrarToken(target.companyId).catch(() => false))) {
     return fail(502, 'El pago con tarjeta no está disponible.')
   }
-
-  const reservationKey = cardnetReservationKey(target.companyId, target.clienteId)
-  const cached = await existingReservation(reservationKey, user, target)
-  if (cached) return cached
 
   const sessionId = randomBytes(24).toString('hex')
   const nonce = randomBytes(32).toString('base64url')
@@ -116,13 +135,13 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
           monto: target.amount,
           reservaClienteKey: reservationKey,
           captureNonce: hashNonce(nonce),
-          guardarRenovacion: parsed.data.guardarParaRenovacion ?? false,
+          guardarRenovacion,
           venceAt: expiresAt,
         },
       })
     )
   } catch {
-    const conflict = await existingReservation(reservationKey, user, target)
+    const conflict = await existingReservation(reservationKey, user, target, guardarRenovacion)
     return conflict ?? fail(409, 'Ya hay un pago en proceso para este cliente.')
   }
 

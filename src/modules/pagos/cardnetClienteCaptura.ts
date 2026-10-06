@@ -17,6 +17,7 @@ import {
 import {
   createOrReadIntent,
   loadSession,
+  claimStaleActivation,
   setSessionState,
   claimProfileCheck,
   type LoadedCardnetSession,
@@ -98,14 +99,17 @@ export async function progressCapture(
     if (Date.now() - session.updatedAt.getTime() < CLAIM_STALE_MS) {
       return success(202, { status: 'pending' })
     }
-    const profile = await getProfileForCharge(session)
+    if (!(await claimStaleActivation(session))) return success(202, { status: 'pending' })
+    const claimed = await loadSession(session.id, session.authSubject)
+    if (!claimed) return success(202, { status: 'pending' })
+    const profile = await getProfileForCharge(claimed)
     if (!profile) return success(202, { status: 'pending' })
     if (!profile.habilitado) {
-      await setSessionState(session, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
+      await setSessionState(claimed, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
       return success(200, { status: 'activation_required' })
     }
-    await setSessionState(session, CARDNET_SESSION_STATES.PROFILE_PENDING)
-    const fresh = await loadSession(session.id, session.authSubject)
+    await setSessionState(claimed, CARDNET_SESSION_STATES.PROFILE_PENDING)
+    const fresh = await loadSession(claimed.id, claimed.authSubject)
     return fresh ? chargeWithProfile(fresh, profile, request) : success(202, { status: 'pending' })
   }
   if (

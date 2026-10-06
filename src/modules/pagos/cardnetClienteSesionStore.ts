@@ -43,6 +43,42 @@ export async function arbitrarComprobanteContraCapturaCardnet(
   return inFlight === null
 }
 
+export async function arbitrarComprobanteCompraContraCapturaCardnet(
+  tx: CardnetReceiptGateTransaction,
+  target: { readonly companyId: string; readonly clienteId: string; readonly compraId: string; readonly authSubject: string }
+): Promise<boolean> {
+  await tx.cardnetCaptureSession.updateMany({
+    where: {
+      ...target,
+      estado: { in: [CARDNET_SESSION_STATES.STARTING, CARDNET_SESSION_STATES.CAPTURE_OPEN] },
+    },
+    data: {
+      estado: CARDNET_SESSION_STATES.EXPIRED,
+      reservaClienteKey: null,
+      captureNonce: null,
+    },
+  })
+
+  const inFlight = await tx.cardnetCaptureSession.findFirst({
+    where: {
+      ...target,
+      estado: {
+        in: [
+          CARDNET_SESSION_STATES.CAPTURE_CONSUMED,
+          CARDNET_SESSION_STATES.PROFILE_PENDING,
+          CARDNET_SESSION_STATES.ACTIVATION_REQUIRED,
+          CARDNET_SESSION_STATES.ACTIVATION_PROCESSING,
+          CARDNET_SESSION_STATES.PURCHASE_PENDING,
+          CARDNET_SESSION_STATES.FULFILLMENT_PENDING,
+          CARDNET_SESSION_STATES.ASSOCIATION_PENDING,
+        ],
+      },
+    },
+    select: { id: true },
+  })
+  return inFlight === null
+}
+
 export async function loadSession(sessionId: string, authSubject: string) {
   return sinEmpresa(
     'CardNET cliente: leer sesión por id con la identidad autenticada',
@@ -159,6 +195,24 @@ export async function claimProfileCheck(
     return stale.count === 1
   }).catch(() => false)
   return fresh
+}
+
+export async function claimStaleActivation(
+  session: NonNullable<Awaited<ReturnType<typeof loadSession>>>
+): Promise<boolean> {
+  const old = new Date(Date.now() - CLAIM_STALE_MS)
+  const claimed = await conEmpresa(session.companyId, (tx) =>
+    tx.cardnetCaptureSession.updateMany({
+      where: {
+        id: session.id,
+        authSubject: session.authSubject,
+        estado: CARDNET_SESSION_STATES.ACTIVATION_PROCESSING,
+        updatedAt: { lt: old },
+      },
+      data: { updatedAt: new Date() },
+    })
+  ).catch(() => ({ count: 0 }))
+  return claimed.count === 1
 }
 
 export type LoadedCardnetSession = NonNullable<Awaited<ReturnType<typeof loadSession>>>

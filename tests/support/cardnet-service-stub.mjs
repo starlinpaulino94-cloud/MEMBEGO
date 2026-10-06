@@ -12,6 +12,10 @@ export async function getApiClientUser() {
   return scenario().authUser ?? null
 }
 
+export async function getUser() {
+  return scenario().authUser ?? null
+}
+
 export function getTokensPublicConfig() {
   scenario().providerCalls += 1
   return scenario().config ?? null
@@ -41,6 +45,7 @@ export async function cobrarConToken(params) {
     purchaseUniqueId: params.purchaseUniqueId,
     order: params.orden,
     amount: params.pesos,
+    token: params.trxToken,
   })
   scenario().chargeCalls += 1
   return scenario().chargeResults.shift() ?? null
@@ -65,8 +70,22 @@ export async function confirmarIntento() {
   return scenario().confirmationResult ?? { ok: true, entrega: 'COMPLETADA' }
 }
 
-export async function adquirirPromocion() {
+export async function adquirirPromocion(user, promotionId) {
+  scenario().promotionCalls.push({ user, promotionId })
   return scenario().promotionResult ?? null
+}
+
+export async function misClienteIds() {
+  const clienteId = scenario().authUser?.metadata.clienteId
+  return clienteId ? [clienteId] : []
+}
+
+export async function registrarTransicionCompra() {
+  return undefined
+}
+
+export function revalidatePath() {
+  return undefined
 }
 
 export function corsHeaders() {

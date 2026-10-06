@@ -15,6 +15,7 @@ import { rutaValida } from '@/modules/storage/comprobantes'
 import { notificarAdmins } from '@/modules/notificaciones/service'
 import { getPaymentProvider } from '@/lib/payments'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
+import { arbitrarComprobanteCompraContraCapturaCardnet } from '@/modules/pagos/cardnetClienteSesionStore'
 import { adquirirPromocion } from '@/modules/promociones/compraService'
 import {
   registrarTransicionCompra,
@@ -131,9 +132,16 @@ export async function enviarComprobanteCompra(
       }
     }
 
-    await conEmpresa(compra.companyId, async (tx) => {
-      await tx.productoCompra.update({
-        where: { id: compra.id },
+    const submission = await conEmpresa(compra.companyId, async (tx) => {
+      const canSubmit = await arbitrarComprobanteCompraContraCapturaCardnet(tx, {
+        companyId: compra.companyId,
+        clienteId: compra.clienteId,
+        compraId: compra.id,
+        authSubject: user.supabaseId,
+      })
+      if (!canSubmit) return 'cardnet_in_flight' as const
+      const updated = await tx.productoCompra.updateMany({
+        where: { id: compra.id, estado: compra.estado },
         data: {
           estado: 'EN_VALIDACION',
           comprobanteUrl,
@@ -143,6 +151,7 @@ export async function enviarComprobanteCompra(
           rechazadoReason: null,
         },
       })
+      if (updated.count !== 1) return 'state_changed' as const
       await registrarTransicionCompra(tx, {
         compraId: compra.id,
         desde: compra.estado,
@@ -150,7 +159,14 @@ export async function enviarComprobanteCompra(
         motivo: 'Comprobante enviado por el cliente',
         userId: user.metadata.dbUserId ?? null,
       })
+      return 'submitted' as const
     })
+    if (submission === 'cardnet_in_flight') {
+      return { error: 'El pago con tarjeta ya se está procesando.' }
+    }
+    if (submission === 'state_changed') {
+      return { error: 'La compra cambió de estado; recarga e intenta de nuevo.' }
+    }
 
     await notificarAdmins(compra.companyId, {
       tipo: 'NUEVO_COMPROBANTE',

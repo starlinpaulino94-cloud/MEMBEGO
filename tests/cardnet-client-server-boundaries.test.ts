@@ -11,6 +11,7 @@ interface Scenario {
   tx: unknown
   authUser: SessionUser
   membership: Row | null
+  purchase: Row | null
   sessions: Map<string, Row>
   reservations: Map<string, Row>
   config: Row
@@ -22,20 +23,23 @@ interface Scenario {
   customerGets: number
   customerIdLookups: number
   targetReads: number
+  purchaseReads: number
   amountLookups: number
   chargeCalls: number
   intentCreates: number
   chargeResults: Array<unknown | null>
-  chargeRequests: Array<{ readonly purchaseUniqueId: unknown; readonly order: unknown; readonly amount: unknown }>
+  chargeRequests: Array<{ readonly purchaseUniqueId: unknown; readonly order: unknown; readonly amount: unknown; readonly token?: unknown }>
   purchaseSearches: Row[]
+  promotionResult: unknown
+  promotionCalls: Array<{ readonly user: SessionUser; readonly promotionId: string }>
 }
 
 const stub = pathToFileURL(path.resolve('tests/support/cardnet-service-stub.mjs')).href
 const serverOnly = pathToFileURL(path.resolve('tests/support/server-only-stub.mjs')).href
 const mocked = new Set([
-  '@/lib/tenant', '@/lib/auth/api-guard', '@/lib/payments/cardnet-tokens',
+  '@/lib/tenant', '@/lib/auth', '@/lib/auth/api-guard', '@/lib/payments/cardnet-tokens',
   '@/modules/pagos/cardnet3ds', '@/modules/pagos/cardnetToken', '@/modules/pagos/intentos',
-  '@/modules/promociones/compraService', '@/lib/rate-limit',
+  '@/modules/promociones/compraService', '@/modules/promociones/compra', '@/lib/rate-limit',
   '@/modules/cliente/afiliacion', '@/modules/notificaciones/service', '@/modules/storage/comprobantes',
   '@/modules/membresia/vigencia', '@/lib/bienvenida', '@/modules/elegibilidad',
   '@/modules/elegibilidad/decidir', '@/modules/membresia/prorrateo', '@/modules/marketplace/cached',
@@ -43,6 +47,7 @@ const mocked = new Set([
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'server-only') return { url: serverOnly, shortCircuit: true }
+    if (specifier === 'next/cache') return { url: stub, shortCircuit: true }
     if (mocked.has(specifier)) return { url: stub, shortCircuit: true }
     return next(specifier, context)
   },
@@ -70,15 +75,15 @@ function setup(): Scenario {
       supabaseId: 'qa-user', email: 'qa@example.test',
       metadata: { role: 'CLIENTE', dbUserId: 'qa-db-user', clienteId: 'qa-client', companyId: 'qa-company' },
     },
-    membership: null, sessions: new Map(), reservations: new Map(),
+    membership: null, purchase: null, sessions: new Map(), reservations: new Map(),
     config: { captureUrl: 'https://lab.cardnet.com.do', scriptUrl: 'https://tr-tsp-test.gtp-seglan.com/widget.js', publicKey: 'sandbox-public' },
     customerResponse: { denegado: false, email: 'qa@example.test', captureUrl: 'https://lab.cardnet.com.do', uniqueId: 'temporary-customer-id', perfiles: [] },
     searchResponse: { ok: true, json: { Response: { Purchases: [] } } },
     amountResult: { ok: true, pesos: 1000 },
     canCharge: true,
-    providerCalls: 0, customerGets: 0, customerIdLookups: 0, targetReads: 0,
+    providerCalls: 0, customerGets: 0, customerIdLookups: 0, targetReads: 0, purchaseReads: 0,
     amountLookups: 0, chargeCalls: 0, intentCreates: 0,
-    chargeResults: [], chargeRequests: [], purchaseSearches: [],
+    chargeResults: [], chargeRequests: [], purchaseSearches: [], promotionResult: null, promotionCalls: [],
   }
   s.tx = {
     membership: {
@@ -89,7 +94,19 @@ function setup(): Scenario {
         return { count: 1 }
       },
     },
-    productoCompra: { findUnique: async () => null },
+    productoCompra: {
+      findUnique: async () => { s.purchaseReads += 1; return s.purchase },
+      update: async (input: { data: Row }) => {
+        if (!s.purchase) throw new Error('promotion purchase missing')
+        Object.assign(s.purchase, input.data)
+        return s.purchase
+      },
+      updateMany: async (input: { where: Row; data: Row }) => {
+        if (!s.purchase || !matches(s.purchase, input.where)) return { count: 0 }
+        Object.assign(s.purchase, input.data)
+        return { count: 1 }
+      },
+    },
     cardnetCaptureSession: {
       findFirst: async (input: { where: Row }) => [...s.sessions.values()].find((row) => matches(row, input.where)) ?? null,
       findUnique: async (input: { where: Row }) => s.reservations.get(String(input.where.reservaClienteKey ?? '')) ?? null,
@@ -132,6 +149,14 @@ function membership(owner = 'qa-user'): Row {
     estado: 'PENDIENTE', planIdSolicitado: null, comprobanteUrl: null,
     cliente: { id: 'qa-client-db', nombre: 'Cliente QA', supabaseId: owner, companyId: 'qa-company', email: 'qa@example.test', cardnetCustomerId: null, esLocal: false } }
 }
+function promotionPurchase(owner = 'qa-user', state = 'PENDIENTE_PAGO'): Row {
+  return {
+    id: 'purchase-test', companyId: 'qa-company', clienteId: 'qa-client', tipo: 'PROMOCION', estado: state,
+    precioCongelado: 825,
+    cliente: { id: 'qa-client-db', nombre: 'Cliente QA', supabaseId: owner, companyId: 'qa-company', email: 'qa@example.test', cardnetCustomerId: null, esLocal: false },
+    promocion: { titulo: 'Promo QA' },
+  }
+}
 async function service() { return import('../src/modules/pagos/cardnetCliente') }
 
 test('mixed targets and a client-supplied baseline fail before DB/provider access', async () => {
@@ -159,6 +184,137 @@ test('a foreign membership is hidden before CardNET is called', async () => {
   assert.equal(result.status, 404)
   assert.equal(s.targetReads, 1)
   assert.equal(s.providerCalls, 0)
+})
+
+test('a foreign promotion purchase is hidden before CardNET is called or reserved', async () => {
+  const s = setup()
+  s.purchase = promotionPurchase('another-user')
+  const api = await service()
+  const result = await api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
+    compraId: 'purchase-test',
+  })
+  assert.equal(result.status, 404)
+  assert.equal(s.purchaseReads, 1)
+  assert.equal(s.providerCalls, 0)
+  assert.equal(s.sessions.size, 0)
+  assert.equal(s.reservations.size, 0)
+  assert.equal(s.purchase.estado, 'PENDIENTE_PAGO')
+})
+
+test('a foreign promotion capture session cannot be read or changed by its id', async () => {
+  const s = setup()
+  s.purchase = promotionPurchase()
+  const session: Row = {
+    id: 'f'.repeat(48), authSubject: 'another-user', companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: null, compraId: 'purchase-test', monto: 825, moneda: 'DOP', estado: 'CAPTURE_OPEN',
+    venceAt: new Date(Date.now() + 60_000), captureNonce: 'untouched-nonce-hash',
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: null, createdAt: new Date(), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null }, purchaseIntent: null,
+    reservaClienteKey: 'foreign-session-reservation',
+  }
+  s.sessions.set(String(session.id), session)
+  s.reservations.set('foreign-session-reservation', session)
+  const api = await service()
+  const result = await api.confirmarSesionCardnet(new Request('http://localhost/confirm'), s.authUser, {
+    sessionId: session.id, captureNonce: 'nonce-for-foreign-session-012345', token: 'one-time-token',
+  })
+  assert.equal(result.status, 404)
+  assert.equal(s.providerCalls, 0)
+  assert.equal(session.estado, 'CAPTURE_OPEN')
+  assert.equal(session.captureNonce, 'untouched-nonce-hash')
+  assert.equal(session.reservaClienteKey, 'foreign-session-reservation')
+  assert.equal(s.reservations.size, 1)
+  assert.equal(s.purchase.estado, 'PENDIENTE_PAGO')
+})
+
+test('the promotion purchase BFF preserves the free and paid service outcomes', async () => {
+  const route = await import('../src/app/api/v1/cliente/promociones/[id]/comprar/route')
+  const request = () => new Request('http://localhost/api/v1/cliente/promociones/promo-test/comprar', {
+    method: 'POST', headers: { Authorization: 'Bearer qa-bearer', 'Content-Type': 'application/json' }, body: '{}',
+  })
+
+  const free = setup()
+  free.promotionResult = { success: true, compraId: 'free-purchase', activada: true }
+  const freeResponse = await route.POST(request(), { params: Promise.resolve({ id: 'promo-free' }) })
+  assert.equal(freeResponse.status, 200)
+  assert.deepEqual(await freeResponse.json(), { ok: true, status: 'free_activated', compraId: 'free-purchase' })
+  assert.equal(free.promotionCalls[0]?.promotionId, 'promo-free')
+  assert.equal(free.purchaseReads, 0)
+  assert.equal(free.providerCalls, 0)
+
+  const paid = setup()
+  paid.promotionResult = { success: true, compraId: 'purchase-test', activada: false }
+  paid.purchase = promotionPurchase()
+  paid.purchase.precioCongelado = '825.50'
+  const paidResponse = await route.POST(request(), { params: Promise.resolve({ id: 'promo-paid' }) })
+  assert.equal(paidResponse.status, 200)
+  assert.deepEqual(await paidResponse.json(), {
+    ok: true, status: 'payment_required', compraId: 'purchase-test', amount: 825.5, currency: 'DOP',
+  })
+  assert.equal(paid.promotionCalls[0]?.promotionId, 'promo-paid')
+  assert.equal(paid.purchaseReads, 1)
+  assert.equal(paid.providerCalls, 0)
+})
+
+test('the session BFF recovers only the same owned target during persisted processing', async () => {
+  const s = setup()
+  s.purchase = promotionPurchase()
+  const id = 'w'.repeat(48)
+  const reservationKey = createHash('sha256').update('qa-company:qa-client').digest('hex')
+  const processing: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: null, compraId: 'purchase-test', monto: 825, moneda: 'DOP', estado: 'PURCHASE_PENDING',
+    venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-private', customerUniqueId: 'provider-customer-unique-id',
+    perfilBase: ['id:profile-old'], paymentProfileId: 'profile-fresh',
+    createdAt: new Date(), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'purchase-order-private' },
+    reservaClienteKey: reservationKey,
+  }
+  s.sessions.set(id, processing)
+  s.reservations.set(reservationKey, processing)
+  const route = await import('../src/app/api/v1/cliente/pagos/cardnet/sesion/route')
+  const response = await route.POST(new Request('http://localhost/api/v1/cliente/pagos/cardnet/sesion', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer qa-bearer', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ compraId: 'purchase-test' }),
+  }))
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { ok: true, status: 'processing', sessionId: id })
+  assert.equal(s.providerCalls, 0)
+  assert.equal(processing.estado, 'PURCHASE_PENDING')
+  assert.equal(processing.customerId, 'cardnet-customer-private')
+  assert.equal(processing.reservaClienteKey, reservationKey)
+})
+
+test('a different target cannot recover a customer reservation or learn its session id', async () => {
+  const s = setup()
+  s.purchase = promotionPurchase()
+  const id = 'x'.repeat(48)
+  const reservationKey = createHash('sha256').update('qa-company:qa-client').digest('hex')
+  const processing: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: null, compraId: 'another-purchase', monto: 825, moneda: 'DOP', estado: 'PURCHASE_PENDING',
+    venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-private', customerUniqueId: 'provider-customer-unique-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh', createdAt: new Date(), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'purchase-order-private' },
+    reservaClienteKey: reservationKey,
+  }
+  s.sessions.set(id, processing)
+  s.reservations.set(reservationKey, processing)
+  const api = await service()
+  const result = await api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
+    compraId: 'purchase-test',
+  })
+  assert.equal(result.status, 409)
+  assert.deepEqual(Object.keys(result.body).sort(), ['error', 'ok'])
+  assert.equal(s.providerCalls, 0)
+  assert.equal(processing.estado, 'PURCHASE_PENDING')
+  assert.equal(processing.reservaClienteKey, reservationKey)
 })
 
 test('capture nonce is consumed once and replay does not issue another Customer GET', async () => {
@@ -190,6 +346,41 @@ test('capture nonce is consumed once and replay does not issue another Customer 
   assert.equal(s.customerGets, 1)
   assert.equal(row.estado, 'PROFILE_PENDING')
   assert.equal(row.reservaClienteKey, 'held-reservation')
+})
+
+test('a Purchase request receives the fresh PaymentProfiles token, never customer or baseline ids', async () => {
+  const s = setup()
+  s.customerResponse = {
+    denegado: false,
+    email: 'qa@example.test',
+    perfiles: [
+      { paymentProfileId: 'profile-old', token: 'older-profile-token', habilitado: true },
+      { paymentProfileId: 'profile-fresh', token: 'fresh-payment-profile-token', habilitado: true },
+    ],
+  }
+  s.chargeResults = [null]
+  const id = 't'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: null, compraId: 'purchase-test', monto: 825, moneda: 'DOP', estado: 'CAPTURE_CONSUMED',
+    venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'customer-unique-id-is-not-a-payment-token',
+    perfilBase: ['id:profile-old'], paymentProfileId: null,
+    purchaseIntentId: null, createdAt: new Date(), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null }, purchaseIntent: null,
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.status, 202)
+  assert.equal(result.body.status, 'pending')
+  assert.equal(row.paymentProfileId, 'profile-fresh')
+  assert.equal(s.chargeCalls, 1)
+  assert.equal(s.chargeRequests[0]?.token, 'fresh-payment-profile-token')
+  assert.notEqual(s.chargeRequests[0]?.token, row.customerUniqueId)
+  assert.notEqual(s.chargeRequests[0]?.token, 'older-profile-token')
 })
 
 test('concurrent starts reserve one customer session and perform one Customer GET', async () => {
@@ -234,6 +425,21 @@ test('a retry resumes the open capture session and rotates its one-use nonce', a
   assert.equal(s.sessions.size, 1)
   assert.equal(s.customerIdLookups, 1)
   assert.equal(s.customerGets, 1)
+})
+
+test('a resumed capture applies the latest renewal-consent choice', async () => {
+  const s = setup()
+  s.membership = membership()
+  const api = await service()
+  const start = (guardarParaRenovacion: boolean) =>
+    api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
+      membershipId: 'membership-test', guardarParaRenovacion,
+    })
+  const optedIn = await start(true)
+  const optedOut = await start(false)
+  assert.equal(optedIn.status, 200)
+  assert.equal(optedOut.status, 200)
+  assert.equal([...s.sessions.values()][0]?.guardarRenovacion, false)
 })
 
 test('renewal consent is rejected for a plan change before CardNET calls', async () => {
@@ -324,11 +530,63 @@ test('confirmation rechecks payable state after a receipt changes the membership
   assert.equal(s.chargeCalls, 0)
 })
 
+test('a promotion receipt expires an open CardNET capture before advancing purchase state', async () => {
+  const s = setup()
+  s.purchase = promotionPurchase()
+  const id = 'o'.repeat(48)
+  const open: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: null, compraId: 'purchase-test', monto: 825, moneda: 'DOP', estado: 'CAPTURE_OPEN',
+    venceAt: new Date(Date.now() + 60_000), captureNonce: 'open-promo-nonce-hash',
+    reservaClienteKey: 'held-promotion-reservation', updatedAt: new Date(),
+  }
+  s.sessions.set(id, open)
+  s.reservations.set('held-promotion-reservation', open)
+  const actions = await import('../src/modules/promociones/compraActions')
+  const form = new FormData()
+  form.set('compraId', 'purchase-test')
+  form.set('comprobanteUrl', 'qa-receipts/purchase-test/image.png')
+  const result = await actions.enviarComprobanteCompra({}, form)
+  assert.deepEqual(result, { success: true, compraId: 'purchase-test' })
+  assert.equal(s.purchase.estado, 'EN_VALIDACION')
+  assert.equal(open.estado, 'EXPIRED')
+  assert.equal(open.captureNonce, null)
+  assert.equal(open.reservaClienteKey, null)
+  assert.equal(s.reservations.size, 0)
+})
+
+test('a promotion receipt cannot advance purchase state while CardNET is processing', async () => {
+  const s = setup()
+  s.purchase = promotionPurchase()
+  const id = 'i'.repeat(48)
+  const processing: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: null, compraId: 'purchase-test', monto: 825, moneda: 'DOP', estado: 'PROFILE_PENDING',
+    venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    reservaClienteKey: 'held-promotion-reservation', updatedAt: new Date(),
+  }
+  s.sessions.set(id, processing)
+  s.reservations.set('held-promotion-reservation', processing)
+  const actions = await import('../src/modules/promociones/compraActions')
+  const form = new FormData()
+  form.set('compraId', 'purchase-test')
+  form.set('comprobanteUrl', 'qa-receipts/purchase-test/image.png')
+  const result = await actions.enviarComprobanteCompra({}, form)
+  assert.ok('error' in result)
+  assert.equal(s.purchase.estado, 'PENDIENTE_PAGO')
+  assert.equal(processing.estado, 'PROFILE_PENDING')
+  assert.equal(processing.reservaClienteKey, 'held-promotion-reservation')
+  assert.equal(s.reservations.size, 1)
+})
+
 test('ambiguous retries retain the Purchase UniqueID and serialize concurrent charges', async () => {
   const s = setup()
   s.customerResponse = {
     denegado: false, email: 'qa@example.test',
-    perfiles: [{ paymentProfileId: 'profile-test', token: 'server-profile-token-test', habilitado: true }],
+    perfiles: [
+      { paymentProfileId: 'profile-old', token: 'older-profile-token-must-not-be-charged', habilitado: true },
+      { paymentProfileId: 'profile-fresh', token: 'fresh-payment-profile-token', habilitado: true },
+    ],
   }
   s.chargeResults = [null, null]
   const id = 'p'.repeat(48)
@@ -338,7 +596,7 @@ test('ambiguous retries retain the Purchase UniqueID and serialize concurrent ch
     membershipId: null, compraId: 'purchase-test', monto: 1000, moneda: 'DOP',
     estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: 'profile-test',
+    perfilBase: ['id:profile-old'], paymentProfileId: 'profile-fresh',
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - 90_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: stableUniqueId },
@@ -352,6 +610,9 @@ test('ambiguous retries retain the Purchase UniqueID and serialize concurrent ch
   assert.ok(concurrent.every((result) => result.status === 202 && result.body.status === 'pending'))
   assert.equal(s.chargeCalls, 1)
   assert.deepEqual(s.chargeRequests.map((call) => call.purchaseUniqueId), [stableUniqueId])
+  assert.equal(s.chargeRequests[0]?.token, 'fresh-payment-profile-token')
+  assert.notEqual(s.chargeRequests[0]?.token, row.customerUniqueId)
+  assert.notEqual(s.chargeRequests[0]?.token, 'older-profile-token-must-not-be-charged')
   assert.equal(row.reservaClienteKey, 'held-customer-reservation')
 
   row.updatedAt = new Date(Date.now() - 90_000)
@@ -360,8 +621,42 @@ test('ambiguous retries retain the Purchase UniqueID and serialize concurrent ch
   assert.equal(retry.body.status, 'pending')
   assert.equal(s.chargeCalls, 2)
   assert.deepEqual(s.chargeRequests.map((call) => call.purchaseUniqueId), [stableUniqueId, stableUniqueId])
+  assert.deepEqual(s.chargeRequests.map((call) => call.token), [
+    'fresh-payment-profile-token',
+    'fresh-payment-profile-token',
+  ])
   assert.equal(s.intentCreates, 0)
   assert.equal(row.reservaClienteKey, 'held-customer-reservation')
+})
+
+test('stale activation recovery claims one lease before charging a persisted intent', async () => {
+  const s = setup()
+  s.customerResponse = {
+    denegado: false, email: 'qa@example.test',
+    perfiles: [{ paymentProfileId: 'profile-fresh', token: 'fresh-payment-profile-token', habilitado: true }],
+  }
+  s.chargeResults = [null, null]
+  const id = 'a'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'ACTIVATION_PROCESSING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh',
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - 90_000),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key' },
+    reservaClienteKey: 'held-membership-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-membership-reservation', row)
+  const api = await service()
+  const status = () => api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  const results = await Promise.all([status(), status()])
+  assert.ok(results.every((result) => result.status === 202 && result.body.status === 'pending'))
+  assert.equal(s.customerGets, 1)
+  assert.equal(s.chargeCalls, 1)
+  assert.deepEqual(s.chargeRequests.map((call) => call.purchaseUniqueId), ['stable-purchase-key'])
 })
 
 test('the real BFF route rejects a request without Bearer before calling the service', async () => {
