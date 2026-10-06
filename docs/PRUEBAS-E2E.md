@@ -126,6 +126,43 @@ relleno y una base desechable.
 
 ---
 
+**El catálogo unificado (Commerce Core)** — `catalogo-admin`, `catalogo-publico`
+y `catalogo-api`, con el arnés de siembra `catalogo-arnes.ts`. Reutilizan el
+mismo truco de sesiones firmadas, sin Supabase:
+
+- `catalogo-admin` (escritorio): el panel de punta a punta — alta, precio,
+  publicar, variantes (el selector aparece y desaparece), categoría, foto sin
+  Storage (avisa y la pantalla sigue viva), filtros — y comprueba que **lo
+  publicado desde el panel se ve** en la vitrina de la empresa, en `/catalogo`
+  y en el inicio, y que **pausarlo lo saca**: es la prueba de que el panel
+  invalida la caché del marketplace. Además: un ítem de otra empresa se ve igual
+  que uno inexistente, y una empresa sin la capacidad no entra ni ve el menú.
+- `catalogo-publico` (móvil **y** escritorio, datos sembrados): qué se ve (precio,
+  «antes» tachado, «desde», agotada marcada, descontinuada ausente) y qué no
+  (borrador, pausado, «solo caja», empresa sin capacidad o sin publicar — todas
+  idénticas a un 404 —, ni costo ni SKU en el HTML), sin desbordes horizontales
+  y sin errores de consola.
+- `catalogo-api` (HTTP puro, con claves de empresa reales sembradas): el costo
+  solo hacia la clave de la propia empresa, la API arma **borradores** y no
+  publica, aislamiento entre empresas y `catalog_not_enabled`.
+
+Tres cosas que costó aprender y conviene no repetir:
+
+1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de
+   auth reintenta sin parar contra el puerto sin nadie escuchando y la red no
+   queda en reposo nunca (la navegación agota el plazo). Usa aserciones con
+   reintento.
+2. **Las páginas en streaming tienen un instante con el contenido duplicado**
+   (una copia oculta que Next intercambia). `getByText` cuenta las ocultas y da
+   «strict mode violation»; `getByRole` no. Para presencia usa roles o
+   `expect(locator).toHaveCount(1)` antes de actuar.
+3. **La lista del marketplace se cachea 120 s por combinación de filtros** y la
+   invalida el panel, no una siembra por Prisma. Para datos sembrados, busca por
+   el sufijo único de la corrida (otra clave de caché); lo que invalida la caché
+   se prueba desde el panel.
+
+---
+
 ## 4. Lo que todavía falta
 
 Del recorrido del cliente **de membresías** (el de `Cliente`/`Visita`, no el de
