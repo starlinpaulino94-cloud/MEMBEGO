@@ -1,3 +1,5 @@
+import { urlsTokens } from './cardnet-tokens-core'
+
 /**
  * CardNET · LECTURA DEL PAYLOAD DEL WIDGET — núcleo puro.
  *
@@ -148,4 +150,65 @@ export function imagenSeguraWidget(url: string | null | undefined): string | nul
   const v = (url ?? '').trim()
   if (!v || !/^https:\/\//i.test(v)) return null
   return /[&?#]/.test(v) ? null : v
+}
+
+export interface SesionMensajeCardnet {
+  readonly captureUrl: string
+  readonly publicKey: string
+  readonly uniqueId: string
+}
+
+export interface IframeMensajeCardnet {
+  readonly src: string
+  readonly contentWindow: unknown
+}
+
+function urlDeCapturaPermitida(url: URL): boolean {
+  if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.search) return false
+  return (['pruebas', 'produccion'] as const).some((ambiente) => {
+    const permitida = new URL(urlsTokens(ambiente).capture)
+    const actualPath = url.pathname.endsWith('/') ? url.pathname : `${url.pathname}/`
+    const permitidaPath = permitida.pathname.endsWith('/') ? permitida.pathname : `${permitida.pathname}/`
+    return url.origin === permitida.origin && actualPath === permitidaPath
+  })
+}
+
+export function esMensajeCapturaCardnetConfiable(
+  event: { readonly origin: string; readonly source: unknown },
+  session: SesionMensajeCardnet | null,
+  iframes: readonly IframeMensajeCardnet[]
+): boolean {
+  if (!session || !event.source || !session.publicKey || !session.uniqueId) return false
+  try {
+    const capture = new URL(session.captureUrl)
+    if (!urlDeCapturaPermitida(capture)) return false
+
+    return iframes.some((frame) => {
+      if (!frame.contentWindow || frame.contentWindow !== event.source) return false
+      const iframe = new URL(frame.src)
+      if (
+        iframe.protocol !== 'https:' ||
+        iframe.origin !== capture.origin ||
+        iframe.pathname !== capture.pathname ||
+        iframe.username ||
+        iframe.password ||
+        iframe.hash ||
+        event.origin !== iframe.origin
+      ) return false
+      const params = [...iframe.searchParams.entries()]
+      const widgetParameterNames = new Set([
+        'key', 'session_id', 'name', 'email', 'image', 'button_label', 'description',
+        'currency', 'lang', 'form_id', 'checkout_card', 'autoSubmit', 'empty',
+      ])
+      return (
+        params.every(([key]) => widgetParameterNames.has(key)) &&
+        iframe.searchParams.getAll('key').length === 1 &&
+        iframe.searchParams.get('key') === session.publicKey &&
+        iframe.searchParams.getAll('session_id').length === 1 &&
+        iframe.searchParams.get('session_id') === session.uniqueId
+      )
+    })
+  } catch {
+    return false
+  }
 }

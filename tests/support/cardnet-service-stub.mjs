@@ -84,3 +84,15 @@ export async function paymentSessionLimiter() {
 export async function paymentLimiter() {
   return true
 }
+
+export async function formSubmitLimiter() {
+  return true
+}
+
+export async function rutaValida() {
+  return true
+}
+
+export async function notificarAdmins() {
+  return undefined
+}

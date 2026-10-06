@@ -47,7 +47,26 @@ async function existingReservation(
     sameTarget &&
     existing.estado === CARDNET_SESSION_STATES.CAPTURE_OPEN &&
     existing.venceAt > new Date()
-  ) return fail(409, 'Ya hay una sesión de pago abierta.')
+  ) {
+    const nonce = randomBytes(32).toString('base64url')
+    const resumed = await conEmpresa(target.companyId, (tx) =>
+      tx.cardnetCaptureSession.updateMany({
+        where: {
+          id: existing.id,
+          authSubject: user.supabaseId,
+          estado: CARDNET_SESSION_STATES.CAPTURE_OPEN,
+          venceAt: { gt: new Date() },
+          captureNonce: existing.captureNonce,
+        },
+        data: { captureNonce: hashNonce(nonce) },
+      })
+    ).catch(() => ({ count: 0 }))
+    if (resumed.count !== 1) return fail(409, 'El pago ya se está procesando. Intenta de nuevo.')
+    const session = await loadSession(existing.id, user.supabaseId)
+    return session
+      ? sessionPayload(session, nonce) ?? fail(409, 'No se pudo recuperar la sesión de pago.')
+      : fail(409, 'No se pudo recuperar la sesión de pago.')
+  }
 
   if (existing.estado === CARDNET_SESSION_STATES.CAPTURE_OPEN && existing.venceAt <= new Date()) {
     await expireSession(existing.id, target.companyId, user.supabaseId)
@@ -69,6 +88,9 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
   if (resolution.kind === 'missing') return fail(404, 'No se encontró el objetivo de pago.')
   if (resolution.kind === 'ineligible') return fail(409, 'El objetivo de pago ya no admite este cobro.')
   const target = resolution.target
+  if (parsed.data.guardarParaRenovacion && !target.allowRenewalConsent) {
+    return fail(409, 'El objetivo no admite guardar la tarjeta para renovaciones.')
+  }
   const config = getTokensPublicConfig()
   if (!config || !(await puedeCobrarToken(target.companyId).catch(() => false))) {
     return fail(502, 'El pago con tarjeta no está disponible.')
@@ -102,6 +124,20 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
   } catch {
     const conflict = await existingReservation(reservationKey, user, target)
     return conflict ?? fail(409, 'Ya hay un pago en proceso para este cliente.')
+  }
+
+  const currentTarget = await resolveTarget(user, parsed.data)
+  if (
+    currentTarget.kind !== 'ready' ||
+    currentTarget.target.companyId !== target.companyId ||
+    currentTarget.target.clienteId !== target.clienteId ||
+    currentTarget.target.membershipId !== target.membershipId ||
+    currentTarget.target.compraId !== target.compraId ||
+    currentTarget.target.amount !== target.amount ||
+    (parsed.data.guardarParaRenovacion && !currentTarget.target.allowRenewalConsent)
+  ) {
+    await failStartingSession(sessionId, target.companyId, user.supabaseId)
+    return fail(409, 'El objetivo de pago cambió. Actualiza la pantalla e intenta de nuevo.')
   }
 
   try {

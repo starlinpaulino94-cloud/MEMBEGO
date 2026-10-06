@@ -30,6 +30,7 @@ import {
   getProfileForCharge,
   progressCapture,
 } from '@/modules/pagos/cardnetClienteCaptura'
+import { resolveTarget } from '@/modules/pagos/cardnetClienteObjetivo'
 import type { SessionUser } from '@/types'
 
 export async function confirmarSesionCardnet(
@@ -45,6 +46,27 @@ export async function confirmarSesionCardnet(
   if (session.venceAt <= new Date()) {
     await expireSession(session.id, session.companyId, user.supabaseId)
     return fail(409, 'La sesión de pago venció.')
+  }
+  if (session.captureNonce !== hashNonce(parsed.data.captureNonce)) {
+    return fail(409, 'La sesión de pago ya fue procesada o venció.')
+  }
+  const targetInput = session.membershipId && !session.compraId
+    ? { membershipId: session.membershipId }
+    : session.compraId && !session.membershipId
+      ? { compraId: session.compraId }
+      : null
+  const currentTarget = targetInput ? await resolveTarget(user, targetInput) : null
+  const expectedAmount = Number(session.monto)
+  if (
+    currentTarget?.kind !== 'ready' ||
+    currentTarget.target.companyId !== session.companyId ||
+    currentTarget.target.clienteId !== session.clienteId ||
+    !Number.isFinite(expectedAmount) ||
+    Math.round(currentTarget.target.amount * 100) !== Math.round(expectedAmount * 100) ||
+    (session.guardarRenovacion && !currentTarget.target.allowRenewalConsent)
+  ) {
+    await expireSession(session.id, session.companyId, user.supabaseId)
+    return fail(409, 'El objetivo de pago cambió. Actualiza la pantalla e intenta de nuevo.')
   }
   const claimed = await conEmpresa(session.companyId, (tx) =>
     tx.cardnetCaptureSession.updateMany({

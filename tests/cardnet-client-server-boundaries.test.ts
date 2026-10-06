@@ -16,7 +16,7 @@ interface Scenario {
   config: Row
   customerResponse: Row
   searchResponse: Row
-  amountResult: { readonly ok: true; readonly pesos: number }
+  amountResult: { readonly ok: true; readonly pesos: number } | { readonly ok: false; readonly motivo: string }
   canCharge: boolean
   providerCalls: number
   customerGets: number
@@ -36,6 +36,9 @@ const mocked = new Set([
   '@/lib/tenant', '@/lib/auth/api-guard', '@/lib/payments/cardnet-tokens',
   '@/modules/pagos/cardnet3ds', '@/modules/pagos/cardnetToken', '@/modules/pagos/intentos',
   '@/modules/promociones/compraService', '@/lib/rate-limit',
+  '@/modules/cliente/afiliacion', '@/modules/notificaciones/service', '@/modules/storage/comprobantes',
+  '@/modules/membresia/vigencia', '@/lib/bienvenida', '@/modules/elegibilidad',
+  '@/modules/elegibilidad/decidir', '@/modules/membresia/prorrateo', '@/modules/marketplace/cached',
 ])
 registerHooks({
   resolve(specifier, context, next) {
@@ -80,7 +83,11 @@ function setup(): Scenario {
   s.tx = {
     membership: {
       findUnique: async () => { s.targetReads += 1; return s.membership },
-      updateMany: async () => ({ count: 1 }),
+      updateMany: async (input: { where: Row; data: Row }) => {
+        if (!s.membership || !matches(s.membership, input.where)) return { count: 0 }
+        Object.assign(s.membership, input.data)
+        return { count: 1 }
+      },
     },
     productoCompra: { findUnique: async () => null },
     cardnetCaptureSession: {
@@ -98,9 +105,10 @@ function setup(): Scenario {
       updateMany: async (input: { where: Row; data: Row }) => {
         const row = [...s.sessions.values()].find((candidate) => matches(candidate, input.where))
         if (!row) return { count: 0 }
+        const previousReservationKey = row.reservaClienteKey
         Object.assign(row, input.data)
         if (!('updatedAt' in input.data)) row.updatedAt = new Date()
-        if (input.data.reservaClienteKey === null) s.reservations.delete(String(row.reservaClienteKey ?? ''))
+        if (input.data.reservaClienteKey === null) s.reservations.delete(String(previousReservationKey ?? ''))
         return { count: 1 }
       },
       update: async (input: { where: Row; data: Row }) => {
@@ -121,7 +129,8 @@ function setup(): Scenario {
 
 function membership(owner = 'qa-user'): Row {
   return { id: 'membership-test', companyId: 'qa-company', clienteId: 'qa-client',
-    cliente: { supabaseId: owner, companyId: 'qa-company', email: 'qa@example.test', cardnetCustomerId: null, esLocal: false } }
+    estado: 'PENDIENTE', planIdSolicitado: null, comprobanteUrl: null,
+    cliente: { id: 'qa-client-db', nombre: 'Cliente QA', supabaseId: owner, companyId: 'qa-company', email: 'qa@example.test', cardnetCustomerId: null, esLocal: false } }
 }
 async function service() { return import('../src/modules/pagos/cardnetCliente') }
 
@@ -154,11 +163,12 @@ test('a foreign membership is hidden before CardNET is called', async () => {
 
 test('capture nonce is consumed once and replay does not issue another Customer GET', async () => {
   const s = setup()
+  s.membership = membership()
   const nonce = 'nonce-for-this-capture-session-012345'
   const id = 's'.repeat(48)
   const row: Row = {
     id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
-    membershipId: null, compraId: 'purchase-test', monto: 1000, moneda: 'DOP',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
     estado: 'CAPTURE_OPEN', venceAt: new Date(Date.now() + 60_000),
     captureNonce: createHash('sha256').update(nonce).digest('hex'),
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
@@ -195,6 +205,123 @@ test('concurrent starts reserve one customer session and perform one Customer GE
   assert.equal(s.customerGets, 1)
   assert.equal(s.sessions.size, 1)
   assert.equal(s.reservations.size, 1)
+})
+
+test('a retry resumes the open capture session and rotates its one-use nonce', async () => {
+  const s = setup()
+  s.membership = membership()
+  const api = await service()
+  const start = () => api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
+    membershipId: 'membership-test',
+  })
+  const original = await start()
+  const resumed = await start()
+  assert.equal(original.status, 200)
+  assert.equal(resumed.status, 200)
+  assert.equal(resumed.body.sessionId, original.body.sessionId)
+  assert.notEqual(resumed.body.captureNonce, original.body.captureNonce)
+  for (const privateField of ['customerId', 'cardnetCustomerId', 'perfilBase', 'paymentProfileId', 'reusableToken', 'privateKey', 'bearer']) {
+    assert.equal(original.body[privateField], undefined, `${privateField} must stay server-side`)
+  }
+  const staleNonce = await api.confirmarSesionCardnet(new Request('http://localhost/confirm'), s.authUser, {
+    sessionId: original.body.sessionId,
+    captureNonce: original.body.captureNonce,
+    token: 'one-time-capture-token-value',
+  })
+  assert.equal(staleNonce.status, 409)
+  assert.equal(s.customerGets, 1)
+  assert.equal([...s.sessions.values()][0]?.estado, 'CAPTURE_OPEN')
+  assert.equal(s.sessions.size, 1)
+  assert.equal(s.customerIdLookups, 1)
+  assert.equal(s.customerGets, 1)
+})
+
+test('renewal consent is rejected for a plan change before CardNET calls', async () => {
+  const s = setup()
+  s.membership = { ...membership(), estado: 'ACTIVA', planIdSolicitado: 'new-plan' }
+  const api = await service()
+  const result = await api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
+    membershipId: 'membership-test', guardarParaRenovacion: true,
+  })
+  assert.equal(result.status, 409)
+  assert.equal(s.providerCalls, 0)
+  assert.equal(s.sessions.size, 0)
+})
+
+test('a receipt expires an open CardNET capture before changing membership state', async () => {
+  const s = setup()
+  s.membership = membership()
+  const id = 'r'.repeat(48)
+  const open: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'CAPTURE_OPEN', venceAt: new Date(Date.now() + 60_000), captureNonce: 'nonce-hash',
+    reservaClienteKey: 'held-membership-reservation', updatedAt: new Date(),
+  }
+  s.sessions.set(id, open)
+  s.reservations.set('held-membership-reservation', open)
+  const memberships = await import('../src/modules/membresia/cliente-service')
+  const result = await memberships.registrarComprobanteMembresiaCliente(s.authUser, {
+    membershipId: 'membership-test', path: 'qa-receipts/membership-test/image.png',
+  })
+  assert.ok('success' in result)
+  assert.equal(s.membership.estado, 'PENDIENTE_PAGO')
+  assert.equal(open.estado, 'EXPIRED')
+  assert.equal(open.captureNonce, null)
+  assert.equal(open.reservaClienteKey, null)
+  assert.equal(s.reservations.size, 0)
+})
+
+test('a receipt cannot advance a membership while CardNET capture is processing', async () => {
+  const s = setup()
+  s.membership = membership()
+  const id = 'q'.repeat(48)
+  const processing: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'PROFILE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    reservaClienteKey: 'held-membership-reservation', updatedAt: new Date(),
+  }
+  s.sessions.set(id, processing)
+  s.reservations.set('held-membership-reservation', processing)
+  const memberships = await import('../src/modules/membresia/cliente-service')
+  const result = await memberships.registrarComprobanteMembresiaCliente(s.authUser, {
+    membershipId: 'membership-test', path: 'qa-receipts/membership-test/image.png',
+  })
+  assert.ok('error' in result)
+  assert.equal(s.membership.estado, 'PENDIENTE')
+  assert.equal(s.membership.comprobanteUrl, null)
+  assert.equal(processing.estado, 'PROFILE_PENDING')
+})
+
+test('confirmation rechecks payable state after a receipt changes the membership', async () => {
+  const s = setup()
+  s.membership = membership()
+  const nonce = 'nonce-for-this-capture-session-012345'
+  const id = 'm'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'CAPTURE_OPEN', venceAt: new Date(Date.now() + 60_000),
+    captureNonce: createHash('sha256').update(nonce).digest('hex'),
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: null, createdAt: new Date(), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null }, purchaseIntent: null,
+    reservaClienteKey: 'held-membership-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-membership-reservation', row)
+  s.membership.estado = 'PENDIENTE_PAGO'
+  s.membership.comprobanteUrl = 'receipts/membership-test/image.png'
+  s.amountResult = { ok: false, motivo: 'Ya enviaste el comprobante.' }
+  const api = await service()
+  const result = await api.confirmarSesionCardnet(new Request('http://localhost/confirm'), s.authUser, {
+    sessionId: id, captureNonce: nonce, token: 'one-time-capture-token-value',
+  })
+  assert.equal(result.status, 409)
+  assert.equal(row.estado, 'EXPIRED')
+  assert.equal(s.customerGets, 0)
+  assert.equal(s.chargeCalls, 0)
 })
 
 test('ambiguous retries retain the Purchase UniqueID and serialize concurrent charges', async () => {

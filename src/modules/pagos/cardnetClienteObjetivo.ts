@@ -9,6 +9,7 @@ export type TargetInfo = {
   readonly email: string
   readonly cardnetCustomerId: string | null
   readonly amount: number
+  readonly allowRenewalConsent: boolean
   readonly membershipId?: string
   readonly compraId?: string
 }
@@ -41,6 +42,9 @@ export async function resolveTarget(
             id: true,
             companyId: true,
             clienteId: true,
+            estado: true,
+            planIdSolicitado: true,
+            comprobanteUrl: true,
             cliente: {
               select: {
                 supabaseId: true,
@@ -65,6 +69,10 @@ export async function resolveTarget(
             clienteId: membership.clienteId,
             email: membership.cliente.email,
             cardnetCustomerId: membership.cliente.cardnetCustomerId,
+            allowRenewalConsent:
+              membership.comprobanteUrl === null &&
+              membership.planIdSolicitado === null &&
+              (membership.estado === 'PENDIENTE' || membership.estado === 'RECHAZADA'),
             membershipId: membership.id,
           },
         }
@@ -105,6 +113,7 @@ export async function resolveTarget(
             clienteId: compra.clienteId,
             email: compra.cliente.email,
             cardnetCustomerId: compra.cliente.cardnetCustomerId,
+            allowRenewalConsent: false,
             compraId: compra.id,
           },
         }
