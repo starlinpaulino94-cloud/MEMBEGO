@@ -101,6 +101,7 @@ datos. Lo que hace, y lo que **no**:
 | **Métricas** | Un id de orden o de cliente como etiqueta | Solo números y etiquetas cortas sin dígitos largos; el validador de etiquetas rechaza lo demás. Comprobado: todos los valores emitidos son números finitos |
 | **Búsqueda de operaciones** | Nombre, correo y teléfono del cliente | Devuelve `clienteId` y nada más. Quien opera no necesita saber de quién es, y por eso no se le dice |
 | **Logs (`anotarSupply`)** | Cualquiera de los anteriores | Campos fijos: evento, pasarela, `correlationId`, `inboxId`, código de error saneado |
+| **Los avisos del cliente en pantalla** | Datos de otra persona | `/cliente/novedades` consulta por `userId` con el contexto de plataforma: cada quien ve los suyos, y la ruta exige rol `CLIENTE` |
 | **Errores en el frontend** | Un detalle interno en el mensaje de una acción | Los mensajes son del dominio y no llevan trazas |
 
 ## 5 · La excepción, dicha en voz alta

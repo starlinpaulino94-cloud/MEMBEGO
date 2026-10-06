@@ -150,3 +150,55 @@ test('§22 · no hay ninguna purga automática de datos de Supply 2.0', () => {
     'hay un borrado por antigüedad; documéntalo en docs/supply-v2-retencion-y-privacidad.md y ponlo detrás de un interruptor'
   )
 })
+
+/**
+ * §22 · bis · EL PUNTO CIEGO DEL GATE `rls:cobertura`, cerrado para Supply 2.0.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ HACE FALTA OTRA PRUEBA SI YA HAY UN GATE
+ *
+ * `scripts/rls-cobertura.mjs` trabaja por ARCHIVO: basta un `sinEmpresa` en
+ * cualquier sitio para que el archivo entero pase, con todas las demás
+ * consultas sueltas. Eso dejó pasar cuatro defectos reales del Slice 9, y el
+ * peor no era de higiene:
+ *
+ *   · `flags.ts` leía los interruptores con `prisma` a pelo. Las tablas de
+ *     operación tienen política de capa 2 OMNISCIENTE, y con RLS encendida una
+ *     consulta sin contexto no falla: devuelve cero filas. Cero filas allí
+ *     significaba `undefined`, y `capacidadEfectiva(clave, undefined)` lo lee
+ *     como «nadie lo apagó»: un kill switch APAGADO a propósito se habría
+ *     leído como ENCENDIDO, y los pagos externos habrían seguido procesándose
+ *     después de que alguien los cortara.
+ *   · `salud.ts` y `panel-queries.ts` habrían mostrado cero incidentes, cero
+ *     difuntos y nada atrasado: el panel en verde justo cuando hace falta que
+ *     grite.
+ *   · `barrido-conciliacion.ts` habría dicho «revisados: 0» sin quejarse.
+ *
+ * Así que para estos dos módulos la regla es más estricta que la del gate:
+ * NINGUNA consulta directa, ni una. Es comprobable leyendo el texto, y lo que
+ * de verdad lo sostiene es que ninguno de los dos importa ya `prisma`.
+ */
+test('§22 · ni operations ni notifications consultan la base sin contexto', () => {
+  const raices = ['src/modules/supply-v2/operations', 'src/modules/supply-v2/notifications']
+  const culpables: string[] = []
+  for (const raiz of raices) {
+    const dir = join(process.cwd(), raiz)
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (!e.isFile() || !e.name.endsWith('.ts')) continue
+      const texto = readFileSync(join(dir, e.name), 'utf8')
+      texto.split('\n').forEach((linea, i) => {
+        // Solo código: un `prisma.` dentro de un comentario explica el defecto,
+        // no lo comete.
+        const limpia = linea.trim()
+        if (limpia.startsWith('*') || limpia.startsWith('//')) return
+        if (/\bprisma\s*\.\s*[a-z]/.test(limpia)) culpables.push(`${raiz}/${e.name}:${i + 1}`)
+      })
+    }
+  }
+  assert.deepEqual(
+    culpables,
+    [],
+    'una consulta sin contexto de plataforma devuelve CERO FILAS con RLS encendida, no un error:\n  ' +
+      culpables.join('\n  ')
+  )
+})

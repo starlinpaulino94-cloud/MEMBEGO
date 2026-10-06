@@ -1,4 +1,3 @@
-import { prisma } from '@/lib/prisma'
 import { sinEmpresa } from '@/lib/tenant'
 import { saludDeLaCola } from '@/modules/jobs/muertos'
 import { saludDeConfiguracion } from './config-salud'
@@ -102,6 +101,17 @@ export async function resumenOperativo(ahora = new Date()): Promise<ResumenOpera
 export async function cifrasOperativas(ahora = new Date()): Promise<CifrasOperativas> {
   const desde = new Date(ahora.getTime() - VENTANA_VIDA_MS)
 
+  // ── `sinEmpresa` sobre TODO el bloque, y no fila por fila ────────────────
+  //
+  // No es higiene: es la diferencia entre un panel que dice la verdad y uno que
+  // miente tranquilizando. Las tablas de operación de Supply 2.0 solo se dejan
+  // leer en modo omnisciente —son de plataforma, no de un inquilino— y con RLS
+  // encendida una consulta sin contexto NO falla: devuelve cero filas. Cero
+  // filas aquí se leería como «cero incidentes, cero difuntos, nada atrasado»,
+  // es decir, el panel en verde justo cuando hace falta que esté en rojo.
+  //
+  // Va UNA transacción para las nueve, no nueve: son lecturas de un instante y
+  // así además se ven coherentes entre sí.
   const [
     incidentesAbiertos,
     incidentesAltos,
@@ -112,23 +122,26 @@ export async function cifrasOperativas(ahora = new Date()): Promise<CifrasOperat
     eventosFallidos,
     eventosMuertos,
     efectosEntregados,
-    cola,
-  ] = await Promise.all([
-    prisma.supplyV2FinanceIncident.count({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH', status: { in: ['OPEN', 'INVESTIGATING'] } } }),
-    prisma.supplyV2FinanceIncident.count({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH', status: { in: ['OPEN', 'INVESTIGATING'] }, severity: 'HIGH' } }),
-    prisma.supplyV2PaymentReconciliation.count({ where: { outcome: 'MISMATCH' } }),
-    prisma.supplyV2OutboxEvent.count({ where: { status: { in: ['PENDING', 'FAILED', 'PROCESSING'] } } }),
-    prisma.supplyV2OutboxEvent.findFirst({
-      where: { status: { in: ['PENDING', 'FAILED', 'PROCESSING'] } },
-      orderBy: { createdAt: 'asc' },
-      select: { createdAt: true },
-    }),
-    prisma.supplyV2OutboxEvent.count({ where: { status: 'DEAD_LETTER' } }),
-    prisma.supplyV2ExternalEvent.count({ where: { status: 'FAILED' } }),
-    prisma.supplyV2ExternalEvent.count({ where: { status: 'DEAD_LETTER' } }),
-    prisma.supplyV2OutboxEvent.count({ where: { status: 'DELIVERED', processedAt: { gte: desde } } }),
-    saludDeLaCola(),
-  ])
+  ] = await sinEmpresa('Supply 2.0: cifras operativas', (tx) =>
+    Promise.all([
+      tx.supplyV2FinanceIncident.count({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH', status: { in: ['OPEN', 'INVESTIGATING'] } } }),
+      tx.supplyV2FinanceIncident.count({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH', status: { in: ['OPEN', 'INVESTIGATING'] }, severity: 'HIGH' } }),
+      tx.supplyV2PaymentReconciliation.count({ where: { outcome: 'MISMATCH' } }),
+      tx.supplyV2OutboxEvent.count({ where: { status: { in: ['PENDING', 'FAILED', 'PROCESSING'] } } }),
+      tx.supplyV2OutboxEvent.findFirst({
+        where: { status: { in: ['PENDING', 'FAILED', 'PROCESSING'] } },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+      tx.supplyV2OutboxEvent.count({ where: { status: 'DEAD_LETTER' } }),
+      tx.supplyV2ExternalEvent.count({ where: { status: 'FAILED' } }),
+      tx.supplyV2ExternalEvent.count({ where: { status: 'DEAD_LETTER' } }),
+      tx.supplyV2OutboxEvent.count({ where: { status: 'DELIVERED', processedAt: { gte: desde } } }),
+    ])
+  )
+  // La cola de trabajos va FUERA de esa transacción: es de otro módulo, trae su
+  // propio contexto y meterla dentro anidaría transacciones.
+  const cola = await saludDeLaCola()
 
   return {
     incidentesAbiertos,
