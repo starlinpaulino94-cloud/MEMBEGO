@@ -1,18 +1,18 @@
 import type { Tx } from '@/lib/tenant'
+import {
+  formatearNumero as formatearNumeroGenerico,
+  secuenciaDeNumero as secuenciaDeNumeroGenerico,
+  siguienteNumero as siguienteNumeroGenerico,
+  type BuscadorUltimo,
+} from '@/lib/commerce-primitives/numeracion'
 
 /**
  * MEMBEGO SUPPLY 2.0 · numeración correlativa SEGURA (§13).
  *
- * PROHIBIDO `count() + 1`: dos altas simultáneas leen el mismo conteo y la
- * segunda choca con el índice único.
- *
- * Aquí se toma un cerrojo consultivo DE TRANSACCIÓN por prefijo
- * (`pg_advisory_xact_lock`): la segunda transacción espera a que la primera
- * confirme, y solo entonces lee el último número —que ya incluye el que la
- * primera acaba de escribir—. Es de transacción y no de sesión a propósito:
- * `sinEmpresa` ejecuta todo el callback en UNA conexión, y el cerrojo se
- * suelta solo al confirmar o deshacer. El índice único de la columna sigue
- * siendo la última red.
+ * El cerrojo consultivo y el formato son genéricos y viven en
+ * src/lib/commerce-primitives/numeracion.ts (Fase 0). Este módulo solo
+ * declara el conjunto cerrado de prefijos de Supply V2 y envuelve las
+ * funciones compartidas con ese tipo.
  *
  * Formato: `MBG-PO-2026-000001`, `MBG-RC-2026-000001`, `MBG-AG-2026-000001`,
  * `LOT-2026-000001`, `MBG-OF-2026-000001` (oferta), `MBG-SO-2026-000001` (orden de cliente).
@@ -46,15 +46,14 @@ export type PrefijoNumeracion =
   | 'MBG-RK'
 
 export function formatearNumero(prefijo: PrefijoNumeracion, anio: number, secuencia: number): string {
-  return `${prefijo}-${anio}-${String(secuencia).padStart(6, '0')}`
+  return formatearNumeroGenerico(prefijo, anio, secuencia)
 }
 
 export function secuenciaDeNumero(numero: string): number {
-  const m = numero.match(/-(\d{6,})$/)
-  return m ? Number(m[1]) : 0
+  return secuenciaDeNumeroGenerico(numero)
 }
 
-type BuscadorUltimo = (prefijoCompleto: string) => Promise<string | null>
+export type { BuscadorUltimo }
 
 /**
  * Siguiente número para un prefijo dentro de la transacción `tx`.
@@ -67,10 +66,5 @@ export async function siguienteNumero(
   ultimo: BuscadorUltimo,
   fecha = new Date()
 ): Promise<string> {
-  const anio = fecha.getFullYear()
-  const clave = `supply_v2:${prefijo}:${anio}`
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${clave}))`
-  const previo = await ultimo(`${prefijo}-${anio}-`)
-  const secuencia = (previo ? secuenciaDeNumero(previo) : 0) + 1
-  return formatearNumero(prefijo, anio, secuencia)
+  return siguienteNumeroGenerico(tx, prefijo, ultimo, fecha)
 }
