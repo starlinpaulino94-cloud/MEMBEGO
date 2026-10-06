@@ -38,6 +38,8 @@ interface Props {
     lavadosRegalo: number
     vigenciaDias: number
     vence: string | null
+    /** Usos del plan que le quedan: con usos y vigente, no se renueva. */
+    lavadosRestantes: number
   }
 }
 
@@ -81,7 +83,11 @@ export function MembershipAdminActions({ membershipId, estado, renovacion }: Pro
       )}
 
       {(estado === 'ACTIVA' || estado === 'VENCIDA') && renovacion && (
-        <RenovarMembresiaDialog membershipId={membershipId} {...renovacion} />
+        <RenovarMembresiaDialog
+          membershipId={membershipId}
+          estado={estado}
+          {...renovacion}
+        />
       )}
 
       {estado === 'ACTIVA' && (

@@ -6,6 +6,7 @@ import {
   montoEnteroMenor,
   interpretarCompraToken,
   exigeActivacionPrimero,
+  MENSAJE_ACTIVACION_PENDIENTE,
   desenvolverRespuesta,
   sinSensibles,
   extraerPerfiles as extraerPerfilesSync,
@@ -629,6 +630,87 @@ test('un rechazo del banco NO se confunde con falta de activación', () => {
   const r = interpretarCompraToken({ ResponseCode: '51' })
   assert.equal(r.aprobada, false)
   assert.equal(r.requiereActivacion, false)
+})
+
+/**
+ * EL CALLEJÓN SIN SALIDA DEL 22-09-2026, con captura de producción delante.
+ *
+ * La tarjeta se registraba, el Purchase respondía PR001 —«el medio de pago
+ * existe pero no está habilitado»— y el cliente veía una tarjeta ROJA de
+ * «PAGO RECHAZADO» que a la vez le explicaba cómo activar su tarjeta, le
+ * aseguraba que «no se aplicó ningún cargo», y no traía ningún campo donde
+ * escribir el código.
+ *
+ * La causa era que la misma pregunta se contestaba en dos sitios que no se
+ * hablaban: `mensajeDeError` sabía que PR001 es falta de activación y
+ * `exigeActivacionPrimero` —que mira CS012— decía que no. Uno elegía el
+ * TEXTO, el otro elegía la PANTALLA.
+ */
+test('PR001 manda a la pantalla de activación, no a la de rechazo', () => {
+  // Respuesta REAL capturada en producción de pruebas (05/08/2026).
+  const r = interpretarCompraToken({
+    Response: { TrxToken: '***', Amount: null },
+    Errors: [{ ErrorCode: 'PR001', Message: 'El token no está activo.' }],
+  })
+  assert.equal(r.aprobada, false)
+  assert.equal(
+    r.requiereActivacion,
+    true,
+    'PR001 es una tarjeta esperando su código, no un rechazo del banco'
+  )
+})
+
+/**
+ * LA INVARIANTE, vigilada sobre la CAUSA y no sobre un caso.
+ *
+ * Fijar «PR001 → true» arreglaría el fallo de hoy y no el de mañana: cualquier
+ * código nuevo que `mensajeDeError` traduzca al texto de activación volvería a
+ * partir el flujo igual, y ninguna prueba se enteraría. Lo que no puede pasar
+ * nunca es que el cliente LEA cómo activar su tarjeta en una pantalla que no
+ * se lo deja hacer.
+ */
+test('el texto de activación nunca sale sin mandar a la pantalla de activación', () => {
+  const respuestas: Record<string, unknown>[] = [
+    { Errors: [{ ErrorCode: 'PR001', Message: 'El token no está activo.' }] },
+    { Errors: [{ ErrorCode: 'CS012', Message: 'PROFILE_MUST_BE_ACTIVATED_FIRST' }] },
+    { Errors: [{ ErrorCode: '', Message: 'Token no activo' }] },
+    { Errors: [{ ErrorCode: 'XX999', Message: 'El token no está activo.' }] },
+  ]
+  for (const resp of respuestas) {
+    const r = interpretarCompraToken(resp)
+    if (r.motivo === MENSAJE_ACTIVACION_PENDIENTE) {
+      assert.equal(
+        r.requiereActivacion,
+        true,
+        `se lee el texto de activación con requiereActivacion=false: ${JSON.stringify(resp)}`
+      )
+    }
+  }
+})
+
+/**
+ * LAS DOS NEGATIVAS DEL TEXTO.
+ *
+ * Son el arreglo entero: el mensaje anterior ya decía DÓNDE está el código y
+ * la gente igual se quedaba esperando un SMS, porque acababa de pasar el 3DS
+ * de su banco y lo natural era esperar otro mensaje. Se comprueba la
+ * intención, no la redacción — cualquiera puede reescribir la frase, nadie
+ * puede quitar el hecho.
+ */
+test('el texto de activación avisa de que no llega nada y de que tarda', () => {
+  assert.match(
+    MENSAJE_ACTIVACION_PENDIENTE,
+    /no llega por (mensaje|sms)|no te va a llegar|no recibir/i,
+    'falta decir que el código NO llega por mensaje: es lo que hace que nadie vaya a buscarlo'
+  )
+  assert.match(
+    MENSAJE_ACTIVACION_PENDIENTE,
+    /tardar|horas|más tarde/i,
+    'falta decir que puede tardar: quien mira a los 30 segundos cree que el pago se rompió'
+  )
+  // Y lo que ya protegía la prueba de arriba, sobre el texto nuevo.
+  assert.match(MENSAJE_ACTIVACION_PENDIENTE, /RD\$1\.00/)
+  assert.doesNotMatch(MENSAJE_ACTIVACION_PENDIENTE, /cardnet/i)
 })
 
 

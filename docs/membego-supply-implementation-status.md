@@ -1,0 +1,476 @@
+# MEMBEGO SUPPLY — Estado de implementación
+
+Fecha de corte: **2026-09-23** · Rama: `claude/project-analysis-ojg18w`
+Arquitectura: `docs/membego-supply-architecture.md` · ADRs: `docs/adr/0001`–`0008`
+
+Puertas de calidad en el corte: **typecheck limpio · lint 0 errores · 2.615
+pruebas en verde** (99 nuevas de Supply). Warnings de lint: 99, dos MENOS que
+la línea base — el módulo no añadió ninguno.
+
+---
+
+## Resumen por release
+
+| Release | Alcance | Estado |
+| --- | --- | --- |
+| **A · Procurement Foundation** | Capacidades de proveedor, acuerdos, órdenes, lotes, ledger | ✅ completo |
+| **B · Supply Management** | Pool, asignación, concurrencia, FEFO, vencimientos | ✅ completo |
+| **C · Customer Distribution** | Derechos, vouchers, QR dinámico, elegibilidad, holds | ✅ completo |
+| **D · Merchant Fulfillment** | Escáner, redención, reversa, capacidad, reservas, portal, enmiendas, incidencias | ✅ completo |
+| **E · Commercial Distribution** | Regalos, membresías, recompensas, referidos, marketplace, cross-selling | ✅ completo · venta con cobro cerrada el 28-09-2026 |
+| **F · Financial Control** | Pagos, ledger financiero, liquidaciones, conciliación, costos separados | ✅ completo |
+| **G · Analytics** | Unit economics, economía de campaña, CAC, LTV, scorecard, riesgo, 12 reportes | ✅ completo |
+
+---
+
+## Cambios en base de datos
+
+**Una migración, solo creación:** `prisma/migrations/20260926_membego_supply/`.
+
+- 15 tablas nuevas, todas con prefijo `supply_`.
+- 14 enums nuevos.
+- 19 valores añadidos al enum `AuditAccion` con `ADD VALUE IF NOT EXISTS`.
+- **Cero** `ALTER` sobre tablas vivas, cero `DROP`, cero `DELETE`. Las relaciones
+  inversas en `Company`, `User`, `Cliente`, `Sucursal`, `Servicio` y `Promocion`
+  son relaciones de Prisma: no añaden columnas.
+- Idempotente: todo va con `IF NOT EXISTS` o dentro de un bloque que traga
+  `duplicate_object`.
+- **Rollback**: `DROP TABLE` de las quince en orden inverso + `DROP TYPE` de los
+  catorce enums. Ninguna fila de otro módulo depende de ellas.
+- **Invariantes en la base**: 6 `CHECK` (cuadre de cubetas, no-negatividad,
+  cantidad positiva, traslado real, sin sobregiro de asignación, montos
+  válidos) y 3 índices únicos parciales (una redención viva por voucher, un
+  voucher activo por derecho, una reserva viva por derecho).
+- 4 índices parciales de rendimiento para los recorridos caros.
+
+Sellada en `prisma/migrations/SUMAS.txt` (`npm run migraciones:sellar`).
+
+---
+
+## Fase por fase
+
+Las 80 fases del encargo, con dónde vive cada una.
+
+### Fases 1–6 · Fundación
+
+| # | Fase | Estado | Dónde |
+| --- | --- | --- | --- |
+| 1 | Capacidades de proveedor | ✅ | `modules/capacidades/catalogo.ts` (`MEMBEGO_SUPPLIER`, `MEMBEGO_SUPPLY_FULFILLMENT`), nacen apagadas |
+| 2 | Supplier agreements | ✅ | `SupplyAcuerdo`, `modules/supply/contrato.ts`, `procurement.ts` |
+| 3 | Purchase orders con aprobación | ✅ | `SupplyOrden`, `SupplyOrdenLinea`; aprobador ≠ creador |
+| 4 | Modalidades de pago | ✅ | `SupplyModalidadPago` (4 valores) + ledger financiero |
+| 5 | Purchased entitlement lot | ✅ | `SupplyLote` con 11 campos `snapshot*` congelados |
+| 6 | Entitlement ledger | ✅ | `SupplyMovimiento`, `modules/supply/ledger.ts`, `movimientos.ts` |
+
+### Fases 7–10, 39 · Pool y asignación
+
+| # | Fase | Estado | Dónde |
+| --- | --- | --- | --- |
+| 7 | Supply pool | ✅ | `/superadmin/supply` + `pool.ts:resumenPool` |
+| 8 | Allocation engine | ✅ | `SupplyAsignacion`, `asignaciones.ts` |
+| 9 | Concurrencia | ✅ | `FOR UPDATE` + validación + `CHECK` (ADR-0005) |
+| 10 | FEFO configurable | ✅ | `fefo.ts`, 4 estrategias |
+| 39 | Expiration engine | ✅ | `vencimientos.ts`, umbrales 30/14/7/3/1, `/superadmin/supply/vencimientos` |
+
+### Fases 11–13, 16, 57, 58 · Cliente
+
+| # | Fase | Estado | Dónde |
+| --- | --- | --- | --- |
+| 11 | Customer entitlements | ✅ | `SupplyDerecho`, 10 orígenes |
+| 12 | Vouchers (≠ cupón) | ✅ | `SupplyVoucher`, 24 bytes `randomBytes` |
+| 13 | QR dinámico | ✅ | `SupplyQrSesion`, 5 min, nonce único, antireplay |
+| 16 | Experiencia del consumidor | ✅ | `/cliente/beneficios` |
+| 57 | Elegibilidad previa | ✅ | `elegibilidad.ts`, 12 motivos de rechazo |
+| 58 | Hold temporal | ✅ | estado `RETENIDO` + barrido en el cron |
+
+### Fases 14–15, 17–20, 29–30, 59–60 · Comercio
+
+| # | Fase | Estado | Dónde |
+| --- | --- | --- | --- |
+| 14 | Merchant scanner | ✅ | `/admin/supply/escaner`, dos pasos |
+| 15 | Redemption atómica | ✅ | `redencion.ts`, 9 motivos de rechazo |
+| 17 | Reserva / pickup | ✅ | `SupplyReserva`, `reservas.ts` |
+| 18 | Capacity engine | ✅ | `capacidad.ts`, genérico por contrato (ADR-0007) |
+| 19 | Merchant supply portal | ✅ | `/admin/supply`, solo lectura |
+| 20 | Contract amendments | ✅ | `SupplyEnmienda` con antes/después/motivo/aprobador |
+| 29 | Fulfillment incidents | ✅ | `SupplyIncidencia`, 8 tipos |
+| 30 | Disputes | ✅ | 6 estados, la operación original no se borra |
+| 59 | Extras | ✅ | `extrasMonto` separado de `aporteClienteComercio` |
+| 60 | Cancelaciones | ✅ | `cancelarDerecho(devolverAlPool)` distingue los dos casos |
+
+### Fases 21–28, 55–56 · Distribución
+
+| # | Fase | Estado | Dónde |
+| --- | --- | --- | --- |
+| 21 | Regalos | ✅ | `distribucion.ts:regalar` + `/cliente/beneficios/disponibles` |
+| 22 | Venta con descuento | ✅ | `precioCliente` en la asignación; la vitrina publica el precio si hay cuenta activa |
+| 23 | Checkout Membego | ✅ | `SupplyPedido` + `SupplyCuentaCobro`, `modules/supply/cobro.ts`. Pasarela: puerto declarado |
+| 24 | Subsidized offers | ✅ | `SUBSIDIO` separado, `desglosarSubsidio` lanza si se confunde (ADR-0003) |
+| 25 | Membresías | ✅ | `porMembresia(clienteId, asignacionId, periodo)` |
+| 26 | Rewards | ✅ | `porRecompensa(clienteId, canjeId, …)` |
+| 27 | Referidos | ✅ | `porReferido(clienteId, recompensaId, …)` |
+| 28 | Cross-selling | ✅ | `recorridoDelCliente` registra la conversión cruzada |
+| 55 | Integración marketplace | ✅ | `ofertasDisponibles` sin exponer costo ni contrato |
+| 56 | Experiencia marketplace | ✅ | `TarjetaOferta` con disponibilidad real |
+
+### Fases 31–38, 47–54, 62 · Dinero y analítica
+
+| # | Fase | Estado | Dónde |
+| --- | --- | --- | --- |
+| 31 | Supplier scorecard | ✅ | `economia.ts:scorecard`, fórmula explicable |
+| 32 | Reconciliation | ✅ | `conciliacion.ts`, 10 tipos de hallazgo con id de fila |
+| 33 | Supplier payments | ✅ | `SupplyPago`, 7 tipos |
+| 34 | Supplier financial ledger | ✅ | `SupplyAsientoFinanciero` (ADR-0008) |
+| 35 | Unit economics | ✅ | `economiaUnidad`, CAC solo si el ingreso fue 0 |
+| 36 | Campaign economics | ✅ | `economiaCampana`, tres costos separados |
+| 37 | Customer acquisition | ✅ | `metricasAdquisicion`, CAC alcanzado y activado |
+| 38 | LTV vs CAC | ✅ | `ltvVsCac` con GMV registrado, sin proyecciones |
+| 47 | Dashboard superadmin | ✅ | 12 vistas bajo `/superadmin/supply` |
+| 48 | 12 reportes obligatorios | ✅ | pantallas + `/superadmin/supply/exportar` (CSV compartido) |
+| 49 | Reporte proveedor | ✅ | `/superadmin/supply/proveedores/[id]` |
+| 50 | Reporte de lote | ✅ | columna «Cuadra» comparando suma vs comprado |
+| 51 | Reporte campaña | ✅ | `/superadmin/supply/economia` |
+| 52 | Reporte vencimiento | ✅ | ordenado por dinero en riesgo, no por fecha |
+| 53 | Reconciliation report | ✅ | herramienta operativa con botón de recálculo |
+| 54 | Supply risk | ✅ | `senalesDeRiesgo`, reglas deterministas, mínimo 10 entregas |
+| 62 | Costos separados | ✅ | `costosDeLote` devuelve siete costos distintos |
+
+### Fases 40–46, 61, 63–65, 67–70 · Transversales
+
+| # | Fase | Estado | Nota |
+| --- | --- | --- | --- |
+| 40 | Notificaciones | ✅ completo | Catorce avisos por `Notificacion`, todos deduplicados: tres de barrido, ocho de evento y tres analíticos |
+| 41 | Roles y permisos | ✅ | Los 8 permisos del encargo resueltos contra el RBAC existente |
+| 42 | Multi-tenancy | ✅ | `conEmpresa` + `where` explícito + `proveedorId` denormalizado; prueba automática |
+| 43 | Auditoría | ✅ | 19 acciones `SUPPLY_*` con etiqueta y filtro |
+| 44 | Idempotencia | ✅ | Clave única en derechos, redenciones y pagos; nonce de un solo uso |
+| 45 | Database integrity | ✅ | 6 `CHECK` + 3 únicos parciales + FKs |
+| 46 | Performance | ✅ | Índices por proveedor, lote, cliente, estado y vencimiento |
+| 61 | Redención vs emisión | ✅ | Sostenido en ledger, economía y toda pantalla (ADR-0004) |
+| 63 | No eliminar histórico | ✅ | `onDelete: Restrict` en lo contractual; prueba que prohíbe `delete` |
+| 64 | Migraciones | ✅ | Solo creación, idempotente, sellada, con rollback documentado |
+| 65 | Testing | ✅ | 99 pruebas en 6 archivos |
+| 67 | Quality gates | ✅ | typecheck + lint + test tras cada release |
+| 68 | Estado de implementación | ✅ | este documento |
+| 69 | Matriz de trazabilidad | ✅ | `docs/membego-supply-requirements-traceability.md` |
+| 70 | ADRs | ✅ | `docs/adr/0001`–`0008` |
+
+---
+
+## Archivos
+
+| Qué | Cuántos | Líneas |
+| --- | ---: | ---: |
+| Dominio (`src/modules/supply/`) | 26 | 7.841 |
+| Pantallas (`app/**/supply`, `cliente/beneficios`) | 21 | — |
+| Componentes (`src/components/supply/`) | 12 | — |
+| Pruebas (`tests/supply-*.test.ts`) | 6 | 2.060 |
+| Esquema (`prisma/schema/supply.prisma`) | 1 | ~950 |
+| Migración | 1 | ~1.190 |
+
+**Modificados fuera del módulo (9):** el catálogo de capacidades, el catálogo de
+secciones del RBAC, sus etiquetas, la clasificación de conceptos de plataforma,
+las etiquetas de la bitácora, la navegación, cuatro archivos de esquema (solo
+relaciones inversas) y `vercel.json` (el cron).
+
+---
+
+## Pruebas
+
+| Archivo | Pruebas | Qué protege |
+| --- | ---: | --- |
+| `supply-ledger.test.ts` | 22 | El invariante, el no-sobregiro y los traslados ilegales |
+| `supply-procurement.test.ts` | 28 | Máquinas de estado sin atajos, reglas del contrato, códigos |
+| `supply-distribucion.test.ts` | 32 | FEFO, capacidad y elegibilidad |
+| `supply-economia.test.ts` | 17 | Unit economics con los números del encargo |
+| `supply-contratos.test.ts` | 18 | Las promesas estructurales del módulo |
+| `supply-e2e.test.ts` | 7 | La cadena completa, paso a paso |
+
+**Lo que NO cubren:** la escritura real en Postgres, el bloqueo de fila y los
+`CHECK`. Eso exige base de datos; su forma la vigila `supply-contratos`.
+
+---
+
+## Riesgos abiertos
+
+1. **Sin cobro a nombre de la plataforma.** La venta de supply (Fases 22-23)
+   necesita cobrar a nombre de Membego, no de cada empresa. El puerto está
+   declarado y `COBRO_MEMBEGO_DISPONIBLE = false` lo dice en voz alta: la
+   vitrina no publica precios que nadie puede cobrar. **El camino que funciona
+   hoy de punta a punta es el regalo.**
+2. **Avisos analíticos de MEMBEGO ADMIN** (proveedor con muchas incidencias,
+   riesgo de presupuesto, problema de capacidad global). Salen del scorecard y
+   de la economía, no de un evento: hay que decidir el umbral de cada uno antes
+   de escribirlos.
+3. ~~**Políticas RLS**~~ · **cerrado el 25-09-2026, y no como se esperaba.**
+   Las políticas nunca hubo que escribirlas: se DEDUCEN del esquema recorriendo
+   claves foráneas, así que las 15 tablas de supply ya tenían una. El problema
+   era otro y peor: **dos de ellas tenían la política EQUIVOCADA**. Ver abajo.
+
+## Los tres avisos analíticos (Fase 40, cierre) · 27-09-2026
+
+Los otros once nacen de un hecho. Estos nacen de una **tendencia**, y por eso
+fueron los últimos: hay que elegir a partir de qué número algo deja de ser un
+mal día y pasa a ser un patrón.
+
+| aviso | dispara | por qué ese número |
+|---|---|---|
+| Proveedor en riesgo | ≥5% de entregas con incidencia suya (urgente ≥15% o puntaje <50), **sobre 20 entregas mínimo** | Sin el suelo, quien entregó 3 y falló 1 sale con 33% y parece un desastre |
+| El supply no cabe | hace falta >80% de su capacidad diaria todos los días que quedan | Es una división: 400 unidades / 10 días / 20 al día = sobran 200 |
+| Capital dormido | a mitad de vigencia con <30% entregado y >RD$25.000 parados | A mitad todavía da tiempo a reasignarlo; al final ya no |
+
+### «Riesgo de presupuesto» no se pudo hacer como pedía la fase
+
+**No existe el concepto de presupuesto en el modelo**: ni tabla, ni tope por
+campaña o período. Cualquier umbral habría sido inventarse una cifra y llamarla
+riesgo. Se sustituye por **capital dormido**, que mide lo que sí hay. Si algún
+día se lleva un techo mensual de compras, se añade encima sin tirar esto.
+
+### Los números son una estimación, no una medición
+
+Cuando se escribieron, el módulo llevaba días en producción: nadie había visto
+todavía la tasa real de incumplimiento de un proveedor. Por eso viven **todos
+juntos en `UMBRALES_RIESGO`**, con nombre, y hay una prueba que falla si alguien
+escribe uno a mano en la lógica. Con dos meses de datos se mueven sin tocar
+código.
+
+Si resultan ruidosos, lo primero que se toca es la **cadencia** —son
+semanales— y no el umbral: un aviso correcto que llega a diario se deja de leer
+igual que uno equivocado.
+
+## «Producto listo» (Fase 40, última pieza) · 25-09-2026
+
+El modelo guardaba la hora que el cliente eligió y nada más: nadie en el
+comercio marcaba «ya está hecho», así que el cliente no tenía forma de saber si
+pasar ya o esperar. Ahora `SupplyReserva` tiene el estado **LISTA**, el portal
+del proveedor enseña «Para preparar hoy» con un botón por pedido, y al pulsarlo
+le llega el aviso al cliente.
+
+### El riesgo que introduce un estado nuevo, y dónde estaba
+
+Una reserva LISTA **sigue ocupando el cupo del día** —la pizza está hecha, el
+horno la produjo— así que toda cuenta de capacidad tiene que incluir las dos.
+El estado se consultaba en **diez sitios**; ocho eran filtros y había que
+cambiarlos. `RESERVA_OCUPA_CUPO` existe para que nadie tenga que acordarse.
+
+El peor de los ocho lo encontró la prueba, no yo: `redencion.ts` buscaba la
+reserva viva del voucher con `estado: 'CONFIRMADA'`. Con solo eso, **escanear un
+pedido ya preparado no habría encontrado su reserva**: se salta la validación de
+sucursal y la reserva se queda viva ocupando cupo para siempre.
+
+### Y el índice único, que es donde de verdad se cierra
+
+`supply_reservas_derecho_viva` filtraba por `estado = 'CONFIRMADA'`. Con LISTA
+fuera, el cliente podía apartar una **segunda** recogida del mismo beneficio
+mientras la primera estaba hecha en el mostrador — el comercio prepararía dos
+por un derecho que paga una. Un `if` no vale: dos peticiones a la vez lo pasan
+las dos. Se recrea con `WHERE estado IN ('CONFIRMADA','LISTA')` y se comprobó
+contra PostgreSQL 16: con el índice nuevo la segunda entrada se rechaza; con el
+viejo, entra.
+
+## Aislamiento entre inquilinos (Fase 42) · 25-09-2026
+
+Medido contra PostgreSQL 16 con el esquema completo, no razonado. Dos fallos, y
+el segundo lo encontró la prueba que se escribió para el primero.
+
+### 1 · El derecho estaba atado a la empresa equivocada
+
+La derivación de políticas recorre las claves foráneas en orden **alfabético de
+columna** y se queda con la primera que llega a una tabla ya cubierta.
+`supply_derechos` tiene tres NOT NULL —`clienteId`, `loteId`, `proveedorId`— y
+ganaba `clienteId`. Igual en `supply_redenciones`.
+
+Eso ataba el derecho a la empresa donde la **persona** tiene su ficha, que no es
+la que lo cumple: alguien registrado en Car Town puede recibir una pizza de Litre
+Pizza. Dos consecuencias, las dos malas, y las dos medidas:
+
+- Litre Pizza, en su propio portal, **no vería ni uno** de sus derechos ni de sus
+  entregas. El módulo se apaga para el proveedor.
+- Y Car Town **sí** leería esas filas, que llevan `costoUnitario` dentro — lo que
+  Membego negoció con otra empresa.
+
+Arreglado en la derivación, no con excepciones a mano: se añadió un **Nivel 0.5**
+—si una tabla tiene clave foránea NOT NULL a `companies`, ESA es su empresa—.
+Medido antes de escribirlo: de las 77 tablas con clave directa a `companies`, 75
+ya resolvían igual; las únicas dos que cambian son las dos que estaban mal.
+Ninguna tabla tiene dos claves NOT NULL a `companies`, así que la elección nunca
+es ambigua. Cobertura idéntica (191 políticas) y converge en una ronda menos.
+
+### 2 · Y B podía colgar un derecho del lote de A
+
+Lo encontró la prueba nueva. La política ata la fila por su `proveedorId`, así
+que si B pone `proveedorId = B` el `WITH CHECK` pasa — y nadie miraba de quién
+era el LOTE. El resultado sería una fila que consume el lote de A y que A no
+puede ver: aparecería en la contabilidad del lote (que se consulta por `loteId`)
+siendo invisible para su dueño.
+
+No era solo ese par: hay **siete** pares padre-hijo en supply donde las dos
+tablas llevan `proveedorId` y nada garantizaba que coincidieran. Se cierran con
+claves foráneas **compuestas** (`20261003_supply_coherencia_proveedor`), no con
+otra política, por tres razones: aplican aunque la aplicación se conecte como
+`postgres` —que hoy es el caso y se salta RLS—, no dependen de que alguien
+acierte con el orden de las claves, y un script manual de madrugada también las
+respeta. La migración se para y nombra la tabla si ya hubiera filas incoherentes.
+
+### La prueba
+
+`npm run rls:probar` pasa de 9 a **14 comprobaciones**. Las cinco nuevas siembran
+al proveedor en una empresa y al cliente en OTRA, que es el único montaje donde
+el fallo se ve: con los dos en la misma, una política mal puesta aprueba. Probado
+por mutación: sin el Nivel 0.5 caen 4 de las 5; sin la clave compuesta, la quinta.
+
+## Riesgos cerrados
+
+- ~~Migración sin aplicar contra base real~~ · **cerrado el 25-09-2026.** El
+  check `Esquema de base de datos` del CI levanta su propio PostgreSQL 16 y
+  replica las 155 migraciones desde cero en cada PR; la migración está además
+  aplicada en producción. Los seis `CHECK` se probaron uno a uno contra PG 16:
+  lote que no cuadra, cubeta negativa, movimiento de cantidad cero, movimiento
+  negativo y asiento que no traslada nada → los cinco RECHAZADOS; el lote que
+  cuadra, aceptado.
+- ~~Sin prueba de carrera real~~ · **cerrado el 25-09-2026.** Dos clientes
+  simultáneos contra PG 16 peleando por la última unidad con el patrón de
+  `bloquearLote`: A se la llevó (`UPDATE 1`), B esperó el bloqueo, leyó el
+  estado ya comprometido y no hizo nada (`UPDATE 0`). Final `disponibles=0`,
+  `emitidas=1000`, y `compradas` seguía cuadrando. Se probó el PATRÓN sobre la
+  base, no `registrarMovimientos` entero: para eso hace falta Prisma contra una
+  base, que la suite no tiene. Lo que estaba en duda era si el bloqueo
+  serializa, y serializa.
+
+## Los diez avisos (Fase 40) · 25-09-2026
+
+`avisos.ts` (puro) decide qué se dice y con qué clave; `notificar.ts`
+(server-only) escribe. La separación existe porque **la parte que se rompe en
+silencio son las claves de deduplicación**: el cron corre a diario, y una clave
+inestable no da error ni sale en ningún log — simplemente, al mes hay treinta
+avisos del mismo lote y nadie vuelve a mirar la campanita.
+
+| aviso | quién | clave | cuándo repite |
+|---|---|---|---|
+| Supply por vencer | superadmins | `supply-vence\|lote\|umbral` | al cruzar cada umbral (30, 14, 7, 3, 1) |
+| Tu compromiso vence | admins del proveedor | la misma `\|proveedor` | igual |
+| Descuadre CRÍTICA/ALTA | superadmins | `supply-descuadre\|tipo\|entidad\|id\|semanaISO` | una vez por semana mientras siga ahí |
+| Beneficio por vencer | cliente | `supply-beneficio-vence\|derecho\|umbral` | 7, 3 y 1 días (barrido) |
+| Beneficio nuevo | cliente | `supply-beneficio\|derecho` | nunca: un hecho, un aviso |
+| Reserva confirmada | cliente | `supply-reserva\|reserva` | nunca |
+| Entrega completada | cliente | `supply-entrega\|redención` | nunca |
+| Voucher nuevo | admins del proveedor | `supply-voucher-nuevo\|derecho` | nunca |
+| Cupo del día al 80% | admins del proveedor | `supply-capacidad\|proveedor\|día` | una vez por día |
+| Incidencia | superadmins **y** proveedor, con mensajes distintos | `supply-incidencia\|id\|destinatario` | nunca |
+| Liquidación confirmada | admins del proveedor | `supply-liquidacion\|pago` | nunca |
+| Producto listo | cliente | `supply-listo\|reserva` | nunca |
+| Proveedor en riesgo | superadmins | `…\|proveedor\|semanaISO` | semanal mientras siga |
+| El supply no cabe | superadmins | `…\|lote\|semanaISO` | semanal mientras siga |
+| Capital dormido | superadmins | `…\|lote\|semanaISO` | semanal mientras siga |
+
+Los de evento se enganchan en las funciones de DOMINIO (`entregar`, `reservar`,
+`redimir`, `abrirIncidencia`, `confirmarPago`), no en las actions: `entregar` es
+el embudo de todos los canales —regalo, oferta, membresía, recompensa,
+referido—, y colgar el aviso de la action habría dejado sin avisar a casi todos.
+Cada gancho va **después de que cierre la transacción**: avisar abre la suya, y
+dentro sería una transacción anidada. Hay una prueba que lo comprueba leyendo la
+fuente, y el guardia del CI también.
+
+El aviso de entrega es el **recibo del cliente**, no una cortesía: si un comercio
+marca entregado algo que no entregó, esto se lo enseña el mismo día en vez del
+mes siguiente, cuando vaya a usar su beneficio y ya no esté.
+
+Lo que NO viaja: al proveedor nunca se le manda el nombre del cliente (lo verá
+al escanear, en el mostrador) ni el texto libre de una incidencia (lo escribe
+una persona enfadada, puede llevar nombres y teléfonos, y esto entra en la
+campanita de un tercero). Dos pruebas lo vigilan.
+
+Decisiones: a Membego se le dice el **dinero primero** («RD$51.000 en 170
+unidades») porque «170 unidades» se lee como inventario y la cifra se lee como
+pérdida. Al proveedor **nunca** se le dice el costo unitario —es información de
+contrato y su portal no la enseña; hay una prueba que lo vigila—. Los hallazgos
+`MEDIA` no llegan a la campanita: están en la pantalla de conciliación, y avisar
+de todo es la forma más segura de que no se lea nada. El envío va **al final del
+cron y dentro de un `try`**: soltar holds y cerrar lo vencido mueven el ledger y
+no se quedan a medias porque falle un aviso.
+
+## Deuda técnica consciente
+
+- `SupplyAsignacion.destinoId` no tiene FK: los destinos viven en cinco tablas
+  distintas y una FK obligaría a cinco columnas nulables que nadie mantendría al
+  añadir la sexta.
+- `sucursalIds` se copia como array en lugar de tabla puente: es una lista corta
+  de solo lectura que se congela en el lote.
+- La conciliación recorre lotes de uno en uno (tope 200). Con miles de lotes
+  habrá que paginarla o moverla a un trabajo en cola.
+
+## El cobro a nombre de la plataforma (Fases 22-23) · 28-09-2026
+
+Era el último hueco: Membego podía comprar 1.000 pizzas, asignarlas, regalarlas
+y verlas redimir, pero no podía VENDER una.
+
+El motivo no era pereza. Cuando Membego compra la unidad entera a RD$300 y la
+revende a RD$399, ese dinero lo cobra MEMBEGO —el comercio ya cobró por
+contrato—, y **toda** la infraestructura de pagos cobra a nombre de una EMPRESA:
+`PaymentContext` lleva `companyId`, `metodos_pago` cuelga de `companies`, y el
+proveedor de transferencia dice «a las cuentas de la empresa».
+
+**El carril.** Transferencia a cuentas de Membego con verificación por una
+persona, que es el único que funciona hoy: CardNET sigue incompleto a propósito
+—falta el manual de integración que dan al abrir la cuenta de comercio— y no se
+finge lo que no hay. `PuertoCobroMembego` sigue declarado para enchufarla.
+
+**Dos tablas, ninguna con `companyId`.** `supply_cuentas_cobro` (las cuentas de
+Membego) y `supply_pedidos` (lo que un cliente le paga a Membego). No son de
+ninguna empresa: ni del proveedor —que no debe ver a qué precio revende Membego
+lo que le vendió— ni de la empresa donde el cliente tiene su ficha.
+
+**El fallo que casi se repite.** `supply_pedidos` tiene `clienteId` NOT NULL, así
+que la derivación de políticas RLS le daba una sola —por la empresa de la ficha
+del cliente—, exactamente el fallo de `supply_derechos` del 25-09. Y la fila
+lleva `monto`, o sea el margen de Membego. El preflight **no** lo marca (para él
+la tabla está cubierta), así que se declara a mano en la Capa 2 y se DEJA CAER la
+política derivada. `npm run rls:probar` pasa de 14 a **16** comprobaciones; las
+dos nuevas fallan si alguien quita esa declaración, probado por mutación.
+
+**El cobro no mueve supply.** Ni una unidad. `retener` aparta al abrir el pedido
+y `confirmarHold` emite cuando el dinero está — las dos ya existían. Hay una
+prueba que falla si `cobro.ts` empieza a llamar a `registrarMovimientos`: un
+invariante en dos sitios es un invariante que algún día discrepa.
+
+**Las tres reglas de `docs/PAGOS.md`, sostenidas.** La aprobación la decide el
+servidor y además la firma una persona (la base exige revisor en todo pedido
+pagado); todo se activa una vez (`confirmarHold` lanza si el derecho no está
+RETENIDO, más único por `derechoId`); y el monto se compara contra el precio
+congelado, con tolerancia de un centavo — no del 1%, que regalaría cuatro pesos
+por venta sin aparecer en ningún descuadre.
+
+**El alta de cuentas es el interruptor.** No hay una casilla de «vender supply:
+sí/no» en ningún sitio: la venta está encendida si —y solo si— hay una cuenta
+activa en `/superadmin/supply/cobros/cuentas`. Dos llaves para lo mismo acaban
+con una en el estado que nadie esperaba, y aquí ese estado sería «la vitrina
+publica precios que no se pueden cobrar». Una cuenta nace APAGADA salvo que se
+diga lo contrario, no se borra ni se edita —un pedido guarda a qué cuenta se le
+pidió transferir— y apagar la última avisa de que la venta se detiene.
+
+**El comprobante vive en el bucket privado.** No en un enlace que el cliente
+teclea: eso dejaba la prueba de un pago donde el interesado quisiera, y podía
+cambiarla o borrarla después de que se la aprobaran. Se reusa
+`modules/storage/comprobantes.ts` —el que resolvió la auditoría C-01 para
+membresías y compras— con un tipo nuevo, `'pedido'`: la ruta la genera el
+servidor con 16 bytes aleatorios, el cliente sube con un token de un solo uso
+que no vale para otra ruta, y cada lectura se firma en el momento
+(`urlComprobante`, cinco minutos) previa comprobación de quién pregunta. La
+columna se llama `comprobantePath` porque guarda una ruta. Un **admin de empresa
+no puede leerlo**: el comprobante lleva el banco y la cuenta de alguien que pagó
+A MEMBEGO por una unidad que el comercio ya cobró por contrato.
+
+**Invariantes en la base:** monto no negativo, revisión completa (estado final
+⇔ revisor y fecha), rechazo motivado, y EN_REVISION implica comprobante. Los
+cuatro probados uno a uno contra PostgreSQL 16: rechazan lo que deben y aceptan
+lo que deben.
+
+
+## Auditoría y finalización (capa financiera) · 29-09-2026
+
+Ver `docs/membego-supply-auditoria-2026-09.md` (matriz, hallazgos y cierre) y
+el ADR-0009. En una línea: el módulo pasa de «compra → lote → derecho →
+redención → saldo» a cubrir también depósitos, facturas, cuentas por pagar y
+por cobrar, liquidaciones con snapshot, conciliación con el proveedor y venta
+sin precompra, con la pestaña «Cobros» disuelta en una sección Finanzas y una
+suite de 16 casos contra PostgreSQL en CI (`npm run test:db`).

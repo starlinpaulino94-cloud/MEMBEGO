@@ -154,6 +154,18 @@ export const CAPACIDADES = [
   'EXCURSIONES',
   // CRM: gestión de leads, seguimiento y pipeline comercial.
   'CRM',
+  // ── Membego Supply (docs/membego-supply-architecture.md) ───────────────────
+  // La MISMA organización es comercio y proveedora de Membego. No se crea una
+  // segunda empresa: se le enciende una capacidad. Nacen APAGADAS — ser
+  // proveedora de la plataforma es algo que se negocia, no un estado por
+  // defecto de estar dada de alta.
+  //
+  // Son DOS y no una porque son dos permisos distintos: vender supply a
+  // Membego (firmar contratos, ver compromisos y liquidaciones) y cumplirlo en
+  // el mostrador (escanear vouchers). Una cadena puede tener la primera en la
+  // organización y la segunda solo donde de verdad hay personal escaneando.
+  'MEMBEGO_SUPPLIER',
+  'MEMBEGO_SUPPLY_FULFILLMENT',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -178,6 +190,8 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   TURNOS: 'Turnos y asistencia',
   EXCURSIONES: 'Excursiones: ventas, vendedores y comisiones',
   CRM: 'CRM: leads, seguimiento y pipeline comercial',
+  MEMBEGO_SUPPLIER: 'Membego Supply: vender inventario a Membego',
+  MEMBEGO_SUPPLY_FULFILLMENT: 'Membego Supply: escanear y entregar vouchers',
 }
 
 /**
@@ -195,6 +209,10 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   // la capacidad apaga esa y con ella el módulo completo. Antes se listaban
   // aquí cuatro; las otras tres no existían en ninguna guardia.
   CRM: ['leads'],
+  // Todo el portal del proveedor (`/admin/supply/*`) cuelga de una sección.
+  // Apagar la capacidad cierra compromisos, redenciones, incidentes y
+  // liquidaciones de una vez.
+  MEMBEGO_SUPPLIER: ['supply'],
 }
 
 /** Índice inverso sección → capacidad que la controla (o undefined). */
@@ -217,6 +235,7 @@ export const SECCION_LABEL: Partial<Record<AdminSection, string>> = {
   seguimiento: 'Seguimiento de beneficios',
   gamificacion: 'Ruleta y gamificación',
   leads: 'Prospectos (todo el CRM)',
+  supply: 'Membego Supply (compromisos con la plataforma)',
 }
 
 /** Las secciones del panel que se apagan al desactivar esta capacidad. */

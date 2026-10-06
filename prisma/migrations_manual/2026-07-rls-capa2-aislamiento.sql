@@ -216,6 +216,69 @@ BEGIN
     RAISE NOTICE 'companies cubierta por su propia clave primaria.';
   END IF;
 
+  -- ── Nivel 0.5: la tabla apunta DIRECTO a `companies` ──────────────────────
+  --
+  -- POR QUÉ ESTE NIVEL EXISTE, Y QUÉ FALLO REAL TAPA
+  --
+  -- Las rondas de abajo recorren las claves foráneas en orden ALFABÉTICO de
+  -- columna y se quedan con la primera que llega a una tabla ya cubierta. Eso
+  -- basta cuando hay un solo camino, y elige mal cuando hay varios.
+  --
+  -- Pasó con Membego Supply (medido el 25-09-2026). `supply_derechos` tiene
+  -- tres claves NOT NULL: `clienteId`, `loteId` y `proveedorId`. Alfabéticamente
+  -- gana `clienteId`, así que la política ataba el derecho a la empresa donde
+  -- la PERSONA tiene su ficha — y no es la misma empresa que lo cumple: alguien
+  -- registrado en Car Town puede recibir una pizza de Litre Pizza. Dos
+  -- consecuencias, las dos malas:
+  --
+  --   · Litre Pizza, mirando su propio portal, no vería NI UNO de sus derechos
+  --     ni de sus entregas. El módulo se apaga para el proveedor.
+  --   · Y Car Town SÍ podría leer esas filas, que llevan `costoUnitario` — lo
+  --     que Membego negoció con OTRA empresa. Una fuga entre inquilinos por el
+  --     camino que se eligió sin mirar.
+  --
+  -- La regla es la que ya estaba implícita en el resto del esquema: si una
+  -- tabla tiene una clave foránea NOT NULL a `companies`, ESA es su empresa.
+  -- No hay que deducir nada por un tercero.
+  --
+  -- Medido antes de escribirlo, y esto es lo que lo hace seguro: de las 77
+  -- tablas con clave directa a `companies`, 75 ya resolvían por `companyId`
+  -- propio o por este mismo camino. Las ÚNICAS dos que cambian son
+  -- `supply_derechos` y `supply_redenciones`, que son las que estaban mal.
+  -- Ninguna tabla tiene dos claves NOT NULL a `companies`, así que la elección
+  -- nunca es ambigua.
+  nuevas := 0;   -- se declara sin valor, y NULL + 1 es NULL: el recuento saldría vacío.
+  FOR fk IN
+    SELECT hija.relname AS tabla, att.attname AS columna
+      FROM pg_constraint con
+      JOIN pg_class  hija  ON hija.oid  = con.conrelid
+      JOIN pg_class  madre ON madre.oid = con.confrelid
+      JOIN pg_namespace n  ON n.oid     = hija.relnamespace
+      JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = con.conkey[1]
+     WHERE con.contype = 'f'
+       AND n.nspname = 'public'
+       AND cardinality(con.conkey) = 1
+       AND att.attnotnull
+       AND madre.relname = 'companies'
+       AND hija.relname <> 'companies'
+       AND NOT (hija.relname = ANY (cubiertas))
+     ORDER BY hija.relname, att.attname
+  LOOP
+    CONTINUE WHEN fk.tabla = ANY (cubiertas);
+    cond := format(
+      '(current_setting(''app.omnisciente'', true) = ''on'' OR EXISTS ('
+      || 'SELECT 1 FROM public.companies p WHERE p.id = public.%I.%I))',
+      fk.tabla, fk.columna);
+    EXECUTE format(
+      'CREATE POLICY membego_inquilino ON public.%I FOR ALL TO membego_app USING (%s) WITH CHECK (%s)',
+      fk.tabla, cond, cond);
+    cubiertas := cubiertas || fk.tabla;
+    nuevas    := nuevas + 1;
+  END LOOP;
+
+  RAISE NOTICE 'Nivel 0.5 — con clave foránea directa a companies: %', nuevas;
+  nuevas := 0;
+
   -- ── Niveles 1..N: se llega al inquilino por una clave foránea NOT NULL ────
   LOOP
     ronda  := ronda + 1;
@@ -308,9 +371,20 @@ BEGIN
   -- lo administra MembeGo y lo lee toda empresa que abre el hub de integraciones.
   -- Se añadió después de escribir esta capa, así que el preflight la marcaba
   -- «sin ruta»: sin esta decisión, con `membego_app` el catálogo saldría vacío.
+  --
+  -- `supply_v2_vehicle_categories` son las categorías de vehículo de PLATAFORMA
+  -- (sedán, SUV, pickup, comercial) con las que Supply 2.0 pone precio por tipo
+  -- de carro. No tiene `companyId` A PROPÓSITO, y no por descuido: un proveedor
+  -- de Supply puede ser externo y no tener empresa en Membego, así que exigirle
+  -- una obligaría a inventarse una arbitraria. Lo administra Membego y lo lee
+  -- cualquiera que mire una oferta. Denegarla dejaría toda oferta cobrando el
+  -- precio base sin que nada lo avisara: el fail-open del precio por categoría
+  -- es por diseño, así que el síntoma NO sería un error sino cobrar de menos en
+  -- silencio, que es justo lo que este trabajo venía a evitar.
   FOREACH cond IN ARRAY ARRAY[
     'business_categories', 'campanas_globales', 'sistemas_conectados',
-    'tipos_negocio', 'sistemas_tipos_negocio', 'conectores'
+    'tipos_negocio', 'sistemas_tipos_negocio', 'conectores',
+    'supply_v2_vehicle_categories'
   ] LOOP
     CONTINUE WHEN NOT EXISTS (
       SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
@@ -354,6 +428,40 @@ BEGIN
   -- pública. Y no puede quedarse sin política, porque entonces RLS la deniega
   -- también en modo omnisciente y la API no autenticaría a NADIE: fallo
   -- cerrado, sí, pero cerrado del todo y sin decir por qué.
+  -- ── Membego Supply · el cobro de la PLATAFORMA ────────────────────────────
+  --
+  -- `supply_cuentas_cobro` son las cuentas bancarias de MEMBEGO, y
+  -- `supply_pedidos` lo que un cliente le paga a MEMBEGO por una unidad que
+  -- Membego ya le compró al comercio. Ninguna de las dos es de ninguna empresa.
+  --
+  -- `supply_pedidos` ESTÁ AQUÍ POR UN MOTIVO QUE NO SE VE, Y ES EL IMPORTANTE.
+  --
+  -- El preflight no la marca: tiene `clienteId` NOT NULL, así que la derivación
+  -- automática le da una política sola, por la empresa donde el CLIENTE tiene su
+  -- ficha. Esa política está mal, y es el mismo fallo que se encontró en
+  -- `supply_derechos` el 25-09-2026: la fila lleva `monto` —lo que Membego cobra
+  -- por revender lo que compró a RD$300—, y con esa política la empresa donde
+  -- Carlos se registró podría leer el margen de Membego sobre una compra en la
+  -- que no participa.
+  --
+  -- Por eso se declara a mano y se DEJA CAER la política derivada: aquí no basta
+  -- con añadir una regla, hay que quitar la que la derivación puso. Un pedido no
+  -- se lee nunca en modo inquilino, solo en omnisciente, que es como lo consulta
+  -- `modules/supply/cobro.ts`.
+  FOREACH cond IN ARRAY ARRAY['supply_cuentas_cobro', 'supply_pedidos'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    -- La derivada, si la hubo. `supply_pedidos` la tiene; la otra no.
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Cobro de plataforma (cuentas y pedidos): solo en modo omnisciente.';
+
   FOREACH cond IN ARRAY ARRAY['credenciales_sistema'] LOOP
     CONTINUE WHEN NOT EXISTS (
       SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
@@ -365,6 +473,126 @@ BEGIN
     cubiertas := cubiertas || cond;
   END LOOP;
   RAISE NOTICE 'Credenciales de sistema: solo en modo omnisciente.';
+
+  -- ── Membego Supply 2.0 · el NÚCLEO OPERATIVO (Slice 9) ────────────────────
+  --
+  -- `supply_v2_external_events` es lo que una pasarela de pago le manda a
+  -- MEMBEGO, y `supply_v2_outbox_events` los efectos que Membego se debe a sí
+  -- misma. Ninguna de las dos es de una empresa:
+  --
+  --   · No llevan `companyId`, y no es un olvido: un aviso de pago llega a
+  --     Membego, no a un inquilino. La empresa aparece —si aparece— al final de
+  --     la cadena, a través de la orden del cliente.
+  --   · Darles camino por `orderId` sería peor que no dárselo: `orderId` es
+  --     NULL justo en las filas que importan al investigar —el evento que llegó
+  --     con una referencia que no existe—, y una política que deriva del
+  --     inquilino dejaría esas filas invisibles para todos salvo en modo
+  --     omnisciente, con el resto visibles. Media tabla con una regla y media
+  --     con otra es exactamente lo que no se quiere al perseguir un pago.
+  --   · Y abrirlas a lectura de inquilino filtraría de una empresa a otra: el
+  --     `payload` y el `correlationId` de un evento nombran la operación de un
+  --     cliente y el proveedor que la sirve.
+  --
+  -- Nadie las lee en modo inquilino: el inbox y el outbox corren en
+  -- `sinEmpresa` (`modules/supply-v2/operations/`), igual que el resto del
+  -- motor de Supply 2.0, y el panel que las mostrará es de plataforma.
+  FOREACH cond IN ARRAY ARRAY['supply_v2_external_events', 'supply_v2_outbox_events'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    -- La derivada, si alguna vez la hubo (`orderId` es opcional, así que hoy no
+    -- la hay; se deja caer por si una columna futura se la ganara).
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Supply 2.0 · inbox y outbox: solo en modo omnisciente.';
+
+  -- ── Membego Supply 2.0 · CONCILIACIÓN DE PAGOS EXTERNOS (Slice 9, bloque 3) ─
+  --
+  -- `supply_v2_payment_reconciliations` es la comprobación de lo que una
+  -- pasarela dice haber cobrado contra lo que Membego tiene escrito. Por los
+  -- mismos motivos que el inbox y el outbox: no lleva `companyId`, su `orderId`
+  -- es NULL justo en las filas que más importan —el cobro de una compra que no
+  -- existe— y su contenido nombra la operación de un cliente y el importe que
+  -- se cobró. La lee el camino del webhook y el barrido, los dos en
+  -- `sinEmpresa`, y el panel que la mostrará es de plataforma.
+  --
+  -- Los INCIDENTES (`supply_v2_finance_incidents`) no están aquí a propósito:
+  -- esa tabla ya tenía su política derivada por `supplierId`, y desde el bloque
+  -- 3 esa columna admite NULL. Una fila sin proveedor queda fuera de la
+  -- política del inquilino —invisible salvo en modo omnisciente—, que es
+  -- exactamente lo que debe pasarle a un incidente de plataforma.
+  FOREACH cond IN ARRAY ARRAY['supply_v2_payment_reconciliations'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Supply 2.0 · conciliación de pagos externos: solo en modo omnisciente.';
+
+  -- ── Membego Supply 2.0 · INCIDENCIAS FINANCIERAS, con DOS dueños posibles ──
+  --
+  -- Esta tabla tenía política DERIVADA por `supplierId`, que era NOT NULL. El
+  -- bloque 3 del Slice 9 la hizo opcional —un aviso de pago de una pasarela
+  -- puede llegar para una compra cuyo proveedor no se resuelve, o para una
+  -- referencia que no existe—, y la derivación solo sigue claves NOT NULL (ver
+  -- la nota de los niveles 1..N). Sin esto, la tabla se quedaría SIN política:
+  -- RLS la denegaría entera y el panel de incidencias del Slice 5 aparecería
+  -- vacío sin un solo error en los logs.
+  --
+  -- Se declara a mano con la MISMA forma que tenía la derivada, más la
+  -- condición que la columna opcional exige:
+  --
+  --   · con proveedor  → se ve si su proveedor se ve (igual que antes);
+  --   · sin proveedor  → solo en modo omnisciente, que es lo que debe pasarle
+  --     a un incidente de plataforma: su `payload` y su importe hablan de la
+  --     operación de un cliente y del cobro de una pasarela.
+  FOREACH cond IN ARRAY ARRAY['supply_v2_finance_incidents'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_inquilino ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'' OR ('
+      || '"supplierId" IS NOT NULL AND EXISTS (SELECT 1 FROM public.supply_v2_suppliers p '
+      || 'WHERE p.id = public.%I."supplierId"))) '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'' OR ('
+      || '"supplierId" IS NOT NULL AND EXISTS (SELECT 1 FROM public.supply_v2_suppliers p '
+      || 'WHERE p.id = public.%I."supplierId")))', cond, cond, cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Supply 2.0 · incidencias: del proveedor si lo tienen, de plataforma si no.';
+
+  -- ── Membego Supply 2.0 · OPERACIÓN (Slice 9, bloque 4) ────────────────────
+  --
+  -- `supply_v2_operational_switches` son los interruptores de la PLATAFORMA
+  -- —apagar los pagos externos no es una decisión de un inquilino— y
+  -- `supply_v2_operational_alerts` son las condiciones que vigila el Centro de
+  -- Operaciones, que es de superadmin. Ninguna de las dos lleva `companyId` y
+  -- ninguna debe verse en modo inquilino: una alerta dice cuántos efectos van
+  -- atrasados en todo Membego, y un interruptor es un control global.
+  FOREACH cond IN ARRAY ARRAY['supply_v2_operational_switches', 'supply_v2_operational_alerts'] LOOP
+    CONTINUE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_inquilino ON public.%I', cond);
+    EXECUTE format('DROP POLICY IF EXISTS membego_omnisciente ON public.%I', cond);
+    EXECUTE format(
+      'CREATE POLICY membego_omnisciente ON public.%I FOR ALL TO membego_app '
+      || 'USING (current_setting(''app.omnisciente'', true) = ''on'') '
+      || 'WITH CHECK (current_setting(''app.omnisciente'', true) = ''on'')', cond);
+    cubiertas := cubiertas || cond;
+  END LOOP;
+  RAISE NOTICE 'Supply 2.0 · interruptores y alertas: solo en modo omnisciente.';
 
   -- ── Lo que quedó fuera ────────────────────────────────────────────────────
   --

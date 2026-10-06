@@ -102,3 +102,34 @@ export async function seccionPermitidaPorCapacidades(
   if (!capacidad) return true
   return tieneCapacidad(companyId, capacidad)
 }
+
+/**
+ * La MISMA decisión que `seccionPermitidaPorCapacidades`, resuelta de una vez
+ * para todas las secciones.
+ *
+ * Existe para las pantallas que tienen que explicar el mapa entero y no
+ * pueden preguntar sección por sección: una llamada por cada una de las 44,
+ * multiplicada por cada miembro del equipo, es una tabla de consultas para
+ * contestar algo que sale de una sola lectura.
+ *
+ * Mantiene las dos reglas de la versión de una en una, porque son las que
+ * hacen que la respuesta signifique lo mismo: sin empresa (contexto de
+ * plataforma) no hay gate, y una sección sin capacidad mapeada siempre pasa.
+ * Ante un fallo de lectura niega lo mapeado, igual que `tieneCapacidad`.
+ */
+export async function filtroDeCapacidades(
+  companyId: string | null | undefined
+): Promise<(section: AdminSection) => boolean> {
+  if (!companyId) return () => true
+  let activas: Capacidad[] | null = null
+  try {
+    activas = (await getCapacidadesEmpresa(companyId)).activas
+  } catch {
+    activas = null
+  }
+  return (section: AdminSection) => {
+    const capacidad = CAPACIDAD_DE_SECCION[section]
+    if (!capacidad) return true
+    return activas ? activas.includes(capacidad) : false
+  }
+}

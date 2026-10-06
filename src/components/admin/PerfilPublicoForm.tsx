@@ -60,6 +60,29 @@ export interface PerfilCompanyData {
 
 const init: PerfilState = {}
 
+/**
+ * Las zonas que un negocio de esta plataforma usa de verdad. No es el catálogo
+ * IANA entero —son más de cuatrocientas y una lista así no ayuda a elegir—:
+ * son el país, sus vecinos y los husos de quien opera desde fuera.
+ */
+const ZONAS_SUGERIDAS = [
+  'America/Santo_Domingo',
+  'America/Puerto_Rico',
+  'America/Port-au-Prince',
+  'America/Havana',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Bogota',
+  'America/Panama',
+  'America/Caracas',
+  'America/Mexico_City',
+  'Europe/Madrid',
+  'UTC',
+]
+
+
 function SubmitBtn() {
   const { pending } = useFormStatus()
   return (
@@ -408,7 +431,25 @@ export function PerfilPublicoForm({
               name="zonaHoraria"
               defaultValue={company.zonaHoraria}
               placeholder="America/Santo_Domingo"
+              list="zonas-horarias"
+              autoComplete="off"
+              spellCheck={false}
             />
+            {/* SUGERENCIAS, NO UNA LISTA CERRADA.
+                El marcador de posición enseñaba el formato y se borraba al
+                escribir, así que «GMT-4» o «Santo Domingo» entraban sin
+                resistencia — y con ellas Reportes deja de cargar, porque
+                `Intl` lanza ante una zona que no reconoce. Un `datalist` deja
+                a mano las que de verdad se usan sin cerrar la puerta a una
+                zona rara; el servidor rechaza lo que no sea IANA válida. */}
+            <datalist id="zonas-horarias">
+              {ZONAS_SUGERIDAS.map((z) => (
+                <option key={z} value={z} />
+              ))}
+            </datalist>
+            <p className="text-caption text-muted-foreground">
+              Formato IANA. Decide el corte del día en los reportes y la caja.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="colorPrimario">Color de marca</Label>

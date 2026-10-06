@@ -63,7 +63,7 @@ export async function guardarComunicacionConfig(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = resolveCompanyId(user, formData)
@@ -124,7 +124,7 @@ export async function enviarCorreoPrueba(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
 
   const parsed = correoPruebaSchema.safeParse({
@@ -162,7 +162,7 @@ export async function crearFaq(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
   const companyId = resolveCompanyId(user, formData)
   if (!companyId) return { error: 'Selecciona una empresa.' }
@@ -196,7 +196,7 @@ export async function actualizarFaq(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
   const parsed = faqActualizarSchema.safeParse({
     id: String(formData.get('id') ?? ''),
@@ -232,7 +232,7 @@ export async function actualizarFaq(
 }
 
 export async function eliminarFaq(id: string): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
   try {
     const faq = await sinEmpresa('soporte: buscar FAQ por id', (tx) =>
@@ -253,7 +253,7 @@ export async function eliminarFaq(id: string): Promise<ActionState> {
 }
 
 export async function toggleFaq(id: string, activo: boolean): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('comunicacion')
   if (!user) return { error: 'No autorizado.' }
   try {
     const faq = await sinEmpresa('soporte: buscar FAQ por id', (tx) =>
@@ -381,7 +381,13 @@ async function loadTicketForAdmin(user: SessionUser, ticketId: string) {
   const ticket = await sinEmpresa('soporte: buscar ticket por id (se valida la empresa después)', (tx) =>
     tx.supportTicket.findUnique({
       where: { id: ticketId },
-      include: { cliente: { select: { supabaseId: true, nombre: true } } },
+      include: {
+        // `email` y el nombre de la empresa entran para poder AVISAR al cliente
+        // por correo cuando alguien le responde. Dos columnas con `select`
+        // expreso, no la fila entera.
+        cliente: { select: { supabaseId: true, nombre: true, email: true } },
+        company: { select: { name: true } },
+      },
     })
   )
   if (!ticket) return null
@@ -391,11 +397,74 @@ async function loadTicketForAdmin(user: SessionUser, ticketId: string) {
   return ticket
 }
 
+/**
+ * El cliente se entera de que le respondieron SIN tener que entrar a la app.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ HACÍA FALTA
+ *
+ * Hasta hoy, responder un ticket creaba una notificación dentro de la
+ * aplicación y nada más. El bucle estaba cerrado del lado del negocio —le
+ * llega el correo del ticket nuevo, y desde agosto también la respuesta del
+ * cliente— y abierto del lado de quien preguntó: si no volvía a entrar, no se
+ * enteraba. Un soporte al que hay que ir a mirar no es soporte.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * TRES DECISIONES
+ *
+ * 1. `Reply-To` FIRMADO, igual que el correo del negocio. El cliente puede
+ *    contestar desde su gestor de correo y su respuesta entra en este mismo
+ *    ticket. Sin `EMAIL_REPLY_DOMAIN` configurado, `crearDireccionRespuesta`
+ *    devuelve null y el correo sale sin él: se avisa igual, solo que hay que
+ *    entrar a la app para contestar.
+ *
+ * 2. SE ESCAPA EL CUERPO. Lo escribe un administrador, no un desconocido, pero
+ *    un `<` mal puesto en una respuesta rompería el HTML del correo, y el coste
+ *    de escapar es cero. El asunto NO: va en `subject`, que es texto plano, y
+ *    con entidades se leería `&lt;` en la bandeja.
+ *
+ * 3. NADA para empresas de demostración. Sus clientes son inventados y sus
+ *    correos también: mandarles mensajes gasta cuota y, lo que importa más,
+ *    los rebotes ensucian la reputación del dominio desde el que sale el
+ *    correo de verdad.
+ *
+ * Fail-open, como todo correo de este archivo: si no se puede enviar, la
+ * respuesta del administrador ya está guardada y la notificación en la app
+ * también. Un correo no puede tumbar una respuesta de soporte.
+ */
+async function avisarAlClientePorCorreo(
+  ticket: { id: string; asunto: string; companyId: string; cliente: { email: string }; company: { name: string } | null },
+  cuerpo: string
+): Promise<void> {
+  try {
+    const { esEmpresaDemo } = await import('@/modules/demo')
+    if (await esEmpresaDemo(ticket.companyId)) return
+
+    const negocio = ticket.company?.name ?? 'el negocio'
+    const replyTo = crearDireccionRespuesta(ticket.id)
+    await encolarEmail({
+      to: ticket.cliente.email,
+      subject: `Respuesta a tu consulta: ${ticket.asunto}`,
+      replyTo,
+      html: `<p>${escaparHtml(negocio)} respondió a tu consulta.</p>
+             <p><strong>Asunto:</strong> ${escaparHtml(ticket.asunto)}</p>
+             <p>${escaparHtml(cuerpo).replace(/\n/g, '<br/>')}</p>
+             ${
+               replyTo
+                 ? '<p>Puedes responder a este correo: tu respuesta entra en la misma conversación.</p>'
+                 : '<p>Entra a tu cuenta para continuar la conversación.</p>'
+             }`,
+    })
+  } catch (e) {
+    console.error('[soporte-email] aviso al cliente', e)
+  }
+}
+
 export async function responderTicket(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('tickets')
   if (!user) return { error: 'No autorizado.' }
 
   const parsed = responderTicketSchema.safeParse({
@@ -443,6 +512,8 @@ export async function responderTicket(
       })
     }
 
+    await avisarAlClientePorCorreo(ticket, cuerpo)
+
     revalidatePath(`/admin/tickets/${ticketId}`)
     revalidatePath('/admin/tickets')
     revalidatePath(`/cliente/ayuda/${ticketId}`)
@@ -457,7 +528,7 @@ export async function agregarNotaInterna(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('tickets')
   if (!user) return { error: 'No autorizado.' }
 
   const parsed = notaInternaSchema.safeParse({
@@ -494,7 +565,7 @@ export async function cambiarEstadoTicket(
   ticketId: string,
   estado: string
 ): Promise<ActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('tickets')
   if (!user) return { error: 'No autorizado.' }
   const parsed = cambiarEstadoTicketSchema.safeParse({ estado })
   if (!parsed.success) return { error: primerErrorZod(parsed.error) }

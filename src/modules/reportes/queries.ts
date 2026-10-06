@@ -84,6 +84,28 @@ export interface Reporte {
   incompleto: boolean
 }
 
+/**
+ * Lo que devuelven las trece consultas del resumen, en orden. Existe con nombre
+ * para poder declarar el VALOR DE RESPALDO cuando la transacción entera falla:
+ * sin el tipo, ese respaldo sería un `as` a ciegas y añadir una consulta
+ * catorceava dejaría de avisar de que falta su respaldo.
+ */
+type DatosResumen = [
+  { ingresos: number; operaciones: number },
+  { ingresos: number; operaciones: number },
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  PuntoSerie[],
+  Reporte['porTipo'],
+  Reporte['porMetodo'],
+  Reporte['topClientes'],
+  Reporte['activasPorPlan'],
+]
+
 /** Transacciones que de verdad ocurrieron (una cancelada no es actividad). */
 function whereAplicadas(companyId: string, desde: Date, hasta: Date): Prisma.TransactionWhereInput {
   return {
@@ -276,6 +298,32 @@ export async function getReporte(
   // Todo el reporte va con el contexto de empresa puesto (RLS Capa 2). El
   // `where: { companyId }` de cada consulta NO se quita: RLS es la segunda
   // barrera, no la primera.
+  /**
+   * LA TRANSACCIÓN TAMBIÉN PUEDE FALLAR, Y ESO NO ESTABA CUBIERTO.
+   *
+   * Las trece consultas van cada una dentro de `seguro()`: si una revienta, el
+   * reporte sale con el resto y marca `incompleto`. Toda la filosofía de este
+   * módulo es esa — un dato que no se pudo leer no puede tumbar la pantalla.
+   *
+   * Pero el envoltorio quedaba fuera. `conEmpresa` abre una transacción
+   * interactiva con `maxWait` 20 s y `timeout` 45 s, y cuando esos números no
+   * alcanzan lanza `P2028: Unable to start a transaction in the given time`.
+   * Ese error pasa POR ENCIMA de los trece `seguro()` —ninguno llega a
+   * ejecutarse— y sale del render como una excepción sin recoger: «No se pudo
+   * cargar esta sección» y un número de error.
+   *
+   * No es hipotético: `lib/tenant.ts` documenta ese incidente del 12-08-2026 y
+   * describe el síntoma con esas mismas palabras. Y Reportes es la pantalla más
+   * cara del panel —trece agregados serializados sobre UNA conexión—, o sea la
+   * primera candidata a agotar el presupuesto.
+   *
+   * Ahora el envoltorio usa el MISMO `seguro()` que sus consultas: se degrada a
+   * un reporte vacío marcado `incompleto`, que la vista ya sabe anunciar con su
+   * aviso de «El reporte está incompleto». Un reporte que avisa de que le
+   * faltan datos es peor que uno completo y muchísimo mejor que ninguno.
+   */
+  const VACIO_RESUMEN: DatosResumen = [cero, cero, 0, 0, 0, 0, 0, 0, [], [], [], [], []]
+
   const [
     ventas,
     ventasAnt,
@@ -290,7 +338,8 @@ export async function getReporte(
     porMetodo,
     clientes,
     planes,
-  ] = await conEmpresa(companyId, (tx) =>
+  ] = await seguro(
+    conEmpresa(companyId, (tx) =>
     Promise.all([
       seguro(sumarVentas(tx, companyId, rango.desde, rango.hasta), cero, fallos),
       seguro(sumarVentas(tx, companyId, rango.anterior.desde, rango.anterior.hasta), cero, fallos),
@@ -310,6 +359,9 @@ export async function getReporte(
       seguro(topClientes(tx, companyId, rango.desde, rango.hasta), [], fallos),
       seguro(activasPorPlan(tx, companyId), [], fallos),
     ])
+    ),
+    VACIO_RESUMEN,
+    fallos
   )
 
   return {
@@ -348,6 +400,20 @@ export function reporteToCsv(
   r: Reporte,
   contexto: { empresa: string; desdeDia: string; hastaDia: string; dias: number }
 ): string {
+  return armarCsvBloques(reporteToBloques(r, contexto))
+}
+
+/**
+ * Los bloques del reporte, antes de convertirse en un archivo.
+ *
+ * Están separados de `reporteToCsv` para que el MISMO contenido pueda salir en
+ * CSV y en Excel. Si cada formato armara su lista, la segunda se quedaría atrás
+ * a la primera cifra nueva — y el fallo no se ve, se descarga.
+ */
+export function reporteToBloques(
+  r: Reporte,
+  contexto: { empresa: string; desdeDia: string; hastaDia: string; dias: number }
+): { titulo: string; encabezados: string[]; filas: unknown[][] }[] {
   const totalSerie = r.serie.reduce(
     (acc, p) => ({
       ventas: acc.ventas + p.ventas,
@@ -365,7 +431,7 @@ export function reporteToCsv(
       ? [label, 'sin permiso', 'sin permiso', '']
       : [label, dinero ? k.valor.toFixed(2) : k.valor, dinero ? k.anterior.toFixed(2) : k.anterior, k.variacion ?? '']
 
-  return armarCsvBloques([
+  return [
     {
       titulo: 'Alcance del reporte',
       encabezados: ['Concepto', 'Valor'],
@@ -429,5 +495,5 @@ export function reporteToCsv(
       encabezados: ['Plan', 'Activas'],
       filas: r.activasPorPlan.map((p) => [p.plan, p.count]),
     },
-  ])
+  ]
 }

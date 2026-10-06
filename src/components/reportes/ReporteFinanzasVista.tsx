@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { formatoDinero } from '@/modules/reportes/formato'
 import { plural } from '@/lib/plural'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { Rango } from '@/modules/reportes/rango'
@@ -66,6 +67,7 @@ export function ReporteFinanzasVista({
   controles?: React.ReactNode
 }) {
   const dinero = (n: number) => formatMoney(n, prefs)
+  const fDinero = formatoDinero(prefs)
   const detalle = (vista: string) =>
     `/admin/reportes/finanzas/detalle?vista=${vista}${qs ? `&${qs}` : ''}`
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
@@ -170,7 +172,7 @@ export function ReporteFinanzasVista({
           <GraficoTendencia
             datos={serie.map((p) => ({ dia: p.dia, valor: p.monto }))}
             etiqueta="Ingreso de caja"
-            formato={dinero}
+            formato={fDinero}
           />
         }
         tabla={
@@ -196,7 +198,7 @@ export function ReporteFinanzasVista({
         grafico={
           <GraficoDistribucion
             datos={metodosDelAnillo}
-            formato={dinero}
+            formato={fDinero}
             total={cajaDelPeriodo}
           />
         }

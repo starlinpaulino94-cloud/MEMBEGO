@@ -1,5 +1,6 @@
 import {
   Activity,
+  BadgePercent,
   BarChart3,
   Banknote,
   Bell,
@@ -26,6 +27,7 @@ import {
   MessageCircle,
   Newspaper,
   Package,
+  PackageSearch,
   Palette,
   Plug,
   QrCode,
@@ -39,6 +41,7 @@ import {
   Store,
   Tag,
   Ticket,
+  TicketPercent,
   TrendingUp,
   TriangleAlert,
   Trophy,
@@ -50,7 +53,7 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react'
-import { FULL_ADMIN_ROLES, type AppRole } from '@/types'
+import { ADMIN_ROLES, FULL_ADMIN_ROLES, type AppRole } from '@/types'
 import {
   adminSectionForPath,
   seccionPermitida,
@@ -110,7 +113,13 @@ import {
  * importa el catálogo entero para no meterlo en el paquete del navegador; la
  * prueba de sincronía se encarga de que no se separen.
  */
-export type CapacidadNav = 'CITAS' | 'SEGUIMIENTO' | 'RULETA' | 'EXCURSIONES' | 'POS_CAJA'
+export type CapacidadNav =
+  | 'CITAS'
+  | 'SEGUIMIENTO'
+  | 'RULETA'
+  | 'EXCURSIONES'
+  | 'POS_CAJA'
+  | 'MEMBEGO_SUPPLIER'
 
 /** Verticales de negocio (espejo de `CATEGORIAS`, por el mismo motivo). */
 export type TipoEmpresaNav = 'CAR_WASH' | 'BARBERIA' | 'RESTAURANTE' | 'GYM' | 'EXCURSIONES'
@@ -615,6 +624,28 @@ const G_ADM_CONEXIONES: NavGroup = {
   label: 'Conexiones',
   items: [
     {
+      // NO va en el grupo de oferta ni junto al inventario, y es deliberado:
+      // esto no es lo que la empresa vende, es lo que Membego le compró y ella
+      // está obligada a entregar. Ponerlo junto a sus promociones invitaría a
+      // confundir «vendí esta pizza yo» con «entregué una que Membego ya pagó».
+      href: '/admin/supply',
+      label: 'Membego Supply',
+      icon: PackageSearch,
+      description: 'Compromisos con la plataforma: qué te compró Membego y cuánto llevas entregado.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['supply', 'membego', 'compromisos', 'vouchers', 'liquidacion', 'contratos'],
+    },
+    {
+      // Membego Supply 2.0: el escáner y las entregas de los beneficios que
+      // los clientes compraron a Membego. Misma capacidad que Supply V1.
+      href: '/admin/supply-v2',
+      label: 'Entregas Membego',
+      icon: ScanLine,
+      description: 'Escanea el QR del cliente, confirma la entrega y revisa las entregas del día.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['supply', 'membego', 'entregas', 'escaner', 'qr', 'beneficios', 'redenciones'],
+    },
+    {
       href: '/admin/integraciones',
       label: 'Integraciones',
       icon: Plug,
@@ -770,7 +801,18 @@ const HUB_ANALITICA: NavGroup = {
 const HUB_AJUSTES: NavGroup = {
   id: 'ajustes',
   label: 'Ajustes',
-  items: deAdmin('/admin/perfil', '/admin/sucursales', '/admin/empleados', '/admin/integraciones'),
+  // `/admin/supply` va aquí, junto a integraciones, y no en Catálogo ni en
+  // Operaciones: no es lo que la empresa vende, es su relación contractual con
+  // la plataforma. Detrás de la capacidad MEMBEGO_SUPPLIER, así que solo
+  // aparece en las empresas que de verdad le venden supply a Membego.
+  items: deAdmin(
+    '/admin/perfil',
+    '/admin/sucursales',
+    '/admin/empleados',
+    '/admin/integraciones',
+    '/admin/supply',
+    '/admin/supply-v2'
+  ),
 }
 
 export const GRUPOS_HUB_ADMIN: readonly NavGroup[] = [
@@ -853,6 +895,60 @@ const G_CLI_MIO: NavGroup = {
   id: 'mi-membego',
   label: 'Mi Membego',
   items: [
+    {
+      // «Mis beneficios» va en MI MEMBEGO y no en Descubrir: esto ya es suyo.
+      // Son unidades que Membego compró y le entregó — de cualquier empresa de
+      // la red, no de una en particular—, así que tampoco cabe en
+      // «Mis promociones», que son las que ella misma compró.
+      href: '/cliente/beneficios',
+      // «Beneficios Membego» y no «Mis beneficios»: esa etiqueta ya es de
+      // /cliente/mis-promociones, que son las que la persona compró ella misma
+      // en una empresa. Dos entradas con el mismo nombre y distinto destino es
+      // exactamente la confusión entre las capas 1 y 3 de la arquitectura.
+      label: 'Beneficios Membego',
+      icon: Gift,
+      description: 'Lo que Membego ya pagó por ti y puedes usar en la red.',
+      keywords: ['beneficios', 'membego', 'gratis', 'regalo', 'voucher', 'supply'],
+    },
+    {
+      // Supply 2.0: compras hechas a MEMBEGO (no a una empresa) y los
+      // beneficios que nacen de ellas. Va en Mi Membego porque ya es suyo.
+      href: '/cliente/compras',
+      label: 'Compras Membego',
+      icon: Tag,
+      description: 'Ofertas Membego que compraste y tus beneficios.',
+      keywords: ['compras', 'membego', 'ofertas', 'beneficios', 'supply'],
+    },
+    {
+      // Supply 2.0 · Slice 6: bonos y descuentos que Membego le asignó a esta
+      // persona y que rebajan lo que paga al comprar una oferta. No son
+      // unidades ya pagadas (eso es «Beneficios Membego») ni promociones que
+      // ella compró (eso es «Mis beneficios»): es dinero a su favor.
+      href: '/cliente/bonos',
+      label: 'Bonos y descuentos',
+      icon: BadgePercent,
+      description: 'Bonos que Membego te asignó para pagar menos.',
+      keywords: ['bonos', 'descuentos', 'beneficio', 'bono', 'subsidio', 'supply'],
+    },
+    {
+      // Supply 2.0 · Slice 7: los códigos de las campañas. Van aparte de los
+      // bonos porque se usan distinto: un cupón se teclea en el checkout.
+      href: '/cliente/cupones',
+      label: 'Mis cupones',
+      icon: TicketPercent,
+      description: 'Códigos de las campañas de Membego.',
+      keywords: ['cupones', 'cupon', 'codigo', 'promocion', 'campana', 'supply'],
+    },
+    {
+      // Supply 2.0 · Slice 8: membresía, puntos, recompensas e invitaciones en
+      // una entrada. Se llama «fidelización» y no «membresías» porque V1 ya
+      // tiene su propia entrada con ese nombre.
+      href: '/cliente/fidelizacion',
+      label: 'Mi fidelización',
+      icon: Gift,
+      description: 'Tu membresía, tus puntos y tus recompensas.',
+      keywords: ['fidelizacion', 'membresia', 'puntos', 'recompensas', 'invitar', 'referidos', 'supply'],
+    },
     {
       href: '/cliente/mis-promociones',
       label: 'Mis beneficios',
@@ -1117,6 +1213,29 @@ const G_SA_OPERACION: NavGroup = {
       description: 'Sistemas satélite conectados a Membego.',
       badge: 'colaAtascada',
       keywords: ['integraciones', 'satelites', 'cola', 'webhooks', 'salud'],
+    },
+    {
+      href: '/superadmin/supply',
+      label: 'Supply',
+      icon: PackageSearch,
+      description: 'Inventario patrocinado: lo que Membego compró para regalar, vender o premiar.',
+      keywords: [
+        'supply',
+        'inventario',
+        'proveedores',
+        'lotes',
+        'compras',
+        'vouchers',
+        'redenciones',
+        'liquidaciones',
+      ],
+    },
+    {
+      href: '/superadmin/supply-v2',
+      label: 'Supply 2.0',
+      icon: PackageSearch,
+      description: 'Procurement: proveedores, acuerdos, compras y recepciones (nuevo motor, en paralelo).',
+      keywords: ['supply', 'supply 2.0', 'procurement', 'proveedores', 'compras', 'recepciones', 'lotes'],
     },
     {
       href: '/superadmin/connect',
@@ -1392,9 +1511,40 @@ export function ofreceSalidaAPlataforma(ctx: ContextoNav): boolean {
 
 /** Los espacios que esta persona ve, con sus grupos ya filtrados. */
 export function visibleWorkspaces(ctx: ContextoNav): EspacioVisible[] {
-  return workspacesForRole(ctx.role)
+  return espaciosDe(ctx)
     .filter((w) => canSeeWorkspace(w, ctx))
     .map((w) => ({ ...w, groups: visibleGroups(w, ctx) }))
+}
+
+/**
+ * Los espacios de los que parte el menú de esta persona.
+ *
+ * `workspacesForRole` reparte por rol, y a un rol de mostrador le da el
+ * mostrador: los espacios del panel NO ESTÁN EN SU ÁRBOL. Por eso conceder
+ * Clientes a un empleado no le enseñaba nada — no es que el módulo se
+ * filtrara, es que no había dónde filtrarlo.
+ *
+ * Con alguna sección concedida se le suman los espacios del panel, y de ahí
+ * en adelante manda el filtro de siempre: `visibleGroups` deja solo los
+ * módulos permitidos y un espacio sin ninguno no se pinta. Un empleado con
+ * Clientes concedido ve Clientes, y nada más.
+ *
+ * NO HACE FALTA AFLOJAR NADA MÁS, y se comprobó: probé además a saltarme el
+ * rol y el rango del item y del espacio para quien tuviera concesiones, y las
+ * pruebas seguían pasando con y sin ello — porque hoy ningún módulo ni
+ * espacio del menú declara `roles` ni `rangoMinimo`. Era código que no hacía
+ * nada, con una prueba que no podía fallar. Fuera los dos.
+ */
+function espaciosDe(ctx: ContextoNav): Workspace[] {
+  const base = workspacesForRole(ctx.role)
+  if (ADMIN_ROLES.includes(ctx.role) || !tieneAlgunaConcesion(ctx)) return base
+  const yaEstan = new Set(base.map((w) => w.id))
+  return [...base, ...ESPACIOS_ADMIN.filter((w) => !yaEstan.has(w.id))]
+}
+
+/** ¿Tiene concedida ALGUNA sección? Abre el árbol; el contenido se filtra aparte. */
+function tieneAlgunaConcesion(ctx: ContextoNav): boolean {
+  return Object.values(ctx.permisos?.secciones ?? {}).some((v) => v === true)
 }
 
 /**

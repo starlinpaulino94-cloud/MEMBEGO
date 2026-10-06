@@ -386,7 +386,31 @@ export function interpretarCompraToken(resp: unknown): ResultadoCompraToken {
     // cliente: es lo que hay que mandarle a CardNET cuando toca reclamar.
     codigo: codigo || (aprobada ? '00' : ''),
     motivo,
-    requiereActivacion: !aprobada && exigeActivacionPrimero(errores),
+    /**
+     * EL TEXTO DE ACTIVACIÓN Y LA PANTALLA DE ACTIVACIÓN VAN JUNTOS. SIEMPRE.
+     *
+     * Este flag decide a qué pantalla va el cliente; `motivo` decide qué lee.
+     * Se calculaban por caminos distintos y podían contradecirse — y se
+     * contradecían:
+     *
+     *   · `mensajeDeError` traduce el código PR001 («el medio de pago existe
+     *     pero no está habilitado», confirmado en vivo) al texto de activación.
+     *   · `exigeActivacionPrimero` mira solo CS012, así que ante PR001 decía
+     *     que no hacía falta activar nada.
+     *
+     * Resultado, con una captura de producción delante: la tarjeta a la
+     * espera de su código producía la tarjeta roja de «PAGO RECHAZADO», con
+     * el texto que explica cómo activarla, la frase «no se aplicó ningún
+     * cargo»… y ningún campo donde escribir el código. Un callejón sin salida
+     * que además desmiente lo que la pantalla anterior acaba de decir.
+     *
+     * La regla ya no se deduce dos veces: si lo que el cliente va a LEER es
+     * el texto de activación, entonces esto es una activación pendiente y va
+     * a la pantalla que tiene el campo. No amplía la detección ni un caso —
+     * `motivo` ya había decidido—: impide que las dos respuestas difieran.
+     */
+    requiereActivacion:
+      !aprobada && (exigeActivacionPrimero(errores) || motivo === MENSAJE_ACTIVACION_PENDIENTE),
   }
 }
 
@@ -424,9 +448,42 @@ function motivoDelRechazo(input: {
  * Se comparte con `cardnetToken.ts`: al cliente le tiene que llegar lo mismo
  * llegue por donde llegue el fallo — cobrando con el token del widget, o
  * cobrando con el perfil que se consulta después.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * LAS DOS FRASES QUE SE AÑADIERON, Y POR QUÉ
+ *
+ * El texto anterior decía dónde estaba el código —«en la descripción de ese
+ * cargo»— y era cierto. Aun así, quien lo leía se quedaba esperando un SMS.
+ *
+ * El motivo es que el cliente ACABA de pasar por el 3DS de su banco dentro de
+ * la ventana de captura, con su mensaje de verdad y su clave de verdad. Cuando
+ * media pantalla después se le pide «un código», lo natural es esperar otro
+ * mensaje. Y mientras espera, no mira el movimiento; y el movimiento es el
+ * único sitio donde ese código existe.
+ *
+ * Así que ahora el texto dice las dos cosas que faltaban, las dos negativas:
+ *
+ *   · NO llega por mensaje. Hay que ir a mirar.
+ *   · NO es inmediato: el código aparece cuando el cargo se ASIENTA, que puede
+ *     ser horas. Sin esto, quien mira el banco a los treinta segundos, no ve
+ *     nada y concluye que el pago se rompió.
+ *
+ * Lo comprobó el dueño de la plataforma sobre su propia integración: esperó un
+ * mensaje que no existe. Si le pasa a quien la construyó, le pasa a cualquiera.
+ *
+ * AQUÍ NO VA EL EJEMPLO DEL CARGO, y no es un descuido. El ejemplo literal
+ * («Cardnet:…») nombra al procesador, y para el cliente todo lo hace MembeGo
+ * —lo vigila `tests/cardnet-tokens.test.ts`—. La excepción existe, pero es de
+ * la PANTALLA de activación, que enseña el recuadro de «así aparece en tu app
+ * del banco»: ahí el nombre no es una filtración, es lo que su banco le va a
+ * mostrar, y sin él estaría buscando a ciegas. Este texto, en cambio, viaja a
+ * sitios donde no hay recuadro que lo justifique.
  */
 export const MENSAJE_ACTIVACION_PENDIENTE =
-  'Tu tarjeta quedó registrada y falta un último paso para verificarla. Tu banco hizo un cargo de RD$1.00 y en la descripción de ese cargo aparece un código de 6 caracteres. Búscalo en tu app del banco e ingrésalo para completar el pago.'
+  'Tu tarjeta quedó registrada y falta un último paso para verificarla. ' +
+  'Tu banco le hizo un cargo de RD$1.00, y el código de 6 caracteres viene dentro de la DESCRIPCIÓN de ese cargo. ' +
+  'No llega por mensaje ni por correo: hay que abrirlo en el detalle del movimiento, en la app del banco. ' +
+  'Puede tardar de unos minutos a varias horas en aparecer, así que si todavía no está, vuelve más tarde: tu tarjeta te sigue esperando aquí.'
 
 /**
  * NORMALIZA lo que el cliente teclea como código de activación (§4.1.2.3).

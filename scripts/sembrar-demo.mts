@@ -40,7 +40,32 @@ import { generarJuego } from './demo/imagenes.mjs'
 
 const ref = 'ybzhvfmybyyomwpjpaud'
 const direct = process.env.DIRECT_URL ?? ''
-assert.ok(new URL(direct).username.endsWith(`.${ref}`), 'Solo contra la base desechable confirmada.')
+
+/**
+ * LA GUARDA, Y LA PUERTA QUE SE LE ABRIÓ (25-09-2026).
+ *
+ * El proyecto Supabase escrito arriba es la base desechable de siempre, y
+ * comprobar el ref es lo que impide sembrar cinco empresas de mentira en
+ * producción por pegar la URL equivocada. Eso NO se toca.
+ *
+ * Lo que se añade es una segunda llave para el caso que no existía cuando se
+ * escribió: el ENSAYO DE RLS (`scripts/ensayo-rls.mjs`) necesita datos en una
+ * base local de usar y tirar, y ninguna base local pasa la comprobación del ref.
+ * Sin esta puerta, el ensayo se queda sin nada que medir y hay que sembrar a
+ * mano lo que ya está escrito aquí.
+ *
+ * La puerta es explícita a propósito: hay que nombrar la intención en una
+ * variable, así que un despiste con la URL sigue chocando con la guarda. Y el
+ * mensaje dice las dos formas de pasar, no solo una.
+ */
+const permitido =
+  process.env.SEMBRAR_DEMO_BASE_DESECHABLE === 'si' ||
+  new URL(direct).username.endsWith(`.${ref}`)
+assert.ok(
+  permitido,
+  'Solo contra la base desechable confirmada. Si es una base local de usar y tirar, ' +
+    'declara la intención: SEMBRAR_DEMO_BASE_DESECHABLE=si'
+)
 const db = new PrismaClient({ datasourceUrl: direct, log: [] })
 
 const DIR_PUBLICO = join(process.cwd(), 'public', 'demo')

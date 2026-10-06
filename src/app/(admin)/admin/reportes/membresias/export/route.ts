@@ -3,8 +3,9 @@ import { getUser } from '@/lib/auth'
 import { requireSection } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { conEmpresa } from '@/lib/tenant'
-import { TZ_PLATAFORMA } from '@/lib/format'
+import { zonaSegura } from '@/lib/zona-horaria'
 import { armarCsvBloques, respuestaCsv } from '@/lib/csv'
+import { armarXlsxBloques, pideXlsx, respuestaXlsx } from '@/lib/xlsx'
 import { leerRango } from '@/modules/reportes/rango'
 import { getReporteMembresias } from '@/modules/reportes/membresias'
 
@@ -35,13 +36,13 @@ export async function GET(req: NextRequest) {
   const empresa = await conEmpresa(companyId, (tx) =>
     tx.company.findUnique({ where: { id: companyId }, select: { name: true, zonaHoraria: true } })
   ).catch(() => null)
-  const timeZone = empresa?.zonaHoraria || TZ_PLATAFORMA
+  const timeZone = zonaSegura(empresa?.zonaHoraria)
 
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries())
   const rango = leerRango(sp, timeZone)
   const r = await getReporteMembresias(companyId, rango, timeZone)
 
-  const csv = armarCsvBloques([
+  const bloques = [
     {
       titulo: 'Alcance del reporte',
       encabezados: ['Concepto', 'Valor'],
@@ -106,7 +107,15 @@ export async function GET(req: NextRequest) {
       encabezados: ['Dia', 'Activaciones', 'Renovaciones', 'Bajas'],
       filas: r.serie.map((p) => [p.dia, p.activadas, p.renovadas, p.bajas]),
     },
-  ])
+  ]
+
+  // El MISMO reporte, en un libro de Excel con una hoja por bloque.
+  // El CSV no se toca: quien ya automatizó una descarga sigue igual.
+  if (pideXlsx(req.nextUrl.searchParams)) {
+    return respuestaXlsx(await armarXlsxBloques(bloques), `ciclo-vida-membresias-${rango.desdeDia}-a-${rango.hastaDia}`, { fechar: false })
+  }
+
+  const csv = armarCsvBloques(bloques)
 
   return respuestaCsv(csv, `ciclo-vida-membresias-${rango.desdeDia}-a-${rango.hastaDia}`, {
     fechar: false,

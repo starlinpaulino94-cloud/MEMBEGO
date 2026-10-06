@@ -109,6 +109,31 @@ conservó tal cual, movido de la raíz a `/admin/crm/leads`.
 - `/admin/crm/leads/page.tsx` existe (Todo 15) e importa `PipelineBoard`.
 - Cada acción valida permiso de sección (`requireSection`), pertenencia a
   `companyId` y que la sección esté habilitada.
+- **Corregido el 24-09-2026:** nueve de esas guardias validaban la sección
+  EQUIVOCADA. `lead-actions.ts` (crear, editar, eliminar, mover de etapa,
+  asignar) y `autoReply-actions.ts` (leer, crear, editar, eliminar) pedían
+  `requireSection('clientes', …)` mientras el resto del CRM pide `'leads'`.
+  CAJERO, SUPERVISOR y GERENTE traen `clientes` y no `leads`: no podían abrir
+  `/admin/crm` y aun así pasaban las nueve, porque una server action se
+  despacha por su id desde cualquier ruta permitida. Además, al no estar esos
+  códigos en `FUNCIONES_POR_SECCION`, el editor de Permisos los descartaba al
+  validar y **nadie podía negarlos**. Hoy las nueve piden `'leads'`, están en
+  el catálogo con su casilla, y `scripts/permisos-catalogo.mjs` lo vigila en
+  el CI en las dos direcciones.
+- **Bitácora (24-09-2026):** investigando lo anterior se descubrió que el CRM
+  no auditaba NADA. Otros 44 módulos sí; este no, y ni `Lead` ni
+  `AutoReplyConfig` guardan autor, así que no había forma de saber quién creó,
+  editó o descartó un prospecto. Las ocho actions de escritura asientan ahora
+  en `audit_logs` con IP y navegador: `PROSPECTO_CREADO`,
+  `PROSPECTO_ACTUALIZADO`, `PROSPECTO_DESCARTADO`, `PROSPECTO_ETAPA_CAMBIADA`,
+  `PROSPECTO_ASIGNADO`, `AUTO_RESPUESTA_CREADA`, `AUTO_RESPUESTA_ACTUALIZADA`
+  y `AUTO_RESPUESTA_ELIMINADA` (migración `20260930_crm_auditoria`).
+  El asiento es **fail-open y va fuera de la transacción**: las migraciones de
+  este proyecto se aplican a mano, y si el código llegara antes que la suya,
+  auditar dentro de la transacción dejaría el CRM de solo lectura. El payload
+  lleva los NOMBRES de los campos tocados, nunca teléfonos, correos ni el
+  texto de las notas: la bitácora la lee más gente que el CRM.
+  Lo fija `tests/crm-auditoria.test.ts`.
 - `queries.ts` / `types.ts` del CRM de leads **no** referencian
   `Conversacion`/`Mensaje` (desacoplados en la reconciliación).
 
@@ -219,7 +244,7 @@ CRM: ['leads', 'seguimiento', 'conversaciones', 'pipeline', 'configuracion'],
 | Dónde | Qué hay |
 |---|---|
 | `src/lib/auth/permissions.ts` | Sección `leads` registrada |
-| `src/lib/auth/funciones.ts` | Función `leads: 'Leads'` |
+| `src/lib/auth/funciones.ts` | Sección `leads` con sus 9 funciones (prospectos y respuestas automáticas) |
 | `src/modules/capacidades/catalogo.ts` | Capacidad `CRM` con sus secciones |
 
 - Guard por sección: `requireSection('leads')` en `layout.tsx` del CRM (y

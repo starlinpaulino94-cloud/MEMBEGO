@@ -14,7 +14,7 @@ import {
 /**
  * ACCIONES DE LA BANDEJA (Meta · Fase 5).
  *
- * Todas empiezan por `requireAdminUser()` —admin pleno, sin redirección— y
+ * Todas empiezan por `requireAdminUser('leads')` —admin pleno, sin redirección— y
  * la empresa sale SIEMPRE de la sesión, nunca del formulario: una acción se
  * despacha por su id desde cualquier ruta, así que el formulario no es una
  * barrera. El id de conversación que llega se valida por forma y luego cada
@@ -36,7 +36,7 @@ export interface EstadoRedactor {
 }
 
 async function quien(): Promise<{ companyId: string; usuarioId: string } | null> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('leads')
   if (!user?.metadata.companyId) return null
   return { companyId: user.metadata.companyId, usuarioId: user.metadata.dbUserId }
 }

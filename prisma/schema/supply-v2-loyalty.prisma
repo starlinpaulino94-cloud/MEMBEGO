@@ -1,0 +1,860 @@
+// ──────────────────────────────────────────────────────────────────────────
+// MEMBEGO SUPPLY 2.0 · SLICE 8 · FIDELIZACIÓN
+//
+// Membresías, referidos, puntos y recompensas. Cinco subdominios que cuelgan
+// de UN programa de fidelización.
+//
+// QUÉ NO HAY AQUÍ, A PROPÓSITO
+//
+//   · Ningún motor de descuentos. El beneficio de un plan o de una recompensa
+//     ES un `SupplyV2Benefit` del Slice 6, con su presupuesto y su ledger.
+//   · Ningún motor de cupones. Un cupón exclusivo de membresía ES un
+//     `SupplyV2Coupon` del Slice 7.
+//   · Ninguna pasarela de pago. La membresía de pago se cobra por el checkout
+//     de los Slices 2–6 (`SupplyV2CustomerOrder`), sin lote ni inventario.
+//   · Ningún sistema de redención. Una recompensa que entrega algo lo hace por
+//     `SupplyV2Entitlement` → `SupplyV2Voucher` → QR → escáner del proveedor.
+//   · Ninguna contabilidad nueva. El costo sale por `SupplyV2EconomicEvent` y,
+//     cuando lo asume el proveedor, por su obligación y su liquidación.
+//
+// LOS PUNTOS NO SON DINERO. Son `Int`, no `Decimal`: unidades de fidelización
+// que no se convierten en saldo retirable ni en cuenta monetaria (§24). El
+// costo económico se reconoce cuando la recompensa se ENTREGA, no cuando se
+// emiten los puntos; lo demás es una estimación y se presenta como tal (§37).
+//
+// EL LEDGER ES LA VERDAD. `SupplyV2PointsAccount` guarda caché de saldos; la
+// verdad es `SupplyV2PointsMovement`, que no se borra nunca. Igual que el
+// presupuesto del Slice 6 se reconstruye desde `SupplyV2BenefitMovement`.
+// ──────────────────────────────────────────────────────────────────────────
+
+// ── Enums ──────────────────────────────────────────────────────────────────
+
+/// Quién es el dueño del programa. Un programa de un proveedor solo lo
+/// administran personas autorizadas de ese proveedor.
+enum SupplyV2LoyaltyOwner {
+  MEMBEGO
+  SUPPLIER
+}
+
+enum SupplyV2LoyaltyProgramStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+/// Qué habilita el programa. Un programa puede ser solo de puntos, solo de
+/// membresías, o todo a la vez.
+enum SupplyV2LoyaltyModality {
+  MEMBERSHIPS
+  REFERRALS
+  POINTS
+  REWARDS
+}
+
+/// §27: si los puntos se calculan sobre el valor contractual de la venta o
+/// sobre el dinero que el cliente pagó de verdad. La regla se CONGELA en cada
+/// movimiento: cambiarla no reescribe el pasado.
+enum SupplyV2PointsAccrualBasis {
+  CONTRACTUAL_VALUE
+  CUSTOMER_PAID
+}
+
+enum SupplyV2MembershipPlanKind {
+  /// El cliente se inscribe sin pagar.
+  FREE
+  /// Cuota por período.
+  PAID
+  /// La concede Membego o el negocio a un cliente concreto.
+  GRANTED
+}
+
+enum SupplyV2MembershipPlanStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+}
+
+enum SupplyV2CustomerMembershipStatus {
+  PENDING_PAYMENT
+  /// Período ya pagado que todavía no empieza: se compró por adelantado
+  /// mientras el anterior sigue corriendo. El barrido lo activa cuando toca,
+  /// y así dos períodos no se solapan (§13).
+  SCHEDULED
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  SUSPENDED
+}
+
+enum SupplyV2MembershipBenefitKind {
+  /// Un `SupplyV2Benefit` del Slice 6 que se asigna al activar.
+  BENEFIT
+  /// Un beneficio que además entrega un cupón privado al miembro (Slice 7).
+  COUPON
+  /// Multiplica los puntos que gana el miembro.
+  POINTS_MULTIPLIER
+  /// Ve las promociones antes que el resto.
+  EARLY_ACCESS
+}
+
+/// §20: ciclo de vida del referido. Los cuatro primeros son informativos; de
+/// `REWARD_PENDING` en adelante hay un derecho económico en juego.
+enum SupplyV2ReferralStatus {
+  LINK_OPENED
+  SIGNED_UP
+  VERIFIED
+  PURCHASE_ELIGIBLE
+  REWARD_PENDING
+  REWARD_APPROVED
+  REWARD_GRANTED
+  REWARD_VOIDED
+}
+
+enum SupplyV2ReferralRewardKind {
+  /// Bono de Membego: un `SupplyV2Benefit` asignado al referidor.
+  BONUS
+  /// Cupón privado del Slice 7.
+  COUPON
+  /// Puntos del programa.
+  POINTS
+  /// Beneficio financiado por el negocio.
+  SUPPLIER_BENEFIT
+}
+
+enum SupplyV2PointsMovementType {
+  EARNED
+  PENDING
+  AVAILABLE
+  RESERVED
+  REDEEMED
+  RELEASED
+  EXPIRED
+  REVERSED
+  ADMIN_ADJUSTMENT
+}
+
+enum SupplyV2PointsSource {
+  PURCHASE
+  REFERRAL
+  MEMBERSHIP
+  REWARD
+  PROMOTION
+  ADMIN
+}
+
+enum SupplyV2RewardKind {
+  /// Abre un cupón del Slice 7.
+  COUPON
+  /// Asigna un beneficio del Slice 6.
+  BENEFIT
+  /// Entrega un producto: derecho + QR + escáner, como cualquier compra.
+  FREE_PRODUCT
+  /// Un servicio del negocio, entregado igual que un producto.
+  SERVICE
+  /// Cubre una parte del precio.
+  PARTIAL_BONUS
+}
+
+enum SupplyV2RewardStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  EXHAUSTED
+  EXPIRED
+  CANCELLED
+}
+
+/// §34: una recompensa ya usada no se anula devolviendo puntos a la ligera.
+enum SupplyV2RewardClaimStatus {
+  /// Puntos reservados, beneficio todavía no creado.
+  RESERVED
+  /// Beneficio creado y a disposición del cliente.
+  CLAIMED
+  /// Ya la usó (entrega confirmada).
+  DELIVERED
+  EXPIRED
+  CANCELLED
+  REVERSED
+}
+
+/// Bitácora propia del dominio. No se borra nunca.
+enum SupplyV2LoyaltyEventType {
+  PROGRAM_CREATED
+  PROGRAM_SUBMITTED
+  PROGRAM_APPROVED
+  PROGRAM_REJECTED
+  PROGRAM_PAUSED
+  PROGRAM_RESUMED
+  PROGRAM_COMPLETED
+  PROGRAM_CANCELLED
+  PLAN_CREATED
+  PLAN_UPDATED
+  PLAN_PUBLISHED
+  PLAN_PAUSED
+  PLAN_ARCHIVED
+  MEMBERSHIP_STARTED
+  MEMBERSHIP_ACTIVATED
+  MEMBERSHIP_RENEWED
+  MEMBERSHIP_EXPIRED
+  MEMBERSHIP_CANCELLED
+  MEMBERSHIP_SUSPENDED
+  MEMBERSHIP_GRANTED
+  REFERRAL_CODE_CREATED
+  REFERRAL_SIGNED_UP
+  REFERRAL_VERIFIED
+  REFERRAL_ELIGIBLE
+  REFERRAL_REWARD_APPROVED
+  REFERRAL_REWARD_GRANTED
+  REFERRAL_REWARD_VOIDED
+  POINTS_EARNED
+  POINTS_AVAILABLE
+  POINTS_EXPIRED
+  POINTS_ADJUSTED
+  REWARD_CREATED
+  REWARD_PUBLISHED
+  REWARD_CLAIMED
+  REWARD_DELIVERED
+  REWARD_REVERSED
+  BUDGET_WAIVED
+}
+
+/// Qué se está comprando en un pedido del cliente. Lo que existía hasta el
+/// Slice 7 es `OFFER`; el Slice 8 añade la compra de una membresía, que NO
+/// lleva líneas, ni lote, ni allocation: no hay inventario que mover.
+enum SupplyV2OrderKind {
+  OFFER
+  MEMBERSHIP
+}
+
+// ── Programa de fidelización ───────────────────────────────────────────────
+
+/// El contenedor de todo. Un programa pertenece a Membego o a un proveedor, y
+/// NUNCA mezcla puntos, presupuestos ni recompensas con otro (§5).
+model SupplyV2LoyaltyProgram {
+  id   String @id @default(cuid())
+  /// "MBG-FD-2026-000001".
+  code String @unique
+
+  name        String
+  description String?
+  /// Objetivo comercial: retener, atraer clientes nuevos, subir el ticket…
+  objective   String?
+
+  owner      SupplyV2LoyaltyOwner @default(MEMBEGO)
+  /// El proveedor dueño (owner SUPPLIER) o el que cofinancia.
+  supplierId String?
+  supplier   SupplyV2Supplier?    @relation("SupplyV2LoyaltyProgramSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+
+  currency String @default("DOP")
+  /// Qué habilita el programa.
+  modalities SupplyV2LoyaltyModality[]
+
+  /// Quién pone el dinero de los beneficios y recompensas del programa.
+  funding SupplyV2BenefitFunding @default(MEMBEGO)
+
+  /// Techo aprobado del compromiso de Membego. Obligatorio cuando Membego
+  /// pone dinero; ir sin él exige autorización escrita (§17 del Slice 7, que
+  /// aquí se mantiene).
+  budgetTotal        Decimal?  @db.Decimal(14, 2)
+  budgetWaiverReason String?
+  budgetWaiverById   String?
+  budgetWaiverBy     User?     @relation("SupplyV2LoyaltyProgramBudgetWaiverBy", fields: [budgetWaiverById], references: [id], onDelete: SetNull)
+  budgetWaiverAt     DateTime?
+
+  startsAt DateTime
+  endsAt   DateTime?
+
+  // ── Reglas de acumulación de puntos (§24, §27) ──
+  /// Puntos que se ganan por cada `amountPerPoint` de compra elegible.
+  /// Ejemplo del enunciado: 1 punto por cada RD$100 → pointsPerUnit = 1,
+  /// amountPerPoint = 100. Configurable, no fijo.
+  pointsPerUnit  Int?
+  amountPerPoint Decimal? @db.Decimal(12, 2)
+  accrualBasis   SupplyV2PointsAccrualBasis @default(CONTRACTUAL_VALUE)
+  /// Días hasta que vencen los puntos ganados. Null = no vencen (§29).
+  pointsExpireDays Int?
+  /// Días que los puntos quedan PENDIENTES antes de estar disponibles: el
+  /// plazo en el que una compra todavía se puede caer (§28).
+  pointsHoldDays   Int  @default(0)
+
+  status SupplyV2LoyaltyProgramStatus @default(DRAFT)
+
+  createdById  String
+  createdBy    User      @relation("SupplyV2LoyaltyProgramCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById String?
+  approvedBy   User?     @relation("SupplyV2LoyaltyProgramApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+  reviewNotes  String?
+
+  cancelledAt     DateTime?
+  cancelledReason String?
+  completedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches        SupplyV2LoyaltyProgramBranch[]
+  plans           SupplyV2MembershipPlan[]
+  memberships     SupplyV2CustomerMembership[]
+  referralProgram SupplyV2ReferralProgram?
+  referralCodes   SupplyV2ReferralCode[]
+  referrals       SupplyV2Referral[]
+  pointsAccounts  SupplyV2PointsAccount[]
+  rewards         SupplyV2Reward[]
+  rewardClaims    SupplyV2RewardClaim[]
+  events          SupplyV2LoyaltyEvent[]
+
+  @@index([status, startsAt, endsAt])
+  @@index([supplierId])
+  @@index([owner, status])
+  @@map("supply_v2_loyalty_programs")
+}
+
+/// Sucursales participantes (§7). Sin filas, el programa vale en todas las del
+/// proveedor.
+model SupplyV2LoyaltyProgramBranch {
+  id         String                 @id @default(cuid())
+  programId  String
+  program    SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  sucursalId String
+  sucursal   Sucursal               @relation("SupplyV2LoyaltyProgramBranchSucursal", fields: [sucursalId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([programId, sucursalId])
+  @@index([sucursalId])
+  @@map("supply_v2_loyalty_program_branches")
+}
+
+// ── Membresías ─────────────────────────────────────────────────────────────
+
+/// Un plan del negocio: Silver, Gold, Platinum… Los nombres y los importes son
+/// configuración, no una lista cerrada.
+model SupplyV2MembershipPlan {
+  id        String                 @id @default(cuid())
+  /// "MBG-MP-2026-000001".
+  code      String                 @unique
+  programId String
+  program   SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  name        String
+  description String?
+
+  kind     SupplyV2MembershipPlanKind @default(PAID)
+  price    Decimal                    @default(0) @db.Decimal(12, 2)
+  currency String                     @default("DOP")
+  /// Duración del período contratado, en días.
+  durationDays Int
+
+  /// Tope de miembros vivos del plan; null = sin tope.
+  maxMembers     Int?
+  /// Cuántos períodos seguidos se pueden comprar por adelantado.
+  maxAdvanceRenewals Int @default(1)
+
+  status SupplyV2MembershipPlanStatus @default(DRAFT)
+
+  /// Versión vigente. Al cambiar precio o condiciones sube, y las membresías
+  /// ya vendidas siguen apuntando a la suya (§14).
+  currentVersion Int @default(1)
+
+  createdById String
+  createdBy   User      @relation("SupplyV2MembershipPlanCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  publishedAt DateTime?
+  archivedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions    SupplyV2MembershipPlanVersion[]
+  benefits    SupplyV2MembershipBenefit[]
+  memberships SupplyV2CustomerMembership[]
+  orders      SupplyV2CustomerOrder[]        @relation("SupplyV2CustomerOrderMembershipPlan")
+  rewards     SupplyV2Reward[]               @relation("SupplyV2RewardRequiredPlan")
+
+  @@unique([programId, name])
+  @@index([programId, status])
+  @@map("supply_v2_membership_plans")
+}
+
+/// Foto congelada del plan. Una membresía apunta a SU versión: cambiar el
+/// plan no recalcula lo que ya se vendió (§14).
+model SupplyV2MembershipPlanVersion {
+  id      String                 @id @default(cuid())
+  planId  String
+  plan    SupplyV2MembershipPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  version Int
+
+  price        Decimal @db.Decimal(12, 2)
+  durationDays Int
+  /// Lo que incluía el plan en esta versión, tal cual se le prometió al
+  /// cliente: beneficios, límites y condiciones.
+  snapshot     Json
+
+  createdById String
+  createdBy   User     @relation("SupplyV2MembershipPlanVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  @@unique([planId, version])
+  @@map("supply_v2_membership_plan_versions")
+}
+
+/// Lo que incluye un plan. Un beneficio de membresía NO es un descuento nuevo:
+/// es un `SupplyV2Benefit` del Slice 6 (o un multiplicador de puntos).
+model SupplyV2MembershipBenefit {
+  id     String                 @id @default(cuid())
+  planId String
+  plan   SupplyV2MembershipPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  kind SupplyV2MembershipBenefitKind @default(BENEFIT)
+
+  benefitId String?
+  benefit   SupplyV2Benefit? @relation("SupplyV2MembershipBenefitBenefit", fields: [benefitId], references: [id], onDelete: Restrict)
+
+  /// Al activar la membresía se le genera al miembro un cupón privado.
+  grantsCoupon Boolean @default(false)
+  /// Usos del beneficio que se conceden por período contratado.
+  usesPerPeriod Int?
+  /// Multiplicador de puntos del plan (2.00 = el doble).
+  pointsMultiplier Decimal? @db.Decimal(5, 2)
+  /// Horas de acceso anticipado a las promociones.
+  earlyAccessHours Int?
+
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([planId, benefitId])
+  @@index([planId])
+  @@map("supply_v2_membership_benefits")
+}
+
+/// La membresía de UNA persona. Guarda su plan, su versión contratada, sus
+/// fechas y su estado de pago.
+model SupplyV2CustomerMembership {
+  id   String @id @default(cuid())
+  /// "MBG-MS-2026-000001".
+  code String @unique
+
+  programId String
+  program   SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  planId    String
+  plan      SupplyV2MembershipPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  /// Versión del plan contratada. No se recalcula con la configuración actual.
+  planVersion Int
+
+  /// El cliente es el USUARIO de la plataforma (rol CLIENTE), igual que en el
+  /// resto de Supply 2.0: una membresía de Membego no pertenece a ningún
+  /// comercio.
+  customerId String
+  customer   User   @relation("SupplyV2CustomerMembershipCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+
+  /// El pedido que la pagó. Único: un pedido no puede producir dos membresías.
+  orderId String?                @unique
+  order   SupplyV2CustomerOrder? @relation("SupplyV2CustomerOrderMembership", fields: [orderId], references: [id], onDelete: Restrict)
+
+  status SupplyV2CustomerMembershipStatus @default(PENDING_PAYMENT)
+
+  purchasedAt DateTime  @default(now())
+  activatedAt DateTime?
+  expiresAt   DateTime?
+
+  /// Lo que pagó de verdad por este período.
+  pricePaid Decimal @default(0) @db.Decimal(12, 2)
+  currency  String  @default("DOP")
+
+  renewalCount         Int     @default(0)
+  /// La membresía que renueva, para encadenar períodos sin solaparlos (§13).
+  previousMembershipId String? @unique
+  previousMembership   SupplyV2CustomerMembership? @relation("SupplyV2MembershipRenovacion", fields: [previousMembershipId], references: [id], onDelete: Restrict)
+  nextMembership       SupplyV2CustomerMembership? @relation("SupplyV2MembershipRenovacion")
+
+  /// Membresía otorgada: quién la concedió y por qué.
+  grantedById String?
+  grantedBy   User?   @relation("SupplyV2CustomerMembershipGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantReason String?
+
+  cancelledAt     DateTime?
+  cancelledReason String?
+  suspendedAt     DateTime?
+
+  /// El doble clic no crea dos membresías.
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customerBenefits SupplyV2CustomerBenefit[] @relation("SupplyV2CustomerBenefitMembership")
+  pointsMovements  SupplyV2PointsMovement[]  @relation("SupplyV2PointsMovementMembership")
+  events           SupplyV2LoyaltyEvent[]
+
+  @@index([customerId, status])
+  @@index([planId, status])
+  @@index([status, expiresAt])
+  @@map("supply_v2_customer_memberships")
+}
+
+// ── Referidos ──────────────────────────────────────────────────────────────
+
+/// Las reglas del programa de referidos. Una por programa.
+model SupplyV2ReferralProgram {
+  id        String                 @id @default(cuid())
+  programId String                 @unique
+  program   SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  rewardKind SupplyV2ReferralRewardKind @default(POINTS)
+  /// El beneficio que se le asigna al referidor (BONUS, COUPON, SUPPLIER_BENEFIT).
+  rewardBenefitId String?
+  rewardBenefit   SupplyV2Benefit? @relation("SupplyV2ReferralProgramBenefit", fields: [rewardBenefitId], references: [id], onDelete: Restrict)
+  rewardPoints    Int?
+  rewardAmount    Decimal? @db.Decimal(12, 2)
+
+  // ── Condiciones (§21) ──
+  requiresFirstPurchase    Boolean  @default(true)
+  minPurchaseAmount        Decimal? @db.Decimal(12, 2)
+  requiresPaymentConfirmed Boolean  @default(true)
+  /// Días de espera tras la compra antes de aprobar la recompensa: el plazo
+  /// en el que una cancelación todavía puede llegar.
+  waitingPeriodDays        Int      @default(0)
+  maxPerReferrer           Int?
+  maxTotal                 Int?
+  budgetTotal              Decimal? @db.Decimal(14, 2)
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("supply_v2_referral_programs")
+}
+
+/// El código de una persona. Se genera con `randomBytes`: NUNCA es un id
+/// interno (§19).
+model SupplyV2ReferralCode {
+  id   String @id @default(cuid())
+  code String @unique
+
+  programId String
+  program   SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  ownerId   String
+  owner     User                   @relation("SupplyV2ReferralCodeOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  /// Estadísticas del panel «Invitar amigos». Caché: la verdad son las filas
+  /// de `SupplyV2Referral`.
+  timesOpened   Int @default(0)
+  timesSignedUp Int @default(0)
+  timesRewarded Int @default(0)
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  referrals SupplyV2Referral[]
+
+  @@unique([programId, ownerId])
+  @@map("supply_v2_referral_codes")
+}
+
+/// Una recomendación concreta y su ciclo de vida (§20).
+model SupplyV2Referral {
+  id String @id @default(cuid())
+
+  programId      String
+  program        SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  referralCodeId String
+  referralCode   SupplyV2ReferralCode   @relation(fields: [referralCodeId], references: [id], onDelete: Restrict)
+  /// Quien recomienda.
+  referrerId     String
+  referrer       User                   @relation("SupplyV2ReferralReferrer", fields: [referrerId], references: [id], onDelete: Restrict)
+  /// Quien se registró con el enlace. Null mientras solo se abrió el enlace.
+  referredId     String?
+  referred       User?                  @relation("SupplyV2ReferralReferred", fields: [referredId], references: [id], onDelete: Restrict)
+
+  /// El código tal como se usó: sobrevive a que se desactive.
+  codeSnapshot String
+
+  status SupplyV2ReferralStatus @default(LINK_OPENED)
+
+  signedUpAt DateTime?
+  verifiedAt DateTime?
+
+  /// La compra que lo hizo elegible.
+  eligibleOrderId String?                @unique
+  eligibleOrder   SupplyV2CustomerOrder? @relation("SupplyV2ReferralEligibleOrder", fields: [eligibleOrderId], references: [id], onDelete: Restrict)
+  eligibleAt      DateTime?
+
+  rewardApprovedAt DateTime?
+  rewardGrantedAt  DateTime?
+  voidedAt         DateTime?
+  voidReason       String?
+
+  /// Lo que se concedió, congelado.
+  rewardKind   SupplyV2ReferralRewardKind?
+  rewardPoints Int?
+  rewardAmount Decimal?         @db.Decimal(12, 2)
+  rewardBenefitId String?
+  rewardBenefit   SupplyV2Benefit? @relation("SupplyV2ReferralRewardBenefit", fields: [rewardBenefitId], references: [id], onDelete: Restrict)
+
+  /// La confirmación de pago puede reintentarse: la clave impide que un
+  /// reintento pague dos veces (§22).
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pointsMovements SupplyV2PointsMovement[] @relation("SupplyV2PointsMovementReferral")
+  rewardClaim     SupplyV2RewardClaim?     @relation("SupplyV2RewardClaimReferral")
+  events          SupplyV2LoyaltyEvent[]
+
+  /// Una persona solo puede ser referida UNA vez por programa: cierra la
+  /// puerta a varias cuentas reclamando el mismo referido (§22).
+  @@unique([programId, referredId])
+  @@index([referrerId, status])
+  @@index([status, eligibleAt])
+  @@map("supply_v2_referrals")
+}
+
+// ── Puntos ─────────────────────────────────────────────────────────────────
+
+/// La cuenta de puntos de una persona EN UN PROGRAMA. Nunca se mezclan los
+/// puntos de dos programas (§5, §25). Las columnas son CACHÉ: la verdad son
+/// los movimientos.
+model SupplyV2PointsAccount {
+  id        String                 @id @default(cuid())
+  programId String
+  program   SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+  customerId String
+  customer   User                  @relation("SupplyV2PointsAccountCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+
+  available Int @default(0)
+  pending   Int @default(0)
+  reserved  Int @default(0)
+  redeemed  Int @default(0)
+  expired   Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movements SupplyV2PointsMovement[]
+  claims    SupplyV2RewardClaim[]
+
+  @@unique([programId, customerId])
+  @@index([customerId])
+  @@map("supply_v2_points_accounts")
+}
+
+/// El ledger. Append-only, con delta firmado por cubeta y saldo resultante,
+/// igual que `SupplyV2BenefitMovement`. NINGUNA ruta lo borra (§43).
+model SupplyV2PointsMovement {
+  id        String                @id @default(cuid())
+  accountId String
+  account   SupplyV2PointsAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  type   SupplyV2PointsMovementType
+  source SupplyV2PointsSource
+
+  /// Magnitud del movimiento, en positivo: para leerlo sin sumar cubetas.
+  points Int
+
+  availableDelta Int @default(0)
+  pendingDelta   Int @default(0)
+  reservedDelta  Int @default(0)
+  redeemedDelta  Int @default(0)
+  expiredDelta   Int @default(0)
+
+  availableAfter Int
+  pendingAfter   Int
+  reservedAfter  Int
+
+  /// Lote de vencimiento: cuándo caducan los puntos que entraron con este
+  /// movimiento. Null = no vencen (§29).
+  expiresAt DateTime?
+  /// Cuánto de este lote ya se consumió o venció, para consumir primero el que
+  /// caduca antes sin tocar los demás.
+  consumedFromLot Int @default(0)
+
+  orderId String?
+  order   SupplyV2CustomerOrder? @relation("SupplyV2PointsMovementOrder", fields: [orderId], references: [id], onDelete: Restrict)
+  referralId String?
+  referral   SupplyV2Referral? @relation("SupplyV2PointsMovementReferral", fields: [referralId], references: [id], onDelete: Restrict)
+  rewardClaimId String?
+  rewardClaim   SupplyV2RewardClaim? @relation("SupplyV2PointsMovementRewardClaim", fields: [rewardClaimId], references: [id], onDelete: Restrict)
+  membershipId String?
+  membership   SupplyV2CustomerMembership? @relation("SupplyV2PointsMovementMembership", fields: [membershipId], references: [id], onDelete: Restrict)
+  /// El lote de origen cuando este movimiento lo consume o lo vence.
+  sourceMovementId String?
+  sourceMovement   SupplyV2PointsMovement?  @relation("SupplyV2PointsMovementLote", fields: [sourceMovementId], references: [id], onDelete: Restrict)
+  consumos         SupplyV2PointsMovement[] @relation("SupplyV2PointsMovementLote")
+
+  /// §27: la regla de acumulación CONGELADA en la operación. Cambiarla después
+  /// no reescribe este movimiento.
+  ruleSnapshot Json?
+
+  /// Un ajuste administrativo EXIGE motivo (§43). Lo sostiene un CHECK.
+  reason  String?
+  actorId String?
+  actor   User?   @relation("SupplyV2PointsMovementActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  /// Un webhook o una confirmación que se ejecuta dos veces no suma dos veces
+  /// (§26).
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([accountId, type, expiresAt])
+  @@index([expiresAt])
+  @@map("supply_v2_points_movements")
+}
+
+// ── Recompensas ────────────────────────────────────────────────────────────
+
+/// El catálogo de recompensas de un programa (§30).
+model SupplyV2Reward {
+  id        String                 @id @default(cuid())
+  /// "MBG-RW-2026-000001".
+  code      String                 @unique
+  programId String
+  program   SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  name        String
+  description String?
+
+  kind       SupplyV2RewardKind
+  /// Costo en puntos. 0 = la recompensa no se compra con puntos (por ejemplo,
+  /// la de un referido).
+  pointsCost Int                @default(0)
+
+  /// El beneficio del Slice 6 que se asigna al reclamar.
+  benefitId String?
+  benefit   SupplyV2Benefit? @relation("SupplyV2RewardBenefit", fields: [benefitId], references: [id], onDelete: Restrict)
+  /// La oferta que se entrega cuando la recompensa es un producto o servicio.
+  offerId   String?
+  offer     SupplyV2Offer?   @relation("SupplyV2RewardOffer", fields: [offerId], references: [id], onDelete: Restrict)
+
+  funding SupplyV2BenefitFunding @default(MEMBEGO)
+  /// Costo estimado de cada entrega, para la economía del programa.
+  unitCost    Decimal? @db.Decimal(12, 2)
+  budgetTotal Decimal? @db.Decimal(14, 2)
+
+  maxClaims      Int?
+  maxPerCustomer Int  @default(1)
+  /// Caché del número de reclamaciones vivas; la verdad son las filas.
+  timesClaimed   Int  @default(0)
+
+  /// Solo para miembros, y opcionalmente de un plan concreto.
+  requiresMembership Boolean                 @default(false)
+  requiredPlanId     String?
+  requiredPlan       SupplyV2MembershipPlan? @relation("SupplyV2RewardRequiredPlan", fields: [requiredPlanId], references: [id], onDelete: Restrict)
+
+  startsAt DateTime
+  endsAt   DateTime?
+
+  status SupplyV2RewardStatus @default(DRAFT)
+
+  createdById String
+  createdBy   User      @relation("SupplyV2RewardCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById String?
+  approvedBy   User?    @relation("SupplyV2RewardApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  claims SupplyV2RewardClaim[]
+
+  @@index([programId, status])
+  @@index([status, startsAt, endsAt])
+  @@map("supply_v2_rewards")
+}
+
+/// La reclamación de una recompensa. Reserva puntos, crea el beneficio y, si
+/// entrega algo, se apoya en el derecho y el QR de siempre (§31, §32).
+model SupplyV2RewardClaim {
+  id   String @id @default(cuid())
+  /// "MBG-RK-2026-000001".
+  code String @unique
+
+  rewardId  String
+  reward    SupplyV2Reward         @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+  programId String
+  program   SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   User   @relation("SupplyV2RewardClaimCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  accountId  String?
+  account    SupplyV2PointsAccount? @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  pointsReserved Int @default(0)
+  pointsConsumed Int @default(0)
+
+  status SupplyV2RewardClaimStatus @default(RESERVED)
+
+  /// Lo que se creó al reclamar.
+  customerBenefitId String?                  @unique
+  customerBenefit   SupplyV2CustomerBenefit? @relation("SupplyV2RewardClaimCustomerBenefit", fields: [customerBenefitId], references: [id], onDelete: Restrict)
+  entitlementId     String?                  @unique
+  entitlement       SupplyV2Entitlement?     @relation("SupplyV2RewardClaimEntitlement", fields: [entitlementId], references: [id], onDelete: Restrict)
+
+  /// Cuando la recompensa viene de un referido, cuelga de él: como mucho UNA
+  /// recompensa por referido (§23).
+  referralId String?           @unique
+  referral   SupplyV2Referral? @relation("SupplyV2RewardClaimReferral", fields: [referralId], references: [id], onDelete: Restrict)
+
+  /// Costo reconocido al ENTREGAR, no al reclamar (§35).
+  cost     Decimal? @db.Decimal(12, 2)
+  currency String   @default("DOP")
+
+  claimedAt     DateTime  @default(now())
+  deliveredAt   DateTime?
+  expiresAt     DateTime?
+  cancelledAt   DateTime?
+  reversedAt    DateTime?
+  reverseReason String?
+
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pointsMovements SupplyV2PointsMovement[] @relation("SupplyV2PointsMovementRewardClaim")
+  events          SupplyV2LoyaltyEvent[]
+
+  @@index([customerId, status])
+  @@index([rewardId, status])
+  @@map("supply_v2_reward_claims")
+}
+
+// ── Bitácora ───────────────────────────────────────────────────────────────
+
+/// Historial del programa. Se escribe además de `AuditLog`, para que la ficha
+/// del programa cuente su propia historia sin cruzar la auditoría global.
+model SupplyV2LoyaltyEvent {
+  id        String                 @id @default(cuid())
+  programId String
+  program   SupplyV2LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  type SupplyV2LoyaltyEventType
+
+  membershipId String?
+  membership   SupplyV2CustomerMembership? @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  referralId   String?
+  referral     SupplyV2Referral?           @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  rewardClaimId String?
+  rewardClaim   SupplyV2RewardClaim?       @relation(fields: [rewardClaimId], references: [id], onDelete: Cascade)
+
+  payload Json?
+
+  actorId String?
+  actor   User?   @relation("SupplyV2LoyaltyEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([programId, createdAt])
+  @@index([type, createdAt])
+  @@map("supply_v2_loyalty_events")
+}

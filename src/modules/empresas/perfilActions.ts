@@ -10,6 +10,7 @@ import {
   esEnlaceCortoGoogleMaps,
 } from '@/modules/geo/enlace-google-maps'
 import { normalizeCompanyBrandColor, withCompanyBrandColor } from '@/lib/company-branding'
+import { esZonaValida } from '@/lib/zona-horaria'
 
 // F4.1: la empresa administra su propio perfil público del marketplace.
 // Solo puede tocar campos de presentación — nunca isActive/isPublished/
@@ -34,7 +35,7 @@ export async function actualizarPerfilPublico(
   _prev: PerfilState,
   formData: FormData
 ): Promise<PerfilState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('perfil')
   if (!user) return { error: 'No autorizado.' }
 
   // Superadmin: empresa del formulario o, si no viene, la ACTIVA del
@@ -42,6 +43,15 @@ export async function actualizarPerfilPublico(
   const companyId = await resolveCompanyId(user, formData)
   if (!companyId) {
     return { error: 'Empresa requerida.' }
+  }
+
+  const zonaHoraria = val(formData, 'zonaHoraria')
+  if (zonaHoraria && !esZonaValida(zonaHoraria)) {
+    return {
+      error:
+        `«${zonaHoraria}» no es una zona horaria válida. Se escribe en formato IANA, ` +
+        'como America/Santo_Domingo o America/New_York.',
+    }
   }
 
   const rawColorPrimario = String(formData.get('colorPrimario') ?? '').trim()
@@ -120,7 +130,7 @@ export async function actualizarPerfilPublico(
           // zonaHoraria son NOT NULL: si vinieran vacíos se conserva el default.
           moneda: val(formData, 'moneda') ?? undefined,
           idioma: val(formData, 'idioma') ?? undefined,
-          zonaHoraria: val(formData, 'zonaHoraria') ?? undefined,
+          zonaHoraria: zonaHoraria ?? undefined,
           colorPrimario,
           engagementConfig: engagementConfig as never,
           politicaCancelacion: val(formData, 'politicaCancelacion'),
@@ -168,7 +178,7 @@ export async function publicarMiEmpresa(
   _prev: PerfilState,
   _formData: FormData
 ): Promise<PerfilState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('perfil')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId = user.metadata.companyId

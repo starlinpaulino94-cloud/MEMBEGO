@@ -5,14 +5,15 @@ import { requireRole, requireSection, puedeFuncion } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
-import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
+import { formatDateTime } from '@/lib/format'
+import { zonaSegura } from '@/lib/zona-horaria'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
 import { getReporteCitas } from '@/modules/reportes/citas'
 import { RangoFechas } from '@/components/reportes/RangoFechas'
 import { ReporteCitasVista } from '@/components/reportes/ReporteCitasVista'
 import { Button } from '@/components/ui/button'
 import { BotonImprimir } from '@/components/ui/boton-imprimir'
-import { BotonExportar } from '@/components/ui/boton-exportar'
+import { BotonesExportar } from '@/components/reportes/BotonesExportar'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +55,7 @@ export default async function ReporteCitasPage({
       .findUnique({ where: { id: companyId }, select: { name: true, zonaHoraria: true } })
       .catch(() => null)
   )
-  const timeZone = empresa?.zonaHoraria || TZ_PLATAFORMA
+  const timeZone = zonaSegura(empresa?.zonaHoraria)
 
   const rango = leerRango(sp, timeZone)
   const prefs = await getRegionalPrefs(companyId)
@@ -144,7 +145,7 @@ export default async function ReporteCitasPage({
       }
       controles={
         <>
-          <BotonExportar href={`/admin/reportes/citas/export${qsExport ? `?${qsExport}` : ''}`} />
+          <BotonesExportar base="/admin/reportes/citas/export" qs={qsExport} />
           <BotonImprimir />
         </>
       }

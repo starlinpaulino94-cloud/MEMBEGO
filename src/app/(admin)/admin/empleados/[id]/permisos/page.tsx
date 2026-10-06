@@ -4,7 +4,11 @@ import { ArrowLeft, ShieldCheck } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { conEmpresa } from '@/lib/tenant'
-import { puedeEditarPermisos, resolverPermisosUsuario } from '@/lib/auth/permissions'
+import {
+  ROLES_CON_PERMISOS,
+  puedeEditarPermisos,
+  resolverPermisosUsuario,
+} from '@/lib/auth/permissions'
 import { safeInternalPath } from '@/lib/utils'
 import { PermisosEmpleadoForm } from '@/components/admin/PermisosEmpleadoForm'
 
@@ -23,7 +27,7 @@ export default async function PermisosEmpleadoPage({
   params: Promise<{ id: string }>
   searchParams: Promise<{ volver?: string }>
 }) {
-  const user = await requireRole(['SUPERADMIN', 'ADMINISTRADOR', 'ADMIN_EMPRESA'])
+  const user = await requireRole(ROLES_CON_PERMISOS)
   const { id } = await params
   const { volver: volverParam } = await searchParams
 

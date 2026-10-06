@@ -369,6 +369,7 @@ export default async function MiCompraPage({
                       publicKey: tokensConfig.publicKey,
                       captureUrl: tokensConfig.captureUrl,
                       scriptUrl: tokensConfig.scriptUrl,
+                      ambiente: tokensConfig.ambiente,
                     }
                   : null
               }

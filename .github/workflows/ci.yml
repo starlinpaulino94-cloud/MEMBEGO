@@ -50,6 +50,23 @@ jobs:
         run: npm test
       - name: Cobertura RLS (envoltorio de tenant)
         run: node scripts/rls-cobertura.mjs
+      # El riesgo número uno de este código: un envoltorio de inquilino que
+      # dentro llama a algo que abre OTRO. Cada uno es una conexión del pool, y
+      # en un bucle se multiplican hasta agotarlo y tumbar lo que esté sirviendo
+      # a la vez. El script existía desde hacía meses y NO estaba conectado aquí:
+      # solo corría si alguien se acordaba, y para cuando se conectó había dos
+      # casos vivos en `main` que nadie había visto.
+      - name: Transacciones anidadas
+        run: node scripts/transacciones-anidadas.mjs
+      # Las dos direcciones del catálogo de permisos. La que faltaba era la
+      # segunda: una guardia que nombra una sección equivocada queda MUERTA sin
+      # avisar, porque el editor descarta al validar todo código que no esté en
+      # el catálogo y ese permiso ya no se puede negar nunca. Así pasaron nueve
+      # actions del CRM pidiendo 'clientes' mientras el módulo se gobierna con
+      # 'leads': CAJERO y SUPERVISOR no podían ni abrir el CRM y aun así las
+      # pasaban, porque una server action se despacha por su id.
+      - name: Catálogo de permisos
+        run: node scripts/permisos-catalogo.mjs
       - name: Preflight RLS Capa 2 (tablas sin ruta al inquilino)
         # Falla si una tabla nueva se quedaría DENEGADA con membego_app y nadie lo
         # decidió en el SQL. `rls:probar` no lo ve —solo siembra ciertas tablas—,
@@ -147,6 +164,27 @@ jobs:
               echo "::error::El esquema (prisma/schema/) tiene cambios sin migración. Crea la migración antes de mezclar."
               exit 1
             }
+
+      # ── Membego Supply: los catorce casos contra PostgreSQL ─────────────────
+      #
+      # Compra → asignación → entitlement → QR → redención (y su doble, su
+      # vencido, su reversa y su carrera), venta sin precompra → cuenta por
+      # pagar, depósito → aplicación → saldo, factura pagada por fuera,
+      # liquidación con snapshot y conciliación con discrepancia. Sobre una
+      # base migrada con el historial real (`migrate deploy`), para que los
+      # CHECK y los índices parciales de la migración financiera cuenten.
+      - name: Flujos de Membego Supply contra PostgreSQL
+        env:
+          DATABASE_URL: postgresql://postgres:ci@localhost:5432/supplytest
+          DIRECT_URL: postgresql://postgres:ci@localhost:5432/supplytest
+          NEXT_PUBLIC_SUPABASE_URL: https://ci.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci
+          SUPABASE_SERVICE_ROLE_KEY: ci
+        run: |
+          psql postgresql://postgres:ci@localhost:5432/sombra -v ON_ERROR_STOP=1 -c 'create database supplytest'
+          npx prisma migrate deploy
+          npx prisma generate
+          npm run test:db
 
       # ── Aislamiento entre empresas (auditoría · A-01) ──────────────────────
       #

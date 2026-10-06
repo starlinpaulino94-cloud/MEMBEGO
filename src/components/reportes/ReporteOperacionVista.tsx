@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { formatoEntero } from '@/modules/reportes/formato'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
@@ -52,6 +53,7 @@ export function ReporteOperacionVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+  const fEntero = formatoEntero(null)
   const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
 
   // La serie se pliega a la granularidad del periodo: un año en días son 365
@@ -159,7 +161,7 @@ export function ReporteOperacionVista({
                 datos={serie.map((p) => ({ dia: p.dia, valor: p.canjes, anterior: p.descontados }))}
                 etiqueta="Canjes"
                 etiquetaAnterior="Descontaron un uso"
-                formato={entero}
+                formato={fEntero}
               />
             }
             tabla={
@@ -185,7 +187,7 @@ export function ReporteOperacionVista({
             grafico={
               <GraficoRanking
                 filas={r.porSucursal.map((f) => ({ nombre: f.nombre, valor: f.canjes }))}
-                formato={entero}
+                formato={fEntero}
               />
             }
             tabla={<TablaOperacion filas={r.porSucursal} columna="Sucursal" entero={entero} />}

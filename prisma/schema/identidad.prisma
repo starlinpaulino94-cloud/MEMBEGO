@@ -45,6 +45,64 @@ enum NotifTipo {
   CITA_NUEVA
   CITA_CONFIRMADA
   CITA_CANCELADA
+  // ── Membego Supply (Fase 40) ─────────────────────────────────────────────
+  // El cron de supply ya calculaba estos dos avisos y los devolvía en el JSON
+  // de su respuesta, que no lee nadie. Un aviso que solo existe si alguien
+  // entra a mirar el panel no es un aviso.
+  /// Un lote cruza un umbral de vencimiento (30, 14, 7, 3 o 1 días). A Membego
+  /// se le dice cuánto dinero está a punto de evaporarse; al proveedor, cuántas
+  /// unidades de su compromiso quedan sin entregar.
+  SUPPLY_POR_VENCER
+  /// La conciliación encontró algo que invalida cifras: invariante roto,
+  /// redención duplicada, asiento que falta. Solo CRÍTICA y ALTA.
+  SUPPLY_DESCUADRE
+  // Avisos de EVENTO: nacen de algo que alguien acaba de hacer, no de un
+  // barrido. Al CLIENTE:
+  /// Recibió una unidad comprada por Membego, del canal que sea.
+  SUPPLY_BENEFICIO_NUEVO
+  /// Su beneficio se le vence en la mano. Es lo que evita que Membego pague
+  /// una pizza que nadie recoge: la razón número uno de que no se use es que
+  /// se olvida.
+  SUPPLY_BENEFICIO_POR_VENCER
+  /// Apartó día, hora y sucursal para recoger.
+  SUPPLY_RESERVA_CONFIRMADA
+  /// El comercio registró la entrega. Es el RECIBO del cliente: si se marca
+  /// una entrega que no ocurrió, esto se la enseña el mismo día en vez del mes
+  /// siguiente, cuando vaya a usar su beneficio y no esté.
+  SUPPLY_ENTREGA_COMPLETADA
+  // Al PROVEEDOR:
+  /// Un voucher suyo entró en circulación y puede presentarse cualquier día.
+  SUPPLY_VOUCHER_NUEVO
+  /// Su cupo comprometido del día pasó del 80%.
+  SUPPLY_CAPACIDAD_AL_LIMITE
+  /// Un cliente reportó un problema con una entrega suya.
+  SUPPLY_INCIDENCIA
+  /// Membego confirmó un pago por sus entregas.
+  SUPPLY_LIQUIDACION
+  /// El comercio preparó lo que el cliente reservó y lo está esperando. Es el
+  /// único aviso de la Fase 40 que no se pudo hacer en su día: no existía el
+  /// concepto de «pedido preparado», solo la hora acordada.
+  SUPPLY_PRODUCTO_LISTO
+  // Analíticos: nacen de una TENDENCIA, no de un hecho. Los umbrales viven
+  // todos juntos en `UMBRALES_RIESGO` porque son una estimación —cuando se
+  // escribieron nadie había visto la tasa real de incumplimiento de un
+  // proveedor— y hay que poder moverlos sin tocar la lógica.
+  /// Un proveedor acumula incidencias por su parte sobre suficientes entregas.
+  SUPPLY_PROVEEDOR_EN_RIESGO
+  /// Lo que queda vivo de un lote no cabe en los días que faltan a la
+  /// capacidad que el contrato declara. Se sabe hoy, no el último día.
+  SUPPLY_NO_CABE
+  /// Dinero comprometido que no se está consumiendo, a mitad de vigencia.
+  /// Sustituye al «riesgo de presupuesto» de la Fase 40: no existe el concepto
+  /// de presupuesto en el modelo, así que se mide lo que sí hay.
+  SUPPLY_CAPITAL_DORMIDO
+  // Capa financiera (29-09-2026).
+  /// Un acuerdo termina su vigencia pronto (90/60/30/15/7/1 días).
+  SUPPLY_ACUERDO_POR_VENCER
+  /// Un depósito abierto llega a su fecha prevista de cierre con saldo.
+  SUPPLY_DEPOSITO_POR_CERRAR
+  /// Hay una liquidación calculada esperando aprobación o pago.
+  SUPPLY_LIQUIDACION_PENDIENTE
 }
 
 enum AuditAccion {
@@ -172,6 +230,288 @@ enum AuditAccion {
   SEGMENTO_EVALUADO
   /// Se envió una campaña dirigida a un segmento.
   CAMPANA_DIRIGIDA_ENVIADA
+  // ── Membego Supply (docs/membego-supply-architecture.md · Fase 43) ────────
+  // Aquí se compromete el capital de la plataforma con empresas de terceros.
+  // Cada una de estas acciones mueve dinero, supply o el derecho de una
+  // persona a recibir algo, y ninguna puede quedar sin nombre y sin fecha.
+  /// Se creó un acuerdo de supply con un proveedor.
+  SUPPLY_ACUERDO_CREADO
+  /// Un acuerdo cambió de estado (aprobado, activado, cancelado).
+  SUPPLY_ACUERDO_ESTADO
+  /// Se enmendó un contrato ya firmado (cantidad, vigencia, capacidad…).
+  SUPPLY_ENMIENDA_REGISTRADA
+  /// Se creó una orden de compra de supply.
+  SUPPLY_ORDEN_CREADA
+  /// Una orden de compra cambió de estado. Incluye la APROBACIÓN, que es el
+  /// momento en que la plataforma se compromete financieramente.
+  SUPPLY_ORDEN_ESTADO
+  /// Se activó un lote: los derechos comprados entran al pool.
+  SUPPLY_LOTE_ACTIVADO
+  /// Se apartaron unidades para una campaña o destino.
+  SUPPLY_ASIGNACION_CREADA
+  /// Se devolvieron al pool unidades apartadas.
+  SUPPLY_ASIGNACION_LIBERADA
+  /// Se emitió un derecho a un cliente.
+  SUPPLY_DERECHO_EMITIDO
+  /// Se canceló o revocó un derecho ya emitido.
+  SUPPLY_DERECHO_CANCELADO
+  /// Se generó un voucher (o se reemitió).
+  SUPPLY_VOUCHER_EMITIDO
+  /// El comercio entregó la unidad.
+  SUPPLY_REDENCION_REGISTRADA
+  /// Se deshizo una entrega. La operación original NO se borra.
+  SUPPLY_REDENCION_REVERSADA
+  /// Se abrió una incidencia de cumplimiento.
+  SUPPLY_INCIDENCIA_ABIERTA
+  /// Se resolvió una disputa.
+  SUPPLY_INCIDENCIA_RESUELTA
+  /// Se registró un pago a un proveedor.
+  SUPPLY_PAGO_REGISTRADO
+  /// Se confirmó un pago y se asentó en el ledger financiero.
+  SUPPLY_PAGO_CONFIRMADO
+  SUPPLY_PEDIDO_ABIERTO
+  SUPPLY_PEDIDO_COBRADO
+  SUPPLY_PEDIDO_RECHAZADO
+  SUPPLY_CUENTA_COBRO_ALTA
+  SUPPLY_CUENTA_COBRO_ESTADO
+  /// Se corrigió el ledger de un lote con un ajuste manual.
+  SUPPLY_AJUSTE_LEDGER
+  /// Se recalcularon los contadores de un lote desde el ledger.
+  SUPPLY_LOTE_RECALCULADO
+  // Capa financiera de supply (29-09-2026): cada una mueve dinero o una
+  // obligación entre Membego y un proveedor.
+  SUPPLY_PROVEEDOR_REGISTRADO
+  SUPPLY_PROVEEDOR_ACTUALIZADO
+  SUPPLY_ACUERDO_VERSION
+  SUPPLY_DEPOSITO_REGISTRADO
+  SUPPLY_DEPOSITO_APLICADO
+  SUPPLY_DEPOSITO_DEVUELTO
+  SUPPLY_DEPOSITO_CERRADO
+  SUPPLY_FACTURA_REGISTRADA
+  SUPPLY_FACTURA_ESTADO
+  SUPPLY_CXP_CREADA
+  SUPPLY_CXP_ESTADO
+  SUPPLY_CXC_CREADA
+  SUPPLY_CXC_ESTADO
+  SUPPLY_LIQUIDACION_CALCULADA
+  SUPPLY_LIQUIDACION_ESTADO
+  SUPPLY_CONCILIACION_ABIERTA
+  SUPPLY_CONCILIACION_ESTADO
+  SUPPLY_DISCREPANCIA_ESTADO
+  SUPPLY_VENTA_ABIERTA
+  SUPPLY_VENTA_ENTREGADA
+  SUPPLY_VENTA_CANCELADA
+  SUPPLY_PAGO_ANULADO
+  /// Se entregó saltándose FEFO con una estrategia distinta, a mano.
+  SUPPLY_FEFO_OVERRIDE
+  SUPPLY_PROVEEDOR_HABILITADO
+  SUPPLY_OFERTA_CREADA
+  SUPPLY_LOTE_TRANSFERENCIA
+  SUPPLY_LOTE_AJUSTE
+  SUPPLY_LOTE_CANCELACION
+  SUPPLY_LOTE_VENCIMIENTO_EXTENDIDO
+  SUPPLY_PEDIDO_REEMBOLSADO
+  // ── Membego Supply 2.0 · Slice 1 (procurement) ────────────────────────────
+  SUPPLY_V2_SUPPLIER_CREATED
+  SUPPLY_V2_CATALOG_ITEM_CREATED
+  SUPPLY_V2_AGREEMENT_CREATED
+  SUPPLY_V2_AGREEMENT_ACTIVATED
+  SUPPLY_V2_PO_CREATED
+  SUPPLY_V2_PO_SUBMITTED
+  SUPPLY_V2_PO_APPROVED
+  SUPPLY_V2_PO_REJECTED
+  SUPPLY_V2_PO_CANCELLED
+  SUPPLY_V2_RECEIPT_CONFIRMED
+  SUPPLY_V2_LOT_CREATED
+  // ── Membego Supply 2.0 · Slice 2 (oferta, checkout, pago, derecho) ────────
+  SUPPLY_V2_ALLOCATION_CREATED
+  SUPPLY_V2_ALLOCATION_RELEASED
+  SUPPLY_V2_OFFER_CREATED
+  SUPPLY_V2_OFFER_PUBLISHED
+  SUPPLY_V2_OFFER_PAUSED
+  SUPPLY_V2_OFFER_RESUMED
+  SUPPLY_V2_OFFER_ENDED
+  SUPPLY_V2_OFFER_CANCELLED
+  /// Edición de una oferta ya publicada: el payload lleva qué campos cambiaron.
+  SUPPLY_V2_OFFER_UPDATED
+  /// Cambio en el catálogo de categorías de vehículo de plataforma. Decide
+  /// cuánto se cobra —mover un nivel cambia qué vehículos caen en él—, así que
+  /// el payload lleva el antes y el después del nivel, no solo «cambió».
+  SUPPLY_V2_VEHICLE_CATEGORY_CHANGED
+  SUPPLY_V2_ORDER_CREATED
+  SUPPLY_V2_ORDER_RESERVED
+  SUPPLY_V2_ORDER_PAYMENT_SUBMITTED
+  SUPPLY_V2_ORDER_CANCELLED
+  SUPPLY_V2_ORDER_EXPIRED
+  SUPPLY_V2_ORDER_PAID
+  SUPPLY_V2_ORDER_PAYMENT_REJECTED
+  SUPPLY_V2_ENTITLEMENT_ISSUED
+  // Slice 3
+  SUPPLY_V2_VOUCHER_CREATED
+  SUPPLY_V2_VOUCHER_REISSUED
+  SUPPLY_V2_VOUCHER_EXPIRED
+  SUPPLY_V2_QR_SESSION_CREATED
+  SUPPLY_V2_QR_SESSION_EXPIRED
+  SUPPLY_V2_QR_SESSION_CONSUMED
+  SUPPLY_V2_REDEMPTION_PREVIEWED
+  SUPPLY_V2_REDEMPTION_CONFIRMED
+  SUPPLY_V2_REDEMPTION_REJECTED
+  SUPPLY_V2_REDEMPTION_REVERSED
+  SUPPLY_V2_REDEMPTION_INCIDENT
+  SUPPLY_V2_ENTITLEMENT_EXPIRED
+  // Slice 4 · finanzas del proveedor y economía del supply
+  SUPPLY_V2_INVOICE_CREATED
+  SUPPLY_V2_INVOICE_APPROVED
+  SUPPLY_V2_INVOICE_CANCELLED
+  SUPPLY_V2_DEPOSIT_CREATED
+  SUPPLY_V2_DEPOSIT_APPLIED
+  SUPPLY_V2_DEPOSIT_REVERSED
+  SUPPLY_V2_PAYMENT_CREATED
+  SUPPLY_V2_PAYMENT_CONFIRMED
+  SUPPLY_V2_PAYMENT_APPLIED
+  SUPPLY_V2_PAYMENT_REVERSED
+  SUPPLY_V2_PAYMENT_CANCELLED
+  SUPPLY_V2_OBLIGATION_RECOGNIZED
+  SUPPLY_V2_OBLIGATION_PAID
+  SUPPLY_V2_OBLIGATION_CANCELLED
+  SUPPLY_V2_ECONOMIC_EVENT_CREATED
+  SUPPLY_V2_RECONCILIATION_CREATED
+  SUPPLY_V2_RECONCILIATION_RESOLVED
+  SUPPLY_V2_LOT_EXPIRED
+  // Slice 5 · comisión y liquidaciones
+  SUPPLY_V2_COMMISSION_OFFER_CREATED
+  SUPPLY_V2_COMMISSION_ORDER_PAID
+  SUPPLY_V2_COMMISSION_OBLIGATION_CREATED
+  SUPPLY_V2_SETTLEMENT_CREATED
+  SUPPLY_V2_SETTLEMENT_APPROVED
+  SUPPLY_V2_SETTLEMENT_PAYMENT_APPLIED
+  SUPPLY_V2_SETTLEMENT_PAID
+  SUPPLY_V2_SETTLEMENT_CANCELLED
+  SUPPLY_V2_COMMISSION_RECONCILIATION_CREATED
+  SUPPLY_V2_COMMISSION_RECONCILIATION_RESOLVED
+  SUPPLY_V2_FINANCE_INCIDENT_CREATED
+  SUPPLY_V2_FINANCE_INCIDENT_RESOLVED
+  // Slice 6 · beneficios económicos
+  SUPPLY_V2_BENEFIT_CREATED
+  SUPPLY_V2_BENEFIT_APPROVED
+  SUPPLY_V2_BENEFIT_PAUSED
+  SUPPLY_V2_BENEFIT_RESUMED
+  SUPPLY_V2_BENEFIT_CANCELLED
+  SUPPLY_V2_BENEFIT_GRANTED
+  SUPPLY_V2_BENEFIT_GRANT_CANCELLED
+  SUPPLY_V2_BENEFIT_RESERVED
+  SUPPLY_V2_BENEFIT_APPLIED
+  SUPPLY_V2_BENEFIT_RELEASED
+  SUPPLY_V2_BENEFIT_REVERSED
+  SUPPLY_V2_ORDER_COVERED_BY_BENEFIT
+  // Slice 7 · campañas, promociones y cupones
+  SUPPLY_V2_CAMPAIGN_CREATED
+  SUPPLY_V2_CAMPAIGN_SUBMITTED
+  SUPPLY_V2_CAMPAIGN_APPROVED
+  SUPPLY_V2_CAMPAIGN_REJECTED
+  SUPPLY_V2_CAMPAIGN_PUBLISHED
+  SUPPLY_V2_CAMPAIGN_PAUSED
+  SUPPLY_V2_CAMPAIGN_RESUMED
+  SUPPLY_V2_CAMPAIGN_CANCELLED
+  SUPPLY_V2_CAMPAIGN_COMPLETED
+  SUPPLY_V2_CAMPAIGN_BUDGET_WAIVED
+  SUPPLY_V2_COUPONS_GENERATED
+  SUPPLY_V2_COUPON_CANCELLED
+  SUPPLY_V2_COUPON_APPLIED
+  SUPPLY_V2_COUPON_RELEASED
+
+  // Slice 9 · núcleo operativo: lo que un evento externo deja escrito.
+  SUPPLY_V2_EXTERNAL_EVENT_RECEIVED
+  SUPPLY_V2_EXTERNAL_EVENT_PROCESSED
+  SUPPLY_V2_EXTERNAL_EVENT_IGNORED
+  SUPPLY_V2_EXTERNAL_EVENT_FAILED
+  SUPPLY_V2_EXTERNAL_EVENT_DEAD_LETTER
+  SUPPLY_V2_EXTERNAL_EVENT_RETRIED
+  SUPPLY_V2_OUTBOX_DEAD_LETTER
+  SUPPLY_V2_OUTBOX_RETRIED
+
+  // Slice 9 · bloque 3: conciliación de pagos externos. `_INCIDENT_CREATED` y
+  // `_INCIDENT_RESOLVED` ya existen del Slice 5 y se reutilizan tal cual.
+  SUPPLY_V2_PAYMENT_RECONCILIATION_CREATED
+  SUPPLY_V2_FINANCE_INCIDENT_INVESTIGATING
+
+  // Slice 9 · bloque 4: lo que un operador hace desde el panel. No se audita
+  // la LECTURA —un panel que registra cada mirada llena la bitácora de ruido y
+  // esconde las decisiones—, solo lo que cambia algo.
+  SUPPLY_V2_OPERATIONS_SWITCH_CHANGED
+  SUPPLY_V2_OPERATIONS_RECONCILE_RUN
+  SUPPLY_V2_OPERATIONS_ALERT_ACKNOWLEDGED
+
+  // ── Supply 2.0 · Slice 8 · fidelización (01-10-2026) ─────────────────────
+  // Programas, membresías, referidos, puntos y recompensas. Un ajuste manual
+  // de puntos exige motivo y queda aquí: no hay forma de borrar un movimiento
+  // para tapar un error.
+  SUPPLY_V2_LOYALTY_PROGRAM_CREATED
+  SUPPLY_V2_LOYALTY_PROGRAM_SUBMITTED
+  SUPPLY_V2_LOYALTY_PROGRAM_APPROVED
+  SUPPLY_V2_LOYALTY_PROGRAM_REJECTED
+  SUPPLY_V2_LOYALTY_PROGRAM_PAUSED
+  SUPPLY_V2_LOYALTY_PROGRAM_RESUMED
+  SUPPLY_V2_LOYALTY_PROGRAM_CANCELLED
+  SUPPLY_V2_LOYALTY_PROGRAM_COMPLETED
+  SUPPLY_V2_LOYALTY_BUDGET_WAIVED
+  SUPPLY_V2_MEMBERSHIP_PLAN_CREATED
+  SUPPLY_V2_MEMBERSHIP_PLAN_UPDATED
+  SUPPLY_V2_MEMBERSHIP_PLAN_PUBLISHED
+  SUPPLY_V2_MEMBERSHIP_PLAN_PAUSED
+  SUPPLY_V2_MEMBERSHIP_PLAN_ARCHIVED
+  SUPPLY_V2_MEMBERSHIP_STARTED
+  SUPPLY_V2_MEMBERSHIP_ACTIVATED
+  SUPPLY_V2_MEMBERSHIP_RENEWED
+  SUPPLY_V2_MEMBERSHIP_GRANTED
+  SUPPLY_V2_MEMBERSHIP_CANCELLED
+  SUPPLY_V2_MEMBERSHIP_SUSPENDED
+  SUPPLY_V2_MEMBERSHIP_EXPIRED
+  SUPPLY_V2_REFERRAL_CODE_CREATED
+  SUPPLY_V2_REFERRAL_SIGNED_UP
+  SUPPLY_V2_REFERRAL_ELIGIBLE
+  SUPPLY_V2_REFERRAL_REWARD_APPROVED
+  SUPPLY_V2_REFERRAL_REWARD_GRANTED
+  SUPPLY_V2_REFERRAL_REWARD_VOIDED
+  SUPPLY_V2_POINTS_EARNED
+  SUPPLY_V2_POINTS_AVAILABLE
+  SUPPLY_V2_POINTS_EXPIRED
+  SUPPLY_V2_POINTS_ADJUSTED
+  SUPPLY_V2_REWARD_CREATED
+  SUPPLY_V2_REWARD_APPROVED
+  SUPPLY_V2_REWARD_CLAIMED
+  SUPPLY_V2_REWARD_DELIVERED
+  SUPPLY_V2_REWARD_REVERSED
+  // ── CRM · prospectos y respuestas automáticas (24-09-2026) ───────────────
+  // El CRM no escribía NI UNA línea de bitácora. Se destapó investigando si
+  // alguien había pasado por el hueco de permisos que tenían estas mismas
+  // actions, y la respuesta fue que no se podía saber: ni auditoría, ni
+  // columna de autor en `Lead` ni en `AutoReplyConfig`. Un prospecto es un
+  // cliente potencial con su teléfono y su correo, y descartarlo o
+  // reasignarlo le quita trabajo —y comisión— a alguien: no puede seguir
+  // pasando sin nombre y sin fecha.
+  /// Se creó un prospecto.
+  PROSPECTO_CREADO
+  /// Se editó un prospecto (el payload lleva solo los campos que cambiaron).
+  PROSPECTO_ACTUALIZADO
+  /// Se descartó un prospecto. Es un borrado blando: la fila sigue ahí en
+  /// estado DESCARTADO, así que este asiento es lo único que dice quién lo
+  /// sacó del embudo y cuándo.
+  PROSPECTO_DESCARTADO
+  /// Un prospecto cambió de etapa del embudo (el payload lleva de dónde a
+  /// dónde). Va aparte de PROSPECTO_ACTUALIZADO porque es la pregunta que se
+  /// hace sola: «¿quién dio este trato por perdido?».
+  PROSPECTO_ETAPA_CAMBIADA
+  /// Un prospecto se asignó a otra persona (o se dejó sin asignar).
+  PROSPECTO_ASIGNADO
+  /// Se creó una respuesta automática. Contesta en nombre de la empresa a
+  /// quien escribe por WhatsApp o redes: cambiarla cambia lo que el negocio
+  /// le dice a sus clientes sin que nadie lo lea antes.
+  AUTO_RESPUESTA_CREADA
+  /// Se editó una respuesta automática.
+  AUTO_RESPUESTA_ACTUALIZADA
+  /// Se eliminó una respuesta automática.
+  AUTO_RESPUESTA_ELIMINADA
 }
 
 // ─────────────────────────────────────────────
@@ -189,25 +529,31 @@ model User {
   /// Copia del nombre sin acentos y en minúsculas, SOLO para buscar. La
   /// mantiene un disparador en la base: la aplicación nunca la escribe, así
   /// que no puede quedarse desfasada porque alguien olvidara actualizarla.
-  nombreBusqueda     String?
-  role               AppRole   @default(CLIENTE)
-  companyId          String?
-  company            Company?  @relation(fields: [companyId], references: [id])
+  nombreBusqueda       String?
+  role                 AppRole   @default(CLIENTE)
+  companyId            String?
+  company              Company?  @relation(fields: [companyId], references: [id])
   /// Módulo de PERMISOS: ajustes por empleado sobre lo que su rol trae de
   /// serie ({v:1, secciones:{sec:bool}, funciones:{sec:{fn:false}}}). Solo
   /// diferencias; null = hereda el rol tal cual. Ver lib/auth/permissions.ts.
-  permisos           Json?
+  permisos             Json?
+  /// Reportes: qué cifras del resumen ejecutivo ve ESTA persona y en qué orden
+  /// ({v:1, ocultas:[clave], orden:[clave]}). Se guarda lo OCULTO, no lo
+  /// visible: así una cifra nueva aparece sola para todos en vez de quedar
+  /// escondida para quien hubiera personalizado alguna vez. null = de fábrica.
+  /// Ver modules/reportes/preferencias.ts.
+  preferenciasReportes Json?
   // Consentimiento (cumplimiento): rastro auditable de aceptación de términos
   // y opt-in de comunicaciones de marketing, con la versión y el momento.
-  termsAcceptedAt    DateTime?
-  termsVersion       String?
-  marketingConsent   Boolean   @default(false)
-  marketingConsentAt DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  termsAcceptedAt      DateTime?
+  termsVersion         String?
+  marketingConsent     Boolean   @default(false)
+  marketingConsentAt   DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   memberships      Membership[]
-  eventosMembresia MembresiaEvento[] @relation("EventosMembresia")
+  eventosMembresia MembresiaEvento[]   @relation("EventosMembresia")
   visits           Visit[]             @relation("EmpleadoVisits")
   /// Visitas que ESTE usuario deshizo. Va aparte de `visits`: quien registra un
   /// lavado y quien lo devuelve rara vez son la misma persona.
@@ -215,6 +561,7 @@ model User {
   auditLogs        AuditLog[]
   comprobantes     Comprobante[]
   notificaciones   Notificacion[]
+  preferenciasDeAviso PreferenciasDeAviso?
   follows          CompanyFollow[]
   promosGuardadas  PromocionGuardada[]
   notasCliente     ClienteNota[]
@@ -228,31 +575,148 @@ model User {
   geoConsents       GeoConsent[]
 
   // Listados de empleados por empresa (/admin/empleados) y conteos por empresa.
-  transaccionesComoEmpleado Transaction[]              @relation("TransactionEmpleado")
-  cajasAbiertas             CajaSesion[]               @relation("CajaAbiertaPor")
-  cajasCerradas             CajaSesion[]               @relation("CajaCerradaPor")
-  transicionesTransaccion   TransactionTransicion[]
-  impresionesRecibo         ReceiptImpresion[]
-  citasAtendidas            Cita[]                     @relation("CitaAtendidaPor")
-  ofertasCreadas            OfertaPrivada[]            @relation("OfertaCreadaPor")
-  ofertaUsosRegistrados     OfertaUso[]                @relation("OfertaUsoRegistradoPor")
-  comprasAprobadas          ProductoCompra[]           @relation("CompraAprobadaPor")
-  transicionesCompra        ProductoCompraTransicion[]
+  transaccionesComoEmpleado    Transaction[]              @relation("TransactionEmpleado")
+  cajasAbiertas                CajaSesion[]               @relation("CajaAbiertaPor")
+  cajasCerradas                CajaSesion[]               @relation("CajaCerradaPor")
+  transicionesTransaccion      TransactionTransicion[]
+  impresionesRecibo            ReceiptImpresion[]
+  citasAtendidas               Cita[]                     @relation("CitaAtendidaPor")
+  ofertasCreadas               OfertaPrivada[]            @relation("OfertaCreadaPor")
+  ofertaUsosRegistrados        OfertaUso[]                @relation("OfertaUsoRegistradoPor")
+  comprasAprobadas             ProductoCompra[]           @relation("CompraAprobadaPor")
+  transicionesCompra           ProductoCompraTransicion[]
   // App Car Wash · E5.
-  colaRegistrada            ColaVehiculo[]             @relation("ColaRegistradaPor")
-  colaAtendida              ColaVehiculo[]             @relation("ColaAtendidaPor")
-  campanasGlobales          CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
-  movimientosInventario     MovimientoInventario[]     @relation("MovInventarioPor")
-  evidenciasSubidas         EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
+  colaRegistrada               ColaVehiculo[]             @relation("ColaRegistradaPor")
+  colaAtendida                 ColaVehiculo[]             @relation("ColaAtendidaPor")
+  campanasGlobales             CampanaGlobal[]            @relation("CampanaGlobalCreadaPor")
+  movimientosInventario        MovimientoInventario[]     @relation("MovInventarioPor")
+  evidenciasSubidas            EvidenciaFoto[]            @relation("EvidenciaSubidaPor")
   // App Car Wash · Fase 2.
-  comisiones                Comision[]                 @relation("ComisionLavador")
-  incidenciasReportadas     Incidencia[]               @relation("IncidenciaReportadaPor")
-  incidenciasAsignadas      Incidencia[]               @relation("IncidenciaResponsable")
+  comisiones                   Comision[]                 @relation("ComisionLavador")
+  incidenciasReportadas        Incidencia[]               @relation("IncidenciaReportadaPor")
+  incidenciasAsignadas         Incidencia[]               @relation("IncidenciaResponsable")
   // App Car Wash · Fase 3.
-  ordenesCompra             OrdenCompra[]              @relation("OrdenCompraCreadaPor")
-  mantenimientos            Mantenimiento[]            @relation("MantenimientoPor")
-  turnos                    Turno[]                    @relation("TurnoEmpleado")
-  turnosCerrados            Turno[]                    @relation("TurnoCerradoPor")
+  ordenesCompra                OrdenCompra[]              @relation("OrdenCompraCreadaPor")
+  mantenimientos               Mantenimiento[]            @relation("MantenimientoPor")
+  turnos                       Turno[]                    @relation("TurnoEmpleado")
+  turnosCerrados               Turno[]                    @relation("TurnoCerradoPor")
+  // ── Membego Supply ────────────────────────────────────────────────────────
+  supplyAcuerdosCreados        SupplyAcuerdo[]            @relation("SupplyAcuerdoCreadoPor")
+  supplyAcuerdosAprobados      SupplyAcuerdo[]            @relation("SupplyAcuerdoAprobadoPor")
+  supplyEnmiendasSolicitadas   SupplyEnmienda[]           @relation("SupplyEnmiendaSolicitadaPor")
+  supplyEnmiendasAprobadas     SupplyEnmienda[]           @relation("SupplyEnmiendaAprobadaPor")
+  supplyOrdenesCreadas         SupplyOrden[]              @relation("SupplyOrdenCreadaPor")
+  supplyOrdenesAprobadas       SupplyOrden[]              @relation("SupplyOrdenAprobadaPor")
+  supplyMovimientos            SupplyMovimiento[]         @relation("SupplyMovimientoActor")
+  supplyAsignacionesCreadas    SupplyAsignacion[]         @relation("SupplyAsignacionCreadaPor")
+  supplyPedidosRevisados       SupplyPedido[]             @relation("SupplyPedidoRevisor")
+  supplyQrConsumidos           SupplyQrSesion[]           @relation("SupplyQrConsumidoPor")
+  supplyRedencionesEntregadas  SupplyRedencion[]          @relation("SupplyRedencionEmpleado")
+  supplyRedencionesReversadas  SupplyRedencion[]          @relation("SupplyRedencionReversadaPor")
+  supplyIncidenciasReportadas  SupplyIncidencia[]         @relation("SupplyIncidenciaReportadaPor")
+  supplyIncidenciasResueltas   SupplyIncidencia[]         @relation("SupplyIncidenciaResueltaPor")
+  supplyPagosRegistrados       SupplyPago[]               @relation("SupplyPagoRegistradoPor")
+  supplyAsientosFinancieros    SupplyAsientoFinanciero[]  @relation("SupplyAsientoActor")
+  // Capa financiera (29-09-2026).
+  supplyProveedoresCreados     SupplyProveedor[]          @relation("SupplyProveedorCreadoPor")
+  supplyAcuerdoVersiones       SupplyAcuerdoVersion[]     @relation("SupplyAcuerdoVersionCreadaPor")
+  supplyDepositosRegistrados   SupplyDeposito[]           @relation("SupplyDepositoRegistradoPor")
+  supplyDepositosAprobados     SupplyDeposito[]           @relation("SupplyDepositoAprobadoPor")
+  supplyDepositoMovimientos    SupplyDepositoMovimiento[] @relation("SupplyDepositoMovimientoActor")
+  supplyFacturasRegistradas    SupplyFacturaProveedor[]   @relation("SupplyFacturaRegistradaPor")
+  supplyCxPCreadas             SupplyCuentaPorPagar[]     @relation("SupplyCxPCreadaPor")
+  supplyCxCCreadas             SupplyCuentaPorCobrar[]    @relation("SupplyCxCCreadaPor")
+  supplyLiquidacionesCalc      SupplyLiquidacion[]        @relation("SupplyLiquidacionCalculadaPor")
+  supplyLiquidacionesAprob     SupplyLiquidacion[]        @relation("SupplyLiquidacionAprobadaPor")
+  supplyConciliacionesCreadas  SupplyConciliacion[]       @relation("SupplyConciliacionCreadaPor")
+  supplyConciliacionesCerradas SupplyConciliacion[]       @relation("SupplyConciliacionCerradaPor")
+  supplyDiscrepanciasResueltas SupplyDiscrepancia[]       @relation("SupplyDiscrepanciaResueltaPor")
+  supplyDiscrepanciasAprobadas SupplyDiscrepancia[]       @relation("SupplyDiscrepanciaAprobadaPor")
+  supplyDiscrepanciaNotas      SupplyDiscrepanciaNota[]   @relation("SupplyDiscrepanciaNotaActor")
+  supplyVentasEntregadas       SupplyVentaDirecta[]       @relation("SupplyVentaEntregadaPor")
+  // ── Membego Supply 2.0 (supply-v2.prisma) ─────────────────────────────────
+  supplyV2ProveedoresCreados   SupplyV2Supplier[]           @relation("SupplyV2SupplierCreatedBy")
+  supplyV2AcuerdosCreados      SupplyV2Agreement[]          @relation("SupplyV2AgreementCreatedBy")
+  supplyV2AcuerdosAprobados    SupplyV2Agreement[]          @relation("SupplyV2AgreementApprovedBy")
+  supplyV2VersionesCreadas     SupplyV2AgreementVersion[]   @relation("SupplyV2AgreementVersionCreatedBy")
+  supplyV2OrdenesCreadas       SupplyV2PurchaseOrder[]      @relation("SupplyV2PurchaseOrderCreatedBy")
+  supplyV2OrdenesAprobadas     SupplyV2PurchaseOrder[]      @relation("SupplyV2PurchaseOrderApprovedBy")
+  supplyV2OrdenEventos         SupplyV2PurchaseOrderEvent[] @relation("SupplyV2PurchaseOrderEventActor")
+  supplyV2Recepciones          SupplyV2PurchaseReceipt[]    @relation("SupplyV2ReceiptReceivedBy")
+  supplyV2Asientos             SupplyV2LedgerEntry[]        @relation("SupplyV2LedgerActor")
+  // Slice 2
+  supplyV2AsignacionesCreadas  SupplyV2Allocation[]         @relation("SupplyV2AllocationCreatedBy")
+  supplyV2OfertasCreadas       SupplyV2Offer[]              @relation("SupplyV2OfferCreatedBy")
+  supplyV2OfertasPublicadas    SupplyV2Offer[]              @relation("SupplyV2OfferPublishedBy")
+  supplyV2ComprasComoCliente   SupplyV2CustomerOrder[]      @relation("SupplyV2CustomerOrderCustomer")
+  supplyV2PagosConfirmados     SupplyV2CustomerOrder[]      @relation("SupplyV2CustomerOrderConfirmedBy")
+  supplyV2Derechos             SupplyV2Entitlement[]        @relation("SupplyV2EntitlementCustomer")
+  // Membego Supply 2.0 · Slice 3
+  supplyV2Vouchers             SupplyV2Voucher[]            @relation("SupplyV2VoucherCustomer")
+  supplyV2SesionesQrAbiertas   SupplyV2QrSession[]          @relation("SupplyV2QrSessionOpenedBy")
+  supplyV2SesionesQrConsumidas SupplyV2QrSession[]          @relation("SupplyV2QrSessionConsumedBy")
+  supplyV2Redenciones          SupplyV2Redemption[]         @relation("SupplyV2RedemptionCustomer")
+  supplyV2Entregas             SupplyV2Redemption[]         @relation("SupplyV2RedemptionEmployee")
+  supplyV2ReversasHechas       SupplyV2Redemption[]         @relation("SupplyV2RedemptionReversedBy")
+  supplyV2Incidencias          SupplyV2RedemptionIncident[] @relation("SupplyV2IncidentEmployee")
+  // Slice 4 · finanzas del proveedor
+  supplyV2FacturasCreadas        SupplyV2SupplierInvoice[]         @relation("SupplyV2InvoiceCreatedBy")
+  supplyV2FacturasAprobadas      SupplyV2SupplierInvoice[]         @relation("SupplyV2InvoiceApprovedBy")
+  supplyV2DepositosCreados       SupplyV2SupplierDeposit[]         @relation("SupplyV2DepositCreatedBy")
+  supplyV2MovimientosDeposito    SupplyV2SupplierDepositMovement[] @relation("SupplyV2DepositMovementActor")
+  supplyV2PagosProveedorCreados  SupplyV2SupplierPayment[]         @relation("SupplyV2PaymentCreatedBy")
+  supplyV2PagosProveedorConfirm  SupplyV2SupplierPayment[]         @relation("SupplyV2PaymentConfirmedBy")
+  supplyV2AplicacionesCreadas    SupplyV2PaymentApplication[]      @relation("SupplyV2ApplicationCreatedBy")
+  supplyV2AplicacionesReversadas SupplyV2PaymentApplication[]      @relation("SupplyV2ApplicationReversedBy")
+  supplyV2ConciliacionesCreadas  SupplyV2Reconciliation[]          @relation("SupplyV2ReconciliationCreatedBy")
+  supplyV2ConciliacionesResuelt  SupplyV2Reconciliation[]          @relation("SupplyV2ReconciliationResolvedBy")
+  // Slice 5 · liquidaciones e incidencias
+  supplyV2LiquidacionesCreadas   SupplyV2Settlement[]              @relation("SupplyV2SettlementCreatedBy")
+  supplyV2LiquidacionesAprobadas SupplyV2Settlement[]              @relation("SupplyV2SettlementApprovedBy")
+  supplyV2IncidenciasResueltas   SupplyV2FinanceIncident[]         @relation("SupplyV2FinanceIncidentResolvedBy")
+  supplyV2BeneficiosCreados       SupplyV2Benefit[]            @relation("SupplyV2BenefitCreatedBy")
+  supplyV2BeneficiosAprobados     SupplyV2Benefit[]            @relation("SupplyV2BenefitApprovedBy")
+  supplyV2BeneficiosAsignados     SupplyV2CustomerBenefit[]    @relation("SupplyV2CustomerBenefitCustomer")
+  supplyV2BeneficiosOtorgados     SupplyV2CustomerBenefit[]    @relation("SupplyV2CustomerBenefitGrantedBy")
+  supplyV2ReservasDeBeneficio     SupplyV2BenefitReservation[] @relation("SupplyV2BenefitReservationCustomer")
+  supplyV2MovimientosDeBeneficio  SupplyV2BenefitMovement[]    @relation("SupplyV2BenefitMovementActor")
+
+  // Slice 7 · campañas, promociones y cupones
+  supplyV2CampanasCreadas         SupplyV2Campaign[]             @relation("SupplyV2CampaignCreatedBy")
+  supplyV2CampanasAprobadas       SupplyV2Campaign[]             @relation("SupplyV2CampaignApprovedBy")
+  supplyV2CampanasPublicadas      SupplyV2Campaign[]             @relation("SupplyV2CampaignPublishedBy")
+  supplyV2CampanasSinTope         SupplyV2Campaign[]             @relation("SupplyV2CampaignBudgetWaiverBy")
+  supplyV2CampanaEventos          SupplyV2CampaignEvent[]        @relation("SupplyV2CampaignEventActor")
+  supplyV2LotesDeCupones          SupplyV2CampaignDistribution[] @relation("SupplyV2CampaignDistributionCreatedBy")
+  supplyV2CuponesCreados          SupplyV2Coupon[]               @relation("SupplyV2CouponCreatedBy")
+  supplyV2CuponesPropios          SupplyV2Coupon[]               @relation("SupplyV2CouponCustomer")
+  supplyV2CuponesAplicados        SupplyV2CouponRedemption[]     @relation("SupplyV2CouponRedemptionCustomer")
+
+  // Slice 9 · quién reintentó a mano un evento externo o un efecto del outbox.
+  supplyV2EventosReintentados SupplyV2ExternalEvent[]        @relation("SupplyV2ExternalEventRetriedBy")
+  supplyV2OutboxReintentados  SupplyV2OutboxEvent[]          @relation("SupplyV2OutboxRetriedBy")
+
+  // Slice 9 · bloque 4 · quién tocó un interruptor y quién reconoció una alerta.
+  supplyV2Interruptores       SupplyV2OperationalSwitch[]    @relation("SupplyV2SwitchChangedBy")
+  supplyV2AlertasReconocidas  SupplyV2OperationalAlert[]     @relation("SupplyV2AlertAcknowledgedBy")
+
+  // Slice 8 · fidelización: membresías, referidos, puntos y recompensas
+  supplyV2ProgramasCreados        SupplyV2LoyaltyProgram[]        @relation("SupplyV2LoyaltyProgramCreatedBy")
+  supplyV2ProgramasAprobados      SupplyV2LoyaltyProgram[]        @relation("SupplyV2LoyaltyProgramApprovedBy")
+  supplyV2ProgramasSinTope        SupplyV2LoyaltyProgram[]        @relation("SupplyV2LoyaltyProgramBudgetWaiverBy")
+  supplyV2PlanesCreados           SupplyV2MembershipPlan[]        @relation("SupplyV2MembershipPlanCreatedBy")
+  supplyV2VersionesDePlan         SupplyV2MembershipPlanVersion[] @relation("SupplyV2MembershipPlanVersionCreatedBy")
+  supplyV2Membresias              SupplyV2CustomerMembership[]    @relation("SupplyV2CustomerMembershipCustomer")
+  supplyV2MembresiasOtorgadas     SupplyV2CustomerMembership[]    @relation("SupplyV2CustomerMembershipGrantedBy")
+  supplyV2CodigosDeReferido       SupplyV2ReferralCode[]          @relation("SupplyV2ReferralCodeOwner")
+  supplyV2ReferidosHechos         SupplyV2Referral[]              @relation("SupplyV2ReferralReferrer")
+  supplyV2ReferidoPor             SupplyV2Referral[]              @relation("SupplyV2ReferralReferred")
+  supplyV2CuentasDePuntos         SupplyV2PointsAccount[]         @relation("SupplyV2PointsAccountCustomer")
+  supplyV2MovimientosDePuntos     SupplyV2PointsMovement[]        @relation("SupplyV2PointsMovementActor")
+  supplyV2RecompensasCreadas      SupplyV2Reward[]                @relation("SupplyV2RewardCreatedBy")
+  supplyV2RecompensasAprobadas    SupplyV2Reward[]                @relation("SupplyV2RewardApprovedBy")
+  supplyV2RecompensasReclamadas   SupplyV2RewardClaim[]           @relation("SupplyV2RewardClaimCustomer")
+  supplyV2FidelizacionEventos     SupplyV2LoyaltyEvent[]          @relation("SupplyV2LoyaltyEventActor")
 
   @@index([companyId])
   @@index([nombreBusqueda(ops: raw("gin_trgm_ops"))], map: "users_nombre_busqueda_trgm", type: Gin)
@@ -471,14 +935,14 @@ model Company {
   campanasDirigidas CampanaDirigida[]
 
   // Módulo de Citas.
-  agendaConfig   AgendaConfig?
-  citas          Cita[]
+  agendaConfig      AgendaConfig?
+  citas             Cita[]
   // Home comercial (F2): revisiones de composición y sinónimos de búsqueda.
-  homeRevisiones   HomeRevision[]
+  homeRevisiones    HomeRevision[]
   busquedaSinonimos BusquedaSinonimo[]
-  ofertaPrivadas OfertaPrivada[]
-  regalos        Regalo[]
-  giftCards      GiftCard[]
+  ofertaPrivadas    OfertaPrivada[]
+  regalos           Regalo[]
+  giftCards         GiftCard[]
 
   // App Car Wash · E5.
   colaVehiculos         ColaVehiculo[]
@@ -497,6 +961,31 @@ model Company {
   ordenesCompra         OrdenCompra[]
   activos               Activo[]
   turnos                Turno[]
+
+  // ── Membego Supply (docs/membego-supply-architecture.md) ──────────────────
+  // La MISMA organización es comercio y proveedora de Membego cuando tiene la
+  // capacidad MEMBEGO_SUPPLIER encendida. No hay una segunda empresa.
+  supplyAcuerdos         SupplyAcuerdo[]           @relation("SupplyProveedorAcuerdos")
+  supplyOrdenes          SupplyOrden[]             @relation("SupplyProveedorOrdenes")
+  supplyLotes            SupplyLote[]              @relation("SupplyProveedorLotes")
+  supplyDerechos         SupplyDerecho[]           @relation("SupplyProveedorDerechos")
+  supplyVouchers         SupplyVoucher[]           @relation("SupplyProveedorVouchers")
+  supplyReservas         SupplyReserva[]           @relation("SupplyProveedorReservas")
+  supplyRedenciones      SupplyRedencion[]         @relation("SupplyProveedorRedenciones")
+  supplyIncidencias      SupplyIncidencia[]        @relation("SupplyProveedorIncidencias")
+  supplyPagos            SupplyPago[]              @relation("SupplyProveedorPagos")
+  supplyAsientos         SupplyAsientoFinanciero[] @relation("SupplyProveedorAsientos")
+  // Capa financiera (29-09-2026).
+  supplyPerfilProveedor  SupplyProveedor?          @relation("SupplyProveedorPerfil")
+  supplyDepositos        SupplyDeposito[]          @relation("SupplyProveedorDepositos")
+  supplyFacturas         SupplyFacturaProveedor[]  @relation("SupplyProveedorFacturas")
+  supplyCuentasPorPagar  SupplyCuentaPorPagar[]    @relation("SupplyProveedorCuentasPorPagar")
+  supplyCuentasPorCobrar SupplyCuentaPorCobrar[]   @relation("SupplyProveedorCuentasPorCobrar")
+  supplyLiquidaciones    SupplyLiquidacion[]       @relation("SupplyProveedorLiquidaciones")
+  supplyConciliaciones   SupplyConciliacion[]      @relation("SupplyProveedorConciliaciones")
+  supplyVentas           SupplyVentaDirecta[]      @relation("SupplyProveedorVentas")
+  // ── Membego Supply 2.0 (supply-v2.prisma) · referencia, no duplicado ─────
+  supplyV2Supplier       SupplyV2Supplier?         @relation("SupplyV2SupplierCompany")
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -528,6 +1017,17 @@ model Sucursal {
   colaVehiculos   ColaVehiculo[]
   bahias          Bahia[]
 
+  // Membego Supply: dónde se recoge y dónde se entrega.
+  supplyReservas    SupplyReserva[]      @relation("SupplyReservaSucursal")
+  supplyRedenciones SupplyRedencion[]    @relation("SupplyRedencionSucursal")
+  supplyVentas      SupplyVentaDirecta[] @relation("SupplyVentaSucursal")
+  // Membego Supply 2.0: dónde se recibió una compra.
+  supplyV2Recepciones SupplyV2PurchaseReceipt[] @relation("SupplyV2ReceiptBranch")
+  // Membego Supply 2.0 · Slice 3: dónde se entregó.
+  supplyV2SesionesQr  SupplyV2QrSession[]          @relation("SupplyV2QrSessionBranch")
+  supplyV2Redenciones SupplyV2Redemption[]         @relation("SupplyV2RedemptionBranch")
+  supplyV2Incidencias SupplyV2RedemptionIncident[] @relation("SupplyV2IncidentBranch")
+
   // ── Geolocalización (docs/GEOLOCALIZACION.md §3.3) ─────────────────────────
   // Normalizado: las claves del catálogo geo cuando la dirección se resuelve.
   countryId   String?
@@ -556,6 +1056,9 @@ model Sucursal {
 
   // Campañas geosegmentadas por radio alrededor de esta sucursal.
   campanasDirigidas CampanaDirigida[]
+
+  // Slice 8 · sucursales participantes de un programa de fidelización.
+  supplyV2ProgramasFidelizacion SupplyV2LoyaltyProgramBranch[] @relation("SupplyV2LoyaltyProgramBranchSucursal")
 
   @@index([companyId])
   @@index([companyId, activa, mostrarEnMapa])
@@ -593,6 +1096,68 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+/// PREFERENCIAS DE AVISO DE UNA PERSONA (Slice 9 · bloque 5 · §9).
+///
+/// ────────────────────────────────────────────────────────────────────────────
+/// POR QUÉ UNA TABLA NUEVA, Y POR QUÉ VIVE AQUÍ Y NO EN SUPPLY 2.0
+///
+/// Se buscó antes de crearla. NO hay un modelo de preferencias de aviso en el
+/// proyecto: `Notificacion` guarda el aviso YA creado y no tiene nada sobre
+/// consentimiento, y lo de `GeoConsent` es consentimiento de UBICACIÓN, que es
+/// otra cosa y mezclarlos sería exactamente el error que §3 prohíbe.
+///
+/// Vive en identidad y no en Supply 2.0 porque esto es de la PERSONA, no de
+/// una vertical: el día que las citas o el car wash quieran avisar por correo,
+/// la decisión de esta persona ya está tomada y no hay que preguntarle otra
+/// vez en otra pantalla. Supply 2.0 es el primero que lo necesita, no el
+/// dueño.
+///
+/// ────────────────────────────────────────────────────────────────────────────
+/// CINCO COLUMNAS Y NO UNA
+///
+/// «No quiero correos» y «no quiero publicidad» son decisiones distintas.
+/// Con un solo interruptor hay que elegir entre respetar la primera o entregar
+/// lo transaccional, y las dos opciones son malas: o la persona deja de
+/// enterarse de que su compra se confirmó, o el sistema manda publicidad que
+/// pidió no recibir.
+///
+/// Los nulos NO son «apagado»: son «no lo ha tocado», y entonces manda el
+/// valor por defecto del dominio (`POR_DEFECTO` en
+/// `modules/supply-v2/notifications/dominio.ts`): lo transaccional encendido,
+/// lo promocional APAGADO. Un consentimiento que nadie dio no es un
+/// consentimiento, así que no se presume a favor.
+///
+/// Lo OPERATIVO no está aquí a propósito: los avisos a quien tiene la guardia
+/// no se apagan desde una pantalla de preferencias personales. Eso dejaría el
+/// sistema sin vigilancia sin que nadie lo decidiera. Se quita el permiso o se
+/// saca a la persona de operaciones.
+model PreferenciasDeAviso {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Avisos dentro de Membego (la campana). Nulo = por defecto.
+  inApp Boolean?
+
+  /// Correo por algo que la persona hizo o compró. Nulo = por defecto.
+  emailTransactional Boolean?
+  /// Correo para vender. Nulo = por defecto (APAGADO).
+  emailMarketing Boolean?
+
+  /// WhatsApp. Hoy el canal está NO CONFIGURADO a nivel de plataforma (ver el
+  /// informe del bloque 5): las columnas existen para que la decisión de la
+  /// persona se pueda guardar desde ya y no haya que migrar después.
+  whatsappTransactional Boolean?
+  whatsappMarketing     Boolean?
+
+  /// Quién tocó esto por última vez y cuándo. Una preferencia de comunicación
+  /// es una decisión que alguien puede discutir más adelante.
+  actualizadoPor String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("preferencias_de_aviso")
+}
+
 model Notificacion {
   id        String    @id @default(cuid())
   userId    String
@@ -609,8 +1174,8 @@ model Notificacion {
   /// varios NULL en índice único: no se altera el pasado).
   dedupeKey String?
 
+  @@unique([userId, dedupeKey])
   @@index([userId, leida])
   @@index([userId, createdAt])
-  @@unique([userId, dedupeKey])
   @@map("notificaciones")
 }

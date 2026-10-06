@@ -950,7 +950,7 @@ export async function guardarRegalosConfig(
   _prev: RegaloActionState,
   formData: FormData
 ): Promise<RegaloActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('regalos')
   if (!user) return { error: 'No autorizado.' }
   const companyId = user.metadata.companyId
   if (!companyId) return { error: 'Tu cuenta no está vinculada a una empresa.' }
@@ -1014,7 +1014,7 @@ export async function cancelarRegaloAdmin(
   regaloId: string,
   motivo: string
 ): Promise<{ error?: string; success?: boolean }> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('regalos')
   if (!user) return { error: 'No autorizado.' }
   const companyId = user.metadata.companyId
   if (!companyId) return { error: 'Tu cuenta no está vinculada a una empresa.' }

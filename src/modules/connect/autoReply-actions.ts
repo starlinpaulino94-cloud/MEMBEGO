@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { requireSection } from '@/lib/auth/guards'
 import { conEmpresa } from '@/lib/tenant'
+import { getRequestMeta } from '@/lib/server-utils'
+import { Prisma } from '@prisma/client'
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -15,10 +17,49 @@ export interface AutoReplyActionState {
 // ── Actions ────────────────────────────────────────────────────────────────
 
 /**
+ * Asienta en la bitácora un cambio en las respuestas automáticas.
+ *
+ * Estas reglas CONTESTAN EN NOMBRE DE LA EMPRESA a quien escribe por WhatsApp
+ * o redes. Cambiar una cambia lo que el negocio le dice a sus clientes sin que
+ * nadie lo lea antes de que salga, y hasta hoy eso no dejaba ni una línea.
+ *
+ * Fail-open y fuera de la transacción, por lo mismo que `auditarProspecto` en
+ * `modules/crm/lead-actions.ts`: los valores del enum viven en la migración
+ * `20260930_crm_auditoria`, que se aplica a mano, y una bitácora no puede
+ * impedir que la empresa configure su propia respuesta.
+ */
+async function auditarAutoRespuesta(
+  companyId: string,
+  userId: string | null,
+  accion: 'AUTO_RESPUESTA_CREADA' | 'AUTO_RESPUESTA_ACTUALIZADA' | 'AUTO_RESPUESTA_ELIMINADA',
+  configId: string,
+  payload: Prisma.InputJsonObject
+) {
+  try {
+    const meta = await getRequestMeta()
+    await conEmpresa(companyId, (tx) =>
+      tx.auditLog.create({
+        data: {
+          companyId,
+          userId,
+          accion,
+          entidadTipo: 'AutoReplyConfig',
+          entidadId: configId,
+          payload,
+          ...meta,
+        },
+      })
+    )
+  } catch (e) {
+    console.error('[connect] no se pudo auditar', accion, e)
+  }
+}
+
+/**
  * Obtiene todas las configuraciones de auto-reply de la empresa.
  */
 export async function getAutoReplyConfigs(companyId: string) {
-  const user = await requireSection('clientes', 'auto_reply_leer')
+  const user = await requireSection('leads', 'auto_reply_leer')
   if (!user) return { error: 'No autorizado.' }
 
   if (user.metadata.companyId !== companyId) {
@@ -55,7 +96,7 @@ export async function createAutoReplyConfig(
     orden?: number
   }
 ): Promise<AutoReplyActionState> {
-  const user = await requireSection('clientes', 'auto_reply_crear')
+  const user = await requireSection('leads', 'auto_reply_crear')
   if (!user) return { error: 'No autorizado.' }
 
   if (user.metadata.companyId !== companyId) {
@@ -85,6 +126,12 @@ export async function createAutoReplyConfig(
       })
     )
 
+    await auditarAutoRespuesta(companyId, user.metadata.dbUserId ?? null, 'AUTO_RESPUESTA_CREADA', config.id, {
+      regla: nombre,
+      esBienvenida: data.esBienvenida ?? false,
+      activa: data.activa ?? true,
+    })
+
     revalidatePath('/admin/connect')
     return { success: true, data: config }
   } catch (e) {
@@ -110,7 +157,7 @@ export async function updateAutoReplyConfig(
     orden?: number
   }
 ): Promise<AutoReplyActionState> {
-  const user = await requireSection('clientes', 'auto_reply_editar')
+  const user = await requireSection('leads', 'auto_reply_editar')
   if (!user) return { error: 'No autorizado.' }
 
   if (user.metadata.companyId !== companyId) {
@@ -123,7 +170,8 @@ export async function updateAutoReplyConfig(
     const existing = await conEmpresa(companyId, (tx) =>
       tx.autoReplyConfig.findFirst({
         where: { id, companyId },
-        select: { id: true },
+        // `nombre` para que el asiento diga CUÁL regla, no solo un id.
+        select: { id: true, nombre: true },
       })
     )
     if (!existing) return { error: 'Configuración no encontrada.' }
@@ -145,6 +193,13 @@ export async function updateAutoReplyConfig(
       })
     )
 
+    await auditarAutoRespuesta(companyId, user.metadata.dbUserId ?? null, 'AUTO_RESPUESTA_ACTUALIZADA', id, {
+      regla: existing.nombre,
+      // Los nombres de los campos tocados, no su contenido: el texto de la
+      // respuesta vive en la regla y ahí se lee.
+      campos: Object.keys(updateData),
+    })
+
     revalidatePath('/admin/connect')
     return { success: true, data: config }
   } catch (e) {
@@ -160,7 +215,7 @@ export async function deleteAutoReplyConfig(
   id: string,
   companyId: string
 ): Promise<AutoReplyActionState> {
-  const user = await requireSection('clientes', 'auto_reply_eliminar')
+  const user = await requireSection('leads', 'auto_reply_eliminar')
   if (!user) return { error: 'No autorizado.' }
 
   if (user.metadata.companyId !== companyId) {
@@ -173,7 +228,8 @@ export async function deleteAutoReplyConfig(
     const existing = await conEmpresa(companyId, (tx) =>
       tx.autoReplyConfig.findFirst({
         where: { id, companyId },
-        select: { id: true },
+        // `nombre` para que el asiento diga CUÁL regla, no solo un id.
+        select: { id: true, nombre: true },
       })
     )
     if (!existing) return { error: 'Configuración no encontrada.' }
@@ -181,6 +237,12 @@ export async function deleteAutoReplyConfig(
     await conEmpresa(companyId, (tx) =>
       tx.autoReplyConfig.delete({ where: { id } })
     )
+
+    // Aquí el borrado es DE VERDAD (no blando como el de prospectos): este
+    // asiento es lo único que va a quedar de que esa regla existió.
+    await auditarAutoRespuesta(companyId, user.metadata.dbUserId ?? null, 'AUTO_RESPUESTA_ELIMINADA', id, {
+      regla: existing.nombre,
+    })
 
     revalidatePath('/admin/connect')
     return { success: true }

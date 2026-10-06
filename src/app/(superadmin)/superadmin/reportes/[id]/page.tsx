@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { sinEmpresa } from '@/lib/tenant'
-import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
+import { formatDateTime } from '@/lib/format'
+import { zonaSegura } from '@/lib/zona-horaria'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
 import { getReporte } from '@/modules/reportes/queries'
 import { RangoFechas } from '@/components/reportes/RangoFechas'
@@ -57,7 +58,7 @@ export default async function ReporteDeEmpresaPage({
   // La zona horaria y la moneda son LAS DE LA EMPRESA, no las de la
   // plataforma: un reporte del negocio cortado en otro huso no cuadra con su
   // caja, y da igual quién lo esté mirando.
-  const timeZone = empresa.zonaHoraria || TZ_PLATAFORMA
+  const timeZone = zonaSegura(empresa.zonaHoraria)
   const rango = leerRango(sp, timeZone)
   const r = await getReporte(id, rango, timeZone)
 

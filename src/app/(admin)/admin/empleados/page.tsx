@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES } from '@/types'
-import { Plus } from 'lucide-react'
+import { Eye, Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { puedeEditarPermisos } from '@/lib/auth/permissions'
+import { ROLES_CON_PERMISOS, puedeEditarPermisos } from '@/lib/auth/permissions'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { listInvitacionesPendientes } from '@/modules/admin/invitacionActions'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,8 @@ export default async function EmpleadosPage() {
   const companyId = await requireCompanyContext(user)
   // Solo los administradores plenos con empresa pueden invitar equipo.
   const puedeInvitar = !!user.metadata.companyId && FULL_ADMIN_ROLES.includes(user.metadata.role)
+  // La pantalla de accesos pide los mismos roles que la ficha de Permisos.
+  const puedeEditarEquipo = ROLES_CON_PERMISOS.includes(user.metadata.role)
 
   let miembros: EmpleadoRow[] = []
   // `caducada` lo resuelve `listInvitacionesPendientes`: `Date.now()` dentro
@@ -80,12 +82,25 @@ export default async function EmpleadosPage() {
         title="Equipo"
         description={`${miembros.length} miembro${miembros.length !== 1 ? 's' : ''} · Invita por correo para que elijan su contraseña; crea manualmente si necesitas acceso inmediato.`}
         action={
-          <Button asChild>
-            <Link href="/admin/empleados/nuevo">
-              <Plus className="mr-2 h-4 w-4" />
-              Nuevo empleado
-            </Link>
-          </Button>
+          <>
+            {/* El mapa de accesos lo abre la misma gente que puede editar
+                permisos; para el resto del equipo el enlace sería una puerta
+                cerrada. */}
+            {puedeEditarEquipo && (
+              <Button asChild variant="outline">
+                <Link href="/admin/empleados/accesos">
+                  <Eye className="mr-2 h-4 w-4" />
+                  Qué ve cada quien
+                </Link>
+              </Button>
+            )}
+            <Button asChild>
+              <Link href="/admin/empleados/nuevo">
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo empleado
+              </Link>
+            </Button>
+          </>
         }
       />
 

@@ -14,7 +14,7 @@ export async function crearMetodoPago(
   _prev: MetodoPagoState,
   formData: FormData
 ): Promise<MetodoPagoState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('metodos-pago')
   if (!user) return { error: 'No autorizado.' }
 
   const companyId =
@@ -68,7 +68,7 @@ export async function actualizarMetodoPago(
   _prev: MetodoPagoState,
   formData: FormData
 ): Promise<MetodoPagoState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('metodos-pago')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()
@@ -113,7 +113,7 @@ export async function eliminarMetodoPago(
   _prev: MetodoPagoState,
   formData: FormData
 ): Promise<MetodoPagoState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('metodos-pago')
   if (!user) return { error: 'No autorizado.' }
 
   const id = String(formData.get('id') ?? '').trim()

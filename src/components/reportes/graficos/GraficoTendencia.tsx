@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { formatear, type FormatoCifra } from '@/modules/reportes/formato'
 
 export interface PuntoTendencia {
   /** `YYYY-MM-DD`, o la etiqueta ya formateada si la granularidad no es diaria. */
@@ -45,7 +46,16 @@ export function GraficoTendencia({
   etiqueta: string
   etiquetaAnterior?: string
   /** El mismo formateador que usa la tarjeta: dinero con dinero, enteros con enteros. */
-  formato: (n: number) => string
+  /**
+   * La RECETA del formato, no el formateador.
+   *
+   * Era `(n: number) => string`, y una función no cruza de un componente de
+   * servidor a uno de cliente: Next devuelve un 500 en el render. Ver
+   * `modules/reportes/formato.ts`, donde está el fallo entero y cómo se
+   * reprodujo. El eje y el tooltip formatean números que el servidor no ha
+   * visto, así que hace falta la receta y no las cifras ya escritas.
+   */
+  formato: FormatoCifra
   alto?: string
   tipo?: 'area' | 'linea'
 }) {
@@ -76,14 +86,14 @@ export function GraficoTendencia({
         stroke="currentColor"
         tickLine={false}
         width={72}
-        tickFormatter={(v: number) => formato(v)}
+        tickFormatter={(v: number) => formatear(formato, v)}
       />
       <Tooltip
         cursor={{ className: 'fill-muted/40' }}
         wrapperClassName="rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
         contentStyle={{ background: 'transparent', border: 'none', borderRadius: 12, fontSize: 12 }}
         labelClassName="font-semibold text-foreground"
-        formatter={(v: number | string) => formato(Number(v))}
+        formatter={(v: number | string) => formatear(formato, Number(v))}
       />
       {hayComparacion && <Legend wrapperStyle={{ fontSize: 12 }} />}
     </>

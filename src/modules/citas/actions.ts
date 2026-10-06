@@ -488,7 +488,7 @@ export async function guardarAgendaConfig(
   formData: FormData
 ): Promise<CitaActionState> {
   try {
-    const user = await requireAdminUser()
+    const user = await requireAdminUser('citas')
     if (!user) return { error: 'No autorizado.' }
     // Módulo de Permisos: llevar la agenda y CONFIGURARLA son poderes
     // distintos — se puede dejar el módulo de citas y negar solo este.

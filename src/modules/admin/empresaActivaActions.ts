@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdminUser } from '@/lib/auth/guards'
+import { requireAdminSinSeccion } from '@/lib/auth/guards'
 import { sinEmpresa } from '@/lib/tenant'
 
 export interface EmpresaActivaState {
@@ -20,7 +20,9 @@ export interface EmpresaActivaState {
 export async function cambiarEmpresaActiva(
   companyId: string
 ): Promise<EmpresaActivaState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminSinSeccion(
+      'el conmutador de empresa vive en la cabecera del panel, no dentro de ningún módulo'
+    )
   if (!user) return { error: 'No autorizado.' }
 
   const target = String(companyId ?? '').trim()

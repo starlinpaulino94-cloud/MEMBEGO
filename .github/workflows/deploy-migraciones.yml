@@ -37,7 +37,14 @@
 #   · MIGRATIONS_DATABASE_URL — la DIRECT_URL de Supabase (puerto 5432, sin
 #     pgbouncer). El pooler no sirve para migrar: `prisma migrate deploy`
 #     necesita sentencias DDL en una conexión directa.
-#   · VERCEL_DEPLOY_HOOK_URL   — el hook de despliegue del proyecto en Vercel.
+#   · VERCEL_DEPLOY_HOOK_URL   — el hook de despliegue del proyecto en Vercel
+#     (Settings → Git → Deploy Hooks, rama `main`). Desde el 29-09-2026
+#     `vercel.json` desactiva el auto-deploy de `main` desde Git
+#     (`git.deploymentEnabled.main = false`), así que **producción solo se
+#     despliega desde aquí, después de migrar**. Sin este secreto, `main`
+#     mezcla y no despliega por ningún camino: por eso el paso se pone ROJO
+#     si falta, en vez de avisar. Las ramas de PR siguen desplegando
+#     previews solas; el interruptor es solo para `main`.
 #
 # Las migraciones de `prisma/migrations_manual/` (buckets de Storage, políticas
 # RLS) NO van aquí: tocan el esquema `storage` de Supabase, que Prisma no
@@ -251,16 +258,54 @@ jobs:
           echo "::error::$CUANTAS migración(es) sin aplicar. El SQL está en el resumen del job."
           exit 1
 
+      # ─────────────────────────────────────────────────────────────────────
+      # DESPLEGAR, y solo después de migrar.
+      #
+      # Corre en dos situaciones: (a) el secreto de la base está puesto y
+      # `migrate deploy` terminó bien; (b) el secreto NO está puesto pero este
+      # push no trae migraciones, así que no hay nada que la base necesite
+      # antes del código. En la tercera —migraciones nuevas sin poder
+      # aplicarlas— el paso anterior ya salió rojo y aquí no se llega: el
+      # código NO debe ir por delante de la base.
+      #
+      # Como `vercel.json` apaga el auto-deploy de `main`, este POST es el
+      # único camino a producción. Un hook vacío no es un aviso: es un `main`
+      # que no despliega, y eso se dice en rojo.
+      # ─────────────────────────────────────────────────────────────────────
       - name: Desplegar en Vercel
-        if: success() && steps.secreto.outputs.configurado == 'true'
+        if: success() && (steps.secreto.outputs.configurado == 'true' || steps.nuevas.outputs.cuantas == '0')
         env:
           HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
           if [ -z "$HOOK" ]; then
-            echo "::warning::VERCEL_DEPLOY_HOOK_URL sin configurar; se omite el despliegue."
-            echo '> ⚠️ `VERCEL_DEPLOY_HOOK_URL` sin configurar: no se disparó el despliegue desde aquí.' >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            {
+              echo '## ⛔ Sin despliegue: falta `VERCEL_DEPLOY_HOOK_URL`'
+              echo
+              echo 'El auto-deploy de `main` desde Git está desactivado en `vercel.json`, así que'
+              echo 'producción **solo** se despliega desde este flujo, y el hook no está configurado.'
+              echo 'Este push NO ha llegado a producción.'
+              echo
+              echo '1. En Vercel: proyecto → Settings → Git → **Deploy Hooks** → crear uno para la rama `main`.'
+              echo '2. En GitHub: Settings → Secrets and variables → Actions → `VERCEL_DEPLOY_HOOK_URL` con esa URL.'
+              echo '3. Relanzar este flujo (Actions → Migrar y desplegar → Run workflow).'
+              echo
+              echo 'Detalle en `docs/DEVOPS.md` § «Configuración manual pendiente».'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo '::error::VERCEL_DEPLOY_HOOK_URL sin configurar y el auto-deploy de main está apagado: este push no se ha desplegado.'
+            exit 1
           fi
-          curl -fsS -X POST "$HOOK" > /dev/null
-          echo "Despliegue disparado."
-          echo '> Despliegue disparado en Vercel, después de las migraciones.' >> "$GITHUB_STEP_SUMMARY"
+          # El hook responde con el job encolado ({"job":{"id":…,"state":"PENDING"}}).
+          # Reintentos porque un 5xx puntual de Vercel no debe dejar `main` sin desplegar.
+          respuesta=$(curl -fsS -X POST --retry 3 --retry-delay 5 --retry-all-errors "$HOOK") || {
+            echo '::error::Vercel no aceptó el deploy hook. Relanza este flujo (Run workflow) cuando Vercel responda.'
+            echo '## ❌ Vercel no aceptó el deploy hook' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Las migraciones ya están aplicadas; solo falta el despliegue. Relanza el flujo con **Run workflow**.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          job=$(printf '%s' "$respuesta" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)
+          echo "Despliegue disparado en Vercel (job ${job:-sin id})."
+          {
+            echo '## 🚀 Despliegue disparado en Vercel'
+            echo
+            echo "Después de las migraciones. Job de Vercel: \`${job:-sin id}\`."
+          } >> "$GITHUB_STEP_SUMMARY"

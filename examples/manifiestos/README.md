@@ -44,3 +44,9 @@ suspendido.
 | `webhookUrl` | no | Sin esto, el sistema solo recibe SSO |
 | `autoHabilitar` | no | ¿Toda empresa compatible lo obtiene sin habilitación explícita? Por defecto `false` |
 | `accesoPorUsuario` | no | ¿Hace falta que cada persona tenga acceso explícito? Por defecto `false` |
+
+## Un alta completa, paso a paso
+
+`docs/platform/park-and-tours.md` recorre el alta de un satélite real de
+principio a fin: el vertical de la empresa, el SQL del registro, el secreto al
+`.env`, dónde aparece el acceso y qué mirar cuando no aparece.

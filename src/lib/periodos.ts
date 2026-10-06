@@ -1,4 +1,7 @@
 import { TZ_PLATAFORMA } from '@/lib/format'
+// La copia privada que vivía aquí se mudó a `lib/zona-horaria.ts`: Reportes
+// necesitaba la misma regla y dos copias de una validación se separan.
+import { zonaSegura } from '@/lib/zona-horaria'
 
 interface FechaLocal {
   year: number
@@ -19,16 +22,6 @@ const RANGOS_MESES: Array<{ min: number; max: number; meses: number }> = [
   { min: 180, max: 184, meses: 6 },
   { min: 364, max: 366, meses: 12 },
 ]
-
-function zonaSegura(zonaHoraria: string | null | undefined): string {
-  const zona = zonaHoraria || TZ_PLATAFORMA
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: zona }).format(new Date(0))
-    return zona
-  } catch {
-    return TZ_PLATAFORMA
-  }
-}
 
 function mesesPorVigencia(dias: number): number | null {
   const d = Math.round(dias)

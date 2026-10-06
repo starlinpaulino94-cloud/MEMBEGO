@@ -60,7 +60,14 @@ const ctx = (extra: Partial<ContextoNav> = {}): ContextoNav => ({ role: ADMIN, .
  * catálogo sin que nada avise. Esto es lo que avisa.
  */
 test('las capacidades del menú existen en el catálogo real', () => {
-  const delMenu: CapacidadNav[] = ['CITAS', 'SEGUIMIENTO', 'RULETA', 'EXCURSIONES', 'POS_CAJA']
+  const delMenu: CapacidadNav[] = [
+    'CITAS',
+    'SEGUIMIENTO',
+    'RULETA',
+    'EXCURSIONES',
+    'POS_CAJA',
+    'MEMBEGO_SUPPLIER',
+  ]
   for (const cap of delMenu) {
     assert.ok(
       (CAPACIDADES as readonly string[]).includes(cap),

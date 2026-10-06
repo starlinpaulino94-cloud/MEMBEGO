@@ -22,7 +22,7 @@ export interface EstadoCrm {
 }
 
 async function quien(): Promise<{ companyId: string; usuarioId: string } | null> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('leads')
   if (!user?.metadata.companyId) return null
   return { companyId: user.metadata.companyId, usuarioId: user.metadata.dbUserId }
 }

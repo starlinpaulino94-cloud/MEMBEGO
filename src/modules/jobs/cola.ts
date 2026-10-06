@@ -86,6 +86,11 @@ export function claveDedup(carga: CargaTrabajo): string {
       // un mensaje distinto del 2.º, pero publicar dos veces el mismo tercero
       // —porque nuestra publicación se reintentó— es el mismo mensaje.
       return `reint:${carga.cola}:${carga.entregaId}:${carga.intentos}`
+    case 'supply-v2-efecto':
+      // Misma lógica que la de arriba, sobre la identidad ESTABLE de la fila
+      // del outbox: dos despachadores que publiquen el mismo intento de la
+      // misma fila son un solo trabajo; el intento siguiente sí es otro.
+      return `sv2out:${carga.outboxId}:${carga.intentos}`
   }
 }
 

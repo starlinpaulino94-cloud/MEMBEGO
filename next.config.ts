@@ -16,10 +16,16 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   experimental: {
-    // El build de producción en Vercel (2 núcleos / 8 GB) murió por OOM
-    // (SIGKILL). Esta opción hace que webpack libere memoria entre fases de
-    // compilación a costa de un build algo más lento — necesario porque la app
-    // ya tiene cientos de rutas.
+    // Sin mapas de fuente del servidor. Con Turbopack se emitían ~5,300
+    // archivos .map que nadie sube (SENTRY_UPLOAD=off en Vercel) y que costaban
+    // ~1 GB de pico de memoria y 340 MB de disco en el build. Medido el
+    // 2026-09-29 en 4 núcleos: 5.0 GB con mapas → 4.1 GB sin ellos.
+    serverSourceMaps: false,
+    // Solo aplica si alguien compila con `next build --webpack`. El build de
+    // producción pasó a Turbopack (ver package.json) porque en Vercel
+    // (2 núcleos / 8 GB) webpack moría por OOM (SIGKILL) tras 8 minutos: pico
+    // medido de 5.6 GB en 3.3 min de compilación frente a 3.7 GB en 1 min
+    // con Turbopack y un solo worker, que es lo que Vercel tiene.
     webpackMemoryOptimizations: true,
     serverActions: {
       // El formulario público de solicitudes (/solicitud-empresa) sube logo,
@@ -60,6 +66,17 @@ const nextConfig: NextConfig = {
     ],
   },
   transpilePackages: ['@membego/ui'],
+  /**
+   * Paquetes que el servidor carga en tiempo de ejecución, SIN empaquetar.
+   *
+   * `write-excel-file/node` solo se usa desde las rutas de exportación, escribe
+   * un zip con APIs de Node y no tiene nada que hacer en un bundle. Dejarlo
+   * fuera le quita trabajo a webpack — y en esta app eso no es un detalle: el
+   * build de Vercel corre en 2 núcleos / 8 GB y pica en ~6 GB (ver la nota de
+   * `typescript.ignoreBuildErrors` y `webpackMemoryOptimizations` arriba), con
+   * un OOM que mata el proceso SIN mensaje legible.
+   */
+  serverExternalPackages: ['write-excel-file'],
   redirects: async () => {
     return [
       // Alias amigable del perfil público (membego.com/empresa/slug).

@@ -39,6 +39,24 @@ export async function puedeSubirComprobante(tipo: TipoComprobante, id: string, s
       )
       return c?.cliente?.supabaseId === supabaseId
     }
+    if (tipo === 'pedido') {
+      const pedido = await sinEmpresa(
+        'comprobantes: pedido de supply por id para comprobar permiso (plataforma)',
+        (tx) =>
+          tx.supplyPedido.findUnique({
+            where: { id },
+            select: { cliente: { select: { supabaseId: true } } },
+          })
+      )
+      return pedido?.cliente?.supabaseId === supabaseId
+    }
+    if (tipo === 'pago' || tipo === 'supply-v2') {
+      const user = await sinEmpresa(
+        'comprobantes: rol de quien adjunta un comprobante de pago a proveedor',
+        (tx) => tx.user.findUnique({ where: { supabaseId }, select: { role: true } })
+      )
+      return user?.role === 'SUPERADMIN'
+    }
     return id === supabaseId
   } catch {
     return false

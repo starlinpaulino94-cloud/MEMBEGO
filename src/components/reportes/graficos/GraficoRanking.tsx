@@ -1,5 +1,7 @@
 'use client'
 
+import { formatear, type FormatoCifra } from '@/modules/reportes/formato'
+
 export interface FilaRanking {
   nombre: string
   valor: number
@@ -24,7 +26,15 @@ export function GraficoRanking({
   maximo,
 }: {
   filas: FilaRanking[]
-  formato: (n: number) => string
+  /**
+   * La RECETA del formato, no el formateador.
+   *
+   * Era `(n: number) => string`, y una función no cruza de un componente de
+   * servidor a uno de cliente: Next devuelve un 500 en el render. Ver
+   * `modules/reportes/formato.ts`, donde está el fallo entero y cómo se
+   * reprodujo.
+   */
+  formato: FormatoCifra
   /** Referencia del 100 %. Por defecto, el mayor de la lista. */
   maximo?: number
 }) {
@@ -45,7 +55,7 @@ export function GraficoRanking({
             </span>
             <span className="min-w-0 truncate text-small text-foreground">{f.nombre}</span>
             <span className="flex items-center gap-2 tabular-nums">
-              <span className="text-small font-semibold text-foreground">{formato(f.valor)}</span>
+              <span className="text-small font-semibold text-foreground">{formatear(formato, f.valor)}</span>
               {variacion != null && (
                 <span
                   className={`text-caption ${

@@ -98,7 +98,21 @@ function funcionesConEnvoltorio(src) {
   const marcas = []
   while ((m = re.exec(src))) marcas.push({ nombre: m[1], desde: m.index })
   for (let i = 0; i < marcas.length; i++) {
-    const hasta = i + 1 < marcas.length ? marcas[i + 1].desde : src.length
+    // EL CUERPO SE RECORTA POR LLAVES, no «hasta la siguiente declaración».
+    //
+    // Recortar hasta la marca siguiente hacía que la ÚLTIMA función del archivo
+    // se llevara todo lo que venía detrás —incluido el componente de página que
+    // sí abre transacción—, y quedara marcada como si la abriera ella. Así
+    // `ordenPasarela`, que solo construye un `orderBy`, aparecía como culpable
+    // de una anidación que no existía. Un guardia que señala a quien no es
+    // enseña a no mirarlo.
+    //
+    // Si no se encuentra la llave de apertura (una `const` de una línea, por
+    // ejemplo), se cae al criterio anterior: no puede abrir transacción sin
+    // cuerpo, y acotar de menos nunca inventa un culpable.
+    const llave = src.indexOf('{', marcas[i].desde)
+    const siguiente = i + 1 < marcas.length ? marcas[i + 1].desde : src.length
+    const hasta = llave !== -1 && llave < siguiente ? cierre(src, llave) + 1 : siguiente
     const cuerpo = src.slice(marcas[i].desde, hasta)
     if (ENVOLTORIOS.some((e) => new RegExp(`\\b${e}\\s*\\(`).test(cuerpo))) {
       nombres.add(marcas[i].nombre)

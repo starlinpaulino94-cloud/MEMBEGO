@@ -173,7 +173,12 @@ test('platformIncidents existe pero no condiciona la visibilidad', () => {
 })
 
 test('cada rol de empresa ve el hub con sus ocho grupos', () => {
-  for (const role of ['ADMINISTRADOR', 'GERENTE', 'ADMIN_EMPRESA'] as AppRole[]) {
+  // GERENTE salió de esta lista al acotarse por oficio: ya no trae la
+  // configuración de experiencia de cliente, así que su hub tiene siete
+  // grupos y no ocho. Lo que ve él y lo que ve el mostrador se fija abajo,
+  // a propósito y por separado — un menú que encoge sin que nadie lo note es
+  // como se pierde el acceso de alguien sin enterarse.
+  for (const role of ['ADMINISTRADOR', 'ADMIN_EMPRESA'] as AppRole[]) {
     const ctx = { role, scope: 'COMPANY' as const, capacidades: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'EXCURSIONES'] as CapacidadNav[] }
     const espacios = visibleWorkspaces(ctx)
     assert.deepEqual(espacios.map((w) => w.id), ['empresa'])
@@ -188,6 +193,46 @@ test('cada rol de empresa ve el hub con sus ocho grupos', () => {
       'ajustes',
     ])
   }
+})
+
+/**
+ * EL MENÚ DE LOS ROLES ACOTADOS, ESCRITO.
+ *
+ * Un CAJERO y un GERENTE traían las 44 secciones —campañas y audiencia
+ * incluidas— porque `canAccessAdminSection` miraba `FULL_ADMIN_ROLES` antes
+ * que nada. Desde que tienen paquete por oficio, su hub encoge; y como
+ * encoger un menú es también quitarle a alguien algo que usaba, aquí queda
+ * exactamente qué le queda a cada uno.
+ */
+test('el mostrador ve cuatro grupos, y marketing no está entre ellos', () => {
+  const ctx = { role: 'CAJERO' as AppRole, scope: 'COMPANY' as const, capacidades: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'EXCURSIONES'] as CapacidadNav[] }
+  const espacios = visibleWorkspaces(ctx)
+  assert.deepEqual(visibleGroups(espacios[0]!, ctx).map((g) => g.id), [
+    'principal',
+    'catalogo',
+    'operaciones',
+    'clientes',
+  ])
+})
+
+test('la operación ve su hub sin la configuración de experiencia', () => {
+  const ctx = { role: 'GERENTE' as AppRole, scope: 'COMPANY' as const, capacidades: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'EXCURSIONES'] as CapacidadNav[] }
+  const espacios = visibleWorkspaces(ctx)
+  const grupos = visibleGroups(espacios[0]!, ctx).map((g) => g.id)
+  assert.deepEqual(grupos, [
+    'principal',
+    'catalogo',
+    'operaciones',
+    'clientes',
+    // Sigue apareciendo, y no por las campañas: dentro solo le quedan
+    // invitar a su equipo y los regalos VIP, que son dos palancas de quien
+    // dirige el turno. Las campañas, la audiencia y las automatizaciones ya
+    // no están.
+    'marketing',
+    'analitica',
+    'ajustes',
+  ])
+  assert.ok(!grupos.includes('experiencia-cliente'))
 })
 
 // ── Conmutador de ámbito y menú de una columna ───────────────────────────

@@ -9,7 +9,8 @@ import { requireRole, requireSection } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
-import { formatDateTime, TZ_PLATAFORMA } from '@/lib/format'
+import { formatDateTime } from '@/lib/format'
+import { zonaSegura } from '@/lib/zona-horaria'
 import { leerRango, paramsDeRango } from '@/modules/reportes/rango'
 import {
   leerOrden,
@@ -148,7 +149,7 @@ export default async function DetalleCicloVidaPage({
       .findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
       .catch(() => null)
   )
-  const timeZone = empresa?.zonaHoraria || TZ_PLATAFORMA
+  const timeZone = zonaSegura(empresa?.zonaHoraria)
   const rango = leerRango(sp, timeZone)
   const prefs = await getRegionalPrefs(companyId)
 

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { formatoEntero } from '@/modules/reportes/formato'
 import { plural } from '@/lib/plural'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { Rango } from '@/modules/reportes/rango'
@@ -52,6 +53,7 @@ export function ReporteClientesVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
+  const fEntero = formatoEntero(prefs)
   const dinero = (n: number) => formatMoney(n, prefs)
   const pct = (n: number, de: number) => (de === 0 ? '—' : `${Math.round((n / de) * 100)} %`)
 
@@ -185,7 +187,7 @@ export function ReporteClientesVista({
             grafico={
               <GraficoDistribucion
                 datos={canalesDelAnillo}
-                formato={entero}
+                formato={fEntero}
                 total={r.nuevos.valor}
               />
             }
@@ -213,7 +215,7 @@ export function ReporteClientesVista({
               <GraficoTendencia
                 datos={serie.map((p) => ({ dia: p.dia, valor: p.nuevos }))}
                 etiqueta="Altas"
-                formato={entero}
+                formato={fEntero}
               />
             }
             tabla={

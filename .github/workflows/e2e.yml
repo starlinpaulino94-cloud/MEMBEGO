@@ -9,9 +9,10 @@
 # (instalar navegador + build + arrancar) y no debería alargar el ciclo de
 # cada push. Se ejecuta en los PR y al mezclar en main.
 #
-# ALCANCE: recorrido PÚBLICO. Lo que falta —registro, compra, pago, QR, canje—
-# necesita un proyecto de Supabase de pruebas; está explicado en
-# docs/PRUEBAS-E2E.md § "Lo que falta".
+# ALCANCE: el recorrido público MÁS el autenticado de Supply 2.0 (slices 1 a 9),
+# que entra con sesiones firmadas aquí mismo con SUPABASE_JWT_SECRET y no
+# necesita un proyecto de Supabase. Lo que sigue sin cubrir es el mostrador de
+# membresías (escaneo de QR y caja); está explicado en docs/PRUEBAS-E2E.md.
 name: E2E
 
 on:
@@ -51,9 +52,32 @@ jobs:
       DIRECT_URL: postgresql://postgres:e2e@localhost:5432/membego_e2e
       # Valores de relleno: el recorrido público no toca Supabase. Tienen que
       # existir porque el build los exige.
-      NEXT_PUBLIC_SUPABASE_URL: https://e2e.supabase.co
+      #
+      # La URL apunta a un puerto local sin nadie escuchando, a propósito: así
+      # `supabase.auth.getUser()` falla con un error de red (transitorio) y la
+      # aplicación cae a la verificación LOCAL del token con
+      # `SUPABASE_JWT_SECRET`. Es lo que permite que el recorrido de Supply 2.0
+      # (`tests/e2e/supply-v2-slice1.spec.ts`) entre con dos sesiones firmadas
+      # aquí mismo, sin proyecto de Supabase. Un host inventado bajo un dominio
+      # real podría resolver y devolver un 401, que NO es transitorio.
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54329
       NEXT_PUBLIC_SUPABASE_ANON_KEY: e2e-anon
       SUPABASE_SERVICE_ROLE_KEY: e2e-service
+      # Secreto de RELLENO, solo para firmar sesiones de prueba contra esta
+      # base efímera. No es el de ningún entorno real.
+      SUPABASE_JWT_SECRET: e2e-jwt-secret-solo-para-pruebas-0123456789
+      # El cron de Supply 2.0 (`/api/cron/supply-v2`) se dispara desde el E2E
+      # de expiración con este secreto de relleno (§59 del Slice 2).
+      CRON_SECRET: e2e-cron-secret-solo-para-pruebas
+      # Slice 9: el secreto HMAC con el que el recorrido firma los avisos de la
+      # pasarela de prueba. De RELLENO, y la base donde actúa se crea y se tira
+      # en cada ejecución. Sin él, el webhook responde 401 (falla CERRADO) y el
+      # recorrido del Slice 9 se SALTA — que es exactamente lo que pasaba antes
+      # de añadirlo: 126 pruebas omitidas y nadie mirándolas.
+      SUPPLY_V2_TEST_GATEWAY_SECRET: e2e-secreto-de-pasarela-solo-para-pruebas-0123456789
+      # TTL corto de la reserva en pruebas: el E2E adelanta el reloj, pero un
+      # valor pequeño evita que un checkout olvidado bloquee otra prueba.
+      SUPPLY_V2_RESERVATION_TTL_MINUTES: '5'
       NEXT_PUBLIC_APP_URL: http://localhost:3210
       E2E_BASE_URL: http://localhost:3210
       NEXT_TELEMETRY_DISABLED: '1'
@@ -85,6 +109,15 @@ jobs:
       # historial de cómo se llegó a él.
       - name: Esquema
         run: npx prisma db push --skip-generate --accept-data-loss
+
+      # La cuenta con la que actúa la integración de pagos externos. El servidor
+      # la necesita en el arranque y la comprueba contra la base, que acaba de
+      # nacer vacía: hay que crearla antes. Se usa el mismo arnés que las
+      # pruebas para que sea la misma cuenta, y es una cuenta APARTE de las
+      # personas del recorrido a propósito (bloque 3 del Slice 9: quien procesa
+      # el aviso de la pasarela no resuelve el incidente que ese aviso abrió).
+      - name: Cuenta de la integración (Slice 9)
+        run: echo "SUPPLY_V2_WEBHOOK_ACTOR_ID=$(npx tsx scripts/e2e/cuenta-integracion.ts)" >> "$GITHUB_ENV"
 
       - name: Build
         run: npm run build

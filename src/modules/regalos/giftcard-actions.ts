@@ -184,7 +184,7 @@ export async function confirmarPagoGiftCard(
   giftCardId: string,
   metodo: 'EFECTIVO' | 'TRANSFERENCIA' | 'OTRO'
 ): Promise<GiftCardActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('regalos')
   if (!user) return { error: 'No autorizado.' }
   const companyId = user.metadata.companyId
   if (!companyId) return { error: 'Tu cuenta no está vinculada a una empresa.' }
@@ -282,7 +282,7 @@ export async function redimirGiftCard(
   montoRaw: number,
   nota?: string
 ): Promise<GiftCardActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('regalos')
   if (!user) return { error: 'No autorizado.' }
   const companyId = user.metadata.companyId
   if (!companyId) return { error: 'Tu cuenta no está vinculada a una empresa.' }
@@ -363,7 +363,7 @@ export async function cancelarGiftCardAdmin(
   giftCardId: string,
   motivo: string
 ): Promise<GiftCardActionState> {
-  const user = await requireAdminUser()
+  const user = await requireAdminUser('regalos')
   if (!user) return { error: 'No autorizado.' }
   const companyId = user.metadata.companyId
   if (!companyId) return { error: 'Tu cuenta no está vinculada a una empresa.' }

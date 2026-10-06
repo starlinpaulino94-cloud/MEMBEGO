@@ -1,4 +1,5 @@
 import type { RegionalPrefs } from '@/lib/format'
+import { formatoEntero } from '@/modules/reportes/formato'
 import { plural } from '@/lib/plural'
 import type { Rango } from '@/modules/reportes/rango'
 import { serieParaGrafico } from '@/modules/reportes/serie'
@@ -53,6 +54,7 @@ export function ReporteCrecimientoVista({
   controles?: React.ReactNode
 }) {
   const entero = (n: number) => new Intl.NumberFormat(prefs?.idioma || 'es-DO').format(n)
+  const fEntero = formatoEntero(prefs)
 
   // La serie se pliega a la granularidad del periodo: un año en días son 365
   // barras y no se lee ninguna. Es una SUMA de los mismos días que ya venían de
@@ -171,7 +173,7 @@ export function ReporteCrecimientoVista({
                 datos={serie.map((p) => ({ dia: p.dia, valor: p.clics, anterior: p.registros }))}
                 etiqueta="Clics"
                 etiquetaAnterior="Registros"
-                formato={entero}
+                formato={fEntero}
               />
             }
             tabla={
@@ -193,7 +195,7 @@ export function ReporteCrecimientoVista({
             grafico={
               <GraficoRanking
                 filas={r.embudo.map((e) => ({ nombre: e.nombre, valor: e.eventos }))}
-                formato={entero}
+                formato={fEntero}
                 maximo={topeEmbudo}
               />
             }
@@ -222,7 +224,7 @@ export function ReporteCrecimientoVista({
             grafico={
               <GraficoRanking
                 filas={canalesConClics.map((c) => ({ nombre: c.nombre, valor: c.clics }))}
-                formato={entero}
+                formato={fEntero}
               />
             }
             tabla={<TablaCanales filas={r.porCanal} entero={entero} />}
