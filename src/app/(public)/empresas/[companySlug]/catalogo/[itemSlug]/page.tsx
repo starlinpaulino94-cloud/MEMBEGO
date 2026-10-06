@@ -8,6 +8,7 @@ import { formatearPrecio } from '@/modules/catalog/formato'
 import { ETIQUETA_TIPO } from '@/modules/catalog/formato'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
+import { RUTA_OFERTAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
 
 interface Props {
   params: Promise<{ companySlug: string; itemSlug: string }>
@@ -36,6 +37,7 @@ export default async function ItemCatalogoPublicoPage({ params }: Props) {
   const { companySlug, itemSlug } = await params
   const item = await itemCatalogoPublico(companySlug, itemSlug)
   if (!item) notFound()
+  const hrefOferta = item.origen === 'SUPPLY' && item.ofertaSlug ? `${RUTA_OFERTAS_PUBLICAS}/${item.ofertaSlug}` : null
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -72,12 +74,16 @@ export default async function ItemCatalogoPublicoPage({ params }: Props) {
         <div>
           <p className="text-caption text-muted-foreground">{ETIQUETA_TIPO[item.type]}</p>
           <h1 className="mt-1 text-h1 text-foreground">{item.name}</h1>
-          <p className="mt-1 text-muted-foreground">
-            de{' '}
-            <Link href={`/empresas/${item.company.slug}`} className="underline">
-              {item.company.name}
-            </Link>
-          </p>
+          {hrefOferta ? (
+            <p className="mt-1 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-caption font-medium text-primary">Oferta MembeGo</p>
+          ) : (
+            <p className="mt-1 text-muted-foreground">
+              de{' '}
+              <Link href={`/empresas/${item.company.slug}`} className="underline">
+                {item.company.name}
+              </Link>
+            </p>
+          )}
 
           {item.categories.length > 0 && (
             <ul className="mt-3 flex flex-wrap gap-2">
@@ -115,12 +121,18 @@ export default async function ItemCatalogoPublicoPage({ params }: Props) {
             ))}
           </ul>
 
-          <Link
-            href={`/empresas/${item.company.slug}`}
-            className="mt-6 inline-flex h-10 items-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground"
-          >
-            Ver {item.company.name}
-          </Link>
+          {hrefOferta ? (
+            <Link href={hrefOferta} className="mt-6 inline-flex h-10 items-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground">
+              Ver la oferta y comprar
+            </Link>
+          ) : (
+            <Link
+              href={`/empresas/${item.company.slug}`}
+              className="mt-6 inline-flex h-10 items-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground"
+            >
+              Ver {item.company.name}
+            </Link>
+          )}
         </div>
       </div>
     </main>

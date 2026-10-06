@@ -159,6 +159,16 @@ disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
 y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba
 la interfaz.
 
+**El puente Supply → Catálogo (Commerce Core · Fase 2.5)** — `puente-supply`
+(escritorio), con `puente-arnes.ts` (proveedor, producto, asignación y ofertas de
+Supply sembrados por Prisma): sin casa → el superadmin la designa → sincroniza →
+las ofertas aparecen en `/catalogo` (franja «Ofertas MembeGo», filtro de origen,
+ficha) y la tarjeta lleva a la compra de Supply → **pausar una oferta desde la
+interfaz de Supply la saca del catálogo** (ejercita el enganche real `after()`) →
+retirar la casa saca todo; un no-superadmin no entra. La casa es **una sola por
+base**: el spec la designa y la retira, así que no debe correrse en paralelo con
+otro que la use.
+
 Tres cosas que costó aprender y conviene no repetir:
 
 1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de

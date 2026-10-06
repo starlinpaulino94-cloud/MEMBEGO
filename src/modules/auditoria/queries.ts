@@ -201,6 +201,7 @@ export const ACCION_LABEL: Record<string, string> = {
   INVENTORY_STOCK_CHANGED: 'Inventario · existencias movidas (entrada, ajuste, daño o devolución)',
   INVENTORY_TRANSFERRED: 'Inventario · transferencia entre sucursales',
   INVENTORY_CONFIGURED: 'Inventario · umbral de stock bajo modificado',
+  SUPPLY_BRIDGE_HOUSE_CHANGED: 'Puente Supply → Catálogo · empresa de la casa designada o retirada',
   SUPPLY_V2_ORDER_CREATED: 'Supply 2.0 · compra de cliente creada',
   SUPPLY_V2_ORDER_RESERVED: 'Supply 2.0 · unidades reservadas para una compra',
   SUPPLY_V2_ORDER_PAYMENT_SUBMITTED: 'Supply 2.0 · cliente avisó su pago',

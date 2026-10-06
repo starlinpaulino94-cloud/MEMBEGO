@@ -58,6 +58,17 @@ los productos que tienen activado «Controla inventario» en su ficha del
 catálogo (los servicios no). Se activa por sucursal: hace falta al menos una
 sucursal activa en la empresa.
 
+### El puente Supply → Catálogo (empresa «de la casa»)
+
+Las ofertas de Supply 2.0 son de Membego, no de una empresa. Para que aparezcan
+en el catálogo y en `/catalogo` («Ofertas MembeGo») hace falta una **empresa de la
+casa** que sea su dueña en el catálogo: el superadmin la designa en
+`/superadmin/puente-supply`. Esa empresa necesita, **a mano**: estar activa y
+publicada, no ser de demostración y tener `CATALOGO_UNIFICADO: true` en su
+override (el panel muestra los requisitos pero no los enciende). Sin casa
+designada el puente no hace nada. Retirar la casa archiva los ítems puente (se
+conservan y se reactivan al designar una nueva).
+
 ## Defaults de la Fase 0 (Plan Maestro §8)
 
 Ocultamiento de módulos secundarios mientras el foco pasa a Commerce Core y

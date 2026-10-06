@@ -3,6 +3,7 @@ import Image from 'next/image'
 import { Package } from 'lucide-react'
 import { formatearPrecio } from '@/modules/catalog/formato'
 import type { ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
+import { RUTA_OFERTAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
 
 /**
  * Tarjeta pública de un ítem del catálogo: la usan la vitrina de la empresa, el
@@ -15,9 +16,12 @@ export function TarjetaCatalogoPublica({
   item: ItemPublicoResumen
   mostrarEmpresa?: boolean
 }) {
+  // Una oferta de Membego (ítem puente) se compra en SU página: el checkout es el de Supply.
+  const esOferta = item.origen === 'SUPPLY' && !!item.ofertaSlug
+  const href = esOferta ? `${RUTA_OFERTAS_PUBLICAS}/${item.ofertaSlug}` : `/empresas/${item.company.slug}/catalogo/${item.slug}`
   return (
     <Link
-      href={`/empresas/${item.company.slug}/catalogo/${item.slug}`}
+      href={href}
       className="group overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40"
     >
       <div className="relative aspect-[16/10] bg-muted">
@@ -36,8 +40,11 @@ export function TarjetaCatalogoPublica({
         )}
       </div>
       <div className="p-4">
+        {esOferta && (
+          <p className="mb-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-caption font-medium text-primary">Oferta MembeGo</p>
+        )}
         <h3 className="text-label-lg text-foreground">{item.name}</h3>
-        {mostrarEmpresa && <p className="mt-1 text-caption text-muted-foreground">{item.company.name}</p>}
+        {mostrarEmpresa && !esOferta && <p className="mt-1 text-caption text-muted-foreground">{item.company.name}</p>}
         {item.priceFrom != null && (
           <p className="mt-2 text-price-sm tabular-nums text-foreground">
             {item.hasVariants && <span className="mr-1 font-normal text-muted-foreground">Desde</span>}

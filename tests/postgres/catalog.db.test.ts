@@ -12,6 +12,7 @@ import {
 } from '../../src/modules/catalog/service'
 import { listarItemsEnTx, obtenerItemEnTx } from '../../src/modules/catalog/queries'
 import { CatalogoError } from '../../src/modules/catalog/errores'
+import { ofertaSupplyDePrueba } from './oferta-supply'
 
 /**
  * COMMERCE CORE · catálogo unificado contra PostgreSQL de verdad (Fase 1).
@@ -396,7 +397,8 @@ test('26 · editar un ítem cambia nombre y descripción pero NO el slug', async
 
 test('27 · un ítem de origen SUPPLY es de solo lectura para la empresa', async () => {
   const r = await itemSimple(`Supply ${sufijo}`)
-  await prisma.catalogItem.update({ where: { id: r.id }, data: { source: 'SUPPLY' } })
+  // Un ítem de Supply refleja una oferta (la base lo exige desde la Fase 2.5).
+  await prisma.catalogItem.update({ where: { id: r.id }, data: { source: 'SUPPLY', supplyV2OfferId: await ofertaSupplyDePrueba(ctx.usuario, sufijo) } })
   assert.equal(await codigoDe(enA((tx) => actualizarItemEnTx(tx, ctx.a, r.id, { name: 'X' }, como(ctx.usuario)))), 'ITEM_SOLO_LECTURA')
   assert.equal(await codigoDe(enA((tx) => cambiarEstadoItemEnTx(tx, ctx.a, r.id, 'ACTIVE', como(ctx.usuario)))), 'ITEM_SOLO_LECTURA')
   assert.equal(await codigoDe(enA((tx) => agregarVarianteEnTx(tx, ctx.a, r.id, { name: 'V', price: 1 }, como(ctx.usuario)))), 'ITEM_SOLO_LECTURA')

@@ -17,6 +17,7 @@ import {
 } from '../../src/modules/catalog/medios'
 import { obtenerItemEnTx } from '../../src/modules/catalog/queries'
 import { CatalogoError } from '../../src/modules/catalog/errores'
+import { ofertaSupplyDePrueba } from './oferta-supply'
 
 /**
  * COMMERCE CORE · catálogo — imágenes y categorías contra PostgreSQL (F1.2).
@@ -146,7 +147,7 @@ test('6 · un ítem archivado o de Supply no recibe ni pierde imágenes', async 
   assert.equal(await codigoDe(enA((tx) => exigirCupoDeImagen(tx, ctx.a, it.id))), 'ITEM_ARCHIVADO')
   assert.equal(await codigoDe(enA((tx) => eliminarImagenEnTx(tx, ctx.a, img.id, como(ctx.usuario)))), 'ITEM_ARCHIVADO')
   await enA((tx) => cambiarEstadoItemEnTx(tx, ctx.a, it.id, 'DRAFT', como(ctx.usuario)))
-  await prisma.catalogItem.update({ where: { id: it.id }, data: { source: 'SUPPLY' } })
+  await prisma.catalogItem.update({ where: { id: it.id }, data: { source: 'SUPPLY', supplyV2OfferId: await ofertaSupplyDePrueba(ctx.usuario, sufijo) } })
   assert.equal(await codigoDe(enA((tx) => exigirCupoDeImagen(tx, ctx.a, it.id))), 'ITEM_SOLO_LECTURA')
 })
 

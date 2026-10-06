@@ -87,6 +87,14 @@ model CatalogItem {
   /// Cuándo se activó por primera vez. null = nunca se ha publicado.
   publishedAt DateTime?
 
+  /// Solo `source = SUPPLY` (Fase 2.5, el puente): la oferta de Supply V2 de la
+  /// que este ítem es el reflejo. Supply es el MASTER; el ítem es de solo
+  /// lectura para la empresa. La unidad que se vende es la OFERTA (un producto
+  /// de proveedor tiene muchas a lo largo del tiempo), no el producto de
+  /// proveedor. La base exige `source = 'SUPPLY'` ⇔ esta columna no es nula.
+  supplyV2OfferId String?          @unique
+  supplyOffer     SupplyV2Offer?   @relation("CatalogItemSupplyOffer", fields: [supplyV2OfferId], references: [id], onDelete: Restrict)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

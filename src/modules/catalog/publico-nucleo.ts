@@ -25,6 +25,9 @@ export interface VariantePublica {
   available: boolean
 }
 
+/** De dónde viene el ítem: lo creó la empresa, o lo refleja el puente desde una oferta de Membego (Supply). */
+export type OrigenPublico = 'EMPRESA' | 'SUPPLY'
+
 export interface ItemPublicoResumen {
   id: string
   slug: string
@@ -37,6 +40,12 @@ export interface ItemPublicoResumen {
   /** true = hay más de una variante visible: «desde». */
   hasVariants: boolean
   company: { slug: string; name: string }
+  origen: OrigenPublico
+  /**
+   * Solo `SUPPLY`: el slug de la oferta en Supply V2, que es la ruta de compra
+   * (la página arma el enlace; Commerce Core no conoce las rutas de Supply).
+   */
+  ofertaSlug: string | null
 }
 
 export interface ItemPublicoDetalle extends ItemPublicoResumen {
@@ -66,6 +75,9 @@ interface FilaItem {
   variants: FilaVariante[]
   images: { path: string }[]
   categories?: { category: { name: string; slug: string } }[]
+  source: 'MERCHANT' | 'SUPPLY'
+  /** Solo `SUPPLY`: la oferta de origen, EN VIVO (no la copia sincronizada). */
+  supplyOffer?: { slug: string; status: string } | null
 }
 
 function atributosTexto(raw: unknown): Record<string, string> {
@@ -77,15 +89,22 @@ function atributosTexto(raw: unknown): Record<string, string> {
   return out
 }
 
-export function variantesPublicas(filas: readonly FilaVariante[]): VariantePublica[] {
+/**
+ * `agotadaEnOrigen`: la oferta de Supply de la que viene el ítem se agotó. El
+ * estado de la variante es una COPIA sincronizada y puede ir por detrás; la
+ * oferta en vivo manda.
+ */
+export function variantesPublicas(filas: readonly FilaVariante[], agotadaEnOrigen = false): VariantePublica[] {
   return filas
     .filter((v) => ESTADOS_VARIANTE_VISIBLES.includes(v.status))
     .map((v) => {
       const price = v.price.toFixed(2)
       const antes = v.compareAtPrice && v.compareAtPrice.toNumber() > v.price.toNumber() ? v.compareAtPrice.toFixed(2) : null
-      return { id: v.id, name: v.name, price, compareAtPrice: antes, attributes: atributosTexto(v.attributes), available: v.status === 'ACTIVE' }
+      return { id: v.id, name: v.name, price, compareAtPrice: antes, attributes: atributosTexto(v.attributes), available: v.status === 'ACTIVE' && !agotadaEnOrigen }
     })
 }
+
+const agotadaEnOrigen = (f: FilaItem): boolean => f.source === 'SUPPLY' && f.supplyOffer?.status === 'SOLD_OUT'
 
 /** Precio «desde»: el menor entre las disponibles; si ninguna lo está, el menor de las visibles. */
 export function precioDesde(vs: readonly VariantePublica[]): string | null {
@@ -95,8 +114,10 @@ export function precioDesde(vs: readonly VariantePublica[]): string | null {
 }
 
 export function aResumenPublico(f: FilaItem): ItemPublicoResumen | null {
-  const vs = variantesPublicas(f.variants)
+  const vs = variantesPublicas(f.variants, agotadaEnOrigen(f))
   if (vs.length === 0) return null // sin nada que mostrar, el ítem no existe para el público
+  // Un ítem puente sin su oferta no existe para el público (no hay a dónde mandar la compra).
+  if (f.source === 'SUPPLY' && !f.supplyOffer) return null
   return {
     id: f.id,
     slug: f.slug,
@@ -107,6 +128,8 @@ export function aResumenPublico(f: FilaItem): ItemPublicoResumen | null {
     priceFrom: precioDesde(vs),
     hasVariants: vs.length > 1,
     company: { slug: f.company.slug, name: f.company.name },
+    origen: f.source === 'SUPPLY' ? 'SUPPLY' : 'EMPRESA',
+    ofertaSlug: f.source === 'SUPPLY' ? (f.supplyOffer?.slug ?? null) : null,
   }
 }
 
@@ -117,7 +140,7 @@ export function aDetallePublico(f: FilaItem): ItemPublicoDetalle | null {
     ...resumen,
     description: f.description,
     images: f.images.map((i) => urlPublicaCatalogo(i.path)).filter((u): u is string => !!u),
-    variants: variantesPublicas(f.variants),
+    variants: variantesPublicas(f.variants, agotadaEnOrigen(f)),
     categories: (f.categories ?? []).map((c) => ({ name: c.category.name, slug: c.category.slug })),
   }
 }

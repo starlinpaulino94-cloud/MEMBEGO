@@ -76,10 +76,10 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
           )}
 
           {datos.alertas.total > 0 && (
-            <Card className="border-amber-300 dark:border-amber-700">
+            <Card className="border-warning/40">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTriangle className="h-4 w-4 text-warning" />
                   Stock bajo ({datos.alertas.total})
                 </CardTitle>
               </CardHeader>

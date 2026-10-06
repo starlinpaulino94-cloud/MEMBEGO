@@ -28,6 +28,7 @@ const fila = (variants: ReturnType<typeof variante>[]) => ({
   variants,
   images: [{ path: 'emp/catalogo/i1/a.jpg' }],
   categories: [{ category: { name: 'Lavados', slug: 'lavados' } }],
+  source: 'MERCHANT' as const,
 })
 
 test('la variante descontinuada no existe para el público; la agotada se enseña como agotada', () => {
@@ -110,7 +111,7 @@ test('las tres lecturas públicas comprueban la capacidad de la empresa', () => 
     const desde = publico.indexOf(`export async function ${fn}`)
     const cuerpo = publico.slice(desde, publico.indexOf('\n}\n', desde))
     assert.match(cuerpo, /empresaPublicaCatalogo\(/, `${fn} no comprueba la capacidad`)
-    assert.match(cuerpo, /ITEM_VISIBLE/, `${fn} no filtra por ítem visible`)
+    assert.match(cuerpo, /itemVisible\(/, `${fn} no filtra por ítem visible`)
     assert.match(cuerpo, /EMPRESA_VISIBLE/, `${fn} no filtra por empresa visible`)
   }
   assert.match(publico, /tieneCapacidad\(companyId, 'CATALOGO_UNIFICADO'\)/)
@@ -143,4 +144,48 @@ test('el panel refresca la vitrina pública al mutar (tag del marketplace), no e
   const a = readFileSync('src/modules/catalog/actions.ts', 'utf8')
   assert.match(a, /revalidateTag\(MARKETPLACE_TAG, 'max'\)/)
   assert.doesNotMatch(a, /revalidatePath\(RUTA\)\s*\n\s*return/, 'quedó una mutación que no refresca la vitrina')
+})
+
+// ── Ítems puente (Fase 2.5) ──────────────────────────────────────────────────
+
+const filaPuente = (estadoOferta: string | null, vs = [variante('a', 650, 'ACTIVE')]) => ({
+  ...fila(vs),
+  source: 'SUPPLY' as const,
+  supplyOffer: estadoOferta ? { slug: 'lavado-mbg-of-2026-000001', status: estadoOferta } : null,
+})
+
+test('un ítem puente sale con su origen y el slug de la oferta (la ruta de compra la arma la página)', () => {
+  const r = aResumenPublico(filaPuente('ACTIVE'))
+  assert.equal(r?.origen, 'SUPPLY')
+  assert.equal(r?.ofertaSlug, 'lavado-mbg-of-2026-000001')
+  const normal = aResumenPublico(fila([variante('a', 10, 'ACTIVE')]))
+  assert.equal(normal?.origen, 'EMPRESA')
+  assert.equal(normal?.ofertaSlug, null)
+})
+
+test('la oferta EN VIVO manda: agotada en Supply = agotada para el público aunque la copia diga ACTIVE', () => {
+  const d = aDetallePublico(filaPuente('SOLD_OUT', [variante('a', 650, 'ACTIVE')]))
+  assert.deepEqual(d?.variants.map((v) => v.available), [false])
+  const viva = aDetallePublico(filaPuente('ACTIVE'))
+  assert.deepEqual(viva?.variants.map((v) => v.available), [true])
+})
+
+test('un ítem puente sin su oferta no existe para el público', () => {
+  assert.equal(aResumenPublico(filaPuente(null)), null)
+  assert.equal(aDetallePublico(filaPuente(null)), null)
+})
+
+test('la lista blanca sigue sin filtrar la oferta de origen (solo su slug) ni el id de la oferta', () => {
+  const json = JSON.stringify(aDetallePublico(filaPuente('ACTIVE')))
+  assert.doesNotMatch(json, /supplyV2OfferId|supplyOffer|"status"/)
+})
+
+test('la visibilidad pública de un ítem puente cruza la oferta en vivo: estado, inicio y fin', () => {
+  const cuerpo = publico.slice(publico.indexOf('function itemVisible'), publico.indexOf('const INCLUIR'))
+  assert.match(cuerpo, /source: 'SUPPLY'/)
+  assert.match(cuerpo, /status: \{ in: \['ACTIVE', 'SOLD_OUT'\] \}/)
+  assert.match(cuerpo, /startsAt: \{ lte: ahora \}/)
+  assert.match(cuerpo, /endsAt: null \}, \{ endsAt: \{ gt: ahora \}/)
+  // Y no pisa el `OR` de la búsqueda de texto del descubrimiento.
+  assert.match(cuerpo, /AND: \[/)
 })

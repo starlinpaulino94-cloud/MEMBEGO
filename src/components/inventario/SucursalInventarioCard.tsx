@@ -51,8 +51,8 @@ export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { va
   const router = useRouter()
   const [pending, start] = useTransition()
   const [operacion, setOperacion] = useState<OperacionManual>('ENTRADA')
-  // Cantidad y motivo son estado controlado: `form.reset()` devolvería el <select>
-  // (también controlado) a su primera opción sin avisar a React.
+  // Cantidad y motivo son estado controlado: `form.reset()` devolvería el selector
+  // de movimiento (también controlado) a su primera opción sin avisar a React.
   const [cantidad, setCantidad] = useState('')
   const [motivo, setMotivo] = useState('')
   const clave = useRef(nuevaClave())

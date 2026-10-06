@@ -49,7 +49,7 @@ export function HistorialMovimientos({ varianteId, inicial }: { varianteId: stri
                 {f.motivo && <p className="mt-0.5 break-words text-xs">{f.motivo}</p>}
               </div>
               <div className="text-right tabular-nums">
-                <p className={f.efectoOnHand > 0 ? 'font-semibold text-green-700 dark:text-green-400' : f.efectoOnHand < 0 ? 'font-semibold text-red-700 dark:text-red-400' : 'text-muted-foreground'}>
+                <p className={f.efectoOnHand > 0 ? 'font-semibold text-success' : f.efectoOnHand < 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'}>
                   {efectoLegible(f.efectoOnHand)}
                 </p>
                 <p className="text-xs text-muted-foreground">

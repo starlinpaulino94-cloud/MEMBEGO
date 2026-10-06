@@ -23,6 +23,7 @@ import {
   Landmark,
   LayoutDashboard,
   LifeBuoy,
+  Link2,
   Megaphone,
   MessageCircle,
   Newspaper,
@@ -1263,6 +1264,13 @@ const G_SA_OPERACION: NavGroup = {
       icon: PackageSearch,
       description: 'Procurement: proveedores, acuerdos, compras y recepciones (nuevo motor, en paralelo).',
       keywords: ['supply', 'supply 2.0', 'procurement', 'proveedores', 'compras', 'recepciones', 'lotes'],
+    },
+    {
+      href: '/superadmin/puente-supply',
+      label: 'Puente Supply → Catálogo',
+      icon: Link2,
+      description: 'Las ofertas de Supply 2.0 en el catálogo y el descubrimiento: empresa de la casa y sincronización.',
+      keywords: ['puente', 'bridge', 'supply', 'catalogo', 'ofertas', 'marketplace', 'sincronizar', 'casa'],
     },
     {
       href: '/superadmin/connect',

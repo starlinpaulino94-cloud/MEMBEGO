@@ -28,14 +28,40 @@ import {
 
 const EMPRESA_VISIBLE = { isPublished: true, isActive: true, esDemo: false } as const
 
-/** Condición de ítem visible. La capacidad de la empresa se comprueba aparte (no es SQL). */
-const ITEM_VISIBLE = {
-  status: 'ACTIVE',
-  capabilities: { path: ['availableMarketplace'], equals: true },
-  variants: { some: { status: { in: [...ESTADOS_VARIANTE_VISIBLES] } } },
-} satisfies Prisma.CatalogItemWhereInput
+/**
+ * Condición de ítem visible. La capacidad de la empresa se comprueba aparte (no es SQL).
+ *
+ * Un ítem puente (`source = SUPPLY`, Fase 2.5) además exige que su OFERTA esté
+ * viva AHORA: activa o agotada (esa se enseña como agotada), ya empezada y sin
+ * vencer. La oferta manda sobre la copia sincronizada: entre un cambio en Supply
+ * y su sincronización puede pasar un rato, y una oferta pausada o vencida no
+ * debe seguir enseñándose ese rato.
+ */
+function itemVisible(ahora: Date) {
+  return {
+    status: 'ACTIVE',
+    capabilities: { path: ['availableMarketplace'], equals: true },
+    variants: { some: { status: { in: [...ESTADOS_VARIANTE_VISIBLES] } } },
+    AND: [
+      {
+        OR: [
+          { source: 'MERCHANT' },
+          {
+            source: 'SUPPLY',
+            supplyOffer: {
+              status: { in: ['ACTIVE', 'SOLD_OUT'] },
+              startsAt: { lte: ahora },
+              OR: [{ endsAt: null }, { endsAt: { gt: ahora } }],
+            },
+          },
+        ],
+      },
+    ],
+  } satisfies Prisma.CatalogItemWhereInput
+}
 
 const INCLUIR = {
+  supplyOffer: { select: { slug: true, status: true } },
   company: { select: { slug: true, name: true } },
   variants: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
   images: { orderBy: { position: 'asc' }, select: { path: true } },
@@ -54,7 +80,7 @@ export async function catalogoPublicoDeEmpresa(companyId: string, limite = 24): 
     if (!(await empresaPublicaCatalogo(companyId))) return []
     const filas = await sinEmpresa('marketplace: catálogo público de una empresa', (tx) =>
       tx.catalogItem.findMany({
-        where: { companyId, company: EMPRESA_VISIBLE, ...ITEM_VISIBLE },
+        where: { companyId, company: EMPRESA_VISIBLE, ...itemVisible(new Date()) },
         include: INCLUIR,
         orderBy: [{ position: 'asc' }, { publishedAt: 'desc' }, { id: 'asc' }],
         take: Math.min(Math.max(limite, 1), MAX_ITEMS_PUBLICOS),
@@ -73,7 +99,7 @@ export async function itemCatalogoPublico(companySlug: string, itemSlug: string)
   try {
     const fila = await sinEmpresa('marketplace: detalle público de un ítem', (tx) =>
       tx.catalogItem.findFirst({
-        where: { slug: itemSlug, company: { slug: companySlug, ...EMPRESA_VISIBLE }, ...ITEM_VISIBLE },
+        where: { slug: itemSlug, company: { slug: companySlug, ...EMPRESA_VISIBLE }, ...itemVisible(new Date()) },
         include: { ...INCLUIR, categories: { select: { category: { select: { name: true, slug: true } } } } },
       })
     )
@@ -90,6 +116,8 @@ export interface FiltrosDescubrimiento {
   q?: string
   /** slug de una categoría de la empresa (se compara por slug, entre empresas). */
   categoria?: string
+  /** `SUPPLY` = solo las ofertas de Membego; `EMPRESAS` = solo lo que publican las empresas. */
+  origen?: 'SUPPLY' | 'EMPRESAS'
   limite?: number
   pagina?: number
 }
@@ -108,7 +136,7 @@ export async function catalogoPublicoGlobal(f: FiltrosDescubrimiento = {}): Prom
   try {
     const candidatas = await sinEmpresa('marketplace: empresas con catálogo público', (tx) =>
       tx.catalogItem.findMany({
-        where: { company: EMPRESA_VISIBLE, ...ITEM_VISIBLE },
+        where: { company: EMPRESA_VISIBLE, ...itemVisible(new Date()) },
         distinct: ['companyId'],
         select: { companyId: true },
       })
@@ -122,9 +150,10 @@ export async function catalogoPublicoGlobal(f: FiltrosDescubrimiento = {}): Prom
         where: {
           companyId: { in: permitidas },
           company: EMPRESA_VISIBLE,
-          ...ITEM_VISIBLE,
+          ...itemVisible(new Date()),
           ...(q ? { OR: [{ name: { contains: q, mode: 'insensitive' as const } }, { description: { contains: q, mode: 'insensitive' as const } }] } : {}),
           ...(categoria ? { categories: { some: { category: { slug: categoria } } } } : {}),
+          ...(f.origen === 'SUPPLY' ? { source: 'SUPPLY' as const } : f.origen === 'EMPRESAS' ? { source: 'MERCHANT' as const } : {}),
         },
         include: INCLUIR,
         orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
