@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import React, { useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { goBackOr } from '../../src/lib/navigation'
-import { ArrowLeft, History, Car, Clock, Calendar, Share2, Download, ArrowRightLeft } from 'lucide-react-native'
+import { ArrowLeft, History, Car, Clock, Calendar, Share2, Download, ArrowRightLeft, CreditCard } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import QRCode from 'react-native-qrcode-svg'
@@ -25,7 +25,11 @@ import { Skeleton } from '../../src/components/ui/Skeleton'
 import { BackHeader } from '../../src/components/ui/BackHeader'
 import { brandColor, brandDisplayForeground, hasBrandColor } from '../../src/lib/brand-color'
 import { api } from '../../src/lib/api'
+import type { CardnetCaptureSession, CardnetPaymentStatus } from '../../src/lib/api'
+import { CardnetCapture } from '../../src/components/pagos/cardnet/Capture'
+import { CardnetCaptureError, RenewalConsent } from '../../src/components/pagos/cardnet/primitives'
 import { ComprobanteMembresiaForm } from '../../src/components/pagos/ComprobanteMembresiaForm'
+import { isCardnetServerApproved, membershipCardnetTarget } from '../../src/lib/cardnet-membership-checkout'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVA: 'Activa',
@@ -149,6 +153,13 @@ function MembresiaDetailScreenContent() {
   const routeParams = useLocalSearchParams<{ membresiaId: string | string[] }>()
   const membresiaId = Array.isArray(routeParams.membresiaId) ? routeParams.membresiaId[0] : routeParams.membresiaId
   const { isAuthenticated } = useAuth()
+  const queryClient = useQueryClient()
+  const [cardnetSession, setCardnetSession] = useState<CardnetCaptureSession | null>(null)
+  const [cardnetStatus, setCardnetStatus] = useState<CardnetPaymentStatus | null>(null)
+  const [cardnetStarting, setCardnetStarting] = useState(false)
+  const [cardnetError, setCardnetError] = useState<string | null>(null)
+  const [renewalConsent, setRenewalConsent] = useState(false)
+  const cardnetStartInFlightRef = useRef(false)
   const { data: membresiasData, isLoading: loadingMembresias } =
     useMembresias(isAuthenticated)
   const { data: historialData } = useHistorial(1, isAuthenticated)
@@ -157,6 +168,16 @@ function MembresiaDetailScreenContent() {
     queryFn: () => api.getMembresiaPago(membresiaId),
     enabled: isAuthenticated && !!membresiaId,
   })
+
+  const handleCardnetStatusChange = React.useCallback((status: CardnetPaymentStatus) => {
+    setCardnetStatus(status)
+    if (!isCardnetServerApproved(status)) return
+
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['cliente', 'membresias'] }),
+      queryClient.invalidateQueries({ queryKey: ['cliente', 'membresia-pago', membresiaId] }),
+    ])
+  }, [membresiaId, queryClient])
 
   const membresia = useMemo(() => {
     const memberships = membresiasData?.membresias ?? []
@@ -232,6 +253,32 @@ function MembresiaDetailScreenContent() {
   const planCambio = pagoDetalle?.planSolicitado
   const permiteAdjuntar = (membresia.estado === 'PENDIENTE' || membresia.estado === 'RECHAZADA' || !!planCambio) &&
     (!pagoDetalle?.tieneComprobante || membresia.estado === 'RECHAZADA' || (!!planCambio && !!pagoDetalle?.rechazadoReason))
+
+  const puedePagarConCardnet = !!pagoPendiente && !!pagoDetalle && permiteAdjuntar
+  const permiteConsentimientoRenovacion = !planCambio &&
+    (membresia.estado === 'PENDIENTE' || membresia.estado === 'PENDIENTE_PAGO' || membresia.estado === 'RECHAZADA')
+
+  const startCardnetCheckout = async () => {
+    if (!puedePagarConCardnet || cardnetStartInFlightRef.current) return
+
+    cardnetStartInFlightRef.current = true
+    setCardnetStarting(true)
+    setCardnetError(null)
+    setCardnetStatus(null)
+    setCardnetSession(null)
+
+    try {
+      const session = await api.startCardnetSession(
+        membershipCardnetTarget(membresia.id, permiteConsentimientoRenovacion, renewalConsent),
+      )
+      setCardnetSession(session)
+    } catch (error) {
+      setCardnetError(error instanceof Error ? error.message : 'Intenta de nuevo en unos minutos.')
+    } finally {
+      cardnetStartInFlightRef.current = false
+      setCardnetStarting(false)
+    }
+  }
 
   const handleShare = async () => {
     try {
@@ -417,8 +464,68 @@ function MembresiaDetailScreenContent() {
                   Este negocio no tiene una cuenta de transferencia disponible. Contacta al negocio para completar el pago.
                 </Text>
               ) : null}
+              {puedePagarConCardnet && !cardnetSession ? (
+                <View className="mt-4 gap-3">
+                  {permiteConsentimientoRenovacion ? (
+                    <>
+                      <RenewalConsent
+                        checked={renewalConsent}
+                        disabled={cardnetStarting}
+                        onChange={setRenewalConsent}
+                      />
+                      <Text className="text-small leading-5 text-muted-foreground">
+                        La renovación automática solo se habilitará después de que el servidor confirme este pago y si autorizas esta opción.
+                      </Text>
+                    </>
+                  ) : null}
+                  {!cardnetError ? (
+                    <Button
+                      className="w-full"
+                      style={{ backgroundColor: companyAccent }}
+                      disabled={cardnetStarting}
+                      loading={cardnetStarting}
+                      icon={<CreditCard size={17} color={brandDisplayForeground(companyAccent, '#0284c7')} />}
+                      onPress={() => { void startCardnetCheckout() }}
+                    >
+                      <Text className="text-sm font-inter-semibold" style={{ color: brandDisplayForeground(companyAccent, '#0284c7') }}>
+                        Pagar con CardNET
+                      </Text>
+                    </Button>
+                  ) : null}
+                  {cardnetError ? (
+                    <CardnetCaptureError
+                      title="No pudimos preparar el pago con CardNET"
+                      description={cardnetError}
+                      onRetry={() => { void startCardnetCheckout() }}
+                    />
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           )}
+
+          {cardnetSession ? (
+            <View className="mb-6">
+              <CardnetCapture
+                session={cardnetSession}
+                onStatusChange={handleCardnetStatusChange}
+                onRestartSession={() => { void startCardnetCheckout() }}
+              />
+              {cardnetStatus?.status === 'expired' ? (
+                <View className="px-4 md:px-6">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={cardnetStarting}
+                    loading={cardnetStarting}
+                    onPress={() => { void startCardnetCheckout() }}
+                  >
+                    Iniciar un nuevo pago
+                  </Button>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           {/* Visits Section */}
           <View className="mb-6">

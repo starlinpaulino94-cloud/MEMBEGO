@@ -78,13 +78,18 @@ export default function PlanDetalleScreen() {
   }
 
   const planesAction = plan && (esCompra || puedeCambiar) ? (
-    <Button className="w-full" style={{ backgroundColor: accentColor }} onPress={handleSolicitar} disabled={submitting}>
+    <View className="gap-3">
+      <Text className="text-small text-center leading-5 text-muted-foreground">
+        Si la solicitud genera un pago pendiente, podrás completarlo con CardNET o las opciones disponibles desde el detalle de tu membresía.
+      </Text>
+      <Button className="w-full" style={{ backgroundColor: accentColor }} onPress={handleSolicitar} disabled={submitting}>
       {submitting ? <ActivityIndicator size="small" color={accentForeground} /> : (
         <Text className="text-sm font-inter-semibold" style={{ color: accentForeground }}>
           {membershipId ? 'Cambiar a este plan' : 'Obtener membresía'}
         </Text>
       )}
-    </Button>
+      </Button>
+    </View>
   ) : membershipId && currentMembership && plan ? (
     <View className="rounded-xl border border-border bg-card px-4 py-3">
       <Text className="text-small text-muted-foreground text-center">
