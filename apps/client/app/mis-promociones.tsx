@@ -5,7 +5,6 @@ import {
   Text,
   ScrollView,
   Pressable,
-  ActivityIndicator,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -22,13 +21,14 @@ import { useAuth } from '../src/lib/auth-context'
 import { goBackOr } from '../src/lib/navigation'
 import { useMisPromociones } from '../src/hooks/useMisPromociones'
 import { formatDate } from '../src/lib/format'
-import { cn } from '../src/lib/cn'
 import { Button } from '../src/components/ui/Button'
 import { Card } from '../src/components/ui/Card'
 import { Badge } from '../src/components/ui/Badge'
 import { EmptyState } from '../src/components/ui/EmptyState'
 import { Skeleton } from '../src/components/ui/Skeleton'
 import type { CompraItem, RegaloClienteItem } from '../src/lib/api'
+import { brandColor } from '../src/lib/brand-color'
+import { colors } from '../src/theme/tokens'
 
 /* ── Estado visual (paridad con web compraEstadoVisual) ──────────────── */
 
@@ -55,6 +55,7 @@ function estadoBadge(estado: string, usosRestantes: number, usosIncluidos: numbe
 function CompraRow({ compra }: { compra: CompraItem }) {
   const router = useRouter()
   const badge = estadoBadge(compra.estado, compra.usosRestantes, compra.usosIncluidos)
+  const companyColor = brandColor(compra.company?.colorPrimario, colors.primary.DEFAULT)
 
   return (
     <Pressable
@@ -64,8 +65,8 @@ function CompraRow({ compra }: { compra: CompraItem }) {
       accessibilityLabel={`Ver detalle de ${compra.promocion?.titulo ?? 'Promoción'}`}
     >
       {/* Icono */}
-      <View className="h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-primary-soft">
-        <TicketPercent size={22} color="#0284c7" />
+      <View className="h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: `${companyColor}1A` }}>
+        <TicketPercent size={22} color={companyColor} />
       </View>
 
       {/* Texto */}
@@ -91,6 +92,7 @@ function CompraRow({ compra }: { compra: CompraItem }) {
 function RegaloRow({ regalo }: { regalo: RegaloClienteItem }) {
   const router = useRouter()
   const restantes = Math.max(0, regalo.usosPorPeriodo - regalo.usosPeriodo)
+  const companyColor = brandColor(regalo.empresaColorPrimario, colors.primary.DEFAULT)
 
   return (
     <Pressable
@@ -99,8 +101,8 @@ function RegaloRow({ regalo }: { regalo: RegaloClienteItem }) {
       accessibilityRole="button"
       accessibilityLabel={`Ver regalo ${regalo.titulo}`}
     >
-      <View className="h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10">
-        <Gift size={22} color="#0284c7" />
+      <View className="h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: `${companyColor}1A` }}>
+        <Gift size={22} color={companyColor} />
       </View>
       <View className="flex-1 min-w-0">
         <Text className="font-inter-semibold text-sm text-foreground" numberOfLines={1}>
@@ -173,8 +175,6 @@ function MisPromocionesScreenContent() {
   const compras = data?.compras ?? []
   const regalos = data?.regalos ?? []
   const historial = data?.historial ?? []
-  const resumen = data?.resumen ?? { activas: 0, pendientes: 0, usosDisponibles: 0 }
-
   const activas = compras.filter((c) => c.estado === 'ACTIVA')
   const pendientes = compras.filter((c) => PENDIENTES.includes(c.estado))
 

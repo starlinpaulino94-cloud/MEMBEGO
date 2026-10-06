@@ -7,7 +7,7 @@ import { rnHref } from '../../lib/rutas'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { InicioAccent, useInicioAccent } from '../layout/InicioAccentContext'
 import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
-import { brandColor, brandForeground } from '../../lib/brand-color'
+import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
 
 export interface EmpresaScrollItem {
   id: string
@@ -126,7 +126,6 @@ export function EmpresaCardItem({
       onHoverOut={() => setIsHovered(false)}
       onPress={onPress}
       className="group hover:scale-[1.01] transition-all"
-      style={{ borderColor: `${companyColor}40` }}
       accessibilityLabel={`Ver ${empresa.nombre}${empresa.esFavorita ? ', marcada como favorita' : ''}${esNueva ? ', empresa nueva' : ''}`}
     >
       {/* Logo */}
@@ -151,7 +150,7 @@ export function EmpresaCardItem({
             className="rounded-full px-2 py-0.5 absolute left-2 top-2 shadow-sm"
             style={{ backgroundColor: companyColor, zIndex: 10 }}
           >
-            <Text className="text-overline font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>
+            <Text className="text-overline font-inter-bold" style={{ color: brandDisplayForeground(companyColor, accent.color) }}>
               Nuevo
             </Text>
           </View>

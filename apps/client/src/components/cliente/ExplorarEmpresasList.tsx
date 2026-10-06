@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
-import { View, Pressable, ActivityIndicator } from 'react-native'
+import { View, Pressable, ActivityIndicator, useWindowDimensions } from 'react-native'
 import { Plus, Check } from 'lucide-react-native'
-import { cn } from '../../lib/cn'
 import {
   BusinessCard,
   type BusinessCardData,
 } from '../marketplace/BusinessCard'
+import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
+import { colors } from '../../theme/tokens'
 
 export type EmpresaExplorar = BusinessCardData
 
@@ -15,7 +16,7 @@ interface ExplorarEmpresasListProps {
 }
 
 /**
- * Rejilla 1-col del explorador.
+ * Rejilla adaptable de empresas.
  *
  * ponytail: el toggle de follow es estado local optimista — el endpoint BFF
  * de follow/unfollow está pendiente (F4). Cuando exista, reemplazar el
@@ -25,6 +26,11 @@ export function ExplorarEmpresasList({
   empresas,
   seguidasIds,
 }: ExplorarEmpresasListProps) {
+  const { width } = useWindowDimensions()
+  const columns = width >= 1024 ? 3 : width >= 768 ? 2 : 1
+  const rows = Array.from({ length: Math.ceil(empresas.length / columns) }, (_, rowIndex) =>
+    empresas.slice(rowIndex * columns, (rowIndex + 1) * columns),
+  )
   const [seguidas, setSeguidas] = useState<Set<string>>(
     () => new Set(seguidasIds),
   )
@@ -46,44 +52,57 @@ export function ExplorarEmpresasList({
 
   return (
     <View className="gap-3">
-      {empresas.map((company) => {
-        const siguiendo = seguidas.has(company.id)
-        const pending = pendingId === company.id
+      {rows.map((row) => (
+        <View key={row[0].id} className="flex-row gap-3">
+          {row.map((company) => {
+            const siguiendo = seguidas.has(company.id)
+            const pending = pendingId === company.id
+            const companyColor = brandColor(company.colorPrimario, colors.primary.DEFAULT)
+            const activeForeground = brandDisplayForeground(companyColor, colors.primary.DEFAULT)
 
-        return (
-          <BusinessCard
-            key={company.id}
-            company={company}
-            hrefBase="/empresas"
-            action={
-              <Pressable
-                onPress={() => toggleSeguir(company)}
-                disabled={pending}
-                className={cn(
-                  'size-10 items-center justify-center rounded-full border',
-                  siguiendo
-                    ? 'border-success bg-success/10'
-                    : 'border-border bg-card',
-                )}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  siguiendo
-                    ? `Dejar de seguir a ${company.name}`
-                    : `Seguir a ${company.name}`
-                }
-              >
-                {pending ? (
-                  <ActivityIndicator size="small" color="#0284c7" />
-                ) : siguiendo ? (
-                  <Check size={18} color="#22c55e" />
-                ) : (
-                  <Plus size={18} color="#9ca3af" />
-                )}
-              </Pressable>
-            }
-          />
-        )
-      })}
+            return (
+              <View key={company.id} className="min-w-0 flex-1">
+                <BusinessCard
+                  company={company}
+                  hrefBase="/empresas"
+                  className="w-full"
+                  action={
+                    <Pressable
+                      onPress={() => toggleSeguir(company)}
+                      disabled={pending}
+                      className="size-10 items-center justify-center rounded-full border"
+                      style={{
+                        borderColor: companyColor,
+                        backgroundColor: siguiendo ? companyColor : `${companyColor}14`,
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        siguiendo
+                          ? `Dejar de seguir a ${company.name}`
+                          : `Seguir a ${company.name}`
+                      }
+                    >
+                      {pending ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={siguiendo ? activeForeground : colors.surface.foreground}
+                        />
+                      ) : siguiendo ? (
+                        <Check size={18} color={activeForeground} />
+                      ) : (
+                        <Plus size={18} color={colors.surface.foreground} />
+                      )}
+                    </Pressable>
+                  }
+                />
+              </View>
+            )
+          })}
+          {Array.from({ length: columns - row.length }, (_, index) => (
+            <View key={`spacer-${row[0].id}-${index}`} className="flex-1" />
+          ))}
+        </View>
+      ))}
     </View>
   )
 }

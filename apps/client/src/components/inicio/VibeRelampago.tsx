@@ -6,7 +6,7 @@ import { rnHref } from '../../lib/rutas'
 import { Card } from '../ui/Card'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { useInicioAccent, type InicioAccent } from '../layout/InicioAccentContext'
-import { brandColor, brandForeground } from '../../lib/brand-color'
+import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
 
 function fechaCorta(d: string) {
   try {
@@ -86,7 +86,6 @@ export function RelampagoCardItem({ promo, accent, onPress }: {
       onHoverOut={() => setIsHovered(false)}
       accessibilityLabel={`Ver ${promo.titulo}`}
       className="w-full min-w-0 group hover:scale-[1.01] transition-all"
-      style={{ borderColor: `${companyColor}40` }}
     >
       <View className="relative h-28 w-28 overflow-hidden rounded-lg bg-vibe-niebla" style={{ backgroundColor: `${companyColor}0D` }}>
         {promo.imagen ? (
@@ -103,7 +102,7 @@ export function RelampagoCardItem({ promo, accent, onPress }: {
             className="absolute bottom-1 left-1 rounded px-1.5 py-0.5"
             style={{ backgroundColor: companyColor }}
           >
-            <Text className="text-overline font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>{promo.descuento}</Text>
+            <Text className="text-overline font-inter-bold" style={{ color: brandDisplayForeground(companyColor, accent.color) }}>{promo.descuento}</Text>
           </View>
         ) : null}
       </View>
@@ -140,7 +139,7 @@ export function RelampagoCardItem({ promo, accent, onPress }: {
             className="shrink-0 rounded-full px-3 min-h-11 justify-center"
             style={{ backgroundColor: companyColor }}
           >
-            <Text className="text-overline font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>Canjear</Text>
+            <Text className="text-overline font-inter-bold" style={{ color: brandDisplayForeground(companyColor, accent.color) }}>Canjear</Text>
           </View>
         </View>
       </View>

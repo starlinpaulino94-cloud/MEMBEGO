@@ -68,7 +68,7 @@ export function PersonalizacionForm({ config }: { config: EngagementConfig }) {
       <div className="space-y-3 rounded-xl border border-border p-5">
         <h3 className="font-semibold text-foreground">Color de acento</h3>
         <p className="text-sm text-muted-foreground">
-          Se usa en los realces del inicio del cliente (gamificación, prueba social).
+          Es el color de marca del negocio y también se usa en sus membresías y ofertas.
         </p>
         <div className="flex items-center gap-3">
           <Input

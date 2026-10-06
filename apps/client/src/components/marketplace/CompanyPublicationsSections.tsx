@@ -6,6 +6,7 @@ import type { CompanyPostsPublic } from '../../lib/api'
 
 interface CompanyPublicationsSectionsProps {
   readonly companyName: string
+  readonly companyColor: string
   readonly posts: CompanyPostsPublic | null
 }
 
@@ -16,7 +17,7 @@ function fechaLocal(fecha: string, opciones: Intl.DateTimeFormatOptions): string
   }).format(new Date(fecha))
 }
 
-export function CompanyPublicationsSections({ companyName, posts }: CompanyPublicationsSectionsProps) {
+export function CompanyPublicationsSections({ companyName, companyColor, posts }: CompanyPublicationsSectionsProps) {
   return (
     <>
       {posts && posts.beneficios.length > 0 ? (
@@ -46,14 +47,14 @@ export function CompanyPublicationsSections({ companyName, posts }: CompanyPubli
           <View className="mt-3 gap-3">
             {posts.eventos.map((evento) => (
               <View key={evento.id} className="flex-row gap-3 rounded-xl border border-border bg-card p-4">
-                <View className="h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                  <CalendarDays size={20} color="#0284c7" />
+                <View className="h-14 w-14 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${companyColor}1A` }}>
+                  <CalendarDays size={20} color={companyColor} />
                 </View>
                 <View className="min-w-0 flex-1">
                   <Text className="text-base font-inter-bold text-foreground">{evento.titulo}</Text>
                   <Text className="mt-1 text-sm leading-relaxed text-muted-foreground">{evento.contenido}</Text>
                   {evento.fechaEvento ? (
-                    <Text className="mt-2 text-xs font-inter-medium text-primary">
+                    <Text className="mt-2 text-xs font-inter-medium" style={{ color: companyColor }}>
                       {fechaLocal(evento.fechaEvento, { dateStyle: 'medium', timeStyle: 'short' })}
                     </Text>
                   ) : null}

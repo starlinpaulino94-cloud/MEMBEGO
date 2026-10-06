@@ -67,6 +67,18 @@ module.exports = {
           blue: '#1d4ed8',
           rose: '#be123c',
         },
+        membership: {
+          active: '#0073ff',
+          'pending-start': '#475569',
+          'pending-end': '#334155',
+          'expired-start': '#64748b',
+          'expired-end': '#475569',
+          'expired-status': '#ba1a1a',
+          'sheen-shadow': 'rgba(0, 0, 0, 0.5)',
+          'sheen-highlight': 'rgba(255, 255, 255, 0.5)',
+          'icon-muted': 'rgba(255, 255, 255, 0.72)',
+          'icon-subtle': 'rgba(255, 255, 255, 0.5)',
+        },
 
         // ── Surfaces (aligned to .retail scope in globals.css) ────────
         background: '#ffffff',
@@ -117,6 +129,18 @@ module.exports = {
         },
       },
 
+      spacing: {
+        'wallet-card': '420px',
+        'wallet-grid': '1200px',
+        'wallet-inset': '26px',
+        'wallet-content-y': '20px',
+        'wallet-logo': '27px',
+        'wallet-progress': '5px',
+        'wallet-control': '28px',
+      },
+      aspectRatio: {
+        'wallet-card': '1.5',
+      },
       // ── Box shadows (from @layer utilities in globals.css) ──────────
       boxShadow: {
         card: '0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)',
@@ -148,10 +172,21 @@ module.exports = {
         'label-lg': [14, { lineHeight: 18 / 14, fontWeight: '600' }],
         'price-sm': [13, { lineHeight: 16 / 13, fontWeight: '600' }],
         'price-lg': [20, { lineHeight: 24 / 20, letterSpacing: -0.2, fontWeight: '700' }],
+        'wallet-company': ['12px', { lineHeight: '15px' }],
+        'wallet-meta': ['8px', { lineHeight: '10px' }],
+        'wallet-overline': ['8px', { lineHeight: '10px', letterSpacing: '2px' }],
+        'wallet-state': ['14px', { lineHeight: '18px' }],
+        'wallet-mark': ['9px', { lineHeight: '12px' }],
+        'wallet-plan': ['20px', { lineHeight: '24px', letterSpacing: '1.4px' }],
+        'wallet-plan-long': ['16px', { lineHeight: '20px', letterSpacing: '0.8px' }],
+        'wallet-usage': ['9px', { lineHeight: '12px' }],
+        'wallet-expiry': ['8px', { lineHeight: '11px' }],
+        'wallet-caption': ['10px', { lineHeight: '12px' }],
       },
 
       // ── Border radius (existing — preserved) ───────────────────────
       borderRadius: {
+        'wallet-card': '19px',
         '2xl': '20px',
         xl: '14px',
         lg: '12px',

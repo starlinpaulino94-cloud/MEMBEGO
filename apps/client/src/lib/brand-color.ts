@@ -23,3 +23,18 @@ export function brandForeground(color: string | null | undefined, fallback: stri
   const lightContrast = 1.05 / (luminance + 0.05)
   return darkContrast >= lightContrast ? '#111827' : '#ffffff'
 }
+
+export function brandDisplayForeground(color: string | null | undefined, fallback: string): string {
+  const resolved = brandColor(color, fallback)
+  const channels = [1, 3, 5].map((offset) => Number.parseInt(resolved.slice(offset, offset + 2), 16) / 255)
+  const chroma = Math.max(...channels) - Math.min(...channels)
+  const linear = (value: number) =>
+    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  const luminance = 0.2126 * linear(channels[0]) + 0.7152 * linear(channels[1]) + 0.0722 * linear(channels[2])
+
+  if (chroma >= 0.55 && luminance <= 0.65) {
+    return '#ffffff'
+  }
+
+  return brandForeground(resolved, fallback)
+}

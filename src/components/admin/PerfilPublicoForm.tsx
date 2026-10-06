@@ -416,8 +416,13 @@ export function PerfilPublicoForm({
               id="colorPrimario"
               name="colorPrimario"
               defaultValue={company.colorPrimario ?? ''}
-              placeholder="#0ea5e9"
+              placeholder="#RRGGBB"
+              pattern="#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})"
+              title="Usa formato hexadecimal, como #abc o #12abef."
             />
+            <p className="text-xs text-muted-foreground">
+              Este color se comparte con personalización, membresías y ofertas.
+            </p>
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="politicaCancelacion">Política de cancelación</Label>

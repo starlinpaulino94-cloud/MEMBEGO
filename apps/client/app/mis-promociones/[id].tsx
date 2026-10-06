@@ -5,7 +5,6 @@ import {
   Text,
   ScrollView,
   Pressable,
-  ActivityIndicator,
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { goBackOr } from '../../src/lib/navigation'
@@ -23,14 +22,15 @@ import {
 import QRCode from 'react-native-qrcode-svg'
 import { useAuth } from '../../src/lib/auth-context'
 import { useMisPromocion } from '../../src/hooks/useMisPromociones'
-import { formatDate, formatDateTime } from '../../src/lib/format'
-import { cn } from '../../src/lib/cn'
+import { formatDateTime } from '../../src/lib/format'
 import { Button } from '../../src/components/ui/Button'
 import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
 import { EmptyState } from '../../src/components/ui/EmptyState'
 import { Skeleton } from '../../src/components/ui/Skeleton'
 import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
+import { brandColor } from '../../src/lib/brand-color'
+import { colors } from '../../src/theme/tokens'
 
 /* ── Estado visual (paridad con web compraEstadoVisual) ──────────────── */
 
@@ -182,6 +182,7 @@ function DetalleContent({
   const promo = data.promocion
   const qr = data.qr as { token: string } | null
   const precio = Number(data.precioCongelado ?? 0)
+  const companyColor = brandColor(data.company.colorPrimario, colors.primary.DEFAULT)
 
   return (
     <View className="gap-5">
@@ -191,7 +192,7 @@ function DetalleContent({
           <Text className="text-2xl font-inter-bold text-foreground">
             {promo?.titulo ?? 'Promoción'}
           </Text>
-          <Text className="text-sm text-muted-foreground mt-0.5">
+          <Text className="text-sm mt-0.5" style={{ color: companyColor }}>
             {data.company?.name ?? 'Empresa'}
           </Text>
         </View>

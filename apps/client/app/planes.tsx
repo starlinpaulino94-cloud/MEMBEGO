@@ -8,7 +8,7 @@ import {
   Image,
   useWindowDimensions,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import {
   ArrowLeft,
   ArrowRightLeft,
@@ -31,7 +31,7 @@ import { Badge } from '../src/components/ui/Badge'
 import { EmptyState } from '../src/components/ui/EmptyState'
 import { Skeleton } from '../src/components/ui/Skeleton'
 import { colors } from '../src/theme/tokens'
-import { brandColor, brandForeground } from '../src/lib/brand-color'
+import { brandColor, brandDisplayForeground } from '../src/lib/brand-color'
 import type {
   PlanPublic,
   PlanGlobalItem,
@@ -56,11 +56,6 @@ function titleCase(s: string) {
 }
 
 /** ponytail: no hay endpoint de compra en el BFF aún. F4 candidate. */
-function handleComprar(_planId: string) {
-  // ponytail: F4 — agregar POST /api/v1/cliente/membresias/crear cuando
-  // el BFF exponga la acción de selección de plan. Por ahora, noop.
-}
-
 /* ── PlanCard ──────────────────────────────────────────────────────────── */
 
 export function PlanCard({
@@ -70,6 +65,7 @@ export function PlanCard({
   className,
   mostrarNegocio = true,
   colorPrimario,
+  accionLabel,
 }: {
   plan: PlanPublic | PlanGlobalItem | PlanEmpresaItem
   destacado: boolean
@@ -77,6 +73,7 @@ export function PlanCard({
   className?: string
   mostrarNegocio?: boolean
   colorPrimario?: string | null
+  accionLabel?: string
 }) {
   const { base, variante } = parseNombre(plan.nombre)
   const precioPorUso =
@@ -94,7 +91,7 @@ export function PlanCard({
         className,
         destacado && 'border-2 border-primary bg-primary/[0.02]',
       )}
-      style={hasCompany && !destacado ? { borderColor: `${companyColor}40` } : undefined}
+      style={{ borderColor: hasCompany && !destacado ? `${companyColor}40` : companyColor }}
     >
       <View>
 
@@ -120,7 +117,7 @@ export function PlanCard({
         {/* Badge "Recomendado" para el destacado */}
         {destacado && (
           <View className="mb-3 self-start">
-            <Badge variant="default" className="flex-row border-primary bg-primary">
+            <Badge variant="custom" className="flex-row" style={{ backgroundColor: companyColor }} textStyle={{ color: brandDisplayForeground(companyColor, colors.primary.DEFAULT) }} >
               Recomendado
             </Badge>
           </View>
@@ -222,17 +219,17 @@ export function PlanCard({
       </View>
 
       {/* CTA */}
-        <View className="mt-5">
-          <Button
-            variant={destacado ? 'default' : 'outline'}
-            className="w-full rounded-full"
-            style={hasCompany && !destacado ? { borderColor: companyColor } : undefined}
-            onPress={onPress}
+      <View className="mt-5">
+        <Button
+          variant={destacado ? 'default' : 'outline'}
+          className="w-full rounded-full"
+          style={hasCompany && { borderColor: !destacado ? companyColor : '', backgroundColor: destacado ? companyColor : '' }}
+          onPress={onPress}
         >
-          {destacado ? 'Aprovechar' : 'Suscribirse'}
+          {accionLabel ?? (destacado ? 'Aprovechar' : 'Suscribirse')}
         </Button>
       </View>
-    </Card>
+    </Card >
   )
 }
 
@@ -260,10 +257,14 @@ function PlanCardSkeleton() {
 
 export default function PlanesScreen() {
   const router = useRouter()
+  const routeParams = useLocalSearchParams<{ membershipId?: string | string[] }>()
+  const membershipId = Array.isArray(routeParams.membershipId)
+    ? routeParams.membershipId[0]
+    : routeParams.membershipId
   const { width } = useWindowDimensions()
   const { isAuthenticated } = useAuth()
   const { data, isLoading, isError, refetch } = usePlanes(
-    { todos: 1 },
+    membershipId ? { membershipId } : { todos: 1 },
     isAuthenticated,
   )
   const [selectedPlanId, setSelectedPlanId] = useState('')
@@ -271,6 +272,11 @@ export default function PlanesScreen() {
   const isDesktop = width >= 1024
   const isTablet = width >= 768 && width < 1024
   const isPlanGrid = isTablet || isDesktop
+  const openPlan = (planId: string) => {
+    router.push(membershipId
+      ? `/planes/${planId}?membershipId=${encodeURIComponent(membershipId)}`
+      : `/planes/${planId}`)
+  }
 
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
@@ -315,7 +321,7 @@ export default function PlanesScreen() {
         <View className="mb-6">
           <View className="flex-row flex-wrap items-center justify-between gap-2">
             <Text className="min-w-0 flex-1 text-overline font-inter-semibold text-primary">
-              Membresías · Todos los negocios
+              {membershipId ? `Cambiar plan · ${data?.modo === 'empresa' ? data.empresa?.name ?? data.cliente?.empresaNombre : ''}` : 'Membresías · Todos los negocios'}
             </Text>
             <Pressable
               onPress={() => router.push('/mis-membresias')}
@@ -339,10 +345,10 @@ export default function PlanesScreen() {
             )}
           </View>
           <Text className="mt-2 text-h2 font-inter-bold text-foreground">
-            Planes para cada negocio
+            {membershipId && data?.modo === 'empresa' ? `Planes de ${data.empresa?.name ?? data.cliente?.empresaNombre}` : 'Planes para cada negocio'}
           </Text>
           <Text className="mt-1.5 text-small leading-relaxed text-muted-foreground">
-            Compara las opciones disponibles y encuentra los planes de cada negocio.
+            {membershipId ? 'Elige un plan superior para continuar el cambio. Los planes de menor valor se gestionan directamente con el negocio.' : 'Compara las opciones disponibles y encuentra los planes de cada negocio.'}
           </Text>
         </View>
 
@@ -451,7 +457,7 @@ export default function PlanesScreen() {
 
               return (
                 <View key={company.id} className="gap-3">
-                  <Card className="flex-row items-center gap-3 border-border bg-card p-4" style={{ borderColor: `${companyColor}40` }}>
+                  <Card className="flex-row items-center gap-3 border-border bg-card p-4" style={{ borderColor: `${companyColor}66`, borderTopWidth: 3, borderTopColor: companyColor }}>
                     {company.logoUrl ? (
                       <Image
                         source={{ uri: company.logoUrl }}
@@ -499,7 +505,8 @@ export default function PlanesScreen() {
                             destacado={index === (planesDelNegocio.length > 1 ? 1 : 0)}
                             mostrarNegocio={false}
                             colorPrimario={company.colorPrimario}
-                            onPress={() => router.push(`/planes/${plan.id}`)}
+                            onPress={() => openPlan(plan.id)}
+                            accionLabel={membershipId ? 'Ver para cambiar' : undefined}
                             className="flex-1"
                           />
                         </View>
@@ -508,7 +515,7 @@ export default function PlanesScreen() {
                   ) : (
                     <View className="gap-3">
                       {planesDelNegocio.length > 1 && (
-                        <View className="rounded-xl bg-retail-mist p-1.5">
+                        <View className="rounded-xl bg-retail-mist p-1.5" style={{ backgroundColor: `${companyColor}12`, borderColor: `${companyColor}40`, borderWidth: 1 }}>
                           <ScrollView
                             horizontal
                             showsHorizontalScrollIndicator={false}
@@ -517,29 +524,43 @@ export default function PlanesScreen() {
                             accessibilityRole="radiogroup"
                             accessibilityLabel={`Planes de ${company.name}`}
                           >
-                            {planesDelNegocio.map((plan) => {
+                            {planesDelNegocio.map((plan, index) => {
                               const seleccionado = plan.id === planSeleccionado.id
                               const { base, variante } = parseNombre(plan.nombre)
+                              const esDestacado = index === (planesDelNegocio.length > 1 ? 1 : 0)
+                              const foregroundColor = seleccionado
+                                ? brandDisplayForeground(companyColor, colors.primary.DEFAULT)
+                                : companyColor
 
                               return (
-                                <Pressable key={plan.id} style={{ flexGrow: 1 }}
+                                <Pressable
+                                  key={plan.id}
                                   onPress={() => setPlanesSeleccionados((actuales) => ({
                                     ...actuales,
                                     [company.id]: plan.id,
                                   }))}
-                                  className={cn(
-                                    'min-h-11 flex-row items-center justify-center rounded-lg px-4',
-                                    seleccionado && 'bg-card',
-                                  )}
+                                  className="min-h-11 flex-row items-center justify-center gap-1.5 rounded-lg px-3.5"
+                                  style={{
+                                    flexGrow: 1,
+                                    ...(seleccionado
+                                      ? { backgroundColor: companyColor }
+                                      : esDestacado
+                                      ? { backgroundColor: `${companyColor}14`, borderWidth: 1, borderColor: `${companyColor}4D` }
+                                      : {}),
+                                  }}
                                   accessibilityRole="radio"
-                                  accessibilityLabel={`${plan.nombre}, ${formatMoney(plan.precio)}`}
+                                  accessibilityLabel={`${plan.nombre}${esDestacado ? ' (Recomendado)' : ''}, ${formatMoney(plan.precio)}`}
                                   accessibilityState={{ checked: seleccionado }}
                                 >
+                                  {esDestacado && (
+                                    <Sparkles
+                                      size={13}
+                                      color={foregroundColor}
+                                    />
+                                  )}
                                   <Text
-                                    className={cn(
-                                      'text-label-lg font-inter-semibold',
-                                      seleccionado ? 'text-foreground' : 'text-muted-foreground',
-                                    )}
+                                    className="text-label-lg font-inter-semibold"
+                                    style={{ color: foregroundColor }}
                                     numberOfLines={1}
                                   >
                                     {variante ?? base}
@@ -556,7 +577,8 @@ export default function PlanesScreen() {
                         destacado={indiceSeleccionado === (planesDelNegocio.length > 1 ? 1 : 0)}
                         mostrarNegocio={false}
                         colorPrimario={company.colorPrimario}
-                        onPress={() => router.push(`/planes/${planSeleccionado.id}`)}
+                        onPress={() => openPlan(planSeleccionado.id)}
+                        accionLabel={membershipId ? 'Ver para cambiar' : undefined}
                       />
                     </View>
                   )}
@@ -578,21 +600,43 @@ export default function PlanesScreen() {
           <View>
             {planes.length > 1 && !isPlanGrid && (
               <View className="mb-5 flex-row gap-1.5 rounded-xl bg-retail-mist p-1.5">
-                {planes.map((plan) => {
+                {planes.map((plan, idx) => {
                   const { base, variante } = parseNombre(plan.nombre)
                   const active = activePlanId === plan.id
+                  const esDestacado = idx === destacadoIdx
                   return (
                     <Pressable
                       key={plan.id}
                       onPress={() => setSelectedPlanId(plan.id)}
                       className={cn(
-                        'min-h-10 flex-1 items-center justify-center rounded-lg px-3',
-                        active ? 'bg-card shadow-sm' : 'bg-transparent',
+                        'min-h-10 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg px-2.5',
+                        active
+                          ? 'bg-card shadow-sm'
+                          : esDestacado
+                          ? 'bg-primary/10 border border-primary/25'
+                          : 'bg-transparent',
                       )}
                       accessibilityRole="tab"
+                      accessibilityLabel={`${plan.nombre}${esDestacado ? ' (Recomendado)' : ''}, ${formatMoney(plan.precio)}`}
                       accessibilityState={{ selected: active }}
                     >
-                      <Text className={cn('text-label-lg font-inter-semibold', active ? 'text-foreground' : 'text-muted-foreground')}>
+                      {esDestacado && (
+                        <Sparkles
+                          size={12}
+                          color={colors.primary.DEFAULT}
+                        />
+                      )}
+                      <Text
+                        className={cn(
+                          'text-label-lg font-inter-semibold',
+                          active
+                            ? 'text-foreground'
+                            : esDestacado
+                            ? 'text-primary'
+                            : 'text-muted-foreground',
+                        )}
+                        numberOfLines={1}
+                      >
                         {variante ?? base}
                       </Text>
                     </Pressable>
@@ -630,7 +674,8 @@ export default function PlanesScreen() {
                       <PlanCard
                         plan={plan}
                         destacado={idx === destacadoIdx}
-                        onPress={() => router.push(`/planes/${plan.id}`)}
+                        onPress={() => openPlan(plan.id)}
+                        accionLabel={membershipId ? 'Ver para cambiar' : undefined}
                         className="flex-1"
                       />
                     </View>

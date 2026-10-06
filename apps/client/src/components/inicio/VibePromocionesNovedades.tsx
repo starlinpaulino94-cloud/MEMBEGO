@@ -8,7 +8,7 @@ import { rnHref } from '../../lib/rutas'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { useInicioAccent, type InicioAccent } from '../layout/InicioAccentContext'
 import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
-import { brandColor, brandForeground } from '../../lib/brand-color'
+import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
 
 interface PromoNovedadItem {
   id: string
@@ -73,7 +73,6 @@ export function PromoCardItem({
       onHoverOut={() => setIsHovered(false)}
       accessibilityLabel={`Ver ${item.titulo}`}
       className="group hover:scale-[1.01] transition-all"
-      style={{ borderColor: `${companyColor}40` }}
       footer={
         <View className="flex-row justify-between items-center">
           <Text className="text-muted-foreground text-caption">Ver beneficio</Text>
@@ -102,8 +101,8 @@ export function PromoCardItem({
 
         {/* Discount badge */}
         {item.descuentoTexto && (
-          <View className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: companyColor }}>
-            <Text className="text-caption font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>
+          <View className="absolute left-1.5 top-1.5 rounded-full px-2 py-0.5 bg-white shadow-sm">
+            <Text className="text-caption font-inter-bold" style={{ color: companyColor }}>
               {item.descuentoTexto}
             </Text>
           </View>
@@ -111,54 +110,59 @@ export function PromoCardItem({
 
         {/* Exclusive badge */}
         {item.esPrivadaMiembros && (
-          <View className="absolute right-1.5 top-1.5 rounded-full px-2 py-0.5" style={{ backgroundColor: companyColor }}>
-            <Text className="text-overline font-bold" style={{ color: brandForeground(companyColor, accent.color) }}>
+          <View className="absolute right-1.5 top-1.5 rounded-full px-2 py-0.5 bg-white">
+            <Text className="text-overline font-bold" style={{ color: companyColor }}>
               Exclusiva
             </Text>
           </View>
-        )}
+        )
+        }
 
         {/* Expiration badge */}
-        {item.diasRestantes != null && item.diasRestantes <= 7 && (
-          <View className="absolute right-1.5 bottom-1.5 rounded-full flex-row items-center gap-1 px-2 py-0.5 bg-destructive">
-            <Clock size={10} color="white" />
-            <Text className="text-overline font-bold text-white">
-              {item.diasRestantes === 0
-                ? 'Hoy'
-                : item.diasRestantes === 1
-                  ? '1 día'
-                  : `${item.diasRestantes} días`}
-            </Text>
-          </View>
-        )}
-      </View>
+        {
+          item.diasRestantes != null && item.diasRestantes <= 7 && (
+            <View className="absolute right-1.5 bottom-1.5 rounded-full flex-row items-center gap-1 px-2 py-0.5 bg-destructive">
+              <Clock size={10} color="white" />
+              <Text className="text-overline font-bold text-white">
+                {item.diasRestantes === 0
+                  ? 'Hoy'
+                  : item.diasRestantes === 1
+                    ? '1 día'
+                    : `${item.diasRestantes} días`}
+              </Text>
+            </View>
+          )
+        }
+      </View >
 
       {/* Company */}
-      <Text
+      < Text
         className="mt-2 text-md text-muted-foreground"
         numberOfLines={1}
       >
         {item.empresa.nombre}
-      </Text>
+      </Text >
 
       {/* Title */}
-      <Text
+      < Text
         className="mt-0.5 text-label-md text-foreground"
         style={isHovered ? { color: companyColor } : undefined}
         numberOfLines={2}
       >
         {item.titulo}
-      </Text>
+      </Text >
 
       {/* Price */}
-      {item.precioTexto && (
-        <View className="mt-1.5 flex-row items-baseline gap-1">
-          <Text className="text-h4 font-inter-bold text-foreground">
-            {item.precioTexto}
-          </Text>
-        </View>
-      )}
-    </MarketplaceCard>
+      {
+        item.precioTexto && (
+          <View className="mt-1.5 flex-row items-baseline gap-1">
+            <Text className="text-h4 font-inter-bold text-foreground">
+              {item.precioTexto}
+            </Text>
+          </View>
+        )
+      }
+    </MarketplaceCard >
   )
 }
 

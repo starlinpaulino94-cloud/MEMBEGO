@@ -144,6 +144,9 @@ export function BusinessCard({
   const router = useRouter()
   const href = `${hrefBase}/${company.slug}`
   const precio = company.desdePlan
+  const companyColor = hasBrandColor(company.colorPrimario)
+    ? brandColor(company.colorPrimario, '#7c3aed')
+    : null
 
   return (
     <View className={cn('relative overflow-hidden rounded-xl', className)}>
@@ -151,7 +154,7 @@ export function BusinessCard({
         variant="flush"
         onPress={() => router.push(href as any)}
         accessibilityLabel={`Ver ${company.name}`}
-        className="overflow-hidden"
+        className="w-full overflow-hidden"
       >
         {hasBrandColor(company.colorPrimario) ? (
           <View className="h-1 w-full" style={{ backgroundColor: brandColor(company.colorPrimario, '#7c3aed') }} />
@@ -164,8 +167,8 @@ export function BusinessCard({
               resizeMode="cover"
             />
           ) : (
-            <View className="size-full items-center justify-center bg-primary/10">
-              <Text className="text-3xl font-inter-bold text-primary">
+            <View className="size-full items-center justify-center bg-primary/10" style={companyColor ? { backgroundColor: `${companyColor}1A` } : undefined}>
+              <Text className="text-3xl font-inter-bold text-primary" style={companyColor ? { color: companyColor } : undefined}>
                 {company.name.slice(0, 2).toUpperCase()}
               </Text>
             </View>
@@ -214,8 +217,8 @@ export function BusinessCard({
 
           {precio ? (
             <View className="mt-1.5 flex-row items-center self-start rounded-full border border-border px-3 py-1">
-              <Text className="text-xs text-primary">{precio.nombre} </Text>
-              <Text className="text-xs font-inter-bold text-primary tabular-nums">
+              <Text className="text-xs text-primary" style={companyColor ? { color: companyColor } : undefined}>{precio.nombre} </Text>
+              <Text className="text-xs font-inter-bold text-primary tabular-nums" style={companyColor ? { color: companyColor } : undefined}>
                 {formatMoney(precio.precio)}
               </Text>
             </View>

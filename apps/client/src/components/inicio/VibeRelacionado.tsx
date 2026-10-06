@@ -10,7 +10,7 @@ import { colors } from '../../theme/tokens'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { useInicioAccent, type InicioAccent } from '../layout/InicioAccentContext'
 import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
-import { brandColor, brandForeground } from '../../lib/brand-color'
+import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
 import type { PlanInicio } from '../../../../../src/modules/home/vista'
 
 function Estrellas({ valoracion, accentColor }: { valoracion: number; accentColor: string }) {
@@ -61,7 +61,6 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
       accessibilityLabel={`Ver membresía de ${plan.empresa}`}
       variant="flush"
       className="group hover:scale-[1.01] transition-all"
-      style={{ borderColor: `${companyColor}40` }}
       footer={
         <LinearGradient
           colors={[companyColor, companyColor]}
@@ -69,7 +68,7 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
           end={{ x: 1, y: 0 }}
           style={{ width: '100%', borderRadius: 9999, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' }}
         >
-          <Text className="text-label-sm font-inter-bold" style={{ color: brandForeground(companyColor, accent.color) }}>
+          <Text className="text-label-sm font-inter-bold" style={{ color: brandDisplayForeground(companyColor, accent.color) }}>
             Aprovechar
           </Text>
         </LinearGradient>
@@ -90,7 +89,7 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
           </View>
         )}
         {plan.esCliente ? (
-          <View className="absolute left-2 bottom-2 rounded-full bg-card/95 px-2 py-1">
+          <View className="absolute left-2 bottom-2 rounded-full bg-card/95 px-2 py-1 shadow-sm">
             <Text
               className="text-label-sm font-inter-semibold"
               style={{ color: companyColor }}
@@ -113,7 +112,7 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
 
           {plan.valoracion != null && Number.isFinite(Number(plan.valoracion)) ? (
             <View className="mt-1 flex-row items-center gap-1">
-          <Estrellas valoracion={Number(plan.valoracion)} accentColor={companyColor} />
+              <Estrellas valoracion={Number(plan.valoracion)} accentColor={companyColor} />
               <Text className="text-label-sm font-inter-medium text-muted-foreground">
                 {Number(plan.resenas ?? 0).toLocaleString('es-DO')}
               </Text>

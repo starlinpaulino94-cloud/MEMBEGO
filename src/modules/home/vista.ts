@@ -151,6 +151,7 @@ export type NovedadHero =
     readonly descripcion: string | null
     readonly empresa: string
     readonly colorPrimario: string | null
+    readonly color: string | null
     readonly imagen: string | null
     readonly href: string
     readonly precio: string

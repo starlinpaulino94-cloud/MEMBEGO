@@ -120,6 +120,7 @@ export interface PlanPublic {
   beneficios: string[]
   vigenciaDias: number
   imagenUrl?: string | null
+  color?: string | null
 }
 
 export interface PlanGlobalItem extends PlanPublic {
@@ -137,6 +138,7 @@ export interface PlanGlobalItem extends PlanPublic {
 }
 
 export interface PlanEmpresaItem extends PlanPublic {
+  precioBase?: number
   condiciones: string | null
   comprable: boolean
   nivelSuperior: string | null
@@ -322,6 +324,7 @@ export interface CuentaMembresia {
   readonly companyColorPrimario: string | null
   readonly planId: string
   readonly planNombre: string
+  readonly planPrecio?: number
   readonly planEsIlimitado: boolean
   readonly planLavadosIncluidos: number | null
   readonly estado: string
@@ -337,6 +340,57 @@ export interface MembresiasResponse {
   readonly porVencer: readonly CuentaMembresia[]
   readonly vencidas: readonly CuentaMembresia[]
   readonly puntos: number | null
+}
+
+export interface CuentaPagoDetalle {
+  readonly id: string
+  readonly estado: string
+  readonly fechaVencimiento: string | null
+  readonly plan: { id: string; nombre: string; precio: number; vigenciaDias: number }
+  readonly planSolicitado: { id: string; nombre: string; precio: number; vigenciaDias: number } | null
+  readonly company: { id: string; name: string; logoUrl: string | null; colorPrimario: string | null }
+  readonly tieneComprobante: boolean
+  readonly comprobanteNota: string | null
+  readonly rechazadoReason: string | null
+  readonly metodoPago: { id: string; nombre: string; tipo: string } | null
+}
+
+export interface CuentaPagoResponse {
+  readonly membresia: CuentaPagoDetalle
+  readonly pago: {
+    importeAPagar: number
+    descuentoBienvenida: number
+    transferenciaActiva: boolean
+    cuentas: {
+      id: string
+      nombre: string
+      titular: string | null
+      numeroCuenta: string | null
+      tipoCuenta: string | null
+      instrucciones: string | null
+    }[]
+    metodosDisponibles: string[]
+  } | null
+}
+
+export interface SolicitarMembresiaBody {
+  readonly planId: string
+  readonly vehicleId?: string
+}
+
+export interface SolicitarMembresiaResponse {
+  readonly success: true
+  readonly membershipId: string
+}
+
+export interface CambioPlanResponse {
+  readonly success: true
+  readonly membershipId: string
+  readonly importeAPagar: number
+}
+
+export interface SubidaComprobanteResponse {
+  readonly subida: { readonly path: string; readonly token: string }
 }
 
 export type CercanoItem = JsonObject
@@ -435,6 +489,17 @@ export interface PlanesEmpresaResponse {
   vitrina: boolean
   planesPublicados: number
   requiereVehiculo: boolean
+  empresa?: {
+    id: string
+    name: string
+    slug: string
+    logoUrl: string | null
+    colorPrimario: string | null
+    ciudad: string | null
+    moneda: string
+    idioma: string
+    averageRating: number | null
+  }
   cliente: {
     nombre: string | null
     empresaNombre: string
@@ -443,7 +508,7 @@ export interface PlanesEmpresaResponse {
       estado: string
       planId: string
       planIdSolicitado: string | null
-      plan: { nombre: string }
+      plan: { id: string; nombre: string; precio: number; vigenciaDias: number }
       planSolicitado: { nombre: string } | null
     } | null
   } | null
@@ -459,7 +524,7 @@ export interface CompraItem {
   usosIncluidos: number
   createdAt: string
   promocion: { titulo: string; imagenUrl: string | null; tipo: string } | null
-  company: { name: string } | null
+  company: { name: string; colorPrimario: string | null } | null
 }
 
 export interface RegaloClienteItem {
@@ -470,6 +535,7 @@ export interface RegaloClienteItem {
   periodo: string
   vigenciaHasta: string | null
   usosPeriodo: number
+  empresaColorPrimario: string | null
 }
 
 export interface MisPromocionesResponse {
@@ -494,7 +560,7 @@ export interface MisPromocionDetalle {
   comprobanteNota: string | null
   rechazadoReason: string | null
   promocion: PromotionPublic | null
-  company: { name: string; zonaHoraria: string }
+  company: { name: string; zonaHoraria: string; colorPrimario: string | null }
   metodoPago: unknown | null
   transiciones: unknown[]
   qr: unknown | null
@@ -519,6 +585,7 @@ export interface RegaloInvitadoResponse {
   titulo: string
   descripcion: string
   empresa: string
+  empresaColorPrimario: string | null
   vigente: boolean
   periodo: string
   periodoLabel: string
@@ -1021,6 +1088,28 @@ export const api = {
   getPerfil: () => fetchBff<PerfilClienteResponse>('/api/v1/cliente/perfil'),
   getMenu: () => fetchBff<any>('/api/v1/cliente/menu'),
   getMembresias: () => fetchBff<MembresiasResponse>('/api/v1/cliente/membresias'),
+  getMembresiaPago: (membershipId: string) =>
+    fetchBff<CuentaPagoResponse>(`/api/v1/cliente/membresias/${encodeURIComponent(membershipId)}`),
+  solicitarMembresia: (body: SolicitarMembresiaBody) =>
+    postJson<SolicitarMembresiaResponse>('/api/v1/cliente/membresias', body),
+  solicitarCambioPlan: (membershipId: string, planId: string) =>
+    postJson<CambioPlanResponse>(
+      `/api/v1/cliente/membresias/${encodeURIComponent(membershipId)}/cambios-plan`,
+      { planId }
+    ),
+  prepararSubidaComprobante: (membershipId: string, extension: string) =>
+    postJson<SubidaComprobanteResponse>(
+      `/api/v1/cliente/membresias/${encodeURIComponent(membershipId)}/comprobante`,
+      { extension }
+    ),
+  enviarComprobanteMembresia: (
+    membershipId: string,
+    body: { path: string; metodoPagoId?: string; nota?: string }
+  ) =>
+    postJson<{ success: true }>(
+      `/api/v1/cliente/membresias/${encodeURIComponent(membershipId)}/comprobante`,
+      body
+    ),
   getHistorial: (page?: number) => fetchBff<any>(`/api/v1/cliente/historial?page=${page ?? 1}`),
 
   // --- Exploración ---
@@ -1059,7 +1148,7 @@ export const api = {
     fetchBff<PromocionesResponse>(`/api/v1/cliente/promociones${qs(params)}`),
   getPromocion: (id: string) =>
     fetchBff<PromocionDetalleResponse>(`/api/v1/cliente/promociones/${encodeURIComponent(id)}`),
-  getPlanes: (params?: { todos?: string | number; q?: string; categoria?: string }) =>
+  getPlanes: (params?: { todos?: string | number; q?: string; categoria?: string; membershipId?: string }) =>
     fetchBff<PlanesResponse>(`/api/v1/cliente/planes${qs(params)}`),
 
   // --- Mis promociones ---

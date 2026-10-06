@@ -16,6 +16,8 @@ import { SectionHeader } from '../ui/SectionHeader'
 import { CompanyPublicationsSections } from './CompanyPublicationsSections'
 import { CompanyReviewsSection } from './CompanyReviewsSection'
 import { formatMoney } from '../../lib/format'
+import { brandDisplayForeground } from '../../lib/brand-color'
+import { colors } from '../../theme/tokens'
 import type {
   CompanyExcursionPublic,
   CompanyOwnReview,
@@ -33,6 +35,7 @@ interface ProfileLink {
 
 interface CompanyProfileExtraSectionsProps {
   readonly company: CompanyPublic
+  readonly companyColor: string
   readonly posts: CompanyPostsPublic | null
   readonly resenas: CompanyReviewsPublic
   readonly puedeOpinar: boolean
@@ -50,6 +53,7 @@ function redSocialUrl(red: 'instagram' | 'facebook' | 'tiktok', perfil: string):
 
 export function CompanyProfileExtraSections({
   company,
+  companyColor,
   posts,
   resenas,
   puedeOpinar,
@@ -61,6 +65,7 @@ export function CompanyProfileExtraSections({
     .join(', ')
   const horario = typeof company.horario === 'string' ? company.horario.trim() : ''
   const googleMapsUrl = company.googleMapsUrl
+  const companyTextColor = companyColor
   const contacto: readonly ProfileLink[] = [
     ...(company.email
       ? [{ label: 'Correo electrónico', value: company.email, href: `mailto:${company.email}`, Icon: Mail }]
@@ -87,7 +92,7 @@ export function CompanyProfileExtraSections({
 
   return (
     <>
-      <CompanyPublicationsSections companyName={company.name} posts={posts} />
+      <CompanyPublicationsSections companyName={company.name} companyColor={companyColor} posts={posts} />
 
       {excursiones.some((excursion) => !excursion.todasFechasPasadas) ? (
         <View className="mt-8 px-4">
@@ -101,12 +106,12 @@ export function CompanyProfileExtraSections({
                 {excursion.portadaUrl ? (
                   <Image source={{ uri: excursion.portadaUrl }} className="h-44 w-full" resizeMode="cover" />
                 ) : (
-                  <View className="h-32 items-center justify-center bg-muted">
-                    <Compass size={32} color="#9ca3af" />
+                  <View className="h-32 items-center justify-center" style={{ backgroundColor: `${companyColor}1A` }}>
+                    <Compass size={32} color={companyTextColor} />
                   </View>
                 )}
                 <View className="p-4">
-                  {excursion.categoria ? <Text className="text-xs font-inter-semibold text-primary">{excursion.categoria}</Text> : null}
+                  {excursion.categoria ? <Text className="self-start rounded-full px-2 py-1 text-xs font-inter-semibold" style={{ backgroundColor: `${companyColor}1A`, color: companyTextColor }}>{excursion.categoria}</Text> : null}
                   <Text className="mt-1 text-base font-inter-bold text-foreground">{excursion.nombre}</Text>
                   <View className="mt-2 flex-row flex-wrap gap-x-4 gap-y-1">
                     {excursion.duracionMin ? (
@@ -149,6 +154,7 @@ export function CompanyProfileExtraSections({
       <CompanyReviewsSection
         companySlug={company.slug}
         companyName={company.name}
+        companyColor={companyColor}
         reviews={resenas}
         canReview={puedeOpinar}
         ownReview={miResena}
@@ -159,28 +165,28 @@ export function CompanyProfileExtraSections({
         <View className="mt-3 gap-3">
           {horario ? (
             <View className="rounded-xl border border-border bg-card p-4">
-              <View className="flex-row items-center gap-2"><Clock size={17} color="#0284c7" /><Text className="text-base font-inter-semibold text-foreground">Horario de atención</Text></View>
+              <View className="flex-row items-center gap-2"><Clock size={17} color={companyColor} /><Text className="text-base font-inter-semibold text-foreground">Horario de atención</Text></View>
               <Text className="mt-2 text-sm leading-relaxed text-muted-foreground">{horario}</Text>
             </View>
           ) : null}
           {ubicacion ? (
             <View className="rounded-xl border border-border bg-card p-4">
-              <View className="flex-row items-center gap-2"><MapPin size={17} color="#0284c7" /><Text className="text-base font-inter-semibold text-foreground">Ubicación</Text></View>
+              <View className="flex-row items-center gap-2"><MapPin size={17} color={companyColor} /><Text className="text-base font-inter-semibold text-foreground">Ubicación</Text></View>
               <Text className="mt-2 text-sm text-muted-foreground">{ubicacion}</Text>
               {googleMapsUrl ? (
-                <Pressable onPress={() => Linking.openURL(googleMapsUrl)} className="mt-3 flex-row items-center gap-2 self-start rounded-lg border border-border px-3 py-2" accessibilityRole="link">
-                  <Text className="text-sm font-inter-semibold text-primary">Ver en Google Maps</Text><ExternalLink size={14} color="#0284c7" />
+                <Pressable onPress={() => Linking.openURL(googleMapsUrl)} className="mt-3 flex-row items-center gap-2 self-start rounded-lg border px-3 py-2" style={{ borderColor: `${companyColor}66`, backgroundColor: `${companyColor}12` }} accessibilityRole="link">
+                  <Text className="text-sm font-inter-semibold" style={{ color: companyTextColor }}>Ver en Google Maps</Text><ExternalLink size={14} color={companyTextColor} />
                 </Pressable>
               ) : null}
             </View>
           ) : null}
           {contacto.length > 0 ? (
             <View className="rounded-xl border border-border bg-card p-4">
-              <View className="flex-row items-center gap-2"><Phone size={17} color="#0284c7" /><Text className="text-base font-inter-semibold text-foreground">Contacto y redes</Text></View>
+              <View className="flex-row items-center gap-2"><Phone size={17} color={colors.surface.foreground} /><Text className="text-base font-inter-semibold text-foreground">Contacto y redes</Text></View>
               <View className="mt-3 gap-3">
                 {contacto.map(({ label, value, href, Icon }) => (
                   <Pressable key={label} onPress={() => Linking.openURL(href)} className="flex-row items-center gap-3" accessibilityRole="link" accessibilityLabel={label}>
-                    <Icon size={17} color="#0284c7" />
+                    <View className="h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: `${companyColor}1A` }}><Icon size={17} color={colors.surface.foreground} /></View>
                     <View className="min-w-0 flex-1">
                       <Text className="text-sm font-inter-semibold text-foreground">{label}</Text>
                       <Text className="text-xs text-muted-foreground" numberOfLines={1}>{value}</Text>
@@ -194,14 +200,14 @@ export function CompanyProfileExtraSections({
         </View>
       </View>
 
-      <View className="mx-4 mt-8 items-center rounded-2xl bg-primary px-5 py-6">
-        <Text className="text-lg font-inter-bold text-white">¿Te gusta {company.name}?</Text>
-        <Text className="mt-2 text-center text-sm leading-relaxed text-white/85">
+      <View className="mx-4 mt-8 items-center rounded-2xl px-5 py-6" style={{ backgroundColor: companyColor }}>
+        <Text className="text-lg font-inter-bold" style={{ color: brandDisplayForeground(companyColor, colors.primary.DEFAULT) }}>¿Te gusta {company.name}?</Text>
+        <Text className="mt-2 text-center text-sm leading-relaxed" style={{ color: brandDisplayForeground(companyColor, colors.primary.DEFAULT) }}>
           Síguela para recibir sus promociones y novedades, o descubre más empresas dentro de MembeGo.
         </Text>
         <Link href="/empresas" asChild>
           <Pressable className="mt-4 rounded-full bg-card px-5 py-2.5" accessibilityRole="link">
-            <Text className="text-sm font-inter-semibold text-primary">Descubrir empresas</Text>
+            <Text className="text-sm font-inter-semibold" style={{ color: companyColor }}>Descubrir empresas</Text>
           </Pressable>
         </Link>
       </View>

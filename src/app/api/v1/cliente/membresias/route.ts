@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { getApiClientUser, corsHeaders, handleCorsPreflight } from '@/lib/auth/api-guard'
 import { getClienteAllMemberships } from '@/modules/cliente/queries'
 import { getGamificacion } from '@/modules/engagement/gamificacion'
+import { solicitarMembresiaCliente } from '@/modules/membresia/cliente-service'
+import { revalidatePath, revalidateTag } from 'next/cache'
+import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,5 +77,36 @@ export async function GET(request: Request) {
       { error: 'Error interno al cargar membresías' },
       { status: 500, headers: corsHeaders(request) }
     )
+  }
+}
+
+export async function POST(request: Request) {
+  const user = await getApiClientUser(request)
+  if (!user || user.metadata.role !== 'CLIENTE') {
+    return NextResponse.json({ error: 'Inicia sesión como cliente para solicitar un plan.' }, { status: 401, headers: corsHeaders(request) })
+  }
+
+  const body: unknown = await request.json().catch(() => null)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'La solicitud no contiene datos válidos.' }, { status: 400, headers: corsHeaders(request) })
+  }
+  const planId = 'planId' in body && typeof body.planId === 'string' ? body.planId.trim() : ''
+  const vehicleId = 'vehicleId' in body && typeof body.vehicleId === 'string' ? body.vehicleId.trim() : undefined
+  if (!planId) {
+    return NextResponse.json({ error: 'Selecciona un plan.' }, { status: 400, headers: corsHeaders(request) })
+  }
+
+  try {
+    const result = await solicitarMembresiaCliente(user, { planId, vehicleId: vehicleId || undefined })
+    if ('error' in result) {
+      return NextResponse.json(result, { status: 400, headers: corsHeaders(request) })
+    }
+    revalidatePath('/mis-membresias')
+    revalidatePath('/cliente/planes')
+    revalidateTag(NAV_CLIENTE_TAG, 'max')
+    return NextResponse.json(result, { status: 201, headers: corsHeaders(request) })
+  } catch (error) {
+    console.error('[api/v1/cliente/membresias] Error solicitando membresía:', error)
+    return NextResponse.json({ error: 'No pudimos iniciar la solicitud. Intenta de nuevo.' }, { status: 500, headers: corsHeaders(request) })
   }
 }

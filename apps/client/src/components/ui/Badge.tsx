@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, type StyleProp, type ViewStyle, type TextStyle } from 'react-native';
 import { cn } from '../../lib/cn';
 
 type BadgeVariant =
@@ -10,7 +10,8 @@ type BadgeVariant =
   | 'warning'
   | 'info'
   | 'danger'
-  | 'vibe';
+  | 'vibe'
+  | 'custom';
 
 const legacyMap: Record<string, BadgeVariant> = {
   danger: 'destructive',
@@ -21,6 +22,9 @@ export interface BadgeProps {
   children: React.ReactNode;
   variant?: BadgeVariant;
   className?: string;
+  textClassName?: string;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
 }
 
 const variantClasses: Record<string, string> = {
@@ -30,6 +34,7 @@ const variantClasses: Record<string, string> = {
   success: 'bg-success/10 border-success/20',
   warning: 'bg-warning/15 border-warning/30',
   info: 'bg-info/10 border-info/20',
+  custom: 'border-none'
 };
 
 const textClasses: Record<string, string> = {
@@ -39,12 +44,16 @@ const textClasses: Record<string, string> = {
   success: 'text-success',
   warning: 'text-warning',
   info: 'text-info',
+  custom: ''
 };
 
 export function Badge({
   children,
   variant = 'default',
   className = '',
+  textClassName = '',
+  style,
+  textStyle,
 }: BadgeProps) {
   const resolved = legacyMap[variant] ?? variant;
 
@@ -55,12 +64,15 @@ export function Badge({
         variantClasses[resolved],
         className,
       )}
+      style={style}
     >
       <Text
         className={cn(
           'text-xs font-inter-medium',
           textClasses[resolved],
+          textClassName,
         )}
+        style={textStyle}
       >
         {children}
       </Text>

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 
 export function usePlanes(
-  params?: { todos?: string | number; q?: string; categoria?: string },
+  params?: { todos?: string | number; q?: string; categoria?: string; membershipId?: string },
   enabled = true,
 ) {
   return useQuery({

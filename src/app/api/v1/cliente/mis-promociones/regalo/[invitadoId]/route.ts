@@ -25,7 +25,7 @@ async function cargarRegalo(user: NonNullable<Awaited<ReturnType<typeof getApiCl
     tx.ofertaInvitado.findUnique({
       where: { id: invitadoId },
       include: {
-        oferta: { include: { company: { select: { name: true, zonaHoraria: true } } } },
+        oferta: { include: { company: { select: { name: true, zonaHoraria: true, colorPrimario: true } } } },
         qrTokens: { where: { activo: true }, orderBy: { createdAt: 'desc' }, take: 1 },
       },
     })
@@ -83,6 +83,7 @@ async function cargarRegalo(user: NonNullable<Awaited<ReturnType<typeof getApiCl
     titulo: oferta.titulo,
     descripcion: oferta.descripcion,
     empresa: oferta.company.name,
+    empresaColorPrimario: oferta.company.colorPrimario,
     vigente,
     periodo: oferta.periodo,
     periodoLabel: PERIODO_LABEL[oferta.periodo],

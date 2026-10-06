@@ -19,6 +19,7 @@ import { Skeleton } from '../../src/components/ui/Skeleton'
 import { colors } from '../../src/theme/tokens'
 import { BannerDemo } from '../../src/components/ui/BannerDemo'
 import { useInicioAccent } from '../../src/components/layout/InicioAccentContext'
+import { brandDisplayForeground } from '../../src/lib/brand-color'
 
 export default function InicioScreen() {
   const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null)
@@ -74,7 +75,7 @@ export default function InicioScreen() {
             style={{ backgroundColor: accent.color }}
             accessibilityRole="button"
           >
-            <Text className="text-sm font-inter-bold text-white">Reintentar</Text>
+            <Text className="text-sm font-inter-bold" style={{ color: brandDisplayForeground(accent.color, colors.primary.DEFAULT) }}>Reintentar</Text>
           </TouchableOpacity>
         </View>
       ) : null}

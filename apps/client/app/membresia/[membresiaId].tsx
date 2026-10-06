@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
@@ -11,7 +12,7 @@ import {
 } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { goBackOr } from '../../src/lib/navigation'
-import { ArrowLeft, History, Car, Clock, Calendar, Share2, Download } from 'lucide-react-native'
+import { ArrowLeft, History, Car, Clock, Calendar, Share2, Download, ArrowRightLeft } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import QRCode from 'react-native-qrcode-svg'
@@ -22,7 +23,9 @@ import { Button } from '../../src/components/ui/Button'
 import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 import { Skeleton } from '../../src/components/ui/Skeleton'
 import { BackHeader } from '../../src/components/ui/BackHeader'
-import { brandColor, hasBrandColor } from '../../src/lib/brand-color'
+import { brandColor, brandDisplayForeground, hasBrandColor } from '../../src/lib/brand-color'
+import { api } from '../../src/lib/api'
+import { ComprobanteMembresiaForm } from '../../src/components/pagos/ComprobanteMembresiaForm'
 
 const ESTADO_LABEL: Record<string, string> = {
   ACTIVA: 'Activa',
@@ -143,11 +146,17 @@ function MembresiaDetailScreenContent() {
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
   const isDetailSheet = width >= 768 && router.canGoBack()
-  const { membresiaId } = useLocalSearchParams<{ membresiaId: string }>()
+  const routeParams = useLocalSearchParams<{ membresiaId: string | string[] }>()
+  const membresiaId = Array.isArray(routeParams.membresiaId) ? routeParams.membresiaId[0] : routeParams.membresiaId
   const { isAuthenticated } = useAuth()
   const { data: membresiasData, isLoading: loadingMembresias } =
     useMembresias(isAuthenticated)
   const { data: historialData } = useHistorial(1, isAuthenticated)
+  const { data: pagoData } = useQuery({
+    queryKey: ['cliente', 'membresia-pago', membresiaId],
+    queryFn: () => api.getMembresiaPago(membresiaId),
+    enabled: isAuthenticated && !!membresiaId,
+  })
 
   const membresia = useMemo(() => {
     const memberships = membresiasData?.membresias ?? []
@@ -218,6 +227,11 @@ function MembresiaDetailScreenContent() {
   const estadoLabel = ESTADO_LABEL[membresia.estado] ?? membresia.estado
   const isActive = membresia.estado === 'ACTIVA' && (!membresia.fechaVencimiento || new Date(membresia.fechaVencimiento) > new Date())
   const showQr = isActive && !!membresia.qrToken
+  const pagoDetalle = pagoData?.membresia
+  const pagoPendiente = pagoData?.pago
+  const planCambio = pagoDetalle?.planSolicitado
+  const permiteAdjuntar = (membresia.estado === 'PENDIENTE' || membresia.estado === 'RECHAZADA' || !!planCambio) &&
+    (!pagoDetalle?.tieneComprobante || membresia.estado === 'RECHAZADA' || (!!planCambio && !!pagoDetalle?.rechazadoReason))
 
   const handleShare = async () => {
     try {
@@ -318,8 +332,8 @@ function MembresiaDetailScreenContent() {
                     className="flex-1 flex-row items-center justify-center gap-2 h-11 rounded-xl bg-primary active:opacity-90"
                     style={hasCompanyColor ? { backgroundColor: companyAccent } : undefined}
                   >
-                    <Share2 size={16} color="#ffffff" />
-                    <Text className="text-sm font-inter-semibold text-background">Compartir</Text>
+                    <Share2 size={16} color={hasCompanyColor ? brandDisplayForeground(companyAccent, '#0284c7') : '#ffffff'} />
+                    <Text className="text-sm font-inter-semibold" style={hasCompanyColor ? { color: brandDisplayForeground(companyAccent, '#0284c7') } : { color: '#ffffff' }}>Compartir</Text>
                   </Pressable>
                   <Pressable
                     onPress={handleDownload}
@@ -354,6 +368,57 @@ function MembresiaDetailScreenContent() {
               </View>
             )}
           </View>
+
+          {pagoPendiente && pagoDetalle && (
+            <View className="mb-6 rounded-2xl border border-border bg-card p-5">
+              <View className="flex-row items-center gap-2">
+                <View className="h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${companyAccent}18` }}>
+                  <ArrowRightLeft size={16} color={companyAccent} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-base font-inter-bold text-foreground">
+                    {planCambio ? `Cambio a ${planCambio.nombre}` : 'Completa el pago de tu membresía'}
+                  </Text>
+                  <Text className="mt-0.5 text-caption text-muted-foreground">
+                    {pagoDetalle.estado === 'PENDIENTE_PAGO' || pagoDetalle.tieneComprobante
+                      ? 'El negocio revisará tu comprobante.'
+                      : 'Envía el comprobante para que el negocio active tu plan.'}
+                  </Text>
+                </View>
+              </View>
+              <View className="mt-4 rounded-xl p-4" style={{ backgroundColor: `${companyAccent}0D` }}>
+                <Text className="text-caption font-inter-semibold text-muted-foreground">TOTAL A PAGAR</Text>
+                <Text className="mt-1 text-h2 font-inter-extrabold" style={{ color: companyAccent }}>
+                  RD${pagoPendiente.importeAPagar.toLocaleString('es-DO')}
+                </Text>
+                {pagoPendiente.descuentoBienvenida > 0 && (
+                  <Text className="mt-1 text-caption text-muted-foreground">
+                    Incluye RD${pagoPendiente.descuentoBienvenida.toLocaleString('es-DO')} de descuento de bienvenida.
+                  </Text>
+                )}
+              </View>
+              {pagoDetalle.rechazadoReason && (membresia.estado === 'RECHAZADA' || !!planCambio) && (
+                <Text className="mt-3 text-small text-destructive">Motivo del rechazo: {pagoDetalle.rechazadoReason}</Text>
+              )}
+              {permiteAdjuntar && pagoPendiente.transferenciaActiva && pagoPendiente.cuentas.length > 0 ? (
+                <View className="mt-4">
+                  <ComprobanteMembresiaForm
+                    membershipId={membresia.id}
+                    cuentas={pagoPendiente.cuentas}
+                    color={companyAccent}
+                  />
+                </View>
+              ) : pagoDetalle.tieneComprobante && membresia.estado !== 'RECHAZADA' ? (
+                <Text className="mt-4 rounded-xl bg-success/10 p-3 text-small font-inter-semibold text-success">
+                  Comprobante enviado. El equipo del negocio lo revisará pronto.
+                </Text>
+              ) : permiteAdjuntar ? (
+                <Text className="mt-4 rounded-xl bg-warning/10 p-3 text-small text-foreground">
+                  Este negocio no tiene una cuenta de transferencia disponible. Contacta al negocio para completar el pago.
+                </Text>
+              ) : null}
+            </View>
+          )}
 
           {/* Visits Section */}
           <View className="mb-6">
@@ -445,6 +510,18 @@ function MembresiaDetailScreenContent() {
         style={{ paddingBottom: isDetailSheet ? 12 : insets.bottom + 12 }}
       >
         <DetailPageFrame>
+          {isActive && (
+            <Button
+              className="mb-2 w-full"
+              style={{ backgroundColor: companyAccent }}
+              onPress={() => router.replace(`/planes?membershipId=${encodeURIComponent(membresia.id)}`)}
+              icon={<ArrowRightLeft size={16} color={brandDisplayForeground(companyAccent, '#0284c7')} />}
+            >
+              <Text className="text-sm font-inter-semibold" style={{ color: brandDisplayForeground(companyAccent, '#0284c7') }}>
+                Cambiar plan
+              </Text>
+            </Button>
+          )}
           <Pressable
             onPress={handleCancel}
             className="items-center py-3"

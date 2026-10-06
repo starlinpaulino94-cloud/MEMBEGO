@@ -34,7 +34,7 @@ export async function GET(
           where: { id },
           include: {
             promocion: true,
-            company: { select: { name: true, zonaHoraria: true } },
+            company: { select: { name: true, zonaHoraria: true, colorPrimario: true } },
             metodoPago: true,
             transiciones: { orderBy: { createdAt: 'asc' } },
             qrTokens: { where: { activo: true }, orderBy: { createdAt: 'desc' }, take: 1 },

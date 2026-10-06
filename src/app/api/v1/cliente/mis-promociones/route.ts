@@ -48,7 +48,7 @@ export async function GET(request: Request) {
               usosIncluidos: true,
               createdAt: true,
               promocion: { select: { titulo: true, imagenUrl: true, tipo: true } },
-              company: { select: { name: true } },
+              company: { select: { name: true, colorPrimario: true } },
             },
             orderBy: { createdAt: 'desc' },
             take: 100,

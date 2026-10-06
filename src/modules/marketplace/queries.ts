@@ -376,7 +376,7 @@ export async function getClientePromociones(
             isFeatured: true,
             createdAt: true,
             company: {
-              select: { id: true, name: true, slug: true, logoUrl: true },
+              select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true },
             },
           },
           orderBy: [{ isFeatured: 'desc' }, { publicadaEn: 'desc' }],
@@ -899,6 +899,7 @@ export interface PlanPublic {
   vigenciaDias: number
   /** Imagen que subió el negocio. Null = quien pinte decide su respaldo. */
   imagenUrl: string | null
+  color?: string | null
 }
 
 /** Un plan con el negocio que lo ofrece, para el catálogo global. */
@@ -972,7 +973,7 @@ export async function getPlanesPublic(
         select: {
           id: true, nombre: true, precio: true, esIlimitado: true,
           lavadosIncluidos: true, descripcion: true, beneficios: true, vigenciaDias: true,
-          imagenUrl: true,
+          imagenUrl: true, color: true,
           company: {
             select: {
               id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, ciudad: true,
@@ -992,6 +993,7 @@ export async function getPlanesPublic(
       beneficios: p.beneficios,
       vigenciaDias: p.vigenciaDias,
       imagenUrl: p.imagenUrl,
+      color: p.color,
       // Number() en el borde: Decimal serializado tras unstable_cache es string.
       company: { ...p.company, averageRating: p.company.averageRating != null ? Number(p.company.averageRating) : null },
     }))

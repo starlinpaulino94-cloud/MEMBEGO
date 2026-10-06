@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath, revalidateTag } from 'next/cache'
+import { revalidatePath, revalidateTag, updateTag } from 'next/cache'
 import { conEmpresa } from '@/lib/tenant'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -9,6 +9,7 @@ import {
   coordenadasDeEnlaceGoogleMaps,
   esEnlaceCortoGoogleMaps,
 } from '@/modules/geo/enlace-google-maps'
+import { normalizeCompanyBrandColor, withCompanyBrandColor } from '@/lib/company-branding'
 
 // F4.1: la empresa administra su propio perfil público del marketplace.
 // Solo puede tocar campos de presentación — nunca isActive/isPublished/
@@ -41,6 +42,12 @@ export async function actualizarPerfilPublico(
   const companyId = await resolveCompanyId(user, formData)
   if (!companyId) {
     return { error: 'Empresa requerida.' }
+  }
+
+  const rawColorPrimario = String(formData.get('colorPrimario') ?? '').trim()
+  const colorPrimario = normalizeCompanyBrandColor(rawColorPrimario)
+  if (rawColorPrimario && !colorPrimario) {
+    return { error: 'El color de marca debe usar formato #RGB o #RRGGBB.' }
   }
 
   const galleryImages = formData
@@ -86,6 +93,12 @@ export async function actualizarPerfilPublico(
 
   try {
     await conEmpresa(companyId, async (tx) => {
+      const current = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { engagementConfig: true },
+      })
+      const engagementConfig = withCompanyBrandColor(current?.engagementConfig, colorPrimario)
+
       await tx.company.update({
         where: { id: companyId },
         data: {
@@ -108,7 +121,8 @@ export async function actualizarPerfilPublico(
           moneda: val(formData, 'moneda') ?? undefined,
           idioma: val(formData, 'idioma') ?? undefined,
           zonaHoraria: val(formData, 'zonaHoraria') ?? undefined,
-          colorPrimario: val(formData, 'colorPrimario'),
+          colorPrimario,
+          engagementConfig: engagementConfig as never,
           politicaCancelacion: val(formData, 'politicaCancelacion'),
           politicaPrivacidad: val(formData, 'politicaPrivacidad'),
           terminosEmpresa: val(formData, 'terminosEmpresa'),
@@ -138,7 +152,7 @@ export async function actualizarPerfilPublico(
     revalidatePath('/admin/perfil')
     revalidatePath('/empresas', 'layout')
     revalidatePath('/')
-    revalidateTag('marketplace', 'max')
+    updateTag('marketplace')
     return { success: true }
   } catch (e) {
     console.error('[perfil-empresa]', e)

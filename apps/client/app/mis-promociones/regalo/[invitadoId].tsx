@@ -28,6 +28,8 @@ import { Card } from '../../../src/components/ui/Card'
 import { Badge } from '../../../src/components/ui/Badge'
 import { EmptyState } from '../../../src/components/ui/EmptyState'
 import { Skeleton } from '../../../src/components/ui/Skeleton'
+import { brandColor } from '../../../src/lib/brand-color'
+import { colors } from '../../../src/theme/tokens'
 
 /**
  * Detalle de un regalo VIP recibido.
@@ -134,20 +136,20 @@ function RegaloContent({
   reclamar: ReturnType<typeof useReclamarRegaloInvitado>
   invitadoId: string
 }) {
-  const router = useRouter()
+  const companyColor = brandColor(data.empresaColorPrimario, colors.primary.DEFAULT)
 
   // Si no está reclamada, ofrecer reclamar
   if (!data.reclamadaAt && data.vigente) {
     return (
       <View className="items-center gap-5 py-6">
-        <View className="h-20 w-20 items-center justify-center rounded-2xl bg-primary/10">
-          <Gift size={40} color="#0284c7" />
+        <View className="h-20 w-20 items-center justify-center rounded-2xl" style={{ backgroundColor: `${companyColor}1A` }}>
+          <Gift size={40} color={companyColor} />
         </View>
         <View className="items-center gap-2">
           <Text className="text-h2 font-inter-bold text-foreground text-center">
             {data.titulo}
           </Text>
-          <Text className="text-sm text-muted-foreground text-center">
+          <Text className="text-sm text-center" style={{ color: companyColor }}>
             Regalo de {data.empresa}
           </Text>
         </View>
@@ -172,11 +174,11 @@ function RegaloContent({
   return (
     <View className="gap-5">
       {/* ── Header del regalo ──────────────────────────────────────────── */}
-      <Card className="border-primary/20 overflow-hidden">
-        <View className="bg-primary/5 p-5 gap-2">
+      <Card className="overflow-hidden" style={{ borderColor: `${companyColor}55` }}>
+        <View className="p-5 gap-2" style={{ backgroundColor: `${companyColor}0D` }}>
           <View className="flex-row items-center gap-1.5">
-            <Gift size={14} color="#0284c7" />
-            <Text className="text-xs font-inter-semibold uppercase tracking-wide text-primary">
+            <Gift size={14} color={companyColor} />
+            <Text className="text-xs font-inter-semibold uppercase tracking-wide" style={{ color: companyColor }}>
               Regalo de {data.empresa}
             </Text>
           </View>

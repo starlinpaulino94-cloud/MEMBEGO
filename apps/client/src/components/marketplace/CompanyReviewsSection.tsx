@@ -8,6 +8,7 @@ import type { CompanyOwnReview, CompanyReviewsPublic } from '../../lib/api'
 interface CompanyReviewsSectionProps {
   readonly companySlug: string
   readonly companyName: string
+  readonly companyColor: string
   readonly reviews: CompanyReviewsPublic
   readonly canReview: boolean
   readonly ownReview: CompanyOwnReview | null
@@ -25,6 +26,7 @@ function fechaResena(fecha: string): string {
 export function CompanyReviewsSection({
   companySlug,
   companyName,
+  companyColor,
   reviews,
   canReview,
   ownReview,
@@ -58,8 +60,8 @@ export function CompanyReviewsSection({
             {reviews.items.map((review) => (
               <View key={review.id} className="rounded-xl border border-border bg-card p-4">
                 <View className="flex-row items-center gap-3">
-                  <View className="h-9 w-9 items-center justify-center rounded-full bg-primary/10">
-                    <Text className="text-xs font-inter-bold text-primary">
+                  <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: `${companyColor}1A` }}>
+                    <Text className="text-xs font-inter-bold" style={{ color: companyColor }}>
                       {review.clienteNombre.trim().slice(0, 2).toUpperCase()}
                     </Text>
                   </View>
@@ -81,7 +83,7 @@ export function CompanyReviewsSection({
           </View>
         </>
       ) : null}
-      {canReview ? <CompanyReviewForm companySlug={companySlug} companyName={companyName} review={ownReview} /> : null}
+      {canReview ? <CompanyReviewForm companySlug={companySlug} companyName={companyName} companyColor={companyColor} review={ownReview} /> : null}
     </View>
   )
 }

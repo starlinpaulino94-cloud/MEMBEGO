@@ -7,7 +7,7 @@ import { isFlashOffer } from './FlashOfferStatus'
 import { SavePromoButton } from '../cliente/SavePromoButton'
 import { formatMoney } from '../../lib/format'
 import { colors } from '../../theme/tokens'
-import { brandColor, brandForeground } from '../../lib/brand-color'
+import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
 import type { PromotionPublic } from '../../lib/api'
 
 export function BenefitCard({ promotion, saved }: {
@@ -32,7 +32,7 @@ export function BenefitCard({ promotion, saved }: {
     <View className="relative flex-1">
       <MarketplaceCard
         className="w-full flex-1"
-        style={{ borderColor: `${companyColor}40` }}
+        style={{ borderColor: `${companyColor}66`, borderTopWidth: 3, borderTopColor: companyColor }}
         onPress={() => router.push({ pathname: '/promociones/[id]', params: { id: promotion.id } })}
         accessibilityLabel={`Ver ${promotion.titulo}, ${promotion.company.name}`}
         footer={
@@ -52,7 +52,7 @@ export function BenefitCard({ promotion, saved }: {
           )}
           {discountLabel && !expired ? (
             <View className="absolute left-2 top-2 rounded-full px-2 py-1" style={{ backgroundColor: companyColor }}>
-              <Text className="text-label-sm font-inter-bold" style={{ color: brandForeground(companyColor, colors.primary.DEFAULT) }}>{discountLabel}</Text>
+              <Text className="text-label-sm font-inter-bold" style={{ color: brandDisplayForeground(companyColor, colors.primary.DEFAULT) }}>{discountLabel}</Text>
             </View>
           ) : null}
           {status ? (

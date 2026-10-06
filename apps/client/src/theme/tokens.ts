@@ -31,6 +31,20 @@ export const colors = {
     star: '#f59e0b',
     lagoon: '#00687a',
   },
+  membership: {
+    active: '#0073ff',
+    pendingStart: '#475569',
+    pendingEnd: '#334155',
+    expiredStart: '#64748b',
+    expiredEnd: '#475569',
+    expiredStatus: '#ba1a1a',
+    expiredStatusBorder: 'rgba(186, 26, 26, 0.3)',
+    expiredStatusSurface: 'rgba(186, 26, 26, 0.25)',
+    sheenShadow: 'rgba(0, 0, 0, 0.5)',
+    sheenHighlight: 'rgba(255, 255, 255, 0.5)',
+    iconMuted: 'rgba(255, 255, 255, 0.72)',
+    iconSubtle: 'rgba(255, 255, 255, 0.5)',
+  },
   vibe: {
     violet: '#7c3aed',
     deep: '#5b21b6',
@@ -98,6 +112,69 @@ export const colors = {
       ['#ec4899', '#f43f5e'],
     ] as const,
   },
+} as const;
+
+export const walletCard = {
+  grid: {
+    maxWidth: 1200,
+    maxCardWidth: 420,
+    twoColumnBreakpoint: 704,
+    threeColumnBreakpoint: 992,
+    gap: 16,
+  },
+  geometry: {
+    width: 300,
+    aspectRatio: 1.5,
+    radius: 19,
+    inset: 26,
+    contentPaddingY: 20,
+    logoSize: 27,
+    progressHeight: 5,
+    controlSize: 28,
+  },
+  typography: {
+    company: { fontSize: 12, lineHeight: 15 },
+    meta: { fontSize: 8, lineHeight: 10 },
+    mark: { fontSize: 9, lineHeight: 12 },
+    overline: { fontSize: 8, lineHeight: 10, letterSpacing: 2 },
+    plan: { fontSize: 20, lineHeight: 24, letterSpacing: 1.4 },
+    planLong: { fontSize: 16, lineHeight: 20, letterSpacing: 0.8 },
+    usage: { fontSize: 9, lineHeight: 12 },
+    expiry: { fontSize: 8, lineHeight: 11 },
+    state: { fontSize: 14, lineHeight: 18 },
+    caption: { fontSize: 10, lineHeight: 12 },
+  },
+  gradient: {
+    pending: [colors.membership.pendingStart, colors.membership.pendingEnd],
+    expired: [colors.membership.expiredStart, colors.membership.expiredEnd],
+    sheen: [
+      colors.membership.sheenShadow,
+      colors.membership.sheenHighlight,
+      colors.membership.sheenShadow,
+    ],
+    sheenLocations: [0.19153, 0.62308, 1],
+    start: { x: 0, y: 0 },
+    end: { x: 1, y: 1 },
+  },
+  iconColor: {
+    muted: colors.membership.iconMuted,
+    subtle: colors.membership.iconSubtle,
+  },
+  iconSize: {
+    shield: 11,
+    qr: 20,
+    clock: 9,
+    flip: 15,
+    details: 14,
+  },
+  qr: {
+    foreground: colors.surface.foreground,
+    size: 108,
+  },
+  blurIntensity: 44,
+  iconStrokeWidth: 1.7,
+  perspective: 1400,
+  flipDuration: 350,
 } as const;
 
 export const radii = {

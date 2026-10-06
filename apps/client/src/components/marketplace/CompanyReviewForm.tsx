@@ -1,19 +1,22 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { Pressable, Text, TextInput, View } from 'react-native'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Star } from 'lucide-react-native'
 import { api, type CompanyOwnReview } from '../../lib/api'
 import { Button } from '../ui/Button'
+import { brandDisplayForeground } from '../../lib/brand-color'
+import { colors } from '../../theme/tokens'
 
 interface CompanyReviewFormProps {
   readonly companySlug: string
   readonly companyName: string
+  readonly companyColor: string
   readonly review: CompanyOwnReview | null
 }
 
 const STARS = [1, 2, 3, 4, 5] as const
 
-export function CompanyReviewForm({ companySlug, companyName, review }: CompanyReviewFormProps) {
+function CompanyReviewFormFields({ companySlug, companyName, companyColor, review }: CompanyReviewFormProps) {
   const queryClient = useQueryClient()
   const [rating, setRating] = useState(review?.rating ?? 0)
   const [comment, setComment] = useState(review?.comment ?? '')
@@ -25,11 +28,6 @@ export function CompanyReviewForm({ companySlug, companyName, review }: CompanyR
       await queryClient.invalidateQueries({ queryKey: ['cliente', 'empresa', companySlug] })
     },
   })
-
-  useEffect(() => {
-    setRating(review?.rating ?? 0)
-    setComment(review?.comment ?? '')
-  }, [review?.rating, review?.comment])
 
   const errorMessage = mutation.error instanceof Error ? mutation.error.message : null
   const cambiarCalificacion = (value: number) => {
@@ -81,9 +79,18 @@ export function CompanyReviewForm({ companySlug, companyName, review }: CompanyR
         disabled={rating === 0 || mutation.isPending}
         loading={mutation.isPending}
         className="mt-3 w-full"
+        style={{ backgroundColor: companyColor }}
       >
-        {review ? 'Guardar cambios' : 'Publicar reseña'}
+        <Text className="text-sm font-inter-semibold" style={{ color: brandDisplayForeground(companyColor, colors.primary.DEFAULT) }}>
+          {review ? 'Guardar cambios' : 'Publicar reseña'}
+        </Text>
       </Button>
     </View>
   )
+}
+
+export function CompanyReviewForm(props: CompanyReviewFormProps) {
+  const reviewKey = props.review ? `${props.review.rating}-${props.review.comment ?? ''}-${props.companySlug}` : `new-${props.companySlug}`
+
+  return <CompanyReviewFormFields key={reviewKey} {...props} />
 }

@@ -46,7 +46,7 @@ import { formatMoney } from '../../src/lib/format'
 import { BackHeader } from '../../src/components/ui/BackHeader'
 import { colors } from '../../src/theme/tokens'
 import { CompanyProfileExtraSections } from '../../src/components/marketplace/CompanyProfileExtraSections'
-import { brandColor, brandForeground } from '../../src/lib/brand-color'
+import { brandColor, brandDisplayForeground } from '../../src/lib/brand-color'
 import { FlashOfferStatus, isFlashOffer } from '../../src/components/marketplace/FlashOfferStatus'
 
 /**
@@ -168,7 +168,7 @@ function EmpresaDetalleScreenContent() {
           style={{
             paddingLeft: insets.left + 16,
             paddingRight: 16,
-            paddingTop: 12,
+            paddingTop: insets.top + 12,
             paddingBottom: 12,
           }}
         >
@@ -202,7 +202,7 @@ function EmpresaDetalleScreenContent() {
           style={{
             paddingLeft: insets.left + 16,
             paddingRight: 16,
-            paddingTop: 12,
+            paddingTop: insets.top + 12,
             paddingBottom: 12,
           }}
         >
@@ -238,7 +238,7 @@ function EmpresaDetalleScreenContent() {
           style={{
             paddingLeft: insets.left + 16,
             paddingRight: 16,
-            paddingTop: 12,
+            paddingTop: insets.top + 12,
             paddingBottom: 12,
           }}
         >
@@ -261,6 +261,7 @@ function EmpresaDetalleScreenContent() {
   const { company, stats, planes, promotions, sucursales, esCliente } = data
   const tipo = TIPO_LABEL[company.type] ?? company.type
   const companyColor = brandColor(company.colorPrimario, colors.primary.DEFAULT)
+  const companyTextColor = companyColor
   const promos = promotions ?? []
   const ubicacion = [company.ciudad, company.provincia, company.pais]
     .filter((parte): parte is string => Boolean(parte))
@@ -277,7 +278,7 @@ function EmpresaDetalleScreenContent() {
       >
         <DetailPageFrame>
           {/* ── Banner ─────────────────────────────────────────────────── */}
-          <View className="relative w-full bg-muted" style={{ height: 200 }}>
+          <View className="relative w-full bg-muted" style={{ height: isSmallScreen ? 260 : 320 }}>
             {company.bannerUrl ? (
               <Image
                 source={{ uri: company.bannerUrl }}
@@ -285,8 +286,8 @@ function EmpresaDetalleScreenContent() {
                 resizeMode="cover"
               />
             ) : (
-              <View className="size-full items-center justify-center bg-primary/10" style={{ backgroundColor: `${companyColor}1A` }}>
-                <Text className="text-4xl font-inter-bold" style={{ color: companyColor }}>
+              <View className="size-full items-center justify-center" style={{ backgroundColor: `${companyColor}1A` }}>
+                <Text className="text-4xl font-inter-bold" style={{ color: companyTextColor }}>
                   {company.name.slice(0, 2).toUpperCase()}
                 </Text>
               </View>
@@ -297,10 +298,11 @@ function EmpresaDetalleScreenContent() {
           <View
             className={cn(
               'pl-4 pt-3 bg-white',
-              isSmallScreen ? 'w-full pr-4' : 'max-w-full self-start pr-16',
+              isSmallScreen ? 'w-full pr-4' : 'self-start',
             )}
             style={{
               width: isSmallScreen ? '100%' : undefined,
+              minWidth: isSmallScreen ? undefined : 300,
               marginTop: -28,
               borderTopRightRadius: isSmallScreen ? 0 : 40,
             }}
@@ -318,7 +320,7 @@ function EmpresaDetalleScreenContent() {
                 </View>
               ) : (
                 <View className="h-16 w-16 shrink-0 items-center justify-center rounded-xl border-2 border-card bg-primary/10" style={{ backgroundColor: `${companyColor}1A` }}>
-                  <Text className="text-lg font-inter-bold" style={{ color: companyColor }}>
+                  <Text className="text-lg font-inter-bold" style={{ color: companyTextColor }}>
                     {company.name.slice(0, 2).toUpperCase()}
                   </Text>
                 </View>
@@ -331,7 +333,15 @@ function EmpresaDetalleScreenContent() {
                   {company.name}
                 </Text>
                 <View className="mt-0.5 flex-row items-center gap-1.5">
-                  <Badge variant="secondary">{tipo}</Badge>
+                  <Badge variant="secondary"
+                    style={{
+                      backgroundColor: `${companyColor}1A`,
+                      borderColor: companyColor
+                    }}
+                    textStyle={{ color: companyColor }}
+                  >
+                    {tipo}
+                  </Badge>
                   {company.isFeatured ? (
                     <View className="flex-row items-center gap-0.5">
                       <Star size={12} color="#eab308" fill="#eab308" />
@@ -364,8 +374,8 @@ function EmpresaDetalleScreenContent() {
               ) : null}
               {sigoLocal ? (
                 <View className="flex-row items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1" style={{ backgroundColor: `${companyColor}1A` }}>
-                  <Check size={14} color={companyColor} />
-                  <Text className="text-xs font-inter-medium" style={{ color: companyColor }}>
+                  <Check size={14} color={companyTextColor} />
+                  <Text className="text-xs font-inter-medium" style={{ color: companyTextColor }}>
                     Sigues este negocio
                   </Text>
                 </View>
@@ -377,13 +387,13 @@ function EmpresaDetalleScreenContent() {
             <View className="mt-3 gap-1 px-4">
               {ubicacion ? (
                 <View className="flex-row items-start gap-1.5">
-                  <MapPin size={15} color="#6b7280" />
+                  <MapPin size={15} color={companyColor} />
                   <Text className="flex-1 text-sm text-muted-foreground">{ubicacion}</Text>
                 </View>
               ) : null}
               {horario ? (
                 <View className="flex-row items-start gap-1.5">
-                  <Clock size={15} color="#6b7280" />
+                  <Clock size={15} color={companyColor} />
                   <Text className="flex-1 text-sm text-muted-foreground">{horario}</Text>
                 </View>
               ) : null}
@@ -404,7 +414,7 @@ function EmpresaDetalleScreenContent() {
             <View className="mt-4 flex-row items-center gap-4 px-4">
               {stats.totalMembers > 0 ? (
                 <View className="flex-row items-center gap-1.5">
-                  <Users size={16} color={companyColor} />
+                  <Users size={16} color={companyTextColor} />
                   <Text className="text-sm font-inter-semibold text-foreground tabular-nums">
                     {stats.totalMembers}
                   </Text>
@@ -413,7 +423,7 @@ function EmpresaDetalleScreenContent() {
               ) : null}
               {stats.activePromotions > 0 ? (
                 <View className="flex-row items-center gap-1.5">
-                  <Gift size={16} color={companyColor} />
+                  <Gift size={16} color={companyTextColor} />
                   <Text className="text-sm font-inter-semibold text-foreground tabular-nums">
                     {stats.activePromotions}
                   </Text>
@@ -449,12 +459,13 @@ function EmpresaDetalleScreenContent() {
                     <View className="gap-2">
                       <View className="flex-row items-start justify-between gap-2">
                         <Text
-                          className="flex-1 text-base font-inter-bold text-foreground"
+                          className="flex-1 text-base font-inter-bold"
+                          style={{ color: companyTextColor }}
                         >
                           {plan.nombre}
                         </Text>
                         <View className="flex-row items-baseline gap-0.5">
-                          <Text className="text-lg font-inter-bold tabular-nums" style={{ color: companyColor }}>
+                          <Text className="text-lg font-inter-bold tabular-nums" style={{ color: companyTextColor }}>
                             {formatMoney(plan.precio)}
                           </Text>
                           <Text className="text-xs text-muted-foreground">
@@ -469,8 +480,8 @@ function EmpresaDetalleScreenContent() {
                           {plan.descripcion}
                         </Text>
                       ) : null}
-                      <View className="rounded-lg bg-muted p-3">
-                        <Text className="text-sm font-inter-semibold text-foreground">
+                      <View className="rounded-lg p-3" style={{ backgroundColor: `${companyColor}1A` }}>
+                        <Text className="text-sm font-inter-semibold" style={{ color: companyTextColor }}>
                           {plan.esIlimitado ? 'Usos ilimitados' : `${plan.lavadosIncluidos ?? 0} usos incluidos`}
                         </Text>
                         <Text className="mt-0.5 text-xs text-muted-foreground">Vigencia: {plan.vigenciaDias} días</Text>
@@ -491,19 +502,32 @@ function EmpresaDetalleScreenContent() {
                         </View>
                       ) : null}
                       <Link href={{ pathname: '/planes/[planId]', params: { planId: plan.id } }} asChild>
-                        <Pressable className={cn(
-                          'mt-2 flex-row items-center justify-center gap-2 rounded-full border px-4 py-2.5',
-                          planes.length > 1 && index === Math.floor(planes.length / 2)
-                            ? 'border-primary bg-primary'
-                            : 'border-border bg-card',
-                        )} accessibilityRole="link">
-                          <Text className={cn(
-                            'text-sm font-inter-semibold',
-                            planes.length > 1 && index === Math.floor(planes.length / 2)
-                              ? 'text-white'
-                              : 'text-primary',
-                          )}>Ver y compartir plan</Text>
-                          <ArrowRight size={16} color={planes.length > 1 && index === Math.floor(planes.length / 2) ? brandForeground(companyColor, colors.primary.DEFAULT) : companyColor} />
+                        <Pressable
+                          className="mt-2 flex-row items-center justify-center gap-2 rounded-full border px-4 py-2.5"
+                          style={{
+                            borderColor: companyColor,
+                            backgroundColor: planes.length > 1 && index === Math.floor(planes.length / 2)
+                              ? companyColor
+                              : colors.surface.card,
+                          }}
+                          accessibilityRole="link"
+                        >
+                          <Text
+                            className="text-sm font-inter-semibold"
+                            style={{
+                              color: planes.length > 1 && index === Math.floor(planes.length / 2)
+                                ? brandDisplayForeground(companyColor, colors.primary.DEFAULT)
+                                : companyTextColor,
+                            }}
+                          >
+                            Ver y compartir plan
+                          </Text>
+                          <ArrowRight
+                            size={16}
+                            color={planes.length > 1 && index === Math.floor(planes.length / 2)
+                              ? brandDisplayForeground(companyColor, colors.primary.DEFAULT)
+                              : companyTextColor}
+                          />
                         </Pressable>
                       </Link>
                     </View>
@@ -520,7 +544,7 @@ function EmpresaDetalleScreenContent() {
                 title="Promociones vigentes"
                 action={
                   promos.length > 3 ? (
-                    <Text className="text-sm font-inter-semibold text-primary">
+                    <Text className="text-sm font-inter-semibold" style={{ color: companyTextColor }}>
                       Ver todas ({promos.length})
                     </Text>
                   ) : undefined
@@ -549,7 +573,7 @@ function EmpresaDetalleScreenContent() {
                           </View>
                         ) : (
                           <View className="h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-primary/10" style={{ backgroundColor: `${companyColor}1A` }}>
-                            <Gift size={24} color={companyColor} />
+                            <Gift size={24} color={companyTextColor} />
                           </View>
                         )}
                         <View className="flex-1 min-w-0 gap-1">
@@ -560,7 +584,7 @@ function EmpresaDetalleScreenContent() {
                             {promo.titulo}
                           </Text>
                           {isFlashOffer(promo) && promo.vigenciaHasta ? (
-                            <FlashOfferStatus hasta={promo.vigenciaHasta} color={companyColor} compact />
+                            <FlashOfferStatus hasta={promo.vigenciaHasta} color={companyTextColor} compact />
                           ) : null}
                           {promo.descripcion ? (
                             <Text
@@ -571,12 +595,12 @@ function EmpresaDetalleScreenContent() {
                             </Text>
                           ) : null}
                           {(promo.venta?.precio ?? promo.precio) != null ? (
-                            <Text className="text-sm font-inter-bold tabular-nums" style={{ color: companyColor }}>
+                            <Text className="text-sm font-inter-bold tabular-nums" style={{ color: companyTextColor }}>
                               {formatMoney(promo.venta?.precio ?? promo.precio ?? 0)}
                             </Text>
                           ) : null}
                           {promo.descuento ? (
-                            <Text className="text-xs font-inter-semibold" style={{ color: companyColor }}>
+                            <Text className="text-xs font-inter-semibold" style={{ color: companyTextColor }}>
                               Descuento: {promo.tipo === 'monto_fijo' ? formatMoney(Number(promo.descuento)) : `-${Math.round(Number(promo.descuento))}%`}
                             </Text>
                           ) : null}
@@ -607,7 +631,7 @@ function EmpresaDetalleScreenContent() {
                 {sucursales.map((s) => (
                   <Card key={s.id}>
                     <View className="flex-row items-start gap-2">
-                      <MapPin size={16} color={companyColor} />
+                      <MapPin size={16} color={companyTextColor} />
                       <View className="flex-1 min-w-0">
                         <Text
                           className="text-sm font-inter-semibold text-foreground"
@@ -640,6 +664,7 @@ function EmpresaDetalleScreenContent() {
 
           <CompanyProfileExtraSections
             company={company}
+            companyColor={companyColor}
             posts={data.posts}
             resenas={data.resenas}
             puedeOpinar={data.puedeOpinar}
@@ -668,7 +693,7 @@ function EmpresaDetalleScreenContent() {
       >
         <DetailPageFrame
           className="flex-row items-center justify-between px-4"
-          style={{ paddingLeft: insets.left + 16, paddingRight: 16, paddingTop: 12, paddingBottom: 12 }}
+          style={{ paddingLeft: insets.left + 16, paddingRight: 16, paddingTop: insets.top, paddingBottom: 12 }}
         >
           <BackHeader
             className="flex-1"
@@ -676,42 +701,45 @@ function EmpresaDetalleScreenContent() {
               <View className="flex-row justify-end items-center gap-2">
                 <Pressable
                   onPress={toggleFavorita}
-                  className={cn(
-                    'size-9 items-center justify-center rounded-full border transition-colors',
-                    esFavoritaLocal
-                      ? 'border-red-500 bg-red-500/15'
-                      : 'border-border bg-card'
-                  )}
+                  className="size-9 items-center justify-center rounded-full border transition-colors"
+                  style={{
+                    borderColor: companyColor,
+                    backgroundColor: esFavoritaLocal ? companyColor : `${companyColor}14`,
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={esFavoritaLocal ? 'Quitar de favoritos' : 'Marcar como favorito'}
                 >
                   <Heart
                     size={18}
-                    color={esFavoritaLocal ? '#ef4444' : '#9ca3af'}
-                    fill={esFavoritaLocal ? '#ef4444' : 'transparent'}
+                    color={esFavoritaLocal ? brandDisplayForeground(companyColor, colors.primary.DEFAULT) : companyColor}
+                    fill={esFavoritaLocal
+                      ? brandDisplayForeground(companyColor, colors.primary.DEFAULT)
+                      : 'transparent'}
                   />
                 </Pressable>
 
                 <Pressable
                   onPress={toggleSeguir}
-                  className={cn(
-                    'flex-row items-center gap-1.5 rounded-full border px-3 py-1.5',
-                    sigoLocal
-                      ? 'border-success bg-success/15'
-                      : 'border-border bg-card',
-                  )}
+                  className="flex-row items-center gap-1.5 rounded-full border px-3 py-1.5"
+                  style={{
+                    borderColor: companyColor,
+                    backgroundColor: sigoLocal ? companyColor : `${companyColor}14`,
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={sigoLocal ? 'Dejar de seguir' : 'Seguir'}
                 >
                   {sigoLocal ? (
                     <>
-                      <Check size={16} color={colors.state.success} />
-                      <Text className="text-sm font-inter-semibold text-success">
+                      <Check size={16} color={brandDisplayForeground(companyColor, colors.primary.DEFAULT)} />
+                      <Text
+                        className="text-sm font-inter-semibold"
+                        style={{ color: brandDisplayForeground(companyColor, colors.primary.DEFAULT) }}
+                      >
                         Siguiendo
                       </Text>
                     </>
                   ) : (
-                    <Text className="text-sm font-inter-semibold text-muted-foreground">
+                    <Text className="text-sm font-inter-semibold text-foreground">
                       Seguir
                     </Text>
                   )}

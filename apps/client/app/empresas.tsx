@@ -9,7 +9,7 @@ import {
   Keyboard,
 } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Search, Store } from 'lucide-react-native'
+import { Search, Store, X } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { useExplorar } from '../src/hooks/useExplorar'
 import { ExplorarEmpresasList } from '../src/components/cliente/ExplorarEmpresasList'
@@ -18,6 +18,7 @@ import { Skeleton } from '../src/components/ui/Skeleton'
 import { Button } from '../src/components/ui/Button'
 import { cn } from '../src/lib/cn'
 import type { BusinessCardData } from '../src/components/marketplace/BusinessCard'
+import { colors } from '../src/theme/tokens'
 
 /**
  * L4-27 · "Mis empresas" — listado de empresas donde el cliente es miembro
@@ -72,6 +73,12 @@ export default function MisEmpresasScreen() {
     setSearchQuery('')
   }
 
+  function handleClearFilters() {
+    setSearchInput('')
+    setSearchQuery('')
+    setSelectedCategory('')
+  }
+
   function handleCategoryToggle(slug: string) {
     setSelectedCategory((prev) => (prev === slug ? '' : slug))
   }
@@ -80,103 +87,123 @@ export default function MisEmpresasScreen() {
     <View className="flex-1 bg-background">
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={{ padding: 16, alignItems: 'center' }}
         keyboardShouldPersistTaps="handled"
       >
+        <View className="w-full self-center" style={{ maxWidth: 1120 }}>
         {/* ── Page header ────────────────────────────────────────────── */}
-        <View className="mb-4">
-          <Text className="text-2xl font-inter-bold text-foreground">
-            Mis empresas
-          </Text>
-          <Text className="mt-1 text-sm text-muted-foreground">
-            Donde eres cliente y las que sigues. Sus promociones y novedades te
-            llegan solas.
+        <View className="mb-5 overflow-hidden rounded-2xl border border-vibe-borde bg-card p-4">
+          <View className="flex-row items-center gap-3">
+            <View className="size-12 items-center justify-center rounded-2xl bg-primary/10">
+              <Store size={22} color={colors.primary.DEFAULT} />
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-xs font-inter-semibold uppercase tracking-wider text-primary">
+                Tu espacio
+              </Text>
+              <Text className="mt-0.5 text-2xl font-inter-bold text-foreground">
+                Mis empresas
+              </Text>
+            </View>
+          </View>
+          <Text className="mt-3 text-sm leading-5 text-muted-foreground">
+            Encuentra tus membresías y sigue las novedades de tus negocios favoritos.
           </Text>
         </View>
 
         {/* ── Buscador ───────────────────────────────────────────────── */}
-        <View className="relative mb-4">
-          <View className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2">
-            <Search size={18} color="#9ca3af" />
-          </View>
+        <View className="mb-4 flex-row items-center gap-2 rounded-2xl border border-border bg-card p-1.5 pl-3">
+          <Search size={18} color={colors.surface.mutedForeground} />
           <TextInput
             value={searchInput}
             onChangeText={setSearchInput}
             onSubmitEditing={handleSearchSubmit}
             returnKeyType="search"
             placeholder="Buscar empresas…"
-            placeholderTextColor="#9ca3af"
-            className="h-11 rounded-xl border border-border bg-card pl-10 pr-10 text-base text-foreground"
+            placeholderTextColor={colors.surface.mutedForeground}
+            className="h-11 min-w-0 flex-1 text-base text-foreground"
             accessibilityLabel="Buscar empresas"
           />
           {searchInput.length > 0 ? (
             <Pressable
               onPress={handleClearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 active:bg-muted"
+              className="size-9 items-center justify-center rounded-xl active:bg-muted"
               accessibilityRole="button"
               accessibilityLabel="Limpiar búsqueda"
             >
-              <Text className="text-sm text-muted-foreground">✕</Text>
+              <X size={18} color={colors.surface.mutedForeground} />
             </Pressable>
           ) : null}
+          <Pressable
+            onPress={handleSearchSubmit}
+            className="h-10 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary px-3"
+            accessibilityRole="button"
+            accessibilityLabel="Buscar empresas"
+          >
+            <Search size={16} color="#ffffff" />
+            <Text className="text-sm font-inter-semibold text-white">Buscar</Text>
+          </Pressable>
         </View>
 
         {/* ── Chips de categoría ─────────────────────────────────────── */}
         {categorias.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
-            className="mb-4"
-          >
-            <Pressable
-              onPress={() => setSelectedCategory('')}
-              className={cn(
-                'rounded-full px-4 py-2.5',
-                !selectedCategory
-                  ? 'bg-retail-deep'
-                  : 'border border-border bg-card',
-              )}
-              accessibilityRole="button"
-              accessibilityState={{ selected: !selectedCategory }}
-            >
-              <Text
-                className={cn(
-                  'text-sm font-inter-semibold',
-                  !selectedCategory ? 'text-white' : 'text-muted-foreground',
-                )}
-              >
-                Todas
+          <View className="mb-4">
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-sm font-inter-semibold text-foreground">
+                Filtrar por categoría
               </Text>
-            </Pressable>
-
-            {categorias.map((cat) => {
-              const activa = cat.slug === selectedCategory
-              return (
+              {selectedCategory ? (
                 <Pressable
-                  key={cat.id}
-                  onPress={() => handleCategoryToggle(cat.slug)}
-                  className={cn(
-                    'rounded-full px-4 py-2.5',
-                    activa
-                      ? 'bg-retail-deep'
-                      : 'border border-border bg-card',
-                  )}
+                  onPress={() => setSelectedCategory('')}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: activa }}
+                  accessibilityLabel="Quitar filtro de categoría"
                 >
-                  <Text
-                    className={cn(
-                      'text-sm font-inter-semibold',
-                      activa ? 'text-white' : 'text-muted-foreground',
-                    )}
-                  >
-                    {cat.name}
-                  </Text>
+                  <Text className="text-xs font-inter-semibold text-primary">Limpiar</Text>
                 </Pressable>
-              )
-            })}
-          </ScrollView>
+              ) : null}
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
+            >
+              <Pressable
+                onPress={() => setSelectedCategory('')}
+                className={cn(
+                  'rounded-full border px-4 py-2.5',
+                  !selectedCategory ? 'border-primary' : 'border-border bg-card',
+                )}
+                style={!selectedCategory ? { backgroundColor: colors.primary.DEFAULT } : undefined}
+                accessibilityRole="button"
+                accessibilityState={{ selected: !selectedCategory }}
+              >
+                <Text className={cn('text-sm font-inter-semibold', !selectedCategory ? 'text-white' : 'text-muted-foreground')}>
+                  Todas
+                </Text>
+              </Pressable>
+
+              {categorias.map((cat) => {
+                const activa = cat.slug === selectedCategory
+                return (
+                  <Pressable
+                    key={cat.id}
+                    onPress={() => handleCategoryToggle(cat.slug)}
+                    className={cn(
+                      'rounded-full border px-4 py-2.5',
+                      activa ? 'border-primary' : 'border-border bg-card',
+                    )}
+                    style={activa ? { backgroundColor: colors.primary.DEFAULT } : undefined}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: activa }}
+                  >
+                    <Text className={cn('text-sm font-inter-semibold', activa ? 'text-white' : 'text-muted-foreground')}>
+                      {cat.name}
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </ScrollView>
+          </View>
         ) : null}
 
         {/* ── Loading skeletons ──────────────────────────────────────── */}
@@ -203,7 +230,7 @@ export default function MisEmpresasScreen() {
         ) : empresas.length === 0 ? (
           /* ── Empty state ────────────────────────────────────────────── */
           <EmptyState
-            icon={<Store size={32} color="#0284c7" />}
+            icon={<Store size={32} color={colors.primary.DEFAULT} />}
             title={
               filtrando
                 ? 'Sin resultados'
@@ -218,9 +245,7 @@ export default function MisEmpresasScreen() {
               filtrando ? (
                 <Button
                   onPress={() => {
-                    setSearchInput('')
-                    setSearchQuery('')
-                    setSelectedCategory('')
+                    handleClearFilters()
                   }}
                   variant="outline"
                 >
@@ -240,12 +265,23 @@ export default function MisEmpresasScreen() {
         ) : (
           <>
             {/* ── Contador de resultados ─────────────────────────────── */}
-            <Text className="mb-3 text-sm text-muted-foreground" role="status">
-              {empresas.length}{' '}
-              {empresas.length === 1 ? 'negocio' : 'negocios'}
-              {categoriaActiva ? ` en ${categoriaActiva.name}` : ''}
-              {searchQuery ? ` para «${searchQuery}»` : ''}
-            </Text>
+            <View className="mb-3 flex-row items-center justify-between gap-3">
+              <Text className="flex-1 text-sm text-muted-foreground" role="status">
+                {empresas.length} {empresas.length === 1 ? 'negocio' : 'negocios'}
+                {categoriaActiva ? ` en ${categoriaActiva.name}` : ''}
+                {searchQuery ? ` para «${searchQuery}»` : ''}
+              </Text>
+              {filtrando ? (
+                <Pressable
+                  onPress={handleClearFilters}
+                  className="rounded-lg px-2 py-1"
+                  accessibilityRole="button"
+                  accessibilityLabel="Limpiar filtros"
+                >
+                  <Text className="text-xs font-inter-semibold text-primary">Limpiar</Text>
+                </Pressable>
+              ) : null}
+            </View>
 
             {/* ── Lista de empresas ──────────────────────────────────── */}
             <ExplorarEmpresasList
@@ -254,6 +290,7 @@ export default function MisEmpresasScreen() {
             />
           </>
         )}
+        </View>
       </ScrollView>
     </View>
   )
