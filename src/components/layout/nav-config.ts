@@ -29,6 +29,7 @@ import {
   Newspaper,
   Package,
   PackageSearch,
+  ShoppingBag,
   Warehouse,
   Palette,
   Plug,
@@ -124,6 +125,7 @@ export type CapacidadNav =
   | 'PUBLICACIONES'
   | 'MENSAJERIA'
   | 'CATALOGO_UNIFICADO'
+  | 'PEDIDOS_MEMBEGO'
   | 'POS_CAJA'
   | 'MEMBEGO_SUPPLIER'
 
@@ -499,6 +501,16 @@ const G_ATENCION: NavGroup = {
   label: 'Atención diaria',
   items: [
     {
+      // Commerce Core · pedidos Membego (Fase 3). Detrás de su capacidad, que nace
+      // apagada: se enciende empresa por empresa.
+      href: '/admin/pedidos-membego',
+      label: 'Pedidos Membego',
+      icon: ShoppingBag,
+      description: 'Pedidos del marketplace: acéptalos, ajusta el monto y ciérralos con el QR del cliente.',
+      keywords: ['pedidos', 'ordenes', 'marketplace', 'membego', 'qr', 'reembolso', 'cancelar'],
+      capacidad: 'PEDIDOS_MEMBEGO',
+    },
+    {
       href: '/admin/scanner',
       label: 'Escanear QR',
       badge: 'canjesHoy',
@@ -795,7 +807,7 @@ const HUB_OPERACIONES: NavGroup = {
   id: 'operaciones',
   label: 'Operaciones',
   items: deAdmin(
-    '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturas',
+    '/admin/pedidos-membego', '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturas',
     '/admin/conciliacion', '/admin/metodos-pago', '/admin/registros', '/admin/actividad'
   ),
 }
@@ -937,6 +949,16 @@ const G_CLI_MIO: NavGroup = {
       icon: Gift,
       description: 'Lo que Membego ya pagó por ti y puedes usar en la red.',
       keywords: ['beneficios', 'membego', 'gratis', 'regalo', 'voucher', 'supply'],
+    },
+    {
+      // Commerce Core · pedidos Membego (Fase 3): lo que la persona pidió a una
+      // empresa. Se oculta mientras ni la empresa recibe pedidos ni la persona
+      // tiene alguno (`navDisponible`); la ruta sigue abierta por URL.
+      href: '/cliente/pedidos',
+      label: 'Mis pedidos',
+      icon: ShoppingBag,
+      description: 'Lo que pediste a las empresas, el monto acordado y el QR para recogerlo.',
+      keywords: ['pedidos', 'ordenes', 'compras', 'qr', 'recoger', 'membego'],
     },
     {
       // Supply 2.0: compras hechas a MEMBEGO (no a una empresa) y los

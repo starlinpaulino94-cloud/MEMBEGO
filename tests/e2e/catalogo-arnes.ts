@@ -23,7 +23,7 @@ export interface EmpresaCatalogo {
 export async function empresaCatalogo(
   sufijo: string,
   clave: string,
-  o: { capacidad: boolean; publicada?: boolean }
+  o: { capacidad: boolean; /** Commerce Core · F3: también recibe pedidos Membego. */ pedidos?: boolean; publicada?: boolean }
 ): Promise<EmpresaCatalogo> {
   const slug = `e2e-cat-${clave}-${sufijo}`
   const name = `E2E Catálogo ${clave} ${sufijo}`
@@ -40,7 +40,9 @@ export async function empresaCatalogo(
       esDemo: false,
       // La capacidad se enciende por override ANTES de la primera petición: el
       // resolutor la cachea por empresa, y una empresa nueva no tiene caché.
-      ...(o.capacidad ? { capacidades: { overrides: { CATALOGO_UNIFICADO: true } } } : {}),
+      ...(o.capacidad || o.pedidos
+        ? { capacidades: { overrides: { ...(o.capacidad ? { CATALOGO_UNIFICADO: true } : {}), ...(o.pedidos ? { PEDIDOS_MEMBEGO: true } : {}) } } }
+        : {}),
     },
     select: { id: true },
   })
@@ -133,4 +135,12 @@ export async function sucursalSembrada(empresaId: string, nombre: string): Promi
 export async function varianteDe(itemId: string): Promise<string> {
   const v = await prismaDeArnes().catalogVariant.findFirstOrThrow({ where: { catalogItemId: itemId }, orderBy: { position: 'asc' }, select: { id: true } })
   return v.id
+}
+
+/** Existencias de una variante en una sucursal (la lista de saldos que el inventario lee). */
+export async function existenciasSembradas(empresaId: string, varianteId: string, sucursalId: string, cantidad: number): Promise<void> {
+  const prisma = prismaDeArnes()
+  const previo = await prisma.inventoryLevel.findUnique({ where: { catalogVariantId_locationId: { catalogVariantId: varianteId, locationId: sucursalId } }, select: { id: true } })
+  if (previo) return
+  await prisma.inventoryLevel.create({ data: { companyId: empresaId, catalogVariantId: varianteId, locationId: sucursalId, onHand: cantidad } })
 }

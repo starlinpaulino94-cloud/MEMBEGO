@@ -63,7 +63,10 @@ function itemVisible(ahora: Date) {
 const INCLUIR = {
   supplyOffer: { select: { slug: true, status: true } },
   company: { select: { slug: true, name: true } },
-  variants: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] },
+  variants: {
+    orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+    include: { inventoryLevels: { select: { onHand: true, reserved: true, location: { select: { activa: true } } } } },
+  },
   images: { orderBy: { position: 'asc' }, select: { path: true } },
 } satisfies Prisma.CatalogItemInclude
 

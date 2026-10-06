@@ -18,7 +18,7 @@ export function PuenteAcciones({ companyId, modo }: { companyId?: string; modo: 
         const r = await sincronizarPuenteAhora()
         if (!r.ok) return void toast.error(r.error)
         const x = r.resultado
-        toast.success(`Sincronizado: ${x.creados} nuevo(s), ${x.actualizados} actualizado(s), ${x.sinCambios} sin cambios${x.errores ? `, ${x.errores} con error` : ''}.`)
+        toast.success(`Sincronizado: ${x.creados} nuevo(s), ${x.actualizados} actualizado(s), ${x.sinCambios} sin cambios${x.errores ? `, ${x.errores} con error` : ''}.${x.pedidosCreados || x.pedidosPendientes || x.pedidosReembolsados ? ` Pedidos de compras de Supply: ${x.pedidosCreados} registrado(s)${x.pedidosPendientes ? `, ${x.pedidosPendientes} pendiente(s) (la casa necesita el ítem o una sucursal activa)` : ''}${x.pedidosReembolsados ? `, ${x.pedidosReembolsados} reembolsado(s)` : ''}.` : ''}`)
       } else {
         const r = await designarCasaMembego(modo === 'retirar' ? null : (companyId ?? null))
         if (!r.ok) return void toast.error(r.error)

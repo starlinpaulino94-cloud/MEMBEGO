@@ -9,6 +9,8 @@ import { ETIQUETA_TIPO } from '@/modules/catalog/formato'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
 import { RUTA_OFERTAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
+import { opcionesDePedidoPublico } from '@/modules/orders/publico'
+import { PedirForm } from '@/components/pedidos/PedirForm'
 
 interface Props {
   params: Promise<{ companySlug: string; itemSlug: string }>
@@ -38,6 +40,8 @@ export default async function ItemCatalogoPublicoPage({ params }: Props) {
   const item = await itemCatalogoPublico(companySlug, itemSlug)
   if (!item) notFound()
   const hrefOferta = item.origen === 'SUPPLY' && item.ofertaSlug ? `${RUTA_OFERTAS_PUBLICAS}/${item.ofertaSlug}` : null
+  // Pedir es de los productos de la EMPRESA: las ofertas de Membego se compran por su propio checkout.
+  const pedido = item.origen === 'EMPRESA' ? await opcionesDePedidoPublico(item.company.slug) : null
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
@@ -120,6 +124,18 @@ export default async function ItemCatalogoPublicoPage({ params }: Props) {
               </li>
             ))}
           </ul>
+
+          {pedido?.habilitado && (
+            <div className="mt-6">
+              <PedirForm
+                retorno={`/empresas/${item.company.slug}/catalogo/${item.slug}`}
+                moneda={item.currency}
+                conVariantes={item.hasVariants}
+                variantes={item.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, available: v.available }))}
+                sucursales={pedido.sucursales}
+              />
+            </div>
+          )}
 
           {hrefOferta ? (
             <Link href={hrefOferta} className="mt-6 inline-flex h-10 items-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground">

@@ -63,6 +63,10 @@ const USUARIOS = {
    */
   catalogoConCapacidad: { email: 'e2e.catalogo.con@membego.test', nombre: 'Admin Catálogo E2E', role: 'ADMINISTRADOR' },
   catalogoSinCapacidad: { email: 'e2e.catalogo.sin@membego.test', nombre: 'Admin Sin Catálogo E2E', role: 'ADMINISTRADOR' },
+  /** Commerce Core · pedidos (F3): quien atiende los pedidos de una empresa, quien los pide y quien tiene el catálogo pero no los pedidos. */
+  pedidosAdmin: { email: 'e2e.pedidos.admin@membego.test', nombre: 'Admin Pedidos E2E', role: 'ADMINISTRADOR' },
+  pedidosCliente: { email: 'e2e.pedidos.cliente@membego.test', nombre: 'Marta Pedidos E2E', role: 'CLIENTE' },
+  pedidosSinCapacidad: { email: 'e2e.pedidos.sin@membego.test', nombre: 'Admin Sin Pedidos E2E', role: 'ADMINISTRADOR' },
 } as const
 
 export type RolE2E = keyof typeof USUARIOS

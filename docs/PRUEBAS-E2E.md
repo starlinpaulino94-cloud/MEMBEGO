@@ -169,6 +169,28 @@ retirar la casa saca todo; un no-superadmin no entra. La casa es **una sola por
 base**: el spec la designa y la retira, así que no debe correrse en paralelo con
 otro que la use.
 
+**Pedidos Membego (Commerce Core · Fase 3)** — `pedidos-membego` (escritorio),
+con el mismo arnés (`empresaCatalogo({ capacidad: true, pedidos: true })`,
+`existenciasSembradas`) y tres sesiones: la de la empresa (`pedidosAdmin`), la de
+quien pide (`pedidosCliente`) y la de otra cliente (`cliente2`). Recorre: la ficha
+pública ofrece «Hacer un pedido» solo si la empresa recibe pedidos; sin sesión,
+pedir manda a iniciar sesión y vuelve; el cliente pide 2 unidades (nace «Esperando
+a la empresa», **aparta** el stock y la empresa recibe el aviso) → la empresa lo
+acepta, ajusta el monto (sin motivo no envía) y lo marca listo → el cliente ve el
+monto ajustado, lo confirma y ve su QR (y ya no puede cancelar) → **el empleado
+escanea el QR con una ráfaga de teclas (lector físico) y lo cierra**: el stock baja,
+la reserva se consume y el nivel queda «Confirmado por el cliente»; un segundo
+escaneo dice «ya se canjeó» → la empresa registra el pago con referencia y sube a
+«Pago verificado» → el cliente cancela a tiempo y se libera lo apartado; la empresa
+cancela otro con su motivo → reembolso devolviendo lo vendido al inventario → otra
+empresa no ve el pedido (se ve igual que uno inventado) y una empresa sin la
+capacidad no entra. La ráfaga del lector tiene una trampa: tras recargar
+`/empleado/scanner` hay que esperar a «Lector listo» antes de teclear, o las
+primeras teclas se pierden y el código llega incompleto (sale «Código QR no
+encontrado»). **Ojo:** como el resto, corre sobre una base creada con `db push` (sin
+los disparadores ni los CHECK de las migraciones; esos los prueban
+`tests/postgres/orders.db.test.ts` y `scripts/probar-rls.mjs`).
+
 Tres cosas que costó aprender y conviene no repetir:
 
 1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de

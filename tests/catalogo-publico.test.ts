@@ -189,3 +189,47 @@ test('la visibilidad pública de un ítem puente cruza la oferta en vivo: estado
   // Y no pisa el `OR` de la búsqueda de texto del descubrimiento.
   assert.match(cuerpo, /AND: \[/)
 })
+
+// ── Fase 3: «agotado» a partir del inventario ────────────────────────────────
+
+const nivel = (onHand: number, reserved = 0, activa = true) => ({ onHand, reserved, location: { activa } })
+const conInventario = (niveles: ReturnType<typeof nivel>[], status: 'ACTIVE' | 'OUT_OF_STOCK' = 'ACTIVE') =>
+  variante('v', 100, status, { inventoryLevels: niveles })
+
+test('un producto que controla inventario se ve agotado si no hay nada DISPONIBLE (existencia − apartado) en una sucursal abierta', () => {
+  const disp = (niveles: ReturnType<typeof nivel>[]) => variantesPublicas([conInventario(niveles)], false, true)[0].available
+  assert.equal(disp([nivel(5)]), true)
+  assert.equal(disp([nivel(5, 4)]), true, 'queda una unidad sin apartar')
+  assert.equal(disp([nivel(5, 5)]), false, 'todo está apartado por pedidos')
+  assert.equal(disp([nivel(0)]), false)
+  assert.equal(disp([]), false, 'controla inventario y no hay ni una fila de saldo: no hay existencias')
+  assert.equal(disp([nivel(0), nivel(3)]), true, 'basta con que una sucursal tenga')
+  assert.equal(disp([nivel(9, 0, false)]), false, 'una sucursal cerrada no despacha')
+})
+
+test('sin controlar inventario, o sin datos de inventario, nada cambia (la variante manda por su estado)', () => {
+  assert.equal(variantesPublicas([conInventario([nivel(0)])], false, false)[0].available, true)
+  assert.equal(variantesPublicas([variante('a', 1, 'ACTIVE')], false, true)[0].available, false, 'una fila sin saldos de un producto controlado es agotado')
+  assert.equal(variantesPublicas([variante('a', 1, 'ACTIVE')])[0].available, true)
+})
+
+test('el estado manual OUT_OF_STOCK sigue mandando aunque haya existencias', () => {
+  assert.equal(variantesPublicas([conInventario([nivel(50)], 'OUT_OF_STOCK')], false, true)[0].available, false)
+})
+
+test('aResumenPublico: solo un ítem de la EMPRESA con la capacidad trackInventory se evalúa por existencias; el «desde» se corrige', () => {
+  const base = { ...fila([conInventario([nivel(0)])]), type: 'PHYSICAL_PRODUCT' as const, capabilities: { trackInventory: true } }
+  assert.equal(aResumenPublico(base)?.priceFrom, '100.00')
+  assert.equal(aDetallePublico(base)?.variants[0].available, false)
+  const sinControl = { ...base, capabilities: { trackInventory: false } }
+  assert.equal(aDetallePublico(sinControl)?.variants[0].available, true)
+  // Un ítem puente (Supply) no usa el inventario de la casa: manda su oferta.
+  const puente = { ...base, source: 'SUPPLY' as const, supplyOffer: { slug: 'o', status: 'ACTIVE' } }
+  assert.equal(aDetallePublico(puente)?.variants[0].available, true)
+})
+
+test('lo que sale al público NO incluye cantidades ni niveles de inventario', () => {
+  const base = { ...fila([conInventario([nivel(7, 2)])]), type: 'PHYSICAL_PRODUCT' as const, capabilities: { trackInventory: true } }
+  const json = JSON.stringify(aDetallePublico(base))
+  assert.doesNotMatch(json, /onHand|reserved|inventoryLevels|trackInventory/)
+})

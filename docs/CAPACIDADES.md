@@ -43,7 +43,16 @@
 | `PUBLICACIONES` | Sección `publicaciones` (`/admin/publicaciones`) | ❌ apagada desde la Fase 0 |
 | `HOME_BUILDER` | Editor de inicio dentro de `/admin/personalizacion` (**no** tiene sección propia: comparte página con el formulario de marca, que no se oculta) | ❌ apagada desde la Fase 0 |
 | `CATALOGO_UNIFICADO` | Secciones `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) e `inventario` (`/admin/inventario`, Fase 2: existencias por variante y sucursal) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
-| `PEDIDOS_MEMBEGO` | Sección `pedidos-membego` (Commerce Core · Fase 3: pedidos del marketplace con atribución, confirmación del cliente y QR). Solo el servicio y las acciones de la empresa por ahora; **la pantalla llega en F3.2** | ❌ apagada para todos; solo tiene sentido en empresas con `CATALOGO_UNIFICADO` (las líneas del pedido son variantes del catálogo) |
+| `PEDIDOS_MEMBEGO` | Sección `pedidos-membego` (`/admin/pedidos-membego`, Commerce Core · Fase 3: pedidos del marketplace con atribución, confirmación del cliente y QR). Con ella la ficha pública de sus productos ofrece «Hacer un pedido» y «Mis pedidos» aparece en el menú del cliente | ❌ apagada para todos; solo tiene sentido en empresas con `CATALOGO_UNIFICADO` (las líneas del pedido son variantes del catálogo) |
+
+### Cómo encender los pedidos Membego en una empresa
+
+`PEDIDOS_MEMBEGO` tampoco está en ningún paquete base. Se enciende, además de
+`CATALOGO_UNIFICADO`, con un override por empresa (`overrides: { CATALOGO_UNIFICADO: true,
+PEDIDOS_MEMBEGO: true }`). Hace falta que la empresa esté publicada y tenga al menos una
+sucursal activa. Sin ella, la acción de pedir responde «este producto no está disponible
+para pedir» y el panel se niega. Si se apaga con pedidos ya hechos, el cliente conserva
+«Mis pedidos» y el historial.
 
 ### Cómo encender el catálogo unificado en una empresa
 

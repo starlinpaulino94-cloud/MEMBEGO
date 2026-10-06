@@ -20,6 +20,7 @@ import { primerErrorZod } from '@/lib/validacion'
 import { capturarErrorInesperado } from '@/lib/sentry'
 import { confirmarVisitaSchema } from '@/modules/visitas/schema'
 import { ejecutarCanje } from '@/modules/visitas/canje'
+import { buscarPedidoPorQr, type PedidoQrLookup } from '@/modules/orders/escaner'
 
 export interface VisitaReciente {
   id: string
@@ -115,6 +116,8 @@ export interface LookupResult {
   promoCompra?: PromoCompraLookup
   /** Regalo VIP: QR del invitado de una oferta privada (canje por período). */
   regalo?: RegaloLookup
+  /** Commerce Core · Fase 3: QR de un pedido Membego LISTO (se cierra al confirmar). */
+  pedido?: PedidoQrLookup
 }
 
 export async function buscarPorToken(token: string): Promise<LookupResult> {
@@ -224,6 +227,21 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
         error:
           'Este código QR ya venció. Pídele al cliente que abra su membresía en la app para generar uno nuevo.',
         errorCode: 'QR_NOT_FOUND',
+      }
+    }
+
+    // Commerce Core · Fase 3: el QR de un pedido Membego no vive en `qr_tokens`
+    // (es una credencial propia del pedido): se busca aparte antes de dar el
+    // código por inexistente.
+    if (!qr) {
+      for (const candidato of candidatos) {
+        const encontrado = await buscarPedidoPorQr(candidato)
+        if (!encontrado) continue
+        if (user.metadata.role !== 'SUPERADMIN' && user.metadata.companyId && encontrado.companyId !== user.metadata.companyId) {
+          await logScanInvalido(user.metadata.dbUserId, clean, 'WRONG_COMPANY')
+          return { error: 'Este pedido pertenece a otra empresa.', errorCode: 'WRONG_COMPANY' }
+        }
+        return { pedido: encontrado.pedido }
       }
     }
 

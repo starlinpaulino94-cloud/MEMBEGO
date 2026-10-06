@@ -130,6 +130,16 @@ export function validarAtribucion(a: DatosAtribucion): string | null {
 
 // ── Dinero ───────────────────────────────────────────────────────────────────
 
+/**
+ * Pedidos que una persona puede tener abiertos a la vez en una misma empresa
+ * (esperando, en preparación o listos). Cada pedido aparta inventario hasta que
+ * se cierra; sin tope, una cuenta podría apartar todo el stock con pedidos que
+ * nunca recoge. Es un freno contra el abuso, no una regla del negocio: lo aplica la
+ * acción del cliente, no el servicio (caja y API crean pedidos por su cuenta).
+ */
+export const MAX_PEDIDOS_ABIERTOS_POR_CLIENTE = 5
+export const ESTADOS_ABIERTOS: readonly MembegoOrderStatus[] = ['AWAITING_MERCHANT', 'IN_PROGRESS', 'READY']
+
 export const CANTIDAD_MAXIMA_POR_LINEA = 10_000
 export const LINEAS_MAXIMAS = 100
 export const MONTO_MAXIMO = 999_999_999.99

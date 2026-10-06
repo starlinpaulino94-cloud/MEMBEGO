@@ -11,7 +11,8 @@
 #
 # ALCANCE: el recorrido público MÁS el autenticado de Supply 2.0 (slices 1 a 9) Y
 # el del catálogo unificado (panel, vitrina pública y API) y el del inventario
-# (panel) y el del puente Supply→Catálogo, que entran con sesiones firmadas aquí mismo con SUPABASE_JWT_SECRET y no necesitan un
+# (panel), el del puente Supply→Catálogo y el de los pedidos Membego, que entran con
+# sesiones firmadas aquí mismo con SUPABASE_JWT_SECRET y no necesitan un
 # proyecto de Supabase. Lo que sigue sin cubrir es el mostrador de
 # membresías (escaneo de QR y caja); está explicado en docs/PRUEBAS-E2E.md.
 name: E2E

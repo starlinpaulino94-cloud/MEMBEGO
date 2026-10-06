@@ -117,3 +117,125 @@ test('el servicio usa el ledger de inventario para apartar, vender y liberar (na
     assert.match(s, new RegExp(`\\b${f}\\b`), `el servicio no usa ${f}`)
   }
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+// F3.2 · interfaz, acciones del cliente, escáner y crons
+// ═════════════════════════════════════════════════════════════════════════════
+
+const leer = (f: string) => readFileSync(f, 'utf8')
+const limpio = (f: string) => leer(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+test('las entradas de menú existen: «Pedidos Membego» detrás de su capacidad (y en el hub de Operaciones) y «Mis pedidos» para el cliente', () => {
+  const nav = leer('src/components/layout/nav-config.ts')
+  assert.match(nav, /href: '\/admin\/pedidos-membego',[\s\S]{0,600}capacidad: 'PEDIDOS_MEMBEGO'/)
+  assert.match(nav, /deAdmin\(\s*'\/admin\/pedidos-membego', '\/admin\/scanner'/)
+  assert.match(nav, /href: '\/cliente\/pedidos',\s*label: 'Mis pedidos'/)
+  assert.match(leer('src/modules/navegacion/contexto.ts'), /'PEDIDOS_MEMBEGO'/)
+  // «Mis pedidos» se oculta mientras ni la empresa recibe pedidos ni la persona tiene alguno.
+  const nd = leer('src/modules/cliente/navDisponible.ts')
+  assert.match(nd, /!activas\.has\('PEDIDOS_MEMBEGO'\) && pedidos === 0/)
+})
+
+test('las pantallas de /admin/pedidos-membego se guardan por sección en el layout y por empresa en cada página', () => {
+  assert.match(leer('src/app/(admin)/admin/pedidos-membego/layout.tsx'), /guardarSeccion\('pedidos-membego'\)/)
+  for (const pagina of ['page.tsx', '[pedidoId]/page.tsx']) {
+    const s = limpio(`src/app/(admin)/admin/pedidos-membego/${pagina}`)
+    assert.match(s, /requireRole\(ADMIN_ROLES\)/, `${pagina} sin guardia de rol`)
+    assert.match(s, /requireCompanyContext\(user\)/, `${pagina} no resuelve la empresa de la sesión`)
+    assert.doesNotMatch(s, /\bprisma\./, `${pagina} usa el cliente global`)
+  }
+  const detalle = limpio('src/app/(admin)/admin/pedidos-membego/[pedidoId]/page.tsx')
+  assert.match(detalle, /notFound\(\)/, 'un pedido ajeno debe verse como inexistente')
+  for (const f of ['gestionar', 'cancelar', 'reembolsar']) assert.match(detalle, new RegExp(`puedeFuncion\\('pedidos-membego', '${f}'\\)`))
+})
+
+test('los componentes de cliente de pedidos y el escáner NO importan el dominio, el servicio ni las lecturas (arrastrarían Prisma al navegador)', () => {
+  const archivos = [...readdirSync('src/components/pedidos').map((f) => `src/components/pedidos/${f}`), 'src/components/scanner/ConfirmPedido.tsx']
+  assert.ok(archivos.length >= 4)
+  for (const f of archivos) {
+    const imports = [...leer(f).matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])
+    for (const origen of imports) {
+      assert.doesNotMatch(origen, /modules\/orders\/(domain|service|queries|cliente-queries|auditoria|errores|barrido|publico)$/, `${f} importa ${origen}`)
+      assert.doesNotMatch(origen, /^@prisma\/client$|lib\/prisma$|lib\/commerce-primitives|modules\/catalog\/|modules\/inventory\/(?!actions)/, `${f} importa ${origen}`)
+    }
+  }
+})
+
+test('las acciones del cliente exigen sesión de cliente, deducen la empresa de la base y no aceptan canales de atribución verificables', () => {
+  const s = limpio('src/modules/orders/cliente-actions.ts')
+  assert.match(s, /async function clienteAutenticado/)
+  assert.match(s, /user\.metadata\.role !== 'CLIENTE'/)
+  const exportadas = [...s.matchAll(/export async function (\w+)/g)].map((m) => m[1])
+  assert.deepEqual(exportadas.sort(), ['cancelarMiPedido', 'confirmarMontoPedido', 'crearPedidoComoCliente', 'renovarQrDeMiPedido'])
+  // La empresa sale de la variante pedida o del pedido propio; jamás de lo que mande el navegador.
+  assert.doesNotMatch(s, /entrada\.companyId|\be\.companyId|companyId:\s*texto\(/)
+  assert.match(s, /empresaRecibePedidos\(variante\.companyId\)/)
+  // Solo canales sin dato que verificar.
+  const canales = [...s.matchAll(/:\s*'(MARKETPLACE_BROWSE|MARKETPLACE_SEARCH|DIRECT|REFERRAL|CAMPAIGN|PROMOTION_CLAIM|QR_SCAN|SUPPLY_OFFER)'/g)].map((m) => m[1])
+  assert.deepEqual([...new Set(canales)].sort(), ['DIRECT', 'MARKETPLACE_BROWSE', 'MARKETPLACE_SEARCH'])
+  // Cada acción sobre un pedido ya existente lo busca entre MIS fichas antes de tocarlo.
+  assert.match(s, /misClienteIds\(supabaseId\)/)
+  assert.match(s, /customerId: \{ in: ids \}/)
+  assert.doesNotMatch(s, /\bprisma\./)
+})
+
+test('crear un pedido desde la vitrina tiene tope de pedidos abiertos por cliente y empresa (freno contra apartar el stock sin recogerlo)', () => {
+  const s = limpio('src/modules/orders/cliente-actions.ts')
+  assert.match(s, /contarPedidosAbiertosEnTx\(tx, companyId, ficha\.clienteId\)\) >= MAX_PEDIDOS_ABIERTOS_POR_CLIENTE/)
+  assert.match(s, /DEMASIADOS_PEDIDOS_ABIERTOS/)
+  // El reintento del MISMO envío no cuenta contra el tope.
+  assert.match(s, /!yaCreado &&/)
+})
+
+test('las lecturas del cliente filtran SIEMPRE por los ids de sus fichas', () => {
+  const s = limpio('src/modules/orders/cliente-queries.ts')
+  const consultas = [...s.matchAll(/tx\.membegoOrder\.(findFirst|findMany)\(\{([\s\S]*?)\n\s{4}\}\)/g)]
+  assert.ok(consultas.length >= 2)
+  for (const [, , cuerpo] of consultas) assert.match(cuerpo, /customerId: \{ in: \[\.\.\.clienteIds\] \}/)
+  for (const pagina of ['page.tsx', '[id]/page.tsx']) {
+    const p = limpio(`src/app/(cliente)/cliente/pedidos/${pagina}`)
+    assert.match(p, /requireRole\('CLIENTE'\)/)
+    assert.match(p, /misClienteIds\(user\.supabaseId\)/)
+  }
+  assert.match(limpio('src/app/(cliente)/cliente/pedidos/[id]/page.tsx'), /notFound\(\)/)
+})
+
+test('el QR del pedido solo cierra el pedido desde el escáner: rol de escáner, empresa del empleado y empresa del pedido sacada de la base', () => {
+  const s = limpio('src/modules/orders/escaner-actions.ts')
+  assert.match(s, /SCANNER_ROLES\.includes\(user\.metadata\.role\)/)
+  assert.ok(s.indexOf('SCANNER_ROLES.includes') < s.indexOf('conEmpresa('), 'cierra antes de autorizar')
+  assert.match(s, /p\.companyId !== user\.metadata\.companyId/)
+  assert.match(s, /findUnique\(\{ where: \{ qrToken: limpio \}/)
+  assert.doesNotMatch(s, /companyId:\s*(token|limpio|entrada)/)
+  // Reconocer el QR en el escáner existente.
+  const v = limpio('src/modules/visitas/actions.ts')
+  assert.match(v, /buscarPedidoPorQr\(candidato\)/)
+  assert.match(v, /encontrado\.companyId !== user\.metadata\.companyId/)
+  assert.match(leer('src/components/scanner/ScannerClient.tsx'), /<ConfirmPedido pedido=\{pedido\}/)
+})
+
+test('el cron de pedidos existe, está programado y exige el secreto antes de barrer', () => {
+  const ruta = leer('src/app/api/cron/pedidos/route.ts')
+  assert.ok(ruta.indexOf('autorizarCron(req)') >= 0 && ruta.indexOf('autorizarCron(req)') < ruta.indexOf('barridoPedidos()'))
+  const vercel = JSON.parse(leer('vercel.json')) as { crons: { path: string; schedule: string }[] }
+  assert.ok(vercel.crons.some((c) => c.path === '/api/cron/pedidos'))
+})
+
+test('la ficha pública ofrece «Pedir» solo para productos de la empresa y detrás de las capacidades; las ofertas de Supply van a su checkout', () => {
+  const s = limpio('src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx')
+  assert.match(s, /item\.origen === 'EMPRESA' \? await opcionesDePedidoPublico\(item\.company\.slug\) : null/)
+  assert.match(s, /pedido\?\.habilitado && /)
+  const pub = limpio('src/modules/orders/publico.ts')
+  assert.match(pub, /tieneCapacidad\(companyId, 'CATALOGO_UNIFICADO'\)/)
+  assert.match(pub, /tieneCapacidad\(companyId, 'PEDIDOS_MEMBEGO'\)/)
+  assert.match(pub, /isPublished: true, isActive: true, esDemo: false/)
+})
+
+test('el envoltorio de Supply vive en el puente (no en Commerce Core), solo lo corre el barrido y no toca la transacción de Supply', () => {
+  const pedido = limpio('src/modules/supply-bridge/pedido.ts')
+  assert.match(pedido, /from '@\/modules\/orders\/service'/)
+  for (const m of pedido.matchAll(/from\s+'([^']+)'/g)) assert.doesNotMatch(m[1], /modules\/supply-v2/, `el envoltorio importa ${m[1]}`)
+  const checkout = leer('src/modules/supply-v2/commerce/checkout.ts')
+  assert.doesNotMatch(checkout, /supply-bridge|modules\/orders/, 'Supply no conoce el puente ni los pedidos')
+  assert.match(limpio('src/modules/supply-bridge/barrido.ts'), /envolverCompraEnTx/)
+})

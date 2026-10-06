@@ -44,6 +44,7 @@ const CAPACIDADES_DEL_MENU: readonly CapacidadNav[] = [
   'PUBLICACIONES',
   'MENSAJERIA',
   'CATALOGO_UNIFICADO',
+  'PEDIDOS_MEMBEGO',
 ]
 
 const VERTICALES: readonly TipoEmpresaNav[] = [

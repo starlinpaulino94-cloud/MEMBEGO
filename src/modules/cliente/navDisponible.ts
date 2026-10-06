@@ -55,6 +55,7 @@ export async function getNavOcultoCliente(
       regalosP2P,
       giftCards,
       campanasInvitacion,
+      pedidos,
       empresa,
     ] = await conEmpresa(companyId, (tx) =>
       Promise.all([
@@ -108,6 +109,8 @@ export async function getNavOcultoCliente(
             fechaFin: { gte: now },
           },
         }),
+        // Pedidos Membego de este cliente (cualquier estado).
+        tx.membegoOrder.count({ where: { companyId, customerId: clienteId } }),
         tx.company.findUnique({
           where: { id: companyId },
           // `tipoNegocioCodigo` incluido: sin él, el menú del cliente decidía
@@ -163,6 +166,12 @@ export async function getNavOcultoCliente(
       for (const ruta of RUTAS_POR_MODULO_CLIENTE.RULETA) {
         if (!ocultas.includes(ruta)) ocultas.push(ruta)
       }
+    }
+    // Commerce Core · Fase 3: «Mis pedidos» solo se ofrece si la empresa recibe
+    // pedidos o la persona ya tiene alguno (su historial no desaparece si la
+    // empresa apaga la capacidad).
+    if (!activas.has('PEDIDOS_MEMBEGO') && pedidos === 0 && !ocultas.includes('/cliente/pedidos')) {
+      ocultas.push('/cliente/pedidos')
     }
     return ocultas
   } catch (e) {

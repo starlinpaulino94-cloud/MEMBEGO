@@ -12,7 +12,9 @@ import {
   aceptarPedidoEnTx,
   ajustarMontoEnTx,
   cancelarPedidoEnTx,
+  cerrarPedidoExternoEnTx,
   completarPorQrEnTx,
+  contarPedidosAbiertosEnTx,
   confirmarMontoEnTx,
   crearPedidoEnTx,
   marcarListoEnTx,
@@ -25,6 +27,8 @@ import {
 } from '../../src/modules/orders/service'
 import { CANALES, DATO_DEL_CANAL, ESTADOS, puedeTransicionar } from '../../src/modules/orders/domain'
 import { ofertaSupplyDePrueba } from './oferta-supply'
+import { barridoPedidos, DIAS_SIN_RESPUESTA } from '../../src/modules/orders/barrido'
+import { buscarPedidoPorQr } from '../../src/modules/orders/escaner'
 
 /**
  * COMMERCE CORE · pedidos Membego contra PostgreSQL de verdad (Fase 3).
@@ -297,6 +301,24 @@ test('7 · lo que no se puede pedir se rechaza con su código', async () => {
   assert.equal(await intenta({ lineas: [lineaServicio()], notas: 'x'.repeat(501) }), 'NOTA_INVALIDA')
   assert.equal(await intenta({ lineas: [lineaServicio()], idempotencyKey: 'x'.repeat(121) }), 'CLAVE_INVALIDA')
   assert.equal(await intenta({ lineas: [{ varianteId: ctx.servicio, cantidad: 1, descuento: 251 }] }), 'PEDIDO_INVALIDO', 'un descuento mayor a la línea')
+})
+
+test('7b · se cuentan los pedidos ABIERTOS de una ficha (esperando, en preparación o listos): lo cerrado y lo cancelado no cuentan', async () => {
+  const cli = await prisma.cliente.create({ data: { companyId: ctx.a, supabaseId: `sb-cli-abiertos-${sufijo}`, nombre: 'Abiertos', email: `abiertos-${sufijo}@prueba.test` }, select: { id: true } })
+  const abiertos = () => enA((tx) => contarPedidosAbiertosEnTx(tx, ctx.a, cli.id))
+  assert.equal(await abiertos(), 0)
+  const ped = async () => (await crear({ customerId: cli.id, lineas: [lineaServicio()] })).pedidoId
+  const a = await ped()
+  const b = await ped()
+  const c = await ped()
+  assert.equal(await abiertos(), 3)
+  await enA((tx) => aceptarPedidoEnTx(tx, ctx.a, b, empresa(ctx.usuario)))
+  assert.equal(await abiertos(), 3, 'aceptado sigue abierto')
+  await enA((tx) => cancelarPedidoEnTx(tx, ctx.a, a, { motivo: 'x' }, empresa(ctx.usuario)))
+  assert.equal(await abiertos(), 2, 'cancelado no cuenta')
+  await completar(await listo(c))
+  assert.equal(await abiertos(), 1, 'completado no cuenta')
+  assert.equal(await enB((tx) => contarPedidosAbiertosEnTx(tx, ctx.b, cli.id)), 0, 'otra empresa no ve los pedidos de esta ficha')
 })
 
 test('8 · el origen SUPPLY solo acepta ofertas de Supply, y estas solo con ese origen', async () => {
@@ -681,6 +703,82 @@ test('30 · aislamiento: ninguna empresa lee ni toca el pedido de otra', async (
     assert.equal(await codigoDe(intento()), 'PEDIDO_NO_ENCONTRADO')
   }
   assert.equal((await pedidoDe(r.pedidoId)).status, 'AWAITING_MERCHANT')
+})
+
+test('30b · el barrido cancela los pedidos que la empresa no atendió en 7 días y libera lo apartado; no toca lo aceptado ni lo reciente', async () => {
+  const ahora = Date.now()
+  const antes = await nivelFisico()
+  const sinAtender = await crear({ lineas: [lineaFisico(2)] })
+  const aceptado = await crear({ lineas: [lineaServicio()] })
+  await enA((tx) => aceptarPedidoEnTx(tx, ctx.a, aceptado.pedidoId, empresa(ctx.usuario)))
+  assert.equal((await nivelFisico()).reserved, antes.reserved + 2)
+
+  // A los 3 días todavía es pronto.
+  const temprano = await barridoPedidos(new Date(ahora + (DIAS_SIN_RESPUESTA - 4) * 86_400_000))
+  assert.equal(temprano.errores, 0)
+  assert.equal((await pedidoDe(sinAtender.pedidoId)).status, 'AWAITING_MERCHANT')
+
+  const tarde = new Date(ahora + (DIAS_SIN_RESPUESTA + 1) * 86_400_000)
+  const r = await barridoPedidos(tarde)
+  assert.equal(r.errores, 0)
+  assert.ok(r.cancelados >= 1)
+  const p = await pedidoDe(sinAtender.pedidoId)
+  assert.equal(p.status, 'CANCELLED')
+  assert.equal(p.cancelReason, 'La empresa no respondió a tiempo')
+  const reserva = await prisma.inventoryReservation.findUniqueOrThrow({ where: { id: p.lines[0].inventoryReservationId as string } })
+  assert.equal(reserva.status, 'RELEASED')
+  assert.equal((await pedidoDe(aceptado.pedidoId)).status, 'IN_PROGRESS', 'un pedido aceptado no se cancela solo')
+  assert.equal((await barridoPedidos(tarde)).cancelados, 0, 'idempotente')
+  const auditoria = await prisma.auditLog.findFirst({ where: { entidadId: sinAtender.pedidoId, accion: 'ORDER_CANCELLED' } })
+  assert.equal((auditoria?.payload as { por?: string })?.por, 'SISTEMA')
+})
+
+test('30c · cerrar sin QR es cosa del sistema, nunca de un pedido de la vitrina; deriva el nivel de la evidencia', async () => {
+  const hecho = await enA((tx) =>
+    crearPedidoEnTx(tx, ctx.a, entrada({ origin: 'API', lineas: [lineaServicio()], atribucion: { channel: 'DIRECT' } }), sistema)
+  )
+  pedidosCreados.push(hecho.pedidoId)
+  assert.equal(await codigoDe(enA((tx) => cerrarPedidoExternoEnTx(tx, ctx.a, hecho.pedidoId, { completedAt: T0, confirmadoPorCliente: true }, empresa(ctx.usuario)))), 'SOLO_SISTEMA')
+  const web = await crear({ lineas: [lineaServicio()] })
+  assert.equal(await codigoDe(enA((tx) => cerrarPedidoExternoEnTx(tx, ctx.a, web.pedidoId, { completedAt: T0, confirmadoPorCliente: true }, sistema))), 'SOLO_CON_QR')
+
+  const r = await enA((tx) =>
+    cerrarPedidoExternoEnTx(tx, ctx.a, hecho.pedidoId, { completedAt: T0, confirmadoPorCliente: true, pago: { method: 'TRANSFER', amount: '250.00', reference: 'TRF-77' } }, sistema)
+  )
+  assert.equal(r.status, 'COMPLETED')
+  assert.equal(r.nivel, 'PAYMENT_VERIFIED')
+  const p = await pedidoDe(hecho.pedidoId)
+  assert.equal(p.qrToken, null)
+  assert.equal(p.completedAt?.toISOString(), T0.toISOString())
+  assert.equal(p.payment?.reference, 'TRF-77')
+  const otra = await enA((tx) => cerrarPedidoExternoEnTx(tx, ctx.a, hecho.pedidoId, { completedAt: T0, confirmadoPorCliente: true }, sistema))
+  assert.equal(otra.repetido, true)
+})
+
+test('30d · el escáner: un QR de pedido LISTO se puede cerrar; vencido, ya canjeado o desconocido, se explica', async () => {
+  const r = await crear({ lineas: [lineaServicio()] })
+  const token = await listo(r.pedidoId, T0)
+  const listoParaCerrar = await buscarPedidoPorQr(token, T0)
+  assert.ok(listoParaCerrar)
+  assert.equal(listoParaCerrar.companyId, ctx.a)
+  assert.equal(listoParaCerrar.pedido.puedeCerrar, true)
+  assert.equal(listoParaCerrar.pedido.code, r.code)
+  assert.equal(listoParaCerrar.pedido.total, '250.00')
+  assert.equal(listoParaCerrar.pedido.confirmado, false)
+  assert.deepEqual(listoParaCerrar.pedido.lineas.map((l) => l.quantity), [1])
+
+  const vencido = await buscarPedidoPorQr(token, dias(7))
+  assert.equal(vencido?.pedido.puedeCerrar, false)
+  assert.match(vencido?.pedido.mensaje ?? '', /venció/)
+
+  await completar(token, T0)
+  const usado = await buscarPedidoPorQr(token, T0)
+  assert.equal(usado?.pedido.puedeCerrar, false)
+  assert.match(usado?.pedido.mensaje ?? '', /ya se canjeó/)
+
+  assert.equal(await buscarPedidoPorQr('no-existe'), null)
+  assert.equal(await buscarPedidoPorQr(''), null)
+  assert.equal(await buscarPedidoPorQr('x'.repeat(201)), null)
 })
 
 // ═════════════════════════════════════════════════════════════════════════════

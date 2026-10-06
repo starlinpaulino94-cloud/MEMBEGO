@@ -10,6 +10,7 @@
 
 import type { CatalogItemType, CatalogVariantStatus } from '@prisma/client'
 import { urlPublicaCatalogo } from './formato'
+import { normalizarCapacidades } from './domain'
 
 /** Variantes que se enseñan: las vendibles y las agotadas. La descontinuada no existe para el público. */
 export const ESTADOS_VARIANTE_VISIBLES: readonly CatalogVariantStatus[] = ['ACTIVE', 'OUT_OF_STOCK']
@@ -62,6 +63,11 @@ interface FilaVariante {
   compareAtPrice: { toFixed(n: number): string; toNumber(): number } | null
   attributes: unknown
   status: CatalogVariantStatus
+  /**
+   * Existencias por sucursal (Fase 3). Solo importan si el ítem CONTROLA inventario;
+   * una sucursal cerrada no cuenta (de ahí no se despacha).
+   */
+  inventoryLevels?: { onHand: number; reserved: number; location: { activa: boolean } }[]
 }
 
 interface FilaItem {
@@ -76,6 +82,8 @@ interface FilaItem {
   images: { path: string }[]
   categories?: { category: { name: string; slug: string } }[]
   source: 'MERCHANT' | 'SUPPLY'
+  /** Las capacidades del ítem (solo para saber si controla inventario; no salen al público). */
+  capabilities?: unknown
   /** Solo `SUPPLY`: la oferta de origen, EN VIVO (no la copia sincronizada). */
   supplyOffer?: { slug: string; status: string } | null
 }
@@ -94,15 +102,35 @@ function atributosTexto(raw: unknown): Record<string, string> {
  * estado de la variante es una COPIA sincronizada y puede ir por detrás; la
  * oferta en vivo manda.
  */
-export function variantesPublicas(filas: readonly FilaVariante[], agotadaEnOrigen = false): VariantePublica[] {
+export function variantesPublicas(filas: readonly FilaVariante[], agotadaEnOrigen = false, controlaInventario = false): VariantePublica[] {
   return filas
     .filter((v) => ESTADOS_VARIANTE_VISIBLES.includes(v.status))
     .map((v) => {
       const price = v.price.toFixed(2)
       const antes = v.compareAtPrice && v.compareAtPrice.toNumber() > v.price.toNumber() ? v.compareAtPrice.toFixed(2) : null
-      return { id: v.id, name: v.name, price, compareAtPrice: antes, attributes: atributosTexto(v.attributes), available: v.status === 'ACTIVE' && !agotadaEnOrigen }
+      return {
+        id: v.id,
+        name: v.name,
+        price,
+        compareAtPrice: antes,
+        attributes: atributosTexto(v.attributes),
+        available: v.status === 'ACTIVE' && !agotadaEnOrigen && !sinExistencias(v, controlaInventario),
+      }
     })
 }
+
+/**
+ * Lo que se puede vender de una variante en las sucursales abiertas: existencia
+ * menos lo apartado. Un producto que controla inventario y no tiene nada
+ * disponible se enseña como agotado (el público no ve cantidades, solo eso).
+ */
+function sinExistencias(v: FilaVariante, controlaInventario: boolean): boolean {
+  if (!controlaInventario) return false
+  const disponible = (v.inventoryLevels ?? []).filter((n) => n.location.activa).reduce((t, n) => t + Math.max(0, n.onHand - n.reserved), 0)
+  return disponible <= 0
+}
+
+const controlaInventario = (f: FilaItem): boolean => f.source === 'MERCHANT' && f.capabilities !== undefined && normalizarCapacidades(f.type, f.capabilities).trackInventory
 
 const agotadaEnOrigen = (f: FilaItem): boolean => f.source === 'SUPPLY' && f.supplyOffer?.status === 'SOLD_OUT'
 
@@ -114,7 +142,7 @@ export function precioDesde(vs: readonly VariantePublica[]): string | null {
 }
 
 export function aResumenPublico(f: FilaItem): ItemPublicoResumen | null {
-  const vs = variantesPublicas(f.variants, agotadaEnOrigen(f))
+  const vs = variantesPublicas(f.variants, agotadaEnOrigen(f), controlaInventario(f))
   if (vs.length === 0) return null // sin nada que mostrar, el ítem no existe para el público
   // Un ítem puente sin su oferta no existe para el público (no hay a dónde mandar la compra).
   if (f.source === 'SUPPLY' && !f.supplyOffer) return null
@@ -140,7 +168,7 @@ export function aDetallePublico(f: FilaItem): ItemPublicoDetalle | null {
     ...resumen,
     description: f.description,
     images: f.images.map((i) => urlPublicaCatalogo(i.path)).filter((u): u is string => !!u),
-    variants: variantesPublicas(f.variants, agotadaEnOrigen(f)),
+    variants: variantesPublicas(f.variants, agotadaEnOrigen(f), controlaInventario(f)),
     categories: (f.categories ?? []).map((c) => ({ name: c.category.name, slug: c.category.slug })),
   }
 }

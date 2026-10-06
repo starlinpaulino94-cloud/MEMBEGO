@@ -10,6 +10,7 @@ import { consumirReservaEnTx, devolverEnTx, liberarReservaEnTx, reservarEnTx, ve
 import { nuevoTokenQr } from '@/modules/qr/token'
 import { auditarPedido } from './auditoria'
 import {
+  ESTADOS_ABIERTOS,
   ESTADOS_AJUSTABLES,
   ESTADOS_CANCELABLES,
   ESTADOS_CANCELABLES_POR_CLIENTE,
@@ -77,6 +78,12 @@ export interface LineaPedido {
   cantidad: number
   /** Descuento en dinero sobre la línea (promociones). El cliente no lo fija. */
   descuento?: number | string
+  /**
+   * Precio unitario YA acordado en otro sistema (la compra de Supply que este
+   * pedido envuelve). Solo lo admite el SISTEMA: el precio de quien pide sale
+   * siempre del catálogo.
+   */
+  precioUnitario?: number | string
 }
 
 export interface EntradaPedido {
@@ -115,6 +122,11 @@ const INCLUIR_PEDIDO = {
 } satisfies Prisma.MembegoOrderInclude
 
 export type PedidoCompleto = Prisma.MembegoOrderGetPayload<{ include: typeof INCLUIR_PEDIDO }>
+
+/** Cuántos pedidos tiene abiertos (esperando, en preparación o listos) esta ficha de cliente. */
+export async function contarPedidosAbiertosEnTx(tx: Tx, companyId: string, customerId: string): Promise<number> {
+  return tx.membegoOrder.count({ where: { companyId, customerId, status: { in: [...ESTADOS_ABIERTOS] } } })
+}
 
 /** Toma el candado de la fila del pedido y lo lee ya bloqueado. */
 async function pedidoBloqueado(tx: Tx, companyId: string, pedidoId: string): Promise<PedidoCompleto> {
@@ -164,6 +176,8 @@ function unirLineas(lineas: readonly LineaPedido[]): LineaPedido[] {
       porVariante.set(l.varianteId, { ...l })
       continue
     }
+    // Dos renglones de la misma variante con precios distintos no se pueden fundir en uno.
+    if (String(previa.precioUnitario ?? '') !== String(l.precioUnitario ?? '')) fallo('PRECIOS_DISTINTOS', 'Dos renglones de la misma variante tienen precios distintos.')
     previa.cantidad = (previa.cantidad ?? 0) + (l.cantidad ?? 0)
     if (l.descuento !== undefined || previa.descuento !== undefined) {
       previa.descuento = new Prisma.Decimal(previa.descuento ?? 0).plus(l.descuento ?? 0).toString()
@@ -207,27 +221,35 @@ export async function crearPedidoEnTx(tx: Tx, companyId: string, e: EntradaPedid
   if (!sucursal.activa) fallo('SUCURSAL_INACTIVA', `La sucursal «${sucursal.nombre}» está desactivada.`)
 
   const unidas = unirLineas(e.lineas)
+  // Un pedido que ENVUELVE una compra ya hecha en otro sistema (Supply) refleja un hecho
+  // consumado: el precio es el que se pagó y el ítem pudo haberse pausado después de la compra.
+  const hechoConsumado = e.origin === 'SUPPLY' && ctx.actor === 'SISTEMA'
+  if (unidas.some((l) => l.precioUnitario !== undefined) && ctx.actor !== 'SISTEMA') {
+    fallo('PRECIO_NO_PERMITIDO', 'El precio de un pedido sale del catálogo: no se puede fijar desde aquí.')
+  }
   const variantes = await tx.catalogVariant.findMany({
     where: { companyId, id: { in: unidas.map((l) => l.varianteId) } },
     include: { item: { select: { id: true, name: true, type: true, status: true, source: true, currency: true, capabilities: true } } },
   })
   const porId = new Map(variantes.map((v) => [v.id, v]))
 
-  const lineasCalculo: { quantity: number; unitPrice: Prisma.Decimal; discount?: number | string }[] = []
+  const lineasCalculo: { quantity: number; unitPrice: number | string | Prisma.Decimal; discount?: number | string }[] = []
   for (const l of unidas) {
     const v = porId.get(l.varianteId)
     if (!v) fallo('VARIANTE_NO_ENCONTRADA', 'Uno de los productos ya no existe.')
     const nombre = v.item.name
-    if (v.item.status !== 'ACTIVE') fallo('ITEM_NO_DISPONIBLE', `«${nombre}» no está a la venta.`)
-    if (v.status !== 'ACTIVE') fallo('VARIANTE_NO_DISPONIBLE', `«${nombre}» (${v.name}) no está disponible.`)
-    const capacidades = normalizarCapacidades(v.item.type, v.item.capabilities)
-    if (e.origin === 'MARKETPLACE' && !capacidades.availableMarketplace) fallo('ITEM_NO_DISPONIBLE', `«${nombre}» no se vende por el marketplace.`)
-    if (e.origin === 'POS' && !capacidades.availablePOS) fallo('ITEM_NO_DISPONIBLE', `«${nombre}» no se vende en caja.`)
+    if (!hechoConsumado) {
+      if (v.item.status !== 'ACTIVE') fallo('ITEM_NO_DISPONIBLE', `«${nombre}» no está a la venta.`)
+      if (v.status !== 'ACTIVE') fallo('VARIANTE_NO_DISPONIBLE', `«${nombre}» (${v.name}) no está disponible.`)
+      const capacidades = normalizarCapacidades(v.item.type, v.item.capabilities)
+      if (e.origin === 'MARKETPLACE' && !capacidades.availableMarketplace) fallo('ITEM_NO_DISPONIBLE', `«${nombre}» no se vende por el marketplace.`)
+      if (e.origin === 'POS' && !capacidades.availablePOS) fallo('ITEM_NO_DISPONIBLE', `«${nombre}» no se vende en caja.`)
+    }
     // Las ofertas de Supply se compran por el checkout de Supply; el pedido de
     // Membego las envuelve (origin SUPPLY) pero no las vende por su cuenta.
     if (v.item.source === 'SUPPLY' && e.origin !== 'SUPPLY') fallo('ITEM_DE_SUPPLY', `«${nombre}» es una oferta de Membego Supply: se compra por su propio checkout.`)
     if (v.item.source !== 'SUPPLY' && e.origin === 'SUPPLY') fallo('ORIGEN_INCOHERENTE', `«${nombre}» no es una oferta de Supply.`)
-    lineasCalculo.push({ quantity: l.cantidad, unitPrice: v.price, discount: l.descuento })
+    lineasCalculo.push({ quantity: l.cantidad, unitPrice: l.precioUnitario !== undefined ? l.precioUnitario : v.price, discount: l.descuento })
   }
 
   const monedas = new Set(variantes.map((v) => v.item.currency))
@@ -624,6 +646,78 @@ export async function completarPorQrEnTx(tx: Tx, companyId: string, token: strin
     nivel,
     total: decimalATexto(p.total),
   })
+  return { pedidoId: p.id, code: p.code, status: 'COMPLETED', nivel, repetido: false }
+}
+
+// ── Cierre de un pedido que envuelve un hecho ya consumado ───────────────────
+
+/**
+ * Cierra un pedido que el SISTEMA creó para envolver algo que ya ocurrió en otro
+ * sistema (una compra de Supply ya pagada). No hay QR que escanear: pasa por los
+ * mismos estados (AWAITING_MERCHANT → READY → COMPLETED) en una sola transacción,
+ * con un QR que nunca se muestra y que se borra al cerrar.
+ *
+ * La evidencia sale de lo que el otro sistema ya verificó: el cliente aceptó el
+ * precio al comprar (`confirmadoPorCliente`) y, si la plata la verificó una
+ * persona de Membego, el pago (`pago`). El nivel se deriva como siempre.
+ *
+ * Solo el sistema, y solo para pedidos que no son del marketplace: un pedido que
+ * un cliente hizo desde la vitrina se cierra únicamente con su QR.
+ */
+export async function cerrarPedidoExternoEnTx(
+  tx: Tx,
+  companyId: string,
+  pedidoId: string,
+  e: { completedAt: Date; confirmadoPorCliente: boolean; pago?: { method: MembegoPaymentMethod; amount: number | string; reference: string | null } | null },
+  ctx: ContextoPedido
+): Promise<ResultadoCierre> {
+  if (ctx.actor !== 'SISTEMA') fallo('SOLO_SISTEMA', 'Un pedido solo se cierra sin QR cuando lo hace el sistema.')
+  const p = await pedidoBloqueado(tx, companyId, pedidoId)
+  if (p.origin === 'MARKETPLACE') fallo('SOLO_CON_QR', 'Un pedido hecho desde la vitrina se cierra únicamente con su QR.')
+  if (p.status === 'COMPLETED') return { pedidoId: p.id, code: p.code, status: p.status, nivel: p.verificationLevel, repetido: true }
+  exigirEstado(p, ['AWAITING_MERCHANT'], 'Solo se cierra un pedido que espera a la empresa')
+
+  const ahora = e.completedAt
+  // El QR existe solo para pasar por LISTO (la base lo exige): nunca sale de aquí y se borra al cerrar.
+  await tx.membegoOrder.update({
+    where: { id: p.id },
+    data: { status: 'READY', acceptedAt: ahora, readyAt: ahora, qrToken: nuevoTokenQr(), qrExpiresAt: ahora },
+  })
+  if (e.confirmadoPorCliente) {
+    await tx.customerConfirmation.upsert({
+      where: { orderId: p.id },
+      create: { companyId, orderId: p.id, confirmedTotal: p.total, confirmedAt: ahora },
+      update: { confirmedTotal: p.total, confirmedAt: ahora },
+    })
+  }
+  if (e.pago) {
+    const error = validarPago(e.pago)
+    if (error) fallo('PAGO_INVALIDO', error)
+    await tx.paymentEvidence.upsert({
+      where: { orderId: p.id },
+      create: { companyId, orderId: p.id, method: e.pago.method, amount: new Prisma.Decimal(e.pago.amount), reference: e.pago.reference, recordedAt: ahora },
+      update: { method: e.pago.method, amount: new Prisma.Decimal(e.pago.amount), reference: e.pago.reference, recordedAt: ahora },
+    })
+  }
+  const nivel = nivelDeVerificacion({
+    status: 'COMPLETED',
+    total: p.total,
+    confirmacion: e.confirmadoPorCliente ? { confirmedTotal: p.total } : null,
+    pago: e.pago ? { method: e.pago.method, amount: e.pago.amount, reference: e.pago.reference } : null,
+  })
+  await tx.membegoOrder.update({
+    where: { id: p.id },
+    data: {
+      status: 'COMPLETED',
+      completedAt: ahora,
+      qrToken: null,
+      qrExpiresAt: null,
+      verificationLevel: nivel,
+      customerConfirmedAt: e.confirmadoPorCliente ? ahora : null,
+      ...(e.pago ? { paymentMethod: e.pago.method } : {}),
+    },
+  })
+  await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_COMPLETED', p.id, { code: p.code, por: ctx.actor, cierre: 'EXTERNO', nivel, total: decimalATexto(p.total) })
   return { pedidoId: p.id, code: p.code, status: 'COMPLETED', nivel, repetido: false }
 }
 
