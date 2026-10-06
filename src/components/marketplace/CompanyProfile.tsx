@@ -42,6 +42,8 @@ import type { RegionalPrefs } from '@/lib/format'
 import { formatMoney } from '@/lib/format'
 import { landingUrlFor } from '@/lib/site'
 import { SucursalesSection } from './SucursalesSection'
+import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPublica'
+import type { ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
 
 const TIPO_LABEL: Record<string, string> = {
   carwash: 'Car Wash',
@@ -86,6 +88,9 @@ export interface CompanyProfileProps {
   /** Sobrescribe el botón volver (p. ej. "Cerca de mí" cuando vino del mapa). */
   backHref?: string
   backLabel?: string
+
+  /** Catálogo unificado publicado (F1.3). Vacío = sin sección: la empresa no lo usa o no tiene nada publicado. */
+  catalogo?: ItemPublicoResumen[]
 
   /** Excursiones públicas de la empresa (opcional). */
   excursiones?: {
@@ -136,6 +141,7 @@ export function CompanyProfile({
   ctaSlot,
   relacionSlot,
   excursiones = [],
+  catalogo = [],
 }: CompanyProfileProps) {
   const hayResenas = !!resenas && (resenas.total > 0 || !!resenaFormSlot)
   const isApp = mode === 'app'
@@ -164,6 +170,7 @@ export function CompanyProfile({
     posts.beneficios.length > 0 && { id: 'beneficios', label: 'Beneficios' },
     posts.eventos.length > 0 && { id: 'eventos', label: 'Eventos' },
     posts.noticias.length > 0 && { id: 'noticias', label: 'Noticias' },
+    catalogo.length > 0 && { id: 'catalogo', label: 'Productos y servicios' },
     excursiones.length > 0 && { id: 'excursiones', label: 'Actividades' },
     company.galleryImages.length > 0 && { id: 'galeria', label: 'Galería' },
     hayResenas && { id: 'resenas', label: 'Reseñas' },
@@ -627,6 +634,19 @@ export function CompanyProfile({
                   <h3 className="mt-2 text-h4 text-foreground">{n.titulo}</h3>
                   <p className="mt-1 text-small text-muted-foreground">{n.contenido}</p>
                 </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Productos y servicios (catálogo unificado) */}
+        {catalogo.length > 0 && (
+          <section id="catalogo" className="mt-14 scroll-mt-32">
+            <h2 className="text-h2 text-foreground">Productos y servicios</h2>
+            <p className="mt-2 text-muted-foreground">Lo que ofrece {company.name}, con sus precios.</p>
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {catalogo.map((item) => (
+                <TarjetaCatalogoPublica key={item.id} item={item} />
               ))}
             </div>
           </section>

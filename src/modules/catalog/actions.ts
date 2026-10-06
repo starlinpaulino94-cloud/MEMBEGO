@@ -13,12 +13,13 @@
  * filtrar detalles de la base.
  */
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import type { CatalogItemStatus } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
+import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { uniqueFileName } from '@/lib/storage'
 import { rutaCatalogo } from '@/lib/storage-rutas'
@@ -52,6 +53,16 @@ import { urlPublicaCatalogo } from './formato'
 export type ResultadoCatalogo<T = unknown> = ({ ok: true } & T) | { ok: false; error: string }
 
 const RUTA = '/admin/catalogo'
+
+/**
+ * Tras cualquier cambio: el panel se refresca y la VITRINA PÚBLICA también
+ * (publicar, pausar, cambiar un precio o una foto debe verse en segundos, no
+ * esperar el TTL de la caché del marketplace).
+ */
+function refrescar() {
+  revalidatePath(RUTA)
+  revalidateTag(MARKETPLACE_TAG, 'max')
+}
 const ESTADOS: readonly CatalogItemStatus[] = ['DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED']
 
 function esObjeto(v: unknown): v is Record<string, unknown> {
@@ -83,7 +94,7 @@ export async function crearItemCatalogo(
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   try {
     const r = await conEmpresa(c.companyId, (tx) => crearItemEnTx(tx, c.companyId, entrada, c.ctx))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true, id: r.id, slug: r.slug }
   } catch (e) {
     return aError(e)
@@ -96,7 +107,7 @@ export async function actualizarItemCatalogo(itemId: string, cambios: CambiosIte
   if (typeof itemId !== 'string' || !esObjeto(cambios)) return { ok: false, error: 'Datos no válidos.' }
   try {
     await conEmpresa(c.companyId, (tx) => actualizarItemEnTx(tx, c.companyId, itemId, cambios, c.ctx))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true }
   } catch (e) {
     return aError(e)
@@ -116,7 +127,7 @@ export async function cambiarEstadoItemCatalogo(itemId: string, estado: CatalogI
   if ('error' in c) return { ok: false, error: c.error }
   try {
     await conEmpresa(c.companyId, (tx) => cambiarEstadoItemEnTx(tx, c.companyId, itemId, estado, c.ctx))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true }
   } catch (e) {
     return aError(e)
@@ -132,7 +143,7 @@ export async function agregarVarianteCatalogo(
   if (typeof itemId !== 'string' || !esObjeto(datos)) return { ok: false, error: 'Datos no válidos.' }
   try {
     const r = await conEmpresa(c.companyId, (tx) => agregarVarianteEnTx(tx, c.companyId, itemId, datos, c.ctx))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true, id: r.id, sku: r.sku }
   } catch (e) {
     return aError(e)
@@ -148,7 +159,7 @@ export async function actualizarVarianteCatalogo(
   if (typeof varianteId !== 'string' || !esObjeto(cambios)) return { ok: false, error: 'Datos no válidos.' }
   try {
     await conEmpresa(c.companyId, (tx) => actualizarVarianteEnTx(tx, c.companyId, varianteId, cambios, c.ctx))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true }
   } catch (e) {
     return aError(e)
@@ -161,7 +172,7 @@ export async function eliminarVarianteCatalogo(varianteId: string): Promise<Resu
   if (typeof varianteId !== 'string') return { ok: false, error: 'Datos no válidos.' }
   try {
     await conEmpresa(c.companyId, (tx) => eliminarVarianteEnTx(tx, c.companyId, varianteId, c.ctx))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true }
   } catch (e) {
     return aError(e)
@@ -209,7 +220,7 @@ export async function subirImagenCatalogo(
 
     try {
       const r = await conEmpresa(c.companyId, (tx) => registrarImagenEnTx(tx, c.companyId, itemId, path, null, c.ctx))
-      revalidatePath(RUTA)
+      refrescar()
       return { ok: true, id: r.id, url: urlPublicaCatalogo(path) }
     } catch (e) {
       // El archivo ya está en Storage y la fila no se pudo escribir: no dejar huérfanos.
@@ -238,7 +249,7 @@ export async function eliminarImagenCatalogo(imagenId: string): Promise<Resultad
     if (path.startsWith(prefijoImagenesItem(c.companyId, itemId))) {
       await createAdminClient().storage.from(BUCKET).remove([path]).catch(() => undefined)
     }
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true }
   } catch (e) {
     return aError(e)
@@ -251,7 +262,7 @@ export async function ponerPortadaCatalogo(imagenId: string): Promise<ResultadoC
   if (typeof imagenId !== 'string') return { ok: false, error: 'Datos no válidos.' }
   try {
     await conEmpresa(c.companyId, (tx) => ponerPortadaEnTx(tx, c.companyId, imagenId, c.ctx))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true }
   } catch (e) {
     return aError(e)
@@ -267,7 +278,7 @@ export async function crearCategoriaCatalogo(
   if ('error' in c) return { ok: false, error: c.error }
   try {
     const r = await conEmpresa(c.companyId, (tx) => crearCategoriaEnTx(tx, c.companyId, nombre))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true, id: r.id, name: r.name }
   } catch (e) {
     return aError(e)
@@ -280,7 +291,7 @@ export async function eliminarCategoriaCatalogo(categoriaId: string): Promise<Re
   if (typeof categoriaId !== 'string') return { ok: false, error: 'Datos no válidos.' }
   try {
     await conEmpresa(c.companyId, (tx) => eliminarCategoriaEnTx(tx, c.companyId, categoriaId))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true }
   } catch (e) {
     return aError(e)
@@ -293,7 +304,7 @@ export async function asignarCategoriasCatalogo(itemId: string, categoriaIds: st
   if (typeof itemId !== 'string' || !Array.isArray(categoriaIds)) return { ok: false, error: 'Datos no válidos.' }
   try {
     await conEmpresa(c.companyId, (tx) => asignarCategoriasEnTx(tx, c.companyId, itemId, categoriaIds, c.ctx))
-    revalidatePath(RUTA)
+    refrescar()
     return { ok: true }
   } catch (e) {
     return aError(e)

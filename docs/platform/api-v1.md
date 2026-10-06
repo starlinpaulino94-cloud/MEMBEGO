@@ -235,6 +235,41 @@ await prisma.credencialSistema.create({
 
 ---
 
+## Catálogo unificado (Commerce Core · F1.3)
+
+Productos y servicios de la empresa, con sus variantes. Es un recurso de **la propia empresa**: se
+consulta y se arma con una **clave de API de empresa** (`mbk_…`); un satélite puede *leerlo*
+(`catalog:read`) pero no escribirlo.
+
+| Método y ruta | Scope | Quién | Qué hace |
+|---|---|---|---|
+| `GET /catalog-items` | `catalog:read` | satélite o empresa | Lista paginada (`limit`, `cursor`; filtros `status`, `type`) |
+| `GET /catalog-items/{id}` | `catalog:read` | satélite o empresa | Un ítem con sus variantes |
+| `POST /catalog-items` | `catalog:manage` | **solo clave de empresa** | Crea un ítem en **borrador** |
+| `GET /catalog-variants` | `catalog:read` | satélite o empresa | Variantes paginadas (`itemId` opcional) |
+| `POST /catalog-variants` | `catalog:manage` | **solo clave de empresa** | Agrega una variante a un ítem **en borrador** |
+
+Reglas que conviene saber antes de integrar:
+
+- **Solo si la empresa lo tiene encendido.** Sin la capacidad `CATALOGO_UNIFICADO` todo contesta
+  `404 NOT_FOUND` con `reason: "catalog_not_enabled"`.
+- **La API arma borradores; no publica.** Crear deja el ítem en `DRAFT` (aunque el cuerpo diga
+  `status`), y las variantes solo se agregan mientras el ítem siga en borrador. Publicar, pausar,
+  archivar y cambiar un precio ya publicado se hace en el panel. Así una clave filtrada o una
+  integración con un error no puede poner nada a la venta ni cambiar un precio en vivo.
+- **El costo es de la empresa.** El campo `cost` de las variantes solo sale hacia la clave de la
+  propia empresa, nunca hacia un satélite.
+- **Reintentos.** Estas escrituras no llevan `Idempotency-Key` (esa tabla es de satélites). Manda
+  siempre `sku`: es único por empresa, y un reintento tras un timeout contesta `400` con
+  `reason: "duplicate"` en vez de crear un segundo ítem.
+- Un id de otra empresa contesta el mismo `404` que un id inventado.
+- Los ítems con `source: "SUPPLY"` (puente con Supply, futuro) serán de solo lectura.
+
+El scope `catalog:manage` es una **excepción nombrada** a «las claves de empresa solo leen», igual
+que `customers:manage`: no mueve dinero, y se concede a mano al crear la clave.
+
+---
+
 ## Guardias
 
 | Prueba | Qué impide |
