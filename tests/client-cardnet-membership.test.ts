@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { CardnetPaymentStatus } from '../apps/client/src/lib/api'
-import { isCardnetServerApproved, membershipCardnetTarget } from '../apps/client/src/lib/cardnet-membership-checkout'
+import type { CardnetPaymentStatus, CardnetSessionStartResult } from '../apps/client/src/lib/api'
+import { isCardnetServerApproved, membershipCardnetStartAction, membershipCardnetTarget } from '../apps/client/src/lib/cardnet-membership-checkout'
 
 test('unchecked consent does not request renewal storage', () => {
   assert.deepEqual(membershipCardnetTarget('membership-1', true, false), {
@@ -33,4 +33,12 @@ test('pending server status is not approval', () => {
 test('server-approved status is approval', () => {
   const status: CardnetPaymentStatus = { status: 'approved' }
   assert.equal(isCardnetServerApproved(status), true)
+})
+
+test('processing session-start result resumes server status instead of opening capture', () => {
+  const result: CardnetSessionStartResult = { status: 'processing', sessionId: 'in-flight-session' }
+  assert.deepEqual(membershipCardnetStartAction(result), {
+    kind: 'resume',
+    sessionId: 'in-flight-session',
+  })
 })
