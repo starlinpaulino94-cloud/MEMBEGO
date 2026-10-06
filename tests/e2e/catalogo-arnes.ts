@@ -60,6 +60,8 @@ export async function itemSembrado(
     slug: string
     status?: 'DRAFT' | 'ACTIVE' | 'PAUSED'
     marketplace?: boolean
+    /** Producto físico que CONTROLA inventario (Fase 2). Sin esto, es un servicio. */
+    controlaInventario?: boolean
     variantes: { name: string; sku: string; price: number; cost?: number; compareAt?: number; status?: 'ACTIVE' | 'OUT_OF_STOCK' | 'DISCONTINUED'; atributos?: Record<string, string>; porDefecto?: boolean }[]
   }
 ): Promise<ItemSembrado> {
@@ -78,10 +80,10 @@ export async function itemSembrado(
         companyId: empresaId,
         name: d.name,
         slug: d.slug,
-        type: 'SERVICE',
+        type: d.controlaInventario ? 'PHYSICAL_PRODUCT' : 'SERVICE',
         status,
         publishedAt: status === 'DRAFT' ? null : new Date(),
-        capabilities: { availableMarketplace: d.marketplace ?? true, availablePOS: true },
+        capabilities: { availableMarketplace: d.marketplace ?? true, availablePOS: true, trackInventory: d.controlaInventario ?? false },
       },
       select: { id: true, slug: true },
     })
@@ -116,4 +118,19 @@ export async function claveApi(empresaId: string, scopes: string[]): Promise<str
     data: { companyId: empresaId, nombre: 'e2e catálogo', prefijo, secretoHash: hashearSecreto(secreto), scopes },
   })
   return `${prefijo}.${secreto}`
+}
+
+/** Una sucursal de la empresa (las existencias se llevan por sucursal). */
+export async function sucursalSembrada(empresaId: string, nombre: string): Promise<{ id: string; nombre: string }> {
+  const prisma = prismaDeArnes()
+  const previa = await prisma.sucursal.findFirst({ where: { companyId: empresaId, nombre }, select: { id: true } })
+  if (previa) return { id: previa.id, nombre }
+  const s = await prisma.sucursal.create({ data: { companyId: empresaId, nombre }, select: { id: true } })
+  return { id: s.id, nombre }
+}
+
+/** El id de la primera variante de un ítem sembrado. */
+export async function varianteDe(itemId: string): Promise<string> {
+  const v = await prismaDeArnes().catalogVariant.findFirstOrThrow({ where: { catalogItemId: itemId }, orderBy: { position: 'asc' }, select: { id: true } })
+  return v.id
 }

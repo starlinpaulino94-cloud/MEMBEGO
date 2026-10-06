@@ -28,7 +28,8 @@ test('CATALOGO_UNIFICADO existe y no está encendida de serie en ninguna categor
 
 test('la sección «catalogo» existe, cuelga de la capacidad y /admin/catalogo resuelve a ella', () => {
   assert.ok((ADMIN_SECTIONS as readonly string[]).includes('catalogo'))
-  assert.deepEqual(SECCIONES_POR_CAPACIDAD.CATALOGO_UNIFICADO, ['catalogo'])
+  // El inventario (Fase 2) cuelga de la misma capacidad: se activa con el catálogo.
+  assert.deepEqual(SECCIONES_POR_CAPACIDAD.CATALOGO_UNIFICADO, ['catalogo', 'inventario'])
   assert.equal(CAPACIDAD_DE_SECCION.catalogo, 'CATALOGO_UNIFICADO')
   assert.equal(adminSectionForPath('/admin/catalogo'), 'catalogo')
   assert.equal(adminSectionForPath('/admin/catalogo/nuevo'), 'catalogo')

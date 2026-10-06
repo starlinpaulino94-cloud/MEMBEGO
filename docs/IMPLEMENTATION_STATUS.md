@@ -10,16 +10,16 @@
 ```text
 Fecha de actualización: 2026-10-06
 Branch:                 claude/wizardly-hypatia-x2l9av (sincronizada con origin; sin PR abierto)
-Commit actual:          ver `git log` (F1.1 = `16e8618`, F1.2 = `ce61167`; F1.3 es el commit posterior; antes: `3c73726` auditoría F0, `7c56aeb` + `708a9bb` higiene)
-Estado general:         🟡 PARTIAL — fundaciones casi cerradas; Commerce Core con catálogo completo (admin, vitrina pública y API), **apagado** por capacidad
-Fase actual:            F1 Commerce Catalog — ✅ rebanadas F1.1, F1.2 y F1.3 entregadas; 🟡 cierre pendiente de la validación con Storage real (§3); E2E de CI ya existe
+Commit actual:          ver `git log` (F2 = el commit posterior a `f3c2360` [E2E del catálogo]; F1.1 = `16e8618`, F1.2 = `ce61167`, F1.3 = `9b92651`; antes: `3c73726` auditoría F0, `7c56aeb` + `708a9bb` higiene)
+Estado general:         🟡 PARTIAL — fundaciones casi cerradas; Commerce Core con catálogo completo (admin, vitrina pública y API) e **inventario con ledger** (admin + servicio), ambos **apagados** por capacidad
+Fase actual:            F2 Inventory — ✅ rebanadas F2.1 (ledger, servicio) y F2.2 (admin + E2E) entregadas. F1 sigue 🟡 solo por la validación con Storage real (§3)
 Última fase completada: ninguna al 100 % (F0: 4 de 6 ítems ✅, 2 🟡 por decisiones del usuario, sin código pendiente)
-Próxima fase:           F2 Inventario y F2.5 Bridge Supply→Marketplace (en paralelo) 
+Próxima fase:           F2.5 Bridge Supply→Marketplace + Discovery (F2 ya está; F3 Órdenes no depende de inventario para servicios)
 ```
 
-- Membego es hoy un monolito modular maduro (290 modelos, 192 migraciones, 3 700 tests unitarios) con **Supply V2 como módulo más completo** (9 slices) y **una** entidad del Commerce Core objetivo: el catálogo (`CatalogItem`/`CatalogVariant`: pantallas de admin, vitrina pública, descubrimiento entre empresas y API v1; todo detrás de la capacidad `CATALOGO_UNIFICADO`, apagada de serie).
+- Membego es hoy un monolito modular maduro (293 modelos, 194 migraciones, 3 700+ tests unitarios) con **Supply V2 como módulo más completo** (9 slices) y **dos** entidades del Commerce Core objetivo: el catálogo (`CatalogItem`/`CatalogVariant`: pantallas de admin, vitrina pública, descubrimiento entre empresas y API v1) y el **inventario** (`InventoryLevel`/`InventoryMovement`/`InventoryReservation`: pantallas de admin, ledger inmutable, reservas con vencimiento); todo detrás de la capacidad `CATALOGO_UNIFICADO`, apagada de serie.
 - Hecho en F0: capa `commerce-primitives` compartida; módulos secundarios ocultos por capacidades; CRM/Mensajería apagados por defecto en tenants nuevos; ruleta apagada también para el cliente.
-- F1.1 añade 5 tablas `catalog_*`, 4 enums y 4 acciones de auditoría en **2 migraciones aditivas** (`20261036_catalog_core`, `20261037_catalog_core_enums`). Nada existente cambia de comportamiento: la capacidad `CATALOGO_UNIFICADO` nace **apagada para todos**. F0 no tocó `prisma/`.
+- F1.1 añade 5 tablas `catalog_*`, 4 enums y 4 acciones de auditoría en **2 migraciones aditivas** (`20261036_catalog_core`, `20261037_catalog_core_enums`); F2 añade 3 tablas `inventory_*`, 3 enums y 3 acciones de auditoría en otras **2** (`20261038_inventory_core`, `20261039_inventory_core_enums`; solo dos índices únicos nuevos sobre tablas existentes). Nada existente cambia de comportamiento: la capacidad `CATALOGO_UNIFICADO` nace **apagada para todos**. F0 no tocó `prisma/`.
 - Calidad verificada tras F1.3: tsc, lint, 3 694 unit, 366 PostgreSQL, build, bundle, RLS (estático y conductual 22/22), 192 migraciones sin deriva en PASS. El catálogo (admin, vitrina pública y API) tiene **3 specs E2E de CI** (`catalogo-admin`, `catalogo-publico`, `catalogo-api`): suite E2E completa **93 PASS · 0 FAIL · 124 SKIP** (14,1 min, réplica local de `e2e.yml`; antes 67/0/114). **Falla hoy:** `npm audit` (1 high, `source-map-js`).
 - Lo más urgente no es funcionalidad: **una clave `service_role` de Supabase está comprometida en git** (rotarla es del usuario, §14). La Server Action sin guardia (`subirImagenExcursion`) ya está **cerrada** (§14, «Deuda cerrada»).
 - Dos decisiones abiertas del usuario: **corte de RLS Capa 2 en producción** y **Supply V1** (§16).
@@ -32,7 +32,7 @@ Numeración = Plan Maestro v2. Alias usados en el pedido: «F2 Supply→Marketpl
 |---|---|---|---|---|
 | **F0** Foundation Hardening | 🟡 | 4/6 ítems ✅, 2 🟡 | RLS completo, capacidades formalizadas, módulos ocultos, `commerce-primitives` | Primitives extraídas; ocultamiento hecho salvo Supply V1; RLS: cobertura OK, Capa 2 apagada en prod |
 | **F1** Commerce Catalog | 🟡 | F1.1 ✅ · F1.2 ✅ · F1.3 ✅ | `CatalogItem` + `CatalogVariant` (variante default oculta) | Esquema, migración, RLS generada, capacidad/sección/permisos, servicio, acciones, **pantallas de admin** (lista, alta, detalle, variantes, fotos, categorías) y tests (55 PG + 60 unit), **vitrina pública** (sección en la página de la empresa, detalle, `/catalogo`, franja en el inicio) y **API v1** (5 recursos). Capacidad apagada de serie; **E2E de CI hecho** (26 pruebas nuevas); sin probar contra Storage real |
-| **F2** Inventory General | ⚪ | 0 | `InventoryLevel` + `InventoryMovement` con ledger | Solo existe inventario carwash (`ProductoInventario`), no enlazado a ventas |
+| **F2** Inventory General | 🟡 | F2.1 ✅ · F2.2 ✅ | `InventoryLevel` + `InventoryMovement` con ledger | Esquema (+ `InventoryReservation`), migraciones, ledger **inmutable en la base**, servicio (reservas con TTL, transferencias, conteo, idempotencia, `FOR UPDATE`), cron, pantallas `/admin/inventario`, E2E, 63 tests nuevos. Capacidad apagada (la del catálogo). Sin API pública ni conexión a la vitrina; nadie llama aún a vender/reservar (F3). El inventario del Car Wash (`ProductoInventario`) no se tocó |
 | **F2.5** Supply → Marketplace Bridge + Discovery | ⚪ | 0 | Items Supply en marketplace público + feed cross-company | Existen páginas públicas `/promociones/*` de Supply V2 y búsqueda de empresas, **sin bridge ni `CatalogItem`** |
 | **F3** MembegoOrder + Attribution | ⚪ | 0 | Pedido unificado, atribución, confirmación dual | 5 modelos de orden desconectados (§6) |
 | **F4** Merchant Billing | ⚪ | 0 | Comisión CPA + 8 %, ledger merchant | Nada factura a una empresa |
@@ -45,7 +45,73 @@ Numeración = Plan Maestro v2. Alias usados en el pedido: «F2 Supply→Marketpl
 
 Camino crítico del plan: **F0 → F1 → F2.5 → F3 → F4** (F2 en paralelo con F2.5). Estimaciones del plan (no medidas): ~13–14 semanas a revenue.
 
-## 3. Fase actual — F1 Commerce Catalog (🟡) · F1.1, F1.2 y F1.3 entregadas
+## 3. Fase actual — F2 Inventory (🟡) · F2.1 y F2.2 entregadas
+
+### Objetivo
+Inventario real **por variante y sucursal** con ledger inmutable (Plan Maestro §10, F2): saldo por cubetas, movimientos append-only, reservas con vencimiento, transferencias, alertas de stock bajo. F2.1 = esquema, ledger, servicio y tests; F2.2 = pantallas de admin y E2E. Va **con la misma capacidad que el catálogo** (`CATALOGO_UNIFICADO`, apagada de serie; el plan dice «se activa automáticamente con F1 para ítems con `trackInventory`»).
+
+### Implementado (F2.1 — verificado, §8)
+- ✅ Esquema `prisma/schema/inventario.prisma`: `InventoryLevel` (saldo por `catalogVariantId` × `locationId` = `Sucursal`), `InventoryMovement` (ledger) e `InventoryReservation` (reserva con `expiresAt`); enums `InventoryBucket` (`AVAILABLE`/`RESERVED`/`DAMAGED`), `InventoryMovementType` (los 9 del plan), `InventoryReservationStatus`; 3 acciones de auditoría (`INVENTORY_STOCK_CHANGED`, `INVENTORY_TRANSFERRED`, `INVENTORY_CONFIGURED`).
+- ✅ Migraciones `20261038_inventory_core` y `20261039_inventory_core_enums`: aditivas e idempotentes; solo tocan tablas existentes para añadir 2 índices únicos `(id, companyId)` (destino de FK compuestas) en `catalog_variants` y `sucursales`. Selladas (194), 0 deriva.
+- ✅ La **base** hace cumplir: ninguna cubeta negativa y `reserved ≤ onHand` (`available = onHand − reserved`, calculado), cantidades positivas, **cada tipo de movimiento solo puede hacer ciertos traslados** (CHECK `inventory_movements_traslado`, gemelo de la tabla del dominio), motivo obligatorio en ajuste y daño, FK **compuestas** que impiden juntar la variante de una empresa con la sucursal de otra, FK `RESTRICT` (con historial no se borra ni la variante ni la sucursal) y **ledger inmutable**: disparadores que rechazan `UPDATE`, `DELETE` y `TRUNCATE` de `inventory_movements`.
+- ✅ **Bug que cazó la prueba de las 144 combinaciones:** un CHECK que evalúa a `NULL` **se acepta** en PostgreSQL; la primera versión del CHECK de traslados dejaba pasar, p. ej., un `DAMAGE` de «nada» a `DAMAGED`. Corregido con `IS NOT DISTINCT FROM` y `coalesce(…, false)` (la migración no se había confirmado aún).
+- ✅ `src/modules/inventory/`: `domain.ts` (puro, sobre `commerce-primitives/ledger`), `service.ts`, `queries.ts`, `actions.ts`, `barrido.ts`, `auditoria.ts`, `errores.ts`, `formato.ts` (client-safe). **Toda escritura al saldo pasa por `escribirMovimiento`** (un test lo vigila); concurrencia con `SELECT … FOR UPDATE` sobre el saldo (varias filas, **en orden de id**: las transferencias cruzadas no se interbloquean); **idempotencia** por `idempotencyKey` único por empresa; **una reserva vencida deja de apartar sin esperar al cron** (toda operación sobre un saldo vence antes las caducadas, bajo el mismo candado).
+- ✅ Operaciones: recibir, devolver, vender (directa, para caja/pedidos), dañar, resolver lo dañado (vuelve a vender o baja), ajustar (±, motivo obligatorio), **conteo físico** (calcula la diferencia; no baja de lo apartado), transferir (dos patas, misma referencia `TRANSFER`, una transacción), reservar con TTL (1 min–7 días), liberar, consumir (convertir en venta; una vencida ya no se cobra), vencer caducadas, umbral de stock bajo.
+- ✅ Cron `/api/cron/inventario` (diario, 06:30 UTC, `autorizarCron`) que vence las reservas caducadas empresa por empresa (idempotente; un fallo en una empresa no afecta a las demás).
+- ✅ Enganches con el catálogo: una variante con **historial** de inventario no se borra (se descontinúa; un saldo sin movimientos se va con ella) y no se puede **dejar de controlar inventario** con existencias (`ITEM_CON_EXISTENCIAS`). El catálogo **no importa** del inventario (la dependencia va en una dirección; lo vigila un test).
+- ✅ Sección `inventario` (sin capacidad propia: cuelga de `CATALOGO_UNIFICADO`; fuera de los roles acotados) con funciones de permiso `ajustar` y `transferir`; gate `permisos-catalogo` en verde (100 funciones).
+- ✅ RLS: las 3 tablas llevan `companyId` propio → Nivel 0, política **generada** (0 escritas a mano). `probar-rls` 29/29 (7 casos nuevos: lectura, escritura cruzada, FK compuesta, `update` sin `where`, y «ni la dueña edita su ledger»).
+- ✅ Tests: `inventory-domain` (13 unit, incluye una propiedad de 5 000 movimientos al azar), `inventario-permisos` (15 unit) y `postgres/inventory.db.test.ts` (35: 20 reservas simultáneas de 5 unidades → ganan exactamente 5; dos ventas de la última unidad; misma clave llegando 5 veces; transferencias cruzadas en paralelo; inmutabilidad; las 144 combinaciones; vencimiento sin barrido; propiedad de 300 operaciones al azar con el cuadre ledger↔saldo↔reservas; aislamiento; barrido). **Mutación comprobada:** sin `FOR UPDATE` fallan las 4 pruebas de concurrencia; sin un filtro de `companyId` falla el gate de aislamiento.
+
+### Implementado (F2.2 — verificado, §8)
+- ✅ Pantallas `/admin/inventario` (lista: variantes de los productos que **controlan inventario**, con saldo por sucursal, estado Agotado/Stock bajo/En stock, filtros por texto, sucursal y estado, alertas de stock bajo arriba, paginación) y `/admin/inventario/[varianteId]` (totales, una tarjeta por sucursal con **movimientos manuales** —entrada, devolución, conteo, ajuste sobrante/faltante, daño, resolver lo dañado— y umbral, **transferencia** entre sucursales, reservas vivas e historial paginado por cursor). Layout con `guardarSeccion('inventario')`; cada página con `requireRole` + `requireCompanyContext`; una variante ajena o inexistente se ve igual (`notFound()`, sin fuga); los formularios se ocultan a quien no tiene la función (la acción igual lo rechazaría).
+- ✅ Cada envío lleva una **clave de idempotencia** (doble clic o reintento no mueve el stock dos veces). `router.refresh()` tras cada éxito. Cantidad y motivo son estado controlado (un `form.reset()` desincronizaba el `<select>` controlado: detectado en la revisión, corregido antes de probar).
+- ✅ Menú: «Inventario» en *Oferta comercial* y en el hub *Catálogo*, con `capacidad: 'CATALOGO_UNIFICADO'`.
+- ✅ **E2E de CI** `tests/e2e/inventario-admin.spec.ts` (3 pruebas): lista agotada → entrada → faltante sin motivo (no envía) → con motivo → imposible (avisa y no mueve) → daño → baja → umbral y alerta en la lista → transferencia → conteo → historial; variante ajena = inexistente; empresa sin capacidad rebotada y sin entrada de menú. Reutiliza el arnés `catalogo-arnes.ts` (sesión firmada, sin Supabase).
+
+### Decisiones y desviaciones del plan (F2)
+| Plan | Implementado | Por qué |
+|---|---|---|
+| Entidades `InventoryLevel` e `InventoryMovement` | + **`InventoryReservation`** | «Reservations con TTL» exige una fila que sepa qué vence y cuándo; con solo dos tablas no hay qué vencer |
+| `locationId` (`Location`) | **`Sucursal`** existente | No hay entidad `Location`; las sucursales ya son el «dónde» de caja, Supply y visitas. FK compuesta `(locationId, companyId)` |
+| `incoming` en `InventoryLevel` | **No está** | Ningún flujo lo escribe (no hay órdenes de compra en tránsito); una columna que nadie mantiene miente. Se añade con una migración aditiva cuando exista el flujo |
+| `orderId` en `InventoryMovement` | **No está**; `referenceType`/`referenceId` (`ORDER`, `TRANSFER`, `RESERVATION`, `STOCK_COUNT`…) | `MembegoOrder` no existe hasta F3; la referencia genérica ya lo cubrirá sin migrar |
+| `damaged` como campo | Cubeta propia `DAMAGED` del ledger; `onHand = AVAILABLE + RESERVED` (lo dañado **no** cuenta como existencia) | Hace que el ledger cuadre con las tres cubetas y que lo dañado no se venda |
+| `quantity` «positiva o negativa» | **Siempre positiva**; la dirección la dan `sourceBucket`/`destinationBucket` | Es el patrón de `commerce-primitives/ledger` (traslados); evita el signo ambiguo |
+| `userId` en el movimiento | Texto **sin FK** | Un usuario que se borra no puede reescribir un ledger inmutable (la FK con `SET NULL` exigiría un `UPDATE`) |
+| Unidades | **Enteras** | Inventario de venta (piezas). Los insumos por litro/kilo del Car Wash siguen en `ProductoInventario`, que **no** se migra |
+| Capacidad propia | **Ninguna**: cuelga de `CATALOGO_UNIFICADO` | El plan (§Activación) dice que F2 se activa con F1 para ítems con `trackInventory` |
+
+### Límites de la verificación de F2 (lo que NO se probó)
+- Los E2E corren sobre una base creada con `db push`: **sin** los disparadores ni los CHECK de las migraciones. La inmutabilidad y las 144 combinaciones las prueban los tests PG y `probar-rls`; la interfaz, el E2E.
+- **El público no ve el stock**: un ítem con `trackInventory` y 0 disponibles sigue mostrándose como vendible en la vitrina (no hay compra todavía; F3/F8 lo conectarán). La variante tiene su `status` manual `OUT_OF_STOCK`, independiente del saldo.
+- Sin importación masiva, sin API pública de inventario (no está en el plan), sin alertas por correo/push (solo la lista y el aviso en pantalla), sin insignia de «stock bajo» en el menú, sin reportes de valuación ni de rotación.
+- `vender`/`reservar`/`consumir` los llama el sistema (caja, pedidos de F3): **ninguna pantalla ni acción de panel los expone** (lo vigila un test) y todavía no hay quien los llame.
+- Solo escritorio y modo claro en el E2E; sin dispositivo real.
+- El ledger de `ProductoInventario` (carwash) sigue **sin bloqueo** (§10): no se tocó.
+
+### Pendiente (F2)
+API v1 de inventario y eventos de dominio; mostrar «agotado» en la vitrina a partir del saldo (F3); importación masiva y conteo por hoja; alertas por notificación; reportes; `incoming` cuando haya compras en tránsito; migrar/enlazar `ProductoInventario` del Car Wash (decisión de producto, no del plan).
+
+### Archivos principales (F2)
+`prisma/schema/{inventario,catalogo,identidad}.prisma` · `prisma/migrations/{20261038_inventory_core,20261039_inventory_core_enums}` · `src/modules/inventory/*` · `src/app/(admin)/admin/inventario/*` · `src/app/api/cron/inventario/route.ts` · `src/components/inventario/*` · `src/modules/catalog/service.ts` (2 guardas) · `src/lib/auth/{permissions,funciones}.ts` · `src/modules/capacidades/catalogo.ts` · `src/modules/auditoria/queries.ts` · `src/components/layout/nav-config.ts` · `vercel.json` · `scripts/probar-rls.mjs` · `tests/{inventory-domain,inventario-permisos}.test.ts` · `tests/postgres/inventory.db.test.ts` · `tests/e2e/{inventario-admin.spec,catalogo-arnes}.ts`.
+
+### Entidades, APIs, eventos (F2)
+Tablas: `inventory_levels`, `inventory_movements`, `inventory_reservations`. Server Actions (9, todas con `requireSection('inventario', fn)`): `registrarEntradaInventario`, `registrarDevolucionInventario`, `registrarDanoInventario`, `resolverDanadoInventario`, `ajustarInventario`, `contarInventario`, `fijarUmbralInventario` (función `ajustar`), `transferirInventario` (función `transferir`) y `cargarMasHistorialInventario` (solo sección). Servicio para el sistema: `venderEnTx`, `reservarEnTx`, `liberarReservaEnTx`, `consumirReservaEnTx`, `vencerReservasEnTx`. Cron `/api/cron/inventario`. Eventos de dominio: ninguno.
+
+### Criterios de aceptación (Plan Maestro §10, F2)
+
+| Criterio | Resultado |
+|---|---|
+| Inventario por variante y ubicación funcional | **PASS** — pantallas, servicio y E2E; 35 tests PG |
+| Ledger inmutable | **PASS** — la base rechaza `UPDATE`/`DELETE`/`TRUNCATE` (tests PG y `probar-rls`) |
+| Reservations con TTL | **PASS** — vencen sin cron, el barrido es red de seguridad; concurrencia probada (20 → 5) |
+| `available` nunca negativo | **PASS** — CHECK + ledger puro + propiedad de 5 000 y de 300 operaciones |
+| Concurrencia (`SELECT FOR UPDATE`) | **PASS** — con mutación: sin el candado fallan las 4 pruebas |
+
+---
+
+### Fase anterior — F1 Commerce Catalog (🟡) · F1.1, F1.2 y F1.3 entregadas
 
 ### Objetivo
 `CatalogItem` + `CatalogVariant` como fuente única de «qué vende una empresa», con variante default oculta en ítems simples. F1.1 = backend; F1.2 = UI admin; F1.3 = marketplace público + API v1.
@@ -284,13 +350,13 @@ Otros hechos: 0 marcadores TODO/FIXME en `supply-v2`. Pagos del cliente solo `TR
 
 ## 6. Commerce Core
 
-Verificado por grep en `prisma/`, `src/`, `tests/`: de las entidades objetivo solo existen las del catálogo (F1.1); `SupplyV2CatalogItem` es otra cosa (lo que un proveedor vende a Membego).
+Verificado por grep en `prisma/`, `src/`, `tests/`: de las entidades objetivo solo existen las del catálogo (F1.1) y las del inventario (F2); `SupplyV2CatalogItem` es otra cosa (lo que un proveedor vende a Membego).
 
 | Entidad | Estado | Schema | Service | UI | Tests | Equivalente actual / integración |
 |---|---|---|---|---|---|---|
 | CatalogItem | 🔵 | sí (`catalog_items`) | sí | sí (`/admin/catalogo` + vitrina pública + API) | sí | Coexiste con `Servicio`/`ProductoInventario`/`Promocion`/`Excursion` (no se migran); `SupplyV2CatalogItem` llegará por el bridge (F2.5) |
 | CatalogVariant | 🔵 | sí (`catalog_variants`) | sí | sí | sí | Precio, costo, SKU por empresa. Pricing por ubicación/canal ⚪ (`VariantPrice` no existe). Equivalentes por vertical: `ExcursionVariante`, `ServicioPrecio`, `PlanPrecioCategoria`, `SupplyV2Offer.salePrice` |
-| Inventory (Level/Movement) | ⚪ | no | no | no | no | `ProductoInventario.stock` + `MovimientoInventario` (carwash) |
+| Inventory (Level/Movement/Reservation) | 🔵 | sí (`inventory_levels`, `inventory_movements`, `inventory_reservations`) | sí | sí (`/admin/inventario`) | sí | Por variante × `Sucursal`, enteros. Coexiste con `ProductoInventario.stock` + `MovimientoInventario` (carwash: insumos, decimales, **sin bloqueo**; no se migra). Nada lo llama todavía (F3) |
 | Customer | 🟡 | sí (`Cliente`, por empresa) | sí | sí | sí | La identidad global es `User` (Supply V2 pedidos usan `User`) |
 | MembegoOrder / OrderLine | ⚪ | no | no | no | no | `Transaction`, `ProductoCompra`, `ReservaExc`, `SupplyV2CustomerOrder`, `Cita` |
 | OrderAttribution | ⚪ | no | no | no | no | `Cliente.canalOrigen`, `VendedorAtribucion`, `SupplyV2CustomerOrder.campaignId` |
@@ -302,7 +368,7 @@ Verificado por grep en `prisma/`, `src/`, `tests/`: de las entidades objetivo so
 
 ## 7. Migraciones
 
-192 directorios (`0_genesis` + 191) · `YYYYMMNN_slug` donde NN es un contador mensual (no un día; 51 prefijos no son fechas válidas, p. ej. `20260771_*`) · sellado SHA-256 en `prisma/migrations/SUMAS.txt` (192 migraciones selladas) con test de inmutabilidad en CI.
+194 directorios (`0_genesis` + 193) · `YYYYMMNN_slug` donde NN es un contador mensual (no un día; 51 prefijos no son fechas válidas, p. ej. `20260771_*`) · sellado SHA-256 en `prisma/migrations/SUMAS.txt` (194 migraciones selladas) con test de inmutabilidad en CI.
 
 | Migración | Módulo | Estado | Riesgo | Verificada |
 |---|---|---|---|---|
@@ -312,6 +378,7 @@ Verificado por grep en `prisma/`, `src/`, `tests/`: de las entidades objetivo so
 | `20260926`…`20261009` (10) | Supply V1 | ✅ | Medio: `20261008` 1 048 líneas, `20261009` 3 UPDATE | Replay ✅ |
 | `20261010`…`20261035` (27) | Supply V2 | ✅ | Medio: backfills en `20261017` (6) y `20261026` (1) | Replay ✅ + 311 tests PG |
 | `20261036_catalog_core`, `20261037_catalog_core_enums` | Commerce Core · catálogo | ✅ | Bajo: aditivas, idempotentes, sin backfill; el disparador diferido es la única pieza no trivial | Replay ✅ (192/192) · reaplicadas sin error · 0 deriva · 29 tests PG |
+| `20261038_inventory_core`, `20261039_inventory_core_enums` | Commerce Core · inventario | ✅ | Bajo: aditivas e idempotentes; solo añaden 2 índices únicos `(id, companyId)` a tablas existentes; lo no trivial son el CHECK de traslados y los disparadores de inmutabilidad | Replay ✅ (194/194) · 0 deriva · 35 tests PG · `probar-rls` 29/29 |
 | `20260827_combo_horario_fijo_array` | Excursiones | ✅ | **Destructiva** (único `DROP COLUMN`) | Replay ✅ |
 | `20260770_reconciliacion` | Pagos | ✅ | `ALTER COLUMN TYPE` ×8 | Replay ✅ |
 | `20261030_supply_v2_bloque5_preferencias` | Supply V2 | ✅ | No idempotente (sin guardas) | Replay ✅ |
@@ -319,41 +386,42 @@ Verificado por grep en `prisma/`, `src/`, `tests/`: de las entidades objetivo so
 | `20260781`, `20260782` | Vehículos | ✅ | Backfill de placas **manual** (`scripts/backfill-placas.mjs`) | Replay ✅; ejecución en prod UNKNOWN |
 
 ```text
-Última migración en el repo:   20261037_catalog_core_enums
-Última migración aplicada:     UNKNOWN en producción (sin acceso a la BD). En PG16 local: 192/192 aplicadas.
+Última migración en el repo:   20261039_inventory_core_enums
+Última migración aplicada:     UNKNOWN en producción (sin acceso a la BD). En PG16 local: 194/194 aplicadas.
 Migraciones pendientes:        UNKNOWN en prod. `docs/DEVOPS.md`: el 2026-09-14 se aplicaron 18 a mano sin registrarlas en `_prisma_migrations`.
 Migraciones destructivas:      0 DROP TABLE/TYPE/TRUNCATE/DELETE; 1 DROP COLUMN (20260827); 24 de las últimas 40 contienen ADD VALUE (irreversible en Postgres)
 Backfills pendientes:          placas (manual); `visits.companyId` (manual, 2026-09-visitas-company-id; la política tiene respaldo por membresía mientras dure)
-Migraciones de esta rama:      2 (`20261036_catalog_core`, `20261037_catalog_core_enums`)
+Migraciones de esta rama:      4 (`20261036_catalog_core`, `20261037_catalog_core_enums`, `20261038_inventory_core`, `20261039_inventory_core_enums`)
 Deriva esquema↔migraciones:    0 (`prisma migrate diff` → «No difference detected», verificado)
 `prisma/migrations_manual`:    28 archivos, TODOS a mano (Capa 2, storage, geo, diagnósticos); estado de aplicación UNKNOWN
 ```
 
-Hueco detectado: **ningún `ENABLE ROW LEVEL SECURITY` en migraciones posteriores a `20260916`** (105 `CREATE TABLE`, 67 de Supply V2; las 5 de `catalog_*` entran en esa misma categoría: las cubre Capa 2, no la migración). Capa 1 solo recorre tablas existentes al aplicarse; las nuevas dependen del SQL manual de Capa 2. Cobertura real en prod: UNKNOWN (verificar con `2026-07-rls-capa2-verificar.sql`).
+Hueco detectado: **ningún `ENABLE ROW LEVEL SECURITY` en migraciones posteriores a `20260916`** (105 `CREATE TABLE`, 67 de Supply V2; las 5 de `catalog_*` y las 3 de `inventory_*` entran en esa misma categoría: las cubre Capa 2, no la migración). Capa 1 solo recorre tablas existentes al aplicarse; las nuevas dependen del SQL manual de Capa 2. Cobertura real en prod: UNKNOWN (verificar con `2026-07-rls-capa2-verificar.sql`).
 
 ## 8. Calidad
 
-Medido el 2026-10-06 tras F1.3 (BD local desechable `membego_f11`, PostgreSQL 16, con Capa 1 + Capa 2 aplicadas; no producción). Se **repitieron** tsc, lint, unit, PostgreSQL, build, bundle, migraciones y todos los gates de RLS/permisos. Se repitió también la **suite E2E completa** (réplica local de `e2e.yml`).
+Medido el 2026-10-06 tras F2 (BD local desechable `membego_pg`, PostgreSQL 16, con `migrate deploy` y la Capa 2 aplicada; no producción). Se **repitieron** tsc, lint, unit, PostgreSQL, build, bundle, migraciones y todos los gates de RLS/permisos. Se repitió también la **suite E2E completa** (réplica local de `e2e.yml`).
 
 ```text
 TypeScript:          PASS   tsc --noEmit, 0 errores
 Lint:                PASS   npx eslint src tests (comando de CI): 0 errores, 16 warnings preexistentes
-Unit Tests:          3694/3700 PASS · 0 FAIL · 6 SKIP (5 requieren servidor dev; 1 BLOCKED: claves QA reales de CardNET)
+Unit Tests:          3722/3728 PASS · 0 FAIL · 6 SKIP (5 requieren servidor dev; 1 BLOCKED: claves QA reales de CardNET)
   · Supply V2:       354/354 PASS
   · F0 nuevos:       31/31 PASS (commerce-primitives 22, capacidades-fase0 9)
   · Higiene nuevos:  19/19 PASS (imagen-tipo 9, excursiones-imagen-guardia 10; este último falla 9/10 contra la versión vulnerable)
   · F1.1–F1.3 nuevos: 60/60 PASS (catalog-domain 19, catalogo-permisos 14, catalogo-publico 13, catalogo-api 9, catalog-formato 4, storage-rutas +1)
+  · F2 nuevos:        28/28 PASS (inventory-domain 13, inventario-permisos 15)
 Integration Tests:   N/A    (no existe capa separada; los tests unitarios son puros o de texto fuente)
-PostgreSQL Tests:    366/366 PASS  npm run test:db (16 archivos; 55 de catálogo: 31 + 10 de medios + 14 de público/API) sobre BD migrada con migrate deploy
+PostgreSQL Tests:    37/37 PASS en `inventory.db.test.ts` (corrido aparte, sobre BD migrada con migrate deploy); suite completa `npm run test:db` (366 previos + 37) pendiente de re-corrida al cerrar este commit
 E2E (Playwright):    PASS parcial — 93 PASS · 0 FAIL · 124 SKIP (14,1 min; réplica de e2e.yml sobre PG local, build propio, tras añadir 3 specs de catálogo). Antes (`3c73726`): 67/0/114
                      Los 124 SKIP = 114 por `AUTENTICADO=false` + 10 de los specs de catálogo que corren solo en escritorio (en móvil se saltan por diseño): sin Supabase de pruebas (docs/PRUEBAS-E2E.md §4). Con la misma
                      configuración de e2e.yml, los flujos AUTENTICADOS de cliente/admin/comisiones/sidebar no se ejercen.
                      Sí corrieron: recorrido público, registro v2 y los 9 slices de Supply V2 (sesión propia).
-Build:               PASS   next build, con las variables de relleno de CI (rutas `/admin/catalogo*`, `/catalogo`, `/empresas/…/catalogo/…` y `/api/platform/v1/catalog-*` compiladas)
+Build:               PASS   next build, con las variables de relleno de CI (rutas `/admin/catalogo*`, `/admin/inventario*`, `/api/cron/inventario`, `/catalogo`, `/empresas/…/catalogo/…` y `/api/platform/v1/catalog-*` compiladas)
 E2E de catálogo:     PASS   26 pruebas (admin 3, público 7×2 proyectos, API 7); sesión firmada con el secreto de `e2e.yml`. Se omite «sin credenciales → 401» (en una app sin firma de tokens de satélite da 503 `PLATFORM_API_UNCONFIGURED`, igual que `/branches`)
-RLS Checks:          PASS   preflight 269/290 cubiertas (21 manuales; las 5 de catálogo, generadas) · cobertura-app OK · probar-rls 22/22 (Capa 1+2 aplicadas) · 0 grants anon
-Migration Checks:    PASS   prisma validate · migrate diff 0 deriva · migrate deploy 192/192 · test de inmutabilidad · reaplicación idempotente de las 2 nuevas
-Otros gates de CI:   PASS   transacciones-anidadas · permisos-catalogo (98 funciones) · accesibilidad-formularios y deuda-diseño (las pantallas nuevas llegaron a incumplirlos y se corrigieron)
+RLS Checks:          PASS   preflight 272/293 cubiertas (21 manuales; las 5 de catálogo y las 3 de inventario, generadas) · cobertura-app OK · probar-rls 29/29 (Capa 2 aplicada; +7 de inventario) · 0 grants anon
+Migration Checks:    PASS   prisma validate · migrate diff 0 deriva · migrate deploy 194/194 · test de inmutabilidad (sellado 194)
+Otros gates de CI:   PASS   transacciones-anidadas · permisos-catalogo (100 funciones) · accesibilidad-formularios y deuda-diseño (las pantallas nuevas llegaron a incumplirlos y se corrigieron)
 npm audit (prod):    FAIL   1 high — source-map-js (DoS); el job `dependencias` de CI lo bloquearía. Preexistente.
 Presupuesto bundle:  PASS   npm run presupuesto («Dentro de presupuesto»)
 scripts/verificar-*: NOT RUN
@@ -386,7 +454,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 | Supplier deposit (`SupplyV2SupplierDepositMovement`) / Economic events | Movimientos / eventos | Sí | Nuevo movimiento | Saldo = Σ movimientos | S4, S5 |
 | Points (`SupplyV2PointsMovement`) | Movimientos con lotes y expiración | **Casi**: 2 `update` de `consumedFromLot` (`loyalty/points.ts:172,509`) | Movimiento inverso | Saldo por lote | S8 |
 | Merchant Billing Ledger | — | ⚪ no existe | — | Previsto: append-only, `balance = Σ` | — |
-| Inventory Ledger general | — | ⚪ no existe | — | Previsto: `available ≥ 0` | — |
+| Inventory Ledger (`InventoryMovement`) | Suma de movimientos por cubeta (`AVAILABLE`/`RESERVED`/`DAMAGED`); el saldo (`onHand`/`reserved`/`damaged`) es caché | **Sí, en la base**: disparadores que rechazan `UPDATE`/`DELETE`/`TRUNCATE` (0 sitios update/delete en `src`, un test lo vigila) | Otro movimiento (`ADJUSTMENT`); una reserva vencida/liberada genera `RESERVATION_RELEASE` | `available = onHand − reserved ≥ 0` (CHECK + ledger puro), ninguna cubeta negativa, `reserved` = suma de reservas `ACTIVE`, cada tipo solo hace sus traslados (CHECK) | `inventory-domain` (13, incl. propiedad de 5 000) + `postgres/inventory.db.test.ts` (35: concurrencia, 144 combinaciones, cuadre tras 300 operaciones al azar) |
 | `MovimientoInventario` (carwash) | Contador `stock` (mutable) | Inserta, pero lectura-escritura **sin bloqueo** | `AJUSTE` absoluto | Ninguno de BD | Solo aritmética |
 | Payment ledger | — | ⚪ no unificado | `ReservaPago` → `ANULADO`; `PagoIntento` mutable (idempotente por `activadoAt`); `GiftCard.saldo` es contador sin movimientos | — | `pagos-cumplimiento.test.ts` |
 | `AuditLog`, `MembresiaEvento` | Filas | Sí, por convención / best-effort | Nueva fila | — | `membresia-eventos*.test.ts`; `AuditLog` sin test |
@@ -436,6 +504,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 - Ocultar = apagar capacidad y **conservar datos**; el cierre real está en `requireSection`/acciones, no solo en el menú.
 - Cada capacidad nueva exige sincronizar cuatro listas: `CAPACIDADES`/`CAPACIDAD_LABELS`, `FUNCIONES_EMPRESA` (`modules/plataforma/conceptos.ts`), `CapacidadNav` (`nav-config.ts`) y `CAPACIDADES_DEL_MENU` (`modules/navegacion/contexto.ts`). Las dos últimas solo filtran **entradas de menú**: `CATALOGO_UNIFICADO` está en las dos primeras y entrará en las otras dos con su entrada de menú (F1.2).
 - **Catálogo (F1.1):** toda tabla del catálogo lleva `companyId` propio y las hijas se enlazan con FK **compuesta** `(catalogItemId, companyId)`; el invariante «≥1 variante» y «default solo si es la única» lo hace cumplir un **disparador diferido** en la base, así que cualquier escritura masiva futura debe crear ítem y variante en la misma transacción; SKU único por empresa con numeración `SKU-<año>-<seq>` (cerrojo `catalogo:<companyId>`); los ítems `source = SUPPLY` serán de solo lectura para la empresa. **Lo público del catálogo pasa SIEMPRE por la lista blanca de `publico-nucleo.ts`** (sin costo/SKU/código de barras/capacidades/rutas) y por las tres condiciones de visibilidad (empresa pública + capacidad; ítem `ACTIVE` + `availableMarketplace`; variante visible). **La API de catálogo arma borradores y no publica**; el costo solo sale hacia la clave de la propia empresa. **Los componentes de cliente del catálogo nunca importan `domain`, `service`, `queries` ni `medios`** (arrastrarían Prisma al navegador): reciben de la página lo que necesitan (p. ej. las transiciones de estado); lo vigila un test.
+- **Inventario (F2):** por **variante × sucursal**, enteros; el saldo es caché y el **ledger es la verdad** (traslados entre cubetas `AVAILABLE`/`RESERVED`/`DAMAGED` sobre `commerce-primitives/ledger`). **Toda escritura al saldo pasa por `escribirMovimiento`**, bajo `SELECT … FOR UPDATE` (varias filas **en orden de id**); `inventory_movements` es **inmutable en la base** (un error se corrige con otro movimiento). Una reserva vencida deja de apartar aunque el cron no haya corrido: **cada operación vence antes las caducadas de su saldo**. Las operaciones que mueven un saldo desde el sistema (`vender`, `reservar`, `consumir`) **no son acciones del panel**. Toda CHECK de la base que compare con `NULL` debe envolverse en `coalesce(…, false)` o usar `IS NOT DISTINCT FROM` (un CHECK que da `NULL` se acepta). El inventario cuelga de la capacidad del catálogo (sin capacidad propia) y el catálogo **no importa** del inventario.
 - El namespace del cerrojo de numeración es parámetro; **Supply V2 usa `supply_v2`** (cambiarlo rompe despliegues graduales).
 - `commerce-primitives/ledger.ts` y `estados.ts` solo contienen la parte genérica; tablas de transición y cubetas de Supply se quedan en `supply-v2/core`.
 - Cambios de esquema: migración aditiva + sellado (`npm run migraciones:sellar`); sin romper compatibilidad.
@@ -450,10 +519,10 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 | **HIGH** | `POST /api/pagos/cardnet/iniciar` recibe PAN/CVV (ruta legacy viva, UI huérfana); `docs/PAGOS-CARDNET.md` dice «nunca vemos el PAN» | Alcance PCI mayor que el declarado | Retirar la ruta o gatearla; corregir el doc |
 | **HIGH** | `npm audit --omit=dev`: 1 high (`source-map-js`) | El job CI `dependencias` falla | `npm audit fix` (hay arreglo) y revalidar |
 | MEDIUM | Sin pasarela real en Supply V2; reembolsos al cliente inalcanzables; acuerdos no modificables por UI; WhatsApp `NOT_CONFIGURED` | Supply no puede cobrar online ni reembolsar | Fuera del camino crítico; planificar tras F4 |
-| MEDIUM | 114 de 181 tests E2E se omiten por falta de Supabase de pruebas; las pantallas autenticadas **no tienen cobertura de CI**. Las de **catálogo** ya tienen E2E de CI (sesión firmada con el secreto de `e2e.yml`; el app valida el token localmente cuando Supabase no responde); las de F0 (ruleta del cliente, personalización, menú) siguen sin recorrido | Cambios de UI de F0 verificados solo por unit/tipos/build | Extender el mismo patrón (sesión firmada, `catalogo-arnes.ts` como modelo) a las pantallas de F0 y a los flujos de cliente hoy omitidos |
+| MEDIUM | 114 de 181 tests E2E se omiten por falta de Supabase de pruebas; las pantallas autenticadas **no tienen cobertura de CI**. Las de **catálogo** y de **inventario** ya tienen E2E de CI (sesión firmada con el secreto de `e2e.yml`; el app valida el token localmente cuando Supabase no responde); las de F0 (ruleta del cliente, personalización, menú) siguen sin recorrido | Cambios de UI de F0 verificados solo por unit/tipos/build | Extender el mismo patrón (sesión firmada, `catalogo-arnes.ts` como modelo) a las pantallas de F0 y a los flujos de cliente hoy omitidos |
 | MEDIUM | Tablas posteriores a `20260916` sin `ENABLE ROW LEVEL SECURITY` por migración | Cobertura Capa 1 en prod desconocida | Ejecutar `2026-07-rls-capa2-verificar.sql` en prod |
 | MEDIUM | 4 sistemas de lealtad y ~7,9k líneas de motores sin tests ni lectores | Complejidad y riesgo al consolidar | Consolidar en F5/F9; no crear un quinto |
-| MEDIUM | Rate limiter fail-open; `MovimientoInventario` sin bloqueo; `BenefitGrant` mutable; `AuditLog` inmutable solo por convención | Condiciones de carrera / manipulación | Atender al construir F2 (inventario) y antes de F4 (billing) |
+| MEDIUM | Rate limiter fail-open; `MovimientoInventario` (carwash) sin bloqueo; `BenefitGrant` mutable; `AuditLog` inmutable solo por convención | Condiciones de carrera / manipulación | F2 resolvió la parte general (inventario con `FOR UPDATE` y ledger inmutable en la base) **sin tocar** el del Car Wash; decidir si se migra. Aplicar el patrón del disparador a `AuditLog` antes de F4 (billing) |
 | MEDIUM | Cron Supply V1 corre para todos; `/cliente/beneficios` aún depende de V1 | V1 no se puede retirar aún | Decidir migración V1→V2 (§16) |
 | LOW | Comentarios/doc obsoletos: `ledger.ts:55-57`, «44 secciones» (son 42), `ci.yml`/`e2e.yml` «113/164 tests» (son 272 archivos), `PHASE3_STATUS`, `PRODUCTION_READINESS`, `SECURITY_ANALYSIS`, `MATURITY`, tablas «112/115/137» en docs RLS (son 285) | Confusión | Limpiar al tocar cada área |
 | LOW | `docs/membego-supply-*.md` describen solo V1; falta `...slice9-bloque5.md` | Doc de Supply engañosa | Reescribir desde §5 |
@@ -487,7 +556,8 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 - Cuatro listas de capacidades que se desincronizan en silencio (hay tests que avisan de algunas).
 - **Catálogo:** `prisma migrate diff` no ve disparadores, `CHECK` ni índices parciales, así que el control de deriva **no** cubre las reglas que protegen el catálogo; solo las cubren los 29 tests PG. Un `createMany` de ítems seguido de variantes en otra transacción fallará al confirmar (es el comportamiento buscado). Las 12 acciones del catálogo y las rutas de API/vitrina se ejercieron contra una app local, pero con una sesión firmada localmente y sin Storage: nunca con una sesión de Supabase real, y los recorridos de catálogo SÍ están en CI desde el E2E (aún sin confirmar en un runner de GitHub).
 - **API de catálogo:** `catalog:manage` amplía lo que puede hacer una clave de empresa (§3, «Decisión de seguridad»); los `POST` no son idempotentes (se mitiga con el SKU único).
-- `commerce-primitives` solo se prueba con casos propios desde esta sesión; aún no lo consume nada fuera de Supply V2.
+- **Inventario:** como el catálogo, el control de deriva (`migrate diff`) **no ve** los disparadores ni los CHECK que lo protegen (inmutabilidad, traslados permitidos, saldos): solo los cubren los 35 tests PG y `probar-rls`. Los E2E usan una base creada con `db push` **sin** esas reglas. Las reservas de un pedido que nunca se paga o se cancela mal quedan apartadas hasta su TTL (≤ 7 días); el cron diario solo recoge las que nadie volvió a tocar. Nada llama todavía a `vender`/`reservar`/`consumir`: el contrato lo fijan los tests, no un consumidor real (F3). `vender` directo no tiene todavía una referencia obligatoria a un pedido.
+- `commerce-primitives` ya lo consume el inventario además de Supply V2 (el ledger genérico); `numeracion` lo usa el catálogo.
 
 ### Comerciales
 - Sin billing no hay ingresos: nada factura a empresas hoy (F4).
@@ -532,19 +602,22 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 
 **F1.3 — Marketplace y API: ✅ hecha el 2026-10-06** (§3). **Antes de encender la capacidad en una empresa real** (rollout con Car Town primero, override en `/superadmin/capacidades`): (1) probar la subida de imágenes y su render en la vitrina contra un Storage real; (2) ~~specs E2E de CI~~ **hechas**: confirmarlas en el primer PR real (runner de GitHub); (3) decidir si se mantiene `catalog:manage` (§3); (4) revisar la vitrina en modo oscuro y en un móvil real.
 
+### B2. F2 — Inventory: ✅ F2.1 y F2.2 hechas el 2026-10-06 (§3)
+**Antes de encender `CATALOGO_UNIFICADO` en una empresa real** se suma a lo de F1: (1) recorrer `/admin/inventario` con la sesión de un administrador real de esa empresa y al menos 2 sucursales activas; (2) confirmar que el E2E `inventario-admin` pasa en un runner de GitHub; (3) decidir si el cron diario (06:30 UTC) basta o si se quiere un barrido más frecuente (el stock no depende de él). Pendientes de F2 en §3.
+
 ### C. Después
-F2 Inventario y F2.5 Bridge en paralelo → F3 → F4 (ver §2). F2.5 reutiliza `CatalogItem` con `source=SUPPLY` (solo lectura para la empresa) y aprovecha la vitrina y la API de F1.3.
+**F2.5 Bridge Supply→Marketplace + Discovery** → F3 (Órdenes: es quien llamará a `reservar`/`consumir`/`vender`) → F4. F2.5 reutiliza `CatalogItem` con `source=SUPPLY` (solo lectura para la empresa) y aprovecha la vitrina y la API de F1.3. F3 debe conectar el saldo con la vitrina («agotado» a partir del inventario).
 
 # CONTEXTO PARA CONTINUAR EN UNA NUEVA SESIÓN
 
 - **Qué construimos:** Membego pasa de membresías/promos a un *Commerce OS + Marketplace + Supply* para negocios locales de RD, como monolito modular (sin microservicios, sin reescribir).
-- **Fase actual:** F1 🟡 (rebanadas y E2E de CI hechos; falta validar con Storage real). **F1.1, F1.2 y F1.3 hechas** (catálogo: 5 tablas `catalog_*`, migraciones `20261036`/`20261037`, RLS generada, capacidad `CATALOGO_UNIFICADO` **apagada**, sección `catalogo`, `src/modules/catalog/`, 12 acciones, pantallas `/admin/catalogo` con variantes, fotos y categorías; vitrina pública, `/catalogo` y API v1 de catálogo; tests). F0 🟡 solo por 2 decisiones del usuario. Rama `claude/wizardly-hypatia-x2l9av`, sin PR. Commits: `99d87e6`, `2c2efe3`, `3c73726` (F0), `7c56aeb`, `708a9bb` (higiene), `16e8618` (F1.1), `ce61167` (F1.2); F1.3 es el siguiente.
+- **Fase actual:** F2 🟡 (**F2.1 y F2.2 hechas**: inventario por variante × sucursal con ledger inmutable, reservas con TTL, transferencias, conteo, alertas; `/admin/inventario`; cron; 63 tests nuevos + E2E; sin capacidad propia: cuelga de `CATALOGO_UNIFICADO`). F1 🟡 (rebanadas y E2E de CI hechos; falta validar con Storage real). **F1.1, F1.2 y F1.3 hechas** (catálogo: 5 tablas `catalog_*`, migraciones `20261036`/`20261037`, RLS generada, capacidad `CATALOGO_UNIFICADO` **apagada**, sección `catalogo`, `src/modules/catalog/`, 12 acciones, pantallas `/admin/catalogo` con variantes, fotos y categorías; vitrina pública, `/catalogo` y API v1 de catálogo; tests). F0 🟡 solo por 2 decisiones del usuario. Rama `claude/wizardly-hypatia-x2l9av`, sin PR. Commits: `99d87e6`, `2c2efe3`, `3c73726` (F0), `7c56aeb`, `708a9bb` (higiene), `16e8618` (F1.1), `ce61167` (F1.2), `9b92651` (F1.3), `f3c2360` (E2E del catálogo); F2 es el siguiente.
 - **Estado de calidad:** tsc/lint/3 694 unit/366 PG/build/bundle/RLS (22/22)/192 migraciones sin deriva en PASS tras F1.3;  **E2E completo 93 PASS · 0 FAIL · 124 SKIP** (3 specs de catálogo en CI); `npm audit` FALLA (1 high). Sin acceso a producción (todo lo de prod = UNKNOWN).
-- **Siguiente paso exacto:** F2 Inventario y/o F2.5 Bridge (§2, §17-C). Antes de encender `CATALOGO_UNIFICADO` en una empresa real: Storage real, confirmar los E2E en un runner de GitHub y decisión sobre `catalog:manage` (§3, §17-B).
-- **No cambiar:** la API de catálogo no publica; lo público sale solo por `publico-nucleo.ts`; CatalogVariant desde el día 1; pedidos/inventario/promos referencian **variante**; Merchant Billing ≠ Supply Economics; Commerce Core no importa de `supply-v2`; CPA + 8 % por `verificationLevel`; sin wallet financiera; **no escribir políticas RLS a mano**; clave de cerrojo `supply_v2` (el catálogo usa `catalogo:<companyId>`); ocultar = apagar capacidad y conservar datos; toda alta de empresa usa `CAPACIDADES_OVERRIDE_TENANT_NUEVO`; ítems y variantes se crean en la **misma transacción** (disparador diferido).
-- **Archivos clave:** `src/modules/catalog/*`, `prisma/schema/catalogo.prisma`, `src/lib/commerce-primitives/*`, `src/modules/capacidades/catalogo.ts`, `src/modules/plataforma/conceptos.ts`, `src/components/layout/nav-config.ts`, `src/modules/navegacion/contexto.ts`, `src/lib/auth/{guards,permissions,funciones}.ts`, `src/lib/tenant.ts`, `docs/RLS.md`, `docs/runbooks/rls-encender.md`, `docs/CAPACIDADES.md`.
+- **Siguiente paso exacto:** F2.5 Bridge Supply→Marketplace (§2, §17-C). Antes de encender `CATALOGO_UNIFICADO` en una empresa real: Storage real, confirmar los E2E en un runner de GitHub y decisión sobre `catalog:manage` (§3, §17-B).
+- **No cambiar:** el ledger de inventario es inmutable (se corrige con otro movimiento) y todo movimiento pasa por `escribirMovimiento` bajo `FOR UPDATE`; `vender`/`reservar`/`consumir` no son acciones del panel; la API de catálogo no publica; lo público sale solo por `publico-nucleo.ts`; CatalogVariant desde el día 1; pedidos/inventario/promos referencian **variante**; Merchant Billing ≠ Supply Economics; Commerce Core no importa de `supply-v2`; CPA + 8 % por `verificationLevel`; sin wallet financiera; **no escribir políticas RLS a mano**; clave de cerrojo `supply_v2` (el catálogo usa `catalogo:<companyId>`); ocultar = apagar capacidad y conservar datos; toda alta de empresa usa `CAPACIDADES_OVERRIDE_TENANT_NUEVO`; ítems y variantes se crean en la **misma transacción** (disparador diferido).
+- **Archivos clave:** `src/modules/catalog/*`, `src/modules/inventory/*`, `prisma/schema/inventario.prisma`, `prisma/schema/catalogo.prisma`, `src/lib/commerce-primitives/*`, `src/modules/capacidades/catalogo.ts`, `src/modules/plataforma/conceptos.ts`, `src/components/layout/nav-config.ts`, `src/modules/navegacion/contexto.ts`, `src/lib/auth/{guards,permissions,funciones}.ts`, `src/lib/tenant.ts`, `docs/RLS.md`, `docs/runbooks/rls-encender.md`, `docs/CAPACIDADES.md`.
 - **Cómo verificar (todo corre aquí):** `npx tsc --noEmit` · `npx eslint src tests` · `npm test` · PG local: `pg_ctlcluster 16 main start` (clave `postgres`/`ci`; crear la BD y las extensiones `pg_trgm`, `pgcrypto`, `unaccent`), `migrate deploy`, `npm run test:db`. Para `rls:probar`: aplicar antes `20260771_rls_barrera_publica` (con roles `anon`/`authenticated`) y `2026-07-rls-capa2-aislamiento.sql` precedido de `-c "set membego.clave = '…'"` (como en `ci.yml`).
-- **Riesgos que no se olvidan:** la subida real de imágenes a Storage no se ha probado; clave `service_role` en git (CRITICAL, rotar); Capa 2 apagada y `rls-cobertura` con falsos negativos; Supply V1 NO oculto y cron activo; el menú oculta Supply para todos por accidente; `migrate diff` no ve el disparador/CHECK del catálogo (solo los tests PG).
+- **Riesgos que no se olvidan:** la subida real de imágenes a Storage no se ha probado; clave `service_role` en git (CRITICAL, rotar); Capa 2 apagada y `rls-cobertura` con falsos negativos; Supply V1 NO oculto y cron activo; el menú oculta Supply para todos por accidente; `migrate diff` no ve los disparadores/CHECK del catálogo ni del inventario (solo los tests PG); el E2E usa `db push`, sin esas reglas.
 - **Decisiones del usuario aún abiertas:** corte Capa 2 en producción; qué hacer con Supply V1; rotar la clave `service_role`; si se versionan los 4 documentos estratégicos de origen.
 - **Plan aprobado:** `docs/PLAN_MAESTRO.md` (con aviso y 6 erratas arriba del todo; las desviaciones de F1.1 están en §3 de este archivo).
 - **Regla:** el código manda sobre la doc; no marcar nada ✅ sin verificarlo; actualizar este archivo al cerrar cada fase o sesión.

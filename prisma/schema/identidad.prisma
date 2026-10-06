@@ -344,6 +344,11 @@ enum AuditAccion {
   CATALOG_ITEM_UPDATED
   CATALOG_ITEM_STATUS_CHANGED
   CATALOG_VARIANT_CHANGED
+  /// Commerce Core · Fase 2: stock movido a mano (entrada, ajuste, daño, devolución).
+  INVENTORY_STOCK_CHANGED
+  INVENTORY_TRANSFERRED
+  /// El umbral de stock bajo de una variante en una sucursal.
+  INVENTORY_CONFIGURED
   SUPPLY_V2_ORDER_CREATED
   SUPPLY_V2_ORDER_RESERVED
   SUPPLY_V2_ORDER_PAYMENT_SUBMITTED
@@ -884,6 +889,9 @@ model Company {
   // Commerce Core · catálogo unificado (Fase 1). Relaciones inversas.
   catalogItems           CatalogItem[]
   catalogVariants        CatalogVariant[]
+  inventoryLevels        InventoryLevel[]
+  inventoryMovements     InventoryMovement[]
+  inventoryReservations  InventoryReservation[]
   catalogCategories      CatalogCategory[]
   catalogItemCategories  CatalogItemCategory[]
   catalogItemImages      CatalogItemImage[]
@@ -1072,6 +1080,11 @@ model Sucursal {
   // Slice 8 · sucursales participantes de un programa de fidelización.
   supplyV2ProgramasFidelizacion SupplyV2LoyaltyProgramBranch[] @relation("SupplyV2LoyaltyProgramBranchSucursal")
 
+  // Commerce Core · Fase 2: existencias del catálogo unificado en esta sucursal.
+  inventoryLevels InventoryLevel[]
+
+  /// Destino de la FK compuesta de `inventory_levels` (misma empresa que la variante).
+  @@unique([id, companyId])
   @@index([companyId])
   @@index([companyId, activa, mostrarEnMapa])
   @@index([cityId])

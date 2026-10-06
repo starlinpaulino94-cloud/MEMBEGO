@@ -28,6 +28,7 @@ import {
   Newspaper,
   Package,
   PackageSearch,
+  Warehouse,
   Palette,
   Plug,
   QrCode,
@@ -372,6 +373,15 @@ const G_OFERTA: NavGroup = {
       icon: Package,
       description: 'Productos y servicios con sus variantes y precios.',
       keywords: ['catalogo', 'productos', 'servicios', 'variantes', 'precios', 'sku', 'inventario'],
+      capacidad: 'CATALOGO_UNIFICADO',
+    },
+    {
+      // Commerce Core · inventario (Fase 2). Misma capacidad que el catálogo.
+      href: '/admin/inventario',
+      label: 'Inventario',
+      icon: Warehouse,
+      description: 'Existencias por producto y sucursal, movimientos y stock bajo.',
+      keywords: ['inventario', 'stock', 'existencias', 'almacen', 'bodega', 'sucursal', 'transferencia', 'ajuste', 'conteo'],
       capacidad: 'CATALOGO_UNIFICADO',
     },
     {
@@ -777,7 +787,7 @@ const HUB_EXPERIENCIA: NavGroup = {
 const HUB_CATALOGO: NavGroup = {
   id: 'catalogo',
   label: 'Catálogo',
-  items: deAdmin('/admin/catalogo', '/admin/planes', '/admin/ofertas', '/admin/excursiones'),
+  items: deAdmin('/admin/catalogo', '/admin/inventario', '/admin/planes', '/admin/ofertas', '/admin/excursiones'),
 }
 
 const HUB_OPERACIONES: NavGroup = {

@@ -42,7 +42,7 @@
 | `MENSAJERIA` | Sección `comunicacion` (`/admin/comunicacion`: canales, FAQ, conexión) | ✅ para empresas existentes; ❌ en tenants nuevos |
 | `PUBLICACIONES` | Sección `publicaciones` (`/admin/publicaciones`) | ❌ apagada desde la Fase 0 |
 | `HOME_BUILDER` | Editor de inicio dentro de `/admin/personalizacion` (**no** tiene sección propia: comparte página con el formulario de marca, que no se oculta) | ❌ apagada desde la Fase 0 |
-| `CATALOGO_UNIFICADO` | Sección `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
+| `CATALOGO_UNIFICADO` | Secciones `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) e `inventario` (`/admin/inventario`, Fase 2: existencias por variante y sucursal) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
 
 ### Cómo encender el catálogo unificado en una empresa
 
@@ -51,6 +51,12 @@ por empresa desde `/superadmin/capacidades` (`overrides: { CATALOGO_UNIFICADO: t
 Con ella: aparece «Catálogo» en el menú (*Oferta comercial*) y se abre
 `/admin/catalogo`; sin ella, la sección se niega (`requireSection`) y la entrada
 no se pinta. Los datos que se hayan creado se conservan si se apaga después.
+
+El **inventario** (Fase 2) no tiene capacidad propia: cuelga de esta misma. Al
+encenderla aparece también «Inventario» en el menú, y solo lleva existencias de
+los productos que tienen activado «Controla inventario» en su ficha del
+catálogo (los servicios no). Se activa por sucursal: hace falta al menos una
+sucursal activa en la empresa.
 
 ## Defaults de la Fase 0 (Plan Maestro §8)
 

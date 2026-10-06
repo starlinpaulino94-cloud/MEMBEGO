@@ -10,8 +10,8 @@
 # cada push. Se ejecuta en los PR y al mezclar en main.
 #
 # ALCANCE: el recorrido público MÁS el autenticado de Supply 2.0 (slices 1 a 9) Y
-# el del catálogo unificado (panel, vitrina pública y API), que entran con
-# sesiones firmadas aquí mismo con SUPABASE_JWT_SECRET y no necesitan un
+# el del catálogo unificado (panel, vitrina pública y API) y el del inventario
+# (panel), que entran con sesiones firmadas aquí mismo con SUPABASE_JWT_SECRET y no necesitan un
 # proyecto de Supabase. Lo que sigue sin cubrir es el mostrador de
 # membresías (escaneo de QR y caja); está explicado en docs/PRUEBAS-E2E.md.
 name: E2E

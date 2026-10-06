@@ -135,8 +135,13 @@ model CatalogVariant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Existencias por sucursal (Fase 2). RESTRICT: con historial no se borra.
+  inventoryLevels InventoryLevel[]
+
   @@unique([companyId, sku])
   @@unique([companyId, barcode])
+  /// Destino de la FK compuesta de `inventory_levels` (Fase 2).
+  @@unique([id, companyId])
   @@index([catalogItemId, position])
   @@map("catalog_variants")
 }

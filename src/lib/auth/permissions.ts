@@ -113,6 +113,12 @@ export const ADMIN_SECTIONS = [
   // lo que se vende y a qué precio es decisión de dirección; Supervisión y
   // Marketing no lo piden.
   'catalogo',
+  // Commerce Core · inventario con ledger (`/admin/inventario`, Fase 2). Cuelga
+  // de la MISMA capacidad que el catálogo (CATALOGO_UNIFICADO): se activa con
+  // ella para los productos que controlan inventario. Tampoco entra en los
+  // roles acotados: mover existencias —y poder borrar un faltante con un
+  // ajuste— es decisión de dirección, no de mostrador.
+  'inventario',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).

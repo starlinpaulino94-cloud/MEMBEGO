@@ -45,6 +45,11 @@
  *                           categorías no cruzan empresas, ni leyendo, ni
  *                           escribiendo, ni colgando una variante de un ítem
  *                           ajeno (FK compuesta).
+ *   11. Inventario        — `inventory_*` (Commerce Core · Fase 2): saldos,
+ *                           movimientos y reservas no cruzan empresas, ni se
+ *                           puede juntar la variante de una con la sucursal
+ *                           de otra, y el ledger no se edita ni con el
+ *                           contexto correcto.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * USO
@@ -161,6 +166,14 @@ function limpiar() {
   // En orden inverso a la siembra: las hijas antes que las madres, o las
   // claves foráneas lo impiden.
   try {
+    // El ledger de inventario no se borra (lo prohíbe un disparador): para limpiar
+    // lo sembrado se desactivan los disparadores ordinarios en ESTA transacción.
+    sql(`begin; set local session_replication_role = replica;
+         delete from inventory_movements where id in ('${A}_im', '${B}_im'); commit;`)
+  } catch {
+    /* si no llegó a sembrarse, no hay nada que limpiar */
+  }
+  try {
     comoOmnisciente(`
       delete from supply_pedidos     where id = '${A}_sped';
       delete from supply_redenciones where id = '${A}_sr';
@@ -168,6 +181,9 @@ function limpiar() {
       delete from supply_derechos    where id = '${A}_sd';
       delete from supply_lotes       where id = '${A}_sl';
       delete from supply_acuerdos    where id = '${A}_sa';
+      delete from inventory_reservations where id in ('${A}_ir', '${B}_ir');
+      delete from inventory_levels   where id in ('${A}_il', '${B}_il');
+      delete from sucursales         where id in ('${A}_su', '${B}_su');
       delete from catalog_items      where id in ('${A}_ci', '${B}_ci');
       delete from catalog_categories where id in ('${A}_cc', '${B}_cc');
       delete from home_bloques    where "revisionId" in ('${A}_h', '${B}_h');
@@ -256,6 +272,21 @@ try {
     insert into catalog_categories (id, "companyId", name, slug, "updatedAt") values
       ('${A}_cc', '${A}', 'Categoría de A', 'cat-a', now()),
       ('${B}_cc', '${B}', 'Categoría de B', 'cat-b', now());
+
+    -- COMMERCE CORE · inventario: una sucursal, un saldo, una reserva y un
+    -- movimiento por empresa.
+    insert into sucursales (id, "companyId", nombre) values
+      ('${A}_su', '${A}', 'Sucursal de A'),
+      ('${B}_su', '${B}', 'Sucursal de B');
+    insert into inventory_levels (id, "companyId", "catalogVariantId", "locationId", "onHand", "updatedAt") values
+      ('${A}_il', '${A}', '${A}_cv', '${A}_su', 5, now()),
+      ('${B}_il', '${B}', '${B}_cv', '${B}_su', 5, now());
+    insert into inventory_reservations (id, "companyId", "inventoryLevelId", quantity, "expiresAt") values
+      ('${A}_ir', '${A}', '${A}_il', 1, now() + interval '1 hour'),
+      ('${B}_ir', '${B}', '${B}_il', 1, now() + interval '1 hour');
+    insert into inventory_movements (id, "companyId", "inventoryLevelId", type, "destinationBucket", quantity, "previousOnHand", "newOnHand") values
+      ('${A}_im', '${A}', '${A}_il', 'PURCHASE', 'AVAILABLE', 5, 0, 5),
+      ('${B}_im', '${B}', '${B}_il', 'PURCHASE', 'AVAILABLE', 5, 0, 5);
 
     -- MEMBEGO SUPPLY · el caso cruzado, que es el que importa.
     --
@@ -529,6 +560,43 @@ try {
     'Catálogo: un `update` sin `where` solo alcanza los ítems de A',
     tocadasCatalogo === '1',
     `filas afectadas: ${tocadasCatalogo} (debería ser 1)`
+  )
+
+  // ── 11. Commerce Core · inventario ────────────────────────────────────────
+  //
+  // Igual que el catálogo: las tres tablas llevan `companyId` propio y entran
+  // por Nivel 0 sin una política escrita a mano. Aquí además se comprueba lo
+  // que el ledger promete: ni siquiera la empresa dueña lo edita.
+  const veo = (tabla, a, b) =>
+    comoInquilino(A, `select id from ${tabla} where id in ('${a}','${b}');`).split('\n').filter(Boolean)
+  const niveles = veo('inventory_levels', `${A}_il`, `${B}_il`)
+  comprobar('Inventario: con el contexto en A no aparece ningún saldo de B', niveles.length === 1 && niveles[0] === `${A}_il`, `devolvió: ${JSON.stringify(niveles)}`)
+  const movs = veo('inventory_movements', `${A}_im`, `${B}_im`)
+  comprobar('Inventario: los movimientos de B tampoco se ven', movs.length === 1 && movs[0] === `${A}_im`, `devolvió: ${JSON.stringify(movs)}`)
+  const reservas = veo('inventory_reservations', `${A}_ir`, `${B}_ir`)
+  comprobar('Inventario: las reservas de B tampoco', reservas.length === 1 && reservas[0] === `${A}_ir`, `devolvió: ${JSON.stringify(reservas)}`)
+
+  comprobar(
+    'Inventario: A no puede insertar un saldo marcado como de B',
+    fallaComoInquilino(
+      A,
+      `insert into inventory_levels (id,"companyId","catalogVariantId","locationId","updatedAt")
+       values ('${A}_intruso_il','${B}','${B}_cv','${B}_su',now());`
+    )
+  )
+  comprobar(
+    'Inventario: A no puede juntar su variante con la sucursal de B — la FK compuesta lo impide',
+    fallaComoInquilino(
+      A,
+      `insert into inventory_levels (id,"companyId","catalogVariantId","locationId","updatedAt")
+       values ('${A}_mezcla_il','${A}','${A}_cv','${B}_su',now());`
+    )
+  )
+  const tocadasInventario = comoInquilino(A, `with u as (update inventory_levels set "lowStockThreshold"=9 returning 1) select count(*) from u;`)
+  comprobar('Inventario: un `update` sin `where` solo alcanza los saldos de A', tocadasInventario === '1', `filas afectadas: ${tocadasInventario} (debería ser 1)`)
+  comprobar(
+    'Inventario: ni A, dueña de su ledger, puede editar un movimiento',
+    fallaComoInquilino(A, `update inventory_movements set quantity = 99 where id = '${A}_im';`)
   )
 } catch (e) {
   fallos++

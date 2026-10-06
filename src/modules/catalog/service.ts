@@ -242,7 +242,18 @@ export async function actualizarItemEnTx(
     }
   }
   if (cambios.capabilities !== undefined) {
-    data.capabilities = { ...normalizarCapacidades(item.type, cambios.capabilities) }
+    const nuevas = normalizarCapacidades(item.type, cambios.capabilities)
+    // Dejar de controlar inventario con existencias a la vista las esconde: el
+    // saldo seguiría ahí, sin pantalla que lo muestre ni operación que lo mueva.
+    if (normalizarCapacidades(item.type, item.capabilities).trackInventory && !nuevas.trackInventory) {
+      const conExistencias = await tx.inventoryLevel.count({
+        where: { companyId, variant: { catalogItemId: item.id }, OR: [{ onHand: { gt: 0 } }, { reserved: { gt: 0 } }, { damaged: { gt: 0 } }] },
+      })
+      if (conExistencias > 0) {
+        fallo('ITEM_CON_EXISTENCIAS', 'Este producto todavía tiene existencias registradas. Déjalas en cero (venta, ajuste o baja) antes de dejar de controlar su inventario.')
+      }
+    }
+    data.capabilities = { ...nuevas }
     despues.capabilities = 'actualizadas'
   }
   if (Object.keys(data).length === 0) return
@@ -435,6 +446,15 @@ export async function eliminarVarianteEnTx(
   const total = await tx.catalogVariant.count({ where: { catalogItemId: item.id, companyId } })
   if (total <= 1) fallo('ULTIMA_VARIANTE', 'Un producto necesita al menos una variante. Archiva el producto si ya no se vende.')
   if (item.status === 'ACTIVE' && actual.status === 'ACTIVE') await exigirOtraActiva(tx, companyId, item.id, actual.id)
+
+  // El historial de inventario es contabilidad: con movimientos no se borra
+  // (la base lo impide con FK RESTRICT); se descontinúa. Un saldo SIN movimientos
+  // (solo se configuró un umbral) no es historial y se retira con la variante.
+  const movimientos = await tx.inventoryMovement.count({ where: { companyId, level: { catalogVariantId: actual.id } } })
+  if (movimientos > 0) {
+    fallo('VARIANTE_CON_INVENTARIO', 'Esta variante tiene historial de inventario y no se puede borrar. Márcala como descontinuada.')
+  }
+  await tx.inventoryLevel.deleteMany({ where: { companyId, catalogVariantId: actual.id } })
 
   await tx.catalogVariant.delete({ where: { id: actual.id } })
   await auditarCatalogo(tx, ctx, companyId, 'CATALOG_VARIANT_CHANGED', 'CatalogVariant', actual.id, {

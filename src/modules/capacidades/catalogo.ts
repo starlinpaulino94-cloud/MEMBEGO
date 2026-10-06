@@ -231,7 +231,10 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   MEMBEGO_SUPPLIER: ['supply'],
   PUBLICACIONES: ['publicaciones'],
   MENSAJERIA: ['comunicacion'],
-  CATALOGO_UNIFICADO: ['catalogo'],
+  // El inventario por variante y sucursal (Fase 2) no tiene capacidad propia:
+  // el Plan Maestro lo activa con el catálogo, para los ítems que controlan
+  // inventario (`trackInventory`).
+  CATALOGO_UNIFICADO: ['catalogo', 'inventario'],
   // HOME_BUILDER no aparece aquí: comparte la sección 'personalizacion' con
   // las opciones de marca/engagement, que NO se ocultan. Se revisa a mano en
   // el componente de esa página (ver admin/personalizacion/page.tsx).
@@ -261,6 +264,7 @@ export const SECCION_LABEL: Partial<Record<AdminSection, string>> = {
   publicaciones: 'Publicaciones',
   comunicacion: 'Mensajería y WhatsApp',
   catalogo: 'Catálogo unificado',
+  inventario: 'Inventario por sucursal',
 }
 
 /** Las secciones del panel que se apagan al desactivar esta capacidad. */

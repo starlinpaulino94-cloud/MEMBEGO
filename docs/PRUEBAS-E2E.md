@@ -146,6 +146,19 @@ mismo truco de sesiones firmadas, sin Supabase:
   solo hacia la clave de la propia empresa, la API arma **borradores** y no
   publica, aislamiento entre empresas y `catalog_not_enabled`.
 
+**El inventario (Commerce Core · Fase 2)** — `inventario-admin` (escritorio),
+con el mismo arnés (`itemSembrado({ controlaInventario: true })`,
+`sucursalSembrada`, `varianteDe`): lista agotada → entrada → faltante sin motivo
+(el navegador no deja enviar) → faltante con motivo → faltante imposible (avisa y
+no mueve) → daño → baja de lo dañado → umbral y alerta en la lista → transferencia
+entre sucursales → conteo físico → historial con cada movimiento; la variante de
+otra empresa se ve igual que una inventada, y una empresa sin la capacidad no
+entra. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
+disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
+144 combinaciones tipo×origen×destino las prueban `tests/postgres/inventory.db.test.ts`
+y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba
+la interfaz.
+
 Tres cosas que costó aprender y conviene no repetir:
 
 1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de
