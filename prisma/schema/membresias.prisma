@@ -164,6 +164,7 @@ model Membership {
   visits       Visit[]
   comprobantes Comprobante[]
   pagoIntentos PagoIntento[]
+  cardnetCaptureSessions CardnetCaptureSession[]
   qrTokens     QrToken[]
 
   transacciones Transaction[]
@@ -253,6 +254,8 @@ model TarjetaTokenizada {
   /// Referencias de CardNET (NO son datos de tarjeta).
   customerId       String
   paymentProfileId String?
+  cardnetCaptureSessionId String? @unique
+  cardnetCaptureSession CardnetCaptureSession? @relation(fields: [cardnetCaptureSessionId], references: [id], onDelete: SetNull)
   /// Token reutilizable de la credencial archivada, si el proveedor lo entrega.
   token            String?
 

@@ -128,6 +128,8 @@ export interface CobrarConTokenInput {
   orden: string
   /** IP del cliente, para el antifraude de CardNET. */
   clienteIp: string
+  customerId?: string
+  purchaseUniqueId?: string
   /** Factura/impuesto opcionales (DataDo). */
   invoice?: string
   tax?: number
@@ -160,10 +162,12 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
   // caracteres viaja bien por el Purchase, pero el tramo siguiente es otro
   // sistema — y es ese el que respondió `BadRequest`.
   const referencia = referenciaCobro(input.orden)
+  const identidadCompra = input.purchaseUniqueId?.trim() || referencia
 
   const cuerpo: Record<string, unknown> = {
     TrxToken: input.trxToken,
-    Order: referencia,
+    ...(input.customerId ? { CustomerId: input.customerId } : {}),
+    Order: identidadCompra,
     Amount: montoEnteroMenor(input.pesos),
     Tip: 0,
     Currency: MONEDA_DOP_TOKENS,
@@ -175,7 +179,7 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     // Ahora va la referencia corta. Si vuelve a llegar vacía en la respuesta,
     // el campo es decorativo y hay que quitarlo; si llega con valor, sirve.
     // El expediente que se guarda permite comprobar exactamente eso.
-    UniqueID: referencia,
+    UniqueID: identidadCompra,
     // `getClientIdentifier` devuelve la cadena 'unknown' cuando no hay
     // `x-forwarded-for`. Mandar eso como IP al antifraude de CardNET es peor
     // que no mandar nada: un valor con formato inválido puede rechazar el
@@ -207,6 +211,21 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     aprobada,
     crudo: evidencia(status, json),
   }
+}
+
+export async function consultarComprasCardnet(input: {
+  customerId: string
+  from: string
+  to: string
+  orderNumber: string
+}): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  const query = new URLSearchParams({
+    CustomerId: input.customerId,
+    From: input.from,
+    To: input.to,
+    OrderNumber: input.orderNumber,
+  })
+  return llamarTokensConRuta('GET', `/Purchase?${query.toString()}`, null)
 }
 
 /**
