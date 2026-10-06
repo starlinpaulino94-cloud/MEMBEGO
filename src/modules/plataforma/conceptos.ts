@@ -87,6 +87,8 @@ export const FUNCIONES_EMPRESA = [
   'PUBLICACIONES',
   'HOME_BUILDER',
   'MENSAJERIA',
+  // Commerce Core (Fase 1): catálogo de ítems y variantes. Vive en el Core.
+  'CATALOGO_UNIFICADO',
 ] as const satisfies readonly Capacidad[]
 
 export type FuncionEmpresa = (typeof FUNCIONES_EMPRESA)[number]

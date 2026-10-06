@@ -38,6 +38,13 @@
  *                           pantalla que ve el cliente no cruza empresas, ni
  *                           leyéndola ni colgando un bloque de una revisión
  *                           ajena.
+ *   8-9. Supply          — el derecho/pedido es de quien lo cumple, no de la
+ *                           ficha del cliente; el cobro de la plataforma no es
+ *                           de ningún inquilino.
+ *   10. Catálogo          — `catalog_*` (Commerce Core): ítems, variantes y
+ *                           categorías no cruzan empresas, ni leyendo, ni
+ *                           escribiendo, ni colgando una variante de un ítem
+ *                           ajeno (FK compuesta).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * USO
@@ -161,6 +168,8 @@ function limpiar() {
       delete from supply_derechos    where id = '${A}_sd';
       delete from supply_lotes       where id = '${A}_sl';
       delete from supply_acuerdos    where id = '${A}_sa';
+      delete from catalog_items      where id in ('${A}_ci', '${B}_ci');
+      delete from catalog_categories where id in ('${A}_cc', '${B}_cc');
       delete from home_bloques    where "revisionId" in ('${A}_h', '${B}_h');
       delete from home_revisiones where id in ('${A}_h', '${B}_h');
       delete from visits      where "clienteId" in ('${A}_k', '${B}_k');
@@ -235,6 +244,18 @@ try {
     insert into home_bloques (id, "revisionId", tipo, orden, "updatedAt") values
       ('${A}_hb', '${A}_h', 'CABECERA', 0, now()),
       ('${B}_hb', '${B}_h', 'CABECERA', 0, now());
+
+    -- COMMERCE CORE · catálogo. Cada ítem se siembra CON su variante en la misma
+    -- transacción: un ítem sin variante no se puede confirmar.
+    insert into catalog_items (id, "companyId", name, slug, type, "updatedAt") values
+      ('${A}_ci', '${A}', 'Ítem de A', 'item-a', 'SERVICE', now()),
+      ('${B}_ci', '${B}', 'Ítem de B', 'item-b', 'SERVICE', now());
+    insert into catalog_variants (id, "companyId", "catalogItemId", name, sku, price, "isDefault", "updatedAt") values
+      ('${A}_cv', '${A}', '${A}_ci', 'Default', 'RLS-A', 100, true, now()),
+      ('${B}_cv', '${B}', '${B}_ci', 'Default', 'RLS-B', 100, true, now());
+    insert into catalog_categories (id, "companyId", name, slug, "updatedAt") values
+      ('${A}_cc', '${A}', 'Categoría de A', 'cat-a', now()),
+      ('${B}_cc', '${B}', 'Categoría de B', 'cat-b', now());
 
     -- MEMBEGO SUPPLY · el caso cruzado, que es el que importa.
     --
@@ -451,6 +472,63 @@ try {
                                    "costoUnitario","vencAt","updatedAt")
        values ('${B}_intruso','${A}_sl','${B}_k','${B}','REGALO',300,now(),now());`
     )
+  )
+
+  // ── 10. Commerce Core · catálogo unificado ────────────────────────────────
+  //
+  // Las cinco tablas llevan `companyId` propio (también las hijas), así que
+  // entran por Nivel 0 y nadie escribió una política a mano para ellas. Que el
+  // generador las cubra es justo lo que se comprueba aquí.
+  const items = comoInquilino(A, `select id from catalog_items where id in ('${A}_ci','${B}_ci');`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Catálogo: con el contexto en A no aparece ningún ítem de B',
+    items.length === 1 && items[0] === `${A}_ci`,
+    `devolvió: ${JSON.stringify(items)}`
+  )
+
+  const variantes = comoInquilino(A, `select id from catalog_variants where id in ('${A}_cv','${B}_cv');`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Catálogo: las variantes de B tampoco se ven (la hija lleva su propio companyId)',
+    variantes.length === 1 && variantes[0] === `${A}_cv`,
+    `devolvió: ${JSON.stringify(variantes)}`
+  )
+
+  const categorias = comoInquilino(A, `select id from catalog_categories where id in ('${A}_cc','${B}_cc');`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Catálogo: las categorías de B tampoco',
+    categorias.length === 1 && categorias[0] === `${A}_cc`,
+    `devolvió: ${JSON.stringify(categorias)}`
+  )
+
+  comprobar(
+    'Catálogo: A no puede insertar un ítem marcado como de B',
+    fallaComoInquilino(
+      A,
+      `insert into catalog_items (id,"companyId",name,slug,type,"updatedAt")
+       values ('${A}_intruso_i','${B}','Intruso','intruso','SERVICE',now());`
+    )
+  )
+
+  comprobar(
+    'Catálogo: A no puede colgar una variante (con su propio companyId) de un ítem de B — la FK compuesta lo impide',
+    fallaComoInquilino(
+      A,
+      `insert into catalog_variants (id,"companyId","catalogItemId",name,sku,price,"updatedAt")
+       values ('${A}_intruso_v','${A}','${B}_ci','Intrusa','RLS-X',1,now());`
+    )
+  )
+
+  const tocadasCatalogo = comoInquilino(
+    A,
+    `with u as (update catalog_items set name='PISOTEADO' returning 1) select count(*) from u;`
+  )
+  comprobar(
+    'Catálogo: un `update` sin `where` solo alcanza los ítems de A',
+    tocadasCatalogo === '1',
+    `filas afectadas: ${tocadasCatalogo} (debería ser 1)`
   )
 } catch (e) {
   fallos++

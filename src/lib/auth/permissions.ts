@@ -108,6 +108,11 @@ export const ADMIN_SECTIONS = [
   // información de dirección, no de mostrador. Escanear vouchers vive en
   // 'scanner', que sí tiene Supervisión.
   'supply',
+  // Commerce Core · catálogo unificado (`/admin/catalogo`, Fase 1). Detrás de
+  // la capacidad CATALOGO_UNIFICADO. No entra en los roles acotados: cambiar
+  // lo que se vende y a qué precio es decisión de dirección; Supervisión y
+  // Marketing no lo piden.
+  'catalogo',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).

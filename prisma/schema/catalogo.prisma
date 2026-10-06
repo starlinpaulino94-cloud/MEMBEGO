@@ -1,0 +1,200 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMERCE CORE · CATÁLOGO UNIFICADO (Fase 1 del Plan Maestro)
+//
+// Una sola respuesta a «qué vende esta empresa»: `CatalogItem` es lo que se
+// ofrece (un lavado, una pizza, una membresía) y `CatalogVariant` es lo que se
+// COMPRA (la talla M, el sabor fresa, o la variante única de un servicio
+// simple). Pedidos, inventario y promociones apuntan SIEMPRE a la variante,
+// nunca al ítem: así agregar tallas a un producto que ya se vendía no obliga a
+// migrar nada.
+//
+// Un ítem simple no se queda sin variante: nace con una `isDefault = true`, y
+// la UI no la muestra mientras sea la única.
+//
+// COEXISTE con `Servicio`, `ProductoInventario`, `Plan`, `Promocion` y
+// `Excursion`; nada de eso se migra aquí. Tampoco apunta a Supply V2: el puente
+// (`supplyV2CatalogItemId`) llega en la Fase 2.5, y por eso este esquema no
+// tiene ninguna FK hacia `supply_v2_*`.
+//
+// AISLAMIENTO. Las cinco tablas llevan `companyId` propio (también las hijas) y
+// las FK hacia el ítem son COMPUESTAS `(catalogItemId, companyId)`: la base
+// rechaza una variante cuya empresa no sea la de su ítem. Con `companyId` en
+// cada tabla, la RLS de Capa 2 las trata como las demás (nivel 0) y el
+// generador de políticas las cubre sin una línea escrita a mano.
+//
+// El invariante «todo ítem tiene al menos una variante» lo vigila la base con un
+// disparador diferido (ver la migración `20261036_catalog_core`); Prisma no sabe
+// expresarlo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CatalogItemType {
+  PHYSICAL_PRODUCT
+  SERVICE
+  BUNDLE
+  MEMBERSHIP
+  VOUCHER
+  DIGITAL_PRODUCT
+  GIFT_CARD
+}
+
+enum CatalogItemStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+/// De dónde viene el ítem. MERCHANT lo creó la empresa. SUPPLY lo sincroniza el
+/// puente desde Supply V2 (Fase 2.5) y será de solo lectura para la empresa; el
+/// valor ya existe para que el puente no tenga que hacer `ALTER TYPE`.
+enum CatalogItemSource {
+  MERCHANT
+  SUPPLY
+}
+
+enum CatalogVariantStatus {
+  ACTIVE
+  OUT_OF_STOCK
+  DISCONTINUED
+}
+
+model CatalogItem {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name        String
+  /// Identificador legible, único dentro de la empresa. No cambia al renombrar:
+  /// un enlace compartido no debe morir porque se corrigió una errata.
+  slug        String
+  description String?
+
+  type   CatalogItemType
+  status CatalogItemStatus @default(DRAFT)
+  source CatalogItemSource @default(MERCHANT)
+
+  /// Moneda de TODAS las variantes del ítem. Una variante no tiene moneda
+  /// propia: dos tallas del mismo producto no se cobran en monedas distintas.
+  currency String @default("DOP")
+
+  /// Qué hace el ítem: `trackInventory`, `requiresBooking`, `requiresRedemption`,
+  /// `requiresPreparation`, `availableMarketplace`, `availablePOS`. La forma la
+  /// fija `modules/catalog/domain.ts`; la base solo exige que sea un objeto.
+  capabilities Json @default("{}")
+
+  position Int @default(0)
+
+  /// Cuándo se activó por primera vez. null = nunca se ha publicado.
+  publishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants   CatalogVariant[]
+  images     CatalogItemImage[]
+  categories CatalogItemCategory[]
+
+  @@unique([companyId, slug])
+  /// Destino de las FK compuestas de las tablas hijas.
+  @@unique([id, companyId])
+  @@index([companyId, status, position])
+  @@index([companyId, type])
+  @@map("catalog_items")
+}
+
+model CatalogVariant {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogItemId String
+  item          CatalogItem @relation(fields: [catalogItemId, companyId], references: [id, companyId], onDelete: Cascade)
+
+  /// «Default» en la variante automática; «M / Rojo» en una real.
+  name String
+  /// Único por EMPRESA (no por ítem): es lo que se escanea o se escribe en caja.
+  sku  String
+  barcode String?
+
+  price          Decimal  @db.Decimal(12, 2)
+  cost           Decimal? @db.Decimal(12, 2)
+  /// Precio «antes» para mostrar el descuento; nunca menor que `price`.
+  compareAtPrice Decimal? @db.Decimal(12, 2)
+
+  /// color, talla, sabor… Texto libre por ahora; cuando haga falta filtrar por
+  /// atributo se promueve a tabla.
+  attributes Json @default("{}")
+
+  /// true solo en la variante automática de un ítem simple. A lo sumo una por
+  /// ítem, y solo mientras sea la ÚNICA variante (lo exige la base).
+  isDefault Boolean @default(false)
+
+  status   CatalogVariantStatus @default(ACTIVE)
+  position Int                  @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, sku])
+  @@unique([companyId, barcode])
+  @@index([catalogItemId, position])
+  @@map("catalog_variants")
+}
+
+/// Categoría PROPIA de la empresa para ordenar su catálogo. No es la categoría
+/// de marketplace de la empresa (`CompanyToCategory`): aquella clasifica el
+/// negocio; esta clasifica lo que vende.
+model CatalogCategory {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  name     String
+  slug     String
+  position Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items CatalogItemCategory[]
+
+  @@unique([companyId, slug])
+  @@unique([id, companyId])
+  @@map("catalog_categories")
+}
+
+model CatalogItemCategory {
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogItemId String
+  item          CatalogItem @relation(fields: [catalogItemId, companyId], references: [id, companyId], onDelete: Cascade)
+
+  categoryId String
+  category   CatalogCategory @relation(fields: [categoryId, companyId], references: [id, companyId], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([catalogItemId, categoryId])
+  @@index([categoryId])
+  @@map("catalog_item_categories")
+}
+
+model CatalogItemImage {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogItemId String
+  item          CatalogItem @relation(fields: [catalogItemId, companyId], references: [id, companyId], onDelete: Cascade)
+
+  /// Ruta dentro del bucket de Storage, no una URL: la URL pública se deriva.
+  path     String
+  alt      String?
+  position Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([catalogItemId, position])
+  @@map("catalog_item_images")
+}

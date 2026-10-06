@@ -59,6 +59,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   leads: 'Prospectos (todo el CRM)',
   integraciones: 'Integraciones',
   supply: 'Membego Supply (compromisos con la plataforma)',
+  catalogo: 'Catálogo unificado',
 }
 
 export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[]>> = {
@@ -169,6 +170,13 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'editar', label: 'Editar campañas de marketing' },
     { codigo: 'estado', label: 'Activar / pausar campañas' },
     { codigo: 'eliminar', label: 'Eliminar campañas de marketing' },
+  ],
+  catalogo: [
+    { codigo: 'crear', label: 'Crear productos y servicios' },
+    { codigo: 'editar', label: 'Editar productos y servicios' },
+    { codigo: 'publicar', label: 'Publicar y pausar productos y servicios' },
+    { codigo: 'archivar', label: 'Archivar productos y servicios' },
+    { codigo: 'variante', label: 'Crear, editar y quitar variantes (precio, costo, SKU)' },
   ],
   excursiones: [
     { codigo: 'catalogo_crear', label: 'Crear excursiones' },

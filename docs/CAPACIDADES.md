@@ -42,6 +42,7 @@
 | `MENSAJERIA` | Sección `comunicacion` (`/admin/comunicacion`: canales, FAQ, conexión) | ✅ para empresas existentes; ❌ en tenants nuevos |
 | `PUBLICACIONES` | Sección `publicaciones` (`/admin/publicaciones`) | ❌ apagada desde la Fase 0 |
 | `HOME_BUILDER` | Editor de inicio dentro de `/admin/personalizacion` (**no** tiene sección propia: comparte página con el formulario de marca, que no se oculta) | ❌ apagada desde la Fase 0 |
+| `CATALOGO_UNIFICADO` | Sección `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
 
 ## Defaults de la Fase 0 (Plan Maestro §8)
 

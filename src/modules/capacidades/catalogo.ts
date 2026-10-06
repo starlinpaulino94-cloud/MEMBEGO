@@ -174,6 +174,10 @@ export const CAPACIDADES = [
   'PUBLICACIONES',
   'HOME_BUILDER',
   'MENSAJERIA',
+  // Fase 1 (Plan Maestro) — Commerce Core: el catálogo unificado de ítems y
+  // variantes (`/admin/catalogo`). Apagada para todos de serie: se enciende
+  // empresa por empresa (Car Town primero) hasta que el catálogo esté probado.
+  'CATALOGO_UNIFICADO',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -203,6 +207,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   PUBLICACIONES: 'Publicaciones: eventos, noticias y beneficios en el perfil',
   HOME_BUILDER: 'Editor de inicio: personalizar bloques de la página principal',
   MENSAJERIA: 'Mensajería interna y WhatsApp avanzado',
+  CATALOGO_UNIFICADO: 'Catálogo unificado: productos, servicios y variantes',
 }
 
 /**
@@ -226,6 +231,7 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   MEMBEGO_SUPPLIER: ['supply'],
   PUBLICACIONES: ['publicaciones'],
   MENSAJERIA: ['comunicacion'],
+  CATALOGO_UNIFICADO: ['catalogo'],
   // HOME_BUILDER no aparece aquí: comparte la sección 'personalizacion' con
   // las opciones de marca/engagement, que NO se ocultan. Se revisa a mano en
   // el componente de esa página (ver admin/personalizacion/page.tsx).
@@ -254,6 +260,7 @@ export const SECCION_LABEL: Partial<Record<AdminSection, string>> = {
   supply: 'Membego Supply (compromisos con la plataforma)',
   publicaciones: 'Publicaciones',
   comunicacion: 'Mensajería y WhatsApp',
+  catalogo: 'Catálogo unificado',
 }
 
 /** Las secciones del panel que se apagan al desactivar esta capacidad. */

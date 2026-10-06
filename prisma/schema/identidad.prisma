@@ -338,6 +338,12 @@ enum AuditAccion {
   /// cuánto se cobra —mover un nivel cambia qué vehículos caen en él—, así que
   /// el payload lleva el antes y el después del nivel, no solo «cambió».
   SUPPLY_V2_VEHICLE_CATEGORY_CHANGED
+  /// Commerce Core · catálogo unificado (Fase 1). El payload lleva el antes y el
+  /// después de lo que cambió (precio, estado), no solo «cambió».
+  CATALOG_ITEM_CREATED
+  CATALOG_ITEM_UPDATED
+  CATALOG_ITEM_STATUS_CHANGED
+  CATALOG_VARIANT_CHANGED
   SUPPLY_V2_ORDER_CREATED
   SUPPLY_V2_ORDER_RESERVED
   SUPPLY_V2_ORDER_PAYMENT_SUBMITTED
@@ -875,6 +881,12 @@ model Company {
   metodosPago            MetodoPago[]
   auditLogs              AuditLog[]
   promociones            Promocion[]
+  // Commerce Core · catálogo unificado (Fase 1). Relaciones inversas.
+  catalogItems           CatalogItem[]
+  catalogVariants        CatalogVariant[]
+  catalogCategories      CatalogCategory[]
+  catalogItemCategories  CatalogItemCategory[]
+  catalogItemImages      CatalogItemImage[]
   referidos              Referido[]
   reglasRecompensa       ReglaRecompensa[]
   whatsappConfig         WhatsAppConfig?
