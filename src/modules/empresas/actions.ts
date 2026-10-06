@@ -469,6 +469,9 @@ export async function duplicarEmpresa(id: string): Promise<ActionState> {
           categoria: company.categoria,
           website: company.website,
           isActive: false,
+          // La copia no hereda `capacidades` del original: nace como tenant
+          // nuevo y recibe sus mismos defaults (Plan Maestro §8.5–§8.6).
+          capacidades: { overrides: CAPACIDADES_OVERRIDE_TENANT_NUEVO },
         },
       })
     )

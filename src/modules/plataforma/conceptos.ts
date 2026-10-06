@@ -4,7 +4,7 @@
  * ────────────────────────────────────────────────────────────────────────────
  * EL PROBLEMA QUE RESUELVE
  *
- * `modules/capacidades/catalogo.ts` tiene hoy varias decenas de valores en
+ * `modules/capacidades/catalogo.ts` tiene hoy más de veinte valores en
  * una sola lista llamada `CAPACIDADES`, y son dos cosas distintas metidas en
  * el mismo saco:
  *

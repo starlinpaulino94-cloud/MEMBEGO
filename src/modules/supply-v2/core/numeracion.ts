@@ -66,5 +66,7 @@ export async function siguienteNumero(
   ultimo: BuscadorUltimo,
   fecha = new Date()
 ): Promise<string> {
-  return siguienteNumeroGenerico(tx, prefijo, ultimo, fecha)
+  // `supply_v2` es la clave de cerrojo que este módulo siempre ha usado: no se
+  // cambia (ver el parámetro `namespace` en commerce-primitives/numeracion.ts).
+  return siguienteNumeroGenerico(tx, prefijo, ultimo, fecha, 'supply_v2')
 }

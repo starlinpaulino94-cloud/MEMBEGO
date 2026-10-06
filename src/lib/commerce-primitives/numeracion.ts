@@ -42,10 +42,18 @@ export async function siguienteNumero<P extends string>(
   tx: Tx,
   prefijo: P,
   ultimo: BuscadorUltimo,
-  fecha = new Date()
+  fecha = new Date(),
+  /**
+   * Espacio de nombres del cerrojo. Dos dominios que compartan un prefijo no
+   * deben compartir cerrojo; y un dominio que ya tenía numeración en producción
+   * DEBE conservar su clave exacta: si cambia, durante un despliegue gradual la
+   * instancia vieja y la nueva toman cerrojos distintos para el mismo prefijo y
+   * una choca con el índice único. Supply V2 pasa `supply_v2`.
+   */
+  namespace = 'commerce'
 ): Promise<string> {
   const anio = fecha.getFullYear()
-  const clave = `commerce:${prefijo}:${anio}`
+  const clave = `${namespace}:${prefijo}:${anio}`
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${clave}))`
   const previo = await ultimo(`${prefijo}-${anio}-`)
   const secuencia = (previo ? secuenciaDeNumero(previo) : 0) + 1
