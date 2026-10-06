@@ -26,6 +26,7 @@ interface Scenario {
   purchaseReads: number
   amountLookups: number
   chargeCalls: number
+  onCharge?: () => void
   intentCreates: number
   chargeResults: Array<unknown | null>
   chargeRequests: Array<{ readonly purchaseUniqueId: unknown; readonly order: unknown; readonly amount: unknown; readonly token?: unknown }>
@@ -629,14 +630,19 @@ test('ambiguous retries retain the Purchase UniqueID and serialize concurrent ch
   assert.equal(row.reservaClienteKey, 'held-customer-reservation')
 })
 
-test('stale activation recovery claims one lease before charging a persisted intent', async () => {
+test('stale activation recovery claims one lease before charging a persisted intent', { timeout: 5_000 }, async () => {
   const { ACTIVATION_CLAIM_STALE_MS } = await import('../src/modules/pagos/cardnetClienteShared')
   const s = setup()
   s.customerResponse = {
     denegado: false, email: 'qa@example.test',
     perfiles: [{ paymentProfileId: 'profile-fresh', token: 'fresh-payment-profile-token', habilitado: true }],
   }
-  s.chargeResults = [null, null]
+  let releaseCharge: (response: unknown) => void = () => undefined
+  let announceCharge: () => void = () => undefined
+  const chargeStarted = new Promise<void>((resolve) => { announceCharge = resolve })
+  const chargeResult = new Promise<unknown>((resolve) => { releaseCharge = resolve })
+  s.onCharge = announceCharge
+  s.chargeResults = [chargeResult, null]
   const id = 'a'.repeat(48)
   const row: Row = {
     id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
@@ -647,6 +653,7 @@ test('stale activation recovery claims one lease before charging a persisted int
     createdAt: new Date(Date.now() - 120_000),
     updatedAt: new Date(Date.now() - ACTIVATION_CLAIM_STALE_MS - 1_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
     purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key' },
     reservaClienteKey: 'held-membership-reservation',
   }
@@ -654,11 +661,19 @@ test('stale activation recovery claims one lease before charging a persisted int
   s.reservations.set('held-membership-reservation', row)
   const api = await service()
   const status = () => api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
-  const results = await Promise.all([status(), status()])
+  const first = status()
+  await chargeStarted
+  assert.equal(row.estado, 'PURCHASE_PENDING')
+  const concurrent = await status()
+  assert.equal(concurrent.status, 202)
+  assert.equal(s.chargeCalls, 1)
+  releaseCharge(null)
+  const results = [await first, concurrent]
   assert.ok(results.every((result) => result.status === 202 && result.body.status === 'pending'))
   assert.equal(s.customerGets, 1)
   assert.equal(s.chargeCalls, 1)
   assert.deepEqual(s.chargeRequests.map((call) => call.purchaseUniqueId), ['stable-purchase-key'])
+  assert.equal(row.estado, 'PURCHASE_PENDING')
 })
 
 test('the real BFF route rejects a request without Bearer before calling the service', async () => {

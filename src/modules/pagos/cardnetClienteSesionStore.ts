@@ -169,7 +169,28 @@ function stablePurchaseId(): string {
 export async function createOrReadIntent(
   session: NonNullable<Awaited<ReturnType<typeof loadSession>>>
 ) {
-  if (session.purchaseIntent) return session.purchaseIntent
+  const purchaseIntent = session.purchaseIntent
+  if (purchaseIntent) {
+    if (session.estado !== CARDNET_SESSION_STATES.PROFILE_PENDING) return session.purchaseIntent
+    const claimedAt = new Date()
+    const claimed = await conEmpresa(session.companyId, (tx) =>
+      tx.cardnetCaptureSession.updateMany({
+        where: {
+          id: session.id,
+          authSubject: session.authSubject,
+          purchaseIntentId: purchaseIntent.id,
+          estado: CARDNET_SESSION_STATES.PROFILE_PENDING,
+          updatedAt: session.updatedAt,
+        },
+        data: {
+          estado: CARDNET_SESSION_STATES.PURCHASE_PENDING,
+          paymentProfileId: session.paymentProfileId,
+          updatedAt: claimedAt,
+        },
+      })
+    ).catch(() => ({ count: 0 }))
+    return claimed.count === 1 ? purchaseIntent : null
+  }
   const uniqueId = stablePurchaseId()
   return conEmpresa(session.companyId, async (tx) => {
     const claimed = await tx.cardnetCaptureSession.updateMany({

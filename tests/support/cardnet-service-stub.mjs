@@ -50,6 +50,7 @@ export async function cobrarConToken(params) {
     token: params.trxToken,
   })
   scenario().chargeCalls += 1
+  scenario().onCharge?.()
   return scenario().chargeResults.shift() ?? null
 }
 
