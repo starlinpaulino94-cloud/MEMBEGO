@@ -412,9 +412,9 @@ Unit Tests:          3722/3728 PASS · 0 FAIL · 6 SKIP (5 requieren servidor de
   · F1.1–F1.3 nuevos: 60/60 PASS (catalog-domain 19, catalogo-permisos 14, catalogo-publico 13, catalogo-api 9, catalog-formato 4, storage-rutas +1)
   · F2 nuevos:        28/28 PASS (inventory-domain 13, inventario-permisos 15)
 Integration Tests:   N/A    (no existe capa separada; los tests unitarios son puros o de texto fuente)
-PostgreSQL Tests:    37/37 PASS en `inventory.db.test.ts` (corrido aparte, sobre BD migrada con migrate deploy); suite completa `npm run test:db` (366 previos + 37) pendiente de re-corrida al cerrar este commit
-E2E (Playwright):    PASS parcial — 93 PASS · 0 FAIL · 124 SKIP (14,1 min; réplica de e2e.yml sobre PG local, build propio, tras añadir 3 specs de catálogo). Antes (`3c73726`): 67/0/114
-                     Los 124 SKIP = 114 por `AUTENTICADO=false` + 10 de los specs de catálogo que corren solo en escritorio (en móvil se saltan por diseño): sin Supabase de pruebas (docs/PRUEBAS-E2E.md §4). Con la misma
+PostgreSQL Tests:    403/403 PASS  npm run test:db (17 archivos; 55 de catálogo + 37 de inventario) sobre BD migrada con migrate deploy
+E2E (Playwright):    PASS parcial — 97 PASS · 0 FAIL · 128 SKIP (14,6 min; réplica de e2e.yml sobre PG local, build propio, tras añadir el spec de inventario). Antes: 93/0/124. `inventario-admin` pasó 3 corridas limpias seguidas y otra con el código final tras endurecer el servicio. No se hizo mutación sobre la interfaz del inventario (sí sobre el servicio, por PG)
+                     Los 128 SKIP = 114 por `AUTENTICADO=false` + 14 de los specs de catálogo e inventario que corren solo en escritorio (en móvil se saltan por diseño): sin Supabase de pruebas (docs/PRUEBAS-E2E.md §4). Con la misma
                      configuración de e2e.yml, los flujos AUTENTICADOS de cliente/admin/comisiones/sidebar no se ejercen.
                      Sí corrieron: recorrido público, registro v2 y los 9 slices de Supply V2 (sesión propia).
 Build:               PASS   next build, con las variables de relleno de CI (rutas `/admin/catalogo*`, `/admin/inventario*`, `/api/cron/inventario`, `/catalogo`, `/empresas/…/catalogo/…` y `/api/platform/v1/catalog-*` compiladas)
