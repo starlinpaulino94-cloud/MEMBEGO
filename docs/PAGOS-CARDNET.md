@@ -317,7 +317,7 @@ Tres consecuencias directas:
 | # | Pregunta | Dónde se mira | Si la respuesta es… |
 |---|---|---|---|
 | 1 | ¿El despliegue está en **pruebas**? | `/admin/metodos-pago` (recuadro «La tarjeta está en modo de pruebas») o `/api/pagos/cardnet-token/estado` → `ambiente` | **Sí** → es la causa. En laboratorio CardNET **no hace el cargo de RD$1.00** y el banco nunca muestra código. Poner `CARDNET_TOKENS_AMBIENTE=produccion` **con las llaves de producción** (las de lab dan 401 en producción). |
-| 2 | ¿El perfil nace de verdad `Enabled: false`? | `/api/pagos/cardnet-token/estado?perfiles=1` → `extraidos[].habilitado` y `consultaCruda` | **No** (viene `true`) y aun así se pide código → el Purchase está devolviendo PR001/CS012 con un perfil habilitado: mandar `consultaCruda` + la fila de `pago_intentos.respuesta` a CardNET. |
+| 2 | ¿El perfil nace de verdad `Enabled: false`? | `/api/pagos/cardnet-token/estado?expediente=<correo del cliente>` (como administrador de la empresa) → `cardnet.perfiles[].habilitado`, `pendienteDeActivar`, `consultaCruda` e `intentos[]` con la respuesta cruda del Purchase | **No** (viene `true`) y aun así se pide código → el Purchase está devolviendo PR001/CS012 con un perfil habilitado: mandar `consultaCruda` + la fila de `pago_intentos.respuesta` a CardNET. |
 | 3 | ¿CardNET ve la **transacción de verificación**? | Panel de comercio de CardNET / ejecutivo de cuenta, con el `CustomerId` y los últimos 4 | **No existe** → la cuenta no tiene el cargo de verificación configurado, o las llaves son del producto sin autenticación pero los perfiles nacen deshabilitados. Es de CardNET. |
 | 4 | ¿El cliente miró el **movimiento**, no el SMS? | Pantalla «Verifica tu tarjeta» (ya lo dice) | El código va en la **descripción del cargo**, en la app del banco, y puede tardar horas en asentarse. No llega por mensaje. |
 
@@ -339,8 +339,11 @@ de verificación, no hay código que esperar**.
   La guía web lo deja fuera de alcance; el manual v1.7 §4.1.2.3 habla del
   cargo de RD$1.00.»
 
-Con la respuesta cruda de `?perfiles=1` (`consultaCruda`, sin tokens) y el
-`CustomerId` el ticket se contesta en una vuelta.
+Con la respuesta de `?expediente=<correo>` (`consultaCruda` sin tokens, el
+`CustomerId` y los intentos con su respuesta cruda) el ticket se contesta en
+una vuelta. Las sondas `?perfiles=1` y `?activar=1` miran el Customer de
+**quien está logueado**: si entras como administrador te dirán
+`customerId: null`, y eso no significa que el cliente no tenga tarjeta.
 
 #### Lo que sí se cambió en MembeGo por este caso
 
