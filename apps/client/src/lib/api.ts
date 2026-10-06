@@ -82,8 +82,6 @@ const cardnetPromotionPurchaseSchema = z.discriminatedUnion('status', [
     .object({
       status: z.literal('free_activated'),
       compraId: z.string().min(1),
-      amount: z.number().nonnegative(),
-      currency: z.string().min(1),
     })
     .strip()
     .readonly(),
