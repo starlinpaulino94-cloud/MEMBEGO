@@ -20,10 +20,10 @@ registerHooks({
   },
 })
 
-async function withPurchaseResponse<T>(body: unknown, action: () => Promise<T>): Promise<T> {
+async function withApiResponse<T>(expectedPath: string, body: unknown, action: () => Promise<T>): Promise<T> {
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (input) => {
-    assert.equal(String(input), 'https://api.invalid/api/v1/cliente/promociones/promo-1/comprar')
+    assert.equal(String(input), `https://api.invalid${expectedPath}`)
     return new Response(JSON.stringify(body), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -39,7 +39,8 @@ async function withPurchaseResponse<T>(body: unknown, action: () => Promise<T>):
 
 test('free promotion response needs no payment fields and strips sensitive properties', async () => {
   const { api } = await import('../apps/client/src/lib/api')
-  const result = await withPurchaseResponse(
+  const result = await withApiResponse(
+    '/api/v1/cliente/promociones/promo-1/comprar',
     {
       status: 'free_activated',
       compraId: 'free-purchase-1',
@@ -55,7 +56,8 @@ test('free promotion response needs no payment fields and strips sensitive prope
 
 test('paid promotion response requires server amount and currency and strips sensitive properties', async () => {
   const { api } = await import('../apps/client/src/lib/api')
-  const result = await withPurchaseResponse(
+  const result = await withApiResponse(
+    '/api/v1/cliente/promociones/promo-1/comprar',
     {
       status: 'payment_required',
       compraId: 'paid-purchase-1',
@@ -75,9 +77,60 @@ test('paid promotion response requires server amount and currency and strips sen
     currency: 'DOP',
   })
   await assert.rejects(
-    withPurchaseResponse(
+    withApiResponse(
+      '/api/v1/cliente/promociones/promo-1/comprar',
       { status: 'payment_required', compraId: 'paid-purchase-2' },
       () => api.comprarPromocion('promo-1')
     )
   )
+})
+
+test('CardNET start accepts target-scoped processing without capture credentials', async () => {
+  const { api } = await import('../apps/client/src/lib/api')
+  const result = await withApiResponse(
+    '/api/v1/cliente/pagos/cardnet/sesion',
+    {
+      status: 'processing',
+      sessionId: 'session-recovery-1',
+      captureNonce: 'must-not-reach-client',
+      captureUrl: 'https://provider.invalid/capture',
+      token: 'must-not-reach-client',
+      providerSessionId: 'must-not-reach-client',
+    },
+    () => api.startCardnetSession({ kind: 'promotion', compraId: 'paid-purchase-1' })
+  )
+
+  assert.deepEqual(result, { status: 'processing', sessionId: 'session-recovery-1' })
+})
+
+test('CardNET start still accepts complete capture sessions', async () => {
+  const { api } = await import('../apps/client/src/lib/api')
+  const result = await withApiResponse(
+    '/api/v1/cliente/pagos/cardnet/sesion',
+    {
+      sessionId: 'session-capture-1',
+      captureNonce: 'nonce-1',
+      expiresAt: '2026-10-06T16:00:00.000Z',
+      amount: 1250,
+      currency: 'DOP',
+      captureUrl: 'https://provider.invalid/capture',
+      scriptUrl: 'https://provider.invalid/script.js',
+      publicKey: 'public-key',
+      uniqueId: 'unique-1',
+      paymentProfileToken: 'must-not-reach-client',
+    },
+    () => api.startCardnetSession({ kind: 'promotion', compraId: 'paid-purchase-1' })
+  )
+
+  assert.deepEqual(result, {
+    sessionId: 'session-capture-1',
+    captureNonce: 'nonce-1',
+    expiresAt: '2026-10-06T16:00:00.000Z',
+    amount: 1250,
+    currency: 'DOP',
+    captureUrl: 'https://provider.invalid/capture',
+    scriptUrl: 'https://provider.invalid/script.js',
+    publicKey: 'public-key',
+    uniqueId: 'unique-1',
+  })
 })

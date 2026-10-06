@@ -67,7 +67,18 @@ const cardnetCaptureSessionSchema = z
     publicKey: z.string().min(1),
     uniqueId: z.string().min(1),
   })
+  .strip()
   .readonly()
+
+const cardnetProcessingSessionSchema = z
+  .object({ status: z.literal('processing'), sessionId: z.string().min(1) })
+  .strip()
+  .readonly()
+
+const cardnetSessionStartSchema = z.union([
+  cardnetCaptureSessionSchema,
+  cardnetProcessingSessionSchema,
+])
 
 const cardnetPaymentStatusSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('pending') }).strip().readonly(),
@@ -112,6 +123,7 @@ export type CardnetSessionTarget =
     }
 
 export type CardnetCaptureSession = z.infer<typeof cardnetCaptureSessionSchema>
+export type CardnetSessionStartResult = z.infer<typeof cardnetSessionStartSchema>
 export type CardnetPaymentStatus = z.infer<typeof cardnetPaymentStatusSchema>
 export type CardnetPromotionPurchaseResult = z.infer<typeof cardnetPromotionPurchaseSchema>
 
@@ -1262,7 +1274,7 @@ export const api = {
 
     return parseCardnetResponse(
       postJson<unknown>('/api/v1/cliente/pagos/cardnet/sesion', body),
-      cardnetCaptureSessionSchema
+      cardnetSessionStartSchema
     )
   },
   confirmCardnetCapture: (input: {

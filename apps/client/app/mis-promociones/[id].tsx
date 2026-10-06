@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   ActivityIndicator,
@@ -34,6 +34,7 @@ import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 import { brandColor } from '../../src/lib/brand-color'
 import { colors } from '../../src/theme/tokens'
 import CardnetCapture from '../../src/components/pagos/cardnet/Capture'
+import { CardnetActivationForm, CardnetPaymentStatusMessage } from '../../src/components/pagos/cardnet/primitives'
 import { api, type CardnetCaptureSession, type CardnetPaymentStatus } from '../../src/lib/api'
 
 /* ── Estado visual (paridad con web compraEstadoVisual) ──────────────── */
@@ -85,7 +86,14 @@ function MisPromocionDetalleScreenContent() {
   const [captureStatus, setCaptureStatus] = useState<CardnetPaymentStatus | null>(null)
   const [isStartingCardnet, setIsStartingCardnet] = useState(false)
   const [captureStartError, setCaptureStartError] = useState(false)
+  const [recoverySessionId, setRecoverySessionId] = useState<string | null>(null)
+  const [recoveryStatus, setRecoveryStatus] = useState<CardnetPaymentStatus | null>(null)
+  const [recoveryStatusError, setRecoveryStatusError] = useState<string | null>(null)
+  const [activationError, setActivationError] = useState<string | null>(null)
+  const [activationSubmitting, setActivationSubmitting] = useState(false)
   const startingCardnet = useRef(false)
+  const recoveryStatusRef = useRef<CardnetPaymentStatus | null>(null)
+  const recoveryPollInFlight = useRef(false)
 
   const startCardnet = useCallback(async () => {
     if (!data || data.estado !== 'PENDIENTE_PAGO' || startingCardnet.current) return
@@ -95,9 +103,24 @@ function MisPromocionDetalleScreenContent() {
     setCaptureStatus(null)
     try {
       const session = await api.startCardnetSession({ kind: 'promotion', compraId: data.id })
+      setRecoveryStatusError(null)
+      setActivationError(null)
+      if (!('captureNonce' in session)) {
+        recoveryStatusRef.current = null
+        setRecoverySessionId(session.sessionId)
+        setRecoveryStatus(null)
+        setCaptureSession(null)
+        return
+      }
+      recoveryStatusRef.current = null
+      setRecoverySessionId(null)
+      setRecoveryStatus(null)
       setCaptureSession(session)
     } catch {
       setCaptureSession(null)
+      setRecoverySessionId(null)
+      setRecoveryStatus(null)
+      recoveryStatusRef.current = null
       setCaptureStartError(true)
     } finally {
       startingCardnet.current = false
@@ -110,6 +133,56 @@ function MisPromocionDetalleScreenContent() {
     void queryClient.invalidateQueries({ queryKey: ['cliente', 'mis-promociones'] })
   }, [queryClient, refetch])
 
+  const refreshRecoveryStatus = useCallback(async () => {
+    if (!recoverySessionId || recoveryPollInFlight.current) return null
+    const current = recoveryStatusRef.current
+    if (current && ['activation_required', 'declined', 'expired'].includes(current.status)) return current
+    recoveryPollInFlight.current = true
+    try {
+      const status = await api.getCardnetStatus(recoverySessionId)
+      recoveryStatusRef.current = status
+      setRecoveryStatus(status)
+      setRecoveryStatusError(null)
+      if (status.status === 'approved') {
+        const latest = await refetch()
+        if (latest.data?.estado === 'ACTIVA') {
+          recoveryStatusRef.current = null
+          setRecoverySessionId(null)
+          void queryClient.invalidateQueries({ queryKey: ['cliente', 'mis-promociones'] })
+        }
+      }
+      return status
+    } catch {
+      setRecoveryStatusError('No pudimos consultar el estado del pago. Seguiremos intentando de forma segura.')
+      return null
+    } finally {
+      recoveryPollInFlight.current = false
+    }
+  }, [queryClient, refetch, recoverySessionId])
+
+  useEffect(() => {
+    if (!recoverySessionId) return
+    void refreshRecoveryStatus()
+    const interval = setInterval(() => void refreshRecoveryStatus(), 2500)
+    return () => clearInterval(interval)
+  }, [recoverySessionId, refreshRecoveryStatus])
+
+  const handleRecoveryActivation = useCallback(async (activationCode: string) => {
+    if (!recoverySessionId) return
+    setActivationSubmitting(true)
+    setActivationError(null)
+    try {
+      const status = await api.activateCardnetProfile({ sessionId: recoverySessionId, activationCode })
+      recoveryStatusRef.current = status
+      setRecoveryStatus(status)
+      if (status.status === 'activation_required') setActivationError('El código no fue confirmado. Verifica el mensaje de tu banco e inténtalo de nuevo.')
+      else if (status.status === 'approved') await refreshRecoveryStatus()
+    } catch {
+      setActivationError('No pudimos confirmar la activación. Revisa tu conexión e inténtalo de nuevo.')
+    } finally {
+      setActivationSubmitting(false)
+    }
+  }, [recoverySessionId, refreshRecoveryStatus])
   /* ── Auth gate ────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
     return (
@@ -195,6 +268,13 @@ function MisPromocionDetalleScreenContent() {
             isStartingCardnet={isStartingCardnet}
             captureStartError={captureStartError}
             onCardnetApproved={handleCardnetApproved}
+            recoverySessionId={recoverySessionId}
+            recoveryStatus={recoveryStatus?.status === 'approved' && data.estado !== 'ACTIVA' ? { status: 'pending' } : recoveryStatus}
+            recoveryStatusError={recoveryStatusError}
+            activationError={activationError}
+            activationSubmitting={activationSubmitting}
+            onRefreshRecoveryStatus={() => void refreshRecoveryStatus()}
+            onRecoveryActivation={handleRecoveryActivation}
           />
         )}
         </DetailPageFrame>
@@ -223,6 +303,13 @@ function DetalleContent({
   isStartingCardnet,
   captureStartError,
   onCardnetApproved,
+  recoverySessionId,
+  recoveryStatus,
+  recoveryStatusError,
+  activationError,
+  activationSubmitting,
+  onRefreshRecoveryStatus,
+  onRecoveryActivation,
 }: {
   data: NonNullable<ReturnType<typeof useMisPromocion>['data']>
   router: ReturnType<typeof useRouter>
@@ -233,6 +320,13 @@ function DetalleContent({
   isStartingCardnet: boolean
   captureStartError: boolean
   onCardnetApproved: () => void
+  recoverySessionId: string | null
+  recoveryStatus: CardnetPaymentStatus | null
+  recoveryStatusError: string | null
+  activationError: string | null
+  activationSubmitting: boolean
+  onRefreshRecoveryStatus: () => void
+  onRecoveryActivation: (activationCode: string) => Promise<void>
 }) {
   const ui = estadoUi(data.estado, data.usosRestantes, data.usosIncluidos)
   const EstadoIcon = ui.icon
@@ -363,14 +457,40 @@ function DetalleContent({
                 : 'El negocio confirmará los próximos pasos.'}
             </Text>
             {data.estado === 'PENDIENTE_PAGO' ? (
-              <Button onPress={() => void startCardnet()} loading={isStartingCardnet}>
-                {isStartingCardnet ? 'Preparando CardNET…' : 'Pagar con CardNET'}
+              <Button disabled={Boolean(recoverySessionId)} onPress={() => void startCardnet()} loading={isStartingCardnet}>
+                {recoverySessionId ? 'Pago en verificación…' : isStartingCardnet ? 'Preparando CardNET…' : 'Pagar con CardNET'}
               </Button>
             ) : null}
           </View>
         </Card>
       )}
 
+      {recoverySessionId ? (
+        <View className='gap-3'>
+          {recoveryStatus ? (
+            <CardnetPaymentStatusMessage status={recoveryStatus.status} />
+          ) : (
+            <Card>
+              <View className='flex-row items-center gap-3 p-4'>
+                <ActivityIndicator color={colors.primary.DEFAULT} />
+                <Text className='text-sm text-muted-foreground'>Consultando el estado de tu pago…</Text>
+              </View>
+            </Card>
+          )}
+          {recoveryStatusError ? (
+            <Card className='gap-3 p-4'>
+              <Text className='text-sm text-muted-foreground'>{recoveryStatusError}</Text>
+              <Button variant='outline' onPress={onRefreshRecoveryStatus}>Consultar estado</Button>
+            </Card>
+          ) : null}
+          {recoveryStatus?.status === 'activation_required' ? (
+            <CardnetActivationForm error={activationError} onSubmit={onRecoveryActivation} submitting={activationSubmitting} />
+          ) : null}
+          {recoveryStatus && ['declined', 'expired'].includes(recoveryStatus.status) && data.estado === 'PENDIENTE_PAGO' ? (
+            <Button onPress={() => void startCardnet()} loading={isStartingCardnet}>Intentar el pago de nuevo</Button>
+          ) : null}
+        </View>
+      ) : null}
       {captureStartError ? (
         <Card className="border-destructive/30 bg-destructive/5">
           <View className="gap-3 p-4">
