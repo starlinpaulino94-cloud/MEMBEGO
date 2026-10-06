@@ -19,6 +19,10 @@ import { conEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { uniqueFileName } from '@/lib/storage'
+import { rutaCatalogo } from '@/lib/storage-rutas'
+import { detectarTipoImagen, EXTENSION_DE_IMAGEN } from '@/lib/imagen-tipo'
 import type { SessionUser } from '@/types'
 import type { ContextoAuditoria } from './auditoria'
 import type { DatosItem, DatosVariante } from './domain'
@@ -33,6 +37,17 @@ import {
   type CambiosItem,
   type CambiosVariante,
 } from './service'
+import {
+  asignarCategoriasEnTx,
+  crearCategoriaEnTx,
+  eliminarCategoriaEnTx,
+  eliminarImagenEnTx,
+  exigirCupoDeImagen,
+  ponerPortadaEnTx,
+  prefijoImagenesItem,
+  registrarImagenEnTx,
+} from './medios'
+import { urlPublicaCatalogo } from './formato'
 
 export type ResultadoCatalogo<T = unknown> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -146,6 +161,138 @@ export async function eliminarVarianteCatalogo(varianteId: string): Promise<Resu
   if (typeof varianteId !== 'string') return { ok: false, error: 'Datos no válidos.' }
   try {
     await conEmpresa(c.companyId, (tx) => eliminarVarianteEnTx(tx, c.companyId, varianteId, c.ctx))
+    revalidatePath(RUTA)
+    return { ok: true }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+// ── Imágenes ─────────────────────────────────────────────────────────────────
+
+const BUCKET = 'promociones'
+const MAX_MB = 5
+const MAX_BYTES = MAX_MB * 1024 * 1024
+
+/**
+ * Sube una imagen al ítem. Escribe con el cliente de SERVICIO, que ignora las
+ * políticas de Storage: por eso la autorización ocurre ANTES de crearlo (sesión,
+ * permiso, empresa de la sesión, ítem de esa empresa, cupo), y el tipo y la
+ * extensión los decide la FIRMA del archivo, no `file.type` ni `file.name`.
+ * Mismo criterio que `subirImagenExcursion`.
+ */
+export async function subirImagenCatalogo(
+  itemId: string,
+  file: File
+): Promise<ResultadoCatalogo<{ id: string; url: string | null }>> {
+  const c = await contexto('editar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof itemId !== 'string' || !itemId) return { ok: false, error: 'Datos no válidos.' }
+  if (!file || typeof file.arrayBuffer !== 'function') return { ok: false, error: 'Archivo no válido.' }
+  if (file.size > MAX_BYTES) return { ok: false, error: `La imagen no puede superar ${MAX_MB} MB.` }
+
+  try {
+    await conEmpresa(c.companyId, (tx) => exigirCupoDeImagen(tx, c.companyId, itemId))
+
+    const buffer = Buffer.from(await file.arrayBuffer())
+    if (buffer.length > MAX_BYTES) return { ok: false, error: `La imagen no puede superar ${MAX_MB} MB.` }
+    const tipo = detectarTipoImagen(buffer)
+    if (!tipo) return { ok: false, error: 'Formato no permitido. Usa JPG, PNG o WebP.' }
+
+    const path = rutaCatalogo(c.companyId, itemId, uniqueFileName(EXTENSION_DE_IMAGEN[tipo]))
+    const supabase = createAdminClient()
+    const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: tipo, upsert: false })
+    if (error) {
+      console.error('[catalogo-imagen] upload:', error.message)
+      return { ok: false, error: 'No se pudo subir la imagen. Intenta de nuevo.' }
+    }
+
+    try {
+      const r = await conEmpresa(c.companyId, (tx) => registrarImagenEnTx(tx, c.companyId, itemId, path, null, c.ctx))
+      revalidatePath(RUTA)
+      return { ok: true, id: r.id, url: urlPublicaCatalogo(path) }
+    } catch (e) {
+      // El archivo ya está en Storage y la fila no se pudo escribir: no dejar huérfanos.
+      await supabase.storage.from(BUCKET).remove([path]).catch(() => undefined)
+      throw e
+    }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+export async function eliminarImagenCatalogo(imagenId: string): Promise<ResultadoCatalogo> {
+  const c = await contexto('editar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof imagenId !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const { path, itemId } = await conEmpresa(c.companyId, async (tx) => {
+      const imagen = await tx.catalogItemImage.findFirst({
+        where: { id: imagenId, companyId: c.companyId },
+        select: { catalogItemId: true },
+      })
+      const r = await eliminarImagenEnTx(tx, c.companyId, imagenId, c.ctx)
+      return { path: r.path, itemId: imagen?.catalogItemId ?? '' }
+    })
+    // Solo se borra del bucket lo que cuelga del ítem de ESTA empresa.
+    if (path.startsWith(prefijoImagenesItem(c.companyId, itemId))) {
+      await createAdminClient().storage.from(BUCKET).remove([path]).catch(() => undefined)
+    }
+    revalidatePath(RUTA)
+    return { ok: true }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+export async function ponerPortadaCatalogo(imagenId: string): Promise<ResultadoCatalogo> {
+  const c = await contexto('editar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof imagenId !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    await conEmpresa(c.companyId, (tx) => ponerPortadaEnTx(tx, c.companyId, imagenId, c.ctx))
+    revalidatePath(RUTA)
+    return { ok: true }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+// ── Categorías ───────────────────────────────────────────────────────────────
+
+export async function crearCategoriaCatalogo(
+  nombre: string
+): Promise<ResultadoCatalogo<{ id: string; name: string }>> {
+  const c = await contexto('editar')
+  if ('error' in c) return { ok: false, error: c.error }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => crearCategoriaEnTx(tx, c.companyId, nombre))
+    revalidatePath(RUTA)
+    return { ok: true, id: r.id, name: r.name }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+export async function eliminarCategoriaCatalogo(categoriaId: string): Promise<ResultadoCatalogo> {
+  const c = await contexto('editar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof categoriaId !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    await conEmpresa(c.companyId, (tx) => eliminarCategoriaEnTx(tx, c.companyId, categoriaId))
+    revalidatePath(RUTA)
+    return { ok: true }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+export async function asignarCategoriasCatalogo(itemId: string, categoriaIds: string[]): Promise<ResultadoCatalogo> {
+  const c = await contexto('editar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof itemId !== 'string' || !Array.isArray(categoriaIds)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    await conEmpresa(c.companyId, (tx) => asignarCategoriasEnTx(tx, c.companyId, itemId, categoriaIds, c.ctx))
     revalidatePath(RUTA)
     return { ok: true }
   } catch (e) {

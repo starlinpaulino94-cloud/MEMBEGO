@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import {
   CAPACIDADES,
   CAPACIDADES_BASE,
@@ -68,9 +68,15 @@ test('todas las acciones exportadas piden la guardia ANTES de tocar la base', ()
     'actualizarItemCatalogo',
     'actualizarVarianteCatalogo',
     'agregarVarianteCatalogo',
+    'asignarCategoriasCatalogo',
     'cambiarEstadoItemCatalogo',
+    'crearCategoriaCatalogo',
     'crearItemCatalogo',
+    'eliminarCategoriaCatalogo',
+    'eliminarImagenCatalogo',
     'eliminarVarianteCatalogo',
+    'ponerPortadaCatalogo',
+    'subirImagenCatalogo',
   ])
   for (const nombre of exportadas) {
     const desde = sinComentarios.indexOf(`export async function ${nombre}`)
@@ -91,8 +97,27 @@ test('contexto() exige la sección «catalogo» y saca la empresa de la sesión,
   assert.doesNotMatch(sinComentarios, /\bprisma\./, 'las acciones no usan el cliente global: todo va por conEmpresa')
 })
 
+test('subirImagenCatalogo autoriza y comprueba el cupo ANTES de crear el cliente de servicio', () => {
+  const desde = sinComentarios.indexOf('export async function subirImagenCatalogo')
+  const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
+  const guardia = cuerpo.indexOf("contexto('editar')")
+  const cupo = cuerpo.indexOf('exigirCupoDeImagen(')
+  const firma = cuerpo.indexOf('detectarTipoImagen(buffer)')
+  const privilegiado = cuerpo.indexOf('createAdminClient()')
+  assert.ok(guardia >= 0 && cupo >= 0 && firma >= 0 && privilegiado >= 0, 'cambió el flujo de subida: revisa esta prueba')
+  assert.ok(guardia < cupo && cupo < privilegiado, 'el cliente de servicio se crea antes de autorizar o de mirar el cupo')
+  assert.ok(firma < privilegiado, 'se sube antes de comprobar la firma del archivo')
+  assert.doesNotMatch(cuerpo, /file\.type|file\.name/, 'vuelve a confiar en el MIME o el nombre del cliente')
+  assert.match(cuerpo, /upsert: false/)
+  assert.match(cuerpo, /rutaCatalogo\(c\.companyId, itemId,/, 'la ruta debe llevar la empresa de la SESIÓN')
+})
+
+test('borrar una imagen solo toca del bucket lo que cuelga del ítem de esta empresa', () => {
+  assert.match(sinComentarios, /path\.startsWith\(prefijoImagenesItem\(c\.companyId, itemId\)\)/)
+})
+
 test('el servicio y las lecturas filtran SIEMPRE por companyId (con la Capa 2 apagada es lo único que separa empresas)', () => {
-  for (const archivo of ['service.ts', 'queries.ts']) {
+  for (const archivo of ['service.ts', 'queries.ts', 'medios.ts']) {
     const s = readFileSync(`src/modules/catalog/${archivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
     const consultas = [...s.matchAll(/tx\.catalog\w+\.(findFirst|findMany|count|updateMany)\(\{([\s\S]*?)\}\)/g)]
     assert.ok(consultas.length > 0)
@@ -103,10 +128,47 @@ test('el servicio y las lecturas filtran SIEMPRE por companyId (con la Capa 2 ap
 })
 
 test('Commerce Core no importa de supply-v2', () => {
-  for (const archivo of ['actions.ts', 'service.ts', 'queries.ts', 'domain.ts', 'auditoria.ts', 'errores.ts']) {
+  for (const archivo of ['actions.ts', 'service.ts', 'queries.ts', 'domain.ts', 'auditoria.ts', 'errores.ts', 'medios.ts', 'formato.ts']) {
     const s = readFileSync(`src/modules/catalog/${archivo}`, 'utf8')
     // Solo los import: un comentario puede nombrar a Supply sin depender de él.
     const imports = [...s.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])
     for (const origen of imports) assert.doesNotMatch(origen, /supply/i, `${archivo} importa de ${origen}`)
   }
+})
+
+// ── Interfaz ─────────────────────────────────────────────────────────────────
+
+test('los componentes de cliente del catálogo NO importan el dominio ni el servicio (arrastrarían Prisma al navegador)', () => {
+  const dir = 'src/components/catalogo'
+  const archivos = readdirSync(dir).filter((f) => f.endsWith('.tsx'))
+  assert.ok(archivos.length >= 6)
+  for (const f of archivos) {
+    const s = readFileSync(`${dir}/${f}`, 'utf8')
+    const imports = [...s.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])
+    for (const origen of imports) {
+      assert.doesNotMatch(origen, /modules\/catalog\/(domain|service|queries|medios|auditoria|errores)$/, `${f} importa ${origen}`)
+      assert.doesNotMatch(origen, /^@prisma\/client$|lib\/prisma$|lib\/commerce-primitives/, `${f} importa ${origen}`)
+    }
+  }
+})
+
+test('las pantallas de /admin/catalogo se guardan por sección en el layout y por empresa en cada página', () => {
+  const layout = readFileSync('src/app/(admin)/admin/catalogo/layout.tsx', 'utf8')
+  assert.match(layout, /guardarSeccion\('catalogo'\)/)
+  for (const pagina of ['page.tsx', 'nuevo/page.tsx', '[id]/page.tsx']) {
+    const s = readFileSync(`src/app/(admin)/admin/catalogo/${pagina}`, 'utf8')
+    assert.match(s, /requireRole\(ADMIN_ROLES\)/, `${pagina} sin guardia de rol`)
+    assert.match(s, /requireCompanyContext\(user\)/, `${pagina} no resuelve la empresa de la sesión`)
+    assert.doesNotMatch(s, /\bprisma\./, `${pagina} usa el cliente global`)
+  }
+  const detalle = readFileSync('src/app/(admin)/admin/catalogo/[id]/page.tsx', 'utf8')
+  assert.match(detalle, /notFound\(\)/, 'un ítem ajeno debe verse como inexistente')
+})
+
+test('la entrada de menú existe, detrás de la capacidad, y en el grupo Catálogo del hub', () => {
+  const nav = readFileSync('src/components/layout/nav-config.ts', 'utf8')
+  assert.match(nav, /href: '\/admin\/catalogo',[\s\S]{0,400}capacidad: 'CATALOGO_UNIFICADO'/)
+  assert.match(nav, /deAdmin\('\/admin\/catalogo',/)
+  const ctxNav = readFileSync('src/modules/navegacion/contexto.ts', 'utf8')
+  assert.match(ctxNav, /'CATALOGO_UNIFICADO'/)
 })

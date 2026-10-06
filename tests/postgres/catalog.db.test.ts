@@ -268,6 +268,7 @@ test('16 · agregar una variante a un ítem simple baja la default y deja el sel
   const d = await enA((tx) => obtenerItemEnTx(tx, ctx.a, r.id))
   assert.equal(d.variants.length, 2)
   assert.ok(d.variants.every((v) => !v.isDefault), 'la automática dejó de ser default')
+  assert.deepEqual(d.variants.map((v) => v.name).sort(), ['Estándar', 'Premium'], 'el nombre del sistema se vuelve legible')
   assert.equal(d.tieneVariantes, true)
   const audit = await prisma.auditLog.findFirst({ where: { accion: 'CATALOG_VARIANT_CHANGED', entidadId: nueva.id } })
   assert.equal((audit?.payload as { accion: string }).accion, 'creada')
@@ -452,4 +453,19 @@ test('29 · el listado trae el precio «desde» entre las variantes activas y fi
   assert.equal(lista[0].tieneVariantes, true)
   assert.equal((await enA((tx) => listarItemsEnTx(tx, ctx.a, { q: nombre, estado: 'ACTIVE' }))).length, 0)
   assert.equal((await enA((tx) => listarItemsEnTx(tx, ctx.a, { q: nombre.toUpperCase(), estado: 'DRAFT', tipo: 'PHYSICAL_PRODUCT' }))).length, 1)
+})
+
+test('30 · un nombre que la persona eligió para la variante original NO se renombra', async () => {
+  const r = await itemSimple(`Nombre propio ${sufijo}`)
+  await enA((tx) => actualizarVarianteEnTx(tx, ctx.a, r.variants[0].id, { name: 'Básico' }, como(ctx.usuario)))
+  await enA((tx) => agregarVarianteEnTx(tx, ctx.a, r.id, { name: 'Lujo', price: 1 }, como(ctx.usuario)))
+  const d = await enA((tx) => obtenerItemEnTx(tx, ctx.a, r.id))
+  assert.deepEqual(d.variants.map((v) => v.name).sort(), ['Básico', 'Lujo'])
+})
+
+test('31 · si la nueva variante se llama «Estándar», la original conserva su nombre de sistema (sin choque)', async () => {
+  const r = await itemSimple(`Choque ${sufijo}`)
+  await enA((tx) => agregarVarianteEnTx(tx, ctx.a, r.id, { name: 'Estándar', price: 1 }, como(ctx.usuario)))
+  const d = await enA((tx) => obtenerItemEnTx(tx, ctx.a, r.id))
+  assert.deepEqual(d.variants.map((v) => v.name).sort(), ['Default', 'Estándar'])
 })

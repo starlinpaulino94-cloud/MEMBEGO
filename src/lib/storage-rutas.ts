@@ -134,6 +134,20 @@ export function rutaExcursion(
 }
 
 /**
+ * Imagen de un ítem del catálogo unificado:
+ * `<companyId>/catalogo/<itemId>/<archivo>`.
+ *
+ * Bucket `promociones`, como planes y excursiones: la política solo mira el
+ * primer segmento, así que esta ruta ya está cubierta. A diferencia de las
+ * otras, aquí el ítem SIEMPRE existe (la imagen se sube desde su edición), así
+ * que no hay carpeta `nueva`.
+ */
+export function rutaCatalogo(companyId: string, itemId: string, archivo: string): string {
+  const empresa = exigirSegmento(companyId, 'companyId')
+  return `${empresa}/catalogo/${exigirSegmento(itemId, 'itemId')}/${exigirSegmento(archivo, 'archivo')}`
+}
+
+/**
  * ¿Esta ruta lleva ya el prefijo de empresa?
  *
  * Sirve para el script de migración y para distinguir, al leer una URL vieja,

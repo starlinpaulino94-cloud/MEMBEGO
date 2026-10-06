@@ -44,6 +44,14 @@
 | `HOME_BUILDER` | Editor de inicio dentro de `/admin/personalizacion` (**no** tiene sección propia: comparte página con el formulario de marca, que no se oculta) | ❌ apagada desde la Fase 0 |
 | `CATALOGO_UNIFICADO` | Sección `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
 
+### Cómo encender el catálogo unificado en una empresa
+
+`CATALOGO_UNIFICADO` no está en ningún paquete base. Se enciende con un override
+por empresa desde `/superadmin/capacidades` (`overrides: { CATALOGO_UNIFICADO: true }`).
+Con ella: aparece «Catálogo» en el menú (*Oferta comercial*) y se abre
+`/admin/catalogo`; sin ella, la sección se niega (`requireSection`) y la entrada
+no se pinta. Los datos que se hayan creado se conservan si se apaga después.
+
 ## Defaults de la Fase 0 (Plan Maestro §8)
 
 Ocultamiento de módulos secundarios mientras el foco pasa a Commerce Core y

@@ -47,6 +47,10 @@ export interface ItemCreado {
   variants: VarianteCreada[]
 }
 
+/** Nombre que el sistema da a la variante automática y el que pasa a tener al dejar de ser la única. */
+const NOMBRE_VARIANTE_DEFAULT = 'Default'
+const NOMBRE_VARIANTE_ESTANDAR = 'Estándar'
+
 const dec = (v: string | null): Prisma.Decimal | null => (v == null ? null : new Prisma.Decimal(v))
 
 // ── SKU ──────────────────────────────────────────────────────────────────────
@@ -185,7 +189,7 @@ export async function crearItemEnTx(
 }
 
 /** El ítem de ESTA empresa, editable: existe, no viene de Supply y no está archivado. */
-async function itemEditable(tx: Tx, companyId: string, itemId: string) {
+export async function itemEditable(tx: Tx, companyId: string, itemId: string) {
   const item = await tx.catalogItem.findFirst({
     where: { id: itemId, companyId },
     select: { id: true, name: true, description: true, type: true, status: true, source: true, capabilities: true },
@@ -321,6 +325,15 @@ export async function agregarVarianteEnTx(
   // La automática se baja ANTES de insertar la nueva: el disparador diferido
   // revisa al confirmar, pero el índice único «una default por ítem» y el
   // orden de las filas se llevan mejor así.
+  // Y si todavía lleva el nombre que le puso el SISTEMA («Default»), se le da uno
+  // que la persona entienda en una lista de variantes. Un nombre que ella
+  // misma eligió no se toca.
+  if (v.datos.name.toLowerCase() !== NOMBRE_VARIANTE_ESTANDAR.toLowerCase()) {
+    await tx.catalogVariant.updateMany({
+      where: { catalogItemId: item.id, companyId, isDefault: true, name: NOMBRE_VARIANTE_DEFAULT },
+      data: { name: NOMBRE_VARIANTE_ESTANDAR },
+    })
+  }
   await tx.catalogVariant.updateMany({ where: { catalogItemId: item.id, companyId, isDefault: true }, data: { isDefault: false } })
   const position = existentes.reduce((m, e) => Math.max(m, e.position), -1) + 1
   const creada = await crearVarianteFila(tx, companyId, item.id, v.datos, { isDefault: false, position })

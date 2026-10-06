@@ -121,6 +121,7 @@ export type CapacidadNav =
   | 'CRM'
   | 'PUBLICACIONES'
   | 'MENSAJERIA'
+  | 'CATALOGO_UNIFICADO'
   | 'POS_CAJA'
   | 'MEMBEGO_SUPPLIER'
 
@@ -363,6 +364,16 @@ const G_OFERTA: NavGroup = {
   id: 'beneficios-oferta',
   label: 'Oferta comercial',
   items: [
+    {
+      // Commerce Core · catálogo unificado (Fase 1). Detrás de su capacidad, que
+      // nace apagada: se enciende empresa por empresa.
+      href: '/admin/catalogo',
+      label: 'Catálogo',
+      icon: Package,
+      description: 'Productos y servicios con sus variantes y precios.',
+      keywords: ['catalogo', 'productos', 'servicios', 'variantes', 'precios', 'sku', 'inventario'],
+      capacidad: 'CATALOGO_UNIFICADO',
+    },
     {
       href: '/admin/planes',
       label: 'Planes',
@@ -766,7 +777,7 @@ const HUB_EXPERIENCIA: NavGroup = {
 const HUB_CATALOGO: NavGroup = {
   id: 'catalogo',
   label: 'Catálogo',
-  items: deAdmin('/admin/planes', '/admin/ofertas', '/admin/excursiones'),
+  items: deAdmin('/admin/catalogo', '/admin/planes', '/admin/ofertas', '/admin/excursiones'),
 }
 
 const HUB_OPERACIONES: NavGroup = {
