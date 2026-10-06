@@ -1,5 +1,6 @@
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
+import { z } from 'zod'
 import { supabase } from './supabase'
 import { resolveApiBaseUrl } from './runtimeUrls'
 
@@ -53,6 +54,68 @@ export async function fetchBff<T>(path: string, options: RequestInit = {}): Prom
 // ---------------------------------------------------------------------------
 
 export type JsonObject = Record<string, unknown>
+
+const cardnetCaptureSessionSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    captureNonce: z.string().min(1),
+    expiresAt: z.iso.datetime(),
+    amount: z.number().positive(),
+    currency: z.string().min(1),
+    captureUrl: z.url(),
+    scriptUrl: z.url(),
+    publicKey: z.string().min(1),
+    uniqueId: z.string().min(1),
+  })
+  .readonly()
+
+const cardnetPaymentStatusSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('pending') }).strip().readonly(),
+  z.object({ status: z.literal('approved') }).strip().readonly(),
+  z.object({ status: z.literal('declined') }).strip().readonly(),
+  z.object({ status: z.literal('activation_required') }).strip().readonly(),
+  z.object({ status: z.literal('expired') }).strip().readonly(),
+])
+
+const cardnetPromotionPurchaseSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('free_activated'),
+      compraId: z.string().min(1),
+      amount: z.number().nonnegative(),
+      currency: z.string().min(1),
+    })
+    .strip()
+    .readonly(),
+  z
+    .object({
+      status: z.literal('payment_required'),
+      compraId: z.string().min(1),
+      amount: z.number().positive(),
+      currency: z.string().min(1),
+    })
+    .strip()
+    .readonly(),
+])
+
+async function parseCardnetResponse<T>(request: Promise<unknown>, schema: z.ZodType<T>): Promise<T> {
+  return schema.parse(await request)
+}
+
+export type CardnetSessionTarget =
+  | {
+      readonly kind: 'membership'
+      readonly membershipId: string
+      readonly guardarParaRenovacion?: boolean
+    }
+  | {
+      readonly kind: 'promotion'
+      readonly compraId: string
+    }
+
+export type CardnetCaptureSession = z.infer<typeof cardnetCaptureSessionSchema>
+export type CardnetPaymentStatus = z.infer<typeof cardnetPaymentStatusSchema>
+export type CardnetPromotionPurchaseResult = z.infer<typeof cardnetPromotionPurchaseSchema>
 
 // --- Marketplace / catálogo ---
 export interface CompanyPublic {
@@ -1183,6 +1246,48 @@ export const api = {
 
   // --- Cuenta: pagos ---
   getPagos: () => fetchBff<PagosResponse>('/api/v1/cliente/pagos'),
+  comprarPromocion: (promotionId: string) =>
+    parseCardnetResponse(
+      postJson<unknown>(`/api/v1/cliente/promociones/${encodeURIComponent(promotionId)}/comprar`, {}),
+      cardnetPromotionPurchaseSchema
+    ),
+  startCardnetSession: (input: CardnetSessionTarget) => {
+    const body =
+      input.kind === 'membership'
+        ? {
+            membershipId: input.membershipId,
+            ...(input.guardarParaRenovacion === undefined
+              ? {}
+              : { guardarParaRenovacion: input.guardarParaRenovacion }),
+          }
+        : { compraId: input.compraId }
+
+    return parseCardnetResponse(
+      postJson<unknown>('/api/v1/cliente/pagos/cardnet/sesion', body),
+      cardnetCaptureSessionSchema
+    )
+  },
+  confirmCardnetCapture: (input: {
+    readonly sessionId: string
+    readonly captureNonce: string
+    readonly token: string
+  }) =>
+    parseCardnetResponse(
+      postJson<unknown>('/api/v1/cliente/pagos/cardnet/confirmar', input),
+      cardnetPaymentStatusSchema
+    ),
+  getCardnetStatus: (sessionId: string) =>
+    parseCardnetResponse(
+      fetchBff<unknown>(
+        `/api/v1/cliente/pagos/cardnet/estado?sessionId=${encodeURIComponent(sessionId)}`
+      ),
+      cardnetPaymentStatusSchema
+    ),
+  activateCardnetProfile: (input: { readonly sessionId: string; readonly activationCode: string }) =>
+    parseCardnetResponse(
+      postJson<unknown>('/api/v1/cliente/pagos/cardnet/activar', input),
+      cardnetPaymentStatusSchema
+    ),
 
   // --- Cuenta: vehículos ---
   getVehiculos: () => fetchBff<VehiculosResponse>('/api/v1/cliente/vehiculos'),
