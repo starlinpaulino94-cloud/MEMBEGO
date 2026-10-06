@@ -585,13 +585,26 @@ export function sinSensibles(obj: Record<string, unknown>): Record<string, unkno
       kl === 'acctnumber'
     ) {
       salida[k] = typeof v === 'string' && v.length > 4 ? `***${v.slice(-4)}` : '***'
-    } else if (v && typeof v === 'object' && !Array.isArray(v)) {
-      salida[k] = sinSensibles(v as Record<string, unknown>)
     } else {
-      salida[k] = v
+      salida[k] = sinSensiblesValor(v)
     }
   }
   return salida
+}
+
+/**
+ * LAS LISTAS TAMBIÉN SE RECORREN. Antes no: `!Array.isArray(v)` las dejaba
+ * pasar enteras, y la respuesta del Customer trae los tokens justo dentro de
+ * una lista —`PaymentProfiles: [{ Token: "CT__…" }]`—. El resultado es que el
+ * diagnóstico `?expediente=` y el `?perfiles=1` devolvían el token de la
+ * tarjeta EN CLARO, y así acabó pegado en un chat. Un token de CardNET no es
+ * el número de tarjeta, pero con la llave privada cobra: no puede salir de
+ * aquí sin enmascarar. Se vio en producción el 06-10-2026.
+ */
+function sinSensiblesValor(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sinSensiblesValor)
+  if (v && typeof v === 'object') return sinSensibles(v as Record<string, unknown>)
+  return v
 }
 
 /** Código de moneda de la República Dominicana para el Purchase. */
