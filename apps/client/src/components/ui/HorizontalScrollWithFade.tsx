@@ -86,7 +86,7 @@ export function HorizontalScrollWithFade({
       </ScrollView>
       {visibleEdges.left ? (
         <LinearGradient
-          colors={[colors.overlay.whiteTransparent, colors.surface.background]}
+          colors={[colors.overlay.whiteTransparent, colors.vibe.fondo]}
           start={{ x: 1, y: 0 }}
           end={{ x: 0, y: 0 }}
           pointerEvents="none"
@@ -95,7 +95,7 @@ export function HorizontalScrollWithFade({
       ) : null}
       {visibleEdges.right ? (
         <LinearGradient
-          colors={[colors.overlay.whiteTransparent, colors.surface.background]}
+          colors={[colors.overlay.whiteTransparent, colors.vibe.fondo]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           pointerEvents="none"
