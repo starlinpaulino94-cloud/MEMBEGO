@@ -1,0 +1,270 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMERCE CORE · PEDIDOS MEMBEGO (Fase 3 del Plan Maestro)
+//
+// El pedido unificado del marketplace: lo que un cliente pide a una empresa, con
+// el origen que lo trajo (atribución), el monto que ambas partes aceptan
+// (confirmación dual) y la prueba de que se cumplió (QR + evidencia de pago).
+// Es la base sobre la que la Fase 4 cobra la comisión.
+//
+//   · `MembegoOrder`          el pedido y su máquina de estados.
+//   · `MembegoOrderLine`      qué se pidió: SIEMPRE una VARIANTE del catálogo.
+//   · `OrderAttribution`      por qué canal llegó (1:1).
+//   · `CustomerConfirmation`  el cliente confirma el monto final (a lo sumo una).
+//   · `PaymentEvidence`       registro de un pago hecho fuera de la plataforma.
+//
+// COEXISTE con `Transaction` (caja), `ProductoCompra`, `SupplyV2CustomerOrder`,
+// `ReservaExc` y `Cita`: ninguno se migra. Los verticales conservan su flujo; el
+// puente de Supply genera un `MembegoOrder` como envoltorio de atribución de la
+// compra (ver `sourceType`/`sourceId`).
+//
+// LA BASE HACE CUMPLIR lo que no puede saltarse nadie (migración
+// `20261042_membego_orders`): los totales cuadran, una transición ilegal de
+// estado no ocurre (disparador que replica la tabla de `modules/orders/domain`),
+// y las líneas de un pedido no se editan ni se borran.
+//
+// AISLAMIENTO. Las cinco tablas llevan `companyId` propio y las FK hacia la
+// variante, la sucursal, el cliente y las hijas son COMPUESTAS `(id, companyId)`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum MembegoOrderStatus {
+  CREATED
+  AWAITING_MERCHANT
+  IN_PROGRESS
+  READY
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum MembegoOrderOrigin {
+  MARKETPLACE
+  POS
+  SUPPLY
+  EXCURSION
+  API
+}
+
+enum MembegoPaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  MEMBEGO_CHECKOUT
+  OTHER
+}
+
+/// De menos a más evidencia. `PAYMENT_VERIFIED` y `FISCALLY_RECONCILED` deciden
+/// en la Fase 4 si la comisión es CPA fijo o el 8 %.
+enum MembegoVerificationLevel {
+  ATTRIBUTED
+  REDEEMED
+  CUSTOMER_VERIFIED
+  PAYMENT_VERIFIED
+  FISCALLY_RECONCILED
+}
+
+enum MembegoAttributionChannel {
+  MARKETPLACE_BROWSE
+  MARKETPLACE_SEARCH
+  PROMOTION_CLAIM
+  CAMPAIGN
+  REFERRAL
+  QR_SCAN
+  SUPPLY_OFFER
+  DIRECT
+}
+
+model MembegoOrder {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  /// `MBG-PED-<año>-<secuencia>`, correlativo POR EMPRESA (no revela el volumen
+  /// de la plataforma). Único por empresa.
+  code String
+
+  /// La sucursal que atiende el pedido (y de la que sale el stock).
+  locationId String
+  location   Sucursal @relation(fields: [locationId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  customerId String
+  customer   Cliente @relation(fields: [customerId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  status            MembegoOrderStatus       @default(CREATED)
+  origin            MembegoOrderOrigin
+  paymentMethod     MembegoPaymentMethod?
+  verificationLevel MembegoVerificationLevel @default(ATTRIBUTED)
+
+  currency String @default("DOP")
+
+  /// Σ cantidad × precio unitario, antes de descuentos.
+  subtotal           Decimal @db.Decimal(12, 2)
+  /// Σ descuentos de las líneas.
+  discount           Decimal @default(0) @db.Decimal(12, 2)
+  /// Ajuste de la empresa sobre el monto (+ recargo, − rebaja). El cliente debe
+  /// volver a confirmar el monto cuando cambia.
+  adjustment         Decimal @default(0) @db.Decimal(12, 2)
+  adjustmentReason   String?
+  /// Base sobre la que la Fase 4 calcula la comisión: lo vendido neto de
+  /// descuentos y ajuste, SIN impuestos. `subtotal − discount + adjustment`.
+  commissionableBase Decimal @db.Decimal(12, 2)
+  tax                Decimal @default(0) @db.Decimal(12, 2)
+  /// `commissionableBase + tax`.
+  total              Decimal @db.Decimal(12, 2)
+
+  /// Credencial al portador que cierra el pedido al escanearla (se emite al
+  /// pasar a READY). Único en toda la base.
+  qrToken     String?   @unique
+  qrExpiresAt DateTime?
+
+  /// Nota del cliente al pedir.
+  notes        String?
+  cancelReason String?
+  refundReason String?
+
+  acceptedAt          DateTime?
+  readyAt             DateTime?
+  completedAt         DateTime?
+  cancelledAt         DateTime?
+  refundedAt          DateTime?
+  /// Cuándo el cliente confirmó el monto VIGENTE (se borra si la empresa lo ajusta).
+  customerConfirmedAt DateTime?
+
+  /// Quién cerró el pedido (null = sistema). Sin FK: un usuario que se borra no
+  /// reescribe la historia.
+  completedByUserId String?
+
+  /// Reintentar la MISMA creación no duplica el pedido. Único por empresa.
+  idempotencyKey String?
+
+  /// De qué documento externo nace (`SUPPLY_V2_CUSTOMER_ORDER`…). Único por
+  /// empresa: generar el envoltorio dos veces devuelve el primero.
+  sourceType String?
+  sourceId   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines        MembegoOrderLine[]
+  attribution  OrderAttribution?
+  confirmation CustomerConfirmation?
+  payment      PaymentEvidence?
+
+  @@unique([companyId, code])
+  @@unique([companyId, idempotencyKey])
+  @@unique([companyId, sourceType, sourceId])
+  /// Destino de las FK compuestas de las tablas hijas.
+  @@unique([id, companyId])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, customerId, createdAt])
+  @@index([companyId, locationId, status])
+  @@map("membego_orders")
+}
+
+/// INMUTABLE: la base rechaza UPDATE y DELETE. Lo que se pidió, a qué precio, no
+/// se reescribe; un error se corrige con el ajuste del pedido o cancelándolo.
+model MembegoOrderLine {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  orderId String
+  order   MembegoOrder @relation(fields: [orderId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// SIEMPRE una variante, nunca el ítem: así agregar tallas después no migra nada.
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// Foto de lo que se vendió (el catálogo cambia; el pedido no).
+  description String
+  sku         String
+
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+  discount  Decimal @default(0) @db.Decimal(12, 2)
+  /// `quantity × unitPrice − discount`.
+  lineTotal Decimal @db.Decimal(12, 2)
+
+  /// La reserva de inventario que aparta estas unidades (null si la variante no
+  /// controla inventario).
+  inventoryReservationId String?
+  reservation            InventoryReservation? @relation(fields: [inventoryReservationId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([companyId, catalogVariantId])
+  @@map("membego_order_lines")
+}
+
+model OrderAttribution {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  orderId String       @unique
+  order   MembegoOrder @relation(fields: [orderId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  channel MembegoAttributionChannel
+
+  /// Referencias opacas (sin FK) hasta que existan sus tablas (campañas, F5) o
+  /// porque pertenecen a otro dominio (promociones): el pedido no debe quedar
+  /// bloqueado por un borrado en otro módulo.
+  campaignId      String?
+  promotionId     String?
+  referralCode    String?
+  /// La oferta de Supply que originó el pedido (envoltorio de Supply).
+  supplyV2OfferId String?
+  supplyOffer     SupplyV2Offer? @relation("OrderAttributionSupplyOffer", fields: [supplyV2OfferId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  /// Requisito de Prisma para una relación 1:1 con FK compuesta (la unicidad real es `orderId`).
+  @@unique([orderId, companyId])
+  @@index([companyId, channel])
+  @@map("order_attributions")
+}
+
+/// Una confirmación por pedido. Si la empresa ajusta el monto, el cliente
+/// confirma otra vez y ESTA fila se actualiza (`confirmedTotal`): una confirmación
+/// vale solo mientras `confirmedTotal` coincida con `membego_orders.total`.
+model CustomerConfirmation {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  orderId String       @unique
+  order   MembegoOrder @relation(fields: [orderId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  confirmedTotal Decimal  @db.Decimal(12, 2)
+  confirmedAt    DateTime @default(now())
+
+  @@unique([orderId, companyId])
+  @@index([companyId, confirmedAt])
+  @@map("customer_confirmations")
+}
+
+/// Registro de un pago hecho FUERA de la plataforma (efectivo, transferencia, el
+/// datáfono de la empresa). No mueve dinero: deja constancia, y con una
+/// referencia verificable sube el nivel de verificación del pedido.
+model PaymentEvidence {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  orderId String       @unique
+  order   MembegoOrder @relation(fields: [orderId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  method    MembegoPaymentMethod
+  amount    Decimal              @db.Decimal(12, 2)
+  /// Número de transferencia, últimos dígitos del voucher… Sin ella un pago en
+  /// efectivo o «de palabra» no cuenta como verificado.
+  reference String?
+  notes     String?
+
+  recordedByUserId String?
+  recordedAt       DateTime @default(now())
+
+  @@unique([orderId, companyId])
+  @@index([companyId, recordedAt])
+  @@map("payment_evidences")
+}

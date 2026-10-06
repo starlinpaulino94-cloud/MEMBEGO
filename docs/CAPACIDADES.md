@@ -43,6 +43,7 @@
 | `PUBLICACIONES` | Sección `publicaciones` (`/admin/publicaciones`) | ❌ apagada desde la Fase 0 |
 | `HOME_BUILDER` | Editor de inicio dentro de `/admin/personalizacion` (**no** tiene sección propia: comparte página con el formulario de marca, que no se oculta) | ❌ apagada desde la Fase 0 |
 | `CATALOGO_UNIFICADO` | Secciones `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) e `inventario` (`/admin/inventario`, Fase 2: existencias por variante y sucursal) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
+| `PEDIDOS_MEMBEGO` | Sección `pedidos-membego` (Commerce Core · Fase 3: pedidos del marketplace con atribución, confirmación del cliente y QR). Solo el servicio y las acciones de la empresa por ahora; **la pantalla llega en F3.2** | ❌ apagada para todos; solo tiene sentido en empresas con `CATALOGO_UNIFICADO` (las líneas del pedido son variantes del catálogo) |
 
 ### Cómo encender el catálogo unificado en una empresa
 

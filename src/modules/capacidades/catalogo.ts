@@ -178,6 +178,11 @@ export const CAPACIDADES = [
   // variantes (`/admin/catalogo`). Apagada para todos de serie: se enciende
   // empresa por empresa (Car Town primero) hasta que el catálogo esté probado.
   'CATALOGO_UNIFICADO',
+  // Fase 3 — Commerce Core: pedidos Membego (`/admin/pedidos-membego`): el pedido
+  // unificado del marketplace con atribución, confirmación dual y QR. Apagada
+  // para todos de serie; solo tiene sentido en empresas con el catálogo
+  // unificado (las líneas del pedido son variantes del catálogo).
+  'PEDIDOS_MEMBEGO',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -208,6 +213,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   HOME_BUILDER: 'Editor de inicio: personalizar bloques de la página principal',
   MENSAJERIA: 'Mensajería interna y WhatsApp avanzado',
   CATALOGO_UNIFICADO: 'Catálogo unificado: productos, servicios y variantes',
+  PEDIDOS_MEMBEGO: 'Pedidos Membego: pedidos del marketplace con atribución, confirmación y QR',
 }
 
 /**
@@ -235,6 +241,7 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   // el Plan Maestro lo activa con el catálogo, para los ítems que controlan
   // inventario (`trackInventory`).
   CATALOGO_UNIFICADO: ['catalogo', 'inventario'],
+  PEDIDOS_MEMBEGO: ['pedidos-membego'],
   // HOME_BUILDER no aparece aquí: comparte la sección 'personalizacion' con
   // las opciones de marca/engagement, que NO se ocultan. Se revisa a mano en
   // el componente de esa página (ver admin/personalizacion/page.tsx).

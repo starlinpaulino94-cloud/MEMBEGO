@@ -145,6 +145,8 @@ model CatalogVariant {
 
   /// Existencias por sucursal (Fase 2). RESTRICT: con historial no se borra.
   inventoryLevels InventoryLevel[]
+  /// Pedidos Membego que la piden (Fase 3). RESTRICT: con pedidos no se borra.
+  orderLines      MembegoOrderLine[]
 
   @@unique([companyId, sku])
   @@unique([companyId, barcode])

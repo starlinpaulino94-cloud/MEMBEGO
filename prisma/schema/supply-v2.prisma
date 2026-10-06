@@ -911,6 +911,8 @@ model SupplyV2Offer {
 
   /// Fase 2.5: el ítem del catálogo unificado que refleja esta oferta (el puente).
   itemPuente             CatalogItem? @relation("CatalogItemSupplyOffer")
+  /// Fase 3: pedidos Membego atribuidos a esta oferta.
+  atribuciones           OrderAttribution[] @relation("OrderAttributionSupplyOffer")
 
   orderLines             SupplyV2CustomerOrderLine[]
   entitlements           SupplyV2Entitlement[]

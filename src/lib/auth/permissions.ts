@@ -119,6 +119,12 @@ export const ADMIN_SECTIONS = [
   // roles acotados: mover existencias —y poder borrar un faltante con un
   // ajuste— es decisión de dirección, no de mostrador.
   'inventario',
+  // Commerce Core · pedidos Membego (`/admin/pedidos-membego`, Fase 3). Detrás
+  // de la capacidad PEDIDOS_MEMBEGO. No entra en los roles acotados: aceptar,
+  // ajustar el monto, cancelar o reembolsar un pedido compromete a la empresa
+  // con un cliente y con la comisión que Membego le cobra. (Escanear el QR que
+  // cierra el pedido vive en 'scanner', que sí tiene Supervisión.)
+  'pedidos-membego',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).

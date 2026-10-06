@@ -89,6 +89,8 @@ export const FUNCIONES_EMPRESA = [
   'MENSAJERIA',
   // Commerce Core (Fase 1): catálogo de ítems y variantes. Vive en el Core.
   'CATALOGO_UNIFICADO',
+  // Commerce Core (Fase 3): pedidos Membego. Vive en el Core.
+  'PEDIDOS_MEMBEGO',
 ] as const satisfies readonly Capacidad[]
 
 export type FuncionEmpresa = (typeof FUNCIONES_EMPRESA)[number]

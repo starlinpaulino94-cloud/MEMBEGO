@@ -169,6 +169,11 @@ model InventoryReservation {
   /// Cuándo dejó de estar ACTIVE.
   resolvedAt DateTime?
 
+  /// La línea de pedido que originó la reserva (Fase 3).
+  orderLines MembegoOrderLine[]
+
+  /// Destino de la FK compuesta de `membego_order_lines`.
+  @@unique([id, companyId])
   @@index([status, expiresAt])
   @@index([inventoryLevelId, status])
   @@index([companyId, referenceType, referenceId])
