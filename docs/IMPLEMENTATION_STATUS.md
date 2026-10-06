@@ -137,7 +137,7 @@ Ver §15. Principales: consultas nuevas sin pruebas unitarias propias; Campañas
 | Sin cambios de lógica, cálculos, permisos, servicios, Prisma ni migraciones | **PASS** (los 11 commits solo tocan UI, `queries.ts` y `core/estados.ts`) |
 | Datos reales, sin contenido de maqueta; lo que no existe se omite o se dice | **PASS** (cada ausencia quedó en el plan: ITBIS, CTR, NCF, cierre fiscal, descargas .xlsx, «Auto 98%»…) |
 | typecheck, lint, build, unitarias | **PASS** (§8) |
-| e2e de Supply 2.0 | **PENDING** (corrida completa de Slices 1–9 en ejecución al guardar esta versión) |
+| e2e de Supply 2.0 | **PASS** (Slices 1–9, 32 recorridos, 0 fallos; ver §8) |
 | Sin desborde horizontal a 1440/1024/768/390 | **PASS** al implementar cada pantalla (no se re-ejecutó en esta auditoría) |
 | Modo oscuro legible | **PENDING** (revisado en Beneficios, Campañas, Fidelización; no re-verificado en las otras 6) |
 | Un commit por pantalla | **PASS** |
@@ -291,7 +291,10 @@ Unit Tests:            3592/3598 PASS · 0 FAIL · 6 skipped        (npm test, 2
 Integration Tests:     NOT RUN en esta edición como suite aparte (cubiertas por Unit y PostgreSQL)
 PostgreSQL Tests:      320/320 PASS  sobre base creada con `migrate deploy`   (13 archivos, tests/postgres)
                        294/320 sobre base `db push` → 26 FALSOS fallos (ver §7, trampa conocida)
-E2E (Supply 2.0):      EN EJECUCIÓN al guardar esta versión (Slices 1–9, escritorio y móvil). Sin fallos hasta el test 35. Resultado final: ver §8 en el siguiente commit
+E2E (Supply 2.0):      PASS · 32 recorridos únicos, 0 fallos (escritorio y móvil).
+                       Corrida 1 (S1,S3,S5,S6,S7,S8): 14 passed. Corrida 2 (S2,S4,S9 con secretos de prueba locales): 18 passed.
+                       Los «skipped» restantes son por diseño (recorrido que corre solo en escritorio o solo en móvil).
+                       OJO: sin CRON_SECRET, SUPPLY_V2_TEST_GATEWAY_SECRET y SUPPLY_V2_WEBHOOK_ACTOR_ID, S2/S4/S9 se SALTAN sin avisar: 36 skipped parecen verdes
 E2E (resto):           NOT RUN (publico, cliente-flujos, excursiones, vehiculos, sidebar, comisiones, fase4…)
 Build:                 PASS  (next build, exit 0)
 RLS Checks:            PASS  rls:cobertura (540 archivos con contexto, 25 con prisma directo justificado — 82 sitios, 0 huecos)
@@ -407,7 +410,7 @@ Las de ADR (`docs/adr/0001–0009`) y las de esta sesión. No reabrir sin eviden
 | MEDIUM | Archivos binarios versionados en la raíz: `stitch_…(1).zip` (7 MB), `ChatGPT Image….png` (2.4 MB), `message_v4.rpmsg` (1.5 MB, mensaje de correo protegido de Outlook; no se abrió) | Peso del repo; posible dato sensible | Revisar contenido; mover/retirar con aprobación |
 | MEDIUM | Documentación desactualizada: `prisma/MIGRATIONS.md` dice «74» migraciones (hay 190); `docs/RLS.md` cubre «115 tablas» (hay 285 modelos); Slice 9 dice «bloque 5 no fusionado» (ya está en main, #562); `03-plan-fases.md` marca F2d «en curso» (ya hecho); `capacidades/catalogo.ts` dice «solo CAR_WASH operativa» (hay paquetes de otras categorías); la descripción de Supply 2.0 en `nav-config.ts` dice «Procurement… (nuevo motor, en paralelo)» | Decisiones sobre datos viejos | Actualizar al tocar cada área |
 | MEDIUM | `docs/membego-supply-implementation-status.md` (V1) no es esta memoria | Dos fuentes de verdad | Enlazarlo desde aquí, no duplicar |
-| LOW | `test:db` falla en bases `db push` (26 falsos) | Falsos rojos | Documentar en README de pruebas / script que cree base migrada |
+| LOW | `test:db` falla en bases `db push` (26 falsos); y los e2e de S2/S4/S9 se saltan en silencio si faltan `CRON_SECRET`, `SUPPLY_V2_TEST_GATEWAY_SECRET`, `SUPPLY_V2_WEBHOOK_ACTOR_ID` | Falsos rojos y falsos verdes | Documentar en el README de pruebas; que la corrida avise o falle cuando se salta por entorno |
 | LOW | 5 `z-index` arbitrarios (`MapaCercaDeMi`) | Modal bajo mapa | Escala de z-index |
 | LOW | 15 warnings de lint (`no-console`, `no-unused-vars`) | Ruido | Limpiar |
 | LOW | Pipeline de mockups A/B (generadores `gen_*.py`, render con Playwright) vive solo en el scratchpad de la sesión | Se pierde | Documentarlo o versionarlo si se sigue con Stitch |
@@ -488,7 +491,7 @@ Hallazgos a atender cuando el usuario lo decida (no tocados): habilitar RLS en t
 - **Imagen fuente:** `stitch_membego_supply_2.0_redesign (1).zip` en la raíz del repo (una carpeta por pantalla con `code.html` + `screen.png`).
 - **Patrón de código:** `MarcoSupplyV2` + `TarjetaIndicador` + `BarraFiltrosSupplyV2` + `PaginacionSupplyV2` + `Tarjeta`; tabla única que se reacomoda en tarjetas (`@4xl`); tokens `--sv2-*` en `globals.css`; filtros por URL. Plantilla a copiar: `redenciones/`, `beneficios/`, `campanas/`, `fidelizacion/`.
 - **Comandos de calidad:** `npx tsc --noEmit`, `npx eslint src tests` (no `eslint .`), `npm test`, `npx next build`, `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test tests/e2e/supply-v2-slice<N>.spec.ts --project=escritorio` (+`movil`). Postgres local: `pg_ctlcluster 16 main start`; dev: `npx next dev -p 3210`.
-- **Trampa de pruebas:** `npm run test:db` solo es fiable sobre una base creada con `prisma migrate deploy` (la base local con `db push` da 26 falsos fallos).
+- **Trampas de pruebas:** `npm run test:db` solo es fiable sobre una base creada con `prisma migrate deploy` (con `db push` da 26 falsos fallos). Los e2e de Slice 2, 4 y 9 se saltan sin avisar si el servidor y Playwright no tienen `CRON_SECRET`, `SUPPLY_V2_TEST_GATEWAY_SECRET` y `SUPPLY_V2_WEBHOOK_ACTOR_ID` (valores locales cualquiera; el actor debe ser un usuario existente). Ojo: `pkill -f "next dev -p 3210"` mata también la shell que lo contiene.
 - **Mockups:** se generaron con scripts en el scratchpad de la sesión (transforman el `code.html` de Stitch, compilan Tailwind v3 local, renderizan con Playwright a 1160 px). No están versionados.
 - **Riesgos que no hay que olvidar:** RLS Capa 2 apagada y tablas de Supply sin RLS; ledgers sin append-only en BD; pasarela real de Supply no conectada; producción no verificada; Plan Maestro F0–F7 no está en el repo; Supply V1/Gamificación/Blog/Home Builder **no** están ocultos.
 - **Antes de terminar una sesión:** actualizar este archivo (§1, §3, §8, §17 como mínimo).
