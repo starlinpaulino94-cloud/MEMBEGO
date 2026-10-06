@@ -1,108 +1,105 @@
 import Link from 'next/link'
-import { AlertTriangle, Banknote, Coins, FileText, Landmark, Percent, PiggyBank, Receipt, TrendingUp, Wallet } from 'lucide-react'
+import { Banknote, FileText, Landmark, PiggyBank, Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { PageHeader } from '@/components/ui/page-header'
-import { StatCard } from '@/components/ui/stat-card'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
-import { NavSupplyV2 } from '@/components/supply-v2/nav'
-import { resumenFinanzas } from '@/modules/supply-v2/finance/queries'
-import { dineroSupplyV2, RUTA_ECONOMIA, RUTA_FINANZAS, RUTA_LIQUIDACIONES } from '@/modules/supply-v2/core/catalogo'
+import { cn } from '@/lib/utils'
+import { MarcoSupplyV2 } from '@/components/supply-v2/marco'
+import { TarjetaIndicador } from '@/components/supply-v2/indicador'
+import { MONO, Tarjeta } from '@/components/supply-v2/resumen/superficie'
+import { PanelComision, PanelEconomia } from '@/components/supply-v2/finanzas/paneles-resultado'
+import { TarjetasSecciones } from '@/components/supply-v2/finanzas/tarjetas-secciones'
+import { TablaObligaciones } from '@/components/supply-v2/finanzas/tabla-obligaciones'
+import { extrasFinanzas, listarObligaciones, resumenFinanzas } from '@/modules/supply-v2/finance/queries'
+import { dineroSupplyV2, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Finanzas · Supply 2.0' }
 
-const SECCIONES = [
-  { href: `${RUTA_FINANZAS}/facturas`, label: 'Facturas', icon: FileText, texto: 'Documentos del proveedor: registrar, aprobar, aplicar depósito, pagar.' },
-  { href: `${RUTA_FINANZAS}/depositos`, label: 'Depósitos', icon: PiggyBank, texto: 'Dinero adelantado a proveedores y su saldo disponible.' },
-  { href: `${RUTA_FINANZAS}/pagos`, label: 'Pagos', icon: Banknote, texto: 'Dinero que sale. Quien registra no confirma.' },
-  { href: `${RUTA_FINANZAS}/obligaciones`, label: 'Obligaciones', icon: Landmark, texto: 'Lo que Membego debe y por qué nació cada deuda.' },
-  { href: `${RUTA_FINANZAS}/conciliaciones`, label: 'Conciliaciones', icon: Receipt, texto: 'Membego frente al estado de cuenta del proveedor (supply y comisión).' },
-  { href: RUTA_LIQUIDACIONES, label: 'Liquidaciones', icon: Percent, texto: 'Ventas a comisión entregadas: bruto, comisión y neto a pagar por periodo.' },
-  { href: `${RUTA_FINANZAS}/incidencias`, label: 'Incidencias', icon: AlertTriangle, texto: 'Lo que no se deshace en silencio: entregas reversadas ya pagadas.' },
-  { href: RUTA_ECONOMIA, label: 'Economía', icon: TrendingUp, texto: 'GMV, ingreso, costo, margen, breakage.' },
-] as const
-
 /**
- * MEMBEGO SUPPLY 2.0 · TABLERO DE FINANZAS (§33). Cada cifra sale de la base;
- * sin datos se dice «Sin datos todavía», nunca «todo cuadra».
+ * MEMBEGO SUPPLY 2.0 · TABLERO DE FINANZAS (§33), rediseño Stitch (propuesta A,
+ * dirección blanca). Cada cifra sale de la base; sin datos se dice «Sin datos
+ * todavía», nunca «todo cuadra». No se muestran ITBIS, cierre fiscal ni
+ * exportaciones: Membego no los calcula.
  */
 export default async function FinanzasPage() {
   await requireRole('SUPERADMIN')
-  const r = await resumenFinanzas()
+  const ahora = new Date()
+  const [r, extras, deudas] = await Promise.all([resumenFinanzas(ahora), extrasFinanzas(), listarObligaciones({ status: 'VIVAS' }, { pagina: 1, tamano: 5, saltar: 0, tomar: 5 })])
   const sin = 'Sin datos todavía'
   const d = (n: string) => (r.hayDatos ? dineroSupplyV2(n) : sin)
 
+  const avisos: Partial<Record<string, string>> = {}
+  if (r.facturasPendientes > 0) avisos.Facturas = `${r.facturasPendientes} por pagar`
+  if (r.pagosPendientesDeConfirmar > 0) avisos.Pagos = `${r.pagosPendientesDeConfirmar} por confirmar`
+  if (deudas.total > 0) avisos.Obligaciones = `${deudas.total} vivas`
+  if (extras.conciliacionesAbiertas > 0) avisos.Conciliaciones = `${extras.conciliacionesAbiertas} abierta(s)`
+  if (r.comision.entregasPendientesDeLiquidar > 0 || r.comision.liquidacionesPendientesDeAprobar > 0) avisos.Liquidaciones = `${r.comision.entregasPendientesDeLiquidar + r.comision.liquidacionesPendientesDeAprobar} por atender`
+  if (r.comision.incidenciasAbiertas > 0) avisos.Incidencias = `${r.comision.incidenciasAbiertas} abierta(s)`
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Finanzas de Supply"
-        description="Cuánto debemos a cada proveedor, cuánto pagamos, cuánto tenemos depositado y qué dejó cada venta. Subledger de Supply, no contabilidad general."
-        eyebrow="Supply 2.0"
-        nav={<NavSupplyV2 activa="finanzas" />}
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline"><Link href={`${RUTA_FINANZAS}/pagos/nuevo`} data-testid="btn-nuevo-pago">+ Registrar pago</Link></Button>
-            <Button asChild><Link href={`${RUTA_FINANZAS}/facturas/nueva`} data-testid="btn-nueva-factura">+ Nueva factura</Link></Button>
-          </div>
-        }
-      />
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Cuentas por pagar (CxP)" value={<span data-testid="kpi-cxp">{d(r.cxpTotal)}</span>} sub="obligaciones pendientes con proveedores" icon={Landmark} accent={Number(r.cxpTotal) > 0 ? 'warning' : 'brand'} href={`${RUTA_FINANZAS}/obligaciones`} hrefLabel="Ver obligaciones" />
-        <StatCard label="Facturas pendientes" value={<span data-testid="kpi-facturas">{r.hayDatos ? r.facturasPendientes.toLocaleString('es-DO') : sin}</span>} sub={r.hayDatos ? `${dineroSupplyV2(r.facturasPendientesMonto)} por pagar` : 'ninguna registrada'} icon={FileText} href={`${RUTA_FINANZAS}/facturas?estado=PENDIENTES`} hrefLabel="Ver facturas" />
-        <StatCard label="Depósitos disponibles" value={<span data-testid="kpi-depositos">{d(r.depositosDisponibles)}</span>} sub="dinero adelantado sin aplicar" icon={PiggyBank} href={`${RUTA_FINANZAS}/depositos`} hrefLabel="Ver depósitos" />
-        <StatCard label="Pagos del mes" value={<span data-testid="kpi-pagos">{d(r.pagosDelMes)}</span>} sub={r.pagosPendientesDeConfirmar > 0 ? `${r.pagosPendientesDeConfirmar} pendiente(s) de confirmar` : 'confirmados este mes'} icon={Banknote} accent={r.pagosPendientesDeConfirmar > 0 ? 'warning' : undefined} href={`${RUTA_FINANZAS}/pagos`} hrefLabel="Ver pagos" />
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle>Economía del mes</CardTitle></CardHeader>
-        <CardContent>
-          {!r.hayDatos ? (
-            <p className="text-sm text-muted-foreground" data-testid="economia-sin-datos">Sin datos todavía. Cuando se confirme la primera venta aparecerán ingreso, costo y margen.</p>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="GMV" value={<span data-testid="kpi-gmv">{dineroSupplyV2(r.gmv)}</span>} sub={`${r.unitsSold.toLocaleString('es-DO')} unidades vendidas`} icon={Coins} />
-              <StatCard label="Ingreso" value={<span data-testid="kpi-revenue">{dineroSupplyV2(r.revenue)}</span>} sub="reconocido por Membego" icon={Wallet} accent="brand" />
-              <StatCard label="Costo" value={<span data-testid="kpi-cost">{dineroSupplyV2(r.cost)}</span>} sub="costo real del supply vendido" icon={Receipt} />
-              <StatCard label="Margen bruto" value={<span data-testid="kpi-margen">{dineroSupplyV2(r.grossMargin)}</span>} sub={r.marginPct != null ? `${r.marginPct.toLocaleString('es-DO')} %` : '—'} icon={TrendingUp} accent="success" />
-              <StatCard label="Supply vencido sin vender" value={<span data-testid="kpi-vencido">{dineroSupplyV2(r.supplyVencidoCosto)}</span>} sub={`${r.supplyVencidoUnidades.toLocaleString('es-DO')} unidades · costo histórico real`} accent={r.supplyVencidoUnidades > 0 ? 'danger' : undefined} />
-              <StatCard label="Breakage" value={<span data-testid="kpi-breakage">{r.unitsExpired.toLocaleString('es-DO')}</span>} sub={r.breakageRate != null ? `${r.breakageRate.toLocaleString('es-DO')} % de lo vendido venció sin usarse` : 'derechos vencidos sin usar'} accent={r.unitsExpired > 0 ? 'warning' : undefined} />
-              <StatCard label="Redimidas" value={r.unitsRedeemed.toLocaleString('es-DO')} sub="entregas vivas del mes" />
+    <MarcoSupplyV2 activa="finanzas">
+      <div className="flex flex-col gap-4">
+        <Tarjeta className="flex flex-col gap-4 p-5 @4xl:flex-row @4xl:items-center @4xl:justify-between">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn(MONO, 'font-bold uppercase tracking-wide text-sv2-primary')}>Supply 2.0</span>
+              <span aria-hidden className="text-sv2-outline">•</span>
+              <span className="text-[12px] font-semibold uppercase leading-4 tracking-wider text-sv2-outline">Subledger de proveedores</span>
             </div>
-          )}
-          <p className="mt-3 text-caption text-muted-foreground">
-            <Link href={RUTA_ECONOMIA} className="underline-offset-4 hover:underline">Reporte completo con filtros →</Link>
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card data-testid="finanzas-comision">
-        <CardHeader><CardTitle>Ventas a comisión</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Comisión del mes (ingreso)" value={<span data-testid="kpi-comision-ingreso">{dineroSupplyV2(r.comision.ingresoMes)}</span>} sub={`GMV ${dineroSupplyV2(r.comision.gmvMes)} · ${r.comision.unidadesMes.toLocaleString('es-DO')} unidades`} icon={Percent} accent="brand" />
-            <StatCard label="Neto de proveedores (mes)" value={<span data-testid="kpi-comision-neto">{dineroSupplyV2(r.comision.netoProveedoresMes)}</span>} sub="cobrado por cuenta del proveedor; no es ingreso ni costo" />
-            <StatCard label="Pendiente de liquidar" value={<span data-testid="kpi-sin-liquidar">{dineroSupplyV2(r.comision.netoPendienteDeLiquidar)}</span>} sub={`${r.comision.entregasPendientesDeLiquidar.toLocaleString('es-DO')} entrega(s) sin liquidación`} accent={r.comision.entregasPendientesDeLiquidar > 0 ? 'warning' : undefined} href={`${RUTA_LIQUIDACIONES}/nueva`} hrefLabel="Generar liquidación" />
-            <StatCard label="Liquidaciones por pagar" value={<span data-testid="kpi-liq-por-pagar">{dineroSupplyV2(r.comision.liquidacionesPorPagarMonto)}</span>} sub={`${r.comision.liquidacionesPorPagar} aprobada(s) · ${r.comision.liquidacionesPendientesDeAprobar} pendiente(s) de aprobar${r.comision.incidenciasAbiertas > 0 ? ` · ${r.comision.incidenciasAbiertas} incidencia(s)` : ''}`} accent={r.comision.liquidacionesPendientesDeAprobar > 0 || r.comision.incidenciasAbiertas > 0 ? 'warning' : undefined} href={RUTA_LIQUIDACIONES} hrefLabel="Ver liquidaciones" />
+            <h2 className="text-[28px] font-bold leading-9 tracking-[-0.02em]">Finanzas de Supply</h2>
+            <p className="max-w-3xl text-[14px] leading-5 text-sv2-ink-variant">
+              Cuánto debemos a cada proveedor, cuánto pagamos, cuánto tenemos depositado y qué dejó cada venta. Subledger de Supply, no contabilidad general.
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Link href={`${RUTA_FINANZAS}/pagos/nuevo`} data-testid="btn-nuevo-pago" className="inline-flex h-10 items-center gap-1.5 rounded-[8px] border border-sv2-border bg-card px-3 text-[14px] font-semibold leading-5 transition-colors hover:bg-sv2-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent">
+              <Banknote aria-hidden className="size-4 text-sv2-ink-variant" />
+              Registrar pago
+            </Link>
+            <Link href={`${RUTA_FINANZAS}/facturas/nueva`} data-testid="btn-nueva-factura" className="inline-flex h-10 items-center gap-1.5 rounded-[8px] bg-sv2-accent px-4 text-[14px] font-semibold leading-5 text-white shadow-sm transition-colors hover:bg-sv2-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent focus-visible:ring-offset-2">
+              <Plus aria-hidden className="size-4" />
+              Nueva factura
+            </Link>
+          </div>
+        </Tarjeta>
 
-      {!r.hayDatos && (
-        <EmptyState variant="card" title="Sin movimientos financieros" description="Registra la factura de una compra, un pago o un anticipo a un proveedor. Nada se marca como «cuadrado» sin datos." action={<Button asChild><Link href={`${RUTA_FINANZAS}/facturas/nueva`}>Nueva factura</Link></Button>} />
-      )}
+        <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @6xl:grid-cols-4" data-testid="tablero-finanzas">
+          <TarjetaIndicador
+            etiqueta="Cuentas por pagar (CxP)"
+            icono={Landmark}
+            tonoIcono={Number(r.cxpTotal) > 0 ? 'aviso' : 'primario'}
+            valor={d(r.cxpTotal)}
+            pie={extras.mayorDeuda ? `Mayor: ${extras.mayorDeuda.proveedor} · ${dineroSupplyV2(extras.mayorDeuda.saldo)}` : 'obligaciones pendientes con proveedores'}
+            testId="kpi-cxp"
+          />
+          <TarjetaIndicador etiqueta="Facturas pendientes" icono={FileText} tonoIcono="primario" valor={r.hayDatos ? r.facturasPendientes.toLocaleString('es-DO') : sin} pie={r.hayDatos ? `${dineroSupplyV2(r.facturasPendientesMonto)} por pagar` : 'ninguna registrada'} testId="kpi-facturas" />
+          <TarjetaIndicador etiqueta="Depósitos disponibles" icono={PiggyBank} tonoIcono="exito" valor={d(r.depositosDisponibles)} pie="dinero adelantado sin aplicar" testId="kpi-depositos" />
+          <TarjetaIndicador
+            etiqueta="Pagos del mes"
+            icono={Banknote}
+            tonoIcono={r.pagosPendientesDeConfirmar > 0 ? 'aviso' : 'primario'}
+            valor={d(r.pagosDelMes)}
+            pie={r.pagosPendientesDeConfirmar > 0 ? `${r.pagosPendientesDeConfirmar} pendiente(s) de confirmar` : 'confirmados este mes'}
+            tonoPie={r.pagosPendientesDeConfirmar > 0 ? 'aviso' : 'neutral'}
+            testId="kpi-pagos"
+          />
+        </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {SECCIONES.map((s) => (
-          <Link key={s.href} href={s.href} className="rounded-xl border border-border bg-card p-4 transition-colors hover:bg-muted/40" data-testid={`seccion-${s.label.toLowerCase()}`}>
-            <s.icon className="mb-2 size-5 text-primary" aria-hidden />
-            <p className="font-medium">{s.label}</p>
-            <p className="text-caption text-muted-foreground">{s.texto}</p>
-          </Link>
-        ))}
+        {!r.hayDatos && (
+          <Tarjeta className="flex flex-col items-start gap-2 p-5" data-testid="finanzas-vacio">
+            <p className="text-[15px] font-semibold leading-5">Sin movimientos financieros</p>
+            <p className="text-[13px] leading-[18px] text-sv2-ink-variant">Registra la factura de una compra, un pago o un anticipo a un proveedor. Nada se marca como «cuadrado» sin datos.</p>
+            <Link href={`${RUTA_FINANZAS}/facturas/nueva`} className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-sv2-accent px-3 text-[13px] font-semibold leading-4 text-white hover:bg-sv2-accent-hover">
+              <Plus aria-hidden className="size-4" />
+              Nueva factura
+            </Link>
+          </Tarjeta>
+        )}
+
+        <PanelEconomia r={r} />
+        <PanelComision r={r} />
+        {deudas.total > 0 && <TablaObligaciones filas={deudas.filas} total={deudas.total} ahora={ahora} />}
+        <TarjetasSecciones avisos={avisos} />
       </div>
-    </div>
+    </MarcoSupplyV2>
   )
 }

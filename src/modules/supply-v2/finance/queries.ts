@@ -105,6 +105,33 @@ export async function resumenFinanzas(ahora = new Date()): Promise<ResumenFinanz
   }
 }
 
+/**
+ * Extras del tablero rediseñado (solo lectura): conciliaciones que siguen sin
+ * cerrar y el proveedor al que más se le debe ahora mismo.
+ */
+export interface ExtrasFinanzas {
+  conciliacionesAbiertas: number
+  conciliacionesConDiferencia: number
+  mayorDeuda: { proveedor: string; proveedorId: string; saldo: string; obligaciones: number } | null
+}
+
+export async function extrasFinanzas(): Promise<ExtrasFinanzas> {
+  const [abiertas, diferencias, porProveedor] = await sinEmpresa('Supply 2.0: extras del tablero de finanzas', (tx) =>
+    Promise.all([
+      tx.supplyV2Reconciliation.count({ where: { status: { in: ['OPEN', 'DISCREPANCY'] } } }),
+      tx.supplyV2Reconciliation.count({ where: { status: 'DISCREPANCY' } }),
+      tx.supplyV2SupplierObligation.groupBy({ by: ['supplierId'], where: { status: { in: [...OBLIGACION_VIVA] } }, _sum: { outstandingAmount: true }, _count: { _all: true }, orderBy: { _sum: { outstandingAmount: 'desc' } }, take: 1 }),
+    ])
+  )
+  const top = porProveedor[0]
+  let mayorDeuda: ExtrasFinanzas['mayorDeuda'] = null
+  if (top && (top._sum.outstandingAmount ?? CERO).greaterThan(0)) {
+    const prov = await sinEmpresa('Supply 2.0: proveedor con mayor deuda', (tx) => tx.supplyV2Supplier.findUnique({ where: { id: top.supplierId }, select: { commercialName: true } }))
+    mayorDeuda = { proveedor: prov?.commercialName ?? '—', proveedorId: top.supplierId, saldo: (top._sum.outstandingAmount ?? CERO).toFixed(2), obligaciones: top._count._all }
+  }
+  return { conciliacionesAbiertas: abiertas, conciliacionesConDiferencia: diferencias, mayorDeuda }
+}
+
 // ── Facturas (§35) ────────────────────────────────────────────────────────────
 
 export interface FiltroFacturas {
