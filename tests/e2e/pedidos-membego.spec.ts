@@ -256,6 +256,33 @@ test.describe('Pedidos Membego · recorrido', () => {
     await ctx.close()
   })
 
+  test('Mi cuenta Membego: el pedido cerrado cobró su comisión (CPA, aún sin pago verificado) y la empresa la ve con su pedido', async ({ browser }) => {
+    test.setTimeout(120_000)
+    // En la base: UNA comisión por el pedido, con su asiento y el saldo corrido (la prueba contra PostgreSQL de las reglas está en billing.db.test.ts).
+    const c = await prismaDeArnes().commission.findUniqueOrThrow({ where: { orderId: pedidoId }, include: { ledgerEntry: true } })
+    expect(c.type).toBe('CPA_FIXED')
+    expect(c.amount.toFixed(2)).toBe('100.00')
+    expect(c.baseAmount.toFixed(2)).toBe('450.00')
+    expect(c.ledgerEntry.balance.toFixed(2)).toBe('100.00')
+
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    await entrarComo(ctx, 'pedidosAdmin', BASE, con.id)
+    await p.goto('/admin/facturacion-membego')
+    await expect(p.getByRole('heading', { name: 'Mi cuenta Membego' })).toBeVisible()
+    await expect(p.getByText('Debes a Membego').first()).toBeVisible()
+    await expect(p.getByText('RD$ 100.00').first()).toBeVisible()
+    await expect(p.getByText('Al día').first()).toBeVisible()
+    const fila = p.getByRole('row', { name: new RegExp(`Comisión por canje \\(CPA\\).*${codigo}`) })
+    await expect(fila).toBeVisible()
+    await fila.getByRole('link', { name: codigo }).click()
+    await expect(p).toHaveURL(new RegExp(`/admin/pedidos-membego/${pedidoId}$`))
+    // Solo lectura: la empresa no tiene formularios para mover su cuenta.
+    await p.goto('/admin/facturacion-membego')
+    await expect(p.getByRole('form')).toHaveCount(0)
+    await ctx.close()
+  })
+
   test('la empresa registra el pago con referencia y el pedido sube a «Pago verificado»', async ({ browser }) => {
     test.setTimeout(120_000)
     const ctx = await browser.newContext()
@@ -326,6 +353,19 @@ test.describe('Pedidos Membego · recorrido', () => {
     await ctx.close()
   })
 
+  test('el reembolso revierte la comisión: aparece el reverso y la cuenta vuelve a cero', async ({ browser }) => {
+    test.setTimeout(120_000)
+    const c = await prismaDeArnes().commission.findUniqueOrThrow({ where: { orderId: pedidoId } })
+    expect(c.status).toBe('REVERSED')
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    await entrarComo(ctx, 'pedidosAdmin', BASE, con.id)
+    await p.goto('/admin/facturacion-membego')
+    await expect(p.getByRole('row', { name: new RegExp(`Reverso de comisión.*${codigo}`) })).toBeVisible()
+    await expect(p.getByText('RD$ 0.00').first()).toBeVisible()
+    await ctx.close()
+  })
+
   test('aislamiento: el pedido de una empresa no se abre ni se lista desde otra, y una empresa SIN pedidos no entra al panel ni ve la entrada de menú', async ({ browser }) => {
     test.setTimeout(120_000)
     const otraEmpresa = await empresaCatalogo(sufijo, 'pedaj', { capacidad: true, pedidos: true })
@@ -352,6 +392,20 @@ test.describe('Pedidos Membego · recorrido', () => {
     await ps.goto('/admin/pedidos-membego')
     await expect(ps).not.toHaveURL(/\/admin\/pedidos-membego$/)
     await expect(ps.getByRole('link', { name: /^Pedidos Membego$/ })).toHaveCount(0)
+    // «Mi cuenta Membego» cuelga de la misma capacidad: sin ella no se entra ni se ve la entrada de menú.
+    await ps.goto('/admin/facturacion-membego')
+    await expect(ps).not.toHaveURL(/\/admin\/facturacion-membego$/)
+    await expect(ps.getByRole('link', { name: /^Mi cuenta Membego$/ })).toHaveCount(0)
     await sin.close()
+
+    // Otra empresa con la capacidad ve SU cuenta (vacía), no la de la primera.
+    const ajena = await browser.newContext()
+    const pj = await ajena.newPage()
+    await entrarComo(ajena, 'catalogoConCapacidad', BASE, otraEmpresa.id)
+    await pj.goto('/admin/facturacion-membego')
+    await expect(pj.getByRole('heading', { name: 'Mi cuenta Membego' })).toBeVisible()
+    await expect(pj.getByText(codigo)).toHaveCount(0)
+    await expect(pj.getByText('Todavía no hay movimientos en la cuenta.')).toBeVisible()
+    await ajena.close()
   })
 })

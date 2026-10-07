@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import { Prisma, type MembegoOrderOrigin, type MembegoOrderStatus, type MembegoPaymentMethod } from '@prisma/client'
+import { Prisma, type MembegoOrderOrigin, type MembegoOrderStatus, type MembegoPaymentMethod, type MembegoVerificationLevel } from '@prisma/client'
 import { siguienteNumero } from '@/lib/commerce-primitives/numeracion'
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import type { ContextoAuditoria } from '@/modules/inventory/auditoria'
+import { registrarComisionDePedidoEnTx, revertirComisionDePedidoEnTx } from '@/modules/billing/service'
 import { TTL_MAXIMO_MINUTOS } from '@/modules/inventory/domain'
 import { InventarioError } from '@/modules/inventory/errores'
 import { consumirReservaEnTx, devolverEnTx, liberarReservaEnTx, reservarEnTx, venderEnTx } from '@/modules/inventory/service'
@@ -562,6 +563,31 @@ export async function registrarPagoEnTx(
   return { pedidoId: p.id }
 }
 
+// ── Comisión de Merchant Billing ─────────────────────────────────────────────
+
+/**
+ * Cobra la comisión del pedido recién completado, en la MISMA transacción: un pedido
+ * completado de una empresa tiene su comisión o el cierre no ocurre. Merchant Billing
+ * decide si el pedido comisiona (los de Supply, no) y cuánto; aquí solo se le pasa lo
+ * que necesita. Devuelve el monto cobrado (texto) o null.
+ */
+async function cobrarComisionDelPedido(
+  tx: Tx,
+  companyId: string,
+  p: Pick<PedidoCompleto, 'id' | 'code' | 'origin' | 'sourceType' | 'commissionableBase' | 'currency'>,
+  nivel: MembegoVerificationLevel,
+  ahora: Date
+): Promise<string | null> {
+  const r = await registrarComisionDePedidoEnTx(
+    tx,
+    companyId,
+    { id: p.id, code: p.code, origin: p.origin, sourceType: p.sourceType, commissionableBase: p.commissionableBase, verificationLevel: nivel, currency: p.currency },
+    undefined,
+    ahora
+  )
+  return r.resultado === 'CREADA' || r.resultado === 'YA_EXISTE' ? r.amount : null
+}
+
 // ── Completar por QR ─────────────────────────────────────────────────────────
 
 /** Vende lo apartado de una línea; si la reserva ya no sirve, vende de lo disponible. */
@@ -640,11 +666,13 @@ export async function completarPorQrEnTx(tx: Tx, companyId: string, token: strin
     where: { id: p.id },
     data: { status: 'COMPLETED', completedAt: ahora, completedByUserId: ctx.actorId, verificationLevel: nivel },
   })
+  const comision = await cobrarComisionDelPedido(tx, companyId, p, nivel, ahora)
   await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_COMPLETED', p.id, {
     code: p.code,
     por: ctx.actor,
     nivel,
     total: decimalATexto(p.total),
+    comision,
   })
   return { pedidoId: p.id, code: p.code, status: 'COMPLETED', nivel, repetido: false }
 }
@@ -717,7 +745,8 @@ export async function cerrarPedidoExternoEnTx(
       ...(e.pago ? { paymentMethod: e.pago.method } : {}),
     },
   })
-  await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_COMPLETED', p.id, { code: p.code, por: ctx.actor, cierre: 'EXTERNO', nivel, total: decimalATexto(p.total) })
+  const comision = await cobrarComisionDelPedido(tx, companyId, p, nivel, ahora)
+  await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_COMPLETED', p.id, { code: p.code, por: ctx.actor, cierre: 'EXTERNO', nivel, total: decimalATexto(p.total), comision })
   return { pedidoId: p.id, code: p.code, status: 'COMPLETED', nivel, repetido: false }
 }
 
@@ -800,11 +829,14 @@ export async function reembolsarPedidoEnTx(
     }
   }
   await tx.membegoOrder.update({ where: { id: p.id }, data: { status: 'REFUNDED', refundedAt: ahora, refundReason: motivo.valor } })
+  // La venta no se sostuvo: la comisión que se cobró por ella se revierte con un asiento contrario.
+  const reverso = await revertirComisionDePedidoEnTx(tx, companyId, p.id, undefined, ahora)
   await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_REFUNDED', p.id, {
     code: p.code,
     por: ctx.actor,
     motivo: motivo.valor,
     devolvioStock: e.devolverAlInventario === true,
+    comisionRevertida: reverso.resultado === 'REVERTIDA' ? reverso.amount : null,
   })
   return { pedidoId: p.id, status: 'REFUNDED' as const, repetido: false }
 }

@@ -527,6 +527,15 @@ const G_ATENCION: NavGroup = {
       keywords: ['pagos', 'cobros', 'transferencias'],
     },
     {
+      // Commerce Core · Mi cuenta Membego (Fase 4): lo que la empresa le debe a la plataforma.
+      href: '/admin/facturacion-membego',
+      label: 'Mi cuenta Membego',
+      icon: Landmark,
+      description: 'Lo que debes a Membego por los pedidos del marketplace: saldo, comisiones y estados de cuenta.',
+      keywords: ['cuenta', 'membego', 'comisiones', 'saldo', 'estado de cuenta', 'facturacion', 'cpa', 'limite', 'credito'],
+      capacidad: 'PEDIDOS_MEMBEGO',
+    },
+    {
       href: '/admin/facturas',
       label: 'Comprobantes',
       icon: ReceiptText,
@@ -807,7 +816,7 @@ const HUB_OPERACIONES: NavGroup = {
   id: 'operaciones',
   label: 'Operaciones',
   items: deAdmin(
-    '/admin/pedidos-membego', '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturas',
+    '/admin/pedidos-membego', '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturacion-membego', '/admin/facturas',
     '/admin/conciliacion', '/admin/metodos-pago', '/admin/registros', '/admin/actividad'
   ),
 }
@@ -1293,6 +1302,13 @@ const G_SA_OPERACION: NavGroup = {
       icon: Link2,
       description: 'Las ofertas de Supply 2.0 en el catálogo y el descubrimiento: empresa de la casa y sincronización.',
       keywords: ['puente', 'bridge', 'supply', 'catalogo', 'ofertas', 'marketplace', 'sincronizar', 'casa'],
+    },
+    {
+      href: '/superadmin/facturacion',
+      label: 'Cobros a empresas',
+      icon: Landmark,
+      description: 'Merchant Billing: lo que cada empresa debe a Membego — cuentas, comisiones, pagos, ajustes, límites y antigüedad.',
+      keywords: ['facturacion', 'cobros', 'comisiones', 'cpa', 'cuentas', 'pagos', 'ajustes', 'credito', 'mora', 'aging', 'estado de cuenta'],
     },
     {
       href: '/superadmin/connect',
