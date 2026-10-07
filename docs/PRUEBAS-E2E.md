@@ -293,6 +293,19 @@ desaparecen del pedido del cliente) → el empleado escanea el QR y entrega: que
 venden. **Ojo:** el spec usa `localStorage` por contexto de navegador (cada persona abre el suyo) y espera el resumen del
 servidor, que tarda ~200 ms tras cada cambio.
 
+**Conciliación y riesgo (Fase 9)** — `conciliacion-riesgo` (escritorio), con `empresaCatalogo({ capacidad: true, pedidos: true })`
+para una empresa y otra marcada `esDemo`, el superadmin de los demás specs (`facturacionSuperadmin`) y un administrador
+de empresa (`conciliacionAdmin`). La base de E2E es `db push` (sin disparadores ni CHECK), así que las anomalías se
+**siembran por Prisma**: en cada empresa, un pedido completado SIN comisión, 5 cancelados y 4 completados de la misma
+persona. Recorre: el administrador de empresa no entra a `/superadmin/conciliacion` ni a `/superadmin/riesgo` → el
+superadmin ve en «Conciliación» la regla C01 con **su** pedido (código y empresa), todas las reglas del catálogo y
+**ninguna** mención de la empresa de práctica → en «Señales de riesgo» ve la empresa con «Muchos pedidos cancelados»
+(alta, 5 de 10) y a la persona con dos indicios (cancelaciones y ráfaga, porque los 10 pedidos se sembraron de golpe),
+sin formularios (una señal no actúa) y sin la empresa ni el cliente de práctica. **Ojo:** el spec no afirma totales de
+la plataforma (comparten base con los demás specs): solo las filas de sus propios sujetos. Este spec encontró dos fallos
+que las pruebas PG no habían visto (un alias repetido que solo rompía el alcance de la plataforma y la transacción
+abortada que tumbaba todas las reglas); hoy cada regla corre en su `SAVEPOINT`.
+
 Tres cosas que costó aprender y conviene no repetir:
 
 1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de
