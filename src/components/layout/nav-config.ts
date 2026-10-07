@@ -38,6 +38,7 @@ import {
   Rocket,
   ScanLine,
   Scale,
+  ListChecks,
   Share2,
   SlidersHorizontal,
   TextSearch,
@@ -1298,6 +1299,13 @@ const G_SA_OPERACION: NavGroup = {
       icon: TrendingUp,
       description: 'GMV, take rate, ventas por empresa y canal, ofertas y salud de los cobros. Supply Economics aparte.',
       keywords: ['analitica', 'gmv', 'take rate', 'toma', 'ventas', 'empresas', 'canales', 'atribucion', 'ofertas', 'ticket', 'salud'],
+    },
+    {
+      href: '/superadmin/conciliacion',
+      label: 'Conciliación',
+      icon: ListChecks,
+      description: 'Si los pedidos, pagos, comisiones, libros, ofertas e inventario cuadran entre sí. Solo lectura.',
+      keywords: ['conciliacion', 'cuadre', 'auditoria', 'comisiones', 'libro', 'inventario', 'pagos', 'ofertas', 'integridad', 'anomalias'],
     },
     {
       href: '/superadmin/connect',
