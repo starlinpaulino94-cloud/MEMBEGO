@@ -12,7 +12,7 @@ export const metadata = {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · escaparate público de membresías (§15).
+ * MEMBEGO SUPPLY · SLICE 8 · escaparate público de membresías (§15).
  *
  * Vive dentro del marketplace que ya existe: no es otro marketplace. El
  * cliente ve el precio, la duración y lo que incluye. Nunca el presupuesto, el

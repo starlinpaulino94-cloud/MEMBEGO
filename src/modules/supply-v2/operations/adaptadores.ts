@@ -2,7 +2,7 @@ import { fallo } from '../core/errores'
 import { sanear } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · ADAPTADORES POR PROVEEDOR (§4).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · ADAPTADORES POR PROVEEDOR (§4).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * QUÉ PROBLEMA RESUELVE ESTA CAPA

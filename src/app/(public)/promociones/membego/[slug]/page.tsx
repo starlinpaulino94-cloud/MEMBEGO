@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · ficha pública de una oferta (§19, §45). El cliente ve
+ * MEMBEGO SUPPLY · ficha pública de una oferta (§19, §45). El cliente ve
  * producto, proveedor, precio regular, precio Membego, ahorro, vigencia y
  * máximo por persona. Nada de lotes, ledger ni costos.
  */

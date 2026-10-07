@@ -16,7 +16,7 @@ import {
 import { anotarSupply } from './log'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 3 · CONCILIAR Y ABRIR INCIDENTES.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 3 · CONCILIAR Y ABRIR INCIDENTES.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * EL HUECO QUE ESTO CIERRA
@@ -305,12 +305,12 @@ export async function conciliarPagoExterno(
   ahora = new Date()
 ): Promise<ResultadoConciliado> {
   try {
-    return await sinEmpresa('Supply 2.0: conciliar un pago externo', (tx) => conciliarPagoExternoEnTx(tx, d, ctx, ahora))
+    return await sinEmpresa('Supply: conciliar un pago externo', (tx) => conciliarPagoExternoEnTx(tx, d, ctx, ahora))
   } catch (e) {
     if (!esCarreraDeIncidente(e)) throw e
     // El incidente lo abrió otro a la vez. Se vuelve a conciliar: ahora la
     // lectura previa lo encuentra y el resultado es el mismo para los dos.
-    return sinEmpresa('Supply 2.0: conciliar un pago externo (tras la carrera)', (tx) =>
+    return sinEmpresa('Supply: conciliar un pago externo (tras la carrera)', (tx) =>
       conciliarPagoExternoEnTx(tx, d, ctx, ahora)
     )
   }
@@ -381,7 +381,7 @@ export async function incidentesDePago(f: FiltroIncidentes = {}, limite = 50) {
     ...(f.correlationId ? { correlationId: f.correlationId } : {}),
     ...(f.provider ? { provider: f.provider.trim().toUpperCase() } : {}),
   }
-  return sinEmpresa('Supply 2.0: incidentes de pago externo', (tx) =>
+  return sinEmpresa('Supply: incidentes de pago externo', (tx) =>
     tx.supplyV2FinanceIncident.findMany({
       where,
       orderBy: [{ status: 'asc' }, { severity: 'desc' }, { createdAt: 'desc' }],
@@ -413,7 +413,7 @@ export async function incidentesDePago(f: FiltroIncidentes = {}, limite = 50) {
 
 /** Cuántos hay por estado y severidad: lo primero que un panel necesita. */
 export async function resumenDeIncidentesDePago() {
-  const filas = await sinEmpresa('Supply 2.0: resumen de incidentes de pago', (tx) =>
+  const filas = await sinEmpresa('Supply: resumen de incidentes de pago', (tx) =>
     tx.supplyV2FinanceIncident.groupBy({
       by: ['status', 'severity'],
       where: { type: 'EXTERNAL_PAYMENT_MISMATCH' },
@@ -430,7 +430,7 @@ export async function conciliacionesDe(f: {
   correlationId?: string
   outcome?: 'MATCHED' | 'MISMATCH' | 'WAITING' | 'IGNORED'
 }, limite = 50) {
-  return sinEmpresa('Supply 2.0: comprobaciones de pago externo', (tx) =>
+  return sinEmpresa('Supply: comprobaciones de pago externo', (tx) =>
     tx.supplyV2PaymentReconciliation.findMany({
       where: {
         ...(f.orderId ? { orderId: f.orderId } : {}),

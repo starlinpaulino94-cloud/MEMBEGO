@@ -7,7 +7,7 @@ function dinero(n: string, moneda: string): string {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · tarjeta pública de una oferta Membego (§19).
+ * MEMBEGO SUPPLY · tarjeta pública de una oferta Membego (§19).
  * Solo lo que el cliente necesita: producto, proveedor, precio regular,
  * precio Membego y ahorro. Nunca costos ni lotes.
  */

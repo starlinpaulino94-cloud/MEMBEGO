@@ -4,13 +4,13 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · §22 · LO QUE NO SE BORRA.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · §22 · LO QUE NO SE BORRA.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * POR QUÉ ESTA PRUEBA EXISTE
  *
  * `docs/supply-v2-retencion-y-privacidad.md` afirma que un registro financiero
- * de Supply 2.0 no se puede perder por descuido, y que lo que lo garantiza es
+ * de Supply no se puede perder por descuido, y que lo que lo garantiza es
  * el esquema —`onDelete: Restrict` sobre el cliente— y no la buena voluntad de
  * quien escriba el próximo modelo.
  *
@@ -31,7 +31,7 @@ const esquemas = readdirSync(DIR)
   .map((f) => ({ archivo: f, texto: readFileSync(join(DIR, f), 'utf8') }))
 
 /**
- * Las relaciones de Supply 2.0 que apuntan a un `User`. Una por línea, que es
+ * Las relaciones de Supply que apuntan a un `User`. Una por línea, que es
  * cómo las escribe Prisma: el nombre del campo, el modelo y el `onDelete`.
  */
 function relacionesAUsuario() {
@@ -70,7 +70,7 @@ const FINANCIEROS = [
   'SupplyV2PaymentReconciliation',
 ] as const
 
-test('§22 · los modelos financieros de Supply 2.0 existen con ese nombre', () => {
+test('§22 · los modelos financieros de Supply existen con ese nombre', () => {
   const todos = esquemas.map((e) => e.texto).join('\n')
   for (const m of FINANCIEROS) {
     assert.match(todos, new RegExp(`^model\\s+${m}\\s*\\{`, 'm'), `falta el modelo ${m}: si se renombró, actualiza esta lista`)
@@ -99,7 +99,7 @@ test('§22 · el cliente de una compra está protegido con Restrict, no con SetN
   assert.equal(r[0].onDelete, 'Restrict')
 })
 
-test('§22 · el único Cascade desde un usuario en Supply 2.0 es el código de referido', () => {
+test('§22 · el único Cascade desde un usuario en Supply es el código de referido', () => {
   // No es que un Cascade esté prohibido: es que cada uno tiene que ser una
   // decisión. Hoy hay exactamente uno y no guarda dinero. Si aparece otro, esta
   // prueba lo nombra y alguien decide si está bien.
@@ -124,7 +124,7 @@ test('§22 · la bitácora sobrevive al borrado de quien actuó', () => {
   assert.match(modelo![0], /userId\s+String\?/, 'el actor es opcional para que la fila sobreviva sin él')
 })
 
-test('§22 · no hay ninguna purga automática de datos de Supply 2.0', () => {
+test('§22 · no hay ninguna purga automática de datos de Supply', () => {
   // El documento afirma que no existe y que es deliberado. Si alguien añade
   // una, esta prueba falla y obliga a actualizar la política antes de borrar
   // nada —no después—.
@@ -152,7 +152,7 @@ test('§22 · no hay ninguna purga automática de datos de Supply 2.0', () => {
 })
 
 /**
- * §22 · bis · EL PUNTO CIEGO DEL GATE `rls:cobertura`, cerrado para Supply 2.0.
+ * §22 · bis · EL PUNTO CIEGO DEL GATE `rls:cobertura`, cerrado para Supply.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * POR QUÉ HACE FALTA OTRA PRUEBA SI YA HAY UN GATE

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mi compra' }
 
 /**
- * MEMBEGO SUPPLY 2.0 · checkout y detalle de una compra (§27, §46).
+ * MEMBEGO SUPPLY · checkout y detalle de una compra (§27, §46).
  * `miCompra` filtra por el cliente de la sesión: la compra de otra persona
  * responde 404, igual que una que no existe.
  */

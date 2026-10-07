@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · WHATSAPP, DICHO COMO ES.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · WHATSAPP, DICHO COMO ES.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * LO QUE LA AUDITORÍA ENCONTRÓ (§8)
@@ -11,7 +11,7 @@
  *
  * Pero todo eso es POR EMPRESA. Un mensaje sale de la cuenta de WhatsApp de
  * una empresa concreta, dentro de una `Conversacion` de esa empresa, contra su
- * `PlantillaWhatsapp` aprobada. Los avisos de Supply 2.0 son de PLATAFORMA:
+ * `PlantillaWhatsapp` aprobada. Los avisos de Supply son de PLATAFORMA:
  * «tu compra está confirmada» lo manda Membego, no el restaurante.
  *
  * Para mandarlos por WhatsApp haría falta una cuenta de WhatsApp Business de

@@ -10,7 +10,7 @@ import { estadisticasDeReferidosEnTx } from './referrals'
 import { valorMedioPorPuntoEnTx } from './points'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · LECTURAS (§39–§41).
+ * MEMBEGO SUPPLY · SLICE 8 · LECTURAS (§39–§41).
  *
  * CUATRO PÚBLICOS, CUATRO DTO. Lo que ve el cliente NO lleva presupuesto, ni
  * costo, ni comisión: no es que se oculte en la plantilla, es que no sale de
@@ -74,7 +74,7 @@ function diasRestantes(hasta: Date | null, ahora: Date): number | null {
 
 /** «Mis membresías» (§17). */
 export async function misMembresias(customerId: string, ahora = new Date()): Promise<MembresiaDelCliente[]> {
-  return sinEmpresa('Supply 2.0: las membresías de un cliente', async (tx) => {
+  return sinEmpresa('Supply: las membresías de un cliente', async (tx) => {
     const filas = await tx.supplyV2CustomerMembership.findMany({
       where: { customerId },
       orderBy: [{ status: 'asc' }, { expiresAt: 'desc' }],
@@ -118,7 +118,7 @@ export async function misMembresias(customerId: string, ahora = new Date()): Pro
 
 /** «Mis puntos» (§25, §39). */
 export async function misPuntos(customerId: string): Promise<PuntosDelCliente[]> {
-  return sinEmpresa('Supply 2.0: los puntos de un cliente', async (tx) => {
+  return sinEmpresa('Supply: los puntos de un cliente', async (tx) => {
     const cuentas = await tx.supplyV2PointsAccount.findMany({
       where: { customerId },
       select: {
@@ -188,7 +188,7 @@ function conceptoDeOrigen(source: string): string {
 
 /** «Mis recompensas»: el catálogo que este cliente puede pedir. */
 export async function recompensasParaElCliente(customerId: string, programId: string, ahora = new Date()): Promise<RecompensaParaElCliente[]> {
-  return sinEmpresa('Supply 2.0: recompensas disponibles para un cliente', async (tx) => {
+  return sinEmpresa('Supply: recompensas disponibles para un cliente', async (tx) => {
     const cuenta = await tx.supplyV2PointsAccount.findUnique({ where: { programId_customerId: { programId, customerId } }, select: { available: true } })
     const disponibles = cuenta?.available ?? 0
     const recompensas = await tx.supplyV2Reward.findMany({
@@ -225,7 +225,7 @@ export async function recompensasParaElCliente(customerId: string, programId: st
 
 /** «Invitar amigos» (§19). */
 export async function misInvitaciones(customerId: string) {
-  return sinEmpresa('Supply 2.0: las invitaciones de un cliente', async (tx) => {
+  return sinEmpresa('Supply: las invitaciones de un cliente', async (tx) => {
     const programas = await tx.supplyV2LoyaltyProgram.findMany({
       where: { status: 'ACTIVE', modalities: { has: 'REFERRALS' }, referralProgram: { active: true } },
       select: { id: true, name: true, supplier: { select: { commercialName: true } }, referralProgram: { select: { rewardKind: true, rewardPoints: true, minPurchaseAmount: true, waitingPeriodDays: true } } },
@@ -256,7 +256,7 @@ export async function misInvitaciones(customerId: string) {
 
 /** Membresías publicadas que un cliente puede comprar (§15). */
 export async function membresiasEnElMarketplace(ahora = new Date()) {
-  return sinEmpresa('Supply 2.0: membresías publicadas', async (tx) => {
+  return sinEmpresa('Supply: membresías publicadas', async (tx) => {
     const planes = await tx.supplyV2MembershipPlan.findMany({
       where: { status: 'PUBLISHED', program: { status: 'ACTIVE', startsAt: { lte: ahora }, OR: [{ endsAt: null }, { endsAt: { gt: ahora } }] } },
       orderBy: [{ programId: 'asc' }, { price: 'asc' }],
@@ -303,7 +303,7 @@ export async function membresiasEnElMarketplace(ahora = new Date()) {
  * `supplierId`, no por lo que mande la pantalla.
  */
 export async function fidelizacionDelProveedor(supplierId: string) {
-  return sinEmpresa('Supply 2.0: fidelización del proveedor', async (tx) => {
+  return sinEmpresa('Supply: fidelización del proveedor', async (tx) => {
     const programas = await tx.supplyV2LoyaltyProgram.findMany({
       where: { supplierId },
       orderBy: { createdAt: 'desc' },
@@ -397,7 +397,7 @@ export interface TableroDeFidelizacion {
  * prohíbe enseñar una estimación como si fuera un resultado confirmado.
  */
 export async function tableroDeFidelizacion(): Promise<TableroDeFidelizacion> {
-  return sinEmpresa('Supply 2.0: tablero de fidelización', async (tx) => {
+  return sinEmpresa('Supply: tablero de fidelización', async (tx) => {
     const programas = await tx.supplyV2LoyaltyProgram.findMany({
       orderBy: { createdAt: 'desc' },
       take: 50,
@@ -492,7 +492,7 @@ export async function tableroDeFidelizacion(): Promise<TableroDeFidelizacion> {
 
 /** Ficha de un programa para Membego, con su bitácora. */
 export async function fichaDePrograma(programId: string) {
-  return sinEmpresa('Supply 2.0: ficha de un programa de fidelización', async (tx) => {
+  return sinEmpresa('Supply: ficha de un programa de fidelización', async (tx) => {
     const p = await tx.supplyV2LoyaltyProgram.findUnique({
       where: { id: programId },
       select: {

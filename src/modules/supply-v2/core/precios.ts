@@ -3,7 +3,7 @@ import type { SupplyV2OfferPriceMode } from '@prisma/client'
 import { decimal, redondear2, type Monto } from './dinero'
 
 /**
- * MEMBEGO SUPPLY 2.0 · precios de oferta y de compra (§8, §13, §48).
+ * MEMBEGO SUPPLY · precios de oferta y de compra (§8, §13, §48).
  *
  * PURO y con Decimal. El servidor recalcula siempre: lo que manda el
  * formulario son precios de entrada, nunca descuentos ni totales.

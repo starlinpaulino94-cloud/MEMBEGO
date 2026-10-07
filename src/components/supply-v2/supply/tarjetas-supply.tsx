@@ -24,7 +24,7 @@ export function TarjetasSupply({ productos, pie }: { productos: SupplyPorProduct
               <div className="flex min-w-0 items-start gap-2">
                 <IconoProducto p={p} grande />
                 <div className="flex min-w-0 flex-col">
-                  <Link href={`/superadmin/supply-v2/supply/${p.catalogItemId}`} className="text-[18px] font-bold leading-6 tracking-[-0.01em] hover:underline">{p.producto}</Link>
+                  <Link href={`/superadmin/supply/supply/${p.catalogItemId}`} className="text-[18px] font-bold leading-6 tracking-[-0.01em] hover:underline">{p.producto}</Link>
                   <span className="text-[13px] leading-[18px] text-sv2-ink-variant">Proveedor: {p.proveedor}</span>
                 </div>
               </div>

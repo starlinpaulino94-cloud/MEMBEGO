@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * AUDITORÍA DE NIVELES TARIFARIOS  (Supply 2.0 · precio por categoría de vehículo)
+ * AUDITORÍA DE NIVELES TARIFARIOS  (Supply · precio por categoría de vehículo)
  *
  * ────────────────────────────────────────────────────────────────────────────
  * PARA QUÉ EXISTE
  *
- * Supply 2.0 va a cobrar distinto según el vehículo, y la pieza que une el
+ * Supply va a cobrar distinto según el vehículo, y la pieza que une el
  * vehículo del cliente con el precio de la oferta es `TipoVehiculo.nivelTarifario`
  * — por decisión explícita del proyecto se compara ese NÚMERO, nunca el nombre
  * de la categoría.
@@ -99,7 +99,7 @@ async function main() {
   const prisma = new PrismaClient()
 
   try {
-    console.log('Auditoría de niveles tarifarios (Supply 2.0 · precio por categoría)')
+    console.log('Auditoría de niveles tarifarios (Supply · precio por categoría)')
     console.log('─'.repeat(64))
 
     const tipos = await prisma.tipoVehiculo.findMany({

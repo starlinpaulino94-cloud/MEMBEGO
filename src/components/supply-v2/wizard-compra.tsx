@@ -53,7 +53,7 @@ function dinero(n: number | string, moneda: string): string {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · NUEVA COMPRA (§32). Seis pasos; crear proveedor,
+ * MEMBEGO SUPPLY · NUEVA COMPRA (§32). Seis pasos; crear proveedor,
  * producto o acuerdo no saca a nadie del wizard: lo creado se añade a las
  * listas y se selecciona. Los totales que se ven aquí son orientativos; el
  * servidor los recalcula al crear la orden.
@@ -95,7 +95,7 @@ export function WizardCompra({ proveedores: iniciales }: { proveedores: Proveedo
     if (!estado.success || !estado.id || visto.current === estado.id) return
     visto.current = estado.id
     toast.success(estado.success)
-    router.push(`/superadmin/supply-v2/compras/${estado.id}`)
+    router.push(`/superadmin/supply/compras/${estado.id}`)
   }, [estado, router])
 
   const subtotal = (Number(cantidad) || 0) * (Number(costo) || 0)
@@ -413,7 +413,7 @@ export function WizardCompra({ proveedores: iniciales }: { proveedores: Proveedo
               <Button type="button" onClick={siguiente} disabled={!listo[paso - 1]}>
                 Continuar
               </Button>
-              <Link href="/superadmin/supply-v2/compras" className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:underline">
+              <Link href="/superadmin/supply/compras" className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:underline">
                 Cancelar
               </Link>
             </div>

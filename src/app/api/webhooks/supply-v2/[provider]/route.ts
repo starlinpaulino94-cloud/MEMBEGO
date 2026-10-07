@@ -4,7 +4,7 @@ import { recibirEventoExterno } from '@/modules/supply-v2/operations/entrada'
 import { httpDe, MENSAJE_DE_CODIGO } from '@/modules/supply-v2/operations/respuestas'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · LA PUERTA HTTP (§1).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · LA PUERTA HTTP (§1).
  *
  * `POST /api/webhooks/supply-v2/<proveedor>`
  *

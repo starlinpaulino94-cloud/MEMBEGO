@@ -36,16 +36,16 @@ export function PanelAbastecimiento() {
         >
           <FormProveedor />
         </DialogoFormulario>
-        <Link href="/superadmin/supply-v2/ofertas/nueva" className={accion}>
+        <Link href="/superadmin/supply/ofertas/nueva" className={accion}>
           <Tag aria-hidden className="size-4 text-sv2-ink-variant" />
           <span>+ Crear oferta</span>
         </Link>
-        <Link href="/superadmin/supply-v2/beneficios/nuevo" className={accion}>
+        <Link href="/superadmin/supply/beneficios/nuevo" className={accion}>
           <Gift aria-hidden className="size-4 text-sv2-ink-variant" />
           <span>+ Crear beneficio</span>
         </Link>
         <Link
-          href="/superadmin/supply-v2/compras/nueva"
+          href="/superadmin/supply/compras/nueva"
           className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-sv2-accent px-3 text-[13px] font-semibold leading-4 text-white shadow-sm transition-colors hover:bg-sv2-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent focus-visible:ring-offset-2"
         >
           <ShoppingCart aria-hidden className="size-4" />

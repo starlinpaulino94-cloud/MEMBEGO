@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · proveedores: reglas puras.
+ * MEMBEGO SUPPLY · proveedores: reglas puras.
  */
 
 export interface DatosProveedorExterno {

@@ -5,7 +5,7 @@ import { conciliarPagoExterno } from './conciliacion'
 import { estadoExternoDeEvento, type PuertoDePasarela, type TransaccionDePasarela } from './pasarela'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 3 · CONCILIAR SIN QUE NADIE LO PIDA
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 3 · CONCILIAR SIN QUE NADIE LO PIDA
  * (§16) Y CUANDO ALGUIEN LO PIDE (§17).
  *
  * ────────────────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ export async function barrerConciliacionDePagos(
   // política de capa 2 omnisciente. Sin contexto, con RLS encendida, esto
   // devolvería cero eventos y el barrido diría «revisados: 0» tan tranquilo:
   // una conciliación que no concilia nada y no se queja de nada.
-  const eventos = await sinEmpresa('Supply 2.0: eventos a conciliar', (tx) =>
+  const eventos = await sinEmpresa('Supply: eventos a conciliar', (tx) =>
     tx.supplyV2ExternalEvent.findMany({
       where: { receivedAt: { gte: desde }, eventType: { in: ['PAYMENT_CONFIRMED', 'PAYMENT_REJECTED'] } },
       orderBy: { receivedAt: 'asc' },
@@ -124,7 +124,7 @@ export async function conciliarAPeticion(
     fallo('SIN_CRITERIO', 'Hay que decir qué conciliar: una compra, una transacción o una pasarela.')
   }
 
-  const eventos = await sinEmpresa('Supply 2.0: eventos a conciliar a petición', (tx) =>
+  const eventos = await sinEmpresa('Supply: eventos a conciliar a petición', (tx) =>
     tx.supplyV2ExternalEvent.findMany({
       where: {
         eventType: { in: ['PAYMENT_CONFIRMED', 'PAYMENT_REJECTED'] },
@@ -190,7 +190,7 @@ export const pasarelaDesdeElInbox = (provider: string): PuertoDePasarela => ({
   provider: provider.trim().toUpperCase(),
 
   async listarTransacciones(desde: Date, hasta: Date, limite = 200): Promise<TransaccionDePasarela[]> {
-    const filas = await sinEmpresa('Supply 2.0: transacciones vistas por la pasarela', (tx) =>
+    const filas = await sinEmpresa('Supply: transacciones vistas por la pasarela', (tx) =>
       tx.supplyV2ExternalEvent.findMany({
         where: {
           provider: provider.trim().toUpperCase(),
@@ -208,7 +208,7 @@ export const pasarelaDesdeElInbox = (provider: string): PuertoDePasarela => ({
   async buscarTransaccion(externalTransactionId: string): Promise<TransaccionDePasarela | null> {
     const referencia = externalTransactionId.trim()
     if (!referencia) return null
-    const filas = await sinEmpresa('Supply 2.0: buscar una transacción de la pasarela', (tx) =>
+    const filas = await sinEmpresa('Supply: buscar una transacción de la pasarela', (tx) =>
       tx.supplyV2ExternalEvent.findMany({
         where: { provider: provider.trim().toUpperCase(), eventType: { in: ['PAYMENT_CONFIRMED', 'PAYMENT_REJECTED'] } },
         orderBy: { receivedAt: 'desc' },

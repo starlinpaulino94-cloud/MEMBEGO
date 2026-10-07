@@ -4,7 +4,7 @@ import { fallo } from '../core/errores'
 import { normalizarProveedor, validarProveedorExterno, type DatosProveedorExterno } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · proveedores: escritura, siempre dentro de una `tx`
+ * MEMBEGO SUPPLY · proveedores: escritura, siempre dentro de una `tx`
  * que abre quien llama (action, seed o prueba). Este archivo no abre
  * transacciones: así ninguna puede anidarse.
  */

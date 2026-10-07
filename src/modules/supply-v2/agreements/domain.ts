@@ -3,7 +3,7 @@ import { AGREEMENT_TYPES_SLICE1, AGREEMENT_TYPES_SLICE5 } from '../core/catalogo
 import { validarPorcentajeComision } from '../core/comision'
 
 /**
- * MEMBEGO SUPPLY 2.0 · acuerdos: reglas puras (§9–§11).
+ * MEMBEGO SUPPLY · acuerdos: reglas puras (§9–§11).
  *
  * El acuerdo define CÓMO se compra (tipo, alcance, costo negociado, plazo,
  * vigencia). NO lleva cantidad: la cantidad es de la orden de compra.

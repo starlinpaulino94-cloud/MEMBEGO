@@ -18,7 +18,7 @@ import {
 } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · PROGRAMAS Y PLANES (§4–§11, §14).
+ * MEMBEGO SUPPLY · SLICE 8 · PROGRAMAS Y PLANES (§4–§11, §14).
  *
  * TODO dentro de la `tx` de quien llama: aquí no se abre ninguna transacción.
  *
@@ -322,7 +322,7 @@ export async function crearPlanEnTx(tx: Tx, programId: string, d: DatosPlan, ctx
   if (!p.modalities.includes('MEMBERSHIPS')) fallo('MODALIDAD_NO_HABILITADA', 'Este programa no tiene habilitadas las membresías.')
   // Una membresía es SIEMPRE de un negocio: es «la membresía Gold de Car
   // Town», no una membresía de nadie. Y además hace falta para la economía:
-  // todo evento económico de Supply 2.0 cuelga de un proveedor, y no se va a
+  // todo evento económico de Supply cuelga de un proveedor, y no se va a
   // cambiar el significado de un modelo financiero existente para esto.
   if (!p.supplierId) fallo('PROGRAMA_SIN_NEGOCIO', 'Un plan de membresía tiene que pertenecer al programa de un negocio concreto.')
 

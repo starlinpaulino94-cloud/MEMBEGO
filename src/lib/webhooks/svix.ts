@@ -45,7 +45,7 @@ export type ResultadoFirma =
  * canal lateral.
  *
  * Se exporta —y es el único cambio que el Slice 9 hace en este archivo— para
- * que el verificador de firmas de Supply 2.0 no escriba una segunda comparación
+ * que el verificador de firmas de Supply no escriba una segunda comparación
  * en tiempo constante. Dos implementaciones de una primitiva de seguridad son
  * dos sitios donde equivocarse, y la segunda nunca recibe la misma atención
  * que la primera.

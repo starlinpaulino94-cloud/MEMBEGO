@@ -71,7 +71,7 @@ export function AccionesProducto({ p, compacto = false }: { p: SupplyPorProducto
     <div className="flex items-center justify-end gap-1">
       {p.disponibles > 0 && (
         <Link
-          href={`/superadmin/supply-v2/ofertas/nueva?producto=${p.catalogItemId}`}
+          href={`/superadmin/supply/ofertas/nueva?producto=${p.catalogItemId}`}
           data-testid="btn-crear-oferta-producto"
           className="inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-[8px] bg-sv2-accent px-2.5 text-[12px] font-semibold leading-4 tracking-[0.04em] text-white shadow-sm transition-colors hover:bg-sv2-accent-hover"
         >
@@ -80,7 +80,7 @@ export function AccionesProducto({ p, compacto = false }: { p: SupplyPorProducto
         </Link>
       )}
       <Link
-        href={`/superadmin/supply-v2/supply/${p.catalogItemId}`}
+        href={`/superadmin/supply/supply/${p.catalogItemId}`}
         aria-label={`Ver lotes de ${p.producto}`}
         title="Ver lotes"
         className="flex size-8 items-center justify-center rounded-[8px] text-sv2-outline transition-colors hover:bg-sv2-soft hover:text-foreground"

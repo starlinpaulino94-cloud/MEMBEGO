@@ -19,7 +19,7 @@ import { membresiasVivasEnTx } from './memberships'
 import { eventoDePrograma } from './programs'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · PUNTOS (§24–§29).
+ * MEMBEGO SUPPLY · SLICE 8 · PUNTOS (§24–§29).
  *
  * EL LEDGER ES LA VERDAD. `SupplyV2PointsAccount` guarda caché de las cinco
  * cubetas; la verdad son los movimientos, que no se borran nunca. Cada

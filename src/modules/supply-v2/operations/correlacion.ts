@@ -1,7 +1,7 @@
 import { nuevoCorrelationId } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · EL HILO DE LA OPERACIÓN (§9).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · EL HILO DE LA OPERACIÓN (§9).
  *
  * Un `correlationId` es lo que permite contar una historia completa cuando algo
  * sale mal: la petición HTTP, la fila del inbox, el pago, la bitácora, el

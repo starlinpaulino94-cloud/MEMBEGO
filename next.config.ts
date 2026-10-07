@@ -85,6 +85,25 @@ const nextConfig: NextConfig = {
         destination: '/empresas/:slug*',
         permanent: true,
       },
+      // Supply 2.0 pasó a llamarse Supply: las URLs viejas (favoritos,
+      // notificaciones ya enviadas) siguen llegando a su pantalla.
+      {
+        source: '/superadmin/supply-v2/:path*',
+        destination: '/superadmin/supply/:path*',
+        permanent: false,
+      },
+      {
+        source: '/admin/supply-v2/:path*',
+        destination: '/admin/supply/:path*',
+        permanent: false,
+      },
+      // Supply original retirado: la billetera de beneficios del cliente ahora
+      // es «Compras Membego» (Supply vigente).
+      {
+        source: '/cliente/beneficios/:path*',
+        destination: '/cliente/compras',
+        permanent: false,
+      },
     ]
   },
   headers: async () => {

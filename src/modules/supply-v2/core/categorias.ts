@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · categorías de vehículo.
+ * MEMBEGO SUPPLY · categorías de vehículo.
  *
  * PURO: sin base de datos, sin `Decimal`, sin fechas. Decide qué categoría de
  * plataforma le corresponde al vehículo de un cliente, y —esto es lo que

@@ -31,7 +31,7 @@ test('Merchant Billing no importa nada de Supply ni de los pedidos', () => {
 })
 
 test('Supply Economics no importa nada de Merchant Billing', () => {
-  for (const dir of ['src/modules/supply-v2', 'src/modules/supply', 'src/modules/supply-bridge']) {
+  for (const dir of ['src/modules/supply-v2', 'src/modules/supply-bridge']) {
     for (const a of archivos(join(RAIZ, dir))) {
       const t = leer(a)
       assert.doesNotMatch(t, /modules\/billing/, `${a} importa de Merchant Billing`)

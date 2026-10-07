@@ -24,7 +24,7 @@ Próxima fase:           F5 Growth Engine (Deals/Campaigns con presupuesto; usar
 - F1.1 añade 5 tablas `catalog_*`, 4 enums y 4 acciones de auditoría en **2 migraciones aditivas** (`20261036_catalog_core`, `20261037_catalog_core_enums`); F2 añade 3 tablas `inventory_*`, 3 enums y 3 acciones de auditoría en otras **2** (`20261038_inventory_core`, `20261039_inventory_core_enums`; solo dos índices únicos nuevos sobre tablas existentes). Nada existente cambia de comportamiento: la capacidad `CATALOGO_UNIFICADO` nace **apagada para todos**. F0 no tocó `prisma/`.
 - Calidad verificada tras F1.3: tsc, lint, 3 694 unit, 366 PostgreSQL, build, bundle, RLS (estático y conductual 22/22), 192 migraciones sin deriva en PASS. El catálogo (admin, vitrina pública y API) tiene **3 specs E2E de CI** (`catalogo-admin`, `catalogo-publico`, `catalogo-api`): suite E2E completa **93 PASS · 0 FAIL · 124 SKIP** (14,1 min, réplica local de `e2e.yml`; antes 67/0/114). **Falla hoy:** `npm audit` (1 high, `source-map-js`).
 - Lo más urgente no es funcionalidad: **una clave `service_role` de Supabase está comprometida en git** (rotarla es del usuario, §14). La Server Action sin guardia (`subirImagenExcursion`) ya está **cerrada** (§14, «Deuda cerrada»).
-- Dos decisiones abiertas del usuario: **corte de RLS Capa 2 en producción** y **Supply V1** (§16).
+- Decisión abierta del usuario: **corte de RLS Capa 2 en producción** (§16). Supply V1 ya se retiró del código (§12 y `IMPLEMENTATION_STATUS_SUPPLY2.md`).
 - **Auditoría de F0–F4 (2026-10-07):** [`docs/AUDITORIA_2026-10-07_F0-F4.md`](AUDITORIA_2026-10-07_F0-F4.md). Toda la verificación se repitió desde cero y siete revisiones de código independientes contrastaron este archivo con el código (E2E completa: 122 pasan, 0 fallan). Encontró 1 crítico (las credenciales de Supabase en git incluyen también la **contraseña de la base**), 4 altos (dos acciones de servidor **sin guardia** fuera de la rama, y dos de Merchant Billing: monedas sin comprobar y `createdAt` no monótono) y 20 medios. **El lote recomendado ya está aplicado** (§9 de la auditoría: billing endurecido con la migración `20261046`, las 4 acciones sin guardia cerradas y vigiladas por una prueba que enumera todo `'use server'`, escáneres que fallan cerrado, ficha pública con tag, credenciales fuera de los scripts + gitleaks); **falta lo que es de una persona**: rotar las claves **y la contraseña de la base**, la decisión sobre el menú de Supply (A5) y las decisiones de producto M10/M12.
 
 ## 2. Progreso por fases
@@ -434,11 +434,11 @@ Asegurar integridad (RLS), formalizar capacidades, ocultar módulos secundarios 
 
 #### Parcial
 - 🟡 RLS: políticas Capa 2 generadas para 264/285 tablas (21 decididas a mano) y probadas conductualmente, pero **apagadas en producción**.
-- 🟡 Ocultamiento: Supply V1 no se ocultó (§12).
+- 🟡 Ocultamiento: Supply V1 no se ocultó; después se retiró del código (§12).
 - 🟡 `supply-v2/core/{dinero,fefo,comision,numeracion,estados,ledger}.ts` siguen existiendo como *shims/wrappers* (el paso 5 del plan, «eliminar originales», no se hizo a propósito).
 
 #### Pendiente
-Decisión Capa 2 en producción; decisión Supply V1; nada más de código de F0.
+Decisión Capa 2 en producción; nada más de código de F0 (la decisión sobre Supply V1 se resolvió retirándolo).
 
 #### Bloqueadores
 Ninguno para F1. Las dos decisiones dependen del usuario/acceso a producción (§16).
@@ -476,7 +476,7 @@ Ver §15. Específicos de F0: la ruleta se corta de golpe a empresas con premios
 |---|---|
 | 100 % de tablas con `companyId` cubiertas por política RLS (generada) | **PASS** — 139/139 (preflight + `probar-rls` 16/16) |
 | Capa 2 activa en producción | **PENDING** — decisión del usuario (§16) |
-| Supply V1 oculto | **FAIL** — no se ocultó (§12) |
+| Supply V1 oculto | **No aplica** — no se ocultó: se retiró del código (§12) |
 | Módulos secundarios ocultos por capacidades | **PASS** — Gamificación, Blog, Home Builder |
 | CRM/Mensajería desactivados por defecto en tenants nuevos | **PASS** — test `capacidades-fase0` |
 | `commerce-primitives` funcional con Supply V2 consumiéndolas | **PASS** — 354 tests Supply V2 + 311 PostgreSQL |
@@ -510,7 +510,7 @@ Ver §15. Específicos de F0: la ruleta se corta de golpe a empresas con premios
 | Redemptions | 🟡 | 4 sitios (`Visit`+`Transaction`, `OfertaUso`, `ReservaExc.checkinAt`, `SupplyV2Redemption`) | Reversa solo en `Visit` y Supply V2 |
 | Merchant Billing | ⚪ | — | Nada factura a una empresa |
 | Revenue Attribution | 🟡 | `referidos-attribution.ts`, `VendedorAtribucion` | A nivel cliente, no de orden |
-| Membego Supply V1 | 🟣 | `modules/supply`, `prisma/schema/supply.prisma` | Deprecado **solo por decisión del plan**; en código sigue activo (§5, §12) |
+| Membego Supply V1 | 🟣 | `prisma/schema/supply.prisma` (solo esquema) | **Retirado del código**: pantallas, módulo, cron y pruebas eliminados; tablas y migraciones se conservan (§5, §12) |
 | Membego Supply V2 | 🟡 | `modules/supply-v2` | Ver §5 |
 | Supplier Finance | ✅ | `supply-v2/finance` | Facturas, depósitos, obligaciones, pagos (manual) |
 | Settlements | ✅ | `supply-v2/finance/settlements.ts` | Incluye liquidación parcial |
@@ -528,9 +528,10 @@ Ver §15. Específicos de F0: la ruleta se corta de golpe a empresas con premios
 Supply V2: 113 archivos / 30 919 LOC en `src/modules/supply-v2`; 66 modelos / 88 enums; 27 migraciones; 61 páginas (8 admin, 53 superadmin) + 5 `/cliente/*` + 5 `/promociones/*`; 118 server actions; tests: 354 unit, ~288 PostgreSQL, 66 Playwright.
 
 ```text
-Supply V1:        🟣 ACTIVO en código. 47 archivos / 16 710 LOC, 30 modelos, 10 migraciones, 263 tests.
-                  /cliente/beneficios/* depende de V1 (sin gate de capacidad); cron /api/cron/supply
-                  agendado ("0 7 * * *"); sin migración V1→V2 (0 scripts). Nav admin oculto por bug (§12).
+Supply V1:        🟣 RETIRADO del código (antes: 47 archivos / 16 710 LOC, 263 tests). Se conservan 30 modelos y
+                  10 migraciones: V2 aún lee SupplyCuentaCobro y SupplyPedido. /cliente/beneficios/* redirige a
+                  /cliente/compras; el cron /api/cron/supply se quitó. Sin migración V1→V2 (0 scripts): los
+                  datos de V1 siguen en la BD pero ya no se ven en pantalla.
 Supply V2:        🟡 núcleo ✅, 4 huecos (abajo)
 Procurement:      ✅ proveedores, catálogo, órdenes de compra, recepciones (S1)
 Agreements:       🟡 crear + activar expuestos; `modificarCondicionesEnTx` sin acción/UI; sin suspender/terminar
@@ -704,7 +705,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 | Home Builder | 🙈 | Secundario frente al marketplace | Capacidad `HOME_BUILDER`; la página no pinta el editor y las acciones de `modules/home` rechazan. El formulario de marca **no** se oculta | Sí (override). Una composición ya publicada sigue renderizándose |
 | CRM | 🙈 solo tenants nuevos | Foco en marketplace | Override `CRM:false` al crear empresa; existentes conservan | Sí (override) |
 | Mensajería (`/admin/comunicacion`) | 🙈 solo tenants nuevos | Canal secundario | Override `MENSAJERIA:false` al crear; la **bandeja de conversaciones es del CRM** (`leads`) | Sí (override) |
-| Supply V1 | 🟣 **NO oculto** | Reemplazado por V2 | **No hay ocultamiento deliberado.** El menú admin lo esconde *por accidente* (`MEMBEGO_SUPPLIER` ausente de `CAPACIDADES_DEL_MENU`, `contexto.ts:37-46`); rutas, `/cliente/beneficios/*` y el cron siguen activos | Nunca (plan); migrar datos V1→V2 aún sin hacer |
+| Supply V1 | 🟣 **RETIRADO** | Reemplazado por V2 (hoy «Supply») | Se eliminó el código, las pantallas y el cron; se conservan el esquema Prisma y las migraciones (V2 aún usa 2 tablas). `/cliente/beneficios/*` redirige a `/cliente/compras` | Migrar los datos de V1 a V2 sigue sin hacerse; borrar las tablas requiere una migración aparte, verificada contra producción |
 | Login con Google | 🙈 | Fijo `false` en `googleAuth.ts:14-18` | Constante en código | Sí |
 | Módulos carwash Fase 2/3 | apagados por defecto | Opt-in | Capacidades `INVENTARIO`, `COLA_VEHICULOS`, `EVIDENCIA_FOTOS`, `CUENTAS_CORPORATIVAS`, `COMISIONES`, `INCIDENCIAS`, `COMPRAS`, `ACTIVOS`, `TURNOS`, `PAGO_CARDNET`, `NAVEGACION_V2` fuera de todo paquete base | Sí (override) |
 | Motores sin uso (`Promotion`, `MembershipPlan`, `ReferralProgram`, `Benefit`) | 🟡 | ~7,9k líneas, 0 tests, sin lector en producción | — | Candidatos a consolidar en F5 |
@@ -744,7 +745,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 | MEDIUM | Tablas posteriores a `20260916` sin `ENABLE ROW LEVEL SECURITY` por migración | Cobertura Capa 1 en prod desconocida | Ejecutar `2026-07-rls-capa2-verificar.sql` en prod |
 | MEDIUM | 4 sistemas de lealtad y ~7,9k líneas de motores sin tests ni lectores | Complejidad y riesgo al consolidar | Consolidar en F5/F9; no crear un quinto |
 | MEDIUM | Rate limiter fail-open; `MovimientoInventario` (carwash) sin bloqueo; `BenefitGrant` mutable; `AuditLog` inmutable solo por convención | Condiciones de carrera / manipulación | F2 resolvió la parte general (inventario con `FOR UPDATE` y ledger inmutable en la base) **sin tocar** el del Car Wash; decidir si se migra. Aplicar el patrón del disparador a `AuditLog` antes de F4 (billing) |
-| MEDIUM | Cron Supply V1 corre para todos; `/cliente/beneficios` aún depende de V1 | V1 no se puede retirar aún | Decidir migración V1→V2 (§16) |
+| ~~MEDIUM~~ cerrado | ~~Cron Supply V1 corre para todos; `/cliente/beneficios` aún depende de V1~~ **Supply V1 retirado del código (#574):** sin cron, sin pantallas, `/cliente/beneficios` redirige a `/cliente/compras`; se conservan esquema y migraciones | — | Borrar las 30 tablas de V1 queda para una migración aparte verificada contra prod |
 | LOW | Comentarios/doc obsoletos: `ledger.ts:55-57`, «44 secciones» (son 42), `ci.yml`/`e2e.yml` «113/164 tests» (son 272 archivos), `PHASE3_STATUS`, `PRODUCTION_READINESS`, `SECURITY_ANALYSIS`, `MATURITY`, tablas «112/115/137» en docs RLS (son 285) | Confusión | Limpiar al tocar cada área |
 | LOW | `docs/membego-supply-*.md` describen solo V1; falta `...slice9-bloque5.md` | Doc de Supply engañosa | Reescribir desde §5 |
 
@@ -765,7 +766,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 |---|---|---|
 | Plan Maestro v1/v2 | El sistema de capacidades eran «strings mágicos» | Catálogo formal con 22→25 claves, paquetes base y mapa de secciones (anotado en las erratas de `docs/PLAN_MAESTRO.md`) |
 | Plan Maestro §10 F0 | Hay que escribir políticas RLS por tabla | Capa 2 las genera por introspección; 0 huecos; hacerlo a mano ya falló una vez |
-| Plan Maestro §12 | Supply V1 «se oculta con un flag» | Nav oculto por accidente; rutas/cron/cliente activos |
+| Plan Maestro §12 | Supply V1 «se oculta con un flag» | Se fue más lejos: V1 **retirado del código** (#574). Quedan sus tablas y migraciones (V2 aún lee `SupplyCuentaCobro` y `SupplyPedido`) |
 | `PAGOS-CARDNET.md` | SAQ A, nunca se ve el PAN | Ruta legacy que recibe PAN/CVV |
 | `ENGAGEMENT_ENGINE.md:78` | `RuletaJugada` es un ledger de puntos | Los puntos son derivados; los giros no se bloquean |
 | `catalogo.ts:14` | Solo CAR_WASH operativo | Excursiones es el módulo más grande |
@@ -801,14 +802,13 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 ### Operacionales
 - Estado real de producción (migraciones aplicadas, Capa 1, Upstash, Sentry) **UNKNOWN**: este entorno no tiene acceso.
 - 18 migraciones aplicadas a mano el 2026-09-14 sin registrar en `_prisma_migrations`.
-- El cron de Supply V1 sigue corriendo para toda la plataforma.
+- ~~El cron de Supply V1 sigue corriendo para toda la plataforma.~~ Retirado con V1 (#574); `vercel.json` ya no lo programa.
 
 ## 16. Bloqueadores
 
 | Bloqueador | Impacto | Qué necesita | Responsable |
 |---|---|---|---|
 | Corte de RLS Capa 2 | Solo bloquea el aislamiento real en BD; **no bloquea F1** | Visto bueno explícito + ensayo (`ensayo-rls.yml`) + seguir `docs/runbooks/rls-encender.md` + acceso a prod | Usuario / ops |
-| Decisión sobre Supply V1 | Bloquea ocultarlo y cerrar el criterio F0 «Supply V1 oculto» | Saber si hay proveedores externos activos con `MEMBEGO_SUPPLIER` (acceso a la BD de prod) y si `/cliente/beneficios` se migra | Usuario |
 | Claves QA reales de CardNET | Bloquea 1 test (`PENDIENTE · activación instantánea con tarjeta`) y el flujo feliz con tarjeta | Credenciales QA | Usuario |
 | Rotación de la clave Supabase | No bloquea desarrollo; sí es un riesgo vivo | Confirmar proyecto y rotar | Usuario |
 | Valores de serie de Merchant Billing (CPA RD$ 100, 8 %, límite RD$ 5,000, ciclo mensual, gracia de 7 días) y tratamiento fiscal de la comisión | No bloquea desarrollo; **sí bloquea encender los pedidos en una empresa real** (empezaría a pagar comisión) | Confirmar o cambiar los valores (se editan por empresa en `/superadmin/facturacion`) y la decisión contable | Usuario |
@@ -819,7 +819,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 1. **(Usuario)** Rotar la clave `service_role`; confirmar si el ref `ybzhvfmybyyomwpjpaud` es producción; luego sacar los valores de `scripts/run-e2e-verify.mjs` y `scripts/run-auth-e2e.mjs` a variables de entorno y añadir secret scanning a CI.
 2. ✅ ~~Cerrar `subirImagenExcursion`~~ (hecho, §14). **Pendiente derivado:** un test que enumere los `'use server'` sin guardia, con allowlist de las ~18 públicas por diseño (auth, registro, marketplace, geo, reset por token).
 3. ✅ ~~Versionar el Plan Maestro~~ (hecho). **Pendiente:** versionar los 4 documentos estratégicos de origen (decisión del usuario; solo si se quieren en el repo).
-4. Decidir Supply V1 (§16) y, si procede, separar la capacidad V1/V2.
+4. ~~Decidir Supply V1~~ Resuelto: V1 retirado del código (#574). Pendiente aparte: migración que borre sus 30 tablas, verificada contra prod.
 5. ✅ ~~`npm audit fix`~~ (resuelto desde main, `1e36861`; 0 vulnerabilidades el 2026-10-07).
 6. ✅ **Lote de la auditoría 2026-10-07 aplicado** (§9 de `docs/AUDITORIA_2026-10-07_F0-F4.md`). **Sigue siendo tuyo, en este orden:** rotar la clave `service_role` **y la contraseña de la base** del proyecto `ybzhvfmybyyomwpjpaud` (están en el historial de git aunque los scripts ya no las tengan); decidir qué se muestra de Supply V1/V2 en el menú (A5); marcar `Secretos` como check obligatorio de la rama.
 
@@ -854,7 +854,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 - **No cambiar:** Supply es el master del puente (el ítem puente es de solo lectura) y lo público cruza la oferta en vivo; el puente solo lee el read model público de Supply; la compra de ofertas pasa por el checkout de Supply; el ledger de inventario es inmutable (se corrige con otro movimiento) y todo movimiento pasa por `escribirMovimiento` bajo `FOR UPDATE`; `vender`/`reservar`/`consumir` no son acciones del panel; la API de catálogo no publica; lo público sale solo por `publico-nucleo.ts`; CatalogVariant desde el día 1; pedidos/inventario/promos referencian **variante**; Merchant Billing ≠ Supply Economics; Commerce Core no importa de `supply-v2`; CPA + 8 % por `verificationLevel`; sin wallet financiera; **no escribir políticas RLS a mano**; clave de cerrojo `supply_v2` (el catálogo usa `catalogo:<companyId>`); ocultar = apagar capacidad y conservar datos; **el estado de un pedido solo lo escribe `orders/service.ts` (lo vigila un test), las líneas son inmutables, el nivel de verificación se deriva (nunca se escribe a mano), un pedido de la vitrina se cierra solo por QR (el único cierre sin QR es `cerrarPedidoExternoEnTx`, del sistema, para el envoltorio de Supply) y Supply no conoce el puente ni los pedidos**;  toda alta de empresa usa `CAPACIDADES_OVERRIDE_TENANT_NUEVO`; ítems y variantes se crean en la **misma transacción** (disparador diferido). Merchant Billing y Supply Economics **no se mezclan** (ningún asiento de `merchant_ledger_entries` referencia algo de Supply; los pedidos de Supply no comisionan); el libro de Merchant Billing es inmutable (se corrige con un asiento contrario) y solo `billing/service.ts` lo escribe; la comisión se cobra **dentro** de la transacción que cierra el pedido.
 - **Archivos clave:** `src/modules/catalog/*`, `src/modules/inventory/*`, `src/modules/orders/*`, `src/modules/billing/*`, `prisma/schema/facturacion-comercial.prisma`, `src/modules/supply-bridge/*`, `prisma/schema/pedidos.prisma`, `prisma/schema/inventario.prisma`, `prisma/schema/catalogo.prisma`, `src/lib/commerce-primitives/*`, `src/modules/capacidades/catalogo.ts`, `src/modules/plataforma/conceptos.ts`, `src/components/layout/nav-config.ts`, `src/modules/navegacion/contexto.ts`, `src/lib/auth/{guards,permissions,funciones}.ts`, `src/lib/tenant.ts`, `docs/RLS.md`, `docs/runbooks/rls-encender.md`, `docs/CAPACIDADES.md`.
 - **Cómo verificar (todo corre aquí):** `npx tsc --noEmit` · `npx eslint src tests` · `npm test` · PG local: `pg_ctlcluster 16 main start` (clave `postgres`/`ci`; crear la BD y las extensiones `pg_trgm`, `pgcrypto`, `unaccent`), `migrate deploy`, `npm run test:db`. Para `rls:probar`: aplicar antes `20260771_rls_barrera_publica` (con roles `anon`/`authenticated`) y `2026-07-rls-capa2-aislamiento.sql` precedido de `-c "set membego.clave = '…'"` (como en `ci.yml`).
-- **Riesgos que no se olvidan:** la subida real de imágenes a Storage no se ha probado; clave `service_role` en git (CRITICAL, rotar); Capa 2 apagada y `rls-cobertura` con falsos negativos; Supply V1 NO oculto y cron activo; el menú oculta Supply para todos por accidente; `migrate diff` no ve los disparadores/CHECK del catálogo, del inventario ni de los pedidos (solo los tests PG); el E2E usa `db push`, sin esas reglas.
+- **Riesgos que no se olvidan:** la subida real de imágenes a Storage no se ha probado; clave `service_role` en git (CRITICAL, rotar); Capa 2 apagada y `rls-cobertura` con falsos negativos; Supply V1 retirado del código pero sus 30 tablas siguen en la BD (sin migración de borrado aún); el menú de Supply (A5) sigue pendiente de decisión; `migrate diff` no ve los disparadores/CHECK del catálogo, del inventario ni de los pedidos (solo los tests PG); el E2E usa `db push`, sin esas reglas.
 - **Decisiones del usuario aún abiertas:** corte Capa 2 en producción; qué hacer con Supply V1; rotar la clave `service_role`; si se versionan los 4 documentos estratégicos de origen.
 - **Plan aprobado:** `docs/PLAN_MAESTRO.md` (con aviso y 6 erratas arriba del todo; las desviaciones de F1.1 están en §3 de este archivo).
 - **Regla:** el código manda sobre la doc; no marcar nada ✅ sin verificarlo; actualizar este archivo al cerrar cada fase o sesión.

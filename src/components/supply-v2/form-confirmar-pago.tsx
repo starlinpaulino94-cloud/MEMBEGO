@@ -12,7 +12,7 @@ import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 import type { PagoConfirmado } from '@/modules/supply-v2/commerce/checkout'
 
 /**
- * MEMBEGO SUPPLY 2.0 · una persona de Membego confirma (o rechaza) el pago de
+ * MEMBEGO SUPPLY · una persona de Membego confirma (o rechaza) el pago de
  * un cliente (§30). Declara el monto que vio; el servidor lo compara con el
  * total congelado. Nunca el cliente.
  */

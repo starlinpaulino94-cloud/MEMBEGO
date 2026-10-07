@@ -32,7 +32,7 @@ export function InventarioActivo({
       titulo="Inventario de Supply Activo"
       data-testid="resumen-inventario"
       extra={
-        <Link href="/superadmin/supply-v2/supply" className="flex shrink-0 items-center gap-0.5 text-[13px] font-semibold leading-4 text-sv2-primary hover:underline">
+        <Link href="/superadmin/supply/supply" className="flex shrink-0 items-center gap-0.5 text-[13px] font-semibold leading-4 text-sv2-primary hover:underline">
           <span>Ver Supply completo</span>
           <ChevronRight aria-hidden className="size-4" />
         </Link>
@@ -71,7 +71,7 @@ function FilaInventario({ p }: { p: SupplyPorProducto }) {
   return (
     <div className="flex flex-col gap-2 rounded-[8px] bg-sv2-well p-3" data-testid="resumen-producto">
       <div className="flex items-start justify-between gap-3">
-        <Link href={`/superadmin/supply-v2/supply/${p.catalogItemId}`} className="group flex min-w-0 items-center gap-2">
+        <Link href={`/superadmin/supply/supply/${p.catalogItemId}`} className="group flex min-w-0 items-center gap-2">
           <span aria-hidden className="flex size-12 shrink-0 items-center justify-center rounded-[8px] bg-sv2-primary-fixed text-sv2-on-primary-fixed">
             <Icono className="size-6" strokeWidth={1.75} />
           </span>

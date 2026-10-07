@@ -23,7 +23,7 @@ const ALCANCES = [
 ] as const
 
 /**
- * MEMBEGO SUPPLY 2.0 · CREAR ACUERDO (§31). Solo compra anticipada y pagar
+ * MEMBEGO SUPPLY · CREAR ACUERDO (§31). Solo compra anticipada y pagar
  * después: lo que el Slice 1 construye de verdad. Nace vigente (versión 1).
  */
 export function FormAcuerdo({

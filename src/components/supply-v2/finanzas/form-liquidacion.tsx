@@ -34,7 +34,7 @@ export function FormLiquidacion({ proveedores, supplierId, periodStart, periodEn
     if (estado.success && estado.id && visto.current !== estado.id) {
       visto.current = estado.id
       toast.success(estado.success)
-      router.push(`/superadmin/supply-v2/finanzas/liquidaciones/${estado.id}`)
+      router.push(`/superadmin/supply/finanzas/liquidaciones/${estado.id}`)
     }
   }, [estado, router])
   const select = 'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm'

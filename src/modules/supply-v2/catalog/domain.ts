@@ -1,7 +1,7 @@
 import type { SupplyV2CatalogItemType, SupplyV2Unit } from '@prisma/client'
 
 /**
- * MEMBEGO SUPPLY 2.0 · catálogo del proveedor: reglas puras (§8).
+ * MEMBEGO SUPPLY · catálogo del proveedor: reglas puras (§8).
  *
  * El nombre NO es el identificador: lo es el id (y el SKU, único por
  * proveedor cuando existe). El `slug` es un identificador legible que se

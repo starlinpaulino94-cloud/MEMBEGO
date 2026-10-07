@@ -6,7 +6,7 @@ import { aNumero } from '../core/dinero'
 import { ORDEN_ABIERTA, ORDEN_POR_RECIBIR } from '../core/estados'
 
 /**
- * MEMBEGO SUPPLY 2.0 · lecturas del pool de supply (§24, §37–§39).
+ * MEMBEGO SUPPLY · lecturas del pool de supply (§24, §37–§39).
  *
  * Todo sale de los lotes y del ledger: ningún número está escrito a mano.
  */
@@ -31,7 +31,7 @@ export interface ResumenSupplyV2 {
 
 export async function resumenSupplyV2(ahora = new Date()): Promise<ResumenSupplyV2> {
   const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-  return sinEmpresa('Supply 2.0: tablero', async (tx) => {
+  return sinEmpresa('Supply: tablero', async (tx) => {
     const [lotes, comprasAbiertas, proveedoresActivos, ofertasActivas, comprasPorAprobar, comprasPorRecibir, comprasRecibidasMes, campanasActivas] = await Promise.all([
       tx.supplyV2Lot.findMany({
         where: { status: { in: ['ACTIVE', 'EXHAUSTED'] } },
@@ -79,7 +79,7 @@ export interface ActividadSupplyV2 {
 
 /** Últimos movimientos: eventos de órdenes y asientos del ledger, mezclados por fecha. */
 export async function actividadRecienteSupplyV2(limite = 10): Promise<ActividadSupplyV2[]> {
-  return sinEmpresa('Supply 2.0: actividad reciente', async (tx) => {
+  return sinEmpresa('Supply: actividad reciente', async (tx) => {
     const [eventos, asientos] = await Promise.all([
       tx.supplyV2PurchaseOrderEvent.findMany({
         orderBy: { createdAt: 'desc' },
@@ -139,7 +139,7 @@ export async function actividadRecienteSupplyV2(limite = 10): Promise<ActividadS
         motivo: e.type === 'CANCELLED' || e.type === 'REJECTED' ? e.reason : null,
         titulo: `${TITULO[e.type] ?? e.type} · ${e.purchaseOrder.number}`,
         detalle: [e.purchaseOrder.supplier.commercialName, e.actor?.name ?? e.actor?.email, e.reason].filter(Boolean).join(' · '),
-        href: `/superadmin/supply-v2/compras/${e.purchaseOrder.id}`,
+        href: `/superadmin/supply/compras/${e.purchaseOrder.id}`,
       })),
       ...asientos.map((a) => ({
         id: `l-${a.id}`,
@@ -150,7 +150,7 @@ export async function actividadRecienteSupplyV2(limite = 10): Promise<ActividadS
         motivo: null,
         titulo: `${TITULO_LEDGER[a.type] ?? a.type} · +${a.quantity.toLocaleString('es-DO')} ${a.lot.catalogItem.name}`,
         detalle: [a.lot.code, a.actor?.name ?? a.actor?.email].filter(Boolean).join(' · '),
-        href: `/superadmin/supply-v2/supply/lotes/${a.lot.id}`,
+        href: `/superadmin/supply/supply/lotes/${a.lot.id}`,
       })),
     ]
     return lista.sort((a, b) => b.cuando.getTime() - a.cuando.getTime()).slice(0, limite)
@@ -189,7 +189,7 @@ export interface SupplyPorProducto {
 
 /** El pool agrupado por producto (§37): lo que se ve primero, no los lotes técnicos. */
 export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
-  const lotes = await sinEmpresa('Supply 2.0: pool agrupado por producto', (tx) =>
+  const lotes = await sinEmpresa('Supply: pool agrupado por producto', (tx) =>
     tx.supplyV2Lot.findMany({
       where: { status: { in: ['ACTIVE', 'EXHAUSTED'] } },
       select: {
@@ -212,7 +212,7 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
     })
   )
   const ofertas = lotes.length
-    ? await sinEmpresa('Supply 2.0: ofertas activas del pool', (tx) =>
+    ? await sinEmpresa('Supply: ofertas activas del pool', (tx) =>
         tx.supplyV2Offer.findMany({
           where: { status: 'ACTIVE', catalogItemId: { in: [...new Set(lotes.map((l) => l.catalogItemId))] } },
           orderBy: { createdAt: 'asc' },
@@ -285,7 +285,7 @@ export interface VerificacionesLotes {
 /** Tres verificaciones sobre los lotes y las compras recibidas, para el panel «Estado de lotes». */
 export async function verificacionesLotes(ahora = new Date()): Promise<VerificacionesLotes> {
   const limite = new Date(ahora.getTime() + 7 * 86_400_000)
-  return sinEmpresa('Supply 2.0: verificaciones de lotes', async (tx) => {
+  return sinEmpresa('Supply: verificaciones de lotes', async (tx) => {
     const [lotes, lineas] = await Promise.all([
       tx.supplyV2Lot.findMany({
         select: { quantityReceived: true, quantityAvailable: true, quantityAllocated: true, quantityReserved: true, quantityIssued: true, quantityRedeemed: true, quantityClosed: true, expiresAt: true, status: true },
@@ -306,7 +306,7 @@ export async function verificacionesLotes(ahora = new Date()): Promise<Verificac
 }
 
 export async function fichaProductoSupply(catalogItemId: string) {
-  return sinEmpresa('Supply 2.0: ficha de un producto en el pool', async (tx) => {
+  return sinEmpresa('Supply: ficha de un producto en el pool', async (tx) => {
     const item = await tx.supplyV2CatalogItem.findUnique({
       where: { id: catalogItemId },
       select: {
@@ -380,7 +380,7 @@ export async function fichaProductoSupply(catalogItemId: string) {
 }
 
 export async function fichaLote(id: string) {
-  return sinEmpresa('Supply 2.0: ficha de un lote y su ledger', (tx) =>
+  return sinEmpresa('Supply: ficha de un lote y su ledger', (tx) =>
     tx.supplyV2Lot.findUnique({
       where: { id },
       include: {

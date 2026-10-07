@@ -18,7 +18,7 @@ import type {
 } from '@prisma/client'
 
 /**
- * MEMBEGO SUPPLY 2.0 · etiquetas y catálogos de la interfaz.
+ * MEMBEGO SUPPLY · etiquetas y catálogos de la interfaz.
  *
  * Los enums de la base hablan inglés (son el contrato técnico); la pantalla
  * habla español. Aquí vive la traducción, en un solo sitio.
@@ -128,7 +128,7 @@ export const LOT_STATUS_LABELS: Record<SupplyV2LotStatus, string> = {
 
 export const MONEDAS_SUPPLY_V2 = ['DOP', 'USD', 'EUR'] as const
 
-export const BASE_SUPPLY_V2 = '/superadmin/supply-v2'
+export const BASE_SUPPLY_V2 = '/superadmin/supply'
 
 // ── Slice 2 ─────────────────────────────────────────────────────────────────
 
@@ -224,7 +224,7 @@ export const INCIDENT_TYPE_LABELS: Record<SupplyV2IncidentType, string> = {
   OTHER: 'Otro',
 }
 
-export const RUTA_PORTAL_PROVEEDOR = '/admin/supply-v2'
+export const RUTA_PORTAL_PROVEEDOR = '/admin/supply'
 export const RUTA_REDENCIONES = `${BASE_SUPPLY_V2}/redenciones`
 
 // ── Slice 4 · finanzas y economía ───────────────────────────────────────────
@@ -248,7 +248,7 @@ type Tono = 'neutral' | 'warning' | 'info' | 'success' | 'danger'
 export const RUTA_FINANZAS = `${BASE_SUPPLY_V2}/finanzas`
 export const RUTA_ECONOMIA = `${BASE_SUPPLY_V2}/economia`
 /// Slice 9 · bloque 4 · el centro operativo. No es un tablero comercial: es
-/// donde se mira si Supply 2.0 está sano y qué pasó con una operación.
+/// donde se mira si Supply está sano y qué pasó con una operación.
 export const RUTA_OPERACIONES = `${BASE_SUPPLY_V2}/operaciones`
 
 export const PAYABLE_RECOGNITION_LABELS: Record<SupplyV2PayableRecognition, string> = {

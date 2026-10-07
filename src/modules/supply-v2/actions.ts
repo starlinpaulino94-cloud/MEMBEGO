@@ -13,7 +13,7 @@ import { aprobarOrdenEnTx, cancelarOrdenEnTx, crearOrdenEnTx, enviarAprobacionEn
 import { confirmarRecepcionEnTx, type RecepcionConfirmada } from './procurement/receipts'
 
 /**
- * MEMBEGO SUPPLY 2.0 · server actions.
+ * MEMBEGO SUPPLY · server actions.
  *
  * Cada una hace tres cosas, en este orden: GUARDIA (quién puede), REGLA (en
  * el módulo, no aquí) y BITÁCORA (dentro de la misma transacción). Devuelven
@@ -57,7 +57,7 @@ export async function crearProveedorExternoAction(
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SUPPLIER_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    const creado = await sinEmpresa('Supply 2.0: alta de proveedor externo', (tx) =>
+    const creado = await sinEmpresa('Supply: alta de proveedor externo', (tx) =>
       crearProveedorExternoEnTx(
         tx,
         {
@@ -95,7 +95,7 @@ export async function vincularEmpresaAction(
     const ctx = await contextoDeAuditoria(actor)
     const companyId = texto(fd, 'companyId', 60)
     if (!companyId) return { error: 'Elige la empresa de Membego que será proveedora.' }
-    const creado = await sinEmpresa('Supply 2.0: vincular empresa como proveedor', (tx) =>
+    const creado = await sinEmpresa('Supply: vincular empresa como proveedor', (tx) =>
       vincularEmpresaComoProveedorEnTx(
         tx,
         companyId,
@@ -129,7 +129,7 @@ export async function crearProductoAction(
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SUPPLIER_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    const creado = await sinEmpresa('Supply 2.0: alta de producto en el catálogo del proveedor', (tx) =>
+    const creado = await sinEmpresa('Supply: alta de producto en el catálogo del proveedor', (tx) =>
       crearItemCatalogoEnTx(
         tx,
         {
@@ -168,7 +168,7 @@ export async function crearAcuerdoAction(
     const startsAt = fecha(fd, 'startsAt')
     if (!startsAt) return { error: 'Hace falta la fecha de inicio del acuerdo.' }
     const supplierId = texto(fd, 'supplierId', 60)
-    const resumen = await sinEmpresa('Supply 2.0: crear y activar un acuerdo', async (tx) => {
+    const resumen = await sinEmpresa('Supply: crear y activar un acuerdo', async (tx) => {
       const creado = await crearAcuerdoEnTx(
         tx,
         {
@@ -232,7 +232,7 @@ export async function crearOrdenAction(
     const quantity = entero(fd, 'quantity')
     const unitCost = texto(fd, 'unitCost', 20)
     if (quantity == null || !unitCost) return { error: 'Hace falta la cantidad y el costo unitario.' }
-    const creada = await sinEmpresa('Supply 2.0: crear una orden de compra', (tx) =>
+    const creada = await sinEmpresa('Supply: crear una orden de compra', (tx) =>
       crearOrdenEnTx(
         tx,
         {
@@ -258,7 +258,7 @@ export async function enviarAprobacionAction(_prev: EstadoAccion, fd: FormData):
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_PURCHASE_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: enviar una orden a aprobación', (tx) => enviarAprobacionEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: enviar una orden a aprobación', (tx) => enviarAprobacionEnTx(tx, id, ctx))
     refrescarSupplyV2('compras', `compras/${id}`)
     return { success: 'Orden enviada a aprobación.', id }
   } catch (e) {
@@ -271,7 +271,7 @@ export async function aprobarOrdenAction(_prev: EstadoAccion, fd: FormData): Pro
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_PURCHASE_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: aprobar una orden de compra', (tx) => aprobarOrdenEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: aprobar una orden de compra', (tx) => aprobarOrdenEnTx(tx, id, ctx))
     refrescarSupplyV2('compras', `compras/${id}`)
     return { success: 'Orden aprobada.', id }
   } catch (e) {
@@ -286,7 +286,7 @@ export async function rechazarOrdenAction(_prev: EstadoAccion, fd: FormData): Pr
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'reason', 1000)
     if (!motivo) return { error: 'Escribe el motivo del rechazo.' }
-    await sinEmpresa('Supply 2.0: rechazar una orden de compra', (tx) => rechazarOrdenEnTx(tx, id, motivo, ctx))
+    await sinEmpresa('Supply: rechazar una orden de compra', (tx) => rechazarOrdenEnTx(tx, id, motivo, ctx))
     refrescarSupplyV2('compras', `compras/${id}`)
     return { success: 'Orden rechazada: vuelve a borrador con el motivo registrado.', id }
   } catch (e) {
@@ -301,7 +301,7 @@ export async function cancelarOrdenAction(_prev: EstadoAccion, fd: FormData): Pr
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'reason', 1000)
     if (!motivo) return { error: 'Escribe el motivo de la cancelación.' }
-    await sinEmpresa('Supply 2.0: cancelar una orden de compra', (tx) => cancelarOrdenEnTx(tx, id, motivo, ctx))
+    await sinEmpresa('Supply: cancelar una orden de compra', (tx) => cancelarOrdenEnTx(tx, id, motivo, ctx))
     refrescarSupplyV2('compras', `compras/${id}`)
     return { success: 'Orden cancelada.', id }
   } catch (e) {
@@ -326,7 +326,7 @@ export async function confirmarRecepcionAction(
       .filter((l) => l.purchaseOrderLineId && l.quantity > 0)
     if (lines.length === 0) return { error: 'Indica cuántas unidades se reciben ahora.' }
     const expiresAt = fechaFinDeDia(fd, 'expiresAt')
-    const r = await sinEmpresa('Supply 2.0: confirmar una recepción', (tx) =>
+    const r = await sinEmpresa('Supply: confirmar una recepción', (tx) =>
       confirmarRecepcionEnTx(
         tx,
         {

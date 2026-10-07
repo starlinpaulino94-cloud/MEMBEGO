@@ -1,5 +1,5 @@
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · EL JUICIO OPERATIVO, EN UN SITIO.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · EL JUICIO OPERATIVO, EN UN SITIO.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * LA PREGUNTA QUE ESTE ARCHIVO CONTESTA
@@ -176,7 +176,7 @@ export function componentesDeSalud(e: EntradaDeSalud): Componente[] {
     ? e.derivaDeEsquema
       ? { clave: 'base', etiqueta: 'Base de datos', estado: 'DEGRADED', detalle: 'Responde, pero el código espera objetos que no están: hay migraciones pendientes.' }
       : { clave: 'base', etiqueta: 'Base de datos', estado: 'HEALTHY', detalle: 'Responde y el esquema coincide con el código.' }
-    : { clave: 'base', etiqueta: 'Base de datos', estado: 'UNAVAILABLE', detalle: 'No responde: Supply 2.0 no puede operar.' }
+    : { clave: 'base', etiqueta: 'Base de datos', estado: 'UNAVAILABLE', detalle: 'No responde: Supply no puede operar.' }
 
   const pagos: Componente = !e.capacidades.SUPPLY_V2_EXTERNAL_PAYMENTS
     ? { clave: 'pagos', etiqueta: 'Pagos externos', estado: 'NOT_CONFIGURED', detalle: 'Apagados a propósito: el webhook responde sin procesar.' }
@@ -277,7 +277,7 @@ export function secretoValido(valor: string | undefined, minimo = 16): EstadoCon
 // ── Banderas y interruptores ────────────────────────────────────────────────
 
 /**
- * LAS CAPACIDADES DE SUPPLY 2.0 QUE SE PUEDEN APAGAR.
+ * LAS CAPACIDADES DE SUPPLY QUE SE PUEDEN APAGAR.
  *
  * Nombres explícitos a propósito: `SUPPLY_V2_EXTERNAL_PAYMENTS` dice qué se
  * apaga; `SUPPLY_V2_PAGOS` no diría si se apaga el cobro al cliente, el pago
@@ -412,7 +412,7 @@ export const ETIQUETA_CONDICION: Record<Condicion, string> = {
   FINANCE_INCIDENTS_HIGH: 'Incidentes de severidad alta sin resolver',
   RECONCILIATION_MISMATCH: 'Comprobaciones de pago con desacuerdo',
   QUEUE_DEAD_JOBS: 'Trabajos difuntos en la cola',
-  READINESS_DEGRADED: 'Supply 2.0 no está listo para operar',
+  READINESS_DEGRADED: 'Supply no está listo para operar',
 }
 
 export interface AlertaCalculada {
@@ -504,7 +504,7 @@ export function evaluarAlertas(e: EntradaDeSalud): AlertaCalculada[] {
       severidad: 'CRITICAL',
       cuenta: 1,
       detalle: {},
-      resumen: 'Supply 2.0 no está en condiciones de operar: ver el estado de los componentes.',
+      resumen: 'Supply no está en condiciones de operar: ver el estado de los componentes.',
     })
   }
 

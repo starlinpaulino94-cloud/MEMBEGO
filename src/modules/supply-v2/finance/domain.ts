@@ -9,7 +9,7 @@ import { decimal, redondear2, type Decimal } from '../core/dinero'
 import type { Transiciones } from '../core/estados'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · reglas PURAS de finanzas del proveedor.
+ * MEMBEGO SUPPLY · SLICE 4 · reglas PURAS de finanzas del proveedor.
  *
  * Sin Prisma ni base de datos: todo lo que decide cuánto se debe, cuánto se
  * puede aplicar y en qué estado queda cada cosa vive aquí y se prueba solo.

@@ -17,13 +17,13 @@ export function MenuProveedor({ id, nombre }: { id: string; nombre: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48 text-[13px]">
         <DropdownMenuItem asChild>
-          <Link href="/superadmin/supply-v2/compras/nueva"><ShoppingCart aria-hidden className="size-4" /> Nueva compra</Link>
+          <Link href="/superadmin/supply/compras/nueva"><ShoppingCart aria-hidden className="size-4" /> Nueva compra</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href={`/superadmin/supply-v2/proveedores/${id}`}><Package aria-hidden className="size-4" /> Ver catálogo</Link>
+          <Link href={`/superadmin/supply/proveedores/${id}`}><Package aria-hidden className="size-4" /> Ver catálogo</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href={`/superadmin/supply-v2/finanzas/pagos?proveedor=${id}`}><ReceiptText aria-hidden className="size-4" /> Historial de pagos</Link>
+          <Link href={`/superadmin/supply/finanzas/pagos?proveedor=${id}`}><ReceiptText aria-hidden className="size-4" /> Historial de pagos</Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

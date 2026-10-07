@@ -10,7 +10,7 @@ import { categoriasVehiculo, categoriasVehiculoActivas } from '../../src/modules
 import { casarCategoria } from '../../src/modules/supply-v2/core/categorias'
 
 /**
- * MEMBEGO SUPPLY 2.0 · catálogo de categorías de vehículo contra PostgreSQL.
+ * MEMBEGO SUPPLY · catálogo de categorías de vehículo contra PostgreSQL.
  *
  * Lo que solo se puede comprobar aquí: que los unique de la tabla den un
  * mensaje que diga QUÉ HACER en vez de «Unique constraint failed on the fields:

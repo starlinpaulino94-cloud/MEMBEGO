@@ -4,7 +4,7 @@ import { trabajosMuertosPendientes, type DifuntoPanel } from '@/modules/jobs/mue
 import { minutosDesde } from './salud-dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · LAS LISTAS DEL PANEL (§16).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · LAS LISTAS DEL PANEL (§16).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * PAGINACIÓN EN EL SERVIDOR, SIEMPRE
@@ -59,7 +59,7 @@ export interface EventoEnPanel {
  * ────────────────────────────────────────────────────────────────────────────
  * NO ES HIGIENE: ES UN PANEL QUE MENTIRÍA TRANQUILIZANDO
  *
- * Las tablas de operación de Supply 2.0 —inbox, outbox, conciliaciones,
+ * Las tablas de operación de Supply —inbox, outbox, conciliaciones,
  * incidentes— tienen política de capa 2 OMNISCIENTE: son de plataforma, no de
  * un inquilino. Con RLS encendida, una consulta sin contexto NO falla: devuelve
  * CERO FILAS. Y cero filas en este archivo se lee como «el inbox está vacío»,
@@ -76,7 +76,7 @@ export interface EventoEnPanel {
  * no queda nada suelto que usar.
  */
 const enPlataforma = <T>(motivo: string, fn: (tx: Tx) => Promise<T>): Promise<T> =>
-  sinEmpresa(`Supply 2.0: panel · ${motivo}`, fn)
+  sinEmpresa(`Supply: panel · ${motivo}`, fn)
 
 export async function eventosDelInbox(
   f: { status?: string; provider?: string } = {},

@@ -26,7 +26,7 @@ export interface OfertaEditable {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · formulario de EDICIÓN de una oferta.
+ * MEMBEGO SUPPLY · formulario de EDICIÓN de una oferta.
  *
  * El servidor recalcula y revalida todo: esto solo recoge. Lo que NO está aquí
  * está fuera a propósito y la pantalla lo explica —las unidades, el producto y

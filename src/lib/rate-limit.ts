@@ -120,6 +120,29 @@ export const loginLimiter = createRateLimiter({
   name: 'login',
 })
 
+/**
+ * Recuperar contraseña (`solicitarRecuperacion`). Dos presupuestos distintos a
+ * propósito:
+ *
+ *   · por CORREO — estrecho: 5 cada 15 min. Quien olvida su clave pide el
+ *     enlace dos o tres veces (el correo tarda, se va a spam); más que eso es
+ *     alguien llenando la bandeja de otra persona.
+ *   · por IP — más ancho: 30 cada 15 min. Los operadores móviles reparten una
+ *     misma IP entre muchísimos teléfonos (CGNAT); con el mismo 5 del correo,
+ *     un solo vecino bloquearía la recuperación a todos los demás.
+ */
+export const recoveryEmailLimiter = createRateLimiter({
+  interval: 15 * 60 * 1000,
+  maxRequests: 5,
+  name: 'recuperar-correo',
+})
+
+export const recoveryIpLimiter = createRateLimiter({
+  interval: 15 * 60 * 1000,
+  maxRequests: 30,
+  name: 'recuperar-ip',
+})
+
 export const registerLimiter = createRateLimiter({
   interval: 60 * 60 * 1000,
   maxRequests: 10,
@@ -166,7 +189,7 @@ export const paymentSessionLimiter = createRateLimiter({
 })
 
 /**
- * Comprobación de un CÓDIGO DE CUPÓN (Supply 2.0 · Slice 7 §28). Un cupón vale
+ * Comprobación de un CÓDIGO DE CUPÓN (Supply · Slice 7 §28). Un cupón vale
  * dinero y su código se teclea: sin freno, probar códigos a mano es una
  * estrategia viable. 12 intentos cada 5 minutos por cliente dan margen a
  * teclear mal y cierran la puerta a barrer el espacio de códigos.

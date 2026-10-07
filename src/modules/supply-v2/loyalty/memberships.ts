@@ -20,7 +20,7 @@ import {
 import { bloquearPlan, bloquearPrograma, eventoDePrograma } from './programs'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · MOTOR DE MEMBRESÍAS (§9–§17).
+ * MEMBEGO SUPPLY · SLICE 8 · MOTOR DE MEMBRESÍAS (§9–§17).
  *
  * Tres formas de tener una membresía, un solo sitio donde se escribe:
  *

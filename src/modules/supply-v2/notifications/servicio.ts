@@ -10,7 +10,7 @@ import {
 import { estadoDeWhatsapp } from './whatsapp'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · APUNTAR UN AVISO.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · APUNTAR UN AVISO.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * EL CAMINO, Y POR QUÉ ES ESTE Y NO OTRO (§2)

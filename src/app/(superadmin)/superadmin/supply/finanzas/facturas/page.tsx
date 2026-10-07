@@ -1,178 +1,115 @@
 import Link from 'next/link'
-import type { SupplyFacturaEstado } from '@prisma/client'
+import type { SupplyV2InvoiceStatus } from '@prisma/client'
 import { requireRole } from '@/lib/auth/guards'
 import { PageHeader } from '@/components/ui/page-header'
-import { StatCard } from '@/components/ui/stat-card'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { TablaReporte } from '@/components/ui/reporte-imprimible'
-import { formatDate, formatMoneyRD } from '@/lib/format'
-import { NavFinanzas } from '@/components/supply/nav'
-import { FormAccion } from '@/components/supply/form-accion'
-import { FiltrosChips, FiltroProveedor } from '@/components/supply/filtros-finanzas'
-import { listarFacturas } from '@/modules/supply/facturas'
-import { opcionesFinanzas } from '@/modules/supply/opciones'
-import { moverFacturaAction, registrarFacturaAction } from '@/modules/supply/actions-finanzas'
-import { SUPPLY_FACTURA_ESTADO_LABELS, SUPPLY_FACTURA_TIPO_LABELS } from '@/modules/supply/catalogo'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Label } from '@/components/ui/label'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
+import { formatDate } from '@/lib/format'
+import { leerPaginacion } from '@/lib/paginacion'
+import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { ChipFactura } from '@/components/supply-v2/finanzas/chips'
+import { listarFacturas, proveedoresParaFinanzas } from '@/modules/supply-v2/finance/queries'
+import { dineroSupplyV2, INVOICE_STATUS_LABELS, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Facturas de proveedor' }
+export const metadata = { title: 'Facturas de proveedor · Supply' }
 
-const BASE = '/superadmin/supply/finanzas/facturas'
+const ESTADOS: SupplyV2InvoiceStatus[] = ['PENDING_APPROVAL', 'APPROVED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED']
 
-/**
- * MEMBEGO SUPPLY · FACTURAS DE PROVEEDOR (§21).
- *
- * La factura es el DOCUMENTO; la obligación vive en la cuenta por pagar que
- * nace con ella (o por cobrar, si es nota de crédito). Se salda con un pago
- * directo, con un depósito o dentro de una liquidación; y su estado refleja
- * el de la cuenta.
- */
-export default async function FacturasPage({ searchParams }: { searchParams: Promise<{ estado?: string; proveedor?: string }> }) {
+/** MEMBEGO SUPPLY · facturas (§35) con paginación real (§47). */
+export default async function FacturasPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireRole('SUPERADMIN')
-  const { estado = '', proveedor = '' } = await searchParams
-  const estados = Object.keys(SUPPLY_FACTURA_ESTADO_LABELS) as SupplyFacturaEstado[]
-  const estadoValido = estados.includes(estado as SupplyFacturaEstado) ? (estado as SupplyFacturaEstado) : undefined
-
-  const [facturas, opciones] = await Promise.all([
-    listarFacturas({ estado: estadoValido, proveedorId: proveedor || undefined }),
-    opcionesFinanzas(),
-  ])
-  const abiertas = facturas.filter((f) => f.estado === 'REGISTRADA' || f.estado === 'PARCIALMENTE_PAGADA')
-  const pendiente = abiertas.reduce((t, f) => t + Number(f.total) - Number(f.montoSaldado), 0)
-  const vencidas = abiertas.filter((f) => f.fechaVencimiento && f.fechaVencimiento < new Date())
+  const sp = await searchParams
+  const proveedor = typeof sp.proveedor === 'string' ? sp.proveedor : ''
+  const estadoCrudo = typeof sp.estado === 'string' ? sp.estado : ''
+  const estado = estadoCrudo === 'PENDIENTES' ? 'PENDIENTES' : (ESTADOS as string[]).includes(estadoCrudo) ? (estadoCrudo as SupplyV2InvoiceStatus) : null
+  const paginacion = leerPaginacion(sp)
+  const [{ filas, total }, proveedores] = await Promise.all([listarFacturas({ supplierId: proveedor || null, status: estado }, paginacion), proveedoresParaFinanzas()])
+  const select = 'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm'
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Facturas de proveedor"
-        description="Facturas, notas de crédito y notas de débito que emiten los proveedores. Cada una abre su cuenta; la cuenta es lo que se salda."
-        eyebrow={
-          <Link href="/superadmin/supply/finanzas" className="hover:underline">
-            Finanzas
-          </Link>
-        }
-        nav={<NavFinanzas activa="facturas" />}
+        description="El documento del proveedor. Se registra, otra persona lo aprueba y entonces nace la deuda; se cubre con depósito, transferencia o ambos."
+        eyebrow={<Link href={RUTA_FINANZAS} className="hover:underline">Finanzas</Link>}
+        nav={<NavSupplyV2 activa="finanzas" />}
+        action={<Button asChild><Link href={`${RUTA_FINANZAS}/facturas/nueva`} data-testid="btn-nueva-factura">+ Nueva factura</Link></Button>}
       />
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Pendiente de pago" value={formatMoneyRD(pendiente)} sub={`${abiertas.length} facturas abiertas`} accent={pendiente > 0 ? 'warning' : undefined} />
-        <StatCard label="Vencidas" value={vencidas.length} sub={formatMoneyRD(vencidas.reduce((t, f) => t + Number(f.total) - Number(f.montoSaldado), 0))} accent={vencidas.length > 0 ? 'danger' : 'success'} />
-        <StatCard label="Disputadas" value={facturas.filter((f) => f.estado === 'DISPUTADA').length} />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Registrar un documento</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {opciones.proveedores.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay proveedores registrados.</p>
-          ) : (
-            <FormAccion
-              accion={registrarFacturaAction}
-              etiqueta="Registrar"
-              etiquetaPendiente="Registrando…"
-              nota="Una factura abre una cuenta por pagar por su total; una nota de crédito, una cuenta por cobrar."
-              campos={[
-                { name: 'proveedorId', label: 'Proveedor', tipo: 'select', opciones: opciones.proveedores, required: true },
-                { name: 'acuerdoId', label: 'Acuerdo (opcional)', tipo: 'select', opciones: [{ value: '', label: '—' }, ...opciones.acuerdos] },
-                { name: 'tipo', label: 'Tipo', tipo: 'select', opciones: Object.entries(SUPPLY_FACTURA_TIPO_LABELS).map(([value, label]) => ({ value, label })) },
-                { name: 'numero', label: 'Número (NCF / del proveedor)', required: true, maxLength: 60 },
-                { name: 'fechaEmision', label: 'Emitida', tipo: 'date', required: true },
-                { name: 'fechaVencimiento', label: 'Vence', tipo: 'date' },
-                { name: 'subtotal', label: 'Subtotal', tipo: 'number', min: 0, required: true },
-                { name: 'impuestos', label: 'Impuestos', tipo: 'number', min: 0 },
-                { name: 'documentoPath', label: 'Documento (ruta)', maxLength: 500 },
-                { name: 'notas', label: 'Notas', tipo: 'textarea' },
-              ]}
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <FiltrosChips base={BASE} parametro="estado" actual={estadoValido ?? ''} otros={{ proveedor }} opciones={estados.map((e) => ({ value: e, label: SUPPLY_FACTURA_ESTADO_LABELS[e] }))} />
-        <FiltroProveedor base={BASE} actual={proveedor} proveedores={opciones.proveedores} otros={{ estado: estadoValido }} />
-      </div>
-
       <Card>
         <CardContent className="pt-6">
-          <TablaReporte
-            titulo="Facturas de proveedor"
-            columnas={[
-              { clave: 'codigo', titulo: 'Código' },
-              { clave: 'numero', titulo: 'Número' },
-              { clave: 'tipo', titulo: 'Tipo' },
-              { clave: 'proveedor', titulo: 'Proveedor' },
-              { clave: 'emitida', titulo: 'Emitida' },
-              { clave: 'vence', titulo: 'Vence' },
-              { clave: 'total', titulo: 'Total', alinearDerecha: true },
-              { clave: 'saldado', titulo: 'Saldado', alinearDerecha: true },
-              { clave: 'cuenta', titulo: 'Cuenta' },
-              { clave: 'estado', titulo: 'Estado' },
-              { clave: 'acciones', titulo: '' },
-            ]}
-            filas={facturas.map((f) => ({
-              __clave: f.id,
-              codigo: <span className="font-medium">{f.codigo}</span>,
-              numero: f.documentoPath ? (
-                <a href={f.documentoPath} target="_blank" rel="noreferrer" className="underline">
-                  {f.numero}
-                </a>
-              ) : (
-                f.numero
-              ),
-              tipo: SUPPLY_FACTURA_TIPO_LABELS[f.tipo],
-              proveedor: f.proveedor.name,
-              emitida: formatDate(f.fechaEmision),
-              vence: f.fechaVencimiento ? formatDate(f.fechaVencimiento) : '—',
-              total: formatMoneyRD(Number(f.total)),
-              saldado: formatMoneyRD(Number(f.montoSaldado)),
-              cuenta: f.cuentaPorPagar ? (
-                <Link href={`/superadmin/supply/finanzas/cuentas-por-pagar?proveedor=${f.proveedor.id}`} className="underline-offset-4 hover:underline">
-                  {f.cuentaPorPagar.codigo}
-                </Link>
-              ) : f.cuentaPorCobrar ? (
-                <Link href={`/superadmin/supply/finanzas/cuentas-por-cobrar?proveedor=${f.proveedor.id}`} className="underline-offset-4 hover:underline">
-                  {f.cuentaPorCobrar.codigo}
-                </Link>
-              ) : (
-                '—'
-              ),
-              estado: (
-                <Badge variant={f.estado === 'PAGADA' ? 'success' : f.estado === 'DISPUTADA' ? 'destructive' : f.estado === 'ANULADA' ? 'outline' : 'secondary'}>
-                  {SUPPLY_FACTURA_ESTADO_LABELS[f.estado]}
-                </Badge>
-              ),
-              acciones:
-                f.estado === 'REGISTRADA' || f.estado === 'PARCIALMENTE_PAGADA' ? (
-                  <FormAccion
-                    accion={moverFacturaAction}
-                    ocultos={{ facturaId: f.id }}
-                    compacto
-                    variant="ghost"
-                    etiqueta="Aplicar"
-                    campos={[
-                      { name: 'hasta', label: 'Pasar a', tipo: 'select', opciones: [{ value: 'DISPUTADA', label: 'Disputar' }, { value: 'ANULADA', label: 'Anular' }] },
-                      { name: 'motivo', label: 'Motivo', required: true, maxLength: 500 },
-                    ]}
-                  />
-                ) : f.estado === 'DISPUTADA' ? (
-                  <FormAccion
-                    accion={moverFacturaAction}
-                    ocultos={{ facturaId: f.id, hasta: 'REGISTRADA' }}
-                    compacto
-                    variant="ghost"
-                    etiqueta="Levantar disputa"
-                    campos={[{ name: 'motivo', label: 'Cómo se resolvió', required: true, maxLength: 500 }]}
-                  />
-                ) : null,
-            }))}
-            vacio="Ninguna factura con ese filtro."
-          />
+          <form method="get" className="grid gap-3 sm:grid-cols-4" data-testid="filtros-facturas">
+            <div>
+              <Label htmlFor="proveedor">Proveedor</Label>
+              <select id="proveedor" name="proveedor" defaultValue={proveedor} className={select}>
+                <option value="">Todos</option>
+                {proveedores.map((p) => <option key={p.id} value={p.id}>{p.commercialName}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="estado">Estado</Label>
+              <select id="estado" name="estado" defaultValue={estadoCrudo} className={select}>
+                <option value="">Todas</option>
+                <option value="PENDIENTES">Pendientes (por aprobar o por pagar)</option>
+                {ESTADOS.map((e) => <option key={e} value={e}>{INVOICE_STATUS_LABELS[e]}</option>)}
+              </select>
+            </div>
+            <div className="flex items-end gap-2">
+              <Button type="submit" variant="outline">Filtrar</Button>
+              <Button asChild variant="ghost"><Link href={`${RUTA_FINANZAS}/facturas`}>Limpiar</Link></Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
+
+      {filas.length === 0 ? (
+        <EmptyState variant="card" title="Sin facturas" description={proveedor || estado ? 'Ninguna factura cumple el filtro.' : 'Registra la primera factura de un proveedor contra su orden de compra.'} />
+      ) : (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="tabla-facturas">
+                <thead className="text-left text-caption text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-3">Factura</th>
+                    <th className="py-1 pr-3">Proveedor</th>
+                    <th className="py-1 pr-3">Fecha</th>
+                    <th className="py-1 pr-3">Vencimiento</th>
+                    <th className="py-1 pr-3 text-right">Total</th>
+                    <th className="py-1 pr-3 text-right">Aplicado</th>
+                    <th className="py-1 pr-3 text-right">Pagado</th>
+                    <th className="py-1 pr-3 text-right">Pendiente</th>
+                    <th className="py-1">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filas.map((f) => (
+                    <tr key={f.id} className="border-t border-border" data-testid="factura">
+                      <td className="py-2 pr-3 font-medium">
+                        <Link href={`${RUTA_FINANZAS}/facturas/${f.id}`} className="underline-offset-4 hover:underline" data-testid="link-factura">{f.number}</Link>
+                        {f.supplierInvoiceNumber && <span className="block text-caption text-muted-foreground">{f.supplierInvoiceNumber}</span>}
+                        {f.purchaseOrder && <span className="block text-caption text-muted-foreground">{f.purchaseOrder.number}</span>}
+                      </td>
+                      <td className="py-2 pr-3">{f.proveedor}</td>
+                      <td className="py-2 pr-3">{formatDate(f.documentDate)}</td>
+                      <td className="py-2 pr-3">{f.dueDate ? formatDate(f.dueDate) : '—'}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(f.total, f.currency)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(f.amountApplied, f.currency)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(f.amountPaid, f.currency)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums" data-testid="factura-pendiente">{dineroSupplyV2(f.amountDue, f.currency)}</td>
+                      <td className="py-2"><ChipFactura estado={f.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <TablaPaginacion paginacion={paginacion} total={total} params={sp} etiqueta="facturas" />
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

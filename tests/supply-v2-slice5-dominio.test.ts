@@ -22,7 +22,7 @@ import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
 import { SUPPLY_V2_PERMISSIONS } from '../src/modules/supply-v2/contracts/gateways'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 5 · pruebas de DOMINIO (§82). Sin base de datos.
+ * MEMBEGO SUPPLY · SLICE 5 · pruebas de DOMINIO (§82). Sin base de datos.
  */
 
 const D = (n: number | string) => new Prisma.Decimal(n)

@@ -135,7 +135,7 @@ async function puedeSubir(
       return ped?.cliente?.supabaseId === supabaseId
     }
     if (tipo === 'pago' || tipo === 'supply-v2') {
-      // Membego Supply (V1 `pago`; Supply 2.0 `supply-v2`: factura o pago a
+      // Membego Supply (V1 `pago`; Supply `supply-v2`: factura o pago a
       // proveedor, el id es el de esa entidad, que ya existe al adjuntar). Lo
       // adjunta plataforma; el id es el del pago (que ya existe: se registra
       // antes de subir) y solo el rol de plataforma puede escribir aquí.
