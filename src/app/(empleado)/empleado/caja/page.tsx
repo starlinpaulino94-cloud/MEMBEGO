@@ -19,6 +19,9 @@ import {
 } from '@/components/caja/CajaForms'
 import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
 import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
+import { CobrarPedidoMembego } from '@/components/pos/CobrarPedidoMembego'
+import { VentaMostrador } from '@/components/pos/VentaMostrador'
+import { posPermitido } from '@/modules/pos/capacidades'
 import { Banknote, Clock, Store, User as UserIcon } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -170,6 +173,8 @@ export default async function CajaPage({
     buscarOrdenesPendientes(companyId, q),
     getMovimientosSesion(sesion.id),
   ])
+  // Fase 7: la caja conectada al catálogo y a los pedidos (apagada de serie; las acciones lo comprueban otra vez).
+  const pos = await posPermitido(companyId)
   const esperado = Number(sesion.balanceInicial) + resumen.totalEfectivo + movimientos.neto
 
   return (
@@ -227,6 +232,10 @@ export default async function CajaPage({
 
       {/* Movimientos de efectivo intra-turno (fondo, retiros, gastos). */}
       <MovimientosCaja cajaSesionId={sesion.id} movimientos={movimientos} />
+
+      {/* Fase 7 · POS conectado: cobrar el pedido de quien llega con su QR y vender en el mostrador. */}
+      {pos.cobrarPedidos && <CobrarPedidoMembego cajaSesionId={sesion.id} />}
+      {pos.venderEnMostrador && <VentaMostrador cajaSesionId={sesion.id} />}
 
       {/* Cobrar */}
       <section className="space-y-4">

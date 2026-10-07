@@ -758,6 +758,7 @@ export async function cerrarPedidoExternoEnTx(
     data: {
       status: 'COMPLETED',
       completedAt: ahora,
+      completedByUserId: ctx.actorId,
       qrToken: null,
       qrExpiresAt: null,
       verificationLevel: nivel,
@@ -765,6 +766,8 @@ export async function cerrarPedidoExternoEnTx(
       ...(e.pago ? { paymentMethod: e.pago.method } : {}),
     },
   })
+  // Un pedido de caja aparta existencias al crearse: cerrarlo las vende (para el envoltorio de Supply, sin reserva, no hace nada).
+  for (const l of p.lines) await venderLinea(tx, companyId, p, l, ahora, ctx)
   const comision = await cobrarComisionDelPedido(tx, companyId, p, nivel, ahora)
   await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_COMPLETED', p.id, { code: p.code, por: ctx.actor, cierre: 'EXTERNO', nivel, total: decimalATexto(p.total), comision })
   return { pedidoId: p.id, code: p.code, status: 'COMPLETED', nivel, repetido: false }

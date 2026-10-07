@@ -188,6 +188,10 @@ export const CAPACIDADES = [
   // reclama y canjea con el QR de su pedido. Apagada para todos de serie; exige el
   // catálogo unificado y los pedidos Membego (el reclamo ES un pedido).
   'DEALS_MARKETPLACE',
+  // Fase 7 — POS conectado a Commerce Core: la caja (`/empleado/caja`) cobra los pedidos Membego de
+  // quien llega con su QR y vende variantes del catálogo en el mostrador. Apagada para todos de serie;
+  // exige la caja (`POS_CAJA`) y, según lo que se use, el catálogo y los pedidos.
+  'POS_MEMBEGO',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -220,6 +224,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   CATALOGO_UNIFICADO: 'Catálogo unificado: productos, servicios y variantes',
   PEDIDOS_MEMBEGO: 'Pedidos Membego: pedidos del marketplace con atribución, confirmación y QR',
   DEALS_MARKETPLACE: 'Ofertas con presupuesto: descuentos que los clientes reclaman y se cobran por canje',
+  POS_MEMBEGO: 'Caja conectada al catálogo: cobrar pedidos Membego y vender productos en el mostrador',
 }
 
 /**
