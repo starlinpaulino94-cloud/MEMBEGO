@@ -22,6 +22,7 @@ import {
   setActivationClaimState,
 } from '@/modules/pagos/cardnetClienteSesionStore'
 import {
+  finishApproval,
   interpretPurchase,
   searchPurchase,
 } from '@/modules/pagos/cardnetClienteCompra'
@@ -170,6 +171,9 @@ export async function estadoSesionCardnet(
   if (session.estado === CARDNET_SESSION_STATES.EXPIRED) return success(200, { status: 'expired' })
   if (session.estado === CARDNET_SESSION_STATES.FAILED) return fail(409, 'La sesión no pudo iniciarse.')
   if (session.estado === CARDNET_SESSION_STATES.PURCHASE_PENDING && session.purchaseIntent) {
+    if (session.purchaseIntent.estado === 'APROBADO') {
+      return finishApproval(session, session.purchaseIntent.id, session.purchaseIntent.autorizacion, null)
+    }
     const searched = await searchPurchase(session)
     if (searched.decision.kind !== 'pending') {
       return interpretPurchase(session, session.purchaseIntent.id, searched.decision, searched.payload)

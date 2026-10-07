@@ -21,3 +21,9 @@ export async function activarMembresia() {
   scenario().activationCalls += 1
   return { ok: true }
 }
+
+export async function reintentarEntrega() {
+  const current = scenario()
+  current.fulfillmentRetryCalls += 1
+  return current.fulfillmentRetryResult ?? { ok: true, entrega: 'PENDIENTE' }
+}

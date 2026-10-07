@@ -115,6 +115,8 @@ export type ConfirmacionResultado =
   | { ok: true; estado: 'APROBADO'; yaEstaba: boolean; entrega: EntregaEstado; compraId: string | null; membershipId: string | null }
   | { ok: false; estado: 'RECHAZADO' | 'ERROR'; motivo: string }
 
+const FULFILLMENT_CLAIM_STALE_MS = 60_000
+
 async function resultadoIntentoActual(
   intentoId: string,
   companyId: string,
@@ -139,7 +141,11 @@ async function resultadoIntentoActual(
       ok: true,
       estado: 'APROBADO',
       yaEstaba: true,
-      entrega: (actual.fulfillmentEstado ?? 'PENDIENTE') as EntregaEstado,
+      entrega: actual.fulfillmentEstado === 'COMPLETADA'
+        ? 'COMPLETADA'
+        : actual.fulfillmentEstado === 'FALLIDA'
+          ? 'FALLIDA'
+          : 'PENDIENTE',
       compraId: actual.compraId ?? fallback.compraId,
       membershipId: actual.membershipId ?? fallback.membershipId,
     }
@@ -277,6 +283,8 @@ export async function confirmarIntento(
       data: {
         estado: 'APROBADO',
         activadoAt: new Date(),
+        fulfillmentEstado: 'PROCESANDO',
+        fulfillmentIntentos: { increment: 1 },
         autorizacion: resultado.autorizacion,
         respuesta: (resultado.crudo ?? null) as never,
       },
@@ -300,13 +308,9 @@ export async function confirmarIntento(
   }
 }
 
-/**
- * Reintenta la entrega de un intento cobrado cuya entrega falló.
- *
- * Solo toca filas APROBADO + FALLIDA y gana un reclamo atómico
- * (FALLIDA→PENDIENTE + contador): dos reintentos concurrentes no ejecutan la
- * activación dos veces. Nunca recobra: no toca la pasarela.
- */
+const estadoEntregaActual = (estado: string): EntregaEstado =>
+  estado === 'COMPLETADA' ? 'COMPLETADA' : estado === 'FALLIDA' ? 'FALLIDA' : 'PENDIENTE'
+
 export async function reintentarEntrega(
   intentoId: string
 ): Promise<{ ok: boolean; entrega: EntregaEstado; error?: string }> {
@@ -324,22 +328,49 @@ export async function reintentarEntrega(
           userAgent: true,
           estado: true,
           fulfillmentEstado: true,
+          updatedAt: true,
         },
       })
   )
   if (!intento) return { ok: false, entrega: 'PENDIENTE', error: 'Intento no encontrado.' }
-  if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado !== 'FALLIDA') {
-    return { ok: true, entrega: intento.fulfillmentEstado as EntregaEstado }
+  if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado === 'COMPLETADA') {
+    return { ok: true, entrega: estadoEntregaActual(intento.fulfillmentEstado) }
+  }
+
+  const claimAt = new Date()
+  const staleBefore = new Date(claimAt.getTime() - FULFILLMENT_CLAIM_STALE_MS)
+  const mayRecoverStaleClaim =
+    intento.fulfillmentEstado === 'PENDIENTE' || intento.fulfillmentEstado === 'PROCESANDO'
+  if (mayRecoverStaleClaim && intento.updatedAt >= staleBefore) {
+    return { ok: true, entrega: 'PENDIENTE', error: 'La entrega sigue en proceso.' }
+  }
+  if (intento.fulfillmentEstado !== 'FALLIDA' && !mayRecoverStaleClaim) {
+    return { ok: true, entrega: 'PENDIENTE' }
   }
 
   const reclamo = await conEmpresa(intento.companyId, (tx) =>
     tx.pagoIntento.updateMany({
-      where: { id: intentoId, fulfillmentEstado: 'FALLIDA' },
-      data: { fulfillmentEstado: 'PENDIENTE', fulfillmentIntentos: { increment: 1 } },
+      where: {
+        id: intentoId,
+        estado: 'APROBADO',
+        fulfillmentEstado: intento.fulfillmentEstado,
+        ...(mayRecoverStaleClaim ? { updatedAt: { lt: staleBefore } } : {}),
+      },
+      data: {
+        fulfillmentEstado: 'PROCESANDO',
+        fulfillmentIntentos: { increment: 1 },
+        updatedAt: claimAt,
+      },
     })
   )
   if (reclamo.count === 0) {
-    return { ok: true, entrega: 'PENDIENTE', error: 'Otro proceso tomó el reintento.' }
+    const actual = await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento.findUnique({
+        where: { id: intentoId },
+        select: { fulfillmentEstado: true },
+      })
+    ).catch(() => null)
+    return { ok: true, entrega: estadoEntregaActual(actual?.fulfillmentEstado ?? 'PENDIENTE') }
   }
 
   const entrega = await entregarProducto(intento)

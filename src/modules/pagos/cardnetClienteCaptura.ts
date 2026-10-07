@@ -25,6 +25,7 @@ import {
 } from '@/modules/pagos/cardnetClienteSesionStore'
 import {
   associateApprovedCard,
+  finishApproval,
   interpretPurchase,
   profileForSession,
   searchPurchase,
@@ -56,6 +57,14 @@ export async function chargeWithProfile(
     purchaseSession.estado !== CARDNET_SESSION_STATES.PURCHASE_PENDING ||
     purchaseSession.purchaseIntent?.id !== intent.id
   ) return success(202, { status: 'pending' })
+  if (intent.estado === 'APROBADO') {
+    return finishApproval(purchaseSession, intent.id, intent.autorizacion, null)
+  }
+  if (intent.estado === 'RECHAZADO') return success(200, { status: 'declined' })
+  if (intent.estado === 'EXPIRADO') return success(200, { status: 'expired' })
+  if (intent.estado !== 'CREADO' && intent.estado !== 'REDIRIGIDO') {
+    return success(202, { status: 'pending' })
+  }
   const ip = requestIp(request)
   const charge = await cobrarConToken({
     trxToken: profile.token,
@@ -91,6 +100,9 @@ export async function progressCapture(
     return success(200, { status: 'activation_required' })
   }
   if (session.estado === CARDNET_SESSION_STATES.PURCHASE_PENDING && session.purchaseIntent) {
+    if (session.purchaseIntent.estado === 'APROBADO') {
+      return finishApproval(session, session.purchaseIntent.id, session.purchaseIntent.autorizacion, null)
+    }
     const searched = await searchPurchase(session)
     if (searched.decision.kind !== 'pending') {
       return interpretPurchase(session, session.purchaseIntent.id, searched.decision, searched.payload)

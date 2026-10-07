@@ -38,6 +38,8 @@ interface Scenario {
   confirmationResult?: unknown
   confirmationResults?: unknown[]
   onConfirmIntent?: () => void
+  fulfillmentRetryResult?: unknown
+  fulfillmentRetryCalls: number
   purchaseSearches: Row[]
   promotionResult: unknown
   promotionCalls: Array<{ readonly user: SessionUser; readonly promotionId: string }>
@@ -91,7 +93,7 @@ function setup(): Scenario {
     amountResult: { ok: true, pesos: 1000 },
     canCharge: true,
     providerCalls: 0, customerGets: 0, customerIdLookups: 0, targetReads: 0, purchaseReads: 0,
-    amountLookups: 0, chargeCalls: 0, intentCreates: 0,
+    amountLookups: 0, chargeCalls: 0, intentCreates: 0, fulfillmentRetryCalls: 0,
     chargeResults: [], chargeRequests: [], purchaseSearches: [], promotionResult: null, promotionCalls: [],
   }
   s.tx = {
@@ -621,7 +623,7 @@ test('ambiguous retries retain the Purchase UniqueID and serialize concurrent ch
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - 90_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
-    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: stableUniqueId },
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: stableUniqueId, estado: 'CREADO' },
     reservaClienteKey: 'held-customer-reservation',
   }
   s.sessions.set(id, row)
@@ -675,7 +677,7 @@ test('stale activation recovery claims one lease before charging a persisted int
     updatedAt: new Date(Date.now() - ACTIVATION_CLAIM_STALE_MS - 1_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
-    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key' },
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key', estado: 'CREADO' },
     reservaClienteKey: 'held-membership-reservation',
   }
   s.sessions.set(id, row)
@@ -735,7 +737,7 @@ test('a superseded stale purchase lookup cannot send Purchase', { timeout: 5_000
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - PURCHASE_RETRY_MS - 1_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
-    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key' },
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key', estado: 'CREADO' },
     reservaClienteKey: 'held-customer-reservation',
   }
   s.sessions.set(id, row)
@@ -872,7 +874,7 @@ test('a stale pending search cannot invalidate a concurrent approved transition'
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
-    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key' },
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key', estado: 'CREADO' },
     reservaClienteKey: 'held-customer-reservation',
   }
   s.sessions.set(id, row)
@@ -964,6 +966,102 @@ test('an in-flight fulfillment result does not leave a completed payment pending
   assert.equal(completed.status, 200)
   assert.equal(completed.body.status, 'approved')
   assert.equal(row.estado, 'APPROVED')
+})
+
+test('a delayed CardNET POST cannot reopen an approved session after stale reconciliation', { timeout: 5_000 }, async () => {
+  const { PURCHASE_RETRY_MS } = await import('../src/modules/pagos/cardnetClienteShared')
+  const s = setup()
+  s.customerResponse = {
+    denegado: false,
+    email: 'qa@example.test',
+    perfiles: [{ paymentProfileId: 'profile-fresh', token: 'fresh-payment-profile-token', habilitado: true }],
+  }
+  const approvedPurchase = {
+    ok: true,
+    json: {
+      Response: {
+        Purchases: [{
+          OrderNumber: 'stable-purchase-key',
+          UniqueID: 'stable-purchase-key',
+          CustomerId: 'cardnet-customer-test',
+          Created: new Date().toISOString(),
+          Transaction: { TransactionStatusId: 1, AuthorizationCode: 'A1B2C3', ResponseCode: '00' },
+        }],
+      },
+    },
+  }
+  const pendingPurchase = { ok: true, json: { Response: { Purchases: [] } } }
+  s.purchaseSearchResponses = [pendingPurchase, approvedPurchase, pendingPurchase]
+  let releaseCharge: (response: unknown) => void = () => undefined
+  let announceCharge: () => void = () => undefined
+  const chargeStarted = new Promise<void>((resolve) => { announceCharge = resolve })
+  const chargeResult = new Promise<unknown>((resolve) => { releaseCharge = resolve })
+  s.onCharge = announceCharge
+  s.chargeResults = [chargeResult]
+
+  const id = 'v'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - PURCHASE_RETRY_MS - 1_000),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key', estado: 'CREADO' },
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+  const api = await service()
+  const status = () => api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  const delayedPost = status()
+  await chargeStarted
+
+  const approved = await status()
+  assert.equal(approved.status, 200)
+  assert.equal(approved.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
+
+  releaseCharge(null)
+  const delayedResult = await delayedPost
+  assert.equal(delayedResult.status, 200)
+  assert.equal(delayedResult.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
+  assert.equal(s.chargeCalls, 1)
+})
+
+test('a locally approved intent resumes fulfillment without another CardNET call', { timeout: 5_000 }, async () => {
+  const s = setup()
+  s.confirmationResult = { ok: true, entrega: 'PENDIENTE' }
+  s.fulfillmentRetryResult = { ok: true, entrega: 'COMPLETADA' }
+  const id = 'w'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
+    purchaseIntent: {
+      id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key', estado: 'APROBADO',
+      autorizacion: 'A1B2C3', fulfillmentEstado: 'PROCESANDO',
+    },
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.status, 200)
+  assert.equal(result.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
+  assert.equal(s.providerCalls, 0)
+  assert.equal(s.chargeCalls, 0)
+  assert.equal(s.fulfillmentRetryCalls, 1)
 })
 
 test('the real BFF route rejects a request without Bearer before calling the service', async () => {

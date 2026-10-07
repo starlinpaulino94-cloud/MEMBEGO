@@ -23,11 +23,23 @@ registerHooks({
 
 function matches(row: Row, where: Row): boolean {
   return Object.entries(where).every(([key, expected]) => {
-    if (expected && typeof expected === 'object' && 'in' in expected) {
-      return (expected.in as unknown[]).includes(row[key])
+    if (expected && typeof expected === 'object') {
+      if ('in' in expected) return (expected.in as unknown[]).includes(row[key])
+      if ('lt' in expected) return row[key] instanceof Date && row[key] < (expected.lt as Date)
+      if ('gt' in expected) return row[key] instanceof Date && row[key] > (expected.gt as Date)
     }
     return row[key] === expected
   })
+}
+
+function applyData(row: Row, data: Row): void {
+  for (const [key, value] of Object.entries(data)) {
+    if (value && typeof value === 'object' && 'increment' in value) {
+      row[key] = Number(row[key] ?? 0) + Number(value.increment)
+    } else {
+      row[key] = value
+    }
+  }
 }
 
 test('a late approval cannot deliver after a concurrent decline closes the intent', async () => {
@@ -57,12 +69,12 @@ test('a late approval cannot deliver after a concurrent decline closes the inten
             await approvalGate
           }
           if (!matches(intento, input.where)) return { count: 0 }
-          Object.assign(intento, input.data)
+          applyData(intento, input.data)
           return { count: 1 }
         },
         update: async (input: { where: Row; data: Row }) => {
           if (input.where.id !== intento.id) throw new Error('intent missing')
-          Object.assign(intento, input.data)
+          applyData(intento, input.data)
           return intento
         },
       },
@@ -95,4 +107,50 @@ test('a late approval cannot deliver after a concurrent decline closes the inten
   assert.equal(staleApproval.estado, 'RECHAZADO')
   assert.equal(intento.estado, 'RECHAZADO')
   assert.equal(scenario.activationCalls, 0)
+})
+
+test('a stale fulfillment claim is recovered after a server interruption', async () => {
+  const intento: Row = {
+    id: 'intent-stale-fulfillment',
+    companyId: 'company-test',
+    compraId: 'purchase-test',
+    membershipId: null,
+    estado: 'APROBADO',
+    activadoAt: new Date(Date.now() - 120_000),
+    fulfillmentEstado: 'PROCESANDO',
+    fulfillmentIntentos: 1,
+    updatedAt: new Date(),
+  }
+  const scenario = {
+    activationCalls: 0,
+    tx: {
+      pagoIntento: {
+        findUnique: async (input: { where: Row }) =>
+          input.where.id === intento.id ? { ...intento } : null,
+        updateMany: async (input: { where: Row; data: Row }) => {
+          if (!matches(intento, input.where)) return { count: 0 }
+          applyData(intento, input.data)
+          return { count: 1 }
+        },
+        update: async (input: { where: Row; data: Row }) => {
+          if (input.where.id !== intento.id) throw new Error('intent missing')
+          applyData(intento, input.data)
+          return intento
+        },
+      },
+    },
+  }
+  Object.assign(globalThis, { __pagoIntentoScenario: scenario })
+
+  const { reintentarEntrega } = await import('../src/modules/pagos/intentos')
+  const liveClaim = await reintentarEntrega('intent-stale-fulfillment')
+  assert.equal(liveClaim.entrega, 'PENDIENTE')
+  assert.equal(scenario.activationCalls, 0)
+
+  intento.updatedAt = new Date(Date.now() - 120_000)
+  const recovered = await reintentarEntrega('intent-stale-fulfillment')
+  assert.equal(recovered.entrega, 'COMPLETADA')
+  assert.equal(intento.fulfillmentEstado, 'COMPLETADA')
+  assert.equal(intento.fulfillmentIntentos, 2)
+  assert.equal(scenario.activationCalls, 1)
 })

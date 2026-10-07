@@ -2,7 +2,7 @@ import 'server-only'
 import { conEmpresa } from '@/lib/tenant'
 import { consultarClienteCardnet, consultarComprasCardnet } from '@/lib/payments/cardnet-tokens'
 import type { PerfilPagoCardnet } from '@/lib/payments/cardnet-tokens-core'
-import { confirmarIntento } from '@/modules/pagos/intentos'
+import { confirmarIntento, reintentarEntrega } from '@/modules/pagos/intentos'
 import {
   CARDNET_SESSION_STATES,
   matchingPurchases,
@@ -176,10 +176,13 @@ export async function finishApproval(
     crudo: { flujo: 'cardnet-cliente', resultado: 'aprobado' },
     montoCobrado: purchaseAmountPesos(purchasePayload),
   }).catch(() => null)
-  if (result?.ok && result.entrega === 'PENDIENTE') {
-    return success(202, { status: 'pending' })
+  let deliveryState = result?.ok ? result.entrega : null
+  if (deliveryState && deliveryState !== 'COMPLETADA') {
+    const retry = await reintentarEntrega(intentId).catch(() => null)
+    deliveryState = retry?.entrega ?? 'PENDIENTE'
   }
-  if (!result?.ok || result.entrega !== 'COMPLETADA') {
+  if (deliveryState === 'PENDIENTE') return success(202, { status: 'pending' })
+  if (!result?.ok || deliveryState !== 'COMPLETADA') {
     const pending = await setSessionState(session, CARDNET_SESSION_STATES.FULFILLMENT_PENDING, { conciliadoAt: new Date() })
     return pending ? success(202, { status: 'pending' }) : currentSessionReply(session)
   }
@@ -205,6 +208,9 @@ export async function interpretPurchase(
   decision: ReturnType<typeof purchaseDecision>,
   payload: unknown
 ): Promise<CardnetReply> {
+  if (session.estado === CARDNET_SESSION_STATES.APPROVED) return success(200, { status: 'approved' })
+  if (session.estado === CARDNET_SESSION_STATES.DECLINED) return success(200, { status: 'declined' })
+  if (session.estado === CARDNET_SESSION_STATES.EXPIRED) return success(200, { status: 'expired' })
   if (decision.kind === 'approved') {
     return finishApproval(session, intentId, decision.authorization, payload)
   }

@@ -45,7 +45,7 @@ test('a stale activation recovery fences the original handler before its charge'
     supabaseId: 'qa-user', email: 'qa@example.test',
     metadata: { role: 'CLIENTE', dbUserId: 'qa-db-user', clienteId: 'qa-client', companyId: 'qa-company' },
   }
-  const purchaseIntent = { id: 'intent-existing', cardnetUniqueId: 'stable-purchase-id' }
+  const purchaseIntent = { id: 'intent-existing', cardnetUniqueId: 'stable-purchase-id', estado: 'CREADO' }
   const session: Row = {
     id: '00000000-0000-4000-8000-000000000001', authSubject: user.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
     membershipId: 'membership-1', compraId: null, monto: 1000, moneda: 'DOP',

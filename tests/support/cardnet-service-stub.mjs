@@ -80,6 +80,12 @@ export async function confirmarIntento() {
   return scenario().confirmationResult ?? { ok: true, entrega: 'COMPLETADA' }
 }
 
+export async function reintentarEntrega() {
+  const current = scenario()
+  current.fulfillmentRetryCalls += 1
+  return current.fulfillmentRetryResult ?? { ok: true, entrega: 'PENDIENTE' }
+}
+
 export async function adquirirPromocion(user, promotionId) {
   scenario().promotionCalls.push({ user, promotionId })
   return scenario().promotionResult ?? null
