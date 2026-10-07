@@ -8,6 +8,7 @@ import {
   CONFIG_POR_DEFECTO,
   TIPOS_MANUALES,
   calcularComision,
+  calcularCuotaDeOferta,
   esClaveDeComision,
   evaluarEstadoDeCuenta,
   inicioDelPeriodo,
@@ -20,6 +21,7 @@ import {
   siguientePosicion,
   validarAsiento,
   validarTarifas,
+  type CuotaDeOferta,
   type Periodo,
   type PedidoParaComision,
   type ReferenciaDelLibro,
@@ -191,7 +193,8 @@ export async function registrarComisionDePedidoEnTx(
   companyId: string,
   pedido: PedidoParaComision,
   ctx: ContextoFacturacion = SISTEMA,
-  ahora = new Date()
+  ahora = new Date(),
+  cuotaDeOferta?: CuotaDeOferta
 ): Promise<ResultadoComision> {
   if (!pedidoGeneraComision(pedido)) return { resultado: 'NO_APLICA' }
   const config = await cuentaBloqueada(tx, companyId)
@@ -202,7 +205,9 @@ export async function registrarComisionDePedidoEnTx(
   if (pedido.currency !== config.currency) {
     fallo('MONEDA_DISTINTA', `El pedido ${pedido.code} está en ${pedido.currency} y la cuenta Membego de la empresa cobra en ${config.currency}: no se puede asentar su comisión en el mismo libro.`)
   }
-  const c = calcularComision(pedido, config)
+  // Un pedido que nació de una oferta con presupuesto paga LA CUOTA DE LA OFERTA (siempre CPA, aunque
+  // la base sea cero); cualquier otro, lo que diga el modelo de cobro de la empresa.
+  const c = cuotaDeOferta ? calcularCuotaDeOferta(pedido, cuotaDeOferta, config.feeModel) : calcularComision(pedido, config)
   if (!c) return { resultado: 'SIN_COMISION' }
 
   const id = randomUUID()
@@ -229,6 +234,7 @@ export async function registrarComisionDePedidoEnTx(
       rate: c.rate,
       amount: c.amount,
       currency: pedido.currency,
+      dealId: c.dealId ?? null,
       ledgerEntryId: asiento.id,
     },
   })

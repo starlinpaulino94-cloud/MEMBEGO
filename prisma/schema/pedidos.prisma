@@ -150,6 +150,7 @@ model MembegoOrder {
   payment      PaymentEvidence?
   /// Fase 4: la comisión que Membego cobra por este pedido (a lo sumo una).
   commission   Commission?
+  dealClaim    DealClaim?
 
   @@unique([companyId, code])
   @@unique([companyId, idempotencyKey])
