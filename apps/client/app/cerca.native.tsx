@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'expo-router'
+import Constants from 'expo-constants'
 import {
   View,
   Text,
@@ -280,6 +281,13 @@ export default function CercaNativeScreen() {
     : null
   const selectedCompanyColor = brandColor(selectedCompanyColorValue, colors.primary.DEFAULT)
   const selectedCompanyForeground = brandDisplayForeground(selectedCompanyColorValue, colors.primary.DEFAULT)
+  const googleMapsEnabledOnIos =
+    Platform.OS === 'ios' &&
+    Constants.appOwnership !== 'expo' &&
+    Constants.expoConfig?.extra?.googleMapsIosConfigured === true
+  const mapProvider = Platform.OS === 'android' || googleMapsEnabledOnIos
+    ? PROVIDER_GOOGLE
+    : PROVIDER_DEFAULT
 
   return (
     <View className="flex-1 bg-background">
@@ -287,7 +295,7 @@ export default function CercaNativeScreen() {
         <MapView
           ref={mapRef}
           style={{ flex: 1 }}
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT}
+          provider={mapProvider}
           userInterfaceStyle="light"
           initialRegion={{ ...DEFAULT_CENTER, latitudeDelta: 0.1, longitudeDelta: 0.1 }}
           onMapReady={() => {
