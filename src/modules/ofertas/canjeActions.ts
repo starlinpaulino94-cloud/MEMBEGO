@@ -21,6 +21,7 @@ import { ofertaVigente } from '@/modules/ofertas/queries'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 import { registrarEntregaBeneficio } from '@/modules/transacciones/entrega'
 import { registrarEvento } from '@/modules/observabilidad/eventos'
+import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
 
 export interface CanjeRegaloState {
   error?: string
@@ -75,11 +76,7 @@ export async function confirmarCanjeRegalo(
     }
     const { oferta } = invitado
     empresaEvento = oferta.companyId
-    if (
-      user.metadata.role !== 'SUPERADMIN' &&
-      user.metadata.companyId &&
-      oferta.companyId !== user.metadata.companyId
-    ) {
+    if (!puedeOperarEnEmpresa(user, oferta.companyId)) {
       return { error: 'Este regalo pertenece a otra empresa.' }
     }
     if (!(oferta.estado === 'ACTIVA' && ofertaVigente(oferta))) {

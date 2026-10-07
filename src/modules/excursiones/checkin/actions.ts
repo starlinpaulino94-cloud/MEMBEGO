@@ -27,7 +27,7 @@ import {
   estadoPorPagos,
   type EstadoReserva,
 } from '@/modules/excursiones/reservas/nucleo'
-import { procesarVentaYComisionInterna } from '@/modules/excursiones/ventas/actions'
+import { procesarVentaYComisionInterna } from '@/modules/excursiones/ventas/procesar'
 
 export interface CheckinItemReserva {
   id: string

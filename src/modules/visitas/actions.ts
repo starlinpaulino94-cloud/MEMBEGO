@@ -21,6 +21,7 @@ import { capturarErrorInesperado } from '@/lib/sentry'
 import { confirmarVisitaSchema } from '@/modules/visitas/schema'
 import { ejecutarCanje } from '@/modules/visitas/canje'
 import { buscarPedidoPorQr, type PedidoQrLookup } from '@/modules/orders/escaner'
+import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
 
 export interface VisitaReciente {
   id: string
@@ -237,7 +238,7 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
       for (const candidato of candidatos) {
         const encontrado = await buscarPedidoPorQr(candidato)
         if (!encontrado) continue
-        if (user.metadata.role !== 'SUPERADMIN' && user.metadata.companyId && encontrado.companyId !== user.metadata.companyId) {
+        if (!puedeOperarEnEmpresa(user, encontrado.companyId)) {
           await logScanInvalido(user.metadata.dbUserId, clean, 'WRONG_COMPANY')
           return { error: 'Este pedido pertenece a otra empresa.', errorCode: 'WRONG_COMPANY' }
         }
@@ -273,11 +274,7 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
     // ── Fase E5: QR de una compra de promoción — flujo de canje propio ──────
     if (qr.compra) {
       const compra = qr.compra
-      if (
-        user.metadata.role !== 'SUPERADMIN' &&
-        user.metadata.companyId &&
-        compra.companyId !== user.metadata.companyId
-      ) {
+      if (!puedeOperarEnEmpresa(user, compra.companyId)) {
         await logScanInvalido(user.metadata.dbUserId, clean, 'WRONG_COMPANY')
         return { error: 'Esta promoción pertenece a otra empresa.', errorCode: 'WRONG_COMPANY' }
       }
@@ -345,11 +342,7 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
     if (qr.ofertaInvitado) {
       const invitado = qr.ofertaInvitado
       const oferta = invitado.oferta
-      if (
-        user.metadata.role !== 'SUPERADMIN' &&
-        user.metadata.companyId &&
-        oferta.companyId !== user.metadata.companyId
-      ) {
+      if (!puedeOperarEnEmpresa(user, oferta.companyId)) {
         await logScanInvalido(user.metadata.dbUserId, clean, 'WRONG_COMPANY')
         return { error: 'Este regalo pertenece a otra empresa.', errorCode: 'WRONG_COMPANY' }
       }
@@ -399,11 +392,7 @@ export async function buscarPorToken(token: string): Promise<LookupResult> {
     }
 
     // Validate scanner's company matches membership's company
-    if (
-      user.metadata.role !== 'SUPERADMIN' &&
-      user.metadata.companyId &&
-      membership.companyId !== user.metadata.companyId
-    ) {
+    if (!puedeOperarEnEmpresa(user, membership.companyId)) {
       await logScanInvalido(user.metadata.dbUserId, clean, 'WRONG_COMPANY')
       return { error: 'Este cliente pertenece a otra empresa.', errorCode: 'WRONG_COMPANY' }
     }

@@ -19,6 +19,7 @@ import { SCANNER_ROLES } from '@/types'
 import { InventarioError } from '@/modules/inventory/errores'
 import { PedidoError } from './errores'
 import { completarPorQrEnTx, type ContextoPedido } from './service'
+import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
 
 export type ResultadoCierre = { ok: true; code: string; nivel: string } | { ok: false; error: string }
 
@@ -33,7 +34,7 @@ export async function completarPedidoPorQr(token: string): Promise<ResultadoCier
     // La empresa del pedido sale de la base (el token es único), no del navegador.
     const p = await sinEmpresa('escáner: empresa del pedido de un QR', (tx) => tx.membegoOrder.findUnique({ where: { qrToken: limpio }, select: { companyId: true } }))
     if (!p) return { ok: false, error: 'Ese código QR no corresponde a ningún pedido.' }
-    if (user.metadata.role !== 'SUPERADMIN' && user.metadata.companyId && p.companyId !== user.metadata.companyId) {
+    if (!puedeOperarEnEmpresa(user, p.companyId)) {
       return { ok: false, error: 'Este pedido pertenece a otra empresa.' }
     }
 

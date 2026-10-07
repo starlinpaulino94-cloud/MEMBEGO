@@ -361,6 +361,10 @@ enum AuditAccion {
   ORDER_CANCELLED
   ORDER_REFUNDED
   ORDER_PAYMENT_RECORDED
+  /// Commerce Core · Fase 4: Merchant Billing (lo que hace una persona: configurar, asentar, cambiar el estado).
+  BILLING_CONFIG_CHANGED
+  BILLING_ENTRY_RECORDED
+  BILLING_STATUS_CHANGED
   SUPPLY_V2_ORDER_CREATED
   SUPPLY_V2_ORDER_RESERVED
   SUPPLY_V2_ORDER_PAYMENT_SUBMITTED
@@ -917,6 +921,11 @@ model Company {
   orderAttributions      OrderAttribution[]
   customerConfirmations  CustomerConfirmation[]
   paymentEvidences       PaymentEvidence[]
+  // Commerce Core · Fase 4: Merchant Billing. Relaciones inversas.
+  merchantBillingConfig  MerchantBillingConfig?
+  merchantCommissions    Commission[]
+  merchantLedgerEntries  MerchantLedgerEntry[]
+  merchantStatements     MerchantStatement[]
   catalogCategories      CatalogCategory[]
   catalogItemCategories  CatalogItemCategory[]
   catalogItemImages      CatalogItemImage[]

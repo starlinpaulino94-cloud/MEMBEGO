@@ -67,6 +67,8 @@ const USUARIOS = {
   pedidosAdmin: { email: 'e2e.pedidos.admin@membego.test', nombre: 'Admin Pedidos E2E', role: 'ADMINISTRADOR' },
   pedidosCliente: { email: 'e2e.pedidos.cliente@membego.test', nombre: 'Marta Pedidos E2E', role: 'CLIENTE' },
   pedidosSinCapacidad: { email: 'e2e.pedidos.sin@membego.test', nombre: 'Admin Sin Pedidos E2E', role: 'ADMINISTRADOR' },
+  /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */
+  facturacionSuperadmin: { email: 'e2e.facturacion.sa@membego.test', nombre: 'Facturación SA E2E', role: 'SUPERADMIN' },
 } as const
 
 export type RolE2E = keyof typeof USUARIOS

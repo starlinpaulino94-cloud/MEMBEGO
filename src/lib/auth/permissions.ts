@@ -125,6 +125,13 @@ export const ADMIN_SECTIONS = [
   // con un cliente y con la comisión que Membego le cobra. (Escanear el QR que
   // cierra el pedido vive en 'scanner', que sí tiene Supervisión.)
   'pedidos-membego',
+  // Commerce Core · Mi cuenta Membego (`/admin/facturacion-membego`, Fase 4): lo que
+  // la empresa le debe a Membego por los pedidos que la plataforma le trajo —su
+  // saldo, el historial de comisiones y los estados de cuenta—. SOLO LECTURA: los
+  // pagos, ajustes y créditos los asienta el superadmin. Cuelga de la misma
+  // capacidad que los pedidos y tampoco entra en los roles acotados: es información
+  // de dirección (lo que se le paga a la plataforma).
+  'facturacion-membego',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).

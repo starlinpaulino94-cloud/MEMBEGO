@@ -241,7 +241,8 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   // el Plan Maestro lo activa con el catálogo, para los ítems que controlan
   // inventario (`trackInventory`).
   CATALOGO_UNIFICADO: ['catalogo', 'inventario'],
-  PEDIDOS_MEMBEGO: ['pedidos-membego'],
+  // «Mi cuenta Membego» (lo que la empresa le debe a la plataforma por esos pedidos) cuelga de la misma capacidad.
+  PEDIDOS_MEMBEGO: ['pedidos-membego', 'facturacion-membego'],
   // HOME_BUILDER no aparece aquí: comparte la sección 'personalizacion' con
   // las opciones de marca/engagement, que NO se ocultan. Se revisa a mano en
   // el componente de esa página (ver admin/personalizacion/page.tsx).

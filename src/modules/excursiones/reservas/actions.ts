@@ -29,7 +29,7 @@ import {
   politicaValida,
   VENTANA_ATRIBUCION_DIAS,
 } from '@/modules/excursiones/atribucion/nucleo'
-import { procesarVentaYComisionInterna } from '../ventas/actions'
+import { procesarVentaYComisionInterna } from '../ventas/procesar'
 import { prisma } from '@/lib/prisma'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -57,7 +57,7 @@ import {
   type ReglaPrecioDinamico,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
-import { sincronizarEstadoAgotada } from '../catalogo/actions'
+import { sincronizarEstadoAgotada } from '../catalogo/agotadas'
 import { getExcursionesConfig } from '../config'
 import { correoConfirmacionReserva, correoAccesoCliente } from '@/lib/email/plantillas-excursiones'
 import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'

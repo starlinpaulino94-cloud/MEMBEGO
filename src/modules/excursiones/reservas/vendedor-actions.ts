@@ -19,7 +19,7 @@ import {
   type ReglaPrecioDinamico,
 } from './nucleo'
 import { verificarYBloquearCupoActividad } from './queries'
-import { sincronizarEstadoAgotada } from '../catalogo/actions'
+import { sincronizarEstadoAgotada } from '../catalogo/agotadas'
 import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { correoAccesoCliente, correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'

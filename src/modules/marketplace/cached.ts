@@ -1,7 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import type { CompanyPublic, PromotionPublic } from '@/modules/marketplace/types'
 import * as q from '@/modules/marketplace/queries'
-import { catalogoPublicoDeEmpresa, catalogoPublicoGlobal, type FiltrosDescubrimiento } from '@/modules/catalog/publico'
+import { catalogoPublicoDeEmpresa, catalogoPublicoGlobal, itemCatalogoPublico, type FiltrosDescubrimiento } from '@/modules/catalog/publico'
 import type { MarketplaceFilters, PromotionFilters } from '@/modules/marketplace/types'
 
 /**
@@ -198,6 +198,22 @@ export async function getCatalogoPublicoGlobal(filtros: FiltrosDescubrimiento = 
   const fn = unstable_cache(
     () => catalogoPublicoGlobal(filtros),
     ['mk-catalogo-global', JSON.stringify(filtros)],
+    { revalidate: 120, tags: [MARKETPLACE_TAG] }
+  )
+  return fn()
+}
+
+/**
+ * Ficha pública de un ítem. Pasa por el MISMO tag que la vitrina y el descubrimiento:
+ * sin él, pausar un ítem o cambiar su precio dejaba la ficha sirviendo lo viejo hasta
+ * 2 minutos (el `revalidateTag` del panel no la alcanzaba; hallazgo M3 de la auditoría
+ * del 2026-10-07). `null` (no existe o no es público) también se cachea: tiene el mismo
+ * TTL y el mismo tag, y publicar el ítem lo invalida.
+ */
+export async function getItemCatalogoPublico(companySlug: string, itemSlug: string) {
+  const fn = unstable_cache(
+    () => itemCatalogoPublico(companySlug, itemSlug),
+    ['mk-catalogo-item', companySlug, itemSlug],
     { revalidate: 120, tags: [MARKETPLACE_TAG] }
   )
   return fn()

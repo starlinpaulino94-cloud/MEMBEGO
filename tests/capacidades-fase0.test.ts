@@ -109,3 +109,33 @@ test('la ruta del cliente de la ruleta existe en el mapa que el menú usa para e
   // navDisponible la fuerza oculta cuando falta la capacidad RULETA.
   assert.deepEqual(RUTAS_POR_MODULO_CLIENTE.RULETA, ['/cliente/ruleta'])
 })
+
+// ── Toda alta de empresa lleva los overrides de tenant nuevo (auditoría del 2026-10-07, M1) ──
+
+test('todo sitio que crea una empresa usa CAPACIDADES_OVERRIDE_TENANT_NUEVO (si no, nace con CRM y Mensajería encendidos)', async () => {
+  const { readdirSync, readFileSync, statSync } = await import('node:fs')
+  const { join, relative } = await import('node:path')
+  const raiz = join(__dirname, '..', 'src')
+  const archivos = (d: string): string[] =>
+    readdirSync(d).flatMap((n) => {
+      const p = join(d, n)
+      return statSync(p).isDirectory() ? archivos(p) : /\.(ts|tsx)$/.test(n) ? [p] : []
+    })
+  // El seed de desarrollo crea empresas de demostración sin capacidades a propósito.
+  const EXENTOS = new Set(['lib/seed.ts'])
+  const sinOverride: string[] = []
+  let altas = 0
+  for (const a of archivos(raiz)) {
+    const rel = relative(raiz, a).split('\\').join('/')
+    if (EXENTOS.has(rel)) continue
+    const t = readFileSync(a, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    const n = (t.match(/\bcompany\.(create|upsert|createMany)\(/g) ?? []).length
+    if (n === 0) continue
+    altas += n
+    if (!t.includes('CAPACIDADES_OVERRIDE_TENANT_NUEVO')) sinOverride.push(rel)
+  }
+  // Piso de cordura: si el rastreo dejara de ver las altas, la prueba pasaría en vacío.
+  // Eran 5 mientras existía Supply V1 (proveedores.ts, retirado en #574); hoy son 4.
+  assert.ok(altas >= 4, `solo encontró ${altas} altas de empresa`)
+  assert.deepEqual(sinOverride, [], 'estas altas de empresa no usan CAPACIDADES_OVERRIDE_TENANT_NUEVO')
+})

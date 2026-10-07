@@ -184,6 +184,17 @@ retirar la casa saca todo; un no-superadmin no entra. La casa es **una sola por
 base**: el spec la designa y la retira, así que no debe correrse en paralelo con
 otro que la use.
 
+**Merchant Billing (Commerce Core · Fase 4)** — `facturacion-superadmin` (escritorio):
+el superadmin (`facturacionSuperadmin`, rol `SUPERADMIN`) abre la lista de cobros y
+encuentra una empresa con deuda, asienta un pago (la referencia es obligatoria; queda en
+el libro con su saldo corrido y en la bitácora), baja el límite de crédito por debajo del
+saldo (la cuenta pasa a «En gracia» y la empresa ve el plazo), suspende la cuenta a mano
+(«Retenida a mano») y la libera; la empresa ve cada cambio en una pantalla sin
+formularios, y quien no es superadmin no entra al panel de cobros. La base de E2E no
+lleva los disparadores del libro (`db push`): las reglas se prueban en
+`tests/postgres/billing.db.test.ts`; aquí, la interfaz. El recorrido pedido → comisión →
+libro está en el spec de pedidos (abajo).
+
 **Pedidos Membego (Commerce Core · Fase 3)** — `pedidos-membego` (escritorio),
 con el mismo arnés (`empresaCatalogo({ capacidad: true, pedidos: true })`,
 `existenciasSembradas`) y tres sesiones: la de la empresa (`pedidosAdmin`), la de
@@ -199,7 +210,11 @@ escaneo dice «ya se canjeó» → la empresa registra el pago con referencia y 
 «Pago verificado» → el cliente cancela a tiempo y se libera lo apartado; la empresa
 cancela otro con su motivo → reembolso devolviendo lo vendido al inventario → otra
 empresa no ve el pedido (se ve igual que uno inventado) y una empresa sin la
-capacidad no entra. La ráfaga del lector tiene una trampa: tras recargar
+capacidad no entra. **Desde la Fase 4** el mismo spec comprueba además que el pedido
+cerrado cobró su comisión (CPA, aún sin pago verificado) y aparece en «Mi cuenta
+Membego» con su código, que el reembolso deja el reverso y la cuenta en cero, y que una
+empresa sin la capacidad no entra a «Mi cuenta Membego» ni otra empresa ve la cuenta
+ajena. La ráfaga del lector tiene una trampa: tras recargar
 `/empleado/scanner` hay que esperar a «Lector listo» antes de teclear, o las
 primeras teclas se pierden y el código llega incompleto (sale «Código QR no
 encontrado»). **Ojo:** como el resto, corre sobre una base creada con `db push` (sin

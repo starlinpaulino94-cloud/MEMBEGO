@@ -55,6 +55,10 @@
  *                           se puede juntar el cliente de una con la sucursal
  *                           de otra, y las líneas no se editan ni con el
  *                           contexto correcto.
+ *   13. Merchant Billing  — `merchant_*` (Commerce Core · Fase 4): la cuenta, el
+ *                           libro y los cortes de una empresa no los ve ni los
+ *                           toca otra, y el libro no se edita ni con el contexto
+ *                           correcto.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * USO
@@ -189,6 +193,9 @@ function limpiar() {
     // El ledger de inventario no se borra (lo prohíbe un disparador): para limpiar
     // lo sembrado se desactivan los disparadores ordinarios en ESTA transacción.
     sql(`begin; set local session_replication_role = replica;
+         delete from merchant_statements where id in ('${A}_ms', '${B}_ms');
+         delete from merchant_ledger_entries where id in ('${A}_ml', '${B}_ml');
+         delete from merchant_billing_configs where id in ('${A}_mc', '${B}_mc');
          delete from order_attributions where id in ('${A}_pa', '${B}_pa');
          delete from membego_order_lines where id in ('${A}_pl', '${B}_pl');
          delete from membego_orders where id in ('${A}_po', '${B}_po');
@@ -322,6 +329,18 @@ try {
     insert into order_attributions (id, "companyId", "orderId", channel) values
       ('${A}_pa', '${A}', '${A}_po', 'DIRECT'),
       ('${B}_pa', '${B}', '${B}_po', 'DIRECT');
+
+    -- COMMERCE CORE · Merchant Billing: la cuenta, un asiento (el primero de la cuenta: posición 1 y
+    -- saldo = monto) y un corte por empresa.
+    insert into merchant_billing_configs (id, "companyId", "updatedAt") values
+      ('${A}_mc', '${A}', now()),
+      ('${B}_mc', '${B}', now());
+    insert into merchant_ledger_entries (id, "companyId", seq, type, amount, balance, "referenceType", "referenceId", reason, "idempotencyKey") values
+      ('${A}_ml', '${A}', 1, 'ADJUSTMENT', 10, 10, 'MANUAL', 'rls', 'prueba', '${A}_ml_k'),
+      ('${B}_ml', '${B}', 1, 'ADJUSTMENT', 10, 10, 'MANUAL', 'rls', 'prueba', '${B}_ml_k');
+    insert into merchant_statements (id, "companyId", period, "periodStart", "periodEnd", "billingCycle", "openingBalance", "totalOrders", "totalGmv", "totalCommissions", reversals, adjustments, credits, payments, "closingBalance", "amountDue", "entryCount") values
+      ('${A}_ms', '${A}', '2030-01-01/2030-02-01', '2030-01-01', '2030-02-01', 'MONTHLY', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+      ('${B}_ms', '${B}', '2030-01-01/2030-02-01', '2030-01-01', '2030-02-01', 'MONTHLY', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     -- MEMBEGO SUPPLY · el caso cruzado, que es el que importa.
     --
@@ -676,6 +695,41 @@ try {
     )
   } else {
     omitir('Pedidos: ni A, dueña del pedido, puede editar una línea', 'la base no trae los disparadores de las migraciones (db push)')
+  }
+
+  // ── 13. Commerce Core · Merchant Billing ──────────────────────────────────
+  //
+  // Las cuatro tablas llevan `companyId` propio y entran por Nivel 0 sin una
+  // política escrita a mano. Lo que importa aquí: lo que una empresa le debe a
+  // Membego no lo ve ni lo toca otra empresa, y el libro no se edita ni con el
+  // contexto correcto.
+  const cuentas = veo('merchant_billing_configs', `${A}_mc`, `${B}_mc`)
+  comprobar('Billing: con el contexto en A no aparece la cuenta de B', cuentas.length === 1 && cuentas[0] === `${A}_mc`, `devolvió: ${JSON.stringify(cuentas)}`)
+  const libroB = veo('merchant_ledger_entries', `${A}_ml`, `${B}_ml`)
+  comprobar('Billing: el libro de B tampoco se ve', libroB.length === 1 && libroB[0] === `${A}_ml`, `devolvió: ${JSON.stringify(libroB)}`)
+  const cortes = veo('merchant_statements', `${A}_ms`, `${B}_ms`)
+  comprobar('Billing: los cortes de B tampoco', cortes.length === 1 && cortes[0] === `${A}_ms`, `devolvió: ${JSON.stringify(cortes)}`)
+  comprobar(
+    'Billing: A no puede asentar un movimiento en la cuenta de B',
+    fallaComoInquilino(
+      A,
+      `insert into merchant_ledger_entries (id,"companyId",seq,type,amount,balance,"referenceType","referenceId",reason,"idempotencyKey")
+       values ('${A}_intruso_ml','${B}',2,'ADJUSTMENT',1,11,'MANUAL','x','intruso','${A}_intruso_k');`
+    )
+  )
+  const tocadasCuentas = comoInquilino(A, `with u as (update merchant_billing_configs set "statusReason"='x' returning 1) select count(*) from u;`)
+  comprobar('Billing: un `update` sin `where` solo alcanza la cuenta de A', tocadasCuentas === '1', `filas afectadas: ${tocadasCuentas} (debería ser 1)`)
+  if (hayDisparador('merchant_ledger_entries_sin_cambios')) {
+    comprobar(
+      'Billing: ni A, dueña de la cuenta, puede editar un asiento del libro',
+      fallaComoInquilino(A, `update merchant_ledger_entries set amount = 1 where id = '${A}_ml';`)
+    )
+    comprobar(
+      'Billing: ni A puede borrar un asiento del libro',
+      fallaComoInquilino(A, `delete from merchant_ledger_entries where id = '${A}_ml';`)
+    )
+  } else {
+    omitir('Billing: ni A puede editar ni borrar un asiento del libro', 'la base no trae los disparadores de las migraciones (db push)')
   }
 } catch (e) {
   fallos++

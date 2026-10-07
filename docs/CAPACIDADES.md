@@ -44,6 +44,7 @@
 | `HOME_BUILDER` | Editor de inicio dentro de `/admin/personalizacion` (**no** tiene sección propia: comparte página con el formulario de marca, que no se oculta) | ❌ apagada desde la Fase 0 |
 | `CATALOGO_UNIFICADO` | Secciones `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) e `inventario` (`/admin/inventario`, Fase 2: existencias por variante y sucursal) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
 | `PEDIDOS_MEMBEGO` | Sección `pedidos-membego` (`/admin/pedidos-membego`, Commerce Core · Fase 3: pedidos del marketplace con atribución, confirmación del cliente y QR). Con ella la ficha pública de sus productos ofrece «Hacer un pedido» y «Mis pedidos» aparece en el menú del cliente | ❌ apagada para todos; solo tiene sentido en empresas con `CATALOGO_UNIFICADO` (las líneas del pedido son variantes del catálogo) |
+| *(misma capacidad)* | Sección `facturacion-membego` (`/admin/facturacion-membego`, **«Mi cuenta Membego»**, Commerce Core · Fase 4): lo que la empresa le debe a Membego por esos pedidos —saldo, comisiones, estados de cuenta—, **solo lectura**. No tiene capacidad propia: cuelga de `PEDIDOS_MEMBEGO` | ❌ con ella |
 
 ### Cómo encender los pedidos Membego en una empresa
 
@@ -53,6 +54,15 @@ PEDIDOS_MEMBEGO: true }`). Hace falta que la empresa esté publicada y tenga al 
 sucursal activa. Sin ella, la acción de pedir responde «este producto no está disponible
 para pedir» y el panel se niega. Si se apaga con pedidos ya hechos, el cliente conserva
 «Mis pedidos» y el historial.
+
+**Qué pasa con la plata (Fase 4).** Con `PEDIDOS_MEMBEGO` encendida, cada pedido de
+marketplace que se **completa** (QR) le cobra a la empresa una comisión de Membego, en
+la misma transacción: CPA fijo (RD$ 100 de serie) si el pedido no tiene el pago
+verificado, o el 8 % de la base comisionable si lo tiene (modelo `HYBRID`, que el
+superadmin puede cambiar por empresa en `/superadmin/facturacion`). La cuenta se crea
+sola con esos valores y un límite de crédito de RD$ 5,000. **Encender la capacidad en una
+empresa real es empezar a cobrarle**: avísale antes. Los pedidos que envuelven una compra
+de Supply no comisionan (se liquidan por Supply Economics).
 
 ### Cómo encender el catálogo unificado en una empresa
 
