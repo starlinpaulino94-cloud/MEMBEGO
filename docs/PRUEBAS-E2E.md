@@ -277,6 +277,22 @@ tarjeta sin autorización no cobra y deja el pedido como estaba, una transferenc
 Prisma con su QR conocido (pedir → aceptar → listo ya lo prueba `pedidos-membego`), y el «lector» de QR es el campo de
 texto: el lector físico teclea el código y pulsa Enter, que es lo mismo.
 
+**Checkout del marketplace (Fase 8)** — `carrito-checkout` (escritorio), con el mismo arnés (`empresaCatalogo({ capacidad:
+true, pedidos: true })` para DOS negocios, `existenciasSembradas`) más una cuenta bancaria sembrada (`metodoPago`) y
+`PAGO_TRANSFERENCIA` por override en ambos, y dos sesiones: `carritoCliente` y `carritoAdmin`. Recorre, **sin cuenta**:
+agregar un producto (2) y un servicio de un negocio y un servicio de otro → el contador del menú los cuenta → `/carrito`
+tiene un bloque por negocio con los precios de hoy (RD$800.00 = 2 × 250 + 300) y sobrevive a recargar → «una más»/«una
+menos» recalculan con el servidor (RD$1,100.00 ↔ RD$800.00) y «Vaciar» saca un negocio → pagar sin sesión manda a
+`/login?redirect=…` y el carrito sigue intacto. **Con cuenta**: pedir 50 de algo que tiene 10 se avisa por renglón
+(«Solo quedan N…») y el botón no deja enviar → un negocio sin cuentas no ofrece transferencia y uno que no existe «no
+recibe pedidos» → pagar el carrito por **transferencia**: llega a «Mi pedido» con sus dos renglones, la nota «Pagará por
+transferencia. paso a las 5», las instrucciones con el **código del pedido como referencia** y la cuenta del negocio, en
+la base `MARKETPLACE`/`TRANSFER`/sin pago/canal `MARKETPLACE_BROWSE`, 2 unidades apartadas (no vendidas) y el carrito de
+ese negocio vacío → el negocio acepta, marca listo y **registra el pago con referencia** (las instrucciones
+desaparecen del pedido del cliente) → el empleado escanea el QR y entrega: queda `COMPLETED` y las unidades apartadas se
+venden. **Ojo:** el spec usa `localStorage` por contexto de navegador (cada persona abre el suyo) y espera el resumen del
+servidor, que tarda ~200 ms tras cada cambio.
+
 Tres cosas que costó aprender y conviene no repetir:
 
 1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de
