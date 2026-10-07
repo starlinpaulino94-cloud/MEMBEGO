@@ -18,6 +18,7 @@ function NuevoVehiculoScreenContent() {
   const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
   const { user, isLoading: authLoading } = useAuth()
   const { data, isLoading, isError, refetch } = useVehiculoTipos(!!user)
+  const empresas = data?.empresas ?? []
   const [empresaSeleccionadaId, setEmpresaSeleccionadaId] = useState<string | null>(null)
   const backHeader = (
     <BackHeader
@@ -30,15 +31,15 @@ function NuevoVehiculoScreenContent() {
   const backgroundClass = sheetBackgroundClass === 'bg-surface-card' ? 'bg-surface-card' : 'bg-background'
 
   useEffect(() => {
-    if (!data?.empresas.length) return
+    if (empresas.length === 0) return
     setEmpresaSeleccionadaId((actual) => {
-      if (actual && data.empresas.some((empresa) => empresa.id === actual)) return actual
-      return data.empresas.find((empresa) => empresa.id === data.empresaActualId)?.id
-        ?? data.empresas[0].id
+      if (actual && empresas.some((empresa) => empresa.id === actual)) return actual
+      return empresas.find((empresa) => empresa.id === data?.empresaActualId)?.id
+        ?? empresas[0].id
     })
   }, [data])
 
-  const empresaSeleccionada = data?.empresas.find((empresa) => empresa.id === empresaSeleccionadaId)
+  const empresaSeleccionada = empresas.find((empresa) => empresa.id === empresaSeleccionadaId)
 
   // Auth gate
   if (authLoading) {
@@ -106,7 +107,7 @@ function NuevoVehiculoScreenContent() {
         )}
 
         {/* No tipos disponibles */}
-        {data && data.empresas.length === 0 && (
+        {data && empresas.length === 0 && (
           <EmptyState
             icon={<Car size={40} color="#71717a" />}
             title="Sin categorías disponibles"
@@ -114,12 +115,12 @@ function NuevoVehiculoScreenContent() {
           />
         )}
 
-        {data && data.empresas.length > 1 && (
+        {data && empresas.length > 1 && (
           <View className="mb-4 gap-2">
             <Text className="text-sm font-inter-semibold text-foreground">
               ¿En qué negocio registrarás el vehículo?
             </Text>
-            {data.empresas.map((empresa) => {
+            {empresas.map((empresa) => {
               const seleccionada = empresa.id === empresaSeleccionadaId
               return (
                 <Pressable
@@ -144,7 +145,7 @@ function NuevoVehiculoScreenContent() {
           </View>
         )}
 
-        {data && data.empresas.length === 1 && empresaSeleccionada && (
+        {data && empresas.length === 1 && empresaSeleccionada && (
           <View className="mb-4 rounded-xl border border-border bg-card px-4 py-3">
             <Text className="text-xs text-muted-foreground">Negocio de registro</Text>
             <Text className="mt-1 font-inter-semibold text-foreground">
