@@ -27,6 +27,8 @@ interface Scenario {
   amountLookups: number
   chargeCalls: number
   onCharge?: () => void
+  onCustomerRead?: () => void
+  customerGetResponses?: Array<unknown | null>
   intentCreates: number
   chargeResults: Array<unknown | null>
   chargeRequests: Array<{ readonly purchaseUniqueId: unknown; readonly order: unknown; readonly amount: unknown; readonly token?: unknown }>
@@ -600,6 +602,7 @@ test('ambiguous retries retain the Purchase UniqueID and serialize concurrent ch
     perfilBase: ['id:profile-old'], paymentProfileId: 'profile-fresh',
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - 90_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
     purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: stableUniqueId },
     reservaClienteKey: 'held-customer-reservation',
   }
@@ -674,6 +677,71 @@ test('stale activation recovery claims one lease before charging a persisted int
   assert.equal(s.chargeCalls, 1)
   assert.deepEqual(s.chargeRequests.map((call) => call.purchaseUniqueId), ['stable-purchase-key'])
   assert.equal(row.estado, 'PURCHASE_PENDING')
+})
+
+test('a superseded stale purchase lookup cannot send Purchase', { timeout: 5_000 }, async () => {
+  const { PURCHASE_RETRY_MS } = await import('../src/modules/pagos/cardnetClienteShared')
+  const s = setup()
+  const profileResponse = {
+    denegado: false, email: 'qa@example.test',
+    perfiles: [{ paymentProfileId: 'profile-fresh', token: 'fresh-payment-profile-token', habilitado: true }],
+  }
+  let releaseFirstProfile: (response: unknown) => void = () => undefined
+  let releaseSecondProfile: (response: unknown) => void = () => undefined
+  const firstProfileResponse = new Promise<unknown>((resolve) => { releaseFirstProfile = resolve })
+  const secondProfileResponse = new Promise<unknown>((resolve) => { releaseSecondProfile = resolve })
+  let announceFirstRead: () => void = () => undefined
+  let announceSecondRead: () => void = () => undefined
+  const firstRead = new Promise<void>((resolve) => { announceFirstRead = resolve })
+  const secondRead = new Promise<void>((resolve) => { announceSecondRead = resolve })
+  let customerReadCount = 0
+  s.onCustomerRead = () => {
+    customerReadCount += 1
+    if (customerReadCount === 1) announceFirstRead()
+    else announceSecondRead()
+  }
+  s.customerGetResponses = [firstProfileResponse, secondProfileResponse]
+  let releaseCharge: (response: unknown) => void = () => undefined
+  let announceCharge: () => void = () => undefined
+  const chargeStarted = new Promise<void>((resolve) => { announceCharge = resolve })
+  const chargeResult = new Promise<unknown>((resolve) => { releaseCharge = resolve })
+  s.onCharge = announceCharge
+  s.chargeResults = [chargeResult]
+  const id = 'r'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: null, compraId: 'purchase-test', monto: 1000, moneda: 'DOP',
+    estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh',
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - PURCHASE_RETRY_MS - 1_000),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key' },
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+  const api = await service()
+  const status = () => api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  const first = status()
+  await firstRead
+  row.updatedAt = new Date(Date.now() - PURCHASE_RETRY_MS - 1_000)
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  const second = status()
+  await secondRead
+  releaseSecondProfile(profileResponse)
+  await chargeStarted
+  assert.equal(s.chargeCalls, 1)
+  releaseFirstProfile(profileResponse)
+  const firstResult = await first
+  assert.equal(firstResult.status, 202)
+  assert.equal(s.chargeCalls, 1)
+  releaseCharge(null)
+  const secondResult = await second
+  assert.ok([firstResult, secondResult].every((result) => result.status === 202 && result.body.status === 'pending'))
+  assert.deepEqual(s.chargeRequests.map((call) => call.purchaseUniqueId), ['stable-purchase-key'])
+  assert.equal(s.customerGets, 2)
 })
 
 test('the real BFF route rejects a request without Bearer before calling the service', async () => {

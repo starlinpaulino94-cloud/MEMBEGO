@@ -175,6 +175,7 @@ export async function estadoSesionCardnet(
       return interpretPurchase(session, session.purchaseIntent.id, searched.decision, searched.payload)
     }
     if (Date.now() - session.updatedAt.getTime() >= PURCHASE_RETRY_MS) {
+      const claimedAt = new Date()
       const claimed = await conEmpresa(session.companyId, (tx) =>
         tx.cardnetCaptureSession.updateMany({
           where: {
@@ -183,12 +184,13 @@ export async function estadoSesionCardnet(
             estado: CARDNET_SESSION_STATES.PURCHASE_PENDING,
             updatedAt: { lt: new Date(Date.now() - PURCHASE_RETRY_MS) },
           },
-          data: { updatedAt: new Date() },
+          data: { updatedAt: claimedAt },
         })
       ).catch(() => ({ count: 0 }))
       if (claimed.count === 1) {
-        const profile = await getProfileForCharge(session)
-        if (profile?.token) return chargeWithProfile(session, profile, request)
+        const claimedSession = { ...session, updatedAt: claimedAt }
+        const profile = await getProfileForCharge(claimedSession)
+        if (profile?.token) return chargeWithProfile(claimedSession, profile, request)
       }
     }
     return success(202, { status: 'pending' })

@@ -171,7 +171,23 @@ export async function createOrReadIntent(
 ) {
   const purchaseIntent = session.purchaseIntent
   if (purchaseIntent) {
-    if (session.estado !== CARDNET_SESSION_STATES.PROFILE_PENDING) return session.purchaseIntent
+    if (session.estado !== CARDNET_SESSION_STATES.PROFILE_PENDING) {
+      if (session.estado !== CARDNET_SESSION_STATES.PURCHASE_PENDING) return null
+      const claimedAt = new Date()
+      const claimed = await conEmpresa(session.companyId, (tx) =>
+        tx.cardnetCaptureSession.updateMany({
+          where: {
+            id: session.id,
+            authSubject: session.authSubject,
+            purchaseIntentId: purchaseIntent.id,
+            estado: CARDNET_SESSION_STATES.PURCHASE_PENDING,
+            updatedAt: session.updatedAt,
+          },
+          data: { updatedAt: claimedAt },
+        })
+      ).catch(() => ({ count: 0 }))
+      return claimed.count === 1 ? purchaseIntent : null
+    }
     const claimedAt = new Date()
     const claimed = await conEmpresa(session.companyId, (tx) =>
       tx.cardnetCaptureSession.updateMany({
