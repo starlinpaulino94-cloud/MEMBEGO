@@ -10,7 +10,6 @@ import {
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  ArrowLeft,
   History,
   CalendarDays,
   MapPin,
@@ -29,6 +28,7 @@ import { Button } from '../src/components/ui/Button'
 import { Card } from '../src/components/ui/Card'
 import { Badge } from '../src/components/ui/Badge'
 import { Skeleton } from '../src/components/ui/Skeleton'
+import { BackHeader } from '../src/components/ui/BackHeader'
 
 interface Visita {
   id: string
@@ -217,26 +217,11 @@ function HistorialScreenContent() {
 
   return (
     <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
-      {/* ── Barra con back + título ──────────────────────────────────── */}
-      <View
-        className={sheetBackgroundClass === 'bg-surface-card' ? "flex-row items-center gap-2 bg-surface-card border-b border-border" : "flex-row items-center gap-2 bg-vibe-fondo border-b border-border"}
-        style={{
-          paddingLeft: insets.left + 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-        }}
-      >
-        <Pressable
-          onPress={() => goBackOr(router, '/(tabs)/cuenta')}
-          className="p-2 rounded-lg active:bg-muted"
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-        >
-          <ArrowLeft size={20} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-inter-bold text-foreground">Historial</Text>
-      </View>
+      <BackHeader
+        title="Historial"
+        leftInset={insets.left}
+        onBack={() => goBackOr(router, '/(tabs)/cuenta')}
+      />
 
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 16 }}>
         {/* ── Encabezado ─────────────────────────────────────────────── */}

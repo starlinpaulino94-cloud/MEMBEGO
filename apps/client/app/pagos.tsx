@@ -4,8 +4,6 @@ import {
   View,
   Text,
   ScrollView,
-  Pressable,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -18,17 +16,19 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import { useAuth } from '../src/lib/auth-context';
+import { goBackOr } from '../src/lib/navigation';
 import { usePagos } from '../src/hooks/usePagos';
 import { formatMoney, formatDate } from '../src/lib/format';
 import { cn } from '../src/lib/cn';
 import { Button } from '../src/components/ui/Button';
 import { Card } from '../src/components/ui/Card';
 import { EmptyState } from '../src/components/ui/EmptyState';
-import { PageHeader } from '../src/components/ui/PageHeader';
+import { BackHeader } from '../src/components/ui/BackHeader';
 import { Skeleton } from '../src/components/ui/Skeleton';
 import { BillingCycleHeader } from '../src/components/cliente/pagos/BillingCycleHeader';
 import { PagosLedger } from '../src/components/cliente/pagos/PagosLedger';
 import { ComprobanteLink } from '../src/components/pagos/ComprobanteLink';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
 
@@ -132,6 +132,7 @@ function EstadoDot({ estado }: { estado: string }) {
 function PagosScreenContent() {
   const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
   const params = useLocalSearchParams<{ pago?: string }>();
   const { data, isLoading, isError, refetch } = usePagos(isAuthenticated);
@@ -141,11 +142,19 @@ function PagosScreenContent() {
   const historial = data?.historial ?? [];
   const necesitaPago = membership ? NECESITA_PAGO.includes(membership.estado) : false;
   const cambioPendiente = !!membership?.planSolicitadoNombre;
+  const backHeader = (
+    <BackHeader
+      title="Mis pagos"
+      leftInset={insets.left}
+      onBack={() => goBackOr(router, '/(tabs)/cuenta')}
+    />
+  );
 
   /* ── Auth gate ─────────────────────────────────────────────────────── */
   if (!isAuthenticated) {
     return (
       <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card p-6" : "flex-1 items-center justify-center bg-vibe-fondo p-6"}>
+        {backHeader}
         <View className="h-16 w-16 items-center justify-center rounded-full bg-primary/20 mb-4">
           <Receipt size={32} color="#0284c7" />
         </View>
@@ -166,6 +175,7 @@ function PagosScreenContent() {
   if (isLoading) {
     return (
       <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
+        {backHeader}
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
@@ -186,6 +196,7 @@ function PagosScreenContent() {
   if (isError) {
     return (
       <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
+        {backHeader}
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
@@ -209,6 +220,7 @@ function PagosScreenContent() {
   if (!membership) {
     return (
       <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
+        {backHeader}
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16 }}
@@ -216,25 +228,24 @@ function PagosScreenContent() {
           {/* Aviso gateway (si aplica) */}
           {aviso && <AvisoBanner aviso={aviso} />}
 
-          <PageHeader
-            eyebrow={
+          <View className="mb-6 gap-3">
+            <View>
               <Text className="text-xs font-inter-semibold uppercase tracking-widest text-primary">
                 Finanzas
               </Text>
-            }
-            title="Mis pagos"
-            description="Tu plan, tu ciclo y cada pago. Todo claro, sin sorpresas."
-            action={
-              <Button
-                variant="outline"
-                size="sm"
-                onPress={() => router.push('/mis-membresias')}
-                icon={<ArrowLeft size={16} color="#111827" />}
-              >
-                Mis membresías
-              </Button>
-            }
-          />
+              <Text className="mt-1.5 text-small leading-relaxed text-muted-foreground">
+                Tu plan, tu ciclo y cada pago. Todo claro, sin sorpresas.
+              </Text>
+            </View>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={() => router.push('/mis-membresias')}
+              icon={<ArrowLeft size={16} color="#111827" />}
+            >
+              Mis membresías
+            </Button>
+          </View>
 
           <EmptyState
             icon={<Receipt size={40} color="#0284c7" />}
@@ -257,6 +268,7 @@ function PagosScreenContent() {
   /* ── Data ──────────────────────────────────────────────────────────── */
   return (
     <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
+      {backHeader}
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ padding: 16 }}
@@ -264,25 +276,24 @@ function PagosScreenContent() {
         {/* Aviso gateway (si aplica) */}
         {aviso && <AvisoBanner aviso={aviso} />}
 
-        <PageHeader
-          eyebrow={
+        <View className="mb-6 gap-3">
+          <View>
             <Text className="text-xs font-inter-semibold uppercase tracking-widest text-primary">
               Finanzas
             </Text>
-          }
-          title="Mis pagos"
-          description="Tu plan, tu ciclo y cada pago. Todo claro, sin sorpresas."
-          action={
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={() => router.push('/mis-membresias')}
-              icon={<ArrowLeft size={16} color="#111827" />}
-            >
-              Mis membresías
-            </Button>
-          }
-        />
+            <Text className="mt-1.5 text-small leading-relaxed text-muted-foreground">
+              Tu plan, tu ciclo y cada pago. Todo claro, sin sorpresas.
+            </Text>
+          </View>
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() => router.push('/mis-membresias')}
+            icon={<ArrowLeft size={16} color="#111827" />}
+          >
+            Mis membresías
+          </Button>
+        </View>
 
         {/* ── Membresía actual: panel de suscripción estilo Stripe Billing ─ */}
         <Card className="mb-8 p-0">

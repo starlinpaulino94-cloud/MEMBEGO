@@ -1,7 +1,9 @@
 import { Pressable, Text, View } from 'react-native'
 import { ArrowLeft } from 'lucide-react-native'
 import React from 'react'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { cn } from '../../lib/cn'
+import { useIsResponsiveDetailSheet } from './ResponsiveDetailSheet'
 
 interface BackHeaderProps {
   readonly className?: string
@@ -9,16 +11,27 @@ interface BackHeaderProps {
   readonly leftInset: number
   readonly onBack?: () => void
   readonly border?: boolean
+  readonly safeAreaTop?: boolean
 }
 
-export function BackHeader({ className, title, leftInset, onBack, border = true }: BackHeaderProps) {
+export function BackHeader({
+  className,
+  title,
+  leftInset,
+  onBack,
+  border = true,
+  safeAreaTop = true,
+}: BackHeaderProps) {
+  const insets = useSafeAreaInsets()
+  const isResponsiveDetailSheet = useIsResponsiveDetailSheet()
+
   return (
     <View
       className={cn("flex-row items-center gap-2", border ? "border-b border-border" : "", className)}
       style={{
         paddingLeft: leftInset + 16,
         paddingRight: 16,
-        paddingTop: 12,
+        paddingTop: (safeAreaTop && !isResponsiveDetailSheet ? insets.top : 0) + 12,
         paddingBottom: 12,
       }}
     >

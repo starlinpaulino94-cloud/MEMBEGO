@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useIsResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -54,6 +54,7 @@ function assertNeverPromotionPurchase(_result: never): never {
 
 function PromocionDetalleScreenContent() {
   const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
+  const isResponsiveDetailSheet = useIsResponsiveDetailSheet()
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const insets = useSafeAreaInsets()
@@ -235,7 +236,7 @@ function PromocionDetalleScreenContent() {
   // Not authenticated
   if (!isAuthenticated) {
     return (
-      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: isResponsiveDetailSheet ? 0 : insets.top }}>
         <EmptyState
           icon={<Tag size={40} color="#0284c7" />}
           title="Inicia sesión para ver esta oferta"
@@ -253,7 +254,7 @@ function PromocionDetalleScreenContent() {
   // Loading
   if (isLoading) {
     return (
-      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card" : "flex-1 items-center justify-center bg-background"}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 items-center justify-center bg-surface-card" : "flex-1 items-center justify-center bg-background"} style={{ paddingTop: isResponsiveDetailSheet ? 0 : insets.top }}>
         <ActivityIndicator color="#0284c7" size="large" />
         <Text className="mt-3 text-sm text-muted-foreground">
           Cargando oferta…
@@ -265,7 +266,7 @@ function PromocionDetalleScreenContent() {
   // Error
   if (isError || !data?.promotion) {
     return (
-      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: isResponsiveDetailSheet ? 0 : insets.top }}>
         <EmptyState
           icon={<AlertCircle size={40} color="#e7000b" />}
           title="No pudimos cargar la oferta"
@@ -285,7 +286,7 @@ function PromocionDetalleScreenContent() {
 
   if (captureVisible && captureSession) {
     return (
-      <View className={sheetBackgroundClass === 'bg-surface-card' ? 'flex-1 bg-surface-card' : 'flex-1 bg-background'} style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? 'flex-1 bg-surface-card' : 'flex-1 bg-background'} style={{ paddingTop: isResponsiveDetailSheet ? 0 : insets.top }}>
         <View className="border-b border-border px-4 py-3">
           <DetailPageFrame>
             <Button variant="outline" onPress={() => setCaptureVisible(false)}>
@@ -307,7 +308,7 @@ function PromocionDetalleScreenContent() {
   }
 
   return (
-    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: isResponsiveDetailSheet ? 0 : insets.top }}>
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 24 }}

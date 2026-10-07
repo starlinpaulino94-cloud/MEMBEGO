@@ -15,6 +15,10 @@ export function useResponsiveDetailSheetBackgroundClass(
     : standaloneBackgroundClass
 }
 
+export function useIsResponsiveDetailSheet(): boolean {
+  return useContext(ResponsiveDetailSheetContext)
+}
+
 interface ResponsiveDetailSheetProps {
   readonly children: ReactNode
   readonly footer?: ReactNode

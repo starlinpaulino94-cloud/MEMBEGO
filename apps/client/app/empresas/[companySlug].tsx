@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useIsResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -70,6 +70,7 @@ const HEADER_BACKGROUND_COLORS = [
 
 function EmpresaDetalleScreenContent() {
   const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
+  const isResponsiveDetailSheet = useIsResponsiveDetailSheet()
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
@@ -168,7 +169,7 @@ function EmpresaDetalleScreenContent() {
           style={{
             paddingLeft: insets.left + 16,
             paddingRight: 16,
-            paddingTop: insets.top + 12,
+            paddingTop: (isResponsiveDetailSheet ? 0 : insets.top) + 12,
             paddingBottom: 12,
           }}
         >
@@ -202,7 +203,7 @@ function EmpresaDetalleScreenContent() {
           style={{
             paddingLeft: insets.left + 16,
             paddingRight: 16,
-            paddingTop: insets.top + 12,
+            paddingTop: (isResponsiveDetailSheet ? 0 : insets.top) + 12,
             paddingBottom: 12,
           }}
         >
@@ -238,7 +239,7 @@ function EmpresaDetalleScreenContent() {
           style={{
             paddingLeft: insets.left + 16,
             paddingRight: 16,
-            paddingTop: insets.top + 12,
+            paddingTop: (isResponsiveDetailSheet ? 0 : insets.top) + 12,
             paddingBottom: 12,
           }}
         >
@@ -693,10 +694,11 @@ function EmpresaDetalleScreenContent() {
       >
         <DetailPageFrame
           className="flex-row items-center justify-between px-4"
-          style={{ paddingLeft: insets.left + 16, paddingRight: 16, paddingTop: insets.top, paddingBottom: 12 }}
+          style={{ paddingLeft: insets.left + 16, paddingRight: 16, paddingTop: isResponsiveDetailSheet ? 0 : insets.top, paddingBottom: 12 }}
         >
           <BackHeader
             className="flex-1"
+            safeAreaTop={false}
             title={
               <View className="flex-row justify-end items-center gap-2">
                 <Pressable

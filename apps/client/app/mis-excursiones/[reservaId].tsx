@@ -1,5 +1,5 @@
 import React from 'react';
-import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useIsResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -131,6 +131,7 @@ const POLITICA_DEFAULT: PoliticaReembolso = {
 
 function MisExcursionDetalleScreenContent() {
   const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
+  const isResponsiveDetailSheet = useIsResponsiveDetailSheet()
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { reservaId } = useLocalSearchParams<{ reservaId: string }>();
@@ -151,7 +152,7 @@ function MisExcursionDetalleScreenContent() {
 
   if (!isAuthenticated) {
     return (
-      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: isResponsiveDetailSheet ? 0 : insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
             onPress={() => goBackOr(router, '/mis-excursiones')}
@@ -180,7 +181,7 @@ function MisExcursionDetalleScreenContent() {
   // Loading
   if (isLoading) {
     return (
-      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: isResponsiveDetailSheet ? 0 : insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
             onPress={() => goBackOr(router, '/mis-excursiones')}
@@ -210,7 +211,7 @@ function MisExcursionDetalleScreenContent() {
   // Error
   if (isError || !data) {
     return (
-      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
+      <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: isResponsiveDetailSheet ? 0 : insets.top }}>
         <View className="px-4 py-3 border-b border-border bg-card">
           <Pressable
             onPress={() => goBackOr(router, '/mis-excursiones')}
@@ -268,7 +269,7 @@ function MisExcursionDetalleScreenContent() {
       : excursion?.horaRegreso?.trim().slice(0, 5) || null;
 
   return (
-    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: insets.top }}>
+    <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-background"} style={{ paddingTop: isResponsiveDetailSheet ? 0 : insets.top }}>
       {/* Back bar */}
       <View className="border-b border-border bg-card">
         <DetailPageFrame className="px-4 py-3">

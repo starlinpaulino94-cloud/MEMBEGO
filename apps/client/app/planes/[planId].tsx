@@ -108,7 +108,7 @@ export default function PlanDetalleScreen() {
         <View className={sheetBackgroundClass === 'bg-surface-card' ? 'border-b border-border bg-surface-card' : 'border-b border-border bg-background'}>
           <DetailPageFrame
             className="flex-row items-center gap-2 px-4"
-            style={{ paddingTop: 8, paddingBottom: 8 }}
+            style={{ paddingTop: (showAsSheet ? 0 : insets.top) + 8, paddingBottom: 8 }}
           >
             <Pressable onPress={handleBack} className="rounded-lg p-2" accessibilityLabel="Volver">
               <ArrowLeft size={20} color={colors.surface.foreground} />

@@ -39,9 +39,12 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) {
     return (
-      <View className="flex-1 items-center justify-center bg-vibe-fondo">
-        <ActivityIndicator size="large" color="#7c3aed" />
-      </View>
+      <>
+        <StatusBar style="dark" />
+        <View className="flex-1 items-center justify-center bg-vibe-fondo">
+          <ActivityIndicator size="large" color="#7c3aed" />
+        </View>
+      </>
     )
   }
 
@@ -49,7 +52,6 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <StatusBar style="light" />
           <ClientShell />
         </AuthProvider>
       </QueryClientProvider>

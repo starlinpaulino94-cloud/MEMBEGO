@@ -23,6 +23,7 @@ function NuevoVehiculoScreenContent() {
     <BackHeader
       title="Registrar vehículo"
       leftInset={insets.left}
+      safeAreaTop
       onBack={() => goBackOr(router, '/vehiculos')}
     />
   )

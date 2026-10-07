@@ -1,5 +1,6 @@
 import React from 'react'
 import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../src/components/ui/ResponsiveDetailSheet'
+import { BackHeader } from '../src/components/ui/BackHeader'
 import {
   View,
   Text,
@@ -9,7 +10,6 @@ import {
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  ArrowLeft,
   TicketPercent,
   Gift,
   Sparkles,
@@ -180,26 +180,11 @@ function MisPromocionesScreenContent() {
 
   return (
     <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
-      {/* ── Back bar ─────────────────────────────────────────────────── */}
-      <View
-        className={sheetBackgroundClass === 'bg-surface-card' ? "flex-row items-center gap-2 bg-surface-card border-b border-border" : "flex-row items-center gap-2 bg-vibe-fondo border-b border-border"}
-        style={{
-          paddingLeft: insets.left + 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-        }}
-      >
-        <Pressable
-          onPress={() => goBackOr(router, '/(tabs)/beneficios')}
-          className="p-2 rounded-lg active:bg-muted"
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-        >
-          <ArrowLeft size={20} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-inter-bold text-foreground">Mis beneficios</Text>
-      </View>
+      <BackHeader
+        title="Mis beneficios"
+        leftInset={insets.left}
+        onBack={() => goBackOr(router, '/(tabs)/beneficios')}
+      />
 
       <ScrollView
         className="flex-1"

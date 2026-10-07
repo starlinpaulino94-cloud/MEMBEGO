@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useIsResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   ActivityIndicator,
   View,
@@ -76,6 +76,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function MisPromocionDetalleScreenContent() {
   const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
+  const isResponsiveDetailSheet = useIsResponsiveDetailSheet()
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated } = useAuth()
@@ -204,7 +205,12 @@ function MisPromocionDetalleScreenContent() {
       <View className={sheetBackgroundClass === 'bg-surface-card' ? "border-b border-border bg-surface-card" : "border-b border-border bg-background"}>
         <DetailPageFrame
           className="flex-row items-center gap-2 px-4"
-          style={{ paddingLeft: insets.left + 16, paddingRight: 16, paddingTop: 12, paddingBottom: 12 }}
+          style={{
+            paddingLeft: insets.left + 16,
+            paddingRight: 16,
+            paddingTop: (isResponsiveDetailSheet ? 0 : insets.top) + 12,
+            paddingBottom: 12,
+          }}
         >
           <Pressable
             onPress={() => goBackOr(router, '/mis-promociones')}

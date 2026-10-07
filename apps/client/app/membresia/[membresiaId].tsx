@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useIsResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   ActivityIndicator,
   View,
@@ -156,6 +156,7 @@ function isUnlimited(m: Membership): boolean {
 
 function MembresiaDetailScreenContent() {
   const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
+  const isResponsiveDetailSheet = useIsResponsiveDetailSheet()
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
@@ -259,7 +260,7 @@ function MembresiaDetailScreenContent() {
     return (
       <ScrollView
         className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}
-        contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8 }}
+        contentContainerStyle={{ padding: 16, paddingTop: isResponsiveDetailSheet ? 8 : insets.top + 8 }}
         showsVerticalScrollIndicator={false}
       >
         <Skeleton className="h-8 w-32 mb-4" />
@@ -274,7 +275,7 @@ function MembresiaDetailScreenContent() {
     return (
       <ScrollView
         className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}
-        contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8 }}
+        contentContainerStyle={{ padding: 16, paddingTop: isResponsiveDetailSheet ? 8 : insets.top + 8 }}
         showsVerticalScrollIndicator={false}
       >
         <Pressable
@@ -401,12 +402,13 @@ function MembresiaDetailScreenContent() {
     <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 16, paddingTop: insets.top + 8, paddingBottom: 16 }}
+        contentContainerStyle={{ padding: 16, paddingTop: isResponsiveDetailSheet ? 8 : insets.top + 8, paddingBottom: 16 }}
         showsVerticalScrollIndicator={false}
       >
         <DetailPageFrame>
           <BackHeader
             className="mb-6"
+            safeAreaTop={false}
             title={
               <View className="flex-row items-start justify-between">
                 <View className="flex-1 mr-4">

@@ -52,6 +52,21 @@ test('only entity details qualify for responsive sheets', () => {
   }
 })
 
+test('account pages already using responsive sheets qualify as details', () => {
+  for (const pathname of [
+    '/citas',
+    '/historial',
+    '/intereses',
+    '/mis-membresias',
+    '/mis-promociones',
+    '/pagos',
+    '/vehiculos',
+    '/vehiculos/nuevo',
+  ]) {
+    assert.equal(isClientDetailRoute(pathname), true, `${pathname} should open as a detail sheet`)
+  }
+})
+
 test('anonymous users are redirected from client routes to login', () => {
   assert.equal(requiresClientAuthentication('/cuenta'), true)
   assert.equal(requiresClientAuthentication('/empresas/mi-negocio'), true)

@@ -1,5 +1,5 @@
 import React from 'react'
-import { ResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
+import { ResponsiveDetailSheet, useIsResponsiveDetailSheet, useResponsiveDetailSheetBackgroundClass } from '../../src/components/ui/ResponsiveDetailSheet'
 import {
   View,
   Text,
@@ -119,6 +119,7 @@ function MessageBubble({
 
 function TicketDetalleScreenContent() {
   const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-background')
+  const isResponsiveDetailSheet = useIsResponsiveDetailSheet()
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -161,7 +162,7 @@ function TicketDetalleScreenContent() {
         style={{
           paddingLeft: insets.left + 16,
           paddingRight: 16,
-          paddingTop: 12,
+          paddingTop: (isResponsiveDetailSheet ? 0 : insets.top) + 12,
           paddingBottom: 12,
         }}
       >

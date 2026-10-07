@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, View, useWindowDimensions } from 'react-native'
 import { Stack, usePathname, useRouter } from 'expo-router'
+import { StatusBar } from 'expo-status-bar'
 import { HeaderVibe } from './HeaderVibe'
 import { TabsEscritorio } from './TabsEscritorio'
 import { BottomTabDock } from './BottomTabDock'
@@ -37,6 +38,7 @@ export function ClientShell() {
   const { isLoading, isAuthenticated } = useAuth()
   const isDesktop = width >= 1024
   const isDetailSheet = width >= 768 && router.canGoBack() && isClientDetailRoute(pathname)
+  const keepsGlobalNavigation = !isClientDetailRoute(pathname) || isDetailSheet
   const shellPathname = isDetailSheet ? sheetBackgroundPath ?? pathname : pathname
   const showcaseIsPublic = __DEV__ && pathname === '/dev-cardnet-capture-showcase'
   const requiresAuth = !showcaseIsPublic && requiresClientAuthentication(pathname)
@@ -57,7 +59,8 @@ export function ClientShell() {
     isAuthenticated &&
     !isPublicPath(pathname) &&
     pathname !== '/' &&
-    getClientRoutePresentation(shellPathname) === 'navigation'
+    getClientRoutePresentation(shellPathname) === 'navigation' &&
+    keepsGlobalNavigation
   const isInicio = shellPathname.endsWith('/inicio')
 
   useEffect(() => {
@@ -67,30 +70,36 @@ export function ClientShell() {
 
   if (requiresAuth && (isLoading || !isAuthenticated)) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator size="large" color={colors.vibe.violet} />
-      </View>
+      <>
+        <StatusBar style="dark" />
+        <View className="flex-1 items-center justify-center bg-background">
+          <ActivityIndicator size="large" color={colors.vibe.violet} />
+        </View>
+      </>
     )
   }
 
   return (
     <InicioAccentProvider active={isInicio}>
-      <View className="flex-1 bg-vibe-fondo">
-        {showNavigation && <HeaderVibe />}
-        {showNavigation && isDesktop && <TabsEscritorio />}
+      <>
+        <StatusBar style={showNavigation ? 'light' : 'dark'} />
+        <View className="flex-1 bg-vibe-fondo">
+          {showNavigation && <HeaderVibe />}
+          {showNavigation && isDesktop && <TabsEscritorio />}
 
-        <View
-          className={
-            showNavigation
-              ? 'flex-1 w-full self-center md:px-2 lg:max-w-7xl lg:px-2'
-              : 'flex-1 w-full'
-          }
-        >
-          <Stack screenOptions={{ headerShown: false }} />
+          <View
+            className={
+              showNavigation
+                ? 'flex-1 w-full self-center md:px-2 lg:max-w-7xl lg:px-2'
+                : 'flex-1 w-full'
+            }
+          >
+            <Stack screenOptions={{ headerShown: false }} />
+          </View>
+
+          {showNavigation && !isDesktop && <BottomTabDock />}
         </View>
-
-        {showNavigation && !isDesktop && <BottomTabDock />}
-      </View>
+      </>
     </InicioAccentProvider>
   )
 }
