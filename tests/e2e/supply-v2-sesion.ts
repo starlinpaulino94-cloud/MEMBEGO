@@ -77,6 +77,9 @@ const USUARIOS = {
   analiticaAdmin: { email: 'e2e.analitica.admin@membego.test', nombre: 'Admin Analítica E2E', role: 'ADMINISTRADOR' },
   analiticaOtra: { email: 'e2e.analitica.otra@membego.test', nombre: 'Admin Otra Analítica E2E', role: 'ADMINISTRADOR' },
   analiticaSin: { email: 'e2e.analitica.sin@membego.test', nombre: 'Admin Sin Analítica E2E', role: 'ADMINISTRADOR' },
+  /** Caja conectada (F7): quien cobra en una empresa CON el POS conectado y quien cobra en otra SIN él. */
+  posAdmin: { email: 'e2e.pos.admin@membego.test', nombre: 'Cajero POS E2E', role: 'ADMINISTRADOR' },
+  posSin: { email: 'e2e.pos.sin@membego.test', nombre: 'Cajero Sin POS E2E', role: 'ADMINISTRADOR' },
   /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */
   facturacionSuperadmin: { email: 'e2e.facturacion.sa@membego.test', nombre: 'Facturación SA E2E', role: 'SUPERADMIN' },
 } as const

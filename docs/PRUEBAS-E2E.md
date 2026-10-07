@@ -263,6 +263,20 @@ bloque «Supply Economics (Membego → proveedores)» aparte → un administrado
 `/superadmin/analitica`. **Ojo:** los totales de la plataforma comparten base con los demás specs de la corrida
 (todos crean pedidos «de hoy»), así que el spec no afirma el total de la plataforma, solo la fila de su empresa.
 
+**Caja conectada (Fase 7)** — `pos-membego` (escritorio), con el mismo arnés (`empresaCatalogo({ capacidad: true,
+pedidos: true, pos: true })`, `existenciasSembradas`) y dos sesiones de cajero: una empresa CON el POS conectado
+(`posAdmin`) y otra SIN él (`posSin`). Recorre: la empresa sin la capacidad abre su caja y **no ve** ninguno de los dos
+bloques → el cajero abre la caja desde la interfaz y **vende en el mostrador** un servicio y 2 camisetas (el total
+RD$450.00 se calcula en pantalla; una transferencia sin referencia no cobra; en efectivo con RD$500 recibidos el
+cambio es RD$50.00): la venta queda `POS` completada, sin comisión, las existencias bajan en 2 y el cobro aparece en
+«Últimos cobros del turno» con su ticket → **cobra el pedido del marketplace con el QR del cliente**: un código
+inventado y el QR de otra empresa no encuentran nada, el pedido válido muestra que el cliente confirmó el monto, una
+tarjeta sin autorización no cobra y deja el pedido como estaba, una transferencia con su referencia cobra y entrega
+(`PAYMENT_VERIFIED`, comisión del 8 % = RD$20.00) y el mismo QR no se cobra otra vez → la empresa ve ambos pedidos en
+`/admin/pedidos-membego` (la venta de mostrador como «Caja»). **Ojo:** el pedido del marketplace se siembra por
+Prisma con su QR conocido (pedir → aceptar → listo ya lo prueba `pedidos-membego`), y el «lector» de QR es el campo de
+texto: el lector físico teclea el código y pulsa Enter, que es lo mismo.
+
 Tres cosas que costó aprender y conviene no repetir:
 
 1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de

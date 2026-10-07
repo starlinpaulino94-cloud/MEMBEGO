@@ -47,6 +47,7 @@
 | *(misma capacidad)* | Sección `facturacion-membego` (`/admin/facturacion-membego`, **«Mi cuenta Membego»**, Commerce Core · Fase 4): lo que la empresa le debe a Membego por esos pedidos —saldo, comisiones, estados de cuenta—, **solo lectura**. No tiene capacidad propia: cuelga de `PEDIDOS_MEMBEGO` | ❌ con ella |
 | `DEALS_MARKETPLACE` | Sección `deals` (`/admin/deals`, Growth Engine · Fase 5: **ofertas con presupuesto**). Con ella (y las otras dos) la empresa publica descuentos sobre una variante de su catálogo que los clientes obtienen en `/ofertas`, en su ficha pública y en `/catalogo`, y canjean con el QR del pedido | ❌ apagada para todos; **exige `CATALOGO_UNIFICADO` y `PEDIDOS_MEMBEGO`** (el reclamo ES un pedido): sin las tres, la vitrina no enseña la oferta y reclamarla responde «no está disponible» |
 | *(misma capacidad que los pedidos)* | Sección `resultados-membego` (`/admin/resultados-membego`, **«Resultados Membego»**, Analítica · Fase 6): cuántos clientes nuevos, pedidos y ventas le produjo Membego a la empresa, qué le costó (comisiones, retorno, costo por cliente nuevo) y cómo rinde cada oferta, **solo lectura**. No tiene capacidad propia: cuelga de `PEDIDOS_MEMBEGO` | ❌ con ella |
+| `POS_MEMBEGO` | La **caja conectada** (`/empleado/caja`, Commerce Core · Fase 7): dos bloques nuevos en el turno —**«Cobrar un pedido Membego»** (con el QR del cliente: registra el pago, cierra el pedido y deja el cobro en la caja) y **«Venta de mostrador»** (vende variantes del catálogo, baja las existencias, ticket)—. No tiene sección propia: vive dentro de la caja | ❌ apagada para todos; **exige `POS_CAJA`** (la caja, que sí viene de serie) y, según el bloque, `PEDIDOS_MEMBEGO` (cobrar pedidos) o `CATALOGO_UNIFICADO` (vender) |
 
 ### Cómo encender los pedidos Membego en una empresa
 
@@ -83,6 +84,20 @@ la reabre. Si la cuenta Membego de la empresa está **suspendida**, no puede cre
 reanudar ofertas ni se pueden obtener las que tiene publicadas. **Encender la capacidad en una
 empresa real es empezar a cobrarle por canje**: avísale antes. Si se apaga con cupones ya
 obtenidos, esos pedidos siguen su curso (se canjean o vencen) y la cuota se cobra igual.
+
+### Cómo encender la caja conectada en una empresa
+
+`POS_MEMBEGO` tampoco está en ningún paquete base. Se enciende con un override por empresa (`overrides: {
+POS_MEMBEGO: true }`), además de `CATALOGO_UNIFICADO` y/o `PEDIDOS_MEMBEGO` según lo que se quiera usar (la caja
+clásica, `POS_CAJA`, ya viene encendida). Sin ella la caja sigue como siempre. Los bloques aparecen solo con la caja
+del turno **abierta**, y las acciones comprueban las capacidades en el servidor.
+
+**Qué pasa con la plata (Fase 7).** Cobrar en la caja el pedido del marketplace de quien llega con su QR sigue
+cobrándole la comisión de Merchant Billing (CPA de RD$ 100 de serie, o el 8 % si el pago queda verificado:
+transferencia o tarjeta **con referencia**, por el monto, sobre un pedido que el cliente confirmó). La **venta de
+mostrador pura NO comisiona** (decisión de producto pendiente). **Encender la capacidad no cobra nada nuevo por sí
+sola**, pero avisa a la empresa de que un pedido del marketplace cobrado con una transferencia verificada le cuesta
+el 8 % de su base.
 
 ### Cómo encender el catálogo unificado en una empresa
 
