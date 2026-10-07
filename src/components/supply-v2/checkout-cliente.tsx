@@ -33,7 +33,7 @@ function CuentaAtras({ hasta }: { hasta: Date }) {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · CHECKOUT del cliente (§27, §29, §36; Slice 6 §17, §21).
+ * MEMBEGO SUPPLY · CHECKOUT del cliente (§27, §29, §36; Slice 6 §17, §21).
  *
  * Desglose con los precios y la financiación CONGELADOS: precio regular,
  * descuento Membego, descuento del proveedor, beneficio aplicado y lo que

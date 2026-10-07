@@ -269,6 +269,91 @@ Con ese expediente se decide: si el `activate` acepta el cuerpo combinado, se
 deja UN solo campo (el que la respuesta confirme); si lo rechaza, el texto del
 error dice qué esperaba.
 
+### Cuando «el código no llega» (06-10-2026)
+
+Síntoma: la tarjeta se registra sin problema en la ventana de CardNET, la
+ventana se cierra, MembeGo enseña la pantalla «Verifica tu tarjeta» y el
+código de 6 caracteres **nunca aparece**. CardNET confirma que la tarjeta
+quedó registrada. Antes de tocar código, hay que tener claro **quién hace
+cada parte**, porque la hipótesis natural —«MembeGo no está mandando bien el
+último paso»— apunta al sitio equivocado.
+
+#### Lo que dice CardNET, literalmente
+
+La guía oficial de *Tokenización & Autenticación* del portal de
+desarrolladores de CardNET (developers.cardnet.com.do) describe la activación
+así:
+
+> El comercio deberá mostrar al usuario los distintos medios de pago que
+> tiene registrados, indicando cuando aplique que dicho medio de pago está
+> deshabilitado y necesita ser «activado». El comercio deberá presentar al
+> usuario un campo donde pueda ingresar el código de activación que recibió
+> previamente (**el método de entrega de dicho código está fuera del alcance
+> de esta documentación**). Una vez que el comercio obtiene el código de
+> activación ingresado por el usuario, deberá hacer la llamada a la operación
+> «Activate» de la API de Customer.
+
+Tres consecuencias directas:
+
+1. **La pantalla del código es del comercio, no de CardNET.** La ventana de
+   captura de CardNET no pide el código y no lo va a pedir: su API nos exige
+   mandárselo nosotros (`POST /Customer/{id}/activate`, §7.5). Mover el campo
+   «al portal de CardNET» no es una opción que exista.
+2. **MembeGo no envía el código al cliente.** No hay ningún paso de MembeGo
+   que dispare un SMS, un correo o el cargo de verificación. Lo único que
+   MembeGo manda a CardNET es: registrar el Customer (una vez), consultarlo
+   (GET), cobrar (Purchase) y activar (activate, con el código que el cliente
+   teclea). El código **lo entrega CardNET/el banco**, y ellos mismos dicen
+   que cómo lo entregan está fuera de su documentación técnica.
+3. **El mecanismo concreto —cargo de RD$1.00 con `Cardnet:XXXXXX` en la
+   descripción— viene del manual PDF v1.7 §4.1.2.3**, no de la guía web. Es
+   una configuración del producto *Autenticación* en la cuenta del comercio.
+   Si esa configuración no está activa, o el ambiente no la ejecuta, el
+   código no existe en ningún sitio y ninguna pantalla nuestra lo va a hacer
+   aparecer.
+
+#### Árbol de diagnóstico, en orden
+
+| # | Pregunta | Dónde se mira | Si la respuesta es… |
+|---|---|---|---|
+| 1 | ¿El despliegue está en **pruebas**? | `/admin/metodos-pago` (recuadro «La tarjeta está en modo de pruebas») o `/api/pagos/cardnet-token/estado` → `ambiente` | **Sí** → es la causa. En laboratorio CardNET **no hace el cargo de RD$1.00** y el banco nunca muestra código. Poner `CARDNET_TOKENS_AMBIENTE=produccion` **con las llaves de producción** (las de lab dan 401 en producción). |
+| 2 | ¿El perfil nace de verdad `Enabled: false`? | `/api/pagos/cardnet-token/estado?expediente=<correo del cliente>` (como administrador de la empresa) → `cardnet.perfiles[].habilitado`, `pendienteDeActivar`, `consultaCruda` e `intentos[]` con la respuesta cruda del Purchase | **No** (viene `true`) y aun así se pide código → el Purchase está devolviendo PR001/CS012 con un perfil habilitado: mandar `consultaCruda` + la fila de `pago_intentos.respuesta` a CardNET. |
+| 3 | ¿CardNET ve la **transacción de verificación**? | Panel de comercio de CardNET / ejecutivo de cuenta, con el `CustomerId` y los últimos 4 | **No existe** → la cuenta no tiene el cargo de verificación configurado, o las llaves son del producto sin autenticación pero los perfiles nacen deshabilitados. Es de CardNET. |
+| 4 | ¿El cliente miró el **movimiento**, no el SMS? | Pantalla «Verifica tu tarjeta» (ya lo dice) | El código va en la **descripción del cargo**, en la app del banco, y puede tardar horas en asentarse. No llega por mensaje. |
+
+Las preguntas 1 y 2 se contestan desde MembeGo en un minuto. La 3 solo la
+contesta CardNET, y es la que decide: **si CardNET no generó la transacción
+de verificación, no hay código que esperar**.
+
+#### Qué preguntarle a CardNET (texto para el ticket)
+
+- «Para el Customer `NNNN` (correo del cliente), perfil terminado en `XXXX`,
+  registrado el `fecha`: ¿se generó la transacción de verificación (RD$1.00)
+  asociada a la activación del PaymentProfile? ¿Con qué descripción y en qué
+  estado quedó?»
+- «¿Las llaves que tenemos en producción son del producto **con
+  autenticación** (perfil nace `Enabled=false` y requiere `activate`) o
+  **sin autenticación** (perfil nace habilitado)? Nuestros perfiles nacen
+  deshabilitados.»
+- «¿Cuál es el método de entrega del código de activación para nuestra cuenta?
+  La guía web lo deja fuera de alcance; el manual v1.7 §4.1.2.3 habla del
+  cargo de RD$1.00.»
+
+Con la respuesta de `?expediente=<correo>` (`consultaCruda` sin tokens, el
+`CustomerId` y los intentos con su respuesta cruda) el ticket se contesta en
+una vuelta. Las sondas `?perfiles=1` y `?activar=1` miran el Customer de
+**quien está logueado**: si entras como administrador te dirán
+`customerId: null`, y eso no significa que el cliente no tenga tarjeta.
+
+#### Lo que sí se cambió en MembeGo por este caso
+
+- El ambiente de la pasarela se ve en el **panel de métodos de pago** de la
+  empresa (`EstadoPasarelas`), con un aviso claro cuando es de pruebas. Antes
+  solo estaba en una variable de Vercel y en la sonda de la API.
+- El aviso de pruebas también sale en el banner «Tienes una tarjeta esperando
+  su código», no solo dentro de la pantalla de activación (ya estaba ahí
+  desde el 28-09-2026).
+
 ### Lo que solo confirma un cobro real
 
 - [ ] Un cobro aprobado de punta a punta, con la consola del navegador abierta.

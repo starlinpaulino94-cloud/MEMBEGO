@@ -7,7 +7,7 @@ import { bloquearFila, recalcularPagoEnTx } from './applications'
 import { CERO } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · DEPÓSITOS DEL PROVEEDOR (§11–§12, §16, §56).
+ * MEMBEGO SUPPLY · SLICE 4 · DEPÓSITOS DEL PROVEEDOR (§11–§12, §16, §56).
  *
  * Un depósito es dinero que YA salió y el proveedor guarda a cuenta de
  * compras futuras. Nace de un pago CONFIRMADO (o de su excedente), nunca de

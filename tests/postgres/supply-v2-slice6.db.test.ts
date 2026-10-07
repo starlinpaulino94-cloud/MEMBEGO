@@ -35,7 +35,7 @@ import { beneficiosParaOferta, fichaBeneficio, misBeneficios } from '../../src/m
 import { barridoSupplyV2 } from '../../src/modules/supply-v2/commerce/barrido'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 contra PostgreSQL de verdad (§36).
+ * MEMBEGO SUPPLY · SLICE 6 contra PostgreSQL de verdad (§36).
  *
  *   A  Bono parcial: 1 000 − 500 = 500 a pagar; comisión 80 sobre el valor
  *      contractual, neto 920, presupuesto reservado → consumido, ledger cuadrado

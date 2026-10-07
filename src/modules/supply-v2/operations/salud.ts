@@ -16,7 +16,7 @@ import {
 } from './salud-dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · LAS CIFRAS, DE LA BASE.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · LAS CIFRAS, DE LA BASE.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * CONTAR EN SQL, NO EN JAVASCRIPT
@@ -104,7 +104,7 @@ export async function cifrasOperativas(ahora = new Date()): Promise<CifrasOperat
   // ── `sinEmpresa` sobre TODO el bloque, y no fila por fila ────────────────
   //
   // No es higiene: es la diferencia entre un panel que dice la verdad y uno que
-  // miente tranquilizando. Las tablas de operación de Supply 2.0 solo se dejan
+  // miente tranquilizando. Las tablas de operación de Supply solo se dejan
   // leer en modo omnisciente —son de plataforma, no de un inquilino— y con RLS
   // encendida una consulta sin contexto NO falla: devuelve cero filas. Cero
   // filas aquí se leería como «cero incidentes, cero difuntos, nada atrasado»,
@@ -122,7 +122,7 @@ export async function cifrasOperativas(ahora = new Date()): Promise<CifrasOperat
     eventosFallidos,
     eventosMuertos,
     efectosEntregados,
-  ] = await sinEmpresa('Supply 2.0: cifras operativas', (tx) =>
+  ] = await sinEmpresa('Supply: cifras operativas', (tx) =>
     Promise.all([
       tx.supplyV2FinanceIncident.count({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH', status: { in: ['OPEN', 'INVESTIGATING'] } } }),
       tx.supplyV2FinanceIncident.count({ where: { type: 'EXTERNAL_PAYMENT_MISMATCH', status: { in: ['OPEN', 'INVESTIGATING'] }, severity: 'HIGH' } }),
@@ -167,7 +167,7 @@ export async function cifrasOperativas(ahora = new Date()): Promise<CifrasOperat
  * Prisma a mitad de una consulta.
  */
 export async function hayDerivaDeEsquema(): Promise<boolean> {
-  const filas = await sinEmpresa('Supply 2.0: centinelas de esquema del Slice 9', (tx) =>
+  const filas = await sinEmpresa('Supply: centinelas de esquema del Slice 9', (tx) =>
     tx.$queryRaw<{ ok: boolean }[]>`
       SELECT to_regclass('public.supply_v2_external_events') IS NOT NULL AS ok
       UNION ALL SELECT to_regclass('public.supply_v2_outbox_events') IS NOT NULL
@@ -203,7 +203,7 @@ export interface Readiness {
 }
 
 /**
- * READINESS: ¿puede Supply 2.0 operar?
+ * READINESS: ¿puede Supply operar?
  *
  * Comprueba base, esquema, configuración crítica, cuenta de integración,
  * secreto de la pasarela cuando la capacidad está encendida, y la cola. Lo que

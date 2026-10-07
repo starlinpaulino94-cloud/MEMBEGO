@@ -5,7 +5,7 @@ import type { Transiciones } from '../core/estados'
 import { CERO, OBLIGACION_VIVA } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 5 · LIQUIDACIONES: reglas PURAS (§35–§47).
+ * MEMBEGO SUPPLY · SLICE 5 · LIQUIDACIONES: reglas PURAS (§35–§47).
  *
  * Una liquidación agrupa obligaciones de comisión de un proveedor en un
  * periodo. Elegibles: OPEN o PARTIALLY_PAID, sin liquidación viva. Se

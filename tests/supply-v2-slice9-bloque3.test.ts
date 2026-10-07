@@ -25,7 +25,7 @@ import {
 } from '../src/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 3 · DOMINIO (§21).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 3 · DOMINIO (§21).
  *
  * La matriz de estados, el emparejamiento de monto y moneda, la identidad del
  * problema, las resoluciones y las etiquetas. Todo puro: sin base, sin red.

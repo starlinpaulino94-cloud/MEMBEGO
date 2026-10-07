@@ -32,7 +32,7 @@ function dinero(n: number | string, moneda: string): string {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · CREAR OFERTA (§10–§16). Seis pasos; al final se crea y
+ * MEMBEGO SUPPLY · CREAR OFERTA (§10–§16). Seis pasos; al final se crea y
  * se PUBLICA en una transacción: el supply se aparta en ese momento, nunca
  * antes. Los cálculos de aquí son orientativos; el servidor los rehace.
  */
@@ -70,7 +70,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
     if (!estado.success || !estado.id || visto.current === estado.id) return
     visto.current = estado.id
     toast.success(estado.success)
-    router.push(`/superadmin/supply-v2/ofertas/${estado.id}`)
+    router.push(`/superadmin/supply/ofertas/${estado.id}`)
   }, [estado, router])
 
   const moneda = producto?.currency ?? 'DOP'
@@ -128,7 +128,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
               <h2 className="text-h3">¿Qué producto vas a ofrecer?</h2>
               {productos.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No hay productos con supply disponible. <Link href="/superadmin/supply-v2/compras/nueva" className="underline">Compra y recibe supply</Link> primero.
+                  No hay productos con supply disponible. <Link href="/superadmin/supply/compras/nueva" className="underline">Compra y recibe supply</Link> primero.
                 </p>
               ) : (
                 <div>
@@ -311,7 +311,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
             <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
               {paso > 1 && <Button type="button" variant="outline" onClick={anterior}>Atrás</Button>}
               <Button type="button" onClick={siguiente} disabled={!listo[paso - 1]}>Continuar</Button>
-              <Link href="/superadmin/supply-v2/ofertas" className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:underline">Cancelar</Link>
+              <Link href="/superadmin/supply/ofertas" className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:underline">Cancelar</Link>
             </div>
           )}
         </CardContent>

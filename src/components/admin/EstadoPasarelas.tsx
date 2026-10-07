@@ -1,5 +1,6 @@
-import { AlertTriangle, CheckCircle2, CreditCard, Landmark, PowerOff } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CreditCard, FlaskConical, Landmark, PowerOff } from 'lucide-react'
 import type { TransferenciasEnVuelo } from '@/modules/pagos/metodosDisponibles'
+import { textoEstadoCardnet, type AmbienteCardnet } from '@/modules/pagos/estadoCardnetTexto'
 
 /**
  * ESTADO DE LOS COBROS EN LÍNEA — el panel que hay que mirar ANTES de tocar
@@ -16,6 +17,13 @@ export interface EstadoPasarelasProps {
   cardnet: boolean
   /** Credenciales de CardNET presentes en el servidor. */
   cardnetConfigurado: boolean
+  /**
+   * Ambiente al que apuntan esas credenciales. En `pruebas` CardNET no hace
+   * el cargo de verificación de RD$1.00, así que el cliente nunca recibe el
+   * código con el que se activa la tarjeta — y desde su pantalla eso parece
+   * una demora del banco. Aquí se ve de un vistazo.
+   */
+  cardnetAmbiente?: AmbienteCardnet | null
   enVuelo: TransferenciasEnVuelo
   cuentasCargadas: number
 }
@@ -24,11 +32,17 @@ export function EstadoPasarelas({
   transferencia,
   cardnet,
   cardnetConfigurado,
+  cardnetAmbiente = null,
   enVuelo,
   cuentasCargadas,
 }: EstadoPasarelasProps) {
   const transferenciaUtil = transferencia && cuentasCargadas > 0
-  const cardnetUtil = cardnet && cardnetConfigurado
+  const estadoCardnet = textoEstadoCardnet({
+    capacidad: cardnet,
+    configurado: cardnetConfigurado,
+    ambiente: cardnetAmbiente,
+  })
+  const cardnetUtil = estadoCardnet.activo
   const sinCobroEnLinea = !transferenciaUtil && !cardnetUtil
 
   return (
@@ -50,15 +64,27 @@ export function EstadoPasarelas({
           icono={<CreditCard className="h-4 w-4" />}
           titulo="Tarjeta (CardNET)"
           activo={cardnetUtil}
-          detalle={
-            !cardnet
-              ? 'Apagada para esta empresa.'
-              : !cardnetConfigurado
-                ? 'Encendida, pero faltan las credenciales en el servidor. No se ofrece.'
-                : 'Cobrando con tarjeta.'
-          }
+          detalle={estadoCardnet.detalle}
         />
       </div>
+
+      {/* AMBIENTE DE PRUEBAS. No es un error —la pasarela responde, la
+          ventana abre, la tarjeta se registra— y por eso es tan fácil no
+          verlo: lo único que falla es el último paso, el código que el banco
+          nunca manda. Va en su propio recuadro porque la fila de arriba dice
+          «activo» y es verdad. */}
+      {estadoCardnet.avisoPruebas && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm"
+        >
+          <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+          <div>
+            <p className="font-bold text-foreground">La tarjeta está en modo de pruebas</p>
+            <p className="mt-1 text-muted-foreground">{estadoCardnet.avisoPruebas}</p>
+          </div>
+        </div>
+      )}
 
       {sinCobroEnLinea && (
         <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm">

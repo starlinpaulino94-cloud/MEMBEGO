@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import type { CompanyPublic, PromotionPublic } from '@/modules/marketplace/types'
 import * as q from '@/modules/marketplace/queries'
+import { catalogoPublicoDeEmpresa, catalogoPublicoGlobal, type FiltrosDescubrimiento } from '@/modules/catalog/publico'
 import type { MarketplaceFilters, PromotionFilters } from '@/modules/marketplace/types'
 
 /**
@@ -177,3 +178,27 @@ export {
 } from '@/modules/marketplace/queries'
 export { getCompanyPostsPublic, getSucursalesPublic } from '@/modules/marketplace/queries'
 export type { PlatformStats } from '@/modules/marketplace/queries'
+
+// ── Catálogo unificado (Commerce Core · F1.3) ────────────────────────────────
+
+/**
+ * Vitrina de una empresa. Cacheada como el resto del marketplace público; el
+ * panel invalida el tag al publicar, pausar o editar (ver `catalog/actions.ts`).
+ */
+export async function getCatalogoPublicoDeEmpresa(companyId: string, limite = 24) {
+  const fn = unstable_cache(
+    () => catalogoPublicoDeEmpresa(companyId, limite),
+    ['mk-catalogo-empresa', companyId, String(limite)],
+    { revalidate: 120, tags: [MARKETPLACE_TAG] }
+  )
+  return fn()
+}
+
+export async function getCatalogoPublicoGlobal(filtros: FiltrosDescubrimiento = {}) {
+  const fn = unstable_cache(
+    () => catalogoPublicoGlobal(filtros),
+    ['mk-catalogo-global', JSON.stringify(filtros)],
+    { revalidate: 120, tags: [MARKETPLACE_TAG] }
+  )
+  return fn()
+}

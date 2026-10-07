@@ -1,14 +1,14 @@
 import type { EstadoExterno } from './conciliacion-dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 3 · LO QUE LA PASARELA SABE (§16).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 3 · LO QUE LA PASARELA SABE (§16).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * UN PUERTO, NO UNA INTEGRACIÓN
  *
  * Conciliar de verdad exige preguntarle al proveedor qué cobró —no solo creerle
  * lo que nos mandó por webhook—. Pero hoy no hay ninguna pasarela conectada a
- * Supply 2.0, y fingir una API que no existe sería peor que no tenerla: el día
+ * Supply, y fingir una API que no existe sería peor que no tenerla: el día
  * que se conecte, el dominio tendría que cambiar para encajar con la de verdad.
  *
  * Así que lo que se define es el CONTRATO:

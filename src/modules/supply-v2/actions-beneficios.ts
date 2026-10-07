@@ -21,7 +21,7 @@ import { buscarClientesParaBeneficio } from './benefits/queries'
 import { RUTA_BENEFICIOS, RUTA_BENEFICIOS_CLIENTE } from './core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · server actions de BENEFICIOS (§29–§30, §34).
+ * MEMBEGO SUPPLY · SLICE 6 · server actions de BENEFICIOS (§29–§30, §34).
  *
  * Mismo contrato que el resto: GUARDIA (permiso de plataforma) → REGLA (en
  * `benefits/service`, dentro de UNA transacción, con bitácora) → `{ error }`
@@ -50,7 +50,7 @@ export async function crearBeneficioAction(_prev: EstadoAccion<BeneficioCreado>,
     if (!SCOPES.includes(scope)) return { error: 'Indica a qué aplica el beneficio.' }
     const startsAt = fecha(fd, 'startsAt')
     if (!startsAt) return { error: 'Indica desde cuándo vale el beneficio.' }
-    const creado = await sinEmpresa('Supply 2.0: alta de un beneficio', (tx) =>
+    const creado = await sinEmpresa('Supply: alta de un beneficio', (tx) =>
       crearBeneficioEnTx(
         tx,
         {
@@ -89,7 +89,7 @@ export async function aprobarBeneficioAction(_prev: EstadoAccion, fd: FormData):
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_BENEFIT_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: aprobar un beneficio', (tx) => aprobarBeneficioEnTx(tx, id, ctx))
+    const r = await sinEmpresa('Supply: aprobar un beneficio', (tx) => aprobarBeneficioEnTx(tx, id, ctx))
     refrescarBeneficios(id)
     return { success: r.repetido ? 'Este beneficio ya estaba activo.' : `Beneficio ${r.code} activo: ya se puede asignar y usar.`, id }
   } catch (e) {
@@ -102,7 +102,7 @@ export async function pausarBeneficioAction(_prev: EstadoAccion, fd: FormData): 
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_BENEFIT_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: pausar un beneficio', (tx) => pausarBeneficioEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: pausar un beneficio', (tx) => pausarBeneficioEnTx(tx, id, ctx))
     refrescarBeneficios(id)
     return { success: 'Beneficio pausado: no se puede usar en compras nuevas. Las reservas en curso siguen vivas.', id }
   } catch (e) {
@@ -115,7 +115,7 @@ export async function reanudarBeneficioAction(_prev: EstadoAccion, fd: FormData)
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_BENEFIT_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: reanudar un beneficio', (tx) => reanudarBeneficioEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: reanudar un beneficio', (tx) => reanudarBeneficioEnTx(tx, id, ctx))
     refrescarBeneficios(id)
     return { success: 'Beneficio activo otra vez.', id }
   } catch (e) {
@@ -130,7 +130,7 @@ export async function cancelarBeneficioAction(_prev: EstadoAccion, fd: FormData)
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Escribe por qué se cancela el beneficio.' }
-    await sinEmpresa('Supply 2.0: cancelar un beneficio', (tx) => cancelarBeneficioEnTx(tx, id, motivo, ctx))
+    await sinEmpresa('Supply: cancelar un beneficio', (tx) => cancelarBeneficioEnTx(tx, id, motivo, ctx))
     refrescarBeneficios(id)
     return { success: 'Beneficio cancelado. Lo ya aplicado queda aplicado; las asignaciones disponibles se cancelaron.', id }
   } catch (e) {
@@ -145,7 +145,7 @@ export async function asignarBeneficioAction(_prev: EstadoAccion, fd: FormData):
     const ctx = await contextoDeAuditoria(actor)
     const customerId = texto(fd, 'customerId', 60)
     if (!customerId) return { error: 'Elige el cliente que recibe el beneficio.' }
-    const r = await sinEmpresa('Supply 2.0: asignar un beneficio a un cliente', (tx) =>
+    const r = await sinEmpresa('Supply: asignar un beneficio a un cliente', (tx) =>
       asignarBeneficioEnTx(tx, { benefitId: id, customerId, usesAllowed: entero(fd, 'usesAllowed'), expiresAt: fechaFinDeDia(fd, 'expiresAt'), note: texto(fd, 'note', 500) || null }, ctx)
     )
     refrescarBeneficios(id)
@@ -163,7 +163,7 @@ export async function cancelarAsignacionAction(_prev: EstadoAccion, fd: FormData
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Escribe por qué se retira el beneficio a este cliente.' }
-    await sinEmpresa('Supply 2.0: cancelar la asignación de un beneficio', (tx) => cancelarAsignacionEnTx(tx, grantId, motivo, ctx))
+    await sinEmpresa('Supply: cancelar la asignación de un beneficio', (tx) => cancelarAsignacionEnTx(tx, grantId, motivo, ctx))
     refrescarBeneficios(benefitId)
     return { success: 'Asignación cancelada.', id: grantId }
   } catch (e) {
@@ -179,7 +179,7 @@ export async function reversarAplicacionAction(_prev: EstadoAccion, fd: FormData
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Escribe por qué se reversa la aplicación.' }
-    await sinEmpresa('Supply 2.0: reversar la aplicación de un beneficio', (tx) => reversarAplicacionBeneficioEnTx(tx, reservationId, motivo, ctx))
+    await sinEmpresa('Supply: reversar la aplicación de un beneficio', (tx) => reversarAplicacionBeneficioEnTx(tx, reservationId, motivo, ctx))
     refrescarBeneficios(benefitId)
     return { success: 'Aplicación reversada: el subsidio vuelve al presupuesto y el uso a la asignación.', id: reservationId }
   } catch (e) {

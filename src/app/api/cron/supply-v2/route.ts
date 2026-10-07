@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 /**
- * CRON DE MEMBEGO SUPPLY 2.0 (§64).
+ * CRON DE MEMBEGO SUPPLY (§64).
  *
  * Mismo mecanismo que el resto de crons (`autorizarCron` + `vercel.json`):
  * expira checkouts con la reserva caducada, activa ofertas programadas y

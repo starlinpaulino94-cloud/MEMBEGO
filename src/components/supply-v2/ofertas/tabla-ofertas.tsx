@@ -158,7 +158,7 @@ export function TablaOfertas({ ofertas, ahora, pie }: { ofertas: OfertaEnLista[]
                       {o.sourceType === 'COMMISSION' ? <Percent className="size-[18px]" /> : <Package className="size-[18px]" />}
                     </span>
                     <div className="flex min-w-0 flex-col">
-                      <Link href={`/superadmin/supply-v2/ofertas/${o.id}`} className="text-[15px] font-bold leading-5 hover:underline">{o.title}</Link>
+                      <Link href={`/superadmin/supply/ofertas/${o.id}`} className="text-[15px] font-bold leading-5 hover:underline">{o.title}</Link>
                       <span className="flex flex-wrap items-center gap-1">
                         <span className={cn(MONO, 'text-sv2-outline')}>{o.code}</span>
                         {(o.categoria || o.sku) && <span className={cn(MONO, 'rounded-[4px] border border-sv2-border px-1 text-sv2-ink-variant')}>{o.categoria ?? o.sku}</span>}
@@ -183,7 +183,7 @@ export function TablaOfertas({ ofertas, ahora, pie }: { ofertas: OfertaEnLista[]
                 <td className={td}><ChipEstado estado={o.status} /></td>
                 <td className={cn(td, 'col-span-2 @xl:col-span-3 @4xl:pr-3')}>
                   <div className="flex items-center justify-end gap-1 [&_button]:h-8 [&_button]:rounded-[8px] [&_button]:px-3 [&_button]:text-[13px] [&_form]:inline">
-                    <Link href={`/superadmin/supply-v2/ofertas/${o.id}`} className="px-2 py-1 text-[13px] font-semibold text-sv2-primary hover:underline">Ver</Link>
+                    <Link href={`/superadmin/supply/ofertas/${o.id}`} className="px-2 py-1 text-[13px] font-semibold text-sv2-primary hover:underline">Ver</Link>
                     <AccionesOferta offerId={o.id} estado={o.status} compacto />
                   </div>
                 </td>

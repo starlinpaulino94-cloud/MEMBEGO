@@ -46,6 +46,11 @@ const SCOPES: { valor: string; label: string }[] = [
     valor: 'customers:manage',
     label: 'Editar la ficha de tus clientes (nombre, teléfono, correo)',
   },
+  { valor: 'catalog:read', label: 'Ver tu catálogo de productos y servicios' },
+  {
+    valor: 'catalog:manage',
+    label: 'Crear productos y variantes en borrador (publicarlos sigue siendo desde el panel)',
+  },
 ]
 
 export interface ClaveVista {

@@ -23,7 +23,7 @@
     "db:seed:supply-v2": "tsx --conditions react-server --import ./scripts/supply-db/shim-next.mjs prisma/seed-supply-v2.ts",
     "geo:seed": "tsx scripts/geo-seed.ts",
     "test": "tsx --test tests/*.test.ts",
-    "test:db": "tsx --conditions react-server --import ./scripts/supply-db/shim-next.mjs --test tests/postgres/*.db.test.ts",
+    "test:db": "tsx --conditions react-server --import ./scripts/supply-db/shim-next.mjs --test --test-concurrency=1 tests/postgres/*.db.test.ts",
     "migraciones:sellar": "node scripts/sellar-migraciones.mjs",
     "certificar:referidos": "tsx --tsconfig tsconfig.json scripts/certificar-referidos.ts",
     "respaldo:verificar": "node scripts/verificar-respaldo.mjs",
@@ -111,7 +111,7 @@
     "react-resizable-panels": "^3.0.3",
     "recharts": "^2.15.4",
     "server-only": "^0.0.1",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "sonner": "^2.0.6",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
@@ -140,7 +140,7 @@
     "wait-on": "^9.1.0"
   },
   "overrides": {
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "postcss": "^8.5.18",
     "deepmerge-ts": "^8.0.0"
   }

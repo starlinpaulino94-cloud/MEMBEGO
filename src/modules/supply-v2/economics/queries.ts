@@ -5,7 +5,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import { agregarEconomia, rangoDeVentana, type Economia, type VentanaEconomia } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · `SupplyV2Economics` (§31–§32, §68).
+ * MEMBEGO SUPPLY · SLICE 4 · `SupplyV2Economics` (§31–§32, §68).
  *
  * UN solo sitio calcula GMV, ingreso, costo, margen, unidades vendidas,
  * redimidas y vencidas y la tasa de breakage: las pantallas piden aquí y no
@@ -34,7 +34,7 @@ export async function calcularEconomia(f: FiltroEconomia, ahora = new Date()): P
     ...(f.supplierId ? { supplierId: f.supplierId } : {}),
     ...(f.catalogItemId ? { catalogItemId: f.catalogItemId } : {}),
   }
-  const [eventos, redimidas] = await sinEmpresa('Supply 2.0: economía del supply', (tx) =>
+  const [eventos, redimidas] = await sinEmpresa('Supply: economía del supply', (tx) =>
     Promise.all([
       tx.supplyV2EconomicEvent.findMany({ where: comun, select: { type: true, units: true, gmvAmount: true, revenueAmount: true, costAmount: true, grossMarginAmount: true, contractualAmount: true, supplierDiscountAmount: true, subsidyAmount: true, customerPaidAmount: true } }),
       tx.supplyV2Redemption.count({
@@ -51,8 +51,80 @@ export async function calcularEconomia(f: FiltroEconomia, ahora = new Date()): P
   return { ...e, desde, hasta, hayDatos: eventos.length > 0 || redimidas > 0 }
 }
 
+export interface FilaDesglose {
+  catalogItemId: string | null
+  producto: string
+  sku: string | null
+  proveedor: string | null
+  /** Modalidades con ventas en el periodo (un producto puede tener las dos). */
+  modalidades: ('PREPAGO' | 'COMISION')[]
+  unidades: number
+  gmv: string
+  /** Costo real por unidad del supply adquirido; null si no hubo venta de supply. */
+  costoUnitario: string | null
+  subsidio: string
+  ingreso: string
+  margen: string
+  /** Margen sobre el ingreso, como en `Economia.marginPct`; null si no hay ingreso. */
+  margenPct: number | null
+}
+
+/**
+ * Desglose por producto de los MISMOS eventos que `calcularEconomia` (mismo
+ * filtro y misma agregación por grupo), de modo que la suma de la tabla
+ * coincide con los indicadores. Solo lectura.
+ */
+export async function desglosePorProducto(f: FiltroEconomia, ahora = new Date()): Promise<FilaDesglose[]> {
+  const { desde, hasta } = rangoDeVentana(f.ventana, ahora, f.desde, f.hasta)
+  const eventos = await sinEmpresa('Supply: desglose económico por producto', (tx) =>
+    tx.supplyV2EconomicEvent.findMany({
+      where: {
+        occurredAt: { gte: desde, lt: hasta },
+        ...(f.supplierId ? { supplierId: f.supplierId } : {}),
+        ...(f.catalogItemId ? { catalogItemId: f.catalogItemId } : {}),
+      },
+      select: {
+        type: true, units: true, gmvAmount: true, revenueAmount: true, costAmount: true, grossMarginAmount: true, contractualAmount: true, supplierDiscountAmount: true, subsidyAmount: true, customerPaidAmount: true,
+        catalogItemId: true,
+        catalogItem: { select: { name: true, sku: true, supplier: { select: { commercialName: true } } } },
+      },
+    })
+  )
+  const grupos = new Map<string, typeof eventos>()
+  for (const e of eventos) {
+    const k = e.catalogItemId ?? '∅'
+    const g = grupos.get(k)
+    if (g) g.push(e)
+    else grupos.set(k, [e])
+  }
+  const filas: FilaDesglose[] = []
+  for (const [k, g] of grupos) {
+    const e = agregarEconomia(g, 0)
+    if (e.unitsSold === 0 && e.gmv.isZero() && e.membegoSubsidy.isZero()) continue
+    const ci = g[0].catalogItem
+    const modalidades: FilaDesglose['modalidades'] = []
+    if (e.prepurchase.unitsSold > 0) modalidades.push('PREPAGO')
+    if (e.commission.unitsSold > 0) modalidades.push('COMISION')
+    filas.push({
+      catalogItemId: k === '∅' ? null : k,
+      producto: ci?.name ?? 'Sin producto asociado',
+      sku: ci?.sku ?? null,
+      proveedor: ci?.supplier.commercialName ?? null,
+      modalidades,
+      unidades: e.unitsSold,
+      gmv: e.gmv.toFixed(2),
+      costoUnitario: e.prepurchase.unitsSold > 0 ? e.prepurchase.cost.dividedBy(e.prepurchase.unitsSold).toFixed(2) : null,
+      subsidio: e.membegoSubsidy.toFixed(2),
+      ingreso: e.revenue.toFixed(2),
+      margen: e.grossMargin.toFixed(2),
+      margenPct: e.marginPct,
+    })
+  }
+  return filas.sort((a, b) => Number(b.gmv) - Number(a.gmv))
+}
+
 export async function opcionesDeFiltroEconomia(): Promise<{ proveedores: { id: string; nombre: string }[]; productos: { id: string; nombre: string; proveedor: string }[] }> {
-  const [proveedores, productos] = await sinEmpresa('Supply 2.0: filtros del reporte económico', (tx) =>
+  const [proveedores, productos] = await sinEmpresa('Supply: filtros del reporte económico', (tx) =>
     Promise.all([
       tx.supplyV2Supplier.findMany({ where: { economicEvents: { some: {} } }, orderBy: { commercialName: 'asc' }, select: { id: true, commercialName: true } }),
       tx.supplyV2CatalogItem.findMany({ where: { economicEvents: { some: {} } }, orderBy: { name: 'asc' }, select: { id: true, name: true, supplier: { select: { commercialName: true } } } }),
@@ -74,7 +146,7 @@ export async function timelineEconomicoDeCompra(orderId: string): Promise<{
   order: { id: string; number: string; status: string; total: string; currency: string; customer: string; paidAt: Date | null; contractualValue: string; supplierDiscountTotal: string; membegoSubsidyTotal: string; beneficio: { code: string; name: string; funding: string } | null }
   derechos: { id: string; status: string; producto: string; proveedor: string; hitos: HitoEconomico[]; venta: { customerPaid: string; publicPrice: string; discount: string; actualUnitCost: string; grossMargin: string; contractual: string; descuentoProveedor: string; subsidio: string } | null }[]
 } | null> {
-  const o = await sinEmpresa('Supply 2.0: timeline económico de una compra', (tx) =>
+  const o = await sinEmpresa('Supply: timeline económico de una compra', (tx) =>
     tx.supplyV2CustomerOrder.findUnique({
       where: { id: orderId },
       select: {

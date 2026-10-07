@@ -8,7 +8,7 @@ import { CERO, OBLIGACION_VIVA } from './domain'
 import { obligacionesLiquidablesEnTx } from './settlements'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · lecturas de finanzas (§33–§38, §47, §61).
+ * MEMBEGO SUPPLY · SLICE 4 · lecturas de finanzas (§33–§38, §47, §61).
  *
  * Listas con PAGINACIÓN REAL (`{ filas, total }`): nada se trunca en
  * silencio. Los importes viajan como texto con dos decimales.
@@ -55,7 +55,7 @@ export interface ResumenFinanzas {
 
 export async function resumenFinanzas(ahora = new Date()): Promise<ResumenFinanzas> {
   const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-  const [cxp, pendientes, depositos, pagosMes, pagosPendientes, vencido, sinLiquidar, liqPendientes, liqPorPagar, incidencias] = await sinEmpresa('Supply 2.0: tablero de finanzas', (tx) =>
+  const [cxp, pendientes, depositos, pagosMes, pagosPendientes, vencido, sinLiquidar, liqPendientes, liqPorPagar, incidencias] = await sinEmpresa('Supply: tablero de finanzas', (tx) =>
     Promise.all([
       tx.supplyV2SupplierObligation.aggregate({ where: { status: { in: [...OBLIGACION_VIVA] } }, _sum: { outstandingAmount: true } }),
       tx.supplyV2SupplierInvoice.aggregate({ where: { status: { in: ['APPROVED', 'PARTIALLY_PAID'] } }, _sum: { amountDue: true }, _count: { _all: true } }),
@@ -105,6 +105,33 @@ export async function resumenFinanzas(ahora = new Date()): Promise<ResumenFinanz
   }
 }
 
+/**
+ * Extras del tablero rediseñado (solo lectura): conciliaciones que siguen sin
+ * cerrar y el proveedor al que más se le debe ahora mismo.
+ */
+export interface ExtrasFinanzas {
+  conciliacionesAbiertas: number
+  conciliacionesConDiferencia: number
+  mayorDeuda: { proveedor: string; proveedorId: string; saldo: string; obligaciones: number } | null
+}
+
+export async function extrasFinanzas(): Promise<ExtrasFinanzas> {
+  const [abiertas, diferencias, porProveedor] = await sinEmpresa('Supply: extras del tablero de finanzas', (tx) =>
+    Promise.all([
+      tx.supplyV2Reconciliation.count({ where: { status: { in: ['OPEN', 'DISCREPANCY'] } } }),
+      tx.supplyV2Reconciliation.count({ where: { status: 'DISCREPANCY' } }),
+      tx.supplyV2SupplierObligation.groupBy({ by: ['supplierId'], where: { status: { in: [...OBLIGACION_VIVA] } }, _sum: { outstandingAmount: true }, _count: { _all: true }, orderBy: { _sum: { outstandingAmount: 'desc' } }, take: 1 }),
+    ])
+  )
+  const top = porProveedor[0]
+  let mayorDeuda: ExtrasFinanzas['mayorDeuda'] = null
+  if (top && (top._sum.outstandingAmount ?? CERO).greaterThan(0)) {
+    const prov = await sinEmpresa('Supply: proveedor con mayor deuda', (tx) => tx.supplyV2Supplier.findUnique({ where: { id: top.supplierId }, select: { commercialName: true } }))
+    mayorDeuda = { proveedor: prov?.commercialName ?? '—', proveedorId: top.supplierId, saldo: (top._sum.outstandingAmount ?? CERO).toFixed(2), obligaciones: top._count._all }
+  }
+  return { conciliacionesAbiertas: abiertas, conciliacionesConDiferencia: diferencias, mayorDeuda }
+}
+
 // ── Facturas (§35) ────────────────────────────────────────────────────────────
 
 export interface FiltroFacturas {
@@ -134,7 +161,7 @@ export async function listarFacturas(f: FiltroFacturas, p: Paginacion): Promise<
   if (f.supplierId) where.supplierId = f.supplierId
   if (f.status === 'PENDIENTES') where.status = { in: ['PENDING_APPROVAL', 'APPROVED', 'PARTIALLY_PAID'] }
   else if (f.status) where.status = f.status
-  const [filas, total] = await sinEmpresa('Supply 2.0: facturas de proveedor', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: facturas de proveedor', (tx) =>
     Promise.all([
       tx.supplyV2SupplierInvoice.findMany({
         where,
@@ -153,7 +180,7 @@ export async function listarFacturas(f: FiltroFacturas, p: Paginacion): Promise<
 }
 
 export async function fichaFactura(id: string) {
-  const f = await sinEmpresa('Supply 2.0: ficha de una factura de proveedor', (tx) =>
+  const f = await sinEmpresa('Supply: ficha de una factura de proveedor', (tx) =>
     tx.supplyV2SupplierInvoice.findUnique({
       where: { id },
       include: {
@@ -204,7 +231,7 @@ export async function listarDepositos(f: { supplierId?: string | null; status?: 
   const where: Prisma.SupplyV2SupplierDepositWhereInput = {}
   if (f.supplierId) where.supplierId = f.supplierId
   if (f.status) where.status = f.status as never
-  const [filas, total] = await sinEmpresa('Supply 2.0: depósitos', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: depósitos', (tx) =>
     Promise.all([
       tx.supplyV2SupplierDeposit.findMany({ where, orderBy: { createdAt: 'desc' }, skip: p.saltar, take: p.tomar, select: { id: true, number: true, currency: true, originalAmount: true, availableAmount: true, appliedAmount: true, status: true, createdAt: true, supplier: { select: { id: true, commercialName: true } }, payment: { select: { number: true } } } }),
       tx.supplyV2SupplierDeposit.count({ where }),
@@ -214,7 +241,7 @@ export async function listarDepositos(f: { supplierId?: string | null; status?: 
 }
 
 export async function fichaDeposito(id: string) {
-  return sinEmpresa('Supply 2.0: ficha de un depósito', (tx) =>
+  return sinEmpresa('Supply: ficha de un depósito', (tx) =>
     tx.supplyV2SupplierDeposit.findUnique({
       where: { id },
       include: {
@@ -253,7 +280,7 @@ export async function listarPagos(f: { supplierId?: string | null; status?: Supp
   const where: Prisma.SupplyV2SupplierPaymentWhereInput = {}
   if (f.supplierId) where.supplierId = f.supplierId
   if (f.status) where.status = f.status
-  const [filas, total] = await sinEmpresa('Supply 2.0: pagos a proveedores', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: pagos a proveedores', (tx) =>
     Promise.all([
       tx.supplyV2SupplierPayment.findMany({
         where,
@@ -269,7 +296,7 @@ export async function listarPagos(f: { supplierId?: string | null; status?: Supp
 }
 
 export async function fichaPago(id: string) {
-  return sinEmpresa('Supply 2.0: ficha de un pago', (tx) =>
+  return sinEmpresa('Supply: ficha de un pago', (tx) =>
     tx.supplyV2SupplierPayment.findUnique({
       where: { id },
       include: {
@@ -310,7 +337,7 @@ export async function listarObligaciones(f: { supplierId?: string | null; status
   if (f.supplierId) where.supplierId = f.supplierId
   if (f.status === 'VIVAS') where.status = { in: [...OBLIGACION_VIVA] }
   else if (f.status) where.status = f.status
-  const [filas, total] = await sinEmpresa('Supply 2.0: obligaciones', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: obligaciones', (tx) =>
     Promise.all([
       tx.supplyV2SupplierObligation.findMany({ where, orderBy: [{ recognizedAt: 'desc' }], skip: p.saltar, take: p.tomar, include: { supplier: { select: { id: true, commercialName: true } }, invoice: { select: { id: true, number: true } }, purchaseOrder: { select: { id: true, number: true } }, receipt: { select: { number: true } }, redemption: { select: { number: true } } } }),
       tx.supplyV2SupplierObligation.count({ where }),
@@ -342,7 +369,7 @@ export async function listarObligaciones(f: { supplierId?: string | null; status
 
 export async function listarConciliaciones(f: { supplierId?: string | null; kind?: 'SUPPLY' | 'COMMISSION' | null }, p: Paginacion) {
   const where: Prisma.SupplyV2ReconciliationWhereInput = { ...(f.supplierId ? { supplierId: f.supplierId } : {}), ...(f.kind ? { kind: f.kind } : {}) }
-  const [filas, total] = await sinEmpresa('Supply 2.0: conciliaciones', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: conciliaciones', (tx) =>
     Promise.all([
       tx.supplyV2Reconciliation.findMany({ where, orderBy: { createdAt: 'desc' }, skip: p.saltar, take: p.tomar, include: { supplier: { select: { id: true, commercialName: true } }, _count: { select: { lines: true } } } }),
       tx.supplyV2Reconciliation.count({ where }),
@@ -352,11 +379,11 @@ export async function listarConciliaciones(f: { supplierId?: string | null; kind
 }
 
 export async function fichaConciliacion(id: string, p: Paginacion) {
-  const r = await sinEmpresa('Supply 2.0: ficha de una conciliación', (tx) =>
+  const r = await sinEmpresa('Supply: ficha de una conciliación', (tx) =>
     tx.supplyV2Reconciliation.findUnique({ where: { id }, include: { supplier: { select: { id: true, commercialName: true } }, createdBy: { select: { name: true, email: true } }, resolvedBy: { select: { name: true, email: true } }, _count: { select: { lines: true } } } })
   )
   if (!r) return null
-  const lineas = await sinEmpresa('Supply 2.0: líneas de una conciliación', (tx) => tx.supplyV2ReconciliationLine.findMany({ where: { reconciliationId: id }, orderBy: { occurredAt: 'asc' }, skip: p.saltar, take: p.tomar }))
+  const lineas = await sinEmpresa('Supply: líneas de una conciliación', (tx) => tx.supplyV2ReconciliationLine.findMany({ where: { reconciliationId: id }, orderBy: { occurredAt: 'asc' }, skip: p.saltar, take: p.tomar }))
   return { ...r, lineas, totalLineas: r._count.lines, creadoPor: nombre(r.createdBy), resueltoPor: nombre(r.resolvedBy) }
 }
 
@@ -384,7 +411,7 @@ export interface PerfilFinanciero {
 }
 
 export async function perfilFinancieroProveedor(supplierId: string, limiteTimeline = 30): Promise<PerfilFinanciero | null> {
-  return sinEmpresa('Supply 2.0: perfil financiero del proveedor', async (tx) => {
+  return sinEmpresa('Supply: perfil financiero del proveedor', async (tx) => {
     const s = await tx.supplyV2Supplier.findUnique({ where: { id: supplierId }, select: { id: true, currency: true } })
     if (!s) return null
     const [cxp, pendientes, depositos, pagado, lotes, facturas, pagos, deps, apps, obligaciones] = await Promise.all([
@@ -401,18 +428,18 @@ export async function perfilFinancieroProveedor(supplierId: string, limiteTimeli
     ])
     const timeline: HitoFinanciero[] = []
     for (const f of facturas) {
-      timeline.push({ cuando: f.createdAt, titulo: `Factura ${f.number}`, monto: f.total.toFixed(2), href: `/superadmin/supply-v2/finanzas/facturas/${f.id}`, tono: f.status === 'CANCELLED' ? 'danger' : 'neutral', detalle: f.status === 'CANCELLED' ? 'Cancelada' : null })
-      if (f.status === 'PAID') timeline.push({ cuando: f.approvedAt ?? f.createdAt, titulo: `Factura ${f.number} pagada`, href: `/superadmin/supply-v2/finanzas/facturas/${f.id}`, tono: 'success' })
+      timeline.push({ cuando: f.createdAt, titulo: `Factura ${f.number}`, monto: f.total.toFixed(2), href: `/superadmin/supply/finanzas/facturas/${f.id}`, tono: f.status === 'CANCELLED' ? 'danger' : 'neutral', detalle: f.status === 'CANCELLED' ? 'Cancelada' : null })
+      if (f.status === 'PAID') timeline.push({ cuando: f.approvedAt ?? f.createdAt, titulo: `Factura ${f.number} pagada`, href: `/superadmin/supply/finanzas/facturas/${f.id}`, tono: 'success' })
     }
-    for (const p of pagos) timeline.push({ cuando: p.confirmedAt ?? p.createdAt, titulo: p.intendedDeposit ? `Anticipo ${p.number}` : `Transferencia ${p.number}`, detalle: p.status === 'PENDING' ? 'Pendiente de confirmar' : null, monto: p.amount.toFixed(2), href: `/superadmin/supply-v2/finanzas/pagos/${p.id}`, tono: p.status === 'PENDING' ? 'warning' : 'success' })
-    for (const d of deps) timeline.push({ cuando: d.createdAt, titulo: `Depósito ${d.number}`, monto: d.originalAmount.toFixed(2), href: `/superadmin/supply-v2/finanzas/depositos/${d.id}`, tono: 'info' })
+    for (const p of pagos) timeline.push({ cuando: p.confirmedAt ?? p.createdAt, titulo: p.intendedDeposit ? `Anticipo ${p.number}` : `Transferencia ${p.number}`, detalle: p.status === 'PENDING' ? 'Pendiente de confirmar' : null, monto: p.amount.toFixed(2), href: `/superadmin/supply/finanzas/pagos/${p.id}`, tono: p.status === 'PENDING' ? 'warning' : 'success' })
+    for (const d of deps) timeline.push({ cuando: d.createdAt, titulo: `Depósito ${d.number}`, monto: d.originalAmount.toFixed(2), href: `/superadmin/supply/finanzas/depositos/${d.id}`, tono: 'info' })
     for (const a of apps) {
       if (a.type === 'PAYMENT_TO_DEPOSIT') continue
       const origen = a.deposit ? `Aplicación depósito ${a.deposit.number}` : `Pago ${a.payment?.number ?? ''} aplicado`
       const destino = a.invoice ? `a la factura ${a.invoice.number}` : `a la obligación ${a.obligation?.number ?? ''}`
-      timeline.push({ cuando: a.createdAt, titulo: `${origen} ${destino}`, monto: a.amount.toFixed(2), href: a.invoice ? `/superadmin/supply-v2/finanzas/facturas/${a.invoice.id}` : null, tono: a.reversedAt ? 'warning' : 'info', detalle: a.reversedAt ? `Reversada: ${a.reversalReason}` : null })
+      timeline.push({ cuando: a.createdAt, titulo: `${origen} ${destino}`, monto: a.amount.toFixed(2), href: a.invoice ? `/superadmin/supply/finanzas/facturas/${a.invoice.id}` : null, tono: a.reversedAt ? 'warning' : 'info', detalle: a.reversedAt ? `Reversada: ${a.reversalReason}` : null })
     }
-    for (const o of obligaciones) timeline.push({ cuando: o.recognizedAt, titulo: `Obligación ${o.number} (${o.recognitionBasis})`, monto: o.grossAmount.toFixed(2), tono: o.status === 'CANCELLED' ? 'danger' : 'neutral', detalle: o.status === 'CANCELLED' ? 'Cancelada' : null, href: '/superadmin/supply-v2/finanzas/obligaciones' })
+    for (const o of obligaciones) timeline.push({ cuando: o.recognizedAt, titulo: `Obligación ${o.number} (${o.recognitionBasis})`, monto: o.grossAmount.toFixed(2), tono: o.status === 'CANCELLED' ? 'danger' : 'neutral', detalle: o.status === 'CANCELLED' ? 'Cancelada' : null, href: '/superadmin/supply/finanzas/obligaciones' })
     timeline.sort((a, b) => a.cuando.getTime() - b.cuando.getTime())
     return {
       saldoAPagar: (cxp._sum.outstandingAmount ?? CERO).toFixed(2),
@@ -431,7 +458,7 @@ export async function perfilFinancieroProveedor(supplierId: string, limiteTimeli
 // ── Timeline financiero de la orden (§61) ────────────────────────────────────
 
 export async function timelineFinancieroOrden(purchaseOrderId: string): Promise<HitoFinanciero[]> {
-  return sinEmpresa('Supply 2.0: timeline financiero de una orden', async (tx) => {
+  return sinEmpresa('Supply: timeline financiero de una orden', async (tx) => {
     const o = await tx.supplyV2PurchaseOrder.findUnique({
       where: { id: purchaseOrderId },
       select: {
@@ -447,8 +474,8 @@ export async function timelineFinancieroOrden(purchaseOrderId: string): Promise<
     const hitos: HitoFinanciero[] = []
     for (const e of o.events) hitos.push({ cuando: e.createdAt, titulo: e.type === 'CREATED' ? `PO creada · ${o.total.toFixed(2)}` : 'Aprobada', tono: e.type === 'CREATED' ? 'neutral' : 'info' })
     for (const f of o.invoices) {
-      hitos.push({ cuando: f.createdAt, titulo: `Factura proveedor ${f.number} · ${f.total.toFixed(2)}`, detalle: f.status === 'PENDING_APPROVAL' ? 'Pendiente de aprobación' : null, href: `/superadmin/supply-v2/finanzas/facturas/${f.id}`, tono: 'neutral' })
-      for (const a of f.applications) hitos.push({ cuando: a.createdAt, titulo: `${a.deposit ? `Depósito ${a.deposit.number} aplicado` : `Pago ${a.payment?.number ?? ''}`} · ${a.amount.toFixed(2)}`, href: `/superadmin/supply-v2/finanzas/facturas/${f.id}`, tono: 'success' })
+      hitos.push({ cuando: f.createdAt, titulo: `Factura proveedor ${f.number} · ${f.total.toFixed(2)}`, detalle: f.status === 'PENDING_APPROVAL' ? 'Pendiente de aprobación' : null, href: `/superadmin/supply/finanzas/facturas/${f.id}`, tono: 'neutral' })
+      for (const a of f.applications) hitos.push({ cuando: a.createdAt, titulo: `${a.deposit ? `Depósito ${a.deposit.number} aplicado` : `Pago ${a.payment?.number ?? ''}`} · ${a.amount.toFixed(2)}`, href: `/superadmin/supply/finanzas/facturas/${f.id}`, tono: 'success' })
       if (f.status === 'PAID') hitos.push({ cuando: f.applications.at(-1)?.createdAt ?? f.createdAt, titulo: `Factura ${f.number} pagada`, tono: 'success' })
     }
     for (const ob of o.obligations) hitos.push({ cuando: ob.recognizedAt, titulo: `Obligación ${ob.number} por recepción · ${ob.grossAmount.toFixed(2)}`, detalle: ob.status === 'PAID' ? 'Pagada' : ob.status === 'CANCELLED' ? 'Cancelada' : 'Pendiente', tono: 'warning' })
@@ -460,12 +487,12 @@ export async function timelineFinancieroOrden(purchaseOrderId: string): Promise<
 // ── Catálogos para formularios ───────────────────────────────────────────────
 
 export async function proveedoresParaFinanzas() {
-  return sinEmpresa('Supply 2.0: proveedores para finanzas', (tx) => tx.supplyV2Supplier.findMany({ where: { status: 'ACTIVE' }, orderBy: { commercialName: 'asc' }, select: { id: true, commercialName: true, currency: true } }))
+  return sinEmpresa('Supply: proveedores para finanzas', (tx) => tx.supplyV2Supplier.findMany({ where: { status: 'ACTIVE' }, orderBy: { commercialName: 'asc' }, select: { id: true, commercialName: true, currency: true } }))
 }
 
 /** Órdenes aprobadas (o más) con líneas y cuánto queda por facturar en cada una. */
 export async function ordenesFacturables(supplierId?: string | null) {
-  return sinEmpresa('Supply 2.0: órdenes facturables', async (tx) => {
+  return sinEmpresa('Supply: órdenes facturables', async (tx) => {
     const ordenes = await tx.supplyV2PurchaseOrder.findMany({
       where: { status: { notIn: ['DRAFT', 'PENDING_APPROVAL', 'CANCELLED'] }, ...(supplierId ? { supplierId } : {}) },
       orderBy: { createdAt: 'desc' },
@@ -488,11 +515,11 @@ export async function ordenesFacturables(supplierId?: string | null) {
 }
 
 export async function depositosActivosDe(supplierId: string) {
-  return sinEmpresa('Supply 2.0: depósitos activos de un proveedor', (tx) => tx.supplyV2SupplierDeposit.findMany({ where: { supplierId, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' }, select: { id: true, number: true, availableAmount: true, currency: true } }))
+  return sinEmpresa('Supply: depósitos activos de un proveedor', (tx) => tx.supplyV2SupplierDeposit.findMany({ where: { supplierId, status: 'ACTIVE' }, orderBy: { createdAt: 'asc' }, select: { id: true, number: true, availableAmount: true, currency: true } }))
 }
 
 export async function pagosConSaldoDe(supplierId: string) {
-  const filas = await sinEmpresa('Supply 2.0: pagos confirmados con saldo sin aplicar', (tx) => tx.supplyV2SupplierPayment.findMany({ where: { supplierId, status: 'CONFIRMED' }, orderBy: { paidAt: 'asc' }, select: { id: true, number: true, amount: true, appliedAmount: true, currency: true, reference: true } }))
+  const filas = await sinEmpresa('Supply: pagos confirmados con saldo sin aplicar', (tx) => tx.supplyV2SupplierPayment.findMany({ where: { supplierId, status: 'CONFIRMED' }, orderBy: { paidAt: 'asc' }, select: { id: true, number: true, amount: true, appliedAmount: true, currency: true, reference: true } }))
   return filas.filter((p) => p.amount.greaterThan(p.appliedAmount)).map((p) => ({ id: p.id, number: p.number, sinAplicar: p.amount.minus(p.appliedAmount).toFixed(2), currency: p.currency, reference: p.reference }))
 }
 
@@ -522,7 +549,7 @@ export async function listarLiquidaciones(f: { supplierId?: string | null; statu
     ...(f.supplierId ? { supplierId: f.supplierId } : {}),
     ...(f.status === 'VIVAS' ? { status: { in: ['PENDING_APPROVAL', 'APPROVED', 'PARTIALLY_PAID'] } } : f.status ? { status: f.status as never } : {}),
   }
-  const [filas, total] = await sinEmpresa('Supply 2.0: liquidaciones', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: liquidaciones', (tx) =>
     Promise.all([
       tx.supplyV2Settlement.findMany({ where, orderBy: { createdAt: 'desc' }, skip: p.saltar, take: p.tomar, include: { supplier: { select: { id: true, commercialName: true } }, _count: { select: { lines: true } } } }),
       tx.supplyV2Settlement.count({ where }),
@@ -535,7 +562,7 @@ export async function listarLiquidaciones(f: { supplierId?: string | null; statu
 }
 
 export async function fichaLiquidacion(id: string, p: Paginacion) {
-  const s = await sinEmpresa('Supply 2.0: ficha de una liquidación', (tx) =>
+  const s = await sinEmpresa('Supply: ficha de una liquidación', (tx) =>
     tx.supplyV2Settlement.findUnique({
       where: { id },
       include: {
@@ -548,7 +575,7 @@ export async function fichaLiquidacion(id: string, p: Paginacion) {
     })
   )
   if (!s) return null
-  const lineas = await sinEmpresa('Supply 2.0: líneas de una liquidación', (tx) =>
+  const lineas = await sinEmpresa('Supply: líneas de una liquidación', (tx) =>
     tx.supplyV2SettlementLine.findMany({ where: { settlementId: id }, orderBy: { createdAt: 'asc' }, skip: p.saltar, take: p.tomar, include: { obligation: { select: { id: true, number: true, status: true, paidAmount: true, outstandingAmount: true, recognizedAt: true } } } })
   )
   return {
@@ -564,7 +591,7 @@ export async function fichaLiquidacion(id: string, p: Paginacion) {
 
 /** Vista previa de lo que entraría en una liquidación (sin candados, sin crear nada). */
 export async function previsualizarLiquidacion(supplierId: string, periodStart: Date, periodEnd: Date) {
-  return sinEmpresa('Supply 2.0: previsualizar liquidación', async (tx) => {
+  return sinEmpresa('Supply: previsualizar liquidación', async (tx) => {
     const s = await tx.supplyV2Supplier.findUnique({ where: { id: supplierId }, select: { currency: true, commercialName: true } })
     if (!s) return null
     const filas = await obligacionesLiquidablesEnTx(tx, supplierId, periodStart, periodEnd, s.currency)
@@ -595,7 +622,7 @@ export async function previsualizarLiquidacion(supplierId: string, periodStart: 
 
 export async function listarIncidenciasFinancieras(f: { status?: 'OPEN' | 'RESOLVED' | null }, p: Paginacion) {
   const where: Prisma.SupplyV2FinanceIncidentWhereInput = f.status ? { status: f.status } : {}
-  const [filas, total] = await sinEmpresa('Supply 2.0: incidencias financieras', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: incidencias financieras', (tx) =>
     Promise.all([
       tx.supplyV2FinanceIncident.findMany({ where, orderBy: [{ status: 'asc' }, { createdAt: 'desc' }], skip: p.saltar, take: p.tomar, include: { supplier: { select: { id: true, commercialName: true } }, obligation: { select: { id: true, number: true, settlementId: true } }, resolvedBy: { select: { name: true, email: true } } } }),
       tx.supplyV2FinanceIncident.count({ where }),
@@ -606,6 +633,6 @@ export async function listarIncidenciasFinancieras(f: { status?: 'OPEN' | 'RESOL
 
 /** Liquidaciones aprobadas con saldo de un proveedor (para el formulario de pago). */
 export async function liquidacionesPagablesDe(supplierId: string) {
-  const filas = await sinEmpresa('Supply 2.0: liquidaciones pagables', (tx) => tx.supplyV2Settlement.findMany({ where: { supplierId, status: { in: ['APPROVED', 'PARTIALLY_PAID'] } }, orderBy: { periodEnd: 'asc' }, select: { id: true, number: true, supplierNet: true, paidAmount: true } }))
+  const filas = await sinEmpresa('Supply: liquidaciones pagables', (tx) => tx.supplyV2Settlement.findMany({ where: { supplierId, status: { in: ['APPROVED', 'PARTIALLY_PAID'] } }, orderBy: { periodEnd: 'asc' }, select: { id: true, number: true, supplierNet: true, paidAmount: true } }))
   return filas.map((s) => ({ id: s.id, number: s.number, pendiente: s.supplierNet.minus(s.paidAmount).toFixed(2) }))
 }

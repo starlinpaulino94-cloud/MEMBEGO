@@ -1,432 +1,204 @@
-import Link from 'next/link'
-import { AlertTriangle, Boxes, Coins, PackageCheck, Ticket, TrendingDown } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  Archive,
+  Banknote,
+  ChartLine,
+  ClipboardCheck,
+  Clock,
+  Info,
+  Package,
+  Receipt,
+  ReceiptText,
+  ShoppingBag,
+  Tag,
+  TrendingUp,
+} from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { PageHeader } from '@/components/ui/page-header'
-import { StatCard } from '@/components/ui/stat-card'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { EmptyState } from '@/components/ui/empty-state'
-import { TablaReporte } from '@/components/ui/reporte-imprimible'
 import { formatMoneyRD } from '@/lib/format'
-import { NavSupply } from '@/components/supply/nav'
-import { resumenPool, reporteProveedores } from '@/modules/supply/pool'
-import { alertasDeVencimiento, vencimientosProximos } from '@/modules/supply/vencimientos'
-import { actividadReciente, economiaGlobal, redencionesRecientes, resumenFinanciero, supplyPorCategoria } from '@/modules/supply/tablero'
-import { sinEmpresa } from '@/lib/tenant'
-import { formatDateTime } from '@/lib/format'
+import { MarcoSupplyV2 } from '@/components/supply-v2/marco'
+import { AccionesCabeceraSupplyV2 } from '@/components/supply-v2/acciones-cabecera'
+import { PanelAbastecimiento } from '@/components/supply-v2/resumen/panel-abastecimiento'
+import { TarjetaAlerta } from '@/components/supply-v2/resumen/tarjeta-alerta'
+import { CifraPilar, MiniMetrica, TarjetaPilar } from '@/components/supply-v2/resumen/tarjeta-pilar'
+import { InventarioActivo } from '@/components/supply-v2/resumen/inventario-activo'
+import { OrdenesRecientes } from '@/components/supply-v2/resumen/ordenes-recientes'
+import { ActividadReciente } from '@/components/supply-v2/resumen/actividad-reciente'
+import { EnlaceSuave } from '@/components/supply-v2/resumen/superficie'
+import { ORDEN_POR_RECIBIR } from '@/modules/supply-v2/core/estados'
+import { actividadRecienteSupplyV2, resumenSupplyV2, supplyPorProducto } from '@/modules/supply-v2/pool/queries'
+import { listarOrdenes } from '@/modules/supply-v2/procurement/queries'
+import { resumenFinanzas } from '@/modules/supply-v2/finance/queries'
+import { calcularEconomia } from '@/modules/supply-v2/economics/queries'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Membego Supply' }
 
-/**
- * MEMBEGO SUPPLY · tablero de la plataforma (Fases 7, 47).
- *
- * Contesta cuatro preguntas en el orden en que se hacen:
- *
- *   1. ¿Cuánto supply tengo y cuánto vale?
- *   2. ¿Cuánto está comprometido y cuánto ya se consumió?
- *   3. ¿Cuánto dinero está a punto de evaporarse?
- *   4. ¿Qué proveedores lo tienen y cómo están cumpliendo?
- *
- * EMITIDO y REDIMIDO salen como cifras SEPARADAS, siempre. Es la distinción
- * que el resto del panel hereda: un voucher entregado no es una pizza
- * entregada, y juntarlas haría que el costo de toda campaña estuviera inflado.
- */
-export default async function SupplyResumenPage() {
-  await requireRole('SUPERADMIN')
+const DIA = 86_400_000
+const PRODUCTOS_VISIBLES = 3
+const ORDENES_VISIBLES = 5
 
-  const [pool, proveedores, alertas, fin, categorias, recientes, otrosVencimientos, eco, actividad] = await Promise.all([
-    resumenPool(),
-    reporteProveedores(),
-    alertasDeVencimiento(30),
-    resumenFinanciero(),
-    supplyPorCategoria(),
-    sinEmpresa('Membego Supply: últimas redenciones del tablero', (tx) => redencionesRecientes(tx, 8)),
-    vencimientosProximos(30),
-    economiaGlobal(),
-    actividadReciente(12),
+function normalizar(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+function plural(n: number, uno: string, varios: string): string {
+  return `${n.toLocaleString('es-DO')} ${n === 1 ? uno : varios}`
+}
+
+/**
+ * MEMBEGO SUPPLY · tablero (§24), rediseño Stitch: panel de accesos,
+ * centro de atención, los tres pilares (tengo / compro / vendo), inventario,
+ * órdenes recientes y actividad. Todo sale de la base; nada está escrito a
+ * mano. El filtro rápido (?q=) acota el inventario y las órdenes por SKU,
+ * producto, proveedor o número de orden.
+ */
+export default async function SupplyV2ResumenPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  await requireRole('SUPERADMIN')
+  const { q } = await searchParams
+  const filtro = (q ?? '').trim().slice(0, 80)
+  const ahora = new Date()
+  const [resumen, actividad, productos, ordenes, finanzas, economia] = await Promise.all([
+    resumenSupplyV2(ahora),
+    actividadRecienteSupplyV2(8),
+    supplyPorProducto(),
+    listarOrdenes(),
+    resumenFinanzas(ahora),
+    calcularEconomia({ ventana: 'MES' }, ahora),
   ])
 
-  const criticas = alertas.filter((a) => a.nivel === 'CRITICO' || a.nivel === 'ALTO')
-  const otrosCriticos = otrosVencimientos.filter((v) => v.tipo !== 'DERECHO' && (v.nivel === 'CRITICO' || v.nivel === 'ALTO'))
-  const hayAlgo = pool.unidadesCompradas > 0 || fin.acuerdosActivos > 0 || fin.ventasMes.ventas > 0 || fin.depositos.depositos > 0
+  const coincide = (...campos: (string | null)[]) => !filtro || campos.some((c) => c && normalizar(c).includes(normalizar(filtro)))
+  const productosFiltrados = productos.filter((p) => coincide(p.producto, p.proveedor, p.sku))
+  const ordenesFiltradas = ordenes.filter((o) => coincide(o.number, o.proveedor, o.producto))
+
+  // ── Centro de atención ────────────────────────────────────────────────────
+  const ordenPorRecibir = ordenes.find((o) => ORDEN_POR_RECIBIR.includes(o.status))
+  const limiteVencimiento = new Date(ahora.getTime() + 7 * DIA)
+  const porVencer = productos.filter((p) => p.proximoVencimiento && p.proximoVencimiento <= limiteVencimiento)
+  const masAsignado = productos.filter((p) => p.asignadas > 0).sort((a, b) => b.asignadas - a.asignadas)[0]
+  const { incidenciasAbiertas, liquidacionesPendientesDeAprobar } = finanzas.comision
+  const alertaFinanzas =
+    incidenciasAbiertas > 0
+      ? { n: incidenciasAbiertas, titulo: 'Incidencias financieras abiertas', descripcion: 'Diferencias entre lo cobrado, lo pagado y lo liquidado que esperan resolución.', accion: 'Resolver incidencias', href: '/superadmin/supply/finanzas/incidencias' }
+      : finanzas.facturasPendientes > 0
+        ? { n: finanzas.facturasPendientes, titulo: plural(finanzas.facturasPendientes, 'factura por pagar', 'facturas por pagar'), descripcion: `${formatMoneyRD(Number(finanzas.facturasPendientesMonto))} aprobados y pendientes de pago a proveedores.`, accion: 'Ver facturas', href: '/superadmin/supply/finanzas/facturas' }
+        : liquidacionesPendientesDeAprobar > 0
+          ? { n: liquidacionesPendientesDeAprobar, titulo: plural(liquidacionesPendientesDeAprobar, 'liquidación por aprobar', 'liquidaciones por aprobar'), descripcion: 'Liquidaciones de ventas a comisión que esperan aprobación.', accion: 'Ver finanzas', href: '/superadmin/supply/finanzas' }
+          : null
+
+  // ── Pilares ───────────────────────────────────────────────────────────────
+  const pctLibre = resumen.unidadesRecibidas > 0 ? Math.round((resumen.unidadesDisponibles / resumen.unidadesRecibidas) * 100) : null
+  const propio = economia.prepurchase
+  const margenPropio = propio.revenue.greaterThan(0) ? Number(propio.revenue.minus(propio.cost).dividedBy(propio.revenue).times(100).toDecimalPlaces(1)) : null
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Membego Supply"
-        description="Productos, servicios y capacidad que Membego compró por adelantado para regalar, vender, premiar o repartir."
-        eyebrow="Plataforma"
-        nav={<NavSupply activa="" />}
-      />
+    <MarcoSupplyV2
+      activa=""
+      contadores={{ compras: { valor: resumen.comprasAbiertas }, campanas: { valor: resumen.campanasActivas, tono: 'exito' } }}
+      acciones={<AccionesCabeceraSupplyV2 destino="/superadmin/supply" filtro={filtro} />}
+    >
+      <div className="flex flex-col gap-4">
+        <PanelAbastecimiento />
 
-      {/* Acciones principales (§38): el centro de gravedad es operar, no mirar. */}
-      <div className="flex flex-wrap gap-2">
-        <AccionRapida href="/superadmin/supply/proveedores#nuevo">Nuevo proveedor</AccionRapida>
-        <AccionRapida href="/superadmin/supply/acuerdos#nuevo">Nuevo acuerdo</AccionRapida>
-        <AccionRapida href="/superadmin/supply/ordenes#nueva">Nueva compra</AccionRapida>
-        <AccionRapida href="/superadmin/supply/finanzas/depositos">Nuevo depósito</AccionRapida>
-        <AccionRapida href="/superadmin/supply/lotes">Crear oferta / campaña</AccionRapida>
-        <AccionRapida href="/superadmin/supply/derechos#emitir">Emitir beneficio</AccionRapida>
-        <AccionRapida href="/superadmin/supply/finanzas/liquidaciones">Nueva liquidación</AccionRapida>
+        {/* Centro de atención */}
+        <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @5xl:grid-cols-4" data-testid="resumen-alertas">
+          {resumen.comprasPorRecibir > 0 ? (
+            <TarjetaAlerta
+              tono="tertiary"
+              icono={Package}
+              categoria="Por recibir"
+              insignia={plural(resumen.comprasPorRecibir, 'orden', 'órdenes')}
+              titulo="Recepción en espera"
+              descripcion={ordenPorRecibir ? `${ordenPorRecibir.proveedor} (${ordenPorRecibir.number})` : 'Órdenes aprobadas con unidades sin recibir.'}
+              accion="Revisar recepción"
+              href={ordenPorRecibir ? `/superadmin/supply/compras/${ordenPorRecibir.id}` : '/superadmin/supply/compras'}
+              testId="alerta-por-recibir"
+            />
+          ) : (
+            <TarjetaAlerta tono="tertiary" icono={Package} categoria="Por recibir" insignia="Al día" titulo="Sin recepciones pendientes" descripcion="Todas las órdenes aprobadas están recibidas." accion="Ver compras" href="/superadmin/supply/compras" testId="alerta-por-recibir" />
+          )}
+          {alertaFinanzas ? (
+            <TarjetaAlerta tono="error" icono={ReceiptText} categoria="Finanzas" insignia={plural(alertaFinanzas.n, 'pendiente', 'pendientes')} titulo={alertaFinanzas.titulo} descripcion={alertaFinanzas.descripcion} accion={alertaFinanzas.accion} href={alertaFinanzas.href} testId="alerta-finanzas" />
+          ) : (
+            <TarjetaAlerta tono="error" icono={ReceiptText} categoria="Finanzas" insignia="Al día" titulo="Finanzas al día" descripcion="Sin facturas por pagar, liquidaciones por aprobar ni incidencias abiertas." accion="Ver finanzas" href="/superadmin/supply/finanzas" testId="alerta-finanzas" />
+          )}
+          <TarjetaAlerta
+            tono="tertiary"
+            icono={Clock}
+            categoria="Vencimiento"
+            insignia="≤ 7 días"
+            titulo={porVencer.length > 0 ? `${plural(porVencer.length, 'producto', 'productos')} por vencer` : 'Sin vencimientos próximos'}
+            descripcion={porVencer.length > 0 ? `${porVencer.map((p) => p.producto).join(', ')}: lotes con unidades disponibles que vencen pronto.` : 'Ningún lote con unidades disponibles vence en los próximos 7 días.'}
+            accion="Ver supply"
+            href={porVencer.length === 1 ? `/superadmin/supply/supply/${porVencer[0]!.catalogItemId}` : '/superadmin/supply/supply'}
+            testId="alerta-vencimiento"
+          />
+          {masAsignado ? (
+            <TarjetaAlerta
+              tono="primary"
+              icono={TrendingUp}
+              categoria="Demanda"
+              insignia="Más asignado"
+              titulo={masAsignado.producto}
+              descripcion={`${plural(masAsignado.asignadas, 'unidad asignada', 'unidades asignadas')} a ofertas · ${plural(masAsignado.disponibles, 'libre', 'libres')}`}
+              accion="Ver producto"
+              href={`/superadmin/supply/supply/${masAsignado.catalogItemId}`}
+              testId="alerta-demanda"
+            />
+          ) : (
+            <TarjetaAlerta tono="primary" icono={TrendingUp} categoria="Demanda" insignia="Sin asignar" titulo="Sin unidades en ofertas" descripcion="Ninguna unidad del supply está comprometida en una oferta." accion="Crear oferta" href="/superadmin/supply/ofertas/nueva" testId="alerta-demanda" />
+          )}
+        </div>
+
+        {/* Los tres pilares */}
+        <div className="grid grid-cols-1 gap-6 @5xl:grid-cols-3">
+          <TarjetaPilar icono={ClipboardCheck} iconoSecundario={Info} pilar="Pilar A" pregunta="¿Qué tengo? (Activos)" testId="pilar-activos"
+            principal={<CifraPilar etiqueta="Valor Supply disponible" valor={formatMoneyRD(resumen.valorDisponible)} nota="unidades disponibles × costo compra" icono={Banknote} tono="primary" testId="kpi-valor" />}
+          >
+            <MiniMetrica etiqueta="Unidades disponibles" valor={resumen.unidadesDisponibles.toLocaleString('es-DO')} complemento={`/ ${resumen.unidadesAsignadas.toLocaleString('es-DO')} asignadas`} pie={pctLibre === null ? 'Sin recepciones' : `${pctLibre}% libre`} tonoPie={pctLibre === null ? 'tenue' : 'exito'} testId="kpi-unidades" />
+            <MiniMetrica etiqueta="Ofertas activas" valor={resumen.ofertasActivas.toLocaleString('es-DO')} complemento="en catálogo" pie={plural(resumen.proveedoresActivos, 'proveedor', 'proveedores')} testId="kpi-ofertas" />
+          </TarjetaPilar>
+
+          <TarjetaPilar icono={ShoppingBag} iconoSecundario={ArrowLeftRight} pilar="Pilar B" pregunta="¿Qué compro? (Procurement)" testId="pilar-compras"
+            principal={<CifraPilar etiqueta="Compras abiertas" valor={resumen.comprasAbiertas.toLocaleString('es-DO')} unidad={resumen.comprasAbiertas === 1 ? 'orden' : 'órdenes'} nota="borrador, pendientes o en recepción" icono={Archive} tono="neutral" testId="kpi-compras" />}
+          >
+            <MiniMetrica etiqueta="Por aprobación" valor={resumen.comprasPorAprobar.toLocaleString('es-DO')} complemento={resumen.comprasPorAprobar === 1 ? 'orden' : 'órdenes'} pie={resumen.comprasPorAprobar > 0 ? 'Requiere aprobación' : 'Al día'} tonoPie={resumen.comprasPorAprobar > 0 ? 'aviso' : 'exito'} />
+            <MiniMetrica etiqueta="Recepciones pendientes" valor={resumen.comprasPorRecibir.toLocaleString('es-DO')} complemento={resumen.comprasPorRecibir === 1 ? 'pendiente' : 'pendientes'} pie={`${plural(resumen.comprasRecibidasMes, 'recibida', 'recibidas')} (mes)`} />
+          </TarjetaPilar>
+
+          <TarjetaPilar icono={ChartLine} iconoSecundario={Receipt} pilar="Pilar C" pregunta="¿Qué vendo? (Tracción)" testId="pilar-ventas"
+            principal={<CifraPilar etiqueta="Ventas confirmadas (mes)" valor={formatMoneyRD(Number(economia.gmv.toFixed(2)))} nota={`${plural(economia.unitsSold, 'unidad vendida', 'unidades vendidas')}`} icono={Tag} tono="secondary" testId="kpi-ventas" />}
+          >
+            <MiniMetrica etiqueta="Inventario propio" valor={formatMoneyRD(Number(propio.revenue.toFixed(2)))} pie={margenPropio === null ? 'Sin ventas este mes' : `Margen ${margenPropio}%`} tonoPie="tenue" />
+            <MiniMetrica etiqueta="Por comisión" valor={formatMoneyRD(Number(economia.commission.revenue.toFixed(2)))} pie="Fee plataforma" tonoPie="tenue" />
+          </TarjetaPilar>
+        </div>
+
+        {/* Operación: inventario y órdenes a la izquierda, actividad a la derecha */}
+        <div className="grid grid-cols-1 gap-6 @5xl:grid-cols-12">
+          <div className="flex min-w-0 flex-col gap-4 @5xl:col-span-7">
+            <InventarioActivo
+              productos={productosFiltrados.slice(0, PRODUCTOS_VISIBLES)}
+              total={productos.length}
+              coincidencias={productosFiltrados.length}
+              filtro={filtro}
+              vacio={
+                <div className="flex flex-col items-start gap-2 rounded-[8px] bg-sv2-well p-3" data-testid="resumen-vacio">
+                  <p className="text-[15px] font-semibold leading-5 text-foreground">Todavía no hay supply</p>
+                  <p className="text-[13px] leading-[18px] text-sv2-ink-variant">Registra un proveedor, lo que vende y un acuerdo; compra una cantidad y recíbela. Todo empieza en «Nueva compra».</p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <EnlaceSuave href="/superadmin/supply/compras/nueva" className="h-8 px-3 text-[13px] leading-4">Nueva compra</EnlaceSuave>
+                    <EnlaceSuave href="/superadmin/supply/proveedores" className="h-8 px-3 text-[13px] leading-4">Agregar primer proveedor</EnlaceSuave>
+                  </div>
+                </div>
+              }
+            />
+            <OrdenesRecientes ordenes={ordenesFiltradas.slice(0, ORDENES_VISIBLES)} filtro={filtro} />
+          </div>
+          <div className="min-w-0 @5xl:col-span-5">
+            <ActividadReciente actividad={actividad} />
+          </div>
+        </div>
       </div>
-
-      {!hayAlgo ? (
-        <EmptyState
-          variant="card"
-          title="Todavía no hay supply comprado"
-          description="Cuando Membego firme un acuerdo con una empresa y active su orden de compra, los derechos adquiridos aparecen aquí."
-          action={
-            <Link
-              href="/superadmin/supply/proveedores#nuevo"
-              className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-            >
-              1 · Agregar un proveedor
-            </Link>
-          }
-          secondaryAction={
-            <Link href="/superadmin/supply/acuerdos#nuevo" className="text-sm font-medium underline-offset-4 hover:underline">
-              2 · Crear el primer acuerdo
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              label="Valor adquirido"
-              value={formatMoneyRD(pool.valorAdquirido)}
-              sub={`${pool.unidadesCompradas.toLocaleString('es-DO')} unidades compradas`}
-              icon={Coins}
-              accent="brand"
-            />
-            <StatCard
-              label="Valor consumido"
-              value={formatMoneyRD(pool.valorConsumido)}
-              sub={`${pool.redimidas.toLocaleString('es-DO')} unidades entregadas de verdad`}
-              icon={PackageCheck}
-              accent="success"
-              href="/superadmin/supply/redenciones"
-              hrefLabel="Ver las redenciones"
-            />
-            <StatCard
-              label="Disponible sin asignar"
-              value={formatMoneyRD(pool.valorDisponible)}
-              sub={`${pool.disponibles.toLocaleString('es-DO')} unidades sin destino`}
-              icon={Boxes}
-              href="/superadmin/supply/lotes"
-              hrefLabel="Ver los lotes"
-            />
-            <StatCard
-              label="Valor en riesgo"
-              value={formatMoneyRD(pool.valorEnRiesgo)}
-              sub={`${pool.proximasAVencer.toLocaleString('es-DO')} unidades vencen en 30 días`}
-              icon={TrendingDown}
-              accent={pool.valorEnRiesgo > 0 ? 'warning' : undefined}
-              href="/superadmin/supply/vencimientos"
-              hrefLabel="Ver los vencimientos"
-            />
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Ticket className="size-4" aria-hidden />
-                Dónde están las unidades
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/*
-                Las seis cubetas del ledger, en el orden en que una unidad las
-                recorre. Sumadas dan exactamente lo comprado: es el invariante
-                del §3.2 enseñado como dato, no como promesa.
-              */}
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-                <Cubeta label="Disponibles" valor={pool.disponibles} />
-                <Cubeta label="Asignadas a campañas" valor={pool.asignadas} />
-                <Cubeta label="Retenidas" valor={pool.retenidas} />
-                <Cubeta label="Emitidas sin canjear" valor={pool.emitidas} destacada />
-                <Cubeta label="Redimidas" valor={pool.redimidas} destacada />
-                <Cubeta label="Vencidas o canceladas" valor={pool.cerradas} />
-              </div>
-              <p className="mt-4 text-caption text-muted-foreground">
-                Emitida no es entregada: las {pool.emitidas.toLocaleString('es-DO')} emitidas son
-                vouchers en manos de clientes que todavía no costaron nada. Solo las{' '}
-                {pool.redimidas.toLocaleString('es-DO')} redimidas son gasto real.
-              </p>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard
-              label="Capital comprometido"
-              value={formatMoneyRD(fin.capitalInvertido)}
-              sub={`lotes + ${formatMoneyRD(fin.depositos.disponible)} en depósitos`}
-              href="/superadmin/supply/finanzas/depositos"
-              hrefLabel="Ver depósitos"
-            />
-            <StatCard
-              label="Por pagar a proveedores"
-              value={formatMoneyRD(fin.cuentasPorPagar.montoPendiente)}
-              sub={`${fin.cuentasPorPagar.vencidas} vencidas · ${formatMoneyRD(fin.cuentasPorPagar.montoVencido)}`}
-              accent={fin.cuentasPorPagar.montoVencido > 0 ? 'warning' : undefined}
-              href="/superadmin/supply/finanzas/cuentas-por-pagar"
-              hrefLabel="Ver cuentas por pagar"
-            />
-            <StatCard
-              label="Por cobrar a proveedores"
-              value={formatMoneyRD(fin.cuentasPorCobrar.montoPendiente)}
-              sub={`${fin.cuentasPorCobrar.abiertas} cuentas abiertas`}
-              href="/superadmin/supply/finanzas/cuentas-por-cobrar"
-              hrefLabel="Ver cuentas por cobrar"
-            />
-            <StatCard
-              label="Liquidaciones pendientes"
-              value={fin.liquidaciones.pendientes}
-              sub={`${formatMoneyRD(fin.liquidaciones.montoPendiente)} · ${fin.liquidaciones.disputadas} disputadas`}
-              accent={fin.liquidaciones.disputadas > 0 ? 'danger' : undefined}
-              href="/superadmin/supply/finanzas/liquidaciones"
-              hrefLabel="Ver liquidaciones"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="GMV" value={formatMoneyRD(eco.gmv)} sub="unidades vendidas + ventas a comisión" href="/superadmin/supply/economia" hrefLabel="Ver economía" />
-            <StatCard label="Ingresos de Membego" value={formatMoneyRD(eco.ingresos)} sub="cobros a clientes + comisiones" accent="brand" />
-            <StatCard label="Margen bruto" value={formatMoneyRD(eco.margenBruto)} sub={`neto estimado ${formatMoneyRD(eco.margenNetoEstimado)}`} accent={eco.margenBruto >= 0 ? 'success' : 'danger'} />
-            <StatCard label="Supply reservado" value={pool.retenidas.toLocaleString('es-DO')} sub={`${pool.asignadas.toLocaleString('es-DO')} asignadas a campañas`} />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Redenciones hoy / mes" value={`${fin.redencionesHoy} / ${fin.redencionesMes}`} href="/superadmin/supply/redenciones" hrefLabel="Ver redenciones" />
-            <StatCard label="Ventas del mes" value={formatMoneyRD(fin.ventasMes.bruto)} sub={`${fin.ventasMes.ventas} ventas · comisión ${formatMoneyRD(fin.ventasMes.comision)}`} href="/superadmin/supply/ventas" hrefLabel="Ver ventas" />
-            <StatCard label="Incidencias abiertas" value={fin.incidenciasAbiertas} accent={fin.incidenciasAbiertas > 0 ? 'warning' : 'success'} href="/superadmin/supply/incidencias" hrefLabel="Ver incidencias" />
-            <StatCard label="Discrepancias abiertas" value={fin.discrepanciasAbiertas} sub={`${fin.acuerdosActivos} acuerdos activos · ${fin.acuerdosSuspendidos} suspendidos · ${fin.proveedoresActivos} proveedores`} accent={fin.discrepanciasAbiertas > 0 ? 'danger' : 'success'} href="/superadmin/supply/conciliacion" hrefLabel="Ver conciliación" />
-          </div>
-
-          {otrosCriticos.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-warning">
-                  <AlertTriangle className="size-4" aria-hidden />
-                  Depósitos y acuerdos que vencen pronto
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <TablaReporte
-                  columnas={[
-                    { clave: 'tipo', titulo: 'Tipo' },
-                    { clave: 'codigo', titulo: 'Código' },
-                    { clave: 'proveedor', titulo: 'Proveedor' },
-                    { clave: 'descripcion', titulo: 'Qué pasa' },
-                    { clave: 'dias', titulo: 'Días', alinearDerecha: true },
-                    { clave: 'monto', titulo: 'En juego', alinearDerecha: true },
-                  ]}
-                  filas={otrosCriticos.slice(0, 8).map((v) => ({
-                    __clave: v.id,
-                    tipo: v.tipo === 'DEPOSITO' ? 'Depósito' : 'Acuerdo',
-                    codigo: (
-                      <Link href={v.tipo === 'DEPOSITO' ? `/superadmin/supply/finanzas/depositos/${v.id}` : `/superadmin/supply/acuerdos/${v.id}`} className="underline-offset-4 hover:underline">
-                        {v.codigo}
-                      </Link>
-                    ),
-                    proveedor: v.proveedorNombre,
-                    descripcion: v.descripcion,
-                    dias: <Badge variant={v.nivel === 'CRITICO' ? 'destructive' : 'warning'}>{v.diasRestantes}</Badge>,
-                    monto: formatMoneyRD(v.monto),
-                  }))}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {criticas.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-warning">
-                  <AlertTriangle className="size-4" aria-hidden />
-                  Supply en riesgo inmediato
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <TablaReporte
-                  titulo="Lotes que vencen pronto"
-                  columnas={[
-                    { clave: 'lote', titulo: 'Lote' },
-                    { clave: 'proveedor', titulo: 'Proveedor' },
-                    { clave: 'item', titulo: 'Producto' },
-                    { clave: 'dias', titulo: 'Días', alinearDerecha: true },
-                    { clave: 'unidades', titulo: 'Unidades', alinearDerecha: true },
-                    { clave: 'exposicion', titulo: 'En riesgo', alinearDerecha: true },
-                  ]}
-                  filas={criticas.slice(0, 8).map((a) => ({
-                    __clave: a.loteId,
-                    lote: (
-                      <Link href={`/superadmin/supply/lotes/${a.loteId}`} className="underline-offset-4 hover:underline">
-                        {a.codigo}
-                      </Link>
-                    ),
-                    proveedor: a.proveedorNombre,
-                    item: a.item,
-                    dias: (
-                      <Badge variant={a.nivel === 'CRITICO' ? 'destructive' : 'warning'}>
-                        {a.diasRestantes}
-                      </Badge>
-                    ),
-                    unidades: (a.enRiesgo + a.expuestas).toLocaleString('es-DO'),
-                    exposicion: formatMoneyRD(a.exposicionFinanciera),
-                  }))}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Proveedores</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <TablaReporte
-                titulo="Supply por proveedor"
-                columnas={[
-                  { clave: 'proveedor', titulo: 'Proveedor' },
-                  { clave: 'compradas', titulo: 'Compradas', alinearDerecha: true },
-                  { clave: 'emitidas', titulo: 'Emitidas', alinearDerecha: true },
-                  { clave: 'redimidas', titulo: 'Redimidas', alinearDerecha: true },
-                  { clave: 'pendientes', titulo: 'En manos de clientes', alinearDerecha: true },
-                  { clave: 'costoConsumido', titulo: 'Costo consumido', alinearDerecha: true },
-                  { clave: 'puntaje', titulo: 'Puntaje', alinearDerecha: true },
-                ]}
-                filas={proveedores.map((p) => ({
-                  __clave: p.proveedorId,
-                  proveedor: (
-                    <Link
-                      href={`/superadmin/supply/proveedores/${p.proveedorId}`}
-                      className="underline-offset-4 hover:underline"
-                    >
-                      {p.proveedor}
-                    </Link>
-                  ),
-                  compradas: p.compradas.toLocaleString('es-DO'),
-                  emitidas: p.emitidas.toLocaleString('es-DO'),
-                  redimidas: p.redimidas.toLocaleString('es-DO'),
-                  pendientes: p.pendientesCliente.toLocaleString('es-DO'),
-                  costoConsumido: formatMoneyRD(p.costoConsumido),
-                  puntaje: (
-                    <Badge
-                      variant={
-                        p.scorecard.puntaje >= 85
-                          ? 'success'
-                          : p.scorecard.puntaje >= 60
-                            ? 'warning'
-                            : 'destructive'
-                      }
-                    >
-                      {p.scorecard.puntaje}
-                    </Badge>
-                  ),
-                }))}
-                vacio="Todavía no hay proveedores con supply activo."
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Actividad reciente</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {actividad.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Todavía no hay actividad en Supply.</p>
-              ) : (
-                <ul className="divide-y divide-border text-sm">
-                  {actividad.map((a) => (
-                    <li key={a.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
-                      <span>
-                        <strong>{a.quien}</strong> · {a.accion}
-                        {a.detalle ? <span className="text-muted-foreground"> · {a.detalle}</span> : null}
-                      </span>
-                      <span className="text-caption text-muted-foreground">{formatDateTime(a.fecha)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Supply por categoría</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <TablaReporte
-                  columnas={[
-                    { clave: 'categoria', titulo: 'Categoría' },
-                    { clave: 'lotes', titulo: 'Lotes', alinearDerecha: true },
-                    { clave: 'compradas', titulo: 'Compradas', alinearDerecha: true },
-                    { clave: 'redimidas', titulo: 'Redimidas', alinearDerecha: true },
-                    { clave: 'valor', titulo: 'Adquirido', alinearDerecha: true },
-                  ]}
-                  filas={categorias.map((c) => ({
-                    __clave: c.categoria,
-                    categoria: c.categoria,
-                    lotes: c.lotes,
-                    compradas: c.compradas.toLocaleString('es-DO'),
-                    redimidas: c.redimidas.toLocaleString('es-DO'),
-                    valor: formatMoneyRD(c.valorAdquirido),
-                  }))}
-                  vacio="Sin lotes."
-                />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Últimas redenciones</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <TablaReporte
-                  columnas={[
-                    { clave: 'fecha', titulo: 'Cuándo' },
-                    { clave: 'cliente', titulo: 'Cliente' },
-                    { clave: 'producto', titulo: 'Producto' },
-                    { clave: 'proveedor', titulo: 'Dónde' },
-                    { clave: 'costo', titulo: 'Costo', alinearDerecha: true },
-                  ]}
-                  filas={recientes.map((r) => ({
-                    __clave: r.id,
-                    fecha: formatDateTime(r.createdAt),
-                    cliente: r.cliente.nombre,
-                    producto: r.voucher.derecho.lote.snapshotItemNombre,
-                    proveedor: r.sucursal ? `${r.proveedor.name} · ${r.sucursal.nombre}` : r.proveedor.name,
-                    costo: formatMoneyRD(Number(r.costoUnitario)),
-                  }))}
-                  vacio="Todavía nadie ha canjeado un beneficio."
-                />
-              </CardContent>
-            </Card>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-function AccionRapida({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link href={href} className="inline-flex h-9 items-center rounded-lg border border-primary/40 bg-primary/5 px-3 text-sm font-medium text-primary hover:bg-primary/10">
-      {children}
-    </Link>
-  )
-}
-
-function Cubeta({ label, valor, destacada }: { label: string; valor: number; destacada?: boolean }) {
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <p className="text-caption text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-lg font-semibold tabular-nums ${destacada ? 'text-primary' : ''}`}>
-        {valor.toLocaleString('es-DO')}
-      </p>
-    </div>
+    </MarcoSupplyV2>
   )
 }

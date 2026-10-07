@@ -2,7 +2,7 @@ import type { AuditAccion, Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 
 /**
- * MEMBEGO SUPPLY 2.0 · bitácora DENTRO de la transacción (§21, §40).
+ * MEMBEGO SUPPLY · bitácora DENTRO de la transacción (§21, §40).
  *
  * Reutiliza `AuditLog` de Membego Core: no hay una segunda auditoría. Se
  * escribe con la misma `tx` que la operación, así que si la operación se

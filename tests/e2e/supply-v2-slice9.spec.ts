@@ -10,7 +10,7 @@ import { abrirOrdenClienteEnTx } from '../../src/modules/supply-v2/commerce/chec
 import { aprobarBeneficioEnTx, asignarBeneficioEnTx, crearBeneficioEnTx } from '../../src/modules/supply-v2/benefits/service'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 de punta a punta en navegador.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 de punta a punta en navegador.
  *
  * LOS RECORRIDOS, en este orden:
  *   A  sistema sano: el Centro de Operaciones dice SANO, sin difuntos y con la
@@ -38,7 +38,7 @@ import { aprobarBeneficioEnTx, asignarBeneficioEnTx, crearBeneficioEnTx } from '
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3210'
 const SECRETO = process.env.SUPPLY_V2_TEST_GATEWAY_SECRET ?? ''
 const LISTO = SESION_LOCAL_DISPONIBLE && Boolean(SECRETO) && Boolean(process.env.SUPPLY_V2_WEBHOOK_ACTOR_ID)
-const RUTA = '/superadmin/supply-v2/operaciones'
+const RUTA = '/superadmin/supply/operaciones'
 
 const sufijo = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
 
@@ -75,7 +75,7 @@ async function compraPendiente(etiqueta: string): Promise<Compra> {
 
   const base = await sinEmpresa('e2e slice 9', async (tx) => {
     // El arnés deja la `Company` con la capacidad de proveedor; la relación
-    // comercial de Supply 2.0 la crea el servicio del slice 1.
+    // comercial de Supply la crea el servicio del slice 1.
     const proveedorId =
       (await tx.supplyV2Supplier.findFirst({ where: { companyId: empresa.id }, select: { id: true } }))?.id ??
       (await vincularEmpresaComoProveedorEnTx(tx, empresa.id, {}, como(compras.id))).id
@@ -137,7 +137,7 @@ async function compraPendiente(etiqueta: string): Promise<Compra> {
 }
 
 /**
- * El cron de Supply 2.0, llamado por HTTP como lo llamaría el programador.
+ * El cron de Supply, llamado por HTTP como lo llamaría el programador.
  *
  * Y NO importando `evaluarAutomatizaciones`: ese servicio vive detrás de
  * `server-only` y un spec de Playwright es código de cliente, así que

@@ -48,8 +48,8 @@
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
 
-  /* Supply 2.0 · paleta del rediseño (Stitch). Solo la usan las pantallas de
-     Supply 2.0; los valores viven en el bloque `--sv2-*` más abajo. */
+  /* Supply · paleta del rediseño (Stitch). Solo la usan las pantallas de
+     Supply; los valores viven en el bloque `--sv2-*` más abajo. */
   --font-sv2: var(--font-sv2-inter);
   --font-sv2-mono: var(--font-sv2-jetbrains);
   --color-sv2-canvas: var(--sv2-canvas);
@@ -532,7 +532,7 @@
   --sidebar-selected-foreground: oklch(0.99 0 0);
 }
 
-/* ── Supply 2.0 · paleta del rediseño (Stitch, "Precision Procurement Engine") ──
+/* ── Supply · paleta del rediseño (Stitch, "Precision Procurement Engine") ──
    Los valores claros son los de la maqueta tal cual; los oscuros son su
    equivalente para que el modo oscuro no quede con superficies lavanda sobre
    negro. Solo los consumen los componentes de `components/supply-v2`. */

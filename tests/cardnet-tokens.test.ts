@@ -151,6 +151,45 @@ test('sinSensibles enmascara tokens y datos de tarjeta', () => {
   assert.equal(anidado.ok, 'visible')
 })
 
+/**
+ * EL TOKEN DENTRO DE UNA LISTA TAMBIÉN SE ENMASCARA.
+ *
+ * La respuesta real del `GET /Customer` trae los tokens de las tarjetas en
+ * `PaymentProfiles: [...]`, y el filtro saltaba las listas enteras. El
+ * `?expediente=` de producción devolvió un `CT__…` completo, y ese texto se
+ * pegó en un chat (06-10-2026). Esta prueba usa la FORMA real de la respuesta
+ * para que el caso no vuelva a pasar por un cambio de estructura.
+ */
+test('sinSensibles enmascara los tokens que vienen dentro de listas (PaymentProfiles)', () => {
+  const limpio = sinSensibles({
+    Response: {
+      CustomerId: 10204245,
+      Email: 'cliente@x.com',
+      PaymentProfiles: [
+        {
+          PaymentProfileId: 10784656,
+          Brand: 'VISA',
+          Token: 'CT__xKtGoslc346q7RUCF_8KwvCzN7zX3ev09ZigS9sl4XCn',
+          Last4: '4336',
+          Enabled: false,
+        },
+      ],
+      Tags: ['uno', 'dos'],
+    },
+    Errors: [],
+  })
+  const resp = limpio.Response as Record<string, unknown>
+  const perfiles = resp.PaymentProfiles as Record<string, unknown>[]
+  assert.equal(perfiles.length, 1)
+  assert.ok(!String(perfiles[0].Token).includes('xKtG'), 'el token de la lista salió en claro')
+  assert.equal(perfiles[0].Token, '***4XCn')
+  // Lo que no es sensible sigue intacto, también dentro de listas.
+  assert.equal(perfiles[0].Last4, '4336')
+  assert.equal(perfiles[0].Enabled, false)
+  assert.deepEqual(resp.Tags, ['uno', 'dos'])
+  assert.deepEqual(limpio.Errors, [])
+})
+
 test('extraerPerfiles saca token y referencias de PaymentProfiles (camino confirmado por CardNET)', async () => {
   const { extraerPerfiles } = await import('../src/lib/payments/cardnet-tokens-core')
   const perfiles = extraerPerfiles({

@@ -12,7 +12,7 @@ import { decimal, type Decimal } from '../core/dinero'
 import type { Transiciones } from '../core/estados'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · CAMPAÑAS Y CUPONES: reglas PURAS (§4–§17, §25).
+ * MEMBEGO SUPPLY · SLICE 7 · CAMPAÑAS Y CUPONES: reglas PURAS (§4–§17, §25).
  *
  * Aquí NO se calcula dinero. Una campaña agrupa ofertas, un público y un
  * presupuesto; lo que rebaja cada venta lo calcula el motor del Slice 6
@@ -168,7 +168,7 @@ export function textoDesdeMinutos(minutos: number | null | undefined): string {
 // ── Público objetivo (§13) ──────────────────────────────────────────────────
 
 export interface HistorialDelCliente {
-  /** Compras PAGADAS del cliente en Supply 2.0. */
+  /** Compras PAGADAS del cliente en Supply. */
   comprasPagadas: number
   /** Beneficios de campaña que ya aplicó. */
   beneficiosDeCampanaUsados: number

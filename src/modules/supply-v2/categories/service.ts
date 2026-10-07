@@ -5,7 +5,7 @@ import { fallo } from '../core/errores'
 type Tx = Prisma.TransactionClient
 
 /**
- * MEMBEGO SUPPLY 2.0 · catálogo de categorías de vehículo de PLATAFORMA.
+ * MEMBEGO SUPPLY · catálogo de categorías de vehículo de PLATAFORMA.
  *
  * Cuatro filas que se tocan una vez al año, pero que deciden cuánto se cobra:
  * cambiar el `nivelTarifario` de una categoría cambia qué vehículos caen en

@@ -1,0 +1,181 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMERCE CORE · INVENTARIO CON LEDGER (Fase 2 del Plan Maestro)
+//
+// Cuánto hay de cada VARIANTE del catálogo unificado, en cada SUCURSAL.
+//
+//   · `InventoryLevel`        el saldo actual (una fila por variante y sucursal).
+//   · `InventoryMovement`     el ledger: cada cambio de ese saldo, para siempre.
+//   · `InventoryReservation`  unidades apartadas con fecha de vencimiento.
+//
+// EL SALDO ES CACHÉ; EL LEDGER ES LA VERDAD. Cada movimiento es un TRASLADO
+// entre tres cubetas (ver `modules/inventory/domain.ts`, que usa
+// `lib/commerce-primitives/ledger`):
+//
+//   AVAILABLE  lo que se puede vender
+//   RESERVED   apartado, con una reserva viva detrás
+//   DAMAGED    físicamente aquí pero no vendible
+//
+//   onHand    = AVAILABLE + RESERVED        (lo que hay para vender o apartado)
+//   available = onHand − reserved           (calculado, no se guarda)
+//   damaged   = DAMAGED                     (aparte: no cuenta como existencia)
+//
+// La base hace cumplir lo que no puede saltarse nadie: ninguna cubeta en
+// negativo, lo reservado nunca supera lo que hay, y `inventory_movements` no
+// admite UPDATE ni DELETE (ver la migración `20261038_inventory_core`).
+//
+// AISLAMIENTO. Las tres tablas llevan `companyId` propio y las FK hacia la
+// variante, la sucursal y el saldo son COMPUESTAS `(id, companyId)`: la base
+// rechaza un saldo que junte la variante de una empresa con la sucursal de otra.
+//
+// Las FK son RESTRICT a propósito: una variante o una sucursal con historial de
+// movimientos no se borra (el historial es contabilidad). Se descontinúa o se
+// desactiva.
+//
+// Unidades ENTERAS: es inventario de venta (piezas). Los insumos por litro o
+// por kilo del Car Wash siguen en `ProductoInventario`, que no se migra aquí.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum InventoryBucket {
+  AVAILABLE
+  RESERVED
+  DAMAGED
+}
+
+enum InventoryMovementType {
+  PURCHASE
+  SALE
+  RETURN
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+  DAMAGE
+  RESERVATION
+  RESERVATION_RELEASE
+}
+
+enum InventoryReservationStatus {
+  ACTIVE
+  /// La liberó quien la pidió (el pedido se canceló).
+  RELEASED
+  /// Se convirtió en venta.
+  CONSUMED
+  /// Venció sin confirmarse.
+  EXPIRED
+}
+
+model InventoryLevel {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// La sucursal (`Sucursal`) donde está el stock.
+  locationId String
+  location   Sucursal @relation(fields: [locationId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// Vendible + apartado. Caché del ledger.
+  onHand   Int @default(0)
+  /// Apartado por reservas vivas. Caché del ledger; igual a la suma de las
+  /// reservas ACTIVE (lo vigilan las pruebas contra la base).
+  reserved Int @default(0)
+  /// Dañado: está en la sucursal pero no se vende.
+  damaged  Int @default(0)
+
+  /// Avisar cuando `onHand − reserved` baje a este número. 0 = sin umbral.
+  lowStockThreshold Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movements    InventoryMovement[]
+  reservations InventoryReservation[]
+
+  @@unique([catalogVariantId, locationId])
+  /// Destino de las FK compuestas de movimientos y reservas.
+  @@unique([id, companyId])
+  @@index([companyId, locationId])
+  @@map("inventory_levels")
+}
+
+/// APPEND-ONLY. La base rechaza UPDATE y DELETE; un error se corrige con otro
+/// movimiento (ADJUSTMENT), nunca editando el anterior.
+model InventoryMovement {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  inventoryLevelId String
+  level            InventoryLevel @relation(fields: [inventoryLevelId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  type InventoryMovementType
+
+  /// De qué cubeta salen las unidades (null = entran desde fuera).
+  sourceBucket      InventoryBucket?
+  /// A qué cubeta entran (null = salen del inventario).
+  destinationBucket InventoryBucket?
+  /// SIEMPRE positiva: la dirección la dan las cubetas.
+  quantity          Int
+
+  /// `onHand` justo antes y justo después de este movimiento.
+  previousOnHand Int
+  newOnHand      Int
+
+  /// Obligatorio en ADJUSTMENT y DAMAGE.
+  reason String?
+  /// Quién lo hizo (null = el sistema: un vencimiento, un proceso). Sin FK: un
+  /// usuario que se borra no puede reescribir el ledger.
+  userId String?
+
+  /// A qué se debe: `TRANSFER` (las dos patas comparten id), `RESERVATION`,
+  /// `ORDER`, `STOCK_COUNT`… Texto libre acotado por el servicio.
+  referenceType String?
+  referenceId   String?
+
+  /// Reintentar la MISMA operación no la repite: un segundo movimiento con la
+  /// misma clave devuelve el primero. Único por empresa.
+  idempotencyKey String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, idempotencyKey])
+  @@index([inventoryLevelId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([companyId, referenceType, referenceId])
+  @@map("inventory_movements")
+}
+
+model InventoryReservation {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  inventoryLevelId String
+  level            InventoryLevel @relation(fields: [inventoryLevelId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  quantity Int
+  status   InventoryReservationStatus @default(ACTIVE)
+
+  /// Pasada esta hora la reserva ya no aparta nada, aunque el barrido no haya
+  /// corrido: toda operación sobre el saldo vence antes las reservas caducadas.
+  expiresAt DateTime
+
+  /// A qué pedido o carrito pertenece (`ORDER`, `CART`…).
+  referenceType String?
+  referenceId   String?
+
+  createdAt  DateTime  @default(now())
+  /// Cuándo dejó de estar ACTIVE.
+  resolvedAt DateTime?
+
+  /// La línea de pedido que originó la reserva (Fase 3).
+  orderLines MembegoOrderLine[]
+
+  /// Destino de la FK compuesta de `membego_order_lines`.
+  @@unique([id, companyId])
+  @@index([status, expiresAt])
+  @@index([inventoryLevelId, status])
+  @@index([companyId, referenceType, referenceId])
+  @@map("inventory_reservations")
+}

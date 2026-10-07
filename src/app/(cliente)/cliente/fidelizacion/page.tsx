@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mi fidelización' }
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · lo que el CLIENTE ve de su fidelización (§39).
+ * MEMBEGO SUPPLY · SLICE 8 · lo que el CLIENTE ve de su fidelización (§39).
  *
  * Su membresía, sus puntos, lo que puede canjear y su código para invitar, en
  * una sola página. Nunca presupuesto, nunca costos, nunca comisión: esas

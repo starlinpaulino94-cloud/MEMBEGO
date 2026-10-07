@@ -17,7 +17,7 @@ import { fueraDePublico, fueraDeVigencia, metricasDeCampana, presupuestoDeCampan
 import { historialDelClienteEnTx } from './coupons'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · lecturas de CAMPAÑAS (§18–§19, §21–§26).
+ * MEMBEGO SUPPLY · SLICE 7 · lecturas de CAMPAÑAS (§18–§19, §21–§26).
  *
  * Cuatro públicos, cuatro DTOs:
  *   · ADMIN: presupuesto, subsidio, resultado económico y bitácora.
@@ -51,7 +51,10 @@ export interface CampanaEnLista {
   budgetDisponible: string | null
   sinTopeAutorizado: boolean
   ofertas: number
+  /** Las primeras ofertas por su orden en la campaña (para el listado). */
+  ofertasNombres: string[]
   promociones: number
+  promocionesNombres: string[]
   cupones: number
   startsAt: Date
   endsAt: Date | null
@@ -83,14 +86,15 @@ export async function listarCampanas(f: FiltroCampanas = {}, ahora = new Date())
         }
       : {}),
   }
-  const filas = await sinEmpresa('Supply 2.0: listado de campañas', (tx) =>
+  const filas = await sinEmpresa('Supply: listado de campañas', (tx) =>
     tx.supplyV2Campaign.findMany({
       where,
-      orderBy: [{ status: 'asc' }, { startsAt: 'desc' }],
+      orderBy: [{ status: 'asc' }, { startsAt: 'desc' }, { createdAt: 'desc' }],
       take: 200,
       include: {
         supplier: { select: { commercialName: true } },
-        benefits: { select: { budgetTotal: true, budgetReserved: true, budgetConsumed: true } },
+        benefits: { select: { name: true, budgetTotal: true, budgetReserved: true, budgetConsumed: true } },
+        offers: { orderBy: { position: 'asc' }, take: 3, select: { offer: { select: { title: true } } } },
         _count: { select: { offers: true, coupons: true, benefits: true } },
         orders: { select: { id: true, status: true, contractualValue: true, supplierDiscountTotal: true, membegoSubsidyTotal: true, total: true, commissionAmount: true, supplierNet: true } },
       },
@@ -130,7 +134,9 @@ export async function listarCampanas(f: FiltroCampanas = {}, ahora = new Date())
       budgetDisponible: p.disponible ? p.disponible.toFixed(2) : null,
       sinTopeAutorizado: c.budgetTotal == null && c.budgetWaiverById != null,
       ofertas: c._count.offers,
+      ofertasNombres: c.offers.map((o) => o.offer.title),
       promociones: c._count.benefits,
+      promocionesNombres: c.benefits.slice(0, 2).map((b) => b.name),
       cupones: c._count.coupons,
       startsAt: c.startsAt,
       endsAt: c.endsAt,
@@ -155,6 +161,11 @@ export interface TableroCampanas {
   contribucion: string
   ventasConfirmadas: number
   pedidosEnCurso: number
+  /** Pedidos atribuidos en cualquier estado (primer paso del embudo). */
+  pedidos: number
+  derechosEmitidos: number
+  derechosRedimidos: number
+  derechosVencidos: number
   presupuestoAprobado: string
   presupuestoComprometido: string
   presupuestoConsumido: string
@@ -176,6 +187,10 @@ export async function tableroCampanas(f: FiltroCampanas = {}): Promise<TableroCa
     contribucion: metricas.contribucionTrasSubsidio.toFixed(2),
     ventasConfirmadas: metricas.ventasConfirmadas,
     pedidosEnCurso: metricas.pedidosEnCurso,
+    pedidos: metricas.pedidos,
+    derechosEmitidos: metricas.derechosEmitidos,
+    derechosRedimidos: metricas.derechosRedimidos,
+    derechosVencidos: metricas.derechosVencidos,
     presupuestoAprobado: suma('budgetTotal').toFixed(2),
     presupuestoComprometido: campanas.reduce((t, c) => t.plus(new Prisma.Decimal(c.budgetReservado)).plus(new Prisma.Decimal(c.budgetConsumido)), CERO).toFixed(2),
     presupuestoConsumido: suma('budgetConsumido').toFixed(2),
@@ -194,7 +209,7 @@ async function metricasDeTodas(f: FiltroCampanas): Promise<MetricasCampana> {
  * pedido aparece una vez, con la campaña que se guardó al comprarlo (§25).
  */
 async function ventasAtribuidas(f: { campaignId?: string | null; supplierId?: string | null; desde?: Date | null; hasta?: Date | null }): Promise<VentaDeCampana[]> {
-  const filas = await sinEmpresa('Supply 2.0: pedidos atribuidos a campañas', (tx) =>
+  const filas = await sinEmpresa('Supply: pedidos atribuidos a campañas', (tx) =>
     tx.supplyV2CustomerOrder.findMany({
       where: {
         campaignId: f.campaignId ? f.campaignId : { not: null },
@@ -330,7 +345,7 @@ export interface FichaCampana {
 }
 
 export async function fichaCampana(id: string, ahora = new Date()): Promise<FichaCampana | null> {
-  const c = await sinEmpresa('Supply 2.0: ficha de una campaña', (tx) =>
+  const c = await sinEmpresa('Supply: ficha de una campaña', (tx) =>
     tx.supplyV2Campaign.findUnique({
       where: { id },
       include: {
@@ -470,7 +485,7 @@ export async function fichaCampana(id: string, ahora = new Date()): Promise<Fich
 
 /** Ofertas que se pueden añadir a una campaña (§5, paso 3 del asistente). */
 export async function ofertasParaCampana(supplierId: string | null): Promise<{ id: string; title: string; proveedor: string; supplierId: string; producto: string; salePrice: string; currency: string; sourceType: string; commissionPercentage: string | null }[]> {
-  const filas = await sinEmpresa('Supply 2.0: ofertas que pueden entrar en una campaña', (tx) =>
+  const filas = await sinEmpresa('Supply: ofertas que pueden entrar en una campaña', (tx) =>
     tx.supplyV2Offer.findMany({
       where: { status: { in: ['ACTIVE', 'SCHEDULED', 'DRAFT'] }, ...(supplierId ? { supplierId } : {}) },
       orderBy: { createdAt: 'desc' },
@@ -514,7 +529,7 @@ export interface CampanaPublica {
  * no se enseña como disponible.
  */
 export async function campanasPublicas(customerId: string | null, ahora = new Date(), limite = 24): Promise<CampanaPublica[]> {
-  const filas = await sinEmpresa('Supply 2.0: campañas activas para el marketplace', (tx) =>
+  const filas = await sinEmpresa('Supply: campañas activas para el marketplace', (tx) =>
     tx.supplyV2Campaign.findMany({
       where: { status: 'ACTIVE', startsAt: { lte: ahora }, OR: [{ endsAt: null }, { endsAt: { gt: ahora } }] },
       orderBy: [{ publishedAt: 'desc' }],
@@ -531,7 +546,7 @@ export async function campanasPublicas(customerId: string | null, ahora = new Da
     })
   )
   const vigentes = filas.filter((c) => fueraDeVigencia(c, ahora) === null)
-  const historial = customerId ? await sinEmpresa('Supply 2.0: historial del cliente para el público de campañas', (tx) => historialDelClienteEnTx(tx, customerId, null)) : null
+  const historial = customerId ? await sinEmpresa('Supply: historial del cliente para el público de campañas', (tx) => historialDelClienteEnTx(tx, customerId, null)) : null
   return vigentes.slice(0, limite).map((c) => {
     const ofertas = c.offers.filter((o) => o.offer.status === 'ACTIVE')
     const condiciones: string[] = []
@@ -602,7 +617,7 @@ export interface CuponDelCliente {
  * se dice por qué en una frase.
  */
 export async function misCupones(customerId: string, ahora = new Date()): Promise<CuponDelCliente[]> {
-  const datos = await sinEmpresa('Supply 2.0: cupones del cliente de la sesión', async (tx) => {
+  const datos = await sinEmpresa('Supply: cupones del cliente de la sesión', async (tx) => {
     const cupones = await tx.supplyV2Coupon.findMany({
       where: {
         OR: [{ customerId }, { kind: 'PUBLIC', status: 'ACTIVE' }],
@@ -693,7 +708,7 @@ export interface PromocionDeOferta {
 }
 
 export async function promocionesParaOferta(customerId: string | null, offerId: string, quantity = 1, ahora = new Date()): Promise<PromocionDeOferta[]> {
-  const datos = await sinEmpresa('Supply 2.0: promociones de campaña de una oferta', async (tx) => {
+  const datos = await sinEmpresa('Supply: promociones de campaña de una oferta', async (tx) => {
     const oferta = await tx.supplyV2Offer.findUnique({
       where: { id: offerId },
       select: { id: true, catalogItemId: true, supplierId: true, sourceType: true, currency: true, salePrice: true, commissionPercentage: true, agreementVersion: { select: { snapshot: true } } },
@@ -775,7 +790,7 @@ export interface CampanaDelProveedor {
 }
 
 export async function campanasDelProveedor(supplierId: string): Promise<CampanaDelProveedor[]> {
-  const filas = await sinEmpresa('Supply 2.0: campañas que afectan a un proveedor', (tx) =>
+  const filas = await sinEmpresa('Supply: campañas que afectan a un proveedor', (tx) =>
     tx.supplyV2Campaign.findMany({
       where: { OR: [{ supplierId }, { offers: { some: { offer: { supplierId } } } }] },
       orderBy: [{ status: 'asc' }, { startsAt: 'desc' }],
@@ -826,7 +841,7 @@ export async function campanasDelProveedor(supplierId: string): Promise<CampanaD
 export async function buscarClientesParaCampana(query: string): Promise<{ id: string; nombre: string; email: string }[]> {
   const q = query.trim()
   if (q.length < 2) return []
-  const filas = await sinEmpresa('Supply 2.0: buscar clientes para una campaña', (tx) =>
+  const filas = await sinEmpresa('Supply: buscar clientes para una campaña', (tx) =>
     tx.user.findMany({
       where: { role: 'CLIENTE', OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] },
       orderBy: { name: 'asc' },

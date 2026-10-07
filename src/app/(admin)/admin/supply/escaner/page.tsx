@@ -1,51 +1,35 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { requireUser } from '@/lib/auth/guards'
-import { requireCompanyContext } from '@/lib/auth/company-context'
-import { conEmpresa } from '@/lib/tenant'
+import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/ui/page-header'
-import { guardiaProveedor } from '@/modules/supply/permisos'
-import { EscanerSupply } from '@/components/supply/escaner-supply'
+import { EscanerProveedor } from '@/components/supply-v2/escaner-proveedor'
+import { proveedorDeLaSesion } from '@/modules/supply-v2/permisos'
+import { branchGateway } from '@/modules/supply-v2/contracts/adapters'
+import { RUTA_PORTAL_PROVEEDOR } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Escáner Membego Supply' }
+export const metadata = { title: 'Escanear beneficio · Membego' }
 
 /**
- * MEMBEGO SUPPLY · escáner del comercio (Fase 14).
- *
- * Separado del escáner de membresías a propósito: lo que se canjea aquí no es
- * un beneficio de la empresa, es una unidad que Membego ya pagó. Mezclarlos en
- * la misma pantalla haría que un empleado confundiera «le di un lavado de su
- * membresía» con «entregué una pizza que Membego compró», que son dos
- * operaciones con consecuencias económicas distintas.
+ * MEMBEGO SUPPLY · escáner del proveedor (§15, §19, §51–§52).
+ * Dos pasos siempre: escanear enseña; «Confirmar entrega» redime.
  */
-export default async function EscanerSupplyPage() {
-  const user = await requireUser()
-  const companyId = await requireCompanyContext(user)
-
-  const permitido = await guardiaProveedor(companyId)
-  if (!permitido) redirect('/admin/dashboard')
-
-  const sucursales = await conEmpresa(companyId, (tx) =>
-    tx.sucursal.findMany({
-      where: { companyId, activa: true },
-      orderBy: { nombre: 'asc' },
-      select: { id: true, nombre: true },
-    })
-  )
+export default async function EscanerProveedorPage() {
+  const proveedor = await proveedorDeLaSesion()
+  if (!proveedor) redirect('/admin/dashboard')
+  const sucursales = await branchGateway.listForCompany(proveedor.companyId)
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
       <PageHeader
-        title="Escáner Membego"
-        description="Lee el código del cliente, comprueba que es válido y confirma la entrega."
+        title="Escanear beneficio"
+        description="Lee el código del cliente, comprueba qué debes entregar y confirma."
         eyebrow={
-          <Link href="/admin/supply" className="hover:underline">
-            Membego Supply
+          <Link href={RUTA_PORTAL_PROVEEDOR} className="hover:underline">
+            Entregas Membego
           </Link>
         }
       />
-      <EscanerSupply companyId={companyId} sucursales={sucursales} />
+      <EscanerProveedor sucursales={sucursales.map((s) => ({ id: s.id, nombre: s.name }))} />
     </div>
   )
 }

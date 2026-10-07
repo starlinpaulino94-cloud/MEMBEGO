@@ -1,297 +1,98 @@
 import Link from 'next/link'
+import type { SupplyV2SupplierPaymentStatus } from '@prisma/client'
 import { requireRole } from '@/lib/auth/guards'
-import { sinEmpresa } from '@/lib/tenant'
+import { getUser } from '@/lib/auth'
 import { PageHeader } from '@/components/ui/page-header'
-import { StatCard } from '@/components/ui/stat-card'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { TablaReporte } from '@/components/ui/reporte-imprimible'
-import { formatDate, formatMoneyRD } from '@/lib/format'
-import { NavFinanzas } from '@/components/supply/nav'
-import { FormAccion } from '@/components/supply/form-accion'
-import { anularPagoAction } from '@/modules/supply/actions'
-import { FormComprobantePago } from '@/components/supply/form-comprobante-pago'
-import { urlComprobante } from '@/modules/storage/comprobantes'
-import { saldoDeProveedor } from '@/modules/supply/finanzas'
-import { FormPago } from '@/components/supply/form-pago'
-import { FormConfirmar } from '@/components/supply/form-confirmar-pago'
-import {
-  SUPPLY_ASIENTO_TIPO_LABELS,
-  SUPPLY_MODALIDAD_PAGO_LABELS,
-  SUPPLY_PAGO_TIPO_LABELS,
-} from '@/modules/supply/catalogo'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Label } from '@/components/ui/label'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
+import { formatDate } from '@/lib/format'
+import { leerPaginacion } from '@/lib/paginacion'
+import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { ChipPagoProveedor } from '@/components/supply-v2/finanzas/chips'
+import { ConfirmarPago } from '@/components/supply-v2/finanzas/acciones-pago'
+import { listarPagos, proveedoresParaFinanzas } from '@/modules/supply-v2/finance/queries'
+import { puedeSupplyV2 } from '@/modules/supply-v2/permisos'
+import { dineroSupplyV2, RUTA_FINANZAS, SUPPLIER_PAYMENT_METHOD_LABELS, SUPPLIER_PAYMENT_STATUS_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Pagos a proveedores' }
+export const metadata = { title: 'Pagos a proveedores · Supply' }
 
-/**
- * MEMBEGO SUPPLY · pagos y ledger financiero (Fases 33, 34; Finanzas 2026-09).
- *
- * El saldo de cada proveedor es la SUMA DE SUS ASIENTOS, calculada aquí mismo.
- * No hay un campo `saldo` guardado: sería el mismo problema que
- * `remaining = 742` un piso más arriba —un número que alguien puede editar y
- * que nadie puede explicar— pero con dinero real.
- *
- * «Contratado» aparece separado del saldo por pagar a propósito: firmar un
- * contrato de RD$300.000 no es deber RD$300.000 hoy. En pago por redención no
- * se debe nada hasta que alguien consuma.
- */
-export default async function PagosPage() {
+const ESTADOS: SupplyV2SupplierPaymentStatus[] = ['PENDING', 'CONFIRMED', 'CANCELLED']
+
+/** MEMBEGO SUPPLY · pagos a proveedores (§37): paginado; los pendientes se confirman aquí (por otra persona). */
+export default async function PagosPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireRole('SUPERADMIN')
-
-  const datos = await sinEmpresa('Membego Supply: liquidaciones con proveedores', async (tx) => {
-    const acuerdos = await tx.supplyAcuerdo.findMany({
-      where: { estado: { in: ['ACTIVO', 'APROBADO', 'COMPLETADO', 'VENCIDO'] } },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        codigo: true,
-        modalidadPago: true,
-        moneda: true,
-        cantidad: true,
-        costoUnitario: true,
-        proveedor: { select: { id: true, name: true } },
-      },
-    })
-
-    const filas = await Promise.all(
-      acuerdos.map(async (a) => ({
-        acuerdo: a,
-        saldo: await saldoDeProveedor(tx, a.proveedor.id, a.id),
-        redenciones: await tx.supplyRedencion.count({
-          where: { acuerdoId: a.id, reversadaAt: null },
-        }),
-      }))
-    )
-
-    const pagos = await tx.supplyPago.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      select: {
-        id: true,
-        tipo: true,
-        monto: true,
-        estado: true,
-        referencia: true,
-        createdAt: true,
-        confirmadoAt: true,
-        anuladoAt: true,
-        metodo: true,
-        comprobantePath: true,
-        proveedor: { select: { name: true } },
-        acuerdo: { select: { codigo: true } },
-        registradoPor: { select: { name: true } },
-      },
-    })
-
-    const asientos = await tx.supplyAsientoFinanciero.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 150,
-      select: {
-        id: true,
-        tipo: true,
-        monto: true,
-        motivo: true,
-        createdAt: true,
-        proveedor: { select: { name: true } },
-        acuerdo: { select: { codigo: true } },
-      },
-    })
-
-    return { filas, pagos, asientos }
-  })
-
-  const pagosConUrl = await Promise.all(datos.pagos.map(async (p) => ({ ...p, url: await urlComprobante('pago', p.id, p.comprobantePath) })))
-  const porPagar = datos.filas.reduce((t, f) => t + f.saldo.saldoPorPagar, 0)
-  const depositado = datos.filas.reduce((t, f) => t + f.saldo.depositado, 0)
-  const contratado = datos.filas.reduce((t, f) => t + f.saldo.contratado, 0)
-  const pendientes = datos.pagos.filter((p) => p.estado === 'PENDIENTE')
-
+  const sp = await searchParams
+  const proveedor = typeof sp.proveedor === 'string' ? sp.proveedor : ''
+  const estadoCrudo = typeof sp.estado === 'string' ? sp.estado : ''
+  const estado = (ESTADOS as string[]).includes(estadoCrudo) ? (estadoCrudo as SupplyV2SupplierPaymentStatus) : null
+  const paginacion = leerPaginacion(sp)
+  const [{ filas, total }, proveedores, user, puedoConfirmar] = await Promise.all([listarPagos({ supplierId: proveedor || null, status: estado }, paginacion), proveedoresParaFinanzas(), getUser(), puedeSupplyV2('SUPPLY_V2_PAYMENT_APPROVE')])
+  const yo = user?.metadata.dbUserId ?? ''
+  const select = 'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm'
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Pagos y ledger"
-        description="Todo pago a un proveedor (anticipos, depósitos, liquidaciones, reembolsos) y el ledger financiero del que sale el saldo de cada acuerdo. Las liquidaciones por período tienen su propia pantalla."
-        eyebrow={
-          <Link href="/superadmin/supply" className="hover:underline">
-            Membego Supply
-          </Link>
-        }
-        nav={<NavFinanzas activa="pagos" />}
+        title="Pagos a proveedores"
+        description="Dinero que sale. Una persona lo registra y otra lo confirma; al confirmarse se aplica a la factura, obligación o depósito declarado."
+        eyebrow={<Link href={RUTA_FINANZAS} className="hover:underline">Finanzas</Link>}
+        nav={<NavSupplyV2 activa="finanzas" />}
+        action={<Button asChild><Link href={`${RUTA_FINANZAS}/pagos/nuevo`} data-testid="btn-nuevo-pago">+ Registrar pago</Link></Button>}
       />
-
-      <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard label="Contratado" value={formatMoneyRD(contratado)} sub="memorando, no deuda" />
-        <StatCard label="Depositado" value={formatMoneyRD(depositado)} accent="brand" />
-        <StatCard
-          label="Saldo por pagar"
-          value={formatMoneyRD(porPagar)}
-          accent={porPagar > 0 ? 'warning' : 'success'}
-        />
-        <StatCard
-          label="Pagos sin confirmar"
-          value={pendientes.length}
-          sub={formatMoneyRD(pendientes.reduce((t, p) => t + Number(p.monto), 0))}
-        />
-      </div>
-
       <Card>
-        <CardHeader>
-          <CardTitle>Saldo por acuerdo</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TablaReporte
-            titulo="Saldos con proveedores"
-            columnas={[
-              { clave: 'acuerdo', titulo: 'Acuerdo' },
-              { clave: 'proveedor', titulo: 'Proveedor' },
-              { clave: 'modalidad', titulo: 'Modalidad' },
-              { clave: 'contratado', titulo: 'Contratado', alinearDerecha: true },
-              { clave: 'redenciones', titulo: 'Redenciones', alinearDerecha: true },
-              { clave: 'devengado', titulo: 'Devengado', alinearDerecha: true },
-              { clave: 'depositado', titulo: 'Depositado', alinearDerecha: true },
-              { clave: 'pagado', titulo: 'Pagado', alinearDerecha: true },
-              { clave: 'saldo', titulo: 'Por pagar', alinearDerecha: true },
-            ]}
-            filas={datos.filas.map((f) => ({
-              __clave: f.acuerdo.id,
-              acuerdo: (
-                <Link
-                  href={`/superadmin/supply/acuerdos/${f.acuerdo.id}`}
-                  className="font-medium underline-offset-4 hover:underline"
-                >
-                  {f.acuerdo.codigo}
-                </Link>
-              ),
-              proveedor: f.acuerdo.proveedor.name,
-              modalidad: SUPPLY_MODALIDAD_PAGO_LABELS[f.acuerdo.modalidadPago],
-              contratado: formatMoneyRD(f.saldo.contratado),
-              redenciones: f.redenciones.toLocaleString('es-DO'),
-              devengado: formatMoneyRD(f.saldo.devengado),
-              depositado: formatMoneyRD(f.saldo.depositado),
-              pagado: formatMoneyRD(f.saldo.pagado),
-              saldo: (
-                <strong className={f.saldo.saldoPorPagar > 0 ? 'text-warning' : undefined}>
-                  {formatMoneyRD(f.saldo.saldoPorPagar)}
-                </strong>
-              ),
-            }))}
-            vacio="Sin acuerdos activos."
-          />
+        <CardContent className="pt-6">
+          <form method="get" className="grid gap-3 sm:grid-cols-4">
+            <div>
+              <Label htmlFor="proveedor">Proveedor</Label>
+              <select id="proveedor" name="proveedor" defaultValue={proveedor} className={select}><option value="">Todos</option>{proveedores.map((p) => <option key={p.id} value={p.id}>{p.commercialName}</option>)}</select>
+            </div>
+            <div>
+              <Label htmlFor="estado">Estado</Label>
+              <select id="estado" name="estado" defaultValue={estadoCrudo} className={select}><option value="">Todos</option>{ESTADOS.map((e) => <option key={e} value={e}>{SUPPLIER_PAYMENT_STATUS_LABELS[e]}</option>)}</select>
+            </div>
+            <div className="flex items-end gap-2"><Button type="submit" variant="outline">Filtrar</Button><Button asChild variant="ghost"><Link href={`${RUTA_FINANZAS}/pagos`}>Limpiar</Link></Button></div>
+          </form>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Registrar un pago</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FormPago
-            acuerdos={datos.filas.map((f) => ({
-              id: f.acuerdo.id,
-              codigo: f.acuerdo.codigo,
-              proveedor: f.acuerdo.proveedor.name,
-            }))}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Pagos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TablaReporte
-            titulo="Pagos a proveedores"
-            columnas={[
-              { clave: 'fecha', titulo: 'Fecha' },
-              { clave: 'acuerdo', titulo: 'Acuerdo' },
-              { clave: 'proveedor', titulo: 'Proveedor' },
-              { clave: 'tipo', titulo: 'Tipo' },
-              { clave: 'monto', titulo: 'Monto', alinearDerecha: true },
-              { clave: 'referencia', titulo: 'Referencia' },
-              { clave: 'comprobante', titulo: 'Comprobante' },
-              { clave: 'registrado', titulo: 'Registró' },
-              { clave: 'estado', titulo: 'Estado' },
-            ]}
-            filas={pagosConUrl.map((p) => ({
-              __clave: p.id,
-              fecha: formatDate(p.createdAt),
-              acuerdo: p.acuerdo.codigo,
-              proveedor: p.proveedor.name,
-              tipo: SUPPLY_PAGO_TIPO_LABELS[p.tipo],
-              monto: formatMoneyRD(Number(p.monto)),
-              referencia: [p.metodo, p.referencia].filter(Boolean).join(' · ') || '—',
-              comprobante: p.url ? (
-                <a href={p.url} target="_blank" rel="noreferrer" className="underline">
-                  Ver
-                </a>
-              ) : p.estado === 'ANULADO' ? (
-                '—'
-              ) : (
-                <FormComprobantePago pagoId={p.id} compacto />
-              ),
-              registrado: p.registradoPor?.name ?? '—',
-              estado: p.anuladoAt || p.estado === 'ANULADO' ? (
-                <Badge variant="outline">Anulado</Badge>
-              ) : p.estado === 'CONFIRMADO' ? (
-                <Badge variant="success">Confirmado</Badge>
-              ) : (
-                <span className="flex flex-col gap-1">
-                  <FormConfirmar pagoId={p.id} />
-                  <FormAccion
-                    accion={anularPagoAction}
-                    ocultos={{ pagoId: p.id }}
-                    campos={[{ name: 'motivo', label: 'Motivo', required: true, maxLength: 500 }]}
-                    etiqueta="Anular"
-                    variant="ghost"
-                    compacto
-                    confirmar="¿Anular este pago pendiente?"
-                  />
-                </span>
-              ),
-            }))}
-            vacio="Todavía no se ha registrado ningún pago."
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Ledger financiero</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-3 text-caption text-muted-foreground">
-            Monto positivo = a favor del proveedor (se le debe más). Negativo = a favor de Membego
-            (un pago, un reembolso, una reversa). El saldo es la suma de estas filas.
-          </p>
-          <TablaReporte
-            titulo="Asientos del ledger financiero"
-            columnas={[
-              { clave: 'fecha', titulo: 'Fecha' },
-              { clave: 'proveedor', titulo: 'Proveedor' },
-              { clave: 'acuerdo', titulo: 'Acuerdo' },
-              { clave: 'tipo', titulo: 'Tipo' },
-              { clave: 'monto', titulo: 'Monto', alinearDerecha: true },
-              { clave: 'motivo', titulo: 'Motivo' },
-            ]}
-            filas={datos.asientos.map((a) => ({
-              __clave: a.id,
-              fecha: formatDate(a.createdAt),
-              proveedor: a.proveedor.name,
-              acuerdo: a.acuerdo?.codigo ?? '—',
-              tipo: SUPPLY_ASIENTO_TIPO_LABELS[a.tipo],
-              monto: (
-                <span className={Number(a.monto) < 0 ? 'text-muted-foreground' : undefined}>
-                  {formatMoneyRD(Number(a.monto))}
-                </span>
-              ),
-              motivo: a.motivo ?? '—',
-            }))}
-            vacio="Sin asientos."
-          />
-        </CardContent>
-      </Card>
+      {filas.length === 0 ? (
+        <EmptyState variant="card" title="Sin pagos" description="Registra el primer pago a un proveedor." />
+      ) : (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="tabla-pagos">
+                <thead className="text-left text-caption text-muted-foreground">
+                  <tr><th className="py-1 pr-3">Pago</th><th className="py-1 pr-3">Proveedor</th><th className="py-1 pr-3">Método</th><th className="py-1 pr-3 text-right">Monto</th><th className="py-1 pr-3">Fecha</th><th className="py-1 pr-3">Referencia</th><th className="py-1 pr-3">Aplicaciones</th><th className="py-1">Estado</th></tr>
+                </thead>
+                <tbody>
+                  {filas.map((p) => (
+                    <tr key={p.id} className="border-t border-border" data-testid="pago">
+                      <td className="py-2 pr-3 font-medium"><Link href={`${RUTA_FINANZAS}/pagos/${p.id}`} className="underline-offset-4 hover:underline" data-testid="link-pago">{p.number}</Link>{p.intendedInvoice && <span className="block text-caption text-muted-foreground">para {p.intendedInvoice.number}</span>}{p.intendedDeposit && <span className="block text-caption text-muted-foreground">anticipo</span>}</td>
+                      <td className="py-2 pr-3">{p.proveedor}</td>
+                      <td className="py-2 pr-3">{SUPPLIER_PAYMENT_METHOD_LABELS[p.method as keyof typeof SUPPLIER_PAYMENT_METHOD_LABELS]}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(p.amount, p.currency)}<span className="block text-caption text-muted-foreground">aplicado {dineroSupplyV2(p.appliedAmount, p.currency)}</span></td>
+                      <td className="py-2 pr-3">{formatDate(p.paidAt)}</td>
+                      <td className="py-2 pr-3">{p.reference ?? '—'}</td>
+                      <td className="py-2 pr-3 tabular-nums">{p.aplicaciones}</td>
+                      <td className="py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ChipPagoProveedor estado={p.status} />
+                          {p.status === 'PENDING' && puedoConfirmar && <ConfirmarPago paymentId={p.id} soyElCreador={false} compacto />}
+                          {p.status === 'PENDING' && p.creadoPor && <span className="text-caption text-muted-foreground">registró {p.creadoPor}{yo ? '' : ''}</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <TablaPaginacion paginacion={paginacion} total={total} params={sp} etiqueta="pagos" />
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

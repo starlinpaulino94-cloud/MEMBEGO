@@ -34,7 +34,7 @@ import { puedeTransicionar } from '../src/modules/supply-v2/core/estados'
 import { SUPPLY_V2_PERMISSIONS } from '../src/modules/supply-v2/contracts/gateways'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · pruebas de DOMINIO (§30). Sin base de datos.
+ * MEMBEGO SUPPLY · SLICE 7 · pruebas de DOMINIO (§30). Sin base de datos.
  *
  * El caso que manda, el del enunciado: precio 1 000, descuento del proveedor
  * 100, bono de Membego 300 → el cliente paga 600, el valor contractual es 900,

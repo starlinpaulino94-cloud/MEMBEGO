@@ -1,19 +1,19 @@
 import 'server-only'
 
 import type { Prisma } from '@prisma/client'
-import { sinEmpresa } from '@/lib/tenant'
+import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { motivoNoComprable } from '../core/estados'
 import { calcularPrecioOferta } from '../core/precios'
 import { SIN_TOPE, unidadesLibres, unidadesLibresComision } from '../offers/domain'
 import { RUTA_OFERTAS_PUBLICAS } from '../core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · READ MODEL PÚBLICO del marketplace (§17–§19, §53).
+ * MEMBEGO SUPPLY · READ MODEL PÚBLICO del marketplace (§17–§19, §53).
  *
- * Es el ÚNICO camino por el que una oferta de Supply 2.0 llega al marketplace
+ * Es el ÚNICO camino por el que una oferta de Supply llega al marketplace
  * y al cliente. Devuelve un DTO cerrado: precio público, precio Membego,
  * ahorro, proveedor, vigencia y si hay unidades. NUNCA costos, lotes,
- * asignaciones ni ledger. El marketplace no importa nada más de Supply 2.0.
+ * asignaciones ni ledger. El marketplace no importa nada más de Supply.
  */
 
 export interface MarketplaceSupplyOffer {
@@ -100,7 +100,7 @@ function aDto(o: Fila, ahora: Date): MarketplaceSupplyOffer {
 /** Ofertas comprables HOY (§18): activas, vigentes y con unidades. */
 export async function ofertasPublicas(limite = 24): Promise<MarketplaceSupplyOffer[]> {
   const ahora = new Date()
-  const filas = await sinEmpresa('Supply 2.0: ofertas activas para el marketplace', (tx) =>
+  const filas = await sinEmpresa('Supply: ofertas activas para el marketplace', (tx) =>
     tx.supplyV2Offer.findMany({
       where: { status: 'ACTIVE', startsAt: { lte: ahora }, OR: [{ endsAt: null }, { endsAt: { gt: ahora } }] },
       orderBy: { publishedAt: 'desc' },
@@ -114,9 +114,23 @@ export async function ofertasPublicas(limite = 24): Promise<MarketplaceSupplyOff
 /** Una oferta por su slug, se pueda comprar o no (la ficha explica por qué). */
 export async function ofertaPublicaPorSlug(slug: string): Promise<MarketplaceSupplyOffer | null> {
   const ahora = new Date()
-  const f = await sinEmpresa('Supply 2.0: ficha pública de una oferta', (tx) =>
+  const f = await sinEmpresa('Supply: ficha pública de una oferta', (tx) =>
     tx.supplyV2Offer.findUnique({ where: { slug }, select: SELECT })
   )
   if (!f || f.status === 'DRAFT' || f.status === 'CANCELLED') return null
   return aDto(f, ahora)
+}
+
+/**
+ * Una oferta en su forma pública MÁS su estado crudo, dentro de la transacción
+ * de quien llama. La usa el puente Supply → Catálogo (Fase 2.5): necesita lo
+ * mismo que ve el público (precios ya calculados, unidades libres, si se puede
+ * comprar) sin duplicar esas reglas, y necesita leerlo bajo SU transacción
+ * —una lectura aparte no vería lo que esa transacción acaba de escribir—.
+ * Devuelve el mismo DTO cerrado: nunca costos, lotes ni ledger.
+ */
+export async function ofertaParaPuenteEnTx(tx: Tx, offerId: string): Promise<{ oferta: MarketplaceSupplyOffer; status: string } | null> {
+  const f = await tx.supplyV2Offer.findUnique({ where: { id: offerId }, select: SELECT })
+  if (!f) return null
+  return { oferta: aDto(f, new Date()), status: f.status }
 }

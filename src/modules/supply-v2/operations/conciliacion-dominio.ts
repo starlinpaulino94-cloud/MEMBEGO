@@ -2,7 +2,7 @@ import { decimal, type Decimal } from '../core/dinero'
 import { montoCuadra } from '../core/precios'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 3 · LA DECISIÓN, EN UN SOLO SITIO.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 3 · LA DECISIÓN, EN UN SOLO SITIO.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * LA PREGUNTA QUE ESTE ARCHIVO CONTESTA

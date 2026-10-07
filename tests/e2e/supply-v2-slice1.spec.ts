@@ -2,9 +2,9 @@ import { test, expect, type Page } from '@playwright/test'
 import { cerrarPrisma, entrarComo, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 1 de punta a punta, en un navegador de verdad (§50).
+ * MEMBEGO SUPPLY · SLICE 1 de punta a punta, en un navegador de verdad (§50).
  *
- *   login (Compras) → Supply 2.0 → Nueva compra → crear proveedor → crear
+ *   login (Compras) → Supply → Nueva compra → crear proveedor → crear
  *   producto → crear acuerdo → PO 1.000 → enviar aprobación → aprobar con
  *   OTRA persona (Finanzas) → recepción 500 → Supply 500 → recepción 300 →
  *   Supply 800 → recepción 200 → Supply 1.000 → PO RECEIVED
@@ -34,14 +34,14 @@ async function registrarRecepcion(page: Page, cantidad: number) {
 }
 
 async function disponiblesEnSupply(page: Page): Promise<number> {
-  await page.goto('/superadmin/supply-v2/supply')
+  await page.goto('/superadmin/supply/supply')
   const tarjeta = page.getByTestId('pool-producto').filter({ hasText: PRODUCTO })
   await expect(tarjeta).toBeVisible()
   const texto = await tarjeta.getByTestId('pool-disponibles').innerText()
   return Number(texto.replace(/[^\d]/g, ''))
 }
 
-test.describe('Supply 2.0 · Slice 1', () => {
+test.describe('Supply · Slice 1', () => {
   test.beforeEach(async ({}, testInfo) => {
     test.skip(!SESION_LOCAL_DISPONIBLE, 'requiere SUPABASE_JWT_SECRET, DATABASE_URL y NEXT_PUBLIC_SUPABASE_URL para firmar sesiones')
     test.skip(testInfo.project.name !== 'escritorio', 'el recorrido completo corre una vez, en escritorio')
@@ -57,10 +57,10 @@ test.describe('Supply 2.0 · Slice 1', () => {
     const ctxCompras = await browser.newContext()
     const compras = await ctxCompras.newPage()
     await entrarComo(ctxCompras, 'compras', BASE)
-    await compras.goto('/superadmin/supply-v2')
-    await expect(compras.getByRole('heading', { level: 1, name: 'Membego Supply 2.0' })).toBeVisible()
+    await compras.goto('/superadmin/supply')
+    await expect(compras.getByRole('heading', { level: 1, name: 'Membego Supply' })).toBeVisible()
     await compras.getByTestId('btn-nueva-compra').first().click()
-    await compras.waitForURL('**/superadmin/supply-v2/compras/nueva')
+    await compras.waitForURL('**/superadmin/supply/compras/nueva')
     await expect(compras.getByTestId('wizard-compra')).toBeVisible()
 
     // ── Paso 1 · crear proveedor externo sin salir del wizard ─────────────
@@ -105,7 +105,7 @@ test.describe('Supply 2.0 · Slice 1', () => {
     await expect(resumen).toContainText('300,000.00')
     await compras.screenshot({ path: 'test-results/shots/supply-v2-wizard-resumen.png', fullPage: true })
     await compras.getByRole('button', { name: 'Crear orden de compra' }).click()
-    await compras.waitForURL(/\/superadmin\/supply-v2\/compras\/(?!nueva)[a-z0-9]+$/)
+    await compras.waitForURL(/\/superadmin\/supply\/compras\/(?!nueva)[a-z0-9]+$/)
     const urlOrden = compras.url()
     await expect(compras.getByRole('heading', { level: 1, name: /^MBG-PO-\d{4}-\d{6}$/ })).toBeVisible()
     await expect(compras.getByTestId('estado-orden')).toHaveText('Borrador')
@@ -158,12 +158,12 @@ test.describe('Supply 2.0 · Slice 1', () => {
     await expect(compras.getByTestId('form-recepcion')).toHaveCount(0)
 
     // ── El tablero refleja el valor real y el ledger del lote existe ──────
-    await compras.goto('/superadmin/supply-v2')
+    await compras.goto('/superadmin/supply')
     await expect(compras.getByTestId('actividad-reciente')).toContainText('Orden recibida por completo')
     await compras.screenshot({ path: 'test-results/shots/supply-v2-tablero.png', fullPage: true })
     await compras.goto(urlOrden)
     await compras.getByTestId('lista-recepciones').getByRole('link', { name: /^LOT-/ }).first().click()
-    await compras.waitForURL(/\/supply-v2\/supply\/lotes\//)
+    await compras.waitForURL(/\/supply\/supply\/lotes\//)
     await expect(compras.getByTestId('tabla-ledger')).toContainText('RECEIPT')
     await expect(compras.getByTestId('lote-recibido')).toHaveText('500')
 
@@ -172,24 +172,13 @@ test.describe('Supply 2.0 · Slice 1', () => {
     await ctxCompras.close()
   })
 
-  test('sin sesión, Supply 2.0 redirige al login', async ({ page }) => {
-    await page.goto('/superadmin/supply-v2')
-    await page.waitForURL(/\/login/)
-  })
-
-  test('Supply V1 sigue funcionando en /superadmin/supply', async ({ browser }) => {
-    const ctx = await browser.newContext()
-    const page = await ctx.newPage()
-    await entrarComo(ctx, 'compras', BASE)
+  test('sin sesión, Supply redirige al login', async ({ page }) => {
     await page.goto('/superadmin/supply')
-    await expect(page.getByRole('heading', { level: 1, name: 'Membego Supply' })).toBeVisible()
-    await page.goto('/superadmin/supply/ordenes')
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-    await ctx.close()
+    await page.waitForURL(/\/login/)
   })
 })
 
-test.describe('Supply 2.0 · móvil', () => {
+test.describe('Supply · móvil', () => {
   test.beforeEach(async ({}, testInfo) => {
     test.skip(!SESION_LOCAL_DISPONIBLE, 'requiere SUPABASE_JWT_SECRET, DATABASE_URL y NEXT_PUBLIC_SUPABASE_URL para firmar sesiones')
     test.skip(testInfo.project.name !== 'movil', 'solo viewport móvil')
@@ -202,10 +191,10 @@ test.describe('Supply 2.0 · móvil', () => {
     const ctx = await browser.newContext()
     const page = await ctx.newPage()
     await entrarComo(ctx, 'compras', BASE)
-    await page.goto('/superadmin/supply-v2')
-    await expect(page.getByRole('heading', { level: 1, name: 'Membego Supply 2.0' })).toBeVisible()
+    await page.goto('/superadmin/supply')
+    await expect(page.getByRole('heading', { level: 1, name: 'Membego Supply' })).toBeVisible()
     await expect(page.getByTestId('kpi-unidades')).toBeVisible()
-    await page.goto('/superadmin/supply-v2/compras/nueva')
+    await page.goto('/superadmin/supply/compras/nueva')
     await expect(page.getByTestId('wizard-compra')).toBeVisible()
     const desborda = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
     expect(desborda).toBe(false)

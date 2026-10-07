@@ -22,7 +22,7 @@ import {
 } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · alta de un programa de fidelización.
+ * MEMBEGO SUPPLY · SLICE 8 · alta de un programa de fidelización.
  *
  * Enseña lo que cada decisión implica antes de guardar: qué hace cada
  * modalidad, quién pone el dinero, y qué pasa si el programa va sin techo.

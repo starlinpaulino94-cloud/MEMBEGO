@@ -23,7 +23,7 @@ import { ofertaPublicaPorSlug } from '../../src/modules/supply-v2/marketplace/re
 import { barridoSupplyV2 } from '../../src/modules/supply-v2/commerce/barrido'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 5 contra PostgreSQL de verdad (§83).
+ * MEMBEGO SUPPLY · SLICE 5 contra PostgreSQL de verdad (§83).
  *
  *   A  Comisión de punta a punta: acuerdo 10 % → oferta sin lote → compra 1 000 →
  *      derecho sin lote (100 / 900) → entrega → obligación 900 → liquidación →

@@ -20,7 +20,7 @@ import {
 } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · MOTOR DE CUPONES (§9–§12, §28).
+ * MEMBEGO SUPPLY · SLICE 7 · MOTOR DE CUPONES (§9–§12, §28).
  *
  * Un cupón es la PUERTA a un beneficio del Slice 6: el código se enseña y se
  * teclea, pero no decide nada. Quien resuelve un código recibe el beneficio al

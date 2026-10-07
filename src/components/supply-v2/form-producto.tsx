@@ -18,7 +18,7 @@ export interface VinculoExistente {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · CREAR PRODUCTO del catálogo del proveedor (§30).
+ * MEMBEGO SUPPLY · CREAR PRODUCTO del catálogo del proveedor (§30).
  * Puede vincularse a un producto o servicio que la empresa ya vende; nunca
  * obliga.
  */

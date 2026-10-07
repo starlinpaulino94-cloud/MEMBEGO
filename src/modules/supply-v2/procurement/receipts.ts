@@ -7,7 +7,7 @@ import { registrarAsientoEnTx } from '../pool/lotes'
 import { reconocerObligacionPorRecepcionEnTx } from '../finance/obligations'
 
 /**
- * MEMBEGO SUPPLY 2.0 · RECEPCIÓN (§15–§22).
+ * MEMBEGO SUPPLY · RECEPCIÓN (§15–§22).
  *
  * AQUÍ ES DONDE NACE EL SUPPLY. Una sola transacción:
  *

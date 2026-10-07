@@ -4,7 +4,7 @@ import { claseFuentesSupplyV2 } from './fuentes'
 import { NavSupplyV2, type ContadoresSupplyV2, type SeccionSupplyV2 } from './nav'
 
 /**
- * MEMBEGO SUPPLY 2.0 · marco del rediseño (Stitch).
+ * MEMBEGO SUPPLY · marco del rediseño (Stitch).
  *
  * Cabecera blanca a todo el ancho con el título del módulo, su estado, las
  * acciones y la navegación agrupada; debajo, el lienzo (también blanco)
@@ -35,7 +35,7 @@ export function MarcoSupplyV2({
               </span>
               <div className="flex min-w-0 flex-col gap-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[24px] font-bold leading-8 tracking-[-0.015em] text-foreground">Membego Supply 2.0</h1>
+                <h1 className="text-[24px] font-bold leading-8 tracking-[-0.015em] text-foreground">Membego Supply</h1>
                 <span className="flex items-center gap-1.5 rounded-full bg-sv2-secondary-container px-2 py-0.5 text-[12px] font-semibold leading-4 tracking-[0.04em] text-sv2-on-secondary-container">
                   <span aria-hidden className="size-1.5 rounded-full bg-sv2-secondary" />
                   En línea

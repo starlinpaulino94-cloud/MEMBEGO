@@ -79,6 +79,24 @@ export const CAPABILITIES = [
    * cliente de otro negocio. Eso —y la cuenta de acceso— es cosa del superadmin.
    */
   'CUSTOMER_DELETION',
+  /**
+   * LEER el catálogo unificado de la empresa (Commerce Core · F1.3): ítems y
+   * variantes. Solo la empresa que tiene encendida la capacidad
+   * CATALOGO_UNIFICADO responde; las demás contestan `NOT_FOUND`.
+   */
+  'CATALOG_LOOKUP',
+  /**
+   * ARMAR el catálogo: crear ítems (siempre en BORRADOR) y agregarles variantes
+   * mientras sigan en borrador. Publicar, pausar, archivar y tocar lo que ya
+   * está a la venta es del panel, a mano.
+   *
+   * Es «ordena tus propios registros», como `customers:manage`: no mueve valor
+   * ni consume nada, y la empresa que presenta la clave es la dueña de lo que se
+   * crea, así que no necesita un sistema satélite que lo respalde. Va aparte de
+   * `catalog:read` y lo incluye por lo de siempre: la respuesta de crear devuelve
+   * el ítem, y conceder escribir sin leer sería un scope que miente.
+   */
+  'CATALOG_MANAGE',
 ] as const
 
 export type Capability = (typeof CAPABILITIES)[number]
@@ -121,6 +139,8 @@ export const SCOPES_POR_CAPABILITY: Record<Capability, readonly string[]> = {
   // localizado. `customers:delete` es propio y NO incluye `:manage`: borrar no es
   // editar, y no debe llegar por arrastre de otro permiso.
   CUSTOMER_DELETION: ['customers:read', 'customers:delete'],
+  CATALOG_LOOKUP: ['catalog:read'],
+  CATALOG_MANAGE: ['catalog:read', 'catalog:manage'],
 }
 
 /** Scopes que corresponden a un conjunto de capabilities, sin repetidos. */

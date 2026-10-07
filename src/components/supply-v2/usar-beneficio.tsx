@@ -8,7 +8,7 @@ import { usarBeneficioAction, type QrParaMostrar } from '@/modules/supply-v2/act
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 
 /**
- * MEMBEGO SUPPLY 2.0 · «Usar beneficio» (§11–§13).
+ * MEMBEGO SUPPLY · «Usar beneficio» (§11–§13).
  *
  * El QR se genera SOLO al pulsar el botón (nunca al abrir la página) y solo
  * contiene el nonce temporal. La cuenta atrás usa el vencimiento que dio el

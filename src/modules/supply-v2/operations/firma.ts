@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto'
 import { igualesSeguro } from '@/lib/webhooks/svix'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · AUTENTICIDAD Y FRESCURA (§2 y §3).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · AUTENTICIDAD Y FRESCURA (§2 y §3).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * POR QUÉ ES LA PRIMERA PUERTA Y NO UNA COMPROBACIÓN MÁS
@@ -108,7 +108,7 @@ export function firmaHmac(secreto: string, timestamp: string, cuerpoCrudo: strin
  *
  * Existe para demostrar la arquitectura con una firma de verdad, no para
  * fingir una integración que Supply todavía no tiene. CardNET sigue siendo una
- * integración de V1 **no conectada** a Supply 2.0 (ver el informe).
+ * integración de V1 **no conectada** a Supply (ver el informe).
  *
  * Cabeceras:
  *   x-sv2-timestamp  unix en segundos, lo FIRMADO

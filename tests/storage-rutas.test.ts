@@ -5,6 +5,7 @@ import {
   rutaPromocion,
   rutaCampana,
   rutaEvidencia,
+  rutaCatalogo,
   tienePrefijoDeEmpresa,
   CARPETA_SIN_GUARDAR,
   CARPETA_SUELTAS,
@@ -70,4 +71,12 @@ test('tienePrefijoDeEmpresa distingue el formato nuevo del heredado', () => {
   assert.equal(tienePrefijoDeEmpresa('nueva/x.jpg', EMPRESA), false)
   // No debe confundirse con otra empresa cuyo id empiece igual.
   assert.equal(tienePrefijoDeEmpresa('cmp_abc1234/promo_1/x.jpg', EMPRESA), false)
+})
+
+test('catálogo: la empresa va primero y el ítem es obligatorio', () => {
+  assert.equal(rutaCatalogo(EMPRESA, 'item_1', 'x.jpg'), `${EMPRESA}/catalogo/item_1/x.jpg`)
+  assert.throws(() => rutaCatalogo(EMPRESA, '', 'x.jpg'))
+  assert.throws(() => rutaCatalogo('', 'item_1', 'x.jpg'))
+  assert.throws(() => rutaCatalogo(EMPRESA, '../otra', 'x.jpg'))
+  assert.throws(() => rutaCatalogo(EMPRESA, 'item_1', 'a/b.jpg'))
 })

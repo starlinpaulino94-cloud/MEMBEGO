@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { Prisma } from '@prisma/client'
-import type { SupplyV2CustomerMembershipStatus, SupplyV2LoyaltyProgramStatus } from '@prisma/client'
+import type { SupplyV2BenefitFunding, SupplyV2CustomerMembershipStatus, SupplyV2LoyaltyModality, SupplyV2LoyaltyProgramStatus } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { dineroSupplyV2 } from '../core/catalogo'
 import { compromisoDePuntos, membresiaVigente } from './domain'
@@ -10,7 +10,7 @@ import { estadisticasDeReferidosEnTx } from './referrals'
 import { valorMedioPorPuntoEnTx } from './points'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · LECTURAS (§39–§41).
+ * MEMBEGO SUPPLY · SLICE 8 · LECTURAS (§39–§41).
  *
  * CUATRO PÚBLICOS, CUATRO DTO. Lo que ve el cliente NO lleva presupuesto, ni
  * costo, ni comisión: no es que se oculte en la plantilla, es que no sale de
@@ -73,7 +73,7 @@ function diasRestantes(hasta: Date | null, ahora: Date): number | null {
 
 /** «Mis membresías» (§17). */
 export async function misMembresias(customerId: string, ahora = new Date()): Promise<MembresiaDelCliente[]> {
-  return sinEmpresa('Supply 2.0: las membresías de un cliente', async (tx) => {
+  return sinEmpresa('Supply: las membresías de un cliente', async (tx) => {
     const filas = await tx.supplyV2CustomerMembership.findMany({
       where: { customerId },
       orderBy: [{ status: 'asc' }, { expiresAt: 'desc' }],
@@ -117,7 +117,7 @@ export async function misMembresias(customerId: string, ahora = new Date()): Pro
 
 /** «Mis puntos» (§25, §39). */
 export async function misPuntos(customerId: string): Promise<PuntosDelCliente[]> {
-  return sinEmpresa('Supply 2.0: los puntos de un cliente', async (tx) => {
+  return sinEmpresa('Supply: los puntos de un cliente', async (tx) => {
     const cuentas = await tx.supplyV2PointsAccount.findMany({
       where: { customerId },
       select: {
@@ -187,7 +187,7 @@ function conceptoDeOrigen(source: string): string {
 
 /** «Mis recompensas»: el catálogo que este cliente puede pedir. */
 export async function recompensasParaElCliente(customerId: string, programId: string, ahora = new Date()): Promise<RecompensaParaElCliente[]> {
-  return sinEmpresa('Supply 2.0: recompensas disponibles para un cliente', async (tx) => {
+  return sinEmpresa('Supply: recompensas disponibles para un cliente', async (tx) => {
     const cuenta = await tx.supplyV2PointsAccount.findUnique({ where: { programId_customerId: { programId, customerId } }, select: { available: true } })
     const disponibles = cuenta?.available ?? 0
     const recompensas = await tx.supplyV2Reward.findMany({
@@ -224,7 +224,7 @@ export async function recompensasParaElCliente(customerId: string, programId: st
 
 /** «Invitar amigos» (§19). */
 export async function misInvitaciones(customerId: string) {
-  return sinEmpresa('Supply 2.0: las invitaciones de un cliente', async (tx) => {
+  return sinEmpresa('Supply: las invitaciones de un cliente', async (tx) => {
     const programas = await tx.supplyV2LoyaltyProgram.findMany({
       where: { status: 'ACTIVE', modalities: { has: 'REFERRALS' }, referralProgram: { active: true } },
       select: { id: true, name: true, supplier: { select: { commercialName: true } }, referralProgram: { select: { rewardKind: true, rewardPoints: true, minPurchaseAmount: true, waitingPeriodDays: true } } },
@@ -255,7 +255,7 @@ export async function misInvitaciones(customerId: string) {
 
 /** Membresías publicadas que un cliente puede comprar (§15). */
 export async function membresiasEnElMarketplace(ahora = new Date()) {
-  return sinEmpresa('Supply 2.0: membresías publicadas', async (tx) => {
+  return sinEmpresa('Supply: membresías publicadas', async (tx) => {
     const planes = await tx.supplyV2MembershipPlan.findMany({
       where: { status: 'PUBLISHED', program: { status: 'ACTIVE', startsAt: { lte: ahora }, OR: [{ endsAt: null }, { endsAt: { gt: ahora } }] } },
       orderBy: [{ programId: 'asc' }, { price: 'asc' }],
@@ -302,7 +302,7 @@ export async function membresiasEnElMarketplace(ahora = new Date()) {
  * `supplierId`, no por lo que mande la pantalla.
  */
 export async function fidelizacionDelProveedor(supplierId: string) {
-  return sinEmpresa('Supply 2.0: fidelización del proveedor', async (tx) => {
+  return sinEmpresa('Supply: fidelización del proveedor', async (tx) => {
     const programas = await tx.supplyV2LoyaltyProgram.findMany({
       where: { supplierId },
       orderBy: { createdAt: 'desc' },
@@ -363,6 +363,14 @@ export interface TableroDeFidelizacion {
     costoRealizado: string
     costoPendiente: string
     sinTope: boolean
+    modalidades: SupplyV2LoyaltyModality[]
+    funding: SupplyV2BenefitFunding
+    startsAt: Date
+    endsAt: Date | null
+    /** Días tras los que vencen los puntos; null = no vencen. */
+    puntosVencenEnDias: number | null
+    puntosEmitidosAcum: number
+    puntosVencidos: number
   }[]
   totales: {
     programasActivos: number
@@ -370,7 +378,11 @@ export interface TableroDeFidelizacion {
     referidosValidos: number
     puntosEmitidos: number
     puntosDisponibles: number
+    /** Puntos vencidos sin canjear, de todos los programas (dato real, no proyección). */
+    puntosVencidos: number
     recompensasEntregadas: number
+    /** Costo ya realizado entre recompensas entregadas; null si no hay entregas. */
+    ticketMedio: string | null
     costoRealizado: string
     /** §37: ESTIMACIÓN, no deuda. La etiqueta viaja con la cifra. */
     costoPotencialEstimado: string
@@ -384,17 +396,18 @@ export interface TableroDeFidelizacion {
  * prohíbe enseñar una estimación como si fuera un resultado confirmado.
  */
 export async function tableroDeFidelizacion(): Promise<TableroDeFidelizacion> {
-  return sinEmpresa('Supply 2.0: tablero de fidelización', async (tx) => {
+  return sinEmpresa('Supply: tablero de fidelización', async (tx) => {
     const programas = await tx.supplyV2LoyaltyProgram.findMany({
       orderBy: { createdAt: 'desc' },
       take: 50,
-      select: { id: true, code: true, name: true, status: true, owner: true, budgetTotal: true, supplier: { select: { commercialName: true } } },
+      select: { id: true, code: true, name: true, status: true, owner: true, budgetTotal: true, modalities: true, funding: true, startsAt: true, endsAt: true, pointsExpireDays: true, supplier: { select: { commercialName: true } } },
     })
     const filas: TableroDeFidelizacion['programas'] = []
     let miembros = 0
     let referidos = 0
     let emitidos = 0
     let disponibles = 0
+    let vencidosTotal = 0
     let entregadas = 0
     let realizadoTotal = new Prisma.Decimal(0)
     let potencialTotal = new Prisma.Decimal(0)
@@ -438,11 +451,19 @@ export async function tableroDeFidelizacion(): Promise<TableroDeFidelizacion> {
         costoRealizado: dineroSupplyV2(economia.costoRealizado),
         costoPendiente: dineroSupplyV2(economia.costoPendiente),
         sinTope: p.budgetTotal === null,
+        modalidades: p.modalities,
+        funding: p.funding,
+        startsAt: p.startsAt,
+        endsAt: p.endsAt,
+        puntosVencenEnDias: p.pointsExpireDays,
+        puntosEmitidosAcum: emit._sum.points ?? 0,
+        puntosVencidos: saldos._sum.expired ?? 0,
       })
       miembros += activas
       referidos += refs
       emitidos += emit._sum.points ?? 0
       disponibles += saldos._sum.available ?? 0
+      vencidosTotal += saldos._sum.expired ?? 0
       entregadas += entreg
       realizadoTotal = realizadoTotal.plus(economia.costoRealizado)
       potencialTotal = potencialTotal.plus(compromiso.costoPotencialEstimado)
@@ -456,7 +477,9 @@ export async function tableroDeFidelizacion(): Promise<TableroDeFidelizacion> {
         referidosValidos: referidos,
         puntosEmitidos: emitidos,
         puntosDisponibles: disponibles,
+        puntosVencidos: vencidosTotal,
         recompensasEntregadas: entregadas,
+        ticketMedio: entregadas > 0 ? dineroSupplyV2(realizadoTotal.dividedBy(entregadas).toDecimalPlaces(2)) : null,
         costoRealizado: dineroSupplyV2(realizadoTotal),
         costoPotencialEstimado: dineroSupplyV2(potencialTotal),
         estimacionAdvertencia:
@@ -468,7 +491,7 @@ export async function tableroDeFidelizacion(): Promise<TableroDeFidelizacion> {
 
 /** Ficha de un programa para Membego, con su bitácora. */
 export async function fichaDePrograma(programId: string) {
-  return sinEmpresa('Supply 2.0: ficha de un programa de fidelización', async (tx) => {
+  return sinEmpresa('Supply: ficha de un programa de fidelización', async (tx) => {
     const p = await tx.supplyV2LoyaltyProgram.findUnique({
       where: { id: programId },
       select: {

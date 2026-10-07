@@ -22,7 +22,7 @@ export interface ChipFiltro {
 }
 
 /**
- * Barra de filtros de las pestañas de Supply 2.0 (Stitch): búsqueda, selectores
+ * Barra de filtros de las pestañas de Supply (Stitch): búsqueda, selectores
  * y los filtros activos como chips. Es un formulario GET: la URL guarda el
  * filtro. `variante` replica las dos versiones de la maqueta: Compras («Filtrar»
  * oscuro + «Limpiar») y Proveedores («Aplicar» suave + ↺).
