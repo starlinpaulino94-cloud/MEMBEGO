@@ -128,7 +128,7 @@ export async function crearOfertaEnTx(tx: Tx, companyId: string, e: EntradaDeOfe
   return { id: oferta.id, fee: cuenta.cpaAmount.toFixed(2), currency: v.item.currency }
 }
 
-export interface CambiosDeOferta extends Partial<EntradaDeOferta> {}
+export type CambiosDeOferta = Partial<EntradaDeOferta>
 
 /**
  * Edita una oferta. En BORRADOR se puede cambiar todo; ya publicada, solo lo que no reescribe

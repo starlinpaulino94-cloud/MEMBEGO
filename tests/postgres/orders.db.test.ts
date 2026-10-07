@@ -279,8 +279,13 @@ test('5 · dos renglones de la misma variante se unen en una línea', async () =
   assert.equal(p.total.toFixed(2), '750.00')
 })
 
+const intentaConCliente = (parcial: Partial<EntradaPedido> & Pick<EntradaPedido, 'lineas'>) => codigoDe(enA((tx) => crearPedidoEnTx(tx, ctx.a, entrada(parcial), cliente)))
+
 test('6 · un descuento de línea baja la base comisionable', async () => {
-  const r = await crear({ lineas: [{ varianteId: ctx.servicio, cantidad: 2, descuento: 50 }] })
+  // El descuento de una línea lo fija el sistema (una oferta, el envoltorio de Supply): una persona no.
+  const r = await enA((tx) => crearPedidoEnTx(tx, ctx.a, entrada({ lineas: [{ varianteId: ctx.servicio, cantidad: 2, descuento: 50 }] }), { actor: 'SISTEMA', actorId: null }))
+  pedidosCreados.push(r.pedidoId)
+  assert.equal(await intentaConCliente({ lineas: [{ varianteId: ctx.servicio, cantidad: 2, descuento: 50 }] }), 'DESCUENTO_NO_PERMITIDO', 'quien pide no fija descuentos')
   const p = await pedidoDe(r.pedidoId)
   assert.equal(p.subtotal.toFixed(2), '500.00')
   assert.equal(p.discount.toFixed(2), '50.00')
@@ -305,7 +310,7 @@ test('7 · lo que no se puede pedir se rechaza con su código', async () => {
   assert.equal(await intenta({ lineas: [lineaServicio()], atribucion: { channel: 'REFERRAL' } }), 'ATRIBUCION_INVALIDA')
   assert.equal(await intenta({ lineas: [lineaServicio()], notas: 'x'.repeat(501) }), 'NOTA_INVALIDA')
   assert.equal(await intenta({ lineas: [lineaServicio()], idempotencyKey: 'x'.repeat(121) }), 'CLAVE_INVALIDA')
-  assert.equal(await intenta({ lineas: [{ varianteId: ctx.servicio, cantidad: 1, descuento: 251 }] }), 'PEDIDO_INVALIDO', 'un descuento mayor a la línea')
+  assert.equal(await intenta({ lineas: [{ varianteId: ctx.servicio, cantidad: 1, descuento: 251 }] }, { actor: 'SISTEMA', actorId: null }), 'PEDIDO_INVALIDO', 'un descuento mayor a la línea')
 })
 
 test('7b · se cuentan los pedidos ABIERTOS de una ficha (esperando, en preparación o listos): lo cerrado y lo cancelado no cuentan', async () => {
