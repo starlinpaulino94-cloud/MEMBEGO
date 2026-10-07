@@ -23,7 +23,7 @@ test('el orden de los grupos los cubre todos, una vez, y todas las reglas caen e
 })
 
 test('el código de una regla empieza con la letra de su grupo (se lee de un vistazo)', () => {
-  const letra: Record<string, string> = { PEDIDOS_Y_COMISIONES: 'C', PAGOS: 'P', RENGLONES: 'L', INVENTARIO: 'I', LIBRO: 'G', OFERTAS: 'O' }
+  const letra: Record<string, string> = { PEDIDOS_Y_COMISIONES: 'C', PAGOS: 'P', RENGLONES: 'L', EXISTENCIAS: 'I', LIBRO: 'G', OFERTAS: 'O' }
   for (const r of REGLAS) assert.equal(r.codigo[0], letra[r.grupo], r.codigo)
 })
 

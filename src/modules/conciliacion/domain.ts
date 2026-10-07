@@ -14,7 +14,7 @@
 
 export type Severidad = 'ALTA' | 'MEDIA' | 'BAJA'
 
-export type GrupoDeRegla = 'PEDIDOS_Y_COMISIONES' | 'PAGOS' | 'RENGLONES' | 'INVENTARIO' | 'LIBRO' | 'OFERTAS'
+export type GrupoDeRegla = 'PEDIDOS_Y_COMISIONES' | 'PAGOS' | 'RENGLONES' | 'EXISTENCIAS' | 'LIBRO' | 'OFERTAS'
 
 export interface Regla {
   codigo: string
@@ -31,12 +31,12 @@ export const ETIQUETA_GRUPO: Readonly<Record<GrupoDeRegla, string>> = {
   PEDIDOS_Y_COMISIONES: 'Pedidos y comisiones',
   PAGOS: 'Pagos y verificación',
   RENGLONES: 'Montos del pedido',
-  INVENTARIO: 'Inventario',
+  EXISTENCIAS: 'Inventario',
   LIBRO: 'Libro de la cuenta Membego',
   OFERTAS: 'Ofertas con presupuesto',
 }
 
-export const ORDEN_DE_GRUPOS: readonly GrupoDeRegla[] = ['PEDIDOS_Y_COMISIONES', 'PAGOS', 'RENGLONES', 'LIBRO', 'OFERTAS', 'INVENTARIO']
+export const ORDEN_DE_GRUPOS: readonly GrupoDeRegla[] = ['PEDIDOS_Y_COMISIONES', 'PAGOS', 'RENGLONES', 'LIBRO', 'OFERTAS', 'EXISTENCIAS']
 
 export const REGLAS: readonly Regla[] = [
   // ── Pedidos y comisiones ────────────────────────────────────────────────
@@ -72,10 +72,10 @@ export const REGLAS: readonly Regla[] = [
   { codigo: 'O05', grupo: 'OFERTAS', severidad: 'ALTA', titulo: 'Cuota cobrada distinta de la cuota del cupón', queEs: 'El canje de una oferta cobra la cuota congelada en su cupón.', queHacer: 'Compara la comisión del pedido con el cupón.' },
 
   // ── Inventario ──────────────────────────────────────────────────────────
-  { codigo: 'I01', grupo: 'INVENTARIO', severidad: 'ALTA', titulo: 'Existencias apartadas distintas de las reservas vivas', queEs: 'Lo apartado de una variante en una sucursal es la suma de sus reservas activas. Si no cuadra, se ofrece de más o de menos.', queHacer: 'Revisa las reservas de esa variante y el libro de movimientos.' },
-  { codigo: 'I02', grupo: 'INVENTARIO', severidad: 'ALTA', titulo: 'Pedido cerrado cuyas existencias no se vendieron', queEs: 'Al completar un pedido, la reserva de cada renglón pasa a vendida. Una reserva que no quedó vendida deja existencias apartadas o devueltas por error.', queHacer: 'Revisa la reserva del renglón.' },
-  { codigo: 'I03', grupo: 'INVENTARIO', severidad: 'MEDIA', titulo: 'Pedido cancelado con existencias todavía apartadas', queEs: 'Cancelar un pedido libera sus reservas. Una reserva activa de un pedido cancelado bloquea existencias sin dueño.', queHacer: 'Libera la reserva.' },
-  { codigo: 'I04', grupo: 'INVENTARIO', severidad: 'MEDIA', titulo: 'Pedido abierto sin existencias apartadas', queEs: 'Mientras un pedido está abierto, sus reservas están activas. Si una venció o se liberó, el pedido se puede aceptar sin que haya existencias.', queHacer: 'Revisa si el pedido sigue vigente o ciérralo.' },
+  { codigo: 'I01', grupo: 'EXISTENCIAS', severidad: 'ALTA', titulo: 'Existencias apartadas distintas de las reservas vivas', queEs: 'Lo apartado de una variante en una sucursal es la suma de sus reservas activas. Si no cuadra, se ofrece de más o de menos.', queHacer: 'Revisa las reservas de esa variante y el libro de movimientos.' },
+  { codigo: 'I02', grupo: 'EXISTENCIAS', severidad: 'ALTA', titulo: 'Pedido cerrado cuyas existencias no se vendieron', queEs: 'Al completar un pedido, la reserva de cada renglón pasa a vendida. Una reserva que no quedó vendida deja existencias apartadas o devueltas por error.', queHacer: 'Revisa la reserva del renglón.' },
+  { codigo: 'I03', grupo: 'EXISTENCIAS', severidad: 'MEDIA', titulo: 'Pedido cancelado con existencias todavía apartadas', queEs: 'Cancelar un pedido libera sus reservas. Una reserva activa de un pedido cancelado bloquea existencias sin dueño.', queHacer: 'Libera la reserva.' },
+  { codigo: 'I04', grupo: 'EXISTENCIAS', severidad: 'MEDIA', titulo: 'Pedido abierto sin existencias apartadas', queEs: 'Mientras un pedido está abierto, sus reservas están activas. Si una venció o se liberó, el pedido se puede aceptar sin que haya existencias.', queHacer: 'Revisa si el pedido sigue vigente o ciérralo.' },
 ]
 
 export const MUESTRA_POR_REGLA = 10
