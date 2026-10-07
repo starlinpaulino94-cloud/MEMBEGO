@@ -10,7 +10,7 @@ import type { SupplyV2AvailabilityMode, SupplyV2OfferPriceMode } from '@prisma/c
 import { cerrarOfertaEnTx, crearOfertaComisionEnTx, crearOfertaEnTx, editarOfertaEnTx, pausarOfertaEnTx, publicarOfertaEnTx, reanudarOfertaEnTx, type OfertaCreada } from './offers/service'
 import { confirmarPagoEnTx, rechazarPagoEnTx, type PagoConfirmado } from './commerce/checkout'
 import { RUTA_OFERTAS_PUBLICAS } from './core/catalogo'
-import { sincronizarOfertaMejorEsfuerzo } from '@/modules/supply-bridge/barrido'
+import { sincronizarOfertaMejorEsfuerzo } from '@/modules/supply-bridge/mejor-esfuerzo'
 
 /**
  * MEMBEGO SUPPLY 2.0 · server actions de OFERTAS y COBROS (lado plataforma).

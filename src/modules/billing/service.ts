@@ -8,8 +8,10 @@ import {
   CONFIG_POR_DEFECTO,
   TIPOS_MANUALES,
   calcularComision,
+  esClaveDeComision,
   evaluarEstadoDeCuenta,
   inicioDelPeriodo,
+  instanteDelAsiento,
   montoATexto,
   normalizarMotivo,
   pedidoGeneraComision,
@@ -78,9 +80,9 @@ export async function cuentaBloqueada(tx: Tx, companyId: string) {
   return tx.merchantBillingConfig.findUniqueOrThrow({ where: { companyId } })
 }
 
-/** El último asiento de la cuenta (su posición y su saldo), o `null` si está vacía. */
+/** El último asiento de la cuenta (su posición, su saldo y su instante), o `null` si está vacía. */
 async function ultimoAsiento(tx: Tx, companyId: string) {
-  return tx.merchantLedgerEntry.findFirst({ where: { companyId }, orderBy: { seq: 'desc' }, select: { seq: true, balance: true } })
+  return tx.merchantLedgerEntry.findFirst({ where: { companyId }, orderBy: { seq: 'desc' }, select: { seq: true, balance: true, createdAt: true } })
 }
 
 /** Lo que la empresa debe hoy (negativo = a su favor). */
@@ -118,7 +120,8 @@ async function asentar(tx: Tx, companyId: string, e: EntradaAsiento): Promise<{ 
   }
   const error = validarAsiento({ type: e.type, amount: e.amount, reason: e.reason })
   if (error) fallo('ASIENTO_INVALIDO', error)
-  const siguiente = siguientePosicion(await ultimoAsiento(tx, companyId), e.amount)
+  const ultimo = await ultimoAsiento(tx, companyId)
+  const siguiente = siguientePosicion(ultimo, e.amount)
   const asiento = await tx.merchantLedgerEntry.create({
     data: {
       companyId,
@@ -132,7 +135,7 @@ async function asentar(tx: Tx, companyId: string, e: EntradaAsiento): Promise<{ 
       reason: e.reason,
       idempotencyKey: e.idempotencyKey,
       actorUserId: e.actorId,
-      createdAt: e.ahora,
+      createdAt: instanteDelAsiento(e.ahora, ultimo),
     },
   })
   return { asiento, repetido: false }
@@ -176,8 +179,12 @@ export type ResultadoComision =
  * el límite de crédito. Se llama en la MISMA transacción que cierra el pedido.
  * Idempotente: un pedido tiene a lo sumo una comisión.
  *
- * La evidencia que decide el modelo es la que el pedido tiene AL COMPLETARSE: un
- * pago que se registre después no recalcula una comisión ya cobrada.
+ * La evidencia que decide el modelo es la que el pedido tiene AL COBRAR: en el camino
+ * normal es la del cierre (se cobra en la misma transacción), y un pago que se registre
+ * después no recalcula una comisión ya cobrada. La red de seguridad del cron cobra
+ * pedidos que se quedaron sin comisión con la evidencia VIGENTE ese día —que puede
+ * ser mayor que la del cierre—; la base lo exige así (la comisión debe coincidir con
+ * el nivel actual del pedido).
  */
 export async function registrarComisionDePedidoEnTx(
   tx: Tx,
@@ -191,6 +198,10 @@ export async function registrarComisionDePedidoEnTx(
   const existente = await tx.commission.findUnique({ where: { orderId: pedido.id } })
   if (existente) return { resultado: 'YA_EXISTE', commissionId: existente.id, amount: montoATexto(existente.amount) }
 
+  // Un libro es de UNA moneda: sumar dólares a un saldo en pesos lo corrompería sin que nada lo notara.
+  if (pedido.currency !== config.currency) {
+    fallo('MONEDA_DISTINTA', `El pedido ${pedido.code} está en ${pedido.currency} y la cuenta Membego de la empresa cobra en ${config.currency}: no se puede asentar su comisión en el mismo libro.`)
+  }
   const c = calcularComision(pedido, config)
   if (!c) return { resultado: 'SIN_COMISION' }
 
@@ -289,6 +300,8 @@ export async function asentarManualEnTx(tx: Tx, companyId: string, e: EntradaMan
   if (ctx.actor !== 'SUPERADMIN') fallo('SOLO_SUPERADMIN', 'Solo el superadmin asienta pagos, ajustes y créditos.')
   if (!(TIPOS_MANUALES as readonly string[]).includes(e.tipo)) fallo('TIPO_INVALIDO', 'Ese tipo de asiento no se registra a mano.')
   const clave = claveValida(e.idempotencyKey)
+  // Esas claves son del sistema (una por pedido): una manual con la misma bloquearía para siempre el cobro o el reverso de ese pedido.
+  if (esClaveDeComision(clave)) fallo('CLAVE_INVALIDA', 'Esa clave está reservada para las comisiones.')
   const motivo = normalizarMotivo(e.motivo)
   if (!motivo.ok) fallo('MOTIVO_INVALIDO', motivo.error)
   let monto: Prisma.Decimal
@@ -305,6 +318,14 @@ export async function asentarManualEnTx(tx: Tx, companyId: string, e: EntradaMan
   if (e.tipo === 'PAYMENT' && referencia === null) fallo('REFERENCIA_REQUERIDA', 'Un pago necesita la referencia del depósito o la transferencia.')
 
   const config = await cuentaBloqueada(tx, companyId)
+  if (e.tipo === 'PAYMENT') {
+    // El mismo depósito no se acredita dos veces: reintentar con la MISMA clave devuelve el asiento original; otra clave con la misma referencia es otro asiento.
+    const mismoDeposito = await tx.merchantLedgerEntry.findFirst({
+      where: { companyId, referenceType: 'PAYMENT', referenceId: referencia as string, NOT: { idempotencyKey: clave } },
+      select: { seq: true },
+    })
+    if (mismoDeposito) fallo('PAGO_DUPLICADO', `Ya hay un pago asentado con la referencia «${referencia}» (asiento ${mismoDeposito.seq}). Si es otro depósito, usa otra referencia.`)
+  }
   const { asiento, repetido } = await asentar(tx, companyId, {
     type: e.tipo,
     amount: monto,
@@ -511,6 +532,8 @@ export async function periodosPendientesEnTx(tx: Tx, companyId: string, ahora = 
 
 /** Emite todos los cortes que faltan de una empresa. */
 export async function generarCortesPendientesEnTx(tx: Tx, companyId: string, ahora = new Date(), max = 24): Promise<{ generados: number; saltados: number }> {
+  // El candado de la cuenta se toma ANTES de calcular los periodos: si no, dos barridos simultáneos con un cambio de ciclo en medio calcularían sus periodos con ciclos distintos y emitirían cortes solapados (la deuda saldría dos veces).
+  await cuentaBloqueada(tx, companyId)
   let generados = 0
   let saltados = 0
   for (const p of await periodosPendientesEnTx(tx, companyId, ahora, max)) {

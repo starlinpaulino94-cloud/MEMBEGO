@@ -56,7 +56,8 @@ export async function barridoFacturacion(ahora: Date = new Date(), opciones: Opc
   // 1 · pedidos completados sin comisión
   const huerfanos = !comisiones ? [] : await sinEmpresa('barrido de Merchant Billing: pedidos completados sin comisión (recorre empresa por empresa)', (tx) =>
     tx.membegoOrder.findMany({
-      where: { status: 'COMPLETED', origin: 'MARKETPLACE', completedAt: { gte: desde }, commission: null },
+      // Una base en cero nunca comisiona (`SIN_COMISION`) y no deja comisión que la excluya: sin este filtro volvería cada día y 200 de ellas taparían a los huérfanos reales.
+      where: { status: 'COMPLETED', origin: 'MARKETPLACE', completedAt: { gte: desde }, commissionableBase: { gt: 0 }, commission: null },
       select: { id: true, companyId: true },
       orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
       take: MAX_PEDIDOS,

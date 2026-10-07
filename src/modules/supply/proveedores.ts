@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client'
 
 import type { SupplyProveedorOrigen } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
-import { capacidadesDeEmpresa } from '@/modules/capacidades/catalogo'
+import { CAPACIDADES_OVERRIDE_TENANT_NUEVO, capacidadesDeEmpresa } from '@/modules/capacidades/catalogo'
 
 /**
  * MEMBEGO SUPPLY · PROVEEDORES (§5 del encargo).
@@ -92,7 +92,8 @@ export async function registrarProveedorExterno(
         telefono: d.telefono?.trim() || null,
         ciudad: d.ciudad?.trim() || null,
         razonSocial: d.razonSocial?.trim() || null,
-        capacidades: { overrides: { MEMBEGO_SUPPLIER: true } },
+        // Toda alta de empresa nueva lleva los overrides de tenant nuevo (CRM y Mensajería apagados): esta nace con `type: 'otro'`, que cae en el paquete de Car Wash, y sin ellos se activaría con las dos encendidas.
+        capacidades: { overrides: { ...CAPACIDADES_OVERRIDE_TENANT_NUEVO, MEMBEGO_SUPPLIER: true } },
       },
       select: { id: true },
     })

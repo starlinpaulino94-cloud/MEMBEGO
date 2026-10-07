@@ -18,6 +18,7 @@ import { registrarTransicionCompra, validarConsumoCompra } from '@/modules/promo
 import { registrarHitoInvitacion } from '@/modules/invitaciones/hitosConversion'
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 import { registrarEvento } from '@/modules/observabilidad/eventos'
+import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
 
 export interface CanjeState {
   error?: string
@@ -124,11 +125,7 @@ export async function confirmarCanjePromocion(
       return { error: 'Compra no encontrada.' }
     }
     empresaEvento = compra.companyId
-    if (
-      user.metadata.role !== 'SUPERADMIN' &&
-      user.metadata.companyId &&
-      compra.companyId !== user.metadata.companyId
-    ) {
+    if (!puedeOperarEnEmpresa(user, compra.companyId)) {
       return { error: 'Esta promoción pertenece a otra empresa.' }
     }
 

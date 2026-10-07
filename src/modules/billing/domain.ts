@@ -206,6 +206,26 @@ export function siguientePosicion(ultimo: SaldoDeLaCuenta | null, amount: Monto)
   return { seq: prev.seq + 1, balance: prev.balance.plus(decimal(amount)) }
 }
 
+/**
+ * El instante que se escribe en un asiento: el de quien llama, pero NUNCA anterior al
+ * del último asiento de la cuenta. Quien llama captura su `ahora` antes de esperar el
+ * candado de la cuenta, y la posición (`seq`) se asigna al obtenerlo: sin esto, dos
+ * escritores que se crucen (una medianoche en medio, un «Revisar ahora» lento) dejarían
+ * un asiento con posición posterior y fecha anterior, y un corte (que delimita por
+ * fecha y cuadra por posición) no podría emitirse nunca. La base lo exige también
+ * (`merchant_ledger_orden`).
+ */
+export function instanteDelAsiento(ahora: Date, ultimo: { createdAt: Date } | null): Date {
+  return ultimo !== null && ultimo.createdAt.getTime() > ahora.getTime() ? ultimo.createdAt : ahora
+}
+
+/** Una clave de idempotencia de las que escribe el sistema para las comisiones (`commission:<pedido>[:reversal]`). */
+export const PREFIJO_CLAVE_DE_COMISION = 'commission:'
+
+export function esClaveDeComision(clave: string): boolean {
+  return clave.trim().toLowerCase().startsWith(PREFIJO_CLAVE_DE_COMISION)
+}
+
 /** Recompone el saldo desde los asientos: la verdad contra la que se compara el saldo corrido. */
 export function saldoDeAsientos(asientos: readonly { amount: Monto }[]): Decimal {
   return asientos.reduce<Decimal>((t, a) => t.plus(decimal(a.amount)), new Prisma.Decimal(0))
@@ -410,6 +430,33 @@ export function tramoDeAntiguedad(dias: number): TramoDeAntiguedad {
   if (dias <= 60) return '31-60'
   if (dias <= 90) return '61-90'
   return '90+'
+}
+
+/** Un asiento tal como lo necesita la antigüedad: con el documento al que apunta. */
+export interface AsientoParaAntiguedad {
+  type: MerchantLedgerEntryType
+  amount: Monto
+  createdAt: Date
+  referenceType: string
+  referenceId: string
+}
+
+/**
+ * Los cargos que siguen VIVOS: comisiones (y ajustes positivos) menos las comisiones
+ * que ya tienen su reverso. Una comisión revertida y su reverso se anulan entre sí:
+ * dejarla como cargo vivo atribuiría el saldo a un cobro que ya no existe y haría
+ * parecer más joven una deuda vieja. (Los pagos y créditos no se descuentan aquí:
+ * saldan lo más viejo y eso lo hace `envejecerDeuda` con el saldo.)
+ */
+export function cargosVigentes(asientos: readonly AsientoParaAntiguedad[]): { amount: Monto; createdAt: Date }[] {
+  const revertidas = new Set(asientos.filter((a) => a.type === 'REFUND' && a.referenceType === 'COMMISSION').map((a) => a.referenceId))
+  return asientos
+    .filter((a) => {
+      if (a.type === 'ADJUSTMENT') return decimal(a.amount).greaterThan(0)
+      if (!TIPOS_QUE_SUMAN.includes(a.type)) return false
+      return !(a.referenceType === 'COMMISSION' && revertidas.has(a.referenceId))
+    })
+    .map((a) => ({ amount: a.amount, createdAt: a.createdAt }))
 }
 
 /**

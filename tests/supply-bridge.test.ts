@@ -109,8 +109,8 @@ test('cada cambio de una oferta de Supply dispara la sincronización DESPUÉS de
   const s = readFileSync('src/modules/supply-v2/actions-ofertas.ts', 'utf8')
   assert.match(s, /import \{ after \} from 'next\/server'/)
   assert.match(s, /if \(id\) after\(\(\) => sincronizarOfertaMejorEsfuerzo\(id\)\)/)
-  const b = readFileSync('src/modules/supply-bridge/barrido.ts', 'utf8')
-  const mejor = b.slice(b.indexOf('export async function sincronizarOfertaMejorEsfuerzo'), b.indexOf('/** Toda la reconciliación'))
+  const b = readFileSync('src/modules/supply-bridge/mejor-esfuerzo.ts', 'utf8')
+  const mejor = b.slice(b.indexOf('export async function sincronizarOfertaMejorEsfuerzo'))
   assert.match(mejor, /try \{[\s\S]*\} catch/, 'nunca lanza')
 })
 
@@ -162,9 +162,9 @@ test('el panel del puente se guarda por rol de superadmin, y los botones no impo
 
 test('la tarjeta y la ficha pública mandan una oferta de Membego a la página de compra de Supply (no duplican el checkout)', () => {
   const tarjeta = readFileSync('src/components/catalogo/TarjetaCatalogoPublica.tsx', 'utf8')
-  assert.match(tarjeta, /RUTA_OFERTAS_PUBLICAS\}\/\$\{item\.ofertaSlug\}/)
+  assert.match(tarjeta, /RUTA_OFERTAS_MEMBEGO\}\/\$\{item\.ofertaSlug\}/)
   const ficha = readFileSync('src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx', 'utf8')
-  assert.match(ficha, /RUTA_OFERTAS_PUBLICAS\}\/\$\{item\.ofertaSlug\}/)
+  assert.match(ficha, /RUTA_OFERTAS_MEMBEGO\}\/\$\{item\.ofertaSlug\}/)
   assert.match(ficha, /Ver la oferta y comprar/)
 })
 
@@ -173,4 +173,48 @@ test('/catalogo valida el origen de la URL contra los valores conocidos y no dup
   assert.match(s, /sp\.origen === 'supply' \|\| sp\.origen === 'empresas' \? sp\.origen : null/)
   assert.match(s, /const conDestacadas = origen === null && !q && pagina === 0/)
   assert.match(s, /origen === 'empresas' \|\| \(origen === null && !q\) \? \{ origen: 'EMPRESAS' as const \}/)
+})
+
+// ── Acoplamiento transitivo (hallazgo M9 de la auditoría del 2026-10-07) ─────
+
+import { existsSync, statSync } from 'node:fs'
+import { dirname, join as unir, normalize } from 'node:path'
+
+/** Resuelve un import del código (alias `@/` o relativo) a un archivo de `src/`, o null si es un paquete externo. */
+function resolverImport(desde: string, origen: string): string | null {
+  const base = origen.startsWith('@/') ? unir('src', origen.slice(2)) : origen.startsWith('.') ? normalize(unir(dirname(desde), origen)) : null
+  if (base === null) return null
+  for (const c of [`${base}.ts`, `${base}.tsx`, unir(base, 'index.ts'), unir(base, 'index.tsx'), base]) {
+    if (existsSync(c) && statSync(c).isFile()) return c
+  }
+  return null
+}
+
+/** Todos los archivos de `src/` que se alcanzan importando desde `entrada` (incluye dinámicos). */
+function cierreDeImports(entrada: string): Set<string> {
+  const vistos = new Set<string>()
+  const pendientes = [entrada]
+  while (pendientes.length > 0) {
+    const f = pendientes.pop() as string
+    if (vistos.has(f)) continue
+    vistos.add(f)
+    const texto = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    for (const m of texto.matchAll(/(?:from|import\()\s*'([^']+)'/g)) {
+      const r = resolverImport(f, m[1])
+      if (r && r.startsWith('src')) pendientes.push(r)
+    }
+  }
+  return vistos
+}
+
+test('la sincronización que Supply llama tras cada oferta no arrastra, ni transitivamente, pedidos, inventario ni billing', () => {
+  const alcanzados = [...cierreDeImports('src/modules/supply-bridge/mejor-esfuerzo.ts')].map((f) => f.split('\\').join('/'))
+  const prohibidos = alcanzados.filter((f) => /^src\/modules\/(orders|inventory|billing)\//.test(f) || /^src\/modules\/supply-bridge\/(pedido|barrido)\.ts$/.test(f))
+  assert.deepEqual(prohibidos, [], 'Supply importa mejor-esfuerzo.ts: no debe alcanzar el Commerce Core')
+})
+
+test('Supply importa la sincronización desde mejor-esfuerzo.ts, no desde el barrido (que importa el envoltorio de pedidos)', () => {
+  const s = readFileSync('src/modules/supply-v2/actions-ofertas.ts', 'utf8')
+  assert.match(s, /from '@\/modules\/supply-bridge\/mejor-esfuerzo'/)
+  assert.doesNotMatch(s, /supply-bridge\/barrido/)
 })

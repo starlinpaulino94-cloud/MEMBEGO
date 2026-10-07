@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { Prisma, type MembegoVerificationLevel, type MerchantFeeModel } from '@prisma/client'
 import { prisma } from '../../src/lib/prisma'
-import { conEmpresa } from '../../src/lib/tenant'
+import { conEmpresa, sinEmpresa } from '../../src/lib/tenant'
 import { cambiarEstadoItemEnTx, crearItemEnTx } from '../../src/modules/catalog/service'
 import { FacturacionError } from '../../src/modules/billing/errores'
 import { PedidoError } from '../../src/modules/orders/errores'
@@ -34,6 +34,7 @@ import {
 } from '../../src/modules/billing/service'
 import { DIAS_DE_GRACIA, TIPOS_QUE_RESTAN, TIPOS_QUE_SUMAN, periodoDe, tipoDeComision } from '../../src/modules/billing/domain'
 import { barridoFacturacion } from '../../src/modules/billing/barrido'
+import { listarCuentasEnTx } from '../../src/modules/billing/queries'
 import { ofertaSupplyDePrueba } from './oferta-supply'
 
 /**
@@ -64,7 +65,7 @@ const T0 = new Date('2030-01-01T10:00:00.000Z')
 const dias = (n: number) => new Date(T0.getTime() + n * 86_400_000)
 
 type Empresa = { id: string; sucursal: string; cliente: string; servicio: string }
-const E: Record<'a' | 'b' | 'c' | 'd' | 'e' | 'f', Empresa> = {
+const E: Record<'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h', Empresa> = {
   a: { id: '', sucursal: '', cliente: '', servicio: '' },
   b: { id: '', sucursal: '', cliente: '', servicio: '' },
   c: { id: '', sucursal: '', cliente: '', servicio: '' },
@@ -72,6 +73,10 @@ const E: Record<'a' | 'b' | 'c' | 'd' | 'e' | 'f', Empresa> = {
   e: { id: '', sucursal: '', cliente: '', servicio: '' },
   /** Solo para pedidos huérfanos de las pruebas de reglas de la base: ningún saldo se comprueba aquí. */
   f: { id: '', sucursal: '', cliente: '', servicio: '' },
+  /** Pruebas del endurecimiento (moneda, orden del tiempo, claves, cortes concurrentes). */
+  g: { id: '', sucursal: '', cliente: '', servicio: '' },
+  /** Antigüedad de la deuda neta de reversos. */
+  h: { id: '', sucursal: '', cliente: '', servicio: '' },
 }
 const f = { usuario: '', supplyVariante: '', oferta: '' }
 
@@ -212,15 +217,23 @@ const manual = (e: Empresa, tipo: 'PAYMENT' | 'ADJUSTMENT' | 'CREDIT' | 'PROMOTI
     )
   )
 
-/** Inserta un asiento crudo con los valores por defecto razonables (para probar las reglas de la base). */
+/**
+ * Inserta un asiento crudo con los valores por defecto razonables (para probar las reglas de la base).
+ * La fecha por defecto es la de ahora, o la del último asiento de la cuenta si es posterior (el tiempo
+ * del libro no retrocede); la clave por defecto respeta la regla `commission:…` ⇔ referencia de comisión.
+ */
 async function insertarAsiento(
   tx: Prisma.TransactionClient,
   e: Empresa,
-  o: { id?: string; seq: number; type: string; amount: string; balance: string; referenceType?: string; referenceId?: string; reason?: string | null; key?: string }
+  o: { id?: string; seq: number; type: string; amount: string; balance: string; referenceType?: string; referenceId?: string; reason?: string | null; key?: string; moneda?: string; cuando?: Date }
 ): Promise<string> {
   const id = o.id ?? randomUUID()
+  const tipoRef = o.referenceType ?? 'MANUAL'
+  const clave = o.key ?? (tipoRef === 'COMMISSION' ? `commission:${randomUUID()}` : randomUUID())
+  const cuando = o.cuando ?? null
   await tx.$executeRaw`INSERT INTO "merchant_ledger_entries" ("id", "companyId", "seq", "type", "amount", "balance", "currency", "referenceType", "referenceId", "reason", "idempotencyKey", "createdAt")
-    VALUES (${id}, ${e.id}, ${o.seq}, ${o.type}::"MerchantLedgerEntryType", ${o.amount}::numeric, ${o.balance}::numeric, 'DOP', ${o.referenceType ?? 'MANUAL'}, ${o.referenceId ?? 'ref'}, ${o.reason ?? null}, ${o.key ?? randomUUID()}, now())`
+    VALUES (${id}, ${e.id}, ${o.seq}, ${o.type}::"MerchantLedgerEntryType", ${o.amount}::numeric, ${o.balance}::numeric, ${o.moneda ?? 'DOP'}, ${tipoRef}, ${o.referenceId ?? 'ref'}, ${o.reason ?? null}, ${clave},
+            COALESCE(${cuando}::timestamp, GREATEST(now()::timestamp, COALESCE((SELECT max("createdAt") FROM "merchant_ledger_entries" WHERE "companyId" = ${e.id}), '-infinity'::timestamp))))`
   return id
 }
 
@@ -935,7 +948,8 @@ test('30 · un corte mensual cuadra, no admite UPDATE/DELETE y es único por per
 test('30b · un periodo ya cortado no recibe asientos nuevos: el corte quedaría desactualizado', async () => {
   const e = E.c
   // Enero de 2031 ya tiene su corte (prueba anterior): un asiento fechado dentro de él se rechaza…
-  await assert.rejects(manual(e, 'ADJUSTMENT', '1', { motivo: 'Retroactivo', ahora: new Date('2031-01-15T15:00:00Z') }), /merchant_ledger_corte/)
+  // (El servicio nunca escribe en el pasado —fecha el asiento en el último de la cuenta, prueba 36—; la
+  // base lo respalda aunque alguien salte el servicio, y es lo que se comprueba aquí.)
   const ultimo = await prisma.merchantLedgerEntry.findFirstOrThrow({ where: { companyId: e.id }, orderBy: { seq: 'desc' } })
   const msg = await rechazo((tx) => tx.$executeRaw`INSERT INTO "merchant_ledger_entries" ("id","companyId","seq","type","amount","balance","currency","referenceType","referenceId","reason","idempotencyKey","createdAt")
     VALUES (${randomUUID()}, ${e.id}, ${ultimo.seq + 1}, 'ADJUSTMENT', 1, ${ultimo.balance.plus(1).toFixed(2)}::numeric, 'DOP', 'MANUAL', 'r', 'x', ${randomUUID()}, ${new Date('2031-01-15T15:00:00Z')})`)
@@ -1025,5 +1039,126 @@ test('34 · cambiar de ciclo no deja huecos: el periodo siguiente empieza donde 
   const cortes = await prisma.merchantStatement.findMany({ where: { companyId: e.id }, orderBy: { periodStart: 'asc' } })
   cortes.forEach((c, i) => {
     if (i > 0) assert.equal(c.periodStart.getTime(), cortes[i - 1].periodEnd.getTime())
+  })
+})
+
+// ── Endurecimiento tras la auditoría del 2026-10-07 ──────────────────────────
+
+test('35 · una cuenta es de una sola moneda: la comisión de un pedido en otra moneda no se asienta, el pedido sigue LISTO y la base también lo rechaza', async () => {
+  const e = E.g
+  const usd = await en(e, (tx) => crearItemEnTx(tx, e.id, { name: `Lavado USD ${sufijo}`, type: 'SERVICE', price: 50, currency: 'USD', sku: `BILL-USD-${sufijo}` }, comoInventario(f.usuario)))
+  await en(e, (tx) => cambiarEstadoItemEnTx(tx, e.id, usd.id, 'ACTIVE', comoInventario(f.usuario)))
+  const variante = (await prisma.catalogVariant.findFirstOrThrow({ where: { catalogItemId: usd.id }, select: { id: true } })).id
+  const r = await en(e, (tx) =>
+    crearPedidoEnTx(tx, e.id, { customerId: e.cliente, locationId: e.sucursal, origin: 'MARKETPLACE', atribucion: { channel: 'MARKETPLACE_BROWSE' }, lineas: [{ varianteId: variante, cantidad: 1 }], ahora: T0 }, cliente)
+  )
+  await en(e, (tx) => aceptarPedidoEnTx(tx, e.id, r.pedidoId, empresa(f.usuario), T0))
+  const listo = await en(e, (tx) => marcarListoEnTx(tx, e.id, r.pedidoId, empresa(f.usuario), T0))
+  // El cierre falla con un mensaje que la persona del escáner entiende y NO deja nada a medias.
+  assert.equal(await codigoDe(en(e, (tx) => completarPorQrEnTx(tx, e.id, listo.qrToken as string, empresa(f.usuario), T0))), 'MONEDA_DISTINTA')
+  assert.equal((await prisma.membegoOrder.findUniqueOrThrow({ where: { id: r.pedidoId }, select: { status: true } })).status, 'READY', 'el pedido sigue LISTO')
+  assert.equal(await comisionDe(r.pedidoId), null)
+  assert.equal(await prisma.merchantLedgerEntry.count({ where: { companyId: e.id } }), 0, 'ningún asiento')
+
+  // El servicio de billing, llamado directo, tampoco la asienta.
+  const directo = en(e, (tx) =>
+    registrarComisionDePedidoEnTx(tx, e.id, { id: r.pedidoId, code: 'MBG-X', origin: 'MARKETPLACE', sourceType: null, commissionableBase: 50, verificationLevel: 'REDEEMED', currency: 'USD' }, SISTEMA, T0)
+  )
+  assert.equal(await codigoDe(directo), 'MONEDA_DISTINTA')
+
+  // Y la base: con la cuenta creada, un asiento en otra moneda se rechaza.
+  await manual(e, 'ADJUSTMENT', '1', { ahora: T0 })
+  const ultimo = await prisma.merchantLedgerEntry.findFirstOrThrow({ where: { companyId: e.id }, orderBy: { seq: 'desc' } })
+  assert.match(await rechazo((tx) => insertarAsiento(tx, e, { seq: ultimo.seq + 1, type: 'ADJUSTMENT', amount: '5', balance: ultimo.balance.plus(5).toFixed(2), reason: 'x', moneda: 'USD' })), /merchant_ledger_moneda/)
+  await acepta((tx) => insertarAsiento(tx, e, { seq: ultimo.seq + 1, type: 'ADJUSTMENT', amount: '5', balance: ultimo.balance.plus(5).toFixed(2), reason: 'x' }))
+})
+
+test('36 · el tiempo del libro no retrocede: un asiento con un «ahora» viejo se escribe con la fecha del último, y la base rechaza una fecha anterior', async () => {
+  const e = E.g
+  const t1 = new Date('2030-03-10T12:00:00.000Z')
+  const a = await manual(e, 'ADJUSTMENT', '2', { ahora: t1 })
+  // Un escritor que capturó su «ahora» ANTES de esperar el candado llega con una hora anterior.
+  const b = await manual(e, 'ADJUSTMENT', '3', { ahora: new Date('2030-03-10T11:00:00.000Z') })
+  const filaA = await prisma.merchantLedgerEntry.findUniqueOrThrow({ where: { id: a.entryId } })
+  const filaB = await prisma.merchantLedgerEntry.findUniqueOrThrow({ where: { id: b.entryId } })
+  assert.equal(filaB.seq, filaA.seq + 1)
+  assert.equal(filaA.createdAt.toISOString(), t1.toISOString())
+  assert.equal(filaB.createdAt.toISOString(), t1.toISOString(), 'se escribe con la fecha del último, no con la vieja')
+  // Uno posterior conserva su hora.
+  const t3 = new Date('2030-03-10T13:00:00.000Z')
+  const c = await manual(e, 'ADJUSTMENT', '4', { ahora: t3 })
+  assert.equal((await prisma.merchantLedgerEntry.findUniqueOrThrow({ where: { id: c.entryId } })).createdAt.toISOString(), t3.toISOString())
+  // Y la base lo exige aunque alguien salte el servicio.
+  const ultimo = await prisma.merchantLedgerEntry.findFirstOrThrow({ where: { companyId: e.id }, orderBy: { seq: 'desc' } })
+  const sig = { seq: ultimo.seq + 1, type: 'ADJUSTMENT', amount: '1', balance: ultimo.balance.plus(1).toFixed(2), reason: 'x' }
+  assert.match(await rechazo((tx) => insertarAsiento(tx, e, { ...sig, cuando: new Date('2030-03-09T00:00:00.000Z') })), /merchant_ledger_orden/)
+  await acepta((tx) => insertarAsiento(tx, e, { ...sig, cuando: ultimo.createdAt }))
+})
+
+test('37 · las claves de las comisiones son del sistema: una clave manual con ese prefijo se rechaza (servicio y base)', async () => {
+  const e = E.g
+  assert.equal(await codigoDe(manual(e, 'ADJUSTMENT', '1', { clave: 'commission:cualquiera' })), 'CLAVE_INVALIDA')
+  assert.equal(await codigoDe(manual(e, 'PAYMENT', '1', { clave: '  Commission:x:reversal ' })), 'CLAVE_INVALIDA')
+  const ultimo = await prisma.merchantLedgerEntry.findFirstOrThrow({ where: { companyId: e.id }, orderBy: { seq: 'desc' } })
+  const sig = { seq: ultimo.seq + 1, type: 'ADJUSTMENT', amount: '1', balance: ultimo.balance.plus(1).toFixed(2), reason: 'x' }
+  assert.match(await rechazo((tx) => insertarAsiento(tx, e, { ...sig, referenceType: 'MANUAL', key: 'commission:robada' })), /clave_comision/)
+  assert.match(await rechazo((tx) => insertarAsiento(tx, e, { ...sig, type: 'REDEMPTION_FEE', referenceType: 'COMMISSION', key: 'otra-clave' })), /clave_comision/)
+  await acepta((tx) => insertarAsiento(tx, e, { ...sig, type: 'REDEMPTION_FEE', referenceType: 'COMMISSION', key: 'commission:ok' }))
+})
+
+test('38 · el mismo depósito no se acredita dos veces en la misma cuenta; reintentar con la misma clave devuelve el original', async () => {
+  const e = E.g
+  const referencia = `TRF-DUP-${sufijo}`
+  const clave = `pago-dup-${sufijo}`
+  const primero = await manual(e, 'PAYMENT', '5', { referencia, clave })
+  assert.equal(primero.repetido, false)
+  assert.equal(await codigoDe(manual(e, 'PAYMENT', '5', { referencia })), 'PAGO_DUPLICADO')
+  const reintento = await manual(e, 'PAYMENT', '5', { referencia, clave })
+  assert.equal(reintento.repetido, true)
+  assert.equal(reintento.entryId, primero.entryId)
+  // Otra cuenta sí puede usar esa referencia (es única por cuenta).
+  await manual(E.f, 'PAYMENT', '5', { referencia, ahora: new Date('2033-01-01T12:00:00.000Z') })
+  // La base lo respalda.
+  const ultimo = await prisma.merchantLedgerEntry.findFirstOrThrow({ where: { companyId: e.id }, orderBy: { seq: 'desc' } })
+  const pago = { seq: ultimo.seq + 1, type: 'PAYMENT', amount: '-5', balance: ultimo.balance.minus(5).toFixed(2), referenceType: 'PAYMENT', referenceId: referencia }
+  assert.match(await rechazo((tx) => insertarAsiento(tx, e, pago)), /23505|already exists|pago_referencia/i)
+  await acepta((tx) => insertarAsiento(tx, e, { ...pago, referenceId: `${referencia}-otro` }))
+})
+
+test('39 · la antigüedad de la deuda no cuenta como cargo vivo una comisión ya revertida', async () => {
+  const e = E.h
+  const base = new Date('2030-06-01T10:00:00.000Z')
+  const hoy = new Date(base.getTime() + 86_400_000)
+  const antes = await sinEmpresa('prueba: antigüedad antes', (tx) => listarCuentasEnTx(tx, {}, hoy))
+  // Un cargo de hace 60 días (sigue debido) y otro de hoy que se revierte hoy.
+  await pedidoCompletado({ empresa: e, ahora: new Date(base.getTime() - 60 * 86_400_000) })
+  const nuevo = await pedidoCompletado({ empresa: e, ahora: base })
+  await en(e, (tx) => reembolsarPedidoEnTx(tx, e.id, nuevo.pedidoId, { motivo: 'El cliente devolvió el servicio' }, empresa(f.usuario), base))
+  assert.equal(await saldo(e), '100.00', 'queda debiendo solo el cargo viejo (el otro y su reverso se anulan)')
+  const despues = await sinEmpresa('prueba: antigüedad después', (tx) => listarCuentasEnTx(tx, {}, hoy))
+  const delta = (t: '0-30' | '31-60' | '61-90' | '90+') => new Prisma.Decimal(despues.antiguedad[t]).minus(antes.antiguedad[t]).toFixed(2)
+  assert.equal(delta('61-90'), '100.00', 'los 100 son del cargo de hace 61 días')
+  assert.equal(delta('0-30'), '0.00', 'no se atribuyen al cargo revertido de hoy')
+  assert.equal(delta('31-60'), '0.00')
+  assert.equal(delta('90+'), '0.00')
+})
+
+test('40 · dos barridos de cortes a la vez con un cambio de ciclo en medio no emiten cortes solapados ni duplicados', async () => {
+  const e = E.g
+  const ahora = new Date('2030-08-01T12:00:00.000Z')
+  const [r1, r2] = await Promise.all([
+    en(e, (tx) => generarCortesPendientesEnTx(tx, e.id, ahora)),
+    en(e, (tx) => generarCortesPendientesEnTx(tx, e.id, ahora)),
+    en(e, (tx) => actualizarConfigEnTx(tx, e.id, { billingCycle: 'BIWEEKLY' }, superadmin(), ahora)),
+  ]).then(([a, b]) => [a, b])
+  assert.ok(r1.generados + r2.generados >= 1, 'se emitió al menos un corte')
+  const cortes = await prisma.merchantStatement.findMany({ where: { companyId: e.id }, orderBy: { periodStart: 'asc' } })
+  cortes.forEach((c, i) => {
+    if (i > 0) assert.ok(c.periodStart.getTime() >= cortes[i - 1].periodEnd.getTime(), `el corte ${c.period} se solapa con ${cortes[i - 1].period}`)
+  })
+  assert.equal(new Set(cortes.map((c) => c.period)).size, cortes.length)
+  // La suma de lo debido por cortes consecutivos nunca cuenta dos veces lo mismo: cada corte abre con el cierre del anterior.
+  cortes.forEach((c, i) => {
+    if (i > 0 && c.periodStart.getTime() === cortes[i - 1].periodEnd.getTime()) assert.equal(c.openingBalance.toFixed(2), cortes[i - 1].closingBalance.toFixed(2))
   })
 })

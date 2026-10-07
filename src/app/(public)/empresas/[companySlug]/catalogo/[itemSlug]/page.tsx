@@ -3,12 +3,12 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, Package } from 'lucide-react'
-import { itemCatalogoPublico } from '@/modules/catalog/publico'
+import { getItemCatalogoPublico } from '@/modules/marketplace/cached'
 import { formatearPrecio } from '@/modules/catalog/formato'
 import { ETIQUETA_TIPO } from '@/modules/catalog/formato'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
-import { RUTA_OFERTAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
+import { RUTA_OFERTAS_MEMBEGO } from '@/modules/catalog/publico-nucleo'
 import { opcionesDePedidoPublico } from '@/modules/orders/publico'
 import { PedirForm } from '@/components/pedidos/PedirForm'
 
@@ -20,7 +20,7 @@ export const revalidate = 120
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { companySlug, itemSlug } = await params
-  const item = await itemCatalogoPublico(companySlug, itemSlug)
+  const item = await getItemCatalogoPublico(companySlug, itemSlug)
   if (!item) return { title: `Producto · ${SITE_NAME}` }
   return shareMetadata({
     title: `${item.name} · ${item.company.name}`,
@@ -37,9 +37,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  */
 export default async function ItemCatalogoPublicoPage({ params }: Props) {
   const { companySlug, itemSlug } = await params
-  const item = await itemCatalogoPublico(companySlug, itemSlug)
+  const item = await getItemCatalogoPublico(companySlug, itemSlug)
   if (!item) notFound()
-  const hrefOferta = item.origen === 'SUPPLY' && item.ofertaSlug ? `${RUTA_OFERTAS_PUBLICAS}/${item.ofertaSlug}` : null
+  const hrefOferta = item.origen === 'SUPPLY' && item.ofertaSlug ? `${RUTA_OFERTAS_MEMBEGO}/${item.ofertaSlug}` : null
   // Pedir es de los productos de la EMPRESA: las ofertas de Membego se compran por su propio checkout.
   const pedido = item.origen === 'EMPRESA' ? await opcionesDePedidoPublico(item.company.slug) : null
 

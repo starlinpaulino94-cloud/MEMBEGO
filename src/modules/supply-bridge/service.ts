@@ -232,7 +232,8 @@ export async function designarCasaEnTx(tx: Tx, companyId: string | null, ctx: Co
 
   const ajenos = await tx.catalogItem.count({ where: { source: 'SUPPLY', companyId: { not: empresa.id } } })
   if (ajenos > 0) {
-    fallo('CASA_CON_ITEMS', `Hay ${ajenos} ítem(s) puente colgando de la empresa de la casa actual. Retira esa empresa primero (se archivan) y vuelve a designar.`)
+    // Retirar la casa solo ARCHIVA sus ítems puente, no los libera: cada uno sigue atado a su oferta (única) y a la empresa que lo creó. Cambiar de casa es una migración de datos, no un clic: el mensaje lo dice tal cual en vez de mandar a un camino que no desbloquea nada.
+    fallo('CASA_CON_ITEMS', `Hay ${ajenos} ítem(s) puente (activos o archivados) que cuelgan de otra empresa. Retirar la casa actual solo los archiva, no los libera: cambiar de casa exige mover esos ítems a la nueva empresa (una migración de datos). Mientras tanto solo se puede volver a designar la misma empresa.`)
   }
   if (actual) await tx.company.update({ where: { id: actual.id }, data: { esCasaMembego: false } })
   await tx.company.update({ where: { id: empresa.id }, data: { esCasaMembego: true } })

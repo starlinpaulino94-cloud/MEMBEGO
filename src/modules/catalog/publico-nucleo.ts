@@ -12,6 +12,13 @@ import type { CatalogItemType, CatalogVariantStatus } from '@prisma/client'
 import { urlPublicaCatalogo } from './formato'
 import { normalizarCapacidades } from './domain'
 
+/**
+ * Ruta pública de las ofertas de Membego (el checkout de Supply). El catálogo NO importa de
+ * Supply (Commerce Core nunca importa de `supply-v2`): la ruta se repite aquí y una prueba
+ * (`tests/catalogo-publico.test.ts`) comprueba que es la misma que la de Supply.
+ */
+export const RUTA_OFERTAS_MEMBEGO = '/promociones/membego'
+
 /** Variantes que se enseñan: las vendibles y las agotadas. La descontinuada no existe para el público. */
 export const ESTADOS_VARIANTE_VISIBLES: readonly CatalogVariantStatus[] = ['ACTIVE', 'OUT_OF_STOCK']
 

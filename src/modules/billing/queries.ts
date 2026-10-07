@@ -1,6 +1,6 @@
 import { Prisma, type MerchantBillingStatus, type MerchantLedgerEntryType } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
-import { CONFIG_POR_DEFECTO, TIPOS_QUE_SUMAN, TRAMOS_DE_ANTIGUEDAD, envejecerDeuda, montoATexto, type TramoDeAntiguedad } from './domain'
+import { CONFIG_POR_DEFECTO, TIPOS_QUE_SUMAN, TRAMOS_DE_ANTIGUEDAD, cargosVigentes, envejecerDeuda, montoATexto, type TramoDeAntiguedad } from './domain'
 
 /**
  * COMMERCE CORE · Merchant Billing — lecturas (Fase 4).
@@ -243,14 +243,20 @@ export async function listarCuentasEnTx(tx: Tx, f: FiltrosDeCuentas = {}, ahora 
   for (const g of porEstado) conteos[g.status] = g._count._all
 
   // Antigüedad de la deuda de las empresas que deben algo.
-  const cargos = conDeuda.length
+  // Se leen también los reversos de comisión: una comisión revertida y su reverso se anulan y no son un cargo vivo.
+  const asientosDeCargo = conDeuda.length
     ? await tx.merchantLedgerEntry.findMany({
-        where: { companyId: { in: conDeuda }, OR: [{ type: { in: [...TIPOS_QUE_SUMAN] } }, { type: 'ADJUSTMENT', amount: { gt: 0 } }] },
-        select: { companyId: true, amount: true, createdAt: true },
+        where: {
+          companyId: { in: conDeuda },
+          OR: [{ type: { in: [...TIPOS_QUE_SUMAN] } }, { type: 'ADJUSTMENT', amount: { gt: 0 } }, { type: 'REFUND', referenceType: 'COMMISSION' }],
+        },
+        select: { companyId: true, type: true, amount: true, createdAt: true, referenceType: true, referenceId: true },
       })
     : []
+  const asientosPorEmpresa = new Map<string, typeof asientosDeCargo>()
+  for (const a of asientosDeCargo) asientosPorEmpresa.set(a.companyId, [...(asientosPorEmpresa.get(a.companyId) ?? []), a])
   const porEmpresa = new Map<string, { amount: Prisma.Decimal; createdAt: Date }[]>()
-  for (const c of cargos) porEmpresa.set(c.companyId, [...(porEmpresa.get(c.companyId) ?? []), { amount: c.amount, createdAt: c.createdAt }])
+  for (const [id, filas] of asientosPorEmpresa) porEmpresa.set(id, cargosVigentes(filas) as { amount: Prisma.Decimal; createdAt: Date }[])
   const total0 = TRAMOS_DE_ANTIGUEDAD.reduce((acc, t) => ({ ...acc, [t]: '0.00' }), {} as Record<TramoDeAntiguedad, string>)
   const acumulado = { ...total0 }
   let deuda = 0

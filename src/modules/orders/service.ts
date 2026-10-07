@@ -4,6 +4,7 @@ import { siguienteNumero } from '@/lib/commerce-primitives/numeracion'
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import type { ContextoAuditoria } from '@/modules/inventory/auditoria'
+import { FacturacionError } from '@/modules/billing/errores'
 import { registrarComisionDePedidoEnTx, revertirComisionDePedidoEnTx } from '@/modules/billing/service'
 import { TTL_MAXIMO_MINUTOS } from '@/modules/inventory/domain'
 import { InventarioError } from '@/modules/inventory/errores'
@@ -578,14 +579,22 @@ async function cobrarComisionDelPedido(
   nivel: MembegoVerificationLevel,
   ahora: Date
 ): Promise<string | null> {
-  const r = await registrarComisionDePedidoEnTx(
-    tx,
-    companyId,
-    { id: p.id, code: p.code, origin: p.origin, sourceType: p.sourceType, commissionableBase: p.commissionableBase, verificationLevel: nivel, currency: p.currency },
-    undefined,
-    ahora
-  )
-  return r.resultado === 'CREADA' || r.resultado === 'YA_EXISTE' ? r.amount : null
+  try {
+    const r = await registrarComisionDePedidoEnTx(
+      tx,
+      companyId,
+      { id: p.id, code: p.code, origin: p.origin, sourceType: p.sourceType, commissionableBase: p.commissionableBase, verificationLevel: nivel, currency: p.currency },
+      undefined,
+      ahora
+    )
+    return r.resultado === 'CREADA' || r.resultado === 'YA_EXISTE' ? r.amount : null
+  } catch (e) {
+    // La persona que escanea no puede arreglar la cuenta de Membego de la empresa: se le dice qué pasó y a quién avisar. El pedido sigue LISTO (la transacción se deshace).
+    if (e instanceof FacturacionError && e.codigo === 'MONEDA_DISTINTA') {
+      fallo('MONEDA_DISTINTA', `No se puede cerrar el pedido ${p.code}: está en ${p.currency} y la cuenta Membego de la empresa cobra en otra moneda. Avisa a Membego.`)
+    }
+    throw e
+  }
 }
 
 // ── Completar por QR ─────────────────────────────────────────────────────────

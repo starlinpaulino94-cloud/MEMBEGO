@@ -163,6 +163,7 @@ test.describe('Catálogo unificado · panel', () => {
     await pub.goto(`/empresas/${con.slug}`)
     await pub.getByRole('link', { name: new RegExp(NOMBRE) }).first().click()
     await expect(pub.getByRole('heading', { level: 1, name: NOMBRE })).toBeVisible()
+    const urlFicha = pub.url()
     await expect(pub.getByText(/RD\$650\.50/)).toBeVisible()
     // El costo del panel NUNCA llega al público.
     expect(await pub.content()).not.toContain('200.00')
@@ -182,6 +183,8 @@ test.describe('Catálogo unificado · panel', () => {
       await pub2.goto('/catalogo')
       return pub2.getByText(NOMBRE).count()
     }, { timeout: 20_000, intervals: [500, 1000, 2000] }).toBe(0)
+    // …y la FICHA del ítem también: antes seguía sirviéndose hasta 2 minutos (no pasaba por el tag del marketplace).
+    await expect.poll(async () => (await pub2.goto(urlFicha))?.status() ?? 0, { timeout: 20_000, intervals: [500, 1000, 2000] }).toBe(404)
     await anonimo2.close()
 
     expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
