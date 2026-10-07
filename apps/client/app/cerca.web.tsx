@@ -21,6 +21,7 @@ import { useGeoCercanos } from '../src/hooks/useGeoCercanos'
 import { useGeoAutocompletar } from '../src/hooks/useGeoAutocompletar'
 import type { CercanoItem, SugerenciaUbicacion } from '../src/lib/api'
 import { filtrarCercanosEnViewport, type MapViewportBounds } from '../src/lib/map-viewport'
+import { brandColor, brandDisplayForeground } from '../src/lib/brand-color'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '../src/theme/tokens'
 
@@ -72,22 +73,22 @@ function formatearDistancia(m: number | null): string {
 
 function crearIconoMarcador(item: CercanoItem, selected: boolean): google.maps.Icon {
   const nombre = typeof item.empresaNombre === 'string' ? item.empresaNombre : 'Negocio'
+  const rawCompanyColor = typeof item.colorPrimario === 'string' ? item.colorPrimario : null
+  const companyColor = brandColor(rawCompanyColor, colors.primary.DEFAULT)
+  // const companyForeground = brandDisplayForeground(rawCompanyColor, colors.primary.DEFAULT)
   const logoUrl = typeof item.logoUrl === 'string' && /^(https?:\/\/|data:image\/)/i.test(item.logoUrl)
     ? item.logoUrl
     : null
   const tieneOfertas = item.tieneOfertas === true
-  const edgeColor = selected ? colors.primary.DEFAULT : tieneOfertas ? colors.state.warning : colors.primary.DEFAULT
+  const edgeColor = companyColor
   const safeLogoUrl = logoUrl?.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
   const logo = safeLogoUrl
     ? `<image href="${safeLogoUrl}" x="3" y="3" width="38" height="38" preserveAspectRatio="xMidYMid slice" clip-path="url(%23logo-clip)"/>`
-    : `<text x="22" y="27" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="700" fill="${colors.primary.DEFAULT}">${(nombre.charAt(0) || '?').replace(/[<>&]/g, '')}</text>`
-  const selectionRing = selected
-    ? `<circle cx="22" cy="21" r="22" fill="none" stroke="${colors.primary[100]}" stroke-width="4"/>`
-    : ''
+    : `<text x="22" y="27" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="700" fill="${companyColor}">${(nombre.charAt(0) || '?').replace(/[<>&]/g, '')}</text>`
   const offerBadge = tieneOfertas
-    ? `<circle cx="38" cy="5" r="6" fill="${colors.state.warning}" stroke="${colors.surface.card}" stroke-width="2"/>`
+    ? `<circle cx="38" cy="5" r="6" fill="${companyColor}" stroke="${colors.surface.card}" stroke-width="2"/>`
     : ''
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="48" viewBox="0 0 44 48"><defs><clipPath id="logo-clip"><circle cx="22" cy="21" r="18"/></clipPath></defs><path d="M15 33 L22 45 L29 33 Z" fill="${tieneOfertas ? colors.state.warning : colors.primary.DEFAULT}"/><circle cx="22" cy="21" r="19" fill="${colors.primary[100]}" stroke="${edgeColor}" stroke-width="2"/>${selectionRing}${logo}${offerBadge}</svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="48" viewBox="0 0 44 48"><defs><clipPath id="logo-clip"><circle cx="22" cy="21" r="18"/></clipPath></defs><path d="M15 33 L22 45 L29 33 Z" fill="${companyColor}"/><circle cx="22" cy="21" r="19" fill="${logo ? colors.primary[100] : companyColor}" stroke="${edgeColor}" stroke-width="${selected ? 4 : 2}"/>${logo}${offerBadge}</svg>`
 
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
@@ -324,6 +325,12 @@ export default function CercaWebScreen() {
     }
   }
 
+  const selectedCompanyColorValue = typeof seleccionado?.colorPrimario === 'string'
+    ? seleccionado.colorPrimario
+    : null
+  const selectedCompanyColor = brandColor(selectedCompanyColorValue, colors.primary.DEFAULT)
+  const selectedCompanyForeground = brandDisplayForeground(selectedCompanyColorValue, colors.primary.DEFAULT)
+
   return (
     <View className="relative flex-1 bg-background">
       {showBusinessPanel && panelVisible && (
@@ -427,12 +434,13 @@ export default function CercaWebScreen() {
         contentStyle={{
           width: '95%',
           maxWidth: 640,
-          height: '25%',
+          height: '30%',
           alignSelf: 'center',
         }}
         footer={seleccionado ? (
           <Pressable
-            className="flex-row items-center justify-center gap-2 rounded-lg border border-border py-3 active:bg-muted"
+            className="flex-row items-center justify-center gap-2 rounded-lg py-3 active:opacity-80"
+            style={{ backgroundColor: selectedCompanyColor }}
             onPress={() => {
               const lat = seleccionado.latitud
               const lng = seleccionado.longitud
@@ -446,15 +454,15 @@ export default function CercaWebScreen() {
               }
             }}
           >
-            <Navigation size={16} color={colors.primary.DEFAULT} />
-            <Text className="text-small font-inter-semibold text-foreground">Cómo llegar</Text>
+            <Navigation size={16} color={selectedCompanyForeground} />
+            <Text className="text-small font-inter-semibold" style={{ color: selectedCompanyForeground }}>Cómo llegar</Text>
           </Pressable>
         ) : null}
       >
         {seleccionado && (
           <View className="gap-3 pb-4">
             <View className="flex-row items-start gap-3">
-              <View className="h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-primary/10">
+              <View className="h-12 w-12 items-center justify-center overflow-hidden rounded-xl" style={{ backgroundColor: selectedCompanyColor }}>
                 {typeof seleccionado.logoUrl === 'string' && seleccionado.logoUrl.length > 0 ? (
                   <Image
                     accessibilityLabel={`Logo de ${typeof seleccionado.empresaNombre === 'string' ? seleccionado.empresaNombre : 'negocio'}`}
@@ -463,7 +471,7 @@ export default function CercaWebScreen() {
                     style={{ width: '100%', height: '100%' }}
                   />
                 ) : (
-                  <Text className="text-small font-inter-bold text-primary">
+                  <Text className="text-small font-inter-bold" style={{ color: selectedCompanyForeground }}>
                     {(seleccionado.empresaNombre as string)?.charAt(0).toUpperCase() ?? '?'}
                   </Text>
                 )}
@@ -476,9 +484,9 @@ export default function CercaWebScreen() {
                   {(seleccionado.sector as string) ?? (seleccionado.ciudad as string) ?? (seleccionado.direccion as string) ?? ''}
                 </Text>
                 {typeof seleccionado.distanciaM === 'number' && (
-                  <View className="mt-1 flex-row items-center gap-1.5">
-                    <Navigation size={14} color={colors.primary.DEFAULT} />
-                    <Text className="text-small font-inter-semibold text-primary">
+                  <View className="mt-1 flex-row items-center gap-1.5 self-start rounded-full px-2 py-1" style={{ backgroundColor: selectedCompanyColor }}>
+                    <Navigation size={14} color={selectedCompanyForeground} />
+                    <Text className="text-small font-inter-semibold" style={{ color: selectedCompanyForeground }}>
                       A {formatearDistancia(seleccionado.distanciaM as number)} de ti
                     </Text>
                   </View>

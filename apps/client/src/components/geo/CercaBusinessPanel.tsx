@@ -1,8 +1,10 @@
 import { ArrowLeft, MapPin, PanelLeftClose, Search, Star, Tag, X } from 'lucide-react-native'
 import { ActivityIndicator, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { cn } from '../../lib/cn'
+import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
 import type { CercanoItem } from '../../lib/api'
 import type { SugerenciaUbicacion } from '../../lib/api'
+import { colors } from '../../theme/tokens'
 
 interface CercaBusinessPanelProps {
   resultados: CercanoItem[]
@@ -184,6 +186,9 @@ export function CercaBusinessPanel({
           const offers = getNumber(resultado, 'cantidadOfertas') ?? 0
           const opened = getBoolean(resultado, 'abierto')
           const selected = seleccionadoId === id
+          const rawCompanyColor = getString(resultado, 'colorPrimario')
+          const companyColor = brandColor(rawCompanyColor, colors.primary.DEFAULT)
+          const companyForeground = brandDisplayForeground(rawCompanyColor, colors.primary.DEFAULT)
 
           return (
             <Pressable
@@ -193,13 +198,23 @@ export function CercaBusinessPanel({
               accessibilityState={{ selected }}
               onPress={() => onSeleccionar(resultado)}
               className={cn('rounded-2xl border bg-card p-3', selected ? 'border-primary' : 'border-border')}
+              style={{
+                borderColor: selected ? companyColor : undefined,
+                borderLeftColor: companyColor,
+                borderLeftWidth: 4,
+              }}
             >
               <View className="flex-row gap-3">
                 {logo ? (
-                  <Image source={{ uri: logo }} className="h-12 w-12 rounded-xl bg-muted" resizeMode="cover" />
+                  <Image
+                    source={{ uri: logo }}
+                    className="h-12 w-12 rounded-xl border-2 bg-muted"
+                    style={{ borderColor: companyColor }}
+                    resizeMode="cover"
+                  />
                 ) : (
-                  <View className="h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
-                    <Text className="text-h3 font-inter-bold text-primary">{empresa.slice(0, 1).toUpperCase()}</Text>
+                  <View className="h-12 w-12 items-center justify-center rounded-xl" style={{ backgroundColor: companyColor }}>
+                    <Text className="text-h3 font-inter-bold" style={{ color: companyForeground }}>{empresa.slice(0, 1).toUpperCase()}</Text>
                   </View>
                 )}
                 <View className="min-w-0 flex-1 gap-1">
@@ -208,7 +223,14 @@ export function CercaBusinessPanel({
                       <Text className="text-small font-inter-semibold text-foreground" numberOfLines={1}>{empresa}</Text>
                       {sucursal && <Text className="text-caption text-muted-foreground" numberOfLines={1}>{sucursal}</Text>}
                     </View>
-                    {distance && <Text className="text-caption font-inter-semibold text-primary">{distance}</Text>}
+                    {distance && (
+                      <Text
+                        className="rounded-md px-2 py-1 text-caption font-inter-semibold"
+                        style={{ backgroundColor: companyColor, color: companyForeground }}
+                      >
+                        {distance}
+                      </Text>
+                    )}
                   </View>
                   <Text className="text-caption text-muted-foreground" numberOfLines={1}>
                     {[direccion, sector, ciudad].filter(Boolean).join(' · ') || 'Dirección no disponible'}
@@ -226,9 +248,9 @@ export function CercaBusinessPanel({
                       </View>
                     )}
                     {offers > 0 && (
-                      <View className="flex-row items-center gap-1">
-                        <Tag size={13} color="#5b21b6" />
-                        <Text className="text-caption font-inter-medium text-primary">
+                      <View className="flex-row items-center gap-1 rounded-md px-2 py-1" style={{ backgroundColor: companyColor }}>
+                        <Tag size={13} color={companyForeground} />
+                        <Text className="text-caption font-inter-medium" style={{ color: companyForeground }}>
                           {offers} {offers === 1 ? 'oferta' : 'ofertas'}
                         </Text>
                       </View>

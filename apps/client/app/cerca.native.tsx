@@ -21,6 +21,7 @@ import { useGeoAutocompletar, type SugerenciaUbicacion } from '../src/hooks/useG
 import type { CercanoItem } from '../src/lib/api'
 import { filtrarCercanosEnViewport, type MapViewportBounds } from '../src/lib/map-viewport'
 import { cn } from '../src/lib/cn'
+import { brandColor, brandDisplayForeground } from '../src/lib/brand-color'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '../src/theme/tokens'
 
@@ -30,8 +31,9 @@ const DEFAULT_CENTER = { latitude: 18.4861, longitude: -69.9312 }
 function BusinessMapMarker({ item, selected }: { item: CercanoItem; selected: boolean }) {
   const nombre = typeof item.empresaNombre === 'string' ? item.empresaNombre : 'Negocio'
   const logoUrl = typeof item.logoUrl === 'string' ? item.logoUrl : null
+  const rawCompanyColor = typeof item.colorPrimario === 'string' ? item.colorPrimario : null
+  const companyColor = brandColor(rawCompanyColor, colors.primary.DEFAULT)
   const tieneOfertas = item.tieneOfertas === true
-  const edgeColor = tieneOfertas ? colors.state.warning : colors.primary.DEFAULT
 
   return (
     <View
@@ -45,7 +47,7 @@ function BusinessMapMarker({ item, selected }: { item: CercanoItem; selected: bo
           top: 32,
           width: 11,
           height: 11,
-          backgroundColor: edgeColor,
+          backgroundColor: companyColor,
           borderRadius: 2,
           transform: [{ rotate: '45deg' }],
         }}
@@ -56,8 +58,8 @@ function BusinessMapMarker({ item, selected }: { item: CercanoItem; selected: bo
           height: selected ? 42 : 38,
           borderRadius: 21,
           borderWidth: 2,
-          borderColor: selected ? colors.primary.DEFAULT : edgeColor,
-          backgroundColor: colors.primary[100],
+          borderColor: companyColor,
+          backgroundColor: logoUrl ? colors.primary[100] : companyColor,
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
@@ -68,7 +70,7 @@ function BusinessMapMarker({ item, selected }: { item: CercanoItem; selected: bo
           elevation: selected ? 8 : 4,
         }}
       >
-        <Text style={{ color: colors.primary.DEFAULT, fontSize: 15, fontWeight: '700' }}>
+        <Text style={{ color: companyColor, fontSize: 15, fontWeight: '700' }}>
           {nombre.charAt(0).toUpperCase() || '?'}
         </Text>
         {logoUrl && (
@@ -104,7 +106,7 @@ function BusinessMapMarker({ item, selected }: { item: CercanoItem; selected: bo
             height: 48,
             borderRadius: 24,
             borderWidth: 3,
-            borderColor: colors.primary[100],
+            borderColor: companyColor,
           }}
         />
       )}
@@ -273,6 +275,12 @@ export default function CercaNativeScreen() {
     }).catch(() => { })
   }
 
+  const selectedCompanyColorValue = typeof seleccionado?.colorPrimario === 'string'
+    ? seleccionado.colorPrimario
+    : null
+  const selectedCompanyColor = brandColor(selectedCompanyColorValue, colors.primary.DEFAULT)
+  const selectedCompanyForeground = brandDisplayForeground(selectedCompanyColorValue, colors.primary.DEFAULT)
+
   return (
     <View className="flex-1 bg-background">
       <View className="flex-1 overflow-hidden">
@@ -370,7 +378,7 @@ export default function CercaNativeScreen() {
         contentStyle={{
           width: '95%',
           maxWidth: 640,
-          height: '25%',
+          height: '30%',
           alignSelf: 'center',
         }}
         footer={seleccionado
@@ -381,18 +389,19 @@ export default function CercaNativeScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Cómo llegar a este negocio"
-            className="flex-row items-center justify-center gap-2 rounded-lg border border-border py-3 active:bg-muted"
+            className="flex-row items-center justify-center gap-2 rounded-lg py-3 active:opacity-80"
+            style={{ backgroundColor: selectedCompanyColor }}
             onPress={() => void abrirNavegacion(seleccionado)}
           >
-            <Navigation size={16} color={colors.primary.DEFAULT} />
-            <Text className="text-small font-inter-semibold text-foreground">Cómo llegar</Text>
+            <Navigation size={16} color={selectedCompanyForeground} />
+            <Text className="text-small font-inter-semibold" style={{ color: selectedCompanyForeground }}>Cómo llegar</Text>
           </Pressable>
         ) : null}
       >
         {seleccionado && (
           <View className="gap-3 pb-4">
             <View className="flex-row items-start gap-3">
-              <View className="h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-primary/10">
+              <View className="h-12 w-12 items-center justify-center overflow-hidden rounded-xl" style={{ backgroundColor: selectedCompanyColor }}>
                 {typeof seleccionado.logoUrl === 'string' && seleccionado.logoUrl.length > 0 ? (
                   <Image
                     accessibilityLabel={`Logo de ${typeof seleccionado.empresaNombre === 'string' ? seleccionado.empresaNombre : 'negocio'}`}
@@ -401,7 +410,7 @@ export default function CercaNativeScreen() {
                     style={{ width: '100%', height: '100%' }}
                   />
                 ) : (
-                  <Text className="text-small font-inter-bold text-primary">
+                  <Text className="text-small font-inter-bold" style={{ color: selectedCompanyForeground }}>
                     {(seleccionado.empresaNombre as string)?.charAt(0).toUpperCase() ?? '?'}
                   </Text>
                 )}
@@ -414,9 +423,9 @@ export default function CercaNativeScreen() {
                   {(seleccionado.sector as string) ?? (seleccionado.ciudad as string) ?? (seleccionado.direccion as string) ?? ''}
                 </Text>
                 {typeof seleccionado.distanciaM === 'number' && (
-                  <View className="mt-1 flex-row items-center gap-1.5">
-                    <Navigation size={14} color={colors.primary.DEFAULT} />
-                    <Text className="text-small font-inter-semibold text-primary">
+                  <View className="mt-1 flex-row items-center gap-1.5 self-start rounded-full px-2 py-1" style={{ backgroundColor: selectedCompanyColor }}>
+                    <Navigation size={14} color={selectedCompanyForeground} />
+                    <Text className="text-small font-inter-semibold" style={{ color: selectedCompanyForeground }}>
                       A {formatearDistancia(seleccionado.distanciaM as number)} de ti
                     </Text>
                   </View>

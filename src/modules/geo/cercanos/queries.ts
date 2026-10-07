@@ -34,6 +34,7 @@ export interface FilaSucursalCercana {
   empresaNombre: string
   empresaSlug: string
   logoUrl: string | null
+  colorPrimario: string | null
   tipo: string
   direccion: string | null
   telefono: string | null
@@ -142,6 +143,7 @@ function distanciaDesde(postgis: boolean, lat: Prisma.Sql, lng: Prisma.Sql, alia
 const COLUMNAS_BASE = Prisma.sql`
   s.id, s.nombre, s."companyId" AS "empresaId",
   c.name AS "empresaNombre", c.slug AS "empresaSlug", c."logoUrl",
+  c."colorPrimario" AS "colorPrimario",
   c.type AS tipo, s.direccion, s.telefono, s.latitud, s.longitud,
   s."ciudadTexto" AS ciudad, s."sectorTexto" AS sector,
   COALESCE(of.cnt, 0)::int AS "cantidadOfertas", of.titulo AS "ofertaTitulo",
@@ -314,6 +316,7 @@ function filaADto(f: FilaSucursalCercana): SucursalCercana {
     empresaNombre: f.empresaNombre,
     empresaSlug: f.empresaSlug,
     logoUrl: f.logoUrl,
+    colorPrimario: f.colorPrimario,
     tipo: f.tipo,
     direccion: f.direccion,
     telefono: f.telefono,
