@@ -76,7 +76,7 @@ const PRESUPUESTOS = [
   {
     id: 'total',
     nombre: 'JavaScript de cliente (todo)',
-    techoKB: 8100, // 2026-09-24: subido de 7500 por Membego Supply (pantallas de superadmin, panel y cliente; medido 7646 KB). Mismo caso que el CRM: no entró ninguna librería —la entrada compartida sigue en 856 KB y el mayor trozo en 520 KB, ambos intactos—, entró un módulo entero. Se mantiene el margen por el mismo motivo de siempre
+    techoKB: 9200, // 2026-10-07: subido de 8100 por app universal cliente y orquestación de pagos CardNET (medido 8748 KB). Entrada compartida (868 KB) y mayor trozo (527 KB) se mantienen bajo sus techos.
     porque: 'Indicador general de peso del proyecto. Ningún usuario lo descarga entero.',
   },
   {

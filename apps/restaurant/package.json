@@ -9,7 +9,7 @@
     "dev": "tsx src/servidor.ts"
   },
   "dependencies": {
-    "@membego/platform-sdk": "workspace:*",
+    "@membego/platform-sdk": "*",
     "@prisma/client": "^6"
   }
 }

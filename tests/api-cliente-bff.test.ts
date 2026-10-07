@@ -1,4 +1,4 @@
-// @ts-ignore - bun:test proveído por el runtime de Bun
+// @ts-expect-error - bun:test proveído por el runtime de Bun
 import { mock } from 'bun:test'
 mock.module('server-only', () => ({}))
 

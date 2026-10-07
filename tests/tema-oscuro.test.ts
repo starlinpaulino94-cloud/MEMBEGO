@@ -62,8 +62,6 @@ const DECLARADOS = new Map<string, string>([
   // ReceiptTicket y CampanaLanding NO están aquí: usan blanco fijo CON texto
   // oscuro fijo, que es una pareja coherente y la guardia no la señala.)
   ['src/app/(cliente)/cliente/invita-y-gana/page.tsx', 'sección festiva de tema claro'],
-  // Carcasa retail Stitch: buscador y botones circulares blancos sobre degradado de marca.
-  ['src/components/layout/CustomerShell.tsx', 'buscador y botones sobre degradado (contrato Stitch retail)'],
 ])
 
 function archivosTsx(dir: string, salida: string[] = []): string[] {
