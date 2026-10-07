@@ -90,14 +90,14 @@ export function PublicNav() {
         {/* Toggle móvil (con el carrito al lado) */}
         <div className="flex items-center gap-1 md:hidden">
           <IconoCarrito />
-        <button
-          onClick={() => setOpen(!open)}
-          className="rounded-lg p-2 text-foreground transition-colors hover:bg-foreground/5"
-          aria-label="Menú"
-          aria-expanded={open}
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+          <button
+            onClick={() => setOpen(!open)}
+            className="rounded-lg p-2 text-foreground transition-colors hover:bg-foreground/5"
+            aria-label="Menú"
+            aria-expanded={open}
+          >
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
       </nav>
 

@@ -45,6 +45,9 @@ export interface RenglonResumido {
   problema: string | null
 }
 
+/** Lo que se enseña a cualquiera: el renglón SIN el número exacto de existencias (eso es del negocio). */
+export type RenglonPublico = Omit<RenglonResumido, 'existencias'>
+
 export interface ResumenDeCarrito {
   moneda: string
   renglones: RenglonResumido[]
@@ -52,6 +55,21 @@ export interface ResumenDeCarrito {
   total: string
   /** Hay al menos un renglón y ninguno tiene problema: se puede pagar. */
   comprable: boolean
+}
+
+export interface ResumenPublico extends Omit<ResumenDeCarrito, 'renglones'> {
+  renglones: RenglonPublico[]
+}
+
+/** El resumen sin las existencias exactas: quien arma un carrito sin cuenta solo se entera de «solo quedan N» al pedir de más. */
+export function aResumenPublico(r: ResumenDeCarrito): ResumenPublico {
+  return {
+    ...r,
+    renglones: r.renglones.map(({ existencias: _e, ...resto }) => {
+      void _e
+      return resto
+    }),
+  }
 }
 
 const dos = (n: number) => (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2)

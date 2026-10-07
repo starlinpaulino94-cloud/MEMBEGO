@@ -73,3 +73,9 @@ test('pagar reutiliza el único camino para crear pedidos y no cobra: la transfe
   assert.match(servicio, /crearPedidoEnTx\(/)
   assert.doesNotMatch(servicio, /registrarPagoEnTx|completarPorQrEnTx|cerrarPedidoExternoEnTx|marcarListoEnTx/)
 })
+
+test('la lectura pública del carrito no devuelve el número exacto de existencias', () => {
+  const resto = cuerpo('resumirCarrito')
+  const solo = resto.slice(0, resto.indexOf('export async function hacerCheckout'))
+  assert.match(solo, /aResumenPublico\(resumen\)/)
+})

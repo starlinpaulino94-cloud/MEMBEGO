@@ -28,7 +28,7 @@ import { PedidoError } from '@/modules/orders/errores'
 import { empresaRecibePedidos } from '@/modules/orders/publico'
 import type { ContextoPedido } from '@/modules/orders/service'
 import { MAX_LINEAS_CARRITO, leerCarrito, type LineaDeCarrito } from './domain'
-import { crearPedidoDelCarritoEnTx, resumenDelCarritoEnTx, type ResumenDeCarrito } from './service'
+import { aResumenPublico, crearPedidoDelCarritoEnTx, resumenDelCarritoEnTx, type ResumenPublico } from './service'
 import { transferenciaDisponible } from './publico'
 
 export type Resultado<T> = ({ ok: true } & T) | { ok: false; error: string; sinSesion?: boolean }
@@ -58,7 +58,7 @@ export interface EmpresaDelCarrito {
 }
 
 /** El carrito de un negocio con precios y existencias de hoy. Sin sesión. */
-export async function resumirCarrito(entrada: { companySlug: string; sucursalId?: string | null; lineas: unknown }): Promise<Resultado<{ empresa: EmpresaDelCarrito; resumen: ResumenDeCarrito }>> {
+export async function resumirCarrito(entrada: { companySlug: string; sucursalId?: string | null; lineas: unknown }): Promise<Resultado<{ empresa: EmpresaDelCarrito; resumen: ResumenPublico }>> {
   try {
     if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
     const h = await headers()
@@ -75,7 +75,7 @@ export async function resumirCarrito(entrada: { companySlug: string; sucursalId?
     const sucursalId = texto(entrada.sucursalId)
     const lineas = lineasLimpias(entrada.lineas)
     const resumen = await conEmpresa(empresa.id, (tx) => resumenDelCarritoEnTx(tx, empresa.id, lineas, empresa.sucursales.some((s) => s.id === sucursalId) ? sucursalId : null))
-    return { ok: true, empresa: { slug: empresa.slug, nombre: empresa.name, sucursales: empresa.sucursales }, resumen }
+    return { ok: true, empresa: { slug: empresa.slug, nombre: empresa.name, sucursales: empresa.sucursales }, resumen: aResumenPublico(resumen) }
   } catch (e) {
     return aError(e)
   }

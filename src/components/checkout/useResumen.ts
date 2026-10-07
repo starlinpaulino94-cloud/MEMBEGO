@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react'
 import { resumirCarrito, type EmpresaDelCarrito } from '@/modules/checkout/actions'
 import type { LineaDeCarrito } from '@/modules/checkout/domain'
-import type { ResumenDeCarrito } from '@/modules/checkout/service'
+import type { ResumenPublico } from '@/modules/checkout/service'
 
-export type EstadoResumen = { estado: 'cargando' } | { estado: 'error'; error: string } | { estado: 'listo'; empresa: EmpresaDelCarrito; resumen: ResumenDeCarrito }
+export type EstadoResumen = { estado: 'cargando' } | { estado: 'error'; error: string } | { estado: 'listo'; empresa: EmpresaDelCarrito; resumen: ResumenPublico }
 
 /**
  * Los precios y la disponibilidad de un carrito, tal como están HOY en el servidor. Se vuelve a pedir cuando
