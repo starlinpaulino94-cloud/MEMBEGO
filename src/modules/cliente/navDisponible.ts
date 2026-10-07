@@ -4,6 +4,7 @@ import { getGrowthConfig } from '@/modules/growth/config'
 import {
   capacidadesDeEmpresa,
   rutasOcultasCliente,
+  RUTAS_POR_MODULO_CLIENTE,
   CATEGORIAS_CON_VEHICULO,
   type ModuloCliente,
 } from '@/modules/capacidades/catalogo'
@@ -54,6 +55,7 @@ export async function getNavOcultoCliente(
       regalosP2P,
       giftCards,
       campanasInvitacion,
+      pedidos,
       empresa,
     ] = await conEmpresa(companyId, (tx) =>
       Promise.all([
@@ -107,6 +109,8 @@ export async function getNavOcultoCliente(
             fechaFin: { gte: now },
           },
         }),
+        // Pedidos Membego de este cliente (cualquier estado).
+        tx.membegoOrder.count({ where: { companyId, customerId: clienteId } }),
         tx.company.findUnique({
           where: { id: companyId },
           // `tipoNegocioCodigo` incluido: sin él, el menú del cliente decidía
@@ -154,7 +158,22 @@ export async function getNavOcultoCliente(
         vehiculos > 0,
     }
 
-    return rutasOcultasCliente(disponible, modulosCliente)
+    const ocultas = rutasOcultasCliente(disponible, modulosCliente)
+    // Fase 0: sin la capacidad RULETA el módulo no existe para el cliente. Va
+    // DESPUÉS de los forzados a propósito: un `MOSTRAR` viejo del panel no
+    // puede resucitar una pantalla cuya acción de giro ya está cerrada.
+    if (!activas.has('RULETA')) {
+      for (const ruta of RUTAS_POR_MODULO_CLIENTE.RULETA) {
+        if (!ocultas.includes(ruta)) ocultas.push(ruta)
+      }
+    }
+    // Commerce Core · Fase 3: «Mis pedidos» solo se ofrece si la empresa recibe
+    // pedidos o la persona ya tiene alguno (su historial no desaparece si la
+    // empresa apaga la capacidad).
+    if (!activas.has('PEDIDOS_MEMBEGO') && pedidos === 0 && !ocultas.includes('/cliente/pedidos')) {
+      ocultas.push('/cliente/pedidos')
+    }
+    return ocultas
   } catch (e) {
     console.error('[navDisponible]', e)
     // Ante un fallo, no ocultamos nada (mejor mostrar de más que romper el menú).

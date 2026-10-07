@@ -56,6 +56,17 @@ const USUARIOS = {
    * resolución fallaría con `ACTOR_DE_INTEGRACION` —y fallaría con razón—.
    */
   integracion: { email: 'e2e.supply2.integracion@membego.test', nombre: 'Integración Supply E2E', role: 'SUPERADMIN' },
+  /**
+   * Commerce Core · catálogo (F1): el administrador de una empresa CON la
+   * capacidad y el de otra SIN ella. Viven aquí y no en un archivo propio
+   * porque firmar la sesión es lo mismo; el nombre del archivo es de origen.
+   */
+  catalogoConCapacidad: { email: 'e2e.catalogo.con@membego.test', nombre: 'Admin Catálogo E2E', role: 'ADMINISTRADOR' },
+  catalogoSinCapacidad: { email: 'e2e.catalogo.sin@membego.test', nombre: 'Admin Sin Catálogo E2E', role: 'ADMINISTRADOR' },
+  /** Commerce Core · pedidos (F3): quien atiende los pedidos de una empresa, quien los pide y quien tiene el catálogo pero no los pedidos. */
+  pedidosAdmin: { email: 'e2e.pedidos.admin@membego.test', nombre: 'Admin Pedidos E2E', role: 'ADMINISTRADOR' },
+  pedidosCliente: { email: 'e2e.pedidos.cliente@membego.test', nombre: 'Marta Pedidos E2E', role: 'CLIENTE' },
+  pedidosSinCapacidad: { email: 'e2e.pedidos.sin@membego.test', nombre: 'Admin Sin Pedidos E2E', role: 'ADMINISTRADOR' },
 } as const
 
 export type RolE2E = keyof typeof USUARIOS

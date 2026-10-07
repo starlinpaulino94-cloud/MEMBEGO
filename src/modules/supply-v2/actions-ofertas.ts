@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import type { SupplyV2PaymentMethod } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { exigirPermisoSupplyV2 } from './permisos'
@@ -9,6 +10,7 @@ import type { SupplyV2AvailabilityMode, SupplyV2OfferPriceMode } from '@prisma/c
 import { cerrarOfertaEnTx, crearOfertaComisionEnTx, crearOfertaEnTx, editarOfertaEnTx, pausarOfertaEnTx, publicarOfertaEnTx, reanudarOfertaEnTx, type OfertaCreada } from './offers/service'
 import { confirmarPagoEnTx, rechazarPagoEnTx, type PagoConfirmado } from './commerce/checkout'
 import { RUTA_OFERTAS_PUBLICAS } from './core/catalogo'
+import { sincronizarOfertaMejorEsfuerzo } from '@/modules/supply-bridge/barrido'
 
 /**
  * MEMBEGO SUPPLY · server actions de OFERTAS y COBROS (lado plataforma).
@@ -18,6 +20,10 @@ function refrescarOfertas(id?: string): void {
   refrescarSupplyV2('ofertas', 'supply', ...(id ? [`ofertas/${id}`] : []))
   revalidatePath('/promociones')
   revalidatePath(RUTA_OFERTAS_PUBLICAS, 'layout')
+  // Puente Supply → Catálogo (Fase 2.5): refleja el cambio en el catálogo de la
+  // casa DESPUÉS de responder y sin poder tumbar la acción (la oferta ya se
+  // guardó); si falla, el barrido del cron lo recoge.
+  if (id) after(() => sincronizarOfertaMejorEsfuerzo(id))
 }
 
 /** El wizard crea y PUBLICA en una sola transacción: sin borradores que bloqueen supply (§12). */

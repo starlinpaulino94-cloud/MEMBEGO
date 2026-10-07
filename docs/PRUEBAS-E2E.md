@@ -141,6 +141,88 @@ relleno y una base desechable.
 
 ---
 
+**El catálogo unificado (Commerce Core)** — `catalogo-admin`, `catalogo-publico`
+y `catalogo-api`, con el arnés de siembra `catalogo-arnes.ts`. Reutilizan el
+mismo truco de sesiones firmadas, sin Supabase:
+
+- `catalogo-admin` (escritorio): el panel de punta a punta — alta, precio,
+  publicar, variantes (el selector aparece y desaparece), categoría, foto sin
+  Storage (avisa y la pantalla sigue viva), filtros — y comprueba que **lo
+  publicado desde el panel se ve** en la vitrina de la empresa, en `/catalogo`
+  y en el inicio, y que **pausarlo lo saca**: es la prueba de que el panel
+  invalida la caché del marketplace. Además: un ítem de otra empresa se ve igual
+  que uno inexistente, y una empresa sin la capacidad no entra ni ve el menú.
+- `catalogo-publico` (móvil **y** escritorio, datos sembrados): qué se ve (precio,
+  «antes» tachado, «desde», agotada marcada, descontinuada ausente) y qué no
+  (borrador, pausado, «solo caja», empresa sin capacidad o sin publicar — todas
+  idénticas a un 404 —, ni costo ni SKU en el HTML), sin desbordes horizontales
+  y sin errores de consola.
+- `catalogo-api` (HTTP puro, con claves de empresa reales sembradas): el costo
+  solo hacia la clave de la propia empresa, la API arma **borradores** y no
+  publica, aislamiento entre empresas y `catalog_not_enabled`.
+
+**El inventario (Commerce Core · Fase 2)** — `inventario-admin` (escritorio),
+con el mismo arnés (`itemSembrado({ controlaInventario: true })`,
+`sucursalSembrada`, `varianteDe`): lista agotada → entrada → faltante sin motivo
+(el navegador no deja enviar) → faltante con motivo → faltante imposible (avisa y
+no mueve) → daño → baja de lo dañado → umbral y alerta en la lista → transferencia
+entre sucursales → conteo físico → historial con cada movimiento; la variante de
+otra empresa se ve igual que una inventada, y una empresa sin la capacidad no
+entra. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
+disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
+144 combinaciones tipo×origen×destino las prueban `tests/postgres/inventory.db.test.ts`
+y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba
+la interfaz.
+
+**El puente Supply → Catálogo (Commerce Core · Fase 2.5)** — `puente-supply`
+(escritorio), con `puente-arnes.ts` (proveedor, producto, asignación y ofertas de
+Supply sembrados por Prisma): sin casa → el superadmin la designa → sincroniza →
+las ofertas aparecen en `/catalogo` (franja «Ofertas MembeGo», filtro de origen,
+ficha) y la tarjeta lleva a la compra de Supply → **pausar una oferta desde la
+interfaz de Supply la saca del catálogo** (ejercita el enganche real `after()`) →
+retirar la casa saca todo; un no-superadmin no entra. La casa es **una sola por
+base**: el spec la designa y la retira, así que no debe correrse en paralelo con
+otro que la use.
+
+**Pedidos Membego (Commerce Core · Fase 3)** — `pedidos-membego` (escritorio),
+con el mismo arnés (`empresaCatalogo({ capacidad: true, pedidos: true })`,
+`existenciasSembradas`) y tres sesiones: la de la empresa (`pedidosAdmin`), la de
+quien pide (`pedidosCliente`) y la de otra cliente (`cliente2`). Recorre: la ficha
+pública ofrece «Hacer un pedido» solo si la empresa recibe pedidos; sin sesión,
+pedir manda a iniciar sesión y vuelve; el cliente pide 2 unidades (nace «Esperando
+a la empresa», **aparta** el stock y la empresa recibe el aviso) → la empresa lo
+acepta, ajusta el monto (sin motivo no envía) y lo marca listo → el cliente ve el
+monto ajustado, lo confirma y ve su QR (y ya no puede cancelar) → **el empleado
+escanea el QR con una ráfaga de teclas (lector físico) y lo cierra**: el stock baja,
+la reserva se consume y el nivel queda «Confirmado por el cliente»; un segundo
+escaneo dice «ya se canjeó» → la empresa registra el pago con referencia y sube a
+«Pago verificado» → el cliente cancela a tiempo y se libera lo apartado; la empresa
+cancela otro con su motivo → reembolso devolviendo lo vendido al inventario → otra
+empresa no ve el pedido (se ve igual que uno inventado) y una empresa sin la
+capacidad no entra. La ráfaga del lector tiene una trampa: tras recargar
+`/empleado/scanner` hay que esperar a «Lector listo» antes de teclear, o las
+primeras teclas se pierden y el código llega incompleto (sale «Código QR no
+encontrado»). **Ojo:** como el resto, corre sobre una base creada con `db push` (sin
+los disparadores ni los CHECK de las migraciones; esos los prueban
+`tests/postgres/orders.db.test.ts` y `scripts/probar-rls.mjs`).
+
+Tres cosas que costó aprender y conviene no repetir:
+
+1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de
+   auth reintenta sin parar contra el puerto sin nadie escuchando y la red no
+   queda en reposo nunca (la navegación agota el plazo). Usa aserciones con
+   reintento.
+2. **Las páginas en streaming tienen un instante con el contenido duplicado**
+   (una copia oculta que Next intercambia). `getByText` cuenta las ocultas y da
+   «strict mode violation»; `getByRole` no. Para presencia usa roles o
+   `expect(locator).toHaveCount(1)` antes de actuar.
+3. **La lista del marketplace se cachea 120 s por combinación de filtros** y la
+   invalida el panel, no una siembra por Prisma. Para datos sembrados, busca por
+   el sufijo único de la corrida (otra clave de caché); lo que invalida la caché
+   se prueba desde el panel.
+
+---
+
 ## 4. Lo que todavía falta
 
 Del recorrido del cliente **de membresías** (el de `Cliente`/`Visita`, no el de

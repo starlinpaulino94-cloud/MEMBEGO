@@ -1,7 +1,7 @@
 import 'server-only'
 
 import type { Prisma } from '@prisma/client'
-import { sinEmpresa } from '@/lib/tenant'
+import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { motivoNoComprable } from '../core/estados'
 import { calcularPrecioOferta } from '../core/precios'
 import { SIN_TOPE, unidadesLibres, unidadesLibresComision } from '../offers/domain'
@@ -119,4 +119,18 @@ export async function ofertaPublicaPorSlug(slug: string): Promise<MarketplaceSup
   )
   if (!f || f.status === 'DRAFT' || f.status === 'CANCELLED') return null
   return aDto(f, ahora)
+}
+
+/**
+ * Una oferta en su forma pública MÁS su estado crudo, dentro de la transacción
+ * de quien llama. La usa el puente Supply → Catálogo (Fase 2.5): necesita lo
+ * mismo que ve el público (precios ya calculados, unidades libres, si se puede
+ * comprar) sin duplicar esas reglas, y necesita leerlo bajo SU transacción
+ * —una lectura aparte no vería lo que esa transacción acaba de escribir—.
+ * Devuelve el mismo DTO cerrado: nunca costos, lotes ni ledger.
+ */
+export async function ofertaParaPuenteEnTx(tx: Tx, offerId: string): Promise<{ oferta: MarketplaceSupplyOffer; status: string } | null> {
+  const f = await tx.supplyV2Offer.findUnique({ where: { id: offerId }, select: SELECT })
+  if (!f) return null
+  return { oferta: aDto(f, new Date()), status: f.status }
 }

@@ -20,9 +20,9 @@
    caída, columna sin migrar o empresa sin config = todo lo actual permitido.
 5. **Barrera real**: `requireSection` (guards.ts) ahora exige rol **Y**
    capacidad. Solo gatea las secciones mapeadas en `SECCIONES_POR_CAPACIDAD`
-   (citas, seguimiento, gamificación) — el núcleo (clientes, membresías,
-   pagos…) no está mapeado y **no puede apagarse por error**. El superadmin
-   nunca se gatea.
+   (citas, seguimiento, gamificación, leads/CRM, supply, publicaciones,
+   comunicación) — el núcleo (clientes, membresías, pagos…) no está mapeado y
+   **no puede apagarse por error**. El superadmin nunca se gatea.
 
 ## Catálogo v1
 
@@ -31,13 +31,98 @@
 | `NAVEGACION_V2` | Oculta los módulos operativos del menú MembeGo (viven solo en la app; interruptor D7, E2) | ❌ apagada |
 | `CITAS` | Sección citas | ✅ |
 | `SEGUIMIENTO` | Sección seguimiento | ✅ |
-| `RULETA` | Sección gamificación | ✅ |
+| `RULETA` | Sección gamificación **y** la ruleta del cliente (`/cliente/ruleta`, acción de giro, acceso en Inicio y «Mis membresías») | ❌ apagada desde la Fase 0 |
 | `GIFT_CARDS` | (flujo regalos — cableado fino en E4) | ✅ |
 | `CITA_ANTES_DEL_QR` | (flujo del QR — cableado fino en E4) | ✅ |
 | `POS_CAJA` | (caja del empleado — cableado fino en E4) | ✅ |
 | `INVENTARIO` | Módulo futuro (P2 · E5) | ❌ |
 | `COLA_VEHICULOS` | Módulo futuro (P2 · E5) | ❌ |
 | `EVIDENCIA_FOTOS` | Módulo futuro (P2 · E5) | ❌ |
+| `CRM` | Sección `leads` (todo `/admin/crm`, incluida la bandeja de conversaciones) | ✅ para empresas existentes; ❌ en tenants nuevos (ver «Defaults de la Fase 0») |
+| `MENSAJERIA` | Sección `comunicacion` (`/admin/comunicacion`: canales, FAQ, conexión) | ✅ para empresas existentes; ❌ en tenants nuevos |
+| `PUBLICACIONES` | Sección `publicaciones` (`/admin/publicaciones`) | ❌ apagada desde la Fase 0 |
+| `HOME_BUILDER` | Editor de inicio dentro de `/admin/personalizacion` (**no** tiene sección propia: comparte página con el formulario de marca, que no se oculta) | ❌ apagada desde la Fase 0 |
+| `CATALOGO_UNIFICADO` | Secciones `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) e `inventario` (`/admin/inventario`, Fase 2: existencias por variante y sucursal) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
+| `PEDIDOS_MEMBEGO` | Sección `pedidos-membego` (`/admin/pedidos-membego`, Commerce Core · Fase 3: pedidos del marketplace con atribución, confirmación del cliente y QR). Con ella la ficha pública de sus productos ofrece «Hacer un pedido» y «Mis pedidos» aparece en el menú del cliente | ❌ apagada para todos; solo tiene sentido en empresas con `CATALOGO_UNIFICADO` (las líneas del pedido son variantes del catálogo) |
+
+### Cómo encender los pedidos Membego en una empresa
+
+`PEDIDOS_MEMBEGO` tampoco está en ningún paquete base. Se enciende, además de
+`CATALOGO_UNIFICADO`, con un override por empresa (`overrides: { CATALOGO_UNIFICADO: true,
+PEDIDOS_MEMBEGO: true }`). Hace falta que la empresa esté publicada y tenga al menos una
+sucursal activa. Sin ella, la acción de pedir responde «este producto no está disponible
+para pedir» y el panel se niega. Si se apaga con pedidos ya hechos, el cliente conserva
+«Mis pedidos» y el historial.
+
+### Cómo encender el catálogo unificado en una empresa
+
+`CATALOGO_UNIFICADO` no está en ningún paquete base. Se enciende con un override
+por empresa desde `/superadmin/capacidades` (`overrides: { CATALOGO_UNIFICADO: true }`).
+Con ella: aparece «Catálogo» en el menú (*Oferta comercial*) y se abre
+`/admin/catalogo`; sin ella, la sección se niega (`requireSection`) y la entrada
+no se pinta. Los datos que se hayan creado se conservan si se apaga después.
+
+El **inventario** (Fase 2) no tiene capacidad propia: cuelga de esta misma. Al
+encenderla aparece también «Inventario» en el menú, y solo lleva existencias de
+los productos que tienen activado «Controla inventario» en su ficha del
+catálogo (los servicios no). Se activa por sucursal: hace falta al menos una
+sucursal activa en la empresa.
+
+### El puente Supply → Catálogo (empresa «de la casa»)
+
+Las ofertas de Supply 2.0 son de Membego, no de una empresa. Para que aparezcan
+en el catálogo y en `/catalogo` («Ofertas MembeGo») hace falta una **empresa de la
+casa** que sea su dueña en el catálogo: el superadmin la designa en
+`/superadmin/puente-supply`. Esa empresa necesita, **a mano**: estar activa y
+publicada, no ser de demostración y tener `CATALOGO_UNIFICADO: true` en su
+override (el panel muestra los requisitos pero no los enciende). Sin casa
+designada el puente no hace nada. Retirar la casa archiva los ítems puente (se
+conservan y se reactivan al designar una nueva).
+
+## Defaults de la Fase 0 (Plan Maestro §8)
+
+Ocultamiento de módulos secundarios mientras el foco pasa a Commerce Core y
+Marketplace. Se hace con este mismo sistema, sin borrar datos:
+
+| Módulo | Capacidad | Para empresas existentes | Para tenants nuevos |
+|---|---|---|---|
+| Gamificación / ruleta | `RULETA` | apagada | apagada |
+| Publicaciones (blog) | `PUBLICACIONES` | apagada | apagada |
+| Editor de inicio | `HOME_BUILDER` | apagada | apagada |
+| CRM | `CRM` | **encendida** (no pierden nada) | apagada |
+| Mensajería / comunicación | `MENSAJERIA` | **encendida** | apagada |
+
+- **Existente vs. nuevo no es una fecha, es un override.** `CRM` y `MENSAJERIA`
+  siguen en `CAPACIDADES_BASE`; los tres puntos de alta de empresa
+  (`registrarEmpresa`, `crearEmpresaDesdeSolicitud`, `crearEmpresa`) y
+  `duplicarEmpresa` escriben `capacidades: { overrides: CAPACIDADES_OVERRIDE_TENANT_NUEVO }`
+  (`CRM: false`, `MENSAJERIA: false`). Cualquier alta nueva de empresa DEBE
+  usar esa constante. La copia de `duplicarEmpresa` no hereda las capacidades
+  del original: nace como tenant nuevo.
+- **Reactivar** cualquiera es un override desde el panel de capacidades
+  (`/superadmin/capacidades`); `RULETA`, `PUBLICACIONES` y `HOME_BUILDER`
+  pueden volver a encenderse por empresa cuando se decida.
+- **Dónde se cierra cada una.** Rutas de admin: `requireSection` vía
+  `SECCIONES_POR_CAPACIDAD`. `HOME_BUILDER` (sin sección): la página
+  `personalizacion` no pinta el editor y las acciones de `modules/home` se
+  niegan. `RULETA` en el cliente: `/cliente/ruleta` redirige, `girarRuleta`
+  responde «no disponible», y `navDisponible` fuerza oculta la ruta **aunque
+  un `MOSTRAR` viejo del panel diga lo contrario**.
+- **Los datos persisten.** Premios, jugadas, publicaciones e historial siguen
+  en base de datos. Las publicaciones ya emitidas siguen viéndose en el perfil
+  público de la empresa (solo se cierra la gestión).
+- **La bandeja de conversaciones es del CRM**, no de `MENSAJERIA`:
+  `/admin/crm/conversaciones` y sus acciones (`modules/mensajeria/actions.ts`)
+  cuelgan de `leads`.
+- **Puntos y niveles de gamificación no dependen de `RULETA`**: se derivan de
+  hechos reales y siguen mostrándose; solo desaparece el acceso a la ruleta.
+- Supply V1 **no** se ocultó en la Fase 0 (ver Plan Maestro, decisión abierta).
+- Al sumar una capacidad nueva, hay cuatro listas que mantener en sincronía:
+  `CAPACIDADES`/`CAPACIDAD_LABELS` (catálogo), `FUNCIONES_EMPRESA`
+  (`modules/plataforma/conceptos.ts`), `CapacidadNav` (`nav-config.ts`) y
+  `CAPACIDADES_DEL_MENU` (`modules/navegacion/contexto.ts`). Las pruebas
+  `plataforma-conceptos`, `navegacion-espacios` y `capacidades-fase0` avisan si
+  se separan.
 
 ## API para el equipo
 
@@ -323,7 +408,7 @@ capas, en este orden**:
 | `BENEFICIOS` | `/cliente/mis-promociones` | el cliente compró beneficios o recibió regalos VIP |
 | `REGALOS` | `/cliente/regalos` | `GIFT_CARDS` encendida **o** ya hay regalos/gift cards suyas |
 | `INVITA_Y_GANA` | `/cliente/invita-y-gana` | hay campaña ACTIVA **y** el programa premia algo |
-| `RULETA` | `/cliente/ruleta` | hay premios activos |
+| `RULETA` | `/cliente/ruleta` | hay premios activos **y** la capacidad `RULETA` está encendida (sin ella se oculta siempre, incluso con `MOSTRAR`) |
 | `CITAS` | `/cliente/citas` | `CITAS` encendida **o** el cliente ya tiene citas |
 | `VEHICULOS` | `/cliente/vehiculos` | la categoría trabaja con vehículos **o** el cliente ya registró uno |
 

@@ -38,6 +38,23 @@
  *                           pantalla que ve el cliente no cruza empresas, ni
  *                           leyéndola ni colgando un bloque de una revisión
  *                           ajena.
+ *   8-9. Supply          — el derecho/pedido es de quien lo cumple, no de la
+ *                           ficha del cliente; el cobro de la plataforma no es
+ *                           de ningún inquilino.
+ *   10. Catálogo          — `catalog_*` (Commerce Core): ítems, variantes y
+ *                           categorías no cruzan empresas, ni leyendo, ni
+ *                           escribiendo, ni colgando una variante de un ítem
+ *                           ajeno (FK compuesta).
+ *   11. Inventario        — `inventory_*` (Commerce Core · Fase 2): saldos,
+ *                           movimientos y reservas no cruzan empresas, ni se
+ *                           puede juntar la variante de una con la sucursal
+ *                           de otra, y el ledger no se edita ni con el
+ *                           contexto correcto.
+ *   12. Pedidos Membego   — `membego_orders` y sus hijas (Commerce Core · Fase 3):
+ *                           pedidos, líneas y atribución no cruzan empresas, ni
+ *                           se puede juntar el cliente de una con la sucursal
+ *                           de otra, y las líneas no se editan ni con el
+ *                           contexto correcto.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * USO
@@ -134,6 +151,21 @@ function fallaComoInquilino(companyId, consulta) {
   }
 }
 
+/**
+ * ¿Existe este disparador? Las reglas que protegen el ledger y las líneas de un
+ * pedido viven en las MIGRACIONES (Prisma no sabe expresarlas), y CI crea esta
+ * base con `db push`, que no las trae: ahí esas comprobaciones no aplican y se
+ * omiten diciéndolo. Las cubren los tests contra PostgreSQL (`npm run test:db`),
+ * que sí parten de `migrate deploy`.
+ */
+function hayDisparador(nombre) {
+  return sql(`select count(*) from pg_trigger where tgname = '${nombre}' and not tgisinternal;`).trim() === '1'
+}
+
+function omitir(nombre, motivo) {
+  console.log(`${C.dim}  - ${nombre} (omitida: ${motivo})${C.off}`)
+}
+
 const A = 'rlsprueba_a'
 const B = 'rlsprueba_b'
 let pasadas = 0
@@ -154,6 +186,17 @@ function limpiar() {
   // En orden inverso a la siembra: las hijas antes que las madres, o las
   // claves foráneas lo impiden.
   try {
+    // El ledger de inventario no se borra (lo prohíbe un disparador): para limpiar
+    // lo sembrado se desactivan los disparadores ordinarios en ESTA transacción.
+    sql(`begin; set local session_replication_role = replica;
+         delete from order_attributions where id in ('${A}_pa', '${B}_pa');
+         delete from membego_order_lines where id in ('${A}_pl', '${B}_pl');
+         delete from membego_orders where id in ('${A}_po', '${B}_po');
+         delete from inventory_movements where id in ('${A}_im', '${B}_im'); commit;`)
+  } catch {
+    /* si no llegó a sembrarse, no hay nada que limpiar */
+  }
+  try {
     comoOmnisciente(`
       delete from supply_pedidos     where id = '${A}_sped';
       delete from supply_redenciones where id = '${A}_sr';
@@ -161,6 +204,11 @@ function limpiar() {
       delete from supply_derechos    where id = '${A}_sd';
       delete from supply_lotes       where id = '${A}_sl';
       delete from supply_acuerdos    where id = '${A}_sa';
+      delete from inventory_reservations where id in ('${A}_ir', '${B}_ir');
+      delete from inventory_levels   where id in ('${A}_il', '${B}_il');
+      delete from sucursales         where id in ('${A}_su', '${B}_su');
+      delete from catalog_items      where id in ('${A}_ci', '${B}_ci');
+      delete from catalog_categories where id in ('${A}_cc', '${B}_cc');
       delete from home_bloques    where "revisionId" in ('${A}_h', '${B}_h');
       delete from home_revisiones where id in ('${A}_h', '${B}_h');
       delete from visits      where "clienteId" in ('${A}_k', '${B}_k');
@@ -235,6 +283,45 @@ try {
     insert into home_bloques (id, "revisionId", tipo, orden, "updatedAt") values
       ('${A}_hb', '${A}_h', 'CABECERA', 0, now()),
       ('${B}_hb', '${B}_h', 'CABECERA', 0, now());
+
+    -- COMMERCE CORE · catálogo. Cada ítem se siembra CON su variante en la misma
+    -- transacción: un ítem sin variante no se puede confirmar.
+    insert into catalog_items (id, "companyId", name, slug, type, "updatedAt") values
+      ('${A}_ci', '${A}', 'Ítem de A', 'item-a', 'SERVICE', now()),
+      ('${B}_ci', '${B}', 'Ítem de B', 'item-b', 'SERVICE', now());
+    insert into catalog_variants (id, "companyId", "catalogItemId", name, sku, price, "isDefault", "updatedAt") values
+      ('${A}_cv', '${A}', '${A}_ci', 'Default', 'RLS-A', 100, true, now()),
+      ('${B}_cv', '${B}', '${B}_ci', 'Default', 'RLS-B', 100, true, now());
+    insert into catalog_categories (id, "companyId", name, slug, "updatedAt") values
+      ('${A}_cc', '${A}', 'Categoría de A', 'cat-a', now()),
+      ('${B}_cc', '${B}', 'Categoría de B', 'cat-b', now());
+
+    -- COMMERCE CORE · inventario: una sucursal, un saldo, una reserva y un
+    -- movimiento por empresa.
+    insert into sucursales (id, "companyId", nombre) values
+      ('${A}_su', '${A}', 'Sucursal de A'),
+      ('${B}_su', '${B}', 'Sucursal de B');
+    insert into inventory_levels (id, "companyId", "catalogVariantId", "locationId", "onHand", "updatedAt") values
+      ('${A}_il', '${A}', '${A}_cv', '${A}_su', 5, now()),
+      ('${B}_il', '${B}', '${B}_cv', '${B}_su', 5, now());
+    insert into inventory_reservations (id, "companyId", "inventoryLevelId", quantity, "expiresAt") values
+      ('${A}_ir', '${A}', '${A}_il', 1, now() + interval '1 hour'),
+      ('${B}_ir', '${B}', '${B}_il', 1, now() + interval '1 hour');
+    insert into inventory_movements (id, "companyId", "inventoryLevelId", type, "destinationBucket", quantity, "previousOnHand", "newOnHand") values
+      ('${A}_im', '${A}', '${A}_il', 'PURCHASE', 'AVAILABLE', 5, 0, 5),
+      ('${B}_im', '${B}', '${B}_il', 'PURCHASE', 'AVAILABLE', 5, 0, 5);
+
+    -- COMMERCE CORE · pedidos Membego: un pedido con su línea y su atribución por
+    -- empresa (el disparador diferido exige que las líneas sumen el subtotal).
+    insert into membego_orders (id, "companyId", code, "locationId", "customerId", status, origin, subtotal, "commissionableBase", total, "updatedAt") values
+      ('${A}_po', '${A}', 'MBG-PED-2030-900001', '${A}_su', '${A}_k', 'CREATED', 'MARKETPLACE', 100, 100, 100, now()),
+      ('${B}_po', '${B}', 'MBG-PED-2030-900001', '${B}_su', '${B}_k', 'CREATED', 'MARKETPLACE', 100, 100, 100, now());
+    insert into membego_order_lines (id, "companyId", "orderId", "catalogVariantId", description, sku, quantity, "unitPrice", "lineTotal") values
+      ('${A}_pl', '${A}', '${A}_po', '${A}_cv', 'Producto de A', 'PED-A', 1, 100, 100),
+      ('${B}_pl', '${B}', '${B}_po', '${B}_cv', 'Producto de B', 'PED-B', 1, 100, 100);
+    insert into order_attributions (id, "companyId", "orderId", channel) values
+      ('${A}_pa', '${A}', '${A}_po', 'DIRECT'),
+      ('${B}_pa', '${B}', '${B}_po', 'DIRECT');
 
     -- MEMBEGO SUPPLY · el caso cruzado, que es el que importa.
     --
@@ -452,6 +539,144 @@ try {
        values ('${B}_intruso','${A}_sl','${B}_k','${B}','REGALO',300,now(),now());`
     )
   )
+
+  // ── 10. Commerce Core · catálogo unificado ────────────────────────────────
+  //
+  // Las cinco tablas llevan `companyId` propio (también las hijas), así que
+  // entran por Nivel 0 y nadie escribió una política a mano para ellas. Que el
+  // generador las cubra es justo lo que se comprueba aquí.
+  const items = comoInquilino(A, `select id from catalog_items where id in ('${A}_ci','${B}_ci');`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Catálogo: con el contexto en A no aparece ningún ítem de B',
+    items.length === 1 && items[0] === `${A}_ci`,
+    `devolvió: ${JSON.stringify(items)}`
+  )
+
+  const variantes = comoInquilino(A, `select id from catalog_variants where id in ('${A}_cv','${B}_cv');`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Catálogo: las variantes de B tampoco se ven (la hija lleva su propio companyId)',
+    variantes.length === 1 && variantes[0] === `${A}_cv`,
+    `devolvió: ${JSON.stringify(variantes)}`
+  )
+
+  const categorias = comoInquilino(A, `select id from catalog_categories where id in ('${A}_cc','${B}_cc');`)
+    .split('\n').filter(Boolean)
+  comprobar(
+    'Catálogo: las categorías de B tampoco',
+    categorias.length === 1 && categorias[0] === `${A}_cc`,
+    `devolvió: ${JSON.stringify(categorias)}`
+  )
+
+  comprobar(
+    'Catálogo: A no puede insertar un ítem marcado como de B',
+    fallaComoInquilino(
+      A,
+      `insert into catalog_items (id,"companyId",name,slug,type,"updatedAt")
+       values ('${A}_intruso_i','${B}','Intruso','intruso','SERVICE',now());`
+    )
+  )
+
+  comprobar(
+    'Catálogo: A no puede colgar una variante (con su propio companyId) de un ítem de B — la FK compuesta lo impide',
+    fallaComoInquilino(
+      A,
+      `insert into catalog_variants (id,"companyId","catalogItemId",name,sku,price,"updatedAt")
+       values ('${A}_intruso_v','${A}','${B}_ci','Intrusa','RLS-X',1,now());`
+    )
+  )
+
+  const tocadasCatalogo = comoInquilino(
+    A,
+    `with u as (update catalog_items set name='PISOTEADO' returning 1) select count(*) from u;`
+  )
+  comprobar(
+    'Catálogo: un `update` sin `where` solo alcanza los ítems de A',
+    tocadasCatalogo === '1',
+    `filas afectadas: ${tocadasCatalogo} (debería ser 1)`
+  )
+
+  // ── 11. Commerce Core · inventario ────────────────────────────────────────
+  //
+  // Igual que el catálogo: las tres tablas llevan `companyId` propio y entran
+  // por Nivel 0 sin una política escrita a mano. Aquí además se comprueba lo
+  // que el ledger promete: ni siquiera la empresa dueña lo edita.
+  const veo = (tabla, a, b) =>
+    comoInquilino(A, `select id from ${tabla} where id in ('${a}','${b}');`).split('\n').filter(Boolean)
+  const niveles = veo('inventory_levels', `${A}_il`, `${B}_il`)
+  comprobar('Inventario: con el contexto en A no aparece ningún saldo de B', niveles.length === 1 && niveles[0] === `${A}_il`, `devolvió: ${JSON.stringify(niveles)}`)
+  const movs = veo('inventory_movements', `${A}_im`, `${B}_im`)
+  comprobar('Inventario: los movimientos de B tampoco se ven', movs.length === 1 && movs[0] === `${A}_im`, `devolvió: ${JSON.stringify(movs)}`)
+  const reservas = veo('inventory_reservations', `${A}_ir`, `${B}_ir`)
+  comprobar('Inventario: las reservas de B tampoco', reservas.length === 1 && reservas[0] === `${A}_ir`, `devolvió: ${JSON.stringify(reservas)}`)
+
+  comprobar(
+    'Inventario: A no puede insertar un saldo marcado como de B',
+    fallaComoInquilino(
+      A,
+      `insert into inventory_levels (id,"companyId","catalogVariantId","locationId","updatedAt")
+       values ('${A}_intruso_il','${B}','${B}_cv','${B}_su',now());`
+    )
+  )
+  comprobar(
+    'Inventario: A no puede juntar su variante con la sucursal de B — la FK compuesta lo impide',
+    fallaComoInquilino(
+      A,
+      `insert into inventory_levels (id,"companyId","catalogVariantId","locationId","updatedAt")
+       values ('${A}_mezcla_il','${A}','${A}_cv','${B}_su',now());`
+    )
+  )
+  const tocadasInventario = comoInquilino(A, `with u as (update inventory_levels set "lowStockThreshold"=9 returning 1) select count(*) from u;`)
+  comprobar('Inventario: un `update` sin `where` solo alcanza los saldos de A', tocadasInventario === '1', `filas afectadas: ${tocadasInventario} (debería ser 1)`)
+  if (hayDisparador('inventory_movements_sin_cambios')) {
+    comprobar(
+      'Inventario: ni A, dueña de su ledger, puede editar un movimiento',
+      fallaComoInquilino(A, `update inventory_movements set quantity = 99 where id = '${A}_im';`)
+    )
+  } else {
+    omitir('Inventario: ni A, dueña de su ledger, puede editar un movimiento', 'la base no trae los disparadores de las migraciones (db push)')
+  }
+
+  // ── 12. Commerce Core · pedidos Membego ───────────────────────────────────
+  //
+  // Las cinco tablas llevan `companyId` propio y entran por Nivel 0 sin una
+  // política escrita a mano. Además se comprueba que las FK compuestas rechazan
+  // mezclar empresas y que las líneas de un pedido no se editan ni con el
+  // contexto correcto.
+  const pedidos = veo('membego_orders', `${A}_po`, `${B}_po`)
+  comprobar('Pedidos: con el contexto en A no aparece ningún pedido de B', pedidos.length === 1 && pedidos[0] === `${A}_po`, `devolvió: ${JSON.stringify(pedidos)}`)
+  const lineasPed = veo('membego_order_lines', `${A}_pl`, `${B}_pl`)
+  comprobar('Pedidos: las líneas de B tampoco se ven', lineasPed.length === 1 && lineasPed[0] === `${A}_pl`, `devolvió: ${JSON.stringify(lineasPed)}`)
+  const atribs = veo('order_attributions', `${A}_pa`, `${B}_pa`)
+  comprobar('Pedidos: la atribución de B tampoco', atribs.length === 1 && atribs[0] === `${A}_pa`, `devolvió: ${JSON.stringify(atribs)}`)
+
+  comprobar(
+    'Pedidos: A no puede insertar un pedido marcado como de B',
+    fallaComoInquilino(
+      A,
+      `insert into membego_orders (id,"companyId",code,"locationId","customerId",status,origin,subtotal,"commissionableBase",total,"updatedAt")
+       values ('${A}_intruso_po','${B}','MBG-PED-2030-900002','${B}_su','${B}_k','CREATED','MARKETPLACE',1,1,1,now());`
+    )
+  )
+  comprobar(
+    'Pedidos: A no puede juntar su cliente con la sucursal de B — la FK compuesta lo impide',
+    fallaComoInquilino(
+      A,
+      `insert into membego_orders (id,"companyId",code,"locationId","customerId",status,origin,subtotal,"commissionableBase",total,"updatedAt")
+       values ('${A}_mezcla_po','${A}','MBG-PED-2030-900003','${B}_su','${A}_k','CREATED','MARKETPLACE',1,1,1,now());`
+    )
+  )
+  const tocadosPedidos = comoInquilino(A, `with u as (update membego_orders set notes='x' returning 1) select count(*) from u;`)
+  comprobar('Pedidos: un `update` sin `where` solo alcanza los pedidos de A', tocadosPedidos === '1', `filas afectadas: ${tocadosPedidos} (debería ser 1)`)
+  if (hayDisparador('membego_order_lines_sin_cambios')) {
+    comprobar(
+      'Pedidos: ni A, dueña del pedido, puede editar una línea',
+      fallaComoInquilino(A, `update membego_order_lines set quantity = 99 where id = '${A}_pl';`)
+    )
+  } else {
+    omitir('Pedidos: ni A, dueña del pedido, puede editar una línea', 'la base no trae los disparadores de las migraciones (db push)')
+  }
 } catch (e) {
   fallos++
   console.log(`${C.mal}  ✗ La prueba no pudo completarse${C.off}`)

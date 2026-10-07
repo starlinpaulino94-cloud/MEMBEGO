@@ -4,7 +4,8 @@ import { HeroSection } from '@/components/public/HeroSection'
 import { ValueProps } from '@/components/public/ValueProps'
 import { HowItWorks } from '@/components/public/HowItWorks'
 import { PromotionCard } from '@/components/public/PromotionCard'
-import { getFeaturedPromotions, getPlatformStats } from '@/modules/marketplace/cached'
+import { getFeaturedPromotions, getPlatformStats, getCatalogoPublicoGlobal } from '@/modules/marketplace/cached'
+import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPublica'
 
 export const revalidate = 600
 
@@ -15,9 +16,10 @@ export const revalidate = 600
  * superadmin incorpore más empresas.
  */
 export default async function HomePage() {
-  const [stats, promotions] = await Promise.all([
+  const [stats, promotions, catalogo] = await Promise.all([
     getPlatformStats(),
     getFeaturedPromotions(6),
+    getCatalogoPublicoGlobal({ limite: 6 }),
   ])
 
   return (
@@ -40,6 +42,28 @@ export default async function HomePage() {
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {promotions.map((p) => (
                 <PromotionCard key={p.id} promotion={p} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Productos y servicios (catálogo unificado): solo si hay algo publicado */}
+      {catalogo.items.length > 0 && (
+        <section className="py-16 sm:py-20">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-8 flex items-end justify-between gap-4">
+              <div>
+                <h2 className="text-h1 text-foreground">Productos y servicios</h2>
+                <p className="mt-2 text-muted-foreground">Lo que ofrecen los negocios, con sus precios.</p>
+              </div>
+              <Link href="/catalogo" className="text-sm font-medium underline">
+                Ver todo
+              </Link>
+            </div>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {catalogo.items.map((item) => (
+                <TarjetaCatalogoPublica key={item.id} item={item} mostrarEmpresa />
               ))}
             </div>
           </div>

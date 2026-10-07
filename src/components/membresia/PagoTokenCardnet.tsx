@@ -1146,6 +1146,13 @@ export function PagoTokenCardnet({
                 entra el código y se completa el pago — no hace falta volver a
                 escribir la tarjeta.
               </p>
+              {/* En pruebas ese cargo no va a aparecer nunca. Decírselo aquí
+                  evita que alguien vuelva tres veces a mirar su banco. */}
+              {ambiente === 'pruebas' && (
+                <p className="mt-1 text-xs font-semibold text-destructive">
+                  Pasarela en modo de pruebas: el banco no enviará ningún código real.
+                </p>
+              )}
             </div>
           </div>
           <Button

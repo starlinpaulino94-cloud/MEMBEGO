@@ -40,6 +40,11 @@ const CAPACIDADES_DEL_MENU: readonly CapacidadNav[] = [
   'RULETA',
   'EXCURSIONES',
   'POS_CAJA',
+  'CRM',
+  'PUBLICACIONES',
+  'MENSAJERIA',
+  'CATALOGO_UNIFICADO',
+  'PEDIDOS_MEMBEGO',
 ]
 
 const VERTICALES: readonly TipoEmpresaNav[] = [

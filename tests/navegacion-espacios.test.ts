@@ -67,6 +67,11 @@ test('las capacidades del menú existen en el catálogo real', () => {
     'EXCURSIONES',
     'POS_CAJA',
     'MEMBEGO_SUPPLIER',
+    'CRM',
+    'PUBLICACIONES',
+    'MENSAJERIA',
+    'CATALOGO_UNIFICADO',
+    'PEDIDOS_MEMBEGO',
   ]
   for (const cap of delMenu) {
     assert.ok(

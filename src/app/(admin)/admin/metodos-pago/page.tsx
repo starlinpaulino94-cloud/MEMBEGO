@@ -12,7 +12,7 @@ import { CreditCard, Building2, Plus, Pencil } from 'lucide-react'
 import { EstadoPasarelas } from '@/components/admin/EstadoPasarelas'
 import { getTransferenciasEnVuelo } from '@/modules/pagos/metodosDisponibles'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
-import { cardnetTokensConfigurado } from '@/lib/payments/cardnet-tokens'
+import { cardnetTokensConfigurado, ambienteConfigurado } from '@/lib/payments/cardnet-tokens'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +69,7 @@ export default async function MetodosPagoPage() {
           transferencia={estado.transferencia}
           cardnet={estado.cardnet}
           cardnetConfigurado={cardnetTokensConfigurado()}
+          cardnetAmbiente={ambienteConfigurado().ambiente}
           enVuelo={estado.enVuelo}
           cuentasCargadas={estado.cuentasCargadas}
         />

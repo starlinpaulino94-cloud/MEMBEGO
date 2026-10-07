@@ -7,6 +7,7 @@ import {
   getCompanyPlanesPublic,
   getCompanyPostsPublic,
   getPromotionsPublic,
+  getCatalogoPublicoDeEmpresa,
 } from '@/modules/marketplace/cached'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { getCompanyResenas } from '@/modules/resenas/queries'
@@ -51,7 +52,7 @@ export default async function CompanyDetailPage({
   const company = await getCompanyPublic(companySlug)
   if (!company) notFound()
 
-  const [stats, planes, promotions, posts, prefs, resenas, excursionesData] = await Promise.all([
+  const [stats, planes, promotions, posts, prefs, resenas, excursionesData, catalogo] = await Promise.all([
     getCompanyStats(companySlug),
     getCompanyPlanesPublic(company.id),
     getPromotionsPublic({ company: companySlug, limit: 12 }),
@@ -61,6 +62,7 @@ export default async function CompanyDetailPage({
     companyIdPorSlug(companySlug).then((cid) =>
       cid ? excursionesPublicas(cid) : Promise.resolve([])
     ),
+    getCatalogoPublicoDeEmpresa(company.id, 12),
   ])
 
   const excursiones = excursionesData.map((exc) => ({
@@ -86,6 +88,7 @@ export default async function CompanyDetailPage({
       prefs={prefs}
       resenas={resenas}
       excursiones={excursiones}
+      catalogo={catalogo}
     />
   )
 }
