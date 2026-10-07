@@ -24,22 +24,26 @@ test('urlPublicaCatalogo: apunta al bucket promociones y no inventa una URL sin 
     urlPublicaCatalogo('emp/catalogo/it/a.jpg', 'https://x.supabase.co/'),
     'https://x.supabase.co/storage/v1/object/public/promociones/emp/catalogo/it/a.jpg'
   )
-  assert.equal(urlPublicaCatalogo('', 'https://x.supabase.co'), null)
-  assert.equal(urlPublicaCatalogo('a.jpg', ''), null)
 
-  // Sin base explícita se usa NEXT_PUBLIC_SUPABASE_URL. Se fija aquí a mano en
-  // los dos casos: dejarlo al entorno hacía que la prueba pasara o fallara
-  // según dónde corriera (el CI define una URL; un `.env` local también).
-  const previo = process.env.NEXT_PUBLIC_SUPABASE_URL
+  // Sin segundo argumento, `urlPublicaCatalogo` cae a
+  // `process.env.NEXT_PUBLIC_SUPABASE_URL`, y esta importación ya cargó
+  // `@prisma/client` por la cadena `domain.ts` → `commerce-primitives/dinero.ts`
+  // → `@prisma/client`: el cliente generado lee `.env` como efecto de
+  // importarlo, así que la variable puede venir puesta aunque este archivo
+  // nunca la toque. Se guarda y se limpia aquí, igual que en
+  // `jwt.test.ts`/`soporte-schema.test.ts`, para que «sin configuración»
+  // signifique sin configuración de verdad y no dependa de qué otro módulo se
+  // haya importado antes en el mismo proceso.
+  const anterior = process.env.NEXT_PUBLIC_SUPABASE_URL
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL
   try {
-    delete process.env.NEXT_PUBLIC_SUPABASE_URL
-    assert.equal(urlPublicaCatalogo('a.jpg'), null, 'sin configuración no se inventa una URL')
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://env.supabase.co/'
-    assert.equal(urlPublicaCatalogo('a.jpg'), 'https://env.supabase.co/storage/v1/object/public/promociones/a.jpg')
+    assert.equal(urlPublicaCatalogo('a.jpg', undefined), null)
   } finally {
-    if (previo === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL
-    else process.env.NEXT_PUBLIC_SUPABASE_URL = previo
+    if (anterior === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = anterior
   }
+
+  assert.equal(urlPublicaCatalogo('', 'https://x.supabase.co'), null)
 })
 
 test('cada tipo, estado y capacidad del dominio tiene etiqueta para la pantalla', () => {

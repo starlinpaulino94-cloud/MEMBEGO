@@ -937,6 +937,11 @@ const G_CLI_MIO: NavGroup = {
     {
       // Supply: compras hechas a MEMBEGO (no a una empresa) y los
       // beneficios que nacen de ellas. Va en Mi Membego porque ya es suyo.
+      //
+      // NO hay una entrada aparte «Beneficios Membego» → /cliente/beneficios:
+      // esa ruta se retiró con Supply V1 y ahora redirige aquí mismo. Dos
+      // entradas de menú al mismo destino es la misma confusión entre capas
+      // que ese nombre separado existía para evitar, solo que al revés.
       href: '/cliente/compras',
       label: 'Compras Membego',
       icon: Tag,
