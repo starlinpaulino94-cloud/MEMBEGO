@@ -24,7 +24,7 @@ probar-rls:          PASS   44 / 44 sobre `db push` (las comprobaciones que pide
 Esquema:             PASS   prisma validate · migrate diff = migración vacía (0 deriva) · migrate status «up to date» · 204 sellos
 npm audit (prod):    PASS   0 vulnerabilidades · ninguna dependencia nueva desde 188dcba (package.json sin cambios)
 Build:               PASS
-E2E completa:        EN CURSO al subir este informe (324 resultados, 0 fallos hasta ese momento); la cifra final se añade en el siguiente commit
+E2E completa:        PASS   158 pasan · 0 fallan · 187 omitidas (16,0 min; ambos proyectos, build con las variables de relleno de CI). Las omitidas son las de siempre: sin Supabase de pruebas y las que corren solo en escritorio. Antes (auditoría F0–F4): 122 / 0 / 151
 ```
 
 ## 3. Veredicto por fase contra el Plan Maestro
