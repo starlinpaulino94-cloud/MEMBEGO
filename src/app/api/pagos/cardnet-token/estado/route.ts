@@ -177,6 +177,149 @@ export async function GET(req: NextRequest) {
     })
     return NextResponse.json({ ...base, correoPrueba: { destinatario: user.email, ...resultado } })
   }
+  // ?expediente=<correo del cliente>: EL CASO DE UN CLIENTE CONCRETO, para el
+  // administrador de su empresa.
+  //
+  // POR QUÉ EXISTE. Las demás sondas miran el Customer de QUIEN PREGUNTA, y
+  // quien pregunta cuando «el código no llega» es el administrador, no el
+  // cliente: `?perfiles=1` le contesta `customerId: null` y lo manda a
+  // registrar una tarjeta que no es la suya. Para ver la del cliente
+  // afectado había que ir a la base a buscar el `cardnetCustomerId` a mano y
+  // volver con `?customerId=` — que además es solo de superadmin.
+  //
+  // Esto junta en una respuesta lo que hace falta llevar al ticket con
+  // CardNET: el Customer del cliente tal como lo devuelve el proveedor (con
+  // los tokens enmascarados), cuál perfil espera código, y sus últimos
+  // intentos de cobro con la respuesta cruda (PR001, CS012, un rechazo del
+  // banco…). Es un GET puro: no crea Customer, no invalida ninguna ventana
+  // abierta y no gasta intentos de activación.
+  //
+  // GUARDAS. Solo administra quien administra, y solo DENTRO de su empresa:
+  // el cliente se busca con `conEmpresa` por el `companyId` de la sesión, así
+  // que un correo de otra empresa simplemente no aparece.
+  const correoExpediente = req.nextUrl.searchParams.get('expediente')?.trim().toLowerCase() || null
+  if (correoExpediente && config.configurado) {
+    if (!esAdminDespliegue) return soloAdmin()
+    const companyId = user.metadata.companyId ?? null
+    if (!companyId) {
+      return NextResponse.json(
+        { ...base, expediente: { error: 'Tu sesión no tiene una empresa activa.' } },
+        { status: 400 }
+      )
+    }
+    const { consultarClienteCardnet, consultarClienteDiagnostico } = await import(
+      '@/lib/payments/cardnet-tokens'
+    )
+    const { leerCustomerIdDeCuenta, perfilPendienteDeActivar, sinSensibles } = await import(
+      '@/lib/payments/cardnet-tokens-core'
+    )
+    const { conEmpresa } = await import('@/lib/tenant')
+
+    const cliente = await conEmpresa(companyId, (tx) =>
+      tx.cliente.findFirst({
+        where: { companyId, email: { equals: correoExpediente, mode: 'insensitive' } },
+        select: { id: true, email: true, nombre: true, cardnetCustomerId: true },
+      })
+    ).catch(() => null)
+    if (!cliente) {
+      return NextResponse.json({
+        ...base,
+        expediente: { correo: correoExpediente, error: 'No hay un cliente con ese correo en tu empresa.' },
+      })
+    }
+
+    const intentos = await conEmpresa(companyId, (tx) =>
+      tx.pagoIntento.findMany({
+        where: { companyId, clienteId: cliente.id, proveedor: 'CARDNET' },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          estado: true,
+          monto: true,
+          motivoRechazo: true,
+          autorizacion: true,
+          respuesta: true,
+          createdAt: true,
+          activadoAt: true,
+          membershipId: true,
+          compraId: true,
+        },
+      })
+    ).catch(() => [])
+
+    const guardadoCrudo = cliente.cardnetCustomerId ?? null
+    const customerId = leerCustomerIdDeCuenta(
+      guardadoCrudo,
+      config.publicKey ?? '',
+      process.env.CARDNET_TOKENS_PRIVATE_KEY ?? ''
+    )
+    const consulta = customerId ? await consultarClienteCardnet(customerId) : null
+    const crudo = customerId ? await consultarClienteDiagnostico(customerId) : null
+    const pendiente = consulta ? perfilPendienteDeActivar(consulta.perfiles) : null
+
+    return NextResponse.json({
+      ...base,
+      expediente: {
+        cliente: { id: cliente.id, email: cliente.email, nombre: cliente.nombre },
+        // Las dos lecturas del id guardado, porque son dos problemas distintos:
+        // «no hay nada» y «hay, pero es de otro juego de llaves».
+        customerIdGuardado: guardadoCrudo
+          ? customerId
+            ? 'presente y de la cuenta actual'
+            : 'presente pero de OTRA cuenta de llaves (se ignora)'
+          : 'ninguno',
+        customerId,
+        cardnet: consulta
+          ? {
+              emailDelCustomer: consulta.email,
+              emailCoincide:
+                (consulta.email ?? '').trim().toLowerCase() === cliente.email.trim().toLowerCase(),
+              totalPerfiles: consulta.perfiles.length,
+              perfiles: consulta.perfiles.map((p) => ({
+                paymentProfileId: p.paymentProfileId,
+                tieneToken: Boolean(p.token),
+                habilitado: p.habilitado,
+                marca: p.marca,
+                ultimos4: p.ultimos4,
+              })),
+              // El que la pantalla del cliente está esperando activar: el
+              // ÚLTIMO de la lista si está deshabilitado (mismo criterio que
+              // la activación real). `null` = no hay nada pendiente.
+              pendienteDeActivar: pendiente
+                ? { paymentProfileId: pendiente.paymentProfileId, ultimos4: pendiente.ultimos4 }
+                : null,
+              // Tal cual lo devuelve el proveedor, con tokens enmascarados.
+              // Es lo que hay que adjuntar al ticket.
+              consultaCruda: crudo,
+            }
+          : null,
+        intentos: intentos.map((i) => ({
+          id: i.id,
+          cuando: i.createdAt,
+          estado: i.estado,
+          monto: Number(i.monto),
+          autorizacion: i.autorizacion,
+          motivoRechazo: i.motivoRechazo,
+          activadoAt: i.activadoAt,
+          membershipId: i.membershipId,
+          compraId: i.compraId,
+          // Ya se guardó sin sensibles; se vuelve a pasar por el filtro por
+          // si alguna fila vieja viene de antes de esa regla.
+          respuesta:
+            i.respuesta && typeof i.respuesta === 'object' && !Array.isArray(i.respuesta)
+              ? sinSensibles(i.respuesta as Record<string, unknown>)
+              : i.respuesta,
+        })),
+        comoLeerlo: {
+          'perfiles[].habilitado=false y pendienteDeActivar': 'La tarjeta nació deshabilitada: CardNET espera el código de activación (producto CON autenticación). Si el cliente no ve el cargo de RD$1.00, la pregunta es para CardNET: ¿generaron la transacción de verificación de ese perfil?',
+          'perfiles[].habilitado=true y los intentos traen PR001/CS012': 'El Purchase dice que el medio de pago no está activo aunque el perfil figure habilitado. Mandar consultaCruda + la respuesta del intento a CardNET.',
+          'intentos con ResponseCode 05/51/54…': 'Rechazo del BANCO, no falta de activación. No hay código que esperar.',
+        },
+      },
+    })
+  }
+
   // ?perfiles=1: CONSULTA PURA del Customer del usuario y muestra QUÉ devuelve
   // el proveedor (forma real de PaymentProfiles, si el Email viene y cómo, y
   // qué logra extraer nuestro parser). Sin sensibles.
@@ -453,6 +596,8 @@ export async function GET(req: NextRequest) {
               '?sesion=1':
                 'Repite paso por paso lo que hace la ventana de pago y enseña la respuesta cruda del proveedor en cada uno.',
               '?perfiles=1': 'Consulta las tarjetas registradas del usuario actual.',
+              '?expediente=correo@cliente.com':
+                'El caso de UN cliente de tu empresa: su Customer en CardNET (perfiles, cuál espera código, respuesta cruda) y sus últimos intentos de cobro con la respuesta del proveedor. Es lo que se lleva al ticket cuando «el código no llega».',
               '?correo=1': 'Envía un correo de prueba al buzón del usuario actual.',
             },
           }

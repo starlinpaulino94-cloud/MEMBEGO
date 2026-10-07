@@ -49,8 +49,23 @@ npm run e2e:limpio -- --project=escritorio
 
 Solo la base, sin correr nada: `npm run e2e:base`.
 
-Con un Chromium ya instalado en el sistema:
+El Chromium lo resuelve el arnés: si `PLAYWRIGHT_CHROMIUM_PATH` viene puesta la
+respeta, y si no, busca el binario en `/opt/pw-browsers/chromium`, donde lo pone
+la imagen del contenedor. Antes había que acordarse de exportar la variable, y
+olvidarla no daba un error claro: Playwright buscaba un
+`chrome-headless-shell` que no existe, las 183 pruebas morían en tres
+milisegundos cada una y el mensaje decía «instala los navegadores» en vez de
+«te falta una variable». Un arnés que depende de que alguien se acuerde no es
+un arnés.
+
+Para apuntar a otro Chromium:
 `PLAYWRIGHT_CHROMIUM_PATH=/ruta/a/chrome npm run e2e:limpio`.
+
+El arnés también pone `CRON_SECRET` de relleno, porque los recorridos del
+bloque 5 del Slice 9 lanzan `/api/cron/supply-v2` por HTTP. No importan su
+servicio a propósito: vive detrás de `server-only`, un spec de Playwright es
+código de cliente, y la ruta es además lo que corre en producción —llamar a la
+puerta prueba más que llamar a la función—.
 
 Para ver qué pasó en un fallo: `npx playwright show-trace test-results/…/trace.zip`.
 

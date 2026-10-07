@@ -5,6 +5,8 @@
 > Regla de mantenimiento: se actualiza al cerrar cada fase o cambio importante, y **antes de terminar cualquier sesión de implementación**.
 > Fuente del plan: **[`docs/PLAN_MAESTRO.md`](PLAN_MAESTRO.md)** (v2, aprobado el 2026-10-06; versionado tal cual con un aviso y erratas). Los 4 documentos estratégicos de origen (`reestructura_1`…`4`) **siguen sin versionarse** (ver §17-A). Lo esencial del plan está resumido en §2, §13 y §17.
 
+> **Documento hermano:** [`IMPLEMENTATION_STATUS_SUPPLY2.md`](IMPLEMENTATION_STATUS_SUPPLY2.md) — memoria operativa de Supply 2.0 y del rediseño visual Stitch (otra sesión, sin el Plan Maestro). Este archivo sigue el Plan Maestro (Commerce Core).
+
 ## 1. Estado general
 
 ```text

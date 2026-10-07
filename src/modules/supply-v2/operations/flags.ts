@@ -1,4 +1,3 @@
-import { prisma } from '@/lib/prisma'
 import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
@@ -82,15 +81,34 @@ export interface EstadoDeCapacidad {
 export async function capacidadActiva(clave: Capacidad): Promise<boolean> {
   // Si la bandera del despliegue dice que no, no hace falta ni mirar la base.
   if (!banderaActiva(clave)) return false
-  const fila = await prisma.supplyV2OperationalSwitch.findUnique({ where: { key: clave }, select: { enabled: true } })
+  // `sinEmpresa` y no `prisma` a pelo, y aquí no es higiene: es FAIL-OPEN.
+  //
+  // La política de capa 2 de `supply_v2_operational_switches` solo deja leerla
+  // en modo omnisciente —es un control de plataforma, no de un inquilino—. Con
+  // RLS encendida, una consulta sin contexto NO falla: devuelve cero filas. Y
+  // cero filas aquí significa `undefined`, que `capacidadEfectiva` interpreta
+  // como «nadie lo apagó». Resultado: un interruptor de emergencia APAGADO a
+  // propósito se leería como ENCENDIDO, y los pagos externos seguirían
+  // procesándose después de que alguien los cortara.
+  //
+  // El gate `rls:cobertura` no lo cazó porque mira por ARCHIVO y este ya tenía
+  // un `sinEmpresa` más abajo (`cambiarInterruptor`). Es el mismo punto ciego
+  // que dejó pasar `worker.ts` y `entrada.ts`.
+  const fila = await sinEmpresa('Supply 2.0: leer un interruptor operativo', (tx) =>
+    tx.supplyV2OperationalSwitch.findUnique({ where: { key: clave }, select: { enabled: true } })
+  )
   return capacidadEfectiva(clave, fila?.enabled)
 }
 
 /** El estado completo de las cuatro capacidades, para el panel. */
 export async function estadoDeCapacidades(): Promise<EstadoDeCapacidad[]> {
-  const filas = await prisma.supplyV2OperationalSwitch.findMany({
-    select: { key: true, enabled: true, reason: true, changedAt: true, changedBy: { select: { name: true, email: true } } },
-  })
+  // Mismo motivo que arriba: sin contexto, cero filas, y el panel mostraría
+  // los cinco interruptores como si nadie los hubiera tocado nunca.
+  const filas = await sinEmpresa('Supply 2.0: leer los interruptores operativos', (tx) =>
+    tx.supplyV2OperationalSwitch.findMany({
+      select: { key: true, enabled: true, reason: true, changedAt: true, changedBy: { select: { name: true, email: true } } },
+    })
+  )
   const porClave = new Map(filas.map((f) => [f.key, f]))
 
   return CAPACIDADES.map((clave) => {

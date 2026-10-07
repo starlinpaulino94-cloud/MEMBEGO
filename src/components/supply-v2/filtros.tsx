@@ -35,6 +35,7 @@ export function BarraFiltrosSupplyV2({
   resumen,
   variante = 'oscura',
   extra,
+  extraEnFila = false,
   testId,
 }: {
   ruta: string
@@ -46,12 +47,14 @@ export function BarraFiltrosSupplyV2({
   variante?: 'oscura' | 'suave'
   /** Controles adicionales junto a los botones (p. ej. el interruptor «Vencimientos» de Supply). Van dentro del formulario. */
   extra?: React.ReactNode
+  /** `fila`: el extra ocupa su propia fila completa bajo los selectores (p. ej. un rango de fechas). */
+  extraEnFila?: boolean
   testId?: string
 }) {
   return (
     <Tarjeta className="flex flex-col gap-3 bg-sv2-well p-3 shadow-none" data-testid={testId}>
       <Form action={ruta} className="grid grid-cols-1 items-center gap-2 @xl:grid-cols-2 @5xl:grid-cols-12">
-        <div className={cn('relative flex items-center @xl:col-span-2', extra ? '@5xl:col-span-3' : '@5xl:col-span-4')}>
+        <div className={cn('relative flex items-center @xl:col-span-2', extra && !extraEnFila ? '@5xl:col-span-3' : '@5xl:col-span-4')}>
           <Search aria-hidden className="pointer-events-none absolute left-2 size-[18px] text-sv2-ink-variant" />
           <input name="q" type="search" defaultValue={busqueda.valor} aria-label={busqueda.etiqueta} placeholder={busqueda.placeholder} className={cn(CAMPO, 'pl-9 pr-3')} data-testid={busqueda.testId} />
         </div>
@@ -66,8 +69,8 @@ export function BarraFiltrosSupplyV2({
             <ChevronDown aria-hidden className="pointer-events-none absolute right-1.5 size-[18px] text-sv2-ink-variant" />
           </div>
         ))}
-        <div className={cn('flex items-center justify-end gap-1', extra ? '@xl:col-span-2 @5xl:col-span-3' : selectores.length >= 3 ? '@5xl:col-span-2' : '@5xl:col-span-4')}>
-          {extra}
+        <div className={cn('flex items-center justify-end gap-1', extra && !extraEnFila ? '@xl:col-span-2 @5xl:col-span-3' : selectores.length >= 3 ? '@5xl:col-span-2' : '@5xl:col-span-4', extraEnFila && 'order-last @xl:col-span-2 @5xl:col-span-12')}>
+          {extraEnFila ? <div className="mr-auto flex w-full max-w-md items-center">{extra}</div> : extra}
           {variante === 'oscura' ? (
             <>
               <button type="submit" className="inline-flex h-10 items-center gap-1 rounded-[8px] bg-foreground px-3 text-[13px] font-medium leading-4 text-background shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent" data-testid="btn-filtrar">
@@ -80,7 +83,7 @@ export function BarraFiltrosSupplyV2({
             </>
           ) : (
             <>
-              <button type="submit" className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-sv2-accent px-4 text-[14px] font-semibold leading-5 text-white shadow-sm transition-colors hover:bg-sv2-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent focus-visible:ring-offset-2" data-testid="btn-filtrar">
+              <button type="submit" className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-[8px] bg-sv2-accent px-4 @5xl:max-w-[160px] text-[14px] font-semibold leading-5 text-white shadow-sm transition-colors hover:bg-sv2-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent focus-visible:ring-offset-2" data-testid="btn-filtrar">
                 <Filter aria-hidden className="size-4" />
                 Aplicar
               </button>

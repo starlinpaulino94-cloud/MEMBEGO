@@ -22,6 +22,21 @@ cortos que se atacaron por el sitio equivocado.
 | Necesito cerrar la aplicación para trabajar tranquilo | [`modo-mantenimiento.md`](modo-mantenimiento.md) |
 | Voy a encender el aislamiento RLS (operación planificada, no incidente) | [`rls-encender.md`](rls-encender.md) |
 
+### Supply 2.0 · pagos externos (Slice 9)
+
+| Síntoma que ves | Runbook |
+|---|---|
+| El proveedor dice que mandó avisos de pago y las compras siguen sin pagar | [`pagos-externos-caidos.md`](pagos-externos-caidos.md) |
+| Los avisos de pago SÍ llegaron, hay filas en el inbox, y las compras siguen sin pagar | [`webhooks-atrasados.md`](webhooks-atrasados.md) |
+| Los clientes pagan y no reciben su aviso; el outbox acumula efectos | [`outbox-atrasado.md`](outbox-atrasado.md) |
+| Hay dinero que no cuadra entre la pasarela y Membego | [`incidente-financiero.md`](incidente-financiero.md) |
+| Las comprobaciones de pago salen en desacuerdo | [`conciliacion-discrepante.md`](conciliacion-discrepante.md) |
+| Algo se rompió justo después de desplegar | [`revertir-despliegue.md`](revertir-despliegue.md) |
+
+Los cinco empiezan por el mismo sitio —`/superadmin/supply-v2/operaciones`—
+porque el Centro de Operaciones ya distingue «apagado a propósito» de «roto», y
+esa es justo la pregunta que más tiempo hace perder de madrugada.
+
 ## Antes de abrir cualquiera de ellos
 
 **1. Escribe la hora y el síntoma.** Literalmente, en el móvil. Treinta

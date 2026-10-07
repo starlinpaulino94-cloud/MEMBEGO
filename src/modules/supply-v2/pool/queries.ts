@@ -181,7 +181,8 @@ export interface SupplyPorProducto {
   /** Costo por unidad del lote más reciente. */
   costoUnitario: number
   /** El lote recibido más recientemente: código y fecha. */
-  ultimoLote: { code: string; receivedAt: Date } | null
+  /** El lote recibido más recientemente: código, fecha de recepción (día) y momento exacto en que se registró. */
+  ultimoLote: { code: string; receivedAt: Date; createdAt: Date } | null
   /** La primera oferta activa del producto (a la que van sus unidades asignadas). */
   ofertaActiva: { code: string; title: string; salePrice: number } | null
 }
@@ -204,6 +205,7 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
         expiresAt: true,
         code: true,
         receivedAt: true,
+        createdAt: true,
         catalogItem: { select: { name: true, unit: true, sku: true, type: true, description: true, publicPrice: true } },
         supplier: { select: { id: true, commercialName: true } },
       },
@@ -252,8 +254,9 @@ export async function supplyPorProducto(): Promise<SupplyPorProducto[]> {
     g.recibidas += l.quantityReceived
     g.valorDisponible += l.quantityAvailable * aNumero(l.unitCost)
     g.lotes += 1
-    if (!g.ultimoLote || l.receivedAt > g.ultimoLote.receivedAt) {
-      g.ultimoLote = { code: l.code, receivedAt: l.receivedAt }
+    // Por el momento de registro y no por `receivedAt`: este guarda solo el día, y dos lotes del mismo día empatarían.
+    if (!g.ultimoLote || l.createdAt > g.ultimoLote.createdAt) {
+      g.ultimoLote = { code: l.code, receivedAt: l.receivedAt, createdAt: l.createdAt }
       g.costoUnitario = aNumero(l.unitCost)
     }
     if (l.expiresAt && l.quantityAvailable > 0 && (!g.proximoVencimiento || l.expiresAt < g.proximoVencimiento)) {

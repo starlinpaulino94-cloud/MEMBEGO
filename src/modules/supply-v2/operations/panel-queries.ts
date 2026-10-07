@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import { prisma } from '@/lib/prisma'
+import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { trabajosMuertosPendientes, type DifuntoPanel } from '@/modules/jobs/muertos'
 import { minutosDesde } from './salud-dominio'
 
@@ -53,6 +53,31 @@ export interface EventoEnPanel {
   edadMin: number | null
 }
 
+/**
+ * TODA consulta de este archivo pasa por el contexto de plataforma.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * NO ES HIGIENE: ES UN PANEL QUE MENTIRÍA TRANQUILIZANDO
+ *
+ * Las tablas de operación de Supply 2.0 —inbox, outbox, conciliaciones,
+ * incidentes— tienen política de capa 2 OMNISCIENTE: son de plataforma, no de
+ * un inquilino. Con RLS encendida, una consulta sin contexto NO falla: devuelve
+ * CERO FILAS. Y cero filas en este archivo se lee como «el inbox está vacío»,
+ * «no hay nada sin salida», «no hay incidentes»: el panel en verde justo cuando
+ * hace falta que esté en rojo.
+ *
+ * El gate `rls:cobertura` no lo caza porque mira por ARCHIVO, y basta un
+ * `sinEmpresa` en cualquier sitio para que el archivo entero pase. Es el mismo
+ * punto ciego que dejó pasar `worker.ts`, `entrada.ts`, `flags.ts` y `salud.ts`.
+ *
+ * Se envuelve en una función corta en vez de repetir el motivo quince veces, y
+ * —esto es lo que de verdad protege— este archivo ya NO importa `prisma`: no
+ * hay forma de añadir una consulta nueva aquí y olvidarse del contexto, porque
+ * no queda nada suelto que usar.
+ */
+const enPlataforma = <T>(motivo: string, fn: (tx: Tx) => Promise<T>): Promise<T> =>
+  sinEmpresa(`Supply 2.0: panel · ${motivo}`, fn)
+
 export async function eventosDelInbox(
   f: { status?: string; provider?: string } = {},
   pagina = 1,
@@ -63,20 +88,22 @@ export async function eventosDelInbox(
     ...(f.status ? { status: f.status as Prisma.EnumSupplyV2ExternalEventStatusFilter['equals'] } : {}),
     ...(f.provider ? { provider: f.provider.trim().toUpperCase() } : {}),
   }
-  const [filas, total] = await Promise.all([
-    prisma.supplyV2ExternalEvent.findMany({
-      where,
-      orderBy: { receivedAt: 'desc' },
-      skip,
-      take,
-      select: {
-        id: true, provider: true, externalEventId: true, eventType: true, status: true, attempts: true,
-        lastError: true, receivedAt: true, processedAt: true, nextAttemptAt: true, correlationId: true,
-        order: { select: { number: true } },
-      },
-    }),
-    prisma.supplyV2ExternalEvent.count({ where }),
-  ])
+  const [filas, total] = await enPlataforma('inbox', (tx) =>
+    Promise.all([
+      tx.supplyV2ExternalEvent.findMany({
+        where,
+        orderBy: { receivedAt: 'desc' },
+        skip,
+        take,
+        select: {
+          id: true, provider: true, externalEventId: true, eventType: true, status: true, attempts: true,
+          lastError: true, receivedAt: true, processedAt: true, nextAttemptAt: true, correlationId: true,
+          order: { select: { number: true } },
+        },
+      }),
+      tx.supplyV2ExternalEvent.count({ where }),
+    ])
+  )
   return {
     filas: filas.map((e) => ({
       id: e.id,
@@ -126,25 +153,29 @@ export async function efectosDelOutbox(
   const where: Prisma.SupplyV2OutboxEventWhereInput = f.status
     ? { status: f.status as Prisma.EnumSupplyV2OutboxStatusFilter['equals'] }
     : {}
-  const [filas, total] = await Promise.all([
-    prisma.supplyV2OutboxEvent.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take,
-      select: {
-        id: true, eventType: true, status: true, attempts: true, availableAt: true, claimedAt: true,
-        processedAt: true, lastError: true, createdAt: true, correlationId: true, aggregateId: true,
-      },
-    }),
-    prisma.supplyV2OutboxEvent.count({ where }),
-  ])
+  const [filas, total] = await enPlataforma('outbox', (tx) =>
+    Promise.all([
+      tx.supplyV2OutboxEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        select: {
+          id: true, eventType: true, status: true, attempts: true, availableAt: true, claimedAt: true,
+          processedAt: true, lastError: true, createdAt: true, correlationId: true, aggregateId: true,
+        },
+      }),
+      tx.supplyV2OutboxEvent.count({ where }),
+    ])
+  )
 
   // El número de compra se resuelve en UNA consulta por página, no una por
   // fila: `aggregateId` apunta a la compra pero no es una relación de Prisma.
   const ids = [...new Set(filas.map((f2) => f2.aggregateId))]
   const ordenes = ids.length
-    ? await prisma.supplyV2CustomerOrder.findMany({ where: { id: { in: ids } }, select: { id: true, number: true } })
+    ? await enPlataforma('compras de las filas', (tx) =>
+        tx.supplyV2CustomerOrder.findMany({ where: { id: { in: ids } }, select: { id: true, number: true } })
+      )
     : []
   const numero = new Map(ordenes.map((o) => [o.id, o.number]))
 
@@ -158,12 +189,16 @@ export async function efectosDelOutbox(
 
 /** Cuántos hay de cada estado: la fila de contadores del panel, en SQL. */
 export async function conteoOutboxPorEstado(): Promise<Record<string, number>> {
-  const filas = await prisma.supplyV2OutboxEvent.groupBy({ by: ['status'], _count: { _all: true } })
+  const filas = await enPlataforma('conteo del outbox', (tx) =>
+    tx.supplyV2OutboxEvent.groupBy({ by: ['status'], _count: { _all: true } })
+  )
   return Object.fromEntries(filas.map((f) => [f.status, f._count._all]))
 }
 
 export async function conteoInboxPorEstado(): Promise<Record<string, number>> {
-  const filas = await prisma.supplyV2ExternalEvent.groupBy({ by: ['status'], _count: { _all: true } })
+  const filas = await enPlataforma('conteo del inbox', (tx) =>
+    tx.supplyV2ExternalEvent.groupBy({ by: ['status'], _count: { _all: true } })
+  )
   return Object.fromEntries(filas.map((f) => [f.status, f._count._all]))
 }
 
@@ -198,21 +233,23 @@ export async function conciliacionesDelPanel(
     ...(f.outcome ? { outcome: f.outcome } : {}),
     ...(f.provider ? { provider: f.provider.trim().toUpperCase() } : {}),
   }
-  const [filas, total] = await Promise.all([
-    prisma.supplyV2PaymentReconciliation.findMany({
-      where,
-      orderBy: { checkedAt: 'desc' },
-      skip,
-      take,
-      select: {
-        id: true, provider: true, externalTransactionId: true, internalStatus: true, externalStatus: true,
-        expectedAmount: true, reportedAmount: true, expectedCurrency: true, reportedCurrency: true,
-        differenceAmount: true, outcome: true, reasonCode: true, severity: true, checks: true,
-        checkedAt: true, incidentId: true, order: { select: { number: true } },
-      },
-    }),
-    prisma.supplyV2PaymentReconciliation.count({ where }),
-  ])
+  const [filas, total] = await enPlataforma('conciliaciones', (tx) =>
+    Promise.all([
+      tx.supplyV2PaymentReconciliation.findMany({
+        where,
+        orderBy: { checkedAt: 'desc' },
+        skip,
+        take,
+        select: {
+          id: true, provider: true, externalTransactionId: true, internalStatus: true, externalStatus: true,
+          expectedAmount: true, reportedAmount: true, expectedCurrency: true, reportedCurrency: true,
+          differenceAmount: true, outcome: true, reasonCode: true, severity: true, checks: true,
+          checkedAt: true, incidentId: true, order: { select: { number: true } },
+        },
+      }),
+      tx.supplyV2PaymentReconciliation.count({ where }),
+    ])
+  )
   return {
     filas: filas.map((c) => ({
       id: c.id,
@@ -272,22 +309,24 @@ export async function incidentesDelPanel(
     ...(f.status ? { status: f.status as Prisma.EnumSupplyV2FinanceIncidentStatusFilter['equals'] } : {}),
     ...(f.severity ? { severity: f.severity as Prisma.EnumSupplyV2FinanceIncidentSeverityFilter['equals'] } : {}),
   }
-  const [filas, total] = await Promise.all([
-    prisma.supplyV2FinanceIncident.findMany({
-      where,
-      orderBy: [{ status: 'asc' }, { severity: 'desc' }, { createdAt: 'desc' }],
-      skip,
-      take,
-      select: {
-        id: true, status: true, severity: true, reasonCode: true, provider: true, externalTransactionId: true,
-        orderId: true, amount: true, currency: true, notes: true, resolution: true, resolvedAt: true,
-        correlationId: true, createdAt: true,
-        order: { select: { number: true } },
-        resolvedBy: { select: { name: true, email: true } },
-      },
-    }),
-    prisma.supplyV2FinanceIncident.count({ where }),
-  ])
+  const [filas, total] = await enPlataforma('incidentes', (tx) =>
+    Promise.all([
+      tx.supplyV2FinanceIncident.findMany({
+        where,
+        orderBy: [{ status: 'asc' }, { severity: 'desc' }, { createdAt: 'desc' }],
+        skip,
+        take,
+        select: {
+          id: true, status: true, severity: true, reasonCode: true, provider: true, externalTransactionId: true,
+          orderId: true, amount: true, currency: true, notes: true, resolution: true, resolvedAt: true,
+          correlationId: true, createdAt: true,
+          order: { select: { number: true } },
+          resolvedBy: { select: { name: true, email: true } },
+        },
+      }),
+      tx.supplyV2FinanceIncident.count({ where }),
+    ])
+  )
   return {
     filas: filas.map((i) => ({
       id: i.id,
@@ -316,7 +355,8 @@ export async function incidentesDelPanel(
 
 /** Un incidente con todo lo que hace falta para trabajarlo (§17). */
 export async function incidenteDetalle(id: string) {
-  return prisma.supplyV2FinanceIncident.findUnique({
+  return enPlataforma('ficha de un incidente', (tx) =>
+    tx.supplyV2FinanceIncident.findUnique({
     where: { id },
     select: {
       id: true, type: true, status: true, severity: true, reasonCode: true, provider: true,
@@ -335,7 +375,8 @@ export async function incidenteDetalle(id: string) {
         },
       },
     },
-  })
+    })
+  )
 }
 
 // ── F y G · difuntos del outbox y de la cola ───────────────────────────────

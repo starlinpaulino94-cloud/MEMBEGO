@@ -3,6 +3,7 @@ import Image from 'next/image'
 import { headers } from 'next/headers'
 import { Inter } from 'next/font/google'
 import { requireRole } from '@/lib/auth/guards'
+import { sinEmpresa } from '@/lib/tenant'
 import { CustomerShell } from '@/components/layout/CustomerShell'
 import { LocationService } from '@/modules/geo/ubicaciones/service'
 import { nombreSiEsDemo } from '@/modules/demo'
@@ -54,11 +55,21 @@ export default async function ClienteLayout({
   }
 
   const user = await requireRole('CLIENTE')
-  const [ubicacion, demo] = await Promise.all([
+  const [ubicacion, demo, avisosSinLeer] = await Promise.all([
     user.metadata.dbUserId
       ? LocationService.primaria(user.metadata.dbUserId).catch(() => null)
       : Promise.resolve(null),
     nombreSiEsDemo(user.metadata.companyId),
+    // El contador de la campana. Va aquí y no en la pantalla porque la campana
+    // está en la carcasa: sin número, un aviso es alcanzable pero no
+    // descubrible, y nadie entra a mirar una campana que nunca dice nada.
+    // `.catch(() => 0)` porque esto es decoración de cabecera: si falla, la
+    // aplicación no se cae por un badge.
+    user.metadata.dbUserId
+      ? sinEmpresa('cliente: avisos sin leer (cross-tenant)', (tx) =>
+          tx.notificacion.count({ where: { userId: user.metadata.dbUserId, leida: false } })
+        ).catch(() => 0)
+      : Promise.resolve(0),
   ])
   const zona = ubicacion?.sector?.name ?? ubicacion?.city?.name ?? null
 
@@ -72,6 +83,7 @@ export default async function ClienteLayout({
         companyId={user.metadata.companyId ?? null}
         zonaLabel={zona}
         demoNombre={demo ?? null}
+        avisosSinLeer={avisosSinLeer}
       >
         {children}
       </CustomerShell>

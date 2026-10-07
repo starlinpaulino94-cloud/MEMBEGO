@@ -28,6 +28,7 @@
     "e2e:ui": "playwright test --ui",
     "e2e:base": "node scripts/e2e/base-limpia.mjs",
     "e2e:limpio": "node scripts/e2e/correr.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "migraciones:baseline": "node scripts/baseline-migraciones.mjs",
     "migraciones:pendientes": "node scripts/migraciones-pendientes.mjs",
     "db:doctor": "node scripts/db-doctor.mjs",
@@ -106,7 +107,7 @@
     "react-resizable-panels": "^3.0.3",
     "recharts": "^2.15.4",
     "server-only": "^0.0.1",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "sonner": "^2.0.6",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
@@ -133,7 +134,7 @@
     "wait-on": "^9.1.0"
   },
   "overrides": {
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "postcss": "^8.5.18",
     "deepmerge-ts": "^8.0.0"
   }

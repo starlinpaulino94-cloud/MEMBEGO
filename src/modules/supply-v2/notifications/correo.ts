@@ -1,6 +1,6 @@
 import { sendEmail } from '@/lib/email'
 import { sinEmpresa } from '@/lib/tenant'
-import { conPorDefecto, puedeMandarse, type DefinicionDeAviso, type PreferenciasDeAviso } from './dominio'
+import { puedeMandarse, type DefinicionDeAviso, type PreferenciasDeAviso } from './dominio'
 
 /**
  * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 5 · EL CORREO.
@@ -40,6 +40,13 @@ export interface CorreoDeAviso {
 export interface ResultadoDeCorreo {
   /** Lo que se apunta en el efecto del outbox. Nunca lleva la dirección. */
   detalle: string
+  /**
+   * `false` cuando el correo NO salió y reintentarlo no cambiaría nada: el
+   * proveedor lo rechazó, la persona apagó el canal, la dirección no vale, es
+   * una empresa de demostración. El worker cierra la fila y GUARDA el motivo,
+   * para que en el panel no se confunda con un envío que sí salió.
+   */
+  entregado?: boolean
 }
 
 /**
@@ -88,7 +95,7 @@ export async function mandarCorreoDeAviso(
     : null
 
   if (!puedeMandarse(aviso, 'EMAIL', preferencias)) {
-    return { detalle: 'no se manda: la persona tiene el correo apagado para esta clase de aviso' }
+    return { detalle: 'no se manda: la persona tiene el correo apagado para esta clase de aviso', entregado: false }
   }
 
   const r = await sendEmail({
@@ -105,13 +112,13 @@ export async function mandarCorreoDeAviso(
   // panel se llenaría de ruido que no describe ninguna avería nueva. Que falta
   // la clave ya lo dice la configuración crítica del bloque 4, que es su sitio.
   if (r.status === undefined && r.reason?.includes('RESEND_API_KEY')) {
-    return { detalle: 'canal de correo NO CONFIGURADO: no se intenta' }
+    return { detalle: 'canal de correo NO CONFIGURADO: no se intenta', entregado: false }
   }
   if (r.reason === 'destinatario inválido') {
-    return { detalle: 'no se manda: la dirección de la persona no es válida' }
+    return { detalle: 'no se manda: la dirección de la persona no es válida', entregado: false }
   }
   if (r.reason?.startsWith('empresa de demostración')) {
-    return { detalle: 'no se manda: empresa de demostración' }
+    return { detalle: 'no se manda: empresa de demostración', entregado: false }
   }
 
   if (valeLaPenaReintentar(r.status)) {
@@ -119,7 +126,7 @@ export async function mandarCorreoDeAviso(
     // se toca: esto corre fuera de la transacción del pago.
     throw new Error(`CORREO_TRANSITORIO: ${r.reason ?? 'sin motivo'}`)
   }
-  return { detalle: `el proveedor rechazó el correo (${r.status}): no se reintenta` }
+  return { detalle: `el proveedor rechazó el correo (${r.status}): no se reintenta`, entregado: false }
 }
 
 /**
