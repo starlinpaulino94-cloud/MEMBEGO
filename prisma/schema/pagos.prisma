@@ -42,6 +42,10 @@ model PagoIntento {
 
   /// Identificador de la sesión/transacción en la pasarela (para conciliar).
   referenciaExterna String?
+  /// Purchase.UniqueID de CardNET para el flujo móvil. Se genera y persiste
+  /// antes del POST al proveedor para que cada reconciliación use la misma
+  /// identidad idempotente.
+  cardnetUniqueId    String? @unique
   /// Código de autorización que devuelve el procesador cuando aprueba.
   autorizacion      String?
   /// Motivo del rechazo, tal como lo reporta la pasarela.
@@ -64,6 +68,8 @@ model PagoIntento {
   fulfillmentError    String?
   fulfillmentIntentos Int       @default(0)
 
+  cardnetCaptureSession CardnetCaptureSession?
+
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
@@ -74,4 +80,49 @@ model PagoIntento {
   @@index([compraId])
   @@index([membershipId])
   @@map("pago_intentos")
+}
+
+/// Estado durable del checkout móvil CardNET. `reservationKey` gana una única
+/// sesión de captura por ficha de cliente y empresa; se vuelve null al liberar
+/// el slot después de una transición terminal.
+model CardnetCaptureSession {
+  id                String   @id
+  authSubject       String
+  companyId         String
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteId         String
+  cliente           Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  customerId        String?
+  membershipId      String?
+  membership        Membership?     @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  compraId          String?
+  compra            ProductoCompra? @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  monto             Decimal  @db.Decimal(10, 2)
+  moneda            String   @default("DOP")
+  estado            String   @default("STARTING")
+  reservaClienteKey String?  @unique
+  captureNonce      String?
+  captureUrl        String?
+  scriptUrl         String?
+  publicKey         String?
+  customerUniqueId  String?
+  /// Identificadores de perfil previos, sin guardar tokens reutilizables.
+  perfilBase        Json?
+  paymentProfileId  String?
+  guardarRenovacion Boolean  @default(false)
+  purchaseIntentId  String? @unique
+  purchaseIntent    PagoIntento? @relation(fields: [purchaseIntentId], references: [id], onDelete: SetNull)
+  tarjetaTokenizada TarjetaTokenizada?
+  capturadoAt       DateTime?
+  perfilLeidoAt     DateTime?
+  conciliadoAt      DateTime?
+  asociadoAt        DateTime?
+  venceAt           DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
+
+  @@index([authSubject, createdAt])
+  @@index([companyId, clienteId, estado])
+  @@index([estado, venceAt])
+  @@map("cardnet_capture_sessions")
 }

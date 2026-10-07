@@ -115,6 +115,49 @@ export type ConfirmacionResultado =
   | { ok: true; estado: 'APROBADO'; yaEstaba: boolean; entrega: EntregaEstado; compraId: string | null; membershipId: string | null }
   | { ok: false; estado: 'RECHAZADO' | 'ERROR'; motivo: string }
 
+const FULFILLMENT_CLAIM_STALE_MS = 60_000
+
+async function resultadoIntentoActual(
+  intentoId: string,
+  companyId: string,
+  fallback: { compraId: string | null; membershipId: string | null },
+  motivo: string
+): Promise<ConfirmacionResultado> {
+  const actual = await conEmpresa(companyId, (tx) =>
+    tx.pagoIntento.findUnique({
+      where: { id: intentoId },
+      select: {
+        estado: true,
+        motivoRechazo: true,
+        fulfillmentEstado: true,
+        compraId: true,
+        membershipId: true,
+      },
+    })
+  ).catch(() => null)
+
+  if (actual?.estado === 'APROBADO') {
+    return {
+      ok: true,
+      estado: 'APROBADO',
+      yaEstaba: true,
+      entrega: actual.fulfillmentEstado === 'COMPLETADA'
+        ? 'COMPLETADA'
+        : actual.fulfillmentEstado === 'FALLIDA'
+          ? 'FALLIDA'
+          : 'PENDIENTE',
+      compraId: actual.compraId ?? fallback.compraId,
+      membershipId: actual.membershipId ?? fallback.membershipId,
+    }
+  }
+
+  return {
+    ok: false,
+    estado: actual?.estado === 'RECHAZADO' ? 'RECHAZADO' : 'ERROR',
+    motivo: actual?.motivoRechazo ?? motivo,
+  }
+}
+
 type IntentoEntregable = {
   id: string
   companyId: string
@@ -132,21 +175,32 @@ type IntentoEntregable = {
  * llama tras ganar el reclamo FALLIDA→PENDIENTE. Nunca recobra.
  */
 async function entregarProducto(
-  intento: IntentoEntregable
+  intento: IntentoEntregable,
+  claimAt: Date
 ): Promise<{ completada: boolean; error?: string }> {
   const meta = { ipAddress: intento.ipAddress, userAgent: intento.userAgent }
+  const fulfillmentClaim = { intentoId: intento.id, claimAt }
 
   // userId null a propósito: no lo activó ningún administrador, lo activó el
   // cobro. La bitácora lo registra como activación automática.
   if (intento.compraId) {
     const res = await activarCompraPromocion(intento.compraId, null, meta, {
       motivo: `Pago aprobado por pasarela (intento ${intento.id})`,
+      fulfillmentClaim,
     })
     if (!res.ok) return { completada: false, error: res.error }
     return { completada: true }
   }
   if (intento.membershipId) {
-    const res = await activarMembresia(intento.membershipId, null, meta)
+    let res
+    try {
+      res = await activarMembresia(intento.membershipId, null, meta, fulfillmentClaim)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'FULFILLMENT_CLAIM_LOST') {
+        return { completada: false, error: 'FULFILLMENT_CLAIM_LOST' }
+      }
+      throw error
+    }
     if (!res.ok) return { completada: false, error: res.error }
     return { completada: true }
   }
@@ -157,16 +211,22 @@ export async function marcarEntrega(
   companyId: string,
   intentoId: string,
   completada: boolean,
-  error?: string
+  error?: string,
+  claimAt?: Date
 ): Promise<void> {
-  await conEmpresa(companyId, (tx) =>
-    tx.pagoIntento.update({
-      where: { id: intentoId },
-      data: completada
-        ? { fulfillmentEstado: 'COMPLETADA', fulfillmentAt: new Date(), fulfillmentError: null }
-        : { fulfillmentEstado: 'FALLIDA', fulfillmentError: error ?? 'La entrega falló.' },
-    })
-  ).catch(anotarFallo('pagos:marcarEntrega', { intentoId }))
+  const data = completada
+    ? { fulfillmentEstado: 'COMPLETADA', fulfillmentAt: new Date(), fulfillmentError: null }
+    : { fulfillmentEstado: 'FALLIDA', fulfillmentError: error ?? 'La entrega falló.' }
+  await conEmpresa(companyId, async (tx) => {
+    if (claimAt) {
+      await tx.pagoIntento.updateMany({
+        where: { id: intentoId, estado: 'APROBADO', fulfillmentEstado: 'PROCESANDO', updatedAt: claimAt },
+        data,
+      })
+      return
+    }
+    await tx.pagoIntento.update({ where: { id: intentoId }, data })
+  }).catch(anotarFallo('pagos:marcarEntrega', { intentoId }))
 }
 
 /**
@@ -188,22 +248,29 @@ export async function confirmarIntento(
   if (!intento) return { ok: false, estado: 'ERROR', motivo: 'Intento de pago no encontrado.' }
 
   if (!resultado.aprobada) {
-    await conEmpresa(intento.companyId, (tx) =>
-      tx.pagoIntento
-        .update({
-          where: { id: intentoId },
-          data: {
-            estado: 'RECHAZADO',
-            motivoRechazo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
-            respuesta: (resultado.crudo ?? null) as never,
-          },
-        })
+    const rechazo = await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento.updateMany({
+        where: { id: intentoId, activadoAt: null, estado: { in: ['CREADO', 'REDIRIGIDO'] } },
+        data: {
+          estado: 'RECHAZADO',
+          motivoRechazo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
+          respuesta: (resultado.crudo ?? null) as never,
+        },
+      })
     ).catch(anotarFallo('pagos:confirmarIntento:rechazo', { intentoId }))
-    return {
-      ok: false,
-      estado: 'RECHAZADO',
-      motivo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
+    if (rechazo?.count === 1) {
+      return {
+        ok: false,
+        estado: 'RECHAZADO',
+        motivo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
+      }
     }
+    return resultadoIntentoActual(
+      intentoId,
+      intento.companyId,
+      intento,
+      'El intento ya no está pendiente de confirmación.'
+    )
   }
 
   // El monto se compara, no se confía. Si la pasarela reporta menos de lo que
@@ -216,27 +283,27 @@ export async function confirmarIntento(
     Math.abs(resultado.montoCobrado - esperado) > 0.01
   ) {
     const motivo = `El monto cobrado (${resultado.montoCobrado}) no coincide con el esperado (${esperado}).`
-    await conEmpresa(intento.companyId, (tx) =>
-      tx.pagoIntento
-        .update({
-          where: { id: intentoId },
-          data: { estado: 'ERROR', motivoRechazo: motivo, respuesta: (resultado.crudo ?? null) as never },
-        })
+    const discrepancia = await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento.updateMany({
+        where: { id: intentoId, activadoAt: null, estado: { in: ['CREADO', 'REDIRIGIDO'] } },
+        data: { estado: 'ERROR', motivoRechazo: motivo, respuesta: (resultado.crudo ?? null) as never },
+      })
     ).catch(anotarFallo('pagos:confirmarIntento:montoDistinto', { intentoId }))
-    return { ok: false, estado: 'ERROR', motivo }
+    if (discrepancia?.count === 1) return { ok: false, estado: 'ERROR', motivo }
+    return resultadoIntentoActual(intentoId, intento.companyId, intento, 'El intento ya no está pendiente de confirmación.')
   }
 
   // ── El candado del COBRO ──────────────────────────────────────────────
-  // updateMany con `activadoAt: null` en el WHERE es una operación atómica: la
-  // base de datos decide quién llega primero. `count === 0` = ya lo reclamó
-  // otro (webhook, recarga de la página, doble clic). Este candado protege el
-  // CARGO, no la entrega: la entrega tiene su propio estado abajo.
+  const claimAt = new Date()
   const marca = await conEmpresa(intento.companyId, (tx) =>
     tx.pagoIntento.updateMany({
-      where: { id: intentoId, activadoAt: null },
+      where: { id: intentoId, activadoAt: null, estado: { in: ['CREADO', 'REDIRIGIDO'] } },
       data: {
         estado: 'APROBADO',
+        updatedAt: claimAt,
         activadoAt: new Date(),
+        fulfillmentEstado: 'PROCESANDO',
+        fulfillmentIntentos: { increment: 1 },
         autorizacion: resultado.autorizacion,
         respuesta: (resultado.crudo ?? null) as never,
       },
@@ -244,24 +311,14 @@ export async function confirmarIntento(
   )
 
   if (marca.count === 0) {
-    const actual = await conEmpresa(intento.companyId, (tx) =>
-      tx.pagoIntento.findUnique({
-        where: { id: intentoId },
-        select: { fulfillmentEstado: true, compraId: true, membershipId: true },
-      })
-    ).catch(() => null)
-    return {
-      ok: true,
-      estado: 'APROBADO',
-      yaEstaba: true,
-      entrega: (actual?.fulfillmentEstado ?? 'PENDIENTE') as EntregaEstado,
-      compraId: actual?.compraId ?? intento.compraId,
-      membershipId: actual?.membershipId ?? intento.membershipId,
-    }
+    return resultadoIntentoActual(intentoId, intento.companyId, intento, 'El intento ya no está pendiente de confirmación.')
   }
 
-  const entrega = await entregarProducto(intento)
-  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error)
+  const entrega = await entregarProducto(intento, claimAt)
+  if (entrega.error === 'FULFILLMENT_CLAIM_LOST') {
+    return resultadoIntentoActual(intentoId, intento.companyId, intento, 'La entrega ya fue reclamada por otro proceso.')
+  }
+  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error, claimAt)
 
   return {
     ok: true,
@@ -273,13 +330,9 @@ export async function confirmarIntento(
   }
 }
 
-/**
- * Reintenta la entrega de un intento cobrado cuya entrega falló.
- *
- * Solo toca filas APROBADO + FALLIDA y gana un reclamo atómico
- * (FALLIDA→PENDIENTE + contador): dos reintentos concurrentes no ejecutan la
- * activación dos veces. Nunca recobra: no toca la pasarela.
- */
+const estadoEntregaActual = (estado: string): EntregaEstado =>
+  estado === 'COMPLETADA' ? 'COMPLETADA' : estado === 'FALLIDA' ? 'FALLIDA' : 'PENDIENTE'
+
 export async function reintentarEntrega(
   intentoId: string
 ): Promise<{ ok: boolean; entrega: EntregaEstado; error?: string }> {
@@ -297,26 +350,59 @@ export async function reintentarEntrega(
           userAgent: true,
           estado: true,
           fulfillmentEstado: true,
+          updatedAt: true,
         },
       })
   )
   if (!intento) return { ok: false, entrega: 'PENDIENTE', error: 'Intento no encontrado.' }
-  if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado !== 'FALLIDA') {
-    return { ok: true, entrega: intento.fulfillmentEstado as EntregaEstado }
+  if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado === 'COMPLETADA') {
+    return { ok: true, entrega: estadoEntregaActual(intento.fulfillmentEstado) }
+  }
+
+  const claimAt = new Date()
+  const staleBefore = new Date(claimAt.getTime() - FULFILLMENT_CLAIM_STALE_MS)
+  const mayRecoverStaleClaim =
+    intento.fulfillmentEstado === 'PENDIENTE' || intento.fulfillmentEstado === 'PROCESANDO'
+  if (mayRecoverStaleClaim && intento.updatedAt >= staleBefore) {
+    return { ok: true, entrega: 'PENDIENTE', error: 'La entrega sigue en proceso.' }
+  }
+  if (intento.fulfillmentEstado !== 'FALLIDA' && !mayRecoverStaleClaim) {
+    return { ok: true, entrega: 'PENDIENTE' }
   }
 
   const reclamo = await conEmpresa(intento.companyId, (tx) =>
     tx.pagoIntento.updateMany({
-      where: { id: intentoId, fulfillmentEstado: 'FALLIDA' },
-      data: { fulfillmentEstado: 'PENDIENTE', fulfillmentIntentos: { increment: 1 } },
+      where: {
+        id: intentoId,
+        estado: 'APROBADO',
+        fulfillmentEstado: intento.fulfillmentEstado,
+        ...(mayRecoverStaleClaim ? { updatedAt: { lt: staleBefore } } : {}),
+      },
+      data: {
+        fulfillmentEstado: 'PROCESANDO',
+        fulfillmentIntentos: { increment: 1 },
+        updatedAt: claimAt,
+      },
     })
   )
   if (reclamo.count === 0) {
-    return { ok: true, entrega: 'PENDIENTE', error: 'Otro proceso tomó el reintento.' }
+    const actual = await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento.findUnique({
+        where: { id: intentoId },
+        select: { fulfillmentEstado: true },
+      })
+    ).catch(() => null)
+    return { ok: true, entrega: estadoEntregaActual(actual?.fulfillmentEstado ?? 'PENDIENTE') }
   }
 
-  const entrega = await entregarProducto(intento)
-  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error)
+  const entrega = await entregarProducto(intento, claimAt)
+  if (entrega.error === 'FULFILLMENT_CLAIM_LOST') {
+    const actual = await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento.findUnique({ where: { id: intentoId }, select: { fulfillmentEstado: true } })
+    ).catch(() => null)
+    return { ok: true, entrega: estadoEntregaActual(actual?.fulfillmentEstado ?? 'PENDIENTE') }
+  }
+  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error, claimAt)
   return {
     ok: entrega.completada,
     entrega: entrega.completada ? 'COMPLETADA' : 'FALLIDA',

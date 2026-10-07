@@ -79,7 +79,7 @@ test('las pestañas de escritorio dicen en cuál estás', () => {
   assert.match(
     tabs,
     /aria-current=\{activo \? 'page' : undefined\}/,
-    'Sin `aria-current` las cuatro pestañas se ven y se anuncian iguales.'
+    'Sin `aria-current` las cinco pestañas se ven y se anuncian iguales.'
   )
 })
 

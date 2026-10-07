@@ -139,6 +139,7 @@ model ProductoCompra {
   estado CompraEstado          @default(SOLICITADA)
 
   pagoIntentos PagoIntento[]
+  cardnetCaptureSessions CardnetCaptureSession[]
 
   /// Si esta compra nació de una campaña en cadena, el eslabón que la generó.
   /// Es lo que permite, al canjearla, saber qué paso desbloquear después.

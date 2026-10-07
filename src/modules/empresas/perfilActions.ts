@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath, revalidateTag } from 'next/cache'
+import { revalidatePath, revalidateTag, updateTag } from 'next/cache'
 import { conEmpresa } from '@/lib/tenant'
 import { requireAdminUser } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -9,6 +9,7 @@ import {
   coordenadasDeEnlaceGoogleMaps,
   esEnlaceCortoGoogleMaps,
 } from '@/modules/geo/enlace-google-maps'
+import { normalizeCompanyBrandColor, withCompanyBrandColor } from '@/lib/company-branding'
 import { esZonaValida } from '@/lib/zona-horaria'
 
 // F4.1: la empresa administra su propio perfil público del marketplace.
@@ -44,19 +45,6 @@ export async function actualizarPerfilPublico(
     return { error: 'Empresa requerida.' }
   }
 
-  /**
-   * LA ZONA HORARIA SE VALIDA ANTES DE GUARDARLA, NO DESPUÉS.
-   *
-   * Es una caja de texto libre, y lo que se teclee se guarda tal cual. Pero
-   * `Intl.DateTimeFormat` no tolera un valor que no reconozca: LANZA. Una
-   * «GMT-4» o una «Santo Domingo» guardadas aquí reaparecen como «No se pudo
-   * cargar esta sección» en Reportes, en todas sus pantallas y para siempre,
-   * a kilómetros de la pantalla donde se escribieron.
-   *
-   * Se rechaza con el valor delante, que es lo único que permite corregirlo.
-   * `zonaSegura` cubre lo que YA está mal guardado; esto impide que vuelva a
-   * entrar.
-   */
   const zonaHoraria = val(formData, 'zonaHoraria')
   if (zonaHoraria && !esZonaValida(zonaHoraria)) {
     return {
@@ -64,6 +52,12 @@ export async function actualizarPerfilPublico(
         `«${zonaHoraria}» no es una zona horaria válida. Se escribe en formato IANA, ` +
         'como America/Santo_Domingo o America/New_York.',
     }
+  }
+
+  const rawColorPrimario = String(formData.get('colorPrimario') ?? '').trim()
+  const colorPrimario = normalizeCompanyBrandColor(rawColorPrimario)
+  if (rawColorPrimario && !colorPrimario) {
+    return { error: 'El color de marca debe usar formato #RGB o #RRGGBB.' }
   }
 
   const galleryImages = formData
@@ -109,6 +103,12 @@ export async function actualizarPerfilPublico(
 
   try {
     await conEmpresa(companyId, async (tx) => {
+      const current = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { engagementConfig: true },
+      })
+      const engagementConfig = withCompanyBrandColor(current?.engagementConfig, colorPrimario)
+
       await tx.company.update({
         where: { id: companyId },
         data: {
@@ -131,7 +131,8 @@ export async function actualizarPerfilPublico(
           moneda: val(formData, 'moneda') ?? undefined,
           idioma: val(formData, 'idioma') ?? undefined,
           zonaHoraria: zonaHoraria ?? undefined,
-          colorPrimario: val(formData, 'colorPrimario'),
+          colorPrimario,
+          engagementConfig: engagementConfig as never,
           politicaCancelacion: val(formData, 'politicaCancelacion'),
           politicaPrivacidad: val(formData, 'politicaPrivacidad'),
           terminosEmpresa: val(formData, 'terminosEmpresa'),
@@ -161,7 +162,7 @@ export async function actualizarPerfilPublico(
     revalidatePath('/admin/perfil')
     revalidatePath('/empresas', 'layout')
     revalidatePath('/')
-    revalidateTag('marketplace', 'max')
+    updateTag('marketplace')
     return { success: true }
   } catch (e) {
     console.error('[perfil-empresa]', e)

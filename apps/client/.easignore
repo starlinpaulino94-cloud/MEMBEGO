@@ -1,0 +1,9 @@
+.codegraph
+.codegraph/**
+.omo
+.omo/**
+.next
+.next/**
+.turbo
+node_modules
+.expo

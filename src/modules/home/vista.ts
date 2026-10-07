@@ -35,6 +35,8 @@ export interface PlanInicio {
   readonly id: string
   readonly nombre: string
   readonly empresa: string
+  readonly colorPrimario: string | null
+  readonly esCliente?: boolean
   readonly descripcion: string | null
   readonly imagen: string | null
   readonly href: string
@@ -89,6 +91,7 @@ export interface RelampagoInicio {
   readonly id: string
   readonly titulo: string
   readonly empresa: string
+  readonly colorPrimario: string | null
   readonly imagen: string | null
   readonly href: string
   /** Ya formateado: «RD$2,900». Null = sin venta en línea. */
@@ -113,14 +116,60 @@ export interface EmpresaScrollItem {
   readonly rubro: string | null
   readonly ciudad: string | null
   readonly logoUrl: string | null
+  readonly colorPrimario: string | null
   readonly bannerUrl: string | null
   readonly href: string
   readonly valoracion: number | null
   readonly resenas: number
   readonly planes?: number
   readonly esMia: boolean
+  readonly esFavorita?: boolean
   readonly etiquetaRelacion: string | null
+  readonly esNueva?: boolean
+  readonly creadoEn?: string | null
 }
+
+export type NovedadHero =
+  | {
+    readonly tipo: 'PROMOCION'
+    readonly id: string
+    readonly creadoEn: string
+    readonly titulo: string
+    readonly descripcion: string | null
+    readonly empresa: string
+    readonly colorPrimario: string | null
+    readonly imagen: string | null
+    readonly href: string
+    readonly descuento: string | null
+    readonly vigenciaHasta: string | null
+  }
+  | {
+    readonly tipo: 'MEMBRESIA'
+    readonly id: string
+    readonly creadoEn: string
+    readonly titulo: string
+    readonly descripcion: string | null
+    readonly empresa: string
+    readonly colorPrimario: string | null
+    readonly color: string | null
+    readonly imagen: string | null
+    readonly href: string
+    readonly precio: string
+    readonly periodo: string
+  }
+  | {
+    readonly tipo: 'EMPRESA'
+    readonly id: string
+    readonly creadoEn: string
+    readonly titulo: string
+    readonly descripcion: string | null
+    readonly empresa: string
+    readonly colorPrimario: string | null
+    readonly imagen: string | null
+    readonly href: string
+    readonly ciudad: string | null
+    readonly valoracion: number | null
+  }
 
 export interface PromoNovedadItem {
   readonly id: string
@@ -140,6 +189,7 @@ export interface PromoNovedadItem {
     readonly nombre: string
     readonly slug: string
     readonly logoUrl: string | null
+    readonly colorPrimario: string | null
   }
   readonly esPrivadaMiembros: boolean
   readonly esDeMiEmpresa: boolean
@@ -160,6 +210,7 @@ export interface InicioVista {
   readonly categoriaActiva?: string | null
   readonly bloques: readonly TipoBloque[]
   readonly heroes: readonly HeroInicio[]
+  readonly novedadesHero: readonly NovedadHero[]
   readonly categorias: readonly CategoriaInicio[]
   readonly empresas: readonly EmpresaInicio[]
   /** Total de empresas publicadas, para «Explorar más de N empresas». */

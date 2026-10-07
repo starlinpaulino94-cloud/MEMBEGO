@@ -29,6 +29,8 @@ export const registroSchema = z.object({
     .trim()
     .transform((v) => v || undefined),
   glCode: z.string().trim().default(''),
+  enlaceSlug: z.string().trim().default(''),
+  vendedorCode: z.string().trim().default(''),
   canalDeclarado: z
     .string()
     .trim()

@@ -106,7 +106,7 @@ export async function ensureSucursalPrincipal(companyId: string): Promise<void> 
         await tx.sucursal.updateMany({
           where: {
             companyId,
-            nombre: SUCURSAL_PRINCIPAL_NOMBRE,
+            nombre: { equals: SUCURSAL_PRINCIPAL_NOMBRE, mode: 'insensitive' },
             OR: [{ latitud: null }, { longitud: null }],
           },
           data: punto,

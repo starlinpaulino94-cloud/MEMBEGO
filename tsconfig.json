@@ -84,6 +84,7 @@
   ],
   "exclude": [
     "node_modules",
-    "prisma"
+    "prisma",
+    "apps/client"
   ]
 }

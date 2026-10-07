@@ -9,6 +9,7 @@ import {
   refsGuardado,
   textoSeguroWidget,
   imagenSeguraWidget,
+  esMensajeCapturaCardnetConfiable,
 } from '@/lib/payments/cardnet-widget'
 import { normalizarCodigoActivacion } from '@/lib/payments/cardnet-tokens-core'
 import { Button } from '@/components/ui/button'
@@ -242,6 +243,7 @@ export function PagoTokenCardnet({
   const customerIdRef = useRef<string | null>(null)
   // Sesión pre-creada en segundo plano para que el clic abra al instante.
   const sesionRef = useRef<SesionCaptura | null>(null)
+  const capturaActivaRef = useRef<SesionCaptura | null>(null)
   // Último payload de tokenCreated: de aquí salen las referencias para guardar.
   const tokenDataRef = useRef<unknown>(null)
   const guardarRef = useRef(false)
@@ -625,7 +627,12 @@ export function PagoTokenCardnet({
   // página (postMessage). Si en alguno viene el token, se cobra con él.
   useEffect(() => {
     const alMensaje = (ev: MessageEvent) => {
-      if (!/gtp-seglan\.com|cardnet\.com\.do/i.test(ev.origin)) return
+      if (estado !== 'capturando') return
+      const iframes = Array.from(document.querySelectorAll<HTMLIFrameElement>('iframe')).map((frame) => ({
+        src: frame.src,
+        contentWindow: frame.contentWindow,
+      }))
+      if (!esMensajeCapturaCardnetConfiable(ev, capturaActivaRef.current, iframes)) return
       if (cobrandoRef.current) return
       const d: unknown = ev.data
       let t = ''
@@ -646,7 +653,7 @@ export function PagoTokenCardnet({
     }
     window.addEventListener('message', alMensaje)
     return () => window.removeEventListener('message', alMensaje)
-  }, [cobrar])
+  }, [cobrar, estado])
 
   // PLAN E: si a pesar de todo el formulario llegó a navegar (recarga con
   // ?PWToken=... en la URL), se rescata el token al montar y se cobra.
@@ -811,6 +818,7 @@ export function PagoTokenCardnet({
       )
       return
     }
+    capturaActivaRef.current = null
     setEstado('capturando')
     setMensaje(null)
     setTipoError('otro')
@@ -832,6 +840,7 @@ export function PagoTokenCardnet({
     }
     conteoAntesRef.current = sesion.conteoPerfiles
     customerIdRef.current = sesion.customerId
+    capturaActivaRef.current = sesion
 
     // Los textos van SANEADOS: el widget los arrastra a la URL de la ventana
     // de captura sin escaparlos, y un `&` —como el de «CARTOWN Wash &

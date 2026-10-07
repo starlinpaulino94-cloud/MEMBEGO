@@ -25,6 +25,15 @@ export const dynamic = 'force-dynamic'
  * para que la ventana padre confirme que es su propio pago.
  */
 
+/**
+ * `req.formData()` resuelve en este programa al `FormData` que declara React
+ * Native (append/getAll/getParts): la app Expo comparte este proyecto de tipos
+ * y su augmentación global gana la resolución. En el servidor el valor real es
+ * el `FormData` web, que sí trae `get`; se cruza lo recibido con el `FormData`
+ * real. Solo tipos: en ejecución no cambia nada.
+ */
+type FormDataRecibida = Awaited<ReturnType<NextRequest['formData']>> & FormData
+
 function leer(params: URLSearchParams | FormData, claves: string[]): string {
   for (const c of claves) {
     const v = params.get(c)
@@ -72,7 +81,7 @@ export async function POST(req: NextRequest) {
       for (const [k, v] of Object.entries(cuerpo)) p.set(k, String(v))
       return paginaPuente(leer(p, RD), leer(p, TDS))
     }
-    const form = await req.formData()
+    const form = (await req.formData()) as FormDataRecibida
     return paginaPuente(leer(form, RD), leer(form, TDS))
   } catch (e) {
     logErrorBd('pagos:cardnet:retorno:cuerpo', e)

@@ -139,9 +139,9 @@ del oscuro y aterriza en una página clara. Lo verifica
 ### Alias semánticos
 
 `brand-primary`, `brand-primary-hover`, `brand-primary-soft`, `surface`,
-`surface-subtle`, `sidebar-hover` y `sidebar-active` apuntan a los tokens de
+`surface-card`, `surface-subtle`, `sidebar-hover` y `sidebar-active` apuntan a los tokens de
 siempre. Son nombres nuevos sobre el mismo sistema, no un segundo sistema:
-`bg-card` y `bg-surface` dan lo mismo. En pantallas nuevas, usa el que mejor
+`bg-card`, `bg-surface` y `bg-surface-card` dan lo mismo. En pantallas nuevas, usa el que mejor
 describa la intención.
 
 ## Tipografía

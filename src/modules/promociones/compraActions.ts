@@ -15,13 +15,12 @@ import { rutaValida } from '@/modules/storage/comprobantes'
 import { notificarAdmins } from '@/modules/notificaciones/service'
 import { getPaymentProvider } from '@/lib/payments'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
+import { arbitrarComprobanteCompraContraCapturaCardnet } from '@/modules/pagos/cardnetClienteSesionStore'
+import { adquirirPromocion } from '@/modules/promociones/compraService'
 import {
   registrarTransicionCompra,
-  validarVentanaAdquisicion,
-  estadoLimiteCliente,
-  mensajeLimitePorCliente,
 } from '@/modules/promociones/compra'
-import { asegurarClienteEnEmpresa, misClienteIds } from '@/modules/cliente/afiliacion'
+import { misClienteIds } from '@/modules/cliente/afiliacion'
 
 export interface CompraState {
   error?: string
@@ -32,53 +31,10 @@ export interface CompraState {
 }
 
 // Estados que cuentan como "compra en proceso o activa" de la misma promo.
-const ESTADOS_VIVOS = ['SOLICITADA', 'PENDIENTE_PAGO', 'EN_VALIDACION', 'APROBADA', 'ACTIVA'] as const
-
 async function clienteAutenticado() {
   const user = await getUser()
   if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) return null
   return user
-}
-
-/**
- * LA FICHA CON LA QUE SE ADQUIERE ESTA PROMOCIÓN.
- *
- * ────────────────────────────────────────────────────────────────────────────
- * ANTES: «PRIMERO ÚNETE A LA EMPRESA»
- *
- * Aquí había un rechazo seco cuando la promoción era de otro negocio:
- * «Para adquirir esta promoción primero únete a la empresa que la publica».
- * Y en la pantalla de la promoción el botón directamente NO aparecía, así que
- * el mensaje ni siquiera llegaba a leerse: quien veía unos tacos gratis en un
- * restaurante que no conocía solo tenía «Ver empresa y sus planes».
- *
- * Eso invertía el trato. Una recompensa es el motivo por el que alguien se
- * acerca a un negocio nuevo; pedirle que se dé de alta ANTES es cobrarle el
- * trámite por adelantado y perder justo a quien todavía no tiene ninguna razón
- * para pagarlo.
- *
- * ────────────────────────────────────────────────────────────────────────────
- * AHORA: EL ALTA ES LA CONSECUENCIA, NO EL REQUISITO
- *
- * Adquirir crea la ficha en esa empresa y la sigue —`asegurarClienteEnEmpresa`
- * hace las dos cosas—, y la compra queda bajo esa ficha. El negocio gana un
- * cliente y un seguidor en el momento en que la persona demuestra interés, no
- * antes.
- *
- * Lo que NO cambia es la empresa activa de la sesión: reclamar unos tacos no es
- * pedir mudarse de negocio (ver `afiliacion.ts`).
- */
-async function fichaParaAdquirir(
-  user: NonNullable<Awaited<ReturnType<typeof clienteAutenticado>>>,
-  companyId: string,
-  companyIdDeMiFicha: string,
-  miClienteId: string
-): Promise<{ clienteId: string } | { error: string }> {
-  if (companyId === companyIdDeMiFicha) return { clienteId: miClienteId }
-
-  const alta = await asegurarClienteEnEmpresa(user.supabaseId, user.email, companyId)
-  if ('error' in alta) return alta
-  return { clienteId: alta.clienteId }
 }
 
 
@@ -108,138 +64,10 @@ export async function solicitarCompraPromocion(
   try {
     const user = await clienteAutenticado()
     if (!user) return { error: 'Inicia sesión como cliente para adquirir promociones.' }
-    if (!(await formSubmitLimiter(user.metadata.clienteId!))) {
-      return { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' }
-    }
-
-    const promocionId = String(formData.get('promocionId') ?? '')
-    if (!promocionId) return { error: 'Promoción no especificada.' }
-
-    const [cliente, promo] = await sinEmpresa(
-      'promociones: lookup de cliente y promoción por id (pertenencia se valida después)',
-      (tx) =>
-        Promise.all([
-          tx.cliente.findUnique({ where: { id: user.metadata.clienteId! } }),
-          tx.promocion.findUnique({ where: { id: promocionId } }),
-        ])
-    )
-    if (!cliente) return { error: 'Cliente no encontrado.' }
-    if (!promo) return { error: 'Promoción no encontrada.' }
-
-    // Rule Engine de adquisición: ventana + cupo + estado de publicación.
-    // Va ANTES del alta a propósito: si la promoción está agotada o fuera de
-    // ventana, no tiene ningún sentido haberle creado una ficha a la persona en
-    // una empresa a la que al final no se lleva nada.
-    const ventana = validarVentanaAdquisicion(promo)
-    if (!ventana.ok) return { error: ventana.mensaje }
-
-    // Promoción privada: solo miembros con membresía activa.
-    //
-    // Se comprueba ANTES del alta, y se mira la ficha que la persona YA tenga
-    // en esa empresa. Sin ficha no puede haber membresía, así que crear una
-    // primero solo serviría para dejarla afiliada a un negocio del que se va
-    // con un «es exclusiva para miembros» — y siguiéndolo, además.
-    if (promo.visibilidad === 'privada') {
-      const activa = await conEmpresa(promo.companyId, (tx) =>
-        tx.membership.findFirst({
-          where: {
-            cliente: { supabaseId: user.supabaseId, companyId: promo.companyId },
-            companyId: promo.companyId,
-            estado: 'ACTIVA',
-          },
-          select: { id: true },
-        })
-      )
-      if (!activa) return { error: 'Esta promoción es exclusiva para miembros con membresía activa.' }
-    }
-
-    // Promoción de otra empresa: el alta y el seguimiento salen de adquirirla.
-    const ficha = await fichaParaAdquirir(user, promo.companyId, cliente.companyId, cliente.id)
-    if ('error' in ficha) return { error: ficha.error }
-    const clienteId = ficha.clienteId
-
-    // Sin compras duplicadas vivas de la misma promoción.
-    const viva = await conEmpresa(promo.companyId, (tx) =>
-      tx.productoCompra.findFirst({
-        where: {
-          clienteId,
-          promocionId: promo.id,
-          estado: { in: [...ESTADOS_VIVOS] },
-        },
-        select: { id: true, estado: true },
-      })
-    )
-    if (viva) {
-      return viva.estado === 'ACTIVA'
-        ? { error: 'Ya tienes esta promoción activa.', compraId: viva.id }
-        : { error: 'Ya tienes una compra de esta promoción en proceso.', compraId: viva.id }
-    }
-
-    // Límite por cliente: promociones de un solo uso (ej. "primer lavado gratis")
-    // no pueden re-adquirirse aunque ya se hayan usado o vencido.
-    if (promo.limitePorCliente != null) {
-      const limite = await conEmpresa(promo.companyId, (tx) =>
-        estadoLimiteCliente(clienteId, promo.id, promo.limitePorCliente, tx)
-      )
-      if (limite.alcanzado) {
-        return { error: mensajeLimitePorCliente(promo.limitePorCliente) }
-      }
-    }
-
-    const precio = Number(promo.precio ?? 0)
-    const esGratis = precio <= 0
-
-    const compra = await conEmpresa(promo.companyId, async (tx) => {
-      const creada = await tx.productoCompra.create({
-        data: {
-          tipo: 'PROMOCION',
-          estado: esGratis ? 'SOLICITADA' : 'PENDIENTE_PAGO',
-          companyId: promo.companyId,
-          clienteId,
-          promocionId: promo.id,
-          precioCongelado: promo.precio,
-          usosIncluidos: promo.usosPorCompra,
-        },
-      })
-      await registrarTransicionCompra(tx, {
-        compraId: creada.id,
-        desde: null,
-        hacia: 'SOLICITADA',
-        motivo: 'Solicitud del cliente',
-        userId: user.metadata.dbUserId ?? null,
-      })
-      if (!esGratis) {
-        await registrarTransicionCompra(tx, {
-          compraId: creada.id,
-          desde: 'SOLICITADA',
-          hacia: 'PENDIENTE_PAGO',
-          motivo: 'Esperando transferencia del cliente',
-          userId: user.metadata.dbUserId ?? null,
-        })
-      }
-      return creada
-    })
-
-    // Campañas conjuntas en cadena: si esta promoción es un eslabón, la compra
-    // queda marcada como tal (y el cliente inscrito si es el primer paso).
-    // Así el cliente entra a la cadena por el flujo normal, sin pantallas
-    // extra. Fail-open: nunca invalida una compra legítima.
-    const { vincularCompraSiEsPaso } = await import('@/modules/campanas/cadena')
-    await vincularCompraSiEsPaso(compra.id, promo.id, clienteId)
-
-    // Promoción gratuita: activación directa (sin pago), QR inmediato.
-    if (esGratis) {
-      const meta = await getRequestMeta()
-      const res = await activarCompraPromocion(compra.id, user.metadata.dbUserId ?? null, meta, {
-        motivo: 'Promoción gratuita: activación directa',
-      })
-      if (!res.ok) return { error: res.error }
-      revalidatePath('/cliente/mis-promociones')
-      return { success: true, compraId: compra.id, activada: true }
-    }
-
+    const result = await adquirirPromocion(user, String(formData.get('promocionId') ?? ''))
+    if ('error' in result) return result
     revalidatePath('/cliente/mis-promociones')
-    return { success: true, compraId: compra.id }
+    return result
   } catch (e) {
     console.error('[promociones] solicitarCompraPromocion:', e)
     return { error: 'Ocurrió un error inesperado. Intenta de nuevo.' }
@@ -304,9 +132,16 @@ export async function enviarComprobanteCompra(
       }
     }
 
-    await conEmpresa(compra.companyId, async (tx) => {
-      await tx.productoCompra.update({
-        where: { id: compra.id },
+    const submission = await conEmpresa(compra.companyId, async (tx) => {
+      const canSubmit = await arbitrarComprobanteCompraContraCapturaCardnet(tx, {
+        companyId: compra.companyId,
+        clienteId: compra.clienteId,
+        compraId: compra.id,
+        authSubject: user.supabaseId,
+      })
+      if (!canSubmit) return 'cardnet_in_flight' as const
+      const updated = await tx.productoCompra.updateMany({
+        where: { id: compra.id, estado: compra.estado },
         data: {
           estado: 'EN_VALIDACION',
           comprobanteUrl,
@@ -316,6 +151,7 @@ export async function enviarComprobanteCompra(
           rechazadoReason: null,
         },
       })
+      if (updated.count !== 1) return 'state_changed' as const
       await registrarTransicionCompra(tx, {
         compraId: compra.id,
         desde: compra.estado,
@@ -323,7 +159,14 @@ export async function enviarComprobanteCompra(
         motivo: 'Comprobante enviado por el cliente',
         userId: user.metadata.dbUserId ?? null,
       })
+      return 'submitted' as const
     })
+    if (submission === 'cardnet_in_flight') {
+      return { error: 'El pago con tarjeta ya se está procesando.' }
+    }
+    if (submission === 'state_changed') {
+      return { error: 'La compra cambió de estado; recarga e intenta de nuevo.' }
+    }
 
     await notificarAdmins(compra.companyId, {
       tipo: 'NUEVO_COMPROBANTE',

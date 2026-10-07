@@ -37,8 +37,7 @@ export interface MembresiaDelCliente {
   precioPagado: string
   renovaciones: number
   beneficios: { nombre: string; usosDisponibles: number; vence: string | null }[]
-}
-
+  }
 export interface PuntosDelCliente {
   programaId: string
   programa: string
@@ -581,4 +580,3 @@ export async function resumenDeFidelizacion(customerId: string, ahora = new Date
       .sort((a, b) => (a.hasta! < b.hasta! ? -1 : 1))[0] ?? null,
   }
 }
-
