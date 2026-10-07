@@ -176,6 +176,9 @@ export async function finishApproval(
     crudo: { flujo: 'cardnet-cliente', resultado: 'aprobado' },
     montoCobrado: purchaseAmountPesos(purchasePayload),
   }).catch(() => null)
+  if (result?.ok && result.entrega === 'PENDIENTE') {
+    return success(202, { status: 'pending' })
+  }
   if (!result?.ok || result.entrega !== 'COMPLETADA') {
     const pending = await setSessionState(session, CARDNET_SESSION_STATES.FULFILLMENT_PENDING, { conciliadoAt: new Date() })
     return pending ? success(202, { status: 'pending' }) : currentSessionReply(session)

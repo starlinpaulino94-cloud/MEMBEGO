@@ -36,6 +36,7 @@ interface Scenario {
   chargeResults: Array<unknown | null>
   chargeRequests: Array<{ readonly purchaseUniqueId: unknown; readonly order: unknown; readonly amount: unknown; readonly token?: unknown }>
   confirmationResult?: unknown
+  confirmationResults?: unknown[]
   onConfirmIntent?: () => void
   purchaseSearches: Row[]
   promotionResult: unknown
@@ -894,6 +895,74 @@ test('a stale pending search cannot invalidate a concurrent approved transition'
   const approvedResult = await approved
   assert.equal(approvedResult.status, 200)
   assert.equal(approvedResult.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
+})
+
+test('an in-flight fulfillment result does not leave a completed payment pending', { timeout: 5_000 }, async () => {
+  const s = setup()
+  const approvedPurchase = {
+    ok: true,
+    json: {
+      Response: {
+        Purchases: [{
+          OrderNumber: 'stable-purchase-key',
+          UniqueID: 'stable-purchase-key',
+          CustomerId: 'cardnet-customer-test',
+          Created: new Date().toISOString(),
+          Transaction: { TransactionStatusId: 1, AuthorizationCode: 'A1B2C3', ResponseCode: '00' },
+        }],
+      },
+    },
+  }
+  s.purchaseSearchResponses = [approvedPurchase, approvedPurchase]
+  let releaseDelivery: (result: unknown) => void = () => undefined
+  const deliveryResult = new Promise<unknown>((resolve) => { releaseDelivery = resolve })
+  let announceFirstConfirmation: () => void = () => undefined
+  const firstConfirmationStarted = new Promise<void>((resolve) => { announceFirstConfirmation = resolve })
+  let confirmCount = 0
+  s.onConfirmIntent = () => {
+    confirmCount += 1
+    if (confirmCount === 1) announceFirstConfirmation()
+  }
+  let announceSecondSearch: () => void = () => undefined
+  const secondSearchStarted = new Promise<void>((resolve) => { announceSecondSearch = resolve })
+  let searchCount = 0
+  s.onPurchaseSearch = () => {
+    searchCount += 1
+    if (searchCount === 2) announceSecondSearch()
+  }
+  s.confirmationResults = [deliveryResult, { ok: true, entrega: 'PENDIENTE' }]
+
+  const id = 'u'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key' },
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+  const api = await service()
+  const status = () => api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  const completing = status()
+  await firstConfirmationStarted
+  const concurrent = status()
+  await secondSearchStarted
+  const concurrentResult = await concurrent
+  assert.equal(concurrentResult.status, 202)
+  assert.equal(concurrentResult.body.status, 'pending')
+  assert.equal(row.estado, 'PURCHASE_PENDING')
+
+  releaseDelivery({ ok: true, entrega: 'COMPLETADA' })
+  const completed = await completing
+  assert.equal(completed.status, 200)
+  assert.equal(completed.body.status, 'approved')
   assert.equal(row.estado, 'APPROVED')
 })
 
