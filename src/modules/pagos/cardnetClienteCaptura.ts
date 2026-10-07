@@ -50,17 +50,23 @@ export async function chargeWithProfile(
 ): Promise<CardnetReply> {
   const intent = await createOrReadIntent(session)
   if (!intent?.cardnetUniqueId || !profile.token) return success(202, { status: 'pending' })
+  const purchaseSession = await loadSession(session.id, session.authSubject)
+  if (
+    !purchaseSession ||
+    purchaseSession.estado !== CARDNET_SESSION_STATES.PURCHASE_PENDING ||
+    purchaseSession.purchaseIntent?.id !== intent.id
+  ) return success(202, { status: 'pending' })
   const ip = requestIp(request)
   const charge = await cobrarConToken({
     trxToken: profile.token,
-    pesos: Number(session.monto),
+    pesos: Number(purchaseSession.monto),
     orden: intent.id,
     clienteIp: ip,
-    customerId: session.customerId ?? undefined,
+    customerId: purchaseSession.customerId ?? undefined,
     purchaseUniqueId: intent.cardnetUniqueId,
   }).catch(() => null)
   if (!charge) {
-    const latest = await loadSession(session.id, session.authSubject)
+    const latest = await loadSession(purchaseSession.id, purchaseSession.authSubject)
     if (!latest) return success(202, { status: 'pending' })
     const reconciled = await searchPurchase(latest)
     return interpretPurchase(latest, intent.id, reconciled.decision, reconciled.payload)
@@ -69,12 +75,12 @@ export async function chargeWithProfile(
   const httpStatus = typeof http === 'number' ? http : 0
   const decision = purchaseDecision(httpStatus, charge.crudo)
   if (decision.kind === 'ambiguous' || decision.kind === 'pending') {
-    const latest = await loadSession(session.id, session.authSubject)
+    const latest = await loadSession(purchaseSession.id, purchaseSession.authSubject)
     if (!latest) return success(202, { status: 'pending' })
     const reconciled = await searchPurchase(latest)
     return interpretPurchase(latest, intent.id, reconciled.decision, reconciled.payload)
   }
-  return interpretPurchase(session, intent.id, decision, charge.crudo)
+  return interpretPurchase(purchaseSession, intent.id, decision, charge.crudo)
 }
 
 export async function progressCapture(
@@ -130,16 +136,17 @@ export async function progressCapture(
   const profile = seleccionarPerfilNuevo(customer.perfiles, baselineFromJson(claimed.perfilBase))
   if (profile.kind !== 'selected') return success(202, { status: 'pending' })
   if (!profile.perfil.habilitado) {
-    await setSessionState(claimed, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED, {
+    const required = await setSessionState(claimed, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED, {
       paymentProfileId: profile.perfil.paymentProfileId,
       perfilLeidoAt: new Date(),
     })
-    return success(200, { status: 'activation_required' })
+    return required ? success(200, { status: 'activation_required' }) : success(202, { status: 'pending' })
   }
-  await setSessionState(claimed, CARDNET_SESSION_STATES.PROFILE_PENDING, {
+  const ready = await setSessionState(claimed, CARDNET_SESSION_STATES.PROFILE_PENDING, {
     paymentProfileId: profile.perfil.paymentProfileId,
     perfilLeidoAt: new Date(),
   })
+  if (!ready) return success(202, { status: 'pending' })
   const fresh = await loadSession(claimed.id, claimed.authSubject)
   return fresh ? chargeWithProfile(fresh, profile.perfil, request) : success(202, { status: 'pending' })
 }

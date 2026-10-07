@@ -112,16 +112,23 @@ export async function failStartingSession(sessionId: string, companyId: string, 
 }
 
 export async function setSessionState(
-  session: { readonly id: string; readonly companyId: string; readonly authSubject: string },
+  session: LoadedCardnetSession,
   state: string,
   additional: Prisma.CardnetCaptureSessionUpdateManyMutationInput = {}
-): Promise<void> {
-  await conEmpresa(session.companyId, (tx) =>
+): Promise<boolean> {
+  const updatedAt = new Date()
+  const updated = await conEmpresa(session.companyId, (tx) =>
     tx.cardnetCaptureSession.updateMany({
-      where: { id: session.id, authSubject: session.authSubject },
-      data: { estado: state, ...additional },
+      where: {
+        id: session.id,
+        authSubject: session.authSubject,
+        estado: session.estado,
+        updatedAt: session.updatedAt,
+      },
+      data: { estado: state, ...additional, updatedAt },
     })
-  ).catch(() => undefined)
+  ).catch(() => ({ count: 0 }))
+  return updated.count === 1
 }
 
 export async function renewActivationClaim(

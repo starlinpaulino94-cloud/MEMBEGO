@@ -14,6 +14,7 @@ interface Scenario {
   purchase: Row | null
   sessions: Map<string, Row>
   reservations: Map<string, Row>
+  intents: Map<string, Row>
   config: Row
   customerResponse: Row
   searchResponse: Row
@@ -29,6 +30,8 @@ interface Scenario {
   onCharge?: () => void
   onCustomerRead?: () => void
   customerGetResponses?: Array<unknown | null>
+  onPurchaseSearch?: () => void
+  purchaseSearchResponses?: Array<unknown | null>
   intentCreates: number
   chargeResults: Array<unknown | null>
   chargeRequests: Array<{ readonly purchaseUniqueId: unknown; readonly order: unknown; readonly amount: unknown; readonly token?: unknown }>
@@ -78,7 +81,7 @@ function setup(): Scenario {
       supabaseId: 'qa-user', email: 'qa@example.test',
       metadata: { role: 'CLIENTE', dbUserId: 'qa-db-user', clienteId: 'qa-client', companyId: 'qa-company' },
     },
-    membership: null, purchase: null, sessions: new Map(), reservations: new Map(),
+    membership: null, purchase: null, sessions: new Map(), reservations: new Map(), intents: new Map(),
     config: { captureUrl: 'https://lab.cardnet.com.do', scriptUrl: 'https://tr-tsp-test.gtp-seglan.com/widget.js', publicKey: 'sandbox-public' },
     customerResponse: { denegado: false, email: 'qa@example.test', captureUrl: 'https://lab.cardnet.com.do', uniqueId: 'temporary-customer-id', perfiles: [] },
     searchResponse: { ok: true, json: { Response: { Purchases: [] } } },
@@ -111,7 +114,10 @@ function setup(): Scenario {
       },
     },
     cardnetCaptureSession: {
-      findFirst: async (input: { where: Row }) => [...s.sessions.values()].find((row) => matches(row, input.where)) ?? null,
+      findFirst: async (input: { where: Row }) => {
+        const row = [...s.sessions.values()].find((candidate) => matches(candidate, input.where))
+        return row ? { ...row } : null
+      },
       findUnique: async (input: { where: Row }) => s.reservations.get(String(input.where.reservaClienteKey ?? '')) ?? null,
       create: async (input: { data: Row }) => {
         const key = String(input.data.reservaClienteKey ?? '')
@@ -134,11 +140,20 @@ function setup(): Scenario {
       update: async (input: { where: Row; data: Row }) => {
         const row = [...s.sessions.values()].find((candidate) => matches(candidate, input.where))
         if (!row) throw new Error('capture session missing')
-        Object.assign(row, input.data); row.updatedAt = new Date(); return row
+        Object.assign(row, input.data)
+        if (typeof input.data.purchaseIntentId === 'string') {
+          row.purchaseIntent = s.intents.get(input.data.purchaseIntentId) ?? null
+        }
+        row.updatedAt = new Date()
+        return row
       },
     },
     pagoIntento: {
-      create: async (input: { data: Row }) => ({ id: 'intent-' + (++s.intentCreates), ...input.data }),
+      create: async (input: { data: Row }) => {
+        const intent = { id: 'intent-' + (++s.intentCreates), ...input.data }
+        s.intents.set(intent.id, intent)
+        return intent
+      },
       updateMany: async () => ({ count: 1 }),
     },
     tarjetaTokenizada: { upsert: async () => ({ id: 'tokenized-card-test' }) },
@@ -742,6 +757,77 @@ test('a superseded stale purchase lookup cannot send Purchase', { timeout: 5_000
   assert.ok([firstResult, secondResult].every((result) => result.status === 202 && result.body.status === 'pending'))
   assert.deepEqual(s.chargeRequests.map((call) => call.purchaseUniqueId), ['stable-purchase-key'])
   assert.equal(s.customerGets, 2)
+})
+
+test('a stale activation result cannot reopen a session approved by another handler', { timeout: 5_000 }, async () => {
+  const s = setup()
+  const stableUniqueId = 'stable-approved-purchase-key'
+  let releaseStaleSearch: (response: unknown) => void = () => undefined
+  const staleSearchResponse = new Promise<unknown>((resolve) => { releaseStaleSearch = resolve })
+  let announceFirstSearch: () => void = () => undefined
+  const firstSearchStarted = new Promise<void>((resolve) => { announceFirstSearch = resolve })
+  let searchCount = 0
+  s.onPurchaseSearch = () => {
+    searchCount += 1
+    if (searchCount === 1) announceFirstSearch()
+  }
+  s.purchaseSearchResponses = [staleSearchResponse, {
+    ok: true,
+    json: {
+      Response: {
+        Purchases: [{
+          OrderNumber: stableUniqueId,
+          UniqueID: stableUniqueId,
+          CustomerId: 'cardnet-customer-test',
+          Created: new Date().toISOString(),
+          Transaction: { TransactionStatusId: 1, AuthorizationCode: 'A1B2C3', ResponseCode: '00' },
+        }],
+      },
+    },
+  }]
+  const id = 's'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: stableUniqueId },
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+  const api = await service()
+  const status = () => api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  const stale = status()
+  await firstSearchStarted
+  const approved = await status()
+  assert.equal(approved.status, 200)
+  assert.equal(approved.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
+  const approvedUpdatedAt = row.updatedAt
+  releaseStaleSearch({
+    ok: true,
+    json: {
+      Response: {
+        Purchases: [{
+          OrderNumber: stableUniqueId,
+          UniqueID: stableUniqueId,
+          CustomerId: 'cardnet-customer-test',
+          Created: new Date().toISOString(),
+          Errors: [{ ErrorCode: 'CS012', Message: 'PROFILE_MUST_BE_ACTIVATED_FIRST' }],
+        }],
+      },
+    },
+  })
+  const staleResult = await stale
+  assert.equal(staleResult.status, 200)
+  assert.equal(staleResult.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
+  assert.equal(row.updatedAt, approvedUpdatedAt)
 })
 
 test('the real BFF route rejects a request without Bearer before calling the service', async () => {

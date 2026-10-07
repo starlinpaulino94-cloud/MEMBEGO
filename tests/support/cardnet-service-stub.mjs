@@ -36,9 +36,11 @@ export async function consultarClienteCardnet() {
 }
 
 export async function consultarComprasCardnet(params) {
-  scenario().providerCalls += 1
-  scenario().purchaseSearches.push(params)
-  return scenario().searchResponse ?? { ok: true, json: { Response: { Purchases: [] } } }
+  const current = scenario()
+  current.providerCalls += 1
+  current.purchaseSearches.push(params)
+  current.onPurchaseSearch?.()
+  return current.purchaseSearchResponses?.shift() ?? current.searchResponse ?? { ok: true, json: { Response: { Purchases: [] } } }
 }
 
 export async function cobrarConToken(params) {

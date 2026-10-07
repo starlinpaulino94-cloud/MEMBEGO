@@ -88,6 +88,7 @@ export async function markDefiniteDecline(
         id: session.id,
         authSubject: session.authSubject,
         purchaseIntentId: intentId,
+        updatedAt: session.updatedAt,
         estado: {
           in: [
             CARDNET_SESSION_STATES.PURCHASE_PENDING,
@@ -143,14 +144,21 @@ export async function associateApprovedCard(
       data: { autoRenovar: true, tarjetaTokenizadaId: tarjeta.id },
     })
     if (attached.count !== 1) throw new Error('membership association failed')
-    await tx.cardnetCaptureSession.updateMany({
-      where: { id: session.id, authSubject: session.authSubject },
+    const captured = await tx.cardnetCaptureSession.updateMany({
+      where: {
+        id: session.id,
+        authSubject: session.authSubject,
+        estado: session.estado,
+        updatedAt: session.updatedAt,
+      },
       data: {
         estado: CARDNET_SESSION_STATES.APPROVED,
         reservaClienteKey: null,
         asociadoAt: new Date(),
+        updatedAt: new Date(),
       },
     })
+    if (captured.count !== 1) throw new Error('capture session association changed')
     return true
   }).catch(() => false)
 }
@@ -169,22 +177,21 @@ export async function finishApproval(
     montoCobrado: purchaseAmountPesos(purchasePayload),
   }).catch(() => null)
   if (!result?.ok || result.entrega !== 'COMPLETADA') {
-    await setSessionState(session, CARDNET_SESSION_STATES.FULFILLMENT_PENDING, { conciliadoAt: new Date() })
-    return success(202, { status: 'pending' })
+    const pending = await setSessionState(session, CARDNET_SESSION_STATES.FULFILLMENT_PENDING, { conciliadoAt: new Date() })
+    return pending ? success(202, { status: 'pending' }) : currentSessionReply(session)
   }
   if (session.guardarRenovacion) {
     const associated = await associateApprovedCard(session)
     if (!associated) {
-      await setSessionState(session, CARDNET_SESSION_STATES.ASSOCIATION_PENDING, { conciliadoAt: new Date() })
-      return success(202, { status: 'pending' })
+      const pending = await setSessionState(session, CARDNET_SESSION_STATES.ASSOCIATION_PENDING, { conciliadoAt: new Date() })
+      return pending ? success(202, { status: 'pending' }) : currentSessionReply(session)
     }
   } else {
-    await conEmpresa(session.companyId, (tx) =>
-      tx.cardnetCaptureSession.updateMany({
-        where: { id: session.id, authSubject: session.authSubject },
-        data: { estado: CARDNET_SESSION_STATES.APPROVED, reservaClienteKey: null, conciliadoAt: new Date() },
-      })
-    ).catch(() => undefined)
+    const approved = await setSessionState(session, CARDNET_SESSION_STATES.APPROVED, {
+      reservaClienteKey: null,
+      conciliadoAt: new Date(),
+    })
+    if (!approved) return currentSessionReply(session)
   }
   return success(200, { status: 'approved' })
 }
@@ -200,9 +207,18 @@ export async function interpretPurchase(
   }
   if (decision.kind === 'declined') return markDefiniteDecline(session, intentId)
   if (decision.kind === 'activation_required') {
-    await setSessionState(session, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
-    return success(200, { status: 'activation_required' })
+    const required = await setSessionState(session, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
+    return required ? success(200, { status: 'activation_required' }) : currentSessionReply(session)
   }
-  await setSessionState(session, CARDNET_SESSION_STATES.PURCHASE_PENDING, { conciliadoAt: new Date() })
+  const pending = await setSessionState(session, CARDNET_SESSION_STATES.PURCHASE_PENDING, { conciliadoAt: new Date() })
+  return pending ? success(202, { status: 'pending' }) : currentSessionReply(session)
+}
+
+async function currentSessionReply(session: LoadedCardnetSession): Promise<CardnetReply> {
+  const current = await loadSession(session.id, session.authSubject)
+  if (current?.estado === CARDNET_SESSION_STATES.APPROVED) return success(200, { status: 'approved' })
+  if (current?.estado === CARDNET_SESSION_STATES.DECLINED) return success(200, { status: 'declined' })
+  if (current?.estado === CARDNET_SESSION_STATES.EXPIRED) return success(200, { status: 'expired' })
+  if (current?.estado === CARDNET_SESSION_STATES.ACTIVATION_REQUIRED) return success(200, { status: 'activation_required' })
   return success(202, { status: 'pending' })
 }
