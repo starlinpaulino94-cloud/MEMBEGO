@@ -189,6 +189,9 @@ test('1 · una base creada solo con los servicios cuadra: ninguna regla encuentr
 
   const t = await totales()
   assert.deepEqual(Object.fromEntries(Object.entries(t).filter(([, v]) => v !== 0)), {}, 'una base sana no tiene hallazgos')
+  // Y TODAS las reglas se pueden evaluar también en el alcance de la plataforma (otra variante de cada consulta).
+  const plataforma = await sinEmpresa('conciliación de prueba (plataforma)', (tx) => conciliarEnTx(tx, { companyId: null }, { muestra: 1 }))
+  assert.deepEqual(plataforma.filter((h) => h.error).map((h) => h.regla.codigo), [], 'ninguna regla falla en el alcance de la plataforma')
   assert.deepEqual(Object.keys(t).sort(), REGLAS.map((r) => r.codigo).sort(), 'todas las reglas corren')
   // Y había de qué hablar: hay pedidos de todos los estados y comisiones de las dos clases.
   const estados = await prisma.membegoOrder.groupBy({ by: ['status'], where: { companyId: ctx.a }, _count: true })

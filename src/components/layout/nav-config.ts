@@ -39,6 +39,7 @@ import {
   ScanLine,
   Scale,
   ListChecks,
+  ShieldAlert,
   Share2,
   SlidersHorizontal,
   TextSearch,
@@ -1306,6 +1307,13 @@ const G_SA_OPERACION: NavGroup = {
       icon: ListChecks,
       description: 'Si los pedidos, pagos, comisiones, libros, ofertas e inventario cuadran entre sí. Solo lectura.',
       keywords: ['conciliacion', 'cuadre', 'auditoria', 'comisiones', 'libro', 'inventario', 'pagos', 'ofertas', 'integridad', 'anomalias'],
+    },
+    {
+      href: '/superadmin/riesgo',
+      label: 'Señales de riesgo',
+      icon: ShieldAlert,
+      description: 'A qué empresas y clientes conviene llamar primero: cancelaciones, reembolsos, pedidos sin atender, crédito y cupones vencidos.',
+      keywords: ['riesgo', 'fraude', 'senales', 'alertas', 'cancelaciones', 'reembolsos', 'credito', 'mora', 'cupones', 'abuso'],
     },
     {
       href: '/superadmin/connect',

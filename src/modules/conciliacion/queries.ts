@@ -23,7 +23,7 @@ function alcance(a: Alcance, col: string): Prisma.Sql {
   const c = Prisma.raw(col)
   return a.companyId
     ? Prisma.sql`AND ${c} = ${a.companyId}`
-    : Prisma.sql`AND NOT EXISTS (SELECT 1 FROM "companies" dc WHERE dc."id" = ${c} AND dc."esDemo" = true)`
+    : Prisma.sql`AND NOT EXISTS (SELECT 1 FROM "companies" cdemo WHERE cdemo."id" = ${c} AND cdemo."esDemo" = true)`
 }
 
 /** Los renglones de cada pedido, sumados. */
@@ -237,6 +237,9 @@ export async function conciliarEnTx(tx: Tx, a: Alcance, opciones: { reglas?: rea
       salida.push({ regla, total: 0, muestra: [], error: 'Sin consulta' })
       continue
     }
+    // Cada regla en su punto de guardado: si una consulta falla, Postgres aborta la transacción entera y las
+    // demás reglas fallarían también. Con el SAVEPOINT solo se pierde la que falló.
+    await tx.$executeRawUnsafe('SAVEPOINT regla_conciliacion')
     try {
       const filas = await tx.$queryRaw<FilaCruda[]>`
         SELECT q."companyId", q."referencia", q."detalle", (count(*) OVER ())::int AS total
@@ -248,7 +251,9 @@ export async function conciliarEnTx(tx: Tx, a: Alcance, opciones: { reglas?: rea
         total: filas[0]?.total ?? 0,
         muestra: filas.map((f): FilaDeHallazgo => ({ companyId: f.companyId, empresa: f.companyId, referencia: f.referencia, detalle: f.detalle })),
       })
+      await tx.$executeRawUnsafe('RELEASE SAVEPOINT regla_conciliacion')
     } catch (e) {
+      await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT regla_conciliacion')
       console.error(`[conciliacion ${regla.codigo}]`, e instanceof Error ? e.message : e)
       salida.push({ regla, total: 0, muestra: [], error: 'No se pudo evaluar esta regla.' })
     }

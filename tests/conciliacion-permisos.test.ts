@@ -18,7 +18,8 @@ test('cada regla del catálogo tiene su consulta, y cada consulta su regla', () 
 
 test('el módulo es SOLO LECTURA: ninguna consulta escribe ni cambia el esquema, y no usa $executeRaw ni escrituras de Prisma', () => {
   for (const f of readdirSync('src/modules/conciliacion').filter((x) => x.endsWith('.ts'))) {
-    const t = limpio(join('src/modules/conciliacion', f))
+    // Lo único que se ejecuta (no se consulta) son los puntos de guardado que aíslan una regla de otra.
+    const t = limpio(join('src/modules/conciliacion', f)).replace(/await tx\.\$executeRawUnsafe\('(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT) regla_conciliacion'\)/g, '')
     assert.doesNotMatch(t, /\b(INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM|ALTER\s+TABLE|DROP\s+|TRUNCATE|CREATE\s+TABLE)\b/i, `${f} escribe`)
     assert.doesNotMatch(t, /\$executeRaw|\.\$transaction\(|\.(create|update|updateMany|delete|deleteMany|upsert)\(/, `${f} escribe con Prisma`)
     for (const m of t.matchAll(/from\s+['"]([^'"]+)['"]/g)) assert.doesNotMatch(m[1], /supply/i, `${f} importa ${m[1]}`)
@@ -43,4 +44,11 @@ test('la pantalla es solo del superadmin, autoriza antes de leer y corre sin con
 test('el menú del superadmin la ofrece y la plataforma deja fuera las empresas de práctica', () => {
   assert.match(leer('src/components/layout/nav-config.ts'), /href: '\/superadmin\/conciliacion'/)
   assert.match(limpio('src/modules/conciliacion/queries.ts'), /"esDemo" = true/)
+})
+
+test('una regla que falla no tumba a las demás: cada una corre en su punto de guardado', () => {
+  const q = limpio('src/modules/conciliacion/queries.ts')
+  assert.match(q, /SAVEPOINT regla_conciliacion/)
+  assert.match(q, /RELEASE SAVEPOINT regla_conciliacion/)
+  assert.match(q, /ROLLBACK TO SAVEPOINT regla_conciliacion/)
 })
