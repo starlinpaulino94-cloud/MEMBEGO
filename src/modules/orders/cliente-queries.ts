@@ -1,4 +1,4 @@
-import type { MembegoOrderStatus } from '@prisma/client'
+import type { MembegoOrderStatus, MembegoPaymentMethod } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { toQrDataUrl } from '@/lib/qr'
 import { ESTADOS_CANCELABLES_POR_CLIENTE, ESTADOS_CONFIRMABLES, qrDePedidoVencido } from './domain'
@@ -82,6 +82,11 @@ export interface DetalleMiPedido {
   tax: string
   total: string
   notes: string | null
+  /** Cómo dijo que pagaría (la intención anotada al pedir); `null` si no lo dijo. NO prueba ningún pago. */
+  metodoPago: MembegoPaymentMethod | null
+  /** ¿La empresa ya registró el pago de este pedido? */
+  pagado: boolean
+  companyId: string
   cancelReason: string | null
   refundReason: string | null
   createdAt: Date
@@ -112,6 +117,7 @@ export async function miPedido(clienteIds: readonly string[], pedidoId: string, 
         location: { select: { nombre: true, direccion: true, telefono: true } },
         lines: { orderBy: { createdAt: 'asc' } },
         confirmation: true,
+        payment: { select: { id: true } },
       },
     })
   )
@@ -134,6 +140,9 @@ export async function miPedido(clienteIds: readonly string[], pedidoId: string, 
     tax: dos(p.tax),
     total: dos(p.total),
     notes: p.notes,
+    metodoPago: p.paymentMethod,
+    pagado: !!p.payment,
+    companyId: p.companyId,
     cancelReason: p.cancelReason,
     refundReason: p.refundReason,
     createdAt: p.createdAt,

@@ -80,6 +80,9 @@ const USUARIOS = {
   /** Caja conectada (F7): quien cobra en una empresa CON el POS conectado y quien cobra en otra SIN él. */
   posAdmin: { email: 'e2e.pos.admin@membego.test', nombre: 'Cajero POS E2E', role: 'ADMINISTRADOR' },
   posSin: { email: 'e2e.pos.sin@membego.test', nombre: 'Cajero Sin POS E2E', role: 'ADMINISTRADOR' },
+  /** Checkout del marketplace (F8): quien atiende el pedido del carrito y quien lo hace. */
+  carritoAdmin: { email: 'e2e.carrito.admin@membego.test', nombre: 'Admin Carrito E2E', role: 'ADMINISTRADOR' },
+  carritoCliente: { email: 'e2e.carrito.cliente@membego.test', nombre: 'Rosa Carrito E2E', role: 'CLIENTE' },
   /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */
   facturacionSuperadmin: { email: 'e2e.facturacion.sa@membego.test', nombre: 'Facturación SA E2E', role: 'SUPERADMIN' },
 } as const
