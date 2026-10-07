@@ -30,6 +30,39 @@ export const TZ_PLATAFORMA = 'America/Santo_Domingo'
 const DEFAULT_TZ = TZ_PLATAFORMA
 
 /**
+ * Normaliza el espacio «raro» que `Intl.DateTimeFormat` mete antes de
+ * «a. m.»/«p. m.» en locales como `es-DO`.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * POR QUÉ ESTO EXISTE: UN ERROR DE HIDRATACIÓN QUE SE VEÍA IGUAL EN LAS DOS FOTOS
+ *
+ * `HistorialMovimientos` (Inventario, F2.2) es un Client Component que
+ * renderiza esta fecha, así que corre UNA VEZ en el servidor (para el HTML
+ * inicial) y OTRA VEZ en el navegador al hidratar. React compara las dos
+ * cadenas y, si no son BYTE A BYTE idénticas, descarta el árbol y lo vuelve a
+ * montar —error #418—. El recorrido E2E `inventario-admin.spec.ts` lo
+ * encontró así, mostrando un diff donde las dos líneas parecían idénticas a
+ * simple vista.
+ *
+ * Lo eran, visualmente. La ICU de Node y la de Chromium no siempre coinciden
+ * en qué carácter ponen ahí: una usa un espacio normal (U+0020) y la otra un
+ * espacio ANGOSTO DE NO SEPARACIÓN (U+202F, a veces U+00A0) — indistinguibles
+ * en pantalla, distintos en memoria. El servidor y el navegador formatean la
+ * MISMA fecha con el MISMO locale y la MISMA zona horaria; lo único que
+ * cambia es el motor de ICU que trae cada uno, y eso no se puede fijar desde
+ * aquí.
+ *
+ * Lo que sí se puede fijar es el resultado: forzar siempre un espacio normal
+ * hace que las dos pasadas —y cualquier otra— produzcan la MISMA cadena. No
+ * es un parche sobre el síntoma del E2E: es la causa real (dos bytes que
+ * dicen lo mismo y no son iguales) arreglada donde vive, para esta función y
+ * para todo lo que la llama.
+ */
+function espacioEstandar(texto: string): string {
+  return texto.replace(/[  ]/g, ' ')
+}
+
+/**
  * Formatea un monto con el símbolo de la moneda de la empresa.
  *
  * `decimales` es opcional y por defecto 0, que es como se muestran los precios
@@ -68,17 +101,21 @@ export function formatDate(
   const d = typeof date === 'string' ? new Date(date) : date
   const idioma = prefs?.idioma || DEFAULT_IDIOMA
   try {
-    return new Intl.DateTimeFormat(idioma, {
-      timeZone: prefs?.zonaHoraria || DEFAULT_TZ,
-      ...options,
-    }).format(d)
+    return espacioEstandar(
+      new Intl.DateTimeFormat(idioma, {
+        timeZone: prefs?.zonaHoraria || DEFAULT_TZ,
+        ...options,
+      }).format(d)
+    )
   } catch {
     // Locale o zona horaria inválidos: degradar al default de plataforma
     // SIN perder la zona horaria (el servidor corre en UTC).
-    return new Intl.DateTimeFormat(DEFAULT_IDIOMA, {
-      timeZone: DEFAULT_TZ,
-      ...options,
-    }).format(d)
+    return espacioEstandar(
+      new Intl.DateTimeFormat(DEFAULT_IDIOMA, {
+        timeZone: DEFAULT_TZ,
+        ...options,
+      }).format(d)
+    )
   }
 }
 
