@@ -121,7 +121,11 @@ export async function progressCapture(
         null
       )
     }
-    return success(202, { status: 'pending' })
+    const intent = session.purchaseIntent
+    if (!intent) return success(202, { status: 'pending' })
+    const searched = await searchPurchase(session)
+    if (searched.decision.kind === 'pending') return success(202, { status: 'pending' })
+    return interpretPurchase(session, intent.id, searched.decision, searched.payload)
   }
   if (session.estado === CARDNET_SESSION_STATES.ASSOCIATION_PENDING && session.purchaseIntent) {
     const associated = await associateApprovedCard(session)

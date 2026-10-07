@@ -1100,6 +1100,48 @@ test('a fulfillment-pending session resumes an approved intent without another C
   assert.equal(s.fulfillmentRetryCalls, 1)
 })
 
+test('a fulfillment-pending session reconciles approval when local intent confirmation failed', { timeout: 5_000 }, async () => {
+  const s = setup()
+  s.confirmationResult = { ok: true, entrega: 'COMPLETADA' }
+  s.purchaseSearchResponses = [{
+    ok: true,
+    json: {
+      Response: {
+        Purchases: [{
+          OrderNumber: 'stable-purchase-key',
+          UniqueID: 'stable-purchase-key',
+          CustomerId: 'cardnet-customer-test',
+          Created: new Date().toISOString(),
+          Transaction: { TransactionStatusId: 1, AuthorizationCode: 'A1B2C3', ResponseCode: '00' },
+        }],
+      },
+    },
+  }]
+  const id = 'g'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'FULFILLMENT_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key', estado: 'CREADO' },
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.status, 200)
+  assert.equal(result.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
+  assert.equal(s.purchaseSearches.length, 1)
+  assert.equal(s.chargeCalls, 0)
+  assert.equal(s.fulfillmentRetryCalls, 0)
+})
+
 test('a freshly approved intent prevents Purchase when the initial intent read is stale', { timeout: 5_000 }, async () => {
   const s = setup()
   s.customerResponse = {

@@ -19,6 +19,7 @@ const previous = {
   publicKey: process.env.CARDNET_TOKENS_PUBLIC_KEY,
   privateKey: process.env.CARDNET_TOKENS_PRIVATE_KEY,
   environment: process.env.CARDNET_TOKENS_AMBIENTE,
+  apiBase: process.env.CARDNET_TOKENS_API_BASE,
   fetch: globalThis.fetch,
 }
 
@@ -29,7 +30,34 @@ after(() => {
   else process.env.CARDNET_TOKENS_PRIVATE_KEY = previous.privateKey
   if (previous.environment === undefined) delete process.env.CARDNET_TOKENS_AMBIENTE
   else process.env.CARDNET_TOKENS_AMBIENTE = previous.environment
+  if (previous.apiBase === undefined) delete process.env.CARDNET_TOKENS_API_BASE
+  else process.env.CARDNET_TOKENS_API_BASE = previous.apiBase
   globalThis.fetch = previous.fetch
+})
+
+test('Purchase with an unknown network outcome is not retried against another API host', async () => {
+  process.env.CARDNET_TOKENS_PUBLIC_KEY = 'qa-public-key'
+  process.env.CARDNET_TOKENS_PRIVATE_KEY = 'qa-private-key'
+  process.env.CARDNET_TOKENS_AMBIENTE = 'pruebas'
+  delete process.env.CARDNET_TOKENS_API_BASE
+  const requests: string[] = []
+  globalThis.fetch = async (input) => {
+    requests.push(String(input))
+    throw new Error('simulated response timeout')
+  }
+
+  const { cobrarConToken } = await import('../src/lib/payments/cardnet-tokens')
+  const result = await cobrarConToken({
+    trxToken: 'qa-payment-token',
+    pesos: 1000,
+    orden: 'qa-order',
+    clienteIp: '127.0.0.1',
+    purchaseUniqueId: 'stable-purchase-key',
+  })
+  assert.equal(result.aprobada, false)
+  assert.equal(result.crudo._http, 0)
+  assert.equal(requests.length, 1)
+  assert.match(requests[0] ?? '', /^https:\/\/lab\.cardnet\.com\.do\//)
 })
 
 test('PaymentProfileDelete sends the documented numeric id using Basic user authentication', async () => {

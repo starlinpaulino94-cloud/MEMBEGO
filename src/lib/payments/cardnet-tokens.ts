@@ -341,7 +341,8 @@ let authConfirmada: string | null = null
 async function llamarTokens(
   metodo: 'GET' | 'POST',
   path: string,
-  cuerpo: Record<string, unknown> | null
+  cuerpo: Record<string, unknown> | null,
+  esCobro = false
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   const cfg = getTokensConfig()
   if (!cfg) return { ok: false, status: 0, json: {} }
@@ -360,6 +361,7 @@ async function llamarTokens(
         return r
       }
       // Host muerto o ruta inexistente: no tiene sentido probar más formatos aquí.
+      if (r.status === 0 && esCobro) return r
       if (r.status === 0 || r.status === 404) break
       if (!mejor) mejor = r
       // Otro error que no es de auth (400, 500): el formato no es el problema.
@@ -407,7 +409,7 @@ async function llamarTokensConRuta(
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   let ultima: { ok: boolean; status: number; json: Record<string, unknown> } | null = null
   for (const variante of variantesDeRuta(path)) {
-    const r = await llamarTokens(metodo, variante, cuerpo)
+    const r = await llamarTokens(metodo, variante, cuerpo, esCobro)
     if (r.ok || !reintentarConOtraGrafia(r.status, esCobro)) return r
     ultima = r
   }
