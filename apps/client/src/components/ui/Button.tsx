@@ -61,6 +61,15 @@ const sizeClasses: Record<string, string> = {
   icon: 'size-11 rounded-xl',
 };
 
+const gradientSizeStyles: Record<ButtonSize, ViewStyle> = {
+  default: { height: 44, minWidth: 44, paddingHorizontal: 16 },
+  sm: { height: 44, paddingHorizontal: 12 },
+  lg: { height: 44, paddingHorizontal: 24 },
+  xl: { height: 48, paddingHorizontal: 32 },
+  icon: { height: 44, width: 44 },
+  md: { height: 44, minWidth: 44, paddingHorizontal: 16 },
+};
+
 const textClasses: Record<string, string> = {
   default: 'text-primary-foreground font-inter-semibold',
   outline: 'text-foreground font-inter-medium',
@@ -144,11 +153,13 @@ export function Button({
           colors={gradientColors[resolvedVariant]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          className={cn(
-            'flex-row items-center justify-center',
-            variantClasses[resolvedVariant],
-            sizeClasses[resolvedSize],
-          )}
+          style={{
+            ...gradientSizeStyles[resolvedSize],
+            flexDirection: 'row',
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
           {content}
         </LinearGradient>
