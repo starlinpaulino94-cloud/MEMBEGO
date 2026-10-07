@@ -33,7 +33,7 @@ import { fichaCampana, misCupones } from '../../src/modules/supply-v2/campaigns/
 import { minutosLocales } from '../../src/modules/supply-v2/campaigns/domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 contra PostgreSQL de verdad (§31).
+ * MEMBEGO SUPPLY · SLICE 7 contra PostgreSQL de verdad (§31).
  *
  *   A  Cupón público: dos clientes usan el mismo código y los dos límites se
  *      respetan; el tercero se queda fuera

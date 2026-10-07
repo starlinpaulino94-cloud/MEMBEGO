@@ -18,7 +18,7 @@ import {
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · acciones del ciclo de vida de un beneficio
+ * MEMBEGO SUPPLY · SLICE 6 · acciones del ciclo de vida de un beneficio
  * (§7, §27, §29). Cada botón es un formulario: lo que decide es el servidor.
  * Lo que exige un motivo lo pide aquí y no se envía vacío.
  */

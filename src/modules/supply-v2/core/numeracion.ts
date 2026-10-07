@@ -7,7 +7,7 @@ import {
 } from '@/lib/commerce-primitives/numeracion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · numeración correlativa SEGURA (§13).
+ * MEMBEGO SUPPLY · numeración correlativa SEGURA (§13).
  *
  * El cerrojo consultivo y el formato son genéricos y viven en
  * src/lib/commerce-primitives/numeracion.ts (Fase 0). Este módulo solo

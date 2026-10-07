@@ -21,7 +21,7 @@ import { RESOLUCIONES } from '@/modules/supply-v2/operations/conciliacion-domini
 import { PAYMENT_INCIDENT_RESOLUTION_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · LO QUE SE PUEDE PULSAR.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · LO QUE SE PUEDE PULSAR.
  *
  * Cada formulario llama a su server action, y la action exige su permiso. Lo
  * que se ve aquí no autoriza nada: si alguien manda el formulario sin permiso

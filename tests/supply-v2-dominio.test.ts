@@ -26,7 +26,7 @@ import { normalizarProveedor, validarProveedorExterno } from '../src/modules/sup
 import { normalizarItemCatalogo, slugDeNombre, validarItemCatalogo } from '../src/modules/supply-v2/catalog/domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · pruebas de dominio PURAS (§48). Sin base de datos: lo
+ * MEMBEGO SUPPLY · pruebas de dominio PURAS (§48). Sin base de datos: lo
  * que aquí se prueba es lo que decide qué es válido y cuánto queda.
  */
 

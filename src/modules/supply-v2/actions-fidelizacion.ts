@@ -37,7 +37,7 @@ import { MODALIDADES, PROPIETARIOS, TIPOS_DE_PLAN, TIPOS_DE_RECOMPENSA } from '.
 import { RUTA_FIDELIZACION, RUTA_FIDELIZACION_CLIENTE, RUTA_MEMBRESIAS_PUBLICAS, RUTA_PORTAL_FIDELIZACION } from './core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · server actions de FIDELIZACIÓN.
+ * MEMBEGO SUPPLY · SLICE 8 · server actions de FIDELIZACIÓN.
  *
  * GUARDIA (permiso de plataforma, o sesión del cliente) → REGLA (en
  * `loyalty/`, dentro de UNA transacción, con bitácora) → `{ error }` o
@@ -79,7 +79,7 @@ export async function crearProgramaAction(_prev: EstadoAccion<ProgramaCreado>, f
     const startsAt = fecha(fd, 'startsAt')
     if (!startsAt) return { error: 'Indica desde cuándo vale el programa.' }
 
-    const creado = await sinEmpresa('Supply 2.0: alta de un programa de fidelización', (tx) =>
+    const creado = await sinEmpresa('Supply: alta de un programa de fidelización', (tx) =>
       crearProgramaEnTx(
         tx,
         {
@@ -115,7 +115,7 @@ export async function enviarProgramaARevisionAction(_prev: EstadoAccion, fd: For
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_LOYALTY_PROGRAM_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: enviar un programa a revisión', (tx) => enviarProgramaARevisionEnTx(tx, id, ctx))
+    const r = await sinEmpresa('Supply: enviar un programa a revisión', (tx) => enviarProgramaARevisionEnTx(tx, id, ctx))
     refrescarFidelizacion(id)
     return { success: r.repetido ? 'Ese programa ya estaba en revisión.' : 'Programa en revisión: otra persona autorizada tiene que aprobarlo.', id }
   } catch (e) {
@@ -128,7 +128,7 @@ export async function aprobarProgramaAction(_prev: EstadoAccion, fd: FormData): 
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_LOYALTY_PROGRAM_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: aprobar un programa de fidelización', (tx) => aprobarProgramaEnTx(tx, id, ctx))
+    const r = await sinEmpresa('Supply: aprobar un programa de fidelización', (tx) => aprobarProgramaEnTx(tx, id, ctx))
     refrescarFidelizacion(id)
     return { success: r.repetido ? 'Ese programa ya estaba aprobado.' : 'Programa aprobado y activo: sus planes publicados ya los ven los clientes.', id }
   } catch (e) {
@@ -143,7 +143,7 @@ export async function rechazarProgramaAction(_prev: EstadoAccion, fd: FormData):
     const ctx = await contextoDeAuditoria(actor)
     const notas = texto(fd, 'motivo', 500)
     if (!notas) return { error: 'Escribe por qué se devuelve el programa.' }
-    await sinEmpresa('Supply 2.0: rechazar un programa de fidelización', (tx) => rechazarProgramaEnTx(tx, id, notas, ctx))
+    await sinEmpresa('Supply: rechazar un programa de fidelización', (tx) => rechazarProgramaEnTx(tx, id, notas, ctx))
     refrescarFidelizacion(id)
     return { success: 'Programa devuelto a borrador con tu motivo.', id }
   } catch (e) {
@@ -156,7 +156,7 @@ export async function pausarProgramaAction(_prev: EstadoAccion, fd: FormData): P
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_LOYALTY_PROGRAM_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: pausar un programa de fidelización', (tx) => pausarProgramaEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: pausar un programa de fidelización', (tx) => pausarProgramaEnTx(tx, id, ctx))
     refrescarFidelizacion(id)
     return { success: 'Programa pausado: no acumula puntos nuevos ni admite contrataciones.', id }
   } catch (e) {
@@ -169,7 +169,7 @@ export async function reanudarProgramaAction(_prev: EstadoAccion, fd: FormData):
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_LOYALTY_PROGRAM_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: reanudar un programa de fidelización', (tx) => reanudarProgramaEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: reanudar un programa de fidelización', (tx) => reanudarProgramaEnTx(tx, id, ctx))
     refrescarFidelizacion(id)
     return { success: 'Programa activo otra vez.', id }
   } catch (e) {
@@ -184,7 +184,7 @@ export async function cancelarProgramaAction(_prev: EstadoAccion, fd: FormData):
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Escribe por qué se cancela el programa.' }
-    const r = await sinEmpresa('Supply 2.0: cancelar un programa de fidelización', (tx) => cancelarProgramaEnTx(tx, id, motivo, ctx))
+    const r = await sinEmpresa('Supply: cancelar un programa de fidelización', (tx) => cancelarProgramaEnTx(tx, id, motivo, ctx))
     refrescarFidelizacion(id)
     return { success: `Programa cancelado y ${r.planesArchivados} plan(es) archivado(s). Las membresías vivas siguen su curso.`, id }
   } catch (e) {
@@ -203,7 +203,7 @@ export async function crearPlanAction(_prev: EstadoAccion, fd: FormData): Promis
     if (!TIPOS_DE_PLAN.includes(kind)) return { error: 'Indica si el plan es gratuito, de pago u otorgado.' }
     const durationDays = entero(fd, 'durationDays')
     if (!durationDays) return { error: 'Indica cuántos días dura el plan.' }
-    const r = await sinEmpresa('Supply 2.0: crear un plan de membresía', (tx) =>
+    const r = await sinEmpresa('Supply: crear un plan de membresía', (tx) =>
       crearPlanEnTx(
         tx,
         id,
@@ -235,7 +235,7 @@ export async function actualizarPlanAction(_prev: EstadoAccion, fd: FormData): P
     if (!TIPOS_DE_PLAN.includes(kind)) return { error: 'Indica si el plan es gratuito, de pago u otorgado.' }
     const durationDays = entero(fd, 'durationDays')
     if (!durationDays) return { error: 'Indica cuántos días dura el plan.' }
-    const r = await sinEmpresa('Supply 2.0: modificar un plan de membresía', (tx) =>
+    const r = await sinEmpresa('Supply: modificar un plan de membresía', (tx) =>
       actualizarPlanEnTx(
         tx,
         texto(fd, 'planId', 60),
@@ -268,7 +268,7 @@ export async function publicarPlanAction(_prev: EstadoAccion, fd: FormData): Pro
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_MEMBERSHIP_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: publicar un plan de membresía', (tx) => publicarPlanEnTx(tx, texto(fd, 'planId', 60), ctx))
+    const r = await sinEmpresa('Supply: publicar un plan de membresía', (tx) => publicarPlanEnTx(tx, texto(fd, 'planId', 60), ctx))
     refrescarFidelizacion(id)
     return { success: r.repetido ? 'Ese plan ya estaba publicado.' : 'Plan publicado: ya lo ven los clientes y se puede contratar.', id }
   } catch (e) {
@@ -281,7 +281,7 @@ export async function pausarPlanAction(_prev: EstadoAccion, fd: FormData): Promi
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_MEMBERSHIP_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: pausar un plan de membresía', (tx) => pausarPlanEnTx(tx, texto(fd, 'planId', 60), ctx))
+    await sinEmpresa('Supply: pausar un plan de membresía', (tx) => pausarPlanEnTx(tx, texto(fd, 'planId', 60), ctx))
     refrescarFidelizacion(id)
     return { success: 'Plan pausado: deja de poder contratarse. Lo ya vendido sigue vigente.', id }
   } catch (e) {
@@ -294,7 +294,7 @@ export async function archivarPlanAction(_prev: EstadoAccion, fd: FormData): Pro
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_MEMBERSHIP_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: archivar un plan de membresía', (tx) => archivarPlanEnTx(tx, texto(fd, 'planId', 60), ctx))
+    const r = await sinEmpresa('Supply: archivar un plan de membresía', (tx) => archivarPlanEnTx(tx, texto(fd, 'planId', 60), ctx))
     refrescarFidelizacion(id)
     return { success: `Plan archivado. ${r.miembrosVivos} membresía(s) viva(s) siguen su curso hasta vencer: archivar no cancela lo vendido.`, id }
   } catch (e) {
@@ -309,7 +309,7 @@ export async function adjuntarBeneficioAPlanAction(_prev: EstadoAccion, fd: Form
     const ctx = await contextoDeAuditoria(actor)
     const kind = texto(fd, 'kind', 30) as SupplyV2MembershipBenefitKind
     if (!['BENEFIT', 'COUPON', 'POINTS_MULTIPLIER', 'EARLY_ACCESS'].includes(kind)) return { error: 'Indica qué incluye el plan.' }
-    await sinEmpresa('Supply 2.0: añadir un beneficio a un plan', (tx) =>
+    await sinEmpresa('Supply: añadir un beneficio a un plan', (tx) =>
       adjuntarBeneficioAPlanEnTx(
         tx,
         texto(fd, 'planId', 60),
@@ -336,7 +336,7 @@ export async function quitarBeneficioDePlanAction(_prev: EstadoAccion, fd: FormD
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_MEMBERSHIP_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: quitar un beneficio de un plan', (tx) => quitarBeneficioDePlanEnTx(tx, texto(fd, 'membershipBenefitId', 60), ctx))
+    await sinEmpresa('Supply: quitar un beneficio de un plan', (tx) => quitarBeneficioDePlanEnTx(tx, texto(fd, 'membershipBenefitId', 60), ctx))
     refrescarFidelizacion(id)
     return { success: 'Beneficio quitado del plan. Lo ya concedido a los miembros no se toca.', id }
   } catch (e) {
@@ -355,7 +355,7 @@ export async function otorgarMembresiaAction(_prev: EstadoAccion, fd: FormData):
     if (!customerId) return { error: 'Elige el cliente que recibe la membresía.' }
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Otorgar una membresía sin cobrarla exige un motivo escrito.' }
-    const r = await sinEmpresa('Supply 2.0: otorgar una membresía', (tx) =>
+    const r = await sinEmpresa('Supply: otorgar una membresía', (tx) =>
       otorgarMembresiaEnTx(tx, { planId: texto(fd, 'planId', 60), customerId, motivo, dias: entero(fd, 'dias') }, ctx)
     )
     refrescarFidelizacion(id)
@@ -372,7 +372,7 @@ export async function cancelarMembresiaAction(_prev: EstadoAccion, fd: FormData)
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Cancelar una membresía exige un motivo escrito.' }
-    const r = await sinEmpresa('Supply 2.0: cancelar una membresía', (tx) => cancelarMembresiaEnTx(tx, texto(fd, 'membershipId', 60), motivo, ctx))
+    const r = await sinEmpresa('Supply: cancelar una membresía', (tx) => cancelarMembresiaEnTx(tx, texto(fd, 'membershipId', 60), motivo, ctx))
     refrescarFidelizacion(id)
     return { success: r.repetida ? 'Esa membresía ya estaba cancelada.' : 'Membresía cancelada.', id }
   } catch (e) {
@@ -387,7 +387,7 @@ export async function suspenderMembresiaAction(_prev: EstadoAccion, fd: FormData
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Suspender una membresía exige un motivo escrito.' }
-    await sinEmpresa('Supply 2.0: suspender una membresía', (tx) => suspenderMembresiaEnTx(tx, texto(fd, 'membershipId', 60), motivo, ctx))
+    await sinEmpresa('Supply: suspender una membresía', (tx) => suspenderMembresiaEnTx(tx, texto(fd, 'membershipId', 60), motivo, ctx))
     refrescarFidelizacion(id)
     return { success: 'Membresía suspendida: sus beneficios dejan de aplicarse hasta que se reactive.', id }
   } catch (e) {
@@ -400,7 +400,7 @@ export async function reactivarMembresiaAction(_prev: EstadoAccion, fd: FormData
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_MEMBERSHIP_GRANT')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: reactivar una membresía', (tx) => reactivarMembresiaEnTx(tx, texto(fd, 'membershipId', 60), ctx))
+    await sinEmpresa('Supply: reactivar una membresía', (tx) => reactivarMembresiaEnTx(tx, texto(fd, 'membershipId', 60), ctx))
     refrescarFidelizacion(id)
     return { success: 'Membresía activa otra vez.', id }
   } catch (e) {
@@ -422,7 +422,7 @@ export async function ajustarPuntosAction(_prev: EstadoAccion, fd: FormData): Pr
     if (puntos == null || puntos === 0) return { error: 'Indica cuántos puntos sumar (positivo) o quitar (negativo).' }
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Un ajuste de puntos a mano exige un motivo escrito: queda en la bitácora y no se borra.' }
-    const r = await sinEmpresa('Supply 2.0: ajustar los puntos de un cliente', (tx) => ajustarPuntosEnTx(tx, { programId: id, customerId, puntos, motivo }, ctx))
+    const r = await sinEmpresa('Supply: ajustar los puntos de un cliente', (tx) => ajustarPuntosEnTx(tx, { programId: id, customerId, puntos, motivo }, ctx))
     refrescarFidelizacion(id)
     return { success: `Ajuste registrado. El cliente queda con ${r.saldo} punto(s) disponible(s).`, id }
   } catch (e) {
@@ -441,7 +441,7 @@ export async function crearRecompensaAction(_prev: EstadoAccion, fd: FormData): 
     if (!TIPOS_DE_RECOMPENSA.includes(kind)) return { error: 'Indica qué tipo de recompensa es.' }
     const startsAt = fecha(fd, 'startsAt')
     if (!startsAt) return { error: 'Indica desde cuándo se puede pedir.' }
-    const r = await sinEmpresa('Supply 2.0: crear una recompensa', (tx) =>
+    const r = await sinEmpresa('Supply: crear una recompensa', (tx) =>
       crearRecompensaEnTx(
         tx,
         id,
@@ -475,7 +475,7 @@ export async function aprobarRecompensaAction(_prev: EstadoAccion, fd: FormData)
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_REWARD_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: aprobar una recompensa', (tx) => aprobarRecompensaEnTx(tx, texto(fd, 'rewardId', 60), ctx))
+    const r = await sinEmpresa('Supply: aprobar una recompensa', (tx) => aprobarRecompensaEnTx(tx, texto(fd, 'rewardId', 60), ctx))
     refrescarFidelizacion(id)
     return { success: r.repetido ? 'Esa recompensa ya estaba aprobada.' : 'Recompensa aprobada y activa: los clientes ya pueden canjear sus puntos por ella.', id }
   } catch (e) {
@@ -488,7 +488,7 @@ export async function pausarRecompensaAction(_prev: EstadoAccion, fd: FormData):
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_REWARD_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: pausar una recompensa', (tx) => pausarRecompensaEnTx(tx, texto(fd, 'rewardId', 60), ctx))
+    await sinEmpresa('Supply: pausar una recompensa', (tx) => pausarRecompensaEnTx(tx, texto(fd, 'rewardId', 60), ctx))
     refrescarFidelizacion(id)
     return { success: 'Recompensa pausada: deja de poder reclamarse. Lo ya reclamado sigue su curso.', id }
   } catch (e) {
@@ -503,7 +503,7 @@ export async function reversarReclamacionAction(_prev: EstadoAccion, fd: FormDat
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Reversar una reclamación exige un motivo escrito.' }
-    const r = await sinEmpresa('Supply 2.0: reversar una reclamación de recompensa', (tx) => reversarReclamacionEnTx(tx, texto(fd, 'claimId', 60), motivo, ctx))
+    const r = await sinEmpresa('Supply: reversar una reclamación de recompensa', (tx) => reversarReclamacionEnTx(tx, texto(fd, 'claimId', 60), motivo, ctx))
     refrescarFidelizacion(id)
     return {
       success:
@@ -526,7 +526,7 @@ export async function configurarReferidosAction(_prev: EstadoAccion, fd: FormDat
     const ctx = await contextoDeAuditoria(actor)
     const rewardKind = texto(fd, 'rewardKind', 30) as SupplyV2ReferralRewardKind
     if (!['POINTS', 'BONUS', 'COUPON', 'SUPPLIER_BENEFIT'].includes(rewardKind)) return { error: 'Indica con qué se premia al que invita.' }
-    await sinEmpresa('Supply 2.0: configurar el programa de referidos', (tx) =>
+    await sinEmpresa('Supply: configurar el programa de referidos', (tx) =>
       configurarReferidosEnTx(
         tx,
         id,
@@ -558,7 +558,7 @@ export async function aprobarReferidoAction(_prev: EstadoAccion, fd: FormData): 
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_REFERRAL_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: conceder el premio de un referido', (tx) => aprobarYConcederEnTx(tx, texto(fd, 'referralId', 60), ctx))
+    const r = await sinEmpresa('Supply: conceder el premio de un referido', (tx) => aprobarYConcederEnTx(tx, texto(fd, 'referralId', 60), ctx))
     refrescarFidelizacion(id)
     return r.concedida ? { success: 'Premio concedido a quien invitó.', id } : { error: r.motivo ?? 'Ese referido todavía no cumple las condiciones.' }
   } catch (e) {
@@ -573,7 +573,7 @@ export async function anularReferidoAction(_prev: EstadoAccion, fd: FormData): P
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Anular una invitación exige un motivo escrito.' }
-    await sinEmpresa('Supply 2.0: anular un referido', (tx) => anularReferidoEnTx(tx, texto(fd, 'referralId', 60), motivo, ctx))
+    await sinEmpresa('Supply: anular un referido', (tx) => anularReferidoEnTx(tx, texto(fd, 'referralId', 60), motivo, ctx))
     refrescarFidelizacion(id)
     return { success: 'Invitación anulada. Es definitivo.', id }
   } catch (e) {
@@ -595,7 +595,7 @@ export async function contratarMembresiaAction(_prev: EstadoAccion<MembresiaCrea
     const ctx = await contextoDeAuditoria(cliente)
     const planId = texto(fd, 'planId', 60)
     if (!planId) return { error: 'Elige el plan que quieres contratar.' }
-    const r = await sinEmpresa('Supply 2.0: un cliente contrata una membresía', (tx) =>
+    const r = await sinEmpresa('Supply: un cliente contrata una membresía', (tx) =>
       contratarMembresiaEnTx(tx, { planId, customerId: cliente.id, idempotencyKey: texto(fd, 'idempotencyKey', 80) || null }, ctx)
     )
     revalidatePath(RUTA_FIDELIZACION_CLIENTE)
@@ -620,7 +620,7 @@ export async function reclamarRecompensaAction(_prev: EstadoAccion<ReclamacionHe
     const ctx = await contextoDeAuditoria(cliente)
     const rewardId = texto(fd, 'rewardId', 60)
     if (!rewardId) return { error: 'Elige la recompensa que quieres.' }
-    const r = await sinEmpresa('Supply 2.0: un cliente reclama una recompensa', (tx) =>
+    const r = await sinEmpresa('Supply: un cliente reclama una recompensa', (tx) =>
       reclamarRecompensaEnTx(tx, { rewardId, customerId: cliente.id, idempotencyKey: texto(fd, 'idempotencyKey', 80) || null }, ctx)
     )
     revalidatePath(RUTA_FIDELIZACION_CLIENTE)
@@ -645,7 +645,7 @@ export async function miCodigoDeReferidoAction(_prev: EstadoAccion, fd: FormData
     const programId = texto(fd, 'programId', 60)
     if (!programId) return { error: 'No sabemos de qué programa quieres tu código.' }
     void ctx
-    const r = await sinEmpresa('Supply 2.0: código de invitación de un cliente', (tx) => codigoDeReferidoEnTx(tx, programId, cliente.id))
+    const r = await sinEmpresa('Supply: código de invitación de un cliente', (tx) => codigoDeReferidoEnTx(tx, programId, cliente.id))
     revalidatePath(RUTA_FIDELIZACION_CLIENTE)
     return { success: r.repetido ? `Tu código es ${r.code}.` : `Tu código de invitación es ${r.code}. Compártelo: cobras cuando quien lo use haga su primera compra válida.`, id: r.code }
   } catch (e) {
@@ -658,7 +658,7 @@ export async function buscarClientesFidelizacionAction(query: string): Promise<{
   await exigirPermisoSupplyV2('SUPPLY_V2_MEMBERSHIP_GRANT')
   const q = query.trim()
   if (q.length < 2) return []
-  const filas = await sinEmpresa('Supply 2.0: buscar clientes para fidelización', (tx) =>
+  const filas = await sinEmpresa('Supply: buscar clientes para fidelización', (tx) =>
     tx.user.findMany({
       where: { role: 'CLIENTE', OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] },
       orderBy: { name: 'asc' },

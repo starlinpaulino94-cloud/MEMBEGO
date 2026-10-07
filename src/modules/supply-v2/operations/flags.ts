@@ -11,7 +11,7 @@ import {
 } from './salud-dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · BANDERAS E INTERRUPTORES.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · BANDERAS E INTERRUPTORES.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * NO SON LO MISMO, Y CONFUNDIRLOS ES EL PROBLEMA
@@ -94,7 +94,7 @@ export async function capacidadActiva(clave: Capacidad): Promise<boolean> {
   // El gate `rls:cobertura` no lo cazó porque mira por ARCHIVO y este ya tenía
   // un `sinEmpresa` más abajo (`cambiarInterruptor`). Es el mismo punto ciego
   // que dejó pasar `worker.ts` y `entrada.ts`.
-  const fila = await sinEmpresa('Supply 2.0: leer un interruptor operativo', (tx) =>
+  const fila = await sinEmpresa('Supply: leer un interruptor operativo', (tx) =>
     tx.supplyV2OperationalSwitch.findUnique({ where: { key: clave }, select: { enabled: true } })
   )
   return capacidadEfectiva(clave, fila?.enabled)
@@ -104,7 +104,7 @@ export async function capacidadActiva(clave: Capacidad): Promise<boolean> {
 export async function estadoDeCapacidades(): Promise<EstadoDeCapacidad[]> {
   // Mismo motivo que arriba: sin contexto, cero filas, y el panel mostraría
   // los cinco interruptores como si nadie los hubiera tocado nunca.
-  const filas = await sinEmpresa('Supply 2.0: leer los interruptores operativos', (tx) =>
+  const filas = await sinEmpresa('Supply: leer los interruptores operativos', (tx) =>
     tx.supplyV2OperationalSwitch.findMany({
       select: { key: true, enabled: true, reason: true, changedAt: true, changedBy: { select: { name: true, email: true } } },
     })
@@ -149,7 +149,7 @@ export async function cambiarInterruptor(
     fallo('MOTIVO_OBLIGATORIO', 'Apagar una capacidad exige explicar por qué.')
   }
 
-  await sinEmpresa('Supply 2.0: cambiar un interruptor operativo', async (tx: Tx) => {
+  await sinEmpresa('Supply: cambiar un interruptor operativo', async (tx: Tx) => {
     await tx.supplyV2OperationalSwitch.upsert({
       where: { key: d.clave },
       create: { key: d.clave, enabled: d.encender, reason: motivo, changedById: ctx.actorId },

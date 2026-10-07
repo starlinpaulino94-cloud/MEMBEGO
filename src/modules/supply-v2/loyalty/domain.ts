@@ -19,7 +19,7 @@ import { decimal, redondear2, type Decimal } from '../core/dinero'
 import type { Transiciones } from '../core/estados'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · FIDELIZACIÓN: reglas PURAS.
+ * MEMBEGO SUPPLY · SLICE 8 · FIDELIZACIÓN: reglas PURAS.
  *
  * Sin Prisma más que para los tipos y `Decimal`. Todo lo de aquí se prueba
  * SIN base de datos (`tests/supply-v2-slice8-dominio.test.ts`).

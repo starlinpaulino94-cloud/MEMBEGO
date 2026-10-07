@@ -18,7 +18,7 @@ import { getRequestMeta } from '@/lib/server-utils'
 import { PAYMENT_METHODS_CLIENTE, RUTA_BENEFICIOS_CLIENTE, RUTA_COMPRAS_CLIENTE } from './core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · server actions del CLIENTE (§23, §26, §29, §36, §52).
+ * MEMBEGO SUPPLY · server actions del CLIENTE (§23, §26, §29, §36, §52).
  *
  * La guardia es la sesión con rol CLIENTE; la PROPIEDAD la comprueba el
  * dominio con el `customerId` de esa sesión en cada operación. El cliente
@@ -43,7 +43,7 @@ export async function comprarOfertaAction(_prev: EstadoAccion<OrdenClienteAbiert
     const cuentas = await paymentAccountGateway.activas()
     if (cuentas.length === 0) return { error: 'Membego no puede cobrar en este momento. Inténtalo más tarde.' }
     const cuenta = cuentas.find((c) => c.id === cuentaId) ?? cuentas[0]!
-    const r = await sinEmpresa('Supply 2.0: el cliente inicia una compra', (tx) =>
+    const r = await sinEmpresa('Supply: el cliente inicia una compra', (tx) =>
       abrirOrdenClienteEnTx(
         tx,
         {
@@ -82,7 +82,7 @@ export async function cancelarCompraAction(_prev: EstadoAccion, fd: FormData): P
   try {
     const cliente = await exigirCliente()
     const ctx = await contextoDeAuditoria(cliente)
-    await sinEmpresa('Supply 2.0: el cliente cancela su compra', (tx) => cancelarOrdenClienteEnTx(tx, id, cliente.id, ctx))
+    await sinEmpresa('Supply: el cliente cancela su compra', (tx) => cancelarOrdenClienteEnTx(tx, id, cliente.id, ctx))
     refrescarCliente(id)
     return { success: 'Compra cancelada. La unidad vuelve a estar disponible para otras personas.', id }
   } catch (e) {
@@ -97,7 +97,7 @@ export async function avisarPagoAction(_prev: EstadoAccion, fd: FormData): Promi
     const ctx = await contextoDeAuditoria(cliente)
     const method = texto(fd, 'method', 20) as SupplyV2PaymentMethod
     if (!PAYMENT_METHODS_CLIENTE.includes(method)) return { error: 'Elige cómo pagaste.' }
-    await sinEmpresa('Supply 2.0: el cliente avisa que pagó', (tx) =>
+    await sinEmpresa('Supply: el cliente avisa que pagó', (tx) =>
       avisarPagoEnTx(tx, { orderId: id, customerId: cliente.id, method, reference: texto(fd, 'reference', 120) || null }, ctx)
     )
     refrescarCliente(id)
@@ -117,7 +117,7 @@ export async function confirmarCoberturaTotalAction(_prev: EstadoAccion, fd: For
   try {
     const cliente = await exigirCliente()
     const ctx = await contextoDeAuditoria(cliente)
-    const r = await sinEmpresa('Supply 2.0: el cliente confirma una compra cubierta por un beneficio', (tx) =>
+    const r = await sinEmpresa('Supply: el cliente confirma una compra cubierta por un beneficio', (tx) =>
       confirmarCoberturaTotalEnTx(tx, { orderId: id, customerId: cliente.id }, ctx)
     )
     refrescarCliente(id)
@@ -168,7 +168,7 @@ export async function comprobarCuponAction(
     const quantity = entero(fd, 'quantity') ?? 1
     if (!codigo) return { error: 'Escribe el código del cupón.' }
 
-    const r = await sinEmpresa('Supply 2.0: comprobar un cupón', async (tx) => {
+    const r = await sinEmpresa('Supply: comprobar un cupón', async (tx) => {
       const oferta = await tx.supplyV2Offer.findUnique({
         where: { id: offerId },
         select: { id: true, salePrice: true, currency: true, sourceType: true, commissionPercentage: true, agreementVersion: { select: { snapshot: true } } },

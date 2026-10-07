@@ -71,7 +71,7 @@ import {
 } from '../../src/modules/supply-v2/loyalty/queries'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 contra PostgreSQL de verdad (§45).
+ * MEMBEGO SUPPLY · SLICE 8 contra PostgreSQL de verdad (§45).
  *
  *   A  Membresía: compra confirmada → membresía activa → beneficios disponibles
  *   B  Aislamiento: un cliente con membresías en DOS empresas, sin mezclar

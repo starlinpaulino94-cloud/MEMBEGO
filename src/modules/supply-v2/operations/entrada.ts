@@ -12,7 +12,7 @@ import { httpDe } from './respuestas'
 import { despacharEfectos } from './worker'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · LA PUERTA, DE PRINCIPIO A FIN (§1).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · LA PUERTA, DE PRINCIPIO A FIN (§1).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * CINCO PASOS Y NINGUNA DECISIÓN DE DINERO
@@ -379,7 +379,7 @@ export async function actorDelWebhook(): Promise<string | null> {
   // falla: devuelve CERO filas, y aquí cero filas significaría «la cuenta
   // configurada no existe» y dejaría todos los eventos esperando por una avería
   // invisible. El gate `rls:cobertura` existe justo para no dejar pasar esto.
-  const existe = await sinEmpresa('Supply 2.0: comprobar la cuenta de la integración', (tx) =>
+  const existe = await sinEmpresa('Supply: comprobar la cuenta de la integración', (tx) =>
     tx.user.findUnique({ where: { id: configurado }, select: { id: true } })
   )
   actorEnMemoria = { id: configurado, valido: Boolean(existe) }
@@ -438,7 +438,7 @@ export async function barrerInbox(
   const actor = await actorDelWebhook()
   if (!actor) return { ...vacio, motivo: 'SIN_ACTOR_CONFIGURADO' }
 
-  const pendientes = await sinEmpresa('Supply 2.0: buscar eventos externos vencidos', (tx) =>
+  const pendientes = await sinEmpresa('Supply: buscar eventos externos vencidos', (tx) =>
     tx.supplyV2ExternalEvent.findMany({
       where: {
         OR: [
@@ -493,7 +493,7 @@ export async function barrerInbox(
 }
 
 async function contarPendientes(ahora: Date): Promise<number> {
-  return sinEmpresa('Supply 2.0: contar eventos externos vencidos', (tx) =>
+  return sinEmpresa('Supply: contar eventos externos vencidos', (tx) =>
     tx.supplyV2ExternalEvent.count({
       where: {
         OR: [

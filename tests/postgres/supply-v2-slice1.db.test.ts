@@ -10,7 +10,7 @@ import { confirmarRecepcionEnTx } from '../../src/modules/supply-v2/procurement/
 import { cubetasDeLote, invarianteCumplido, saldoDeAsientos } from '../../src/modules/supply-v2/core/ledger'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 1 contra PostgreSQL de verdad (§49).
+ * MEMBEGO SUPPLY · SLICE 1 contra PostgreSQL de verdad (§49).
  *
  * El recorrido completo, encadenado a propósito:
  *

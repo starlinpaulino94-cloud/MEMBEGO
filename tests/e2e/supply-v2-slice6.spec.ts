@@ -2,7 +2,7 @@ import { test, expect, type Browser, type BrowserContext, type Page } from '@pla
 import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 de punta a punta en navegador (§37).
+ * MEMBEGO SUPPLY · SLICE 6 de punta a punta en navegador (§37).
  *
  *   1  ALTA Y APROBACIÓN  compras crea el bono con el asistente de 7 pasos (ve
  *      el ejemplo económico), NO puede aprobarlo, finanzas lo aprueba y lo
@@ -65,18 +65,18 @@ async function cuentaDeCobro(): Promise<void> {
 // ── Montaje por interfaz: proveedor, producto, acuerdo y oferta a comisión ───
 
 async function proveedorVinculado(compras: Page, d: Datos): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/proveedores')
+  await compras.goto('/superadmin/supply/proveedores')
   await compras.getByTestId('btn-nuevo-proveedor').click()
   await compras.getByRole('button', { name: 'Sí, es una empresa de Membego' }).click()
   await compras.locator('#buscarEmpresa').fill(d.empresa)
   await compras.getByRole('option').filter({ hasText: d.empresa }).getByRole('button').click()
   await compras.getByRole('button', { name: /Vincular como proveedor|Usar este proveedor/ }).click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/proveedores\/[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/proveedores\/[a-z0-9]+$/)
   return compras.url().split('/').pop()!
 }
 
 async function producto(compras: Page, supplierId: string, nombre: string, precio: string): Promise<void> {
-  await compras.goto(`/superadmin/supply-v2/proveedores/${supplierId}`)
+  await compras.goto(`/superadmin/supply/proveedores/${supplierId}`)
   await compras.getByTestId('btn-agregar-producto').click()
   await compras.locator('#productoNombre').fill(nombre)
   await compras.locator('#productoCategoria').fill('Tours')
@@ -87,7 +87,7 @@ async function producto(compras: Page, supplierId: string, nombre: string, preci
 
 /** Acuerdo a comisión del 8 % por catálogo, con la BASE explícita (§14). */
 async function acuerdoComision(compras: Page, supplierId: string): Promise<void> {
-  await compras.goto(`/superadmin/supply-v2/proveedores/${supplierId}`)
+  await compras.goto(`/superadmin/supply/proveedores/${supplierId}`)
   await compras.getByTestId('btn-crear-acuerdo').click()
   await compras.getByTestId('acuerdo-tipo-COMMISSION').click()
   await compras.getByTestId('acuerdo-alcance').getByRole('radio', { name: 'Todo el catálogo' }).check()
@@ -100,7 +100,7 @@ async function acuerdoComision(compras: Page, supplierId: string): Promise<void>
 }
 
 async function ofertaComision(compras: Page, producto: string, titulo: string, precio: string): Promise<void> {
-  await compras.goto('/superadmin/supply-v2/ofertas/nueva')
+  await compras.goto('/superadmin/supply/ofertas/nueva')
   await compras.getByTestId('fuente-comision').click()
   await compras.waitForURL(/fuente=COMMISSION/)
   const select = compras.getByTestId('comision-producto')
@@ -116,7 +116,7 @@ async function ofertaComision(compras: Page, producto: string, titulo: string, p
   await compras.locator('#ofertaLimiteC').fill('3')
   await compras.getByTestId('comision-continuar').click()
   await compras.getByTestId('btn-publicar-oferta-comision').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/ofertas\/(?!nueva)[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/ofertas\/(?!nueva)[a-z0-9]+$/)
   await expect(compras.getByTestId('estado-oferta')).toHaveText('Activa')
 }
 
@@ -135,7 +135,7 @@ interface BonoNuevo {
 
 /** Crea el beneficio con el asistente y devuelve la url de su ficha (queda en BORRADOR). */
 async function bonoCreado(compras: Page, b: BonoNuevo): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/beneficios')
+  await compras.goto('/superadmin/supply/beneficios')
   await compras.getByTestId('btn-crear-beneficio-nav').click()
   await expect(compras.getByTestId('wizard-beneficio')).toBeVisible()
   // 1 · qué es
@@ -166,7 +166,7 @@ async function bonoCreado(compras: Page, b: BonoNuevo): Promise<string> {
   await expect(ejemplo).toBeVisible()
   for (const texto of b.ejemplo ?? []) await expect(ejemplo).toContainText(texto)
   await compras.getByTestId('btn-crear-beneficio').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/beneficios\/(?!nuevo)[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/beneficios\/(?!nuevo)[a-z0-9]+$/)
   await expect(compras.getByTestId('estado-beneficio')).toHaveText('Borrador')
   return compras.url()
 }
@@ -214,7 +214,7 @@ async function redimir(cliente: Page, empleado: Page, producto: string): Promise
   await expect(b.getByTestId('derecho-estado')).toHaveText('Disponible')
   await b.getByTestId('btn-usar-beneficio').click()
   const nonce = (await b.getByTestId('qr-beneficio').getByTestId('qr-codigo').innerText()).trim()
-  await empleado.goto('/admin/supply-v2/escaner')
+  await empleado.goto('/admin/supply/escaner')
   await empleado.getByTestId('btn-codigo-manual').click()
   await empleado.getByTestId('input-codigo').fill(nonce)
   await empleado.getByTestId('btn-buscar-codigo').click()
@@ -316,7 +316,7 @@ async function recorridoCompleto(browser: Browser) {
   await cliente.getByTestId('btn-avisar-pago').click()
   await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
 
-  await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+  await finanzas.goto('/superadmin/supply/ofertas/ventas')
   const venta = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `BONO-${d.sufijo}` })
   await expect(venta.getByTestId('venta-financiacion')).toContainText(RD(1000))
   await expect(venta.getByTestId('venta-beneficio')).toContainText(d.bono)
@@ -342,18 +342,18 @@ async function recorridoCompleto(browser: Browser) {
   await redimir(cliente, empleado, d.saona)
 
   // El proveedor ve su valor contractual y su neto: el bono no se lo descuentan.
-  await empleado.goto('/admin/supply-v2/ventas')
+  await empleado.goto('/admin/supply/ventas')
   const ventaProv = empleado.getByTestId('venta-proveedor').filter({ hasText: d.saona }).first()
   await expect(ventaProv.getByTestId('venta-neto')).toHaveText(RD(920))
   await expect(ventaProv.getByTestId('venta-contractual')).toContainText(RD(1000))
   await expect(ventaProv.getByTestId('venta-bono-membego')).toContainText('no sale de tu neto')
-  await empleado.goto('/admin/supply-v2/beneficios')
+  await empleado.goto('/admin/supply/beneficios')
   await expect(empleado.getByTestId('beneficio-proveedor').filter({ hasText: d.bono }).getByTestId('beneficio-prov-aporte')).toHaveText('No pones nada')
   await empleado.screenshot({ path: 'test-results/shots/supply-v2-s6-portal-proveedor.png', fullPage: true })
 
   // Economía: el subsidio y la contribución tras el subsidio se ven aparte.
   // Filtrado por ESTE proveedor: así la cifra es la de este recorrido y no la de toda la base.
-  await finanzas.goto(`/superadmin/supply-v2/economia?ventana=30D&proveedor=${supplierId}`)
+  await finanzas.goto(`/superadmin/supply/economia?ventana=30D&proveedor=${supplierId}`)
   await expect(finanzas.getByTestId('eco-financiacion')).toBeVisible()
   await expect(finanzas.getByTestId('eco-subsidio')).toHaveText(RD(500))
   await expect(finanzas.getByTestId('eco-cobrado')).toHaveText(RD(500))
@@ -406,7 +406,7 @@ async function recorridoCompleto(browser: Browser) {
   // una carrera de la prueba. Dos párrafos más arriba (línea 317) esto ya se
   // hacía; aquí se había quedado sin hacer.
   await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
-  await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+  await finanzas.goto('/superadmin/supply/ofertas/ventas')
   const ventaShared = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `SHARED-${d.sufijo}` })
   await expect(ventaShared.getByTestId('venta-financiacion')).toContainText(RD(900))
   await ventaShared.getByTestId('btn-confirmar-pago').click()
@@ -414,7 +414,7 @@ async function recorridoCompleto(browser: Browser) {
   await expect(finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: `SHARED-${d.sufijo}` })).toHaveCount(0)
   await enBaseDeDatos(urlCompraCompartida.split('/').pop()!, { total: '600.00', contractual: '900.00', subsidio: '300.00', descuento: '100.00', comision: '72.00', neto: '828.00', paymentStatus: 'CONFIRMED' })
   // El proveedor ve SU descuento como suyo y el de Membego como de Membego.
-  await empleado.goto('/admin/supply-v2/beneficios')
+  await empleado.goto('/admin/supply/beneficios')
   const prov = empleado.getByTestId('beneficio-proveedor').filter({ hasText: d.bonoCompartido })
   await expect(prov.getByTestId('beneficio-prov-aporte')).toContainText(RD(100))
   await expect(prov.getByTestId('beneficio-prov-membego')).toContainText(RD(300))
@@ -440,7 +440,7 @@ async function recorridoCompleto(browser: Browser) {
   await expect(tarjetaCompartida.getByTestId('bono-motivo')).toBeVisible()
 
   // El listado de beneficios enseña las tres cifras del presupuesto por separado.
-  await finanzas.goto('/superadmin/supply-v2/beneficios')
+  await finanzas.goto('/superadmin/supply/beneficios')
   const fila = finanzas.getByTestId('tabla-beneficios').locator('tr').filter({ hasText: d.bono })
   await expect(fila.getByTestId('beneficio-consumido')).toHaveText(RD(500))
   await expect(fila.getByTestId('beneficio-disponible')).toHaveText(RD(1500))
@@ -491,7 +491,7 @@ async function movil(browser: Browser) {
   await enBaseDeDatos(orderId, { total: '0.00', contractual: '400.00', subsidio: '400.00', descuento: '0.00', comision: '32.00', neto: '368.00', paymentStatus: 'COVERED_BY_BENEFIT' })
 }
 
-test.describe('Supply 2.0 · Slice 6', () => {
+test.describe('Supply · Slice 6', () => {
   test.beforeAll(() => {
     test.skip(!SESION_LOCAL_DISPONIBLE, 'requiere SUPABASE_JWT_SECRET, DATABASE_URL y NEXT_PUBLIC_SUPABASE_URL para firmar sesiones')
   })

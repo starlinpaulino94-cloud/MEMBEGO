@@ -24,7 +24,7 @@ function nuevaClave(): string {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · REGISTRAR RECEPCIÓN (§36). Enseña comprado, recibido
+ * MEMBEGO SUPPLY · REGISTRAR RECEPCIÓN (§36). Enseña comprado, recibido
  * y pendiente por línea; el servidor vuelve a validar. La clave de
  * idempotencia nace con el formulario y se renueva tras cada éxito: el doble
  * clic no crea dos lotes.
@@ -76,7 +76,7 @@ export function FormRecepcion({
             </p>
             <div className="flex flex-wrap gap-2">
               <Button asChild>
-                <Link href="/superadmin/supply-v2/supply">Ver Supply</Link>
+                <Link href="/superadmin/supply/supply">Ver Supply</Link>
               </Button>
               {ultima.purchaseOrderStatus !== 'RECEIVED' && (
                 <Button type="button" variant="outline" onClick={() => setUltima(null)}>

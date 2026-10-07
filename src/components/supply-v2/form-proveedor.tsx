@@ -18,7 +18,7 @@ import type { ProveedorCreado } from '@/modules/supply-v2/suppliers/service'
 import { MONEDAS_SUPPLY_V2 } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · CREAR PROVEEDOR (§27).
+ * MEMBEGO SUPPLY · CREAR PROVEEDOR (§27).
  *
  * Primero pregunta si ya está en Membego. Sí → autocompletar empresas y
  * vincular (no se crea otra `Company`). No → alta de proveedor externo.
@@ -63,7 +63,7 @@ function useAlTerminar(estado: EstadoAccion<ProveedorCreado>, onCreado?: (p: Pro
     visto.current = estado.id
     toast.success(estado.success)
     if (onCreado) onCreado(estado.data)
-    else router.push(`/superadmin/supply-v2/proveedores/${estado.data.id}`)
+    else router.push(`/superadmin/supply/proveedores/${estado.data.id}`)
   }, [estado, onCreado, router])
 }
 

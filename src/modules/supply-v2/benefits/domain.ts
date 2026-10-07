@@ -5,7 +5,7 @@ import type { Transiciones } from '../core/estados'
 import { validarBeneficioParaCalculo } from '../core/financiacion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · BENEFICIOS: reglas PURAS (§7–§12, §16, §18).
+ * MEMBEGO SUPPLY · SLICE 6 · BENEFICIOS: reglas PURAS (§7–§12, §16, §18).
  */
 
 export interface DatosBeneficio {

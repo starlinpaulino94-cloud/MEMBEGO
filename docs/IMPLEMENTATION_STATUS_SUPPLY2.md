@@ -1,5 +1,7 @@
 > **Nota de fusión (PR #570).** Este documento lo escribió otra sesión con el nombre `IMPLEMENTATION_STATUS.md` (Supply 2.0 y el rediseño Stitch, sin acceso al Plan Maestro). Choca con el del plan por Commerce Core, que conserva ese nombre: `docs/IMPLEMENTATION_STATUS.md`. Se renombró para no perder ninguno; el contenido no se tocó.
 
+> **Nota de fusión (PR #574).** La rama `claude/relaxed-brahmagupta-1shtlc` (retiro de Supply V1 y renombrado a «Supply») se bifurcó antes de este renombre y siguió actualizando el archivo viejo con ese nombre. Al fusionar, sus ediciones de contenido se trasladaron aquí —que es lo que de verdad describen— y `docs/IMPLEMENTATION_STATUS.md` se dejó con el estado de Commerce Core sin modificar. Ver «Retiro de Supply V1» en §5.
+
 # MEMBEGO — IMPLEMENTATION STATUS
 
 > Memoria operativa del proyecto. Se escribe **contra el código**, no contra documentos: donde un documento y el código se contradicen, manda el código y la discrepancia queda en §14.
@@ -11,13 +13,13 @@
 ## 1. Estado general
 
 ```text
-Fecha de actualización:   2026-10-06
-Branch:                   claude/relaxed-brahmagupta-1shtlc
-Commit auditado:          2791c33  (origin/main = 2795490, PR #563). El commit de este documento es posterior
-Estado general:           Supply 2.0 (Slices 1–9) completo y fusionado en main; rediseño visual Stitch en curso
-Fase actual:              Rediseño visual Stitch de Supply 2.0 — 11 de 11 pantallas hechas y fusionadas en `main`
-Última fase completada:   Pantalla 11/11 «Economía» (commit propio en la rama; Finanzas ya está en `main` por #569)
-Próxima fase:             Cierre del rediseño (ver §17)
+Fecha de actualización:   2026-10-07 (fusión del PR #574; contenido original de la rama, 2026-10-06)
+Branch:                   claude/relaxed-brahmagupta-1shtlc (PR #574)
+Commit auditado:          006f7aba (rama), fusionado sobre origin/main. El rediseño Stitch (11/11, Economía por #571) ya estaba en `main` antes de esta fusión
+Estado general:           Supply (antes «Supply 2.0», Slices 1–9) completo; rediseño Stitch terminado (11/11, ya en `main`); Supply original (V1) retirado del código por el PR #574
+Fase actual:              Cierre del retiro de Supply V1 (PR #574); rediseño Stitch ya cerrado — ver §17
+Última fase completada:   Retiro de Supply V1 y renombrado de «Supply 2.0» a «Supply» en los textos (§5)
+Próxima fase:             Ninguna de rediseño pendiente; ver §16 para lo que necesita al usuario
 ```
 
 - Supply 2.0 backend (S1–S9 + ofertas editables/precio/categorías de vehículo) está en `main` con 27 migraciones y 320 pruebas contra PostgreSQL en verde sobre una base creada con `migrate deploy`.
@@ -52,7 +54,7 @@ Próxima fase:             Cierre del rediseño (ver §17)
 
 | Programa / fase | Estado | Progreso | Objetivo | Resultado actual |
 |---|---|---:|---|---|
-| Supply V1 (releases A–G) | ✅ | 7/7 | Supply original (inventario patrocinado) | Doc `membego-supply-implementation-status.md`; migraciones `20260926…20261009` (10). Coexiste, no deprecado |
+| Supply V1 (releases A–G) | 🟣 | 7/7 | Supply original (inventario patrocinado) | Doc `membego-supply-implementation-status.md`; migraciones `20260926…20261009` (10). Código retirado por el PR #574 (§5); 30 tablas y 10 migraciones se conservan |
 | Supply 2.0 · S1 Procurement | ✅ | 1/9 | Proveedores, acuerdos, órdenes, lotes, ledger | `20261010`; `db.test` S1 verde |
 | · S2 Pool/Oferta/Checkout | ✅ | 2/9 | Asignación FEFO, ofertas, compra cliente | `20261011` |
 | · S3 Voucher/QR/Redención | ✅ | 3/9 | Entrega, reversa, incidencias | `20261012` |
@@ -177,7 +179,7 @@ Ver §15. Principales: consultas nuevas sin pruebas unitarias propias; Campañas
 | Redemptions | ✅ | `supply-v2/redemption` | Entrega, reversa, incidencias |
 | Merchant Billing | ⚪ | — | No existe (§2 F4) |
 | Revenue Attribution | 🟡 | `supply-v2/campaigns`, `growth`, `excursiones` | Sin atribución genérica |
-| Membego Supply V1 | ✅ | `modules/supply`, `/superadmin/supply`, `/admin/supply` | Visible; coexiste con V2 |
+| Membego Supply V1 | 🟣 | retirado (ver «Retiro de Supply V1» en §5) | Código y pantallas eliminados por el PR #574; tablas y migraciones se conservan |
 | Membego Supply V2 | 🔵 | `modules/supply-v2` | Backend ✅; UI en rediseño (§3) |
 | Supplier Finance | ✅ | `supply-v2/finance` | S4 |
 | Settlements | ✅ | `supply-v2/finance/settlements*` | S5 + liquidación parcial |
@@ -195,8 +197,8 @@ Ver §15. Principales: consultas nuevas sin pruebas unitarias propias; Campañas
 ## 5. Membego Supply
 
 ```text
-Supply V1:               ✅ COMPLETED (7 releases) · visible · coexiste con V2 · sin retirada planificada en el código
-Supply V2:               ✅ backend S1–S9 · 🔵 UI en rediseño Stitch
+Supply V1:               🟣 DEPRECATED · código y pantallas retirados por el PR #574; 30 tablas y 10 migraciones se conservan en la BD
+Supply (antes «Supply 2.0»): ✅ backend S1–S9 · ✅ UI Stitch terminada (11/11) · renombrada a «Supply» en los textos (PR #574, §5a)
 Procurement:             ✅ S1  (suppliers, catalog, agreements, procurement)
 Agreements:              ✅ S1  versiones congeladas; resolución en S5
 Purchase Orders:         ✅ S1  aprobación segregada (core/segregacion.ts)
@@ -222,6 +224,19 @@ Payment gateway:         🟡 frontera genérica ✅ (HMAC, anti-replay, kill sw
 ```
 
 Superficies: superadmin 53 páginas, admin 8 (`campanas, beneficios, escaner, fidelizacion, ventas, liquidaciones`), cliente 5 (`bonos, fidelizacion, compras, compras/[id], cupones`), públicas `/promociones/*`. Endpoints: `POST /api/webhooks/supply-v2/[provider]`, `/api/cron/supply-v2`.
+
+### 5a. Retiro de Supply V1 y cambio de nombre a «Supply» (PR #574)
+
+Pedido del usuario: eliminar el Supply original, dejar el 2.0 como el único y llamarlo «Supply».
+
+- **Eliminado:** `superadmin/supply` (33 archivos), `admin/supply`, `cliente/beneficios`, `api/cron/supply` (y su entrada en `vercel.json`), `modules/supply` (47), `components/supply` (26), 9 pruebas unitarias y 1 de PostgreSQL de V1, y las entradas de menú de V1.
+- **Conservado a propósito:** el esquema Prisma y las 10 migraciones de V1 (30 tablas). Dos de ellas siguen en uso: `SupplyCuentaCobro` (la lee el checkout de Supply) y `SupplyPedido` (permiso de comprobantes). Borrar tablas queda para una migración aparte, verificada contra producción.
+- **Rescatado de V1:** la administración de las cuentas de cobro de Membego (sin una activa nadie puede pagar), que solo existía en la pantalla de V1. Ahora vive en `/superadmin/supply/finanzas/cuentas-cobro` (`modules/supply-v2/payment-accounts`, `actions-cuentas.ts`), con el permiso `SUPPLY_V2_PAYMENT_CREATE` y bitácora en la misma transacción.
+- **Renombrado:** las rutas de pantalla `/superadmin/supply-v2` y `/admin/supply-v2` pasaron a `/supply`, con redirección desde las viejas; «Supply 2.0» pasó a «Supply» en los textos. NO cambiaron `/api/cron/supply-v2` ni `/api/webhooks/supply-v2` (integraciones externas). Los nombres internos de carpetas, módulos y permisos (`supply-v2`, `SUPPLY_V2_*`) tampoco cambiaron.
+- **Redirección:** `/cliente/beneficios/*` lleva a `/cliente/compras`. Los clientes que tuvieran beneficios del Supply original dejan de verlos en pantalla (los datos siguen en la BD).
+- **Verificado en la rama** (antes de fusionar con el estado de `main` del 2026-10-07, que incluye Commerce Core F0–F3 y el rediseño Stitch completo): TypeScript PASS · lint PASS (0 errores, 12 warnings) · unit 3356/3362 PASS (6 omitidas; baja por las pruebas de V1 eliminadas) · PostgreSQL 297/297 PASS en base migrada de cero · build PASS · `rls:cobertura` PASS · `permisos:catalogo` PASS · e2e de las Slices 1–9: 31 pasados, 0 fallos, el resto omitido por diseño. **Estas cifras son de antes de la fusión** y no incluyen lo que Commerce Core añadió mientras tanto (catálogo, inventario, puente, pedidos); hay que repetir las puertas de calidad sobre el árbol ya fusionado antes de dar esto por cerrado.
+- **Hallazgos al verificar (en la rama):** (1) 34 líneas de los e2e tenían regex con las URLs viejas (`\/supply-v2\/…`) que el reemplazo no alcanzó; corregidas. (2) La lista de Campañas ordenaba solo por estado y fecha de inicio, y con muchas campañas el empate dejaba la nueva fuera de la primera página: se añadió desempate por `createdAt` (cambio de solo lectura). (3) La base local pierde el servicio Postgres cuando se reinicia el contenedor; no es del código.
+- **No verificado:** producción (si hay datos de V1 en uso real); el comportamiento visual de `/cliente/compras` como sustituto de `/cliente/beneficios`; el resto de e2e de la plataforma; las puertas de calidad sobre el código ya fusionado con Commerce Core (ver punto anterior).
 
 ---
 
@@ -384,11 +399,11 @@ Riesgos pendientes: sin pentest externo; Capa 2 de RLS apagada; `app.omnisciente
 
 ## 12. Módulos ocultos / deprecated
 
-**Resultado de la verificación: en el código no hay módulos 🙈 HIDDEN ni 🟣 DEPRECATED globales.** Lo que sigue contradice la premisa de que Supply V1, Gamificación, Blog y Home Builder estén ocultos.
+**Resultado de la verificación: en el código no hay módulos 🙈 HIDDEN globales**, y desde el PR #574 hay uno 🟣 DEPRECATED (Supply V1, retirado, ver §5a). Lo que sigue contradice la premisa de que Gamificación, Blog y Home Builder estén ocultos.
 
 | Módulo | Estado | Motivo | Cómo se oculta | Puede regresar |
 |---|---|---|---|---|
-| Supply V1 | ✅ visible | Coexiste con V2 («nuevo motor, en paralelo») | No se oculta: `/superadmin/supply` en `nav-config.ts`; `/admin/supply` solo con capacidad `MEMBEGO_SUPPLIER` | n/a (nunca salió) |
+| Supply V1 | 🟣 retirado | Código, pantallas y cron eliminados por el PR #574; se conserva la BD | n/a: ya no hay ruta ni entrada de menú que ocultar | n/a (nunca salió) |
 | Gamificación (ruleta) | ✅ visible por capacidad | — | Capacidad `RULETA` → sección `gamificacion` (`SECCIONES_POR_CAPACIDAD`); entrada en el hub Marketing | n/a |
 | Blog | 🟡 público y vacío | Sin artículos (`ARTICULOS = []`); no se inventan | **No está oculto**: enlazado en `PublicFooter` y `sitemap.ts` | n/a |
 | Home Builder (composición del Inicio) | ✅ visible | `home.prisma` (3 modelos); se administra en `/admin/personalizacion` | Sin bandera | n/a |
@@ -406,7 +421,7 @@ Las de ADR (`docs/adr/0001–0009`) y las de esta sesión. No reabrir sin eviden
 
 - Monolito modular Next.js (App Router) + Prisma + Supabase Postgres; vertical slices con dominio **puro** separado de la base (`domain.ts` sin Prisma).
 - Supply separado del inventario (ADR-0001); **ledger, no contador** (ADR-0002); «emitido ≠ redimido» (ADR-0004); concurrencia con bloqueo de fila (ADR-0005); FEFO configurable (ADR-0006); liquidación desde el ledger (ADR-0008); capa financiera en sublibros (ADR-0009).
-- Supply V2 convive con V1 en paralelo; no se refactoriza V1.
+- Supply V1 se retiró (PR #574); Supply (V2) es el único. Las rutas de pantalla pasaron de `supply-v2` a `supply`; las de API, cron y webhooks NO cambiaron (hay integraciones externas apuntando a ellas). Los nombres internos de carpetas, módulos y permisos (`supply-v2`, `SUPPLY_V2_*`) tampoco cambiaron.
 - Migraciones **aditivas**, enums nuevos en migración aparte, ninguna editada tras aplicarse (sellos `SUMAS.txt`).
 - El dinero cruza como texto formateado (`dineroSupplyV2`), nunca se recalcula en pantalla.
 - Pasarelas: frontera genérica (`provider` = texto), dominio sin conocer a ningún proveedor; CardNET sigue aparte.
@@ -470,7 +485,7 @@ Ninguno técnico. Decisiones que **necesitan al usuario** (no son bloqueadores):
 | Qué | Impacto | Qué necesita | Responsable |
 |---|---|---|---|
 | Adjuntar el Plan Maestro F0–F7 | §2 y §6 no se pueden reconciliar | El documento | Usuario |
-| Decidir si Supply V1, Gamificación, Blog y Home Builder deben ocultarse | Hoy están visibles | Decisión y alcance | Usuario |
+| Decidir si Gamificación, Blog y Home Builder deben ocultarse | Hoy están visibles | Decisión y alcance | Usuario |
 | Acceso a producción (migraciones, RLS, deriva) | §7 y §9 no verificables | Ejecutar `migraciones:pendientes` y `db:doctor` allí | Usuario / DevOps |
 
 ---

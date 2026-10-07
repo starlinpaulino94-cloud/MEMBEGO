@@ -8,7 +8,7 @@ import { marcarEntregado, marcarFallido, reclamarEfectos, type EfectoReclamado }
 import { EFECTOS_DE_AVISO } from '../notifications/efectos'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · DEL OUTBOX A LA COLA (§6, §7, §8).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · DEL OUTBOX A LA COLA (§6, §7, §8).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * TRES PIEZAS, Y CADA UNA HACE SOLO LO SUYO
@@ -92,7 +92,7 @@ export interface EfectoAEntregar extends EfectoReclamado {
 /**
  * LOS EFECTOS QUE HOY SABEMOS HACER.
  *
- * Son avisos al cliente dentro de Membego: lo que Supply 2.0 ya le debía y
+ * Son avisos al cliente dentro de Membego: lo que Supply ya le debía y
  * nunca le daba —hasta ahora, confirmar un pago no avisaba a nadie—. Correo,
  * WhatsApp y alertas son de bloques posteriores a propósito; lo que este
  * bloque tiene que demostrar es el CAMINO, y un aviso in-app lo recorre
@@ -218,7 +218,7 @@ export async function entregarEfecto(
   // «ese efecto no existe» y el despacho se quedaría mudo para siempre. El
   // gate `rls:cobertura` no lo cazó porque mira por ARCHIVO y este ya tenía un
   // `sinEmpresa` más abajo; eso no lo hace menos defecto.
-  const fila = await sinEmpresa('Supply 2.0: leer el efecto a entregar', (tx) =>
+  const fila = await sinEmpresa('Supply: leer el efecto a entregar', (tx) =>
     tx.supplyV2OutboxEvent.findUnique({
     where: { id: outboxId },
     select: {
@@ -311,7 +311,7 @@ export async function recuperarArriendos(
   // «ese efecto no existe» y el despacho se quedaría mudo para siempre. El
   // gate `rls:cobertura` no lo cazó porque mira por ARCHIVO y este ya tenía un
   // `sinEmpresa` más abajo; eso no lo hace menos defecto.
-  const abandonadas = await sinEmpresa('Supply 2.0: efectos con el arriendo vencido', (tx) =>
+  const abandonadas = await sinEmpresa('Supply: efectos con el arriendo vencido', (tx) =>
     tx.supplyV2OutboxEvent.findMany({
       where: { status: 'PROCESSING', claimedAt: { lt: limite } },
       select: { id: true, correlationId: true, attempts: true },
@@ -363,7 +363,7 @@ async function avisarAlCliente(
   e: EfectoAEntregar,
   aviso: { tipo: NotifTipo; titulo: string; mensaje: string; href: string }
 ): Promise<{ detalle: string }> {
-  const orden = await sinEmpresa('Supply 2.0: a quién avisar de esta compra', (tx) =>
+  const orden = await sinEmpresa('Supply: a quién avisar de esta compra', (tx) =>
     tx.supplyV2CustomerOrder.findUnique({
       where: { id: e.aggregateId },
       select: { customerId: true, number: true },
@@ -376,7 +376,7 @@ async function avisarAlCliente(
   }
 
   try {
-    await sinEmpresa('Supply 2.0: avisar al cliente del resultado de su pago', (tx) =>
+    await sinEmpresa('Supply: avisar al cliente del resultado de su pago', (tx) =>
       tx.notificacion.create({
         data: {
           userId: orden.customerId,
@@ -410,7 +410,7 @@ async function devolverSiSigueReclamado(
   ctx: ContextoAuditoria,
   ahora: Date
 ): Promise<void> {
-  const fila = await sinEmpresa('Supply 2.0: estado del efecto antes de anotar el fallo', (tx) =>
+  const fila = await sinEmpresa('Supply: estado del efecto antes de anotar el fallo', (tx) =>
     tx.supplyV2OutboxEvent.findUnique({ where: { id }, select: { status: true } })
   )
   if (fila?.status !== 'PROCESSING') return

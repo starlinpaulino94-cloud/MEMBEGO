@@ -17,7 +17,7 @@ import {
 } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · EL QUE MUEVE EL DINERO.
+ * MEMBEGO SUPPLY · SLICE 4 · EL QUE MUEVE EL DINERO.
  *
  * Una APLICACIÓN relaciona un origen de dinero (pago confirmado o depósito)
  * con una deuda (obligación; y la factura a la que pertenece, si tiene). Las

@@ -32,7 +32,7 @@ import type { PaymentAccountRef } from '../contracts/gateways'
 import { reconocerVentaEnTx } from '../economics/service'
 
 /**
- * MEMBEGO SUPPLY 2.0 · CHECKOUT, RESERVA, PAGO Y DERECHO (§21–§37).
+ * MEMBEGO SUPPLY · CHECKOUT, RESERVA, PAGO Y DERECHO (§21–§37).
  *
  * TODO dentro de la `tx` de quien llama. La OFERTA se bloquea con
  * `FOR UPDATE` en cada operación que mueve sus unidades: dos clientes por la

@@ -3,7 +3,7 @@ import { StatusChip } from '@/components/ui/status-chip'
 import type { EstadoComponente } from '@/modules/supply-v2/operations/salud-dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · PIEZAS DEL CENTRO DE OPERACIONES.
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · PIEZAS DEL CENTRO DE OPERACIONES.
  *
  * Denso y legible, no decorativo. El operador que abre esto está buscando una
  * respuesta a una pregunta concreta, probablemente con prisa: lo que manda es

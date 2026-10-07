@@ -6,7 +6,7 @@ import { ORDEN_ABIERTA } from '../core/estados'
 import { aNumero } from '../core/dinero'
 
 /**
- * MEMBEGO SUPPLY 2.0 · lecturas de proveedores. Cada función abre su propia
+ * MEMBEGO SUPPLY · lecturas de proveedores. Cada función abre su propia
  * transacción de plataforma (`sinEmpresa`): Membego mira a todos sus
  * proveedores, que son de empresas distintas.
  */
@@ -27,7 +27,7 @@ export interface ProveedorEnLista {
 }
 
 export async function listarProveedores(): Promise<ProveedorEnLista[]> {
-  const filas = await sinEmpresa('Supply 2.0: listado de proveedores', (tx) =>
+  const filas = await sinEmpresa('Supply: listado de proveedores', (tx) =>
     tx.supplyV2Supplier.findMany({
       orderBy: [{ status: 'asc' }, { commercialName: 'asc' }],
       select: {
@@ -91,7 +91,7 @@ export async function buscarProveedores(f: FiltroProveedores, p: { pagina: numbe
         }
       : {}),
   }
-  return sinEmpresa('Supply 2.0: directorio de proveedores', async (tx) => {
+  return sinEmpresa('Supply: directorio de proveedores', async (tx) => {
     const [filas, total] = await Promise.all([
       tx.supplyV2Supplier.findMany({
         where,
@@ -150,7 +150,7 @@ export interface ResumenProveedores {
 
 /** Los cuatro indicadores de la pantalla Proveedores. */
 export async function resumenProveedores(): Promise<ResumenProveedores> {
-  return sinEmpresa('Supply 2.0: indicadores de proveedores', async (tx) => {
+  return sinEmpresa('Supply: indicadores de proveedores', async (tx) => {
     const [total, activos, registrados, externos, conComprasAbiertas, ordenesAbiertas] = await Promise.all([
       tx.supplyV2Supplier.count(),
       tx.supplyV2Supplier.count({ where: { status: 'ACTIVE' } }),
@@ -165,14 +165,14 @@ export async function resumenProveedores(): Promise<ResumenProveedores> {
 
 /** Categorías de producto en uso, para el filtro del directorio. */
 export async function categoriasDeProveedores(): Promise<string[]> {
-  const filas = await sinEmpresa('Supply 2.0: categorías de productos de proveedores', (tx) =>
+  const filas = await sinEmpresa('Supply: categorías de productos de proveedores', (tx) =>
     tx.supplyV2CatalogItem.findMany({ where: { status: { not: 'ARCHIVED' }, category: { not: null } }, distinct: ['category'], select: { category: true }, orderBy: { category: 'asc' } })
   )
   return filas.map((f) => f.category!).filter((c) => c.trim().length > 0)
 }
 
 export async function fichaProveedor(id: string) {
-  const p = await sinEmpresa('Supply 2.0: ficha de un proveedor', (tx) =>
+  const p = await sinEmpresa('Supply: ficha de un proveedor', (tx) =>
     tx.supplyV2Supplier.findUnique({
       where: { id },
       include: {
@@ -223,7 +223,7 @@ export async function fichaProveedor(id: string) {
 
 /** Proveedores activos con su catálogo y sus acuerdos vigentes: lo que el wizard necesita. */
 export async function proveedoresParaWizard() {
-  return sinEmpresa('Supply 2.0: datos del wizard de compra', (tx) =>
+  return sinEmpresa('Supply: datos del wizard de compra', (tx) =>
     tx.supplyV2Supplier.findMany({
       where: { status: 'ACTIVE' },
       orderBy: { commercialName: 'asc' },

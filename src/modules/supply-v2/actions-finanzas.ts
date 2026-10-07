@@ -19,7 +19,7 @@ import type { LineaFacturaEntrada } from './finance/domain'
 import { guardarAdjuntoEnTx } from './finance/attachments'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · server actions de finanzas.
+ * MEMBEGO SUPPLY · SLICE 4 · server actions de finanzas.
  *
  * GUARDIA (permiso separado por operación, §40) → REGLA (en `finance/`) →
  * BITÁCORA (misma transacción). La segregación de funciones la impone el
@@ -55,7 +55,7 @@ export async function crearFacturaAction(_prev: EstadoAccion<FacturaCreada>, fd:
       if (q && q > 0) lines.push({ quantity: q, unitCost: texto(fd, 'unitCost', 20), description: texto(fd, 'description', 200) })
     }
     if (lines.length === 0) return { error: 'Indica al menos una línea con cantidad mayor que cero.' }
-    const creada = await sinEmpresa('Supply 2.0: registrar factura de proveedor', (tx) =>
+    const creada = await sinEmpresa('Supply: registrar factura de proveedor', (tx) =>
       crearFacturaEnTx(
         tx,
         {
@@ -85,7 +85,7 @@ export async function aprobarFacturaAction(_prev: EstadoAccion, fd: FormData): P
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_INVOICE_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
     const id = texto(fd, 'invoiceId', 60)
-    const r = await sinEmpresa('Supply 2.0: aprobar factura de proveedor', (tx) => aprobarFacturaEnTx(tx, id, ctx))
+    const r = await sinEmpresa('Supply: aprobar factura de proveedor', (tx) => aprobarFacturaEnTx(tx, id, ctx))
     refrescarFinanzas('facturas', `facturas/${id}`, 'obligaciones')
     return { success: r.repetida ? `La factura ${r.number} ya estaba aprobada.` : `Factura ${r.number} aprobada: la deuda con el proveedor quedó reconocida.`, id }
   } catch (e) {
@@ -98,7 +98,7 @@ export async function cancelarFacturaAction(_prev: EstadoAccion, fd: FormData): 
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_INVOICE_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
     const id = texto(fd, 'invoiceId', 60)
-    await sinEmpresa('Supply 2.0: cancelar factura de proveedor', (tx) => cancelarFacturaEnTx(tx, id, texto(fd, 'motivo', 500), ctx))
+    await sinEmpresa('Supply: cancelar factura de proveedor', (tx) => cancelarFacturaEnTx(tx, id, texto(fd, 'motivo', 500), ctx))
     refrescarFinanzas('facturas', `facturas/${id}`, 'obligaciones')
     return { success: 'Factura cancelada.', id }
   } catch (e) {
@@ -117,7 +117,7 @@ export async function crearPagoProveedorAction(_prev: EstadoAccion<PagoCreado>, 
     const monto = numero(fd, 'amount')
     if (monto == null || monto <= 0) return { error: 'Indica el monto del pago.' }
     const destino = texto(fd, 'destino', 20)
-    const creado = await sinEmpresa('Supply 2.0: registrar pago a proveedor', (tx) =>
+    const creado = await sinEmpresa('Supply: registrar pago a proveedor', (tx) =>
       crearPagoEnTx(
         tx,
         {
@@ -150,7 +150,7 @@ export async function confirmarPagoProveedorAction(_prev: EstadoAccion<PagoConfi
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_PAYMENT_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
     const id = texto(fd, 'paymentId', 60)
-    const r = await sinEmpresa('Supply 2.0: confirmar pago a proveedor', (tx) => confirmarPagoProveedorEnTx(tx, id, ctx))
+    const r = await sinEmpresa('Supply: confirmar pago a proveedor', (tx) => confirmarPagoProveedorEnTx(tx, id, ctx))
     refrescarFinanzas('pagos', `pagos/${id}`, 'facturas', 'depositos', 'obligaciones', 'liquidaciones')
     revalidatePath(RUTA_PORTAL_PROVEEDOR, 'layout')
     const detalle = r.depositId ? ' y quedó como depósito' : Number(r.aplicado) > 0 ? `: ${r.aplicado} aplicado${Number(r.sinAplicar) > 0 ? `, ${r.sinAplicar} sin aplicar` : ''}` : ''
@@ -165,7 +165,7 @@ export async function cancelarPagoProveedorAction(_prev: EstadoAccion, fd: FormD
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_PAYMENT_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
     const id = texto(fd, 'paymentId', 60)
-    await sinEmpresa('Supply 2.0: cancelar pago a proveedor', (tx) => cancelarPagoProveedorEnTx(tx, id, texto(fd, 'motivo', 500), ctx))
+    await sinEmpresa('Supply: cancelar pago a proveedor', (tx) => cancelarPagoProveedorEnTx(tx, id, texto(fd, 'motivo', 500), ctx))
     refrescarFinanzas('pagos', `pagos/${id}`)
     return { success: 'Pago cancelado.', id }
   } catch (e) {
@@ -179,7 +179,7 @@ export async function aplicarDepositoAction(_prev: EstadoAccion<AplicacionHecha>
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_DEPOSIT_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: aplicar depósito', (tx) =>
+    const r = await sinEmpresa('Supply: aplicar depósito', (tx) =>
       aplicarEnTx(tx, { depositId: texto(fd, 'depositId', 60), invoiceId: texto(fd, 'invoiceId', 60) || null, obligationId: texto(fd, 'obligationId', 60) || null, amount: texto(fd, 'amount', 20), idempotencyKey: texto(fd, 'idempotencyKey', 80) || null }, ctx)
     )
     refrescarFinanzas('facturas', `facturas/${texto(fd, 'invoiceId', 60)}`, 'depositos', 'obligaciones')
@@ -193,7 +193,7 @@ export async function aplicarPagoAction(_prev: EstadoAccion<AplicacionHecha>, fd
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_PAYMENT_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: aplicar pago confirmado', (tx) =>
+    const r = await sinEmpresa('Supply: aplicar pago confirmado', (tx) =>
       aplicarEnTx(tx, { paymentId: texto(fd, 'paymentId', 60), invoiceId: texto(fd, 'invoiceId', 60) || null, obligationId: texto(fd, 'obligationId', 60) || null, amount: texto(fd, 'amount', 20), idempotencyKey: texto(fd, 'idempotencyKey', 80) || null }, ctx)
     )
     refrescarFinanzas('facturas', `facturas/${texto(fd, 'invoiceId', 60)}`, 'pagos', 'obligaciones')
@@ -207,7 +207,7 @@ export async function reversarAplicacionAction(_prev: EstadoAccion<ReversaAplica
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_PAYMENT_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: reversar aplicación', (tx) => reversarAplicacionEnTx(tx, texto(fd, 'applicationId', 60), texto(fd, 'motivo', 500), ctx))
+    const r = await sinEmpresa('Supply: reversar aplicación', (tx) => reversarAplicacionEnTx(tx, texto(fd, 'applicationId', 60), texto(fd, 'motivo', 500), ctx))
     refrescarFinanzas('facturas', 'pagos', 'depositos', 'obligaciones')
     return { success: `Aplicación de ${r.amount} reversada.`, data: r }
   } catch (e) {
@@ -220,7 +220,7 @@ export async function convertirEnDepositoAction(_prev: EstadoAccion<DepositoCrea
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_DEPOSIT_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
     const paymentId = texto(fd, 'paymentId', 60)
-    const r = await sinEmpresa('Supply 2.0: convertir excedente de pago en depósito', (tx) => crearDepositoDesdePagoEnTx(tx, { paymentId, amount: texto(fd, 'amount', 20) || null, notes: texto(fd, 'notes', 500) || null, idempotencyKey: texto(fd, 'idempotencyKey', 80) || null }, ctx))
+    const r = await sinEmpresa('Supply: convertir excedente de pago en depósito', (tx) => crearDepositoDesdePagoEnTx(tx, { paymentId, amount: texto(fd, 'amount', 20) || null, notes: texto(fd, 'notes', 500) || null, idempotencyKey: texto(fd, 'idempotencyKey', 80) || null }, ctx))
     refrescarFinanzas('pagos', `pagos/${paymentId}`, 'depositos')
     return { success: r.repetido ? `Ese pago ya financia el depósito ${r.number}.` : `Depósito ${r.number} creado por ${r.originalAmount}.`, id: r.id, data: r }
   } catch (e) {
@@ -238,7 +238,7 @@ export async function crearConciliacionAction(_prev: EstadoAccion<ConciliacionCr
     const periodEnd = fecha(fd, 'periodEnd')
     if (!periodStart || !periodEnd) return { error: 'Indica el periodo a conciliar.' }
     periodEnd.setUTCHours(23, 59, 59, 999)
-    const r = await sinEmpresa('Supply 2.0: abrir conciliación', (tx) => crearConciliacionEnTx(tx, { supplierId: texto(fd, 'supplierId', 60), periodStart, periodEnd, supplierAmount: texto(fd, 'supplierAmount', 20) || null, notes: texto(fd, 'notes', 2000) || null }, ctx))
+    const r = await sinEmpresa('Supply: abrir conciliación', (tx) => crearConciliacionEnTx(tx, { supplierId: texto(fd, 'supplierId', 60), periodStart, periodEnd, supplierAmount: texto(fd, 'supplierAmount', 20) || null, notes: texto(fd, 'notes', 2000) || null }, ctx))
     refrescarFinanzas('conciliaciones', `conciliaciones/${r.id}`)
     return { success: r.repetida ? `Ese periodo ya tiene la conciliación ${r.number}.` : `Conciliación ${r.number} abierta con ${r.lineas} líneas.`, id: r.id, data: r }
   } catch (e) {
@@ -253,7 +253,7 @@ export async function registrarMontoProveedorAction(_prev: EstadoAccion, fd: For
     const id = texto(fd, 'reconciliationId', 60)
     const monto = texto(fd, 'supplierAmount', 20)
     if (!monto) return { error: 'Indica el monto del estado de cuenta del proveedor.' }
-    const r = await sinEmpresa('Supply 2.0: registrar el estado de cuenta del proveedor', (tx) => registrarMontoDelProveedorEnTx(tx, id, monto, ctx))
+    const r = await sinEmpresa('Supply: registrar el estado de cuenta del proveedor', (tx) => registrarMontoDelProveedorEnTx(tx, id, monto, ctx))
     refrescarFinanzas('conciliaciones', `conciliaciones/${id}`)
     return { success: r.status === 'MATCHED' ? 'Cuadra con el proveedor.' : `Diferencia de ${r.differenceAmount}.`, id }
   } catch (e) {
@@ -273,7 +273,7 @@ export async function generarLiquidacionAction(_prev: EstadoAccion<LiquidacionCr
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SETTLEMENT_CREATE')
     const ctx = await contextoDeAuditoria(actor)
     const frequency = (texto(fd, 'frequency', 20) || 'MANUAL') as SupplyV2SettlementFrequency
-    const r = await sinEmpresa('Supply 2.0: generar liquidación', (tx) =>
+    const r = await sinEmpresa('Supply: generar liquidación', (tx) =>
       generarLiquidacionEnTx(
         tx,
         {
@@ -300,7 +300,7 @@ export async function aprobarLiquidacionAction(_prev: EstadoAccion, fd: FormData
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SETTLEMENT_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: aprobar liquidación', (tx) => aprobarLiquidacionEnTx(tx, id, ctx))
+    const r = await sinEmpresa('Supply: aprobar liquidación', (tx) => aprobarLiquidacionEnTx(tx, id, ctx))
     refrescarLiquidaciones(id)
     return { success: r.repetida ? `La liquidación ${r.number} ya estaba aprobada.` : `Liquidación ${r.number} aprobada: ya se puede pagar.`, id }
   } catch (e) {
@@ -313,7 +313,7 @@ export async function cancelarLiquidacionAction(_prev: EstadoAccion, fd: FormDat
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SETTLEMENT_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: cancelar liquidación', (tx) => cancelarLiquidacionEnTx(tx, id, texto(fd, 'motivo', 500), ctx))
+    await sinEmpresa('Supply: cancelar liquidación', (tx) => cancelarLiquidacionEnTx(tx, id, texto(fd, 'motivo', 500), ctx))
     refrescarLiquidaciones(id)
     return { success: 'Liquidación cancelada: sus entregas vuelven a quedar pendientes de liquidar.', id }
   } catch (e) {
@@ -326,7 +326,7 @@ export async function resolverIncidenciaFinancieraAction(_prev: EstadoAccion, fd
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SETTLEMENT_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: resolver incidencia financiera', (tx) => resolverIncidenciaFinancieraEnTx(tx, id, texto(fd, 'notas', 2000), ctx))
+    await sinEmpresa('Supply: resolver incidencia financiera', (tx) => resolverIncidenciaFinancieraEnTx(tx, id, texto(fd, 'notas', 2000), ctx))
     refrescarFinanzas('incidencias')
     return { success: 'Incidencia resuelta.', id }
   } catch (e) {
@@ -344,7 +344,7 @@ export async function crearConciliacionComisionAction(_prev: EstadoAccion<Concil
     const periodEnd = fecha(fd, 'periodEnd')
     if (!periodStart || !periodEnd) return { error: 'Indica el periodo a conciliar.' }
     periodEnd.setUTCHours(23, 59, 59, 999)
-    const r = await sinEmpresa('Supply 2.0: abrir conciliación de comisión', (tx) =>
+    const r = await sinEmpresa('Supply: abrir conciliación de comisión', (tx) =>
       crearConciliacionComisionEnTx(tx, { supplierId: texto(fd, 'supplierId', 60), periodStart, periodEnd, grossClaimed: texto(fd, 'grossClaimed', 20) || null, commissionClaimed: texto(fd, 'commissionClaimed', 20) || null, netClaimed: texto(fd, 'netClaimed', 20) || null, notes: texto(fd, 'notes', 2000) || null }, ctx)
     )
     refrescarFinanzas('conciliaciones', `conciliaciones/${r.id}`)
@@ -361,7 +361,7 @@ export async function registrarCifrasProveedorAction(_prev: EstadoAccion, fd: Fo
     const ctx = await contextoDeAuditoria(actor)
     const net = texto(fd, 'netClaimed', 20)
     if (!net) return { error: 'Indica el neto que reclama el proveedor.' }
-    const r = await sinEmpresa('Supply 2.0: registrar las cifras del proveedor', (tx) => registrarCifrasDelProveedorEnTx(tx, id, { grossClaimed: texto(fd, 'grossClaimed', 20) || null, commissionClaimed: texto(fd, 'commissionClaimed', 20) || null, netClaimed: net }, ctx))
+    const r = await sinEmpresa('Supply: registrar las cifras del proveedor', (tx) => registrarCifrasDelProveedorEnTx(tx, id, { grossClaimed: texto(fd, 'grossClaimed', 20) || null, commissionClaimed: texto(fd, 'commissionClaimed', 20) || null, netClaimed: net }, ctx))
     refrescarFinanzas('conciliaciones', `conciliaciones/${id}`)
     return { success: r.status === 'MATCHED' ? 'Las cifras cuadran.' : `Hay una diferencia de ${r.differenceAmount}.`, id }
   } catch (e) {
@@ -375,7 +375,7 @@ export async function resolverConciliacionAction(_prev: EstadoAccion, fd: FormDa
     const ctx = await contextoDeAuditoria(actor)
     const id = texto(fd, 'reconciliationId', 60)
     const resolutionType = (texto(fd, 'resolutionType', 20) || null) as SupplyV2ResolutionType | null
-    await sinEmpresa('Supply 2.0: resolver conciliación', (tx) => resolverConciliacionEnTx(tx, id, texto(fd, 'notas', 2000), ctx, resolutionType))
+    await sinEmpresa('Supply: resolver conciliación', (tx) => resolverConciliacionEnTx(tx, id, texto(fd, 'notas', 2000), ctx, resolutionType))
     refrescarFinanzas('conciliaciones', `conciliaciones/${id}`)
     return { success: 'Conciliación resuelta.', id }
   } catch (e) {
@@ -394,7 +394,7 @@ export async function adjuntarArchivoAction(_prev: EstadoAccion, fd: FormData): 
     const path = texto(fd, 'path', 300)
     if (entidad !== 'factura' && entidad !== 'pago') return { error: 'Entidad no válida.' }
     if (!path) return { error: 'Primero sube el archivo.' }
-    await sinEmpresa('Supply 2.0: guardar adjunto', (tx) => guardarAdjuntoEnTx(tx, entidad, id, path))
+    await sinEmpresa('Supply: guardar adjunto', (tx) => guardarAdjuntoEnTx(tx, entidad, id, path))
     refrescarFinanzas(entidad === 'factura' ? `facturas/${id}` : `pagos/${id}`)
     return { success: 'Archivo guardado.', id }
   } catch (e) {

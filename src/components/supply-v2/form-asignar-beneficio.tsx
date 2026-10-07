@@ -10,7 +10,7 @@ import { asignarBeneficioAction, buscarClientesBeneficioAction } from '@/modules
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · asignar un beneficio a un cliente (§10).
+ * MEMBEGO SUPPLY · SLICE 6 · asignar un beneficio a un cliente (§10).
  *
  * El cliente se elige de una búsqueda del servidor: nadie escribe un id a
  * mano. Los usos no pueden pasar del límite por cliente del beneficio y el

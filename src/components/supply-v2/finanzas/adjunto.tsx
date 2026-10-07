@@ -11,7 +11,7 @@ import { adjuntarArchivoAction } from '@/modules/supply-v2/actions-finanzas'
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 
 /**
- * MEMBEGO SUPPLY 2.0 · adjuntar la factura (PDF/imagen) o el comprobante de
+ * MEMBEGO SUPPLY · adjuntar la factura (PDF/imagen) o el comprobante de
  * un pago (§42). Misma mecánica que los comprobantes existentes: el servidor
  * firma una ruta para ESTA entidad en el bucket privado, el navegador sube
  * directo y la action guarda la ruta. No hay storage propio de Supply.

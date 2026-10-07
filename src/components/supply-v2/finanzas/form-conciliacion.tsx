@@ -33,7 +33,7 @@ export function FormConciliacion({ proveedores }: { proveedores: { id: string; c
     if (estado.success && estado.id && visto.current !== estado.id) {
       visto.current = estado.id
       toast.success(estado.success)
-      router.push(`/superadmin/supply-v2/finanzas/conciliaciones/${estado.id}`)
+      router.push(`/superadmin/supply/finanzas/conciliaciones/${estado.id}`)
     }
   }, [estado, router])
   const hoy = new Date()
@@ -97,7 +97,7 @@ export function FormConciliacionComision({ proveedores }: { proveedores: { id: s
     if (estado.success && estado.id && visto.current !== estado.id) {
       visto.current = estado.id
       toast.success(estado.success)
-      router.push(`/superadmin/supply-v2/finanzas/conciliaciones/${estado.id}`)
+      router.push(`/superadmin/supply/finanzas/conciliaciones/${estado.id}`)
     }
   }, [estado, router])
   const hoy = new Date()

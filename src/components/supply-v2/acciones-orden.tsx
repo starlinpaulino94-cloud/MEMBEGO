@@ -78,7 +78,7 @@ function BotonAccion({
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · acciones de una orden (§35). Quien la creó TAMBIÉN la
+ * MEMBEGO SUPPLY · acciones de una orden (§35). Quien la creó TAMBIÉN la
  * aprueba: con un solo administrador de plataforma no hay a quién pasársela, y
  * esconder el botón solo dejaba el trabajo atascado sin salida. Lo que queda es
  * decirlo claro, porque la aprobación va firmada con su nombre.

@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · ficha pública de una CAMPAÑA (§19).
+ * MEMBEGO SUPPLY · SLICE 7 · ficha pública de una CAMPAÑA (§19).
  *
  * Nombre, qué es, hasta cuándo vale, qué empresas participan, qué productos y
  * en qué condiciones. Desde aquí se elige una oferta y se compra en su ficha de

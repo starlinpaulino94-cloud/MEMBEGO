@@ -98,7 +98,7 @@ comprobar('el login carga', await pedir('/login'), [200])
 // contesta 200 sin sesión no es un fallo de disponibilidad: es una brecha.
 console.log(`${C.dim}puertas cerradas${C.off}`)
 comprobar('el área de cliente pide sesión', await pedir('/cliente/compras'), [302, 307, 401, 403])
-comprobar('el Centro de Operaciones pide sesión', await pedir('/superadmin/supply-v2/operaciones'), [302, 307, 401, 403])
+comprobar('el Centro de Operaciones pide sesión', await pedir('/superadmin/supply/operaciones'), [302, 307, 401, 403])
 // 404 = hay secreto y no lo llevamos (a quien no tiene la llave, el endpoint
 // "no existe") · 503 = METRICAS_SECRET no está configurado, que es fail-closed
 // a propósito. Lo inaceptable es un 200.

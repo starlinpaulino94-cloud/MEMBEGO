@@ -14,7 +14,7 @@ function dinero(n: string, moneda: string): string {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · CAMPAÑAS en el marketplace (§18).
+ * MEMBEGO SUPPLY · SLICE 7 · CAMPAÑAS en el marketplace (§18).
  *
  * Es una sección DENTRO del marketplace que ya existe, no otro marketplace: la
  * vitrina lista campañas activas y vigentes AHORA (la vigencia y el horario se

@@ -30,7 +30,7 @@ interface Sucursal {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · ESCÁNER DEL PROVEEDOR (§15–§19, §51–§52, §66–§67).
+ * MEMBEGO SUPPLY · ESCÁNER DEL PROVEEDOR (§15–§19, §51–§52, §66–§67).
  *
  * Escanear ENSEÑA quién es y qué entregar; solo «Confirmar entrega» redime, y
  * el servidor vuelve a validar todo dentro de la transacción. La cámara puede

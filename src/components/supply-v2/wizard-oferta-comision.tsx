@@ -35,7 +35,7 @@ function dinero(n: number | string, moneda: string): string {
 }
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 5 · VENDER A COMISIÓN (§10–§12, §63).
+ * MEMBEGO SUPPLY · SLICE 5 · VENDER A COMISIÓN (§10–§12, §63).
  * Sin lote ni asignación: el producto trae su acuerdo a comisión resuelto en
  * el servidor (ITEM > CATEGORY > CATALOG) y la disponibilidad la declara el
  * proveedor. El reparto de aquí es orientativo; el servidor lo rehace.
@@ -71,7 +71,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
     if (!estado.success || !estado.id || visto.current === estado.id) return
     visto.current = estado.id
     toast.success(estado.success)
-    router.push(`/superadmin/supply-v2/ofertas/${estado.id}`)
+    router.push(`/superadmin/supply/ofertas/${estado.id}`)
   }, [estado, router])
 
   const moneda = producto?.currency ?? 'DOP'
@@ -118,7 +118,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
               <h2 className="text-h3">¿Qué producto del proveedor vas a vender?</h2>
               {productos.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Ningún producto tiene un acuerdo a comisión vigente. <Link href="/superadmin/supply-v2/proveedores" className="underline">Crea un acuerdo a comisión</Link> (por producto, categoría o catálogo) en la ficha del proveedor.
+                  Ningún producto tiene un acuerdo a comisión vigente. <Link href="/superadmin/supply/proveedores" className="underline">Crea un acuerdo a comisión</Link> (por producto, categoría o catálogo) en la ficha del proveedor.
                 </p>
               ) : (
                 <div>
@@ -269,7 +269,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
             <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
               {paso > 1 && <Button type="button" variant="outline" onClick={anterior}>Atrás</Button>}
               <Button type="button" onClick={siguiente} disabled={!listo[paso - 1]} data-testid="comision-continuar">Continuar</Button>
-              <Link href="/superadmin/supply-v2/ofertas" className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:underline">Cancelar</Link>
+              <Link href="/superadmin/supply/ofertas" className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:underline">Cancelar</Link>
             </div>
           )}
         </CardContent>

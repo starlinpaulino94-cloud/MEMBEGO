@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 2 de punta a punta en navegador (§57–§59).
+ * MEMBEGO SUPPLY · SLICE 2 de punta a punta en navegador (§57–§59).
  *
  *   ADMIN    supply recibido (Slice 1 por la interfaz) → Crear oferta → 100 a
  *            RD$399 → publicar → oferta ACTIVA → Supply 900 / 100
@@ -28,7 +28,7 @@ const OFERTA = `Pizza Grande Pepperoni Membego ${sufijo}`
 
 /** Slice 1 por la interfaz: proveedor → producto → acuerdo → PO 1.000 → aprobación → recepción 1.000. */
 async function supplyRecibido(compras: Page, finanzas: Page): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/compras/nueva')
+  await compras.goto('/superadmin/supply/compras/nueva')
   await compras.getByRole('button', { name: '+ Crear proveedor' }).click()
   await compras.getByRole('button', { name: 'No, es un proveedor externo' }).click()
   await compras.locator('#commercialName').fill(PROVEEDOR)
@@ -44,7 +44,7 @@ async function supplyRecibido(compras: Page, finanzas: Page): Promise<string> {
   await compras.getByRole('button', { name: 'Continuar' }).click()
   await compras.getByRole('button', { name: 'Continuar' }).click()
   await compras.getByRole('button', { name: 'Crear orden de compra' }).click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/compras\/(?!nueva)[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/compras\/(?!nueva)[a-z0-9]+$/)
   const urlOrden = compras.url()
   await compras.getByTestId('btn-enviar-aprobacion').click()
   await expect(compras.getByTestId('estado-orden')).toHaveText('Pendiente de aprobación')
@@ -59,14 +59,14 @@ async function supplyRecibido(compras: Page, finanzas: Page): Promise<string> {
 }
 
 async function disponiblesDelProducto(page: Page) {
-  await page.goto('/superadmin/supply-v2/supply')
+  await page.goto('/superadmin/supply/supply')
   const tarjeta = page.getByTestId('pool-producto').filter({ hasText: PRODUCTO })
   await expect(tarjeta).toBeVisible()
   const n = async (id: string) => Number((await tarjeta.getByTestId(id).innerText()).replace(/[^\d]/g, ''))
   return { disponibles: await n('pool-disponibles'), asignadas: await n('pool-asignadas'), reservadas: await n('pool-reservadas'), emitidas: await n('pool-emitidas'), tarjeta }
 }
 
-test.describe('Supply 2.0 · Slice 2', () => {
+test.describe('Supply · Slice 2', () => {
   test.beforeEach(async ({}, testInfo) => {
     test.skip(!SESION_LOCAL_DISPONIBLE, 'requiere SUPABASE_JWT_SECRET, DATABASE_URL y NEXT_PUBLIC_SUPABASE_URL para firmar sesiones')
     test.skip(testInfo.project.name !== 'escritorio', 'el recorrido completo corre una vez, en escritorio')
@@ -101,7 +101,7 @@ test.describe('Supply 2.0 · Slice 2', () => {
 
     // ── ADMIN · Crear oferta desde Supply ─────────────────────────────────
     await pool.tarjeta.getByTestId('btn-crear-oferta-producto').click()
-    await compras.waitForURL(/\/superadmin\/supply-v2\/ofertas\/nueva/)
+    await compras.waitForURL(/\/superadmin\/supply\/ofertas\/nueva/)
     await expect(compras.getByTestId('oferta-producto-resumen')).toContainText('1,000')
     await compras.getByRole('button', { name: 'Continuar' }).click()
     await compras.locator('#ofertaCantidad').fill('100')
@@ -118,7 +118,7 @@ test.describe('Supply 2.0 · Slice 2', () => {
     await compras.getByRole('button', { name: 'Continuar' }).click()
     await expect(compras.getByTestId('form-publicar-oferta')).toContainText('RD$399.00')
     await compras.getByTestId('btn-publicar-oferta').click()
-    await compras.waitForURL(/\/superadmin\/supply-v2\/ofertas\/(?!nueva)[a-z0-9]+$/)
+    await compras.waitForURL(/\/superadmin\/supply\/ofertas\/(?!nueva)[a-z0-9]+$/)
     const urlOferta = compras.url()
     await expect(compras.getByTestId('estado-oferta')).toHaveText('Activa')
     await expect(compras.getByTestId('oferta-asignadas')).toHaveText('100')
@@ -175,7 +175,7 @@ test.describe('Supply 2.0 · Slice 2', () => {
     await expect(cliente.getByTestId('estado-compra').filter({ visible: true })).toHaveText('Pago en revisión')
 
     // ── ADMIN · confirmar el pago ─────────────────────────────────────────
-    await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+    await finanzas.goto('/superadmin/supply/ofertas/ventas')
     const venta = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: OFERTA })
     await expect(venta).toContainText('TRX-E2E-001')
     await venta.getByTestId('btn-confirmar-pago').click()

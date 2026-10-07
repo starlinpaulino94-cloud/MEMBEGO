@@ -14,7 +14,7 @@ import { ofertaPublicaPorSlug, ofertasPublicas } from '../../src/modules/supply-
 import { cubetasDeLote, invarianteCumplido, saldoDeAsientos } from '../../src/modules/supply-v2/core/ledger'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 2 contra PostgreSQL de verdad (§56).
+ * MEMBEGO SUPPLY · SLICE 2 contra PostgreSQL de verdad (§56).
  *
  *   Supply 1.000 (LOT-A 600 @300 vence antes · LOT-B 400 @280 vence después)
  *   → oferta 100 (A) → checkout → cancelar → checkout → pago → derecho

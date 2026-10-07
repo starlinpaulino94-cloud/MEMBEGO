@@ -27,7 +27,7 @@ import { buscarClientesParaCampana } from './campaigns/queries'
 import { RUTA_CAMPANAS, RUTA_CAMPANAS_PUBLICAS, RUTA_CUPONES_CLIENTE } from './core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 7 · server actions de CAMPAÑAS Y CUPONES (§27).
+ * MEMBEGO SUPPLY · SLICE 7 · server actions de CAMPAÑAS Y CUPONES (§27).
  *
  * GUARDIA (permiso de plataforma) → REGLA (en `campaigns/`, dentro de UNA
  * transacción, con bitácora) → `{ error }` o `{ success }`.
@@ -73,7 +73,7 @@ export async function crearCampanaAction(_prev: EstadoAccion<CampanaCreada>, fd:
             requiresAssignment: texto(fd, 'requiresAssignment', 5) === 'si',
           }
         : null
-    const creada = await sinEmpresa('Supply 2.0: alta de una campaña', (tx) =>
+    const creada = await sinEmpresa('Supply: alta de una campaña', (tx) =>
       crearCampanaCompletaEnTx(
         tx,
         {
@@ -119,7 +119,7 @@ export async function agregarOfertaCampanaAction(_prev: EstadoAccion, fd: FormDa
     const ctx = await contextoDeAuditoria(actor)
     const offerId = texto(fd, 'offerId', 60)
     if (!offerId) return { error: 'Elige la oferta que participa.' }
-    const r = await sinEmpresa('Supply 2.0: añadir una oferta a una campaña', (tx) =>
+    const r = await sinEmpresa('Supply: añadir una oferta a una campaña', (tx) =>
       agregarOfertaEnTx(tx, { campaignId: id, offerId, featured: texto(fd, 'featured', 5) === 'si' }, ctx)
     )
     refrescarCampanas(id)
@@ -134,7 +134,7 @@ export async function quitarOfertaCampanaAction(_prev: EstadoAccion, fd: FormDat
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_CAMPAIGN_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: quitar una oferta de una campaña', (tx) => quitarOfertaEnTx(tx, { campaignId: id, offerId: texto(fd, 'offerId', 60) }, ctx))
+    await sinEmpresa('Supply: quitar una oferta de una campaña', (tx) => quitarOfertaEnTx(tx, { campaignId: id, offerId: texto(fd, 'offerId', 60) }, ctx))
     refrescarCampanas(id)
     return { success: 'Oferta retirada de la campaña.', id }
   } catch (e) {
@@ -149,7 +149,7 @@ export async function adjuntarPromocionAction(_prev: EstadoAccion, fd: FormData)
     const ctx = await contextoDeAuditoria(actor)
     const valueType = texto(fd, 'valueType', 20) as 'FIXED_AMOUNT' | 'PERCENTAGE'
     if (!['FIXED_AMOUNT', 'PERCENTAGE'].includes(valueType)) return { error: 'Indica si la promoción es un importe fijo o un porcentaje.' }
-    const b = await sinEmpresa('Supply 2.0: configurar la promoción de una oferta de campaña', (tx) =>
+    const b = await sinEmpresa('Supply: configurar la promoción de una oferta de campaña', (tx) =>
       adjuntarPromocionEnTx(
         tx,
         {
@@ -188,7 +188,7 @@ export async function ajustarPromocionAction(_prev: EstadoAccion, fd: FormData):
     const ctx = await contextoDeAuditoria(actor)
     const valueType = texto(fd, 'valueType', 20) as 'FIXED_AMOUNT' | 'PERCENTAGE'
     if (!['FIXED_AMOUNT', 'PERCENTAGE'].includes(valueType)) return { error: 'Indica si la promoción es un importe fijo o un porcentaje.' }
-    const b = await sinEmpresa('Supply 2.0: ajustar la promoción de una oferta de campaña', (tx) =>
+    const b = await sinEmpresa('Supply: ajustar la promoción de una oferta de campaña', (tx) =>
       ajustarPromocionEnTx(
         tx,
         {
@@ -220,7 +220,7 @@ export async function enviarCampanaARevisionAction(_prev: EstadoAccion, fd: Form
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_CAMPAIGN_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: enviar una campaña a revisión', (tx) => enviarARevisionEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: enviar una campaña a revisión', (tx) => enviarARevisionEnTx(tx, id, ctx))
     refrescarCampanas(id)
     return { success: 'Campaña en revisión: otra persona autorizada tiene que aprobarla.', id }
   } catch (e) {
@@ -233,7 +233,7 @@ export async function aprobarCampanaAction(_prev: EstadoAccion, fd: FormData): P
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_CAMPAIGN_APPROVE')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: aprobar una campaña', (tx) => aprobarCampanaEnTx(tx, id, ctx))
+    const r = await sinEmpresa('Supply: aprobar una campaña', (tx) => aprobarCampanaEnTx(tx, id, ctx))
     refrescarCampanas(id)
     return {
       success: r.repetida
@@ -255,7 +255,7 @@ export async function rechazarCampanaAction(_prev: EstadoAccion, fd: FormData): 
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Escribe por qué se devuelve la campaña.' }
-    await sinEmpresa('Supply 2.0: rechazar una campaña', (tx) => rechazarCampanaEnTx(tx, id, motivo, ctx))
+    await sinEmpresa('Supply: rechazar una campaña', (tx) => rechazarCampanaEnTx(tx, id, motivo, ctx))
     refrescarCampanas(id)
     return { success: 'Campaña devuelta a borrador con tu motivo.', id }
   } catch (e) {
@@ -268,7 +268,7 @@ export async function publicarCampanaAction(_prev: EstadoAccion, fd: FormData): 
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_CAMPAIGN_PUBLISH')
     const ctx = await contextoDeAuditoria(actor)
-    const r = await sinEmpresa('Supply 2.0: publicar una campaña', (tx) => publicarCampanaEnTx(tx, id, ctx))
+    const r = await sinEmpresa('Supply: publicar una campaña', (tx) => publicarCampanaEnTx(tx, id, ctx))
     refrescarCampanas(id)
     return {
       success: r.repetida
@@ -288,7 +288,7 @@ export async function pausarCampanaAction(_prev: EstadoAccion, fd: FormData): Pr
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_CAMPAIGN_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: pausar una campaña', (tx) => pausarCampanaEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: pausar una campaña', (tx) => pausarCampanaEnTx(tx, id, ctx))
     refrescarCampanas(id)
     return { success: 'Campaña pausada: sus promociones dejan de aplicarse en compras nuevas.', id }
   } catch (e) {
@@ -301,7 +301,7 @@ export async function reanudarCampanaAction(_prev: EstadoAccion, fd: FormData): 
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_CAMPAIGN_CREATE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: reanudar una campaña', (tx) => reanudarCampanaEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: reanudar una campaña', (tx) => reanudarCampanaEnTx(tx, id, ctx))
     refrescarCampanas(id)
     return { success: 'Campaña activa otra vez.', id }
   } catch (e) {
@@ -316,7 +316,7 @@ export async function cancelarCampanaAction(_prev: EstadoAccion, fd: FormData): 
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Escribe por qué se cancela la campaña.' }
-    await sinEmpresa('Supply 2.0: cancelar una campaña', (tx) => cancelarCampanaEnTx(tx, id, motivo, ctx))
+    await sinEmpresa('Supply: cancelar una campaña', (tx) => cancelarCampanaEnTx(tx, id, motivo, ctx))
     refrescarCampanas(id)
     return { success: 'Campaña cancelada. Lo aplicado queda aplicado; sus cupones vivos se cancelaron.', id }
   } catch (e) {
@@ -335,7 +335,7 @@ export async function generarCuponesAction(_prev: EstadoAccion<CuponesGenerados>
     if (!benefitId) return { error: 'Elige la promoción a la que abre el cupón.' }
     const clientes = fd.getAll('customerIds').map((v) => String(v)).filter(Boolean)
     const cantidad = kind === 'PRIVATE' ? clientes.length : (entero(fd, 'cantidad') ?? 1)
-    const r = await sinEmpresa('Supply 2.0: generar cupones de una campaña', (tx) =>
+    const r = await sinEmpresa('Supply: generar cupones de una campaña', (tx) =>
       generarCuponesEnTx(
         tx,
         {
@@ -373,7 +373,7 @@ export async function cancelarCuponAction(_prev: EstadoAccion, fd: FormData): Pr
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Escribe por qué se cancela el cupón.' }
-    await sinEmpresa('Supply 2.0: cancelar un cupón', (tx) => cancelarCuponEnTx(tx, texto(fd, 'couponId', 60), motivo, ctx))
+    await sinEmpresa('Supply: cancelar un cupón', (tx) => cancelarCuponEnTx(tx, texto(fd, 'couponId', 60), motivo, ctx))
     refrescarCampanas(campaignId)
     return { success: 'Cupón cancelado.', id: campaignId }
   } catch (e) {
@@ -388,7 +388,7 @@ export async function asignarCampanaAction(_prev: EstadoAccion, fd: FormData): P
     const ctx = await contextoDeAuditoria(actor)
     const customerId = texto(fd, 'customerId', 60)
     if (!customerId) return { error: 'Elige el cliente que recibe la campaña.' }
-    const r = await sinEmpresa('Supply 2.0: asignar una campaña a un cliente', (tx) =>
+    const r = await sinEmpresa('Supply: asignar una campaña a un cliente', (tx) =>
       asignarCampanaAClienteEnTx(tx, { campaignId: id, customerId, usesAllowed: entero(fd, 'usesAllowed'), note: texto(fd, 'note', 500) || null }, ctx)
     )
     refrescarCampanas(id)

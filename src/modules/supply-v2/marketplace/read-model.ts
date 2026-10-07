@@ -8,12 +8,12 @@ import { SIN_TOPE, unidadesLibres, unidadesLibresComision } from '../offers/doma
 import { RUTA_OFERTAS_PUBLICAS } from '../core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · READ MODEL PÚBLICO del marketplace (§17–§19, §53).
+ * MEMBEGO SUPPLY · READ MODEL PÚBLICO del marketplace (§17–§19, §53).
  *
- * Es el ÚNICO camino por el que una oferta de Supply 2.0 llega al marketplace
+ * Es el ÚNICO camino por el que una oferta de Supply llega al marketplace
  * y al cliente. Devuelve un DTO cerrado: precio público, precio Membego,
  * ahorro, proveedor, vigencia y si hay unidades. NUNCA costos, lotes,
- * asignaciones ni ledger. El marketplace no importa nada más de Supply 2.0.
+ * asignaciones ni ledger. El marketplace no importa nada más de Supply.
  */
 
 export interface MarketplaceSupplyOffer {
@@ -100,7 +100,7 @@ function aDto(o: Fila, ahora: Date): MarketplaceSupplyOffer {
 /** Ofertas comprables HOY (§18): activas, vigentes y con unidades. */
 export async function ofertasPublicas(limite = 24): Promise<MarketplaceSupplyOffer[]> {
   const ahora = new Date()
-  const filas = await sinEmpresa('Supply 2.0: ofertas activas para el marketplace', (tx) =>
+  const filas = await sinEmpresa('Supply: ofertas activas para el marketplace', (tx) =>
     tx.supplyV2Offer.findMany({
       where: { status: 'ACTIVE', startsAt: { lte: ahora }, OR: [{ endsAt: null }, { endsAt: { gt: ahora } }] },
       orderBy: { publishedAt: 'desc' },
@@ -114,7 +114,7 @@ export async function ofertasPublicas(limite = 24): Promise<MarketplaceSupplyOff
 /** Una oferta por su slug, se pueda comprar o no (la ficha explica por qué). */
 export async function ofertaPublicaPorSlug(slug: string): Promise<MarketplaceSupplyOffer | null> {
   const ahora = new Date()
-  const f = await sinEmpresa('Supply 2.0: ficha pública de una oferta', (tx) =>
+  const f = await sinEmpresa('Supply: ficha pública de una oferta', (tx) =>
     tx.supplyV2Offer.findUnique({ where: { slug }, select: SELECT })
   )
   if (!f || f.status === 'DRAFT' || f.status === 'CANCELLED') return null

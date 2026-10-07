@@ -6,7 +6,7 @@ import { fallo } from '../core/errores'
 import { snapshotDeVenta } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · EVENTOS ECONÓMICOS (§22–§30).
+ * MEMBEGO SUPPLY · SLICE 4 · EVENTOS ECONÓMICOS (§22–§30).
  *
  * Cada función es IDEMPOTENTE por `type + referenceType + referenceId`
  * (índice único): reconocer la misma venta dos veces deja un solo evento.

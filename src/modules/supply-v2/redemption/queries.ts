@@ -5,7 +5,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import { estadoSesionQr, type EstadoSesionQr } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 3 · lecturas.
+ * MEMBEGO SUPPLY · SLICE 3 · lecturas.
  *
  * Tres públicos, tres DTOs:
  *   · PROVEEDOR (§14, §35): sus entregas e incidencias, sin costos.
@@ -45,7 +45,7 @@ export interface EntregaProveedor {
 }
 
 export async function entregasDelProveedor(supplierId: string, dias: VentanaDias = 0): Promise<EntregaProveedor[]> {
-  const filas = await sinEmpresa('Supply 2.0: entregas del proveedor de la sesión', (tx) =>
+  const filas = await sinEmpresa('Supply: entregas del proveedor de la sesión', (tx) =>
     tx.supplyV2Redemption.findMany({
       where: { supplierId, redeemedAt: { gte: desdeDias(dias) } },
       orderBy: { redeemedAt: 'desc' },
@@ -84,7 +84,7 @@ export interface IncidenciaProveedor {
 }
 
 export async function incidenciasDelProveedor(supplierId: string, dias: VentanaDias = 0): Promise<IncidenciaProveedor[]> {
-  const filas = await sinEmpresa('Supply 2.0: incidencias del proveedor de la sesión', (tx) =>
+  const filas = await sinEmpresa('Supply: incidencias del proveedor de la sesión', (tx) =>
     tx.supplyV2RedemptionIncident.findMany({
       where: { supplierId, createdAt: { gte: desdeDias(dias) } },
       orderBy: { createdAt: 'desc' },
@@ -104,7 +104,7 @@ export interface ResumenProveedor {
 
 export async function resumenProveedor(supplierId: string): Promise<ResumenProveedor> {
   const hoy = desdeDias(0)
-  const [entregasHoy, incidenciasHoy, pendientes] = await sinEmpresa('Supply 2.0: resumen del proveedor de la sesión', (tx) =>
+  const [entregasHoy, incidenciasHoy, pendientes] = await sinEmpresa('Supply: resumen del proveedor de la sesión', (tx) =>
     Promise.all([
       tx.supplyV2Redemption.count({ where: { supplierId, redeemedAt: { gte: hoy }, reversedAt: null } }),
       tx.supplyV2RedemptionIncident.count({ where: { supplierId, createdAt: { gte: hoy } } }),
@@ -141,7 +141,7 @@ export async function listarRedenciones(f: FiltroRedenciones = {}): Promise<Rede
   if (f.estado === 'ENTREGADA') where.reversedAt = null
   if (f.estado === 'REVERSADA') where.reversedAt = { not: null }
   if (f.desde || f.hasta) where.redeemedAt = { ...(f.desde ? { gte: f.desde } : {}), ...(f.hasta ? { lte: f.hasta } : {}) }
-  const filas = await sinEmpresa('Supply 2.0: redenciones (plataforma)', (tx) =>
+  const filas = await sinEmpresa('Supply: redenciones (plataforma)', (tx) =>
     tx.supplyV2Redemption.findMany({
       where,
       orderBy: { redeemedAt: 'desc' },
@@ -173,7 +173,7 @@ export async function listarRedenciones(f: FiltroRedenciones = {}): Promise<Rede
 }
 
 export async function proveedoresConRedenciones(): Promise<{ id: string; nombre: string }[]> {
-  const grupos = await sinEmpresa('Supply 2.0: proveedores con redenciones', (tx) =>
+  const grupos = await sinEmpresa('Supply: proveedores con redenciones', (tx) =>
     tx.supplyV2Supplier.findMany({ where: { redemptions: { some: {} } }, select: { id: true, commercialName: true }, orderBy: { commercialName: 'asc' } })
   )
   return grupos.map((g) => ({ id: g.id, nombre: g.commercialName }))
@@ -223,7 +223,7 @@ function whereRedenciones(f: FiltroBusquedaRedenciones): Prisma.SupplyV2Redempti
 /** Listado filtrado y paginado de la pantalla Redenciones: los filtros se aplican en la base. */
 export async function buscarRedenciones(f: FiltroBusquedaRedenciones, p: { pagina: number; filas: number }): Promise<{ filas: RedencionDetallada[]; total: number }> {
   const where = whereRedenciones(f)
-  const [filas, total] = await sinEmpresa('Supply 2.0: búsqueda de redenciones (plataforma)', (tx) =>
+  const [filas, total] = await sinEmpresa('Supply: búsqueda de redenciones (plataforma)', (tx) =>
     Promise.all([
       tx.supplyV2Redemption.findMany({
         where,
@@ -296,7 +296,7 @@ export async function resumenRedenciones(ahora = new Date()): Promise<ResumenRed
   const hoy = new Date(ahora)
   hoy.setHours(0, 0, 0, 0)
   const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-  return sinEmpresa('Supply 2.0: indicadores de redenciones', async (tx) => {
+  return sinEmpresa('Supply: indicadores de redenciones', async (tx) => {
     const [deHoy, delMes, reversasMes, incidenciasMes, canales, porSucursal] = await Promise.all([
       tx.supplyV2Redemption.count({ where: { redeemedAt: { gte: hoy }, reversedAt: null } }),
       tx.supplyV2Redemption.findMany({ where: { redeemedAt: { gte: inicioMes }, reversedAt: null }, select: { quantity: true, customerUnitPriceSnapshot: true } }),
@@ -327,12 +327,12 @@ export async function resumenRedenciones(ahora = new Date()): Promise<ResumenRed
 
 /** Sucursales donde hubo al menos una entrega, para el filtro. */
 export async function sucursalesConRedenciones(): Promise<{ id: string; nombre: string }[]> {
-  const grupos = await sinEmpresa('Supply 2.0: sucursales con redenciones', (tx) =>
+  const grupos = await sinEmpresa('Supply: sucursales con redenciones', (tx) =>
     tx.supplyV2Redemption.groupBy({ by: ['branchId'], where: { branchId: { not: null } } })
   )
   const ids = grupos.map((g) => g.branchId!).filter(Boolean)
   if (!ids.length) return []
-  const ramas = await sinEmpresa('Supply 2.0: nombres de sucursales con redenciones', (tx) =>
+  const ramas = await sinEmpresa('Supply: nombres de sucursales con redenciones', (tx) =>
     tx.sucursal.findMany({ where: { id: { in: ids } }, select: { id: true, nombre: true }, orderBy: { nombre: 'asc' } })
   )
   return ramas
@@ -342,7 +342,7 @@ export async function sucursalesConRedenciones(): Promise<{ id: string; nombre: 
 export async function redencionPorCodigo(codigo: string): Promise<string | null> {
   const c = codigo.trim().toUpperCase()
   if (!c) return null
-  const r = await sinEmpresa('Supply 2.0: redención por código', (tx) =>
+  const r = await sinEmpresa('Supply: redención por código', (tx) =>
     tx.supplyV2Redemption.findFirst({
       where: { OR: [{ number: c }, { entitlement: { order: { number: c } } }] },
       orderBy: { redeemedAt: 'desc' },
@@ -360,7 +360,7 @@ export interface HitoTimeline {
 
 /** Ficha INTERNA de una redención (§34, §56–§57, §65): con costos, lote y toda la cadena. */
 export async function fichaRedencion(id: string) {
-  const r = await sinEmpresa('Supply 2.0: ficha de una redención (plataforma)', (tx) =>
+  const r = await sinEmpresa('Supply: ficha de una redención (plataforma)', (tx) =>
     tx.supplyV2Redemption.findUnique({
       where: { id },
       select: {
@@ -439,7 +439,7 @@ export interface SesionQrCliente {
 
 /** Las sesiones QR vivas del cliente, por derecho (para volver a mostrar el QR al recargar). */
 export async function sesionesQrVivasDelCliente(customerId: string): Promise<Map<string, SesionQrCliente>> {
-  const filas = await sinEmpresa('Supply 2.0: sesiones QR vivas del cliente de la sesión', (tx) =>
+  const filas = await sinEmpresa('Supply: sesiones QR vivas del cliente de la sesión', (tx) =>
     tx.supplyV2QrSession.findMany({
       where: { openedByCustomerId: customerId, consumedAt: null, expiresAt: { gt: new Date() }, voucher: { customerId, status: 'ACTIVE' } },
       orderBy: { createdAt: 'desc' },
@@ -466,7 +466,7 @@ export interface ResumenVentasProveedor {
 }
 
 export async function resumenVentasProveedor(supplierId: string): Promise<ResumenVentasProveedor> {
-  return sinEmpresa('Supply 2.0: resumen de ventas a comisión del proveedor', async (tx) => {
+  return sinEmpresa('Supply: resumen de ventas a comisión del proveedor', async (tx) => {
     const [s, pendientes, entregadas, deuda, pagado, liq] = await Promise.all([
       tx.supplyV2Supplier.findUniqueOrThrow({ where: { id: supplierId }, select: { currency: true } }),
       tx.supplyV2Entitlement.count({ where: { supplierId, sourceType: 'COMMISSION', status: 'ACTIVE' } }),
@@ -511,7 +511,7 @@ export interface VentaProveedor {
 
 /** Ventas a comisión del proveedor: lo que Membego vendió por su cuenta. Sin comisión ni margen de Membego. */
 export async function ventasDelProveedor(supplierId: string, filtro: 'TODAS' | 'PENDIENTES' | 'ENTREGADAS' = 'TODAS', limite = 200): Promise<VentaProveedor[]> {
-  const filas = await sinEmpresa('Supply 2.0: ventas a comisión del proveedor', (tx) =>
+  const filas = await sinEmpresa('Supply: ventas a comisión del proveedor', (tx) =>
     tx.supplyV2Entitlement.findMany({
       where: { supplierId, sourceType: 'COMMISSION', ...(filtro === 'PENDIENTES' ? { status: 'ACTIVE' } : filtro === 'ENTREGADAS' ? { status: 'REDEEMED' } : {}) },
       orderBy: { issuedAt: 'desc' },
@@ -573,14 +573,14 @@ export interface LiquidacionProveedor {
 }
 
 export async function liquidacionesDelProveedor(supplierId: string, limite = 100): Promise<LiquidacionProveedor[]> {
-  const filas = await sinEmpresa('Supply 2.0: liquidaciones del proveedor', (tx) =>
+  const filas = await sinEmpresa('Supply: liquidaciones del proveedor', (tx) =>
     tx.supplyV2Settlement.findMany({ where: { supplierId, status: { not: 'CANCELLED' } }, orderBy: { periodEnd: 'desc' }, take: limite, include: { _count: { select: { lines: true } } } })
   )
   return filas.map((s) => ({ id: s.id, number: s.number, periodStart: s.periodStart, periodEnd: s.periodEnd, status: s.status, currency: s.currency, grossSales: s.grossSales.toFixed(2), commissionAmount: s.commissionAmount.toFixed(2), supplierNet: s.supplierNet.toFixed(2), paidAmount: s.paidAmount.toFixed(2), pendiente: s.supplierNet.minus(s.paidAmount).toFixed(2), entregas: s._count.lines, approvedAt: s.approvedAt, paidAt: s.paidAt }))
 }
 
 export async function liquidacionDelProveedor(supplierId: string, id: string) {
-  const s = await sinEmpresa('Supply 2.0: una liquidación vista por el proveedor', (tx) =>
+  const s = await sinEmpresa('Supply: una liquidación vista por el proveedor', (tx) =>
     tx.supplyV2Settlement.findFirst({
       where: { id, supplierId, status: { not: 'CANCELLED' } },
       include: {

@@ -13,7 +13,7 @@ import { obligacionesDeLiquidacionBloqueadasEnTx } from './settlements'
 import { LIQUIDACION_PAGABLE, repartirPagoMasAntiguoPrimero } from './settlements-domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · PAGOS AL PROVEEDOR (§13, §41, §56).
+ * MEMBEGO SUPPLY · SLICE 4 · PAGOS AL PROVEEDOR (§13, §41, §56).
  *
  * Un pago es dinero que SALE. Lo registra una persona (PENDING) y lo
  * confirma OTRA (CONFIRMED) —segregación en el servidor—. Al confirmarse se

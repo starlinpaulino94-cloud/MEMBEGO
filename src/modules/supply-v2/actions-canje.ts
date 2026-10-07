@@ -22,7 +22,7 @@ import {
 } from './redemption/service'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 3 · server actions de canje.
+ * MEMBEGO SUPPLY · SLICE 3 · server actions de canje.
  *
  * El CLIENTE genera QR solo de sus derechos (la sesión decide quién es, §46).
  * El PROVEEDOR se resuelve desde la empresa de la sesión (§47); la sucursal
@@ -55,7 +55,7 @@ export async function usarBeneficioAction(_prev: EstadoAccion<QrParaMostrar>, fd
     const ctx = await contextoDeAuditoria(cliente)
     const entitlementId = texto(fd, 'entitlementId', 60)
     const branchId = texto(fd, 'branchId', 60) || null
-    const s = await sinEmpresa('Supply 2.0: el cliente genera un QR de su beneficio', (tx) =>
+    const s = await sinEmpresa('Supply: el cliente genera un QR de su beneficio', (tx) =>
       abrirSesionQrEnTx(tx, { entitlementId, customerId: cliente.id, branchId, deviceInfo: ctx.userAgent }, ctx)
     )
     revalidatePath(RUTA_COMPRAS_CLIENTE)
@@ -79,7 +79,7 @@ export async function escanearBeneficioAction(_prev: EstadoAccion<PreviewParaEsc
     const ctx = await contextoDeAuditoria(p)
     const nonce = normalizarCodigoLeido(texto(fd, 'codigo', 200))
     const branchId = texto(fd, 'branchId', 60) || null
-    const preview = await sinEmpresa('Supply 2.0: el proveedor resuelve un QR', (tx) =>
+    const preview = await sinEmpresa('Supply: el proveedor resuelve un QR', (tx) =>
       previsualizarCanjeEnTx(tx, { nonce, empleado: { userId: p.id, companyId: p.companyId, supplierId: p.supplierId }, branchId }, ctx)
     )
     if (!preview.valid) return { data: preview }
@@ -99,7 +99,7 @@ export async function confirmarEntregaAction(_prev: EstadoAccion<EntregaConfirma
     const branchId = texto(fd, 'branchId', 60) || null
     const idempotencyKey = texto(fd, 'idempotencyKey', 80) || null
     const channel = texto(fd, 'channel', 20) === 'MANUAL_CODE' ? 'MANUAL_CODE' : 'QR_SCAN'
-    const r = await sinEmpresa('Supply 2.0: el proveedor confirma una entrega', (tx) =>
+    const r = await sinEmpresa('Supply: el proveedor confirma una entrega', (tx) =>
       confirmarEntregaEnTx(tx, { nonce, empleado: { userId: p.id, companyId: p.companyId, supplierId: p.supplierId }, branchId, idempotencyKey, deviceInfo: meta.userAgent, channel }, ctx)
     )
     refrescarPortal()
@@ -117,7 +117,7 @@ export async function registrarIncidenciaAction(_prev: EstadoAccion, fd: FormDat
     const ctx = await contextoDeAuditoria(p)
     const tipo = texto(fd, 'type', 40) as SupplyV2IncidentType
     if (!INCIDENT_TYPES.includes(tipo)) return { error: 'Elige el tipo de incidencia.' }
-    const r = await sinEmpresa('Supply 2.0: el proveedor registra una incidencia', (tx) =>
+    const r = await sinEmpresa('Supply: el proveedor registra una incidencia', (tx) =>
       registrarIncidenciaEnTx(tx, { empleado: { userId: p.id, companyId: p.companyId, supplierId: p.supplierId }, branchId: texto(fd, 'branchId', 60) || null, type: tipo, notes: texto(fd, 'notes', 500) || null, codeSeen: texto(fd, 'codeSeen', 64) || null }, ctx)
     )
     refrescarPortal()
@@ -136,7 +136,7 @@ export async function reversarRedencionAction(_prev: EstadoAccion<ReversaHecha>,
     const redemptionId = texto(fd, 'redemptionId', 60)
     const motivo = texto(fd, 'motivo', 500)
     if (!motivo) return { error: 'Escribe el motivo de la reversa.' }
-    const r = await sinEmpresa('Supply 2.0: reversar una redención', (tx) => reversarRedencionEnTx(tx, redemptionId, motivo, ctx))
+    const r = await sinEmpresa('Supply: reversar una redención', (tx) => reversarRedencionEnTx(tx, redemptionId, motivo, ctx))
     refrescarSupplyV2('supply', 'redenciones', `redenciones/${redemptionId}`)
     refrescarPortal()
     revalidatePath(RUTA_COMPRAS_CLIENTE)

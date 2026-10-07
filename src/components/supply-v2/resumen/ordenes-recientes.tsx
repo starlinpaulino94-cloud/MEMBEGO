@@ -43,7 +43,7 @@ export function OrdenesRecientes({ ordenes, filtro }: { ordenes: OrdenEnLista[];
       titulo="Órdenes de Compra Recientes"
       data-testid="resumen-ordenes"
       extra={
-        <Link href="/superadmin/supply-v2/compras" className="shrink-0 text-[12px] font-semibold leading-4 tracking-[0.04em] text-sv2-outline hover:text-foreground hover:underline">
+        <Link href="/superadmin/supply/compras" className="shrink-0 text-[12px] font-semibold leading-4 tracking-[0.04em] text-sv2-outline hover:text-foreground hover:underline">
           Últimos registros
         </Link>
       }
@@ -67,7 +67,7 @@ export function OrdenesRecientes({ ordenes, filtro }: { ordenes: OrdenEnLista[];
                 {ordenes.map((o) => (
                   <tr key={o.id} className="transition-colors hover:bg-sv2-well">
                     <td className={cn(MONO, 'px-3 py-3 font-semibold', CERRADA.includes(o.status) ? 'text-sv2-ink-variant' : 'text-sv2-primary')}>
-                      <Link href={`/superadmin/supply-v2/compras/${o.id}`} className="hover:underline">{o.number}</Link>
+                      <Link href={`/superadmin/supply/compras/${o.id}`} className="hover:underline">{o.number}</Link>
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-col">
@@ -78,7 +78,7 @@ export function OrdenesRecientes({ ordenes, filtro }: { ordenes: OrdenEnLista[];
                     <td className={cn(MONO, 'whitespace-nowrap px-3 py-3 font-medium')}>{o.compradas.toLocaleString('es-DO')} un.</td>
                     <td className="px-3 py-3"><ChipOrdenSv2 estado={o.status} /></td>
                     <td className="px-3 py-3 text-right">
-                      <Link href={`/superadmin/supply-v2/compras/${o.id}`} className={boton}>{CERRADA.includes(o.status) ? 'Bitácora' : 'Detalle'}</Link>
+                      <Link href={`/superadmin/supply/compras/${o.id}`} className={boton}>{CERRADA.includes(o.status) ? 'Bitácora' : 'Detalle'}</Link>
                     </td>
                   </tr>
                 ))}
@@ -89,7 +89,7 @@ export function OrdenesRecientes({ ordenes, filtro }: { ordenes: OrdenEnLista[];
             {ordenes.map((o) => (
               <li key={o.id} className="flex flex-col gap-1.5 px-3 py-3">
                 <div className="flex items-center justify-between gap-2">
-                  <Link href={`/superadmin/supply-v2/compras/${o.id}`} className={cn(MONO, 'font-semibold hover:underline', CERRADA.includes(o.status) ? 'text-sv2-ink-variant' : 'text-sv2-primary')}>{o.number}</Link>
+                  <Link href={`/superadmin/supply/compras/${o.id}`} className={cn(MONO, 'font-semibold hover:underline', CERRADA.includes(o.status) ? 'text-sv2-ink-variant' : 'text-sv2-primary')}>{o.number}</Link>
                   <ChipOrdenSv2 estado={o.status} />
                 </div>
                 <div className="flex items-end justify-between gap-2">
@@ -97,7 +97,7 @@ export function OrdenesRecientes({ ordenes, filtro }: { ordenes: OrdenEnLista[];
                     <span className="font-medium text-foreground">{o.proveedor}</span>
                     <span className="text-[12px] leading-4 text-sv2-outline">{subtitulo(o)} · <span className="font-sv2-mono">{o.compradas.toLocaleString('es-DO')} un.</span></span>
                   </div>
-                  <Link href={`/superadmin/supply-v2/compras/${o.id}`} className={cn(boton, 'shrink-0')}>{CERRADA.includes(o.status) ? 'Bitácora' : 'Detalle'}</Link>
+                  <Link href={`/superadmin/supply/compras/${o.id}`} className={cn(boton, 'shrink-0')}>{CERRADA.includes(o.status) ? 'Bitácora' : 'Detalle'}</Link>
                 </div>
               </li>
             ))}

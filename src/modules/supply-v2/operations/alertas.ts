@@ -17,7 +17,7 @@ import {
 } from './salud-dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · ALERTAS QUE SE PUEDEN LEER (§12, §13).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · ALERTAS QUE SE PUEDEN LEER (§12, §13).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * UNA POR CONDICIÓN, NO UNA POR FILA
@@ -101,7 +101,7 @@ export async function evaluarYGuardarAlertas(ctx: ContextoAuditoria, ahora = new
   // la mitad de las condiciones refrescadas y la otra mitad no es peor que no
   // refrescar ninguna. `resumenOperativo` queda FUERA a propósito —ya abre la
   // suya— para no anidar.
-  await sinEmpresa('Supply 2.0: evaluar y guardar alertas', async (tx) => {
+  await sinEmpresa('Supply: evaluar y guardar alertas', async (tx) => {
     const previas = await tx.supplyV2OperationalAlert.findMany({
       where: { key: { in: [...CONDICIONES] } },
       select: { key: true, status: true },
@@ -169,7 +169,7 @@ export async function alertasEnPanel(
   f: { status?: EstadoAlerta; incluirResueltas?: boolean } = {},
   limite = 50
 ): Promise<AlertaEnPanel[]> {
-  const filas = await sinEmpresa('Supply 2.0: alertas operativas', (tx) =>
+  const filas = await sinEmpresa('Supply: alertas operativas', (tx) =>
     tx.supplyV2OperationalAlert.findMany({
       where: f.status ? { status: f.status } : f.incluirResueltas ? {} : { status: { in: ['ACTIVE', 'ACKNOWLEDGED'] } },
       orderBy: [{ status: 'asc' }, { lastSeenAt: 'desc' }],
@@ -226,7 +226,7 @@ export async function reconocerAlerta(
   const nota = d.nota?.trim()
   if (!nota || nota.length < 3) fallo('MOTIVO_OBLIGATORIO', 'Reconocer una alerta exige decir qué se está haciendo.')
 
-  return sinEmpresa('Supply 2.0: reconocer una alerta operativa', async (tx) => {
+  return sinEmpresa('Supply: reconocer una alerta operativa', async (tx) => {
     const previa = await tx.supplyV2OperationalAlert.findUnique({ where: { key: d.key }, select: { key: true, status: true, severity: true, count: true } })
     if (!previa) fallo('ALERTA_NO_ENCONTRADA', 'Esa alerta no existe.')
     if (previa.status === 'RESOLVED') fallo('ALERTA_RESUELTA', 'Esa alerta ya se resolvió sola: la condición desapareció.')

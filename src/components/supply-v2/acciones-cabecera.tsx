@@ -3,7 +3,7 @@ import Form from 'next/form'
 import { ListFilter, Plus } from 'lucide-react'
 
 /**
- * Acciones de la cabecera común de Supply 2.0 (Stitch): el filtro rápido y
+ * Acciones de la cabecera común de Supply (Stitch): el filtro rápido y
  * «Nuevo Pedido». El filtro envía `?q=` a la pantalla en la que está, que
  * decide qué acota (en el Resumen, inventario y órdenes; en Compras, la tabla).
  */
@@ -24,7 +24,7 @@ export function AccionesCabeceraSupplyV2({ destino, filtro }: { destino: string;
         />
       </Form>
       <Link
-        href="/superadmin/supply-v2/compras/nueva"
+        href="/superadmin/supply/compras/nueva"
         data-testid="btn-nueva-compra"
         className="inline-flex h-8 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-[8px] bg-sv2-accent px-3 text-[13px] font-semibold leading-4 text-white transition-colors hover:bg-sv2-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv2-accent focus-visible:ring-offset-2"
       >
