@@ -69,6 +69,7 @@ const USUARIOS = {
   pedidosSinCapacidad: { email: 'e2e.pedidos.sin@membego.test', nombre: 'Admin Sin Pedidos E2E', role: 'ADMINISTRADOR' },
   /** Commerce Core · ofertas con presupuesto (F5): quien las crea y publica, y tres personas que las reclaman. */
   dealsAdmin: { email: 'e2e.deals.admin@membego.test', nombre: 'Admin Ofertas E2E', role: 'ADMINISTRADOR' },
+  dealsSinCapacidad: { email: 'e2e.deals.sin@membego.test', nombre: 'Admin Sin Ofertas E2E', role: 'ADMINISTRADOR' },
   dealsCliente: { email: 'e2e.deals.cliente@membego.test', nombre: 'Carla Ofertas E2E', role: 'CLIENTE' },
   dealsCliente2: { email: 'e2e.deals.cliente2@membego.test', nombre: 'Diego Ofertas E2E', role: 'CLIENTE' },
   dealsCliente3: { email: 'e2e.deals.cliente3@membego.test', nombre: 'Elena Ofertas E2E', role: 'CLIENTE' },

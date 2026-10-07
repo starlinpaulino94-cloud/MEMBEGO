@@ -45,6 +45,7 @@
 | `CATALOGO_UNIFICADO` | Secciones `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) e `inventario` (`/admin/inventario`, Fase 2: existencias por variante y sucursal) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
 | `PEDIDOS_MEMBEGO` | Sección `pedidos-membego` (`/admin/pedidos-membego`, Commerce Core · Fase 3: pedidos del marketplace con atribución, confirmación del cliente y QR). Con ella la ficha pública de sus productos ofrece «Hacer un pedido» y «Mis pedidos» aparece en el menú del cliente | ❌ apagada para todos; solo tiene sentido en empresas con `CATALOGO_UNIFICADO` (las líneas del pedido son variantes del catálogo) |
 | *(misma capacidad)* | Sección `facturacion-membego` (`/admin/facturacion-membego`, **«Mi cuenta Membego»**, Commerce Core · Fase 4): lo que la empresa le debe a Membego por esos pedidos —saldo, comisiones, estados de cuenta—, **solo lectura**. No tiene capacidad propia: cuelga de `PEDIDOS_MEMBEGO` | ❌ con ella |
+| `DEALS_MARKETPLACE` | Sección `deals` (`/admin/deals`, Growth Engine · Fase 5: **ofertas con presupuesto**). Con ella (y las otras dos) la empresa publica descuentos sobre una variante de su catálogo que los clientes obtienen en `/ofertas`, en su ficha pública y en `/catalogo`, y canjean con el QR del pedido | ❌ apagada para todos; **exige `CATALOGO_UNIFICADO` y `PEDIDOS_MEMBEGO`** (el reclamo ES un pedido): sin las tres, la vitrina no enseña la oferta y reclamarla responde «no está disponible» |
 
 ### Cómo encender los pedidos Membego en una empresa
 
@@ -63,6 +64,24 @@ superadmin puede cambiar por empresa en `/superadmin/facturacion`). La cuenta se
 sola con esos valores y un límite de crédito de RD$ 5,000. **Encender la capacidad en una
 empresa real es empezar a cobrarle**: avísale antes. Los pedidos que envuelven una compra
 de Supply no comisionan (se liquidan por Supply Economics).
+
+### Cómo encender las ofertas con presupuesto en una empresa
+
+`DEALS_MARKETPLACE` tampoco está en ningún paquete base. Se enciende, además de
+`CATALOGO_UNIFICADO` y `PEDIDOS_MEMBEGO`, con un override por empresa (`overrides: {
+CATALOGO_UNIFICADO: true, PEDIDOS_MEMBEGO: true, DEALS_MARKETPLACE: true }`). La empresa
+tiene que estar publicada y activa y tener al menos una sucursal activa donde canjear.
+
+**Qué pasa con la plata (Fase 5).** Cada oferta tiene un **presupuesto** (un *tope*, no un pago
+por adelantado): la empresa declara cuánto está dispuesta a pagar por traer clientes. Cada
+vez que un cliente **canjea** (el empleado escanea el QR del pedido) Membego le cobra la
+**cuota de la oferta** —el CPA de su cuenta, RD$ 100 de serie, **congelado al crear la oferta**—
+en su cuenta Membego, y esa parte del presupuesto pasa de «apartada» a «gastada». Cuando el
+presupuesto ya no alcanza para otro canje, la oferta se **pausa sola**; ampliar el presupuesto
+la reabre. Si la cuenta Membego de la empresa está **suspendida**, no puede crear, publicar ni
+reanudar ofertas ni se pueden obtener las que tiene publicadas. **Encender la capacidad en una
+empresa real es empezar a cobrarle por canje**: avísale antes. Si se apaga con cupones ya
+obtenidos, esos pedidos siguen su curso (se canjean o vencen) y la cuota se cobra igual.
 
 ### Cómo encender el catálogo unificado en una empresa
 

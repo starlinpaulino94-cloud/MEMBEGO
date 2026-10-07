@@ -221,6 +221,32 @@ encontrado»). **Ojo:** como el resto, corre sobre una base creada con `db push`
 los disparadores ni los CHECK de las migraciones; esos los prueban
 `tests/postgres/orders.db.test.ts` y `scripts/probar-rls.mjs`).
 
+**Ofertas con presupuesto (Growth Engine · Fase 5)** — `deals-membego` (escritorio), con el
+mismo arnés (`empresaCatalogo({ capacidad: true, pedidos: true, deals: true })`) y cuatro
+sesiones: la de la empresa (`dealsAdmin`) y tres personas que reclaman (`dealsCliente`,
+`dealsCliente2`, `dealsCliente3`), más un administrador de otra empresa sin la capacidad
+(`dealsSinCapacidad`). Recorre: sin la capacidad el panel no existe → la empresa **crea la oferta
+como borrador desde el formulario** (20 % sobre un servicio de RD$ 500, cuota de RD$ 100 y
+presupuesto de RD$ 200 = 2 canjes) y la **publica** (un borrador no sale en la vitrina) → la vitrina
+enseña el precio (RD$ 400 / RD$ 500 tachado) y **no enseña presupuesto ni cuota**, ni en
+`/ofertas` ni en la ficha de la empresa, y una empresa sin la capacidad no enseña nada → sin sesión,
+«Obtener oferta» manda a iniciar sesión y vuelve → el cliente la obtiene: recibe su **pedido LISTO
+con QR** a RD$ 400 y la cuota queda **apartada**; pulsarla otra vez lo lleva al mismo pedido sin
+apartar más → la empresa ve quién la obtuvo y el pedido dice «Obtuvo una oferta con descuento» →
+otra empresa no ve la oferta → **el empleado escanea el QR** (el escáner dice «Oferta «…»»): el
+pedido se cierra, el presupuesto pasa de apartado a **gastado** y Merchant Billing cobra **una
+comisión CPA de RD$ 100 ligada a la oferta** sobre la base de RD$ 400 → una segunda persona la
+obtiene y el presupuesto se agota: la oferta pasa sola a «Presupuesto agotado» y una tercera
+persona ya no puede (no se crea un tercer reclamo; si la vitrina aún enseña la tarjeta, el servidor responde «se agotó») → la empresa **amplía el
+presupuesto** y se reabre sola, la **pausa** (sale de la vitrina) y la **reanuda**. Igual que el
+resto, corre sobre una base `db push` (sin los disparadores ni los CHECK de las migraciones: esos
+los prueban `tests/postgres/deals.db.test.ts` —27 pruebas, incluida la carrera de 16 reclamos por
+5 cupos— y `scripts/probar-rls.mjs`). **Ojo:** `/ofertas` y la ficha de la empresa se cachean
+(60 s y 1 h); los cambios hechos desde el panel o por un reclamo las invalidan
+(`refrescarVitrinasDeOfertas`), pero un cierre por el escáner o un vencimiento por el cron no: la
+vitrina puede ir atrasada hasta esos plazos, y por eso el reclamo se vuelve a comprobar siempre
+en el servidor.
+
 Tres cosas que costó aprender y conviene no repetir:
 
 1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de
