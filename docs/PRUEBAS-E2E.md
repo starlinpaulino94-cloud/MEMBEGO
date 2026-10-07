@@ -247,6 +247,22 @@ los prueban `tests/postgres/deals.db.test.ts` —27 pruebas, incluida la carrera
 vitrina puede ir atrasada hasta esos plazos, y por eso el reclamo se vuelve a comprobar siempre
 en el servidor.
 
+**Analítica de Membego (Fase 6)** — `analitica-membego` (escritorio), con el mismo arnés y cinco sesiones:
+la de la empresa (`analiticaAdmin`), la de otra empresa (`analiticaOtra`), la de una con catálogo pero **sin**
+pedidos Membego (`analiticaSin`), el superadmin (`facturacionSuperadmin`) y un administrador que intenta
+entrar a la analítica de la plataforma. A diferencia de los otros specs, **los pedidos completados, sus
+atribuciones, sus asientos y sus comisiones se siembran por Prisma** (el recorrido pedir → canjear → comisión ya
+lo prueban `pedidos-membego` y `deals-membego`; las cuentas exactas, con los bordes de hora local, las prueba
+`tests/postgres/analytics.db.test.ts`). Recorre: la empresa lee «Membego te produjo 2 clientes nuevos, 3
+pedidos y RD$1,120.00 en ventas. Te costó RD$300.00 (26.8 % de lo vendido)», el retorno (RD$3.70 por peso) y el
+costo por cliente nuevo (RD$150.00), la tabla de ventas por canal (que está en el panel plegable «Ver los datos
+de este gráfico»: hay que abrirlo antes de buscar sus filas) y que NO aparece nada de otra empresa ni de la de
+práctica → un periodo sin pedidos lo dice en vez de enseñar ceros → otra empresa solo ve lo suyo → una empresa sin
+los pedidos no tiene el panel → el superadmin ve el ranking con la empresa y su comisión, sin la de práctica, y el
+bloque «Supply Economics (Membego → proveedores)» aparte → un administrador de empresa no entra a
+`/superadmin/analitica`. **Ojo:** los totales de la plataforma comparten base con los demás specs de la corrida
+(todos crean pedidos «de hoy»), así que el spec no afirma el total de la plataforma, solo la fila de su empresa.
+
 Tres cosas que costó aprender y conviene no repetir:
 
 1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de

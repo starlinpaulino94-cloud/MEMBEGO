@@ -73,6 +73,10 @@ const USUARIOS = {
   dealsCliente: { email: 'e2e.deals.cliente@membego.test', nombre: 'Carla Ofertas E2E', role: 'CLIENTE' },
   dealsCliente2: { email: 'e2e.deals.cliente2@membego.test', nombre: 'Diego Ofertas E2E', role: 'CLIENTE' },
   dealsCliente3: { email: 'e2e.deals.cliente3@membego.test', nombre: 'Elena Ofertas E2E', role: 'CLIENTE' },
+  /** Analítica (F6): el administrador de una empresa con pedidos, el de otra con pedidos y el de una con catálogo pero SIN pedidos. */
+  analiticaAdmin: { email: 'e2e.analitica.admin@membego.test', nombre: 'Admin Analítica E2E', role: 'ADMINISTRADOR' },
+  analiticaOtra: { email: 'e2e.analitica.otra@membego.test', nombre: 'Admin Otra Analítica E2E', role: 'ADMINISTRADOR' },
+  analiticaSin: { email: 'e2e.analitica.sin@membego.test', nombre: 'Admin Sin Analítica E2E', role: 'ADMINISTRADOR' },
   /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */
   facturacionSuperadmin: { email: 'e2e.facturacion.sa@membego.test', nombre: 'Facturación SA E2E', role: 'SUPERADMIN' },
 } as const

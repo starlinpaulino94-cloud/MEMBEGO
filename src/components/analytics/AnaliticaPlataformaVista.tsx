@@ -17,7 +17,7 @@ import { ReporteImprimible, TablaReporte } from '@/components/ui/reporte-imprimi
 import { SectionHeader } from '@/components/ui/section-header'
 
 const num = (n: number) => new Intl.NumberFormat('es-DO').format(n)
-const dinero = (n: number) => formatMoney(n, null)
+const dinero = (n: number) => formatMoney(n, null, 2)
 const pct = (n: number | null) => (n === null ? '—' : `${n} %`)
 
 function Celda({ label, valor, nota }: { label: string; valor: string; nota: string }) {
@@ -54,7 +54,7 @@ export function AnaliticaPlataformaVista({
   eyebrow?: React.ReactNode
   controles?: React.ReactNode
 }) {
-  const fDinero = formatoDinero(null)
+  const fDinero = formatoDinero(null, 2)
   const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
   const serie = serieParaGrafico(p.serie, rango.granularidad)
   const canales = p.porCanal.slice(0, 6).map((c) => ({ nombre: ETIQUETA_CANAL_ANALITICA[c.canal], valor: c.ventas }))

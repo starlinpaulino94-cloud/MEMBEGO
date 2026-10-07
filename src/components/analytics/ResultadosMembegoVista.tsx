@@ -52,8 +52,8 @@ export function ResultadosMembegoVista({
   eyebrow?: React.ReactNode
   controles?: React.ReactNode
 }) {
-  const dinero = (n: number) => formatMoney(n, prefs)
-  const fDinero = formatoDinero(prefs)
+  const dinero = (n: number) => formatMoney(n, prefs, 2)
+  const fDinero = formatoDinero(prefs, 2)
   const entero = (n: number) => num(n, prefs?.idioma)
   const periodo = `${rango.desdeDia} a ${rango.hastaDia}`
   const serie = serieParaGrafico(r.serie, rango.granularidad)
