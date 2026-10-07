@@ -47,7 +47,7 @@ export const ETIQUETA_ORIGEN: Record<MembegoOrderOrigin, string> = {
 export const ETIQUETA_CANAL: Record<MembegoAttributionChannel, string> = {
   MARKETPLACE_BROWSE: 'Navegando el marketplace',
   MARKETPLACE_SEARCH: 'Buscando en el marketplace',
-  PROMOTION_CLAIM: 'Reclamó una promoción',
+  PROMOTION_CLAIM: 'Obtuvo una oferta con descuento',
   CAMPAIGN: 'Campaña',
   REFERRAL: 'Referido',
   QR_SCAN: 'Escaneó un QR',

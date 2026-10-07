@@ -132,6 +132,10 @@ export const ADMIN_SECTIONS = [
   // capacidad que los pedidos y tampoco entra en los roles acotados: es información
   // de dirección (lo que se le paga a la plataforma).
   'facturacion-membego',
+  // Growth Engine · ofertas con presupuesto (`/admin/deals`, Fase 5). Detrás de la
+  // capacidad DEALS_MARKETPLACE. No entra en los roles acotados: fijar un descuento
+  // y un tope de gasto compromete dinero de la empresa (la cuota por canje).
+  'deals',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).

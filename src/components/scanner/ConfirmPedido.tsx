@@ -103,6 +103,7 @@ export function ConfirmPedido({ pedido, onDone, onScanNext }: { pedido: PedidoQr
             <span className="text-muted-foreground">Total</span>
             <span className="text-h3 font-semibold tabular-nums text-foreground">{formatearMonto(pedido.total, pedido.currency)}</span>
           </div>
+          {pedido.oferta && <p className="text-sm font-medium text-primary">Oferta «{pedido.oferta}»: el precio ya trae el descuento.</p>}
           {pedido.ajuste && (
             <p className="text-xs text-muted-foreground">Incluye un ajuste de {formatearMonto(pedido.ajuste, pedido.currency)} de la empresa.</p>
           )}

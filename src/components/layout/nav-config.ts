@@ -126,6 +126,7 @@ export type CapacidadNav =
   | 'MENSAJERIA'
   | 'CATALOGO_UNIFICADO'
   | 'PEDIDOS_MEMBEGO'
+  | 'DEALS_MARKETPLACE'
   | 'POS_CAJA'
   | 'MEMBEGO_SUPPLIER'
 
@@ -386,6 +387,15 @@ const G_OFERTA: NavGroup = {
       description: 'Existencias por producto y sucursal, movimientos y stock bajo.',
       keywords: ['inventario', 'stock', 'existencias', 'almacen', 'bodega', 'sucursal', 'transferencia', 'ajuste', 'conteo'],
       capacidad: 'CATALOGO_UNIFICADO',
+    },
+    {
+      // Growth Engine · ofertas con presupuesto (Fase 5). Detrás de su capacidad, que nace apagada.
+      href: '/admin/deals',
+      label: 'Ofertas con presupuesto',
+      icon: BadgePercent,
+      description: 'Descuentos que los clientes del marketplace obtienen y canjean, con un tope de lo que pagas por canje.',
+      keywords: ['ofertas', 'deals', 'descuento', 'presupuesto', 'cupon', 'canje', 'marketplace', 'cpa', 'promocion'],
+      capacidad: 'DEALS_MARKETPLACE',
     },
     {
       href: '/admin/planes',
@@ -799,7 +809,7 @@ const HUB_EXPERIENCIA: NavGroup = {
 const HUB_CATALOGO: NavGroup = {
   id: 'catalogo',
   label: 'Catálogo',
-  items: deAdmin('/admin/catalogo', '/admin/inventario', '/admin/planes', '/admin/ofertas', '/admin/excursiones'),
+  items: deAdmin('/admin/catalogo', '/admin/inventario', '/admin/deals', '/admin/planes', '/admin/ofertas', '/admin/excursiones'),
 }
 
 const HUB_OPERACIONES: NavGroup = {

@@ -23,7 +23,7 @@ export interface EmpresaCatalogo {
 export async function empresaCatalogo(
   sufijo: string,
   clave: string,
-  o: { capacidad: boolean; /** Commerce Core · F3: también recibe pedidos Membego. */ pedidos?: boolean; publicada?: boolean }
+  o: { capacidad: boolean; /** Commerce Core · F3: también recibe pedidos Membego. */ pedidos?: boolean; /** Growth Engine · F5: también tiene ofertas con presupuesto. */ deals?: boolean; publicada?: boolean }
 ): Promise<EmpresaCatalogo> {
   const slug = `e2e-cat-${clave}-${sufijo}`
   const name = `E2E Catálogo ${clave} ${sufijo}`
@@ -40,8 +40,8 @@ export async function empresaCatalogo(
       esDemo: false,
       // La capacidad se enciende por override ANTES de la primera petición: el
       // resolutor la cachea por empresa, y una empresa nueva no tiene caché.
-      ...(o.capacidad || o.pedidos
-        ? { capacidades: { overrides: { ...(o.capacidad ? { CATALOGO_UNIFICADO: true } : {}), ...(o.pedidos ? { PEDIDOS_MEMBEGO: true } : {}) } } }
+      ...(o.capacidad || o.pedidos || o.deals
+        ? { capacidades: { overrides: { ...(o.capacidad ? { CATALOGO_UNIFICADO: true } : {}), ...(o.pedidos ? { PEDIDOS_MEMBEGO: true } : {}), ...(o.deals ? { DEALS_MARKETPLACE: true } : {}) } } }
         : {}),
     },
     select: { id: true },

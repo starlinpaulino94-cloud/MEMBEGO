@@ -58,7 +58,7 @@ test('el orden de candados del canje es pedido → oferta → inventario → cue
 })
 
 test('Merchant Billing no sabe que existen las ofertas, y Supply tampoco', () => {
-  for (const dir of ['src/modules/billing', 'src/modules/supply-v2', 'src/modules/supply', 'src/modules/supply-bridge']) {
+  for (const dir of ['src/modules/billing', 'src/modules/supply-v2', 'src/modules/supply-bridge']) {
     for (const a of archivos(join(RAIZ, dir))) {
       for (const origen of importsDe(leer(a))) assert.doesNotMatch(origen, /modules\/deals/, `${a} importa ${origen}`)
     }

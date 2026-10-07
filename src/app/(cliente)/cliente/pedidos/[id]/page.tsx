@@ -41,6 +41,13 @@ export default async function MiPedidoPage({ params }: { params: Promise<{ id: s
         action={<Badge variant={BADGE_ESTADO[p.status]}>{ETIQUETA_ESTADO[p.status]}</Badge>}
       />
 
+      {p.oferta && (
+        <p className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <span className="font-semibold">Oferta «{p.oferta.titulo}»</span>
+          {p.oferta.estado === 'CLAIMED' ? ` · canjéala en el negocio antes del ${formatearFechaHora(p.oferta.venceEl)} mostrando tu QR.` : p.oferta.estado === 'REDEEMED' ? ' · ya la canjeaste.' : p.oferta.estado === 'EXPIRED' ? ' · venció sin canjearse.' : ''}
+        </p>
+      )}
+
       {!cerrado && (
         <ol className="flex flex-wrap gap-2 text-sm" aria-label="Progreso del pedido">
           {PASOS.map((s, i) => (

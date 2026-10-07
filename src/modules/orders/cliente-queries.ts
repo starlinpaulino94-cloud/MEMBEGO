@@ -96,6 +96,8 @@ export interface DetalleMiPedido {
   /** QR como imagen (data URL) — solo si el pedido está LISTO y el QR no venció. */
   qrImagen: string | null
   qrVencido: boolean
+  /** Si el pedido es el cupón de una oferta con descuento: cuál y hasta cuándo vale. */
+  oferta: { titulo: string; venceEl: Date; estado: string } | null
   /** Lo que la persona puede hacer ahora (decidido en el servidor). */
   puede: { confirmar: boolean; cancelar: boolean; renovarQr: boolean }
 }
@@ -114,6 +116,9 @@ export async function miPedido(clienteIds: readonly string[], pedidoId: string, 
     })
   )
   if (!p) return null
+  const reclamo = await sinEmpresa('pedidos: ¿mi pedido es el cupón de una oferta?', (tx) =>
+    tx.dealClaim.findFirst({ where: { orderId: p.id, companyId: p.companyId }, select: { status: true, expiresAt: true, deal: { select: { title: true } } } })
+  )
 
   const vigente = !!p.confirmation && p.confirmation.confirmedTotal.equals(p.total)
   const qrVigente = p.status === 'READY' && !!p.qrToken && !qrDePedidoVencido(p.qrExpiresAt, ahora)
@@ -141,6 +146,7 @@ export async function miPedido(clienteIds: readonly string[], pedidoId: string, 
     confirmacion: p.confirmation ? { confirmedTotal: dos(p.confirmation.confirmedTotal), vigente } : null,
     qrImagen: qrVigente && p.qrToken ? await toQrDataUrl(p.qrToken, 220) : null,
     qrVencido: p.status === 'READY' && !qrVigente,
+    oferta: reclamo ? { titulo: reclamo.deal.title, venceEl: reclamo.expiresAt, estado: reclamo.status } : null,
     puede: {
       confirmar: ESTADOS_CONFIRMABLES.includes(p.status) && !vigente,
       cancelar: ESTADOS_CANCELABLES_POR_CLIENTE.includes(p.status),

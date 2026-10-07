@@ -43,6 +43,8 @@ import { formatMoney } from '@/lib/format'
 import { landingUrlFor } from '@/lib/site'
 import { SucursalesSection } from './SucursalesSection'
 import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPublica'
+import { TarjetaOferta } from '@/components/deals/TarjetaOferta'
+import type { OfertaPublica } from '@/modules/deals/publico-nucleo'
 import type { ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
 
 const TIPO_LABEL: Record<string, string> = {
@@ -91,6 +93,9 @@ export interface CompanyProfileProps {
 
   /** Catálogo unificado publicado (F1.3). Vacío = sin sección: la empresa no lo usa o no tiene nada publicado. */
   catalogo?: ItemPublicoResumen[]
+
+  /** Ofertas con presupuesto que se pueden obtener ahora (F5). Vacío = sin sección. */
+  ofertas?: OfertaPublica[]
 
   /** Excursiones públicas de la empresa (opcional). */
   excursiones?: {
@@ -142,6 +147,7 @@ export function CompanyProfile({
   relacionSlot,
   excursiones = [],
   catalogo = [],
+  ofertas = [],
 }: CompanyProfileProps) {
   const hayResenas = !!resenas && (resenas.total > 0 || !!resenaFormSlot)
   const isApp = mode === 'app'
@@ -170,6 +176,7 @@ export function CompanyProfile({
     posts.beneficios.length > 0 && { id: 'beneficios', label: 'Beneficios' },
     posts.eventos.length > 0 && { id: 'eventos', label: 'Eventos' },
     posts.noticias.length > 0 && { id: 'noticias', label: 'Noticias' },
+    ofertas.length > 0 && { id: 'ofertas', label: 'Ofertas' },
     catalogo.length > 0 && { id: 'catalogo', label: 'Productos y servicios' },
     excursiones.length > 0 && { id: 'excursiones', label: 'Actividades' },
     company.galleryImages.length > 0 && { id: 'galeria', label: 'Galería' },
@@ -634,6 +641,19 @@ export function CompanyProfile({
                   <h3 className="mt-2 text-h4 text-foreground">{n.titulo}</h3>
                   <p className="mt-1 text-small text-muted-foreground">{n.contenido}</p>
                 </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Ofertas con presupuesto (F5): descuentos que se obtienen aquí y se canjean con el QR del pedido */}
+        {ofertas.length > 0 && (
+          <section id="ofertas" className="mt-14 scroll-mt-32">
+            <h2 className="text-h2 text-foreground">Ofertas</h2>
+            <p className="mt-2 text-muted-foreground">Obtén la oferta y canjéala en {company.name} con tu QR.</p>
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {ofertas.map((o) => (
+                <TarjetaOferta key={o.id} oferta={o} retorno={`/empresas/${company.slug}#ofertas`} mostrarEmpresa={false} />
               ))}
             </div>
           </section>

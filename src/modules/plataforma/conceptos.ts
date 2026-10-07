@@ -91,6 +91,8 @@ export const FUNCIONES_EMPRESA = [
   'CATALOGO_UNIFICADO',
   // Commerce Core (Fase 3): pedidos Membego. Vive en el Core.
   'PEDIDOS_MEMBEGO',
+  // Growth Engine (Fase 5): ofertas con presupuesto. Vive en el Core.
+  'DEALS_MARKETPLACE',
 ] as const satisfies readonly Capacidad[]
 
 export type FuncionEmpresa = (typeof FUNCIONES_EMPRESA)[number]

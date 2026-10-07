@@ -67,6 +67,11 @@ const USUARIOS = {
   pedidosAdmin: { email: 'e2e.pedidos.admin@membego.test', nombre: 'Admin Pedidos E2E', role: 'ADMINISTRADOR' },
   pedidosCliente: { email: 'e2e.pedidos.cliente@membego.test', nombre: 'Marta Pedidos E2E', role: 'CLIENTE' },
   pedidosSinCapacidad: { email: 'e2e.pedidos.sin@membego.test', nombre: 'Admin Sin Pedidos E2E', role: 'ADMINISTRADOR' },
+  /** Commerce Core · ofertas con presupuesto (F5): quien las crea y publica, y tres personas que las reclaman. */
+  dealsAdmin: { email: 'e2e.deals.admin@membego.test', nombre: 'Admin Ofertas E2E', role: 'ADMINISTRADOR' },
+  dealsCliente: { email: 'e2e.deals.cliente@membego.test', nombre: 'Carla Ofertas E2E', role: 'CLIENTE' },
+  dealsCliente2: { email: 'e2e.deals.cliente2@membego.test', nombre: 'Diego Ofertas E2E', role: 'CLIENTE' },
+  dealsCliente3: { email: 'e2e.deals.cliente3@membego.test', nombre: 'Elena Ofertas E2E', role: 'CLIENTE' },
   /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */
   facturacionSuperadmin: { email: 'e2e.facturacion.sa@membego.test', nombre: 'Facturación SA E2E', role: 'SUPERADMIN' },
 } as const
