@@ -175,21 +175,32 @@ type IntentoEntregable = {
  * llama tras ganar el reclamo FALLIDA→PENDIENTE. Nunca recobra.
  */
 async function entregarProducto(
-  intento: IntentoEntregable
+  intento: IntentoEntregable,
+  claimAt: Date
 ): Promise<{ completada: boolean; error?: string }> {
   const meta = { ipAddress: intento.ipAddress, userAgent: intento.userAgent }
+  const fulfillmentClaim = { intentoId: intento.id, claimAt }
 
   // userId null a propósito: no lo activó ningún administrador, lo activó el
   // cobro. La bitácora lo registra como activación automática.
   if (intento.compraId) {
     const res = await activarCompraPromocion(intento.compraId, null, meta, {
       motivo: `Pago aprobado por pasarela (intento ${intento.id})`,
+      fulfillmentClaim,
     })
     if (!res.ok) return { completada: false, error: res.error }
     return { completada: true }
   }
   if (intento.membershipId) {
-    const res = await activarMembresia(intento.membershipId, null, meta)
+    let res
+    try {
+      res = await activarMembresia(intento.membershipId, null, meta, fulfillmentClaim)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'FULFILLMENT_CLAIM_LOST') {
+        return { completada: false, error: 'FULFILLMENT_CLAIM_LOST' }
+      }
+      throw error
+    }
     if (!res.ok) return { completada: false, error: res.error }
     return { completada: true }
   }
@@ -200,16 +211,22 @@ export async function marcarEntrega(
   companyId: string,
   intentoId: string,
   completada: boolean,
-  error?: string
+  error?: string,
+  claimAt?: Date
 ): Promise<void> {
-  await conEmpresa(companyId, (tx) =>
-    tx.pagoIntento.update({
-      where: { id: intentoId },
-      data: completada
-        ? { fulfillmentEstado: 'COMPLETADA', fulfillmentAt: new Date(), fulfillmentError: null }
-        : { fulfillmentEstado: 'FALLIDA', fulfillmentError: error ?? 'La entrega falló.' },
-    })
-  ).catch(anotarFallo('pagos:marcarEntrega', { intentoId }))
+  const data = completada
+    ? { fulfillmentEstado: 'COMPLETADA', fulfillmentAt: new Date(), fulfillmentError: null }
+    : { fulfillmentEstado: 'FALLIDA', fulfillmentError: error ?? 'La entrega falló.' }
+  await conEmpresa(companyId, async (tx) => {
+    if (claimAt) {
+      await tx.pagoIntento.updateMany({
+        where: { id: intentoId, estado: 'APROBADO', fulfillmentEstado: 'PROCESANDO', updatedAt: claimAt },
+        data,
+      })
+      return
+    }
+    await tx.pagoIntento.update({ where: { id: intentoId }, data })
+  }).catch(anotarFallo('pagos:marcarEntrega', { intentoId }))
 }
 
 /**
@@ -277,11 +294,13 @@ export async function confirmarIntento(
   }
 
   // ── El candado del COBRO ──────────────────────────────────────────────
+  const claimAt = new Date()
   const marca = await conEmpresa(intento.companyId, (tx) =>
     tx.pagoIntento.updateMany({
       where: { id: intentoId, activadoAt: null, estado: { in: ['CREADO', 'REDIRIGIDO'] } },
       data: {
         estado: 'APROBADO',
+        updatedAt: claimAt,
         activadoAt: new Date(),
         fulfillmentEstado: 'PROCESANDO',
         fulfillmentIntentos: { increment: 1 },
@@ -295,8 +314,11 @@ export async function confirmarIntento(
     return resultadoIntentoActual(intentoId, intento.companyId, intento, 'El intento ya no está pendiente de confirmación.')
   }
 
-  const entrega = await entregarProducto(intento)
-  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error)
+  const entrega = await entregarProducto(intento, claimAt)
+  if (entrega.error === 'FULFILLMENT_CLAIM_LOST') {
+    return resultadoIntentoActual(intentoId, intento.companyId, intento, 'La entrega ya fue reclamada por otro proceso.')
+  }
+  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error, claimAt)
 
   return {
     ok: true,
@@ -373,8 +395,14 @@ export async function reintentarEntrega(
     return { ok: true, entrega: estadoEntregaActual(actual?.fulfillmentEstado ?? 'PENDIENTE') }
   }
 
-  const entrega = await entregarProducto(intento)
-  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error)
+  const entrega = await entregarProducto(intento, claimAt)
+  if (entrega.error === 'FULFILLMENT_CLAIM_LOST') {
+    const actual = await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento.findUnique({ where: { id: intentoId }, select: { fulfillmentEstado: true } })
+    ).catch(() => null)
+    return { ok: true, entrega: estadoEntregaActual(actual?.fulfillmentEstado ?? 'PENDIENTE') }
+  }
+  await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error, claimAt)
   return {
     ok: entrega.completada,
     entrega: entrega.completada ? 'COMPLETADA' : 'FALLIDA',

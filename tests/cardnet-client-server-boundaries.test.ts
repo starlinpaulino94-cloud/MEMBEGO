@@ -121,7 +121,11 @@ function setup(): Scenario {
     cardnetCaptureSession: {
       findFirst: async (input: { where: Row }) => {
         const row = [...s.sessions.values()].find((candidate) => matches(candidate, input.where))
-        return row ? { ...row } : null
+        return row
+          ? { ...row, purchaseIntent: row.purchaseIntent && typeof row.purchaseIntent === 'object'
+            ? { ...(row.purchaseIntent as Row) }
+            : null }
+          : null
       },
       findUnique: async (input: { where: Row }) => s.reservations.get(String(input.where.reservaClienteKey ?? '')) ?? null,
       create: async (input: { data: Row }) => {
@@ -1062,6 +1066,82 @@ test('a locally approved intent resumes fulfillment without another CardNET call
   assert.equal(s.providerCalls, 0)
   assert.equal(s.chargeCalls, 0)
   assert.equal(s.fulfillmentRetryCalls, 1)
+})
+
+test('a fulfillment-pending session resumes an approved intent without another CardNET call', { timeout: 5_000 }, async () => {
+  const s = setup()
+  s.confirmationResult = { ok: true, entrega: 'PENDIENTE' }
+  s.fulfillmentRetryResult = { ok: true, entrega: 'COMPLETADA' }
+  const id = 'f'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'FULFILLMENT_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
+    purchaseIntent: {
+      id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key', estado: 'APROBADO',
+      autorizacion: 'A1B2C3', fulfillmentEstado: 'PROCESANDO',
+    },
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.status, 200)
+  assert.equal(result.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
+  assert.equal(s.providerCalls, 0)
+  assert.equal(s.chargeCalls, 0)
+  assert.equal(s.fulfillmentRetryCalls, 1)
+})
+
+test('a freshly approved intent prevents Purchase when the initial intent read is stale', { timeout: 5_000 }, async () => {
+  const s = setup()
+  s.customerResponse = {
+    denegado: false,
+    email: 'qa@example.test',
+    perfiles: [{ paymentProfileId: 'profile-fresh', token: 'fresh-payment-profile-token', habilitado: true }],
+  }
+  s.confirmationResult = { ok: true, entrega: 'COMPLETADA' }
+  const id = 'y'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - 90_000),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key', estado: 'CREADO' },
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+
+  const tx = s.tx as { cardnetCaptureSession: { updateMany(input: { where: Row; data: Row }): Promise<{ count: number }> } }
+  const originalUpdateMany = tx.cardnetCaptureSession.updateMany
+  let intentStateChanged = false
+  tx.cardnetCaptureSession.updateMany = async (input) => {
+    const result = await originalUpdateMany(input)
+    if (result.count === 1 && 'updatedAt' in input.data && !intentStateChanged) {
+      intentStateChanged = true
+      Object.assign(row.purchaseIntent as Row, { estado: 'APROBADO', autorizacion: 'A1B2C3' })
+    }
+    return result
+  }
+
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.status, 200)
+  assert.equal(result.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
+  assert.equal(s.chargeCalls, 0)
 })
 
 test('the real BFF route rejects a request without Bearer before calling the service', async () => {

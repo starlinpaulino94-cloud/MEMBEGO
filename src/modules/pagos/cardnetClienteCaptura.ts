@@ -55,30 +55,33 @@ export async function chargeWithProfile(
   if (
     !purchaseSession ||
     purchaseSession.estado !== CARDNET_SESSION_STATES.PURCHASE_PENDING ||
-    purchaseSession.purchaseIntent?.id !== intent.id
+    purchaseSession.purchaseIntent?.id !== intent.id ||
+    !purchaseSession.purchaseIntent
   ) return success(202, { status: 'pending' })
-  if (intent.estado === 'APROBADO') {
-    return finishApproval(purchaseSession, intent.id, intent.autorizacion, null)
+  const currentIntent = purchaseSession.purchaseIntent
+  if (!currentIntent.cardnetUniqueId) return success(202, { status: 'pending' })
+  if (currentIntent.estado === 'APROBADO') {
+    return finishApproval(purchaseSession, currentIntent.id, currentIntent.autorizacion, null)
   }
-  if (intent.estado === 'RECHAZADO') return success(200, { status: 'declined' })
-  if (intent.estado === 'EXPIRADO') return success(200, { status: 'expired' })
-  if (intent.estado !== 'CREADO' && intent.estado !== 'REDIRIGIDO') {
+  if (currentIntent.estado === 'RECHAZADO') return success(200, { status: 'declined' })
+  if (currentIntent.estado === 'EXPIRADO') return success(200, { status: 'expired' })
+  if (currentIntent.estado !== 'CREADO' && currentIntent.estado !== 'REDIRIGIDO') {
     return success(202, { status: 'pending' })
   }
   const ip = requestIp(request)
   const charge = await cobrarConToken({
     trxToken: profile.token,
     pesos: Number(purchaseSession.monto),
-    orden: intent.id,
+    orden: currentIntent.id,
     clienteIp: ip,
     customerId: purchaseSession.customerId ?? undefined,
-    purchaseUniqueId: intent.cardnetUniqueId,
+    purchaseUniqueId: currentIntent.cardnetUniqueId,
   }).catch(() => null)
   if (!charge) {
     const latest = await loadSession(purchaseSession.id, purchaseSession.authSubject)
     if (!latest) return success(202, { status: 'pending' })
     const reconciled = await searchPurchase(latest)
-    return interpretPurchase(latest, intent.id, reconciled.decision, reconciled.payload)
+    return interpretPurchase(latest, currentIntent.id, reconciled.decision, reconciled.payload)
   }
   const http = ownRecord(charge.crudo)?._http
   const httpStatus = typeof http === 'number' ? http : 0
@@ -87,9 +90,9 @@ export async function chargeWithProfile(
     const latest = await loadSession(purchaseSession.id, purchaseSession.authSubject)
     if (!latest) return success(202, { status: 'pending' })
     const reconciled = await searchPurchase(latest)
-    return interpretPurchase(latest, intent.id, reconciled.decision, reconciled.payload)
+    return interpretPurchase(latest, currentIntent.id, reconciled.decision, reconciled.payload)
   }
-  return interpretPurchase(purchaseSession, intent.id, decision, charge.crudo)
+  return interpretPurchase(purchaseSession, currentIntent.id, decision, charge.crudo)
 }
 
 export async function progressCapture(
@@ -109,7 +112,17 @@ export async function progressCapture(
     }
     return success(202, { status: 'pending' })
   }
-  if (session.estado === CARDNET_SESSION_STATES.FULFILLMENT_PENDING) return success(202, { status: 'pending' })
+  if (session.estado === CARDNET_SESSION_STATES.FULFILLMENT_PENDING) {
+    if (session.purchaseIntent?.estado === 'APROBADO') {
+      return finishApproval(
+        session,
+        session.purchaseIntent.id,
+        session.purchaseIntent.autorizacion,
+        null
+      )
+    }
+    return success(202, { status: 'pending' })
+  }
   if (session.estado === CARDNET_SESSION_STATES.ASSOCIATION_PENDING && session.purchaseIntent) {
     const associated = await associateApprovedCard(session)
     return associated ? success(200, { status: 'approved' }) : success(202, { status: 'pending' })

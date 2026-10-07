@@ -89,9 +89,9 @@ export function cardnetTokensConfigurado(): boolean {
  */
 function variantesAuth(privateKey: string): { nombre: string; valor: string }[] {
   return [
-    { nombre: 'cruda', valor: `Basic ${privateKey}` },
     { nombre: 'basic-user', valor: `Basic ${Buffer.from(`${privateKey}:`).toString('base64')}` },
     { nombre: 'base64-simple', valor: `Basic ${Buffer.from(privateKey).toString('base64')}` },
+    { nombre: 'cruda', valor: `Basic ${privateKey}` },
   ]
 }
 
@@ -804,8 +804,11 @@ export async function borrarPerfilCardnet(input: {
   customerId: string
   paymentProfileId: string
 }): Promise<boolean> {
+  const paymentProfileId = Number(input.paymentProfileId)
+  if (!Number.isSafeInteger(paymentProfileId) || paymentProfileId <= 0) return false
+
   const { ok } = await postTokens(`/Customer/${encodeURIComponent(input.customerId)}/PaymentProfileDelete`, {
-    PaymentProfileId: input.paymentProfileId,
+    PaymentProfileId: paymentProfileId,
   })
   return ok
 }

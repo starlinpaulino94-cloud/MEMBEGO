@@ -23,6 +23,7 @@ import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 type Meta = { ipAddress: string | null; userAgent: string | null }
+type FulfillmentClaim = { intentoId: string; claimAt: Date }
 
 type ActivarResult =
   | { ok: true; clienteId: string; companyId: string; supabaseId: string; planNombre: string; esPrimera: boolean }
@@ -34,7 +35,8 @@ const ESTADOS_ACTIVABLES = new Set(['PENDIENTE', 'PENDIENTE_PAGO', 'RECHAZADA', 
 export async function activarMembresia(
   membershipId: string,
   userId: string | null,
-  meta: Meta
+  meta: Meta,
+  fulfillmentClaim?: FulfillmentClaim
 ): Promise<ActivarResult> {
   // Se busca la membresía por id sin conocer aún la empresa (cross-tenant por
   // diseño: el caller ya autorizó; aquí solo se revalida estado y se lee el
@@ -66,6 +68,24 @@ export async function activarMembresia(
   // esPrimera se calcula dentro de la transacción para evitar race condition
   // con activaciones concurrentes del mismo cliente EN ESTA EMPRESA.
   const { esPrimera } = await conEmpresa(membership.companyId, async (tx) => {
+    if (fulfillmentClaim) {
+      const claim = await tx.pagoIntento.updateMany({
+        where: {
+          id: fulfillmentClaim.intentoId,
+          companyId: membership.companyId,
+          estado: 'APROBADO',
+          fulfillmentEstado: 'PROCESANDO',
+          updatedAt: fulfillmentClaim.claimAt,
+        },
+        data: {
+          fulfillmentEstado: 'COMPLETADA',
+          fulfillmentAt: now,
+          fulfillmentError: null,
+        },
+      })
+      if (claim.count !== 1) throw new Error('FULFILLMENT_CLAIM_LOST')
+    }
+
     const previasConfirmadas = await tx.membership.count({
       where: {
         clienteId: membership.clienteId,

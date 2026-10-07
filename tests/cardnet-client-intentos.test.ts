@@ -154,3 +154,73 @@ test('a stale fulfillment claim is recovered after a server interruption', async
   assert.equal(intento.fulfillmentIntentos, 2)
   assert.equal(scenario.activationCalls, 1)
 })
+
+test('a slow fulfillment worker cannot deliver after another worker recovers its lease', async () => {
+  let releaseSlowWorker: () => void = () => undefined
+  let announceSlowWorker: () => void = () => undefined
+  const slowWorkerGate = new Promise<void>((resolve) => { releaseSlowWorker = resolve })
+  const slowWorkerStarted = new Promise<void>((resolve) => { announceSlowWorker = resolve })
+  const intento: Row = {
+    id: 'intent-live-fulfillment-race',
+    companyId: 'company-test',
+    compraId: 'purchase-test',
+    membershipId: null,
+    monto: 1000,
+    estado: 'REDIRIGIDO',
+    activadoAt: null,
+    fulfillmentEstado: 'PENDIENTE',
+    fulfillmentIntentos: 0,
+    updatedAt: new Date(),
+  }
+  let activationStarted = 0
+  const scenario = {
+    activationCalls: 0,
+    beforeActivationClaim: async () => {
+      activationStarted += 1
+      if (activationStarted === 1) {
+        announceSlowWorker()
+        await slowWorkerGate
+      }
+    },
+    tx: {
+      pagoIntento: {
+        findUnique: async (input: { where: Row }) =>
+          input.where.id === intento.id ? { ...intento } : null,
+        updateMany: async (input: { where: Row; data: Row }) => {
+          if (!matches(intento, input.where)) return { count: 0 }
+          applyData(intento, input.data)
+          return { count: 1 }
+        },
+        update: async (input: { where: Row; data: Row }) => {
+          if (input.where.id !== intento.id) throw new Error('intent missing')
+          applyData(intento, input.data)
+          return intento
+        },
+      },
+    },
+  }
+  Object.assign(globalThis, { __pagoIntentoScenario: scenario })
+
+  const { confirmarIntento, reintentarEntrega } = await import('../src/modules/pagos/intentos')
+  const slowApproval = confirmarIntento('intent-live-fulfillment-race', {
+    aprobada: true,
+    autorizacion: 'AUTH-TEST',
+    motivo: null,
+    crudo: {},
+    montoCobrado: 1000,
+  })
+  await slowWorkerStarted
+
+  intento.updatedAt = new Date(Date.now() - 120_000)
+  const recovery = await reintentarEntrega('intent-live-fulfillment-race')
+  assert.equal(recovery.entrega, 'COMPLETADA')
+  assert.equal(intento.fulfillmentEstado, 'COMPLETADA')
+  assert.equal(scenario.activationCalls, 1)
+
+  releaseSlowWorker()
+  const staleResult = await slowApproval
+  assert.equal(staleResult.ok, true)
+  if (staleResult.ok) assert.equal(staleResult.entrega, 'COMPLETADA')
+  assert.equal(intento.fulfillmentEstado, 'COMPLETADA')
+  assert.equal(scenario.activationCalls, 1)
+})
