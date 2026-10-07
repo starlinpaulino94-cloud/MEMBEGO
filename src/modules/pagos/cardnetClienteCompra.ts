@@ -207,8 +207,14 @@ export async function interpretPurchase(
   }
   if (decision.kind === 'declined') return markDefiniteDecline(session, intentId)
   if (decision.kind === 'activation_required') {
+    if (session.estado === CARDNET_SESSION_STATES.ACTIVATION_REQUIRED) {
+      return success(200, { status: 'activation_required' })
+    }
     const required = await setSessionState(session, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
     return required ? success(200, { status: 'activation_required' }) : currentSessionReply(session)
+  }
+  if (session.estado === CARDNET_SESSION_STATES.PURCHASE_PENDING) {
+    return success(202, { status: 'pending' })
   }
   const pending = await setSessionState(session, CARDNET_SESSION_STATES.PURCHASE_PENDING, { conciliadoAt: new Date() })
   return pending ? success(202, { status: 'pending' }) : currentSessionReply(session)

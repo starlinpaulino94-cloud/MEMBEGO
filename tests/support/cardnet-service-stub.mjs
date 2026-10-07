@@ -74,6 +74,7 @@ export async function puedeCobrarToken() {
 }
 
 export async function confirmarIntento() {
+  scenario().onConfirmIntent?.()
   return scenario().confirmationResult ?? { ok: true, entrega: 'COMPLETADA' }
 }
 

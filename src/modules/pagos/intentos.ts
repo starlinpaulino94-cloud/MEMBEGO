@@ -115,6 +115,43 @@ export type ConfirmacionResultado =
   | { ok: true; estado: 'APROBADO'; yaEstaba: boolean; entrega: EntregaEstado; compraId: string | null; membershipId: string | null }
   | { ok: false; estado: 'RECHAZADO' | 'ERROR'; motivo: string }
 
+async function resultadoIntentoActual(
+  intentoId: string,
+  companyId: string,
+  fallback: { compraId: string | null; membershipId: string | null },
+  motivo: string
+): Promise<ConfirmacionResultado> {
+  const actual = await conEmpresa(companyId, (tx) =>
+    tx.pagoIntento.findUnique({
+      where: { id: intentoId },
+      select: {
+        estado: true,
+        motivoRechazo: true,
+        fulfillmentEstado: true,
+        compraId: true,
+        membershipId: true,
+      },
+    })
+  ).catch(() => null)
+
+  if (actual?.estado === 'APROBADO') {
+    return {
+      ok: true,
+      estado: 'APROBADO',
+      yaEstaba: true,
+      entrega: (actual.fulfillmentEstado ?? 'PENDIENTE') as EntregaEstado,
+      compraId: actual.compraId ?? fallback.compraId,
+      membershipId: actual.membershipId ?? fallback.membershipId,
+    }
+  }
+
+  return {
+    ok: false,
+    estado: actual?.estado === 'RECHAZADO' ? 'RECHAZADO' : 'ERROR',
+    motivo: actual?.motivoRechazo ?? motivo,
+  }
+}
+
 type IntentoEntregable = {
   id: string
   companyId: string
@@ -188,22 +225,29 @@ export async function confirmarIntento(
   if (!intento) return { ok: false, estado: 'ERROR', motivo: 'Intento de pago no encontrado.' }
 
   if (!resultado.aprobada) {
-    await conEmpresa(intento.companyId, (tx) =>
-      tx.pagoIntento
-        .update({
-          where: { id: intentoId },
-          data: {
-            estado: 'RECHAZADO',
-            motivoRechazo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
-            respuesta: (resultado.crudo ?? null) as never,
-          },
-        })
+    const rechazo = await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento.updateMany({
+        where: { id: intentoId, activadoAt: null, estado: { in: ['CREADO', 'REDIRIGIDO'] } },
+        data: {
+          estado: 'RECHAZADO',
+          motivoRechazo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
+          respuesta: (resultado.crudo ?? null) as never,
+        },
+      })
     ).catch(anotarFallo('pagos:confirmarIntento:rechazo', { intentoId }))
-    return {
-      ok: false,
-      estado: 'RECHAZADO',
-      motivo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
+    if (rechazo?.count === 1) {
+      return {
+        ok: false,
+        estado: 'RECHAZADO',
+        motivo: resultado.motivo ?? 'La pasarela rechazó la transacción.',
+      }
     }
+    return resultadoIntentoActual(
+      intentoId,
+      intento.companyId,
+      intento,
+      'El intento ya no está pendiente de confirmación.'
+    )
   }
 
   // El monto se compara, no se confía. Si la pasarela reporta menos de lo que
@@ -216,24 +260,20 @@ export async function confirmarIntento(
     Math.abs(resultado.montoCobrado - esperado) > 0.01
   ) {
     const motivo = `El monto cobrado (${resultado.montoCobrado}) no coincide con el esperado (${esperado}).`
-    await conEmpresa(intento.companyId, (tx) =>
-      tx.pagoIntento
-        .update({
-          where: { id: intentoId },
-          data: { estado: 'ERROR', motivoRechazo: motivo, respuesta: (resultado.crudo ?? null) as never },
-        })
+    const discrepancia = await conEmpresa(intento.companyId, (tx) =>
+      tx.pagoIntento.updateMany({
+        where: { id: intentoId, activadoAt: null, estado: { in: ['CREADO', 'REDIRIGIDO'] } },
+        data: { estado: 'ERROR', motivoRechazo: motivo, respuesta: (resultado.crudo ?? null) as never },
+      })
     ).catch(anotarFallo('pagos:confirmarIntento:montoDistinto', { intentoId }))
-    return { ok: false, estado: 'ERROR', motivo }
+    if (discrepancia?.count === 1) return { ok: false, estado: 'ERROR', motivo }
+    return resultadoIntentoActual(intentoId, intento.companyId, intento, 'El intento ya no está pendiente de confirmación.')
   }
 
   // ── El candado del COBRO ──────────────────────────────────────────────
-  // updateMany con `activadoAt: null` en el WHERE es una operación atómica: la
-  // base de datos decide quién llega primero. `count === 0` = ya lo reclamó
-  // otro (webhook, recarga de la página, doble clic). Este candado protege el
-  // CARGO, no la entrega: la entrega tiene su propio estado abajo.
   const marca = await conEmpresa(intento.companyId, (tx) =>
     tx.pagoIntento.updateMany({
-      where: { id: intentoId, activadoAt: null },
+      where: { id: intentoId, activadoAt: null, estado: { in: ['CREADO', 'REDIRIGIDO'] } },
       data: {
         estado: 'APROBADO',
         activadoAt: new Date(),
@@ -244,20 +284,7 @@ export async function confirmarIntento(
   )
 
   if (marca.count === 0) {
-    const actual = await conEmpresa(intento.companyId, (tx) =>
-      tx.pagoIntento.findUnique({
-        where: { id: intentoId },
-        select: { fulfillmentEstado: true, compraId: true, membershipId: true },
-      })
-    ).catch(() => null)
-    return {
-      ok: true,
-      estado: 'APROBADO',
-      yaEstaba: true,
-      entrega: (actual?.fulfillmentEstado ?? 'PENDIENTE') as EntregaEstado,
-      compraId: actual?.compraId ?? intento.compraId,
-      membershipId: actual?.membershipId ?? intento.membershipId,
-    }
+    return resultadoIntentoActual(intentoId, intento.companyId, intento, 'El intento ya no está pendiente de confirmación.')
   }
 
   const entrega = await entregarProducto(intento)

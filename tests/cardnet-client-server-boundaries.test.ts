@@ -35,6 +35,8 @@ interface Scenario {
   intentCreates: number
   chargeResults: Array<unknown | null>
   chargeRequests: Array<{ readonly purchaseUniqueId: unknown; readonly order: unknown; readonly amount: unknown; readonly token?: unknown }>
+  confirmationResult?: unknown
+  onConfirmIntent?: () => void
   purchaseSearches: Row[]
   promotionResult: unknown
   promotionCalls: Array<{ readonly user: SessionUser; readonly promotionId: string }>
@@ -828,6 +830,71 @@ test('a stale activation result cannot reopen a session approved by another hand
   assert.equal(staleResult.body.status, 'approved')
   assert.equal(row.estado, 'APPROVED')
   assert.equal(row.updatedAt, approvedUpdatedAt)
+})
+
+test('a stale pending search cannot invalidate a concurrent approved transition', { timeout: 5_000 }, async () => {
+  const s = setup()
+  let releaseStaleSearch: (response: unknown) => void = () => undefined
+  const staleSearchResponse = new Promise<unknown>((resolve) => { releaseStaleSearch = resolve })
+  let announceFirstSearch: () => void = () => undefined
+  const firstSearchStarted = new Promise<void>((resolve) => { announceFirstSearch = resolve })
+  s.onPurchaseSearch = announceFirstSearch
+  s.purchaseSearchResponses = [staleSearchResponse, {
+    ok: true,
+    json: {
+      Response: {
+        Purchases: [{
+          OrderNumber: 'stable-purchase-key',
+          UniqueID: 'stable-purchase-key',
+          CustomerId: 'cardnet-customer-test',
+          Created: new Date().toISOString(),
+          Transaction: { TransactionStatusId: 1, AuthorizationCode: 'A1B2C3', ResponseCode: '00' },
+        }],
+      },
+    },
+  }]
+
+  let releaseConfirmation: (result: unknown) => void = () => undefined
+  const confirmationResult = new Promise<unknown>((resolve) => { releaseConfirmation = resolve })
+  let announceConfirmation: () => void = () => undefined
+  const confirmationStarted = new Promise<void>((resolve) => { announceConfirmation = resolve })
+  s.confirmationResult = confirmationResult
+  s.onConfirmIntent = announceConfirmation
+
+  const id = 't'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null },
+    purchaseIntentId: 'intent-persisted',
+    purchaseIntent: { id: 'intent-persisted', cardnetUniqueId: 'stable-purchase-key' },
+    reservaClienteKey: 'held-customer-reservation',
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-customer-reservation', row)
+  const api = await service()
+  const status = () => api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  const stale = status()
+  await firstSearchStarted
+  const approved = status()
+  await confirmationStarted
+
+  const pendingUpdatedAt = row.updatedAt
+  releaseStaleSearch({ ok: true, json: { Response: { Purchases: [] } } })
+  const staleResult = await stale
+  assert.equal(staleResult.status, 202)
+  assert.equal(staleResult.body.status, 'pending')
+  assert.equal(row.updatedAt, pendingUpdatedAt)
+
+  releaseConfirmation({ ok: true, entrega: 'COMPLETADA' })
+  const approvedResult = await approved
+  assert.equal(approvedResult.status, 200)
+  assert.equal(approvedResult.body.status, 'approved')
+  assert.equal(row.estado, 'APPROVED')
 })
 
 test('the real BFF route rejects a request without Bearer before calling the service', async () => {
