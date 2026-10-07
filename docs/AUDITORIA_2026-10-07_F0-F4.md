@@ -23,12 +23,12 @@ probar-rls:          PASS   43 / 43 sobre la BD migrada · 39 / 39 sobre `db pus
 Esquema:             PASS   prisma validate · migrate diff = migración vacía (0 deriva) · migrate status «up to date» · 200 sellos
 npm audit (prod):    PASS   0 vulnerabilidades  ← la doc todavía dice FAIL (lo arregló `1e36861`, llegado desde main)
 Build:               PASS
-E2E completa:        ver §2.1
+E2E completa:        PASS   122 pasan · 0 fallan · 151 omitidas (15,2 min)
 ```
 
 ### 2.1 Suite E2E completa (ambos proyectos, réplica de `e2e.yml`)
 
-_(se rellena al terminar la corrida; ver el final de este documento)_
+**122 pasan · 0 fallan · 151 omitidas** (15,2 min; build con las variables de relleno de CI, `npm run e2e:limpio`). Las 151 omitidas son las de siempre: 114 sin Supabase de pruebas y las que corren solo en escritorio.
 
 ## 3. Veredicto por fase contra el Plan Maestro
 
@@ -143,3 +143,31 @@ Antes de empezar F5, un lote corto de correcciones, en este orden:
 6. **Documentación:** corregir las discrepancias de §5 y registrar las decisiones (M10, M12, M16, SUPERADMIN salta capacidades).
 
 Nada de lo anterior bloquea el desarrollo de F5, pero **C1, A1 y A2 están vivos en producción hoy** (si ese proyecto es producción) y A3/A4 deben cerrarse **antes de encender `PEDIDOS_MEMBEGO` en una empresa real**.
+
+## 9. Correcciones aplicadas (lote del 2026-10-07, commits `ffe4e48` y `188dcba`)
+
+Lo recomendado en §8 se aplicó, salvo lo que es decisión o acción de una persona. **Cada corrección lleva su prueba; las de reglas de la base y las de código se comprobaron además con una mutación** (se estropeó la corrección y la prueba falló).
+
+| Hallazgo | Estado | Qué se hizo | Prueba |
+|---|---|---|---|
+| **C1** credenciales en git | 🟡 **código hecho; falta rotar (es tuyo)** | Los dos scripts E2E ya no llevan nada: leen todo del entorno (`scripts/e2e-entorno-remoto.mjs`; sin variables, se bloquean y dicen cuáles faltan). Job `secretos` de CI (gitleaks sobre los commits nuevos). **Las claves y la contraseña siguen en el historial de git: hay que rotarlas** | `tests/sin-credenciales.test.ts` (recorre todos los archivos versionados) |
+| **A1, A2, M2** acciones sin guardia | ✅ | Los cuatro ayudantes salen de los archivos `'use server'`: `excursiones/ventas/procesar.ts`, `admin/invitaciones-consulta.ts`, `excursiones/catalogo/agotadas.ts` | `tests/acciones-sin-guardia.test.ts`: enumera todo `'use server'` con el compilador de TypeScript; 25 públicas por diseño en una lista con su razón; falla en las dos direcciones (mutación: añadir un export sin guardia lo rompe) |
+| **M19** test de «`'use server'` sin guardia» y secret scanning | ✅ | Lo anterior + `secretos.yml` | idem |
+| **A3** monedas mezcladas | ✅ | `registrarComisionDePedidoEnTx` rechaza `MONEDA_DISTINTA` (el cierre del pedido falla con un mensaje claro para quien escanea y el pedido sigue LISTO); el disparador `merchant_ledger_saldo` exige que el asiento sea de la moneda de la cuenta | PG 35 (servicio, cierre completo y base) |
+| **A4** `createdAt` no monótono | ✅ | `instanteDelAsiento`: nunca anterior al último asiento; la base lo exige (`merchant_ledger_orden`) | PG 36 + unit |
+| **M13** cortes solapados | ✅ | `generarCortesPendientesEnTx` toma el candado de la cuenta antes de calcular los periodos | PG 40 (concurrente) + unit de orden |
+| **M14** claves manuales | ✅ | Prefijo `commission:` reservado al sistema (servicio) y CHECK `merchant_ledger_entries_clave_comision` (base) | PG 37 |
+| **M15** antigüedad con comisiones revertidas | ✅ | `cargosVigentes` descuenta la comisión revertida y su reverso | PG 39 + unit |
+| **M17** inanición del barrido | ✅ parcial | El barrido ignora los pedidos con base 0. Queda: una configuración con CPA 0 o % 0 sigue haciendo volver a sus pedidos cada día | unit |
+| **M18** pago duplicado | ✅ | `PAGO_DUPLICADO` (servicio) + índice único parcial `(cuenta, referencia)` de los pagos (base) | PG 38 |
+| **M16** evidencia del barrido | ✅ decidido y documentado | Se cobra con la evidencia **vigente al cobrar**: la del cierre en el camino normal, la de ese día en la red de seguridad (la base ya lo exigía) | comentario del servicio |
+| **M11** escáner fail-open | ✅ | `puedeOperarEnEmpresa` (falla cerrado) en los **8** sitios (escáner de pedidos, de visitas ×4, canjes de ofertas y de promociones, ficha de cliente) | `tests/empresa-de-la-sesion.test.ts` (también prohíbe el patrón viejo en todo `src/`) |
+| **M1** alta de proveedor sin override | ✅ | `registrarProveedorExterno` lleva `CAPACIDADES_OVERRIDE_TENANT_NUEVO` | `capacidades-fase0`: **toda** alta de empresa de `src/` debe llevarlo (falla sin el arreglo) |
+| **M3** ficha pública sin tag | ✅ | `getItemCatalogoPublico` (caché con el tag del marketplace) | unit + E2E `catalogo-admin`: tras pausar, la ficha da 404 |
+| **M9** acoplamiento transitivo Supply → Core | ✅ | `sincronizarOfertaMejorEsfuerzo` vive en `supply-bridge/mejor-esfuerzo.ts`, que no alcanza pedidos, inventario ni billing | `supply-bridge.test.ts`: cierre transitivo de imports |
+| **M8** mensaje de «cambiar de casa» | ✅ | Ahora dice la verdad: es una migración de datos | — |
+| F1 bajo: `TarjetaCatalogoPublica` y la ficha importaban de Supply | ✅ | `RUTA_OFERTAS_MEMBEGO` en el catálogo (una prueba la compara con la de Supply) | unit |
+
+**No se tocó** (decisión tuya o fuera del lote): **A5** (el menú esconde Supply V1 y V2: decide qué se muestra); **M4** (`CATALOG_MANAGE` ofrecido a satélites que no lo pueden usar); **M5** (`cerrarPedidoExternoEnTx` no vende reservas: hoy inalcanzable); **M6/M7** (presupuesto de tiempo de los barridos de reservas y del puente); **M10** (fichas de clientes de Supply en la casa) y **M12** (`CustomerConfirmation` al ajustar): decisiones de producto; y los **bajos**. Siguen en §4.
+
+**Verificación del lote** (BD local, desde cero): tsc 0 · eslint 0 errores · unit 3 880 (2 pruebas viejas ajustadas al código corregido) · **PostgreSQL 528/528** (+6, billing 41) · permisos 103 · preflight 281/302 · cobertura RLS · **0 deriva · 201 sellos** · `migrate status` al día · `npm audit` 0 · `probar-rls` 43/43 y 39/39 · build · bundle. E2E completa: ver el commit que cierra este documento.
