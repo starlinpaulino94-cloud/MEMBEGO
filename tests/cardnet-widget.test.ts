@@ -1,6 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tokenDe, refsGuardado, CLAVES_TOKEN } from '../src/lib/payments/cardnet-widget'
+import {
+  tokenDe,
+  refsGuardado,
+  CLAVES_TOKEN,
+  esMensajeCapturaCardnetConfiable,
+} from '../src/lib/payments/cardnet-widget'
+import { urlsTokens } from '../src/lib/payments/cardnet-tokens-core'
 
 /**
  * Estas pruebas existen por un fallo real que costó días.
@@ -124,4 +130,50 @@ test('un logo con parámetros en la URL se omite antes que romper el pago', asyn
   assert.equal(imagenSeguraWidget('https://cdn.x.com/l.png?w=200&h=200'), null)
   assert.equal(imagenSeguraWidget('http://inseguro.com/l.png'), null, 'solo https')
   assert.equal(imagenSeguraWidget(null), null)
+})
+
+test('solo acepta mensajes del iframe activo de captura CardNET', () => {
+  const captureUrl = urlsTokens('pruebas').capture
+  const session = { captureUrl, publicKey: 'sandbox-public', uniqueId: 'session-qa-123' }
+  const source = {}
+  const iframe = {
+    src: `${captureUrl}?key=sandbox-public&session_id=session-qa-123&name=Pago+seguro`,
+    contentWindow: source,
+  }
+  assert.equal(
+    esMensajeCapturaCardnetConfiable({ origin: 'https://lab.cardnet.com.do', source }, session, [iframe]),
+    true
+  )
+  assert.equal(
+    esMensajeCapturaCardnetConfiable({ origin: 'https://evilcardnet.com.do', source }, session, [iframe]),
+    false
+  )
+  assert.equal(
+    esMensajeCapturaCardnetConfiable(
+      { origin: 'https://lab.cardnet.com.do', source },
+      session,
+      [{ ...iframe, src: 'https://lab.cardnet.com.do/attacker?key=sandbox-public&session_id=session-qa-123' }]
+    ),
+    false
+  )
+  assert.equal(
+    esMensajeCapturaCardnetConfiable(
+      { origin: 'https://lab.cardnet.com.do', source },
+      session,
+      [{ ...iframe, src: `${captureUrl}?key=sandbox-public&session_id=session-qa-123&unexpected=1` }]
+    ),
+    false
+  )
+  assert.equal(
+    esMensajeCapturaCardnetConfiable({ origin: 'https://lab.cardnet.com.do', source: {} }, session, [iframe]),
+    false
+  )
+  assert.equal(
+    esMensajeCapturaCardnetConfiable(
+      { origin: 'https://lab.cardnet.com.do', source },
+      { ...session, captureUrl: 'https://lab.cardnet.com.do.attacker.invalid/servicios/tokens/v1/Capture/' },
+      [iframe]
+    ),
+    false
+  )
 })

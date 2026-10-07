@@ -1,7 +1,22 @@
 import { Platform } from 'react-native'
 import Constants from 'expo-constants'
+import { z } from 'zod'
+import {
+  cardnetPaymentStatusSchema,
+  cardnetPromotionPurchaseSchema,
+  cardnetSessionStartSchema,
+  type CardnetSessionTarget,
+} from './cardnet-api-contracts'
 import { supabase } from './supabase'
 import { resolveApiBaseUrl } from './runtimeUrls'
+
+export type {
+  CardnetCaptureSession,
+  CardnetPaymentStatus,
+  CardnetPromotionPurchaseResult,
+  CardnetSessionStartResult,
+  CardnetSessionTarget,
+} from './cardnet-api-contracts'
 
 function getApiBaseUrl(): string {
   return resolveApiBaseUrl({
@@ -53,6 +68,10 @@ export async function fetchBff<T>(path: string, options: RequestInit = {}): Prom
 // ---------------------------------------------------------------------------
 
 export type JsonObject = Record<string, unknown>
+
+async function parseCardnetResponse<T>(request: Promise<unknown>, schema: z.ZodType<T>): Promise<T> {
+  return schema.parse(await request)
+}
 
 // --- Marketplace / catálogo ---
 export interface CompanyPublic {
@@ -1189,6 +1208,48 @@ export const api = {
 
   // --- Cuenta: pagos ---
   getPagos: () => fetchBff<PagosResponse>('/api/v1/cliente/pagos'),
+  comprarPromocion: (promotionId: string) =>
+    parseCardnetResponse(
+      postJson<unknown>(`/api/v1/cliente/promociones/${encodeURIComponent(promotionId)}/comprar`, {}),
+      cardnetPromotionPurchaseSchema
+    ),
+  startCardnetSession: (input: CardnetSessionTarget) => {
+    const body =
+      input.kind === 'membership'
+        ? {
+            membershipId: input.membershipId,
+            ...(input.guardarParaRenovacion === undefined
+              ? {}
+              : { guardarParaRenovacion: input.guardarParaRenovacion }),
+          }
+        : { compraId: input.compraId }
+
+    return parseCardnetResponse(
+      postJson<unknown>('/api/v1/cliente/pagos/cardnet/sesion', body),
+      cardnetSessionStartSchema
+    )
+  },
+  confirmCardnetCapture: (input: {
+    readonly sessionId: string
+    readonly captureNonce: string
+    readonly token: string
+  }) =>
+    parseCardnetResponse(
+      postJson<unknown>('/api/v1/cliente/pagos/cardnet/confirmar', input),
+      cardnetPaymentStatusSchema
+    ),
+  getCardnetStatus: (sessionId: string) =>
+    parseCardnetResponse(
+      fetchBff<unknown>(
+        `/api/v1/cliente/pagos/cardnet/estado?sessionId=${encodeURIComponent(sessionId)}`
+      ),
+      cardnetPaymentStatusSchema
+    ),
+  activateCardnetProfile: (input: { readonly sessionId: string; readonly activationCode: string }) =>
+    parseCardnetResponse(
+      postJson<unknown>('/api/v1/cliente/pagos/cardnet/activar', input),
+      cardnetPaymentStatusSchema
+    ),
 
   // --- Cuenta: vehículos ---
   getVehiculos: () => fetchBff<VehiculosResponse>('/api/v1/cliente/vehiculos'),

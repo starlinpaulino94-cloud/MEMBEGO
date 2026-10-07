@@ -9,6 +9,7 @@ import { TERMS_VERSION } from '@/lib/legal'
 import { isEmailVerificationEnabled, sendVerificationEmail } from '@/lib/auth/emailVerification'
 import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
 import { anotarFallo } from '@/lib/prisma-errors'
+import { CAPACIDADES_OVERRIDE_TENANT_NUEVO } from '@/modules/capacidades/catalogo'
 
 // F5.1: registro self-service de empresas (B2B). La empresa se crea
 // DESPUBLICADA (isPublished: false): no aparece en el marketplace hasta
@@ -97,6 +98,9 @@ export async function registrarEmpresa(
           isActive: true,
           // Clave del onboarding: no aparece en el marketplace todavía.
           isPublished: false,
+          // Fase 0 (Plan Maestro §8.5–§8.6): tenant nuevo nace sin CRM ni
+          // mensajería avanzada; las empresas existentes no se tocan.
+          capacidades: { overrides: CAPACIDADES_OVERRIDE_TENANT_NUEVO },
         },
       })
     )

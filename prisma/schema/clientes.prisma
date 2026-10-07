@@ -128,6 +128,7 @@ model Cliente {
 
   campanaInscripciones CampanaInscripcion[]
   pagoIntentos         PagoIntento[]
+  cardnetCaptureSessions CardnetCaptureSession[]
 
   // Membego Supply: lo que Membego le compró a un tercero y le entregó a esta
   // persona. No son beneficios de ESTA empresa: son derechos financiados por

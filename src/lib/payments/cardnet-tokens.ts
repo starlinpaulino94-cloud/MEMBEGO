@@ -89,9 +89,9 @@ export function cardnetTokensConfigurado(): boolean {
  */
 function variantesAuth(privateKey: string): { nombre: string; valor: string }[] {
   return [
-    { nombre: 'cruda', valor: `Basic ${privateKey}` },
     { nombre: 'basic-user', valor: `Basic ${Buffer.from(`${privateKey}:`).toString('base64')}` },
     { nombre: 'base64-simple', valor: `Basic ${Buffer.from(privateKey).toString('base64')}` },
+    { nombre: 'cruda', valor: `Basic ${privateKey}` },
   ]
 }
 
@@ -128,6 +128,8 @@ export interface CobrarConTokenInput {
   orden: string
   /** IP del cliente, para el antifraude de CardNET. */
   clienteIp: string
+  customerId?: string
+  purchaseUniqueId?: string
   /** Factura/impuesto opcionales (DataDo). */
   invoice?: string
   tax?: number
@@ -160,10 +162,12 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
   // caracteres viaja bien por el Purchase, pero el tramo siguiente es otro
   // sistema — y es ese el que respondió `BadRequest`.
   const referencia = referenciaCobro(input.orden)
+  const identidadCompra = input.purchaseUniqueId?.trim() || referencia
 
   const cuerpo: Record<string, unknown> = {
     TrxToken: input.trxToken,
-    Order: referencia,
+    ...(input.customerId ? { CustomerId: input.customerId } : {}),
+    Order: identidadCompra,
     Amount: montoEnteroMenor(input.pesos),
     Tip: 0,
     Currency: MONEDA_DOP_TOKENS,
@@ -175,7 +179,7 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     // Ahora va la referencia corta. Si vuelve a llegar vacía en la respuesta,
     // el campo es decorativo y hay que quitarlo; si llega con valor, sirve.
     // El expediente que se guarda permite comprobar exactamente eso.
-    UniqueID: referencia,
+    UniqueID: identidadCompra,
     // `getClientIdentifier` devuelve la cadena 'unknown' cuando no hay
     // `x-forwarded-for`. Mandar eso como IP al antifraude de CardNET es peor
     // que no mandar nada: un valor con formato inválido puede rechazar el
@@ -207,6 +211,21 @@ export async function cobrarConToken(input: CobrarConTokenInput): Promise<Cobrar
     aprobada,
     crudo: evidencia(status, json),
   }
+}
+
+export async function consultarComprasCardnet(input: {
+  customerId: string
+  from: string
+  to: string
+  orderNumber: string
+}): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  const query = new URLSearchParams({
+    CustomerId: input.customerId,
+    From: input.from,
+    To: input.to,
+    OrderNumber: input.orderNumber,
+  })
+  return llamarTokensConRuta('GET', `/Purchase?${query.toString()}`, null)
 }
 
 /**
@@ -322,7 +341,8 @@ let authConfirmada: string | null = null
 async function llamarTokens(
   metodo: 'GET' | 'POST',
   path: string,
-  cuerpo: Record<string, unknown> | null
+  cuerpo: Record<string, unknown> | null,
+  esCobro = false
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   const cfg = getTokensConfig()
   if (!cfg) return { ok: false, status: 0, json: {} }
@@ -341,6 +361,7 @@ async function llamarTokens(
         return r
       }
       // Host muerto o ruta inexistente: no tiene sentido probar más formatos aquí.
+      if (r.status === 0 && esCobro) return r
       if (r.status === 0 || r.status === 404) break
       if (!mejor) mejor = r
       // Otro error que no es de auth (400, 500): el formato no es el problema.
@@ -388,7 +409,7 @@ async function llamarTokensConRuta(
 ): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
   let ultima: { ok: boolean; status: number; json: Record<string, unknown> } | null = null
   for (const variante of variantesDeRuta(path)) {
-    const r = await llamarTokens(metodo, variante, cuerpo)
+    const r = await llamarTokens(metodo, variante, cuerpo, esCobro)
     if (r.ok || !reintentarConOtraGrafia(r.status, esCobro)) return r
     ultima = r
   }
@@ -785,8 +806,11 @@ export async function borrarPerfilCardnet(input: {
   customerId: string
   paymentProfileId: string
 }): Promise<boolean> {
+  const paymentProfileId = Number(input.paymentProfileId)
+  if (!Number.isSafeInteger(paymentProfileId) || paymentProfileId <= 0) return false
+
   const { ok } = await postTokens(`/Customer/${encodeURIComponent(input.customerId)}/PaymentProfileDelete`, {
-    PaymentProfileId: input.paymentProfileId,
+    PaymentProfileId: paymentProfileId,
   })
   return ok
 }

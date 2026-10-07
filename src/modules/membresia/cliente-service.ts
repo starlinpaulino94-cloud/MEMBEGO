@@ -9,6 +9,7 @@ import { categoriaDeEmpresa, vehiculosDe } from '@/modules/elegibilidad'
 import { requisitosParaAccion, decidirPlan } from '@/modules/elegibilidad/decidir'
 import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
 import { getPlanesPublic } from '@/modules/marketplace/cached'
+import { arbitrarComprobanteContraCapturaCardnet } from '@/modules/pagos/cardnetClienteSesionStore'
 import type { SessionUser } from '@/types'
 
 export type MembresiaClienteResult =
@@ -299,9 +300,23 @@ export async function registrarComprobanteMembresiaCliente(
     if (!metodoValido) return { error: 'La cuenta de pago seleccionada ya no está disponible.' }
   }
 
-  await conEmpresa(membership.cliente.companyId, (tx) =>
-    tx.membership.update({
-      where: { id: membership.id },
+  const registrado = await conEmpresa(membership.cliente.companyId, async (tx) => {
+    const sinCapturaActiva = await arbitrarComprobanteContraCapturaCardnet(tx, {
+      companyId: membership.companyId,
+      clienteId: membership.clienteId,
+      membershipId: membership.id,
+      authSubject: user.supabaseId,
+    })
+    if (!sinCapturaActiva) return false
+
+    const updated = await tx.membership.updateMany({
+      where: {
+        id: membership.id,
+        clienteId: membership.clienteId,
+        estado: membership.estado,
+        planIdSolicitado: membership.planIdSolicitado,
+        comprobanteUrl: membership.comprobanteUrl,
+      },
       data: {
         comprobanteUrl: input.path,
         comprobanteNota: input.nota?.trim() || null,
@@ -309,7 +324,11 @@ export async function registrarComprobanteMembresiaCliente(
         ...(esCambioDePlan ? {} : { estado: 'PENDIENTE_PAGO', rechazadoReason: null }),
       },
     })
-  )
+    return updated.count === 1
+  })
+  if (!registrado) {
+    return { error: 'Ya hay un pago con tarjeta en proceso o la membresía cambió. Actualiza la pantalla e intenta de nuevo.' }
+  }
 
   await notificarAdmins(membership.cliente.companyId, {
     tipo: 'NUEVO_COMPROBANTE',

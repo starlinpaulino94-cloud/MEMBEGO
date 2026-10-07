@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { conEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
+import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import {
   ComposicionInput,
   HeroSlide,
@@ -22,6 +23,9 @@ async function contexto() {
   if (!user) return null
   const companyId = await resolveCompanyId(user)
   if (!companyId) return null
+  // Fase 0: 'personalizacion' no cuelga de ninguna capacidad (comparte sección
+  // con la marca), así que el editor de inicio se cierra aquí, en la acción.
+  if (!(await tieneCapacidad(companyId, 'HOME_BUILDER'))) return null
   return { user, companyId }
 }
 

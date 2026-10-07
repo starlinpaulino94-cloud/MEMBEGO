@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
-import { requireRole } from '@/lib/auth/guards'
+import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
-import { ADMIN_ROLES } from '@/types'
+import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { COSTO_RULETA } from '@/lib/gamificacion'
 import { getGamificacion } from '@/modules/engagement/gamificacion'
 import { otorgarBeneficioDirecto } from '@/modules/growth/rewards'
@@ -28,6 +28,11 @@ export async function girarRuleta(): Promise<GiroResultado> {
   const companyId = user?.metadata.companyId
   if (!user || user.metadata.role !== 'CLIENTE' || !clienteId || !companyId) {
     return { ok: false, error: 'No autorizado.' }
+  }
+  // Fase 0: la barrera de verdad es esta, no la pantalla. Sin la capacidad
+  // nadie gira, aunque llame a la acción directamente.
+  if (!(await tieneCapacidad(companyId, 'RULETA'))) {
+    return { ok: false, error: 'La ruleta no está disponible.' }
   }
 
   const game = await getGamificacion(clienteId, companyId)
@@ -157,7 +162,8 @@ export async function crearRuletaPremio(
   _prev: RuletaPremioState,
   fd: FormData
 ): Promise<RuletaPremioState> {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('gamificacion')
+  if (!user) return { error: 'No autorizado.' }
   const companyId = await resolveCompanyId(user, fd)
   if (!companyId) return { error: 'Empresa requerida.' }
 
@@ -192,7 +198,8 @@ export async function actualizarRuletaPremio(
   _prev: RuletaPremioState,
   fd: FormData
 ): Promise<RuletaPremioState> {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('gamificacion')
+  if (!user) return { error: 'No autorizado.' }
   const companyId = await resolveCompanyId(user, fd)
   if (!companyId) return { error: 'Empresa requerida.' }
   const id = s(fd, 'id')
@@ -236,7 +243,8 @@ export async function cambiarActivoRuletaPremio(
   id: string,
   activo: boolean
 ): Promise<{ ok: boolean }> {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('gamificacion')
+  if (!user) return { ok: false }
   const companyId = await resolveCompanyId(user)
   if (!companyId) return { ok: false }
   const res = await conEmpresa(companyId, (tx) =>
@@ -247,7 +255,8 @@ export async function cambiarActivoRuletaPremio(
 }
 
 export async function eliminarRuletaPremio(id: string): Promise<{ ok: boolean }> {
-  const user = await requireRole(ADMIN_ROLES)
+  const user = await requireSection('gamificacion')
+  if (!user) return { ok: false }
   const companyId = await resolveCompanyId(user)
   if (!companyId) return { ok: false }
   const res = await conEmpresa(companyId, (tx) =>

@@ -26,6 +26,7 @@ import { uniqueFileName } from '@/lib/storage'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
 import { verticalValido } from '@/modules/empresas/verticales'
+import { CAPACIDADES_OVERRIDE_TENANT_NUEVO } from '@/modules/capacidades/catalogo'
 import {
   validarDatosSolicitud,
   horarioComoTexto,
@@ -327,6 +328,9 @@ export async function crearEmpresaDesdeSolicitud(
           isActive: true,
           // Sin publicar: primero se configuran planes y promociones.
           isPublished: false,
+          // Fase 0 (Plan Maestro §8.5–§8.6): tenant nuevo nace sin CRM ni
+          // mensajería avanzada; las empresas existentes no se tocan.
+          capacidades: { overrides: CAPACIDADES_OVERRIDE_TENANT_NUEVO },
         },
       })
     )

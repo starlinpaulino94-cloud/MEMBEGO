@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { conEmpresa } from '@/lib/tenant'
+import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { getEngagementConfig } from '@/modules/engagement/config'
 import { getCategoriesPublic } from '@/modules/marketplace/cached'
 import { getHomeBorrador, getHomePublicada } from '@/modules/home/composicion'
@@ -30,10 +31,12 @@ export default async function AdminPersonalizacionPage() {
     return <SinEmpresaActiva seccion="la personalización de tu experiencia" />
   }
 
+  const homeBuilderActivo = await tieneCapacidad(companyId, 'HOME_BUILDER')
+
   const [config, trabajo, publicada, datos, categorias] = await Promise.all([
     getEngagementConfig(companyId),
-    getHomeBorrador(companyId),
-    getHomePublicada(companyId),
+    homeBuilderActivo ? getHomeBorrador(companyId) : Promise.resolve(null),
+    homeBuilderActivo ? getHomePublicada(companyId) : Promise.resolve(null),
     conEmpresa(companyId, (tx) =>
       Promise.all([
         tx.company.findUnique({
@@ -112,34 +115,38 @@ export default async function AdminPersonalizacionPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title="Editor de inicio"
-        description="Cómo se ve tu negocio en la app del cliente: bloques, banners, segmentación y publicación."
-      />
-      <EditorInicio
-        companyId={companyId}
-        companyName={empresa?.name ?? 'Tu empresa'}
-        territorioSugerido={empresa?.ciudad ?? ''}
-        trabajo={borrador}
-        publicada={
-          publicada
-            ? {
-                id: publicada.id,
-                updatedAt: publicada.updatedAt.toISOString(),
-                territorio: publicada.territorio,
-              }
-            : null
-        }
-        media={media}
-        previewCategorias={categorias.map((c) => c.name)}
-        promociones={promos.map((p) => ({ id: p.id, titulo: p.titulo }))}
-        planes={planes.map((p) => ({ id: p.id, titulo: p.nombre }))}
-        excursiones={excursiones.map((e) => ({ id: e.id, titulo: e.nombre }))}
-        previewEmpresas={[{ name: empresa?.name ?? 'Tu empresa' }]}
-        previewPlanes={planes
-          .slice(0, 2)
-          .map((p) => ({ nombre: p.nombre, precio: Number(p.precio) }))}
-      />
+      {homeBuilderActivo && (
+        <>
+          <PageHeader
+            title="Editor de inicio"
+            description="Cómo se ve tu negocio en la app del cliente: bloques, banners, segmentación y publicación."
+          />
+          <EditorInicio
+            companyId={companyId}
+            companyName={empresa?.name ?? 'Tu empresa'}
+            territorioSugerido={empresa?.ciudad ?? ''}
+            trabajo={borrador}
+            publicada={
+              publicada
+                ? {
+                    id: publicada.id,
+                    updatedAt: publicada.updatedAt.toISOString(),
+                    territorio: publicada.territorio,
+                  }
+                : null
+            }
+            media={media}
+            previewCategorias={categorias.map((c) => c.name)}
+            promociones={promos.map((p) => ({ id: p.id, titulo: p.titulo }))}
+            planes={planes.map((p) => ({ id: p.id, titulo: p.nombre }))}
+            excursiones={excursiones.map((e) => ({ id: e.id, titulo: e.nombre }))}
+            previewEmpresas={[{ name: empresa?.name ?? 'Tu empresa' }]}
+            previewPlanes={planes
+              .slice(0, 2)
+              .map((p) => ({ nombre: p.nombre, precio: Number(p.precio) }))}
+          />
+        </>
+      )}
 
       <div className="space-y-4">
         <PageHeader

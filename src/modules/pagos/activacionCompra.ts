@@ -22,6 +22,7 @@ import {
 import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 
 type Meta = { ipAddress: string | null; userAgent: string | null }
+type FulfillmentClaim = { intentoId: string; claimAt: Date }
 
 type ActivarCompraResult =
   | { ok: true; compraId: string; clienteId: string; companyId: string; promoTitulo: string }
@@ -34,7 +35,7 @@ export async function activarCompraPromocion(
   compraId: string,
   userId: string | null,
   meta: Meta,
-  opts: { motivo?: string } = {}
+  opts: { motivo?: string; fulfillmentClaim?: FulfillmentClaim } = {}
 ): Promise<ActivarCompraResult> {
   let compra = await sinEmpresa(
     'pagos: localizar compra de promoción por id (su empresa se deriva de la compra)',
@@ -82,6 +83,24 @@ export async function activarCompraPromocion(
 
   try {
     await conEmpresa(cid, async (tx) => {
+      if (opts.fulfillmentClaim) {
+        const claim = await tx.pagoIntento.updateMany({
+          where: {
+            id: opts.fulfillmentClaim.intentoId,
+            companyId: cid,
+            estado: 'APROBADO',
+            fulfillmentEstado: 'PROCESANDO',
+            updatedAt: opts.fulfillmentClaim.claimAt,
+          },
+          data: {
+            fulfillmentEstado: 'COMPLETADA',
+            fulfillmentAt: now,
+            fulfillmentError: null,
+          },
+        })
+        if (claim.count !== 1) throw new Error('FULFILLMENT_CLAIM_LOST')
+      }
+
       // Cupo atómico: `canjes` cuenta entregas contra `maxCanjes`. La consulta
       // vivía aquí; se mudó a `promociones/cupo.ts` cuando las recompensas del
       // Growth Engine pasaron a descontar también. Dos copias de un guard de
@@ -146,6 +165,9 @@ export async function activarCompraPromocion(
     }
     if (e instanceof Error && e.message === 'ESTADO_CAMBIADO') {
       return { ok: false, error: 'La compra cambió de estado; recarga e intenta de nuevo.' }
+    }
+    if (e instanceof Error && e.message === 'FULFILLMENT_CLAIM_LOST') {
+      return { ok: false, error: 'FULFILLMENT_CLAIM_LOST' }
     }
     console.error('[pagos] activarCompraPromocion:', e)
     return { ok: false, error: 'No se pudo activar la compra.' }
