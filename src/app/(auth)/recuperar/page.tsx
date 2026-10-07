@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { solicitarRecuperacion } from '@/modules/auth/recuperarActions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,38 +26,21 @@ export default function RecuperarPage() {
     setError(null)
     setLoading(true)
 
-    const supabase = createClient()
-    const redirectTo =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}/actualizar-password`
-        : undefined
-
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-      email,
-      { redirectTo }
-    )
-
-    setLoading(false)
-
-    if (resetError) {
-      // El error real queda en la consola para diagnóstico; al usuario se le
-      // distingue el caso más común (límite de reintentos) del fallo de envío.
-      const codigo = (resetError as { code?: string }).code
-      console.error(
-        '[recuperar] resetPasswordForEmail:',
-        JSON.stringify({ status: resetError.status, code: codigo, name: resetError.name, message: resetError.message })
-      )
-      const msg = typeof resetError.message === 'string' ? resetError.message : ''
-      if (resetError.status === 429 || /security purposes|rate limit/i.test(msg)) {
-        setError('Por seguridad solo se puede pedir un correo por minuto. Espera 60 segundos y vuelve a intentar.')
-      } else {
-        const detalle = [resetError.status, codigo, msg].filter(Boolean).join(' · ')
-        setError(`No pudimos enviar el correo${detalle ? ` (${detalle})` : ''}. Intenta de nuevo más tarde.`)
+    // La petición a Supabase la hace el servidor (ver recuperarActions.ts): el
+    // navegador solo necesita llegar al dominio de la app, no a supabase.co.
+    try {
+      const resultado = await solicitarRecuperacion(email)
+      if (!resultado.ok) {
+        setError(resultado.error ?? 'No pudimos enviar el correo. Intenta de nuevo.')
+        return
       }
-      return
+      setSuccess(true)
+    } catch {
+      // La propia llamada a la app falló: sin conexión o red inestable.
+      setError('No pudimos conectar. Revisa tu conexión a internet e intenta de nuevo.')
+    } finally {
+      setLoading(false)
     }
-
-    setSuccess(true)
   }
 
   return (

@@ -77,10 +77,22 @@ export default function ActualizarPasswordPage() {
     setLoading(false)
 
     if (updateError) {
-      setError(
-        updateError.message ||
-          'No se pudo actualizar la contraseña. Solicita un nuevo enlace.'
+      // Nunca se muestra el mensaje crudo del proveedor: un fallo de red trae
+      // "Failed to fetch (<proyecto>.supabase.co)" y el resto viene en inglés.
+      const codigo = (updateError as { code?: string }).code
+      console.error(
+        '[actualizar-password] updateUser:',
+        JSON.stringify({ status: updateError.status, code: codigo, message: updateError.message })
       )
+      if (!updateError.status || updateError.status >= 500) {
+        setError('No pudimos conectar. Revisa tu conexión a internet e intenta de nuevo.')
+      } else if (codigo === 'same_password') {
+        setError('La nueva contraseña debe ser distinta a la anterior.')
+      } else if (codigo === 'weak_password') {
+        setError('Esa contraseña es demasiado fácil de adivinar. Elige otra más segura.')
+      } else {
+        setError('No se pudo actualizar la contraseña. Solicita un nuevo enlace.')
+      }
       return
     }
 
