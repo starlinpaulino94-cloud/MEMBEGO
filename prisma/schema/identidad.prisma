@@ -365,6 +365,12 @@ enum AuditAccion {
   BILLING_CONFIG_CHANGED
   BILLING_ENTRY_RECORDED
   BILLING_STATUS_CHANGED
+  DEAL_CREATED
+  DEAL_UPDATED
+  DEAL_STATUS_CHANGED
+  DEAL_CLAIMED
+  DEAL_REDEEMED
+  DEAL_CLAIM_CLOSED
   SUPPLY_V2_ORDER_CREATED
   SUPPLY_V2_ORDER_RESERVED
   SUPPLY_V2_ORDER_PAYMENT_SUBMITTED
@@ -926,6 +932,8 @@ model Company {
   merchantCommissions    Commission[]
   merchantLedgerEntries  MerchantLedgerEntry[]
   merchantStatements     MerchantStatement[]
+  deals                  Deal[]
+  dealClaims             DealClaim[]
   catalogCategories      CatalogCategory[]
   catalogItemCategories  CatalogItemCategory[]
   catalogItemImages      CatalogItemImage[]

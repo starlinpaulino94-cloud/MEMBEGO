@@ -97,6 +97,28 @@ export interface ComisionCalculada {
   /** Solo en PERCENTAGE. */
   rate: Decimal | null
   amount: Decimal
+  /** Si es la cuota de una oferta con presupuesto (Fase 5): el id de la oferta. */
+  dealId?: string | null
+}
+
+/**
+ * La CUOTA de una oferta con presupuesto: lo que la oferta fijó por canje al crearse. Siempre
+ * CPA, sea cual sea el modelo de cobro de la empresa, y se cobra aunque la base del pedido sea
+ * cero (una oferta gratis también paga su cuota). `dealId` es el id de la oferta, un texto
+ * opaco: Merchant Billing no conoce las ofertas.
+ */
+export interface CuotaDeOferta {
+  dealId: string
+  amount: Monto
+}
+
+export function calcularCuotaDeOferta(pedido: Pick<PedidoParaComision, 'commissionableBase'>, cuota: CuotaDeOferta, feeModel: MerchantFeeModel): ComisionCalculada {
+  if (typeof cuota.dealId !== 'string' || cuota.dealId.trim() === '') throw new Error('La cuota de una oferta necesita el id de la oferta.')
+  const base = redondear2(decimal(pedido.commissionableBase))
+  if (!base.isFinite() || base.isNegative()) throw new Error('La base comisionable no puede ser negativa.')
+  const amount = redondear2(decimal(cuota.amount))
+  if (!amount.isFinite() || !amount.greaterThan(0)) throw new Error('La cuota de una oferta tiene que ser mayor que cero.')
+  return { type: 'CPA_FIXED', feeModel, baseAmount: base, rate: null, amount, dealId: cuota.dealId }
 }
 
 /**

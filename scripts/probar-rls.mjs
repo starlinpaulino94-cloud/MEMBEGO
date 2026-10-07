@@ -193,6 +193,11 @@ function limpiar() {
     // El ledger de inventario no se borra (lo prohíbe un disparador): para limpiar
     // lo sembrado se desactivan los disparadores ordinarios en ESTA transacción.
     sql(`begin; set local session_replication_role = replica;
+         delete from deal_claims where id in ('${A}_dc', '${B}_dc');
+         delete from deals where id in ('${A}_dl', '${B}_dl');
+         delete from order_attributions where id in ('${A}_doa', '${B}_doa');
+         delete from membego_order_lines where id in ('${A}_dol', '${B}_dol');
+         delete from membego_orders where id in ('${A}_do', '${B}_do');
          delete from merchant_statements where id in ('${A}_ms', '${B}_ms');
          delete from merchant_ledger_entries where id in ('${A}_ml', '${B}_ml');
          delete from merchant_billing_configs where id in ('${A}_mc', '${B}_mc');
@@ -341,6 +346,29 @@ try {
     insert into merchant_statements (id, "companyId", period, "periodStart", "periodEnd", "billingCycle", "openingBalance", "totalOrders", "totalGmv", "totalCommissions", reversals, adjustments, credits, payments, "closingBalance", "amountDue", "entryCount") values
       ('${A}_ms', '${A}', '2030-01-01/2030-02-01', '2030-01-01', '2030-02-01', 'MONTHLY', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
       ('${B}_ms', '${B}', '2030-01-01/2030-02-01', '2030-01-01', '2030-02-01', 'MONTHLY', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+    -- COMMERCE CORE · ofertas con presupuesto: una oferta con UN reclamo por empresa. En un solo bloque
+    -- (los contadores de la oferta tienen que cuadrar con sus reclamos al confirmar): la oferta nace en
+    -- borrador y sin contadores; el pedido del reclamo lleva la atribución de ESA oferta.
+    begin;
+    insert into deals (id, "companyId", "catalogVariantId", title, "discountType", "discountValue", "startsAt", "maxClaims", "feePerRedemption", "budgetTotal", "updatedAt") values
+      ('${A}_dl', '${A}', '${A}_cv', 'Oferta de A', 'PERCENT', 10, now(), 5, 100, 1000, now()),
+      ('${B}_dl', '${B}', '${B}_cv', 'Oferta de B', 'PERCENT', 10, now(), 5, 100, 1000, now());
+    insert into membego_orders (id, "companyId", code, "locationId", "customerId", status, origin, subtotal, "commissionableBase", total, "updatedAt") values
+      ('${A}_do', '${A}', 'MBG-PED-2030-900002', '${A}_su', '${A}_k', 'CREATED', 'MARKETPLACE', 100, 100, 100, now()),
+      ('${B}_do', '${B}', 'MBG-PED-2030-900002', '${B}_su', '${B}_k', 'CREATED', 'MARKETPLACE', 100, 100, 100, now());
+    insert into membego_order_lines (id, "companyId", "orderId", "catalogVariantId", description, sku, quantity, "unitPrice", "lineTotal") values
+      ('${A}_dol', '${A}', '${A}_do', '${A}_cv', 'Producto de A', 'DEAL-A', 1, 100, 100),
+      ('${B}_dol', '${B}', '${B}_do', '${B}_cv', 'Producto de B', 'DEAL-B', 1, 100, 100);
+    insert into order_attributions (id, "companyId", "orderId", channel, "promotionId") values
+      ('${A}_doa', '${A}', '${A}_do', 'PROMOTION_CLAIM', '${A}_dl'),
+      ('${B}_doa', '${B}', '${B}_do', 'PROMOTION_CLAIM', '${B}_dl');
+    update membego_orders set status = 'AWAITING_MERCHANT' where id in ('${A}_do', '${B}_do');
+    insert into deal_claims (id, "companyId", "dealId", "customerId", "orderId", fee, savings, "expiresAt", "updatedAt") values
+      ('${A}_dc', '${A}', '${A}_dl', '${A}_k', '${A}_do', 100, 10, now() + interval '7 days', now()),
+      ('${B}_dc', '${B}', '${B}_dl', '${B}_k', '${B}_do', 100, 10, now() + interval '7 days', now());
+    update deals set status = 'ACTIVE', "publishedAt" = now(), "claimsActive" = 1, "budgetReserved" = 100 where id in ('${A}_dl', '${B}_dl');
+    commit;
 
     -- MEMBEGO SUPPLY · el caso cruzado, que es el que importa.
     --
@@ -687,7 +715,8 @@ try {
     )
   )
   const tocadosPedidos = comoInquilino(A, `with u as (update membego_orders set notes='x' returning 1) select count(*) from u;`)
-  comprobar('Pedidos: un `update` sin `where` solo alcanza los pedidos de A', tocadosPedidos === '1', `filas afectadas: ${tocadosPedidos} (debería ser 1)`)
+  // A tiene DOS pedidos sembrados (el normal y el de su oferta); B también tiene dos y no se toca.
+  comprobar('Pedidos: un `update` sin `where` solo alcanza los pedidos de A', tocadosPedidos === '2', `filas afectadas: ${tocadosPedidos} (debería ser 2: los de A)`)
   if (hayDisparador('membego_order_lines_sin_cambios')) {
     comprobar(
       'Pedidos: ni A, dueña del pedido, puede editar una línea',
@@ -730,6 +759,41 @@ try {
     )
   } else {
     omitir('Billing: ni A puede editar ni borrar un asiento del libro', 'la base no trae los disparadores de las migraciones (db push)')
+  }
+
+  // ── 14. Commerce Core · Ofertas con presupuesto ───────────────────────────
+  //
+  // `deals` y `deal_claims` llevan `companyId` propio y entran por Nivel 0 sin una
+  // política escrita a mano. Lo que importa: la oferta de una empresa y quién la
+  // reclamó no los ve ni los toca otra, y un reclamo no se borra ni con el contexto
+  // correcto (su pedido y su cuota ya cuentan).
+  const ofertasVistas = veo('deals', `${A}_dl`, `${B}_dl`)
+  comprobar('Ofertas: con el contexto en A no aparece la oferta de B', ofertasVistas.length === 1 && ofertasVistas[0] === `${A}_dl`, `devolvió: ${JSON.stringify(ofertasVistas)}`)
+  const reclamosVistos = veo('deal_claims', `${A}_dc`, `${B}_dc`)
+  comprobar('Ofertas: los reclamos de B tampoco se ven', reclamosVistos.length === 1 && reclamosVistos[0] === `${A}_dc`, `devolvió: ${JSON.stringify(reclamosVistos)}`)
+  comprobar(
+    'Ofertas: A no puede insertar una oferta marcada como de B',
+    fallaComoInquilino(
+      A,
+      `insert into deals (id,"companyId","catalogVariantId",title,"discountType","discountValue","startsAt","maxClaims","feePerRedemption","budgetTotal","updatedAt")
+       values ('${A}_intruso_dl','${B}','${B}_cv','intruso','PERCENT',10,now(),5,100,1000,now());`
+    )
+  )
+  comprobar(
+    'Ofertas: A no puede ofrecer una variante del catálogo de B — la FK compuesta lo impide',
+    fallaComoInquilino(
+      A,
+      `insert into deals (id,"companyId","catalogVariantId",title,"discountType","discountValue","startsAt","maxClaims","feePerRedemption","budgetTotal","updatedAt")
+       values ('${A}_cruce_dl','${A}','${B}_cv','cruce','PERCENT',10,now(),5,100,1000,now());`
+    )
+  )
+  const tocadasOfertas = comoInquilino(A, `with u as (update deals set "statusReason"='x' returning 1) select count(*) from u;`)
+  comprobar('Ofertas: un `update` sin `where` solo alcanza las ofertas de A', tocadasOfertas === '1', `filas afectadas: ${tocadasOfertas} (debería ser 1)`)
+  if (hayDisparador('deal_claims_reglas')) {
+    comprobar('Ofertas: ni A, dueña del reclamo, puede borrarlo', fallaComoInquilino(A, `delete from deal_claims where id = '${A}_dc';`))
+    comprobar('Ofertas: ni A puede cambiar la cuota de un reclamo', fallaComoInquilino(A, `update deal_claims set fee = 1 where id = '${A}_dc';`))
+  } else {
+    omitir('Ofertas: ni A puede borrar ni cambiar la cuota de un reclamo', 'la base no trae los disparadores de las migraciones (db push)')
   }
 } catch (e) {
   fallos++

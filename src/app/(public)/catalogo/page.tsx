@@ -4,6 +4,8 @@ import { Package, Search } from 'lucide-react'
 import { getCatalogoPublicoGlobal } from '@/modules/marketplace/cached'
 import { normalizarBusqueda, normalizarPagina } from '@/modules/catalog/publico-nucleo'
 import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPublica'
+import { TarjetaOferta } from '@/components/deals/TarjetaOferta'
+import { ofertasPublicas } from '@/modules/deals/publico'
 import { SITE_NAME } from '@/lib/site'
 
 export const metadata: Metadata = {
@@ -39,7 +41,7 @@ export default async function CatalogoPublicoPage({
   // Sin filtros, las ofertas de Membego van destacadas arriba y la lista general es de los negocios;
   // con búsqueda o con un origen elegido, se muestra lo que se pidió, sin duplicar.
   const conDestacadas = origen === null && !q && pagina === 0
-  const [destacadas, { items, hayMas }] = await Promise.all([
+  const [destacadas, { items, hayMas }, ofertas] = await Promise.all([
     conDestacadas ? getCatalogoPublicoGlobal({ origen: 'SUPPLY', limite: DESTACADAS }) : Promise.resolve({ items: [], hayMas: false }),
     getCatalogoPublicoGlobal({
       q,
@@ -47,6 +49,8 @@ export default async function CatalogoPublicoPage({
       limite: POR_PAGINA,
       ...(origen === 'supply' ? { origen: 'SUPPLY' as const } : origen === 'empresas' || (origen === null && !q) ? { origen: 'EMPRESAS' as const } : {}),
     }),
+    // Las ofertas con descuento van arriba, solo en la portada del catálogo (sin búsqueda ni filtros).
+    conDestacadas ? ofertasPublicas({ limite: 3 }) : Promise.resolve([]),
   ])
 
   const enlace = (p: number, o: Origen | null = origen) => {
@@ -93,6 +97,24 @@ export default async function CatalogoPublicoPage({
           </Link>
         ))}
       </nav>
+
+      {ofertas.length > 0 && (
+        <section className="mt-8" aria-labelledby="ofertas-descuento">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 id="ofertas-descuento" className="text-h3 text-foreground">
+              Ofertas con descuento
+            </h2>
+            <Link href="/ofertas" className="text-sm underline">
+              Ver todas
+            </Link>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {ofertas.map((o) => (
+              <TarjetaOferta key={o.id} oferta={o} retorno="/catalogo" />
+            ))}
+          </div>
+        </section>
+      )}
 
       {destacadas.items.length > 0 && (
         <section className="mt-8" aria-labelledby="ofertas-membego">

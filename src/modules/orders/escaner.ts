@@ -25,6 +25,8 @@ export interface PedidoQrLookup {
   confirmado: boolean
   /** Hay un ajuste de monto de la empresa (para que el empleado lo tenga presente al cobrar). */
   ajuste: string | null
+  /** Título de la oferta con descuento de la que nació este pedido (su cupón), si es el caso. */
+  oferta: string | null
   puedeCerrar: boolean
   mensaje?: string
 }
@@ -38,6 +40,7 @@ export async function buscarPedidoPorQr(token: string, ahora = new Date()): Prom
     tx.membegoOrder.findUnique({
       where: { qrToken: token },
       select: {
+        id: true,
         companyId: true,
         code: true,
         status: true,
@@ -54,12 +57,18 @@ export async function buscarPedidoPorQr(token: string, ahora = new Date()): Prom
     })
   )
   if (!p) return null
+  // Si el pedido es el cupón de una oferta: el empleado lo ve, y un cupón vencido no se puede canjear.
+  const reclamo = await sinEmpresa('escáner: ¿el pedido del QR es el cupón de una oferta?', (tx) =>
+    tx.dealClaim.findFirst({ where: { orderId: p.id, companyId: p.companyId }, select: { status: true, expiresAt: true, deal: { select: { title: true } } } })
+  )
 
   let puedeCerrar = false
   let mensaje: string | undefined
   if (p.status === 'READY') {
     if (qrDePedidoVencido(p.qrExpiresAt, ahora)) mensaje = 'Este código QR venció. El cliente puede generar uno nuevo desde su pedido.'
-    else puedeCerrar = true
+    else if (reclamo && reclamo.status === 'CLAIMED' && reclamo.expiresAt.getTime() <= ahora.getTime()) {
+      mensaje = `El cupón de esta oferta venció el ${reclamo.expiresAt.toLocaleString('es-DO', { dateStyle: 'medium', timeStyle: 'short' })}.`
+    } else puedeCerrar = true
   } else if (p.status === 'COMPLETED' || p.status === 'REFUNDED') {
     mensaje = `Este pedido ya se canjeó${p.completedAt ? ` el ${p.completedAt.toLocaleString('es-DO', { dateStyle: 'medium', timeStyle: 'short' })}` : ''}.`
   } else {
@@ -79,6 +88,7 @@ export async function buscarPedidoPorQr(token: string, ahora = new Date()): Prom
       lineas: p.lines,
       confirmado: !!p.confirmation && p.confirmation.confirmedTotal.equals(p.total),
       ajuste: p.adjustment.isZero() ? null : p.adjustment.toFixed(2),
+      oferta: reclamo ? reclamo.deal.title : null,
       puedeCerrar,
       mensaje,
     },

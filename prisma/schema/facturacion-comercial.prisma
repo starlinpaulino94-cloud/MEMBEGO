@@ -120,6 +120,10 @@ model Commission {
   baseAmount        Decimal                  @db.Decimal(12, 2)
   /// Solo en PERCENTAGE.
   rate              Decimal?                 @db.Decimal(5, 2)
+  /// Si la comisión es la CUOTA de una oferta con presupuesto (Fase 5): el id de la
+  /// oferta (texto opaco, sin FK: Merchant Billing no depende de las ofertas). Una
+  /// cuota de oferta es siempre CPA, sea cual sea el modelo de cobro de la empresa.
+  dealId            String?
   amount            Decimal                  @db.Decimal(12, 2)
   currency          String                   @default("DOP")
 
@@ -141,6 +145,7 @@ model Commission {
   @@unique([id, companyId])
   @@index([companyId, createdAt])
   @@index([companyId, status])
+  @@index([dealId])
   @@map("merchant_commissions")
 }
 

@@ -183,6 +183,11 @@ export const CAPACIDADES = [
   // para todos de serie; solo tiene sentido en empresas con el catálogo
   // unificado (las líneas del pedido son variantes del catálogo).
   'PEDIDOS_MEMBEGO',
+  // Fase 5 — Growth Engine: ofertas con presupuesto (`/admin/deals`, `/ofertas`): un
+  // descuento sobre una variante del catálogo, con tope de gasto, que el cliente
+  // reclama y canjea con el QR de su pedido. Apagada para todos de serie; exige el
+  // catálogo unificado y los pedidos Membego (el reclamo ES un pedido).
+  'DEALS_MARKETPLACE',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -214,6 +219,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   MENSAJERIA: 'Mensajería interna y WhatsApp avanzado',
   CATALOGO_UNIFICADO: 'Catálogo unificado: productos, servicios y variantes',
   PEDIDOS_MEMBEGO: 'Pedidos Membego: pedidos del marketplace con atribución, confirmación y QR',
+  DEALS_MARKETPLACE: 'Ofertas con presupuesto: descuentos que los clientes reclaman y se cobran por canje',
 }
 
 /**
@@ -243,6 +249,8 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   CATALOGO_UNIFICADO: ['catalogo', 'inventario'],
   // «Mi cuenta Membego» (lo que la empresa le debe a la plataforma por esos pedidos) cuelga de la misma capacidad.
   PEDIDOS_MEMBEGO: ['pedidos-membego', 'facturacion-membego'],
+  // Las ofertas con presupuesto (Fase 5): crear, publicar y pausar descuentos con tope de gasto.
+  DEALS_MARKETPLACE: ['deals'],
   // HOME_BUILDER no aparece aquí: comparte la sección 'personalizacion' con
   // las opciones de marca/engagement, que NO se ocultan. Se revisa a mano en
   // el componente de esa página (ver admin/personalizacion/page.tsx).
@@ -273,6 +281,7 @@ export const SECCION_LABEL: Partial<Record<AdminSection, string>> = {
   comunicacion: 'Mensajería y WhatsApp',
   catalogo: 'Catálogo unificado',
   inventario: 'Inventario por sucursal',
+  deals: 'Ofertas con presupuesto',
 }
 
 /** Las secciones del panel que se apagan al desactivar esta capacidad. */

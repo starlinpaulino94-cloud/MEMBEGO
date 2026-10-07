@@ -63,6 +63,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   inventario: 'Inventario',
   'pedidos-membego': 'Pedidos Membego',
   'facturacion-membego': 'Mi cuenta Membego (comisiones y estados de cuenta)',
+  deals: 'Ofertas con presupuesto',
 }
 
 export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[]>> = {
@@ -189,6 +190,12 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'gestionar', label: 'Aceptar pedidos, ajustar el monto, marcarlos listos y registrar el pago' },
     { codigo: 'cancelar', label: 'Cancelar pedidos' },
     { codigo: 'reembolsar', label: 'Reembolsar pedidos completados' },
+  ],
+  deals: [
+    { codigo: 'crear', label: 'Crear y editar ofertas (borrador)' },
+    { codigo: 'publicar', label: 'Publicar, pausar y reanudar ofertas' },
+    { codigo: 'presupuesto', label: 'Ampliar el presupuesto de una oferta' },
+    { codigo: 'archivar', label: 'Archivar ofertas' },
   ],
   excursiones: [
     { codigo: 'catalogo_crear', label: 'Crear excursiones' },

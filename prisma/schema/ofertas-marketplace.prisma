@@ -1,0 +1,164 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMERCE CORE · DEALS CON PRESUPUESTO (Fase 5 del Plan Maestro — Growth Engine)
+//
+// Una OFERTA (`Deal`) es un descuento que una empresa pone sobre UNA variante de su
+// catálogo, con un presupuesto para lo que le cuesta a Membego traerle clientes:
+//
+//   «20 % en el lavado básico · presupuesto RD$ 5,000 · RD$ 100 por canje · 50 clientes»
+//
+//   1. La empresa crea y publica la oferta (`Deal`).
+//   2. El cliente la RECLAMA ("Obtener oferta"): en UNA transacción se reserva su parte
+//      del presupuesto y un cupo, se crea el PEDIDO Membego de la oferta (con su QR y la
+//      atribución `PROMOTION_CLAIM`) y se escribe el reclamo (`DealClaim`).
+//   3. El cliente lo canjea en el negocio: el empleado escanea el QR del pedido (F3), el
+//      pedido se COMPLETA y Merchant Billing cobra la cuota de la oferta (F4) en esa
+//      misma transacción; la parte reservada pasa a GASTADA.
+//   4. Si el presupuesto no alcanza para otro canje, la oferta se pausa sola.
+//
+// El reclamo no tiene tablas de «entitlement» ni «voucher» aparte: el VOUCHER es el QR
+// del pedido y el ENTITLEMENT es el propio pedido (como en F3: «el QR del pedido es el
+// canje»). Una promoción de `promociones` (motor E5) no se toca: las ofertas son otro
+// concepto, con presupuesto y cuota, que cuelga del catálogo unificado.
+//
+// EL PRESUPUESTO ES UN TOPE, NO UN SALDO. Lo declara la empresa para acotar lo que está
+// dispuesta a pagar por canjes; el cobro real sigue siendo el libro de Merchant Billing
+// (la empresa le debe a Membego). No hay billetera prepagada.
+//
+// LA BASE HACE CUMPLIR (migración `20261047_deals`): presupuesto y cupos nunca se pasan,
+// una persona reclama una oferta UNA sola vez (índice único), el reclamo y su pedido se
+// mueven juntos (un canje exige el pedido COMPLETED, un vencimiento o cancelación exige
+// el pedido CANCELLED) y los contadores de la oferta cuadran con sus reclamos al
+// confirmar la transacción.
+//
+// AISLAMIENTO. Las dos tablas llevan `companyId` propio y las FK hacia catálogo, cliente
+// y pedido son COMPUESTAS `(id, companyId)`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum DealStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  /// El presupuesto no alcanza para otro canje. Vuelve a ACTIVE si se libera o se amplía.
+  BUDGET_EXHAUSTED
+  /// Pasó su fecha de fin. Los reclamos ya hechos siguen valiendo hasta su vencimiento.
+  COMPLETED
+  ARCHIVED
+}
+
+enum DealDiscountType {
+  /// `discountValue` = porcentaje (0 < v ≤ 100) sobre el precio de la variante.
+  PERCENT
+  /// `discountValue` = monto que se rebaja del precio.
+  AMOUNT_OFF
+  /// `discountValue` = el precio de la oferta (0 = gratis).
+  FIXED_PRICE
+}
+
+enum DealClaimStatus {
+  CLAIMED
+  REDEEMED
+  /// Venció sin canjearse (lo cierra el sistema).
+  EXPIRED
+  /// La empresa o la persona cancelaron el pedido antes del canje.
+  CANCELLED
+  /// Se canjeó y después el pedido se reembolsó: la cuota se revirtió.
+  REFUNDED
+}
+
+model Deal {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  /// Lo que se ofrece: SIEMPRE una variante del catálogo (nunca el ítem).
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  title       String
+  description String?
+
+  discountType  DealDiscountType
+  discountValue Decimal          @db.Decimal(12, 2)
+  currency      String           @default("DOP")
+
+  status          DealStatus @default(DRAFT)
+  /// Por qué está pausada o terminó (lo ve la empresa).
+  statusReason    String?
+  statusChangedAt DateTime?
+  publishedAt     DateTime?
+
+  startsAt DateTime
+  endsAt   DateTime?
+  /// Cuántos días vale el reclamo para canjearlo (1–60).
+  voucherDays      Int     @default(7)
+  /// Solo para quien nunca ha completado un pedido en esta empresa («primera visita»).
+  newCustomersOnly Boolean @default(false)
+
+  /// Cupos: cuántos reclamos vivos o canjeados admite. `claimsActive` los cuenta.
+  maxClaims    Int
+  claimsActive Int @default(0)
+
+  /// Lo que Membego cobra por cada canje (CPA). Se toma de la tarifa de la cuenta al
+  /// CREAR la oferta y no cambia: la empresa ve de antemano lo que le cuesta.
+  feePerRedemption Decimal @db.Decimal(12, 2)
+  /// Tope que la empresa declara para estas cuotas. `reserved` = lo apartado por
+  /// reclamos vivos; `spent` = lo ya cobrado por canjes. Siempre `spent + reserved ≤ total`.
+  budgetTotal      Decimal @db.Decimal(12, 2)
+  budgetReserved   Decimal @default(0) @db.Decimal(12, 2)
+  budgetSpent      Decimal @default(0) @db.Decimal(12, 2)
+
+  /// Quién la creó (sin FK: un usuario que se borra no reescribe la historia).
+  createdByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  claims DealClaim[]
+
+  @@unique([id, companyId])
+  @@index([companyId, status])
+  @@index([status, startsAt, endsAt])
+  @@index([catalogVariantId])
+  @@map("deals")
+}
+
+/// UN reclamo = UNA persona, UNA oferta, UN pedido. Único por (oferta, cliente): la base
+/// rechaza el segundo reclamo aunque dos clics lleguen a la vez.
+model DealClaim {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  dealId String
+  deal   Deal   @relation(fields: [dealId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  customerId String
+  customer   Cliente @relation(fields: [customerId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// El pedido que es el voucher de este reclamo (su QR es el canje).
+  orderId String       @unique
+  order   MembegoOrder @relation(fields: [orderId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  status DealClaimStatus @default(CLAIMED)
+
+  /// Fotos del momento del reclamo (la oferta no las cambia después).
+  fee     Decimal @db.Decimal(12, 2)
+  /// Cuánto se ahorra la persona.
+  savings Decimal @db.Decimal(12, 2)
+
+  claimedAt  DateTime  @default(now())
+  expiresAt  DateTime
+  redeemedAt DateTime?
+  closedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([dealId, customerId])
+  @@unique([orderId, companyId])
+  @@unique([id, companyId])
+  @@index([companyId, status, expiresAt])
+  @@index([dealId, status])
+  @@index([customerId])
+  @@map("deal_claims")
+}

@@ -5,6 +5,7 @@ import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import type { ContextoAuditoria } from '@/modules/inventory/auditoria'
 import { FacturacionError } from '@/modules/billing/errores'
+import { cerrarReclamoSinCanjeEnTx, liquidarReclamoEnTx, revertirReclamoEnTx } from '@/modules/deals/reclamos'
 import { registrarComisionDePedidoEnTx, revertirComisionDePedidoEnTx } from '@/modules/billing/service'
 import { TTL_MAXIMO_MINUTOS } from '@/modules/inventory/domain'
 import { InventarioError } from '@/modules/inventory/errores'
@@ -228,6 +229,10 @@ export async function crearPedidoEnTx(tx: Tx, companyId: string, e: EntradaPedid
   const hechoConsumado = e.origin === 'SUPPLY' && ctx.actor === 'SISTEMA'
   if (unidas.some((l) => l.precioUnitario !== undefined) && ctx.actor !== 'SISTEMA') {
     fallo('PRECIO_NO_PERMITIDO', 'El precio de un pedido sale del catálogo: no se puede fijar desde aquí.')
+  }
+  // El descuento de una línea lo fija un flujo del servidor que lo verificó (una oferta con presupuesto, el envoltorio de Supply): quien pide nunca lo fija.
+  if (unidas.some((l) => l.descuento !== undefined) && ctx.actor !== 'SISTEMA') {
+    fallo('DESCUENTO_NO_PERMITIDO', 'El descuento de un pedido no se puede fijar desde aquí.')
   }
   const variantes = await tx.catalogVariant.findMany({
     where: { companyId, id: { in: unidas.map((l) => l.varianteId) } },
@@ -577,7 +582,8 @@ async function cobrarComisionDelPedido(
   companyId: string,
   p: Pick<PedidoCompleto, 'id' | 'code' | 'origin' | 'sourceType' | 'commissionableBase' | 'currency'>,
   nivel: MembegoVerificationLevel,
-  ahora: Date
+  ahora: Date,
+  cuotaDeOferta?: { dealId: string; amount: Prisma.Decimal }
 ): Promise<string | null> {
   try {
     const r = await registrarComisionDePedidoEnTx(
@@ -585,7 +591,8 @@ async function cobrarComisionDelPedido(
       companyId,
       { id: p.id, code: p.code, origin: p.origin, sourceType: p.sourceType, commissionableBase: p.commissionableBase, verificationLevel: nivel, currency: p.currency },
       undefined,
-      ahora
+      ahora,
+      cuotaDeOferta
     )
     return r.resultado === 'CREADA' || r.resultado === 'YA_EXISTE' ? r.amount : null
   } catch (e) {
@@ -663,8 +670,6 @@ export async function completarPorQrEnTx(tx: Tx, companyId: string, token: strin
   exigirEstado(p, ['READY'], 'El pedido todavía no está listo para canjear')
   if (qrDePedidoVencido(p.qrExpiresAt, ahora)) fallo('QR_VENCIDO', 'Este código QR venció. El cliente puede generar uno nuevo desde su pedido.')
 
-  for (const l of p.lines) await venderLinea(tx, companyId, p, l, ahora, ctx)
-
   const nivel = nivelDeVerificacion({
     status: 'COMPLETED',
     total: p.total,
@@ -675,7 +680,13 @@ export async function completarPorQrEnTx(tx: Tx, companyId: string, token: strin
     where: { id: p.id },
     data: { status: 'COMPLETED', completedAt: ahora, completedByUserId: ctx.actorId, verificationLevel: nivel },
   })
-  const comision = await cobrarComisionDelPedido(tx, companyId, p, nivel, ahora)
+  // Un pedido que nació de una OFERTA con presupuesto: lo reservado pasa a gastado y el reclamo a
+  // REDEEMED (la base exige que el pedido ya esté COMPLETED). Va ANTES del inventario: el orden de
+  // candados es pedido → oferta → inventario → cuenta de billing (el reclamo toma la oferta antes
+  // de reservar el stock), y así nunca se interbloquean.
+  const reclamo = await liquidarReclamoEnTx(tx, contextoDeAuditoria(ctx), companyId, p.id, ahora)
+  for (const l of p.lines) await venderLinea(tx, companyId, p, l, ahora, ctx)
+  const comision = await cobrarComisionDelPedido(tx, companyId, p, nivel, ahora, reclamo ? { dealId: reclamo.dealId, amount: reclamo.fee } : undefined)
   await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_COMPLETED', p.id, {
     code: p.code,
     por: ctx.actor,
@@ -787,15 +798,18 @@ export async function cancelarPedidoEnTx(
     exigirEstado(p, ESTADOS_CANCELABLES, 'Un pedido cerrado no se cancela; se reembolsa')
   }
 
-  for (const l of p.lines) {
-    if (!l.inventoryReservationId) continue
-    await liberarReservaEnTx(tx, companyId, l.inventoryReservationId, { motivo: `Pedido ${p.code} cancelado`, ahora }, contextoDeInventario(ctx))
-  }
   await tx.membegoOrder.update({
     where: { id: p.id },
     // El QR deja de valer con el pedido.
     data: { status: 'CANCELLED', cancelledAt: ahora, cancelReason: motivo.valor, qrToken: null, qrExpiresAt: null },
   })
+  // Un pedido de una OFERTA libera su cupo y lo reservado (EXPIRED si lo cierra el sistema por
+  // vencimiento). Antes del inventario: pedido → oferta → inventario.
+  await cerrarReclamoSinCanjeEnTx(tx, contextoDeAuditoria(ctx), companyId, p.id, ctx.actor === 'SISTEMA' ? 'EXPIRED' : 'CANCELLED', ahora)
+  for (const l of p.lines) {
+    if (!l.inventoryReservationId) continue
+    await liberarReservaEnTx(tx, companyId, l.inventoryReservationId, { motivo: `Pedido ${p.code} cancelado`, ahora }, contextoDeInventario(ctx))
+  }
   await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_CANCELLED', p.id, { code: p.code, por: ctx.actor, motivo: motivo.valor, desde: p.status })
   return { pedidoId: p.id, status: 'CANCELLED' as const, repetido: false }
 }
@@ -818,6 +832,9 @@ export async function reembolsarPedidoEnTx(
   const motivo = normalizarMotivoPedido(e.motivo)
   if (!motivo.ok) fallo('MOTIVO_INVALIDO', motivo.error)
 
+  await tx.membegoOrder.update({ where: { id: p.id }, data: { status: 'REFUNDED', refundedAt: ahora, refundReason: motivo.valor } })
+  // El cupón de una OFERTA devuelve lo gastado al presupuesto (pedido → oferta → inventario → cuenta).
+  await revertirReclamoEnTx(tx, contextoDeAuditoria(ctx), companyId, p.id, ahora)
   if (e.devolverAlInventario) {
     for (const l of p.lines) {
       if (!l.inventoryReservationId) continue // la variante no controla inventario
@@ -837,7 +854,6 @@ export async function reembolsarPedidoEnTx(
       )
     }
   }
-  await tx.membegoOrder.update({ where: { id: p.id }, data: { status: 'REFUNDED', refundedAt: ahora, refundReason: motivo.valor } })
   // La venta no se sostuvo: la comisión que se cobró por ella se revierte con un asiento contrario.
   const reverso = await revertirComisionDePedidoEnTx(tx, companyId, p.id, undefined, ahora)
   await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_REFUNDED', p.id, {
