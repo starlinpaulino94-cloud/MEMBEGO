@@ -248,7 +248,7 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   // inventario (`trackInventory`).
   CATALOGO_UNIFICADO: ['catalogo', 'inventario'],
   // «Mi cuenta Membego» (lo que la empresa le debe a la plataforma por esos pedidos) cuelga de la misma capacidad.
-  PEDIDOS_MEMBEGO: ['pedidos-membego', 'facturacion-membego'],
+  PEDIDOS_MEMBEGO: ['pedidos-membego', 'facturacion-membego', 'resultados-membego'],
   // Las ofertas con presupuesto (Fase 5): crear, publicar y pausar descuentos con tope de gasto.
   DEALS_MARKETPLACE: ['deals'],
   // HOME_BUILDER no aparece aquí: comparte la sección 'personalizacion' con

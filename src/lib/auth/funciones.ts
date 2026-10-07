@@ -64,6 +64,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   'pedidos-membego': 'Pedidos Membego',
   'facturacion-membego': 'Mi cuenta Membego (comisiones y estados de cuenta)',
   deals: 'Ofertas con presupuesto',
+  'resultados-membego': 'Resultados Membego (lo que la plataforma produce y cuesta)',
 }
 
 export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[]>> = {

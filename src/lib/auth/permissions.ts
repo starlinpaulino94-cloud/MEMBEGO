@@ -136,6 +136,11 @@ export const ADMIN_SECTIONS = [
   // capacidad DEALS_MARKETPLACE. No entra en los roles acotados: fijar un descuento
   // y un tope de gasto compromete dinero de la empresa (la cuota por canje).
   'deals',
+  // Analítica · «Resultados Membego» (`/admin/resultados-membego`, Fase 6): lo que la plataforma le
+  // produce a la empresa (pedidos, ventas, clientes nuevos, ROI de cada oferta) frente a lo que le
+  // cuesta. SOLO LECTURA y cuelga de la capacidad de los pedidos. Fuera de los roles acotados: incluye
+  // lo que la empresa le paga a Membego.
+  'resultados-membego',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).
