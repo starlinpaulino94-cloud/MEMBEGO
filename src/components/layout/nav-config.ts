@@ -23,11 +23,14 @@ import {
   Landmark,
   LayoutDashboard,
   LifeBuoy,
+  Link2,
   Megaphone,
   MessageCircle,
   Newspaper,
   Package,
   PackageSearch,
+  ShoppingBag,
+  Warehouse,
   Palette,
   Plug,
   QrCode,
@@ -121,6 +124,8 @@ export type CapacidadNav =
   | 'CRM'
   | 'PUBLICACIONES'
   | 'MENSAJERIA'
+  | 'CATALOGO_UNIFICADO'
+  | 'PEDIDOS_MEMBEGO'
   | 'POS_CAJA'
   | 'MEMBEGO_SUPPLIER'
 
@@ -364,6 +369,25 @@ const G_OFERTA: NavGroup = {
   label: 'Oferta comercial',
   items: [
     {
+      // Commerce Core · catálogo unificado (Fase 1). Detrás de su capacidad, que
+      // nace apagada: se enciende empresa por empresa.
+      href: '/admin/catalogo',
+      label: 'Catálogo',
+      icon: Package,
+      description: 'Productos y servicios con sus variantes y precios.',
+      keywords: ['catalogo', 'productos', 'servicios', 'variantes', 'precios', 'sku', 'inventario'],
+      capacidad: 'CATALOGO_UNIFICADO',
+    },
+    {
+      // Commerce Core · inventario (Fase 2). Misma capacidad que el catálogo.
+      href: '/admin/inventario',
+      label: 'Inventario',
+      icon: Warehouse,
+      description: 'Existencias por producto y sucursal, movimientos y stock bajo.',
+      keywords: ['inventario', 'stock', 'existencias', 'almacen', 'bodega', 'sucursal', 'transferencia', 'ajuste', 'conteo'],
+      capacidad: 'CATALOGO_UNIFICADO',
+    },
+    {
       href: '/admin/planes',
       label: 'Planes',
       badge: 'planesActivos',
@@ -476,6 +500,16 @@ const G_ATENCION: NavGroup = {
   id: 'operacion-atencion',
   label: 'Atención diaria',
   items: [
+    {
+      // Commerce Core · pedidos Membego (Fase 3). Detrás de su capacidad, que nace
+      // apagada: se enciende empresa por empresa.
+      href: '/admin/pedidos-membego',
+      label: 'Pedidos Membego',
+      icon: ShoppingBag,
+      description: 'Pedidos del marketplace: acéptalos, ajusta el monto y ciérralos con el QR del cliente.',
+      keywords: ['pedidos', 'ordenes', 'marketplace', 'membego', 'qr', 'reembolso', 'cancelar'],
+      capacidad: 'PEDIDOS_MEMBEGO',
+    },
     {
       href: '/admin/scanner',
       label: 'Escanear QR',
@@ -766,14 +800,14 @@ const HUB_EXPERIENCIA: NavGroup = {
 const HUB_CATALOGO: NavGroup = {
   id: 'catalogo',
   label: 'Catálogo',
-  items: deAdmin('/admin/planes', '/admin/ofertas', '/admin/excursiones'),
+  items: deAdmin('/admin/catalogo', '/admin/inventario', '/admin/planes', '/admin/ofertas', '/admin/excursiones'),
 }
 
 const HUB_OPERACIONES: NavGroup = {
   id: 'operaciones',
   label: 'Operaciones',
   items: deAdmin(
-    '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturas',
+    '/admin/pedidos-membego', '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturas',
     '/admin/conciliacion', '/admin/metodos-pago', '/admin/registros', '/admin/actividad'
   ),
 }
@@ -915,6 +949,16 @@ const G_CLI_MIO: NavGroup = {
       icon: Gift,
       description: 'Lo que Membego ya pagó por ti y puedes usar en la red.',
       keywords: ['beneficios', 'membego', 'gratis', 'regalo', 'voucher', 'supply'],
+    },
+    {
+      // Commerce Core · pedidos Membego (Fase 3): lo que la persona pidió a una
+      // empresa. Se oculta mientras ni la empresa recibe pedidos ni la persona
+      // tiene alguno (`navDisponible`); la ruta sigue abierta por URL.
+      href: '/cliente/pedidos',
+      label: 'Mis pedidos',
+      icon: ShoppingBag,
+      description: 'Lo que pediste a las empresas, el monto acordado y el QR para recogerlo.',
+      keywords: ['pedidos', 'ordenes', 'compras', 'qr', 'recoger', 'membego'],
     },
     {
       // Supply 2.0: compras hechas a MEMBEGO (no a una empresa) y los
@@ -1242,6 +1286,13 @@ const G_SA_OPERACION: NavGroup = {
       icon: PackageSearch,
       description: 'Procurement: proveedores, acuerdos, compras y recepciones (nuevo motor, en paralelo).',
       keywords: ['supply', 'supply 2.0', 'procurement', 'proveedores', 'compras', 'recepciones', 'lotes'],
+    },
+    {
+      href: '/superadmin/puente-supply',
+      label: 'Puente Supply → Catálogo',
+      icon: Link2,
+      description: 'Las ofertas de Supply 2.0 en el catálogo y el descubrimiento: empresa de la casa y sincronización.',
+      keywords: ['puente', 'bridge', 'supply', 'catalogo', 'ofertas', 'marketplace', 'sincronizar', 'casa'],
     },
     {
       href: '/superadmin/connect',

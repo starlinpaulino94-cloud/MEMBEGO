@@ -108,6 +108,23 @@ export const ADMIN_SECTIONS = [
   // información de dirección, no de mostrador. Escanear vouchers vive en
   // 'scanner', que sí tiene Supervisión.
   'supply',
+  // Commerce Core · catálogo unificado (`/admin/catalogo`, Fase 1). Detrás de
+  // la capacidad CATALOGO_UNIFICADO. No entra en los roles acotados: cambiar
+  // lo que se vende y a qué precio es decisión de dirección; Supervisión y
+  // Marketing no lo piden.
+  'catalogo',
+  // Commerce Core · inventario con ledger (`/admin/inventario`, Fase 2). Cuelga
+  // de la MISMA capacidad que el catálogo (CATALOGO_UNIFICADO): se activa con
+  // ella para los productos que controlan inventario. Tampoco entra en los
+  // roles acotados: mover existencias —y poder borrar un faltante con un
+  // ajuste— es decisión de dirección, no de mostrador.
+  'inventario',
+  // Commerce Core · pedidos Membego (`/admin/pedidos-membego`, Fase 3). Detrás
+  // de la capacidad PEDIDOS_MEMBEGO. No entra en los roles acotados: aceptar,
+  // ajustar el monto, cancelar o reembolsar un pedido compromete a la empresa
+  // con un cliente y con la comisión que Membego le cobra. (Escanear el QR que
+  // cierra el pedido vive en 'scanner', que sí tiene Supervisión.)
+  'pedidos-membego',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).

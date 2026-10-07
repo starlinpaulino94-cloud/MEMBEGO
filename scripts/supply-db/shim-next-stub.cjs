@@ -10,4 +10,7 @@ module.exports = {
   revalidatePath: () => {},
   revalidateTag: () => {},
   unstable_noStore: () => {},
+  // Sin caché en las pruebas: cada llamada lee la base, así que un caso que
+  // enciende o apaga una capacidad se ve en el siguiente sin esperar un TTL.
+  unstable_cache: (fn) => fn,
 }

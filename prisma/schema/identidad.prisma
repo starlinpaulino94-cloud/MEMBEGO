@@ -338,6 +338,29 @@ enum AuditAccion {
   /// cuánto se cobra —mover un nivel cambia qué vehículos caen en él—, así que
   /// el payload lleva el antes y el después del nivel, no solo «cambió».
   SUPPLY_V2_VEHICLE_CATEGORY_CHANGED
+  /// Commerce Core · catálogo unificado (Fase 1). El payload lleva el antes y el
+  /// después de lo que cambió (precio, estado), no solo «cambió».
+  CATALOG_ITEM_CREATED
+  CATALOG_ITEM_UPDATED
+  CATALOG_ITEM_STATUS_CHANGED
+  CATALOG_VARIANT_CHANGED
+  /// Commerce Core · Fase 2: stock movido a mano (entrada, ajuste, daño, devolución).
+  INVENTORY_STOCK_CHANGED
+  INVENTORY_TRANSFERRED
+  /// El umbral de stock bajo de una variante en una sucursal.
+  INVENTORY_CONFIGURED
+  /// Commerce Core · Fase 2.5: el superadmin designó (o retiró) la empresa de la casa del puente Supply→Catálogo.
+  SUPPLY_BRIDGE_HOUSE_CHANGED
+  /// Commerce Core · Fase 3: pedidos Membego (una acción por transición y por cambio de monto).
+  ORDER_CREATED
+  ORDER_ACCEPTED
+  ORDER_ADJUSTED
+  ORDER_READY
+  ORDER_CONFIRMED
+  ORDER_COMPLETED
+  ORDER_CANCELLED
+  ORDER_REFUNDED
+  ORDER_PAYMENT_RECORDED
   SUPPLY_V2_ORDER_CREATED
   SUPPLY_V2_ORDER_RESERVED
   SUPPLY_V2_ORDER_PAYMENT_SUBMITTED
@@ -764,6 +787,13 @@ model Company {
   /// pública y las métricas de la plataforma.
   esDemo Boolean @default(false)
 
+  /// LA EMPRESA DE LA CASA (Fase 2.5, el puente Supply→Catálogo): a lo sumo UNA
+  /// (índice único parcial en la migración `20261040_supply_bridge`). Las
+  /// ofertas de Supply V2 son de Membego, no de una empresa, y un ítem del
+  /// catálogo necesita dueño: los ítems puente cuelgan de esta. La designa el
+  /// superadmin; no es una empresa cliente ni opera como tal.
+  esCasaMembego Boolean @default(false)
+
   // FASE 2: Marketplace fields
   isPublished           Boolean  @default(true)
   isFeatured            Boolean  @default(false)
@@ -875,6 +905,21 @@ model Company {
   metodosPago            MetodoPago[]
   auditLogs              AuditLog[]
   promociones            Promocion[]
+  // Commerce Core · catálogo unificado (Fase 1). Relaciones inversas.
+  catalogItems           CatalogItem[]
+  catalogVariants        CatalogVariant[]
+  inventoryLevels        InventoryLevel[]
+  inventoryMovements     InventoryMovement[]
+  inventoryReservations  InventoryReservation[]
+  // Commerce Core · Fase 3: pedidos Membego. Relaciones inversas.
+  membegoOrders          MembegoOrder[]
+  membegoOrderLines      MembegoOrderLine[]
+  orderAttributions      OrderAttribution[]
+  customerConfirmations  CustomerConfirmation[]
+  paymentEvidences       PaymentEvidence[]
+  catalogCategories      CatalogCategory[]
+  catalogItemCategories  CatalogItemCategory[]
+  catalogItemImages      CatalogItemImage[]
   referidos              Referido[]
   reglasRecompensa       ReglaRecompensa[]
   whatsappConfig         WhatsAppConfig?
@@ -1060,6 +1105,13 @@ model Sucursal {
   // Slice 8 · sucursales participantes de un programa de fidelización.
   supplyV2ProgramasFidelizacion SupplyV2LoyaltyProgramBranch[] @relation("SupplyV2LoyaltyProgramBranchSucursal")
 
+  // Commerce Core · Fase 2: existencias del catálogo unificado en esta sucursal.
+  inventoryLevels InventoryLevel[]
+  // Commerce Core · Fase 3: pedidos Membego que atiende esta sucursal.
+  membegoOrders   MembegoOrder[]
+
+  /// Destino de la FK compuesta de `inventory_levels` (misma empresa que la variante).
+  @@unique([id, companyId])
   @@index([companyId])
   @@index([companyId, activa, mostrarEnMapa])
   @@index([cityId])

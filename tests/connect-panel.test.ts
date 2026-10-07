@@ -72,9 +72,14 @@ test('panel: no se ofrece NINGUNA escritura de negocio', () => {
   // negocio (config de avisos, editar la propia ficha de un cliente). Un
   // `:write`/`:redeem`/`:publish` aquí sería abrir una escritura de satélite a
   // una clave de empresa, que es lo que la guardia de abajo impide.
+  //
+  // `catalog:manage` (Commerce Core · F1.3) entra con ese criterio y un tope
+  // más: solo ARMA borradores (crear ítems en DRAFT y agregarles variantes
+  // mientras lo sean). No publica, no toca lo que ya está a la venta y no
+  // mueve dinero; lo vigila `tests/catalogo-api.test.ts`.
   assert.deepEqual(
     excepciones.slice().sort(),
-    ['customers:manage', 'webhooks:manage'],
+    ['catalog:manage', 'customers:manage', 'webhooks:manage'],
     'cambió la lista de excepciones'
   )
 

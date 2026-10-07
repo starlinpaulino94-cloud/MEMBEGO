@@ -909,6 +909,11 @@ model SupplyV2Offer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Fase 2.5: el ítem del catálogo unificado que refleja esta oferta (el puente).
+  itemPuente             CatalogItem? @relation("CatalogItemSupplyOffer")
+  /// Fase 3: pedidos Membego atribuidos a esta oferta.
+  atribuciones           OrderAttribution[] @relation("OrderAttributionSupplyOffer")
+
   orderLines             SupplyV2CustomerOrderLine[]
   entitlements           SupplyV2Entitlement[]
   commissionReservations SupplyV2CommissionReservation[]
