@@ -150,7 +150,8 @@ test.describe('Catálogo unificado · panel', () => {
       await pub.goto(`/empresas/${con.slug}`)
       return pub.getByText(NOMBRE).count()
     }, { timeout: 20_000, intervals: [500, 1000, 2000] }).toBeGreaterThan(0)
-    await expect(pub.locator('#catalogo')).toBeVisible()
+    // `.first()`: en la respuesta en streaming hay un instante con el bloque duplicado y oculto (ver docs/PRUEBAS-E2E.md).
+    await expect(pub.locator('#catalogo').first()).toBeVisible()
     // …y en el descubrimiento entre empresas (lista sin filtros) y en el inicio.
     await expect.poll(async () => {
       await pub.goto('/catalogo')
@@ -163,6 +164,7 @@ test.describe('Catálogo unificado · panel', () => {
     await pub.goto(`/empresas/${con.slug}`)
     await pub.getByRole('link', { name: new RegExp(NOMBRE) }).first().click()
     await expect(pub.getByRole('heading', { level: 1, name: NOMBRE })).toBeVisible()
+    const urlFicha = pub.url()
     await expect(pub.getByText(/RD\$650\.50/)).toBeVisible()
     // El costo del panel NUNCA llega al público.
     expect(await pub.content()).not.toContain('200.00')
@@ -181,6 +183,12 @@ test.describe('Catálogo unificado · panel', () => {
     await expect.poll(async () => {
       await pub2.goto('/catalogo')
       return pub2.getByText(NOMBRE).count()
+    }, { timeout: 20_000, intervals: [500, 1000, 2000] }).toBe(0)
+    // …y la FICHA del ítem también: antes seguía sirviéndose hasta 2 minutos (no pasaba por el tag del marketplace).
+    // (La respuesta sale en streaming: el estado HTTP ya es 200 cuando Next decide «no encontrado»; lo que cambia es la página.)
+    await expect.poll(async () => {
+      await pub2.goto(urlFicha)
+      return pub2.getByRole('heading', { level: 1, name: NOMBRE }).count()
     }, { timeout: 20_000, intervals: [500, 1000, 2000] }).toBe(0)
     await anonimo2.close()
 

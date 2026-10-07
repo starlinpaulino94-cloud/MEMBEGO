@@ -20,6 +20,7 @@ import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/
 import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
 import { motivoCambioDirectoBloqueado } from '@/modules/membresia/cambio-plan-pendiente'
 import { explicarNoRenovable, motivoNoRenovable } from '@/modules/membresia/renovacion'
+import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
 
 /**
  * Ensure the membership belongs to the admin's company (superadmin = any).
@@ -709,11 +710,7 @@ export async function crearMembresia(
       (tx) => tx.cliente.findUnique({ where: { id: clienteId } })
     )
     if (!cliente) return { error: 'Cliente no encontrado.' }
-    if (
-      user.metadata.role !== 'SUPERADMIN' &&
-      user.metadata.companyId &&
-      cliente.companyId !== user.metadata.companyId
-    ) {
+    if (!puedeOperarEnEmpresa(user, cliente.companyId)) {
       return { error: 'No autorizado.' }
     }
     const companyId = cliente.companyId

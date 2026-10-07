@@ -16,7 +16,7 @@ import { FUNCIONES_EMPRESA } from '../src/modules/plataforma/conceptos'
 test('la capacidad PEDIDOS_MEMBEGO existe, gobierna la sección «pedidos-membego» y está apagada de serie en todas las categorías', () => {
   assert.ok((CAPACIDADES as readonly string[]).includes('PEDIDOS_MEMBEGO'))
   assert.ok((ADMIN_SECTIONS as readonly string[]).includes('pedidos-membego'))
-  assert.deepEqual(SECCIONES_POR_CAPACIDAD.PEDIDOS_MEMBEGO, ['pedidos-membego'])
+  assert.deepEqual(SECCIONES_POR_CAPACIDAD.PEDIDOS_MEMBEGO, ['pedidos-membego', 'facturacion-membego'], 'la misma capacidad gobierna «Mi cuenta Membego» (Fase 4)')
   assert.equal(CAPACIDAD_DE_SECCION['pedidos-membego'], 'PEDIDOS_MEMBEGO')
   assert.ok((FUNCIONES_EMPRESA as readonly string[]).includes('PEDIDOS_MEMBEGO'), 'una función de empresa se puede encender por override')
   for (const [categoria, base] of Object.entries(CAPACIDADES_BASE)) {
@@ -204,13 +204,14 @@ test('el QR del pedido solo cierra el pedido desde el escáner: rol de escáner,
   const s = limpio('src/modules/orders/escaner-actions.ts')
   assert.match(s, /SCANNER_ROLES\.includes\(user\.metadata\.role\)/)
   assert.ok(s.indexOf('SCANNER_ROLES.includes') < s.indexOf('conEmpresa('), 'cierra antes de autorizar')
-  assert.match(s, /p\.companyId !== user\.metadata\.companyId/)
+  // La empresa del pedido contra la de la sesión, FALLANDO CERRADO si la sesión no trae empresa (puedeOperarEnEmpresa).
+  assert.match(s, /!puedeOperarEnEmpresa\(user, p\.companyId\)/)
   assert.match(s, /findUnique\(\{ where: \{ qrToken: limpio \}/)
   assert.doesNotMatch(s, /companyId:\s*(token|limpio|entrada)/)
   // Reconocer el QR en el escáner existente.
   const v = limpio('src/modules/visitas/actions.ts')
   assert.match(v, /buscarPedidoPorQr\(candidato\)/)
-  assert.match(v, /encontrado\.companyId !== user\.metadata\.companyId/)
+  assert.match(v, /!puedeOperarEnEmpresa\(user, encontrado\.companyId\)/)
   assert.match(leer('src/components/scanner/ScannerClient.tsx'), /<ConfirmPedido pedido=\{pedido\}/)
 })
 

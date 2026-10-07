@@ -148,6 +148,8 @@ model MembegoOrder {
   attribution  OrderAttribution?
   confirmation CustomerConfirmation?
   payment      PaymentEvidence?
+  /// Fase 4: la comisión que Membego cobra por este pedido (a lo sumo una).
+  commission   Commission?
 
   @@unique([companyId, code])
   @@unique([companyId, idempotencyKey])

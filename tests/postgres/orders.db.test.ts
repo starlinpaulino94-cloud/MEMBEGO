@@ -137,6 +137,11 @@ after(async () => {
   const ids = [ctx.a, ctx.b]
   await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe('SET LOCAL session_replication_role = replica')
+    // Cerrar un pedido de marketplace cobra su comisión (Fase 4): también se limpia lo de la cuenta.
+    await tx.$executeRaw`DELETE FROM "merchant_commissions" WHERE "companyId" IN (${Prisma.join(ids)})`
+    await tx.$executeRaw`DELETE FROM "merchant_statements" WHERE "companyId" IN (${Prisma.join(ids)})`
+    await tx.$executeRaw`DELETE FROM "merchant_ledger_entries" WHERE "companyId" IN (${Prisma.join(ids)})`
+    await tx.$executeRaw`DELETE FROM "merchant_billing_configs" WHERE "companyId" IN (${Prisma.join(ids)})`
     await tx.$executeRaw`DELETE FROM "payment_evidences" WHERE "companyId" IN (${Prisma.join(ids)})`
     await tx.$executeRaw`DELETE FROM "customer_confirmations" WHERE "companyId" IN (${Prisma.join(ids)})`
     await tx.$executeRaw`DELETE FROM "order_attributions" WHERE "companyId" IN (${Prisma.join(ids)})`

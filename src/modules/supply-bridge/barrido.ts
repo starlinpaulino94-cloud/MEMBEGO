@@ -4,6 +4,7 @@ import { revalidateTag } from 'next/cache'
 import { sinEmpresa } from '@/lib/tenant'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
 import { archivarPuenteEnTx, casaMembegoEnTx, sincronizarOfertaEnTx, type ResultadoSincronizacion } from './service'
+import { CAMBIAN } from './mejor-esfuerzo'
 import { FUENTE_SUPPLY, envolverCompraEnTx, reflejarReembolsoEnTx } from './pedido'
 
 /**
@@ -13,7 +14,7 @@ import { FUENTE_SUPPLY, envolverCompraEnTx, reflejarReembolsoEnTx } from './pedi
  *
  *  1. TRAS CADA CAMBIO de una oferta (publicar, editar, pausar, reanudar,
  *     finalizar, cancelar), de inmediato y sin bloquear la respuesta:
- *     `sincronizarOfertaMejorEsfuerzo`. Si falla, no tumba la acción de Supply
+ *     `sincronizarOfertaMejorEsfuerzo` (en `mejor-esfuerzo.ts`). Si falla, no tumba la acción de Supply
  *     —la oferta ya se guardó—: queda en el log y lo recoge el barrido.
  *  2. EL BARRIDO DEL CRON, que recorre todas las ofertas no borrador y
  *     reconcilia lo que el primer camino no alcanzó (un fallo, una venta que
@@ -46,20 +47,6 @@ export const MAX_COMPRAS_POR_PASADA = 200
 /** Intentos como máximo por pasada, envolviera o no: una compra que no se puede envolver (aún) no frena a las demás. */
 export const MAX_INTENTOS_POR_PASADA = 2000
 const TAMANO_LOTE = 200
-
-const CAMBIAN: ReadonlySet<ResultadoSincronizacion['resultado']> = new Set(['CREADO', 'ACTUALIZADO'])
-
-/** Una oferta, tras un cambio. Nunca lanza. Invalida la caché del marketplace si algo cambió. */
-export async function sincronizarOfertaMejorEsfuerzo(offerId: string): Promise<ResultadoSincronizacion | null> {
-  try {
-    const r = await sinEmpresa('puente Supply→Catálogo: sincronizar una oferta tras un cambio', (tx) => sincronizarOfertaEnTx(tx, offerId))
-    if (CAMBIAN.has(r.resultado)) revalidateTag(MARKETPLACE_TAG, 'max')
-    return r
-  } catch (e) {
-    console.error('[supply-bridge]', offerId, e instanceof Error ? e.message : e)
-    return null
-  }
-}
 
 /** Toda la reconciliación (cron y botón «Sincronizar ahora»). Cada oferta en su propia transacción. */
 export interface OpcionesBarrido {

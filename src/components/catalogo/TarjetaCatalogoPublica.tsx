@@ -2,8 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Package } from 'lucide-react'
 import { formatearPrecio } from '@/modules/catalog/formato'
-import type { ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
-import { RUTA_OFERTAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
+import { RUTA_OFERTAS_MEMBEGO, type ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
 
 /**
  * Tarjeta pública de un ítem del catálogo: la usan la vitrina de la empresa, el
@@ -18,7 +17,7 @@ export function TarjetaCatalogoPublica({
 }) {
   // Una oferta de Membego (ítem puente) se compra en SU página: el checkout es el de Supply.
   const esOferta = item.origen === 'SUPPLY' && !!item.ofertaSlug
-  const href = esOferta ? `${RUTA_OFERTAS_PUBLICAS}/${item.ofertaSlug}` : `/empresas/${item.company.slug}/catalogo/${item.slug}`
+  const href = esOferta ? `${RUTA_OFERTAS_MEMBEGO}/${item.ofertaSlug}` : `/empresas/${item.company.slug}/catalogo/${item.slug}`
   return (
     <Link
       href={href}

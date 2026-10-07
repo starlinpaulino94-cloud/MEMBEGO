@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
+  RUTA_OFERTAS_MEMBEGO,
   aDetallePublico,
   aResumenPublico,
   normalizarBusqueda,
@@ -9,6 +10,7 @@ import {
   precioDesde,
   variantesPublicas,
 } from '../src/modules/catalog/publico-nucleo'
+import { RUTA_OFERTAS_PUBLICAS } from '../src/modules/supply-v2/core/catalogo'
 
 /**
  * COMMERCE CORE · catálogo — lo que ve el público (F1.3). Lo que no puede salir
@@ -232,4 +234,21 @@ test('lo que sale al público NO incluye cantidades ni niveles de inventario', (
   const base = { ...fila([conInventario([nivel(7, 2)])]), type: 'PHYSICAL_PRODUCT' as const, capabilities: { trackInventory: true } }
   const json = JSON.stringify(aDetallePublico(base))
   assert.doesNotMatch(json, /onHand|reserved|inventoryLevels|trackInventory/)
+})
+
+test('la ruta de las ofertas de Membego que repite el catálogo es la de Supply (el catálogo no importa de Supply)', () => {
+  assert.equal(RUTA_OFERTAS_MEMBEGO, RUTA_OFERTAS_PUBLICAS)
+  for (const f of ['src/components/catalogo/TarjetaCatalogoPublica.tsx', 'src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx']) {
+    assert.doesNotMatch(readFileSync(f, 'utf8'), /modules\/supply-v2/, `${f} no importa de Supply`)
+  }
+})
+
+test('la ficha pública de un ítem se lee por el caché con el tag del marketplace (si no, el panel no la invalida)', () => {
+  const cached = readFileSync('src/modules/marketplace/cached.ts', 'utf8')
+  const i = cached.indexOf('export async function getItemCatalogoPublico')
+  assert.ok(i > 0)
+  assert.match(cached.slice(i, i + 400), /tags: \[MARKETPLACE_TAG\]/)
+  const pagina = readFileSync('src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx', 'utf8')
+  assert.match(pagina, /getItemCatalogoPublico\(/)
+  assert.doesNotMatch(pagina, /[^t]itemCatalogoPublico\(/, 'la página no llama a la lectura directa')
 })

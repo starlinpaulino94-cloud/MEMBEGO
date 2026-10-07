@@ -76,7 +76,7 @@ const PRESUPUESTOS = [
   {
     id: 'total',
     nombre: 'JavaScript de cliente (todo)',
-    techoKB: 8100, // 2026-09-24: subido de 7500 por Membego Supply (pantallas de superadmin, panel y cliente; medido 7646 KB). Mismo caso que el CRM: no entró ninguna librería —la entrada compartida sigue en 856 KB y el mayor trozo en 520 KB, ambos intactos—, entró un módulo entero. Se mantiene el margen por el mismo motivo de siempre
+    techoKB: 8400, // 2026-10-07: subido de 8100 por Commerce Core (catálogo, inventario, puente, pedidos y Merchant Billing: pantallas de empresa, cliente y superadmin; medido 8126 KB al cerrar la Fase 4; Merchant Billing añadió, entre otras cosas, un trozo de 16 KB con los formularios del superadmin). No entró ninguna librería —la entrada compartida está en 854 KB y el mayor trozo en 409 KB, ambos por debajo de sus techos—, entró un módulo entero más. 2026-09-24: subido de 7500 por Membego Supply (pantallas de superadmin, panel y cliente; medido 7646 KB). Mismo caso que el CRM: no entró ninguna librería —la entrada compartida sigue en 856 KB y el mayor trozo en 520 KB, ambos intactos—, entró un módulo entero. Se mantiene el margen por el mismo motivo de siempre
     porque: 'Indicador general de peso del proyecto. Ningún usuario lo descarga entero.',
   },
   {
