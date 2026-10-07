@@ -1254,7 +1254,7 @@ const G_SA_OPERACION: NavGroup = {
       href: '/superadmin/puente-supply',
       label: 'Puente Supply → Catálogo',
       icon: Link2,
-      description: 'Las ofertas de Supply 2.0 en el catálogo y el descubrimiento: empresa de la casa y sincronización.',
+      description: 'Las ofertas de Supply en el catálogo y el descubrimiento: empresa de la casa y sincronización.',
       keywords: ['puente', 'bridge', 'supply', 'catalogo', 'ofertas', 'marketplace', 'sincronizar', 'casa'],
     },
     {

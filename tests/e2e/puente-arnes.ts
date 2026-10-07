@@ -3,7 +3,7 @@ import { asegurarUsuario, prismaDeArnes } from './supply-v2-sesion'
 /**
  * ARNÉS DE SIEMBRA · el puente Supply → Catálogo (E2E).
  *
- * Siembra por Prisma el proveedor, su producto y las ofertas de Supply 2.0 que
+ * Siembra por Prisma el proveedor, su producto y las ofertas de Supply que
  * el puente refleja. Lo que la prueba verifica (designar la casa, sincronizar,
  * pausar una oferta desde Supply, lo que ve el público) lo hace por la
  * interfaz, nunca por aquí.

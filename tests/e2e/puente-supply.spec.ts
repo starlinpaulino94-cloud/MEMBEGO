@@ -122,7 +122,7 @@ test.describe('Puente Supply → Catálogo', () => {
     await expect(pub.getByRole('heading', { name: new RegExp(A) }).first()).toBeVisible()
 
     // ── Pausar la oferta DESDE SUPPLY la saca del catálogo ────────────────
-    await p.goto(`/superadmin/supply-v2/ofertas/${ofertas[0].id}`)
+    await p.goto(`/superadmin/supply/ofertas/${ofertas[0].id}`)
     await p.getByTestId('btn-pausar').click()
     await expect(p.getByTestId('btn-pausar')).toHaveCount(0, { timeout: 15_000 })
     await expect

@@ -24,7 +24,7 @@ Próxima fase:           F4 Merchant Billing (usará `commissionableBase` y `ver
 - F1.1 añade 5 tablas `catalog_*`, 4 enums y 4 acciones de auditoría en **2 migraciones aditivas** (`20261036_catalog_core`, `20261037_catalog_core_enums`); F2 añade 3 tablas `inventory_*`, 3 enums y 3 acciones de auditoría en otras **2** (`20261038_inventory_core`, `20261039_inventory_core_enums`; solo dos índices únicos nuevos sobre tablas existentes). Nada existente cambia de comportamiento: la capacidad `CATALOGO_UNIFICADO` nace **apagada para todos**. F0 no tocó `prisma/`.
 - Calidad verificada tras F1.3: tsc, lint, 3 694 unit, 366 PostgreSQL, build, bundle, RLS (estático y conductual 22/22), 192 migraciones sin deriva en PASS. El catálogo (admin, vitrina pública y API) tiene **3 specs E2E de CI** (`catalogo-admin`, `catalogo-publico`, `catalogo-api`): suite E2E completa **93 PASS · 0 FAIL · 124 SKIP** (14,1 min, réplica local de `e2e.yml`; antes 67/0/114). **Falla hoy:** `npm audit` (1 high, `source-map-js`).
 - Lo más urgente no es funcionalidad: **una clave `service_role` de Supabase está comprometida en git** (rotarla es del usuario, §14). La Server Action sin guardia (`subirImagenExcursion`) ya está **cerrada** (§14, «Deuda cerrada»).
-- Dos decisiones abiertas del usuario: **corte de RLS Capa 2 en producción** y **Supply V1** (§16).
+- Decisión abierta del usuario: **corte de RLS Capa 2 en producción** (§16). Supply V1 ya se retiró del código (§12 y `IMPLEMENTATION_STATUS_SUPPLY2.md`).
 
 ## 2. Progreso por fases
 
@@ -361,11 +361,11 @@ Asegurar integridad (RLS), formalizar capacidades, ocultar módulos secundarios 
 
 #### Parcial
 - 🟡 RLS: políticas Capa 2 generadas para 264/285 tablas (21 decididas a mano) y probadas conductualmente, pero **apagadas en producción**.
-- 🟡 Ocultamiento: Supply V1 no se ocultó (§12).
+- 🟡 Ocultamiento: Supply V1 no se ocultó; después se retiró del código (§12).
 - 🟡 `supply-v2/core/{dinero,fefo,comision,numeracion,estados,ledger}.ts` siguen existiendo como *shims/wrappers* (el paso 5 del plan, «eliminar originales», no se hizo a propósito).
 
 #### Pendiente
-Decisión Capa 2 en producción; decisión Supply V1; nada más de código de F0.
+Decisión Capa 2 en producción; nada más de código de F0 (la decisión sobre Supply V1 se resolvió retirándolo).
 
 #### Bloqueadores
 Ninguno para F1. Las dos decisiones dependen del usuario/acceso a producción (§16).
@@ -403,7 +403,7 @@ Ver §15. Específicos de F0: la ruleta se corta de golpe a empresas con premios
 |---|---|
 | 100 % de tablas con `companyId` cubiertas por política RLS (generada) | **PASS** — 139/139 (preflight + `probar-rls` 16/16) |
 | Capa 2 activa en producción | **PENDING** — decisión del usuario (§16) |
-| Supply V1 oculto | **FAIL** — no se ocultó (§12) |
+| Supply V1 oculto | **No aplica** — no se ocultó: se retiró del código (§12) |
 | Módulos secundarios ocultos por capacidades | **PASS** — Gamificación, Blog, Home Builder |
 | CRM/Mensajería desactivados por defecto en tenants nuevos | **PASS** — test `capacidades-fase0` |
 | `commerce-primitives` funcional con Supply V2 consumiéndolas | **PASS** — 354 tests Supply V2 + 311 PostgreSQL |
@@ -437,7 +437,7 @@ Ver §15. Específicos de F0: la ruleta se corta de golpe a empresas con premios
 | Redemptions | 🟡 | 4 sitios (`Visit`+`Transaction`, `OfertaUso`, `ReservaExc.checkinAt`, `SupplyV2Redemption`) | Reversa solo en `Visit` y Supply V2 |
 | Merchant Billing | ⚪ | — | Nada factura a una empresa |
 | Revenue Attribution | 🟡 | `referidos-attribution.ts`, `VendedorAtribucion` | A nivel cliente, no de orden |
-| Membego Supply V1 | 🟣 | `modules/supply`, `prisma/schema/supply.prisma` | Deprecado **solo por decisión del plan**; en código sigue activo (§5, §12) |
+| Membego Supply V1 | 🟣 | `prisma/schema/supply.prisma` (solo esquema) | **Retirado del código**: pantallas, módulo, cron y pruebas eliminados; tablas y migraciones se conservan (§5, §12) |
 | Membego Supply V2 | 🟡 | `modules/supply-v2` | Ver §5 |
 | Supplier Finance | ✅ | `supply-v2/finance` | Facturas, depósitos, obligaciones, pagos (manual) |
 | Settlements | ✅ | `supply-v2/finance/settlements.ts` | Incluye liquidación parcial |
@@ -455,9 +455,10 @@ Ver §15. Específicos de F0: la ruleta se corta de golpe a empresas con premios
 Supply V2: 113 archivos / 30 919 LOC en `src/modules/supply-v2`; 66 modelos / 88 enums; 27 migraciones; 61 páginas (8 admin, 53 superadmin) + 5 `/cliente/*` + 5 `/promociones/*`; 118 server actions; tests: 354 unit, ~288 PostgreSQL, 66 Playwright.
 
 ```text
-Supply V1:        🟣 ACTIVO en código. 47 archivos / 16 710 LOC, 30 modelos, 10 migraciones, 263 tests.
-                  /cliente/beneficios/* depende de V1 (sin gate de capacidad); cron /api/cron/supply
-                  agendado ("0 7 * * *"); sin migración V1→V2 (0 scripts). Nav admin oculto por bug (§12).
+Supply V1:        🟣 RETIRADO del código (antes: 47 archivos / 16 710 LOC, 263 tests). Se conservan 30 modelos y
+                  10 migraciones: V2 aún lee SupplyCuentaCobro y SupplyPedido. /cliente/beneficios/* redirige a
+                  /cliente/compras; el cron /api/cron/supply se quitó. Sin migración V1→V2 (0 scripts): los
+                  datos de V1 siguen en la BD pero ya no se ven en pantalla.
 Supply V2:        🟡 núcleo ✅, 4 huecos (abajo)
 Procurement:      ✅ proveedores, catálogo, órdenes de compra, recepciones (S1)
 Agreements:       🟡 crear + activar expuestos; `modificarCondicionesEnTx` sin acción/UI; sin suspender/terminar
@@ -627,7 +628,7 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 | Home Builder | 🙈 | Secundario frente al marketplace | Capacidad `HOME_BUILDER`; la página no pinta el editor y las acciones de `modules/home` rechazan. El formulario de marca **no** se oculta | Sí (override). Una composición ya publicada sigue renderizándose |
 | CRM | 🙈 solo tenants nuevos | Foco en marketplace | Override `CRM:false` al crear empresa; existentes conservan | Sí (override) |
 | Mensajería (`/admin/comunicacion`) | 🙈 solo tenants nuevos | Canal secundario | Override `MENSAJERIA:false` al crear; la **bandeja de conversaciones es del CRM** (`leads`) | Sí (override) |
-| Supply V1 | 🟣 **NO oculto** | Reemplazado por V2 | **No hay ocultamiento deliberado.** El menú admin lo esconde *por accidente* (`MEMBEGO_SUPPLIER` ausente de `CAPACIDADES_DEL_MENU`, `contexto.ts:37-46`); rutas, `/cliente/beneficios/*` y el cron siguen activos | Nunca (plan); migrar datos V1→V2 aún sin hacer |
+| Supply V1 | 🟣 **RETIRADO** | Reemplazado por V2 (hoy «Supply») | Se eliminó el código, las pantallas y el cron; se conservan el esquema Prisma y las migraciones (V2 aún usa 2 tablas). `/cliente/beneficios/*` redirige a `/cliente/compras` | Migrar los datos de V1 a V2 sigue sin hacerse; borrar las tablas requiere una migración aparte, verificada contra producción |
 | Login con Google | 🙈 | Fijo `false` en `googleAuth.ts:14-18` | Constante en código | Sí |
 | Módulos carwash Fase 2/3 | apagados por defecto | Opt-in | Capacidades `INVENTARIO`, `COLA_VEHICULOS`, `EVIDENCIA_FOTOS`, `CUENTAS_CORPORATIVAS`, `COMISIONES`, `INCIDENCIAS`, `COMPRAS`, `ACTIVOS`, `TURNOS`, `PAGO_CARDNET`, `NAVEGACION_V2` fuera de todo paquete base | Sí (override) |
 | Motores sin uso (`Promotion`, `MembershipPlan`, `ReferralProgram`, `Benefit`) | 🟡 | ~7,9k líneas, 0 tests, sin lector en producción | — | Candidatos a consolidar en F5 |
