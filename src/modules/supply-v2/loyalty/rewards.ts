@@ -32,7 +32,7 @@ import {
 import { bloquearPrograma, eventoDePrograma } from './programs'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 8 · RECOMPENSAS (§30–§34).
+ * MEMBEGO SUPPLY · SLICE 8 · RECOMPENSAS (§30–§34).
  *
  * CÓMO SE ENTREGA UNA RECOMPENSA, Y POR QUÉ NO HAY OTRO SISTEMA DE REDENCIÓN
  *

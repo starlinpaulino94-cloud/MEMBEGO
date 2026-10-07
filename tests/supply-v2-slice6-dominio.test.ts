@@ -21,7 +21,7 @@ import { politicaDeVersion } from '../src/modules/supply-v2/finance/domain'
 import { SUPPLY_V2_PERMISSIONS } from '../src/modules/supply-v2/contracts/gateways'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · pruebas de DOMINIO (§35). Sin base de datos.
+ * MEMBEGO SUPPLY · SLICE 6 · pruebas de DOMINIO (§35). Sin base de datos.
  *
  * Las cifras del enunciado se prueban tal cual: 1 000 con bono de 500 deja 500
  * a pagar, comisión 80 sobre el valor contractual, neto 920 y contribución

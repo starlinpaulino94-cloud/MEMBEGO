@@ -54,7 +54,7 @@ export default async function PuenteSupplyPage({ searchParams }: { searchParams:
     <div className="space-y-6">
       <PageHeader
         title="Puente Supply → Catálogo"
-        description="Las ofertas de Supply 2.0 aparecen en el catálogo y en el descubrimiento como ítems de una empresa «de la casa». Supply es el master: esos ítems son de solo lectura y se actualizan solos."
+        description="Las ofertas de Supply aparecen en el catálogo y en el descubrimiento como ítems de una empresa «de la casa». Supply es el master: esos ítems son de solo lectura y se actualizan solos."
       />
 
       <Card>

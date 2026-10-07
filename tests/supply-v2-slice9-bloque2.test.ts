@@ -31,7 +31,7 @@ import {
 } from '../src/modules/supply-v2/operations/respuestas'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 2 · DOMINIO (§12).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · DOMINIO (§12).
  *
  * Lo que se prueba aquí no toca la base ni la red: firma, frescura, traducción
  * del adaptador, hilo de la operación, política de códigos HTTP, forma del log
@@ -194,7 +194,7 @@ test('4a · la idempotencia NO es la protección contra replay, y por eso hacen 
 // ── 5 · proveedores ─────────────────────────────────────────────────────────
 
 test('5 · un proveedor desconocido no tiene verificador ni adaptador', () => {
-  assert.equal(verificadorDe('CARDNET'), null, 'CardNET NO está conectado a Supply 2.0')
+  assert.equal(verificadorDe('CARDNET'), null, 'CardNET NO está conectado a Supply')
   assert.equal(adaptadorDe('CARDNET'), null)
   assert.equal(verificadorDe('lo-que-sea'), null)
   assert.ok(verificadorDe('test_gateway'), 'el nombre del proveedor no distingue mayúsculas')

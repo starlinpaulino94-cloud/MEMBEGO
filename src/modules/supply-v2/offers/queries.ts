@@ -8,7 +8,7 @@ import { resolverAcuerdoComisionDeItemEnTx } from '../agreements/service'
 import { unidadesLibres, unidadesLibresComision } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · lecturas de ofertas para la ADMINISTRACIÓN (§43–§44).
+ * MEMBEGO SUPPLY · lecturas de ofertas para la ADMINISTRACIÓN (§43–§44).
  * Aquí sí se ven costos y lotes: es la vista interna.
  */
 
@@ -112,7 +112,7 @@ function aOfertaEnLista(o: OfertaSeleccionada): OfertaEnLista {
 }
 
 export async function listarOfertas(): Promise<OfertaEnLista[]> {
-  const filas = await sinEmpresa('Supply 2.0: listado de ofertas', (tx) =>
+  const filas = await sinEmpresa('Supply: listado de ofertas', (tx) =>
     tx.supplyV2Offer.findMany({ orderBy: { createdAt: 'desc' }, take: 200, select: SELECT_OFERTA })
   )
   return filas.map(aOfertaEnLista)
@@ -145,7 +145,7 @@ export async function buscarOfertas(f: FiltroOfertas, p: { pagina: number; filas
         }
       : {}),
   }
-  const [filas, porModelo] = await sinEmpresa('Supply 2.0: búsqueda de ofertas', (tx) =>
+  const [filas, porModelo] = await sinEmpresa('Supply: búsqueda de ofertas', (tx) =>
     Promise.all([
       tx.supplyV2Offer.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (p.pagina - 1) * p.filas, take: p.filas, select: SELECT_OFERTA }),
       tx.supplyV2Offer.groupBy({ by: ['sourceType'], where, _count: { _all: true } }),
@@ -180,7 +180,7 @@ export interface ResumenOfertas {
 
 /** Indicadores de la pantalla Ofertas, sobre todas las ofertas (no el filtro). */
 export async function resumenOfertas(): Promise<ResumenOfertas> {
-  const [conteos, activas, enCampanas, enFidelizacion] = await sinEmpresa('Supply 2.0: indicadores de ofertas', (tx) =>
+  const [conteos, activas, enCampanas, enFidelizacion] = await sinEmpresa('Supply: indicadores de ofertas', (tx) =>
     Promise.all([
       tx.supplyV2Offer.groupBy({ by: ['status'], _count: { _all: true } }),
       tx.supplyV2Offer.findMany({ where: { status: 'ACTIVE' }, orderBy: { createdAt: 'desc' }, select: SELECT_OFERTA }),
@@ -213,14 +213,14 @@ export async function resumenOfertas(): Promise<ResumenOfertas> {
 
 /** Proveedores con al menos una oferta, para el filtro. */
 export async function proveedoresConOfertas(): Promise<{ id: string; nombre: string }[]> {
-  const filas = await sinEmpresa('Supply 2.0: proveedores con ofertas', (tx) =>
+  const filas = await sinEmpresa('Supply: proveedores con ofertas', (tx) =>
     tx.supplyV2Supplier.findMany({ where: { offers: { some: {} } }, orderBy: { commercialName: 'asc' }, select: { id: true, commercialName: true } })
   )
   return filas.map((f) => ({ id: f.id, nombre: f.commercialName }))
 }
 
 export async function fichaOferta(id: string) {
-  const o = await sinEmpresa('Supply 2.0: ficha de una oferta', (tx) =>
+  const o = await sinEmpresa('Supply: ficha de una oferta', (tx) =>
     tx.supplyV2Offer.findUnique({
       where: { id },
       include: {
@@ -246,7 +246,7 @@ export async function fichaOferta(id: string) {
   )
   if (!o) return null
   const ledger = o.allocation
-    ? await sinEmpresa('Supply 2.0: ledger relacionado con una oferta', (tx) =>
+    ? await sinEmpresa('Supply: ledger relacionado con una oferta', (tx) =>
         tx.supplyV2LedgerEntry.findMany({
           where: {
             OR: [
@@ -268,7 +268,7 @@ export async function fichaOferta(id: string) {
   if (o.sourceType === 'COMMISSION') {
     const reservadas = o.commissionReservations.filter((r) => r.status === 'ACTIVE').reduce((t, r) => t + r.quantity, 0)
     const vendidas = o.commissionReservations.filter((r) => r.status === 'CONSUMED').reduce((t, r) => t + r.quantity, 0)
-    const [derechos, obligaciones] = await sinEmpresa('Supply 2.0: estadísticas de comisión de una oferta', (tx) =>
+    const [derechos, obligaciones] = await sinEmpresa('Supply: estadísticas de comisión de una oferta', (tx) =>
       Promise.all([
         tx.supplyV2Entitlement.groupBy({ by: ['status'], where: { offerId: o.id }, _count: { _all: true }, _sum: { customerUnitPrice: true, commissionAmount: true, supplierNet: true } }),
         tx.supplyV2SupplierObligation.aggregate({ where: { redemption: { entitlement: { offerId: o.id } }, status: { not: 'CANCELLED' } }, _sum: { grossAmount: true, paidAmount: true, outstandingAmount: true } }),
@@ -328,7 +328,7 @@ export interface EstadisticasComision {
  * La regla resuelta se muestra al administrador; nunca al cliente.
  */
 export async function productosParaOfertaComision() {
-  return sinEmpresa('Supply 2.0: productos con acuerdo a comisión', async (tx) => {
+  return sinEmpresa('Supply: productos con acuerdo a comisión', async (tx) => {
     const items = await tx.supplyV2CatalogItem.findMany({
       where: { status: 'ACTIVE', supplier: { status: 'ACTIVE', agreements: { some: { type: 'COMMISSION', status: 'ACTIVE' } } } },
       orderBy: { name: 'asc' },
@@ -347,7 +347,7 @@ export async function productosParaOfertaComision() {
 
 /** Lo que el wizard necesita del producto (§11): disponibilidad y costo promedio ponderado. */
 export async function productosParaOferta() {
-  const items = await sinEmpresa('Supply 2.0: productos con supply disponible para ofertar', (tx) =>
+  const items = await sinEmpresa('Supply: productos con supply disponible para ofertar', (tx) =>
     tx.supplyV2CatalogItem.findMany({
       where: { status: 'ACTIVE', lots: { some: { quantityAvailable: { gt: 0 }, status: 'ACTIVE' } } },
       orderBy: { name: 'asc' },
@@ -385,7 +385,7 @@ export async function productosParaOferta() {
 
 /** Cola de pagos por revisar y ventas recientes (administración). */
 export async function listarComprasClientes(filtro: 'PENDIENTES' | 'TODAS' = 'TODAS') {
-  return sinEmpresa('Supply 2.0: compras de clientes', (tx) =>
+  return sinEmpresa('Supply: compras de clientes', (tx) =>
     tx.supplyV2CustomerOrder.findMany({
       where: filtro === 'PENDIENTES' ? { status: { in: ['PENDING', 'AWAITING_PAYMENT'] } } : {},
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],

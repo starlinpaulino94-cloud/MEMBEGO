@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { decimal, type Decimal } from '../core/dinero'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · ECONOMÍA DEL SUPPLY: reglas PURAS (§29–§32).
+ * MEMBEGO SUPPLY · SLICE 4 · ECONOMÍA DEL SUPPLY: reglas PURAS (§29–§32).
  *
  * DEFINICIONES (no se mezclan):
  *   GMV          valor vendido al cliente (lo que el cliente pagó)

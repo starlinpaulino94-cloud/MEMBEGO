@@ -17,7 +17,7 @@ import type { OpcionesBeneficio } from '@/modules/supply-v2/benefits/queries'
 import { BENEFIT_FUNDING_EXPLICACION, BENEFIT_FUNDING_LABELS, BENEFIT_SCOPE_LABELS, BENEFIT_VALUE_TYPE_LABELS, RUTA_BENEFICIOS } from '@/modules/supply-v2/core/catalogo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 6 · ASISTENTE DE BENEFICIOS, 7 pasos (§30).
+ * MEMBEGO SUPPLY · SLICE 6 · ASISTENTE DE BENEFICIOS, 7 pasos (§30).
  *
  * El asistente enseña la economía ANTES de guardar: quién financia, cuánto
  * rebaja, qué paga el cliente, sobre qué se calcula la comisión, qué cobra

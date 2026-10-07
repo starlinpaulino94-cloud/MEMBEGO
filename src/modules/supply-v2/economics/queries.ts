@@ -5,7 +5,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import { agregarEconomia, rangoDeVentana, type Economia, type VentanaEconomia } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · `SupplyV2Economics` (§31–§32, §68).
+ * MEMBEGO SUPPLY · SLICE 4 · `SupplyV2Economics` (§31–§32, §68).
  *
  * UN solo sitio calcula GMV, ingreso, costo, margen, unidades vendidas,
  * redimidas y vencidas y la tasa de breakage: las pantallas piden aquí y no
@@ -34,7 +34,7 @@ export async function calcularEconomia(f: FiltroEconomia, ahora = new Date()): P
     ...(f.supplierId ? { supplierId: f.supplierId } : {}),
     ...(f.catalogItemId ? { catalogItemId: f.catalogItemId } : {}),
   }
-  const [eventos, redimidas] = await sinEmpresa('Supply 2.0: economía del supply', (tx) =>
+  const [eventos, redimidas] = await sinEmpresa('Supply: economía del supply', (tx) =>
     Promise.all([
       tx.supplyV2EconomicEvent.findMany({ where: comun, select: { type: true, units: true, gmvAmount: true, revenueAmount: true, costAmount: true, grossMarginAmount: true, contractualAmount: true, supplierDiscountAmount: true, subsidyAmount: true, customerPaidAmount: true } }),
       tx.supplyV2Redemption.count({
@@ -76,7 +76,7 @@ export interface FilaDesglose {
  */
 export async function desglosePorProducto(f: FiltroEconomia, ahora = new Date()): Promise<FilaDesglose[]> {
   const { desde, hasta } = rangoDeVentana(f.ventana, ahora, f.desde, f.hasta)
-  const eventos = await sinEmpresa('Supply 2.0: desglose económico por producto', (tx) =>
+  const eventos = await sinEmpresa('Supply: desglose económico por producto', (tx) =>
     tx.supplyV2EconomicEvent.findMany({
       where: {
         occurredAt: { gte: desde, lt: hasta },
@@ -124,7 +124,7 @@ export async function desglosePorProducto(f: FiltroEconomia, ahora = new Date())
 }
 
 export async function opcionesDeFiltroEconomia(): Promise<{ proveedores: { id: string; nombre: string }[]; productos: { id: string; nombre: string; proveedor: string }[] }> {
-  const [proveedores, productos] = await sinEmpresa('Supply 2.0: filtros del reporte económico', (tx) =>
+  const [proveedores, productos] = await sinEmpresa('Supply: filtros del reporte económico', (tx) =>
     Promise.all([
       tx.supplyV2Supplier.findMany({ where: { economicEvents: { some: {} } }, orderBy: { commercialName: 'asc' }, select: { id: true, commercialName: true } }),
       tx.supplyV2CatalogItem.findMany({ where: { economicEvents: { some: {} } }, orderBy: { name: 'asc' }, select: { id: true, name: true, supplier: { select: { commercialName: true } } } }),
@@ -146,7 +146,7 @@ export async function timelineEconomicoDeCompra(orderId: string): Promise<{
   order: { id: string; number: string; status: string; total: string; currency: string; customer: string; paidAt: Date | null; contractualValue: string; supplierDiscountTotal: string; membegoSubsidyTotal: string; beneficio: { code: string; name: string; funding: string } | null }
   derechos: { id: string; status: string; producto: string; proveedor: string; hitos: HitoEconomico[]; venta: { customerPaid: string; publicPrice: string; discount: string; actualUnitCost: string; grossMargin: string; contractual: string; descuentoProveedor: string; subsidio: string } | null }[]
 } | null> {
-  const o = await sinEmpresa('Supply 2.0: timeline económico de una compra', (tx) =>
+  const o = await sinEmpresa('Supply: timeline económico de una compra', (tx) =>
     tx.supplyV2CustomerOrder.findUnique({
       where: { id: orderId },
       select: {

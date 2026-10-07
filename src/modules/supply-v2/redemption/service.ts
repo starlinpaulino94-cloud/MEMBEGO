@@ -22,7 +22,7 @@ import {
 } from './domain'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 3 · VOUCHER → QR → PREVIEW → ENTREGA → REVERSA.
+ * MEMBEGO SUPPLY · SLICE 3 · VOUCHER → QR → PREVIEW → ENTREGA → REVERSA.
  *
  * TODO dentro de la `tx` de quien llama. Orden de candados fijo para que dos
  * confirmaciones del mismo derecho (o dos escáneres con el mismo QR) se

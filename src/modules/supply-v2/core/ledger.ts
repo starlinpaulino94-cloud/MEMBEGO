@@ -10,7 +10,7 @@ import {
 } from '@/lib/commerce-primitives/ledger'
 
 /**
- * MEMBEGO SUPPLY 2.0 · EL LEDGER (Slice 1).
+ * MEMBEGO SUPPLY · EL LEDGER (Slice 1).
  *
  * PURO: sin Prisma, sin base de datos. Decide qué asiento es válido y qué
  * deja en las cubetas. Lo que escribe en la base es `pool/lotes.ts`.

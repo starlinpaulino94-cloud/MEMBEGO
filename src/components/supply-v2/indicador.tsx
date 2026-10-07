@@ -28,7 +28,7 @@ const RECUADRO: Record<TonoIndicador, string> = {
 }
 
 /**
- * Indicador de las pestañas de Supply 2.0 (Stitch): categoría en mayúsculas
+ * Indicador de las pestañas de Supply (Stitch): categoría en mayúsculas
  * con su icono, cifra grande con unidad y una línea de estado al pie.
  */
 export function TarjetaIndicador({

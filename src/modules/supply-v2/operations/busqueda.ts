@@ -2,7 +2,7 @@ import { sinEmpresa, type Tx } from '@/lib/tenant'
 import { interpretarBusqueda, type TipoDeBusqueda } from './salud-dominio'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · BUSCAR UNA OPERACIÓN (§5, §6).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · BUSCAR UNA OPERACIÓN (§5, §6).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * POR IGUALDAD Y POR ÍNDICE, NUNCA POR `contains`
@@ -127,7 +127,7 @@ const TOPE = 25
  * dejar pasar esto, y tenía razón.
  */
 export async function buscarOperacion(texto: string): Promise<ResultadoBusqueda> {
-  return sinEmpresa('Supply 2.0: búsqueda operativa', (tx) => buscarOperacionEnTx(tx, texto))
+  return sinEmpresa('Supply: búsqueda operativa', (tx) => buscarOperacionEnTx(tx, texto))
 }
 
 async function buscarOperacionEnTx(tx: Tx, texto: string): Promise<ResultadoBusqueda> {
@@ -424,7 +424,7 @@ export async function lineaDeTiempoDeOperacion(texto: string): Promise<{ busqued
     ...busqueda.efectos.map((o) => o.id),
   ]
   if (entidades.length) {
-    const bitacora = await sinEmpresa('Supply 2.0: bitácora de una operación', (tx) =>
+    const bitacora = await sinEmpresa('Supply: bitácora de una operación', (tx) =>
       tx.auditLog.findMany({
         where: { entidadId: { in: entidades } },
         orderBy: { createdAt: 'asc' },

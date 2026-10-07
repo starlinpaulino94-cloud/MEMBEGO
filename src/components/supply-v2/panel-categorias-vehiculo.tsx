@@ -16,7 +16,7 @@ import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 import type { CategoriaVehiculoFila } from '@/modules/supply-v2/categories/queries'
 
 /**
- * MEMBEGO SUPPLY 2.0 · administración de las categorías de vehículo de
+ * MEMBEGO SUPPLY · administración de las categorías de vehículo de
  * plataforma.
  *
  * La pantalla explica lo que ningún campo dice por sí mismo: que lo que une

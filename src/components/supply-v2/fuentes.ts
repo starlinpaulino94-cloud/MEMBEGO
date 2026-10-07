@@ -1,7 +1,7 @@
 import { Inter, JetBrains_Mono } from 'next/font/google'
 
 /**
- * Tipografías del rediseño de Supply 2.0 (Stitch): Inter para la interfaz y
+ * Tipografías del rediseño de Supply (Stitch): Inter para la interfaz y
  * JetBrains Mono para códigos (órdenes, lotes, SKU). Se cargan solo donde se
  * aplica `claseFuentesSupplyV2`, no en toda la aplicación.
  */

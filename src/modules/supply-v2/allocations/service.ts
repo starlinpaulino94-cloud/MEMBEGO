@@ -6,7 +6,7 @@ import { repartirFefo } from '../core/fefo'
 import { registrarAsientoEnTx } from '../pool/lotes'
 
 /**
- * MEMBEGO SUPPLY 2.0 · ASIGNACIÓN (§4–§6, §16, §38–§39).
+ * MEMBEGO SUPPLY · ASIGNACIÓN (§4–§6, §16, §38–§39).
  *
  * Apartar supply disponible para un fin. Se hace en la `tx` de quien llama:
  *

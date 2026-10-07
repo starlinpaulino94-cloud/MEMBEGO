@@ -5,7 +5,7 @@ import type { Transiciones } from '../core/estados'
 import { agotoLosIntentos, proximoIntentoTras } from '../../integraciones/reintentos'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · NÚCLEO OPERATIVO, parte pura.
+ * MEMBEGO SUPPLY · SLICE 9 · NÚCLEO OPERATIVO, parte pura.
  *
  * Sin Prisma, sin red y sin `server-only`: aquí viven las decisiones que
  * tienen consecuencias —qué identidad tiene un evento externo, cuándo se
@@ -193,7 +193,7 @@ export const MENSAJES_DE_FALLO: Record<CodigoDeFallo, string> = {
   ESTADO_IMPOSIBLE: 'La compra está en un estado que no admite este evento.',
   PAYLOAD_DISTINTO: 'Ya llegó un evento con ese identificador y un contenido distinto.',
   ORDEN_YA_PAGADA: 'La compra ya estaba pagada: el evento no cambia nada.',
-  TIPO_NO_MANEJADO: 'Ese tipo de evento no se procesa en Supply 2.0.',
+  TIPO_NO_MANEJADO: 'Ese tipo de evento no se procesa en Supply.',
   SIN_REFERENCIA: 'El evento no dice a qué compra se refiere.',
   ERROR_TRANSITORIO: 'No se pudo procesar ahora; se reintentará.',
 }

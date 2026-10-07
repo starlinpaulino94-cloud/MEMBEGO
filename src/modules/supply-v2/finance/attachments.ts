@@ -3,7 +3,7 @@ import { rutaValida } from '@/modules/storage/comprobantes'
 import { fallo } from '../core/errores'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · adjuntos (§42): la factura (PDF/imagen) y el
+ * MEMBEGO SUPPLY · SLICE 4 · adjuntos (§42): la factura (PDF/imagen) y el
  * comprobante del pago viven en el bucket PRIVADO `comprobantes` existente,
  * con el tipo `supply-v2` y la ruta firmada por el servidor para ESA entidad.
  * Aquí solo se guarda la ruta, después de comprobar que pertenece a la entidad.

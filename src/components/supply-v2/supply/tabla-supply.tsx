@@ -44,7 +44,7 @@ export function TablaSupply({ productos, ahora, pie }: { productos: SupplyPorPro
                   <div className="flex items-start gap-2">
                     <IconoProducto p={p} />
                     <div className="flex min-w-0 flex-col">
-                      <Link href={`/superadmin/supply-v2/supply/${p.catalogItemId}`} className="text-[15px] font-bold leading-5 text-foreground hover:underline">{p.producto}</Link>
+                      <Link href={`/superadmin/supply/supply/${p.catalogItemId}`} className="text-[15px] font-bold leading-5 text-foreground hover:underline">{p.producto}</Link>
                       <span className="flex flex-wrap items-center gap-1">
                         {p.sku && <span className={cn(MONO, 'rounded-[4px] bg-sv2-soft px-1 text-sv2-outline')}>{p.sku}</span>}
                         {p.descripcion && <span className="line-clamp-2 text-[12px] leading-4 text-sv2-ink-variant">{p.descripcion}</span>}
@@ -54,7 +54,7 @@ export function TablaSupply({ productos, ahora, pie }: { productos: SupplyPorPro
                 </td>
                 <td className={td}>
                   <span className={ETIQUETA_MOVIL}>Proveedor</span>
-                  <Link href={`/superadmin/supply-v2/proveedores/${p.proveedorId}`} className="block font-semibold leading-[18px] hover:underline">{p.proveedor}</Link>
+                  <Link href={`/superadmin/supply/proveedores/${p.proveedorId}`} className="block font-semibold leading-[18px] hover:underline">{p.proveedor}</Link>
                 </td>
                 <td className={td}>
                   <span className={ETIQUETA_MOVIL}>Lotes</span>

@@ -6,7 +6,7 @@ import { marcarAgotadaSiCorrespondeEnTx } from '../offers/service'
 import { registrarAsientoEnTx } from './lotes'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 4 · VENCIMIENTO DE LOTES (§48–§50).
+ * MEMBEGO SUPPLY · SLICE 4 · VENCIMIENTO DE LOTES (§48–§50).
  *
  * Un lote vencido cierra lo que NADIE tiene: AVAILABLE → CLOSED y
  * ALLOCATED → CLOSED (las unidades apartadas para una oferta que ya no se

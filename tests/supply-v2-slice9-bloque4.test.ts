@@ -31,7 +31,7 @@ import { HTTP_DE_CODIGO, MENSAJE_DE_CODIGO, invitaAReintentar } from '../src/mod
 import { SUPPLY_V2_PERMISSIONS, SUPPLY_V2_PERMISSION_LABELS } from '../src/modules/supply-v2/contracts/gateways'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 9 · BLOQUE 4 · DOMINIO (§31).
+ * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 4 · DOMINIO (§31).
  *
  * El juicio operativo, puro: estados de componente, umbrales, banderas,
  * interruptores, readiness, agregación de alertas, su máquina de estados, el

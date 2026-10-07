@@ -36,6 +36,7 @@ const PUBLICAS: Record<string, string> = {
   'modules/admin/invitacionActions.ts::aceptarInvitacion': 'la persona invitada aún no tiene cuenta: entra con el token de la invitación (y registerLimiter)',
   'modules/auth/actions.ts::logout': 'cierra la sesión de quien llama',
   'modules/auth/loginActions.ts::iniciarSesion': 'es el login (loginLimiter)',
+  'modules/auth/recuperarActions.ts::solicitarRecuperacion': 'recuperar contraseña: quien la pide no tiene sesión (recoveryIpLimiter y recoveryEmailLimiter) y la respuesta no revela si el correo existe',
   'modules/connect/adminActions.ts::scopesDisponibles': 'lista estática de scopes: no lee ni cambia datos',
   'modules/connect/adminActions.ts::urlDeConexionOauth': 'arma una URL a partir de la configuración pública: no lee datos de ninguna empresa',
   'modules/crm/seguimiento-actions.ts::deleteActividad': 'delega en deleteNota, que exige requireSection(\'clientes\', \'nota_eliminar\')',
@@ -58,7 +59,6 @@ const PUBLICAS: Record<string, string> = {
   'modules/registro/empresaActions.ts::registrarEmpresa': 'registro público de empresas (registerLimiter)',
   'modules/solicitudes/actions.ts::enviarSolicitudEmpresa': 'formulario público de solicitud (registerLimiter)',
   'modules/storage/comprobantes.ts::rutaValida': 'función pura sobre un texto',
-  'modules/supply/actions.ts::puedeAdministrarSupply': 'devuelve un booleano sobre la sesión de quien llama',
 }
 
 function archivos(dir: string): string[] {

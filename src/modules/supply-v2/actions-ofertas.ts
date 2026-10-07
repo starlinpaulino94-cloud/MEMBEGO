@@ -13,7 +13,7 @@ import { RUTA_OFERTAS_PUBLICAS } from './core/catalogo'
 import { sincronizarOfertaMejorEsfuerzo } from '@/modules/supply-bridge/mejor-esfuerzo'
 
 /**
- * MEMBEGO SUPPLY 2.0 · server actions de OFERTAS y COBROS (lado plataforma).
+ * MEMBEGO SUPPLY · server actions de OFERTAS y COBROS (lado plataforma).
  */
 
 function refrescarOfertas(id?: string): void {
@@ -61,7 +61,7 @@ export async function crearYPublicarOfertaAction(_prev: EstadoAccion<OfertaCread
     const startsAt = fecha(fd, 'startsAt') ?? new Date()
     const quantity = entero(fd, 'quantity')
     if (quantity == null) return { error: 'Indica cuántas unidades destinar.' }
-    const r = await sinEmpresa('Supply 2.0: crear y publicar una oferta', async (tx) => {
+    const r = await sinEmpresa('Supply: crear y publicar una oferta', async (tx) => {
       const creada = await crearOfertaEnTx(
         tx,
         {
@@ -100,7 +100,7 @@ export async function crearYPublicarOfertaComisionAction(_prev: EstadoAccion<Ofe
     const ctx = await contextoDeAuditoria(actor)
     const startsAt = fecha(fd, 'startsAt') ?? new Date()
     const availabilityMode = (texto(fd, 'availabilityMode', 20) || 'UNLIMITED') as SupplyV2AvailabilityMode
-    const r = await sinEmpresa('Supply 2.0: crear y publicar una oferta a comisión', async (tx) => {
+    const r = await sinEmpresa('Supply: crear y publicar una oferta a comisión', async (tx) => {
       const creada = await crearOfertaComisionEnTx(
         tx,
         {
@@ -133,7 +133,7 @@ export async function publicarOfertaAction(_prev: EstadoAccion, fd: FormData): P
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_OFFER_PUBLISH')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: publicar una oferta', (tx) => publicarOfertaEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: publicar una oferta', (tx) => publicarOfertaEnTx(tx, id, ctx))
     refrescarOfertas(id)
     return { success: 'Oferta publicada.', id }
   } catch (e) {
@@ -161,7 +161,7 @@ export async function editarOfertaAction(_prev: EstadoAccion, fd: FormData): Pro
       perCustomerLimit: entero(fd, 'perCustomerLimit') ?? 1,
       endsAt: typeof fin === 'string' && fin.trim() ? fechaFinDeDia(fd, 'endsAt') : null,
     }
-    const r = await sinEmpresa('Supply 2.0: editar una oferta', (tx) => editarOfertaEnTx(tx, id, d, ctx))
+    const r = await sinEmpresa('Supply: editar una oferta', (tx) => editarOfertaEnTx(tx, id, d, ctx))
     refrescarOfertas(id)
     return {
       success: r.cambios.length ? `Oferta actualizada: ${r.cambios.join(', ')}.` : 'No había nada que cambiar.',
@@ -177,7 +177,7 @@ export async function pausarOfertaAction(_prev: EstadoAccion, fd: FormData): Pro
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_OFFER_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: pausar una oferta', (tx) => pausarOfertaEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: pausar una oferta', (tx) => pausarOfertaEnTx(tx, id, ctx))
     refrescarOfertas(id)
     return { success: 'Oferta pausada: no acepta compras nuevas.', id }
   } catch (e) {
@@ -190,7 +190,7 @@ export async function reanudarOfertaAction(_prev: EstadoAccion, fd: FormData): P
   try {
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_OFFER_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
-    await sinEmpresa('Supply 2.0: reanudar una oferta', (tx) => reanudarOfertaEnTx(tx, id, ctx))
+    await sinEmpresa('Supply: reanudar una oferta', (tx) => reanudarOfertaEnTx(tx, id, ctx))
     refrescarOfertas(id)
     return { success: 'Oferta reactivada.', id }
   } catch (e) {
@@ -204,7 +204,7 @@ export async function finalizarOfertaAction(_prev: EstadoAccion, fd: FormData): 
     const actor = await exigirPermisoSupplyV2('SUPPLY_V2_OFFER_MANAGE')
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'reason', 500) || 'Finalizada desde la administración.'
-    const r = await sinEmpresa('Supply 2.0: finalizar una oferta', (tx) => cerrarOfertaEnTx(tx, id, 'ENDED', motivo, ctx))
+    const r = await sinEmpresa('Supply: finalizar una oferta', (tx) => cerrarOfertaEnTx(tx, id, 'ENDED', motivo, ctx))
     refrescarOfertas(id)
     return { success: `Oferta finalizada. ${r.liberadas.toLocaleString('es-DO')} unidades volvieron al supply disponible.`, id }
   } catch (e) {
@@ -219,7 +219,7 @@ export async function cancelarOfertaAction(_prev: EstadoAccion, fd: FormData): P
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'reason', 500)
     if (!motivo) return { error: 'Escribe el motivo de la cancelación.' }
-    const r = await sinEmpresa('Supply 2.0: cancelar una oferta', (tx) => cerrarOfertaEnTx(tx, id, 'CANCELLED', motivo, ctx))
+    const r = await sinEmpresa('Supply: cancelar una oferta', (tx) => cerrarOfertaEnTx(tx, id, 'CANCELLED', motivo, ctx))
     refrescarOfertas(id)
     return { success: `Oferta cancelada. ${r.liberadas.toLocaleString('es-DO')} unidades volvieron al supply disponible.`, id }
   } catch (e) {
@@ -237,9 +237,9 @@ export async function confirmarPagoClienteAction(_prev: EstadoAccion<PagoConfirm
     const monto = texto(fd, 'amountSeen', 20)
     if (!monto) return { error: 'Indica el monto que viste en el banco.' }
     const metodo = (texto(fd, 'method', 20) || null) as SupplyV2PaymentMethod | null
-    const r = await sinEmpresa('Supply 2.0: confirmar el pago de un cliente', (tx) => confirmarPagoEnTx(tx, { orderId: id, amountSeen: monto, method: metodo }, ctx))
+    const r = await sinEmpresa('Supply: confirmar el pago de un cliente', (tx) => confirmarPagoEnTx(tx, { orderId: id, amountSeen: monto, method: metodo }, ctx))
     refrescarOfertas()
-    revalidatePath('/superadmin/supply-v2/ofertas/ventas')
+    revalidatePath('/superadmin/supply/ofertas/ventas')
     revalidatePath('/cliente/compras', 'layout')
     return {
       success: r.repetido ? `La compra ${r.number} ya estaba pagada.` : `Pago confirmado: ${r.entitlements.length} derecho(s) emitido(s) para ${r.number}.`,
@@ -258,9 +258,9 @@ export async function rechazarPagoClienteAction(_prev: EstadoAccion, fd: FormDat
     const ctx = await contextoDeAuditoria(actor)
     const motivo = texto(fd, 'reason', 500)
     if (!motivo) return { error: 'Escribe por qué se rechaza el pago.' }
-    await sinEmpresa('Supply 2.0: rechazar el pago de un cliente', (tx) => rechazarPagoEnTx(tx, id, motivo, ctx))
+    await sinEmpresa('Supply: rechazar el pago de un cliente', (tx) => rechazarPagoEnTx(tx, id, motivo, ctx))
     refrescarOfertas()
-    revalidatePath('/superadmin/supply-v2/ofertas/ventas')
+    revalidatePath('/superadmin/supply/ofertas/ventas')
     revalidatePath('/cliente/compras', 'layout')
     return { success: 'Pago rechazado: la unidad volvió a la oferta.', id }
   } catch (e) {

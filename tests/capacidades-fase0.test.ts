@@ -134,6 +134,8 @@ test('todo sitio que crea una empresa usa CAPACIDADES_OVERRIDE_TENANT_NUEVO (si 
     altas += n
     if (!t.includes('CAPACIDADES_OVERRIDE_TENANT_NUEVO')) sinOverride.push(rel)
   }
-  assert.ok(altas >= 5, `solo encontró ${altas} altas de empresa`)
+  // Piso de cordura: si el rastreo dejara de ver las altas, la prueba pasaría en vacío.
+  // Eran 5 mientras existía Supply V1 (proveedores.ts, retirado en #574); hoy son 4.
+  assert.ok(altas >= 4, `solo encontró ${altas} altas de empresa`)
   assert.deepEqual(sinOverride, [], 'estas altas de empresa no usan CAPACIDADES_OVERRIDE_TENANT_NUEVO')
 })

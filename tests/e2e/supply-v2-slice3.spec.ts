@@ -2,7 +2,7 @@ import { test, expect, type Browser, type Page } from '@playwright/test'
 import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 
 /**
- * MEMBEGO SUPPLY 2.0 · SLICE 3 de punta a punta en navegador (§73–§76).
+ * MEMBEGO SUPPLY · SLICE 3 de punta a punta en navegador (§73–§76).
  *
  *   ADMIN     Little Pizza (empresa registrada) vinculada como proveedor →
  *             producto → acuerdo → PO 1.000 → aprobación → recepción →
@@ -36,7 +36,7 @@ function datos(): Datos {
 
 /** Slice 1 por la interfaz, con proveedor = EMPRESA REGISTRADA. */
 async function supplyRecibido(compras: Page, finanzas: Page, d: Datos): Promise<void> {
-  await compras.goto('/superadmin/supply-v2/compras/nueva')
+  await compras.goto('/superadmin/supply/compras/nueva')
   await compras.getByRole('button', { name: '+ Crear proveedor' }).click()
   await compras.getByRole('button', { name: 'Sí, es una empresa de Membego' }).click()
   await compras.locator('#buscarEmpresa').fill(d.empresa)
@@ -53,7 +53,7 @@ async function supplyRecibido(compras: Page, finanzas: Page, d: Datos): Promise<
   await compras.getByRole('button', { name: 'Continuar' }).click()
   await compras.getByRole('button', { name: 'Continuar' }).click()
   await compras.getByRole('button', { name: 'Crear orden de compra' }).click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/compras\/(?!nueva)[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/compras\/(?!nueva)[a-z0-9]+$/)
   const urlOrden = compras.url()
   await compras.getByTestId('btn-enviar-aprobacion').click()
   await expect(compras.getByTestId('estado-orden')).toHaveText('Pendiente de aprobación')
@@ -66,10 +66,10 @@ async function supplyRecibido(compras: Page, finanzas: Page, d: Datos): Promise<
 }
 
 async function ofertaPublicada(compras: Page, d: Datos): Promise<string> {
-  await compras.goto('/superadmin/supply-v2/supply')
+  await compras.goto('/superadmin/supply/supply')
   const tarjeta = compras.getByTestId('pool-producto').filter({ hasText: d.producto })
   await tarjeta.getByTestId('btn-crear-oferta-producto').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/ofertas\/nueva/)
+  await compras.waitForURL(/\/superadmin\/supply\/ofertas\/nueva/)
   await compras.getByRole('button', { name: 'Continuar' }).click()
   await compras.locator('#ofertaCantidad').fill('100')
   await compras.getByRole('button', { name: 'Continuar' }).click()
@@ -80,7 +80,7 @@ async function ofertaPublicada(compras: Page, d: Datos): Promise<string> {
   await compras.locator('#ofertaLimite').fill('2')
   await compras.getByRole('button', { name: 'Continuar' }).click()
   await compras.getByTestId('btn-publicar-oferta').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/ofertas\/(?!nueva)[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/ofertas\/(?!nueva)[a-z0-9]+$/)
   await expect(compras.getByTestId('estado-oferta')).toHaveText('Activa')
   return compras.url()
 }
@@ -102,7 +102,7 @@ async function compraPagada(cliente: Page, finanzas: Page, d: Datos): Promise<vo
   await cliente.locator('#referenciaPago').fill(`TRX-S3-${d.sufijo}`)
   await cliente.getByTestId('btn-avisar-pago').click()
   await expect(cliente.getByTestId('estado-compra')).toHaveText('Pago en revisión')
-  await finanzas.goto('/superadmin/supply-v2/ofertas/ventas')
+  await finanzas.goto('/superadmin/supply/ofertas/ventas')
   const venta = finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: d.oferta })
   await venta.getByTestId('btn-confirmar-pago').click()
   await venta.getByTestId('btn-confirmar-pago-confirmar').click()
@@ -134,14 +134,14 @@ async function generarQr(cliente: Page, d: Datos): Promise<string> {
 
 /** EMPLEADO: escribe el código a mano y devuelve la tarjeta del resultado. */
 async function escanear(empleado: Page, codigo: string): Promise<void> {
-  await empleado.goto('/admin/supply-v2/escaner')
+  await empleado.goto('/admin/supply/escaner')
   await empleado.getByTestId('btn-codigo-manual').click()
   await empleado.getByTestId('input-codigo').fill(codigo)
   await empleado.getByTestId('btn-buscar-codigo').click()
 }
 
 async function pool(page: Page, d: Datos) {
-  await page.goto('/superadmin/supply-v2/supply')
+  await page.goto('/superadmin/supply/supply')
   const tarjeta = page.getByTestId('pool-producto').filter({ hasText: d.producto })
   const n = async (id: string) => Number((await tarjeta.getByTestId(id).innerText()).replace(/[^\d]/g, ''))
   return { disponibles: await n('pool-disponibles'), asignadas: await n('pool-asignadas'), emitidas: await n('pool-emitidas'), redimidas: await n('pool-redimidas') }
@@ -181,11 +181,11 @@ async function recorrido(browser: Browser, opciones: { conReversa: boolean; clie
   await cliente.screenshot({ path: 'test-results/shots/supply-v2-qr-cliente.png', fullPage: true })
 
   // ── EMPLEADO · portal, escáner, preview, confirmar ────────────────────
-  await empleado.goto('/admin/supply-v2')
+  await empleado.goto('/admin/supply')
   await expect(empleado.getByTestId('entregas-hoy')).toHaveText('0')
   await expect(empleado.getByTestId('pendientes')).toHaveText(/\d+/)
   await empleado.getByTestId('btn-escanear').click()
-  await empleado.waitForURL(/\/admin\/supply-v2\/escaner/)
+  await empleado.waitForURL(/\/admin\/supply\/escaner/)
   await escanear(empleado, nonce1)
   const preview = empleado.getByTestId('preview-valido')
   await expect(preview).toBeVisible()
@@ -209,12 +209,12 @@ async function recorrido(browser: Browser, opciones: { conReversa: boolean; clie
   await expect(beneficio(cliente, d).getByTestId('btn-usar-beneficio')).toHaveCount(0)
 
   // ── ADMIN · redención visible y supply ISSUED −1 / REDEEMED +1 ────────
-  await compras.goto('/superadmin/supply-v2/redenciones')
+  await compras.goto('/superadmin/supply/redenciones')
   const fila = compras.getByTestId('redencion').filter({ hasText: d.producto })
   await expect(fila).toContainText('Entregada')
   await expect(fila).toContainText('Bávaro')
   await fila.getByTestId('link-redencion').click()
-  await compras.waitForURL(/\/superadmin\/supply-v2\/redenciones\/[a-z0-9]+$/)
+  await compras.waitForURL(/\/superadmin\/supply\/redenciones\/[a-z0-9]+$/)
   const urlRedencion = compras.url()
   await expect(compras.getByTestId('redencion-costo')).toContainText('300')
   await expect(compras.getByTestId('redencion-timeline')).toContainText('Entregado')
@@ -224,7 +224,7 @@ async function recorrido(browser: Browser, opciones: { conReversa: boolean; clie
   await escanear(empleado, nonce1)
   await expect(empleado.getByTestId('preview-rechazado')).toHaveText(/ya fue utilizado/)
   await expect(empleado.getByTestId('preview-valido')).toHaveCount(0)
-  await empleado.goto('/admin/supply-v2')
+  await empleado.goto('/admin/supply')
   await expect(empleado.getByTestId('entregas-hoy')).toHaveText('1')
   await expect(empleado.getByTestId('entrega').filter({ hasText: d.producto })).toContainText(ana.nombre)
 
@@ -260,12 +260,12 @@ async function recorrido(browser: Browser, opciones: { conReversa: boolean; clie
   await cliente.goto('/cliente/compras')
   await expect(beneficio(cliente, d).getByTestId('derecho-estado')).toHaveText('Utilizado')
   expect(await pool(compras, d)).toMatchObject({ disponibles: 900, asignadas: 99, emitidas: 0, redimidas: 1 })
-  await compras.goto('/superadmin/supply-v2/redenciones')
+  await compras.goto('/superadmin/supply/redenciones')
   await expect(compras.getByTestId('redencion').filter({ hasText: d.producto })).toHaveCount(2)
   await expect(compras.getByTestId('redencion').filter({ hasText: d.producto }).filter({ hasText: 'Reversada' })).toHaveCount(1)
 }
 
-test.describe('Supply 2.0 · Slice 3', () => {
+test.describe('Supply · Slice 3', () => {
   test.beforeEach(async () => {
     test.skip(!SESION_LOCAL_DISPONIBLE, 'requiere SUPABASE_JWT_SECRET, DATABASE_URL y NEXT_PUBLIC_SUPABASE_URL para firmar sesiones')
   })
