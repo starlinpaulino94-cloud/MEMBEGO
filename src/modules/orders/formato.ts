@@ -67,6 +67,7 @@ export const ETIQUETA_NIVEL: Record<MembegoVerificationLevel, string> = {
   ATTRIBUTED: 'Atribuido',
   REDEEMED: 'Canjeado con QR',
   CUSTOMER_VERIFIED: 'Confirmado por el cliente',
+  EXTERNAL_PAYMENT_REPORTED: 'Pago reportado por el negocio',
   PAYMENT_VERIFIED: 'Pago verificado',
   FISCALLY_RECONCILED: 'Conciliado fiscalmente',
 }
@@ -76,7 +77,8 @@ export const AYUDA_NIVEL: Record<MembegoVerificationLevel, string> = {
   ATTRIBUTED: 'Se sabe de dónde vino. Falta que el cliente lo recoja con su QR.',
   REDEEMED: 'El QR cerró el pedido. Falta que el cliente confirme el monto.',
   CUSTOMER_VERIFIED: 'El cliente confirmó el monto. Falta registrar un pago con tarjeta o transferencia y su referencia.',
-  PAYMENT_VERIFIED: 'Hay un pago registrado por el monto del pedido, con referencia.',
+  EXTERNAL_PAYMENT_REPORTED: 'El negocio registró un pago con tarjeta o transferencia por el monto del pedido, con referencia. Falta que una fuente externa (pasarela, banco) lo confirme.',
+  PAYMENT_VERIFIED: 'Una fuente externa (pasarela de pago, conciliación bancaria o proveedor) confirmó el pago por el monto del pedido.',
   FISCALLY_RECONCILED: 'Conciliado con el comprobante fiscal.',
 }
 

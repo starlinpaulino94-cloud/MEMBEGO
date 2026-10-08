@@ -69,9 +69,22 @@ const USUARIOS = {
   pedidosSinCapacidad: { email: 'e2e.pedidos.sin@membego.test', nombre: 'Admin Sin Pedidos E2E', role: 'ADMINISTRADOR' },
   /** Commerce Core · ofertas con presupuesto (F5): quien las crea y publica, y tres personas que las reclaman. */
   dealsAdmin: { email: 'e2e.deals.admin@membego.test', nombre: 'Admin Ofertas E2E', role: 'ADMINISTRADOR' },
+  dealsSinCapacidad: { email: 'e2e.deals.sin@membego.test', nombre: 'Admin Sin Ofertas E2E', role: 'ADMINISTRADOR' },
   dealsCliente: { email: 'e2e.deals.cliente@membego.test', nombre: 'Carla Ofertas E2E', role: 'CLIENTE' },
   dealsCliente2: { email: 'e2e.deals.cliente2@membego.test', nombre: 'Diego Ofertas E2E', role: 'CLIENTE' },
   dealsCliente3: { email: 'e2e.deals.cliente3@membego.test', nombre: 'Elena Ofertas E2E', role: 'CLIENTE' },
+  /** Analítica (F6): el administrador de una empresa con pedidos, el de otra con pedidos y el de una con catálogo pero SIN pedidos. */
+  analiticaAdmin: { email: 'e2e.analitica.admin@membego.test', nombre: 'Admin Analítica E2E', role: 'ADMINISTRADOR' },
+  analiticaOtra: { email: 'e2e.analitica.otra@membego.test', nombre: 'Admin Otra Analítica E2E', role: 'ADMINISTRADOR' },
+  analiticaSin: { email: 'e2e.analitica.sin@membego.test', nombre: 'Admin Sin Analítica E2E', role: 'ADMINISTRADOR' },
+  /** Caja conectada (F7): quien cobra en una empresa CON el POS conectado y quien cobra en otra SIN él. */
+  posAdmin: { email: 'e2e.pos.admin@membego.test', nombre: 'Cajero POS E2E', role: 'ADMINISTRADOR' },
+  posSin: { email: 'e2e.pos.sin@membego.test', nombre: 'Cajero Sin POS E2E', role: 'ADMINISTRADOR' },
+  /** Checkout del marketplace (F8): quien atiende el pedido del carrito y quien lo hace. */
+  carritoAdmin: { email: 'e2e.carrito.admin@membego.test', nombre: 'Admin Carrito E2E', role: 'ADMINISTRADOR' },
+  carritoCliente: { email: 'e2e.carrito.cliente@membego.test', nombre: 'Rosa Carrito E2E', role: 'CLIENTE' },
+  /** Conciliación y riesgo (F9): quien administra una empresa y no puede entrar a las pantallas de la plataforma. */
+  conciliacionAdmin: { email: 'e2e.conciliacion.admin@membego.test', nombre: 'Admin Conciliación E2E', role: 'ADMINISTRADOR' },
   /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */
   facturacionSuperadmin: { email: 'e2e.facturacion.sa@membego.test', nombre: 'Facturación SA E2E', role: 'SUPERADMIN' },
 } as const

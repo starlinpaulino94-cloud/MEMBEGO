@@ -283,7 +283,7 @@ test.describe('Pedidos Membego · recorrido', () => {
     await ctx.close()
   })
 
-  test('la empresa registra el pago con referencia y el pedido sube a «Pago verificado»', async ({ browser }) => {
+  test('la empresa registra el pago con referencia y el pedido sube a «Pago reportado por el negocio» (verificar es cosa de una fuente externa)', async ({ browser }) => {
     test.setTimeout(120_000)
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
@@ -295,7 +295,7 @@ test.describe('Pedidos Membego · recorrido', () => {
     await pago.getByLabel(/^Monto cobrado/).fill('450')
     await pago.getByLabel('Referencia').fill('TRF-E2E-1')
     await pago.getByRole('button', { name: 'Registrar pago' }).click()
-    await expect(p.getByText('Pago verificado').first()).toBeVisible({ timeout: 20_000 })
+    await expect(p.getByText('Pago reportado por el negocio').first()).toBeVisible({ timeout: 20_000 })
     await expect(p.getByText('TRF-E2E-1')).toBeVisible()
     await expect(p.getByText('Pago registrado').first()).toBeVisible() // en la historia
     await ctx.close()

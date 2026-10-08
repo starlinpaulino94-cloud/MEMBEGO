@@ -21,6 +21,7 @@ import {
   obtenerPedidoEnTx,
   reembolsarPedidoEnTx,
   registrarPagoEnTx,
+  verificarPagoExternamenteEnTx,
   renovarQrEnTx,
   type ContextoPedido,
   type EntradaPedido,
@@ -495,7 +496,7 @@ test('17 · completar por QR vende lo apartado: la reserva se consume y el stock
   assert.equal(ventas[0].quantity, 4)
 })
 
-test('18 · el nivel de verificación sube con la evidencia: REDEEMED → CUSTOMER_VERIFIED → PAYMENT_VERIFIED', async () => {
+test('18 · el nivel de verificación sube con la evidencia: REDEEMED → CUSTOMER_VERIFIED → EXTERNAL_PAYMENT_REPORTED (lo que registra la empresa) → PAYMENT_VERIFIED (fuente externa)', async () => {
   // Solo QR
   const a = await crear({ lineas: [lineaServicio()] })
   assert.equal((await completar(await listo(a.pedidoId))).nivel, 'REDEEMED')
@@ -512,9 +513,9 @@ test('18 · el nivel de verificación sube con la evidencia: REDEEMED → CUSTOM
   await enA((tx) => confirmarMontoEnTx(tx, ctx.a, c.pedidoId, { customerId: ctx.cli1, montoVisto: '250.00' }, cliente))
   const tc = await listo(c.pedidoId)
   await enA((tx) => registrarPagoEnTx(tx, ctx.a, c.pedidoId, { method: 'TRANSFER', amount: '250.00', reference: 'TRF-123' }, empresa(ctx.usuario)))
-  assert.equal((await completar(tc)).nivel, 'PAYMENT_VERIFIED')
+  assert.equal((await completar(tc)).nivel, 'EXTERNAL_PAYMENT_REPORTED', 'la referencia que registra la empresa es su palabra, no una verificación')
 
-  // La evidencia llega DESPUÉS de cerrar: el nivel se recalcula.
+  // La evidencia llega DESPUÉS de cerrar: el nivel se recalcula; y solo una fuente externa lo lleva a PAYMENT_VERIFIED.
   const d = await crear({ lineas: [lineaServicio()] })
   await enA((tx) => aceptarPedidoEnTx(tx, ctx.a, d.pedidoId, empresa(ctx.usuario)))
   const td = await listo(d.pedidoId)
@@ -523,7 +524,46 @@ test('18 · el nivel de verificación sube con la evidencia: REDEEMED → CUSTOM
   await enA((tx) => confirmarMontoEnTx(tx, ctx.a, d.pedidoId, { customerId: ctx.cli1, montoVisto: '250.00' }, cliente))
   assert.equal((await pedidoDe(d.pedidoId)).verificationLevel, 'CUSTOMER_VERIFIED')
   await enA((tx) => registrarPagoEnTx(tx, ctx.a, d.pedidoId, { method: 'CARD', amount: '250.00', reference: 'AUTH-9' }, empresa(ctx.usuario)))
-  assert.equal((await pedidoDe(d.pedidoId)).verificationLevel, 'PAYMENT_VERIFIED')
+  assert.equal((await pedidoDe(d.pedidoId)).verificationLevel, 'EXTERNAL_PAYMENT_REPORTED')
+  const v = await enA((tx) => verificarPagoExternamenteEnTx(tx, ctx.a, d.pedidoId, { source: 'GATEWAY_VERIFIED', verificationRef: `gw-${sufijo}-18`, method: 'CARD', amount: '250.00', reference: 'AUTH-9' }, sistema))
+  assert.equal(v.nivel, 'PAYMENT_VERIFIED')
+  assert.equal(v.repetido, false)
+  const pd = await pedidoDe(d.pedidoId)
+  assert.equal(pd.verificationLevel, 'PAYMENT_VERIFIED')
+  assert.equal(pd.payment?.source, 'GATEWAY_VERIFIED')
+  assert.equal(pd.payment?.verificationRef, `gw-${sufijo}-18`)
+  assert.ok(pd.payment?.verifiedAt)
+})
+
+test('18b · verificar un pago es cosa del sistema o del superadmin, con la referencia del hecho externo; es idempotente por esa referencia y no se pisa', async () => {
+  const r = await crear({ lineas: [lineaServicio()] })
+  await enA((tx) => aceptarPedidoEnTx(tx, ctx.a, r.pedidoId, empresa(ctx.usuario)))
+  await enA((tx) => confirmarMontoEnTx(tx, ctx.a, r.pedidoId, { customerId: ctx.cli1, montoVisto: '250.00' }, cliente))
+  const token = await listo(r.pedidoId)
+  const v = { source: 'BANK_RECONCILED' as const, verificationRef: `banco-${sufijo}-18b`, method: 'TRANSFER' as const, amount: '250.00', reference: 'TRF-1' }
+  // La empresa no verifica; el superadmin sí (actorId obligatorio); el sistema sí.
+  assert.equal(await codigoDe(enA((tx) => verificarPagoExternamenteEnTx(tx, ctx.a, r.pedidoId, v, empresa(ctx.usuario)))), 'SOLO_SISTEMA')
+  assert.equal(await codigoDe(enA((tx) => verificarPagoExternamenteEnTx(tx, ctx.a, r.pedidoId, { ...v, source: 'MERCHANT_REPORTED' }, sistema))), 'VERIFICACION_INVALIDA')
+  assert.equal(await codigoDe(enA((tx) => verificarPagoExternamenteEnTx(tx, ctx.a, r.pedidoId, { ...v, verificationRef: '' }, sistema))), 'VERIFICACION_INVALIDA')
+  assert.equal(await codigoDe(enA((tx) => verificarPagoExternamenteEnTx(tx, ctx.a, r.pedidoId, { ...v, method: 'CASH' }, sistema))), 'VERIFICACION_INVALIDA')
+  const sa = await enA((tx) => verificarPagoExternamenteEnTx(tx, ctx.a, r.pedidoId, v, { ...empresa(ctx.usuario), superadmin: true }))
+  assert.equal(sa.nivel, 'ATTRIBUTED', 'aún no está completado: la evidencia cuenta al cerrar')
+  assert.equal((await pedidoDe(r.pedidoId)).payment?.source, 'BANK_RECONCILED')
+  // La misma referencia externa otra vez: repetido, sin tocar nada. Otra referencia sobre un pedido ya verificado: se rechaza.
+  assert.equal((await enA((tx) => verificarPagoExternamenteEnTx(tx, ctx.a, r.pedidoId, v, sistema))).repetido, true)
+  assert.equal(await codigoDe(enA((tx) => verificarPagoExternamenteEnTx(tx, ctx.a, r.pedidoId, { ...v, verificationRef: 'otro-hecho' }, sistema))), 'PAGO_YA_VERIFICADO')
+  // Y la empresa no puede registrar encima de una constancia verificada.
+  assert.equal(await codigoDe(enA((tx) => registrarPagoEnTx(tx, ctx.a, r.pedidoId, { method: 'CASH', amount: '250.00' }, empresa(ctx.usuario)))), 'PAGO_YA_VERIFICADO')
+  assert.equal((await completar(token)).nivel, 'PAYMENT_VERIFIED')
+  // La base: una constancia «reportada» no lleva verificación, y una verificada la lleva entera.
+  await assert.rejects(
+    prisma.paymentEvidence.update({ where: { orderId: r.pedidoId }, data: { source: 'MERCHANT_REPORTED' } }),
+    /payment_evidences_fuente/
+  )
+  await assert.rejects(
+    prisma.paymentEvidence.update({ where: { orderId: r.pedidoId }, data: { verificationRef: null } }),
+    /payment_evidences_fuente/
+  )
 })
 
 test('19 · un pago en efectivo o por otro monto deja constancia pero NO verifica; registrar otra vez reemplaza', async () => {
@@ -539,7 +579,8 @@ test('19 · un pago en efectivo o por otro monto deja constancia pero NO verific
   assert.equal((await pedidoDe(r.pedidoId)).verificationLevel, 'CUSTOMER_VERIFIED', 'otro monto no verifica')
   await enA((tx) => registrarPagoEnTx(tx, ctx.a, r.pedidoId, { method: 'TRANSFER', amount: '250.00', reference: 'TRF-2' }, empresa(ctx.usuario)))
   const p = await pedidoDe(r.pedidoId)
-  assert.equal(p.verificationLevel, 'PAYMENT_VERIFIED')
+  assert.equal(p.verificationLevel, 'EXTERNAL_PAYMENT_REPORTED')
+  assert.equal(p.payment?.source, 'MERCHANT_REPORTED')
   assert.equal(p.paymentMethod, 'TRANSFER')
   assert.equal((await prisma.paymentEvidence.findMany({ where: { orderId: r.pedidoId } })).length, 1, 'una constancia por pedido')
   assert.equal(await codigoDe(enA((tx) => registrarPagoEnTx(tx, ctx.a, r.pedidoId, { method: 'CARD', amount: -1 }, empresa(ctx.usuario)))), 'PAGO_INVALIDO')
@@ -753,7 +794,7 @@ test('30c · cerrar sin QR es cosa del sistema, nunca de un pedido de la vitrina
   assert.equal(await codigoDe(enA((tx) => cerrarPedidoExternoEnTx(tx, ctx.a, web.pedidoId, { completedAt: T0, confirmadoPorCliente: true }, sistema))), 'SOLO_CON_QR')
 
   const r = await enA((tx) =>
-    cerrarPedidoExternoEnTx(tx, ctx.a, hecho.pedidoId, { completedAt: T0, confirmadoPorCliente: true, pago: { method: 'TRANSFER', amount: '250.00', reference: 'TRF-77' } }, sistema)
+    cerrarPedidoExternoEnTx(tx, ctx.a, hecho.pedidoId, { completedAt: T0, confirmadoPorCliente: true, pago: { method: 'TRANSFER', amount: '250.00', reference: 'TRF-77', source: 'PROVIDER_VERIFIED', verificationRef: `ext-${sufijo}-30c` } }, sistema)
   )
   assert.equal(r.status, 'COMPLETED')
   assert.equal(r.nivel, 'PAYMENT_VERIFIED')

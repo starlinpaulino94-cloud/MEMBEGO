@@ -91,31 +91,3 @@ export async function ofertasPublicas(q: ConsultaDeOfertasPublicas = {}, ahora =
     return []
   }
 }
-
-/** Una oferta por id, si se puede enseñar ahora. */
-export async function ofertaPublicaPorId(id: string, ahora = new Date()): Promise<OfertaPublica | null> {
-  if (typeof id !== 'string' || id === '' || id.length > 60) return null
-  try {
-    const f = await sinEmpresa('ofertas: ficha pública', (tx) =>
-      tx.deal.findFirst({
-        where: {
-          id,
-          status: 'ACTIVE',
-          startsAt: { lte: ahora },
-          OR: [{ endsAt: null }, { endsAt: { gt: ahora } }],
-          company: { isPublished: true, isActive: true, esDemo: false },
-          variant: { status: 'ACTIVE', item: { status: 'ACTIVE', source: 'MERCHANT' } },
-        },
-        include: INCLUDE_PUBLICO,
-      })
-    )
-    if (!f || !(await empresaOfreceOfertas(f.companyId))) return null
-    if (!normalizarCapacidades(f.variant.item.type, f.variant.item.capabilities).availableMarketplace) return null
-    const cuenta = await sinEmpresa('ofertas: cuenta de la empresa', (tx) => tx.merchantBillingConfig.findUnique({ where: { companyId: f.companyId }, select: { status: true } }))
-    if (cuenta && !puedeCrearCampanas(cuenta.status)) return null
-    return aOfertaPublica(f)
-  } catch (e) {
-    console.error('[ofertaPublicaPorId]', e)
-    return null
-  }
-}

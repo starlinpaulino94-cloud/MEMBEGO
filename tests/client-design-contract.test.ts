@@ -79,25 +79,32 @@ const stitchMD = readFileSync(
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-test('el primario del cliente (RN) coincide con el Brand Primary de Stitch', () => {
+/**
+ * Desde «align shared UI with Vibe theme» (1e596cd, 2026-09-30) y «unify branding»
+ * (dbbcac0, 2026-10-06) el primario del cliente es el violeta Vibe —el rediseño del
+ * Inicio aprobado el 2026-09-10—, no el retail blue del Stitch comercial. El contrato
+ * (docs/design/client-design-contract.md §1) registra el cambio; el Stitch comercial
+ * sigue siendo la fuente de la PALETA retail, que el cliente conserva como tal.
+ */
+test('el primario del cliente (RN) es el violeta Vibe de globals.css (--color-vibe-deep)', () => {
   const rnPrimary = primaryDefaultDeTW(rnTWConfig)
-  const stitchPrimary = brandPrimaryDeStitch(stitchMD)
+  const cssVibeDeep = hexDeCSS(globalsCSS, '--color-vibe-deep')
   assert.equal(
     rnPrimary,
-    stitchPrimary,
-    'primary.DEFAULT en apps/client/tailwind.config.js no coincide con el Brand Primary ' +
-      'del contrato visual Stitch. Ver docs/design/client-design-contract.md §1.'
+    cssVibeDeep,
+    'primary.DEFAULT en apps/client/tailwind.config.js no coincide con --color-vibe-deep ' +
+      'en globals.css. Ver docs/design/client-design-contract.md §1.'
   )
 })
 
-test('el primario del cliente (RN) coincide con retail-blue en globals.css', () => {
-  const rnPrimary = primaryDefaultDeTW(rnTWConfig)
-  const cssRetailBlue = retailTokenDeCSS(globalsCSS, 'retail-blue')
-  assert.equal(
-    rnPrimary,
-    cssRetailBlue,
-    'primary.DEFAULT en RN no coincide con --color-retail-blue en globals.css. ' +
-      'El primario del cliente es retail-blue (#0284c7).'
+test('el Brand Primary del Stitch comercial es el retail-blue del cliente (paleta, ya no primario)', () => {
+  const stitchPrimary = brandPrimaryDeStitch(stitchMD)
+  assert.equal(stitchPrimary, retailTokenDeCSS(globalsCSS, 'retail-blue'))
+  assert.equal(stitchPrimary, retailTokenDeTW(rnTWConfig, 'blue'))
+  assert.notEqual(
+    primaryDefaultDeTW(rnTWConfig),
+    stitchPrimary,
+    'si el primario vuelve a ser retail-blue, hay que registrar el cambio en el contrato §1'
   )
 })
 

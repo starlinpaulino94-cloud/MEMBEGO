@@ -3,8 +3,9 @@ import { z } from 'zod'
 import { registerLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAppUrl, SITE_NAME } from '@/lib/site'
+import { getAppUrl } from '@/lib/site'
 import { sendEmail } from '@/lib/email'
+import { correoEliminacionDeCuenta } from '@/lib/email/eliminacion-cuenta'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,12 +39,7 @@ export async function POST(request: Request) {
     confirmationUrl.searchParams.set('token_hash', token)
     confirmationUrl.searchParams.set('type', 'magiclink')
     confirmationUrl.searchParams.set('purpose', 'delete-account')
-    await sendEmail({
-      to: parsed.data.email,
-      subject: `Confirma la eliminación de tu cuenta · ${SITE_NAME}`,
-      text: `Para continuar con la eliminación de tu cuenta MembeGo, confirma tu identidad aquí: ${confirmationUrl.toString()}. Si no lo solicitaste, ignora este mensaje.`,
-      html: `<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:#111827"><h1>Confirma la eliminación de tu cuenta</h1><p>Usa este enlace para confirmar que controlas este correo y continuar con la eliminación de tu cuenta MembeGo.</p><p><a href="${confirmationUrl.toString()}" style="display:inline-block;padding:12px 20px;background:#b91c1c;color:#fff;text-decoration:none;border-radius:8px">Continuar con la eliminación</a></p><p>Si no solicitaste este cambio, ignora este correo. No se eliminará ninguna cuenta.</p></div>`,
-    })
+    await sendEmail({ to: parsed.data.email, ...correoEliminacionDeCuenta(confirmationUrl.toString()) })
   }
 
   // Respuesta indistinguible para evitar enumerar cuentas existentes.

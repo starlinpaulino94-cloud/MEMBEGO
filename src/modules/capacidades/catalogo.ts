@@ -188,6 +188,10 @@ export const CAPACIDADES = [
   // reclama y canjea con el QR de su pedido. Apagada para todos de serie; exige el
   // catálogo unificado y los pedidos Membego (el reclamo ES un pedido).
   'DEALS_MARKETPLACE',
+  // Fase 7 — POS conectado a Commerce Core: la caja (`/empleado/caja`) cobra los pedidos Membego de
+  // quien llega con su QR y vende variantes del catálogo en el mostrador. Apagada para todos de serie;
+  // exige la caja (`POS_CAJA`) y, según lo que se use, el catálogo y los pedidos.
+  'POS_MEMBEGO',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -220,6 +224,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   CATALOGO_UNIFICADO: 'Catálogo unificado: productos, servicios y variantes',
   PEDIDOS_MEMBEGO: 'Pedidos Membego: pedidos del marketplace con atribución, confirmación y QR',
   DEALS_MARKETPLACE: 'Ofertas con presupuesto: descuentos que los clientes reclaman y se cobran por canje',
+  POS_MEMBEGO: 'Caja conectada al catálogo: cobrar pedidos Membego y vender productos en el mostrador',
 }
 
 /**
@@ -248,7 +253,7 @@ export const SECCIONES_POR_CAPACIDAD: Partial<Record<Capacidad, AdminSection[]>>
   // inventario (`trackInventory`).
   CATALOGO_UNIFICADO: ['catalogo', 'inventario'],
   // «Mi cuenta Membego» (lo que la empresa le debe a la plataforma por esos pedidos) cuelga de la misma capacidad.
-  PEDIDOS_MEMBEGO: ['pedidos-membego', 'facturacion-membego'],
+  PEDIDOS_MEMBEGO: ['pedidos-membego', 'facturacion-membego', 'resultados-membego'],
   // Las ofertas con presupuesto (Fase 5): crear, publicar y pausar descuentos con tope de gasto.
   DEALS_MARKETPLACE: ['deals'],
   // HOME_BUILDER no aparece aquí: comparte la sección 'personalizacion' con

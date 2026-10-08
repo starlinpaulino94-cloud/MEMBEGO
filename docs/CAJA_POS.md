@@ -125,3 +125,29 @@ vista previa + impresión/reimpresión auditada por fila.
 `TicketPayload` ya transporta líneas y método de pago: exportar a **PDF,
 correo o WhatsApp** solo requiere renderizar `FacturaSheet`/`ReceiptDoc` en el
 canal nuevo — sin tocar datos ni flujo de cobro.
+
+## Caja conectada a Commerce Core (Fase 7)
+
+Con la capacidad `POS_MEMBEGO` (apagada de serie), la caja del turno suma dos bloques que usan el catálogo, las
+existencias y los pedidos Membego en vez de órdenes sueltas. El resto de la caja (abrir, cobrar membresías y
+promociones, movimientos, arqueo, cierre, tickets) **no cambia**: los cobros nuevos entran al mismo turno, al mismo
+arqueo y a la misma lista de «Últimos cobros» con su impresión.
+
+- **Cobrar un pedido Membego.** Quien cobra escanea (o teclea) el QR del cliente. Se ve el pedido y si el cliente
+  confirmó el monto; se elige efectivo, transferencia o tarjeta; el pago, el cierre del pedido y el cobro de la caja
+  ocurren juntos. Solo en la sucursal del pedido. Un pedido de la vitrina se cierra **solo** con su QR.
+  Si el pedido **ya tiene un pago registrado** (por ejemplo una transferencia que la empresa anotó), no se cobra
+  otra vez: la pantalla lo dice y ofrece «Entregar sin cobrar», que lo cierra con la evidencia como estaba y sin
+  tocar la caja. La caja cuenta solo en pesos; con más de una caja abierta se elige con cuál se trabaja.
+- **Venta de mostrador.** Se buscan productos y servicios del catálogo (los que se venden en caja), se arma el
+  carrito, se elige al cliente por nombre, teléfono o correo (o queda «sin registro») y se cobra. Las existencias
+  bajan; el precio sale siempre del catálogo; pulsar «Cobrar» dos veces no vende dos veces.
+- **Referencia.** La transferencia y la tarjeta (número de autorización) la exigen: es el comprobante. El efectivo
+  admite «recibido» para calcular el cambio. **Decisión (2026-10-08):** cualquier rol de escáner (cajero, recepción,
+  empleado) puede registrarlas con la referencia que teclea, y eso puede subir el pedido a pago verificado.
+- **Qué no hay (todavía):** descuentos manuales, promociones del motor, pago mixto, devolución con reverso del cobro
+  en la caja, integración con CardNET. Un reembolso desde `/admin/pedidos-membego` devuelve las existencias pero no
+  toca el cobro de la caja.
+- **Comisión.** El pedido del marketplace cobrado aquí comisiona como siempre; la venta de mostrador pura no.
+
+Detalle y decisiones: `docs/IMPLEMENTATION_STATUS.md` §3 (F7).

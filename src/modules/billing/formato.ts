@@ -15,6 +15,7 @@ export const ETIQUETA_TIPO_ASIENTO: Record<MerchantLedgerEntryType, string> = {
   PAYMENT: 'Pago de la empresa',
   CREDIT: 'Crédito a favor',
   PROMOTIONAL_CREDIT: 'Crédito promocional',
+  VERIFICATION_ADJUSTMENT: 'Ajuste por pago verificado',
 }
 
 export const ETIQUETA_ESTADO: Record<MerchantBillingStatus, string> = {

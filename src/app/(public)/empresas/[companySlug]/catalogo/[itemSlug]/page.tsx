@@ -11,6 +11,7 @@ import { shareMetadata } from '@/lib/share/metadata'
 import { RUTA_OFERTAS_MEMBEGO } from '@/modules/catalog/publico-nucleo'
 import { opcionesDePedidoPublico } from '@/modules/orders/publico'
 import { PedirForm } from '@/components/pedidos/PedirForm'
+import { AgregarAlCarrito } from '@/components/checkout/AgregarAlCarrito'
 
 interface Props {
   params: Promise<{ companySlug: string; itemSlug: string }>
@@ -126,7 +127,13 @@ export default async function ItemCatalogoPublicoPage({ params }: Props) {
           </ul>
 
           {pedido?.habilitado && (
-            <div className="mt-6">
+            <div className="mt-6 space-y-4">
+              <AgregarAlCarrito
+                companySlug={item.company.slug}
+                moneda={item.currency}
+                conVariantes={item.hasVariants}
+                variantes={item.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, available: v.available }))}
+              />
               <PedirForm
                 retorno={`/empresas/${item.company.slug}/catalogo/${item.slug}`}
                 moneda={item.currency}

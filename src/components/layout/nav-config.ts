@@ -38,6 +38,8 @@ import {
   Rocket,
   ScanLine,
   Scale,
+  ListChecks,
+  ShieldAlert,
   Share2,
   SlidersHorizontal,
   TextSearch,
@@ -546,6 +548,15 @@ const G_ATENCION: NavGroup = {
       capacidad: 'PEDIDOS_MEMBEGO',
     },
     {
+      // Analítica (Fase 6): lo que Membego le produjo a la empresa y lo que le costó. Misma capacidad que los pedidos.
+      href: '/admin/resultados-membego',
+      label: 'Resultados Membego',
+      icon: TrendingUp,
+      description: 'Cuántos clientes, pedidos y ventas te produjo Membego, qué te costó y cómo rinde cada oferta.',
+      keywords: ['resultados', 'membego', 'roi', 'retorno', 'ventas', 'gmv', 'clientes nuevos', 'atribucion', 'comisiones', 'ofertas'],
+      capacidad: 'PEDIDOS_MEMBEGO',
+    },
+    {
       href: '/admin/facturas',
       label: 'Comprobantes',
       icon: ReceiptText,
@@ -816,7 +827,7 @@ const HUB_OPERACIONES: NavGroup = {
   id: 'operaciones',
   label: 'Operaciones',
   items: deAdmin(
-    '/admin/pedidos-membego', '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturacion-membego', '/admin/facturas',
+    '/admin/pedidos-membego', '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturacion-membego', '/admin/resultados-membego', '/admin/facturas',
     '/admin/conciliacion', '/admin/metodos-pago', '/admin/registros', '/admin/actividad'
   ),
 }
@@ -1282,6 +1293,27 @@ const G_SA_OPERACION: NavGroup = {
       icon: Landmark,
       description: 'Merchant Billing: lo que cada empresa debe a Membego — cuentas, comisiones, pagos, ajustes, límites y antigüedad.',
       keywords: ['facturacion', 'cobros', 'comisiones', 'cpa', 'cuentas', 'pagos', 'ajustes', 'credito', 'mora', 'aging', 'estado de cuenta'],
+    },
+    {
+      href: '/superadmin/analitica',
+      label: 'Analítica de Membego',
+      icon: TrendingUp,
+      description: 'GMV, take rate, ventas por empresa y canal, ofertas y salud de los cobros. Supply Economics aparte.',
+      keywords: ['analitica', 'gmv', 'take rate', 'toma', 'ventas', 'empresas', 'canales', 'atribucion', 'ofertas', 'ticket', 'salud'],
+    },
+    {
+      href: '/superadmin/conciliacion',
+      label: 'Conciliación',
+      icon: ListChecks,
+      description: 'Si los pedidos, pagos, comisiones, libros, ofertas e inventario cuadran entre sí. Solo lectura.',
+      keywords: ['conciliacion', 'cuadre', 'auditoria', 'comisiones', 'libro', 'inventario', 'pagos', 'ofertas', 'integridad', 'anomalias'],
+    },
+    {
+      href: '/superadmin/riesgo',
+      label: 'Señales de riesgo',
+      icon: ShieldAlert,
+      description: 'A qué empresas y clientes conviene llamar primero: cancelaciones, reembolsos, pedidos sin atender, crédito y cupones vencidos.',
+      keywords: ['riesgo', 'fraude', 'senales', 'alertas', 'cancelaciones', 'reembolsos', 'credito', 'mora', 'cupones', 'abuso'],
     },
     {
       href: '/superadmin/connect',

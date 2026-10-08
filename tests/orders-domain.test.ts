@@ -21,7 +21,9 @@ import {
   nivelDeVerificacion,
   normalizarMotivoPedido,
   normalizarNota,
+  pagoReportado,
   pagoVerificado,
+  validarVerificacionExterna,
   puedeTransicionar,
   qrDePedidoVencido,
   rangoDeNivel,
@@ -202,9 +204,10 @@ test('motivos y notas: obligatorio y acotado / opcional y acotada', () => {
 
 const ev = (parcial: Partial<EvidenciaDePedido> = {}): EvidenciaDePedido => ({ status: 'COMPLETED', total: '500.00', confirmacion: null, pago: null, ...parcial })
 
-test('los cinco niveles de verificación existen, ordenados de menos a más evidencia', () => {
-  assert.deepEqual([...NIVELES], ['ATTRIBUTED', 'REDEEMED', 'CUSTOMER_VERIFIED', 'PAYMENT_VERIFIED', 'FISCALLY_RECONCILED'])
+test('los seis niveles de verificación existen, ordenados de menos a más evidencia', () => {
+  assert.deepEqual([...NIVELES], ['ATTRIBUTED', 'REDEEMED', 'CUSTOMER_VERIFIED', 'EXTERNAL_PAYMENT_REPORTED', 'PAYMENT_VERIFIED', 'FISCALLY_RECONCILED'])
   assert.ok(rangoDeNivel('REDEEMED') > rangoDeNivel('ATTRIBUTED'))
+  assert.ok(rangoDeNivel('PAYMENT_VERIFIED') > rangoDeNivel('EXTERNAL_PAYMENT_REPORTED'), 'lo que reporta el negocio vale menos que lo que verifica una fuente externa')
   assert.ok(rangoDeNivel('FISCALLY_RECONCILED') > rangoDeNivel('PAYMENT_VERIFIED'))
 })
 
@@ -232,23 +235,51 @@ test('una confirmación de OTRO monto (la empresa ajustó después) no cuenta', 
   assert.equal(confirmacionVigente('500.00', null), false)
 })
 
-test('pago verificado: método verificable + referencia + el monto del pedido; y exige la confirmación', () => {
+test('pago REPORTADO por el negocio (método verificable + referencia + el monto): EXTERNAL_PAYMENT_REPORTED, nunca PAYMENT_VERIFIED; y exige la confirmación', () => {
   const pago = { method: 'TRANSFER' as const, amount: '500.00', reference: 'T-99' }
-  assert.equal(nivelDeVerificacion(ev({ confirmacion: { confirmedTotal: '500.00' }, pago })), 'PAYMENT_VERIFIED')
+  // Sin fuente (código anterior) o con la fuente del negocio: es su palabra.
+  assert.equal(nivelDeVerificacion(ev({ confirmacion: { confirmedTotal: '500.00' }, pago })), 'EXTERNAL_PAYMENT_REPORTED')
+  assert.equal(nivelDeVerificacion(ev({ confirmacion: { confirmedTotal: '500.00' }, pago: { ...pago, source: 'MERCHANT_REPORTED' } })), 'EXTERNAL_PAYMENT_REPORTED')
+  assert.equal(pagoReportado('500.00', pago), true)
+  assert.equal(pagoVerificado('500.00', pago), false, 'una referencia tecleada en caja no verifica')
   // Sin confirmación del cliente el pago solo no sube más allá de REDEEMED (es una cadena).
   assert.equal(nivelDeVerificacion(ev({ pago })), 'REDEEMED')
 })
 
-test('el pago NO verifica si es efectivo, no tiene referencia o no es por el monto', () => {
+test('pago VERIFICADO: lo reportado más una fuente externa (pasarela, banco, proveedor): PAYMENT_VERIFIED', () => {
   const conf = { confirmedTotal: '500.00' }
-  assert.equal(pagoVerificado('500.00', { method: 'CASH', amount: '500.00', reference: 'R' }), false)
-  assert.equal(pagoVerificado('500.00', { method: 'OTHER', amount: '500.00', reference: 'R' }), false)
-  assert.equal(pagoVerificado('500.00', { method: 'CARD', amount: '500.00', reference: null }), false)
-  assert.equal(pagoVerificado('500.00', { method: 'CARD', amount: '500.00', reference: '  ' }), false)
-  assert.equal(pagoVerificado('500.00', { method: 'CARD', amount: '499.99', reference: 'R' }), false)
-  assert.equal(pagoVerificado('500.00', null), false)
-  assert.equal(pagoVerificado('500.00', { method: 'MEMBEGO_CHECKOUT', amount: 500, reference: 'R' }), true)
+  for (const source of ['GATEWAY_VERIFIED', 'BANK_RECONCILED', 'PROVIDER_VERIFIED'] as const) {
+    const pago = { method: 'CARD' as const, amount: '500.00', reference: 'AUTH-1', source }
+    assert.equal(pagoVerificado('500.00', pago), true, source)
+    assert.equal(nivelDeVerificacion(ev({ confirmacion: conf, pago })), 'PAYMENT_VERIFIED', source)
+  }
+  // La fuente externa no salta la cadena: sin método verificable, referencia o monto, no hay ni reporte.
+  assert.equal(nivelDeVerificacion(ev({ confirmacion: conf, pago: { method: 'CASH', amount: '500.00', reference: 'R', source: 'BANK_RECONCILED' } })), 'CUSTOMER_VERIFIED')
+  assert.equal(nivelDeVerificacion(ev({ confirmacion: conf, pago: { method: 'CARD', amount: '499.99', reference: 'R', source: 'GATEWAY_VERIFIED' } })), 'CUSTOMER_VERIFIED')
+  assert.equal(nivelDeVerificacion(ev({ pago: { method: 'CARD', amount: '500.00', reference: 'R', source: 'GATEWAY_VERIFIED' } })), 'REDEEMED', 'sin confirmación del cliente')
+})
+
+test('el pago NO se reporta si es efectivo, no tiene referencia o no es por el monto', () => {
+  const conf = { confirmedTotal: '500.00' }
+  assert.equal(pagoReportado('500.00', { method: 'CASH', amount: '500.00', reference: 'R' }), false)
+  assert.equal(pagoReportado('500.00', { method: 'OTHER', amount: '500.00', reference: 'R' }), false)
+  assert.equal(pagoReportado('500.00', { method: 'CARD', amount: '500.00', reference: null }), false)
+  assert.equal(pagoReportado('500.00', { method: 'CARD', amount: '500.00', reference: '  ' }), false)
+  assert.equal(pagoReportado('500.00', { method: 'CARD', amount: '499.99', reference: 'R' }), false)
+  assert.equal(pagoReportado('500.00', null), false)
+  assert.equal(pagoReportado('500.00', { method: 'MEMBEGO_CHECKOUT', amount: 500, reference: 'R' }), true)
   assert.equal(nivelDeVerificacion(ev({ confirmacion: conf, pago: { method: 'CASH', amount: '500.00', reference: 'R' } })), 'CUSTOMER_VERIFIED')
+})
+
+test('validarVerificacionExterna: fuente externa, referencia del hecho obligatoria y acotada, método verificable', () => {
+  const base = { source: 'GATEWAY_VERIFIED' as const, verificationRef: 'txn-1', method: 'CARD' as const, amount: '500.00', reference: 'AUTH-1' }
+  assert.equal(validarVerificacionExterna(base), null)
+  assert.ok(validarVerificacionExterna({ ...base, source: 'MERCHANT_REPORTED' }))
+  assert.ok(validarVerificacionExterna({ ...base, verificationRef: '' }))
+  assert.ok(validarVerificacionExterna({ ...base, verificationRef: undefined }))
+  assert.ok(validarVerificacionExterna({ ...base, verificationRef: 'x'.repeat(121) }))
+  assert.ok(validarVerificacionExterna({ ...base, method: 'CASH' }))
+  assert.ok(validarVerificacionExterna({ ...base, amount: -1 }))
 })
 
 test('un pedido reembolsado conserva el nivel que tenía al completarse', () => {

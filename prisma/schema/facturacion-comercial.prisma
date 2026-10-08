@@ -57,7 +57,14 @@ enum MerchantCommissionStatus {
 
 /// Signo del monto (positivo = la empresa debe; negativo = a su favor):
 /// `REDEMPTION_FEE`, `ORDER_FEE` > 0; `REFUND`, `PAYMENT`, `CREDIT`,
-/// `PROMOTIONAL_CREDIT` < 0; `ADJUSTMENT` cualquiera ≠ 0, con motivo.
+/// `PROMOTIONAL_CREDIT` < 0; `ADJUSTMENT` y `VERIFICATION_ADJUSTMENT`
+/// cualquiera ≠ 0, con motivo.
+///
+/// `VERIFICATION_ADJUSTMENT`: cuando un pago se VERIFICA (fuente externa) después
+/// de que la comisión CPA ya se cobró, el modelo HYBRID debe cobrar el porcentaje.
+/// La comisión original no se edita: se asienta la DIFERENCIA (porcentaje − CPA),
+/// una sola vez por comisión, con la referencia del hecho que la verificó. Lo
+/// escribe solo el sistema (`commission:<pedido>:verification`).
 enum MerchantLedgerEntryType {
   REDEMPTION_FEE
   ORDER_FEE
@@ -66,6 +73,7 @@ enum MerchantLedgerEntryType {
   PAYMENT
   CREDIT
   PROMOTIONAL_CREDIT
+  VERIFICATION_ADJUSTMENT
 }
 
 model MerchantBillingConfig {
@@ -134,6 +142,22 @@ model Commission {
   reversalEntry   MerchantLedgerEntry? @relation("CommissionReversal", fields: [reversalEntryId, companyId], references: [id, companyId], onDelete: Restrict)
   reversedAt      DateTime?
 
+  /// AJUSTE POR VERIFICACIÓN (a lo sumo uno, append-only). Si el pago se verificó
+  /// DESPUÉS de cobrar el CPA (modelo HYBRID, sin cuota de oferta), aquí queda la
+  /// diferencia asentada (porcentaje − CPA, con signo), el asiento que la cobra, la
+  /// referencia externa que la justificó y, si el pedido se reembolsó después, el
+  /// asiento que la devuelve. `amount` (lo cobrado al cerrar) NO cambia nunca: lo
+  /// cobrado en total es `amount + verificationAdjustmentAmount`. La base exige
+  /// (`merchant_commissions_ajuste_verificacion` + disparador) que el ajuste vaya
+  /// con su asiento, que sea de una comisión CPA sin oferta y que no se repita.
+  verificationAdjustmentAmount          Decimal?             @db.Decimal(12, 2)
+  verificationAdjustmentEntryId         String?
+  verificationAdjustmentEntry           MerchantLedgerEntry? @relation("CommissionVerificationAdjustment", fields: [verificationAdjustmentEntryId, companyId], references: [id, companyId], onDelete: Restrict)
+  verificationAdjustedAt                DateTime?
+  verificationRef                       String?
+  verificationAdjustmentReversalEntryId String?
+  verificationAdjustmentReversalEntry   MerchantLedgerEntry? @relation("CommissionVerificationAdjustmentReversal", fields: [verificationAdjustmentReversalEntryId, companyId], references: [id, companyId], onDelete: Restrict)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -142,6 +166,10 @@ model Commission {
   @@unique([ledgerEntryId, companyId])
   @@unique([reversalEntryId])
   @@unique([reversalEntryId, companyId])
+  @@unique([verificationAdjustmentEntryId])
+  @@unique([verificationAdjustmentEntryId, companyId])
+  @@unique([verificationAdjustmentReversalEntryId])
+  @@unique([verificationAdjustmentReversalEntryId, companyId])
   @@unique([id, companyId])
   @@index([companyId, createdAt])
   @@index([companyId, status])
@@ -181,6 +209,8 @@ model MerchantLedgerEntry {
 
   charges   Commission? @relation("CommissionCharge")
   reversals Commission? @relation("CommissionReversal")
+  verificationAdjustments         Commission? @relation("CommissionVerificationAdjustment")
+  verificationAdjustmentReversals Commission? @relation("CommissionVerificationAdjustmentReversal")
 
   @@unique([companyId, seq])
   @@unique([companyId, idempotencyKey])

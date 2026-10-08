@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs'
 import { Prisma } from '@prisma/client'
 import {
   ESTADOS_DE_OFERTA,
+  alertasDeOferta,
+  claveDeAlertaDeOferta,
+  textoDeAlertaDeOferta,
   TRANSICIONES_DE_OFERTA,
   TRANSICIONES_DE_RECLAMO,
   estadoPorPresupuesto,
@@ -14,9 +17,11 @@ import {
   puedePasarOferta,
   reclamosPosibles,
   rendimientoDeOferta,
+  rendimientoDeTotales,
   validarOferta,
   vencimientoDelReclamo,
   type EntradaDeOferta,
+  type OfertaParaAlertas,
   type OfertaParaReclamar,
 } from '../src/modules/deals/domain'
 
@@ -40,6 +45,7 @@ test('validarOferta: acepta una oferta normal y normaliza el texto', () => {
     assert.equal(r.datos.voucherDays, 7)
     assert.equal(r.datos.newCustomersOnly, false)
     assert.equal(r.datos.budgetTotal.toFixed(2), '5000.00')
+    assert.equal(r.datos.discountValue.toFixed(2), '20.00')
   }
 })
 
@@ -149,6 +155,28 @@ test('rendimientoDeOferta: reclamos, canjes, conversión y lo cobrado', () => {
   assert.equal(rendimientoDeOferta([]).conversion, 0)
 })
 
+test('rendimientoDeTotales (agregado en la base) da lo mismo que contar reclamo por reclamo (auditoría F5–F9, M10)', () => {
+  const filas = [
+    { status: 'REDEEMED' as const, savings: '80', fee: '100' },
+    { status: 'REDEEMED' as const, savings: '60', fee: '100' },
+    { status: 'CLAIMED' as const, savings: '80', fee: '100' },
+    { status: 'EXPIRED' as const, savings: '80', fee: '100' },
+    { status: 'CANCELLED' as const, savings: '80', fee: '100' },
+    { status: 'REFUNDED' as const, savings: '80', fee: '100' },
+  ]
+  const uno = rendimientoDeOferta(filas)
+  const agrupado = rendimientoDeTotales([
+    { status: 'REDEEMED', cantidad: 2, savings: '140', fee: '200' },
+    { status: 'CLAIMED', cantidad: 1, savings: '80', fee: '100' },
+    { status: 'EXPIRED', cantidad: 1, savings: '80', fee: '100' },
+    { status: 'CANCELLED', cantidad: 1, savings: '80', fee: '100' },
+    { status: 'REFUNDED', cantidad: 1, savings: '80', fee: '100' },
+  ])
+  assert.deepEqual({ ...agrupado, costoCobrado: agrupado.costoCobrado.toFixed(2), ahorroEntregado: agrupado.ahorroEntregado.toFixed(2) }, { ...uno, costoCobrado: uno.costoCobrado.toFixed(2), ahorroEntregado: uno.ahorroEntregado.toFixed(2) })
+  assert.equal(agrupado.reclamos, 6)
+  assert.equal(rendimientoDeTotales([]).conversion, 0)
+})
+
 test('etiquetas y vencimiento del reclamo', () => {
   assert.equal(etiquetaDeDescuento('PERCENT', 20), '20 % de descuento')
   assert.equal(etiquetaDeDescuento('AMOUNT_OFF', 100), 'RD$ 100.00 menos')
@@ -156,4 +184,74 @@ test('etiquetas y vencimiento del reclamo', () => {
   assert.equal(etiquetaDeDescuento('FIXED_PRICE', 250, 'USD'), 'A USD 250.00')
   assert.equal(vencimientoDelReclamo(AHORA, 7).toISOString(), '2030-06-08T12:00:00.000Z')
   assert.ok(new Prisma.Decimal(1).equals(1))
+})
+
+// ── Avisos de presupuesto y vigencia (sprint de cierre) ──────────────────────
+
+const para = (extra: Partial<OfertaParaAlertas> = {}): OfertaParaAlertas => ({
+  status: 'ACTIVE',
+  endsAt: null,
+  feePerRedemption: 100,
+  budgetTotal: 1000,
+  budgetReserved: 0,
+  budgetSpent: 0,
+  ...extra,
+})
+
+test('alertas: debajo del 80 % no hay aviso; en el 80 % exacto, sí; el 100 % avisa también del 80 % y de que se agotó', () => {
+  assert.deepEqual(alertasDeOferta(para({ budgetReserved: 700 }), AHORA), [])
+  assert.deepEqual(alertasDeOferta(para({ budgetReserved: 799.99 }), AHORA), [])
+  assert.deepEqual(alertasDeOferta(para({ budgetReserved: 500, budgetSpent: 300 }), AHORA), ['PRESUPUESTO_80'])
+  // Lo comprometido es reservado + gastado, y 900 con cuota de 100 aún deja un canje (libre 100 ≥ 100): no está agotada.
+  assert.deepEqual(alertasDeOferta(para({ budgetReserved: 200, budgetSpent: 700 }), AHORA), ['PRESUPUESTO_80'])
+  assert.deepEqual(alertasDeOferta(para({ budgetReserved: 400, budgetSpent: 600 }), AHORA), ['PRESUPUESTO_80', 'PRESUPUESTO_100', 'AGOTADA'])
+})
+
+test('alertas: agotada es «no alcanza para otro canje», aunque quede un resto menor que la cuota', () => {
+  assert.deepEqual(alertasDeOferta(para({ budgetSpent: 950 }), AHORA), ['PRESUPUESTO_80', 'AGOTADA'], '50 libres < cuota de 100: no se puede reclamar otra')
+  assert.deepEqual(alertasDeOferta(para({ status: 'BUDGET_EXHAUSTED', budgetSpent: 950 }), AHORA), ['PRESUPUESTO_80', 'AGOTADA'])
+})
+
+test('alertas: «por vencer» solo en las últimas 72 horas y mientras no haya terminado', () => {
+  const en = (horas: number) => new Date(AHORA.getTime() + horas * 3_600_000)
+  assert.deepEqual(alertasDeOferta(para({ endsAt: en(73) }), AHORA), [])
+  assert.deepEqual(alertasDeOferta(para({ endsAt: en(72) }), AHORA), ['POR_VENCER'])
+  assert.deepEqual(alertasDeOferta(para({ endsAt: en(1) }), AHORA), ['POR_VENCER'])
+  assert.deepEqual(alertasDeOferta(para({ endsAt: en(0) }), AHORA), [], 'ya terminó: no es «por vencer»')
+  assert.deepEqual(alertasDeOferta(para({ endsAt: en(-5) }), AHORA), [])
+})
+
+test('alertas: borrador, terminada y archivada no avisan; pausada sí (sigue viva y sigue gastando cupones ya reclamados)', () => {
+  for (const status of ['DRAFT', 'COMPLETED', 'ARCHIVED'] as const) {
+    assert.deepEqual(alertasDeOferta(para({ status, budgetSpent: 1000, endsAt: new Date(AHORA.getTime() + 3_600_000) }), AHORA), [], status)
+  }
+  assert.deepEqual(alertasDeOferta(para({ status: 'PAUSED', budgetReserved: 800 }), AHORA), ['PRESUPUESTO_80'])
+})
+
+test('alertas: un presupuesto en cero no divide entre cero', () => {
+  assert.doesNotThrow(() => alertasDeOferta(para({ budgetTotal: 0 }), AHORA))
+})
+
+test('alertas: la clave cambia con el presupuesto total y con la fecha de fin, y no con lo gastado', () => {
+  const fin = new Date('2030-06-03T12:00:00Z')
+  const base = claveDeAlertaDeOferta('d1', 'PRESUPUESTO_80', { budgetTotal: 1000, endsAt: fin })
+  assert.equal(base, 'oferta-alerta:d1:PRESUPUESTO_80:1000.00')
+  assert.notEqual(base, claveDeAlertaDeOferta('d1', 'PRESUPUESTO_80', { budgetTotal: 2000, endsAt: fin }), 'ampliar el presupuesto es otro hecho')
+  assert.notEqual(claveDeAlertaDeOferta('d1', 'POR_VENCER', { budgetTotal: 1000, endsAt: fin }), claveDeAlertaDeOferta('d1', 'POR_VENCER', { budgetTotal: 1000, endsAt: new Date(fin.getTime() + 86_400_000) }), 'alargar la vigencia también')
+  assert.equal(claveDeAlertaDeOferta('d1', 'POR_VENCER', { budgetTotal: 1000, endsAt: fin }), claveDeAlertaDeOferta('d1', 'POR_VENCER', { budgetTotal: 5000, endsAt: fin }), 'por vencer no depende del presupuesto')
+})
+
+test('alertas: los textos no llevan datos de clientes y dicen cuánto', () => {
+  const t = textoDeAlertaDeOferta('PRESUPUESTO_80', 'Lavado 20 %', { budgetTotal: 1000, budgetReserved: 500, budgetSpent: 300, endsAt: null })
+  assert.match(t.mensaje, /«Lavado 20 %»/)
+  assert.match(t.mensaje, /RD\$ 800\.00 de RD\$ 1000\.00/)
+  assert.equal(textoDeAlertaDeOferta('POR_VENCER', 'X', { budgetTotal: 1, budgetReserved: 0, budgetSpent: 0, endsAt: new Date('2030-06-03T12:00:00Z') }).mensaje.includes('2030-06-03'), true)
+  assert.match(textoDeAlertaDeOferta('AGOTADA', 'X', { budgetTotal: 1, budgetReserved: 0, budgetSpent: 0, endsAt: null, currency: 'USD' }).titulo, /agotó/)
+})
+
+test('el barrido avisa DESPUÉS de terminar lo suyo y por la clave, nunca con un INSERT propio (la unicidad de la base es la que evita el doble aviso)', () => {
+  const src = readFileSync('src/modules/deals/barrido.ts', 'utf8')
+  assert.match(src, /notificarAdmins\(/)
+  assert.match(src, /dedupeKey: clave/)
+  assert.doesNotMatch(src, /notificacion\.(create|createMany|upsert)\(/, 'solo cuenta; escribe el helper de notificaciones')
 })

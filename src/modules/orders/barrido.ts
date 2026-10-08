@@ -1,3 +1,4 @@
+import { MOTIVO_SIN_RESPUESTA } from './motivos'
 import 'server-only'
 
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
@@ -21,7 +22,7 @@ import { cancelarPedidoEnTx, type ContextoPedido } from './service'
 /** Cuánto espera un pedido a que la empresa lo acepte antes de cancelarse solo. */
 export const DIAS_SIN_RESPUESTA = 7
 
-const MOTIVO = 'La empresa no respondió a tiempo'
+const MOTIVO = MOTIVO_SIN_RESPUESTA
 const SISTEMA: ContextoPedido = { actor: 'SISTEMA', actorId: null }
 
 /** Tope de pedidos por pasada: lo que sobre lo recoge la siguiente. */

@@ -44,13 +44,31 @@ export interface PedidoParaComision {
   code: string
   origin: string
   sourceType: string | null
+  /** El canal de atribución del pedido (texto: este módulo no importa el dominio de pedidos). `null` si no se conoce. */
+  attributionChannel?: string | null
   commissionableBase: Monto
   verificationLevel: MembegoVerificationLevel
   currency: string
 }
 
-/** Orígenes que Membego trajo y por los que cobra. POS, excursiones y API se agregan al venir su fase. */
+/**
+ * Orígenes que comisionan POR SÍ MISMOS: el pedido nació en Membego (la vitrina, el carrito,
+ * una oferta), así que la adquisición es de Membego sea cual sea el canal que lo cumpla.
+ * POS, excursiones y API NO están aquí: en esos orígenes decide la atribución (abajo).
+ */
 export const ORIGENES_COMISIONABLES: readonly string[] = ['MARKETPLACE']
+
+/**
+ * ADQUISICIÓN ≠ CUMPLIMIENTO. Un pedido se cobra por lo que Membego trajo, no por dónde se
+ * cumplió o se pagó: el pedido del marketplace que la caja cobra y entrega (origen MARKETPLACE,
+ * cumplido por POS) comisiona; la venta de mostrador de quien entró por su cuenta (origen POS,
+ * canal DIRECT) no. Para un origen que no comisiona por sí mismo, comisiona SOLO si su atribución
+ * es demostrable: uno de estos canales, cada uno con el dato que la base le exige (promoción,
+ * campaña, código de referido). `QR_SCAN` (el cliente se identificó con su QR en el mostrador)
+ * y `DIRECT` no prueban que Membego trajera la venta y no comisionan. Nada de esto cobra hacia
+ * atrás: un pedido sin atribución demostrable sigue sin comisionar.
+ */
+export const CANALES_ATRIBUIDOS_A_MEMBEGO: readonly string[] = ['MARKETPLACE_BROWSE', 'MARKETPLACE_SEARCH', 'PROMOTION_CLAIM', 'CAMPAIGN', 'REFERRAL']
 
 /** El tipo de documento con el que el puente de Supply envuelve una compra (se compara como texto: este módulo no importa Supply). */
 const FUENTE_SUPPLY = 'SUPPLY_V2_CUSTOMER_ORDER'
@@ -60,8 +78,10 @@ export function esPedidoDeSupply(p: Pick<PedidoParaComision, 'origin' | 'sourceT
   return p.origin === 'SUPPLY' || p.sourceType === FUENTE_SUPPLY
 }
 
-export function pedidoGeneraComision(p: Pick<PedidoParaComision, 'origin' | 'sourceType'>): boolean {
-  return !esPedidoDeSupply(p) && ORIGENES_COMISIONABLES.includes(p.origin)
+export function pedidoGeneraComision(p: Pick<PedidoParaComision, 'origin' | 'sourceType' | 'attributionChannel'>): boolean {
+  if (esPedidoDeSupply(p)) return false
+  if (ORIGENES_COMISIONABLES.includes(p.origin)) return true
+  return typeof p.attributionChannel === 'string' && CANALES_ATRIBUIDOS_A_MEMBEGO.includes(p.attributionChannel)
 }
 
 // ── Cuánto se cobra ──────────────────────────────────────────────────────────
@@ -178,7 +198,9 @@ export function validarTarifas(c: { cpaAmount?: Monto | null; percentageRate?: M
 
 export const TIPOS_QUE_SUMAN: readonly MerchantLedgerEntryType[] = ['REDEMPTION_FEE', 'ORDER_FEE']
 export const TIPOS_QUE_RESTAN: readonly MerchantLedgerEntryType[] = ['REFUND', 'PAYMENT', 'CREDIT', 'PROMOTIONAL_CREDIT']
-const TIPOS_CON_MOTIVO: readonly MerchantLedgerEntryType[] = ['ADJUSTMENT', 'CREDIT', 'PROMOTIONAL_CREDIT']
+/** Con cualquier signo (nunca cero): el ajuste manual y el ajuste por verificación de una comisión. */
+export const TIPOS_CON_SIGNO: readonly MerchantLedgerEntryType[] = ['ADJUSTMENT', 'VERIFICATION_ADJUSTMENT']
+const TIPOS_CON_MOTIVO: readonly MerchantLedgerEntryType[] = ['ADJUSTMENT', 'VERIFICATION_ADJUSTMENT', 'CREDIT', 'PROMOTIONAL_CREDIT']
 
 /** Tipos que una PERSONA puede asentar a mano; los demás los escribe el sistema al cobrar o revertir una comisión. */
 export const TIPOS_MANUALES = ['PAYMENT', 'ADJUSTMENT', 'CREDIT', 'PROMOTIONAL_CREDIT'] as const
@@ -206,6 +228,47 @@ export function validarAsiento(a: { type: MerchantLedgerEntryType; amount: Monto
   if (TIPOS_QUE_RESTAN.includes(a.type) && !m.lessThan(0)) return 'Un pago, crédito o reverso resta de lo que la empresa debe.'
   if (TIPOS_CON_MOTIVO.includes(a.type) && !(a.reason ?? '').trim()) return 'Un ajuste o crédito exige un motivo por escrito.'
   return null
+}
+
+/** Lo que Merchant Billing necesita de una comisión ya cobrada para decidir su ajuste por verificación. */
+export interface ComisionParaAjuste {
+  type: MerchantCommissionType
+  feeModel: MerchantFeeModel
+  status: string
+  dealId: string | null
+  baseAmount: Monto
+  amount: Monto
+  verificationAdjustmentAmount: Monto | null
+}
+
+export type AjustePorVerificacion =
+  | { resultado: 'AJUSTAR'; amount: Decimal; rate: Decimal; objetivo: Decimal }
+  | { resultado: 'NO_APLICA'; motivo: 'MODELO' | 'PORCENTAJE' | 'OFERTA' | 'REVERTIDA' | 'YA_AJUSTADA' | 'NIVEL' }
+  | { resultado: 'SIN_DIFERENCIA' }
+
+/**
+ * Cuánto hay que asentar para que una comisión cobrada como CPA quede en el porcentaje, ahora
+ * que el pago está verificado por una fuente externa. SOLO para el modelo HYBRID (en CPA_FIXED el
+ * CPA es la regla y en PERCENTAGE ya se cobró el porcentaje), SOLO para comisiones CPA sin cuota
+ * de oferta (la cuota de una oferta es un precio pactado, no un adelanto) y UNA sola vez. La
+ * diferencia lleva signo: si el porcentaje es menor que el CPA, se devuelve la diferencia, porque
+ * lo que la regla dice es «porcentaje desde PAYMENT_VERIFIED», no «lo que sea mayor».
+ */
+export function calcularAjustePorVerificacion(c: ComisionParaAjuste, nivel: MembegoVerificationLevel, config: ConfigDeCobro): AjustePorVerificacion {
+  if (c.status === 'REVERSED') return { resultado: 'NO_APLICA', motivo: 'REVERTIDA' }
+  if (c.verificationAdjustmentAmount !== null) return { resultado: 'NO_APLICA', motivo: 'YA_AJUSTADA' }
+  if (c.dealId) return { resultado: 'NO_APLICA', motivo: 'OFERTA' }
+  if (c.feeModel !== 'HYBRID') return { resultado: 'NO_APLICA', motivo: 'MODELO' }
+  if (c.type !== 'CPA_FIXED') return { resultado: 'NO_APLICA', motivo: 'PORCENTAJE' }
+  if (!NIVELES_CON_PAGO_VERIFICADO.includes(nivel)) return { resultado: 'NO_APLICA', motivo: 'NIVEL' }
+  const errorConfig = validarTarifas(config)
+  if (errorConfig) throw new Error(errorConfig)
+  const base = redondear2(decimal(c.baseAmount))
+  const rate = decimal(config.percentageRate)
+  const objetivo = repartirComision(base, rate).commissionAmount
+  const amount = redondear2(objetivo.minus(decimal(c.amount)))
+  if (amount.isZero()) return { resultado: 'SIN_DIFERENCIA' }
+  return { resultado: 'AJUSTAR', amount, rate, objetivo }
 }
 
 /** El motivo de un asiento manual: sin espacios sobrantes y de largo acotado. */
@@ -420,7 +483,8 @@ export function resumirCorte(apertura: Monto, asientos: readonly AsientoParaCort
   const openingBalance = decimal(apertura)
   const totalCommissions = suma(TIPOS_QUE_SUMAN)
   const reversals = suma(['REFUND'])
-  const adjustments = suma(['ADJUSTMENT'])
+  // El ajuste por verificación va con los ajustes (tiene signo) y no con las comisiones (que el corte exige ≥ 0).
+  const adjustments = suma(TIPOS_CON_SIGNO)
   const credits = suma(['CREDIT', 'PROMOTIONAL_CREDIT'])
   const payments = suma(['PAYMENT'])
   const closingBalance = openingBalance.plus(totalCommissions).plus(reversals).plus(adjustments).plus(credits).plus(payments)
@@ -475,6 +539,8 @@ export function cargosVigentes(asientos: readonly AsientoParaAntiguedad[]): { am
   return asientos
     .filter((a) => {
       if (a.type === 'ADJUSTMENT') return decimal(a.amount).greaterThan(0)
+      // El ajuste positivo de una comisión es un cargo vivo mientras la comisión no se haya revertido.
+      if (a.type === 'VERIFICATION_ADJUSTMENT') return decimal(a.amount).greaterThan(0) && !revertidas.has(a.referenceId)
       if (!TIPOS_QUE_SUMAN.includes(a.type)) return false
       return !(a.referenceType === 'COMMISSION' && revertidas.has(a.referenceId))
     })

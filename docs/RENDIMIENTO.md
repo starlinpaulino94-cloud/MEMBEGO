@@ -1,183 +1,134 @@
-# Presupuestos de rendimiento y tamaño del código
+# Rendimiento de la analítica y la conciliación
 
-Cubre los puntos **27** y **29** del plan de `docs/AUDITORIA-PRODUCCION.md`
-— Fase 7.
+Sprint de cierre · Bloque E (2026-10-08). Medido, no estimado: las consultas **reales** del código
+(`src/modules/analytics/queries.ts`, `src/modules/conciliacion/queries.ts`) contra una base desechable con
+volumen. Esto **no** es producción ni un benchmark de hardware: PostgreSQL 16 local, un solo nodo, cachés
+frías a medias. Sirve para comparar antes/después y para ver qué plan elige el optimizador.
 
----
-
-## 1. Presupuestos de bundle (punto 29)
-
-### El problema
-
-El JavaScript de una aplicación web solo crece. Nunca hay un día en que alguien
-decida "hoy engordamos el bundle": hay cien días en que se añade una librería de
-gráficos, un selector de fechas, un lector de QR, y cada uno suma cincuenta
-kilobytes que nadie mira. Un año después la aplicación tarda seis segundos en
-abrir en un teléfono de gama media con datos móviles, y ya no se puede señalar
-al culpable porque no hay uno.
-
-Un presupuesto no prohíbe crecer. Prohíbe crecer **sin darse cuenta**.
-
-### Los tres números
-
-`npm run presupuesto` (tras `npm run build`), y en CI dentro del trabajo
-*Build de producción*.
-
-| Qué | Medido hoy | Techo | Qué pregunta responde |
-|---|---|---|---|
-| JavaScript de cliente (todo) | 5.177 KB | 6.500 KB | ¿Se está haciendo pesado el proyecto en general? |
-| **Entrada compartida** | **820 KB** | **1.000 KB** | **Lo que descarga SIEMPRE cualquier visitante. El que de verdad se siente** |
-| Trozo individual más grande | 493 KB | 600 KB | ¿Hay una librería que debería cargarse a demanda? |
-
-Se miden **sin comprimir**. Los bytes que viajan van con gzip o brotli y son
-bastante menos, pero el tamaño sin comprimir es el que el navegador tiene que
-parsear y compilar, y en un teléfono de gama media eso pesa más que la descarga.
-Además es estable: no depende de cómo tenga configurada la compresión el CDN.
-
-### Por qué no se usa "First Load JS"
-
-Es el número que todo el mundo cita, y con Next 16 esta configuración ya no lo
-imprime. Parsear una tabla que a veces sale y a veces no no es base para nada:
-se miden los bytes en disco de `.next/static/chunks`, que es lo que de verdad se
-descarga.
-
-### Cuando el CI falle aquí
-
-En orden:
-
-1. Mirar **qué entró** en el último cambio y cargarlo con `next/dynamic` — como
-   ya se hace con el lector de QR (`ScannerClient.tsx`), que es 280 KB que solo
-   pagan quienes escanean.
-2. Buscar una alternativa más ligera.
-3. **Subir el techo a propósito** y anotar por qué en `scripts/presupuesto-bundle.mjs`.
-
-La tercera es legítima. Lo que no vale es subirlo sin mirar.
-
----
-
-## 2. Archivos grandes (punto 27) — lo que se midió y qué se hizo
-
-El punto pedía *"dividir archivos de 900+ líneas y el schema por dominios"*.
-Antes de dividir nada, la medición:
-
-| Archivo | Líneas | Qué es |
-|---|---|---|
-| `src/modules/referidos/actions.ts` | 972 | Server actions |
-| `src/modules/regalos/actions.ts` | 964 | Server actions |
-| `src/lib/automation/playbooks/campaign.ts` | 950 | **Biblioteca de contenido** |
-| `src/lib/automation/playbooks/membership.ts` | 932 | **Biblioteca de contenido** |
-| `src/lib/automation/playbooks/gamification.ts` | 921 | **Biblioteca de contenido** |
-| `src/modules/admin/actions.ts` | 917 | Server actions |
-| `src/lib/automation/playbooks/referral.ts` | 916 | **Biblioteca de contenido** |
-
-**Cinco de los siete son bibliotecas de contenido**, no lógica: catálogos de
-playbooks declarativos, uno detrás de otro. Un archivo de 950 líneas de datos no
-es complejidad; es una lista. Partirlo en tres de 300 no lo hace más fácil de
-entender — hace falta abrir tres archivos para leer lo mismo.
-
-**Los tres de server actions sí son lógica**, y ahí la división tendría sentido.
-Pero dividir por número de líneas no es la razón correcta: la razón correcta es
-que un archivo tenga más de una responsabilidad. Eso hay que mirarlo con el
-código delante, en un cambio dedicado, y no como efecto colateral de una fase
-que ya toca cuarenta archivos.
-
-**Decisión: no se dividieron.** Cambiar la forma de código que funciona, sin una
-pregunta concreta que responder, es riesgo sin beneficio medible.
-
-### El esquema: de 4.003 líneas en un archivo a 14 por dominio — **hecho**
-
-Este sí dolía de verdad: 112 modelos y 53 enums en un solo archivo es incómodo
-de navegar todos los días. Ahora está en `prisma/schema/`, un archivo por
-dominio, con el índice al principio de `base.prisma`.
-
-| Archivo | Bloques | Qué contiene |
-|---|---|---|
-| `base` | 2 | Generador, origen de datos y el índice |
-| `identidad` | 9 | Usuarios, empresas, sucursales, auditoría |
-| `clientes` | 6 | El cliente final, vehículos, notas |
-| `membresias` | 8 | Membresías, planes, QR, visitas |
-| `promociones` | 9 | Promociones y compras |
-| `marketplace` | 5 | Categorías, reseñas, capa social |
-| `referidos` | 23 | Referidos, crecimiento, invitaciones |
-| `caja` | 17 | Caja, transacciones, tickets, regalos |
-| `motores` | 42 | Reglas, promociones universales, beneficios, automatizaciones |
-| `campanas` | 15 | Campañas, ruleta, ofertas privadas |
-| `citas` | 3 | Agenda y reservas |
-| `soporte` | 7 | Tickets, FAQ, WhatsApp |
-| `carwash` | 20 | Operación de pista |
-| `pagos` | 1 | Pasarela |
-
-La división salió de las secciones que el propio esquema ya tenía marcadas
-(`// FASE 2: MARKETPLACE`, `// Caja (POS)`…), no de una organización inventada.
-
-#### Cómo se demostró que no cambia nada
-
-Un cambio en este archivo lo paga cada despliegue y cada migración, así que no
-basta con que compile. Se comprobó en cuatro niveles, de menos a más
-concluyente:
+## Cómo se reproduce
 
 ```bash
-# 1. Ningún bloque perdido, duplicado ni alterado (167 bloques, comparados
-#    tras normalizar espacios y comentarios).
-# 2. El esquema sigue siendo válido y el cliente se genera igual.
-npx prisma validate && npx prisma generate
-
-# 3. Diff del modelo de datos ANTIGUO contra el NUEVO. Salida esperada:
-#    "This is an empty migration" — cero diferencias.
-npx prisma migrate diff \
-  --from-schema-datamodel <schema.prisma original> \
-  --to-schema-datamodel prisma/schema --script
-
-# 4. LA PRUEBA QUE ZANJA EL ASUNTO: `db push` de cada versión sobre dos bases
-#    vacías distintas y `pg_dump --schema-only` de ambas. Resultado: 2.953
-#    líneas de DDL idénticas en las dos, salvo los dos tokens aleatorios que
-#    pg_dump genera en cada invocación.
+createdb -T membego_pg membego_perf        # copia de la base local de pruebas (nunca una base real)
+psql membego_perf -v ON_ERROR_STOP=1 -f scripts/rendimiento/sembrar-volumen.sql   # ~50 s
+# luego EXPLAIN (ANALYZE, BUFFERS) de la consulta que interese, o las funciones EnTx desde un script tsx
 ```
 
-Y después, todo lo demás en verde: `tsc`, `eslint`, 187 pruebas, `next build`,
-28 E2E y `npm run db:doctor` (112 modelos, 53 enums, sin desfase).
+`sembrar-volumen.sql` apaga disparadores y FK **de su sesión** para sembrar filas coherentes a mano; por eso
+solo es para bases desechables (lo dice su cabecera).
 
-#### Lo que hubo que tocar además
+## Volumen sembrado
 
-- `package.json` → `prisma.schema: "prisma/schema"`. **Prisma 6.19 no detecta
-  la carpeta solo**; sin esta línea dice "schema not found".
-- `.github/workflows/ci.yml`, trabajo `esquema` → `--to-schema-datamodel prisma/schema`.
-- `scripts/db-doctor.mjs` → concatena los `.prisma` de la carpeta en vez de leer
-  un archivo.
+| Tabla | Filas |
+|---|---:|
+| `membego_orders` (120 empresas, 12 meses; 80 % completados, 8 % cancelados, 4 % reembolsados…) | 396 000 (94 MB) |
+| `order_attributions` | 396 000 |
+| `payment_evidences` (reportadas y verificadas) | ≈ 133 000 |
+| `merchant_commissions` + `merchant_ledger_entries` | ≈ 158 000 + 158 000 |
 
-#### El hallazgo que salió por el camino — ya está arreglado
+La empresa de prueba es la de más pedidos (≈ 3 300). Ninguna empresa real de un piloto se acerca a eso.
 
-Al dividir el esquema apareció que `prisma migrate diff --from-migrations`
-**fallaba en este repositorio**, y fallaba igual antes de dividir nada. Se
-arregló en el commit siguiente. Lo que se encontró:
+## Tiempos (primera ejecución, mediana de la tanda)
 
-| Problema | Detalle |
+| Consulta | 90 días | 365 días |
+|---|---:|---:|
+| Resultados de una empresa (`resultadosDeMembegoEnTx`, 9 consultas en paralelo) | 212 ms | 240 ms |
+| Panorama de la plataforma (`panoramaDePlataformaEnTx`) | 1 104 ms | 2 077 ms |
+| Conciliación, las 27 reglas, toda la plataforma | 3 592 ms | — (no depende del rango) |
+| Conciliación, las 27 reglas, una empresa | 365 ms | — |
+
+Reglas de conciliación individuales más lentas (plataforma entera): **C01 1 600 ms**, L01 794 ms, P03 472 ms;
+las otras 24 tardan ≤ 209 ms. Los hallazgos de la siembra (C01 75 369, P01 12 654, P03 277 469, L01 396 000)
+son artefactos del dato sintético —no hay líneas de pedido ni inventario sembrados—, no un fallo del código.
+
+## Lectura de los planes
+
+- **C01** («completado de marketplace/atribuible sin comisión»): `Hash Anti Join` contra
+  `merchant_commissions` y contra `merchant_billing_configs`; lee 233 853 pedidos completados con un
+  `Bitmap Heap Scan` y ordena 75 369 hallazgos para numerarlos (`row_number()`; 7 MB a disco). **Es una
+  verificación de integridad que, por definición, mira todo lo completado**: ningún índice reduce el conjunto
+  que hay que comprobar. 1,0 s de ejecución con 396 000 pedidos.
+- **Panorama de plataforma**: filtra `status = 'COMPLETED' AND completedAt` por rango y une las comisiones por
+  `orderId` (índice único). El coste lo marca el barrido de `merchant_commissions` (158 000 filas).
+
+## Experimento de índice (no se añade)
+
+Candidato: `CREATE INDEX … ON membego_orders ("completedAt") WHERE status = 'COMPLETED'` (7 MB).
+
+| Agregado de plataforma, rango de 90 días | Tiempo (3 corridas) |
 |---|---|
-| El historial no tenía principio | Ninguna migración creaba `users`, `companies`, `clientes` ni `memberships`: el esquema inicial se hizo con `db push` y las migraciones empezaron después |
-| Tres tablas sin migración | `campanas_invitacion`, `invitacion_progresos` e `invitacion_eventos` se crearon a mano |
-| Dos migraciones extraviadas | `20260745` y `20260746` vivían en `scripts/`, no en `prisma/migrations/` |
-| 110 diferencias de forma | Claves foráneas con otra regla `ON DELETE`, `updatedAt` con `DEFAULT` de más, `VARCHAR(n)` donde el esquema dice `String`, índices con nombre `idx_*` |
-| `CONCURRENTLY` irreplicable | `20260768_visitas_indices` no puede correr dentro de una transacción, y Prisma envuelve cada migración en una |
+| Sin el índice | 83 · 90 · 97 ms |
+| Con el índice parcial | 124 · 137 · 150 ms |
 
-Se cerró con `0_genesis` (sacado del propio git: el esquema del commit anterior
-a la primera migración), una migración de reparación, las dos promovidas, y
-`20260770_reconciliacion`. Verificado: **74 migraciones, 0 fallos desde vacío,
-"No difference detected"**. El trabajo `esquema` del CI perdió su
-`continue-on-error` y ahora bloquea de verdad.
+El optimizador usa el índice (`Bitmap Heap Scan`) y el resultado es **más lento**: el rango de 90 días ya
+cubre ≈ 40 000 de 316 000 completados y el acceso por bitmap cuesta más que el barrido paralelo. **Decisión:
+no añadir índices en este sprint.** Los existentes (`(companyId, status, createdAt)`, `(companyId, customerId,
+createdAt)`, `(companyId, locationId, status)`, `(companyId, channel)` en atribuciones, `(companyId,
+createdAt)` en el libro y las comisiones) cubren las consultas de empresa, que son las que corre un usuario
+cada vez que abre una pantalla.
 
-El procedimiento de una sola vez que hay que ejecutar en producción está en
-`docs/DEVOPS.md`.
+## Límites que ya existen en el código
 
----
+- Rangos: los presets llegan a 365 días; la serie diaria se recorta a `MAX_DIAS_SERIE = 370` y pasa a semanal
+  a partir de 62 días (`reportes/rango.ts`).
+- Listas acotadas: ofertas de analítica `limite = 50`; ranking de empresas 15; ofertas de plataforma 10;
+  muestra de cada regla de conciliación `1…50` (por defecto pocas filas) con el **total** exacto aparte.
+- Las dos pantallas pesadas (`/superadmin/analitica`, `/superadmin/conciliacion`) son solo del superadmin,
+  de lectura, sin escribir y sin efectos laterales (pruebas `analytics-*` y `conciliacion-permisos`).
 
-## 3. Lo que sigue sin medirse
+## Qué no se midió
 
-1. **Los scripts de carga de k6 nunca se han ejecutado** (`tests/carga/`, Fase 4).
-   El techo de "500-1.000 concurrentes" sigue siendo una estimación.
-2. **No hay Lighthouse ni Core Web Vitals en CI.** Los presupuestos miden bytes,
-   no experiencia: un bundle pequeño puede seguir dando un LCP malo por una
-   imagen sin optimizar o una fuente que bloquea. La prueba E2E de "responde en
-   menos de 8 s" es una red mínima, no una medición.
-3. **No hay presupuesto para el CSS ni para las imágenes.** El CSS de Tailwind
-   se poda solo y las imágenes pasan por `next/image`, así que hoy no son el
-   problema — pero tampoco están vigilados.
+- Producción, hardware real, pooler (Supabase/PgBouncer) ni latencia de red.
+- Concurrencia de varios superadmins abriendo la conciliación a la vez.
+- Volúmenes de otras tablas (`inventory_movements`, `deal_claims`, `supply_*`).
+- Con el tamaño actual (decenas de pedidos por empresa) nada de esto importa: es un margen de crecimiento, no
+  un problema de hoy. **Cuándo reabrirlo:** si la conciliación de plataforma pasa de ~10 s o el panorama de
+  ~5 s con datos reales, antes de pensar en índices conviene materializar o partir la conciliación por empresa.
+
+## Concurrencia y carga (cobertura existente + lo añadido)
+
+No hace falta una suite de carga aparte: cada caso de la lista del sprint ya tiene su prueba concurrente
+contra PostgreSQL real, en serie.
+
+| Caso | Prueba |
+|---|---|
+| Reclamos de oferta simultáneos / último cupo de presupuesto | `deals.db` 5 (dos clics → un reclamo), 6 (16 personas, presupuesto para 5 → ganan 5 y se pausa) |
+| Canje de QR (pedido) | `orders.db` 21 (6 escaneos simultáneos → un cierre, una venta), `pos.db` 17 (dos cajeros, un cobro) |
+| Reserva de inventario / última unidad | `inventory.db` 15 (20 reservas de 5 → ganan 5), 16, 17 (misma clave ×5); `checkout.db` 7 |
+| Creación de comisión | `billing.db` 5, 27 (varios cierres a la vez), 28 (cierre + barrido) |
+| Ajuste por verificación | `billing.db` 42 (3 verificaciones → 1 ajuste) y **48 (nuevo): verificación contra reembolso a la vez, 4 rondas** |
+| Libro de Merchant Billing | `billing.db` 26 (20 asientos simultáneos → posiciones 1…n, saldo exacto) |
+| Redención de Supply / mismo QR / última unidad | `supply-v2-slice3` B, C; `slice5` C, F; `slice2` E, E2 |
+| Mismo webhook dos veces | `slice9` A, B2·A (×5), B2·B (HTTP simultáneo) |
+| Último uso de bono/cupón y presupuesto | `slice6` D, E; `slice7` C, D |
+| Un derecho por unidad pagada (nuevo) | `supply-v2-slice2` K2 (la base rechaza derechos de más) |
+
+## Peso del JavaScript del cliente (auditoría, sin cambios)
+
+Medido con `npm run presupuesto` sobre el build del Bloque C (2026-10-08). «Antes» = último valor registrado en
+el status (F9/lote de auditoría); «después» = esta rama tras los Bloques A–D (los únicos añadidos de cliente son
+el formulario de verificación bancaria del superadmin y textos).
+
+| Medida | Antes | Después | Tope |
+|---|---:|---:|---:|
+| JavaScript de cliente (todo) | 8 869 KB | 8 875 KB (+6) | 9 200 KB (96 %) |
+| Entrada compartida (se baja siempre) | — | 867 KB | 1 000 KB (87 %) |
+| Trozo individual mayor | — | 526 KB | 600 KB (88 %) |
+
+Qué hay en los trozos grandes (buscando firmas en el código minificado, no con un analizador):
+
+- **526 KB (`37664-…`) y 203 KB (`16425…`)**: el SDK de Sentry del cliente (repetición de sesión + trazas +
+  migas). Es lo más pesado y se baja en todas las páginas.
+- **395 KB (`87672-…`)**: `recharts`, solo en las pantallas con gráficas (carga por ruta, no compartida).
+- `leaflet` sigue en uso (`MapaUbicacion`, `MapaConfirmarVivienda`, `MapaCercaDeMi`): no es peso muerto.
+
+**No se tocó nada**, a propósito: la única palanca grande es cargar la repetición de sesión de Sentry de forma
+diferida o quitarla, y eso cambia qué se observa en producción. Queda como decisión:
+
+> **DECISIÓN DE PRODUCTO / PRIVACIDAD (no técnica):** `src/instrumentation-client.ts` graba repeticiones con
+> `maskAllText: false` (el texto visible de las pantallas —nombres, montos, referencias— se ve en la
+> repetición; los campos de formulario sí se enmascaran con `maskAllInputs`, y hay máscara explícita de
+> contraseña, token y correo). Para un piloto con datos reales de clientes lo prudente es `maskAllText: true`
+> o no grabar repeticiones; hoy no lo cambio porque altera lo que el equipo ve al depurar.
+
+Si el total se acerca al tope (> 98 %), el orden de palancas es: (1) repetición de Sentry diferida,
+(2) `recharts` solo en las dos pantallas de analítica, (3) revisar `date-fns` por importaciones de todo el paquete.

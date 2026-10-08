@@ -42,7 +42,9 @@ const leer = (p: string) =>
     .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 
 const PAGINA_PROMO = 'src/app/(cliente)/cliente/promociones/[id]/page.tsx'
-const ACCIONES = 'src/modules/promociones/compraActions.ts'
+// La lógica de adquirir vive en el servicio (la acción solo delega, desde que la compra pasó a `compraService.ts`).
+const ACCIONES = 'src/modules/promociones/compraService.ts'
+const ACCIONES_DE_COMPRA = 'src/modules/promociones/compraActions.ts'
 const AFILIACION = 'src/modules/cliente/afiliacion.ts'
 const MIS_BENEFICIOS = 'src/app/(cliente)/cliente/mis-promociones/page.tsx'
 const DETALLE_COMPRA = 'src/app/(cliente)/cliente/mis-promociones/[id]/page.tsx'
@@ -97,7 +99,7 @@ test('el alta crea la ficha Y el seguimiento en el mismo sitio', () => {
 test('promoción privada: se comprueba la membresía ANTES de crear la ficha', () => {
   const src = leer(ACCIONES)
   const iPrivada = src.indexOf("promo.visibilidad === 'privada'")
-  const iAlta = src.indexOf('const ficha = await fichaParaAdquirir')
+  const iAlta = src.indexOf('const alta = await asegurarClienteEnEmpresa')
   assert.ok(iPrivada > 0 && iAlta > 0, 'No se encontraron ambos bloques.')
   assert.ok(
     iPrivada < iAlta,
@@ -110,7 +112,7 @@ test('promoción privada: se comprueba la membresía ANTES de crear la ficha', (
 test('ventana de adquisición: tampoco se afilia a nadie para nada', () => {
   const src = leer(ACCIONES)
   const iVentana = src.indexOf('validarVentanaAdquisicion(promo)')
-  const iAlta = src.indexOf('const ficha = await fichaParaAdquirir')
+  const iAlta = src.indexOf('const alta = await asegurarClienteEnEmpresa')
   assert.ok(
     iVentana > 0 && iVentana < iAlta,
     'La ventana y el cupo se validan antes del alta: una promoción agotada no ' +
@@ -143,7 +145,7 @@ test('lo adquirido en otra empresa se puede encontrar después', () => {
 })
 
 test('las comprobaciones de propiedad de una compra son por persona', () => {
-  const src = leer(ACCIONES)
+  const src = leer(ACCIONES_DE_COMPRA)
   assert.ok(
     !/compra\.clienteId !== user\.metadata\.clienteId/.test(src),
     'Pagar o cancelar una recompensa de otro negocio devolvería «No autorizado» ' +

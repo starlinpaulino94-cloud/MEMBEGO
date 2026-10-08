@@ -45,6 +45,9 @@
 | `CATALOGO_UNIFICADO` | Secciones `catalogo` (`/admin/catalogo`, Commerce Core · Fase 1) e `inventario` (`/admin/inventario`, Fase 2: existencias por variante y sucursal) | ❌ apagada para todos; se enciende empresa por empresa (Car Town primero) |
 | `PEDIDOS_MEMBEGO` | Sección `pedidos-membego` (`/admin/pedidos-membego`, Commerce Core · Fase 3: pedidos del marketplace con atribución, confirmación del cliente y QR). Con ella la ficha pública de sus productos ofrece «Hacer un pedido» y «Mis pedidos» aparece en el menú del cliente | ❌ apagada para todos; solo tiene sentido en empresas con `CATALOGO_UNIFICADO` (las líneas del pedido son variantes del catálogo) |
 | *(misma capacidad)* | Sección `facturacion-membego` (`/admin/facturacion-membego`, **«Mi cuenta Membego»**, Commerce Core · Fase 4): lo que la empresa le debe a Membego por esos pedidos —saldo, comisiones, estados de cuenta—, **solo lectura**. No tiene capacidad propia: cuelga de `PEDIDOS_MEMBEGO` | ❌ con ella |
+| `DEALS_MARKETPLACE` | Sección `deals` (`/admin/deals`, Growth Engine · Fase 5: **ofertas con presupuesto**). Con ella (y las otras dos) la empresa publica descuentos sobre una variante de su catálogo que los clientes obtienen en `/ofertas`, en su ficha pública y en `/catalogo`, y canjean con el QR del pedido | ❌ apagada para todos; **exige `CATALOGO_UNIFICADO` y `PEDIDOS_MEMBEGO`** (el reclamo ES un pedido): sin las tres, la vitrina no enseña la oferta y reclamarla responde «no está disponible» |
+| *(misma capacidad que los pedidos)* | Sección `resultados-membego` (`/admin/resultados-membego`, **«Resultados Membego»**, Analítica · Fase 6): cuántos clientes nuevos, pedidos y ventas le produjo Membego a la empresa, qué le costó (comisiones, retorno, costo por cliente nuevo) y cómo rinde cada oferta, **solo lectura**. No tiene capacidad propia: cuelga de `PEDIDOS_MEMBEGO` | ❌ con ella |
+| `POS_MEMBEGO` | La **caja conectada** (`/empleado/caja`, Commerce Core · Fase 7): dos bloques nuevos en el turno —**«Cobrar un pedido Membego»** (con el QR del cliente: registra el pago, cierra el pedido y deja el cobro en la caja) y **«Venta de mostrador»** (vende variantes del catálogo, baja las existencias, ticket)—. No tiene sección propia: vive dentro de la caja | ❌ apagada para todos; **exige `POS_CAJA`** (la caja, que sí viene de serie) y, según el bloque, `PEDIDOS_MEMBEGO` (cobrar pedidos) o `CATALOGO_UNIFICADO` (vender) |
 
 ### Cómo encender los pedidos Membego en una empresa
 
@@ -59,10 +62,49 @@ para pedir» y el panel se niega. Si se apaga con pedidos ya hechos, el cliente 
 marketplace que se **completa** (QR) le cobra a la empresa una comisión de Membego, en
 la misma transacción: CPA fijo (RD$ 100 de serie) si el pedido no tiene el pago
 verificado, o el 8 % de la base comisionable si lo tiene (modelo `HYBRID`, que el
-superadmin puede cambiar por empresa en `/superadmin/facturacion`). La cuenta se crea
+superadmin puede cambiar por empresa en `/superadmin/facturacion`). **Verificado** quiere
+decir confirmado por una fuente externa a la empresa (pasarela firmada, conciliación
+bancaria del superadmin, proveedor); lo que la empresa registra con una referencia es
+«reportado» y cobra CPA. Si la verificación llega después de cerrar, el libro recibe la
+diferencia hasta el porcentaje como un asiento aparte (`VERIFICATION_ADJUSTMENT`), sin
+editar la comisión (`docs/REGLAS_FINANCIERAS.md`). La cuenta se crea
 sola con esos valores y un límite de crédito de RD$ 5,000. **Encender la capacidad en una
 empresa real es empezar a cobrarle**: avísale antes. Los pedidos que envuelven una compra
 de Supply no comisionan (se liquidan por Supply Economics).
+
+### Cómo encender las ofertas con presupuesto en una empresa
+
+`DEALS_MARKETPLACE` tampoco está en ningún paquete base. Se enciende, además de
+`CATALOGO_UNIFICADO` y `PEDIDOS_MEMBEGO`, con un override por empresa (`overrides: {
+CATALOGO_UNIFICADO: true, PEDIDOS_MEMBEGO: true, DEALS_MARKETPLACE: true }`). La empresa
+tiene que estar publicada y activa y tener al menos una sucursal activa donde canjear.
+
+**Qué pasa con la plata (Fase 5).** Cada oferta tiene un **presupuesto** (un *tope*, no un pago
+por adelantado): la empresa declara cuánto está dispuesta a pagar por traer clientes. Cada
+vez que un cliente **canjea** (el empleado escanea el QR del pedido) Membego le cobra la
+**cuota de la oferta** —el CPA de su cuenta, RD$ 100 de serie, **congelado al crear la oferta**—
+en su cuenta Membego, y esa parte del presupuesto pasa de «apartada» a «gastada». Cuando el
+presupuesto ya no alcanza para otro canje, la oferta se **pausa sola**; ampliar el presupuesto
+la reabre. Si la cuenta Membego de la empresa está **suspendida**, no puede crear, publicar ni
+reanudar ofertas ni se pueden obtener las que tiene publicadas. **Encender la capacidad en una
+empresa real es empezar a cobrarle por canje**: avísale antes. Si se apaga con cupones ya
+obtenidos, esos pedidos siguen su curso (se canjean o vencen) y la cuota se cobra igual.
+
+### Cómo encender la caja conectada en una empresa
+
+`POS_MEMBEGO` tampoco está en ningún paquete base. Se enciende con un override por empresa (`overrides: {
+POS_MEMBEGO: true }`), además de `CATALOGO_UNIFICADO` y/o `PEDIDOS_MEMBEGO` según lo que se quiera usar (la caja
+clásica, `POS_CAJA`, ya viene encendida). Sin ella la caja sigue como siempre. Los bloques aparecen solo con la caja
+del turno **abierta**, y las acciones comprueban las capacidades en el servidor.
+
+**Qué pasa con la plata (Fase 7).** Cobrar en la caja el pedido del marketplace de quien llega con su QR sigue
+cobrándole la comisión de Merchant Billing (CPA de RD$ 100 de serie). La transferencia o tarjeta **con referencia**
+que teclea el cajero deja el pedido **reportado por el negocio**, no verificado: el 8 % solo se cobra cuando una fuente
+externa (pasarela, conciliación bancaria del superadmin) confirma el pago, y entonces el libro recibe la diferencia
+como ajuste (sprint de cierre, 2026-10-08). La **venta de mostrador pura NO comisiona** (origen POS con canal DIRECT);
+un pedido de origen POS **sí comisiona si su atribución es de Membego** (promoción, campaña, referido, vitrina). **Encender
+la capacidad no cobra nada nuevo por sí sola**, pero avisa a la empresa de que un pedido del marketplace cobrado en caja
+le cuesta el CPA y, si el pago se verifica, el 8 % de su base.
 
 ### Cómo encender el catálogo unificado en una empresa
 
@@ -126,7 +168,12 @@ Marketplace. Se hace con este mismo sistema, sin borrar datos:
   cuelgan de `leads`.
 - **Puntos y niveles de gamificación no dependen de `RULETA`**: se derivan de
   hechos reales y siguen mostrándose; solo desaparece el acceso a la ruleta.
-- Supply V1 **no** se ocultó en la Fase 0 (ver Plan Maestro, decisión abierta).
+- Supply V1 ya **no existe en el código** (retirado; quedan sus tablas y migraciones,
+  ver `IMPLEMENTATION_STATUS.md` §5 y §12). Lo que hoy se llama «Supply» es V2, y va
+  detrás de `MEMBEGO_SUPPLIER`: no está en ningún paquete base, se enciende a mano por
+  empresa proveedora, y su menú (`/admin/supply`, «Entregas Membego») y su layout exigen
+  además un `SupplyV2Supplier` activo de esa empresa (`proveedorDeLaSesion()`); sin él
+  la pantalla redirige al panel aunque la capacidad esté encendida.
 - Al sumar una capacidad nueva, hay cuatro listas que mantener en sincronía:
   `CAPACIDADES`/`CAPACIDAD_LABELS` (catálogo), `FUNCIONES_EMPRESA`
   (`modules/plataforma/conceptos.ts`), `CapacidadNav` (`nav-config.ts`) y

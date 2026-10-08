@@ -102,11 +102,17 @@ test('solo se busca cuando el enlace puede serlo', () => {
  */
 test('registrar en la bitácora no puede tumbar el inicio de sesión', () => {
   const salidas = [...CONFIRMAR.matchAll(/return loginError/g)].map((m) => m.index ?? -1)
-  assert.equal(salidas.length, 2, 'aparecieron salidas de error nuevas en /confirmar; revísalas')
-
   const registro = CONFIRMAR.indexOf('registrarUsoEntrarComo(')
-  for (const s of salidas) {
-    assert.ok(s < registro, 'ninguna salida de error puede depender del registro de auditoría')
+  assert.ok(registro > 0)
+
+  // Las salidas de error ANTES del registro son las de siempre (faltan parámetros, el token no valió): exactamente dos.
+  const antes = salidas.filter((s) => s < registro)
+  assert.equal(antes.length, 2, 'aparecieron salidas de error nuevas en /confirmar antes del registro; revísalas')
+
+  // Las que vienen DESPUÉS (el flujo de eliminar cuenta y el de la app móvil) dependen solo del ROL de quien ya entró, no del
+  // registro de auditoría: esa escritura se traga sus propios fallos y nunca decide a dónde va nadie.
+  for (const s of salidas.filter((x) => x > registro)) {
+    assert.match(CONFIRMAR.slice(Math.max(0, s - 90), s), /app_metadata\?\.role !== 'CLIENTE'\) $/, 'una salida de error posterior al registro tiene que depender solo del rol')
   }
 
   // Y el módulo se traga sus propios fallos en vez de propagarlos.

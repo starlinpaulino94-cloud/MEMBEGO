@@ -195,12 +195,19 @@ test('cerca.tsx es un dispatcher por Platform.OS entre web y native', () => {
   assert.match(src, /cerca\.native/, 'cerca.tsx debe importar cerca.native.')
 })
 
-test('cerca.web.tsx importa leaflet y NO react-native-maps', () => {
+test('cerca.web.tsx usa el mapa web (Google Maps JS) y NO react-native-maps', () => {
+  // Desde `7fb7bea`/`f70b545` (main) el mapa web es Google Maps JS, cargado con
+  // EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY; antes era Leaflet.
   const src = leer('apps/client/app/cerca.web.tsx')
   assert.match(
     src,
+    /EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY/,
+    'cerca.web.tsx debe cargar Google Maps JS con la clave web del entorno.'
+  )
+  assert.doesNotMatch(
+    src,
     /from\s*['"]leaflet['"]/,
-    'cerca.web.tsx debe importar leaflet.'
+    'cerca.web.tsx ya no usa Leaflet (sería un segundo mapa).'
   )
   assert.doesNotMatch(
     src,

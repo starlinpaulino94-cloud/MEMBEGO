@@ -150,6 +150,12 @@ export default async function OfertaPage({ params }: { params: Promise<{ dealId:
           {o.reclamos.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía nadie la ha obtenido.</p>
           ) : (
+            <>
+            {o.reclamosTotal > o.reclamos.length && (
+              <p className="mb-2 text-xs text-muted-foreground" data-testid="reclamos-recortados">
+                Se muestran los {o.reclamos.length} más recientes de {o.reclamosTotal}. El resultado de arriba cuenta todos.
+              </p>
+            )}
             <ul className="divide-y" aria-label="Reclamos de la oferta">
               {o.reclamos.map((c) => (
                 <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
@@ -169,6 +175,7 @@ export default async function OfertaPage({ params }: { params: Promise<{ dealId:
                 </li>
               ))}
             </ul>
+            </>
           )}
         </CardContent>
       </Card>

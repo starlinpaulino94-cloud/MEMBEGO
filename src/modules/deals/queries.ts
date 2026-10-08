@@ -2,7 +2,7 @@ import type { DealClaimStatus, DealStatus } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { puedeCrearCampanas } from '@/modules/billing/domain'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
-import { precioDeLaOferta, presupuestoLibre, reclamosPosibles, rendimientoDeOferta, type RendimientoDeOferta } from './domain'
+import { precioDeLaOferta, presupuestoLibre, reclamosPosibles, rendimientoDeTotales, type RendimientoDeOferta, type TotalesPorEstado } from './domain'
 
 /**
  * COMMERCE CORE · ofertas — lecturas del panel de la empresa (Fase 5).
@@ -45,12 +45,18 @@ export async function listarOfertasEnTx(tx: Tx, companyId: string): Promise<Fila
     include: { variant: { select: { name: true, item: { select: { name: true } } } } },
   })
   if (ofertas.length === 0) return []
-  const reclamos = await tx.dealClaim.findMany({
+  // Agregado en la base: una oferta con miles de reclamos no se carga renglón por renglón.
+  const grupos = await tx.dealClaim.groupBy({
+    by: ['dealId', 'status'],
     where: { companyId, dealId: { in: ofertas.map((o) => o.id) } },
-    select: { dealId: true, status: true, fee: true, savings: true },
+    _count: { _all: true },
+    _sum: { fee: true, savings: true },
   })
-  const porOferta = new Map<string, typeof reclamos>()
-  for (const r of reclamos) porOferta.set(r.dealId, [...(porOferta.get(r.dealId) ?? []), r])
+  const porOferta = new Map<string, TotalesPorEstado[]>()
+  for (const g of grupos) {
+    const fila: TotalesPorEstado = { status: g.status, cantidad: g._count._all, fee: g._sum.fee ?? 0, savings: g._sum.savings ?? 0 }
+    porOferta.set(g.dealId, [...(porOferta.get(g.dealId) ?? []), fila])
+  }
   return ofertas.map((o) => ({
     id: o.id,
     title: o.title,
@@ -71,7 +77,7 @@ export async function listarOfertasEnTx(tx: Tx, companyId: string): Promise<Fila
     budgetReserved: dos(o.budgetReserved),
     budgetFree: dos(presupuestoLibre(o)),
     posibles: reclamosPosibles(o),
-    rendimiento: rendimientoDeOferta(porOferta.get(o.id) ?? []),
+    rendimiento: rendimientoDeTotales(porOferta.get(o.id) ?? []),
   }))
 }
 
@@ -100,7 +106,12 @@ export interface DetalleDeOferta extends FilaDeOferta {
   ahorro: string
   editableTodo: boolean
   reclamos: ReclamoDeOferta[]
+  /** Cuántos reclamos tiene en total (la lista de arriba muestra solo los más recientes). */
+  reclamosTotal: number
 }
+
+/** Cuántos reclamos se listan en el detalle; el resultado se calcula sobre TODOS, no sobre estos. */
+export const RECLAMOS_EN_LISTA = 200
 
 export async function detalleOfertaEnTx(tx: Tx, companyId: string, id: string): Promise<DetalleDeOferta | null> {
   if (typeof id !== 'string' || id === '' || id.length > 60) return null
@@ -112,9 +123,11 @@ export async function detalleOfertaEnTx(tx: Tx, companyId: string, id: string): 
   const reclamos = await tx.dealClaim.findMany({
     where: { dealId: o.id, companyId },
     orderBy: [{ claimedAt: 'desc' }, { id: 'asc' }],
-    take: 500,
+    take: RECLAMOS_EN_LISTA,
     include: { customer: { select: { nombre: true } }, order: { select: { code: true, status: true } } },
   })
+  const grupos = await tx.dealClaim.groupBy({ by: ['status'], where: { dealId: o.id, companyId }, _count: { _all: true }, _sum: { fee: true, savings: true } })
+  const totales: TotalesPorEstado[] = grupos.map((g) => ({ status: g.status, cantidad: g._count._all, fee: g._sum.fee ?? 0, savings: g._sum.savings ?? 0 }))
   const { precio, ahorro } = precioDeLaOferta(o.variant.price, o.discountType, o.discountValue)
   return {
     id: o.id,
@@ -136,7 +149,8 @@ export async function detalleOfertaEnTx(tx: Tx, companyId: string, id: string): 
     budgetReserved: dos(o.budgetReserved),
     budgetFree: dos(presupuestoLibre(o)),
     posibles: reclamosPosibles(o),
-    rendimiento: rendimientoDeOferta(reclamos),
+    rendimiento: rendimientoDeTotales(totales),
+    reclamosTotal: totales.reduce((t, g) => t + g.cantidad, 0),
     catalogVariantId: o.catalogVariantId,
     description: o.description,
     voucherDays: o.voucherDays,

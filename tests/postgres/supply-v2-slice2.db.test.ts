@@ -484,6 +484,22 @@ test('K · el ledger de cada lote cuadra al final y la base no acepta contadores
   )
 })
 
+test('K2 · la base no admite más derechos que unidades pagadas en una línea, ni un derecho colgado de la línea de otra orden (sprint de cierre)', async () => {
+  const orden = await prisma.supplyV2CustomerOrder.findUniqueOrThrow({ where: { id: ctx.ordenD }, include: { lines: true } })
+  const linea = orden.lines[0]!
+  const derecho = await prisma.supplyV2Entitlement.findFirstOrThrow({ where: { orderLineId: linea.id } })
+  assert.equal(linea.quantity, 1)
+  const { id: _id, createdAt: _c, issuedAt: _i, ...copia } = derecho
+  // Un segundo derecho para una línea de 1 unidad: la base lo rechaza aunque el código no mire.
+  await assert.rejects(prisma.supplyV2Entitlement.create({ data: copia }), /supply_v2_entitlements_linea/)
+  // Un derecho que dice ser de otra orden pero cuelga de esta línea: tampoco.
+  const otra = await prisma.supplyV2CustomerOrder.findFirstOrThrow({ where: { id: { not: ctx.ordenD }, customerId: ctx.cliente1 } })
+  await assert.rejects(prisma.supplyV2Entitlement.create({ data: { ...copia, orderId: otra.id } }), /supply_v2_entitlements_linea/)
+  // Y el derecho emitido no cambia de línea, de orden ni de cantidad.
+  await assert.rejects(prisma.supplyV2Entitlement.update({ where: { id: derecho.id }, data: { orderId: otra.id } }), /supply_v2_entitlements_linea/)
+  assert.equal(await prisma.supplyV2Entitlement.count({ where: { orderLineId: linea.id } }), 1)
+})
+
 // ── Editar una oferta publicada (§7–§15) ─────────────────────────────────────
 
 test('E1 · editar el título de una oferta ACTIVE cambia la oferta y deja rastro', async () => {

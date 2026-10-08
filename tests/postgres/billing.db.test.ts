@@ -17,11 +17,13 @@ import {
   marcarListoEnTx,
   reembolsarPedidoEnTx,
   registrarPagoEnTx,
+  verificarPagoExternamenteEnTx,
   type ContextoPedido,
 } from '../../src/modules/orders/service'
 import {
   SISTEMA,
   actualizarConfigEnTx,
+  ajustarComisionPorVerificacionEnTx,
   asentarManualEnTx,
   fijarEstadoManualEnTx,
   generarCorteEnTx,
@@ -65,7 +67,7 @@ const T0 = new Date('2030-01-01T10:00:00.000Z')
 const dias = (n: number) => new Date(T0.getTime() + n * 86_400_000)
 
 type Empresa = { id: string; sucursal: string; cliente: string; servicio: string }
-const E: Record<'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h', Empresa> = {
+const E: Record<'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i', Empresa> = {
   a: { id: '', sucursal: '', cliente: '', servicio: '' },
   b: { id: '', sucursal: '', cliente: '', servicio: '' },
   c: { id: '', sucursal: '', cliente: '', servicio: '' },
@@ -77,11 +79,14 @@ const E: Record<'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h', Empresa> = {
   g: { id: '', sucursal: '', cliente: '', servicio: '' },
   /** Antigüedad de la deuda neta de reversos. */
   h: { id: '', sucursal: '', cliente: '', servicio: '' },
+  /** Sprint de cierre: ajuste por verificación y atribución (sin cortes, para asentar en T0). */
+  i: { id: '', sucursal: '', cliente: '', servicio: '' },
 }
 const f = { usuario: '', supplyVariante: '', oferta: '' }
 
 const empresa = (actorId: string | null): ContextoPedido => ({ actor: 'EMPRESA', actorId, ipAddress: '127.0.0.1', userAgent: 'test' })
 const cliente: ContextoPedido = { actor: 'CLIENTE', actorId: null }
+const sistemaPedido: ContextoPedido = { actor: 'SISTEMA', actorId: null }
 const sistema: ContextoPedido = { actor: 'SISTEMA', actorId: null }
 const superadmin = (): ContextoFacturacion => ({ actor: 'SUPERADMIN', actorId: f.usuario, ipAddress: '127.0.0.1', userAgent: 'test' })
 const comoInventario = (actorId: string | null) => ({ actorId, ipAddress: '127.0.0.1', userAgent: 'test' })
@@ -168,8 +173,11 @@ async function acepta(fn: (tx: Prisma.TransactionClient) => Promise<unknown>, op
 interface OpcionesPedido {
   empresa?: Empresa
   cantidad?: number
-  /** `PAYMENT_VERIFIED`: el cliente confirma el monto y se registra un pago con referencia. */
-  nivel?: 'REDEEMED' | 'PAYMENT_VERIFIED'
+  /**
+   * `EXTERNAL_PAYMENT_REPORTED`: el cliente confirma el monto y la EMPRESA registra un pago con referencia.
+   * `PAYMENT_VERIFIED`: lo mismo, pero el pago lo verifica una fuente externa (la pasarela) antes de cerrar.
+   */
+  nivel?: 'REDEEMED' | 'EXTERNAL_PAYMENT_REPORTED' | 'PAYMENT_VERIFIED'
   ajuste?: number
   ahora?: Date
 }
@@ -191,12 +199,17 @@ async function pedidoCompletado(o: OpcionesPedido = {}) {
   if (o.ajuste !== undefined) {
     total = (await en(e, (tx) => ajustarMontoEnTx(tx, e.id, r.pedidoId, { ajuste: o.ajuste as number, motivo: 'Ajuste de prueba' }, empresa(f.usuario)))).total
   }
-  if (o.nivel === 'PAYMENT_VERIFIED') {
+  if (o.nivel === 'PAYMENT_VERIFIED' || o.nivel === 'EXTERNAL_PAYMENT_REPORTED') {
     await en(e, (tx) => confirmarMontoEnTx(tx, e.id, r.pedidoId, { customerId: e.cliente, montoVisto: total }, cliente, ahora))
   }
   const listo = await en(e, (tx) => marcarListoEnTx(tx, e.id, r.pedidoId, empresa(f.usuario), ahora))
-  if (o.nivel === 'PAYMENT_VERIFIED') {
+  if (o.nivel === 'EXTERNAL_PAYMENT_REPORTED') {
     await en(e, (tx) => registrarPagoEnTx(tx, e.id, r.pedidoId, { method: 'TRANSFER', amount: total, reference: `TRF-${randomUUID().slice(0, 8)}` }, empresa(f.usuario), ahora))
+  }
+  if (o.nivel === 'PAYMENT_VERIFIED') {
+    await en(e, (tx) =>
+      verificarPagoExternamenteEnTx(tx, e.id, r.pedidoId, { source: 'GATEWAY_VERIFIED', verificationRef: `gw-${randomUUID().slice(0, 8)}`, method: 'CARD', amount: total, reference: `AUTH-${randomUUID().slice(0, 6)}` }, sistemaPedido, ahora)
+    )
   }
   const cierre = await en(e, (tx) => completarPorQrEnTx(tx, e.id, listo.qrToken as string, empresa(f.usuario), ahora))
   return { pedidoId: r.pedidoId, code: r.code, nivel: cierre.nivel, total }
@@ -567,9 +580,9 @@ test('16 · la base valida el asiento de la comisión: mismo tipo, mismo monto, 
   assert.match(msg, /already exists|23505|Unique constraint/i)
 })
 
-test('17 · la base y el dominio dicen lo mismo sobre CPA vs porcentaje (3 modelos × 5 niveles)', async () => {
+test('17 · la base y el dominio dicen lo mismo sobre CPA vs porcentaje (3 modelos × 6 niveles)', async () => {
   const modelos: MerchantFeeModel[] = ['CPA_FIXED', 'PERCENTAGE', 'HYBRID']
-  const niveles: MembegoVerificationLevel[] = ['ATTRIBUTED', 'REDEEMED', 'CUSTOMER_VERIFIED', 'PAYMENT_VERIFIED', 'FISCALLY_RECONCILED']
+  const niveles: MembegoVerificationLevel[] = ['ATTRIBUTED', 'REDEEMED', 'CUSTOMER_VERIFIED', 'EXTERNAL_PAYMENT_REPORTED', 'PAYMENT_VERIFIED', 'FISCALLY_RECONCILED']
   const tipos = ['CPA_FIXED', 'PERCENTAGE'] as const
   let combinaciones = 0
   for (const m of modelos) {
@@ -586,7 +599,7 @@ test('17 · la base y el dominio dicen lo mismo sobre CPA vs porcentaje (3 model
       }
     }
   }
-  assert.equal(combinaciones, 30)
+  assert.equal(combinaciones, 36)
 })
 
 test('18 · la base valida los montos de la comisión (porcentaje exacto, CPA sin tasa, positiva)', async () => {
@@ -1161,4 +1174,182 @@ test('40 · dos barridos de cortes a la vez con un cambio de ciclo en medio no e
   cortes.forEach((c, i) => {
     if (i > 0 && c.periodStart.getTime() === cortes[i - 1].periodEnd.getTime()) assert.equal(c.openingBalance.toFixed(2), cortes[i - 1].closingBalance.toFixed(2))
   })
+})
+
+// ── Sprint de cierre (2026-10-08): pago verificado DESPUÉS de cobrar el CPA ───
+
+/** La comisión de un pedido con su ajuste por verificación (si lo tiene). */
+const comisionCompleta = (pedidoId: string) =>
+  prisma.commission.findUniqueOrThrow({ where: { orderId: pedidoId }, include: { verificationAdjustmentEntry: true, verificationAdjustmentReversalEntry: true } })
+
+const verificar = (e: Empresa, pedidoId: string, ref: string, ahora = T0, ctx: ContextoPedido = sistemaPedido) =>
+  en(e, (tx) => verificarPagoExternamenteEnTx(tx, e.id, pedidoId, { source: 'GATEWAY_VERIFIED', verificationRef: ref, method: 'CARD', amount: '5000.00', reference: `AUTH-${ref}` }, ctx, ahora))
+
+test('41 · el escenario del plan: cierra con CPA 100 sobre RD$5,000; CardNET confirma después → VERIFICATION_ADJUSTMENT +300 (8 % = 400), sin editar la comisión', async () => {
+  const e = E.i
+  const p = await pedidoCompletado({ empresa: e, cantidad: 20, nivel: 'EXTERNAL_PAYMENT_REPORTED' }) // base 5000.00; la empresa reportó una transferencia
+  assert.equal(p.nivel, 'EXTERNAL_PAYMENT_REPORTED')
+  const antes = await comisionDe(p.pedidoId)
+  assert.equal(antes?.type, 'CPA_FIXED')
+  assert.equal(antes?.amount.toFixed(2), '100.00', 'lo reportado por el negocio cobra CPA')
+  const saldo0 = await saldo(e)
+
+  // Verificar sobre una constancia ya reportada por la empresa: la fuente externa la respalda (misma constancia, otra fuente).
+  const v = await verificar(e, p.pedidoId, 'cardnet-41')
+  assert.equal(v.nivel, 'PAYMENT_VERIFIED')
+  assert.equal(v.comision, 'AJUSTADA')
+
+  const c = await comisionCompleta(p.pedidoId)
+  assert.equal(c.amount.toFixed(2), '100.00', 'la comisión original no cambia')
+  assert.equal(c.type, 'CPA_FIXED')
+  assert.equal(c.verificationLevel, 'EXTERNAL_PAYMENT_REPORTED', 'la foto del nivel al cobrar tampoco')
+  assert.equal(c.verificationAdjustmentAmount?.toFixed(2), '300.00')
+  assert.equal(c.verificationRef, 'cardnet-41')
+  assert.ok(c.verificationAdjustedAt)
+  assert.equal(c.verificationAdjustmentEntry?.type, 'VERIFICATION_ADJUSTMENT')
+  assert.equal(c.verificationAdjustmentEntry?.amount.toFixed(2), '300.00')
+  assert.equal(c.verificationAdjustmentEntry?.referenceType, 'COMMISSION')
+  assert.equal(c.verificationAdjustmentEntry?.referenceId, c.id)
+  assert.equal(c.verificationAdjustmentEntry?.idempotencyKey, `commission:${p.pedidoId}:verification`)
+  assert.match(c.verificationAdjustmentEntry?.reason ?? '', /cardnet-41/)
+  assert.equal(await saldo(e), new Prisma.Decimal(saldo0).plus(300).toFixed(2), 'la empresa debe 100 + 300 = 400 por ese pedido')
+
+  // Idempotente: la misma referencia externa no asienta nada más; el ajuste solo se hace una vez.
+  const otra = await verificar(e, p.pedidoId, 'cardnet-41')
+  assert.equal(otra.repetido, true)
+  assert.equal((await en(e, (tx) => ajustarComisionPorVerificacionEnTx(tx, e.id, p.pedidoId, { verificationRef: 'cardnet-41', fuente: 'GATEWAY_VERIFIED' }, SISTEMA, T0))).resultado, 'YA_AJUSTADA')
+  assert.equal(await saldo(e), new Prisma.Decimal(saldo0).plus(300).toFixed(2))
+  assert.equal((await libro(e)).filter((a) => a.type === 'VERIFICATION_ADJUSTMENT' && a.referenceId === c.id).length, 1)
+})
+
+test('42 · CONCURRENCIA: dos confirmaciones del mismo pago a la vez dejan UN ajuste y UN asiento', async () => {
+  const e = E.i
+  const p = await pedidoCompletado({ empresa: e, cantidad: 20, nivel: 'EXTERNAL_PAYMENT_REPORTED' })
+  const saldo0 = await saldo(e)
+  const resultados = await Promise.allSettled([verificar(e, p.pedidoId, 'cardnet-42'), verificar(e, p.pedidoId, 'cardnet-42'), verificar(e, p.pedidoId, 'cardnet-42')])
+  assert.ok(resultados.every((r) => r.status === 'fulfilled'), 'la misma referencia externa es idempotente, no un error')
+  const ajustadas = resultados.filter((r) => r.status === 'fulfilled' && r.value.comision === 'AJUSTADA').length
+  assert.equal(ajustadas, 1)
+  assert.equal((await libro(e)).filter((a) => a.type === 'VERIFICATION_ADJUSTMENT' && a.idempotencyKey === `commission:${p.pedidoId}:verification`).length, 1)
+  assert.equal(await saldo(e), new Prisma.Decimal(saldo0).plus(300).toFixed(2))
+  // Otra pasarela, otra referencia, mismo pedido ya verificado: se rechaza, no se ajusta dos veces.
+  assert.equal(await codigoDe(verificar(e, p.pedidoId, 'otro-hecho-42')), 'PAGO_YA_VERIFICADO')
+})
+
+test('43 · reembolsar después del ajuste revierte la comisión Y el ajuste, cada uno con su asiento contrario; el saldo vuelve', async () => {
+  const e = E.i
+  const p = await pedidoCompletado({ empresa: e, cantidad: 20, nivel: 'EXTERNAL_PAYMENT_REPORTED' })
+  const saldo0 = await saldo(e)
+  await verificar(e, p.pedidoId, 'cardnet-43')
+  assert.equal(await saldo(e), new Prisma.Decimal(saldo0).plus(300).toFixed(2))
+  const r = await en(e, (tx) => reembolsarPedidoEnTx(tx, e.id, p.pedidoId, { motivo: 'Devolución' }, empresa(f.usuario), T0))
+  assert.equal(r.repetido, false)
+  const c = await comisionCompleta(p.pedidoId)
+  assert.equal(c.status, 'REVERSED')
+  assert.ok(c.reversalEntryId)
+  assert.equal(c.verificationAdjustmentReversalEntry?.type, 'REFUND')
+  assert.equal(c.verificationAdjustmentReversalEntry?.amount.toFixed(2), '-300.00')
+  assert.equal(c.verificationAdjustmentReversalEntry?.idempotencyKey, `commission:${p.pedidoId}:verification:reversal`)
+  assert.equal(await saldo(e), new Prisma.Decimal(saldo0).minus(100).toFixed(2), 'se devolvió 100 + 300 sobre un saldo que ya tenía los 100')
+  // Reembolsar otra vez no mueve nada.
+  const n = (await libro(e)).length
+  await en(e, (tx) => reembolsarPedidoEnTx(tx, e.id, p.pedidoId, { motivo: 'otra vez' }, empresa(f.usuario), T0))
+  assert.equal((await libro(e)).length, n)
+})
+
+test('44 · si el porcentaje es MENOR que el CPA, el ajuste es negativo (la regla es «porcentaje», no «lo que sea mayor») y el corte lo suma con los ajustes', async () => {
+  const e = E.i
+  const p = await pedidoCompletado({ empresa: e, cantidad: 2, nivel: 'EXTERNAL_PAYMENT_REPORTED' }) // base 500 → 8 % = 40; cobrados 100
+  const saldo0 = await saldo(e)
+  const v = await en(e, (tx) => verificarPagoExternamenteEnTx(tx, e.id, p.pedidoId, { source: 'BANK_RECONCILED', verificationRef: `banco-44-${sufijo}`, method: 'TRANSFER', amount: '500.00', reference: 'TRF-44' }, sistemaPedido, T0))
+  assert.equal(v.comision, 'AJUSTADA')
+  const c = await comisionCompleta(p.pedidoId)
+  assert.equal(c.verificationAdjustmentAmount?.toFixed(2), '-60.00')
+  assert.equal(await saldo(e), new Prisma.Decimal(saldo0).minus(60).toFixed(2))
+})
+
+test('45 · no aplica: modelo CPA_FIXED (el CPA es la regla), modelo PERCENTAGE (ya se cobró el porcentaje), ni un pago que solo reportó el negocio', async () => {
+  const e = E.i
+  // Un pedido verificado ANTES de cerrar bajo HYBRID ya cobró el porcentaje: nada que ajustar.
+  const ya = await pedidoCompletado({ empresa: e, cantidad: 20, nivel: 'PAYMENT_VERIFIED' })
+  assert.equal((await comisionDe(ya.pedidoId))?.type, 'PERCENTAGE')
+  assert.equal((await en(e, (tx) => ajustarComisionPorVerificacionEnTx(tx, e.id, ya.pedidoId, { verificationRef: 'x', fuente: 'GATEWAY_VERIFIED' }, SISTEMA, T0))).resultado, 'NO_APLICA')
+  // Solo reportado: nada que ajustar (y la base tampoco lo admitiría: el pedido no está PAYMENT_VERIFIED).
+  const rep = await pedidoCompletado({ empresa: e, cantidad: 20, nivel: 'EXTERNAL_PAYMENT_REPORTED' })
+  assert.equal((await en(e, (tx) => ajustarComisionPorVerificacionEnTx(tx, e.id, rep.pedidoId, { verificationRef: 'x', fuente: 'GATEWAY_VERIFIED' }, SISTEMA, T0))).resultado, 'NO_APLICA')
+  // Modelo CPA_FIXED: verificar sube el nivel pero no toca la comisión.
+  await en(e, (tx) => actualizarConfigEnTx(tx, e.id, { feeModel: 'CPA_FIXED' }, superadmin(), T0))
+  const fijo = await pedidoCompletado({ empresa: e, cantidad: 20, nivel: 'EXTERNAL_PAYMENT_REPORTED' })
+  const v = await verificar(e, fijo.pedidoId, 'cardnet-45')
+  assert.equal(v.nivel, 'PAYMENT_VERIFIED')
+  assert.equal(v.comision, 'NO_APLICA')
+  assert.equal((await comisionCompleta(fijo.pedidoId)).verificationAdjustmentEntryId, null)
+  await en(e, (tx) => actualizarConfigEnTx(tx, e.id, { feeModel: 'HYBRID' }, superadmin(), T0))
+})
+
+test('46 · la base vigila el ajuste: solo con su asiento exacto, sobre un pedido verificado, una sola vez, sin editarlo después; y el reverso solo con el pedido reembolsado', async () => {
+  const e = E.i
+  const p = await pedidoCompletado({ empresa: e, cantidad: 20, nivel: 'EXTERNAL_PAYMENT_REPORTED' })
+  const c = await comisionDe(p.pedidoId)
+  assert.ok(c)
+  // Sin asiento: rechazado. Con un asiento de otro tipo/monto: rechazado. Pedido aún no verificado: rechazado.
+  assert.match(await rechazo((tx) => tx.$executeRaw`UPDATE "merchant_commissions" SET "verificationAdjustmentAmount" = 300, "verificationAdjustmentEntryId" = 'no-existe', "verificationAdjustedAt" = now(), "verificationRef" = 'r' WHERE "id" = ${c.id}`), /merchant_comision|foreign key|violates/)
+  // Ahora sí: verificado por la pasarela → el servicio asienta el ajuste. Intentar cambiarlo después: rechazado.
+  await verificar(e, p.pedidoId, 'cardnet-46')
+  const con = await comisionCompleta(p.pedidoId)
+  assert.ok(con.verificationAdjustmentEntryId)
+  assert.match(await rechazo((tx) => tx.$executeRaw`UPDATE "merchant_commissions" SET "verificationAdjustmentAmount" = 999 WHERE "id" = ${c.id}`), /merchant_inmutable|merchant_commissions_ajuste_verificacion/)
+  assert.match(await rechazo((tx) => tx.$executeRaw`UPDATE "merchant_commissions" SET "verificationAdjustmentEntryId" = NULL, "verificationAdjustmentAmount" = NULL, "verificationAdjustedAt" = NULL, "verificationRef" = NULL WHERE "id" = ${c.id}`), /merchant_inmutable/)
+  // El reverso del ajuste sin el pedido reembolsado: rechazado.
+  const asientoFalso = await en(e, (tx) => tx.merchantLedgerEntry.findFirstOrThrow({ where: { companyId: e.id, type: 'REFUND' }, select: { id: true } })).catch(() => null)
+  if (asientoFalso) {
+    assert.match(await rechazo((tx) => tx.$executeRaw`UPDATE "merchant_commissions" SET "verificationAdjustmentReversalEntryId" = ${asientoFalso.id} WHERE "id" = ${c.id}`), /merchant_comision|merchant_commissions_verificationAdjustmentReversal/)
+  }
+  // El libro: VERIFICATION_ADJUSTMENT nunca en cero, siempre con motivo y colgado de una comisión.
+  const ultimo = (await libro(e)).at(-1)!
+  const sig = ultimo.seq + 1
+  const saldoCon = (m: string) => ultimo.balance.plus(m).toFixed(2)
+  assert.match(await rechazo((tx) => insertarAsiento(tx, e, { seq: sig, type: 'VERIFICATION_ADJUSTMENT', amount: '0', balance: saldoCon('0'), reason: 'x', referenceType: 'COMMISSION', referenceId: c.id, key: `commission:${p.pedidoId}:v0` })), /merchant_ledger_entries_signo/)
+  assert.match(await rechazo((tx) => insertarAsiento(tx, e, { seq: sig, type: 'VERIFICATION_ADJUSTMENT', amount: '10', balance: saldoCon('10'), reason: '', referenceType: 'COMMISSION', referenceId: c.id, key: `commission:${p.pedidoId}:v1` })), /merchant_ledger_entries_motivo/)
+  assert.match(await rechazo((tx) => insertarAsiento(tx, e, { seq: sig, type: 'VERIFICATION_ADJUSTMENT', amount: '10', balance: saldoCon('10'), reason: 'x', referenceType: 'MANUAL', referenceId: 'm', key: `manual-v2-${sufijo}` })), /merchant_ledger_entries_referencia/)
+})
+
+test('47 · ATRIBUCIÓN ≠ CUMPLIMIENTO: un pedido de origen POS con una promoción de Membego comisiona; la venta espontánea de mostrador (DIRECT) y el QR de membresía, no', async () => {
+  const e = E.i
+  const cerrar = async (atribucion: { channel: 'PROMOTION_CLAIM' | 'DIRECT' | 'QR_SCAN' | 'REFERRAL'; promotionId?: string; referralCode?: string }) => {
+    const r = await en(e, (tx) =>
+      crearPedidoEnTx(tx, e.id, { customerId: e.cliente, locationId: e.sucursal, origin: 'POS', atribucion, lineas: [{ varianteId: e.servicio, cantidad: 1 }], ahora: T0 }, empresa(f.usuario))
+    )
+    const listo = await en(e, (tx) => marcarListoEnTx(tx, e.id, r.pedidoId, empresa(f.usuario), T0))
+    await en(e, (tx) => completarPorQrEnTx(tx, e.id, listo.qrToken as string, empresa(f.usuario), T0))
+    return comisionDe(r.pedidoId)
+  }
+  const promo = await cerrar({ channel: 'PROMOTION_CLAIM', promotionId: `promo-${sufijo}` })
+  assert.equal(promo?.type, 'CPA_FIXED', 'Membego trajo la venta (promoción): comisiona aunque se cumpla en el POS')
+  const referido = await cerrar({ channel: 'REFERRAL', referralCode: `REF-${sufijo}` })
+  assert.ok(referido, 'un referido de Membego también')
+  assert.equal(await cerrar({ channel: 'DIRECT' }), null, 'entró por su cuenta: no hay nada que cobrar')
+  assert.equal(await cerrar({ channel: 'QR_SCAN' }), null, 'identificarse con el QR de membresía no demuestra que Membego trajera la venta')
+})
+
+test('48 · CONCURRENCIA: verificar el pago y reembolsar el pedido a la vez, en cualquier orden, nunca deja un ajuste sin su reverso ni un saldo que no cuadre', async () => {
+  const e = E.i
+  for (let ronda = 0; ronda < 4; ronda++) {
+    const p = await pedidoCompletado({ empresa: e, cantidad: 20, nivel: 'EXTERNAL_PAYMENT_REPORTED' })
+    const saldo0 = await saldo(e) // ya incluye el CPA de 100 de este pedido
+    const resultados = await Promise.allSettled([
+      verificar(e, p.pedidoId, `cardnet-48-${ronda}`),
+      en(e, (tx) => reembolsarPedidoEnTx(tx, e.id, p.pedidoId, { motivo: `Devolución ${ronda}` }, empresa(f.usuario), T0)),
+    ])
+    // El reembolso siempre se aplica; la verificación puede llegar antes (ajusta y se revierte) o después (el pedido ya no admite ajuste).
+    assert.equal(resultados[1].status, 'fulfilled', `ronda ${ronda}: el reembolso no puede perderse`)
+    const c = await comisionCompleta(p.pedidoId)
+    assert.equal(c.status, 'REVERSED', `ronda ${ronda}`)
+    // Con ajuste → tiene SU reverso. Sin ajuste → no hay nada que revertir.
+    assert.equal(c.verificationAdjustmentEntryId === null, c.verificationAdjustmentReversalEntryId === null, `ronda ${ronda}: ajuste y reverso van juntos`)
+    // Lo que importa para el dinero: el pedido reembolsado no deja nada a cargo de la empresa.
+    assert.equal(await saldo(e), new Prisma.Decimal(saldo0).minus(100).toFixed(2), `ronda ${ronda}: el saldo vuelve a antes del pedido`)
+    const delPedido = (await libro(e)).filter((a) => a.referenceId === c.id)
+    assert.equal(delPedido.reduce((t, a) => t.plus(a.amount), new Prisma.Decimal(0)).toFixed(2), '0.00', `ronda ${ronda}: los asientos de la comisión suman cero`)
+  }
 })

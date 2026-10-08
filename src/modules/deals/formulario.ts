@@ -53,10 +53,10 @@ function entero(v: unknown): number | null {
   return Number(t)
 }
 
-/** Un número decimal escrito con punto (sin separadores de miles ni notación científica). */
+/** Un número decimal escrito con punto (sin separadores de miles ni notación científica). Las columnas son DECIMAL(12,2): hasta 10 enteros. */
 function decimalTexto(v: unknown): string | null {
   const t = texto(v)
-  return /^\d{1,12}(\.\d{1,2})?$/.test(t) ? t : null
+  return /^\d{1,10}(\.\d{1,2})?$/.test(t) ? t : null
 }
 
 export type Leido<T> = { ok: true; valor: T } | { ok: false; error: string }

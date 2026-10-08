@@ -221,6 +221,96 @@ encontrado»). **Ojo:** como el resto, corre sobre una base creada con `db push`
 los disparadores ni los CHECK de las migraciones; esos los prueban
 `tests/postgres/orders.db.test.ts` y `scripts/probar-rls.mjs`).
 
+**Ofertas con presupuesto (Growth Engine · Fase 5)** — `deals-membego` (escritorio), con el
+mismo arnés (`empresaCatalogo({ capacidad: true, pedidos: true, deals: true })`) y cuatro
+sesiones: la de la empresa (`dealsAdmin`) y tres personas que reclaman (`dealsCliente`,
+`dealsCliente2`, `dealsCliente3`), más un administrador de otra empresa sin la capacidad
+(`dealsSinCapacidad`). Recorre: sin la capacidad el panel no existe → la empresa **crea la oferta
+como borrador desde el formulario** (20 % sobre un servicio de RD$ 500, cuota de RD$ 100 y
+presupuesto de RD$ 200 = 2 canjes) y la **publica** (un borrador no sale en la vitrina) → la vitrina
+enseña el precio (RD$ 400 / RD$ 500 tachado) y **no enseña presupuesto ni cuota**, ni en
+`/ofertas` ni en la ficha de la empresa, y una empresa sin la capacidad no enseña nada → sin sesión,
+«Obtener oferta» manda a iniciar sesión y vuelve → el cliente la obtiene: recibe su **pedido LISTO
+con QR** a RD$ 400 y la cuota queda **apartada**; pulsarla otra vez lo lleva al mismo pedido sin
+apartar más → la empresa ve quién la obtuvo y el pedido dice «Obtuvo una oferta con descuento» →
+otra empresa no ve la oferta → **el empleado escanea el QR** (el escáner dice «Oferta «…»»): el
+pedido se cierra, el presupuesto pasa de apartado a **gastado** y Merchant Billing cobra **una
+comisión CPA de RD$ 100 ligada a la oferta** sobre la base de RD$ 400 → una segunda persona la
+obtiene y el presupuesto se agota: la oferta pasa sola a «Presupuesto agotado» y una tercera
+persona ya no puede (no se crea un tercer reclamo; si la vitrina aún enseña la tarjeta, el servidor responde «se agotó») → la empresa **amplía el
+presupuesto** y se reabre sola, la **pausa** (sale de la vitrina) y la **reanuda**. Igual que el
+resto, corre sobre una base `db push` (sin los disparadores ni los CHECK de las migraciones: esos
+los prueban `tests/postgres/deals.db.test.ts` —27 pruebas, incluida la carrera de 16 reclamos por
+5 cupos— y `scripts/probar-rls.mjs`). **Ojo:** `/ofertas` y la ficha de la empresa se cachean
+(60 s y 1 h); los cambios hechos desde el panel o por un reclamo las invalidan
+(`refrescarVitrinasDeOfertas`), pero un cierre por el escáner o un vencimiento por el cron no: la
+vitrina puede ir atrasada hasta esos plazos, y por eso el reclamo se vuelve a comprobar siempre
+en el servidor.
+
+**Analítica de Membego (Fase 6)** — `analitica-membego` (escritorio), con el mismo arnés y cinco sesiones:
+la de la empresa (`analiticaAdmin`), la de otra empresa (`analiticaOtra`), la de una con catálogo pero **sin**
+pedidos Membego (`analiticaSin`), el superadmin (`facturacionSuperadmin`) y un administrador que intenta
+entrar a la analítica de la plataforma. A diferencia de los otros specs, **los pedidos completados, sus
+atribuciones, sus asientos y sus comisiones se siembran por Prisma** (el recorrido pedir → canjear → comisión ya
+lo prueban `pedidos-membego` y `deals-membego`; las cuentas exactas, con los bordes de hora local, las prueba
+`tests/postgres/analytics.db.test.ts`). Recorre: la empresa lee «Membego te produjo 2 clientes nuevos, 3
+pedidos y RD$1,120.00 en ventas. Te costó RD$300.00 (26.8 % de lo vendido)», el retorno (RD$3.70 por peso) y el
+costo por cliente nuevo (RD$150.00), la tabla de ventas por canal (que está en el panel plegable «Ver los datos
+de este gráfico»: hay que abrirlo antes de buscar sus filas) y que NO aparece nada de otra empresa ni de la de
+práctica → un periodo sin pedidos lo dice en vez de enseñar ceros → otra empresa solo ve lo suyo → una empresa sin
+los pedidos no tiene el panel → el superadmin ve el ranking con la empresa y su comisión, sin la de práctica, y el
+bloque «Supply Economics (Membego → proveedores)» aparte → un administrador de empresa no entra a
+`/superadmin/analitica`. **Ojo:** los totales de la plataforma comparten base con los demás specs de la corrida
+(todos crean pedidos «de hoy»), así que el spec no afirma el total de la plataforma, solo la fila de su empresa.
+
+**Caja conectada (Fase 7)** — `pos-membego` (escritorio), con el mismo arnés (`empresaCatalogo({ capacidad: true,
+pedidos: true, pos: true })`, `existenciasSembradas`) y dos sesiones de cajero: una empresa CON el POS conectado
+(`posAdmin`) y otra SIN él (`posSin`). Recorre: la empresa sin la capacidad abre su caja y **no ve** ninguno de los dos
+bloques → el cajero abre la caja desde la interfaz y **vende en el mostrador** un servicio y 2 camisetas (el total
+RD$450.00 se calcula en pantalla; una transferencia sin referencia no cobra; en efectivo con RD$500 recibidos el
+cambio es RD$50.00): la venta queda `POS` completada, sin comisión, las existencias bajan en 2 y el cobro aparece en
+«Últimos cobros del turno» con su ticket → **cobra el pedido del marketplace con el QR del cliente**: un código
+inventado y el QR de otra empresa no encuentran nada, el pedido válido muestra que el cliente confirmó el monto, una
+tarjeta sin autorización no cobra y deja el pedido como estaba, una transferencia con su referencia cobra y entrega
+(`EXTERNAL_PAYMENT_REPORTED`: lo reportado por el negocio; comisión CPA RD$100 —desde el sprint de cierre el 8 % espera
+a que una fuente externa verifique el pago—) y el mismo QR no se cobra otra vez → la empresa ve ambos pedidos en
+`/admin/pedidos-membego` (la venta de mostrador como «Caja»). Tras la auditoría F5–F9 suma dos casos: un pedido **ya
+pagado por transferencia** (evidencia sembrada) se busca con su QR → la pantalla dice «ya está pagado», **no** ofrece
+elegir cómo paga ni «Cobrar», y «Entregar sin cobrar» lo cierra con la transferencia intacta (`EXTERNAL_PAYMENT_REPORTED`, CPA)
+y **sin** cobro nuevo en la caja; y con **dos cajas abiertas** (Principal y Norte) aparece el selector, que marca la
+caja elegida y cambia el encabezado, mientras que con una sola no hay selector. **Ojo:** el pedido del marketplace se siembra por
+Prisma con su QR conocido (pedir → aceptar → listo ya lo prueba `pedidos-membego`), y el «lector» de QR es el campo de
+texto: el lector físico teclea el código y pulsa Enter, que es lo mismo.
+
+**Checkout del marketplace (Fase 8)** — `carrito-checkout` (escritorio), con el mismo arnés (`empresaCatalogo({ capacidad:
+true, pedidos: true })` para DOS negocios, `existenciasSembradas`) más una cuenta bancaria sembrada (`metodoPago`) y
+`PAGO_TRANSFERENCIA` por override en ambos, y dos sesiones: `carritoCliente` y `carritoAdmin`. Recorre, **sin cuenta**:
+agregar un producto (2) y un servicio de un negocio y un servicio de otro → el contador del menú los cuenta → `/carrito`
+tiene un bloque por negocio con los precios de hoy (RD$800.00 = 2 × 250 + 300) y sobrevive a recargar → «una más»/«una
+menos» recalculan con el servidor (RD$1,100.00 ↔ RD$800.00) y «Vaciar» saca un negocio → pagar sin sesión manda a
+`/login?redirect=…` y el carrito sigue intacto. **Con cuenta**: pedir 50 de algo que tiene 10 se avisa por renglón
+(«Solo quedan N…») y el botón no deja enviar → un negocio sin cuentas no ofrece transferencia y uno que no existe «no
+recibe pedidos» → pagar el carrito por **transferencia**: llega a «Mi pedido» con sus dos renglones, la nota «Pagará por
+transferencia. paso a las 5», las instrucciones con el **código del pedido como referencia** y la cuenta del negocio, en
+la base `MARKETPLACE`/`TRANSFER`/sin pago/canal `MARKETPLACE_BROWSE`, 2 unidades apartadas (no vendidas) y el carrito de
+ese negocio vacío → el negocio acepta, marca listo y **registra el pago con referencia** (las instrucciones
+desaparecen del pedido del cliente) → el empleado escanea el QR y entrega: queda `COMPLETED` y las unidades apartadas se
+venden. **Ojo:** el spec usa `localStorage` por contexto de navegador (cada persona abre el suyo) y espera el resumen del
+servidor, que tarda ~200 ms tras cada cambio.
+
+**Conciliación y riesgo (Fase 9)** — `conciliacion-riesgo` (escritorio), con `empresaCatalogo({ capacidad: true, pedidos: true })`
+para una empresa y otra marcada `esDemo`, el superadmin de los demás specs (`facturacionSuperadmin`) y un administrador
+de empresa (`conciliacionAdmin`). La base de E2E es `db push` (sin disparadores ni CHECK), así que las anomalías se
+**siembran por Prisma**: en cada empresa, un pedido completado SIN comisión, 5 cancelados y 4 completados de la misma
+persona. Recorre: el administrador de empresa no entra a `/superadmin/conciliacion` ni a `/superadmin/riesgo` → el
+superadmin ve en «Conciliación» la regla C01 con **su** pedido (código y empresa), todas las reglas del catálogo y
+**ninguna** mención de la empresa de práctica → en «Señales de riesgo» ve la empresa con «Muchos pedidos cancelados»
+(alta, 5 de 10) y a la persona con dos indicios (cancelaciones y ráfaga, porque los 10 pedidos se sembraron de golpe),
+sin formularios (una señal no actúa) y sin la empresa ni el cliente de práctica. **Ojo:** el spec no afirma totales de
+la plataforma (comparten base con los demás specs): solo las filas de sus propios sujetos. Este spec encontró dos fallos
+que las pruebas PG no habían visto (un alias repetido que solo rompía el alcance de la plataforma y la transacción
+abortada que tumbaba todas las reglas); hoy cada regla corre en su `SAVEPOINT`.
+
 Tres cosas que costó aprender y conviene no repetir:
 
 1. **No uses `waitUntil: 'networkidle'`.** Con el build de CI el cliente de

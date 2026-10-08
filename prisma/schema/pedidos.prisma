@@ -54,12 +54,36 @@ enum MembegoPaymentMethod {
 
 /// De menos a más evidencia. `PAYMENT_VERIFIED` y `FISCALLY_RECONCILED` deciden
 /// en la Fase 4 si la comisión es CPA fijo o el 8 %.
+///
+/// El ORDEN de evidencia lo fija `NIVELES` en `modules/orders/domain.ts`, no el
+/// orden de esta lista (`EXTERNAL_PAYMENT_REPORTED` va ENTRE `CUSTOMER_VERIFIED`
+/// y `PAYMENT_VERIFIED`; se añadió al final por cómo PostgreSQL amplía un enum).
+///
+///   · `EXTERNAL_PAYMENT_REPORTED`  el NEGOCIO afirma que cobró con tarjeta o
+///     transferencia y teclea una referencia. Es su palabra: deja constancia y
+///     no es evidencia financiera.
+///   · `PAYMENT_VERIFIED`  MEMBEGO recibió confirmación de una fuente externa
+///     confiable (pasarela firmada, conciliación bancaria, proveedor). Solo
+///     desde aquí se cobra el porcentaje en el modelo HYBRID.
+///   · `FISCALLY_RECONCILED`  reservado al comprobante fiscal (e-CF); nada lo
+///     deriva todavía.
 enum MembegoVerificationLevel {
   ATTRIBUTED
   REDEEMED
   CUSTOMER_VERIFIED
   PAYMENT_VERIFIED
   FISCALLY_RECONCILED
+  EXTERNAL_PAYMENT_REPORTED
+}
+
+/// Quién respalda una constancia de pago. `MERCHANT_REPORTED` es lo que
+/// registra la empresa (caja, panel); lo demás solo lo escribe el sistema o el
+/// superadmin con una referencia verificable fuera de Membego.
+enum MembegoPaymentEvidenceSource {
+  MERCHANT_REPORTED
+  GATEWAY_VERIFIED
+  BANK_RECONCILED
+  PROVIDER_VERIFIED
 }
 
 enum MembegoAttributionChannel {
@@ -260,14 +284,29 @@ model PaymentEvidence {
   method    MembegoPaymentMethod
   amount    Decimal              @db.Decimal(12, 2)
   /// Número de transferencia, últimos dígitos del voucher… Sin ella un pago en
-  /// efectivo o «de palabra» no cuenta como verificado.
+  /// efectivo o «de palabra» no cuenta ni como reportado.
   reference String?
   notes     String?
+
+  /// Quién respalda la constancia. Con `MERCHANT_REPORTED` el pedido llega a
+  /// `EXTERNAL_PAYMENT_REPORTED`; con cualquier otra fuente, a `PAYMENT_VERIFIED`.
+  /// La base exige (`payment_evidences_fuente`) que una fuente externa traiga
+  /// `verifiedAt` y `verificationRef`, y que la reportada no los traiga.
+  source          MembegoPaymentEvidenceSource @default(MERCHANT_REPORTED)
+  /// Cuándo confirmó la fuente externa.
+  verifiedAt      DateTime?
+  /// El identificador del hecho externo (id de transacción de la pasarela,
+  /// referencia del extracto bancario, número de la compra de Supply). Es la
+  /// clave de idempotencia de la verificación: el mismo hecho no verifica dos veces.
+  verificationRef String?
+  /// Quién la verificó (null = sistema). Sin FK.
+  verifiedByUserId String?
 
   recordedByUserId String?
   recordedAt       DateTime @default(now())
 
   @@unique([orderId, companyId])
   @@index([companyId, recordedAt])
+  @@index([companyId, source])
   @@map("payment_evidences")
 }

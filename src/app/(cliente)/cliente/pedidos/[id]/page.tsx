@@ -9,6 +9,7 @@ import { miPedido } from '@/modules/orders/cliente-queries'
 import { BADGE_ESTADO, ETIQUETA_ESTADO, PASOS, formatearFechaHora, formatearMonto, pasoActual } from '@/modules/orders/formato'
 import { AccionesMiPedido } from '@/components/pedidos/AccionesMiPedido'
 import { QrDePedido } from '@/components/pedidos/QrDePedido'
+import { getCuentasTransferencia } from '@/modules/pagos/metodosDisponibles'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mi pedido' }
@@ -23,6 +24,10 @@ export default async function MiPedidoPage({ params }: { params: Promise<{ id: s
   const { id } = await params
   const p = await miPedido(await misClienteIds(user.supabaseId), id)
   if (!p) notFound()
+
+  // Dijo que pagaría por transferencia y todavía no hay pago registrado: se le dice adónde y con qué referencia.
+  const porTransferir = p.metodoPago === 'TRANSFER' && !p.pagado && ['AWAITING_MERCHANT', 'IN_PROGRESS', 'READY'].includes(p.status)
+  const cuentas = porTransferir ? await getCuentasTransferencia(p.companyId) : []
 
   const paso = pasoActual(p.status)
   const cerrado = p.status === 'CANCELLED' || p.status === 'REFUNDED'
@@ -71,6 +76,40 @@ export default async function MiPedidoPage({ params }: { params: Promise<{ id: s
           <CardContent className="p-4 text-sm">
             <p className="font-medium">Este pedido fue reembolsado</p>
             {p.refundReason && <p className="text-muted-foreground">Motivo: {p.refundReason}</p>}
+          </CardContent>
+        </Card>
+      )}
+
+      {porTransferir && (
+        <Card className="border-primary/30" data-testid="instrucciones-transferencia">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Cómo pagar por transferencia</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p>
+              Transfiere <span className="font-semibold tabular-nums">{formatearMonto(p.total, p.currency)}</span> y escribe{' '}
+              <span className="rounded bg-muted px-1.5 py-0.5 font-mono font-semibold">{p.code}</span> como referencia o concepto.
+            </p>
+            {cuentas.length === 0 ? (
+              <p className="rounded-lg bg-muted/50 p-3 text-muted-foreground">Este negocio no tiene cuentas publicadas ahora. Pregúntale por dónde transferir o paga al recoger.</p>
+            ) : (
+              <ul className="space-y-2" aria-label="Cuentas del negocio">
+                {cuentas.map((c) => (
+                  <li key={c.id} className="rounded-lg border border-border p-3">
+                    <p className="font-medium">{c.nombre}</p>
+                    {c.titular && <p className="text-muted-foreground">Titular: {c.titular}</p>}
+                    {c.numeroCuenta && (
+                      <p className="text-muted-foreground">
+                        {c.tipoCuenta ? `${c.tipoCuenta} · ` : ''}
+                        <span className="font-mono text-foreground">{c.numeroCuenta}</span>
+                      </p>
+                    )}
+                    {c.instrucciones && <p className="mt-1 whitespace-pre-line text-muted-foreground">{c.instrucciones}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-muted-foreground">El negocio confirma tu pago cuando lo vea en su banco. Tu transferencia no cambia el estado del pedido por sí sola.</p>
           </CardContent>
         </Card>
       )}

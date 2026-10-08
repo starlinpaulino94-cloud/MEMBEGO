@@ -86,3 +86,13 @@ test('el menú, el mapa de capacidades del menú y el catálogo conocen DEALS_MA
   assert.match(leer('src/components/layout/nav-config.ts'), /\| 'DEALS_MARKETPLACE'/)
   assert.match(leer('src/modules/navegacion/contexto.ts'), /'DEALS_MARKETPLACE'/)
 })
+
+test('«Obtener oferta» no afilia a nadie por una oferta que no se puede reclamar, y el reclamo respeta el tope de pedidos abiertos (auditoría F5–F9, M2 y M7)', () => {
+  const cliente = limpio('src/modules/deals/cliente-actions.ts')
+  const previa = cliente.indexOf('motivoNoReclamarEnTx(')
+  assert.ok(previa > 0 && previa < cliente.indexOf('asegurarClienteEnEmpresa('), 'comprueba la oferta ANTES de crear la ficha')
+  const servicio = limpio('src/modules/deals/service.ts')
+  const reclamar = servicio.slice(servicio.indexOf('export async function reclamarOfertaEnTx'))
+  assert.match(reclamar, /contarPedidosAbiertosEnTx\(/)
+  assert.ok(reclamar.indexOf('contarPedidosAbiertosEnTx(') < reclamar.indexOf('UPDATE "deals"'), 'el tope va antes de apartar cupo y presupuesto')
+})
