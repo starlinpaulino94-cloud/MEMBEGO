@@ -21,10 +21,12 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   aEtiqueta,
   esEtiqueta,
   lineaDeEvento,
+  registrarOperacion,
   saneaExtra,
 } from '../src/modules/observabilidad/eventos'
 import {
@@ -124,6 +126,53 @@ test('la línea del evento tiene la forma fija que se puede filtrar y contar', (
   assert.equal(o.ok, true)
   assert.equal(o.ms, 1235, 'los milisegundos se redondean')
   assert.equal('emp' in o, false, 'sin empresa no se inventa el campo')
+})
+
+test('un evento de pedido lleva empresa y pedido (ids opacos) y nada más que etiquetas', () => {
+  const linea = lineaDeEvento({ dominio: 'pedido', accion: 'pago_verificado', ok: true, companyId: 'cmuzk2qvq00017d5bbezxhxlc', pedidoId: 'cmux1vb1900007dzt3fxbwosp' })
+  const o = JSON.parse(linea)
+  assert.equal(o.dom, 'pedido')
+  assert.equal(o.emp, 'cmuzk2qvq00017d5bbezxhxlc')
+  assert.equal(o.ped, 'cmux1vb1900007dzt3fxbwosp', 'el hilo de la venta: el mismo id de la bitácora')
+})
+
+test('el pedido solo sale si es un id opaco: un correo, un teléfono o una frase no se cuelan por ahí', () => {
+  for (const malo of ['cliente@correo.com', '809-555-1234', '8095551234', 'pedido de Juan Pérez', 'corto', 'x'.repeat(41), 'sololetrasminusculasmuylargas', 'MBG-PED-2031-000123', 'MBG PED 2031 000123']) {
+    const o = JSON.parse(lineaDeEvento({ dominio: 'pedido', accion: 'pedido_completado', ok: true, pedidoId: malo }))
+    assert.equal('ped' in o, false, `no debió salir: ${malo}`)
+  }
+})
+
+test('registrarOperacion: el motivo de un fallo es el código del error de dominio, nunca su mensaje', () => {
+  const lineas: string[] = []
+  const original = console.log
+  console.log = (l: unknown) => lineas.push(String(l))
+  try {
+    class Fallo extends Error { readonly codigo = 'PAGO_YA_VERIFICADO' }
+    registrarOperacion({ dominio: 'pedido', accion: 'pago_verificado', companyId: 'cmuzk2qvq00017d5bbezxhxlc', pedidoId: 'cmux1vb1900007dzt3fxbwosp', error: new Fallo('Juan Pérez pagó con la tarjeta 4111 1111 1111 1111') })
+    registrarOperacion({ dominio: 'facturacion', accion: 'movimiento_manual', error: new Error('fallo de conexión con secreto-de-prueba-xyz en el mensaje') })
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_completado' })
+  } finally {
+    console.log = original
+  }
+  const [dominio, interno, bueno] = lineas.map((l) => JSON.parse(l))
+  assert.equal(dominio.ok, false)
+  assert.equal(dominio.motivo, 'pago_ya_verificado')
+  assert.equal(interno.motivo, 'error_interno')
+  assert.equal(bueno.ok, true)
+  assert.equal('motivo' in bueno, false)
+  const todo = lineas.join('\n')
+  for (const filtrado of ['Juan', '4111', 'secreto-de-prueba', 'conexión']) assert.equal(todo.includes(filtrado), false, `se coló: ${filtrado}`)
+})
+
+test('las acciones que mueven dinero dejan su evento DESPUÉS de la transacción (nunca dentro del servicio, que puede revertirse)', () => {
+  const lee = (f: string) => readFileSync(f, 'utf8')
+  for (const f of ['src/modules/orders/actions.ts', 'src/modules/orders/escaner-actions.ts', 'src/modules/orders/superadmin-actions.ts', 'src/modules/pos/actions.ts', 'src/modules/billing/actions.ts']) {
+    assert.match(lee(f), /registrarOperacion\(/, `${f} no emite eventos`)
+  }
+  for (const f of ['src/modules/orders/service.ts', 'src/modules/billing/service.ts', 'src/modules/pos/service.ts']) {
+    assert.doesNotMatch(lee(f), /registrarOperacion|registrarEvento/, `${f} emite dentro de la transacción`)
+  }
 })
 
 // ── 2 · El presupuesto de error ─────────────────────────────────────────────

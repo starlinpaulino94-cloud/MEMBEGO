@@ -22,6 +22,7 @@ import { SCANNER_ROLES } from '@/types'
 import { getRequestMeta } from '@/lib/server-utils'
 import { formSubmitLimiter } from '@/lib/rate-limit'
 import { capturarErrorInesperado } from '@/lib/sentry'
+import { registrarOperacion } from '@/modules/observabilidad/eventos'
 import { FacturacionError } from '@/modules/billing/errores'
 import { InventarioError } from '@/modules/inventory/errores'
 import { PedidoError } from '@/modules/orders/errores'
@@ -122,11 +123,13 @@ export async function cobrarPedidoMembego(entrada: { cajaSesionId: string; token
     const cobro = await conEmpresa(c.companyId, (tx) =>
       cobrarPedidoEnCajaEnTx(tx, c.companyId, { cajaSesionId: texto(entrada.cajaSesionId), token: texto(entrada.token), metodo: entrada.metodo, referencia: entrada.referencia, recibido: entrada.recibido, entregarSinCobrar: entrada.entregarSinCobrar === true }, c.ctx)
     )
+    registrarOperacion({ dominio: 'pedido', accion: cobro.transaccion ? 'cobro_en_caja' : 'entrega_sin_cobro_en_caja', companyId: c.companyId, pedidoId: cobro.pedidoId })
     revalidatePath('/empleado/caja')
     revalidatePath('/admin/pedidos-membego', 'layout')
     revalidatePath('/admin/deals', 'layout')
     return { ok: true, cobro }
   } catch (e) {
+    registrarOperacion({ dominio: 'pedido', accion: 'cobro_en_caja', companyId: c.companyId, error: e })
     return aError(e, 'cobrar-pedido')
   }
 }
@@ -156,11 +159,13 @@ export async function venderEnMostrador(entrada: {
         c.ctx
       )
     )
+    registrarOperacion({ dominio: 'pedido', accion: venta.repetido ? 'venta_de_mostrador_repetida' : 'venta_de_mostrador', companyId: c.companyId, pedidoId: venta.pedidoId })
     revalidatePath('/empleado/caja')
     revalidatePath('/admin/pedidos-membego', 'layout')
     revalidatePath('/admin/inventario', 'layout')
     return { ok: true, venta }
   } catch (e) {
+    registrarOperacion({ dominio: 'pedido', accion: 'venta_de_mostrador', companyId: c.companyId, error: e })
     return aError(e, 'vender')
   }
 }

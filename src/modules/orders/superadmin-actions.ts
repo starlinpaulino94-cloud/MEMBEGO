@@ -19,6 +19,7 @@ import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { FacturacionError } from '@/modules/billing/errores'
+import { registrarOperacion } from '@/modules/observabilidad/eventos'
 import { PedidoError } from './errores'
 import { verificarPagoExternamenteEnTx, type ContextoPedido } from './service'
 
@@ -49,10 +50,12 @@ export async function verificarPagoBancario(entrada: {
   if (!metodo) return { ok: false, error: 'Indica si el pago fue por transferencia o tarjeta.' }
   const meta = await getRequestMeta()
   const ctx: ContextoPedido & { superadmin: true } = { actor: 'EMPRESA', actorId: user.metadata.dbUserId ?? null, superadmin: true, ...meta }
+  let pedidoId: string | null = null
   try {
     const r = await conEmpresa(companyId, async (tx) => {
       const pedido = await tx.membegoOrder.findFirst({ where: { companyId, code: codigo }, select: { id: true } })
       if (!pedido) throw new PedidoError('NO_EXISTE', `No hay ningún pedido ${codigo} en esta empresa.`)
+      pedidoId = pedido.id
       return verificarPagoExternamenteEnTx(
         tx,
         companyId,
@@ -61,12 +64,14 @@ export async function verificarPagoBancario(entrada: {
         ctx
       )
     })
+    registrarOperacion({ dominio: 'pedido', accion: r.repetido ? 'pago_verificado_repetido' : 'pago_verificado', companyId, pedidoId })
     revalidatePath('/superadmin/facturacion')
     revalidatePath(`/superadmin/facturacion/${companyId}`)
     revalidatePath('/admin/pedidos-membego')
     revalidatePath('/admin/facturacion-membego')
     return { ok: true, nivel: r.nivel, comision: r.comision, repetido: r.repetido }
   } catch (e) {
+    registrarOperacion({ dominio: 'pedido', accion: 'pago_verificado', companyId, pedidoId, error: e })
     if (e instanceof PedidoError || e instanceof FacturacionError) return { ok: false, error: e.message }
     console.error('[pedidos:verificar-pago]', e instanceof Error ? e.message : e)
     return { ok: false, error: 'No se pudo verificar el pago. Intenta de nuevo.' }

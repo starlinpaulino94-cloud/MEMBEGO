@@ -236,6 +236,72 @@ export function estadoPorPresupuesto(o: Pick<NumerosDeOferta, 'feePerRedemption'
   return presupuestoLibre(o).greaterThanOrEqualTo(decimal(o.feePerRedemption)) ? 'ACTIVE' : 'BUDGET_EXHAUSTED'
 }
 
+// ── Alertas de presupuesto y vigencia ────────────────────────────────────────
+
+/**
+ * Avisos que la empresa recibe sobre una oferta viva. Cada uno es UN hecho que se avisa UNA vez:
+ *
+ *   PRESUPUESTO_80   lo comprometido (reservado + gastado) llegó al 80 % del presupuesto
+ *   PRESUPUESTO_100  lo comprometido llegó al 100 % (no queda nada por prometer)
+ *   AGOTADA          la oferta quedó en BUDGET_EXHAUSTED: no alcanza para otro canje
+ *   POR_VENCER       faltan 3 días o menos para que termine la vigencia
+ *
+ * No se encadenan: un salto de 70 % a 100 % dispara PRESUPUESTO_80 Y PRESUPUESTO_100 (el 80 % también se cruzó),
+ * porque quien lee "se acabó" sin haber leído "se está acabando" pierde el contexto.
+ */
+export type TipoDeAlertaDeOferta = 'PRESUPUESTO_80' | 'PRESUPUESTO_100' | 'AGOTADA' | 'POR_VENCER'
+
+export const UMBRAL_ALERTA_PRESUPUESTO = 0.8
+export const HORAS_POR_VENCER = 72
+
+export interface OfertaParaAlertas extends Pick<NumerosDeOferta, 'feePerRedemption' | 'budgetTotal' | 'budgetReserved' | 'budgetSpent'> {
+  status: DealStatus
+  endsAt: Date | null
+}
+
+/** Qué avisos le tocan a la oferta AHORA (sin saber cuáles ya se enviaron: eso lo resuelve la clave de cada aviso). */
+export function alertasDeOferta(o: OfertaParaAlertas, ahora: Date): TipoDeAlertaDeOferta[] {
+  if (o.status !== 'ACTIVE' && o.status !== 'PAUSED' && o.status !== 'BUDGET_EXHAUSTED') return []
+  const salida: TipoDeAlertaDeOferta[] = []
+  const total = decimal(o.budgetTotal)
+  if (total.greaterThan(0)) {
+    const comprometido = decimal(o.budgetReserved).plus(decimal(o.budgetSpent))
+    if (comprometido.dividedBy(total).greaterThanOrEqualTo(UMBRAL_ALERTA_PRESUPUESTO)) salida.push('PRESUPUESTO_80')
+    if (comprometido.greaterThanOrEqualTo(total)) salida.push('PRESUPUESTO_100')
+  }
+  if (o.status === 'BUDGET_EXHAUSTED' || estadoPorPresupuesto({ ...o, status: 'ACTIVE' }) === 'BUDGET_EXHAUSTED') salida.push('AGOTADA')
+  if (o.endsAt) {
+    const faltan = o.endsAt.getTime() - ahora.getTime()
+    if (faltan > 0 && faltan <= HORAS_POR_VENCER * 3_600_000) salida.push('POR_VENCER')
+  }
+  return salida
+}
+
+/**
+ * La identidad de un aviso. Lleva lo que lo hace "otro hecho": si la empresa AMPLÍA el presupuesto o ALARGA la vigencia, el
+ * siguiente cruce de umbral es un aviso nuevo; repetir el barrido sobre el mismo estado no avisa dos veces.
+ */
+export function claveDeAlertaDeOferta(dealId: string, tipo: TipoDeAlertaDeOferta, o: Pick<OfertaParaAlertas, 'budgetTotal' | 'endsAt'>): string {
+  const variante = tipo === 'POR_VENCER' ? String(o.endsAt?.getTime() ?? 0) : decimal(o.budgetTotal).toFixed(2)
+  return `oferta-alerta:${dealId}:${tipo}:${variante}`
+}
+
+export function textoDeAlertaDeOferta(tipo: TipoDeAlertaDeOferta, titulo: string, o: Pick<OfertaParaAlertas, 'budgetTotal' | 'budgetReserved' | 'budgetSpent' | 'endsAt'> & { currency?: string }): { titulo: string; mensaje: string } {
+  const prefijo = !o.currency || o.currency === 'DOP' ? 'RD$ ' : `${o.currency} `
+  const dinero = (m: Monto) => `${prefijo}${montoATexto(m)}`
+  const comprometido = decimal(o.budgetReserved).plus(decimal(o.budgetSpent))
+  switch (tipo) {
+    case 'PRESUPUESTO_80':
+      return { titulo: 'Tu oferta va por el 80 % del presupuesto', mensaje: `«${titulo}» ya comprometió ${dinero(comprometido)} de ${dinero(o.budgetTotal)}. Amplía el presupuesto si quieres que siga disponible.` }
+    case 'PRESUPUESTO_100':
+      return { titulo: 'Tu oferta comprometió todo su presupuesto', mensaje: `«${titulo}» ya no tiene presupuesto por prometer (${dinero(comprometido)} de ${dinero(o.budgetTotal)}). Si un cupón vence sin canjearse, esa cuota vuelve.` }
+    case 'AGOTADA':
+      return { titulo: 'Tu oferta se agotó', mensaje: `«${titulo}» no se puede reclamar: el presupuesto no alcanza para otro canje. Se reactiva sola si se libera cuota o si lo amplías.` }
+    case 'POR_VENCER':
+      return { titulo: 'Tu oferta está por terminar', mensaje: `«${titulo}» termina el ${o.endsAt ? o.endsAt.toISOString().slice(0, 10) : '—'}. Los cupones ya reclamados siguen valiendo hasta su propio vencimiento.` }
+  }
+}
+
 // ── ¿Se puede reclamar? ──────────────────────────────────────────────────────
 
 export interface OfertaParaReclamar extends NumerosDeOferta {

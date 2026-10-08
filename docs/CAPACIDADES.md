@@ -168,7 +168,12 @@ Marketplace. Se hace con este mismo sistema, sin borrar datos:
   cuelgan de `leads`.
 - **Puntos y niveles de gamificación no dependen de `RULETA`**: se derivan de
   hechos reales y siguen mostrándose; solo desaparece el acceso a la ruleta.
-- Supply V1 **no** se ocultó en la Fase 0 (ver Plan Maestro, decisión abierta).
+- Supply V1 ya **no existe en el código** (retirado; quedan sus tablas y migraciones,
+  ver `IMPLEMENTATION_STATUS.md` §5 y §12). Lo que hoy se llama «Supply» es V2, y va
+  detrás de `MEMBEGO_SUPPLIER`: no está en ningún paquete base, se enciende a mano por
+  empresa proveedora, y su menú (`/admin/supply`, «Entregas Membego») y su layout exigen
+  además un `SupplyV2Supplier` activo de esa empresa (`proveedorDeLaSesion()`); sin él
+  la pantalla redirige al panel aunque la capacidad esté encendida.
 - Al sumar una capacidad nueva, hay cuatro listas que mantener en sincronía:
   `CAPACIDADES`/`CAPACIDAD_LABELS` (catálogo), `FUNCIONES_EMPRESA`
   (`modules/plataforma/conceptos.ts`), `CapacidadNav` (`nav-config.ts`) y

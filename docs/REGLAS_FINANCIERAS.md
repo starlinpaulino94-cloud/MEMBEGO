@@ -157,6 +157,23 @@ Pruebas: `tests/billing-domain.test.ts` («qué pedidos comisionan»), `tests/po
 cliente **identificado por su QR de membresía** debe comisionar. Hoy no, porque identificarse no demuestra
 que Membego trajera la venta.
 
+## 4b. Supply es otra economía
+
+Una compra de Supply (oferta de Membego, pagada a Membego) **nunca entra en Merchant
+Billing**: `pedidoGeneraComision` la excluye y el disparador `merchant_commissions_reglas`
+rechaza cualquier comisión sobre un pedido con `origin = SUPPLY` o `sourceType` de Supply.
+Lo que Membego le debe al proveedor nace al **redimir** (obligación del proveedor, Supply
+Economics), no al vender. El pedido Membego que envuelve la compra es un reflejo de solo
+lectura: no mueve inventario, no escribe en el ledger de Supply y es único por compra.
+
+Reglas de la base que sostienen la cadena compra → derecho → QR → entrega: un derecho por
+unidad pagada y de su propia orden (`20261052`), una sola redención viva por derecho, QR
+(`nonce`, sesión) y clave de idempotencia únicos, cubetas del lote que cuadran y nunca
+negativas. **Lo que no existe:** un flujo de reembolso al cliente en Supply (`REFUNDED` no
+lo escribe nadie; un reembolso hecho fuera del sistema deja el derecho canjeable). Es una
+decisión de producto pendiente, no un fallo silencioso: la conciliación no lo cubre porque
+no hay nada que conciliar todavía.
+
 ## 5. Lo que NO está (y se dice)
 
 - Pago en línea (CardNET) dentro del pedido Membego: `BLOCKED — EXTERNAL CREDENTIALS`. La ruta de entrada

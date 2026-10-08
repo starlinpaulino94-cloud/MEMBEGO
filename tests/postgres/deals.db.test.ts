@@ -739,3 +739,54 @@ test('32 · motivoNoReclamarEnTx: la lectura previa que evita afiliar por una of
   assert.equal((await en(E.a, (tx) => motivoNoReclamarEnTx(tx, E.a.id, 'no-existe')))?.codigo, 'OFERTA_NO_ENCONTRADA')
   assert.equal((await en(E.b, (tx) => motivoNoReclamarEnTx(tx, E.b.id, id)))?.codigo, 'OFERTA_NO_ENCONTRADA', 'la oferta de A no existe para B')
 })
+
+test('33 · avisos de la oferta (sprint de cierre): 80 %, 100 %, agotada y por vencer, cada uno UNA vez; ampliar el presupuesto deja avisar el siguiente cruce', async () => {
+  const admin = await prisma.user.create({ data: { supabaseId: `sb-dealadm-${sufijo}`, email: `dealadm-${sufijo}@prueba.test`, name: 'Admin ofertas', role: 'ADMINISTRADOR', companyId: E.a.id }, select: { id: true } })
+  const fin = new Date(Date.now() + 2 * 86_400_000) // faltan 48 h: entra en «por vencer» (≤ 72 h)
+  const id = await ofertaActiva(E.a, { budgetTotal: 500, maxClaims: 10, endsAt: fin })
+  const tipos = async () =>
+    (await prisma.notificacion.findMany({ where: { userId: admin.id, dedupeKey: { startsWith: `oferta-alerta:${id}:` } }, select: { dedupeKey: true } }))
+      .map((n) => n.dedupeKey!.split(':')[2])
+      .sort()
+
+  // Recién publicada: solo le falta poco tiempo.
+  const b0 = await barridoDeOfertas()
+  assert.ok(b0.alertas >= 1)
+  assert.deepEqual(await tipos(), ['POR_VENCER'])
+
+  // 4 de 5 cupones reservados = 400 de 500 = 80 %.
+  for (let i = 0; i < 4; i++) await reclamar(E.a, id, i)
+  await barridoDeOfertas()
+  assert.deepEqual(await tipos(), ['POR_VENCER', 'PRESUPUESTO_80'])
+
+  // Repetir el barrido (o correr dos a la vez) no avisa dos veces.
+  const antes = await prisma.notificacion.count({ where: { userId: admin.id, dedupeKey: { startsWith: `oferta-alerta:${id}:` } } })
+  await Promise.all([barridoDeOfertas(), barridoDeOfertas()])
+  assert.equal(await prisma.notificacion.count({ where: { userId: admin.id, dedupeKey: { startsWith: `oferta-alerta:${id}:` } } }), antes)
+
+  // El quinto cupón compromete el 100 % y la oferta queda agotada: avisa de las dos cosas.
+  await reclamar(E.a, id, 4)
+  assert.equal((await oferta(id)).status, 'BUDGET_EXHAUSTED')
+  await barridoDeOfertas()
+  assert.deepEqual(await tipos(), ['AGOTADA', 'POR_VENCER', 'PRESUPUESTO_100', 'PRESUPUESTO_80'])
+
+  // Ampliar el presupuesto reabre la oferta; cuando vuelva a cruzar el 80 % del NUEVO total, avisa otra vez.
+  await en(E.a, (tx) => ampliarPresupuestoEnTx(tx, E.a.id, id, 500, ctxOferta()))
+  await barridoDeOfertas()
+  assert.equal((await tipos()).filter((t) => t === 'PRESUPUESTO_80').length, 1, 'con 500 de 1 000 comprometidos todavía no cruza el 80 % del nuevo total')
+  for (let i = 5; i < 8; i++) await reclamar(E.a, id, i) // 800 de 1 000
+  await barridoDeOfertas()
+  assert.equal((await tipos()).filter((t) => t === 'PRESUPUESTO_80').length, 2, 'el nuevo total es otro hecho: avisa de nuevo')
+
+  // Una oferta pausada o ya terminada no genera avisos de más: terminada, ninguno nuevo.
+  const total = (await tipos()).length
+  await barridoDeOfertas(new Date(fin.getTime() + HORA))
+  assert.equal((await oferta(id)).status, 'COMPLETED')
+  await barridoDeOfertas(new Date(fin.getTime() + 2 * HORA))
+  assert.equal((await tipos()).length, total, 'terminada: no hay nada que avisar')
+
+  // El aviso lleva el enlace a la oferta y no revela nada de los clientes.
+  const una = await prisma.notificacion.findFirstOrThrow({ where: { userId: admin.id, dedupeKey: { startsWith: `oferta-alerta:${id}:PRESUPUESTO_80` } } })
+  assert.equal(una.href, `/admin/deals/${id}`)
+  assert.doesNotMatch(`${una.titulo} ${una.mensaje}`, /Cliente a\d|@prueba\.test/)
+})

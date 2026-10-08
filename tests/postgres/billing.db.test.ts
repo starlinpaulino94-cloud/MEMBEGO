@@ -1331,3 +1331,25 @@ test('47 · ATRIBUCIÓN ≠ CUMPLIMIENTO: un pedido de origen POS con una promoc
   assert.equal(await cerrar({ channel: 'DIRECT' }), null, 'entró por su cuenta: no hay nada que cobrar')
   assert.equal(await cerrar({ channel: 'QR_SCAN' }), null, 'identificarse con el QR de membresía no demuestra que Membego trajera la venta')
 })
+
+test('48 · CONCURRENCIA: verificar el pago y reembolsar el pedido a la vez, en cualquier orden, nunca deja un ajuste sin su reverso ni un saldo que no cuadre', async () => {
+  const e = E.i
+  for (let ronda = 0; ronda < 4; ronda++) {
+    const p = await pedidoCompletado({ empresa: e, cantidad: 20, nivel: 'EXTERNAL_PAYMENT_REPORTED' })
+    const saldo0 = await saldo(e) // ya incluye el CPA de 100 de este pedido
+    const resultados = await Promise.allSettled([
+      verificar(e, p.pedidoId, `cardnet-48-${ronda}`),
+      en(e, (tx) => reembolsarPedidoEnTx(tx, e.id, p.pedidoId, { motivo: `Devolución ${ronda}` }, empresa(f.usuario), T0)),
+    ])
+    // El reembolso siempre se aplica; la verificación puede llegar antes (ajusta y se revierte) o después (el pedido ya no admite ajuste).
+    assert.equal(resultados[1].status, 'fulfilled', `ronda ${ronda}: el reembolso no puede perderse`)
+    const c = await comisionCompleta(p.pedidoId)
+    assert.equal(c.status, 'REVERSED', `ronda ${ronda}`)
+    // Con ajuste → tiene SU reverso. Sin ajuste → no hay nada que revertir.
+    assert.equal(c.verificationAdjustmentEntryId === null, c.verificationAdjustmentReversalEntryId === null, `ronda ${ronda}: ajuste y reverso van juntos`)
+    // Lo que importa para el dinero: el pedido reembolsado no deja nada a cargo de la empresa.
+    assert.equal(await saldo(e), new Prisma.Decimal(saldo0).minus(100).toFixed(2), `ronda ${ronda}: el saldo vuelve a antes del pedido`)
+    const delPedido = (await libro(e)).filter((a) => a.referenceId === c.id)
+    assert.equal(delPedido.reduce((t, a) => t.plus(a.amount), new Prisma.Decimal(0)).toFixed(2), '0.00', `ronda ${ronda}: los asientos de la comisión suman cero`)
+  }
+})

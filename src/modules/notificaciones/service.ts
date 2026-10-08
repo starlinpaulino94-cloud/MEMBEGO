@@ -44,23 +44,26 @@ export async function crearNotificacion(data: {
 export async function notificarAdmins(
   companyId: string,
   payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string; dedupeKey?: string }
-) {
+): Promise<number> {
   try {
-    await conEmpresa(companyId, async (tx) => {
+    return await conEmpresa(companyId, async (tx) => {
       const admins = await tx.user.findMany({
         where: { companyId, role: { in: FULL_ADMIN_ROLES } },
         select: { id: true },
       })
-      if (admins.length === 0) return
-      await tx.notificacion.createMany({
+      if (admins.length === 0) return 0
+      const r = await tx.notificacion.createMany({
         data: admins.map((a) => ({ userId: a.id, ...payload })),
         // Solo muerde cuando el payload trae `dedupeKey`: sin clave, Postgres
         // permite tantos NULL como quiera y esto no cambia nada.
         skipDuplicates: true,
       })
+      // Cuántas filas NUEVAS quedaron (con `dedupeKey`, repetir el hecho da 0).
+      return r.count
     })
   } catch (e) {
     console.error('[notificacion] notificarAdmins error', e)
+    return 0
   }
 }
 

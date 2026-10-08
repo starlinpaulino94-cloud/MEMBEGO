@@ -47,6 +47,8 @@ export type DominioEvento =
   | 'auth'
   | 'datos'
   | 'sistema'
+  | 'pedido'
+  | 'facturacion'
 
 /** Valores admitidos en `extra`. Ver la cabecera: no hay cadenas libres. */
 export type ValorEtiqueta = number | boolean | string
@@ -61,6 +63,12 @@ export interface Evento {
   ms?: number
   /** Empresa afectada. Sin esto no se puede diagnosticar nada multi-inquilino. */
   companyId?: string | null
+  /**
+   * Pedido Membego afectado: es el hilo que une todo lo que le pasa a una venta (pedido, pago, comisión,
+   * asiento, reembolso) y el mismo `entidadId` de la bitácora. Es un id opaco (cuid/uuid), no un dato de
+   * persona; solo se emite si TIENE esa forma —un código con nombre o un correo no pasa.
+   */
+  pedidoId?: string | null
   /** Por qué falló, en etiqueta: `token_vencido`, `sin_saldo`, `p2024`. */
   motivo?: string
   /** Dimensiones adicionales. Solo números, booleanos y etiquetas. */
@@ -78,6 +86,13 @@ export interface Evento {
  * fechas e identificadores numéricos de un plumazo, y ninguna etiqueta real
  * (`qr_ya_usado`, `p2024`, `pool_agotado`) empieza por dígito.
  */
+/**
+ * Un id opaco de la base (cuid de Prisma: `c` + minúsculas y dígitos, ~25 caracteres). Empieza por LETRA y no admite
+ * guiones, para que un teléfono (`809-555-1234`) o una cédula no quepan; y exige algún dígito, para que tampoco quepa
+ * una palabra suelta.
+ */
+const RE_ID_OPACO = /^(?=.*\d)[a-z][a-z0-9]{15,39}$/
+
 const RE_ETIQUETA = /^[a-z][a-z0-9_-]{0,47}$/
 
 /** Siete dígitos seguidos ya no es un código: es un número que identifica algo. */
@@ -149,6 +164,7 @@ export function lineaDeEvento(e: Evento, ahora: Date = new Date()): string {
   }
   if (typeof e.ms === 'number' && Number.isFinite(e.ms)) cuerpo.ms = Math.round(e.ms)
   if (e.companyId) cuerpo.emp = e.companyId
+  if (typeof e.pedidoId === 'string' && RE_ID_OPACO.test(e.pedidoId)) cuerpo.ped = e.pedidoId
   if (e.motivo) cuerpo.motivo = aEtiqueta(e.motivo)
 
   const extra = saneaExtra(e.extra)
@@ -211,4 +227,32 @@ export async function medir<T>(
     })
     throw e
   }
+}
+
+/**
+ * Evento de una operación del Commerce Core (pedido, pago, comisión, caja) con su desenlace.
+ *
+ * Se llama DESPUÉS de que la transacción terminó —en la acción, no dentro del servicio—: un evento escrito dentro
+ * de una transacción que luego se revierte contaría como hecho algo que no ocurrió. El motivo de un fallo es el
+ * `codigo` del error de dominio (`PAGO_YA_VERIFICADO`, `STOCK_INSUFICIENTE`…) o, si no es de dominio, `error_interno`;
+ * nunca el mensaje, que puede llevar datos.
+ */
+export function registrarOperacion(o: {
+  dominio: 'pedido' | 'facturacion'
+  accion: string
+  companyId?: string | null
+  pedidoId?: string | null
+  error?: unknown
+  ms?: number
+}): void {
+  const codigo = o.error && typeof o.error === 'object' && 'codigo' in o.error ? (o.error as { codigo: unknown }).codigo : undefined
+  registrarEvento({
+    dominio: o.dominio,
+    accion: o.accion,
+    ok: o.error === undefined,
+    companyId: o.companyId ?? null,
+    pedidoId: o.pedidoId ?? null,
+    ms: o.ms,
+    motivo: o.error === undefined ? undefined : typeof codigo === 'string' ? codigo : 'error_interno',
+  })
 }

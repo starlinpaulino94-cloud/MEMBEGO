@@ -26,6 +26,7 @@ import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import type { SessionUser } from '@/types'
 import { InventarioError } from '@/modules/inventory/errores'
+import { registrarOperacion } from '@/modules/observabilidad/eventos'
 import { PedidoError } from './errores'
 import {
   aceptarPedidoEnTx,
@@ -125,9 +126,11 @@ export async function registrarPagoPedido(entrada: {
     await conEmpresa(c.companyId, (tx) =>
       registrarPagoEnTx(tx, c.companyId, texto(entrada.pedidoId), { method: metodo, amount: entrada.monto, reference: entrada.referencia ?? null, notes: entrada.notas ?? null }, c.ctx)
     )
+    registrarOperacion({ dominio: 'pedido', accion: 'pago_reportado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId) })
     refrescar()
     return { ok: true }
   } catch (e) {
+    registrarOperacion({ dominio: 'pedido', accion: 'pago_reportado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId), error: e })
     return aError(e)
   }
 }
@@ -139,9 +142,11 @@ export async function cancelarPedidoComoEmpresa(entrada: { pedidoId: string; mot
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   try {
     const r = await conEmpresa(c.companyId, (tx) => cancelarPedidoEnTx(tx, c.companyId, texto(entrada.pedidoId), { motivo: texto(entrada.motivo) }, c.ctx))
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_cancelado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId) })
     refrescar()
     return { ok: true, repetido: r.repetido }
   } catch (e) {
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_cancelado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId), error: e })
     return aError(e)
   }
 }
@@ -155,9 +160,11 @@ export async function reembolsarPedido(entrada: { pedidoId: string; motivo: stri
     const r = await conEmpresa(c.companyId, (tx) =>
       reembolsarPedidoEnTx(tx, c.companyId, texto(entrada.pedidoId), { motivo: texto(entrada.motivo), devolverAlInventario: entrada.devolverAlInventario === true }, c.ctx)
     )
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_reembolsado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId) })
     refrescar()
     return { ok: true, repetido: r.repetido }
   } catch (e) {
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_reembolsado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId), error: e })
     return aError(e)
   }
 }
