@@ -273,7 +273,11 @@ cambio es RD$50.00): la venta queda `POS` completada, sin comisión, las existen
 inventado y el QR de otra empresa no encuentran nada, el pedido válido muestra que el cliente confirmó el monto, una
 tarjeta sin autorización no cobra y deja el pedido como estaba, una transferencia con su referencia cobra y entrega
 (`PAYMENT_VERIFIED`, comisión del 8 % = RD$20.00) y el mismo QR no se cobra otra vez → la empresa ve ambos pedidos en
-`/admin/pedidos-membego` (la venta de mostrador como «Caja»). **Ojo:** el pedido del marketplace se siembra por
+`/admin/pedidos-membego` (la venta de mostrador como «Caja»). Tras la auditoría F5–F9 suma dos casos: un pedido **ya
+pagado por transferencia** (evidencia sembrada) se busca con su QR → la pantalla dice «ya está pagado», **no** ofrece
+elegir cómo paga ni «Cobrar», y «Entregar sin cobrar» lo cierra con la transferencia intacta (`PAYMENT_VERIFIED`, 8 %)
+y **sin** cobro nuevo en la caja; y con **dos cajas abiertas** (Principal y Norte) aparece el selector, que marca la
+caja elegida y cambia el encabezado, mientras que con una sola no hay selector. **Ojo:** el pedido del marketplace se siembra por
 Prisma con su QR conocido (pedir → aceptar → listo ya lo prueba `pedidos-membego`), y el «lector» de QR es el campo de
 texto: el lector físico teclea el código y pulsa Enter, que es lo mismo.
 

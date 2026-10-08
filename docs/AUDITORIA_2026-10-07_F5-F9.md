@@ -7,7 +7,7 @@
 - **Verificación automática desde cero** (BD local `membego_pg`, PostgreSQL 16, 204 migraciones): tsc, eslint, unit, PostgreSQL (en serie), bundle, permisos, preflight y cobertura de RLS, deriva, sellos, `prisma validate`, `migrate status`, `npm audit`, `probar-rls` sobre `db push`, build y la **suite E2E completa** (réplica de `e2e.yml`, ambos proyectos).
 - **Seis revisiones de código independientes y de solo lectura** (una por fase F5, F6, F7, F8, F9 y una transversal de seguridad sobre todo el rango `188dcba..HEAD`), con la instrucción de citar `archivo:línea` y de no dar por bueno nada que no vieran en el código. **Los hallazgos altos y los medios con dinero por medio los volví a comprobar yo en el código** antes de incluirlos; donde mi lectura difiere de la del revisor lo digo.
 - Severidades (las de la auditoría anterior): **CRÍTICO** (credenciales o pérdida de datos), **ALTO** (acceso cruzado entre empresas, dinero mal contado, bloqueo permanente), **MEDIO** (comportamiento incorrecto en un caso real pero acotado, o promesa de la doc que el código no cumple), **BAJO** (calidad, código muerto, cosmética). Origen: **[rama]** = introducido en F5–F9; **[previo]** = ya existía.
-- Estado de la rama al auditar: PR #570 ya está **fusionado** en `main` (hasta F5); los 13 commits de F6–F9 **no están en `main`**, y `main` lleva 116 commits que la rama no tiene (app Expo del cliente, orquestación CardNET, 2 migraciones: `20261002_sync_company_brand_color` y `20261036_cardnet_client_orchestration`). Un `git merge-tree` en seco **no da conflictos**, pero la fusión no se hizo en esta auditoría (ver §8).
+- Estado de la rama al auditar: PR #570 ya está **fusionado** en `main` (hasta F5); los 13 commits de F6–F9 **no estaban en `main`**, y `main` llevaba 116 commits que la rama no tenía (app Expo del cliente, orquestación CardNET, 2 migraciones: `20261002_sync_company_brand_color` y `20261036_cardnet_client_orchestration`). La fusión se hizo después, al aplicar el lote (§9): sin conflictos.
 
 ## 2. Resultado de la verificación (2026-10-07, repetida entera sobre `987548a`)
 
@@ -155,3 +155,40 @@ Antes de abrir el PR de F6–F9, un lote corto en este orden:
 10. **Fusionar `main` en la rama** (116 commits, 2 migraciones, sin conflictos en seco) y repetir la verificación completa antes del PR.
 
 Nada de lo anterior bloquea seguir desarrollando, pero **A1 está vivo en cuanto una empresa real encienda `POS_MEMBEGO` y reciba transferencias**, y M2/M7 son abusables desde una cuenta de cliente pública.
+
+## 9. Correcciones aplicadas (lote del 2026-10-08)
+
+Se aplicó el lote de §8. **Cada corrección lleva su prueba**; las de PostgreSQL y las de reglas de código se comprobaron además con una **mutación** (se estropeó la corrección y la prueba falló: A1 y la moneda de la caja → pruebas 20 y 23 de `pos.db.test.ts`; el tope de abiertos, «solo nuevos» y el barrido por lotes → 28, 29 y 30 de `deals.db.test.ts`; C01 base 0 e I02 → 19 y 20 de `conciliacion.db.test.ts`). Antes de empezar se **fusionó `main`** en la rama (merge `d4b88e0`: sin conflictos, 206 migraciones aplican desde cero, 0 deriva, 206 sellos).
+
+Decisión del usuario sobre **M1**: **sí** — cualquier rol de escáner (cajero, recepción, empleado) puede registrar en la caja un pago con tarjeta o transferencia con una referencia que teclea. Queda como **decisión de producto vigente**, documentada y vigilada por la prueba 13 de `pos.db.test.ts` (una transferencia con referencia sobre un monto confirmado sube a PAYMENT_VERIFIED y paga el 8 %). Lo que sigue sin existir —y se anota como límite, no como defecto— es una señal de riesgo que mire la proporción de cobros con tarjeta/transferencia en caja.
+
+| Hallazgo | Estado | Qué se hizo | Prueba |
+|---|---|---|---|
+| **A1** cobrar en caja un pedido ya pagado | ✅ | `cobrarPedidoEnCajaEnTx` rechaza con `PEDIDO_YA_PAGADO` si el pedido ya tiene pago; la pantalla lo dice («Este pedido ya está pagado: Transferencia · ref. …») y ofrece **«Entregar sin cobrar»**, que cierra con el QR **sin** registrar pago ni mover la caja (el resultado no trae ticket). «Entregar sin cobrar» sin pago previo se rechaza (`SIN_PAGO_REGISTRADO`) | PG `pos` 20, 21 · unit `pos-permisos` |
+| **M1** pagos no-efectivo en caja | ✅ decidido: se permite | Documentado (arriba) | PG `pos` 13 |
+| **M6** total leído sin candado | ✅ | El pedido se **bloquea antes de leerlo** (`bloquearPedidoEnTx`, el mismo candado de siempre): el cobro, la evidencia y el ticket usan el total vigente | PG `pos` 22 · unit `pos-permisos` (el candado va antes de registrar y de validar el cobro) |
+| **M4** moneda de la caja | ✅ | La caja cuenta en pesos (`MONEDA_DE_CAJA`): el catálogo de la caja no ofrece otra moneda, la vista previa dice «solo cobra en pesos» y una venta en otra moneda se deshace entera | PG `pos` 23 |
+| **M5** caja por sucursal | ✅ | Con más de una caja abierta, la pantalla muestra un **selector** (`?caja=`) y todas las acciones trabajan con la elegida; el buscador no la pierde | E2E (selector visible solo con 2+ cajas) |
+| **M2** reclamar sin tope de abiertos | ✅ | `reclamarOfertaEnTx` aplica `MAX_PEDIDOS_ABIERTOS_POR_CLIENTE` antes de apartar cupo y presupuesto (los cupones cuentan como pedidos abiertos) | PG `deals` 28 · unit `deals-permisos` |
+| **M3** «solo clientes nuevos» | ✅ | «Nuevo» = ningún pedido COMPLETADO **ni REEMBOLSADO** con la empresa y ningún cupón vivo de otra oferta «solo nuevos». Ya no se apilan | PG `deals` 29 |
+| **M7** afiliar antes de validar | ✅ | `reclamarOferta` y `hacerCheckout` comprueban primero lo que impediría el pedido (`motivoNoReclamarEnTx`, `problemaDelPedidoEnTx`) y **no crean ficha, seguimiento ni regalo** si ya se sabe que va a fallar (quien ya es cliente sigue su camino) | PG `deals` 32, `checkout` 21 · unit `checkout-permisos`, `deals-permisos` |
+| **M8** carrito público | ✅ | Lo que no se puede comprar sale como «Producto no disponible» a `0.00` (sin nombre ni precio actual); **sin sesión** de cliente el «solo quedan N» se vuelve «No hay suficientes en esta sucursal» (con sesión se conserva el número, hace falta para corregir la cantidad); el campo `existencias` nunca viaja | PG `checkout` 20 · unit `checkout-permisos` |
+| **M9** «cliente nuevo» | ✅ | Una sola definición: nunca completó ni se le reembolsó un pedido con la empresa, **de cualquier origen** (marketplace, caja, Supply). Analítica, ofertas, la tarjeta y la doc dicen lo mismo | PG `analytics` N |
+| **M10** resultado de la oferta | ✅ | El resultado se **agrega en la base** (`groupBy` por estado) sobre todos los reclamos, en el detalle y en la lista; la lista del detalle muestra los 200 más recientes y dice «de N» | PG `deals` 31 · unit `deals-domain` |
+| **M11** barrido de ofertas | ✅ | Procesa **lotes hasta vaciar o agotar el presupuesto de tiempo** (40 s de los 60 del cron); lo que falla no se reintenta en la misma pasada; devuelve `quedaTrabajo` | PG `deals` 30 |
+| **M12** C01 con base 0 | ✅ | C01 exige `commissionableBase > 0` y excluye a las empresas cuyo cobro vale 0 (CPA 0 / 0 %) | PG `conciliacion` 19 |
+| **M13** cancelaciones del sistema | ✅ | Para el **cliente** no cuentan los cupones vencidos (ya son su otra señal) ni lo que el sistema cancela por falta de respuesta; para la **empresa** no cuentan los cupones que el cliente dejó vencer, y la falta de respuesta SÍ (es su descuido) | PG `riesgo` 13, 14 |
+| **M14** I02 | ✅ | I02 solo acusa una reserva que sigue **ACTIVA** en un pedido cerrado; una reserva vencida es un cierre correcto (se vende de lo disponible) | PG `conciliacion` 20 |
+| **M16** orden de la muestra | ✅ | Cada regla ordena por una columna **explícita** (`row_number() OVER (ORDER BY …)`), no por el orden que dé el subselect | PG `conciliacion` 21 (y las 26 reglas siguen corriendo) |
+| **M17** doc del POS | ✅ | Corregida en el commit de la auditoría; las demás filas de §5 se corrigieron en `IMPLEMENTATION_STATUS.md` | — |
+| Bajos: slug `constructor` | ✅ | `lineasDe` y el resto del carrito leen con `Object.hasOwn` | unit `checkout-domain` |
+| Bajos: QR vencido en la vista previa | ✅ | `motivoNoCobrable` mira `qrExpiresAt` | PG `pos` 24 |
+| Bajos: clave de la venta atascada y error de red | ✅ | La clave de la venta cambia cuando cambia el carrito o el cliente (reintentar sin tocar nada la reutiliza); un error de red en la caja o al pagar se avisa en vez de callarse | — (UI) |
+| Bajos: nombre de la variable de entorno | ✅ | Login y recuperar de contraseña dejan el detalle en el log del servidor y al navegador le dicen «Avisa al administrador» | — |
+
+**No se tocó (queda como estaba, a propósito o por decisión tuya):**
+
+- **C1** (rotar la clave `service_role` y la contraseña de la base) — es tuyo.
+- **M15** rendimiento de la conciliación de plataforma con volumen: declarado; requiere datos reales y, si hace falta, caché o índices.
+- Bajos que no se aplicaron: las señales de reembolso por `createdAt` en vez de `refundedAt` y de ajuste con denominador distinto; «N empresas revisadas»; la ráfaga que cuenta cupones; ruido de I04 por el TTL de 7 días; P03 sin `FISCALLY_RECONCILED`; el canal de checkout que solo manda `navegacion`; el GMV con `total` (hoy sin impuestos); `'MARKETPLACE'` fijado en analítica; el tope de 50 ofertas de la empresa; los cálculos repetidos en las vistas; el catálogo de caja truncado a 80; `@prisma/client` en el bundle por `pos/domain`; la etiqueta SISTEMA en el cierre del POS; el directorio de clientes en la caja sin limitador; la caja que se cierra mientras se cobra; los limitadores por IP sin Redis; `ofertaPublicaPorId` (código muerto); la rama `DELETE` de `deals_cuadre`; el tope de 12 dígitos del presupuesto; el aviso a la empresa fuera de `after()`.
+- **Cada uno de esos bajos está listado en §4**; ninguno mueve dinero ni cruza empresas.
