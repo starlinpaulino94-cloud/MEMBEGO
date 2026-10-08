@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { hacerCheckout } from '@/modules/checkout/actions'
-import { ETIQUETA_METODO_CHECKOUT, type MetodoCheckout } from '@/modules/checkout/domain'
+import { ETIQUETA_METODO_CHECKOUT, lineasDe, type MetodoCheckout } from '@/modules/checkout/domain'
 import { formatearMonto } from '@/modules/orders/formato'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,7 +35,7 @@ interface Props {
 export function PagarFormulario({ companySlug, sucursales, transferencia }: Props) {
   const router = useRouter()
   const { carrito, vaciar } = useCarrito()
-  const lineas = carrito.negocios[companySlug] ?? []
+  const lineas = lineasDe(carrito, companySlug)
   const [pending, start] = useTransition()
   const [sucursalId, setSucursalId] = useState(sucursales.length === 1 ? sucursales[0].id : '')
   const [metodo, setMetodo] = useState<MetodoCheckout>('AL_RECOGER')
@@ -69,7 +69,14 @@ export function PagarFormulario({ companySlug, sucursales, transferencia }: Prop
       return
     }
     start(async () => {
-      const resultado = await hacerCheckout({ lineas, sucursalId, metodo, notas: notas.trim() || undefined, origen: 'navegacion', clave: clave.valor })
+      let resultado: Awaited<ReturnType<typeof hacerCheckout>>
+      try {
+        resultado = await hacerCheckout({ lineas, sucursalId, metodo, notas: notas.trim() || undefined, origen: 'navegacion', clave: clave.valor })
+      } catch {
+        // Sin red o la respuesta se perdió: reenviar usa la misma clave, así que no duplica el pedido.
+        toast.error('No pudimos confirmar tu pedido. Revisa «Mis pedidos»; si no aparece, vuelve a pulsar Enviar.')
+        return
+      }
       if (!resultado.ok) {
         if (resultado.sinSesion) {
           router.push(`/login?redirect=${encodeURIComponent(`/carrito/pagar/${companySlug}`)}`)

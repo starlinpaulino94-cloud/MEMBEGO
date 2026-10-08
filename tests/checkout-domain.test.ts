@@ -11,6 +11,7 @@ import {
   esMetodoCheckout,
   fijarCantidad,
   leerCarrito,
+  lineasDe,
   metodoDePedidoDelCheckout,
   notaDelPedido,
   quitar,
@@ -179,4 +180,20 @@ test('la nota para el negocio dice cómo piensa pagar y conserva el recado, limp
 test('el navegador solo puede declarar tres canales de origen, ninguno que exija verificar algo', () => {
   assert.deepEqual(Object.values(CANALES_DE_CHECKOUT).sort(), ['DIRECT', 'MARKETPLACE_BROWSE', 'MARKETPLACE_SEARCH'])
   for (const peligroso of ['QR', 'PROMOTION_CLAIM', 'POS', 'ADMIN']) assert.ok(!(peligroso in CANALES_DE_CHECKOUT) && !Object.values(CANALES_DE_CHECKOUT).includes(peligroso as never))
+})
+
+test('un negocio cuyo slug coincide con una clave de Object.prototype («constructor») funciona como cualquier otro (auditoría F5–F9)', () => {
+  const vacio = CARRITO_VACIO
+  // El slug solo admite minúsculas: de las claves heredadas, la única que puede ser un negocio es `constructor`.
+  for (const slug of ['constructor']) {
+    assert.deepEqual(lineasDe(vacio, slug), [], `${slug}: sin renglones propios no hay nada, no lo heredado`)
+    const a = agregar(vacio, slug, 'var-uno', 2)
+    assert.ok(a.ok, `${slug}: se puede agregar`)
+    assert.deepEqual(lineasDe(a.carrito, slug), [{ varianteId: 'var-uno', cantidad: 2 }])
+    assert.deepEqual(lineasDe(fijarCantidad(a.carrito, slug, 'var-uno', 5), slug), [{ varianteId: 'var-uno', cantidad: 5 }])
+    assert.deepEqual(quitar(a.carrito, slug, 'var-uno').negocios, {})
+  }
+  // Fijar o quitar sobre un negocio que no está no rompe ni inventa nada.
+  assert.equal(fijarCantidad(vacio, 'constructor', 'x', 3), vacio)
+  assert.equal(quitar(vacio, 'constructor', 'x'), vacio)
 })

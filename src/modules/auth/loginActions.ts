@@ -123,8 +123,10 @@ export async function iniciarSesion(
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : ''
     if (mensaje.includes('Missing env var')) {
+      // El detalle (qué variable falta) se queda en el servidor: al navegador solo le toca saber que el entorno no está listo.
+      console.error('[%s] entorno sin configurar: %s', 'login', mensaje)
       return {
-        error: `Este entorno no está configurado (${mensaje.replace('Missing env var: ', 'falta ')}).`,
+        error: 'Este entorno no está configurado todavía. Avisa al administrador.',
       }
     }
     console.error('[login] error inesperado:', e)

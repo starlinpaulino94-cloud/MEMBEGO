@@ -6,6 +6,7 @@ import { conEmpresa, sinEmpresa } from '../../src/lib/tenant'
 import { cambiarEstadoItemEnTx, crearItemEnTx } from '../../src/modules/catalog/service'
 import { recibirEnTx } from '../../src/modules/inventory/service'
 import {
+  ajustarMontoEnTx,
   cancelarPedidoEnTx,
   completarPorQrEnTx,
   confirmarMontoEnTx,
@@ -392,4 +393,46 @@ test('18 · aislamiento: lo roto en una empresa no aparece en otra, y la platafo
   assert.ok(!empresas.has(ctx.demo), 'y deja fuera las empresas de práctica')
   const dedemo = await conEmpresa(ctx.demo, (tx) => conciliarEnTx(tx, { companyId: ctx.demo }, { reglas: ['L03'] }))
   assert.equal(dedemo[0].total, 1, 'la propia empresa de práctica sí se concilia cuando se pide por ella')
+})
+
+
+// ── Lote de la auditoría F5–F9 ───────────────────────────────────────────────
+
+test('19 · C01 no acusa lo que por diseño no comisiona: un pedido con base 0 no deja comisión y no es «dinero sin cobrar»', async () => {
+  const antes = await totales()
+  const r = await pedido()
+  const listo = await enA((tx) => marcarListoEnTx(tx, ctx.a, r.pedidoId, empresa))
+  await enA((tx) => ajustarMontoEnTx(tx, ctx.a, r.pedidoId, { ajuste: -250, motivo: 'Cortesía total' }, empresa))
+  await enA((tx) => completarPorQrEnTx(tx, ctx.a, listo.qrToken as string, empresa))
+  const o = await prisma.membegoOrder.findUniqueOrThrow({ where: { id: r.pedidoId }, include: { commission: true } })
+  assert.equal(o.status, 'COMPLETED')
+  assert.equal(o.commissionableBase.toFixed(2), '0.00')
+  assert.equal(o.commission, null, 'con base 0 no hay comisión')
+  const despues = await totales()
+  assert.equal(despues.C01, antes.C01, 'C01 no lo cuenta')
+})
+
+test('20 · I02 no acusa un pedido cerrado cuya reserva había vencido (se vende de lo disponible: es correcto); sí uno que dejó la reserva ACTIVA', async () => {
+  const antes = await totales()
+  const r = await abierto({ variante: ctx.fisico, cantidad: 2 })
+  const listo = await enA((tx) => marcarListoEnTx(tx, ctx.a, r.pedidoId, empresa))
+  await rompe('inventory_reservations', Prisma.sql`UPDATE "inventory_reservations" SET "expiresAt" = now() - interval '1 hour' WHERE "id" IN (SELECT "inventoryReservationId" FROM "membego_order_lines" WHERE "orderId" = ${ids(r.pedidoId)})`)
+  await enA((tx) => completarPorQrEnTx(tx, ctx.a, listo.qrToken as string, empresa))
+  const res = await prisma.inventoryReservation.findFirstOrThrow({ where: { id: { in: (await prisma.membegoOrderLine.findMany({ where: { orderId: r.pedidoId }, select: { inventoryReservationId: true } })).map((l) => l.inventoryReservationId as string) } } })
+  assert.notEqual(res.status, 'CONSUMED', 'la reserva había vencido: no se consumió')
+  const despues = await totales()
+  assert.equal(despues.I02, antes.I02, 'I02 no lo cuenta')
+  assert.equal(despues.I01, antes.I01, 'y el apartado sigue cuadrando')
+})
+
+test('21 · cada regla entrega primero los casos más recientes de SU orden (el orden es explícito, no el que dé la base)', async () => {
+  const a = await cerradoEnEfectivo()
+  const b = await cerradoEnEfectivo()
+  await rompe('merchant_commissions', Prisma.sql`DELETE FROM "merchant_commissions" WHERE "orderId" IN (${ids(a.pedidoId)}, ${ids(b.pedidoId)})`)
+  const r = await enA((tx) => conciliarEnTx(tx, { companyId: ctx.a }, { reglas: ['C01'], muestra: 50 }))
+  const codigos = r[0].muestra.map((f) => f.referencia)
+  const ca = (await prisma.membegoOrder.findUniqueOrThrow({ where: { id: a.pedidoId }, select: { code: true } })).code
+  const cb = (await prisma.membegoOrder.findUniqueOrThrow({ where: { id: b.pedidoId }, select: { code: true } })).code
+  assert.ok(codigos.indexOf(cb) >= 0 && codigos.indexOf(ca) >= 0)
+  assert.ok(codigos.indexOf(cb) < codigos.indexOf(ca), 'el cerrado después (b) sale antes que el cerrado antes (a)')
 })

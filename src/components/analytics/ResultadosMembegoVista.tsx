@@ -109,7 +109,7 @@ export function ResultadosMembegoVista({
           <KpiReporte label="Pedidos" kpi={r.pedidos} formato={entero} definicion="Pedidos del marketplace completados (cerrados con el QR) en el periodo." />
           <KpiReporte label="Ticket promedio" kpi={r.ticket} formato={dinero} definicion="Ventas ÷ pedidos." />
           <KpiReporte label="Clientes" kpi={r.clientes} formato={entero} definicion="Personas distintas con al menos un pedido completado en el periodo." />
-          <KpiReporte label="Clientes nuevos" kpi={r.clientesNuevos} formato={entero} definicion="Clientes que nunca habían completado un pedido Membego contigo antes de este periodo." />
+          <KpiReporte label="Clientes nuevos" kpi={r.clientesNuevos} formato={entero} definicion="Clientes que nunca habían completado un pedido contigo (por el marketplace, la caja o Supply) antes de este periodo." />
           <KpiReporte label="Comisiones pagadas" kpi={r.comisiones} formato={dinero} invertido definicion="Lo que Membego te cobró por los pedidos de este periodo (CPA o porcentaje). Las comisiones revertidas por reembolso no cuentan." />
         </div>
       </section>

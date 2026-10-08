@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
+import { MOTIVO_SIN_RESPUESTA } from '@/modules/orders/motivos'
 import { UMBRALES, VENTANA_DIAS, evaluarCliente, evaluarEmpresa, ordenarSenales, type MetricasDeCliente, type MetricasDeEmpresa, type Senal } from './domain'
 
 /**
@@ -13,6 +14,18 @@ import { UMBRALES, VENTANA_DIAS, evaluarCliente, evaluarEmpresa, ordenarSenales,
 
 const SIN_DEMO = (col: string): Prisma.Sql => Prisma.sql`AND NOT EXISTS (SELECT 1 FROM "companies" cdemo WHERE cdemo."id" = ${Prisma.raw(col)} AND cdemo."esDemo" = true)`
 
+/**
+ * Cancelaciones que NO decidió una persona del lado del cliente: el cupón de una oferta que se dejó vencer (ya cuenta como
+ * «cupón vencido») y el pedido que nadie respondió en 7 días (culpa de la empresa, no de quien lo pidió).
+ */
+const CANCELADO_POR_EL_CLIENTE = Prisma.sql`o."status" = 'CANCELLED'
+  AND coalesce(o."cancelReason", '') <> ${MOTIVO_SIN_RESPUESTA}
+  AND NOT EXISTS (SELECT 1 FROM "deal_claims" dce WHERE dce."orderId" = o."id" AND dce."status" = 'EXPIRED')`
+
+/** Cancelado y atribuible a la empresa: todo menos el cupón que el cliente dejó vencer. El pedido sin respuesta SÍ cuenta (es su descuido). */
+const CANCELADO_ATRIBUIBLE_A_LA_EMPRESA = Prisma.sql`o."status" = 'CANCELLED'
+  AND NOT EXISTS (SELECT 1 FROM "deal_claims" dce WHERE dce."orderId" = o."id" AND dce."status" = 'EXPIRED')`
+
 const num = (v: unknown) => (v === null || v === undefined ? 0 : Number(v))
 
 export async function metricasDeEmpresasEnTx(tx: Tx, ahora: Date): Promise<MetricasDeEmpresa[]> {
@@ -23,7 +36,7 @@ export async function metricasDeEmpresasEnTx(tx: Tx, ahora: Date): Promise<Metri
   const pedidos = await tx.$queryRaw<Record<string, unknown>[]>`
     SELECT o."companyId" AS "companyId",
            count(*) FILTER (WHERE o."createdAt" >= ${desde})::int AS pedidos,
-           count(*) FILTER (WHERE o."createdAt" >= ${desde} AND o."status" = 'CANCELLED')::int AS cancelados,
+           count(*) FILTER (WHERE o."createdAt" >= ${desde} AND ${CANCELADO_ATRIBUIBLE_A_LA_EMPRESA})::int AS cancelados,
            count(*) FILTER (WHERE o."createdAt" >= ${desde} AND o."status" = 'COMPLETED')::int AS completados,
            count(*) FILTER (WHERE o."createdAt" >= ${desde} AND o."status" = 'REFUNDED')::int AS reembolsados,
            count(*) FILTER (WHERE o."status" = 'AWAITING_MERCHANT' AND o."createdAt" < ${limiteSinAtender})::int AS "sinAtender",
@@ -74,13 +87,13 @@ export async function metricasDeClientesEnTx(tx: Tx, ahora: Date): Promise<Metri
     SELECT cl."supabaseId" AS clave, max(cl."nombre") AS nombre, max(cl."email") AS correo,
            count(DISTINCT o."companyId")::int AS empresas,
            count(*)::int AS pedidos,
-           count(*) FILTER (WHERE o."status" = 'CANCELLED')::int AS cancelados,
+           count(*) FILTER (WHERE ${CANCELADO_POR_EL_CLIENTE})::int AS cancelados,
            count(*) FILTER (WHERE o."createdAt" >= ${hace24h})::int AS "pedidosEnUnDia"
       FROM "membego_orders" o
       JOIN "clientes" cl ON cl."id" = o."customerId" AND cl."companyId" = o."companyId"
      WHERE o."origin" = 'MARKETPLACE' AND o."createdAt" >= ${desde} ${SIN_DEMO('o."companyId"')}
      GROUP BY cl."supabaseId"
-    HAVING count(*) FILTER (WHERE o."status" = 'CANCELLED') >= ${U.cancelados.media}
+    HAVING count(*) FILTER (WHERE ${CANCELADO_POR_EL_CLIENTE}) >= ${U.cancelados.media}
         OR count(*) FILTER (WHERE o."createdAt" >= ${hace24h}) >= ${U.rafaga.media}`
 
   const cupones = await tx.$queryRaw<Record<string, unknown>[]>`

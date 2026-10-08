@@ -14,9 +14,10 @@ import { variacion } from '@/modules/reportes/rango'
  *    sus comisiones entran en la toma (take rate): se enseñan aparte, por origen.
  *  · **Toma (take rate)** = comisión ÷ GMV de los pedidos comisionables.
  *  · **Retorno** = ventas por cada peso pagado a Membego (GMV ÷ comisión).
- *  · **Cliente nuevo** = quien no había completado antes ningún pedido Membego con esa empresa.
- *    Es «nuevo para Membego en esa empresa», no «nunca visitó el negocio»: alguien pudo haber
- *    comprado antes por otro camino (caja, membresía).
+ *  · **Cliente nuevo** = quien no había completado (ni se le había reembolsado) antes ningún pedido Membego con
+ *    esa empresa, de CUALQUIER origen: marketplace, caja o Supply. Es la misma regla que usan las ofertas «solo
+ *    clientes nuevos». Es «nuevo para Membego en esa empresa», no «nunca visitó el negocio»: alguien pudo haber
+ *    comprado antes sin pasar por Membego.
  *
  * Las cifras son para LEER, no para contabilizar: el libro de Merchant Billing y los pedidos son la
  * fuente de verdad. Aquí el dinero viaja como `number` (suficiente para mostrar dos decimales).

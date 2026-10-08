@@ -84,13 +84,16 @@ export async function agregadosEnTx(tx: Tx, a: Alcance, origenes: Origenes, desd
   return { pedidos: aNumero(f?.pedidos), ventas: aNumero(f?.ventas), comisiones: aNumero(f?.comisiones), clientes: aNumero(f?.clientes), empresas: aNumero(f?.empresas) }
 }
 
-/** De los clientes que completaron un pedido en el periodo, cuántos NUNCA habían completado uno con esa empresa. Solo de una empresa. */
+/**
+ * De los clientes que completaron un pedido del marketplace en el periodo, cuántos NUNCA habían completado uno con esa empresa
+ * —de cualquier origen: marketplace, caja o Supply—. Es la misma regla de «solo clientes nuevos» de las ofertas. Solo de una empresa.
+ */
 export async function clientesNuevosEnTx(tx: Tx, companyId: string, desde: Date, hasta: Date): Promise<{ total: number; nuevos: number }> {
   const [f] = await tx.$queryRaw<Record<string, unknown>[]>`
     SELECT count(*)::int AS total,
            count(*) FILTER (WHERE NOT EXISTS (
              SELECT 1 FROM "membego_orders" p
-              WHERE p."companyId" = c."companyId" AND p."customerId" = c."customerId" AND p."origin" = 'MARKETPLACE'
+              WHERE p."companyId" = c."companyId" AND p."customerId" = c."customerId"
                 AND p."status" IN ('COMPLETED', 'REFUNDED') AND p."completedAt" < ${desde}
            ))::int AS nuevos
       FROM (SELECT DISTINCT o."companyId", o."customerId"

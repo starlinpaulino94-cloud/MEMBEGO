@@ -107,7 +107,7 @@ export function evaluarEmpresa(m: MetricasDeEmpresa): Senal[] {
   if (m.pedidos >= U.minimoDePedidos) {
     const tasa = m.cancelados / m.pedidos
     const s = nivel(tasa, U.cancelacion)
-    if (s) salida.push({ tipo: 'EMPRESA_CANCELA_MUCHO', severidad: s, sujeto, titulo: 'Muchos pedidos cancelados', detalle: `${m.cancelados} de ${m.pedidos} pedidos ${ventana} (${pct(tasa)}). Incluye las cancelaciones que pidió el cliente.`, valor: tasa, umbral: s === 'ALTA' ? U.cancelacion.alta : U.cancelacion.media })
+    if (s) salida.push({ tipo: 'EMPRESA_CANCELA_MUCHO', severidad: s, sujeto, titulo: 'Muchos pedidos cancelados', detalle: `${m.cancelados} de ${m.pedidos} pedidos ${ventana} (${pct(tasa)}). Incluye las que pidió el cliente y las que el sistema hizo porque la empresa no respondió; no cuenta los cupones que el cliente dejó vencer.`, valor: tasa, umbral: s === 'ALTA' ? U.cancelacion.alta : U.cancelacion.media })
     if (m.conAjusteGrande > 0) {
       const f = m.conAjusteGrande / m.pedidos
       const a = nivel(f, U.ajustes)
@@ -141,7 +141,7 @@ export function evaluarCliente(m: MetricasDeCliente): Senal[] {
   const U = UMBRALES.cliente
   const salida: Senal[] = []
   const c = nivel(m.cancelados, U.cancelados)
-  if (c) salida.push({ tipo: 'CLIENTE_CANCELA_MUCHO', severidad: c, sujeto, titulo: 'Cancela muchos pedidos', detalle: `${m.cancelados} pedidos cancelados en ${m.empresas === 1 ? '1 empresa' : `${m.empresas} empresas`} en los últimos ${VENTANA_DIAS} días (de ${m.pedidos}). Aparta existencias que no recoge.`, valor: m.cancelados, umbral: c === 'ALTA' ? U.cancelados.alta : U.cancelados.media })
+  if (c) salida.push({ tipo: 'CLIENTE_CANCELA_MUCHO', severidad: c, sujeto, titulo: 'Cancela muchos pedidos', detalle: `${m.cancelados} pedidos cancelados en ${m.empresas === 1 ? '1 empresa' : `${m.empresas} empresas`} en los últimos ${VENTANA_DIAS} días (de ${m.pedidos}). Aparta existencias que no recoge. No cuenta los cupones que dejó vencer (van aparte) ni los pedidos que la empresa no respondió.`, valor: m.cancelados, umbral: c === 'ALTA' ? U.cancelados.alta : U.cancelados.media })
   const v = nivel(m.cuponesVencidos, U.cuponesVencidos)
   if (v) salida.push({ tipo: 'CLIENTE_CUPONES_VENCIDOS', severidad: v, sujeto, titulo: 'Deja vencer cupones de ofertas', detalle: `${m.cuponesVencidos} cupones vencidos sin canjear en los últimos ${VENTANA_DIAS} días. Cada uno aparta presupuesto de una oferta ajena.`, valor: m.cuponesVencidos, umbral: v === 'ALTA' ? U.cuponesVencidos.alta : U.cuponesVencidos.media })
   const r = nivel(m.pedidosEnUnDia, U.rafaga)

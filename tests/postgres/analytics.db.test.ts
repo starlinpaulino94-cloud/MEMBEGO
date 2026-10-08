@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { prisma } from '../../src/lib/prisma'
 import { conEmpresa, sinEmpresa } from '../../src/lib/tenant'
 import { cambiarEstadoItemEnTx, crearItemEnTx } from '../../src/modules/catalog/service'
-import { cancelarPedidoEnTx, completarPorQrEnTx, crearPedidoEnTx, marcarListoEnTx, reembolsarPedidoEnTx, type ContextoPedido } from '../../src/modules/orders/service'
+import { cancelarPedidoEnTx, cerrarPedidoExternoEnTx, completarPorQrEnTx, crearPedidoEnTx, marcarListoEnTx, reembolsarPedidoEnTx, type ContextoPedido } from '../../src/modules/orders/service'
 import { crearOfertaEnTx, publicarOfertaEnTx, reclamarOfertaEnTx } from '../../src/modules/deals/service'
 import { leerRango } from '../../src/modules/reportes/rango'
-import { panoramaDePlataformaEnTx, resultadosDeMembegoEnTx } from '../../src/modules/analytics/queries'
+import { clientesNuevosEnTx, panoramaDePlataformaEnTx, resultadosDeMembegoEnTx } from '../../src/modules/analytics/queries'
 
 /**
  * ANALÍTICA DE MEMBEGO contra PostgreSQL de verdad (Fase 6).
@@ -54,7 +54,7 @@ before(async () => {
     })
     e.id = c.id
     e.sucursal = (await prisma.sucursal.create({ data: { companyId: c.id, nombre: 'Principal' }, select: { id: true } })).id
-    const total = k === 'a' ? 10 : 2
+    const total = k === 'a' ? 12 : 2
     for (let i = 0; i < total; i++) {
       e.clientes.push((await prisma.cliente.create({ data: { companyId: c.id, supabaseId: `sb-acli-${k}-${i}-${sufijo}`, nombre: `Cliente ${k}${i}`, email: `acli-${k}-${i}-${sufijo}@prueba.test` }, select: { id: true } })).id)
     }
@@ -257,4 +257,16 @@ test('8 · la empresa de práctica sí ve lo suyo en su propio panel', async () 
   const x = await en(E.demo, (tx) => resultadosDeMembegoEnTx(tx, E.demo.id, rango(), TZ))
   assert.equal(x.pedidos.valor, 1)
   assert.equal(x.ventas.valor, 400)
+})
+
+
+test('N · «cliente nuevo» es el mismo en toda la plataforma: quien ya compró en la CAJA (otro origen) no es nuevo en el marketplace (auditoría F5–F9, M9)', async () => {
+  // a10 compró en el mostrador en enero; a11 nunca había comprado. Los dos piden por el marketplace en febrero.
+  const enero = d('2032-01-10T15:00:00Z')
+  const venta = await en(E.a, (tx) => crearPedidoEnTx(tx, E.a.id, { customerId: E.a.clientes[10], locationId: E.a.sucursal, origin: 'POS', lineas: [{ varianteId: E.a.variante, cantidad: 1 }], atribucion: { channel: 'DIRECT' }, ahora: enero }, empresa()))
+  await en(E.a, (tx) => cerrarPedidoExternoEnTx(tx, E.a.id, venta.pedidoId, { completedAt: enero, confirmadoPorCliente: false }, { actor: 'SISTEMA', actorId: null }))
+  await pedido(E.a, 10, '2032-02-05T15:00:00Z', { completado: '2032-02-05T15:00:00Z' })
+  await pedido(E.a, 11, '2032-02-06T15:00:00Z', { completado: '2032-02-06T15:00:00Z' })
+  const r = await en(E.a, (tx) => clientesNuevosEnTx(tx, E.a.id, d('2032-02-01T04:00:00Z'), d('2032-03-01T04:00:00Z')))
+  assert.deepEqual(r, { total: 2, nuevos: 1 }, 'a10 ya era cliente (compró en caja); solo a11 es nuevo')
 })

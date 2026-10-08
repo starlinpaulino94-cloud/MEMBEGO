@@ -73,13 +73,21 @@ export function leerCarrito(crudo: unknown): Carrito {
 export type ResultadoCarrito = { ok: true; carrito: Carrito } | { ok: false; error: string }
 
 /** Agrega `cantidad` de una variante al carrito del negocio (suma si ya estaba). Devuelve un carrito NUEVO. */
+/**
+ * Los renglones de un negocio. Se lee con `hasOwn`: un slug como `constructor` o `toString` no puede devolver lo que hereda
+ * el objeto (un negocio llamado «Constructor» existe y su slug pasa la validación).
+ */
+export function lineasDe(carrito: Carrito, slug: string): LineaDeCarrito[] {
+  return Object.hasOwn(carrito.negocios, slug) ? carrito.negocios[slug] : []
+}
+
 export function agregar(carrito: Carrito, slug: string, varianteId: string, cantidad: number): ResultadoCarrito {
   if (!SLUG.test(slug)) return { ok: false, error: 'El negocio no es válido.' }
   if (!ID.test(varianteId)) return { ok: false, error: 'El producto no es válido.' }
   const n = entero(cantidad, 1, MAX_CANTIDAD_POR_LINEA)
   if (n === null) return { ok: false, error: `La cantidad tiene que ser un entero entre 1 y ${MAX_CANTIDAD_POR_LINEA}.` }
-  const actuales = carrito.negocios[slug] ?? []
-  if (!carrito.negocios[slug] && Object.keys(carrito.negocios).length >= MAX_NEGOCIOS_EN_CARRITO) return { ok: false, error: `El carrito admite como máximo ${MAX_NEGOCIOS_EN_CARRITO} negocios a la vez.` }
+  const actuales = lineasDe(carrito, slug)
+  if (!Object.hasOwn(carrito.negocios, slug) && Object.keys(carrito.negocios).length >= MAX_NEGOCIOS_EN_CARRITO) return { ok: false, error: `El carrito admite como máximo ${MAX_NEGOCIOS_EN_CARRITO} negocios a la vez.` }
   const i = actuales.findIndex((l) => l.varianteId === varianteId)
   if (i < 0 && actuales.length >= MAX_LINEAS_CARRITO) return { ok: false, error: `Un carrito admite como máximo ${MAX_LINEAS_CARRITO} productos distintos por negocio.` }
   const lineas = i >= 0 ? actuales.map((l, j) => (j === i ? { ...l, cantidad: Math.min(MAX_CANTIDAD_POR_LINEA, l.cantidad + n) } : l)) : [...actuales, { varianteId, cantidad: n }]
@@ -89,14 +97,14 @@ export function agregar(carrito: Carrito, slug: string, varianteId: string, cant
 /** Pone la cantidad exacta de un renglón (1–99). Si el renglón no está, no hace nada. */
 export function fijarCantidad(carrito: Carrito, slug: string, varianteId: string, cantidad: number): Carrito {
   const n = entero(cantidad, 1, MAX_CANTIDAD_POR_LINEA)
-  const lineas = carrito.negocios[slug]
+  const lineas = Object.hasOwn(carrito.negocios, slug) ? carrito.negocios[slug] : undefined
   if (n === null || !lineas) return carrito
   return { v: 1, negocios: { ...carrito.negocios, [slug]: lineas.map((l) => (l.varianteId === varianteId ? { ...l, cantidad: n } : l)) } }
 }
 
 /** Quita un renglón; si era el último del negocio, el negocio sale del carrito. */
 export function quitar(carrito: Carrito, slug: string, varianteId: string): Carrito {
-  const lineas = carrito.negocios[slug]
+  const lineas = Object.hasOwn(carrito.negocios, slug) ? carrito.negocios[slug] : undefined
   if (!lineas) return carrito
   const resto = lineas.filter((l) => l.varianteId !== varianteId)
   const { [slug]: _quitado, ...otros } = carrito.negocios

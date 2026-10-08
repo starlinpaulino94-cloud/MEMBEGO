@@ -5,6 +5,8 @@ import { prisma } from '../../src/lib/prisma'
 import { conEmpresa, sinEmpresa } from '../../src/lib/tenant'
 import { cambiarEstadoItemEnTx, crearItemEnTx } from '../../src/modules/catalog/service'
 import { aceptarPedidoEnTx, ajustarMontoEnTx, cancelarPedidoEnTx, completarPorQrEnTx, crearPedidoEnTx, marcarListoEnTx, reembolsarPedidoEnTx, type ContextoPedido } from '../../src/modules/orders/service'
+import { MOTIVO_SIN_RESPUESTA } from '../../src/modules/orders/motivos'
+import { barridoDeOfertas } from '../../src/modules/deals/barrido'
 import { crearOfertaEnTx, publicarOfertaEnTx, reclamarOfertaEnTx } from '../../src/modules/deals/service'
 import { riesgoDeLaPlataformaEnTx } from '../../src/modules/riesgo-comercio/queries'
 import type { Senal } from '../../src/modules/riesgo-comercio/domain'
@@ -233,4 +235,33 @@ test('12 · las señales salen ordenadas: primero las altas', async () => {
   const todas = (await senales()).map((s) => s.severidad)
   const primeraMedia = todas.indexOf('MEDIA')
   assert.ok(primeraMedia === -1 || !todas.slice(primeraMedia).includes('ALTA'))
+})
+
+
+// ── Lote de la auditoría F5–F9 ───────────────────────────────────────────────
+
+test('13 · lo que el SISTEMA cancela porque la empresa no respondió cuenta contra la EMPRESA, no contra quien pidió (M13)', async () => {
+  const persona = 'olvidadizo'
+  for (let i = 0; i < 5; i++) {
+    const p = await pedido('poco', persona)
+    await en('poco', (tx) => cancelarPedidoEnTx(tx, empresas.poco.id, p.pedidoId, { motivo: MOTIVO_SIN_RESPUESTA }, { actor: 'SISTEMA', actorId: null }))
+  }
+  const todas = await senales()
+  assert.deepEqual(dePersona(todas, persona), [], '5 cancelaciones automáticas por falta de respuesta no son del cliente')
+  assert.ok(de(todas, 'poco').includes('EMPRESA_CANCELA_MUCHO:ALTA') || de(todas, 'poco').includes('EMPRESA_CANCELA_MUCHO:MEDIA'), 'y sí son un descuido de la empresa')
+})
+
+test('14 · un cupón que se deja vencer es UNA señal (cupones vencidos), no además «cancela muchos»; y tampoco cuenta como cancelación de la empresa (M13)', async () => {
+  const persona = 'cuponero2'
+  const cid = await cliente('sana', persona)
+  for (let i = 0; i < 5; i++) {
+    const oferta = await en('sana', (tx) => crearOfertaEnTx(tx, empresas.sana.id, { title: `Oferta vence ${sufijo}-${i}`, catalogVariantId: empresas.sana.variante, discountType: 'PERCENT', discountValue: 20, startsAt: new Date(Date.now() - 3_600_000), endsAt: null, maxClaims: 5, budgetTotal: 1000, voucherDays: 1 }, aud()))
+    await en('sana', (tx) => publicarOfertaEnTx(tx, empresas.sana.id, oferta.id, aud()))
+    await en('sana', (tx) => reclamarOfertaEnTx(tx, empresas.sana.id, { dealId: oferta.id, customerId: cid, locationId: empresas.sana.suc }))
+  }
+  const b = await barridoDeOfertas(new Date(Date.now() + 3 * 86_400_000))
+  assert.ok(b.reclamosVencidos >= 5)
+  const todas = await senales()
+  assert.deepEqual(dePersona(todas, persona), ['CLIENTE_CUPONES_VENCIDOS:MEDIA'], '5 cupones vencidos = una sola señal, la suya')
+  assert.ok(!de(todas, 'sana').some((x) => x.startsWith('EMPRESA_CANCELA_MUCHO')), 'la empresa no “cancela” porque se le vencieron cupones')
 })
