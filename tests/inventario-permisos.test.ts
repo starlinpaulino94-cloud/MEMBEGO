@@ -24,9 +24,9 @@ test('la sección «inventario» existe, cuelga de la capacidad del catálogo y 
   assert.notEqual(adminSectionForPath('/admin/app/carwash/inventario'), 'inventario')
 })
 
-test('sin capacidad propia: la que lo gobierna sigue apagada de serie en todas las categorías', () => {
+test('sin capacidad propia: la que lo gobierna (el catálogo) está encendida de serie en todas las categorías', () => {
   for (const [categoria, base] of Object.entries(CAPACIDADES_BASE)) {
-    assert.ok(!(base as readonly string[]).includes('CATALOGO_UNIFICADO'), `${categoria} la enciende de serie`)
+    assert.ok((base as readonly string[]).includes('CATALOGO_UNIFICADO'), `${categoria} no la enciende de serie`)
   }
 })
 
@@ -135,10 +135,10 @@ test('el cron del inventario existe, está programado y exige el secreto', () =>
   assert.ok(vercel.crons.some((c) => c.path === '/api/cron/inventario'))
 })
 
-test('la entrada de menú existe, detrás de la capacidad, y en el grupo Catálogo del hub', () => {
+test('la entrada de menú existe, detrás de la capacidad, y va junto al catálogo en el grupo Comercio del hub', () => {
   const nav = readFileSync('src/components/layout/nav-config.ts', 'utf8')
   assert.match(nav, /href: '\/admin\/inventario',[\s\S]{0,500}capacidad: 'CATALOGO_UNIFICADO'/)
-  assert.match(nav, /deAdmin\('\/admin\/catalogo', '\/admin\/inventario',/)
+  assert.match(nav, /deAdmin\(\s*'\/admin\/catalogo', '\/admin\/inventario',/)
 })
 
 // ── Interfaz ─────────────────────────────────────────────────────────────────

@@ -59,11 +59,11 @@ test.describe('Catálogo unificado · panel', () => {
     await p.goto('/admin/catalogo')
     await expect(p).toHaveURL(/\/admin\/catalogo$/)
     await expect(p.getByRole('heading', { name: 'Catálogo' }).first()).toBeVisible()
-    await expect(p.getByText('Tu catálogo está vacío')).toBeVisible()
+    await expect(p.getByText('Todavía no tienes productos o servicios.')).toBeVisible()
     await expect(p.getByRole('link', { name: /^Catálogo/ }).first()).toBeVisible()
 
     // ── Alta de un servicio simple ────────────────────────────────────────
-    await p.getByRole('link', { name: 'Nuevo' }).first().click()
+    await p.getByRole('link', { name: 'Nuevo producto o servicio' }).first().click()
     await p.waitForURL('**/admin/catalogo/nuevo')
     await p.getByLabel('Nombre *').fill(NOMBRE)
     await p.getByLabel('Descripción').fill('Exterior e interior')

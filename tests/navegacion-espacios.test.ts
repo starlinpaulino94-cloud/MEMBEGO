@@ -556,7 +556,7 @@ test('el hub administrativo son los ocho grupos del diseño, en su orden', () =>
     [
       'principal',
       'experiencia-cliente',
-      'catalogo',
+      'comercio',
       'operaciones',
       'clientes',
       'marketing',

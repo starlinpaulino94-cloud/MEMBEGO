@@ -13,14 +13,14 @@ import { FUNCIONES_EMPRESA } from '../src/modules/plataforma/conceptos'
  * base; el comportamiento contra la base está en `tests/postgres/orders.db.test.ts`.
  */
 
-test('la capacidad PEDIDOS_MEMBEGO existe, gobierna la sección «pedidos-membego» y está apagada de serie en todas las categorías', () => {
+test('la capacidad PEDIDOS_MEMBEGO existe, gobierna la sección «pedidos-membego» y está encendida de serie en todas las categorías', () => {
   assert.ok((CAPACIDADES as readonly string[]).includes('PEDIDOS_MEMBEGO'))
   assert.ok((ADMIN_SECTIONS as readonly string[]).includes('pedidos-membego'))
   assert.deepEqual(SECCIONES_POR_CAPACIDAD.PEDIDOS_MEMBEGO, ['pedidos-membego', 'facturacion-membego', 'resultados-membego'], 'la misma capacidad gobierna «Mi cuenta Membego» (Fase 4)')
   assert.equal(CAPACIDAD_DE_SECCION['pedidos-membego'], 'PEDIDOS_MEMBEGO')
   assert.ok((FUNCIONES_EMPRESA as readonly string[]).includes('PEDIDOS_MEMBEGO'), 'una función de empresa se puede encender por override')
   for (const [categoria, base] of Object.entries(CAPACIDADES_BASE)) {
-    assert.ok(!(base as readonly string[]).includes('PEDIDOS_MEMBEGO'), `${categoria} la enciende de serie`)
+    assert.ok((base as readonly string[]).includes('PEDIDOS_MEMBEGO'), `${categoria} no la enciende de serie`)
   }
 })
 
@@ -125,10 +125,10 @@ test('el servicio usa el ledger de inventario para apartar, vender y liberar (na
 const leer = (f: string) => readFileSync(f, 'utf8')
 const limpio = (f: string) => leer(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-test('las entradas de menú existen: «Pedidos Membego» detrás de su capacidad (y en el hub de Operaciones) y «Mis pedidos» para el cliente', () => {
+test('las entradas de menú existen: «Pedidos Membego» detrás de su capacidad (y en el hub de Comercio) y «Mis pedidos» para el cliente', () => {
   const nav = leer('src/components/layout/nav-config.ts')
   assert.match(nav, /href: '\/admin\/pedidos-membego',[\s\S]{0,600}capacidad: 'PEDIDOS_MEMBEGO'/)
-  assert.match(nav, /deAdmin\(\s*'\/admin\/pedidos-membego', '\/admin\/scanner'/)
+  assert.match(nav, /deAdmin\(\s*'\/admin\/catalogo', '\/admin\/inventario', '\/admin\/pedidos-membego', '\/admin\/deals'/)
   assert.match(nav, /href: '\/cliente\/pedidos',\s*label: 'Mis pedidos'/)
   assert.match(leer('src/modules/navegacion/contexto.ts'), /'PEDIDOS_MEMBEGO'/)
   // «Mis pedidos» se oculta mientras ni la empresa recibe pedidos ni la persona tiene alguno.

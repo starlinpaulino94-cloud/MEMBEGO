@@ -226,8 +226,8 @@ export default async function AdminDashboard() {
             {mesActualLabel}
           </span>
           <Button asChild variant="secondary" className="rounded-full">
-            <Link href="/admin/promociones/nuevo">
-              <Plus className="size-4" aria-hidden /> Nuevo Beneficio
+            <Link href="/admin/catalogo/nuevo">
+              <Plus className="size-4" aria-hidden /> Nuevo producto o servicio
             </Link>
           </Button>
           <Button asChild className="rounded-full bg-retail-deep text-white hover:opacity-95">

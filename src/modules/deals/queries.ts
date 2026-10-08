@@ -97,6 +97,7 @@ export interface ReclamoDeOferta {
 
 export interface DetalleDeOferta extends FilaDeOferta {
   catalogVariantId: string
+  catalogItemId: string
   description: string | null
   voucherDays: number
   newCustomersOnly: boolean
@@ -117,7 +118,7 @@ export async function detalleOfertaEnTx(tx: Tx, companyId: string, id: string): 
   if (typeof id !== 'string' || id === '' || id.length > 60) return null
   const o = await tx.deal.findFirst({
     where: { id, companyId },
-    include: { variant: { select: { name: true, price: true, item: { select: { name: true } } } } },
+    include: { variant: { select: { name: true, price: true, item: { select: { id: true, name: true } } } } },
   })
   if (!o) return null
   const reclamos = await tx.dealClaim.findMany({
@@ -152,6 +153,7 @@ export async function detalleOfertaEnTx(tx: Tx, companyId: string, id: string): 
     rendimiento: rendimientoDeTotales(totales),
     reclamosTotal: totales.reduce((t, g) => t + g.cantidad, 0),
     catalogVariantId: o.catalogVariantId,
+    catalogItemId: o.variant.item.id,
     description: o.description,
     voucherDays: o.voucherDays,
     newCustomersOnly: o.newCustomersOnly,
@@ -181,6 +183,10 @@ export interface OpcionDeProducto {
   etiqueta: string
   precio: string
   currency: string
+  /** El ítem al que pertenece la variante (para preseleccionar desde el catálogo). */
+  itemId: string
+  /** true si controla inventario y no queda nada disponible en ninguna sucursal activa: la oferta se puede crear, pero avisa. */
+  sinStock: boolean
 }
 
 export interface OpcionesParaOferta {
@@ -198,19 +204,31 @@ export async function opcionesParaOfertaEnTx(tx: Tx, companyId: string): Promise
       where: { companyId, status: 'ACTIVE', item: { status: 'ACTIVE', source: 'MERCHANT' } },
       orderBy: [{ item: { name: 'asc' } }, { name: 'asc' }, { id: 'asc' }],
       take: 500,
-      select: { id: true, name: true, price: true, item: { select: { name: true, type: true, capabilities: true, currency: true, variants: { select: { id: true } } } } },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        item: { select: { id: true, name: true, type: true, capabilities: true, currency: true, variants: { select: { id: true } } } },
+        inventoryLevels: { where: { location: { activa: true } }, select: { onHand: true, reserved: true } },
+      },
     }),
     tx.merchantBillingConfig.findUnique({ where: { companyId }, select: { cpaAmount: true, currency: true, status: true } }),
   ])
   return {
     productos: variantes
       .filter((v) => normalizarCapacidades(v.item.type, v.item.capabilities).availableMarketplace)
-      .map((v) => ({
-        id: v.id,
-        etiqueta: v.item.variants.length > 1 ? `${v.item.name} · ${v.name}` : v.item.name,
-        precio: dos(v.price),
-        currency: v.item.currency,
-      })),
+      .map((v) => {
+        const caps = normalizarCapacidades(v.item.type, v.item.capabilities)
+        const disponible = v.inventoryLevels.reduce((a, n) => a + Math.max(0, n.onHand - n.reserved), 0)
+        return {
+          id: v.id,
+          etiqueta: v.item.variants.length > 1 ? `${v.item.name} · ${v.name}` : v.item.name,
+          precio: dos(v.price),
+          currency: v.item.currency,
+          itemId: v.item.id,
+          sinStock: caps.trackInventory && disponible <= 0,
+        }
+      }),
     cuota: cuenta ? dos(cuenta.cpaAmount) : null,
     currency: cuenta?.currency ?? null,
     suspendida: cuenta ? !puedeCrearCampanas(cuenta.status) : false,

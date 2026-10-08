@@ -19,6 +19,22 @@ export interface ProductoParaOferta {
   etiqueta: string
   precio: string
   currency: string
+  itemId?: string
+  sinStock?: boolean
+}
+
+/**
+ * Vista previa del precio con la oferta. Es la MISMA regla que `precioDeLaOferta` del dominio
+ * (porcentaje, monto fijo o precio final, acotado entre 0 y el precio de lista), repetida aquí
+ * solo para enseñarla mientras se escribe: el servidor la recalcula y es el único que manda.
+ */
+export function previsualizarPrecio(precioLista: string, tipo: ValoresDeOferta['discountType'], valor: string): { precio: number; ahorro: number } | null {
+  const lista = Number(precioLista)
+  const v = Number(valor)
+  if (!Number.isFinite(lista) || !Number.isFinite(v) || valor.trim() === '') return null
+  let precio = tipo === 'PERCENT' ? (lista * (100 - v)) / 100 : tipo === 'AMOUNT_OFF' ? lista - v : v
+  precio = Math.min(Math.max(precio, 0), lista)
+  return { precio: Math.round(precio * 100) / 100, ahorro: Math.round((lista - precio) * 100) / 100 }
 }
 
 export interface ValoresDeOferta {
@@ -75,6 +91,7 @@ export function OfertaForm({ productos, cuota, moneda, ofertaId, inicial, soloAj
   const set = <K extends keyof ValoresDeOferta>(k: K, valor: ValoresDeOferta[K]) => setV((a) => ({ ...a, [k]: valor }))
 
   const producto = productos.find((p) => p.id === v.catalogVariantId)
+  const vista = useMemo(() => (producto ? previsualizarPrecio(producto.precio, v.discountType, v.discountValue) : null), [producto, v.discountType, v.discountValue])
   const canjes = useMemo(() => {
     const total = Number(v.budgetTotal)
     const c = Number(cuota)
@@ -157,7 +174,27 @@ export function OfertaForm({ productos, cuota, moneda, ofertaId, inicial, soloAj
               <p className="text-xs text-muted-foreground">{AYUDA_TIPO_DESCUENTO[v.discountType]}</p>
             </div>
           </div>
-          {producto && <p className="text-xs text-muted-foreground">Precio de lista: {producto.precio} {producto.currency}</p>}
+          {producto && (
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm" aria-live="polite">
+              <p className="text-xs text-muted-foreground">Así lo verá el cliente</p>
+              <p className="mt-0.5">
+                <span className="text-muted-foreground">Antes:</span>{' '}
+                <span className={vista && vista.ahorro > 0 ? 'line-through' : ''}>{producto.precio} {producto.currency}</span>
+                {vista && vista.ahorro > 0 && (
+                  <>
+                    {' · '}
+                    <span className="text-muted-foreground">Ahora:</span> <strong>{vista.precio.toFixed(2)} {producto.currency}</strong>
+                    <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">ahorra {vista.ahorro.toFixed(2)}</span>
+                  </>
+                )}
+              </p>
+              {producto.sinStock && (
+                <p className="mt-1 text-xs text-warning">
+                  Este producto está agotado ahora mismo. La oferta se crea igual, pero el marketplace la mostrará como «Agotado» y nadie podrá obtenerla hasta que entres existencias en Inventario. Crear la oferta no cambia el stock.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

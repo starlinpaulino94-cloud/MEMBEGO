@@ -66,7 +66,7 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
     const p = await ctx.newPage()
     await entrarComo(ctx, 'dealsSinCapacidad', BASE, sin.id)
     await p.goto('/admin/deals')
-    await expect(p.getByRole('heading', { name: 'Ofertas con presupuesto' })).toHaveCount(0)
+    await expect(p.getByRole('heading', { name: 'Ofertas y promociones' })).toHaveCount(0)
     await expect(p.getByRole('link', { name: 'Nueva oferta' })).toHaveCount(0)
     await ctx.close()
   })
@@ -78,7 +78,7 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
     await entrarComo(ctx, 'dealsAdmin', BASE, con.id)
 
     await p.goto('/admin/deals')
-    await expect(p.getByRole('heading', { name: 'Ofertas con presupuesto' })).toBeVisible()
+    await expect(p.getByRole('heading', { name: 'Ofertas y promociones' })).toBeVisible()
     await expect(p.getByText('Todavía no tienes ofertas')).toBeVisible()
     await p.getByRole('link', { name: 'Nueva oferta' }).click()
 

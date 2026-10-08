@@ -63,7 +63,7 @@ export const SECCION_LABELS: Record<AdminSection, string> = {
   inventario: 'Inventario',
   'pedidos-membego': 'Pedidos Membego',
   'facturacion-membego': 'Mi cuenta Membego (comisiones y estados de cuenta)',
-  deals: 'Ofertas con presupuesto',
+  deals: 'Ofertas y promociones (sobre el catálogo)',
   'resultados-membego': 'Resultados Membego (lo que la plataforma produce y cuesta)',
 }
 
