@@ -88,6 +88,8 @@ export async function buscarClientesCaja(entrada: { q: string }): Promise<Result
   const c = await cajero('venderEnMostrador')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  // Es un directorio de clientes con nombre y teléfono: no se puede vaciar a golpe de búsquedas.
+  if (!(await formSubmitLimiter(`pos-clientes:${c.ctx.actorId ?? c.companyId}`))) return { ok: false, error: 'Demasiados intentos. Espera un momento.' }
   try {
     return { ok: true, clientes: await conEmpresa(c.companyId, (tx) => buscarClientesDeCajaEnTx(tx, c.companyId, texto(entrada.q))) }
   } catch (e) {

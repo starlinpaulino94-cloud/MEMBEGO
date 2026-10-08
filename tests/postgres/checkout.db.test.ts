@@ -391,3 +391,25 @@ test('21 · problemaDelPedidoEnTx lee, sin crear nada, lo que impediría el pedi
   assert.match((await p({ lineas: [{ varianteId: ctx.fisico, cantidad: 9999 }] })) ?? '', /^Solo quedan \d+ en esta sucursal\.$/)
   assert.equal(await cuentaPedidos(), pedidos, 'no creó nada')
 })
+
+test('22 · un carrito con productos de monedas distintas lo dice en el resumen en vez de fallar al pagar (B8)', async () => {
+  const dolares = await conEmpresa(ctx.a, async (tx) => {
+    const r = await crearItemEnTx(tx, ctx.a, { name: `Dólares ${sufijo}`, type: 'SERVICE', price: 20, currency: 'USD', sku: `CK-U-${sufijo}` }, aud())
+    await cambiarEstadoItemEnTx(tx, ctx.a, r.id, 'ACTIVE', aud())
+    return (await tx.catalogVariant.findFirstOrThrow({ where: { catalogItemId: r.id }, select: { id: true } })).id
+  })
+  const r = await resumen([
+    { varianteId: ctx.servicio, cantidad: 1 },
+    { varianteId: dolares, cantidad: 1 },
+  ])
+  assert.equal(r.moneda, 'DOP', 'el primero fija la moneda del pedido')
+  assert.equal(r.renglones.find((x) => x.varianteId === ctx.servicio)!.problema, null)
+  assert.match(r.renglones.find((x) => x.varianteId === dolares)!.problema ?? '', /USD.*no se puede pagar junto/)
+  assert.equal(r.comprable, false)
+  assert.equal(r.total, '250.00', 'lo que no se puede pagar junto no se suma')
+  // Solo dólares sí es comprable (en dólares).
+  const solo = await resumen([{ varianteId: dolares, cantidad: 2 }])
+  assert.equal(solo.moneda, 'USD')
+  assert.equal(solo.comprable, true)
+  assert.equal(solo.total, '40.00')
+})

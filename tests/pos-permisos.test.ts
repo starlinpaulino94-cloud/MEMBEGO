@@ -106,3 +106,10 @@ test('la caja cuenta en pesos: ni el catálogo, ni la vista previa, ni la venta 
   assert.match(s, /currency: MONEDA_DE_CAJA/)
   assert.match(s, /MONEDA_NO_SOPORTADA/)
 })
+
+test('buscar clientes en la caja (nombre y teléfono) tiene límite de envíos: el directorio no se vacía a golpe de búsquedas (auditoría F5–F9)', () => {
+  const cuerpo = acciones.slice(acciones.indexOf('export async function buscarClientesCaja('))
+  const fin = cuerpo.indexOf('export async function', 10)
+  const b = cuerpo.slice(0, fin)
+  assert.ok(b.indexOf('formSubmitLimiter(') > 0 && b.indexOf('formSubmitLimiter(') < b.indexOf('conEmpresa('))
+})

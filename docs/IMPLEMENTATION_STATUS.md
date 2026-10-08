@@ -285,7 +285,7 @@ Diez consultas de **Reportes** (`reportes/{finanzas,regalos,citas,promociones,op
 - Los E2E siembran los pedidos y las comisiones **directamente por Prisma** (no por el flujo): el flujo ya lo prueban `pedidos-membego` y `deals-membego`. Las cuentas exactas las prueba PG, no el navegador.
 - **Sin carga ni rendimiento medidos**: las consultas recorren los pedidos del periodo (hay índices por empresa/estado/fecha, pero no uno por `completedAt`); pensado para cientos de empresas, no para millones de pedidos. El ranking por empresa y la plataforma completa son lo más pesado.
 - «Cliente nuevo» es nuevo **para Membego en esa empresa**, no para el negocio.
-- Las ventas suman `total`, que por esquema incluye el impuesto; hoy ningún flujo manda impuesto (siempre 0), así que coincide con «sin impuestos». Si algún flujo lo usa habrá que sumar la base comisionable.
+- Las ventas suman la **base comisionable** (subtotal − descuento + ajuste, sin impuesto). Hasta el lote de la auditoría F5–F9 sumaban `total`, que por esquema incluye el impuesto; coincidían solo porque ningún flujo manda impuesto. Una prueba obliga a revisar la toma si Merchant Billing añade un origen comisionable.
 - La tasa de cierre de los días recientes se queda corta (un pedido creado ayer aún puede completarse).
 - No hay exportación a CSV ni envío periódico por correo; solo imprimir/guardar como PDF del navegador.
 - No hay clics ni conversiones del marketplace, ni LTV, ni cohortes.

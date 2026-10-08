@@ -53,3 +53,19 @@ test('solo los comisionables entran en la toma: la toma usa el GMV del marketpla
   const q = sinComentarios(leer(join(RAIZ, 'src/modules/analytics/queries.ts')))
   assert.match(q, /toma: \{ valor: tomaDeComision\(mk\.comisiones, mk\.ventas\)/)
 })
+
+test('«qué comisiona» de la analítica es lo mismo que decide Merchant Billing (auditoría F5–F9): si billing añade un origen, esta prueba obliga a revisar la toma', () => {
+  const billing = leer(join(RAIZ, 'src/modules/billing/domain.ts'))
+  const lista = /export const ORIGENES_COMISIONABLES[^=]*=\s*\[([^\]]*)\]/.exec(billing)
+  assert.ok(lista, 'billing declara ORIGENES_COMISIONABLES')
+  const origenes = [...lista[1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1])
+  assert.deepEqual(origenes, ['MARKETPLACE'], 'billing comisiona otros orígenes: actualiza COMISIONABLE y sqlAlcance de analytics/queries.ts')
+  const queries = sinComentarios(leer(join(RAIZ, 'src/modules/analytics/queries.ts')))
+  assert.match(queries, /const COMISIONABLE: MembegoOrderOrigin = 'MARKETPLACE'/)
+})
+
+test('las ventas suman la base comisionable (sin impuestos), no el total, que por esquema incluye el impuesto', () => {
+  const queries = sinComentarios(leer(join(RAIZ, 'src/modules/analytics/queries.ts')))
+  assert.doesNotMatch(queries, /sum\(o\."total"\)/)
+  assert.match(queries, /sum\(o\."commissionableBase"\)/)
+})

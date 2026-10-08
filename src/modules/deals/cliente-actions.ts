@@ -16,6 +16,7 @@
  */
 
 import { revalidatePath, revalidateTag } from 'next/cache'
+import { after } from 'next/server'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { formSubmitLimiter } from '@/lib/rate-limit'
@@ -84,13 +85,19 @@ export async function reclamarOferta(entrada: { dealId: string; sucursalId: stri
       revalidatePath('/admin/pedidos-membego', 'layout')
       refrescarVitrinasDeOfertas()
       revalidateTag(NAV_CLIENTE_TAG, 'max')
-      // Best-effort: un aviso no puede tumbar el reclamo.
-      void notificarAdmins(companyId, {
-        tipo: 'SISTEMA',
-        titulo: 'Alguien obtuvo una oferta',
-        mensaje: `El cupón ${r.orderCode} está listo para canjearse con su QR.`,
-        href: `/admin/pedidos-membego/${r.orderId}`,
-        dedupeKey: `oferta-reclamada:${r.claimId}`,
+      // Best-effort y DESPUÉS de responder (`after`): un aviso no puede tumbar el reclamo ni perderse al terminar la respuesta.
+      after(async () => {
+        try {
+          await notificarAdmins(companyId, {
+            tipo: 'SISTEMA',
+            titulo: 'Alguien obtuvo una oferta',
+            mensaje: `El cupón ${r.orderCode} está listo para canjearse con su QR.`,
+            href: `/admin/pedidos-membego/${r.orderId}`,
+            dedupeKey: `oferta-reclamada:${r.claimId}`,
+          })
+        } catch (e) {
+          console.error('[deals-cliente] aviso a la empresa', e instanceof Error ? e.message : e)
+        }
       })
       return { ok: true, pedidoId: r.orderId, code: r.orderCode, repetido: false, ahorro: r.savings }
     } catch (e) {

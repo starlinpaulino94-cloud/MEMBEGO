@@ -100,11 +100,13 @@ export async function resumenDelCarritoEnTx(tx: Tx, companyId: string, lineas: r
   })
   const porId = new Map(variantes.map((v) => [v.id, v]))
   let total = 0
-  let moneda = 'DOP'
+  let moneda: string | null = null
   const renglones: RenglonResumido[] = pedidas.map((l) => {
     const v = porId.get(l.varianteId)
     if (!v) return { varianteId: l.varianteId, nombre: 'Producto que ya no existe', precio: '0.00', cantidad: l.cantidad, subtotal: '0.00', existencias: null, problema: NO_DISPONIBLE }
-    moneda = v.item.currency
+    // Un pedido es de UNA moneda: el primer producto fija cuál, y los que vengan en otra no se pueden pagar juntos.
+    if (moneda === null) moneda = v.item.currency
+    const otraMoneda = v.item.currency !== moneda
     const caps = normalizarCapacidades(v.item.type, v.item.capabilities)
     const nombre = v.item.variants.length > 1 ? `${v.item.name} · ${v.name}` : v.item.name
     const precio = Number(v.price.toFixed(2))
@@ -112,13 +114,14 @@ export async function resumenDelCarritoEnTx(tx: Tx, companyId: string, lineas: r
     const existencias = caps.trackInventory && sucursalId ? Math.max(0, (nivel?.onHand ?? 0) - (nivel?.reserved ?? 0)) : null
     let problema: string | null = null
     if (v.item.status !== 'ACTIVE' || v.status !== 'ACTIVE' || v.item.source !== 'MERCHANT' || !caps.availableMarketplace) problema = NO_DISPONIBLE
+    else if (otraMoneda) problema = `Este producto es en ${v.item.currency} y no se puede pagar junto con los demás (${moneda}).`
     else if (existencias !== null && existencias <= 0) problema = 'Agotado en esta sucursal.'
     else if (existencias !== null && l.cantidad > existencias) problema = `Solo quedan ${existencias} en esta sucursal.`
     const subtotal = precio * l.cantidad
     if (problema === null) total += subtotal
     return { varianteId: v.id, nombre, precio: dos(precio), cantidad: l.cantidad, subtotal: dos(subtotal), existencias, problema }
   })
-  return { moneda, renglones, total: dos(total), comprable: renglones.length > 0 && renglones.every((r) => r.problema === null) }
+  return { moneda: moneda ?? 'DOP', renglones, total: dos(total), comprable: renglones.length > 0 && renglones.every((r) => r.problema === null) }
 }
 
 export interface EntradaDeCheckout {

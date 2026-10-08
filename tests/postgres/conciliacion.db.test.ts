@@ -436,3 +436,10 @@ test('21 · cada regla entrega primero los casos más recientes de SU orden (el 
   assert.ok(codigos.indexOf(cb) >= 0 && codigos.indexOf(ca) >= 0)
   assert.ok(codigos.indexOf(cb) < codigos.indexOf(ca), 'el cerrado después (b) sale antes que el cerrado antes (a)')
 })
+
+test('22 · P03 también vigila el nivel «conciliado fiscalmente»: sin la confirmación vigente del cliente es el mismo error', async () => {
+  const r = await cerradoEnEfectivo()
+  const c = await cambios(() => rompe('membego_orders', Prisma.sql`UPDATE "membego_orders" SET "verificationLevel" = 'FISCALLY_RECONCILED' WHERE "id" = ${ids(r.pedidoId)}`))
+  assert.equal(c.P03, 1, 'sin confirmación del cliente')
+  assert.equal(c.P01, 1, 'y sin constancia de pago')
+})

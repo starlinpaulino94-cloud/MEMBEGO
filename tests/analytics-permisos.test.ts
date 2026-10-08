@@ -16,7 +16,7 @@ test('«Resultados Membego» es la sección «resultados-membego», cuelga de PE
   assert.equal(CAPACIDAD_DE_SECCION['resultados-membego'], 'PEDIDOS_MEMBEGO')
   assert.equal(FUNCIONES_POR_SECCION['resultados-membego'], undefined, 'solo lectura: no hay nada que delegar por función')
   assert.equal(adminSectionForPath('/admin/resultados-membego'), 'resultados-membego')
-  for (const rol of ['MARKETING', 'SUPERVISOR', 'CAJERO'] as const) assert.equal(seccionPermitida(rol, 'resultados-membego', null), false, rol)
+  for (const rol of ['GERENTE', 'SUPERVISOR', 'CAJERO', 'RECEPCION', 'EMPLEADO', 'MARKETING'] as const) assert.equal(seccionPermitida(rol, 'resultados-membego', null), false, rol)
   assert.equal(seccionPermitida('ADMINISTRADOR', 'resultados-membego', null), true)
 })
 

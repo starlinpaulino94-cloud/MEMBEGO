@@ -126,3 +126,9 @@ test('público: «quedan» solo aparece cuando son pocos, y es el menor entre cu
   assert.equal(aOfertaPublica(fila({ claimsActive: 100 - UMBRAL_QUEDAN }))?.quedan, UMBRAL_QUEDAN)
   assert.equal(aOfertaPublica(fila({ budgetReserved: D(4700) }))?.quedan, 3, 'el presupuesto alcanza para 3 canjes')
 })
+
+test('el presupuesto y el descuento caben en la columna (DECIMAL(12,2): hasta 10 enteros) y lo que no cabe se rechaza con un mensaje, no con un error de la base (auditoría F5–F9)', () => {
+  assert.equal(leerOfertaNueva({ ...BASE, budgetTotal: '9999999999.99' }).ok, true)
+  assert.equal(leerOfertaNueva({ ...BASE, budgetTotal: '10000000000' }).ok, false)
+  assert.equal(leerOfertaNueva({ ...BASE, budgetTotal: '99999999999999' }).ok, false)
+})

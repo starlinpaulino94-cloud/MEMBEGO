@@ -89,7 +89,7 @@ const CONSULTAS: Readonly<Record<string, Consulta>> = {
     SELECT o."companyId", o."code" AS referencia, 'Nivel ' || o."verificationLevel" || CASE WHEN c."orderId" IS NULL THEN ' sin confirmación del cliente' ELSE ': confirmó ' || ${dinero('c."confirmedTotal"')} || ' y el pedido es ' || ${dinero('o."total"')} END AS detalle,
            row_number() OVER (ORDER BY o."updatedAt" DESC, o."id") AS "orden"
       FROM "membego_orders" o LEFT JOIN "customer_confirmations" c ON c."orderId" = o."id"
-     WHERE o."verificationLevel" IN ('CUSTOMER_VERIFIED', 'PAYMENT_VERIFIED') ${alcance(a, 'o."companyId"')}
+     WHERE o."verificationLevel" IN ('CUSTOMER_VERIFIED', 'PAYMENT_VERIFIED', 'FISCALLY_RECONCILED') ${alcance(a, 'o."companyId"')}
        AND (c."orderId" IS NULL OR c."confirmedTotal" <> o."total")`,
   P04: (a) => Prisma.sql`
     SELECT o."companyId", o."code" AS referencia, 'Comisión CPA de ' || ${dinero('m."amount"')} || ' por ' || ${dinero('o."total"')} || '; el pago se verificó después de cerrar' AS detalle,

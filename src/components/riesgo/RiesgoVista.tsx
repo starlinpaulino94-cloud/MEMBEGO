@@ -57,7 +57,7 @@ export function RiesgoVista({ senales, ventanaDias, empresasRevisadas, generadoE
   return (
     <ReporteImprimible
       titulo="Señales de riesgo"
-      subtitulo={`Últimos ${ventanaDias} días · ${plural(empresasRevisadas, 'empresa revisada', 'empresas revisadas')} · sin empresas de práctica`}
+      subtitulo={`Últimos ${ventanaDias} días · ${plural(empresasRevisadas, 'empresa con actividad o cuenta', 'empresas con actividad o cuenta')} · sin empresas de práctica`}
       generadoEn={generadoEn}
       controles={controles}
       pie={
@@ -71,7 +71,7 @@ export function RiesgoVista({ senales, ventanaDias, empresasRevisadas, generadoE
       <section>
         <SectionHeader title="Resumen" description="Cuántas empresas y clientes dieron alguna señal." />
         <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
-          <Celda label="Empresas con señales" valor={num(r.empresas)} nota={`de ${num(empresasRevisadas)} revisadas`} />
+          <Celda label="Empresas con señales" valor={num(r.empresas)} nota={`de ${num(empresasRevisadas)} con actividad o cuenta`} />
           <Celda label="Clientes con señales" valor={num(r.clientes)} nota="Los que cruzaron algún umbral" />
           <Celda label="Severidad alta · media" valor={`${num(r.porSeveridad.ALTA)} · ${num(r.porSeveridad.MEDIA)}`} nota="Señales, no personas" />
         </div>

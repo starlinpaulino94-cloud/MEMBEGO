@@ -36,6 +36,9 @@ export type Resultado<T> = ({ ok: true } & T) | { ok: false; error: string; sinS
 // El carrito se refresca al cambiar cantidades: un límite más holgado que el de los formularios.
 const limiteLecturas = createRateLimiter({ interval: 60 * 1000, maxRequests: 90, name: 'carrito' })
 
+/** La clave del navegador va dentro de `cli:<cliente>:<clave>` y el pedido admite 120 en total: con el prefijo (≈31) cabe hasta 89. */
+const MAX_CLAVE_DEL_ENVIO = 80
+
 const texto = (v: unknown) => (typeof v === 'string' ? v : '')
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
@@ -104,7 +107,7 @@ export async function hacerCheckout(entrada: {
     const sucursalId = texto(entrada.sucursalId)
     if (!sucursalId) return { ok: false, error: 'Elige la sucursal donde recogerás tu pedido.' }
     const clave = texto(entrada.clave)
-    if (clave === '' || clave.length > 100) return { ok: false, error: 'Recarga la página e inténtalo de nuevo.' }
+    if (clave === '' || clave.length > MAX_CLAVE_DEL_ENVIO) return { ok: false, error: 'Recarga la página e inténtalo de nuevo.' }
 
     // La empresa sale de las variantes: todas del mismo negocio, publicado y que recibe pedidos.
     const variantes = await sinEmpresa('checkout: empresa de las variantes del carrito', (tx) =>

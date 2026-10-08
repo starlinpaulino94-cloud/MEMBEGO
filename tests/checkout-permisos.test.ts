@@ -98,3 +98,10 @@ test('la lectura pública no enseña el nombre ni el precio de lo que no se pued
   assert.match(servicio, /No hay suficientes en esta sucursal\./)
   assert.match(servicio, /conSesionDeCliente/)
 })
+
+test('la clave del envío que acepta la acción cabe dentro de la clave de idempotencia del pedido (cli:<cliente>:<clave> ≤ 120)', () => {
+  assert.match(acciones, /const MAX_CLAVE_DEL_ENVIO = 80/)
+  assert.match(acciones, /clave\.length > MAX_CLAVE_DEL_ENVIO/)
+  const pedidos = limpio('src/modules/orders/service.ts')
+  assert.match(pedidos, /k\.length > 120/)
+})

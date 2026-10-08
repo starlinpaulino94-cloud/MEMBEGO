@@ -71,7 +71,7 @@ export interface Agregados {
 export async function agregadosEnTx(tx: Tx, a: Alcance, origenes: Origenes, desde: Date, hasta: Date): Promise<Agregados> {
   const [f] = await tx.$queryRaw<Record<string, unknown>[]>`
     SELECT count(*)::int AS pedidos,
-           coalesce(sum(o."total"), 0) AS ventas,
+           coalesce(sum(o."commissionableBase"), 0) AS ventas,
            coalesce(sum(m."amount") FILTER (WHERE m."status" = 'CONFIRMED'), 0) AS comisiones,
            count(DISTINCT o."customerId")::int AS clientes,
            count(DISTINCT o."companyId")::int AS empresas
@@ -105,7 +105,7 @@ export async function clientesNuevosEnTx(tx: Tx, companyId: string, desde: Date,
 
 export async function reembolsosEnTx(tx: Tx, a: Alcance, origenes: Origenes, desde: Date, hasta: Date): Promise<{ pedidos: number; monto: number }> {
   const [f] = await tx.$queryRaw<Record<string, unknown>[]>`
-    SELECT count(*)::int AS pedidos, coalesce(sum(o."total"), 0) AS monto
+    SELECT count(*)::int AS pedidos, coalesce(sum(o."commissionableBase"), 0) AS monto
       FROM "membego_orders" o
      WHERE o."status" = 'REFUNDED' AND o."refundedAt" >= ${desde} AND o."refundedAt" < ${hasta}
        ${sqlOrigen(origenes)} ${sqlAlcance(a, 'o."companyId"')}`
@@ -114,7 +114,7 @@ export async function reembolsosEnTx(tx: Tx, a: Alcance, origenes: Origenes, des
 
 export async function porCanalEnTx(tx: Tx, a: Alcance, origenes: Origenes, desde: Date, hasta: Date): Promise<FilaPorCanal[]> {
   const filas = await tx.$queryRaw<{ canal: string | null; pedidos: number; ventas: unknown }[]>`
-    SELECT a."channel"::text AS canal, count(*)::int AS pedidos, coalesce(sum(o."total"), 0) AS ventas
+    SELECT a."channel"::text AS canal, count(*)::int AS pedidos, coalesce(sum(o."commissionableBase"), 0) AS ventas
       FROM "membego_orders" o
       LEFT JOIN "order_attributions" a ON a."orderId" = o."id"
      WHERE o."status" = 'COMPLETED' AND o."completedAt" >= ${desde} AND o."completedAt" < ${hasta}
@@ -133,7 +133,7 @@ export interface FilaPorOrigen {
 
 export async function porOrigenEnTx(tx: Tx, a: Alcance, desde: Date, hasta: Date): Promise<FilaPorOrigen[]> {
   const filas = await tx.$queryRaw<{ origen: string; pedidos: number; ventas: unknown; comisiones: unknown }[]>`
-    SELECT o."origin"::text AS origen, count(*)::int AS pedidos, coalesce(sum(o."total"), 0) AS ventas,
+    SELECT o."origin"::text AS origen, count(*)::int AS pedidos, coalesce(sum(o."commissionableBase"), 0) AS ventas,
            coalesce(sum(m."amount") FILTER (WHERE m."status" = 'CONFIRMED'), 0) AS comisiones
       FROM "membego_orders" o
       LEFT JOIN "merchant_commissions" m ON m."orderId" = o."id"
@@ -147,7 +147,7 @@ export async function porOrigenEnTx(tx: Tx, a: Alcance, desde: Date, hasta: Date
 export async function serieEnTx(tx: Tx, a: Alcance, origenes: Origenes, rango: Rango, timeZone: string): Promise<PuntoDeVentas[]> {
   const filas = await tx.$queryRaw<{ dia: string; pedidos: number; ventas: unknown }[]>`
     SELECT to_char((o."completedAt" AT TIME ZONE 'UTC' AT TIME ZONE ${timeZone}), 'YYYY-MM-DD') AS dia,
-           count(*)::int AS pedidos, coalesce(sum(o."total"), 0) AS ventas
+           count(*)::int AS pedidos, coalesce(sum(o."commissionableBase"), 0) AS ventas
       FROM "membego_orders" o
      WHERE o."status" = 'COMPLETED' AND o."completedAt" >= ${rango.desde} AND o."completedAt" < ${rango.hasta}
        ${sqlOrigen(origenes)} ${sqlAlcance(a, 'o."companyId"')}
@@ -174,7 +174,7 @@ export async function ofertasEnTx(tx: Tx, a: Alcance, desde: Date, hasta: Date, 
     SELECT d."id", d."title" AS titulo, d."status"::text AS estado, co."name" AS empresa,
            count(c."id")::int AS obtenidas,
            (count(c."id") FILTER (WHERE c."status" = 'REDEEMED'))::int AS canjeadas,
-           coalesce(sum(o."total") FILTER (WHERE c."status" = 'REDEEMED'), 0) AS ventas,
+           coalesce(sum(o."commissionableBase") FILTER (WHERE c."status" = 'REDEEMED'), 0) AS ventas,
            coalesce(sum(c."savings") FILTER (WHERE c."status" = 'REDEEMED'), 0) AS ahorro,
            coalesce(sum(m."amount") FILTER (WHERE c."status" = 'REDEEMED' AND m."status" = 'CONFIRMED'), 0) AS cuota
       FROM "deals" d
@@ -212,7 +212,7 @@ export async function totalesDeOfertasEnTx(tx: Tx, a: Alcance, desde: Date, hast
   const [f] = await tx.$queryRaw<Record<string, unknown>[]>`
     SELECT count(c."id")::int AS obtenidas,
            (count(c."id") FILTER (WHERE c."status" = 'REDEEMED'))::int AS canjeadas,
-           coalesce(sum(o."total") FILTER (WHERE c."status" = 'REDEEMED'), 0) AS ventas,
+           coalesce(sum(o."commissionableBase") FILTER (WHERE c."status" = 'REDEEMED'), 0) AS ventas,
            coalesce(sum(m."amount") FILTER (WHERE c."status" = 'REDEEMED' AND m."status" = 'CONFIRMED'), 0) AS cuota
       FROM "deal_claims" c
       JOIN "membego_orders" o ON o."id" = c."orderId"
@@ -359,9 +359,9 @@ export async function panoramaDePlataformaEnTx(tx: Tx, rango: Rango, timeZone: s
 
 async function topEmpresasEnTx(tx: Tx, desde: Date, hasta: Date, limite: number): Promise<FilaEmpresaTop[]> {
   const filas = await tx.$queryRaw<Record<string, unknown>[]>`
-    SELECT co."id", co."name" AS nombre, count(*)::int AS pedidos, coalesce(sum(o."total"), 0) AS ventas,
+    SELECT co."id", co."name" AS nombre, count(*)::int AS pedidos, coalesce(sum(o."commissionableBase"), 0) AS ventas,
            coalesce(sum(m."amount") FILTER (WHERE m."status" = 'CONFIRMED'), 0) AS comisiones,
-           coalesce(sum(o."total") FILTER (WHERE o."origin" = ${COMISIONABLE}::"MembegoOrderOrigin"), 0) AS ventas_comisionables
+           coalesce(sum(o."commissionableBase") FILTER (WHERE o."origin" = ${COMISIONABLE}::"MembegoOrderOrigin"), 0) AS ventas_comisionables
       FROM "membego_orders" o
       JOIN "companies" co ON co."id" = o."companyId"
       LEFT JOIN "merchant_commissions" m ON m."orderId" = o."id"
