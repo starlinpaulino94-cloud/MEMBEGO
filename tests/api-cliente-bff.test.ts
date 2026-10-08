@@ -1,9 +1,11 @@
-// @ts-expect-error - bun:test proveído por el runtime de Bun
-import { mock } from 'bun:test'
-mock.module('server-only', () => ({}))
-
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+
+// `server-only` lanza al importarse fuera de un componente de servidor de Next. Estas pruebas corren con `tsx --test` (Node), no con
+// Bun: se deja el paquete ya «cargado» y vacío en la caché de módulos ANTES de importar `api-guard`.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const rutaServerOnly: string = require.resolve('server-only')
+require.cache[rutaServerOnly] = { id: rutaServerOnly, filename: rutaServerOnly, loaded: true, exports: {}, children: [], paths: [] } as unknown as NodeJS.Module
 
 test('getApiClientUser: rechaza peticiones sin cabecera Authorization', async () => {
   const { getApiClientUser } = await import('../src/lib/auth/api-guard')
