@@ -88,6 +88,16 @@ y está escrito en «El registro se desactualiza solo».
    | `Recorrido público` | `recorrido-publico` | E2E |
    | `Secretos` | `secretos` | Secretos (gitleaks sobre los commits nuevos; añadido tras la auditoría F0–F4) |
 
+   `Secretos` lee `.gitleaks.toml` (raíz del repo): reglas por defecto más una
+   lista blanca, entrada por entrada, de fixtures de prueba y ejemplos de la
+   documentación clasificados como sintéticos en el sprint de cierre
+   (2026-10-08). Para repetirlo en local (el binario no es dependencia del
+   proyecto): `gitleaks dir .` sobre el árbol y
+   `gitleaks git . --log-opts="main..HEAD"` sobre los commits de la rama. Un
+   escaneo del historial completo seguirá señalando el commit `0d54ec72` (las
+   claves de Supabase que estuvieron en dos scripts, hallazgo C1): está así a
+   propósito, lo que se escribió hay que rotarlo, no esconderlo.
+
    `Esquema de base de datos` es el que detecta una migración que la base no
    tiene. Es el que habría evitado los cuatro incidentes de agosto de 2026.
 2. **Dos secretos del repositorio** (Settings → Secrets and variables →

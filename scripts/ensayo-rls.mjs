@@ -84,6 +84,19 @@ const DENEGADAS_A_PROPOSITO = new Set([
   'geo_sectors',
   'location_search_events',
   'credenciales_sistema',
+  // Membego Supply · tablas de PLATAFORMA, decididas en el SQL de la Capa 2 con su motivo
+  // (secciones «el cobro de la PLATAFORMA», «eventos externos y outbox», «conciliación de
+  // pagos» e «interruptores y alertas»). Ninguna pantalla de empresa las lee: el código las
+  // alcanza solo por `sinEmpresa` (supply-v2/payment-accounts, operations, contracts, outbox,
+  // payments). El sembrador de demo las llena, y por eso el ensayo las veía «a oscuras»
+  // (sprint de cierre, 2026-10-08).
+  'supply_cuentas_cobro',
+  'supply_pedidos',
+  'supply_v2_external_events',
+  'supply_v2_outbox_events',
+  'supply_v2_payment_reconciliations',
+  'supply_v2_operational_switches',
+  'supply_v2_operational_alerts',
 ])
 
 console.log('\nEnsayo de RLS Capa 2 · ¿qué pantalla se quedaría en blanco?')
