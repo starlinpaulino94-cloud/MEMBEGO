@@ -84,3 +84,25 @@ test('la pantalla de la caja enseña los dos bloques solo si el servidor lo perm
   assert.match(p, /pos\.cobrarPedidos && <CobrarPedidoMembego/)
   assert.match(p, /pos\.venderEnMostrador && <VentaMostrador/)
 })
+
+test('cobrar un pedido bloquea la fila ANTES de leerla y nunca sustituye un pago que el pedido ya tiene (auditoría F5–F9, A1 y M6)', () => {
+  const s = limpio('src/modules/pos/service.ts')
+  const cobrar = s.slice(s.indexOf('export async function cobrarPedidoEnCajaEnTx'), s.indexOf('export interface EntradaDeVenta'))
+  const bloqueo = cobrar.indexOf('bloquearPedidoEnTx(')
+  assert.ok(bloqueo > 0, 'toma el candado del pedido')
+  assert.ok(bloqueo < cobrar.indexOf('registrarPagoEnTx('), 'el candado va antes de registrar el pago')
+  assert.ok(bloqueo < cobrar.indexOf('validarCobroPos('), 'y antes de validar el cobro contra el total')
+  assert.match(cobrar, /PEDIDO_YA_PAGADO/)
+  assert.match(cobrar, /SIN_PAGO_REGISTRADO/)
+  // Entregar sin cobrar cierra con el QR y no escribe nada en la caja.
+  const entrega = cobrar.slice(cobrar.indexOf('if (entregarSinCobrar)'), cobrar.indexOf('if (p.payment)'))
+  assert.match(entrega, /completarPorQrEnTx\(/)
+  assert.doesNotMatch(entrega, /registrarPagoEnTx|registrarCobroEnCajaEnTx/)
+})
+
+test('la caja cuenta en pesos: ni el catálogo, ni la vista previa, ni la venta aceptan otra moneda', () => {
+  const s = limpio('src/modules/pos/service.ts')
+  assert.match(s, /export const MONEDA_DE_CAJA = 'DOP'/)
+  assert.match(s, /currency: MONEDA_DE_CAJA/)
+  assert.match(s, /MONEDA_NO_SOPORTADA/)
+})

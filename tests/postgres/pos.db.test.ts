@@ -8,10 +8,12 @@ import { recibirEnTx } from '../../src/modules/inventory/service'
 import { InventarioError } from '../../src/modules/inventory/errores'
 import { PedidoError } from '../../src/modules/orders/errores'
 import {
+  ajustarMontoEnTx,
   cancelarPedidoEnTx,
   confirmarMontoEnTx,
   crearPedidoEnTx,
   marcarListoEnTx,
+  registrarPagoEnTx,
   reembolsarPedidoEnTx,
   type ContextoPedido,
 } from '../../src/modules/orders/service'
@@ -22,6 +24,7 @@ import {
   buscarClientesDeCajaEnTx,
   buscarProductosDeCajaEnTx,
   cobrarPedidoEnCajaEnTx,
+  pedidoParaCobrarEnTx,
   venderEnMostradorEnTx,
   type ContextoCaja,
 } from '../../src/modules/pos/service'
@@ -60,6 +63,7 @@ const ctx = {
   cajaB: '',
   cajaCerrada: '',
   servicio: '',
+  enDolares: '',
   fisico: '',
   soloMarketplace: '',
   borrador: '',
@@ -106,6 +110,11 @@ before(async () => {
     return (await prisma.catalogVariant.findFirstOrThrow({ where: { catalogItemId: r.id }, select: { id: true } })).id
   }
   ctx.servicio = await crear(ctx.a, `Lavado caja ${sufijo}`, 'SERVICE', 250, `POS-S-${sufijo}`)
+  ctx.enDolares = await conEmpresa(ctx.a, async (tx) => {
+    const r = await crearItemEnTx(tx, ctx.a, { name: `Dólares caja ${sufijo}`, type: 'SERVICE', price: 20, currency: 'USD', sku: `POS-U-${sufijo}` }, aud())
+    await cambiarEstadoItemEnTx(tx, ctx.a, r.id, 'ACTIVE', aud())
+    return (await tx.catalogVariant.findFirstOrThrow({ where: { catalogItemId: r.id }, select: { id: true } })).id
+  })
   ctx.fisico = await crear(ctx.a, `Camiseta caja ${sufijo}`, 'PHYSICAL_PRODUCT', 100, `POS-F-${sufijo}`)
   ctx.soloMarketplace = await crear(ctx.a, `Solo vitrina ${sufijo}`, 'SERVICE', 90, `POS-M-${sufijo}`, true, { availablePOS: false })
   ctx.borrador = await crear(ctx.a, `Borrador caja ${sufijo}`, 'SERVICE', 10, `POS-D-${sufijo}`, false)
@@ -141,6 +150,12 @@ const vender = (extra: Partial<Parameters<typeof venderEnMostradorEnTx>[2]> = {}
   enA((tx) =>
     venderEnMostradorEnTx(tx, ctx.a, { cajaSesionId, lineas: [{ varianteId: ctx.servicio, cantidad: 1 }], metodo: 'EFECTIVO', clave: clave(), ...extra }, caja())
   )
+
+/** El ticket que dejó un cobro (un pedido que solo se entregó, por estar ya pagado, no deja ticket). */
+function ticketDe(r: { transaccion: { id: string; codigo: string; ticketNumero: string } | null }) {
+  assert.ok(r.transaccion, 'se esperaba un ticket de caja')
+  return r.transaccion
+}
 
 const pedidoDe = (id: string) => prisma.membegoOrder.findUniqueOrThrow({ where: { id }, include: { lines: true, attribution: true, payment: true, commission: true } })
 const nivel = async (variante: string, sucursal = ctx.s1) => prisma.inventoryLevel.findUniqueOrThrow({ where: { catalogVariantId_locationId: { catalogVariantId: variante, locationId: sucursal } } })
@@ -334,7 +349,7 @@ test('12 · cobrar en efectivo el pedido de la vitrina: se cierra con su QR, com
   assert.equal(o.verificationLevel, 'CUSTOMER_VERIFIED', 'el efectivo deja constancia pero no verifica')
   assert.equal(o.commission?.type, 'CPA_FIXED')
   assert.equal(o.commission?.amount.toFixed(2), '100.00')
-  const t = await prisma.transaction.findUniqueOrThrow({ where: { id: r.transaccion.id } })
+  const t = await prisma.transaction.findUniqueOrThrow({ where: { id: ticketDe(r).id } })
   assert.equal(t.cajaSesionId, ctx.caja)
   assert.equal(Number(t.monto), 250)
   assert.equal((t.snapshot as { ordenTipo: string }).ordenTipo, 'PEDIDO_MEMBEGO')
@@ -374,7 +389,7 @@ test('15 · el cupón de una oferta se cobra en la caja con su descuento y su cu
   const c = await prisma.commission.findUniqueOrThrow({ where: { orderId: reclamo.orderId } })
   assert.equal(c.dealId, oferta.id)
   assert.equal(c.amount.toFixed(2), '100.00', 'la oferta cobra SU cuota CPA aunque el pago esté verificado')
-  assert.equal(Number((await prisma.transaction.findUniqueOrThrow({ where: { id: r.transaccion.id } })).monto), 200)
+  assert.equal(Number((await prisma.transaction.findUniqueOrThrow({ where: { id: ticketDe(r).id } })).monto), 200)
 })
 
 test('16 · lo que NO se cobra: otra sucursal, un QR ajeno o inventado, ya cobrado, cancelado, y sin caja abierta', async () => {
@@ -438,4 +453,85 @@ test('19 · aislamiento: la analítica y los pedidos de B no ven nada de lo cobr
   assert.equal(await codigoDe(enB((tx) => venderEnMostradorEnTx(tx, ctx.b, { cajaSesionId: ctx.cajaB, lineas: [{ varianteId: ctx.servicio, cantidad: 1 }], metodo: 'EFECTIVO', clave: clave() }, caja()))), 'VARIANTE_NO_ENCONTRADA')
   const cobrosA = await prisma.transaction.count({ where: { companyId: ctx.a, cajaSesionId: ctx.cajaB } })
   assert.equal(cobrosA, 0)
+})
+
+// ── Lote de la auditoría F5–F9 ───────────────────────────────────────────────
+
+const registrarPago = (pedidoId: string, total: string, extra: Partial<Parameters<typeof registrarPagoEnTx>[3]> = {}) =>
+  enA((tx) => registrarPagoEnTx(tx, ctx.a, pedidoId, { method: 'TRANSFER', amount: total, reference: 'TRF-PREVIA-1', ...extra }, empresa))
+
+test('20 · un pedido que YA tiene su pago no se cobra otra vez: la evidencia verificada no se sustituye ni entra efectivo fantasma a la caja (A1)', async () => {
+  const p = await pedidoListo({ confirmado: true })
+  await registrarPago(p.pedidoId, p.total)
+  const txs = await cuentaTx()
+
+  // La pantalla lo dice: ya hay un pago registrado.
+  const vista = await enA((tx) => pedidoParaCobrarEnTx(tx, ctx.a, ctx.caja, p.token))
+  assert.deepEqual(vista.pagoRegistrado, { metodo: 'Transferencia', referencia: 'TRF-PREVIA-1', monto: '250.00' })
+  assert.equal(vista.puedeCobrar, true)
+
+  // Cobrarlo (en efectivo, que es lo que la pantalla ofrece por defecto) se rechaza y no toca nada.
+  assert.equal(await codigoDe(cobrar(p.token, { metodo: 'EFECTIVO' })), 'PEDIDO_YA_PAGADO')
+  const intacto = await pedidoDe(p.pedidoId)
+  assert.equal(intacto.status, 'READY')
+  assert.equal(intacto.payment?.method, 'TRANSFER', 'la transferencia sigue siendo la evidencia')
+  assert.equal(intacto.payment?.reference, 'TRF-PREVIA-1')
+  assert.equal(await cuentaTx(), txs, 'y no entró ningún cobro a la caja')
+
+  // Se entrega sin cobrar: se cierra con la evidencia tal como estaba → PAYMENT_VERIFIED y comisión del 8 %.
+  const r = await cobrar(p.token, { entregarSinCobrar: true, metodo: undefined })
+  assert.equal(r.transaccion, null, 'no entró dinero: no hay ticket')
+  assert.equal(r.nivel, 'PAYMENT_VERIFIED')
+  const o = await pedidoDe(p.pedidoId)
+  assert.equal(o.status, 'COMPLETED')
+  assert.equal(o.payment?.method, 'TRANSFER')
+  assert.equal(o.commission?.type, 'PERCENTAGE')
+  assert.equal(o.commission?.amount.toFixed(2), '20.00')
+  assert.equal(await cuentaTx(), txs, 'la caja no cuenta un efectivo que nunca entró')
+})
+
+test('21 · «entregar sin cobrar» sin un pago registrado se rechaza: no se entrega gratis lo que no está pagado', async () => {
+  const p = await pedidoListo()
+  assert.equal(await codigoDe(cobrar(p.token, { entregarSinCobrar: true })), 'SIN_PAGO_REGISTRADO')
+  assert.equal((await pedidoDe(p.pedidoId)).status, 'READY')
+  assert.equal((await enA((tx) => pedidoParaCobrarEnTx(tx, ctx.a, ctx.caja, p.token))).pagoRegistrado, null)
+})
+
+test('22 · el cobro usa el total VIGENTE del pedido: si se ajustó antes, la evidencia, el cobro de la caja y el ticket llevan el nuevo (M6)', async () => {
+  const p = await pedidoListo({ confirmado: true })
+  await enA((tx) => ajustarMontoEnTx(tx, ctx.a, p.pedidoId, { ajuste: -50, motivo: 'descuento de cortesía' }, empresa))
+  const r = await cobrar(p.token, { metodo: 'TRANSFERENCIA', referencia: 'TRF-AJUSTADO' })
+  assert.equal(r.total, '200.00')
+  const o = await pedidoDe(p.pedidoId)
+  assert.equal(o.payment?.amount.toFixed(2), '200.00')
+  assert.equal(Number((await prisma.transaction.findUniqueOrThrow({ where: { id: ticketDe(r).id } })).monto), 200)
+  assert.equal((o.verificationLevel), 'REDEEMED', 'el cliente confirmó 250: con el monto ajustado esa confirmación ya no vale')
+})
+
+test('23 · la caja solo cobra en pesos: un producto en dólares no sale en el catálogo de la caja, y una venta o un cobro en dólares se deshacen enteros (M4)', async () => {
+  const productos = await enA((tx) => buscarProductosDeCajaEnTx(tx, ctx.a, ctx.s1, 'Dólares caja'))
+  assert.equal(productos.length, 0, 'no se ofrece')
+
+  const pedidos = await cuentaPedidos()
+  const txs = await cuentaTx()
+  assert.equal(await codigoDe(vender({ lineas: [{ varianteId: ctx.enDolares, cantidad: 1 }] })), 'MONEDA_NO_SOPORTADA')
+  assert.equal(await cuentaPedidos(), pedidos, 'la venta en dólares no deja ni el pedido')
+  assert.equal(await cuentaTx(), txs)
+
+  const p = await pedidoListo({ variante: ctx.enDolares })
+  const vista = await enA((tx) => pedidoParaCobrarEnTx(tx, ctx.a, ctx.caja, p.token))
+  assert.equal(vista.puedeCobrar, false)
+  assert.match(vista.mensaje ?? '', /USD/)
+  assert.equal(await codigoDe(cobrar(p.token)), 'MONEDA_NO_SOPORTADA')
+  assert.equal((await pedidoDe(p.pedidoId)).status, 'READY')
+  assert.equal(await cuentaTx(), txs)
+})
+
+test('24 · un QR vencido se dice ANTES de cobrar, en la vista previa (B2)', async () => {
+  const p = await pedidoListo()
+  await prisma.membegoOrder.update({ where: { id: p.pedidoId }, data: { qrExpiresAt: new Date(Date.now() - 60_000) } })
+  const vista = await enA((tx) => pedidoParaCobrarEnTx(tx, ctx.a, ctx.caja, p.token))
+  assert.equal(vista.puedeCobrar, false)
+  assert.match(vista.mensaje ?? '', /venció/)
+  assert.equal(await codigoDe(cobrar(p.token)), 'QR_VENCIDO')
 })

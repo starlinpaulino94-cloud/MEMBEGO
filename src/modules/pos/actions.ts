@@ -110,15 +110,15 @@ export async function buscarPedidoParaCobrar(entrada: { cajaSesionId: string; to
 
 // ── Cobrar ───────────────────────────────────────────────────────────────────
 
-/** Cobra en la caja el pedido de quien presenta su QR y lo cierra. */
-export async function cobrarPedidoMembego(entrada: { cajaSesionId: string; token: string; metodo: string; referencia?: string; recibido?: string }): Promise<Resultado<{ cobro: ResultadoDeCobro }>> {
+/** Cobra en la caja el pedido de quien presenta su QR y lo cierra (o, si ya estaba pagado, solo lo entrega sin cobrar). */
+export async function cobrarPedidoMembego(entrada: { cajaSesionId: string; token: string; metodo?: string; referencia?: string; recibido?: string; entregarSinCobrar?: boolean }): Promise<Resultado<{ cobro: ResultadoDeCobro }>> {
   const c = await cajero('cobrarPedidos')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   if (!(await formSubmitLimiter(`pos-cobro:${c.ctx.actorId ?? c.companyId}`))) return { ok: false, error: 'Demasiados intentos. Espera un momento.' }
   try {
     const cobro = await conEmpresa(c.companyId, (tx) =>
-      cobrarPedidoEnCajaEnTx(tx, c.companyId, { cajaSesionId: texto(entrada.cajaSesionId), token: texto(entrada.token), metodo: entrada.metodo, referencia: entrada.referencia, recibido: entrada.recibido }, c.ctx)
+      cobrarPedidoEnCajaEnTx(tx, c.companyId, { cajaSesionId: texto(entrada.cajaSesionId), token: texto(entrada.token), metodo: entrada.metodo, referencia: entrada.referencia, recibido: entrada.recibido, entregarSinCobrar: entrada.entregarSinCobrar === true }, c.ctx)
     )
     revalidatePath('/empleado/caja')
     revalidatePath('/admin/pedidos-membego', 'layout')

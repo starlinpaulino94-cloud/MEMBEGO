@@ -48,15 +48,22 @@ export function VentaMostrador({ cajaSesionId }: { cajaSesionId: string }) {
     })
   }
 
+  // Cada cambio del carrito o del cliente es otra venta: lleva otra clave. Reintentar SIN cambiar nada reutiliza la clave
+  // (si la respuesta se perdió, el servidor devuelve la venta que ya hizo en vez de repetirla).
+  const otraVenta = () => {
+    clave.current = nuevaClave()
+  }
+
   function agregar(p: ProductoDeCaja) {
+    otraVenta()
     setCarrito((c) => {
       const i = c.findIndex((x) => x.producto.varianteId === p.varianteId)
       if (i >= 0) return c.map((x, j) => (j === i ? { ...x, cantidad: Math.min(999, x.cantidad + 1) } : x))
       return [...c, { producto: p, cantidad: 1 }]
     })
   }
-  const cambiar = (id: string, delta: number) => setCarrito((c) => c.map((x) => (x.producto.varianteId === id ? { ...x, cantidad: Math.max(1, Math.min(999, x.cantidad + delta)) } : x)))
-  const quitar = (id: string) => setCarrito((c) => c.filter((x) => x.producto.varianteId !== id))
+  const cambiar = (id: string, delta: number) => (otraVenta(), setCarrito((c) => c.map((x) => (x.producto.varianteId === id ? { ...x, cantidad: Math.max(1, Math.min(999, x.cantidad + delta)) } : x))))
+  const quitar = (id: string) => (otraVenta(), setCarrito((c) => c.filter((x) => x.producto.varianteId !== id)))
 
   function buscarClientes(e: React.FormEvent) {
     e.preventDefault()
@@ -82,19 +89,24 @@ export function VentaMostrador({ cajaSesionId }: { cajaSesionId: string }) {
 
   function cobrar() {
     start(async () => {
-      const r = await venderEnMostrador({
-        cajaSesionId,
-        lineas: carrito.map((x) => ({ varianteId: x.producto.varianteId, cantidad: x.cantidad })),
-        clienteId: cliente?.id ?? null,
-        metodo: pago.metodo,
-        referencia: pago.referencia,
-        recibido: pago.recibido,
-        clave: clave.current,
-      })
-      if (!r.ok) return void toast.error(r.error)
-      toast.success(`Venta ${r.venta.code} · ticket ${r.venta.transaccion.ticketNumero}`)
-      setHecha(r.venta)
-      router.refresh()
+      try {
+        const r = await venderEnMostrador({
+          cajaSesionId,
+          lineas: carrito.map((x) => ({ varianteId: x.producto.varianteId, cantidad: x.cantidad })),
+          clienteId: cliente?.id ?? null,
+          metodo: pago.metodo,
+          referencia: pago.referencia,
+          recibido: pago.recibido,
+          clave: clave.current,
+        })
+        if (!r.ok) return void toast.error(r.error)
+        toast.success(`Venta ${r.venta.code} · ticket ${r.venta.transaccion.ticketNumero}`)
+        setHecha(r.venta)
+        router.refresh()
+      } catch {
+        // La respuesta se perdió: pudo o no cobrarse. Reintentar con la misma clave no vende dos veces.
+        toast.error('No se pudo confirmar la venta. Revisa «Últimos cobros» antes de cobrar de nuevo; si no aparece, vuelve a pulsar Cobrar.')
+      }
     })
   }
 
@@ -188,7 +200,7 @@ export function VentaMostrador({ cajaSesionId }: { cajaSesionId: string }) {
         {cliente ? (
           <p className="flex items-center justify-between rounded-xl border border-border/60 px-3 py-2 text-sm">
             <span>{cliente.nombre}</span>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setCliente(null)}>
+            <Button type="button" size="sm" variant="ghost" onClick={() => (otraVenta(), setCliente(null))}>
               Quitar
             </Button>
           </p>
@@ -209,7 +221,7 @@ export function VentaMostrador({ cajaSesionId }: { cajaSesionId: string }) {
               <ul className="divide-y divide-border/50 rounded-xl border border-border/60 text-sm" aria-label="Clientes encontrados">
                 {clientes.map((c) => (
                   <li key={c.id}>
-                    <button type="button" className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/40" onClick={() => setCliente(c)}>
+                    <button type="button" className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/40" onClick={() => (otraVenta(), setCliente(c))}>
                       <span>{c.nombre}</span>
                       <span className="text-xs text-muted-foreground">{c.telefono ?? ''}</span>
                     </button>

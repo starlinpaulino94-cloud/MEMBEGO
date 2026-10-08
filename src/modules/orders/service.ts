@@ -139,6 +139,9 @@ async function pedidoBloqueado(tx: Tx, companyId: string, pedidoId: string): Pro
   return tx.membegoOrder.findFirstOrThrow({ where: { id: pedidoId, companyId }, include: INCLUIR_PEDIDO })
 }
 
+/** Toma el candado de la fila del pedido y lo lee ya bloqueado (para quien necesita decidir con el pedido congelado, como la caja). */
+export const bloquearPedidoEnTx = pedidoBloqueado
+
 /** Lectura sin candado (consultas). */
 export async function obtenerPedidoEnTx(tx: Tx, companyId: string, pedidoId: string): Promise<PedidoCompleto | null> {
   return tx.membegoOrder.findFirst({ where: { id: pedidoId, companyId }, include: INCLUIR_PEDIDO })

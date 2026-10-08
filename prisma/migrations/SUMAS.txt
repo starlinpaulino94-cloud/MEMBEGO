@@ -30,7 +30,6 @@
 #   Lo que querías escribir va en otro sitio —un archivo de `migrations_manual/`,
 #   `docs/`, o una migración nueva—.
 
-
 cfd243d0fe62eb058d8017c1fc6b3098ddb22a46847fa2d7dc357982488a89f3  0_genesis
 668f7bbd20fcce42e85ed00552db13aa7c8a9fa17d8ff3b1e6d9ae3a3d41f0e6  20260705_add_multi_membership_support
 706d82c6ef2600d281144abe00fc68ae646d870b553230576611ec0f37766155  20260706_add_marketplace_fase2

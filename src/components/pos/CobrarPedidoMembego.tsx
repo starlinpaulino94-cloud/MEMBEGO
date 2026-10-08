@@ -53,14 +53,16 @@ export function CobrarPedidoMembego({ cajaSesionId }: { cajaSesionId: string }) 
     })
   }
 
-  function cobrar() {
+  function cobrar(entregarSinCobrar = false) {
     start(async () => {
-      const r = await cobrarPedidoMembego({ cajaSesionId, token, metodo: pago.metodo, referencia: pago.referencia, recibido: pago.recibido })
+      const r = await cobrarPedidoMembego(
+        entregarSinCobrar ? { cajaSesionId, token, entregarSinCobrar: true } : { cajaSesionId, token, metodo: pago.metodo, referencia: pago.referencia, recibido: pago.recibido }
+      )
       if (!r.ok) {
         toast.error(r.error)
         return
       }
-      toast.success(`Cobrado ${r.cobro.code} · ticket ${r.cobro.transaccion.ticketNumero}`)
+      toast.success(r.cobro.transaccion ? `Cobrado ${r.cobro.code} · ticket ${r.cobro.transaccion.ticketNumero}` : `Entregado ${r.cobro.code}`)
       setHecho(r.cobro)
       setPedido(null)
       router.refresh()
@@ -90,10 +92,11 @@ export function CobrarPedidoMembego({ cajaSesionId }: { cajaSesionId: string }) 
       {hecho && (
         <div className="rounded-xl border border-success/30 bg-success/5 p-4" role="status" data-testid="pos-cobro-hecho">
           <p className="flex items-center gap-2 font-semibold text-success">
-            <CheckCircle2 className="h-4 w-4" aria-hidden /> Pedido {hecho.code} cobrado y entregado
+            <CheckCircle2 className="h-4 w-4" aria-hidden /> Pedido {hecho.code} {hecho.transaccion ? 'cobrado y entregado' : 'entregado (ya estaba pagado)'}
           </p>
           <p className="mt-1 text-sm text-foreground">
-            {rd(hecho.total)} · ticket {hecho.transaccion.ticketNumero}
+            {rd(hecho.total)}
+            {hecho.transaccion ? ` · ticket ${hecho.transaccion.ticketNumero}` : ' · no entró dinero a la caja'}
             {hecho.cambio ? ` · cambio ${rd(hecho.cambio)}` : ''}
           </p>
           <Button type="button" variant="outline" size="sm" className="mt-3" onClick={reiniciar}>
@@ -124,10 +127,21 @@ export function CobrarPedidoMembego({ cajaSesionId }: { cajaSesionId: string }) 
               </li>
             ))}
           </ul>
-          {pedido.puedeCobrar ? (
+          {pedido.puedeCobrar && pedido.pagoRegistrado ? (
+            <div className="space-y-3" data-testid="pos-ya-pagado">
+              <p className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-foreground">
+                Este pedido <strong>ya está pagado</strong>: {pedido.pagoRegistrado.metodo}
+                {pedido.pagoRegistrado.referencia ? ` · ref. ${pedido.pagoRegistrado.referencia}` : ''} · {rd(pedido.pagoRegistrado.monto)}. No se cobra otra vez: entrégalo.
+              </p>
+              <Button type="button" className="w-full py-5 text-base font-semibold" disabled={pending} onClick={() => cobrar(true)}>
+                {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Entregar sin cobrar
+              </Button>
+            </div>
+          ) : pedido.puedeCobrar ? (
             <>
               <PagoFormulario valor={pago} onChange={setPago} total={Number(pedido.total)} prefijo="pos-cobro" />
-              <Button type="button" className="w-full py-5 text-base font-semibold" disabled={pending} onClick={cobrar}>
+              <Button type="button" className="w-full py-5 text-base font-semibold" disabled={pending} onClick={() => cobrar()}>
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Cobrar {rd(pedido.total)} y entregar
               </Button>

@@ -4,7 +4,10 @@ import { crearTransaccionAplicada } from '@/lib/transactions/application/transac
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 import { PedidoError } from '@/modules/orders/errores'
+import { ETIQUETA_METODO } from '@/modules/orders/formato'
+import { qrDePedidoVencido } from '@/modules/orders/domain'
 import {
+  bloquearPedidoEnTx,
   cerrarPedidoExternoEnTx,
   completarPorQrEnTx,
   crearPedidoEnTx,
@@ -74,6 +77,12 @@ export interface SesionDeCaja {
   sucursalNombre: string
 }
 
+/**
+ * La caja cuenta en pesos: el arqueo y los tickets no llevan moneda. Un producto en otra moneda no se vende
+ * ni se cobra aquí (entraría al cajón como si fueran pesos).
+ */
+export const MONEDA_DE_CAJA = 'DOP'
+
 /** La caja tiene que estar abierta y ser de la empresa: sin caja abierta no se cobra. */
 export async function sesionAbiertaEnTx(tx: Tx, companyId: string, cajaSesionId: string): Promise<SesionDeCaja> {
   if (typeof cajaSesionId !== 'string' || cajaSesionId === '') fallo('CAJA_CERRADA', 'La caja está cerrada: ábrela para poder cobrar.')
@@ -103,7 +112,7 @@ export async function buscarProductosDeCajaEnTx(tx: Tx, companyId: string, sucur
     where: {
       companyId,
       status: 'ACTIVE',
-      item: { status: 'ACTIVE', source: 'MERCHANT', ...(termino ? { name: { contains: termino, mode: 'insensitive' as const } } : {}) },
+      item: { status: 'ACTIVE', source: 'MERCHANT', currency: MONEDA_DE_CAJA, ...(termino ? { name: { contains: termino, mode: 'insensitive' as const } } : {}) },
     },
     orderBy: [{ item: { name: 'asc' } }, { name: 'asc' }, { id: 'asc' }],
     take: 80,
@@ -250,14 +259,17 @@ function notasDeEfectivo(c: CobroPos): string | null {
 
 /** Por qué un pedido no se puede cobrar en ESTA caja, o `null` si se puede. */
 function motivoNoCobrable(
-  p: { code: string; origin: string; status: string; locationId: string },
-  sesion: SesionDeCaja
+  p: { code: string; origin: string; status: string; locationId: string; currency: string; qrExpiresAt: Date | null },
+  sesion: SesionDeCaja,
+  ahora: Date
 ): { codigo: string; mensaje: string } | null {
+  if (p.currency !== MONEDA_DE_CAJA) return { codigo: 'MONEDA_NO_SOPORTADA', mensaje: `El pedido ${p.code} es en ${p.currency}: la caja solo cobra en pesos (${MONEDA_DE_CAJA}).` }
   if (p.origin === 'SUPPLY') return { codigo: 'PEDIDO_DE_SUPPLY', mensaje: 'Las compras de Membego Supply se entregan con el escáner, no se cobran en la caja: ya están pagadas.' }
   if (p.locationId !== sesion.sucursalId) return { codigo: 'OTRA_SUCURSAL', mensaje: `Este pedido es para otra sucursal: la caja abierta es la de «${sesion.sucursalNombre}».` }
   if (p.status === 'COMPLETED' || p.status === 'REFUNDED') return { codigo: 'YA_COBRADO', mensaje: `El pedido ${p.code} ya se canjeó.` }
   if (p.status === 'CANCELLED') return { codigo: 'PEDIDO_CANCELADO', mensaje: `El pedido ${p.code} fue cancelado.` }
   if (p.status !== 'READY') return { codigo: 'PEDIDO_NO_LISTO', mensaje: `El pedido ${p.code} todavía no está listo para cobrar.` }
+  if (qrDePedidoVencido(p.qrExpiresAt, ahora)) return { codigo: 'QR_VENCIDO', mensaje: 'Este código QR venció. El cliente puede generar uno nuevo desde su pedido.' }
   return null
 }
 
@@ -271,21 +283,32 @@ export interface PedidoParaCobrar {
   confirmado: boolean
   /** El título de la oferta si el pedido es el cupón de una. */
   oferta: string | null
+  /**
+   * El pago que YA tiene el pedido (por ejemplo, una transferencia que el negocio registró). Si existe, la caja no
+   * cobra otra vez ni lo sustituye: solo entrega (`entregarSinCobrar`).
+   */
+  pagoRegistrado: { metodo: string; referencia: string | null; monto: string } | null
   puedeCobrar: boolean
   mensaje: string | null
 }
 
 /** Lo que la pantalla enseña antes de cobrar: el pedido de ese QR, y si esta caja lo puede cobrar. Solo lee. */
-export async function pedidoParaCobrarEnTx(tx: Tx, companyId: string, cajaSesionId: string, tokenCrudo: unknown): Promise<PedidoParaCobrar> {
+export async function pedidoParaCobrarEnTx(tx: Tx, companyId: string, cajaSesionId: string, tokenCrudo: unknown, ahora = new Date()): Promise<PedidoParaCobrar> {
   const sesion = await sesionAbiertaEnTx(tx, companyId, cajaSesionId)
   const token = typeof tokenCrudo === 'string' ? tokenCrudo.trim() : ''
   if (token === '' || token.length > 200) fallo('QR_INVALIDO', 'El código QR no es válido.')
   const p = await tx.membegoOrder.findFirst({
     where: { companyId, qrToken: token },
-    include: { lines: { orderBy: { createdAt: 'asc' } }, customer: { select: { nombre: true } }, confirmation: { select: { confirmedTotal: true } }, dealClaim: { select: { deal: { select: { title: true } } } } },
+    include: {
+      lines: { orderBy: { createdAt: 'asc' } },
+      customer: { select: { nombre: true } },
+      confirmation: { select: { confirmedTotal: true } },
+      dealClaim: { select: { deal: { select: { title: true } } } },
+      payment: { select: { method: true, reference: true, amount: true } },
+    },
   })
   if (!p) fallo('QR_INVALIDO', 'Ese código QR no corresponde a ningún pedido de esta empresa.')
-  const motivo = motivoNoCobrable(p, sesion)
+  const motivo = motivoNoCobrable(p, sesion, ahora)
   return {
     pedidoId: p.id,
     code: p.code,
@@ -294,6 +317,7 @@ export async function pedidoParaCobrarEnTx(tx: Tx, companyId: string, cajaSesion
     lineas: p.lines.map((l) => ({ descripcion: l.description, cantidad: l.quantity, total: l.lineTotal.toFixed(2) })),
     confirmado: !!p.confirmation && p.confirmation.confirmedTotal.equals(p.total),
     oferta: p.dealClaim?.deal.title ?? null,
+    pagoRegistrado: p.payment ? { metodo: ETIQUETA_METODO[p.payment.method], referencia: p.payment.reference, monto: p.payment.amount.toFixed(2) } : null,
     puedeCobrar: motivo === null,
     mensaje: motivo?.mensaje ?? null,
   }
@@ -307,17 +331,27 @@ export interface ResultadoDeCobro {
   total: string
   cambio: string | null
   nivel: string
-  transaccion: { id: string; codigo: string; ticketNumero: string }
+  /** `null` cuando el pedido ya estaba pagado y la caja solo lo entregó: no entró dinero al cajón, no hay ticket. */
+  transaccion: { id: string; codigo: string; ticketNumero: string } | null
 }
 
 /**
  * La persona llegó con su QR (de un pedido del marketplace o del cupón de una oferta): se registra su
  * pago, se cierra el pedido con ese QR y el cobro queda en la caja del turno. Todo o nada.
+ *
+ * UN PEDIDO QUE YA TIENE SU PAGO (una transferencia que el negocio registró desde el panel) NO se cobra otra
+ * vez: cobrarlo sustituiría la evidencia verificada por la que teclee el cajero, bajaría el nivel de
+ * verificación —y con él la comisión— y metería al arqueo un efectivo que nunca entró. Solo se entrega
+ * (`entregarSinCobrar`), con la evidencia tal como estaba. Y al revés: `entregarSinCobrar` sin pago previo se
+ * rechaza (no se entrega sin cobrar lo que no está pagado).
+ *
+ * El pedido se bloquea ANTES de leerlo: un ajuste de monto concurrente no puede dejar el cobro (la evidencia, el
+ * movimiento de caja y el ticket) con un total distinto del que el pedido cierra.
  */
 export async function cobrarPedidoEnCajaEnTx(
   tx: Tx,
   companyId: string,
-  e: { cajaSesionId: string; token: string; metodo: unknown; referencia?: unknown; recibido?: unknown },
+  e: { cajaSesionId: string; token: string; metodo?: unknown; referencia?: unknown; recibido?: unknown; entregarSinCobrar?: unknown },
   ctx: ContextoCaja,
   ahora = new Date()
 ): Promise<ResultadoDeCobro> {
@@ -325,15 +359,27 @@ export async function cobrarPedidoEnCajaEnTx(
   const token = typeof e.token === 'string' ? e.token.trim() : ''
   if (token === '' || token.length > 200) fallo('QR_INVALIDO', 'El código QR no es válido.')
 
-  const p = await tx.membegoOrder.findFirst({
-    where: { companyId, qrToken: token },
-    include: { lines: { orderBy: { createdAt: 'asc' } }, customer: { select: { nombre: true } } },
-  })
-  if (!p) fallo('QR_INVALIDO', 'Ese código QR no corresponde a ningún pedido de esta empresa.')
-  const motivo = motivoNoCobrable(p, sesion)
+  const candidato = await tx.membegoOrder.findFirst({ where: { companyId, qrToken: token }, select: { id: true } })
+  if (!candidato) fallo('QR_INVALIDO', 'Ese código QR no corresponde a ningún pedido de esta empresa.')
+  // Bajo candado desde aquí: lo que se lea ya no cambia hasta que termine la transacción.
+  const p = await bloquearPedidoEnTx(tx, companyId, candidato.id)
+  if (p.qrToken !== token) fallo('QR_INVALIDO', 'Ese código QR ya no es el vigente de este pedido. Pide uno nuevo.')
+  const cliente = await tx.cliente.findFirst({ where: { id: p.customerId, companyId }, select: { nombre: true } })
+  const motivo = motivoNoCobrable(p, sesion, ahora)
   if (motivo) fallo(motivo.codigo, motivo.mensaje)
 
-  const v = validarCobroPos(e, p.total)
+  const entregarSinCobrar = e.entregarSinCobrar === true
+  if (entregarSinCobrar) {
+    if (!p.payment) fallo('SIN_PAGO_REGISTRADO', 'Este pedido no tiene un pago registrado: cóbralo para entregarlo.')
+    const cierre = await completarPorQrEnTx(tx, companyId, token, empresa(ctx), ahora)
+    return { pedidoId: p.id, code: p.code, total: p.total.toFixed(2), cambio: null, nivel: cierre.nivel, transaccion: null }
+  }
+  if (p.payment) {
+    const ref = p.payment.reference ? ` (ref. ${p.payment.reference})` : ''
+    fallo('PEDIDO_YA_PAGADO', `El pedido ${p.code} ya tiene un pago registrado: ${ETIQUETA_METODO[p.payment.method]}${ref}. No se cobra otra vez: entrégalo sin cobrar.`)
+  }
+
+  const v = validarCobroPos({ metodo: e.metodo, referencia: e.referencia, recibido: e.recibido }, p.total)
   if (!v.ok) fallo('COBRO_INVALIDO', v.error)
   const cobro = v.cobro
 
@@ -355,7 +401,7 @@ export async function cobrarPedidoEnCajaEnTx(
     {
       sesion,
       pedido: p,
-      clienteNombre: p.customer.nombre,
+      clienteNombre: cliente?.nombre ?? '',
       lineas,
       cobro,
       detalle: p.lines.length === 1 ? p.lines[0].description : `Pedido ${p.code}`,
@@ -380,7 +426,9 @@ export interface EntradaDeVenta {
   clave: unknown
 }
 
-export interface ResultadoDeVenta extends ResultadoDeCobro {
+export interface ResultadoDeVenta extends Omit<ResultadoDeCobro, 'transaccion'> {
+  /** Una venta de mostrador siempre deja ticket (vacío solo si es el reenvío de una que ya existía). */
+  transaccion: { id: string; codigo: string; ticketNumero: string }
   repetido: boolean
 }
 
@@ -431,6 +479,10 @@ export async function venderEnMostradorEnTx(tx: Tx, companyId: string, e: Entrad
       repetido: true,
     }
   }
+
+  // La caja cuenta en pesos: una venta en otra moneda se deshace entera (la transacción no se confirma).
+  const moneda = await tx.membegoOrder.findFirstOrThrow({ where: { id: creado.pedidoId, companyId }, select: { currency: true } })
+  if (moneda.currency !== MONEDA_DE_CAJA) fallo('MONEDA_NO_SOPORTADA', `Esta venta es en ${moneda.currency}: la caja solo cobra en pesos (${MONEDA_DE_CAJA}).`)
 
   const total = new Prisma.Decimal(creado.total)
   const v = validarCobroPos(e, total)
