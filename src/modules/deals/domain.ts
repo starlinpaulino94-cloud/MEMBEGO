@@ -294,21 +294,42 @@ export interface RendimientoDeOferta {
   ahorroEntregado: Decimal
 }
 
-export function rendimientoDeOferta(reclamos: readonly ReclamoParaRendimiento[]): RendimientoDeOferta {
+/** Lo mismo que `ReclamoParaRendimiento`, ya agrupado por estado (para ofertas con miles de reclamos: no se cargan uno por uno). */
+export interface TotalesPorEstado {
+  status: DealClaimStatus
+  cantidad: number
+  savings: Monto
+  fee: Monto
+}
+
+export function rendimientoDeTotales(filas: readonly TotalesPorEstado[]): RendimientoDeOferta {
   const cero = new Prisma.Decimal(0)
-  const cuenta = (s: DealClaimStatus) => reclamos.filter((r) => r.status === s).length
-  const canjeados = reclamos.filter((r) => r.status === 'REDEEMED')
+  const de = (s: DealClaimStatus) => filas.find((f) => f.status === s)
+  const cuenta = (s: DealClaimStatus) => de(s)?.cantidad ?? 0
+  const total = filas.reduce((t, f) => t + f.cantidad, 0)
+  const canjeados = cuenta('REDEEMED')
+  const redimidos = de('REDEEMED')
   return {
-    reclamos: reclamos.length,
-    canjeados: canjeados.length,
+    reclamos: total,
+    canjeados,
     porCanjear: cuenta('CLAIMED'),
     vencidos: cuenta('EXPIRED'),
     cancelados: cuenta('CANCELLED'),
     reembolsados: cuenta('REFUNDED'),
-    conversion: reclamos.length === 0 ? 0 : Math.round((canjeados.length / reclamos.length) * 1000) / 10,
-    costoCobrado: canjeados.reduce((t, r) => t.plus(decimal(r.fee)), cero),
-    ahorroEntregado: canjeados.reduce((t, r) => t.plus(decimal(r.savings)), cero),
+    conversion: total === 0 ? 0 : Math.round((canjeados / total) * 1000) / 10,
+    costoCobrado: redimidos ? decimal(redimidos.fee) : cero,
+    ahorroEntregado: redimidos ? decimal(redimidos.savings) : cero,
   }
+}
+
+export function rendimientoDeOferta(reclamos: readonly ReclamoParaRendimiento[]): RendimientoDeOferta {
+  const cero = new Prisma.Decimal(0)
+  const porEstado = new Map<DealClaimStatus, TotalesPorEstado>()
+  for (const r of reclamos) {
+    const t = porEstado.get(r.status) ?? { status: r.status, cantidad: 0, savings: cero, fee: cero }
+    porEstado.set(r.status, { status: r.status, cantidad: t.cantidad + 1, savings: decimal(t.savings).plus(decimal(r.savings)), fee: decimal(t.fee).plus(decimal(r.fee)) })
+  }
+  return rendimientoDeTotales([...porEstado.values()])
 }
 
 export function montoATexto(m: Monto): string {

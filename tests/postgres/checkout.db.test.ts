@@ -8,7 +8,7 @@ import { InventarioError } from '../../src/modules/inventory/errores'
 import { PedidoError } from '../../src/modules/orders/errores'
 import { cancelarPedidoEnTx, completarPorQrEnTx, marcarListoEnTx, aceptarPedidoEnTx, type ContextoPedido } from '../../src/modules/orders/service'
 import { MAX_PEDIDOS_ABIERTOS_POR_CLIENTE } from '../../src/modules/orders/domain'
-import { crearPedidoDelCarritoEnTx, resumenDelCarritoEnTx, type EntradaDeCheckout } from '../../src/modules/checkout/service'
+import { aResumenPublico, crearPedidoDelCarritoEnTx, problemaDelPedidoEnTx, resumenDelCarritoEnTx, type EntradaDeCheckout } from '../../src/modules/checkout/service'
 import { MAX_LINEAS_CARRITO } from '../../src/modules/checkout/domain'
 
 /**
@@ -348,4 +348,46 @@ test('19 · aislamiento: el resumen de una empresa no ve las variantes de la otr
   assert.equal(b.renglones.find((x) => x.varianteId === ctx.varB)?.problema, null)
   assert.equal(b.renglones.find((x) => x.varianteId === ctx.servicio)?.problema, 'Ya no está disponible.')
   assert.equal(b.total, '60.00')
+})
+
+
+// ── Lote de la auditoría F5–F9 ───────────────────────────────────────────────
+
+test('20 · la vista pública no enseña nombre ni precio de lo que no se puede comprar, ni el «solo quedan N» sin sesión (M8)', async () => {
+  const r = await resumen([
+    { varianteId: ctx.servicio, cantidad: 1 },
+    { varianteId: ctx.soloCaja, cantidad: 1 },
+    { varianteId: ctx.borrador, cantidad: 1 },
+    { varianteId: ctx.fisico, cantidad: 90 },
+  ])
+  // Sin sesión.
+  const anonimo = aResumenPublico(r)
+  const porA = (v: string) => anonimo.renglones.find((x) => x.varianteId === v)!
+  for (const v of [ctx.soloCaja, ctx.borrador]) {
+    assert.equal(porA(v).nombre, 'Producto no disponible')
+    assert.equal(porA(v).precio, '0.00')
+    assert.equal(porA(v).subtotal, '0.00')
+    assert.equal(porA(v).problema, 'Ya no está disponible.')
+  }
+  assert.equal(porA(ctx.fisico).problema, 'No hay suficientes en esta sucursal.', 'sin sesión no se dice cuántas quedan')
+  assert.ok(!JSON.stringify(anonimo).includes('"existencias"'))
+  assert.match(porA(ctx.servicio).nombre, /Lavado/, 'lo que sí se vende conserva su nombre y su precio')
+  assert.equal(porA(ctx.servicio).precio, '250.00')
+  // Con sesión de cliente sí hace falta el número para corregir la cantidad.
+  const cliente = aResumenPublico(r, { conSesionDeCliente: true })
+  assert.match(cliente.renglones.find((x) => x.varianteId === ctx.fisico)!.problema ?? '', /^Solo quedan \d+ en esta sucursal\.$/)
+  assert.ok(!JSON.stringify(cliente).includes('"existencias"'), 'ni con sesión viaja el campo')
+})
+
+test('21 · problemaDelPedidoEnTx lee, sin crear nada, lo que impediría el pedido (M7)', async () => {
+  const pedidos = await cuentaPedidos()
+  const ok = [{ varianteId: ctx.servicio, cantidad: 1 }]
+  const p = (extra: Partial<Parameters<typeof problemaDelPedidoEnTx>[2]> = {}) => enA((tx) => problemaDelPedidoEnTx(tx, ctx.a, { lineas: ok, locationId: ctx.s1, metodo: 'AL_RECOGER', ...extra }))
+  assert.equal(await p(), null)
+  assert.match((await p({ metodo: 'bitcoin' })) ?? '', /Elige cómo vas a pagar/)
+  assert.equal(await p({ locationId: 'no-existe' }), 'La sucursal no existe.')
+  assert.equal(await p({ locationId: ctx.sB }), 'La sucursal no existe.', 'la sucursal de otra empresa no existe aquí')
+  assert.equal(await p({ lineas: [{ varianteId: ctx.borrador, cantidad: 1 }] }), 'Ya no está disponible.')
+  assert.match((await p({ lineas: [{ varianteId: ctx.fisico, cantidad: 9999 }] })) ?? '', /^Solo quedan \d+ en esta sucursal\.$/)
+  assert.equal(await cuentaPedidos(), pedidos, 'no creó nada')
 })

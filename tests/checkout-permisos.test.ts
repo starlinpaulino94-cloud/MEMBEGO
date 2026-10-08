@@ -52,7 +52,9 @@ test('resumir el carrito es solo lectura, pública con límite por IP, y solo de
   assert.match(solo, /isPublished: true, isActive: true, esDemo: false/)
   assert.match(solo, /empresaRecibePedidos\(/)
   assert.doesNotMatch(solo, /\.(create|update|updateMany|delete|deleteMany|upsert)\(/)
-  assert.doesNotMatch(solo, /getUser\(\)/)
+  // La sesión (si hay) solo decide cuánto detalle de existencias se enseña: nunca se exige ni corta la respuesta.
+  assert.match(solo, /conSesionDeCliente = \(await getUser\(\)\)\?\.metadata\.role === 'CLIENTE'/)
+  assert.doesNotMatch(solo, /if \(!user\)|sinSesion/)
 })
 
 test('el servicio del carrito no escribe pedidos por su cuenta ni importa Supply', () => {
@@ -77,5 +79,22 @@ test('pagar reutiliza el único camino para crear pedidos y no cobra: la transfe
 test('la lectura pública del carrito no devuelve el número exacto de existencias', () => {
   const resto = cuerpo('resumirCarrito')
   const solo = resto.slice(0, resto.indexOf('export async function hacerCheckout'))
-  assert.match(solo, /aResumenPublico\(resumen\)/)
+  assert.match(solo, /aResumenPublico\(resumen, \{ conSesionDeCliente \}\)/)
+})
+
+test('pagar no afilia a nadie por un pedido que ya se sabe que va a fallar (auditoría F5–F9, M7)', () => {
+  const c = cuerpo('hacerCheckout')
+  const previa = c.indexOf('problemaDelPedidoEnTx(')
+  assert.ok(previa > 0, 'comprueba método, sucursal y carrito antes')
+  assert.ok(previa < c.indexOf('asegurarClienteEnEmpresa('), 'y lo hace ANTES de crear la ficha, el seguimiento y el regalo de bienvenida')
+  assert.match(servicio, /export async function problemaDelPedidoEnTx/)
+  // Solo lee.
+  const fn = servicio.slice(servicio.indexOf('export async function problemaDelPedidoEnTx'), servicio.indexOf('export async function crearPedidoDelCarritoEnTx'))
+  assert.doesNotMatch(fn, /\.(create|update|updateMany|delete|deleteMany|upsert)\(/)
+})
+
+test('la lectura pública no enseña el nombre ni el precio de lo que no se puede comprar, ni «solo quedan N» sin sesión (auditoría F5–F9, M8)', () => {
+  assert.match(servicio, /Producto no disponible/)
+  assert.match(servicio, /No hay suficientes en esta sucursal\./)
+  assert.match(servicio, /conSesionDeCliente/)
 })

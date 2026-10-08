@@ -28,7 +28,7 @@ import { PedidoError } from '@/modules/orders/errores'
 import { empresaRecibePedidos } from '@/modules/orders/publico'
 import type { ContextoPedido } from '@/modules/orders/service'
 import { MAX_LINEAS_CARRITO, leerCarrito, type LineaDeCarrito } from './domain'
-import { aResumenPublico, crearPedidoDelCarritoEnTx, resumenDelCarritoEnTx, type ResumenPublico } from './service'
+import { aResumenPublico, crearPedidoDelCarritoEnTx, problemaDelPedidoEnTx, resumenDelCarritoEnTx, type ResumenPublico } from './service'
 import { transferenciaDisponible } from './publico'
 
 export type Resultado<T> = ({ ok: true } & T) | { ok: false; error: string; sinSesion?: boolean }
@@ -74,8 +74,10 @@ export async function resumirCarrito(entrada: { companySlug: string; sucursalId?
     if (!empresa || !(await empresaRecibePedidos(empresa.id))) return { ok: false, error: 'Este negocio no recibe pedidos por ahora.' }
     const sucursalId = texto(entrada.sucursalId)
     const lineas = lineasLimpias(entrada.lineas)
+    // La lectura es pública: la sesión (si hay) solo decide cuánto detalle de existencias se enseña, nunca si se responde.
+    const conSesionDeCliente = (await getUser())?.metadata.role === 'CLIENTE'
     const resumen = await conEmpresa(empresa.id, (tx) => resumenDelCarritoEnTx(tx, empresa.id, lineas, empresa.sucursales.some((s) => s.id === sucursalId) ? sucursalId : null))
-    return { ok: true, empresa: { slug: empresa.slug, nombre: empresa.name, sucursales: empresa.sucursales }, resumen: aResumenPublico(resumen) }
+    return { ok: true, empresa: { slug: empresa.slug, nombre: empresa.name, sucursales: empresa.sucursales }, resumen: aResumenPublico(resumen, { conSesionDeCliente }) }
   } catch (e) {
     return aError(e)
   }
@@ -119,6 +121,14 @@ export async function hacerCheckout(entrada: {
 
     // La transferencia solo se acepta si el negocio la tiene encendida y dice adónde transferir.
     if (entrada.metodo === 'TRANSFERENCIA' && !(await transferenciaDisponible(companyId))) return { ok: false, error: 'Este negocio no acepta transferencias por ahora. Elige pagar al recoger.' }
+
+    // Afiliar a alguien (ficha, seguimiento, regalo de bienvenida) es un efecto: no se hace por un pedido que ya se sabe que
+    // va a fallar. Quien ya es cliente de ese negocio sigue su camino (su ficha existe y no se crea nada).
+    const previa = await conEmpresa(companyId, async (tx) => ({
+      tieneFicha: (await tx.cliente.findFirst({ where: { companyId, supabaseId: user.supabaseId }, select: { id: true } })) !== null,
+      problema: await problemaDelPedidoEnTx(tx, companyId, { lineas, locationId: sucursalId, metodo: entrada.metodo }),
+    }))
+    if (!previa.tieneFicha && previa.problema) return { ok: false, error: previa.problema }
 
     const ficha = await asegurarClienteEnEmpresa(user.supabaseId, user.email, companyId)
     if ('error' in ficha) return { ok: false, error: ficha.error }

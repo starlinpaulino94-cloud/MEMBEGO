@@ -5,7 +5,8 @@ import { puedeCrearCampanas } from '@/modules/billing/domain'
 import { cuentaBloqueada } from '@/modules/billing/service'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import type { ContextoAuditoria } from '@/modules/inventory/auditoria'
-import { aceptarPedidoEnTx, confirmarMontoEnTx, crearPedidoEnTx, marcarListoEnTx } from '@/modules/orders/service'
+import { MAX_PEDIDOS_ABIERTOS_POR_CLIENTE } from '@/modules/orders/domain'
+import { aceptarPedidoEnTx, confirmarMontoEnTx, contarPedidosAbiertosEnTx, crearPedidoEnTx, marcarListoEnTx } from '@/modules/orders/service'
 import { auditarOferta } from './auditoria'
 import {
   ESTADOS_EDITABLES,
@@ -281,6 +282,18 @@ export interface ReclamoCreado {
 }
 
 /**
+ * ¿Esta oferta se puede reclamar AHORA? Solo lectura, sin candado, y solo mira la oferta (no a quien la pide): sirve para
+ * decidir si vale la pena afiliar a alguien antes de reclamar. La reserva de verdad, y la última palabra, la tiene
+ * `reclamarOfertaEnTx`.
+ */
+export async function motivoNoReclamarEnTx(tx: Tx, companyId: string, dealId: string, ahora = new Date()): Promise<{ codigo: string; mensaje: string } | null> {
+  if (typeof dealId !== 'string' || dealId === '') return { codigo: 'OFERTA_NO_ENCONTRADA', mensaje: 'La oferta no existe.' }
+  const o = await tx.deal.findFirst({ where: { id: dealId, companyId } })
+  if (!o) return { codigo: 'OFERTA_NO_ENCONTRADA', mensaje: 'La oferta no existe.' }
+  return motivoNoReclamable(o, ahora, !(await cuentaAdmiteCampanasEnTx(tx, companyId)))
+}
+
+/**
  * «Obtener oferta». Ver el encabezado: reserva atómica de cupo y presupuesto, pedido con QR y
  * reclamo, todo o nada. Una persona reclama una oferta UNA vez: si ya la tiene, lanza
  * `YA_RECLAMADA` con el id del pedido que ya es suyo (y no deja nada reservado).
@@ -301,6 +314,11 @@ export async function reclamarOfertaEnTx(
   const suspendida = !(await cuentaAdmiteCampanasEnTx(tx, companyId))
   const razon = motivoNoReclamable(previa, ahora, suspendida)
   if (razon) fallo(razon.codigo, razon.mensaje)
+  // Cada cupón aparta stock y presupuesto hasta que se canjea o vence: el mismo tope de pedidos abiertos que el
+  // checkout (que cuenta también los cupones) impide que una cuenta acapare una oferta entera sin ir a canjear.
+  if ((await contarPedidosAbiertosEnTx(tx, companyId, e.customerId)) >= MAX_PEDIDOS_ABIERTOS_POR_CLIENTE) {
+    fallo('DEMASIADOS_PEDIDOS_ABIERTOS', `Ya tienes ${MAX_PEDIDOS_ABIERTOS_POR_CLIENTE} pedidos u ofertas pendientes con este negocio. Canjea o cancela alguno para obtener otra.`)
+  }
 
   // RESERVA ATÓMICA. La condición completa va en el WHERE: es lo que impide pasarse del
   // presupuesto o de los cupos con reclamos simultáneos (el candado de fila los serializa).
@@ -329,8 +347,11 @@ export async function reclamarOfertaEnTx(
   if (dobleClic) fallo('YA_RECLAMADA', 'Ya reclamaste esta oferta.', { claimId: dobleClic.id, orderId: dobleClic.orderId, status: dobleClic.status })
 
   if (previa.newCustomersOnly) {
-    const previos = await tx.membegoOrder.count({ where: { companyId, customerId: e.customerId, status: 'COMPLETED' } })
-    if (previos > 0) fallo('SOLO_CLIENTES_NUEVOS', 'Esta oferta es para quienes todavía no han visitado este negocio.')
+    // «Nuevo» = nunca vino (ningún pedido completado ni reembolsado) y no tiene ya otro cupón vivo de una oferta
+    // «solo nuevos» del mismo negocio: si no, se podrían apilar todas antes de canjear la primera.
+    const previos = await tx.membegoOrder.count({ where: { companyId, customerId: e.customerId, status: { in: ['COMPLETED', 'REFUNDED'] } } })
+    const apilados = await tx.dealClaim.count({ where: { companyId, customerId: e.customerId, status: { in: ['CLAIMED', 'REDEEMED'] }, deal: { newCustomersOnly: true } } })
+    if (previos > 0 || apilados > 0) fallo('SOLO_CLIENTES_NUEVOS', 'Esta oferta es para quienes todavía no han visitado este negocio.')
   }
 
   const variante = await varianteDeLaOferta(tx, companyId, previa.catalogVariantId)

@@ -17,10 +17,12 @@ import {
   crearOfertaEnTx,
   pausarOfertaEnTx,
   publicarOfertaEnTx,
+  motivoNoReclamarEnTx,
   reanudarOfertaEnTx,
   reclamarOfertaEnTx,
 } from '../../src/modules/deals/service'
 import { barridoDeOfertas } from '../../src/modules/deals/barrido'
+import { detalleOfertaEnTx, listarOfertasEnTx } from '../../src/modules/deals/queries'
 import type { EntradaDeOferta } from '../../src/modules/deals/domain'
 
 /**
@@ -54,7 +56,7 @@ const E: Record<'a' | 'b' | 'c', Empresa> = {
   c: { id: '', sucursal: '', variante: '', clientes: [] },
 }
 const f = { usuario: '' }
-const N_CLIENTES = 18
+const N_CLIENTES = 30
 
 const ctxEmpresa = (): ContextoPedido => ({ actor: 'EMPRESA', actorId: f.usuario, ipAddress: '127.0.0.1', userAgent: 'test' })
 const ctxOferta = () => ({ actorId: f.usuario, ipAddress: '127.0.0.1', userAgent: 'test' })
@@ -641,4 +643,99 @@ test('27 · aislamiento: la oferta, los reclamos y sus pedidos de una empresa no
   assert.equal(await en(E.b, (tx) => tx.dealClaim.count({ where: { dealId: id, companyId: E.b.id } })), 0)
   assert.equal(await en(E.b, (tx) => reanudarOfertaEnTx(tx, E.b.id, id, ctxOferta()).then(() => 'ok', (e) => (e as OfertaError).codigo)), 'OFERTA_NO_ENCONTRADA')
   assert.equal(await en(E.b, (tx) => archivarOfertaEnTx(tx, E.b.id, id, ctxOferta()).then(() => 'ok', (e) => (e as OfertaError).codigo)), 'OFERTA_NO_ENCONTRADA')
+})
+
+
+// ── Lote de la auditoría F5–F9 ───────────────────────────────────────────────
+
+test('28 · reclamar respeta el tope de pedidos abiertos del cliente: no se acapara una oferta con cupones que nunca se canjean (M2)', async () => {
+  const id = await ofertaActiva(E.a, { maxClaims: 10, budgetTotal: 1000 })
+  const cliente28 = E.a.clientes[24]
+  for (let i = 0; i < 5; i++) {
+    await en(E.a, (tx) => crearPedidoEnTx(tx, E.a.id, { customerId: cliente28, locationId: E.a.sucursal, origin: 'MARKETPLACE', lineas: [{ varianteId: E.a.variante, cantidad: 1 }], atribucion: { channel: 'MARKETPLACE_BROWSE' } }, cliente))
+  }
+  assert.equal(await codigoDe(reclamar(E.a, id, 24)), 'DEMASIADOS_PEDIDOS_ABIERTOS')
+  const o = await oferta(id)
+  assert.equal(o.claimsActive, 0, 'no quedó ningún cupo apartado')
+  assert.equal(num(o.budgetReserved), '0.00')
+  // Con un pedido menos abierto, sí.
+  const uno = await prisma.membegoOrder.findFirstOrThrow({ where: { companyId: E.a.id, customerId: cliente28, status: 'AWAITING_MERCHANT' }, select: { id: true } })
+  await en(E.a, (tx) => cancelarPedidoEnTx(tx, E.a.id, uno.id, { motivo: 'prueba' }, ctxEmpresa()))
+  await reclamar(E.a, id, 24)
+  assert.equal((await oferta(id)).claimsActive, 1)
+})
+
+test('29 · «solo clientes nuevos» no se apila (otro cupón vivo de una oferta «solo nuevos») y quien ya vino, aunque se le reembolsara, no cuenta como nuevo (M3)', async () => {
+  const a = await ofertaActiva(E.a, { newCustomersOnly: true })
+  const b = await ofertaActiva(E.a, { newCustomersOnly: true })
+  const ra = await reclamar(E.a, a, 25)
+  assert.equal(await codigoDe(reclamar(E.a, b, 25)), 'SOLO_CLIENTES_NUEVOS', 'con un cupón «solo nuevos» vivo no se obtiene otro')
+  await en(E.a, (tx) => cancelarPedidoEnTx(tx, E.a.id, ra.orderId, { motivo: 'No vendrá' }, ctxEmpresa()))
+  await reclamar(E.a, b, 25)
+
+  // Vino, pagó y se le reembolsó: ya conoce el negocio.
+  const normal = await ofertaActiva(E.a)
+  const r = await reclamar(E.a, normal, 26)
+  await canjear(E.a, r.orderId)
+  await en(E.a, (tx) => reembolsarPedidoEnTx(tx, E.a.id, r.orderId, { motivo: 'prueba' }, ctxEmpresa()))
+  const c = await ofertaActiva(E.a, { newCustomersOnly: true })
+  assert.equal(await codigoDe(reclamar(E.a, c, 26)), 'SOLO_CLIENTES_NUEVOS')
+})
+
+test('30 · el barrido vacía lo pendiente en varios lotes y, si se acaba el tiempo, lo dice y la siguiente pasada sigue (M11)', async () => {
+  const id = await ofertaActiva(E.a, { maxClaims: 10, budgetTotal: 5000, voucherDays: 1 })
+  for (const i of [27, 28, 29, 23]) await reclamar(E.a, id, i)
+  const lejos = new Date(Date.now() + 3 * 86_400_000)
+  const pendientes = () => prisma.dealClaim.count({ where: { status: 'CLAIMED', expiresAt: { lte: lejos } } })
+  const antes = await pendientes()
+  assert.ok(antes >= 4)
+
+  // Con poco tiempo: hace una parte, avisa que queda trabajo y no revienta.
+  let t = 0
+  const parcial = await barridoDeOfertas(lejos, { presupuestoMs: 5, reloj: () => ++t, porLote: 2 })
+  assert.equal(parcial.quedaTrabajo, true)
+  assert.ok(parcial.reclamosVencidos >= 1 && parcial.reclamosVencidos < antes, `procesó ${parcial.reclamosVencidos} de ${antes}`)
+  assert.equal(parcial.errores, 0)
+
+  // Con tiempo: lotes de 2 hasta vaciarlo todo (antes el tope fijo dejaba el resto para mañana).
+  const resto = await barridoDeOfertas(lejos, { porLote: 2 })
+  assert.equal(resto.quedaTrabajo, false)
+  assert.equal(await pendientes(), 0)
+  assert.equal(parcial.reclamosVencidos + resto.reclamosVencidos, antes)
+  const o = await oferta(id)
+  assert.equal(o.claimsActive, 0)
+  assert.equal(num(o.budgetReserved), '0.00', 'lo reservado volvió al presupuesto')
+})
+
+test('31 · el resultado de una oferta cuenta TODOS sus reclamos (agregado en la base), no solo los de la lista (M10)', async () => {
+  const id = await ofertaActiva(E.a, { maxClaims: 10, budgetTotal: 5000 })
+  const r1 = await reclamar(E.a, id, 18)
+  const r2 = await reclamar(E.a, id, 19)
+  await reclamar(E.a, id, 20)
+  await canjear(E.a, r1.orderId)
+  await en(E.a, (tx) => cancelarPedidoEnTx(tx, E.a.id, r2.orderId, { motivo: 'No vendrá' }, ctxEmpresa()))
+  const detalle = await en(E.a, (tx) => detalleOfertaEnTx(tx, E.a.id, id))
+  assert.ok(detalle)
+  assert.equal(detalle.reclamosTotal, 3)
+  assert.equal(detalle.reclamos.length, 3)
+  assert.equal(detalle.rendimiento.reclamos, 3)
+  assert.equal(detalle.rendimiento.canjeados, 1)
+  assert.equal(detalle.rendimiento.cancelados, 1)
+  assert.equal(detalle.rendimiento.porCanjear, 1)
+  assert.equal(detalle.rendimiento.conversion, 33.3)
+  assert.equal(detalle.rendimiento.costoCobrado.toFixed(2), '100.00')
+  // La lista del panel usa el mismo cálculo.
+  const lista = await en(E.a, (tx) => listarOfertasEnTx(tx, E.a.id))
+  const fila = lista.find((x) => x.id === id)
+  assert.ok(fila)
+  assert.deepEqual({ ...fila.rendimiento, costoCobrado: fila.rendimiento.costoCobrado.toFixed(2), ahorroEntregado: fila.rendimiento.ahorroEntregado.toFixed(2) }, { ...detalle.rendimiento, costoCobrado: detalle.rendimiento.costoCobrado.toFixed(2), ahorroEntregado: detalle.rendimiento.ahorroEntregado.toFixed(2) })
+})
+
+test('32 · motivoNoReclamarEnTx: la lectura previa que evita afiliar por una oferta que no se puede reclamar', async () => {
+  const id = await ofertaActiva(E.a)
+  assert.equal(await en(E.a, (tx) => motivoNoReclamarEnTx(tx, E.a.id, id)), null)
+  await en(E.a, (tx) => pausarOfertaEnTx(tx, E.a.id, id, 'Prueba', ctxOferta()))
+  assert.equal((await en(E.a, (tx) => motivoNoReclamarEnTx(tx, E.a.id, id)))?.codigo, 'OFERTA_PAUSADA')
+  assert.equal((await en(E.a, (tx) => motivoNoReclamarEnTx(tx, E.a.id, 'no-existe')))?.codigo, 'OFERTA_NO_ENCONTRADA')
+  assert.equal((await en(E.b, (tx) => motivoNoReclamarEnTx(tx, E.b.id, id)))?.codigo, 'OFERTA_NO_ENCONTRADA', 'la oferta de A no existe para B')
 })

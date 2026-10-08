@@ -14,6 +14,7 @@ import {
   puedePasarOferta,
   reclamosPosibles,
   rendimientoDeOferta,
+  rendimientoDeTotales,
   validarOferta,
   vencimientoDelReclamo,
   type EntradaDeOferta,
@@ -147,6 +148,28 @@ test('rendimientoDeOferta: reclamos, canjes, conversión y lo cobrado', () => {
   assert.equal(r.costoCobrado.toFixed(2), '200.00')
   assert.equal(r.ahorroEntregado.toFixed(2), '160.00')
   assert.equal(rendimientoDeOferta([]).conversion, 0)
+})
+
+test('rendimientoDeTotales (agregado en la base) da lo mismo que contar reclamo por reclamo (auditoría F5–F9, M10)', () => {
+  const filas = [
+    { status: 'REDEEMED' as const, savings: '80', fee: '100' },
+    { status: 'REDEEMED' as const, savings: '60', fee: '100' },
+    { status: 'CLAIMED' as const, savings: '80', fee: '100' },
+    { status: 'EXPIRED' as const, savings: '80', fee: '100' },
+    { status: 'CANCELLED' as const, savings: '80', fee: '100' },
+    { status: 'REFUNDED' as const, savings: '80', fee: '100' },
+  ]
+  const uno = rendimientoDeOferta(filas)
+  const agrupado = rendimientoDeTotales([
+    { status: 'REDEEMED', cantidad: 2, savings: '140', fee: '200' },
+    { status: 'CLAIMED', cantidad: 1, savings: '80', fee: '100' },
+    { status: 'EXPIRED', cantidad: 1, savings: '80', fee: '100' },
+    { status: 'CANCELLED', cantidad: 1, savings: '80', fee: '100' },
+    { status: 'REFUNDED', cantidad: 1, savings: '80', fee: '100' },
+  ])
+  assert.deepEqual({ ...agrupado, costoCobrado: agrupado.costoCobrado.toFixed(2), ahorroEntregado: agrupado.ahorroEntregado.toFixed(2) }, { ...uno, costoCobrado: uno.costoCobrado.toFixed(2), ahorroEntregado: uno.ahorroEntregado.toFixed(2) })
+  assert.equal(agrupado.reclamos, 6)
+  assert.equal(rendimientoDeTotales([]).conversion, 0)
 })
 
 test('etiquetas y vencimiento del reclamo', () => {

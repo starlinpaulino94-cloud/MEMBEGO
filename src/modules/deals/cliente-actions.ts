@@ -27,7 +27,7 @@ import { PedidoError } from '@/modules/orders/errores'
 import { OfertaError } from './errores'
 import { refrescarVitrinasDeOfertas } from './vitrinas'
 import { empresaOfreceOfertas } from './publico'
-import { reclamarOfertaEnTx } from './service'
+import { motivoNoReclamarEnTx, reclamarOfertaEnTx } from './service'
 
 export type ResultadoReclamo =
   | { ok: true; pedidoId: string; code: string | null; repetido: boolean; ahorro: string | null }
@@ -65,6 +65,14 @@ export async function reclamarOferta(entrada: { dealId: string; sucursalId: stri
       return { ok: false, error: 'Esta oferta no está disponible.' }
     }
     const companyId = oferta.companyId
+
+    // Afiliar (ficha, seguimiento, regalo de bienvenida) es un efecto: no se hace por una oferta que ni siquiera se puede
+    // reclamar. Quien ya es cliente de ese negocio sigue su camino (su ficha ya existe y puede tener ya el cupón).
+    const previa = await conEmpresa(companyId, async (tx) => ({
+      tieneFicha: (await tx.cliente.findFirst({ where: { companyId, supabaseId: user.supabaseId }, select: { id: true } })) !== null,
+      motivo: await motivoNoReclamarEnTx(tx, companyId, dealId),
+    }))
+    if (!previa.tieneFicha && previa.motivo) return { ok: false, error: previa.motivo.mensaje }
 
     const ficha = await asegurarClienteEnEmpresa(user.supabaseId, user.email, companyId)
     if ('error' in ficha) return { ok: false, error: ficha.error }

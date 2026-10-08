@@ -61,12 +61,23 @@ export interface ResumenPublico extends Omit<ResumenDeCarrito, 'renglones'> {
   renglones: RenglonPublico[]
 }
 
-/** El resumen sin las existencias exactas: quien arma un carrito sin cuenta solo se entera de «solo quedan N» al pedir de más. */
-export function aResumenPublico(r: ResumenDeCarrito): ResumenPublico {
+const NO_DISPONIBLE = 'Ya no está disponible.'
+
+/**
+ * Lo que se enseña a quien lo pide:
+ *  · NUNCA el campo `existencias`;
+ *  · lo que no se puede comprar (borrador, pausado, solo caja, de Supply, que ya no existe) sale sin su nombre ni su
+ *    precio actual: un `varianteId` conocido no debe servir para leer el precio de algo que ya no es público;
+ *  · el «solo quedan N» exacto únicamente con sesión de cliente (hace falta para corregir la cantidad al pagar); sin
+ *    sesión se dice «no hay suficientes», que no revela cuántas existencias tiene el negocio en cada sucursal.
+ */
+export function aResumenPublico(r: ResumenDeCarrito, opciones: { conSesionDeCliente?: boolean } = {}): ResumenPublico {
   return {
     ...r,
     renglones: r.renglones.map(({ existencias: _e, ...resto }) => {
       void _e
+      if (resto.problema === NO_DISPONIBLE) return { ...resto, nombre: 'Producto no disponible', precio: '0.00', subtotal: '0.00' }
+      if (!opciones.conSesionDeCliente && resto.problema !== null && resto.problema.startsWith('Solo quedan')) return { ...resto, problema: 'No hay suficientes en esta sucursal.' }
       return resto
     }),
   }
@@ -92,7 +103,7 @@ export async function resumenDelCarritoEnTx(tx: Tx, companyId: string, lineas: r
   let moneda = 'DOP'
   const renglones: RenglonResumido[] = pedidas.map((l) => {
     const v = porId.get(l.varianteId)
-    if (!v) return { varianteId: l.varianteId, nombre: 'Producto que ya no existe', precio: '0.00', cantidad: l.cantidad, subtotal: '0.00', existencias: null, problema: 'Ya no está disponible.' }
+    if (!v) return { varianteId: l.varianteId, nombre: 'Producto que ya no existe', precio: '0.00', cantidad: l.cantidad, subtotal: '0.00', existencias: null, problema: NO_DISPONIBLE }
     moneda = v.item.currency
     const caps = normalizarCapacidades(v.item.type, v.item.capabilities)
     const nombre = v.item.variants.length > 1 ? `${v.item.name} · ${v.name}` : v.item.name
@@ -100,7 +111,7 @@ export async function resumenDelCarritoEnTx(tx: Tx, companyId: string, lineas: r
     const nivel = Array.isArray(v.inventoryLevels) ? v.inventoryLevels[0] : undefined
     const existencias = caps.trackInventory && sucursalId ? Math.max(0, (nivel?.onHand ?? 0) - (nivel?.reserved ?? 0)) : null
     let problema: string | null = null
-    if (v.item.status !== 'ACTIVE' || v.status !== 'ACTIVE' || v.item.source !== 'MERCHANT' || !caps.availableMarketplace) problema = 'Ya no está disponible.'
+    if (v.item.status !== 'ACTIVE' || v.status !== 'ACTIVE' || v.item.source !== 'MERCHANT' || !caps.availableMarketplace) problema = NO_DISPONIBLE
     else if (existencias !== null && existencias <= 0) problema = 'Agotado en esta sucursal.'
     else if (existencias !== null && l.cantidad > existencias) problema = `Solo quedan ${existencias} en esta sucursal.`
     const subtotal = precio * l.cantidad
@@ -126,6 +137,21 @@ export interface ResultadoDeCheckout {
   code: string
   total: string
   repetido: boolean
+}
+
+/**
+ * Lo que impediría el pedido y se sabe SIN crear nada: método, sucursal y que cada renglón se pueda comprar ahí. Solo lee.
+ * Sirve para no afiliar a nadie (ficha, seguimiento, regalo de bienvenida) por un pedido que va a fallar; la última
+ * palabra la sigue teniendo `crearPedidoDelCarritoEnTx` (existencias en carrera, tope de pedidos abiertos).
+ */
+export async function problemaDelPedidoEnTx(tx: Tx, companyId: string, e: { lineas: readonly LineaDeCarrito[]; locationId: string; metodo: unknown }): Promise<string | null> {
+  if (!esMetodoCheckout(e.metodo)) return 'Elige cómo vas a pagar: al recoger o por transferencia.'
+  const sucursal = await tx.sucursal.findFirst({ where: { id: e.locationId, companyId }, select: { nombre: true, activa: true } })
+  if (!sucursal) return 'La sucursal no existe.'
+  if (!sucursal.activa) return `La sucursal «${sucursal.nombre}» está desactivada.`
+  const resumen = await resumenDelCarritoEnTx(tx, companyId, e.lineas, e.locationId)
+  if (!resumen.comprable) return resumen.renglones.find((r) => r.problema)?.problema ?? 'Revisa tu carrito: algo cambió.'
+  return null
 }
 
 /** Convierte el carrito de un negocio en UN pedido Membego, todo o nada. */
