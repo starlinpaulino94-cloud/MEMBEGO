@@ -1,3 +1,4 @@
+import { getUser } from '@/lib/auth'
 import { sinEmpresa } from '@/lib/tenant'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { getCuentasTransferencia } from '@/modules/pagos/metodosDisponibles'
@@ -42,4 +43,12 @@ export async function opcionesDeCheckout(companySlug: string): Promise<OpcionesD
     console.error('[opcionesDeCheckout]', err)
     return null
   }
+}
+
+/**
+ * ¿Quien pregunta tiene sesión de CLIENTE? Solo decide cuánto detalle de existencias se le enseña en el carrito público;
+ * NO es una guardia: sin sesión la lectura se responde igual (con menos detalle).
+ */
+export async function haySesionDeCliente(): Promise<boolean> {
+  return (await getUser())?.metadata.role === 'CLIENTE'
 }

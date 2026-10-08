@@ -53,8 +53,8 @@ test('resumir el carrito es solo lectura, pública con límite por IP, y solo de
   assert.match(solo, /empresaRecibePedidos\(/)
   assert.doesNotMatch(solo, /\.(create|update|updateMany|delete|deleteMany|upsert)\(/)
   // La sesión (si hay) solo decide cuánto detalle de existencias se enseña: nunca se exige ni corta la respuesta.
-  assert.match(solo, /conSesionDeCliente = \(await getUser\(\)\)\?\.metadata\.role === 'CLIENTE'/)
-  assert.doesNotMatch(solo, /if \(!user\)|sinSesion/)
+  assert.match(solo, /conSesionDeCliente = await haySesionDeCliente\(\)/)
+  assert.doesNotMatch(solo, /getUser\(\)|if \(!user\)|sinSesion/)
 })
 
 test('el servicio del carrito no escribe pedidos por su cuenta ni importa Supply', () => {

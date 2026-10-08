@@ -29,7 +29,7 @@ import { empresaRecibePedidos } from '@/modules/orders/publico'
 import type { ContextoPedido } from '@/modules/orders/service'
 import { MAX_LINEAS_CARRITO, leerCarrito, type LineaDeCarrito } from './domain'
 import { aResumenPublico, crearPedidoDelCarritoEnTx, problemaDelPedidoEnTx, resumenDelCarritoEnTx, type ResumenPublico } from './service'
-import { transferenciaDisponible } from './publico'
+import { haySesionDeCliente, transferenciaDisponible } from './publico'
 
 export type Resultado<T> = ({ ok: true } & T) | { ok: false; error: string; sinSesion?: boolean }
 
@@ -75,7 +75,7 @@ export async function resumirCarrito(entrada: { companySlug: string; sucursalId?
     const sucursalId = texto(entrada.sucursalId)
     const lineas = lineasLimpias(entrada.lineas)
     // La lectura es pública: la sesión (si hay) solo decide cuánto detalle de existencias se enseña, nunca si se responde.
-    const conSesionDeCliente = (await getUser())?.metadata.role === 'CLIENTE'
+    const conSesionDeCliente = await haySesionDeCliente()
     const resumen = await conEmpresa(empresa.id, (tx) => resumenDelCarritoEnTx(tx, empresa.id, lineas, empresa.sucursales.some((s) => s.id === sucursalId) ? sucursalId : null))
     return { ok: true, empresa: { slug: empresa.slug, nombre: empresa.name, sucursales: empresa.sucursales }, resumen: aResumenPublico(resumen, { conSesionDeCliente }) }
   } catch (e) {
