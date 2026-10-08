@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { Prisma, type MembegoOrderOrigin, type MembegoOrderStatus, type MembegoPaymentMethod, type MembegoVerificationLevel } from '@prisma/client'
+import { Prisma, type MembegoOrderOrigin, type MembegoOrderStatus, type MembegoPaymentEvidenceSource, type MembegoPaymentMethod, type MembegoVerificationLevel } from '@prisma/client'
 import { siguienteNumero } from '@/lib/commerce-primitives/numeracion'
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import type { ContextoAuditoria } from '@/modules/inventory/auditoria'
 import { FacturacionError } from '@/modules/billing/errores'
 import { cerrarReclamoSinCanjeEnTx, liquidarReclamoEnTx, revertirReclamoEnTx } from '@/modules/deals/reclamos'
-import { registrarComisionDePedidoEnTx, revertirComisionDePedidoEnTx } from '@/modules/billing/service'
+import { ajustarComisionPorVerificacionEnTx, registrarComisionDePedidoEnTx, revertirComisionDePedidoEnTx } from '@/modules/billing/service'
 import { TTL_MAXIMO_MINUTOS } from '@/modules/inventory/domain'
 import { InventarioError } from '@/modules/inventory/errores'
 import { consumirReservaEnTx, devolverEnTx, liberarReservaEnTx, reservarEnTx, venderEnTx } from '@/modules/inventory/service'
@@ -27,8 +27,10 @@ import {
   qrDePedidoVencido,
   validarAtribucion,
   validarPago,
+  validarVerificacionExterna,
   vencimientoQrPedido,
   type DatosAtribucion,
+  type PagoRegistrado,
 } from './domain'
 import { fallo } from './errores'
 
@@ -480,15 +482,16 @@ export async function renovarQrEnTx(
 
 // ── Confirmación del cliente y pago registrado ───────────────────────────────
 
-async function recalcularNivel(tx: Tx, companyId: string, pedidoId: string): Promise<void> {
+/** La constancia tal como la necesita el dominio para derivar el nivel (con quién la respalda). */
+function pagoDe(p: { method: MembegoPaymentMethod; amount: Prisma.Decimal; reference: string | null; source: MembegoPaymentEvidenceSource } | null): PagoRegistrado | null {
+  return p ? { method: p.method, amount: p.amount, reference: p.reference, source: p.source } : null
+}
+
+async function recalcularNivel(tx: Tx, companyId: string, pedidoId: string): Promise<MembegoVerificationLevel> {
   const p = await tx.membegoOrder.findFirstOrThrow({ where: { id: pedidoId, companyId }, include: { confirmation: true, payment: true } })
-  const nivel = nivelDeVerificacion({
-    status: p.status,
-    total: p.total,
-    confirmacion: p.confirmation,
-    pago: p.payment ? { method: p.payment.method, amount: p.payment.amount, reference: p.payment.reference } : null,
-  })
+  const nivel = nivelDeVerificacion({ status: p.status, total: p.total, confirmacion: p.confirmation, pago: pagoDe(p.payment) })
   if (nivel !== p.verificationLevel) await tx.membegoOrder.update({ where: { id: p.id }, data: { verificationLevel: nivel } })
+  return nivel
 }
 
 /**
@@ -551,14 +554,19 @@ export async function registrarPagoEnTx(
   exigirEstado(p, ESTADOS_CON_PAGO_REGISTRABLE, 'El pago se registra cuando el pedido está listo o completado')
   const error = validarPago(e)
   if (error) fallo('PAGO_INVALIDO', error)
+  // Una constancia que ya respaldó una fuente externa no se pisa con la palabra de la empresa.
+  if (p.payment && p.payment.source !== 'MERCHANT_REPORTED') {
+    fallo('PAGO_YA_VERIFICADO', `El pago del pedido ${p.code} ya está verificado por ${ETIQUETA_FUENTE[p.payment.source]}; no se registra encima.`)
+  }
   const referencia = typeof e.reference === 'string' && e.reference.trim() !== '' ? e.reference.trim() : null
   const notas = typeof e.notes === 'string' && e.notes.trim() !== '' ? e.notes.trim().slice(0, 300) : null
   const monto = new Prisma.Decimal(e.amount)
 
+  // Lo que registra la empresa es SIEMPRE «reportado por el negocio»: la verificación llega de fuera.
   await tx.paymentEvidence.upsert({
     where: { orderId: p.id },
-    create: { companyId, orderId: p.id, method: e.method, amount: monto, reference: referencia, notes: notas, recordedByUserId: ctx.actorId, recordedAt: ahora },
-    update: { method: e.method, amount: monto, reference: referencia, notes: notas, recordedByUserId: ctx.actorId, recordedAt: ahora },
+    create: { companyId, orderId: p.id, method: e.method, amount: monto, reference: referencia, notes: notas, source: 'MERCHANT_REPORTED', recordedByUserId: ctx.actorId, recordedAt: ahora },
+    update: { method: e.method, amount: monto, reference: referencia, notes: notas, source: 'MERCHANT_REPORTED', verifiedAt: null, verificationRef: null, verifiedByUserId: null, recordedByUserId: ctx.actorId, recordedAt: ahora },
   })
   await tx.membegoOrder.update({ where: { id: p.id }, data: { paymentMethod: e.method } })
   await recalcularNivel(tx, companyId, p.id)
@@ -568,8 +576,102 @@ export async function registrarPagoEnTx(
     metodo: e.method,
     monto: decimalATexto(monto),
     conReferencia: referencia !== null,
+    fuente: 'MERCHANT_REPORTED',
   })
   return { pedidoId: p.id }
+}
+
+const ETIQUETA_FUENTE: Record<MembegoPaymentEvidenceSource, string> = {
+  MERCHANT_REPORTED: 'el negocio',
+  GATEWAY_VERIFIED: 'la pasarela de pago',
+  BANK_RECONCILED: 'la conciliación bancaria',
+  PROVIDER_VERIFIED: 'el proveedor',
+}
+
+export interface VerificacionExterna {
+  /** Quién respalda el pago: pasarela firmada, extracto bancario conciliado o proveedor. Nunca la empresa. */
+  source: MembegoPaymentEvidenceSource
+  /** El identificador del hecho externo (id de transacción, referencia del extracto…). Clave de idempotencia. */
+  verificationRef: string
+  method: MembegoPaymentMethod
+  amount: number | string
+  /** La referencia que el negocio verá (número de autorización, de transferencia). Si falta, se usa la del hecho externo. */
+  reference?: string | null
+  verifiedAt?: Date
+}
+
+export type ResultadoVerificacion = {
+  pedidoId: string
+  nivel: MembegoVerificationLevel
+  /** true si esta misma referencia externa ya había verificado el pedido. */
+  repetido: boolean
+  /** Qué hizo Merchant Billing con la comisión ya cobrada (null si el pedido no está cerrado o no comisiona). */
+  comision: string | null
+}
+
+/**
+ * Una FUENTE EXTERNA confirma el pago de un pedido: la pasarela (callback firmado), la
+ * conciliación bancaria (el superadmin con el extracto) o el proveedor. Es lo único que lleva un
+ * pedido a `PAYMENT_VERIFIED`; una referencia tecleada por un empleado se queda en
+ * `EXTERNAL_PAYMENT_REPORTED` (`registrarPagoEnTx`).
+ *
+ * Solo el SISTEMA (webhooks, puentes) o el superadmin (`actorId` obligatorio) la escriben; la
+ * empresa, nunca. Idempotente por la referencia externa: el mismo hecho no verifica dos veces,
+ * y otro hecho distinto sobre un pedido ya verificado se rechaza (una constancia por pedido).
+ *
+ * Si el pedido ya está COMPLETED y su comisión se cobró como CPA (modelo HYBRID), Merchant
+ * Billing asienta la diferencia hasta el porcentaje en la MISMA transacción
+ * (`ajustarComisionPorVerificacionEnTx`): el libro no se edita, se le añade un asiento.
+ */
+export async function verificarPagoExternamenteEnTx(
+  tx: Tx,
+  companyId: string,
+  pedidoId: string,
+  v: VerificacionExterna,
+  ctx: ContextoPedido & { superadmin?: boolean },
+  ahora = new Date()
+): Promise<ResultadoVerificacion> {
+  if (ctx.actor !== 'SISTEMA' && !(ctx.actor === 'EMPRESA' && ctx.superadmin === true && ctx.actorId)) {
+    fallo('SOLO_SISTEMA', 'Un pago lo verifica una fuente externa a través del sistema o del superadmin; la empresa solo lo reporta.')
+  }
+  const error = validarVerificacionExterna(v)
+  if (error) fallo('VERIFICACION_INVALIDA', error)
+  const p = await pedidoBloqueado(tx, companyId, pedidoId)
+  exigirEstado(p, ESTADOS_CON_PAGO_REGISTRABLE, 'El pago se verifica cuando el pedido está listo o completado')
+  const ref = v.verificationRef.trim()
+  if (p.payment && p.payment.source !== 'MERCHANT_REPORTED') {
+    if (p.payment.verificationRef === ref) {
+      return { pedidoId: p.id, nivel: p.verificationLevel, repetido: true, comision: null }
+    }
+    fallo('PAGO_YA_VERIFICADO', `El pago del pedido ${p.code} ya está verificado por ${ETIQUETA_FUENTE[p.payment.source]} con otra referencia.`)
+  }
+  const monto = new Prisma.Decimal(v.amount)
+  const referencia = typeof v.reference === 'string' && v.reference.trim() !== '' ? v.reference.trim() : ref
+  const cuando = v.verifiedAt ?? ahora
+  await tx.paymentEvidence.upsert({
+    where: { orderId: p.id },
+    create: { companyId, orderId: p.id, method: v.method, amount: monto, reference: referencia, source: v.source, verifiedAt: cuando, verificationRef: ref, verifiedByUserId: ctx.actorId, recordedByUserId: ctx.actorId, recordedAt: ahora },
+    update: { method: v.method, amount: monto, reference: referencia, source: v.source, verifiedAt: cuando, verificationRef: ref, verifiedByUserId: ctx.actorId, recordedAt: ahora },
+  })
+  await tx.membegoOrder.update({ where: { id: p.id }, data: { paymentMethod: v.method } })
+  const nivel = await recalcularNivel(tx, companyId, p.id)
+  // Con el pedido cerrado y el pago ahora verificado, la comisión CPA ya cobrada sube al porcentaje (append-only).
+  let comision: string | null = null
+  if (p.status === 'COMPLETED' && nivel === 'PAYMENT_VERIFIED') {
+    const a = await ajustarComisionPorVerificacionEnTx(tx, companyId, p.id, { verificationRef: ref, fuente: v.source }, undefined, ahora)
+    comision = a.resultado
+  }
+  await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_PAYMENT_VERIFIED', p.id, {
+    code: p.code,
+    por: ctx.actor,
+    fuente: v.source,
+    referenciaExterna: ref,
+    metodo: v.method,
+    monto: decimalATexto(monto),
+    nivel,
+    comision,
+  })
+  return { pedidoId: p.id, nivel, repetido: false, comision }
 }
 
 // ── Comisión de Merchant Billing ─────────────────────────────────────────────
@@ -583,7 +685,7 @@ export async function registrarPagoEnTx(
 async function cobrarComisionDelPedido(
   tx: Tx,
   companyId: string,
-  p: Pick<PedidoCompleto, 'id' | 'code' | 'origin' | 'sourceType' | 'commissionableBase' | 'currency'>,
+  p: Pick<PedidoCompleto, 'id' | 'code' | 'origin' | 'sourceType' | 'commissionableBase' | 'currency' | 'attribution'>,
   nivel: MembegoVerificationLevel,
   ahora: Date,
   cuotaDeOferta?: { dealId: string; amount: Prisma.Decimal }
@@ -592,7 +694,7 @@ async function cobrarComisionDelPedido(
     const r = await registrarComisionDePedidoEnTx(
       tx,
       companyId,
-      { id: p.id, code: p.code, origin: p.origin, sourceType: p.sourceType, commissionableBase: p.commissionableBase, verificationLevel: nivel, currency: p.currency },
+      { id: p.id, code: p.code, origin: p.origin, sourceType: p.sourceType, attributionChannel: p.attribution?.channel ?? null, commissionableBase: p.commissionableBase, verificationLevel: nivel, currency: p.currency },
       undefined,
       ahora,
       cuotaDeOferta
@@ -673,12 +775,7 @@ export async function completarPorQrEnTx(tx: Tx, companyId: string, token: strin
   exigirEstado(p, ['READY'], 'El pedido todavía no está listo para canjear')
   if (qrDePedidoVencido(p.qrExpiresAt, ahora)) fallo('QR_VENCIDO', 'Este código QR venció. El cliente puede generar uno nuevo desde su pedido.')
 
-  const nivel = nivelDeVerificacion({
-    status: 'COMPLETED',
-    total: p.total,
-    confirmacion: p.confirmation,
-    pago: p.payment ? { method: p.payment.method, amount: p.payment.amount, reference: p.payment.reference } : null,
-  })
+  const nivel = nivelDeVerificacion({ status: 'COMPLETED', total: p.total, confirmacion: p.confirmation, pago: pagoDe(p.payment) })
   await tx.membegoOrder.update({
     where: { id: p.id },
     data: { status: 'COMPLETED', completedAt: ahora, completedByUserId: ctx.actorId, verificationLevel: nivel },
@@ -719,7 +816,15 @@ export async function cerrarPedidoExternoEnTx(
   tx: Tx,
   companyId: string,
   pedidoId: string,
-  e: { completedAt: Date; confirmadoPorCliente: boolean; pago?: { method: MembegoPaymentMethod; amount: number | string; reference: string | null } | null },
+  e: {
+    completedAt: Date
+    confirmadoPorCliente: boolean
+    /**
+     * El pago, con la fuente que lo respalda: `MERCHANT_REPORTED` (la caja lo cobró: palabra de la empresa) o una
+     * fuente externa (el otro sistema lo verificó), que exige la referencia del hecho (`verificationRef`).
+     */
+    pago?: { method: MembegoPaymentMethod; amount: number | string; reference: string | null; source: MembegoPaymentEvidenceSource; verificationRef?: string | null } | null
+  },
   ctx: ContextoPedido
 ): Promise<ResultadoCierre> {
   if (ctx.actor !== 'SISTEMA') fallo('SOLO_SISTEMA', 'Un pedido solo se cierra sin QR cuando lo hace el sistema.')
@@ -742,19 +847,28 @@ export async function cerrarPedidoExternoEnTx(
     })
   }
   if (e.pago) {
-    const error = validarPago(e.pago)
+    const externo = e.pago.source !== 'MERCHANT_REPORTED'
+    // Con fuente externa hace falta la referencia del hecho; el método NO se restringe aquí: un pago en efectivo
+    // que el otro sistema comprobó deja constancia (y no verifica: la cadena de niveles lo decide).
+    const ref = typeof e.pago.verificationRef === 'string' ? e.pago.verificationRef.trim() : ''
+    const error = validarPago(e.pago) ?? (externo && ref === '' ? 'La verificación necesita la referencia del hecho externo.' : null)
     if (error) fallo('PAGO_INVALIDO', error)
-    await tx.paymentEvidence.upsert({
-      where: { orderId: p.id },
-      create: { companyId, orderId: p.id, method: e.pago.method, amount: new Prisma.Decimal(e.pago.amount), reference: e.pago.reference, recordedAt: ahora },
-      update: { method: e.pago.method, amount: new Prisma.Decimal(e.pago.amount), reference: e.pago.reference, recordedAt: ahora },
-    })
+    const datos = {
+      method: e.pago.method,
+      amount: new Prisma.Decimal(e.pago.amount),
+      reference: e.pago.reference,
+      source: e.pago.source,
+      verifiedAt: externo ? ahora : null,
+      verificationRef: externo ? ref : null,
+      recordedAt: ahora,
+    }
+    await tx.paymentEvidence.upsert({ where: { orderId: p.id }, create: { companyId, orderId: p.id, ...datos }, update: datos })
   }
   const nivel = nivelDeVerificacion({
     status: 'COMPLETED',
     total: p.total,
     confirmacion: e.confirmadoPorCliente ? { confirmedTotal: p.total } : null,
-    pago: e.pago ? { method: e.pago.method, amount: e.pago.amount, reference: e.pago.reference } : null,
+    pago: e.pago ? { method: e.pago.method, amount: e.pago.amount, reference: e.pago.reference, source: e.pago.source } : null,
   })
   await tx.membegoOrder.update({
     where: { id: p.id },

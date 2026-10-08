@@ -13,7 +13,7 @@ import {
   validarCarrito,
   validarCobroPos,
 } from '../src/modules/pos/domain'
-import { pagoVerificado } from '../src/modules/orders/domain'
+import { pagoReportado, pagoVerificado } from '../src/modules/orders/domain'
 
 const D = (v: string | number) => new Prisma.Decimal(v)
 
@@ -24,12 +24,15 @@ test('métodos: cómo los llama el pedido y cómo los llama la caja (que no dist
   for (const raro of ['efectivo', 'CASH', '', null, undefined, 3]) assert.equal(esMetodoPos(raro), false)
 })
 
-test('solo la transferencia y la tarjeta pueden verificar un pago: el efectivo deja constancia pero no verifica', () => {
+test('solo la transferencia y la tarjeta pueden REPORTAR un pago: el efectivo deja constancia pero no reporta; y lo que reporta la caja nunca VERIFICA', () => {
   assert.deepEqual([metodoVerifica('EFECTIVO'), metodoVerifica('TRANSFERENCIA'), metodoVerifica('TARJETA')], [false, true, true])
-  // Y la regla del dominio de pedidos es la misma: con referencia y por el monto.
-  assert.equal(pagoVerificado(250, { method: 'CASH', amount: 250, reference: 'x' }), false)
-  assert.equal(pagoVerificado(250, { method: 'TRANSFER', amount: 250, reference: 'TRF' }), true)
-  assert.equal(pagoVerificado(250, { method: 'CARD', amount: 250, reference: null }), false)
+  // Y la regla del dominio de pedidos es la misma: con referencia y por el monto, queda REPORTADO…
+  assert.equal(pagoReportado(250, { method: 'CASH', amount: 250, reference: 'x' }), false)
+  assert.equal(pagoReportado(250, { method: 'TRANSFER', amount: 250, reference: 'TRF' }), true)
+  assert.equal(pagoReportado(250, { method: 'CARD', amount: 250, reference: null }), false)
+  // …pero no VERIFICADO: la referencia que teclea un empleado es la palabra de la empresa (sprint de cierre, 2026-10-08).
+  assert.equal(pagoVerificado(250, { method: 'TRANSFER', amount: 250, reference: 'TRF', source: 'MERCHANT_REPORTED' }), false)
+  assert.equal(pagoVerificado(250, { method: 'TRANSFER', amount: 250, reference: 'TRF', source: 'BANK_RECONCILED' }), true)
 })
 
 test('cobro: transferencia y tarjeta EXIGEN su referencia; el efectivo no', () => {

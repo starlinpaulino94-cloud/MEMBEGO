@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { empresaParaCuentaEnTx, listarAsientosEnTx, listarCortesEnTx, resumenDeCuentaEnTx } from '@/modules/billing/queries'
 import { BADGE_ESTADO_CUENTA, ETIQUETA_ESTADO, formatearFecha, formatoMonto } from '@/modules/billing/formato'
 import { CuentaAcciones } from '@/components/billing/CuentaAcciones'
+import { VerificarPagoForm } from '@/components/billing/VerificarPagoForm'
 import { TablaDeAsientos, TablaDeCortes } from '@/components/billing/LibroDeCuenta'
 
 export const dynamic = 'force-dynamic'
@@ -105,13 +106,16 @@ export default async function CuentaDeEmpresaPage({ params, searchParams }: { pa
             </CardContent>
           </Card>
         </div>
-        <CuentaAcciones
-          companyId={empresa.id}
-          moneda={resumen.currency}
-          config={{ feeModel: resumen.feeModel, cpaAmount: resumen.cpaAmount, percentageRate: resumen.percentageRate, creditLimit: resumen.creditLimit, billingCycle: resumen.billingCycle }}
-          status={resumen.status}
-          holdManual={resumen.holdManual}
-        />
+        <div className="space-y-6">
+          <CuentaAcciones
+            companyId={empresa.id}
+            moneda={resumen.currency}
+            config={{ feeModel: resumen.feeModel, cpaAmount: resumen.cpaAmount, percentageRate: resumen.percentageRate, creditLimit: resumen.creditLimit, billingCycle: resumen.billingCycle }}
+            status={resumen.status}
+            holdManual={resumen.holdManual}
+          />
+          <VerificarPagoForm companyId={empresa.id} moneda={resumen.currency} />
+        </div>
       </div>
     </div>
   )

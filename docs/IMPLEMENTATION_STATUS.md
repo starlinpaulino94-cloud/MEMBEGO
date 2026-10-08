@@ -911,7 +911,7 @@ Verificado por grep en `prisma/`, `src/`, `tests/`: de las entidades objetivo ex
 | Customer | 🟡 | sí (`Cliente`, por empresa) | sí | sí | sí | La identidad global es `User` (Supply V2 pedidos usan `User`) |
 | MembegoOrder / OrderLine | 🔵 | sí (`membego_orders`, `membego_order_lines`) | sí | sí | sí | Coexiste con `Transaction`, `ProductoCompra`, `ReservaExc`, `SupplyV2CustomerOrder`, `Cita`; el puente de Supply genera un envoltorio |
 | OrderAttribution | 🔵 | sí | sí | sí | sí | `Cliente.canalOrigen`, `VendedorAtribucion`, `SupplyV2CustomerOrder.campaignId` |
-| PaymentEvidence | 🔵 | sí | sí | sí | sí | `ProductoCompra.comprobanteUrl`, `ReservaPago.comprobanteUrl` (por flujo) |
+| PaymentEvidence | 🔵 | sí (`source`, `verifiedAt`, `verificationRef`, `verifiedByUserId` desde `20261051`) | sí (`registrarPagoEnTx` = `MERCHANT_REPORTED`; `verificarPagoExternamenteEnTx` = fuente externa, solo SISTEMA/superadmin) | sí (panel de la empresa registra; `/superadmin/facturacion/[empresa]` verifica contra el banco) | sí | **Sprint de cierre:** lo que registra la empresa lleva el pedido a `EXTERNAL_PAYMENT_REPORTED`; `PAYMENT_VERIFIED` solo con `GATEWAY_VERIFIED`/`BANK_RECONCILED`/`PROVIDER_VERIFIED` + referencia del hecho (CHECK `payment_evidences_fuente`). Reglas en `docs/REGLAS_FINANCIERAS.md` §2 |
 | Commission / MerchantLedger / MerchantStatement / MerchantBillingConfig | 🔵 | sí (`merchant_commissions`, `merchant_ledger_entries`, `merchant_statements`, `merchant_billing_configs`) | sí (`billing`) | sí (`/admin/facturacion-membego`, `/superadmin/facturacion`) | sí | Cobros *a* empresas (Membego recibe). `Comision` (carwash) y `ComisionEntrada` (vendedores) son pagos *a* personal; Supply Economics es Membego → proveedor: **no se cruzan** |
 | Deal / DealClaim | 🔵 | sí (`deals`, `deal_claims`) | sí (`deals`) | sí (`/admin/deals`, `/ofertas`) | sí | Descuento con presupuesto sobre una variante; el reclamo ES un `MembegoOrder` (su QR es el voucher). Distinto de `Promocion` y del motor `Promotion` |
 | Entitlement | 🟡 | sí (`SupplyV2Entitlement`) | sí | sí | sí | Solo Supply V2; `EntitlementEmpresa` es otra cosa (nombre en colisión) |
@@ -920,7 +920,7 @@ Verificado por grep en `prisma/`, `src/`, `tests/`: de las entidades objetivo ex
 
 ## 7. Migraciones
 
-206 directorios (`0_genesis` + 205; las dos últimas, `20261002_sync_company_brand_color` y `20261036_cardnet_client_orchestration`, llegaron de `main` con la app del cliente y CardNET y no son de esta rama) · `YYYYMMNN_slug` donde NN es un contador mensual (no un día; 51 prefijos no son fechas válidas, p. ej. `20260771_*`) · sellado SHA-256 en `prisma/migrations/SUMAS.txt` (204 migraciones selladas) con test de inmutabilidad en CI.
+208 directorios (`0_genesis` + 207; `20261050`/`20261051` son del sprint de cierre; `20261002_sync_company_brand_color` y `20261036_cardnet_client_orchestration` llegaron de `main` con la app del cliente y CardNET y no son de esta rama) · `YYYYMMNN_slug` donde NN es un contador mensual (no un día; 51 prefijos no son fechas válidas, p. ej. `20260771_*`) · sellado SHA-256 en `prisma/migrations/SUMAS.txt` (204 migraciones selladas) con test de inmutabilidad en CI.
 
 | Migración | Módulo | Estado | Riesgo | Verificada |
 |---|---|---|---|---|
@@ -936,6 +936,7 @@ Verificado por grep en `prisma/`, `src/`, `tests/`: de las entidades objetivo ex
 | `20261044_merchant_billing`, `20261045_merchant_billing_enums` | Commerce Core · Merchant Billing (4 tablas, 6 enums, 3 acciones de auditoría) | ✅ | Bajo: aditivas e idempotentes y **no tocan ninguna tabla existente**; lo no trivial son los **disparadores** (saldo corrido y posición del libro, libro/cortes inmutables, comisión ↔ asiento ↔ pedido, periodo ya cortado) y 10 CHECK (no los ve `migrate diff`: los cubre `billing.db.test.ts`) | Replay ✅ (200/200) · 0 deriva · 35 tests PG |
 | `20261046_merchant_billing_endurecimiento` | Merchant Billing · auditoría 2026-10-07 | ✅ | Bajo: aditiva e idempotente; reemplaza el disparador del libro (**una moneda por cuenta**, **el tiempo no retrocede**) y añade un CHECK (`commission:…` ⇔ asiento de comisión) y un índice único parcial (un depósito, un pago); no toca datos. `migrate diff` no ve disparadores, CHECK ni índices parciales: los cubre `billing.db.test.ts` (35–40) | Replay ✅ (201/201) · 0 deriva · 41 tests PG de billing |
 | `20261047_deals`, `20261048_merchant_billing_cuota_de_oferta`, `20261049_deals_enums` | Growth Engine · ofertas con presupuesto (2 tablas, 3 enums, 6 acciones de auditoría, `merchant_commissions.dealId`) | ✅ | Bajo: aditivas e idempotentes; la `20261048` solo **reemplaza** el disparador de la comisión para admitir la cuota de oferta y añade `dealId`; lo no trivial son los **disparadores** (transiciones, lo prometido inmutable, contadores = suma de reclamos y reclamo ↔ pedido, diferidos) y los CHECK (no los ve `migrate diff`: los cubre `deals.db.test.ts`) | Replay ✅ (204/204) · 0 deriva · 27 tests PG |
+| `20261050_verificacion_de_pago_enums`, `20261051_verificacion_de_pago` | Sprint de cierre · verificación de pago y ajuste de comisión (`payment_evidences.source` + verificación externa, nivel `EXTERNAL_PAYMENT_REPORTED`, asiento `VERIFICATION_ADJUSTMENT`, 5 columnas en `merchant_commissions`, 2 acciones de auditoría) | ✅ | Bajo-medio: aditivas e idempotentes; **backfill demostrable y anunciado con NOTICE** (constancias del envoltorio de Supply → `PROVIDER_VERIFIED`; pedidos `PAYMENT_VERIFIED` por una constancia reportada → `EXTERNAL_PAYMENT_REPORTED`; ninguna comisión cobrada se toca); reemplaza 3 CHECK del libro y el disparador de comisiones (sobre la versión de `20261048`, con la cuota de oferta) | Replay PG16 local ✅ (migrate deploy + diff vacío + 208 sellos); PG billing 41–47, orders 18/18b, pos 13/20, conciliación 11 |
 | `20260827_combo_horario_fijo_array` | Excursiones | ✅ | **Destructiva** (único `DROP COLUMN`) | Replay ✅ |
 | `20260770_reconciliacion` | Pagos | ✅ | `ALTER COLUMN TYPE` ×8 | Replay ✅ |
 | `20261030_supply_v2_bloque5_preferencias` | Supply V2 | ✅ | No idempotente (sin guardas) | Replay ✅ |
@@ -943,12 +944,12 @@ Verificado por grep en `prisma/`, `src/`, `tests/`: de las entidades objetivo ex
 | `20260781`, `20260782` | Vehículos | ✅ | Backfill de placas **manual** (`scripts/backfill-placas.mjs`) | Replay ✅; ejecución en prod UNKNOWN |
 
 ```text
-Última migración en el repo:   20261049_deals_enums
-Última migración aplicada:     UNKNOWN en producción (sin acceso a la BD). En PG16 local: 204/204 aplicadas.
+Última migración en el repo:   20261051_verificacion_de_pago
+Última migración aplicada:     UNKNOWN en producción (sin acceso a la BD). En PG16 local: 208/208 aplicadas.
 Migraciones pendientes:        UNKNOWN en prod. `docs/DEVOPS.md`: el 2026-09-14 se aplicaron 18 a mano sin registrarlas en `_prisma_migrations`.
 Migraciones destructivas:      0 DROP TABLE/TYPE/TRUNCATE/DELETE; 1 DROP COLUMN (20260827); 24 de las últimas 40 contienen ADD VALUE (irreversible en Postgres)
 Backfills pendientes:          placas (manual); `visits.companyId` (manual, 2026-09-visitas-company-id; la política tiene respaldo por membresía mientras dure)
-Migraciones de esta rama:      14 (`20261036`…`20261049`: catálogo, inventario, puente Supply→Catálogo, pedidos, Merchant Billing (con su endurecimiento) y ofertas, cada uno con su migración de enums)
+Migraciones de esta rama:      16 (`20261036`…`20261051`: catálogo, inventario, puente Supply→Catálogo, pedidos, Merchant Billing (con su endurecimiento) y ofertas, cada uno con su migración de enums)
 Deriva esquema↔migraciones:    0 (`prisma migrate diff` → «No difference detected», verificado)
 `prisma/migrations_manual`:    28 archivos, TODOS a mano (Capa 2, storage, geo, diagnósticos); estado de aplicación UNKNOWN
 ```
@@ -960,6 +961,14 @@ Hueco detectado: **ningún `ENABLE ROW LEVEL SECURITY` en migraciones posteriore
 Medido el 2026-10-07 tras F9 (sobre `main` fusionado, que retiró Supply V1 del código; BD local desechable `membego_pg`, PostgreSQL 16; no producción). Se repitieron tsc, lint, unit, PostgreSQL (suite completa), build, bundle, migraciones, los gates de RLS/permisos y los specs E2E de F7 y de sus vecinos (`pedidos-membego`, `deals-membego`, `analitica-membego`, `facturacion-superadmin`). **No se repitió la suite E2E completa**: la última completa sigue siendo la de F3 (abajo). Las líneas «(F6)», «(F5)» y «(F4)» son lo medido en esas fases, conservado como historia.
 
 ```text
+Sprint de cierre · Bloque C (2026-10-08, verificación de pago y ajuste de comisión; BD local `membego_pg`):
+  TypeScript       PASS   `npx tsc --noEmit`, 0 errores
+  Lint             PASS   `npx eslint src tests --quiet`, 0 errores
+  Unit             PASS   **3917/3923 · 0 FAIL · 6 SKIP** (+3 de C: orders-domain, pos-domain y billing-domain ampliados; conciliacion-permisos admite la lista de canales como constante). Bloque B dejó la suite en 3914/3920 · 0 FAIL: los 10 heredados se clasificaron uno por uno (C: contrato de color del cliente → violeta `#5b21b6` documentado en `docs/design/client-design-contract.md` §1 y `stitch-manifest.json` resellado; B: orden de la navegación nativa y `cerca.web` sin Leaflet; A: deuda de diseño por encima del techo → `COLOR_MARCA_POR_DEFECTO`, `bg-destructive`, correo de eliminación con la plantilla común) sin tocar aserciones a ciegas ni saltar nada
+  PostgreSQL       PASS   **638/638** `npm run test:db` en serie (+8 respecto a la última completa: billing 41–47, orders 18b). Antes de esta corrida limpia hubo una 635/638 con tres fallos reales, corregidos en el código y no en las pruebas: `deals` 25 (la migración 20261051 reescribía `merchant_commissions_reglas` sin las reglas de `dealId` de 20261048 → fusionadas) y `supply-bridge` 24/27 (el cierre externo exigía tarjeta/transferencia para una verificación externa; Supply confirma también efectivo → la regla pide la fuente y la referencia, no el método)
+  Build            PASS   `npm run build` (Next 16, 0 errores)
+  E2E (parcial)    PASS   `pedidos-membego` 11/11 y `pos-membego` 7/7 (escritorio, `scripts/e2e/correr.mjs` sobre el build). Primera corrida de `pos-membego` 6/7: la aserción del monto seguía en el 8 % de RD$250 (20.00) cuando la regla nueva cobra el CPA (100.00) sobre un pago solo reportado → **clase B (prueba desactualizada)**, corregida la aserción y repetido 7/7
+  Migraciones      PASS   208 selladas (`sellar-migraciones --check`), `migrate diff` sin deriva tras aplicar 20261050–20261051 sobre la base local
 TypeScript (lote auditoría F5–F9): PASS   `npx tsc --noEmit`, 0 errores, sin filtros. `main` traía 6 errores de módulos de Expo (`react-native`, `expo-constants`, `expo-secure-store`) que importan las pruebas del cliente móvil: rompían el job «Tipos, linter y pruebas» del CI (por eso el linter y `npm test` se saltaban en `main`). Se declaran sin tipos en `tests/support/modulos-expo.d.ts`
 TypeScript:          PASS   tsc --noEmit, 0 errores (tras F9)
 Lint (lote auditoría F5–F9): PASS   eslint src tests --quiet: 0 errores
@@ -1056,6 +1065,8 @@ Notas de reproducción: para `probar-rls` en una BD vacía hay que crear antes `
 | `MovimientoInventario` (carwash) | Contador `stock` (mutable) | Inserta, pero lectura-escritura **sin bloqueo** | `AJUSTE` absoluto | Ninguno de BD | Solo aritmética |
 | Payment ledger | — | ⚪ no unificado | `ReservaPago` → `ANULADO`; `PagoIntento` mutable (idempotente por `activadoAt`); `GiftCard.saldo` es contador sin movimientos | — | `pagos-cumplimiento.test.ts` |
 | `AuditLog`, `MembresiaEvento` | Filas | Sí, por convención / best-effort | Nueva fila | — | `membresia-eventos*.test.ts`; `AuditLog` sin test |
+
+**Sprint de cierre (2026-10-08) · Merchant Billing Ledger.** Tipo nuevo `VERIFICATION_ADJUSTMENT` (con signo, con motivo, colgado de la comisión; CHECK `_signo`/`_motivo`/`_referencia` reemplazados): cuando una fuente externa verifica el pago DESPUÉS de cobrar el CPA (modelo HYBRID, sin cuota de oferta), `ajustarComisionPorVerificacionEnTx` asienta la diferencia hasta el porcentaje UNA vez (clave `commission:<pedido>:verification`, CHECK `merchant_commissions_ajuste_verificacion` + disparador: asiento exacto, pedido COMPLETED y PAYMENT_VERIFIED, inmutable después); el reembolso revierte comisión y ajuste con dos asientos `REFUND`; el corte lo suma en `adjustments`. La comisión original no se edita nunca. Verificado: `tests/postgres/billing.db.test.ts` 41–46 (escenario RD$5,000: +100 al cerrar, +300 al verificar; idempotencia; 3 verificaciones simultáneas → 1 ajuste; reverso doble; ajuste negativo; no aplica en CPA_FIXED/PERCENTAGE/reportado; reglas de la base). **Atribución ≠ cumplimiento:** `pedidoGeneraComision` cobra MARKETPLACE siempre y cualquier otro origen solo con canal `CANALES_ATRIBUIDOS_A_MEMBEGO` (vitrina, búsqueda, promoción, campaña, referido); DIRECT y QR_SCAN no; el barrido y las reglas C01/C04 usan la misma lista (billing 47, conciliación 5). Reglas completas en `docs/REGLAS_FINANCIERAS.md`.
 
 ## 11. Integraciones
 

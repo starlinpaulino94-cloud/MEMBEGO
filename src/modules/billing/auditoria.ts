@@ -9,7 +9,7 @@ import type { ContextoAuditoria } from '@/modules/inventory/auditoria'
  * pago/ajuste/crédito) y los cambios de estado de la cuenta. Las comisiones que
  * escribe el sistema no auditan aquí: su rastro es el libro, que es inmutable.
  */
-export type AccionDeFacturacion = Extract<AuditAccion, 'BILLING_CONFIG_CHANGED' | 'BILLING_ENTRY_RECORDED' | 'BILLING_STATUS_CHANGED'>
+export type AccionDeFacturacion = Extract<AuditAccion, 'BILLING_CONFIG_CHANGED' | 'BILLING_ENTRY_RECORDED' | 'BILLING_STATUS_CHANGED' | 'COMMISSION_VERIFICATION_ADJUSTED'>
 
 export async function auditarFacturacion(
   tx: Tx,

@@ -40,8 +40,9 @@ import { ID_CLIENTE_DE_MOSTRADOR } from '../../src/modules/pos/domain'
  *  · reenviar el mismo formulario no vende dos veces; dos cajeros cobrando el mismo pedido a la vez
  *    producen UN solo cobro;
  *  · cobrar en la caja el pedido de la vitrina (con su QR) lo cierra con la evidencia del pago: una
- *    transferencia con referencia sobre un monto que el cliente confirmó llega a PAYMENT_VERIFIED y la
- *    comisión es el 8 %; el efectivo no verifica; el cupón de una oferta cobra su cuota y su descuento;
+ *    transferencia con referencia sobre un monto que el cliente confirmó queda REPORTADA por el negocio
+ *    (EXTERNAL_PAYMENT_REPORTED) y la comisión sigue en CPA —verificar es cosa de una fuente externa—;
+ *    el efectivo ni siquiera reporta; el cupón de una oferta cobra su cuota y su descuento;
  *  · la venta de mostrador pura NO comisiona y nunca pasa de REDEEMED (no hay confirmación del cliente);
  *  · la caja tiene que estar abierta y ser de la empresa; un pedido de otra sucursal no se cobra en esta;
  *  · aislamiento entre empresas.
@@ -355,15 +356,19 @@ test('12 · cobrar en efectivo el pedido de la vitrina: se cierra con su QR, com
   assert.equal((t.snapshot as { ordenTipo: string }).ordenTipo, 'PEDIDO_MEMBEGO')
 })
 
-test('13 · transferencia con referencia sobre un monto que el cliente confirmó: PAYMENT_VERIFIED y comisión del 8 %', async () => {
+test('13 · transferencia con referencia sobre un monto que el cliente confirmó: queda REPORTADA por el negocio (EXTERNAL_PAYMENT_REPORTED), no verificada, y la comisión sigue en CPA', async () => {
+  // Sprint de cierre (2026-10-08): la referencia que teclea un cajero es la palabra de la empresa. PAYMENT_VERIFIED
+  // y el 8 % quedan para una fuente externa (pasarela, banco, proveedor) a través de `verificarPagoExternamenteEnTx`.
   const p = await pedidoListo({ confirmado: true })
   const r = await cobrar(p.token, { metodo: 'TRANSFERENCIA', referencia: 'TRF-889900' })
-  assert.equal(r.nivel, 'PAYMENT_VERIFIED')
+  assert.equal(r.nivel, 'EXTERNAL_PAYMENT_REPORTED')
   const o = await pedidoDe(p.pedidoId)
-  assert.equal(o.verificationLevel, 'PAYMENT_VERIFIED')
+  assert.equal(o.verificationLevel, 'EXTERNAL_PAYMENT_REPORTED')
   assert.equal(o.payment?.reference, 'TRF-889900')
-  assert.equal(o.commission?.type, 'PERCENTAGE')
-  assert.equal(o.commission?.amount.toFixed(2), '20.00', '8 % de 250')
+  assert.equal(o.payment?.source, 'MERCHANT_REPORTED')
+  assert.equal(o.payment?.verifiedAt, null)
+  assert.equal(o.commission?.type, 'CPA_FIXED')
+  assert.equal(o.commission?.amount.toFixed(2), '100.00', 'CPA, no el 8 % de 250')
 })
 
 test('14 · sin la confirmación del cliente, ni una transferencia con referencia pasa de REDEEMED (la cadena de evidencia no se salta)', async () => {
@@ -478,15 +483,15 @@ test('20 · un pedido que YA tiene su pago no se cobra otra vez: la evidencia ve
   assert.equal(intacto.payment?.reference, 'TRF-PREVIA-1')
   assert.equal(await cuentaTx(), txs, 'y no entró ningún cobro a la caja')
 
-  // Se entrega sin cobrar: se cierra con la evidencia tal como estaba → PAYMENT_VERIFIED y comisión del 8 %.
+  // Se entrega sin cobrar: se cierra con la evidencia tal como estaba → reportada por el negocio y comisión CPA.
   const r = await cobrar(p.token, { entregarSinCobrar: true, metodo: undefined })
   assert.equal(r.transaccion, null, 'no entró dinero: no hay ticket')
-  assert.equal(r.nivel, 'PAYMENT_VERIFIED')
+  assert.equal(r.nivel, 'EXTERNAL_PAYMENT_REPORTED')
   const o = await pedidoDe(p.pedidoId)
   assert.equal(o.status, 'COMPLETED')
   assert.equal(o.payment?.method, 'TRANSFER')
-  assert.equal(o.commission?.type, 'PERCENTAGE')
-  assert.equal(o.commission?.amount.toFixed(2), '20.00')
+  assert.equal(o.commission?.type, 'CPA_FIXED')
+  assert.equal(o.commission?.amount.toFixed(2), '100.00')
   assert.equal(await cuentaTx(), txs, 'la caja no cuenta un efectivo que nunca entró')
 })
 

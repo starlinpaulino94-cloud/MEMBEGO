@@ -1,6 +1,14 @@
 import { Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
+import { CANALES_ATRIBUIDOS_A_MEMBEGO } from '@/modules/billing/domain'
 import { MUESTRA_POR_REGLA, REGLAS, type FilaDeHallazgo, type Hallazgo } from './domain'
+
+/**
+ * Los canales de atribución por los que un pedido de otro origen comisiona (la misma lista que Merchant
+ * Billing). Es una constante del código, no un parámetro: entra en el SQL como literales (los valores son
+ * nombres de enum del propio código, nunca entrada de nadie).
+ */
+const CANALES_ATRIBUIDOS = Prisma.raw(CANALES_ATRIBUIDOS_A_MEMBEGO.map((c) => "'" + c.replace(/'/g, "''") + "'").join(', '))
 
 /**
  * CONCILIACIÓN DEL COMERCIO · lecturas (Fase 9). SOLO LECTURA y sin tablas nuevas: cada regla es una consulta
@@ -41,7 +49,9 @@ const CONSULTAS: Readonly<Record<string, Consulta>> = {
     SELECT o."companyId", o."code" AS referencia, 'Completado el ' || to_char(o."completedAt", 'YYYY-MM-DD') || ' por ' || ${dinero('o."total"')} AS detalle,
            row_number() OVER (ORDER BY o."completedAt" DESC NULLS LAST, o."id") AS "orden"
       FROM "membego_orders" o
-     WHERE o."status" = 'COMPLETED' AND o."origin" = 'MARKETPLACE' ${alcance(a, 'o."companyId"')}
+     WHERE o."status" = 'COMPLETED' ${alcance(a, 'o."companyId"')}
+       AND (o."origin" = 'MARKETPLACE' OR EXISTS (SELECT 1 FROM "order_attributions" at WHERE at."orderId" = o."id" AND at."channel"::text IN (${CANALES_ATRIBUIDOS})))
+       AND o."origin" <> 'SUPPLY' AND o."sourceType" IS DISTINCT FROM 'SUPPLY_V2_CUSTOMER_ORDER'
        AND o."commissionableBase" > 0
        AND NOT EXISTS (SELECT 1 FROM "merchant_billing_configs" bc WHERE bc."companyId" = o."companyId"
                           AND ((bc."feeModel" = 'CPA_FIXED' AND bc."cpaAmount" = 0) OR (bc."feeModel" = 'PERCENTAGE' AND bc."percentageRate" = 0)))
@@ -57,10 +67,12 @@ const CONSULTAS: Readonly<Record<string, Consulta>> = {
       FROM "membego_orders" o JOIN "merchant_commissions" m ON m."orderId" = o."id"
      WHERE m."status" = 'CONFIRMED' AND o."status" NOT IN ('COMPLETED', 'REFUNDED') ${alcance(a, 'o."companyId"')}`,
   C04: (a) => Prisma.sql`
-    SELECT o."companyId", o."code" AS referencia, 'Origen ' || o."origin" || ' con comisión de ' || ${dinero('m."amount"')} AS detalle,
+    SELECT o."companyId", o."code" AS referencia, 'Origen ' || o."origin" || ', canal ' || coalesce(at."channel"::text, '—') || ', con comisión de ' || ${dinero('m."amount"')} AS detalle,
            row_number() OVER (ORDER BY m."createdAt" DESC, o."id") AS "orden"
       FROM "membego_orders" o JOIN "merchant_commissions" m ON m."orderId" = o."id"
-     WHERE o."origin" <> 'MARKETPLACE' ${alcance(a, 'o."companyId"')}`,
+      LEFT JOIN "order_attributions" at ON at."orderId" = o."id"
+     WHERE o."origin" <> 'MARKETPLACE' ${alcance(a, 'o."companyId"')}
+       AND (at."channel" IS NULL OR at."channel"::text NOT IN (${CANALES_ATRIBUIDOS}))`,
   C05: (a) => Prisma.sql`
     SELECT o."companyId", o."code" AS referencia, 'Base ' || ${dinero('m."baseAmount"')} || ' × ' || m."rate"::text || ' % da ' || ${dinero('round(m."baseAmount" * m."rate" / 100, 2)')} || ' y se cobró ' || ${dinero('m."amount"')} AS detalle,
            row_number() OVER (ORDER BY m."createdAt" DESC, o."id") AS "orden"
@@ -92,11 +104,19 @@ const CONSULTAS: Readonly<Record<string, Consulta>> = {
      WHERE o."verificationLevel" IN ('CUSTOMER_VERIFIED', 'PAYMENT_VERIFIED', 'FISCALLY_RECONCILED') ${alcance(a, 'o."companyId"')}
        AND (c."orderId" IS NULL OR c."confirmedTotal" <> o."total")`,
   P04: (a) => Prisma.sql`
-    SELECT o."companyId", o."code" AS referencia, 'Comisión CPA de ' || ${dinero('m."amount"')} || ' por ' || ${dinero('o."total"')} || '; el pago se verificó después de cerrar' AS detalle,
+    SELECT o."companyId", o."code" AS referencia, 'Comisión CPA de ' || ${dinero('m."amount"')} || ' por ' || ${dinero('o."total"')} || '; el pago se verificó después de cerrar y el ajuste al porcentaje no está asentado' AS detalle,
            row_number() OVER (ORDER BY o."completedAt" DESC NULLS LAST, o."id") AS "orden"
       FROM "membego_orders" o JOIN "merchant_commissions" m ON m."orderId" = o."id"
      WHERE o."verificationLevel" IN ('PAYMENT_VERIFIED', 'FISCALLY_RECONCILED') AND m."verificationLevel" NOT IN ('PAYMENT_VERIFIED', 'FISCALLY_RECONCILED')
-       AND m."type" = 'CPA_FIXED' AND m."dealId" IS NULL AND m."feeModel" = 'HYBRID' ${alcance(a, 'o."companyId"')}`,
+       AND m."type" = 'CPA_FIXED' AND m."dealId" IS NULL AND m."feeModel" = 'HYBRID' AND m."status" = 'CONFIRMED'
+       AND m."verificationAdjustmentEntryId" IS NULL ${alcance(a, 'o."companyId"')}`,
+  P05: (a) => Prisma.sql`
+    SELECT o."companyId", o."code" AS referencia, 'Comisión al ' || m."rate"::text || ' % (' || ${dinero('m."amount"')} || ') con el pago solo reportado por el negocio (' || coalesce(p."source"::text, 'sin constancia') || ')' AS detalle,
+           row_number() OVER (ORDER BY m."createdAt" DESC, o."id") AS "orden"
+      FROM "merchant_commissions" m JOIN "membego_orders" o ON o."id" = m."orderId"
+      LEFT JOIN "payment_evidences" p ON p."orderId" = o."id"
+     WHERE m."type" = 'PERCENTAGE' AND m."feeModel" = 'HYBRID' AND m."status" = 'CONFIRMED'
+       AND (p."orderId" IS NULL OR p."source" = 'MERCHANT_REPORTED') ${alcance(a, 'm."companyId"')}`,
 
   // ── Montos del pedido ───────────────────────────────────────────────────
   L01: (a) => Prisma.sql`

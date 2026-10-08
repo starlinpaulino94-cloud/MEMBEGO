@@ -5,7 +5,9 @@ import {
   CONFIG_POR_DEFECTO,
   DIAS_DE_GRACIA,
   TIPOS_QUE_RESTAN,
+  CANALES_ATRIBUIDOS_A_MEMBEGO,
   TIPOS_QUE_SUMAN,
+  calcularAjustePorVerificacion,
   calcularComision,
   envejecerDeuda,
   esPedidoDeSupply,
@@ -40,9 +42,10 @@ const cfg = (feeModel: MerchantFeeModel = 'HYBRID', cpaAmount = '100.00', percen
 
 test('CPA vs porcentaje: la tabla completa de modelo × nivel de verificación', () => {
   const esperado: Record<MerchantFeeModel, Record<MembegoVerificationLevel, 'CPA_FIXED' | 'PERCENTAGE'>> = {
-    CPA_FIXED: { ATTRIBUTED: 'CPA_FIXED', REDEEMED: 'CPA_FIXED', CUSTOMER_VERIFIED: 'CPA_FIXED', PAYMENT_VERIFIED: 'CPA_FIXED', FISCALLY_RECONCILED: 'CPA_FIXED' },
-    PERCENTAGE: { ATTRIBUTED: 'PERCENTAGE', REDEEMED: 'PERCENTAGE', CUSTOMER_VERIFIED: 'PERCENTAGE', PAYMENT_VERIFIED: 'PERCENTAGE', FISCALLY_RECONCILED: 'PERCENTAGE' },
-    HYBRID: { ATTRIBUTED: 'CPA_FIXED', REDEEMED: 'CPA_FIXED', CUSTOMER_VERIFIED: 'CPA_FIXED', PAYMENT_VERIFIED: 'PERCENTAGE', FISCALLY_RECONCILED: 'PERCENTAGE' },
+    CPA_FIXED: { ATTRIBUTED: 'CPA_FIXED', REDEEMED: 'CPA_FIXED', CUSTOMER_VERIFIED: 'CPA_FIXED', EXTERNAL_PAYMENT_REPORTED: 'CPA_FIXED', PAYMENT_VERIFIED: 'CPA_FIXED', FISCALLY_RECONCILED: 'CPA_FIXED' },
+    PERCENTAGE: { ATTRIBUTED: 'PERCENTAGE', REDEEMED: 'PERCENTAGE', CUSTOMER_VERIFIED: 'PERCENTAGE', EXTERNAL_PAYMENT_REPORTED: 'PERCENTAGE', PAYMENT_VERIFIED: 'PERCENTAGE', FISCALLY_RECONCILED: 'PERCENTAGE' },
+    // HYBRID: el porcentaje solo desde el pago VERIFICADO por una fuente externa; lo que reporta el negocio sigue en CPA.
+    HYBRID: { ATTRIBUTED: 'CPA_FIXED', REDEEMED: 'CPA_FIXED', CUSTOMER_VERIFIED: 'CPA_FIXED', EXTERNAL_PAYMENT_REPORTED: 'CPA_FIXED', PAYMENT_VERIFIED: 'PERCENTAGE', FISCALLY_RECONCILED: 'PERCENTAGE' },
   }
   for (const m of MODELOS) for (const n of NIVELES) assert.equal(tipoDeComision(m, n), esperado[m][n], `${m} + ${n}`)
 })
@@ -76,14 +79,56 @@ test('una tarifa rota lanza en vez de cobrar mal', () => {
   assert.throws(() => calcularComision({ ...p, commissionableBase: '-1' }, cfg()))
 })
 
-test('qué pedidos comisionan: solo el marketplace; nunca el que envuelve Supply', () => {
+test('qué pedidos comisionan: el marketplace por sí mismo; otros orígenes solo con atribución demostrable; nunca el que envuelve Supply', () => {
   assert.equal(pedidoGeneraComision({ origin: 'MARKETPLACE', sourceType: null }), true)
-  for (const origin of ['POS', 'EXCURSION', 'API']) assert.equal(pedidoGeneraComision({ origin, sourceType: null }), false, origin)
+  assert.equal(pedidoGeneraComision({ origin: 'MARKETPLACE', sourceType: null, attributionChannel: 'MARKETPLACE_BROWSE' }), true)
+  // Adquisición ≠ cumplimiento: sin atribución (o DIRECT, o el QR de membresía) un POS, una excursión o la API no comisionan…
+  for (const origin of ['POS', 'EXCURSION', 'API']) {
+    assert.equal(pedidoGeneraComision({ origin, sourceType: null }), false, origin)
+    assert.equal(pedidoGeneraComision({ origin, sourceType: null, attributionChannel: null }), false, origin)
+    assert.equal(pedidoGeneraComision({ origin, sourceType: null, attributionChannel: 'DIRECT' }), false, `${origin} DIRECT`)
+    assert.equal(pedidoGeneraComision({ origin, sourceType: null, attributionChannel: 'QR_SCAN' }), false, `${origin} QR_SCAN`)
+  }
+  // …y SÍ comisionan cuando Membego trajo la venta de forma demostrable (promoción, campaña, referido, vitrina, búsqueda).
+  for (const canal of CANALES_ATRIBUIDOS_A_MEMBEGO) assert.equal(pedidoGeneraComision({ origin: 'POS', sourceType: null, attributionChannel: canal }), true, canal)
+  assert.deepEqual([...CANALES_ATRIBUIDOS_A_MEMBEGO], ['MARKETPLACE_BROWSE', 'MARKETPLACE_SEARCH', 'PROMOTION_CLAIM', 'CAMPAIGN', 'REFERRAL'])
   assert.equal(pedidoGeneraComision({ origin: 'SUPPLY', sourceType: 'SUPPLY_V2_CUSTOMER_ORDER' }), false)
+  assert.equal(pedidoGeneraComision({ origin: 'SUPPLY', sourceType: 'SUPPLY_V2_CUSTOMER_ORDER', attributionChannel: 'SUPPLY_OFFER' }), false)
   // Aunque el origen mintiera, el documento de origen de Supply lo delata.
   assert.equal(pedidoGeneraComision({ origin: 'MARKETPLACE', sourceType: 'SUPPLY_V2_CUSTOMER_ORDER' }), false)
   assert.equal(esPedidoDeSupply({ origin: 'MARKETPLACE', sourceType: 'SUPPLY_V2_CUSTOMER_ORDER' }), true)
   assert.equal(esPedidoDeSupply({ origin: 'MARKETPLACE', sourceType: null }), false)
+})
+
+test('ajuste por verificación: solo HYBRID + CPA sin oferta, una vez, con el pago verificado; la diferencia lleva signo', () => {
+  const cfg: { feeModel: MerchantFeeModel; cpaAmount: string; percentageRate: string } = { feeModel: 'HYBRID', cpaAmount: '100', percentageRate: '8' }
+  const c: Parameters<typeof calcularAjustePorVerificacion>[0] = { type: 'CPA_FIXED', feeModel: 'HYBRID', status: 'CONFIRMED', dealId: null, baseAmount: '5000.00', amount: '100.00', verificationAdjustmentAmount: null }
+  const a = calcularAjustePorVerificacion(c, 'PAYMENT_VERIFIED', cfg)
+  assert.equal(a.resultado, 'AJUSTAR')
+  if (a.resultado === 'AJUSTAR') {
+    assert.equal(a.amount.toFixed(2), '300.00', '8 % de 5000 = 400; cobrados 100; diferencia +300')
+    assert.equal(a.objetivo.toFixed(2), '400.00')
+    assert.equal(a.rate.toFixed(2), '8.00')
+  }
+  // Porcentaje menor que el CPA: la diferencia es negativa (la regla dice «porcentaje», no «lo que sea mayor»).
+  const b = calcularAjustePorVerificacion({ ...c, baseAmount: '500.00' }, 'PAYMENT_VERIFIED', cfg)
+  assert.equal(b.resultado, 'AJUSTAR')
+  if (b.resultado === 'AJUSTAR') assert.equal(b.amount.toFixed(2), '-60.00')
+  // Exactamente igual: nada que asentar.
+  assert.equal(calcularAjustePorVerificacion({ ...c, baseAmount: '1250.00' }, 'PAYMENT_VERIFIED', cfg).resultado, 'SIN_DIFERENCIA')
+  // Lo que no aplica, con su motivo.
+  const noAplica = (x: Parameters<typeof calcularAjustePorVerificacion>[0], nivel: Parameters<typeof calcularAjustePorVerificacion>[1], conf = cfg) => {
+    const r = calcularAjustePorVerificacion(x, nivel, conf)
+    return r.resultado === 'NO_APLICA' ? r.motivo : r.resultado
+  }
+  assert.equal(noAplica(c, 'EXTERNAL_PAYMENT_REPORTED'), 'NIVEL', 'lo reportado por el negocio no ajusta nada')
+  assert.equal(noAplica(c, 'CUSTOMER_VERIFIED'), 'NIVEL')
+  assert.equal(noAplica({ ...c, verificationAdjustmentAmount: '300.00' }, 'PAYMENT_VERIFIED'), 'YA_AJUSTADA')
+  assert.equal(noAplica({ ...c, status: 'REVERSED' }, 'PAYMENT_VERIFIED'), 'REVERTIDA')
+  assert.equal(noAplica({ ...c, dealId: 'd1' }, 'PAYMENT_VERIFIED'), 'OFERTA')
+  assert.equal(noAplica({ ...c, feeModel: 'CPA_FIXED' }, 'PAYMENT_VERIFIED', { ...cfg, feeModel: 'CPA_FIXED' }), 'MODELO')
+  assert.equal(noAplica({ ...c, type: 'PERCENTAGE', amount: '400.00' }, 'PAYMENT_VERIFIED'), 'PORCENTAJE')
+  assert.throws(() => calcularAjustePorVerificacion(c, 'PAYMENT_VERIFIED', { ...cfg, percentageRate: '101' }))
 })
 
 test('validar tarifas: rangos, decimales y números', () => {

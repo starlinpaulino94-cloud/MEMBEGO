@@ -14,6 +14,7 @@ import {
   marcarListoEnTx,
   reembolsarPedidoEnTx,
   registrarPagoEnTx,
+  verificarPagoExternamenteEnTx,
   type ContextoPedido,
 } from '../../src/modules/orders/service'
 import { crearOfertaEnTx, publicarOfertaEnTx, reclamarOfertaEnTx } from '../../src/modules/deals/service'
@@ -40,6 +41,7 @@ const ctx = { usuario: '', a: '', b: '', demo: '', s1: '', sB: '', sDemo: '', ca
 
 const empresa: ContextoPedido = { actor: 'EMPRESA', actorId: null }
 const clienteCtx: ContextoPedido = { actor: 'CLIENTE', actorId: null }
+const sistemaCtx: ContextoPedido = { actor: 'SISTEMA', actorId: null }
 const aud = () => ({ actorId: ctx.usuario, ipAddress: '127.0.0.1', userAgent: 'test' })
 const enA = <T>(fn: Parameters<typeof conEmpresa<T>>[1]) => conEmpresa(ctx.a, fn)
 
@@ -147,13 +149,15 @@ async function cerradoEnEfectivo(opts: { variante?: string; cantidad?: number } 
   return r
 }
 
-/** Confirmado por el cliente, transferencia con referencia ANTES de entregar → PAYMENT_VERIFIED y 8 %. */
+/** Confirmado por el cliente, pago VERIFICADO por una fuente externa (conciliación bancaria) ANTES de entregar → PAYMENT_VERIFIED y 8 %. */
 async function cerradoVerificado(opts: { variante?: string; cantidad?: number } = {}) {
   const cliente = siguienteCliente()
   const r = await pedido({ ...opts, cliente })
   const listo = await enA((tx) => marcarListoEnTx(tx, ctx.a, r.pedidoId, empresa))
   await enA((tx) => confirmarMontoEnTx(tx, ctx.a, r.pedidoId, { customerId: cliente, montoVisto: r.total }, clienteCtx))
-  await enA((tx) => registrarPagoEnTx(tx, ctx.a, r.pedidoId, { method: 'TRANSFER', amount: r.total, reference: `TRF-${sufijo}-${n}` }, empresa))
+  await enA((tx) =>
+    verificarPagoExternamenteEnTx(tx, ctx.a, r.pedidoId, { source: 'BANK_RECONCILED', verificationRef: `banco-${sufijo}-${n}`, method: 'TRANSFER', amount: r.total, reference: `TRF-${sufijo}-${n}` }, sistemaCtx)
+  )
   await enA((tx) => completarPorQrEnTx(tx, ctx.a, listo.qrToken as string, empresa))
   return r
 }
@@ -222,9 +226,12 @@ test('4 · C03: una comisión confirmada sobre un pedido que quedó cancelado', 
   assert.deepEqual(await cambios(() => rompe('membego_orders', Prisma.sql`UPDATE "membego_orders" SET "status" = 'CANCELLED' WHERE "id" = ${ids(r.pedidoId)}`)), { C03: 1 })
 })
 
-test('5 · C04: una comisión sobre un pedido de un origen que no comisiona', async () => {
+test('5 · C04: una comisión sobre un pedido que no comisiona (origen POS SIN atribución demostrable); con atribución de Membego, el POS sí comisiona', async () => {
   const r = await cerradoEnEfectivo()
-  assert.deepEqual(await cambios(() => rompe('membego_orders', Prisma.sql`UPDATE "membego_orders" SET "origin" = 'POS' WHERE "id" = ${ids(r.pedidoId)}`)), { C04: 1 })
+  // Origen POS pero atribuido a la vitrina: Membego trajo la venta → comisiona → nada que acusar.
+  assert.deepEqual(await cambios(() => rompe('membego_orders', Prisma.sql`UPDATE "membego_orders" SET "origin" = 'POS' WHERE "id" = ${ids(r.pedidoId)}`)), {})
+  // Origen POS y canal DIRECT (entró por su cuenta): esa comisión cobra lo que no se puede demostrar.
+  assert.deepEqual(await cambios(() => rompe('order_attributions', Prisma.sql`UPDATE "order_attributions" SET "channel" = 'DIRECT' WHERE "orderId" = ${ids(r.pedidoId)}`)), { C04: 1 })
 })
 
 test('6 · C05: una comisión por porcentaje con un monto que no es base × tasa (y su asiento ya no coincide)', async () => {
@@ -257,19 +264,38 @@ test('10 · P03: verificado por el cliente con una confirmación que ya no es la
   assert.deepEqual(await cambios(() => rompe('customer_confirmations', Prisma.sql`UPDATE "customer_confirmations" SET "confirmedTotal" = "confirmedTotal" + 1 WHERE "orderId" = ${ids(r.pedidoId)}`)), { P03: 1 })
 })
 
-test('11 · P04: el negocio registra el pago DESPUÉS de entregar — la comisión se queda en CPA (por diseño, pero se ve)', async () => {
+test('11 · P04/P05: lo que el negocio registra DESPUÉS de entregar deja la comisión en CPA sin hallazgo; una verificación externa posterior asienta el ajuste (y P04 acusa si falta); el porcentaje sobre un pago solo reportado es P05', async () => {
   const cliente = siguienteCliente()
   const r = await pedido({ cliente })
   const listo = await enA((tx) => marcarListoEnTx(tx, ctx.a, r.pedidoId, empresa))
   await enA((tx) => confirmarMontoEnTx(tx, ctx.a, r.pedidoId, { customerId: cliente, montoVisto: r.total }, clienteCtx))
   await enA((tx) => completarPorQrEnTx(tx, ctx.a, listo.qrToken as string, empresa))
   const antes = await totales()
+  // (a) La empresa registra el pago tarde: queda REPORTADO, la comisión sigue en CPA y ninguna regla acusa.
   await enA((tx) => registrarPagoEnTx(tx, ctx.a, r.pedidoId, { method: 'TRANSFER', amount: r.total, reference: `TARDE-${sufijo}` }, empresa))
-  const despues = await totales()
-  assert.equal((await prisma.membegoOrder.findUniqueOrThrow({ where: { id: r.pedidoId } })).verificationLevel, 'PAYMENT_VERIFIED')
+  let despues = await totales()
+  assert.equal((await prisma.membegoOrder.findUniqueOrThrow({ where: { id: r.pedidoId } })).verificationLevel, 'EXTERNAL_PAYMENT_REPORTED')
   assert.equal((await prisma.commission.findUniqueOrThrow({ where: { orderId: r.pedidoId } })).type, 'CPA_FIXED')
-  assert.equal(despues.P04 - antes.P04, 1)
-  assert.equal(despues.P01 - antes.P01 + (despues.P02 - antes.P02) + (despues.P03 - antes.P03), 0, 'no es una incoherencia: la evidencia sí está')
+  assert.deepEqual(despues, antes, 'reportar no es verificar: nada que conciliar')
+  // (b) Una fuente externa lo verifica después: el ajuste al porcentaje se asienta en la misma operación → P04 sigue en cero.
+  await enA((tx) => verificarPagoExternamenteEnTx(tx, ctx.a, r.pedidoId, { source: 'GATEWAY_VERIFIED', verificationRef: `gw-tarde-${sufijo}`, method: 'TRANSFER', amount: r.total, reference: `TARDE-${sufijo}` }, sistemaCtx))
+  const c = await prisma.commission.findUniqueOrThrow({ where: { orderId: r.pedidoId } })
+  assert.equal(c.type, 'CPA_FIXED')
+  assert.ok(c.verificationAdjustmentEntryId, 'el ajuste quedó asentado')
+  despues = await totales()
+  assert.deepEqual(despues, antes)
+  // (c) Si el ajuste faltara (escritura a mano), P04 lo acusa.
+  const c2 = await cambios(() =>
+    rompe('merchant_commissions', Prisma.sql`UPDATE "merchant_commissions" SET "verificationAdjustmentEntryId" = NULL, "verificationAdjustmentAmount" = NULL, "verificationAdjustedAt" = NULL, "verificationRef" = NULL WHERE "orderId" = ${ids(r.pedidoId)}`)
+  )
+  assert.deepEqual(c2, { P04: 1 })
+  // (d) P05: una comisión al porcentaje cuya constancia es solo «reportada por el negocio».
+  const v = await cerradoVerificado()
+  assert.equal((await prisma.commission.findUniqueOrThrow({ where: { orderId: v.pedidoId } })).type, 'PERCENTAGE')
+  const c3 = await cambios(() =>
+    rompe('payment_evidences', Prisma.sql`UPDATE "payment_evidences" SET "source" = 'MERCHANT_REPORTED', "verifiedAt" = NULL, "verificationRef" = NULL WHERE "orderId" = ${ids(v.pedidoId)}`)
+  )
+  assert.deepEqual(c3, { P05: 1 })
 })
 
 test('12 · L01–L04: los montos del pedido tienen que salir de sus renglones', async () => {

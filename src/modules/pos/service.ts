@@ -494,7 +494,8 @@ export async function venderEnMostradorEnTx(tx: Tx, companyId: string, e: Entrad
     tx,
     companyId,
     creado.pedidoId,
-    { completedAt: ahora, confirmadoPorCliente: false, pago: { method: metodoDePedido(cobro.metodo), amount: total.toFixed(2), reference: cobro.referencia } },
+    // La caja cobró: es lo que la empresa reporta, no una verificación externa.
+    { completedAt: ahora, confirmadoPorCliente: false, pago: { method: metodoDePedido(cobro.metodo), amount: total.toFixed(2), reference: cobro.referencia, source: 'MERCHANT_REPORTED' } },
     sistemaACargoDe(ctx)
   )
 

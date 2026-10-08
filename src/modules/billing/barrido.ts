@@ -1,6 +1,8 @@
 import 'server-only'
 
+import type { MembegoAttributionChannel } from '@prisma/client'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { CANALES_ATRIBUIDOS_A_MEMBEGO } from './domain'
 import {
   SISTEMA,
   generarCortesPendientesEnTx,
@@ -57,7 +59,15 @@ export async function barridoFacturacion(ahora: Date = new Date(), opciones: Opc
   const huerfanos = !comisiones ? [] : await sinEmpresa('barrido de Merchant Billing: pedidos completados sin comisión (recorre empresa por empresa)', (tx) =>
     tx.membegoOrder.findMany({
       // Una base en cero nunca comisiona (`SIN_COMISION`) y no deja comisión que la excluya: sin este filtro volvería cada día y 200 de ellas taparían a los huérfanos reales.
-      where: { status: 'COMPLETED', origin: 'MARKETPLACE', completedAt: { gte: desde }, commissionableBase: { gt: 0 }, commission: null },
+      // Lo que comisiona por sí mismo (marketplace) o por atribución demostrable (los canales de
+      // `CANALES_ATRIBUIDOS_A_MEMBEGO`); el servicio vuelve a decidirlo (`pedidoGeneraComision`).
+      where: {
+        status: 'COMPLETED',
+        completedAt: { gte: desde },
+        commissionableBase: { gt: 0 },
+        commission: null,
+        OR: [{ origin: 'MARKETPLACE' }, { attribution: { channel: { in: CANALES_ATRIBUIDOS_A_MEMBEGO as MembegoAttributionChannel[] } } }],
+      },
       select: { id: true, companyId: true },
       orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
       take: MAX_PEDIDOS,
@@ -70,10 +80,10 @@ export async function barridoFacturacion(ahora: Date = new Date(), opciones: Opc
         await tx.$queryRaw`SELECT "id" FROM "membego_orders" WHERE "id" = ${id} AND "companyId" = ${companyId} FOR UPDATE`
         const p = await tx.membegoOrder.findFirst({
           where: { id, companyId, status: 'COMPLETED' },
-          select: { id: true, code: true, origin: true, sourceType: true, commissionableBase: true, verificationLevel: true, currency: true },
+          select: { id: true, code: true, origin: true, sourceType: true, commissionableBase: true, verificationLevel: true, currency: true, attribution: { select: { channel: true } } },
         })
         if (!p) return
-        const c = await registrarComisionDePedidoEnTx(tx, companyId, p, SISTEMA, ahora)
+        const c = await registrarComisionDePedidoEnTx(tx, companyId, { ...p, attributionChannel: p.attribution?.channel ?? null }, SISTEMA, ahora)
         if (c.resultado === 'CREADA') r.comisionesCreadas++
       })
     } catch (e) {

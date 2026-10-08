@@ -30,7 +30,8 @@ test('lo único que entra a una consulta por parámetro es la empresa; el resto 
   const q = limpio('src/modules/conciliacion/queries.ts')
   // Las interpolaciones de las consultas son filtros de alcance, ayudas de formato o fragmentos propios.
   const interpoladas = [...q.matchAll(/\$\{([^}]+)\}/g)].map((m) => m[1]).filter((x) => !/^(dinero|alcance|lineasPorPedido)\(/.test(x))
-  for (const i of interpoladas) assert.match(i, /^(c|col|regla\.codigo|a\.companyId|muestra|consulta\(a\)|Prisma\.join\(\[\.\.\.nombres\.keys\(\)\]\))$/, `interpolación inesperada: ${i}`)
+  // `CANALES_ATRIBUIDOS` es la lista de canales que comisionan (constante del código, en literales): no es un parámetro.
+  for (const i of interpoladas) assert.match(i, /^(c|col|regla\.codigo|a\.companyId|muestra|consulta\(a\)|CANALES_ATRIBUIDOS|Prisma\.join\(\[\.\.\.nombres\.keys\(\)\]\))$/, `interpolación inesperada: ${i}`)
 })
 
 test('la pantalla es solo del superadmin, autoriza antes de leer y corre sin contexto de empresa', () => {

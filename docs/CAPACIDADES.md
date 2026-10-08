@@ -62,7 +62,12 @@ para pedir» y el panel se niega. Si se apaga con pedidos ya hechos, el cliente 
 marketplace que se **completa** (QR) le cobra a la empresa una comisión de Membego, en
 la misma transacción: CPA fijo (RD$ 100 de serie) si el pedido no tiene el pago
 verificado, o el 8 % de la base comisionable si lo tiene (modelo `HYBRID`, que el
-superadmin puede cambiar por empresa en `/superadmin/facturacion`). La cuenta se crea
+superadmin puede cambiar por empresa en `/superadmin/facturacion`). **Verificado** quiere
+decir confirmado por una fuente externa a la empresa (pasarela firmada, conciliación
+bancaria del superadmin, proveedor); lo que la empresa registra con una referencia es
+«reportado» y cobra CPA. Si la verificación llega después de cerrar, el libro recibe la
+diferencia hasta el porcentaje como un asiento aparte (`VERIFICATION_ADJUSTMENT`), sin
+editar la comisión (`docs/REGLAS_FINANCIERAS.md`). La cuenta se crea
 sola con esos valores y un límite de crédito de RD$ 5,000. **Encender la capacidad en una
 empresa real es empezar a cobrarle**: avísale antes. Los pedidos que envuelven una compra
 de Supply no comisionan (se liquidan por Supply Economics).
@@ -93,11 +98,13 @@ clásica, `POS_CAJA`, ya viene encendida). Sin ella la caja sigue como siempre. 
 del turno **abierta**, y las acciones comprueban las capacidades en el servidor.
 
 **Qué pasa con la plata (Fase 7).** Cobrar en la caja el pedido del marketplace de quien llega con su QR sigue
-cobrándole la comisión de Merchant Billing (CPA de RD$ 100 de serie, o el 8 % si el pago queda verificado:
-transferencia o tarjeta **con referencia**, por el monto, sobre un pedido que el cliente confirmó). La **venta de
-mostrador pura NO comisiona** (decisión de producto pendiente). **Encender la capacidad no cobra nada nuevo por sí
-sola**, pero avisa a la empresa de que un pedido del marketplace cobrado con una transferencia verificada le cuesta
-el 8 % de su base.
+cobrándole la comisión de Merchant Billing (CPA de RD$ 100 de serie). La transferencia o tarjeta **con referencia**
+que teclea el cajero deja el pedido **reportado por el negocio**, no verificado: el 8 % solo se cobra cuando una fuente
+externa (pasarela, conciliación bancaria del superadmin) confirma el pago, y entonces el libro recibe la diferencia
+como ajuste (sprint de cierre, 2026-10-08). La **venta de mostrador pura NO comisiona** (origen POS con canal DIRECT);
+un pedido de origen POS **sí comisiona si su atribución es de Membego** (promoción, campaña, referido, vitrina). **Encender
+la capacidad no cobra nada nuevo por sí sola**, pero avisa a la empresa de que un pedido del marketplace cobrado en caja
+le cuesta el CPA y, si el pago se verifica, el 8 % de su base.
 
 ### Cómo encender el catálogo unificado en una empresa
 

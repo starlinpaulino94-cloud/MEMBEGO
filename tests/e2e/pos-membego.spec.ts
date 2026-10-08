@@ -8,7 +8,8 @@ import { empresaCatalogo, existenciasSembradas, itemSembrado, sucursalSembrada, 
  *   el cajero abre la caja → vende en el mostrador un servicio y 2 camisetas, paga en efectivo con cambio
  *   (las existencias bajan y el cobro aparece en el turno) → una transferencia sin referencia no cobra → una
  *   persona llega con el QR de su pedido del marketplace: se ve el pedido, se cobra con una transferencia con
- *   su referencia y el pedido se cierra con su comisión del 8 % (el cliente ya había confirmado el monto)
+ *   su referencia y el pedido se cierra REPORTADO por el negocio y con su comisión CPA (el cliente ya había
+ *   confirmado el monto; el 8 % espera a que una fuente externa verifique el pago)
  *
  * Y lo que NO debe pasar: ver los bloques del POS conectado en una empresa que no lo tiene, cobrar el QR de
  * otra empresa, o cobrar dos veces el mismo QR.
@@ -165,7 +166,7 @@ test.describe('POS conectado · recorrido', () => {
     await ctx.close()
   })
 
-  test('el cajero cobra el pedido del marketplace con el QR del cliente: transferencia con referencia, comisión del 8 %', async ({ browser }) => {
+  test('el cajero cobra el pedido del marketplace con el QR del cliente: transferencia con referencia → pago REPORTADO por el negocio y comisión CPA', async ({ browser }) => {
     test.setTimeout(180_000)
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
@@ -206,11 +207,13 @@ test.describe('POS conectado · recorrido', () => {
 
     const o = await prismaDeArnes().membegoOrder.findUniqueOrThrow({ where: { id: pedidoListoId }, include: { payment: true, commission: true } })
     expect(o.status).toBe('COMPLETED')
-    expect(o.verificationLevel).toBe('PAYMENT_VERIFIED')
+    // Sprint de cierre: la referencia que teclea el cajero es la palabra del negocio; PAYMENT_VERIFIED y el 8 % son de una fuente externa.
+    expect(o.verificationLevel).toBe('EXTERNAL_PAYMENT_REPORTED')
     expect(o.payment?.method).toBe('TRANSFER')
     expect(o.payment?.reference).toBe('TRF-E2E-778899')
-    expect(o.commission?.type).toBe('PERCENTAGE')
-    expect(o.commission?.amount.toFixed(2)).toBe('20.00')
+    expect(o.payment?.source).toBe('MERCHANT_REPORTED')
+    expect(o.commission?.type).toBe('CPA_FIXED')
+    expect(o.commission?.amount.toFixed(2)).toBe('100.00')
 
     // El mismo QR no se cobra otra vez.
     await bloque.getByRole('button', { name: 'Cobrar otro' }).click()
@@ -254,8 +257,8 @@ test.describe('POS conectado · recorrido', () => {
     expect(o.status).toBe('COMPLETED')
     expect(o.payment?.method, 'la evidencia sigue siendo la transferencia').toBe('TRANSFER')
     expect(o.payment?.reference).toBe('TRF-PREVIA-E2E')
-    expect(o.verificationLevel).toBe('PAYMENT_VERIFIED')
-    expect(o.commission?.type).toBe('PERCENTAGE')
+    expect(o.verificationLevel).toBe('EXTERNAL_PAYMENT_REPORTED')
+    expect(o.commission?.type).toBe('CPA_FIXED')
     expect(await prisma.transaction.count({ where: { companyId: con.id, tipo: 'SALE' } }), 'ningún cobro nuevo en la caja').toBe(cobrosAntes)
     await ctx.close()
   })
