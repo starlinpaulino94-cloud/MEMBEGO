@@ -1,5 +1,12 @@
 const HEX_COLOR = /^#(?:[\da-f]{3}|[\da-f]{6})$/i
 
+/**
+ * El color de marca cuando la empresa no fijó ninguno: el violeta Vibe
+ * (`--color-vibe-deep` en globals.css). Es el único sitio donde se escribe;
+ * quien pinte con el color de una empresa lo importa de aquí.
+ */
+export const COLOR_MARCA_POR_DEFECTO = '#5b21b6'
+
 export function normalizeCompanyBrandColor(value: unknown): string | null {
   if (typeof value !== 'string') return null
 
@@ -14,7 +21,7 @@ export function normalizeCompanyBrandColor(value: unknown): string | null {
 export function brandDisplayForeground(value: unknown, fallback: string): string {
   const resolved = normalizeCompanyBrandColor(value)
     ?? normalizeCompanyBrandColor(fallback)
-    ?? '#5b21b6'
+    ?? COLOR_MARCA_POR_DEFECTO
   const channels = [1, 3, 5].map((offset) => Number.parseInt(resolved.slice(offset, offset + 2), 16) / 255)
   const chroma = Math.max(...channels) - Math.min(...channels)
   const linear = (channel: number) =>

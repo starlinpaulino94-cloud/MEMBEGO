@@ -25,7 +25,7 @@ import { EmptyState } from '@/components/system/EmptyState'
 import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 import { MobileBottomSheet } from '@/components/ui/mobile-bottom-sheet'
 import { cn } from '@/lib/utils'
-import { brandDisplayForeground, normalizeCompanyBrandColor } from '@/lib/company-branding'
+import { COLOR_MARCA_POR_DEFECTO, brandDisplayForeground, normalizeCompanyBrandColor } from '@/lib/company-branding'
 import {
   formatearDistancia,
   formatearMagnitudDistancia,
@@ -339,8 +339,8 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
      * texto, y una comilla suelta ahí es una inyección.
      */
     const icono = (s: SucursalCercana, activo: boolean) => {
-      const companyColor = normalizeCompanyBrandColor(s.colorPrimario) ?? '#5b21b6'
-      const companyForeground = brandDisplayForeground(s.colorPrimario, '#5b21b6')
+      const companyColor = normalizeCompanyBrandColor(s.colorPrimario) ?? COLOR_MARCA_POR_DEFECTO
+      const companyForeground = brandDisplayForeground(s.colorPrimario, COLOR_MARCA_POR_DEFECTO)
       const clases = [
         'mg-pin',
         s.tieneOfertas ? 'mg-pin--oferta' : '',
@@ -971,8 +971,8 @@ function TarjetaNegocio({
   activa: boolean
   onAbrir: (s: SucursalCercana) => void
 }) {
-  const companyColor = normalizeCompanyBrandColor(s.colorPrimario) ?? '#5b21b6'
-  const companyForeground = brandDisplayForeground(s.colorPrimario, '#5b21b6')
+  const companyColor = normalizeCompanyBrandColor(s.colorPrimario) ?? COLOR_MARCA_POR_DEFECTO
+  const companyForeground = brandDisplayForeground(s.colorPrimario, COLOR_MARCA_POR_DEFECTO)
   // Deja que el sistema operativo elija su app de mapas; en escritorio abre
   // Google Maps. Con nombre además de coordenadas, el destino se reconoce.
   const comoLlegar = `https://www.google.com/maps/dir/?api=1&destination=${s.latitud},${s.longitud}&destination_place_id=`
@@ -1128,8 +1128,8 @@ function TarjetaSeleccionado({
   s: SucursalCercana
   onCerrar: () => void
 }) {
-  const companyColor = normalizeCompanyBrandColor(s.colorPrimario) ?? '#5b21b6'
-  const companyForeground = brandDisplayForeground(s.colorPrimario, '#5b21b6')
+  const companyColor = normalizeCompanyBrandColor(s.colorPrimario) ?? COLOR_MARCA_POR_DEFECTO
+  const companyForeground = brandDisplayForeground(s.colorPrimario, COLOR_MARCA_POR_DEFECTO)
   const comoLlegar = `https://www.google.com/maps/dir/?api=1&destination=${s.latitud},${s.longitud}`
 
   return (
