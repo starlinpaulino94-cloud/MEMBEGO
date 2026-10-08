@@ -17,6 +17,7 @@ import {
   type ContextoPedido,
 } from '../../src/modules/orders/service'
 import { crearOfertaEnTx, publicarOfertaEnTx, reclamarOfertaEnTx } from '../../src/modules/deals/service'
+import { actualizarConfigEnTx, type ContextoFacturacion } from '../../src/modules/billing/service'
 import { venderEnMostradorEnTx } from '../../src/modules/pos/service'
 import { conciliarEnTx } from '../../src/modules/conciliacion/queries'
 import { REGLAS } from '../../src/modules/conciliacion/domain'
@@ -442,4 +443,22 @@ test('22 · P03 también vigila el nivel «conciliado fiscalmente»: sin la conf
   const c = await cambios(() => rompe('membego_orders', Prisma.sql`UPDATE "membego_orders" SET "verificationLevel" = 'FISCALLY_RECONCILED' WHERE "id" = ${ids(r.pedidoId)}`))
   assert.equal(c.P03, 1, 'sin confirmación del cliente')
   assert.equal(c.P01, 1, 'y sin constancia de pago')
+})
+
+test('23 · C01 tampoco acusa a una empresa a la que Membego no cobra (CPA fijo en 0): el pedido cierra sin comisión y no es «dinero sin cobrar»; con cuota positiva sí lo sería', async () => {
+  const sa: ContextoFacturacion = { actor: 'SUPERADMIN', actorId: ctx.usuario, ipAddress: '127.0.0.1', userAgent: 'test' }
+  const enB = <T>(fn: Parameters<typeof conEmpresa<T>>[1]) => conEmpresa(ctx.b, fn)
+  await enB((tx) => actualizarConfigEnTx(tx, ctx.b, { feeModel: 'CPA_FIXED', cpaAmount: '0' }, sa))
+  const antes = await totales(ctx.b)
+  const r = await pedido({ companyId: ctx.b, cliente: ctx.clienteB, sucursal: ctx.sB, variante: ctx.varB })
+  const listo = await enB((tx) => marcarListoEnTx(tx, ctx.b, r.pedidoId, empresa))
+  await enB((tx) => completarPorQrEnTx(tx, ctx.b, listo.qrToken as string, empresa))
+  const o = await prisma.membegoOrder.findUniqueOrThrow({ where: { id: r.pedidoId }, include: { commission: true } })
+  assert.equal(o.status, 'COMPLETED')
+  assert.ok(o.commissionableBase.greaterThan(0), 'la base sí es comisionable: lo que vale 0 es la cuota')
+  assert.equal(o.commission, null, 'con cuota 0 no hay comisión')
+  assert.equal((await totales(ctx.b)).C01, antes.C01, 'C01 no lo cuenta')
+  // La misma base con una cuota positiva sí es dinero sin cobrar: la excepción es por la tarifa, no por el pedido.
+  await enB((tx) => actualizarConfigEnTx(tx, ctx.b, { cpaAmount: '100' }, sa))
+  assert.equal((await totales(ctx.b)).C01, antes.C01 + 1, 'con cuota positiva vuelve a contarlo')
 })

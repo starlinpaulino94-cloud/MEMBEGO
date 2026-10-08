@@ -41,6 +41,7 @@ test('validarOferta: acepta una oferta normal y normaliza el texto', () => {
     assert.equal(r.datos.voucherDays, 7)
     assert.equal(r.datos.newCustomersOnly, false)
     assert.equal(r.datos.budgetTotal.toFixed(2), '5000.00')
+    assert.equal(r.datos.discountValue.toFixed(2), '20.00')
   }
 })
 

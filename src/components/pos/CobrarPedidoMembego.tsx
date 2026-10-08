@@ -55,17 +55,22 @@ export function CobrarPedidoMembego({ cajaSesionId }: { cajaSesionId: string }) 
 
   function cobrar(entregarSinCobrar = false) {
     start(async () => {
-      const r = await cobrarPedidoMembego(
-        entregarSinCobrar ? { cajaSesionId, token, entregarSinCobrar: true } : { cajaSesionId, token, metodo: pago.metodo, referencia: pago.referencia, recibido: pago.recibido }
-      )
-      if (!r.ok) {
-        toast.error(r.error)
-        return
+      try {
+        const r = await cobrarPedidoMembego(
+          entregarSinCobrar ? { cajaSesionId, token, entregarSinCobrar: true } : { cajaSesionId, token, metodo: pago.metodo, referencia: pago.referencia, recibido: pago.recibido }
+        )
+        if (!r.ok) {
+          toast.error(r.error)
+          return
+        }
+        toast.success(r.cobro.transaccion ? `Cobrado ${r.cobro.code} · ticket ${r.cobro.transaccion.ticketNumero}` : `Entregado ${r.cobro.code}`)
+        setHecho(r.cobro)
+        setPedido(null)
+        router.refresh()
+      } catch {
+        // La respuesta se perdió: pudo o no cobrarse. Volver a buscar el QR lo dice: si ya se cobró, el servicio responde PEDIDO_YA_PAGADO.
+        toast.error('No se pudo confirmar el cobro. Vuelve a buscar el pedido antes de cobrar de nuevo: si ya se cobró, lo verás como pagado.')
       }
-      toast.success(r.cobro.transaccion ? `Cobrado ${r.cobro.code} · ticket ${r.cobro.transaccion.ticketNumero}` : `Entregado ${r.cobro.code}`)
-      setHecho(r.cobro)
-      setPedido(null)
-      router.refresh()
     })
   }
 

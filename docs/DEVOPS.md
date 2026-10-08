@@ -86,6 +86,7 @@ y está escrito en «El registro se desactualiza solo».
    | `Vulnerabilidades en dependencias` | `dependencias` | CI |
    | `Esquema de base de datos` | `esquema` | CI |
    | `Recorrido público` | `recorrido-publico` | E2E |
+   | `Secretos` | `secretos` | Secretos (gitleaks sobre los commits nuevos; añadido tras la auditoría F0–F4) |
 
    `Esquema de base de datos` es el que detecta una migración que la base no
    tiene. Es el que habría evitado los cuatro incidentes de agosto de 2026.
