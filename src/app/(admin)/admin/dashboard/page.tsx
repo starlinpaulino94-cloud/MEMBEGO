@@ -12,8 +12,12 @@ import {
   IdCard,
   Lightbulb,
   Megaphone,
+  Package,
   Plus,
   QrCode,
+  ShoppingBag,
+  BadgePercent,
+  Warehouse,
   Share2,
   Smartphone,
   TrendingUp,
@@ -24,6 +28,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getDashboardEjecutivo, type DashboardEjecutivo } from '@/modules/admin/dashboardQueries'
 import { getOnboardingEmpresa } from '@/modules/empresas/onboarding'
+import { resumenComercioEmpresa, type ResumenComercio } from '@/modules/comercio/dashboard'
 import { getHomePublicada } from '@/modules/home/composicion'
 import { leerSlidesEditor } from '@/modules/home/editor-contrato'
 import { OnboardingChecklist } from '@/components/admin/OnboardingChecklist'
@@ -146,6 +151,7 @@ export default async function AdminDashboard() {
   let d: DashboardEjecutivo | null = null
   let company: { name: string; moneda: string; idioma: string; zonaHoraria: string } | null = null
   let publicada: Awaited<ReturnType<typeof getHomePublicada>> = null
+  let comercio: ResumenComercio | null = null
   try {
     // La empresa se lee ANTES: su zona horaria decide dónde empieza «hoy».
     company = await conEmpresa(companyId, (tx) =>
@@ -154,9 +160,10 @@ export default async function AdminDashboard() {
         select: { name: true, moneda: true, idioma: true, zonaHoraria: true },
       })
     )
-    ;[d, publicada] = await Promise.all([
+    ;[d, publicada, comercio] = await Promise.all([
       getDashboardEjecutivo(companyId, company?.zonaHoraria || 'America/Santo_Domingo'),
       getHomePublicada(companyId).catch(() => null),
+      resumenComercioEmpresa(companyId, company?.zonaHoraria || 'America/Santo_Domingo').catch(() => null),
     ])
   } catch (e) {
     console.error('[admin-dashboard]', e)
@@ -240,6 +247,60 @@ export default async function AdminDashboard() {
 
       {/* Onboarding (F5.1): guía hasta publicar el perfil */}
       {onboarding && <OnboardingChecklist onboarding={onboarding} />}
+
+      {/* ── Comercio Membego: lo que la empresa vende y le piden hoy ───────── */}
+      {comercio ? (
+        <section aria-labelledby="comercio-membego" className="rounded-xl border border-border bg-card p-4 elevation-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="comercio-membego" className="flex items-center gap-2 text-label-lg text-foreground">
+              <ShoppingBag className="size-4 text-primary" aria-hidden /> Comercio Membego
+            </h2>
+            <span className="text-caption">Catálogo → Inventario → Ofertas → Pedidos</span>
+          </div>
+          <dl className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {comercio.modulos.pedidos ? (
+              <>
+                <Link href="/admin/pedidos-membego?estado=AWAITING_MERCHANT" className={cn('rounded-lg border p-3 transition hover:bg-muted/40', comercio.pedidosNuevos > 0 ? 'border-primary/40 bg-primary/5' : 'border-border')}>
+                  <dt className="text-caption">Pedidos nuevos</dt>
+                  <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.pedidosNuevos)}</dd>
+                  <p className="text-label-sm text-muted-foreground">{comercio.pedidosNuevos > 0 ? 'Esperan tu respuesta' : 'Nada pendiente'}</p>
+                </Link>
+                <Link href="/admin/pedidos-membego" className="rounded-lg border border-border p-3 transition hover:bg-muted/40">
+                  <dt className="text-caption">En curso</dt>
+                  <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.pedidosEnCurso)}</dd>
+                  <p className="text-label-sm text-muted-foreground">Aceptados o listos para recoger</p>
+                </Link>
+                <div className="rounded-lg border border-border p-3">
+                  <dt className="text-caption">Ventas Membego del mes</dt>
+                  <dd className="text-h3 tabular-nums text-foreground">{formatMoney(Number(comercio.ventasMes), company)}</dd>
+                  <p className="text-label-sm text-muted-foreground">{fmt(comercio.pedidosCompletadosMes)} pedidos completados</p>
+                </div>
+              </>
+            ) : null}
+            {comercio.modulos.catalogo ? (
+              <>
+                <Link href="/admin/catalogo" className="rounded-lg border border-border p-3 transition hover:bg-muted/40">
+                  <dt className="flex items-center gap-1 text-caption"><Package className="size-3.5" aria-hidden /> Catálogo</dt>
+                  <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.productosPublicados)}</dd>
+                  <p className="text-label-sm text-muted-foreground">{comercio.productosTotal === 0 ? 'Crea tu primer producto' : `publicados de ${fmt(comercio.productosTotal)}`}</p>
+                </Link>
+                <Link href="/admin/inventario?estado=BAJO" className={cn('rounded-lg border p-3 transition hover:bg-muted/40', comercio.stockBajo > 0 ? 'border-warning/50 bg-warning/5' : 'border-border')}>
+                  <dt className="flex items-center gap-1 text-caption"><Warehouse className="size-3.5" aria-hidden /> Stock bajo</dt>
+                  <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.stockBajo)}</dd>
+                  <p className="text-label-sm text-muted-foreground">{comercio.stockBajo > 0 ? 'Productos por reponer' : 'Todo con existencias'}</p>
+                </Link>
+              </>
+            ) : null}
+            {comercio.modulos.ofertas ? (
+              <Link href="/admin/deals" className="rounded-lg border border-border p-3 transition hover:bg-muted/40">
+                <dt className="flex items-center gap-1 text-caption"><BadgePercent className="size-3.5" aria-hidden /> Ofertas activas</dt>
+                <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.ofertasActivas)}</dd>
+                <p className="text-label-sm text-muted-foreground">{fmt(comercio.canjesMes)} canjes este mes</p>
+              </Link>
+            ) : null}
+          </dl>
+        </section>
+      ) : null}
 
       {/* ── Avisos: solo los que tienen algo que decir ───────────────────── */}
       {d.porVencer7d + d.pagosPendientes === 0 && d.topPromos.length === 0 ? (

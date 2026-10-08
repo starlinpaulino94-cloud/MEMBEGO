@@ -52,6 +52,9 @@ export function OnboardingChecklist({ onboarding }: { onboarding: OnboardingEmpr
               <span className={item.done ? 'text-muted-foreground line-through' : 'text-foreground'}>
                 {item.label}
               </span>
+              {!item.done && !item.requeridoParaPublicar && (
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">comercio</span>
+              )}
             </span>
             {!item.done && (
               <Link href={item.href}>
@@ -68,8 +71,8 @@ export function OnboardingChecklist({ onboarding }: { onboarding: OnboardingEmpr
             <p className="text-xs text-primary">
               Tu empresa aún <strong>no es visible</strong> en el marketplace.
               {onboarding.listoParaPublicar
-                ? ' ¡Todo listo para publicar!'
-                : ' Completa la lista para poder publicarla.'}
+                ? ' ¡Todo listo para publicar! Los pasos de comercio puedes hacerlos después.'
+                : ' Completa el perfil para poder publicarla; los pasos de comercio no bloquean.'}
             </p>
             <PublicarEmpresaButton habilitado={onboarding.listoParaPublicar} />
           </div>

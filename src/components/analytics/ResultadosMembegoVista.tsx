@@ -187,8 +187,50 @@ export function ResultadosMembegoVista({
 
       <section>
         <SectionHeader
+          title="Cada producto"
+          description="Qué productos y servicios de tu catálogo se pidieron y vendieron por Membego en el periodo."
+          action={
+            <Link href="/admin/catalogo" className="print:hidden text-small font-semibold text-primary underline">
+              Ver mi catálogo
+            </Link>
+          }
+        />
+        <TablaReporte
+          titulo="Ventas por producto"
+          columnas={[
+            { clave: 'producto', titulo: 'Producto o servicio' },
+            { clave: 'pedidos', titulo: 'Pedidos', alinearDerecha: true },
+            { clave: 'completados', titulo: 'Completados', alinearDerecha: true },
+            { clave: 'conversion', titulo: 'Cierre', alinearDerecha: true },
+            { clave: 'unidades', titulo: 'Unidades', alinearDerecha: true },
+            { clave: 'ventas', titulo: 'Ventas', alinearDerecha: true },
+            { clave: 'descuento', titulo: 'Descuento dado', alinearDerecha: true },
+          ]}
+          filas={r.productos.map((p) => ({
+            __clave: p.itemId,
+            producto: (
+              <Link href={`/admin/catalogo/${p.itemId}#pedidos`} className="underline-offset-2 hover:underline">
+                {p.producto}
+              </Link>
+            ),
+            pedidos: entero(p.pedidos),
+            completados: entero(p.completados),
+            conversion: p.conversion === null ? '—' : `${p.conversion} %`,
+            unidades: entero(p.unidades),
+            ventas: dinero(p.ventas),
+            descuento: dinero(p.descuento),
+          }))}
+          vacio="En este periodo no se pidió ningún producto por Membego."
+        />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Ventas y unidades cuentan solo pedidos completados (recogidos con QR). Las visualizaciones de producto no se miden todavía, así que no se enseñan.
+        </p>
+      </section>
+
+      <section>
+        <SectionHeader
           title="Cada oferta"
-          description="Las ofertas con presupuesto que los clientes obtuvieron en el periodo."
+          description="Las ofertas sobre tu catálogo que los clientes obtuvieron en el periodo."
           action={
             <Link href="/admin/deals" className="print:hidden text-small font-semibold text-primary underline">
               Ver mis ofertas

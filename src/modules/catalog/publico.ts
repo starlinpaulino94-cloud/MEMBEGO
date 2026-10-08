@@ -65,7 +65,8 @@ const INCLUIR = {
   company: { select: { slug: true, name: true } },
   variants: {
     orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
-    include: { inventoryLevels: { select: { onHand: true, reserved: true, location: { select: { activa: true } } } } },
+    // Umbral y sucursal entran para derivar «Pocas unidades» y «dónde recoger»; las cantidades NO salen (ver publico-nucleo).
+    include: { inventoryLevels: { select: { onHand: true, reserved: true, lowStockThreshold: true, locationId: true, location: { select: { activa: true } } } } },
   },
   images: { orderBy: { position: 'asc' }, select: { path: true } },
 } satisfies Prisma.CatalogItemInclude

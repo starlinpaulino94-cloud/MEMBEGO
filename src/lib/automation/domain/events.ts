@@ -112,6 +112,21 @@ export const AUTOMATION_EVENTS = {
   TRANSFORMATION_COMPLETED: 'transformacion.completada',
   TRANSFORMATION_CANCELLED: 'transformacion.cancelada',
   TRANSFORMATION_FAILED: 'transformacion.fallida',
+  // Commerce Core · pedidos Membego, inventario y ofertas sobre el catálogo.
+  // Los emiten las acciones DESPUÉS de confirmar la transacción (best-effort):
+  // el pedido nunca falla porque falle el bus, y el bus los persiste en
+  // `DomainEvent` para que las automatizaciones y los webhooks los consuman.
+  ORDER_PLACED: 'pedido.creado',
+  ORDER_ACCEPTED: 'pedido.aceptado',
+  ORDER_READY: 'pedido.listo',
+  ORDER_COMPLETED: 'pedido.completado',
+  ORDER_CANCELLED: 'pedido.cancelado',
+  ORDER_REFUNDED: 'pedido.reembolsado',
+  INVENTORY_RESERVED: 'inventario.reservado',
+  INVENTORY_SOLD: 'inventario.vendido',
+  INVENTORY_LOW_STOCK: 'inventario.stock_bajo',
+  DEAL_CLAIMED: 'oferta.obtenida',
+  DEAL_REDEEMED: 'oferta.canjeada',
   // Emitidos por el propio motor.
   AUTOMATION_STARTED: 'automatizacion.iniciada',
   AUTOMATION_FINISHED: 'automatizacion.finalizada',
@@ -127,6 +142,17 @@ export interface AutomationEventDef {
 }
 
 export const AUTOMATION_EVENT_CATALOG: readonly AutomationEventDef[] = [
+  { id: AUTOMATION_EVENTS.ORDER_PLACED, name: 'Pedido Membego creado', description: 'Un cliente hizo un pedido en el marketplace. Variables: pedido.code, pedido.total, pedido.origen.' },
+  { id: AUTOMATION_EVENTS.ORDER_ACCEPTED, name: 'Pedido aceptado', description: 'La empresa aceptó el pedido y empezó a atenderlo.' },
+  { id: AUTOMATION_EVENTS.ORDER_READY, name: 'Pedido listo', description: 'El pedido está listo para recoger; el cliente tiene su QR.' },
+  { id: AUTOMATION_EVENTS.ORDER_COMPLETED, name: 'Pedido completado', description: 'El cliente recogió el pedido (QR escaneado); el inventario registró la venta.' },
+  { id: AUTOMATION_EVENTS.ORDER_CANCELLED, name: 'Pedido cancelado', description: 'El pedido se canceló (cliente, empresa o por vencimiento); el stock apartado volvió a estar disponible.' },
+  { id: AUTOMATION_EVENTS.ORDER_REFUNDED, name: 'Pedido reembolsado', description: 'La empresa reembolsó un pedido completado.' },
+  { id: AUTOMATION_EVENTS.INVENTORY_RESERVED, name: 'Inventario apartado', description: 'Un pedido apartó unidades de una variante en una sucursal.' },
+  { id: AUTOMATION_EVENTS.INVENTORY_SOLD, name: 'Inventario vendido', description: 'Las unidades apartadas salieron del inventario al completarse el pedido.' },
+  { id: AUTOMATION_EVENTS.INVENTORY_LOW_STOCK, name: 'Stock bajo', description: 'Una variante quedó por debajo de su umbral de aviso en una sucursal. Variables: producto, sucursal, disponible, umbral.' },
+  { id: AUTOMATION_EVENTS.DEAL_CLAIMED, name: 'Oferta obtenida', description: 'Un cliente obtuvo una oferta del catálogo (nace su pedido con QR).' },
+  { id: AUTOMATION_EVENTS.DEAL_REDEEMED, name: 'Oferta canjeada', description: 'El cliente canjeó la oferta en el negocio (QR escaneado).' },
   { id: AUTOMATION_EVENTS.MESSAGE_RECEIVED, name: 'Mensaje recibido', description: 'Alguien escribió al negocio por WhatsApp, Messenger o Instagram. Variables: mensaje.canal, mensaje.texto, mensaje.conversacionId, mensaje.primero, contacto.nombre, contacto.telefono.' },
   { id: AUTOMATION_EVENTS.PROSPECT_CREATED, name: 'Prospecto creado', description: 'Del primer mensaje de alguien que no es cliente nació un prospecto. Variables: prospecto.id, prospecto.canal, contacto.nombre, contacto.telefono.' },
   { id: AUTOMATION_EVENTS.CLIENT_REGISTERED, name: 'Cliente registrado', description: 'Un cliente creó su cuenta.' },

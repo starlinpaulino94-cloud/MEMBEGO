@@ -20,6 +20,8 @@ import { InventarioError } from '@/modules/inventory/errores'
 import { registrarOperacion } from '@/modules/observabilidad/eventos'
 import { PedidoError } from './errores'
 import { completarPorQrEnTx, type ContextoPedido } from './service'
+import { avisarPasoDelPedido, variantesDelPedido } from './avisos'
+import { avisarStockBajo } from '@/modules/inventory/avisos'
 import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
 
 export type ResultadoCierre = { ok: true; code: string; nivel: string } | { ok: false; error: string }
@@ -47,6 +49,14 @@ export async function completarPedidoPorQr(token: string): Promise<ResultadoCier
     registrarOperacion({ dominio: 'pedido', accion: 'pedido_completado', ...pedidoDelQr })
     revalidatePath('/admin/pedidos-membego', 'layout')
     revalidatePath('/cliente/pedidos', 'layout')
+    if (!r.repetido) {
+      // Best-effort y tras confirmar: aviso al cliente, evento de dominio y, si la venta dejó
+      // alguna variante por debajo de su umbral, aviso de stock bajo a la empresa.
+      void (async () => {
+        await avisarPasoDelPedido(p.companyId, p.id, 'COMPLETADO', 'EMPRESA')
+        await avisarStockBajo(p.companyId, await variantesDelPedido(p.companyId, p.id))
+      })()
+    }
     return { ok: true, code: r.code, nivel: r.nivel }
   } catch (e) {
     if (pedidoDelQr) registrarOperacion({ dominio: 'pedido', accion: 'pedido_completado', ...pedidoDelQr, error: e })

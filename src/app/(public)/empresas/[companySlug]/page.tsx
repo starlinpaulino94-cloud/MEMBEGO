@@ -8,6 +8,7 @@ import {
   getCompanyPostsPublic,
   getPromotionsPublic,
   getCatalogoPublicoDeEmpresa,
+  getSucursalesPublic,
 } from '@/modules/marketplace/cached'
 import { ofertasPublicas } from '@/modules/deals/publico'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
@@ -53,7 +54,7 @@ export default async function CompanyDetailPage({
   const company = await getCompanyPublic(companySlug)
   if (!company) notFound()
 
-  const [stats, planes, promotions, posts, prefs, resenas, excursionesData, catalogo, ofertas] = await Promise.all([
+  const [stats, planes, promotions, posts, prefs, resenas, excursionesData, catalogo, ofertas, sucursales] = await Promise.all([
     getCompanyStats(companySlug),
     getCompanyPlanesPublic(company.id),
     getPromotionsPublic({ company: companySlug, limit: 12 }),
@@ -65,6 +66,7 @@ export default async function CompanyDetailPage({
     ),
     getCatalogoPublicoDeEmpresa(company.id, 12),
     ofertasPublicas({ companySlug, limite: 6 }),
+    getSucursalesPublic(company.id).catch(() => []),
   ])
 
   const excursiones = excursionesData.map((exc) => ({
@@ -92,6 +94,7 @@ export default async function CompanyDetailPage({
       excursiones={excursiones}
       catalogo={catalogo}
       ofertas={ofertas}
+      sucursales={sucursales}
     />
   )
 }

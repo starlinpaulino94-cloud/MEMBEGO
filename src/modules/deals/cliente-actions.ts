@@ -27,6 +27,9 @@ import { InventarioError } from '@/modules/inventory/errores'
 import { PedidoError } from '@/modules/orders/errores'
 import { OfertaError } from './errores'
 import { refrescarVitrinasDeOfertas } from './vitrinas'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
+import { AUTOMATION_EVENTS } from '@/lib/automation/domain/events'
+import { crearNotificacion } from '@/modules/notificaciones/service'
 import { empresaOfreceOfertas } from './publico'
 import { motivoNoReclamarEnTx, reclamarOfertaEnTx } from './service'
 
@@ -88,13 +91,28 @@ export async function reclamarOferta(entrada: { dealId: string; sucursalId: stri
       // Best-effort y DESPUÉS de responder (`after`): un aviso no puede tumbar el reclamo ni perderse al terminar la respuesta.
       after(async () => {
         try {
-          await notificarAdmins(companyId, {
-            tipo: 'SISTEMA',
-            titulo: 'Alguien obtuvo una oferta',
-            mensaje: `El cupón ${r.orderCode} está listo para canjearse con su QR.`,
-            href: `/admin/pedidos-membego/${r.orderId}`,
-            dedupeKey: `oferta-reclamada:${r.claimId}`,
-          })
+          await Promise.allSettled([
+            notificarAdmins(companyId, {
+              tipo: 'SISTEMA',
+              titulo: 'Alguien obtuvo una oferta',
+              mensaje: `El cupón ${r.orderCode} está listo para canjearse con su QR.`,
+              href: `/admin/pedidos-membego/${r.orderId}`,
+              dedupeKey: `oferta-reclamada:${r.claimId}`,
+            }),
+            // Al cliente: su cupón con QR ya existe (es un pedido LISTO).
+            user.metadata.dbUserId
+              ? crearNotificacion({
+                  userId: user.metadata.dbUserId,
+                  tipo: 'SISTEMA',
+                  titulo: 'Tu oferta está lista',
+                  mensaje: `Obtuviste la oferta: el cupón ${r.orderCode} se canjea en el negocio con el QR de tu pedido.`,
+                  href: `/cliente/pedidos/${r.orderId}`,
+                  dedupeKey: `oferta-obtenida:${r.claimId}`,
+                })
+              : Promise.resolve(),
+            // Bus de dominio: «obtenida» ≠ «canjeada» (el canje lo emite el cierre por QR como pedido.completado + oferta.canjeada).
+            emitirEventoEstrategia({ companyId, type: AUTOMATION_EVENTS.DEAL_CLAIMED, subjectId: dealId, payload: { oferta: dealId, reclamo: r.claimId, pedido: r.orderId, ahorro: r.savings } }),
+          ])
         } catch (e) {
           console.error('[deals-cliente] aviso a la empresa', e instanceof Error ? e.message : e)
         }

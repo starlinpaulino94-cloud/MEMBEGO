@@ -3,6 +3,7 @@ import 'server-only'
 
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { cancelarPedidoEnTx, type ContextoPedido } from './service'
+import { avisarPasoDelPedido } from './avisos'
 
 /**
  * COMMERCE CORE · pedidos — BARRIDO del cron (Fase 3).
@@ -48,7 +49,11 @@ export async function barridoPedidos(ahora: Date = new Date()): Promise<Resultad
   for (const { id, companyId } of filas) {
     try {
       const r = await conEmpresa(companyId, (tx) => cancelarPedidoEnTx(tx, companyId, id, { motivo: MOTIVO }, SISTEMA, ahora))
-      if (!r.repetido) cancelados++
+      if (!r.repetido) {
+        cancelados++
+        // El cliente y la empresa se enteran de que venció (best-effort, fuera de la transacción).
+        await avisarPasoDelPedido(companyId, id, 'CANCELADO', 'SISTEMA')
+      }
     } catch (e) {
       errores++
       console.error('[pedidos:barrido]', id, e instanceof Error ? e.message : e)
