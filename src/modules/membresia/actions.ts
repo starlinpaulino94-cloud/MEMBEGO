@@ -5,14 +5,14 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { notificarAdmins } from '@/modules/notificaciones/service'
 import { formSubmitLimiter } from '@/lib/rate-limit'
-import { rutaValida } from '@/modules/storage/comprobantes'
-import { estaVigente } from '@/modules/membresia/vigencia'
-import { calcularDescuentoBienvenida } from '@/lib/bienvenida'
 import { generarCodigo } from '@/lib/codes'
-import { categoriaDeEmpresa, vehiculosDe } from '@/modules/elegibilidad'
-import { requisitosParaAccion, decidirPlan } from '@/modules/elegibilidad/decidir'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 import { registrarEventoMembresia } from '@/modules/membresia/eventos'
+import {
+  registrarComprobanteMembresiaCliente,
+  solicitarCambioPlanCliente,
+  solicitarMembresiaCliente,
+} from '@/modules/membresia/cliente-service'
 
 export interface SeleccionState {
   error?: string
@@ -26,192 +26,13 @@ export async function seleccionarPlan(
 ): Promise<SeleccionState> {
   try {
     const user = await getUser()
-    if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
-      return { error: 'No autorizado.' }
-    }
+    if (!user) return { error: 'No autorizado.' }
 
-    // Rate limit form submissions to prevent spam
-    const clientId = user.metadata.clienteId
-    if (!(await formSubmitLimiter(clientId))) {
-      return { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' }
-    }
-
-    const planId = String(formData.get('planId') ?? '')
-    if (!planId) return { error: 'Selecciona un plan.' }
-    // Onboarding v2: vehículo al que se aplicará la membresía (§10/§13).
-    const vehiculoIdForm = String(formData.get('vehiculoId') ?? '')
-
-    const companyId = user.metadata.companyId
-    if (!companyId) return { error: 'Empresa requerida.' }
-
-    const result = await conEmpresa(companyId, async (tx) => {
-      const cliente = await tx.cliente.findUnique({
-        where: { id: clientId },
-        include: {
-          company: {
-            select: {
-              bienvenidaActiva: true,
-              bienvenidaTipo: true,
-              bienvenidaValor: true,
-            },
-          },
-        },
-      })
-      if (!cliente) return { error: 'Cliente no encontrado.' } as SeleccionState
-
-      const plan = await tx.plan.findUnique({ where: { id: planId } })
-      // Validate: plan must exist, belong to client's company, and be active
-      if (!plan || plan.companyId !== cliente.companyId || !plan.activo) {
-        return { error: 'Plan no válido para tu empresa.' } as SeleccionState
-      }
-
-      // Block if there's already an active membership IN THIS COMPANY
-      const existing = await tx.membership.findUnique({
-        where: {
-          clienteId_companyId: {
-            clienteId: cliente.id,
-            companyId: cliente.companyId,
-          },
-        },
-      })
-
-      // Vigente de verdad: ACTIVA *y* sin vencer. Mirando solo el estado, a
-      // quien se le venció la membresía y el job todavía no marcó se le
-      // respondía «espera a que venza» algo que ya venció — y se quedaba sin
-      // poder renovar, que es justo lo que esta rama debe permitir.
-      if (existing && estaVigente(existing)) {
-        return {
-          error: 'Ya tienes una membresía activa en esta empresa. Espera a que venza para cambiar.',
-        } as SeleccionState
-      }
-
-      // ── Onboarding v2 · reglas de vehículo (§10/§12/§13) ────────────────────
-      //
-      // REGLA DE COMPATIBILIDAD: la exigencia aplica SOLO a la PRIMERA
-      // membresía (compra nueva). Si ya existe una fila (renovación, reabrir
-      // una cancelada/vencida, pendiente de pago), el cliente está protegido:
-      // no se le exige vehículo, como siempre. Las mismas reglas puras que la
-      // página de planes (decidir.ts) — el checkout no inventa las suyas (§9).
-      const categoria = await categoriaDeEmpresa(tx, cliente.companyId)
-      const vehiculos = await vehiculosDe(tx, cliente.id)
-      const completos = vehiculos.filter((v) => v.placaNormalizada && v.tipoVehiculoId)
-      const esCompraNueva = !existing
-
-      let vehiculoSel: (typeof vehiculos)[number] | null = null
-      if (esCompraNueva) {
-        const requisitos = requisitosParaAccion({ accion: 'COMPRAR_PLAN', categoria, vehiculos })
-        if (!requisitos.canProceed) {
-          return {
-            error:
-              'Para comprar una membresía aquí primero registra tu vehículo con su placa. Entra a Planes y complétalo en un minuto.',
-          } as SeleccionState
-        }
-        if (vehiculoIdForm) {
-          vehiculoSel = completos.find((v) => v.id === vehiculoIdForm) ?? null
-          if (!vehiculoSel && vehiculos.some((v) => v.id === vehiculoIdForm)) {
-            return {
-              error:
-                'Ese vehículo necesita placa y categoría para asociarlo a la membresía. Complétalo o elige otro.',
-            } as SeleccionState
-          }
-        }
-        // Sin elección explícita: el principal completo (vehiculosDe ordena
-        // principal-primero y completos conserva ese orden).
-        vehiculoSel = vehiculoSel ?? completos[0] ?? null
-
-        if (vehiculoSel) {
-          const precioCategoria = vehiculoSel.tipoVehiculoId
-            ? await tx.planPrecioCategoria.findFirst({
-                where: { planId: plan.id, tipoVehiculoId: vehiculoSel.tipoVehiculoId, activo: true },
-                select: { precio: true },
-              })
-            : null
-          const decision = decidirPlan(
-            {
-              id: plan.id,
-              precioBase: Number(plan.precio),
-              precioCategoria: precioCategoria ? Number(precioCategoria.precio) : null,
-              nivelTarifarioMax: plan.nivelTarifarioMax,
-            },
-            vehiculoSel
-          )
-          if (!decision.puedeComprar) {
-            return {
-              error:
-                'Este plan es para vehículos de una categoría menor que el tuyo. Elige un plan para tu categoría o consulta en el local para actualizarlo.',
-            } as SeleccionState
-          }
-        }
-      } else if (vehiculoIdForm) {
-        // Cliente protegido (membresía previa): la asociación es voluntaria y
-        // jamás bloquea — solo se toma si el vehículo está completo.
-        vehiculoSel = completos.find((v) => v.id === vehiculoIdForm) ?? null
-      }
-
-      // O-13: beneficio de bienvenida — solo para la PRIMERA activación. Una
-      // fila nunca activada tiene fechaInicio null (la activación lo fija y la
-      // renovación jamás lo vuelve a null). Se congela aquí el importe para que
-      // cambios posteriores de configuración no alteren solicitudes en curso.
-      const elegibleBienvenida = !existing || existing.fechaInicio == null
-      const descuento = elegibleBienvenida
-        ? calcularDescuentoBienvenida(cliente.company, Number(plan.precio))
-        : 0
-      const descuentoBienvenida = descuento > 0 ? descuento : null
-
-      let membershipId: string
-      if (existing) {
-        // Reuse existing membership (PENDIENTE or PENDIENTE_PAGO). Si estaba
-        // CANCELADA/VENCIDA/RECHAZADA, la solicitud la REABRE: vuelve a
-        // PENDIENTE para entrar de nuevo al flujo de pago (renovación que el
-        // cliente reclama tras una cancelación del admin).
-        await tx.membership.update({
-          where: { id: existing.id },
-          data: {
-            planId: plan.id,
-            montoPagado: null,
-            pagoConfirmado: false,
-            descuentoBienvenida,
-            ...(['CANCELADA', 'VENCIDA', 'RECHAZADA'].includes(existing.estado)
-              ? { estado: 'PENDIENTE' as const, rechazadoReason: null }
-              : {}),
-          },
-        })
-        membershipId = existing.id
-      } else {
-        // Create new membership with companyId
-        const created = await tx.membership.create({
-          data: {
-            clienteId: cliente.id,
-            companyId: cliente.companyId,
-            planId: plan.id,
-            userId: user.metadata.dbUserId || null,
-            estado: 'PENDIENTE',
-            descuentoBienvenida,
-          },
-        })
-        membershipId = created.id
-      }
-
-      // ── §13: la membresía identifica su(s) vehículo(s) ─────────────────────
-      // Se reemplaza la asociación anterior (el plan/vehículo elegido puede
-      // cambiar mientras la solicitud siga pendiente) y se CONGELA el nivel
-      // tarifario de la compra: renivelar categorías después no altera lo ya
-      // comprado. Las membresías protegidas sin vehículo siguen sin filas aquí
-      // y funcionan igual que siempre.
-      if (vehiculoSel) {
-        await tx.membresiaVehiculo.deleteMany({ where: { membershipId } })
-        await tx.membresiaVehiculo.create({
-          data: {
-            membershipId,
-            vehiculoId: vehiculoSel.id,
-            nivelTarifarioComprado: vehiculoSel.nivelTarifario ?? 1,
-          },
-        })
-      }
-
-      return { success: true, membershipId }
+    const result = await solicitarMembresiaCliente(user, {
+      planId: String(formData.get('planId') ?? '').trim(),
+      vehicleId: String(formData.get('vehiculoId') ?? '').trim() || undefined,
     })
-    if (result.error) return result
+    if ('error' in result) return result
 
     revalidatePath('/mis-membresias')
     revalidatePath('/cliente/planes')
@@ -238,106 +59,19 @@ export async function solicitarCambioPlan(
 ): Promise<SeleccionState> {
   try {
     const user = await getUser()
-    if (!user || user.metadata.role !== 'CLIENTE') {
-      return { error: 'No autorizado.' }
-    }
+    if (!user) return { error: 'No autorizado.' }
 
-    // Resolver el clienteId: puede venir en el metadata o haber que buscarlo
-    // por supabaseId (caso de usuarios migrados o con metadata incompleta).
-    let clienteId = user.metadata.clienteId
-    if (!clienteId && user.supabaseId) {
-      const cliente = await sinEmpresa('cambio plan: resolver cliente por supabaseId', (tx) =>
-        tx.cliente.findFirst({
-          where: { supabaseId: user.supabaseId },
-          select: { id: true },
-        })
-      )
-      if (cliente) clienteId = cliente.id
-    }
-    if (!clienteId) {
-      return { error: 'No autorizado.' }
-    }
-
-    if (!(await formSubmitLimiter(clienteId))) {
-      return { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' }
-    }
-
-    const membershipId = String(formData.get('membershipId') ?? '').trim()
-    const planId = String(formData.get('planId') ?? '').trim()
-    if (!membershipId) return { error: 'Membresía no especificada.' }
-    if (!planId) return { error: 'Selecciona el plan al que quieres cambiar.' }
-
-    const membership = await sinEmpresa(
-      'cambio de plan: la persona busca su membresía entre todas sus fichas',
-      (tx) =>
-        tx.membership.findUnique({
-          where: { id: membershipId },
-          select: {
-            id: true,
-            clienteId: true,
-            estado: true,
-            planId: true,
-            planIdSolicitado: true,
-            plan: { select: { nombre: true, precio: true } },
-            cliente: { select: { companyId: true } },
-          },
-        })
-    )
-    if (!membership) return { error: 'Membresía no encontrada.' }
-    if (membership.clienteId !== clienteId) {
-      return { error: 'No autorizado.' }
-    }
-    if (membership.estado !== 'ACTIVA') {
-      return { error: 'Solo puedes cambiar de plan con una membresía activa.' }
-    }
-
-    const planDestino = await conEmpresa(membership.cliente.companyId, (tx) =>
-      tx.plan.findFirst({
-        where: {
-          id: planId,
-          companyId: membership.cliente.companyId,
-          activo: true,
-        },
-        select: { id: true, precio: true },
-      })
-    )
-    if (!planDestino) {
-      return { error: 'Ese plan no está disponible para tu empresa.' }
-    }
-    if (planDestino.id === membership.planId) {
-      return { error: 'Ese ya es tu plan actual.' }
-    }
-
-    if (Number(planDestino.precio) <= Number(membership.plan.precio)) {
-      return {
-        error:
-          'Solo puedes cambiar a un plan de mayor valor. Para bajar de plan, habla con el negocio.',
-      }
-    }
-
-    const yaPedido = membership.planIdSolicitado === planDestino.id
-    await conEmpresa(membership.cliente.companyId, (tx) =>
-      tx.membership.update({
-        where: { id: membership.id },
-        data: {
-          planIdSolicitado: planDestino.id,
-          ...(yaPedido
-            ? {}
-            : {
-                comprobanteUrl: null,
-                comprobanteNota: null,
-                metodoPagoId: null,
-                rechazadoReason: null,
-              }),
-        },
-      })
-    )
+    const result = await solicitarCambioPlanCliente(user, {
+      membershipId: String(formData.get('membershipId') ?? '').trim(),
+      planId: String(formData.get('planId') ?? '').trim(),
+    })
+    if ('error' in result) return result
 
     revalidatePath('/mis-membresias')
-    revalidatePath(`/membresia/${membership.id}`)
+    revalidatePath(`/membresia/${result.membershipId}`)
     revalidatePath('/cliente/planes')
     revalidateTag(NAV_CLIENTE_TAG, 'max')
-    return { success: true }
+    return result
   } catch (e) {
     console.error('[membresia] solicitarCambioPlan error:', e)
     return { error: 'Ocurrió un error inesperado. Intenta de nuevo.' }
@@ -357,84 +91,26 @@ export async function enviarComprobante(
   _prev: ComprobanteState,
   formData: FormData
 ): Promise<ComprobanteState> {
-  const user = await getUser()
-  if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId) {
-    return { error: 'No autorizado.' }
-  }
+  try {
+    const user = await getUser()
+    if (!user) return { error: 'No autorizado.' }
 
-  // Rate limit form submissions to prevent spam
-  const clientId = user.metadata.clienteId
-  if (!(await formSubmitLimiter(clientId))) {
-    return { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' }
-  }
-
-  const membershipId = String(formData.get('membershipId') ?? '').trim()
-  const comprobanteUrl = String(formData.get('comprobanteUrl') ?? '').trim()
-  const metodoPagoId = String(formData.get('metodoPagoId') ?? '').trim() || null
-  const nota = String(formData.get('nota') ?? '').trim() || null
-
-  if (!membershipId) return { error: 'Membresía no especificada.' }
-  if (!comprobanteUrl) return { error: 'Adjunta el comprobante de pago.' }
-
-  // El campo ya NO es una URL pública, es la RUTA dentro del bucket privado
-  // que generó el servidor al firmar la subida (auditoría · C-01). Se
-  // comprueba que corresponda a ESTA membresía: si no, alguien pidió una
-  // subida legítima para lo suyo y luego intentó declararla como comprobante
-  // de otro pago.
-  if (!(await rutaValida('membresia', membershipId, comprobanteUrl))) {
-    return { error: 'El comprobante adjunto no corresponde a este pago.' }
-  }
-
-  const membership = await sinEmpresa('membresia: buscar membresía para comprobante', (tx) =>
-    tx.membership.findUnique({
-      where: { id: membershipId },
-      include: { cliente: { select: { id: true, nombre: true, companyId: true } } },
+    const result = await registrarComprobanteMembresiaCliente(user, {
+      membershipId: String(formData.get('membershipId') ?? '').trim(),
+      path: String(formData.get('comprobanteUrl') ?? '').trim(),
+      metodoPagoId: String(formData.get('metodoPagoId') ?? '').trim() || null,
+      nota: String(formData.get('nota') ?? '').trim() || null,
     })
-  )
-  if (!membership) return { error: 'Membresía no encontrada.' }
-  if (membership.clienteId !== user.metadata.clienteId) {
-    return { error: 'No autorizado.' }
+    if ('error' in result) return result
+
+    revalidatePath('/mis-membresias')
+    revalidatePath('/cliente/pagos')
+    revalidatePath(`/membresia/${result.membershipId}`)
+    return { success: true }
+  } catch (e) {
+    console.error('[membresia] enviarComprobante error:', e)
+    return { error: 'Ocurrió un error inesperado. Intenta de nuevo.' }
   }
-
-  // Comprobante de un cambio de plan: la membresía está ACTIVA y tiene un cambio
-  // solicitado. No se cambia el estado (no pierde acceso); el admin lo aprueba.
-  const esCambioDePlan =
-    membership.estado === 'ACTIVA' && membership.planIdSolicitado != null
-
-  if (!esCambioDePlan && !['PENDIENTE', 'RECHAZADA'].includes(membership.estado)) {
-    return { error: 'Solo puedes enviar comprobante en estado Pendiente o Rechazado.' }
-  }
-
-  await conEmpresa(membership.cliente.companyId, (tx) =>
-    tx.membership.update({
-      where: { id: membershipId },
-      data: {
-        comprobanteUrl,
-        comprobanteNota: nota,
-        metodoPagoId: metodoPagoId || null,
-        // En un cambio de plan la membresía sigue ACTIVA; en un pago normal pasa a
-        // PENDIENTE_PAGO para entrar a la cola de validación del admin.
-        ...(esCambioDePlan
-          ? {}
-          : { estado: 'PENDIENTE_PAGO', rechazadoReason: null }),
-      },
-    })
-  )
-
-  await notificarAdmins(membership.cliente.companyId, {
-    tipo: 'NUEVO_COMPROBANTE',
-    titulo: esCambioDePlan
-      ? 'Comprobante de cambio de plan'
-      : 'Nuevo comprobante de pago',
-    mensaje: esCambioDePlan
-      ? `${membership.cliente.nombre} envió el comprobante para su cambio de plan. Revísalo para aplicarlo.`
-      : `${membership.cliente.nombre} envió un comprobante para su membresía. Revísalo para activarla.`,
-    href: `/admin/pagos`,
-  })
-
-  revalidatePath('/mis-membresias')
-  revalidatePath('/cliente/pagos')
-  return { success: true }
 }
 
 export interface PresencialState {

@@ -51,6 +51,29 @@ export default function PrivacyPage() {
             </p>
           </div>
 
+          <div>
+            <h2 className="text-h2 text-foreground">Ubicación y proveedores</h2>
+            <p>
+              Si autorizas el acceso a la ubicación al usar «Cerca», usamos la
+              ubicación de tu dispositivo para mostrar empresas cercanas. Puedes
+              denegar o retirar ese permiso desde los ajustes del dispositivo.
+              La app usa Supabase para autenticación y almacenamiento de datos,
+              Google Maps para mostrar mapas y CardNET para procesar pagos con
+              tarjeta. Estos proveedores reciben los datos necesarios para
+              prestar esas funciones.
+            </p>
+          </div>
+
+          <div>
+            <h2 className="text-h2 text-foreground">Retención al eliminar la cuenta</h2>
+            <p>
+              Cuando eliminas tu cuenta, borramos tus fichas de cliente y sus
+              datos operativos. Se conserva el historial de transacciones para
+              mantener la contabilidad de las empresas y se desvincula de tu
+              perfil.
+            </p>
+          </div>
+
           {/* DÓNDE VIVE EL NOMBRE DEL PROCESADOR.
               En la pantalla de pago el cliente ve MembeGo y nada más: meterle
               el nombre de un tercero en mitad de una compra no le aporta y le
@@ -85,12 +108,18 @@ export default function PrivacyPage() {
           <div>
             <h2 className="text-h2 text-foreground">6. Tus derechos</h2>
             <p>
-              Puedes solicitar el acceso, rectificación o eliminación de tus datos
-              personales escribiéndonos a{' '}
+              Puedes solicitar el acceso o rectificación de tus datos personales
+              escribiéndonos a{' '}
               <a href="mailto:contacto@membego.com" className="text-primary hover:underline">
                 contacto@membego.com
               </a>
-              .
+              . Para eliminar tu cuenta, inicia la solicitud en{' '}
+              <a href="/eliminar-cuenta" className="text-primary hover:underline">
+                membego.com/eliminar-cuenta
+              </a>
+              . Verificaremos que controlas el correo de la cuenta y eliminaremos
+              tus fichas y datos asociados. Los registros contables que deban
+              conservarse por obligación legal quedarán desvinculados de tu perfil.
             </p>
           </div>
         </section>

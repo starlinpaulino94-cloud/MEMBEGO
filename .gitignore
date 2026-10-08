@@ -115,6 +115,7 @@ examples/*
 /playwright/.cache/
 /playwright/.auth/
 .playwright-mcp/
+/artifacts/
 
 # Generado por `npm run migraciones:pendientes` — snapshot, se regenera
 migraciones-pendientes.sql

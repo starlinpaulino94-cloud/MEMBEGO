@@ -20,11 +20,14 @@ export interface EmpresaSeguida {
     name: string
     slug: string
     type: string
+    colorPrimario?: string | null
     description: string | null
     logoUrl: string | null
     bannerUrl: string | null
     ciudad: string | null
     activePromotionsCount: number
+    createdAt?: Date | string | null
+    averageRating?: number | string | Prisma.Decimal | null
   }
 }
 
@@ -33,11 +36,14 @@ const EMPRESA_EN_MI_LISTA = {
   name: true,
   slug: true,
   type: true,
+  colorPrimario: true,
   description: true,
   logoUrl: true,
   bannerUrl: true,
   ciudad: true,
   activePromotionsCount: true,
+  createdAt: true,
+  averageRating: true,
 } as const
 
 /**
@@ -206,10 +212,48 @@ const PROMO_SELECT = {
   tags: true,
   isFeatured: true,
   createdAt: true,
+  esComprable: true,
+  precio: true,
+  usosPorCompra: true,
+  beneficioVigenciaDias: true,
+  beneficioVigenciaHasta: true,
+  limitePorCliente: true,
+  maxCanjes: true,
+  canjes: true,
   company: {
-    select: { id: true, name: true, slug: true, logoUrl: true },
+    select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true },
   },
 } as const
+
+function toPublicPromotion(
+  promotion: Prisma.PromocionGetPayload<{ select: typeof PROMO_SELECT }>
+): PromotionPublic {
+  const {
+    esComprable,
+    precio,
+    usosPorCompra,
+    beneficioVigenciaDias,
+    beneficioVigenciaHasta,
+    limitePorCliente,
+    maxCanjes,
+    canjes,
+    ...rest
+  } = promotion
+  return {
+    ...rest,
+    descuento: rest.descuento == null ? null : Number(rest.descuento),
+    venta: esComprable
+      ? {
+          precio: Number(precio ?? 0),
+          usosPorCompra,
+          agotada: maxCanjes != null && canjes >= maxCanjes,
+          beneficioVigenciaDias,
+          beneficioVigenciaHasta,
+          limitePorCliente,
+        }
+      : null,
+  }
+}
 
 /**
  * Condición de promoción vigente y visible públicamente.
@@ -377,7 +421,7 @@ export async function getPromoFeed(dbUserId: string): Promise<PromoFeed> {
     const favA = favoritasIds.has(a.company.id) ? 1 : 0
     const favB = favoritasIds.has(b.company.id) ? 1 : 0
     return favB - favA
-  }) as PromotionPublic[]
+  }).map(toPublicPromotion)
 
   // Deduplicación por prioridad de sección.
   const vistos = new Set(misEmpresas.map((p) => p.id))
@@ -386,7 +430,7 @@ export async function getPromoFeed(dbUserId: string): Promise<PromoFeed> {
     for (const p of rows) {
       if (vistos.has(p.id)) continue
       vistos.add(p.id)
-      out.push(p as PromotionPublic)
+      out.push(toPublicPromotion(p))
       if (out.length >= limit) break
     }
     return out
@@ -429,6 +473,7 @@ async function getEmpresasRecomendadas(
       name: true,
       slug: true,
       type: true,
+      colorPrimario: true,
       description: true,
       logoUrl: true,
       bannerUrl: true,
@@ -562,7 +607,7 @@ export async function buscarEnMisEmpresas(
 
   const now = new Date()
   try {
-    return (await sinEmpresa('social: buscar en las ofertas de mis empresas', async (tx) => {
+    const promotions = await sinEmpresa('social: buscar en las ofertas de mis empresas', async (tx) => {
       const [follows, dbUser] = await Promise.all([
         tx.companyFollow.findMany({ where: { userId: dbUserId }, select: { companyId: true } }),
         tx.user.findUnique({ where: { id: dbUserId }, select: { supabaseId: true } }),
@@ -616,7 +661,8 @@ export async function buscarEnMisEmpresas(
         orderBy: [{ prioridad: 'desc' }, { publicadaEn: 'desc' }],
         take: limite,
       })
-    })) as PromotionPublic[]
+    })
+    return promotions.map(toPublicPromotion)
   } catch (e) {
     console.error('[social] buscarEnMisEmpresas', e)
     return []
@@ -646,7 +692,7 @@ export async function getPromocionesDeEmpresaParaMi(
 ): Promise<PromotionPublic[]> {
   const now = new Date()
   try {
-    return (await sinEmpresa('social: ofertas de un negocio para quien las mira', async (tx) => {
+    const promotions = await sinEmpresa('social: ofertas de un negocio para quien las mira', async (tx) => {
       const ficha = supabaseId
         ? await tx.cliente.findUnique({
             where: { supabaseId_companyId: { supabaseId, companyId } },
@@ -666,7 +712,8 @@ export async function getPromocionesDeEmpresaParaMi(
         orderBy: [{ prioridad: 'desc' }, { isFeatured: 'desc' }, { publicadaEn: 'desc' }],
         take: limite,
       })
-    })) as PromotionPublic[]
+    })
+    return promotions.map(toPublicPromotion)
   } catch (e) {
     console.error('[social] getPromocionesDeEmpresaParaMi', e)
     return []

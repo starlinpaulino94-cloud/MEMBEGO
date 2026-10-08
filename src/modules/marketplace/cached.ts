@@ -132,12 +132,14 @@ export async function getPlanesPublic(
   return fn()
 }
 
-/** Categorías: cambian poco — 1 h de TTL (solo primitivos, sin revivir). */
-export const getCategoriesPublic = unstable_cache(
-  () => q.getCategoriesPublic(),
-  ['mk-categories'],
-  { revalidate: 3600, tags: [MARKETPLACE_TAG] }
-)
+export const getCategoriesPublic =
+  process.env.NODE_ENV === 'development'
+    ? () => q.getCategoriesPublic()
+    : unstable_cache(
+        () => q.getCategoriesPublic(),
+        ['mk-categories'],
+        { revalidate: 3600, tags: [MARKETPLACE_TAG] }
+      )
 
 /** Stats de plataforma para la landing: números — 10 min. */
 export const getPlatformStats = unstable_cache(

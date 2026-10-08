@@ -107,6 +107,8 @@ export async function registrarCliente(
     refCode: String(formData.get('refCode') ?? ''),
     campanaId: String(formData.get('campanaId') ?? ''),
     glCode: String(formData.get('glCode') ?? ''),
+    enlaceSlug: String(formData.get('enlaceSlug') ?? ''),
+    vendedorCode: String(formData.get('vendedorCode') ?? ''),
     canalDeclarado: String(formData.get('canalDeclarado') ?? ''),
     marca: String(formData.get('marca') ?? ''),
     modelo: String(formData.get('modelo') ?? ''),
@@ -127,6 +129,7 @@ export async function registrarCliente(
     refCode,
     campanaId: campanaInvitacionId,
     glCode,
+    enlaceSlug,
     canalDeclarado,
     marca,
     modelo,
@@ -308,7 +311,7 @@ export async function registrarCliente(
 
       // Excursiones: ¿entró por el QR o el enlace de un vendedor? (cookie de
       // la ventana de atribución). Nunca bloquea el registro.
-      await capturarAtribucionVendedor(cliente.id, company.id)
+      await capturarAtribucionVendedor(cliente.id, company.id, { enlaceSlug })
 
       // FASE 3/5.2: seguir la empresa al registrarse (salvo que lo desmarque).
       if (seguirEmpresa) {
@@ -511,7 +514,7 @@ export async function registrarCliente(
 
     // Excursiones: ¿entró por el QR o el enlace de un vendedor? (cookie de la
     // ventana de atribución). Nunca bloquea el registro.
-    await capturarAtribucionVendedor(result.cliente.id, company.id)
+    await capturarAtribucionVendedor(result.cliente.id, company.id, { enlaceSlug })
 
     await vincularReferido(refCode, company.id, result.cliente.id, ipAddress, {
       campanaInvitacionId,
@@ -569,7 +572,10 @@ export async function registrarCliente(
       qrBienvenidaDe(result.cliente.id, campanaBienvenida),
     ])
     if (verificarCorreo) {
-      await sendVerificationEmail(admin, email, nombre)
+      await sendVerificationEmail(admin, email, nombre, {
+        mobile: formData.get('source') === 'mobile',
+        returnTo: String(formData.get('mobileReturnTo') ?? ''),
+      })
       return { pendingVerification: true, codigoInvitacion }
     }
 
@@ -771,7 +777,10 @@ export async function registrarCuentaGeneral(
       await guardarUbicacionYConsentimientos(dbUser.id, formData, { ipAddress, userAgent })
 
       if (verificarCorreo) {
-        await sendVerificationEmail(admin, email, nombre)
+        await sendVerificationEmail(admin, email, nombre, {
+          mobile: formData.get('source') === 'mobile',
+          returnTo: String(formData.get('mobileReturnTo') ?? ''),
+        })
         return { pendingVerification: true }
       }
 

@@ -81,7 +81,7 @@ export async function getOfertaParaCliente(codigo: string, clienteId: string | n
   const oferta = await sinEmpresa('ofertas: buscar oferta por código único global', (tx) =>
     tx.ofertaPrivada.findUnique({
       where: { codigo },
-      include: { company: { select: { name: true, zonaHoraria: true, logoUrl: true } } },
+      include: { company: { select: { name: true, zonaHoraria: true, logoUrl: true, colorPrimario: true } } },
     })
   )
   if (!oferta) return null
@@ -132,7 +132,7 @@ export async function getRegalosCliente(clienteIds: string[]) {
         oferta: { estado: 'ACTIVA' },
       },
       include: {
-        oferta: { include: { company: { select: { name: true, zonaHoraria: true } } } },
+        oferta: { include: { company: { select: { name: true, zonaHoraria: true, colorPrimario: true } } } },
       },
       orderBy: { reclamadaAt: 'desc' },
     })
@@ -174,5 +174,6 @@ export async function getRegalosCliente(clienteIds: string[]) {
     periodo: i.oferta.periodo,
     vigenciaHasta: i.oferta.vigenciaHasta,
     usosPeriodo: usosPorInvitado.get(i.id) ?? 0,
+    empresaColorPrimario: i.oferta.company.colorPrimario,
   }))
 }

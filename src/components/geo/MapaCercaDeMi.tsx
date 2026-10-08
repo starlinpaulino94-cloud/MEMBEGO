@@ -25,6 +25,7 @@ import { EmptyState } from '@/components/system/EmptyState'
 import { RailOverflowHint } from '@/components/ui/RailOverflowHint'
 import { MobileBottomSheet } from '@/components/ui/mobile-bottom-sheet'
 import { cn } from '@/lib/utils'
+import { brandDisplayForeground, normalizeCompanyBrandColor } from '@/lib/company-branding'
 import {
   formatearDistancia,
   formatearMagnitudDistancia,
@@ -338,6 +339,8 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
      * texto, y una comilla suelta ahí es una inyección.
      */
     const icono = (s: SucursalCercana, activo: boolean) => {
+      const companyColor = normalizeCompanyBrandColor(s.colorPrimario) ?? '#5b21b6'
+      const companyForeground = brandDisplayForeground(s.colorPrimario, '#5b21b6')
       const clases = [
         'mg-pin',
         s.tieneOfertas ? 'mg-pin--oferta' : '',
@@ -359,7 +362,7 @@ export function MapaCercaDeMi({ userId }: { userId: string | null }) {
 
       return L.divIcon({
         className: '',
-        html: `<span class="${clases}" title="${escaparHtml(s.empresaNombre)}">
+        html: `<span class="${clases}" style="--mg-company-color:${escaparCss(companyColor)};--mg-company-foreground:${escaparCss(companyForeground)}" title="${escaparHtml(s.empresaNombre)}">
           ${interior}${s.tieneOfertas ? '<span class="mg-pin__oferta"></span>' : ''}
         </span>`,
         iconSize: [38, 38],
@@ -968,6 +971,8 @@ function TarjetaNegocio({
   activa: boolean
   onAbrir: (s: SucursalCercana) => void
 }) {
+  const companyColor = normalizeCompanyBrandColor(s.colorPrimario) ?? '#5b21b6'
+  const companyForeground = brandDisplayForeground(s.colorPrimario, '#5b21b6')
   // Deja que el sistema operativo elija su app de mapas; en escritorio abre
   // Google Maps. Con nombre además de coordenadas, el destino se reconoce.
   const comoLlegar = `https://www.google.com/maps/dir/?api=1&destination=${s.latitud},${s.longitud}&destination_place_id=`
@@ -977,12 +982,21 @@ function TarjetaNegocio({
       id={`cercano-${s.id}`}
       className={cn(
         'rounded-xl border bg-card p-3 transition',
-        activa ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-primary/40'
+        activa ? 'border' : 'border-border hover:border-primary/40'
       )}
+      style={{
+        borderColor: activa ? companyColor : undefined,
+        borderLeftColor: companyColor,
+        borderLeftWidth: 4,
+        boxShadow: activa ? `0 0 0 2px ${companyColor}29` : undefined,
+      }}
     >
       <div className="flex items-start gap-3">
         <Link href={s.urlDetalle} className="flex min-w-0 flex-1 items-start gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted text-small font-bold">
+          <div
+            className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 bg-muted text-small font-bold"
+            style={{ borderColor: companyColor, backgroundColor: companyColor, color: companyForeground }}
+          >
             {s.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={s.logoUrl} alt="" className="h-full w-full object-cover" />
@@ -1040,6 +1054,7 @@ function TarjetaNegocio({
             onAbrir(s)
           }}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-primary"
+          style={{ color: companyColor }}
           aria-label={`Centrar ${s.empresaNombre} en el mapa`}
         >
           <MapPin className="h-5 w-5" aria-hidden />
@@ -1053,8 +1068,9 @@ function TarjetaNegocio({
         target="_blank"
         rel="noopener noreferrer"
         className="mt-2.5 inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-border text-small font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        style={{ backgroundColor: companyColor, borderColor: companyColor, color: companyForeground }}
       >
-        <Navigation className="h-4 w-4 text-primary" aria-hidden />
+        <Navigation className="h-4 w-4" aria-hidden />
         Cómo llegar
         <span className="sr-only"> a {s.empresaNombre} (se abre en otra pestaña)</span>
       </a>
@@ -1112,12 +1128,18 @@ function TarjetaSeleccionado({
   s: SucursalCercana
   onCerrar: () => void
 }) {
+  const companyColor = normalizeCompanyBrandColor(s.colorPrimario) ?? '#5b21b6'
+  const companyForeground = brandDisplayForeground(s.colorPrimario, '#5b21b6')
   const comoLlegar = `https://www.google.com/maps/dir/?api=1&destination=${s.latitud},${s.longitud}`
 
   return (
     <div className="mx-auto max-w-md rounded-xl border border-border bg-card p-3 elevation-3">
+      <div className="mb-3 h-1 w-full rounded-full" style={{ backgroundColor: companyColor }} />
       <div className="flex items-start gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted text-small font-bold">
+        <div
+          className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 text-small font-bold"
+          style={{ borderColor: companyColor, backgroundColor: companyColor, color: companyForeground }}
+        >
           {s.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={s.logoUrl} alt="" className="h-full w-full object-cover" />
@@ -1135,8 +1157,8 @@ function TarjetaSeleccionado({
               gris más entre otras tres. "de ti" es literal: se mide desde la
               ubicación activa, no desde el centro del mapa. */}
           {formatearMagnitudDistancia(s.distanciaM) && (
-            <p className="mt-1 flex items-center gap-1.5 text-small font-semibold text-primary">
-              <Navigation className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <p className="mt-1 flex items-center gap-1.5 text-small font-semibold">
+              <Navigation className="h-3.5 w-3.5 shrink-0" style={{ color: companyColor }} aria-hidden />
               A {formatearMagnitudDistancia(s.distanciaM)} de ti
             </p>
           )}
@@ -1165,12 +1187,12 @@ function TarjetaSeleccionado({
       )}
 
       <div className="mt-3 flex gap-2">
-        <Button asChild size="lg" className="flex-1">
+        <Button asChild size="lg" className="flex-1" style={{ backgroundColor: companyColor, color: companyForeground }}>
           <Link href={s.urlDetalle}>Ver negocio</Link>
         </Button>
-        <Button asChild size="lg" variant="outline" className="flex-1">
+        <Button asChild size="lg" variant="outline" className="flex-1" style={{ borderColor: companyColor, color: companyColor }}>
           <a href={comoLlegar} target="_blank" rel="noopener noreferrer">
-            <Navigation aria-hidden />
+            <Navigation style={{ color: companyColor }} aria-hidden />
             Cómo llegar
           </a>
         </Button>

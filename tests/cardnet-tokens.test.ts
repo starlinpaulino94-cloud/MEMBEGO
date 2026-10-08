@@ -15,6 +15,15 @@ import {
   clasificarFalloProveedor,
   mismoPerfilCardnet,
 } from '../src/lib/payments/cardnet-tokens-core'
+import {
+  cardnetConfirmInputSchema,
+  cardnetSessionInputSchema,
+  matchingPurchases,
+  perfilesBase,
+  purchaseDecision,
+  seleccionarPerfilNuevo,
+  validarCaptureUrl,
+} from '../src/modules/pagos/cardnetClientCore'
 
 /**
  * Pruebas de la tokenización HOSPEDADA. Fijan lo verificable sin llamar a
@@ -270,6 +279,62 @@ test('sin estado de transacción se cae a los indicios de siempre', async () => 
   assert.equal(interpretarCompraToken({ Approved: true, AuthorizationCode: 'A1' }).aprobada, true)
   assert.equal(interpretarCompraToken({ ResponseCode: '00', RRN: '1' }).aprobada, true)
   assert.equal(interpretarCompraToken({ ResponseCode: '51' }).aprobada, false)
+})
+
+test('el contrato de captura acepta un único objetivo y consentimiento solo de membresía', () => {
+  assert.equal(cardnetSessionInputSchema.safeParse({ membershipId: 'mem_1' }).success, true)
+  assert.equal(cardnetSessionInputSchema.safeParse({ compraId: 'buy_1' }).success, true)
+  assert.equal(cardnetSessionInputSchema.safeParse({ membershipId: 'mem_1', compraId: 'buy_1' }).success, false)
+  assert.equal(cardnetSessionInputSchema.safeParse({}).success, false)
+  assert.equal(cardnetSessionInputSchema.safeParse({ compraId: 'buy_1', guardarParaRenovacion: true }).success, false)
+  assert.equal(cardnetSessionInputSchema.safeParse({ membershipId: 'mem_1', conteoAntes: 0 }).success, false)
+  assert.equal(cardnetConfirmInputSchema.safeParse({ sessionId: 's'.repeat(40), captureNonce: 'n'.repeat(40), token: 't'.repeat(24) }).success, true)
+})
+
+test('la selección de perfil requiere exactamente un perfil nuevo respecto a la consulta inicial', () => {
+  const profiles = [
+    { paymentProfileId: 'old', token: 'tok_old', marca: null, ultimos4: null, habilitado: true },
+    { paymentProfileId: 'new', token: 'tok_new', marca: null, ultimos4: null, habilitado: true },
+  ]
+  const baseline = perfilesBase([profiles[0]!])
+  const result = seleccionarPerfilNuevo(profiles, baseline)
+  assert.equal(result.kind, 'selected')
+  if (result.kind === 'selected') assert.equal(result.perfil.paymentProfileId, 'new')
+  assert.equal(seleccionarPerfilNuevo([profiles[0]!], baseline).kind, 'missing')
+  assert.equal(seleccionarPerfilNuevo(profiles, []).kind, 'ambiguous')
+})
+
+test('la ventana de captura solo acepta HTTPS en el origen y la ruta configurados', () => {
+  const trusted = 'https://lab.cardnet.com.do/servicios/tokens/v1/Capture/'
+  assert.equal(validarCaptureUrl(trusted, trusted), true)
+  assert.equal(validarCaptureUrl(`${trusted}?session=opaque`, trusted), true)
+  assert.equal(validarCaptureUrl('http://lab.cardnet.com.do/servicios/tokens/v1/Capture/', trusted), false)
+  assert.equal(validarCaptureUrl('https://lab.cardnet.com.do.attacker.test/servicios/tokens/v1/Capture/', trusted), false)
+  assert.equal(validarCaptureUrl('https://lab.cardnet.com.do/servicios/tokens/v1/Other/', trusted), false)
+})
+
+test('compra ambigua queda pendiente y el estado explícito de CardNET controla el resultado', () => {
+  assert.equal(purchaseDecision(0, {}).kind, 'ambiguous')
+  assert.equal(purchaseDecision(200, { Response: { Transaction: { TransactionStatusId: 2 } }, Errors: [] }).kind, 'pending')
+  assert.equal(purchaseDecision(200, { Response: { Transaction: { TransactionStatusId: 1, AuthorizationCode: 'A1' } }, Errors: [] }).kind, 'approved')
+  assert.equal(purchaseDecision(200, { Response: { Transaction: { TransactionStatusId: 4 } }, Errors: [] }).kind, 'declined')
+  assert.equal(purchaseDecision(200, { Response: { Transaction: { TransactionStatusId: 4 } }, Errors: [{ ErrorCode: 'X' }] }).kind, 'pending')
+})
+
+test('la reconciliación exige OrderNumber, UniqueID, CustomerId y fecha dentro del rango', () => {
+  const from = new Date('2026-10-01T00:00:00.000Z')
+  const to = new Date('2026-10-02T00:00:00.000Z')
+  const expected = { customerId: 'customer', orderNumber: '123456789012', uniqueId: '123456789012', from, to }
+  const exact = {
+    CustomerId: 'customer',
+    OrderNumber: '123456789012',
+    UniqueID: '123456789012',
+    Created: '2026-10-01T12:00:00.000Z',
+  }
+  assert.equal(matchingPurchases([exact], expected).length, 1)
+  assert.equal(matchingPurchases([{ ...exact, CustomerId: 'other' }], expected).length, 0)
+  assert.equal(matchingPurchases([{ ...exact, UniqueID: 'different' }], expected).length, 0)
+  assert.equal(matchingPurchases([{ ...exact, Created: '2026-10-03T00:00:00.000Z' }], expected).length, 0)
 })
 
 test('los códigos de rechazo del §9.2 se traducen a algo accionable', () => {

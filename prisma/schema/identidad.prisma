@@ -1016,6 +1016,7 @@ model Company {
   servicios             Servicio[]
   bahias                Bahia[]
   pagoIntentos          PagoIntento[]
+  cardnetCaptureSessions CardnetCaptureSession[]
   cuentasCorporativas   CuentaCorporativa[]
   comisiones            Comision[]
   incidencias           Incidencia[]

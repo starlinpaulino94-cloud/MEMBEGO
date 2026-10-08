@@ -26,6 +26,7 @@ export async function getCompaniesPublic(filters: MarketplaceFilters = {}): Prom
     featured,
     limit = 50,
     offset = 0,
+    sortBy,
   } = filters
 
   try {
@@ -60,6 +61,7 @@ export async function getCompaniesPublic(filters: MarketplaceFilters = {}): Prom
           name: true,
           slug: true,
           type: true,
+          colorPrimario: true,
           description: true,
           logoUrl: true,
           bannerUrl: true,
@@ -98,7 +100,15 @@ export async function getCompaniesPublic(filters: MarketplaceFilters = {}): Prom
         },
         orderBy: [
           { isFeatured: 'desc' },
-          { createdAt: 'desc' },
+          ...(sortBy === 'rating'
+            ? [
+                { averageRating: { sort: 'desc' as const, nulls: 'last' as const } },
+                { totalMembersCount: 'desc' as const },
+                { createdAt: 'desc' as const },
+              ]
+            : sortBy === 'name'
+              ? [{ name: 'asc' as const }]
+              : [{ createdAt: 'desc' as const }]),
         ],
         take: limit,
         skip: offset,
@@ -136,6 +146,7 @@ export async function getCompanyPublic(companySlug: string): Promise<CompanyPubl
           name: true,
           slug: true,
           type: true,
+          colorPrimario: true,
           description: true,
           logoUrl: true,
           bannerUrl: true,
@@ -252,12 +263,21 @@ export async function getPromotionsPublic(filters: PromotionFilters = {}): Promi
           tags: true,
           isFeatured: true,
           createdAt: true,
+          esComprable: true,
+          precio: true,
+          usosPorCompra: true,
+          beneficioVigenciaDias: true,
+          beneficioVigenciaHasta: true,
+          limitePorCliente: true,
+          maxCanjes: true,
+          canjes: true,
           company: {
             select: {
               id: true,
               name: true,
               slug: true,
               logoUrl: true,
+              colorPrimario: true,
             },
           },
         },
@@ -270,7 +290,33 @@ export async function getPromotionsPublic(filters: PromotionFilters = {}): Promi
       })
     )
 
-    return promotions as PromotionPublic[]
+    return promotions.map((promotion) => {
+      const {
+        esComprable,
+        precio,
+        usosPorCompra,
+        beneficioVigenciaDias,
+        beneficioVigenciaHasta,
+        limitePorCliente,
+        maxCanjes,
+        canjes,
+        ...rest
+      } = promotion
+      return {
+        ...rest,
+        descuento: rest.descuento == null ? null : Number(rest.descuento),
+        venta: esComprable
+          ? {
+              precio: Number(precio ?? 0),
+              usosPorCompra,
+              agotada: maxCanjes != null && canjes >= maxCanjes,
+              beneficioVigenciaDias,
+              beneficioVigenciaHasta,
+              limitePorCliente,
+            }
+          : null,
+      }
+    })
   } catch (error) {
     console.error('[getPromotionsPublic] Error:', error)
     return []
@@ -330,7 +376,7 @@ export async function getClientePromociones(
             isFeatured: true,
             createdAt: true,
             company: {
-              select: { id: true, name: true, slug: true, logoUrl: true },
+              select: { id: true, name: true, slug: true, logoUrl: true, colorPrimario: true },
             },
           },
           orderBy: [{ isFeatured: 'desc' }, { publicadaEn: 'desc' }],
@@ -393,6 +439,7 @@ export async function getFeaturedPromotions(limit: number = 6): Promise<Promotio
               name: true,
               slug: true,
               logoUrl: true,
+              colorPrimario: true,
             },
           },
         },
@@ -471,6 +518,7 @@ export async function getPromotionDetail(
               name: true,
               slug: true,
               logoUrl: true,
+              colorPrimario: true,
               isPublished: true,
               isActive: true,
               // ¿Este negocio vende membresías? El detalle de una promoción
@@ -851,6 +899,7 @@ export interface PlanPublic {
   vigenciaDias: number
   /** Imagen que subió el negocio. Null = quien pinte decide su respaldo. */
   imagenUrl: string | null
+  color?: string | null
 }
 
 /** Un plan con el negocio que lo ofrece, para el catálogo global. */
@@ -860,6 +909,7 @@ export interface PlanConEmpresa extends PlanPublic {
     name: string
     slug: string
     logoUrl: string | null
+    colorPrimario: string | null
     ciudad: string | null
     /**
      * Moneda e idioma de SU negocio. En un catálogo que mezcla empresas, un
@@ -923,10 +973,10 @@ export async function getPlanesPublic(
         select: {
           id: true, nombre: true, precio: true, esIlimitado: true,
           lavadosIncluidos: true, descripcion: true, beneficios: true, vigenciaDias: true,
-          imagenUrl: true,
+          imagenUrl: true, color: true,
           company: {
             select: {
-              id: true, name: true, slug: true, logoUrl: true, ciudad: true,
+              id: true, name: true, slug: true, logoUrl: true, colorPrimario: true, ciudad: true,
               moneda: true, idioma: true, averageRating: true,
             },
           },
@@ -943,6 +993,7 @@ export async function getPlanesPublic(
       beneficios: p.beneficios,
       vigenciaDias: p.vigenciaDias,
       imagenUrl: p.imagenUrl,
+      color: p.color,
       // Number() en el borde: Decimal serializado tras unstable_cache es string.
       company: { ...p.company, averageRating: p.company.averageRating != null ? Number(p.company.averageRating) : null },
     }))

@@ -1,0 +1,2784 @@
+{
+  "meta": {
+    "task": "Todo 2 — client web↔native route parity inventory",
+    "plan": ".omo/plans/cliente-web-to-native-redesign.md",
+    "webRouteGlob": "src/app/(cliente)/**/page.tsx",
+    "nativeRouteGlob": "apps/client/app/**/*.tsx",
+    "generatedBy": "scripts/verificar-paridad-rutas.mjs",
+    "stateDetection": "States are source-inspected per file (imports/keywords: Skeleton/ActivityIndicator/isLoading, error/retry, EmptyState/empty, real paginators, QR libs, map libs), not inferred from filenames.",
+    "planClaim": {
+      "webRoutes": 47,
+      "nativeRouteFiles": 53
+    }
+  },
+  "counts": {
+    "webRoutes": 47,
+    "nativeRouteFiles": 53,
+    "webMatchesPlanClaim": true,
+    "nativeMatchesPlanClaim": true
+  },
+  "authLegend": {
+    "public": "No client session required (auth group / pre-login).",
+    "client-authenticated": "Client session expected; web enforced by requireRole in src/app/(cliente)/layout.tsx. Native relies on session-scoped data (some screens gate/redirect, some do not).",
+    "redirect-to-login": "Native screen explicitly router.replace(\"/(auth)/login\") when unauthenticated."
+  },
+  "statusLegend": {
+    "complete": "Native route exists and matches the web route behavior/states (or is an exact redirect twin).",
+    "partial": "Native route exists but has a state/family/composition gap versus web.",
+    "stub": "Route exists but only redirects/placeholders.",
+    "missing": "No native route satisfies this web route."
+  },
+  "webRoutes": [
+    {
+      "webPath": "/cliente/ajustes",
+      "file": "src/app/(cliente)/cliente/ajustes/page.tsx",
+      "kind": "page",
+      "family": "account",
+      "nativeFiles": [
+        "apps/client/app/ajustes.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/cliente/queries.ts",
+        "src/modules/geo/ubicaciones/service.ts",
+        "src/modules/auth/actions.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: account settings reconciled (Todo 7); auth/loading/error/empty and preference forms match web."
+    },
+    {
+      "webPath": "/cliente/ayuda",
+      "file": "src/app/(cliente)/cliente/ayuda/page.tsx",
+      "kind": "page",
+      "family": "support",
+      "nativeFiles": [
+        "apps/client/app/ayuda.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/soporte/queries.ts",
+        "src/modules/social/queries.ts",
+        "src/modules/cliente/afiliacion.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Native POST ticket flow and form are implemented; visual confirmation and ticket detail remain platform-specific."
+    },
+    {
+      "webPath": "/cliente/ayuda/[id]",
+      "file": "src/app/(cliente)/cliente/ayuda/[id]/page.tsx",
+      "kind": "page",
+      "family": "support",
+      "nativeFiles": [
+        "apps/client/app/ayuda/[id].tsx"
+      ],
+      "webDataSource": [
+        "src/modules/soporte/queries.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: ticket thread, attachment and notFound parity verified (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/bienvenida",
+      "file": "src/app/(cliente)/cliente/bienvenida/page.tsx",
+      "kind": "page",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/bienvenida.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/social/queries.ts",
+        "src/components/onboarding/WizardCliente.tsx"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: onboarding wizard contract matches web (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/bienvenida-ref/[companySlug]",
+      "file": "src/app/(cliente)/cliente/bienvenida-ref/[companySlug]/page.tsx",
+      "kind": "page",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/bienvenida-ref/[companySlug].tsx"
+      ],
+      "webDataSource": [
+        "src/modules/excursiones/catalogo/public-queries.ts",
+        "src/modules/marketplace/cached.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: referral landing CTAs and company context verified (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/buscar",
+      "file": "src/app/(cliente)/cliente/buscar/page.tsx",
+      "kind": "page",
+      "family": "marketplace",
+      "nativeFiles": [
+        "apps/client/app/buscar.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/social/queries.ts",
+        "src/modules/marketplace/types.ts",
+        "src/app/(cliente)/cliente/buscar/FiltersSidebar.tsx"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: unified search filters and results reconciled (Todo 5)."
+    },
+    {
+      "webPath": "/cliente/celebracion",
+      "file": "src/app/(cliente)/cliente/celebracion/page.tsx",
+      "kind": "page",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/celebracion.tsx"
+      ],
+      "webDataSource": [
+        "src/lib/tenant.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: auth gate added plus confetti/return CTA parity (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/cerca",
+      "file": "src/app/(cliente)/cliente/cerca/page.tsx",
+      "kind": "page",
+      "family": "maps",
+      "nativeFiles": [
+        "apps/client/app/cerca.tsx",
+        "apps/client/app/cerca.web.tsx",
+        "apps/client/app/cerca.native.tsx"
+      ],
+      "webDataSource": [
+        "src/components/geo/MapaCercaDeMi.tsx"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": true
+      },
+      "status": "partial",
+      "action": "GPS permission and current-location states use expo-location; Leaflet vs react-native-maps remains a platform-specific implementation."
+    },
+    {
+      "webPath": "/cliente/citas",
+      "file": "src/app/(cliente)/cliente/citas/page.tsx",
+      "kind": "page",
+      "family": "account",
+      "nativeFiles": [
+        "apps/client/app/citas.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/citas/queries.ts",
+        "src/modules/citas/disponibilidad.ts",
+        "src/modules/cliente/afiliacion.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: booking availability, cancel and filters reconciled (Todo 7)."
+    },
+    {
+      "webPath": "/cliente/dashboard",
+      "file": "src/app/(cliente)/cliente/dashboard/page.tsx",
+      "kind": "redirect",
+      "redirectTo": "/mis-membresias",
+      "family": "wallet",
+      "nativeFiles": [
+        "apps/client/app/index.tsx",
+        "apps/client/app/dashboard.tsx"
+      ],
+      "webDataSource": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Residual divergence: native root redirects to /(tabs)/inicio while web /cliente/dashboard redirects to /mis-membresias. Accepted, not reconciled."
+    },
+    {
+      "webPath": "/cliente/empresas",
+      "file": "src/app/(cliente)/cliente/empresas/page.tsx",
+      "kind": "page",
+      "family": "marketplace",
+      "nativeFiles": [
+        "apps/client/app/empresas.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/social/queries.ts",
+        "src/components/cliente/MisEmpresasList.tsx"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: followed/known companies list reconciled (Todo 5)."
+    },
+    {
+      "webPath": "/cliente/empresas/[companySlug]",
+      "file": "src/app/(cliente)/cliente/empresas/[companySlug]/page.tsx",
+      "kind": "page",
+      "family": "marketplace",
+      "nativeFiles": [
+        "apps/client/app/empresas/[companySlug].tsx"
+      ],
+      "webDataSource": [
+        "src/modules/marketplace/cached.ts",
+        "src/modules/marketplace/conversion.ts",
+        "src/modules/resenas/queries.ts",
+        "src/modules/elegibilidad.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: profile, reviews and eligibility CTA parity (Todo 5)."
+    },
+    {
+      "webPath": "/cliente/establecer-contrasena",
+      "file": "src/app/(cliente)/cliente/establecer-contrasena/page.tsx",
+      "kind": "page",
+      "family": "auth",
+      "nativeFiles": [
+        "apps/client/app/establecer-contrasena.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/excursiones/cliente/actions.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: native set-password screen matches web flow (Supabase direct + redirect to login)."
+    },
+    {
+      "webPath": "/cliente/excursiones",
+      "file": "src/app/(cliente)/cliente/excursiones/page.tsx",
+      "kind": "page",
+      "family": "excursions",
+      "nativeFiles": [
+        "apps/client/app/excursiones.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/excursiones/catalogo/cliente-queries.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: catalog rails and categories reconciled (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/excursiones/buscar",
+      "file": "src/app/(cliente)/cliente/excursiones/buscar/page.tsx",
+      "kind": "page",
+      "family": "excursions",
+      "nativeFiles": [
+        "apps/client/app/excursiones/buscar.tsx"
+      ],
+      "webDataSource": [
+        "src/app/(cliente)/cliente/dashboard/BuscarExcursionesSearchParams.tsx"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: filter/date/stock parity verified (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/excursiones/[reservaId]",
+      "file": "src/app/(cliente)/cliente/excursiones/[reservaId]/page.tsx",
+      "kind": "redirect",
+      "redirectTo": "/cliente/mis-excursiones/[reservaId]",
+      "family": "excursions",
+      "nativeFiles": [
+        "apps/client/app/mis-excursiones/[reservaId].tsx"
+      ],
+      "webDataSource": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: redirect parity; native detail route exists."
+    },
+    {
+      "webPath": "/cliente/explorar",
+      "file": "src/app/(cliente)/cliente/explorar/page.tsx",
+      "kind": "page",
+      "family": "marketplace",
+      "nativeFiles": [
+        "apps/client/app/explorar.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/marketplace/cached.ts",
+        "src/modules/marketplace/marcaUnica.ts",
+        "src/modules/social/queries.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: discovery filters and marcaUnica reconciled (Todo 5)."
+    },
+    {
+      "webPath": "/cliente/historial",
+      "file": "src/app/(cliente)/cliente/historial/page.tsx",
+      "kind": "page",
+      "family": "account",
+      "nativeFiles": [
+        "apps/client/app/historial.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/cliente/queries.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: pagination and status badges parity verified (Todo 7)."
+    },
+    {
+      "webPath": "/cliente/inicio",
+      "file": "src/app/(cliente)/cliente/inicio/page.tsx",
+      "kind": "page",
+      "family": "home",
+      "nativeFiles": [
+        "apps/client/app/(tabs)/inicio.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/cliente/panelPersonal.ts",
+        "src/modules/home/lectura.ts",
+        "src/components/cliente/inicio/InicioRetail.tsx"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: InicioRetail composition reconciled, including PromocionesNovedades and EmpresasScroll (Todo 5)."
+    },
+    {
+      "webPath": "/cliente/intereses",
+      "file": "src/app/(cliente)/cliente/intereses/page.tsx",
+      "kind": "page",
+      "family": "account",
+      "nativeFiles": [
+        "apps/client/app/intereses.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/empresas/queries.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: category save parity verified (Todo 7); web also has no error state."
+    },
+    {
+      "webPath": "/cliente/invita-y-gana",
+      "file": "src/app/(cliente)/cliente/invita-y-gana/page.tsx",
+      "kind": "page",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/invita-y-gana.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/invitaciones/queries.ts",
+        "src/lib/referidos.ts",
+        "src/lib/invitaContenido.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: milestones, share and counters reconciled (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/membresia",
+      "file": "src/app/(cliente)/cliente/membresia/page.tsx",
+      "kind": "redirect",
+      "redirectTo": "/mis-membresias",
+      "family": "wallet",
+      "nativeFiles": [
+        "apps/client/app/mis-membresias.tsx"
+      ],
+      "webDataSource": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: redirect parity; native /membresia maps to /mis-membresias in src/lib/rutas.ts."
+    },
+    {
+      "webPath": "/cliente/menu",
+      "file": "src/app/(cliente)/cliente/menu/page.tsx",
+      "kind": "page",
+      "family": "home",
+      "nativeFiles": [
+        "apps/client/app/(tabs)/menu.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/cliente/navDisponible.ts",
+        "src/modules/cliente/queries.ts",
+        "src/modules/auth/actions.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "OPEN OWNER DECISION: native exposes 4 persistent destinations vs 5 on web (Beneficios, a19093cb); tests/cliente-retail.test.ts asserts 4. Deliberately not resolved. See debt ledger."
+    },
+    {
+      "webPath": "/cliente/mis-excursiones",
+      "file": "src/app/(cliente)/cliente/mis-excursiones/page.tsx",
+      "kind": "page",
+      "family": "excursions",
+      "nativeFiles": [
+        "apps/client/app/mis-excursiones.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/excursiones/reservas/queries.ts",
+        "src/modules/excursiones/reservas/nucleo.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: reservation status, modify/cancel parity (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/mis-excursiones/[reservaId]",
+      "file": "src/app/(cliente)/cliente/mis-excursiones/[reservaId]/page.tsx",
+      "kind": "page",
+      "family": "excursions",
+      "nativeFiles": [
+        "apps/client/app/mis-excursiones/[reservaId].tsx"
+      ],
+      "webDataSource": [
+        "src/modules/excursiones/reservas/queries.ts",
+        "src/modules/excursiones/config.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: check-in QR, modification and ownership rules verified (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/mis-promociones",
+      "file": "src/app/(cliente)/cliente/mis-promociones/page.tsx",
+      "kind": "page",
+      "family": "wallet",
+      "nativeFiles": [
+        "apps/client/app/mis-promociones.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/ofertas/queries.ts",
+        "src/modules/ofertas/periodo.ts",
+        "src/modules/cliente/afiliacion.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: purchases/gifts grouping and status labels reconciled (Todo 6)."
+    },
+    {
+      "webPath": "/cliente/mis-promociones/[id]",
+      "file": "src/app/(cliente)/cliente/mis-promociones/[id]/page.tsx",
+      "kind": "page",
+      "family": "wallet",
+      "nativeFiles": [
+        "apps/client/app/mis-promociones/[id].tsx"
+      ],
+      "webDataSource": [
+        "src/modules/ofertas/queries.ts",
+        "src/modules/citas/queries.ts",
+        "src/modules/pagos/metodosDisponibles.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: QR, payment options, comprobante and cancel parity (Todo 6)."
+    },
+    {
+      "webPath": "/cliente/mis-promociones/[id]/agendar",
+      "file": "src/app/(cliente)/cliente/mis-promociones/[id]/agendar/page.tsx",
+      "kind": "page",
+      "family": "wallet",
+      "nativeFiles": [
+        "apps/client/app/mis-promociones/[id]/agendar.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/citas/queries.ts",
+        "src/modules/cliente/afiliacion.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: scheduling slot flow and retorno verified (Todo 6)."
+    },
+    {
+      "webPath": "/cliente/mis-promociones/regalo/[invitadoId]",
+      "file": "src/app/(cliente)/cliente/mis-promociones/regalo/[invitadoId]/page.tsx",
+      "kind": "page",
+      "family": "wallet",
+      "nativeFiles": [
+        "apps/client/app/mis-promociones/regalo/[invitadoId].tsx"
+      ],
+      "webDataSource": [
+        "src/modules/ofertas/queries.ts",
+        "src/modules/qr/token.ts",
+        "src/modules/cliente/afiliacion.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: guest gift claim and QR issuance parity (Todo 6/8)."
+    },
+    {
+      "webPath": "/cliente/novedades",
+      "file": "src/app/(cliente)/cliente/novedades/page.tsx",
+      "kind": "page",
+      "family": "marketplace",
+      "nativeFiles": [
+        "apps/client/app/novedades.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/social/queries.ts",
+        "src/components/cliente/FeedNovedades.tsx"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: feed filters and empty state reconciled (Todo 5)."
+    },
+    {
+      "webPath": "/cliente/pagos",
+      "file": "src/app/(cliente)/cliente/pagos/page.tsx",
+      "kind": "page",
+      "family": "account",
+      "nativeFiles": [
+        "apps/client/app/pagos.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/cliente/queries.ts",
+        "src/modules/storage/comprobantes.ts",
+        "src/modules/empresas/regional.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: ledger, billing cycle header and comprobante parity (Todo 7)."
+    },
+    {
+      "webPath": "/cliente/perfil",
+      "file": "src/app/(cliente)/cliente/perfil/page.tsx",
+      "kind": "page",
+      "family": "account",
+      "nativeFiles": [
+        "apps/client/app/(tabs)/cuenta.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/cliente/queries.ts",
+        "src/modules/cliente/afiliacion.ts",
+        "src/modules/social/queries.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: profile is served by the Cuenta index plus the /ajustes editor (Todo 7); capability preserved."
+    },
+    {
+      "webPath": "/cliente/planes",
+      "file": "src/app/(cliente)/cliente/planes/page.tsx",
+      "kind": "page",
+      "family": "marketplace",
+      "nativeFiles": [
+        "apps/client/app/planes.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/elegibilidad.ts",
+        "src/modules/marketplace/cached.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: global/company plan catalogs reconciled (Todo 5)."
+    },
+    {
+      "webPath": "/cliente/planes/[planId]",
+      "file": "src/app/(cliente)/cliente/planes/[planId]/page.tsx",
+      "kind": "page",
+      "family": "marketplace",
+      "nativeFiles": [],
+      "webDataSource": [
+        "src/modules/elegibilidad.ts",
+        "src/modules/marketplace/queries.ts",
+        "src/modules/membresia/prorrateo.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "nativeFiles": [
+        "apps/client/app/planes/[planId].tsx"
+      ],
+      "status": "partial",
+      "action": "Native plan detail exists and resolves back safely; purchase/elegibility parity remains dependent on the native BFF flow."
+    },
+    {
+      "webPath": "/cliente/promociones",
+      "file": "src/app/(cliente)/cliente/promociones/page.tsx",
+      "kind": "page",
+      "family": "marketplace",
+      "nativeFiles": [
+        "apps/client/app/promociones.tsx",
+        "apps/client/app/(tabs)/beneficios.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/marketplace/cached.ts",
+        "src/modules/social/queries.ts",
+        "src/modules/marketplace/types.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: promotion rails/feed and save-promo button reconciled (Todo 5)."
+    },
+    {
+      "webPath": "/cliente/promociones/[id]",
+      "file": "src/app/(cliente)/cliente/promociones/[id]/page.tsx",
+      "kind": "page",
+      "family": "marketplace",
+      "nativeFiles": [
+        "apps/client/app/promociones/[id].tsx"
+      ],
+      "webDataSource": [
+        "src/modules/marketplace/cached.ts",
+        "src/modules/promociones/compra.ts",
+        "src/modules/cliente/afiliacion.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: purchase CTA and retorno parity (Todo 5)."
+    },
+    {
+      "webPath": "/cliente/qr",
+      "file": "src/app/(cliente)/cliente/qr/page.tsx",
+      "kind": "page",
+      "family": "wallet",
+      "nativeFiles": [
+        "apps/client/app/(tabs)/qr.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/qr/token.ts",
+        "src/modules/cliente/queries.ts",
+        "src/modules/marketplace/cached.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: membership selection and QR ownership/expiration reconciled; BFF filters to the auth user (Todo 6)."
+    },
+    {
+      "webPath": "/cliente/referidos",
+      "file": "src/app/(cliente)/cliente/referidos/page.tsx",
+      "kind": "redirect",
+      "redirectTo": "/cliente/invita-y-gana",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/referidos.tsx"
+      ],
+      "webDataSource": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: redirect parity (web and native both redirect to Invita y Gana)."
+    },
+    {
+      "webPath": "/cliente/regalos",
+      "file": "src/app/(cliente)/cliente/regalos/page.tsx",
+      "kind": "page",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/regalos.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/regalos/queries.ts",
+        "src/modules/regalos/giftcards.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Residual BFF gap: native cannot accept/reject/cancel gifts (BFF exposes only GET; web uses server actions). See debt ledger."
+    },
+    {
+      "webPath": "/cliente/regalos/enviar",
+      "file": "src/app/(cliente)/cliente/regalos/enviar/page.tsx",
+      "kind": "page",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/regalos/enviar.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/regalos/queries.ts",
+        "src/modules/regalos/config.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: send-gift validation and destination search parity (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/regalos/giftcard",
+      "file": "src/app/(cliente)/cliente/regalos/giftcard/page.tsx",
+      "kind": "page",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/regalos/giftcard.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/regalos/config.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: gift-card amount min/max parity (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/regalos/regalar",
+      "file": "src/app/(cliente)/cliente/regalos/regalar/page.tsx",
+      "kind": "page",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/regalos/regalar.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/regalos/queries.ts",
+        "src/modules/regalos/config.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: promo/plan gifting and balance/cost parity (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/ruleta",
+      "file": "src/app/(cliente)/cliente/ruleta/page.tsx",
+      "kind": "page",
+      "family": "growth",
+      "nativeFiles": [
+        "apps/client/app/ruleta.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/engagement/ruleta.ts",
+        "src/modules/engagement/gamificacion.ts",
+        "src/modules/engagement/config.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: wheel, prize mapping and gamification reconciled (Todo 8)."
+    },
+    {
+      "webPath": "/cliente/vehiculos",
+      "file": "src/app/(cliente)/cliente/vehiculos/page.tsx",
+      "kind": "page",
+      "family": "account",
+      "nativeFiles": [
+        "apps/client/app/vehiculos.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/cliente/queries.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: loading/error plus vehicle cards and principal flag parity (Todo 7)."
+    },
+    {
+      "webPath": "/cliente/vehiculos/nuevo",
+      "file": "src/app/(cliente)/cliente/vehiculos/nuevo/page.tsx",
+      "kind": "page",
+      "family": "account",
+      "nativeFiles": [
+        "apps/client/app/vehiculos/nuevo.tsx"
+      ],
+      "webDataSource": [
+        "src/components/cliente/AgregarVehiculoWizard.tsx",
+        "src/lib/tenant.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: wizard step contract and plate validation parity (Todo 7)."
+    },
+    {
+      "webPath": "/membresia/[membresiaId]",
+      "file": "src/app/(cliente)/membresia/[membresiaId]/page.tsx",
+      "kind": "page",
+      "family": "wallet",
+      "nativeFiles": [
+        "apps/client/app/membresia/[membresiaId].tsx"
+      ],
+      "webDataSource": [
+        "src/modules/membresia/prorrateo.ts",
+        "src/modules/pagos/metodosDisponibles.ts",
+        "src/lib/payments/cardnet-tokens.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: detail, QR, payment options and cancel reconciled; QR shown only when active and tokenized (Todo 6)."
+    },
+    {
+      "webPath": "/mis-membresias",
+      "file": "src/app/(cliente)/mis-membresias/page.tsx",
+      "kind": "page",
+      "family": "wallet",
+      "nativeFiles": [
+        "apps/client/app/mis-membresias.tsx"
+      ],
+      "webDataSource": [
+        "src/modules/cliente/queries.ts",
+        "src/modules/cliente/primerPaso.ts",
+        "src/modules/engagement/gamificacion.ts"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: wallet grouping, status labels and counters reconciled (Todo 6)."
+    }
+  ],
+  "nativeRoutes": [
+    {
+      "nativeFile": "apps/client/app/_layout.tsx",
+      "route": "root stack",
+      "kind": "layout",
+      "family": "shell",
+      "webPaths": [],
+      "hooks": [],
+      "api": [],
+      "components": [],
+      "auth": "public",
+      "states": {
+        "loading": true,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: root providers (QueryClient, AuthProvider, SafeArea, fonts)."
+    },
+    {
+      "nativeFile": "apps/client/app/(auth)/_layout.tsx",
+      "route": "/(auth)",
+      "kind": "layout",
+      "family": "auth",
+      "webPaths": [],
+      "hooks": [],
+      "api": [],
+      "components": [],
+      "auth": "public",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: auth surface layout with brand + legal footer."
+    },
+    {
+      "nativeFile": "apps/client/app/(auth)/login.tsx",
+      "route": "/(auth)/login",
+      "kind": "screen",
+      "family": "auth",
+      "webPaths": [],
+      "hooks": [],
+      "api": [],
+      "components": [
+        "src/components/ui/Button",
+        "src/components/ui/Card"
+      ],
+      "auth": "public",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: sign-in parity with web (auth-context signIn)."
+    },
+    {
+      "nativeFile": "apps/client/app/(tabs)/_layout.tsx",
+      "route": "/(tabs)",
+      "kind": "layout",
+      "family": "shell",
+      "webPaths": [],
+      "hooks": [],
+      "api": [],
+      "components": [
+        "src/components/layout/HeaderVibe",
+        "src/components/layout/TabsEscritorio",
+        "src/components/layout/BottomTabDock"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Shell aligned: header bell routes to /novedades, location to /cerca, and the five destination descriptor drives dock, desktop tabs, and active state."
+    },
+    {
+      "nativeFile": "apps/client/app/(tabs)/inicio.tsx",
+      "route": "/(tabs)/inicio",
+      "kind": "screen",
+      "family": "home",
+      "webPaths": [
+        "/cliente/inicio"
+      ],
+      "hooks": [
+        "useInicio"
+      ],
+      "api": [
+        "api.getInicio"
+      ],
+      "components": [
+        "src/components/inicio/VibeHero",
+        "src/components/inicio/VibeCategorias",
+        "src/components/inicio/VibeRelacionado",
+        "src/components/inicio/VibeRelampago",
+        "src/components/inicio/VibeReferidos",
+        "src/components/inicio/VibeOnboarding",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/(tabs)/menu.tsx",
+      "route": "/(tabs)/menu",
+      "kind": "screen",
+      "family": "home",
+      "webPaths": [
+        "/cliente/menu"
+      ],
+      "hooks": [
+        "useMenu"
+      ],
+      "api": [
+        "api.getMenu"
+      ],
+      "components": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": false,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Mirrors /cliente/menu: OPEN OWNER DECISION: native exposes 4 persistent destinations vs 5 on web (Beneficios, a19093cb); tests/cliente-retail.test.ts asserts 4. Deliberately not resolved. See debt ledger."
+    },
+    {
+      "nativeFile": "apps/client/app/(tabs)/cuenta.tsx",
+      "route": "/(tabs)/cuenta",
+      "kind": "screen",
+      "family": "account",
+      "webPaths": [
+        "/cliente/perfil"
+      ],
+      "hooks": [
+        "usePerfil"
+      ],
+      "api": [
+        "api.getPerfil"
+      ],
+      "components": [
+        "src/components/ui/Button",
+        "src/components/ui/SectionHeader"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/(tabs)/qr.tsx",
+      "route": "/(tabs)/qr",
+      "kind": "screen",
+      "family": "wallet",
+      "webPaths": [
+        "/cliente/qr"
+      ],
+      "hooks": [
+        "useQr"
+      ],
+      "api": [
+        "api.getQr"
+      ],
+      "components": [
+        "src/components/ui/Button",
+        "src/components/ui/Card"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/index.tsx",
+      "route": "/",
+      "kind": "redirect",
+      "redirectTo": "/(tabs)/inicio",
+      "family": "shell",
+      "webPaths": [
+        "/cliente/dashboard"
+      ],
+      "hooks": [],
+      "api": [],
+      "components": [],
+      "auth": "public",
+      "states": {
+        "loading": true,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Mirrors /cliente/dashboard: Residual divergence: native root redirects to /(tabs)/inicio while web /cliente/dashboard redirects to /mis-membresias. Accepted, not reconciled."
+    },
+    {
+      "nativeFile": "apps/client/app/ajustes.tsx",
+      "route": "/ajustes",
+      "kind": "screen",
+      "family": "account",
+      "webPaths": [
+        "/cliente/ajustes"
+      ],
+      "hooks": [
+        "useAjustes",
+        "useActualizarAjustes"
+      ],
+      "api": [
+        "api.getAjustes",
+        "api.actualizarAjustes"
+      ],
+      "components": [
+        "src/components/ui/Button",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Input",
+        "src/components/ui/SectionHeader",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/ayuda.tsx",
+      "route": "/ayuda",
+      "kind": "screen",
+      "family": "support",
+      "webPaths": [
+        "/cliente/ayuda"
+      ],
+      "hooks": [
+        "useAyuda"
+      ],
+      "api": [
+        "api.getAyuda"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Button",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Mirrors /cliente/ayuda: native POST ticket flow and form are implemented; visual confirmation and ticket detail remain platform-specific."
+    },
+    {
+      "nativeFile": "apps/client/app/ayuda/[id].tsx",
+      "route": "/ayuda/[id]",
+      "kind": "screen",
+      "family": "support",
+      "webPaths": [
+        "/cliente/ayuda/[id]"
+      ],
+      "hooks": [
+        "useTicketAyuda"
+      ],
+      "api": [
+        "api.getTicketAyuda"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Button",
+        "src/components/ui/Card",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/bienvenida.tsx",
+      "route": "/bienvenida",
+      "kind": "screen",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/bienvenida"
+      ],
+      "hooks": [
+        "useBienvenida"
+      ],
+      "api": [
+        "api.getBienvenida"
+      ],
+      "components": [
+        "src/components/onboarding/WizardCliente",
+        "src/components/ui/Button"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/bienvenida-ref/[companySlug].tsx",
+      "route": "/bienvenida-ref/[companySlug]",
+      "kind": "screen",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/bienvenida-ref/[companySlug]"
+      ],
+      "hooks": [],
+      "api": [
+        "api.getEmpresa",
+        "api.getExcursiones"
+      ],
+      "components": [
+        "src/components/ui/Button",
+        "src/components/ui/Card"
+      ],
+      "auth": "public",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/buscar.tsx",
+      "route": "/buscar",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/buscar"
+      ],
+      "hooks": [
+        "useBuscar"
+      ],
+      "api": [
+        "api.getBuscar"
+      ],
+      "components": [
+        "src/components/cliente/FiltersSidebar",
+        "src/components/cliente/SavePromoButton",
+        "src/components/marketplace/BusinessCard",
+        "src/components/public/ExcursionCard",
+        "src/components/public/PromotionCard",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/celebracion.tsx",
+      "route": "/celebracion",
+      "kind": "screen",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/celebracion"
+      ],
+      "hooks": [
+        "useCelebracion"
+      ],
+      "api": [
+        "api.getCelebracion"
+      ],
+      "components": [
+        "src/components/cliente/SinEmpresaTodavia",
+        "src/components/growth/ConfettiCelebration",
+        "src/components/ui/Button"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/cerca.tsx",
+      "route": "/cerca",
+      "kind": "platform-dispatcher",
+      "family": "maps",
+      "webPaths": [
+        "/cliente/cerca"
+      ],
+      "hooks": [],
+      "api": [],
+      "components": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Mirrors /cliente/cerca: GPS permission and current-location states use expo-location; map rendering remains platform-specific."
+    },
+    {
+      "nativeFile": "apps/client/app/cerca.web.tsx",
+      "route": "/cerca (web)",
+      "kind": "platform-variant",
+      "family": "maps",
+      "webPaths": [
+        "/cliente/cerca"
+      ],
+      "hooks": [
+        "useGeoCercanos",
+        "useGeoAutocompletar"
+      ],
+      "api": [
+        "api.getGeoCercanos",
+        "api.getGeoAutocompletar"
+      ],
+      "components": [
+        "src/components/ui/Sheet"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": true
+      },
+      "status": "partial",
+      "action": "Mirrors /cliente/cerca: GPS permission and current-location states use expo-location; map rendering remains platform-specific."
+    },
+    {
+      "nativeFile": "apps/client/app/cerca.native.tsx",
+      "route": "/cerca (native)",
+      "kind": "platform-variant",
+      "family": "maps",
+      "webPaths": [
+        "/cliente/cerca"
+      ],
+      "hooks": [
+        "useGeoCercanos",
+        "useGeoAutocompletar"
+      ],
+      "api": [
+        "api.getGeoCercanos",
+        "api.getGeoAutocompletar"
+      ],
+      "components": [
+        "src/components/ui/Sheet"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": true
+      },
+      "status": "partial",
+      "action": "Mirrors /cliente/cerca: GPS permission and current-location states use expo-location; map rendering remains platform-specific."
+    },
+    {
+      "nativeFile": "apps/client/app/citas.tsx",
+      "route": "/citas",
+      "kind": "screen",
+      "family": "account",
+      "webPaths": [
+        "/cliente/citas"
+      ],
+      "hooks": [
+        "useCitas"
+      ],
+      "api": [
+        "api.getCitas",
+        "api.crearCita",
+        "api.cancelarCita"
+      ],
+      "components": [
+        "src/components/citas/CancelarCitaButton",
+        "src/components/citas/CitaEstadoBadge",
+        "src/components/citas/ReservarCita",
+        "src/components/ui/EmptyState"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/empresas.tsx",
+      "route": "/empresas",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/empresas"
+      ],
+      "hooks": [
+        "useExplorar"
+      ],
+      "api": [
+        "api.getExplorar"
+      ],
+      "components": [
+        "src/components/cliente/ExplorarEmpresasList",
+        "src/components/marketplace/BusinessCard",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/empresas/[companySlug].tsx",
+      "route": "/empresas/[companySlug]",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/empresas/[companySlug]"
+      ],
+      "hooks": [
+        "useEmpresa"
+      ],
+      "api": [
+        "api.getEmpresa"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Button",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/SectionHeader",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/establecer-contrasena.tsx",
+      "route": "/establecer-contrasena",
+      "kind": "screen",
+      "family": "auth",
+      "webPaths": [
+        "/cliente/establecer-contrasena"
+      ],
+      "hooks": [],
+      "api": [],
+      "components": [
+        "src/components/ui/Button",
+        "src/components/ui/Card",
+        "src/components/ui/Input"
+      ],
+      "auth": "public",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/excursiones.tsx",
+      "route": "/excursiones",
+      "kind": "screen",
+      "family": "excursions",
+      "webPaths": [
+        "/cliente/excursiones"
+      ],
+      "hooks": [
+        "useExcursiones"
+      ],
+      "api": [
+        "api.getExcursiones"
+      ],
+      "components": [
+        "src/components/public/ExcursionCard",
+        "src/components/ui/EmptyState",
+        "src/components/ui/PageHeader",
+        "src/components/ui/SectionHeader"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/excursiones/buscar.tsx",
+      "route": "/excursiones/buscar",
+      "kind": "screen",
+      "family": "excursions",
+      "webPaths": [
+        "/cliente/excursiones/buscar"
+      ],
+      "hooks": [
+        "useBuscarExcursiones"
+      ],
+      "api": [
+        "api.buscarExcursiones"
+      ],
+      "components": [
+        "src/components/public/ExcursionCard",
+        "src/components/ui/EmptyState",
+        "src/components/ui/PageHeader"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/explorar.tsx",
+      "route": "/explorar",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/explorar"
+      ],
+      "hooks": [
+        "useExplorar"
+      ],
+      "api": [
+        "api.getExplorar"
+      ],
+      "components": [
+        "src/components/cliente/ExplorarEmpresasList",
+        "src/components/marketplace/BusinessCard",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/historial.tsx",
+      "route": "/historial",
+      "kind": "screen",
+      "family": "account",
+      "webPaths": [
+        "/cliente/historial"
+      ],
+      "hooks": [
+        "useHistorial"
+      ],
+      "api": [
+        "api.getHistorial"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/intereses.tsx",
+      "route": "/intereses",
+      "kind": "screen",
+      "family": "account",
+      "webPaths": [
+        "/cliente/intereses"
+      ],
+      "hooks": [
+        "useIntereses"
+      ],
+      "api": [
+        "api.getIntereses",
+        "api.guardarIntereses"
+      ],
+      "components": [
+        "src/components/cliente/InteresesForm",
+        "src/components/ui/Card"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/invita-y-gana.tsx",
+      "route": "/invita-y-gana",
+      "kind": "screen",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/invita-y-gana"
+      ],
+      "hooks": [
+        "useReferidos"
+      ],
+      "api": [
+        "api.getReferidos"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/SectionHeader",
+        "src/components/ui/Skeleton",
+        "src/components/ui/StatCard"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/membresia/[membresiaId].tsx",
+      "route": "/membresia/[membresiaId]",
+      "kind": "screen",
+      "family": "wallet",
+      "webPaths": [
+        "/membresia/[membresiaId]"
+      ],
+      "hooks": [
+        "useMembresias",
+        "useHistorial"
+      ],
+      "api": [
+        "api.getMembresias",
+        "api.getHistorial"
+      ],
+      "components": [
+        "src/components/ui/Button",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": false,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/mis-excursiones.tsx",
+      "route": "/mis-excursiones",
+      "kind": "screen",
+      "family": "excursions",
+      "webPaths": [
+        "/cliente/mis-excursiones"
+      ],
+      "hooks": [
+        "useMisExcursiones"
+      ],
+      "api": [
+        "api.getMisExcursiones"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/mis-excursiones/[reservaId].tsx",
+      "route": "/mis-excursiones/[reservaId]",
+      "kind": "screen",
+      "family": "excursions",
+      "webPaths": [
+        "/cliente/mis-excursiones/[reservaId]",
+        "/cliente/excursiones/[reservaId]"
+      ],
+      "hooks": [
+        "useMiExcursion"
+      ],
+      "api": [
+        "api.getMiExcursion"
+      ],
+      "components": [
+        "src/components/excursiones/ClienteModificarReserva",
+        "src/components/excursiones/ReservaCheckinQrDisplay",
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/mis-membresias.tsx",
+      "route": "/mis-membresias",
+      "kind": "screen",
+      "family": "wallet",
+      "webPaths": [
+        "/mis-membresias",
+        "/cliente/membresia"
+      ],
+      "hooks": [
+        "useMembresias"
+      ],
+      "api": [
+        "api.getMembresias"
+      ],
+      "components": [
+        "src/components/ui/EmptyState",
+        "src/components/ui/PageHeader",
+        "src/components/ui/SectionHeader",
+        "src/components/ui/Skeleton",
+        "src/components/ui/StatCard",
+        "src/components/wallet/WalletStack"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/mis-promociones.tsx",
+      "route": "/mis-promociones",
+      "kind": "screen",
+      "family": "wallet",
+      "webPaths": [
+        "/cliente/mis-promociones"
+      ],
+      "hooks": [
+        "useMisPromociones"
+      ],
+      "api": [
+        "api.getMisPromociones"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/mis-promociones/[id].tsx",
+      "route": "/mis-promociones/[id]",
+      "kind": "screen",
+      "family": "wallet",
+      "webPaths": [
+        "/cliente/mis-promociones/[id]"
+      ],
+      "hooks": [
+        "useMisPromocion"
+      ],
+      "api": [
+        "api.getMisPromocion"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/mis-promociones/[id]/agendar.tsx",
+      "route": "/mis-promociones/[id]/agendar",
+      "kind": "screen",
+      "family": "wallet",
+      "webPaths": [
+        "/cliente/mis-promociones/[id]/agendar"
+      ],
+      "hooks": [
+        "useAgendarPromocion",
+        "useMisPromocion"
+      ],
+      "api": [
+        "api.agendarPromocion",
+        "api.getMisPromocion"
+      ],
+      "components": [
+        "src/components/ui/Card"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/mis-promociones/regalo/[invitadoId].tsx",
+      "route": "/mis-promociones/regalo/[invitadoId]",
+      "kind": "screen",
+      "family": "wallet",
+      "webPaths": [
+        "/cliente/mis-promociones/regalo/[invitadoId]"
+      ],
+      "hooks": [
+        "useRegaloInvitado",
+        "useReclamarRegaloInvitado"
+      ],
+      "api": [
+        "api.getRegaloInvitado",
+        "api.reclamarRegaloInvitado"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": true,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/novedades.tsx",
+      "route": "/novedades",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/novedades"
+      ],
+      "hooks": [
+        "useNovedades"
+      ],
+      "api": [
+        "api.getNovedades"
+      ],
+      "components": [
+        "src/components/cliente/FeedNovedades",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/pagos.tsx",
+      "route": "/pagos",
+      "kind": "screen",
+      "family": "account",
+      "webPaths": [
+        "/cliente/pagos"
+      ],
+      "hooks": [
+        "usePagos"
+      ],
+      "api": [
+        "api.getPagos"
+      ],
+      "components": [
+        "src/components/cliente/pagos/BillingCycleHeader",
+        "src/components/cliente/pagos/PagosLedger",
+        "src/components/pagos/ComprobanteLink",
+        "src/components/ui/EmptyState",
+        "src/components/ui/PageHeader",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/planes.tsx",
+      "route": "/planes",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/planes"
+      ],
+      "hooks": [
+        "usePlanes"
+      ],
+      "api": [
+        "api.getPlanes"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/promociones.tsx",
+      "route": "/promociones",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/promociones"
+      ],
+      "hooks": [
+        "usePromociones"
+      ],
+      "api": [
+        "api.getPromociones"
+      ],
+      "components": [
+        "src/components/cliente/SavePromoButton",
+        "src/components/marketplace/BusinessCard",
+        "src/components/public/PromotionCard",
+        "src/components/ui/EmptyState",
+        "src/components/ui/PageHeader",
+        "src/components/ui/SectionHeader"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/promociones/[id].tsx",
+      "route": "/promociones/[id]",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/promociones/[id]"
+      ],
+      "hooks": [
+        "usePromocion"
+      ],
+      "api": [
+        "api.getPromocion"
+      ],
+      "components": [
+        "src/components/cliente/SavePromoButton",
+        "src/components/ui/EmptyState"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/referidos.tsx",
+      "route": "/referidos",
+      "kind": "redirect",
+      "redirectTo": "/invita-y-gana",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/referidos"
+      ],
+      "hooks": [],
+      "api": [],
+      "components": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/regalos.tsx",
+      "route": "/regalos",
+      "kind": "screen",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/regalos"
+      ],
+      "hooks": [
+        "useRegalos"
+      ],
+      "api": [
+        "api.getRegalos"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/PageHeader"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Mirrors /cliente/regalos: Residual BFF gap: native cannot accept/reject/cancel gifts (BFF exposes only GET; web uses server actions). See debt ledger."
+    },
+    {
+      "nativeFile": "apps/client/app/regalos/enviar.tsx",
+      "route": "/regalos/enviar",
+      "kind": "screen",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/regalos/enviar"
+      ],
+      "hooks": [
+        "useEnviarRegalo"
+      ],
+      "api": [
+        "api.enviarRegalo"
+      ],
+      "components": [
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/Input"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/regalos/giftcard.tsx",
+      "route": "/regalos/giftcard",
+      "kind": "screen",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/regalos/giftcard"
+      ],
+      "hooks": [
+        "useGiftcardConfig"
+      ],
+      "api": [
+        "api.getGiftcardConfig"
+      ],
+      "components": [
+        "src/components/ui/EmptyState",
+        "src/components/ui/Input"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/regalos/regalar.tsx",
+      "route": "/regalos/regalar",
+      "kind": "screen",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/regalos/regalar"
+      ],
+      "hooks": [
+        "useRegalar"
+      ],
+      "api": [
+        "api.regalar"
+      ],
+      "components": [
+        "src/components/ui/EmptyState",
+        "src/components/ui/Input"
+      ],
+      "auth": "redirect-to-login",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/ruleta.tsx",
+      "route": "/ruleta",
+      "kind": "screen",
+      "family": "growth",
+      "webPaths": [
+        "/cliente/ruleta"
+      ],
+      "hooks": [
+        "useRuleta",
+        "useGirarRuleta"
+      ],
+      "api": [
+        "api.getRuleta",
+        "api.girarRuleta"
+      ],
+      "components": [
+        "src/components/ui/Badge",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/vehiculos.tsx",
+      "route": "/vehiculos",
+      "kind": "screen",
+      "family": "account",
+      "webPaths": [
+        "/cliente/vehiculos"
+      ],
+      "hooks": [
+        "useVehiculos"
+      ],
+      "api": [
+        "api.getVehiculos"
+      ],
+      "components": [
+        "src/components/cliente/VehicleCard",
+        "src/components/ui/Card",
+        "src/components/ui/EmptyState",
+        "src/components/ui/PageHeader",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/vehiculos/nuevo.tsx",
+      "route": "/vehiculos/nuevo",
+      "kind": "screen",
+      "family": "account",
+      "webPaths": [
+        "/cliente/vehiculos/nuevo"
+      ],
+      "hooks": [
+        "useVehiculoTipos"
+      ],
+      "api": [
+        "api.getVehiculoTipos",
+        "api.crearVehiculo"
+      ],
+      "components": [
+        "src/components/cliente/AgregarVehiculoWizard",
+        "src/components/ui/EmptyState"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "complete",
+      "action": "None: mirrors the linked client web route status."
+    },
+    {
+      "nativeFile": "apps/client/app/(tabs)/beneficios.tsx",
+      "route": "/(tabs)/beneficios",
+      "kind": "alias",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/promociones"
+      ],
+      "hooks": [],
+      "api": [],
+      "components": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": true,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Alias for the five-destination Beneficios tab; the canonical promotions screen owns the web parity contract."
+    },
+    {
+      "nativeFile": "apps/client/app/dashboard.tsx",
+      "route": "/dashboard",
+      "kind": "redirect",
+      "redirectTo": "/(tabs)/inicio",
+      "family": "shell",
+      "webPaths": [
+        "/cliente/dashboard"
+      ],
+      "hooks": [],
+      "api": [],
+      "components": [],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": false,
+        "error": false,
+        "empty": false,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Legacy dashboard alias; native root now uses the authenticated shell and keeps the redirect explicit."
+    },
+    {
+      "nativeFile": "apps/client/app/planes/[planId].tsx",
+      "route": "/planes/[planId]",
+      "kind": "screen",
+      "family": "marketplace",
+      "webPaths": [
+        "/cliente/planes/[planId]"
+      ],
+      "hooks": [
+        "usePlanes"
+      ],
+      "api": [
+        "api.getPlanes"
+      ],
+      "components": [
+        "src/components/ui/Card",
+        "src/components/ui/PageHeader",
+        "src/components/ui/Skeleton"
+      ],
+      "auth": "client-authenticated",
+      "states": {
+        "loading": true,
+        "error": true,
+        "empty": true,
+        "pagination": false,
+        "qr": false,
+        "map": false
+      },
+      "status": "partial",
+      "action": "Native plan detail is mapped; purchase and eligibility behavior remains a documented parity gap."
+    }
+  ]
+}

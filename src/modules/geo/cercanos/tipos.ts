@@ -43,6 +43,7 @@ export interface SucursalCercana {
   empresaNombre: string
   empresaSlug: string
   logoUrl: string | null
+  colorPrimario: string | null
   tipo: string
   direccion: string | null
   telefono: string | null

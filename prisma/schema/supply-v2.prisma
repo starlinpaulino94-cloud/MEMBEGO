@@ -996,7 +996,7 @@ model SupplyV2CustomerOrder {
   contractualValue      Decimal                 @default(0) @db.Decimal(14, 2)
   supplierDiscountTotal Decimal                 @default(0) @db.Decimal(14, 2)
   membegoSubsidyTotal   Decimal                 @default(0) @db.Decimal(14, 2)
-  commissionBase        SupplyV2CommissionBase? 
+  commissionBase        SupplyV2CommissionBase?
   /// Foto completa del reparto (beneficio, importes, política) al abrir la orden.
   benefitFundingSnapshot Json?
   /// Slice 7 (§25): la campaña y el cupón con los que se cerró esta compra,

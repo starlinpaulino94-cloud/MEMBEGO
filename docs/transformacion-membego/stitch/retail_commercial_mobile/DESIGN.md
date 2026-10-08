@@ -48,6 +48,8 @@ colors:
   background: '#f9f9ff'
   on-background: '#141b2b'
   surface-variant: '#dce2f7'
+  membership-pending-status: '#f59e0b'
+  membership-expired-status: '#ba1a1a'
 typography:
   headline-lg:
     fontFamily: Inter
@@ -228,3 +230,10 @@ The interface balances soft rectangular containment for cards with pill-shaped a
 
 ### Account & Category List Items
 - Stacked rows with white background, `8px` border radius, `1px solid #E5E7EB`, padding `12px 16px`, flexible text label (`15px`, bold `600`), and trailing right-facing chevron (`#9CA3AF`).
+
+### Membership Wallet Cards
+- Arrange cards in a responsive grid based on the available container width: one column below `704px`, two columns from `704px` through `991px`, and three columns at `992px` or wider. Measure the container so cards also fit inside narrower detail sheets.
+- Center the grid and cap it at `1200px`; cap each card at `420px` and keep `16px` between cards.
+- Color each card with its company's primary color, fading into a dark gradient stop for readable white text. Use the existing neutral fallback when a company has no primary color.
+- Active cards keep their company, plan, usage, expiry, and status details readable and retain QR access.
+- Pending and expired cards blur and dim the card details. Center a prominent state badge above the blur: amber for pending and error red for expired.

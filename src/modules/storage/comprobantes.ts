@@ -46,121 +46,24 @@
  * ────────────────────────────────────────────────────────────────────────────
  */
 
-import { randomBytes } from 'crypto'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { FULL_ADMIN_ROLES } from '@/types'
 import { BUCKET_COMPROBANTES, type TipoComprobante } from '@/modules/storage/tipos'
+import { puedeSubirComprobante, prepararSubidaComprobante, type ResultadoSubida } from '@/modules/storage/subidas'
 
+export type { ResultadoSubida, SubidaFirmada } from '@/modules/storage/subidas'
 
-const EXTENSIONES = new Set(['jpg', 'jpeg', 'png', 'webp', 'pdf'])
-
-export interface SubidaFirmada {
-  /** Ruta definitiva dentro del bucket. Es la que se guarda en la base. */
-  path: string
-  /** Token de un solo uso para `uploadToSignedUrl`. */
-  token: string
-}
-
-export interface ResultadoSubida {
-  error?: string
-  subida?: SubidaFirmada
-}
-
-/**
- * Prefijo obligatorio de la ruta de una entidad.
- *
- * Es lo que permite comprobar, al guardar, que la ruta que envía el navegador
- * corresponde de verdad a la entidad que dice. Sin esto, alguien podría pedir
- * una URL de subida para SU membresía (legítimo) y luego declarar ese archivo
- * como comprobante de otra cosa.
- */
 function prefijoDe(tipo: TipoComprobante, id: string): string {
   return `${tipo}/${id}/`
 }
 
-/** ¿Esta ruta pertenece a esta entidad? Comprobación de forma, barata. */
-export async function rutaValida(
-  tipo: TipoComprobante,
-  id: string,
-  path: string
-): Promise<boolean> {
+export async function rutaValida(tipo: TipoComprobante, id: string, path: string): Promise<boolean> {
   if (!path || path.includes('..') || path.startsWith('/')) return false
   return path.startsWith(prefijoDe(tipo, id))
 }
 
-/**
- * ¿Esta persona puede adjuntar un comprobante a esta entidad?
- *
- * Se comprueba contra la base, no contra lo que diga el formulario: el
- * identificador viaja por el navegador y es manipulable.
- */
-async function puedeSubir(
-  tipo: TipoComprobante,
-  id: string,
-  supabaseId: string
-): Promise<boolean> {
-  try {
-    if (tipo === 'membresia') {
-      const m = await sinEmpresa('comprobantes: membership por id para comprobar permiso (cross-tenant)', (tx) =>
-        tx.membership.findUnique({
-          where: { id },
-          select: { cliente: { select: { supabaseId: true } } },
-        })
-      )
-      return m?.cliente?.supabaseId === supabaseId
-    }
-    if (tipo === 'compra') {
-      const c = await sinEmpresa('comprobantes: compra por id para comprobar permiso (cross-tenant)', (tx) =>
-        tx.productoCompra.findUnique({
-          where: { id },
-          select: { cliente: { select: { supabaseId: true } } },
-        })
-      )
-      return c?.cliente?.supabaseId === supabaseId
-    }
-    if (tipo === 'pedido') {
-      // Membego Supply: un pedido del cliente A MEMBEGO. Lo adjunta quien lo
-      // abrió, y nadie más. `sinEmpresa` porque el pedido no es de ninguna
-      // empresa: es de la plataforma.
-      const ped = await sinEmpresa(
-        'comprobantes: pedido de supply por id para comprobar permiso (plataforma)',
-        (tx) =>
-          tx.supplyPedido.findUnique({
-            where: { id },
-            select: { cliente: { select: { supabaseId: true } } },
-          })
-      )
-      return ped?.cliente?.supabaseId === supabaseId
-    }
-    if (tipo === 'pago' || tipo === 'supply-v2') {
-      // Membego Supply (V1 `pago`; Supply `supply-v2`: factura o pago a
-      // proveedor, el id es el de esa entidad, que ya existe al adjuntar). Lo
-      // adjunta plataforma; el id es el del pago (que ya existe: se registra
-      // antes de subir) y solo el rol de plataforma puede escribir aquí.
-      const u = await sinEmpresa('comprobantes: rol de quien adjunta un comprobante de pago a proveedor', (tx) =>
-        tx.user.findUnique({ where: { supabaseId }, select: { role: true } })
-      )
-      return u?.role === 'SUPERADMIN'
-    }
-    // Soporte: el ticket todavía no existe cuando se adjunta el archivo (el
-    // adjunto se sube antes de crear el ticket). El identificador es el propio
-    // supabaseId de quien reporta, así que la ruta ya queda atada a la persona.
-    return id === supabaseId
-  } catch {
-    return false
-  }
-}
-
-/**
- * Pide permiso para subir un comprobante y devuelve la ruta y el token.
- *
- * La extensión se valida contra una lista blanca ANTES de firmar: la
- * validación del navegador (tipo MIME y tamaño) es comodidad para el usuario,
- * no una defensa — el navegador es del atacante. El límite de tamaño y los
- * tipos permitidos los impone además el propio bucket en la migración.
- */
 export async function pedirSubidaComprobante(
   tipo: TipoComprobante,
   id: string,
@@ -168,36 +71,7 @@ export async function pedirSubidaComprobante(
 ): Promise<ResultadoSubida> {
   const user = await getUser()
   if (!user) return { error: 'Inicia sesión para adjuntar el comprobante.' }
-
-  const ext = extension.toLowerCase().replace(/[^a-z0-9]/g, '')
-  if (!EXTENSIONES.has(ext)) {
-    return { error: 'Solo se aceptan imágenes JPG, PNG, WEBP o archivos PDF.' }
-  }
-  if (!id) return { error: 'Falta la referencia del pago.' }
-
-  const idEfectivo = tipo === 'soporte' ? user.supabaseId : id
-  if (!(await puedeSubir(tipo, idEfectivo, user.supabaseId))) {
-    return { error: 'No puedes adjuntar un comprobante a este pago.' }
-  }
-
-  // 16 bytes aleatorios: la ruta no se puede adivinar ni desde dentro. El
-  // nombre original del archivo se descarta a propósito (llega del navegador
-  // y puede contener cualquier cosa).
-  const path = `${prefijoDe(tipo, idEfectivo)}${randomBytes(16).toString('hex')}.${ext}`
-
-  try {
-    const { data, error } = await createAdminClient()
-      .storage.from(BUCKET_COMPROBANTES)
-      .createSignedUploadUrl(path)
-    if (error || !data) {
-      console.error('[comprobantes] createSignedUploadUrl:', error)
-      return { error: 'No se pudo preparar la subida. Intenta de nuevo.' }
-    }
-    return { subida: { path: data.path, token: data.token } }
-  } catch (e) {
-    console.error('[comprobantes] error inesperado:', e)
-    return { error: 'No se pudo preparar la subida. Intenta de nuevo.' }
-  }
+  return prepararSubidaComprobante(tipo, id, extension, user.supabaseId)
 }
 
 /**
@@ -236,7 +110,7 @@ export async function urlComprobante(
   const user = await getUser()
   if (!user) return null
 
-  const esDueno = await puedeSubir(tipo, id, user.supabaseId)
+  const esDueno = await puedeSubirComprobante(tipo, id, user.supabaseId)
   const esAdmin =
     FULL_ADMIN_ROLES.includes(user.metadata.role) &&
     (await esDeSuEmpresa(tipo, id, user.metadata.companyId, user.metadata.role))
@@ -318,11 +192,6 @@ async function esDeSuEmpresa(
         0
       )
     }
-    // 'pedido' cae aquí a propósito, y con `false`. Un pedido de Membego Supply
-    // no es de ninguna empresa: el comprobante lleva el banco y la cuenta de una
-    // persona que le pagó A MEMBEGO por una unidad que el comercio ya cobró por
-    // contrato. El único que lo revisa es plataforma, y ese ya salió arriba por
-    // `role === 'SUPERADMIN'`. Un admin de empresa no tiene nada que ver aquí.
     return false
   } catch {
     return false
