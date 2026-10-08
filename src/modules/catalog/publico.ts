@@ -120,6 +120,14 @@ export interface FiltrosDescubrimiento {
   q?: string
   /** slug de una categoría de la empresa (se compara por slug, entre empresas). */
   categoria?: string
+  /**
+   * slug de una categoría de NEGOCIO (`BusinessCategory`, la taxonomía transversal
+   * del marketplace: Comida, Belleza, Automotriz…). Los productos heredan la
+   * categoría de su empresa, así que una sola taxonomía navega empresas Y productos.
+   */
+  categoriaNegocio?: string
+  /** Solo ítems de este tipo (p. ej. SERVICE para «Servicios»). */
+  tipo?: 'PHYSICAL_PRODUCT' | 'SERVICE' | 'BUNDLE' | 'MEMBERSHIP' | 'VOUCHER' | 'DIGITAL_PRODUCT' | 'GIFT_CARD'
   /** `SUPPLY` = solo las ofertas de Membego; `EMPRESAS` = solo lo que publican las empresas. */
   origen?: 'SUPPLY' | 'EMPRESAS'
   limite?: number
@@ -137,6 +145,7 @@ export async function catalogoPublicoGlobal(f: FiltrosDescubrimiento = {}): Prom
   const pagina = Math.max(f.pagina ?? 0, 0)
   const q = normalizarBusqueda(f.q)
   const categoria = normalizarBusqueda(f.categoria)
+  const categoriaNegocio = normalizarBusqueda(f.categoriaNegocio)
   try {
     const candidatas = await sinEmpresa('marketplace: empresas con catálogo público', (tx) =>
       tx.catalogItem.findMany({
@@ -157,6 +166,8 @@ export async function catalogoPublicoGlobal(f: FiltrosDescubrimiento = {}): Prom
           ...itemVisible(new Date()),
           ...(q ? { OR: [{ name: { contains: q, mode: 'insensitive' as const } }, { description: { contains: q, mode: 'insensitive' as const } }] } : {}),
           ...(categoria ? { categories: { some: { category: { slug: categoria } } } } : {}),
+          ...(categoriaNegocio ? { company: { ...EMPRESA_VISIBLE, categories: { some: { category: { slug: categoriaNegocio, active: true } } } } } : {}),
+          ...(f.tipo ? { type: f.tipo } : {}),
           ...(f.origen === 'SUPPLY' ? { source: 'SUPPLY' as const } : f.origen === 'EMPRESAS' ? { source: 'MERCHANT' as const } : {}),
         },
         include: INCLUIR,

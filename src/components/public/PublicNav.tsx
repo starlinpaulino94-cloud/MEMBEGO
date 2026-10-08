@@ -12,6 +12,9 @@ import { IconoCarrito } from '@/components/checkout/IconoCarrito'
 // marketplace (/empresas) y el alta de negocios (/registro-empresa) siguen
 // vivas por URL para cuando la plataforma crezca.
 const LINKS = [
+  { href: '/empresas', label: 'Negocios' },
+  { href: '/catalogo', label: 'Productos y servicios' },
+  { href: '/ofertas', label: 'Ofertas' },
   { href: '/promociones', label: 'Promociones' },
   { href: '/caracteristicas', label: 'Características' },
   { href: '/faq', label: 'Preguntas' },

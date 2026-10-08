@@ -931,6 +931,15 @@ const G_CLI_DESCUBRIR: NavGroup = {
   label: 'Descubrir',
   items: [
     {
+      // Experiencia comercial (2026-10-08): la puerta al marketplace dentro de la
+      // app — negocios, productos, servicios y ofertas con una sola taxonomía.
+      href: '/cliente/explorar',
+      label: 'Explorar',
+      icon: PackageSearch,
+      description: 'Negocios, productos, servicios y ofertas.',
+      keywords: ['explorar', 'marketplace', 'productos', 'servicios', 'negocios', 'empresas', 'catalogo', 'buscar'],
+    },
+    {
       href: '/cliente/promociones',
       label: 'Ofertas',
       icon: Megaphone,

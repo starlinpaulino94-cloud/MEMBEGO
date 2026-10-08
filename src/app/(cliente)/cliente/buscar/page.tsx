@@ -11,6 +11,9 @@ import { EmptyState } from '@/components/system/EmptyState'
 import { PromotionCard } from '@/components/public/PromotionCard'
 import { ExcursionCard } from '@/components/public/ExcursionCard'
 import { BusinessCard, type BusinessCardData } from '@/components/marketplace/BusinessCard'
+import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPublica'
+import { TarjetaOferta } from '@/components/deals/TarjetaOferta'
+import { claveDeItem, indiceDeOfertas } from '@/modules/comercio/vitrina'
 import { SavePromoButton } from '@/components/cliente/SavePromoButton'
 import { FiltersSidebar } from './FiltersSidebar'
 import type { PromotionPublic } from '@/modules/marketplace/types'
@@ -75,6 +78,9 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
   const rawPromociones = hayError ? [] : resultado.promociones
   const rawExcursiones = hayError ? [] : resultado.excursiones
   const rawEmpresas: BusinessCardData[] = hayError ? [] : (resultado.empresas ?? [])
+  // Commerce Core: productos/servicios del catálogo y ofertas sobre ellos (proyecciones públicas).
+  let productos = hayError ? [] : (resultado.productos ?? [])
+  let ofertas = hayError ? [] : (resultado.ofertas ?? [])
 
   // Extraer categorías y empresas disponibles
   const categoriasSet = new Set<string>()
@@ -115,6 +121,9 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
   }
 
   if (params.emp) {
+    const empSlug = empresasMap.get(params.emp)?.slug
+    productos = productos.filter((p) => p.company.slug === empSlug)
+    ofertas = ofertas.filter((o) => o.empresa.slug === empSlug)
     promociones = promociones.filter((p) => p.company?.id === params.emp)
     excursiones = excursiones.filter((e) => e.empresa?.id === params.emp)
     empresas = empresas.filter((emp) => emp.id === params.emp)
@@ -140,7 +149,7 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
     )
   }
 
-  const total = promociones.length + excursiones.length + empresas.length
+  const total = promociones.length + excursiones.length + empresas.length + productos.length + ofertas.length
 
   // Chips rápidos: enlaces que conservan el resto de los parámetros. La
   // paginación (`p`) se reinicia al cambiar de filtro.
@@ -222,6 +231,8 @@ export default async function BuscarPage({ searchParams }: BuscarPageProps) {
               empresas={empresas}
               promociones={promociones}
               excursiones={excursiones}
+              productos={productos}
+              ofertas={ofertas}
               guardadasIds={guardadasIds}
               currentParams={params}
             />
@@ -236,16 +247,21 @@ function ResultsGrid({
   empresas,
   promociones,
   excursiones,
+  productos,
+  ofertas,
   guardadasIds,
   currentParams
 }: {
   empresas: BusinessCardData[]
   promociones: BuscadorUnificadoResult['promociones']
   excursiones: BuscadorUnificadoResult['excursiones']
+  productos: NonNullable<BuscadorUnificadoResult['productos']>
+  ofertas: NonNullable<BuscadorUnificadoResult['ofertas']>
   guardadasIds: Set<string>
   currentParams: Record<string, string | undefined>
 }) {
-  if (empresas.length === 0 && promociones.length === 0 && excursiones.length === 0) {
+  const ofertaPorItem = indiceDeOfertas(ofertas)
+  if (empresas.length === 0 && promociones.length === 0 && excursiones.length === 0 && productos.length === 0 && ofertas.length === 0) {
     // Dos vacíos distintos: buscó y no hubo (se dice qué falló), o aún no
     // buscó (se invita al buscador de la cabecera — el único de la app).
     return (
@@ -278,6 +294,56 @@ function ResultsGrid({
 
   return (
     <div className="space-y-8">
+      {/* Ofertas sobre el catálogo (Commerce Core): primero, porque es lo que más mueve a actuar */}
+      {ofertas.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="flex min-w-0 items-center gap-2 text-h3 text-foreground">
+              <Tag className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+              Ofertas ({ofertas.length})
+            </h2>
+            <Link
+              href={`/cliente/explorar?ver=ofertas${currentParams.q ? `&q=${encodeURIComponent(currentParams.q)}` : ''}`}
+              className="flex shrink-0 items-center gap-0.5 text-small font-semibold text-primary hover:underline"
+            >
+              Ver todas <ChevronRight className="h-4 w-4" aria-hidden />
+            </Link>
+          </div>
+          <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {ofertas.map((o) => (
+              <li key={o.id} className="flex">
+                <TarjetaOferta oferta={o} retorno={`/cliente/buscar${currentParams.q ? `?q=${encodeURIComponent(currentParams.q)}` : ''}`} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Productos y servicios (catálogo unificado) */}
+      {productos.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="flex min-w-0 items-center gap-2 text-h3 text-foreground">
+              <Store className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+              Productos y servicios ({productos.length})
+            </h2>
+            <Link
+              href={`/cliente/explorar?ver=productos${currentParams.q ? `&q=${encodeURIComponent(currentParams.q)}` : ''}`}
+              className="flex shrink-0 items-center gap-0.5 text-small font-semibold text-primary hover:underline"
+            >
+              Ver todos <ChevronRight className="h-4 w-4" aria-hidden />
+            </Link>
+          </div>
+          <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {productos.map((item) => (
+              <li key={item.id} className="flex [&>a]:w-full">
+                <TarjetaCatalogoPublica item={item} mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* Empresas */}
       {empresas.length > 0 && (
         <section>
