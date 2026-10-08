@@ -176,7 +176,8 @@ test.describe('Checkout del marketplace · recorrido', () => {
     await expect(p.getByLabel('Cómo vas a pagar')).toBeVisible()
     await expect(p.getByLabel('Cómo vas a pagar').locator('option')).toHaveText(['Pago al recoger en el negocio'])
     await p.goto('/carrito/pagar/negocio-que-no-existe')
-    await expect(p.getByText(/no recibe pedidos por ahora/)).toBeVisible()
+    // La respuesta sale en streaming y el texto aparece también en la copia oculta de la hidratación: se mira el primero.
+    await expect(p.getByText(/no recibe pedidos por ahora/).first()).toBeVisible()
     await ctx.close()
   })
 
