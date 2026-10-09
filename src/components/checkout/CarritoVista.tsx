@@ -1,5 +1,6 @@
 'use client'
 
+import { rutaDeEmpresa, rutaDePago } from '@/modules/comercio/rutas'
 import Link from 'next/link'
 import { Loader2, Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react'
 import { MAX_CANTIDAD_POR_LINEA, type LineaDeCarrito } from '@/modules/checkout/domain'
@@ -40,7 +41,7 @@ function CarritoDelNegocio({ slug, lineas }: { slug: string; lineas: LineaDeCarr
     <section className="rounded-lg border border-border" data-testid={`carrito-${slug}`} aria-label={`Carrito de ${empresa.nombre}`}>
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <h2 className="text-h3 text-foreground">
-          <Link href={`/empresas/${empresa.slug}`} className="hover:underline">
+          <Link href={rutaDeEmpresa('app', empresa.slug)} className="hover:underline">
             {empresa.nombre}
           </Link>
         </h2>
@@ -86,7 +87,7 @@ function CarritoDelNegocio({ slug, lineas }: { slug: string; lineas: LineaDeCarr
           Total <span className="text-lg font-semibold text-foreground tabular-nums">{formatearMonto(resumen.total, resumen.moneda)}</span>
         </p>
         <Button asChild>
-          <Link href={`/carrito/pagar/${empresa.slug}`}>Continuar al pago</Link>
+          <Link href={rutaDePago(empresa.slug)}>Continuar al pago</Link>
         </Button>
       </footer>
     </section>
@@ -105,14 +106,14 @@ export function CarritoVista() {
         <p className="font-medium">Tu carrito está vacío</p>
         <p className="text-sm">Agrega productos desde la ficha de cualquier negocio.</p>
         <Button asChild variant="outline" className="mt-4">
-          <Link href="/empresas">Ver negocios</Link>
+          <Link href="/cliente/explorar">Ver negocios</Link>
         </Button>
       </div>
     )
   }
 
   return (
-    <div className="mt-6 space-y-5">
+    <div className="space-y-5">
       {negocios.length > 1 && <p className="rounded-lg bg-muted/50 px-4 py-3 text-sm text-muted-foreground">Cada negocio atiende su propio pedido: pagas y recoges en cada uno por separado.</p>}
       {negocios.map(([slug, lineas]) => (
         <CarritoDelNegocio key={slug} slug={slug} lineas={lineas} />

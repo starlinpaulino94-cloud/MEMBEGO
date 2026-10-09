@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { Menu, X, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { IconoCarrito } from '@/components/checkout/IconoCarrito'
 
 // Marca única: la nav pública le habla SOLO al cliente. Las rutas del
 // marketplace (/empresas) y el alta de negocios (/registro-empresa) siguen
@@ -74,7 +73,6 @@ export function PublicNav() {
 
         {/* CTAs (desktop) */}
         <div className="hidden items-center gap-2 md:flex">
-          <IconoCarrito />
           <Link
             href="/login"
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -90,9 +88,8 @@ export function PublicNav() {
           </Link>
         </div>
 
-        {/* Toggle móvil (con el carrito al lado) */}
+        {/* Toggle móvil */}
         <div className="flex items-center gap-1 md:hidden">
-          <IconoCarrito />
           <button
             onClick={() => setOpen(!open)}
             className="rounded-lg p-2 text-foreground transition-colors hover:bg-foreground/5"

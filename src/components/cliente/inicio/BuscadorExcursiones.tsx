@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
  * Buscador de excursiones en el Home del cliente.
  *
  * Funciona igual que el buscador de promociones pero para excursiones:
- * redirige a /excursiones con los filtros aplicados.
+ * redirige a /cliente/excursiones con los filtros aplicados.
  */
 export function BuscadorExcursiones() {
   const router = useRouter()
@@ -19,7 +19,7 @@ export function BuscadorExcursiones() {
   function buscar(e: React.FormEvent) {
     e.preventDefault()
     const limpio = q.trim()
-    router.push(limpio ? `/excursiones?q=${encodeURIComponent(limpio)}` : '/excursiones')
+    router.push(limpio ? `/cliente/excursiones?q=${encodeURIComponent(limpio)}` : '/cliente/excursiones')
   }
 
   return (
@@ -43,7 +43,7 @@ export function BuscadorExcursiones() {
 
       <div className="flex items-center gap-2">
         <Link
-          href="/excursiones"
+          href="/cliente/excursiones"
           className="inline-flex min-h-11 items-center rounded-full border border-border bg-card px-4 text-small font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-muted"
         >
           <Compass className="mr-2 h-4 w-4" />

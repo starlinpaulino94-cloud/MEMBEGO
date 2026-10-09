@@ -29,7 +29,7 @@ export default async function InicioCliente({
   // composición publicada se arma con los datos del marketplace, así que el
   // diseño no depende de ningún acto administrativo para verse.
   const [comercial, personal, ofertas, novedades] = await Promise.all([
-    getInicioVista(user, categoria),
+    getInicioVista(user, categoria, 'app'),
     cargarPanelPersonal(user),
     // Commerce Core: ofertas vivas sobre el catálogo y lo último publicado, con la
     // misma categoría activa que el resto del inicio. Best-effort: sin ellas el

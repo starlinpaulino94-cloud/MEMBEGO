@@ -63,7 +63,7 @@ export default async function HomePage() {
             </div>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {catalogo.items.map((item) => (
-                <TarjetaCatalogoPublica key={item.id} item={item} mostrarEmpresa />
+                <TarjetaCatalogoPublica key={item.id} item={item} espacio="publico" mostrarEmpresa />
               ))}
             </div>
           </div>

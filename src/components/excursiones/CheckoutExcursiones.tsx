@@ -1,5 +1,9 @@
 'use client'
 
+// Antes vivía en la landing (`/checkout`). Confirmar y pagar las reservas es una operación del cliente y vive dentro de la
+// app (`/cliente/carrito/excursiones`). El archivo se movió sin reescribirse: solo cambian sus rutas.
+
+import { RUTA_CARRITO_EXCURSIONES, rutaDeLogin, rutaDeRegistro } from '@/modules/comercio/rutas'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -28,7 +32,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-interface CheckoutClientProps {
+interface CheckoutExcursionesProps {
   isAuthenticated: boolean
 }
 
@@ -40,7 +44,7 @@ const PASOS: { key: Paso; label: string }[] = [
   { key: 'confirmar', label: 'Confirmar' },
 ]
 
-export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
+export function CheckoutExcursiones({ isAuthenticated }: CheckoutExcursionesProps) {
   const { items, removeItem, updateItem, clearCart, subtotal } = useExcursionCart()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -62,7 +66,7 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
           <p className="text-sm text-muted-foreground">
             Agrega actividades desde el catálogo para continuar.
           </p>
-          <Button onClick={() => router.push('/excursiones')} className="mt-4">
+          <Button onClick={() => router.push('/cliente/excursiones')} className="mt-4">
             Explorar Actividades
           </Button>
         </div>
@@ -87,7 +91,7 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
       if (res.error) {
         if (res.error.includes('iniciar sesión') || res.error === 'unauthenticated') {
           toast.error('Debes iniciar sesión para confirmar las reservas.')
-          router.push(`/login?redirect=${encodeURIComponent('/checkout')}`)
+          router.push(rutaDeLogin(RUTA_CARRITO_EXCURSIONES))
         } else {
           toast.error(res.error)
         }
@@ -108,7 +112,7 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
 
   const handleConfirmar = () => {
     if (!isAuthenticated) {
-      router.push(`/login?redirect=${encodeURIComponent('/checkout')}`)
+      router.push(rutaDeLogin(RUTA_CARRITO_EXCURSIONES))
       return
     }
     if (metodoPago === 'ONLINE_SIMULADO') {
@@ -134,7 +138,7 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
       <div className="border-b bg-card">
         <div className="mx-auto flex max-w-3xl items-center gap-4 px-4 py-4">
           <Link
-            href="/excursiones"
+            href="/cliente/excursiones"
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -413,14 +417,14 @@ export function CheckoutClient({ isAuthenticated }: CheckoutClientProps) {
                 </p>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Link
-                    href={`/login?redirect=${encodeURIComponent('/checkout')}`}
+                    href={rutaDeLogin(RUTA_CARRITO_EXCURSIONES)}
                     className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-card py-2.5 text-sm font-semibold transition hover:bg-muted"
                   >
                     <LogIn className="h-4 w-4" />
                     Iniciar sesión
                   </Link>
                   <Link
-                    href={`/registro/cuenta?next=${encodeURIComponent('/checkout')}`}
+                    href={rutaDeRegistro(RUTA_CARRITO_EXCURSIONES)}
                     className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
                   >
                     <UserPlus className="h-4 w-4" />

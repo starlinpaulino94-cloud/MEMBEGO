@@ -10,6 +10,7 @@ import {
   seccionPermitida,
 } from '@/lib/auth/permissions'
 import { verifyLocalSession } from '@/lib/auth/jwt'
+import { destinoParaRol } from '@/lib/auth/destino-seguro'
 import { CANAL_COOKIE, CANAL_COOKIE_MAX_AGE, sanitizarCanal } from '@/modules/adquisicion/shared'
 import {
   COOKIE_MANTENIMIENTO,
@@ -43,6 +44,23 @@ function redirectWithCookies(url: URL, from: NextResponse) {
   const redirect = NextResponse.redirect(url)
   from.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie))
   return redirect
+}
+
+/**
+ * La dirección del login que recuerda a dónde iba la persona: ruta Y consulta.
+ *
+ * La consulta importa: `/cliente/explorar?ver=ofertas&q=aire` o `/cliente/carrito/pagar/x?utm=…` deben
+ * volver exactamente ahí tras entrar, no a la ruta pelada. La consulta PROPIA de la petición se descarta del
+ * login (si no, parámetros como `utm` viajarían dos veces: en el login y dentro de `redirect`). Lo que se
+ * obedece al volver lo vuelve a validar `destino-seguro`: solo rutas internas autorizadas.
+ */
+function haciaElLogin(request: NextRequest, path: string): URL {
+  const url = request.nextUrl.clone()
+  const destino = path + request.nextUrl.search
+  url.pathname = '/login'
+  url.search = ''
+  url.searchParams.set('redirect', destino)
+  return url
 }
 
 /** ¿El request trae una cookie de sesión de Supabase? (sb-<ref>-auth-token). */
@@ -220,10 +238,7 @@ export async function proxy(request: NextRequest) {
 
     if (matched) {
       if (!user) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/login'
-        url.searchParams.set('redirect', path)
-        return redirectWithCookies(url, response)
+        return redirectWithCookies(haciaElLogin(request, path), response)
       }
       const metadata = (user.app_metadata ?? {}) as Partial<AppMetadata>
       const role = metadata.role ?? 'CLIENTE'
@@ -279,14 +294,14 @@ export async function proxy(request: NextRequest) {
       const metadata = (user.app_metadata ?? {}) as Partial<AppMetadata>
       const role = metadata.role ?? 'CLIENTE'
       const roleHome = ROLE_HOME[role]
-      // Usar redirectTo si es una ruta interna segura (empieza con / pero no //)
-      const destino = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
-        ? redirectTo
-        : roleHome
-      const url = request.nextUrl.clone()
-      url.pathname = destino
-      url.searchParams.delete('redirect')
-      return redirectWithCookies(url, response)
+      // El destino pedido solo se obedece si es una ruta interna AUTORIZADA que
+      // ese rol puede abrir (ver `destino-seguro`): sin redirecciones abiertas, sin
+      // bucles hacia el propio login, y sin mandar a un administrador a un flujo
+      // de cliente. En cualquier otro caso, a su casa — en un solo salto.
+      const destino = destinoParaRol(redirectTo, role, roleHome, {
+        puedeEntrarAlPanel: puedeEntrarAlPanel(role, resolverPermisosUsuario(metadata.permisos)),
+      })
+      return redirectWithCookies(new URL(destino, request.url), response)
     }
   } catch (err) {
     // Fail-closed: si la verificación de auth falla (Supabase caído, env
@@ -294,10 +309,7 @@ export async function proxy(request: NextRequest) {
     // Las rutas públicas continúan normalmente.
     console.error('[proxy] auth check failed:', err)
     if (matched) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      url.searchParams.set('redirect', path)
-      return redirectWithCookies(url, response)
+      return redirectWithCookies(haciaElLogin(request, path), response)
     }
   }
 

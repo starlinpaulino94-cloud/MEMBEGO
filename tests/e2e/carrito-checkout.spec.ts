@@ -5,8 +5,13 @@ import { empresaCatalogo, existenciasSembradas, itemSembrado, sucursalSembrada, 
 /**
  * CHECKOUT DEL MARKETPLACE · de punta a punta (F8).
  *
- *   sin cuenta: agregar productos de dos negocios al carrito → ver el carrito (un bloque por negocio, precios de hoy)
- *   → cambiar cantidades y quitar → pagar pide iniciar sesión (y el carrito sigue ahí)
+ * SEPARACIÓN LANDING/APP (F2): el carrito y el pago viven DENTRO DE LA APP (`/cliente/carrito`), no en la landing. La
+ * landing no tiene carrito: las URL viejas (`/carrito`, `/carrito/pagar/...`) redirigen a la app, pasando por el login
+ * si hace falta. Lo que antes probaba «sin cuenta» ahora se prueba con sesión de cliente.
+ *
+ *   con sesión de cliente: agregar productos de dos negocios al carrito → ver el carrito (un bloque por negocio, precios
+ *   de hoy) → cambiar cantidades y quitar
+ *   sin sesión: las URL viejas de la landing mandan al login y, tras entrar, a la pantalla de la app
  *   con cuenta: pagar el carrito de un negocio por transferencia → pedido con sus renglones, existencias apartadas,
  *   instrucciones de transferencia con el código como referencia → el negocio lo acepta, lo marca listo y el empleado lo
  *   cierra con el QR (es un pedido de siempre)
@@ -92,32 +97,34 @@ test.describe('Checkout del marketplace · recorrido', () => {
     await existenciasSembradas(a.id, varianteProducto, sucursalA, 10)
     await itemSembrado(a.id, { name: SERVICIO, slug: `pulido-carr-${sufijo}`, variantes: [{ name: 'Default', sku: `PUL-CARR-${sufijo}`, price: 300, porDefecto: true }] })
     await itemSembrado(b.id, { name: SERVICIO_B, slug: `cera-carr-${sufijo}`, variantes: [{ name: 'Default', sku: `CERA-CARR-${sufijo}`, price: 120, porDefecto: true }] })
-    urlProducto = `/empresas/${a.slug}/catalogo/gorra-carr-${sufijo}`
-    urlServicio = `/empresas/${a.slug}/catalogo/pulido-carr-${sufijo}`
-    urlServicioB = `/empresas/${b.slug}/catalogo/cera-carr-${sufijo}`
+    // La ficha DONDE SE COMPRA es la de la app.
+    urlProducto = `/cliente/empresas/${a.slug}/catalogo/gorra-carr-${sufijo}`
+    urlServicio = `/cliente/empresas/${a.slug}/catalogo/pulido-carr-${sufijo}`
+    urlServicioB = `/cliente/empresas/${b.slug}/catalogo/cera-carr-${sufijo}`
   })
 
-  let ctxAnonimo: Awaited<ReturnType<import('@playwright/test').Browser['newContext']>>
-  let pAnonimo: Page
+  let ctxCliente: Awaited<ReturnType<import('@playwright/test').Browser['newContext']>>
+  let pCliente: Page
 
-  test('sin cuenta: agregar de dos negocios llena el carrito y el contador del encabezado lo cuenta', async ({ browser }) => {
-    ctxAnonimo = await browser.newContext()
-    pAnonimo = await ctxAnonimo.newPage()
+  test('con sesión de cliente: agregar de dos negocios llena el carrito y el contador del encabezado lo cuenta', async ({ browser }) => {
+    ctxCliente = await browser.newContext()
+    await entrarComo(ctxCliente, 'carritoCliente', BASE)
+    pCliente = await ctxCliente.newPage()
     await expect(async () => {
-      await pAnonimo.goto('/carrito')
-      await expect(pAnonimo.getByText('Tu carrito está vacío')).toBeVisible()
+      await pCliente.goto('/cliente/carrito')
+      await expect(pCliente.getByText('Tu carrito está vacío')).toBeVisible()
     }).toPass()
-    await agregar(pAnonimo, urlProducto, '2')
-    await expect(contador(pAnonimo)).toHaveText('2')
-    await agregar(pAnonimo, urlServicio, '1')
-    await expect(contador(pAnonimo)).toHaveText('3')
-    await agregar(pAnonimo, urlServicioB, '1')
-    await expect(contador(pAnonimo)).toHaveText('4')
+    await agregar(pCliente, urlProducto, '2')
+    await expect(contador(pCliente)).toHaveText('2')
+    await agregar(pCliente, urlServicio, '1')
+    await expect(contador(pCliente)).toHaveText('3')
+    await agregar(pCliente, urlServicioB, '1')
+    await expect(contador(pCliente)).toHaveText('4')
   })
 
   test('el carrito tiene un bloque por negocio con los precios de hoy, y sobrevive a recargar', async () => {
-    const p = pAnonimo
-    await p.goto('/carrito')
+    const p = pCliente
+    await p.goto('/cliente/carrito')
     await expect(p.getByText(/Cada negocio atiende su propio pedido/)).toBeVisible()
     const bA = bloque(p, a.slug)
     const bB = bloque(p, b.slug)
@@ -130,7 +137,7 @@ test.describe('Checkout del marketplace · recorrido', () => {
   })
 
   test('cambiar cantidades recalcula con el servidor; quitar un negocio lo saca del carrito', async () => {
-    const p = pAnonimo
+    const p = pCliente
     const bA = bloque(p, a.slug)
     await bA.getByRole('button', { name: `Una más de ${SERVICIO}` }).click()
     await expect(bA.getByText('RD$1,100.00')).toBeVisible()
@@ -141,17 +148,50 @@ test.describe('Checkout del marketplace · recorrido', () => {
     await expect(contador(p)).toHaveText('3')
   })
 
-  test('sin cuenta, pagar manda a iniciar sesión y el carrito sigue intacto', async () => {
-    const p = pAnonimo
+  test('pagar desde el carrito de la app lleva a la pantalla de pago de la app', async () => {
+    const p = pCliente
     await p.getByRole('link', { name: 'Continuar al pago' }).click()
-    await expect(p).toHaveURL(new RegExp(`/carrito/pagar/${a.slug}$`))
+    await expect(p).toHaveURL(new RegExp(`/cliente/carrito/pagar/${a.slug}$`))
     await expect(p.getByTestId('pago-total')).toHaveText('RD$800.00')
-    await p.getByRole('button', { name: 'Enviar pedido' }).click()
-    await expect(p).toHaveURL(/\/login\?redirect=/)
-    expect(decodeURIComponent(p.url())).toContain(`/carrito/pagar/${a.slug}`)
-    await p.goto('/carrito')
+    // El carrito sigue intacto al volver.
+    await p.goto('/cliente/carrito')
     await expect(bloque(p, a.slug).getByTestId('carrito-renglon')).toHaveCount(2)
-    await ctxAnonimo.close()
+    await ctxCliente.close()
+  })
+
+  test('las URL viejas de la landing (/carrito y /carrito/pagar) mandan al login y, tras entrar, a la pantalla de la app', async ({ browser }) => {
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    // Sin sesión: redirige a la app y de ahí al login, recordando el destino correcto (la ruta de la APP, no la vieja).
+    await p.goto('/cliente/carrito')
+    await expect(p).toHaveURL(/\/login\?redirect=/)
+    expect(new URL(p.url()).searchParams.get('redirect')).toBe('/cliente/carrito')
+    await p.goto(`/carrito/pagar/${a.slug}?utm=viejo`)
+    await expect(p).toHaveURL(/\/login\?redirect=/)
+    // La consulta de la URL vieja viaja con el destino (y no se duplica en el login).
+    expect(new URL(p.url()).searchParams.get('redirect')).toBe(`/cliente/carrito/pagar/${a.slug}?utm=viejo`)
+    expect(new URL(p.url()).searchParams.get('utm')).toBeNull()
+    // Tras entrar, el login devuelve al destino en un solo salto (sin pasar por la landing ni dar vueltas).
+    await entrarComo(ctx, 'carritoCliente', BASE)
+    await p.goto(`/login?redirect=${encodeURIComponent(`/cliente/carrito/pagar/${a.slug}?utm=viejo`)}`)
+    await expect(p).toHaveURL(new RegExp(`/cliente/carrito/pagar/${a.slug}\\?utm=viejo$`))
+    // Con sesión, la URL vieja llega directo.
+    await p.goto('/cliente/carrito')
+    await expect(p).toHaveURL(/\/cliente\/carrito$/)
+    await ctx.close()
+  })
+
+  test('el administrador y el empleado no entran al carrito del cliente: van a su espacio, sin bucle', async ({ browser }) => {
+    for (const rol of ['carritoAdmin'] as const) {
+      const ctx = await browser.newContext()
+      await entrarComo(ctx, rol, BASE, a.id)
+      const p = await ctx.newPage()
+      await p.goto('/cliente/carrito')
+      await expect(p).toHaveURL(/\/admin\/dashboard$/)
+      await p.goto(`/login?redirect=${encodeURIComponent('/cliente/carrito')}`)
+      await expect(p).toHaveURL(/\/admin\/dashboard$/)
+      await ctx.close()
+    }
   })
 
   test('pedir más de lo que hay se ve ANTES de pagar: aviso por renglón y el botón no deja enviar', async ({ browser }) => {
@@ -159,11 +199,11 @@ test.describe('Checkout del marketplace · recorrido', () => {
     const p = await ctx.newPage()
     await entrarComo(ctx, 'carritoCliente', BASE)
     await agregar(p, urlProducto, '50')
-    await p.goto(`/carrito/pagar/${a.slug}`)
+    await p.goto(`/cliente/carrito/pagar/${a.slug}`)
     await expect(p.getByText(/^Solo quedan \d+ en esta sucursal\.$/)).toBeVisible()
     await expect(p.getByRole('button', { name: 'Enviar pedido' })).toBeDisabled()
     // Con el carrito corregido sí se puede.
-    await p.goto('/carrito')
+    await p.goto('/cliente/carrito')
     await bloque(p, a.slug).getByRole('button', { name: 'Vaciar' }).click()
     await ctx.close()
   })
@@ -171,11 +211,12 @@ test.describe('Checkout del marketplace · recorrido', () => {
   test('un negocio sin cuentas no ofrece transferencia, y uno que no existe no recibe pedidos', async ({ browser }) => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
+    await entrarComo(ctx, 'carritoCliente', BASE)
     await agregar(p, urlServicioB, '1')
-    await p.goto(`/carrito/pagar/${b.slug}`)
+    await p.goto(`/cliente/carrito/pagar/${b.slug}`)
     await expect(p.getByLabel('Cómo vas a pagar')).toBeVisible()
     await expect(p.getByLabel('Cómo vas a pagar').locator('option')).toHaveText(['Pago al recoger en el negocio'])
-    await p.goto('/carrito/pagar/negocio-que-no-existe')
+    await p.goto('/cliente/carrito/pagar/negocio-que-no-existe')
     // La respuesta sale en streaming y el texto aparece también en la copia oculta de la hidratación: se mira el primero.
     await expect(p.getByText(/no recibe pedidos por ahora/).first()).toBeVisible()
     await ctx.close()
@@ -189,7 +230,7 @@ test.describe('Checkout del marketplace · recorrido', () => {
     await entrarComo(ctx, 'carritoCliente', BASE)
     await agregar(p, urlProducto, '2')
     await agregar(p, urlServicio, '1')
-    await p.goto(`/carrito/pagar/${a.slug}`)
+    await p.goto(`/cliente/carrito/pagar/${a.slug}`)
     await expect(p.getByTestId('pago-renglon')).toHaveCount(2)
     await expect(p.getByTestId('pago-total')).toHaveText('RD$800.00')
     await p.getByLabel('Cómo vas a pagar').selectOption({ label: 'Pago por transferencia bancaria' })
@@ -221,7 +262,7 @@ test.describe('Checkout del marketplace · recorrido', () => {
     expect(pedido.paymentMethod).toBe('TRANSFER')
     expect(pedido.payment).toBeNull()
     expect(pedido.attribution?.channel).toBe('MARKETPLACE_BROWSE')
-    await p.goto('/carrito')
+    await p.goto('/cliente/carrito')
     await expect(bloque(p, a.slug)).toHaveCount(0)
     await ctx.close()
   })

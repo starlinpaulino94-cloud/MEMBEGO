@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { avisarPagoAction, cancelarCompraAction, confirmarCoberturaTotalAction } from '@/modules/supply-v2/actions-cliente'
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
 import type { CompraCliente } from '@/modules/supply-v2/commerce/queries'
-import { ENTITLEMENT_STATUS_LABELS, PAYMENT_METHODS_CLIENTE, PAYMENT_METHOD_LABELS, RUTA_MEMBRESIAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
+import { ENTITLEMENT_STATUS_LABELS, PAYMENT_METHODS_CLIENTE, PAYMENT_METHOD_LABELS, RUTA_MEMBRESIAS_CLIENTE, RUTA_OFERTAS_CLIENTE } from '@/modules/supply-v2/core/catalogo'
 
 function dinero(n: string, moneda: string): string {
   return `${moneda === 'DOP' ? 'RD$' : `${moneda} `}${Number(n).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
@@ -206,9 +206,9 @@ export function CheckoutCliente({ compra }: { compra: CompraCliente }) {
           {compra.paymentRejectedReason && <p className="text-muted-foreground">Motivo: {compra.paymentRejectedReason}</p>}
           <p className="text-muted-foreground">Si todavía la quieres, vuelve y {compra.kind === 'MEMBERSHIP' ? 'contrátala' : 'compra'} de nuevo.</p>
           {compra.kind === 'MEMBERSHIP' ? (
-            <Link href={RUTA_MEMBRESIAS_PUBLICAS} className="mt-2 inline-block text-primary underline-offset-4 hover:underline">Ver las membresías</Link>
+            <Link href={RUTA_MEMBRESIAS_CLIENTE} className="mt-2 inline-block text-primary underline-offset-4 hover:underline">Ver las membresías</Link>
           ) : (
-            <Link href={`/promociones/membego/${compra.lineas[0]?.offerSlug ?? ''}`} className="mt-2 inline-block text-primary underline-offset-4 hover:underline">Ver la oferta</Link>
+            <Link href={`${RUTA_OFERTAS_CLIENTE}/${compra.lineas[0]?.offerSlug ?? ''}`} className="mt-2 inline-block text-primary underline-offset-4 hover:underline">Ver la oferta</Link>
           )}
         </div>
       )}

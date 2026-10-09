@@ -1,3 +1,4 @@
+import { AccionObtenerOferta } from '@/components/deals/AccionObtenerOferta'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { BadgePercent, Search, ShoppingBag, Store } from 'lucide-react'
@@ -254,7 +255,7 @@ export default async function ExplorarPage({
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {items.items.map((item) => (
-                <TarjetaCatalogoPublica key={item.id} item={item} mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
+                <TarjetaCatalogoPublica key={item.id} item={item} espacio="app" mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
               ))}
             </div>
             {(pagina > 0 || items.hayMas) && (
@@ -302,7 +303,7 @@ export default async function ExplorarPage({
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {ofertas.map((o) => (
-                <TarjetaOferta key={o.id} oferta={o} retorno={href({})} />
+                <TarjetaOferta key={o.id} oferta={o} espacio="app" accion={<AccionObtenerOferta oferta={o} retorno={href({})} />} />
               ))}
             </div>
           </>

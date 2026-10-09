@@ -22,13 +22,10 @@ export interface CartItem {
 
 interface ExcursionCarritoContextType {
   items: CartItem[]
-  isOpen: boolean
   addItem: (item: Omit<CartItem, 'id'>) => void
   removeItem: (id: string) => void
   updateItem: (id: string, updates: Partial<CartItem>) => void
   clearCart: () => void
-  openCart: () => void
-  closeCart: () => void
   subtotal: number
 }
 
@@ -36,7 +33,6 @@ const ExcursionCarritoContext = createContext<ExcursionCarritoContextType | null
 
 export function ExcursionCarritoProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
-  const [isOpen, setIsOpen] = useState(false)
   const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
@@ -87,7 +83,6 @@ export function ExcursionCarritoProvider({ children }: { children: ReactNode }) 
       const id = Math.random().toString(36).substring(2, 9)
       setItems([...items, { ...item, id }])
     }
-    setIsOpen(true)
   }
 
   const removeItem = (id: string) => setItems(prev => prev.filter(i => i.id !== id))
@@ -97,12 +92,10 @@ export function ExcursionCarritoProvider({ children }: { children: ReactNode }) 
   }
 
   const clearCart = () => setItems([])
-  const openCart = () => setIsOpen(true)
-  const closeCart = () => setIsOpen(false)
 
   return (
     <ExcursionCarritoContext.Provider value={{
-      items, isOpen, addItem, removeItem, updateItem, clearCart, openCart, closeCart, subtotal
+      items, addItem, removeItem, updateItem, clearCart, subtotal
     }}>
       {children}
     </ExcursionCarritoContext.Provider>

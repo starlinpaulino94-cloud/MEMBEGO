@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { SignJWT } from 'jose'
-import type { BrowserContext } from '@playwright/test'
+import { expect, type BrowserContext, type Page } from '@playwright/test'
 
 /**
  * SESIONES FIRMADAS LOCALMENTE para los E2E de Supply.
@@ -32,9 +32,11 @@ export interface UsuarioE2E {
   supabaseId: string
   email: string
   nombre: string
-  role: 'SUPERADMIN' | 'CLIENTE' | 'ADMINISTRADOR'
+  role: 'SUPERADMIN' | 'CLIENTE' | 'ADMINISTRADOR' | 'EMPLEADO'
   /** Empresa activa de la sesión (empleados del proveedor). */
   companyId: string | null
+  /** Solo para quien necesita un perfil de cliente en la sesión (p. ej. reclamar el regalo de una empresa). */
+  clienteId?: string | null
 }
 
 const USUARIOS = {
@@ -85,6 +87,12 @@ const USUARIOS = {
   carritoCliente: { email: 'e2e.carrito.cliente@membego.test', nombre: 'Rosa Carrito E2E', role: 'CLIENTE' },
   /** Conciliación y riesgo (F9): quien administra una empresa y no puede entrar a las pantallas de la plataforma. */
   conciliacionAdmin: { email: 'e2e.conciliacion.admin@membego.test', nombre: 'Admin Conciliación E2E', role: 'ADMINISTRADOR' },
+  /** Separación landing/app (F1): un cliente SIN pedidos ni empresa, para ver los estados vacíos de la app. */
+  separacionCliente: { email: 'e2e.separacion.cliente@membego.test', nombre: 'Lucía Separación E2E', role: 'CLIENTE' },
+  /** Separación landing/app (F2): un cliente que compra, y dos cuentas de equipo (administrador y empleado) que NO deben recibir el flujo de compra. */
+  separacionCliente2: { email: 'e2e.separacion.cliente2@membego.test', nombre: 'Mario Separación E2E', role: 'CLIENTE' },
+  separacionAdmin: { email: 'e2e.separacion.admin@membego.test', nombre: 'Admin Separación E2E', role: 'ADMINISTRADOR' },
+  separacionEmpleado: { email: 'e2e.separacion.empleado@membego.test', nombre: 'Empleado Separación E2E', role: 'EMPLEADO' },
   /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */
   facturacionSuperadmin: { email: 'e2e.facturacion.sa@membego.test', nombre: 'Facturación SA E2E', role: 'SUPERADMIN' },
 } as const
@@ -139,7 +147,7 @@ export async function cookieDeSesion(u: UsuarioE2E): Promise<{ name: string; val
   if (!secreto) throw new Error('Falta SUPABASE_JWT_SECRET para firmar la sesión de prueba.')
   const ahora = Math.floor(Date.now() / 1000)
   const exp = ahora + 60 * 60
-  const appMetadata = { role: u.role, dbUserId: u.id, clienteId: null, companyId: u.companyId }
+  const appMetadata = { role: u.role, dbUserId: u.id, clienteId: u.clienteId ?? null, companyId: u.companyId }
   const accessToken = await new SignJWT({ email: u.email, role: 'authenticated', app_metadata: appMetadata, user_metadata: {} })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(u.supabaseId)
@@ -178,4 +186,20 @@ export const SESION_LOCAL_DISPONIBLE = Boolean(process.env.SUPABASE_JWT_SECRET &
 /** Acceso directo a la base para el ARNÉS (adelantar un reloj, sembrar una cuenta de cobro). Nunca para lo que la prueba debe hacer por la interfaz. */
 export function prismaDeArnes(): PrismaClient {
   return cliente()
+}
+
+/**
+ * Separación landing/app · F4: la ficha pública de una oferta Membego solo informa; la compra vive en
+ * `/cliente/ofertas-membego/<slug>`. Esta es la URL de la ficha de la app a partir de la pública.
+ */
+export function fichaDeLaApp(urlPublica: string): string {
+  return urlPublica.replace('/promociones/membego/', '/cliente/ofertas-membego/')
+}
+
+/** Desde la ficha pública de una oferta, un cliente con sesión pasa a la ficha de la app por el traspaso. */
+export async function pasarALaFichaDeLaApp(page: Page): Promise<void> {
+  await page.waitForURL(/\/promociones\/membego\//)
+  await page.getByRole('region', { name: 'Comprar esta oferta' }).getByRole('link', { name: 'Comprar en la app' }).click()
+  await page.waitForURL(/\/cliente\/ofertas-membego\//)
+  await expect(page.getByTestId('btn-comprar').filter({ visible: true })).toBeVisible()
 }

@@ -24,7 +24,7 @@ export default async function ClienteLayout({
         <main className="flex flex-1 flex-col items-center justify-center px-4 py-10 sm:py-14">
           <div className="mb-8 flex flex-col items-center gap-2.5">
             <Link
-              href="/"
+              href="/login"
               className="flex items-center gap-2.5 rounded-lg text-2xl font-bold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4"
             >
               <Image src="/logo.svg" alt="" width={38} height={38} priority aria-hidden />

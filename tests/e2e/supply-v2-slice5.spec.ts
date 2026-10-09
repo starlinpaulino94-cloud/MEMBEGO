@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
+import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE, pasarALaFichaDeLaApp } from './supply-v2-sesion'
 
 /**
  * MEMBEGO SUPPLY · SLICE 5 de punta a punta en navegador (§84–§88).
@@ -117,7 +117,7 @@ async function ofertaComisionPublicada(compras: Page, d: Datos, o: { producto: s
 async function compraPagada(cliente: Page, finanzas: Page, titulo: string, ref: string, reparto?: { comision: number; neto: number }): Promise<string> {
   await cliente.goto('/promociones')
   await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: titulo }).filter({ visible: true }).first().click()
-  await cliente.waitForURL(/\/promociones\/membego\//)
+  await pasarALaFichaDeLaApp(cliente)
   await cliente.getByTestId('btn-comprar').click()
   await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
   const urlCompra = cliente.url()
@@ -382,7 +382,7 @@ async function movil(browser: Browser) {
   // El cliente compra desde el teléfono; sin scroll horizontal en la ficha ni en el checkout.
   await cliente.goto('/promociones')
   await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.ofertaSaona }).filter({ visible: true }).first().click()
-  await cliente.waitForURL(/\/promociones\/membego\//)
+  await pasarALaFichaDeLaApp(cliente)
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await expect(cliente.getByText(/comisi[óo]n/i)).toHaveCount(0)
   await cliente.getByTestId('btn-comprar').click()

@@ -9,7 +9,7 @@ import { comoError, contextoDeAuditoria, entero, fecha, fechaFinDeDia, refrescar
 import type { SupplyV2AvailabilityMode, SupplyV2OfferPriceMode } from '@prisma/client'
 import { cerrarOfertaEnTx, crearOfertaComisionEnTx, crearOfertaEnTx, editarOfertaEnTx, pausarOfertaEnTx, publicarOfertaEnTx, reanudarOfertaEnTx, type OfertaCreada } from './offers/service'
 import { confirmarPagoEnTx, rechazarPagoEnTx, type PagoConfirmado } from './commerce/checkout'
-import { RUTA_OFERTAS_PUBLICAS } from './core/catalogo'
+import { RUTA_OFERTAS_CLIENTE, RUTA_OFERTAS_PUBLICAS } from './core/catalogo'
 import { sincronizarOfertaMejorEsfuerzo } from '@/modules/supply-bridge/mejor-esfuerzo'
 
 /**
@@ -20,6 +20,7 @@ function refrescarOfertas(id?: string): void {
   refrescarSupplyV2('ofertas', 'supply', ...(id ? [`ofertas/${id}`] : []))
   revalidatePath('/promociones')
   revalidatePath(RUTA_OFERTAS_PUBLICAS, 'layout')
+  revalidatePath(RUTA_OFERTAS_CLIENTE, 'layout')
   // Puente Supply → Catálogo (Fase 2.5): refleja el cambio en el catálogo de la
   // casa DESPUÉS de responder y sin poder tumbar la acción (la oferta ya se
   // guardó); si falla, el barrido del cron lo recoge.

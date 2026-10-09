@@ -135,8 +135,12 @@ test('el código público nunca pide el costo, el SKU ni el código de barras a 
 
 test('las páginas públicas: detalle da 404 uniforme, no usan el cliente global y el buscador tiene nombre accesible', () => {
   const detalle = readFileSync('src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx', 'utf8')
-  assert.match(detalle, /if \(!item\) notFound\(\)/)
+  assert.match(detalle, /if \(!ficha\) notFound\(\)/)
   assert.doesNotMatch(detalle, /\bprisma\./)
+  // El cargador es COMPARTIDO con la ficha de la app: «no existe» y «no es público» se ven igual en los dos.
+  const cargador = readFileSync('src/modules/comercio/ficha-item.ts', 'utf8')
+  assert.match(cargador, /if \(!item\) return null/)
+  assert.doesNotMatch(cargador, /\bprisma\./)
   const lista = readFileSync('src/app/(public)/catalogo/page.tsx', 'utf8')
   assert.match(lista, /aria-label="Buscar productos y servicios"/)
   assert.doesNotMatch(lista, /\bprisma\./)
@@ -238,7 +242,7 @@ test('lo que sale al público NO incluye cantidades ni niveles de inventario', (
 
 test('la ruta de las ofertas de Membego que repite el catálogo es la de Supply (el catálogo no importa de Supply)', () => {
   assert.equal(RUTA_OFERTAS_MEMBEGO, RUTA_OFERTAS_PUBLICAS)
-  for (const f of ['src/components/catalogo/TarjetaCatalogoPublica.tsx', 'src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx']) {
+  for (const f of ['src/components/catalogo/TarjetaCatalogoPublica.tsx', 'src/components/catalogo/FichaDeItem.tsx', 'src/modules/comercio/ficha-item.ts', 'src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx']) {
     assert.doesNotMatch(readFileSync(f, 'utf8'), /modules\/supply-v2/, `${f} no importa de Supply`)
   }
 })

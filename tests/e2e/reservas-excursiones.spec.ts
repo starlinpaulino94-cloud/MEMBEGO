@@ -41,9 +41,10 @@ test.describe('Flujos de Reserva de Excursiones', () => {
     await page.getByRole('button', { name: /entrar/i }).click()
     await page.waitForURL(/\/cliente/)
 
-    // 2. Entrar por el QR del vendedor. Al estar logueado, va al catálogo.
+    // 2. Entrar por el QR del vendedor. Al estar logueado, va a las excursiones de la empresa DENTRO DE LA APP
+    //    (separación landing/app · F3): la reserva es una operación del cliente y vive en `/cliente`.
     await page.goto('/e/luis-tours')
-    await expect(page).toHaveURL(/\/empresas\/.*\/excursiones/)
+    await expect(page).toHaveURL(/\/cliente\/empresas\/.*\/excursiones/)
 
     // 3. Abrir la primera excursión del catálogo. La tarjeta entera es el
     //    enlace (`ExcursionCard`), así que su nombre accesible es el título de
@@ -57,8 +58,13 @@ test.describe('Flujos de Reserva de Excursiones', () => {
     await page.getByRole('button', { name: 'Añadir un adulto' }).click()
     await page.getByRole('button', { name: /agregar al carrito/i }).click()
 
-    // 5. El carrito se abre con el ítem dentro.
-    await expect(page.getByText(/tu carrito de excursiones/i)).toBeVisible()
+    // 5. Hay UN solo carrito (sin cajón lateral): el aviso lleva al carrito de la app, que muestra la excursión.
+    await expect(page.getByText('Excursión agregada al carrito.').first()).toBeVisible()
+    await page.getByTestId('carrito-icono').click()
+    await expect(page).toHaveURL(/\/cliente\/carrito$/)
+    await expect(page.getByTestId('carrito-excursiones')).toBeVisible()
+    await page.getByRole('link', { name: 'Revisar y reservar' }).click()
+    await expect(page).toHaveURL(/\/cliente\/carrito\/excursiones$/)
 
     // 6. Confirmar la compra.
     await page.getByRole('button', { name: /confirmar reservas/i }).click()
