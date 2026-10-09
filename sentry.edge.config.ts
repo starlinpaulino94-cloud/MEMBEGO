@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/nextjs'
+import { limpiarEvento, limpiarMiga } from './src/modules/observabilidad/sentryLimpieza'
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
@@ -7,4 +8,6 @@ Sentry.init({
   release: process.env.SENTRY_RELEASE ?? process.env.VERCEL_GIT_COMMIT_SHA,
 
   tracesSampleRate: 0.2,
+  beforeSend: limpiarEvento,
+  beforeBreadcrumb: limpiarMiga,
 })

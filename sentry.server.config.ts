@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/nextjs'
-import { limpiarEvento } from './src/modules/observabilidad/sentryLimpieza'
+import { limpiarEvento, limpiarMiga } from './src/modules/observabilidad/sentryLimpieza'
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
@@ -18,6 +18,7 @@ Sentry.init({
   beforeSend(event) {
     return limpiarEvento(event)
   },
+  beforeBreadcrumb: limpiarMiga,
 
   ignoreErrors: [
     'NEXT_REDIRECT',
