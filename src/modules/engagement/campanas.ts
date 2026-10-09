@@ -1,6 +1,7 @@
 import { conEmpresa } from '@/lib/tenant'
-import type { MarketingCampaignTipo } from '@prisma/client'
+import { Prisma, type MarketingCampaignTipo } from '@prisma/client'
 import { reclamosPosibles } from '@/modules/deals/domain'
+import { finDeVentanaCampana } from './ventana-campana'
 
 /**
  * Engagement Engine · Fase 2 — Motor de Campañas.
@@ -10,23 +11,9 @@ import { reclamosPosibles } from '@/modules/deals/domain'
  * dentro de su ventana horaria y días de la semana (hora local de RD, UTC-4).
  */
 
-// República Dominicana no aplica horario de verano: siempre UTC-4.
-const RD_OFFSET_MS = 4 * 60 * 60 * 1000
-
-/** "Ahora" en RD como campos UTC (día de la semana y minutos del día). */
-function ahoraRD() {
-  const rd = new Date(Date.now() - RD_OFFSET_MS)
-  return {
-    dia: rd.getUTCDay(), // 0=Dom … 6=Sáb
-    minutos: rd.getUTCHours() * 60 + rd.getUTCMinutes(),
-    // Instante UTC real de la medianoche de HOY en RD.
-    medianocheMs:
-      Date.UTC(rd.getUTCFullYear(), rd.getUTCMonth(), rd.getUTCDate()) + RD_OFFSET_MS,
-  }
-}
-
 export interface CampanaViva {
   id: string
+  dealId: string | null
   tipo: MarketingCampaignTipo
   titulo: string
   descripcion: string
@@ -43,6 +30,40 @@ export interface CampanaViva {
   cuposRestantes: number | null
   /** Cupones ya reclamados (prueba social); 0 si nadie aún. */
   reclamados: number
+}
+
+interface RendimientoCampana {
+  reclamosAtribuidos: number
+  canjesAtribuidos: number
+}
+
+async function rendimientoAtribuido(companyId: string, campaignIds: string[]) {
+  const resultado = new Map<string, RendimientoCampana>()
+  if (campaignIds.length === 0) return resultado
+
+  const filas = await conEmpresa(companyId, (tx) =>
+    tx.$queryRaw<Array<{ campaignId: string; reclamos: bigint; canjes: bigint }>>`
+      SELECT oa."campaignId" AS "campaignId",
+             COUNT(*) AS reclamos,
+             COUNT(*) FILTER (WHERE dc."status" = 'REDEEMED') AS canjes
+        FROM "order_attributions" oa
+        JOIN "deal_claims" dc
+          ON dc."orderId" = oa."orderId"
+         AND dc."companyId" = oa."companyId"
+       WHERE oa."companyId" = ${companyId}
+         AND oa."channel" = 'PROMOTION_CLAIM'
+         AND oa."campaignId" IN (${Prisma.join(campaignIds)})
+       GROUP BY oa."campaignId"
+    `
+  )
+
+  for (const fila of filas) {
+    resultado.set(fila.campaignId, {
+      reclamosAtribuidos: Number(fila.reclamos),
+      canjesAtribuidos: Number(fila.canjes),
+    })
+  }
+  return resultado
 }
 
 export async function getDealsParaMarketing(companyId: string) {
@@ -97,7 +118,6 @@ export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]
       })
     )
 
-    const rd = ahoraRD()
     const vivas: CampanaViva[] = []
 
     for (const c of candidatas) {
@@ -116,16 +136,8 @@ export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]
         promocion.actions.length > 0 ||
         promocion.restrictions.length > 0
       )) continue
-      // Día de la semana (si se restringe).
-      if (c.diasSemana.length > 0 && !c.diasSemana.includes(rd.dia)) continue
-
-      // Ventana horaria (Happy Hour): dentro de [horaInicioMin, horaFinMin].
-      let finMs = c.fechaFin.getTime()
-      if (c.horaInicioMin != null && c.horaFinMin != null) {
-        if (rd.minutos < c.horaInicioMin || rd.minutos >= c.horaFinMin) continue
-        // Termina hoy al cierre de la ventana (o antes si la campaña acaba).
-        finMs = Math.min(rd.medianocheMs + c.horaFinMin * 60_000, finMs)
-      }
+      const terminaEn = finDeVentanaCampana(c, now)
+      if (!terminaEn) continue
 
       // Stock de cupones (urgencia): agotado → no se muestra.
       const cuposRestantes = c.deal
@@ -137,23 +149,30 @@ export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]
 
       vivas.push({
         id: c.id,
+        dealId: c.dealId,
         tipo: c.tipo,
         titulo: c.titulo,
         descripcion: c.descripcion,
         bannerUrl: c.bannerUrl,
         imagenUrl: c.imagenUrl,
         ctaTexto: c.ctaTexto,
-        ctaHref: c.dealId ? `/ofertas/${encodeURIComponent(c.dealId)}` : c.ctaHref,
+        ctaHref: c.dealId
+          ? `/ofertas/${encodeURIComponent(c.dealId)}?campaign=${encodeURIComponent(c.id)}`
+          : c.ctaHref,
         colorPrimario: c.colorPrimario,
         colorSecundario: c.colorSecundario,
         destacada: c.destacada,
-        terminaEn: new Date(finMs).toISOString(),
+        terminaEn: terminaEn.toISOString(),
         cuposRestantes,
         reclamados: c.deal?.claimsActive ?? c.reclamosCount,
       })
     }
 
-    return vivas
+    const rendimiento = await rendimientoAtribuido(companyId, vivas.filter((c) => c.dealId).map((c) => c.id))
+    return vivas.map((campana) => ({
+      ...campana,
+      reclamados: campana.dealId ? rendimiento.get(campana.id)?.reclamosAtribuidos ?? 0 : campana.reclamados,
+    }))
   } catch (e) {
     console.error('[engagement] getCampanasVivas:', e)
     return []
@@ -163,13 +182,19 @@ export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]
 // ─── Admin ────────────────────────────────────────────────────────────────
 
 export async function getCampanasMarketingAdmin(companyId: string) {
-  return conEmpresa(companyId, (tx) =>
+  const campanas = await conEmpresa(companyId, (tx) =>
     tx.marketingCampaign.findMany({
       where: { companyId },
       orderBy: [{ estado: 'asc' }, { fechaFin: 'desc' }],
       include: { deal: { select: { title: true, promotion: { select: { nombre: true } } } } },
     })
   )
+  const rendimiento = await rendimientoAtribuido(companyId, campanas.filter((c) => c.dealId).map((c) => c.id))
+  return campanas.map((campana) => ({
+    ...campana,
+    reclamosAtribuidos: rendimiento.get(campana.id)?.reclamosAtribuidos ?? 0,
+    canjesAtribuidos: rendimiento.get(campana.id)?.canjesAtribuidos ?? 0,
+  }))
 }
 
 export async function getCampanaMarketing(id: string, companyId: string) {

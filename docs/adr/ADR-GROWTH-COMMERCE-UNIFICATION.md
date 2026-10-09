@@ -1,6 +1,6 @@
 # ADR: Growth Commerce Unification
 
-- Estado: en curso
+- Estado: primera rebanada completada (PR #588)
 - Fecha: 2026-10-09
 - Alcance de esta fase: conectar reglas de Promotion con reclamos nuevos de Deals y distribuir Deals mediante MarketingCampaign.
 
@@ -43,7 +43,7 @@ Esta rebanada no persiste atribución de reclamos a una campaña ni cambia `Deal
 - En Commerce, el cupón ya emitido es `DealClaim` más el pedido/QR asociado: tiene unicidad por `(dealId, customerId)`, vencimiento, estados de reclamo/canje y fotos de cuota/ahorro. No se añadirá otra tabla de cupón para Deals mientras este modelo cubra el ciclo; crear un `Coupon Engine` duplicaría esa autoridad.
 - `SupplyV2Coupon` y `SupplyV2Campaign` pertenecen al flujo y la economía de Supply. Mantienen sus reservas, financiación, beneficios y redenciones; no se trasladan a Merchant Billing ni al nuevo enlace.
 - `MarketingCampaign` se amplió para distribuir Deals con FK tenant-safe. `SupplyV2Campaign` continúa siendo una campaña de beneficios/cupones de Supply con presupuesto y aprobación; no se fusiona.
-- La siguiente rebanada de Growth puede agregar atribución de reclamos a campañas y analítica de conversión, si se define cómo tratar múltiples campañas y ventanas de atribución.
+- La atribución de reclamos y su medición se documentan en [ADR-CAMPAIGN-CLAIM-ATTRIBUTION.md](ADR-CAMPAIGN-CLAIM-ATTRIBUTION.md).
 
 ## Verificación requerida para ampliar esta fase
 

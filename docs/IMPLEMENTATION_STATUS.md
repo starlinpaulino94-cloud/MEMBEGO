@@ -1,14 +1,14 @@
 # MEMBEGO — estado de implementación
 
-> Fuente operativa vigente. Esta actualización local se trabaja el **2026-10-09** en `codex/growth-commerce-unification`, sobre `codex/onboarding-foundation-cleanup` (`1889e95e`); `origin/main` está en **`4a4e56960c9b171a8e9252a34c1d2d02d9589638`**. El PR #585 está fusionado. Growth Commerce sigue sin commit ni push, según la decisión de agrupar el trabajo al terminar las fases. El código y las verificaciones indicadas mandan sobre los informes históricos. La existencia de una función no prueba su configuración ni su uso en producción.
+> Fuente operativa vigente. Esta rebanada se trabaja el **2026-10-09** sobre `origin/main` en `47c84876673cc09a49fa8834e68cf5e1b9b8cf56`, que ya incluye el PR #588 de Growth Commerce. El código y las verificaciones indicadas mandan sobre los informes históricos. La existencia de una función no prueba su configuración ni su uso en producción.
 
 ## ESTADO ACTUAL
 
 ### Base y alcance
 
-Los PR [#583](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/583) (experiencia comercial, `claude/gracious-pasteur-87pexr`, `126c2e47`), [#584](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/584) (`claude/wizardly-hypatia-x2l9av`, `3becfb59`) y [#585](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/585) (onboarding/foundation cleanup) están fusionados. El trabajo actual de Growth Commerce es un cambio local posterior, todavía sin commit ni PR.
+Los PR [#583](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/583) (experiencia comercial), [#584](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/584), [#585](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/585) (onboarding/foundation cleanup) y [#588](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/588) (primera rebanada de Growth Commerce) están fusionados.
 
-El producto es un monolito modular Next.js/React/TypeScript, Prisma y Supabase, con una app Expo y un satélite de restaurante que consumen HTTP. Commerce Core ya existe: no es una propuesta pendiente. **Growth Commerce Unification está en curso** en la rama local `codex/growth-commerce-unification`: la primera rebanada conecta reglas de `Promotion` con la elegibilidad de reclamos nuevos de `Deal`; Coupons, Campaigns y Supply siguen separados. El inventario del Car Wash y las compras/membresías legacy siguen siendo dominios distintos.
+El producto es un monolito modular Next.js/React/TypeScript, Prisma y Supabase, con una app Expo y un satélite de restaurante que consumen HTTP. Commerce Core ya existe: no es una propuesta pendiente. **La primera rebanada de Growth Commerce está fusionada**: Promotion condiciona la elegibilidad de reclamos nuevos de Deal y MarketingCampaign distribuye Deals. Esta rebanada agrega atribución directa campaña→reclamo y medición de reclamos/canjes; Supply y `Promocion` legacy siguen separados. El inventario del Car Wash y las compras/membresías legacy siguen siendo dominios distintos.
 
 ### Capacidades y acceso
 
@@ -80,7 +80,7 @@ Resultados y comandos reproducibles en [CODEX_ONBOARDING_AUDIT.md](CODEX_ONBOARD
 2. Acordar tarifas y fiscalidad, probar el flujo de campo de [PILOT_FIELD_TEST.md](PILOT_FIELD_TEST.md), Storage, lector, térmica, móvil y modo oscuro con usuarios reales.
 3. Validar CardNET tokenizado con credenciales QA aprobadas. No extenderlo al checkout comercial ni Supply sin diseño y pruebas específicas. Los helpers directos aún conservados no son una integración autorizada para reactivarse.
 4. Resolver los límites pendientes: devolución monetaria POS/Supply, atomicidad de emisión de eventos y presupuesto de bundle. Replay ya oculta texto e inputs por defecto; consultar la auditoría de onboarding para riesgos restantes.
-5. Completar **Growth Commerce Unification: Promotion → Deal → Coupon → Campaign**. La elegibilidad de Deals ya evalúa Promotion; `MarketingCampaign` ahora puede distribuir un Deal y su Promotion por la relación `Campaign → Deal → Promotion`. El cupón sigue siendo `DealClaim` + pedido/QR. Falta decidir la atribución analítica de reclamos a campañas. `SupplyV2Campaign`/`SupplyV2Coupon` y `Promocion` legacy siguen separados. Booking, bundles, Discovery 2.0 y entrega multicanal siguen fuera de este cambio.
+5. Validar en piloto la atribución directa de reclamos a campañas y observar si los reportes de reclamos/canjes responden preguntas operativas. No existe seguimiento de impresiones/clics, así que todavía no se calcula conversión de exposición a reclamo. El cupón sigue siendo `DealClaim` + pedido/QR. `SupplyV2Campaign`/`SupplyV2Coupon` y `Promocion` legacy siguen separados. Booking, bundles, Discovery 2.0 y entrega multicanal siguen fuera de este cambio.
 
 ## HISTORIA / FASES ANTERIORES
 
