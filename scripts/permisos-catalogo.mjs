@@ -43,8 +43,9 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const RAIZ = new URL('..', import.meta.url).pathname
+const RAIZ = fileURLToPath(new URL('..', import.meta.url))
 const CATALOGO = join(RAIZ, 'src/lib/auth/funciones.ts')
 
 /** Todas las formas de pedir permiso que existen hoy en el código. */

@@ -130,7 +130,8 @@ test.describe('Supply · Slice 2', () => {
     // ── Sin sesión: la oferta se ve pero pide iniciar sesión ──────────────
     const anonimo = await browser.newPage()
     await anonimo.goto('/promociones')
-    const seccion = anonimo.getByTestId('ofertas-membego')
+    // La página sale en streaming: mientras llega, la sección existe dos veces (la copia oculta de la hidratación). Se mira la visible.
+    const seccion = anonimo.getByTestId('ofertas-membego').filter({ visible: true }).first()
     await expect(seccion).toBeVisible()
     const tarjetaOferta = seccion.getByTestId('oferta-membego-card').filter({ hasText: OFERTA })
     await expect(tarjetaOferta).toBeVisible()

@@ -97,7 +97,7 @@ async function ofertaPublicada(compras: Page, d: Datos): Promise<void> {
 /** El cliente compra 1 y avisa; finanzas confirma. Devuelve la url de la compra del cliente. */
 async function compraPagada(cliente: Page, finanzas: Page, d: Datos, ref: string): Promise<string> {
   await cliente.goto('/promociones')
-  await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.oferta }).click()
+  await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.oferta }).filter({ visible: true }).first().click()
   await pasarALaFichaDeLaApp(cliente)
   await cliente.getByTestId('btn-comprar').click()
   await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)

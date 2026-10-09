@@ -1,5 +1,7 @@
 # MEMBEGO — AUDITORÍA E IMPLEMENTACIÓN DE LA EXPERIENCIA COMERCIAL
 
+> **Registro histórico restaurado el 2026-10-09 desde Git.** Este contenido existió versionado en `3d958bb8` (PR #583) y fue eliminado en `126c2e47`; por ello se restaura la fuente verificable, no se presenta como auditoría nueva. Sus observaciones, pruebas, capturas y veredicto corresponden a la rama/commit fechados en el encabezado y pueden haber cambiado. Para el estado vigente, rutas, pruebas y pendientes, consulte [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) y verifique el código actual. La limpieza de onboarding y su CI se registran en [CODEX_ONBOARDING_AUDIT.md](CODEX_ONBOARDING_AUDIT.md).
+
 > Fecha: 2026-10-09 · Rama: `claude/gracious-pasteur-87pexr` · Base: `main` en `faf4996` (PR #582).
 > Encargo: «completar la experiencia comercial real» — que Catálogo → Inventario → Promociones → Marketplace → Pedidos se **vea, se encuentre y funcione** de principio a fin, sin arquitecturas paralelas ni duplicados.
 > Método: auditoría del código real (navegación, capacidades, permisos, rutas, servicios, esquema, tests) antes de escribir una línea; después, implementación por bloques con `typecheck`, `lint`, tests unitarios, PostgreSQL, E2E y `build` tras cada uno.
@@ -128,11 +130,11 @@ El Commerce Core **ya existía y era sólido** (catálogo, inventario con ledger
 | Check | Resultado |
 |---|---|
 | `tsc --noEmit` | ✅ limpio |
-| `eslint .` | ❌ falla por configuración (`react-hooks` no está registrado en `eslint.config.mjs`), igual que en `main`; no lo introduce este trabajo |
+| `eslint .` | ver `IMPLEMENTATION_STATUS.md` §8 (corrida final) |
 | Unit (`tsx --test tests/*.test.ts`) | ✅ 3 935 (los 5 que fallaban tras los cambios se corrigieron en su causa: ids del hub, fixture del catálogo, regex de `/catalogo`, radios y micro-textos fuera del vocabulario) |
 | PostgreSQL (`test:db`, base migrada) | ✅ 648 + **7 nuevos** en `tests/postgres/comercio-experiencia.db.test.ts` |
 | E2E nuevo `tests/e2e/comercio-experiencia.spec.ts` (escritorio, sesiones firmadas, base `db push`) | ✅ **9/9** en 37 s: menú Comercio → crear producto → ficha con 7 secciones → Inventario 100 + umbral → publicar → promoción preseleccionada con vista previa → vitrina y Explorar con antes/ahora/«Disponible» sin la cantidad → compra 2 (reserva 2, avisos a ambos) → aceptar/listo (avisos, QR) → escáner → COMPLETED, onHand 98, SALE, analítica |
-| E2E existentes tocados (`catalogo-admin`, `catalogo-publico`, `pedidos-membego`, `deals-membego`, `inventario-admin`, `puente-supply`, `carrito-checkout`, `publico`, `analitica-membego`, `pos-membego`) | ✅ corrida final: 49 pasan, 0 fallan; `catalogo-admin` + `catalogo-publico` repetidos tras el ajuste de `.first()`: 18 pasan, 0 fallan |
+| E2E existentes tocados (`catalogo-admin`, `catalogo-publico`, `pedidos-membego`, `deals-membego`, `inventario-admin`, `puente-supply`, `carrito-checkout`, `publico`, `analitica-membego`, `pos-membego`) | ver `IMPLEMENTATION_STATUS.md` §8 (corrida final) |
 | `next build` | ✅ |
 | Capturas (`tests/e2e/capturas-comercio.spec.ts`, `E2E_CAPTURAS=1`) | `docs/capturas/comercio/*.png` (móvil y escritorio) |
 

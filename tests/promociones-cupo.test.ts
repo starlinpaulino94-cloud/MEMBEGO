@@ -90,7 +90,7 @@ test('toda vía que entrega una promoción activa descuenta del stock', () => {
     )
     if (!entrega) continue
 
-    const rel = p.slice(RAIZ.length + 1)
+    const rel = p.slice(RAIZ.length + 1).replaceAll('\\', '/')
     if (rel in EXCEPCIONES) continue
     // Dos formas legítimas: descontar aquí, o entregar por `activarCompraPromocion`,
     // que descuenta por dentro.
@@ -127,7 +127,7 @@ test('cada excepción del stock apunta a un archivo que existe y sigue entregand
 test('el descuento de stock se escribe en un solo sitio', () => {
   const copias = archivosDe(join(RAIZ, 'src'))
     .filter((p) => /"canjes"\s*=\s*"canjes"\s*\+\s*1|canjes:\s*\{\s*increment/.test(codigoDe(p)))
-    .map((p) => p.slice(RAIZ.length + 1))
+    .map((p) => p.slice(RAIZ.length + 1).replaceAll('\\', '/'))
   assert.deepEqual(copias, ['src/modules/promociones/cupo.ts'])
 })
 

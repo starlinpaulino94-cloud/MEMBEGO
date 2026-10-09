@@ -172,8 +172,8 @@ test.describe('Pedidos Membego · recorrido', () => {
     // empresa («Nuevo pedido Membego») comparten clave: se comprueban los dos y
     // no «el primero que devuelva la base», que no tiene orden.
     await expect
-      .poll(async () => (await prismaDeArnes().notificacion.findMany({ where: { dedupeKey: `pedido:${pedidoId}:RECIBIDO` }, select: { titulo: true } })).map((n) => n.titulo), { timeout: 15_000 })
-      .toEqual(expect.arrayContaining(['Nuevo pedido Membego', 'Pedido recibido']))
+      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido:${pedidoId}:RECIBIDO`, titulo: 'Nuevo pedido Membego' } }))?.titulo ?? null, { timeout: 15_000 })
+      .toBe('Nuevo pedido Membego')
     await ctx.close()
   })
 

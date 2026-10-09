@@ -1,3 +1,5 @@
+> **REGISTRO HISTÓRICO.** Describe su fecha y commit de origen; no acredita el estado actual de ramas, capacidades, pruebas ni producción. Consultar [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) para el estado vigente y la auditoría de onboarding enlazada allí.
+
 # Production Readiness Report — Sprint de cierre (2026-10-08)
 
 Rama `claude/wizardly-hypatia-x2l9av` · sin PR abierto · todo medido sobre una base local desechable (PostgreSQL 16),
@@ -12,7 +14,7 @@ Rama `claude/wizardly-hypatia-x2l9av` · sin PR abierto · todo medido sobre una
 
 ## 1. Estado general
 
-- Monolito modular (309 tablas, 209 migraciones selladas, ~3 930 pruebas unitarias, 640 de PostgreSQL, 160+ E2E).
+- Monolito modular (307 tablas, 209 migraciones selladas, 3 935 pruebas unitarias, 641 de PostgreSQL, 162 E2E que pasan).
   Arquitectura intacta: Commerce Core separado de Supply; `commerce-primitives`; catálogo + variantes; `MembegoOrder`
   con `Transaction` legacy conviviendo; Merchant Billing ≠ Supply Economics; libros append-only; QR idempotente.
 - Nada nuevo se enciende solo: todo el comercio va detrás de capacidades que nacen apagadas.
@@ -39,14 +41,14 @@ Medido en la corrida final de este sprint (BD local desechable):
 |---|---|
 | TypeScript | PASS — `tsc --noEmit`, 0 errores |
 | ESLint | PASS — `eslint src tests --quiet`, 0 errores |
-| Unit | __UNIT__ |
-| PostgreSQL | __PG__ |
+| Unit | PASS — **3 929 / 3 935**, 0 fallan, 6 omitidas (las 6: 5 requieren servidor de desarrollo y 1 claves QA de CardNET → *BLOCKED — EXTERNAL CREDENTIALS*) |
+| PostgreSQL | PASS — **641 / 641** (`npm run test:db`, en serie); además `supply-v2-slice9` 10 veces seguidas, 85/85 cada una |
 | RLS (cobertura, preflight, `rls:probar` en ensayo) | PASS |
 | Migraciones | PASS — 209 selladas, sin deriva (`migrate diff` vacío) |
-| Build | __BUILD__ |
-| E2E | __E2E__ |
+| Build | PASS — `npm run build`, 0 errores |
+| E2E | PASS — **162 pasan · 0 fallan · 191 omitidas** (16,3 min, build de producción, base recreada). Las 191 omitidas son los flujos autenticados que dependen de Supabase de pruebas y los specs que solo corren en escritorio (`docs/PRUEBAS-E2E.md` §4). *Es la tercera corrida completa de hoy*: las dos primeras dieron 1 fallo cada una, distintos (ver abajo) |
 | Secretos | PASS — gitleaks 0 hallazgos en el árbol |
-| Presupuesto de JS | __PRESU__ |
+| Presupuesto de JS | PASS — 8 876 / 9 200 KB (96 %), entrada compartida 867 / 1 000 KB, trozo mayor 526 / 600 KB |
 
 **Cómo se llegó al verde, sin trampas:** las 10 pruebas rojas heredadas de `main` se clasificaron una por una —
 A código, B prueba desactualizada, C contrato visual cambiado, D configuración— y se corrigió la fuente de cada una;
@@ -56,12 +58,14 @@ corrigió el valor esperado con la razón. Las pruebas encontraron además defec
 (un disparador reescrito que perdía las reglas de `dealId`; un filtro de ids que dejaba pasar teléfonos; un ejemplo
 de prueba con forma de cadena de conexión) y se corrigieron en el código.
 
+**Las dos corridas E2E rojas previas (para que quede dicho):** (1) `supply-v2-slice4 · móvil` por tiempo agotado (180 s) — coincidió con análisis míos corriendo en la misma máquina; aislado pasa 5/5 en 1,3 min el spec entero, no se tocó el test; (2) `supply-v2-slice2` con un `strict mode violation`: la sección `ofertas-membego` existe dos veces mientras llega la página en *streaming* (patrón ya conocido del repo, `fc82c10`). Esto último sí era una fragilidad real del test y se corrigió con el patrón que ya usa slice6 (`filter({ visible: true }).first()`) en slice2/4/5; slice3 no se tocó porque ya afirma `toHaveCount(1)` con reintento. La tercera corrida completa, sin carga concurrente, dio 162/0.
+
 **Intermitentes E2E `supply-v2-slice5` / `slice9`:** 8 rondas seguidas de ambos specs sobre base recreada en cada
 ronda: 16/16 en las 8 (2 omitidos = el proyecto móvil, por diseño). Causa raíz de los fallos históricos: la suite
 corrió durante semanas contra una base compartida (`membego_dev`) y el script `e2e:limpio` ya recrea la base y
 el servidor en cada corrida (`scripts/e2e/correr.mjs`); desde entonces no se reprodujo. El único intermitente
 conocido en PostgreSQL (`slice9 · lo abandonado vuelve a la vida`, arriendo del outbox) se repitió 10 veces
-aislado: __S9__. Es un riesgo **no reproducible**, no resuelto: se dice así.
+aislado: 850 pruebas, 0 fallos. Es un riesgo **no reproducible**, no resuelto: se dice así.
 
 ## 4. Finanzas
 
