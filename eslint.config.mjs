@@ -5,6 +5,8 @@ const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
+    // Mismo alcance que el preset que registra React y Hooks (excluye .cjs).
+    files: ['**/*.{js,jsx,mjs,ts,tsx,mts,cts}'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
@@ -15,6 +17,11 @@ const eslintConfig = [
       'prefer-const': 'error',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
+  },
+  {
+    // Metro requiere imágenes estáticas; no permite require de módulos de código.
+    files: ['apps/client/**/*.{ts,tsx}'],
+    rules: { '@typescript-eslint/no-require-imports': ['error', { allow: ['\\.(png|jpe?g|webp|gif|svg)$'] }] },
   },
   {
     // Los scripts de terminal imprimen por diseño: su salida ES el producto.

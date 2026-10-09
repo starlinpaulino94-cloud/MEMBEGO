@@ -45,7 +45,7 @@ jobs:
       - name: Tipos
         run: npx tsc --noEmit
       - name: Linter
-        run: npx eslint src tests
+        run: npm run lint
       - name: Pruebas
         run: npm test
       - name: Cobertura RLS (envoltorio de tenant)
