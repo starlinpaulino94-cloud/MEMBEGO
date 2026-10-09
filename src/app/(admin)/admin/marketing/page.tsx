@@ -98,6 +98,12 @@ export default async function AdminMarketingPage() {
                       {c.deal?.promotion && (
                         <p className="text-xs text-muted-foreground">Promotion: {c.deal.promotion.nombre}</p>
                       )}
+                      {c.dealId && (
+                        <p className="text-xs text-muted-foreground">
+                          {c.reclamosAtribuidos} reclamo{c.reclamosAtribuidos === 1 ? '' : 's'} atribuido{c.reclamosAtribuidos === 1 ? '' : 's'}
+                          {' · '}{c.canjesAtribuidos} canje{c.canjesAtribuidos === 1 ? '' : 's'}
+                        </p>
+                      )}
                       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />

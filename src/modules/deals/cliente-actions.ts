@@ -46,7 +46,7 @@ function aError(e: unknown): { ok: false; error: string } {
 const texto = (v: unknown) => (typeof v === 'string' ? v : '')
 
 /** «Obtener oferta»: reserva la parte del presupuesto y un cupo, y crea el pedido (con su QR) de la oferta. */
-export async function reclamarOferta(entrada: { dealId: string; sucursalId: string }): Promise<ResultadoReclamo> {
+export async function reclamarOferta(entrada: { dealId: string; sucursalId: string; campaignId?: string }): Promise<ResultadoReclamo> {
   try {
     const user = await getUser()
     if (!user) return { ok: false, error: 'Inicia sesión para obtener la oferta.', sinSesion: true }
@@ -56,6 +56,7 @@ export async function reclamarOferta(entrada: { dealId: string; sucursalId: stri
 
     const dealId = texto(entrada.dealId)
     const sucursalId = texto(entrada.sucursalId)
+    const campaignId = texto(entrada.campaignId).slice(0, 60) || undefined
     if (!dealId) return { ok: false, error: 'La oferta no existe.' }
     if (!sucursalId) return { ok: false, error: 'Elige la sucursal donde la vas a canjear.' }
 
@@ -82,7 +83,7 @@ export async function reclamarOferta(entrada: { dealId: string; sucursalId: stri
     if ('error' in ficha) return { ok: false, error: ficha.error }
 
     try {
-      const r = await conEmpresa(companyId, (tx) => reclamarOfertaEnTx(tx, companyId, { dealId, customerId: ficha.clienteId, locationId: sucursalId }))
+      const r = await conEmpresa(companyId, (tx) => reclamarOfertaEnTx(tx, companyId, { dealId, customerId: ficha.clienteId, locationId: sucursalId, campaignId }))
       revalidatePath('/cliente/pedidos', 'layout')
       revalidatePath('/admin/deals', 'layout')
       revalidatePath('/admin/pedidos-membego', 'layout')
