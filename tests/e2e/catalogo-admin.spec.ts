@@ -166,7 +166,7 @@ test.describe('Catálogo unificado · panel', () => {
     await pub.getByRole('link', { name: new RegExp(NOMBRE) }).first().click()
     await expect(pub.getByRole('heading', { level: 1, name: NOMBRE })).toBeVisible()
     const urlFicha = pub.url()
-    await expect(pub.getByText(/RD\$650\.50/)).toBeVisible()
+    await expect(pub.getByText(/RD\$650\.50/).first()).toBeVisible()
     // El costo del panel NUNCA llega al público.
     expect(await pub.content()).not.toContain('200.00')
     await anonimo.close()

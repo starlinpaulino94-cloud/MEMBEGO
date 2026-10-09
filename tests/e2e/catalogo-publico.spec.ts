@@ -99,8 +99,9 @@ test.describe('Catálogo unificado · público', () => {
     await ir(page, `/empresas/${a.slug}/catalogo/${it.camiseta.slug}`)
     await expect(page.getByRole('heading', { level: 1, name: `Camiseta oficial ${sufijo}` })).toBeVisible()
     await expect(page.getByText('Opciones')).toBeVisible()
-    await expect(page.getByText(/RD\$800\.00/)).toBeVisible()
-    await expect(page.getByText(/RD\$850\.00/)).toBeVisible()
+    // `.first()`: el precio sale arriba (precio «desde» del ítem) y en la fila de la variante.
+    await expect(page.getByText(/RD\$800\.00/).first()).toBeVisible()
+    await expect(page.getByText(/RD\$850\.00/).first()).toBeVisible()
     await expect(page.getByText('Agotado')).toBeVisible()
     await expect(page.getByText('XXS vieja')).toHaveCount(0)
     expect(await page.content()).not.toContain(`CAM-M-${sufijo}`)
