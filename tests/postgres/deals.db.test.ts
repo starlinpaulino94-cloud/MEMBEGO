@@ -88,7 +88,7 @@ after(async () => {
   const lista = ids.map((i) => `'${i}'`).join(',')
   await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe('SET LOCAL session_replication_role = replica')
-    for (const tabla of ['deal_claims', 'deals', 'merchant_statements', 'merchant_commissions', 'merchant_ledger_entries', 'merchant_billing_configs', 'payment_evidences', 'customer_confirmations', 'order_attributions', 'membego_order_lines', 'membego_orders']) {
+    for (const tabla of ['marketing_campaigns', 'deal_claims', 'deals', 'merchant_statements', 'merchant_commissions', 'merchant_ledger_entries', 'merchant_billing_configs', 'payment_evidences', 'customer_confirmations', 'order_attributions', 'membego_order_lines', 'membego_orders']) {
       await tx.$executeRawUnsafe(`DELETE FROM "${tabla}" WHERE "companyId" IN (${lista})`)
     }
   })
@@ -304,6 +304,67 @@ test('9 · «solo clientes nuevos»: quien ya completó un pedido en la empresa 
   await canjear(E.a, r.orderId)
   assert.equal(await codigoDe(reclamar(E.a, id, 4)), 'SOLO_CLIENTES_NUEVOS')
   await reclamar(E.a, id, 5)
+})
+
+test('Growth · las reglas Promotion vivas condicionan reclamos nuevos antes de reservar; las ofertas sin reglas siguen abiertas', async () => {
+  const promotion = await prisma.promotion.create({
+    data: { companyId: E.a.id, nombre: `Segmento ${sufijo}`, status: 'ACTIVE' },
+    select: { id: true },
+  })
+  const rule = await prisma.rule.create({
+    data: {
+      companyId: E.a.id,
+      nombre: `Solo cliente ${sufijo}`,
+      status: 'PUBLISHED',
+      conditions: {
+        create: {
+          campo: 'cliente.id',
+          operador: 'eq',
+          valor: E.a.clientes[1],
+          dataType: 'TEXT',
+        },
+      },
+    },
+    select: { id: true },
+  })
+  await prisma.promotionRule.create({ data: { promotionId: promotion.id, ruleId: rule.id } })
+  const dealId = await ofertaActiva(E.a, { promotionId: promotion.id })
+
+  assert.equal(await codigoDe(reclamar(E.a, dealId, 0)), 'PROMOCION_NO_APLICA')
+  const unchanged = await oferta(dealId)
+  assert.equal(unchanged.claimsActive, 0)
+  assert.equal(unchanged.budgetReserved.toFixed(2), '0.00')
+
+  const claim = await reclamar(E.a, dealId, 1)
+  assert.ok(claim.orderId)
+  const reserved = await oferta(dealId)
+  assert.equal(reserved.claimsActive, 1)
+  assert.equal(reserved.budgetReserved.toFixed(2), reserved.feePerRedemption.toFixed(2))
+})
+
+test('Growth · Promotion de otra empresa no se puede asociar a un Deal por la clave compuesta', async () => {
+  const promotion = await prisma.promotion.create({
+    data: { companyId: E.b.id, nombre: `Cruzada ${sufijo}`, status: 'ACTIVE' },
+    select: { id: true },
+  })
+  const dealId = await ofertaActiva(E.a)
+  await assert.rejects(
+    en(E.a, (tx) => tx.deal.update({ where: { id: dealId }, data: { promotionId: promotion.id } })),
+  )
+})
+
+test('Growth · pausar una Promotion detiene reclamos nuevos pero no invalida un cupón ya emitido', async () => {
+  const promotion = await prisma.promotion.create({
+    data: { companyId: E.a.id, nombre: `Viva ${sufijo}`, status: 'ACTIVE' },
+    select: { id: true },
+  })
+  const dealId = await ofertaActiva(E.a, { promotionId: promotion.id })
+  const reclamo = await reclamar(E.a, dealId, 3)
+
+  await prisma.promotion.update({ where: { id: promotion.id }, data: { status: 'PAUSED' } })
+  assert.equal(await codigoDe(reclamar(E.a, dealId, 4)), 'PROMOCION_NO_APLICA')
+  await canjear(E.a, reclamo.orderId)
+  assert.equal((await reclamoDe(reclamo.orderId)).status, 'REDEEMED')
 })
 
 // ── Canje y cobro ────────────────────────────────────────────────────────────
@@ -789,4 +850,21 @@ test('33 · avisos de la oferta (sprint de cierre): 80 %, 100 %, agotada y por v
   const una = await prisma.notificacion.findFirstOrThrow({ where: { userId: admin.id, dedupeKey: { startsWith: `oferta-alerta:${id}:PRESUPUESTO_80` } } })
   assert.equal(una.href, `/admin/deals/${id}`)
   assert.doesNotMatch(`${una.titulo} ${una.mensaje}`, /Cliente a\d|@prueba\.test/)
+})
+
+test('34 · una campaña de marketing no puede enlazar un Deal de otra empresa', async () => {
+  const dealDeB = await ofertaActiva(E.b)
+  await assert.rejects(() =>
+    prisma.marketingCampaign.create({
+      data: {
+        companyId: E.a.id,
+        dealId: dealDeB,
+        titulo: `Campaña tenant ${sufijo}`,
+        descripcion: 'Intento de vínculo cruzado',
+        fechaInicio: hace(HORA),
+        fechaFin: new Date(Date.now() + HORA),
+        diasSemana: [],
+      } as never,
+    })
+  )
 })

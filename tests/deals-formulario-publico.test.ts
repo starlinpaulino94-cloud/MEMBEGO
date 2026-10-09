@@ -21,6 +21,17 @@ test('formulario: una oferta nueva mínima se lee; sin fecha de inicio empieza y
   assert.equal(r.valor.newCustomersOnly, false)
 })
 
+test('formulario: la Promotion opcional se lee como referencia y rechaza tipos manipulados', () => {
+  const ligado = leerOfertaNueva({ ...BASE, promotionId: 'promo-123' })
+  assert.ok(ligado.ok)
+  if (ligado.ok) assert.equal(ligado.valor.promotionId, 'promo-123')
+
+  const libre = leerOfertaNueva(BASE)
+  assert.ok(libre.ok)
+  if (libre.ok) assert.equal(libre.valor.promotionId, null)
+  assert.equal(leerOfertaNueva({ ...BASE, promotionId: { id: 'otra-empresa' } }).ok, false)
+})
+
 test('formulario: los días son dominicanos (UTC−4): el inicio es la medianoche y el fin es el último instante de ese día', () => {
   assert.equal(diaADate('2026-10-08', false)?.toISOString(), '2026-10-08T04:00:00.000Z')
   assert.equal(diaADate('2026-10-08', true)?.toISOString(), '2026-10-09T03:59:59.999Z')

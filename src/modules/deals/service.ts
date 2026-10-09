@@ -21,6 +21,7 @@ import {
   type EntradaDeOferta,
 } from './domain'
 import { fallo } from './errores'
+import { validarPromotionParaReclamoEnTx } from './promotion-gate'
 import { COLUMNAS_DE_OFERTA, ajustarEstadoPorPresupuestoEnTx, filaDeOferta } from './reclamos'
 
 /**
@@ -95,6 +96,27 @@ export async function crearOfertaEnTx(tx: Tx, companyId: string, e: EntradaDeOfe
   const valida = validarOferta(e, cuenta.cpaAmount)
   if (!valida.ok) fallo('OFERTA_INVALIDA', valida.error)
   const v = await varianteDeLaOferta(tx, companyId, valida.datos.catalogVariantId)
+  if (valida.datos.promotionId) {
+    const ahora = new Date()
+    const promotion = await tx.promotion.findFirst({
+      where: { id: valida.datos.promotionId, companyId },
+      select: {
+        id: true,
+        status: true,
+        inicioEn: true,
+        finEn: true,
+        actions: { where: { activa: true }, select: { id: true } },
+        restrictions: { where: { activa: true }, select: { id: true } },
+      },
+    })
+    if (!promotion) fallo('PROMOCION_NO_ENCONTRADA', 'La promoción no existe en esta empresa.')
+    if (promotion.status !== 'ACTIVE' || (promotion.inicioEn && promotion.inicioEn > ahora) || (promotion.finEn && promotion.finEn < ahora)) {
+      fallo('PROMOCION_NO_APLICA', 'Elige una promoción activa y vigente.')
+    }
+    if (promotion.actions.length > 0 || promotion.restrictions.length > 0) {
+      fallo('PROMOCION_NO_APLICA', 'Esta oferta solo admite promociones basadas en reglas de elegibilidad.')
+    }
+  }
   if (cuenta.currency !== v.item.currency) {
     fallo('MONEDA_DISTINTA', `«${v.item.name}» está en ${v.item.currency} y tu cuenta Membego cobra en ${cuenta.currency}: no se puede ofrecer.`)
   }
@@ -102,6 +124,7 @@ export async function crearOfertaEnTx(tx: Tx, companyId: string, e: EntradaDeOfe
   const oferta = await tx.deal.create({
     data: {
       companyId,
+      promotionId: valida.datos.promotionId,
       catalogVariantId: v.id,
       title: d.title,
       description: d.description,
@@ -125,6 +148,7 @@ export async function crearOfertaEnTx(tx: Tx, companyId: string, e: EntradaDeOfe
     cuota: cuenta.cpaAmount.toFixed(2),
     presupuesto: d.budgetTotal.toFixed(2),
     cupos: d.maxClaims,
+    promotionId: d.promotionId,
   })
   return { id: oferta.id, fee: cuenta.cpaAmount.toFixed(2), currency: v.item.currency }
 }
@@ -314,6 +338,15 @@ export async function reclamarOfertaEnTx(
   const suspendida = !(await cuentaAdmiteCampanasEnTx(tx, companyId))
   const razon = motivoNoReclamable(previa, ahora, suspendida)
   if (razon) fallo(razon.codigo, razon.mensaje)
+  const promotionAplicada = previa.promotionId
+    ? await validarPromotionParaReclamoEnTx(tx, companyId, previa.promotionId, {
+        customerId: e.customerId,
+        locationId: e.locationId,
+        dealId: previa.id,
+        catalogVariantId: previa.catalogVariantId,
+        at: ahora,
+      })
+    : null
   // Cada cupón aparta stock y presupuesto hasta que se canjea o vence: el mismo tope de pedidos abiertos que el
   // checkout (que cuenta también los cupones) impide que una cuenta acapare una oferta entera sin ir a canjear.
   if ((await contarPedidosAbiertosEnTx(tx, companyId, e.customerId)) >= MAX_PEDIDOS_ABIERTOS_POR_CLIENTE) {
@@ -397,6 +430,7 @@ export async function reclamarOfertaEnTx(
     cuota: reservada.feePerRedemption.toFixed(2),
     reservado: reservada.budgetReserved.toFixed(2),
     presupuesto: reservada.budgetTotal.toFixed(2),
+    promotion: promotionAplicada,
   })
   await ajustarEstadoPorPresupuestoEnTx(tx, { actorId: null }, companyId, reservada, ahora, 'reclamo')
   return { claimId: reclamo.id, orderId: pedido.pedidoId, orderCode: pedido.code, savings: ahorro.toFixed(2), total: pedido.total, expiresAt }

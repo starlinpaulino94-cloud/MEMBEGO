@@ -15,6 +15,7 @@ type CambiosDeOferta = Partial<EntradaDeOferta>
 export interface FormularioDeOferta {
   title?: unknown
   description?: unknown
+  promotionId?: unknown
   catalogVariantId?: unknown
   discountType?: unknown
   discountValue?: unknown
@@ -64,6 +65,7 @@ export type Leido<T> = { ok: true; valor: T } | { ok: false; error: string }
 /** Una oferta NUEVA: todos los campos obligatorios salvo las fechas, los días del cupón y «nuevos clientes». */
 export function leerOfertaNueva(f: FormularioDeOferta, ahora = new Date()): Leido<EntradaDeOferta> {
   if (typeof f !== 'object' || f === null) return { ok: false, error: 'Datos no válidos.' }
+  if (f.promotionId !== undefined && typeof f.promotionId !== 'string') return { ok: false, error: 'La promoción seleccionada no es válida.' }
   const tipo = texto(f.discountType) as DealDiscountType
   if (!TIPOS.includes(tipo)) return { ok: false, error: 'Elige cómo se aplica el descuento.' }
   const valor = decimalTexto(f.discountValue)
@@ -89,6 +91,7 @@ export function leerOfertaNueva(f: FormularioDeOferta, ahora = new Date()): Leid
     valor: {
       title: texto(f.title),
       description: texto(f.description) || null,
+      promotionId: texto(f.promotionId) || null,
       catalogVariantId: texto(f.catalogVariantId),
       discountType: tipo,
       discountValue: valor,

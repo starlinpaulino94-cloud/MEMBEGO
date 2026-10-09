@@ -48,6 +48,7 @@ export default async function NuevaOfertaPage({ searchParams }: { searchParams: 
       )}
       <OfertaForm
         productos={opciones.productos}
+        promociones={opciones.promociones}
         cuota={opciones.cuota}
         moneda={opciones.currency ?? 'DOP'}
         inicial={elegido ? { catalogVariantId: elegido.id, title: `Oferta en ${elegido.etiqueta}` } : undefined}

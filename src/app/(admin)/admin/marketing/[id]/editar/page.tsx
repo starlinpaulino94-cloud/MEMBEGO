@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
-import { getCampanaMarketing } from '@/modules/engagement/campanas'
+import { getCampanaMarketing, getDealsParaMarketing } from '@/modules/engagement/campanas'
 import { PageHeader } from '@/components/ui/page-header'
 import {
   MarketingCampaignForm,
@@ -28,6 +28,7 @@ export default async function EditarCampanaMarketingPage({
   const existing: MarketingExisting = {
     id: c.id,
     tipo: c.tipo,
+    dealId: c.dealId,
     titulo: c.titulo,
     descripcion: c.descripcion,
     bannerUrl: c.bannerUrl,
@@ -46,10 +47,11 @@ export default async function EditarCampanaMarketingPage({
     maxReclamos: c.maxReclamos,
   }
 
+  const deals = await getDealsParaMarketing(companyId)
   return (
     <div className="space-y-6">
       <PageHeader title="Editar campaña" description="Ajusta tu oferta y su ventana de tiempo." />
-      <MarketingCampaignForm existing={existing} companyId={companyId} />
+      <MarketingCampaignForm existing={existing} companyId={companyId} deals={deals} />
     </div>
   )
 }

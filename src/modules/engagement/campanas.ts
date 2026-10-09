@@ -1,5 +1,6 @@
 import { conEmpresa } from '@/lib/tenant'
 import type { MarketingCampaignTipo } from '@prisma/client'
+import { reclamosPosibles } from '@/modules/deals/domain'
 
 /**
  * Engagement Engine · Fase 2 — Motor de Campañas.
@@ -44,6 +45,17 @@ export interface CampanaViva {
   reclamados: number
 }
 
+export async function getDealsParaMarketing(companyId: string) {
+  return conEmpresa(companyId, (tx) =>
+    tx.deal.findMany({
+      where: { companyId, status: 'ACTIVE' },
+      orderBy: [{ title: 'asc' }, { id: 'asc' }],
+      take: 200,
+      select: { id: true, title: true, promotion: { select: { nombre: true } } },
+    })
+  )
+}
+
 export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]> {
   try {
     const now = new Date()
@@ -57,6 +69,31 @@ export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]
         },
         orderBy: [{ destacada: 'desc' }, { prioridad: 'desc' }, { fechaFin: 'asc' }],
         take: 20,
+        include: {
+          deal: {
+            select: {
+              id: true,
+              status: true,
+              startsAt: true,
+              endsAt: true,
+              maxClaims: true,
+              claimsActive: true,
+              feePerRedemption: true,
+              budgetTotal: true,
+              budgetReserved: true,
+              budgetSpent: true,
+              promotion: {
+                select: {
+                  status: true,
+                  inicioEn: true,
+                  finEn: true,
+                  actions: { where: { activa: true }, select: { id: true } },
+                  restrictions: { where: { activa: true }, select: { id: true } },
+                },
+              },
+            },
+          },
+        },
       })
     )
 
@@ -64,6 +101,21 @@ export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]
     const vivas: CampanaViva[] = []
 
     for (const c of candidatas) {
+      // Una campaña vinculada a un Deal deja de anunciarlo cuando la oferta se
+      // pausa o sale de vigencia. Los reclamos ya emitidos siguen su propio ciclo.
+      if (c.deal && (
+        c.deal.status !== 'ACTIVE' ||
+        c.deal.startsAt > now ||
+        (c.deal.endsAt != null && c.deal.endsAt <= now)
+      )) continue
+      const promocion = c.deal?.promotion
+      if (promocion && (
+        promocion.status !== 'ACTIVE' ||
+        (promocion.inicioEn != null && promocion.inicioEn > now) ||
+        (promocion.finEn != null && promocion.finEn < now) ||
+        promocion.actions.length > 0 ||
+        promocion.restrictions.length > 0
+      )) continue
       // Día de la semana (si se restringe).
       if (c.diasSemana.length > 0 && !c.diasSemana.includes(rd.dia)) continue
 
@@ -76,8 +128,11 @@ export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]
       }
 
       // Stock de cupones (urgencia): agotado → no se muestra.
-      const cuposRestantes =
-        c.maxReclamos != null ? Math.max(0, c.maxReclamos - c.reclamosCount) : null
+      const cuposRestantes = c.deal
+        ? reclamosPosibles(c.deal)
+        : c.maxReclamos != null
+          ? Math.max(0, c.maxReclamos - c.reclamosCount)
+          : null
       if (cuposRestantes === 0) continue
 
       vivas.push({
@@ -88,13 +143,13 @@ export async function getCampanasVivas(companyId: string): Promise<CampanaViva[]
         bannerUrl: c.bannerUrl,
         imagenUrl: c.imagenUrl,
         ctaTexto: c.ctaTexto,
-        ctaHref: c.ctaHref,
+        ctaHref: c.dealId ? `/ofertas/${encodeURIComponent(c.dealId)}` : c.ctaHref,
         colorPrimario: c.colorPrimario,
         colorSecundario: c.colorSecundario,
         destacada: c.destacada,
         terminaEn: new Date(finMs).toISOString(),
         cuposRestantes,
-        reclamados: c.reclamosCount,
+        reclamados: c.deal?.claimsActive ?? c.reclamosCount,
       })
     }
 
@@ -112,6 +167,7 @@ export async function getCampanasMarketingAdmin(companyId: string) {
     tx.marketingCampaign.findMany({
       where: { companyId },
       orderBy: [{ estado: 'asc' }, { fechaFin: 'desc' }],
+      include: { deal: { select: { title: true, promotion: { select: { nombre: true } } } } },
     })
   )
 }

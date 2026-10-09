@@ -40,6 +40,7 @@ export function previsualizarPrecio(precioLista: string, tipo: ValoresDeOferta['
 export interface ValoresDeOferta {
   title: string
   description: string
+  promotionId: string
   catalogVariantId: string
   discountType: 'PERCENT' | 'AMOUNT_OFF' | 'FIXED_PRICE'
   discountValue: string
@@ -55,6 +56,7 @@ export interface ValoresDeOferta {
 const VACIO: ValoresDeOferta = {
   title: '',
   description: '',
+  promotionId: '',
   catalogVariantId: '',
   discountType: 'PERCENT',
   discountValue: '',
@@ -68,6 +70,7 @@ const VACIO: ValoresDeOferta = {
 
 interface Props {
   productos: ProductoParaOferta[]
+  promociones?: { id: string; nombre: string }[]
   /** Cuota que Membego cobra por canje (de la tarifa de la cuenta), o null si aún no hay cuenta. */
   cuota: string | null
   moneda: string
@@ -83,7 +86,7 @@ interface Props {
  * calcula (el navegador no manda precios finales, cuotas ni estados). La cuota por canje se
  * enseña para que la empresa vea de antemano lo que le cuesta cada canje y cuántos alcanzan.
  */
-export function OfertaForm({ productos, cuota, moneda, ofertaId, inicial, soloAjustes = false }: Props) {
+export function OfertaForm({ productos, promociones = [], cuota, moneda, ofertaId, inicial, soloAjustes = false }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -156,6 +159,17 @@ export function OfertaForm({ productos, cuota, moneda, ofertaId, inicial, soloAj
             </select>
             {productos.length === 0 && <p className="text-xs text-muted-foreground">No tienes productos o servicios publicados que se vendan por el marketplace. Publica uno en el catálogo primero.</p>}
           </div>
+
+          {!ofertaId && promociones.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="promotionId">Condición de acceso (opcional)</Label>
+              <select id="promotionId" className={campoSelector} value={v.promotionId} onChange={(e) => set('promotionId', e.target.value)}>
+                <option value="">Disponible para todos los clientes elegibles</option>
+                {promociones.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground">Las reglas activas se validan en el servidor al reclamar. Los cupones ya emitidos conservan sus condiciones de canje.</p>
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

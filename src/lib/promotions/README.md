@@ -9,7 +9,7 @@ restricciones + ciclo de vida + configuración + versionado + auditoría.
 > (descuento, 2x1, happy hour, cashback, lavado gratis, puntos, cupones…): esos
 > se implementarán en fases posteriores como *plantillas* sobre este framework.
 > Es independiente de la industria y **no toca** el modelo `Promocion`
-> (marketplace) existente. Ningún flujo de la app lo consume aún.
+> (marketplace) existente. El flujo de reclamo de Deals consume la evaluación de reglas para decidir elegibilidad; sus acciones genéricas aún no cambian precios ni ejecutan efectos comerciales.
 
 ---
 

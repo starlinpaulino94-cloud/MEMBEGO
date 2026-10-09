@@ -32,6 +32,7 @@ import {
 export interface MarketingExisting {
   id: string
   tipo: string
+  dealId: string | null
   titulo: string
   descripcion: string
   bannerUrl: string | null
@@ -50,6 +51,12 @@ export interface MarketingExisting {
   maxReclamos: number | null
 }
 
+export interface MarketingDealOption {
+  id: string
+  title: string
+  promotion: { nombre: string } | null
+}
+
 const init: MarketingState = {}
 
 /** ISO → valor de <input type="datetime-local"> en hora local del navegador. */
@@ -64,10 +71,12 @@ function toLocalInput(iso: string | null): string {
 export function MarketingCampaignForm({
   existing,
   companyId,
+  deals = [],
 }: {
   existing?: MarketingExisting
   /** Empresa dueña de las imágenes que se suban. Ver `storage-rutas.ts`. */
   companyId: string | null
+  deals?: MarketingDealOption[]
 }) {
   const router = useRouter()
   const action = existing ? actualizarCampanaMarketing : crearCampanaMarketing
@@ -104,6 +113,26 @@ export function MarketingCampaignForm({
         {/* ── Básico ─────────────────────────────────────────────── */}
         <div className="space-y-5 rounded-xl border border-border p-5">
           <h3 className="font-semibold text-foreground">Información de la campaña</h3>
+
+          <div className="space-y-2">
+            <Label htmlFor="dealId">Deal que distribuirá (opcional)</Label>
+            <Select name="dealId" defaultValue={existing?.dealId ?? 'ninguno'}>
+              <SelectTrigger id="dealId">
+                <SelectValue placeholder="Sin Deal vinculado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ninguno">Sin Deal vinculado</SelectItem>
+                {deals.map((deal) => (
+                  <SelectItem key={deal.id} value={deal.id}>
+                    {deal.title}{deal.promotion ? ` · Promotion: ${deal.promotion.nombre}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              La campaña enlaza la oferta y su Promotion. Sus reglas se validan al reclamar; los cupones emitidos conservan su vigencia.
+            </p>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="tipo">Tipo de campaña</Label>
@@ -238,7 +267,7 @@ export function MarketingCampaignForm({
                 defaultValue={existing?.maxReclamos ?? ''}
               />
               <p className="text-xs text-muted-foreground">
-                Muestra “¡Solo quedan X!” cuando el stock baja.
+                Urgencia visual para campañas sin Deal. Al vincular una oferta, sus cupos y presupuesto gobiernan los reclamos.
               </p>
             </div>
             <div className="space-y-2">
@@ -268,7 +297,7 @@ export function MarketingCampaignForm({
             </div>
             <div className="space-y-2">
               <Label htmlFor="ctaHref">Destino del botón</Label>
-              <Select name="ctaHref" defaultValue={existing?.ctaHref ?? MARKETING_CTA_DESTINOS[0].value}>
+              <Select name="ctaHref" defaultValue={existing?.dealId ? MARKETING_CTA_DESTINOS[0].value : existing?.ctaHref ?? MARKETING_CTA_DESTINOS[0].value}>
                 <SelectTrigger id="ctaHref">
                   <SelectValue />
                 </SelectTrigger>
@@ -280,6 +309,9 @@ export function MarketingCampaignForm({
                   ))}
                 </SelectContent>
               </Select>
+              {existing?.dealId && (
+                <p className="text-xs text-muted-foreground">El CTA irá a la ficha del Deal vinculado.</p>
+              )}
             </div>
           </div>
 
