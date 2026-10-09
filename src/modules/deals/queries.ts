@@ -191,6 +191,7 @@ export interface OpcionDeProducto {
 
 export interface OpcionesParaOferta {
   productos: OpcionDeProducto[]
+  promociones: { id: string; nombre: string }[]
   /** La cuota por canje de la cuenta, o `null` si aún no tiene cuenta (se fija al crear). */
   cuota: string | null
   currency: string | null
@@ -199,7 +200,8 @@ export interface OpcionesParaOferta {
 
 /** Lo que el formulario de una oferta nueva necesita: qué se puede ofrecer y cuánto cuesta cada canje. */
 export async function opcionesParaOfertaEnTx(tx: Tx, companyId: string): Promise<OpcionesParaOferta> {
-  const [variantes, cuenta] = await Promise.all([
+  const ahora = new Date()
+  const [variantes, cuenta, promociones] = await Promise.all([
     tx.catalogVariant.findMany({
       where: { companyId, status: 'ACTIVE', item: { status: 'ACTIVE', source: 'MERCHANT' } },
       orderBy: [{ item: { name: 'asc' } }, { name: 'asc' }, { id: 'asc' }],
@@ -213,6 +215,21 @@ export async function opcionesParaOfertaEnTx(tx: Tx, companyId: string): Promise
       },
     }),
     tx.merchantBillingConfig.findUnique({ where: { companyId }, select: { cpaAmount: true, currency: true, status: true } }),
+    tx.promotion.findMany({
+      where: {
+        companyId,
+        status: 'ACTIVE',
+        actions: { none: { activa: true } },
+        restrictions: { none: { activa: true } },
+        AND: [
+          { OR: [{ inicioEn: null }, { inicioEn: { lte: ahora } }] },
+          { OR: [{ finEn: null }, { finEn: { gte: ahora } }] },
+        ],
+      },
+      orderBy: [{ prioridad: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, nombre: true },
+      take: 100,
+    }),
   ])
   return {
     productos: variantes
@@ -229,6 +246,7 @@ export async function opcionesParaOfertaEnTx(tx: Tx, companyId: string): Promise
           sinStock: caps.trackInventory && disponible <= 0,
         }
       }),
+    promociones: promociones.map((p) => ({ id: p.id, nombre: p.nombre })),
     cuota: cuenta ? dos(cuenta.cpaAmount) : null,
     currency: cuenta?.currency ?? null,
     suspendida: cuenta ? !puedeCrearCampanas(cuenta.status) : false,

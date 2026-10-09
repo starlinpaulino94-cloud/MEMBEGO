@@ -70,6 +70,10 @@ model Deal {
   companyId String
   company   Company @relation(fields: [companyId], references: [id])
 
+  /// Promotion universal que condiciona reclamos nuevos; Deal conserva la autoridad económica.
+  promotionId String?
+  promotion   Promotion? @relation(fields: [promotionId, companyId], references: [id, companyId], onDelete: Restrict)
+
   /// Lo que se ofrece: SIEMPRE una variante del catálogo (nunca el ítem).
   catalogVariantId String
   variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
@@ -114,9 +118,11 @@ model Deal {
   updatedAt DateTime @updatedAt
 
   claims DealClaim[]
+  marketingCampaigns MarketingCampaign[]
 
   @@unique([id, companyId])
   @@index([companyId, status])
+  @@index([promotionId])
   @@index([status, startsAt, endsAt])
   @@index([catalogVariantId])
   @@map("deals")

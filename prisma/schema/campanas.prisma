@@ -36,6 +36,9 @@ model MarketingCampaign {
   id        String                  @id @default(cuid())
   companyId String
   company   Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Deal que esta campaña distribuye. La Promotion se alcanza por el Deal.
+  dealId    String?
+  deal      Deal?                   @relation(fields: [dealId, companyId], references: [id, companyId], onDelete: Restrict)
   tipo      MarketingCampaignTipo   @default(FLASH_SALE)
   estado    MarketingCampaignEstado @default(BORRADOR)
 
@@ -66,8 +69,10 @@ model MarketingCampaign {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([id, companyId])
   @@index([companyId, estado, fechaInicio, fechaFin])
   @@index([estado, fechaFin])
+  @@index([dealId])
   @@map("marketing_campaigns")
 }
 

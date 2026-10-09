@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
-import { conEmpresa } from '@/lib/tenant'
+import { conEmpresa, type Tx } from '@/lib/tenant'
 import type { MarketingCampaignEstado } from '@prisma/client'
-import { esMarketingTipoValido, horaAMinutos } from '@/lib/marketing'
+import { esMarketingCtaDestinoValido, esMarketingTipoValido, horaAMinutos } from '@/lib/marketing'
 
 export interface MarketingState {
   error?: string
@@ -53,16 +53,23 @@ function parse(fd: FormData): { data: MarketingData } | { error: string } {
   }
 
   const prioridad = Math.max(0, Math.floor(Number(s(fd, 'prioridad') || '0')) || 0)
+  const dealValue = s(fd, 'dealId')
+  const dealId = dealValue && dealValue !== 'ninguno' ? dealValue : null
+  const ctaDestino = s(fd, 'ctaHref')
+  if (!dealId && !esMarketingCtaDestinoValido(ctaDestino)) {
+    return { error: 'El destino del botón no es válido.' }
+  }
 
   return {
     data: {
       tipo,
+      dealId,
       titulo: titulo.slice(0, 120),
       descripcion: descripcion.slice(0, 600),
       bannerUrl: s(fd, 'bannerUrl') || null,
       imagenUrl: s(fd, 'imagenUrl') || null,
       ctaTexto: s(fd, 'ctaTexto').slice(0, 40) || null,
-      ctaHref: s(fd, 'ctaHref') || null,
+      ctaHref: dealId ? `/ofertas/${encodeURIComponent(dealId)}` : ctaDestino,
       colorPrimario: s(fd, 'colorPrimario') || null,
       colorSecundario: s(fd, 'colorSecundario') || null,
       fechaInicio,
@@ -79,6 +86,7 @@ function parse(fd: FormData): { data: MarketingData } | { error: string } {
 
 interface MarketingData {
   tipo: string
+  dealId: string | null
   titulo: string
   descripcion: string
   bannerUrl: string | null
@@ -97,9 +105,25 @@ interface MarketingData {
   maxReclamos: number | null
 }
 
+async function dealValidoParaCampana(tx: Tx, companyId: string, data: MarketingData) {
+  if (!data.dealId) return true
+  const deal = await tx.deal.findFirst({
+    where: {
+      id: data.dealId,
+      companyId,
+      status: 'ACTIVE',
+      startsAt: { lt: data.fechaFin },
+      OR: [{ endsAt: null }, { endsAt: { gt: data.fechaInicio } }],
+    },
+    select: { id: true },
+  })
+  return !!deal
+}
+
 function revalidar() {
   revalidatePath('/admin/marketing')
   revalidatePath('/mis-membresias')
+  revalidatePath('/ofertas')
 }
 
 export async function crearCampanaMarketing(
@@ -117,11 +141,14 @@ export async function crearCampanaMarketing(
   try {
     // Se crea ACTIVA para que empiece a mostrarse dentro de su ventana; el
     // admin puede pausarla luego.
-    await conEmpresa(companyId, (tx) =>
-      tx.marketingCampaign.create({
+    const creada = await conEmpresa(companyId, async (tx) => {
+      if (!(await dealValidoParaCampana(tx, companyId, parsed.data))) return false
+      await tx.marketingCampaign.create({
         data: { companyId, estado: 'ACTIVA', ...parsed.data } as never,
       })
-    )
+      return true
+    })
+    if (!creada) return { error: 'El Deal debe pertenecer a esta empresa y estar activo durante la campaña.' }
     revalidar()
     return { success: true }
   } catch (e) {
@@ -153,12 +180,12 @@ export async function actualizarCampanaMarketing(
   if ('error' in parsed) return { error: parsed.error }
 
   try {
-    await conEmpresa(companyId, (tx) =>
-      tx.marketingCampaign.update({
-        where: { id },
-        data: parsed.data as never,
-      })
-    )
+    const actualizada = await conEmpresa(companyId, async (tx) => {
+      if (!(await dealValidoParaCampana(tx, companyId, parsed.data))) return false
+      await tx.marketingCampaign.update({ where: { id }, data: parsed.data as never })
+      return true
+    })
+    if (!actualizada) return { error: 'El Deal debe pertenecer a esta empresa y estar activo durante la campaña.' }
     revalidar()
     return { success: true }
   } catch (e) {

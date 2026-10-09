@@ -22,6 +22,7 @@ import type {
   RuleResult,
 } from '@/lib/rule-engine'
 import type { Promotion, PromotionActionDef } from '../domain/types'
+import { isRuleEvaluable } from '@/lib/rule-engine'
 
 export interface PromotionEngineDeps {
   readonly ruleEvaluator: RuleEvaluator
@@ -35,11 +36,23 @@ export interface PromotionEvaluation {
   readonly promotionId: string
   /** Elegible si TODAS las reglas mapeadas se cumplen (AND). */
   readonly eligible: boolean
+  /** Razones por las que la promoción no se puede aplicar en este instante. */
+  readonly ineligibleReasons: readonly PromotionIneligibleReason[]
   /** Resultado por regla (del Rule Engine). */
   readonly ruleResults: readonly RuleResult[]
   /** Ids de reglas mapeadas que no se encontraron (config inconsistente). */
   readonly missingRuleIds: readonly string[]
+  /** Reglas encontradas que están inactivas, fuera de vigencia o pertenecen a otra empresa. */
+  readonly ineligibleRuleIds: readonly string[]
 }
+
+export type PromotionIneligibleReason =
+  | 'NOT_ACTIVE'
+  | 'NOT_STARTED'
+  | 'ENDED'
+  | 'COMPANY_MISMATCH'
+  | 'UNSUPPORTED_ACTIONS'
+  | 'UNSUPPORTED_RESTRICTIONS'
 
 export class PromotionEngine {
   constructor(private readonly deps: PromotionEngineDeps) {}
@@ -51,6 +64,27 @@ export class PromotionEngine {
   async evaluate(promotion: Promotion, context: RuleContext): Promise<PromotionEvaluation> {
     const ruleResults: RuleResult[] = []
     const missingRuleIds: string[] = []
+    const ineligibleRuleIds: string[] = []
+    const ineligibleReasons: PromotionIneligibleReason[] = []
+
+    if (promotion.companyId !== context.companyId) ineligibleReasons.push('COMPANY_MISMATCH')
+    if (promotion.status !== 'ACTIVE') ineligibleReasons.push('NOT_ACTIVE')
+    if (promotion.startsAt && context.timestamp < promotion.startsAt) ineligibleReasons.push('NOT_STARTED')
+    if (promotion.endsAt && context.timestamp > promotion.endsAt) ineligibleReasons.push('ENDED')
+    if (promotion.actions.some((action) => action.enabled)) ineligibleReasons.push('UNSUPPORTED_ACTIONS')
+    if (promotion.restrictions.some((restriction) => restriction.enabled)) ineligibleReasons.push('UNSUPPORTED_RESTRICTIONS')
+
+    // Do not even load/evaluate rules when the promotion itself is not applicable.
+    if (ineligibleReasons.length > 0) {
+      return {
+        promotionId: promotion.id,
+        eligible: false,
+        ineligibleReasons,
+        ruleResults,
+        missingRuleIds,
+        ineligibleRuleIds,
+      }
+    }
 
     const ordered = [...promotion.rules].sort((a, b) => a.order - b.order)
     for (const ref of ordered) {
@@ -59,14 +93,20 @@ export class PromotionEngine {
         missingRuleIds.push(ref.ruleId)
         continue
       }
+      // PromotionRule has no database-level tenant constraint. Enforce ownership
+      // and the Rule lifecycle here so a stale or cross-tenant mapping fails closed.
+      if (rule.companyId !== promotion.companyId || !isRuleEvaluable(rule, context.timestamp)) {
+        ineligibleRuleIds.push(ref.ruleId)
+        continue
+      }
       ruleResults.push(this.deps.ruleEvaluator.evaluateToResult(rule, context))
     }
 
     // Sin reglas mapeadas → elegible (promoción incondicional). Con reglas → AND.
     const eligible =
-      missingRuleIds.length === 0 && ruleResults.every((r) => r.valid)
+      missingRuleIds.length === 0 && ineligibleRuleIds.length === 0 && ruleResults.every((r) => r.valid)
 
-    return { promotionId: promotion.id, eligible, ruleResults, missingRuleIds }
+    return { promotionId: promotion.id, eligible, ineligibleReasons, ruleResults, missingRuleIds, ineligibleRuleIds }
   }
 
   /**

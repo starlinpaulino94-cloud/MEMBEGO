@@ -47,6 +47,7 @@ const INCLUDE_PUBLICO = Prisma.validator<Prisma.DealInclude>()({
 })
 
 export interface ConsultaDeOfertasPublicas {
+  dealId?: string
   companySlug?: string
   limite?: number
   /** Texto libre sobre el título de la oferta y el nombre del producto. */
@@ -62,9 +63,33 @@ export async function ofertasPublicas(q: ConsultaDeOfertasPublicas = {}, ahora =
     const filas = await sinEmpresa('ofertas: lista pública', (tx) =>
       tx.deal.findMany({
         where: {
+          ...(q.dealId ? { id: q.dealId } : {}),
           status: 'ACTIVE',
           startsAt: { lte: ahora },
-          OR: [{ endsAt: null }, { endsAt: { gt: ahora } }],
+          AND: [
+            { OR: [{ endsAt: null }, { endsAt: { gt: ahora } }] },
+            {
+              OR: [
+                { promotionId: null },
+                {
+                  promotion: {
+                    is: {
+                      status: 'ACTIVE',
+                      actions: { none: { activa: true } },
+                      restrictions: { none: { activa: true } },
+                      AND: [
+                        { OR: [{ inicioEn: null }, { inicioEn: { lte: ahora } }] },
+                        { OR: [{ finEn: null }, { finEn: { gte: ahora } }] },
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+            ...(q.q && q.q.trim()
+              ? [{ OR: [{ title: { contains: q.q.trim().slice(0, 80), mode: 'insensitive' as const } }, { variant: { item: { name: { contains: q.q.trim().slice(0, 80), mode: 'insensitive' as const } } } }] }]
+              : []),
+          ],
           company: {
             isPublished: true,
             isActive: true,
@@ -73,9 +98,6 @@ export async function ofertasPublicas(q: ConsultaDeOfertasPublicas = {}, ahora =
             ...(q.categoriaNegocio ? { categories: { some: { category: { slug: q.categoriaNegocio.trim().slice(0, 80), active: true } } } } : {}),
           },
           variant: { status: 'ACTIVE', item: { status: 'ACTIVE', source: 'MERCHANT' } },
-          ...(q.q && q.q.trim()
-            ? { OR: [{ title: { contains: q.q.trim().slice(0, 80), mode: 'insensitive' as const } }, { variant: { item: { name: { contains: q.q.trim().slice(0, 80), mode: 'insensitive' as const } } } }] }
-            : {}),
         },
         orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
         // Se pide de más: lo que no pasa los filtros de capacidad o cuenta se descarta después.
