@@ -1,8 +1,9 @@
 'use client'
 
+import { destinoParaRol } from '@/lib/auth/destino-seguro'
 import { useActionState, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -34,6 +35,11 @@ const initial: RegistroState = {}
  */
 export function RegisterGeneralForm() {
   const router = useRouter()
+  // Destino tras el alta (`?next=`): igual que el asistente de registro, para que el
+  // formulario clásico —la salida de emergencia de la bandera— no pierda a dónde iba la
+  // persona (p. ej. el producto que quería pedir). Solo rutas internas autorizadas.
+  const searchParams = useSearchParams()
+  const nextSeguro = destinoParaRol(searchParams.get('next'), 'CLIENTE', '') || null
   const [state, formAction, pending] = useActionState(registrarCuentaGeneral, initial)
   const credsRef = useRef<{ email: string; password: string } | null>(null)
   const handledRef = useRef(false)
@@ -55,7 +61,8 @@ export function RegisterGeneralForm() {
       toast.success(
         'Te enviamos un enlace de confirmación a tu correo. Ábrelo para activar tu cuenta.'
       )
-      router.replace('/login?verifica=1')
+      // Conserva el destino: al confirmar el correo y entrar, vuelve a donde iba.
+      router.replace(nextSeguro ? `/login?verifica=1&redirect=${encodeURIComponent(nextSeguro)}` : '/login?verifica=1')
       return
     }
 
@@ -65,7 +72,7 @@ export function RegisterGeneralForm() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRedirecting(true)
       toast.success('¡Bienvenido a MembeGo! Tu cuenta está lista.')
-      const destino = '/cliente/celebracion'
+      const destino = nextSeguro ?? '/cliente/celebracion'
       const creds = credsRef.current
       // Carga completa a propósito, no `router.push`. Acaba de crearse la
       // sesión: la cookie es nueva y la caché de cliente todavía guarda el
@@ -84,7 +91,7 @@ export function RegisterGeneralForm() {
         window.location.href = destino
       }
     }
-  }, [state.success, state.pendingVerification, router])
+  }, [state.success, state.pendingVerification, router, nextSeguro])
 
   return (
     <Card className="border-border">

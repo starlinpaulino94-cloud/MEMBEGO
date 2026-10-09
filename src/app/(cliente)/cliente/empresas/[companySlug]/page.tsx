@@ -1,3 +1,4 @@
+import { AccionObtenerOferta } from '@/components/deals/AccionObtenerOferta'
 import { notFound } from 'next/navigation'
 import { BadgeCheck, Check } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
@@ -204,6 +205,7 @@ export default async function ClienteEmpresaPage({
       excursiones={excursiones}
       catalogo={catalogo}
       ofertas={ofertas}
+      accionDeOferta={(o) => <AccionObtenerOferta oferta={o} retorno={`/cliente/empresas/${company.slug}#ofertas`} />}
     />
   )
 }

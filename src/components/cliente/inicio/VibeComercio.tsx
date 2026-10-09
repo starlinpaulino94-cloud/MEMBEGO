@@ -1,3 +1,4 @@
+import { AccionObtenerOferta } from '@/components/deals/AccionObtenerOferta'
 import Link from 'next/link'
 import { BadgePercent, ChevronRight, ShoppingBag } from 'lucide-react'
 import type { ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
@@ -39,7 +40,7 @@ export function VibeComercio({ ofertas, productos }: { ofertas: readonly OfertaP
             <div className="flex gap-3 overflow-x-auto pb-2 pr-10 scrollbar-none">
               {ofertas.map((o) => (
                 <div key={o.id} className="w-72 shrink-0 sm:w-80">
-                  <TarjetaOferta oferta={o} retorno="/cliente/inicio" espacio="app" />
+                  <TarjetaOferta oferta={o} espacio="app" accion={<AccionObtenerOferta oferta={o} retorno="/cliente/inicio" />} />
                 </div>
               ))}
             </div>
@@ -65,7 +66,7 @@ export function VibeComercio({ ofertas, productos }: { ofertas: readonly OfertaP
             <div className="flex gap-3 overflow-x-auto pb-2 pr-10 scrollbar-none">
               {productos.map((item) => (
                 <div key={item.id} className="w-56 shrink-0 sm:w-64">
-                  <TarjetaCatalogoPublica item={item} mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
+                  <TarjetaCatalogoPublica item={item} espacio="app" mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
                 </div>
               ))}
             </div>

@@ -1,10 +1,11 @@
 /**
  * EL MAPA ÚNICO DE RUTAS ENTRE LA LANDING Y LA APP.
  *
- * Una misma pantalla compartida (una tarjeta, un perfil de empresa) se pinta en
- * dos espacios: la landing pública, que solo informa, y la app del cliente,
- * donde se opera. Cada espacio tiene su propia ruta para el mismo recurso, y
- * quien está dentro de la app no debe salir a la landing para seguir un enlace.
+ * Una misma pantalla compartida (una tarjeta, un perfil de empresa, la ficha de
+ * un producto) se pinta en dos espacios: la landing pública, que solo informa, y
+ * la app del cliente, donde se opera. Cada espacio tiene su propia ruta para el
+ * mismo recurso, y quien está dentro de la app no debe salir a la landing para
+ * seguir un enlace.
  *
  * Los componentes compartidos NO escriben esas rutas a mano: reciben el
  * `Espacio` en el que se pintan y piden aquí el destino. Así, mover una
@@ -21,4 +22,27 @@ export type Espacio = 'publico' | 'app'
 /** La vitrina de una empresa. */
 export function rutaDeEmpresa(espacio: Espacio, slug: string): string {
   return espacio === 'app' ? `/cliente/empresas/${slug}` : `/empresas/${slug}`
+}
+
+/** La ficha de un producto o servicio del catálogo de una empresa. */
+export function rutaDeItem(espacio: Espacio, empresaSlug: string, itemSlug: string): string {
+  return espacio === 'app' ? `/cliente/empresas/${empresaSlug}/catalogo/${itemSlug}` : `/empresas/${empresaSlug}/catalogo/${itemSlug}`
+}
+
+/** El carrito de productos y servicios. Solo existe en la app: la landing no tiene carrito. */
+export const RUTA_CARRITO = '/cliente/carrito'
+
+/** El pago del carrito de UN negocio. Solo existe en la app. */
+export function rutaDePago(empresaSlug: string): string {
+  return `/cliente/carrito/pagar/${empresaSlug}`
+}
+
+/** Iniciar sesión y volver a `destino`. El destino lo vuelve a validar el login: aquí solo se arma el enlace. */
+export function rutaDeLogin(destino: string): string {
+  return `/login?redirect=${encodeURIComponent(destino)}`
+}
+
+/** Crear cuenta y volver a `destino`. */
+export function rutaDeRegistro(destino: string): string {
+  return `/registro/cuenta?next=${encodeURIComponent(destino)}`
 }

@@ -163,8 +163,9 @@ test('el panel del puente se guarda por rol de superadmin, y los botones no impo
 test('la tarjeta y la ficha pública mandan una oferta de Membego a la página de compra de Supply (no duplican el checkout)', () => {
   const tarjeta = readFileSync('src/components/catalogo/TarjetaCatalogoPublica.tsx', 'utf8')
   assert.match(tarjeta, /RUTA_OFERTAS_MEMBEGO\}\/\$\{item\.ofertaSlug\}/)
-  const ficha = readFileSync('src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx', 'utf8')
-  assert.match(ficha, /RUTA_OFERTAS_MEMBEGO\}\/\$\{item\.ofertaSlug\}/)
+  const cargador = readFileSync('src/modules/comercio/ficha-item.ts', 'utf8')
+  assert.match(cargador, /RUTA_OFERTAS_MEMBEGO\}\/\$\{item\.ofertaSlug\}/)
+  const ficha = readFileSync('src/components/catalogo/FichaDeItem.tsx', 'utf8')
   assert.match(ficha, /Ver la oferta y comprar/)
 })
 

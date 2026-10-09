@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { Clock, Tag } from 'lucide-react'
 import type { OfertaPublica } from '@/modules/deals/publico-nucleo'
 import { formatearPrecio } from '@/modules/catalog/formato'
+import type { ReactNode } from 'react'
 import { rutaDeEmpresa, type Espacio } from '@/modules/comercio/rutas'
-import { ReclamarOfertaBoton } from './ReclamarOfertaBoton'
 
 function hasta(iso: string): string {
   return new Date(iso).toLocaleDateString('es-DO', { day: 'numeric', month: 'long', timeZone: 'America/Santo_Domingo' })
@@ -15,8 +15,13 @@ function hasta(iso: string): string {
  * `espacio` es obligatorio a propósito: dice dónde se pinta (la landing o la app
  * del cliente) y de él sale el enlace a la empresa. Con un valor por defecto, una
  * pantalla de la app que lo olvidara sacaría al cliente a la landing sin aviso.
+ *
+ * `accion` es lo único que OPERA en la tarjeta («Obtener oferta»), y entra por
+ * ranura: la app pone el botón que obtiene la oferta; la landing pone un enlace
+ * que lleva a la app. Así esta tarjeta es presentación pura y la landing no
+ * arrastra ninguna operación comercial al pintarla.
  */
-export function TarjetaOferta({ oferta: o, retorno, espacio, mostrarEmpresa = true }: { oferta: OfertaPublica; retorno: string; espacio: Espacio; mostrarEmpresa?: boolean }) {
+export function TarjetaOferta({ oferta: o, espacio, accion, mostrarEmpresa = true }: { oferta: OfertaPublica; espacio: Espacio; accion: ReactNode; mostrarEmpresa?: boolean }) {
   return (
     <article className="flex flex-col overflow-hidden rounded-lg border border-border bg-card" aria-label={o.title}>
       {o.imageUrl ? (
@@ -57,9 +62,7 @@ export function TarjetaOferta({ oferta: o, retorno, espacio, mostrarEmpresa = tr
           {o.soloClientesNuevos && <li>Solo para quienes aún no han visitado este negocio.</li>}
           {o.quedan !== null && <li className="font-medium text-foreground">{o.quedan === 1 ? 'Queda 1' : `Quedan ${o.quedan}`}</li>}
         </ul>
-        <div className="mt-auto">
-          <ReclamarOfertaBoton dealId={o.id} retorno={retorno} sucursales={o.sucursales} />
-        </div>
+        <div className="mt-auto">{accion}</div>
       </div>
     </article>
   )

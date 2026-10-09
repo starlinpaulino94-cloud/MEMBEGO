@@ -145,14 +145,7 @@ const EXCEPCIONES_APP_DIRECTA: Excepcion[] = [
 // Componentes que sirven a la app Y a la landing: lo operativo no puede estar
 // cableado al espacio público; debe recibir su destino.
 const EXCEPCIONES_COMPARTIDOS: Excepcion[] = [
-  { archivo: 'src/components/catalogo/TarjetaCatalogoPublica.tsx', clase: '/empresas', veces: 1, fase: 'F2' },
-  { archivo: 'src/components/catalogo/TarjetaCatalogoPublica.tsx', clase: '/empresas/*/catalogo', veces: 1, fase: 'F2' },
   { archivo: 'src/components/catalogo/TarjetaCatalogoPublica.tsx', clase: 'RUTA_* pública (Supply)', veces: 1, fase: 'F4' },
-  { archivo: 'src/components/checkout/AgregarAlCarrito.tsx', clase: '/carrito', veces: 2, fase: 'F2' },
-  { archivo: 'src/components/checkout/CarritoVista.tsx', clase: '/carrito', veces: 1, fase: 'F2' },
-  { archivo: 'src/components/checkout/CarritoVista.tsx', clase: '/empresas', veces: 2, fase: 'F2' },
-  { archivo: 'src/components/checkout/IconoCarrito.tsx', clase: '/carrito', veces: 1, fase: 'F2' },
-  { archivo: 'src/components/checkout/PagarFormulario.tsx', clase: '/carrito', veces: 4, fase: 'F2' },
   { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
   { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: '/promociones/(membego|membresias|campanas)', veces: 1, fase: 'F4' },
   { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: 'RUTA_* pública (Supply)', veces: 1, fase: 'F4' },
@@ -206,100 +199,211 @@ test('los componentes compartidos no cablean a la landing lo operativo', () => {
 
 // ── 2 · La landing no opera ─────────────────────────────────────────────────
 
-/** Componentes que disparan una operación comercial: no pueden montarse en la landing. */
+/**
+ * LA REGLA: desde ninguna ruta pública se puede ALCANZAR una operación comercial.
+ *
+ * «Alcanzar» es transitivo. Una página pública que importa una tarjeta, que
+ * importa un botón, que llama a una acción de servidor, expone esa acción igual
+ * que si la importara ella: Next la registra para esa página y el navegador la
+ * descarga. Mirar solo los imports directos (como hacía la primera versión de
+ * esta guardia) dejaba pasar justo ese caso.
+ *
+ * Y a la vez NO se prohíbe por directorio. Una tarjeta compartida que solo
+ * presenta información puede vivir en `components/deals` sin que la landing la
+ * tenga prohibida: lo que se prohíbe son los NODOS que operan, y se avisa solo
+ * si la landing llega a uno, con la cadena de imports que lo demuestra.
+ *
+ * Nodos que operan:
+ *   · los componentes que disparan una operación (carrito, pedido, oferta, compra…);
+ *   · los servicios que escriben (pedidos, checkout, inventario, ofertas);
+ *   · cualquier módulo `'use server'` (acción de servidor) que no esté permitido.
+ */
 const COMPONENTES_OPERATIVOS = [
-  'components/checkout/AgregarAlCarrito',
-  'components/checkout/CarritoVista',
-  'components/checkout/IconoCarrito',
-  'components/checkout/PagarFormulario',
-  'components/checkout/useCarrito',
-  'components/checkout/useResumen',
-  'components/pedidos/PedirForm',
-  'components/deals/ReclamarOfertaBoton',
-  'components/ofertas/ReclamarOferta',
-  'components/supply-v2/boton-comprar',
-  'components/supply-v2/boton-contratar-membresia',
-  'components/excursiones/ExcursionCarritoContext',
-  'components/excursiones/ExcursionCarritoWrapper',
-  'components/excursiones/ExcursionCarritoDrawer',
-  'components/excursiones/PasarelaSimuladaModal',
+  'src/components/checkout/AgregarAlCarrito.tsx',
+  'src/components/checkout/CarritoVista.tsx',
+  'src/components/checkout/IconoCarrito.tsx',
+  'src/components/checkout/PagarFormulario.tsx',
+  'src/components/checkout/useCarrito.ts',
+  'src/components/checkout/useResumen.ts',
+  'src/components/pedidos/PedirForm.tsx',
+  'src/components/deals/ReclamarOfertaBoton.tsx',
+  'src/components/deals/AccionObtenerOferta.tsx',
+  'src/components/catalogo/AccionesDeCompra.tsx',
+  'src/components/ofertas/ReclamarOferta.tsx',
+  'src/components/supply-v2/boton-comprar.tsx',
+  'src/components/supply-v2/boton-contratar-membresia.tsx',
+  'src/components/excursiones/ExcursionCarritoContext.tsx',
+  'src/components/excursiones/ExcursionCarritoWrapper.tsx',
+  'src/components/excursiones/ExcursionCarritoDrawer.tsx',
+  'src/components/excursiones/PasarelaSimuladaModal.tsx',
+]
+
+/** Servicios que ESCRIBEN pedidos, reservas, existencias u ofertas. La landing no los alcanza ni de lejos. */
+const SERVICIOS_QUE_ESCRIBEN = [
+  'src/modules/orders/service.ts',
+  'src/modules/orders/escaner.ts',
+  'src/modules/checkout/service.ts',
+  'src/modules/inventory/service.ts',
+  'src/modules/deals/service.ts',
+  'src/modules/deals/reclamos.ts',
 ]
 
 /**
- * Acciones de servidor que SÍ pueden importarse desde la landing, con su razón:
+ * Acciones de servidor que SÍ puede alcanzar la landing, con su razón:
  *   · marketplace/actions: contadores de vistas y de «compartir» (analítica).
  *   · solicitudes/actions: la solicitud de alta de una empresa (captación B2B).
  *   · cliente/actions: el buscador unificado, que solo lee.
+ *   · invitaciones/clienteActions: contadores del embudo de las landings de invitación (compartir, vistas).
+ *   · registro/actions: el alta de una cuenta de cliente (módulo de registro; la landing de invitación la
+ *     incrusta). Crea una CUENTA, no un pedido ni una compra.
+ *   · registro/empresaActions: el alta de un negocio (captación B2B).
  */
 const ACCIONES_PERMITIDAS = [
-  '@/modules/marketplace/actions',
-  '@/modules/solicitudes/actions',
-  '@/modules/cliente/actions',
+  'src/modules/marketplace/actions.ts',
+  'src/modules/solicitudes/actions.ts',
+  'src/modules/cliente/actions.ts',
+  'src/modules/invitaciones/clienteActions.ts',
+  'src/modules/registro/actions.ts',
+  'src/modules/registro/empresaActions.ts',
 ]
 
-type Importa = { archivo: string; clase: string; veces: number }
+/** Los puntos de entrada de la landing: sus páginas, sus layouts y los enlaces compartidos. */
+const RAICES_DE_LA_LANDING = [
+  ...archivosDe('src/app/(public)'),
+  ...archivosDe('src/app/invitar'),
+  'src/app/layout.tsx',
+]
 
-function importsOperativos(archivos: string[]): Importa[] {
-  const cuenta = new Map<string, number>()
-  for (const archivo of archivos) {
-    const src = leer(archivo)
-    const imports = [...src.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])
-    // Imports relativos a componentes locales de la página (ReservaExcursionForm, CheckoutClient).
-    const locales = [...src.matchAll(/from\s+'(\.\/[^']+)'/g)].map((m) => m[1])
-    for (const spec of imports) {
-      let clase: string | null = null
-      if (COMPONENTES_OPERATIVOS.some((c) => spec === `@/${c}`)) clase = spec.replace('@/', '')
-      else if (/^@\/modules\/.+(-actions|\/actions)$/.test(spec) && !ACCIONES_PERMITIDAS.includes(spec)) clase = spec.replace('@/', '')
-      if (clase) cuenta.set(`${archivo}\u0000${clase}`, (cuenta.get(`${archivo}\u0000${clase}`) ?? 0) + 1)
+const EXTENSIONES = ['', '.ts', '.tsx', '/index.ts', '/index.tsx']
+
+function resolverImport(desde: string, especificador: string): string | null {
+  let base: string
+  if (especificador.startsWith('@/')) base = join('src', especificador.slice(2))
+  else if (especificador.startsWith('.')) base = join(desde, '..', especificador)
+  else return null // paquete externo (next, react, lucide…): no es código nuestro
+  for (const ext of EXTENSIONES) {
+    const candidato = base + ext
+    if (existsSync(join(RAIZ, candidato)) && statSync(join(RAIZ, candidato)).isFile()) return candidato
+  }
+  return null
+}
+
+/**
+ * Los módulos que `archivo` importa EN TIEMPO DE EJECUCIÓN. Los imports de solo tipos
+ * (`import type`) no cuentan: desaparecen al compilar y no llevan nada a la página.
+ */
+function importsEnEjecucion(archivo: string): string[] {
+  const src = leer(archivo)
+  const salida = new Set<string>()
+  const patrones = [
+    /(?:^|\n)\s*import\s+(?!type\b)(?:[\w*{}\s,$]+?\s+from\s+)?['"]([^'"]+)['"]/g,
+    /(?:^|\n)\s*export\s+(?!type\b)(?:\*|\{[^}]*\})(?:\s+as\s+\w+)?\s+from\s+['"]([^'"]+)['"]/g,
+    /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g,
+  ]
+  for (const patron of patrones) {
+    for (const m of src.matchAll(patron)) {
+      const destino = resolverImport(archivo, m[1])
+      if (destino) salida.add(destino)
     }
-    for (const spec of locales) {
-      if (/\/(ReservaExcursionForm|CheckoutClient)$/.test(spec)) {
-        cuenta.set(`${archivo}\u0000local:${spec.split('/').pop()}`, 1)
+  }
+  return [...salida]
+}
+
+const esAccionDeServidor = (archivo: string) => /^\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*['"]use server['"]/.test(leer(archivo))
+
+function esNodoQueOpera(archivo: string): boolean {
+  if (COMPONENTES_OPERATIVOS.includes(archivo) || SERVICIOS_QUE_ESCRIBEN.includes(archivo)) return true
+  return esAccionDeServidor(archivo) && !ACCIONES_PERMITIDAS.includes(archivo)
+}
+
+/** Cada nodo operativo que la landing alcanza, con la cadena de imports que lo demuestra. */
+function operacionesAlcanzablesDesde(raices: string[]): Map<string, string[]> {
+  const padre = new Map<string, string | null>()
+  const cola: string[] = []
+  for (const r of raices) {
+    padre.set(r, null)
+    cola.push(r)
+  }
+  const alcanzados = new Map<string, string[]>()
+  while (cola.length > 0) {
+    const actual = cola.shift()!
+    if (esNodoQueOpera(actual)) {
+      const cadena: string[] = []
+      for (let n: string | null = actual; n; n = padre.get(n) ?? null) cadena.unshift(n)
+      alcanzados.set(actual, cadena)
+      // Al llegar a un nodo que opera no se sigue: lo que cuelga de él ya cuelga de él.
+      continue
+    }
+    for (const sig of importsEnEjecucion(actual)) {
+      if (!padre.has(sig)) {
+        padre.set(sig, actual)
+        cola.push(sig)
       }
     }
   }
-  return [...cuenta.entries()]
-    .map(([k, veces]) => {
-      const [archivo, clase] = k.split('\u0000')
-      return { archivo, clase, veces }
-    })
-    .sort((a, b) => (a.archivo + a.clase).localeCompare(b.archivo + b.clase))
+  return alcanzados
 }
 
-// Cada una nombra la fase que la elimina. `decision` marca lo que el producto
-// aún tiene que resolver (seguir empresa y reseñas son acciones del cliente).
-const EXCEPCIONES_LANDING_OPERA: Excepcion[] = [
-  { archivo: 'src/app/(public)/carrito/pagar/[companySlug]/page.tsx', clase: 'components/checkout/PagarFormulario', veces: 1, fase: 'F2' },
-  { archivo: 'src/app/(public)/carrito/page.tsx', clase: 'components/checkout/CarritoVista', veces: 1, fase: 'F2' },
-  { archivo: 'src/app/(public)/checkout/CheckoutClient.tsx', clase: 'components/excursiones/ExcursionCarritoContext', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(public)/checkout/CheckoutClient.tsx', clase: 'components/excursiones/PasarelaSimuladaModal', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(public)/checkout/CheckoutClient.tsx', clase: 'modules/excursiones/reservas/cliente-actions', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(public)/checkout/page.tsx', clase: 'components/excursiones/ExcursionCarritoWrapper', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(public)/checkout/page.tsx', clase: 'local:CheckoutClient', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx', clase: 'components/checkout/AgregarAlCarrito', veces: 1, fase: 'F2' },
-  { archivo: 'src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx', clase: 'components/deals/ReclamarOfertaBoton', veces: 1, fase: 'F2' },
-  { archivo: 'src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx', clase: 'components/pedidos/PedirForm', veces: 1, fase: 'F2' },
-  { archivo: 'src/app/(public)/empresas/[companySlug]/excursiones/[excursionSlug]/page.tsx', clase: 'local:ReservaExcursionForm', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(public)/empresas/[companySlug]/excursiones/[excursionSlug]/ReservaExcursionForm.tsx', clase: 'components/excursiones/ExcursionCarritoContext', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(public)/empresas/[companySlug]/excursiones/[excursionSlug]/ReservaExcursionForm.tsx', clase: 'modules/excursiones/reservas/cliente-actions', veces: 2, fase: 'F3' },
-  { archivo: 'src/app/(public)/empresas/[companySlug]/excursiones/[excursionSlug]/ReservaExcursionForm.tsx', clase: 'modules/social/actions', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(public)/layout.tsx', clase: 'components/excursiones/ExcursionCarritoWrapper', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(public)/oferta/[codigo]/page.tsx', clase: 'components/ofertas/ReclamarOferta', veces: 1, fase: 'F4' },
-  { archivo: 'src/app/(public)/promociones/membego/[slug]/page.tsx', clase: 'components/supply-v2/boton-comprar', veces: 1, fase: 'F4' },
-  { archivo: 'src/app/(public)/promociones/membresias/page.tsx', clase: 'components/supply-v2/boton-contratar-membresia', veces: 1, fase: 'F4' },
-  { archivo: 'src/components/marketplace/ResenaForm.tsx', clase: 'modules/resenas/actions', veces: 1, fase: 'F3 (decisión de producto: reseñas)' },
-  { archivo: 'src/components/public/FollowButton.tsx', clase: 'modules/social/actions', veces: 1, fase: 'F3 (decisión de producto: seguir empresa)' },
-  { archivo: 'src/components/public/PublicNav.tsx', clase: 'components/checkout/IconoCarrito', veces: 1, fase: 'F2' },
+/**
+ * Operaciones que la landing TODAVÍA alcanza. Cada una nombra la fase que la quita
+ * (`decisión` = el producto aún tiene que resolverlo). Al terminar F6 está vacía.
+ * F2 vació todo lo de productos, servicios y ofertas del catálogo.
+ */
+const EXCEPCIONES_LANDING_OPERA: Array<{ nodo: string; fase: string }> = [
+  { nodo: 'src/components/excursiones/ExcursionCarritoContext.tsx', fase: 'F3' },
+  { nodo: 'src/components/excursiones/ExcursionCarritoWrapper.tsx', fase: 'F3' },
+  { nodo: 'src/components/excursiones/PasarelaSimuladaModal.tsx', fase: 'F3' },
+  { nodo: 'src/modules/excursiones/reservas/cliente-actions.ts', fase: 'F3' },
+  { nodo: 'src/modules/social/actions.ts', fase: 'F3 (decisión de producto: seguir empresa)' },
+  { nodo: 'src/components/ofertas/ReclamarOferta.tsx', fase: 'F4' },
+  { nodo: 'src/components/supply-v2/boton-comprar.tsx', fase: 'F4' },
+  { nodo: 'src/components/supply-v2/boton-contratar-membresia.tsx', fase: 'F4' },
 ]
 
-const ARCHIVOS_LANDING = [
-  ...archivosDe('src/app/(public)'),
-  ...archivosDe('src/components/public'),
-  ...archivosDe('src/components/marketplace'),
-]
+test('la landing no alcanza ninguna operación comercial, ni directa ni transitivamente', () => {
+  const alcanzadas = operacionesAlcanzablesDesde(RAICES_DE_LA_LANDING)
+  const permitidas = new Set(EXCEPCIONES_LANDING_OPERA.map((e) => e.nodo))
+  const nuevas = [...alcanzadas.entries()].filter(([nodo]) => !permitidas.has(nodo)).map(([nodo, cadena]) => `${nodo}\n      ← ${cadena.slice(0, -1).reverse().join('\n      ← ')}`)
+  assert.deepEqual(
+    nuevas,
+    [],
+    'la landing alcanza una operación comercial (carrito, pedido, reserva, compra, canje o acción de servidor). Esa operación vive en /cliente; en la landing va solo el traspaso (TraspasoALaApp). La cadena de imports que lo demuestra:'
+  )
+  const olvidadas = EXCEPCIONES_LANDING_OPERA.filter((e) => !alcanzadas.has(e.nodo)).map((e) => `${e.nodo} (la quitaba ${e.fase})`)
+  assert.deepEqual(olvidadas, [], 'la landing ya no alcanza esta operación; quítala de la lista (el trabajo de esa fase está hecho)')
+})
 
-test('la landing no importa operaciones comerciales', () => {
-  comparar('landing', importsOperativos(ARCHIVOS_LANDING), EXCEPCIONES_LANDING_OPERA, 'la landing importa una operación comercial (carrito, pedido, reserva, compra, canje, acción de servidor). Esa operación vive en /cliente; aquí solo va el traspaso.')
+test('el cierre transitivo no da falsos positivos: una tarjeta que solo presenta no se marca', () => {
+  // `TarjetaOferta` y `FichaDeItem` viven en directorios de operaciones pero solo presentan:
+  // la landing las usa y NO debe aparecer ninguna como operativa por estar cerca de una.
+  for (const presentacion of ['src/components/deals/TarjetaOferta.tsx', 'src/components/catalogo/FichaDeItem.tsx', 'src/components/catalogo/TarjetaCatalogoPublica.tsx', 'src/components/public/TraspasoALaApp.tsx']) {
+    assert.equal(esNodoQueOpera(presentacion), false, `${presentacion} solo presenta`)
+    assert.deepEqual([...operacionesAlcanzablesDesde([presentacion]).keys()], [], `${presentacion} no debe alcanzar ninguna operación`)
+  }
+})
+
+test('el cierre transitivo SÍ ve una operación escondida detrás de otros componentes', () => {
+  // Control del detector. El inicio de la app llega al botón de obtener oferta pasando por dos componentes
+  // que NO operan (InicioRetail y VibeComercio): si el recorrido solo mirara imports directos, no lo vería.
+  const desdeElInicio = operacionesAlcanzablesDesde(['src/app/(cliente)/cliente/inicio/page.tsx'])
+  const cadena = desdeElInicio.get('src/components/deals/AccionObtenerOferta.tsx')
+  assert.ok(cadena, 'el inicio de la app debe alcanzar AccionObtenerOferta')
+  assert.ok(cadena.length >= 3, `debe llegar por intermediarios, no por un import directo: ${cadena.join(' → ')}`)
+  // La ficha de la app llega a su bloque de compra.
+  const desdeLaFicha = operacionesAlcanzablesDesde(['src/app/(cliente)/cliente/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx'])
+  assert.ok(desdeLaFicha.has('src/components/catalogo/AccionesDeCompra.tsx'), 'la ficha de la app debe alcanzar AccionesDeCompra')
+  // Y las acciones de servidor se reconocen por su directiva, no por su nombre.
+  assert.equal(esAccionDeServidor('src/modules/orders/cliente-actions.ts'), true)
+  assert.equal(esAccionDeServidor('src/modules/checkout/actions.ts'), true)
+  assert.equal(esAccionDeServidor('src/modules/orders/publico.ts'), false)
+  assert.equal(esAccionDeServidor('src/modules/comercio/ficha-item.ts'), false)
+})
+
+test('los imports de solo tipos no cuentan como alcanzar una operación', () => {
+  // `AccionesDeCompra` no se importa por tipo en ninguna parte; el control es sobre el propio analizador.
+  const imports = importsEnEjecucion('src/components/catalogo/FichaDeItem.tsx')
+  assert.ok(!imports.includes('src/modules/comercio/ficha-item.ts'), 'FichaDeItem importa ficha-item solo por tipo (import type): no debe contar')
+  assert.ok(imports.includes('src/modules/comercio/rutas.ts'), 'pero sí cuenta lo que importa en ejecución')
 })
 
 // ── 3 · La landing sigue siendo estática ────────────────────────────────────
@@ -392,7 +496,7 @@ test('el cierre de sesión va a una pantalla pública de acceso y el proxy recha
   const logout = leer('src/modules/auth/actions.ts')
   assert.match(logout, /export async function logout\(\)[\s\S]*?redirect\('\/login'\)/, 'logout debe terminar en /login')
   const proxy = leer('src/proxy.ts')
-  assert.match(proxy, /redirectTo\.startsWith\('\/'\)\s*&&\s*!redirectTo\.startsWith\('\/\/'\)/, 'el proxy debe rechazar destinos que no sean rutas internas')
+  assert.match(proxy, /destinoParaRol\(redirectTo, role, roleHome,/, 'el proxy debe validar el destino con el validador compartido (rol incluido)')
   assert.match(proxy, /fail-closed|Fail-closed/i, 'el proxy debe seguir fallando cerrado')
 })
 
@@ -478,7 +582,7 @@ test('VOLCADO (solo con SEPARACION_VOLCAR=1): imprime las listas reales para rev
     ...enlacesAPublico(ARCHIVOS_COMPARTIDOS_ESTRICTOS, [...CLASES_OPERATIVAS, ...CLASES_VITRINA]),
     ...enlacesAPublico(ARCHIVOS_COMPARTIDOS_CON_MODO, CLASES_OPERATIVAS),
   ])
-  volcar('LANDING_OPERA', importsOperativos(ARCHIVOS_LANDING))
+  volcar('LANDING_OPERA', [...operacionesAlcanzablesDesde(RAICES_DE_LA_LANDING).entries()].map(([nodo, cadena]) => ({ nodo, via: cadena[cadena.length - 2] })))
   volcar('SESION', archivosDe('src/app/(public)').filter((f) => /\bgetUser\s*\(/.test(leer(f))))
   volcar('PANELES', [
     ...archivosDe('src/app/(vendedor)'),

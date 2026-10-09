@@ -1,5 +1,6 @@
 'use client'
 
+import { RUTA_CARRITO, rutaDeLogin, rutaDePago } from '@/modules/comercio/rutas'
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
@@ -53,7 +54,7 @@ export function PagarFormulario({ companySlug, sucursales, transferencia }: Prop
       <div className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
         <p className="font-medium text-foreground">Tu carrito de este negocio está vacío.</p>
         <Button asChild variant="outline" className="mt-4">
-          <Link href="/carrito">Ir al carrito</Link>
+          <Link href={RUTA_CARRITO}>Ir al carrito</Link>
         </Button>
       </div>
     )
@@ -79,7 +80,7 @@ export function PagarFormulario({ companySlug, sucursales, transferencia }: Prop
       }
       if (!resultado.ok) {
         if (resultado.sinSesion) {
-          router.push(`/login?redirect=${encodeURIComponent(`/carrito/pagar/${companySlug}`)}`)
+          router.push(rutaDeLogin(rutaDePago(companySlug)))
           return
         }
         toast.error(resultado.error)
@@ -133,7 +134,7 @@ export function PagarFormulario({ companySlug, sucursales, transferencia }: Prop
             </div>
             {!resumen.comprable && (
               <p className="border-t border-border px-4 py-3 text-sm text-destructive" role="alert">
-                Hay productos que ya no se pueden pedir así. <Link href="/carrito" className="underline">Revisa tu carrito</Link>.
+                Hay productos que ya no se pueden pedir así. <Link href={RUTA_CARRITO} className="underline">Revisa tu carrito</Link>.
               </p>
             )}
           </>
@@ -175,7 +176,7 @@ export function PagarFormulario({ companySlug, sucursales, transferencia }: Prop
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/carrito" className="text-sm text-muted-foreground underline">
+        <Link href={RUTA_CARRITO} className="text-sm text-muted-foreground underline">
           Volver al carrito
         </Link>
         <Button type="submit" disabled={!puedePagar}>

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+import type { Espacio } from '@/modules/comercio/rutas'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -97,6 +99,12 @@ export interface CompanyProfileProps {
 
   /** Ofertas con presupuesto que se pueden obtener ahora (F5). Vacío = sin sección. */
   ofertas?: OfertaPublica[]
+  /**
+   * Lo único que OPERA en una oferta («Obtener»). Lo pone la PÁGINA que monta el perfil:
+   * la app, el botón que la obtiene; la landing, el enlace que lleva a la app. Así este
+   * componente compartido no importa ninguna operación comercial.
+   */
+  accionDeOferta?: (oferta: OfertaPublica) => ReactNode
 
   /** Excursiones públicas de la empresa (opcional). */
   excursiones?: {
@@ -149,9 +157,11 @@ export function CompanyProfile({
   excursiones = [],
   catalogo = [],
   ofertas = [],
+  accionDeOferta = () => null,
 }: CompanyProfileProps) {
   const hayResenas = !!resenas && (resenas.total > 0 || !!resenaFormSlot)
   const isApp = mode === 'app'
+  const espacio: Espacio = isApp ? 'app' : 'publico'
 
   // Rutas dependientes del contexto. En 'app' todo permanece dentro de la
   // aplicación; en 'public' se usan las rutas de la Landing. Fase 4: si el
@@ -660,7 +670,7 @@ export function CompanyProfile({
             <p className="mt-2 text-muted-foreground">Lo que vende {company.name}. Pides aquí y lo recoges con tu QR.</p>
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {productos.map((item) => (
-                <TarjetaCatalogoPublica key={item.id} item={item} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
+                <TarjetaCatalogoPublica key={item.id} item={item} espacio={espacio} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
               ))}
             </div>
           </section>
@@ -673,7 +683,7 @@ export function CompanyProfile({
             <p className="mt-2 text-muted-foreground">Lo que {company.name} hace por ti, con sus precios.</p>
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {servicios.map((item) => (
-                <TarjetaCatalogoPublica key={item.id} item={item} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
+                <TarjetaCatalogoPublica key={item.id} item={item} espacio={espacio} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
               ))}
             </div>
           </section>
@@ -686,7 +696,7 @@ export function CompanyProfile({
             <p className="mt-2 text-muted-foreground">Descuentos sobre lo que vende {company.name}. Obtén la oferta y canjéala con tu QR.</p>
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {ofertas.map((o) => (
-                <TarjetaOferta key={o.id} espacio={isApp ? 'app' : 'publico'} oferta={o} retorno={`${isApp ? `/cliente/empresas/${company.slug}` : `/empresas/${company.slug}`}#ofertas`} mostrarEmpresa={false} />
+                <TarjetaOferta key={o.id} espacio={espacio} oferta={o} accion={accionDeOferta(o)} mostrarEmpresa={false} />
               ))}
             </div>
           </section>

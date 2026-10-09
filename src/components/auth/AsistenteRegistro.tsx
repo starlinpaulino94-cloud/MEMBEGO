@@ -1,5 +1,6 @@
 'use client'
 
+import { destinoParaRol } from '@/lib/auth/destino-seguro'
 import { useActionState, useEffect, useMemo, useRef, useState, startTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, ArrowRight, Car, Check, Loader2 } from 'lucide-react'
@@ -137,8 +138,8 @@ export function AsistenteRegistro({
   const glCode = searchParams.get('gl') ?? ''
   const enlaceSlug = searchParams.get('e') ?? ''
   const vendedorCode = searchParams.get('v') ?? ''
-  const nextRaw = searchParams.get('next') ?? ''
-  const nextSeguro = nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : null
+  // Solo rutas internas autorizadas y abribles por un cliente (ver `destino-seguro`).
+  const nextSeguro = destinoParaRol(searchParams.get('next'), 'CLIENTE', '') || null
 
   // Si vino por enlace/código de vendedor, aterriza directamente en el catálogo de excursiones del negocio
   const destinoVendedor = (enlaceSlug || vendedorCode) && companySlug

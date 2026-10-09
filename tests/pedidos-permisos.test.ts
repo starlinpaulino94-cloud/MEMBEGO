@@ -223,9 +223,12 @@ test('el cron de pedidos existe, está programado y exige el secreto antes de ba
 })
 
 test('la ficha pública ofrece «Pedir» solo para productos de la empresa y detrás de las capacidades; las ofertas de Supply van a su checkout', () => {
-  const s = limpio('src/app/(public)/empresas/[companySlug]/catalogo/[itemSlug]/page.tsx')
+  // El cargador es uno solo y lo comparten la ficha de la landing y la de la app.
+  const s = limpio('src/modules/comercio/ficha-item.ts')
   assert.match(s, /item\.origen === 'EMPRESA' \? await opcionesDePedidoPublico\(item\.company\.slug\) : null/)
-  assert.match(s, /pedido\?\.habilitado && /)
+  // La presentación solo pinta el bloque de compra si la empresa lo recibe; la compra de verdad es de la app.
+  assert.match(limpio('src/components/catalogo/FichaDeItem.tsx'), /pedido\?\.habilitado && /)
+  assert.match(limpio('src/components/catalogo/AccionesDeCompra.tsx'), /if \(!pedido\?\.habilitado\) return null/)
   const pub = limpio('src/modules/orders/publico.ts')
   assert.match(pub, /tieneCapacidad\(companyId, 'CATALOGO_UNIFICADO'\)/)
   assert.match(pub, /tieneCapacidad\(companyId, 'PEDIDOS_MEMBEGO'\)/)

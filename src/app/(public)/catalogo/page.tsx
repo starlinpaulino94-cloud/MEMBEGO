@@ -1,3 +1,4 @@
+import { AccionDeOfertaPublica } from '@/components/public/AccionDeOfertaPublica'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Package, Search } from 'lucide-react'
@@ -133,7 +134,7 @@ export default async function CatalogoPublicoPage({
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {ofertas.map((o) => (
-              <TarjetaOferta key={o.id} oferta={o} retorno="/catalogo" espacio="publico" />
+              <TarjetaOferta key={o.id} oferta={o} espacio="publico" accion={<AccionDeOfertaPublica oferta={o} />} />
             ))}
           </div>
         </section>
@@ -151,7 +152,7 @@ export default async function CatalogoPublicoPage({
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {destacadas.items.map((item) => (
-              <TarjetaCatalogoPublica key={item.id} item={item} mostrarEmpresa />
+              <TarjetaCatalogoPublica key={item.id} item={item} espacio="publico" mostrarEmpresa />
             ))}
           </div>
         </section>
@@ -171,7 +172,7 @@ export default async function CatalogoPublicoPage({
         <>
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
-              <TarjetaCatalogoPublica key={item.id} item={item} mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
+              <TarjetaCatalogoPublica key={item.id} item={item} espacio="publico" mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
             ))}
           </div>
           <nav className="mt-8 flex justify-between text-sm" aria-label="Paginación">

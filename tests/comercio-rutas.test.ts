@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { rutaDeEmpresa } from '../src/modules/comercio/rutas'
+import { RUTA_CARRITO, rutaDeEmpresa, rutaDeItem, rutaDeLogin, rutaDePago, rutaDeRegistro } from '../src/modules/comercio/rutas'
+import { destinoInterno } from '../src/lib/auth/destino-seguro'
 
 /**
  * EL MAPA DE RUTAS ENTRE LA LANDING Y LA APP (separación · F1).
@@ -51,7 +52,7 @@ test('cada tarjeta de oferta declara el espacio que le corresponde a donde se pi
       const valor = espacio[1] ?? espacio[2]
       if (esDeLaApp(f)) assert.equal(valor, 'app', `${f}: la app debe pasar espacio="app"`)
       else if (esDeLaLanding(f)) assert.equal(valor, 'publico', `${f}: la landing debe pasar espacio="publico"`)
-      else assert.match(valor, /isApp|app|publico/, `${f}: el espacio debe salir del modo del componente`)
+      else assert.match(valor, /^espacio$|isApp|app|publico/, `${f}: el espacio debe salir del modo del componente`)
     }
   }
   assert.ok(usos.length >= 5, 'el detector debe encontrar los usos de la tarjeta')
@@ -61,4 +62,22 @@ test('el componente de la tarjeta no escribe a mano la ruta de la empresa', () =
   const src = readFileSync(join(RAIZ, 'src/components/deals/TarjetaOferta.tsx'), 'utf8')
   assert.match(src, /rutaDeEmpresa\(espacio,/)
   assert.doesNotMatch(src, /`\/empresas\//)
+})
+
+test('la ficha, el carrito y el pago tienen su ruta en la app; la landing solo conserva la ficha de consulta', () => {
+  assert.equal(rutaDeItem('publico', 'tech', 'airpods'), '/empresas/tech/catalogo/airpods')
+  assert.equal(rutaDeItem('app', 'tech', 'airpods'), '/cliente/empresas/tech/catalogo/airpods')
+  assert.equal(RUTA_CARRITO, '/cliente/carrito')
+  assert.equal(rutaDePago('tech'), '/cliente/carrito/pagar/tech')
+})
+
+test('los enlaces de traspaso construyen destinos que el validador acepta (el ciclo cierra sin bucles)', () => {
+  const destino = rutaDeItem('app', 'tech-store', 'airpods-pro')
+  const login = new URL(rutaDeLogin(destino), 'http://x')
+  const registro = new URL(rutaDeRegistro(destino), 'http://x')
+  assert.equal(login.pathname, '/login')
+  assert.equal(registro.pathname, '/registro/cuenta')
+  assert.equal(destinoInterno(login.searchParams.get('redirect')), destino)
+  assert.equal(destinoInterno(registro.searchParams.get('next')), destino)
+  for (const ruta of [RUTA_CARRITO, rutaDePago('tech')]) assert.equal(destinoInterno(ruta), ruta)
 })

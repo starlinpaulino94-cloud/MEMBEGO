@@ -1,3 +1,4 @@
+import { AccionDeOfertaPublica } from '@/components/public/AccionDeOfertaPublica'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { CompanyProfile } from '@/components/marketplace/CompanyProfile'
@@ -94,6 +95,7 @@ export default async function CompanyDetailPage({
       excursiones={excursiones}
       catalogo={catalogo}
       ofertas={ofertas}
+      accionDeOferta={(o) => <AccionDeOfertaPublica oferta={o} />}
       sucursales={sucursales}
     />
   )

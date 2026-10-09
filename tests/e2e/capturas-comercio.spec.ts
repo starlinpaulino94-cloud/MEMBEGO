@@ -112,8 +112,24 @@ test.describe('Capturas · experiencia comercial', () => {
       ['/cliente/buscar?q=airpods', 'cliente-buscar'],
       [`/cliente/empresas/${empresa.slug}`, 'cliente-vitrina-empresa'],
       ['/cliente/pedidos', 'cliente-pedidos'],
+      [`/cliente/empresas/${empresa.slug}/catalogo/${slugItem}`, 'cliente-producto-detalle-app'],
     ] as const) {
       await p.goto(ruta)
+      await foto(p, nombre, pr)
+    }
+    // Separación landing/app (F2): el carrito y el pago viven en la app. Se llena el carrito por la interfaz.
+    await p.goto(`/cliente/empresas/${empresa.slug}/catalogo/${slugItem}`)
+    const agregar = p.getByRole('form', { name: 'Agregar al carrito' })
+    await agregar.getByLabel('Cantidad').fill('2')
+    await agregar.getByRole('button', { name: 'Agregar al carrito' }).click()
+    await p.getByText('Agregado al carrito.').first().waitFor()
+    await foto(p, 'cliente-producto-con-carrito', pr)
+    for (const [ruta, nombre] of [
+      ['/cliente/carrito', 'cliente-carrito'],
+      [`/cliente/carrito/pagar/${empresa.slug}`, 'cliente-pago'],
+    ] as const) {
+      await p.goto(ruta)
+      await p.waitForTimeout(1200)
       await foto(p, nombre, pr)
     }
     await ctx.close()

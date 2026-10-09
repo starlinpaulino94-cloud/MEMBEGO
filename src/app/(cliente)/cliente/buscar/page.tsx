@@ -1,3 +1,4 @@
+import { AccionObtenerOferta } from '@/components/deals/AccionObtenerOferta'
 import { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
@@ -312,7 +313,7 @@ function ResultsGrid({
           <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {ofertas.map((o) => (
               <li key={o.id} className="flex">
-                <TarjetaOferta oferta={o} espacio="app" retorno={`/cliente/buscar${currentParams.q ? `?q=${encodeURIComponent(currentParams.q)}` : ''}`} />
+                <TarjetaOferta oferta={o} espacio="app" accion={<AccionObtenerOferta oferta={o} retorno={`/cliente/buscar${currentParams.q ? `?q=${encodeURIComponent(currentParams.q)}` : ''}`} />} />
               </li>
             ))}
           </ul>
@@ -337,7 +338,7 @@ function ResultsGrid({
           <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {productos.map((item) => (
               <li key={item.id} className="flex [&>a]:w-full">
-                <TarjetaCatalogoPublica item={item} mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
+                <TarjetaCatalogoPublica item={item} espacio="app" mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
               </li>
             ))}
           </ul>

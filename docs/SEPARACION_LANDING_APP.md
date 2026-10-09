@@ -29,7 +29,8 @@ Efecto en el plan: la pregunta 3 de §7 queda resuelta en contra de la recomenda
 |---|---|
 | F0 · Red de seguridad | **Hecha.** Ver abajo. |
 | F1 · Enlaces de la app a su propio espacio | **Hecha.** Ver abajo. |
-| F2 a F6 | Pendientes de aprobación individual. |
+| F2 · Producto, servicio, oferta, carrito y pago en la app | **Hecha.** Ver abajo. |
+| F3 a F6 | Pendientes de aprobación individual. |
 
 ### F0 · Red de seguridad (hecha)
 
@@ -62,13 +63,66 @@ Lo que sí se hizo:
 
 Pruebas: `tests/comercio-rutas.test.ts` (el mapa, y que cada tarjeta declara el espacio que corresponde a donde se pinta, algo que el tipado no puede comprobar), la guardia de F0 con la lista reducida y verificada por mutación, y `tests/e2e/separacion-f1.spec.ts` (móvil y escritorio, incluida la comprobación de que la landing no cambió).
 
+### F2 · Producto, servicio, oferta, carrito y pago dentro de la app (hecha)
+
+La landing deja de tener formularios, botones y código de compra, reserva, oferta o pago de productos y servicios. Sus fichas siguen existiendo para consulta, SEO y enlaces compartidos, y donde estaban los botones hay el traspaso a la app.
+
+**Trasladado a `/cliente`**
+
+| Antes (landing) | Ahora (app) |
+|---|---|
+| Ficha con pedir, reservar, agregar al carrito y obtener oferta | `/cliente/empresas/[slug]/catalogo/[item]` |
+| `/carrito` | `/cliente/carrito`; la URL vieja redirige (temporal, con su consulta) |
+| `/carrito/pagar/[slug]` | `/cliente/carrito/pagar/[slug]`; la URL vieja redirige |
+| Icono de carrito en la barra pública | Icono con contador en el encabezado de la app |
+| «Obtener oferta» en las tarjetas de `/ofertas`, `/catalogo` y la vitrina pública | Mismo botón en Explorar, Buscar, inicio y vitrina dentro de la app; en la landing, «Obtener en la app» |
+
+**Arquitectura**
+
+- `src/modules/comercio/ficha-item.ts`: el cargador de datos es uno y lo comparten las dos fichas, así que «no existe» y «no es público» se ven igual en ambos espacios.
+- `FichaDeItem` es presentación pura con dos ranuras (oferta y compra). La app las llena con `AccionesDeCompra`; la landing, con `TraspasoALaApp`. La landing no importa ni una operación.
+- `TarjetaOferta` recibe su acción por ranura, y `CompanyProfile` la recibe de la página que lo monta. `TarjetaCatalogoPublica` toma `espacio` y arma la ficha con el mapa único de rutas.
+- `GET /api/v1/auth/sesion` (nuevo, solo lectura): rol y casa, sin identidad y sin caché. Lo consulta el hook `useSesionLigera`, una vez por página, sin volver dinámico el layout público.
+
+**El traspaso reconoce quién mira**
+
+| Quien mira | Ve |
+|---|---|
+| Visitante | «Iniciar sesión» y «Crear cuenta», que vuelven a la ficha de la app |
+| Cliente | Enlace directo a la ficha dentro de `/cliente` |
+| Administrador, empleado, vendedor, superadmin | «Ir a mi panel»; ningún enlace de compra |
+
+Mientras llega la respuesta (y sin JavaScript) se pinta la variante de visitante, cuyos enlaces funcionan para cualquiera porque `/login` devuelve en un solo salto a quien ya tiene sesión.
+
+**Destinos de retorno endurecidos (`src/lib/auth/destino-seguro.ts`)**
+
+Un único validador para `?redirect=` y `?next=`, usado por el proxy, el login, el asistente de registro y los dos formularios clásicos. Solo acepta rutas internas autorizadas, normaliza (`/a/../b`, `%2e%2e`), rechaza esquemas, contrabarras, controles y barras dobles, nunca acepta el propio flujo de acceso (sin bucles) y, con el rol a la vista, descarta destinos de espacios que ese rol no puede abrir. Cambios de comportamiento a tener presentes:
+
+- El registro clásico general no respetaba `?next=`; ahora sí, también al confirmar el correo. «Regístrate» desde el login conserva el destino.
+- El proxy recuerda ruta **y consulta** al mandar al login, y no duplica la consulta propia del login. Antes `/login?redirect=` perdía la consulta.
+- Con sesión, `/login?redirect=` da un solo salto al destino permitido para el rol, o a su casa.
+
+**Guardia reforzada (`tests/separacion-landing-app.test.ts`)**
+
+El cierre de imports de la landing es transitivo: sigue importaciones, reexportaciones e imports dinámicos, ignora los de solo tipos y se detiene al llegar a un nodo que opera (componentes de compra, servicios que escriben, o cualquier módulo `'use server'` no permitido). No prohíbe por directorio, así que una tarjeta que solo presenta no se marca. Verificada por mutación en tres casos que debe atrapar y dos que debe dejar pasar. Cuando falla, imprime la cadena de imports que lo demuestra.
+
+**Pruebas de comportamiento (`tests/e2e/separacion-f2.spec.ts`, móvil y escritorio)**: la landing no tiene formularios, botones de operación ni carrito, y al navegador de la landing no llega el código de las operaciones (se busca en los scripts descargados, no solo en lo visible); los tres estados del traspaso; el equipo no entra a la ficha de la app y vuelve a su espacio sin bucle; `/login` rechaza destinos externos, del propio acceso y de otros espacios; en la app, ficha, carrito y contador; la ficha no publicada se ve igual que la inexistente; el endpoint de sesión no filtra identidad.
+
+#### Hallazgos de F2
+
+- La ficha pública de un producto y la vitrina de empresa se renderizan **por visita** (`ƒ` en la tabla de rutas), aunque declaran `revalidate`. Ya era así antes de F2: el build de F1 las marca igual. La caché real es la de datos (`getItemCatalogoPublico`, con etiqueta). La portada y `/ofertas` siguen siendo estáticas (ISR) y una prueba lo fija.
+- La guardia transitiva encontró operaciones alcanzables que la directa no veía: la landing de invitación incrusta el alta de cuenta (`registro/actions`) y contadores del embudo. Se clasificaron como permitidas (alta de cuenta, captación B2B y analítica; no son pedidos ni compras) y quedan nombradas en el test.
+- El encabezado `x-nextjs-cache` ya no existe en esta versión de Next; las pruebas miran `Cache-Control`.
+- El formulario de pedido se llama «Hacer un pedido» también para servicios; lo que cambia es su título y su botón.
+- Las pruebas que escriben estados directamente en la base no ven el cambio si la lectura del catálogo está en caché con etiqueta; solo la invalidan las acciones reales.
+
 #### Excepciones vigentes, por fase que las elimina
 
 | Fase | Qué se elimina |
 |---|---|
 | F1 | Hecha. |
-| F2 | Detalle de producto operativo (`PedirForm`, `AgregarAlCarrito`, `ReclamarOfertaBoton`), `/carrito`, `/carrito/pagar/*`, icono de carrito de la barra pública, y la tarjeta del catálogo con destino propio. |
-| F3 | Excursiones: ficha con reserva, `/checkout`, carrito de excursiones en el layout público, seguir empresa y reseñas (decisión de producto), enlaces de la app a excursiones públicas, y la tarjeta de excursión con destino propio. |
+| F2 | Hecha. |
+| F3 | Excursiones: ficha con reserva, `/checkout`, carrito de excursiones en el layout público (`ExcursionCarritoWrapper`, contexto, modal de pasarela y acción de reserva), seguir empresa (decisión de producto), enlaces de la app a excursiones públicas, y la tarjeta de excursión con destino propio. |
 | F4 | Ofertas Membego, membresías, campañas, canje de beneficios (`/oferta/[codigo]`), constantes `RUTA_*` públicas desde la app, los avisos «Ver ofertas» y «Ver promociones» de compras y bonos, y las páginas públicas que leen la sesión. |
 
 La lista exacta, archivo por archivo y con conteo, está en el propio test.

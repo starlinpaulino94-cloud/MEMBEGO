@@ -1,5 +1,6 @@
 'use client'
 
+import { destinoInterno } from '@/lib/auth/destino-seguro'
 import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -44,6 +45,9 @@ export function LoginForm({
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // El destino de retorno ya validado (ver `destino-seguro`): «Regístrate» lo conserva
+  // para que una persona sin cuenta vuelva a lo que quería hacer después de crearla.
+  const destinoRetorno = destinoInterno(searchParams.get('redirect'))
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -201,7 +205,10 @@ export function LoginForm({
         {!isStaff && (
           <p className="mt-2 text-center text-small text-muted-foreground">
             ¿No tienes cuenta?{' '}
-            <Link href="/registro/cuenta" className="text-primary hover:underline">
+            <Link
+              href={destinoRetorno ? `/registro/cuenta?next=${encodeURIComponent(destinoRetorno)}` : '/registro/cuenta'}
+              className="text-primary hover:underline"
+            >
               Regístrate
             </Link>
           </p>

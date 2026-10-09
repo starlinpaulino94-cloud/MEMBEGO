@@ -104,6 +104,23 @@ const nextConfig: NextConfig = {
         destination: '/cliente/compras',
         permanent: false,
       },
+      // Separación landing/app (F2): el carrito y el pago ya no existen en la
+      // landing, que solo informa. Viven dentro de la app. Las URL viejas
+      // (favoritos, enlaces ya enviados, un `?redirect=` en vuelo) llegan a la
+      // pantalla de siempre: sin sesión, el proxy las manda al login y, tras
+      // entrar, de vuelta aquí; con sesión de cliente, directo. Redirección
+      // temporal: la ruta de la app es la definitiva, pero no se promete a los
+      // buscadores. La consulta (`?x=`) viaja con ellas.
+      {
+        source: '/carrito',
+        destination: '/cliente/carrito',
+        permanent: false,
+      },
+      {
+        source: '/carrito/pagar/:companySlug',
+        destination: '/cliente/carrito/pagar/:companySlug',
+        permanent: false,
+      },
     ]
   },
   headers: async () => {

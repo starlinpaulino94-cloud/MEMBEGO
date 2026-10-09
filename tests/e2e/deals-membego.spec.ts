@@ -43,6 +43,9 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
 
   const oferta = () => prismaDeArnes().deal.findUniqueOrThrow({ where: { id: dealId } })
 
+  /** Donde se OBTIENE una oferta: Explorar ofertas, dentro de la app. La landing solo la muestra y traspasa. */
+  const OFERTAS_EN_LA_APP = '/cliente/explorar?ver=ofertas'
+
   async function obtener(p: Page, url: string) {
     await p.goto(url)
     const tarjeta = p.getByRole('article', { name: TITULO })
@@ -122,6 +125,9 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
     await expect(tarjeta.getByText('RD$500.00')).toBeVisible()
     const texto = await tarjeta.innerText()
     expect(texto).not.toMatch(/presupuesto|cuota|CPA/i)
+    // La landing muestra la oferta pero NO la opera: ni botón de obtener, solo el traspaso a la app.
+    await expect(tarjeta.getByRole('button', { name: 'Obtener oferta' })).toHaveCount(0)
+    await expect(tarjeta.getByRole('link', { name: 'Obtener en la app' })).toBeVisible()
     // También en la ficha de la empresa.
     await page.goto(`/empresas/${con.slug}`)
     await expect(page.locator('#ofertas').getByRole('article', { name: TITULO })).toBeVisible()
@@ -130,12 +136,36 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
     await expect(page.locator('#ofertas')).toHaveCount(0)
   })
 
-  test('sin sesión, «Obtener oferta» manda a iniciar sesión (y vuelve a las ofertas)', async ({ browser }) => {
+  test('sin sesión, la landing ofrece «Obtener en la app»: lleva a iniciar sesión y volver a la ficha de la app, donde está el botón', async ({ browser }) => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
-    await obtener(p, '/ofertas')
+    await p.goto('/ofertas')
+    const tarjeta = p.getByRole('article', { name: TITULO })
+    await expect(tarjeta).toBeVisible()
+    await tarjeta.getByRole('link', { name: 'Obtener en la app' }).click()
     await expect(p).toHaveURL(/\/login\?redirect=/)
-    expect(decodeURIComponent(p.url())).toContain('/ofertas')
+    const destino = new URL(p.url()).searchParams.get('redirect') as string
+    expect(destino).toBe(`/cliente/empresas/${con.slug}/catalogo/lavado-oferta-${sufijo}`)
+    // Ya con sesión de cliente, ese mismo enlace entra directo a la ficha de la app, con el botón de obtener.
+    await entrarComo(ctx, 'dealsCliente', BASE)
+    await p.goto(p.url())
+    await expect(p).toHaveURL(new RegExp(`${destino}$`))
+    await expect(p.getByRole('button', { name: 'Obtener oferta' })).toBeVisible()
+    await ctx.close()
+  })
+
+  test('una cuenta de equipo no recibe el flujo de obtener: su enlace de traspaso la lleva a su panel', async ({ browser }) => {
+    const ctx = await browser.newContext()
+    await entrarComo(ctx, 'dealsAdmin', BASE, con.id)
+    const p = await ctx.newPage()
+    await p.goto('/ofertas')
+    const tarjeta = p.getByRole('article', { name: TITULO })
+    await expect(tarjeta).toBeVisible()
+    // Cuando llega la respuesta de sesión, el enlace de compra se sustituye por el del propio panel.
+    await expect(tarjeta.getByRole('link', { name: 'Ir a mi panel' })).toBeVisible()
+    await expect(tarjeta.getByRole('link', { name: 'Obtener en la app' })).toHaveCount(0)
+    await tarjeta.getByRole('link', { name: 'Ir a mi panel' }).click()
+    await expect(p).toHaveURL(/\/admin\/dashboard$/)
     await ctx.close()
   })
 
@@ -144,7 +174,7 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
     await entrarComo(ctx, 'dealsCliente', BASE)
-    await obtener(p, '/ofertas')
+    await obtener(p, OFERTAS_EN_LA_APP)
     await expect(p).toHaveURL(/\/cliente\/pedidos\/[a-z0-9]+$/, { timeout: 30_000 })
     pedidoId = p.url().split('/').pop() as string
     codigo = (await p.getByRole('heading', { name: /^MBG-/ }).innerText()).trim()
@@ -162,7 +192,7 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
     expect(r.savings.toFixed(2)).toBe('100.00')
 
     // Volver a pulsar «Obtener oferta» lleva al MISMO pedido: no se crea otro ni se aparta más presupuesto.
-    await obtener(p, '/ofertas')
+    await obtener(p, OFERTAS_EN_LA_APP)
     await expect(p).toHaveURL(new RegExp(`/cliente/pedidos/${pedidoId}$`), { timeout: 30_000 })
     expect(await prismaDeArnes().dealClaim.count({ where: { dealId } })).toBe(1)
     expect((await oferta()).budgetReserved.toFixed(2)).toBe('100.00')
@@ -239,7 +269,7 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
     const dos = await browser.newContext()
     const p2 = await dos.newPage()
     await entrarComo(dos, 'dealsCliente2', BASE)
-    await obtener(p2, '/ofertas')
+    await obtener(p2, OFERTAS_EN_LA_APP)
     await expect(p2).toHaveURL(/\/cliente\/pedidos\/[a-z0-9]+$/, { timeout: 30_000 })
     // 100 gastados + 100 apartados = el tope de 200.
     const o = await oferta()
@@ -251,7 +281,7 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
     const p3 = await tres.newPage()
     await entrarComo(tres, 'dealsCliente3', BASE)
     // Si la vitrina aún enseña la tarjeta (va atrasada), el servidor manda: dice que se agotó y no crea nada.
-    await p3.goto('/ofertas')
+    await p3.goto(OFERTAS_EN_LA_APP)
     const tarjeta = p3.getByRole('article', { name: TITULO })
     if (await tarjeta.count()) {
       await tarjeta.getByRole('button', { name: 'Obtener oferta' }).click()
@@ -292,7 +322,7 @@ test.describe('Ofertas con presupuesto · recorrido', () => {
     const tres = await browser.newContext()
     const p3 = await tres.newPage()
     await entrarComo(tres, 'dealsCliente3', BASE)
-    await p3.goto('/ofertas')
+    await p3.goto(OFERTAS_EN_LA_APP)
     await expect(p3.getByRole('article', { name: TITULO })).toHaveCount(0)
     expect(await prismaDeArnes().dealClaim.count({ where: { dealId } })).toBe(2)
     await tres.close()

@@ -204,14 +204,17 @@ test.describe('Experiencia comercial · recorrido completo', () => {
     const texto = (await p.locator('body').innerText()).replace(/\s+/g, ' ')
     expect(texto).not.toMatch(/\b100 unidades|Quedan 100|onHand|reserved/)
 
-    // Detalle: precio normal, promocional, ahorro, disponibilidad, condiciones y los dos caminos.
+    // Detalle (de CONSULTA, en la landing): precio normal, promocional, ahorro, disponibilidad, condiciones, y
+    // los dos caminos como TRASPASO a la app — la landing no tiene botones que operen.
     await tarjeta.click()
     await p.waitForURL(`**/empresas/${empresa.slug}/catalogo/${slugItem}`)
     await expect(p.getByRole('heading', { level: 1, name: PRODUCTO })).toBeVisible()
     await expect(p.getByText(/Ahorras RD\$2,400\.00/)).toBeVisible()
     await expect(p.getByText('Disponible').first()).toBeVisible()
-    await expect(p.getByRole('button', { name: 'Obtener oferta' })).toBeVisible()
-    await expect(p.getByRole('form', { name: 'Hacer un pedido' })).toBeVisible()
+    await expect(p.getByRole('link', { name: 'Obtener oferta en la app' })).toBeVisible()
+    await expect(p.getByRole('region', { name: 'Hacer un pedido' })).toBeVisible()
+    await expect(p.getByRole('button', { name: 'Obtener oferta' })).toHaveCount(0)
+    await expect(p.getByRole('form', { name: 'Hacer un pedido' })).toHaveCount(0)
     expect((await p.content()).includes('"onHand"')).toBe(false)
 
     // Dentro de la app: Explorar → Productos y Ofertas; y el inicio con «Ofertas destacadas».
@@ -230,7 +233,8 @@ test.describe('Experiencia comercial · recorrido completo', () => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
     await entrarComo(ctx, 'pedidosCliente', BASE)
-    await p.goto(`/empresas/${empresa.slug}/catalogo/${slugItem}`)
+    // La compra se hace en la ficha de la APP.
+    await p.goto(`/cliente/empresas/${empresa.slug}/catalogo/${slugItem}`)
     const form = p.getByRole('form', { name: 'Hacer un pedido' })
     await form.getByLabel('Cantidad').fill('2')
     await form.getByRole('button', { name: 'Enviar pedido' }).click()

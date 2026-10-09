@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { IconoCarrito } from '@/components/checkout/IconoCarrito'
 import { Search, MapPin, ChevronDown, User, Bell, Mic } from 'lucide-react'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { TabsEscritorio } from '@/components/layout/TabsEscritorio'
@@ -110,6 +111,7 @@ export function CustomerShell({
                 </span>
               )}
             </Link>
+            <IconoCarrito />
             <Link
               href="/cliente/perfil"
               aria-label="Mi cuenta"

@@ -1,3 +1,4 @@
+import { AccionDeOfertaPublica } from '@/components/public/AccionDeOfertaPublica'
 import type { Metadata } from 'next'
 import { BadgePercent } from 'lucide-react'
 import { ofertasPublicas } from '@/modules/deals/publico'
@@ -29,7 +30,7 @@ export default async function OfertasPublicasPage() {
       ) : (
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" id="ofertas">
           {ofertas.map((o) => (
-            <TarjetaOferta key={o.id} oferta={o} retorno="/ofertas" espacio="publico" />
+            <TarjetaOferta key={o.id} oferta={o} espacio="publico" accion={<AccionDeOfertaPublica oferta={o} />} />
           ))}
         </div>
       )}

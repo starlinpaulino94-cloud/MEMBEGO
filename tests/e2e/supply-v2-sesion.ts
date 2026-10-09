@@ -32,7 +32,7 @@ export interface UsuarioE2E {
   supabaseId: string
   email: string
   nombre: string
-  role: 'SUPERADMIN' | 'CLIENTE' | 'ADMINISTRADOR'
+  role: 'SUPERADMIN' | 'CLIENTE' | 'ADMINISTRADOR' | 'EMPLEADO'
   /** Empresa activa de la sesión (empleados del proveedor). */
   companyId: string | null
 }
@@ -87,6 +87,10 @@ const USUARIOS = {
   conciliacionAdmin: { email: 'e2e.conciliacion.admin@membego.test', nombre: 'Admin Conciliación E2E', role: 'ADMINISTRADOR' },
   /** Separación landing/app (F1): un cliente SIN pedidos ni empresa, para ver los estados vacíos de la app. */
   separacionCliente: { email: 'e2e.separacion.cliente@membego.test', nombre: 'Lucía Separación E2E', role: 'CLIENTE' },
+  /** Separación landing/app (F2): un cliente que compra, y dos cuentas de equipo (administrador y empleado) que NO deben recibir el flujo de compra. */
+  separacionCliente2: { email: 'e2e.separacion.cliente2@membego.test', nombre: 'Mario Separación E2E', role: 'CLIENTE' },
+  separacionAdmin: { email: 'e2e.separacion.admin@membego.test', nombre: 'Admin Separación E2E', role: 'ADMINISTRADOR' },
+  separacionEmpleado: { email: 'e2e.separacion.empleado@membego.test', nombre: 'Empleado Separación E2E', role: 'EMPLEADO' },
   /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */
   facturacionSuperadmin: { email: 'e2e.facturacion.sa@membego.test', nombre: 'Facturación SA E2E', role: 'SUPERADMIN' },
 } as const
