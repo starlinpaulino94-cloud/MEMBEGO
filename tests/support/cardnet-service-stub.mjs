@@ -155,3 +155,11 @@ export async function rutaValida() {
 export async function notificarAdmins() {
   return undefined
 }
+
+export function getPaymentProvider() {
+  return null
+}
+
+export async function arbitrarComprobanteCompraContraCapturaCardnet() {
+  return true
+}
