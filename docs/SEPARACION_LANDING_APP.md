@@ -28,7 +28,8 @@ Efecto en el plan: la pregunta 3 de §7 queda resuelta en contra de la recomenda
 | Fase | Estado |
 |---|---|
 | F0 · Red de seguridad | **Hecha.** Ver abajo. |
-| F1 a F6 | Pendientes de aprobación individual. |
+| F1 · Enlaces de la app a su propio espacio | **Hecha.** Ver abajo. |
+| F2 a F6 | Pendientes de aprobación individual. |
 
 ### F0 · Red de seguridad (hecha)
 
@@ -41,14 +42,34 @@ Solo pruebas y documentación; ningún archivo de `src` cambia.
 
 Límite conocido: las guardias son análisis de texto. Ven literales de ruta, constantes `RUTA_*` públicas e imports. No ven un enlace armado por concatenación arbitraria; para eso están el E2E y las pruebas de cada fase.
 
-#### Excepciones vigentes al cerrar F0, por fase que las elimina
+### F1 · Enlaces de la app a su propio espacio (hecha)
+
+Alcance real, más corto que el del plan original: tres piezas no tenían todavía un destino en `/cliente` y se reasignaron a la fase donde su destino existe.
+
+| Pieza | Fase |
+|---|---|
+| Avisos «Ver ofertas» y «Ver promociones» en compras y bonos (hablan de ofertas Membego de Supply; `/cliente/promociones` lista otra cosa) | F4 |
+| Tarjeta del catálogo (necesita el detalle de producto en la app) | F2 |
+| Tarjeta de excursión (necesita la ficha de excursión en la app) | F3 |
+
+Lo que sí se hizo:
+
+- `src/modules/comercio/rutas.ts` (nuevo, módulo puro): el mapa único de rutas por espacio, `publico` o `app`. F2 a F4 lo amplían; los componentes compartidos ya no escriben a mano la ruta de un recurso.
+- `TarjetaOferta` recibe `espacio` como dato **obligatorio** y arma el enlace a la empresa con ese mapa. La app pasa `app`, la landing pasa `publico`, y el perfil de empresa pasa el que le corresponde. Sin valor por defecto: una pantalla de la app que lo olvidara sacaría al cliente a la landing sin aviso.
+- «Ver el catálogo» en pedidos vacíos va a `/cliente/explorar?ver=productos`.
+- `BuscadorExcursiones` y `BuscadorUnificado` apuntan a `/cliente/excursiones`. **Ninguno está montado en ninguna pantalla hoy**; se corrigieron sus enlaces y se dejan para decidir en F6 si se eliminan.
+- Los logos de las pantallas de establecer contraseña del cliente y del vendedor (sin sesión todavía) van a `/login` y no a la portada.
+
+Pruebas: `tests/comercio-rutas.test.ts` (el mapa, y que cada tarjeta declara el espacio que corresponde a donde se pinta, algo que el tipado no puede comprobar), la guardia de F0 con la lista reducida y verificada por mutación, y `tests/e2e/separacion-f1.spec.ts` (móvil y escritorio, incluida la comprobación de que la landing no cambió).
+
+#### Excepciones vigentes, por fase que las elimina
 
 | Fase | Qué se elimina |
 |---|---|
-| F1 | Enlaces de la app a `/catalogo`, `/promociones` y `/excursiones`; `TarjetaCatalogoPublica`, `TarjetaOferta` y `ExcursionCard` con destino propio; logo del vendedor a `/`. |
-| F2 | Detalle de producto operativo (`PedirForm`, `AgregarAlCarrito`, `ReclamarOfertaBoton`), `/carrito`, `/carrito/pagar/*`, icono de carrito de la barra pública. |
-| F3 | Excursiones: ficha con reserva, `/checkout`, carrito de excursiones en el layout público, seguir empresa y reseñas (decisión de producto), enlaces de la app a excursiones públicas. |
-| F4 | Ofertas Membego, membresías, campañas, canje de beneficios (`/oferta/[codigo]`), constantes `RUTA_*` públicas desde la app, y las páginas públicas que leen la sesión. |
+| F1 | Hecha. |
+| F2 | Detalle de producto operativo (`PedirForm`, `AgregarAlCarrito`, `ReclamarOfertaBoton`), `/carrito`, `/carrito/pagar/*`, icono de carrito de la barra pública, y la tarjeta del catálogo con destino propio. |
+| F3 | Excursiones: ficha con reserva, `/checkout`, carrito de excursiones en el layout público, seguir empresa y reseñas (decisión de producto), enlaces de la app a excursiones públicas, y la tarjeta de excursión con destino propio. |
+| F4 | Ofertas Membego, membresías, campañas, canje de beneficios (`/oferta/[codigo]`), constantes `RUTA_*` públicas desde la app, los avisos «Ver ofertas» y «Ver promociones» de compras y bonos, y las páginas públicas que leen la sesión. |
 
 La lista exacta, archivo por archivo y con conteo, está en el propio test.
 

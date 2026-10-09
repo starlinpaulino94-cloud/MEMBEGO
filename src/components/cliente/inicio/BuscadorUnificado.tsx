@@ -165,7 +165,7 @@ export function BuscadorUnificado() {
                   Actividades ({resultados!.excursiones.length})
                 </h3>
                 <Link
-                  href={`/excursiones?q=${encodeURIComponent(q)}`}
+                  href={`/cliente/excursiones?q=${encodeURIComponent(q)}`}
                   className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
                 >
                   Ver todas <ChevronRight className="h-4 w-4" />
@@ -237,7 +237,7 @@ export function BuscadorUnificado() {
               </div>
               <div className="flex justify-center pt-2">
                 <Link
-                  href={`/excursiones?q=${encodeURIComponent(q)}`}
+                  href={`/cliente/excursiones?q=${encodeURIComponent(q)}`}
                   className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
                 >
                   Ver todas las excursiones <ChevronRight className="h-4 w-4" />

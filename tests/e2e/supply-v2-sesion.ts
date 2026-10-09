@@ -85,6 +85,8 @@ const USUARIOS = {
   carritoCliente: { email: 'e2e.carrito.cliente@membego.test', nombre: 'Rosa Carrito E2E', role: 'CLIENTE' },
   /** Conciliación y riesgo (F9): quien administra una empresa y no puede entrar a las pantallas de la plataforma. */
   conciliacionAdmin: { email: 'e2e.conciliacion.admin@membego.test', nombre: 'Admin Conciliación E2E', role: 'ADMINISTRADOR' },
+  /** Separación landing/app (F1): un cliente SIN pedidos ni empresa, para ver los estados vacíos de la app. */
+  separacionCliente: { email: 'e2e.separacion.cliente@membego.test', nombre: 'Lucía Separación E2E', role: 'CLIENTE' },
   /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */
   facturacionSuperadmin: { email: 'e2e.facturacion.sa@membego.test', nombre: 'Facturación SA E2E', role: 'SUPERADMIN' },
 } as const

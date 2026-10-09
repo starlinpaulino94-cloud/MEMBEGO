@@ -39,7 +39,7 @@ export function VibeComercio({ ofertas, productos }: { ofertas: readonly OfertaP
             <div className="flex gap-3 overflow-x-auto pb-2 pr-10 scrollbar-none">
               {ofertas.map((o) => (
                 <div key={o.id} className="w-72 shrink-0 sm:w-80">
-                  <TarjetaOferta oferta={o} retorno="/cliente/inicio" />
+                  <TarjetaOferta oferta={o} retorno="/cliente/inicio" espacio="app" />
                 </div>
               ))}
             </div>

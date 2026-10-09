@@ -2,14 +2,21 @@ import Link from 'next/link'
 import { Clock, Tag } from 'lucide-react'
 import type { OfertaPublica } from '@/modules/deals/publico-nucleo'
 import { formatearPrecio } from '@/modules/catalog/formato'
+import { rutaDeEmpresa, type Espacio } from '@/modules/comercio/rutas'
 import { ReclamarOfertaBoton } from './ReclamarOfertaBoton'
 
 function hasta(iso: string): string {
   return new Date(iso).toLocaleDateString('es-DO', { day: 'numeric', month: 'long', timeZone: 'America/Santo_Domingo' })
 }
 
-/** Tarjeta pública de una oferta. Solo recibe la proyección pública: nada interno llega aquí. */
-export function TarjetaOferta({ oferta: o, retorno, mostrarEmpresa = true }: { oferta: OfertaPublica; retorno: string; mostrarEmpresa?: boolean }) {
+/**
+ * Tarjeta pública de una oferta. Solo recibe la proyección pública: nada interno llega aquí.
+ *
+ * `espacio` es obligatorio a propósito: dice dónde se pinta (la landing o la app
+ * del cliente) y de él sale el enlace a la empresa. Con un valor por defecto, una
+ * pantalla de la app que lo olvidara sacaría al cliente a la landing sin aviso.
+ */
+export function TarjetaOferta({ oferta: o, retorno, espacio, mostrarEmpresa = true }: { oferta: OfertaPublica; retorno: string; espacio: Espacio; mostrarEmpresa?: boolean }) {
   return (
     <article className="flex flex-col overflow-hidden rounded-lg border border-border bg-card" aria-label={o.title}>
       {o.imageUrl ? (
@@ -29,7 +36,7 @@ export function TarjetaOferta({ oferta: o, retorno, mostrarEmpresa = true }: { o
             {o.variantName !== o.itemName ? ` · ${o.variantName}` : ''}
           </p>
           {mostrarEmpresa && (
-            <Link href={`/empresas/${o.empresa.slug}`} className="text-sm underline">
+            <Link href={rutaDeEmpresa(espacio, o.empresa.slug)} className="text-sm underline">
               {o.empresa.name}
             </Link>
           )}

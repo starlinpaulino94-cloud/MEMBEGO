@@ -686,7 +686,7 @@ export function CompanyProfile({
             <p className="mt-2 text-muted-foreground">Descuentos sobre lo que vende {company.name}. Obtén la oferta y canjéala con tu QR.</p>
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {ofertas.map((o) => (
-                <TarjetaOferta key={o.id} oferta={o} retorno={`${isApp ? `/cliente/empresas/${company.slug}` : `/empresas/${company.slug}`}#ofertas`} mostrarEmpresa={false} />
+                <TarjetaOferta key={o.id} espacio={isApp ? 'app' : 'publico'} oferta={o} retorno={`${isApp ? `/cliente/empresas/${company.slug}` : `/empresas/${company.slug}`}#ofertas`} mostrarEmpresa={false} />
               ))}
             </div>
           </section>

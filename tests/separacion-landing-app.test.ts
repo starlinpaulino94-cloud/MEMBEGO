@@ -132,38 +132,34 @@ function comparar(nombre: string, reales: Hallazgo[], permitidas: Excepcion[], q
 const EXCEPCIONES_APP_DIRECTA: Excepcion[] = [
   { archivo: 'src/app/(cliente)/cliente/bienvenida-ref/[companySlug]/page.tsx', clase: '/empresas', veces: 1, fase: 'F3' },
   { archivo: 'src/app/(cliente)/cliente/bienvenida-ref/[companySlug]/page.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(cliente)/cliente/bonos/page.tsx', clase: '/promociones', veces: 1, fase: 'F1' },
+  { archivo: 'src/app/(cliente)/cliente/bonos/page.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
   { archivo: 'src/app/(cliente)/cliente/bonos/page.tsx', clase: 'RUTA_* pública (Supply)', veces: 2, fase: 'F4' },
-  { archivo: 'src/app/(cliente)/cliente/compras/page.tsx', clase: '/promociones', veces: 1, fase: 'F1' },
+  { archivo: 'src/app/(cliente)/cliente/compras/page.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
   { archivo: 'src/app/(cliente)/cliente/cupones/page.tsx', clase: 'RUTA_* pública (Supply)', veces: 2, fase: 'F4' },
   { archivo: 'src/app/(cliente)/cliente/dashboard/ExcursionSearchCard.tsx', clase: '/empresas', veces: 1, fase: 'F3' },
   { archivo: 'src/app/(cliente)/cliente/dashboard/ExcursionSearchCard.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
   { archivo: 'src/app/(cliente)/cliente/fidelizacion/page.tsx', clase: 'RUTA_* pública (Supply)', veces: 2, fase: 'F4' },
-  { archivo: 'src/app/(cliente)/cliente/pedidos/page.tsx', clase: '/catalogo', veces: 1, fase: 'F1' },
-  { archivo: 'src/components/cliente/inicio/BuscadorExcursiones.tsx', clase: '/excursiones', veces: 3, fase: 'F1' },
   { archivo: 'src/components/cliente/inicio/BuscadorUnificado.tsx', clase: '/empresas', veces: 1, fase: 'F3' },
   { archivo: 'src/components/cliente/inicio/BuscadorUnificado.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
-  { archivo: 'src/components/cliente/inicio/BuscadorUnificado.tsx', clase: '/excursiones', veces: 2, fase: 'F1' },
 ]
 // Componentes que sirven a la app Y a la landing: lo operativo no puede estar
 // cableado al espacio público; debe recibir su destino.
 const EXCEPCIONES_COMPARTIDOS: Excepcion[] = [
-  { archivo: 'src/components/catalogo/TarjetaCatalogoPublica.tsx', clase: '/empresas', veces: 1, fase: 'F1' },
-  { archivo: 'src/components/catalogo/TarjetaCatalogoPublica.tsx', clase: '/empresas/*/catalogo', veces: 1, fase: 'F1' },
+  { archivo: 'src/components/catalogo/TarjetaCatalogoPublica.tsx', clase: '/empresas', veces: 1, fase: 'F2' },
+  { archivo: 'src/components/catalogo/TarjetaCatalogoPublica.tsx', clase: '/empresas/*/catalogo', veces: 1, fase: 'F2' },
   { archivo: 'src/components/catalogo/TarjetaCatalogoPublica.tsx', clase: 'RUTA_* pública (Supply)', veces: 1, fase: 'F4' },
   { archivo: 'src/components/checkout/AgregarAlCarrito.tsx', clase: '/carrito', veces: 2, fase: 'F2' },
   { archivo: 'src/components/checkout/CarritoVista.tsx', clase: '/carrito', veces: 1, fase: 'F2' },
   { archivo: 'src/components/checkout/CarritoVista.tsx', clase: '/empresas', veces: 2, fase: 'F2' },
   { archivo: 'src/components/checkout/IconoCarrito.tsx', clase: '/carrito', veces: 1, fase: 'F2' },
   { archivo: 'src/components/checkout/PagarFormulario.tsx', clase: '/carrito', veces: 4, fase: 'F2' },
-  { archivo: 'src/components/deals/TarjetaOferta.tsx', clase: '/empresas', veces: 1, fase: 'F1' },
   { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
   { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: '/promociones/(membego|membresias|campanas)', veces: 1, fase: 'F4' },
   { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: 'RUTA_* pública (Supply)', veces: 1, fase: 'F4' },
   { archivo: 'src/components/excursiones/ExcursionCarritoDrawer.tsx', clase: '/checkout', veces: 1, fase: 'F3' },
   { archivo: 'src/components/marketplace/CompanyProfile.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
-  { archivo: 'src/components/public/ExcursionCard.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F1' },
-  { archivo: 'src/components/public/ExcursionCard.tsx', clase: '/excursiones', veces: 1, fase: 'F1' },
+  { archivo: 'src/components/public/ExcursionCard.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
+  { archivo: 'src/components/public/ExcursionCard.tsx', clase: '/excursiones', veces: 1, fase: 'F3' },
 ]
 
 /** Vista previa del PANEL para la empresa (consulta, no operación del cliente) y la nav/pie de la landing. */
@@ -342,9 +338,7 @@ test('las páginas públicas no leen la sesión en servidor', () => {
 
 // ── 4 · Los paneles no dependen de la landing ───────────────────────────────
 
-const EXCEPCIONES_PANELES_A_LANDING: Array<{ archivo: string; fase: string }> = [
-  { archivo: 'src/app/(vendedor)/layout.tsx', fase: 'F1' },
-]
+const EXCEPCIONES_PANELES_A_LANDING: Array<{ archivo: string; fase: string }> = []
 
 test('los paneles y espacios autenticados no enlazan a la portada de la landing', () => {
   const archivos = [

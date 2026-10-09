@@ -133,7 +133,7 @@ export default async function CatalogoPublicoPage({
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {ofertas.map((o) => (
-              <TarjetaOferta key={o.id} oferta={o} retorno="/catalogo" />
+              <TarjetaOferta key={o.id} oferta={o} retorno="/catalogo" espacio="publico" />
             ))}
           </div>
         </section>

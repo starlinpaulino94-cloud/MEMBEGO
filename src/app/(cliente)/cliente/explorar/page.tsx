@@ -302,7 +302,7 @@ export default async function ExplorarPage({
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {ofertas.map((o) => (
-                <TarjetaOferta key={o.id} oferta={o} retorno={href({})} />
+                <TarjetaOferta key={o.id} oferta={o} retorno={href({})} espacio="app" />
               ))}
             </div>
           </>

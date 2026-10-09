@@ -137,10 +137,13 @@ test.describe('Pedidos Membego · recorrido', () => {
     await p.goto('/cliente/pedidos')
     // `.first()`: el código también sale en los avisos de la campanita (el cliente ya recibe «Pedido recibido»).
     await expect(p.getByRole('link', { name: new RegExp(codigo) }).first()).toBeVisible()
-    // El aviso sale después de responder: se espera a que llegue.
+    // El aviso sale después de responder: se espera a que llegue. La clave de
+    // duplicado es única POR PERSONA, así que el cliente («Pedido recibido») y la
+    // empresa («Nuevo pedido Membego») comparten clave: se comprueban los dos y
+    // no «el primero que devuelva la base», que no tiene orden.
     await expect
-      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido:${pedidoId}:RECIBIDO` } }))?.titulo ?? null, { timeout: 15_000 })
-      .toBe('Nuevo pedido Membego')
+      .poll(async () => (await prismaDeArnes().notificacion.findMany({ where: { dedupeKey: `pedido:${pedidoId}:RECIBIDO` }, select: { titulo: true } })).map((n) => n.titulo), { timeout: 15_000 })
+      .toEqual(expect.arrayContaining(['Nuevo pedido Membego', 'Pedido recibido']))
     await ctx.close()
   })
 
