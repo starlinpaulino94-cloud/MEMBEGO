@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { TarjetaOferta } from '@/components/deals/TarjetaOferta'
+import { AccionDeOfertaPublica } from '@/components/public/AccionDeOfertaPublica'
 import { ofertasPublicas } from '@/modules/deals/publico'
 
 export const revalidate = 60
@@ -24,7 +25,7 @@ export default async function OfertaPublicaPage({
         Oferta de {oferta.empresa.name}. Reclámala para recibir tu cupón con QR.
       </p>
       <div className="mt-6">
-        <TarjetaOferta oferta={oferta} retorno={`/ofertas/${encodeURIComponent(oferta.id)}`} />
+        <TarjetaOferta oferta={oferta} espacio="publico" accion={<AccionDeOfertaPublica oferta={oferta} />} />
       </div>
     </main>
   )
