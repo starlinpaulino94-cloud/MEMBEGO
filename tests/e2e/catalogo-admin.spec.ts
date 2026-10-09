@@ -151,7 +151,8 @@ test.describe('Catálogo unificado · panel', () => {
       return pub.getByText(NOMBRE).count()
     }, { timeout: 20_000, intervals: [500, 1000, 2000] }).toBeGreaterThan(0)
     // `.first()`: en la respuesta en streaming hay un instante con el bloque duplicado y oculto (ver docs/PRUEBAS-E2E.md).
-    await expect(pub.locator('#catalogo').first()).toBeVisible()
+    // Un lavado es un SERVICIO: va en la sección «Servicios» de la vitrina.
+    await expect(pub.locator('#servicios').first()).toBeVisible()
     // …y en el descubrimiento entre empresas (lista sin filtros) y en el inicio.
     await expect.poll(async () => {
       await pub.goto('/catalogo')

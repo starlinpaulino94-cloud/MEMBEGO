@@ -53,7 +53,7 @@ export function OnboardingChecklist({ onboarding }: { onboarding: OnboardingEmpr
                 {item.label}
               </span>
               {!item.done && !item.requeridoParaPublicar && (
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">comercio</span>
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-label-sm font-medium uppercase tracking-wide text-muted-foreground">comercio</span>
               )}
             </span>
             {!item.done && (

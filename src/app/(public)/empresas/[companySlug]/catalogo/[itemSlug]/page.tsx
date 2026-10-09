@@ -207,14 +207,14 @@ export default async function ItemCatalogoPublicoPage({ params }: Props) {
                   </span>
                 </p>
               )}
-              {!servicio && (
-                <AgregarAlCarrito
-                  companySlug={item.company.slug}
-                  moneda={item.currency}
-                  conVariantes={item.hasVariants}
-                  variantes={item.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, available: v.available }))}
-                />
-              )}
+              {/* El carrito admite productos Y servicios en un mismo pedido (una instalación con su cable);
+                  lo que cambia según el tipo es el botón principal de abajo: «Hacer un pedido» o «Reservar». */}
+              <AgregarAlCarrito
+                companySlug={item.company.slug}
+                moneda={item.currency}
+                conVariantes={item.hasVariants}
+                variantes={item.variants.map((v) => ({ id: v.id, name: v.name, price: v.price, available: v.available }))}
+              />
               <PedirForm
                 retorno={retorno}
                 moneda={item.currency}

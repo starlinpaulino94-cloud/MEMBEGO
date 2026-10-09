@@ -102,7 +102,7 @@ export function PanoramaComercial({
                     </div>
                     <dl className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
                       {v.sucursales.map((s) => (
-                        <div key={s.sucursalId} className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1">
+                        <div key={s.sucursalId} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1">
                           <dt className="truncate">{s.nombre}{!s.activa && ' (inactiva)'}</dt>
                           <dd className="tabular-nums font-medium text-foreground">
                             {formatearCantidad(s.disponible)}
@@ -177,7 +177,7 @@ export function PanoramaComercial({
         </CardHeader>
         <CardContent>
           {panorama.ventas.pedidosEsperando > 0 && (
-            <p className="mb-3 rounded-md bg-warning/10 px-3 py-2 text-sm">
+            <p className="mb-3 rounded-lg bg-warning/10 px-3 py-2 text-sm">
               <strong>{panorama.ventas.pedidosEsperando}</strong> pedido{panorama.ventas.pedidosEsperando === 1 ? '' : 's'} con este ítem espera{panorama.ventas.pedidosEsperando === 1 ? '' : 'n'} tu respuesta.
             </p>
           )}

@@ -133,13 +133,20 @@ export default async function InventarioVariantePage({ params }: { params: Promi
                 <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <span>
                     {formatearCantidad(r.cantidad)} en {r.sucursalNombre}
-                    {r.referenciaTipo === 'ORDER' && r.referenciaId ? ` · pedido ${r.referenciaId.slice(-8)}` : ''}
+                    {r.referenciaTipo === 'ORDER' && r.referenciaId ? (
+                      <>
+                        {' · '}
+                        <Link href={`/admin/pedidos-membego/${r.referenciaId}`} className="underline underline-offset-2">
+                          ver el pedido
+                        </Link>
+                      </>
+                    ) : null}
                   </span>
                   <span className="text-xs text-muted-foreground">vence {formatDateTime(r.expiresAt)}</span>
                 </li>
               ))}
             </ul>
-            <p className="pt-2 text-xs text-muted-foreground">Las reservas las crean los pedidos y se liberan solas al vencer.</p>
+            <p className="pt-2 text-xs text-muted-foreground">Las reservas las crean los pedidos del marketplace: se consumen al entregar con el QR, se liberan al cancelar y vencen solas si nadie las toca.</p>
           </CardContent>
         </Card>
       )}

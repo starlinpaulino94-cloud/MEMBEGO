@@ -171,7 +171,7 @@ test('la tarjeta y la ficha pública mandan una oferta de Membego a la página d
 test('/catalogo valida el origen de la URL contra los valores conocidos y no duplica las ofertas destacadas en la lista', () => {
   const s = readFileSync('src/app/(public)/catalogo/page.tsx', 'utf8')
   assert.match(s, /sp\.origen === 'supply' \|\| sp\.origen === 'empresas' \? sp\.origen : null/)
-  assert.match(s, /const conDestacadas = origen === null && !q && pagina === 0/)
+  assert.match(s, /const conDestacadas = origen === null && !q && !categoria && pagina === 0/)
   assert.match(s, /origen === 'empresas' \|\| \(origen === null && !q\) \? \{ origen: 'EMPRESAS' as const \}/)
 })
 

@@ -80,14 +80,20 @@ test.describe('Catálogo unificado · público', () => {
   test('la vitrina de la empresa muestra lo publicado y nada más', async ({ page }) => {
     const r = await ir(page, `/empresas/${a.slug}`)
     expect(r?.status()).toBe(200)
+    // La vitrina separa lo que se recoge (#catalogo · Productos) de lo que se presta (#servicios · Servicios).
     const seccion = page.locator('#catalogo')
+    const servicios = page.locator('#servicios')
     await expect(seccion).toBeVisible()
-    await expect(seccion.getByText(`Lavado completo ${sufijo}`)).toBeVisible()
+    await expect(servicios).toBeVisible()
+    await expect(servicios.getByText(`Lavado completo ${sufijo}`)).toBeVisible()
     await expect(seccion.getByText(`Camiseta oficial ${sufijo}`)).toBeVisible()
     // «Desde» el menor precio DISPONIBLE (la agotada y la descontinuada no cuentan).
     await expect(seccion.getByText(/Desde\s*RD\$800\.00/)).toBeVisible()
-    await expect(seccion.getByText(/RD\$650\.50/)).toBeVisible()
-    for (const oculto of ['Borrador interno', 'Pausado', 'Solo caja']) await expect(seccion.getByText(oculto)).toHaveCount(0)
+    await expect(servicios.getByText(/RD\$650\.50/)).toBeVisible()
+    for (const oculto of ['Borrador interno', 'Pausado', 'Solo caja']) {
+      await expect(seccion.getByText(oculto)).toHaveCount(0)
+      await expect(servicios.getByText(oculto)).toHaveCount(0)
+    }
     const html = await page.content()
     for (const secreto of [COSTO_SECRETO, SKU_SECRETO]) expect(html).not.toContain(secreto)
   })

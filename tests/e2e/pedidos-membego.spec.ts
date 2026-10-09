@@ -75,7 +75,8 @@ test.describe('Pedidos Membego · recorrido', () => {
     await expect(form).toBeVisible()
     await form.getByLabel('Cantidad').fill(cantidad)
     if (nota) await form.getByLabel(/Nota para la empresa/).fill(nota)
-    await form.getByRole('button', { name: 'Enviar pedido' }).click()
+    // El botón principal depende de lo que se compra: «Enviar pedido» (producto) o «Reservar» (servicio).
+    await form.getByRole('button', { name: /Enviar pedido|Reservar/ }).click()
   }
 
   test('prepara: una empresa que recibe pedidos (producto con stock y un servicio), otra con catálogo pero sin pedidos', async () => {
@@ -137,7 +138,7 @@ test.describe('Pedidos Membego · recorrido', () => {
     await expect(p.getByRole('link', { name: new RegExp(codigo) })).toBeVisible()
     // El aviso sale después de responder: se espera a que llegue.
     await expect
-      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido-nuevo:${pedidoId}` } }))?.titulo ?? null, { timeout: 15_000 })
+      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido:${pedidoId}:RECIBIDO` } }))?.titulo ?? null, { timeout: 15_000 })
       .toBe('Nuevo pedido Membego')
     await ctx.close()
   })

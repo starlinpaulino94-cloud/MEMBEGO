@@ -30,6 +30,7 @@ const INCLUDE_PUBLICO = Prisma.validator<Prisma.DealInclude>()({
     select: {
       id: true,
       name: true,
+      isDefault: true,
       price: true,
       item: {
         select: {

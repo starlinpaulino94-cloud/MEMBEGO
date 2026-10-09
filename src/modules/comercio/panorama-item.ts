@@ -100,11 +100,6 @@ export interface PanoramaDelItem {
 const DIAS_VENTAS = 90
 const HISTORIAL_MAX = 25
 
-function peor(a: EstadoStock, b: EstadoStock): EstadoStock {
-  const orden: EstadoStock[] = ['AGOTADO', 'BAJO', 'OK']
-  return orden.indexOf(a) <= orden.indexOf(b) ? a : b
-}
-
 function dos(n: { toFixed(d: number): string } | number | null | undefined): string {
   if (n == null) return '0.00'
   return typeof n === 'number' ? n.toFixed(2) : n.toFixed(2)
@@ -186,14 +181,19 @@ export async function panoramaDelItemEnTx(tx: Tx, companyId: string, itemId: str
       })
     }
     const activas = filas.filter((f) => f.activa)
+    const totalDisponible = filas.reduce((a, f) => a + f.disponible, 0)
+    // El estado de la VARIANTE mira el conjunto: una sucursal sin existencias no
+    // «agota» un producto que en otra tiene 100. Agotado = nada en ninguna; bajo =
+    // alguna sucursal activa cruzó su umbral; si no, en stock.
+    const estado: EstadoStock = totalDisponible <= 0 ? 'AGOTADO' : activas.some((f) => f.estado === 'BAJO') ? 'BAJO' : 'OK'
     return {
       varianteId: v.id,
       nombre: v.name,
       esDefault: v.isDefault,
       sucursales: filas,
-      totalDisponible: filas.reduce((a, f) => a + f.disponible, 0),
+      totalDisponible,
       totalReservado: filas.reduce((a, f) => a + f.reserved, 0),
-      estado: activas.length === 0 ? 'AGOTADO' : activas.map((f) => f.estado).reduce(peor, 'OK'),
+      estado,
     }
   })
 
