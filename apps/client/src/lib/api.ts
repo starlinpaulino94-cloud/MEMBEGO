@@ -2,9 +2,10 @@ import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 import { z } from 'zod'
 import {
+  cardnetCaptureSessionSchema,
   cardnetPaymentStatusSchema,
+  cardnetProcessingSessionSchema,
   cardnetPromotionPurchaseSchema,
-  cardnetSessionStartSchema,
   type CardnetSessionTarget,
 } from './cardnet-api-contracts'
 import { supabase } from './supabase'
@@ -72,6 +73,30 @@ export type JsonObject = Record<string, unknown>
 async function parseCardnetResponse<T>(request: Promise<unknown>, schema: z.ZodType<T>): Promise<T> {
   return schema.parse(await request)
 }
+
+const cardnetProcessingSessionResponseSchema = z
+  .object({ status: z.literal('processing') })
+  .passthrough()
+  .refine(
+    (response) =>
+      ![
+        'captureNonce',
+        'expiresAt',
+        'amount',
+        'currency',
+        'captureUrl',
+        'scriptUrl',
+        'publicKey',
+        'uniqueId',
+      ].every((field) => Object.prototype.hasOwnProperty.call(response, field)),
+    { message: 'Processing CardNET response cannot carry a capture session' }
+  )
+  .pipe(cardnetProcessingSessionSchema)
+
+export const cardnetSessionStartResponseSchema = z.union([
+  cardnetProcessingSessionResponseSchema,
+  cardnetCaptureSessionSchema,
+])
 
 // --- Marketplace / catálogo ---
 export interface CompanyPublic {
@@ -1226,7 +1251,7 @@ export const api = {
 
     return parseCardnetResponse(
       postJson<unknown>('/api/v1/cliente/pagos/cardnet/sesion', body),
-      cardnetSessionStartSchema
+      cardnetSessionStartResponseSchema
     )
   },
   confirmCardnetCapture: (input: {
