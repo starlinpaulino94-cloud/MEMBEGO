@@ -22,6 +22,7 @@ import {
 } from './domain'
 import { fallo } from './errores'
 import { validarPromotionParaReclamoEnTx } from './promotion-gate'
+import { finDeVentanaCampana } from '@/modules/engagement/ventana-campana'
 import { COLUMNAS_DE_OFERTA, ajustarEstadoPorPresupuestoEnTx, filaDeOferta } from './reclamos'
 
 /**
@@ -325,7 +326,7 @@ export async function motivoNoReclamarEnTx(tx: Tx, companyId: string, dealId: st
 export async function reclamarOfertaEnTx(
   tx: Tx,
   companyId: string,
-  e: { dealId: string; customerId: string; locationId: string },
+  e: { dealId: string; customerId: string; locationId: string; campaignId?: string | null },
   ahora = new Date()
 ): Promise<ReclamoCreado> {
   if (typeof e.dealId !== 'string' || e.dealId === '') fallo('OFERTA_NO_ENCONTRADA', 'La oferta no existe.')
@@ -347,6 +348,24 @@ export async function reclamarOfertaEnTx(
         at: ahora,
       })
     : null
+  // La campaña solo recibe atribución si el reclamo llegó directamente por un
+  // enlace activo de esa campaña al mismo Deal y empresa. El ID recibido es
+  // entrada no confiable: se verifica dentro de la misma transacción del reclamo.
+  let campaignId: string | null = null
+  if (typeof e.campaignId === 'string' && e.campaignId.length > 0 && e.campaignId.length <= 60) {
+    const campana = await tx.marketingCampaign.findFirst({
+      where: { id: e.campaignId, companyId, dealId: previa.id, estado: 'ACTIVA' },
+      select: {
+        id: true,
+        fechaInicio: true,
+        fechaFin: true,
+        horaInicioMin: true,
+        horaFinMin: true,
+        diasSemana: true,
+      },
+    })
+    if (campana && finDeVentanaCampana(campana, ahora)) campaignId = campana.id
+  }
   // Cada cupón aparta stock y presupuesto hasta que se canjea o vence: el mismo tope de pedidos abiertos que el
   // checkout (que cuenta también los cupones) impide que una cuenta acapare una oferta entera sin ir a canjear.
   if ((await contarPedidosAbiertosEnTx(tx, companyId, e.customerId)) >= MAX_PEDIDOS_ABIERTOS_POR_CLIENTE) {
@@ -399,7 +418,7 @@ export async function reclamarOfertaEnTx(
       locationId: e.locationId,
       origin: 'MARKETPLACE',
       lineas: [{ varianteId: variante.id, cantidad: 1, descuento: ahorro.toFixed(2) }],
-      atribucion: { channel: 'PROMOTION_CLAIM', promotionId: previa.id },
+      atribucion: { channel: 'PROMOTION_CLAIM', promotionId: previa.id, campaignId },
       notas: `Oferta «${previa.title}»`,
       fuente: { tipo: FUENTE_DE_RECLAMO, id: `${previa.id}:${e.customerId}` },
       ahora,
@@ -431,6 +450,7 @@ export async function reclamarOfertaEnTx(
     reservado: reservada.budgetReserved.toFixed(2),
     presupuesto: reservada.budgetTotal.toFixed(2),
     promotion: promotionAplicada,
+    campaignId,
   })
   await ajustarEstadoPorPresupuestoEnTx(tx, { actorId: null }, companyId, reservada, ahora, 'reclamo')
   return { claimId: reclamo.id, orderId: pedido.pedidoId, orderCode: pedido.code, savings: ahorro.toFixed(2), total: pedido.total, expiresAt }

@@ -4,12 +4,15 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Star, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
-import { subirImagenCatalogo, ponerPortadaCatalogo, eliminarImagenCatalogo } from '@/modules/catalog/actions'
+import { prepararSubidaImagenCatalogo, confirmarImagenCatalogo, ponerPortadaCatalogo, eliminarImagenCatalogo } from '@/modules/catalog/actions'
+import { createClient } from '@/lib/supabase/client'
+import { mensajeDeStorage } from '@/lib/storage-errores'
 import { Button } from '@/components/ui/button'
 import { DeleteButton } from '@/components/ui/delete-button'
 
 const ACEPTADOS = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_MB = 5
+const BUCKET = 'promociones'
 
 export interface ImagenVista {
   id: string
@@ -35,19 +38,35 @@ export function ImagenesPanel({
   const [subiendo, setSubiendo] = useState(false)
   const [pending, start] = useTransition()
 
+  /**
+   * Tres pasos (ver `prepararSubidaImagenCatalogo`): el servidor decide la ruta
+   * y firma una URL de un solo uso; el archivo va DIRECTO a Storage desde aquí,
+   * sin pasar por la Server Action (y sin su límite de cuerpo); el servidor
+   * comprueba el archivo subido y registra la fila.
+   */
   async function subir(file: File) {
     if (!ACEPTADOS.includes(file.type)) return void toast.error('Formato no permitido. Usa JPG, PNG o WebP.')
     if (file.size > MAX_MB * 1024 * 1024) return void toast.error(`La imagen no puede superar ${MAX_MB} MB.`)
     setSubiendo(true)
     try {
-      const r = await subirImagenCatalogo(itemId, file)
-      if (!r.ok) toast.error(r.error)
-      else {
-        toast.success('Imagen subida.')
-        router.refresh()
+      const permiso = await prepararSubidaImagenCatalogo(itemId, file.type)
+      if (!permiso.ok) return void toast.error(permiso.error)
+
+      const { error } = await createClient()
+        .storage.from(BUCKET)
+        .uploadToSignedUrl(permiso.path, permiso.token, file, { contentType: file.type, upsert: false })
+      if (error) {
+        console.error('[catalogo-imagen] uploadToSignedUrl:', error.message)
+        return void toast.error(mensajeDeStorage(error, { maxMb: MAX_MB }))
       }
-    } catch {
-      toast.error('No se pudo subir la imagen. Intenta de nuevo.')
+
+      const r = await confirmarImagenCatalogo(itemId, permiso.path)
+      if (!r.ok) return void toast.error(r.error)
+      toast.success('Imagen subida.')
+      router.refresh()
+    } catch (e) {
+      console.error('[catalogo-imagen]', e)
+      toast.error(mensajeDeStorage(e, { maxMb: MAX_MB }))
     } finally {
       setSubiendo(false)
       if (ref.current) ref.current.value = ''

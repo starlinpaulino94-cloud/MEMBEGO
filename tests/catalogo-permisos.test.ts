@@ -71,13 +71,14 @@ test('todas las acciones exportadas piden la guardia ANTES de tocar la base', ()
     'agregarVarianteCatalogo',
     'asignarCategoriasCatalogo',
     'cambiarEstadoItemCatalogo',
+    'confirmarImagenCatalogo',
     'crearCategoriaCatalogo',
     'crearItemCatalogo',
     'eliminarCategoriaCatalogo',
     'eliminarImagenCatalogo',
     'eliminarVarianteCatalogo',
     'ponerPortadaCatalogo',
-    'subirImagenCatalogo',
+    'prepararSubidaImagenCatalogo',
   ])
   for (const nombre of exportadas) {
     const desde = sinComentarios.indexOf(`export async function ${nombre}`)
@@ -98,19 +99,33 @@ test('contexto() exige la sección «catalogo» y saca la empresa de la sesión,
   assert.doesNotMatch(sinComentarios, /\bprisma\./, 'las acciones no usan el cliente global: todo va por conEmpresa')
 })
 
-test('subirImagenCatalogo autoriza y comprueba el cupo ANTES de crear el cliente de servicio', () => {
-  const desde = sinComentarios.indexOf('export async function subirImagenCatalogo')
+test('prepararSubidaImagenCatalogo autoriza y comprueba el cupo ANTES de crear el cliente de servicio', () => {
+  const desde = sinComentarios.indexOf('export async function prepararSubidaImagenCatalogo')
   const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
   const guardia = cuerpo.indexOf("contexto('editar')")
   const cupo = cuerpo.indexOf('exigirCupoDeImagen(')
-  const firma = cuerpo.indexOf('detectarTipoImagen(buffer)')
   const privilegiado = cuerpo.indexOf('createAdminClient()')
-  assert.ok(guardia >= 0 && cupo >= 0 && firma >= 0 && privilegiado >= 0, 'cambió el flujo de subida: revisa esta prueba')
+  assert.ok(guardia >= 0 && cupo >= 0 && privilegiado >= 0, 'cambió el flujo de subida: revisa esta prueba')
   assert.ok(guardia < cupo && cupo < privilegiado, 'el cliente de servicio se crea antes de autorizar o de mirar el cupo')
-  assert.ok(firma < privilegiado, 'se sube antes de comprobar la firma del archivo')
-  assert.doesNotMatch(cuerpo, /file\.type|file\.name/, 'vuelve a confiar en el MIME o el nombre del cliente')
-  assert.match(cuerpo, /upsert: false/)
+  assert.match(cuerpo, /createSignedUploadUrl\(path\)/, 'la URL firmada debe ser para la ruta que decide el servidor')
+  assert.doesNotMatch(cuerpo, /upsert: true/, 'una URL firmada nunca debe sobrescribir')
   assert.match(cuerpo, /rutaCatalogo\(c\.companyId, itemId,/, 'la ruta debe llevar la empresa de la SESIÓN')
+})
+
+test('confirmarImagenCatalogo autoriza, exige la ruta de este ítem y decide el tipo por la firma antes de registrar', () => {
+  const desde = sinComentarios.indexOf('export async function confirmarImagenCatalogo')
+  const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
+  const guardia = cuerpo.indexOf("contexto('editar')")
+  const ruta = cuerpo.indexOf('prefijoImagenesItem(c.companyId, itemId)')
+  const privilegiado = cuerpo.indexOf('createAdminClient()')
+  const firma = cuerpo.indexOf('detectarTipoImagen(buffer)')
+  const registro = cuerpo.indexOf('registrarImagenEnTx(')
+  assert.ok(guardia >= 0 && ruta >= 0 && privilegiado >= 0 && firma >= 0 && registro >= 0, 'cambió el flujo de confirmación: revisa esta prueba')
+  assert.ok(guardia < ruta && ruta < privilegiado, 'el cliente de servicio se crea antes de autorizar o de validar la ruta')
+  assert.ok(firma < registro, 'se registra la imagen antes de comprobar la firma del archivo')
+  assert.doesNotMatch(cuerpo, /file\.type|file\.name|tipoDeclarado/, 'vuelve a confiar en el MIME o el nombre del cliente')
+  // Lo que no pasa la validación no se queda en Storage: cada salida fallida borra el objeto.
+  assert.ok((cuerpo.match(/await descartar\(\)/g) ?? []).length >= 3, 'un archivo rechazado debe borrarse del bucket')
 })
 
 test('borrar una imagen solo toca del bucket lo que cuelga del ítem de esta empresa', () => {
