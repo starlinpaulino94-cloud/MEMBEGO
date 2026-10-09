@@ -1,12 +1,12 @@
 # MEMBEGO — estado de implementación
 
-> Fuente operativa vigente. Actualizada el **2026-10-09** en `codex/onboarding-foundation-cleanup`, con base `origin/main` **`2f57b6aca41ed055ff2034289e719efc7636d8a1`**. Esta documentación se integra en el PR de la rama; sus commits muestran la revisión exacta. El código y las verificaciones indicadas mandan sobre los informes históricos. La existencia de una función no prueba su configuración ni su uso en producción.
+> Fuente operativa vigente. Actualizada el **2026-10-09** en `codex/onboarding-foundation-cleanup`, con base `origin/main` **`2f57b6aca41ed055ff2034289e719efc7636d8a1`**. El HEAD publicado y sus checks están enlazados en el [PR #585](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/585); esa referencia se mantiene vigente al añadir commits. El código y las verificaciones indicadas mandan sobre los informes históricos. La existencia de una función no prueba su configuración ni su uso en producción.
 
 ## ESTADO ACTUAL
 
 ### Base y alcance
 
-Los PR [#583](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/583) (experiencia comercial, `claude/gracious-pasteur-87pexr`, `126c2e47`) y [#584](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/584) (`claude/wizardly-hypatia-x2l9av`, `3becfb59`) están fusionados. No queda pendiente integrar esas ramas. La limpieza de onboarding se entrega en el PR abierto desde esta rama; revisar allí los commits y checks actuales.
+Los PR [#583](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/583) (experiencia comercial, `claude/gracious-pasteur-87pexr`, `126c2e47`) y [#584](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/584) (`claude/wizardly-hypatia-x2l9av`, `3becfb59`) están fusionados. No queda pendiente integrar esas ramas. La limpieza de onboarding se entrega en el [PR #585](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/585), abierto y sin merge; consultar allí el SHA exacto de HEAD y el estado vigente de los checks.
 
 El producto es un monolito modular Next.js/React/TypeScript, Prisma y Supabase, con una app Expo y un satélite de restaurante que consumen HTTP. Commerce Core ya existe: no es una propuesta pendiente. La siguiente fase propuesta es **Growth Commerce Unification**, todavía sin implementar. El inventario del Car Wash y las compras/membresías legacy siguen siendo dominios distintos.
 
