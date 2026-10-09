@@ -44,6 +44,36 @@ export function rutaDeExcursion(espacio: Espacio, empresaSlug: string, excursion
   return espacio === 'app' ? `/cliente/empresas/${empresaSlug}/excursiones/${excursionSlug}` : `/empresas/${empresaSlug}/excursiones/${excursionSlug}`
 }
 
+/** El índice de promociones: en la landing, el escaparate; en la app, las promociones del cliente. */
+export function rutaDePromociones(espacio: Espacio): string {
+  return espacio === 'app' ? '/cliente/promociones' : '/promociones'
+}
+
+/** La ficha de una oferta Membego (Supply). La compra solo existe en la app. */
+export function rutaDeOfertaMembego(espacio: Espacio, slug: string): string {
+  return espacio === 'app' ? `/cliente/ofertas-membego/${slug}` : `/promociones/membego/${slug}`
+}
+
+/** La lista de campañas. */
+export function rutaDeCampanas(espacio: Espacio): string {
+  return espacio === 'app' ? '/cliente/campanas' : '/promociones/campanas'
+}
+
+/** La ficha de una campaña. */
+export function rutaDeCampana(espacio: Espacio, code: string): string {
+  return `${rutaDeCampanas(espacio)}/${code}`
+}
+
+/** Los planes de membresía de la red. Contratar solo existe en la app. */
+export function rutaDeMembresias(espacio: Espacio): string {
+  return espacio === 'app' ? '/cliente/membresias-membego' : '/promociones/membresias'
+}
+
+/** El regalo de una empresa que llega por enlace compartido (`/oferta/<código>`). Reclamarlo solo existe en la app. */
+export function rutaDeOfertaLegada(espacio: Espacio, codigo: string): string {
+  return espacio === 'app' ? `/cliente/oferta/${codigo}` : `/oferta/${codigo}`
+}
+
 /** El carrito de productos y servicios. Solo existe en la app: la landing no tiene carrito. */
 export const RUTA_CARRITO = '/cliente/carrito'
 

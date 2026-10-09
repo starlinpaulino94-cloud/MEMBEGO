@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { ArrowLeft, MapPin, Package, Sparkles } from 'lucide-react'
 import { formatearPrecio, ETIQUETA_TIPO } from '@/modules/catalog/formato'
 import { ETIQUETA_DISPONIBILIDAD } from '@/modules/catalog/publico-nucleo'
-import { rutaDeEmpresa, type Espacio } from '@/modules/comercio/rutas'
+import { rutaDeEmpresa, rutaDeOfertaMembego, type Espacio } from '@/modules/comercio/rutas'
 import type { FichaDeItemDatos } from '@/modules/comercio/ficha-item'
 
 /**
@@ -37,7 +37,7 @@ export function FichaDeItem({
   /** Agregar al carrito + pedir/reservar (app) o el traspaso (landing). Solo se pinta si la empresa recibe pedidos. */
   ranuraCompra: ReactNode
 }) {
-  const { item, hrefOferta, pedido, ofertas, mejorOferta, pct, agotado, servicio } = ficha
+  const { item, ofertaSlug, pedido, ofertas, mejorOferta, pct, agotado, servicio } = ficha
 
   return (
     <div>
@@ -75,7 +75,7 @@ export function FichaDeItem({
         <div>
           <p className="text-caption text-muted-foreground">{ETIQUETA_TIPO[item.type]}</p>
           <h1 className="mt-1 text-h1 text-foreground">{item.name}</h1>
-          {hrefOferta ? (
+          {ofertaSlug ? (
             <p className="mt-1 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-caption font-medium text-primary">Oferta MembeGo</p>
           ) : (
             <p className="mt-1 text-muted-foreground">
@@ -110,7 +110,7 @@ export function FichaDeItem({
               <span className={agotado ? 'text-muted-foreground' : item.disponibilidad === 'POCAS_UNIDADES' ? 'font-medium text-warning' : 'font-medium text-success'}>
                 {ETIQUETA_DISPONIBILIDAD[item.disponibilidad]}
               </span>
-              {!hrefOferta && <span className="text-muted-foreground"> · {servicio ? 'Servicio: se presta en la sucursal' : 'Producto: se recoge en la sucursal con tu QR'}</span>}
+              {!ofertaSlug && <span className="text-muted-foreground"> · {servicio ? 'Servicio: se presta en la sucursal' : 'Producto: se recoge en la sucursal con tu QR'}</span>}
             </p>
           </div>
 
@@ -185,8 +185,8 @@ export function FichaDeItem({
             </div>
           )}
 
-          {hrefOferta ? (
-            <Link href={hrefOferta} className="mt-6 inline-flex h-10 items-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground">
+          {ofertaSlug ? (
+            <Link href={rutaDeOfertaMembego(espacio, ofertaSlug)} className="mt-6 inline-flex h-10 items-center rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground">
               Ver la oferta y comprar
             </Link>
           ) : (

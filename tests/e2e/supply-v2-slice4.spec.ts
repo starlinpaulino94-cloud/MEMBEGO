@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
+import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE, pasarALaFichaDeLaApp } from './supply-v2-sesion'
 
 /**
  * MEMBEGO SUPPLY · SLICE 4 de punta a punta en navegador (§72–§75, §79).
@@ -98,7 +98,7 @@ async function ofertaPublicada(compras: Page, d: Datos): Promise<void> {
 async function compraPagada(cliente: Page, finanzas: Page, d: Datos, ref: string): Promise<string> {
   await cliente.goto('/promociones')
   await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.oferta }).click()
-  await cliente.waitForURL(/\/promociones\/membego\//)
+  await pasarALaFichaDeLaApp(cliente)
   await cliente.getByTestId('btn-comprar').click()
   await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
   const urlCompra = cliente.url()

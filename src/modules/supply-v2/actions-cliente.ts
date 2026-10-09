@@ -15,7 +15,7 @@ import { politicaDeVersion } from './finance/domain'
 import { MENSAJES_CUPON, MENSAJE_CUPON_OPACO, normalizarCodigoCupon } from './campaigns/domain'
 import { couponLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
-import { PAYMENT_METHODS_CLIENTE, RUTA_BENEFICIOS_CLIENTE, RUTA_COMPRAS_CLIENTE } from './core/catalogo'
+import { PAYMENT_METHODS_CLIENTE, RUTA_BENEFICIOS_CLIENTE, RUTA_COMPRAS_CLIENTE, RUTA_OFERTAS_CLIENTE } from './core/catalogo'
 
 /**
  * MEMBEGO SUPPLY · server actions del CLIENTE (§23, §26, §29, §36, §52).
@@ -29,6 +29,7 @@ function refrescarCliente(id?: string): void {
   revalidatePath(RUTA_COMPRAS_CLIENTE)
   if (id) revalidatePath(`${RUTA_COMPRAS_CLIENTE}/${id}`)
   revalidatePath('/promociones')
+  revalidatePath(RUTA_OFERTAS_CLIENTE, 'layout')
   revalidatePath(RUTA_BENEFICIOS_CLIENTE)
 }
 

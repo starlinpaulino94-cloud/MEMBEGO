@@ -31,7 +31,8 @@ Efecto en el plan: la pregunta 3 de §7 queda resuelta en contra de la recomenda
 | F1 · Enlaces de la app a su propio espacio | **Hecha.** Ver abajo. |
 | F2 · Producto, servicio, oferta, carrito y pago en la app | **Hecha.** Ver abajo. |
 | F3 · Excursiones, carrito único y vendedores en la app | **Hecha.** Ver abajo. |
-| F4 a F6 | Pendientes de aprobación individual. |
+| F4 · Ofertas Membego, membresías, campañas y regalos en la app | **Hecha.** Ver abajo. |
+| F5 y F6 | Pendientes de aprobación individual. |
 
 ### F0 · Red de seguridad (hecha)
 
@@ -142,6 +143,28 @@ Pruebas: `tests/separacion-f3.test.ts` (unitarias), guardia F0/F2 sin las excepc
 - Las excursiones de la portada (carruseles de promociones, planes y empresas) todavía enlazan a páginas públicas: es alcance de F4.
 - El E2E de reserva real contra Supabase (`reservas-excursiones.spec.ts`, `excursiones-catalogo.spec.ts`) se salta sin Supabase de pruebas; el nuevo `separacion-f3.spec.ts` sí corre con la sesión firmada local.
 
+### F4 · Ofertas Membego, membresías, campañas y regalos de empresa (hecha)
+
+| Antes | Ahora |
+|---|---|
+| `/promociones/membego/[slug]`: ficha pública con `BotonComprar` (beneficios, cupón, compra), leyendo la sesión | Ficha pública = consulta (misma presentación `FichaDeOfertaMembego`) con el traspaso «Comprar esta oferta». La compra vive en `/cliente/ofertas-membego/[slug]`. `?beneficio=` y `?cupon=` viajan del enlace público hasta la app |
+| `/promociones/membresias` con `BotonContratarMembresia` | Escaparate público de consulta (`ListaDeMembresias`) con «Contratar en la app»; contratar vive en `/cliente/membresias-membego` |
+| `/promociones/campanas` y `/[code]` leían la sesión para «para ti» y «Mis cupones» | La landing no conoce al cliente; `/cliente/campanas` y `/cliente/campanas/[code]` sí (`paraTi`, «Mis cupones»). Mismas presentaciones (`ListaDeCampanas`, `FichaDeCampana`), con enlaces del espacio donde se pintan |
+| `/oferta/[codigo]`: el regalo de una empresa se abría y reclamaba en la landing | La landing solo muestra «Tienes un regalo esperándote» y el traspaso «Abrir mi regalo» (el contenido del regalo no se filtra, ni a la vista previa). Abrirlo y reclamarlo vive en `/cliente/oferta/[codigo]` |
+| La app enlazaba a las rutas públicas de Supply (bonos, cupones, fidelización, compras, checkout, ficha de ítem) | Todas usan `RUTA_OFERTAS_CLIENTE`, `RUTA_CAMPANAS_CLIENTE`, `RUTA_MEMBRESIAS_CLIENTE` (en `core/catalogo.ts`) o el mapa único `rutas.ts` |
+
+Cómo se hizo: presentación compartida por espacio y ranuras (la landing pasa el traspaso, la app pasa el botón de verdad), mapa único de rutas ampliado (`rutaDeOfertaMembego`, `rutaDeCampana(s)`, `rutaDeMembresias`, `rutaDePromociones`, `rutaDeOfertaLegada`), constantes de cliente en Supply con un test que las ata a las públicas, y las acciones de Supply refrescan también las pantallas de la app. No se tocó ninguna regla de compra, beneficio, cupón, importe ni idempotencia, ni el contrato de la API.
+
+Con F4, todas las listas de excepciones de la guardia están vacías: la landing no alcanza ninguna operación comercial, ninguna página pública lee la sesión en servidor y la app no enlaza a rutas operativas públicas.
+
+#### Hallazgos de F4
+
+- La guardia no veía una ruta pública escrita en un **cargador** (`modules/comercio/ficha-item.ts`): la ficha de ítem de la app enlazaba «Ver la oferta y comprar» a la oferta pública. Se corrigió (el cargador devuelve el slug, la presentación arma la ruta por espacio) y la guardia ahora también escanea `src/modules/comercio` (con mutación verificada).
+- Los avisos de membresía (`supply.notify.membership_*`) llevaban a `/cliente/membresias`, que no es una página. Ahora llevan a `/cliente/fidelizacion`, donde está la membresía.
+- La ficha pública de la oferta ya no calcula beneficios ni promociones por cliente (no hay sesión): eso se ve en la app.
+- Las pruebas de sesión local firman `clienteId: null`; para el regalo de empresa (`getOfertaParaCliente` necesita el cliente) el arnés ganó un `clienteId` opcional.
+- Los recorridos de Supply (slices 2 a 8) y el puente siguen siendo la prueba de compra de punta a punta; `separacion-f4.spec.ts` prueba la separación y no repite la configuración de la cuenta de cobro.
+
 #### Excepciones vigentes, por fase que las elimina
 
 | Fase | Qué se elimina |
@@ -149,7 +172,7 @@ Pruebas: `tests/separacion-f3.test.ts` (unitarias), guardia F0/F2 sin las excepc
 | F1 | Hecha. |
 | F2 | Hecha. |
 | F3 | Hecha. |
-| F4 | Ofertas Membego, membresías, campañas, canje de beneficios (`/oferta/[codigo]`), constantes `RUTA_*` públicas desde la app, los avisos «Ver ofertas» y «Ver promociones» de compras y bonos, y las páginas públicas que leen la sesión. |
+| F4 | Hecha. No quedan excepciones en la guardia. |
 
 La lista exacta, archivo por archivo y con conteo, está en el propio test.
 

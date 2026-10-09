@@ -2,10 +2,10 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Package } from 'lucide-react'
 import { formatearPrecio } from '@/modules/catalog/formato'
-import { ETIQUETA_DISPONIBILIDAD, RUTA_OFERTAS_MEMBEGO, type ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
+import { ETIQUETA_DISPONIBILIDAD, type ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
 import type { OfertaPublica } from '@/modules/deals/publico-nucleo'
 import { ctaDelItem, esServicio, porcentajeDeAhorro } from '@/modules/comercio/vitrina'
-import { rutaDeItem, type Espacio } from '@/modules/comercio/rutas'
+import { rutaDeItem, rutaDeOfertaMembego, type Espacio } from '@/modules/comercio/rutas'
 
 /**
  * Tarjeta pública de un ítem del catálogo: la usan la vitrina de la empresa, el
@@ -30,9 +30,9 @@ export function TarjetaCatalogoPublica({
   /** La mejor oferta viva sobre este ítem (ver `modules/comercio/vitrina`). */
   oferta?: OfertaPublica | null
 }) {
-  // Una oferta de Membego (ítem puente) se compra en SU página: el checkout es el de Supply.
+  // Una oferta de Membego (ítem puente) tiene SU ficha: el checkout es el de Supply, y se compra dentro de la app.
   const esSupply = item.origen === 'SUPPLY' && !!item.ofertaSlug
-  const href = esSupply ? `${RUTA_OFERTAS_MEMBEGO}/${item.ofertaSlug}` : rutaDeItem(espacio, item.company.slug, item.slug)
+  const href = esSupply ? rutaDeOfertaMembego(espacio, item.ofertaSlug!) : rutaDeItem(espacio, item.company.slug, item.slug)
   const agotado = item.disponibilidad === 'AGOTADO'
   const pct = oferta ? porcentajeDeAhorro(oferta) : null
   const servicio = esServicio(item)

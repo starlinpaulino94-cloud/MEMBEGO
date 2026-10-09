@@ -1,7 +1,6 @@
 import { getItemCatalogoPublico } from '@/modules/marketplace/cached'
 import { opcionesDePedidoPublico } from '@/modules/orders/publico'
 import { ofertasPublicas } from '@/modules/deals/publico'
-import { RUTA_OFERTAS_MEMBEGO } from '@/modules/catalog/publico-nucleo'
 import { esServicio, porcentajeDeAhorro } from '@/modules/comercio/vitrina'
 
 /**
@@ -18,7 +17,8 @@ import { esServicio, porcentajeDeAhorro } from '@/modules/comercio/vitrina'
 export async function cargarFichaDeItem(companySlug: string, itemSlug: string) {
   const item = await getItemCatalogoPublico(companySlug, itemSlug)
   if (!item) return null
-  const hrefOferta = item.origen === 'SUPPLY' && item.ofertaSlug ? `${RUTA_OFERTAS_MEMBEGO}/${item.ofertaSlug}` : null
+  // El slug de la oferta Membego (Supply), no su ruta: la ruta depende del espacio donde se pinta la ficha.
+  const ofertaSlug = item.origen === 'SUPPLY' && item.ofertaSlug ? item.ofertaSlug : null
   // Pedir es de los productos de la EMPRESA: las ofertas de Membego se compran por su propio checkout.
   const pedido = item.origen === 'EMPRESA' ? await opcionesDePedidoPublico(item.company.slug) : null
   const ofertasDeLaEmpresa = item.origen === 'EMPRESA' ? await ofertasPublicas({ companySlug: item.company.slug, limite: 24 }).catch(() => []) : []
@@ -27,7 +27,7 @@ export async function cargarFichaDeItem(companySlug: string, itemSlug: string) {
   const mejorOferta = ofertas[0] ?? null
   return {
     item,
-    hrefOferta,
+    ofertaSlug,
     pedido,
     ofertas,
     mejorOferta,

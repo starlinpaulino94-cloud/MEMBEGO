@@ -1,12 +1,12 @@
 import { test, expect, type Page } from '@playwright/test'
-import { cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
+import { cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE, fichaDeLaApp } from './supply-v2-sesion'
 
 /**
  * MEMBEGO SUPPLY · SLICE 2 de punta a punta en navegador (§57–§59).
  *
  *   ADMIN    supply recibido (Slice 1 por la interfaz) → Crear oferta → 100 a
  *            RD$399 → publicar → oferta ACTIVA → Supply 900 / 100
- *   CLIENTE  /promociones → Oferta Membego → RD$600 → RD$399 → Comprar →
+ *   CLIENTE  /promociones → Oferta Membego (compra en la app) → RD$600 → RD$399 → Comprar →
  *            checkout con cuenta de Membego → «Ya pagué»
  *   ADMIN    Ventas y cobros → confirmar pago → derecho emitido
  *   CLIENTE  compra PAID, beneficio Disponible
@@ -137,7 +137,11 @@ test.describe('Supply · Slice 2', () => {
     await tarjetaOferta.click()
     await anonimo.waitForURL(/\/promociones\/membego\//)
     const urlPublica = anonimo.url()
-    await expect(anonimo.getByTestId('btn-comprar-login')).toBeVisible()
+    // La ficha pública solo informa: no hay botón de compra, hay traspaso a la ficha de la app, con el retorno guardado.
+    const urlApp = fichaDeLaApp(urlPublica)
+    await expect(anonimo.getByTestId('btn-comprar')).toHaveCount(0)
+    const traspaso = anonimo.getByRole('region', { name: 'Comprar esta oferta' })
+    await expect(traspaso.getByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute('href', `/login?redirect=${encodeURIComponent(new URL(urlApp).pathname)}`)
     // Nada interno llega al HTML público.
     const html = await anonimo.content()
     expect(html).not.toMatch(/unitCost|actualUnitCost|LOT-\d{4}|allocation/i)
@@ -149,7 +153,7 @@ test.describe('Supply · Slice 2', () => {
     const ctxCliente = await browser.newContext()
     const cliente = await ctxCliente.newPage()
     await entrarComo(ctxCliente, 'cliente', BASE)
-    await cliente.goto(urlPublica)
+    await cliente.goto(fichaDeLaApp(urlPublica))
     await expect(cliente.getByTestId('oferta-titulo').filter({ visible: true })).toHaveText(OFERTA)
     await expect(cliente.getByTestId('oferta-precio-regular').filter({ visible: true })).toContainText('600')
     await expect(cliente.getByTestId('oferta-precio-membego').filter({ visible: true })).toContainText('399')
@@ -216,7 +220,7 @@ test.describe('Supply · Slice 2', () => {
     await ctxOtro.close()
 
     // ── EXPIRACIÓN · segunda compra, reloj adelantado, cron ───────────────
-    await cliente.goto(urlPublica)
+    await cliente.goto(fichaDeLaApp(urlPublica))
     await cliente.getByTestId('btn-comprar').filter({ visible: true }).click()
     await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
     const urlSegunda = cliente.url()

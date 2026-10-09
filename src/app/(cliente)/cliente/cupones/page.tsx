@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { formatDate } from '@/lib/format'
 import { ChipCupon, ChipTipoCupon } from '@/components/supply-v2/chips'
 import { misCupones } from '@/modules/supply-v2/campaigns/queries'
-import { dineroSupplyV2, RUTA_CAMPANAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
+import { dineroSupplyV2, RUTA_CAMPANAS_CLIENTE, RUTA_OFERTAS_CLIENTE } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mis cupones' }
@@ -34,7 +34,7 @@ export default async function MisCuponesPage() {
         eyebrow="Membego"
         action={
           <Button asChild variant="outline">
-            <Link href={RUTA_CAMPANAS_PUBLICAS}>Ver campañas</Link>
+            <Link href={RUTA_CAMPANAS_CLIENTE}>Ver campañas</Link>
           </Button>
         }
       />
@@ -45,7 +45,7 @@ export default async function MisCuponesPage() {
           icon={<TicketPercent className="h-6 w-6" aria-hidden />}
           title="Todavía no tienes cupones"
           description="Cuando Membego publique una campaña con cupones o te asigne uno, lo verás aquí con las ofertas donde vale."
-          action={<Button asChild><Link href={RUTA_CAMPANAS_PUBLICAS}>Ver campañas</Link></Button>}
+          action={<Button asChild><Link href={RUTA_CAMPANAS_CLIENTE}>Ver campañas</Link></Button>}
         />
       ) : (
         <>
@@ -80,7 +80,7 @@ export default async function MisCuponesPage() {
                       <ul className="space-y-1 text-sm">
                         {c.ofertas.map((o) => (
                           <li key={o.slug}>
-                            <Link href={`${o.href}?cupon=${encodeURIComponent(c.code)}`} className="text-primary underline-offset-4 hover:underline" data-testid="cupon-oferta">
+                            <Link href={`${RUTA_OFERTAS_CLIENTE}/${o.slug}?cupon=${encodeURIComponent(c.code)}`} className="text-primary underline-offset-4 hover:underline" data-testid="cupon-oferta">
                               {o.titulo}
                             </Link>
                             <span className="block text-caption text-muted-foreground">{o.proveedor} · {dineroSupplyV2(o.salePrice, c.currency)}</span>
@@ -91,7 +91,7 @@ export default async function MisCuponesPage() {
                   )}
                   {c.usable && c.ofertas[0] && (
                     <Button asChild className="w-full">
-                      <Link href={`${c.ofertas[0].href}?cupon=${encodeURIComponent(c.code)}`} data-testid="btn-usar-cupon">Usar mi cupón</Link>
+                      <Link href={`${RUTA_OFERTAS_CLIENTE}/${c.ofertas[0].slug}?cupon=${encodeURIComponent(c.code)}`} data-testid="btn-usar-cupon">Usar mi cupón</Link>
                     </Button>
                   )}
                 </CardContent>

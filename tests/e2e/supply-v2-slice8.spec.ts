@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
+import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE, fichaDeLaApp } from './supply-v2-sesion'
 
 /**
  * MEMBEGO SUPPLY · SLICE 8 de punta a punta en navegador.
@@ -279,8 +279,12 @@ async function recorridoCompleto(browser: Browser) {
   await expect(tarjeta.getByTestId('plan-publico-incluye')).toContainText(d.beneficio)
   await cliente.screenshot({ path: 'test-results/shots/supply-v2-s8-escaparate.png', fullPage: true })
 
-  // ── 6 · la contrata: pedido de membresía por el checkout de siempre ─────
-  await tarjeta.getByTestId('btn-contratar-membresia').click()
+  // ── 6 · la contrata —en la app— : pedido de membresía por el checkout de siempre ─────
+  // El escaparate público solo informa: no tiene botón de contratar, tiene el traspaso a la app.
+  await expect(tarjeta.getByTestId('btn-contratar-membresia')).toHaveCount(0)
+  await tarjeta.getByRole('link', { name: 'Contratar en la app' }).click()
+  await cliente.waitForURL(/\/cliente\/membresias-membego$/)
+  await cliente.getByTestId('plan-publico').filter({ hasText: d.planPago }).filter({ visible: true }).getByTestId('btn-contratar-membresia').click()
   await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
   const urlMembresia = cliente.url()
   const orderMembresia = urlMembresia.split('/').pop()!
@@ -309,7 +313,7 @@ async function recorridoCompleto(browser: Browser) {
   await cliente.screenshot({ path: 'test-results/shots/supply-v2-s8-mi-fidelizacion.png', fullPage: true })
 
   // ── 8 · una compra de 1 000 da 10 puntos (1 por cada 100) ───────────────
-  await cliente.goto(urlOferta)
+  await cliente.goto(fichaDeLaApp(urlOferta))
   await expect(cliente.getByTestId('btn-comprar')).toBeVisible()
   // Sin elegir el bono del plan: se compra a precio completo, y los puntos
   // salen de lo que la clienta paga de verdad.
@@ -502,7 +506,7 @@ async function movil(browser: Browser) {
   await publicarPlan(compras, urlPrograma, d.planGratis)
 
   // ── El escaparate y la contratación en el teléfono ──────────────────────
-  await cliente.goto('/promociones/membresias')
+  await cliente.goto('/cliente/membresias-membego')
   const tarjeta = cliente.getByTestId('plan-publico').filter({ hasText: d.planGratis }).filter({ visible: true })
   await expect(tarjeta.getByTestId('plan-publico-precio')).toHaveText('Gratis')
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)

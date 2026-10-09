@@ -130,23 +130,18 @@ function comparar(nombre: string, reales: Hallazgo[], permitidas: Excepcion[], q
 
 // La app del cliente: ningún enlace a la landing, sea la ruta que sea.
 const EXCEPCIONES_APP_DIRECTA: Excepcion[] = [
-  { archivo: 'src/app/(cliente)/cliente/bonos/page.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
-  { archivo: 'src/app/(cliente)/cliente/bonos/page.tsx', clase: 'RUTA_* pública (Supply)', veces: 2, fase: 'F4' },
-  { archivo: 'src/app/(cliente)/cliente/compras/page.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
-  { archivo: 'src/app/(cliente)/cliente/cupones/page.tsx', clase: 'RUTA_* pública (Supply)', veces: 2, fase: 'F4' },
-  { archivo: 'src/app/(cliente)/cliente/fidelizacion/page.tsx', clase: 'RUTA_* pública (Supply)', veces: 2, fase: 'F4' },
+  // Vacía: F4 quitó las últimas excepciones.
 ]
 // Componentes que sirven a la app Y a la landing: lo operativo no puede estar
 // cableado al espacio público; debe recibir su destino.
 const EXCEPCIONES_COMPARTIDOS: Excepcion[] = [
-  { archivo: 'src/components/catalogo/TarjetaCatalogoPublica.tsx', clase: 'RUTA_* pública (Supply)', veces: 1, fase: 'F4' },
-  { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
-  { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: '/promociones/(membego|membresias|campanas)', veces: 1, fase: 'F4' },
-  { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: 'RUTA_* pública (Supply)', veces: 1, fase: 'F4' },
+  // Vacía: F4 quitó las últimas excepciones.
 ]
 
 /** Vista previa del PANEL para la empresa (consulta, no operación del cliente) y la nav/pie de la landing. */
 const EXENTOS_ENLACES = new Set([
+  // El mapa único de rutas: es el ÚNICO lugar donde se escribe la ruta de cada espacio.
+  'src/modules/comercio/rutas.ts',
   'src/components/catalogo/PanoramaComercial.tsx',
   // La barra y el pie de la landing enlazan a la propia landing, que es su sitio.
   'src/components/public/PublicNav.tsx',
@@ -164,6 +159,8 @@ const ARCHIVOS_COMPARTIDOS_ESTRICTOS = [
   ...archivosDe('src/components/catalogo'),
   ...archivosDe('src/components/pedidos'),
   ...archivosDe('src/components/supply-v2'),
+  // Los cargadores que arman datos para las dos fichas: una ruta pública escrita aquí llega a la ficha de la app (F4 lo encontró en `ficha-item`).
+  ...archivosDe('src/modules/comercio'),
 ].filter((f) => !EXENTOS_ENLACES.has(f))
 const ARCHIVOS_COMPARTIDOS_CON_MODO = [
   ...archivosDe('src/components/marketplace'),
@@ -340,9 +337,7 @@ function operacionesAlcanzablesDesde(raices: string[]): Map<string, string[]> {
  * F2 vació todo lo de productos, servicios y ofertas del catálogo; F3, todo lo de excursiones y seguir empresa.
  */
 const EXCEPCIONES_LANDING_OPERA: Array<{ nodo: string; fase: string }> = [
-  { nodo: 'src/components/ofertas/ReclamarOferta.tsx', fase: 'F4' },
-  { nodo: 'src/components/supply-v2/boton-comprar.tsx', fase: 'F4' },
-  { nodo: 'src/components/supply-v2/boton-contratar-membresia.tsx', fase: 'F4' },
+  // Vacía: F4 quitó las últimas excepciones.
 ]
 
 test('la landing no alcanza ninguna operación comercial, ni directa ni transitivamente', () => {
@@ -406,10 +401,7 @@ test('el layout y la barra públicos no leen la sesión en servidor', () => {
 })
 
 const EXCEPCIONES_PAGINAS_CON_SESION: Array<{ archivo: string; fase: string }> = [
-  { archivo: 'src/app/(public)/oferta/[codigo]/page.tsx', fase: 'F4' },
-  { archivo: 'src/app/(public)/promociones/campanas/[code]/page.tsx', fase: 'F4' },
-  { archivo: 'src/app/(public)/promociones/campanas/page.tsx', fase: 'F4' },
-  { archivo: 'src/app/(public)/promociones/membego/[slug]/page.tsx', fase: 'F4' },
+  // Vacía: F4 quitó las últimas excepciones.
 ]
 
 test('las páginas públicas no leen la sesión en servidor', () => {
