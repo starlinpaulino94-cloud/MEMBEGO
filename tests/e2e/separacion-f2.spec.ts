@@ -269,9 +269,12 @@ test.describe('Separación F2 · la landing informa, la app opera', () => {
 
   test('una ficha que no se publicó se ve exactamente igual que una que no existe, en los dos espacios', async ({ browser, page }) => {
     // Sembrada como borrador desde el principio (así la lectura en caché nunca la vio publicada).
-    const publicaOculta = await page.goto(publica(slugBorrador))
+    // `ir` espera a que termine el streaming de Next: sin eso se lee el cuerpo a medias y las dos pantallas parecen distintas.
+    const publicaOculta = await ir(page, publica(slugBorrador))
+    await expect(page.getByText(/no encontr|no existe/i).first()).toBeVisible()
     const textoOculta = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
-    const publicaInexistente = await page.goto(publica(`no-existe-${sufijo}`))
+    const publicaInexistente = await ir(page, publica(`no-existe-${sufijo}`))
+    await expect(page.getByText(/no encontr|no existe/i).first()).toBeVisible()
     const textoInexistente = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
     expect(publicaOculta?.status()).toBe(publicaInexistente?.status())
     expect(textoOculta.includes(BORRADOR), 'la landing no puede nombrar un borrador').toBe(false)
