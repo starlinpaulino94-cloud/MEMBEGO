@@ -1,9 +1,10 @@
 import { conEmpresa } from '@/lib/tenant'
+import { rutaDeExcursion, type Espacio } from '@/modules/comercio/rutas'
 import { formatMoney } from '@/lib/format'
 import type { HeroSlide } from './esquema'
 import type { HeroInicio } from './vista'
 
-export async function heroPublico(companyId: string, slide: HeroSlide): Promise<HeroInicio | null> {
+export async function heroPublico(companyId: string, slide: HeroSlide, espacio: Espacio = 'publico'): Promise<HeroInicio | null> {
   if (slide.empresaId !== companyId) return null
   return conEmpresa(companyId, async (tx) => {
     const empresa = await tx.company.findFirst({
@@ -66,7 +67,7 @@ export async function heroPublico(companyId: string, slide: HeroSlide): Promise<
           select: { slug: true, portadaUrl: true },
         })
         if (!excursion) return null
-        href = `/empresas/${empresa.slug}/excursiones/${excursion.slug}`
+        href = rutaDeExcursion(espacio, empresa.slug, excursion.slug)
         imagen = excursion.portadaUrl
         propias.push(excursion.portadaUrl)
         break

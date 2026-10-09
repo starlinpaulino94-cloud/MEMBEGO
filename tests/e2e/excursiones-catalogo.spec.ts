@@ -5,7 +5,8 @@ import fs from 'node:fs'
  * CATÁLOGO DE EXCURSIONES · EL DETALLE EXISTE
  *
  * Los 7 enlaces de excursión que sirve `/cliente/excursiones` deben abrir el
- * detalle público (`/empresas/<empresa>/excursiones/<excursión>`).
+ * detalle de la app (`/cliente/empresas/<empresa>/excursiones/<excursión>`; la ficha pública, de consulta, tiene el mismo
+ * marcado con el traspaso en lugar del formulario).
  *
  * Antes del arreglo el módulo de esa ruta NO COMPILABA y Next degradaba la ruta
  * entera a `_not-found`: los 7 enlaces devolvían 404 aunque la fila existiera.
@@ -28,7 +29,8 @@ const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3000'
 const EMAIL = process.env.E2E_CLIENTE_EMAIL ?? 'cliente@membego.com'
 const PASSWORD = process.env.E2E_CLIENTE_PASSWORD ?? 'cliente123'
 
-const DETALLE = /^\/empresas\/[^/]+\/excursiones\/[^/]+$/
+// La ficha donde se reserva es la de la APP (separación landing/app · F3); la pública es de consulta y traspasa.
+const DETALLE = /^\/cliente\/empresas\/[^/]+\/excursiones\/[^/]+$/
 
 type CookieSesion = {
   name: string
@@ -138,8 +140,8 @@ test('una excursión inexistente no se sirve como página real', async ({ page, 
   const hrefs = await enlacesDeDetalle(page)
   expect(hrefs.length).toBeGreaterThan(0)
 
-  const empresa = hrefs[0].split('/')[2]
-  const inexistente = `/empresas/${empresa}/excursiones/zzz-no-existe-${Date.now()}`
+  const empresa = hrefs[0].split('/')[3]
+  const inexistente = `/cliente/empresas/${empresa}/excursiones/zzz-no-existe-${Date.now()}`
 
   const r = await context.request.get(`${BASE}${inexistente}`)
   const html = await r.text()

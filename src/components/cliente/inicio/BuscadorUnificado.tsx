@@ -1,5 +1,6 @@
 'use client'
 
+import { rutaDeExcursion } from '@/modules/comercio/rutas'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { formatMoney } from '@/lib/format'
@@ -175,7 +176,7 @@ export function BuscadorUnificado() {
                 {resultados!.excursiones.slice(0, 6).map((e) => (
                   <Link
                     key={e.id}
-                    href={`/empresas/${e.empresa.slug}/excursiones/${e.slug}`}
+                    href={rutaDeExcursion('app', e.empresa.slug, e.slug)}
                     className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${e.agotadaGlobal || e.todasFechasPasadas ? 'opacity-50 pointer-events-none' : ''}`}
                   >
                     <div className="relative aspect-[16/10] bg-muted">

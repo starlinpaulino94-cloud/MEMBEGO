@@ -1,4 +1,5 @@
 import { AccionObtenerOferta } from '@/components/deals/AccionObtenerOferta'
+import { FollowButton } from '@/components/public/FollowButton'
 import { notFound } from 'next/navigation'
 import { BadgeCheck, Check } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
@@ -206,6 +207,7 @@ export default async function ClienteEmpresaPage({
       catalogo={catalogo}
       ofertas={ofertas}
       accionDeOferta={(o) => <AccionObtenerOferta oferta={o} retorno={`/cliente/empresas/${company.slug}#ofertas`} />}
+      ranuraSeguir={<FollowButton companyId={company.id} redirectTo={`/cliente/empresas/${company.slug}`} />}
     />
   )
 }

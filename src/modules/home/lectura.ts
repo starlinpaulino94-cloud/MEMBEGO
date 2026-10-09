@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { rutaDeExcursion, type Espacio } from '@/modules/comercio/rutas'
 import { differenceInDays } from 'date-fns'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { LocationService } from '@/modules/geo/ubicaciones/service'
@@ -266,9 +267,14 @@ async function heroesPorDefecto(
   })
 }
 
+/**
+ * `espacio` decide a qué ficha llevan las excursiones del inicio: la de la landing (por defecto, que es lo que ve la API
+ * de la app móvil, sin cambio de contrato) o la de la app web (`'app'`), donde se reserva.
+ */
 export async function getInicioVista(
   user: SessionUser,
-  categoriaSlug?: string
+  categoriaSlug?: string,
+  espacio: Espacio = 'publico'
 ): Promise<InicioVista> {
   const publicada = await composicionAdmitida(user).catch(() => null)
   const tipos: readonly TipoBloque[] = publicada?.tipos ?? TIPOS_BLOQUE
@@ -699,7 +705,7 @@ export async function getInicioVista(
 
   // Las promociones activas alimentan el Hero principal en la sección de novedades
   const heroesPublicados = publicada
-    ? (await Promise.all(publicada.slides.map((slide) => heroPublico(publicada.companyId, slide)))).filter(
+    ? (await Promise.all(publicada.slides.map((slide) => heroPublico(publicada.companyId, slide, espacio)))).filter(
       (h): h is HeroInicio => h !== null
     )
     : []
@@ -740,7 +746,7 @@ export async function getInicioVista(
     planes: planesRecomendados,
     experiencias: excursiones.flatMap((e): ExperienciaInicio[] => e.company ? [{
       id: e.id, nombre: e.nombre, empresa: e.company.name, descripcion: e.descripcion,
-      imagen: e.portadaUrl, href: `/empresas/${e.company.slug}/excursiones/${e.slug}`,
+      imagen: e.portadaUrl, href: rutaDeExcursion(espacio, e.company.slug, e.slug),
       precio: e.variantes.length === 0 ? null : formatMoney(Math.min(...e.variantes.map((v) => v.precioAdulto)), { moneda: e.moneda }),
       duracion: duracionLegible(e.duracionMin),
     }] : []),

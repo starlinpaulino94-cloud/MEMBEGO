@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { Espacio } from '@/modules/comercio/rutas'
+import { rutaDeExcursion, type Espacio } from '@/modules/comercio/rutas'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -29,7 +29,6 @@ import {
   X,
 } from 'lucide-react'
 import { PromotionGrid } from '@/components/public/PromotionGrid'
-import { FollowButton } from '@/components/public/FollowButton'
 import { ShareButton } from '@/components/public/ShareButton'
 import { ResenasSection } from '@/components/marketplace/ResenasSection'
 import type { CompanyResenas } from '@/modules/resenas/queries'
@@ -105,6 +104,11 @@ export interface CompanyProfileProps {
    * componente compartido no importa ninguna operación comercial.
    */
   accionDeOferta?: (oferta: OfertaPublica) => ReactNode
+  /**
+   * «Seguir a la empresa». Lo pone la PÁGINA que monta el perfil: la app, el botón que sigue; la landing, un enlace que
+   * lleva a la app (seguir es una acción del cliente). Así este componente compartido no importa ninguna acción.
+   */
+  ranuraSeguir?: ReactNode
 
   /** Excursiones públicas de la empresa (opcional). */
   excursiones?: {
@@ -158,6 +162,7 @@ export function CompanyProfile({
   catalogo = [],
   ofertas = [],
   accionDeOferta = () => null,
+  ranuraSeguir = null,
 }: CompanyProfileProps) {
   const hayResenas = !!resenas && (resenas.total > 0 || !!resenaFormSlot)
   const isApp = mode === 'app'
@@ -175,10 +180,6 @@ export function CompanyProfile({
   // (para que el destinatario, que puede no tener sesión, la pueda abrir).
   const sharePath = `/empresas/${company.slug}`
   const shareUrl = landingUrlFor(sharePath)
-  const followRedirect = isApp
-    ? `/cliente/empresas/${company.slug}`
-    : sharePath
-
   // El catálogo se enseña en dos secciones (lo que se recoge y lo que se presta);
   // cada tarjeta lleva su oferta viva (antes/ahora) sin duplicar el producto.
   const { productos, servicios } = separarCatalogo(catalogo)
@@ -355,7 +356,7 @@ export function CompanyProfile({
                   Quiero una membresía <ArrowRight className="h-4 w-4" aria-hidden />
                 </Link>
               )}
-              <FollowButton companyId={company.id} redirectTo={followRedirect} />
+              {ranuraSeguir}
               <ShareButton
                 title={company.name}
                 text={`Descubre ${company.name} en MembeGo: membresías, promociones y beneficios.`}
@@ -720,7 +721,7 @@ export function CompanyProfile({
                   return (
                     <Link
                       key={exc.id}
-                      href={`/empresas/${company.slug}/excursiones/${exc.slug}`}
+                      href={rutaDeExcursion(espacio, company.slug, exc.slug)}
                       className={`group overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40 ${isAgotada || isFinalizada ? 'opacity-50 pointer-events-none' : ''}`}
                     >
                       <div className="relative aspect-[16/10] bg-muted">

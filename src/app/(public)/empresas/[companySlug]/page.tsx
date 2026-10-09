@@ -1,4 +1,6 @@
 import { AccionDeOfertaPublica } from '@/components/public/AccionDeOfertaPublica'
+import { rutaDeEmpresa } from '@/modules/comercio/rutas'
+import { EnlaceDeTraspaso } from '@/components/public/TraspasoALaApp'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { CompanyProfile } from '@/components/marketplace/CompanyProfile'
@@ -96,6 +98,8 @@ export default async function CompanyDetailPage({
       catalogo={catalogo}
       ofertas={ofertas}
       accionDeOferta={(o) => <AccionDeOfertaPublica oferta={o} />}
+      // Seguir es una acción del cliente: en la landing, un enlace que lleva a la vitrina de la app, donde está el botón.
+      ranuraSeguir={<EnlaceDeTraspaso destino={rutaDeEmpresa('app', company.slug)} etiqueta="Seguir en la app" variante="outline" className="w-full sm:w-auto" />}
       sucursales={sucursales}
     />
   )

@@ -84,17 +84,17 @@ export function TraspasoALaApp({ destino, titulo, descripcion, etiquetaCliente }
 }
 
 /** La versión compacta, para una tarjeta de una lista: un solo enlace que sigue las mismas reglas. */
-export function EnlaceDeTraspaso({ destino, etiqueta }: { destino: string; etiqueta: string }) {
+export function EnlaceDeTraspaso({ destino, etiqueta, className = 'w-full', variante }: { destino: string; etiqueta: string; className?: string; variante?: 'outline' }) {
   const sesion = useSesionLigera()
   if (sesion.estado === 'equipo') {
     return (
-      <Button asChild variant="outline" className="w-full">
+      <Button asChild variant="outline" className={className}>
         <Link href={sesion.casa}>Ir a mi panel</Link>
       </Button>
     )
   }
   return (
-    <Button asChild className="w-full" data-traspaso={sesion.estado}>
+    <Button asChild variant={variante} className={className} data-traspaso={sesion.estado}>
       <Link href={sesion.estado === 'cliente' ? destino : rutaDeLogin(destino)}>{etiqueta}</Link>
     </Button>
   )

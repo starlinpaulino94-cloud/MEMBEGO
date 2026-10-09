@@ -121,6 +121,12 @@ const nextConfig: NextConfig = {
         destination: '/cliente/carrito/pagar/:companySlug',
         permanent: false,
       },
+      // Y el checkout de excursiones (F3): confirmar reservas también es de la app.
+      {
+        source: '/checkout',
+        destination: '/cliente/carrito/excursiones',
+        permanent: false,
+      },
     ]
   },
   headers: async () => {

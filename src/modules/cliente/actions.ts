@@ -1,5 +1,6 @@
 'use server'
 
+import { rutaDeExcursiones } from '@/modules/comercio/rutas'
 import { terminosBusqueda } from '@/modules/busqueda/sinonimos'
 import { filtrosPromociones, filtrosEmpresas, textoExcursiones } from '@/modules/busqueda/filtros'
 
@@ -119,12 +120,12 @@ export async function afiliarmeAEmpresa(
   const enlaceSlug = String(formData.get('enlaceSlug') ?? '').trim() || null
   if (companySlug) {
     if (enlaceSlug) {
-      destino = `/empresas/${companySlug}/excursiones?e=${encodeURIComponent(enlaceSlug)}`
+      destino = `${rutaDeExcursiones('app', companySlug)}?e=${encodeURIComponent(enlaceSlug)}`
     } else {
       const cid = await companyIdPorSlug(companySlug)
       if (cid) {
         const exc = await excursionesPublicas(cid)
-        if (exc.length > 0) destino = `/empresas/${companySlug}/excursiones`
+        if (exc.length > 0) destino = rutaDeExcursiones('app', companySlug)
       }
     }
   }

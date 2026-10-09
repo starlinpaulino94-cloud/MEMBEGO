@@ -437,7 +437,7 @@ function ResultsGrid({
           <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {excursiones.map((e) => (
               <li key={e.id} className="flex">
-                <ExcursionCard excursion={e} />
+                <ExcursionCard excursion={e} espacio="app" />
               </li>
             ))}
           </ul>

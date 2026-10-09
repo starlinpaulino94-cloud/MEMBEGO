@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { rutaDeExcursiones } from '@/modules/comercio/rutas'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAppUrl } from '@/lib/site'
 import { esBotDeVistaPrevia } from '@/lib/share/bots'
@@ -42,7 +43,7 @@ export async function GET(
     const destino = `${base}/registro/${enlace.companySlug}?v=${encodeURIComponent(
       enlace.codigoVendedor
     )}&e=${encodeURIComponent(enlace.slug)}&next=${encodeURIComponent(
-      `/empresas/${enlace.companySlug}/excursiones?e=${encodeURIComponent(enlace.slug)}`
+      `${rutaDeExcursiones('app', enlace.companySlug)}?e=${encodeURIComponent(enlace.slug)}`
     )}`
     return NextResponse.redirect(destino)
   }
@@ -63,7 +64,8 @@ export async function GET(
   const isCliente = user && user.metadata.role === 'CLIENTE'
 
   // Si está logueado, llevarlo al catálogo directo. Si no, al registro con next.
-  const nextUrl = `/empresas/${enlace.companySlug}/excursiones?e=${encodeURIComponent(enlace.slug)}`
+  // Las excursiones de la empresa DENTRO DE LA APP: ahí se reserva. La atribución no depende de esta URL: ya quedó en las cookies.
+  const nextUrl = `${rutaDeExcursiones('app', enlace.companySlug)}?e=${encodeURIComponent(enlace.slug)}`
   let destino: string
   
   if (isCliente) {

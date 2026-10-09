@@ -43,7 +43,9 @@ export function CustomerShell({
   children: React.ReactNode
 }) {
   return (
-    <>
+    // El proveedor del carrito de excursiones envuelve TODA la carcasa (no solo el contenido): el icono del carrito del
+    // encabezado necesita leerlo para contar las excursiones junto con los productos.
+    <ExcursionCarritoWrapper>
       {/* Cabecera del rediseño violeta (Stitch «amazon style»): buscador en
           píldora blanca, campana (→ novedades) y avatar sobre el degradado;
           debajo, la píldora oscura de ubicación. El micrófono es decorativo
@@ -143,11 +145,11 @@ export function CustomerShell({
 
       {demoNombre && <BannerDemo nombreEmpresa={demoNombre} />}
       <main className="con-dock-inferior mx-auto w-full max-w-md px-4 py-4 md:max-w-3xl lg:max-w-7xl lg:px-6">
-        <ExcursionCarritoWrapper>{children}</ExcursionCarritoWrapper>
+        {children}
       </main>
 
       <BottomNav />
       <SentryUserSync userId={dbUserId} email={email} role={role} companyId={companyId} />
-    </>
+    </ExcursionCarritoWrapper>
   )
 }

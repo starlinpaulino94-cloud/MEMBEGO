@@ -30,7 +30,8 @@ Efecto en el plan: la pregunta 3 de §7 queda resuelta en contra de la recomenda
 | F0 · Red de seguridad | **Hecha.** Ver abajo. |
 | F1 · Enlaces de la app a su propio espacio | **Hecha.** Ver abajo. |
 | F2 · Producto, servicio, oferta, carrito y pago en la app | **Hecha.** Ver abajo. |
-| F3 a F6 | Pendientes de aprobación individual. |
+| F3 · Excursiones, carrito único y vendedores en la app | **Hecha.** Ver abajo. |
+| F4 a F6 | Pendientes de aprobación individual. |
 
 ### F0 · Red de seguridad (hecha)
 
@@ -116,13 +117,38 @@ El cierre de imports de la landing es transitivo: sigue importaciones, reexporta
 - El formulario de pedido se llama «Hacer un pedido» también para servicios; lo que cambia es su título y su botón.
 - Las pruebas que escriben estados directamente en la base no ven el cambio si la lectura del catálogo está en caché con etiqueta; solo la invalidan las acciones reales.
 
+### F3 · Excursiones, carrito único y enlaces de vendedor (hecha)
+
+Decisiones aprobadas: (1) «seguir empresa» pasa a la app y la landing ofrece «Seguir en la app»; (2) se elimina el cajón de carrito de excursiones a favor de un solo carrito; (3) las tres rutas de entrada y `/e/[slug]` terminan en la lista de excursiones de la empresa **dentro de la app**.
+
+| Antes | Ahora |
+|---|---|
+| Ficha pública de excursión con formulario de reserva | Ficha pública = consulta (misma presentación, SEO y metadatos de enlace compartido) con el traspaso «Reservar esta excursión». La reserva vive en `/cliente/empresas/[empresa]/excursiones/[excursión]` |
+| Lista pública con «agregar» | Lista pública de consulta; lista de la app en `/cliente/empresas/[empresa]/excursiones` |
+| `/checkout` público y cajón de carrito de excursiones en el layout público | `/cliente/carrito/excursiones`; el cajón desaparece. `/checkout` redirige allí |
+| Dos carritos (productos en `/cliente/carrito`, excursiones en cajón) | Una sola página `/cliente/carrito` con ambos; el contador del encabezado suma unidades de producto y excursiones. Cada uno conserva su almacenamiento y sus acciones |
+| `/carrito`, `/carrito/pagar/[empresa]` | Redirigen al carrito de la app |
+| `/e/[slug]` (QR del vendedor) → registro → excursiones públicas | → registro con `next=` a las excursiones de la app (cliente con sesión: directo). La atribución sigue en cookies (`mg_ven`, visitante), no en la URL |
+| Botón «Seguir» en la vitrina pública | Solo en la vitrina de la app; la pública muestra «Seguir en la app» (ranura `ranuraSeguir`) |
+
+Cómo se hizo (sin reescribir reglas): presentación compartida con `espacio: 'publico' | 'app'` y ranuras (`FichaDeExcursion`, `ListaDeExcursionesDeEmpresa`, `CompanyProfile`), cargadores neutrales en `src/modules/comercio` (`ficha-excursion`, `lista-excursiones`), mapa único de rutas en `rutas.ts`, y el formulario de reserva y el checkout movidos tal cual a `src/components/excursiones`. El contrato de la API móvil no cambia (`getInicioVista` mantiene `espacio='publico'` por defecto).
+
+Pruebas: `tests/separacion-f3.test.ts` (unitarias), guardia F0/F2 sin las excepciones de excursiones, `tests/e2e/separacion-f3.spec.ts` (landing sin formularios ni código de reserva, traspaso por visitante/cliente/equipo, reserva completa hasta «mis excursiones» por el carrito único, rutas retiradas, `/e/[slug]`, seguir empresa) y los specs de excursiones reescritos a rutas de la app.
+
+#### Hallazgos de F3
+
+- La ficha pública de excursión ya era dinámica (`ƒ`) antes de F3; no se cambia el régimen de caché.
+- Hoy no tiene salida si ya pasó la hora: el formulario elige solo la primera fecha disponible.
+- Las excursiones de la portada (carruseles de promociones, planes y empresas) todavía enlazan a páginas públicas: es alcance de F4.
+- El E2E de reserva real contra Supabase (`reservas-excursiones.spec.ts`, `excursiones-catalogo.spec.ts`) se salta sin Supabase de pruebas; el nuevo `separacion-f3.spec.ts` sí corre con la sesión firmada local.
+
 #### Excepciones vigentes, por fase que las elimina
 
 | Fase | Qué se elimina |
 |---|---|
 | F1 | Hecha. |
 | F2 | Hecha. |
-| F3 | Excursiones: ficha con reserva, `/checkout`, carrito de excursiones en el layout público (`ExcursionCarritoWrapper`, contexto, modal de pasarela y acción de reserva), seguir empresa (decisión de producto), enlaces de la app a excursiones públicas, y la tarjeta de excursión con destino propio. |
+| F3 | Hecha. |
 | F4 | Ofertas Membego, membresías, campañas, canje de beneficios (`/oferta/[codigo]`), constantes `RUTA_*` públicas desde la app, los avisos «Ver ofertas» y «Ver promociones» de compras y bonos, y las páginas públicas que leen la sesión. |
 
 La lista exacta, archivo por archivo y con conteo, está en el propio test.

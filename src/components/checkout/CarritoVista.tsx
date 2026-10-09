@@ -113,7 +113,7 @@ export function CarritoVista() {
   }
 
   return (
-    <div className="mt-6 space-y-5">
+    <div className="space-y-5">
       {negocios.length > 1 && <p className="rounded-lg bg-muted/50 px-4 py-3 text-sm text-muted-foreground">Cada negocio atiende su propio pedido: pagas y recoges en cada uno por separado.</p>}
       {negocios.map(([slug, lineas]) => (
         <CarritoDelNegocio key={slug} slug={slug} lineas={lineas} />

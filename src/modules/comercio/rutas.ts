@@ -29,8 +29,26 @@ export function rutaDeItem(espacio: Espacio, empresaSlug: string, itemSlug: stri
   return espacio === 'app' ? `/cliente/empresas/${empresaSlug}/catalogo/${itemSlug}` : `/empresas/${empresaSlug}/catalogo/${itemSlug}`
 }
 
+/** Buscar excursiones (todas las empresas). */
+export function rutaDeBuscarExcursiones(espacio: Espacio): string {
+  return espacio === 'app' ? '/cliente/excursiones' : '/excursiones'
+}
+
+/** La lista de excursiones de una empresa. */
+export function rutaDeExcursiones(espacio: Espacio, empresaSlug: string): string {
+  return espacio === 'app' ? `/cliente/empresas/${empresaSlug}/excursiones` : `/empresas/${empresaSlug}/excursiones`
+}
+
+/** La ficha de una excursión de una empresa. */
+export function rutaDeExcursion(espacio: Espacio, empresaSlug: string, excursionSlug: string): string {
+  return espacio === 'app' ? `/cliente/empresas/${empresaSlug}/excursiones/${excursionSlug}` : `/empresas/${empresaSlug}/excursiones/${excursionSlug}`
+}
+
 /** El carrito de productos y servicios. Solo existe en la app: la landing no tiene carrito. */
 export const RUTA_CARRITO = '/cliente/carrito'
+
+/** La reserva de las excursiones del carrito (su pantalla de confirmación y pago). Solo existe en la app. */
+export const RUTA_CARRITO_EXCURSIONES = '/cliente/carrito/excursiones'
 
 /** El pago del carrito de UN negocio. Solo existe en la app. */
 export function rutaDePago(empresaSlug: string): string {

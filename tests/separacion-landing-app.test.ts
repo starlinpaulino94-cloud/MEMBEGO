@@ -130,17 +130,11 @@ function comparar(nombre: string, reales: Hallazgo[], permitidas: Excepcion[], q
 
 // La app del cliente: ningún enlace a la landing, sea la ruta que sea.
 const EXCEPCIONES_APP_DIRECTA: Excepcion[] = [
-  { archivo: 'src/app/(cliente)/cliente/bienvenida-ref/[companySlug]/page.tsx', clase: '/empresas', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(cliente)/cliente/bienvenida-ref/[companySlug]/page.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
   { archivo: 'src/app/(cliente)/cliente/bonos/page.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
   { archivo: 'src/app/(cliente)/cliente/bonos/page.tsx', clase: 'RUTA_* pública (Supply)', veces: 2, fase: 'F4' },
   { archivo: 'src/app/(cliente)/cliente/compras/page.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
   { archivo: 'src/app/(cliente)/cliente/cupones/page.tsx', clase: 'RUTA_* pública (Supply)', veces: 2, fase: 'F4' },
-  { archivo: 'src/app/(cliente)/cliente/dashboard/ExcursionSearchCard.tsx', clase: '/empresas', veces: 1, fase: 'F3' },
-  { archivo: 'src/app/(cliente)/cliente/dashboard/ExcursionSearchCard.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
   { archivo: 'src/app/(cliente)/cliente/fidelizacion/page.tsx', clase: 'RUTA_* pública (Supply)', veces: 2, fase: 'F4' },
-  { archivo: 'src/components/cliente/inicio/BuscadorUnificado.tsx', clase: '/empresas', veces: 1, fase: 'F3' },
-  { archivo: 'src/components/cliente/inicio/BuscadorUnificado.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
 ]
 // Componentes que sirven a la app Y a la landing: lo operativo no puede estar
 // cableado al espacio público; debe recibir su destino.
@@ -149,10 +143,6 @@ const EXCEPCIONES_COMPARTIDOS: Excepcion[] = [
   { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: '/promociones', veces: 1, fase: 'F4' },
   { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: '/promociones/(membego|membresias|campanas)', veces: 1, fase: 'F4' },
   { archivo: 'src/components/supply-v2/checkout-cliente.tsx', clase: 'RUTA_* pública (Supply)', veces: 1, fase: 'F4' },
-  { archivo: 'src/components/excursiones/ExcursionCarritoDrawer.tsx', clase: '/checkout', veces: 1, fase: 'F3' },
-  { archivo: 'src/components/marketplace/CompanyProfile.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
-  { archivo: 'src/components/public/ExcursionCard.tsx', clase: '/empresas/*/excursiones', veces: 1, fase: 'F3' },
-  { archivo: 'src/components/public/ExcursionCard.tsx', clase: '/excursiones', veces: 1, fase: 'F3' },
 ]
 
 /** Vista previa del PANEL para la empresa (consulta, no operación del cliente) y la nav/pie de la landing. */
@@ -347,14 +337,9 @@ function operacionesAlcanzablesDesde(raices: string[]): Map<string, string[]> {
 /**
  * Operaciones que la landing TODAVÍA alcanza. Cada una nombra la fase que la quita
  * (`decisión` = el producto aún tiene que resolverlo). Al terminar F6 está vacía.
- * F2 vació todo lo de productos, servicios y ofertas del catálogo.
+ * F2 vació todo lo de productos, servicios y ofertas del catálogo; F3, todo lo de excursiones y seguir empresa.
  */
 const EXCEPCIONES_LANDING_OPERA: Array<{ nodo: string; fase: string }> = [
-  { nodo: 'src/components/excursiones/ExcursionCarritoContext.tsx', fase: 'F3' },
-  { nodo: 'src/components/excursiones/ExcursionCarritoWrapper.tsx', fase: 'F3' },
-  { nodo: 'src/components/excursiones/PasarelaSimuladaModal.tsx', fase: 'F3' },
-  { nodo: 'src/modules/excursiones/reservas/cliente-actions.ts', fase: 'F3' },
-  { nodo: 'src/modules/social/actions.ts', fase: 'F3 (decisión de producto: seguir empresa)' },
   { nodo: 'src/components/ofertas/ReclamarOferta.tsx', fase: 'F4' },
   { nodo: 'src/components/supply-v2/boton-comprar.tsx', fase: 'F4' },
   { nodo: 'src/components/supply-v2/boton-contratar-membresia.tsx', fase: 'F4' },
@@ -421,8 +406,6 @@ test('el layout y la barra públicos no leen la sesión en servidor', () => {
 })
 
 const EXCEPCIONES_PAGINAS_CON_SESION: Array<{ archivo: string; fase: string }> = [
-  { archivo: 'src/app/(public)/checkout/page.tsx', fase: 'F3' },
-  { archivo: 'src/app/(public)/empresas/[companySlug]/excursiones/[excursionSlug]/page.tsx', fase: 'F3' },
   { archivo: 'src/app/(public)/oferta/[codigo]/page.tsx', fase: 'F4' },
   { archivo: 'src/app/(public)/promociones/campanas/[code]/page.tsx', fase: 'F4' },
   { archivo: 'src/app/(public)/promociones/campanas/page.tsx', fase: 'F4' },

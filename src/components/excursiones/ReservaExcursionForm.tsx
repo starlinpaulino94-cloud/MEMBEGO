@@ -1,5 +1,11 @@
 'use client'
 
+// Antes vivía en la landing (`(public)/empresas/.../excursiones/[excursionSlug]/`). Reservar es una operación del
+// cliente y vive dentro de la app: solo la monta la ficha de `/cliente/empresas/[slug]/excursiones/[excursión]`.
+// El archivo se movió sin reescribirse: las reglas de precio, cupo y atribución son las de siempre.
+
+import { RUTA_CARRITO, RUTA_CARRITO_EXCURSIONES, rutaDeLogin } from '@/modules/comercio/rutas'
+import { toast } from 'sonner'
 import { useState, useEffect, useRef, useActionState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -1451,8 +1457,11 @@ export function ReservaExcursionForm({
                 notas: notas.trim() || undefined,
               })
               if (!isAuthenticated) {
-                router.push(`/login?redirect=${encodeURIComponent('/checkout')}`)
+                router.push(rutaDeLogin(RUTA_CARRITO_EXCURSIONES))
+                return
               }
+              // Un solo carrito visible: el aviso lleva al carrito de la app (donde están las excursiones y los productos).
+              toast.success('Excursión agregada al carrito.', { action: { label: 'Ver carrito', onClick: () => router.push(RUTA_CARRITO) } })
             }}
             disabled={pending || followingPending || !fecha || (tipoItem !== 'PASE_DIA' && !hora) || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
             className="flex items-center justify-center gap-2 w-full rounded-lg border-2 border-primary bg-background py-3 text-sm font-semibold text-primary transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
@@ -1481,7 +1490,7 @@ export function ReservaExcursionForm({
                 moneda,
                 notas: notas.trim() || undefined,
               })
-              router.push(isAuthenticated ? '/checkout' : `/login?redirect=${encodeURIComponent('/checkout')}`)
+              router.push(isAuthenticated ? RUTA_CARRITO_EXCURSIONES : rutaDeLogin(RUTA_CARRITO_EXCURSIONES))
             }}
             disabled={pending || followingPending || !fecha || (tipoItem !== 'PASE_DIA' && !hora) || (!usarHoraPersonalizada && horariosDisponibles.every((h) => h.agotada))}
             className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
