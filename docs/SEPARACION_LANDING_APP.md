@@ -32,7 +32,8 @@ Efecto en el plan: la pregunta 3 de §7 queda resuelta en contra de la recomenda
 | F2 · Producto, servicio, oferta, carrito y pago en la app | **Hecha.** Ver abajo. |
 | F3 · Excursiones, carrito único y vendedores en la app | **Hecha.** Ver abajo. |
 | F4 · Ofertas Membego, membresías, campañas y regalos en la app | **Hecha.** Ver abajo. |
-| F5 y F6 | Pendientes de aprobación individual. |
+| F5 · Landing consciente de la sesión y orden en auth | **Hecha.** Ver abajo. |
+| F6 | Pendiente de aprobación. |
 
 ### F0 · Red de seguridad (hecha)
 
@@ -164,6 +165,29 @@ Con F4, todas las listas de excepciones de la guardia están vacías: la landing
 - La ficha pública de la oferta ya no calcula beneficios ni promociones por cliente (no hay sesión): eso se ve en la app.
 - Las pruebas de sesión local firman `clienteId: null`; para el regalo de empresa (`getOfertaParaCliente` necesita el cliente) el arnés ganó un `clienteId` opcional.
 - Los recorridos de Supply (slices 2 a 8) y el puente siguen siendo la prueba de compra de punta a punta; `separacion-f4.spec.ts` prueba la separación y no repite la configuración de la cuenta de cobro.
+
+### F5 · La landing sabe si hay sesión, y orden en auth (hecha)
+
+| Antes | Ahora |
+|---|---|
+| La barra siempre decía «Ingresar / Registrarse», también a quien ya tenía cuenta | Visitante: igual. Cliente: «Ir a mi app» (→ `/cliente/inicio`). Equipo (administrador, empleado, vendedor, superadmin): «Ir a mi panel» (→ su casa según `ROLE_HOME`) |
+| Héroe, cierre de la portada y pie: «Crear mi cuenta gratis», «Ya tengo cuenta», «Crear cuenta» | Los tres cambian a la puerta de su espacio; «Ya tengo cuenta» desaparece con sesión |
+| 404 y error mandaban a `/` a cualquiera | «Volver a mi espacio» lleva a la casa de quien tiene sesión; el visitante sigue yendo a `/` |
+| `/registro` vivía en la landing y perdía la consulta (`next`, `utm`, `ref`) | Vive en `(auth)/registro/page.tsx` (misma URL) y conserva la consulta |
+
+Mecanismo (resuelve el riesgo R5): el HTML del servidor es el mismo para todos —el de visitante— y la landing sigue siendo estática (la portada, ISR de 10 minutos; el TTFB medido de `/` es el mismo con y sin cookie, ~7 ms). Todo se decide en el navegador con `useSesionLigera`, que ahora **solo pregunta al servidor si el navegador trae la cookie de sesión** (`hayCookieDeSesion`): el tráfico anónimo no hace ninguna petición, y al cerrar sesión la cookie desaparece y la landing vuelve a la del visitante al instante (la comprobación va antes del caché de 15 s). Quien trae la cookie ve los enlaces invisibles —en su sitio— hasta que llega la respuesta: sin salto de diseño ni un «Registrarse» que parpadee. Si algún despliegue marcara la cookie como `httpOnly`, el resultado seguro es la vista de visitante (sus enlaces siguen sirviendo: `/login` rebota a quien ya tiene sesión).
+
+Decisiones: (1) **no** se redirige `/` en el servidor a quien tiene sesión (puede seguir viendo la landing; el SEO y los enlaces compartidos no cambian); (2) `/mis-membresias` y `/membresia/[id]` **se quedan** fuera de `/cliente`: la app móvil (`apps/client`) tiene esas mismas rutas y las usa en su lista de rutas nativas, y el servidor ya emitió esos hrefs en avisos guardados y correos.
+
+#### Excepciones permanentes de la landing (fijadas por prueba)
+
+Lo único de la landing que envía datos al servidor, y por qué se queda: `/eliminar-cuenta/**` (las tiendas de apps exigen una URL pública para borrar la cuenta), `/registro-empresa` y `/solicitud-empresa` (captación B2B), y la consulta GET de solo lectura del estado de sesión. `/acceso` (la puerta del equipo) sigue sin enlazarse desde la web. Una pieza nueva de la landing que envíe datos hace fallar la prueba: o es captación, o es una operación del cliente y va en `/cliente`.
+
+#### Hallazgos de F5
+
+- `main` llegó con un error de tipos entre el #588 (nueva `/ofertas/[dealId]`) y las fichas de F2: la página usaba `TarjetaOferta` con la API vieja (`retorno`) y habría vuelto a poner la obtención de la oferta en la landing. Ahora usa `espacio="publico"` y el traspaso (`AccionDeOfertaPublica`), como `/ofertas`.
+- El arnés E2E firmaba la cookie de sesión como `httpOnly`, lo que no pasa en producción (`@supabase/ssr` la deja legible). Ahora no lo es.
+- Con `loading.tsx` en el grupo, el redirect de `/registro` llega por streaming (200 + salto del cliente): las pruebas comprueban dónde termina la persona, no el código HTTP.
 
 #### Excepciones vigentes, por fase que las elimina
 

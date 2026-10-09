@@ -314,10 +314,11 @@ async function recorridoCompleto(browser: Browser) {
 
   // ── 8 · una compra de 1 000 da 10 puntos (1 por cada 100) ───────────────
   await cliente.goto(fichaDeLaApp(urlOferta))
-  await expect(cliente.getByTestId('btn-comprar')).toBeVisible()
+  // Next 16.3 deja unos instantes la página anterior OCULTA en el DOM al navegar: se filtra por visible.
+  await expect(cliente.getByTestId('btn-comprar').filter({ visible: true })).toBeVisible()
   // Sin elegir el bono del plan: se compra a precio completo, y los puntos
   // salen de lo que la clienta paga de verdad.
-  await cliente.getByTestId('btn-comprar').click()
+  await cliente.getByTestId('btn-comprar').filter({ visible: true }).click()
   await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
   const orderCompra = cliente.url().split('/').pop()!
   await cliente.locator('#referenciaPago').fill(`PTS-${d.sufijo}`)

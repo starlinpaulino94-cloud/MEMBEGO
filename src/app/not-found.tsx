@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { Button } from '@/components/ui/button'
+import { EnlaceDeInicio } from '@/components/public/EnlaceDeInicio'
 
 export default function NotFound() {
   return (
@@ -19,9 +19,7 @@ export default function NotFound() {
       <p className="mt-2 max-w-md text-white/60">
         La página que buscas no existe o fue movida.
       </p>
-      <Button asChild className="mt-8 bg-primary hover:bg-primary/90">
-        <Link href="/">Volver al inicio</Link>
-      </Button>
+      <EnlaceDeInicio className="mt-8 bg-primary hover:bg-primary/90" />
     </div>
   )
 }

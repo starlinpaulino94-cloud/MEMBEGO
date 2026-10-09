@@ -37,7 +37,7 @@ async function conSesion(browser: Browser, rol: RolE2E, companyId: string | null
   if (clienteId) {
     const u = await asegurarUsuario(rol, companyId)
     const c = await cookieDeSesion({ ...u, clienteId })
-    await ctx.addCookies([{ ...c, url: BASE, httpOnly: true, sameSite: 'Lax' }])
+    await ctx.addCookies([{ ...c, url: BASE, httpOnly: false, sameSite: 'Lax' }])
   } else {
     await entrarComo(ctx, rol, BASE, companyId)
   }

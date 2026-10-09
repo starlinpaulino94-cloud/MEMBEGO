@@ -34,3 +34,29 @@ export function interpretarSesion(crudo: unknown): SesionLigera {
   const casa = ROLE_HOME[rol as AppRole]
   return rol === 'CLIENTE' ? { estado: 'cliente', casa } : { estado: 'equipo', rol: rol as AppRole, casa }
 }
+
+/**
+ * ¿PUEDE haber una sesión? Solo mira si el navegador trae la cookie de sesión de Supabase (`sb-<ref>-auth-token`,
+ * posiblemente en trozos `.0`, `.1`…). No decide nada: es la pista para no preguntarle al servidor cuando no
+ * hay forma de que la respuesta sea otra cosa que «visitante» —y así el tráfico anónimo de la landing no paga
+ * ninguna petición extra—. Quien tiene la cookie sí pregunta, y el servidor es quien contesta.
+ *
+ * `cookies` es el valor de `document.cookie` (`a=1; b=2`).
+ */
+export function hayCookieDeSesion(cookies: string | null | undefined): boolean {
+  if (!cookies) return false
+  return cookies.split(';').some((par) => {
+    const i = par.indexOf('=')
+    if (i < 0) return false
+    const nombre = par.slice(0, i).trim()
+    const valor = par.slice(i + 1).trim()
+    return nombre.startsWith('sb-') && nombre.includes('auth-token') && valor.length > 0
+  })
+}
+
+/** La etiqueta y el destino de la puerta a «lo mío» para quien ya tiene sesión; `null` para el visitante. */
+export function puertaDeCasa(sesion: SesionLigera): { href: string; etiqueta: string } | null {
+  if (sesion.estado === 'cliente') return { href: sesion.casa, etiqueta: 'Ir a mi app' }
+  if (sesion.estado === 'equipo') return { href: sesion.casa, etiqueta: 'Ir a mi panel' }
+  return null
+}
