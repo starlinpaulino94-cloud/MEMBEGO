@@ -1,17 +1,18 @@
 -- ¿Están aplicadas TODAS las migraciones de prisma/migrations? (versión corta)
--- Generado desde main (2f57b6ac): 209 migraciones, última 20261052_supply_v2_derechos_por_linea.
+-- Generado con scripts/generar-verificar-migraciones.mjs en 9f2f8d82: 211 migraciones, última 20261054_growth_campaign_deal.
 -- Pégalo entero en el SQL Editor de Supabase. Solo lee. Devuelve UNA fila.
 --   veredicto = 'OK' → no falta ninguna y coinciden nombre y contenido.
 --   Si no, el detalle de qué falta lo da scripts/verificar-migraciones.sql
---   (ejecutado con psql -f, no pegado: son 257 líneas).
+--   (ejecutado con psql -f, no pegado: es largo).
+-- Si el repo cambió, regenera con: node scripts/generar-verificar-migraciones.mjs
 WITH base AS (
   SELECT migration_name AS n, checksum AS c
   FROM _prisma_migrations
   WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
 ), esperado AS (
-  SELECT 209 AS total, '20261052_supply_v2_derechos_por_linea' AS ultima,
-         '48a5ceac0eace81bc08e22b9293808b7' AS nombres,
-         '5427c70ba94146964885263e26b7544b' AS checksums
+  SELECT 211 AS total, '20261054_growth_campaign_deal' AS ultima,
+         '10dbe5567ef29b532a326aafd0deddc0' AS nombres,
+         'e5ade3b9837cf7f52e5d3b848281c25f' AS checksums
 ), real AS (
   SELECT count(*) AS aplicadas,
          max(n COLLATE "C") AS ultima,
@@ -26,6 +27,7 @@ SELECT r.aplicadas, e.total AS esperadas, r.ultima AS ultima_aplicada, e.ultima 
        CASE WHEN r.nombres = e.nombres AND r.checksums = e.checksums AND r.incompletas = 0 THEN 'OK'
             WHEN r.incompletas > 0 THEN 'REVISAR: hay migraciones a medias o revertidas'
             WHEN r.aplicadas < e.total THEN 'REVISAR: faltan ' || (e.total - r.aplicadas) || ' migración(es)'
+            WHEN r.aplicadas > e.total THEN 'REVISAR: la base tiene ' || (r.aplicadas - e.total) || ' migración(es) que el repo no tiene'
             WHEN r.nombres <> e.nombres THEN 'REVISAR: hay migraciones distintas a las del repo'
             ELSE 'REVISAR: algún migration.sql aplicado difiere del repo' END AS veredicto
 FROM real r, esperado e;

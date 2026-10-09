@@ -1,14 +1,14 @@
 -- =============================================================================
--- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations?
--- Generado desde main (2f57b6ac): 209 migraciones, última
--- 20261052_supply_v2_derechos_por_linea. Solo lee; no modifica nada.
+-- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
+-- Generado con scripts/generar-verificar-migraciones.mjs en 9f2f8d82: 211 migraciones, última 20261054_growth_campaign_deal.
+-- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
--- UNA SOLA SENTENCIA: pégala COMPLETA (hasta el último ";") en el SQL Editor
--- de Supabase, o ejecuta  psql "$DIRECT_URL" -f scripts/verificar-migraciones.sql
+-- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
+--   psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f scripts/verificar-migraciones.sql
+-- Si el repo cambió, regenera con: node scripts/generar-verificar-migraciones.mjs
 --
--- Resultado: una fila por hallazgo. Si solo sale la fila RESUMEN con
--- estado = 'OK', no falta ninguna migración y la base coincide con el repo.
---   FALTANTE     → está en el repo y no en la base          (lo que buscas)
+-- Resultado: una fila por hallazgo. Si solo sale RESUMEN con 'OK', no falta nada.
+--   FALTANTE     → está en el repo y no en la base
 --   INCOMPLETA   → registrada sin terminar o revertida      (deploy roto)
 --   ALTERADA     → aplicada con un migration.sql distinto   (Prisma la rechazará)
 --   DESCONOCIDA  → en la base pero no en el repo            (a mano u otra rama)
@@ -222,7 +222,9 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261049_deals_enums','62a96621a7f37cd11589fa38c2e5d06ba6b3679f723a3532bac4deaeca0dc275'),
   ('20261050_verificacion_de_pago_enums','457d3124a0108035ee4162e2d032fe9181209576f33d0355dc409af561c266f2'),
   ('20261051_verificacion_de_pago','b6a2fc9cdfab3a508b401b8f1eea9cb1ff14d523fb91ec8da3a7edf4cea33329'),
-  ('20261052_supply_v2_derechos_por_linea','b374840aa0d8a3e1be74a0b32c3239a430f190e66be3fc857edd9e29352d0fc6')
+  ('20261052_supply_v2_derechos_por_linea','b374840aa0d8a3e1be74a0b32c3239a430f190e66be3fc857edd9e29352d0fc6'),
+  ('20261053_growth_deal_promotion_gate','88e7e6ea7b0e02469da035920510f0024def6334aea12f3d3476e780518ae9a4'),
+  ('20261054_growth_campaign_deal','c9a3ee3b07f0da9f10516f4b56dd194bf84ce0eace3506a2c02658622197efac')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,
