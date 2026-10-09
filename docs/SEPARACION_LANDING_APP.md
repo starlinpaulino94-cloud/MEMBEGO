@@ -8,6 +8,58 @@
 
 Fecha de la auditoría: 2026-10-09 · rama `claude/gracious-pasteur-87pexr`.
 
+## Decisiones aprobadas (2026-10-09)
+
+Estas condiciones reemplazan lo que el borrador original proponía donde se contradigan.
+
+1. **Landing exclusivamente informativa.** Sin carritos, compras, reservas, redenciones ni operaciones comerciales, tampoco para el visitante anónimo. Se conservan las páginas de consulta (productos, promociones, empresas, excursiones) para SEO y enlaces compartidos; toda acción operativa se ejecuta desde la aplicación.
+2. **App del cliente independiente.** Todo lo que el cliente hace existe dentro de `/cliente`, sin volver a la landing.
+3. **Rutas nuevas aprobadas de forma provisional.** Antes de crear cada una se verifica que respete la organización actual y no duplique. Las excursiones comparten la capa de experiencia (un solo carrito visible, mismo patrón de componente con modo, mismo traspaso de inicio de sesión), no el modelo de datos: una excursión no es un ítem del catálogo y su reserva no es un pedido.
+4. **Estado de sesión en la landing** con un componente de cliente ligero, sin volver dinámico el layout público.
+5. **Se conservan** autenticación, autorización, aislamiento multiempresa, servicios, lógica de negocio y base de datos.
+6. **URL públicas con valor** de SEO y enlaces compartidos se conservan. Las rutas operativas públicas que se retiren redirigen de forma segura, conservando destino y parámetros, sin bucles.
+7. **Una fase a la vez**, un commit por fase. Antes de cada una se presentan archivos, cambios, riesgos y pruebas de aceptación, y se espera aprobación.
+8. **Pruebas** unitarias, de integración y E2E por fase.
+
+Efecto en el plan: la pregunta 3 de §7 queda resuelta en contra de la recomendación original. **No hay carrito anónimo**: el visitante ve la ficha y un botón que lleva a iniciar sesión y volver a la ruta de la app. Seguir empresa y reseñas son acciones del cliente; se mueven a la app salvo que producto decida otra cosa (marcadas «decisión de producto» en la lista de excepciones).
+
+## Estado de las fases
+
+| Fase | Estado |
+|---|---|
+| F0 · Red de seguridad | **Hecha.** Ver abajo. |
+| F1 a F6 | Pendientes de aprobación individual. |
+
+### F0 · Red de seguridad (hecha)
+
+Solo pruebas y documentación; ningún archivo de `src` cambia.
+
+- `tests/separacion-landing-app.test.ts`: guardias estáticas (13 casos). Fijan que la app del cliente no enlaza a rutas operativas de la landing, que los componentes compartidos no cablean lo operativo al espacio público, que la landing no importa operaciones comerciales, que el layout público no lee la sesión en servidor, que los paneles no enlazan a la portada, que cada rol tiene una casa abierta por su propia protección, que el logout termina en `/login`, que el proxy rechaza destinos externos y que las URL públicas de SEO siguen existiendo.
+- Las guardias 1 a 3, la de sesión en páginas públicas y la de paneles usan **listas de excepciones que solo pueden encogerse**: una violación nueva falla, y una excepción ya resuelta que siga en la lista también falla. Cada excepción nombra la fase que la elimina. **En F6 todas deben quedar vacías.**
+- `tests/e2e/separacion-invariantes.spec.ts`: invariantes de acceso y de consulta pública, para ejecutarse tras cada fase.
+- Verificación de las guardias por mutación: un enlace nuevo a `/carrito` en la app, un import operativo en la portada pública, una fase que arregla un enlace y olvida la lista, y un layout público que lee la sesión, hacen fallar la prueba.
+
+Límite conocido: las guardias son análisis de texto. Ven literales de ruta, constantes `RUTA_*` públicas e imports. No ven un enlace armado por concatenación arbitraria; para eso están el E2E y las pruebas de cada fase.
+
+#### Excepciones vigentes al cerrar F0, por fase que las elimina
+
+| Fase | Qué se elimina |
+|---|---|
+| F1 | Enlaces de la app a `/catalogo`, `/promociones` y `/excursiones`; `TarjetaCatalogoPublica`, `TarjetaOferta` y `ExcursionCard` con destino propio; logo del vendedor a `/`. |
+| F2 | Detalle de producto operativo (`PedirForm`, `AgregarAlCarrito`, `ReclamarOfertaBoton`), `/carrito`, `/carrito/pagar/*`, icono de carrito de la barra pública. |
+| F3 | Excursiones: ficha con reserva, `/checkout`, carrito de excursiones en el layout público, seguir empresa y reseñas (decisión de producto), enlaces de la app a excursiones públicas. |
+| F4 | Ofertas Membego, membresías, campañas, canje de beneficios (`/oferta/[codigo]`), constantes `RUTA_*` públicas desde la app, y las páginas públicas que leen la sesión. |
+
+La lista exacta, archivo por archivo y con conteo, está en el propio test.
+
+### Hallazgos de F0 que ajustan el diagnóstico
+
+- `ResenaForm` (reseñas) y `FollowButton` (seguir empresa) también son acciones del cliente montadas en la landing mediante el perfil de empresa compartido. No estaban en el inventario original.
+- `/oferta/[codigo]` monta `ReclamarOferta` (canje de beneficios legacy): se suma a F4.
+- La app enlaza a rutas públicas también mediante constantes `RUTA_*` de Supply (cupones, fidelización, bonos), no solo con literales.
+- El estado HTTP no distingue «no encontrado» en el panel ni en la landing (Next transmite por streaming y deja 200); las pruebas miden el contenido.
+- `logout` revoca la sesión en Supabase Auth. Con las sesiones firmadas localmente del arnés E2E esa revocación no puede completarse, así que el caso E2E de cierre de sesión solo corre con `E2E_SUPABASE_REAL=1`. El destino del logout queda fijado por la guardia estática.
+
 ---
 
 ## 0. Veredicto en una frase
@@ -252,7 +304,7 @@ pantallas nuevas y conviene aprobarlas una a una.
 | Riesgo | Fase | Medida |
 |---|---|---|
 | **R1 · Romper E2E que hoy pasan por rutas públicas** (`carrito-checkout`, `pedidos-membego`, `deals-membego`, `catalogo-publico`, `comercio-experiencia`, `puente-supply`, `publico`) | F2–F4 | Correr cada spec antes y después; actualizar los specs al nuevo recorrido (login → app) y mantener un caso que verifique el **traspaso** público → login → app. No se borra ningún spec. |
-| **R2 · Pérdida del carrito al cambiar de layout** | F2, F3 | Ambos carritos persisten en `localStorage` del mismo origen con los mismos hooks; la página de la app usa `useCarrito`/`ExcursionCarritoContext` sin cambiar la clave. Prueba E2E: añadir anónimo → login → `/cliente/carrito` muestra la línea. |
+| **R2 · Carritos huérfanos en el navegador** (quien ya añadió algo en la landing antes de F2/F3) | F2, F3 | La clave de `localStorage` no cambia y la página de la app usa los mismos hooks, así que lo ya guardado aparece en `/cliente/carrito` tras iniciar sesión. A partir de F2 la landing deja de poder añadir. Prueba E2E: con una línea sembrada en el navegador, `/cliente/carrito` la muestra. |
 | **R3 · SEO y vistas previas** (WhatsApp/Facebook no siguen redirects) | F2–F4 | Las URL públicas de **lectura** (`/empresas/**`, `/catalogo`, `/ofertas`, `/promociones/**`, `/plan`, `/oferta`, `/promocion`) se mantienen con 200, canónicos y OG. Solo `/carrito*` y `/checkout` redirigen, y nunca estuvieron en el sitemap (`src/app/sitemap.ts:14-16`). |
 | **R4 · Choques de rutas en `(cliente)`** (`/cliente/excursiones/[reservaId]`, `/cliente/promociones/[id]`) | F3, F4 | Usar `/cliente/empresas/[slug]/excursiones/[excSlug]` y nombres nuevos (`ofertas-membego`, `membresias-membego`, `campanas`); el test `navegacion-cliente` («toda entrada del menú lleva a una pantalla que existe») y `tsc` detectan segmentos dinámicos en conflicto. |
 | **R5 · Hacer dinámica la landing** al leer la sesión en `(public)/layout` (hoy `revalidate = 600` en la home) | F5 | No leer `getUser` en el layout. Opción recomendada: componente cliente `EstadoSesionNav` que consulta un endpoint ligero existente o la presencia de la cookie `sb-*-auth-token` vía una cabecera que el proxy ya puede fijar; se decide en F5 con una medición de TTFB antes/después. |
@@ -277,7 +329,7 @@ pantallas nuevas y conviene aprobarlas una a una.
 
 ---
 
-## 7. Pendiente de aprobación
+## 7. Aprobación
 
 1. ¿Se aprueba el orden F0 → F6 y ejecutarlo fase a fase con commit por fase?
 2. Nombres de las rutas nuevas de la app (§2): `/cliente/carrito`,
@@ -285,9 +337,7 @@ pantallas nuevas y conviene aprobarlas una a una.
    `/cliente/empresas/[slug]/catalogo/[itemSlug]`,
    `/cliente/empresas/[slug]/excursiones/[excSlug]`, `/cliente/ofertas-membego/[slug]`,
    `/cliente/membresias-membego`, `/cliente/campanas/[code]`.
-3. Comportamiento del **visitante anónimo** en la landing: ¿puede seguir
-   añadiendo al carrito antes de iniciar sesión (y lo recupera en la app), o la
-   landing solo muestra «Inicia sesión para pedir»? Recomendación: lo primero,
-   porque ya funciona así y el carrito se conserva.
-4. Mecanismo de «sesión en la landing» (R5): componente cliente ligero
-   (recomendado) o layout dinámico.
+3. ~~Comportamiento del visitante anónimo~~ **Resuelto:** sin carrito en la
+   landing; la ficha ofrece un botón que lleva a iniciar sesión y volver a la
+   ruta de la app.
+4. ~~Mecanismo de sesión en la landing~~ **Resuelto:** componente de cliente ligero.
