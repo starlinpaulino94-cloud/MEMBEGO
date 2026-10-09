@@ -24,6 +24,7 @@ import {
 import { barridoDeOfertas } from '../../src/modules/deals/barrido'
 import { detalleOfertaEnTx, listarOfertasEnTx } from '../../src/modules/deals/queries'
 import type { EntradaDeOferta } from '../../src/modules/deals/domain'
+import { getCampanasMarketingAdmin } from '../../src/modules/engagement/campanas'
 
 /**
  * COMMERCE CORE · Ofertas con presupuesto (Deals) contra PostgreSQL de verdad (Fase 5).
@@ -144,6 +145,21 @@ async function ofertaActiva(e: Empresa, extra: Partial<EntradaDeOferta> = {}): P
   const { id } = await en(e, (tx) => crearOfertaEnTx(tx, e.id, entrada(e, extra), ctxOferta()))
   await en(e, (tx) => publicarOfertaEnTx(tx, e.id, id, ctxOferta()))
   return id
+}
+
+async function campanaPara(e: Empresa, dealId: string, estado: 'ACTIVA' | 'PAUSADA' = 'ACTIVA') {
+  return prisma.marketingCampaign.create({
+    data: {
+      companyId: e.id,
+      dealId,
+      titulo: `Campaña ${sufijo}`,
+      descripcion: 'Prueba de atribución',
+      estado,
+      fechaInicio: hace(HORA),
+      fechaFin: new Date(Date.now() + HORA),
+    },
+    select: { id: true },
+  })
 }
 
 const reclamar = (e: Empresa, dealId: string, i: number, ahora?: Date) => en(e, (tx) => reclamarOfertaEnTx(tx, e.id, { dealId, customerId: e.clientes[i], locationId: e.sucursal }, ahora))
@@ -365,6 +381,39 @@ test('Growth · pausar una Promotion detiene reclamos nuevos pero no invalida un
   assert.equal(await codigoDe(reclamar(E.a, dealId, 4)), 'PROMOCION_NO_APLICA')
   await canjear(E.a, reclamo.orderId)
   assert.equal((await reclamoDe(reclamo.orderId)).status, 'REDEEMED')
+})
+
+test('Growth · atribuye el reclamo a la campaña directa, valida tenant y reporta reclamos/canjes', async () => {
+  const dealId = await ofertaActiva(E.a)
+  const primera = await campanaPara(E.a, dealId)
+  const segunda = await campanaPara(E.a, dealId)
+  const pausa = await campanaPara(E.a, dealId, 'PAUSADA')
+  const ajena = await campanaPara(E.b, await ofertaActiva(E.b))
+
+  const claim1 = await en(E.a, (tx) => reclamarOfertaEnTx(tx, E.a.id, {
+    dealId, customerId: E.a.clientes[20], locationId: E.a.sucursal, campaignId: primera.id,
+  }))
+  const claim2 = await en(E.a, (tx) => reclamarOfertaEnTx(tx, E.a.id, {
+    dealId, customerId: E.a.clientes[21], locationId: E.a.sucursal, campaignId: segunda.id,
+  }))
+  const sinCampanaActiva = await en(E.a, (tx) => reclamarOfertaEnTx(tx, E.a.id, {
+    dealId, customerId: E.a.clientes[22], locationId: E.a.sucursal, campaignId: pausa.id,
+  }))
+  const deOtraEmpresa = await en(E.a, (tx) => reclamarOfertaEnTx(tx, E.a.id, {
+    dealId, customerId: E.a.clientes[23], locationId: E.a.sucursal, campaignId: ajena.id,
+  }))
+
+  assert.equal((await pedido(claim1.orderId)).attribution?.campaignId, primera.id)
+  assert.equal((await pedido(claim2.orderId)).attribution?.campaignId, segunda.id)
+  assert.equal((await pedido(sinCampanaActiva.orderId)).attribution?.campaignId, null)
+  assert.equal((await pedido(deOtraEmpresa.orderId)).attribution?.campaignId, null)
+
+  await canjear(E.a, claim1.orderId)
+  const metricas = await getCampanasMarketingAdmin(E.a.id)
+  assert.equal(metricas.find((c) => c.id === primera.id)?.reclamosAtribuidos, 1)
+  assert.equal(metricas.find((c) => c.id === primera.id)?.canjesAtribuidos, 1)
+  assert.equal(metricas.find((c) => c.id === segunda.id)?.reclamosAtribuidos, 1)
+  assert.equal(metricas.find((c) => c.id === segunda.id)?.canjesAtribuidos, 0)
 })
 
 // ── Canje y cobro ────────────────────────────────────────────────────────────
