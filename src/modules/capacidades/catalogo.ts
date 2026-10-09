@@ -179,8 +179,8 @@ export const CAPACIDADES = [
   // comercial (ver CAPACIDADES_COMERCIO); se apaga por override si hace falta.
   'CATALOGO_UNIFICADO',
   // Fase 3 — Commerce Core: pedidos Membego (`/admin/pedidos-membego`): el pedido
-  // unificado del marketplace con atribución, confirmación dual y QR. Apagada
-  // para todos de serie; solo tiene sentido en empresas con el catálogo
+  // unificado del marketplace con atribución, confirmación dual y QR. Encendida
+  // de serie (CAPACIDADES_COMERCIO); requiere el catálogo
   // unificado (las líneas del pedido son variantes del catálogo).
   'PEDIDOS_MEMBEGO',
   // Fase 5 — Growth Engine: ofertas con presupuesto (`/admin/deals`, `/ofertas`): un

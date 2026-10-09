@@ -122,20 +122,20 @@ function RuletaWheel({
     const idx = k >= 0 ? k : 0
     // Target: bring sector center to top (pointer at -PI/2)
     const targetAngle = -(idx * seg + seg / 2) - Math.PI / 2
-    const currentMod = ((rotation.value % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
+    const currentMod = ((rotation.get() % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
     const delta = ((targetAngle - currentMod) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)
     const vueltas = 5 * 2 * Math.PI
-    rotation.value = withTiming(rotation.value + vueltas + delta, {
+    rotation.set(withTiming(rotation.get() + vueltas + delta, {
       duration: SPIN_DURATION,
       easing: Easing.out(Easing.cubic),
-    })
+    }))
     // Show result modal after animation
     const t = setTimeout(() => setLocalResultado(resultado), SPIN_DURATION + 100)
     return () => clearTimeout(t)
   }, [resultado]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}rad` }],
+    transform: [{ rotate: `${rotation.get()}rad` }],
   }))
 
   const sectors = useMemo(() => {

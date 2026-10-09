@@ -96,8 +96,11 @@ if (/supabase\.(co|com)|pooler\.supabase/i.test(URL) && process.env.RLS_PERMITIR
 
 /** Ejecuta SQL y devuelve la salida cruda. Lanza si psql falla. */
 function sql(texto) {
-  return execFileSync('psql', [URL, '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', texto], {
+  // Opciones antes de la URL y SQL por stdin UTF-8: argv de Windows altera los acentos.
+  return execFileSync('psql', ['-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-f', '-', URL], {
     encoding: 'utf8',
+    input: texto,
+    env: { ...process.env, PGCLIENTENCODING: 'UTF8' },
     stdio: ['pipe', 'pipe', 'pipe'],
   }).trim()
 }

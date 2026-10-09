@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 
 /**
  * SEPARACIÓN ESTRICTA (Plan Maestro §F4, riesgo n.º 4): Merchant Billing (empresa →
@@ -70,7 +70,7 @@ test('solo el servicio de pedidos llama a billing desde los pedidos, y solo con 
 
 test('nadie fuera del servicio de billing escribe en el libro, las comisiones ni los cortes', () => {
   for (const a of archivos(join(RAIZ, 'src'))) {
-    if (a.includes('/modules/billing/')) continue
+    if (a.includes(sep + join('modules', 'billing') + sep)) continue
     const t = leer(a)
     assert.doesNotMatch(t, /merchantLedgerEntry\.(create|createMany|update|updateMany|delete|deleteMany|upsert)/, `${a} escribe en el libro`)
     assert.doesNotMatch(t, /\.commission\.(create|createMany|update|updateMany|delete|deleteMany|upsert)/, `${a} escribe comisiones`)

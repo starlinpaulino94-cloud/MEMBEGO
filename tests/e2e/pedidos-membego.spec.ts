@@ -139,7 +139,7 @@ test.describe('Pedidos Membego · recorrido', () => {
     await expect(p.getByRole('link', { name: new RegExp(codigo) }).first()).toBeVisible()
     // El aviso sale después de responder: se espera a que llegue.
     await expect
-      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido:${pedidoId}:RECIBIDO` } }))?.titulo ?? null, { timeout: 15_000 })
+      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido:${pedidoId}:RECIBIDO`, titulo: 'Nuevo pedido Membego' } }))?.titulo ?? null, { timeout: 15_000 })
       .toBe('Nuevo pedido Membego')
     await ctx.close()
   })
