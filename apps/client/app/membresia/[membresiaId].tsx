@@ -606,6 +606,7 @@ function MembresiaDetailScreenContent() {
                 session={cardnetSession}
                 onStatusChange={handleCardnetStatusChange}
                 onRestartSession={() => { void startCardnetCheckout() }}
+                onClose={() => setCardnetSession(null)}
               />
               {cardnetStatus?.status === 'expired' ? (
                 <View className="px-4 md:px-6">

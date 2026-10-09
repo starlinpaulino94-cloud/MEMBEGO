@@ -48,11 +48,10 @@ export function buildCardnetCaptureDocument(
 <title>Pago seguro con CardNET</title>
 <style>
 :root{color-scheme:light;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:${colors.surface.foreground};background:${colors.surface.background}}
-*{box-sizing:border-box}body{margin:0;padding:16px;background:${colors.surface.background}}main{max-width:620px;margin:0 auto;padding:18px;border:1px solid ${colors.surface.border};border-radius:16px;background:${colors.surface.background};box-shadow:0 8px 28px ${captureCardShadow}}
+*{box-sizing:border-box}html,body{min-height:100%;margin:0}body{padding:16px;background:${colors.surface.background}}main{max-width:620px;margin:0 auto;padding:18px;border:1px solid ${colors.surface.border};border-radius:16px;background:${colors.surface.background};box-shadow:0 8px 28px ${captureCardShadow}}
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:12px}.mark{width:38px;height:38px;border-radius:12px;background:${colors.primary[50]};color:${colors.primary.DEFAULT};display:grid;place-items:center;font-size:20px}.title{font-size:16px;font-weight:700;line-height:1.35}.sub{font-size:14px;line-height:1.5;color:${colors.surface.mutedForeground};margin:3px 0 14px}
 .note{padding:12px;border:1px solid ${colors.surface.border};border-radius:12px;background:${colors.surface.muted};font-size:14px;line-height:1.5;color:${colors.surface.mutedForeground}}button{width:100%;min-height:48px;margin-top:16px;border:0;border-radius:12px;background:${colors.primary.DEFAULT};color:${colors.surface.background};font:600 15px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button:disabled{opacity:.55}#status{margin-top:10px;min-height:20px;text-align:center;font-size:13px;color:${colors.surface.mutedForeground}}
 </style>
-<script src="${escapeAttribute(config.scriptUrl)}" async></script>
 </head>
 <body><main>
 <div class="brand"><div class="mark" aria-hidden="true">◈</div><div class="title">Pago seguro con CardNET</div></div>
@@ -66,13 +65,19 @@ export function buildCardnetCaptureDocument(
 (function(){
   'use strict';
   const capture=${scriptJson(capture)};
+  const sdkScriptUrl=${scriptJson(config.scriptUrl)};
   const button=document.getElementById('open-capture');
   const status=document.getElementById('status');
   let activeFrame=null;
   let trustedToken=null;
   let consumed=false;
-  function validToken(value){return typeof value==='string'&&value.length>=8&&value.length<=512&&value.trim()===value&&!/[\u0000-\u0020\u007f]/.test(value)}
+  let captureOpened=false;
+  function validToken(value){return typeof value==='string'&&value.length>=8&&value.length<=512&&value.trim()===value&&!/[\\u0000-\\u0020\\u007f]/.test(value)}
   function tokenFrom(data){return data&&typeof data==='object'&&!Array.isArray(data)&&Object.prototype.hasOwnProperty.call(data,'TokenId')&&validToken(data.TokenId)?data.TokenId:null}
+  function report(stage){
+    const bridge=window.ReactNativeWebView;
+    if(bridge&&typeof bridge.postMessage==='function')bridge.postMessage(JSON.stringify({type:'CARDNET_DIAGNOSTIC',stage:stage}));
+  }
   function isExpectedFrame(frame){
     try{
       const url=new URL(frame.src);
@@ -100,35 +105,55 @@ export function buildCardnetCaptureDocument(
     status.textContent='Captura recibida. Confirmando con el servidor…';
     button.disabled=true;
   }
+  function openCapture(){
+    if(captureOpened||consumed)return;
+    report('capture_open_requested');
+    try{
+      const sdk=window.PWCheckout;
+      if(!sdk||typeof sdk.SetProperties!=='function')throw new Error('unavailable');
+      sdk.SetProperties({name:'MembeGo',email:'',button_label:'Pagar #monto#',currency:${scriptJson(session.currency)},description:'Pago seguro',form_id:'cardnet_capture_form',lang:'ESP',checkout_card:1,autoSubmit:'false',empty:'false'});
+      const open=sdk.OpenIframeCustom||sdk.OpenIframe;
+      if(typeof open!=='function')throw new Error('unavailable');
+      open(capture.iframeUrl,capture.uniqueId);
+      captureOpened=true;
+      button.disabled=true;
+      button.textContent='Formulario seguro abierto';
+      status.textContent='Completa el formulario dentro de CardNET.';
+      report('capture_opened');
+    }catch{
+      button.disabled=false;
+      button.textContent='Reintentar apertura de CardNET';
+      status.textContent='No se pudo abrir el formulario seguro. Intenta nuevamente.';
+      report('capture_open_failed');
+    }
+  }
   function ready(){
     const sdk=window.PWCheckout;
-    if(!sdk||typeof sdk.Bind!=='function'||typeof sdk.OpenIframeCustom!=='function'){
+    if(!sdk||typeof sdk.Bind!=='function'||typeof sdk.SetProperties!=='function'||(typeof sdk.OpenIframeCustom!=='function'&&typeof sdk.OpenIframe!=='function')){
+      report('sdk_unavailable');
       status.textContent='No se pudo cargar el formulario seguro. Cierra e intenta nuevamente.';
       return;
     }
     try{
       sdk.Bind('tokenCreated',receiveToken);
-      sdk.SetProperties({button_label:'Continuar con CardNET',checkout_card:1,currency:${scriptJson(session.currency)},description:'Pago seguro',empty:true,form_id:'cardnet_capture_form',lang:'ESP',amount:${scriptJson(String(session.amount))},autoSubmit:false});
       button.disabled=false;
       button.textContent='Abrir formulario de CardNET';
-      status.textContent='';
+      status.textContent='Conectado. Toca para abrir el formulario seguro.';
+      report('sdk_ready');
     }catch{
+      report('sdk_setup_failed');
       status.textContent='No se pudo preparar el formulario seguro. Cierra e intenta nuevamente.';
     }
   }
-  button.addEventListener('click',function(){
-    if(consumed)return;
-    try{
-      const sdk=window.PWCheckout;
-      if(!sdk||typeof sdk.OpenIframeCustom!=='function')throw new Error('unavailable');
-      refreshFrame();
-      sdk.OpenIframeCustom(capture.iframeUrl,capture.uniqueId);
-      status.textContent='Completa el formulario dentro de CardNET.';
-    }catch{status.textContent='No se pudo abrir el formulario seguro. Cierra e intenta nuevamente.'}
-  });
-  const script=document.querySelector('script[src]');
-  if(window.PWCheckout)ready();
-  else if(script){script.addEventListener('load',ready,{once:true});script.addEventListener('error',function(){status.textContent='No se pudo cargar el formulario seguro.'},{once:true});}
+  button.addEventListener('click',openCapture);
+  report('document_ready');
+  if(window.PWCheckout){report('sdk_script_loaded');ready();return;}
+  const script=document.createElement('script');
+  script.src=sdkScriptUrl;
+  script.async=true;
+  script.addEventListener('load',function(){report('sdk_script_loaded');ready();},{once:true});
+  script.addEventListener('error',function(){report('sdk_script_failed');status.textContent='No se pudo cargar el formulario seguro.'},{once:true});
+  document.head.appendChild(script);
 })();
 </script>
 </body></html>`

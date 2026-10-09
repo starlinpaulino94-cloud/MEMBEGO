@@ -17,6 +17,43 @@ export interface CardnetTokenMessage {
   readonly token: string
 }
 
+const CARDNET_MERCHANT_ORIGIN_FALLBACK = 'https://membego.com'
+export const CARDNET_CAPTURE_DOCUMENT_PATH = '/__rn_cardnet_capture__/' as const
+
+const CARDNET_DIAGNOSTIC_STAGES = [
+  'document_ready',
+  'sdk_script_loaded',
+  'sdk_script_failed',
+  'sdk_ready',
+  'sdk_unavailable',
+  'sdk_setup_failed',
+  'capture_open_requested',
+  'capture_opened',
+  'capture_open_failed',
+  'navigation_allowed',
+  'navigation_rejected',
+  'webview_load_start',
+  'webview_load_end',
+  'webview_error',
+  'webview_http_error',
+] as const
+
+export type CardnetDiagnosticStage = (typeof CARDNET_DIAGNOSTIC_STAGES)[number]
+
+export interface CardnetDiagnosticMessage {
+  readonly type: 'CARDNET_DIAGNOSTIC'
+  readonly stage: CardnetDiagnosticStage
+}
+
+export interface CardnetDiagnosticLocation {
+  readonly host: string
+  readonly path: string
+}
+
+function isCardnetDiagnosticStage(value: unknown): value is CardnetDiagnosticStage {
+  return typeof value === 'string' && CARDNET_DIAGNOSTIC_STAGES.some((stage) => stage === value)
+}
+
 const MODE_CONFIG: Readonly<Record<CardnetCaptureMode, {
   origin: string
   capturePath: string
@@ -40,6 +77,56 @@ function safeUrl(value: string): URL | null {
   } catch {
     return null
   }
+}
+
+export function resolveCardnetMerchantOrigin(value: string | undefined): string | null {
+  if (value === undefined) return CARDNET_MERCHANT_ORIGIN_FALLBACK
+  const url = safeUrl(value)
+  if (
+    !url ||
+    url.protocol !== 'https:' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.pathname !== '/' ||
+    url.search !== '' ||
+    url.hash !== ''
+  ) {
+    return null
+  }
+  return url.origin
+}
+
+export function parseCardnetDiagnosticMessage(raw: string): CardnetDiagnosticMessage | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+
+  if (!isPlainRecord(parsed)) return null
+  const keys = Object.keys(parsed).sort()
+  if (
+    keys.join(',') !== 'stage,type' ||
+    parsed.type !== 'CARDNET_DIAGNOSTIC' ||
+    !isCardnetDiagnosticStage(parsed.stage)
+  ) {
+    return null
+  }
+  return {
+    type: 'CARDNET_DIAGNOSTIC',
+    stage: parsed.stage,
+  }
+}
+
+export function sanitizeCardnetDiagnosticLocation(rawUrl: string): CardnetDiagnosticLocation | null {
+  const url = safeUrl(rawUrl)
+  if (!url || url.protocol !== 'https:' || url.username !== '' || url.password !== '') return null
+  const path = url.pathname
+    .split('/')
+    .map((segment) => (/^[A-Za-z0-9_-]{24,}$/.test(segment) || /^\d{8,}$/.test(segment) ? '[redacted]' : segment))
+    .join('/')
+  return { host: url.host, path }
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -141,6 +228,30 @@ export function isAllowedCardnetFrameUrl(
     keys.join(',') === 'key,session_id' &&
     url.searchParams.get('key') === session.publicKey &&
     url.searchParams.get('session_id') === session.uniqueId
+  )
+}
+
+export function isAllowedCardnetNavigation(
+  request: { readonly url: string; readonly isTopFrame?: boolean },
+  merchantOrigin: string,
+  config: CardnetCaptureConfig,
+  session: Pick<CardnetCaptureSession, 'publicKey' | 'uniqueId'>
+): boolean {
+  if (resolveCardnetMerchantOrigin(merchantOrigin) !== merchantOrigin) return false
+  if (request.url === 'about:blank') return true
+  if (isAllowedCardnetFrameUrl(request.url, config, session)) return true
+  if (request.isTopFrame === false) return false
+
+  const url = safeUrl(request.url)
+  return (
+    url !== null &&
+    url.protocol === 'https:' &&
+    url.origin === merchantOrigin &&
+    url.username === '' &&
+    url.password === '' &&
+    (url.pathname === '/' || url.pathname === CARDNET_CAPTURE_DOCUMENT_PATH) &&
+    url.search === '' &&
+    url.hash === ''
   )
 }
 

@@ -271,6 +271,10 @@ function MisPromocionDetalleScreenContent() {
             captureSession={captureSession}
             captureStatus={captureStatus}
             onCaptureStatusChange={setCaptureStatus}
+            onCloseCapture={() => {
+              setCaptureSession(null)
+              setCaptureStatus(null)
+            }}
             isStartingCardnet={isStartingCardnet}
             captureStartError={captureStartError}
             onCardnetApproved={handleCardnetApproved}
@@ -306,6 +310,7 @@ function DetalleContent({
   captureSession,
   captureStatus,
   onCaptureStatusChange,
+  onCloseCapture,
   isStartingCardnet,
   captureStartError,
   onCardnetApproved,
@@ -323,6 +328,7 @@ function DetalleContent({
   captureSession: CardnetCaptureSession | null
   captureStatus: CardnetPaymentStatus | null
   onCaptureStatusChange: (status: CardnetPaymentStatus) => void
+  onCloseCapture: () => void
   isStartingCardnet: boolean
   captureStartError: boolean
   onCardnetApproved: () => void
@@ -526,6 +532,7 @@ function DetalleContent({
           onStatusChange={onCaptureStatusChange}
           onApproved={onCardnetApproved}
           onRestartSession={startCardnet}
+          onClose={onCloseCapture}
         />
       ) : null}
 

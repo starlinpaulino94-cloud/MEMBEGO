@@ -1,14 +1,19 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
+import { runInNewContext } from 'node:vm'
 import type { CardnetCaptureSession } from '../apps/client/src/lib/api'
 import { buildCardnetCaptureDocument } from '../apps/client/src/components/pagos/cardnet/captureDocument.native'
 import {
   createCardnetTokenGate,
   isAllowedCardnetFrameUrl,
+  isAllowedCardnetNavigation,
   isCardnetSessionExpired,
   matchesActiveCaptureFrame,
+  parseCardnetDiagnosticMessage,
   parseNativeCardnetMessage,
+  resolveCardnetMerchantOrigin,
+  sanitizeCardnetDiagnosticLocation,
   shouldRenderPaymentSuccess,
   validateCardnetCaptureSession,
 } from '../apps/client/src/components/pagos/cardnet/security'
@@ -54,6 +59,60 @@ test('rejects invalid initial URLs, hostile suffixes, mixed modes, and query ove
     session({ uniqueId: 'id with spaces' }),
   ]
   for (const value of invalidSessions) assert.equal(validateCardnetCaptureSession(value), null)
+})
+
+test('resolves only an HTTPS merchant origin for the native capture document', () => {
+  assert.equal(resolveCardnetMerchantOrigin(undefined), 'https://membego.com')
+  assert.equal(resolveCardnetMerchantOrigin('https://checkout.example/'), 'https://checkout.example')
+  for (const invalid of [
+    '',
+    'http://checkout.example',
+    'https://checkout.example/pay',
+    'https://checkout.example/?redirect=https://attacker.example',
+    'https://user:password@checkout.example',
+  ]) {
+    assert.equal(resolveCardnetMerchantOrigin(invalid), null)
+  }
+})
+
+test('allows exact CardNET session navigation on Android when isTopFrame is absent', () => {
+  const active = session()
+  const config = validateCardnetCaptureSession(active)
+  assert.ok(config)
+  const merchantOrigin = 'https://membego.com'
+  const request = (url: string, isTopFrame?: boolean) =>
+    isTopFrame === undefined ? { url } : { url, isTopFrame }
+
+  assert.equal(isAllowedCardnetNavigation(request(config.iframeUrl), merchantOrigin, config, active), true)
+  assert.equal(isAllowedCardnetNavigation(request('about:blank'), merchantOrigin, config, active), true)
+  assert.equal(isAllowedCardnetNavigation(request('https://membego.com/', true), merchantOrigin, config, active), true)
+  assert.equal(isAllowedCardnetNavigation(request('https://membego.com/__rn_cardnet_capture__/'), merchantOrigin, config, active), true)
+  assert.equal(isAllowedCardnetNavigation(request(config.iframeUrl, false), merchantOrigin, config, active), true)
+  assert.equal(isAllowedCardnetNavigation(request('https://membego.com/pay', true), merchantOrigin, config, active), false)
+  assert.equal(isAllowedCardnetNavigation(request('http://membego.com/', true), merchantOrigin, config, active), false)
+  assert.equal(isAllowedCardnetNavigation(request('https://attacker.example/', undefined), merchantOrigin, config, active), false)
+  assert.equal(isAllowedCardnetNavigation(request(config.iframeUrl.replace('customer-unique-id-fixture', 'other-id')), merchantOrigin, config, active), false)
+  assert.equal(isAllowedCardnetNavigation(request(config.iframeUrl), 'http://membego.com', config, active), false)
+})
+
+test('CardNET diagnostics accept fixed stages and omit query or identifier values', () => {
+  assert.deepEqual(parseCardnetDiagnosticMessage(JSON.stringify({
+    type: 'CARDNET_DIAGNOSTIC',
+    stage: 'sdk_ready',
+  })), { type: 'CARDNET_DIAGNOSTIC', stage: 'sdk_ready' })
+  assert.equal(parseCardnetDiagnosticMessage(JSON.stringify({
+    type: 'CARDNET_DIAGNOSTIC',
+    stage: 'sdk_ready',
+    sessionId: 'private-session-fixture',
+  })), null)
+  assert.deepEqual(
+    sanitizeCardnetDiagnosticLocation('https://servicios.cardnet.com.do/servicios/tokens/v1/Capture/?key=secret-public-key&session_id=secret-session'),
+    { host: 'servicios.cardnet.com.do', path: '/servicios/tokens/v1/Capture/' },
+  )
+  const location = sanitizeCardnetDiagnosticLocation('https://servicios.cardnet.com.do/private-session-identifier-1234567890')
+  assert.ok(location)
+  assert.equal(location.path.includes('private-session-identifier-1234567890'), false)
+  assert.equal(sanitizeCardnetDiagnosticLocation('http://servicios.cardnet.com.do/path'), null)
 })
 
 test('accepts only the active capture iframe from the exact selected origin', () => {
@@ -130,7 +189,100 @@ test('escapes server session strings before embedding them in the native WebView
   }
 })
 
-test('native capture surface colors stay tied to semantic client tokens', () => {
+test('keeps the generated native WebView document free of literal NUL bytes', () => {
+  const active = session()
+  const config = validateCardnetCaptureSession(active)
+  assert.ok(config)
+
+  const html = buildCardnetCaptureDocument(active, config)
+  assert.equal(html.includes(String.fromCharCode(0)), false)
+})
+
+test('opens the provider capture only after a user tap once PWCheckout is ready', () => {
+  const active = session()
+  const config = validateCardnetCaptureSession(active)
+  assert.ok(config)
+
+  const calls: string[] = []
+  const frames: Array<{ src: string; contentWindow: object }> = []
+  const listeners = new Map<string, () => void>()
+  const scriptListeners = new Map<string, () => void>()
+  const button = {
+    disabled: true,
+    textContent: 'Preparando formulario seguro',
+    addEventListener: (name: string, listener: () => void) => listeners.set(name, listener),
+  }
+  const status = { textContent: '' }
+  const properties: Record<string, unknown>[] = []
+  const sdk = {
+    Bind: (event: string) => calls.push(`bind:${event}`),
+    SetProperties: (value: Record<string, unknown>) => {
+      calls.push('set-properties')
+      properties.push(value)
+    },
+    OpenIframeCustom: (url: string, uniqueId: string) => {
+      calls.push('open-capture')
+      assert.equal(url, config.iframeUrl)
+      assert.equal(uniqueId, active.uniqueId)
+      frames.push({ src: url, contentWindow: {} })
+    },
+  }
+  let sdkAvailable = false
+  const sdkScript = {
+    src: '',
+    async: false,
+    addEventListener: (name: string, listener: () => void) => scriptListeners.set(name, listener),
+  }
+  const messages: string[] = []
+  const document = {
+    documentElement: {},
+    getElementById: (id: string) => id === 'open-capture' ? button : status,
+    querySelector: () => null,
+    querySelectorAll: () => frames,
+    createElement: () => sdkScript,
+    head: { appendChild: () => undefined },
+  }
+  const windowObject = {
+    get PWCheckout() { return sdkAvailable ? sdk : undefined },
+    ReactNativeWebView: { postMessage: (message: string) => messages.push(message) },
+    addEventListener: () => undefined,
+  }
+
+  const html = buildCardnetCaptureDocument(active, config)
+  const inlineScript = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
+    .map((match) => match[1])
+    .find((source) => source?.includes('CARDNET_TOKEN_CREATED'))
+  assert.ok(inlineScript)
+
+  runInNewContext(inlineScript, {
+    MutationObserver: class { observe() {} },
+    URL,
+    document,
+    window: windowObject,
+  })
+
+  assert.equal(sdkScript.src, config.scriptUrl)
+  assert.equal(sdkScript.async, true)
+  assert.equal(button.disabled, true)
+  sdkAvailable = true
+  scriptListeners.get('load')?.()
+
+  assert.deepEqual(calls, ['bind:tokenCreated'])
+  assert.equal(button.disabled, false)
+  assert.equal(frames.length, 0)
+
+  listeners.get('click')?.()
+
+  assert.deepEqual(calls, ['bind:tokenCreated', 'set-properties', 'open-capture'])
+  assert.equal(properties[0]?.form_id, 'cardnet_capture_form')
+  assert.equal(properties[0]?.empty, 'false')
+  assert.equal(properties[0]?.autoSubmit, 'false')
+  assert.equal(Object.hasOwn(properties[0] ?? {}, 'amount'), false)
+  assert.equal(frames.length, 1)
+  assert.ok(messages.some((message) => message.includes('capture_opened')))
+})
+
+test('native capture surface fills its modal and colors stay tied to semantic client tokens', () => {
   const nativeSurface = readFileSync(
     new URL('../apps/client/src/components/pagos/cardnet/CaptureSurface.native.tsx', import.meta.url),
     'utf8',
@@ -140,7 +292,9 @@ test('native capture surface colors stay tied to semantic client tokens', () => 
     'utf8',
   )
 
-  assert.match(nativeSurface, /border border-border bg-card/)
+  assert.match(nativeSurface, /className="flex-1 bg-background"/)
+  assert.match(nativeSurface, /style=\{\{ flex: 1, opacity: 1 \}\}/)
+  assert.doesNotMatch(nativeSurface, /height: 284/)
   assert.doesNotMatch(nativeSurface, /\bbg-white\b/)
   assert.match(nativeDocument, /cssRgba\(colors\.surface\.foreground, 0\.06\)/)
   assert.doesNotMatch(nativeDocument, /rgba\(\s*\d+/)
