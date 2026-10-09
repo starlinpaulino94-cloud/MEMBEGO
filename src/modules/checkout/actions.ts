@@ -22,9 +22,10 @@ import { createRateLimiter, formSubmitLimiter, getClientIdentifier } from '@/lib
 import { headers } from 'next/headers'
 import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
-import { notificarAdmins } from '@/modules/notificaciones/service'
 import { InventarioError } from '@/modules/inventory/errores'
+import { avisarStockBajo } from '@/modules/inventory/avisos'
 import { PedidoError } from '@/modules/orders/errores'
+import { avisarPasoDelPedido } from '@/modules/orders/avisos'
 import { empresaRecibePedidos } from '@/modules/orders/publico'
 import type { ContextoPedido } from '@/modules/orders/service'
 import { MAX_LINEAS_CARRITO, leerCarrito, type LineaDeCarrito } from './domain'
@@ -145,8 +146,12 @@ export async function hacerCheckout(entrada: {
     revalidatePath('/admin/pedidos-membego', 'layout')
     revalidateTag(NAV_CLIENTE_TAG, 'max')
     if (!r.repetido) {
-      // Best-effort: un aviso no puede tumbar el pedido.
-      void notificarAdmins(companyId, { tipo: 'SISTEMA', titulo: 'Nuevo pedido Membego', mensaje: `Llegó el pedido ${r.code} por ${r.total}. Acéptalo para empezar a atenderlo.`, href: `/admin/pedidos-membego/${r.pedidoId}`, dedupeKey: `pedido-nuevo:${r.pedidoId}` })
+      // Best-effort: un aviso no puede tumbar el pedido. Empresa («Nuevo pedido»), cliente
+      // («Pedido recibido»), bus `pedido.creado` y stock bajo si lo apartado lo dejó así.
+      void (async () => {
+        await avisarPasoDelPedido(companyId, r.pedidoId, 'RECIBIDO', 'CLIENTE')
+        await avisarStockBajo(companyId, lineas.map((l) => l.varianteId))
+      })()
     }
     return { ok: true, ...r }
   } catch (e) {

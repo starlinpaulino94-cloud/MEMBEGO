@@ -24,9 +24,10 @@ import { getRequestMeta } from '@/lib/server-utils'
 import { formSubmitLimiter } from '@/lib/rate-limit'
 import { asegurarClienteEnEmpresa, misClienteIds } from '@/modules/cliente/afiliacion'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
-import { notificarAdmins } from '@/modules/notificaciones/service'
 import { InventarioError } from '@/modules/inventory/errores'
+import { avisarStockBajo } from '@/modules/inventory/avisos'
 import { PedidoError } from './errores'
+import { avisarPasoDelPedido } from './avisos'
 import { empresaRecibePedidos } from './publico'
 import { MAX_PEDIDOS_ABIERTOS_POR_CLIENTE } from './domain'
 import { cancelarPedidoEnTx, confirmarMontoEnTx, contarPedidosAbiertosEnTx, crearPedidoEnTx, renovarQrEnTx, type ContextoPedido } from './service'
@@ -150,8 +151,12 @@ export async function crearPedidoComoCliente(entrada: EntradaPedidoCliente): Pro
     // El primer pedido hace aparecer «Mis pedidos» en el menú del cliente.
     revalidateTag(NAV_CLIENTE_TAG, 'max')
     if (!r.repetido) {
-      // Best-effort: un aviso no puede tumbar el pedido.
-      void notificarAdmins(companyId, { tipo: 'SISTEMA', titulo: 'Nuevo pedido Membego', mensaje: `Llegó el pedido ${r.code} por ${r.total}. Acéptalo para empezar a atenderlo.`, href: `/admin/pedidos-membego/${r.pedidoId}`, dedupeKey: `pedido-nuevo:${r.pedidoId}` })
+      // Best-effort: un aviso no puede tumbar el pedido. La empresa recibe «Nuevo pedido», el
+      // cliente «Pedido recibido», el bus `pedido.creado`, y si lo apartado dejó stock bajo, el aviso.
+      void (async () => {
+        await avisarPasoDelPedido(companyId, r.pedidoId, 'RECIBIDO', 'CLIENTE')
+        await avisarStockBajo(companyId, [varianteId])
+      })()
     }
     return { ok: true, pedidoId: r.pedidoId, code: r.code, repetido: r.repetido }
   } catch (e) {
@@ -200,10 +205,13 @@ export async function confirmarMontoPedido(entrada: { pedidoId: string; montoVis
 /** Cancela mi pedido (solo antes de que la empresa lo acepte). */
 export async function cancelarMiPedido(entrada: { pedidoId: string; motivo: string }): Promise<ResultadoCliente<{ repetido: boolean }>> {
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
-  return accionSobreMiPedido(texto(entrada.pedidoId), async (companyId, customerId, ctx, tx) => {
-    const r = await cancelarPedidoEnTx(tx, companyId, texto(entrada.pedidoId), { motivo: texto(entrada.motivo), customerId }, ctx)
-    return { repetido: r.repetido }
+  const r = await accionSobreMiPedido(texto(entrada.pedidoId), async (companyId, customerId, ctx, tx) => {
+    const x = await cancelarPedidoEnTx(tx, companyId, texto(entrada.pedidoId), { motivo: texto(entrada.motivo), customerId }, ctx)
+    return { repetido: x.repetido, companyId }
   })
+  // La empresa se entera de que el cliente canceló (y de que el stock volvió); el cliente recibe la confirmación.
+  if (r.ok && !r.repetido) void avisarPasoDelPedido(r.companyId, texto(entrada.pedidoId), 'CANCELADO', 'CLIENTE')
+  return r.ok ? { ok: true, repetido: r.repetido } : r
 }
 
 /** Pide un QR nuevo para mi pedido listo (el anterior deja de valer). */

@@ -66,6 +66,12 @@ export default async function OfertaPage({ params }: { params: Promise<{ dealId:
       <p className="text-sm text-muted-foreground">
         {EXPLICACION_ESTADO_OFERTA[o.status]}
         {o.statusReason ? ` (${o.statusReason})` : ''}
+        {' '}
+        La oferta referencia a{' '}
+        <Link href={`/admin/catalogo/${o.catalogItemId}#promociones`} className="text-primary underline-offset-2 hover:underline">
+          {o.itemName}
+        </Link>{' '}
+        del catálogo: si cambias su nombre, foto o descripción, el marketplace lo refleja; el precio de lista se lee al crearla y al reclamarla.
       </p>
 
       <OfertaAcciones ofertaId={o.id} moneda={m} permisos={{ publicar, presupuesto, archivar }} puede={puede} />

@@ -12,12 +12,22 @@ import { OfertaForm } from '@/components/deals/OfertaForm'
 
 export const dynamic = 'force-dynamic'
 
-export default async function NuevaOfertaPage() {
+export default async function NuevaOfertaPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await requireCompanyContext(user)
   if (!(await puedeFuncion('deals', 'crear'))) redirect('/admin/deals')
 
+  const sp = await searchParams
   const opciones = await conEmpresa(companyId, (tx) => opcionesParaOfertaEnTx(tx, companyId))
+
+  // «Crear promoción» desde la ficha de un producto llega con `?variante=` (o `?item=`):
+  // se preselecciona SOLO si la variante es ofertable por esta empresa (lo que llega por
+  // la URL es texto libre; una variante ajena o no publicada se ignora sin decir nada).
+  const preseleccion =
+    opciones.productos.find((p) => p.id === sp.variante)?.id ??
+    opciones.productos.find((p) => p.itemId === sp.item)?.id ??
+    ''
+  const elegido = opciones.productos.find((p) => p.id === preseleccion)
 
   return (
     <div className="space-y-6">
@@ -31,7 +41,17 @@ export default async function NuevaOfertaPage() {
           <AlertDescription>Tu cuenta Membego está suspendida: no puedes crear ofertas hasta ponerte al día.</AlertDescription>
         </Alert>
       )}
-      <OfertaForm productos={opciones.productos} cuota={opciones.cuota} moneda={opciones.currency ?? 'DOP'} />
+      {(sp.variante || sp.item) && !elegido && (
+        <Alert>
+          <AlertDescription>Ese producto no se puede ofertar todavía: tiene que estar publicado y visible en el marketplace. Elige otro o publícalo primero.</AlertDescription>
+        </Alert>
+      )}
+      <OfertaForm
+        productos={opciones.productos}
+        cuota={opciones.cuota}
+        moneda={opciones.currency ?? 'DOP'}
+        inicial={elegido ? { catalogVariantId: elegido.id, title: `Oferta en ${elegido.etiqueta}` } : undefined}
+      />
     </div>
   )
 }

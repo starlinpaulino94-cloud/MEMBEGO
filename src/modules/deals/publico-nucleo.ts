@@ -30,6 +30,8 @@ export interface FilaDeOfertaPublica {
   variant: {
     id: string
     name: string
+    /** La variante automática de un ítem simple: su nombre es de sistema y no se enseña. */
+    isDefault?: boolean
     price: Prisma.Decimal
     item: {
       name: string
@@ -92,7 +94,8 @@ export function aOfertaPublica(f: FilaDeOfertaPublica): OfertaPublica | null {
     ahorro: ahorro.toFixed(2),
     itemName: f.variant.item.name,
     itemSlug: f.variant.item.slug,
-    variantName: f.variant.name,
+    // Un ítem simple no tiene «variante» para el cliente: se nombra como el ítem.
+    variantName: f.variant.isDefault ? f.variant.item.name : f.variant.name,
     imageUrl: f.variant.item.images[0] ? urlPublicaCatalogo(f.variant.item.images[0].path) : null,
     empresa: { slug: f.variant.item.company.slug, name: f.variant.item.company.name },
     sucursales: f.variant.item.company.sucursales.map((x) => ({ id: x.id, nombre: x.nombre })),

@@ -46,6 +46,7 @@ import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPub
 import { TarjetaOferta } from '@/components/deals/TarjetaOferta'
 import type { OfertaPublica } from '@/modules/deals/publico-nucleo'
 import type { ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
+import { claveDeItem, indiceDeOfertas, separarCatalogo } from '@/modules/comercio/vitrina'
 
 const TIPO_LABEL: Record<string, string> = {
   carwash: 'Car Wash',
@@ -168,6 +169,11 @@ export function CompanyProfile({
     ? `/cliente/empresas/${company.slug}`
     : sharePath
 
+  // El catálogo se enseña en dos secciones (lo que se recoge y lo que se presta);
+  // cada tarjeta lleva su oferta viva (antes/ahora) sin duplicar el producto.
+  const { productos, servicios } = separarCatalogo(catalogo)
+  const ofertaPorItem = indiceDeOfertas(ofertas)
+
   // Navegación por secciones (solo las que tienen contenido).
   const seccionesNav = [
     sucursales && sucursales.length > 0 && { id: 'sucursales', label: 'Sucursales' },
@@ -176,8 +182,9 @@ export function CompanyProfile({
     posts.beneficios.length > 0 && { id: 'beneficios', label: 'Beneficios' },
     posts.eventos.length > 0 && { id: 'eventos', label: 'Eventos' },
     posts.noticias.length > 0 && { id: 'noticias', label: 'Noticias' },
+    productos.length > 0 && { id: 'catalogo', label: 'Productos' },
+    servicios.length > 0 && { id: 'servicios', label: 'Servicios' },
     ofertas.length > 0 && { id: 'ofertas', label: 'Ofertas' },
-    catalogo.length > 0 && { id: 'catalogo', label: 'Productos y servicios' },
     excursiones.length > 0 && { id: 'excursiones', label: 'Actividades' },
     company.galleryImages.length > 0 && { id: 'galeria', label: 'Galería' },
     hayResenas && { id: 'resenas', label: 'Reseñas' },
@@ -646,27 +653,40 @@ export function CompanyProfile({
           </section>
         )}
 
-        {/* Ofertas con presupuesto (F5): descuentos que se obtienen aquí y se canjean con el QR del pedido */}
-        {ofertas.length > 0 && (
-          <section id="ofertas" className="mt-14 scroll-mt-32">
-            <h2 className="text-h2 text-foreground">Ofertas</h2>
-            <p className="mt-2 text-muted-foreground">Obtén la oferta y canjéala en {company.name} con tu QR.</p>
+        {/* Productos (catálogo unificado): lo que se recoge en la sucursal. Cada tarjeta lleva su oferta viva. */}
+        {productos.length > 0 && (
+          <section id="catalogo" className="mt-14 scroll-mt-32">
+            <h2 className="text-h2 text-foreground">Productos</h2>
+            <p className="mt-2 text-muted-foreground">Lo que vende {company.name}. Pides aquí y lo recoges con tu QR.</p>
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {ofertas.map((o) => (
-                <TarjetaOferta key={o.id} oferta={o} retorno={`/empresas/${company.slug}#ofertas`} mostrarEmpresa={false} />
+              {productos.map((item) => (
+                <TarjetaCatalogoPublica key={item.id} item={item} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
               ))}
             </div>
           </section>
         )}
 
-        {/* Productos y servicios (catálogo unificado) */}
-        {catalogo.length > 0 && (
-          <section id="catalogo" className="mt-14 scroll-mt-32">
-            <h2 className="text-h2 text-foreground">Productos y servicios</h2>
-            <p className="mt-2 text-muted-foreground">Lo que ofrece {company.name}, con sus precios.</p>
+        {/* Servicios: lo que se presta (lavado, corte, consulta…). Sin cajas que contar. */}
+        {servicios.length > 0 && (
+          <section id="servicios" className="mt-14 scroll-mt-32">
+            <h2 className="text-h2 text-foreground">Servicios</h2>
+            <p className="mt-2 text-muted-foreground">Lo que {company.name} hace por ti, con sus precios.</p>
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {catalogo.map((item) => (
-                <TarjetaCatalogoPublica key={item.id} item={item} />
+              {servicios.map((item) => (
+                <TarjetaCatalogoPublica key={item.id} item={item} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Ofertas (F5): descuentos sobre esos mismos productos y servicios, que se obtienen aquí y se canjean con el QR del pedido */}
+        {ofertas.length > 0 && (
+          <section id="ofertas" className="mt-14 scroll-mt-32">
+            <h2 className="text-h2 text-foreground">Ofertas</h2>
+            <p className="mt-2 text-muted-foreground">Descuentos sobre lo que vende {company.name}. Obtén la oferta y canjéala con tu QR.</p>
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {ofertas.map((o) => (
+                <TarjetaOferta key={o.id} oferta={o} retorno={`${isApp ? `/cliente/empresas/${company.slug}` : `/empresas/${company.slug}`}#ofertas`} mostrarEmpresa={false} />
               ))}
             </div>
           </section>

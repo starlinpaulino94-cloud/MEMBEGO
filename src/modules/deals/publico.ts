@@ -30,6 +30,7 @@ const INCLUDE_PUBLICO = Prisma.validator<Prisma.DealInclude>()({
     select: {
       id: true,
       name: true,
+      isDefault: true,
       price: true,
       item: {
         select: {
@@ -48,6 +49,10 @@ const INCLUDE_PUBLICO = Prisma.validator<Prisma.DealInclude>()({
 export interface ConsultaDeOfertasPublicas {
   companySlug?: string
   limite?: number
+  /** Texto libre sobre el título de la oferta y el nombre del producto. */
+  q?: string
+  /** slug de una categoría de NEGOCIO (`BusinessCategory`): la misma taxonomía que navega empresas y productos. */
+  categoriaNegocio?: string
 }
 
 /** Las ofertas que se pueden reclamar ahora, las más recientes primero. */
@@ -60,8 +65,17 @@ export async function ofertasPublicas(q: ConsultaDeOfertasPublicas = {}, ahora =
           status: 'ACTIVE',
           startsAt: { lte: ahora },
           OR: [{ endsAt: null }, { endsAt: { gt: ahora } }],
-          company: { isPublished: true, isActive: true, esDemo: false, ...(q.companySlug ? { slug: q.companySlug } : {}) },
+          company: {
+            isPublished: true,
+            isActive: true,
+            esDemo: false,
+            ...(q.companySlug ? { slug: q.companySlug } : {}),
+            ...(q.categoriaNegocio ? { categories: { some: { category: { slug: q.categoriaNegocio.trim().slice(0, 80), active: true } } } } : {}),
+          },
           variant: { status: 'ACTIVE', item: { status: 'ACTIVE', source: 'MERCHANT' } },
+          ...(q.q && q.q.trim()
+            ? { OR: [{ title: { contains: q.q.trim().slice(0, 80), mode: 'insensitive' as const } }, { variant: { item: { name: { contains: q.q.trim().slice(0, 80), mode: 'insensitive' as const } } } }] }
+            : {}),
         },
         orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
         // Se pide de más: lo que no pasa los filtros de capacidad o cuenta se descarta después.

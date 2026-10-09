@@ -28,6 +28,7 @@ import type { SessionUser } from '@/types'
 import { InventarioError } from '@/modules/inventory/errores'
 import { registrarOperacion } from '@/modules/observabilidad/eventos'
 import { PedidoError } from './errores'
+import { avisarPasoDelPedido } from './avisos'
 import {
   aceptarPedidoEnTx,
   ajustarMontoEnTx,
@@ -74,6 +75,8 @@ export async function aceptarPedido(pedidoId: string): Promise<ResultadoPedido<{
   try {
     const r = await conEmpresa(c.companyId, (tx) => aceptarPedidoEnTx(tx, c.companyId, texto(pedidoId), c.ctx))
     refrescar()
+    // Best-effort y tras confirmar: el cliente se entera de que lo están atendiendo.
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'ACEPTADO', 'EMPRESA')
     return { ok: true, repetido: r.repetido }
   } catch (e) {
     return aError(e)
@@ -90,6 +93,7 @@ export async function ajustarMontoPedido(entrada: { pedidoId: string; ajuste: nu
       ajustarMontoEnTx(tx, c.companyId, texto(entrada.pedidoId), { ajuste: entrada.ajuste, motivo: texto(entrada.motivo) }, c.ctx)
     )
     refrescar()
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'AJUSTADO', 'EMPRESA')
     return { ok: true, total: r.total, repetido: r.repetido }
   } catch (e) {
     return aError(e)
@@ -103,6 +107,7 @@ export async function marcarPedidoListo(pedidoId: string): Promise<ResultadoPedi
   try {
     const r = await conEmpresa(c.companyId, (tx) => marcarListoEnTx(tx, c.companyId, texto(pedidoId), c.ctx))
     refrescar()
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'LISTO', 'EMPRESA')
     return { ok: true, repetido: r.repetido }
   } catch (e) {
     return aError(e)
@@ -144,6 +149,7 @@ export async function cancelarPedidoComoEmpresa(entrada: { pedidoId: string; mot
     const r = await conEmpresa(c.companyId, (tx) => cancelarPedidoEnTx(tx, c.companyId, texto(entrada.pedidoId), { motivo: texto(entrada.motivo) }, c.ctx))
     registrarOperacion({ dominio: 'pedido', accion: 'pedido_cancelado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId) })
     refrescar()
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'CANCELADO', 'EMPRESA')
     return { ok: true, repetido: r.repetido }
   } catch (e) {
     registrarOperacion({ dominio: 'pedido', accion: 'pedido_cancelado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId), error: e })
@@ -162,6 +168,7 @@ export async function reembolsarPedido(entrada: { pedidoId: string; motivo: stri
     )
     registrarOperacion({ dominio: 'pedido', accion: 'pedido_reembolsado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId) })
     refrescar()
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'REEMBOLSADO', 'EMPRESA')
     return { ok: true, repetido: r.repetido }
   } catch (e) {
     registrarOperacion({ dominio: 'pedido', accion: 'pedido_reembolsado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId), error: e })

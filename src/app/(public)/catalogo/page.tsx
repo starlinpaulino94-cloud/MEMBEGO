@@ -1,11 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Package, Search } from 'lucide-react'
-import { getCatalogoPublicoGlobal } from '@/modules/marketplace/cached'
+import { getCatalogoPublicoGlobal, getCategoriesPublic } from '@/modules/marketplace/cached'
 import { normalizarBusqueda, normalizarPagina } from '@/modules/catalog/publico-nucleo'
 import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPublica'
 import { TarjetaOferta } from '@/components/deals/TarjetaOferta'
 import { ofertasPublicas } from '@/modules/deals/publico'
+import { claveDeItem, indiceDeOfertas } from '@/modules/comercio/vitrina'
 import { SITE_NAME } from '@/lib/site'
 
 export const metadata: Metadata = {
@@ -38,25 +39,33 @@ export default async function CatalogoPublicoPage({
   const pagina = normalizarPagina(sp.pagina)
   // Lo que llega por la URL es texto libre: solo valen los valores conocidos.
   const origen: Origen | null = sp.origen === 'supply' || sp.origen === 'empresas' ? sp.origen : null
+  // La categoría de NEGOCIO (taxonomía transversal del marketplace): solo vale si existe.
+  const categorias = await getCategoriesPublic().catch(() => [])
+  const categoria = categorias.find((c) => c.slug === sp.categoria)?.slug
   // Sin filtros, las ofertas de Membego van destacadas arriba y la lista general es de los negocios;
   // con búsqueda o con un origen elegido, se muestra lo que se pidió, sin duplicar.
-  const conDestacadas = origen === null && !q && pagina === 0
-  const [destacadas, { items, hayMas }, ofertas] = await Promise.all([
+  const conDestacadas = origen === null && !q && !categoria && pagina === 0
+  const [destacadas, { items, hayMas }, ofertas, ofertasDeTarjetas] = await Promise.all([
     conDestacadas ? getCatalogoPublicoGlobal({ origen: 'SUPPLY', limite: DESTACADAS }) : Promise.resolve({ items: [], hayMas: false }),
     getCatalogoPublicoGlobal({
       q,
       pagina,
       limite: POR_PAGINA,
+      categoriaNegocio: categoria,
       ...(origen === 'supply' ? { origen: 'SUPPLY' as const } : origen === 'empresas' || (origen === null && !q) ? { origen: 'EMPRESAS' as const } : {}),
     }),
     // Las ofertas con descuento van arriba, solo en la portada del catálogo (sin búsqueda ni filtros).
     conDestacadas ? ofertasPublicas({ limite: 3 }) : Promise.resolve([]),
+    // Para que cada tarjeta enseñe «antes / ahora» cuando su producto tiene una oferta viva.
+    ofertasPublicas({ limite: 60, categoriaNegocio: categoria }).catch(() => []),
   ])
+  const ofertaPorItem = indiceDeOfertas(ofertasDeTarjetas)
 
-  const enlace = (p: number, o: Origen | null = origen) => {
+  const enlace = (p: number, o: Origen | null = origen, cat: string | undefined | null = categoria) => {
     const u = new URLSearchParams()
     if (q) u.set('q', q)
     if (o) u.set('origen', o)
+    if (cat) u.set('categoria', cat)
     if (p > 0) u.set('pagina', String(p))
     const s = u.toString()
     return `/catalogo${s ? `?${s}` : ''}`
@@ -80,10 +89,24 @@ export default async function CatalogoPublicoPage({
           />
         </div>
         {origen && <input type="hidden" name="origen" value={origen} />}
+        {categoria && <input type="hidden" name="categoria" value={categoria} />}
         <button type="submit" className="h-10 rounded-lg border border-border bg-card px-4 text-sm font-medium">
           Buscar
         </button>
       </form>
+
+      {categorias.length > 0 && (
+        <nav className="mt-4 flex flex-wrap gap-2" aria-label="Categorías">
+          <Link href={enlace(0, origen, null)} aria-current={!categoria ? 'page' : undefined} className={`rounded-full border px-3 py-1 text-sm ${!categoria ? 'border-foreground bg-foreground font-medium text-background' : 'border-border text-muted-foreground'}`}>
+            Todas las categorías
+          </Link>
+          {categorias.map((c) => (
+            <Link key={c.slug} href={enlace(0, origen, c.slug)} aria-current={c.slug === categoria ? 'page' : undefined} className={`rounded-full border px-3 py-1 text-sm ${c.slug === categoria ? 'border-foreground bg-foreground font-medium text-background' : 'border-border text-muted-foreground'}`}>
+              {c.name}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       <nav className="mt-4 flex flex-wrap gap-2" aria-label="Origen">
         {ORIGENES.map((o) => (
@@ -137,8 +160,8 @@ export default async function CatalogoPublicoPage({
       {items.length === 0 && destacadas.items.length > 0 ? null : items.length === 0 ? (
         <div className="mt-12 rounded-lg border border-border py-16 text-center text-muted-foreground">
           <Package className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" aria-hidden />
-          <p className="font-medium">{q || origen ? 'Nada coincide con tu búsqueda' : 'Todavía no hay productos publicados'}</p>
-          {(q || origen) && (
+          <p className="font-medium">{q || origen || categoria ? 'Nada coincide con tu búsqueda' : 'Todavía no hay productos publicados'}</p>
+          {(q || origen || categoria) && (
             <Link href="/catalogo" className="mt-2 inline-block text-sm underline">
               Quitar filtros
             </Link>
@@ -148,7 +171,7 @@ export default async function CatalogoPublicoPage({
         <>
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => (
-              <TarjetaCatalogoPublica key={item.id} item={item} mostrarEmpresa />
+              <TarjetaCatalogoPublica key={item.id} item={item} mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
             ))}
           </div>
           <nav className="mt-8 flex justify-between text-sm" aria-label="Paginación">

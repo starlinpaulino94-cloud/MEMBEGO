@@ -75,7 +75,8 @@ test.describe('Pedidos Membego · recorrido', () => {
     await expect(form).toBeVisible()
     await form.getByLabel('Cantidad').fill(cantidad)
     if (nota) await form.getByLabel(/Nota para la empresa/).fill(nota)
-    await form.getByRole('button', { name: 'Enviar pedido' }).click()
+    // El botón principal depende de lo que se compra: «Enviar pedido» (producto) o «Reservar» (servicio).
+    await form.getByRole('button', { name: /Enviar pedido|Reservar/ }).click()
   }
 
   test('prepara: una empresa que recibe pedidos (producto con stock y un servicio), otra con catálogo pero sin pedidos', async () => {
@@ -134,10 +135,11 @@ test.describe('Pedidos Membego · recorrido', () => {
     expect(despues.reserved).toBe(antes.reserved + 2)
     // Un cliente ve «Mis pedidos» con el pedido.
     await p.goto('/cliente/pedidos')
-    await expect(p.getByRole('link', { name: new RegExp(codigo) })).toBeVisible()
+    // `.first()`: el código también sale en los avisos de la campanita (el cliente ya recibe «Pedido recibido»).
+    await expect(p.getByRole('link', { name: new RegExp(codigo) }).first()).toBeVisible()
     // El aviso sale después de responder: se espera a que llegue.
     await expect
-      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido-nuevo:${pedidoId}` } }))?.titulo ?? null, { timeout: 15_000 })
+      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido:${pedidoId}:RECIBIDO` } }))?.titulo ?? null, { timeout: 15_000 })
       .toBe('Nuevo pedido Membego')
     await ctx.close()
   })
@@ -168,7 +170,7 @@ test.describe('Pedidos Membego · recorrido', () => {
 
     await p.goto('/admin/pedidos-membego')
     await expect(p.getByText(/espera tu respuesta/)).toBeVisible()
-    await p.getByRole('link', { name: new RegExp(codigo) }).click()
+    await p.getByRole('link', { name: new RegExp(codigo) }).first().click()
     await expect(p.getByRole('heading', { name: codigo })).toBeVisible()
     await expect(p.getByText('sin prisa').first()).toBeVisible()
 

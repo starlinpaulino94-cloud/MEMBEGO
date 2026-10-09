@@ -175,8 +175,8 @@ export const CAPACIDADES = [
   'HOME_BUILDER',
   'MENSAJERIA',
   // Fase 1 (Plan Maestro) — Commerce Core: el catálogo unificado de ítems y
-  // variantes (`/admin/catalogo`). Apagada para todos de serie: se enciende
-  // empresa por empresa (Car Town primero) hasta que el catálogo esté probado.
+  // variantes (`/admin/catalogo`). Encendida de serie desde la experiencia
+  // comercial (ver CAPACIDADES_COMERCIO); se apaga por override si hace falta.
   'CATALOGO_UNIFICADO',
   // Fase 3 — Commerce Core: pedidos Membego (`/admin/pedidos-membego`): el pedido
   // unificado del marketplace con atribución, confirmación dual y QR. Apagada
@@ -185,8 +185,9 @@ export const CAPACIDADES = [
   'PEDIDOS_MEMBEGO',
   // Fase 5 — Growth Engine: ofertas con presupuesto (`/admin/deals`, `/ofertas`): un
   // descuento sobre una variante del catálogo, con tope de gasto, que el cliente
-  // reclama y canjea con el QR de su pedido. Apagada para todos de serie; exige el
-  // catálogo unificado y los pedidos Membego (el reclamo ES un pedido).
+  // reclama y canjea con el QR de su pedido. Encendida de serie
+  // (CAPACIDADES_COMERCIO); exige el catálogo unificado y los pedidos Membego
+  // (el reclamo ES un pedido).
   'DEALS_MARKETPLACE',
   // Fase 7 — POS conectado a Commerce Core: la caja (`/empleado/caja`) cobra los pedidos Membego de
   // quien llega con su QR y vende variantes del catálogo en el mostrador. Apagada para todos de serie;
@@ -223,7 +224,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   MENSAJERIA: 'Mensajería interna y WhatsApp avanzado',
   CATALOGO_UNIFICADO: 'Catálogo unificado: productos, servicios y variantes',
   PEDIDOS_MEMBEGO: 'Pedidos Membego: pedidos del marketplace con atribución, confirmación y QR',
-  DEALS_MARKETPLACE: 'Ofertas con presupuesto: descuentos que los clientes reclaman y se cobran por canje',
+  DEALS_MARKETPLACE: 'Ofertas y promociones sobre el catálogo: descuentos que los clientes obtienen y canjean, con tope de presupuesto',
   POS_MEMBEGO: 'Caja conectada al catálogo: cobrar pedidos Membego y vender productos en el mostrador',
 }
 
@@ -286,7 +287,7 @@ export const SECCION_LABEL: Partial<Record<AdminSection, string>> = {
   comunicacion: 'Mensajería y WhatsApp',
   catalogo: 'Catálogo unificado',
   inventario: 'Inventario por sucursal',
-  deals: 'Ofertas con presupuesto',
+  deals: 'Ofertas y promociones',
 }
 
 /** Las secciones del panel que se apagan al desactivar esta capacidad. */
@@ -311,13 +312,24 @@ export function seccionesQueApaga(cap: Capacidad): string[] {
  * src/modules/registro/empresaActions.ts, src/modules/solicitudes/actions.ts
  * y src/modules/empresas/actions.ts.
  */
+/**
+ * Commerce Core ENCENDIDO de serie (experiencia comercial, 2026-10-08): el
+ * catálogo, los pedidos Membego y las ofertas sobre el catálogo son el corazón
+ * del producto —«aquí creo lo que vendo, aquí controlo lo que tengo, aquí hago
+ * ofertas sobre eso mismo, aquí veo los pedidos»— y una empresa que entra al
+ * panel tiene que encontrarlos sin que un superadmin se los active uno por uno.
+ * Siguen siendo capacidades (se pueden apagar por override en una empresa
+ * concreta), pero dejan de nacer ocultas.
+ */
+export const CAPACIDADES_COMERCIO: readonly Capacidad[] = ['CATALOGO_UNIFICADO', 'PEDIDOS_MEMBEGO', 'DEALS_MARKETPLACE']
+
 export const CAPACIDADES_BASE: Record<CategoriaNegocio, Capacidad[]> = {
-  CAR_WASH: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'CITA_ANTES_DEL_QR', 'POS_CAJA', 'CRM', 'MENSAJERIA'],
-  BARBERIA: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'CRM', 'MENSAJERIA'],
-  RESTAURANTE: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'CRM', 'MENSAJERIA'],
-  GYM: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'CRM', 'MENSAJERIA'],
+  CAR_WASH: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'CITA_ANTES_DEL_QR', 'POS_CAJA', 'CRM', 'MENSAJERIA', ...CAPACIDADES_COMERCIO],
+  BARBERIA: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'CRM', 'MENSAJERIA', ...CAPACIDADES_COMERCIO],
+  RESTAURANTE: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'CRM', 'MENSAJERIA', ...CAPACIDADES_COMERCIO],
+  GYM: ['PAGO_TRANSFERENCIA', 'CITAS', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'CRM', 'MENSAJERIA', ...CAPACIDADES_COMERCIO],
   // El módulo de Excursiones viene ENCENDIDO de serie en su categoría.
-  EXCURSIONES: ['PAGO_TRANSFERENCIA', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'EXCURSIONES', 'CRM', 'MENSAJERIA'],
+  EXCURSIONES: ['PAGO_TRANSFERENCIA', 'SEGUIMIENTO', 'GIFT_CARDS', 'POS_CAJA', 'EXCURSIONES', 'CRM', 'MENSAJERIA', ...CAPACIDADES_COMERCIO],
 }
 
 /**

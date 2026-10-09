@@ -30,8 +30,8 @@ export default async function OfertasPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Ofertas con presupuesto"
-        description="Descuentos que los clientes del marketplace obtienen y canjean en tu negocio. Tú fijas el tope de lo que estás dispuesto a pagar por canje; la oferta se pausa sola cuando se acaba."
+        title="Ofertas y promociones"
+        description="Descuentos sobre los productos y servicios de tu catálogo. El cliente los ve en el marketplace con el precio de antes y el de ahora, los obtiene y los canjea con el QR de su pedido. Tú fijas el tope de lo que estás dispuesto a pagar por canje; la oferta se pausa sola cuando se acaba."
         action={
           puedeCrear ? (
             <Link href="/admin/deals/nueva">

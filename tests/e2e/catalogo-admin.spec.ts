@@ -59,11 +59,11 @@ test.describe('Catálogo unificado · panel', () => {
     await p.goto('/admin/catalogo')
     await expect(p).toHaveURL(/\/admin\/catalogo$/)
     await expect(p.getByRole('heading', { name: 'Catálogo' }).first()).toBeVisible()
-    await expect(p.getByText('Tu catálogo está vacío')).toBeVisible()
+    await expect(p.getByText('Todavía no tienes productos o servicios.')).toBeVisible()
     await expect(p.getByRole('link', { name: /^Catálogo/ }).first()).toBeVisible()
 
     // ── Alta de un servicio simple ────────────────────────────────────────
-    await p.getByRole('link', { name: 'Nuevo' }).first().click()
+    await p.getByRole('link', { name: 'Nuevo producto o servicio' }).first().click()
     await p.waitForURL('**/admin/catalogo/nuevo')
     await p.getByLabel('Nombre *').fill(NOMBRE)
     await p.getByLabel('Descripción').fill('Exterior e interior')
@@ -151,7 +151,8 @@ test.describe('Catálogo unificado · panel', () => {
       return pub.getByText(NOMBRE).count()
     }, { timeout: 20_000, intervals: [500, 1000, 2000] }).toBeGreaterThan(0)
     // `.first()`: en la respuesta en streaming hay un instante con el bloque duplicado y oculto (ver docs/PRUEBAS-E2E.md).
-    await expect(pub.locator('#catalogo').first()).toBeVisible()
+    // Un lavado es un SERVICIO: va en la sección «Servicios» de la vitrina.
+    await expect(pub.locator('#servicios').first()).toBeVisible()
     // …y en el descubrimiento entre empresas (lista sin filtros) y en el inicio.
     await expect.poll(async () => {
       await pub.goto('/catalogo')
@@ -165,7 +166,7 @@ test.describe('Catálogo unificado · panel', () => {
     await pub.getByRole('link', { name: new RegExp(NOMBRE) }).first().click()
     await expect(pub.getByRole('heading', { level: 1, name: NOMBRE })).toBeVisible()
     const urlFicha = pub.url()
-    await expect(pub.getByText(/RD\$650\.50/)).toBeVisible()
+    await expect(pub.getByText(/RD\$650\.50/).first()).toBeVisible()
     // El costo del panel NUNCA llega al público.
     expect(await pub.content()).not.toContain('200.00')
     await anonimo.close()

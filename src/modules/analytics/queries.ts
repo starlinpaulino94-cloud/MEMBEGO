@@ -221,6 +221,60 @@ export async function totalesDeOfertasEnTx(tx: Tx, a: Alcance, desde: Date, hast
   return { obtenidas: aNumero(f?.obtenidas), canjeadas: aNumero(f?.canjeadas), ventas: aNumero(f?.ventas), cuota: aNumero(f?.cuota) }
 }
 
+export interface FilaDeProductoAnalitica {
+  itemId: string
+  producto: string
+  /** Pedidos (no cancelados) creados en el periodo que incluyen el producto. */
+  pedidos: number
+  /** Pedidos COMPLETADOS en el periodo que lo incluyen. */
+  completados: number
+  /** Unidades vendidas (líneas de pedidos completados). */
+  unidades: number
+  /** Suma de `lineTotal` de esas líneas (ya con el descuento). */
+  ventas: number
+  /** Descuento concedido en esas líneas (ofertas sobre el catálogo). */
+  descuento: number
+  /** completados / pedidos, en %. */
+  conversion: number | null
+}
+
+/**
+ * Lo que vendió CADA PRODUCTO del catálogo por Membego en el periodo. Se agrupa por ítem (no por
+ * variante) porque es la unidad que la empresa reconoce; la variante se ve en el pedido. Solo
+ * pedidos del marketplace. No se inventan vistas ni clics: hoy no hay tracking de visualizaciones.
+ */
+export async function productosEnTx(tx: Tx, a: Alcance, desde: Date, hasta: Date, limite: number): Promise<FilaDeProductoAnalitica[]> {
+  const filas = await tx.$queryRaw<Record<string, unknown>[]>`
+    SELECT i."id", i."name" AS producto,
+           count(DISTINCT o."id")::int AS pedidos,
+           (count(DISTINCT o."id") FILTER (WHERE o."status" = 'COMPLETED'))::int AS completados,
+           coalesce(sum(l."quantity") FILTER (WHERE o."status" = 'COMPLETED'), 0)::int AS unidades,
+           coalesce(sum(l."lineTotal") FILTER (WHERE o."status" = 'COMPLETED'), 0) AS ventas,
+           coalesce(sum(l."discount") FILTER (WHERE o."status" = 'COMPLETED'), 0) AS descuento
+      FROM "membego_order_lines" l
+      JOIN "membego_orders" o ON o."id" = l."orderId" AND o."createdAt" >= ${desde} AND o."createdAt" < ${hasta} AND o."status" <> 'CANCELLED' ${sqlOrigen('MARKETPLACE')}
+      JOIN "catalog_variants" v ON v."id" = l."catalogVariantId"
+      JOIN "catalog_items" i ON i."id" = v."catalogItemId"
+     WHERE true ${sqlAlcance(a, 'o."companyId"')}
+     GROUP BY i."id", i."name"
+     ORDER BY ventas DESC, unidades DESC, i."id"
+     LIMIT ${limite}`
+  return filas.map((f) => {
+    const pedidos = aNumero(f.pedidos)
+    const completados = aNumero(f.completados)
+    return {
+      itemId: String(f.id),
+      producto: String(f.producto),
+      pedidos,
+      completados,
+      unidades: aNumero(f.unidades),
+      ventas: aNumero(f.ventas),
+      descuento: aNumero(f.descuento),
+      conversion: porcentaje(completados, pedidos),
+    }
+  })
+}
+
 // ── Para la empresa ──────────────────────────────────────────────────────────
 
 export interface ResultadosDeMembego {
@@ -240,13 +294,15 @@ export interface ResultadosDeMembego {
   serie: PuntoDeVentas[]
   embudo: EmbudoDePedidos
   ofertas: (FilaDeOfertaAnalitica & { empresa: string })[]
+  /** Qué productos del catálogo se vendieron por Membego en el periodo. */
+  productos: FilaDeProductoAnalitica[]
 }
 
 /** «Membego te produjo X clientes, Y pedidos, Z en ventas» y lo que te costó. Solo pedidos del marketplace. */
 export async function resultadosDeMembegoEnTx(tx: Tx, companyId: string, rango: Rango, timeZone: string): Promise<ResultadosDeMembego> {
   const a: Alcance = { companyId }
   const { desde, hasta, anterior } = rango
-  const [actual, previo, nuevos, nuevosPrevio, reembolsos, porCanal, serie, emb, ofertas] = await Promise.all([
+  const [actual, previo, nuevos, nuevosPrevio, reembolsos, porCanal, serie, emb, ofertas, productos] = await Promise.all([
     agregadosEnTx(tx, a, 'MARKETPLACE', desde, hasta),
     agregadosEnTx(tx, a, 'MARKETPLACE', anterior.desde, anterior.hasta),
     clientesNuevosEnTx(tx, companyId, desde, hasta),
@@ -256,6 +312,7 @@ export async function resultadosDeMembegoEnTx(tx: Tx, companyId: string, rango: 
     serieEnTx(tx, a, 'MARKETPLACE', rango, timeZone),
     embudoEnTx(tx, a, 'MARKETPLACE', desde, hasta),
     ofertasEnTx(tx, a, desde, hasta, 50),
+    productosEnTx(tx, a, desde, hasta, 50),
   ])
   return {
     pedidos: kpi(actual.pedidos, previo.pedidos),
@@ -271,6 +328,7 @@ export async function resultadosDeMembegoEnTx(tx: Tx, companyId: string, rango: 
     serie,
     embudo: emb,
     ofertas,
+    productos,
   }
 }
 

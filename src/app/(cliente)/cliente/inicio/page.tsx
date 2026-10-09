@@ -1,6 +1,8 @@
 import { requireRole } from '@/lib/auth/guards'
 import { cargarPanelPersonal } from '@/modules/cliente/panelPersonal'
 import { getInicioVista } from '@/modules/home/lectura'
+import { getCatalogoPublicoGlobal } from '@/modules/marketplace/cached'
+import { ofertasPublicas } from '@/modules/deals/publico'
 import { InicioRetail } from '@/components/cliente/inicio/InicioRetail'
 
 export const dynamic = 'force-dynamic'
@@ -26,9 +28,14 @@ export default async function InicioCliente({
   // Las dos mitades se piden a la vez. La comercial SIEMPRE existe: sin
   // composición publicada se arma con los datos del marketplace, así que el
   // diseño no depende de ningún acto administrativo para verse.
-  const [comercial, personal] = await Promise.all([
+  const [comercial, personal, ofertas, novedades] = await Promise.all([
     getInicioVista(user, categoria),
     cargarPanelPersonal(user),
+    // Commerce Core: ofertas vivas sobre el catálogo y lo último publicado, con la
+    // misma categoría activa que el resto del inicio. Best-effort: sin ellas el
+    // inicio sigue entero.
+    ofertasPublicas({ limite: 8, categoriaNegocio: categoria }).catch(() => []),
+    getCatalogoPublicoGlobal({ limite: 8, origen: 'EMPRESAS', categoriaNegocio: categoria }).catch(() => ({ items: [], hayMas: false })),
   ])
-  return <InicioRetail comercial={comercial} personal={personal} />
+  return <InicioRetail comercial={comercial} personal={personal} comercio={{ ofertas, productos: novedades.items }} />
 }

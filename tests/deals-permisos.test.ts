@@ -16,14 +16,14 @@ import { FUNCIONES_EMPRESA } from '../src/modules/plataforma/conceptos'
 const leer = (f: string) => readFileSync(f, 'utf8')
 const limpio = (f: string) => leer(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-test('la capacidad DEALS_MARKETPLACE existe, gobierna la sección «deals» y está apagada de serie en todas las categorías', () => {
+test('la capacidad DEALS_MARKETPLACE existe, gobierna la sección «deals» y está encendida de serie en todas las categorías', () => {
   assert.ok((CAPACIDADES as readonly string[]).includes('DEALS_MARKETPLACE'))
   assert.ok((ADMIN_SECTIONS as readonly string[]).includes('deals'))
   assert.deepEqual(SECCIONES_POR_CAPACIDAD.DEALS_MARKETPLACE, ['deals'])
   assert.equal(CAPACIDAD_DE_SECCION['deals'], 'DEALS_MARKETPLACE')
   assert.ok((FUNCIONES_EMPRESA as readonly string[]).includes('DEALS_MARKETPLACE'), 'una función de empresa se puede encender por override')
   for (const [categoria, base] of Object.entries(CAPACIDADES_BASE)) {
-    assert.ok(!(base as readonly string[]).includes('DEALS_MARKETPLACE'), `${categoria} la enciende de serie`)
+    assert.ok((base as readonly string[]).includes('DEALS_MARKETPLACE'), `${categoria} no la enciende de serie`)
   }
 })
 

@@ -264,6 +264,10 @@ export interface EmpresaResumen {
 }
 
 export interface BuscadorUnificadoResult {
+  /** Productos y servicios del catálogo unificado (proyección pública: sin stock exacto ni costos). */
+  productos?: import('@/modules/catalog/publico-nucleo').ItemPublicoResumen[]
+  /** Ofertas sobre el catálogo (antes/ahora) que se pueden obtener ahora. */
+  ofertas?: import('@/modules/deals/publico-nucleo').OfertaPublica[]
   promociones: Array<{
     id: string
     titulo: string
@@ -337,6 +341,15 @@ export async function buscarUnificado(
     const q = query.trim()
     const terminos = await terminosBusqueda(q, user.metadata.companyId)
     const filtroPromos = filtrosPromociones(terminos, new Date())
+
+    // Catálogo y ofertas sobre el catálogo (Commerce Core): la misma proyección pública que ve
+    // cualquiera en /catalogo y /ofertas, acotada por el texto buscado. Best-effort: si falla,
+    // el buscador sigue respondiendo con el resto.
+    const [{ catalogoPublicoGlobal }, { ofertasPublicas }] = await Promise.all([import('@/modules/catalog/publico'), import('@/modules/deals/publico')])
+    const [catalogoRes, ofertasRes] = await Promise.all([
+      catalogoPublicoGlobal({ q, limite: 12 }).catch(() => ({ items: [], hayMas: false })),
+      ofertasPublicas({ q, limite: 12 }).catch(() => []),
+    ])
 
     // Buscar en promociones (públicas + privadas de las empresas del usuario) y empresas
     const [promocionesPublicas, promocionesMias, rawEmpresas] = await Promise.all([
@@ -719,6 +732,8 @@ export async function buscarUnificado(
       })),
       excursiones: excursionesConInfo,
       empresas: empresasMapped,
+      productos: catalogoRes.items,
+      ofertas: ofertasRes,
     }
   } catch (e) {
     console.error('[buscador] buscarUnificado error:', e)

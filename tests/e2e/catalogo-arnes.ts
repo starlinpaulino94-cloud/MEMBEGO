@@ -40,8 +40,11 @@ export async function empresaCatalogo(
       esDemo: false,
       // La capacidad se enciende por override ANTES de la primera petición: el
       // resolutor la cachea por empresa, y una empresa nueva no tiene caché.
-      ...(o.capacidad || o.pedidos || o.deals || o.pos
-        ? { capacidades: { overrides: { ...(o.capacidad ? { CATALOGO_UNIFICADO: true } : {}), ...(o.pedidos ? { PEDIDOS_MEMBEGO: true } : {}), ...(o.deals ? { DEALS_MARKETPLACE: true } : {}), ...(o.pos ? { POS_MEMBEGO: true } : {}) } } }
+      // Las tres capacidades de comercio NACEN ENCENDIDAS (experiencia comercial), así
+      // que el arnés escribe SIEMPRE el override explícito: `false` apaga lo que el
+      // recorrido quiere ver apagado («sin la capacidad, el panel no existe»).
+      ...(true
+        ? { capacidades: { overrides: { CATALOGO_UNIFICADO: Boolean(o.capacidad), PEDIDOS_MEMBEGO: Boolean(o.pedidos), DEALS_MARKETPLACE: Boolean(o.deals), ...(o.pos ? { POS_MEMBEGO: true } : {}) } } }
         : {}),
     },
     select: { id: true },

@@ -372,8 +372,8 @@ const G_OFERTA: NavGroup = {
   label: 'Oferta comercial',
   items: [
     {
-      // Commerce Core · catálogo unificado (Fase 1). Detrás de su capacidad, que
-      // nace apagada: se enciende empresa por empresa.
+      // Commerce Core · catálogo unificado (Fase 1). Detrás de su capacidad,
+      // encendida de serie desde la experiencia comercial.
       href: '/admin/catalogo',
       label: 'Catálogo',
       icon: Package,
@@ -391,12 +391,12 @@ const G_OFERTA: NavGroup = {
       capacidad: 'CATALOGO_UNIFICADO',
     },
     {
-      // Growth Engine · ofertas con presupuesto (Fase 5). Detrás de su capacidad, que nace apagada.
+      // Growth Engine · ofertas sobre el catálogo (Fase 5). Detrás de su capacidad, encendida de serie.
       href: '/admin/deals',
-      label: 'Ofertas con presupuesto',
+      label: 'Ofertas y Promociones',
       icon: BadgePercent,
-      description: 'Descuentos que los clientes del marketplace obtienen y canjean, con un tope de lo que pagas por canje.',
-      keywords: ['ofertas', 'deals', 'descuento', 'presupuesto', 'cupon', 'canje', 'marketplace', 'cpa', 'promocion'],
+      description: 'Descuentos sobre tus productos y servicios que los clientes obtienen en el marketplace y canjean con QR, con tope de presupuesto.',
+      keywords: ['ofertas', 'deals', 'descuento', 'presupuesto', 'cupon', 'canje', 'marketplace', 'cpa', 'promocion', 'promociones', 'rebaja', 'oferta'],
       capacidad: 'DEALS_MARKETPLACE',
     },
     {
@@ -410,10 +410,10 @@ const G_OFERTA: NavGroup = {
     },
     {
       href: '/admin/ofertas',
-      label: 'Ofertas',
+      label: 'Beneficios y regalos',
       icon: Tag,
-      description: 'Promociones y beneficios publicados.',
-      keywords: ['ofertas', 'promociones', 'descuentos', 'banners'],
+      description: 'Promociones públicas, banners relámpago y regalos VIP (beneficios sin producto del catálogo).',
+      keywords: ['ofertas', 'promociones', 'descuentos', 'banners', 'beneficios', 'regalos', 'vip'],
     },
     {
       href: '/admin/invitaciones',
@@ -513,8 +513,8 @@ const G_ATENCION: NavGroup = {
   label: 'Atención diaria',
   items: [
     {
-      // Commerce Core · pedidos Membego (Fase 3). Detrás de su capacidad, que nace
-      // apagada: se enciende empresa por empresa.
+      // Commerce Core · pedidos Membego (Fase 3). Detrás de su capacidad,
+      // encendida de serie desde la experiencia comercial.
       href: '/admin/pedidos-membego',
       label: 'Pedidos Membego',
       icon: ShoppingBag,
@@ -817,17 +817,29 @@ const HUB_EXPERIENCIA: NavGroup = {
   items: deAdmin('/admin/personalizacion', '/admin/sinonimos'),
 }
 
-const HUB_CATALOGO: NavGroup = {
-  id: 'catalogo',
-  label: 'Catálogo',
-  items: deAdmin('/admin/catalogo', '/admin/inventario', '/admin/deals', '/admin/planes', '/admin/ofertas', '/admin/excursiones'),
+/**
+ * COMERCIO (experiencia comercial, 2026-10-08). El grupo «Catálogo» del diseño
+ * pasa a leerse como lo que una empresa VENDE y OPERA en Membego, en el orden
+ * en que se usa: qué vendo (Catálogo) → cuánto tengo y dónde (Inventario) →
+ * qué me piden (Pedidos) → qué incentivo aplico sobre esos mismos productos
+ * (Ofertas y Promociones) → beneficios sin producto (legacy) → membresías →
+ * excursiones. Los pedidos salen de «Operaciones» para que la cadena
+ * Catálogo → Inventario → Ofertas → Pedidos se vea entera en un solo sitio.
+ */
+const HUB_COMERCIO: NavGroup = {
+  id: 'comercio',
+  label: 'Comercio',
+  items: deAdmin(
+    '/admin/catalogo', '/admin/inventario', '/admin/pedidos-membego', '/admin/deals',
+    '/admin/ofertas', '/admin/planes', '/admin/excursiones'
+  ),
 }
 
 const HUB_OPERACIONES: NavGroup = {
   id: 'operaciones',
   label: 'Operaciones',
   items: deAdmin(
-    '/admin/pedidos-membego', '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturacion-membego', '/admin/resultados-membego', '/admin/facturas',
+    '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturacion-membego', '/admin/resultados-membego', '/admin/facturas',
     '/admin/conciliacion', '/admin/metodos-pago', '/admin/registros', '/admin/actividad'
   ),
 }
@@ -875,7 +887,7 @@ const HUB_AJUSTES: NavGroup = {
 }
 
 export const GRUPOS_HUB_ADMIN: readonly NavGroup[] = [
-  HUB_PRINCIPAL, HUB_EXPERIENCIA, HUB_CATALOGO, HUB_OPERACIONES,
+  HUB_PRINCIPAL, HUB_EXPERIENCIA, HUB_COMERCIO, HUB_OPERACIONES,
   HUB_CLIENTES, HUB_MARKETING, HUB_ANALITICA, HUB_AJUSTES,
 ]
 
@@ -918,6 +930,15 @@ const G_CLI_DESCUBRIR: NavGroup = {
   id: 'descubrir',
   label: 'Descubrir',
   items: [
+    {
+      // Experiencia comercial (2026-10-08): la puerta al marketplace dentro de la
+      // app — negocios, productos, servicios y ofertas con una sola taxonomía.
+      href: '/cliente/explorar',
+      label: 'Explorar',
+      icon: PackageSearch,
+      description: 'Negocios, productos, servicios y ofertas.',
+      keywords: ['explorar', 'marketplace', 'productos', 'servicios', 'negocios', 'empresas', 'catalogo', 'buscar'],
+    },
     {
       href: '/cliente/promociones',
       label: 'Ofertas',

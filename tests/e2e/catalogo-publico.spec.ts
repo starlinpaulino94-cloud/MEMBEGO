@@ -80,8 +80,11 @@ test.describe('Catálogo unificado · público', () => {
   test('la vitrina de la empresa muestra lo publicado y nada más', async ({ page }) => {
     const r = await ir(page, `/empresas/${a.slug}`)
     expect(r?.status()).toBe(200)
-    const seccion = page.locator('#catalogo')
+    // La vitrina separa lo que se recoge (#catalogo · Productos) de lo que se presta (#servicios · Servicios).
+    // El arnés siembra ambos ítems SIN inventario, así que son servicios: todo vive en #servicios.
+    const seccion = page.locator('#servicios')
     await expect(seccion).toBeVisible()
+    await expect(page.locator('#catalogo')).toHaveCount(0)
     await expect(seccion.getByText(`Lavado completo ${sufijo}`)).toBeVisible()
     await expect(seccion.getByText(`Camiseta oficial ${sufijo}`)).toBeVisible()
     // «Desde» el menor precio DISPONIBLE (la agotada y la descontinuada no cuentan).
@@ -96,8 +99,9 @@ test.describe('Catálogo unificado · público', () => {
     await ir(page, `/empresas/${a.slug}/catalogo/${it.camiseta.slug}`)
     await expect(page.getByRole('heading', { level: 1, name: `Camiseta oficial ${sufijo}` })).toBeVisible()
     await expect(page.getByText('Opciones')).toBeVisible()
-    await expect(page.getByText(/RD\$800\.00/)).toBeVisible()
-    await expect(page.getByText(/RD\$850\.00/)).toBeVisible()
+    // `.first()`: el precio sale arriba (precio «desde» del ítem) y en la fila de la variante.
+    await expect(page.getByText(/RD\$800\.00/).first()).toBeVisible()
+    await expect(page.getByText(/RD\$850\.00/).first()).toBeVisible()
     await expect(page.getByText('Agotado')).toBeVisible()
     await expect(page.getByText('XXS vieja')).toHaveCount(0)
     expect(await page.content()).not.toContain(`CAM-M-${sufijo}`)
@@ -135,6 +139,7 @@ test.describe('Catálogo unificado · público', () => {
   test('la vitrina de una empresa sin capacidad no tiene sección de catálogo', async ({ page }) => {
     await ir(page, `/empresas/${b.slug}`)
     await expect(page.locator('#catalogo')).toHaveCount(0)
+    await expect(page.locator('#servicios')).toHaveCount(0)
     await expect(page.getByText(/Ítem de B/)).toHaveCount(0)
   })
 

@@ -14,15 +14,15 @@ import { FUNCIONES_EMPRESA } from '../src/modules/plataforma/conceptos'
 /**
  * COMMERCE CORE · catálogo — capacidad, sección y guardias (Fase 1).
  *
- * El catálogo unificado nace APAGADO para todos y se enciende empresa por
- * empresa. Aquí se comprueba el cableado; el comportamiento contra la base
+ * El catálogo unificado nace ENCENDIDO para todos (experiencia comercial,
+ * 2026-10-08) y se apaga por override si hace falta. Aquí se comprueba el cableado; el comportamiento contra la base
  * está en `tests/postgres/catalog.db.test.ts`.
  */
 
-test('CATALOGO_UNIFICADO existe y no está encendida de serie en ninguna categoría', () => {
+test('CATALOGO_UNIFICADO existe y está encendida de serie en todas las categorías (experiencia comercial)', () => {
   assert.ok((CAPACIDADES as readonly string[]).includes('CATALOGO_UNIFICADO'))
   for (const [categoria, base] of Object.entries(CAPACIDADES_BASE)) {
-    assert.ok(!(base as readonly string[]).includes('CATALOGO_UNIFICADO'), `${categoria} la enciende de serie`)
+    assert.ok((base as readonly string[]).includes('CATALOGO_UNIFICADO'), `${categoria} no la enciende de serie`)
   }
 })
 
@@ -166,10 +166,10 @@ test('las pantallas de /admin/catalogo se guardan por sección en el layout y po
   assert.match(detalle, /notFound\(\)/, 'un ítem ajeno debe verse como inexistente')
 })
 
-test('la entrada de menú existe, detrás de la capacidad, y en el grupo Catálogo del hub', () => {
+test('la entrada de menú existe, detrás de la capacidad, y abre el grupo Comercio del hub', () => {
   const nav = readFileSync('src/components/layout/nav-config.ts', 'utf8')
   assert.match(nav, /href: '\/admin\/catalogo',[\s\S]{0,400}capacidad: 'CATALOGO_UNIFICADO'/)
-  assert.match(nav, /deAdmin\('\/admin\/catalogo',/)
+  assert.match(nav, /id: 'comercio',\s*label: 'Comercio',\s*items: deAdmin\(\s*'\/admin\/catalogo',/)
   const ctxNav = readFileSync('src/modules/navegacion/contexto.ts', 'utf8')
   assert.match(ctxNav, /'CATALOGO_UNIFICADO'/)
 })

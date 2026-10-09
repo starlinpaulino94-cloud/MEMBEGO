@@ -15,6 +15,13 @@ export interface OpcionVariante {
   name: string
   price: string
   available: boolean
+  /**
+   * Sucursales (ids) donde hay existencias para recoger esta variante. `null` o
+   * ausente = no controla inventario: cualquier sucursal activa sirve. Son ids,
+   * nunca cantidades: el consumidor elige DÓNDE, no ve cuántas quedan.
+   */
+  sucursalesConStock?: string[] | null
+  disponibilidad?: 'DISPONIBLE' | 'POCAS_UNIDADES' | 'AGOTADO'
 }
 
 function nuevaClave(): string {
@@ -33,6 +40,10 @@ interface Props {
   conVariantes: boolean
   variantes: OpcionVariante[]
   sucursales: { id: string; nombre: string }[]
+  /** Título del bloque según lo que se compra («Hacer un pedido», «Reservar»…). */
+  titulo?: string
+  /** Texto del botón según lo que se compra. */
+  cta?: string
 }
 
 /**
@@ -41,7 +52,7 @@ interface Props {
  * persona a iniciar sesión y volver aquí. El precio que se muestra es solo
  * informativo; el pedido lo fija el servidor desde el catálogo.
  */
-export function PedirForm({ retorno, moneda, conVariantes, variantes, sucursales }: Props) {
+export function PedirForm({ retorno, moneda, conVariantes, variantes, sucursales, titulo = 'Hacer un pedido', cta = 'Enviar pedido' }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const disponibles = variantes.filter((v) => v.available)
@@ -51,9 +62,12 @@ export function PedirForm({ retorno, moneda, conVariantes, variantes, sucursales
   const [notas, setNotas] = useState('')
   const clave = useRef(nuevaClave())
 
-  if (disponibles.length === 0) return <p className="text-sm text-muted-foreground">Por ahora no hay existencias para pedir.</p>
+  if (disponibles.length === 0) return <p className="text-sm text-muted-foreground">Agotado por ahora: no hay existencias para pedir.</p>
 
   const variante = disponibles.find((v) => v.id === varianteId) ?? disponibles[0]
+  // Solo las sucursales donde ESTA variante tiene existencias (si controla inventario).
+  const sucursalesValidas = variante.sucursalesConStock ? sucursales.filter((s) => variante.sucursalesConStock!.includes(s.id)) : sucursales
+  const sucursalElegida = sucursalesValidas.length === 1 ? sucursalesValidas[0].id : sucursalesValidas.some((s) => s.id === sucursalId) ? sucursalId : ''
   const n = Number(cantidad)
   const total = Number.isInteger(n) && n > 0 ? (Number(variante.price) * n).toFixed(2) : null
 
@@ -63,12 +77,12 @@ export function PedirForm({ retorno, moneda, conVariantes, variantes, sucursales
       toast.error('Escribe una cantidad entera de 1 en adelante.')
       return
     }
-    if (!sucursalId) {
+    if (!sucursalElegida) {
       toast.error('Elige la sucursal donde recogerás tu pedido.')
       return
     }
     start(async () => {
-      const r = await crearPedidoComoCliente({ varianteId: variante.id, cantidad: n, sucursalId, notas: notas.trim() || null, clave: clave.current, origen: 'navegacion' })
+      const r = await crearPedidoComoCliente({ varianteId: variante.id, cantidad: n, sucursalId: sucursalElegida, notas: notas.trim() || null, clave: clave.current, origen: 'navegacion' })
       if (!r.ok) {
         if (r.sinSesion) {
           router.push(`/login?redirect=${encodeURIComponent(retorno)}`)
@@ -86,7 +100,7 @@ export function PedirForm({ retorno, moneda, conVariantes, variantes, sucursales
     <form onSubmit={enviar} className="space-y-3 rounded-lg border border-border p-4" aria-label="Hacer un pedido">
       <h2 className="flex items-center gap-2 text-h3 text-foreground">
         <ShoppingBag className="h-4 w-4" aria-hidden />
-        Hacer un pedido
+        {titulo}
       </h2>
       {conVariantes && (
         <div className="space-y-1.5">
@@ -108,13 +122,17 @@ export function PedirForm({ retorno, moneda, conVariantes, variantes, sucursales
         {sucursales.length > 1 && (
           <div className="space-y-1.5">
             <Label htmlFor="pd-sucursal">Sucursal donde lo recogerás</Label>
-            <select id="pd-sucursal" value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} className={campoSelector} required>
+            <select id="pd-sucursal" value={sucursalElegida} onChange={(e) => setSucursalId(e.target.value)} className={campoSelector} required>
               <option value="">Elige una sucursal</option>
-              {sucursales.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nombre}
-                </option>
-              ))}
+              {sucursales.map((s) => {
+                const sinStock = !sucursalesValidas.some((x) => x.id === s.id)
+                return (
+                  <option key={s.id} value={s.id} disabled={sinStock}>
+                    {s.nombre}
+                    {sinStock ? ' · agotado aquí' : ''}
+                  </option>
+                )
+              })}
             </select>
           </div>
         )}
@@ -135,7 +153,7 @@ export function PedirForm({ retorno, moneda, conVariantes, variantes, sucursales
         </p>
         <Button type="submit" disabled={pending}>
           {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Enviar pedido
+          {cta}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">La empresa confirmará tu pedido y el monto final. El pago se hace con ella, fuera de MembeGo.</p>
