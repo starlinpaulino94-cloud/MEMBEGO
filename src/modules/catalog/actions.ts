@@ -23,7 +23,8 @@ import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { uniqueFileName } from '@/lib/storage'
 import { rutaCatalogo } from '@/lib/storage-rutas'
-import { detectarTipoImagen, EXTENSION_DE_IMAGEN } from '@/lib/imagen-tipo'
+import { detectarTipoImagen, EXTENSION_DE_IMAGEN, type TipoImagen } from '@/lib/imagen-tipo'
+import { mensajeDeStorage } from '@/lib/storage-errores'
 import type { SessionUser } from '@/types'
 import type { ContextoAuditoria } from './auditoria'
 import type { DatosItem, DatosVariante } from './domain'
@@ -184,38 +185,88 @@ export async function eliminarVarianteCatalogo(varianteId: string): Promise<Resu
 const BUCKET = 'promociones'
 const MAX_MB = 5
 const MAX_BYTES = MAX_MB * 1024 * 1024
+const TIPOS_IMAGEN = Object.keys(EXTENSION_DE_IMAGEN) as TipoImagen[]
 
 /**
- * Sube una imagen al ítem. Escribe con el cliente de SERVICIO, que ignora las
- * políticas de Storage: por eso la autorización ocurre ANTES de crearlo (sesión,
- * permiso, empresa de la sesión, ítem de esa empresa, cupo), y el tipo y la
- * extensión los decide la FIRMA del archivo, no `file.type` ni `file.name`.
- * Mismo criterio que `subirImagenExcursion`.
+ * SUBIDA DE IMÁGENES EN DOS PASOS, SIN PASAR EL ARCHIVO POR EL SERVIDOR.
+ *
+ * Antes el archivo entero viajaba dentro de la Server Action y el servidor lo
+ * reenviaba a Storage. Eso duplicaba el tráfico y, peor, dependía de límites
+ * de transporte que no controla el código (el de la plataforma de despliegue
+ * es menor que los 5 MB que admite el formulario): la petición moría antes de
+ * llegar a la validación y el panel solo decía «No se pudo subir la imagen».
+ *
+ * Ahora, igual que los comprobantes de pago (`modules/storage/subidas.ts`):
+ *
+ *   1. `prepararSubidaImagenCatalogo` autoriza (sesión, permiso, empresa de la
+ *      sesión, ítem editable, cupo) y devuelve una URL firmada de un solo uso
+ *      para UNA ruta que decide el servidor (`<empresa>/catalogo/<ítem>/…`).
+ *   2. El navegador sube el archivo directamente a Storage con ese token. El
+ *      token no sirve para ninguna otra ruta, y el bucket impone el tamaño y
+ *      los tipos permitidos.
+ *   3. `confirmarImagenCatalogo` vuelve a autorizar, lee el objeto subido,
+ *      decide el tipo por la FIRMA del archivo (no por lo que dijo el
+ *      navegador), y solo entonces registra la fila. Si algo no cuadra, borra
+ *      el objeto: no quedan huérfanos ni archivos sin fila.
+ *
+ * El cliente de servicio se crea DESPUÉS de autorizar, como siempre.
  */
-export async function subirImagenCatalogo(
+export async function prepararSubidaImagenCatalogo(
   itemId: string,
-  file: File
+  tipoDeclarado: string
+): Promise<ResultadoCatalogo<{ path: string; token: string }>> {
+  const c = await contexto('editar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof itemId !== 'string' || !itemId) return { ok: false, error: 'Datos no válidos.' }
+  // El tipo declarado solo elige la extensión del nombre; el tipo que vale lo
+  // decide `confirmarImagenCatalogo` leyendo los bytes.
+  const tipo = TIPOS_IMAGEN.find((t) => t === tipoDeclarado)
+  if (!tipo) return { ok: false, error: 'Formato no permitido. Usa JPG, PNG o WebP.' }
+
+  try {
+    await conEmpresa(c.companyId, (tx) => exigirCupoDeImagen(tx, c.companyId, itemId))
+    const path = rutaCatalogo(c.companyId, itemId, uniqueFileName(EXTENSION_DE_IMAGEN[tipo]))
+    const supabase = createAdminClient()
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path)
+    if (error || !data) {
+      console.error('[catalogo-imagen] createSignedUploadUrl:', error?.message)
+      return { ok: false, error: mensajeDeStorage(error, { maxMb: MAX_MB }) }
+    }
+    return { ok: true, path: data.path, token: data.token }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+export async function confirmarImagenCatalogo(
+  itemId: string,
+  path: string
 ): Promise<ResultadoCatalogo<{ id: string; url: string | null }>> {
   const c = await contexto('editar')
   if ('error' in c) return { ok: false, error: c.error }
   if (typeof itemId !== 'string' || !itemId) return { ok: false, error: 'Datos no válidos.' }
-  if (!file || typeof file.arrayBuffer !== 'function') return { ok: false, error: 'Archivo no válido.' }
-  if (file.size > MAX_BYTES) return { ok: false, error: `La imagen no puede superar ${MAX_MB} MB.` }
+  // La ruta debe ser la que ESTE servidor emitió para ESTE ítem de ESTA empresa.
+  if (typeof path !== 'string' || !path.startsWith(prefijoImagenesItem(c.companyId, itemId)) || path.includes('..')) {
+    return { ok: false, error: 'La ruta de la imagen no corresponde a este producto.' }
+  }
 
+  const supabase = createAdminClient()
+  const descartar = () => supabase.storage.from(BUCKET).remove([path]).catch(() => undefined)
   try {
-    await conEmpresa(c.companyId, (tx) => exigirCupoDeImagen(tx, c.companyId, itemId))
-
-    const buffer = Buffer.from(await file.arrayBuffer())
-    if (buffer.length > MAX_BYTES) return { ok: false, error: `La imagen no puede superar ${MAX_MB} MB.` }
+    const { data, error } = await supabase.storage.from(BUCKET).download(path)
+    if (error || !data) {
+      console.error('[catalogo-imagen] download:', error?.message)
+      return { ok: false, error: mensajeDeStorage(error, { maxMb: MAX_MB }) }
+    }
+    const buffer = Buffer.from(await data.arrayBuffer())
+    if (buffer.length > MAX_BYTES) {
+      await descartar()
+      return { ok: false, error: `La imagen no puede superar ${MAX_MB} MB.` }
+    }
     const tipo = detectarTipoImagen(buffer)
-    if (!tipo) return { ok: false, error: 'Formato no permitido. Usa JPG, PNG o WebP.' }
-
-    const path = rutaCatalogo(c.companyId, itemId, uniqueFileName(EXTENSION_DE_IMAGEN[tipo]))
-    const supabase = createAdminClient()
-    const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: tipo, upsert: false })
-    if (error) {
-      console.error('[catalogo-imagen] upload:', error.message)
-      return { ok: false, error: 'No se pudo subir la imagen. Intenta de nuevo.' }
+    if (!tipo || !path.endsWith(`.${EXTENSION_DE_IMAGEN[tipo]}`)) {
+      await descartar()
+      return { ok: false, error: 'Formato no permitido. Usa JPG, PNG o WebP.' }
     }
 
     try {
@@ -224,7 +275,7 @@ export async function subirImagenCatalogo(
       return { ok: true, id: r.id, url: urlPublicaCatalogo(path) }
     } catch (e) {
       // El archivo ya está en Storage y la fila no se pudo escribir: no dejar huérfanos.
-      await supabase.storage.from(BUCKET).remove([path]).catch(() => undefined)
+      await descartar()
       throw e
     }
   } catch (e) {
