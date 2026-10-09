@@ -8,12 +8,13 @@ const fs = require('node:fs');
 const projectRoot = __dirname;
 const monorepoRoot = path.resolve(projectRoot, '../..');
 const bunRoot = path.resolve(monorepoRoot, 'node_modules/.bun');
+const bunPackageDirectories = fs.existsSync(bunRoot) ? fs.readdirSync(bunRoot) : [];
 
 function findBunPackage(packageName) {
   const prefix = packageName.startsWith('@')
     ? packageName.slice(1).replace('/', '+') + '@'
     : packageName + '@';
-  const directory = fs.readdirSync(bunRoot).find((entry) => entry.startsWith(prefix));
+  const directory = bunPackageDirectories.find((entry) => entry.startsWith(prefix));
   return directory
     ? path.resolve(bunRoot, directory, 'node_modules', packageName)
     : path.resolve(projectRoot, 'node_modules', packageName);
