@@ -104,25 +104,50 @@ test('CardNET start accepts target-scoped processing without capture credentials
 })
 
 test('CardNET start rejects a processing response that also carries capture fields', async () => {
-  const { api } = await import('../apps/client/src/lib/api')
+  const { api, cardnetSessionStartResponseSchema } = await import('../apps/client/src/lib/api')
+  const { cardnetCaptureSessionSchema } = await import('../apps/client/src/lib/cardnet-api-contracts')
+  const response = {
+    status: 'processing',
+    sessionId: 'session-recovery-2',
+    captureNonce: 'must-not-be-used',
+    expiresAt: '2026-10-06T16:00:00.000Z',
+    amount: 1250,
+    currency: 'DOP',
+    captureUrl: 'https://provider.invalid/capture',
+    scriptUrl: 'https://provider.invalid/script.js',
+    publicKey: 'public-key',
+    uniqueId: 'unique-2',
+  }
+
+  assert.equal(cardnetCaptureSessionSchema.safeParse(response).success, false)
+  assert.equal(cardnetSessionStartResponseSchema.safeParse(response).success, false)
   await assert.rejects(
     withApiResponse(
       '/api/v1/cliente/pagos/cardnet/sesion',
-      {
-        status: 'processing',
-        sessionId: 'session-recovery-2',
-        captureNonce: 'must-not-be-used',
-        expiresAt: '2026-10-06T16:00:00.000Z',
-        amount: 1250,
-        currency: 'DOP',
-        captureUrl: 'https://provider.invalid/capture',
-        scriptUrl: 'https://provider.invalid/script.js',
-        publicKey: 'public-key',
-        uniqueId: 'unique-2',
-      },
+      response,
       () => api.startCardnetSession({ kind: 'promotion', compraId: 'paid-purchase-1' })
     )
   )
+})
+
+test('CardNET capture rejects a session missing a required field', async () => {
+  const { cardnetCaptureSessionSchema } = await import('../apps/client/src/lib/cardnet-api-contracts')
+  const capture = {
+    sessionId: 'session-capture-2',
+    captureNonce: 'nonce-2',
+    expiresAt: '2026-10-06T16:00:00.000Z',
+    amount: 1250,
+    currency: 'DOP',
+    captureUrl: 'https://provider.invalid/capture',
+    scriptUrl: 'https://provider.invalid/script.js',
+    publicKey: 'public-key',
+    uniqueId: 'unique-2',
+  }
+  const missingPublicKey = Object.fromEntries(
+    Object.entries(capture).filter(([field]) => field !== 'publicKey')
+  )
+
+  assert.equal(cardnetCaptureSessionSchema.safeParse(missingPublicKey).success, false)
 })
 
 test('CardNET start still accepts complete capture sessions', async () => {
