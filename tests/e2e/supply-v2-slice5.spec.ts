@@ -116,7 +116,7 @@ async function ofertaComisionPublicada(compras: Page, d: Datos, o: { producto: s
 /** El cliente compra 1 y avisa; finanzas confirma viendo el reparto. Devuelve la url de la compra. */
 async function compraPagada(cliente: Page, finanzas: Page, titulo: string, ref: string, reparto?: { comision: number; neto: number }): Promise<string> {
   await cliente.goto('/promociones')
-  await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: titulo }).click()
+  await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: titulo }).filter({ visible: true }).first().click()
   await cliente.waitForURL(/\/promociones\/membego\//)
   await cliente.getByTestId('btn-comprar').click()
   await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
@@ -381,7 +381,7 @@ async function movil(browser: Browser) {
 
   // El cliente compra desde el teléfono; sin scroll horizontal en la ficha ni en el checkout.
   await cliente.goto('/promociones')
-  await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.ofertaSaona }).click()
+  await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.ofertaSaona }).filter({ visible: true }).first().click()
   await cliente.waitForURL(/\/promociones\/membego\//)
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await expect(cliente.getByText(/comisi[óo]n/i)).toHaveCount(0)

@@ -60,7 +60,20 @@ defecto), por eso el orden seguro es migrar primero.
 
 ## Verificación (BD local desechable, no producción)
 
-<!-- CIFRAS: se rellenan con la corrida final del sprint (ver docs/PRODUCTION_READINESS_REPORT.md §Tests) -->
+| Puerta | Resultado |
+|---|---|
+| `tsc --noEmit` | 0 errores |
+| `eslint src tests --quiet` | 0 errores |
+| Unit (`npm test`) | 3 929 / 3 935, 0 fallan, 6 omitidas |
+| PostgreSQL (`npm run test:db`) | 641 / 641 |
+| Build | OK |
+| E2E completa (`npm run e2e:limpio`) | 162 pasan, 0 fallan, 191 omitidas |
+| Migraciones | 209 selladas, sin deriva |
+| Secretos (gitleaks) | 0 hallazgos en el árbol |
+| RLS (cobertura + preflight) | OK; ensayo Capa 2 en local: `rls:probar` 50/50 |
+| Presupuesto de JS | 8 876 / 9 200 KB |
+
+Detalle, incluidas las dos corridas E2E rojas previas y su causa, en `docs/PRODUCTION_READINESS_REPORT.md` §3.
 
 ## Antes de fusionar (lo decide el usuario)
 
