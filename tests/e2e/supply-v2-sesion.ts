@@ -171,7 +171,9 @@ export async function cookieDeSesion(u: UsuarioE2E): Promise<{ name: string; val
 export async function entrarComo(context: BrowserContext, rol: RolE2E, baseURL: string, companyId: string | null = null): Promise<UsuarioE2E> {
   const u = await asegurarUsuario(rol, companyId)
   const c = await cookieDeSesion(u)
-  await context.addCookies([{ ...c, url: baseURL, httpOnly: true, sameSite: 'Lax' }])
+  // NO httpOnly, como en producción: `@supabase/ssr` deja la cookie de sesión legible por el navegador, y la landing
+  // se apoya en eso para no preguntar por la sesión a quien no la trae (separación landing/app · F5).
+  await context.addCookies([{ ...c, url: baseURL, httpOnly: false, sameSite: 'Lax' }])
   return u
 }
 

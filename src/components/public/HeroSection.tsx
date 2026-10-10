@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight, QrCode, ShieldCheck, Sparkles } from 'lucide-react'
 import type { PlatformStats } from '@/modules/marketplace/cached'
+import { EnlaceDeCuenta } from './AccionesDeSesion'
 
 function fmt(n: number) {
   return new Intl.NumberFormat('es-DO').format(n)
@@ -46,13 +47,12 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
             </p>
 
             <div className="mt-9 flex animate-slide-up flex-col gap-3 delay-150 sm:flex-row">
-              <Link
+              <EnlaceDeCuenta
                 href="/registro"
+                etiqueta="Crear mi cuenta gratis"
                 className="group inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3.5 font-semibold text-primary shadow-glow-strong transition-all hover:bg-primary/10 active:scale-[0.98]"
-              >
-                Crear mi cuenta gratis
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-              </Link>
+                icono={<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden />}
+              />
               <Link
                 href="/promociones"
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 py-3.5 font-semibold text-white backdrop-blur transition-all hover:bg-white/20 active:scale-[0.98]"

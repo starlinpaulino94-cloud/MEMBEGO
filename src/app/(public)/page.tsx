@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight, Sparkles } from 'lucide-react'
 import { HeroSection } from '@/components/public/HeroSection'
+import { EnlaceDeCuenta, SoloVisitante } from '@/components/public/AccionesDeSesion'
 import { ValueProps } from '@/components/public/ValueProps'
 import { HowItWorks } from '@/components/public/HowItWorks'
 import { PromotionCard } from '@/components/public/PromotionCard'
@@ -84,18 +85,20 @@ export default async function HomePage() {
             beneficios y promociones exclusivas hoy mismo.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <Link
+            <EnlaceDeCuenta
               href="/registro"
+              etiqueta="Crear mi cuenta gratis"
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-6 py-3 font-semibold text-primary transition hover:bg-primary/10"
-            >
-              Crear mi cuenta gratis <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3 font-semibold text-white backdrop-blur transition hover:bg-white/20"
-            >
-              Ya tengo cuenta
-            </Link>
+              icono={<ArrowRight className="h-4 w-4" aria-hidden />}
+            />
+            <SoloVisitante>
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3 font-semibold text-white backdrop-blur transition hover:bg-white/20"
+              >
+                Ya tengo cuenta
+              </Link>
+            </SoloVisitante>
           </div>
         </div>
       </section>
