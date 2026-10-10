@@ -1,5 +1,5 @@
 import { conEmpresa } from '@/lib/tenant'
-import { rutaDeExcursion, type Espacio } from '@/modules/comercio/rutas'
+import { rutaDeExcursion, rutaDePlan, type Espacio } from '@/modules/comercio/rutas'
 import { formatMoney } from '@/lib/format'
 import type { HeroSlide } from './esquema'
 import type { HeroInicio } from './vista'
@@ -43,7 +43,7 @@ export async function heroPublico(companyId: string, slide: HeroSlide, espacio: 
       case 'plan': {
         const plan = await tx.plan.findFirst({ where: { id: slide.ctaDestino.id, companyId, activo: true }, select: { id: true } })
         if (!plan) return null
-        href = `/plan/${plan.id}`
+        href = rutaDePlan(espacio, plan.id)
         imagen = empresa.bannerUrl ?? empresa.logoUrl
         break
       }

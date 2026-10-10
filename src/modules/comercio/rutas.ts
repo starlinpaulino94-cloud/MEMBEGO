@@ -44,6 +44,11 @@ export function rutaDeExcursion(espacio: Espacio, empresaSlug: string, excursion
   return espacio === 'app' ? `/cliente/empresas/${empresaSlug}/excursiones/${excursionSlug}` : `/empresas/${empresaSlug}/excursiones/${excursionSlug}`
 }
 
+/** La ficha de un plan de membresía de una empresa. En la landing es consulta; en la app es donde se contrata. */
+export function rutaDePlan(espacio: Espacio, planId: string): string {
+  return espacio === 'app' ? `/cliente/planes/${planId}` : `/plan/${planId}`
+}
+
 /** El índice de promociones: en la landing, el escaparate; en la app, las promociones del cliente. */
 export function rutaDePromociones(espacio: Espacio): string {
   return espacio === 'app' ? '/cliente/promociones' : '/promociones'

@@ -130,7 +130,9 @@ test.describe('Catálogo unificado · panel', () => {
     // ── Foto: sin Storage debe avisar y la pantalla sigue viva ────────────
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
     await p.locator('input[type=file]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: png })
-    await expect(p.getByText(/No se pudo subir la imagen/).first()).toBeVisible({ timeout: 15_000 })
+    // Desde el #590 el aviso dice la causa (`mensajeDeStorage`): sin Storage puede ser «no se pudo conectar», «sin acceso»,
+    // «no configurado» o el genérico. Lo que importa aquí es que avisa y que la pantalla sigue viva.
+    await expect(p.getByText(/No se pudo subir la imagen|No se pudo conectar con el almacenamiento|almacenamiento de imágenes no está configurado|no tiene acceso al almacenamiento/).first()).toBeVisible({ timeout: 15_000 })
     await expect(p.getByText('Fotos', { exact: true })).toBeVisible()
 
     // ── Filtros de la lista ───────────────────────────────────────────────

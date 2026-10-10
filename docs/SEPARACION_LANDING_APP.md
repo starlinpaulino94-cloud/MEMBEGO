@@ -1,12 +1,12 @@
-# Separación Landing · App del cliente · Paneles — diagnóstico y plan
+# Separación Landing · App del cliente · Paneles
 
-> Estado: **diagnóstico, sin cambios de código**. Documento para aprobar antes de
-> ejecutar. Complementa `docs/ARQUITECTURA_SEPARACION.md` (separación física por
-> dominios, etapas 1–6) y `docs/ARQUITECTURA_OBJETIVO_V2.md` (dominios objetivo).
-> Aquí se trata la separación **funcional** dentro del repositorio actual: qué
-> pantalla pertenece a qué espacio y qué enlaces y flujos cruzan la frontera.
+> Estado: **ejecutada (F0 a F6).** La landing informa y descubre; la app del cliente opera; los paneles son de quien
+> administra. Este documento es el registro de lo decidido y de lo hecho, la arquitectura final, la tabla de rutas por
+> espacio (generada del código y verificada por prueba) y, al final, el diagnóstico original como anexo histórico.
+> Complementa `docs/ARQUITECTURA_SEPARACION.md` (la separación **física** por dominios, que sigue pendiente: F7) y
+> `docs/ARQUITECTURA_OBJETIVO_V2.md`.
 
-Fecha de la auditoría: 2026-10-09 · rama `claude/gracious-pasteur-87pexr`.
+Auditoría inicial: 2026-10-09 · ejecución F0 a F6: 2026-10-09 y 2026-10-10 · rama de trabajo `claude/gracious-pasteur-87pexr`.
 
 ## Decisiones aprobadas (2026-10-09)
 
@@ -33,14 +33,14 @@ Efecto en el plan: la pregunta 3 de §7 queda resuelta en contra de la recomenda
 | F3 · Excursiones, carrito único y vendedores en la app | **Hecha.** Ver abajo. |
 | F4 · Ofertas Membego, membresías, campañas y regalos en la app | **Hecha.** Ver abajo. |
 | F5 · Landing consciente de la sesión y orden en auth | **Hecha.** Ver abajo. |
-| F6 | Pendiente de aprobación. |
+| F6 · Documentación y cierre | **Hecha.** Ver abajo. |
 
 ### F0 · Red de seguridad (hecha)
 
 Solo pruebas y documentación; ningún archivo de `src` cambia.
 
 - `tests/separacion-landing-app.test.ts`: guardias estáticas (13 casos). Fijan que la app del cliente no enlaza a rutas operativas de la landing, que los componentes compartidos no cablean lo operativo al espacio público, que la landing no importa operaciones comerciales, que el layout público no lee la sesión en servidor, que los paneles no enlazan a la portada, que cada rol tiene una casa abierta por su propia protección, que el logout termina en `/login`, que el proxy rechaza destinos externos y que las URL públicas de SEO siguen existiendo.
-- Las guardias 1 a 3, la de sesión en páginas públicas y la de paneles usan **listas de excepciones que solo pueden encogerse**: una violación nueva falla, y una excepción ya resuelta que siga en la lista también falla. Cada excepción nombra la fase que la elimina. **En F6 todas deben quedar vacías.**
+- Las guardias 1 a 3, la de sesión en páginas públicas y la de paneles nacieron con **listas de excepciones que solo podían encogerse**: una violación nueva fallaba, y una excepción ya resuelta que siguiera en la lista también. Cada excepción nombraba la fase que la eliminaba. **En F6 quedaron vacías y las listas desaparecieron: las guardias exigen cero hallazgos.**
 - `tests/e2e/separacion-invariantes.spec.ts`: invariantes de acceso y de consulta pública, para ejecutarse tras cada fase.
 - Verificación de las guardias por mutación: un enlace nuevo a `/carrito` en la app, un import operativo en la portada pública, una fase que arregla un enlace y olvida la lista, y un layout público que lee la sesión, hacen fallar la prueba.
 
@@ -61,7 +61,7 @@ Lo que sí se hizo:
 - `src/modules/comercio/rutas.ts` (nuevo, módulo puro): el mapa único de rutas por espacio, `publico` o `app`. F2 a F4 lo amplían; los componentes compartidos ya no escriben a mano la ruta de un recurso.
 - `TarjetaOferta` recibe `espacio` como dato **obligatorio** y arma el enlace a la empresa con ese mapa. La app pasa `app`, la landing pasa `publico`, y el perfil de empresa pasa el que le corresponde. Sin valor por defecto: una pantalla de la app que lo olvidara sacaría al cliente a la landing sin aviso.
 - «Ver el catálogo» en pedidos vacíos va a `/cliente/explorar?ver=productos`.
-- `BuscadorExcursiones` y `BuscadorUnificado` apuntan a `/cliente/excursiones`. **Ninguno está montado en ninguna pantalla hoy**; se corrigieron sus enlaces y se dejan para decidir en F6 si se eliminan.
+- `BuscadorExcursiones` y `BuscadorUnificado` apuntan a `/cliente/excursiones`. **Ninguno estaba montado en ninguna pantalla**; se corrigieron sus enlaces y en F6 se decidió: `BuscadorExcursiones` se eliminó; `BuscadorUnificado` se queda (lo usan `/cliente/buscar` y la búsqueda pública de excursiones).
 - Los logos de las pantallas de establecer contraseña del cliente y del vendedor (sin sesión todavía) van a `/login` y no a la portada.
 
 Pruebas: `tests/comercio-rutas.test.ts` (el mapa, y que cada tarjeta declara el espacio que corresponde a donde se pinta, algo que el tipado no puede comprobar), la guardia de F0 con la lista reducida y verificada por mutación, y `tests/e2e/separacion-f1.spec.ts` (móvil y escritorio, incluida la comprobación de que la landing no cambió).
@@ -189,16 +189,9 @@ Lo único de la landing que envía datos al servidor, y por qué se queda: `/eli
 - El arnés E2E firmaba la cookie de sesión como `httpOnly`, lo que no pasa en producción (`@supabase/ssr` la deja legible). Ahora no lo es.
 - Con `loading.tsx` en el grupo, el redirect de `/registro` llega por streaming (200 + salto del cliente): las pruebas comprueban dónde termina la persona, no el código HTTP.
 
-#### Excepciones vigentes, por fase que las elimina
+#### Excepciones en la guardia
 
-| Fase | Qué se elimina |
-|---|---|
-| F1 | Hecha. |
-| F2 | Hecha. |
-| F3 | Hecha. |
-| F4 | Hecha. No quedan excepciones en la guardia. |
-
-La lista exacta, archivo por archivo y con conteo, está en el propio test.
+Ninguna. Las listas `EXCEPCIONES_*` se vaciaron fase a fase (F1 a F4) y F6 las quitó del test: cada guardia afirma que no hay hallazgos. Lo único que la landing conserva fuera de la regla está fijado, con su razón, en `tests/separacion-f5.test.ts` (ver «Excepciones permanentes de la landing» en F5).
 
 ### Hallazgos de F0 que ajustan el diagnóstico
 
@@ -208,7 +201,93 @@ La lista exacta, archivo por archivo y con conteo, está en el propio test.
 - El estado HTTP no distingue «no encontrado» en el panel ni en la landing (Next transmite por streaming y deja 200); las pruebas miden el contenido.
 - `logout` revoca la sesión en Supabase Auth. Con las sesiones firmadas localmente del arnés E2E esa revocación no puede completarse, así que el caso E2E de cierre de sesión solo corre con `E2E_SUPABASE_REAL=1`. El destino del logout queda fijado por la guardia estática.
 
+### F6 · Documentación y cierre (hecha)
+
+- **Documentación:** este documento pasa de plan a registro; `ARQUITECTURA_SEPARACION.md` actualiza su mapa de route-groups y su tabla de navegación; `IMPLEMENTATION_STATUS.md` suma la fila de la separación; `PRUEBAS-E2E.md` lista los specs de separación y la regla de la cookie de sesión del arnés.
+- **Tabla de rutas por espacio que no se puede quedar vieja:** `scripts/docs/rutas-por-espacio.ts` (`bun run docs:rutas`) clasifica cada página y cada handler de `src/app` y escribe la tabla de abajo. `tests/separacion-rutas.test.ts` falla si aparece una ruta o un grupo sin espacio, si la tabla del documento no coincide con el código, o si un espacio se cruza con `ROUTE_PROTECTION`.
+- **Guardia estricta:** sin listas de excepciones, y con tres clases de ruta nuevas (`/plan/*`, `/promocion/*`, `/oferta/*`) y el escaneo de `src/modules/home`. Verificada por mutación.
+- **Dos cabos sueltos:** el slide de plan del inicio enlazaba `/plan/…` desde la app y la guardia no lo veía; ahora sale del mapa único (`rutaDePlan`). `BuscadorExcursiones`, que no estaba montado en ninguna pantalla, se eliminó.
+
+## Arquitectura final
+
+Una sola app Next, un solo backend, una sola autenticación. Lo que cambió es **dónde vive cada cosa**:
+
+| Espacio | Qué hace | Reglas que lo sostienen |
+|---|---|---|
+| **Landing** (`(public)`) | Informa y descubre: negocios, catálogo, ofertas, promociones, excursiones, planes. SEO y enlaces compartidos. | No importa operaciones (ni transitivamente), no lee la sesión en servidor, no lee cookies ni cabeceras; sigue estática (ISR). Toda acción es un **traspaso** a la app. |
+| **App del cliente** (`/cliente`) | Comprar, reservar, contratar, reclamar, pagar, seguir. Un solo carrito. | Exige rol CLIENTE (proxy y layout). No enlaza a rutas operativas de la landing. |
+| **Acceso** (`(auth)`) | Entrar, registrarse, recuperar, confirmar. `/registro` vive aquí. | Los destinos `redirect` y `next` pasan por `destino-seguro` (solo rutas internas autorizadas). |
+| **Paneles** | Administrador, superadmin, empleado, vendedor, asistente de negocio. | `ROUTE_PROTECTION` y permisos por sección, sin cambios. No enlazan a la portada de la landing. |
+
+**El traspaso.** La landing no tiene formularios ni botones de compra: tiene `TraspasoALaApp` / `EnlaceDeTraspaso`, que según quién mire ofrecen iniciar sesión o crear cuenta (visitante), ir directo a la operación en la app (cliente) o ir a su panel (equipo). El estado de sesión llega del navegador por `useSesionLigera`, que solo pregunta al servidor si hay cookie de sesión; el HTML del servidor es el mismo para todos.
+
+**Pantallas compartidas.** Una pantalla es un componente de presentación que recibe `espacio: 'publico' | 'app'` y pide sus enlaces al mapa único `src/modules/comercio/rutas.ts`; lo único que opera entra por una **ranura** (la landing pone el traspaso, la app pone el botón de verdad). Así la landing no arrastra operaciones y la app no vuelve a la landing. Las lecturas comunes viven en cargadores neutrales de `src/modules/comercio`.
+
+**Para añadir una pantalla nueva**
+1. Decide su espacio y, si es un grupo de rutas nuevo, anótalo en `ESPACIO_DE` (`scripts/docs/rutas-por-espacio.ts`); luego `bun run docs:rutas`.
+2. Si se opera (comprar, reservar, pagar, reclamar, contratar), va en `/cliente`; en la landing solo el traspaso.
+3. Si la pantalla se ve en los dos espacios, componente de presentación + `espacio` + ranura, y la ruta de cada espacio en `rutas.ts`.
+4. Los destinos de retorno pasan por `destino-seguro`; no escribas un `redirect` a mano.
+5. Corre `tests/separacion-*.test.ts`: dicen qué se rompió y por qué.
+
+**Las guardias** (todas en `bun run test`): `separacion-landing-app` (frontera: enlaces, importaciones transitivas, sesión en servidor, paneles, roles), `separacion-rutas` (cada ruta tiene espacio y el documento coincide), `separacion-f2` a `f6` (lo que cada fase movió), `destino-seguro` y `sesion-ligera`. En E2E: `separacion-invariantes` y `separacion-f1` a `f5`.
+
+## Tabla final de rutas por espacio
+
+<!-- RUTAS-POR-ESPACIO:INICIO (generado por scripts/docs/rutas-por-espacio.ts; no editar a mano) -->
+
+| Espacio | Qué es | Páginas | Handlers |
+|---|---|---:|---:|
+| **Landing** | Informa y descubre: consulta, SEO y enlaces compartidos. No opera; ofrece el traspaso a la app. | 31 | 5 |
+| **Enlaces compartidos** | Invitaciones y enlaces cortos que llevan a la landing, al registro o a la app. | 2 | 2 |
+| **Acceso** | Entrar, registrarse, recuperar, confirmar y aceptar invitaciones. | 8 | 3 |
+| **App del cliente** | Todo lo que el cliente hace: comprar, reservar, contratar, reclamar, pagar. | 66 | 0 |
+| **Paneles** | Administrador, superadmin, empleado, vendedor y asistente de negocio. | 266 | 27 |
+| **API** | Handlers de servidor (`/api/**`, incluida la API v1 que usa la app móvil). | 0 | 126 |
+| **Sistema** | Páginas de error, sin conexión, imágenes para compartir, `robots` y `sitemap`. | 1 | 6 |
+
+**Landing** (31): `/` · `/blog` · `/caracteristicas` · `/catalogo` · `/contact` · `/descargar` · `/eliminar-cuenta` · `/eliminar-cuenta/confirmar` · `/eliminar-cuenta/terminada` · `/empresas` · `/empresas/[companySlug]` · `/empresas/[companySlug]/catalogo/[itemSlug]` · `/empresas/[companySlug]/excursiones` · `/empresas/[companySlug]/excursiones/[excursionSlug]` · `/excursiones` · `/faq` · `/i/[code]` · `/oferta/[codigo]` · `/ofertas` · `/ofertas/[dealId]` · `/plan/[id]` · `/privacy` · `/promocion/[clave]` · `/promociones` · `/promociones/campanas` · `/promociones/campanas/[code]` · `/promociones/membego/[slug]` · `/promociones/membresias` · `/registro-empresa` · `/solicitud-empresa` · `/terms`
+
+**Enlaces compartidos** (4): `/e/[slug]` · `/invita/[slug]` · `/invitar/[code]` · `/r/[code]`
+
+**Acceso** (11): `/acceso` · `/actualizar-password` · `/auth/callback` · `/confirmar` · `/invitacion/[token]` · `/login` · `/recuperar` · `/registro` · `/registro/[companySlug]` · `/registro/cuenta` · `/sso/entrar`
+
+**App del cliente** (66): `/cliente/ajustes` · `/cliente/ayuda` · `/cliente/ayuda/[id]` · `/cliente/bienvenida` · `/cliente/bienvenida-ref/[companySlug]` · `/cliente/bonos` · `/cliente/buscar` · `/cliente/campanas` · `/cliente/campanas/[code]` · `/cliente/carrito` · `/cliente/carrito/excursiones` · `/cliente/carrito/pagar/[companySlug]` · `/cliente/celebracion` · `/cliente/cerca` · `/cliente/citas` · `/cliente/compras` · `/cliente/compras/[id]` · `/cliente/cupones` · `/cliente/dashboard` · `/cliente/empresas` · `/cliente/empresas/[companySlug]` · `/cliente/empresas/[companySlug]/catalogo/[itemSlug]` · `/cliente/empresas/[companySlug]/excursiones` · `/cliente/empresas/[companySlug]/excursiones/[excursionSlug]` · `/cliente/establecer-contrasena` · `/cliente/excursiones` · `/cliente/excursiones/[reservaId]` · `/cliente/excursiones/buscar` · `/cliente/explorar` · `/cliente/fidelizacion` · `/cliente/historial` · `/cliente/inicio` · `/cliente/intereses` · `/cliente/invita-y-gana` · `/cliente/membresia` · `/cliente/membresias-membego` · `/cliente/menu` · `/cliente/mis-excursiones` · `/cliente/mis-excursiones/[reservaId]` · `/cliente/mis-promociones` · `/cliente/mis-promociones/[id]` · `/cliente/mis-promociones/[id]/agendar` · `/cliente/mis-promociones/regalo/[invitadoId]` · `/cliente/novedades` · `/cliente/oferta/[codigo]` · `/cliente/ofertas-membego/[slug]` · `/cliente/ofertas/[dealId]` · `/cliente/pagos` · `/cliente/pedidos` · `/cliente/pedidos/[id]` · `/cliente/perfil` · `/cliente/planes` · `/cliente/planes/[planId]` · `/cliente/promociones` · `/cliente/promociones/[id]` · `/cliente/qr` · `/cliente/referidos` · `/cliente/regalos` · `/cliente/regalos/enviar` · `/cliente/regalos/giftcard` · `/cliente/regalos/regalar` · `/cliente/ruleta` · `/cliente/vehiculos` · `/cliente/vehiculos/nuevo` · `/membresia/[membresiaId]` · `/mis-membresias`
+
+**Paneles**: `/admin` (187) · `/empleado` (2) · `/onboarding` (1) · `/superadmin` (97) · `/vendedor` (6)
+
+<!-- RUTAS-POR-ESPACIO:FIN -->
+
+## Verificación final (2026-10-10, sobre el árbol de F6)
+
+Corrida local contra una base desechable (`bun run e2e:limpio`) y contra `membego_test` (PostgreSQL migrada). Sin Supabase real, producción, CardNET ni equipos físicos: **no verificados** aquí.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` | limpio |
+| `bun run lint` | 0 errores (los avisos preexistentes no son de la separación) |
+| `bun run build` | verde |
+| Unitarias (`bun run test`) | 4036 pruebas: 4029 pasan, 0 fallan, 7 saltadas |
+| E2E completo (móvil y escritorio) | 331 pasan, 211 saltadas (las que exigen Supabase real) y 1 fallo ajeno a la separación: `catalogo-admin` esperaba el texto genérico de error de subida de imagen y el #590 cambió esos mensajes; aserción ajustada y spec repetido (4/4) |
+| Recorridos de Supply (slices 2 a 8 y puente), por separado porque se saltan en la corrida completa | 11/11 en escritorio, 6/6 en móvil |
+| PostgreSQL (`bun run test:db`) | 653/653 |
+| Mutaciones de las guardias nuevas | detectadas: ruta o grupo sin espacio, tabla del documento desfasada, carrito en la landing, `/plan/${…}` en un módulo del inicio, `/promocion/${…}` en la app |
+
+Notas de la corrida: la suite PG tiene intermitencias conocidas en `deals.db.test.ts` (pruebas 29 y 33), también sobre `main` limpio e independientes de la separación; en esta corrida pasó completa, pero dos intentos previos con un límite de 280 s se cortaron por lentitud de la base de pruebas, no por fallos. `bunx prisma generate` y `prisma migrate deploy` son necesarios tras traer migraciones nuevas de `main`.
+
+## Excepciones y decisiones permanentes
+
+- **Landing que envía datos** (fijado por `separacion-f5.test.ts`): `/eliminar-cuenta/**` (las tiendas de apps exigen una URL pública), `/registro-empresa` y `/solicitud-empresa` (captación B2B), y la consulta de solo lectura del estado de sesión.
+- **`/mis-membresias` y `/membresia/[id]` se quedan fuera de `/cliente`:** la app móvil tiene esas mismas rutas y las usa, y el servidor ya emitió esos hrefs en avisos guardados y correos. Por eso `ROUTE_PROTECTION` conserva sus dos prefijos.
+- **`/` no se redirige en el servidor** a quien tiene sesión: puede seguir viendo la landing; recibe el atajo «Ir a mi app» o «Ir a mi panel».
+- **La API móvil no cambia de contrato:** los modelos de lectura que arman hrefs usan `espacio = 'publico'` por defecto; solo la web de la app pasa `'app'`.
+- **Fuera de este trabajo (F7):** el corte físico `membego.com` / `app.membego.com` de `ARQUITECTURA_SEPARACION.md` (etapas 6 y 7).
+
 ---
+
+# Anexo histórico — diagnóstico y plan originales
+
+> Lo que sigue es el diagnóstico y el plan tal como se aprobaron el 2026-10-09, **antes de F0**. Describe el estado de entonces: rutas, enlaces y riesgos que ya se resolvieron. Se conserva como registro; la arquitectura vigente está arriba.
 
 ## 0. Veredicto en una frase
 
