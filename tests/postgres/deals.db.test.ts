@@ -163,6 +163,24 @@ async function campanaPara(e: Empresa, dealId: string, estado: 'ACTIVA' | 'PAUSA
 }
 
 const reclamar = (e: Empresa, dealId: string, i: number, ahora?: Date) => en(e, (tx) => reclamarOfertaEnTx(tx, e.id, { dealId, customerId: e.clientes[i], locationId: e.sucursal }, ahora))
+
+/**
+ * Clientes recién creados para UNA prueba; devuelve sus índices en `e.clientes`.
+ *
+ * El grupo compartido arrastra estado de las pruebas anteriores: pedidos abiertos, que cuentan para el tope de 5 por
+ * cliente, y pedidos canjeados o reembolsados, que quitan el «nuevo». Ese estado depende de QUIÉN gana las carreras de
+ * las pruebas 6 y 7 (los ganadores son los que llegan primero) y de la secuencia de la 26, así que una prueba que lo
+ * necesita limpio no puede apoyarse en índices fijos: fallaba una de cada tres corridas. Las que miran el tope de
+ * pedidos o si el cliente es «nuevo» piden los suyos.
+ */
+async function clientesFrescos(e: Empresa, n: number): Promise<number[]> {
+  const desde = e.clientes.length
+  for (let i = 0; i < n; i++) {
+    const k = desde + i
+    e.clientes.push((await prisma.cliente.create({ data: { companyId: e.id, supabaseId: `sb-dcli-f-${e.id}-${k}-${sufijo}`, nombre: `Cliente fresco ${k}`, email: `dcli-f-${e.id}-${k}-${sufijo}@prueba.test` }, select: { id: true } })).id)
+  }
+  return Array.from({ length: n }, (_, i) => desde + i)
+}
 const oferta = (id: string) => prisma.deal.findUniqueOrThrow({ where: { id } })
 const reclamoDe = (orderId: string) => prisma.dealClaim.findUniqueOrThrow({ where: { orderId } })
 const pedido = (id: string) => prisma.membegoOrder.findUniqueOrThrow({ where: { id }, include: { attribution: true, confirmation: true, lines: true } })
@@ -747,7 +765,8 @@ test('26 · propiedad: tras muchas operaciones mezcladas, los contadores de cada
 
 test('27 · aislamiento: la oferta, los reclamos y sus pedidos de una empresa no se ven desde otra', async () => {
   const id = await ofertaActiva(E.a)
-  await reclamar(E.a, id, 8)
+  const [c27] = await clientesFrescos(E.a, 1)
+  await reclamar(E.a, id, c27)
   // (La base de pruebas no trae la Capa 2 de RLS: el aislamiento por servicio es lo que se prueba aquí; el de la base, `probar-rls`.)
   assert.equal(await en(E.b, (tx) => tx.deal.count({ where: { id, companyId: E.b.id } })), 0)
   assert.equal(await en(E.b, (tx) => tx.dealClaim.count({ where: { dealId: id, companyId: E.b.id } })), 0)
@@ -760,41 +779,43 @@ test('27 · aislamiento: la oferta, los reclamos y sus pedidos de una empresa no
 
 test('28 · reclamar respeta el tope de pedidos abiertos del cliente: no se acapara una oferta con cupones que nunca se canjean (M2)', async () => {
   const id = await ofertaActiva(E.a, { maxClaims: 10, budgetTotal: 1000 })
-  const cliente28 = E.a.clientes[24]
+  const [c28] = await clientesFrescos(E.a, 1)
+  const cliente28 = E.a.clientes[c28]
   for (let i = 0; i < 5; i++) {
     await en(E.a, (tx) => crearPedidoEnTx(tx, E.a.id, { customerId: cliente28, locationId: E.a.sucursal, origin: 'MARKETPLACE', lineas: [{ varianteId: E.a.variante, cantidad: 1 }], atribucion: { channel: 'MARKETPLACE_BROWSE' } }, cliente))
   }
-  assert.equal(await codigoDe(reclamar(E.a, id, 24)), 'DEMASIADOS_PEDIDOS_ABIERTOS')
+  assert.equal(await codigoDe(reclamar(E.a, id, c28)), 'DEMASIADOS_PEDIDOS_ABIERTOS')
   const o = await oferta(id)
   assert.equal(o.claimsActive, 0, 'no quedó ningún cupo apartado')
   assert.equal(num(o.budgetReserved), '0.00')
   // Con un pedido menos abierto, sí.
   const uno = await prisma.membegoOrder.findFirstOrThrow({ where: { companyId: E.a.id, customerId: cliente28, status: 'AWAITING_MERCHANT' }, select: { id: true } })
   await en(E.a, (tx) => cancelarPedidoEnTx(tx, E.a.id, uno.id, { motivo: 'prueba' }, ctxEmpresa()))
-  await reclamar(E.a, id, 24)
+  await reclamar(E.a, id, c28)
   assert.equal((await oferta(id)).claimsActive, 1)
 })
 
 test('29 · «solo clientes nuevos» no se apila (otro cupón vivo de una oferta «solo nuevos») y quien ya vino, aunque se le reembolsara, no cuenta como nuevo (M3)', async () => {
   const a = await ofertaActiva(E.a, { newCustomersOnly: true })
   const b = await ofertaActiva(E.a, { newCustomersOnly: true })
-  const ra = await reclamar(E.a, a, 25)
-  assert.equal(await codigoDe(reclamar(E.a, b, 25)), 'SOLO_CLIENTES_NUEVOS', 'con un cupón «solo nuevos» vivo no se obtiene otro')
+  const [n1, n2] = await clientesFrescos(E.a, 2)
+  const ra = await reclamar(E.a, a, n1)
+  assert.equal(await codigoDe(reclamar(E.a, b, n1)), 'SOLO_CLIENTES_NUEVOS', 'con un cupón «solo nuevos» vivo no se obtiene otro')
   await en(E.a, (tx) => cancelarPedidoEnTx(tx, E.a.id, ra.orderId, { motivo: 'No vendrá' }, ctxEmpresa()))
-  await reclamar(E.a, b, 25)
+  await reclamar(E.a, b, n1)
 
   // Vino, pagó y se le reembolsó: ya conoce el negocio.
   const normal = await ofertaActiva(E.a)
-  const r = await reclamar(E.a, normal, 26)
+  const r = await reclamar(E.a, normal, n2)
   await canjear(E.a, r.orderId)
   await en(E.a, (tx) => reembolsarPedidoEnTx(tx, E.a.id, r.orderId, { motivo: 'prueba' }, ctxEmpresa()))
   const c = await ofertaActiva(E.a, { newCustomersOnly: true })
-  assert.equal(await codigoDe(reclamar(E.a, c, 26)), 'SOLO_CLIENTES_NUEVOS')
+  assert.equal(await codigoDe(reclamar(E.a, c, n2)), 'SOLO_CLIENTES_NUEVOS')
 })
 
 test('30 · el barrido vacía lo pendiente en varios lotes y, si se acaba el tiempo, lo dice y la siguiente pasada sigue (M11)', async () => {
   const id = await ofertaActiva(E.a, { maxClaims: 10, budgetTotal: 5000, voucherDays: 1 })
-  for (const i of [27, 28, 29, 23]) await reclamar(E.a, id, i)
+  for (const i of await clientesFrescos(E.a, 4)) await reclamar(E.a, id, i)
   const lejos = new Date(Date.now() + 3 * 86_400_000)
   const pendientes = () => prisma.dealClaim.count({ where: { status: 'CLAIMED', expiresAt: { lte: lejos } } })
   const antes = await pendientes()
@@ -819,9 +840,10 @@ test('30 · el barrido vacía lo pendiente en varios lotes y, si se acaba el tie
 
 test('31 · el resultado de una oferta cuenta TODOS sus reclamos (agregado en la base), no solo los de la lista (M10)', async () => {
   const id = await ofertaActiva(E.a, { maxClaims: 10, budgetTotal: 5000 })
-  const r1 = await reclamar(E.a, id, 18)
-  const r2 = await reclamar(E.a, id, 19)
-  await reclamar(E.a, id, 20)
+  const [f1, f2, f3] = await clientesFrescos(E.a, 3)
+  const r1 = await reclamar(E.a, id, f1)
+  const r2 = await reclamar(E.a, id, f2)
+  await reclamar(E.a, id, f3)
   await canjear(E.a, r1.orderId)
   await en(E.a, (tx) => cancelarPedidoEnTx(tx, E.a.id, r2.orderId, { motivo: 'No vendrá' }, ctxEmpresa()))
   const detalle = await en(E.a, (tx) => detalleOfertaEnTx(tx, E.a.id, id))
@@ -865,7 +887,8 @@ test('33 · avisos de la oferta (sprint de cierre): 80 %, 100 %, agotada y por v
   assert.deepEqual(await tipos(), ['POR_VENCER'])
 
   // 4 de 5 cupones reservados = 400 de 500 = 80 %.
-  for (let i = 0; i < 4; i++) await reclamar(E.a, id, i)
+  const f33 = await clientesFrescos(E.a, 8)
+  for (let i = 0; i < 4; i++) await reclamar(E.a, id, f33[i])
   await barridoDeOfertas()
   assert.deepEqual(await tipos(), ['POR_VENCER', 'PRESUPUESTO_80'])
 
@@ -875,7 +898,7 @@ test('33 · avisos de la oferta (sprint de cierre): 80 %, 100 %, agotada y por v
   assert.equal(await prisma.notificacion.count({ where: { userId: admin.id, dedupeKey: { startsWith: `oferta-alerta:${id}:` } } }), antes)
 
   // El quinto cupón compromete el 100 % y la oferta queda agotada: avisa de las dos cosas.
-  await reclamar(E.a, id, 4)
+  await reclamar(E.a, id, f33[4])
   assert.equal((await oferta(id)).status, 'BUDGET_EXHAUSTED')
   await barridoDeOfertas()
   assert.deepEqual(await tipos(), ['AGOTADA', 'POR_VENCER', 'PRESUPUESTO_100', 'PRESUPUESTO_80'])
@@ -884,7 +907,7 @@ test('33 · avisos de la oferta (sprint de cierre): 80 %, 100 %, agotada y por v
   await en(E.a, (tx) => ampliarPresupuestoEnTx(tx, E.a.id, id, 500, ctxOferta()))
   await barridoDeOfertas()
   assert.equal((await tipos()).filter((t) => t === 'PRESUPUESTO_80').length, 1, 'con 500 de 1 000 comprometidos todavía no cruza el 80 % del nuevo total')
-  for (let i = 5; i < 8; i++) await reclamar(E.a, id, i) // 800 de 1 000
+  for (let i = 5; i < 8; i++) await reclamar(E.a, id, f33[i]) // 800 de 1 000
   await barridoDeOfertas()
   assert.equal((await tipos()).filter((t) => t === 'PRESUPUESTO_80').length, 2, 'el nuevo total es otro hecho: avisa de nuevo')
 
