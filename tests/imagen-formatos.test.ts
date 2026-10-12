@@ -107,3 +107,17 @@ test('validarRecorte rechaza lo que no es de fiar', () => {
     assert.equal(v.ok, false, JSON.stringify(m))
   }
 })
+
+test('las rutas de las versiones salen de la ruta del original y un token', async () => {
+  const { baseDeVariantes, rutaDeVariante, rutasDeVariantes } = await import('../src/lib/imagen/formatos')
+  const base = baseDeVariantes('emp1/catalogo/item1/abc.jpg', 'k9')
+  assert.equal(base, 'emp1/catalogo/item1/abc-k9')
+  assert.equal(rutaDeVariante(base, 'tarjeta'), 'emp1/catalogo/item1/abc-k9_tarjeta.webp')
+  assert.deepEqual(rutasDeVariantes(base), [
+    'emp1/catalogo/item1/abc-k9_tarjeta.webp',
+    'emp1/catalogo/item1/abc-k9_ficha.webp',
+    'emp1/catalogo/item1/abc-k9_compartir.webp',
+  ])
+  // Un punto en una carpeta no se confunde con la extensión.
+  assert.equal(baseDeVariantes('a.b/c/foto', 'z'), 'a.b/c/foto-z')
+})

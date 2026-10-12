@@ -1,5 +1,5 @@
 import type { CatalogItemType, DealDiscountType, Prisma } from '@prisma/client'
-import { urlPublicaCatalogo } from '@/modules/catalog/formato'
+import { urlImagenCatalogo } from '@/modules/catalog/formato'
 import { precioDeLaOferta, reclamosPosibles, etiquetaDeDescuento } from './domain'
 
 /**
@@ -37,7 +37,7 @@ export interface FilaDeOfertaPublica {
       name: string
       slug: string
       type: CatalogItemType
-      images: { path: string }[]
+      images: { path: string; variantesBase?: string | null }[]
       company: { slug: string; name: string; sucursales: { id: string; nombre: string }[] }
     }
   }
@@ -96,7 +96,7 @@ export function aOfertaPublica(f: FilaDeOfertaPublica): OfertaPublica | null {
     itemSlug: f.variant.item.slug,
     // Un ítem simple no tiene «variante» para el cliente: se nombra como el ítem.
     variantName: f.variant.isDefault ? f.variant.item.name : f.variant.name,
-    imageUrl: f.variant.item.images[0] ? urlPublicaCatalogo(f.variant.item.images[0].path) : null,
+    imageUrl: f.variant.item.images[0] ? urlImagenCatalogo(f.variant.item.images[0], 'tarjeta') : null,
     empresa: { slug: f.variant.item.company.slug, name: f.variant.item.company.name },
     sucursales: f.variant.item.company.sucursales.map((x) => ({ id: x.id, nombre: x.nombre })),
     endsAt: f.endsAt ? f.endsAt.toISOString() : null,

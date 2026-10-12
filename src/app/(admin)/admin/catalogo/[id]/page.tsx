@@ -15,7 +15,7 @@ import { panoramaDelItemEnTx } from '@/modules/comercio/panorama-item'
 import { CatalogoError } from '@/modules/catalog/errores'
 import { TRANSICIONES_ITEM, normalizarCapacidades } from '@/modules/catalog/domain'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
-import { ETIQUETA_ESTADO, ETIQUETA_TIPO, urlPublicaCatalogo } from '@/modules/catalog/formato'
+import { ETIQUETA_ESTADO, ETIQUETA_TIPO, urlImagenCatalogo } from '@/modules/catalog/formato'
 import { ItemDetalleForm } from '@/components/catalogo/ItemDetalleForm'
 import { EstadoItemBotones } from '@/components/catalogo/EstadoItemBotones'
 import { VariantesPanel } from '@/components/catalogo/VariantesPanel'
@@ -160,7 +160,7 @@ export default async function ItemCatalogoPage({ params }: { params: Promise<{ i
               <ImagenesPanel
                 itemId={item.id}
                 editable={editable}
-                imagenes={item.images.map((i) => ({ id: i.id, url: urlPublicaCatalogo(i.path) }))}
+                imagenes={item.images.map((i) => ({ id: i.id, url: urlImagenCatalogo(i, 'tarjeta') }))}
               />
             </CardContent>
           </Card>

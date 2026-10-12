@@ -79,6 +79,7 @@ test('todas las acciones exportadas piden la guardia ANTES de tocar la base', ()
     'eliminarVarianteCatalogo',
     'ponerPortadaCatalogo',
     'prepararSubidaImagenCatalogo',
+    'reencuadrarImagenCatalogo',
   ])
   for (const nombre of exportadas) {
     const desde = sinComentarios.indexOf(`export async function ${nombre}`)
@@ -125,11 +126,35 @@ test('confirmarImagenCatalogo autoriza, exige la ruta de este ítem y decide el 
   assert.ok(firma < registro, 'se registra la imagen antes de comprobar la firma del archivo')
   assert.doesNotMatch(cuerpo, /file\.type|file\.name|tipoDeclarado/, 'vuelve a confiar en el MIME o el nombre del cliente')
   // Lo que no pasa la validación no se queda en Storage: cada salida fallida borra el objeto.
-  assert.ok((cuerpo.match(/await descartar\(\)/g) ?? []).length >= 3, 'un archivo rechazado debe borrarse del bucket')
+  assert.ok((cuerpo.match(/await descartar\(/g) ?? []).length >= 4, 'un archivo rechazado debe borrarse del bucket')
 })
 
-test('borrar una imagen solo toca del bucket lo que cuelga del ítem de esta empresa', () => {
-  assert.match(sinComentarios, /path\.startsWith\(prefijoImagenesItem\(c\.companyId, itemId\)\)/)
+test('borrar una imagen solo toca del bucket lo que cuelga del ítem de esta empresa, versiones incluidas', () => {
+  const desde = sinComentarios.indexOf('export async function eliminarImagenCatalogo')
+  const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
+  assert.match(cuerpo, /rutasDeVariantes\(variantesBase\)/, 'al quitar la foto deben irse también sus versiones')
+  assert.match(cuerpo, /\.filter\(\(r\) => r\.startsWith\(prefijo\)\)/, 'solo se borra lo que cuelga del ítem de esta empresa')
+})
+
+test('reencuadrarImagenCatalogo autoriza antes de leer, parte del original y no pisa las versiones viejas hasta el final', () => {
+  const desde = sinComentarios.indexOf('export async function reencuadrarImagenCatalogo')
+  const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
+  const guardia = cuerpo.indexOf("contexto('editar')")
+  const lectura = cuerpo.indexOf('leerImagenParaReencuadrarEnTx(')
+  const cliente = cuerpo.indexOf('createServerClient()')
+  const generar = cuerpo.indexOf('generarVariantesCatalogo(')
+  const subir = cuerpo.indexOf('subirVariantes(')
+  const registro = cuerpo.indexOf('reencuadrarImagenEnTx(')
+  const borrarViejas = cuerpo.indexOf('rutasDeVariantes(anterior)')
+  assert.ok([guardia, lectura, cliente, generar, subir, registro, borrarViejas].every((i) => i >= 0), 'cambió el flujo de reencuadre: revisa esta prueba')
+  assert.ok(guardia < lectura && lectura < cliente && cliente < generar && generar < subir && subir < registro && registro < borrarViejas,
+    'el orden debe ser: autorizar, leer, generar, subir las nuevas, guardar y SOLO ENTONCES borrar las viejas')
+  assert.match(cuerpo, /anterior\.startsWith\(prefijoImagenesItem\(c\.companyId, actual\.itemId\)\)/, 'no se borra nada fuera del ítem de esta empresa')
+  assert.match(cuerpo, /upsert: false|subirVariantes/, 'las versiones nuevas nunca pisan archivos')
+})
+
+test('las versiones se suben con caché larga y sin pisar nada', () => {
+  assert.match(sinComentarios, /cacheControl: '31536000', upsert: false/)
 })
 
 test('el servicio y las lecturas filtran SIEMPRE por companyId (con la Capa 2 apagada es lo único que separa empresas)', () => {

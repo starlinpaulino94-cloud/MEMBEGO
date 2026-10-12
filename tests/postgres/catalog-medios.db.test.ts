@@ -9,6 +9,8 @@ import {
   crearCategoriaEnTx,
   eliminarCategoriaEnTx,
   eliminarImagenEnTx,
+  reencuadrarImagenEnTx,
+  leerImagenParaReencuadrarEnTx,
   exigirCupoDeImagen,
   listarCategoriasEnTx,
   ponerPortadaEnTx,
@@ -138,6 +140,61 @@ test('5 · quitar una imagen devuelve su ruta (para borrar el archivo) y una emp
   const r = await enA((tx) => eliminarImagenEnTx(tx, ctx.a, img.id, como(ctx.usuario)))
   assert.equal(r.path, p)
   assert.equal(await prisma.catalogItemImage.count({ where: { id: img.id } }), 0)
+})
+
+test('5b · una foto procesada guarda el original, el encuadre y sus versiones; se reencuadra sin perder el original', async () => {
+  const it = await nuevoItem('a', 'Procesada')
+  const original = ruta(ctx.a, it.id, 'p.jpg')
+  const base1 = ruta(ctx.a, it.id, 'p-aaaa')
+  const crop = { x: 100, y: 0, w: 800, h: 800 }
+  const img = await enA((tx) =>
+    registrarImagenEnTx(tx, ctx.a, it.id, original, null, como(ctx.usuario), { width: 1000, height: 800, crop, variantesBase: base1 })
+  )
+  const fila = await prisma.catalogItemImage.findUniqueOrThrow({ where: { id: img.id } })
+  assert.deepEqual([fila.width, fila.height, fila.variantesBase, fila.path], [1000, 800, base1, original])
+  assert.deepEqual(fila.crop, crop)
+
+  // Reencuadrar: el original no cambia; devuelve las versiones anteriores para borrarlas.
+  const base2 = ruta(ctx.a, it.id, 'p-bbbb')
+  const leida = await enA((tx) => leerImagenParaReencuadrarEnTx(tx, ctx.a, img.id))
+  assert.deepEqual([leida.path, leida.variantesBase, leida.itemId], [original, base1, it.id])
+  const r = await enA((tx) =>
+    reencuadrarImagenEnTx(tx, ctx.a, img.id, { width: 1000, height: 800, crop: { x: 0, y: 0, w: 800, h: 800 }, variantesBase: base2 }, como(ctx.usuario))
+  )
+  assert.equal(r.variantesBaseAnterior, base1)
+  const despues = await prisma.catalogItemImage.findUniqueOrThrow({ where: { id: img.id } })
+  assert.deepEqual([despues.path, despues.variantesBase], [original, base2])
+  const audit = await prisma.auditLog.findFirst({ where: { accion: 'CATALOG_ITEM_UPDATED', entidadId: it.id }, orderBy: { createdAt: 'desc' } })
+  assert.equal((audit?.payload as { cambio: string }).cambio, 'imagen_reencuadrada')
+
+  // Quitar devuelve original Y versiones para borrar los archivos.
+  const q = await enA((tx) => eliminarImagenEnTx(tx, ctx.a, img.id, como(ctx.usuario)))
+  assert.deepEqual([q.path, q.variantesBase], [original, base2])
+})
+
+test('5c · las versiones o el reencuadre de otra empresa/ítem se rechazan, y una empresa ajena no reencuadra', async () => {
+  const it = await nuevoItem('a', 'Ajena')
+  const otro = await nuevoItem('a', 'Otro')
+  const original = ruta(ctx.a, it.id, 'q.jpg')
+  const meta = (variantesBase: string) => ({ width: 1000, height: 1000, crop: { x: 0, y: 0, w: 1000, h: 1000 }, variantesBase })
+  for (const mala of [ruta(ctx.b, it.id, 'q-x'), ruta(ctx.a, otro.id, 'q-x'), `${prefijoImagenesItem(ctx.a, it.id)}../x`]) {
+    assert.equal(
+      await codigoDe(enA((tx) => registrarImagenEnTx(tx, ctx.a, it.id, original, null, como(ctx.usuario), meta(mala)))),
+      'IMAGEN_INVALIDA',
+      mala
+    )
+  }
+  assert.equal(await prisma.catalogItemImage.count({ where: { catalogItemId: it.id } }), 0, 'una foto con versiones ajenas no deja fila')
+  const img = await enA((tx) => registrarImagenEnTx(tx, ctx.a, it.id, original, null, como(ctx.usuario)))
+  assert.equal(await codigoDe(enB((tx) => reencuadrarImagenEnTx(tx, ctx.b, img.id, meta(ruta(ctx.b, it.id, 'q-x')), como(ctx.usuario)))), 'IMAGEN_NO_ENCONTRADA')
+  assert.equal(await codigoDe(enB((tx) => leerImagenParaReencuadrarEnTx(tx, ctx.b, img.id))), 'IMAGEN_NO_ENCONTRADA')
+  assert.equal(
+    await codigoDe(enA((tx) => reencuadrarImagenEnTx(tx, ctx.a, img.id, meta(ruta(ctx.a, otro.id, 'q-x')), como(ctx.usuario)))),
+    'IMAGEN_INVALIDA'
+  )
+  // Una foto anterior al editor (sin versiones) se puede reencuadrar: pasa a tenerlas.
+  const r = await enA((tx) => reencuadrarImagenEnTx(tx, ctx.a, img.id, meta(ruta(ctx.a, it.id, 'q-z')), como(ctx.usuario)))
+  assert.equal(r.variantesBaseAnterior, null)
 })
 
 test('6 · un ítem archivado o de Supply no recibe ni pierde imágenes', async () => {

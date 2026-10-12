@@ -8,7 +8,7 @@
  */
 
 import type { CatalogItemStatus, CatalogItemType, CatalogVariantStatus } from '@prisma/client'
-import { urlPublicaCatalogo } from '@/modules/catalog/formato'
+import { urlImagenCatalogo } from '@/modules/catalog/formato'
 
 type Dec = { toFixed(n: number): string }
 
@@ -92,7 +92,7 @@ export function catalogItemDTO(
     publishedAt: Date | null
     createdAt: Date
     variants: FilaVariante[]
-    images: { path: string }[]
+    images: { path: string; variantesBase?: string | null }[]
   },
   incluirCosto: boolean
 ): CatalogItemDTO {
@@ -107,7 +107,7 @@ export function catalogItemDTO(
     currency: i.currency,
     source: i.source,
     capabilities: Object.fromEntries(Object.entries(caps).filter(([, v]) => typeof v === 'boolean')) as Record<string, boolean>,
-    imageUrls: i.images.map((x) => urlPublicaCatalogo(x.path)).filter((u): u is string => !!u),
+    imageUrls: i.images.map((x) => urlImagenCatalogo(x, 'ficha')).filter((u): u is string => !!u),
     publishedAt: i.publishedAt?.toISOString() ?? null,
     createdAt: i.createdAt.toISOString(),
     variants: i.variants.map((v) => catalogVariantDTO(v, incluirCosto)),

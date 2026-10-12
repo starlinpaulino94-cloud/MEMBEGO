@@ -66,7 +66,7 @@ export function leerFiltros(params: URLSearchParams): { ok: true; status?: Catal
 
 const INCLUIR_ITEM = {
   variants: { orderBy: [{ position: 'asc' as const }, { createdAt: 'asc' as const }] },
-  images: { orderBy: { position: 'asc' as const }, select: { path: true } },
+  images: { orderBy: { position: 'asc' as const }, select: { path: true, variantesBase: true } },
 }
 
 export async function listarItems(

@@ -235,3 +235,23 @@ export function validarRecorte(
   }
   return { ok: true, recorte: dentro }
 }
+
+// ── Rutas de las versiones en Storage ────────────────────────────────────────
+
+/**
+ * Prefijo (sin extensión) de las versiones de una foto. Lleva un token propio
+ * y cambia cada vez que se genera de nuevo: las versiones se suben con caché
+ * larga, y reusar el nombre serviría la versión vieja desde el CDN.
+ */
+export function baseDeVariantes(rutaOriginal: string, token: string): string {
+  return `${rutaOriginal.replace(/\.[^./]+$/, '')}-${token}`
+}
+
+export function rutaDeVariante(base: string, nombre: NombreVariante): string {
+  return `${base}_${nombre}.webp`
+}
+
+/** Todas las rutas de las versiones de una base, para borrarlas juntas. */
+export function rutasDeVariantes(base: string): string[] {
+  return (['tarjeta', 'ficha', 'compartir'] as const).map((n) => rutaDeVariante(base, n))
+}
