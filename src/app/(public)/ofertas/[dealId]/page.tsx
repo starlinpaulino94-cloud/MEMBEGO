@@ -32,6 +32,7 @@ export default async function OfertaPublicaPage({
       <div className="mt-6">
         <TarjetaOferta
           oferta={oferta}
+          detalle
           espacio="publico"
           accion={<AccionDeOfertaPublica oferta={oferta} destino={destino} />}
         />

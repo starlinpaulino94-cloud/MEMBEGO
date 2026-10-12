@@ -132,7 +132,7 @@ export default async function CatalogoPublicoPage({
               Ver todas
             </Link>
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {ofertas.map((o) => (
               <TarjetaOferta key={o.id} oferta={o} espacio="publico" accion={<AccionDeOfertaPublica oferta={o} />} />
             ))}
@@ -150,7 +150,7 @@ export default async function CatalogoPublicoPage({
               Ver todas
             </Link>
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {destacadas.items.map((item) => (
               <TarjetaCatalogoPublica key={item.id} item={item} espacio="publico" mostrarEmpresa />
             ))}
@@ -170,7 +170,7 @@ export default async function CatalogoPublicoPage({
         </div>
       ) : (
         <>
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {items.map((item) => (
               <TarjetaCatalogoPublica key={item.id} item={item} espacio="publico" mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
             ))}
