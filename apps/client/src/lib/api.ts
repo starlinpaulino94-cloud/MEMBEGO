@@ -49,17 +49,31 @@ export async function fetchBff<T>(path: string, options: RequestInit = {}): Prom
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(url, {
-    ...options,
-    headers,
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
+  const signal = options.signal ?? controller.signal
 
-  if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(errorBody.error || `HTTP error ${res.status}`)
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal,
+      headers,
+    })
+
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(errorBody.error || `HTTP error ${res.status}`)
+    }
+
+    return res.json()
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado. Revisa tu conexión e intenta de nuevo.')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
-
-  return res.json()
 }
 
 // ---------------------------------------------------------------------------
