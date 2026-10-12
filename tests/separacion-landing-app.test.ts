@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { ROLE_HOME, ROUTE_PROTECTION } from '../src/types'
 
 /**
@@ -39,8 +39,8 @@ function archivosDe(dir: string): string[] {
   const acc: string[] = []
   for (const e of readdirSync(absoluto)) {
     const p = join(absoluto, e)
-    if (statSync(p).isDirectory()) acc.push(...archivosDe(relative(RAIZ, p)))
-    else if (/\.(ts|tsx)$/.test(p) && !/\.test\.tsx?$/.test(p)) acc.push(relative(RAIZ, p))
+    if (statSync(p).isDirectory()) acc.push(...archivosDe(relative(RAIZ, p).split(sep).join('/')))
+    else if (/\.(ts|tsx)$/.test(p) && !/\.test\.tsx?$/.test(p)) acc.push(relative(RAIZ, p).split(sep).join('/'))
   }
   return acc.sort()
 }
@@ -236,7 +236,7 @@ function resolverImport(desde: string, especificador: string): string | null {
   else return null // paquete externo (next, react, lucide…): no es código nuestro
   for (const ext of EXTENSIONES) {
     const candidato = base + ext
-    if (existsSync(join(RAIZ, candidato)) && statSync(join(RAIZ, candidato)).isFile()) return candidato
+    if (existsSync(join(RAIZ, candidato)) && statSync(join(RAIZ, candidato)).isFile()) return candidato.split(sep).join('/')
   }
   return null
 }

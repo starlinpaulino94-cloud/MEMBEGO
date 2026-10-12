@@ -87,7 +87,7 @@ export function rutasDe(raiz = 'src/app'): Ruta[] {
     const primero = rel.split(sep)[0]
     const espacio: Espacio | null = esRaiz ? (RAIZ_DEL_SISTEMA.test(nombre) || ES_RUTA.test(nombre) ? 'sistema' : null) : (ESPACIO_DE[primero] ?? null)
     const url = esRaiz ? '/' + (/^(page|route|opengraph-image)\./.test(nombre) ? '' : nombre.replace(/\.(tsx?|ts)$/, '')) : urlDe(rel)
-    rutas.push({ url: url === '' ? '/' : url, tipo: nombre === 'page.tsx' ? 'pagina' : 'handler', espacio, archivo: relative('.', archivo) })
+    rutas.push({ url: url === '' ? '/' : url, tipo: nombre === 'page.tsx' ? 'pagina' : 'handler', espacio, archivo: relative('.', archivo).split(sep).join('/') })
   }
   return rutas.sort((a, b) => a.url.localeCompare(b.url) || a.tipo.localeCompare(b.tipo))
 }
