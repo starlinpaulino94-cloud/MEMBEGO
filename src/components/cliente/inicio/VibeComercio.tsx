@@ -39,7 +39,7 @@ export function VibeComercio({ ofertas, productos }: { ofertas: readonly OfertaP
           <RailOverflowHint className="from-vibe-fondo via-vibe-fondo/90 to-transparent text-vibe-violet">
             <div className="flex gap-3 overflow-x-auto pb-2 pr-10 scrollbar-none">
               {ofertas.map((o) => (
-                <div key={o.id} className="w-72 shrink-0 sm:w-80">
+                <div key={o.id} className="w-44 shrink-0 sm:w-52">
                   <TarjetaOferta oferta={o} espacio="app" accion={<AccionObtenerOferta oferta={o} retorno="/cliente/inicio" />} />
                 </div>
               ))}
@@ -65,7 +65,7 @@ export function VibeComercio({ ofertas, productos }: { ofertas: readonly OfertaP
           <RailOverflowHint className="from-vibe-fondo via-vibe-fondo/90 to-transparent text-vibe-violet">
             <div className="flex gap-3 overflow-x-auto pb-2 pr-10 scrollbar-none">
               {productos.map((item) => (
-                <div key={item.id} className="w-56 shrink-0 sm:w-64">
+                <div key={item.id} className="w-40 shrink-0 sm:w-48">
                   <TarjetaCatalogoPublica item={item} espacio="app" mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
                 </div>
               ))}

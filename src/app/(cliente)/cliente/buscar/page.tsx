@@ -310,7 +310,7 @@ function ResultsGrid({
               Ver todas <ChevronRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
-          <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
             {ofertas.map((o) => (
               <li key={o.id} className="flex">
                 <TarjetaOferta oferta={o} espacio="app" accion={<AccionObtenerOferta oferta={o} retorno={`/cliente/buscar${currentParams.q ? `?q=${encodeURIComponent(currentParams.q)}` : ''}`} />} />
@@ -335,7 +335,7 @@ function ResultsGrid({
               Ver todos <ChevronRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
-          <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
             {productos.map((item) => (
               <li key={item.id} className="flex [&>a]:w-full">
                 <TarjetaCatalogoPublica item={item} espacio="app" mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />

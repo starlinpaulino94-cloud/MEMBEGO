@@ -253,7 +253,7 @@ export default async function ExplorarPage({
               {categoriaActiva ? ` en ${categoriaActiva.name}` : ''}
               {search ? ` para «${search}»` : ''}
             </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
               {items.items.map((item) => (
                 <TarjetaCatalogoPublica key={item.id} item={item} espacio="app" mostrarEmpresa oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
               ))}
@@ -301,7 +301,7 @@ export default async function ExplorarPage({
               {categoriaActiva ? ` en ${categoriaActiva.name}` : ''}
               {search ? ` para «${search}»` : ''}
             </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
               {ofertas.map((o) => (
                 <TarjetaOferta key={o.id} oferta={o} espacio="app" accion={<AccionObtenerOferta oferta={o} retorno={href({})} />} />
               ))}
