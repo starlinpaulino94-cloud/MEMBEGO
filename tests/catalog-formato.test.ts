@@ -59,3 +59,22 @@ test('atributos: ida y vuelta entre el objeto y el texto «clave: valor»', () =
   assert.deepEqual(textoAAtributos('  talla :  L  \n\nsin dos puntos\n: sinclave\nclave:\nurl: http://x.y'), { talla: 'L', url: 'http://x.y' })
   assert.deepEqual(textoAAtributos(''), {})
 })
+
+test('urlImagenCatalogo sirve la versión pedida, y el original en las fotos anteriores al editor', async () => {
+  const { urlImagenCatalogo } = await import('../src/modules/catalog/formato')
+  const base = 'https://x.supabase.co'
+  const prefijo = `${base}/storage/v1/object/public/promociones/`
+  const procesada = { path: 'e/catalogo/i/a.jpg', variantesBase: 'e/catalogo/i/a-k1' }
+  assert.equal(urlImagenCatalogo(procesada, 'tarjeta', base), `${prefijo}e/catalogo/i/a-k1_tarjeta.webp`)
+  assert.equal(urlImagenCatalogo(procesada, 'ficha', base), `${prefijo}e/catalogo/i/a-k1_ficha.webp`)
+  assert.equal(urlImagenCatalogo(procesada, 'compartir', base), `${prefijo}e/catalogo/i/a-k1_compartir.webp`)
+  assert.equal(urlImagenCatalogo(procesada, 'original', base), `${prefijo}e/catalogo/i/a.jpg`)
+  // Foto anterior al editor: no hay versiones, todo cae al original.
+  for (const vieja of [{ path: 'e/catalogo/i/b.jpg' }, { path: 'e/catalogo/i/b.jpg', variantesBase: null }]) {
+    for (const v of ['tarjeta', 'ficha', 'compartir', 'original'] as const) {
+      assert.equal(urlImagenCatalogo(vieja, v, base), `${prefijo}e/catalogo/i/b.jpg`)
+    }
+  }
+  // Sin URL base de Supabase no se inventa una.
+  assert.equal(urlImagenCatalogo(procesada, 'tarjeta', ''), null)
+})

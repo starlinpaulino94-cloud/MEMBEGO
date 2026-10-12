@@ -31,6 +31,7 @@ export interface ResumenItem {
   tieneVariantes: boolean
   /** Ruta de la portada en el bucket (la URL se deriva en la pantalla), o null. */
   imagenPath: string | null
+  imagenVariantesBase: string | null
   /** Visible en el marketplace según «Cómo se comporta» (y publicado). */
   enMarketplace: boolean
   /** «Controla inventario» según «Cómo se comporta». */
@@ -84,7 +85,7 @@ export async function listarItemsEnTx(tx: Tx, companyId: string, f: FiltrosCatal
     skip: Math.max(f.skip ?? 0, 0),
     select: {
       id: true, name: true, slug: true, type: true, status: true, currency: true, capabilities: true,
-      images: { orderBy: { position: 'asc' as const }, take: 1, select: { path: true } },
+      images: { orderBy: { position: 'asc' as const }, take: 1, select: { path: true, variantesBase: true } },
       variants: {
         select: {
           price: true,
@@ -105,6 +106,7 @@ export async function listarItemsEnTx(tx: Tx, companyId: string, f: FiltrosCatal
       desde: minimo == null ? null : minimo.toFixed(2),
       tieneVariantes: i.variants.length > 1,
       imagenPath: i.images[0]?.path ?? null,
+      imagenVariantesBase: i.images[0]?.variantesBase ?? null,
       enMarketplace: caps.availableMarketplace,
       controlaInventario: caps.trackInventory,
       niveles: caps.trackInventory ? i.variants.flatMap((v) => v.inventoryLevels) : [],

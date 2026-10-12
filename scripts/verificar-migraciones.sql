@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en 9f2f8d82: 211 migraciones, última 20261054_growth_campaign_deal.
+-- Generado con scripts/generar-verificar-migraciones.mjs en ce287dc4: 212 migraciones, última 20261055_catalog_image_variantes.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -224,7 +224,8 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261051_verificacion_de_pago','b6a2fc9cdfab3a508b401b8f1eea9cb1ff14d523fb91ec8da3a7edf4cea33329'),
   ('20261052_supply_v2_derechos_por_linea','b374840aa0d8a3e1be74a0b32c3239a430f190e66be3fc857edd9e29352d0fc6'),
   ('20261053_growth_deal_promotion_gate','88e7e6ea7b0e02469da035920510f0024def6334aea12f3d3476e780518ae9a4'),
-  ('20261054_growth_campaign_deal','c9a3ee3b07f0da9f10516f4b56dd194bf84ce0eace3506a2c02658622197efac')
+  ('20261054_growth_campaign_deal','c9a3ee3b07f0da9f10516f4b56dd194bf84ce0eace3506a2c02658622197efac'),
+  ('20261055_catalog_image_variantes','2d553df80118a431cca1d35d7701c1b1a40376ac066c728c98a2deb01102a6c2')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,

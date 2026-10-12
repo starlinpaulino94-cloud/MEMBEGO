@@ -42,7 +42,7 @@ export function TarjetaCatalogoPublica({
       className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40"
       aria-label={`${item.name}${mostrarEmpresa ? ` · ${item.company.name}` : ''}`}
     >
-      <div className="relative aspect-[16/10] bg-muted">
+      <div className="relative aspect-square bg-muted">
         {item.imageUrl ? (
           <Image
             src={item.imageUrl}
