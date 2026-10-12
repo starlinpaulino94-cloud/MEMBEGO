@@ -99,14 +99,14 @@ test('contexto() exige la sección «catalogo» y saca la empresa de la sesión,
   assert.doesNotMatch(sinComentarios, /\bprisma\./, 'las acciones no usan el cliente global: todo va por conEmpresa')
 })
 
-test('prepararSubidaImagenCatalogo autoriza y comprueba el cupo ANTES de crear el cliente de servicio', () => {
+test('prepararSubidaImagenCatalogo autoriza y comprueba el cupo ANTES de crear el cliente de Storage', () => {
   const desde = sinComentarios.indexOf('export async function prepararSubidaImagenCatalogo')
   const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
   const guardia = cuerpo.indexOf("contexto('editar')")
   const cupo = cuerpo.indexOf('exigirCupoDeImagen(')
-  const privilegiado = cuerpo.indexOf('createAdminClient()')
+  const privilegiado = cuerpo.indexOf('createServerClient()')
   assert.ok(guardia >= 0 && cupo >= 0 && privilegiado >= 0, 'cambió el flujo de subida: revisa esta prueba')
-  assert.ok(guardia < cupo && cupo < privilegiado, 'el cliente de servicio se crea antes de autorizar o de mirar el cupo')
+  assert.ok(guardia < cupo && cupo < privilegiado, 'el cliente de Storage se crea antes de autorizar o de mirar el cupo')
   assert.match(cuerpo, /createSignedUploadUrl\(path\)/, 'la URL firmada debe ser para la ruta que decide el servidor')
   assert.doesNotMatch(cuerpo, /upsert: true/, 'una URL firmada nunca debe sobrescribir')
   assert.match(cuerpo, /rutaCatalogo\(c\.companyId, itemId,/, 'la ruta debe llevar la empresa de la SESIÓN')
@@ -117,11 +117,11 @@ test('confirmarImagenCatalogo autoriza, exige la ruta de este ítem y decide el 
   const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
   const guardia = cuerpo.indexOf("contexto('editar')")
   const ruta = cuerpo.indexOf('prefijoImagenesItem(c.companyId, itemId)')
-  const privilegiado = cuerpo.indexOf('createAdminClient()')
+  const privilegiado = cuerpo.indexOf('createServerClient()')
   const firma = cuerpo.indexOf('detectarTipoImagen(buffer)')
   const registro = cuerpo.indexOf('registrarImagenEnTx(')
   assert.ok(guardia >= 0 && ruta >= 0 && privilegiado >= 0 && firma >= 0 && registro >= 0, 'cambió el flujo de confirmación: revisa esta prueba')
-  assert.ok(guardia < ruta && ruta < privilegiado, 'el cliente de servicio se crea antes de autorizar o de validar la ruta')
+  assert.ok(guardia < ruta && ruta < privilegiado, 'el cliente de Storage se crea antes de autorizar o de validar la ruta')
   assert.ok(firma < registro, 'se registra la imagen antes de comprobar la firma del archivo')
   assert.doesNotMatch(cuerpo, /file\.type|file\.name|tipoDeclarado/, 'vuelve a confiar en el MIME o el nombre del cliente')
   // Lo que no pasa la validación no se queda en Storage: cada salida fallida borra el objeto.
