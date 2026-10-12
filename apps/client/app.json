@@ -7,10 +7,18 @@
     "icon": "./assets/icon.png",
     "scheme": "membego",
     "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
+    "ios" : {
+      "bundleIdentifier": "com.havelgo.membego",
+      "buildNumber": "1.0.0",
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "MembeGo necesita acceso a tu galería para adjuntar comprobantes de pago de tus membresías.",
+        "NSLocationWhenInUseUsageDescription": "MembeGo utiliza tu ubicación para mostrarte los comercios afiliados, servicios y ofertas más cercanos a ti en el mapa."
+      }
     },
     "android": {
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -18,7 +26,7 @@
       },
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.membegoclient"
+      "package": "com.havelgo.membego"
     },
     "web": {
       "bundler": "metro",
