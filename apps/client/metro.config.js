@@ -35,4 +35,25 @@ config.resolver.extraNodeModules = {
   'react-native-css-interop': findBunPackage('react-native-css-interop'),
 };
 
-module.exports = withNativeWind(config, { input: './global.css' });
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (
+    platform === 'web' &&
+    (moduleName === 'react-native' || moduleName.startsWith('react-native-web/'))
+  ) {
+    const reactNativeWebPath = path.resolve(
+      projectRoot,
+      'node_modules/react-native-web',
+      moduleName === 'react-native' ? 'dist/index.js' : moduleName.slice('react-native-web/'.length),
+    );
+
+    return context.resolveRequest(
+      context,
+      reactNativeWebPath,
+      platform,
+    );
+  }
+
+  return context.resolveRequest(context, moduleName, platform);
+};
+
+module.exports = withNativeWind(config, { input: './global.native.css' });
