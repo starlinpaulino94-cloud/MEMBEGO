@@ -85,12 +85,17 @@ const CLASES_NIVEL: Record<'ok' | 'justa' | 'baja', string> = {
   baja: 'border-destructive/40 bg-destructive/5',
 }
 
+/** Velos que oscurecen lo que no se ve: negro con transparencia, sin escribir un color a mano. */
+const VELO_LEVE = 'color-mix(in srgb, black 38%, transparent)'
+const VELO_FUERTE = 'color-mix(in srgb, black 50%, transparent)'
+
 /** El fondo se pinta tal cual; «sin fondo» se enseña como un tablero para que se note. */
 function estiloDeFondo(fondo: string | undefined): React.CSSProperties {
   if (fondo === FONDO_TRANSPARENTE) {
-    return { background: 'conic-gradient(#e2e8f0 25%, #ffffff 0 50%, #e2e8f0 0 75%, #ffffff 0) 0 0 / 16px 16px' }
+    // Tablero con los tokens del tema (no un color a mano): se ve bien en claro y en oscuro.
+    return { background: 'conic-gradient(var(--color-muted) 25%, var(--color-background) 0 50%, var(--color-muted) 0 75%, var(--color-background) 0) 0 0 / 16px 16px' }
   }
-  return { backgroundColor: fondo ?? '#f1f5f9' }
+  return { backgroundColor: fondo ?? 'var(--color-muted)' }
 }
 
 const dimsDe = (e: Pick<Estado, 'ancho' | 'alto' | 'giro'>) => dimensionesGiradas(e.ancho, e.alto, e.giro)
@@ -293,7 +298,7 @@ export function EditorDeImagen({
                         top: `${comun.y * 100}%`,
                         width: `${comun.w * 100}%`,
                         height: `${comun.h * 100}%`,
-                        boxShadow: '0 0 0 9999px rgba(0,0,0,0.38)',
+                        boxShadow: `0 0 0 9999px ${VELO_LEVE}`,
                       }}
                     />
                   </div>
@@ -312,7 +317,7 @@ export function EditorDeImagen({
               {/* Avatares: lo que queda fuera del círculo se oscurece */}
               {estado && circular && (
                 <div className="pointer-events-none absolute inset-0" aria-hidden>
-                  <div className="absolute inset-[4%] rounded-full border-2 border-white/90" style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }} />
+                  <div className="absolute inset-[4%] rounded-full border-2 border-white/90" style={{ boxShadow: `0 0 0 9999px ${VELO_FUERTE}` }} />
                 </div>
               )}
 

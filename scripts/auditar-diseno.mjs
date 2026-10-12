@@ -73,6 +73,11 @@ const EXENTOS_EXACTOS = new Set([
   // pasar `var(--foreground)`. Es el único sitio que los escribe; la interfaz
   // los importa de aquí (`COLOR_MARCA_POR_DEFECTO`).
   'src/lib/company-branding.ts',
+  // Los colores con los que el editor de imágenes RELLENA lo que la foto no
+  // cubre (blanco, gris claro, oscuro) quedan horneados en los píxeles del
+  // archivo que se sube: no son estilo de interfaz y no hay variable CSS que
+  // valga dentro de una imagen. Son datos de formato, como el color de marca.
+  'src/lib/imagen/formatos.ts',
 ])
 
 /**
