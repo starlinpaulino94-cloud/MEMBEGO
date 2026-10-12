@@ -30,6 +30,7 @@
     "e2e:base": "node scripts/e2e/base-limpia.mjs",
     "e2e:limpio": "node scripts/e2e/correr.mjs",
     "e2e:dos-anfitriones": "node scripts/e2e/dos-anfitriones.mjs",
+    "corte:verificar": "tsx scripts/corte/verificar.ts",
     "smoke": "node scripts/smoke.mjs",
     "migraciones:baseline": "node scripts/baseline-migraciones.mjs",
     "migraciones:pendientes": "node scripts/migraciones-pendientes.mjs",

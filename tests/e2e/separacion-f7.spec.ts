@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { request as http } from 'node:http'
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
 import { asegurarUsuario, cerrarPrisma, cookieDeSesion, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
@@ -213,5 +214,64 @@ test.describe('Separación F7 · dos anfitriones', () => {
     await page.goto(`${LANDING}/login`)
     await page.waitForURL(new RegExp(`^${APP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/cliente`))
     await ctx.close()
+  })
+
+  // ── F8 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  test('F8 · la sesión host-only de antes del corte se borra una vez, y la compartida y la sesión sobreviven', async ({ browser }) => {
+    test.skip(!SESION_LOCAL_DISPONIBLE, 'requiere sesiones firmadas localmente y la base')
+    const ctx = await browser.newContext()
+    const u = await asegurarUsuario('separacionCliente2')
+    const c = await cookieDeSesion(u)
+    // La compartida (la de después del corte) y, con el MISMO nombre, la vieja host-only de membego.test, más un trozo suelto.
+    await ctx.addCookies([
+      { ...c, domain: '.membego.test', path: '/', httpOnly: false, sameSite: 'Lax' },
+      { name: c.name, value: 'sesion-heredada', url: LANDING, httpOnly: false, sameSite: 'Lax' },
+      { name: `${c.name}.1`, value: 'trozo-heredado', url: LANDING, httpOnly: false, sameSite: 'Lax' },
+    ])
+    const delSitio = async () => (await ctx.cookies(LANDING)).filter((k) => k.name.startsWith('sb-'))
+    expect((await delSitio()).filter((k) => !k.domain.startsWith('.')).map((k) => k.name).sort(), 'parten con las dos viejas host-only').toEqual([c.name, `${c.name}.1`].sort())
+
+    const page = await ctx.newPage()
+    await page.goto(`${LANDING}/`)
+    await page.waitForTimeout(800)
+    const despues = await delSitio()
+    expect(despues.filter((k) => !k.domain.startsWith('.')), 'las host-only se borraron').toEqual([])
+    expect(despues.filter((k) => k.domain === '.membego.test').map((k) => k.name), 'la compartida sigue').toEqual([c.name])
+    expect((await ctx.cookies(LANDING)).find((k) => k.name === 'mg_cd'), 'marcador host-only').toBeTruthy()
+    await abrirMenuMovil(page)
+    await expect(visibles(page, 'Ir a mi app').first()).toBeVisible({ timeout: 8000 })
+
+    // Una segunda visita no vuelve a tocar nada.
+    const respuesta = await page.goto(`${LANDING}/promociones`)
+    expect(await respuesta!.headerValues('set-cookie')).toEqual([])
+    await ctx.close()
+  })
+
+  test('F8 · solo con la sesión vieja host-only: se borra y la landing vuelve a ser la del visitante', async ({ browser }) => {
+    const ctx = await browser.newContext()
+    await ctx.addCookies([{ name: 'sb-viejo-auth-token', value: 'x', url: LANDING, httpOnly: false, sameSite: 'Lax' }])
+    const page = await ctx.newPage()
+    await page.goto(`${LANDING}/`)
+    await page.waitForTimeout(800)
+    expect((await ctx.cookies(LANDING)).filter((k) => k.name.startsWith('sb-'))).toEqual([])
+    await ctx.close()
+  })
+
+  test('F8 · el verificador del corte da por bueno el despliegue de dos anfitriones y falla si se le dan los hosts al revés', () => {
+    const correr = (...args: string[]) => {
+      try {
+        const salida = execFileSync('npx', ['tsx', 'scripts/corte/verificar.ts', ...args, '--via', '127.0.0.1:3210'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+        return { codigo: 0, salida }
+      } catch (e) {
+        const err = e as { status?: number; stdout?: string }
+        return { codigo: err.status ?? 1, salida: err.stdout ?? '' }
+      }
+    }
+    const bien = correr(LANDING, APP, '--cookie-domain', '.membego.test')
+    expect(bien.codigo, bien.salida).toBe(0)
+    expect(bien.salida).toMatch(/0 mal/)
+    const mal = correr(APP, LANDING, '--cookie-domain', '.membego.test')
+    expect(mal.codigo).toBe(1)
   })
 })

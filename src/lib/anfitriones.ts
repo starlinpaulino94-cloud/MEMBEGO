@@ -103,6 +103,14 @@ export function decidirAnfitrion(entrada: { host: string | null | undefined; rut
   return { accion: 'redirigir', destino: `${origen}${entrada.ruta}${busqueda}` }
 }
 
+/**
+ * El código de la redirección entre hosts: 307 (temporal) mientras se valida el corte —un buscador no la memoriza y la reversa
+ * es limpia— y 308 (permanente, igual que un 301 para los buscadores pero conserva el método) cuando el corte ya es estable.
+ */
+export function estadoDeRedireccion(permanente: boolean): 307 | 308 {
+  return permanente ? 308 : 307
+}
+
 /** Cabeceras que el host añade a sus respuestas: la app no se indexa. */
 export function cabecerasDelAnfitrion(host: string | null | undefined, anfitriones: Anfitriones | null): Record<string, string> {
   return anfitrionDelHost(host, anfitriones) === 'app' ? { 'X-Robots-Tag': 'noindex, nofollow' } : {}

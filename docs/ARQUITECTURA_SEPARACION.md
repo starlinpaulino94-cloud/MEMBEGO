@@ -188,7 +188,9 @@ correctos sin tocar las páginas.
   origen antiguo hacia el nuevo host **conservando el path y el slug** (no
   cambiar slugs). Registrar ambos dominios en Search Console y reenviar sitemaps.
 - Rutas de app que hoy responden en el dominio único (`/login`, `/registro`,
-  paneles): al separarlas, 301 desde la Landing hacia `appUrlFor(path)`.
+  paneles): al separarlas, redirección desde la Landing hacia `appUrlFor(path)`
+  (hecho en F7: 307 mientras se valida; 308 con `ANFITRIONES_REDIRECCION_PERMANENTE=1`,
+  ver [F8_CIERRE_DEL_CORTE.md](F8_CIERRE_DEL_CORTE.md), que también fija el plan de Search Console).
 
 ## Etapa 6 · App independiente (arranque: cookie cross-subdominio)
 
