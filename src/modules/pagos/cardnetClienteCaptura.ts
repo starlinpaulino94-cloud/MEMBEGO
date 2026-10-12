@@ -8,6 +8,7 @@ import {
 } from '@/modules/pagos/cardnetClientCore'
 import {
   ACTIVATION_CLAIM_STALE_MS,
+  PROFILE_WAIT_MS,
   fail,
   ownRecord,
   requestIp,
@@ -21,6 +22,7 @@ import {
   setSessionState,
   setActivationClaimState,
   claimProfileCheck,
+  expireConsumedWithoutProfile,
   type LoadedCardnetSession,
 } from '@/modules/pagos/cardnetClienteSesionStore'
 import {
@@ -154,6 +156,27 @@ export async function progressCapture(
     session.estado !== CARDNET_SESSION_STATES.PROFILE_PENDING
   ) return fail(409, 'La sesión de pago ya fue procesada.')
 
+  // Una captura consumida que lleva mucho esperando un perfil que NUNCA aparece (el aviso no era de una tarjeta, CardNET no la
+  // lista) no puede quedarse reteniendo la reserva del cliente: con ella retenida no puede abrir otro pago. No hay cobro en
+  // marcha (ni perfil elegido ni intento), así que expirar es seguro; si el perfil llegara después, repetir la captura crea otro.
+  if (
+    !session.purchaseIntentId &&
+    !session.paymentProfileId &&
+    session.capturadoAt &&
+    Date.now() - session.capturadoAt.getTime() >= PROFILE_WAIT_MS
+  ) {
+    const expired = await expireConsumedWithoutProfile(session)
+    if (expired) {
+      console.warn('[pagos:cardnet-cliente] captura consumida sin perfil de CardNET: se libera la reserva', {
+        sessionId: session.id,
+        clienteId: session.clienteId,
+        esperaMs: Date.now() - session.capturadoAt.getTime(),
+      })
+      return success(200, { status: 'expired' })
+    }
+    return success(202, { status: 'pending' })
+  }
+
   if (!(await claimProfileCheck(session))) return success(202, { status: 'pending' })
   const claimed = await loadSession(session.id, session.authSubject)
   if (!claimed?.customerId) return success(202, { status: 'pending' })
@@ -161,26 +184,53 @@ export async function progressCapture(
   if (
     !customer ||
     customer.email?.trim().toLowerCase() !== claimed.cliente.email.trim().toLowerCase()
-  ) return success(202, { status: 'pending' })
+  ) return waitForProfile(claimed)
   const profile = seleccionarPerfilNuevo(customer.perfiles, baselineFromJson(claimed.perfilBase))
-  if (profile.kind !== 'selected') return success(202, { status: 'pending' })
-  if (!profile.perfil.habilitado) {
+  if (profile.kind !== 'selected') return waitForProfile(claimed)
+  return advanceWithProfile(claimed, profile.perfil, request)
+}
+
+/**
+ * El perfil todavía no está (CardNET tarda en listarlo, o la lectura falló): se suelta la comprobación para que el PRÓXIMO
+ * sondeo vuelva a mirar de inmediato.
+ *
+ * Antes la sesión se quedaba en PROFILE_PENDING y `claimProfileCheck` no dejaba reintentar hasta 45 s después: el sondeo de la
+ * app (18 × 2,5 s) casi se acababa antes, y el pago se quedaba en «confirmando» con la tarjeta ya registrada. Solo hay UNA
+ * comprobación a la vez por sesión: el reclamo directo de CAPTURE_CONSUMED es atómico, y quien llegue entremedias ve la sesión
+ * en PROFILE_PENDING y espera sin llamar a CardNET.
+ */
+async function waitForProfile(claimed: LoadedCardnetSession): Promise<CardnetReply> {
+  await setSessionState(claimed, CARDNET_SESSION_STATES.CAPTURE_CONSUMED)
+  return success(202, { status: 'pending' })
+}
+
+/**
+ * Con el perfil nuevo ya identificado: lo deja anotado en la sesión y sigue al cobro (o pide el código de activación).
+ * Lo comparten `progressCapture` y la reconciliación del servidor (`reconciliarCapturaAbierta`), que ya leyó el perfil y no
+ * tiene por qué volver a pedírselo a CardNET.
+ */
+export async function advanceWithProfile(
+  claimed: LoadedCardnetSession,
+  perfil: PerfilPagoCardnet,
+  request: Request
+): Promise<CardnetReply> {
+  if (!perfil.habilitado) {
     const required = await setSessionState(claimed, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED, {
-      paymentProfileId: profile.perfil.paymentProfileId,
+      paymentProfileId: perfil.paymentProfileId,
       perfilLeidoAt: new Date(),
     })
     return required ? success(200, { status: 'activation_required' }) : success(202, { status: 'pending' })
   }
   const ready = await setSessionState(claimed, CARDNET_SESSION_STATES.PROFILE_PENDING, {
-    paymentProfileId: profile.perfil.paymentProfileId,
+    paymentProfileId: perfil.paymentProfileId,
     perfilLeidoAt: new Date(),
   })
   if (!ready) return success(202, { status: 'pending' })
   const fresh = await loadSession(claimed.id, claimed.authSubject)
-  return fresh ? chargeWithProfile(fresh, profile.perfil, request) : success(202, { status: 'pending' })
+  return fresh ? chargeWithProfile(fresh, perfil, request) : success(202, { status: 'pending' })
 }
 
-function baselineFromJson(value: unknown): readonly string[] {
+export function baselineFromJson(value: unknown): readonly string[] {
   if (!Array.isArray(value)) return []
   return value.filter((item): item is string => typeof item === 'string')
 }
