@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { FlaskConical, Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { getAppUrl } from '@/lib/site'
+import { appUrl } from '@/lib/site'
 import { getEmpresasDemo, estadoDemo } from '@/modules/demo'
 import { getAccesosDeEmpresa, getAdminsVinculables } from '@/modules/empresas/accesos'
 import { DemoPanel, type EmpresaDemoUI } from '@/components/superadmin/DemoPanel'
@@ -13,7 +13,7 @@ export default async function SuperadminDemoPage() {
   await requireRole('SUPERADMIN')
 
   const [empresas, admins] = await Promise.all([
-    getEmpresasDemo(getAppUrl()),
+    getEmpresasDemo(appUrl()),
     getAdminsVinculables(),
   ])
   // El inventario de cada una en paralelo: se enseña ANTES de que alguien

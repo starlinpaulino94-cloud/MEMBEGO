@@ -5,6 +5,7 @@ import { useSyncExternalStore, type ReactNode } from 'react'
 import { ArrowRight } from 'lucide-react'
 import { hayCookieDeSesion, puertaDeCasa } from '@/lib/auth/sesion-ligera'
 import { cn } from '@/lib/utils'
+import { haciaLaApp } from '@/lib/anfitriones'
 import { useSesionLigera } from './useSesionLigera'
 
 /**
@@ -35,7 +36,7 @@ export function EnlaceDeCuenta({ href, etiqueta, className, icono, onClick }: { 
   const { sesion, puerta, pendiente } = useSesionDeLaLanding()
   return (
     <Link
-      href={puerta?.href ?? href}
+      href={haciaLaApp(puerta?.href ?? href)}
       onClick={onClick}
       className={cn(className, pendiente && 'invisible')}
       aria-hidden={pendiente || undefined}
@@ -54,12 +55,12 @@ export function AccionesDeLaBarra({ movil = false, onNavigate }: { movil?: boole
   const oculto = pendiente ? 'invisible' : undefined
   if (puerta) {
     return movil ? (
-      <Link href={puerta.href} onClick={onNavigate} data-sesion={sesion.estado} className="block rounded-xl bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground shadow-glow">
+      <Link href={haciaLaApp(puerta.href)} onClick={onNavigate} data-sesion={sesion.estado} className="block rounded-xl bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground shadow-glow">
         {puerta.etiqueta}
       </Link>
     ) : (
       <Link
-        href={puerta.href}
+        href={haciaLaApp(puerta.href)}
         data-sesion={sesion.estado}
         className="group inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:bg-primary hover:shadow-glow-strong active:scale-[0.98]"
       >
@@ -70,20 +71,20 @@ export function AccionesDeLaBarra({ movil = false, onNavigate }: { movil?: boole
   }
   return movil ? (
     <div className={cn('space-y-1.5', oculto)} aria-hidden={pendiente || undefined} data-sesion={sesion.estado}>
-      <Link href="/login" onClick={onNavigate} tabIndex={pendiente ? -1 : undefined} className="block rounded-xl px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5">
+      <Link href={haciaLaApp('/login')} onClick={onNavigate} tabIndex={pendiente ? -1 : undefined} className="block rounded-xl px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5">
         Ingresar
       </Link>
-      <Link href="/registro/cuenta" onClick={onNavigate} tabIndex={pendiente ? -1 : undefined} className="block rounded-xl bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground shadow-glow">
+      <Link href={haciaLaApp('/registro/cuenta')} onClick={onNavigate} tabIndex={pendiente ? -1 : undefined} className="block rounded-xl bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground shadow-glow">
         Registrarse
       </Link>
     </div>
   ) : (
     <div className={cn('flex items-center gap-2', oculto)} aria-hidden={pendiente || undefined} data-sesion={sesion.estado}>
-      <Link href="/login" tabIndex={pendiente ? -1 : undefined} className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+      <Link href={haciaLaApp('/login')} tabIndex={pendiente ? -1 : undefined} className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
         Ingresar
       </Link>
       <Link
-        href="/registro/cuenta"
+        href={haciaLaApp('/registro/cuenta')}
         tabIndex={pendiente ? -1 : undefined}
         className="group inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:bg-primary hover:shadow-glow-strong active:scale-[0.98]"
       >
@@ -101,19 +102,19 @@ export function ColumnaDeCuentaDelPie({ claseEnlace }: { claseEnlace: string }) 
     <ul className={cn('space-y-2.5 text-sm', pendiente && 'invisible')} aria-hidden={pendiente || undefined} data-sesion={sesion.estado}>
       {puerta ? (
         <li>
-          <Link href={puerta.href} className={claseEnlace}>
+          <Link href={haciaLaApp(puerta.href)} className={claseEnlace}>
             {puerta.etiqueta}
           </Link>
         </li>
       ) : (
         <>
           <li>
-            <Link href="/registro" tabIndex={pendiente ? -1 : undefined} className={claseEnlace}>
+            <Link href={haciaLaApp('/registro')} tabIndex={pendiente ? -1 : undefined} className={claseEnlace}>
               Crear cuenta
             </Link>
           </li>
           <li>
-            <Link href="/login" tabIndex={pendiente ? -1 : undefined} className={claseEnlace}>
+            <Link href={haciaLaApp('/login')} tabIndex={pendiente ? -1 : undefined} className={claseEnlace}>
               Ingresar
             </Link>
           </li>

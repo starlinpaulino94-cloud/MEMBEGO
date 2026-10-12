@@ -27,6 +27,7 @@ import { sendEmail } from '@/lib/email'
 import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
 import { randomBytes } from 'crypto'
 import { generarCodigo } from '@/lib/codes'
+import { appUrl } from '@/lib/site'
 
 export interface ReservaVendedorState {
   error?: string
@@ -334,7 +335,7 @@ export async function crearReservaVendedor(
           data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
         })
 
-        const urlBase = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const urlBase = appUrl()
         const html = await correoAccesoCliente({ nombre: clienteNombre, email: clienteEmail, token, urlBase })
         await sendEmail({ to: clienteEmail, subject: 'Establece tu contraseña - MembeGo', html })
       } catch (e) {
@@ -488,7 +489,7 @@ export async function crearReservaVendedor(
       })
     )
     if (clienteEmail) {
-      const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
+      const urlBase = appUrl()
       if (reservaCompleta?.checkinToken) {
         correoConfirmacionReserva({
           nombreCliente: clienteNombre || clienteEmail,

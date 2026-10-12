@@ -80,7 +80,7 @@ test('las pantallas de «no encontrada» y de error llevan a la casa de quien ti
   assert.match(sinComentarios('src/app/not-found.tsx'), /<EnlaceDeInicio/)
   assert.match(sinComentarios('src/app/(public)/error.tsx'), /<EnlaceDeInicio/)
   const enlace = sinComentarios('src/components/public/EnlaceDeInicio.tsx')
-  assert.match(enlace, /puerta\?\.href \?\? '\/'/)
+  assert.match(enlace, /puerta \? haciaLaApp\(puerta\.href\) : haciaLaLanding\('\/'\)/)
 })
 
 test('/registro es una pieza del acceso: vive en (auth), conserva la URL y la consulta', () => {

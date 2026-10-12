@@ -20,6 +20,7 @@ import { anotarFallo } from '@/lib/prisma-errors'
 import { generarCodigo } from '@/lib/codes'
 import { sendEmail } from '@/lib/email'
 import { correoAccesoVendedor } from '@/lib/email/plantillas-excursiones'
+import { appUrl } from '@/lib/site'
 import {
   ESTADOS_VENDEDOR,
   codigoVendedor,
@@ -352,7 +353,7 @@ export async function darAccesoVendedor(
         nombre: nombreCompleto,
         email: correo,
         token,
-        urlBase: process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000',
+        urlBase: appUrl(),
       })
       await sendEmail({ to: correo, subject: 'Establece tu contraseña - MembeGo', html })
     } catch (emailErr) {
@@ -550,7 +551,7 @@ export async function reenviarCorreoAccesoVendedor(
       nombre: dbUser.name,
       email: dbUser.email,
       token,
-      urlBase: process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000',
+      urlBase: appUrl(),
     })
     await sendEmail({ to: dbUser.email, subject: 'Establece tu contraseña - MembeGo', html })
 

@@ -3,6 +3,9 @@
 > Ejecuta esto **tú** en un entorno con navegador: cada paso tiene un
 > **checkpoint visual** porque el estilado (Tailwind v4) y la sesión
 > (cookies cross-subdominio) no se pueden verificar de forma headless.
+> **Para el corte de un proyecto y dos dominios (camino A) usa `docs/F7_CORTE_POR_ANFITRION.md`:** es el runbook vigente, con
+> el enrutado por host ya implementado y probado.
+>
 > El código ya está preparado (abstracción de dominios, `sessionCookieDomain()`,
 > manifiesto de UI). **Nada rompe si no defines las envs nuevas.**
 

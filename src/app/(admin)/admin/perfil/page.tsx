@@ -16,7 +16,7 @@ import type { ReceiptTemplateConfig } from '@/lib/receipts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
-import { getAppUrl } from '@/lib/site'
+import { appUrlFor } from '@/lib/site'
 
 export const dynamic = 'force-dynamic'
 
@@ -221,7 +221,7 @@ export default async function PerfilEmpresaPage({
             y se registran directamente en tu empresa.
           </p>
           <CompanyQRRegistro
-            url={`${getAppUrl()}/registro/${company.slug}`}
+            url={appUrlFor(`/registro/${company.slug}`)}
             companySlug={company.slug}
           />
         </CardContent>

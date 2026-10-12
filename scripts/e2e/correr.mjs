@@ -35,8 +35,10 @@ const PUERTO = process.env.E2E_PORT || '3210'
 const BASE = `http://localhost:${PUERTO}`
 const URL_BASE_DATOS = process.env.E2E_DATABASE_URL?.trim() || 'postgresql://postgres:postgres@127.0.0.1:5432/membego_e2e'
 
-if (!existsSync(new URL('../../.next/BUILD_ID', import.meta.url))) {
-  console.error('✗ Falta el build. Corre `npm run build` primero: el E2E prueba lo que se despliega.')
+// Separación landing/app · F7: el build de dos anfitriones vive en su propio directorio (`MEMBEGO_DIST_DIR`) para no pisar el normal.
+const DIST = process.env.MEMBEGO_DIST_DIR || '.next'
+if (!existsSync(new URL(`../../${DIST}/BUILD_ID`, import.meta.url))) {
+  console.error(`✗ Falta el build (${DIST}). Corre \`npm run build\` primero: el E2E prueba lo que se despliega.`)
   process.exit(1)
 }
 
@@ -141,7 +143,8 @@ const entorno = {
   // es código de cliente, y la ruta es además lo que corre de verdad en
   // producción. Llamar a la puerta prueba más que llamar a la función.
   CRON_SECRET: process.env.CRON_SECRET || 'e2e-secreto-de-cron-solo-para-pruebas-0123456789',
-  NEXT_PUBLIC_APP_URL: BASE,
+  // Con dos anfitriones la URL "de siempre" es la de la landing (la que sale en canónicos y correos).
+  NEXT_PUBLIC_APP_URL: process.env.E2E_DOS_ANFITRIONES === '1' ? process.env.NEXT_PUBLIC_LANDING_URL : BASE,
   E2E_BASE_URL: BASE,
   ...(navegador ? { PLAYWRIGHT_CHROMIUM_PATH: navegador } : {}),
 }

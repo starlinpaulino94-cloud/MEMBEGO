@@ -2,7 +2,7 @@ import { withSentryConfig } from '@sentry/nextjs'
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  distDir: process.env.MEMBEGO_QA === '1' ? '.next-qa' : '.next',
+  distDir: process.env.MEMBEGO_DIST_DIR || (process.env.MEMBEGO_QA === '1' ? '.next-qa' : '.next'),
   reactStrictMode: true,
   typescript: {
     // El chequeo de tipos NO corre en el build de despliegue, y no es una

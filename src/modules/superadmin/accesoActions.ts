@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUser } from '@/lib/auth'
-import { getAppUrl } from '@/lib/site'
+import { appUrlFor } from '@/lib/site'
 import { sinEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { huellaToken } from './entrarComo'
@@ -149,7 +149,7 @@ export async function generarEnlaceEntrarComo(
 
     // Mismo callback que la verificación de correo: abre la sesión y lleva al
     // home del ROL del usuario (cliente → su app, admin → su panel).
-    const url = `${getAppUrl()}/confirmar?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink`
+    const url = appUrlFor(`/confirmar?token_hash=${encodeURIComponent(tokenHash)}&type=magiclink`)
 
     await sinEmpresa('superadmin: bitácora de entrar como', (tx) =>
       tx.auditLog

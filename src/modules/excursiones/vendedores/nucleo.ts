@@ -1,3 +1,4 @@
+import { landingUrlFor } from '@/lib/site'
 /**
  * EXCURSIONES · Vendedores — NÚCLEO PURO.
  *
@@ -139,8 +140,7 @@ export function validarVendedor(
 
 /** URL pública del enlace de un vendedor (la que se copia y se comparte). */
 export function urlDeEnlace(slug: string): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://membego.com').replace(/\/$/, '')
-  return `${base}/e/${slug}`
+  return landingUrlFor(`/e/${slug}`)
 }
 
 /**

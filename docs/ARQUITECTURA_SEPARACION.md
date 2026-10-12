@@ -5,8 +5,9 @@
 > la separación **funcional** dentro de este repositorio —landing que informa, app
 > del cliente que opera, paneles—, documentada, con su tabla de rutas por espacio
 > generada del código, en [SEPARACION_LANDING_APP.md](SEPARACION_LANDING_APP.md).
-> Este documento fija el mapa objetivo para cortar por dominios cuando se apruebe
-> (F7); el mapa de abajo ya refleja el estado funcional de hoy.
+> Este documento fija el mapa objetivo para cortar por dominios. El corte está
+> implementado como F7 (un proyecto, dos dominios, apagado por defecto): ver
+> [F7_CORTE_POR_ANFITRION.md](F7_CORTE_POR_ANFITRION.md). El mapa de abajo refleja el estado funcional de hoy.
 
 ## Objetivo
 

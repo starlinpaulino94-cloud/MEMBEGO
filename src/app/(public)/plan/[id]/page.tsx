@@ -1,3 +1,4 @@
+import { haciaLaApp } from '@/lib/anfitriones'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -50,7 +51,7 @@ export default async function PlanPublicPage({ params }: PlanPageProps) {
 
   // Al registrarse desde un plan compartido, aterriza directo en la selección
   // de planes para continuar con SU membresía (?next=), no en el home genérico.
-  const registroHref = `/registro/${plan.company.slug}?next=${encodeURIComponent('/cliente/planes')}`
+  const registroHref = haciaLaApp(`/registro/${plan.company.slug}?next=${encodeURIComponent('/cliente/planes')}`)
 
   return (
     <div className="min-h-screen bg-card">

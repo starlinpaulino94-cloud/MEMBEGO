@@ -5,7 +5,7 @@ import { accesoASistema, sistemaParaVerificarFirma } from '@/modules/plataforma/
 import { secretosVivos, verificarConVivos } from '@/modules/plataforma/rotacion-secreto-nucleo'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createRouteClient, redirectWithCookies } from '@/lib/supabase/route-client'
-import { getAppUrl } from '@/lib/site'
+import { appUrl } from '@/lib/site'
 import { loginLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { ROLE_HOME, type AppRole } from '@/types'
 
@@ -49,7 +49,7 @@ type MotivoSSO = 'token' | 'sistema' | 'cuenta' | 'sesion'
 
 export async function GET(req: NextRequest) {
   const rechazar = (motivo: MotivoSSO) =>
-    NextResponse.redirect(new URL(`/login?error=sso&motivo=${motivo}`, getAppUrl()))
+    NextResponse.redirect(new URL(`/login?error=sso&motivo=${motivo}`, appUrl()))
 
   // Rate limit por IP: este endpoint acepta credenciales al portador.
   if (!(await loginLimiter(getClientIdentifier(req)))) return rechazar('token')
@@ -182,7 +182,7 @@ export async function GET(req: NextRequest) {
     }
 
     const dest = ROLE_HOME[user.role as AppRole] ?? '/mis-membresias'
-    return redirectWithCookies(new URL(dest, getAppUrl()), carrier)
+    return redirectWithCookies(new URL(dest, appUrl()), carrier)
   } catch (e) {
     console.error('[sso-entrar] error inesperado:', e)
     return rechazar('sesion')

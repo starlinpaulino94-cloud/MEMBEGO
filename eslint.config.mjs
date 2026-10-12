@@ -58,6 +58,7 @@ const eslintConfig = [
       'node_modules/**',
       '.next/**',
       '.next-qa/**',
+      '.next-f7/**',
       '.claude/**',
       'out/**',
       'build/**',

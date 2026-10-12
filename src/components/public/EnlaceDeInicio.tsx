@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { haciaLaApp, haciaLaLanding } from '@/lib/anfitriones'
 import { useSesionDeLaLanding } from './AccionesDeSesion'
 
 /**
@@ -16,7 +17,7 @@ export function EnlaceDeInicio({ etiqueta = 'Volver al inicio', etiquetaConSesio
   const { puerta, sesion } = useSesionDeLaLanding()
   return (
     <Button asChild variant={variante} className={className}>
-      <Link href={puerta?.href ?? '/'} data-sesion={sesion.estado}>
+      <Link href={puerta ? haciaLaApp(puerta.href) : haciaLaLanding('/')} data-sesion={sesion.estado}>
         {puerta ? etiquetaConSesion : etiqueta}
       </Link>
     </Button>

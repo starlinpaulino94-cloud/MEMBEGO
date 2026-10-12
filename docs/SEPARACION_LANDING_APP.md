@@ -1,9 +1,9 @@
 # Separación Landing · App del cliente · Paneles
 
-> Estado: **ejecutada (F0 a F6).** La landing informa y descubre; la app del cliente opera; los paneles son de quien
+> Estado: **ejecutada (F0 a F7; el corte por dominios está listo y apagado por defecto).** La landing informa y descubre; la app del cliente opera; los paneles son de quien
 > administra. Este documento es el registro de lo decidido y de lo hecho, la arquitectura final, la tabla de rutas por
 > espacio (generada del código y verificada por prueba) y, al final, el diagnóstico original como anexo histórico.
-> Complementa `docs/ARQUITECTURA_SEPARACION.md` (la separación **física** por dominios, que sigue pendiente: F7) y
+> Complementa `docs/ARQUITECTURA_SEPARACION.md` (la separación **física** por dominios; su ejecución en código es F7, ver `docs/F7_CORTE_POR_ANFITRION.md`) y
 > `docs/ARQUITECTURA_OBJETIVO_V2.md`.
 
 Auditoría inicial: 2026-10-09 · ejecución F0 a F6: 2026-10-09 y 2026-10-10 · rama de trabajo `claude/gracious-pasteur-87pexr`.
@@ -34,6 +34,7 @@ Efecto en el plan: la pregunta 3 de §7 queda resuelta en contra de la recomenda
 | F4 · Ofertas Membego, membresías, campañas y regalos en la app | **Hecha.** Ver abajo. |
 | F5 · Landing consciente de la sesión y orden en auth | **Hecha.** Ver abajo. |
 | F6 · Documentación y cierre | **Hecha.** Ver abajo. |
+| F7 · Corte `membego.com` / `app.membego.com` | **Hecha en código, apagada por defecto.** Ver abajo y `docs/F7_CORTE_POR_ANFITRION.md`. |
 
 ### F0 · Red de seguridad (hecha)
 
@@ -208,6 +209,19 @@ Ninguna. Las listas `EXCEPCIONES_*` se vaciaron fase a fase (F1 a F4) y F6 las q
 - **Guardia estricta:** sin listas de excepciones, y con tres clases de ruta nuevas (`/plan/*`, `/promocion/*`, `/oferta/*`) y el escaneo de `src/modules/home`. Verificada por mutación.
 - **Dos cabos sueltos:** el slide de plan del inicio enlazaba `/plan/…` desde la app y la guardia no lo veía; ahora sale del mapa único (`rutaDePlan`). `BuscadorExcursiones`, que no estaba montado en ninguna pantalla, se eliminó.
 
+### F7 · El corte por dominios (hecha en código, apagada por defecto)
+
+Un proyecto, dos dominios (opción A), con el enrutado por host en el proxy y todo detrás de tres variables de entorno
+(`NEXT_PUBLIC_LANDING_URL`, `NEXT_PUBLIC_APP_ORIGIN`, `NEXT_PUBLIC_COOKIE_DOMAIN`) que, sin definir, dejan el comportamiento
+de siempre. Detalle, runbook de corte y de reversa, y riesgos: [F7_CORTE_POR_ANFITRION.md](F7_CORTE_POR_ANFITRION.md).
+
+- **Núcleo puro** `src/lib/anfitriones.ts` (qué host sirve cada ruta, redirección 307 solo GET/HEAD sin redirección abierta,
+  `haciaLaApp`/`haciaLaLanding`/`irALaApp`) y la puerta en `src/proxy.ts`; la app no se indexa.
+- **Enlaces y cookies:** la landing enlaza a la app por `haciaLaApp`; las URL absolutas de servidor se clasificaron (landing o
+  app); las cookies de atribución y la celebración de bienvenida cruzan de un dominio al otro.
+- **SEO por host:** canónicos, sitemap y robots de la landing; `app.` con `noindex`. Se eliminó `public/robots.txt`, que tapaba a `robots.ts`.
+- **Pruebas:** `tests/separacion-f7.test.ts` y el E2E de dos anfitriones (`bun run e2e:dos-anfitriones`).
+
 ## Arquitectura final
 
 Una sola app Next, un solo backend, una sola autenticación. Lo que cambió es **dónde vive cada cosa**:
@@ -275,13 +289,17 @@ Corrida local contra una base desechable (`bun run e2e:limpio`) y contra `membeg
 
 Notas de la corrida: la suite PG tiene intermitencias conocidas en `deals.db.test.ts` (pruebas 29 y 33), también sobre `main` limpio e independientes de la separación; en esta corrida pasó completa, pero dos intentos previos con un límite de 280 s se cortaron por lentitud de la base de pruebas, no por fallos. `bunx prisma generate` y `prisma migrate deploy` son necesarios tras traer migraciones nuevas de `main`.
 
+### F7 · verificación (2026-10-12)
+
+Detalle completo en [F7_CORTE_POR_ANFITRION.md](F7_CORTE_POR_ANFITRION.md#verificación-2026-10-12-sobre-el-árbol-de-f7): `tsc` y lint limpios; unitarias 4045/4053 (el fallo restante es un test de excursiones con fecha fija, ajeno); E2E con un dominio 334 pasan y 0 fallan; E2E de dos anfitriones 20/20; PG 652/653 (una intermitencia que pasa sola).
+
 ## Excepciones y decisiones permanentes
 
 - **Landing que envía datos** (fijado por `separacion-f5.test.ts`): `/eliminar-cuenta/**` (las tiendas de apps exigen una URL pública), `/registro-empresa` y `/solicitud-empresa` (captación B2B), y la consulta de solo lectura del estado de sesión.
 - **`/mis-membresias` y `/membresia/[id]` se quedan fuera de `/cliente`:** la app móvil tiene esas mismas rutas y las usa, y el servidor ya emitió esos hrefs en avisos guardados y correos. Por eso `ROUTE_PROTECTION` conserva sus dos prefijos.
 - **`/` no se redirige en el servidor** a quien tiene sesión: puede seguir viendo la landing; recibe el atajo «Ir a mi app» o «Ir a mi panel».
 - **La API móvil no cambia de contrato:** los modelos de lectura que arman hrefs usan `espacio = 'publico'` por defecto; solo la web de la app pasa `'app'`.
-- **Fuera de este trabajo (F7):** el corte físico `membego.com` / `app.membego.com` de `ARQUITECTURA_SEPARACION.md` (etapas 6 y 7).
+- **El corte físico `membego.com` / `app.membego.com`** (F7) está implementado y apagado; encenderlo es una operación de infraestructura con su runbook en `F7_CORTE_POR_ANFITRION.md`.
 
 ---
 
