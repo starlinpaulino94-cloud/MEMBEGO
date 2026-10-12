@@ -45,7 +45,15 @@ BEGIN
   SET LOCAL ROLE authenticated;
   BEGIN
     v_msg := v_msg || 'membego_es_superadmin() = ' || public.membego_es_superadmin()::text || E'\n';
+  EXCEPTION WHEN OTHERS THEN
+    v_msg := v_msg || 'membego_es_superadmin(): ERROR (' || SQLERRM || ')' || E'\n';
+  END;
+  BEGIN
     v_msg := v_msg || 'membego_medio_propio(ruta) = ' || public.membego_medio_propio(v_path)::text || E'\n';
+  EXCEPTION WHEN OTHERS THEN
+    v_msg := v_msg || 'membego_medio_propio(ruta): ERROR (' || SQLERRM || ')' || E'\n';
+  END;
+  BEGIN
     INSERT INTO storage.objects (bucket_id, name) VALUES ('promociones', v_path);
     v_msg := v_msg || 'INSERT como authenticated: PERMITIDO' || E'\n';
   EXCEPTION WHEN OTHERS THEN
