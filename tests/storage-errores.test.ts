@@ -13,9 +13,10 @@ test('cada causa conocida de Storage recibe un mensaje que la nombra', () => {
   assert.match(mensajeDeStorage({ message: 'The resource already exists' }, o), /Ya existe/)
 })
 
-test('lo desconocido conserva el mensaje genérico y nunca revienta', () => {
+test('lo desconocido muestra el motivo si lo hay, conserva el genérico si no, y nunca revienta', () => {
   const generico = 'No se pudo subir la imagen. Intenta de nuevo.'
-  assert.equal(mensajeDeStorage({ message: 'algo raro' }, o), generico)
+  assert.equal(mensajeDeStorage({ message: 'algo raro' }, o), 'No se pudo subir la imagen (algo raro). Intenta de nuevo.')
+  assert.ok(mensajeDeStorage({ message: 'x'.repeat(500) }, o).length < 200)
   assert.equal(mensajeDeStorage(null, o), generico)
   assert.equal(mensajeDeStorage(undefined, o), generico)
   assert.equal(mensajeDeStorage(42, o), generico)

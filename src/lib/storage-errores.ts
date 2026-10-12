@@ -11,9 +11,9 @@
  * petición, nunca datos de otra empresa.
  */
 export function mensajeDeStorage(error: unknown, opciones: { maxMb: number }): string {
-  const texto = (
+  const original =
     typeof error === 'string' ? error : error && typeof error === 'object' && 'message' in error ? String((error as { message: unknown }).message) : ''
-  ).toLowerCase()
+  const texto = original.toLowerCase()
 
   if (/bucket not found|bucket .* does not exist/.test(texto)) {
     return 'El almacenamiento de imágenes no está configurado (falta el bucket «promociones»). Avisa al administrador de la plataforma.'
@@ -33,5 +33,8 @@ export function mensajeDeStorage(error: unknown, opciones: { maxMb: number }): s
   if (/fetch failed|network|econn|timed? ?out|failed to fetch|load failed/.test(texto)) {
     return 'No se pudo conectar con el almacenamiento. Revisa tu conexión e intenta de nuevo.'
   }
-  return 'No se pudo subir la imagen. Intenta de nuevo.'
+  // Causa desconocida: se muestra el motivo que dio Storage (recortado) para
+  // que el aviso diga algo accionable en vez de obligar a abrir los logs.
+  const detalle = original.replace(/\s+/g, ' ').trim().slice(0, 120)
+  return detalle ? `No se pudo subir la imagen (${detalle}). Intenta de nuevo.` : 'No se pudo subir la imagen. Intenta de nuevo.'
 }
