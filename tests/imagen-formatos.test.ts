@@ -121,3 +121,13 @@ test('las rutas de las versiones salen de la ruta del original y un token', asyn
   // Un punto en una carpeta no se confunde con la extensión.
   assert.equal(baseDeVariantes('a.b/c/foto', 'z'), 'a.b/c/foto-z')
 })
+
+test('franjaCompartir: franja centrada, en enteros, con la proporción de compartir', async () => {
+  const { franjaCompartir } = await import('../src/lib/imagen/formatos')
+  const f = franjaCompartir({ x: 100, y: 50, w: 1200, h: 1200 })
+  assert.deepEqual(f, { x: 100, y: 50 + Math.round((1200 - 630) / 2), w: 1200, h: 630 })
+  // Un encuadre ya apaisado no se corta más de lo que mide.
+  const baja = franjaCompartir({ x: 0, y: 0, w: 1000, h: 300 })
+  assert.equal(baja.h, 300)
+  assert.equal(baja.y, 0)
+})

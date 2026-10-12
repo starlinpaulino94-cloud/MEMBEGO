@@ -137,6 +137,16 @@ export function zonaVisibleApaisada(aspectoEncuadre: number, aspectoZona: number
 }
 
 /**
+ * La franja del encuadre que alimenta la tarjeta apaisada de compartir, en
+ * píxeles enteros del original. La usan el servidor (para generarla) y el
+ * editor (para dibujar la «así se verá»): una sola cuenta, mismo resultado.
+ */
+export function franjaCompartir(r: Recorte, aspecto: number = ASPECTO_COMPARTIR): Recorte {
+  const h = Math.min(r.h, Math.max(1, Math.round(r.w / aspecto)))
+  return { x: r.x, y: r.y + Math.round((r.h - h) / 2), w: r.w, h }
+}
+
+/**
  * Cómo pintar un recorte dentro de una caja de su misma proporción, con la
  * imagen completa como fondo: porcentajes para `width`, `left` y `top` de la
  * imagen. Sirve a las miniaturas «así se verá» sin tocar un canvas.

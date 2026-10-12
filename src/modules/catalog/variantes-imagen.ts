@@ -2,6 +2,7 @@ import sharp from 'sharp'
 import {
   FORMATO_CATALOGO,
   MAX_PIXELES_ORIGINAL,
+  franjaCompartir,
   validarRecorte,
   type NombreVariante,
   type Recorte,
@@ -65,11 +66,7 @@ export async function generarVariantesCatalogo(original: Buffer, recorteEntrada:
   for (const [nombre, medida] of Object.entries(FORMATO_CATALOGO.variantes) as [NombreVariante, { ancho: number; alto: number }][]) {
     // Región del original que alimenta esta versión: el encuadre entero, o (compartir)
     // una franja centrada de él con la proporción de la tarjeta que se comparte.
-    let region = recorte
-    if (nombre === 'compartir') {
-      const alturaFranja = Math.min(recorte.h, Math.round((recorte.w * medida.alto) / medida.ancho))
-      region = { x: recorte.x, y: recorte.y + Math.round((recorte.h - alturaFranja) / 2), w: recorte.w, h: alturaFranja }
-    }
+    const region = nombre === 'compartir' ? franjaCompartir(recorte, medida.ancho / medida.alto) : recorte
     const { data, info } = await sharp(original, { limitInputPixels: MAX_PIXELES_ORIGINAL })
       .rotate() // aplica la orientación EXIF antes de recortar
       .extract({ left: region.x, top: region.y, width: region.w, height: region.h })
