@@ -131,3 +131,11 @@ test('franjaCompartir: franja centrada, en enteros, con la proporción de compar
   assert.equal(baja.h, 300)
   assert.equal(baja.y, 0)
 })
+
+test('recorteGuardado: lee un JSON de la base o devuelve null', async () => {
+  const { recorteGuardado } = await import('../src/lib/imagen/formatos')
+  assert.deepEqual(recorteGuardado({ x: 1, y: 2, w: 300, h: 300 }), { x: 1, y: 2, w: 300, h: 300 })
+  for (const malo of [null, undefined, 'x', 3, {}, { x: 0, y: 0, w: 0, h: 10 }, { x: 'a', y: 0, w: 1, h: 1 }, { x: NaN, y: 0, w: 1, h: 1 }]) {
+    assert.equal(recorteGuardado(malo), null)
+  }
+})

@@ -164,6 +164,18 @@ export function estiloDeVista(
   }
 }
 
+/**
+ * Lee un recorte guardado en la base (JSON sin tipo). Devuelve null si no hay
+ * uno utilizable: el editor entonces empieza centrado, como con una foto nueva.
+ */
+export function recorteGuardado(json: unknown): Recorte | null {
+  if (typeof json !== 'object' || json === null) return null
+  const { x, y, w, h } = json as Record<string, unknown>
+  if (![x, y, w, h].every((n) => typeof n === 'number' && Number.isFinite(n))) return null
+  if ((w as number) <= 0 || (h as number) <= 0) return null
+  return { x: x as number, y: y as number, w: w as number, h: h as number }
+}
+
 // ── Avisos de resolución ─────────────────────────────────────────────────────
 
 export type NivelResolucion = 'ok' | 'justa' | 'baja'

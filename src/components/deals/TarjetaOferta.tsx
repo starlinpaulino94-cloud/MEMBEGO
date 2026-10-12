@@ -26,9 +26,9 @@ export function TarjetaOferta({ oferta: o, espacio, accion, mostrarEmpresa = tru
     <article className="flex flex-col overflow-hidden rounded-lg border border-border bg-card" aria-label={o.title}>
       {o.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- la URL es del bucket público de Storage
-        <img src={o.imageUrl} alt="" loading="lazy" className="aspect-[16/9] w-full object-cover" />
+        <img src={o.imageUrl} alt="" loading="lazy" className="aspect-square w-full object-cover" />
       ) : (
-        <div className="flex aspect-[16/9] w-full items-center justify-center bg-muted" aria-hidden>
+        <div className="flex aspect-square w-full items-center justify-center bg-muted" aria-hidden>
           <Tag className="h-8 w-8 text-muted-foreground/40" />
         </div>
       )}
