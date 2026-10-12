@@ -1,6 +1,6 @@
 import type { Tx } from '@/lib/tenant'
 import type { Prisma } from '@prisma/client'
-import type { Recorte } from '@/lib/imagen/formatos'
+import type { Encuadre } from '@/lib/imagen/formatos'
 import { auditarCatalogo, type ContextoAuditoria } from './auditoria'
 import { elegirSlugLibre, slugDeNombre } from './domain'
 import { fallo } from './errores'
@@ -39,11 +39,11 @@ export async function exigirCupoDeImagen(tx: Tx, companyId: string, itemId: stri
   return total
 }
 
-/** Lo que se sabe de una foto procesada: original orientado, encuadre y dónde están sus versiones. */
+/** Lo que se sabe de una foto procesada: original orientado, encuadre (con giro y fondo) y dónde están sus versiones. */
 export interface MetaImagen {
   width: number
   height: number
-  crop: Recorte
+  crop: Encuadre
   variantesBase: string
 }
 

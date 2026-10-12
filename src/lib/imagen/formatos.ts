@@ -1,28 +1,33 @@
 /**
  * FORMATOS DE IMAGEN · LA FUENTE ÚNICA.
  *
- * Cada tipo de imagen de la plataforma tiene aquí su proporción, el tamaño de
- * las versiones que se generan y la resolución que pide para verse nítida. Lo
- * leen el editor del navegador, el servidor que genera las versiones y los
- * letreros del panel: así no pueden contradecirse.
+ * Cada sección de la plataforma que recibe una imagen tiene aquí UN formato:
+ * una proporción y un tamaño final. Lo leen el editor del navegador, el
+ * servidor que genera las versiones y los letreros del panel: así no pueden
+ * contradecirse.
  *
- * Y la geometría del recorte vive aquí, pura y sin dependencias (ni React ni
+ * Y la geometría del encuadre vive aquí, pura y sin dependencias (ni React ni
  * `sharp`): el navegador la usa para dibujar el encuadre y el servidor para
  * validar lo que el navegador mandó, con el mismo código.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * EL MODELO
  *
- * Se guarda la imagen ORIGINAL tal como la subió la persona y un RECORTE: un
- * rectángulo en píxeles de esa imagen. Las versiones (tarjeta, ficha,
- * compartir) se generan en el servidor a partir de original + recorte. Así,
- * reencuadrar después no degrada nada: se vuelve a partir del original.
+ * La persona elige DÓNDE se ve su foto: la mueve, la acerca, la aleja hasta
+ * verla entera y la gira. Eso se resume en un ENCUADRE: un rectángulo
+ * (en píxeles de la foto ya girada) más el giro y el color de fondo que rellena
+ * lo que la foto no cubre.
  *
- * Las coordenadas son las de la imagen YA orientada (la que ve el navegador al
- * aplicar la rotación EXIF), no las del archivo en crudo.
+ *  - Catálogo: se guarda el ORIGINAL y el encuadre; el servidor genera las
+ *    versiones desde ahí. Reencuadrar no degrada la foto.
+ *  - Resto de secciones: el navegador produce la imagen final en el tamaño único
+ *    de la sección (`exportar.ts`) y esa es la que se sube.
+ *
+ * Las coordenadas son las de la imagen YA orientada (rotación EXIF aplicada),
+ * que es la que ve el navegador, y después del giro elegido.
  */
 
-/** Rectángulo de recorte en píxeles de la imagen original, ya orientada. */
+/** Rectángulo en píxeles de la foto (ya orientada y girada). Puede salirse de ella si se aleja la foto. */
 export interface Recorte {
   x: number
   y: number
@@ -30,42 +35,118 @@ export interface Recorte {
   h: number
 }
 
+export type Giro = 0 | 90 | 180 | 270
+
+/** Lo que se guarda de una foto: el rectángulo, cuánto se giró y de qué color se rellena lo que sobra. */
+export interface Encuadre extends Recorte {
+  giro: Giro
+  fondo: string
+}
+
 export type NombreVariante = 'tarjeta' | 'ficha' | 'compartir'
 
+/** Una parte de la imagen que, en alguna pantalla, se recorta: el editor la dibuja para que se vea qué se pierde. */
+export interface ZonaSegura {
+  etiqueta: string
+  /** Proporción ancho/alto de lo que SÍ se ve en esa pantalla. */
+  aspecto: number
+}
+
 export interface FormatoImagen {
+  id: string
   /** Nombre para mostrar en el panel. */
   etiqueta: string
-  /** Proporción ancho/alto del encuadre que elige la persona. */
+  /** Una línea para letreros: «Cuadrada (1:1) · 1200×1200 px». */
+  descripcion: string
+  /** Proporción ancho/alto del encuadre. */
   aspecto: number
-  /** Lado largo, en píxeles, de cada versión que se genera. */
-  variantes: Partial<Record<NombreVariante, { ancho: number; alto: number }>>
+  /** El tamaño ÚNICO de la imagen final de esta sección. */
+  salida: { ancho: number; alto: number }
   /** Con menos píxeles de ancho de recorte que esto, se avisa de que se verá borrosa. */
   recomendadoPx: number
-  /** Por debajo de esto, la imagen se ve mal incluso en la tarjeta. */
+  /** Por debajo de esto, la imagen se ve mal incluso en pequeño. */
   minimoPx: number
+  /** Pantallas que recortan la imagen distinto del formato (p. ej. el banner en móvil y en escritorio). */
+  zonas?: ZonaSegura[]
+  /** Cómo se enseña la vista previa: un círculo para los avatares. */
+  forma?: 'cuadro' | 'circulo'
+}
+
+function formato(
+  id: string,
+  etiqueta: string,
+  aspectoTexto: string,
+  ancho: number,
+  alto: number,
+  extra: Partial<FormatoImagen> & { recomendadoPx?: number; minimoPx?: number } = {}
+): FormatoImagen {
+  return {
+    id,
+    etiqueta,
+    descripcion: `${aspectoTexto} · ${ancho}×${alto} px`,
+    aspecto: ancho / alto,
+    salida: { ancho, alto },
+    recomendadoPx: extra.recomendadoPx ?? ancho,
+    minimoPx: extra.minimoPx ?? Math.round(ancho / 2),
+    ...(extra.zonas ? { zonas: extra.zonas } : {}),
+    ...(extra.forma ? { forma: extra.forma } : {}),
+  }
 }
 
 /**
- * Foto de producto del catálogo: cuadrada. Es el estándar de las tiendas
- * (Amazon, Mercado Libre, Shopify) y la misma decisión de las promociones.
- * La tarjeta, la ficha y el perfil de la empresa muestran el cuadrado entero.
+ * UN tamaño por sección. El tamaño sale de cómo se muestra la imagen en esa
+ * sección, no del gusto: lo que se pinta cuadrado es cuadrado, lo que se pinta
+ * a 16:9 es 16:9. Cambiar un formato aquí cambia el editor, el aviso de
+ * resolución y los letreros a la vez.
  */
-export const FORMATO_CATALOGO: FormatoImagen = {
-  etiqueta: 'Foto de producto',
-  aspecto: 1,
-  variantes: {
-    tarjeta: { ancho: 600, alto: 600 },
-    ficha: { ancho: 1200, alto: 1200 },
-    // La tarjeta de WhatsApp/Facebook es apaisada (1,91:1): sale de una franja
-    // centrada del encuadre, y el editor la dibuja para que se vea qué se pierde.
-    compartir: { ancho: 1200, alto: 630 },
-  },
-  recomendadoPx: 1200,
-  minimoPx: 600,
-}
+export const FORMATOS = {
+  /** Foto de producto: el estándar de las tiendas; tarjeta, ficha, perfil y ofertas muestran el cuadrado entero. */
+  catalogo: formato('catalogo', 'Foto de producto', 'Cuadrada (1:1)', 1200, 1200, { minimoPx: 600 }),
+  /** Promoción: el «formato Instagram» que ya usaban las promociones. */
+  promocion: formato('promocion', 'Imagen de la promoción', 'Cuadrada (1:1)', 1080, 1080, { minimoPx: 540 }),
+  /** Plan de membresía: la tarjeta del plan la pinta a 16:9. */
+  plan: formato('plan', 'Imagen del plan', 'Panorámica (16:9)', 1600, 900, { minimoPx: 800 }),
+  /** Excursión: portada a 16:9. */
+  excursion: formato('excursion', 'Portada de la excursión', 'Panorámica (16:9)', 1600, 900, { minimoPx: 800 }),
+  /** Fotos extra de la excursión y de la galería de la empresa: cuadrícula cuadrada. */
+  galeria: formato('galeria', 'Foto de galería', 'Cuadrada (1:1)', 1000, 1000, { minimoPx: 500 }),
+  /** Logo de la empresa: se pinta cuadrado. */
+  logo: formato('logo', 'Logo', 'Cuadrado (1:1)', 512, 512, { minimoPx: 256 }),
+  /**
+   * Banner del perfil de la empresa: ocupa todo el ancho, 224 px de alto en
+   * móvil (≈1,7:1) y 288 px en escritorio (≈4,4:1). Una sola imagen 3:1 y las
+   * dos zonas dibujadas en el editor para poner lo importante en el centro.
+   */
+  banner: formato('banner', 'Banner del perfil', 'Banner (3:1)', 1800, 600, {
+    minimoPx: 900,
+    zonas: [
+      { etiqueta: 'Se ve en móvil', aspecto: 390 / 224 },
+      { etiqueta: 'Se ve en escritorio', aspecto: 1280 / 288 },
+    ],
+  }),
+  /** Imagen que se ve al compartir el enlace de una campaña: la proporción de las tarjetas de WhatsApp y Facebook. */
+  compartir: formato('compartir', 'Imagen para compartir', 'Apaisada (1,91:1)', 1200, 630, { minimoPx: 600 }),
+  /** Fondo del landing y de las campañas de marketing. */
+  fondo: formato('fondo', 'Fondo de la campaña', 'Panorámica (16:9)', 1600, 900, { minimoPx: 800 }),
+  /** Foto de perfil del cliente: se pinta en círculo. */
+  avatar: formato('avatar', 'Foto de perfil', 'Cuadrada (1:1)', 400, 400, { minimoPx: 200, forma: 'circulo' }),
+} as const satisfies Record<string, FormatoImagen>
 
-/** Proporción de la tarjeta que se comparte por redes. */
-export const ASPECTO_COMPARTIR = 1200 / 630
+export type IdFormato = keyof typeof FORMATOS
+
+/** El formato del catálogo, que además genera versiones (ver `VARIANTES_CATALOGO`). */
+export const FORMATO_CATALOGO: FormatoImagen = FORMATOS.catalogo
+
+/**
+ * Versiones que se generan de una foto de catálogo. Mismo encuadre, tres
+ * tamaños: la tarjeta (listas), la ficha (detalle) y, para el enlace que se
+ * comparte, la foto entera centrada sobre un fondo desenfocado de sí misma.
+ */
+export const VARIANTES_CATALOGO: Record<NombreVariante, { ancho: number; alto: number }> = {
+  tarjeta: { ancho: 600, alto: 600 },
+  ficha: { ancho: 1200, alto: 1200 },
+  compartir: { ancho: 1200, alto: 630 },
+}
 
 /** Tamaño máximo del original, en MB (el del bucket). */
 export const MAX_ORIGINAL_MB = 5
@@ -74,58 +155,84 @@ export const MAX_PIXELES_ORIGINAL = 40_000_000
 /** Zoom máximo del editor: más allá la imagen se ve a pedazos. */
 export const ZOOM_MAXIMO = 4
 
+export const FONDO_PREDETERMINADO = '#ffffff'
+/** Colores de fondo que ofrece el editor para lo que la foto no cubre. */
+export const FONDOS: readonly { valor: string; etiqueta: string }[] = [
+  { valor: '#ffffff', etiqueta: 'Blanco' },
+  { valor: '#f1f5f9', etiqueta: 'Gris claro' },
+  { valor: '#0f172a', etiqueta: 'Oscuro' },
+]
+
 // ── Geometría ────────────────────────────────────────────────────────────────
 
 function entre(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v))
 }
 
-/**
- * El encuadre más grande de la proporción pedida que cabe en la imagen, con
- * `zoom` aplicado (1 = todo lo que quepa) y centrado en (`cx`, `cy`), que son
- * fracciones 0–1 de la imagen. El centro se limita para que el recorte nunca se
- * salga: es la única función que usa el editor para saber qué se ve.
- */
-export function recorteDesde(
-  ancho: number,
-  alto: number,
-  aspecto: number,
-  zoom = 1,
-  cx = 0.5,
-  cy = 0.5
-): Recorte {
-  const z = entre(zoom, 1, ZOOM_MAXIMO)
-  // Lado del recorte a zoom 1: el rectángulo de esa proporción que llena la imagen.
-  let w = ancho
-  let h = ancho / aspecto
-  if (h > alto) {
-    h = alto
-    w = alto * aspecto
-  }
-  w /= z
-  h /= z
-  const x = entre(cx * ancho - w / 2, 0, ancho - w)
-  const y = entre(cy * alto - h / 2, 0, alto - h)
-  return { x, y, w, h }
+/** Las dimensiones de una foto después de girarla: a 90° y 270° alto y ancho se intercambian. */
+export function dimensionesGiradas(ancho: number, alto: number, giro: Giro): { ancho: number; alto: number } {
+  return giro === 90 || giro === 270 ? { ancho: alto, alto: ancho } : { ancho, alto }
 }
 
-/** Centro (fracciones 0–1) de un recorte: el inverso de `recorteDesde`. */
+export function siguienteGiro(giro: Giro, sentido: 1 | -1): Giro {
+  return ((((giro + 90 * sentido) % 360) + 360) % 360) as Giro
+}
+
+/** Ancho del encuadre más grande de esa proporción que cabe DENTRO de la foto (zoom 1). */
+function anchoBase(ancho: number, alto: number, aspecto: number): number {
+  return Math.min(ancho, alto * aspecto)
+}
+
+/** Ancho del encuadre más chico que contiene la foto ENTERA: el zoom más alejado. */
+function anchoContenedor(ancho: number, alto: number, aspecto: number): number {
+  return Math.max(ancho, alto * aspecto)
+}
+
+/**
+ * El zoom más alejado: el que deja ver la foto entera dentro del marco (con
+ * fondo en lo que sobra). En una foto de la misma proporción que el marco es 1:
+ * no hay nada que alejar.
+ */
+export function zoomMinimo(ancho: number, alto: number, aspecto: number): number {
+  return Math.min(1, anchoBase(ancho, alto, aspecto) / anchoContenedor(ancho, alto, aspecto))
+}
+
+function posicionEnEje(centro: number, lado: number, total: number): number {
+  const p = centro * total - lado / 2
+  // Foto más grande que el marco: el marco no se sale de ella. Más chica: la foto no se sale del marco.
+  return lado <= total ? entre(p, 0, total - lado) : entre(p, total - lado, 0)
+}
+
+/**
+ * El encuadre de la proporción pedida, con `zoom` aplicado (1 = el más grande
+ * que cabe dentro de la foto; menos de 1 = alejado, con fondo) y centrado en
+ * (`cx`, `cy`), que son fracciones de la foto. Es la única función que usa el
+ * editor para saber qué se ve, y limita el centro para que nunca quede una
+ * esquina vacía sin querer: la foto se mueve libremente dentro de lo que cubre.
+ */
+export function recorteDesde(ancho: number, alto: number, aspecto: number, zoom = 1, cx = 0.5, cy = 0.5): Recorte {
+  const z = entre(zoom, zoomMinimo(ancho, alto, aspecto), ZOOM_MAXIMO)
+  const w = anchoBase(ancho, alto, aspecto) / z
+  const h = w / aspecto
+  return { x: posicionEnEje(cx, w, ancho), y: posicionEnEje(cy, h, alto), w, h }
+}
+
+/** Centro (fracciones de la foto) de un recorte: el inverso de `recorteDesde`. */
 export function centroDe(r: Recorte, ancho: number, alto: number): { cx: number; cy: number } {
   return { cx: (r.x + r.w / 2) / ancho, cy: (r.y + r.h / 2) / alto }
 }
 
-/** Zoom con el que un recorte se obtiene de `recorteDesde` (1 = el encuadre más grande). */
+/** Zoom con el que un recorte se obtiene de `recorteDesde`. */
 export function zoomDe(r: Recorte, ancho: number, alto: number, aspecto: number): number {
-  const base = recorteDesde(ancho, alto, aspecto)
-  return entre(base.w / r.w, 1, ZOOM_MAXIMO)
+  return entre(anchoBase(ancho, alto, aspecto) / r.w, zoomMinimo(ancho, alto, aspecto), ZOOM_MAXIMO)
 }
 
 /**
- * Qué parte del encuadre se ve en una tarjeta APAISADA (la de compartir):
- * una franja centrada. Devuelve la franja como fracciones 0–1 del encuadre,
- * para que el editor oscurezca lo que queda fuera.
+ * Qué parte del encuadre se ve en una pantalla de OTRA proporción (por ejemplo
+ * el banner en el móvil): una franja centrada. Devuelve la franja como
+ * fracciones 0–1 del encuadre, para que el editor oscurezca lo que queda fuera.
  */
-export function zonaVisibleApaisada(aspectoEncuadre: number, aspectoZona: number): { x: number; y: number; w: number; h: number } {
+export function zonaVisible(aspectoEncuadre: number, aspectoZona: number): { x: number; y: number; w: number; h: number } {
   if (aspectoZona >= aspectoEncuadre) {
     // Más apaisada que el encuadre: se pierde arriba y abajo.
     const h = aspectoEncuadre / aspectoZona
@@ -137,19 +244,9 @@ export function zonaVisibleApaisada(aspectoEncuadre: number, aspectoZona: number
 }
 
 /**
- * La franja del encuadre que alimenta la tarjeta apaisada de compartir, en
- * píxeles enteros del original. La usan el servidor (para generarla) y el
- * editor (para dibujar la «así se verá»): una sola cuenta, mismo resultado.
- */
-export function franjaCompartir(r: Recorte, aspecto: number = ASPECTO_COMPARTIR): Recorte {
-  const h = Math.min(r.h, Math.max(1, Math.round(r.w / aspecto)))
-  return { x: r.x, y: r.y + Math.round((r.h - h) / 2), w: r.w, h }
-}
-
-/**
  * Cómo pintar un recorte dentro de una caja de su misma proporción, con la
- * imagen completa como fondo: porcentajes para `width`, `left` y `top` de la
- * imagen. Sirve a las miniaturas «así se verá» sin tocar un canvas.
+ * foto entera como fondo: porcentajes para `width`, `height`, `left` y `top`.
+ * Sirve a la vista del editor y a las miniaturas sin tocar un canvas.
  */
 export function estiloDeVista(
   r: Recorte,
@@ -165,15 +262,45 @@ export function estiloDeVista(
 }
 
 /**
- * Lee un recorte guardado en la base (JSON sin tipo). Devuelve null si no hay
- * uno utilizable: el editor entonces empieza centrado, como con una foto nueva.
+ * Estilo del `<img>` DENTRO de la caja que pinta `estiloDeVista` con las
+ * dimensiones YA giradas. A 0° y 180° ocupa la caja; a 90° y 270° la caja tiene
+ * ancho y alto intercambiados respecto a la foto, así que la imagen se dimensiona
+ * al revés y se gira desde el centro.
  */
-export function recorteGuardado(json: unknown): Recorte | null {
+export function estiloDeImagenGirada(giro: Giro, ancho: number, alto: number): Record<string, string> {
+  const rot = `rotate(${giro}deg)`
+  if (giro === 0 || giro === 180) {
+    return { position: 'absolute', left: '0', top: '0', width: '100%', height: '100%', transform: rot }
+  }
+  // Caja = alto×ancho de la foto; la foto sin girar mide ancho×alto.
+  return {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: `${(ancho / alto) * 100}%`,
+    height: `${(alto / ancho) * 100}%`,
+    transform: `translate(-50%, -50%) ${rot}`,
+  }
+}
+
+/**
+ * Lee el encuadre guardado en la base (JSON sin tipo). Las filas anteriores al
+ * giro y al fondo solo traen el rectángulo: se completan con 0° y blanco.
+ * Devuelve null si no hay uno utilizable: el editor empieza centrado.
+ */
+export function encuadreGuardado(json: unknown): Encuadre | null {
   if (typeof json !== 'object' || json === null) return null
-  const { x, y, w, h } = json as Record<string, unknown>
+  const { x, y, w, h, giro, fondo } = json as Record<string, unknown>
   if (![x, y, w, h].every((n) => typeof n === 'number' && Number.isFinite(n))) return null
   if ((w as number) <= 0 || (h as number) <= 0) return null
-  return { x: x as number, y: y as number, w: w as number, h: h as number }
+  return {
+    x: x as number,
+    y: y as number,
+    w: w as number,
+    h: h as number,
+    giro: giro === 90 || giro === 180 || giro === 270 ? giro : 0,
+    fondo: typeof fondo === 'string' && /^#[0-9a-f]{6}$/i.test(fondo) ? fondo : FONDO_PREDETERMINADO,
+  }
 }
 
 // ── Avisos de resolución ─────────────────────────────────────────────────────
@@ -188,21 +315,22 @@ export interface EvaluacionResolucion {
 
 /**
  * ¿Con este recorte se verá nítida la foto? Mide el ANCHO REAL del recorte en
- * píxeles del original, que es lo que de verdad se va a ampliar.
+ * píxeles de la foto, que es lo que de verdad se va a ampliar.
  */
-export function evaluarResolucion(r: Recorte, formato: FormatoImagen): EvaluacionResolucion {
+export function evaluarResolucion(r: Recorte, f: FormatoImagen): EvaluacionResolucion {
   const w = Math.round(r.w)
   const h = Math.round(r.h)
-  if (w < formato.minimoPx) {
+  const recomendado = `${f.recomendadoPx}×${Math.round(f.recomendadoPx / f.aspecto)} px`
+  if (w < f.minimoPx) {
     return {
       nivel: 'baja',
-      mensaje: `La zona que elegiste mide ${w}×${h} px: se verá borrosa, incluso en la tarjeta. Usa una foto más grande o acerca menos el zoom (recomendado ${formato.recomendadoPx}×${Math.round(formato.recomendadoPx / formato.aspecto)} px o más).`,
+      mensaje: `La zona que elegiste mide ${w}×${h} px: se verá borrosa. Usa una foto más grande o acerca menos el zoom (recomendado ${recomendado} o más).`,
     }
   }
-  if (w < formato.recomendadoPx) {
+  if (w < f.recomendadoPx) {
     return {
       nivel: 'justa',
-      mensaje: `La zona mide ${w}×${h} px. En la tarjeta se ve bien, pero en la ficha del producto puede verse algo blanda. Recomendado: ${formato.recomendadoPx}×${Math.round(formato.recomendadoPx / formato.aspecto)} px o más.`,
+      mensaje: `La zona mide ${w}×${h} px. Se ve bien en tamaño pequeño, pero puede verse algo blanda en pantallas grandes. Recomendado: ${recomendado} o más.`,
     }
   }
   return { nivel: 'ok', mensaje: null }
@@ -214,48 +342,45 @@ const TOLERANCIA_ASPECTO = 0.03
 const LADO_MINIMO_RECORTE = 64
 
 /**
- * Valida un recorte llegado del navegador contra las dimensiones REALES de la
- * imagen. Devuelve el recorte redondeado a píxeles enteros (lo que necesita
- * `sharp`) o un mensaje de error. No se confía en nada: ni en que sean números
- * ni en que quepan ni en la proporción.
+ * Valida un encuadre llegado del navegador contra las dimensiones REALES de la
+ * foto ya orientada (SIN girar: el giro se valida aquí y se aplica al medir).
+ * Devuelve el encuadre con el rectángulo en enteros, o un mensaje de error. No
+ * se confía en nada: ni en que sean números, ni en que quepan, ni en la
+ * proporción, ni en el color.
  */
-export function validarRecorte(
+export function validarEncuadre(
   entrada: unknown,
   ancho: number,
   alto: number,
   aspecto: number
-): { ok: true; recorte: Recorte } | { ok: false; error: string } {
+): { ok: true; encuadre: Encuadre } | { ok: false; error: string } {
   if (typeof entrada !== 'object' || entrada === null) return { ok: false, error: 'Falta el encuadre de la imagen.' }
-  const { x, y, w, h } = entrada as Record<string, unknown>
+  const { x, y, w, h, giro: giroEntrada, fondo: fondoEntrada } = entrada as Record<string, unknown>
   if (![x, y, w, h].every((n) => typeof n === 'number' && Number.isFinite(n))) {
     return { ok: false, error: 'El encuadre de la imagen no es válido.' }
   }
-  const r = {
-    x: Math.round(x as number),
-    y: Math.round(y as number),
-    w: Math.round(w as number),
-    h: Math.round(h as number),
-  }
-  if (r.w < LADO_MINIMO_RECORTE || r.h < LADO_MINIMO_RECORTE) {
-    return { ok: false, error: 'El encuadre es demasiado pequeño.' }
-  }
-  // Tolerancia de 1 px por el redondeo del navegador al medir.
-  if (r.x < -1 || r.y < -1 || r.x + r.w > ancho + 1 || r.y + r.h > alto + 1) {
-    return { ok: false, error: 'El encuadre se sale de la imagen.' }
-  }
-  const dentro = {
-    x: entre(r.x, 0, ancho - 1),
-    y: entre(r.y, 0, alto - 1),
-    w: 0,
-    h: 0,
-  }
-  dentro.w = Math.min(r.w, ancho - dentro.x)
-  dentro.h = Math.min(r.h, alto - dentro.y)
-  const proporcion = dentro.w / dentro.h
-  if (Math.abs(proporcion - aspecto) / aspecto > TOLERANCIA_ASPECTO) {
+  const giro: Giro = giroEntrada === undefined ? 0 : giroEntrada === 90 || giroEntrada === 180 || giroEntrada === 270 || giroEntrada === 0 ? giroEntrada : (NaN as never)
+  if (Number.isNaN(giro)) return { ok: false, error: 'El giro de la imagen no es válido.' }
+  const fondo = fondoEntrada === undefined ? FONDO_PREDETERMINADO : fondoEntrada
+  if (typeof fondo !== 'string' || !/^#[0-9a-f]{6}$/i.test(fondo)) return { ok: false, error: 'El color de fondo no es válido.' }
+
+  const dims = dimensionesGiradas(ancho, alto, giro)
+  const r = { x: Math.round(x as number), y: Math.round(y as number), w: Math.round(w as number), h: Math.round(h as number) }
+  if (r.w < LADO_MINIMO_RECORTE || r.h < LADO_MINIMO_RECORTE) return { ok: false, error: 'El encuadre es demasiado pequeño.' }
+  if (Math.abs(r.w / r.h - aspecto) / aspecto > TOLERANCIA_ASPECTO) {
     return { ok: false, error: 'El encuadre no tiene la proporción de este tipo de imagen.' }
   }
-  return { ok: true, recorte: dentro }
+  // No se puede alejar más de lo que hace falta para ver la foto entera.
+  if (r.w > anchoContenedor(dims.ancho, dims.alto, aspecto) * 1.01 + 1) {
+    return { ok: false, error: 'El encuadre se aleja más de lo permitido.' }
+  }
+  // Por eje: si el marco cabe en la foto, no se sale; si la foto cabe en el marco, la foto no se sale. Tolerancia de 1 px.
+  const ejeValido = (p: number, lado: number, total: number) =>
+    lado <= total + 1 ? p >= -1 && p + lado <= total + 1 : p <= 1 && p + lado >= total - 1
+  if (!ejeValido(r.x, r.w, dims.ancho) || !ejeValido(r.y, r.h, dims.alto)) {
+    return { ok: false, error: 'El encuadre se sale de la imagen.' }
+  }
+  return { ok: true, encuadre: { ...r, giro, fondo: fondo.toLowerCase() } }
 }
 
 // ── Rutas de las versiones en Storage ────────────────────────────────────────
