@@ -78,6 +78,9 @@ after(async () => {
   await prisma.catalogCategory.deleteMany({ where: { companyId: { in: [ctx.a, ctx.b] } } })
 })
 
+/** Un encuadre completo (rectángulo + giro + fondo), como lo guarda el panel. */
+const encuadre = (r: { x: number; y: number; w: number; h: number }, giro: 0 | 90 | 180 | 270 = 0) => ({ ...r, giro, fondo: '#ffffff' })
+
 const ruta = (empresa: string, item: string, archivo: string) => `${prefijoImagenesItem(empresa, item)}${archivo}`
 
 // ── Imágenes ─────────────────────────────────────────────────────────────────
@@ -146,7 +149,7 @@ test('5b · una foto procesada guarda el original, el encuadre y sus versiones; 
   const it = await nuevoItem('a', 'Procesada')
   const original = ruta(ctx.a, it.id, 'p.jpg')
   const base1 = ruta(ctx.a, it.id, 'p-aaaa')
-  const crop = { x: 100, y: 0, w: 800, h: 800 }
+  const crop = encuadre({ x: 100, y: 0, w: 800, h: 800 }, 90)
   const img = await enA((tx) =>
     registrarImagenEnTx(tx, ctx.a, it.id, original, null, como(ctx.usuario), { width: 1000, height: 800, crop, variantesBase: base1 })
   )
@@ -159,7 +162,7 @@ test('5b · una foto procesada guarda el original, el encuadre y sus versiones; 
   const leida = await enA((tx) => leerImagenParaReencuadrarEnTx(tx, ctx.a, img.id))
   assert.deepEqual([leida.path, leida.variantesBase, leida.itemId], [original, base1, it.id])
   const r = await enA((tx) =>
-    reencuadrarImagenEnTx(tx, ctx.a, img.id, { width: 1000, height: 800, crop: { x: 0, y: 0, w: 800, h: 800 }, variantesBase: base2 }, como(ctx.usuario))
+    reencuadrarImagenEnTx(tx, ctx.a, img.id, { width: 1000, height: 800, crop: encuadre({ x: 0, y: 0, w: 800, h: 800 }), variantesBase: base2 }, como(ctx.usuario))
   )
   assert.equal(r.variantesBaseAnterior, base1)
   const despues = await prisma.catalogItemImage.findUniqueOrThrow({ where: { id: img.id } })
@@ -176,7 +179,7 @@ test('5c · las versiones o el reencuadre de otra empresa/ítem se rechazan, y u
   const it = await nuevoItem('a', 'Ajena')
   const otro = await nuevoItem('a', 'Otro')
   const original = ruta(ctx.a, it.id, 'q.jpg')
-  const meta = (variantesBase: string) => ({ width: 1000, height: 1000, crop: { x: 0, y: 0, w: 1000, h: 1000 }, variantesBase })
+  const meta = (variantesBase: string) => ({ width: 1000, height: 1000, crop: encuadre({ x: 0, y: 0, w: 1000, h: 1000 }), variantesBase })
   for (const mala of [ruta(ctx.b, it.id, 'q-x'), ruta(ctx.a, otro.id, 'q-x'), `${prefijoImagenesItem(ctx.a, it.id)}../x`]) {
     assert.equal(
       await codigoDe(enA((tx) => registrarImagenEnTx(tx, ctx.a, it.id, original, null, como(ctx.usuario), meta(mala)))),

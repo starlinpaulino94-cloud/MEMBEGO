@@ -16,7 +16,7 @@ import { CatalogoError } from '@/modules/catalog/errores'
 import { TRANSICIONES_ITEM, normalizarCapacidades } from '@/modules/catalog/domain'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { ETIQUETA_ESTADO, ETIQUETA_TIPO, urlImagenCatalogo } from '@/modules/catalog/formato'
-import { recorteGuardado } from '@/lib/imagen/formatos'
+import { encuadreGuardado } from '@/lib/imagen/formatos'
 import { ItemDetalleForm } from '@/components/catalogo/ItemDetalleForm'
 import { EstadoItemBotones } from '@/components/catalogo/EstadoItemBotones'
 import { VariantesPanel } from '@/components/catalogo/VariantesPanel'
@@ -165,7 +165,7 @@ export default async function ItemCatalogoPage({ params }: { params: Promise<{ i
                   id: i.id,
                   url: urlImagenCatalogo(i, 'tarjeta'),
                   originalUrl: urlImagenCatalogo(i, 'original'),
-                  crop: recorteGuardado(i.crop),
+                  crop: encuadreGuardado(i.crop),
                 }))}
               />
             </CardContent>

@@ -1,103 +1,123 @@
-# Imágenes: formatos, editor de encuadre y versiones
+# Imágenes: un formato por sección y el editor de encuadre
 
-Una sola regla para todas las imágenes de la plataforma: se guarda el **original**
-tal como lo subió la persona, más un **encuadre** (un rectángulo en píxeles de ese
-original), y el servidor genera las **versiones** que cada pantalla necesita.
-Reencuadrar después parte siempre del original, así que no degrada la foto.
+Una regla para todas las imágenes de la marca: **cada sección tiene UN formato**
+(una proporción y un tamaño final) y **todas pasan por el mismo editor**, donde la
+persona mueve la foto al lugar que quiere que se vea más, la acerca, la aleja hasta
+verla entera, la gira y ve cómo quedará. Nada se rechaza por tener otra proporción:
+se encuadra.
 
-> Estado: **fase 1 (catálogo)** hecha. Las promociones, planes, ofertas,
-> excursiones, campañas, logos, banners y avatares siguen con su componente de
-> subida actual y se enchufan al mismo editor en las fases 2 y 3.
+## Los formatos (`FORMATOS` en `src/lib/imagen/formatos.ts`)
+
+| Sección | Formato | Tamaño final | Por qué |
+|---|---|---|---|
+| Producto del catálogo | cuadrada 1:1 | 1200×1200 | estándar de las tiendas; tarjeta, ficha, perfil y ofertas la muestran entera |
+| Promoción | cuadrada 1:1 | 1080×1080 | el «formato Instagram» que ya tenían; la tarjeta es cuadrada |
+| Plan de membresía | panorámica 16:9 | 1600×900 | la tarjeta del plan se pinta a 16:9 |
+| Portada de excursión | panorámica 16:9 | 1600×900 | las tarjetas y la ficha se pintan a 16:9 |
+| Foto extra de excursión / galería de la empresa | cuadrada 1:1 | 1000×1000 | cuadrícula cuadrada |
+| Logo | cuadrado 1:1 | 512×512 | se pinta cuadrado; **admite fondo transparente** |
+| Banner del perfil | banner 3:1 | 1800×600 | ocupa todo el ancho: ≈1,7:1 en móvil y ≈4,4:1 en escritorio |
+| Imagen al compartir una campaña | apaisada 1,91:1 | 1200×630 | la proporción de las tarjetas de WhatsApp y Facebook |
+| Fondo de campañas y de landings | panorámica 16:9 | 1600×900 | |
+| Foto de perfil del cliente | cuadrada 1:1 | 400×400 | se pinta en círculo |
+
+Cambiar un formato ahí cambia el editor, el aviso de resolución y los letreros a la vez.
+`tests/imagen-secciones.test.ts` falla si un componente nuevo sube un archivo sin pasar
+por el editor (o sin declararse como excepción con su motivo).
+
+**Fuera del editor a propósito**: fotos de evidencia del vehículo, comprobantes de pago,
+adjuntos de reportes y adjuntos contables. Son pruebas o documentos: recortarlos
+cambiaría lo que prueban.
+
+## Qué hace el editor (`EditorDeImagen`)
+
+- **Mover**: arrastrar con ratón o dedo, o con las flechas. La foto se mueve libremente
+  dentro de lo que cubre; nunca queda una esquina vacía sin querer.
+- **Acercar y alejar**: de ×4 hasta ver la **foto entera**. Si sobra espacio, se rellena
+  con un color de fondo a elegir (blanco, gris claro u oscuro; «sin fondo» en logos).
+- **Girar** a 90° a la izquierda o a la derecha.
+- **Zonas por pantalla**: si una imagen se recorta distinto en alguna pantalla (el banner
+  en móvil y en escritorio), el editor dibuja cada zona y oscurece lo que no se ve en
+  ninguna.
+- **Así se verá**: vista final en el formato de la sección (círculo en avatares).
+- **Aviso de resolución** según los píxeles **reales** del recorte: óptima ≥ el ancho
+  final, justa ≥ el mínimo, baja por debajo.
+
+## Dos caminos para producir la imagen final
+
+**Catálogo — se guarda el original.** El navegador manda el encuadre (rectángulo + giro +
+fondo) y el servidor genera las versiones desde el original, así que reencuadrar no
+degrada la foto:
+
+| Versión | Medida | Dónde |
+|---|---|---|
+| `tarjeta` | 600×600 | listas, inicio, perfil de empresa, ofertas, panel |
+| `ficha` | 1200×1200 | ficha del producto, API de plataforma |
+| `compartir` | 1200×630 | `og:image`: la foto **entera** centrada sobre un fondo desenfocado de sí misma |
+
+WebP, sin metadatos (se va el GPS). Archivos en `promociones/<empresa>/catalogo/<item>/`:
+
+```
+<id>.jpg                       ← original
+<id>-<token>_tarjeta.webp      ← versiones (el token cambia al reencuadrar:
+<id>-<token>_ficha.webp          cache de un año, no se reutilizan nombres)
+<id>-<token>_compartir.webp
+```
+
+**Resto de secciones — se sube una sola imagen.** `useEditorDeImagen` abre el editor y, al
+confirmar, `exportarEncuadre` pinta el encuadre en un lienzo del **tamaño único** de la
+sección y entrega un WebP al `handleFile` que cada componente ya tenía (con sus
+validaciones y su subida a Storage). Para reencuadrar una imagen ya subida se parte de
+esa imagen.
+
+## Seguridad
+
+- El encuadre llega del navegador y **no se confía en él**: `validarEncuadre` exige
+  números finitos, giro múltiplo de 90°, color hexadecimal, proporción del formato, que
+  no se aleje más de «foto entera» y que ni el marco ni la foto se salgan donde no deben.
+- `limitInputPixels` (40 MP) contra bombas de descompresión; el tipo real sale de la
+  firma del archivo, no de `file.type`.
+- Quitar o reencuadrar solo borra rutas que cuelgan del ítem y la empresa de la sesión.
+- Las versiones se escriben con la sesión del usuario (la política de Storage comprueba
+  la empresa), no con la clave de servicio.
+- SVG: los logos en SVG se suben tal cual (pasarlos por un lienzo los volvería píxeles).
 
 ## Dónde vive cada cosa
 
 | Pieza | Archivo |
 |---|---|
-| Formatos, geometría del recorte y validación (puro, sin dependencias) | `src/lib/imagen/formatos.ts` |
-| Editor de encuadre (cliente) | `src/components/imagen/EditorDeImagen.tsx` |
-| Generación de versiones con `sharp` (servidor) | `src/modules/catalog/variantes-imagen.ts` |
-| Acciones: subir, reencuadrar, quitar | `src/modules/catalog/actions.ts` |
-| URL de cada versión | `urlImagenCatalogo` en `src/modules/catalog/formato.ts` |
-| Columnas (`width`, `height`, `crop`, `variantesBase`) | `CatalogItemImage`, migración `20261055` |
+| Formatos, geometría y validación (puro) | `src/lib/imagen/formatos.ts` |
+| Pintar el encuadre en un lienzo (navegador) | `src/lib/imagen/exportar.ts` |
+| Editor | `src/components/imagen/EditorDeImagen.tsx` |
+| Conexión con un componente de subida | `src/components/imagen/useEditorDeImagen.tsx` |
+| Versiones del catálogo con `sharp` (servidor) | `src/modules/catalog/variantes-imagen.ts` |
+| Acciones del catálogo: subir, reencuadrar, quitar | `src/modules/catalog/actions.ts` |
+| Columnas `width`, `height`, `crop`, `variantesBase` | `CatalogItemImage`, migración `20261055` |
 
-## Formato del catálogo
+`crop` guarda `{ x, y, w, h, giro, fondo }`; las filas anteriores al giro solo traen el
+rectángulo y se leen con giro 0° y fondo blanco (`encuadreGuardado`).
 
-Foto de producto **cuadrada (1:1)**: es el estándar de las tiendas y la misma
-decisión de las promociones. La tarjeta, la ficha, el perfil de la empresa y las
-ofertas muestran el cuadrado entero.
+## Fotos anteriores
 
-| Versión | Medida | Dónde se usa |
-|---|---|---|
-| `tarjeta` | 600×600 | inicio, vitrina, perfil de empresa, ofertas, panel |
-| `ficha` | 1200×1200 | ficha del producto, API de plataforma |
-| `compartir` | 1200×630 (1,91:1) | `og:image` al compartir el enlace |
-
-`compartir` sale de una **franja centrada** del encuadre (`franjaCompartir`). El
-editor oscurece lo que queda fuera de esa franja para que se vea qué se pierde.
-
-Todas salen en **WebP** y **sin metadatos** (se va el GPS de las fotos de celular).
-
-## Flujo de subida
-
-1. La persona elige un archivo. **No se sube todavía**: se abre el editor.
-2. Mueve y acerca la foto dentro del marco. Ve en vivo la tarjeta, la ficha y la
-   tarjeta de compartir, y un aviso de resolución según los píxeles **reales** del
-   recorte (`evaluarResolucion`): óptima ≥ 1200 px, justa ≥ 600 px, baja < 600 px.
-3. «Subir foto»: `prepararSubidaImagenCatalogo` autoriza y firma la subida del
-   **original** (directo a Storage, sin pasar por la Server Action).
-4. `confirmarImagenCatalogo(itemId, ruta, recorte)` lee el original, decide el tipo
-   por la firma del archivo, **valida el recorte contra las dimensiones reales**,
-   genera las tres versiones, las sube y registra la fila. Si algo falla, borra lo
-   que ya había subido: no quedan archivos sueltos.
-5. «Encuadrar» en una foto ya subida: `reencuadrarImagenCatalogo` regenera desde el
-   original con un prefijo nuevo y borra las versiones viejas **al final**.
-
-Las coordenadas del recorte son las de la imagen **ya orientada** (rotación EXIF
-aplicada), que es la que ve el navegador; `variantes-imagen.ts` rota antes de
-recortar.
-
-## Storage
-
-Todo en el bucket `promociones`, bajo `<empresa>/catalogo/<item>/`:
-
-```
-<id>.jpg                       ← original
-<id>-<token>_tarjeta.webp      ← versiones
-<id>-<token>_ficha.webp
-<id>-<token>_compartir.webp
-```
-
-Las versiones se suben con `cache-control` de un año. Por eso el nombre lleva un
-`token` nuevo cada vez que se generan: reutilizar el nombre serviría la versión
-vieja desde el CDN. La política de Storage (`membego_medio_propio`) comprueba que
-el primer segmento sea una empresa del usuario.
-
-## Fotos anteriores al editor
-
-No tienen versiones (`variantesBase` es null): se siguen sirviendo desde el
-original, como siempre. El botón «Encuadrar» las convierte: genera sus versiones
-la primera vez que se guardan.
-
-## Seguridad
-
-- El recorte llega del navegador y **no se confía en él**: `validarRecorte` exige
-  números finitos, dentro de la imagen, de la proporción del formato y de un tamaño
-  mínimo.
-- `limitInputPixels` (40 MP) corta las bombas de descompresión.
-- El tipo real lo decide la firma del archivo, no `file.type`.
-- Quitar una foto o reencuadrarla solo borra rutas que cuelgan del ítem y la
-  empresa de la sesión.
+- Catálogo anterior al editor: sin versiones (`variantesBase` null), se sirve el
+  original; «Encuadrar» las convierte.
+- Promociones, planes, etc. ya subidas: se ven como antes. «Encuadrar» las reabre desde
+  la imagen guardada.
+- Las excursiones, planes y tarjetas cuya proporción cambió (excursión 16:10 → 16:9,
+  búsqueda de promociones 4:3 → 1:1) recortan ahora menos, no más.
 
 ## Añadir un formato nuevo
 
-1. Define su `FormatoImagen` en `formatos.ts` (proporción, versiones, resolución).
-2. Reutiliza `EditorDeImagen` con ese formato.
-3. Genera sus versiones con la misma tubería de `variantes-imagen.ts`.
-4. Si guarda la imagen en una tabla propia, añade las mismas cuatro columnas.
+1. Define su entrada en `FORMATOS` (proporción, tamaño final, umbrales y, si hace falta,
+   `zonas` o `permiteTransparente`).
+2. En su componente de subida: `useEditorDeImagen({ formato: FORMATOS.x, alAplicar: handleFile })`
+   y el `input` llama a `elegir(...)`.
+3. Añade el componente a `SECCIONES` en `tests/imagen-secciones.test.ts`.
+4. Pinta la imagen con la proporción del formato (nada de `aspect-[4/3]` sueltos).
 
-## Fases siguientes
+## Pendiente
 
-2. **Promociones**: hoy rechazan lo que no es 1:1–4:5; pasan a abrir el editor y
-   recortar al formato Instagram.
-3. **Planes, ofertas, excursiones, campañas, logos, banners, avatar**: cada
-   componente de subida (ocho en total) pasa por el editor con su formato.
+- **El original del catálogo queda en el bucket público con sus metadatos EXIF** (como
+  ya ocurría). Las versiones salen sin ellos. Cerrarlo pide un bucket privado para originales.
+- La app móvil (Expo) todavía pinta las imágenes con alto fijo; cuando muestre el
+  catálogo debe usar la proporción del formato.

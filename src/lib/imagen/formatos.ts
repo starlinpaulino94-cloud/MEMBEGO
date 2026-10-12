@@ -70,6 +70,11 @@ export interface FormatoImagen {
   zonas?: ZonaSegura[]
   /** Cómo se enseña la vista previa: un círculo para los avatares. */
   forma?: 'cuadro' | 'circulo'
+  /**
+   * Los logos suelen ser PNG con fondo transparente: aplanarlos sobre blanco
+   * los estropea. Con esto el editor ofrece «sin fondo» y lo deja por defecto.
+   */
+  permiteTransparente?: boolean
 }
 
 function formato(
@@ -90,6 +95,7 @@ function formato(
     minimoPx: extra.minimoPx ?? Math.round(ancho / 2),
     ...(extra.zonas ? { zonas: extra.zonas } : {}),
     ...(extra.forma ? { forma: extra.forma } : {}),
+    ...(extra.permiteTransparente ? { permiteTransparente: true } : {}),
   }
 }
 
@@ -111,7 +117,7 @@ export const FORMATOS = {
   /** Fotos extra de la excursión y de la galería de la empresa: cuadrícula cuadrada. */
   galeria: formato('galeria', 'Foto de galería', 'Cuadrada (1:1)', 1000, 1000, { minimoPx: 500 }),
   /** Logo de la empresa: se pinta cuadrado. */
-  logo: formato('logo', 'Logo', 'Cuadrado (1:1)', 512, 512, { minimoPx: 256 }),
+  logo: formato('logo', 'Logo', 'Cuadrado (1:1)', 512, 512, { minimoPx: 256, permiteTransparente: true }),
   /**
    * Banner del perfil de la empresa: ocupa todo el ancho, 224 px de alto en
    * móvil (≈1,7:1) y 288 px en escritorio (≈4,4:1). Una sola imagen 3:1 y las
@@ -156,12 +162,19 @@ export const MAX_PIXELES_ORIGINAL = 40_000_000
 export const ZOOM_MAXIMO = 4
 
 export const FONDO_PREDETERMINADO = '#ffffff'
+/** Sin color de fondo: lo que la foto no cubre queda transparente (solo para los formatos que lo permiten). */
+export const FONDO_TRANSPARENTE = 'transparent'
 /** Colores de fondo que ofrece el editor para lo que la foto no cubre. */
 export const FONDOS: readonly { valor: string; etiqueta: string }[] = [
   { valor: '#ffffff', etiqueta: 'Blanco' },
   { valor: '#f1f5f9', etiqueta: 'Gris claro' },
   { valor: '#0f172a', etiqueta: 'Oscuro' },
 ]
+
+/** El fondo con el que empieza el editor para un formato. */
+export function fondoInicial(f: FormatoImagen): string {
+  return f.permiteTransparente ? FONDO_TRANSPARENTE : FONDO_PREDETERMINADO
+}
 
 // ── Geometría ────────────────────────────────────────────────────────────────
 

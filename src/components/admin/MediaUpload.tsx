@@ -5,6 +5,8 @@ import { Loader2, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { FORMATOS } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 
 interface MediaUploadProps {
   /** Ruta dentro del bucket `logos`, ej. `banners/abc123`. Sin extensión. */
@@ -31,10 +33,8 @@ export function MediaUpload({
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  /** La imagen ya encuadrada, en el tamaño único de su formato: es la que se sube. */
+  async function subirArchivo(file: File) {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast.error('Solo se aceptan imágenes JPG, PNG o WEBP.')
       return
@@ -67,6 +67,11 @@ export function MediaUpload({
       if (inputRef.current) inputRef.current.value = ''
     }
   }
+
+  const { elegir, dialogo } = useEditorDeImagen({
+    formato: aspect === 'wide' ? FORMATOS.banner : FORMATOS.logo,
+    alAplicar: subirArchivo,
+  })
 
   function handleRemove() {
     setPreview(null)
@@ -131,8 +136,9 @@ export function MediaUpload({
         type="file"
         accept="image/jpeg,image/png,image/webp"
         className="hidden"
-        onChange={handleFile}
+        onChange={(e) => elegir(e.target.files?.[0])}
       />
+      {dialogo}
     </div>
   )
 }

@@ -11,7 +11,7 @@ import {
   ponerPortadaCatalogo,
   eliminarImagenCatalogo,
 } from '@/modules/catalog/actions'
-import { FORMATO_CATALOGO, type Recorte } from '@/lib/imagen/formatos'
+import { FORMATOS, type Encuadre } from '@/lib/imagen/formatos'
 import { EditorDeImagen } from '@/components/imagen/EditorDeImagen'
 import { createClient } from '@/lib/supabase/client'
 import { mensajeDeStorage } from '@/lib/storage-errores'
@@ -29,7 +29,7 @@ export interface ImagenVista {
   /** El original, para poder reencuadrar. */
   originalUrl: string | null
   /** Encuadre guardado; null en las fotos anteriores al editor. */
-  crop: Recorte | null
+  crop: Encuadre | null
 }
 
 type Editor = { tipo: 'nueva'; archivo: File; url: string } | { tipo: 'reencuadre'; imagen: ImagenVista }
@@ -67,10 +67,10 @@ export function ImagenesPanel({
     if (ref.current) ref.current.value = ''
   }
 
-  async function reencuadrar(imagen: ImagenVista, recorte: Recorte) {
+  async function reencuadrar(imagen: ImagenVista, encuadre: Encuadre) {
     setSubiendo(true)
     try {
-      const r = await reencuadrarImagenCatalogo(imagen.id, recorte)
+      const r = await reencuadrarImagenCatalogo(imagen.id, encuadre)
       if (!r.ok) return void toast.error(r.error)
       toast.success('Encuadre guardado.')
       cerrarEditor()
@@ -90,7 +90,7 @@ export function ImagenesPanel({
    * comprueba el archivo subido, genera las versiones con el encuadre elegido
    * y registra la fila.
    */
-  async function subir(file: File, recorte: Recorte) {
+  async function subir(file: File, encuadre: Encuadre) {
     setSubiendo(true)
     try {
       const permiso = await prepararSubidaImagenCatalogo(itemId, file.type)
@@ -104,7 +104,7 @@ export function ImagenesPanel({
         return void toast.error(mensajeDeStorage(error, { maxMb: MAX_MB }))
       }
 
-      const r = await confirmarImagenCatalogo(itemId, permiso.path, recorte)
+      const r = await confirmarImagenCatalogo(itemId, permiso.path, encuadre)
       if (!r.ok) return void toast.error(r.error)
       toast.success('Imagen subida.')
       cerrarEditor()
@@ -212,8 +212,8 @@ export function ImagenesPanel({
             if (!abierto) cerrarEditor()
           }}
           fuente={editor.tipo === 'nueva' ? editor.url : (editor.imagen.originalUrl ?? '')}
-          formato={FORMATO_CATALOGO}
-          recorteInicial={editor.tipo === 'reencuadre' ? editor.imagen.crop : null}
+          formato={FORMATOS.catalogo}
+          encuadreInicial={editor.tipo === 'reencuadre' ? editor.imagen.crop : null}
           avisoInicial={
             editor.tipo === 'reencuadre' && !editor.imagen.crop
               ? 'Esta foto se subió antes del editor: al guardar se generan sus versiones nuevas.'
@@ -221,7 +221,7 @@ export function ImagenesPanel({
           }
           textoConfirmar={editor.tipo === 'nueva' ? 'Subir foto' : 'Guardar encuadre'}
           procesando={subiendo}
-          onConfirmar={(recorte) => (editor.tipo === 'nueva' ? void subir(editor.archivo, recorte) : void reencuadrar(editor.imagen, recorte))}
+          onConfirmar={(encuadre) => (editor.tipo === 'nueva' ? void subir(editor.archivo, encuadre) : void reencuadrar(editor.imagen, encuadre))}
         />
       )}
     </div>

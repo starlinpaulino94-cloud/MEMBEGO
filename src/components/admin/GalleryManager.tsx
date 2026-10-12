@@ -4,6 +4,8 @@ import { useRef, useState } from 'react'
 import { Loader2, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { FORMATOS } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 
 const MAX_IMAGES = 8
 
@@ -22,10 +24,8 @@ export function GalleryManager({ companyId, initialImages }: GalleryManagerProps
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  /** La foto ya encuadrada (cuadrada, 1000×1000): es la que se sube. */
+  async function subirArchivo(file: File) {
     if (images.length >= MAX_IMAGES) {
       toast.error(`Máximo ${MAX_IMAGES} imágenes en la galería.`)
       return
@@ -61,6 +61,8 @@ export function GalleryManager({ companyId, initialImages }: GalleryManagerProps
       if (inputRef.current) inputRef.current.value = ''
     }
   }
+
+  const { elegir, dialogo } = useEditorDeImagen({ formato: FORMATOS.galeria, alAplicar: subirArchivo })
 
   function handleRemove(url: string) {
     setImages((prev) => prev.filter((i) => i !== url))
@@ -118,8 +120,12 @@ export function GalleryManager({ companyId, initialImages }: GalleryManagerProps
         type="file"
         accept="image/jpeg,image/png,image/webp"
         className="hidden"
-        onChange={handleFile}
+        onChange={(e) => {
+          if (images.length >= MAX_IMAGES) return void toast.error(`Máximo ${MAX_IMAGES} imágenes en la galería.`)
+          elegir(e.target.files?.[0])
+        }}
       />
+      {dialogo}
     </div>
   )
 }

@@ -266,3 +266,15 @@ test('las rutas de las versiones salen de la ruta del original y un token', () =
   ])
   assert.equal(baseDeVariantes('a.b/c/foto', 'z'), 'a.b/c/foto-z')
 })
+
+test('el logo permite fondo transparente (y empieza así): aplanar un PNG sobre blanco lo estropea', async () => {
+  const { fondoInicial, FONDO_TRANSPARENTE, FONDO_PREDETERMINADO } = await import('../src/lib/imagen/formatos')
+  assert.equal(FORMATOS.logo.permiteTransparente, true)
+  assert.equal(fondoInicial(FORMATOS.logo), FONDO_TRANSPARENTE)
+  for (const f of Object.values(FORMATOS)) {
+    if (f.id !== 'logo') {
+      assert.equal(f.permiteTransparente, undefined, f.id)
+      assert.equal(fondoInicial(f), FONDO_PREDETERMINADO)
+    }
+  }
+})
