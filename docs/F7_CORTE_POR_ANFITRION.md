@@ -1,6 +1,6 @@
 # F7 · El corte `membego.com` / `app.membego.com`
 
-> Estado: **código listo y apagado por defecto.** Un solo proyecto de Vercel sirve los dos dominios (opción A). Mientras las
+> Estado: **código listo y apagado por defecto** (F8 cierra los cabos operativos: [F8_CIERRE_DEL_CORTE.md](F8_CIERRE_DEL_CORTE.md)). Un solo proyecto de Vercel sirve los dos dominios (opción A). Mientras las
 > tres variables del corte no estén definidas, el comportamiento es el de siempre: ninguna petición se redirige, los enlaces
 > entre «dominios» son relativos y las cookies son *host-only*. Cortar es poner las variables y el DNS; volver atrás es
 > quitarlas. Complementa `docs/SEPARACION_LANDING_APP.md` (la separación funcional, F0 a F6) y
@@ -95,6 +95,9 @@ NEXT_PUBLIC_COOKIE_DOMAIN=.membego.com
 
 ### 2 · Verificación inmediata
 
+Primero, automática: `bun run corte:verificar https://membego.com https://app.membego.com --cookie-domain .membego.com`
+(ver [F8_CIERRE_DEL_CORTE.md](F8_CIERRE_DEL_CORTE.md)). Después, a mano:
+
 - [ ] `https://membego.com/` carga la landing; `https://membego.com/login` → 307 a `https://app.membego.com/login`.
 - [ ] `https://app.membego.com/` → 307 a `/login`; `https://app.membego.com/promociones` → 307 a `https://membego.com/promociones`.
 - [ ] `https://app.membego.com/robots.txt` dice `Disallow: /`; `https://membego.com/robots.txt` enlaza `https://membego.com/sitemap.xml`.
@@ -117,10 +120,10 @@ NEXT_PUBLIC_COOKIE_DOMAIN=.membego.com
 ## Riesgos conocidos
 
 - **Sesiones existentes al cortar.** Quien tenga una sesión *host-only* en `membego.com` no la llevará a `app.membego.com`
-  (esa cookie no se envía al otro host): tendrá que iniciar sesión una vez. Su cookie antigua convive con la nueva
-  (`Domain=.membego.com`) hasta que caduque; durante ese tiempo la landing puede ofrecer «Ir a mi app» a quien ya no tiene sesión
-  válida o mostrar «Ingresar» a quien sí la tiene. Mitigación: anunciar el re-login, hacer el corte en baja hora y, si el
-  síntoma persiste en pruebas, pedir limpiar cookies del sitio. **Verificar en staging con un usuario real de producción.**
+  (esa cookie no se envía al otro host): tendrá que iniciar sesión una vez. **Mitigado en F8:** el proxy borra esas cookies
+  heredadas una vez por navegador y host, para que no convivan con la compartida ni mezclen trozos
+  ([F8_CIERRE_DEL_CORTE.md](F8_CIERRE_DEL_CORTE.md#1--sesiones-de-antes-del-corte-cookies-heredadas)). Falta verificarlo en Safari y
+  Firefox en staging.
 - **Lo que este trabajo no puede probar** (se probó con dos dominios de prueba `membego.test` / `app.membego.test` sobre HTTP
   local): DNS y TLS reales de Vercel, la lista de Redirect URLs de Supabase real, cookies `Secure` bajo HTTPS, Safari/ITP con
   cookies de dominio compartido, la pasarela de pago real y la app móvil publicada.

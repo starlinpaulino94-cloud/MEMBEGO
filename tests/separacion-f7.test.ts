@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
+  estadoDeRedireccion,
   anfitrionDeRuta,
   anfitrionDelHost,
   anfitrionesDe,
@@ -140,7 +141,8 @@ test('el proxy pasa por la puerta de los anfitriones y no cambia nada con las va
   const proxy = sinComentarios('src/proxy.ts')
   assert.match(proxy, /export async function proxy\(request: NextRequest\) \{\s*const anfitriones = anfitrionesDelEntorno\(\)/)
   assert.match(proxy, /decidirAnfitrion\(/)
-  assert.match(proxy, /NextResponse\.redirect\(decision\.destino, 307\)/, '307: reversible hasta que el corte esté asentado')
+  assert.match(proxy, /NextResponse\.redirect\(decision\.destino, estadoDeRedireccion\(/, '307 por defecto (reversible); 308 solo con el interruptor de F8')
+  assert.equal(estadoDeRedireccion(false), 307)
   assert.match(proxy, /return procesar\(request\)\s*\}/, 'sin anfitriones, el mismo camino de siempre')
 })
 

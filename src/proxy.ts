@@ -11,7 +11,8 @@ import {
 } from '@/lib/auth/permissions'
 import { verifyLocalSession } from '@/lib/auth/jwt'
 import { destinoParaRol } from '@/lib/auth/destino-seguro'
-import { anfitrionesDelEntorno, cabecerasDelAnfitrion, decidirAnfitrion } from '@/lib/anfitriones'
+import { anfitrionDelHost, anfitrionesDelEntorno, cabecerasDelAnfitrion, decidirAnfitrion, estadoDeRedireccion } from '@/lib/anfitriones'
+import { cookiesHeredadasALimpiar } from '@/lib/cookies-heredadas'
 import { CANAL_COOKIE, CANAL_COOKIE_MAX_AGE, sanitizarCanal } from '@/modules/adquisicion/shared'
 import {
   COOKIE_MANTENIMIENTO,
@@ -334,12 +335,23 @@ export async function proxy(request: NextRequest) {
       anfitriones
     )
     if (decision.accion === 'redirigir') {
-      const salto = NextResponse.redirect(decision.destino, 307)
+      const salto = NextResponse.redirect(decision.destino, estadoDeRedireccion(process.env.ANFITRIONES_REDIRECCION_PERMANENTE === '1'))
       for (const [clave, valor] of Object.entries(cabecerasDelAnfitrion(host, anfitriones))) salto.headers.set(clave, valor)
       return salto
     }
     const respuesta = await procesar(request)
     for (const [clave, valor] of Object.entries(cabecerasDelAnfitrion(host, anfitriones))) respuesta.headers.set(clave, valor)
+    // Con el dominio compartido, las cookies de sesión *host-only* de antes del corte sobran y pueden mezclar trozos con las
+    // nuevas: se borran una vez por navegador y host (ver `cookies-heredadas.ts`). Se añaden como líneas crudas porque el
+    // mapa de cookies de Next va por nombre y no distingue la compartida de la *host-only*.
+    for (const linea of cookiesHeredadasALimpiar({
+      nombres: request.cookies.getAll().map((c) => c.name),
+      dominioCompartido: sessionCookieDomain(),
+      anfitrion: anfitrionDelHost(host, anfitriones),
+      habilitada: process.env.ANFITRIONES_LIMPIAR_COOKIES_HEREDADAS !== '0',
+    })) {
+      respuesta.headers.append('Set-Cookie', linea)
+    }
     return respuesta
   }
   return procesar(request)

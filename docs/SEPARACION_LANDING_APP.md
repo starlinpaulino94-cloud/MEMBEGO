@@ -35,6 +35,7 @@ Efecto en el plan: la pregunta 3 de §7 queda resuelta en contra de la recomenda
 | F5 · Landing consciente de la sesión y orden en auth | **Hecha.** Ver abajo. |
 | F6 · Documentación y cierre | **Hecha.** Ver abajo. |
 | F7 · Corte `membego.com` / `app.membego.com` | **Hecha en código, apagada por defecto.** Ver abajo y `docs/F7_CORTE_POR_ANFITRION.md`. |
+| F8 · Cierre operativo del corte | **Hecha en código, apagada por defecto.** Ver abajo y `docs/F8_CIERRE_DEL_CORTE.md`. |
 
 ### F0 · Red de seguridad (hecha)
 
@@ -222,6 +223,13 @@ de siempre. Detalle, runbook de corte y de reversa, y riesgos: [F7_CORTE_POR_ANF
 - **SEO por host:** canónicos, sitemap y robots de la landing; `app.` con `noindex`. Se eliminó `public/robots.txt`, que tapaba a `robots.ts`.
 - **Pruebas:** `tests/separacion-f7.test.ts` y el E2E de dos anfitriones (`bun run e2e:dos-anfitriones`).
 
+### F8 · Cierre operativo del corte (hecha en código, apagada por defecto)
+
+Detalle en [F8_CIERRE_DEL_CORTE.md](F8_CIERRE_DEL_CORTE.md): limpieza de las cookies de sesión *host-only* heredadas al activar el
+dominio compartido (una vez por navegador y host, con interruptor de emergencia); redirección 307 → 308 opcional
+(`ANFITRIONES_REDIRECCION_PERMANENTE=1`); plan de Search Console; y `bun run corte:verificar`, que comprueba un despliegue real
+(enrutado, API, SEO, cookies). Incluye la guía de staging y la lista previa al corte de producción.
+
 ## Arquitectura final
 
 Una sola app Next, un solo backend, una sola autenticación. Lo que cambió es **dónde vive cada cosa**:
@@ -292,6 +300,10 @@ Notas de la corrida: la suite PG tiene intermitencias conocidas en `deals.db.tes
 ### F7 · verificación (2026-10-12)
 
 Detalle completo en [F7_CORTE_POR_ANFITRION.md](F7_CORTE_POR_ANFITRION.md#verificación-2026-10-12-sobre-el-árbol-de-f7): `tsc` y lint limpios; unitarias 4045/4053 (el fallo restante es un test de excursiones con fecha fija, ajeno); E2E con un dominio 334 pasan y 0 fallan; E2E de dos anfitriones 20/20; PG 652/653 (una intermitencia que pasa sola).
+
+### F8 · verificación (2026-10-12)
+
+Detalle en [F8_CIERRE_DEL_CORTE.md](F8_CIERRE_DEL_CORTE.md#verificación-2026-10-12-sobre-el-árbol-de-f8): `tsc` y lint limpios; unitarias 4056/4063 (7 saltadas); E2E con un dominio 334 pasan, 0 fallan; E2E de dos anfitriones 26/26; PG 653/653.
 
 ## Excepciones y decisiones permanentes
 

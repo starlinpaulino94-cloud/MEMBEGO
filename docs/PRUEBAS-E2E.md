@@ -146,7 +146,8 @@ las operaciones funcionan. El spec `separacion-f7` (los dos anfitriones) no corr
 `bun run e2e:dos-anfitriones` (construye en `.next-f7` con `NEXT_PUBLIC_LANDING_URL`, `NEXT_PUBLIC_APP_ORIGIN` y
 `NEXT_PUBLIC_COOKIE_DOMAIN`; `-- --sin-build` reutiliza el build). Los dominios `membego.test` y `app.membego.test` los resuelve
 Chromium con `--host-resolver-rules` (sin tocar `/etc/hosts`); el cliente HTTP de Node no los ve, así que las pruebas sin
-navegador fijan el `Host` a mano. Detalle en `docs/F7_CORTE_POR_ANFITRION.md`. Dos reglas del arnés que importan aquí:
+navegador fijan el `Host` a mano. Detalle en `docs/F7_CORTE_POR_ANFITRION.md`. El mismo spec cubre la limpieza de cookies heredadas de F8 y ejecuta
+`bun run corte:verificar` (con `--via 127.0.0.1:3210`) contra ese servidor. Dos reglas del arnés que importan aquí:
 
 - `entrarComo` firma la cookie de sesión **sin `httpOnly`**, como en producción (`@supabase/ssr` la deja legible por el
   navegador): la landing solo pregunta por la sesión a quien trae esa cookie, y con una cookie `httpOnly` no la vería.
