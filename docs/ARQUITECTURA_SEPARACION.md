@@ -1,10 +1,12 @@
 # Arquitectura de separación Landing / Aplicación (FASE 2 · preparación)
 
-> Estado: **preparación in-situ**. No se ha movido, copiado ni eliminado código,
-> ni se han creado páginas nuevas. El proyecto sigue funcionando en **un solo
-> dominio** con comportamiento **idéntico** al actual. Este documento fija el
-> mapa objetivo y deja lista la abstracción de dominios para ejecutar la
-> separación por etapas cuando se apruebe.
+> Estado: **separación FÍSICA por dominios: preparada, no ejecutada.** El proyecto
+> sigue funcionando en **un solo dominio**. Lo que sí se ejecutó (2026-10-09/10) es
+> la separación **funcional** dentro de este repositorio —landing que informa, app
+> del cliente que opera, paneles—, documentada, con su tabla de rutas por espacio
+> generada del código, en [SEPARACION_LANDING_APP.md](SEPARACION_LANDING_APP.md).
+> Este documento fija el mapa objetivo para cortar por dominios cuando se apruebe
+> (F7); el mapa de abajo ya refleja el estado funcional de hoy.
 
 ## Objetivo
 
@@ -38,19 +40,20 @@ migración de call-sites es una etapa posterior (ver checklist).
 |---|---|---|
 | `(public)/page.tsx` (Home) | Landing | Marketing + destacados (DB) |
 | `(public)/empresas`, `/empresas/[slug]` | Landing | Marketplace/SEO (DB) |
-| `(public)/promociones`, `/promocion/[id]` (+OG) | Landing | Marketplace/SEO (DB) |
+| `(public)/promociones`, `/promocion/[id]` (+OG) | Landing | Marketplace/SEO (DB), **solo consulta**; la compra/contratación/reclamo es del cliente en `/cliente/*` |
 | `(public)/plan/[id]` (+OG) | Landing | Marketplace/SEO (DB) |
 | `(public)/registro-empresa` | Landing | Captación B2B (form) |
 | `(public)/contact` `/terms` `/privacy` | Landing | Estáticas |
 | *(nuevas: características, FAQ, blog, descarga)* | Landing | A crear (etapa 4) |
 | `(auth)/*` (login, registro, recuperar, confirmar) | App | Auth |
-| `(cliente)/*`, `/mis-membresias`, `/membresia/[id]` | App | Cliente |
+| `(cliente)/*`, `/mis-membresias`, `/membresia/[id]` | App | Cliente: todo lo operativo (carrito único, fichas de compra y reserva, ofertas Membego, membresías, campañas, regalos) vive bajo `/cliente`. `/mis-membresias` y `/membresia/[id]` se quedan fuera por la app móvil |
 | `(admin)/*` | App | Panel admin |
 | `(superadmin)/*` | App | Panel superadmin |
 | `(empleado)/*` | App | Scanner |
 | `(onboarding)/*` | App | Onboarding B2B |
 | `invitacion/[token]` | App | Invitación de equipo |
-| `(public)/registro`, `(public)/i/[code]` | **Híbrido → App** | Entrada al registro |
+| `(auth)/registro` (antes `(public)/registro`, movido en F5; misma URL) | App | Entrada al registro; conserva la consulta |
+| `(public)/i/[code]` | **Híbrido → App** | Enlace de invitación que lleva al registro |
 | `r/[code]`, `auth/callback`, `confirmar` | App | Redirects / auth |
 | `api/*`, `/monitoring` | App | Backend interno |
 | `layout.tsx` (root), `error`, `not-found` | **Compartido** (duplicar) | Shell base |
@@ -77,7 +80,8 @@ Exclusivos App: `admin/`, `cliente/`, `scanner/`, `superadmin/`, `membresia/`,
 | Enlace | Destino futuro | Función a usar |
 |---|---|---|
 | `PublicNav` → empresas/promociones/para-empresas | Landing | relativo |
-| `PublicNav` → login/registro | App | `appUrlFor('/login')` |
+| `PublicNav` → login/registro | App | `appUrlFor('/login')`; con sesión la barra muestra «Ir a mi app» / «Ir a mi panel» (componente de cliente, la landing sigue estática) |
+| Traspaso (`TraspasoALaApp`, `EnlaceDeTraspaso`) | App | `rutaDeLogin(destino)`; el destino pasa por `destino-seguro` |
 | `AppShell` / `nav-config.ts` | App | relativo |
 | Logout / marca → Home | Landing | `landingUrlFor('/')` |
 | Share/OG/QR/referidos | según recurso | `landingUrlFor` / `appUrlFor` |

@@ -17,17 +17,13 @@ import { ROLE_HOME, ROUTE_PROTECTION } from '../src/types'
  * (iniciar sesión y seguir a la ruta de la app).
  *
  * ────────────────────────────────────────────────────────────────────────────
- * POR QUÉ UNA PRUEBA ESTÁTICA Y UNA LISTA QUE SOLO PUEDE ENCOGERSE
+ * POR QUÉ UNA PRUEBA ESTÁTICA, Y ESTRICTA
  *
- * El código de hoy ya incumple la regla en varios sitios (ver el documento).
- * Arreglarlo es trabajo de las fases F1 a F5. Esta prueba hace dos cosas
- * mientras tanto:
- *
- *   1. Impide EMPEORAR: una violación nueva, que no esté en la lista, falla.
- *   2. Impide OLVIDAR: una excepción que ya no existe en el código y sigue en
- *      la lista también falla, así cada fase está obligada a vaciar la suya.
- *
- * Al terminar F6 todas las listas EXCEPCIONES_* deben estar vacías.
+ * Durante F0 a F5 las guardias llevaron listas de excepciones que solo podían
+ * encogerse: impedían empeorar y obligaban a cada fase a vaciar la suya. Con F6
+ * todas están VACÍAS y desaparecieron: ahora cada guardia exige CERO hallazgos.
+ * Lo único que la landing conserva fuera de la regla —borrar la cuenta y la
+ * captación de negocios— está fijado, con su razón, en `separacion-f5.test.ts`.
  *
  * LÍMITE CONOCIDO: es análisis de texto. Ve literales de ruta, constantes
  * `RUTA_*` públicas e imports; no ve un enlace armado por concatenación
@@ -71,6 +67,10 @@ const CLASES_VITRINA: Array<[string, RegExp]> = [
   ['/promociones', /(['"`])\/promociones(?=[/?#'"`])/g],
   ['/empresas', /(['"`])\/empresas(?=[/?#'"`])/g],
   ['/ofertas', /(['"`])\/ofertas(?=[/?#'"`])/g],
+  // Fichas públicas con equivalente en la app (F6: el slide de plan del inicio enlazaba `/plan/…` desde la app y nadie lo veía).
+  ['/plan/*', /(['"`])\/plan\/\$\{/g],
+  ['/promocion/*', /(['"`])\/promocion\/\$\{/g],
+  ['/oferta/*', /(['"`])\/oferta\/\$\{/g],
 ]
 
 export type Hallazgo = { archivo: string; clase: string; veces: number }
@@ -98,45 +98,13 @@ function enlacesAPublico(archivos: string[], clases: Array<[string, RegExp]>): H
     .sort((a, b) => (a.archivo + a.clase).localeCompare(b.archivo + b.clase))
 }
 
-type Excepcion = Hallazgo & { fase: string }
-
-function comparar(nombre: string, reales: Hallazgo[], permitidas: Excepcion[], queEs = 'enlaces nuevos de la app a rutas operativas de la landing. Apunta a la ruta de /cliente.') {
-  const clave = (h: Hallazgo) => `${h.archivo} · ${h.clase}`
-  const mapaPermitidas = new Map(permitidas.map((e) => [clave(e), e]))
-  const nuevas: string[] = []
-  const olvidadas: string[] = []
-  for (const r of reales) {
-    const e = mapaPermitidas.get(clave(r))
-    if (!e) nuevas.push(`${clave(r)} ×${r.veces}`)
-    else if (r.veces > e.veces) nuevas.push(`${clave(r)} ×${r.veces} (permitido ×${e.veces})`)
-  }
-  const mapaReales = new Map(reales.map((r) => [clave(r), r]))
-  for (const e of permitidas) {
-    const r = mapaReales.get(clave(e))
-    if (!r) olvidadas.push(`${clave(e)} (la quitaba ${e.fase})`)
-    else if (r.veces < e.veces) olvidadas.push(`${clave(e)} ahora ×${r.veces}, la lista dice ×${e.veces} (la quitaba ${e.fase})`)
-  }
+function sinHallazgos(nombre: string, reales: Hallazgo[], queEs = 'enlaces nuevos de la app a rutas operativas de la landing. Apunta a la ruta de /cliente.') {
   assert.deepEqual(
-    nuevas,
+    reales.map((r) => `${r.archivo} · ${r.clase} ×${r.veces}`),
     [],
     `${nombre}: ${queEs}`
   )
-  assert.deepEqual(
-    olvidadas,
-    [],
-    `${nombre}: la excepción ya no existe en el código; quítala de la lista (el trabajo de esa fase está hecho).`
-  )
 }
-
-// La app del cliente: ningún enlace a la landing, sea la ruta que sea.
-const EXCEPCIONES_APP_DIRECTA: Excepcion[] = [
-  // Vacía: F4 quitó las últimas excepciones.
-]
-// Componentes que sirven a la app Y a la landing: lo operativo no puede estar
-// cableado al espacio público; debe recibir su destino.
-const EXCEPCIONES_COMPARTIDOS: Excepcion[] = [
-  // Vacía: F4 quitó las últimas excepciones.
-]
 
 /** Vista previa del PANEL para la empresa (consulta, no operación del cliente) y la nav/pie de la landing. */
 const EXENTOS_ENLACES = new Set([
@@ -161,6 +129,8 @@ const ARCHIVOS_COMPARTIDOS_ESTRICTOS = [
   ...archivosDe('src/components/supply-v2'),
   // Los cargadores que arman datos para las dos fichas: una ruta pública escrita aquí llega a la ficha de la app (F4 lo encontró en `ficha-item`).
   ...archivosDe('src/modules/comercio'),
+  // Los módulos que arman los destinos del inicio y de la búsqueda de la app (y de la API móvil, que usa el espacio por defecto).
+  ...archivosDe('src/modules/home'),
 ].filter((f) => !EXENTOS_ENLACES.has(f))
 const ARCHIVOS_COMPARTIDOS_CON_MODO = [
   ...archivosDe('src/components/marketplace'),
@@ -169,11 +139,7 @@ const ARCHIVOS_COMPARTIDOS_CON_MODO = [
 ].filter((f) => !EXENTOS_ENLACES.has(f))
 
 test('la app del cliente no manda al cliente a la landing', () => {
-  comparar(
-    'app del cliente',
-    enlacesAPublico(ARCHIVOS_APP, [...CLASES_OPERATIVAS, ...CLASES_VITRINA]),
-    EXCEPCIONES_APP_DIRECTA
-  )
+  sinHallazgos('app del cliente', enlacesAPublico(ARCHIVOS_APP, [...CLASES_OPERATIVAS, ...CLASES_VITRINA]))
 })
 
 test('los componentes compartidos no cablean a la landing lo operativo', () => {
@@ -181,7 +147,7 @@ test('los componentes compartidos no cablean a la landing lo operativo', () => {
     ...enlacesAPublico(ARCHIVOS_COMPARTIDOS_ESTRICTOS, [...CLASES_OPERATIVAS, ...CLASES_VITRINA]),
     ...enlacesAPublico(ARCHIVOS_COMPARTIDOS_CON_MODO, CLASES_OPERATIVAS),
   ]
-  comparar('componentes compartidos', reales, EXCEPCIONES_COMPARTIDOS)
+  sinHallazgos('componentes compartidos', reales)
 })
 
 // ── 2 · La landing no opera ─────────────────────────────────────────────────
@@ -331,26 +297,14 @@ function operacionesAlcanzablesDesde(raices: string[]): Map<string, string[]> {
   return alcanzados
 }
 
-/**
- * Operaciones que la landing TODAVÍA alcanza. Cada una nombra la fase que la quita
- * (`decisión` = el producto aún tiene que resolverlo). Al terminar F6 está vacía.
- * F2 vació todo lo de productos, servicios y ofertas del catálogo; F3, todo lo de excursiones y seguir empresa.
- */
-const EXCEPCIONES_LANDING_OPERA: Array<{ nodo: string; fase: string }> = [
-  // Vacía: F4 quitó las últimas excepciones.
-]
-
 test('la landing no alcanza ninguna operación comercial, ni directa ni transitivamente', () => {
   const alcanzadas = operacionesAlcanzablesDesde(RAICES_DE_LA_LANDING)
-  const permitidas = new Set(EXCEPCIONES_LANDING_OPERA.map((e) => e.nodo))
-  const nuevas = [...alcanzadas.entries()].filter(([nodo]) => !permitidas.has(nodo)).map(([nodo, cadena]) => `${nodo}\n      ← ${cadena.slice(0, -1).reverse().join('\n      ← ')}`)
+  const nuevas = [...alcanzadas.entries()].map(([nodo, cadena]) => `${nodo}\n      ← ${cadena.slice(0, -1).reverse().join('\n      ← ')}`)
   assert.deepEqual(
     nuevas,
     [],
     'la landing alcanza una operación comercial (carrito, pedido, reserva, compra, canje o acción de servidor). Esa operación vive en /cliente; en la landing va solo el traspaso (TraspasoALaApp). La cadena de imports que lo demuestra:'
   )
-  const olvidadas = EXCEPCIONES_LANDING_OPERA.filter((e) => !alcanzadas.has(e.nodo)).map((e) => `${e.nodo} (la quitaba ${e.fase})`)
-  assert.deepEqual(olvidadas, [], 'la landing ya no alcanza esta operación; quítala de la lista (el trabajo de esa fase está hecho)')
 })
 
 test('el cierre transitivo no da falsos positivos: una tarjeta que solo presenta no se marca', () => {
@@ -400,24 +354,14 @@ test('el layout y la barra públicos no leen la sesión en servidor', () => {
   }
 })
 
-const EXCEPCIONES_PAGINAS_CON_SESION: Array<{ archivo: string; fase: string }> = [
-  // Vacía: F4 quitó las últimas excepciones.
-]
-
 test('las páginas públicas no leen la sesión en servidor', () => {
   const reales = archivosDe('src/app/(public)')
     .filter((f) => /\bgetUser\s*\(/.test(leer(f)))
     .sort()
-  const permitidas = EXCEPCIONES_PAGINAS_CON_SESION.map((e) => e.archivo).sort()
-  const nuevas = reales.filter((f) => !permitidas.includes(f))
-  const olvidadas = EXCEPCIONES_PAGINAS_CON_SESION.filter((e) => !reales.includes(e.archivo)).map((e) => `${e.archivo} (la quitaba ${e.fase})`)
-  assert.deepEqual(nuevas, [], 'una página pública nueva lee la sesión: el estado de sesión va en el componente de cliente de la barra')
-  assert.deepEqual(olvidadas, [], 'la página ya no lee la sesión: quítala de la lista')
+  assert.deepEqual(reales, [], 'una página pública lee la sesión: el estado de sesión va en el componente de cliente de la barra (AccionesDeSesion)')
 })
 
 // ── 4 · Los paneles no dependen de la landing ───────────────────────────────
-
-const EXCEPCIONES_PANELES_A_LANDING: Array<{ archivo: string; fase: string }> = []
 
 test('los paneles y espacios autenticados no enlazan a la portada de la landing', () => {
   const archivos = [
@@ -432,17 +376,7 @@ test('los paneles y espacios autenticados no enlazan a la portada de la landing'
   ]
   const portada = /(href=(?:"\/"|\{'\/'\}|\{"\/"\})|\b(?:redirect|push|replace)\(\s*['"]\/['"]\s*\))/
   const reales = archivos.filter((f) => leer(f).split('\n').some((l) => !esComentario(l) && portada.test(l))).sort()
-  const permitidas = EXCEPCIONES_PANELES_A_LANDING.map((e) => e.archivo).sort()
-  assert.deepEqual(
-    reales.filter((f) => !permitidas.includes(f)),
-    [],
-    'un espacio autenticado manda a la portada de la landing: debe ir a su propia casa (ROLE_HOME)'
-  )
-  assert.deepEqual(
-    EXCEPCIONES_PANELES_A_LANDING.filter((e) => !reales.includes(e.archivo)).map((e) => `${e.archivo} (la quitaba ${e.fase})`),
-    [],
-    'la excepción ya no existe: quítala de la lista'
-  )
+  assert.deepEqual(reales, [], 'un espacio autenticado manda a la portada de la landing: debe ir a su propia casa (ROLE_HOME)')
 })
 
 // ── 5 · La autenticación y la autorización no se tocan ──────────────────────

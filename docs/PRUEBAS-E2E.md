@@ -139,6 +139,17 @@ la aplicación cae a la verificación LOCAL del token, que es la que acepta esa
 cookie. Lo que hacía falta no era un servicio externo: era un secreto de
 relleno y una base desechable.
 
+**Separación landing / app / paneles.** Los specs `separacion-invariantes`, `separacion-f1` a `separacion-f5` prueban,
+por la interfaz y con lo que llega al navegador, que la landing no opera ni descarga código de operación, que el traspaso
+es el que corresponde a visitante, cliente y equipo, que los destinos de retorno no abren redirecciones, y que en la app
+las operaciones funcionan. Dos reglas del arnés que importan aquí:
+
+- `entrarComo` firma la cookie de sesión **sin `httpOnly`**, como en producción (`@supabase/ssr` la deja legible por el
+  navegador): la landing solo pregunta por la sesión a quien trae esa cookie, y con una cookie `httpOnly` no la vería.
+- Next 16 streaming: una página «no encontrada» llega con 200 y el cuerpo puede estar a medias al cargar. Se espera el
+  streaming (helper `ir`) y se comprueba el contenido, no el código HTTP; y tras navegar puede quedar unos instantes la
+  página anterior OCULTA en el DOM, así que se filtra por `visible`.
+
 ---
 
 **El catálogo unificado (Commerce Core)** — `catalogo-admin`, `catalogo-publico`
