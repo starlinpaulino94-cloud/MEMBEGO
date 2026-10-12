@@ -279,6 +279,19 @@ export interface CompanyOwnReview {
   readonly comment: string | null
 }
 
+export interface ReportarResenaBody {
+  readonly resenaId: string
+  readonly companySlug: string
+  readonly motivo: 'OFENSIVO' | 'SPAM' | 'ENGANOSO' | 'ACOSO' | 'OTRO'
+  readonly detalle?: string
+}
+
+export interface ReportarResenaResponse {
+  readonly success: true
+  readonly ticketId: string
+  readonly message: string
+}
+
 export interface CompanyExcursionPublic {
   readonly id: string
   readonly nombre: string
@@ -1198,6 +1211,8 @@ export const api = {
       `/api/v1/cliente/empresas/${encodeURIComponent(slug)}/resena`,
       body
     ),
+  reportarResena: (body: ReportarResenaBody) =>
+    postJson<ReportarResenaResponse>('/api/v1/cliente/resenas/reportar', body),
   toggleFavoritaEmpresa: (slug: string) =>
     postJson<{ following?: boolean; esFavorita?: boolean; error?: string }>(
       `/api/v1/cliente/empresas/${encodeURIComponent(slug)}`,
