@@ -1,14 +1,14 @@
 # MEMBEGO — estado de implementación
 
-> Fuente operativa vigente. Esta rebanada se trabaja el **2026-10-09** sobre `origin/main` en `47c84876673cc09a49fa8834e68cf5e1b9b8cf56`, que ya incluye el PR #588 de Growth Commerce. El código y las verificaciones indicadas mandan sobre los informes históricos. La existencia de una función no prueba su configuración ni su uso en producción.
+> Fuente operativa vigente. Revisada el **2026-10-12** sobre `origin/main` en `ab5c1711fe1a033115a64c9ef37d056ccefaae9f`, que incluye los PR #588, #589 y #596. El código y las verificaciones fechadas mandan sobre los informes históricos. La existencia de una función no prueba su configuración ni su uso en producción.
 
 ## ESTADO ACTUAL
 
 ### Base y alcance
 
-Los PR [#583](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/583) (experiencia comercial), [#584](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/584), [#585](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/585) (onboarding/foundation cleanup) y [#588](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/588) (primera rebanada de Growth Commerce) están fusionados.
+Los PR [#583](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/583) (experiencia comercial), [#584](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/584), [#585](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/585) (onboarding/foundation cleanup), [#588](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/588) y [#589](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/589) (primera rebanada de Growth Commerce y atribución directa), y [#596](https://github.com/starlinpaulino94-cloud/MEMBEGO/pull/596) (build Vercel con Turbopack) están fusionados.
 
-El producto es un monolito modular Next.js/React/TypeScript, Prisma y Supabase, con una app Expo y un satélite de restaurante que consumen HTTP. Commerce Core ya existe: no es una propuesta pendiente. **La primera rebanada de Growth Commerce está fusionada**: Promotion condiciona la elegibilidad de reclamos nuevos de Deal y MarketingCampaign distribuye Deals. Esta rebanada agrega atribución directa campaña→reclamo y medición de reclamos/canjes; Supply y `Promocion` legacy siguen separados. El inventario del Car Wash y las compras/membresías legacy siguen siendo dominios distintos.
+El producto es un monolito modular Next.js/React/TypeScript, Prisma y Supabase, con una app Expo y un satélite de restaurante que consumen HTTP. Commerce Core ya existe: no es una propuesta pendiente. **La primera rebanada de Growth Commerce está fusionada**: Promotion condiciona la elegibilidad de reclamos nuevos de Deal y MarketingCampaign distribuye Deals. La atribución se asigna desde la campaña que origina el reclamo y se miden reclamos/canjes; no hay tracking de impresiones/clics. Supply y `Promocion` legacy siguen separados. El inventario del Car Wash y las compras/membresías legacy siguen siendo dominios distintos. PR #596 sustituyó el build de webpack por Turbopack para evitar el OOM de Vercel; Vercel pasó en el merge `ab5c1711`.
 
 ### Capacidades y acceso
 
@@ -29,9 +29,9 @@ El producto es un monolito modular Next.js/React/TypeScript, Prisma y Supabase, 
 | Revenue Attribution | Snapshot de atribución al crear el pedido; determina elegibilidad de comisión junto al origen y evidencia de verificación | `modules/orders/atribucion.ts`, `orders/domain.ts`, `billing/domain.ts`; no representa tracking de impresiones/clicks ni analítica de embudo. |
 | Checkout | Carrito por negocio en el navegador; revalida precio y stock en servidor; crea un pedido multilínea atómico | `modules/checkout`; pago al recoger o intención de transferencia. **Sin CardNET de MembegoOrder, cupones en carrito ni agenda/cupos.** |
 | Merchant Billing | Cuenta por empresa, comisión al cierre, ledger inmutable, cortes, pagos manuales, límite y suspensión | `modules/billing`, `schema/facturacion-comercial.prisma`; pruebas de dominio, separación y `postgres/billing.db.test.ts`. No es facturación fiscal ni una pasarela de cobro automático. |
-| Deals | Oferta sobre variante; reserva de presupuesto/cupo y pedido READY con QR; canje cobra la cuota congelada | `modules/deals`, `schema/ofertas-marketplace.prisma`; `postgres/deals.db.test.ts`. Presupuesto es un tope, no dinero prepagado. Sin Campaign/Coupon comerciales unificados. |
+| Deals | Oferta sobre variante; reserva de presupuesto/cupo y pedido READY con QR; canje cobra la cuota congelada. MarketingCampaign distribuye Deals y atribuye el reclamo originado por su enlace | `modules/deals`, `schema/ofertas-marketplace.prisma`, módulos de campañas; `postgres/deals.db.test.ts`. Presupuesto es un tope, no dinero prepagado. No existe todavía un Coupon Engine común. |
 | Marketplace | Catálogo, ofertas y perfiles públicos con disponibilidad agregada; usa proyecciones públicas y categorías de negocio | `modules/catalog/publico-nucleo.ts`, `modules/comercio/vitrina.ts`, rutas `/catalogo`, `/ofertas`, `/empresas`, `/cliente/explorar`. No mide impresiones y no implementa Discovery 2.0. |
-| Promotions | Reglas universales y vigencia de `Promotion` condicionan reclamos nuevos de Deals; Deal conserva la autoridad del descuento y la economía. Promociones legacy y Supply siguen separados | `modules/deals/promotion-gate.ts`, `lib/promotions/application/promotion-engine.ts`, migración `20261053`; decisión y límites en `adr/ADR-GROWTH-COMMERCE-UNIFICATION.md`. Aún no hay un motor común de cupones/campañas ni unificación con Supply. |
+| Promotions | Reglas universales y vigencia de `Promotion` condicionan reclamos nuevos de Deals; Deal conserva la autoridad del descuento y la economía. Promociones legacy y Supply siguen separados | `modules/deals/promotion-gate.ts`, `lib/promotions/application/promotion-engine.ts`, migración `20261053`; decisión y límites en `adr/ADR-GROWTH-COMMERCE-UNIFICATION.md`. Coupon, `Promocion` legacy y Supply no están unificados con este flujo. |
 | Analytics | Ventas, pedidos, atribución, comisiones y resultados por producto/oferta/empresa; Supply Economics separado | `modules/analytics`, `modules/comercio`; `postgres/analytics.db.test.ts`. Sin impresiones/vistas ni embudo instrumentado de descubrimiento. |
 | POS | Cobra pedidos con QR y ventas directas del catálogo, con turno, pago, stock y cierre en una transacción | `modules/pos/service.ts`; `postgres/pos.db.test.ts`. Mostrador DIRECT no comisiona; falta prueba de lector/térmica y devolución física de dinero. |
 | Conciliación y riesgo | 27 reglas de conciliación y nueve señales de riesgo, consultas de solo lectura | `modules/conciliacion`, `modules/riesgo-comercio`; pruebas de dominio y PostgreSQL. No corrigen saldos ni bloquean automáticamente; umbrales no calibrados con negocio real. |
@@ -77,11 +77,25 @@ Resultados y comandos reproducibles en [CODEX_ONBOARDING_AUDIT.md](CODEX_ONBOARD
 
 ### Pendientes prioritarios
 
-1. Confirmar por operaciones la rotación de credenciales expuestas históricamente, especialmente la contraseña de BD, y el estado de RLS Capa 2/migraciones en producción. Esta sesión no accedió a secretos ni producción.
-2. Acordar tarifas y fiscalidad, probar el flujo de campo de [PILOT_FIELD_TEST.md](PILOT_FIELD_TEST.md), Storage, lector, térmica, móvil y modo oscuro con usuarios reales.
-3. Validar CardNET tokenizado con credenciales QA aprobadas. No extenderlo al checkout comercial ni Supply sin diseño y pruebas específicas. Los helpers directos aún conservados no son una integración autorizada para reactivarse.
-4. Resolver los límites pendientes: devolución monetaria POS/Supply, atomicidad de emisión de eventos y presupuesto de bundle. Replay ya oculta texto e inputs por defecto; consultar la auditoría de onboarding para riesgos restantes.
-5. Validar en piloto la atribución directa de reclamos a campañas y observar si los reportes de reclamos/canjes responden preguntas operativas. No existe seguimiento de impresiones/clics, así que todavía no se calcula conversión de exposición a reclamo. El cupón sigue siendo `DealClaim` + pedido/QR. `SupplyV2Campaign`/`SupplyV2Coupon` y `Promocion` legacy siguen separados. Booking, bundles, Discovery 2.0 y entrega multicanal siguen fuera de este cambio.
+1. **CI del PR #596:** Vercel pasó y el build de producción de CI pasó; el job de tipos/lint/pruebas falló en una prueba de excursiones que usaba como futura una salida a las 09:00 en una fecha que ya era hoy. TypeScript y lint pasaron; 4.028 tests pasaron, uno falló y siete se omitieron. La corrección de fecha determinista ya pasa en la suite local completa (4.029 pasan, cero fallan, siete omitidas); falta que los checks remotos la ejecuten en una rama/PR.
+2. **Producción no auditada:** operaciones debe confirmar la rotación de credenciales expuestas históricamente, especialmente la contraseña de BD, y el estado de RLS Capa 2/migraciones/overrides de capacidades. Esta revisión no accedió a secretos ni producción.
+3. **Piloto y operación:** acordar tarifas y fiscalidad; probar [PILOT_FIELD_TEST.md](PILOT_FIELD_TEST.md), Storage, lector, térmica, móvil y modo oscuro con usuarios reales. Validar también atribución directa de campaña y utilidad de los reportes.
+4. **Pagos:** validar CardNET tokenizado con credenciales QA aprobadas. No extenderlo al checkout comercial ni Supply sin diseño y pruebas específicas. No hubo cobros reales; helpers directos no deben reactivarse.
+5. **Cierre de negocio y consistencia:** definir devoluciones monetarias POS/Supply y fiscalidad/e-CF; diseñar emisión atómica de eventos para evitar perder notificaciones tras el commit; mantener margen del bundle. Replay oculta texto e inputs por defecto, pero revisar logs de aplicación y retención histórica con operaciones.
+6. **Alcance funcional pendiente:** no hay tracking de impresiones/clics ni conversión de exposición a reclamo; el cupón comercial sigue siendo `DealClaim` + pedido/QR. `SupplyV2Campaign`/`SupplyV2Coupon` y `Promocion` legacy siguen separados. Booking, bundles, Discovery 2.0 y entrega multicanal siguen fuera del alcance implementado.
+7. **Calidad y dispositivos:** investigar 182 advertencias lint, siete tests unitarios omitidos y bundle al 97%; probar animaciones Expo, Android/iOS y flujos en dispositivos físicos. Storage, lector y térmica todavía no se ensayaron.
+
+### Verificación local de cierre — 2026-10-12
+
+Esta ejecución es posterior al merge `ab5c1711` y a los ajustes de portabilidad/test de esta rama; no reemplaza checks remotos ni pruebas contra servicios reales.
+
+| Comprobación | Resultado |
+|---|---|
+| TypeScript | PASS — `npm run typecheck` |
+| ESLint | PASS — `npm run lint`, 0 errores y 182 advertencias |
+| Unit | PASS — `npm test`, 4.036 tests totales, 4.029 pasan, 0 fallan, 7 omitidos heredados |
+| Build | PASS — `npm run build` con configuración sintética de CI; Turbopack compiló y generó 52 páginas estáticas. Sin base accesible, Prisma registró advertencias de conexión capturadas por las páginas que permiten degradación. |
+| PostgreSQL, RLS conductual, E2E local y CardNET QA | NOT RUN en esta rama |
 
 ## HISTORIA / FASES ANTERIORES
 

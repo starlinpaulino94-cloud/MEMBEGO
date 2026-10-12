@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { hayCookieDeSesion, interpretarSesion, puertaDeCasa, respuestaDeSesion } from '../src/lib/auth/sesion-ligera'
 import { ROLE_HOME } from '../src/types'
 
@@ -17,7 +17,7 @@ function archivosDe(dir: string): string[] {
   for (const e of readdirSync(dir)) {
     const p = join(dir, e)
     if (statSync(p).isDirectory()) acc.push(...archivosDe(p))
-    else if (/\.(ts|tsx)$/.test(p) && !/\.test\.tsx?$/.test(p)) acc.push(relative('.', p))
+    else if (/\.(ts|tsx)$/.test(p) && !/\.test\.tsx?$/.test(p)) acc.push(relative('.', p).split(sep).join('/'))
   }
   return acc.sort()
 }

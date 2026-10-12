@@ -3,11 +3,15 @@ import assert from 'node:assert/strict'
 import { validarDisponibilidadCombo } from '@/modules/excursiones/reservas/nucleo'
 import { validarMeta } from '@/modules/excursiones/metricas/nucleo'
 import { rangoDeParametros } from '@/modules/excursiones/reportes/nucleo'
-import { proximoDiaUTC } from './support/proximo-dia'
 
 test('validarDisponibilidadCombo: valida cupo y días de todas las actividades hijas', () => {
-  const fechaLunes = proximoDiaUTC(1) // Lunes (día 1); relativa a hoy: una fecha fija caducaba
-  const fechaDomingo = proximoDiaUTC(0) // Domingo (día 0)
+  // Mantener la salida futura incluso si CI corre después de las 09:00.
+  const fechaLunes = new Date()
+  fechaLunes.setUTCHours(12, 0, 0, 0)
+  const diasHastaLunes = ((8 - fechaLunes.getUTCDay()) % 7) || 7
+  fechaLunes.setUTCDate(fechaLunes.getUTCDate() + diasHastaLunes)
+  const fechaDomingo = new Date(fechaLunes)
+  fechaDomingo.setUTCDate(fechaDomingo.getUTCDate() + 6)
 
   const comboConfig = {
     nombre: 'Combo Caribe: Catamarán + Buggies',
