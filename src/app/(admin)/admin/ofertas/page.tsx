@@ -6,8 +6,10 @@ import {
   Gift,
   Plus,
   ArrowRight,
+  BadgePercent,
   type LucideIcon,
 } from 'lucide-react'
+import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
@@ -15,7 +17,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Ofertas' }
+export const metadata = { title: 'Beneficios y regalos' }
 
 /**
  * Hub de Ofertas (Auditoría · Fase D).
@@ -28,7 +30,7 @@ export const metadata = { title: 'Ofertas' }
  * que se unifica es la puerta de entrada.
  */
 type TipoOferta = {
-  key: 'publica' | 'relampago' | 'vip'
+  key: 'catalogo' | 'publica' | 'relampago' | 'vip'
   titulo: string
   descripcion: string
   icon: LucideIcon
@@ -38,6 +40,19 @@ type TipoOferta = {
 }
 
 const TIPOS: TipoOferta[] = [
+  {
+    // Commerce Core (F5): la oferta que REFERENCIA un producto o servicio del
+    // catálogo. Es la que el marketplace muestra con «antes / ahora»; no crea
+    // un producto duplicado ni toca el inventario al publicarse.
+    key: 'catalogo',
+    titulo: 'Oferta sobre un producto o servicio',
+    descripcion:
+      'Descuento sobre algo de tu catálogo. El marketplace lo muestra con el precio de antes y el de ahora; el cliente lo obtiene y lo canjea con QR.',
+    icon: BadgePercent,
+    crearHref: '/admin/deals/nueva',
+    crearLabel: 'Nueva oferta',
+    gestionarHref: '/admin/deals',
+  },
   {
     key: 'publica',
     titulo: 'Promoción pública',
@@ -80,24 +95,28 @@ export default async function OfertasHubPage() {
 
   // Conteos por tipo (total por empresa). Fail-open: si una query falla, se
   // muestra 0 y el hub sigue siendo navegable.
-  const [publicas, relampago, vip] = await conEmpresa(companyId,
+  const [publicas, relampago, vip, catalogo] = await conEmpresa(companyId,
     (tx) => Promise.all([
       tx.promocion.count({ where: { companyId, archivada: false } }).catch(() => 0),
       tx.marketingCampaign.count({ where: { companyId } }).catch(() => 0),
       tx.ofertaPrivada.count({ where: { companyId } }).catch(() => 0),
+      tx.deal.count({ where: { companyId, status: { not: 'ARCHIVED' } } }).catch(() => 0),
     ])
   )
-  const conteo: Record<TipoOferta['key'], number> = { publica: publicas, relampago, vip }
+  const conteo: Record<TipoOferta['key'], number> = { catalogo, publica: publicas, relampago, vip }
+  // La oferta sobre el catálogo solo se ofrece a quien tiene el módulo encendido.
+  const conDeals = await tieneCapacidad(companyId, 'DEALS_MARKETPLACE').catch(() => false)
+  const tipos = conDeals ? TIPOS : TIPOS.filter((t) => t.key !== 'catalogo')
 
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Ofertas"
+        title="Beneficios y regalos"
         description="Todo lo que ofreces a tus clientes en un solo lugar. Elige el tipo y créalo; cada tipo tiene su propio panel de gestión."
       />
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {TIPOS.map((t) => {
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+        {tipos.map((t) => {
           const Icon = t.icon
           const n = conteo[t.key]
           return (

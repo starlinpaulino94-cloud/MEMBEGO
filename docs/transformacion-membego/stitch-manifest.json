@@ -19,9 +19,9 @@
   "design": {
     "path": "docs/transformacion-membego/stitch/retail_commercial_mobile/DESIGN.md",
     "source_relative_path": "retail_commercial_mobile/DESIGN.md",
-    "sha256": "55eb43cbd72524cf39840992bff5457718ca89be1c8b2f9ae0d25918253ebff1",
+    "sha256": "98dda79adae08397a639cadc34c9c8caac229f092f0eb69f06d7719fe6ab7c46",
     "source_matches_repo": true,
-    "note": "Read in full. Frontmatter primary #006194 differs from prose primary #0284C7; do not silently resolve that internal specification inconsistency."
+    "note": "Read in full. Frontmatter primary #006194 differs from prose primary #0284C7; do not silently resolve that internal specification inconsistency. Re-recorded 2026-10-08 after dbbcac0 (unify branding) changed the membership-card layout rule (vertical list -> responsive grid); the previous version is sha256 55eb43cbd72524cf39840992bff5457718ca89be1c8b2f9ae0d25918253ebff1 at commit 08fd7fb, preserved in git history."
   },
   "screens": [
     {

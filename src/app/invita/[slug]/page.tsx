@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getCampanaBySlug } from '@/modules/invitaciones/queries'
-import { absoluteUrl } from '@/lib/site'
+import { landingUrlFor } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
 import { normalizeInvitaContenido } from '@/lib/invitaContenido'
 import { arteDeCampana } from '@/modules/invitaciones/ogCard'
@@ -26,13 +26,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const compartir = normalizeInvitaContenido(campana.contenido)
   const title = compartir.ogTitulo || campana.titulo
   const image =
-    arteDeCampana(campana) ?? absoluteUrl(`/og/campana?slug=${encodeURIComponent(slug)}`)
+    arteDeCampana(campana) ?? landingUrlFor(`/og/campana?slug=${encodeURIComponent(slug)}`)
 
   return {
     ...shareMetadata({
       title,
       description: compartir.ogDescripcion || campana.descripcion,
-      url: absoluteUrl(`/invita/${slug}`),
+      url: landingUrlFor(`/invita/${slug}`),
       siteName: campana.company.name,
       image,
     }),

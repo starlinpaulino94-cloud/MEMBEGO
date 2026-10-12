@@ -459,7 +459,7 @@ export function PerfilPublicoForm({
               defaultValue={company.colorPrimario ?? ''}
               placeholder="#RRGGBB"
               pattern="#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})"
-              title="Usa formato hexadecimal, como #abc o #12abef."
+              title="Usa formato hexadecimal: #RGB o #RRGGBB."
             />
             <p className="text-xs text-muted-foreground">
               Este color se comparte con personalización, membresías y ofertas.

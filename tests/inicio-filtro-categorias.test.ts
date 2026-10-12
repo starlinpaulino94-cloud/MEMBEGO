@@ -19,7 +19,7 @@ test('getInicioVista admite categoriaSlug como segundo argumento y lo refleja', 
   const lectura = leer('src/modules/home/lectura.ts')
   assert.match(
     lectura,
-    /export async function getInicioVista\(\s*user:\s*SessionUser,\s*categoriaSlug\?: string\s*\)/,
+    /export async function getInicioVista\(\s*user:\s*SessionUser,\s*categoriaSlug\?: string,\s*espacio: Espacio = 'publico'\s*\)/,
     'getInicioVista debe admitir categoriaSlug opcional'
   )
   assert.match(
@@ -62,7 +62,7 @@ test('InicioCliente (page.tsx) lee searchParams y los pasa a getInicioVista', ()
   )
   assert.match(
     page,
-    /getInicioVista\(user,\s*categoria\)/,
+    /getInicioVista\(user,\s*categoria(?:,\s*'app')?\)/,
     'InicioCliente debe pasar la categoría a getInicioVista'
   )
 })

@@ -214,7 +214,7 @@ test('zonaSegura se define una sola vez en todo el código', () => {
     /(export\s+)?function\s+zonaSegura\b/.test(codigoDe(p))
   )
   assert.deepEqual(
-    definiciones.map((p) => p.slice(RAIZ.length + 1)),
+    definiciones.map((p) => p.slice(RAIZ.length + 1).replaceAll('\\', '/')),
     ['src/lib/zona-horaria.ts']
   )
 })

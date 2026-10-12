@@ -39,7 +39,10 @@ const MEDIDAS = MEDIDAS_SIN_TIPAR as Record<string, { que: string; porque: strin
  * Bajar uno: cámbialo aquí en el mismo commit que lo baja. Subir uno: no.
  */
 const TECHOS: Record<string, number> = {
-  hexEnInterfaz: 121,
+  // 121 al cerrar la Fase 1; 114 tras el sprint de cierre (2026-10-08): la fusión de la app
+  // Expo había subido a 129 y se devolvieron a su sitio (correo a `lib/email`, color de marca
+  // por defecto en un solo módulo, texto de ayuda sin hex, botones `destructive`).
+  hexEnInterfaz: 114,
   colorCrudo: 147,
   radiosFuera: 0,
   microTextos: 0,

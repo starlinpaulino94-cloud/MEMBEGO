@@ -37,6 +37,7 @@ const PUBLICAS: Record<string, string> = {
   'modules/auth/actions.ts::logout': 'cierra la sesión de quien llama',
   'modules/auth/loginActions.ts::iniciarSesion': 'es el login (loginLimiter)',
   'modules/auth/recuperarActions.ts::solicitarRecuperacion': 'recuperar contraseña: quien la pide no tiene sesión (recoveryIpLimiter y recoveryEmailLimiter) y la respuesta no revela si el correo existe',
+  'modules/checkout/actions.ts::resumirCarrito': 'el carrito se arma sin cuenta: solo lee lo ya público del catálogo de un negocio publicado, con límite por IP; no escribe nada',
   'modules/connect/adminActions.ts::scopesDisponibles': 'lista estática de scopes: no lee ni cambia datos',
   'modules/connect/adminActions.ts::urlDeConexionOauth': 'arma una URL a partir de la configuración pública: no lee datos de ninguna empresa',
   'modules/crm/seguimiento-actions.ts::deleteActividad': 'delega en deleteNota, que exige requireSection(\'clientes\', \'nota_eliminar\')',

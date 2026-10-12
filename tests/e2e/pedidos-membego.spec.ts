@@ -38,8 +38,11 @@ test.describe('Pedidos Membego · recorrido', () => {
   let sinPedidos: EmpresaCatalogo
   let sucursalId = ''
   let variante = ''
+  /** Donde se PIDE: la ficha dentro de la app. */
   let urlProducto = ''
   let urlServicio = ''
+  /** La ficha de CONSULTA de la landing (SEO y enlaces compartidos): no opera, traspasa. */
+  let urlServicioPublica = ''
   let urlSinPedidos = ''
   let pedidoId = ''
   let codigo = ''
@@ -75,7 +78,8 @@ test.describe('Pedidos Membego · recorrido', () => {
     await expect(form).toBeVisible()
     await form.getByLabel('Cantidad').fill(cantidad)
     if (nota) await form.getByLabel(/Nota para la empresa/).fill(nota)
-    await form.getByRole('button', { name: 'Enviar pedido' }).click()
+    // El botón principal depende de lo que se compra: «Enviar pedido» (producto) o «Reservar» (servicio).
+    await form.getByRole('button', { name: /Enviar pedido|Reservar/ }).click()
   }
 
   test('prepara: una empresa que recibe pedidos (producto con stock y un servicio), otra con catálogo pero sin pedidos', async () => {
@@ -91,26 +95,53 @@ test.describe('Pedidos Membego · recorrido', () => {
     await existenciasSembradas(con.id, variante, sucursalId, 10)
     const servicio = await itemSembrado(con.id, { name: SERVICIO, slug: `lavado-ped-${sufijo}`, variantes: [{ name: 'Default', sku: `LAV-PED-${sufijo}`, price: 300, porDefecto: true }] })
     const ajeno = await itemSembrado(sinPedidos.id, { name: `Sin pedidos ${sufijo}`, slug: `sinpedidos-${sufijo}`, variantes: [{ name: 'Default', sku: `SP-${sufijo}`, price: 100, porDefecto: true }] })
-    urlProducto = `/empresas/${con.slug}/catalogo/camiseta-ped-${sufijo}`
-    urlServicio = `/empresas/${con.slug}/catalogo/lavado-ped-${sufijo}`
-    urlSinPedidos = `/empresas/${sinPedidos.slug}/catalogo/sinpedidos-${sufijo}`
+    urlProducto = `/cliente/empresas/${con.slug}/catalogo/camiseta-ped-${sufijo}`
+    urlServicio = `/cliente/empresas/${con.slug}/catalogo/lavado-ped-${sufijo}`
+    urlServicioPublica = `/empresas/${con.slug}/catalogo/lavado-ped-${sufijo}`
+    urlSinPedidos = `/cliente/empresas/${sinPedidos.slug}/catalogo/sinpedidos-${sufijo}`
     expect([producto.id, servicio.id, ajeno.id].every(Boolean)).toBe(true)
   })
 
-  test('la ficha ofrece «Hacer un pedido» solo si la empresa recibe pedidos; una ficha ajena o sin la capacidad no lo ofrece', async ({ page }) => {
+  test('la ficha de la APP ofrece «Hacer un pedido» solo si la empresa recibe pedidos; una ficha ajena o sin la capacidad no lo ofrece', async ({ browser }) => {
+    const ctx = await browser.newContext()
+    await entrarComo(ctx, 'pedidosCliente', BASE)
+    const page = await ctx.newPage()
     await page.goto(urlProducto)
     await expect(page.getByRole('form', { name: 'Hacer un pedido' })).toBeVisible()
     await page.goto(urlSinPedidos)
     await expect(page.getByRole('heading', { name: new RegExp(`Sin pedidos ${sufijo}`) }).first()).toBeVisible()
     await expect(page.getByRole('form', { name: 'Hacer un pedido' })).toHaveCount(0)
+    await ctx.close()
   })
 
-  test('sin sesión, pedir manda a iniciar sesión (y vuelve a la ficha)', async ({ browser }) => {
+  test('la ficha de la LANDING no tiene formulario de pedido ni de reserva: solo el traspaso a la app', async ({ page }) => {
+    await page.goto(urlServicioPublica)
+    await expect(page.getByRole('heading', { name: SERVICIO }).first()).toBeVisible()
+    for (const formulario of ['Hacer un pedido', 'Reservar este servicio', 'Agregar al carrito']) {
+      await expect(page.getByRole('form', { name: formulario })).toHaveCount(0)
+    }
+    await expect(page.getByRole('button', { name: /Enviar pedido|Reservar$|Agregar al carrito/ })).toHaveCount(0)
+    // En su lugar, el traspaso (visitante: iniciar sesión o crear cuenta, y volver a la ficha de la app).
+    const traspaso = page.getByRole('region', { name: 'Reservar este servicio' })
+    await expect(traspaso).toBeVisible()
+    await expect(traspaso.getByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute('href', `/login?redirect=${encodeURIComponent(urlServicio)}`)
+    await expect(traspaso.getByRole('link', { name: 'Crear cuenta' })).toHaveAttribute('href', `/registro/cuenta?next=${encodeURIComponent(urlServicio)}`)
+  })
+
+  test('sin sesión, el traspaso lleva a iniciar sesión y, tras entrar, a la ficha de la app donde se reserva', async ({ browser }) => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
-    await pedir(p, urlServicio, '1')
+    await p.goto(urlServicioPublica)
+    await p.getByRole('region', { name: 'Reservar este servicio' }).getByRole('link', { name: 'Iniciar sesión' }).click()
     await expect(p).toHaveURL(/\/login\?redirect=/)
-    expect(decodeURIComponent(p.url())).toContain(`/empresas/${con.slug}/catalogo/lavado-ped-${sufijo}`)
+    expect(new URL(p.url()).searchParams.get('redirect')).toBe(urlServicio)
+    // Ya con sesión, el mismo enlace de login devuelve a la ficha de la app en un solo salto.
+    await entrarComo(ctx, 'pedidosCliente', BASE)
+    await p.goto(p.url())
+    await expect(p).toHaveURL(new RegExp(`${urlServicio}$`))
+    // El formulario se llama siempre «Hacer un pedido»; lo que cambia con el servicio es su título y su botón.
+    await expect(p.getByRole('heading', { name: 'Reservar este servicio' })).toBeVisible()
+    await expect(p.getByRole('form', { name: 'Hacer un pedido' }).getByRole('button', { name: 'Reservar' })).toBeVisible()
     await ctx.close()
   })
 
@@ -134,10 +165,14 @@ test.describe('Pedidos Membego · recorrido', () => {
     expect(despues.reserved).toBe(antes.reserved + 2)
     // Un cliente ve «Mis pedidos» con el pedido.
     await p.goto('/cliente/pedidos')
-    await expect(p.getByRole('link', { name: new RegExp(codigo) })).toBeVisible()
-    // El aviso sale después de responder: se espera a que llegue.
+    // `.first()`: el código también sale en los avisos de la campanita (el cliente ya recibe «Pedido recibido»).
+    await expect(p.getByRole('link', { name: new RegExp(codigo) }).first()).toBeVisible()
+    // El aviso sale después de responder: se espera a que llegue. La clave de
+    // duplicado es única POR PERSONA, así que el cliente («Pedido recibido») y la
+    // empresa («Nuevo pedido Membego») comparten clave: se comprueban los dos y
+    // no «el primero que devuelva la base», que no tiene orden.
     await expect
-      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido-nuevo:${pedidoId}` } }))?.titulo ?? null, { timeout: 15_000 })
+      .poll(async () => (await prismaDeArnes().notificacion.findFirst({ where: { dedupeKey: `pedido:${pedidoId}:RECIBIDO`, titulo: 'Nuevo pedido Membego' } }))?.titulo ?? null, { timeout: 15_000 })
       .toBe('Nuevo pedido Membego')
     await ctx.close()
   })
@@ -168,7 +203,7 @@ test.describe('Pedidos Membego · recorrido', () => {
 
     await p.goto('/admin/pedidos-membego')
     await expect(p.getByText(/espera tu respuesta/)).toBeVisible()
-    await p.getByRole('link', { name: new RegExp(codigo) }).click()
+    await p.getByRole('link', { name: new RegExp(codigo) }).first().click()
     await expect(p.getByRole('heading', { name: codigo })).toBeVisible()
     await expect(p.getByText('sin prisa').first()).toBeVisible()
 
@@ -283,7 +318,7 @@ test.describe('Pedidos Membego · recorrido', () => {
     await ctx.close()
   })
 
-  test('la empresa registra el pago con referencia y el pedido sube a «Pago verificado»', async ({ browser }) => {
+  test('la empresa registra el pago con referencia y el pedido sube a «Pago reportado por el negocio» (verificar es cosa de una fuente externa)', async ({ browser }) => {
     test.setTimeout(120_000)
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
@@ -295,7 +330,7 @@ test.describe('Pedidos Membego · recorrido', () => {
     await pago.getByLabel(/^Monto cobrado/).fill('450')
     await pago.getByLabel('Referencia').fill('TRF-E2E-1')
     await pago.getByRole('button', { name: 'Registrar pago' }).click()
-    await expect(p.getByText('Pago verificado').first()).toBeVisible({ timeout: 20_000 })
+    await expect(p.getByText('Pago reportado por el negocio').first()).toBeVisible({ timeout: 20_000 })
     await expect(p.getByText('TRF-E2E-1')).toBeVisible()
     await expect(p.getByText('Pago registrado').first()).toBeVisible() // en la historia
     await ctx.close()

@@ -190,6 +190,8 @@ export const PAYMENT_METHOD_LABELS: Record<SupplyV2PaymentMethod, string> = {
 export const PAYMENT_METHODS_CLIENTE: readonly SupplyV2PaymentMethod[] = ['TRANSFER', 'DEPOSIT']
 
 export const RUTA_OFERTAS_PUBLICAS = '/promociones/membego'
+/** La ficha de la oferta DENTRO DE LA APP, donde se compra (separación landing/app · F4). La pública solo informa. */
+export const RUTA_OFERTAS_CLIENTE = '/cliente/ofertas-membego'
 export const RUTA_COMPRAS_CLIENTE = '/cliente/compras'
 
 // ── Slice 3 ─────────────────────────────────────────────────────────────────
@@ -602,6 +604,7 @@ import type {
 
 export const RUTA_CAMPANAS = `${BASE_SUPPLY_V2}/campanas`
 export const RUTA_CAMPANAS_PUBLICAS = '/promociones/campanas'
+export const RUTA_CAMPANAS_CLIENTE = '/cliente/campanas'
 export const RUTA_CUPONES_CLIENTE = '/cliente/cupones'
 export const RUTA_PORTAL_CAMPANAS = `${RUTA_PORTAL_PROVEEDOR}/campanas`
 
@@ -722,6 +725,8 @@ import type {
 export const RUTA_FIDELIZACION = `${BASE_SUPPLY_V2}/fidelizacion`
 export const RUTA_FIDELIZACION_CLIENTE = '/cliente/fidelizacion'
 export const RUTA_MEMBRESIAS_PUBLICAS = '/promociones/membresias'
+/** Los planes DENTRO DE LA APP, donde se contratan. */
+export const RUTA_MEMBRESIAS_CLIENTE = '/cliente/membresias-membego'
 export const RUTA_PORTAL_FIDELIZACION = `${RUTA_PORTAL_PROVEEDOR}/fidelizacion`
 
 export const LOYALTY_PROGRAM_STATUS_LABELS: Record<SupplyV2LoyaltyProgramStatus, string> = {

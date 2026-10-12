@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import { rutaDeExcursiones } from '@/modules/comercio/rutas'
 import { NextResponse, type NextRequest } from 'next/server'
-import { getAppUrl } from '@/lib/site'
+import { appUrl, dominioDeCookieCompartida, landingUrl } from '@/lib/site'
 import { esBotDeVistaPrevia } from '@/lib/share/bots'
 import { VISITOR_COOKIE, VISITOR_COOKIE_DIAS } from '@/lib/referidos'
 import {
@@ -31,10 +32,10 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params
-  const base = getAppUrl()
+  const base = appUrl()
 
   const enlace = await resolverEnlace(slug.trim().toLowerCase())
-  if (!enlace) return NextResponse.redirect(base)
+  if (!enlace) return NextResponse.redirect(landingUrl())
 
   // Los robots de vista previa (WhatsApp, Facebook…) abren el enlace antes que
   // la persona: si contaran, cada compartida sería una visita falsa.
@@ -42,7 +43,7 @@ export async function GET(
     const destino = `${base}/registro/${enlace.companySlug}?v=${encodeURIComponent(
       enlace.codigoVendedor
     )}&e=${encodeURIComponent(enlace.slug)}&next=${encodeURIComponent(
-      `/empresas/${enlace.companySlug}/excursiones?e=${encodeURIComponent(enlace.slug)}`
+      `${rutaDeExcursiones('app', enlace.companySlug)}?e=${encodeURIComponent(enlace.slug)}`
     )}`
     return NextResponse.redirect(destino)
   }
@@ -63,7 +64,8 @@ export async function GET(
   const isCliente = user && user.metadata.role === 'CLIENTE'
 
   // Si está logueado, llevarlo al catálogo directo. Si no, al registro con next.
-  const nextUrl = `/empresas/${enlace.companySlug}/excursiones?e=${encodeURIComponent(enlace.slug)}`
+  // Las excursiones de la empresa DENTRO DE LA APP: ahí se reserva. La atribución no depende de esta URL: ya quedó en las cookies.
+  const nextUrl = `${rutaDeExcursiones('app', enlace.companySlug)}?e=${encodeURIComponent(enlace.slug)}`
   let destino: string
   
   if (isCliente) {
@@ -83,6 +85,7 @@ export async function GET(
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
+    ...dominioDeCookieCompartida(),
   })
 
   const ventanaDias = await ventanaDeEmpresa(enlace.companyId)
@@ -94,6 +97,7 @@ export async function GET(
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
+    ...dominioDeCookieCompartida(),
   })
 
   return res

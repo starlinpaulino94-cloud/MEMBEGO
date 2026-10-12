@@ -4,13 +4,17 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Menu, X, ArrowRight } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { AccionesDeLaBarra } from './AccionesDeSesion'
 
 // Marca única: la nav pública le habla SOLO al cliente. Las rutas del
 // marketplace (/empresas) y el alta de negocios (/registro-empresa) siguen
 // vivas por URL para cuando la plataforma crezca.
 const LINKS = [
+  { href: '/empresas', label: 'Negocios' },
+  { href: '/catalogo', label: 'Productos y servicios' },
+  { href: '/ofertas', label: 'Ofertas' },
   { href: '/promociones', label: 'Promociones' },
   { href: '/caracteristicas', label: 'Características' },
   { href: '/faq', label: 'Preguntas' },
@@ -68,32 +72,22 @@ export function PublicNav() {
           ))}
         </div>
 
-        {/* CTAs (desktop) */}
+        {/* CTAs (desktop): visitante → Ingresar / Registrarse; con sesión → la puerta a su espacio */}
         <div className="hidden items-center gap-2 md:flex">
-          <Link
-            href="/login"
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Ingresar
-          </Link>
-          <Link
-            href="/registro/cuenta"
-            className="group inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:bg-primary hover:shadow-glow-strong active:scale-[0.98]"
-          >
-            Registrarse
-            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+          <AccionesDeLaBarra />
         </div>
 
         {/* Toggle móvil */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="rounded-lg p-2 text-foreground transition-colors hover:bg-foreground/5 md:hidden"
-          aria-label="Menú"
-          aria-expanded={open}
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        <div className="flex items-center gap-1 md:hidden">
+          <button
+            onClick={() => setOpen(!open)}
+            className="rounded-lg p-2 text-foreground transition-colors hover:bg-foreground/5"
+            aria-label="Menú"
+            aria-expanded={open}
+          >
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </nav>
 
       {/* Menú móvil */}
@@ -109,21 +103,8 @@ export function PublicNav() {
               {l.label}
             </Link>
           ))}
-          <div className="mt-1 space-y-1.5 border-t border-border/70 pt-2">
-            <Link
-              href="/login"
-              onClick={() => setOpen(false)}
-              className="block rounded-xl px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5"
-            >
-              Ingresar
-            </Link>
-            <Link
-              href="/registro/cuenta"
-              onClick={() => setOpen(false)}
-              className="block rounded-xl bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-foreground shadow-glow"
-            >
-              Registrarse
-            </Link>
+          <div className="mt-1 border-t border-border/70 pt-2">
+            <AccionesDeLaBarra movil onNavigate={() => setOpen(false)} />
           </div>
         </div>
       )}

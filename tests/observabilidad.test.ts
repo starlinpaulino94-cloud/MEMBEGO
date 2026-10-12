@@ -21,10 +21,12 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   aEtiqueta,
   esEtiqueta,
   lineaDeEvento,
+  registrarOperacion,
   saneaExtra,
 } from '../src/modules/observabilidad/eventos'
 import {
@@ -124,6 +126,53 @@ test('la línea del evento tiene la forma fija que se puede filtrar y contar', (
   assert.equal(o.ok, true)
   assert.equal(o.ms, 1235, 'los milisegundos se redondean')
   assert.equal('emp' in o, false, 'sin empresa no se inventa el campo')
+})
+
+test('un evento de pedido lleva empresa y pedido (ids opacos) y nada más que etiquetas', () => {
+  const linea = lineaDeEvento({ dominio: 'pedido', accion: 'pago_verificado', ok: true, companyId: 'cmuzk2qvq00017d5bbezxhxlc', pedidoId: 'cmux1vb1900007dzt3fxbwosp' })
+  const o = JSON.parse(linea)
+  assert.equal(o.dom, 'pedido')
+  assert.equal(o.emp, 'cmuzk2qvq00017d5bbezxhxlc')
+  assert.equal(o.ped, 'cmux1vb1900007dzt3fxbwosp', 'el hilo de la venta: el mismo id de la bitácora')
+})
+
+test('el pedido solo sale si es un id opaco: un correo, un teléfono o una frase no se cuelan por ahí', () => {
+  for (const malo of ['cliente@correo.com', '809-555-1234', '8095551234', 'pedido de Juan Pérez', 'corto', 'x'.repeat(41), 'sololetrasminusculasmuylargas', 'MBG-PED-2031-000123', 'MBG PED 2031 000123']) {
+    const o = JSON.parse(lineaDeEvento({ dominio: 'pedido', accion: 'pedido_completado', ok: true, pedidoId: malo }))
+    assert.equal('ped' in o, false, `no debió salir: ${malo}`)
+  }
+})
+
+test('registrarOperacion: el motivo de un fallo es el código del error de dominio, nunca su mensaje', () => {
+  const lineas: string[] = []
+  const original = console.log
+  console.log = (l: unknown) => lineas.push(String(l))
+  try {
+    class Fallo extends Error { readonly codigo = 'PAGO_YA_VERIFICADO' }
+    registrarOperacion({ dominio: 'pedido', accion: 'pago_verificado', companyId: 'cmuzk2qvq00017d5bbezxhxlc', pedidoId: 'cmux1vb1900007dzt3fxbwosp', error: new Fallo('Juan Pérez pagó con la tarjeta 4111 1111 1111 1111') })
+    registrarOperacion({ dominio: 'facturacion', accion: 'movimiento_manual', error: new Error('fallo de conexión con secreto-de-prueba-xyz en el mensaje') })
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_completado' })
+  } finally {
+    console.log = original
+  }
+  const [dominio, interno, bueno] = lineas.map((l) => JSON.parse(l))
+  assert.equal(dominio.ok, false)
+  assert.equal(dominio.motivo, 'pago_ya_verificado')
+  assert.equal(interno.motivo, 'error_interno')
+  assert.equal(bueno.ok, true)
+  assert.equal('motivo' in bueno, false)
+  const todo = lineas.join('\n')
+  for (const filtrado of ['Juan', '4111', 'secreto-de-prueba', 'conexión']) assert.equal(todo.includes(filtrado), false, `se coló: ${filtrado}`)
+})
+
+test('las acciones que mueven dinero dejan su evento DESPUÉS de la transacción (nunca dentro del servicio, que puede revertirse)', () => {
+  const lee = (f: string) => readFileSync(f, 'utf8')
+  for (const f of ['src/modules/orders/actions.ts', 'src/modules/orders/escaner-actions.ts', 'src/modules/orders/superadmin-actions.ts', 'src/modules/pos/actions.ts', 'src/modules/billing/actions.ts']) {
+    assert.match(lee(f), /registrarOperacion\(/, `${f} no emite eventos`)
+  }
+  for (const f of ['src/modules/orders/service.ts', 'src/modules/billing/service.ts', 'src/modules/pos/service.ts']) {
+    assert.doesNotMatch(lee(f), /registrarOperacion|registrarEvento/, `${f} emite dentro de la transacción`)
+  }
 })
 
 // ── 2 · El presupuesto de error ─────────────────────────────────────────────
@@ -312,4 +361,30 @@ test('las migas de navegación también se limpian', () => {
   assert.equal(JSON.stringify(miga).includes('token=1'), false)
   assert.equal(JSON.stringify(miga).includes('pase=2'), false)
   assert.equal(JSON.stringify(miga).includes('code=3'), false)
+})
+
+test('Sentry descarta el cuerpo completo, incluidos PAN/CVV anidados o serializados', () => {
+  for (const data of [{ pago: { pan: '4111111111111111', cvv: '123' } }, 'pan=4111111111111111&cvv=123']) {
+    const evento = limpiarEvento({ request: { url: '/api/pagos/cardnet/iniciar', data } })
+    assert.equal(Object.hasOwn(evento.request, 'data'), false)
+    assert.equal(evento.request.url, '/api/pagos/cardnet/iniciar')
+  }
+})
+
+test('Sentry Replay enmascara texto, campos y multimedia; no envía breadcrumbs de consola', () => {
+  const config = readFileSync('src/instrumentation-client.ts', 'utf8')
+  assert.match(config, /maskAllText:\s*true/)
+  assert.match(config, /maskAllInputs:\s*true/)
+  assert.match(config, /blockAllMedia:\s*true/)
+  assert.match(config, /console:\s*false/)
+})
+
+test('Sentry elimina PAN/CVV, referencias de pago, teléfonos y direcciones de las URLs', () => {
+  const url = limpiarUrl('/cliente/pagos?paymentReference=ABC123&telefono=8095550100&addressLine1=Calle%20Uno&pan=4111111111111111&cvv=123&page=2')
+  assert.equal(url.includes('ABC123'), false)
+  assert.equal(url.includes('8095550100'), false)
+  assert.equal(url.includes('Calle'), false)
+  assert.equal(url.includes('4111111111111111'), false)
+  assert.equal(url.includes('cvv=123'), false)
+  assert.equal(url.includes('page=2'), true)
 })

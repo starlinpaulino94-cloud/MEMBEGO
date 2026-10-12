@@ -22,6 +22,19 @@ export const RUTA_OFERTAS_MEMBEGO = '/promociones/membego'
 /** Variantes que se enseñan: las vendibles y las agotadas. La descontinuada no existe para el público. */
 export const ESTADOS_VARIANTE_VISIBLES: readonly CatalogVariantStatus[] = ['ACTIVE', 'OUT_OF_STOCK']
 
+/**
+ * Lo ÚNICO que el consumidor sabe del stock. Nunca una cantidad: «Disponible»,
+ * «Pocas unidades» (solo si la empresa fijó un umbral de aviso y se cruzó) o
+ * «Agotado». Un ítem que no controla inventario está siempre «Disponible».
+ */
+export type DisponibilidadPublica = 'DISPONIBLE' | 'POCAS_UNIDADES' | 'AGOTADO'
+
+export const ETIQUETA_DISPONIBILIDAD: Record<DisponibilidadPublica, string> = {
+  DISPONIBLE: 'Disponible',
+  POCAS_UNIDADES: 'Pocas unidades',
+  AGOTADO: 'Agotado',
+}
+
 export interface VariantePublica {
   id: string
   name: string
@@ -31,6 +44,13 @@ export interface VariantePublica {
   compareAtPrice: string | null
   attributes: Record<string, string>
   available: boolean
+  disponibilidad: DisponibilidadPublica
+  /**
+   * Sucursales (ids) donde la variante tiene existencias para recoger. `null` =
+   * no controla inventario (se puede pedir en cualquier sucursal activa). Son
+   * ids, no cantidades: el consumidor elige dónde, no cuántas quedan.
+   */
+  sucursalesConStock: string[] | null
 }
 
 /** De dónde viene el ítem: lo creó la empresa, o lo refleja el puente desde una oferta de Membego (Supply). */
@@ -54,6 +74,8 @@ export interface ItemPublicoResumen {
    * (la página arma el enlace; Commerce Core no conoce las rutas de Supply).
    */
   ofertaSlug: string | null
+  /** La mejor disponibilidad entre sus variantes visibles (para la tarjeta). */
+  disponibilidad: DisponibilidadPublica
 }
 
 export interface ItemPublicoDetalle extends ItemPublicoResumen {
@@ -74,7 +96,7 @@ interface FilaVariante {
    * Existencias por sucursal (Fase 3). Solo importan si el ítem CONTROLA inventario;
    * una sucursal cerrada no cuenta (de ahí no se despacha).
    */
-  inventoryLevels?: { onHand: number; reserved: number; location: { activa: boolean } }[]
+  inventoryLevels?: { onHand: number; reserved: number; lowStockThreshold?: number; locationId?: string; location: { activa: boolean } }[]
 }
 
 interface FilaItem {
@@ -115,15 +137,48 @@ export function variantesPublicas(filas: readonly FilaVariante[], agotadaEnOrige
     .map((v) => {
       const price = v.price.toFixed(2)
       const antes = v.compareAtPrice && v.compareAtPrice.toNumber() > v.price.toNumber() ? v.compareAtPrice.toFixed(2) : null
+      const available = v.status === 'ACTIVE' && !agotadaEnOrigen && !sinExistencias(v, controlaInventario)
       return {
         id: v.id,
         name: v.name,
         price,
         compareAtPrice: antes,
         attributes: atributosTexto(v.attributes),
-        available: v.status === 'ACTIVE' && !agotadaEnOrigen && !sinExistencias(v, controlaInventario),
+        available,
+        disponibilidad: !available ? 'AGOTADO' : pocasUnidades(v, controlaInventario) ? 'POCAS_UNIDADES' : 'DISPONIBLE',
+        sucursalesConStock: controlaInventario ? sucursalesConStock(v) : null,
       }
     })
+}
+
+const nivelesActivos = (v: FilaVariante) => (v.inventoryLevels ?? []).filter((n) => n.location.activa)
+
+/**
+ * «Pocas unidades» SOLO si la empresa configuró un umbral de aviso en alguna
+ * sucursal y lo disponible total cayó a ese umbral o menos. Sin umbral, el
+ * consumidor ve «Disponible» hasta que se acaba: la empresa decide si quiere
+ * ese mensaje (configurando el umbral), no el sistema.
+ */
+function pocasUnidades(v: FilaVariante, controlaInventario: boolean): boolean {
+  if (!controlaInventario) return false
+  const niveles = nivelesActivos(v)
+  const umbral = Math.max(0, ...niveles.map((n) => n.lowStockThreshold ?? 0))
+  if (umbral <= 0) return false
+  const disponible = niveles.reduce((t, n) => t + Math.max(0, n.onHand - n.reserved), 0)
+  return disponible <= umbral
+}
+
+function sucursalesConStock(v: FilaVariante): string[] {
+  return nivelesActivos(v)
+    .filter((n) => n.onHand - n.reserved > 0 && typeof n.locationId === 'string')
+    .map((n) => n.locationId as string)
+}
+
+/** La mejor disponibilidad del conjunto: con una «Disponible» basta; si todas agotadas, «Agotado». */
+export function disponibilidadDelItem(vs: readonly VariantePublica[]): DisponibilidadPublica {
+  if (vs.some((v) => v.disponibilidad === 'DISPONIBLE')) return 'DISPONIBLE'
+  if (vs.some((v) => v.disponibilidad === 'POCAS_UNIDADES')) return 'POCAS_UNIDADES'
+  return 'AGOTADO'
 }
 
 /**
@@ -165,6 +220,7 @@ export function aResumenPublico(f: FilaItem): ItemPublicoResumen | null {
     company: { slug: f.company.slug, name: f.company.name },
     origen: f.source === 'SUPPLY' ? 'SUPPLY' : 'EMPRESA',
     ofertaSlug: f.source === 'SUPPLY' ? (f.supplyOffer?.slug ?? null) : null,
+    disponibilidad: disponibilidadDelItem(vs),
   }
 }
 

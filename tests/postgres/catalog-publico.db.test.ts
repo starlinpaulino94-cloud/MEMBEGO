@@ -34,7 +34,8 @@ async function empresa(x: string, over: object, caps: boolean) {
     await prisma.company.create({
       data: {
         name: `Pública ${x} ${sufijo}`, slug: `pub-${x}-${sufijo}`, type: 'carwash', ciudad: 'Santo Domingo',
-        ...(caps ? { capacidades: { overrides: { CATALOGO_UNIFICADO: true } } } : {}),
+        // El catálogo nace ENCENDIDO (experiencia comercial): una empresa «sin capacidad» la tiene apagada por override explícito.
+        capacidades: { overrides: { CATALOGO_UNIFICADO: caps } },
         ...over,
       },
       select: { id: true },

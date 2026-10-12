@@ -19,6 +19,10 @@ import {
 } from '@/components/caja/CajaForms'
 import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
 import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
+import { CobrarPedidoMembego } from '@/components/pos/CobrarPedidoMembego'
+import { VentaMostrador } from '@/components/pos/VentaMostrador'
+import { posPermitido } from '@/modules/pos/capacidades'
+import Link from 'next/link'
 import { Banknote, Clock, Store, User as UserIcon } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -51,7 +55,7 @@ const fmtFechaCorta = (d: Date) =>
 export default async function CajaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; caja?: string }>
 }) {
   const user = await requireRole(SCANNER_ROLES)
   const companyId = user.metadata.companyId as string | undefined
@@ -77,7 +81,7 @@ export default async function CajaPage({
     )
   }
 
-  const { q = '' } = await searchParams
+  const { q = '', caja: cajaPedida = '' } = await searchParams
   let sucursales = await getSucursalesActivas(companyId)
 
   // Self-heal para empresas creadas antes de la sucursal automática: sin
@@ -126,17 +130,20 @@ export default async function CajaPage({
       </section>
     )
 
-  // Sesión abierta de la empresa (la primera entre sus sucursales).
-  const sesion = await conEmpresa(companyId, (tx) =>
-    tx.cajaSesion.findFirst({
+  // Cajas abiertas de la empresa. Con más de una (varias sucursales), se trabaja con la que se elige (?caja=); sin elección,
+  // la más reciente. Venderle a alguien con la caja de OTRA sucursal bajaría las existencias de allá, así que la elegida se ve
+  // siempre y las acciones de la caja conectada trabajan con ESA.
+  const abiertas = await conEmpresa(companyId, (tx) =>
+    tx.cajaSesion.findMany({
       where: { companyId, estado: 'ABIERTA' },
       include: {
         sucursal: { select: { nombre: true } },
         abiertaPor: { select: { name: true } },
       },
-      orderBy: { abiertaAt: 'desc' },
+      orderBy: [{ abiertaAt: 'desc' }, { id: 'asc' }],
     })
   )
+  const sesion = abiertas.find((c) => c.id === cajaPedida) ?? abiertas[0] ?? null
 
   if (!sesion) {
     return (
@@ -170,10 +177,28 @@ export default async function CajaPage({
     buscarOrdenesPendientes(companyId, q),
     getMovimientosSesion(sesion.id),
   ])
+  // Fase 7: la caja conectada al catálogo y a los pedidos (apagada de serie; las acciones lo comprueban otra vez).
+  const pos = await posPermitido(companyId)
   const esperado = Number(sesion.balanceInicial) + resumen.totalEfectivo + movimientos.neto
 
   return (
     <main className="container max-w-3xl space-y-6 py-8">
+      {abiertas.length > 1 && (
+        <nav aria-label="Cajas abiertas" className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/70 bg-card p-3" data-testid="caja-selector">
+          <span className="text-sm font-medium text-foreground">Hay {abiertas.length} cajas abiertas. Trabajas con:</span>
+          {abiertas.map((c) => (
+            <Link
+              key={c.id}
+              href={`/empleado/caja?caja=${c.id}`}
+              aria-current={c.id === sesion.id ? 'true' : undefined}
+              className={`rounded-lg border px-3 py-1.5 text-sm ${c.id === sesion.id ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border text-muted-foreground hover:bg-muted/40'}`}
+            >
+              {c.sucursal.nombre}
+            </Link>
+          ))}
+        </nav>
+      )}
+
       {/* Estado de la caja */}
       <header className="rounded-2xl border border-success/25 bg-success/5 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -228,6 +253,10 @@ export default async function CajaPage({
       {/* Movimientos de efectivo intra-turno (fondo, retiros, gastos). */}
       <MovimientosCaja cajaSesionId={sesion.id} movimientos={movimientos} />
 
+      {/* Fase 7 · POS conectado: cobrar el pedido de quien llega con su QR y vender en el mostrador. */}
+      {pos.cobrarPedidos && <CobrarPedidoMembego cajaSesionId={sesion.id} />}
+      {pos.venderEnMostrador && <VentaMostrador cajaSesionId={sesion.id} />}
+
       {/* Cobrar */}
       <section className="space-y-4">
         <div>
@@ -240,7 +269,7 @@ export default async function CajaPage({
           </p>
         </div>
 
-        <BuscadorOrdenes q={q} />
+        <BuscadorOrdenes q={q} cajaId={abiertas.length > 1 ? sesion.id : undefined} />
 
         {ordenes.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-border/80 bg-muted/20 p-6 text-center text-sm text-muted-foreground">

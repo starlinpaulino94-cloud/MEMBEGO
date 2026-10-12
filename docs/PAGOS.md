@@ -1,3 +1,5 @@
+> **DISEÑO HISTÓRICO DEL PROVEEDOR DIRECTO.** Este documento describe una etapa anterior a la tokenización. Las rutas `/api/pagos/cardnet/{iniciar,completar,retorno}` están retiradas con HTTP 410 desde la limpieza del 2026-10-09. No completar los antiguos TODO de este documento ni reactivar sus callbacks: consultar [PAGOS-CARDNET.md](PAGOS-CARDNET.md) y [REGLAS_FINANCIERAS.md](REGLAS_FINANCIERAS.md).
+
 # Cobros en línea — CardNET y retiro de la transferencia
 
 Este documento explica cómo está montado el cobro en línea, qué falta para

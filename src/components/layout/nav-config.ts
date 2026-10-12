@@ -38,6 +38,8 @@ import {
   Rocket,
   ScanLine,
   Scale,
+  ListChecks,
+  ShieldAlert,
   Share2,
   SlidersHorizontal,
   TextSearch,
@@ -126,6 +128,7 @@ export type CapacidadNav =
   | 'MENSAJERIA'
   | 'CATALOGO_UNIFICADO'
   | 'PEDIDOS_MEMBEGO'
+  | 'DEALS_MARKETPLACE'
   | 'POS_CAJA'
   | 'MEMBEGO_SUPPLIER'
 
@@ -369,8 +372,8 @@ const G_OFERTA: NavGroup = {
   label: 'Oferta comercial',
   items: [
     {
-      // Commerce Core · catálogo unificado (Fase 1). Detrás de su capacidad, que
-      // nace apagada: se enciende empresa por empresa.
+      // Commerce Core · catálogo unificado (Fase 1). Detrás de su capacidad,
+      // encendida de serie desde la experiencia comercial.
       href: '/admin/catalogo',
       label: 'Catálogo',
       icon: Package,
@@ -388,6 +391,15 @@ const G_OFERTA: NavGroup = {
       capacidad: 'CATALOGO_UNIFICADO',
     },
     {
+      // Growth Engine · ofertas sobre el catálogo (Fase 5). Detrás de su capacidad, encendida de serie.
+      href: '/admin/deals',
+      label: 'Ofertas y Promociones',
+      icon: BadgePercent,
+      description: 'Descuentos sobre tus productos y servicios que los clientes obtienen en el marketplace y canjean con QR, con tope de presupuesto.',
+      keywords: ['ofertas', 'deals', 'descuento', 'presupuesto', 'cupon', 'canje', 'marketplace', 'cpa', 'promocion', 'promociones', 'rebaja', 'oferta'],
+      capacidad: 'DEALS_MARKETPLACE',
+    },
+    {
       href: '/admin/planes',
       label: 'Planes',
       badge: 'planesActivos',
@@ -398,10 +410,10 @@ const G_OFERTA: NavGroup = {
     },
     {
       href: '/admin/ofertas',
-      label: 'Ofertas',
+      label: 'Beneficios y regalos',
       icon: Tag,
-      description: 'Promociones y beneficios publicados.',
-      keywords: ['ofertas', 'promociones', 'descuentos', 'banners'],
+      description: 'Promociones públicas, banners relámpago y regalos VIP (beneficios sin producto del catálogo).',
+      keywords: ['ofertas', 'promociones', 'descuentos', 'banners', 'beneficios', 'regalos', 'vip'],
     },
     {
       href: '/admin/invitaciones',
@@ -501,8 +513,8 @@ const G_ATENCION: NavGroup = {
   label: 'Atención diaria',
   items: [
     {
-      // Commerce Core · pedidos Membego (Fase 3). Detrás de su capacidad, que nace
-      // apagada: se enciende empresa por empresa.
+      // Commerce Core · pedidos Membego (Fase 3). Detrás de su capacidad,
+      // encendida de serie desde la experiencia comercial.
       href: '/admin/pedidos-membego',
       label: 'Pedidos Membego',
       icon: ShoppingBag,
@@ -533,6 +545,15 @@ const G_ATENCION: NavGroup = {
       icon: Landmark,
       description: 'Lo que debes a Membego por los pedidos del marketplace: saldo, comisiones y estados de cuenta.',
       keywords: ['cuenta', 'membego', 'comisiones', 'saldo', 'estado de cuenta', 'facturacion', 'cpa', 'limite', 'credito'],
+      capacidad: 'PEDIDOS_MEMBEGO',
+    },
+    {
+      // Analítica (Fase 6): lo que Membego le produjo a la empresa y lo que le costó. Misma capacidad que los pedidos.
+      href: '/admin/resultados-membego',
+      label: 'Resultados Membego',
+      icon: TrendingUp,
+      description: 'Cuántos clientes, pedidos y ventas te produjo Membego, qué te costó y cómo rinde cada oferta.',
+      keywords: ['resultados', 'membego', 'roi', 'retorno', 'ventas', 'gmv', 'clientes nuevos', 'atribucion', 'comisiones', 'ofertas'],
       capacidad: 'PEDIDOS_MEMBEGO',
     },
     {
@@ -796,17 +817,29 @@ const HUB_EXPERIENCIA: NavGroup = {
   items: deAdmin('/admin/personalizacion', '/admin/sinonimos'),
 }
 
-const HUB_CATALOGO: NavGroup = {
-  id: 'catalogo',
-  label: 'Catálogo',
-  items: deAdmin('/admin/catalogo', '/admin/inventario', '/admin/planes', '/admin/ofertas', '/admin/excursiones'),
+/**
+ * COMERCIO (experiencia comercial, 2026-10-08). El grupo «Catálogo» del diseño
+ * pasa a leerse como lo que una empresa VENDE y OPERA en Membego, en el orden
+ * en que se usa: qué vendo (Catálogo) → cuánto tengo y dónde (Inventario) →
+ * qué me piden (Pedidos) → qué incentivo aplico sobre esos mismos productos
+ * (Ofertas y Promociones) → beneficios sin producto (legacy) → membresías →
+ * excursiones. Los pedidos salen de «Operaciones» para que la cadena
+ * Catálogo → Inventario → Ofertas → Pedidos se vea entera en un solo sitio.
+ */
+const HUB_COMERCIO: NavGroup = {
+  id: 'comercio',
+  label: 'Comercio',
+  items: deAdmin(
+    '/admin/catalogo', '/admin/inventario', '/admin/pedidos-membego', '/admin/deals',
+    '/admin/ofertas', '/admin/planes', '/admin/excursiones'
+  ),
 }
 
 const HUB_OPERACIONES: NavGroup = {
   id: 'operaciones',
   label: 'Operaciones',
   items: deAdmin(
-    '/admin/pedidos-membego', '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturacion-membego', '/admin/facturas',
+    '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturacion-membego', '/admin/resultados-membego', '/admin/facturas',
     '/admin/conciliacion', '/admin/metodos-pago', '/admin/registros', '/admin/actividad'
   ),
 }
@@ -854,7 +887,7 @@ const HUB_AJUSTES: NavGroup = {
 }
 
 export const GRUPOS_HUB_ADMIN: readonly NavGroup[] = [
-  HUB_PRINCIPAL, HUB_EXPERIENCIA, HUB_CATALOGO, HUB_OPERACIONES,
+  HUB_PRINCIPAL, HUB_EXPERIENCIA, HUB_COMERCIO, HUB_OPERACIONES,
   HUB_CLIENTES, HUB_MARKETING, HUB_ANALITICA, HUB_AJUSTES,
 ]
 
@@ -897,6 +930,15 @@ const G_CLI_DESCUBRIR: NavGroup = {
   id: 'descubrir',
   label: 'Descubrir',
   items: [
+    {
+      // Experiencia comercial (2026-10-08): la puerta al marketplace dentro de la
+      // app — negocios, productos, servicios y ofertas con una sola taxonomía.
+      href: '/cliente/explorar',
+      label: 'Explorar',
+      icon: PackageSearch,
+      description: 'Negocios, productos, servicios y ofertas.',
+      keywords: ['explorar', 'marketplace', 'productos', 'servicios', 'negocios', 'empresas', 'catalogo', 'buscar'],
+    },
     {
       href: '/cliente/promociones',
       label: 'Ofertas',
@@ -1272,6 +1314,27 @@ const G_SA_OPERACION: NavGroup = {
       icon: Landmark,
       description: 'Merchant Billing: lo que cada empresa debe a Membego — cuentas, comisiones, pagos, ajustes, límites y antigüedad.',
       keywords: ['facturacion', 'cobros', 'comisiones', 'cpa', 'cuentas', 'pagos', 'ajustes', 'credito', 'mora', 'aging', 'estado de cuenta'],
+    },
+    {
+      href: '/superadmin/analitica',
+      label: 'Analítica de Membego',
+      icon: TrendingUp,
+      description: 'GMV, take rate, ventas por empresa y canal, ofertas y salud de los cobros. Supply Economics aparte.',
+      keywords: ['analitica', 'gmv', 'take rate', 'toma', 'ventas', 'empresas', 'canales', 'atribucion', 'ofertas', 'ticket', 'salud'],
+    },
+    {
+      href: '/superadmin/conciliacion',
+      label: 'Conciliación',
+      icon: ListChecks,
+      description: 'Si los pedidos, pagos, comisiones, libros, ofertas e inventario cuadran entre sí. Solo lectura.',
+      keywords: ['conciliacion', 'cuadre', 'auditoria', 'comisiones', 'libro', 'inventario', 'pagos', 'ofertas', 'integridad', 'anomalias'],
+    },
+    {
+      href: '/superadmin/riesgo',
+      label: 'Señales de riesgo',
+      icon: ShieldAlert,
+      description: 'A qué empresas y clientes conviene llamar primero: cancelaciones, reembolsos, pedidos sin atender, crédito y cupones vencidos.',
+      keywords: ['riesgo', 'fraude', 'senales', 'alertas', 'cancelaciones', 'reembolsos', 'credito', 'mora', 'cupones', 'abuso'],
     },
     {
       href: '/superadmin/connect',

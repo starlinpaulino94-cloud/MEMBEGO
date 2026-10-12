@@ -34,7 +34,7 @@ export default async function MisPedidosPage() {
           description="Cuando pidas algo del catálogo de una empresa, lo seguirás desde aquí."
           action={
             <Button asChild>
-              <Link href="/catalogo">Ver el catálogo</Link>
+              <Link href="/cliente/explorar?ver=productos">Ver el catálogo</Link>
             </Button>
           }
         />

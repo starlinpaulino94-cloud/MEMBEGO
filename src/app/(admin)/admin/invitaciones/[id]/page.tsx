@@ -22,7 +22,7 @@ import { campanaEstadoUi } from '@/lib/estados'
 import { formatDate } from '@/lib/format'
 import { ADMIN_ROLES } from '@/types'
 import { getCampanaDashboard } from '@/modules/invitaciones/queries'
-import { absoluteUrl } from '@/lib/site'
+import { landingUrlFor } from '@/lib/site'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -67,7 +67,7 @@ export default async function CampanaDetallePage({
 
   const { campana, embudoStats, participantes, metasAlcanzadas, premiosReclamados, topCompartidores } = data
   const badge = campanaEstadoUi(campana.estado)
-  const url = absoluteUrl(`/invita/${campana.slug}`)
+  const url = landingUrlFor(`/invita/${campana.slug}`)
 
   return (
     <div className="space-y-6">

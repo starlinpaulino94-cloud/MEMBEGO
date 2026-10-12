@@ -23,7 +23,11 @@ jobs:
     # producción»— y aquí no hay forma de equivocarse de base.
     services:
       postgres:
-        image: postgres:16
+        # Espejo de AWS (ECR Public) de la imagen oficial: Docker Hub limita las
+        # descargas anónimas desde los runners y a veces ni responde al pedir el
+        # token (toomanyrequests / Client.Timeout), y el job moría antes de correr
+        # una sola prueba. ECR Public no exige autenticación.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_PASSWORD: ensayo
           POSTGRES_DB: ensayo

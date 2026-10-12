@@ -26,7 +26,9 @@ import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import type { SessionUser } from '@/types'
 import { InventarioError } from '@/modules/inventory/errores'
+import { registrarOperacion } from '@/modules/observabilidad/eventos'
 import { PedidoError } from './errores'
+import { avisarPasoDelPedido } from './avisos'
 import {
   aceptarPedidoEnTx,
   ajustarMontoEnTx,
@@ -73,6 +75,8 @@ export async function aceptarPedido(pedidoId: string): Promise<ResultadoPedido<{
   try {
     const r = await conEmpresa(c.companyId, (tx) => aceptarPedidoEnTx(tx, c.companyId, texto(pedidoId), c.ctx))
     refrescar()
+    // Best-effort y tras confirmar: el cliente se entera de que lo están atendiendo.
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'ACEPTADO', 'EMPRESA')
     return { ok: true, repetido: r.repetido }
   } catch (e) {
     return aError(e)
@@ -89,6 +93,7 @@ export async function ajustarMontoPedido(entrada: { pedidoId: string; ajuste: nu
       ajustarMontoEnTx(tx, c.companyId, texto(entrada.pedidoId), { ajuste: entrada.ajuste, motivo: texto(entrada.motivo) }, c.ctx)
     )
     refrescar()
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'AJUSTADO', 'EMPRESA')
     return { ok: true, total: r.total, repetido: r.repetido }
   } catch (e) {
     return aError(e)
@@ -102,6 +107,7 @@ export async function marcarPedidoListo(pedidoId: string): Promise<ResultadoPedi
   try {
     const r = await conEmpresa(c.companyId, (tx) => marcarListoEnTx(tx, c.companyId, texto(pedidoId), c.ctx))
     refrescar()
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'LISTO', 'EMPRESA')
     return { ok: true, repetido: r.repetido }
   } catch (e) {
     return aError(e)
@@ -125,9 +131,11 @@ export async function registrarPagoPedido(entrada: {
     await conEmpresa(c.companyId, (tx) =>
       registrarPagoEnTx(tx, c.companyId, texto(entrada.pedidoId), { method: metodo, amount: entrada.monto, reference: entrada.referencia ?? null, notes: entrada.notas ?? null }, c.ctx)
     )
+    registrarOperacion({ dominio: 'pedido', accion: 'pago_reportado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId) })
     refrescar()
     return { ok: true }
   } catch (e) {
+    registrarOperacion({ dominio: 'pedido', accion: 'pago_reportado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId), error: e })
     return aError(e)
   }
 }
@@ -139,9 +147,12 @@ export async function cancelarPedidoComoEmpresa(entrada: { pedidoId: string; mot
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   try {
     const r = await conEmpresa(c.companyId, (tx) => cancelarPedidoEnTx(tx, c.companyId, texto(entrada.pedidoId), { motivo: texto(entrada.motivo) }, c.ctx))
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_cancelado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId) })
     refrescar()
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'CANCELADO', 'EMPRESA')
     return { ok: true, repetido: r.repetido }
   } catch (e) {
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_cancelado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId), error: e })
     return aError(e)
   }
 }
@@ -155,9 +166,12 @@ export async function reembolsarPedido(entrada: { pedidoId: string; motivo: stri
     const r = await conEmpresa(c.companyId, (tx) =>
       reembolsarPedidoEnTx(tx, c.companyId, texto(entrada.pedidoId), { motivo: texto(entrada.motivo), devolverAlInventario: entrada.devolverAlInventario === true }, c.ctx)
     )
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_reembolsado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId) })
     refrescar()
+    if (!r.repetido) void avisarPasoDelPedido(c.companyId, r.pedidoId, 'REEMBOLSADO', 'EMPRESA')
     return { ok: true, repetido: r.repetido }
   } catch (e) {
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_reembolsado', companyId: c.companyId, pedidoId: texto(entrada.pedidoId), error: e })
     return aError(e)
   }
 }

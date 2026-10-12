@@ -14,15 +14,15 @@ Sentry.init({
 
   integrations: [
     Sentry.replayIntegration({
-      maskAllText: false,
+      maskAllText: true,
       maskAllInputs: true,
-      blockAllMedia: false,
+      blockAllMedia: true,
       mask: ['[data-sentry-mask]', 'input[type="password"]', 'input[name="token"]', 'input[name="email"]'],
       block: ['[data-sentry-block]'],
     }),
     Sentry.browserTracingIntegration(),
     Sentry.breadcrumbsIntegration({
-      console: true,
+      console: false,
       dom: true,
       fetch: true,
       history: true,

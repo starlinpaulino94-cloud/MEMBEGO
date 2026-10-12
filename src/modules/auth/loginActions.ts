@@ -49,6 +49,8 @@ import { headers } from 'next/headers'
 import { authService } from '@/lib/auth'
 import { loginLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { ROLE_HOME } from '@/types'
+import { destinoParaRol } from '@/lib/auth/destino-seguro'
+import { puedeEntrarAlPanel, resolverPermisosUsuario } from '@/lib/auth/permissions'
 import { registrarEvento } from '@/modules/observabilidad/eventos'
 
 export interface LoginState {
@@ -119,27 +121,22 @@ export async function iniciarSesion(
     registrarEvento({ dominio: 'auth', accion: 'login', ok: true })
 
     const role = result.user?.metadata.role ?? 'CLIENTE'
-    return { redirect: destinoSeguro(redirectPedido, ROLE_HOME[role] ?? '/') }
+    return {
+      redirect: destinoParaRol(redirectPedido, role, ROLE_HOME[role] ?? '/cliente/inicio', {
+        // Un empleado con una sección del panel concedida entra a `/admin` por esa llave, no por su rol.
+        puedeEntrarAlPanel: puedeEntrarAlPanel(role, resolverPermisosUsuario(result.user?.metadata.permisos)),
+      }),
+    }
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : ''
     if (mensaje.includes('Missing env var')) {
+      // El detalle (qué variable falta) se queda en el servidor: al navegador solo le toca saber que el entorno no está listo.
+      console.error('[%s] entorno sin configurar: %s', 'login', mensaje)
       return {
-        error: `Este entorno no está configurado (${mensaje.replace('Missing env var: ', 'falta ')}).`,
+        error: 'Este entorno no está configurado todavía. Avisa al administrador.',
       }
     }
     console.error('[login] error inesperado:', e)
     return { error: 'No se pudo iniciar sesión. Intenta de nuevo en unos momentos.' }
   }
-}
-
-/**
- * Solo rutas internas. Un `?redirect=https://otro-sitio` convertiría el login
- * en un trampolín de phishing: la víctima ve el dominio de MembeGo, se
- * autentica de verdad, y acaba en la página del atacante creyendo que sigue
- * dentro. Se exige que empiece por una sola barra y que no empiece por dos
- * (`//evil.com` es una URL absoluta con protocolo heredado).
- */
-function destinoSeguro(candidato: string, porDefecto: string): string {
-  if (!candidato.startsWith('/') || candidato.startsWith('//')) return porDefecto
-  return candidato
 }

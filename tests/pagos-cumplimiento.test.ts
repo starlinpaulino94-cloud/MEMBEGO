@@ -84,11 +84,18 @@ test('la confirmación distingue cobro aprobado de producto entregado', () => {
   assert.match(src, /export async function reintentarEntrega/)
 })
 
-test('el reintento reclama FALLIDA→PENDIENTE y nunca toca la pasarela', () => {
+test('el reintento reclama la entrega (FALLIDA, o un reclamo viejo sin terminar) con una comparación atómica y nunca toca la pasarela', () => {
   const src = leer('src/modules/pagos/intentos.ts')
-  assert.match(src, /where: \{ id: intentoId, fulfillmentEstado: 'FALLIDA' \}/)
+  // Comparar-y-cambiar en una sola sentencia: solo gana quien ve el estado que leyó (y, si es un reclamo viejo, que siga viejo).
+  assert.match(src, /estado: 'APROBADO',\s*fulfillmentEstado: intento\.fulfillmentEstado,/)
+  assert.match(src, /\.\.\.\(mayRecoverStaleClaim \? \{ updatedAt: \{ lt: staleBefore \} \} : \{\}\)/)
+  assert.match(src, /fulfillmentEstado: 'PROCESANDO'/)
   assert.match(src, /fulfillmentIntentos: \{ increment: 1 \}/)
   assert.match(src, /Nunca recobra/)
+  // Lo que se reclama es la ENTREGA: la función de reintento no llama al cobro.
+  const reintento = src.slice(src.indexOf('export async function reintentarEntrega'))
+  assert.match(reintento, /entregarProducto\(intento, claimAt\)/)
+  assert.doesNotMatch(reintento, /cobrarConTarjeta|ejecutarCobro|cardnet\w*Cobr/i)
 })
 
 test('la renovación con tarjeta marca la entrega en ambos caminos', () => {

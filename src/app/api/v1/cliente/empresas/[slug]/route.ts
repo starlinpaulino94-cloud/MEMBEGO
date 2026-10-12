@@ -11,7 +11,7 @@ import { getPromocionesDeEmpresaParaMi } from '@/modules/social/queries'
 import { fichaEnEmpresa } from '@/modules/cliente/afiliacion'
 import { getCompanyResenas, getMiResena } from '@/modules/resenas/queries'
 import { excursionesPublicas } from '@/modules/excursiones/catalogo/public-queries'
-import { toggleFavoritaEmpresaDirecto, toggleSeguirEmpresaDirecto } from '@/modules/social/actions'
+import { toggleFavoritaEmpresaDirecto, toggleSeguirEmpresaDirecto } from '@/modules/social/directo'
 import { sinEmpresa } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'

@@ -55,26 +55,26 @@ function ConfettiPiece({ pieza }: { pieza: Pieza }) {
 
   useEffect(() => {
     const totalTravel = VH * 1.2; // -10vh to 110vh
-    translateY.value = withRepeat(
+    translateY.set(withRepeat(
       withTiming(totalTravel, {
         duration: pieza.dur * 1000,
       }),
       -1,
       false
-    );
-    rotate.value = withRepeat(
+    ));
+    rotate.set(withRepeat(
       withTiming(540, {
         duration: pieza.dur * 1000,
       }),
       -1,
       false
-    );
+    ));
   }, [pieza.dur, translateY, rotate]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: translateY.value },
-      { rotate: `${rotate.value}deg` },
+      { translateY: translateY.get() },
+      { rotate: `${rotate.get()}deg` },
     ],
   }));
 

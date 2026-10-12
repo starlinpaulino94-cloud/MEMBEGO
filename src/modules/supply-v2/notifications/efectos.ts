@@ -71,14 +71,14 @@ const REDACCION: Readonly<Record<string, Redaccion>> = {
     tipoInApp: 'SISTEMA',
     titulo: 'Tu membresía está activa',
     mensaje: 'Tu membresía quedó activa. Ya puedes usar lo que incluye.',
-    href: '/cliente/membresias',
+    href: '/cliente/fidelizacion',
     asunto: 'Tu membresía de Membego está activa',
   },
   'supply.notify.membership_expiring': {
     tipoInApp: 'SISTEMA',
     titulo: 'Tu membresía está por vencer',
     mensaje: 'Tu membresía vence pronto. Renuévala para no perder sus beneficios.',
-    href: '/cliente/membresias',
+    href: '/cliente/fidelizacion',
     asunto: 'Tu membresía de Membego vence pronto',
   },
   'supply.notify.benefit_expiring': {

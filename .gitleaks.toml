@@ -1,0 +1,47 @@
+# Configuración de gitleaks (job `Secretos` del CI y escaneo local).
+#
+# Parte de las reglas por defecto de gitleaks y SOLO añade una lista blanca de lo que ya se
+# clasificó, una por una, como material sintético (sprint de cierre, 2026-10-08). Cada entrada
+# es lo más estrecha posible: un archivo concreto más la forma exacta del valor de prueba, para
+# que un secreto real pegado en esos mismos archivos siga saltando.
+#
+# Lo que NO está aquí a propósito: el commit 0d54ec72e9f3d09be68a85ed43af883c4019ee67, donde dos
+# scripts de E2E llevaron las claves `anon`/`service_role` de Supabase y la contraseña de la base
+# (hallazgo C1). Un escaneo del historial completo lo seguirá señalando, y así debe ser: esas
+# claves hay que ROTARLAS (la `service_role` ya se rotó; la contraseña de la base es acción del
+# usuario). El job de CI escanea solo los commits nuevos de cada push/PR.
+#
+# Escaneo local (el binario no es dependencia del proyecto):
+#   gitleaks dir .                      # el árbol de trabajo
+#   gitleaks git . --log-opts="main..HEAD"   # los commits de la rama
+
+title = "Membego"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures de prueba y ejemplos de documentación clasificados como sintéticos"
+regexTarget = "match"
+regexes = [
+  # Tokens de tarjeta y de sesión del manual de CardNET copiados en las pruebas y en la guía
+  # (tests/cardnet-tokens.test.ts, tests/cardnet-widget.test.ts, docs/PAGOS-CARDNET.md). Son los
+  # ejemplos del manual: no identifican una tarjeta de nadie y sin las claves del comercio
+  # (que viven en el entorno) no sirven para nada.
+  '''CT__[A-Za-z0-9_]{44,48}''',
+  '''OT_01_[A-Za-z0-9_]{40,44}''',
+  # Tokens inventados en esas mismas pruebas: «CT__viejo_habilitado_1234», «OT_01_envuelto_1234567»,
+  # «CT__x_1234567890»… (palabra en español o una letra + números; un token real es base64url largo).
+  '''(CT__|OT_01_)[a-z_]{0,24}[0-9]{4,16}\b''',
+  '''OT_01_abcdefghijklmnop''',
+  # Secretos de prueba con nombre de prueba.
+  '''sv2-secreto-de-prueba''',
+  '''pkce_9f1c8a0b2d3e4f56''',
+  '''AB12CD34EF56GH78IJ90KL12''',
+  '''eyJhbGciOiJIUzI1NiJ9\.abc\.def''',
+  # Clave de localStorage (nombre, no secreto).
+  '''membego-solicitud-v1''',
+  # Ejemplos de la guía para desarrolladores: clave de API con relleno visible.
+  '''mbk_x{6,}\.tu-secreto''',
+  '''Authorization: Bearer TU_CLAVE_API''',
+]

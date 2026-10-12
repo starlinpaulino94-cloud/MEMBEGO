@@ -41,12 +41,12 @@ export default function SolicitarEliminacionPage() {
       <form onSubmit={submit} className="mt-8 space-y-4">
         <label htmlFor="email" className="block text-sm font-medium text-foreground">Correo electrónico</label>
         <input id="email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-lg border border-input bg-background px-3 py-3 text-foreground" />
-        <button type="submit" disabled={loading} className="rounded-lg bg-red-700 px-5 py-3 font-semibold text-white disabled:opacity-60">
+        <button type="submit" disabled={loading} className="rounded-lg bg-destructive px-5 py-3 font-semibold text-white disabled:opacity-60">
           {loading ? 'Enviando…' : 'Enviar enlace de verificación'}
         </button>
       </form>
       {message && <p role="status" className="mt-4 text-sm text-foreground">{message}</p>}
-      {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-4 text-sm text-destructive">{error}</p>}
     </main>
   )
 }

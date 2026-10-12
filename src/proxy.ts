@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/env'
-import { sessionCookieDomain } from '@/lib/site'
+import { dominioDeCookieCompartida, sessionCookieDomain } from '@/lib/site'
 import { ROLE_HOME, ROUTE_PROTECTION, ADMIN_ROLES, FULL_ADMIN_ROLES, type AppMetadata } from '@/types'
 import {
   adminSectionForPath,
@@ -10,6 +10,9 @@ import {
   seccionPermitida,
 } from '@/lib/auth/permissions'
 import { verifyLocalSession } from '@/lib/auth/jwt'
+import { destinoParaRol } from '@/lib/auth/destino-seguro'
+import { anfitrionDelHost, anfitrionesDelEntorno, cabecerasDelAnfitrion, decidirAnfitrion, estadoDeRedireccion } from '@/lib/anfitriones'
+import { cookiesHeredadasALimpiar } from '@/lib/cookies-heredadas'
 import { CANAL_COOKIE, CANAL_COOKIE_MAX_AGE, sanitizarCanal } from '@/modules/adquisicion/shared'
 import {
   COOKIE_MANTENIMIENTO,
@@ -45,6 +48,23 @@ function redirectWithCookies(url: URL, from: NextResponse) {
   return redirect
 }
 
+/**
+ * La dirección del login que recuerda a dónde iba la persona: ruta Y consulta.
+ *
+ * La consulta importa: `/cliente/explorar?ver=ofertas&q=aire` o `/cliente/carrito/pagar/x?utm=…` deben
+ * volver exactamente ahí tras entrar, no a la ruta pelada. La consulta PROPIA de la petición se descarta del
+ * login (si no, parámetros como `utm` viajarían dos veces: en el login y dentro de `redirect`). Lo que se
+ * obedece al volver lo vuelve a validar `destino-seguro`: solo rutas internas autorizadas.
+ */
+function haciaElLogin(request: NextRequest, path: string): URL {
+  const url = request.nextUrl.clone()
+  const destino = path + request.nextUrl.search
+  url.pathname = '/login'
+  url.search = ''
+  url.searchParams.set('redirect', destino)
+  return url
+}
+
 /** ¿El request trae una cookie de sesión de Supabase? (sb-<ref>-auth-token). */
 function hasSupabaseAuthCookie(request: NextRequest) {
   return request.cookies
@@ -52,7 +72,7 @@ function hasSupabaseAuthCookie(request: NextRequest) {
     .some((c) => c.name.startsWith('sb-') && c.name.includes('auth-token'))
 }
 
-export async function proxy(request: NextRequest) {
+async function procesar(request: NextRequest) {
   // Nonce por petición para la CSP (auditoría · A-04).
   //
   // Se EMITE ya, pero la CSP todavía lleva `'unsafe-inline'` (ver la nota en
@@ -147,6 +167,7 @@ export async function proxy(request: NextRequest) {
       maxAge: CANAL_COOKIE_MAX_AGE,
       path: '/',
       sameSite: 'lax',
+      ...dominioDeCookieCompartida(),
     })
   }
 
@@ -220,10 +241,7 @@ export async function proxy(request: NextRequest) {
 
     if (matched) {
       if (!user) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/login'
-        url.searchParams.set('redirect', path)
-        return redirectWithCookies(url, response)
+        return redirectWithCookies(haciaElLogin(request, path), response)
       }
       const metadata = (user.app_metadata ?? {}) as Partial<AppMetadata>
       const role = metadata.role ?? 'CLIENTE'
@@ -279,14 +297,14 @@ export async function proxy(request: NextRequest) {
       const metadata = (user.app_metadata ?? {}) as Partial<AppMetadata>
       const role = metadata.role ?? 'CLIENTE'
       const roleHome = ROLE_HOME[role]
-      // Usar redirectTo si es una ruta interna segura (empieza con / pero no //)
-      const destino = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
-        ? redirectTo
-        : roleHome
-      const url = request.nextUrl.clone()
-      url.pathname = destino
-      url.searchParams.delete('redirect')
-      return redirectWithCookies(url, response)
+      // El destino pedido solo se obedece si es una ruta interna AUTORIZADA que
+      // ese rol puede abrir (ver `destino-seguro`): sin redirecciones abiertas, sin
+      // bucles hacia el propio login, y sin mandar a un administrador a un flujo
+      // de cliente. En cualquier otro caso, a su casa — en un solo salto.
+      const destino = destinoParaRol(redirectTo, role, roleHome, {
+        puedeEntrarAlPanel: puedeEntrarAlPanel(role, resolverPermisosUsuario(metadata.permisos)),
+      })
+      return redirectWithCookies(new URL(destino, request.url), response)
     }
   } catch (err) {
     // Fail-closed: si la verificación de auth falla (Supabase caído, env
@@ -294,14 +312,49 @@ export async function proxy(request: NextRequest) {
     // Las rutas públicas continúan normalmente.
     console.error('[proxy] auth check failed:', err)
     if (matched) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      url.searchParams.set('redirect', path)
-      return redirectWithCookies(url, response)
+      return redirectWithCookies(haciaElLogin(request, path), response)
     }
   }
 
   return response
+}
+
+/**
+ * LA PUERTA: primero se decide a qué host pertenece la petición (separación landing/app · F7) y solo después corre todo lo
+ * demás. Con los dos dominios activos, la landing no sirve rutas de la app ni la app rutas de la landing: se redirigen
+ * (307, reversible) al host que corresponde, conservando ruta y consulta. Sin las variables de entorno de los dos
+ * dominios, o con un host que no es ninguno de los dos (local, previews), `decidirAnfitrion` siempre dice «seguir» y
+ * esto es idéntico a lo de antes.
+ */
+export async function proxy(request: NextRequest) {
+  const anfitriones = anfitrionesDelEntorno()
+  if (anfitriones) {
+    const host = request.headers.get('host')
+    const decision = decidirAnfitrion(
+      { host, ruta: request.nextUrl.pathname, busqueda: request.nextUrl.search, metodo: request.method },
+      anfitriones
+    )
+    if (decision.accion === 'redirigir') {
+      const salto = NextResponse.redirect(decision.destino, estadoDeRedireccion(process.env.ANFITRIONES_REDIRECCION_PERMANENTE === '1'))
+      for (const [clave, valor] of Object.entries(cabecerasDelAnfitrion(host, anfitriones))) salto.headers.set(clave, valor)
+      return salto
+    }
+    const respuesta = await procesar(request)
+    for (const [clave, valor] of Object.entries(cabecerasDelAnfitrion(host, anfitriones))) respuesta.headers.set(clave, valor)
+    // Con el dominio compartido, las cookies de sesión *host-only* de antes del corte sobran y pueden mezclar trozos con las
+    // nuevas: se borran una vez por navegador y host (ver `cookies-heredadas.ts`). Se añaden como líneas crudas porque el
+    // mapa de cookies de Next va por nombre y no distingue la compartida de la *host-only*.
+    for (const linea of cookiesHeredadasALimpiar({
+      nombres: request.cookies.getAll().map((c) => c.name),
+      dominioCompartido: sessionCookieDomain(),
+      anfitrion: anfitrionDelHost(host, anfitriones),
+      habilitada: process.env.ANFITRIONES_LIMPIAR_COOKIES_HEREDADAS !== '0',
+    })) {
+      respuesta.headers.append('Set-Cookie', linea)
+    }
+    return respuesta
+  }
+  return procesar(request)
 }
 
 export const config = {

@@ -17,13 +17,17 @@ import { getRequestMeta } from '@/lib/server-utils'
 import { formSubmitLimiter } from '@/lib/rate-limit'
 import { SCANNER_ROLES } from '@/types'
 import { InventarioError } from '@/modules/inventory/errores'
+import { registrarOperacion } from '@/modules/observabilidad/eventos'
 import { PedidoError } from './errores'
 import { completarPorQrEnTx, type ContextoPedido } from './service'
+import { avisarPasoDelPedido, variantesDelPedido } from './avisos'
+import { avisarStockBajo } from '@/modules/inventory/avisos'
 import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
 
 export type ResultadoCierre = { ok: true; code: string; nivel: string } | { ok: false; error: string }
 
 export async function completarPedidoPorQr(token: string): Promise<ResultadoCierre> {
+  let pedidoDelQr: { companyId: string; pedidoId: string } | null = null
   try {
     const user = await getUser()
     if (!user || !SCANNER_ROLES.includes(user.metadata.role)) return { ok: false, error: 'No tienes permisos para cerrar pedidos.' }
@@ -32,7 +36,7 @@ export async function completarPedidoPorQr(token: string): Promise<ResultadoCier
     if (limpio === '' || limpio.length > 200) return { ok: false, error: 'El código QR no es válido.' }
 
     // La empresa del pedido sale de la base (el token es único), no del navegador.
-    const p = await sinEmpresa('escáner: empresa del pedido de un QR', (tx) => tx.membegoOrder.findUnique({ where: { qrToken: limpio }, select: { companyId: true } }))
+    const p = await sinEmpresa('escáner: empresa del pedido de un QR', (tx) => tx.membegoOrder.findUnique({ where: { qrToken: limpio }, select: { id: true, companyId: true } }))
     if (!p) return { ok: false, error: 'Ese código QR no corresponde a ningún pedido.' }
     if (!puedeOperarEnEmpresa(user, p.companyId)) {
       return { ok: false, error: 'Este pedido pertenece a otra empresa.' }
@@ -40,11 +44,22 @@ export async function completarPedidoPorQr(token: string): Promise<ResultadoCier
 
     const meta = await getRequestMeta()
     const ctx: ContextoPedido = { actor: 'EMPRESA', actorId: user.metadata.dbUserId ?? null, ...meta }
+    pedidoDelQr = { companyId: p.companyId, pedidoId: p.id }
     const r = await conEmpresa(p.companyId, (tx) => completarPorQrEnTx(tx, p.companyId, limpio, ctx))
+    registrarOperacion({ dominio: 'pedido', accion: 'pedido_completado', ...pedidoDelQr })
     revalidatePath('/admin/pedidos-membego', 'layout')
     revalidatePath('/cliente/pedidos', 'layout')
+    if (!r.repetido) {
+      // Best-effort y tras confirmar: aviso al cliente, evento de dominio y, si la venta dejó
+      // alguna variante por debajo de su umbral, aviso de stock bajo a la empresa.
+      void (async () => {
+        await avisarPasoDelPedido(p.companyId, p.id, 'COMPLETADO', 'EMPRESA')
+        await avisarStockBajo(p.companyId, await variantesDelPedido(p.companyId, p.id))
+      })()
+    }
     return { ok: true, code: r.code, nivel: r.nivel }
   } catch (e) {
+    if (pedidoDelQr) registrarOperacion({ dominio: 'pedido', accion: 'pedido_completado', ...pedidoDelQr, error: e })
     if (e instanceof PedidoError || e instanceof InventarioError) return { ok: false, error: e.message }
     console.error('[pedidos-escaner]', e instanceof Error ? e.message : e)
     return { ok: false, error: 'No se pudo cerrar el pedido. Intenta de nuevo.' }

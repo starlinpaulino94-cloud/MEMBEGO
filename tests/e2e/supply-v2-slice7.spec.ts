@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
+import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE, pasarALaFichaDeLaApp } from './supply-v2-sesion'
 
 /**
  * MEMBEGO SUPPLY · SLICE 7 de punta a punta en navegador (§32–§33).
@@ -273,7 +273,7 @@ async function recorridoCompleto(browser: Browser) {
   await expect(cliente.getByTestId('campana-ficha-nombre')).toHaveText(d.campana)
   await expect(cliente.getByTestId('campana-ficha-condiciones')).toContainText('Un uso por persona')
   await cliente.getByTestId('campana-ficha-oferta').filter({ hasText: d.ofertaPizza }).first().click()
-  await cliente.waitForURL(/\/promociones\/membego\//)
+  await pasarALaFichaDeLaApp(cliente)
 
   // ── 10–11 · aplica el cupón y comprueba el desglose ───────────────────
   await cliente.getByTestId('input-cupon').fill(d.cupon)
@@ -464,7 +464,7 @@ async function movil(browser: Browser) {
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await cliente.screenshot({ path: 'test-results/shots/supply-v2-s7-movil-cupones.png', fullPage: true })
   await tarjeta.getByTestId('btn-usar-cupon').click()
-  await cliente.waitForURL(/\/promociones\/membego\/.*cupon=/)
+  await cliente.waitForURL(/\/cliente\/ofertas-membego\/.*cupon=/)
 
   // El código llega preseleccionado: solo hay que aplicarlo.
   await expect(cliente.getByTestId('input-cupon')).toHaveValue(codigo)

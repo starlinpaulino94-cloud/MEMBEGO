@@ -7,7 +7,9 @@ import { auditarFacturacion } from './auditoria'
 import {
   CONFIG_POR_DEFECTO,
   TIPOS_MANUALES,
+  calcularAjustePorVerificacion,
   calcularComision,
+  calcularCuotaDeOferta,
   esClaveDeComision,
   evaluarEstadoDeCuenta,
   inicioDelPeriodo,
@@ -20,6 +22,7 @@ import {
   siguientePosicion,
   validarAsiento,
   validarTarifas,
+  type CuotaDeOferta,
   type Periodo,
   type PedidoParaComision,
   type ReferenciaDelLibro,
@@ -191,7 +194,8 @@ export async function registrarComisionDePedidoEnTx(
   companyId: string,
   pedido: PedidoParaComision,
   ctx: ContextoFacturacion = SISTEMA,
-  ahora = new Date()
+  ahora = new Date(),
+  cuotaDeOferta?: CuotaDeOferta
 ): Promise<ResultadoComision> {
   if (!pedidoGeneraComision(pedido)) return { resultado: 'NO_APLICA' }
   const config = await cuentaBloqueada(tx, companyId)
@@ -202,7 +206,9 @@ export async function registrarComisionDePedidoEnTx(
   if (pedido.currency !== config.currency) {
     fallo('MONEDA_DISTINTA', `El pedido ${pedido.code} está en ${pedido.currency} y la cuenta Membego de la empresa cobra en ${config.currency}: no se puede asentar su comisión en el mismo libro.`)
   }
-  const c = calcularComision(pedido, config)
+  // Un pedido que nació de una oferta con presupuesto paga LA CUOTA DE LA OFERTA (siempre CPA, aunque
+  // la base sea cero); cualquier otro, lo que diga el modelo de cobro de la empresa.
+  const c = cuotaDeOferta ? calcularCuotaDeOferta(pedido, cuotaDeOferta, config.feeModel) : calcularComision(pedido, config)
   if (!c) return { resultado: 'SIN_COMISION' }
 
   const id = randomUUID()
@@ -229,6 +235,7 @@ export async function registrarComisionDePedidoEnTx(
       rate: c.rate,
       amount: c.amount,
       currency: pedido.currency,
+      dealId: c.dealId ?? null,
       ledgerEntryId: asiento.id,
     },
   })
@@ -240,8 +247,11 @@ export type ResultadoReverso = { resultado: 'REVERTIDA'; amount: string } | { re
 
 /**
  * Revierte la comisión de un pedido REEMBOLSADO: un asiento nuevo por el mismo
- * monto y signo contrario, y la comisión pasa a REVERSED. Se llama en la misma
- * transacción que reembolsa el pedido (con el pedido ya en REFUNDED).
+ * monto y signo contrario, y la comisión pasa a REVERSED. Si la comisión tenía un
+ * ajuste por verificación, se revierte también, con su propio asiento contrario
+ * (la base exige que vayan juntos). Se llama en la misma transacción que
+ * reembolsa el pedido (con el pedido ya en REFUNDED). `amount` es lo devuelto en
+ * total (comisión + ajuste).
  */
 export async function revertirComisionDePedidoEnTx(tx: Tx, companyId: string, pedidoId: string, ctx: ContextoFacturacion = SISTEMA, ahora = new Date()): Promise<ResultadoReverso> {
   const previa = await tx.commission.findUnique({ where: { orderId: pedidoId }, select: { id: true } })
@@ -261,9 +271,99 @@ export async function revertirComisionDePedidoEnTx(tx: Tx, companyId: string, pe
     actorId: ctx.actorId,
     ahora,
   })
-  await tx.commission.update({ where: { id: c.id }, data: { status: 'REVERSED', reversalEntryId: asiento.id, reversedAt: ahora } })
+  let devuelto = c.amount
+  let reversoDelAjuste: string | null = null
+  if (c.verificationAdjustmentEntryId && c.verificationAdjustmentAmount && !c.verificationAdjustmentReversalEntryId) {
+    // Un ajuste negativo (se había devuelto la diferencia) se revierte sumando: el contrario exacto, siempre.
+    const { asiento: r } = await asentar(tx, companyId, {
+      type: 'REFUND',
+      amount: c.verificationAdjustmentAmount.negated(),
+      currency: c.currency,
+      referenceType: 'COMMISSION',
+      referenceId: c.id,
+      reason: null,
+      idempotencyKey: `commission:${pedidoId}:verification:reversal`,
+      actorId: ctx.actorId,
+      ahora,
+    })
+    reversoDelAjuste = r.id
+    devuelto = devuelto.plus(c.verificationAdjustmentAmount)
+  }
+  await tx.commission.update({
+    where: { id: c.id },
+    data: { status: 'REVERSED', reversalEntryId: asiento.id, reversedAt: ahora, ...(reversoDelAjuste ? { verificationAdjustmentReversalEntryId: reversoDelAjuste } : {}) },
+  })
   await reevaluarEstado(tx, companyId, ctx, ahora)
-  return { resultado: 'REVERTIDA', amount: montoATexto(c.amount) }
+  return { resultado: 'REVERTIDA', amount: montoATexto(devuelto) }
+}
+
+export type ResultadoAjuste =
+  | { resultado: 'AJUSTADA'; amount: string; total: string }
+  | { resultado: 'YA_AJUSTADA' }
+  | { resultado: 'SIN_DIFERENCIA' }
+  | { resultado: 'NO_APLICA' }
+  | { resultado: 'SIN_COMISION' }
+
+/**
+ * El pago de un pedido ya COMPLETADO acaba de VERIFICARSE por una fuente externa. Si su
+ * comisión se cobró como CPA bajo el modelo HYBRID (y no es la cuota de una oferta), el
+ * modelo manda cobrar el porcentaje: se asienta la DIFERENCIA (`VERIFICATION_ADJUSTMENT`,
+ * con signo) y la comisión registra el ajuste, el asiento, la fecha y la referencia del
+ * hecho externo. La comisión original no se edita (la base lo impide).
+ *
+ * Idempotente por partida doble: la clave del asiento es `commission:<pedido>:verification`
+ * y la comisión solo admite un ajuste (CHECK + disparador). Dos verificaciones simultáneas
+ * se serializan en el candado del pedido (quien llama lo tiene) y en el de la cuenta: la
+ * segunda ve el ajuste y devuelve `YA_AJUSTADA`. Se llama en la MISMA transacción que
+ * verifica el pago, con el pedido ya en PAYMENT_VERIFIED (la base lo exige).
+ */
+export async function ajustarComisionPorVerificacionEnTx(
+  tx: Tx,
+  companyId: string,
+  pedidoId: string,
+  v: { verificationRef: string; fuente: string },
+  ctx: ContextoFacturacion = SISTEMA,
+  ahora = new Date()
+): Promise<ResultadoAjuste> {
+  const previa = await tx.commission.findUnique({ where: { orderId: pedidoId }, select: { id: true } })
+  if (!previa) return { resultado: 'SIN_COMISION' }
+  const config = await cuentaBloqueada(tx, companyId)
+  const c = await tx.commission.findUniqueOrThrow({ where: { id: previa.id } })
+  const pedido = await tx.membegoOrder.findFirstOrThrow({ where: { id: pedidoId, companyId }, select: { code: true, verificationLevel: true, currency: true } })
+  const d = calcularAjustePorVerificacion(c, pedido.verificationLevel, config)
+  if (d.resultado === 'NO_APLICA') return d.motivo === 'YA_AJUSTADA' ? { resultado: 'YA_AJUSTADA' } : { resultado: 'NO_APLICA' }
+  if (d.resultado === 'SIN_DIFERENCIA') return { resultado: 'SIN_DIFERENCIA' }
+  if (pedido.currency !== config.currency) {
+    fallo('MONEDA_DISTINTA', `El pedido ${pedido.code} está en ${pedido.currency} y la cuenta Membego de la empresa cobra en ${config.currency}: no se puede asentar el ajuste en el mismo libro.`)
+  }
+  const ref = v.verificationRef.trim()
+  const { asiento } = await asentar(tx, companyId, {
+    type: 'VERIFICATION_ADJUSTMENT',
+    amount: d.amount,
+    currency: c.currency,
+    referenceType: 'COMMISSION',
+    referenceId: c.id,
+    reason: `Pago verificado (${v.fuente}, ref. ${ref}): ${d.rate.toFixed(2)} % de ${montoATexto(c.baseAmount)} = ${montoATexto(d.objetivo)}; cobrado al cerrar ${montoATexto(c.amount)}`,
+    idempotencyKey: `commission:${pedidoId}:verification`,
+    actorId: ctx.actorId,
+    ahora,
+  })
+  await tx.commission.update({
+    where: { id: c.id },
+    data: { verificationAdjustmentAmount: d.amount, verificationAdjustmentEntryId: asiento.id, verificationAdjustedAt: ahora, verificationRef: ref },
+  })
+  await auditarFacturacion(tx, ctx, companyId, 'COMMISSION_VERIFICATION_ADJUSTED', 'MerchantLedgerEntry', asiento.id, {
+    comision: c.id,
+    pedido: pedido.code,
+    fuente: v.fuente,
+    referenciaExterna: ref,
+    cobradoAlCerrar: montoATexto(c.amount),
+    porcentaje: d.rate.toFixed(2),
+    objetivo: montoATexto(d.objetivo),
+    ajuste: montoATexto(d.amount),
+  })
+  await reevaluarEstado(tx, companyId, ctx, ahora)
+  return { resultado: 'AJUSTADA', amount: montoATexto(d.amount), total: montoATexto(d.objetivo) }
 }
 
 // ── Asientos manuales (superadmin) ───────────────────────────────────────────

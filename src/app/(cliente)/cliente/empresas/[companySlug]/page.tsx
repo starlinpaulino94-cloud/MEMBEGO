@@ -1,3 +1,5 @@
+import { AccionObtenerOferta } from '@/components/deals/AccionObtenerOferta'
+import { FollowButton } from '@/components/public/FollowButton'
 import { notFound } from 'next/navigation'
 import { BadgeCheck, Check } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
@@ -18,6 +20,8 @@ import { ResenaForm } from '@/components/marketplace/ResenaForm'
 import { requisitosPara } from '@/modules/elegibilidad'
 import { decisionCtaPlanes } from '@/modules/marketplace/conversion'
 import { companyIdPorSlug, excursionesPublicas } from '@/modules/excursiones/catalogo/public-queries'
+import { getCatalogoPublicoDeEmpresa } from '@/modules/marketplace/cached'
+import { ofertasPublicas } from '@/modules/deals/publico'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,7 +74,7 @@ export default async function ClienteEmpresaPage({
   const esCliente = fichaAqui != null
   const esActiva = company.id === user.metadata.companyId
 
-  const [stats, planes, promotions, posts, prefs, resenas, miResena, sucursales, sigo, excursionesData] =
+  const [stats, planes, promotions, posts, prefs, resenas, miResena, sucursales, sigo, excursionesData, catalogo, ofertas] =
     await Promise.all([
       getCompanyStats(companySlug),
       getCompanyPlanesPublic(company.id),
@@ -87,6 +91,10 @@ export default async function ClienteEmpresaPage({
       companyIdPorSlug(companySlug).then((cid) =>
         cid ? excursionesPublicas(cid) : Promise.resolve([])
       ),
+      // Lo que la empresa VENDE y sus OFERTAS: la misma vitrina que ve el público.
+      // Antes el perfil dentro de la app no traía ni productos ni ofertas.
+      getCatalogoPublicoDeEmpresa(company.id, 24).catch(() => []),
+      ofertasPublicas({ companySlug, limite: 12 }).catch(() => []),
     ])
 
   const excursiones = excursionesData.map((exc) => ({
@@ -196,6 +204,10 @@ export default async function ClienteEmpresaPage({
         ) : undefined
       }
       excursiones={excursiones}
+      catalogo={catalogo}
+      ofertas={ofertas}
+      accionDeOferta={(o) => <AccionObtenerOferta oferta={o} retorno={`/cliente/empresas/${company.slug}#ofertas`} />}
+      ranuraSeguir={<FollowButton companyId={company.id} redirectTo={`/cliente/empresas/${company.slug}`} />}
     />
   )
 }

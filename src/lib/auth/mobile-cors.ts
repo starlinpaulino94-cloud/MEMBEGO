@@ -1,4 +1,4 @@
-import { appUrl, getAppUrl } from '@/lib/site'
+import { appUrl, getAppUrl, landingUrl } from '@/lib/site'
 
 function configuredOrigins(): Set<string> {
   const origins = [
@@ -7,6 +7,7 @@ function configuredOrigins(): Set<string> {
       .flatMap((value) => value!.split(',')),
     getAppUrl(),
     appUrl(),
+    landingUrl(),
   ]
   return new Set(origins.flatMap((value) => {
     try { return [new URL(value.trim()).origin] } catch { return [] }

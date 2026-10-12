@@ -5,8 +5,13 @@ import { validarMeta } from '@/modules/excursiones/metricas/nucleo'
 import { rangoDeParametros } from '@/modules/excursiones/reportes/nucleo'
 
 test('validarDisponibilidadCombo: valida cupo y días de todas las actividades hijas', () => {
-  const fechaLunes = new Date('2026-10-12T12:00:00.000Z') // Lunes (día 1)
-  const fechaDomingo = new Date('2026-10-18T12:00:00.000Z') // Domingo (día 0)
+  // Mantener la salida futura incluso si CI corre después de las 09:00.
+  const fechaLunes = new Date()
+  fechaLunes.setUTCHours(12, 0, 0, 0)
+  const diasHastaLunes = ((8 - fechaLunes.getUTCDay()) % 7) || 7
+  fechaLunes.setUTCDate(fechaLunes.getUTCDate() + diasHastaLunes)
+  const fechaDomingo = new Date(fechaLunes)
+  fechaDomingo.setUTCDate(fechaDomingo.getUTCDate() + 6)
 
   const comboConfig = {
     nombre: 'Combo Caribe: Catamarán + Buggies',

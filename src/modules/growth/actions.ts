@@ -13,7 +13,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { resolveCompanyId } from '@/lib/auth/company-context'
-import { getAppUrl } from '@/lib/site'
+import { landingUrlFor } from '@/lib/site'
 import { crearGrowthLink } from './links'
 import { DURACION_HORAS_VALIDAS } from './config'
 import { leerRegla } from './reglas'
@@ -53,7 +53,7 @@ export async function generarGrowthLinkAction(
 
   try {
     const link = await crearGrowthLink({ clienteId, companyId, promocionId, canal, duracionHoras })
-    return { ok: true, url: `${getAppUrl()}/r/${link.code}` }
+    return { ok: true, url: landingUrlFor(`/r/${link.code}`) }
   } catch (e) {
     console.error('[growth] generarGrowthLinkAction', e)
     return { error: 'No se pudo generar tu enlace. Intenta de nuevo.' }

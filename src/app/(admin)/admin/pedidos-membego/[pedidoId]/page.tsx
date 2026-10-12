@@ -221,6 +221,14 @@ export default async function PedidoMembegoPage({ params }: { params: Promise<{ 
             </CardHeader>
             <CardContent className="text-sm">
               <p>{p.atribucion ? ETIQUETA_CANAL[p.atribucion.channel as keyof typeof ETIQUETA_CANAL] ?? p.atribucion.channel : 'Sin atribución'}</p>
+              {p.atribucion?.channel === 'PROMOTION_CLAIM' && p.atribucion.promotionId && (
+                <p className="text-xs">
+                  <Link href={`/admin/deals/${p.atribucion.promotionId}`} className="underline">
+                    Ver la oferta
+                  </Link>{' '}
+                  <span className="text-muted-foreground">· al canjearlo con el QR se cobra la cuota de la oferta.</span>
+                </p>
+              )}
               {p.atribucion?.referralCode && <p className="text-xs text-muted-foreground">Código de referido: {p.atribucion.referralCode}</p>}
             </CardContent>
           </Card>

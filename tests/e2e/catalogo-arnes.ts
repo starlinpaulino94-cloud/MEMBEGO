@@ -23,7 +23,7 @@ export interface EmpresaCatalogo {
 export async function empresaCatalogo(
   sufijo: string,
   clave: string,
-  o: { capacidad: boolean; /** Commerce Core · F3: también recibe pedidos Membego. */ pedidos?: boolean; publicada?: boolean }
+  o: { capacidad: boolean; /** Commerce Core · F3: también recibe pedidos Membego. */ pedidos?: boolean; /** Growth Engine · F5: también tiene ofertas con presupuesto. */ deals?: boolean; /** Fase 7: la caja conectada al catálogo y a los pedidos. */ pos?: boolean; publicada?: boolean }
 ): Promise<EmpresaCatalogo> {
   const slug = `e2e-cat-${clave}-${sufijo}`
   const name = `E2E Catálogo ${clave} ${sufijo}`
@@ -40,8 +40,11 @@ export async function empresaCatalogo(
       esDemo: false,
       // La capacidad se enciende por override ANTES de la primera petición: el
       // resolutor la cachea por empresa, y una empresa nueva no tiene caché.
-      ...(o.capacidad || o.pedidos
-        ? { capacidades: { overrides: { ...(o.capacidad ? { CATALOGO_UNIFICADO: true } : {}), ...(o.pedidos ? { PEDIDOS_MEMBEGO: true } : {}) } } }
+      // Las tres capacidades de comercio NACEN ENCENDIDAS (experiencia comercial), así
+      // que el arnés escribe SIEMPRE el override explícito: `false` apaga lo que el
+      // recorrido quiere ver apagado («sin la capacidad, el panel no existe»).
+      ...(true
+        ? { capacidades: { overrides: { CATALOGO_UNIFICADO: Boolean(o.capacidad), PEDIDOS_MEMBEGO: Boolean(o.pedidos), DEALS_MARKETPLACE: Boolean(o.deals), ...(o.pos ? { POS_MEMBEGO: true } : {}) } } }
         : {}),
     },
     select: { id: true },

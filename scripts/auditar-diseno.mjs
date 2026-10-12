@@ -67,6 +67,12 @@ const EXENTOS_EXACTOS = new Set([
   // con un token semántico haría que el logotipo de WhatsApp saliera del color
   // primario de Membego, que es lo contrario de reconocer una marca.
   'src/modules/connect/proveedores/metadatos.ts',
+  // Normaliza el color de marca que cada EMPRESA elige y calcula con qué tinta
+  // se lee encima: el valor por defecto y las dos tintas son DATOS de una
+  // fórmula de contraste (luminancia relativa), y a una fórmula no se le puede
+  // pasar `var(--foreground)`. Es el único sitio que los escribe; la interfaz
+  // los importa de aquí (`COLOR_MARCA_POR_DEFECTO`).
+  'src/lib/company-branding.ts',
 ])
 
 /**

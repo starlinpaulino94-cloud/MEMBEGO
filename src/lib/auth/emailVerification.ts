@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
-import { getAppUrl, SITE_NAME } from '@/lib/site'
+import { SITE_NAME, appUrl } from '@/lib/site'
 
 /**
  * Verificación de correo en el registro (Fase 1 · O-1), detrás de un flag.
@@ -43,7 +43,7 @@ export async function sendVerificationEmail(
     return false
   }
 
-  const confirmUrl = new URL('/confirmar', getAppUrl())
+  const confirmUrl = new URL('/confirmar', appUrl())
   confirmUrl.searchParams.set('token_hash', hashedToken)
   confirmUrl.searchParams.set('type', 'magiclink')
   if (options.mobile) {

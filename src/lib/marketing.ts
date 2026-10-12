@@ -32,6 +32,10 @@ export const MARKETING_CTA_DESTINOS = [
   { value: '/cliente/invita-y-gana', label: 'Invita y Gana' },
 ] as const
 
+export function esMarketingCtaDestinoValido(v: string): boolean {
+  return MARKETING_CTA_DESTINOS.some((destino) => destino.value === v)
+}
+
 export const DIAS_SEMANA = [
   { value: 1, label: 'Lun' },
   { value: 2, label: 'Mar' },

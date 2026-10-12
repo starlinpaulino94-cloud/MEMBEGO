@@ -126,8 +126,9 @@ export async function envolverCompraEnTx(tx: Tx, supplyOrderId: string): Promise
       completedAt: fecha,
       // Comprar es aceptar el precio: el cliente vio el total en el checkout.
       confirmadoPorCliente: true,
+      // Lo respalda Supply (fuente externa a la empresa de la casa): la referencia del hecho es la propia compra.
       pago: pagoVerificado
-        ? { method: METODO_DE_PAGO[o.paymentMethod ?? 'MANUAL'], amount: (o.paymentAmountSeen ?? o.total).toFixed(2), reference: o.paymentReference ?? o.number }
+        ? { method: METODO_DE_PAGO[o.paymentMethod ?? 'MANUAL'], amount: (o.paymentAmountSeen ?? o.total).toFixed(2), reference: o.paymentReference ?? o.number, source: 'PROVIDER_VERIFIED', verificationRef: o.id }
         : null,
     },
     SISTEMA

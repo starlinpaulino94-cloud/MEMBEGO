@@ -16,7 +16,20 @@
 
 ### Decisión
 
-El primario del cliente es **`#0284c7`** (retail blue). Su estado hover/pressed es **`#0369a1`** (retail deep).
+El primario del cliente es **`#5b21b6`** (`vibe-deep`, el violeta del rediseño Vibe del Inicio aprobado el 2026-09-10). Su estado hover/pressed es **`#4c1d95`** (`primary-hover`, paso 800 de la escala violeta).
+
+> **Cambio registrado (2026-10-08).** Hasta el 2026-09-30 este contrato decía retail blue
+> (`#0284c7`). Los commits `1e596cd` («align shared UI with Vibe theme», 2026-09-30) y
+> `dbbcac0` («unify branding», 2026-10-06), ambos ya en `main`, movieron el primario del
+> cliente a la paleta Vibe y la escala `primary.50–900` de RN al violeta (`#f5f3ff`…`#3b0764`,
+> `DEFAULT = 700 = #5b21b6`). El retail blue **sigue existiendo como paleta** (`retail.*`,
+> §2) y sigue siendo el «Brand Primary» del Stitch comercial; ya no es el primario de la app.
+> La prueba `tests/client-design-contract.test.ts` compara `primary.DEFAULT` de RN con
+> `--color-vibe-deep` de `globals.css` y comprueba que el Brand Primary del Stitch coincide
+> con `retail-blue`. El texto que sigue en esta sección describe la decisión anterior y se
+> conserva como historia del conflicto que resolvió.
+>
+> _Decisión anterior:_ el primario del cliente era `#0284c7` (retail blue) con hover `#0369a1`.
 
 ### Conflicto resuelto
 
@@ -44,7 +57,7 @@ La escala 50–900 que usa RN (`F4` líneas 9-19) es el espejo de F2 (OKLCH web)
 | 700 | `#0059ce` | F2 primary.700 = F4 primary.700 |
 | 800 | `#0049a7` | F2 primary.800 = F4 primary.800 |
 | 900 | `#004087` | F2 primary.900 = F4 primary.900 |
-| **DEFAULT** | **`#0284c7`** | **F4 línea 20 = F1 `--color-retail-blue`** |
+| **DEFAULT** | ~~`#0284c7`~~ → **`#5b21b6`** | **desde `1e596cd`: F4 `primary.DEFAULT` = F1 `--color-vibe-deep` (ver el cambio registrado arriba)** |
 
 ## 2. Paleta retail
 

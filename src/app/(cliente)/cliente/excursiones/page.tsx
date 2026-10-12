@@ -35,7 +35,7 @@ function ExcursionGrid({ excursiones }: { excursiones: ExcursionCardData[] }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
       {excursiones.map((e) => (
         <div key={e.id} className="relative">
-          <ExcursionCard excursion={e} />
+          <ExcursionCard excursion={e} espacio="app" />
         </div>
       ))}
     </div>

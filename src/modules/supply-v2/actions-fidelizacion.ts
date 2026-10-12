@@ -34,7 +34,7 @@ import { ajustarPuntosEnTx } from './loyalty/points'
 import { aprobarRecompensaEnTx, crearRecompensaEnTx, pausarRecompensaEnTx, reclamarRecompensaEnTx, reversarReclamacionEnTx, type ReclamacionHecha } from './loyalty/rewards'
 import { anularReferidoEnTx, aprobarYConcederEnTx, codigoDeReferidoEnTx, configurarReferidosEnTx } from './loyalty/referrals'
 import { MODALIDADES, PROPIETARIOS, TIPOS_DE_PLAN, TIPOS_DE_RECOMPENSA } from './loyalty/domain'
-import { RUTA_FIDELIZACION, RUTA_FIDELIZACION_CLIENTE, RUTA_MEMBRESIAS_PUBLICAS, RUTA_PORTAL_FIDELIZACION } from './core/catalogo'
+import { RUTA_FIDELIZACION, RUTA_FIDELIZACION_CLIENTE, RUTA_MEMBRESIAS_CLIENTE, RUTA_MEMBRESIAS_PUBLICAS, RUTA_PORTAL_FIDELIZACION } from './core/catalogo'
 
 /**
  * MEMBEGO SUPPLY · SLICE 8 · server actions de FIDELIZACIÓN.
@@ -59,6 +59,7 @@ function refrescarFidelizacion(id?: string): void {
   revalidatePath(RUTA_FIDELIZACION)
   if (id) revalidatePath(`${RUTA_FIDELIZACION}/${id}`)
   revalidatePath(RUTA_MEMBRESIAS_PUBLICAS)
+  revalidatePath(RUTA_MEMBRESIAS_CLIENTE)
   revalidatePath(RUTA_FIDELIZACION_CLIENTE)
   revalidatePath(RUTA_PORTAL_FIDELIZACION)
 }
@@ -600,6 +601,7 @@ export async function contratarMembresiaAction(_prev: EstadoAccion<MembresiaCrea
     )
     revalidatePath(RUTA_FIDELIZACION_CLIENTE)
     revalidatePath(RUTA_MEMBRESIAS_PUBLICAS)
+    revalidatePath(RUTA_MEMBRESIAS_CLIENTE)
     revalidatePath('/cliente/compras')
     return {
       success: r.orderId

@@ -1,4 +1,4 @@
-import type { MembegoOrderStatus } from '@prisma/client'
+import type { MembegoOrderStatus, MembegoPaymentMethod } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { toQrDataUrl } from '@/lib/qr'
 import { ESTADOS_CANCELABLES_POR_CLIENTE, ESTADOS_CONFIRMABLES, qrDePedidoVencido } from './domain'
@@ -82,6 +82,11 @@ export interface DetalleMiPedido {
   tax: string
   total: string
   notes: string | null
+  /** Cómo dijo que pagaría (la intención anotada al pedir); `null` si no lo dijo. NO prueba ningún pago. */
+  metodoPago: MembegoPaymentMethod | null
+  /** ¿La empresa ya registró el pago de este pedido? */
+  pagado: boolean
+  companyId: string
   cancelReason: string | null
   refundReason: string | null
   createdAt: Date
@@ -96,6 +101,8 @@ export interface DetalleMiPedido {
   /** QR como imagen (data URL) — solo si el pedido está LISTO y el QR no venció. */
   qrImagen: string | null
   qrVencido: boolean
+  /** Si el pedido es el cupón de una oferta con descuento: cuál y hasta cuándo vale. */
+  oferta: { titulo: string; venceEl: Date; estado: string } | null
   /** Lo que la persona puede hacer ahora (decidido en el servidor). */
   puede: { confirmar: boolean; cancelar: boolean; renovarQr: boolean }
 }
@@ -110,10 +117,14 @@ export async function miPedido(clienteIds: readonly string[], pedidoId: string, 
         location: { select: { nombre: true, direccion: true, telefono: true } },
         lines: { orderBy: { createdAt: 'asc' } },
         confirmation: true,
+        payment: { select: { id: true } },
       },
     })
   )
   if (!p) return null
+  const reclamo = await sinEmpresa('pedidos: ¿mi pedido es el cupón de una oferta?', (tx) =>
+    tx.dealClaim.findFirst({ where: { orderId: p.id, companyId: p.companyId }, select: { status: true, expiresAt: true, deal: { select: { title: true } } } })
+  )
 
   const vigente = !!p.confirmation && p.confirmation.confirmedTotal.equals(p.total)
   const qrVigente = p.status === 'READY' && !!p.qrToken && !qrDePedidoVencido(p.qrExpiresAt, ahora)
@@ -129,6 +140,9 @@ export async function miPedido(clienteIds: readonly string[], pedidoId: string, 
     tax: dos(p.tax),
     total: dos(p.total),
     notes: p.notes,
+    metodoPago: p.paymentMethod,
+    pagado: !!p.payment,
+    companyId: p.companyId,
     cancelReason: p.cancelReason,
     refundReason: p.refundReason,
     createdAt: p.createdAt,
@@ -141,6 +155,7 @@ export async function miPedido(clienteIds: readonly string[], pedidoId: string, 
     confirmacion: p.confirmation ? { confirmedTotal: dos(p.confirmation.confirmedTotal), vigente } : null,
     qrImagen: qrVigente && p.qrToken ? await toQrDataUrl(p.qrToken, 220) : null,
     qrVencido: p.status === 'READY' && !qrVigente,
+    oferta: reclamo ? { titulo: reclamo.deal.title, venceEl: reclamo.expiresAt, estado: reclamo.status } : null,
     puede: {
       confirmar: ESTADOS_CONFIRMABLES.includes(p.status) && !vigente,
       cancelar: ESTADOS_CANCELABLES_POR_CLIENTE.includes(p.status),

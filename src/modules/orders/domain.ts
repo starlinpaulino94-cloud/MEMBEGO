@@ -1,6 +1,7 @@
 import type {
   MembegoAttributionChannel,
   MembegoOrderStatus,
+  MembegoPaymentEvidenceSource,
   MembegoPaymentMethod,
   MembegoVerificationLevel,
   Prisma,
@@ -266,11 +267,15 @@ export function normalizarNota(n: unknown): { ok: true; valor: string | null } |
 
 // ── Nivel de verificación ────────────────────────────────────────────────────
 
-/** De menos a más evidencia. */
+/**
+ * De menos a más evidencia. ESTE orden manda (no el del enum en la base, donde
+ * `EXTERNAL_PAYMENT_REPORTED` se añadió al final por cómo PostgreSQL amplía un enum).
+ */
 export const NIVELES: readonly MembegoVerificationLevel[] = [
   'ATTRIBUTED',
   'REDEEMED',
   'CUSTOMER_VERIFIED',
+  'EXTERNAL_PAYMENT_REPORTED',
   'PAYMENT_VERIFIED',
   'FISCALLY_RECONCILED',
 ]
@@ -279,19 +284,37 @@ export function rangoDeNivel(n: MembegoVerificationLevel): number {
   return NIVELES.indexOf(n)
 }
 
+/**
+ * Quién respalda una constancia de pago. `MERCHANT_REPORTED` es lo que la
+ * empresa registra (caja, panel): su palabra. Las demás son fuentes EXTERNAS a
+ * la empresa que Membego puede cotejar, y solo las escribe el sistema o el
+ * superadmin con la referencia del hecho (`verificarPagoExternamenteEnTx`).
+ */
+export const FUENTES_DE_PAGO: readonly MembegoPaymentEvidenceSource[] = ['MERCHANT_REPORTED', 'GATEWAY_VERIFIED', 'BANK_RECONCILED', 'PROVIDER_VERIFIED']
+export const FUENTES_EXTERNAS: readonly MembegoPaymentEvidenceSource[] = ['GATEWAY_VERIFIED', 'BANK_RECONCILED', 'PROVIDER_VERIFIED']
+
+export interface PagoRegistrado {
+  method: MembegoPaymentMethod
+  amount: Monto
+  reference: string | null
+  /** Sin fuente (código anterior a la distinción) se trata como reportado por la empresa. */
+  source?: MembegoPaymentEvidenceSource | null
+}
+
 export interface EvidenciaDePedido {
   status: MembegoOrderStatus
   total: Monto
   /** La confirmación del cliente, si existe. */
   confirmacion: { confirmedTotal: Monto } | null
   /** El pago registrado, si existe. */
-  pago: { method: MembegoPaymentMethod; amount: Monto; reference: string | null } | null
+  pago: PagoRegistrado | null
 }
 
 /**
- * Métodos cuyo registro, con referencia, cuenta como pago verificado. El
- * efectivo y «otro» dejan constancia pero no verifican: sin un comprobante que
- * alguien más pueda cotejar, es la palabra de la empresa.
+ * Métodos cuyo registro, con referencia, cuenta como pago REPORTADO (y, si lo
+ * respalda una fuente externa, verificado). El efectivo y «otro» dejan constancia
+ * pero ni siquiera reportan: sin un comprobante que alguien más pueda cotejar,
+ * es la palabra de la empresa sin nada detrás.
  */
 export const METODOS_VERIFICABLES: readonly MembegoPaymentMethod[] = ['CARD', 'TRANSFER', 'MEMBEGO_CHECKOUT']
 
@@ -300,8 +323,11 @@ export function confirmacionVigente(total: Monto, confirmacion: { confirmedTotal
   return confirmacion !== null && mismoMonto(confirmacion.confirmedTotal, total)
 }
 
-/** ¿Es un pago verificable? Método verificable, referencia, y el monto del pedido. */
-export function pagoVerificado(total: Monto, pago: EvidenciaDePedido['pago']): boolean {
+/**
+ * ¿Es un pago REPORTADO? Método verificable, referencia, y el monto del pedido.
+ * Es lo que un empleado puede afirmar desde la caja; no dice quién lo respalda.
+ */
+export function pagoReportado(total: Monto, pago: EvidenciaDePedido['pago']): boolean {
   if (!pago) return false
   if (!METODOS_VERIFICABLES.includes(pago.method)) return false
   if (typeof pago.reference !== 'string' || pago.reference.trim() === '') return false
@@ -309,26 +335,53 @@ export function pagoVerificado(total: Monto, pago: EvidenciaDePedido['pago']): b
 }
 
 /**
+ * ¿Es un pago VERIFICADO? Un pago reportado que además respalda una fuente externa
+ * a la empresa (pasarela firmada, conciliación bancaria, proveedor). Una referencia
+ * tecleada en caja NO verifica: la verificación llega de fuera, nunca de la misma
+ * empresa que cobra.
+ */
+export function pagoVerificado(total: Monto, pago: EvidenciaDePedido['pago']): boolean {
+  if (!pagoReportado(total, pago)) return false
+  return FUENTES_EXTERNAS.includes(pago?.source ?? 'MERCHANT_REPORTED')
+}
+
+/**
  * El nivel de verificación que corresponde a la evidencia que hay. Es una
  * CADENA: cada nivel exige el anterior.
  *
- *   ATTRIBUTED         el pedido existe y tiene origen.
- *   REDEEMED           el QR cerró la operación (COMPLETED).
- *   CUSTOMER_VERIFIED  + el cliente confirmó el monto vigente.
- *   PAYMENT_VERIFIED   + hay un pago verificable por ese monto.
- *   FISCALLY_RECONCILED  no se deriva aquí: lo fijará una fase posterior con el
- *                        comprobante fiscal.
+ *   ATTRIBUTED                 el pedido existe y tiene origen.
+ *   REDEEMED                   el QR cerró la operación (COMPLETED).
+ *   CUSTOMER_VERIFIED          + el cliente confirmó el monto vigente.
+ *   EXTERNAL_PAYMENT_REPORTED  + la empresa registró un pago por ese monto con
+ *                                método verificable y referencia (su palabra).
+ *   PAYMENT_VERIFIED           + una fuente externa confirmó ese pago.
+ *   FISCALLY_RECONCILED        no se deriva aquí: lo fijará una fase posterior
+ *                              con el comprobante fiscal.
  *
  * Un pedido que no está COMPLETED (o ya reembolsado tras completarse) no pasa
  * de ATTRIBUTED: la evidencia cuenta cuando el servicio se prestó.
  */
 export function nivelDeVerificacion(e: EvidenciaDePedido): MembegoVerificationLevel {
   if (e.status !== 'COMPLETED' && e.status !== 'REFUNDED') return 'ATTRIBUTED'
-  let nivel: MembegoVerificationLevel = 'REDEEMED'
-  if (!confirmacionVigente(e.total, e.confirmacion)) return nivel
-  nivel = 'CUSTOMER_VERIFIED'
-  if (!pagoVerificado(e.total, e.pago)) return nivel
+  if (!confirmacionVigente(e.total, e.confirmacion)) return 'REDEEMED'
+  if (!pagoReportado(e.total, e.pago)) return 'CUSTOMER_VERIFIED'
+  if (!pagoVerificado(e.total, e.pago)) return 'EXTERNAL_PAYMENT_REPORTED'
   return 'PAYMENT_VERIFIED'
+}
+
+export const REFERENCIA_VERIFICACION_MAXIMA = 120
+
+/**
+ * Valida lo que una fuente externa afirma de un pago. Devuelve el mensaje de error o `null`.
+ * La referencia del hecho externo es obligatoria: sin ella no hay nada que cotejar ni
+ * clave con la que no repetir la verificación.
+ */
+export function validarVerificacionExterna(v: { source: MembegoPaymentEvidenceSource; verificationRef?: unknown; method: MembegoPaymentMethod; amount: Monto; reference?: string | null }): string | null {
+  if (!FUENTES_EXTERNAS.includes(v.source)) return 'La fuente de la verificación no es externa.'
+  if (typeof v.verificationRef !== 'string' || v.verificationRef.trim() === '') return 'La verificación necesita la referencia del hecho externo.'
+  if (v.verificationRef.trim().length > REFERENCIA_VERIFICACION_MAXIMA) return `La referencia de la verificación admite como máximo ${REFERENCIA_VERIFICACION_MAXIMA} caracteres.`
+  if (!METODOS_VERIFICABLES.includes(v.method)) return 'Solo se verifica un pago con tarjeta, transferencia o checkout.'
+  return validarPago({ method: v.method, amount: v.amount, reference: v.reference })
 }
 
 // ── Pago registrado ──────────────────────────────────────────────────────────

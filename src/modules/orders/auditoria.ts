@@ -21,6 +21,7 @@ export type AccionDePedido = Extract<
   | 'ORDER_CANCELLED'
   | 'ORDER_REFUNDED'
   | 'ORDER_PAYMENT_RECORDED'
+  | 'ORDER_PAYMENT_VERIFIED'
 >
 
 export async function auditarPedido(

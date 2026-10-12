@@ -1,44 +1,19 @@
-# Pago con tarjeta — CardNET (tokenización HOSPEDADA)
+# Pago con tarjeta — CardNET tokenizado
 
-Cobro con tarjeta para las membresías de **CARTOWN** (y solo CARTOWN). Convive
-con el pago en efectivo en sucursal, que no cambia.
+Estado revisado el **2026-10-09**. El flujo vigente usa captura hospedada y tokens para membresías y compras de promociones, en web y en la API del cliente móvil. El checkout de MembegoOrder y Supply no incorporan esta pasarela.
 
----
+## 1. Frontera de seguridad y retiro del flujo directo
 
-## 1. El modelo, y por qué es el seguro
+- La UI web activa es `PagoTokenCardnet`; Expo consume el BFF `/api/v1/cliente/pagos/cardnet/*`. La captura prevista ocurre en la superficie hospedada del proveedor; Membego opera con tokens, importe del servidor y activación idempotente.
+- La habilitación real depende de `PAGO_CARDNET`, configuración de pasarela y rechazo de empresas demo. **No hay una restricción de identidad hardcodeada a CARTOWN** en la orquestación. CARTOWN es el piloto histórico, no una garantía de autorización.
+- Antes de esta limpieza, `POST /api/pagos/cardnet/iniciar` y `completar` sí aceptaban PAN/CVV de un cliente autenticado. Su formulario `PagoTarjetaCardnet` no tiene consumidores en el árbol revisado. No era correcto describir estas rutas como inactivas ni afirmar ausencia absoluta de PAN en el servidor.
+- Ahora `iniciar`, `completar` y el retorno GET/POST responden **410 Gone**, sin leer cuerpo, URL ni sesión, sin persistir ni contactar CardNET. Se conserva esa respuesta para enlaces/clientes antiguos, que deben volver al pago tokenizado. No se redirigen cuerpos de pago.
+- Se mantienen los helpers legacy porque `cardnetToken.ts` y `cardnetClienteObjetivo.ts` comparten `montoDeObjetivo` desde `cardnet3ds.ts`. Eso no autoriza reactivar el cobro directo. Su redacción histórica era superficial y había respuestas crudas persistibles; detalles en [CODEX_ONBOARDING_AUDIT.md](CODEX_ONBOARDING_AUDIT.md).
+- Sentry descarta `request.data`; la política compartida también se aplica en Edge. No se inspeccionaron datos/logs históricos ni la infraestructura del proveedor de hosting. No puede concluirse que nunca hubo almacenamiento accidental.
 
-CardNET captura la tarjeta en **su propia página** (un iframe servido por
-`*.cardnet.com.do`). El cliente digita el número **en CardNET**, y a nosotros
-solo nos llega un **token**. **El número de tarjeta nunca pasa por el servidor
-de MembeGo.** Ese es el modelo de **menor alcance PCI (SAQ A)**: no se puede
-filtrar de nuestra base lo que nunca la toca.
+Pruebas: `tests/cardnet-legacy-retirado.test.ts`, `tests/e2e/cardnet-legacy.spec.ts`, `tests/observabilidad.test.ts` y suites existentes de CardNET tokenizado. No hubo pago real ni uso de credenciales QA. El cumplimiento PCI y el cuestionario aplicable requieren validación con el adquirente; no se certifican por una revisión de código.
 
-> Antes existió una integración DIRECTA (SAQ D, la tarjeta pasaba por nuestro
-> servidor). Se descartó a favor de esta. El código directo se conserva en
-> pausa (`cardnet-core.ts` / `cardnet.ts` / `cardnet3ds.ts` y sus rutas) pero
-> **no se usa**; el flujo activo es el de tokens.
-
-### Lo que el código garantiza
-
-- **La tarjeta nunca llega al servidor.** Solo el token. No hay PAN ni CVV en
-  ninguna parte de MembeGo.
-- **La llave privada es un secreto de servidor.** Va en `Authorization: Basic`
-  desde el servidor, nunca al navegador, nunca a la base, nunca a un log
-  (`sinSensibles()` enmascara tokens en la evidencia).
-- **El monto sale de la base, nunca del navegador.** El cliente dice QUÉ paga
-  (una membresía por id); cuánto se cobra lo lee el servidor (`montoDeObjetivo`).
-- **Solo CARTOWN cobra.** Capacidad `PAGO_CARDNET` encendida + no ser empresa
-  demo — comprobado en la orquestación, no solo en la UI.
-- **Idempotencia.** La activación (`confirmarIntento`) ocurre una sola vez
-  aunque el cliente recargue o haga doble clic.
-
-### Lo que sigue siendo tuyo
-
-- Firmar el **autocuestionario SAQ A** anual ante tu adquiriente (mucho más
-  liviano que el SAQ D).
-- Mantener el servidor parcheado y las llaves fuera de todo lo versionado.
-
----
+Las secciones siguientes conservan la guía del piloto e investigación de protocolos; sus hipótesis no sustituyen documentación del proveedor ni una prueba QA.
 
 ## 2. Cómo funciona un cobro
 
@@ -152,7 +127,7 @@ algo, así que queda escrito:
 
 | Pantalla | De quién | Qué se teclea | Por qué |
 |---|---|---|---|
-| Ventana de captura | **CardNET** (iframe) | Número, CVV, expiración, y el **3DS** del emisor | Nunca vemos el PAN: es lo que nos mantiene en **SAQ A**. `cardnetToken.ts` lo dice: «no hay 3DS que orquestar (lo hace el iframe)» |
+| Ventana de captura | **CardNET** (iframe) | Número, CVV, expiración, y el **3DS** del emisor | La captura hospedada evita que esta UI envíe PAN al backend; no certifica por sí sola el alcance PCI. `cardnetToken.ts` lo dice: «no hay 3DS que orquestar (lo hace el iframe)» |
 | Código de activación | **NUESTRA** | Los 6 caracteres del cargo de RD$1.00 | CardNET **no hospeda ninguna** para esto: su API nos exige mandarle el `ActivationCode` (§7.5) |
 
 **La prueba de que la segunda es nuestra** está en el propio contrato: si

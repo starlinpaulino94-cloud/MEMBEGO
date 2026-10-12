@@ -42,7 +42,7 @@ import {
   recoveryEmailLimiter,
   recoveryIpLimiter,
 } from '@/lib/rate-limit'
-import { absoluteUrl } from '@/lib/site'
+import { appUrlFor } from '@/lib/site'
 import { registrarEvento } from '@/modules/observabilidad/eventos'
 
 export interface RecuperarState {
@@ -88,7 +88,7 @@ export async function solicitarRecuperacion(email: string): Promise<RecuperarSta
 
   try {
     const supabase = await createClient()
-    const redirectTo = absoluteUrl('/actualizar-password')
+    const redirectTo = appUrlFor('/actualizar-password')
 
     let { error } = await supabase.auth.resetPasswordForEmail(correo, { redirectTo })
 
@@ -127,8 +127,10 @@ export async function solicitarRecuperacion(email: string): Promise<RecuperarSta
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : ''
     if (mensaje.includes('Missing env var')) {
+      // El detalle (qué variable falta) se queda en el servidor: al navegador solo le toca saber que el entorno no está listo.
+      console.error('[%s] entorno sin configurar: %s', 'recuperar', mensaje)
       return {
-        error: `Este entorno no está configurado (${mensaje.replace('Missing env var: ', 'falta ')}).`,
+        error: 'Este entorno no está configurado todavía. Avisa al administrador.',
       }
     }
     console.error('[recuperar] error inesperado:', e)

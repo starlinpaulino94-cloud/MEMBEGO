@@ -132,6 +132,15 @@ export const ADMIN_SECTIONS = [
   // capacidad que los pedidos y tampoco entra en los roles acotados: es información
   // de dirección (lo que se le paga a la plataforma).
   'facturacion-membego',
+  // Growth Engine · ofertas con presupuesto (`/admin/deals`, Fase 5). Detrás de la
+  // capacidad DEALS_MARKETPLACE. No entra en los roles acotados: fijar un descuento
+  // y un tope de gasto compromete dinero de la empresa (la cuota por canje).
+  'deals',
+  // Analítica · «Resultados Membego» (`/admin/resultados-membego`, Fase 6): lo que la plataforma le
+  // produce a la empresa (pedidos, ventas, clientes nuevos, ROI de cada oferta) frente a lo que le
+  // cuesta. SOLO LECTURA y cuelga de la capacidad de los pedidos. Fuera de los roles acotados: incluye
+  // lo que la empresa le paga a Membego.
+  'resultados-membego',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).
@@ -181,7 +190,9 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // mostrador: en el menú vive bajo el grupo «Marketing», y era el único
   // enlace que hacía que a un cajero le siguiera apareciendo ese título. Un
   // cajero que sí entregue regalos lo recibe desde su pantalla de Permisos.
-  CAJERO: ['dashboard', 'clientes', 'membresias', 'pagos', 'facturas', 'citas', 'scanner', 'ofertas', 'registros', 'conciliacion'],
+  // 'pedidos-membego' entra: el pedido del marketplace se recoge en el mostrador
+  // (aceptar, marcar listo, registrar el pago) y es el cajero quien lo atiende.
+  CAJERO: ['dashboard', 'clientes', 'membresias', 'pagos', 'facturas', 'citas', 'scanner', 'ofertas', 'registros', 'conciliacion', 'pedidos-membego'],
   /**
    * LA OPERACIÓN. Todo lo del mostrador más lo que hace falta para dirigirla:
    * los reportes, la bitácora, el seguimiento, el equipo y las sucursales.
@@ -198,6 +209,9 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
     'ofertas', 'regalos', 'promociones', 'registros', 'actividad', 'reportes',
     'seguimiento', 'riesgo', 'retencion', 'conciliacion', 'empleados', 'invitaciones',
     'sucursales', 'tickets', 'comunicacion', 'app', 'excursiones',
+    // Comercio: quien dirige la operación gestiona lo que se vende, lo que hay
+    // en cada sucursal, los pedidos que llegan y las ofertas sobre el catálogo.
+    'catalogo', 'inventario', 'pedidos-membego', 'deals',
   ],
 }
 

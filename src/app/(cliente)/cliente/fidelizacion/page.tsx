@@ -10,7 +10,7 @@ import { ChipMembresia } from '@/components/supply-v2/chips'
 import { BotonReclamarRecompensa } from '@/components/supply-v2/boton-reclamar-recompensa'
 import { FormMiCodigo } from '@/components/supply-v2/form-mi-codigo'
 import { misInvitaciones, misMembresias, misPuntos, recompensasParaElCliente } from '@/modules/supply-v2/loyalty/queries'
-import { POINTS_MOVEMENT_LABELS, RUTA_MEMBRESIAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
+import { POINTS_MOVEMENT_LABELS, RUTA_MEMBRESIAS_CLIENTE } from '@/modules/supply-v2/core/catalogo'
 import type { SupplyV2PointsMovementType } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +54,7 @@ export default async function MiFidelizacionPage() {
         description="Tu membresía, tus puntos, lo que puedes canjear y tu código para invitar."
         action={
           <Button asChild variant="outline">
-            <Link href={RUTA_MEMBRESIAS_PUBLICAS} data-testid="link-ver-membresias">Ver membresías</Link>
+            <Link href={RUTA_MEMBRESIAS_CLIENTE} data-testid="link-ver-membresias">Ver membresías</Link>
           </Button>
         }
       />
@@ -72,7 +72,7 @@ export default async function MiFidelizacionPage() {
             <EmptyState
               title="Todavía no tienes ninguna membresía"
               description="Los planes de los negocios de la red están en el escaparate, con lo que incluye cada uno."
-              action={<Button asChild><Link href={RUTA_MEMBRESIAS_PUBLICAS}>Ver las membresías</Link></Button>}
+              action={<Button asChild><Link href={RUTA_MEMBRESIAS_CLIENTE}>Ver las membresías</Link></Button>}
             />
           ) : (
             <ul className="space-y-3" data-testid="mis-membresias">

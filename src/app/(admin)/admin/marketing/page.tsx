@@ -71,7 +71,7 @@ export default async function AdminMarketingPage() {
           {campanas.map((c) => {
             const badge = campanaEstadoUi(c.estado)
             const cupos =
-              c.maxReclamos != null
+              !c.deal && c.maxReclamos != null
                 ? `${Math.max(0, c.maxReclamos - c.reclamosCount)} / ${c.maxReclamos} cupos`
                 : null
             return (
@@ -92,8 +92,18 @@ export default async function AdminMarketingPage() {
                           {MARKETING_TIPO_LABEL[c.tipo] ?? c.tipo}
                         </Badge>
                         {c.destacada && <Badge variant="secondary">Destacada</Badge>}
+                        {c.deal && <Badge variant="outline">Deal: {c.deal.title}</Badge>}
                       </div>
                       <p className="truncate text-sm text-muted-foreground">{c.descripcion}</p>
+                      {c.deal?.promotion && (
+                        <p className="text-xs text-muted-foreground">Promotion: {c.deal.promotion.nombre}</p>
+                      )}
+                      {c.dealId && (
+                        <p className="text-xs text-muted-foreground">
+                          {c.reclamosAtribuidos} reclamo{c.reclamosAtribuidos === 1 ? '' : 's'} atribuido{c.reclamosAtribuidos === 1 ? '' : 's'}
+                          {' · '}{c.canjesAtribuidos} canje{c.canjesAtribuidos === 1 ? '' : 's'}
+                        </p>
+                      )}
                       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />

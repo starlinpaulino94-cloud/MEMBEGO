@@ -18,6 +18,7 @@ import type { MerchantBillingCycle, MerchantFeeModel } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
+import { registrarOperacion } from '@/modules/observabilidad/eventos'
 import { barridoFacturacion, type ResultadoBarridoFacturacion } from './barrido'
 import { FacturacionError } from './errores'
 import { TIPOS_MANUALES, type TipoManual } from './domain'
@@ -68,9 +69,11 @@ export async function asentarMovimiento(entrada: {
     const r = await conEmpresa(companyId, (tx) =>
       asentarManualEnTx(tx, companyId, { tipo, monto: entrada.monto, motivo: entrada.motivo ?? null, referencia: entrada.referencia ?? null, idempotencyKey: texto(entrada.idempotencyKey) }, c.ctx)
     )
+    registrarOperacion({ dominio: 'facturacion', accion: r.repetido ? 'movimiento_repetido' : `movimiento_${tipo.toLowerCase()}`, companyId })
     refrescar(companyId)
     return { ok: true, balance: r.balance, status: r.status, repetido: r.repetido }
   } catch (e) {
+    registrarOperacion({ dominio: 'facturacion', accion: 'movimiento_manual', companyId, error: e })
     return aError(e)
   }
 }

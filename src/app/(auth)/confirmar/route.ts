@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
 import { createRouteClient, redirectWithCookies } from '@/lib/supabase/route-client'
-import { getAppUrl } from '@/lib/site'
+import { appUrl, landingUrl } from '@/lib/site'
 import { registrarVerificacionReferido } from '@/lib/referidos-attribution'
 import { registrarUsoEntrarComo } from '@/modules/superadmin/entrarComoUso'
 import { ROLE_HOME, type AppRole } from '@/types'
@@ -12,15 +12,15 @@ import { ROLE_HOME, type AppRole } from '@/types'
  * (abre sesión) y redirigimos al home según el rol. Las cookies de sesión se
  * acumulan en un carrier y viajan en el redirect final para no perderlas.
  *
- * Aquí sí usamos getAppUrl: el enlace del correo se construyó con ese mismo
- * dominio canónico, así que request y destino comparten host.
+ * Aquí el destino se arma con `appUrl()`: el enlace del correo se construyó con ese mismo dominio de la app, así que
+ * request y destino comparten host. Solo el borrado de cuenta termina en la landing (`/eliminar-cuenta/confirmar`).
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const tokenHash = searchParams.get('token_hash')
   const type = searchParams.get('type') as EmailOtpType | null
 
-  const loginError = NextResponse.redirect(new URL('/login?error=verify', getAppUrl()))
+  const loginError = NextResponse.redirect(new URL('/login?error=verify', appUrl()))
 
   if (!tokenHash || !type) return loginError
 
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
 
   if (searchParams.get('purpose') === 'delete-account') {
     if (data.user?.app_metadata?.role !== 'CLIENTE') return loginError
-    return redirectWithCookies(new URL('/eliminar-cuenta/confirmar', getAppUrl()), carrier)
+    return redirectWithCookies(new URL('/eliminar-cuenta/confirmar', landingUrl()), carrier)
   }
 
   if (searchParams.get('source') === 'mobile') {
@@ -79,5 +79,5 @@ export async function GET(request: NextRequest) {
   const role = (data.user?.app_metadata?.role ?? 'CLIENTE') as AppRole
   const dest = ROLE_HOME[role] ?? '/mis-membresias'
 
-  return redirectWithCookies(new URL(dest, getAppUrl()), carrier)
+  return redirectWithCookies(new URL(dest, appUrl()), carrier)
 }

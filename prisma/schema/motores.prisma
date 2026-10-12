@@ -231,7 +231,9 @@ model Promotion {
   restrictions PromotionRestriction[]
   versions     PromotionVersion[]
   audits       PromotionAudit[]
+  deals        Deal[]
 
+  @@unique([id, companyId])
   @@index([companyId, status])
   @@index([companyId, prioridad])
   @@index([companyId, status, inicioEn, finEn])

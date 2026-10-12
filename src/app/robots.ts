@@ -1,14 +1,22 @@
 import type { MetadataRoute } from 'next'
-import { getAppUrl } from '@/lib/site'
+import { headers } from 'next/headers'
+import { anfitrionDelHost, anfitrionesDelEntorno } from '@/lib/anfitriones'
+import { landingUrl } from '@/lib/site'
 
 /**
- * Robots de MembeGo: permite indexar la Landing y el marketplace público,
- * bloquea explícitamente los paneles privados y rutas de aplicación. Enlaza el
- * sitemap. (Preparado para la separación Landing/App: cuando existan dominios
- * separados, cada proyecto expone su propio robots.)
+ * Robots de MembeGo, por host (separación landing/app · F7).
+ *
+ * Con un solo dominio —o con los dos sin configurar— es el de siempre: permite indexar la Landing y el marketplace,
+ * bloquea paneles y rutas de la app, y enlaza el sitemap; y es estático. Con los dos dominios activos, `app.` no se indexa
+ * nada (`Disallow: /`, sin sitemap; además el proxy añade `X-Robots-Tag: noindex`) y `membego.com` conserva las reglas de
+ * la landing. Solo en ese caso se lee el host, así que solo ahí es dinámico.
  */
-export default function robots(): MetadataRoute.Robots {
-  const base = getAppUrl()
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const anfitriones = anfitrionesDelEntorno()
+  if (anfitriones && anfitrionDelHost((await headers()).get('host'), anfitriones) === 'app') {
+    return { rules: [{ userAgent: '*', disallow: '/' }] }
+  }
+  const base = landingUrl()
   return {
     rules: [
       {
