@@ -17,7 +17,7 @@ import { colors, radii } from '../../theme/tokens'
 import { MarketplaceCard } from '../marketplace/MarketplaceCard'
 import { useInicioAccent } from '../layout/InicioAccentContext'
 import { HorizontalScrollWithFade } from '../ui/HorizontalScrollWithFade'
-import { brandColor, brandDisplayForeground, brandForeground } from '../../lib/brand-color'
+import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
 import type { NovedadHero } from '../../../../../src/modules/home/vista'
 
 const GRAD_OVERLAY = [colors.overlay.transparent, colors.overlay.heroMid, colors.overlay.heroDeep] as const
@@ -71,7 +71,9 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
   const router = useRouter()
   const { accent } = useInicioAccent()
   const { width: windowWidth } = useWindowDimensions()
-  const cardWidth = Math.min(windowWidth * 0.82, 320)
+  const [viewportWidth, setViewportWidth] = useState(0)
+  const carouselWidth = viewportWidth || windowWidth
+  const cardWidth = Math.min(carouselWidth * 0.82, 320)
   const step = cardWidth + CARD_GAP
   const isCircular = heroes.length > 5
   const repeatedHeroes = useMemo(
@@ -79,7 +81,6 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
     [heroes, isCircular],
   )
   const scrollRef = useRef<ScrollView>(null)
-  const [viewportWidth, setViewportWidth] = useState(0)
   const physicalIndex = useRef(0)
   const interactionTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const needsInitialPosition = useRef(true)
@@ -89,9 +90,7 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
   const [autoplayCycle, setAutoplayCycle] = useState(0)
   const [isInteracting, setIsInteracting] = useState(false)
   const [reduceMotion, setReduceMotion] = useState(false)
-  const horizontalInset = viewportWidth > 0
-    ? Math.max(0, (viewportWidth - cardWidth) / 2)
-    : 20
+  const horizontalInset = Math.max(0, (carouselWidth - cardWidth) / 2)
 
   useEffect(() => {
     let mounted = true
@@ -121,6 +120,10 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
     setAccessibleCopy(isCircular ? 2 : 0)
     scrollRef.current?.scrollTo({ x: middleIndex * step, y: 0, animated: false })
   }, [heroes.length, isCircular, step, viewportWidth])
+
+  useEffect(() => {
+    if (viewportWidth > 0) posicionarCarrusel(viewportWidth)
+  }, [posicionarCarrusel, viewportWidth])
 
   const actualizarPosicion = useCallback((offset: number) => {
     if (heroes.length === 0) return
@@ -182,7 +185,13 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
       <HorizontalScrollWithFade
         fadeScrollRef={scrollRef}
         contentContainerStyle={{ paddingHorizontal: horizontalInset, gap: CARD_GAP }}
-        onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
+        onLayout={(event) => {
+          const nextViewportWidth = event.nativeEvent.layout.width
+          if (nextViewportWidth !== viewportWidth) {
+            needsInitialPosition.current = true
+            setViewportWidth(nextViewportWidth)
+          }
+        }}
         snapToInterval={step}
         decelerationRate="fast"
         scrollEventThrottle={16}
@@ -218,23 +227,41 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
             </View>
           )
           return (
-            <MarketplaceCard
-              variant="flush"
+            <View
               key={`${hero.tipo}-${hero.id}-${i}`}
-              onPress={() => router.push(rnHref(hero.href) as Href)}
-              accessibilityLabel={`${etiquetaTipo(hero.tipo)}: ${hero.titulo}, ${hero.empresa}. ${ctaTipo(hero.tipo)}`}
-              accessibilityElementsHidden={Math.floor(i / heroes.length) !== accessibleCopy}
-              importantForAccessibility={Math.floor(i / heroes.length) === accessibleCopy ? 'auto' : 'no-hide-descendants'}
-              aria-hidden={Math.floor(i / heroes.length) !== accessibleCopy}
-              tabIndex={Math.floor(i / heroes.length) === accessibleCopy ? 0 : -1}
-              className="relative max-w-[320px] overflow-hidden bg-vibe-deep"
-              style={{ width: cardWidth, height: 380, padding: 0 }}
+              className="shrink-0"
+              style={{ width: cardWidth, height: 380 }}
             >
-              {isMembership ? (
-                <>
-                  {hero.imagen ? (
-                    <View className="relative h-32 w-full overflow-hidden">
-                      <Image source={{ uri: hero.imagen }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <MarketplaceCard
+                variant="flush"
+                onPress={() => router.push(rnHref(hero.href) as Href)}
+                accessibilityLabel={`${etiquetaTipo(hero.tipo)}: ${hero.titulo}, ${hero.empresa}. ${ctaTipo(hero.tipo)}`}
+                accessibilityElementsHidden={Math.floor(i / heroes.length) !== accessibleCopy}
+                importantForAccessibility={Math.floor(i / heroes.length) === accessibleCopy ? 'auto' : 'no-hide-descendants'}
+                aria-hidden={Math.floor(i / heroes.length) !== accessibleCopy}
+                tabIndex={Math.floor(i / heroes.length) === accessibleCopy ? 0 : -1}
+                className="h-full w-full max-w-[320px] overflow-hidden bg-vibe-deep"
+              >
+                {isMembership ? (
+                  <>
+                    {hero.imagen ? (
+                      <View className="relative h-32 w-full overflow-hidden">
+                        <Image source={{ uri: hero.imagen }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                        <LinearGradient
+                          colors={[...GRAD_OVERLAY]}
+                          locations={[0, 0.5, 1]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 0, y: 1 }}
+                          pointerEvents="none"
+                          style={StyleSheet.absoluteFill}
+                        />
+                        <View className="absolute left-5 top-4">{membershipBadge}</View>
+                      </View>
+                    ) : null}
+                    <View
+                      className="relative z-10 flex-1 justify-between p-5"
+                      style={{ backgroundColor: itemColor }}
+                    >
                       <LinearGradient
                         colors={[...GRAD_OVERLAY]}
                         locations={[0, 0.5, 1]}
@@ -243,138 +270,128 @@ export function VibeHero({ heroes }: { heroes: readonly NovedadHero[] }) {
                         pointerEvents="none"
                         style={StyleSheet.absoluteFill}
                       />
-                      <View className="absolute left-5 top-4">{membershipBadge}</View>
+                      <View className="gap-y-2">
+                        {!hero.imagen ? membershipBadge : null}
+                        <Text
+                          className="text-3xl font-extrabold"
+                          style={{ color: itemForeground, lineHeight: 36 }}
+                          numberOfLines={2}
+                        >
+                          {hero.titulo}
+                        </Text>
+                        {hero.descripcion ? (
+                          <Text
+                            className="mt-2 text-sm font-medium"
+                            style={{ color: itemForeground }}
+                            numberOfLines={2}
+                          >
+                            {hero.descripcion}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View className="gap-y-3">
+                        <View>
+                          <Text
+                            className="text-sm font-semibold"
+                            style={{ color: overlayForeground }}
+                            numberOfLines={1}
+                          >
+                            {hero.empresa}
+                          </Text>
+                          {detalle ? (
+                            <Text
+                              className="mt-1 text-base font-bold"
+                              style={{ color: overlayForeground }}
+                              numberOfLines={1}
+                            >
+                              {detalle}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <View
+                          className="flex-row items-center justify-center gap-1.5 rounded-full"
+                          style={{ minHeight: 48, paddingHorizontal: 14, backgroundColor: companyColor }}
+                        >
+                          <Text
+                            className="text-label-sm font-bold"
+                            style={{ color: itemForeground }}
+                          >
+                            {ctaTipo(hero.tipo)}
+                          </Text>
+                          <ArrowRight
+                            size={16}
+                            color={itemForeground}
+                          />
+                        </View>
+                      </View>
                     </View>
-                  ) : null}
-                  <View
-                    className="relative z-10 flex-1 justify-between p-5"
-                    style={{ backgroundColor: itemColor }}
-                  >
+                  </>
+                ) : (
+                  <>
+                    {hero.imagen ? (
+                      <Image source={{ uri: hero.imagen }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    ) : (
+                      <LinearGradient
+                        colors={[itemColor, itemColor]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                      />
+                    )}
                     <LinearGradient
                       colors={[...GRAD_OVERLAY]}
                       locations={[0, 0.5, 1]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 0, y: 1 }}
-                      pointerEvents="none"
                       style={StyleSheet.absoluteFill}
                     />
-                    <View className="gap-y-2">
-                      {!hero.imagen ? membershipBadge : null}
+                    <View className="relative z-10 flex-1 justify-between p-5 pt-14">
                       <Text
-                        className="text-3xl font-extrabold"
-                        style={{ color: itemForeground, lineHeight: 36 }}
-                        numberOfLines={2}
+                        className="absolute left-5 top-4 rounded-full shadow-sm px-3 py-1 text-overline font-bold uppercase tracking-wider bg-white"
+                        style={{ color: itemColor }}
                       >
-                        {hero.titulo}
+                        {etiquetaTipo(hero.tipo)}
                       </Text>
-                      {hero.descripcion ? (
-                        <Text
-                          className="mt-2 text-sm font-medium"
-                          style={{ color: itemForeground }}
-                          numberOfLines={2}
-                        >
-                          {hero.descripcion}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View className="gap-y-3">
                       <View>
                         <Text
-                          className="text-sm font-semibold"
-                          style={{ color: overlayForeground }}
-                          numberOfLines={1}
+                          className={hero.tipo === 'EMPRESA' ? 'text-2xl font-extrabold text-white' : 'text-4xl font-extrabold text-white'}
+                          style={{ lineHeight: hero.tipo === 'EMPRESA' ? 32 : 40 }}
+                          numberOfLines={hero.tipo === 'EMPRESA' ? 2 : 3}
                         >
-                          {hero.empresa}
+                          {hero.titulo}
                         </Text>
-                        {detalle ? (
-                          <Text
-                            className="mt-1 text-base font-bold"
-                            style={{ color: overlayForeground }}
-                            numberOfLines={1}
-                          >
-                            {detalle}
+                        {hero.descripcion ? (
+                          <Text className="mt-2 text-sm font-medium text-white" numberOfLines={3}>
+                            {hero.descripcion}
                           </Text>
                         ) : null}
                       </View>
-                      <View
-                        className="flex-row items-center justify-center gap-1.5 rounded-full"
-                        style={{ minHeight: 48, paddingHorizontal: 14, backgroundColor: companyColor }}
-                      >
-                        <Text
-                          className="text-label-sm font-bold"
-                          style={{ color: itemForeground }}
-                        >
-                          {ctaTipo(hero.tipo)}
-                        </Text>
-                        <ArrowRight
-                          size={16}
-                          color={itemForeground}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                </>
-              ) : (
-                <>
-                  {hero.imagen ? (
-                    <Image source={{ uri: hero.imagen }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                  ) : (
-                    <LinearGradient
-                      colors={[itemColor, itemColor]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={StyleSheet.absoluteFill}
-                    />
-                  )}
-                  <LinearGradient
-                    colors={[...GRAD_OVERLAY]}
-                    locations={[0, 0.5, 1]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View className="relative z-10 flex-1 justify-between p-5 pt-14">
-                    <Text
-                      className="absolute left-5 top-4 rounded-full shadow-sm px-3 py-1 text-overline font-bold uppercase tracking-wider bg-white"
-                      style={{ color: itemColor }}
-                    >
-                      {etiquetaTipo(hero.tipo)}
-                    </Text>
-                    <View>
-                      <Text className="text-4xl font-extrabold text-white" style={{ lineHeight: 40 }} numberOfLines={3}>
-                        {hero.titulo}
-                      </Text>
-                      {hero.descripcion ? (
-                        <Text className="mt-2 text-sm font-medium text-white" numberOfLines={3}>
-                          {hero.descripcion}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <View className="gap-y-3">
-                      <View>
-                        <Text className="text-sm font-semibold text-white" numberOfLines={1}>
-                          {hero.tipo === 'EMPRESA' ? 'Descubre el negocio' : hero.empresa}
-                        </Text>
-                        {detalle ? (
-                          <Text className="mt-1 text-base font-bold text-white" numberOfLines={1}>
-                            {detalle}
+                      <View className="gap-y-3">
+                        <View>
+                          <Text className="text-sm font-semibold text-white" numberOfLines={1}>
+                            {hero.tipo === 'EMPRESA' ? 'Descubre el negocio' : hero.empresa}
                           </Text>
-                        ) : null}
+                          {detalle ? (
+                            <Text className="mt-1 text-base font-bold text-white" numberOfLines={1}>
+                              {detalle}
+                            </Text>
+                          ) : null}
+                        </View>
+                        <LinearGradient
+                          colors={[itemColor, itemColor]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={{ minHeight: 48, paddingHorizontal: 14, borderRadius: radii.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                        >
+                          <Text className="text-label-sm font-bold text-white" style={{ color: itemForeground }}>{ctaTipo(hero.tipo)}</Text>
+                          <ArrowRight size={16} color={itemForeground} />
+                        </LinearGradient>
                       </View>
-                      <LinearGradient
-                        colors={[itemColor, itemColor]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={{ minHeight: 48, paddingHorizontal: 14, borderRadius: radii.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                      >
-                        <Text className="text-label-sm font-bold text-white" style={{ color: itemForeground }}>{ctaTipo(hero.tipo)}</Text>
-                        <ArrowRight size={16} color={itemForeground} />
-                      </LinearGradient>
                     </View>
-                  </View>
-                </>
-              )}
-            </MarketplaceCard>
+                  </>
+                )}
+              </MarketplaceCard>
+            </View>
           )
         })}
       </HorizontalScrollWithFade>
