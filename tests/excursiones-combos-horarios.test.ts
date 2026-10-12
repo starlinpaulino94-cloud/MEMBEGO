@@ -10,6 +10,7 @@ import {
   optimizarItinerarioCombo,
   generarCombinacionesCombo,
 } from '@/modules/excursiones/reservas/nucleo'
+import { proximoDiaUTC } from './support/proximo-dia'
 
 test('minutosDesdeMedianoche y formatoMinutosAHora: conversión exacta bidireccional', () => {
   assert.equal(minutosDesdeMedianoche('00:00'), 0)
@@ -104,8 +105,8 @@ test('validarItinerarioCombo: detecta y rechaza solapamiento de horas en el mism
 })
 
 test('validarDisponibilidadCombo: valida secuencia sin solapamiento y día común de operación', () => {
-  const fechaMiercoles = new Date('2026-10-14T12:00:00.000Z') // Miércoles (día 3 ISO)
-  const fechaMartes = new Date('2026-10-13T12:00:00.000Z') // Martes (día 2 ISO)
+  const fechaMiercoles = proximoDiaUTC(3) // Miércoles (día 3 ISO); relativa a hoy: una fecha fija caducaba
+  const fechaMartes = proximoDiaUTC(2) // Martes (día 2 ISO)
 
   const comboConfig = {
     nombre: 'Combo Saona + Buggies Extremo',
