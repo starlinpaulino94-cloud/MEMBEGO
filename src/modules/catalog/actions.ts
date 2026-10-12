@@ -20,7 +20,7 @@ import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { uniqueFileName } from '@/lib/storage'
 import { rutaCatalogo } from '@/lib/storage-rutas'
 import { detectarTipoImagen, EXTENSION_DE_IMAGEN, type TipoImagen } from '@/lib/imagen-tipo'
@@ -209,7 +209,13 @@ const TIPOS_IMAGEN = Object.keys(EXTENSION_DE_IMAGEN) as TipoImagen[]
  *      navegador), y solo entonces registra la fila. Si algo no cuadra, borra
  *      el objeto: no quedan huérfanos ni archivos sin fila.
  *
- * El cliente de servicio se crea DESPUÉS de autorizar, como siempre.
+ * Storage se usa con la SESIÓN de quien sube, no con la clave de servicio: la
+ * política del bucket (`membego_medio_propio`) comprueba que la ruta sea de su
+ * empresa, así que ni la firma ni la lectura necesitan saltarse RLS. Antes se
+ * firmaba con la clave de servicio, y si esa variable no era de verdad
+ * `service_role` Storage respondía «new row violates row-level security policy»
+ * sin que el panel pudiera distinguirlo de cualquier otro fallo. El cliente se
+ * crea DESPUÉS de autorizar, como siempre.
  */
 export async function prepararSubidaImagenCatalogo(
   itemId: string,
@@ -226,7 +232,7 @@ export async function prepararSubidaImagenCatalogo(
   try {
     await conEmpresa(c.companyId, (tx) => exigirCupoDeImagen(tx, c.companyId, itemId))
     const path = rutaCatalogo(c.companyId, itemId, uniqueFileName(EXTENSION_DE_IMAGEN[tipo]))
-    const supabase = createAdminClient()
+    const supabase = await createServerClient()
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path)
     if (error || !data) {
       console.error('[catalogo-imagen] createSignedUploadUrl:', error?.message)
@@ -250,7 +256,7 @@ export async function confirmarImagenCatalogo(
     return { ok: false, error: 'La ruta de la imagen no corresponde a este producto.' }
   }
 
-  const supabase = createAdminClient()
+  const supabase = await createServerClient()
   const descartar = () => supabase.storage.from(BUCKET).remove([path]).catch(() => undefined)
   try {
     const { data, error } = await supabase.storage.from(BUCKET).download(path)
@@ -298,7 +304,7 @@ export async function eliminarImagenCatalogo(imagenId: string): Promise<Resultad
     })
     // Solo se borra del bucket lo que cuelga del ítem de ESTA empresa.
     if (path.startsWith(prefijoImagenesItem(c.companyId, itemId))) {
-      await createAdminClient().storage.from(BUCKET).remove([path]).catch(() => undefined)
+      (await createServerClient()).storage.from(BUCKET).remove([path]).catch(() => undefined)
     }
     refrescar()
     return { ok: true }
