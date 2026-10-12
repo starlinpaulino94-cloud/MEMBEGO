@@ -144,7 +144,7 @@ export function EditorDeImagen({
 
   return (
     <Dialog open={open} onOpenChange={(abierto) => !procesando && onOpenChange(abierto)}>
-      <DialogContent className="max-w-3xl space-y-4 p-4 sm:p-6">
+      <DialogContent className="max-h-[92vh] gap-0 space-y-4 overflow-y-auto p-4 sm:max-w-3xl sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
             <Crop className="h-5 w-5 text-primary" aria-hidden />
