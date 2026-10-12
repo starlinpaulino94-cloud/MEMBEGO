@@ -724,7 +724,7 @@ export function CompanyProfile({
                       href={rutaDeExcursion(espacio, company.slug, exc.slug)}
                       className={`group overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40 ${isAgotada || isFinalizada ? 'opacity-50 pointer-events-none' : ''}`}
                     >
-                      <div className="relative aspect-[16/10] bg-muted">
+                      <div className="relative aspect-video bg-muted">
                         {exc.portadaUrl ? (
                           <Image
                             src={exc.portadaUrl}

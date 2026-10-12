@@ -116,7 +116,7 @@ export function BuscadorUnificado() {
                     href={`/cliente/promociones/${p.id}`}
                     className="group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md hover:border-primary/30"
                   >
-                    <div className="relative aspect-[4/3] bg-muted overflow-hidden">
+                    <div className="relative aspect-square bg-muted overflow-hidden">
                       {p.imagenUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -179,7 +179,7 @@ export function BuscadorUnificado() {
                     href={rutaDeExcursion('app', e.empresa.slug, e.slug)}
                     className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${e.agotadaGlobal || e.todasFechasPasadas ? 'opacity-50 pointer-events-none' : ''}`}
                   >
-                    <div className="relative aspect-[16/10] bg-muted">
+                    <div className="relative aspect-video bg-muted">
                       {e.portadaUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img

@@ -10,6 +10,7 @@ import {
   type CampanaState,
 } from '@/modules/invitaciones/adminActions'
 import { CampanaImagenUpload } from '@/components/invitaciones/CampanaImagenUpload'
+import { FORMATOS } from '@/lib/imagen/formatos'
 import {
   INVITA_COMPARTIR_CAMPOS,
   INVITA_CONTENIDO_CAMPOS,
@@ -270,6 +271,7 @@ export function CampanaInvitacionForm({
               campanaId={existing?.id ?? null}
               currentUrl={existing?.imagenUrl ?? null}
               label="Subir imagen"
+              formato={FORMATOS.compartir}
             />
           </div>
           <div className="space-y-2">
@@ -280,6 +282,7 @@ export function CampanaInvitacionForm({
               campanaId={existing?.id ?? null}
               currentUrl={existing?.bannerUrl ?? null}
               label="Subir banner"
+              formato={FORMATOS.fondo}
             />
           </div>
         </div>

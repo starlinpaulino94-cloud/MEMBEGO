@@ -7,12 +7,14 @@
  */
 
 import { useRef, useState } from 'react'
-import { ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
+import { Crop, ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { uniqueFileName } from '@/lib/storage'
 import { rutaCampana } from '@/lib/storage-rutas'
 import { Button } from '@/components/ui/button'
+import { type FormatoImagen } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_MB = 5
@@ -24,6 +26,7 @@ export function CampanaImagenUpload({
   campanaId,
   currentUrl,
   label,
+  formato,
 }: {
   /** Nombre del hidden input (imagenUrl | bannerUrl). */
   name: string
@@ -36,6 +39,8 @@ export function CampanaImagenUpload({
   campanaId: string | null
   currentUrl: string | null
   label: string
+  /** El formato ÚNICO de esta imagen (de `FORMATOS`): el editor encuadra a su proporción y la sube a su tamaño. */
+  formato: FormatoImagen
 }) {
   const [url, setUrl] = useState(currentUrl ?? '')
   const [uploading, setUploading] = useState(false)
@@ -75,6 +80,8 @@ export function CampanaImagenUpload({
     }
   }
 
+  const { elegir, encuadrar, dialogo } = useEditorDeImagen({ formato, alAplicar: handleFile })
+
   return (
     <div className="space-y-2">
       <input type="hidden" name={name} value={url} />
@@ -84,22 +91,23 @@ export function CampanaImagenUpload({
         accept={ALLOWED.join(',')}
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) void handleFile(f)
+          elegir(e.target.files?.[0])
+          e.target.value = ''
         }}
       />
 
       {url ? (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="overflow-hidden rounded-xl border border-border" style={{ aspectRatio: formato.aspecto }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt={label} className="h-32 w-full object-cover" />
+          <img src={url} alt={label} className="h-full w-full object-cover" />
         </div>
       ) : (
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          style={{ aspectRatio: formato.aspecto }}
+          className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
         >
           {uploading ? (
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -107,7 +115,9 @@ export function CampanaImagenUpload({
             <ImageIcon className="h-6 w-6" />
           )}
           <span className="text-sm">{label}</span>
-          <span className="text-xs">JPG, PNG o WebP · máx. {MAX_MB} MB</span>
+          <span className="text-xs">
+            {formato.descripcion} · JPG, PNG o WebP · máx. {MAX_MB} MB
+          </span>
         </button>
       )}
 
@@ -124,6 +134,10 @@ export function CampanaImagenUpload({
             {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
             Cambiar
           </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={uploading} onClick={() => encuadrar(url)}>
+            <Crop className="h-3.5 w-3.5" aria-hidden />
+            Encuadrar
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -137,6 +151,7 @@ export function CampanaImagenUpload({
           </Button>
         </div>
       )}
+      {dialogo}
     </div>
   )
 }

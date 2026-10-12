@@ -23,12 +23,14 @@
  */
 
 import { useRef, useState } from 'react'
-import { ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
+import { Crop, ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { uniqueFileName } from '@/lib/storage'
 import { rutaPlan } from '@/lib/storage-rutas'
 import { Button } from '@/components/ui/button'
+import { FORMATOS } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 
 const PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_MB = 5
@@ -97,6 +99,9 @@ export function PlanImagenUpload({
     }
   }
 
+  // Al elegir una foto se abre el editor; lo que sube es la imagen ya encuadrada (16:9, 1600×900).
+  const { elegir, encuadrar, dialogo } = useEditorDeImagen({ formato: FORMATOS.plan, alAplicar: manejarArchivo })
+
   return (
     <div className="space-y-2">
       <input type="hidden" name="imagenUrl" value={url} />
@@ -106,22 +111,22 @@ export function PlanImagenUpload({
         accept={PERMITIDOS.join(',')}
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) void manejarArchivo(f)
+          elegir(e.target.files?.[0])
+          e.target.value = ''
         }}
       />
 
       {url ? (
         <div className="overflow-hidden rounded-xl border border-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="Imagen del plan" className="h-40 w-full object-cover" />
+          <img src={url} alt="Imagen del plan" className="aspect-video w-full object-cover" />
         </div>
       ) : (
         <button
           type="button"
           onClick={() => archivoRef.current?.click()}
           disabled={subiendo}
-          className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
         >
           {subiendo ? (
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -129,7 +134,9 @@ export function PlanImagenUpload({
             <ImageIcon className="h-6 w-6" />
           )}
           <span className="text-sm">Subir imagen desde tu dispositivo</span>
-          <span className="text-xs">JPG, PNG o WebP · máx. {MAX_MB} MB</span>
+          <span className="text-xs">
+            {FORMATOS.plan.descripcion} · JPG, PNG o WebP · máx. {MAX_MB} MB
+          </span>
         </button>
       )}
 
@@ -150,6 +157,10 @@ export function PlanImagenUpload({
             )}
             Cambiar
           </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={subiendo} onClick={() => encuadrar(url)}>
+            <Crop className="h-3.5 w-3.5" aria-hidden />
+            Encuadrar
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -163,6 +174,7 @@ export function PlanImagenUpload({
           </Button>
         </div>
       )}
+      {dialogo}
     </div>
   )
 }

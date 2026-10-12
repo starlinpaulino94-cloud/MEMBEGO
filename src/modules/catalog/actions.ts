@@ -288,15 +288,15 @@ function mensajeDeProcesado(e: unknown): string {
 }
 
 /**
- * Tercer paso de la subida. `recorte` es el encuadre que eligió la persona en
- * el editor (píxeles del original ya orientado). Sin él —un navegador con la
+ * Tercer paso de la subida. `encuadre` es lo que eligió la persona en el
+ * editor: rectángulo (píxeles del original orientado y girado), giro y fondo. Sin él —un navegador con la
  * pestaña abierta de antes del editor— se centra el encuadre más grande, que
  * es lo que mostraba la ficha hasta ahora.
  */
 export async function confirmarImagenCatalogo(
   itemId: string,
   path: string,
-  recorte?: unknown
+  encuadre?: unknown
 ): Promise<ResultadoCatalogo<{ id: string; url: string | null }>> {
   const c = await contexto('editar')
   if ('error' in c) return { ok: false, error: c.error }
@@ -329,12 +329,12 @@ export async function confirmarImagenCatalogo(
     // Versiones: tarjeta, ficha y compartir, desde el original y el encuadre.
     let generado: ResultadoVariantes
     try {
-      let encuadre = recorte
-      if (encuadre === undefined || encuadre === null) {
+      let elegido = encuadre
+      if (elegido === undefined || elegido === null) {
         const { ancho, alto } = await dimensionesOrientadas(buffer)
-        encuadre = recorteDesde(ancho, alto, FORMATO_CATALOGO.aspecto)
+        elegido = recorteDesde(ancho, alto, FORMATO_CATALOGO.aspecto)
       }
-      generado = await generarVariantesCatalogo(buffer, encuadre)
+      generado = await generarVariantesCatalogo(buffer, elegido)
     } catch (e) {
       console.error('[catalogo-imagen] procesar:', e instanceof Error ? e.message : e)
       await descartar([path])
@@ -353,7 +353,7 @@ export async function confirmarImagenCatalogo(
         registrarImagenEnTx(tx, c.companyId, itemId, path, null, c.ctx, {
           width: generado.ancho,
           height: generado.alto,
-          crop: generado.recorte,
+          crop: generado.encuadre,
           variantesBase: base,
         })
       )
@@ -377,7 +377,7 @@ export async function confirmarImagenCatalogo(
  */
 export async function reencuadrarImagenCatalogo(
   imagenId: string,
-  recorte: unknown
+  encuadre: unknown
 ): Promise<ResultadoCatalogo<{ url: string | null }>> {
   const c = await contexto('editar')
   if ('error' in c) return { ok: false, error: c.error }
@@ -392,7 +392,7 @@ export async function reencuadrarImagenCatalogo(
     }
     let generado: ResultadoVariantes
     try {
-      generado = await generarVariantesCatalogo(Buffer.from(await data.arrayBuffer()), recorte)
+      generado = await generarVariantesCatalogo(Buffer.from(await data.arrayBuffer()), encuadre)
     } catch (e) {
       console.error('[catalogo-imagen] procesar (reencuadre):', e instanceof Error ? e.message : e)
       return { ok: false, error: mensajeDeProcesado(e) }
@@ -410,7 +410,7 @@ export async function reencuadrarImagenCatalogo(
           tx,
           c.companyId,
           imagenId,
-          { width: generado.ancho, height: generado.alto, crop: generado.recorte, variantesBase: base },
+          { width: generado.ancho, height: generado.alto, crop: generado.encuadre, variantesBase: base },
           c.ctx
         )
       )

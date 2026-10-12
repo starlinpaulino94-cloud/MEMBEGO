@@ -210,7 +210,7 @@ function ResultsGrid({
             href={`/empresas/${exc.empresa.slug}/excursiones/${exc.slug}`}
             className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${exc.agotadaGlobal || exc.todasFechasPasadas ? 'opacity-50 pointer-events-none' : ''}`}
           >
-            <div className="relative aspect-[16/10] bg-muted">
+            <div className="relative aspect-video bg-muted">
               {exc.portadaUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -351,7 +351,7 @@ function ResultsSkeleton() {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
         <div key={i} className="animate-pulse overflow-hidden rounded-xl border bg-card">
-          <div className="aspect-[16/10] bg-muted" />
+          <div className="aspect-video bg-muted" />
           <div className="p-4 space-y-3">
             <div className="h-4 w-3/4 bg-muted rounded" />
             <div className="h-4 w-1/2 bg-muted rounded" />
