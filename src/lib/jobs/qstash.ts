@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual, createHash } from 'crypto'
+import { appUrl } from '@/lib/site'
 
 /**
  * CLIENTE DE QSTASH POR REST — sin SDK, igual que el limitador de peticiones.
@@ -20,10 +21,8 @@ export function qstashConfigurado(): boolean {
 function destino(ruta: string): string {
   const base =
     process.env.QSTASH_TARGET_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : '')
+    // Los trabajos vuelven por `/api`, que responde en los dos dominios; se usa el de la app.
+    appUrl()
   return `${base.replace(/\/$/, '')}${ruta}`
 }
 

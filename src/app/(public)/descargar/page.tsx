@@ -1,3 +1,4 @@
+import { haciaLaApp } from '@/lib/anfitriones'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -85,14 +86,14 @@ export default function DescargarPage() {
 
         <div className="mt-10 flex flex-col items-center gap-3 text-center">
           <Link
-            href="/registro/cuenta"
+            href={haciaLaApp('/registro/cuenta')}
             className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-glow transition hover:opacity-95"
           >
             Crear mi cuenta <ArrowRight className="h-4 w-4" />
           </Link>
           <p className="text-sm text-muted-foreground">
             ¿Ya tienes cuenta?{' '}
-            <Link href="/login" className="text-primary hover:underline">
+            <Link href={haciaLaApp('/login')} className="text-primary hover:underline">
               Ingresar
             </Link>
           </p>

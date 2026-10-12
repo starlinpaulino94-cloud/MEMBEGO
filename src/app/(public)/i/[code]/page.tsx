@@ -1,3 +1,4 @@
+import { haciaLaApp } from '@/lib/anfitriones'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -83,7 +84,7 @@ export default async function InvitacionPage({ params }: InvitacionPageProps) {
   }
 
   const beneficioTitulo = data.beneficio?.titulo ?? 'un beneficio exclusivo'
-  const ctaHref = `/registro/${data.empresa.slug}?ref=${data.referenteCodigo}&gl=${data.code}`
+  const ctaHref = haciaLaApp(`/registro/${data.empresa.slug}?ref=${data.referenteCodigo}&gl=${data.code}`)
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/10 via-card to-card">

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/env'
-import { sessionCookieDomain } from '@/lib/site'
+import { dominioDeCookieCompartida, sessionCookieDomain } from '@/lib/site'
 import { ROLE_HOME, ROUTE_PROTECTION, ADMIN_ROLES, FULL_ADMIN_ROLES, type AppMetadata } from '@/types'
 import {
   adminSectionForPath,
@@ -11,6 +11,7 @@ import {
 } from '@/lib/auth/permissions'
 import { verifyLocalSession } from '@/lib/auth/jwt'
 import { destinoParaRol } from '@/lib/auth/destino-seguro'
+import { anfitrionesDelEntorno, cabecerasDelAnfitrion, decidirAnfitrion } from '@/lib/anfitriones'
 import { CANAL_COOKIE, CANAL_COOKIE_MAX_AGE, sanitizarCanal } from '@/modules/adquisicion/shared'
 import {
   COOKIE_MANTENIMIENTO,
@@ -70,7 +71,7 @@ function hasSupabaseAuthCookie(request: NextRequest) {
     .some((c) => c.name.startsWith('sb-') && c.name.includes('auth-token'))
 }
 
-export async function proxy(request: NextRequest) {
+async function procesar(request: NextRequest) {
   // Nonce por petición para la CSP (auditoría · A-04).
   //
   // Se EMITE ya, pero la CSP todavía lleva `'unsafe-inline'` (ver la nota en
@@ -165,6 +166,7 @@ export async function proxy(request: NextRequest) {
       maxAge: CANAL_COOKIE_MAX_AGE,
       path: '/',
       sameSite: 'lax',
+      ...dominioDeCookieCompartida(),
     })
   }
 
@@ -314,6 +316,33 @@ export async function proxy(request: NextRequest) {
   }
 
   return response
+}
+
+/**
+ * LA PUERTA: primero se decide a qué host pertenece la petición (separación landing/app · F7) y solo después corre todo lo
+ * demás. Con los dos dominios activos, la landing no sirve rutas de la app ni la app rutas de la landing: se redirigen
+ * (307, reversible) al host que corresponde, conservando ruta y consulta. Sin las variables de entorno de los dos
+ * dominios, o con un host que no es ninguno de los dos (local, previews), `decidirAnfitrion` siempre dice «seguir» y
+ * esto es idéntico a lo de antes.
+ */
+export async function proxy(request: NextRequest) {
+  const anfitriones = anfitrionesDelEntorno()
+  if (anfitriones) {
+    const host = request.headers.get('host')
+    const decision = decidirAnfitrion(
+      { host, ruta: request.nextUrl.pathname, busqueda: request.nextUrl.search, metodo: request.method },
+      anfitriones
+    )
+    if (decision.accion === 'redirigir') {
+      const salto = NextResponse.redirect(decision.destino, 307)
+      for (const [clave, valor] of Object.entries(cabecerasDelAnfitrion(host, anfitriones))) salto.headers.set(clave, valor)
+      return salto
+    }
+    const respuesta = await procesar(request)
+    for (const [clave, valor] of Object.entries(cabecerasDelAnfitrion(host, anfitriones))) respuesta.headers.set(clave, valor)
+    return respuesta
+  }
+  return procesar(request)
 }
 
 export const config = {

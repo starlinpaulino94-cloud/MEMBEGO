@@ -2,6 +2,7 @@ import 'server-only'
 import { conEmpresa } from '@/lib/tenant'
 import { detectarIntencionExcursiones } from '@/modules/mensajeria/intenciones'
 import { enviarTextoEnConversacion } from '@/modules/mensajeria/salientes'
+import { landingUrl } from '@/lib/site'
 
 /**
  * AUTO-REPLY DE MENSAJERÍA (portado de `connect/autoReply.ts`, eliminado en
@@ -47,9 +48,7 @@ function normalizar(texto: string): string {
 
 function urlBase(): string {
   return (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    'http://127.0.0.1:3000'
+    landingUrl()
   )
 }
 

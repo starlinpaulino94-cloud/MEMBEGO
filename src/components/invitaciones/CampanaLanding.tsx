@@ -1,5 +1,8 @@
 'use client'
 
+import { anfitrionesDelEntorno, irALaApp } from '@/lib/anfitriones'
+import { guardarCelebracionParaLaApp } from '@/lib/celebracion-entre-dominios'
+import { sessionCookieDomain } from '@/lib/site'
 import { useActionState, useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Gift, Clock, Shield, CheckCircle2 } from 'lucide-react'
@@ -169,9 +172,11 @@ export function CampanaLanding({ campana, refCode, invitanteNombre }: Props) {
         const { error } = await supabase.auth.signInWithPassword(creds)
         if (!error) {
           sessionStorage.setItem('membego_celebracion', JSON.stringify(celebracion))
+          // Con dos dominios sessionStorage no cruza: la misma celebración viaja en una cookie corta del dominio compartido.
+          if (anfitrionesDelEntorno()) guardarCelebracionParaLaApp(JSON.stringify(celebracion), sessionCookieDomain())
           // Lo PRIMERO que ve el recién registrado es la pantalla de reclamar
           // su regalo de la campaña (lavado gratis, etc.), no el home genérico.
-          router.replace('/cliente/celebracion')
+          irALaApp(router, '/cliente/celebracion', { reemplazar: true })
           return
         }
         console.error('[invita] auto-login:', error.message)

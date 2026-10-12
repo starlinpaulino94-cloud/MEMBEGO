@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, Sparkles } from 'lucide-react'
 import { HeroSection } from '@/components/public/HeroSection'
 import { EnlaceDeCuenta, SoloVisitante } from '@/components/public/AccionesDeSesion'
+import { haciaLaApp } from '@/lib/anfitriones'
 import { ValueProps } from '@/components/public/ValueProps'
 import { HowItWorks } from '@/components/public/HowItWorks'
 import { PromotionCard } from '@/components/public/PromotionCard'
@@ -93,7 +94,7 @@ export default async function HomePage() {
             />
             <SoloVisitante>
               <Link
-                href="/login"
+                href={haciaLaApp('/login')}
                 className="inline-flex items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3 font-semibold text-white backdrop-blur transition hover:bg-white/20"
               >
                 Ya tengo cuenta

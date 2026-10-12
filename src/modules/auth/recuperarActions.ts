@@ -42,7 +42,7 @@ import {
   recoveryEmailLimiter,
   recoveryIpLimiter,
 } from '@/lib/rate-limit'
-import { absoluteUrl } from '@/lib/site'
+import { appUrlFor } from '@/lib/site'
 import { registrarEvento } from '@/modules/observabilidad/eventos'
 
 export interface RecuperarState {
@@ -88,7 +88,7 @@ export async function solicitarRecuperacion(email: string): Promise<RecuperarSta
 
   try {
     const supabase = await createClient()
-    const redirectTo = absoluteUrl('/actualizar-password')
+    const redirectTo = appUrlFor('/actualizar-password')
 
     let { error } = await supabase.auth.resetPasswordForEmail(correo, { redirectTo })
 

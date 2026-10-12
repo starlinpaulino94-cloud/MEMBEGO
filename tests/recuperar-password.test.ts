@@ -55,7 +55,7 @@ test('la acción aplica los dos limitadores y los consulta SIEMPRE los dos', () 
 
 test('el enlace de recuperación sigue aterrizando en /actualizar-password', () => {
   const src = codigo('src/modules/auth/recuperarActions.ts')
-  assert.match(src, /absoluteUrl\('\/actualizar-password'\)/)
+  assert.match(src, /appUrlFor\('\/actualizar-password'\)/)
 })
 
 test('/actualizar-password no enseña el mensaje crudo del proveedor', () => {

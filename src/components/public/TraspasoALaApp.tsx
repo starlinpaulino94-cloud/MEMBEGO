@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { LogIn, ShoppingBag, UserPlus } from 'lucide-react'
 import { rutaDeLogin, rutaDeRegistro } from '@/modules/comercio/rutas'
+import { haciaLaApp } from '@/lib/anfitriones'
 import { Button } from '@/components/ui/button'
 import { useSesionLigera } from './useSesionLigera'
 
@@ -50,14 +51,14 @@ export function TraspasoALaApp({ destino, titulo, descripcion, etiquetaCliente }
             Tu cuenta es del equipo de un negocio. Los pedidos y reservas se hacen desde una cuenta de cliente.
           </p>
           <Button asChild variant="outline" className="mt-3">
-            <Link href={sesion.casa}>Ir a mi panel</Link>
+            <Link href={haciaLaApp(sesion.casa)}>Ir a mi panel</Link>
           </Button>
         </>
       ) : sesion.estado === 'cliente' ? (
         <>
           <p className="mt-2 text-sm text-muted-foreground">{descripcion}</p>
           <Button asChild className="mt-3">
-            <Link href={destino}>{etiquetaCliente}</Link>
+            <Link href={haciaLaApp(destino)}>{etiquetaCliente}</Link>
           </Button>
         </>
       ) : (
@@ -65,13 +66,13 @@ export function TraspasoALaApp({ destino, titulo, descripcion, etiquetaCliente }
           <p className="mt-2 text-sm text-muted-foreground">{descripcion} Inicia sesión o crea tu cuenta y volverás aquí mismo.</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button asChild>
-              <Link href={rutaDeLogin(destino)}>
+              <Link href={haciaLaApp(rutaDeLogin(destino))}>
                 <LogIn className="mr-2 h-4 w-4" aria-hidden />
                 Iniciar sesión
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href={rutaDeRegistro(destino)}>
+              <Link href={haciaLaApp(rutaDeRegistro(destino))}>
                 <UserPlus className="mr-2 h-4 w-4" aria-hidden />
                 Crear cuenta
               </Link>
@@ -89,13 +90,13 @@ export function EnlaceDeTraspaso({ destino, etiqueta, className = 'w-full', vari
   if (sesion.estado === 'equipo') {
     return (
       <Button asChild variant="outline" className={className}>
-        <Link href={sesion.casa}>Ir a mi panel</Link>
+        <Link href={haciaLaApp(sesion.casa)}>Ir a mi panel</Link>
       </Button>
     )
   }
   return (
     <Button asChild variant={variante} className={className} data-traspaso={sesion.estado}>
-      <Link href={sesion.estado === 'cliente' ? destino : rutaDeLogin(destino)}>{etiqueta}</Link>
+      <Link href={haciaLaApp(sesion.estado === 'cliente' ? destino : rutaDeLogin(destino))}>{etiqueta}</Link>
     </Button>
   )
 }

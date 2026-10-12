@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { tomarCelebracionDeCookie } from '@/lib/celebracion-entre-dominios'
+import { sessionCookieDomain } from '@/lib/site'
 import {
   CelebracionOverlay,
   type CelebracionData,
@@ -19,7 +21,8 @@ export function CelebracionBienvenida() {
 
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(KEY)
+      // Con dos dominios la landing la deja en una cookie corta; con uno, en sessionStorage.
+      const raw = sessionStorage.getItem(KEY) ?? tomarCelebracionDeCookie(sessionCookieDomain())
       if (raw) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setData(JSON.parse(raw) as CelebracionData)

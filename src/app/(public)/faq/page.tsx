@@ -6,7 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { SITE_NAME, getAppUrl } from '@/lib/site'
+import { SITE_NAME, landingUrl } from '@/lib/site'
 
 export const metadata: Metadata = {
   title: 'Preguntas frecuentes',
@@ -101,8 +101,8 @@ export default function FaqPage() {
             Registra tu negocio
           </Link>{' '}
           y empieza a ofrecer membresías. Más info en{' '}
-          <a href={getAppUrl()} className="text-primary hover:underline">
-            {getAppUrl().replace(/^https?:\/\//, '')}
+          <a href={landingUrl()} className="text-primary hover:underline">
+            {landingUrl().replace(/^https?:\/\//, '')}
           </a>
           .
         </p>

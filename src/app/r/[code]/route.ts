@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
-import { getAppUrl } from '@/lib/site'
+import { appUrl, dominioDeCookieCompartida, landingUrl } from '@/lib/site'
 import {
   logReferralEvent,
   hashIp,
@@ -39,7 +39,6 @@ export async function GET(
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params
-  const base = getAppUrl()
   const clean = code.trim()
 
   const ip = getClientIdentifier(req)
@@ -75,13 +74,14 @@ export async function GET(
       })
     }
 
-    const res = NextResponse.redirect(`${base}/i/${growth.code}`)
+    const res = NextResponse.redirect(`${landingUrl()}/i/${growth.code}`)
     if (!esDuenno) {
       res.cookies.set(VISITOR_COOKIE, visitorId, {
         maxAge: VISITOR_COOKIE_DIAS * 24 * 60 * 60,
         httpOnly: true,
         sameSite: 'lax',
         path: '/',
+        ...dominioDeCookieCompartida(),
       })
     }
     return res
@@ -104,7 +104,7 @@ export async function GET(
 
   // Código inválido o empresa inactiva: al marketplace, sin tracking.
   if (!cliente || !cliente.company.isActive) {
-    return NextResponse.redirect(`${base}/empresas`)
+    return NextResponse.redirect(`${landingUrl()}/empresas`)
   }
 
   // Autoclic: el propio referente abriendo su enlace no cuenta.
@@ -129,7 +129,7 @@ export async function GET(
   }
 
   const res = NextResponse.redirect(
-    `${base}/registro/${cliente.company.slug}?ref=${cliente.codigoReferido}`
+    `${appUrl()}/registro/${cliente.company.slug}?ref=${cliente.codigoReferido}`
   )
   if (!esDuenno) {
     res.cookies.set(VISITOR_COOKIE, visitorId, {
@@ -137,12 +137,14 @@ export async function GET(
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
+      ...dominioDeCookieCompartida(),
     })
     res.cookies.set(REF_COOKIE, cliente.codigoReferido, {
       maxAge: REF_COOKIE_DIAS * 24 * 60 * 60,
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
+      ...dominioDeCookieCompartida(),
     })
   }
   return res

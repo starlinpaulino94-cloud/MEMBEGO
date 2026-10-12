@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Gift, Users, Clock, Trophy, Send, Ticket, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { requireRole } from '@/lib/auth/guards'
-import { absoluteUrl } from '@/lib/site'
+import { landingUrlFor } from '@/lib/site'
 import { ensureCodigoCorto } from '@/lib/referidos'
 import {
   misCampanasDisponibles,
@@ -126,7 +126,7 @@ export default async function InvitaYGanaPage({
    * la tarjeta vieja tras actualizar la imagen o los textos.
    */
   const version = campana.updatedAt.getTime().toString(36)
-  const inviteUrl = absoluteUrl(
+  const inviteUrl = landingUrlFor(
     `/invitar/${codigoCorto}?c=${encodeURIComponent(campana.slug)}&v=${version}`
   )
 

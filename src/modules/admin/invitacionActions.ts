@@ -9,7 +9,7 @@ import { registerLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
 import { escaparHtml } from '@/lib/html'
 import { encolarEmail } from '@/modules/jobs/emisiones'
-import { getAppUrl, SITE_NAME } from '@/lib/site'
+import { SITE_NAME, appUrlFor } from '@/lib/site'
 import { TERMS_VERSION } from '@/lib/legal'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { FULL_ADMIN_ROLES, INVITABLE_ROLES, type AppRole } from '@/types'
@@ -99,7 +99,7 @@ export async function invitarMiembro(
 
   const nombreEmpresa = company?.name ?? 'Una empresa'
   const nombreSeguro = escaparHtml(nombreEmpresa)
-  const url = `${getAppUrl()}/invitacion/${invitacion.token}`
+  const url = appUrlFor(`/invitacion/${invitacion.token}`)
   await encolarEmail({
     to: email,
     subject: `Te invitaron a ${nombreEmpresa}`,

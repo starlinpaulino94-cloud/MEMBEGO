@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { registerLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getAppUrl } from '@/lib/site'
+import { appUrl } from '@/lib/site'
 import { sendEmail } from '@/lib/email'
 import { correoEliminacionDeCuenta } from '@/lib/email/eliminacion-cuenta'
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   })
   const token = data.properties?.hashed_token
   if (!error && token) {
-    const confirmationUrl = new URL('/confirmar', getAppUrl())
+    const confirmationUrl = new URL('/confirmar', appUrl())
     confirmationUrl.searchParams.set('token_hash', token)
     confirmationUrl.searchParams.set('type', 'magiclink')
     confirmationUrl.searchParams.set('purpose', 'delete-account')

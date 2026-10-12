@@ -142,7 +142,11 @@ relleno y una base desechable.
 **Separación landing / app / paneles.** Los specs `separacion-invariantes`, `separacion-f1` a `separacion-f5` prueban,
 por la interfaz y con lo que llega al navegador, que la landing no opera ni descarga código de operación, que el traspaso
 es el que corresponde a visitante, cliente y equipo, que los destinos de retorno no abren redirecciones, y que en la app
-las operaciones funcionan. Dos reglas del arnés que importan aquí:
+las operaciones funcionan. El spec `separacion-f7` (los dos anfitriones) no corre con la suite normal: se salta si no hay build de dos dominios. Se lanza con
+`bun run e2e:dos-anfitriones` (construye en `.next-f7` con `NEXT_PUBLIC_LANDING_URL`, `NEXT_PUBLIC_APP_ORIGIN` y
+`NEXT_PUBLIC_COOKIE_DOMAIN`; `-- --sin-build` reutiliza el build). Los dominios `membego.test` y `app.membego.test` los resuelve
+Chromium con `--host-resolver-rules` (sin tocar `/etc/hosts`); el cliente HTTP de Node no los ve, así que las pruebas sin
+navegador fijan el `Host` a mano. Detalle en `docs/F7_CORTE_POR_ANFITRION.md`. Dos reglas del arnés que importan aquí:
 
 - `entrarComo` firma la cookie de sesión **sin `httpOnly`**, como en producción (`@supabase/ssr` la deja legible por el
   navegador): la landing solo pregunta por la sesión a quien trae esa cookie, y con una cookie `httpOnly` no la vería.

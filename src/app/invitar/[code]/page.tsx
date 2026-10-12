@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getCampanaPorCodigoInvitacion } from '@/modules/invitaciones/queries'
-import { absoluteUrl } from '@/lib/site'
+import { landingUrlFor } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
 import { normalizeInvitaContenido } from '@/lib/invitaContenido'
 import { arteDeCampana } from '@/modules/invitaciones/ogCard'
@@ -47,8 +47,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   // dibujando una campaña distinta de la que la landing enseña debajo.
   const image =
     arteDeCampana(campana) ??
-    absoluteUrl(`/og/campana?slug=${encodeURIComponent(campana.slug)}`)
-  const url = absoluteUrl(
+    landingUrlFor(`/og/campana?slug=${encodeURIComponent(campana.slug)}`)
+  const url = landingUrlFor(
     `/invitar/${code}?c=${encodeURIComponent(campana.slug)}`
   )
 

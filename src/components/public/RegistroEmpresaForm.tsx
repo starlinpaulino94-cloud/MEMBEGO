@@ -1,5 +1,6 @@
 'use client'
 
+import { irALaApp } from '@/lib/anfitriones'
 import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -42,12 +43,12 @@ export function RegistroEmpresaForm() {
       toast.success(
         'Te enviamos un enlace de confirmación a tu correo. Ábrelo para activar tu empresa.'
       )
-      router.push('/login?verifica=1')
+      irALaApp(router, '/login?verifica=1')
       return
     }
     if (state.success) {
       toast.success('¡Empresa registrada! Inicia sesión para configurar tu perfil.')
-      router.push('/login?registered=empresa')
+      irALaApp(router, '/login?registered=empresa')
     }
   }, [state.success, state.pendingVerification, router])
 
