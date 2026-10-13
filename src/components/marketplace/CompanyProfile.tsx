@@ -669,7 +669,7 @@ export function CompanyProfile({
           <section id="catalogo" className="mt-14 scroll-mt-32">
             <h2 className="text-h2 text-foreground">Productos</h2>
             <p className="mt-2 text-muted-foreground">Lo que vende {company.name}. Pides aquí y lo recoges con tu QR.</p>
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {productos.map((item) => (
                 <TarjetaCatalogoPublica key={item.id} item={item} espacio={espacio} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
               ))}
@@ -682,7 +682,7 @@ export function CompanyProfile({
           <section id="servicios" className="mt-14 scroll-mt-32">
             <h2 className="text-h2 text-foreground">Servicios</h2>
             <p className="mt-2 text-muted-foreground">Lo que {company.name} hace por ti, con sus precios.</p>
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {servicios.map((item) => (
                 <TarjetaCatalogoPublica key={item.id} item={item} espacio={espacio} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
               ))}
@@ -695,7 +695,7 @@ export function CompanyProfile({
           <section id="ofertas" className="mt-14 scroll-mt-32">
             <h2 className="text-h2 text-foreground">Ofertas</h2>
             <p className="mt-2 text-muted-foreground">Descuentos sobre lo que vende {company.name}. Obtén la oferta y canjéala con tu QR.</p>
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {ofertas.map((o) => (
                 <TarjetaOferta key={o.id} espacio={espacio} oferta={o} accion={accionDeOferta(o)} mostrarEmpresa={false} />
               ))}
@@ -724,7 +724,7 @@ export function CompanyProfile({
                       href={rutaDeExcursion(espacio, company.slug, exc.slug)}
                       className={`group overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40 ${isAgotada || isFinalizada ? 'opacity-50 pointer-events-none' : ''}`}
                     >
-                      <div className="relative aspect-[16/10] bg-muted">
+                      <div className="relative aspect-video bg-muted">
                         {exc.portadaUrl ? (
                           <Image
                             src={exc.portadaUrl}

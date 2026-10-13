@@ -5,7 +5,8 @@ import { ImageIcon, Loader2, UploadCloud, X, Plus, Crop } from 'lucide-react'
 import { toast } from 'sonner'
 import { subirImagenExcursion } from '@/modules/excursiones/catalogo/imageActions'
 import { Button } from '@/components/ui/button'
-import { ModalRecortePortada } from './ModalRecortePortada'
+import { FORMATOS } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp']
 const MAX_MB = 5
@@ -25,8 +26,6 @@ export function ExcursionImagenUpload({
   const [galeriaUrls, setGaleriaUrls] = useState<string[]>(currentGaleria ?? [])
   const [uploadingPortada, setUploadingPortada] = useState(false)
   const [uploadingGaleria, setUploadingGaleria] = useState(false)
-  const [archivoParaRecortar, setArchivoParaRecortar] = useState<{ file?: File; url: string } | null>(null)
-  
   const portadaRef = useRef<HTMLInputElement>(null)
   const galeriaRef = useRef<HTMLInputElement>(null)
 
@@ -70,6 +69,10 @@ export function ExcursionImagenUpload({
     }
   }
 
+  // Las dos imágenes pasan por el editor; cada una con SU formato único: la portada 16:9, las fotos extra cuadradas.
+  const portada = useEditorDeImagen({ formato: FORMATOS.excursion, alAplicar: (f) => handleUpload(f, 'portada') })
+  const galeria = useEditorDeImagen({ formato: FORMATOS.galeria, alAplicar: (f) => handleUpload(f, 'galeria') })
+
   function eliminarImagenGaleria(index: number) {
     setGaleriaUrls(prev => prev.filter((_, i) => i !== index))
   }
@@ -93,19 +96,8 @@ export function ExcursionImagenUpload({
           accept={ALLOWED.join(',')}
           className="hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) {
-              if (!ALLOWED.includes(f.type)) {
-                toast.error('Formato no permitido. Usa JPG, PNG o WebP.')
-                return
-              }
-              if (f.size > MAX_MB * 1024 * 1024) {
-                toast.error(`La imagen no puede superar ${MAX_MB} MB.`)
-                return
-              }
-              const objUrl = URL.createObjectURL(f)
-              setArchivoParaRecortar({ file: f, url: objUrl })
-            }
+            portada.elegir(e.target.files?.[0])
+            e.target.value = ''
           }}
         />
 
@@ -113,7 +105,7 @@ export function ExcursionImagenUpload({
           <div className="space-y-2">
             <div className="overflow-hidden rounded-xl border border-border">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={portadaUrl} alt="Portada de la excursión" className="h-48 w-full object-cover" />
+              <img src={portadaUrl} alt="Portada de la excursión" className="aspect-video w-full object-cover" />
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -133,7 +125,7 @@ export function ExcursionImagenUpload({
                 size="sm"
                 className="gap-1.5"
                 disabled={uploadingPortada}
-                onClick={() => setArchivoParaRecortar({ url: portadaUrl })}
+                onClick={() => portada.encuadrar(portadaUrl)}
               >
                 <Crop className="h-3.5 w-3.5" /> Reajustar encuadre
               </Button>
@@ -154,7 +146,7 @@ export function ExcursionImagenUpload({
             type="button"
             onClick={() => portadaRef.current?.click()}
             disabled={uploadingPortada}
-            className="flex h-48 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground bg-muted/20"
+            className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground bg-muted/20"
           >
             {uploadingPortada ? (
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -162,7 +154,9 @@ export function ExcursionImagenUpload({
               <ImageIcon className="h-6 w-6" />
             )}
             <span className="text-sm">Subir portada desde tu dispositivo</span>
-            <span className="text-xs opacity-80">JPG, PNG o WebP · máx. {MAX_MB} MB</span>
+            <span className="text-xs opacity-80">
+              {FORMATOS.excursion.descripcion} · JPG, PNG o WebP · máx. {MAX_MB} MB
+            </span>
           </button>
         )}
       </div>
@@ -182,8 +176,8 @@ export function ExcursionImagenUpload({
           accept={ALLOWED.join(',')}
           className="hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) void handleUpload(f, 'galeria')
+            galeria.elegir(e.target.files?.[0])
+            e.target.value = ''
           }}
         />
 
@@ -222,28 +216,8 @@ export function ExcursionImagenUpload({
         </div>
       </div>
 
-      {archivoParaRecortar && (
-        <ModalRecortePortada
-          open={Boolean(archivoParaRecortar)}
-          onOpenChange={(abierto) => {
-            if (!abierto) {
-              if (archivoParaRecortar.file && archivoParaRecortar.url.startsWith('blob:')) {
-                URL.revokeObjectURL(archivoParaRecortar.url)
-              }
-              setArchivoParaRecortar(null)
-              if (portadaRef.current) portadaRef.current.value = ''
-            }
-          }}
-          imagenSrc={archivoParaRecortar.url}
-          onConfirmar={(archivoRecortado) => {
-            if (archivoParaRecortar.file && archivoParaRecortar.url.startsWith('blob:')) {
-              URL.revokeObjectURL(archivoParaRecortar.url)
-            }
-            setArchivoParaRecortar(null)
-            void handleUpload(archivoRecortado, 'portada')
-          }}
-        />
-      )}
+      {portada.dialogo}
+      {galeria.dialogo}
     </div>
   )
 }

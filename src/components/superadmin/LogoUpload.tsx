@@ -6,6 +6,8 @@ import { Loader2, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
+import { FORMATOS } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 
 interface Props {
   companyId: string
@@ -19,10 +21,8 @@ export function LogoUpload({ companyId, currentUrl, companyName, onUploaded }: P
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  /** El logo ya encuadrado (cuadrado, 512×512), o un SVG tal cual: es lo que se sube. */
+  async function subirArchivo(file: File) {
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'].includes(file.type)) {
       toast.error('Solo se aceptan imágenes JPG, PNG, WEBP o SVG.')
       return
@@ -55,6 +55,16 @@ export function LogoUpload({ companyId, currentUrl, companyName, onUploaded }: P
       setUploading(false)
       if (inputRef.current) inputRef.current.value = ''
     }
+  }
+
+  const { elegir, dialogo } = useEditorDeImagen({ formato: FORMATOS.logo, alAplicar: subirArchivo })
+
+  function alElegir(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Un SVG es vectorial: pasarlo por un lienzo lo volvería píxeles. Se sube tal cual.
+    if (file.type === 'image/svg+xml') void subirArchivo(file)
+    else elegir(file)
   }
 
   function handleRemove() {
@@ -120,8 +130,9 @@ export function LogoUpload({ companyId, currentUrl, companyName, onUploaded }: P
         type="file"
         accept="image/jpeg,image/png,image/webp,image/svg+xml"
         className="hidden"
-        onChange={handleFile}
+        onChange={alElegir}
       />
+      {dialogo}
     </div>
   )
 }

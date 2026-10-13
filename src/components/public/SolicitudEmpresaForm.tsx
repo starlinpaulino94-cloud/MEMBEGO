@@ -24,7 +24,9 @@ import {
   IMG_MAX_BYTES,
   type SolicitudDatos,
 } from '@/modules/solicitudes/nucleo'
-import { validarDimensionesPromo, PROMO_IMG_DESCRIPCION } from '@/modules/promociones/formato-imagen'
+import { validarDimensionesPromo } from '@/modules/promociones/formato-imagen'
+import { FORMATOS, type FormatoImagen } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -86,6 +88,7 @@ function Seccion({
 function CampoImagen({
   etiqueta,
   ayuda,
+  formato,
   adjunto,
   onElegir,
   onQuitar,
@@ -93,12 +96,15 @@ function CampoImagen({
 }: {
   etiqueta: string
   ayuda: string
+  /** El formato ÚNICO de esta imagen: el editor la encuadra y entrega la imagen final a `onElegir`. */
+  formato: FormatoImagen
   adjunto: Adjunto | null
   onElegir: (f: File) => void
   onQuitar: () => void
   error?: string | null
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const { elegir, dialogo } = useEditorDeImagen({ formato, alAplicar: onElegir, textoConfirmar: 'Usar esta foto' })
   return (
     <div>
       <Label>{etiqueta}</Label>
@@ -108,8 +114,7 @@ function CampoImagen({
         accept={TIPOS_IMG}
         className="sr-only"
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) onElegir(f)
+          elegir(e.target.files?.[0])
           e.target.value = ''
         }}
       />
@@ -136,6 +141,7 @@ function CampoImagen({
       )}
       <p className="mt-1 text-xs text-muted-foreground">{ayuda}</p>
       {error ? <p className="mt-1 text-xs font-medium text-destructive">{error}</p> : null}
+      {dialogo}
     </div>
   )
 }
@@ -529,7 +535,8 @@ export function SolicitudEmpresaForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <CampoImagen
             etiqueta="Tu logo"
-            ayuda="JPG, PNG o WebP · máx. 5 MB. Con fondo transparente si lo tienes."
+            ayuda={`${FORMATOS.logo.descripcion} · JPG, PNG o WebP · máx. 5 MB. Se conserva el fondo transparente.`}
+            formato={FORMATOS.logo}
             adjunto={logo}
             onElegir={(f) => elegirImagen('logo', f, false, setLogo)}
             onQuitar={() => setLogo(null)}
@@ -537,7 +544,8 @@ export function SolicitudEmpresaForm() {
           />
           <CampoImagen
             etiqueta="Foto de portada"
-            ayuda="Una buena foto del negocio (horizontal). Máx. 5 MB."
+            ayuda={`Una buena foto del negocio. ${FORMATOS.banner.descripcion} · máx. 5 MB.`}
+            formato={FORMATOS.banner}
             adjunto={portada}
             onElegir={(f) => elegirImagen('portada', f, false, setPortada)}
             onQuitar={() => setPortada(null)}
@@ -719,7 +727,8 @@ export function SolicitudEmpresaForm() {
               </div>
               <CampoImagen
                 etiqueta="Imagen de esta promoción"
-                ayuda={PROMO_IMG_DESCRIPCION}
+                ayuda={`${FORMATOS.promocion.descripcion} · máx. 5 MB.`}
+                formato={FORMATOS.promocion}
                 adjunto={promoImgs[i] ?? null}
                 onElegir={(f) => elegirImagen(`promo_${i}`, f, true, (a) => setPromoImgs((m) => ({ ...m, [i]: a })))}
                 onQuitar={() =>

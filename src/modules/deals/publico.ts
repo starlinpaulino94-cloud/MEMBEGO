@@ -38,7 +38,7 @@ const INCLUDE_PUBLICO = Prisma.validator<Prisma.DealInclude>()({
           slug: true,
           type: true,
           capabilities: true,
-          images: { select: { path: true }, orderBy: [{ position: 'asc' }, { id: 'asc' }], take: 1 },
+          images: { select: { path: true, variantesBase: true }, orderBy: [{ position: 'asc' }, { id: 'asc' }], take: 1 },
           company: { select: { slug: true, name: true, sucursales: { where: { activa: true }, select: { id: true, nombre: true }, orderBy: [{ nombre: 'asc' }, { id: 'asc' }] } } },
         },
       },

@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${item.name} · ${item.company.name}`,
     description: item.description ?? `${item.name}, de ${item.company.name}.`,
     url: `/empresas/${item.company.slug}/catalogo/${item.slug}`,
-    image: item.imageUrl ?? undefined,
+    image: item.imageShareUrl ?? item.imageUrl ?? undefined,
   })
 }
 

@@ -20,11 +20,14 @@ import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient as createServerClient } from '@/lib/supabase/server'
+import { randomBytes } from 'crypto'
 import { uniqueFileName } from '@/lib/storage'
 import { rutaCatalogo } from '@/lib/storage-rutas'
 import { detectarTipoImagen, EXTENSION_DE_IMAGEN, type TipoImagen } from '@/lib/imagen-tipo'
 import { mensajeDeStorage } from '@/lib/storage-errores'
+import { FORMATO_CATALOGO, baseDeVariantes, recorteDesde, rutaDeVariante, rutasDeVariantes } from '@/lib/imagen/formatos'
+import { ErrorDeImagen, dimensionesOrientadas, generarVariantesCatalogo, type ResultadoVariantes } from './variantes-imagen'
 import type { SessionUser } from '@/types'
 import type { ContextoAuditoria } from './auditoria'
 import type { DatosItem, DatosVariante } from './domain'
@@ -44,12 +47,14 @@ import {
   crearCategoriaEnTx,
   eliminarCategoriaEnTx,
   eliminarImagenEnTx,
+  leerImagenParaReencuadrarEnTx,
+  reencuadrarImagenEnTx,
   exigirCupoDeImagen,
   ponerPortadaEnTx,
   prefijoImagenesItem,
   registrarImagenEnTx,
 } from './medios'
-import { urlPublicaCatalogo } from './formato'
+import { urlImagenCatalogo } from './formato'
 
 export type ResultadoCatalogo<T = unknown> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -209,7 +214,13 @@ const TIPOS_IMAGEN = Object.keys(EXTENSION_DE_IMAGEN) as TipoImagen[]
  *      navegador), y solo entonces registra la fila. Si algo no cuadra, borra
  *      el objeto: no quedan huérfanos ni archivos sin fila.
  *
- * El cliente de servicio se crea DESPUÉS de autorizar, como siempre.
+ * Storage se usa con la SESIÓN de quien sube, no con la clave de servicio: la
+ * política del bucket (`membego_medio_propio`) comprueba que la ruta sea de su
+ * empresa, así que ni la firma ni la lectura necesitan saltarse RLS. Antes se
+ * firmaba con la clave de servicio, y si esa variable no era de verdad
+ * `service_role` Storage respondía «new row violates row-level security policy»
+ * sin que el panel pudiera distinguirlo de cualquier otro fallo. El cliente se
+ * crea DESPUÉS de autorizar, como siempre.
  */
 export async function prepararSubidaImagenCatalogo(
   itemId: string,
@@ -226,7 +237,7 @@ export async function prepararSubidaImagenCatalogo(
   try {
     await conEmpresa(c.companyId, (tx) => exigirCupoDeImagen(tx, c.companyId, itemId))
     const path = rutaCatalogo(c.companyId, itemId, uniqueFileName(EXTENSION_DE_IMAGEN[tipo]))
-    const supabase = createAdminClient()
+    const supabase = await createServerClient()
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path)
     if (error || !data) {
       console.error('[catalogo-imagen] createSignedUploadUrl:', error?.message)
@@ -238,9 +249,54 @@ export async function prepararSubidaImagenCatalogo(
   }
 }
 
+type Almacen = Awaited<ReturnType<typeof createServerClient>>['storage']
+
+/**
+ * Sube las versiones de una foto bajo un prefijo NUEVO. Si alguna falla, borra
+ * las que ya subió y relanza: nunca quedan versiones a medias en el bucket.
+ * Caché de un año: el nombre lleva un token propio y no se reutiliza jamás.
+ */
+async function subirVariantes(almacen: Almacen, base: string, generadas: ResultadoVariantes['variantes']): Promise<void> {
+  const subidas: string[] = []
+  try {
+    for (const v of generadas) {
+      const ruta = rutaDeVariante(base, v.nombre)
+      const { error } = await almacen
+        .from(BUCKET)
+        .upload(ruta, v.buffer, { contentType: 'image/webp', cacheControl: '31536000', upsert: false })
+      if (error) {
+        console.error('[catalogo-imagen] subir versión:', error.message)
+        throw error
+      }
+      subidas.push(ruta)
+    }
+  } catch (e) {
+    await almacen.from(BUCKET).remove(subidas).catch(() => undefined)
+    throw e
+  }
+}
+
+/** Traduce lo que puede fallar al procesar una foto a algo que se le pueda decir a quien sube. */
+function mensajeDeProcesado(e: unknown): string {
+  if (e instanceof ErrorDeImagen) return e.message
+  const texto = e instanceof Error ? e.message : ''
+  if (/pixel limit/i.test(texto)) return 'La imagen es demasiado grande (máximo 40 megapíxeles). Reduce su tamaño e inténtalo de nuevo.'
+  if (/unsupported image format|corrupt|bad seek|VipsJpeg|not a valid/i.test(texto)) {
+    return 'No se pudo leer la imagen. Prueba con otro archivo.'
+  }
+  return mensajeDeStorage(e, { maxMb: MAX_MB })
+}
+
+/**
+ * Tercer paso de la subida. `encuadre` es lo que eligió la persona en el
+ * editor: rectángulo (píxeles del original orientado y girado), giro y fondo. Sin él —un navegador con la
+ * pestaña abierta de antes del editor— se centra el encuadre más grande, que
+ * es lo que mostraba la ficha hasta ahora.
+ */
 export async function confirmarImagenCatalogo(
   itemId: string,
-  path: string
+  path: string,
+  encuadre?: unknown
 ): Promise<ResultadoCatalogo<{ id: string; url: string | null }>> {
   const c = await contexto('editar')
   if ('error' in c) return { ok: false, error: c.error }
@@ -250,34 +306,125 @@ export async function confirmarImagenCatalogo(
     return { ok: false, error: 'La ruta de la imagen no corresponde a este producto.' }
   }
 
-  const supabase = createAdminClient()
-  const descartar = () => supabase.storage.from(BUCKET).remove([path]).catch(() => undefined)
+  const supabase = await createServerClient()
+  const almacen = supabase.storage
+  const descartar = (rutas: string[]) => almacen.from(BUCKET).remove(rutas).catch(() => undefined)
   try {
-    const { data, error } = await supabase.storage.from(BUCKET).download(path)
+    const { data, error } = await almacen.from(BUCKET).download(path)
     if (error || !data) {
       console.error('[catalogo-imagen] download:', error?.message)
       return { ok: false, error: mensajeDeStorage(error, { maxMb: MAX_MB }) }
     }
     const buffer = Buffer.from(await data.arrayBuffer())
     if (buffer.length > MAX_BYTES) {
-      await descartar()
+      await descartar([path])
       return { ok: false, error: `La imagen no puede superar ${MAX_MB} MB.` }
     }
     const tipo = detectarTipoImagen(buffer)
     if (!tipo || !path.endsWith(`.${EXTENSION_DE_IMAGEN[tipo]}`)) {
-      await descartar()
+      await descartar([path])
       return { ok: false, error: 'Formato no permitido. Usa JPG, PNG o WebP.' }
     }
 
+    // Versiones: tarjeta, ficha y compartir, desde el original y el encuadre.
+    let generado: ResultadoVariantes
     try {
-      const r = await conEmpresa(c.companyId, (tx) => registrarImagenEnTx(tx, c.companyId, itemId, path, null, c.ctx))
-      refrescar()
-      return { ok: true, id: r.id, url: urlPublicaCatalogo(path) }
+      let elegido = encuadre
+      if (elegido === undefined || elegido === null) {
+        const { ancho, alto } = await dimensionesOrientadas(buffer)
+        elegido = recorteDesde(ancho, alto, FORMATO_CATALOGO.aspecto)
+      }
+      generado = await generarVariantesCatalogo(buffer, elegido)
     } catch (e) {
-      // El archivo ya está en Storage y la fila no se pudo escribir: no dejar huérfanos.
-      await descartar()
+      console.error('[catalogo-imagen] procesar:', e instanceof Error ? e.message : e)
+      await descartar([path])
+      return { ok: false, error: mensajeDeProcesado(e) }
+    }
+    const base = baseDeVariantes(path, randomBytes(4).toString('hex'))
+    try {
+      await subirVariantes(almacen, base, generado.variantes)
+    } catch (e) {
+      await descartar([path])
+      return { ok: false, error: mensajeDeStorage(e, { maxMb: MAX_MB }) }
+    }
+
+    try {
+      const r = await conEmpresa(c.companyId, (tx) =>
+        registrarImagenEnTx(tx, c.companyId, itemId, path, null, c.ctx, {
+          width: generado.ancho,
+          height: generado.alto,
+          crop: generado.encuadre,
+          variantesBase: base,
+        })
+      )
+      refrescar()
+      return { ok: true, id: r.id, url: urlImagenCatalogo({ path, variantesBase: base }, 'tarjeta') }
+    } catch (e) {
+      // Los archivos ya están en Storage y la fila no se pudo escribir: no dejar huérfanos.
+      await descartar([path, ...rutasDeVariantes(base)])
       throw e
     }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * Cambia el encuadre de una foto YA subida. Parte siempre del ORIGINAL, así que
+ * reencuadrar mil veces no degrada nada. Las versiones nuevas se suben primero
+ * y las viejas se borran al final: si algo falla a medias, la foto sigue
+ * viéndose con su encuadre anterior.
+ */
+export async function reencuadrarImagenCatalogo(
+  imagenId: string,
+  encuadre: unknown
+): Promise<ResultadoCatalogo<{ url: string | null }>> {
+  const c = await contexto('editar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof imagenId !== 'string' || !imagenId) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const actual = await conEmpresa(c.companyId, (tx) => leerImagenParaReencuadrarEnTx(tx, c.companyId, imagenId))
+    const almacen = (await createServerClient()).storage
+    const { data, error } = await almacen.from(BUCKET).download(actual.path)
+    if (error || !data) {
+      console.error('[catalogo-imagen] download (reencuadre):', error?.message)
+      return { ok: false, error: mensajeDeStorage(error, { maxMb: MAX_MB }) }
+    }
+    let generado: ResultadoVariantes
+    try {
+      generado = await generarVariantesCatalogo(Buffer.from(await data.arrayBuffer()), encuadre)
+    } catch (e) {
+      console.error('[catalogo-imagen] procesar (reencuadre):', e instanceof Error ? e.message : e)
+      return { ok: false, error: mensajeDeProcesado(e) }
+    }
+    const base = baseDeVariantes(actual.path, randomBytes(4).toString('hex'))
+    try {
+      await subirVariantes(almacen, base, generado.variantes)
+    } catch (e) {
+      return { ok: false, error: mensajeDeStorage(e, { maxMb: MAX_MB }) }
+    }
+    let anterior: string | null
+    try {
+      const r = await conEmpresa(c.companyId, (tx) =>
+        reencuadrarImagenEnTx(
+          tx,
+          c.companyId,
+          imagenId,
+          { width: generado.ancho, height: generado.alto, crop: generado.encuadre, variantesBase: base },
+          c.ctx
+        )
+      )
+      anterior = r.variantesBaseAnterior
+    } catch (e) {
+      await almacen.from(BUCKET).remove(rutasDeVariantes(base)).catch(() => undefined)
+      throw e
+    }
+    // Solo se borra lo que cuelga del ítem de ESTA empresa.
+    if (anterior && anterior.startsWith(prefijoImagenesItem(c.companyId, actual.itemId))) {
+      await almacen.from(BUCKET).remove(rutasDeVariantes(anterior)).catch(() => undefined)
+    }
+    refrescar()
+    return { ok: true, url: urlImagenCatalogo({ path: actual.path, variantesBase: base }, 'tarjeta') }
   } catch (e) {
     return aError(e)
   }
@@ -288,17 +435,19 @@ export async function eliminarImagenCatalogo(imagenId: string): Promise<Resultad
   if ('error' in c) return { ok: false, error: c.error }
   if (typeof imagenId !== 'string') return { ok: false, error: 'Datos no válidos.' }
   try {
-    const { path, itemId } = await conEmpresa(c.companyId, async (tx) => {
+    const { path, variantesBase, itemId } = await conEmpresa(c.companyId, async (tx) => {
       const imagen = await tx.catalogItemImage.findFirst({
         where: { id: imagenId, companyId: c.companyId },
         select: { catalogItemId: true },
       })
       const r = await eliminarImagenEnTx(tx, c.companyId, imagenId, c.ctx)
-      return { path: r.path, itemId: imagen?.catalogItemId ?? '' }
+      return { path: r.path, variantesBase: r.variantesBase, itemId: imagen?.catalogItemId ?? '' }
     })
-    // Solo se borra del bucket lo que cuelga del ítem de ESTA empresa.
-    if (path.startsWith(prefijoImagenesItem(c.companyId, itemId))) {
-      await createAdminClient().storage.from(BUCKET).remove([path]).catch(() => undefined)
+    // Solo se borra del bucket lo que cuelga del ítem de ESTA empresa: el original y sus versiones.
+    const prefijo = prefijoImagenesItem(c.companyId, itemId)
+    const rutas = [path, ...(variantesBase ? rutasDeVariantes(variantesBase) : [])].filter((r) => r.startsWith(prefijo))
+    if (rutas.length > 0) {
+      ;(await createServerClient()).storage.from(BUCKET).remove(rutas).catch(() => undefined)
     }
     refrescar()
     return { ok: true }

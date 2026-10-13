@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { PageHeader } from '@/components/ui/page-header'
 import { paginarItemsEnTx, type PaginaItems } from '@/modules/catalog/queries'
-import { ETIQUETA_ESTADO, ETIQUETA_TIPO, formatearPrecio, urlPublicaCatalogo } from '@/modules/catalog/formato'
+import { ETIQUETA_ESTADO, ETIQUETA_TIPO, formatearPrecio, urlImagenCatalogo } from '@/modules/catalog/formato'
 import { BADGE_ESTADO_STOCK, ETIQUETA_ESTADO_STOCK } from '@/modules/inventory/formato'
 import { resumenDeStock } from '@/modules/comercio/stock'
 
@@ -136,7 +136,7 @@ export default async function CatalogoPage({
         <>
           <ul className="grid gap-3" aria-label="Productos y servicios">
             {datos.items.map((i) => {
-              const portada = i.imagenPath ? urlPublicaCatalogo(i.imagenPath) : null
+              const portada = i.imagenPath ? urlImagenCatalogo({ path: i.imagenPath, variantesBase: i.imagenVariantesBase }, 'tarjeta') : null
               const stock = resumenDeStock(i.controlaInventario, i.niveles)
               return (
                 <li key={i.id}>

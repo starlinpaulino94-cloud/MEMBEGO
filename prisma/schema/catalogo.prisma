@@ -205,9 +205,22 @@ model CatalogItemImage {
   item          CatalogItem @relation(fields: [catalogItemId, companyId], references: [id, companyId], onDelete: Cascade)
 
   /// Ruta dentro del bucket de Storage, no una URL: la URL pública se deriva.
+  /// Es el ORIGINAL tal como lo subió la persona.
   path     String
   alt      String?
   position Int     @default(0)
+
+  /// Dimensiones del original, ya orientado (rotación EXIF aplicada). null = foto
+  /// anterior al editor de imágenes: no tiene versiones ni encuadre guardado.
+  width  Int?
+  height Int?
+  /// Encuadre elegido: { x, y, w, h } en píxeles del original orientado.
+  crop   Json?
+  /// Prefijo (sin extensión) de las versiones generadas: `<base>_tarjeta.webp`,
+  /// `<base>_ficha.webp`, `<base>_compartir.webp`. null = no hay versiones y se
+  /// sirve el original. Cambia al reencuadrar, para no servir una versión vieja
+  /// desde la caché del CDN.
+  variantesBase String?
 
   createdAt DateTime @default(now())
 

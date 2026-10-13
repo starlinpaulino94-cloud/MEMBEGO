@@ -16,6 +16,7 @@ import {
   minutosAHora,
 } from '@/lib/marketing'
 import { CampanaImagenUpload } from '@/components/invitaciones/CampanaImagenUpload'
+import { FORMATOS } from '@/lib/imagen/formatos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -423,6 +424,7 @@ function BannerUploadBridge({
         campanaId={campanaId}
         currentUrl={value || null}
         label="Subir imagen de fondo"
+        formato={FORMATOS.fondo}
       />
     </div>
   )

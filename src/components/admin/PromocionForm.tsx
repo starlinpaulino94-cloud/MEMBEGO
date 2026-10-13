@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { PROMO_IMG_DESCRIPCION } from '@/modules/promociones/formato-imagen'
+import { FORMATOS } from '@/lib/imagen/formatos'
 
 interface Existing {
   id: string
@@ -232,7 +232,7 @@ export function PromocionForm({
             currentUrl={existing?.imagenUrl ?? null}
           />
           <p className="text-xs text-muted-foreground">
-            {PROMO_IMG_DESCRIPCION}. Al compartir el enlace (WhatsApp,
+            Se encuadra al subirla: {FORMATOS.promocion.descripcion.toLowerCase()}. Al compartir el enlace (WhatsApp,
             Facebook…) se muestra ENTERA como vista previa.
           </p>
         </div>

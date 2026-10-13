@@ -68,7 +68,7 @@ const INCLUIR = {
     // Umbral y sucursal entran para derivar «Pocas unidades» y «dónde recoger»; las cantidades NO salen (ver publico-nucleo).
     include: { inventoryLevels: { select: { onHand: true, reserved: true, lowStockThreshold: true, locationId: true, location: { select: { activa: true } } } } },
   },
-  images: { orderBy: { position: 'asc' }, select: { path: true } },
+  images: { orderBy: { position: 'asc' }, select: { path: true, variantesBase: true } },
 } satisfies Prisma.CatalogItemInclude
 
 export const MAX_ITEMS_PUBLICOS = 48

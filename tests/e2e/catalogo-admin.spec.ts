@@ -130,6 +130,10 @@ test.describe('Catálogo unificado · panel', () => {
     // ── Foto: sin Storage debe avisar y la pantalla sigue viva ────────────
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
     await p.locator('input[type=file]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: png })
+    // Elegir la foto abre el editor de encuadre (no sube nada todavía) y avisa de que 1×1 px se verá borrosa.
+    await expect(p.getByRole('heading', { name: 'Encuadra tu foto' })).toBeVisible({ timeout: 15_000 })
+    await expect(p.getByRole('status').filter({ hasText: 'borrosa' })).toBeVisible({ timeout: 15_000 })
+    await p.getByRole('button', { name: 'Subir foto' }).click()
     // Sin Storage la subida falla; el panel dice por qué (aquí el servidor no alcanza Supabase: «conectar») o, si no
     // sabe la causa, el aviso genérico. Lo que se exige es que avise y la pantalla siga viva, no el texto exacto.
     await expect(p.getByText(/No se pudo (subir la imagen|conectar con el almacenamiento)/).first()).toBeVisible({ timeout: 15_000 })

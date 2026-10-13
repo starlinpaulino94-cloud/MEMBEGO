@@ -1,4 +1,6 @@
 import type { Tx } from '@/lib/tenant'
+import type { Prisma } from '@prisma/client'
+import type { Encuadre } from '@/lib/imagen/formatos'
 import { auditarCatalogo, type ContextoAuditoria } from './auditoria'
 import { elegirSlugLibre, slugDeNombre } from './domain'
 import { fallo } from './errores'
@@ -37,10 +39,29 @@ export async function exigirCupoDeImagen(tx: Tx, companyId: string, itemId: stri
   return total
 }
 
+/** Lo que se sabe de una foto procesada: original orientado, encuadre (con giro y fondo) y dónde están sus versiones. */
+export interface MetaImagen {
+  width: number
+  height: number
+  crop: Encuadre
+  variantesBase: string
+}
+
+function exigirMetaValida(companyId: string, itemId: string, meta: MetaImagen) {
+  const base = meta.variantesBase
+  if (typeof base !== 'string' || !base.startsWith(prefijoImagenesItem(companyId, itemId)) || base.includes('..')) {
+    fallo('IMAGEN_INVALIDA', 'La ruta de las versiones de la imagen no corresponde a este producto.')
+  }
+  if (!Number.isInteger(meta.width) || !Number.isInteger(meta.height) || meta.width < 1 || meta.height < 1) {
+    fallo('IMAGEN_INVALIDA', 'Las dimensiones de la imagen no son válidas.')
+  }
+}
+
 /**
  * Registra una imagen YA subida. La ruta debe ser de esta empresa y de este
  * ítem: lo que llega aquí lo escribió el servidor, pero esta puerta no se
- * fía de quien la llame.
+ * fía de quien la llame. Con `meta`, guarda además el encuadre y dónde están
+ * las versiones; sin ella (fotos anteriores al editor) se sirve el original.
  */
 export async function registrarImagenEnTx(
   tx: Tx,
@@ -48,11 +69,13 @@ export async function registrarImagenEnTx(
   itemId: string,
   path: string,
   alt: string | null,
-  ctx: ContextoAuditoria
+  ctx: ContextoAuditoria,
+  meta?: MetaImagen
 ): Promise<{ id: string; position: number }> {
   if (!path.startsWith(prefijoImagenesItem(companyId, itemId)) || path.includes('..')) {
     fallo('IMAGEN_INVALIDA', 'La ruta de la imagen no corresponde a este producto.')
   }
+  if (meta) exigirMetaValida(companyId, itemId, meta)
   await exigirCupoDeImagen(tx, companyId, itemId)
   const ultima = await tx.catalogItemImage.findFirst({
     where: { catalogItemId: itemId, companyId },
@@ -61,7 +84,16 @@ export async function registrarImagenEnTx(
   })
   const position = (ultima?.position ?? -1) + 1
   const fila = await tx.catalogItemImage.create({
-    data: { companyId, catalogItemId: itemId, path, alt: alt?.trim().slice(0, 160) || null, position },
+    data: {
+      companyId,
+      catalogItemId: itemId,
+      path,
+      alt: alt?.trim().slice(0, 160) || null,
+      position,
+      ...(meta
+        ? { width: meta.width, height: meta.height, crop: meta.crop as unknown as Prisma.InputJsonValue, variantesBase: meta.variantesBase }
+        : {}),
+    },
     select: { id: true },
   })
   await auditarCatalogo(tx, ctx, companyId, 'CATALOG_ITEM_UPDATED', 'CatalogItem', itemId, {
@@ -71,13 +103,54 @@ export async function registrarImagenEnTx(
   return { id: fila.id, position }
 }
 
-/** Quita la fila y devuelve la ruta, para que quien llama borre también el archivo. */
+/**
+ * Lo que `reencuadrarImagenEnTx` necesita saber de la foto ANTES de regenerar
+ * las versiones: dónde está el original y qué versiones tiene ahora.
+ */
+export async function leerImagenParaReencuadrarEnTx(
+  tx: Tx,
+  companyId: string,
+  imagenId: string
+): Promise<{ id: string; itemId: string; path: string; variantesBase: string | null }> {
+  const imagen = await tx.catalogItemImage.findFirst({ where: { id: imagenId, companyId } })
+  if (!imagen) fallo('IMAGEN_NO_ENCONTRADA', 'La imagen no existe.')
+  await itemEditable(tx, companyId, imagen.catalogItemId)
+  return { id: imagen.id, itemId: imagen.catalogItemId, path: imagen.path, variantesBase: imagen.variantesBase }
+}
+
+/**
+ * Guarda el nuevo encuadre y las versiones regeneradas. Devuelve las versiones
+ * ANTERIORES, para que quien llama las borre del bucket.
+ */
+export async function reencuadrarImagenEnTx(
+  tx: Tx,
+  companyId: string,
+  imagenId: string,
+  meta: MetaImagen,
+  ctx: ContextoAuditoria
+): Promise<{ variantesBaseAnterior: string | null }> {
+  const imagen = await tx.catalogItemImage.findFirst({ where: { id: imagenId, companyId } })
+  if (!imagen) fallo('IMAGEN_NO_ENCONTRADA', 'La imagen no existe.')
+  await itemEditable(tx, companyId, imagen.catalogItemId)
+  exigirMetaValida(companyId, imagen.catalogItemId, meta)
+  await tx.catalogItemImage.update({
+    where: { id: imagen.id },
+    data: { width: meta.width, height: meta.height, crop: meta.crop as unknown as Prisma.InputJsonValue, variantesBase: meta.variantesBase },
+  })
+  await auditarCatalogo(tx, ctx, companyId, 'CATALOG_ITEM_UPDATED', 'CatalogItem', imagen.catalogItemId, {
+    cambio: 'imagen_reencuadrada',
+    imagenId: imagen.id,
+  })
+  return { variantesBaseAnterior: imagen.variantesBase }
+}
+
+/** Quita la fila y devuelve la ruta y las versiones, para que quien llama borre también los archivos. */
 export async function eliminarImagenEnTx(
   tx: Tx,
   companyId: string,
   imagenId: string,
   ctx: ContextoAuditoria
-): Promise<{ path: string }> {
+): Promise<{ path: string; variantesBase: string | null }> {
   const imagen = await tx.catalogItemImage.findFirst({ where: { id: imagenId, companyId } })
   if (!imagen) fallo('IMAGEN_NO_ENCONTRADA', 'La imagen no existe.')
   await itemEditable(tx, companyId, imagen.catalogItemId)
@@ -86,7 +159,7 @@ export async function eliminarImagenEnTx(
     cambio: 'imagen_eliminada',
     imagenId: imagen.id,
   })
-  return { path: imagen.path }
+  return { path: imagen.path, variantesBase: imagen.variantesBase }
 }
 
 /** La imagen elegida pasa a ser la primera (la portada); el resto conserva su orden. */

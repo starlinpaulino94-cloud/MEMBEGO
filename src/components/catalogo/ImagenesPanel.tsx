@@ -2,9 +2,17 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Star, UploadCloud } from 'lucide-react'
+import { Crop, Loader2, Star, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
-import { prepararSubidaImagenCatalogo, confirmarImagenCatalogo, ponerPortadaCatalogo, eliminarImagenCatalogo } from '@/modules/catalog/actions'
+import {
+  prepararSubidaImagenCatalogo,
+  confirmarImagenCatalogo,
+  reencuadrarImagenCatalogo,
+  ponerPortadaCatalogo,
+  eliminarImagenCatalogo,
+} from '@/modules/catalog/actions'
+import { FORMATOS, type Encuadre } from '@/lib/imagen/formatos'
+import { EditorDeImagen } from '@/components/imagen/EditorDeImagen'
 import { createClient } from '@/lib/supabase/client'
 import { mensajeDeStorage } from '@/lib/storage-errores'
 import { Button } from '@/components/ui/button'
@@ -16,8 +24,15 @@ const BUCKET = 'promociones'
 
 export interface ImagenVista {
   id: string
+  /** Versión de tarjeta (o el original en las fotos anteriores al editor). */
   url: string | null
+  /** El original, para poder reencuadrar. */
+  originalUrl: string | null
+  /** Encuadre guardado; null en las fotos anteriores al editor. */
+  crop: Encuadre | null
 }
+
+type Editor = { tipo: 'nueva'; archivo: File; url: string } | { tipo: 'reencuadre'; imagen: ImagenVista }
 
 /**
  * Fotos del ítem. La primera es la portada. El navegador solo hace una
@@ -36,17 +51,46 @@ export function ImagenesPanel({
   const router = useRouter()
   const ref = useRef<HTMLInputElement>(null)
   const [subiendo, setSubiendo] = useState(false)
+  const [editor, setEditor] = useState<Editor | null>(null)
   const [pending, start] = useTransition()
+
+  /** Elegir un archivo NO lo sube: abre el editor para encuadrarlo primero. */
+  function elegir(file: File) {
+    if (!ACEPTADOS.includes(file.type)) return void toast.error('Formato no permitido. Usa JPG, PNG o WebP.')
+    if (file.size > MAX_MB * 1024 * 1024) return void toast.error(`La imagen no puede superar ${MAX_MB} MB.`)
+    setEditor({ tipo: 'nueva', archivo: file, url: URL.createObjectURL(file) })
+  }
+
+  function cerrarEditor() {
+    if (editor?.tipo === 'nueva') URL.revokeObjectURL(editor.url)
+    setEditor(null)
+    if (ref.current) ref.current.value = ''
+  }
+
+  async function reencuadrar(imagen: ImagenVista, encuadre: Encuadre) {
+    setSubiendo(true)
+    try {
+      const r = await reencuadrarImagenCatalogo(imagen.id, encuadre)
+      if (!r.ok) return void toast.error(r.error)
+      toast.success('Encuadre guardado.')
+      cerrarEditor()
+      router.refresh()
+    } catch (e) {
+      console.error('[catalogo-imagen] reencuadre:', e)
+      toast.error(mensajeDeStorage(e, { maxMb: MAX_MB }))
+    } finally {
+      setSubiendo(false)
+    }
+  }
 
   /**
    * Tres pasos (ver `prepararSubidaImagenCatalogo`): el servidor decide la ruta
    * y firma una URL de un solo uso; el archivo va DIRECTO a Storage desde aquí,
    * sin pasar por la Server Action (y sin su límite de cuerpo); el servidor
-   * comprueba el archivo subido y registra la fila.
+   * comprueba el archivo subido, genera las versiones con el encuadre elegido
+   * y registra la fila.
    */
-  async function subir(file: File) {
-    if (!ACEPTADOS.includes(file.type)) return void toast.error('Formato no permitido. Usa JPG, PNG o WebP.')
-    if (file.size > MAX_MB * 1024 * 1024) return void toast.error(`La imagen no puede superar ${MAX_MB} MB.`)
+  async function subir(file: File, encuadre: Encuadre) {
     setSubiendo(true)
     try {
       const permiso = await prepararSubidaImagenCatalogo(itemId, file.type)
@@ -60,16 +104,16 @@ export function ImagenesPanel({
         return void toast.error(mensajeDeStorage(error, { maxMb: MAX_MB }))
       }
 
-      const r = await confirmarImagenCatalogo(itemId, permiso.path)
+      const r = await confirmarImagenCatalogo(itemId, permiso.path, encuadre)
       if (!r.ok) return void toast.error(r.error)
       toast.success('Imagen subida.')
+      cerrarEditor()
       router.refresh()
     } catch (e) {
       console.error('[catalogo-imagen]', e)
       toast.error(mensajeDeStorage(e, { maxMb: MAX_MB }))
     } finally {
       setSubiendo(false)
-      if (ref.current) ref.current.value = ''
     }
   }
 
@@ -95,7 +139,18 @@ export function ImagenesPanel({
                 )}
               </div>
               {editable && (
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
+                  {img.originalUrl && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={pending || subiendo}
+                      onClick={() => setEditor({ tipo: 'reencuadre', imagen: img })}
+                    >
+                      <Crop className="mr-1 h-3.5 w-3.5" aria-hidden /> Encuadrar
+                    </Button>
+                  )}
                   {i > 0 && (
                     <Button
                       type="button"
@@ -139,7 +194,7 @@ export function ImagenesPanel({
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f) void subir(f)
+              if (f) elegir(f)
             }}
           />
           <Button type="button" variant="outline" size="sm" disabled={subiendo} onClick={() => ref.current?.click()}>
@@ -147,6 +202,27 @@ export function ImagenesPanel({
             Subir imagen
           </Button>
         </>
+      )}
+
+      {editor && (
+        <EditorDeImagen
+          key={editor.tipo === 'nueva' ? editor.url : editor.imagen.id}
+          open
+          onOpenChange={(abierto) => {
+            if (!abierto) cerrarEditor()
+          }}
+          fuente={editor.tipo === 'nueva' ? editor.url : (editor.imagen.originalUrl ?? '')}
+          formato={FORMATOS.catalogo}
+          encuadreInicial={editor.tipo === 'reencuadre' ? editor.imagen.crop : null}
+          avisoInicial={
+            editor.tipo === 'reencuadre' && !editor.imagen.crop
+              ? 'Esta foto se subió antes del editor: al guardar se generan sus versiones nuevas.'
+              : undefined
+          }
+          textoConfirmar={editor.tipo === 'nueva' ? 'Subir foto' : 'Guardar encuadre'}
+          procesando={subiendo}
+          onConfirmar={(encuadre) => (editor.tipo === 'nueva' ? void subir(editor.archivo, encuadre) : void reencuadrar(editor.imagen, encuadre))}
+        />
       )}
     </div>
   )

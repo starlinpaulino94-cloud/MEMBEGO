@@ -24,6 +24,7 @@ export default async function ClienteOfertaPage({
       <h1 className="mb-4 text-h1 text-foreground">Tu oferta</h1>
       <TarjetaOferta
         oferta={oferta}
+        detalle
         espacio="app"
         accion={<AccionObtenerOferta oferta={oferta} retorno={retorno} campaignId={campaignId} />}
       />

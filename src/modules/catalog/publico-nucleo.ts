@@ -9,7 +9,7 @@
  */
 
 import type { CatalogItemType, CatalogVariantStatus } from '@prisma/client'
-import { urlPublicaCatalogo } from './formato'
+import { urlImagenCatalogo } from './formato'
 import { normalizarCapacidades } from './domain'
 
 /**
@@ -81,6 +81,8 @@ export interface ItemPublicoResumen {
 export interface ItemPublicoDetalle extends ItemPublicoResumen {
   description: string | null
   images: string[]
+  /** Imagen para la tarjeta que se comparte por redes (1,91:1). null = sin foto. */
+  imageShareUrl: string | null
   variants: VariantePublica[]
   categories: { name: string; slug: string }[]
 }
@@ -108,7 +110,7 @@ interface FilaItem {
   currency: string
   company: { slug: string; name: string }
   variants: FilaVariante[]
-  images: { path: string }[]
+  images: { path: string; variantesBase?: string | null }[]
   categories?: { category: { name: string; slug: string } }[]
   source: 'MERCHANT' | 'SUPPLY'
   /** Las capacidades del ítem (solo para saber si controla inventario; no salen al público). */
@@ -214,7 +216,7 @@ export function aResumenPublico(f: FilaItem): ItemPublicoResumen | null {
     name: f.name,
     type: f.type,
     currency: f.currency,
-    imageUrl: f.images[0] ? urlPublicaCatalogo(f.images[0].path) : null,
+    imageUrl: f.images[0] ? urlImagenCatalogo(f.images[0], 'tarjeta') : null,
     priceFrom: precioDesde(vs),
     hasVariants: vs.length > 1,
     company: { slug: f.company.slug, name: f.company.name },
@@ -230,7 +232,8 @@ export function aDetallePublico(f: FilaItem): ItemPublicoDetalle | null {
   return {
     ...resumen,
     description: f.description,
-    images: f.images.map((i) => urlPublicaCatalogo(i.path)).filter((u): u is string => !!u),
+    images: f.images.map((i) => urlImagenCatalogo(i, 'ficha')).filter((u): u is string => !!u),
+    imageShareUrl: f.images[0] ? urlImagenCatalogo(f.images[0], 'compartir') : null,
     variants: variantesPublicas(f.variants, agotadaEnOrigen(f), controlaInventario(f)),
     categories: (f.categories ?? []).map((c) => ({ name: c.category.name, slug: c.category.slug })),
   }
