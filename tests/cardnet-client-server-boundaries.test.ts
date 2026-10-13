@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import type { SessionUser } from '../src/types'
 
 type Row = Record<string, unknown>
@@ -371,8 +372,269 @@ test('capture nonce is consumed once and replay does not issue another Customer 
   assert.equal(first.body.status, 'pending')
   assert.equal(replay.status, 409)
   assert.equal(s.customerGets, 1)
-  assert.equal(row.estado, 'PROFILE_PENDING')
+  // Sin perfil todavía, la sesión queda lista para REINTENTAR de inmediato (antes quedaba 45 s en PROFILE_PENDING).
+  assert.equal(row.estado, 'CAPTURE_CONSUMED')
   assert.equal(row.reservaClienteKey, 'held-reservation')
+})
+
+function openCaptureRow(s: Scenario, overrides: Row = {}): { id: string; row: Row } {
+  const id = 'o'.repeat(48)
+  const row: Row = {
+    id, authSubject: s.authUser.supabaseId, companyId: 'qa-company', clienteId: 'qa-client',
+    membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
+    estado: 'CAPTURE_OPEN', venceAt: new Date(Date.now() + 5 * 60_000),
+    captureNonce: createHash('sha256').update('nonce-nobody-will-send-0123456789012').digest('hex'),
+    customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
+    perfilBase: [], paymentProfileId: null, purchaseIntentId: null, guardarRenovacion: false,
+    createdAt: new Date(Date.now() - 60_000), updatedAt: new Date(Date.now() - 30_000),
+    cliente: { email: 'qa@example.test', cardnetCustomerId: null }, purchaseIntent: null,
+    reservaClienteKey: 'held-open-reservation',
+    ...overrides,
+  }
+  s.sessions.set(id, row)
+  s.reservations.set('held-open-reservation', row)
+  return { id, row }
+}
+const freshProfile = { paymentProfileId: 'profile-fresh', token: 'fresh-payment-profile-token', habilitado: true }
+
+test('an open capture that the app never confirmed is recovered by the server from CardNET (the card IS registered)', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [freshProfile] }
+  s.chargeResults = [null]
+  const { id, row } = openCaptureRow(s)
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.notEqual(row.estado, 'CAPTURE_OPEN', 'the session left the open-capture state without a /confirmar call')
+  assert.ok(row.capturadoAt instanceof Date)
+  assert.equal(row.captureNonce, null, 'the one-use nonce is burned')
+  assert.equal(row.paymentProfileId, 'profile-fresh')
+  assert.equal(s.chargeCalls, 1)
+  assert.equal(s.chargeRequests[0]?.token, 'fresh-payment-profile-token')
+  assert.equal(result.body.capture, 'closed', 'once it advanced the app must be told the capture is no longer open')
+  assert.equal(s.customerGets, 1, 'the profile already read is reused: no second CardNET read')
+})
+
+test('an open capture with no new CardNET profile stays open and says so', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [] }
+  const { id, row } = openCaptureRow(s)
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.status, 200)
+  assert.deepEqual(result.body, { ok: true, status: 'pending', capture: 'open' })
+  assert.equal(row.estado, 'CAPTURE_OPEN')
+  assert.equal(s.customerGets, 1)
+  assert.equal(s.chargeCalls, 0)
+})
+
+test('a consumed capture whose profile CardNET has not listed yet is retried on the very next poll, not 45 s later', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerGetResponses = [
+    { denegado: false, email: 'qa@example.test', perfiles: [] },
+    { denegado: false, email: 'qa@example.test', perfiles: [freshProfile] },
+  ]
+  s.chargeResults = [null]
+  const { id, row } = openCaptureRow(s, { estado: 'CAPTURE_CONSUMED', capturadoAt: new Date(Date.now() - 5_000), captureNonce: null })
+  const api = await service()
+  const first = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(first.status, 202)
+  assert.equal(row.estado, 'CAPTURE_CONSUMED')
+  assert.equal(s.chargeCalls, 0)
+  const second = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(s.customerGets, 2)
+  assert.equal(s.chargeCalls, 1, 'the second poll found the profile and charged')
+  assert.equal(second.body.capture, 'closed')
+  assert.equal(row.paymentProfileId, 'profile-fresh')
+})
+
+test('a failed CardNET read while waiting for the profile also leaves the session ready to retry', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerGetResponses = [null]
+  const { id, row } = openCaptureRow(s, { estado: 'CAPTURE_CONSUMED', capturadoAt: new Date(Date.now() - 5_000), captureNonce: null })
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.status, 202)
+  assert.equal(row.estado, 'CAPTURE_CONSUMED')
+  assert.equal(s.chargeCalls, 0)
+})
+
+test('only one CardNET read at a time per consumed capture: a poll that arrives meanwhile waits without calling CardNET', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [] }
+  const { id } = openCaptureRow(s, { estado: 'CAPTURE_CONSUMED', capturadoAt: new Date(Date.now() - 5_000), captureNonce: null })
+  const api = await service()
+  const poll = () => api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  await Promise.all([poll(), poll(), poll()])
+  assert.equal(s.customerGets, 1)
+})
+
+test('a capture consumed with NO profile for longer than the wait releases the customer reservation', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [] }
+  const { id, row } = openCaptureRow(s, {
+    estado: 'PROFILE_PENDING', capturadoAt: new Date(Date.now() - 6 * 60_000), captureNonce: null,
+    purchaseIntentId: null, paymentProfileId: null,
+  })
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.body.status, 'expired')
+  assert.equal(row.estado, 'EXPIRED')
+  assert.equal(row.reservaClienteKey, null, 'the customer can open a new payment')
+  assert.equal(s.customerGets, 0)
+  assert.equal(s.chargeCalls, 0)
+})
+
+test('the wait for a profile never expires a session where a charge is already underway', async () => {
+  const s = setup()
+  s.membership = membership()
+  for (const extra of [{ paymentProfileId: 'profile-fresh' }, { purchaseIntentId: 'intent-1' }]) {
+    const { id, row } = openCaptureRow(s, {
+      estado: 'PROFILE_PENDING', capturadoAt: new Date(Date.now() - 6 * 60_000), captureNonce: null,
+      purchaseIntentId: null, paymentProfileId: null, ...extra,
+    })
+    const api = await service()
+    await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+    assert.notEqual(row.estado, 'EXPIRED', JSON.stringify(extra))
+    s.sessions.clear(); s.reservations.clear()
+  }
+})
+
+test('expiring a consumed capture is atomic: a charge that starts after the read can never be expired from under it', async () => {
+  const s = setup()
+  const store = await import('../src/modules/pagos/cardnetClienteSesionStore')
+  for (const underway of [{ paymentProfileId: 'profile-fresh' }, { purchaseIntentId: 'intent-1' }]) {
+    const { row } = openCaptureRow(s, {
+      estado: 'PROFILE_PENDING', capturadoAt: new Date(Date.now() - 6 * 60_000), captureNonce: null,
+      purchaseIntentId: null, paymentProfileId: null,
+    })
+    // La petición leyó la sesión SIN perfil...
+    const stale = { ...row } as unknown as Parameters<typeof store.expireConsumedWithoutProfile>[0]
+    // ...y otra la hizo avanzar hacia el cobro antes de que esta llegara a expirarla.
+    Object.assign(row, underway)
+    assert.equal(await store.expireConsumedWithoutProfile(stale), false, JSON.stringify(underway))
+    assert.equal(row.estado, 'PROFILE_PENDING')
+    assert.equal(row.reservaClienteKey, 'held-open-reservation')
+    s.sessions.clear(); s.reservations.clear()
+  }
+})
+
+test('the status marks pending as capture open or closed; every other status carries no marker', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [] }
+  const api = await service()
+  const { id, row } = openCaptureRow(s, { updatedAt: new Date() })
+  assert.equal((await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))).body.capture, 'open')
+  row.estado = 'PURCHASE_PENDING'
+  row.purchaseIntent = { id: 'intent-1', estado: 'CREADO', cardnetUniqueId: '123456789012' }
+  const processing = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  if (processing.body.status === 'pending') assert.equal(processing.body.capture, 'closed')
+  row.estado = 'APPROVED'
+  const approved = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.deepEqual(approved.body, { ok: true, status: 'approved' })
+  row.estado = 'DECLINED'
+  assert.deepEqual((await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))).body, { ok: true, status: 'declined' })
+})
+
+test('a profile that already existed when the capture opened is not charged as if it were new', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [freshProfile] }
+  const { id, row } = openCaptureRow(s, { perfilBase: ['id:profile-fresh'] })
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.body.capture, 'open')
+  assert.equal(row.estado, 'CAPTURE_OPEN')
+  assert.equal(s.chargeCalls, 0)
+})
+
+test('the server looks at CardNET at most once per throttle window per open capture', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [] }
+  const { id } = openCaptureRow(s, { updatedAt: new Date() })
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.body.capture, 'open')
+  assert.equal(s.customerGets, 0, 'a poll right after the last check must not hit CardNET')
+})
+
+test('two simultaneous polls recover the capture once and charge once', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [freshProfile] }
+  s.chargeResults = [null, null]
+  const { id } = openCaptureRow(s)
+  const api = await service()
+  const poll = () => api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  await Promise.all([poll(), poll()])
+  assert.equal(s.chargeCalls, 1)
+
+  // Y el segundo sondeo ni siquiera llega a preguntarle a CardNET: el primero reclamó la comprobación (por `updatedAt`).
+  const solo = setup()
+  solo.membership = membership()
+  solo.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [freshProfile] }
+  solo.chargeResults = [null]
+  const single = openCaptureRow(solo)
+  await (await service()).estadoSesionCardnet(solo.authUser, single.id, new Request('http://localhost/status'))
+  assert.equal(s.customerGets, solo.customerGets, 'two simultaneous polls cost the same CardNET reads as one')
+})
+
+test('a CardNET customer that is not this user is never advanced or charged', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'someone-else@example.test', perfiles: [freshProfile] }
+  const { id, row } = openCaptureRow(s)
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.body.capture, 'open')
+  assert.equal(row.estado, 'CAPTURE_OPEN')
+  assert.equal(s.chargeCalls, 0)
+})
+
+test('an expired open capture is reported as expired and never reconciled', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [freshProfile] }
+  const { id, row } = openCaptureRow(s, { venceAt: new Date(Date.now() - 1_000) })
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.deepEqual(result.body, { ok: true, status: 'expired' })
+  assert.equal(row.estado, 'EXPIRED')
+  assert.equal(s.customerGets, 0)
+  assert.equal(s.chargeCalls, 0)
+})
+
+test('recovery re-checks the payable target: a changed amount expires the capture instead of charging', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.amountResult = { ok: true, pesos: 1500 }
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [freshProfile] }
+  const { id, row } = openCaptureRow(s)
+  const api = await service()
+  const result = await api.estadoSesionCardnet(s.authUser, id, new Request('http://localhost/status'))
+  assert.equal(result.body.status, 'expired')
+  assert.equal(row.estado, 'EXPIRED')
+  assert.equal(s.chargeCalls, 0)
+})
+
+test('another user cannot reconcile or read a session that is not theirs', async () => {
+  const s = setup()
+  s.membership = membership()
+  s.customerResponse = { denegado: false, email: 'qa@example.test', perfiles: [freshProfile] }
+  const { id, row } = openCaptureRow(s)
+  const api = await service()
+  const stranger = { ...s.authUser, supabaseId: 'someone-else' }
+  const result = await api.estadoSesionCardnet(stranger, id, new Request('http://localhost/status'))
+  assert.equal(result.status, 404)
+  assert.equal(row.estado, 'CAPTURE_OPEN')
+  assert.equal(s.customerGets, 0)
 })
 
 test('a Purchase request receives the fresh PaymentProfiles token, never customer or baseline ids', async () => {
@@ -1184,6 +1446,20 @@ test('a freshly approved intent prevents Purchase when the initial intent read i
   assert.equal(result.body.status, 'approved')
   assert.equal(row.estado, 'APPROVED')
   assert.equal(s.chargeCalls, 0)
+})
+
+test('the status route polls under the read budget while the routes that move money keep the narrow one', () => {
+  const route = (name: string) => readFileSync(`src/app/api/v1/cliente/pagos/cardnet/${name}/route.ts`, 'utf8')
+  // El sondeo de la app (cada pocos segundos mientras se captura y se cobra) agotaba los 10/min de los cobros y el 429
+  // se leía como «no pudimos confirmar». Consultar el estado no es una ruta de cobro.
+  assert.match(route('estado'), /await paymentSessionLimiter\(/)
+  assert.doesNotMatch(route('estado'), /await paymentLimiter\(/)
+  for (const name of ['confirmar', 'activar']) assert.match(route(name), /await paymentLimiter\(/, `${name} keeps the money budget`)
+  const limits = readFileSync('src/lib/rate-limit.ts', 'utf8')
+  const cap = (limiter: string) => Number(new RegExp(`export const ${limiter} = createRateLimiter\\(\\{[^}]*maxRequests:\\s*(\\d+)`).exec(limits)?.[1])
+  // La app pregunta cada 3,5 s con la captura abierta (~17/min) y cada 2,5 s después (24/min): ambos caben.
+  assert.ok(cap('paymentSessionLimiter') >= 30)
+  assert.ok(cap('paymentLimiter') <= 10)
 })
 
 test('the real BFF route rejects a request without Bearer before calling the service', async () => {

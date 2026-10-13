@@ -17,6 +17,7 @@ import {
 import {
   CAPTURE_TTL_MS,
   CLAIM_STALE_MS,
+  anotarCapturaVencida,
   fail,
   hashNonce,
   sessionPayload,
@@ -87,6 +88,7 @@ async function existingReservation(
   }
 
   if (existing.estado === CARDNET_SESSION_STATES.CAPTURE_OPEN && existing.venceAt <= new Date()) {
+    anotarCapturaVencida(existing, 'reanudacion')
     await expireSession(existing.id, target.companyId, user.supabaseId)
   } else if (
     existing.estado === CARDNET_SESSION_STATES.STARTING &&

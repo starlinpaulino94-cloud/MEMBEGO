@@ -1,5 +1,6 @@
 import type { CardnetCaptureSession } from '../../../lib/api'
 import { colors } from '../../../theme/tokens'
+import { CARDNET_PAGE_HELPERS } from './pageHelpers'
 import type { CardnetCaptureConfig } from './security'
 
 function cssRgba(color: string, opacity: number): string {
@@ -68,53 +69,66 @@ export function buildCardnetCaptureDocument(
   const sdkScriptUrl=${scriptJson(config.scriptUrl)};
   const button=document.getElementById('open-capture');
   const status=document.getElementById('status');
-  let activeFrame=null;
-  let trustedToken=null;
+  ${CARDNET_PAGE_HELPERS}
+  /*
+   * POR QUÉ SOLO SE EXIGE HABER VISTO EL IFRAME, Y NO UN MENSAJE PREVIO DE ÉL.
+   *
+   * Antes el token solo se aceptaba si un 'message' crudo del iframe, con origen y fuente exactos, había llegado primero, y
+   * si en ese instante el iframe seguía en el documento. Eran tres condiciones que podían fallar sin ruido: el widget
+   * cierra el iframe ANTES de entregar el token, su Close puede reventar a medias, y el payload puede venir en otro
+   * formato. La tarjeta quedaba registrada en CardNET y la sesión de pago vencía sin cobrar (18 sesiones seguidas).
+   * El token no decide qué se cobra —el servidor lee el perfil nuevo de CardNET—, solo avisa de que la captura terminó;
+   * basta con que el formulario correcto se haya abierto de verdad (frameSeen) y que el valor tenga forma de token.
+   */
+  let frameSeen=false;
   let consumed=false;
   let captureOpened=false;
-  function validToken(value){return typeof value==='string'&&value.length>=8&&value.length<=512&&value.trim()===value&&!/[\\u0000-\\u0020\\u007f]/.test(value)}
-  function tokenFrom(data){return data&&typeof data==='object'&&!Array.isArray(data)&&Object.prototype.hasOwnProperty.call(data,'TokenId')&&validToken(data.TokenId)?data.TokenId:null}
   function report(stage){
     const bridge=window.ReactNativeWebView;
     if(bridge&&typeof bridge.postMessage==='function')bridge.postMessage(JSON.stringify({type:'CARDNET_DIAGNOSTIC',stage:stage}));
   }
-  function isExpectedFrame(frame){
-    try{
-      const url=new URL(frame.src);
-      const keys=Array.from(url.searchParams.keys()).sort().join(',');
-      return url.protocol==='https:'&&url.origin===capture.captureOrigin&&url.pathname===capture.capturePath&&url.username===''&&url.password===''&&url.hash===''&&keys==='key,session_id'&&url.searchParams.get('key')===capture.publicKey&&url.searchParams.get('session_id')===capture.uniqueId;
-    }catch{return false}
+  function refreshFrame(){
+    const frames=document.querySelectorAll('iframe');
+    for(let i=0;i<frames.length;i++){if(frameMatches(frames[i].src,capture)){frameSeen=true;return}}
   }
-  function refreshFrame(){activeFrame=Array.from(document.querySelectorAll('iframe')).find(isExpectedFrame)||null;if(!activeFrame)trustedToken=null}
   const observer=new MutationObserver(refreshFrame);
   observer.observe(document.documentElement,{attributes:true,attributeFilter:['src'],childList:true,subtree:true});
   refreshFrame();
-  window.addEventListener('message',function(event){
-    refreshFrame();
-    if(!activeFrame||event.source!==activeFrame.contentWindow||event.origin!==capture.captureOrigin)return;
-    trustedToken=tokenFrom(event.data);
-  });
-  function receiveToken(payload){
-    if(consumed||!activeFrame)return;
-    const token=tokenFrom(payload);
-    if(!token||trustedToken!==token||!activeFrame)return;
+  function deliver(token){
+    if(consumed)return;
     consumed=true;
-    trustedToken=null;
+    clearInterval(poll);
     const message={type:'CARDNET_TOKEN_CREATED',sessionId:capture.sessionId,captureNonce:capture.captureNonce,token:token};
     if(window.ReactNativeWebView&&typeof window.ReactNativeWebView.postMessage==='function')window.ReactNativeWebView.postMessage(JSON.stringify(message));
     status.textContent='Captura recibida. Confirmando con el servidor…';
     button.disabled=true;
   }
+  function receiveToken(payload){
+    if(consumed)return;
+    refreshFrame();
+    const token=tokenFrom(payload,true);
+    if(!token||!frameSeen)return;
+    deliver(token);
+  }
+  // Plan B: con autoSubmit apagado el widget también deja el token en el campo oculto del formulario.
+  const field=document.getElementById('PWToken');
+  const poll=setInterval(function(){
+    if(consumed||!frameSeen||!field)return;
+    if(validToken(field.value))deliver(field.value);
+  },500);
   function openCapture(){
     if(captureOpened||consumed)return;
     report('capture_open_requested');
     try{
       const sdk=window.PWCheckout;
       if(!sdk||typeof sdk.SetProperties!=='function')throw new Error('unavailable');
+      guardClose(sdk);
       sdk.SetProperties({name:'MembeGo',email:'',button_label:'Pagar #monto#',currency:${scriptJson(session.currency)},description:'Pago seguro',form_id:'cardnet_capture_form',lang:'ESP',checkout_card:1,autoSubmit:'false',empty:'false'});
       const open=sdk.OpenIframeCustom||sdk.OpenIframe;
       if(typeof open!=='function')throw new Error('unavailable');
+      refreshFrame();
       open(capture.iframeUrl,capture.uniqueId);
+      refreshFrame();
       captureOpened=true;
       button.disabled=true;
       button.textContent='Formulario seguro abierto';
@@ -135,7 +149,8 @@ export function buildCardnetCaptureDocument(
       return;
     }
     try{
-      sdk.Bind('tokenCreated',receiveToken);
+      guardClose(sdk);
+      ['tokenCreated','TokenCreated','token_created'].forEach(function(name){try{sdk.Bind(name,receiveToken)}catch(e){}});
       button.disabled=false;
       button.textContent='Abrir formulario de CardNET';
       status.textContent='Conectado. Toca para abrir el formulario seguro.';
