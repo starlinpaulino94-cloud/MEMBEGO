@@ -712,3 +712,36 @@ export async function configurarUmbralEnTx(
   })
   return { nivelId, umbral: u.valor }
 }
+
+/**
+ * Aplica el MISMO umbral a las demás sucursales ACTIVAS donde la variante ya
+ * tiene un saldo registrado. Solo donde ya hay saldo: crear saldos en cero en
+ * sucursales que nunca llevaron el producto, con un umbral encima, las llenaría
+ * de alertas de «Agotado» por un producto que allí no existe.
+ *
+ * Cada sucursal pasa por `configurarUmbralEnTx` (bloquea el saldo, no escribe si
+ * no cambia, audita el cambio), así que repetirlo es inofensivo. Devuelve en
+ * cuántas sucursales hubo un cambio real.
+ */
+export async function configurarUmbralOtrasSucursalesEnTx(
+  tx: Tx,
+  companyId: string,
+  e: { varianteId: string; sucursalOrigenId: string; umbral: number },
+  ctx: ContextoAuditoria
+): Promise<{ sucursales: number }> {
+  const u = validarUmbral(e.umbral)
+  if (!u.ok) fallo('UMBRAL_INVALIDO', u.error)
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  const otras = await tx.inventoryLevel.findMany({
+    where: { companyId, catalogVariantId: variante.id, locationId: { not: e.sucursalOrigenId }, location: { activa: true } },
+    select: { locationId: true, lowStockThreshold: true },
+    orderBy: { id: 'asc' },
+  })
+  let cambiadas = 0
+  for (const n of otras) {
+    if (n.lowStockThreshold === u.valor) continue
+    await configurarUmbralEnTx(tx, companyId, { varianteId: variante.id, sucursalId: n.locationId, umbral: u.valor }, ctx)
+    cambiadas++
+  }
+  return { sucursales: cambiadas }
+}

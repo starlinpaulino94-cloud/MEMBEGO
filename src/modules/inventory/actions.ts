@@ -19,20 +19,31 @@
  *
  * Cada formulario manda una `clave` única (idempotencia): un doble clic o un
  * reintento de red no mueve el stock dos veces.
+ *
+ * AVISO DE STOCK BAJO. Lo que baja lo vendible a mano —un faltante, un daño, una
+ * transferencia (en el origen) o un conteo a la baja— avisa igual que una venta:
+ * antes solo avisaban las ventas del marketplace, y un daño que agotaba un
+ * producto no se lo decía a nadie. Va DESPUÉS de confirmar y de responder
+ * (`after`: un aviso lanzado a medias con `void` puede perderse cuando la
+ * respuesta termina) y es best-effort (`avisarStockBajo` nunca lanza): un aviso
+ * no puede deshacer un movimiento.
  */
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { conEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import type { SessionUser } from '@/types'
 import type { ContextoAuditoria } from './auditoria'
+import { avisarStockBajo } from './avisos'
 import { InventarioError } from './errores'
 import { historialDeVarianteEnTx, type HistorialPagina } from './queries'
 import {
   ajustarEnTx,
   configurarUmbralEnTx,
+  configurarUmbralOtrasSucursalesEnTx,
   contarEnTx,
   danarEnTx,
   devolverEnTx,
@@ -64,6 +75,12 @@ async function contexto(funcion?: string): Promise<{ user: SessionUser; companyI
   return { user, companyId, ctx: { actorId: user.metadata.dbUserId ?? null, ...meta } }
 }
 
+/** Tras confirmar un movimiento que bajó lo vendible: ¿quedó la variante bajo su umbral? */
+function avisarTrasBajar(companyId: string, varianteId: unknown) {
+  if (typeof varianteId !== 'string' || varianteId === '') return
+  after(() => avisarStockBajo(companyId, [varianteId]))
+}
+
 function aError(e: unknown): { ok: false; error: string } {
   if (e instanceof InventarioError) return { ok: false, error: e.message }
   console.error('[inventario]', e instanceof Error ? e.message : e)
@@ -84,7 +101,9 @@ type ResultadoSaldo = ResultadoInventario<{ saldo: SaldoVista; repetido: boolean
 async function operar(
   funcion: 'ajustar' | 'transferir',
   entrada: unknown,
-  hacer: (companyId: string, e: Record<string, unknown>, ctx: ContextoAuditoria, tx: Parameters<Parameters<typeof conEmpresa>[1]>[0]) => Promise<{ saldo: SaldoVista; repetido: boolean }>
+  hacer: (companyId: string, e: Record<string, unknown>, ctx: ContextoAuditoria, tx: Parameters<Parameters<typeof conEmpresa>[1]>[0]) => Promise<{ saldo: SaldoVista; repetido: boolean }>,
+  /** ¿Este movimiento baja lo vendible? Si sí, tras confirmarse se revisa el umbral de la variante. */
+  bajaLoVendible: (e: Record<string, unknown>) => boolean = () => false
 ): Promise<ResultadoSaldo> {
   const c = await contexto(funcion)
   if ('error' in c) return { ok: false, error: c.error }
@@ -92,6 +111,7 @@ async function operar(
   try {
     const r = await conEmpresa(c.companyId, (tx) => hacer(c.companyId, entrada, c.ctx, tx))
     refrescar()
+    if (!r.repetido && bajaLoVendible(entrada)) avisarTrasBajar(c.companyId, entrada.varianteId)
     return { ok: true, saldo: r.saldo, repetido: r.repetido }
   } catch (e) {
     return aError(e)
@@ -118,7 +138,8 @@ export async function registrarDevolucionInventario(entrada: EntradaMovimiento):
 /** Mercancía dañada: sale de lo vendible a la cubeta de dañado. Motivo obligatorio. */
 export async function registrarDanoInventario(entrada: EntradaMovimiento): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    danarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx)
+    danarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx),
+    () => true
   )
 }
 
@@ -137,7 +158,8 @@ export async function resolverDanadoInventario(entrada: EntradaMovimiento & { de
 /** Corrige un descuadre: `cambio` positivo = sobrante, negativo = faltante. Motivo obligatorio. */
 export async function ajustarInventario(entrada: Omit<EntradaMovimiento, 'cantidad'> & { cambio: number }): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    ajustarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cambio: e.cambio as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx)
+    ajustarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cambio: e.cambio as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx),
+    (e) => typeof e.cambio === 'number' && e.cambio < 0
   )
 }
 
@@ -151,23 +173,38 @@ export async function contarInventario(entrada: Omit<EntradaMovimiento, 'cantida
       contarEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), sucursalId: texto(entrada.sucursalId), conteo: entrada.conteo as number, motivo: entrada.motivo as string | null }, c.ctx)
     )
     refrescar()
+    if (r.diferencia < 0) avisarTrasBajar(c.companyId, entrada.varianteId)
     return { ok: true, saldo: r.saldo, diferencia: r.diferencia, repetido: r.repetido }
   } catch (e) {
     return aError(e)
   }
 }
 
-/** Fija el umbral de stock bajo de una variante en una sucursal (0 = sin alerta). */
-export async function fijarUmbralInventario(entrada: { varianteId: string; sucursalId: string; umbral: number }): Promise<ResultadoInventario<{ umbral: number }>> {
+/**
+ * Fija el umbral de stock bajo de una variante en una sucursal (0 = sin alerta).
+ * Con `aplicarAOtras`, el mismo umbral se aplica también a las demás sucursales
+ * activas donde el producto ya tiene saldo (todo en una sola transacción).
+ */
+export async function fijarUmbralInventario(entrada: {
+  varianteId: string
+  sucursalId: string
+  umbral: number
+  aplicarAOtras?: boolean
+}): Promise<ResultadoInventario<{ umbral: number; otras: number }>> {
   const c = await contexto('ajustar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   try {
-    const r = await conEmpresa(c.companyId, (tx) =>
-      configurarUmbralEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), sucursalId: texto(entrada.sucursalId), umbral: entrada.umbral as number }, c.ctx)
-    )
+    const r = await conEmpresa(c.companyId, async (tx) => {
+      const propia = await configurarUmbralEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), sucursalId: texto(entrada.sucursalId), umbral: entrada.umbral as number }, c.ctx)
+      const otras =
+        entrada.aplicarAOtras === true
+          ? await configurarUmbralOtrasSucursalesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), sucursalOrigenId: texto(entrada.sucursalId), umbral: entrada.umbral as number }, c.ctx)
+          : { sucursales: 0 }
+      return { umbral: propia.umbral, otras: otras.sucursales }
+    })
     refrescar()
-    return { ok: true, umbral: r.umbral }
+    return { ok: true, umbral: r.umbral, otras: r.otras }
   } catch (e) {
     return aError(e)
   }
@@ -195,6 +232,7 @@ export async function transferirInventario(entrada: {
       )
     )
     refrescar()
+    if (!r.repetido) avisarTrasBajar(c.companyId, entrada.varianteId)
     return { ok: true, repetido: r.repetido }
   } catch (e) {
     return aError(e)

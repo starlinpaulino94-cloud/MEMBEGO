@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ChevronLeft } from 'lucide-react'
+import { AlertTriangle, ChevronLeft } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { puedeFuncion, requireRole } from '@/lib/auth/guards'
@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { PageHeader } from '@/components/ui/page-header'
 import { detalleVarianteEnTx, historialDeVarianteEnTx, reservasVivasEnTx } from '@/modules/inventory/queries'
-import { formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
+import { advertenciaEstadoManual, formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 import { formatDateTime } from '@/lib/format'
 import { SucursalInventarioCard } from '@/components/inventario/SucursalInventarioCard'
 import { TransferirForm } from '@/components/inventario/TransferirForm'
@@ -76,6 +76,19 @@ export default async function InventarioVariantePage({ params }: { params: Promi
         </Alert>
       )}
 
+      {detalle.controlaInventario && advertenciaEstadoManual(detalle.estadoVariante, total.disponible) && (
+        <Alert className="border-warning/40">
+          <AlertTriangle className="h-4 w-4 text-warning" aria-hidden />
+          <AlertDescription>
+            {advertenciaEstadoManual(detalle.estadoVariante, total.disponible)}{' '}
+            <Link href={`/admin/catalogo/${detalle.itemId}`} className="underline">
+              Cambiar su estado en el catálogo
+            </Link>
+            .
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-label="Totales de todas las sucursales">
         {(
           [
@@ -112,6 +125,7 @@ export default async function InventarioVariantePage({ params }: { params: Promi
                 key={s.sucursalId}
                 varianteId={detalle.varianteId}
                 puedeAjustar={puedeAjustar}
+                hayOtrasConSaldo={detalle.sucursales.some((o) => o.activa && o.sucursalId !== s.sucursalId && o.nivelId !== null)}
                 saldo={{ sucursalId: s.sucursalId, nombre: s.nombre, activa: s.activa, onHand: s.onHand, reserved: s.reserved, damaged: s.damaged, disponible: s.disponible, lowStockThreshold: s.lowStockThreshold, estado: s.estado }}
               />
             ))}

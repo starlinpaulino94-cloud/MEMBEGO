@@ -1,7 +1,9 @@
-import type { InventoryMovementType, InventoryReservationStatus } from '@prisma/client'
+import type { CatalogVariantStatus, InventoryMovementType, InventoryReservationStatus, Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import { disponible, estadoDeStock, type EstadoStock } from './domain'
+import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosMovimientos } from './filtros'
+import { limiteDiaLocal } from '@/modules/reportes/rango'
 
 /**
  * COMMERCE CORE · inventario — lecturas para el panel (Fase 2).
@@ -32,11 +34,15 @@ export interface SucursalSaldo {
 export interface FilaInventario {
   varianteId: string
   sku: string
+  /** Para reconocer una búsqueda exacta (lector de código de barras). */
+  barcode: string | null
   nombreVariante: string
   esDefault: boolean
   itemId: string
   itemNombre: string
   itemEstado: string
+  /** Lo que la empresa fijó a mano en el catálogo; manda sobre el inventario para vender. */
+  estadoVariante: CatalogVariantStatus
   onHand: number
   reserved: number
   damaged: number
@@ -64,6 +70,11 @@ export interface ListaInventario {
   recortada: boolean
   /** Cuántas variantes hay en cada estado (antes de filtrar por estado), para los resúmenes. */
   conteos: Record<EstadoStock, number>
+  /**
+   * La variante cuyo SKU o código de barras es EXACTAMENTE lo buscado, si hay una
+   * sola. Es lo que hace un lector de código de barras: la pantalla salta a su ficha.
+   */
+  varianteExacta: string | null
 }
 
 const ORDEN_ESTADO: Record<EstadoStock, number> = { AGOTADO: 0, BAJO: 1, OK: 2 }
@@ -88,12 +99,21 @@ export async function listarInventarioEnTx(tx: Tx, companyId: string, f: Filtros
       status: { not: 'DISCONTINUED' },
       item: { status: { not: 'ARCHIVED' }, capabilities: { path: ['trackInventory'], equals: true } },
       ...(q
-        ? { OR: [{ sku: { contains: q, mode: 'insensitive' } }, { name: { contains: q, mode: 'insensitive' } }, { item: { name: { contains: q, mode: 'insensitive' } } }] }
+        ? {
+            OR: [
+              { sku: { contains: q, mode: 'insensitive' } },
+              { barcode: { contains: q, mode: 'insensitive' } },
+              { name: { contains: q, mode: 'insensitive' } },
+              { item: { name: { contains: q, mode: 'insensitive' } } },
+            ],
+          }
         : {}),
     },
     select: {
       id: true,
       sku: true,
+      barcode: true,
+      status: true,
       name: true,
       isDefault: true,
       item: { select: { id: true, name: true, status: true } },
@@ -130,11 +150,13 @@ export async function listarInventarioEnTx(tx: Tx, companyId: string, f: Filtros
     return {
       varianteId: v.id,
       sku: v.sku,
+      barcode: v.barcode,
       nombreVariante: v.name,
       esDefault: v.isDefault,
       itemId: v.item.id,
       itemNombre: v.item.name,
       itemEstado: v.item.status,
+      estadoVariante: v.status,
       ...total,
       disponible: total.onHand - total.reserved,
       estado: estadoDeVariante(sucursales),
@@ -149,7 +171,16 @@ export async function listarInventarioEnTx(tx: Tx, companyId: string, f: Filtros
   const ordenadas = [...filtradas].sort((a, b) => ORDEN_ESTADO[a.estado] - ORDEN_ESTADO[b.estado])
   const paginas = Math.max(1, Math.ceil(ordenadas.length / POR_PAGINA))
   const pagina = Math.min(Math.max(1, Math.trunc(f.pagina ?? 1) || 1), paginas)
-  return { filas: ordenadas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA), total: ordenadas.length, pagina, paginas, recortada, conteos }
+  const exactas = q ? todas.filter((x) => esCodigoExacto(q, x)) : []
+  return {
+    filas: ordenadas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA),
+    total: ordenadas.length,
+    pagina,
+    paginas,
+    recortada,
+    conteos,
+    varianteExacta: exactas.length === 1 ? exactas[0].varianteId : null,
+  }
 }
 
 export interface SucursalOpcion {
@@ -237,6 +268,7 @@ export interface DetalleVarianteInventario {
   esDefault: boolean
   itemId: string
   itemNombre: string
+  estadoVariante: CatalogVariantStatus
   controlaInventario: boolean
   /** Todas las sucursales activas (con o sin saldo) más las inactivas que aún tengan existencias. */
   sucursales: SucursalSaldo[]
@@ -250,6 +282,7 @@ export async function detalleVarianteEnTx(tx: Tx, companyId: string, varianteId:
       sku: true,
       name: true,
       isDefault: true,
+      status: true,
       item: { select: { id: true, name: true, type: true, capabilities: true } },
       inventoryLevels: { where: { companyId }, select: { id: true, locationId: true, onHand: true, reserved: true, damaged: true, lowStockThreshold: true } },
     },
@@ -283,6 +316,7 @@ export async function detalleVarianteEnTx(tx: Tx, companyId: string, varianteId:
     esDefault: v.isDefault,
     itemId: v.item.id,
     itemNombre: v.item.name,
+    estadoVariante: v.status,
     controlaInventario: normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory,
     sucursales: filas,
   }
@@ -400,4 +434,235 @@ export async function reservasVivasEnTx(tx: Tx, companyId: string, varianteId: s
     referenciaTipo: r.referenceType,
     referenciaId: r.referenceId,
   }))
+}
+
+// ── Movimientos de TODA la empresa ───────────────────────────────────────────
+
+export const POR_PAGINA_MOVIMIENTOS = 50
+
+export interface FilaMovimientoEmpresa extends FilaMovimiento {
+  varianteId: string
+  sku: string
+  itemNombre: string
+  nombreVariante: string
+  esDefault: boolean
+  sucursalId: string
+}
+
+export interface MovimientosEmpresaPagina {
+  filas: FilaMovimientoEmpresa[]
+  siguiente: string | null
+}
+
+/** La condición de fechas del filtro: días LOCALES de la empresa, ambos extremos incluidos. */
+export function rangoDeFechas(f: Pick<FiltrosMovimientos, 'desde' | 'hasta'>, zonaHoraria: string): { gte?: Date; lt?: Date } {
+  return {
+    ...(f.desde ? { gte: limiteDiaLocal(f.desde, zonaHoraria, false) } : {}),
+    ...(f.hasta ? { lt: limiteDiaLocal(f.hasta, zonaHoraria, true) } : {}),
+  }
+}
+
+/**
+ * Los movimientos de todas las variantes y sucursales de la empresa, del más
+ * reciente al más antiguo, con los filtros de la pantalla. Paginado por cursor
+ * (`createdAt|id`) por la misma razón que el historial de una variante: el
+ * ledger crece sin parar y un offset se vuelve lento y se corre.
+ *
+ * `limite` es cuántas filas devolver; se pide una de más para saber si hay otra
+ * página. La exportación usa esta MISMA función con un límite mayor, de modo que
+ * el CSV y la pantalla no pueden diferir en qué filas cuentan.
+ */
+export async function movimientosEmpresaEnTx(
+  tx: Tx,
+  companyId: string,
+  f: FiltrosMovimientos,
+  opciones: { zonaHoraria: string; cursor?: string | null; limite?: number }
+): Promise<MovimientosEmpresaPagina> {
+  const limite = Math.max(1, Math.min(opciones.limite ?? POR_PAGINA_MOVIMIENTOS, 10_000))
+  const antes = leerCursor(opciones.cursor)
+  const q = f.q?.trim()
+  const fechas = rangoDeFechas(f, opciones.zonaHoraria)
+  const nivel: Prisma.InventoryLevelWhereInput = {
+    ...(f.sucursalId ? { locationId: f.sucursalId } : {}),
+    ...(q
+      ? {
+          variant: {
+            OR: [
+              { sku: { contains: q, mode: 'insensitive' } },
+              { barcode: { contains: q, mode: 'insensitive' } },
+              { name: { contains: q, mode: 'insensitive' } },
+              { item: { name: { contains: q, mode: 'insensitive' } } },
+            ],
+          },
+        }
+      : {}),
+  }
+  const movs = await tx.inventoryMovement.findMany({
+    where: {
+      companyId,
+      ...(f.tipo ? { type: f.tipo } : {}),
+      ...(f.usuario ? { userId: f.usuario === USUARIO_SISTEMA ? null : f.usuario } : {}),
+      ...(fechas.gte || fechas.lt ? { createdAt: fechas } : {}),
+      ...(Object.keys(nivel).length > 0 ? { level: nivel } : {}),
+      ...(antes ? { AND: [{ OR: [{ createdAt: { lt: antes.creadoEn } }, { createdAt: antes.creadoEn, id: { lt: antes.id } }] }] } : {}),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limite + 1,
+    select: {
+      id: true,
+      createdAt: true,
+      type: true,
+      quantity: true,
+      previousOnHand: true,
+      newOnHand: true,
+      reason: true,
+      userId: true,
+      referenceType: true,
+      referenceId: true,
+      level: {
+        select: {
+          locationId: true,
+          location: { select: { nombre: true } },
+          variant: { select: { id: true, sku: true, name: true, isDefault: true, item: { select: { name: true } } } },
+        },
+      },
+    },
+  })
+  const hayMas = movs.length > limite
+  const pagina = hayMas ? movs.slice(0, limite) : movs
+  const ids = [...new Set(pagina.map((m) => m.userId).filter((x): x is string => Boolean(x)))]
+  const usuarios = ids.length ? await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } }) : []
+  const nombres = new Map(usuarios.map((u) => [u.id, u.name || u.email]))
+  const ultimo = pagina[pagina.length - 1]
+  return {
+    filas: pagina.map((m) => ({
+      id: m.id,
+      creadoEn: m.createdAt,
+      tipo: m.type,
+      cantidad: m.quantity,
+      efectoOnHand: m.newOnHand - m.previousOnHand,
+      previousOnHand: m.previousOnHand,
+      newOnHand: m.newOnHand,
+      motivo: m.reason,
+      sucursalNombre: m.level.location.nombre,
+      usuarioNombre: m.userId ? (nombres.get(m.userId) ?? null) : null,
+      referenciaTipo: m.referenceType,
+      referenciaId: m.referenceId,
+      varianteId: m.level.variant.id,
+      sku: m.level.variant.sku,
+      itemNombre: m.level.variant.item.name,
+      nombreVariante: m.level.variant.name,
+      esDefault: m.level.variant.isDefault,
+      sucursalId: m.level.locationId,
+    })),
+    siguiente: hayMas && ultimo ? armarCursor(ultimo.createdAt, ultimo.id) : null,
+  }
+}
+
+export interface UsuarioOpcion {
+  id: string
+  nombre: string
+}
+
+/**
+ * Las personas del equipo de la empresa, para el filtro «quién». Un
+ * superadministrador que movió existencias desde fuera de la empresa no figura
+ * aquí, pero sus movimientos SÍ salen en la lista con su nombre.
+ */
+export async function usuariosParaFiltroEnTx(tx: Tx, companyId: string): Promise<UsuarioOpcion[]> {
+  const us = await tx.user.findMany({
+    where: { companyId, role: { not: 'CLIENTE' } },
+    select: { id: true, name: true, email: true },
+    orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    take: 200,
+  })
+  return us.map((u) => ({ id: u.id, nombre: u.name || u.email }))
+}
+
+// ── Reservas vivas de TODA la empresa ────────────────────────────────────────
+
+/** Tope de filas de la pantalla de reservas: pasado eso se enseña el total y se pide filtrar. */
+export const MAX_RESERVAS_LISTA = 200
+
+export interface ReservaEmpresaVista {
+  id: string
+  varianteId: string
+  sku: string
+  itemNombre: string
+  nombreVariante: string
+  esDefault: boolean
+  sucursalNombre: string
+  cantidad: number
+  expiresAt: Date
+  referenciaTipo: string | null
+  referenciaId: string | null
+}
+
+export interface ReservasEmpresa {
+  filas: ReservaEmpresaVista[]
+  /** Cuántas reservas vivas hay en total (la lista se recorta a `MAX_RESERVAS_LISTA`). */
+  total: number
+  /** Unidades apartadas en total por esas reservas. */
+  unidades: number
+}
+
+/**
+ * Lo que hoy está apartado en la empresa y hasta cuándo. «Vivas» = ACTIVE y NO
+ * vencidas: una reserva pasada de hora ya no aparta nada aunque el barrido no
+ * haya corrido (ver `service.ts`), así que no se cuenta aquí.
+ */
+export async function reservasVivasEmpresaEnTx(tx: Tx, companyId: string, ahora: Date = new Date()): Promise<ReservasEmpresa> {
+  const [filas, suma, total] = await Promise.all([
+    tx.inventoryReservation.findMany({
+      where: { companyId, status: 'ACTIVE', expiresAt: { gt: ahora } },
+      orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
+      take: MAX_RESERVAS_LISTA,
+      select: {
+        id: true,
+        quantity: true,
+        expiresAt: true,
+        referenceType: true,
+        referenceId: true,
+        level: {
+          select: {
+            location: { select: { nombre: true } },
+            variant: { select: { id: true, sku: true, name: true, isDefault: true, item: { select: { name: true } } } },
+          },
+        },
+      },
+    }),
+    tx.inventoryReservation.aggregate({ where: { companyId, status: 'ACTIVE', expiresAt: { gt: ahora } }, _sum: { quantity: true } }),
+    tx.inventoryReservation.count({ where: { companyId, status: 'ACTIVE', expiresAt: { gt: ahora } } }),
+  ])
+  return {
+    filas: filas.map((r) => ({
+      id: r.id,
+      varianteId: r.level.variant.id,
+      sku: r.level.variant.sku,
+      itemNombre: r.level.variant.item.name,
+      nombreVariante: r.level.variant.name,
+      esDefault: r.level.variant.isDefault,
+      sucursalNombre: r.level.location.nombre,
+      cantidad: r.quantity,
+      expiresAt: r.expiresAt,
+      referenciaTipo: r.referenceType,
+      referenciaId: r.referenceId,
+    })),
+    total,
+    unidades: suma._sum.quantity ?? 0,
+  }
+}
+
+export interface SucursalFiltro {
+  id: string
+  nombre: string
+  activa: boolean
+}
+
+/**
+ * TODAS las sucursales de la empresa (también las desactivadas), para filtrar
+ * movimientos: una sucursal que ya cerró sigue teniendo historial.
+ */
+export async function sucursalesDeLaEmpresaEnTx(tx: Tx, companyId: string): Promise<SucursalFiltro[]> {
+  return tx.sucursal.findMany({ where: { companyId }, select: { id: true, nombre: true, activa: true }, orderBy: [{ nombre: 'asc' }, { id: 'asc' }] })
 }

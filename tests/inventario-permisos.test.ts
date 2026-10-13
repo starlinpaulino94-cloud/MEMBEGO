@@ -177,3 +177,120 @@ test('la sucursal de la URL solo vale si es de esta empresa', () => {
   const lista = readFileSync('src/app/(admin)/admin/inventario/page.tsx', 'utf8')
   assert.match(lista, /sucursales\.find\(\(s\) => s\.id === sp\.sucursal\)/)
 })
+
+// ── INV-1 · visibilidad ──────────────────────────────────────────────────────
+
+const leer = (ruta: string) => readFileSync(ruta, 'utf8')
+const sinComent = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+test('INV-1 · las pantallas nuevas (movimientos, reservas) se guardan como las demás: rol, empresa de la sesión y nada de cliente global', () => {
+  for (const pagina of ['movimientos/page.tsx', 'reservas/page.tsx']) {
+    const s = sinComent(leer(`src/app/(admin)/admin/inventario/${pagina}`))
+    assert.match(s, /requireRole\(ADMIN_ROLES\)/, `${pagina} sin guardia de rol`)
+    assert.match(s, /requireCompanyContext\(user\)/, `${pagina} no resuelve la empresa de la sesión`)
+    assert.match(s, /conEmpresa\(companyId/, `${pagina} no lee dentro de conEmpresa`)
+    assert.doesNotMatch(s, /\bprisma\./, `${pagina} usa el cliente global`)
+    assert.doesNotMatch(s, /searchParams[\s\S]{0,80}companyId|sp\.companyId|sp\.empresa/, `${pagina} toma la empresa de la URL`)
+  }
+  // Tres vistas, un solo menú: las tres pantallas de la empresa lo llevan.
+  assert.match(leer('src/app/(admin)/admin/inventario/page.tsx'), /<NavegacionInventario actual="existencias"/)
+  assert.match(leer('src/app/(admin)/admin/inventario/movimientos/page.tsx'), /<NavegacionInventario actual="movimientos"/)
+  assert.match(leer('src/app/(admin)/admin/inventario/reservas/page.tsx'), /<NavegacionInventario actual="reservas"/)
+})
+
+test('INV-1 · la sucursal de la URL de movimientos solo vale si es de esta empresa', () => {
+  const s = leer('src/app/(admin)/admin/inventario/movimientos/page.tsx')
+  assert.match(s, /sucursales\.find\(\(s\) => s\.id === filtros\.sucursalId\)/)
+})
+
+test('INV-1 · la exportación se guarda SOLA (un route handler no pasa por el layout) y lee la URL igual que la pantalla', () => {
+  const s = sinComent(leer('src/app/(admin)/admin/inventario/movimientos/exportar/route.ts'))
+  assert.match(s, /requireSection\('inventario'\)/)
+  assert.ok(s.indexOf("requireSection('inventario')") < s.indexOf('conEmpresa('), 'autoriza ANTES de tocar la base')
+  assert.match(s, /if \(!user\) return NextResponse\.json\(\{ error: 'No autorizado\.' \}, \{ status: 403 \}\)/)
+  assert.match(s, /resolveCompanyId\(user\)/, 'la empresa sale de la sesión')
+  assert.doesNotMatch(s, /get\('companyId'\)|get\('empresa'\)|searchParams\.get\('company/, 'jamás de la URL')
+  assert.match(s, /leerFiltrosMovimientos\(/, 'la MISMA función que la pantalla: el CSV exporta lo que se ve')
+  assert.match(s, /limite: TOPE_FILAS_MOVIMIENTOS/)
+  assert.match(s, /truncado: r\.pagina\.siguiente !== null/, 'si el tope corta, el archivo lo dice')
+  assert.match(s, /sucursales\.find\(\(s\) => s\.id === filtros\.sucursalId\)/, 'una sucursal ajena no filtra')
+  assert.doesNotMatch(s, /\bprisma\./)
+})
+
+test('INV-1 · las lecturas nuevas filtran por empresa, también las que el guardia general no ve', () => {
+  const q = sinComent(leer('src/modules/inventory/queries.ts'))
+  const usuarios = q.slice(q.indexOf('export async function usuariosParaFiltroEnTx'))
+  assert.match(usuarios.slice(0, 400), /where: \{ companyId, role: \{ not: 'CLIENTE' \} \}/, 'solo el equipo de ESTA empresa, nunca clientes')
+  const movs = q.slice(q.indexOf('export async function movimientosEmpresaEnTx'), q.indexOf('export interface UsuarioOpcion'))
+  assert.match(movs, /where: \{\s*companyId,/, 'los movimientos se leen de esta empresa')
+  assert.match(movs, /take: limite \+ 1/, 'se pide una de más para saber si hay otra página')
+  assert.match(q, /Math\.min\(opciones\.limite \?\? POR_PAGINA_MOVIMIENTOS, 10_000\)/, 'el límite está acotado')
+  const sucursales = q.slice(q.indexOf('export async function sucursalesDeLaEmpresaEnTx'))
+  assert.match(sucursales, /where: \{ companyId \}/)
+})
+
+test('INV-1 · el aviso de stock bajo cubre el POS y todo movimiento manual que baja lo vendible', () => {
+  // Acciones del panel: daño, ajuste faltante, transferencia (origen) y conteo a la baja.
+  assert.match(sinComentarios, /import \{ avisarStockBajo \} from '\.\/avisos'/)
+  assert.match(sinComentarios, /import \{ after \} from 'next\/server'/)
+  assert.match(sinComentarios, /function avisarTrasBajar\(companyId: string, varianteId: unknown\)[\s\S]*?after\(\(\) => avisarStockBajo\(companyId, \[varianteId\]\)\)/, 'el aviso va en after(): no se pierde al terminar la respuesta')
+  assert.doesNotMatch(sinComentarios, /void avisarStockBajo/, 'un `void` suelto puede perderse cuando la respuesta termina')
+  const dano = sinComentarios.slice(sinComentarios.indexOf('export async function registrarDanoInventario'))
+  assert.match(dano.slice(0, 700), /\(\) => true\n\s*\)/, 'un daño siempre baja lo vendible')
+  const ajuste = sinComentarios.slice(sinComentarios.indexOf('export async function ajustarInventario'))
+  assert.match(ajuste.slice(0, 700), /e\.cambio < 0/, 'un ajuste solo avisa si es faltante')
+  const conteo = sinComentarios.slice(sinComentarios.indexOf('export async function contarInventario'))
+  assert.match(conteo.slice(0, 900), /if \(r\.diferencia < 0\) avisarTrasBajar/, 'un conteo avisa solo si bajó')
+  const transferencia = sinComentarios.slice(sinComentarios.indexOf('export async function transferirInventario'))
+  assert.match(transferencia.slice(0, 1200), /if \(!r\.repetido\) avisarTrasBajar/, 'una transferencia repetida no avisa otra vez')
+  // Una entrada, una devolución o resolver lo dañado NO bajan lo vendible: no llaman al aviso.
+  for (const nombre of ['registrarEntradaInventario', 'registrarDevolucionInventario', 'resolverDanadoInventario']) {
+    const cuerpo = sinComentarios.slice(sinComentarios.indexOf(`export async function ${nombre}`)).split('\n}\n')[0]
+    assert.doesNotMatch(cuerpo, /avisar|=> true/, `${nombre} no baja lo vendible`)
+  }
+  // El aviso nunca se espera ni puede deshacer el movimiento.
+  assert.doesNotMatch(sinComentarios, /await avisarStockBajo/)
+
+  const pos = sinComent(leer('src/modules/pos/actions.ts'))
+  assert.match(pos, /import \{ avisarStockBajo \} from '@\/modules\/inventory\/avisos'/)
+  assert.match(pos, /import \{ after \} from 'next\/server'/)
+  assert.match(pos, /if \(!venta\.repetido\) after\(\(\) => avisarStockBajo\(c\.companyId, lineas\.map\(\(l\) => l\.varianteId\)\)\)/, 'venta de mostrador')
+  assert.match(pos, /after\(async \(\) => avisarStockBajo\(c\.companyId, await variantesDelPedido\(c\.companyId, cobro\.pedidoId\)\)\)/, 'cobro de un pedido en caja')
+  assert.doesNotMatch(pos, /void avisarStockBajo|void \(async \(\) => avisarStockBajo/, 'un aviso suelto con void puede perderse al terminar la respuesta')
+})
+
+test('INV-1 · la clave del aviso lleva el estado, para que AGOTADO avise aunque «Stock bajo» ya avisara hoy', () => {
+  const s = sinComent(leer('src/modules/inventory/avisos.ts'))
+  assert.match(s, /dedupeKey: `stock-bajo:\$\{n\.id\}:\$\{dia\}:\$\{estado\}`/)
+})
+
+test('INV-1 · el umbral en varias sucursales extiende la acción existente (no hay acción nueva) y exige la misma función', () => {
+  const umbral = sinComentarios.slice(sinComentarios.indexOf('export async function fijarUmbralInventario'))
+  const cuerpo = umbral.slice(0, umbral.indexOf('\n}\n') + 3)
+  assert.match(cuerpo, /await contexto\('ajustar'\)/)
+  assert.match(cuerpo, /entrada\.aplicarAOtras === true/)
+  assert.match(cuerpo, /configurarUmbralOtrasSucursalesEnTx\(tx, c\.companyId,/, 'todo en la MISMA transacción y con la empresa de la sesión')
+  const svc = sinComent(leer('src/modules/inventory/service.ts'))
+  const otras = svc.slice(svc.indexOf('export async function configurarUmbralOtrasSucursalesEnTx'))
+  assert.match(otras, /where: \{ companyId, catalogVariantId: variante\.id, locationId: \{ not: e\.sucursalOrigenId \}, location: \{ activa: true \} \}/, 'solo sucursales activas con saldo, de esta empresa')
+  assert.doesNotMatch(otras, /obtenerNivel\(/, 'no crea saldos en cero donde el producto nunca estuvo')
+})
+
+test('INV-1 · la lista salta a la ficha solo con coincidencia exacta, y el salto queda FUERA del try (redirect lanza)', () => {
+  const s = sinComent(leer('src/app/(admin)/admin/inventario/page.tsx'))
+  assert.match(s, /if \(q && datos\?\.lista\.varianteExacta\) redirect\(`\/admin\/inventario\/\$\{datos\.lista\.varianteExacta\}`\)/)
+  assert.ok(s.indexOf('redirect(`/admin/inventario/') > s.lastIndexOf('} catch (e) {'), 'el redirect va después del catch')
+  assert.match(s, /advertenciaEstadoManual\(f\.estadoVariante, f\.disponible\)/, 'la lista advierte del estado manual')
+  assert.match(leer('src/app/(admin)/admin/inventario/[varianteId]/page.tsx'), /advertenciaEstadoManual\(detalle\.estadoVariante, total\.disponible\)/)
+})
+
+test('INV-1 · los componentes nuevos del inventario no arrastran el servidor al navegador', () => {
+  const nav = leer('src/components/inventario/NavegacionInventario.tsx')
+  assert.doesNotMatch(nav, /'use client'/, 'son tres enlaces: componente de servidor')
+  assert.doesNotMatch(nav, /@prisma\/client|lib\/prisma|modules\/inventory/)
+  // `formato.ts` y `filtros.ts` los importan las pantallas y las pruebas: tienen que seguir siendo puros.
+  for (const archivo of ['formato.ts', 'filtros.ts', 'exportacion.ts']) {
+    const s = leer(`src/modules/inventory/${archivo}`)
+    assert.doesNotMatch(s, /server-only|from '@\/lib\/prisma'|from '@\/lib\/tenant'/, `${archivo} debe seguir siendo puro`)
+  }
+})

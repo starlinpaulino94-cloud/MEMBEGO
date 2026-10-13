@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
-import { cerrarPrisma, entrarComo, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
+import { cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 import { empresaCatalogo, itemSembrado, sucursalSembrada, varianteDe, type EmpresaCatalogo } from './catalogo-arnes'
 
 /**
@@ -9,6 +9,11 @@ import { empresaCatalogo, itemSembrado, sucursalSembrada, varianteDe, type Empre
  *   motivo → faltante imposible (avisa y no mueve) → daño → dar de baja →
  *   umbral → la alerta aparece en la lista → transferir → conteo físico →
  *   historial con cada movimiento
+ *
+ * Después (INV-1): las tres vistas de la empresa —existencias, movimientos y
+ * reservas—, los filtros y la exportación a CSV de los movimientos, el salto a
+ * la ficha con el código exacto de un lector, el aviso del estado «Agotada»
+ * fijado a mano y el umbral aplicado a otras sucursales.
  *
  * Y lo que NO debe pasar: abrir por URL la variante de otra empresa, y entrar
  * una empresa que no tiene encendida la capacidad.
@@ -195,6 +200,135 @@ test.describe('Inventario · panel', () => {
     // ── Persistencia: lo mismo después de recargar ────────────────────────
     expect(await cifra(tarjeta(p, 'Principal'), 'En existencia')).toBe(4)
     expect(await cifra(tarjeta(p, 'Norte'), 'Disponible')).toBe(2)
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-1 · movimientos de la empresa, exportación CSV, reservas, salto por código, estado manual y umbral en varias sucursales', async ({ browser }) => {
+    test.setTimeout(240_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+    const SKU = `INV-${sufijo}`
+
+    // ── Tres vistas, un solo menú ─────────────────────────────────────────
+    await p.goto('/admin/inventario')
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    await expect(vistas.getByRole('link', { name: 'Existencias' })).toHaveAttribute('aria-current', 'page')
+    await vistas.getByRole('link', { name: 'Movimientos' }).click()
+    await p.waitForURL('**/admin/inventario/movimientos')
+    await expect(p.getByRole('heading', { name: 'Movimientos de inventario', level: 1 })).toBeVisible()
+    await expect(vistas.getByRole('link', { name: 'Movimientos' })).toHaveAttribute('aria-current', 'page')
+
+    // ── Todo el historial de la empresa: los 7 movimientos del recorrido anterior ──
+    const lista = p.getByRole('list', { name: 'Movimientos de inventario' })
+    await expect(lista.getByRole('listitem')).toHaveCount(7)
+    await expect(lista.getByRole('listitem').first()).toContainText('Conteo físico')
+    await expect(lista.getByRole('link', { name: PRODUCTO }).first()).toHaveAttribute('href', `/admin/inventario/${variante}`)
+
+    // ── Filtros: por tipo, por sucursal y por texto ───────────────────────
+    const filtros = p.getByRole('form', { name: 'Filtrar movimientos' })
+    await filtros.getByLabel('Movimiento').selectOption({ label: 'Transferencia enviada' })
+    await filtros.getByRole('button', { name: 'Filtrar' }).click()
+    await p.waitForURL(/tipo=TRANSFER_OUT/)
+    await expect(lista.getByRole('listitem')).toHaveCount(1)
+    await expect(lista.getByRole('listitem').first()).toContainText('Reabasto')
+    await expect(lista.getByRole('listitem').first()).toContainText('Principal')
+
+    // Combina con sucursal: la transferencia ENVIADA salió de Principal, no de Norte.
+    await p.goto('/admin/inventario/movimientos')
+    const f2 = p.getByRole('form', { name: 'Filtrar movimientos' })
+    await f2.getByLabel('Sucursal').selectOption({ label: 'Norte' })
+    await f2.getByRole('button', { name: 'Filtrar' }).click()
+    await p.waitForURL(/sucursal=/)
+    await expect(lista.getByRole('listitem')).toHaveCount(1)
+    await expect(lista.getByRole('listitem').first()).toContainText('Transferencia recibida')
+
+    await p.goto(`/admin/inventario/movimientos?q=${encodeURIComponent(SKU)}`)
+    await expect(lista.getByRole('listitem')).toHaveCount(7)
+    await p.goto('/admin/inventario/movimientos?q=zzz-no-existe')
+    await expect(p.getByText('Nada coincide con esos filtros')).toBeVisible()
+    // Una URL manipulada no rompe nada.
+    await p.goto('/admin/inventario/movimientos?tipo=<script>&desde=2030-02-31&cursor=basura&sucursal=ajena')
+    await expect(p.getByRole('heading', { name: 'Movimientos de inventario', level: 1 })).toBeVisible()
+
+    // ── Exportar CSV: los mismos filtros que la pantalla ──────────────────
+    await p.goto('/admin/inventario/movimientos?tipo=TRANSFER_OUT')
+    await expect(p.getByRole('link', { name: /Exportar CSV/ })).toHaveAttribute('href', /\/admin\/inventario\/movimientos\/exportar\?.*tipo=TRANSFER_OUT/)
+    const filtrado = await p.request.get('/admin/inventario/movimientos/exportar?tipo=TRANSFER_OUT')
+    expect(filtrado.status()).toBe(200)
+    expect(filtrado.headers()['content-type']).toContain('text/csv')
+    expect(filtrado.headers()['content-disposition']).toMatch(/^attachment; filename="movimientos-inventario-\d{4}-\d{2}-\d{2}\.csv"$/)
+    const csvFiltrado = await filtrado.text()
+    expect(csvFiltrado).toContain('Alcance de la exportación')
+    expect(csvFiltrado).toContain('Movimiento;Transferencia enviada')
+    expect(csvFiltrado).toContain('Datos completos;Si')
+    expect(csvFiltrado.split('\n').filter((l) => l.includes(SKU))).toHaveLength(1)
+    expect(csvFiltrado).not.toContain('Entrada de mercancía')
+    const completo = await (await p.request.get('/admin/inventario/movimientos/exportar')).text()
+    expect(completo).toContain('Ninguno (todos los movimientos)')
+    expect(completo.split('\n').filter((l) => l.includes(SKU))).toHaveLength(7)
+
+    // Sin sesión, o de una empresa sin la capacidad, NO sale ni una fila.
+    const anonimo = await browser.newContext()
+    const sinSesion = await anonimo.request.get('/admin/inventario/movimientos/exportar', { maxRedirects: 0 })
+    expect(sinSesion.headers()['content-type'] ?? '').not.toContain('text/csv')
+    expect(await sinSesion.text()).not.toContain('Alcance de la exportación')
+    await anonimo.close()
+    const ctxSin = await browser.newContext()
+    await entrarComo(ctxSin, 'catalogoSinCapacidad', BASE, sin.id)
+    const sinCapacidad = await ctxSin.request.get('/admin/inventario/movimientos/exportar', { maxRedirects: 0 })
+    expect(sinCapacidad.headers()['content-type'] ?? '').not.toContain('text/csv')
+    expect([302, 303, 307, 308, 403]).toContain(sinCapacidad.status())
+    expect(await sinCapacidad.text()).not.toContain(SKU)
+    await ctxSin.close()
+
+    // ── Reservas: nada apartado todavía (las crean los pedidos; el detalle está en las pruebas contra la base) ──
+    await p.goto('/admin/inventario/reservas')
+    await expect(p.getByRole('heading', { name: 'Reservas de inventario', level: 1 })).toBeVisible()
+    await expect(vistas.getByRole('link', { name: 'Reservas' })).toHaveAttribute('aria-current', 'page')
+    await expect(p.getByText('No hay nada apartado ahora mismo')).toBeVisible()
+
+    // ── Lector de código: el SKU exacto salta a la ficha; un fragmento, no ──
+    await p.goto(`/admin/inventario?q=${encodeURIComponent(SKU)}`)
+    await p.waitForURL(`**/admin/inventario/${variante}`)
+    await expect(p.getByRole('heading', { name: PRODUCTO, level: 1 })).toBeVisible()
+    await p.goto(`/admin/inventario?q=${encodeURIComponent(SKU.toLowerCase())}`)
+    await p.waitForURL(`**/admin/inventario/${variante}`)
+    await p.goto('/admin/inventario?q=INV-')
+    await expect(p).toHaveURL(/\/admin\/inventario\?q=INV-$/)
+    await expect(p.getByRole('list', { name: 'Existencias por producto' }).getByText(PRODUCTO)).toBeVisible()
+
+    // ── Estado «Agotada» fijado a mano: se avisa en la lista y en la ficha ─
+    const prisma = prismaDeArnes()
+    await prisma.catalogVariant.update({ where: { id: variante }, data: { status: 'OUT_OF_STOCK' } })
+    try {
+      await p.goto('/admin/inventario?q=INV-')
+      await expect(p.getByText(/marcada «Agotada» en el catálogo: no se vende aunque haya 6 unidades disponibles/)).toBeVisible()
+      await p.goto(`/admin/inventario/${variante}`)
+      await expect(p.getByText(/marcada «Agotada» en el catálogo: no se vende aunque haya 6 unidades disponibles/)).toBeVisible()
+      await expect(p.getByRole('link', { name: 'Cambiar su estado en el catálogo' })).toHaveAttribute('href', /\/admin\/catalogo\//)
+    } finally {
+      await prisma.catalogVariant.update({ where: { id: variante }, data: { status: 'ACTIVE' } })
+    }
+    await p.goto(`/admin/inventario/${variante}`)
+    await expect(p.getByText(/marcada «Agotada»/)).toHaveCount(0)
+
+    // ── Umbral aplicado también a la otra sucursal con existencias ────────
+    const umbralPrincipal = p.getByRole('form', { name: 'Umbral de stock bajo en Principal' })
+    await umbralPrincipal.getByLabel('Avisar cuando queden').fill('3')
+    await umbralPrincipal.getByLabel(/Aplicar también a las otras sucursales/).check()
+    await umbralPrincipal.getByRole('button', { name: 'Guardar umbral' }).click()
+    await expect(p.getByText(/También se aplicó en 1 sucursal más/).first()).toBeVisible({ timeout: 15_000 })
+    await p.reload()
+    await expect(p.getByRole('form', { name: 'Umbral de stock bajo en Principal' }).getByLabel('Avisar cuando queden')).toHaveValue('3')
+    await expect(p.getByRole('form', { name: 'Umbral de stock bajo en Norte' }).getByLabel('Avisar cuando queden')).toHaveValue('3')
 
     expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
     await ctx.close()

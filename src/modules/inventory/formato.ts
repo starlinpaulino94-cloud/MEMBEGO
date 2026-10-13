@@ -1,4 +1,4 @@
-import type { InventoryMovementType } from '@prisma/client'
+import type { CatalogVariantStatus, InventoryMovementType } from '@prisma/client'
 import type { EstadoStock } from './domain'
 
 /**
@@ -31,6 +31,26 @@ export const BADGE_ESTADO_STOCK: Record<EstadoStock, 'destructive' | 'warning' |
   AGOTADO: 'destructive',
   BAJO: 'warning',
   OK: 'success',
+}
+
+/**
+ * El estado de una variante que la empresa fijó A MANO en el catálogo manda sobre
+ * el inventario: los pedidos y el checkout rechazan toda variante que no esté
+ * «Activa», y la vitrina la enseña «Agotado», haya existencias o no. Reponer
+ * mercancía NO la reactiva. Esto lo dice con palabras, o devuelve null si no hay
+ * nada que advertir.
+ */
+export function advertenciaEstadoManual(estado: CatalogVariantStatus, disponibles: number): string | null {
+  const cuantas = `${formatearCantidad(disponibles)} ${disponibles === 1 ? 'unidad disponible' : 'unidades disponibles'}`
+  if (estado === 'OUT_OF_STOCK') {
+    return disponibles > 0
+      ? `Esta variante está marcada «Agotada» en el catálogo: no se vende aunque haya ${cuantas}.`
+      : 'Esta variante está marcada «Agotada» en el catálogo. Al reponer existencias seguirá sin venderse hasta que la actives.'
+  }
+  if (estado === 'DISCONTINUED' && disponibles > 0) {
+    return `Esta variante está descontinuada en el catálogo: no se vende, pero aún tiene ${cuantas}.`
+  }
+  return null
 }
 
 /** «Camiseta · Grande»; una variante automática (`isDefault`) no se nombra: es el producto. */

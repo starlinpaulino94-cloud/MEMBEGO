@@ -184,7 +184,12 @@ con el mismo arnés (`itemSembrado({ controlaInventario: true })`,
 no mueve) → daño → baja de lo dañado → umbral y alerta en la lista → transferencia
 entre sucursales → conteo físico → historial con cada movimiento; la variante de
 otra empresa se ve igual que una inventada, y una empresa sin la capacidad no
-entra. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
+entra. **INV-1** añade un recorrido: las tres vistas (Existencias · Movimientos ·
+Reservas), los 7 movimientos de la empresa, filtros por tipo y por sucursal, la
+exportación CSV con los mismos filtros (y sin sesión o sin la capacidad no sale ni
+una fila), el salto a la ficha con el SKU exacto de un lector, la advertencia de una
+variante «Agotada» a mano (la prueba la fija por Prisma y la restaura) y el umbral
+aplicado también a la otra sucursal con existencias. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
 disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
 144 combinaciones tipo×origen×destino las prueban `tests/postgres/inventory.db.test.ts`
 y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba
