@@ -405,7 +405,7 @@ test('the code that runs inside the WebView behaves exactly like the TypeScript 
 interface PageHarness {
   readonly posted: string[]
   readonly diagnostics: string[]
-  readonly sdkScript: { listeners: Map<string, () => void> }
+  readonly sdkScript: { src: string; listeners: Map<string, () => void> }
   readonly status: { textContent: string }
   readonly field: { value: string }
   readonly button: { disabled: boolean; textContent: string; click: () => void }
