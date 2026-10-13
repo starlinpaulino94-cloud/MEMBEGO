@@ -61,12 +61,17 @@ function loadService() {
   return servicePromise
 }
 
+// Solo se corre contra una base desechable: la de QA local (`127.0.0.1:15432/cardnetqa`) o la base de pruebas que
+// `npm run test:db` levanta en CI (`supplytest`, siempre en la propia máquina). Nunca contra una base real.
 function assertDisposableDatabase(): void {
   const databaseUrl = process.env.DATABASE_URL
   if (!databaseUrl) throw new Error('DATABASE_URL must target the disposable PostgreSQL QA database')
   const parsed = new URL(databaseUrl)
-  if (parsed.hostname !== '127.0.0.1' || parsed.port !== '15432' || parsed.pathname !== '/cardnetqa') {
-    throw new Error('CardNET PostgreSQL QA is restricted to 127.0.0.1:15432/cardnetqa')
+  const isLocalHost = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+  const isQaDatabase = parsed.hostname === '127.0.0.1' && parsed.port === '15432' && parsed.pathname === '/cardnetqa'
+  const isSuiteDatabase = isLocalHost && parsed.pathname === '/supplytest'
+  if (!isQaDatabase && !isSuiteDatabase) {
+    throw new Error('CardNET PostgreSQL QA is restricted to 127.0.0.1:15432/cardnetqa or the local supplytest database')
   }
 }
 
@@ -217,7 +222,8 @@ test('PostgreSQL nonce CAS allows one concurrent consume and rejects replay', as
   const confirmationStatuses = confirmations.map((result) => result.status).sort((left, right) => left - right)
   assert.deepEqual(confirmationStatuses, [202, 409])
   const consumed = await prisma.cardnetCaptureSession.findUniqueOrThrow({ where: { id: sessionId } })
-  assert.equal(consumed.estado, 'PROFILE_PENDING')
+  // Sin perfil todavía, la sesión queda lista para REINTENTAR de inmediato (antes quedaba 45 s en PROFILE_PENDING).
+  assert.equal(consumed.estado, 'CAPTURE_CONSUMED')
   assert.equal(consumed.captureNonce, null)
   assert.equal(consumed.reservaClienteKey !== null, true)
   assert.equal(scenario.customerGets, 1)
@@ -228,7 +234,7 @@ test('PostgreSQL nonce CAS allows one concurrent consume and rejects replay', as
   const replay = await confirmSession(fixture.user, sessionId, captureNonce)
   assert.equal(replay.status, 409)
   assert.equal(scenario.customerGets, 1)
-  console.log('QA nonce CAS result: statuses=202,409; state=PROFILE_PENDING; nonceCleared=true; reservationHeld=true; customerGets=1; charges=0; replay=409; customerGetsAfterReplay=1')
+  console.log('QA nonce CAS result: statuses=202,409; state=CAPTURE_CONSUMED; nonceCleared=true; reservationHeld=true; customerGets=1; charges=0; replay=409; customerGetsAfterReplay=1')
 })
 
 test('approved Purchase persists one intent and fulfills the membership exactly once across replay', async () => {
