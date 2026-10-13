@@ -8,12 +8,13 @@ const fs = require('node:fs');
 const projectRoot = __dirname;
 const monorepoRoot = path.resolve(projectRoot, '../..');
 const bunRoot = path.resolve(monorepoRoot, 'node_modules/.bun');
+const bunPackageDirectories = fs.existsSync(bunRoot) ? fs.readdirSync(bunRoot) : [];
 
 function findBunPackage(packageName) {
   const prefix = packageName.startsWith('@')
     ? packageName.slice(1).replace('/', '+') + '@'
     : packageName + '@';
-  const directory = fs.readdirSync(bunRoot).find((entry) => entry.startsWith(prefix));
+  const directory = bunPackageDirectories.find((entry) => entry.startsWith(prefix));
   return directory
     ? path.resolve(bunRoot, directory, 'node_modules', packageName)
     : path.resolve(projectRoot, 'node_modules', packageName);
@@ -34,4 +35,25 @@ config.resolver.extraNodeModules = {
   'react-native-css-interop': findBunPackage('react-native-css-interop'),
 };
 
-module.exports = withNativeWind(config, { input: './global.css' });
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (
+    platform === 'web' &&
+    (moduleName === 'react-native' || moduleName.startsWith('react-native-web/'))
+  ) {
+    const reactNativeWebPath = path.resolve(
+      projectRoot,
+      'node_modules/react-native-web',
+      moduleName === 'react-native' ? 'dist/index.js' : moduleName.slice('react-native-web/'.length),
+    );
+
+    return context.resolveRequest(
+      context,
+      reactNativeWebPath,
+      platform,
+    );
+  }
+
+  return context.resolveRequest(context, moduleName, platform);
+};
+
+module.exports = withNativeWind(config, { input: './global.native.css' });

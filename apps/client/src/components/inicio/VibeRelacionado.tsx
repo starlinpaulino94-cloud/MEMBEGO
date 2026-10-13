@@ -59,7 +59,6 @@ export function PlanCardItem({ plan, accent, onPress }: PlanCardItemProps) {
       onHoverIn={() => setIsHovered(true)}
       onHoverOut={() => setIsHovered(false)}
       accessibilityLabel={`Ver membresía de ${plan.empresa}`}
-      variant="flush"
       className="group hover:scale-[1.01] transition-all"
       footer={
         <LinearGradient

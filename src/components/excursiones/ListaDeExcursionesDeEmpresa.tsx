@@ -35,7 +35,7 @@ export function ListaDeExcursionesDeEmpresa({ datos, espacio, enlaceVendedor }: 
               Próximas excursiones de {company.name}
             </h1>
             <p className="mt-1.5 text-xs sm:text-sm text-muted-foreground w-full">
-              {excursiones.length > 0 
+              {excursiones.length > 0
                 ? `Explora ${excursiones.length} experiencia${excursiones.length !== 1 ? 's' : ''} disponible${excursiones.length !== 1 ? 's' : ''} con salidas confirmadas y cupos abiertos.`
                 : 'Descubre y reserva las mejores aventuras.'
               }

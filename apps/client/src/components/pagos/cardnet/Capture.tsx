@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Text, View } from 'react-native'
+import { ActivityIndicator, Modal, Platform, ScrollView, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { CheckCircle2 } from 'lucide-react-native'
 import type { CardnetCaptureSession, CardnetPaymentStatus } from '../../../lib/api'
 import { api } from '../../../lib/api'
@@ -18,9 +19,14 @@ import {
 import {
   decideCaptureStatus,
   isCardnetSessionExpired,
+  resolveCardnetMerchantOrigin,
   shouldRenderPaymentSuccess,
   validateCardnetCaptureSession,
 } from './security'
+
+const cardnetMerchantOrigin = resolveCardnetMerchantOrigin(
+  process.env.EXPO_PUBLIC_CARDNET_MERCHANT_ORIGIN,
+)
 
 export interface CardnetCaptureProps {
   readonly session: CardnetCaptureSession
@@ -28,6 +34,7 @@ export interface CardnetCaptureProps {
   readonly onStatusChange?: (status: CardnetPaymentStatus) => void
   readonly onApproved?: () => void
   readonly onRestartSession?: () => void
+  readonly onClose: () => void
 }
 
 /** Cada cuánto se pregunta al servidor mientras el formulario está abierto (≈17 por minuto; el tope de la ruta es 30). */
@@ -60,6 +67,7 @@ export function CardnetCapture({
   onStatusChange,
   onApproved,
   onRestartSession,
+  onClose,
 }: CardnetCaptureProps) {
   const config = useMemo(() => validateCardnetCaptureSession(session), [session])
   const [status, setStatus] = useState<CardnetPaymentStatus | null>(initialStatus)
@@ -228,8 +236,13 @@ export function CardnetCapture({
     }, CAPTURE_WATCH_MS)
     return () => clearInterval(interval)
   }, [watching])
+  const nativeCaptureActive = Platform.OS !== 'web' &&
+    config !== null &&
+    cardnetMerchantOrigin !== null &&
+    !captureFailure &&
+    !captureIsClosed
 
-  return (
+  const captureContent = (
     <View className="mx-auto w-full max-w-[720px] gap-4 px-4 py-4 md:px-6">
       <Card className="gap-4 p-4 md:p-5">
         <View className="flex-row items-start justify-between gap-3">
@@ -246,6 +259,8 @@ export function CardnetCapture({
         <CardnetCaptureIntroduction />
         {!config ? (
           <CardnetCaptureError title="No pudimos validar la sesión de CardNET" description="Cierra esta ventana e inicia una nueva sesión de pago." onRetry={onRestartSession} />
+        ) : Platform.OS !== 'web' && !cardnetMerchantOrigin ? (
+          <CardnetCaptureError title="No pudimos preparar CardNET" description="El origen seguro de la tienda no es válido." onRetry={onRestartSession} />
         ) : captureFailure ? (
           <CardnetCaptureError onRetry={onRestartSession} />
         ) : captureIsClosed ? (
@@ -259,6 +274,7 @@ export function CardnetCapture({
             key={surfaceKey}
             config={config}
             disabled={false}
+            merchantOrigin={cardnetMerchantOrigin ?? 'https://membego.com'}
             onError={handleCaptureError}
             onToken={receiveToken}
             session={session}
@@ -279,6 +295,50 @@ export function CardnetCapture({
         ) : null}
       </Card>
     </View>
+  )
+
+  if (Platform.OS === 'web') return captureContent
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="fullScreen"
+      visible
+    >
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
+        <View className="border-b border-border px-4 py-3">
+          <View className="mx-auto w-full max-w-[720px] flex-row items-center justify-between gap-3">
+            <View className="flex-1">
+              <Text className="text-base font-inter-semibold text-foreground">Pago seguro</Text>
+              <Text className="text-sm text-muted-foreground">CardNET · {formatAmount(session.amount, session.currency)}</Text>
+            </View>
+            <Button size="sm" variant="outline" onPress={onClose}>
+              Cerrar
+            </Button>
+          </View>
+        </View>
+        {nativeCaptureActive && config ? (
+          <CardnetCaptureSurface
+            key={surfaceKey}
+            config={config}
+            disabled={false}
+            merchantOrigin={cardnetMerchantOrigin ?? 'https://membego.com'}
+            onError={handleCaptureError}
+            onToken={receiveToken}
+            session={session}
+          />
+        ) : (
+          <ScrollView
+            className="flex-1"
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {captureContent}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    </Modal>
   )
 }
 

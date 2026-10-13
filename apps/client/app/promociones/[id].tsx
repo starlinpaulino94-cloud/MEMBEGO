@@ -301,6 +301,7 @@ function PromocionDetalleScreenContent() {
             onStatusChange={setCaptureStatus}
             onApproved={handlePaymentApproved}
             onRestartSession={restartCardnetSession}
+            onClose={() => setCaptureVisible(false)}
           />
         </ScrollView>
       </View>

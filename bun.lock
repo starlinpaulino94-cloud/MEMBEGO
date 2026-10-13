@@ -127,6 +127,7 @@
         "react-native-webview": "13.16.1",
         "react-native-worklets": "0.10.1",
         "tailwindcss": "^3.4.17",
+        "zod": "^4.0.2",
       },
       "devDependencies": {
         "@babel/plugin-transform-react-jsx": "^8.0.1",
