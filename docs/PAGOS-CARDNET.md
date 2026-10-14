@@ -387,9 +387,9 @@ demostrado; las tres eran un riesgo real y están cerradas. Lo importante es que
    servidor` (esa línea es la señal de que el puente de la app sigue fallando: si aparece, hay que mirar el iframe real).
 
 **Lo que NO está verificado.** Todo se probó con simulaciones: el servidor contra un CardNET de mentira y la WebView contra un
-SDK y un DOM de mentira. Falta una prueba en un teléfono real (Android e iOS) con una tarjeta de verdad. En particular no se
-sabe si en iOS `onShouldStartLoadWithRequest` deja pasar la redirección 3DS del banco dentro del iframe (la regla actual solo
-permite la ventana de captura de esta sesión): si el 3DS no abre en iPhone, ese es el sitio.
+SDK y un DOM de mentira. Falta una prueba en un teléfono real (Android e iOS) con una tarjeta de verdad. (Lo que se temía aquí
+—que la WebView no dejara pasar el 3DS del banco— pasó en Android el 14-10-2026; ver la sección siguiente: la app ya no usa
+WebView para el formulario.)
 
 **La tarjeta de prueba que ya quedó registrada.** El Customer ya tiene su perfil, así que el próximo intento lo toma como
 «anterior» y espera uno NUEVO. CardNET crea un perfil por cada captura, de modo que basta repetir la captura. La membresía
@@ -397,6 +397,47 @@ sigue `PENDIENTE` hasta que un cobro apruebe.
 
 **Cómo comprobar que funciona.** Pagar con la app y mirar `cardnet_capture_sessions`: la sesión debe pasar de
 `CAPTURE_OPEN` a `CAPTURE_CONSUMED` (con `capturadoAt`) y aparecer un `pago_intentos` con `cardnetUniqueId`.
+
+### Móvil: «la autenticación falló» dentro del formulario de CardNET (14-10-2026)
+
+**Síntoma.** En la app de Android, CardNET mostraba «la autenticación falló» DENTRO de su formulario a las tarjetas cuyo
+banco pide la verificación 3D Secure; otras tarjetas (las que el banco aprueba sin pedir nada) sí se registraban. La MISMA
+tarjeta se registraba bien en membego.com desde Chrome en el mismo teléfono. Es decir: el fallo era de la WebView, no del
+banco ni de CardNET.
+
+**Por qué la WebView.** El reto 3DS del banco se pinta en un marco de NUESTRA página y el formulario que lo abre hace POST a
+la pasarela (lo dice la CSP de `next.config.ts`); además el banco puede abrir ventanas y usar sus cookies. Un navegador lo da
+todo; la WebView de la app no (ventanas emergentes bloqueadas, navegación restringida a CardNET, sin `Referer`, documento
+armado en memoria). Imitar Chrome dentro de la WebView era perseguir el síntoma.
+
+**Arreglo.** La app ya no pinta el formulario en una WebView: abre en el navegador del sistema (pestaña de Chrome en
+Android, Safari en iPhone, con `expo-web-browser` · `openAuthSessionAsync`) una ventana que sirve el servidor:
+
+| Pieza | Dónde |
+|---|---|
+| Ventana (HTML: SDK oficial, mismos `SetProperties` que la web, puente del token) | `src/modules/pagos/cardnetVentanaHtml.ts` |
+| Quién puede abrirla | `src/modules/pagos/cardnetVentana.ts` |
+| Ruta | `GET /api/v1/cliente/pagos/cardnet/ventana?s=<sessionId>&n=<nonce>` |
+| Botón en la app | `apps/client/src/components/pagos/cardnet/CaptureSurface.native.tsx` |
+| Vuelta a la app | `membego://pago-cardnet?s=…&t=…` (`CARDNET_WINDOW_RETURN_URL`; `app/+native-intent.tsx` evita que el router navegue con ella) |
+
+- La pestaña no tiene la sesión de la app: se abre con el id de la sesión de captura **y su nonce** (la base guarda el hash),
+  solo si la captura está ABIERTA y sin vencer, y con la URL de captura, el script y la llave pública del ambiente
+  configurado. Cualquier otra cosa da la misma página «ya no está disponible» (404), sin oráculo. Límite por IP.
+- Lo que la página enseña (llave pública, `UniqueID`, `CaptureURL`, monto) ya se le entregaba a la app. Cobrar sigue
+  exigiendo la sesión autenticada de la app (`/confirmar` con el nonce) o lo decide el servidor viendo el perfil nuevo.
+- Al entregar CardNET el token, la ventana vuelve a la app con él y la app lo confirma como antes. Si la vuelta se pierde
+  (el cliente cierra la pestaña), el sondeo de `/estado` encuentra la tarjeta nueva en CardNET y avanza
+  (`reconciliarCapturaAbierta`, 12-10-2026).
+- Se retiraron el documento de la WebView (`captureDocument.native.ts`, `pageHelpers.ts`), su política de navegación y sus
+  diagnósticos, y la variable `EXPO_PUBLIC_CARDNET_MERCHANT_ORIGIN`. La versión web de la app (`CaptureSurface.web.tsx`) no
+  cambia.
+- `expo-web-browser` es un módulo nativo: el arreglo llega a los teléfonos con un **build nuevo** de la app. La ruta del
+  servidor tiene que estar desplegada antes de repartir ese build.
+
+Pruebas: `tests/cardnet-ventana-navegador.test.ts` ejecuta la ventana real contra un SDK y un DOM simulados (abre con los
+parámetros de la web, entrega el token en todas sus formas, plan B, `Close` que revienta, sin SDK, datos hostiles) y fija la
+vuelta a la app y el router; `tests/postgres/cardnet-capture-reservation.db.test.ts` fija quién puede abrirla.
 
 ### Lo que solo confirma un cobro real
 
