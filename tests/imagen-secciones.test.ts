@@ -35,6 +35,7 @@ const EXCEPCIONES: Record<string, string> = {
   'src/components/cliente/ComprobantePagoForm.tsx': 'comprobantes de pago: documento, no imagen de marca',
   'src/components/cliente/ReportarProblemaForm.tsx': 'adjunto de un reporte de problema: captura tal cual',
   'src/components/supply-v2/finanzas/adjunto.tsx': 'adjuntos contables (pueden ser PDF)',
+  'src/components/inventario/ImportarForm.tsx': 'archivo CSV de existencias: se lee como texto en el navegador, no es una imagen',
   // Se delega en el editor mediante la prop `formato`; los formularios que la usan se comprueban abajo.
   'src/components/invitaciones/CampanaImagenUpload.tsx': 'recibe el formato por prop (ver prueba de sus llamadas)',
 }

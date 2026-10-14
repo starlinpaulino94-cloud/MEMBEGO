@@ -118,3 +118,52 @@ export function movimientosToCsv(filas: readonly FilaExportada[], ctx: ContextoE
     },
   ])
 }
+
+// ── INV-2a · el CSV de UNA entrada ───────────────────────────────────────────
+
+export interface EntradaParaCsv {
+  numero: string
+  creadoEn: Date
+  sucursalNombre: string
+  origen: 'MANUAL' | 'CSV'
+  referencia: string | null
+  nota: string | null
+  usuarioNombre: string | null
+  lineas: number
+  unidades: number
+  detalle: ReadonlyArray<{ sku: string; barcode: string | null; itemNombre: string; nombreVariante: string; esDefault: boolean; cantidad: number; existenciaAntes: number; existenciaDespues: number }>
+}
+
+/** Una entrada con todas sus líneas: lo que se le manda al contador o al proveedor. */
+export function entradaToCsv(e: EntradaParaCsv, zonaHoraria: string): string {
+  return armarCsvBloques([
+    {
+      titulo: 'Entrada de mercancía',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Número', e.numero],
+        ['Fecha y hora', fechaHoraCsv(e.creadoEn, zonaHoraria)],
+        ['Zona horaria', zonaHoraria],
+        ['Sucursal', SIN_FORMULA(e.sucursalNombre)],
+        ['Referencia', SIN_FORMULA(e.referencia)],
+        ['Nota', SIN_FORMULA(e.nota)],
+        ['Origen', e.origen === 'CSV' ? 'Importada de un archivo CSV' : 'Capturada a mano'],
+        ['Registrada por', SIN_FORMULA(e.usuarioNombre ?? 'Sistema')],
+        ['Productos', e.lineas],
+        ['Unidades', e.unidades],
+      ],
+    },
+    {
+      titulo: 'Líneas',
+      encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Cantidad', 'Existencia antes', 'Existencia despues'],
+      filas: e.detalle.map((l) => [
+        SIN_FORMULA(l.sku),
+        SIN_FORMULA(l.barcode),
+        SIN_FORMULA(l.esDefault ? l.itemNombre : `${l.itemNombre} · ${l.nombreVariante}`),
+        l.cantidad,
+        l.existenciaAntes,
+        l.existenciaDespues,
+      ]),
+    },
+  ])
+}

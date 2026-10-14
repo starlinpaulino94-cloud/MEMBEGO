@@ -51,12 +51,16 @@ test('todas las acciones exportadas autorizan ANTES de tocar la base', () => {
   const exportadas = [...sinComentarios.matchAll(/export async function (\w+)/g)].map((m) => m[1])
   assert.deepEqual(exportadas.sort(), [
     'ajustarInventario',
+    'aplicarImportacion',
+    'buscarProductosParaEntrada',
     'cargarMasHistorialInventario',
     'contarInventario',
     'fijarUmbralInventario',
+    'previsualizarImportacion',
     'registrarDanoInventario',
     'registrarDevolucionInventario',
     'registrarEntradaInventario',
+    'registrarEntradaMultiple',
     'resolverDanadoInventario',
     'transferirInventario',
   ])
@@ -293,4 +297,145 @@ test('INV-1 · los componentes nuevos del inventario no arrastran el servidor al
     const s = leer(`src/modules/inventory/${archivo}`)
     assert.doesNotMatch(s, /server-only|from '@\/lib\/prisma'|from '@\/lib\/tenant'/, `${archivo} debe seguir siendo puro`)
   }
+})
+
+// ── INV-2a · entradas con varias líneas e importación CSV ────────────────────
+
+test('INV-2a · las pantallas de entradas se guardan como las demás: rol, empresa de la sesión, nada de cliente global ni de empresa por la URL', () => {
+  for (const pagina of ['entradas/page.tsx', 'entradas/nueva/page.tsx', 'entradas/[id]/page.tsx', 'importar/page.tsx']) {
+    const s = sinComent(leer(`src/app/(admin)/admin/inventario/${pagina}`))
+    assert.match(s, /requireRole\(ADMIN_ROLES\)/, `${pagina} sin guardia de rol`)
+    assert.match(s, /requireCompanyContext\(user\)/, `${pagina} no resuelve la empresa de la sesión`)
+    assert.match(s, /conEmpresa\(companyId/, `${pagina} no lee dentro de conEmpresa`)
+    assert.doesNotMatch(s, /\bprisma\./, `${pagina} usa el cliente global`)
+    assert.doesNotMatch(s, /sp\.companyId|sp\.empresa|params\.companyId/, `${pagina} toma la empresa de la URL`)
+  }
+  // Las que ESCRIBEN esconden la forma a quien no puede ajustar (la acción igual lo rechazaría).
+  for (const pagina of ['entradas/page.tsx', 'entradas/nueva/page.tsx', 'importar/page.tsx']) {
+    assert.match(leer(`src/app/(admin)/admin/inventario/${pagina}`), /puedeFuncion\('inventario', 'ajustar'\)/, pagina)
+  }
+  // Una entrada ajena o inventada se ve igual: 404.
+  assert.match(leer('src/app/(admin)/admin/inventario/entradas/[id]/page.tsx'), /notFound\(\)/)
+  // Y cuando la migración no está aplicada, la pantalla lo DICE en vez de pedir que reintenten.
+  for (const pagina of ['entradas/page.tsx', 'entradas/nueva/page.tsx', 'entradas/[id]/page.tsx', 'importar/page.tsx']) {
+    assert.match(leer(`src/app/(admin)/admin/inventario/${pagina}`), /describirFalloDeCarga\(/, `${pagina} no distingue una migración pendiente`)
+  }
+  assert.match(leer('src/modules/inventory/errores-pantalla.ts'), /SCHEMA_DRIFT/)
+  assert.match(leer('src/app/(admin)/admin/inventario/entradas/page.tsx'), /<NavegacionInventario actual="entradas"/)
+})
+
+test('INV-2a · las descargas de entradas se guardan SOLAS (un route handler no pasa por el layout) y la empresa sale de la sesión', () => {
+  const rutas: Array<[string, RegExp]> = [
+    ['entradas/[id]/exportar/route.ts', /requireSection\('inventario'\)/],
+    ['importar/plantilla/route.ts', /requireSection\('inventario', 'ajustar'\)/],
+  ]
+  for (const [ruta, guardia] of rutas) {
+    const s = sinComent(leer(`src/app/(admin)/admin/inventario/${ruta}`))
+    assert.match(s, guardia, ruta)
+    assert.match(s, /if \(!user\) return NextResponse\.json\(\{ error: 'No autorizado\.' \}, \{ status: 403 \}\)/, ruta)
+    assert.ok(s.indexOf('requireSection(') < (s.indexOf('conEmpresa(') < 0 ? Infinity : s.indexOf('conEmpresa(')), `${ruta} toca la base antes de autorizar`)
+    assert.doesNotMatch(s, /\bprisma\./, ruta)
+  }
+  const exportar = sinComent(leer('src/app/(admin)/admin/inventario/entradas/[id]/exportar/route.ts'))
+  assert.match(exportar, /resolveCompanyId\(user\)/)
+  assert.match(exportar, /entradaDetalleEnTx\(tx, companyId, id\)/, 'el id de la URL solo identifica la entrada, dentro de la empresa de la sesión')
+  assert.match(exportar, /status: 404/)
+})
+
+test('INV-2a · las acciones nuevas autorizan con la función «ajustar», limitan el envío de archivos y no toman la empresa de la entrada', () => {
+  for (const nombre of ['registrarEntradaMultiple', 'buscarProductosParaEntrada', 'previsualizarImportacion', 'aplicarImportacion']) {
+    const desde = sinComentarios.indexOf(`export async function ${nombre}`)
+    const cuerpo = sinComentarios.slice(desde).split('\n}\n')[0]
+    assert.match(cuerpo, /await contexto\('ajustar'\)/, `${nombre} no exige «ajustar»`)
+    assert.ok(cuerpo.indexOf('await contexto(') < cuerpo.indexOf('conEmpresa('), `${nombre} toca la base antes de autorizar`)
+    // La empresa sale de la sesión (`c.companyId`), nunca de lo que manda el navegador.
+    assert.match(cuerpo, /conEmpresa\(c\.companyId,/, `${nombre} no abre la transacción con la empresa de la sesión`)
+    assert.doesNotMatch(cuerpo, /\bentrada\b[^\n]*company/i, `${nombre} lee una empresa de la entrada`)
+  }
+  assert.match(sinComentarios, /registrarEntradaMultipleEnTx\(\s*tx,\s*c\.companyId,/, 'la entrada múltiple recibe la empresa de la sesión')
+  for (const nombre of ['previsualizarImportacion', 'aplicarImportacion']) {
+    const cuerpo = sinComentarios.slice(sinComentarios.indexOf(`export async function ${nombre}`)).split('\n}\n')[0]
+    assert.match(cuerpo, /formSubmitLimiter\(`inv-importar:/, `${nombre} no limita las subidas`)
+  }
+  // El navegador solo manda sucursal, líneas y texto: lo demás lo decide el servidor.
+  const entrada = sinComentarios.slice(sinComentarios.indexOf('export async function registrarEntradaMultiple')).split('\n}\n')[0]
+  assert.match(entrada, /origen: 'MANUAL', idempotencyKey/, 'el origen no lo elige el navegador')
+  // Aplicar NO reutiliza la revisión que viajó por el navegador: el texto se lee y se valida otra vez en el servidor.
+  const imp = sinComent(leer('src/modules/inventory/importar.ts'))
+  assert.match(imp, /const r = await informeDeImportacionEnTx\(tx, companyId, e\.texto\)/)
+  assert.match(imp, /lineas: r\.informe\.lineas/)
+  assert.doesNotMatch(sinComentarios, /informe\.lineas|lineas: entrada\.informe/, 'las líneas validadas nunca vienen del navegador')
+})
+
+test('INV-2a · la búsqueda de productos para una entrada escribe la empresa en CADA consulta (el guardia general no ve las que van dentro de un Promise.all)', () => {
+  const q = sinComent(leer('src/modules/inventory/queries.ts'))
+  const desde = q.indexOf('export async function buscarVariantesParaEntradaEnTx')
+  assert.ok(desde >= 0)
+  const cuerpo = q.slice(desde).split('\nexport ')[0]
+  const llamadas = cuerpo.split('tx.catalogVariant.findMany(').slice(1)
+  assert.equal(llamadas.length, 2, 'la búsqueda tiene dos consultas (exactas y parciales)')
+  for (const l of llamadas) assert.match(l.slice(0, l.indexOf('select')), /companyId/, 'una consulta de la búsqueda no filtra por empresa')
+  for (const nombre of ['entradasDeLaEmpresaEnTx', 'entradaDetalleEnTx']) {
+    const f = q.slice(q.indexOf(`export async function ${nombre}`)).split('\nexport ')[0]
+    assert.match(f, /companyId/, `${nombre} no filtra por empresa`)
+  }
+})
+
+test('INV-2a · los saldos que faltan se crean en un orden fijo (si no, dos entradas con los mismos productos nuevos se interbloquean)', () => {
+  const f = sinComent(leer('src/modules/inventory/service.ts'))
+  const cuerpo = f.slice(f.indexOf('export async function registrarEntradaMultipleEnTx')).split('\nexport ')[0]
+  assert.match(cuerpo, /inventoryLevel\.createMany\(\{ data: \[\.\.\.ids\]\.sort\(\)/, 'los saldos nuevos se insertan ordenados por producto')
+  assert.ok(cuerpo.indexOf('.sort()') < cuerpo.indexOf('await bloquear('), 'primero se crean, ordenados; después se bloquean todos')
+})
+
+test('INV-2a · los saldos solo los escriben DOS puertas: escribirMovimiento y la escritura por lote, que exige saldos bloqueados', () => {
+  const svc = sinComent(leer('src/modules/inventory/service.ts'))
+  // Escrituras con el cliente de Prisma: una sola puerta (ya la vigila otra prueba). Con SQL crudo: solo el lote.
+  const crudos = [...svc.matchAll(/UPDATE "inventory_levels"/g)]
+  assert.equal(crudos.length, 1, 'solo la escritura por lote actualiza saldos con SQL crudo')
+  const lote = svc.slice(svc.indexOf('async function escribirMovimientosPorLote'), svc.indexOf('export interface EntradaMultiple'))
+  assert.match(lote, /UPDATE "inventory_levels"/)
+  assert.match(lote, /l\."companyId" = \$\{companyId\}/, 'el UPDATE filtra por empresa')
+  assert.match(lote, /actualizados !== items\.length\) fallo\('LOTE_INCOMPLETO'/, 'si no se actualizan todos los saldos, se deshace todo')
+  assert.match(lote, /new Set\(items\.map\(\(i\) => i\.nivelId\)\)\.size !== items\.length\) fallo\('LOTE_INVALIDO'/, 'un saldo no puede repetirse en el lote')
+  // Quien la llama bloquea ANTES todos los saldos y aplica el ledger puro a cada uno.
+  const entrada = svc.slice(svc.indexOf('export async function registrarEntradaMultipleEnTx'))
+  assert.ok(entrada.indexOf('await bloquear(tx, companyId, niveles.map') < entrada.indexOf('escribirMovimientosPorLote(tx, companyId, items)'), 'se bloquea antes de escribir')
+  assert.ok(entrada.indexOf('aplicarMovimiento(cubetasDeSaldo(fila), movimiento)') > 0, 'cada línea pasa por el ledger puro')
+  assert.ok(entrada.indexOf('if (clave) {') > entrada.indexOf('await bloquear('), 'la idempotencia se revisa con los candados puestos')
+  // Las entradas y sus líneas son append-only también en el código.
+  assert.doesNotMatch(svc, /inventoryReceipt(Line)?\.(update|updateMany|delete|deleteMany|upsert)\(/)
+  assert.doesNotMatch(leer('src/modules/inventory/queries.ts'), /inventoryReceipt(Line)?\.(update|updateMany|delete|deleteMany|upsert|create|createMany)\(/, 'las lecturas no escriben')
+})
+
+test('INV-2a · lo que es PURO sigue siendo puro, y los componentes de cliente nuevos no arrastran el servidor', () => {
+  for (const archivo of ['entradas.ts', 'importacion.ts']) {
+    const s = leer(`src/modules/inventory/${archivo}`)
+    assert.doesNotMatch(s, /server-only|from '@\/lib\/prisma'|from '@\/lib\/tenant'|@prisma\/client'/, `${archivo} debe seguir siendo puro`)
+  }
+  for (const f of ['EntradaMultipleForm.tsx', 'ImportarForm.tsx']) {
+    const s = leer(`src/components/inventario/${f}`)
+    assert.match(s, /^'use client'/, f)
+    for (const origen of [...s.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])) {
+      assert.doesNotMatch(origen, /modules\/inventory\/(domain|service|queries|auditoria|errores|barrido|importar|errores-pantalla)$/, `${f} importa ${origen}`)
+    }
+  }
+})
+
+test('INV-2a · la migración es aditiva e idempotente: solo crea objetos nuevos, y las entradas son append-only en la base', () => {
+  const sql = leer('prisma/migrations/20261056_inventory_receipts/migration.sql')
+  const sinNotas = sql.replace(/^--.*$/gm, '')
+  assert.doesNotMatch(sinNotas, /\bDROP\s+(TABLE|COLUMN|TYPE)\b|\bALTER\s+TABLE\s+"(?!inventory_receipt)/i, 'no toca ninguna tabla existente')
+  assert.doesNotMatch(sinNotas, /\bTRUNCATE\s+TABLE|\bDELETE\s+FROM|\bUPDATE\s+"/i)
+  for (const crea of sinNotas.matchAll(/CREATE\s+(TABLE|UNIQUE INDEX|INDEX)\s+(IF NOT EXISTS)?/gi)) assert.ok(crea[2], `«${crea[0]}» sin IF NOT EXISTS: no es idempotente`)
+  assert.match(sql, /inventory_receipts_sin_cambios[\s\S]*BEFORE UPDATE OR DELETE/)
+  assert.match(sql, /inventory_receipt_lines_sin_cambios[\s\S]*BEFORE UPDATE OR DELETE/)
+  assert.match(sql, /BEFORE TRUNCATE/)
+  assert.match(sql, /FOREIGN KEY \("catalogVariantId", "companyId"\) REFERENCES "catalog_variants"\("id", "companyId"\)/, 'la variante va con la empresa: FK compuesta')
+  // Sellada: el sello de SUMAS.txt es el de este archivo.
+  assert.match(leer('prisma/migrations/SUMAS.txt'), /20261056_inventory_receipts/)
+})
+
+test('INV-2a · /api/health avisa si falta la tabla de entradas (despliegue adelantado a la base)', () => {
+  assert.match(leer('src/app/api/health/route.ts'), /'inventory_receipts\.esquema', to_regclass\('public\.inventory_receipts'\) IS NOT NULL/)
 })

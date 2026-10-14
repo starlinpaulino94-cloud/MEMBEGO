@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { Prisma, type InventoryMovement, type InventoryMovementType, type InventoryReservation, type InventoryReservationStatus } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
+import { siguienteNumero } from '@/lib/commerce-primitives/numeracion'
+import { esViolacionUnica } from '@/lib/prisma-errors'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import { auditarInventario, type ContextoAuditoria } from './auditoria'
 import {
@@ -18,6 +20,15 @@ import {
   type Movimiento,
   type Saldo,
 } from './domain'
+import {
+  MAX_LINEAS_ENTRADA,
+  MAX_NOTA,
+  MAX_REFERENCIA,
+  PREFIJO_ENTRADA,
+  normalizarTextoLibre,
+  validarLineasEntrada,
+  type LineaEntrada,
+} from './entradas'
 import { fallo } from './errores'
 
 /**
@@ -744,4 +755,235 @@ export async function configurarUmbralOtrasSucursalesEnTx(
     cambiadas++
   }
   return { sucursales: cambiadas }
+}
+
+// ── INV-2a · Entrada de mercancía con varias líneas ──────────────────────────
+
+/**
+ * UNA línea de un lote: un saldo ya BLOQUEADO, su valor antes y después de
+ * aplicar el movimiento con el ledger puro, y a qué se debe.
+ */
+interface ItemLote {
+  nivelId: string
+  movimiento: Movimiento
+  antes: Saldo
+  despues: Saldo
+  meta: MetaMovimiento
+}
+
+/**
+ * La SEGUNDA (y última) puerta que escribe contadores de saldo, junto a
+ * `escribirMovimiento`. Existe por una razón de rendimiento y no de lógica: una
+ * entrada de 1.000 líneas con `escribirMovimiento` son ~3.000 consultas (leer,
+ * insertar, actualizar por línea) y no cabe en los 45 s de una transacción
+ * contra una base remota. Aquí son TRES: un `INSERT … RETURNING` de todos los
+ * movimientos, un `UPDATE … FROM (VALUES …)` de todos los saldos, y nada más.
+ *
+ * Mantiene TODAS las garantías de la otra puerta:
+ *   · quien llama tiene los saldos BLOQUEADOS (`bloquear`) y ya aplicó cada
+ *     movimiento con el ledger puro (`aplicarMovimiento`), así que el invariante
+ *     «available nunca negativo» y el tope de existencia salen del mismo código;
+ *   · cada movimiento guarda su antes y su después;
+ *   · un saldo aparece UNA sola vez en el lote (si no, el «antes» de la segunda
+ *     ocurrencia sería mentira);
+ *   · los CHECK y el trigger de la base siguen siendo la última red.
+ *
+ * Devuelve el id de cada movimiento, en el orden de `items`.
+ */
+async function escribirMovimientosPorLote(tx: Tx, companyId: string, items: readonly ItemLote[]): Promise<string[]> {
+  if (items.length === 0) return []
+  if (new Set(items.map((i) => i.nivelId)).size !== items.length) fallo('LOTE_INVALIDO', 'Un saldo no puede aparecer dos veces en el mismo lote.')
+  const creados = await tx.inventoryMovement.createManyAndReturn({
+    data: items.map((i) => ({
+      companyId,
+      inventoryLevelId: i.nivelId,
+      type: i.movimiento.type,
+      sourceBucket: i.movimiento.sourceBucket,
+      destinationBucket: i.movimiento.destinationBucket,
+      quantity: i.movimiento.quantity,
+      previousOnHand: i.antes.onHand,
+      newOnHand: i.despues.onHand,
+      reason: i.movimiento.reason ?? null,
+      userId: i.meta.userId,
+      referenceType: i.meta.referencia?.tipo ?? null,
+      referenceId: i.meta.referencia?.id ?? null,
+      idempotencyKey: i.meta.idempotencyKey ?? null,
+    })),
+    select: { id: true, inventoryLevelId: true },
+  })
+  const idPorNivel = new Map(creados.map((c) => [c.inventoryLevelId, c.id]))
+  const filas = items.map((i) => Prisma.sql`(${i.nivelId}, ${i.despues.onHand}::int, ${i.despues.reserved}::int, ${i.despues.damaged}::int)`)
+  // `now() AT TIME ZONE 'UTC'` y no `now()`: la columna es `timestamp` sin zona y Prisma escribe en UTC; `now()` la
+  // convertiría con la zona de la sesión.
+  const actualizados = await tx.$executeRaw`
+    UPDATE "inventory_levels" AS l
+       SET "onHand" = v."onHand", "reserved" = v."reserved", "damaged" = v."damaged", "updatedAt" = (now() AT TIME ZONE 'UTC')
+      FROM (VALUES ${Prisma.join(filas)}) AS v("id", "onHand", "reserved", "damaged")
+     WHERE l."id" = v."id" AND l."companyId" = ${companyId}`
+  if (actualizados !== items.length) fallo('LOTE_INCOMPLETO', 'No se pudieron actualizar todos los saldos de la entrada.')
+  return items.map((i) => {
+    const id = idPorNivel.get(i.nivelId)
+    if (!id) fallo('LOTE_INCOMPLETO', 'Falta el movimiento de una línea de la entrada.')
+    return id
+  })
+}
+
+export interface EntradaMultiple {
+  sucursalId: string
+  lineas: readonly LineaEntrada[]
+  referencia?: string | null
+  nota?: string | null
+  origen?: 'MANUAL' | 'CSV'
+  idempotencyKey?: string | null
+  /** Tope de líneas; el de una importación es mayor que el de una captura a mano. */
+  maxLineas?: number
+  /** Para pruebas: el «ahora» del número correlativo y la fecha. */
+  ahora?: Date
+}
+
+export interface ResultadoEntradaMultiple {
+  entradaId: string
+  numero: string
+  lineas: number
+  unidades: number
+  /** true si la clave de idempotencia ya existía: no se hizo nada nuevo. */
+  repetido: boolean
+}
+
+/** El último correlativo de entradas de la empresa para el prefijo con año (`ENT-2026-`). */
+async function ultimaEntrada(tx: Tx, companyId: string, prefijo: string): Promise<string | null> {
+  const filas = await tx.$queryRaw<{ number: string }[]>`
+    SELECT "number" FROM "inventory_receipts"
+     WHERE "companyId" = ${companyId} AND "number" ~ ${'^' + prefijo + '[0-9]{6,}$'}
+     ORDER BY "number" DESC LIMIT 1`
+  return filas[0]?.number ?? null
+}
+
+/**
+ * ENTRADA DE MERCANCÍA con varias líneas: TODO O NADA.
+ *
+ * Una factura de proveedor trae 20–50 productos. Esto las registra juntas como
+ * UN documento (`ENT-2026-000001`, sucursal, referencia) cuyas líneas apuntan a
+ * los movimientos PURCHASE que produjeron. Si cualquier línea falla —producto
+ * que no controla inventario, existencia máxima superada, sucursal cerrada—
+ * no queda NADA: ni movimientos, ni saldos, ni número consumido.
+ *
+ * CONCURRENCIA. Antes de escribir nada se BLOQUEAN, en orden de id y de una vez,
+ * todos los saldos que la entrada toca. Dos entradas simultáneas con los mismos
+ * productos en distinto orden (A: v1, v2 — B: v2, v1) no se interbloquean: las
+ * dos piden los candados en el mismo orden. La idempotencia se revisa YA con los
+ * candados puestos, así que dos envíos idénticos simultáneos se turnan y el
+ * segundo devuelve la entrada del primero.
+ */
+export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e: EntradaMultiple, ctx: ContextoAuditoria): Promise<ResultadoEntradaMultiple> {
+  const validas = validarLineasEntrada(e.lineas, e.maxLineas ?? MAX_LINEAS_ENTRADA)
+  if (!validas.ok) fallo(validas.codigo, validas.error)
+  const referencia = normalizarTextoLibre(e.referencia, MAX_REFERENCIA, 'La referencia')
+  if (!referencia.ok) fallo('REFERENCIA_INVALIDA', referencia.error)
+  const nota = normalizarTextoLibre(e.nota, MAX_NOTA, 'La nota')
+  if (!nota.ok) fallo('NOTA_INVALIDA', nota.error)
+  const clave = claveValida(e.idempotencyKey)
+  const ahora = e.ahora ?? new Date()
+
+  const sucursal = await exigirSucursal(tx, companyId, e.sucursalId, true)
+
+  // Las variantes: todas existen en la empresa y todas controlan inventario.
+  const ids = validas.lineas.map((l) => l.varianteId)
+  const variantes = await tx.catalogVariant.findMany({
+    where: { companyId, id: { in: ids } },
+    select: { id: true, sku: true, name: true, isDefault: true, item: { select: { name: true, type: true, capabilities: true } } },
+  })
+  const porId = new Map(variantes.map((v) => [v.id, v]))
+  for (const l of validas.lineas) {
+    const v = porId.get(l.varianteId)
+    if (!v) fallo('VARIANTE_NO_ENCONTRADA', 'Uno de los productos de la entrada ya no existe.')
+    if (!normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory) {
+      fallo('SIN_CONTROL_DE_INVENTARIO', `«${v.item.name}» no controla inventario. Actívalo en su ficha del catálogo para llevar existencias.`)
+    }
+  }
+
+  // Los saldos: se crean en cero los que falten (no es un movimiento) y se BLOQUEAN todos, en orden de id.
+  // Se crean en un orden FIJO (por producto): un INSERT … ON CONFLICT fila a fila espera a la fila que otra transacción
+  // acaba de insertar, y dos entradas con los mismos productos nuevos en distinto orden se interbloquearían.
+  await tx.inventoryLevel.createMany({ data: [...ids].sort().map((v) => ({ companyId, catalogVariantId: v, locationId: sucursal.id })), skipDuplicates: true })
+  const niveles = await tx.inventoryLevel.findMany({
+    where: { companyId, locationId: sucursal.id, catalogVariantId: { in: ids } },
+    select: { id: true, catalogVariantId: true },
+  })
+  const nivelDeVariante = new Map(niveles.map((n) => [n.catalogVariantId, n.id]))
+  if (nivelDeVariante.size !== ids.length) fallo('NIVEL_NO_ENCONTRADO', 'No se pudieron preparar los saldos de la entrada.')
+  const bloqueados = await bloquear(tx, companyId, niveles.map((n) => n.id))
+
+  // Idempotencia, YA con los candados: el segundo de dos envíos idénticos llega aquí tras el primero.
+  if (clave) {
+    const previa = await tx.inventoryReceipt.findFirst({
+      where: { companyId, idempotencyKey: clave },
+      select: { id: true, number: true, locationId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantity: true } } },
+    })
+    if (previa) {
+      const mismas =
+        previa.locationId === sucursal.id &&
+        previa.lines.length === validas.lineas.length &&
+        validas.lineas.every((l) => previa.lines.some((p) => p.catalogVariantId === l.varianteId && p.quantity === l.cantidad))
+      if (!mismas) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra entrada distinta.')
+      return { entradaId: previa.id, numero: previa.number, lineas: previa.lineCount, unidades: previa.unitCount, repetido: true }
+    }
+  }
+
+  // Cada línea se aplica con el ledger PURO sobre el saldo bloqueado: el invariante y el tope de existencia son los de siempre.
+  const items: ItemLote[] = validas.lineas.map((l) => {
+    const nivelId = nivelDeVariante.get(l.varianteId)!
+    const fila = bloqueados.get(nivelId)!
+    const movimiento: Movimiento = { type: 'PURCHASE', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: l.cantidad, reason: null }
+    let despues
+    try {
+      despues = aplicarMovimiento(cubetasDeSaldo(fila), movimiento)
+    } catch (err) {
+      const v = porId.get(l.varianteId)!
+      const nombre = v.isDefault ? v.item.name : `${v.item.name} · ${v.name}`
+      fallo('EXISTENCIA_MAXIMA', `«${nombre}»: ${err instanceof Error ? err.message : 'la existencia no es válida.'}`)
+    }
+    return { nivelId, movimiento, antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged }, despues: saldoDeCubetas(despues), meta: { userId: ctx.actorId } }
+  })
+
+  const numero = await siguienteNumero(tx, PREFIJO_ENTRADA, (prefijo) => ultimaEntrada(tx, companyId, prefijo), ahora, `entrada:${companyId}`)
+  let entrada
+  try {
+    entrada = await tx.inventoryReceipt.create({
+      data: {
+        companyId,
+        number: numero,
+        locationId: sucursal.id,
+        source: e.origen ?? 'MANUAL',
+        reference: referencia.valor,
+        note: nota.valor,
+        userId: ctx.actorId,
+        idempotencyKey: clave,
+        lineCount: validas.lineas.length,
+        unitCount: validas.unidades,
+      },
+      select: { id: true },
+    })
+  } catch (err) {
+    if (esViolacionUnica(err)) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra entrada distinta.')
+    throw err
+  }
+
+  // El movimiento apunta a la entrada que lo explica.
+  for (const i of items) i.meta = { ...i.meta, referencia: { tipo: 'RECEIPT', id: entrada.id } }
+  const movimientoIds = await escribirMovimientosPorLote(tx, companyId, items)
+  await tx.inventoryReceiptLine.createMany({
+    data: validas.lineas.map((l, idx) => ({ companyId, receiptId: entrada.id, catalogVariantId: l.varianteId, position: idx, quantity: l.cantidad, movementId: movimientoIds[idx] })),
+  })
+
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_STOCK_CHANGED',
+    entrada.id,
+    { tipo: 'PURCHASE', entrada: numero, origen: e.origen ?? 'MANUAL', sucursal: sucursal.nombre, referencia: referencia.valor, lineas: validas.lineas.length, unidades: validas.unidades },
+    'InventoryReceipt'
+  )
+  return { entradaId: entrada.id, numero, lineas: validas.lineas.length, unidades: validas.unidades, repetido: false }
 }

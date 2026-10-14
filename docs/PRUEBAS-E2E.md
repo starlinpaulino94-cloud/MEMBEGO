@@ -189,7 +189,15 @@ Reservas), los 7 movimientos de la empresa, filtros por tipo y por sucursal, la
 exportación CSV con los mismos filtros (y sin sesión o sin la capacidad no sale ni
 una fila), el salto a la ficha con el SKU exacto de un lector, la advertencia de una
 variante «Agotada» a mano (la prueba la fija por Prisma y la restaura) y el umbral
-aplicado también a la otra sucursal con existencias. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
+aplicado también a la otra sucursal con existencias. **INV-2a** añade otro: la pestaña
+Entradas vacía → «Nueva entrada» con un lector (el SKU exacto se añade solo, repetirlo suma
+una unidad, el código de barras funciona igual, un código inexistente y un servicio no
+entran, una cantidad en cero no deja registrar) → la entrada `ENT-AAAA-000001` con sus
+líneas, factura y nota → su CSV (y una entrada inventada da 404) → existencias e historial
+→ lista y filtros (también una URL manipulada) → importación CSV: un archivo con filas malas
+no registra NADA (ni siquiera sus filas buenas) y un archivo limpio sí (una fila por SKU y
+otra por código de barras) → plantilla descargable → sin sesión, o de una empresa sin la
+capacidad, no sale ni una fila. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
 disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
 144 combinaciones tipo×origen×destino las prueban `tests/postgres/inventory.db.test.ts`
 y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba

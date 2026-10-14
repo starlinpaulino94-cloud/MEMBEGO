@@ -35,6 +35,8 @@ const tarjeta = (p: Page, nombre: string): Locator => p.locator(`[data-sucursal=
 
 /** Lo que dice la tarjeta en una cifra concreta («Disponible», «Dañado»…). */
 async function cifra(t: Locator, etiqueta: string): Promise<number> {
+  // Sin esperar a que la tarjeta esté pintada, `innerText` cae a `textContent` y las cifras salen pegadas a su etiqueta.
+  await t.getByLabel(/^Existencias en/).waitFor({ state: 'visible' })
   const bloque = t.getByLabel(/^Existencias en/).locator('div', { has: t.page().getByText(etiqueta, { exact: true }) }).last()
   const texto = (await bloque.innerText()).replace(/\s+/g, ' ')
   const m = new RegExp(`${etiqueta}\\s+([\\d.,]+)`).exec(texto)
@@ -329,6 +331,223 @@ test.describe('Inventario · panel', () => {
     await p.reload()
     await expect(p.getByRole('form', { name: 'Umbral de stock bajo en Principal' }).getByLabel('Avisar cuando queden')).toHaveValue('3')
     await expect(p.getByRole('form', { name: 'Umbral de stock bajo en Norte' }).getByLabel('Avisar cuando queden')).toHaveValue('3')
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-2a · entrada de mercancía con varias líneas (lector), documento con número, CSV, importación todo o nada y permisos', async ({ browser }) => {
+    test.setTimeout(240_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+
+    // Dos productos nuevos con código de barras: el recorrido no depende de las existencias de los anteriores.
+    const NOMBRE_A = `Gorra E2E ${sufijo}`
+    const NOMBRE_B = `Medias E2E ${sufijo}`
+    const SKU_A = `ENTA-${sufijo}`
+    const SKU_B = `ENTB-${sufijo}`
+    const base = parseInt(sufijo, 36) % 900_000
+    const COD_A = String(7_501_000_000_000 + base)
+    const COD_B = String(7_502_000_000_000 + base)
+    const itemA = await itemSembrado(con.id, { name: NOMBRE_A, slug: `gorra-ent-${sufijo}`, controlaInventario: true, variantes: [{ name: 'Default', sku: SKU_A, barcode: COD_A, price: 300, porDefecto: true }] })
+    const itemB = await itemSembrado(con.id, { name: NOMBRE_B, slug: `medias-ent-${sufijo}`, controlaInventario: true, variantes: [{ name: 'Default', sku: SKU_B, barcode: COD_B, price: 150, porDefecto: true }] })
+    const varA = await varianteDe(itemA.id)
+    const varB = await varianteDe(itemB.id)
+
+    // ── La pestaña «Entradas»: vacía al principio, con sus dos caminos ────
+    await p.goto('/admin/inventario')
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    await vistas.getByRole('link', { name: 'Entradas' }).click()
+    await p.waitForURL('**/admin/inventario/entradas')
+    await expect(p.getByRole('heading', { name: 'Entradas de mercancía', level: 1 })).toBeVisible()
+    await expect(vistas.getByRole('link', { name: 'Entradas' })).toHaveAttribute('aria-current', 'page')
+    await expect(p.getByText('Todavía no hay entradas registradas')).toBeVisible()
+    await expect(p.getByRole('link', { name: 'Importar CSV' })).toBeVisible()
+
+    // ── Nueva entrada con un lector: el código exacto se añade solo; repetirlo suma ──
+    await p.getByRole('link', { name: 'Nueva entrada' }).click()
+    await p.waitForURL('**/admin/inventario/entradas/nueva')
+    const form = p.getByRole('form', { name: 'Nueva entrada de mercancía' })
+    await form.getByLabel('Sucursal que recibe').selectOption({ label: 'Principal' })
+    await form.getByLabel(/^Factura o referencia/).fill('F-1045 E2E')
+    await form.getByLabel(/^Nota/).fill('Llegó un bulto roto')
+    const buscar = form.getByLabel('Escanear o buscar un producto')
+    const lineas = form.getByRole('list', { name: 'Productos de la entrada' })
+    const filaA = lineas.getByRole('listitem').filter({ hasText: NOMBRE_A })
+    const filaB = lineas.getByRole('listitem').filter({ hasText: NOMBRE_B })
+
+    await buscar.fill(SKU_A)
+    await buscar.press('Enter')
+    await expect(filaA).toHaveCount(1)
+    await expect(filaA.getByRole('textbox')).toHaveValue('1')
+    await expect(buscar).toHaveValue('')
+    await buscar.fill(SKU_A.toLowerCase()) // el SKU no distingue mayúsculas
+    await buscar.press('Enter')
+    await expect(filaA).toHaveCount(1)
+    await expect(filaA.getByRole('textbox')).toHaveValue('2')
+    await buscar.fill(COD_B) // el código de barras exacto, como lo escribe un lector
+    await buscar.press('Enter')
+    await expect(filaB).toHaveCount(1)
+    await expect(filaB.getByRole('textbox')).toHaveValue('1')
+
+    // Lo que no se puede recibir: un código que no existe y un servicio (no controla inventario).
+    await buscar.fill('NO-EXISTE-999')
+    await buscar.press('Enter')
+    await expect(p.getByText(/No encontré ningún producto que controle inventario con «NO-EXISTE-999»/)).toBeVisible()
+    await buscar.fill(`LAV-INV-${sufijo}`)
+    await buscar.press('Enter')
+    await expect(p.getByText(new RegExp(`No encontré ningún producto que controle inventario con «LAV-INV-${sufijo}»`))).toBeVisible()
+    await expect(lineas.getByRole('listitem')).toHaveCount(2)
+
+    // Cantidades: una a cero no deja registrar; con valores válidos, el resumen cuenta bien.
+    await filaA.getByRole('textbox').fill('12')
+    await filaB.getByRole('textbox').fill('0')
+    await form.getByRole('button', { name: 'Registrar entrada' }).click()
+    await expect(p.getByText(new RegExp(`Revisa la cantidad de «${NOMBRE_B}»`))).toBeVisible()
+    await expect(p).toHaveURL(/\/entradas\/nueva$/)
+    await filaB.getByRole('textbox').fill('5')
+    await expect(form.getByText(/2 productos · 17 unidades/)).toBeVisible()
+
+    await form.getByRole('button', { name: 'Registrar entrada' }).click()
+    await p.waitForURL(/\/admin\/inventario\/entradas\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+    const idEntrada1 = p.url().split('/').pop()!
+    const numero1 = /^ENT-\d{4}-000001$/
+    await expect(p.getByRole('heading', { name: numero1, level: 1 })).toBeVisible()
+    const numeroTexto1 = (await p.getByRole('heading', { level: 1 }).innerText()).trim()
+    await expect(p.getByText('Capturada a mano')).toBeVisible()
+    await expect(p.getByText('F-1045 E2E')).toBeVisible()
+    await expect(p.getByText('Llegó un bulto roto')).toBeVisible()
+    const detalle = p.getByRole('list', { name: 'Líneas de la entrada' })
+    await expect(detalle.getByRole('listitem')).toHaveCount(2)
+    await expect(detalle.getByRole('listitem').filter({ hasText: NOMBRE_A })).toContainText('+12')
+    await expect(detalle.getByRole('listitem').filter({ hasText: NOMBRE_A })).toContainText('0 → 12')
+    await expect(detalle.getByRole('listitem').filter({ hasText: NOMBRE_B })).toContainText('+5')
+    await expect(detalle.getByRole('listitem').filter({ hasText: NOMBRE_B })).toContainText(COD_B)
+
+    // ── La entrada se descarga como CSV, y una entrada ajena o inventada da 404 ──
+    const csv = await p.request.get(`/admin/inventario/entradas/${idEntrada1}/exportar`)
+    expect(csv.status()).toBe(200)
+    expect(csv.headers()['content-type']).toContain('text/csv')
+    expect(csv.headers()['content-disposition']).toMatch(/^attachment; filename="/)
+    const textoCsv = await csv.text()
+    for (const esperado of [numeroTexto1, SKU_A, SKU_B, 'F-1045 E2E', 'Entrada de mercancía']) expect(textoCsv).toContain(esperado)
+    const inventada = await p.request.get('/admin/inventario/entradas/cinexistente000000000000/exportar')
+    expect(inventada.status()).toBe(404)
+    expect(inventada.headers()['content-type'] ?? '').not.toContain('text/csv')
+
+    // ── Las existencias cambiaron de verdad, y el historial lo cuenta ─────
+    await p.goto(`/admin/inventario/${varA}`)
+    expect(await cifra(tarjeta(p, 'Principal'), 'Disponible')).toBe(12)
+    expect(await cifra(tarjeta(p, 'Norte'), 'Disponible')).toBe(0)
+    await p.goto(`/admin/inventario/movimientos?q=${encodeURIComponent(SKU_A)}`)
+    const movs = p.getByRole('list', { name: 'Movimientos de inventario' })
+    await expect(movs.getByRole('listitem')).toHaveCount(1)
+    await expect(movs.getByRole('listitem').first()).toContainText('Entrada de mercancía')
+    await expect(movs.getByRole('listitem').first()).toContainText('+12')
+
+    // ── La lista y sus filtros ────────────────────────────────────────────
+    await p.goto('/admin/inventario/entradas')
+    const listaEntradas = p.getByRole('list', { name: 'Entradas de mercancía' })
+    await expect(listaEntradas.getByRole('listitem')).toHaveCount(1)
+    await expect(listaEntradas.getByRole('listitem').first()).toContainText(numeroTexto1)
+    await expect(listaEntradas.getByRole('listitem').first()).toContainText('F-1045 E2E')
+    await expect(listaEntradas.getByRole('listitem').first()).toContainText('+17')
+    await expect(listaEntradas.getByRole('link', { name: new RegExp(numeroTexto1) })).toHaveAttribute('href', `/admin/inventario/entradas/${idEntrada1}`)
+    await p.goto('/admin/inventario/entradas?q=F-1045')
+    await expect(listaEntradas.getByRole('listitem')).toHaveCount(1)
+    await p.goto('/admin/inventario/entradas?q=zzz-no-existe')
+    await expect(p.getByText('Nada coincide con esos filtros')).toBeVisible()
+    const filtrar = p.getByRole('form', { name: 'Filtrar entradas' })
+    await p.goto('/admin/inventario/entradas')
+    await filtrar.getByLabel('Sucursal').selectOption({ label: 'Norte' })
+    await filtrar.getByRole('button', { name: 'Filtrar' }).click()
+    await p.waitForURL(/sucursal=/)
+    await expect(p.getByText('Nada coincide con esos filtros')).toBeVisible()
+    // Una URL manipulada no rompe nada.
+    await p.goto('/admin/inventario/entradas?desde=2030-02-31&cursor=basura&sucursal=ajena&q=%27%3Cscript%3E')
+    await expect(p.getByRole('heading', { name: 'Entradas de mercancía', level: 1 })).toBeVisible()
+
+    // ── Importar CSV: un archivo con problemas NO registra nada ───────────
+    await p.getByRole('link', { name: 'Importar CSV' }).click()
+    await p.waitForURL('**/admin/inventario/importar')
+    await expect(p.getByRole('heading', { name: 'Importar existencias desde un CSV', level: 1 })).toBeVisible()
+    await p.getByLabel('Sucursal que recibe').selectOption({ label: 'Norte' })
+    const subir = (nombre: string, contenido: string) => p.getByLabel('Archivo CSV').setInputFiles({ name: nombre, mimeType: 'text/csv', buffer: Buffer.from(contenido, 'utf8') })
+    await subir('malo.csv', `sku;cantidad\n${SKU_A};5\nNO-EXISTE-${sufijo};3\n${SKU_B};0\n`)
+    await p.getByRole('button', { name: 'Revisar archivo' }).click()
+    await expect(p.getByText(/2 filas con problemas/)).toBeVisible({ timeout: 15_000 })
+    const problemas = p.getByRole('list', { name: 'Filas con problemas' })
+    await expect(problemas).toContainText('Fila 3')
+    await expect(problemas).toContainText('Fila 4')
+    await expect(p.getByRole('button', { name: /^Registrar entrada de/ })).toHaveCount(0)
+    // La fila buena de ese archivo tampoco entró.
+    await p.goto(`/admin/inventario/${varA}`)
+    expect(await cifra(tarjeta(p, 'Norte'), 'Disponible')).toBe(0)
+
+    // ── Un archivo limpio (una fila por SKU y otra por código de barras) ──
+    await p.goto('/admin/inventario/importar')
+    await p.getByLabel('Sucursal que recibe').selectOption({ label: 'Norte' })
+    await subir('limpio.csv', `sku;codigo_de_barras;cantidad\n${SKU_A};;3\n;${COD_B};7\n`)
+    await p.getByRole('button', { name: 'Revisar archivo' }).click()
+    await expect(p.getByText(/El archivo está limpio/)).toBeVisible({ timeout: 15_000 })
+    const previa = p.getByRole('list', { name: 'Vista previa de la entrada' })
+    await expect(previa.getByRole('listitem')).toHaveCount(2)
+    await expect(previa).toContainText('+3')
+    await expect(previa).toContainText('+7')
+    await p.getByRole('button', { name: 'Registrar entrada de 2 productos en Norte' }).click()
+    await p.waitForURL(/\/admin\/inventario\/entradas\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+    await expect(p.getByRole('heading', { name: /^ENT-\d{4}-000002$/, level: 1 })).toBeVisible()
+    await expect(p.getByText('Archivo CSV').first()).toBeVisible()
+    await expect(p.getByText('CSV', { exact: true })).toBeVisible()
+    await expect(p.getByRole('list', { name: 'Líneas de la entrada' }).getByRole('listitem')).toHaveCount(2)
+    await p.goto(`/admin/inventario/${varA}`)
+    expect(await cifra(tarjeta(p, 'Norte'), 'Disponible')).toBe(3)
+    expect(await cifra(tarjeta(p, 'Principal'), 'Disponible')).toBe(12)
+    await p.goto(`/admin/inventario/${varB}`)
+    expect(await cifra(tarjeta(p, 'Norte'), 'Disponible')).toBe(7)
+    expect(await cifra(tarjeta(p, 'Principal'), 'Disponible')).toBe(5)
+    await p.goto('/admin/inventario/entradas')
+    await expect(listaEntradas.getByRole('listitem')).toHaveCount(2)
+    await expect(listaEntradas.getByRole('listitem').first()).toContainText('CSV')
+
+    // ── La plantilla se descarga, con filas de ejemplo que no son productos reales ──
+    const plantilla = await p.request.get('/admin/inventario/importar/plantilla')
+    expect(plantilla.status()).toBe(200)
+    expect(plantilla.headers()['content-type']).toContain('text/csv')
+    expect(await plantilla.text()).toContain('EJEMPLO-BORRAR-1')
+
+    // ── Una entrada inventada no existe: misma página que cualquier id desconocido ──
+    await p.goto('/admin/inventario/entradas/cinexistente000000000000')
+    expect(await p.locator('meta[name=robots][content*=noindex]').count()).toBeGreaterThan(0)
+    await expect(p.getByText(/^ENT-\d{4}-\d{6}$/)).toHaveCount(0)
+    await expect(p.getByRole('list', { name: 'Líneas de la entrada' })).toHaveCount(0)
+
+    // ── Sin sesión, o con otra empresa sin la capacidad, NO sale nada ─────
+    const anonimo = await browser.newContext()
+    for (const ruta of [`/admin/inventario/entradas/${idEntrada1}/exportar`, '/admin/inventario/importar/plantilla']) {
+      const r = await anonimo.request.get(ruta, { maxRedirects: 0 })
+      expect(r.headers()['content-type'] ?? '', ruta).not.toContain('text/csv')
+      expect(await r.text(), ruta).not.toContain(SKU_A)
+    }
+    await anonimo.close()
+    const ctxSin = await browser.newContext()
+    await entrarComo(ctxSin, 'catalogoSinCapacidad', BASE, sin.id)
+    for (const ruta of [`/admin/inventario/entradas/${idEntrada1}/exportar`, '/admin/inventario/importar/plantilla']) {
+      const r = await ctxSin.request.get(ruta, { maxRedirects: 0 })
+      expect(r.headers()['content-type'] ?? '', ruta).not.toContain('text/csv')
+      expect([302, 303, 307, 308, 403, 404], ruta).toContain(r.status())
+      expect(await r.text(), ruta).not.toContain(SKU_A)
+    }
+    const pSin = await ctxSin.newPage()
+    await pSin.goto('/admin/inventario/entradas')
+    await expect(pSin).not.toHaveURL(/\/admin\/inventario\/entradas$/)
+    await ctxSin.close()
 
     expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
     await ctx.close()

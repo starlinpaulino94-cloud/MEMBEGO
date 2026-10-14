@@ -77,6 +77,8 @@ export function describirReferencia(tipo: string | null, id: string | null): str
       return 'Transferencia entre sucursales'
     case 'STOCK_COUNT':
       return 'Conteo físico'
+    case 'RECEIPT':
+      return 'Entrada de mercancía'
     case 'RESERVATION':
       return 'Reserva'
     case 'ORDER':

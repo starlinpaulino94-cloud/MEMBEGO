@@ -2,7 +2,7 @@ import type { CatalogVariantStatus, InventoryMovementType, InventoryReservationS
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import { disponible, estadoDeStock, type EstadoStock } from './domain'
-import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosMovimientos } from './filtros'
+import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosEntradas, type FiltrosMovimientos } from './filtros'
 import { limiteDiaLocal } from '@/modules/reportes/rango'
 
 /**
@@ -665,4 +665,246 @@ export interface SucursalFiltro {
  */
 export async function sucursalesDeLaEmpresaEnTx(tx: Tx, companyId: string): Promise<SucursalFiltro[]> {
   return tx.sucursal.findMany({ where: { companyId }, select: { id: true, nombre: true, activa: true }, orderBy: [{ nombre: 'asc' }, { id: 'asc' }] })
+}
+
+// ── INV-2a · Entradas de mercancía ───────────────────────────────────────────
+
+export const POR_PAGINA_ENTRADAS = 30
+
+export interface FilaEntrada {
+  id: string
+  numero: string
+  creadoEn: Date
+  sucursalId: string
+  sucursalNombre: string
+  origen: 'MANUAL' | 'CSV'
+  referencia: string | null
+  lineas: number
+  unidades: number
+  usuarioNombre: string | null
+}
+
+export interface EntradasPagina {
+  filas: FilaEntrada[]
+  siguiente: string | null
+}
+
+/** Nombres de las personas detrás de un conjunto de ids de usuario (los que ya no existen, no salen). */
+async function nombresDeUsuarios(tx: Tx, ids: readonly (string | null)[]): Promise<Map<string, string>> {
+  const unicos = [...new Set(ids.filter((x): x is string => Boolean(x)))]
+  if (unicos.length === 0) return new Map()
+  const us = await tx.user.findMany({ where: { id: { in: unicos } }, select: { id: true, name: true, email: true } })
+  return new Map(us.map((u) => [u.id, u.name || u.email]))
+}
+
+/**
+ * Las entradas de mercancía de la empresa, de la más reciente a la más antigua,
+ * con los filtros de la pantalla. Paginado por cursor (`createdAt|id`).
+ */
+export async function entradasDeLaEmpresaEnTx(
+  tx: Tx,
+  companyId: string,
+  f: FiltrosEntradas,
+  opciones: { zonaHoraria: string; cursor?: string | null; limite?: number }
+): Promise<EntradasPagina> {
+  const limite = Math.max(1, Math.min(opciones.limite ?? POR_PAGINA_ENTRADAS, 200))
+  const antes = leerCursor(opciones.cursor)
+  const q = f.q?.trim()
+  const fechas = rangoDeFechas(f, opciones.zonaHoraria)
+  const filas = await tx.inventoryReceipt.findMany({
+    where: {
+      companyId,
+      ...(f.sucursalId ? { locationId: f.sucursalId } : {}),
+      ...(fechas.gte || fechas.lt ? { createdAt: fechas } : {}),
+      ...(q ? { OR: [{ number: { contains: q, mode: 'insensitive' } }, { reference: { contains: q, mode: 'insensitive' } }] } : {}),
+      ...(antes ? { AND: [{ OR: [{ createdAt: { lt: antes.creadoEn } }, { createdAt: antes.creadoEn, id: { lt: antes.id } }] }] } : {}),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limite + 1,
+    select: {
+      id: true,
+      number: true,
+      createdAt: true,
+      locationId: true,
+      source: true,
+      reference: true,
+      lineCount: true,
+      unitCount: true,
+      userId: true,
+      location: { select: { nombre: true } },
+    },
+  })
+  const hayMas = filas.length > limite
+  const pagina = hayMas ? filas.slice(0, limite) : filas
+  const nombres = await nombresDeUsuarios(tx, pagina.map((r) => r.userId))
+  const ultimo = pagina[pagina.length - 1]
+  return {
+    filas: pagina.map((r) => ({
+      id: r.id,
+      numero: r.number,
+      creadoEn: r.createdAt,
+      sucursalId: r.locationId,
+      sucursalNombre: r.location.nombre,
+      origen: r.source,
+      referencia: r.reference,
+      lineas: r.lineCount,
+      unidades: r.unitCount,
+      usuarioNombre: r.userId ? (nombres.get(r.userId) ?? null) : null,
+    })),
+    siguiente: hayMas && ultimo ? armarCursor(ultimo.createdAt, ultimo.id) : null,
+  }
+}
+
+export interface LineaDeEntrada {
+  posicion: number
+  varianteId: string
+  sku: string
+  barcode: string | null
+  itemNombre: string
+  nombreVariante: string
+  esDefault: boolean
+  cantidad: number
+  existenciaAntes: number
+  existenciaDespues: number
+}
+
+export interface DetalleEntrada extends FilaEntrada {
+  nota: string | null
+  detalle: LineaDeEntrada[]
+}
+
+/** Una entrada con todas sus líneas; null si no existe o es de otra empresa (se ven igual a propósito). */
+export async function entradaDetalleEnTx(tx: Tx, companyId: string, id: string): Promise<DetalleEntrada | null> {
+  if (typeof id !== 'string' || id === '' || id.length > 120) return null
+  const r = await tx.inventoryReceipt.findFirst({
+    where: { id, companyId },
+    select: {
+      id: true,
+      number: true,
+      createdAt: true,
+      locationId: true,
+      source: true,
+      reference: true,
+      note: true,
+      lineCount: true,
+      unitCount: true,
+      userId: true,
+      location: { select: { nombre: true } },
+      lines: {
+        orderBy: { position: 'asc' },
+        select: {
+          position: true,
+          quantity: true,
+          variant: { select: { id: true, sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } } } },
+          movement: { select: { previousOnHand: true, newOnHand: true } },
+        },
+      },
+    },
+  })
+  if (!r) return null
+  const nombres = await nombresDeUsuarios(tx, [r.userId])
+  return {
+    id: r.id,
+    numero: r.number,
+    creadoEn: r.createdAt,
+    sucursalId: r.locationId,
+    sucursalNombre: r.location.nombre,
+    origen: r.source,
+    referencia: r.reference,
+    nota: r.note,
+    lineas: r.lineCount,
+    unidades: r.unitCount,
+    usuarioNombre: r.userId ? (nombres.get(r.userId) ?? null) : null,
+    detalle: r.lines.map((l) => ({
+      posicion: l.position,
+      varianteId: l.variant.id,
+      sku: l.variant.sku,
+      barcode: l.variant.barcode,
+      itemNombre: l.variant.item.name,
+      nombreVariante: l.variant.name,
+      esDefault: l.variant.isDefault,
+      cantidad: l.quantity,
+      existenciaAntes: l.movement.previousOnHand,
+      existenciaDespues: l.movement.newOnHand,
+    })),
+  }
+}
+
+export interface VarianteBuscable {
+  id: string
+  sku: string
+  barcode: string | null
+  itemNombre: string
+  nombreVariante: string
+  esDefault: boolean
+  /** Lo vendible hoy en la sucursal pedida (0 si no hay saldo); null si no se pidió sucursal. */
+  disponible: number | null
+  /** El texto buscado es EXACTAMENTE su SKU o su código de barras (lo que hace un lector). */
+  exacto: boolean
+}
+
+/**
+ * Productos que controlan inventario, para añadir a una entrada: por nombre, SKU
+ * o código de barras. Las coincidencias exactas de SKU o código van primero.
+ */
+export async function buscarVariantesParaEntradaEnTx(tx: Tx, companyId: string, q: string, sucursalId: string | null, limite = 10): Promise<VarianteBuscable[]> {
+  const t = q.trim().slice(0, 80)
+  if (t === '') return []
+  const tope = Math.max(1, Math.min(limite, 30))
+  // Lo común a las dos consultas; la empresa va ESCRITA en cada `where` (el guardia de aislamiento la busca ahí).
+  const comun = {
+    status: { not: 'DISCONTINUED' },
+    item: { status: { not: 'ARCHIVED' }, capabilities: { path: ['trackInventory'], equals: true } },
+  } satisfies Prisma.CatalogVariantWhereInput
+  const select = {
+    id: true,
+    sku: true,
+    barcode: true,
+    name: true,
+    isDefault: true,
+    item: { select: { name: true } },
+    inventoryLevels: { where: { companyId, ...(sucursalId ? { locationId: sucursalId } : { id: 'sin-sucursal' }) }, select: { onHand: true, reserved: true } },
+  } satisfies Prisma.CatalogVariantSelect
+  // Dos consultas y no una: la coincidencia EXACTA (lo que escribe un lector) tiene que aparecer aunque haya mil
+  // coincidencias parciales por delante en el orden alfabético.
+  const [exactas, parciales] = await Promise.all([
+    tx.catalogVariant.findMany({
+      where: { companyId, ...comun, OR: [{ sku: { equals: t, mode: 'insensitive' } }, { barcode: { equals: t, mode: 'insensitive' } }] },
+      select,
+      take: tope,
+    }),
+    tx.catalogVariant.findMany({
+      where: {
+        companyId,
+        ...comun,
+        OR: [
+          { sku: { contains: t, mode: 'insensitive' } },
+          { barcode: { contains: t, mode: 'insensitive' } },
+          { name: { contains: t, mode: 'insensitive' } },
+          { item: { name: { contains: t, mode: 'insensitive' } } },
+        ],
+      },
+      select,
+      orderBy: [{ item: { name: 'asc' } }, { position: 'asc' }, { id: 'asc' }],
+      take: tope,
+    }),
+  ])
+  const vistos = new Set<string>()
+  const salida: VarianteBuscable[] = []
+  for (const v of [...exactas, ...parciales]) {
+    if (vistos.has(v.id)) continue
+    vistos.add(v.id)
+    const nivel = v.inventoryLevels[0]
+    salida.push({
+      id: v.id,
+      sku: v.sku,
+      barcode: v.barcode,
+      itemNombre: v.item.name,
+      nombreVariante: v.name,
+      esDefault: v.isDefault,
+      disponible: sucursalId ? (nivel ? disponible(nivel) : 0) : null,
+      exacto: esCodigoExacto(t, v),
+    })
+  }
+  return salida.slice(0, tope)
 }

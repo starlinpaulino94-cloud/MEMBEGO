@@ -130,3 +130,37 @@ export function esCodigoExacto(q: string | undefined, v: { sku: string; barcode:
   if (!n) return false
   return v.sku.toLowerCase() === n || (v.barcode !== null && v.barcode.toLowerCase() === n)
 }
+
+// ── INV-2a · lista de entradas de mercancía ──────────────────────────────────
+
+export interface FiltrosEntradas {
+  sucursalId?: string
+  /** `YYYY-MM-DD` en la zona horaria de la empresa, ambos extremos incluidos. */
+  desde?: string
+  hasta?: string
+  /** Número de la entrada (`ENT-2026-000012`) o texto de su referencia (la factura). */
+  q?: string
+}
+
+export interface PeticionEntradas {
+  filtros: FiltrosEntradas
+  cursor: string | null
+}
+
+/** Lee la URL de la lista de entradas con las mismas reglas que la de movimientos. */
+export function leerFiltrosEntradas(sp: ParametrosUrl): PeticionEntradas {
+  const { filtros, cursor } = leerFiltrosMovimientos(sp)
+  return {
+    filtros: {
+      ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+      ...(filtros.desde ? { desde: filtros.desde } : {}),
+      ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+      ...(filtros.q ? { q: filtros.q } : {}),
+    },
+    cursor,
+  }
+}
+
+export function consultaDeFiltrosEntradas(f: FiltrosEntradas, cursor?: string | null): string {
+  return consultaDeFiltros({ sucursalId: f.sucursalId, desde: f.desde, hasta: f.hasta, q: f.q }, cursor)
+}

@@ -923,6 +923,8 @@ model Company {
   inventoryLevels        InventoryLevel[]
   inventoryMovements     InventoryMovement[]
   inventoryReservations  InventoryReservation[]
+  inventoryReceipts      InventoryReceipt[]
+  inventoryReceiptLines  InventoryReceiptLine[]
   // Commerce Core · Fase 3: pedidos Membego. Relaciones inversas.
   membegoOrders          MembegoOrder[]
   membegoOrderLines      MembegoOrderLine[]
@@ -1127,6 +1129,7 @@ model Sucursal {
 
   // Commerce Core · Fase 2: existencias del catálogo unificado en esta sucursal.
   inventoryLevels InventoryLevel[]
+  inventoryReceipts InventoryReceipt[]
   // Commerce Core · Fase 3: pedidos Membego que atiende esta sucursal.
   membegoOrders   MembegoOrder[]
 

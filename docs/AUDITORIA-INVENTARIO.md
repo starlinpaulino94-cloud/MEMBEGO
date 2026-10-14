@@ -4,7 +4,7 @@
 > `/admin/inventario`, sus consumidores (pedidos, checkout, POS, ofertas), el cron, las pruebas y la documentación.
 > Se compara con el inventario del Car Wash (`ProductoInventario`), que es OTRO módulo.
 >
-> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1 ya lo cerró** (ver §5).
+> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1 o INV-2a ya lo cerraron** (ver §5 y §7).
 
 ## 1. Veredicto
 
@@ -32,10 +32,10 @@ separa un «control de stock» de un módulo de inventario profesional.
 
 | Falta | Hoy | Por qué importa | Fase |
 |---|---|---|---|
-| Recepción de mercancía múltiple | Una variante, una sucursal, un formulario por vez | Una factura trae 20–50 líneas: son 20–50 envíos | INV-2 |
-| Importar existencias (CSV) | No existe | Abrir una tienda con 300 SKU es imposible a mano | INV-2 |
-| Sesión de conteo físico por sucursal | Conteo de una variante a la vez | Un inventario real recorre toda la tienda y necesita informe de varianza | INV-2 |
-| Transferencias con estado | Inmediatas (salen y entran en la misma transacción) | Entre sucursales reales pasan horas o días: falta «enviada → recibida» y recepción parcial | INV-2 |
+| Recepción de mercancía múltiple | Una variante, una sucursal, un formulario por vez | Una factura trae 20–50 líneas: son 20–50 envíos | **INV-2a ✔** |
+| Importar existencias (CSV) | No existe | Abrir una tienda con 300 SKU es imposible a mano | **INV-2a ✔** |
+| Sesión de conteo físico por sucursal | Conteo de una variante a la vez | Un inventario real recorre toda la tienda y necesita informe de varianza | INV-2b |
+| Transferencias con estado | Inmediatas (salen y entran en la misma transacción) | Entre sucursales reales pasan horas o días: falta «enviada → recibida» y recepción parcial | INV-2c |
 | Búsqueda por código de barras | La lista buscaba por nombre y SKU; la variante ya tiene `barcode` | El lector es la forma normal de encontrar un producto en bodega | **INV-1 ✔** |
 
 ### 3.2 Compras y reposición
@@ -99,7 +99,9 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | Fase | Contenido | Esquema | Tamaño | Estado |
 |---|---|---|---|---|
 | **INV-1 · Visibilidad** | Movimientos de toda la empresa con filtros y CSV; búsqueda y salto por código de barras; avisos de stock bajo en POS y movimientos manuales; reservas vivas de la empresa; umbral en varias sucursales; estado manual advertido | Sin cambios | S | **Hecha** |
-| INV-2 · Operación en volumen | Documento de entrada con varias líneas y referencia; importación CSV de existencias y conteos; sesión de conteo por sucursal con informe de varianza; transferencias con estado | `InventoryDocument`/líneas, `InventoryTransfer`, `InventoryCountSession` | L | pendiente |
+| **INV-2a · Entradas en volumen** | Documento de entrada con varias líneas, número `ENT-AAAA-NNNNNN`, factura y nota; captura con lector; importación CSV todo o nada (hasta 1.000 filas) con revisión previa y plantilla; lista, detalle y CSV de cada entrada | `InventoryReceipt`, `InventoryReceiptLine` (migración `20261056`) | M | **Hecha** (este documento, §7) |
+| INV-2b · Conteo físico por sucursal | Sesión de conteo (una abierta por sucursal), hoja a ciegas, captura por lector o CSV, informe de varianza y ajuste como delta | `InventoryCountSession`/líneas | M | pendiente |
+| INV-2c · Transferencias con estado | «Con envío»: enviada → parcial/recibida o cancelada; recepción parcial; en tránsito visible en la ficha; aviso al destino. La transferencia directa actual se conserva | `InventoryTransfer`/líneas | M | pendiente |
 | INV-3 · Compras y costo | Proveedores y órdenes de compra; costo unitario en entradas; costo promedio ponderado y valor del inventario; COGS; punto de reorden y lista de qué comprar | Proveedores/OC de Commerce Core; `unitCost` en movimientos | L | pendiente |
 | INV-4 · Reportes | Kardex valorizado, rotación y días de inventario, stock sin movimiento, mermas por motivo codificado, margen real; tarjeta de dashboard | Catálogo de motivos | M | pendiente |
 | INV-5 · Trazabilidad | Lotes y vencimiento con FEFO; series; kits que descuentan componentes; API v1; rol de bodega | Lotes, kits | L por pieza | pendiente |
@@ -156,3 +158,93 @@ Hallazgos de la propia verificación:
   INV-1 y no se tocó.
 - `after()` se ejercitó en un servidor de producción local (`next start`); su comportamiento sobre el runtime de Vercel
   no se verificó.
+
+## 7. INV-2a · qué se hizo
+
+> INV-2 se entrega en tres partes, cada una con su migración, su commit y su verificación: **2a** entradas en volumen
+> (esta), **2b** conteo físico por sucursal y **2c** transferencias con estado. Decisiones aprobadas: sin borradores (se
+> registra todo junto o nada), documentos inmutables (un error se corrige con otro movimiento), importación todo o nada
+> con tope de 1.000 filas, y las mismas funciones de permiso (`ajustar` para entradas e importación; `transferir` para los
+> envíos de 2c), sin funciones nuevas. Los costos quedan fuera (INV-3).
+
+- **Entrada de mercancía como documento** — `/admin/inventario/entradas/nueva`. Una entrada es UN documento con número
+  `ENT-AAAA-NNNNNN` (correlativo por empresa y año, sin huecos), sucursal que recibe, factura o referencia y nota. Cada
+  línea es un producto con su cantidad, y apunta al movimiento `PURCHASE` que la causó (el movimiento apunta de vuelta a
+  la entrada). Se captura con lector de código de barras: el código exacto se añade solo, escanear otra vez suma una
+  unidad, y un SKU o código inexistente —o un servicio— no entra. Hasta 200 productos a mano.
+- **Todo o nada, idempotente, sin interbloqueos** — `registrarEntradaMultipleEnTx` valida, crea los saldos que falten
+  (en orden fijo), bloquea **todos** los saldos juntos y en orden de id, comprueba la clave de idempotencia **ya con los
+  candados** (cinco envíos idénticos a la vez crean una sola entrada), aplica el ledger puro a cada línea y escribe todo
+  con `escribirMovimientosPorLote` (un `INSERT … RETURNING` y un `UPDATE … FROM (VALUES …)`), la segunda puerta de escritura
+  de saldos junto a `escribirMovimiento` (una guardia prohíbe una tercera). Mil líneas caben en una transacción.
+- **Inmutable en la base** — las tablas `inventory_receipts` y `inventory_receipt_lines` no admiten UPDATE, DELETE ni
+  TRUNCATE (disparadores), con CHECK de forma (cantidades, número, longitudes) y claves foráneas compuestas por empresa.
+  Efecto colateral conocido: como las líneas apuntan al ledger, un `TRUNCATE` a secas del ledger ya lo frena PostgreSQL por
+  la clave foránea (antes que el disparador); vaciarlo junto con las líneas, o con `CASCADE`, lo frena el disparador. La
+  prueba 12 de `inventory.db.test.ts` se ajustó a eso y prueba las tres formas.
+- **Lista, detalle y CSV** — `/admin/inventario/entradas` (filtros: número o factura, sucursal, días locales de la
+  empresa; paginación por cursor), `/entradas/[id]` (líneas con existencia antes → después; una entrada de otra empresa o
+  inventada se ve idéntica: 404) y `/entradas/[id]/exportar` (CSV con las fórmulas neutralizadas).
+- **Importar CSV** — `/admin/inventario/importar`: dos pasos. «Revisar archivo» lee y valida **sin escribir nada** y
+  explica fila por fila (número de fila como en la hoja); «Registrar» solo aparece con el archivo limpio y el servidor
+  **vuelve a leerlo y validarlo** (no se fía de la revisión que viajó por el navegador). Reconoce `sku` y/o
+  `codigo_de_barras`, `cantidad`, separador `;` o `,`, BOM y alias comunes; rechaza códigos en notación científica (Excel),
+  SKU ambiguos por mayúsculas, SKU y código de productos distintos, productos sin control de inventario y duplicados;
+  avisa de los descontinuados. Hasta 1.000 filas y 2 MB; con un solo error no se registra nada. Plantilla descargable con
+  filas de ejemplo que no pueden pasar por producto real (`EJEMPLO-BORRAR-…`). Envíos limitados a 20 por minuto.
+- **Degradación** — si la migración aún no está aplicada, las pantallas nuevas dicen exactamente eso en lugar de fallar
+  (`describirFalloDeCarga`), y `/api/health` lo reporta (`inventory_receipts.esquema`).
+
+Archivos principales: `prisma/schema/inventario.prisma`, `prisma/migrations/20261056_inventory_receipts/`,
+`src/modules/inventory/{entradas,importacion,importar,errores-pantalla}.ts` (+ `service`, `queries`, `filtros`,
+`exportacion`, `actions`), `src/components/inventario/{EntradaMultipleForm,ImportarForm}.tsx`,
+`src/app/(admin)/admin/inventario/{entradas,importar}/`.
+
+### Cómo aplicar la migración (obligatorio y en este orden)
+
+1. **SQL primero**: copiar `prisma/migrations/20261056_inventory_receipts/migration.sql` al SQL Editor de Supabase y
+   ejecutarlo (es aditivo e idempotente: se puede correr dos veces). Solo crea objetos nuevos; no toca los existentes.
+2. **Después el código** (despliegue en Vercel). Un código desplegado antes de la migración deja las pantallas nuevas
+   con un mensaje claro y el resto del inventario intacto, pero registrar una entrada fallaría.
+3. Verificar con `npm run db:doctor` y con `/api/health` (debe listar `inventory_receipts.esquema` en verde).
+
+## 8. Verificación de INV-2a (2026-10-14)
+
+Local, sobre PostgreSQL 16 desechable (clúster nuevo en `127.0.0.1`, collation ICU `en-US`, las 213 migraciones aplicadas
+desde vacío con `prisma migrate deploy`, la nueva dos veces seguidas sin error y `prisma migrate diff` sin diferencias;
+no se tocó ninguna base real). Sin Supabase real, Vercel, lector de código de barras, Excel ni dispositivos móviles/Safari:
+**no verificados**.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (los avisos son preexistentes; ninguno en los archivos tocados) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; entrada compartida 855/1000 KB (86 %), trozo mayor 409/600 KB |
+| Unitarias (`bun run test`) | 4221 pruebas: 4214 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest` como en CI) | 680/680, cero omitidas |
+| Pruebas nuevas | 21 puras (`inventario-entradas.test.ts`), 9 guardias nuevas (`inventario-permisos.test.ts`, ya 33), 14 contra PostgreSQL (`inventory-entradas.db.test.ts`) y un recorrido E2E nuevo |
+| E2E (`bun run e2e:limpio`, escritorio) | 67/67 sobre la compilación final: 49 en `inventario-admin` (6, con el recorrido nuevo), `comercio-experiencia`, `pedidos-membego`, `pos-membego` y `carrito-checkout`, y 18 en `catalogo-admin`, `catalogo-api` y `catalogo-publico` (comparten el arnés que ganó el campo `barcode`) |
+| Mutaciones | 41 de 43 detectadas (ver abajo) |
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Un interbloqueo real, cazado por la suite completa de PostgreSQL y no por mi prueba aislada.** Dos entradas con los
+  mismos productos *nuevos* en distinto orden se interbloqueaban al crear los saldos que faltan (un
+  `INSERT … ON CONFLICT` fila a fila espera a la fila que la otra transacción acaba de insertar). Mi prueba de carrera
+  pasaba de suerte con pocos productos; con 30 rondas × 20 productos fallaba 3 de 3. Corregido creando los saldos en
+  orden fijo; la prueba ahora hace 25 rondas × 20 productos con productos nuevos en cada ronda (sin el arreglo falla 4 de
+  4) y hay una guardia estática del orden. **Esto vale para INV-2c**: toda escritura nueva que cree o bloquee saldos de
+  varios productos debe hacerlo en orden fijo.
+- **Una prueba preexistente cambió de mensaje**: `inventory.db.test.ts` (12) esperaba que `TRUNCATE inventory_movements`
+  lo rechazara el disparador del ledger; ahora lo rechaza antes PostgreSQL por la clave foránea de las líneas de entrada.
+  El ledger sigue protegido (sin `CASCADE`, con `CASCADE` y junto con las líneas); la prueba cubre las tres formas.
+- **Mutaciones**: 5 sobrevivieron al principio y obligaron a reforzar pruebas: los topes (200 / 1.000) no estaban fijados,
+  la guardia de «la empresa sale de la sesión» no comprobaba lo que decía su título, el origen `MANUAL` podía venir del
+  navegador sin que nada lo notara, y el filtro por empresa de las dos consultas de la búsqueda de productos no lo veía la
+  guardia general (van dentro de un `Promise.all`); además `entradaToCsv` no tenía prueba unitaria directa (solo el E2E).
+  Las 2 que siguen vivas son comprobaciones defensivas que no tienen forma de dispararse desde fuera
+  (`LOTE_INCOMPLETO` y `NIVEL_NO_ENCONTRADO`: con los saldos bloqueados y las claves foráneas compuestas, el `UPDATE` o el
+  `INSERT` fallarían antes).
+- **Una prueba ajena es intermitente**: `supply-v2-slice9` («B2·G §8 caso 1», arriendo del *outbox*) falló una vez en la
+  suite completa y pasó 3 de 3 aislada y en la siguiente corrida completa. No toca el inventario; no se modificó.
+- En esta máquina el servidor de E2E imprime muchos `fetch failed … 127.0.0.1:54329`: son llamadas de Supabase Auth a un
+  servidor que no existe en el arnés (las sesiones se firman localmente). Ruido previo, no afecta a los resultados.

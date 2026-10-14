@@ -67,7 +67,7 @@ export async function itemSembrado(
     marketplace?: boolean
     /** Producto físico que CONTROLA inventario (Fase 2). Sin esto, es un servicio. */
     controlaInventario?: boolean
-    variantes: { name: string; sku: string; price: number; cost?: number; compareAt?: number; status?: 'ACTIVE' | 'OUT_OF_STOCK' | 'DISCONTINUED'; atributos?: Record<string, string>; porDefecto?: boolean }[]
+    variantes: { name: string; sku: string; barcode?: string; price: number; cost?: number; compareAt?: number; status?: 'ACTIVE' | 'OUT_OF_STOCK' | 'DISCONTINUED'; atributos?: Record<string, string>; porDefecto?: boolean }[]
   }
 ): Promise<ItemSembrado> {
   const status = d.status ?? 'ACTIVE'
@@ -98,6 +98,7 @@ export async function itemSembrado(
         catalogItemId: it.id,
         name: v.name,
         sku: v.sku,
+        barcode: v.barcode,
         price: v.price,
         cost: v.cost,
         compareAtPrice: v.compareAt,

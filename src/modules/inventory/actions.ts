@@ -35,11 +35,14 @@ import { conEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
+import { formSubmitLimiter } from '@/lib/rate-limit'
 import type { SessionUser } from '@/types'
 import type { ContextoAuditoria } from './auditoria'
 import { avisarStockBajo } from './avisos'
 import { InventarioError } from './errores'
-import { historialDeVarianteEnTx, type HistorialPagina } from './queries'
+import type { InformeImportacion } from './importacion'
+import { aplicarImportacionEnTx, informeDeImportacionEnTx } from './importar'
+import { buscarVariantesParaEntradaEnTx, historialDeVarianteEnTx, type HistorialPagina, type VarianteBuscable } from './queries'
 import {
   ajustarEnTx,
   configurarUmbralEnTx,
@@ -48,6 +51,7 @@ import {
   danarEnTx,
   devolverEnTx,
   recibirEnTx,
+  registrarEntradaMultipleEnTx,
   resolverDanadoEnTx,
   transferirEnTx,
   type SaldoVista,
@@ -259,4 +263,112 @@ export interface SerializableHistorial extends Omit<HistorialPagina, 'filas'> {
 
 function serializar(p: HistorialPagina): SerializableHistorial {
   return { siguiente: p.siguiente, filas: p.filas.map((f) => ({ ...f, creadoEn: f.creadoEn.toISOString() })) }
+}
+
+// ── INV-2a · entrada de mercancía con varias líneas e importación CSV ────────
+
+export interface ResumenEntrada {
+  entradaId: string
+  numero: string
+  lineas: number
+  unidades: number
+  repetido: boolean
+}
+
+/** Lo que cruza al navegador de un informe de importación: sin las líneas (son del servidor, que las rehace al aplicar). */
+export type InformeVista = Omit<InformeImportacion, 'lineas'>
+
+const sinLineas = (i: InformeImportacion): InformeVista => {
+  const { lineas, ...resto } = i
+  void lineas
+  return resto
+}
+
+/**
+ * Registra UNA entrada de mercancía con todas sus líneas, todo o nada. Las
+ * líneas se vuelven a validar en el servicio (cantidades, productos, sucursal):
+ * lo que manda el navegador no se da por bueno.
+ */
+export async function registrarEntradaMultiple(entrada: {
+  sucursalId: string
+  lineas: { varianteId: string; cantidad: number }[]
+  referencia?: string | null
+  nota?: string | null
+  clave?: string | null
+}): Promise<ResultadoInventario<ResumenEntrada>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : []
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      registrarEntradaMultipleEnTx(
+        tx,
+        c.companyId,
+        { sucursalId: texto(entrada.sucursalId), lineas, referencia: entrada.referencia, nota: entrada.nota, origen: 'MANUAL', idempotencyKey: clave(entrada.clave) },
+        c.ctx
+      )
+    )
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Busca productos que controlan inventario para añadir a una entrada: nombre, SKU o código de barras (un lector escribe el código). */
+export async function buscarProductosParaEntrada(q: string, sucursalId: string | null): Promise<ResultadoInventario<{ productos: VarianteBuscable[] }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof q !== 'string' || (sucursalId !== null && typeof sucursalId !== 'string')) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const productos = await conEmpresa(c.companyId, (tx) => buscarVariantesParaEntradaEnTx(tx, c.companyId, q, sucursalId || null))
+    return { ok: true, productos }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Lee el archivo y dice, fila por fila, qué pasaría. NO escribe nada. */
+export async function previsualizarImportacion(entrada: { texto: string }): Promise<ResultadoInventario<{ informe: InformeVista }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  if (!(await formSubmitLimiter(`inv-importar:${c.ctx.actorId ?? c.companyId}`))) return { ok: false, error: 'Demasiados intentos. Espera un momento.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => informeDeImportacionEnTx(tx, c.companyId, entrada.texto))
+    if (!r.ok) return { ok: false, error: r.error }
+    return { ok: true, informe: sinLineas(r.informe) }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * Aplica el archivo: vuelve a leerlo y a validarlo contra el catálogo de AHORA y,
+ * solo si no tiene un error, lo registra como una entrada (origen CSV). Con un
+ * error devuelve el informe y no escribe nada.
+ */
+export async function aplicarImportacion(entrada: {
+  sucursalId: string
+  texto: string
+  referencia?: string | null
+  nota?: string | null
+  clave?: string | null
+}): Promise<ResultadoInventario<{ aplicada: true; entrada: ResumenEntrada } | { aplicada: false; informe: InformeVista }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  if (!(await formSubmitLimiter(`inv-importar:${c.ctx.actorId ?? c.companyId}`))) return { ok: false, error: 'Demasiados intentos. Espera un momento.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      aplicarImportacionEnTx(tx, c.companyId, { sucursalId: texto(entrada.sucursalId), texto: entrada.texto, referencia: entrada.referencia, nota: entrada.nota, idempotencyKey: clave(entrada.clave) }, c.ctx)
+    )
+    if (!r.ok) return { ok: false, error: r.error }
+    if (!r.resultado.aplicada) return { ok: true, aplicada: false, informe: sinLineas(r.resultado.informe) }
+    refrescar()
+    return { ok: true, aplicada: true, entrada: r.resultado.entrada }
+  } catch (e) {
+    return aError(e)
+  }
 }
