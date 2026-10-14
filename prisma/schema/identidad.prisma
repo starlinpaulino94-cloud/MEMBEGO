@@ -103,6 +103,12 @@ enum NotifTipo {
   SUPPLY_DEPOSITO_POR_CERRAR
   /// Hay una liquidación calculada esperando aprobación o pago.
   SUPPLY_LIQUIDACION_PENDIENTE
+  // Supplier & Fulfillment Commerce · visitas atribuidas a Membego (§50–§51).
+  VISITA_CONFIRMA_CONSUMO
+  VISITA_COMPRA_ADICIONAL
+  VISITA_DISPUTA
+  SUPPLY_SOLICITUD_MERCHANT
+
 }
 
 enum AuditAccion {
@@ -561,6 +567,19 @@ enum AuditAccion {
   SUPPLY_V2_SUPPLIER_READINESS_WAIVED
   /// El dueño del proveedor invitó a alguien de su personal con un rol de proveedor.
   SUPPLY_V2_SUPPLIER_STAFF_INVITED
+
+  // Supplier & Fulfillment Commerce · visitas atribuidas, ventas adicionales, comisión y disputas (§22–§36).
+  VISIT_OPENED
+  VISIT_CLOSED
+  VISIT_CANCELLED
+  ANCILLARY_SALE_RECORDED
+  ANCILLARY_SALE_CONFIRMED
+  ANCILLARY_SALE_REVERSED
+  ANCILLARY_SALE_ADJUSTED
+  ANCILLARY_COMMISSION_POSTED
+  ANCILLARY_COMMISSION_REVERSED
+  VISIT_DISPUTE_OPENED
+  VISIT_DISPUTE_RESOLVED
 }
 
 // ─────────────────────────────────────────────
@@ -686,6 +705,14 @@ model User {
   // ── Membego Supply 2.0 (supply-v2.prisma) ─────────────────────────────────
   supplyV2ProveedoresCreados   SupplyV2Supplier[]           @relation("SupplyV2SupplierCreatedBy")
   supplyV2ContratosAceptados   SupplyV2Supplier[]           @relation("SupplyV2SupplierTermsAcceptedBy")
+  // Supplier & Fulfillment Commerce · visitas atribuidas a Membego.
+  visitasMembegoComoCliente    MembegoVisit[]               @relation("MembegoVisitCustomer")
+  visitasMembegoAbiertas       MembegoVisit[]               @relation("MembegoVisitOpenedBy")
+  visitasMembegoCerradas       MembegoVisit[]               @relation("MembegoVisitClosedBy")
+  ventasAdicionalesReportadas  AncillarySale[]              @relation("AncillarySaleReportedBy")
+  ventasAdicionalesReversadas  AncillarySale[]              @relation("AncillarySaleReversedBy")
+  disputasDeVisitaComoCliente  VisitDispute[]               @relation("VisitDisputeCustomer")
+  disputasDeVisitaResueltas    VisitDispute[]               @relation("VisitDisputeResolvedBy")
   supplyV2AcuerdosCreados      SupplyV2Agreement[]          @relation("SupplyV2AgreementCreatedBy")
   supplyV2AcuerdosAprobados    SupplyV2Agreement[]          @relation("SupplyV2AgreementApprovedBy")
   supplyV2VersionesCreadas     SupplyV2AgreementVersion[]   @relation("SupplyV2AgreementVersionCreatedBy")
@@ -1066,6 +1093,10 @@ model Company {
   supplyVentas           SupplyVentaDirecta[]      @relation("SupplyProveedorVentas")
   // ── Membego Supply 2.0 (supply-v2.prisma) · referencia, no duplicado ─────
   supplyV2Supplier       SupplyV2Supplier?         @relation("SupplyV2SupplierCompany")
+  // Supplier & Fulfillment Commerce · visitas atribuidas a Membego en esta empresa.
+  membegoVisits          MembegoVisit[]
+  ancillarySales         AncillarySale[]
+  visitDisputes          VisitDispute[]
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -1151,6 +1182,9 @@ model Sucursal {
   @@index([companyId, activa, mostrarEnMapa])
   @@index([cityId])
   @@index([sectorId])
+  /// Supplier & Fulfillment Commerce: visitas atribuidas a Membego en esta sucursal.
+  membegoVisits MembegoVisit[]
+
   @@map("sucursales")
 }
 

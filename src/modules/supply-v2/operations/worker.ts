@@ -6,6 +6,7 @@ import { sanearError } from './domain'
 import { anotarSupply, anotarYContar } from './log'
 import { marcarEntregado, marcarFallido, reclamarEfectos, type EfectoReclamado } from './outbox'
 import { EFECTOS_DE_AVISO } from '../notifications/efectos'
+import { EFECTOS_DE_VISITA } from '@/modules/visitas-membego/efectos'
 
 /**
  * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · DEL OUTBOX A LA COLA (§6, §7, §8).
@@ -128,6 +129,8 @@ export const EFECTOS: Record<string, EjecutorDeEfecto> = {
    * el de que esa parte funciona.
    */
   ...EFECTOS_DE_AVISO,
+  // Supplier & Fulfillment Commerce: visitas atribuidas, ventas adicionales, comisión y disputas.
+  ...EFECTOS_DE_VISITA,
 }
 
 export interface ResultadoDespacho {

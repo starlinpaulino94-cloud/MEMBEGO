@@ -292,6 +292,8 @@ model SupplyV2Supplier {
 
   // Slice 8 · programas de fidelización que organiza o cofinancia.
   loyaltyPrograms SupplyV2LoyaltyProgram[] @relation("SupplyV2LoyaltyProgramSupplier")
+  // Supplier & Fulfillment Commerce · visitas atribuidas a Membego que este proveedor atendió.
+  visits          MembegoVisit[]
 
   @@map("supply_v2_suppliers")
 }
@@ -404,6 +406,8 @@ model SupplyV2CatalogItem {
   // Slice 4
   invoiceLines   SupplyV2SupplierInvoiceLine[]
   economicEvents SupplyV2EconomicEvent[]
+  /// Supplier & Fulfillment Commerce: líneas de venta adicional que vendieron este extra (§26).
+  ancillaryLines AncillarySaleLine[]
 
   /// `supplierId + sku` único cuando hay SKU (índice parcial en la migración).
   @@unique([supplierId, sku])
@@ -450,6 +454,18 @@ model SupplyV2Agreement {
   allowDepositApplication Boolean                    @default(true)
   /// Texto libre («mensual», «quincenal»); solo informativo en el Slice 4.
   settlementFrequency     String?
+
+  // ── Supplier & Fulfillment Commerce · ventas adicionales en la visita (§37–§38). Van a la foto de la versión. ──
+  /// Las compras adicionales durante una visita atribuida a Membego comisionan.
+  ancillaryCommissionEnabled   Boolean  @default(true)
+  /// Tasa contractual (%); nula = la de la cuenta Merchant Billing de la empresa (8 % por defecto de plataforma).
+  ancillaryCommissionRate      Decimal? @db.Decimal(5, 2)
+  /// Hasta cuándo una compra pertenece a la visita, desde que se abre.
+  attributionWindowMinutes     Int      @default(120)
+  /// La comisión de los extras se asienta solo cuando el cliente confirma.
+  requiresCustomerConfirmation Boolean  @default(false)
+  /// Por encima de este monto reportado se exige comprobante (informativo para revisión).
+  receiptRequiredAbove         Decimal? @db.Decimal(12, 2)
 
   startsAt DateTime
   endsAt   DateTime?
@@ -1417,6 +1433,8 @@ model SupplyV2Redemption {
   // Slice 4
   obligation     SupplyV2SupplierObligation?
   economicEvents SupplyV2EconomicEvent[]
+  /// Supplier & Fulfillment Commerce: la visita que abrió esta entrega (§23).
+  visit          MembegoVisit?
 
   @@index([supplierId, redeemedAt])
   @@index([entitlementId])
