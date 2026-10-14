@@ -17,43 +17,41 @@ export interface CardnetTokenMessage {
   readonly token: string
 }
 
-const CARDNET_MERCHANT_ORIGIN_FALLBACK = 'https://membego.com'
-export const CARDNET_CAPTURE_DOCUMENT_PATH = '/__rn_cardnet_capture__/' as const
+/**
+ * Adónde vuelve la ventana de CardNET abierta en el navegador del teléfono (`/api/v1/cliente/pagos/cardnet/ventana`).
+ * Es el `scheme` de `app.json`; el servidor redirige exactamente aquí (`RETORNO_APP_CARDNET`) y una prueba fija que
+ * los dos coinciden.
+ */
+export const CARDNET_WINDOW_RETURN_URL = 'membego://pago-cardnet' as const
 
-const CARDNET_DIAGNOSTIC_STAGES = [
-  'document_ready',
-  'sdk_script_loaded',
-  'sdk_script_failed',
-  'sdk_ready',
-  'sdk_unavailable',
-  'sdk_setup_failed',
-  'capture_open_requested',
-  'capture_opened',
-  'capture_open_failed',
-  'navigation_allowed',
-  'navigation_rejected',
-  'webview_load_start',
-  'webview_load_end',
-  'webview_error',
-  'webview_http_error',
-] as const
-
-export type CardnetDiagnosticStage = (typeof CARDNET_DIAGNOSTIC_STAGES)[number]
-
-export interface CardnetDiagnosticMessage {
-  readonly type: 'CARDNET_DIAGNOSTIC'
-  readonly stage: CardnetDiagnosticStage
+/** ¿Este enlace es la vuelta de la ventana de CardNET? (`+native-intent` no debe navegar con él.) */
+export function isCardnetWindowReturn(url: string): boolean {
+  return url === CARDNET_WINDOW_RETURN_URL || url.startsWith(`${CARDNET_WINDOW_RETURN_URL}?`) || url.startsWith(`${CARDNET_WINDOW_RETURN_URL}/`)
 }
 
-export interface CardnetDiagnosticLocation {
-  readonly host: string
-  readonly path: string
+/**
+ * El token que trae la vuelta de la ventana, SOLO si es de esta sesión y tiene forma de token. Sin `URL`/`URLSearchParams`
+ * a propósito: el esquema es propio y se lee a mano. Cualquier otra cosa da `null` y la app sigue con su sondeo (el
+ * servidor ve la tarjeta nueva en CardNET aunque la vuelta se pierda).
+ */
+export function parseCardnetWindowReturn(url: string, sessionId: string): string | null {
+  if (!isCardnetWindowReturn(url)) return null
+  const query = url.split('?')[1]?.split('#')[0] ?? ''
+  const params = new Map<string, string>()
+  for (const pair of query.split('&')) {
+    if (!pair) continue
+    const [rawKey, rawValue = ''] = pair.split('=')
+    try {
+      const key = decodeURIComponent(rawKey.replace(/\+/g, ' '))
+      if (params.has(key)) return null
+      params.set(key, decodeURIComponent(rawValue.replace(/\+/g, ' ')))
+    } catch {
+      return null
+    }
+  }
+  const token = params.get('t')
+  return params.get('s') === sessionId && isValidOneTimeToken(token) ? token : null
 }
-
-function isCardnetDiagnosticStage(value: unknown): value is CardnetDiagnosticStage {
-  return typeof value === 'string' && CARDNET_DIAGNOSTIC_STAGES.some((stage) => stage === value)
-}
-
 const MODE_CONFIG: Readonly<Record<CardnetCaptureMode, {
   origin: string
   capturePath: string
@@ -77,56 +75,6 @@ function safeUrl(value: string): URL | null {
   } catch {
     return null
   }
-}
-
-export function resolveCardnetMerchantOrigin(value: string | undefined): string | null {
-  if (value === undefined) return CARDNET_MERCHANT_ORIGIN_FALLBACK
-  const url = safeUrl(value)
-  if (
-    !url ||
-    url.protocol !== 'https:' ||
-    url.username !== '' ||
-    url.password !== '' ||
-    url.pathname !== '/' ||
-    url.search !== '' ||
-    url.hash !== ''
-  ) {
-    return null
-  }
-  return url.origin
-}
-
-export function parseCardnetDiagnosticMessage(raw: string): CardnetDiagnosticMessage | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return null
-  }
-
-  if (!isPlainRecord(parsed)) return null
-  const keys = Object.keys(parsed).sort()
-  if (
-    keys.join(',') !== 'stage,type' ||
-    parsed.type !== 'CARDNET_DIAGNOSTIC' ||
-    !isCardnetDiagnosticStage(parsed.stage)
-  ) {
-    return null
-  }
-  return {
-    type: 'CARDNET_DIAGNOSTIC',
-    stage: parsed.stage,
-  }
-}
-
-export function sanitizeCardnetDiagnosticLocation(rawUrl: string): CardnetDiagnosticLocation | null {
-  const url = safeUrl(rawUrl)
-  if (!url || url.protocol !== 'https:' || url.username !== '' || url.password !== '') return null
-  const path = url.pathname
-    .split('/')
-    .map((segment) => (/^[A-Za-z0-9_-]{24,}$/.test(segment) || /^\d{8,}$/.test(segment) ? '[redacted]' : segment))
-    .join('/')
-  return { host: url.host, path }
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -156,8 +104,8 @@ const TOKEN_WRAPPERS = ['data', 'Data', 'detail', 'payload', 'Response', 'respon
  * Extrae el token de lo que entrega el widget. Con `raw` (la llamada directa del SDK, `tokenCreated`), un texto suelto ES
  * el token; en un mensaje del iframe solo cuentan objetos y JSON en texto (un texto cualquiera no es un token).
  *
- * La misma lógica vive escrita a mano dentro del documento de la WebView (`CARDNET_PAGE_HELPERS`); una prueba ejecuta
- * ese código y comprueba que coincide con esta función en cada caso.
+ * La ventana que la app abre en el navegador (`cardnetVentanaHtml.ts` del servidor) lleva esta misma lógica escrita a
+ * mano; una prueba ejecuta ese código y comprueba que coincide con esta función en cada caso.
  */
 export function extractCardnetToken(payload: unknown, raw = false, depth = 0): string | null {
   if (typeof payload === 'string') {
@@ -276,30 +224,6 @@ export function isAllowedCardnetFrameUrl(
   )
 }
 
-export function isAllowedCardnetNavigation(
-  request: { readonly url: string; readonly isTopFrame?: boolean },
-  merchantOrigin: string,
-  config: CardnetCaptureConfig,
-  session: Pick<CardnetCaptureSession, 'publicKey' | 'uniqueId'>
-): boolean {
-  if (resolveCardnetMerchantOrigin(merchantOrigin) !== merchantOrigin) return false
-  if (request.url === 'about:blank') return true
-  if (isAllowedCardnetFrameUrl(request.url, config, session)) return true
-  if (request.isTopFrame === false) return false
-
-  const url = safeUrl(request.url)
-  return (
-    url !== null &&
-    url.protocol === 'https:' &&
-    url.origin === merchantOrigin &&
-    url.username === '' &&
-    url.password === '' &&
-    (url.pathname === '/' || url.pathname === CARDNET_CAPTURE_DOCUMENT_PATH) &&
-    url.search === '' &&
-    url.hash === ''
-  )
-}
-
 export function matchesActiveCaptureFrame(
   event: Pick<MessageEvent<unknown>, 'origin' | 'source' | 'data'>,
   expectedOrigin: string,
@@ -311,36 +235,6 @@ export function matchesActiveCaptureFrame(
     event.source === activeFrame &&
     extractCardnetToken(event.data) !== null
   )
-}
-
-export function parseNativeCardnetMessage(
-  raw: string,
-  session: Pick<CardnetCaptureSession, 'sessionId' | 'captureNonce'>
-): CardnetTokenMessage | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return null
-  }
-
-  if (!isPlainRecord(parsed)) return null
-  const keys = Object.keys(parsed).sort()
-  if (keys.join(',') !== 'captureNonce,sessionId,token,type') return null
-  if (
-    parsed.type !== 'CARDNET_TOKEN_CREATED' ||
-    parsed.sessionId !== session.sessionId ||
-    parsed.captureNonce !== session.captureNonce ||
-    !isValidOneTimeToken(parsed.token)
-  ) {
-    return null
-  }
-  return {
-    type: 'CARDNET_TOKEN_CREATED',
-    sessionId: session.sessionId,
-    captureNonce: session.captureNonce,
-    token: parsed.token,
-  }
 }
 
 export function createCardnetTokenGate(session: Pick<CardnetCaptureSession, 'sessionId' | 'captureNonce'>) {

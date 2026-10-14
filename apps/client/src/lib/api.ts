@@ -1292,6 +1292,12 @@ export const api = {
       postJson<unknown>('/api/v1/cliente/pagos/cardnet/confirmar', input),
       cardnetPaymentStatusSchema
     ),
+  /**
+   * La ventana de CardNET que se abre en el navegador del teléfono (no en una WebView): el banco puede verificar la
+   * tarjeta con 3D Secure como en la web. Lleva el id de la sesión y su nonce porque la pestaña no tiene la sesión de la app.
+   */
+  cardnetCaptureWindowUrl: (input: { readonly sessionId: string; readonly captureNonce: string }) =>
+    `${getApiBaseUrl()}/api/v1/cliente/pagos/cardnet/ventana?s=${encodeURIComponent(input.sessionId)}&n=${encodeURIComponent(input.captureNonce)}`,
   getCardnetStatus: (sessionId: string) =>
     parseCardnetResponse(
       fetchBff<unknown>(
