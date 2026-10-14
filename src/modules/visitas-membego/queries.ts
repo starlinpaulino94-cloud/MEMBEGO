@@ -202,9 +202,13 @@ export async function resumenDeExtrasDeLaEmpresa(companyId: string, dias = 30): 
 }
 
 /** El mini catálogo del proveedor: lo que puede vender como extra (§26). */
-export async function extrasDelProveedor(supplierId: string): Promise<{ id: string; name: string; price: string | null; activo: boolean; sellableAsExtra: boolean; catalogItemId: string | null }[]> {
+export async function extrasDelProveedor(supplierId: string): Promise<{ id: string; name: string; price: string | null; activo: boolean; sellableAsExtra: boolean; catalogItemId: string | null; deMembego: boolean }[]> {
   const filas = await sinEmpresa('Visitas Membego: mini catálogo del proveedor', (tx) =>
-    tx.supplyV2CatalogItem.findMany({ where: { supplierId, status: { not: 'ARCHIVED' } }, orderBy: { name: 'asc' }, select: { id: true, name: true, publicPrice: true, status: true, sellableAsExtra: true, catalogItemId: true } })
+    tx.supplyV2CatalogItem.findMany({
+      where: { supplierId, status: { not: 'ARCHIVED' }, OR: [{ sellableAsExtra: true }, { agreements: { some: { status: 'ACTIVE' } } }] },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, publicPrice: true, status: true, sellableAsExtra: true, catalogItemId: true, _count: { select: { agreements: { where: { status: 'ACTIVE' } } } } },
+    })
   )
-  return filas.map((f) => ({ id: f.id, name: f.name, price: f.publicPrice?.toFixed(2) ?? null, activo: f.status === 'ACTIVE', sellableAsExtra: f.sellableAsExtra, catalogItemId: f.catalogItemId }))
+  return filas.map((f) => ({ id: f.id, name: f.name, price: f.publicPrice?.toFixed(2) ?? null, activo: f.status === 'ACTIVE', sellableAsExtra: f.sellableAsExtra, catalogItemId: f.catalogItemId, deMembego: f._count.agreements > 0 }))
 }

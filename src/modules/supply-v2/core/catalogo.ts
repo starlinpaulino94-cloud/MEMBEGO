@@ -243,6 +243,13 @@ export const RUTA_PORTAL_CANJES = `${RUTA_PORTAL_PROVEEDOR}/canjes`
 export const RUTA_PORTAL_INCIDENCIAS = `${RUTA_PORTAL_PROVEEDOR}/incidencias`
 export const RUTA_PORTAL_PERSONAL = `${RUTA_PORTAL_PROVEEDOR}/personal`
 export const RUTA_PORTAL_CONFIGURACION = `${RUTA_PORTAL_PROVEEDOR}/configuracion`
+/** SUPPLIER & FULFILLMENT COMMERCE · visitas atribuidas y ventas adicionales (§24–§36). */
+export const RUTA_PORTAL_VENTAS_ADICIONALES = `${RUTA_PORTAL_PROVEEDOR}/ventas-adicionales`
+export const RUTA_VISITAS = `${BASE_SUPPLY_V2}/visitas`
+export const RUTA_VISITAS_CLIENTE = '/cliente/visitas'
+/** Supplier → Merchant (§39–§41): el proveedor pide ser empresa Membego; Membego revisa. */
+export const RUTA_PORTAL_SOLICITUD_MERCHANT = `${RUTA_PORTAL_PROVEEDOR}/solicitud-merchant`
+export const RUTA_SOLICITUDES_MERCHANT = `${BASE_SUPPLY_V2}/proveedores/solicitudes`
 export const RUTA_REDENCIONES = `${BASE_SUPPLY_V2}/redenciones`
 
 // ── Slice 4 · finanzas y economía ───────────────────────────────────────────

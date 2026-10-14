@@ -32,7 +32,7 @@ async function avisar(userId: string, aviso: { tipo: NotifTipo; titulo: string; 
   }
 }
 
-async function avisarAdminsDeEmpresa(companyId: string, aviso: { tipo: NotifTipo; titulo: string; mensaje: string; href: string }, dedupeKey: string): Promise<ResultadoDeEfecto> {
+export async function avisarAdminsDeEmpresa(companyId: string, aviso: { tipo: NotifTipo; titulo: string; mensaje: string; href: string }, dedupeKey: string): Promise<ResultadoDeEfecto> {
   const admins = await sinEmpresa('Visitas Membego: administradores del proveedor a avisar', (tx) =>
     tx.user.findMany({ where: { companyId, role: { in: FULL_ADMIN_ROLES } }, select: { id: true } })
   )

@@ -21,6 +21,7 @@ import {
   History,
   Inbox,
   Landmark,
+  MapPinCheck,
   LayoutDashboard,
   LifeBuoy,
   Link2,
@@ -34,6 +35,7 @@ import {
   Palette,
   Plug,
   QrCode,
+  Receipt,
   ReceiptText,
   Rocket,
   ScanLine,
@@ -753,6 +755,14 @@ const ENLACES_PORTAL_PROVEEDOR: readonly NavLink[] = [
       keywords: ['canjes', 'entregas', 'redenciones', 'proveedor', 'supply'],
     },
     {
+      href: '/admin/supply/ventas-adicionales',
+      label: 'Ventas adicionales',
+      icon: Receipt,
+      description: 'Lo que los clientes de Membego te compraron además de lo incluido, y la comisión solo sobre eso.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['ventas', 'adicionales', 'extras', 'visitas', 'comision', 'proveedor', 'supply'],
+    },
+    {
       href: '/admin/supply/incidencias',
       label: 'Incidencias',
       icon: TriangleAlert,
@@ -783,6 +793,14 @@ const ENLACES_PORTAL_PROVEEDOR: readonly NavLink[] = [
       description: 'Contrato, prueba del escáner y lista de preparación de tu portal.',
       capacidad: 'MEMBEGO_SUPPLIER',
       keywords: ['configuracion', 'contrato', 'prueba', 'activacion', 'proveedor', 'supply'],
+    },
+    {
+      href: '/admin/supply/solicitud-merchant',
+      label: 'Ser empresa Membego',
+      icon: Store,
+      description: 'Pide operar también como empresa Membego: catálogo, pedidos y ofertas en la misma organización.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['merchant', 'empresa', 'solicitud', 'convertirme', 'vitrina', 'proveedor', 'supply'],
     },
 ]
 
@@ -1006,7 +1024,7 @@ const ESPACIO_PROVEEDOR: Workspace = {
     {
       id: 'proveedor-operacion',
       label: 'Operación',
-      items: delPortal('/admin/supply/inventario', '/admin/supply/escaner', '/admin/supply/canjes', '/admin/supply/incidencias'),
+      items: delPortal('/admin/supply/inventario', '/admin/supply/escaner', '/admin/supply/canjes', '/admin/supply/ventas-adicionales', '/admin/supply/incidencias'),
     },
     {
       id: 'proveedor-cuentas',
@@ -1016,7 +1034,7 @@ const ESPACIO_PROVEEDOR: Workspace = {
     {
       id: 'proveedor-organizacion',
       label: 'Organización',
-      items: delPortal('/admin/supply/personal', '/admin/supply/configuracion'),
+      items: delPortal('/admin/supply/personal', '/admin/supply/configuracion', '/admin/supply/solicitud-merchant'),
     },
   ],
 }
@@ -1116,6 +1134,15 @@ const G_CLI_MIO: NavGroup = {
       icon: Tag,
       description: 'Ofertas Membego que compraste y tus beneficios.',
       keywords: ['compras', 'membego', 'ofertas', 'beneficios', 'supply'],
+    },
+    {
+      // SUPPLIER & FULFILLMENT COMMERCE · cada vez que usó un beneficio en un
+      // negocio: lo incluido, lo que compró además y su confirmación (§33).
+      href: '/cliente/visitas',
+      label: 'Mis visitas',
+      icon: MapPinCheck,
+      description: 'Dónde usaste un beneficio de Membego y qué compraste además.',
+      keywords: ['visitas', 'membego', 'consumo', 'confirmar', 'compras adicionales'],
     },
     {
       // Supply · Slice 6: bonos y descuentos que Membego le asignó a esta

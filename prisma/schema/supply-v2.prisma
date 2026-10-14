@@ -61,6 +61,16 @@ enum SupplyV2SupplierAccessStatus {
   TERMINATED
 }
 
+/// Supplier & Fulfillment Commerce · solicitud «Convertirme en empresa Membego» (§39–§41).
+enum SupplyV2MerchantApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  MORE_INFO_REQUIRED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
 enum SupplyV2CatalogItemType {
   PRODUCT
   SERVICE
@@ -280,6 +290,8 @@ model SupplyV2Supplier {
   payments        SupplyV2SupplierPayment[]
   obligations     SupplyV2SupplierObligation[]
   economicEvents  SupplyV2EconomicEvent[]
+  // Supplier & Fulfillment Commerce · solicitudes para ser Merchant (misma empresa).
+  merchantApplications SupplyV2MerchantApplication[]
   reconciliations SupplyV2Reconciliation[]
   // Slice 5
   settlements      SupplyV2Settlement[]
@@ -3089,4 +3101,51 @@ enum SupplyV2CampaignEventType {
   COUPONS_GENERATED
   AUDIENCE_ASSIGNED
   BUDGET_WAIVED
+}
+
+// ─────────────────────────────────────────────
+// SUPPLIER & FULFILLMENT COMMERCE · Supplier → Merchant (§39–§41)
+// ─────────────────────────────────────────────
+
+/// La solicitud de un proveedor para operar también como empresa Membego
+/// (catálogo, pedidos, ofertas). La aprobación ENCIENDE capacidades en la
+/// MISMA `Company`: nunca se crea una segunda organización. Los datos del
+/// formulario llegan prellenados desde el proveedor y la empresa (`datos`).
+model SupplyV2MerchantApplication {
+  id         String                            @id @default(cuid())
+  supplierId String
+  supplier   SupplyV2Supplier                  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  companyId  String
+  company    Company                           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status     SupplyV2MerchantApplicationStatus @default(SUBMITTED)
+
+  /// El formulario, versionado ({v:1, nombreComercial, categoria, descripcion, telefono, direccion, rnc, sucursales, horario, notas}).
+  datos Json
+
+  submittedById String
+  submittedBy   User     @relation("SupplyV2MerchantApplicationSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  submittedAt   DateTime @default(now())
+
+  /// Lo que Membego pidió cuando dejó la solicitud en MORE_INFO_REQUIRED.
+  moreInfoRequest String?
+  /// Respuesta del proveedor a esa petición (vuelve a SUBMITTED).
+  moreInfoResponse String?
+
+  reviewerId     String?
+  reviewer       User?     @relation("SupplyV2MerchantApplicationReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  /// Motivo de la decisión (aprobada o rechazada): lo ve el proveedor.
+  decisionReason String?
+  /// Notas internas de Membego: nunca salen al proveedor.
+  internalNotes  String?
+  /// Capacidades encendidas al aprobar, para la bitácora.
+  capabilitiesGranted Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId, status])
+  @@index([companyId])
+  @@index([status, submittedAt])
+  @@map("supply_v2_merchant_applications")
 }

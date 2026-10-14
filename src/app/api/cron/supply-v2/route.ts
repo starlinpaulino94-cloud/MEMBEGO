@@ -8,6 +8,8 @@ import { evaluarYGuardarAlertas } from '@/modules/supply-v2/operations/alertas'
 import { evaluarAutomatizaciones } from '@/modules/supply-v2/notifications/automatizaciones'
 import { emitirMetricasOperativas } from '@/modules/supply-v2/operations/metricas'
 import { capacidadActiva } from '@/modules/supply-v2/operations/flags'
+import { sinEmpresa } from '@/lib/tenant'
+import { cerrarVisitasVencidasEnTx } from '@/modules/visitas-membego/service'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -51,6 +53,11 @@ export async function GET(req: NextRequest) {
   if (denegado) return denegado
   const ctx = { actorId: null, ipAddress: null, userAgent: 'cron:supply-v2' }
   const resultado = await barridoSupplyV2()
+
+  // SUPPLIER & FULFILLMENT COMMERCE (§38): las visitas abiertas cuya ventana
+  // de atribución venció se cierran solas. Va ANTES del despacho del outbox
+  // para que el aviso de «confirma tu consumo» salga en esta misma pasada.
+  const visitasCerradas = await sinEmpresa('Cron: cierre de visitas con la ventana vencida', (tx) => cerrarVisitasVencidasEnTx(tx, ctx))
 
   // ── SLICE 9 · BLOQUE 4 · el resto del trabajo operativo ──────────────────
   //
@@ -141,6 +148,7 @@ export async function GET(req: NextRequest) {
       resueltas: alertas.resueltas.length,
     },
     metricas: metricas ? { emitidas: true, readiness: metricas.readiness_status } : { emitidas: false },
+    visitas: { cerradasPorVentana: visitasCerradas },
     automatizaciones: automatizaciones
       ? {
           activo: true,

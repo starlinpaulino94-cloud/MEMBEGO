@@ -1,4 +1,4 @@
-import { test, before } from 'node:test'
+import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { prisma } from '../../src/lib/prisma'
 import { sinEmpresa } from '../../src/lib/tenant'
@@ -27,6 +27,7 @@ let a: ArnesSupplierLite
 let casaId = ''
 let casaSlug = ''
 let itemSlug = ''
+let casaCreadaAqui = false
 
 before(async () => {
   a = await montarSupplierLite({ prefijo: 'disp', unidadesCompradas: 50, unidadesCliente: 1 })
@@ -46,6 +47,7 @@ before(async () => {
     const casa = await prisma.company.create({ data: { name: `Casa Membego ${a.sufijo}`, slug: `casa-${a.sufijo}`, type: 'otro', isPublished: true }, select: { id: true, slug: true } })
     casaId = casa.id
     casaSlug = casa.slug
+    casaCreadaAqui = true
     await sinEmpresa('prueba', (tx) => designarCasaEnTx(tx, casa.id, como(a.admin)))
   }
   const r = await sinEmpresa('prueba', (tx) => sincronizarOfertaEnTx(tx, a.offerId))
@@ -53,6 +55,14 @@ before(async () => {
   const puente = await prisma.catalogItem.findUniqueOrThrow({ where: { supplyV2OfferId: a.offerId }, select: { slug: true, companyId: true } })
   assert.equal(puente.companyId, casaId)
   itemSlug = puente.slug
+})
+
+// Lo que esta prueba deja colgando de la casa estorba a `supply-bridge.db.test.ts` (que designa SU
+// propia casa y exige que ningún ítem puente cuelgue de otra empresa): se recoge todo lo que
+// nace de proveedores Supplier Lite (empresas `proveedor`, las del arnés) y la casa creada aquí.
+after(async () => {
+  await prisma.catalogItem.deleteMany({ where: { source: 'SUPPLY', supplyOffer: { supplier: { company: { type: 'proveedor' } } } } })
+  if (casaCreadaAqui) await prisma.company.updateMany({ where: { id: casaId }, data: { esCasaMembego: false } })
 })
 
 test('C · Supplier Lite: la oferta de Membego se enseña como de Membego, con canje en Café Central y SIN enlace a vitrina', async () => {

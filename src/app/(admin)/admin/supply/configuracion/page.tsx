@@ -5,6 +5,8 @@ import { formatDate } from '@/lib/format'
 import { ConfiguracionProveedor } from '@/components/supply-v2/portal/configuracion-proveedor'
 import { proveedorDeLaSesion, FUNCION_PORTAL } from '@/modules/supply-v2/permisos'
 import { configuracionDelProveedor } from '@/modules/supply-v2/portal/queries'
+import { extrasDelProveedor } from '@/modules/visitas-membego/queries'
+import { MiniCatalogoExtras } from '@/components/supply-v2/portal/mini-catalogo-extras'
 import { RUTA_PORTAL_PROVEEDOR } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +21,7 @@ export default async function ConfiguracionProveedorPage() {
   const proveedor = await proveedorDeLaSesion()
   if (!proveedor) redirect(RUTA_PORTAL_PROVEEDOR)
   const puedeConfigurar = (await proveedorDeLaSesion(FUNCION_PORTAL.configuracion)) !== null
-  const { preparacion, ficha } = await configuracionDelProveedor(proveedor.supplierId)
+  const [{ preparacion, ficha }, extras] = await Promise.all([configuracionDelProveedor(proveedor.supplierId), extrasDelProveedor(proveedor.supplierId)])
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -34,6 +36,11 @@ export default async function ConfiguracionProveedorPage() {
         contratoAceptadoEn={ficha.termsAcceptedAt ? formatDate(ficha.termsAcceptedAt) : null}
         codigoDePrueba={puedeConfigurar ? ficha.qrTestCode : null}
         qrProbadoEn={ficha.qrTestedAt ? formatDate(ficha.qrTestedAt) : null}
+        puedeConfigurar={puedeConfigurar}
+      />
+      {/* SUPPLIER & FULFILLMENT COMMERCE · el mini catálogo de extras (§26). */}
+      <MiniCatalogoExtras
+        extras={extras.map((e) => ({ id: e.id, name: e.name, price: e.price, activo: e.sellableAsExtra && e.activo, deMembego: e.deMembego }))}
         puedeConfigurar={puedeConfigurar}
       />
     </div>

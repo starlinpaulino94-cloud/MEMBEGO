@@ -180,6 +180,11 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPPLY_V2_SUPPLIER_QR_TESTED: 'Supply · prueba del escáner completada',
   SUPPLY_V2_SUPPLIER_READINESS_WAIVED: 'Supply · preparación del proveedor dispensada',
   SUPPLY_V2_SUPPLIER_STAFF_INVITED: 'Supply · personal del proveedor invitado',
+  SUPPLY_V2_MERCHANT_APPLICATION_SUBMITTED: 'Proveedor: solicitud para ser empresa Membego enviada',
+  SUPPLY_V2_MERCHANT_APPLICATION_REVIEWED: 'Proveedor: solicitud de empresa Membego en revisión',
+  SUPPLY_V2_MERCHANT_APPLICATION_APPROVED: 'Proveedor: solicitud de empresa Membego aprobada',
+  SUPPLY_V2_MERCHANT_APPLICATION_REJECTED: 'Proveedor: solicitud de empresa Membego rechazada',
+  SUPPLY_V2_MERCHANT_APPLICATION_WITHDRAWN: 'Proveedor: solicitud de empresa Membego retirada',
   // Supplier & Fulfillment Commerce · visitas atribuidas, ventas adicionales, comisión y disputas.
   VISIT_OPENED: 'Visita Membego abierta',
   VISIT_CLOSED: 'Visita Membego cerrada',

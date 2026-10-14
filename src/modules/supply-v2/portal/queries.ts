@@ -93,3 +93,17 @@ export async function configuracionDelProveedor(supplierId: string) {
     return { preparacion, ficha }
   })
 }
+
+/**
+ * Supplier → Merchant (§39–§41): la última solicitud del proveedor, el
+ * formulario prellenado y si ya es Merchant. Lectura de plataforma con
+ * razón: el proveedor solo recibe lo SUYO (la consulta filtra por su id).
+ */
+export async function solicitudMerchantDelProveedor(supplierId: string) {
+  const { prellenadoDeSolicitudEnTx, ultimaSolicitudEnTx, yaEsMerchantEnTx } = await import('../suppliers/solicitud-merchant')
+  return sinEmpresa('Supply: la solicitud de empresa Membego del proveedor', async (tx) => ({
+    solicitud: await ultimaSolicitudEnTx(tx, supplierId),
+    prellenado: await prellenadoDeSolicitudEnTx(tx, supplierId),
+    yaMerchant: await yaEsMerchantEnTx(tx, supplierId),
+  }))
+}

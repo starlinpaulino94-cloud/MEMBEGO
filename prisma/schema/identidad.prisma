@@ -567,6 +567,11 @@ enum AuditAccion {
   SUPPLY_V2_SUPPLIER_READINESS_WAIVED
   /// El dueño del proveedor invitó a alguien de su personal con un rol de proveedor.
   SUPPLY_V2_SUPPLIER_STAFF_INVITED
+  SUPPLY_V2_MERCHANT_APPLICATION_SUBMITTED
+  SUPPLY_V2_MERCHANT_APPLICATION_REVIEWED
+  SUPPLY_V2_MERCHANT_APPLICATION_APPROVED
+  SUPPLY_V2_MERCHANT_APPLICATION_REJECTED
+  SUPPLY_V2_MERCHANT_APPLICATION_WITHDRAWN
 
   // Supplier & Fulfillment Commerce · visitas atribuidas, ventas adicionales, comisión y disputas (§22–§36).
   VISIT_OPENED
@@ -713,6 +718,8 @@ model User {
   ventasAdicionalesReversadas  AncillarySale[]              @relation("AncillarySaleReversedBy")
   disputasDeVisitaComoCliente  VisitDispute[]               @relation("VisitDisputeCustomer")
   disputasDeVisitaResueltas    VisitDispute[]               @relation("VisitDisputeResolvedBy")
+  solicitudesMerchantEnviadas  SupplyV2MerchantApplication[] @relation("SupplyV2MerchantApplicationSubmittedBy")
+  solicitudesMerchantRevisadas SupplyV2MerchantApplication[] @relation("SupplyV2MerchantApplicationReviewer")
   supplyV2AcuerdosCreados      SupplyV2Agreement[]          @relation("SupplyV2AgreementCreatedBy")
   supplyV2AcuerdosAprobados    SupplyV2Agreement[]          @relation("SupplyV2AgreementApprovedBy")
   supplyV2VersionesCreadas     SupplyV2AgreementVersion[]   @relation("SupplyV2AgreementVersionCreatedBy")
@@ -1097,6 +1104,7 @@ model Company {
   membegoVisits          MembegoVisit[]
   ancillarySales         AncillarySale[]
   visitDisputes          VisitDispute[]
+  supplyV2MerchantApplications SupplyV2MerchantApplication[]
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
