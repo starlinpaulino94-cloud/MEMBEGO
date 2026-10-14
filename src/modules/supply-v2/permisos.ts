@@ -7,6 +7,7 @@ import { requireSection } from '@/lib/auth/guards'
 import { sinEmpresa } from '@/lib/tenant'
 import { rolPuede } from './contracts/adapters'
 import { SUPPLY_V2_PERMISSION_LABELS, type SupplyV2Permission } from './contracts/gateways'
+import { RUTA_PORTAL_PROVEEDOR } from './core/catalogo'
 
 export type { SupplyV2Permission }
 
@@ -101,6 +102,40 @@ export async function proveedorDeLaSesion(funcion?: FuncionPortal): Promise<Prov
   // DRAFT (histórico) y ACTIVATION_PENDING entran, para completar su preparación.
   if (supplier.accessStatus === 'SUSPENDED' || supplier.accessStatus === 'TERMINATED') return null
   return { user, id: user.metadata.dbUserId, companyId, supplierId: supplier.id, supplierName: supplier.commercialName, accessStatus: supplier.accessStatus }
+}
+
+/**
+ * Por qué la empresa de la sesión NO tiene portal: proveedor con acceso
+ * suspendido o dado de baja (se le enseña, no se le redirige en bucle), o
+ * ninguna relación de proveedor (null → el layout manda al panel).
+ */
+export async function motivoPortalCerrado(): Promise<{ accessStatus: SupplyV2SupplierAccessStatus; reason: string | null; supplierName: string } | null> {
+  const user = await getUser()
+  const companyId = user?.metadata.companyId
+  if (!companyId) return null
+  const s = await sinEmpresa('Supply: estado del acceso del proveedor de la sesión', (tx) =>
+    tx.supplyV2Supplier.findUnique({ where: { companyId }, select: { accessStatus: true, accessStatusReason: true, commercialName: true } })
+  )
+  if (!s || (s.accessStatus !== 'SUSPENDED' && s.accessStatus !== 'TERMINATED')) return null
+  return { accessStatus: s.accessStatus, reason: s.accessStatusReason, supplierName: s.commercialName }
+}
+
+/**
+ * Supplier Lite (§6): una empresa SOLO proveedora aterriza en su portal, no en
+ * el panel comercial que no contrató. Devuelve la ruta a la que mandar, o null.
+ */
+export async function destinoSiSoloProveedora(companyId: string | null | undefined): Promise<string | null> {
+  if (!companyId) return null
+  try {
+    const { getCapacidadesEmpresa } = await import('@/modules/capacidades/resolver')
+    const { activas } = await getCapacidadesEmpresa(companyId)
+    const { esSoloProveedora } = await import('@/modules/navegacion/contexto')
+    if (!esSoloProveedora(Array.from(activas as Iterable<string>))) return null
+    const esProveedora = await sinEmpresa('Supply: ¿la empresa es proveedora?', (tx) => tx.supplyV2Supplier.count({ where: { companyId } }))
+    return esProveedora > 0 ? RUTA_PORTAL_PROVEEDOR : null
+  } catch {
+    return null
+  }
 }
 
 export async function exigirProveedorSupplyV2(funcion?: FuncionPortal): Promise<ProveedorSupplyV2> {

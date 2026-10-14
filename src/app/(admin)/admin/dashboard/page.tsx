@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
+import { destinoSiSoloProveedora } from '@/modules/supply-v2/permisos'
 import { getDashboardEjecutivo, type DashboardEjecutivo } from '@/modules/admin/dashboardQueries'
 import { getOnboardingEmpresa } from '@/modules/empresas/onboarding'
 import { resumenComercioEmpresa, type ResumenComercio } from '@/modules/comercio/dashboard'
@@ -139,6 +140,9 @@ export default async function AdminDashboard() {
   // ÁMBITO EMPRESA: sin empresa activa no hay vista global aquí — el
   // superadmin elige empresa en plataforma y el staff ve /admin/sin-empresa.
   const companyId = await requireCompanyContext(user)
+  // Supplier Lite (§6): una empresa SOLO proveedora de Membego vive en su portal.
+  const portal = await destinoSiSoloProveedora(companyId)
+  if (portal) redirect(portal)
 
   // Onboarding PRIMERO: mientras la empresa no esté publicada, el asistente es
   // su "home". Se resuelve antes de cargar el dashboard pesado para no

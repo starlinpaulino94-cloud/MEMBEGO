@@ -227,6 +227,12 @@ export const INCIDENT_TYPE_LABELS: Record<SupplyV2IncidentType, string> = {
 }
 
 export const RUTA_PORTAL_PROVEEDOR = '/admin/supply'
+// Supplier & Fulfillment Commerce · pantallas del portal (Supplier Lite).
+export const RUTA_PORTAL_ESCANER = `${RUTA_PORTAL_PROVEEDOR}/escaner`
+export const RUTA_PORTAL_CANJES = `${RUTA_PORTAL_PROVEEDOR}/canjes`
+export const RUTA_PORTAL_INCIDENCIAS = `${RUTA_PORTAL_PROVEEDOR}/incidencias`
+export const RUTA_PORTAL_PERSONAL = `${RUTA_PORTAL_PROVEEDOR}/personal`
+export const RUTA_PORTAL_CONFIGURACION = `${RUTA_PORTAL_PROVEEDOR}/configuracion`
 export const RUTA_REDENCIONES = `${BASE_SUPPLY_V2}/redenciones`
 
 // ── Slice 4 · finanzas y economía ───────────────────────────────────────────
