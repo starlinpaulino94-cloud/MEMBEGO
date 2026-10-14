@@ -105,7 +105,7 @@ export async function montarSupplierLite(opts: {
     await aprobarOrdenEnTx(tx, po.id, como(aprobador.id))
     const linea = await tx.supplyV2PurchaseOrderLine.findFirstOrThrow({ where: { purchaseOrderId: po.id }, select: { id: true } })
     const rec = await confirmarRecepcionEnTx(tx, { purchaseOrderId: po.id, lines: [{ purchaseOrderLineId: linea.id, quantity: unidades, expiresAt: new Date(ahora.getTime() + 60 * DIA) }] }, como(aprobador.id))
-    const o = await crearOfertaEnTx(tx, { catalogItemId: item.id, title: `Cappuccino grande · ${sufijo}`, publicPrice: precioPublico, salePrice: precioMembego, quantity: Math.min(100, unidades), perCustomerLimit: 5, startsAt: new Date(ahora.getTime() - 60_000), endsAt: new Date(ahora.getTime() + 30 * DIA) }, como(admin.id))
+    const o = await crearOfertaEnTx(tx, { catalogItemId: item.id, title: `Cappuccino grande · ${sufijo}`, publicPrice: precioPublico, salePrice: precioMembego, quantity: Math.min(100, Math.max(1, Math.floor(unidades / 2))), perCustomerLimit: 5, startsAt: new Date(ahora.getTime() - 60_000), endsAt: new Date(ahora.getTime() + 30 * DIA) }, como(admin.id))
     await publicarOfertaEnTx(tx, o.id, como(admin.id))
     const orden = await abrirOrdenClienteEnTx(tx, { customerId: cliente.id, offerId: o.id, quantity: compradas }, como(cliente.id))
     await avisarPagoEnTx(tx, { orderId: orden.id, customerId: cliente.id, method: 'TRANSFER', reference: `REF-${sufijo}` }, como(cliente.id))

@@ -1,4 +1,5 @@
 import type { CatalogItemType, DealDiscountType, Prisma } from '@prisma/client'
+import { presentacionComercial, type PresentacionComercial } from '@/modules/comercio/modo-comercial'
 import { urlImagenCatalogo } from '@/modules/catalog/formato'
 import { precioDeLaOferta, reclamosPosibles, etiquetaDeDescuento } from './domain'
 
@@ -13,6 +14,8 @@ import { precioDeLaOferta, reclamosPosibles, etiquetaDeDescuento } from './domai
 
 export interface FilaDeOfertaPublica {
   id: string
+  /** Quién financia el descuento (§17): MERCHANT, MEMBEGO o SHARED. */
+  sponsor?: 'MERCHANT' | 'MEMBEGO' | 'SHARED'
   title: string
   description: string | null
   discountType: DealDiscountType
@@ -66,6 +69,8 @@ export interface OfertaPublica {
   soloClientesNuevos: boolean
   /** Solo cuando quedan pocos (≤ 10): crea urgencia sin enseñar el tamaño de la oferta. */
   quedan: number | null
+  /** Quién vende y quién financia (§17): «Vendido por X · Promoción financiada por Membego». */
+  comercial: PresentacionComercial
 }
 
 /** Cuántos «quedan» se enseñan como máximo. */
@@ -103,5 +108,11 @@ export function aOfertaPublica(f: FilaDeOfertaPublica): OfertaPublica | null {
     voucherDays: f.voucherDays,
     soloClientesNuevos: f.newCustomersOnly,
     quedan: posibles <= UMBRAL_QUEDAN ? posibles : null,
+    comercial: presentacionComercial({
+      origen: 'EMPRESA',
+      empresa: { nombre: f.variant.item.company.name, slug: f.variant.item.company.slug },
+      deal: { sponsor: f.sponsor ?? 'MERCHANT' },
+      sucursales: f.variant.item.company.sucursales.map((x) => ({ id: x.id, nombre: x.nombre })),
+    }),
   }
 }

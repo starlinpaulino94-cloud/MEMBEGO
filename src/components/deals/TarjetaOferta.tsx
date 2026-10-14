@@ -40,7 +40,7 @@ export function TarjetaOferta({
   detalle?: boolean
 }) {
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card" aria-label={o.title}>
+    <article className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card" aria-label={o.title} data-modo-comercial={o.comercial.modo}>
       {o.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- la URL es del bucket público de Storage
         <img src={o.imageUrl} alt="" loading="lazy" className="aspect-square w-full object-cover" />
@@ -61,6 +61,9 @@ export function TarjetaOferta({
             <Link href={rutaDeEmpresa(espacio, o.empresa.slug)} className={detalle ? 'text-sm underline' : 'block truncate text-caption underline'}>
               {o.empresa.name}
             </Link>
+          )}
+          {o.comercial.lineaFinanciacion && (
+            <p className={detalle ? 'text-sm text-primary' : 'line-clamp-1 text-caption text-primary'} data-testid="linea-financiacion">{o.comercial.lineaFinanciacion}</p>
           )}
         </div>
         {detalle && o.description && <p className="text-sm text-muted-foreground">{o.description}</p>}
