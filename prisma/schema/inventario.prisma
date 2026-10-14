@@ -139,6 +139,15 @@ model InventoryMovement {
 
   createdAt DateTime @default(now())
 
+  /// La línea de entrada (INV-2a) que produjo este movimiento, si vino de una.
+  receiptLine InventoryReceiptLine?
+
+  /// La línea de conteo (INV-2b) cuyo ajuste produjo este movimiento, si vino de un conteo.
+  countLine InventoryCountLine?
+
+  /// La línea de transferencia con envío (INV-2c) cuya salida produjo este movimiento, si vino de una.
+  transferOutLine InventoryTransferLine?
+
   @@unique([companyId, idempotencyKey])
   @@index([inventoryLevelId, createdAt])
   @@index([companyId, createdAt])
@@ -178,4 +187,293 @@ model InventoryReservation {
   @@index([inventoryLevelId, status])
   @@index([companyId, referenceType, referenceId])
   @@map("inventory_reservations")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INV-2a · ENTRADAS DE MERCANCÍA CON VARIAS LÍNEAS
+//
+// Una factura de proveedor trae 20–50 productos. Hasta aquí cada entrada era un
+// movimiento suelto; ahora una ENTRADA es un documento con número, sucursal,
+// referencia (la factura) y sus líneas, y cada línea apunta al movimiento
+// PURCHASE del ledger que produjo. El ledger sigue siendo la verdad: la entrada
+// es el "por qué" agrupado, no otra fuente de existencias.
+//
+// APPEND-ONLY, como el ledger: la base rechaza UPDATE y DELETE. Un error se
+// corrige con un ajuste (otro movimiento), nunca editando la entrada.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum InventoryReceiptSource {
+  /// Capturada a mano en la pantalla de «Nueva entrada».
+  MANUAL
+  /// Importada desde un archivo CSV.
+  CSV
+}
+
+model InventoryReceipt {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  /// Correlativo legible por empresa y año: `ENT-2026-000001`.
+  number String
+
+  /// La sucursal que recibió la mercancía.
+  locationId String
+  location   Sucursal @relation(fields: [locationId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  source InventoryReceiptSource @default(MANUAL)
+
+  /// Factura, remisión u orden del proveedor. Texto libre acotado.
+  reference String?
+  note      String?
+
+  /// Quién la registró (null = el sistema). Sin FK: un usuario que se borra no
+  /// puede reescribir la historia.
+  userId String?
+
+  /// Reintentar el MISMO envío (doble clic, red) devuelve esta entrada en vez de
+  /// crear otra. Único por empresa.
+  idempotencyKey String?
+
+  /// Totales congelados al registrar: la entrada no se edita.
+  lineCount Int
+  unitCount Int
+
+  createdAt DateTime @default(now())
+
+  lines InventoryReceiptLine[]
+
+  @@unique([companyId, number])
+  @@unique([companyId, idempotencyKey])
+  /// Destino de la FK compuesta de las líneas.
+  @@unique([id, companyId])
+  @@index([companyId, createdAt])
+  @@index([companyId, locationId, createdAt])
+  @@map("inventory_receipts")
+}
+
+model InventoryReceiptLine {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  receiptId String
+  receipt   InventoryReceipt @relation(fields: [receiptId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// Orden en que se capturó (0, 1, 2…).
+  position Int
+  /// Unidades que entraron. Siempre positiva.
+  quantity Int
+
+  /// El movimiento PURCHASE del ledger que esta línea produjo (uno por línea).
+  movementId String            @unique
+  movement   InventoryMovement @relation(fields: [movementId], references: [id], onDelete: Restrict)
+
+  /// Una línea por variante dentro de una entrada: capturarla dos veces suma la
+  /// cantidad en la misma línea, no la repite.
+  @@unique([receiptId, catalogVariantId])
+  @@unique([receiptId, position])
+  @@index([companyId, catalogVariantId])
+  @@map("inventory_receipt_lines")
+}
+
+// ── Conteo físico por sucursal (INV-2b) ──────────────────────────────────────
+
+enum InventoryCountStatus {
+  /// Se está contando. Las líneas se pueden capturar, corregir y quitar.
+  OPEN
+  /// Se aplicaron los ajustes. Desde aquí el conteo y sus líneas no cambian.
+  APPLIED
+  /// Se descartó sin tocar existencias. Tampoco cambia.
+  CANCELLED
+}
+
+/// Un inventario físico de UNA sucursal. Solo puede haber UNO abierto por
+/// sucursal (índice único parcial en la migración). Al aplicarlo, cada producto
+/// contado genera como mucho un ajuste por la DIFERENCIA (contado − esperado al
+/// contar), de modo que las ventas ocurridas mientras se contaba no se pierden.
+/// Lo que no se contó no se toca.
+model InventoryCountSession {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  /// Correlativo legible por empresa y año: `CNT-2026-000001`.
+  number String
+
+  locationId String
+  location   Sucursal @relation(fields: [locationId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  status InventoryCountStatus @default(OPEN)
+
+  /// Para qué es el conteo («Inventario de cierre de mes»). Texto libre acotado.
+  note String?
+
+  /// Quién lo abrió, lo aplicó o lo canceló. Sin FK: un usuario que se borra no
+  /// puede reescribir la historia.
+  openedById    String?
+  appliedById   String?
+  cancelledById String?
+
+  createdAt    DateTime  @default(now())
+  appliedAt    DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  /// Resumen congelado al aplicar (la lista no recorre las líneas).
+  countedLines   Int?
+  adjustedLines  Int?
+  unitsOver      Int?
+  unitsShort     Int?
+  /// Productos con existencias en la sucursal que NO se contaron (no se tocaron).
+  uncountedLines Int?
+
+  lines InventoryCountLine[]
+
+  @@unique([companyId, number])
+  /// Destino de la FK compuesta de las líneas.
+  @@unique([id, companyId])
+  @@index([companyId, createdAt])
+  @@index([companyId, locationId, status])
+  @@map("inventory_count_sessions")
+}
+
+model InventoryCountLine {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  sessionId String
+  session   InventoryCountSession @relation(fields: [sessionId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// Lo que la persona contó (vendible + apartado; lo dañado no se cuenta).
+  counted  Int
+  /// Lo que decía el sistema en el momento de contar. Es la referencia de la
+  /// diferencia; NO se muestra mientras se cuenta (conteo a ciegas).
+  expected Int
+
+  countedById String?
+  createdAt   DateTime @default(now())
+  /// Cuándo se capturó por última vez (la fecha de referencia de `expected`).
+  countedAt   DateTime @default(now())
+
+  /// Resultado al aplicar. `onHandBefore/After` son las existencias reales de
+  /// ese momento; `movementId` es el ajuste (null si coincidía).
+  onHandBefore Int?
+  onHandAfter  Int?
+  movementId   String?            @unique
+  movement     InventoryMovement? @relation(fields: [movementId], references: [id], onDelete: Restrict)
+
+  /// Un producto, una línea por conteo: contarlo otra vez la corrige.
+  @@unique([sessionId, catalogVariantId])
+  @@index([companyId, catalogVariantId])
+  @@map("inventory_count_lines")
+}
+
+// ── Transferencias con envío entre sucursales (INV-2c) ───────────────────────
+
+enum InventoryTransferStatus {
+  /// Salió del origen y nada ha llegado al destino.
+  SENT
+  /// Ya llegó una parte; falta lo demás.
+  PARTIAL
+  /// Cerrada: llegó todo, o se cerró con faltante (con motivo).
+  RECEIVED
+  /// Cancelada: lo que faltaba por llegar volvió al origen.
+  CANCELLED
+}
+
+/// Una transferencia CON ENVÍO: al enviarla las unidades salen del origen (TRANSFER_OUT)
+/// y quedan EN TRÁNSITO —no disponibles en ninguna sucursal— hasta que el destino las
+/// recibe (TRANSFER_IN), en una o varias recepciones. La transferencia directa de siempre
+/// (sale y entra en el mismo instante) sigue existiendo y no usa estas tablas.
+model InventoryTransfer {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  /// Correlativo legible por empresa y año: `TRF-2026-000001`.
+  number String
+
+  fromLocationId String
+  fromLocation   Sucursal @relation("InventoryTransferFrom", fields: [fromLocationId, companyId], references: [id, companyId], onDelete: Restrict)
+  toLocationId   String
+  toLocation     Sucursal @relation("InventoryTransferTo", fields: [toLocationId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  status InventoryTransferStatus @default(SENT)
+
+  /// Para qué es / qué lleva («Reposición de fin de semana»). Texto libre acotado.
+  note String?
+
+  /// Reintentar el MISMO envío (doble clic, red) devuelve este traslado en vez de crear otro. Único por empresa.
+  idempotencyKey String?
+
+  /// Quién lo envió y quién lo cerró. Sin FK: un usuario que se borra no puede reescribir la historia.
+  sentById   String?
+  closedById String?
+
+  /// `createdAt` es el momento del envío.
+  createdAt   DateTime  @default(now())
+  closedAt    DateTime?
+  /// Por qué se cerró con faltante o se canceló. Obligatorio si hubo faltante.
+  closeReason String?
+
+  /// Lo enviado, congelado al enviar.
+  lineCount Int
+  unitCount Int
+
+  /// Resumen congelado al cerrar: recibidas + devueltas al origen + perdidas en el camino = enviadas.
+  receivedUnits Int?
+  returnedUnits Int?
+  lostUnits     Int?
+
+  lines InventoryTransferLine[]
+
+  @@unique([companyId, number])
+  @@unique([companyId, idempotencyKey])
+  /// Destino de la FK compuesta de las líneas.
+  @@unique([id, companyId])
+  @@index([companyId, createdAt])
+  @@index([companyId, status, createdAt])
+  @@index([companyId, fromLocationId, status])
+  @@index([companyId, toLocationId, status])
+  @@map("inventory_transfers")
+}
+
+model InventoryTransferLine {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  transferId String
+  transfer   InventoryTransfer @relation(fields: [transferId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// Orden en que se capturó (0, 1, 2…).
+  position Int
+
+  /// Lo que salió del origen. Siempre positiva y congelada.
+  quantitySent     Int
+  /// Lo que ya llegó al destino, lo que volvió al origen al cancelar y lo que se dio por perdido al cerrar con faltante.
+  /// Solo crecen; su suma nunca pasa de lo enviado. Lo que falta por llegar es el resto.
+  quantityReceived Int @default(0)
+  quantityReturned Int @default(0)
+  quantityLost     Int @default(0)
+
+  /// El movimiento TRANSFER_OUT del ledger que esta línea produjo (uno por línea).
+  outMovementId String            @unique
+  outMovement   InventoryMovement @relation(fields: [outMovementId], references: [id], onDelete: Restrict)
+
+  @@unique([transferId, catalogVariantId])
+  @@unique([transferId, position])
+  @@index([companyId, catalogVariantId])
+  @@map("inventory_transfer_lines")
 }

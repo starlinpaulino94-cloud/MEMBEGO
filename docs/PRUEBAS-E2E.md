@@ -184,7 +184,32 @@ con el mismo arnés (`itemSembrado({ controlaInventario: true })`,
 no mueve) → daño → baja de lo dañado → umbral y alerta en la lista → transferencia
 entre sucursales → conteo físico → historial con cada movimiento; la variante de
 otra empresa se ve igual que una inventada, y una empresa sin la capacidad no
-entra. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
+entra. **INV-1** añade un recorrido: las tres vistas (Existencias · Movimientos ·
+Reservas), los 7 movimientos de la empresa, filtros por tipo y por sucursal, la
+exportación CSV con los mismos filtros (y sin sesión o sin la capacidad no sale ni
+una fila), el salto a la ficha con el SKU exacto de un lector, la advertencia de una
+variante «Agotada» a mano (la prueba la fija por Prisma y la restaura) y el umbral
+aplicado también a la otra sucursal con existencias. **INV-2a** añade otro: la pestaña
+Entradas vacía → «Nueva entrada» con un lector (el SKU exacto se añade solo, repetirlo suma
+una unidad, el código de barras funciona igual, un código inexistente y un servicio no
+entran, una cantidad en cero no deja registrar) → la entrada `ENT-AAAA-000001` con sus
+líneas, factura y nota → su CSV (y una entrada inventada da 404) → existencias e historial
+→ lista y filtros (también una URL manipulada) → importación CSV: un archivo con filas malas
+no registra NADA (ni siquiera sus filas buenas) y un archivo limpio sí (una fila por SKU y
+otra por código de barras) → plantilla descargable → sin sesión, o de una empresa sin la
+capacidad, no sale ni una fila. **INV-2b** añade el conteo físico: pestaña Conteos vacía → abrir el conteo de
+Principal → pantalla a ciegas (ni una cifra del sistema; los pendientes salen sin cantidades) → escaneo por código y por
+SKU, «unidades por escaneo», código inexistente y una ráfaga de escaneos seguidos (la cola no pierde ninguno) → corregir
+escribiendo el número → una venta mientras se cuenta → hoja en blanco → importar un archivo con errores (no entra nada)
+y uno limpio → revisar (esperado, contado, diferencia) y su CSV → aplicar por la diferencia (la venta se conserva) → un
+faltante bajo lo apartado se avisa, se rechaza todo y, corregido, se aplica → cancelar con motivo → id inventado, sin
+sesión y sin la capacidad. **INV-2c** añade las transferencias con envío: pestaña Transferencias vacía → «Nueva
+transferencia» con un lector (se ve lo que hay en el origen y no deja pasar de ahí) → enviar: la transferencia
+`TRF-AAAA-000001` queda «En camino», el origen baja, el destino no sube y la ficha del producto muestra «En camino entre
+sucursales» → aviso a los administradores → recibir una parte («Recibida en parte»; lo que falta sigue en camino; escribir más de lo que
+falta no deja recibir) → cerrar con faltante (sin motivo no deja; con motivo queda «Recibida» y lo perdido) → su CSV →
+cancelar otra (lo que seguía en camino VUELVE al origen) → recibir todo de una vez → la lista y sus filtros → lo que NO
+debe pasar (id inventado y CSV de un id inventado, sin sesión, sin la capacidad). **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
 disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
 144 combinaciones tipo×origen×destino las prueban `tests/postgres/inventory.db.test.ts`
 y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba

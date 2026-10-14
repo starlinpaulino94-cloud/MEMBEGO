@@ -47,7 +47,18 @@ function Cifra({ etiqueta, valor, fuerte = false }: { etiqueta: string; valor: n
  * movimientos manuales y el umbral de stock bajo. El estado de cada formulario
  * vive aquí; lo que hay en la base se refresca con `router.refresh()`.
  */
-export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { varianteId: string; saldo: SaldoSucursalVista; puedeAjustar: boolean }) {
+export function SucursalInventarioCard({
+  varianteId,
+  saldo,
+  puedeAjustar,
+  hayOtrasConSaldo = false,
+}: {
+  varianteId: string
+  saldo: SaldoSucursalVista
+  puedeAjustar: boolean
+  /** ¿Hay otras sucursales activas donde este producto ya tiene saldo? Solo entonces tiene sentido ofrecer aplicar el umbral a todas. */
+  hayOtrasConSaldo?: boolean
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [operacion, setOperacion] = useState<OperacionManual>('ENTRADA')
@@ -123,17 +134,19 @@ export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { va
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const umbral = Number(String(f.get('umbral') ?? '').trim())
+    const aplicarAOtras = f.get('aplicarAOtras') === 'on'
     if (!Number.isInteger(umbral) || umbral < 0) {
       toast.error('El umbral es un número entero, 0 o más.')
       return
     }
     start(async () => {
-      const r = await fijarUmbralInventario({ varianteId, sucursalId: saldo.sucursalId, umbral })
+      const r = await fijarUmbralInventario({ varianteId, sucursalId: saldo.sucursalId, umbral, aplicarAOtras })
       if (!r.ok) {
         toast.error(r.error)
         return
       }
-      toast.success(r.umbral === 0 ? 'Sin aviso de stock bajo.' : `Te avisaremos cuando queden ${formatearCantidad(r.umbral)} o menos.`)
+      const base = r.umbral === 0 ? 'Sin aviso de stock bajo.' : `Te avisaremos cuando queden ${formatearCantidad(r.umbral)} o menos.`
+      toast.success(r.otras > 0 ? `${base} También se aplicó en ${r.otras} ${r.otras === 1 ? 'sucursal más' : 'sucursales más'}.` : base)
       router.refresh()
     })
   }
@@ -198,6 +211,12 @@ export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { va
               <Button type="submit" size="sm" variant="outline" disabled={pending}>
                 Guardar umbral
               </Button>
+              {hayOtrasConSaldo && (
+                <label className="flex basis-full items-center gap-2 text-sm">
+                  <input type="checkbox" name="aplicarAOtras" className="h-4 w-4" />
+                  Aplicar también a las otras sucursales donde este producto ya tiene existencias
+                </label>
+              )}
               <p className="basis-full text-xs text-muted-foreground">0 = sin aviso. Cuenta lo disponible (sin lo apartado).</p>
             </form>
           </>

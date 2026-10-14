@@ -16,6 +16,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { conEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
 import { SCANNER_ROLES } from '@/types'
@@ -24,7 +25,9 @@ import { formSubmitLimiter } from '@/lib/rate-limit'
 import { capturarErrorInesperado } from '@/lib/sentry'
 import { registrarOperacion } from '@/modules/observabilidad/eventos'
 import { FacturacionError } from '@/modules/billing/errores'
+import { avisarStockBajo } from '@/modules/inventory/avisos'
 import { InventarioError } from '@/modules/inventory/errores'
+import { variantesDelPedido } from '@/modules/orders/avisos'
 import { PedidoError } from '@/modules/orders/errores'
 import { posPermitido } from './capacidades'
 import { PosError } from './errores'
@@ -127,6 +130,9 @@ export async function cobrarPedidoMembego(entrada: { cajaSesionId: string; token
     revalidatePath('/empleado/caja')
     revalidatePath('/admin/pedidos-membego', 'layout')
     revalidatePath('/admin/deals', 'layout')
+    // Igual que el cierre con el escáner: si cerrar el pedido dejó una variante bajo su umbral, la empresa se entera.
+    // Best-effort, tras confirmar y DESPUÉS de responder (`after`): un aviso no puede deshacer un cobro ni perderse al terminar la respuesta.
+    after(async () => avisarStockBajo(c.companyId, await variantesDelPedido(c.companyId, cobro.pedidoId)))
     return { ok: true, cobro }
   } catch (e) {
     registrarOperacion({ dominio: 'pedido', accion: 'cobro_en_caja', companyId: c.companyId, error: e })
@@ -163,6 +169,9 @@ export async function venderEnMostrador(entrada: {
     revalidatePath('/empleado/caja')
     revalidatePath('/admin/pedidos-membego', 'layout')
     revalidatePath('/admin/inventario', 'layout')
+    // Una venta de mostrador aparta y vende en el acto: si dejó una variante bajo su umbral, la empresa se entera.
+    // Antes solo avisaban las ventas del marketplace. Tras responder (`after`), para que el aviso no se pierda.
+    if (!venta.repetido) after(() => avisarStockBajo(c.companyId, lineas.map((l) => l.varianteId)))
     return { ok: true, venta }
   } catch (e) {
     registrarOperacion({ dominio: 'pedido', accion: 'venta_de_mostrador', companyId: c.companyId, error: e })
