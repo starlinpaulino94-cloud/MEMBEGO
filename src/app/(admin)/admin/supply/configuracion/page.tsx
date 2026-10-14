@@ -2,10 +2,9 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/ui/page-header'
 import { formatDate } from '@/lib/format'
-import { sinEmpresa } from '@/lib/tenant'
 import { ConfiguracionProveedor } from '@/components/supply-v2/portal/configuracion-proveedor'
 import { proveedorDeLaSesion, FUNCION_PORTAL } from '@/modules/supply-v2/permisos'
-import { preparacionDelProveedorEnTx } from '@/modules/supply-v2/suppliers/acceso'
+import { configuracionDelProveedor } from '@/modules/supply-v2/portal/queries'
 import { RUTA_PORTAL_PROVEEDOR } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
@@ -20,12 +19,7 @@ export default async function ConfiguracionProveedorPage() {
   const proveedor = await proveedorDeLaSesion()
   if (!proveedor) redirect(RUTA_PORTAL_PROVEEDOR)
   const puedeConfigurar = (await proveedorDeLaSesion(FUNCION_PORTAL.configuracion)) !== null
-  const [preparacion, ficha] = await sinEmpresa('Supply: configuración del proveedor de la sesión', (tx) =>
-    Promise.all([
-      preparacionDelProveedorEnTx(tx, proveedor.supplierId),
-      tx.supplyV2Supplier.findUniqueOrThrow({ where: { id: proveedor.supplierId }, select: { termsAcceptedAt: true, qrTestCode: true, qrTestedAt: true, accessStatus: true } }),
-    ])
-  )
+  const { preparacion, ficha } = await configuracionDelProveedor(proveedor.supplierId)
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

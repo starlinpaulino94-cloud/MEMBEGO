@@ -3,6 +3,7 @@ import type { Prisma, SupplyV2SupplierAccessStatus } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { FULL_ADMIN_ROLES, type AppRole } from '@/types'
 import { funcionPermitida, resolverPermisosUsuario, seccionPermitida } from '@/lib/auth/permissions'
+import { CAPACIDADES_OVERRIDE_TENANT_NUEVO } from '@/modules/capacidades/catalogo'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
 import { preparacionEstricta } from '../core/config'
@@ -146,7 +147,7 @@ export async function asegurarEmpresaSupplierLiteEnTx(tx: Tx, supplierId: string
       isActive: true,
       // SIN VITRINA: un Supplier Lite no es una empresa del Marketplace (§15, §49).
       isPublished: false,
-      capacidades: { overrides: OVERRIDES_SUPPLIER_LITE },
+      capacidades: { overrides: { ...CAPACIDADES_OVERRIDE_TENANT_NUEVO, ...OVERRIDES_SUPPLIER_LITE } },
     },
     select: { id: true },
   })

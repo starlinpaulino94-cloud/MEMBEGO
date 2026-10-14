@@ -84,6 +84,17 @@ enum SupplyV2CatalogItemStatus {
   ARCHIVED
 }
 
+/// Supplier & Fulfillment Commerce §9: qué RESPALDA la unidad que Membego
+/// compró. 1.000 pizzas son normalmente 1.000 DERECHOS que el proveedor cocina
+/// al canjear (ON_DEMAND), no 1.000 pizzas en un almacén. Informativo para el
+/// portal y para las reglas de capacidad; el ledger de lotes no cambia.
+enum SupplyV2FulfillmentBacking {
+  ON_DEMAND
+  PHYSICAL_RESERVED_STOCK
+  SERVICE_CAPACITY
+  SCHEDULED_CAPACITY
+}
+
 enum SupplyV2AgreementType {
   PREPAID_PURCHASE
   OPEN_DEPOSIT
@@ -365,6 +376,19 @@ model SupplyV2CatalogItem {
 
   status SupplyV2CatalogItemStatus @default(ACTIVE)
 
+  // ── Supplier & Fulfillment Commerce ──
+  /// Cómo se respalda la unidad (§9). ON_DEMAND por defecto: lo normal.
+  fulfillmentBacking SupplyV2FulfillmentBacking @default(ON_DEMAND)
+  /// Capacidad diaria de canje (servicios/capacidad): «hoy 20, usada 8». Nulo = sin tope.
+  dailyCapacity Int?
+  /// MINI CATÁLOGO del proveedor (§26): se vende como EXTRA en una visita
+  /// atribuida a Membego (venta adicional). No lo compra Membego ni tiene lote.
+  sellableAsExtra Boolean @default(false)
+  /// Mapa al catálogo unificado cuando el proveedor ya es Merchant (§20, §26):
+  /// el mismo producto, sin duplicarlo. Opcional y nunca se escribe sobre él.
+  catalogItemId String?
+  catalogItem   CatalogItem? @relation("SupplyV2CatalogItemCatalogCore", fields: [catalogItemId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -385,6 +409,7 @@ model SupplyV2CatalogItem {
   @@unique([supplierId, sku])
   @@unique([supplierId, slug])
   @@index([supplierId, status])
+  @@index([supplierId, sellableAsExtra])
   @@map("supply_v2_catalog_items")
 }
 

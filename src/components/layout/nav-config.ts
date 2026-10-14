@@ -729,6 +729,14 @@ const G_ADM_CONEXIONES: NavGroup = {
  */
 const ENLACES_PORTAL_PROVEEDOR: readonly NavLink[] = [
     {
+      href: '/admin/supply/inventario',
+      label: 'Productos de Membego',
+      icon: Warehouse,
+      description: 'Lo que Membego te compró: unidades, derechos, capacidad y vencimientos por contrato.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['inventario', 'productos', 'servicios', 'derechos', 'unidades', 'contrato', 'proveedor', 'supply'],
+    },
+    {
       href: '/admin/supply/escaner',
       label: 'Escanear QR',
       icon: ScanLine,
@@ -998,7 +1006,7 @@ const ESPACIO_PROVEEDOR: Workspace = {
     {
       id: 'proveedor-operacion',
       label: 'Operación',
-      items: delPortal('/admin/supply/escaner', '/admin/supply/canjes', '/admin/supply/incidencias'),
+      items: delPortal('/admin/supply/inventario', '/admin/supply/escaner', '/admin/supply/canjes', '/admin/supply/incidencias'),
     },
     {
       id: 'proveedor-cuentas',
@@ -1749,7 +1757,11 @@ function espaciosDe(ctx: ContextoNav): Workspace[] {
   // Vale para cualquier rol del panel y para el superadmin que la opera.
   if (ctx.soloProveedor && ctx.scope === 'COMPANY') return [ESPACIO_PROVEEDOR]
   const base = workspacesForRole(ctx.role)
-  const conProveedor = (ws: Workspace[]) => (ctx.scope === 'COMPANY' && !ws.includes(ESPACIO_PROVEEDOR) ? [...ws, ESPACIO_PROVEEDOR] : ws)
+  // El espacio del proveedor se SUMA solo cuando la capacidad se leyó y está
+  // encendida: no es un módulo que una empresa pierda si falla una consulta
+  // (el fail-open de las capacidades no aplica a lo que se añade).
+  const esProveedora = ctx.capacidades?.includes('MEMBEGO_SUPPLIER') === true
+  const conProveedor = (ws: Workspace[]) => (esProveedora && ctx.scope === 'COMPANY' && !ws.includes(ESPACIO_PROVEEDOR) ? [...ws, ESPACIO_PROVEEDOR] : ws)
   if (ADMIN_ROLES.includes(ctx.role) || !tieneAlgunaConcesion(ctx)) return conProveedor(base)
   const yaEstan = new Set(base.map((w) => w.id))
   return conProveedor([...base, ...ESPACIOS_ADMIN.filter((w) => !yaEstan.has(w.id))])

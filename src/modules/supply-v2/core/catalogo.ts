@@ -1,4 +1,5 @@
 import type {
+  SupplyV2FulfillmentBacking,
   SupplyV2EntitlementStatus,
   SupplyV2IncidentType,
   SupplyV2VoucherStatus,
@@ -33,6 +34,14 @@ export const SUPPLIER_STATUS_LABELS: Record<SupplyV2SupplierStatus, string> = {
   ACTIVE: 'Activo',
   INACTIVE: 'Inactivo',
   BLOCKED: 'Bloqueado',
+}
+
+/** Supplier & Fulfillment Commerce §9: qué respalda la unidad comprada. */
+export const FULFILLMENT_BACKING_LABELS: Record<SupplyV2FulfillmentBacking, string> = {
+  ON_DEMAND: 'Bajo demanda (se prepara al canjear)',
+  PHYSICAL_RESERVED_STOCK: 'Existencia física apartada',
+  SERVICE_CAPACITY: 'Capacidad de servicio',
+  SCHEDULED_CAPACITY: 'Capacidad con agenda',
 }
 
 export const CATALOG_ITEM_TYPE_LABELS: Record<SupplyV2CatalogItemType, string> = {
@@ -229,6 +238,7 @@ export const INCIDENT_TYPE_LABELS: Record<SupplyV2IncidentType, string> = {
 export const RUTA_PORTAL_PROVEEDOR = '/admin/supply'
 // Supplier & Fulfillment Commerce · pantallas del portal (Supplier Lite).
 export const RUTA_PORTAL_ESCANER = `${RUTA_PORTAL_PROVEEDOR}/escaner`
+export const RUTA_PORTAL_INVENTARIO = `${RUTA_PORTAL_PROVEEDOR}/inventario`
 export const RUTA_PORTAL_CANJES = `${RUTA_PORTAL_PROVEEDOR}/canjes`
 export const RUTA_PORTAL_INCIDENCIAS = `${RUTA_PORTAL_PROVEEDOR}/incidencias`
 export const RUTA_PORTAL_PERSONAL = `${RUTA_PORTAL_PROVEEDOR}/personal`

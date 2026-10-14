@@ -2,7 +2,7 @@ import type { AppRole } from '@/types'
 import { funcionPermitida, resolverPermisosUsuario, seccionPermitida } from '@/lib/auth/permissions'
 import { sinEmpresa } from '@/lib/tenant'
 import { PRESETS_ROL_PROVEEDOR, ROLES_DE_PROVEEDOR, type RolDeProveedor } from '../suppliers/acceso-dominio'
-import { ORIGEN_INVITACION_PROVEEDOR } from '../suppliers/acceso'
+import { ORIGEN_INVITACION_PROVEEDOR, preparacionDelProveedorEnTx } from '../suppliers/acceso'
 
 /**
  * SUPPLIER & FULFILLMENT COMMERCE · lecturas del portal del proveedor
@@ -81,4 +81,15 @@ export async function equipoDelProveedor(companyId: string): Promise<{ miembros:
       expiraEn: i.expiraEn,
     })),
   }
+}
+
+/** Lo que la pantalla de Configuración del portal necesita (una sola lectura). */
+export async function configuracionDelProveedor(supplierId: string) {
+  return sinEmpresa('Supply: configuración del proveedor de la sesión', async (tx) => {
+    const [preparacion, ficha] = await Promise.all([
+      preparacionDelProveedorEnTx(tx, supplierId),
+      tx.supplyV2Supplier.findUniqueOrThrow({ where: { id: supplierId }, select: { termsAcceptedAt: true, qrTestCode: true, qrTestedAt: true, accessStatus: true } }),
+    ])
+    return { preparacion, ficha }
+  })
 }
