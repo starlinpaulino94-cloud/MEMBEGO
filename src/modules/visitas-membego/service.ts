@@ -86,8 +86,8 @@ function comoFacturacion(ctx: ContextoAuditoria): ContextoFacturacion {
 }
 
 async function recalcularTotalesEnTx(tx: Tx, visitId: string): Promise<{ ancillaryTotal: Decimal; commissionTotal: Decimal }> {
-  const ventas = await tx.ancillarySale.findMany({ where: { visitId }, select: { status: true, subtotal: true, commissionAmount: true, commissionStatus: true } })
-  const t = sumarVentas(ventas)
+  const ventas = await tx.ancillarySale.findMany({ where: { visitId }, select: { status: true, subtotal: true, commissionAmount: true, commissionStatus: true, adjustmentEntry: { select: { amount: true } } } })
+  const t = sumarVentas(ventas.map((v) => ({ ...v, commissionAdjustment: v.adjustmentEntry?.amount ?? null })))
   await tx.membegoVisit.update({ where: { id: visitId }, data: { ancillaryTotal: t.ancillaryTotal, commissionTotal: t.commissionTotal } })
   return t
 }

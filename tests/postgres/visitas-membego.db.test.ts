@@ -200,7 +200,7 @@ test('4 · disputa: reportan 400, el cliente reconoce 150 → a favor del client
   const disputa = await prisma.visitDispute.findUniqueOrThrow({ where: { id: d.id } })
   assert.equal(disputa.status, 'RESOLVED_CUSTOMER')
   assert.equal(disputa.resolvedBase?.toFixed(2), '150.00')
-  assert.equal((await prisma.membegoVisit.findUniqueOrThrow({ where: { id: v.id } })).commissionTotal.toFixed(2), '32.00', 'el caché muestra lo asentado como cargo; el saldo real del libro lleva el ajuste')
+  assert.equal((await prisma.membegoVisit.findUniqueOrThrow({ where: { id: v.id } })).commissionTotal.toFixed(2), '12.00', 'la visita enseña la comisión NETA: cargo 32 + ajuste −20; el cargo no se edita')
   assert.equal((await sinEmpresa('prueba', (tx) => saldoEnTx(tx, a.companyId))).toFixed(2), '44.00', '32 + 32 − 20')
   // Nada se borra.
   await assert.rejects(prisma.ancillarySale.delete({ where: { id: venta.id } }), /no se borra/)

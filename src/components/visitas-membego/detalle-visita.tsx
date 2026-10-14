@@ -91,7 +91,8 @@ export function DetalleVisita({
                   </ul>
                   {conComision && (
                     <p className="text-caption text-muted-foreground" data-testid="venta-comision">
-                      Comisión {Number(v.commissionRate).toLocaleString('es-DO')} %: {d(v.commissionAmount)} · {ETIQUETA_COMISION[v.commissionStatus]} · reportada por {v.reportedBy}
+                      Comisión {Number(v.commissionRate).toLocaleString('es-DO')} %: {d(v.commissionAmount)}
+                      {v.commissionAdjustment ? ` · ajuste por disputa ${d(v.commissionAdjustment)}` : ''} · {ETIQUETA_COMISION[v.commissionStatus]} · reportada por {v.reportedBy}
                     </p>
                   )}
                   {accionDeVenta?.(v)}

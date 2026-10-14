@@ -126,6 +126,10 @@ test('totales y confirmación: las reversadas no suman; solo la comisión asenta
   ])
   assert.equal(t.ancillaryTotal.toFixed(2), '400.00')
   assert.equal(t.commissionTotal.toFixed(2), '12.00')
+  // Una venta ajustada por disputa cuenta con su ajuste (asiento aparte, negativo): 32 − 20 = 12.
+  const ajustada = sumarVentas([{ status: 'ADJUSTED', subtotal: '400', commissionAmount: '32', commissionStatus: 'POSTED', commissionAdjustment: '-20' }])
+  assert.equal(ajustada.commissionTotal.toFixed(2), '12.00')
+  assert.equal(ajustada.ancillaryTotal.toFixed(2), '400.00')
   assert.ok(totalCoincide('400.00', 400))
   assert.equal(totalCoincide('400.00', '399.99'), false)
   assert.equal(totalCoincide('400', 'x'), false)

@@ -1,5 +1,6 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE, pasarALaFichaDeLaApp } from './supply-v2-sesion'
+import { OVERRIDES_SUPPLIER_LITE } from '../../src/modules/supply-v2/suppliers/acceso-dominio'
 
 /**
  * SUPPLIER & FULFILLMENT COMMERCE · el recorrido del §86 en navegador.
@@ -102,9 +103,13 @@ async function compraPagada(cliente: Page, finanzas: Page, d: Datos, ref: string
   await expect(finanzas.getByTestId('pagos-por-revisar').getByTestId('venta').filter({ hasText: d.oferta })).toHaveCount(0)
 }
 
-/** El beneficio DISPONIBLE del producto (puede haber otro ya utilizado). */
+/**
+ * El beneficio DISPONIBLE del producto (puede haber otro ya utilizado). Se filtra por el chip de
+ * estado y no por el botón «Usar beneficio»: al pulsarlo, el botón deja paso al QR y el
+ * beneficio sigue siendo el mismo.
+ */
 function beneficioDisponible(cliente: Page, d: Datos) {
-  return cliente.getByTestId('beneficio').filter({ hasText: d.producto }).filter({ has: cliente.getByTestId('btn-usar-beneficio') }).filter({ visible: true })
+  return cliente.getByTestId('beneficio').filter({ hasText: d.producto }).filter({ has: cliente.getByTestId('derecho-estado').filter({ hasText: /^Disponible$/ }) }).filter({ visible: true })
 }
 
 async function generarQr(cliente: Page, d: Datos): Promise<string> {
@@ -272,9 +277,12 @@ async function recorrido(browser: Browser, o: { completo: boolean; cliente: 'cli
   await compras.getByTestId('base-reconocida').fill('150')
   await compras.getByTestId('notas-resolucion').fill('El cliente aporta el recibo: solo el refresco.')
   await compras.getByTestId('btn-resolver-disputa').click()
-  await expect(compras.getByTestId('disputa-resuelta')).toContainText('-20.00')
+  // El mensaje de éxito dura lo que tarda la página en refrescarse (la disputa deja de ser
+  // resoluble): lo que se comprueba es el ESTADO que quedó, no el aviso.
   await expect(compras.getByTestId('chip-disputa').first()).toHaveText('A favor del cliente')
+  await expect(compras.getByTestId('disputa').first()).toContainText('El cliente aporta el recibo')
   await expect(compras.getByTestId('visita-comision-total')).toHaveText(RD(12))
+  await expect(compras.getByTestId('venta').first()).toContainText('Ajustada')
 
   // ── El libro de Merchant Billing: solo asientos nuevos, nunca ediciones ─
   const asientos = await db.merchantLedgerEntry.findMany({ where: { companyId: empresa.id, referenceType: 'ANCILLARY_SALE' }, orderBy: { seq: 'asc' }, select: { type: true, amount: true } })
@@ -290,6 +298,10 @@ async function recorrido(browser: Browser, o: { completo: boolean; cliente: 'cli
   expect(ventas.every((v) => v.evidenceLevel !== 'PAYMENT_VERIFIED')).toBe(true)
 
   // ── Supplier → Merchant (§39–§41): la MISMA empresa, sin segunda organización ─
+  // El arnés sembró la empresa como una registrada de Membego (ya es Merchant). Para probar la
+  // conversión se la deja como Supplier Lite —lo que crea la invitación del dueño en producción—:
+  // tipo «proveedor», solo la capacidad de proveedor y sin vitrina. Lo operado hasta aquí no cambia.
+  await db.company.update({ where: { id: empresa.id }, data: { type: 'proveedor', isPublished: false, capacidades: { overrides: OVERRIDES_SUPPLIER_LITE } } })
   const empresasAntes = await db.company.count()
   await empleado.goto('/admin/supply/solicitud-merchant')
   await expect(empleado.getByTestId('form-solicitud-merchant')).toBeVisible()
@@ -297,10 +309,14 @@ async function recorrido(browser: Browser, o: { completo: boolean; cliente: 'cli
   await empleado.getByTestId('sol-descripcion').fill('Cafetería de especialidad en Bávaro, frente a la playa.')
   await empleado.getByTestId('sol-que-vende').fill('Café, postres y desayunos.')
   await empleado.getByTestId('sol-telefono').fill('809-555-0100')
+  // La empresa sembrada no tiene dirección: el formulario la exige (validación nativa del navegador).
+  await empleado.getByTestId('sol-direccion').fill('Av. Alemania 12, Bávaro')
   await empleado.getByTestId('btn-enviar-solicitud').click()
-  await expect(empleado.getByTestId('solicitud-enviada')).toBeVisible()
+  // El aviso de éxito dura lo que tarda la página en refrescarse: se comprueba el estado que quedó.
+  await expect(empleado.getByTestId('chip-solicitud')).toHaveText('Enviada')
   await empleado.reload()
   await expect(empleado.getByTestId('chip-solicitud')).toHaveText('Enviada')
+  await expect(empleado.getByTestId('form-solicitud-merchant')).toHaveCount(0)
 
   await compras.goto('/superadmin/supply/proveedores/solicitudes')
   const solicitud = compras.getByTestId('solicitud').filter({ hasText: d.empresa }).first()
@@ -308,7 +324,12 @@ async function recorrido(browser: Browser, o: { completo: boolean; cliente: 'cli
   await solicitud.getByTestId('select-decision').selectOption('APPROVED')
   await solicitud.getByTestId('motivo-decision').fill('Bienvenidos a Membego.')
   await solicitud.getByTestId('btn-decidir-solicitud').click()
-  await expect(compras.getByTestId('solicitud-decidida')).toContainText('misma empresa')
+  // Aprobada, sale de la cola de pendientes: se comprueba en la lista de aprobadas.
+  await expect(compras.getByTestId('solicitud').filter({ hasText: d.empresa })).toHaveCount(0)
+  await compras.goto('/superadmin/supply/proveedores/solicitudes?estado=APPROVED')
+  const aprobada = compras.getByTestId('solicitud').filter({ hasText: d.empresa }).first()
+  await expect(aprobada.getByTestId('chip-solicitud')).toHaveText('Aprobada')
+  await expect(aprobada.getByTestId('capacidades-encendidas')).toContainText('CATALOGO_UNIFICADO')
   expect(await db.company.count()).toBe(empresasAntes)
   const convertida = await db.company.findUniqueOrThrow({ where: { id: empresa.id }, select: { isPublished: true, capacidades: true } })
   expect(convertida.isPublished).toBe(false)

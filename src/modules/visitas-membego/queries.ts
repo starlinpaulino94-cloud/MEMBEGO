@@ -15,6 +15,8 @@ export interface VentaDeVisita {
   evidenceLevel: AncillaryEvidenceLevel
   subtotal: string
   commissionAmount: string
+  /** Ajuste por disputa (negativo) asentado aparte; null si no lo hubo. */
+  commissionAdjustment: string | null
   commissionRate: string
   commissionStatus: AncillaryCommissionStatus
   hasCustomLines: boolean
@@ -54,7 +56,7 @@ const INCLUDE_DETALLE = {
   location: { select: { nombre: true } },
   customer: { select: { name: true, email: true } },
   redemption: { select: { number: true, quantity: true, catalogItem: { select: { name: true } } } },
-  sales: { orderBy: { reportedAt: 'asc' as const }, include: { lines: true, reportedBy: { select: { name: true, email: true } }, dispute: { select: { id: true, status: true } } } },
+  sales: { orderBy: { reportedAt: 'asc' as const }, include: { lines: true, reportedBy: { select: { name: true, email: true } }, dispute: { select: { id: true, status: true } }, adjustmentEntry: { select: { amount: true } } } },
   disputes: { orderBy: { openedAt: 'desc' as const } },
 }
 
@@ -85,6 +87,7 @@ function aDetalle(v: NonNullable<Awaited<ReturnType<typeof leerDetalle>>>): Visi
       evidenceLevel: s.evidenceLevel,
       subtotal: s.subtotal.toFixed(2),
       commissionAmount: s.commissionAmount.toFixed(2),
+      commissionAdjustment: s.adjustmentEntry?.amount.toFixed(2) ?? null,
       commissionRate: s.commissionRate.toFixed(2),
       commissionStatus: s.commissionStatus,
       hasCustomLines: s.hasCustomLines,

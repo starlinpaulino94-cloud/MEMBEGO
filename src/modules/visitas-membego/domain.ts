@@ -259,13 +259,20 @@ export const VENTAS_CONFIRMABLES: readonly AncillarySaleStatus[] = ['REPORTED']
 /** Estados de venta que cuentan en el total reportado de la visita. */
 export const VENTAS_VIVAS: readonly AncillarySaleStatus[] = ['REPORTED', 'CONFIRMED', 'DISPUTED', 'ADJUSTED']
 
-export function sumarVentas(ventas: readonly { status: AncillarySaleStatus; subtotal: Monto; commissionAmount: Monto; commissionStatus: AncillaryCommissionStatus }[]): { ancillaryTotal: Decimal; commissionTotal: Decimal } {
+/**
+ * Totales de la visita. `commissionTotal` es la comisión NETA asentada: el
+ * cargo más su ajuste por disputa (negativo), si lo hubo. El cargo original
+ * nunca se edita (§36): el neto sale de sumar asientos.
+ */
+export function sumarVentas(
+  ventas: readonly { status: AncillarySaleStatus; subtotal: Monto; commissionAmount: Monto; commissionStatus: AncillaryCommissionStatus; commissionAdjustment?: Monto | null }[]
+): { ancillaryTotal: Decimal; commissionTotal: Decimal } {
   let ancillaryTotal = decimal(0)
   let commissionTotal = decimal(0)
   for (const v of ventas) {
     if (!VENTAS_VIVAS.includes(v.status)) continue
     ancillaryTotal = ancillaryTotal.plus(decimal(v.subtotal))
-    if (v.commissionStatus === 'POSTED') commissionTotal = commissionTotal.plus(decimal(v.commissionAmount))
+    if (v.commissionStatus === 'POSTED') commissionTotal = commissionTotal.plus(decimal(v.commissionAmount)).plus(decimal(v.commissionAdjustment ?? 0))
   }
   return { ancillaryTotal: redondear2(ancillaryTotal), commissionTotal: redondear2(commissionTotal) }
 }
