@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
-import { empresaCatalogo, itemSembrado, sucursalSembrada, varianteDe, type EmpresaCatalogo } from './catalogo-arnes'
+import { empresaCatalogo, existenciasSembradas, itemSembrado, sucursalSembrada, varianteDe, type EmpresaCatalogo } from './catalogo-arnes'
 
 /**
  * INVENTARIO CON LEDGER · el panel, de punta a punta (F2.2).
@@ -547,6 +547,302 @@ test.describe('Inventario · panel', () => {
     const pSin = await ctxSin.newPage()
     await pSin.goto('/admin/inventario/entradas')
     await expect(pSin).not.toHaveURL(/\/admin\/inventario\/entradas$/)
+    await ctxSin.close()
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-2b · conteo físico a ciegas: captura con lector, hoja en blanco, importar lo contado, revisar diferencias, rechazo por reservas, aplicar y cancelar', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+    const prisma = prismaDeArnes()
+
+    // Tres productos con existencias en Principal: el sistema "sabe" 10, 20 y 7.
+    const principalId = (await sucursalSembrada(con.id, 'Principal')).id
+    const N1 = `Zapato E2E ${sufijo}`
+    const N2 = `Cinturón E2E ${sufijo}`
+    const N3 = `Billetera E2E ${sufijo}`
+    const S1 = `CNT1-${sufijo}`
+    const S2 = `CNT2-${sufijo}`
+    const S3 = `CNT3-${sufijo}`
+    const base = parseInt(sufijo, 36) % 900_000
+    const C1 = String(7_503_000_000_000 + base)
+    const mk = async (name: string, slug: string, sku: string, barcode: string | undefined, stock: number) => {
+      const it = await itemSembrado(con.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, barcode, price: 100, porDefecto: true }] })
+      const id = await varianteDe(it.id)
+      await existenciasSembradas(con.id, id, principalId, stock)
+      return id
+    }
+    const v1 = await mk(N1, `zapato-cnt-${sufijo}`, S1, C1, 10)
+    const v2 = await mk(N2, `cinturon-cnt-${sufijo}`, S2, undefined, 20)
+    const v3 = await mk(N3, `billetera-cnt-${sufijo}`, S3, undefined, 7)
+    const nivel = (v: string) => prisma.inventoryLevel.findFirstOrThrow({ where: { catalogVariantId: v, locationId: principalId } })
+
+    // ── La pestaña «Conteos»: vacía, con su formulario ────────────────────
+    await p.goto('/admin/inventario')
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    await vistas.getByRole('link', { name: 'Conteos' }).click()
+    await p.waitForURL('**/admin/inventario/conteos')
+    await expect(p.getByRole('heading', { name: 'Conteos físicos', level: 1 })).toBeVisible()
+    await expect(vistas.getByRole('link', { name: 'Conteos' })).toHaveAttribute('aria-current', 'page')
+    await expect(p.getByText('Todavía no hay conteos')).toBeVisible()
+
+    // ── Abrir el conteo de Principal ──────────────────────────────────────
+    const abrir = p.getByRole('form', { name: 'Iniciar conteo' })
+    await abrir.getByLabel('Sucursal que vas a contar').selectOption({ label: 'Principal' })
+    await abrir.getByLabel(/^Para qué es/).fill('Cierre E2E')
+    await abrir.getByRole('button', { name: 'Abrir conteo' }).click()
+    await p.waitForURL(/\/admin\/inventario\/conteos\/(?!nuevo)[^/]+$/, { timeout: 30_000 })
+    const idConteo = p.url().split('/').pop()!
+    await expect(p.getByRole('heading', { name: /^CNT-\d{4}-000001$/, level: 1 })).toBeVisible()
+    const numero = (await p.getByRole('heading', { level: 1 }).innerText()).trim()
+    await expect(p.getByText('Cierre E2E')).toBeVisible()
+    await expect(p.getByText('Conteo a ciegas.')).toBeVisible()
+
+    // A ciegas: ni una cifra del sistema en la pantalla de captura; los pendientes salen sin cantidades.
+    await expect(p.getByText(/Esperado|Disponible|El sistema dice/)).toHaveCount(0)
+    await p.getByText(/Con existencias y todavía sin contar \(/).click()
+    const porContar = p.getByRole('list', { name: 'Productos por contar' })
+    await expect(porContar.getByText(N1)).toBeVisible()
+    await expect(porContar.getByText(N3)).toBeVisible()
+    await expect(porContar.getByText(/\b(10|20)\b(?!-)/)).toHaveCount(0)
+
+    // ── Captura con lector: el código exacto suma; «unidades por escaneo» cuenta por cajas ──
+    const buscar = p.getByLabel('Escanear o buscar un producto para contar')
+    const estado = p.getByRole('status')
+    await buscar.fill(C1)
+    await buscar.press('Enter')
+    await expect(estado).toContainText(`${N1}: ahora 1 contados`)
+    await buscar.fill(C1)
+    await buscar.press('Enter')
+    await expect(estado).toContainText(`${N1}: ahora 2 contados`)
+    await p.getByLabel('Unidades por escaneo').fill('3')
+    await buscar.fill(S1.toLowerCase())
+    await buscar.press('Enter')
+    await expect(estado).toContainText(`${N1}: ahora 5 contados`)
+    await p.getByLabel('Unidades por escaneo').fill('1')
+    // Lo que no existe se dice, y no cuenta nada.
+    await buscar.fill('NO-EXISTE-999')
+    await buscar.press('Enter')
+    await expect(estado).toContainText('No encontré ningún producto que controle inventario con «NO-EXISTE-999»')
+    // Una ráfaga de escaneos seguidos no pierde ninguno (cola en orden).
+    await buscar.fill(S2)
+    await buscar.press('Enter')
+    await buscar.fill(S2)
+    await buscar.press('Enter')
+    await buscar.fill(S2)
+    await buscar.press('Enter')
+    await expect(estado).toContainText(`${N2}: ahora 3 contados`, { timeout: 20_000 })
+
+    const lista = p.getByRole('list', { name: 'Productos contados' })
+    await expect(p.getByRole('heading', { name: /^Productos contados \(2\)$/ })).toBeVisible({ timeout: 20_000 })
+    // Corregir escribiendo el número (recuento): zapato 8 y cinturón 25.
+    await lista.getByLabel(`Contado de ${N1}`).fill('8')
+    await lista.getByLabel(`Contado de ${N1}`).press('Enter')
+    await expect(lista.getByLabel(`Contado de ${N1}`)).toHaveValue('8', { timeout: 20_000 })
+    await lista.getByLabel(`Contado de ${N2}`).fill('25')
+    await lista.getByLabel(`Contado de ${N2}`).press('Enter')
+    await expect.poll(async () => (await prisma.inventoryCountLine.findMany({ where: { sessionId: idConteo }, select: { catalogVariantId: true, counted: true, expected: true } })).sort((a, b) => a.counted - b.counted), { timeout: 20_000 }).toEqual(
+      [
+        { catalogVariantId: v1, counted: 8, expected: 10 },
+        { catalogVariantId: v2, counted: 25, expected: 20 },
+      ].sort((a, b) => a.counted - b.counted)
+    )
+    expect((await nivel(v1)).onHand, 'contar no mueve existencias').toBe(10)
+
+    // ── Mientras se cuenta, se vende: 3 del cinturón (el sistema pasa de 20 a 17) ──
+    await prisma.inventoryLevel.update({ where: { id: (await nivel(v2)).id }, data: { onHand: 17 } })
+
+    // ── La hoja en blanco: qué productos hay, SIN cuántos ─────────────────
+    const hoja = await p.request.get(`/admin/inventario/conteos/${idConteo}/hoja`)
+    expect(hoja.status()).toBe(200)
+    expect(hoja.headers()['content-type']).toContain('text/csv')
+    const textoHoja = await hoja.text()
+    expect(textoHoja).toContain('sku;codigo_de_barras;producto;contado')
+    expect(textoHoja).toMatch(new RegExp(`^${S1};${C1};${N1};$`, 'm'))
+    expect(textoHoja).toMatch(new RegExp(`^${S3};;${N3};$`, 'm'))
+
+    // ── Importar lo contado: con un error no entra nada; limpio, sí ───────
+    await p.getByRole('link', { name: 'Importar hoja contada' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}/importar`)
+    const subir = (nombre: string, contenido: string) => p.getByLabel('Archivo CSV').setInputFiles({ name: nombre, mimeType: 'text/csv', buffer: Buffer.from(contenido, 'utf8') })
+    await subir('malo.csv', `sku;contado\n${S3};abc\n${S1};\nNO-EXISTE-${sufijo};2\n`)
+    await p.getByRole('button', { name: 'Revisar archivo' }).click()
+    await expect(p.getByText(/2 filas con problemas/)).toBeVisible({ timeout: 15_000 })
+    await expect(p.getByRole('list', { name: 'Filas con problemas' })).toContainText('entero de cero en adelante')
+    await expect(p.getByRole('button', { name: /^Cargar/ })).toHaveCount(0)
+    await p.goto(`/admin/inventario/conteos/${idConteo}/importar`)
+    await subir('limpio.csv', `sku;contado\n${S3};7\n${S1};\n`)
+    await p.getByRole('button', { name: 'Revisar archivo' }).click()
+    await expect(p.getByText(/El archivo está limpio/)).toBeVisible({ timeout: 15_000 })
+    await expect(p.getByText('Sin contar (se ignoran)').locator('..')).toContainText('1')
+    await p.getByRole('button', { name: 'Cargar 1 producto contado' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}`, { timeout: 30_000 })
+    await expect(p.getByRole('heading', { name: /^Productos contados \(3\)$/ })).toBeVisible({ timeout: 20_000 })
+    await expect(p.getByRole('list', { name: 'Productos contados' }).getByLabel(`Contado de ${N3}`)).toHaveValue('7')
+
+    // ── Revisar: ahora SÍ se ve lo esperado y la diferencia ───────────────
+    await p.getByRole('link', { name: 'Revisar y aplicar' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}/revisar`)
+    await expect(p.getByRole('heading', { name: `Revisar ${numero}`, level: 1 })).toBeVisible()
+    const dif = p.getByRole('list', { name: 'Diferencias por producto' })
+    const f1 = dif.getByRole('listitem').filter({ hasText: N1 })
+    const f2 = dif.getByRole('listitem').filter({ hasText: N2 })
+    const f3 = dif.getByRole('listitem').filter({ hasText: N3 })
+    await expect(f1).toContainText('Faltante')
+    await expect(f1.getByText('Esperado').locator('..')).toContainText('10')
+    await expect(f1.getByText('Contado').locator('..')).toContainText('8')
+    await expect(f2).toContainText('Sobrante')
+    await expect(f2.getByText('Esperado').locator('..')).toContainText('20')
+    await expect(f3).toContainText('Coincide')
+    const resumen = p.getByLabel('Resumen de diferencias')
+    await expect(resumen).toContainText('Productos contados')
+    await expect(resumen).toContainText('+5 u.')
+    await expect(resumen).toContainText('−2 u.')
+    const csvDif = await p.request.get(`/admin/inventario/conteos/${idConteo}/exportar`)
+    expect(csvDif.status()).toBe(200)
+    expect(csvDif.headers()['content-type']).toContain('text/csv')
+    const textoDif = await csvDif.text()
+    expect(textoDif).toContain(`Número;${numero}`)
+    expect(textoDif).toMatch(new RegExp(`${S1};${C1};${N1};10;8;-2;Faltante`))
+    expect(textoDif).toMatch(new RegExp(`${S2};;${N2};20;25;5;Sobrante`))
+
+    // ── Aplicar: por la DIFERENCIA, así que la venta de mientras se contaba se conserva (17 + 5 = 22) ──
+    await p.getByLabel('Revisé las diferencias y quiero ajustar las existencias.').check()
+    await p.getByRole('button', { name: 'Aplicar conteo' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}`, { timeout: 30_000 })
+    await expect(p.getByText(/^Aplicado \d/)).toBeVisible({ timeout: 20_000 })
+    const informe = p.getByRole('list', { name: 'Diferencias por producto' })
+    await expect(informe.getByRole('listitem').filter({ hasText: N1 })).toContainText('10 → 8')
+    await expect(informe.getByRole('listitem').filter({ hasText: N2 })).toContainText('17 → 22')
+    await expect(informe.getByRole('listitem').filter({ hasText: N3 })).toContainText('sin cambio')
+    expect((await nivel(v1)).onHand).toBe(8)
+    expect((await nivel(v2)).onHand).toBe(22)
+    expect((await nivel(v3)).onHand).toBe(7)
+    // Un conteo aplicado ya no se captura ni se revisa.
+    await expect(p.getByLabel('Escanear o buscar un producto para contar')).toHaveCount(0)
+    await p.goto(`/admin/inventario/conteos/${idConteo}/revisar`)
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}`)
+    // Y los ajustes quedan en el historial con el número del conteo.
+    await p.goto(`/admin/inventario/movimientos?q=${encodeURIComponent(S1)}`)
+    await expect(p.getByRole('list', { name: 'Movimientos de inventario' }).getByRole('listitem').first()).toContainText('Conteo físico')
+
+    // ── La lista: aplicado, con su resumen ────────────────────────────────
+    await p.goto('/admin/inventario/conteos')
+    const conteos = p.getByRole('list', { name: 'Conteos físicos' })
+    await expect(conteos.getByRole('listitem').first()).toContainText(numero)
+    await expect(conteos.getByRole('listitem').first()).toContainText('Aplicado')
+    await expect(conteos.getByRole('listitem').first()).toContainText('+5')
+    await expect(conteos.getByRole('listitem').first()).toContainText('−2')
+
+    // ── Un faltante que dejaría menos de lo apartado: se avisa de antemano y NO se aplica NADA ──
+    await prisma.inventoryLevel.update({ where: { id: (await nivel(v1)).id }, data: { reserved: 7 } }) // 8 en estante, 7 apartadas
+    await p.goto('/admin/inventario/conteos')
+    const abrir2 = p.getByRole('form', { name: 'Iniciar conteo' })
+    await abrir2.getByLabel('Sucursal que vas a contar').selectOption({ label: 'Principal' })
+    await abrir2.getByRole('button', { name: 'Abrir conteo' }).click()
+    await p.waitForURL(/\/admin\/inventario\/conteos\/(?!nuevo)[^/]+$/, { timeout: 30_000 })
+    const idConteo2 = p.url().split('/').pop()!
+    expect(idConteo2).not.toBe(idConteo)
+    await expect(p.getByRole('heading', { name: /^CNT-\d{4}-000002$/, level: 1 })).toBeVisible()
+    const buscar2 = p.getByLabel('Escanear o buscar un producto para contar')
+    await buscar2.fill(S1)
+    await buscar2.press('Enter')
+    await expect(p.getByRole('status')).toContainText(`${N1}: ahora 1 contados`)
+    await buscar2.fill(S2)
+    await buscar2.press('Enter')
+    await expect(p.getByRole('status')).toContainText(`${N2}: ahora 1 contados`)
+    await expect(p.getByRole('heading', { name: /^Productos contados \(2\)$/ })).toBeVisible({ timeout: 20_000 })
+    await p.getByRole('link', { name: 'Revisar y aplicar' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo2}/revisar`)
+    await expect(p.getByText(/Una línea no se podría aplicar hoy/)).toBeVisible()
+    await expect(p.getByRole('list', { name: 'Diferencias por producto' }).getByRole('listitem').filter({ hasText: N1 })).toContainText('No se podría aplicar hoy')
+    await p.getByLabel('Revisé las diferencias y quiero ajustar las existencias.').check()
+    await p.getByRole('button', { name: 'Aplicar conteo' }).click()
+    const rechazadas = p.getByRole('list', { name: 'Líneas que no se pueden aplicar' })
+    await expect(rechazadas).toBeVisible({ timeout: 20_000 })
+    await expect(rechazadas).toContainText(N1)
+    await expect(rechazadas).toContainText('menos de lo apartado')
+    await expect(p.getByText('No se aplicó nada.')).toBeVisible()
+    expect((await nivel(v1)).onHand, 'no se aplicó NADA').toBe(8)
+    expect((await nivel(v2)).onHand, 'ni siquiera la línea buena').toBe(22)
+    // Se corrige el recuento (quedan 7 en el estante: cabe) y entonces sí.
+    await p.getByRole('link', { name: new RegExp(`Seguir contando · ${numero.replace(/\d{6}$/, '000002')}`) }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo2}`)
+    const lista2 = p.getByRole('list', { name: 'Productos contados' })
+    await lista2.getByLabel(`Contado de ${N1}`).fill('7')
+    await lista2.getByLabel(`Contado de ${N1}`).press('Enter')
+    await expect.poll(async () => (await prisma.inventoryCountLine.findFirstOrThrow({ where: { sessionId: idConteo2, catalogVariantId: v1 } })).counted, { timeout: 20_000 }).toBe(7)
+    await lista2.getByRole('button', { name: `Quitar ${N2} del conteo` }).click()
+    await expect(p.getByRole('heading', { name: /^Productos contados \(1\)$/ })).toBeVisible({ timeout: 20_000 })
+    await p.getByRole('link', { name: 'Revisar y aplicar' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo2}/revisar`)
+    await expect(p.getByText(/no se podría aplicar hoy/i)).toHaveCount(0)
+    await p.getByLabel('Revisé las diferencias y quiero ajustar las existencias.').check()
+    await p.getByRole('button', { name: 'Aplicar conteo' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo2}`, { timeout: 30_000 })
+    await expect(p.getByText(/^Aplicado \d/)).toBeVisible({ timeout: 20_000 })
+    expect((await nivel(v1)).onHand).toBe(7)
+    expect((await nivel(v1)).reserved, 'lo apartado no se toca').toBe(7)
+    expect((await nivel(v2)).onHand, 'el que se quitó del conteo no se tocó').toBe(22)
+
+    // ── Cancelar: no mueve nada, queda guardado con su motivo, y libera la sucursal ──
+    await p.goto('/admin/inventario/conteos')
+    const abrir3 = p.getByRole('form', { name: 'Iniciar conteo' })
+    await abrir3.getByLabel('Sucursal que vas a contar').selectOption({ label: 'Principal' })
+    await abrir3.getByRole('button', { name: 'Abrir conteo' }).click()
+    await p.waitForURL(/\/admin\/inventario\/conteos\/(?!nuevo)[^/]+$/, { timeout: 30_000 })
+    const idConteo3 = p.url().split('/').pop()!
+    const buscar3 = p.getByLabel('Escanear o buscar un producto para contar')
+    await buscar3.fill(S2)
+    await buscar3.press('Enter')
+    await expect(p.getByRole('heading', { name: /^Productos contados \(1\)$/ })).toBeVisible({ timeout: 20_000 })
+    await p.goto(`/admin/inventario/conteos/${idConteo3}/revisar`)
+    await p.getByRole('button', { name: 'Cancelar este conteo' }).click()
+    await p.getByLabel(/^Motivo/).fill('Sucursal equivocada')
+    await p.getByRole('button', { name: 'Sí, cancelar el conteo' }).click()
+    await p.waitForURL('**/admin/inventario/conteos', { timeout: 30_000 })
+    await p.goto(`/admin/inventario/conteos/${idConteo3}`)
+    await expect(p.getByText(/Cancelado.*Sucursal equivocada.*No se movió ninguna existencia/)).toBeVisible()
+    expect((await nivel(v2)).onHand).toBe(22)
+
+    // ── Lo que NO debe pasar ──────────────────────────────────────────────
+    // Un conteo inventado no existe: misma página que cualquier id desconocido, y sus descargas dan 404.
+    await p.goto('/admin/inventario/conteos/cinexistente000000000000')
+    expect(await p.locator('meta[name=robots][content*=noindex]').count()).toBeGreaterThan(0)
+    await expect(p.getByRole('list', { name: 'Productos contados' })).toHaveCount(0)
+    for (const ruta of ['hoja', 'exportar']) {
+      const r = await p.request.get(`/admin/inventario/conteos/cinexistente000000000000/${ruta}`)
+      expect(r.status(), ruta).toBe(404)
+      expect(r.headers()['content-type'] ?? '', ruta).not.toContain('text/csv')
+    }
+    // Sin sesión, o de una empresa sin la capacidad, NO sale ni una fila.
+    const anonimo = await browser.newContext()
+    for (const ruta of [`/admin/inventario/conteos/${idConteo}/exportar`, `/admin/inventario/conteos/${idConteo}/hoja`]) {
+      const r = await anonimo.request.get(ruta, { maxRedirects: 0 })
+      expect(r.headers()['content-type'] ?? '', ruta).not.toContain('text/csv')
+      expect(await r.text(), ruta).not.toContain(S1)
+    }
+    await anonimo.close()
+    const ctxSin = await browser.newContext()
+    await entrarComo(ctxSin, 'catalogoSinCapacidad', BASE, sin.id)
+    for (const ruta of [`/admin/inventario/conteos/${idConteo}/exportar`, `/admin/inventario/conteos/${idConteo}/hoja`]) {
+      const r = await ctxSin.request.get(ruta, { maxRedirects: 0 })
+      expect(r.headers()['content-type'] ?? '', ruta).not.toContain('text/csv')
+      expect([302, 303, 307, 308, 403, 404], ruta).toContain(r.status())
+      expect(await r.text(), ruta).not.toContain(S1)
+    }
+    const pSin = await ctxSin.newPage()
+    await pSin.goto('/admin/inventario/conteos')
+    await expect(pSin).not.toHaveURL(/\/admin\/inventario\/conteos$/)
     await ctxSin.close()
 
     expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])

@@ -23,8 +23,8 @@ export async function auditarInventario(
   accion: Extract<AuditAccion, 'INVENTORY_STOCK_CHANGED' | 'INVENTORY_TRANSFERRED' | 'INVENTORY_CONFIGURED'>,
   entidadId: string,
   payload: Prisma.InputJsonObject,
-  /** Qué es `entidadId`: el saldo (por defecto) o, p.ej., la entrada de mercancía que agrupa varios. */
-  entidadTipo: 'InventoryLevel' | 'InventoryReceipt' = 'InventoryLevel'
+  /** Qué es `entidadId`: el saldo (por defecto) o, p.ej., la entrada de mercancía o el conteo que agrupan varios. */
+  entidadTipo: 'InventoryLevel' | 'InventoryReceipt' | 'InventoryCountSession' = 'InventoryLevel'
 ): Promise<void> {
   await tx.auditLog.create({
     data: {

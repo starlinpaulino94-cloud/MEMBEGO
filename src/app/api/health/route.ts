@@ -102,6 +102,7 @@ export async function GET(req: NextRequest) {
         UNION ALL SELECT 'ofertas_privadas.esquema', to_regclass('public.ofertas_privadas') IS NOT NULL
         UNION ALL SELECT 'citas.esquema', to_regclass('public.citas') IS NOT NULL
         UNION ALL SELECT 'inventory_receipts.esquema', to_regclass('public.inventory_receipts') IS NOT NULL
+        UNION ALL SELECT 'inventory_count_sessions.esquema', to_regclass('public.inventory_count_sessions') IS NOT NULL
         UNION ALL SELECT 'entregas_webhook.proximoIntentoAt', EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'entregas_webhook' AND column_name = 'proximoIntentoAt')`

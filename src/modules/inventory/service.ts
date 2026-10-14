@@ -9,6 +9,7 @@ import {
   TTL_POR_DEFECTO_MINUTOS,
   aplicarMovimiento,
   cubetasDeSaldo,
+  CANTIDAD_MAXIMA,
   disponible,
   normalizarMotivo,
   reservaVencida,
@@ -29,6 +30,19 @@ import {
   validarLineasEntrada,
   type LineaEntrada,
 } from './entradas'
+import {
+  MAX_LINEAS_CONTEO,
+  MAX_MOTIVO_CANCELACION,
+  MAX_NOTA_CONTEO,
+  PREFIJO_CONTEO,
+  diferenciaDeConteo,
+  esModoConteo,
+  motivoDeConteo,
+  planDeAjuste,
+  validarCantidadContada,
+  type EstadoConteo,
+  type ModoConteo,
+} from './conteos'
 import { fallo } from './errores'
 
 /**
@@ -986,4 +1000,424 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
     'InventoryReceipt'
   )
   return { entradaId: entrada.id, numero, lineas: validas.lineas.length, unidades: validas.unidades, repetido: false }
+}
+
+// ── INV-2b · Conteo físico por sucursal ──────────────────────────────────────
+
+/**
+ * UN inventario físico por sucursal a la vez, en tres tiempos:
+ *
+ *   1. ABRIR el conteo (`abrirConteoEnTx`): un documento `CNT-2026-000001` con la
+ *      sucursal. Solo uno abierto por sucursal (índice único parcial en la base).
+ *   2. CONTAR (`registrarConteoProductoEnTx`, `importarConteoEnTx`): una línea por
+ *      producto con lo contado y lo que decía el sistema EN ESE MOMENTO. Mientras
+ *      está abierto es un borrador: se corrige y se quita.
+ *   3. APLICAR (`aplicarConteoEnTx`) o CANCELAR. Aplicar ajusta cada producto por
+ *      la DIFERENCIA (contado − esperado al contar), no por el número: una venta
+ *      ocurrida mientras se contaba no se pierde. Lo que no se contó no se toca.
+ *      Todo o nada: si una línea no se puede aplicar (dejaría menos de lo
+ *      apartado) no se aplica NINGUNA y se dice cuáles son.
+ *
+ * Cada operación sobre un conteo lo BLOQUEA primero (`SELECT … FOR UPDATE`), y
+ * después —en `aplicar`— los saldos, en orden de id. Nada más bloquea sesiones,
+ * así que no hay ciclos.
+ */
+
+/** El último correlativo de conteos de la empresa para el prefijo con año (`CNT-2026-`). */
+async function ultimoConteo(tx: Tx, companyId: string, prefijo: string): Promise<string | null> {
+  const filas = await tx.$queryRaw<{ number: string }[]>`
+    SELECT "number" FROM "inventory_count_sessions"
+     WHERE "companyId" = ${companyId} AND "number" ~ ${'^' + prefijo + '[0-9]{6,}$'}
+     ORDER BY "number" DESC LIMIT 1`
+  return filas[0]?.number ?? null
+}
+
+interface ConteoBloqueado {
+  id: string
+  number: string
+  status: EstadoConteo
+  locationId: string
+}
+
+/** Bloquea el conteo y lo devuelve; si no existe (o es de otra empresa) se dice igual: no existe. */
+async function bloquearConteo(tx: Tx, companyId: string, conteoId: string): Promise<ConteoBloqueado> {
+  if (typeof conteoId !== 'string' || conteoId === '' || conteoId.length > 120) fallo('CONTEO_NO_ENCONTRADO', 'El conteo no existe.')
+  const filas = await tx.$queryRaw<ConteoBloqueado[]>`
+    SELECT "id", "number", "status", "locationId"
+      FROM "inventory_count_sessions"
+     WHERE "id" = ${conteoId} AND "companyId" = ${companyId}
+       FOR UPDATE`
+  if (!filas[0]) fallo('CONTEO_NO_ENCONTRADO', 'El conteo no existe.')
+  return filas[0]
+}
+
+function exigirAbierto(c: ConteoBloqueado): void {
+  if (c.status !== 'OPEN') {
+    fallo('CONTEO_CERRADO', c.status === 'APPLIED' ? `El conteo ${c.number} ya se aplicó: no admite cambios. Abre otro para contar de nuevo.` : `El conteo ${c.number} está cancelado: no admite cambios.`)
+  }
+}
+
+/** Lo que dice el sistema hoy de un producto en una sucursal (0 si nunca tuvo saldo). */
+async function existenciaDe(tx: Tx, companyId: string, varianteId: string, sucursalId: string): Promise<number> {
+  const n = await tx.inventoryLevel.findFirst({ where: { companyId, catalogVariantId: varianteId, locationId: sucursalId }, select: { onHand: true } })
+  return n?.onHand ?? 0
+}
+
+export interface ResultadoAbrirConteo {
+  conteoId: string
+  numero: string
+  /** true si esa persona ya tenía abierto el conteo de esta sucursal: se le devuelve el mismo (un doble clic no abre dos). */
+  repetido: boolean
+}
+
+export async function abrirConteoEnTx(tx: Tx, companyId: string, e: { sucursalId: string; nota?: string | null; ahora?: Date }, ctx: ContextoAuditoria): Promise<ResultadoAbrirConteo> {
+  const nota = normalizarTextoLibre(e.nota, MAX_NOTA_CONTEO, 'La nota')
+  if (!nota.ok) fallo('NOTA_INVALIDA', nota.error)
+  const sucursal = await exigirSucursal(tx, companyId, e.sucursalId, true)
+  // Dos aperturas simultáneas de la misma sucursal se turnan; sin esto, la segunda toparía con el índice único y
+  // PostgreSQL aborta toda la transacción en vez de dejarnos contestar con el conteo que ya existe.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'conteo-abrir:' + sucursal.id}))`
+  const abierto = await tx.inventoryCountSession.findFirst({ where: { companyId, locationId: sucursal.id, status: 'OPEN' }, select: { id: true, number: true, openedById: true } })
+  if (abierto) {
+    if (abierto.openedById !== null && abierto.openedById === ctx.actorId) return { conteoId: abierto.id, numero: abierto.number, repetido: true }
+    fallo('CONTEO_YA_ABIERTO', `Ya hay un conteo abierto en «${sucursal.nombre}» (${abierto.number}). Termínalo —aplícalo o cancélalo— antes de abrir otro.`)
+  }
+  const ahora = e.ahora ?? new Date()
+  const numero = await siguienteNumero(tx, PREFIJO_CONTEO, (prefijo) => ultimoConteo(tx, companyId, prefijo), ahora, `conteo:${companyId}`)
+  try {
+    const c = await tx.inventoryCountSession.create({
+      data: { companyId, number: numero, locationId: sucursal.id, note: nota.valor, openedById: ctx.actorId },
+      select: { id: true },
+    })
+    return { conteoId: c.id, numero, repetido: false }
+  } catch (err) {
+    if (esViolacionUnica(err)) fallo('CONTEO_YA_ABIERTO', `Ya hay un conteo abierto en «${sucursal.nombre}». Termínalo antes de abrir otro.`)
+    throw err
+  }
+}
+
+export interface EntradaConteoProducto {
+  conteoId: string
+  varianteId: string
+  cantidad: number
+  modo: ModoConteo
+  ahora?: Date
+}
+
+export interface ResultadoConteoProducto {
+  varianteId: string
+  /** Lo contado de ese producto después de esta captura. */
+  contado: number
+  /** true si era la primera vez que se contaba en este conteo. */
+  nueva: boolean
+  /** Productos con línea en el conteo, contando este. */
+  lineas: number
+}
+
+/**
+ * Cuenta UN producto. `SUMAR` es un escaneo (una unidad más, o las que diga);
+ * `FIJAR` es escribir el número (reemplaza lo contado y vuelve a tomar la foto de
+ * lo que decía el sistema: es un recuento en este momento).
+ */
+export async function registrarConteoProductoEnTx(tx: Tx, companyId: string, e: EntradaConteoProducto, ctx: ContextoAuditoria): Promise<ResultadoConteoProducto> {
+  if (!esModoConteo(e.modo)) fallo('MODO_INVALIDO', 'Indica si sumas una captura o escribes la cantidad.')
+  const cantidad = validarCantidadContada(e.cantidad, e.modo)
+  if (!cantidad.ok) fallo('CANTIDAD_INVALIDA', cantidad.error)
+  const conteo = await bloquearConteo(tx, companyId, e.conteoId)
+  exigirAbierto(conteo)
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  const previa = await tx.inventoryCountLine.findFirst({ where: { companyId, sessionId: conteo.id, catalogVariantId: variante.id }, select: { id: true, counted: true } })
+  const total = await tx.inventoryCountLine.count({ where: { companyId, sessionId: conteo.id } })
+  if (!previa && total >= MAX_LINEAS_CONTEO) {
+    fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} productos. Aplícalo y abre otro para seguir.`)
+  }
+  const esperado = await existenciaDe(tx, companyId, variante.id, conteo.locationId)
+  const ahora = e.ahora ?? new Date()
+  if (!previa) {
+    await tx.inventoryCountLine.create({
+      data: { companyId, sessionId: conteo.id, catalogVariantId: variante.id, counted: cantidad.valor, expected: esperado, countedById: ctx.actorId, countedAt: ahora },
+    })
+    return { varianteId: variante.id, contado: cantidad.valor, nueva: true, lineas: total + 1 }
+  }
+  const contado = e.modo === 'SUMAR' ? previa.counted + cantidad.valor : cantidad.valor
+  if (contado > CANTIDAD_MAXIMA) fallo('CANTIDAD_INVALIDA', `Un conteo no puede pasar de ${CANTIDAD_MAXIMA.toLocaleString('es-DO')} unidades por producto.`)
+  await tx.inventoryCountLine.update({
+    where: { id: previa.id },
+    data: { counted: contado, countedById: ctx.actorId, countedAt: ahora, ...(e.modo === 'FIJAR' ? { expected: esperado } : {}) },
+  })
+  return { varianteId: variante.id, contado, nueva: false, lineas: total }
+}
+
+/** Saca un producto del conteo (mientras está abierto): lo que no tiene línea no se ajusta. */
+export async function quitarLineaDeConteoEnTx(tx: Tx, companyId: string, e: { conteoId: string; varianteId: string }): Promise<{ quitada: boolean }> {
+  const conteo = await bloquearConteo(tx, companyId, e.conteoId)
+  exigirAbierto(conteo)
+  if (typeof e.varianteId !== 'string' || e.varianteId === '') fallo('VARIANTE_NO_ENCONTRADA', 'La variante no existe.')
+  const r = await tx.inventoryCountLine.deleteMany({ where: { companyId, sessionId: conteo.id, catalogVariantId: e.varianteId } })
+  return { quitada: r.count > 0 }
+}
+
+export interface ResultadoImportarConteo {
+  nuevas: number
+  reemplazadas: number
+  lineas: number
+}
+
+/**
+ * Carga de golpe lo contado en una hoja (CSV): TODO O NADA y siempre como
+ * `FIJAR`. Un producto que ya tenía línea se reemplaza (la hoja es el recuento
+ * más reciente); los demás no se tocan.
+ */
+export async function importarConteoEnTx(
+  tx: Tx,
+  companyId: string,
+  e: { conteoId: string; lineas: ReadonlyArray<{ varianteId: string; cantidad: number }>; ahora?: Date },
+  ctx: ContextoAuditoria
+): Promise<ResultadoImportarConteo> {
+  if (!Array.isArray(e.lineas) || e.lineas.length === 0) fallo('CONTEO_SIN_LINEAS', 'El archivo no trae ningún producto contado.')
+  if (e.lineas.length > MAX_LINEAS_CONTEO) fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} productos.`)
+  const ids: string[] = []
+  const vistos = new Set<string>()
+  for (const l of e.lineas) {
+    if (!l || typeof l.varianteId !== 'string' || l.varianteId === '') fallo('LINEA_INVALIDA', 'Una línea del archivo no tiene producto.')
+    const c = validarCantidadContada(l.cantidad, 'FIJAR')
+    if (!c.ok) fallo('CANTIDAD_INVALIDA', c.error)
+    if (vistos.has(l.varianteId)) fallo('LINEA_REPETIDA', 'Un producto aparece dos veces en el archivo.')
+    vistos.add(l.varianteId)
+    ids.push(l.varianteId)
+  }
+  const conteo = await bloquearConteo(tx, companyId, e.conteoId)
+  exigirAbierto(conteo)
+
+  const variantes = await tx.catalogVariant.findMany({
+    where: { companyId, id: { in: ids } },
+    select: { id: true, name: true, isDefault: true, item: { select: { name: true, type: true, capabilities: true } } },
+  })
+  const porId = new Map(variantes.map((v) => [v.id, v]))
+  for (const id of ids) {
+    const v = porId.get(id)
+    if (!v) fallo('VARIANTE_NO_ENCONTRADA', 'Uno de los productos del archivo ya no existe.')
+    if (!normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory) {
+      fallo('SIN_CONTROL_DE_INVENTARIO', `«${v.item.name}» no controla inventario. Actívalo en su ficha del catálogo para contarlo.`)
+    }
+  }
+
+  const previas = await tx.inventoryCountLine.findMany({ where: { companyId, sessionId: conteo.id }, select: { id: true, catalogVariantId: true } })
+  const previaDe = new Map(previas.map((p) => [p.catalogVariantId, p.id]))
+  const nuevas = ids.filter((id) => !previaDe.has(id)).length
+  if (previas.length + nuevas > MAX_LINEAS_CONTEO) {
+    fallo('DEMASIADAS_LINEAS', `Con este archivo el conteo pasaría de ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} productos. Aplícalo y abre otro para seguir.`)
+  }
+
+  const niveles = await tx.inventoryLevel.findMany({ where: { companyId, locationId: conteo.locationId, catalogVariantId: { in: ids } }, select: { catalogVariantId: true, onHand: true } })
+  const esperadoDe = new Map(niveles.map((n) => [n.catalogVariantId, n.onHand]))
+  const ahora = e.ahora ?? new Date()
+
+  const aCrear = e.lineas.filter((l) => !previaDe.has(l.varianteId))
+  if (aCrear.length > 0) {
+    await tx.inventoryCountLine.createMany({
+      data: aCrear.map((l) => ({ companyId, sessionId: conteo.id, catalogVariantId: l.varianteId, counted: l.cantidad, expected: esperadoDe.get(l.varianteId) ?? 0, countedById: ctx.actorId, countedAt: ahora })),
+    })
+  }
+  const aCambiar = e.lineas.filter((l) => previaDe.has(l.varianteId))
+  if (aCambiar.length > 0) {
+    const filas = aCambiar.map((l) => Prisma.sql`(${previaDe.get(l.varianteId)!}, ${l.cantidad}::int, ${esperadoDe.get(l.varianteId) ?? 0}::int)`)
+    // `AT TIME ZONE 'UTC'`: la columna es `timestamp` sin zona y Prisma escribe en UTC (ver `escribirMovimientosPorLote`).
+    const cambiadas = await tx.$executeRaw`
+      UPDATE "inventory_count_lines" AS l
+         SET "counted" = v."counted", "expected" = v."expected", "countedById" = ${ctx.actorId}, "countedAt" = (${ahora.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+        FROM (VALUES ${Prisma.join(filas)}) AS v("id", "counted", "expected")
+       WHERE l."id" = v."id" AND l."companyId" = ${companyId} AND l."sessionId" = ${conteo.id}`
+    if (cambiadas !== aCambiar.length) fallo('LOTE_INCOMPLETO', 'No se pudieron actualizar todas las líneas del conteo.')
+  }
+  return { nuevas: aCrear.length, reemplazadas: aCambiar.length, lineas: previas.length + aCrear.length }
+}
+
+export interface LineaRechazada {
+  varianteId: string
+  sku: string
+  nombre: string
+  contado: number
+  esperado: number
+  /** Las existencias reales de ahora. */
+  existenciaActual: number
+  motivo: string
+}
+
+export interface ResumenConteoAplicado {
+  lineas: number
+  ajustadas: number
+  unidadesSobrantes: number
+  unidadesFaltantes: number
+  sinContar: number
+}
+
+export type ResultadoAplicarConteo =
+  | {
+      aplicada: true
+      conteoId: string
+      numero: string
+      resumen: ResumenConteoAplicado
+      /** true si ya estaba aplicado: no se hizo nada nuevo. */
+      repetido: boolean
+      /** Productos cuyo vendible bajó (para revisar sus umbrales de aviso). */
+      variantesBajadas: string[]
+    }
+  | { aplicada: false; conteoId: string; numero: string; rechazadas: LineaRechazada[] }
+
+/**
+ * APLICA el conteo: un ajuste por producto por la diferencia, todo en una
+ * transacción. Si alguna línea no se puede aplicar, NO se aplica ninguna y se
+ * devuelven todas las que fallan (la persona las corrige o las quita y vuelve a
+ * aplicar). Aplicar dos veces el mismo conteo no repite nada.
+ */
+export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId: string; ahora?: Date }, ctx: ContextoAuditoria): Promise<ResultadoAplicarConteo> {
+  const conteo = await bloquearConteo(tx, companyId, e.conteoId)
+  if (conteo.status === 'APPLIED') {
+    const r = await tx.inventoryCountSession.findFirstOrThrow({
+      where: { id: conteo.id, companyId },
+      select: { countedLines: true, adjustedLines: true, unitsOver: true, unitsShort: true, uncountedLines: true },
+    })
+    return {
+      aplicada: true,
+      conteoId: conteo.id,
+      numero: conteo.number,
+      repetido: true,
+      variantesBajadas: [],
+      resumen: { lineas: r.countedLines ?? 0, ajustadas: r.adjustedLines ?? 0, unidadesSobrantes: r.unitsOver ?? 0, unidadesFaltantes: r.unitsShort ?? 0, sinContar: r.uncountedLines ?? 0 },
+    }
+  }
+  exigirAbierto(conteo)
+  const ahora = e.ahora ?? new Date()
+
+  const lineas = await tx.inventoryCountLine.findMany({
+    where: { companyId, sessionId: conteo.id },
+    orderBy: [{ catalogVariantId: 'asc' }],
+    select: {
+      id: true,
+      catalogVariantId: true,
+      counted: true,
+      expected: true,
+      variant: { select: { sku: true, name: true, isDefault: true, item: { select: { name: true, type: true, capabilities: true } } } },
+    },
+  })
+  if (lineas.length === 0) fallo('CONTEO_SIN_LINEAS', 'Cuenta al menos un producto antes de aplicar el conteo.')
+  const nombreDe = (l: (typeof lineas)[number]) => (l.variant.isDefault ? l.variant.item.name : `${l.variant.item.name} · ${l.variant.name}`)
+
+  const sucursal = await exigirSucursal(tx, companyId, conteo.locationId, false)
+  if (lineas.some((l) => diferenciaDeConteo(l.counted, l.expected) > 0)) await exigirSucursal(tx, companyId, conteo.locationId, true)
+
+  // Los saldos: se crean en cero los que falten (en orden fijo) y se BLOQUEAN todos juntos, en orden de id.
+  const variantes = lineas.map((l) => l.catalogVariantId)
+  await tx.inventoryLevel.createMany({ data: [...variantes].sort().map((v) => ({ companyId, catalogVariantId: v, locationId: sucursal.id })), skipDuplicates: true })
+  const niveles = await tx.inventoryLevel.findMany({ where: { companyId, locationId: sucursal.id, catalogVariantId: { in: variantes } }, select: { id: true, catalogVariantId: true } })
+  const nivelDe = new Map(niveles.map((n) => [n.catalogVariantId, n.id]))
+  if (nivelDe.size !== variantes.length) fallo('NIVEL_NO_ENCONTRADO', 'No se pudieron preparar los saldos del conteo.')
+  const idsNivel = niveles.map((n) => n.id)
+  let filas = await bloquear(tx, companyId, idsNivel)
+
+  const motivo = motivoDeConteo(conteo.number)
+  const evaluar = () =>
+    lineas.map((l) => {
+      const fila = filas.get(nivelDe.get(l.catalogVariantId)!)!
+      const delta = diferenciaDeConteo(l.counted, l.expected)
+      const trackea = normalizarCapacidades(l.variant.item.type, l.variant.item.capabilities).trackInventory
+      const plan = trackea ? planDeAjuste(delta, fila, motivo) : ({ tipo: 'RECHAZADA', motivo: `«${l.variant.item.name}» ya no controla inventario: actívalo en su ficha del catálogo o quítalo del conteo.` } as const)
+      return { l, fila, delta, plan }
+    })
+
+  // Una reserva vencida que nadie ha barrido aún sigue «apartando»: antes de rechazar un faltante por eso, se vencen las caducadas.
+  let evaluadas = evaluar()
+  const paraVencer = evaluadas.filter((x) => x.plan.tipo === 'RECHAZADA' && x.delta < 0 && x.fila.reserved > 0).map((x) => x.fila.id)
+  if (paraVencer.length > 0) {
+    let vencidas = 0
+    for (const id of paraVencer) vencidas += await vencerDeNivel(tx, companyId, id, ahora)
+    if (vencidas > 0) {
+      filas = await bloquear(tx, companyId, idsNivel)
+      evaluadas = evaluar()
+    }
+  }
+
+  const rechazadas = evaluadas.flatMap((x) =>
+    x.plan.tipo === 'RECHAZADA'
+      ? [{ varianteId: x.l.catalogVariantId, sku: x.l.variant.sku, nombre: nombreDe(x.l), contado: x.l.counted, esperado: x.l.expected, existenciaActual: x.fila.onHand, motivo: x.plan.motivo } satisfies LineaRechazada]
+      : []
+  )
+  if (rechazadas.length > 0) return { aplicada: false, conteoId: conteo.id, numero: conteo.number, rechazadas }
+
+  // Los ajustes: uno por producto con diferencia, con el ledger puro sobre el saldo bloqueado.
+  const items: ItemLote[] = []
+  const idLineaDeItem: string[] = []
+  const bajadas: string[] = []
+  let unidadesSobrantes = 0
+  let unidadesFaltantes = 0
+  for (const x of evaluadas) {
+    if (x.plan.tipo !== 'AJUSTE') continue
+    const despues = saldoDeCubetas(aplicarMovimiento(cubetasDeSaldo(x.fila), x.plan.movimiento))
+    items.push({
+      nivelId: x.fila.id,
+      movimiento: x.plan.movimiento,
+      antes: { onHand: x.fila.onHand, reserved: x.fila.reserved, damaged: x.fila.damaged },
+      despues,
+      meta: { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: conteo.id } },
+    })
+    idLineaDeItem.push(x.l.id)
+    if (x.delta > 0) unidadesSobrantes += x.delta
+    else {
+      unidadesFaltantes += -x.delta
+      bajadas.push(x.l.catalogVariantId)
+    }
+  }
+  const movimientoIds = await escribirMovimientosPorLote(tx, companyId, items)
+  const movimientoDeLinea = new Map(idLineaDeItem.map((id, i) => [id, movimientoIds[i]]))
+  const despuesDeNivel = new Map(items.map((i) => [i.nivelId, i.despues.onHand]))
+
+  // El resultado de CADA línea (también las que coincidieron): se escribe ANTES de cerrar el conteo, que después no admite cambios.
+  const resultados = evaluadas.map((x) => Prisma.sql`(${x.l.id}, ${x.fila.onHand}::int, ${despuesDeNivel.get(x.fila.id) ?? x.fila.onHand}::int, ${movimientoDeLinea.get(x.l.id) ?? null}::text)`)
+  const escritas = await tx.$executeRaw`
+    UPDATE "inventory_count_lines" AS l
+       SET "onHandBefore" = v."antes", "onHandAfter" = v."despues", "movementId" = v."movimiento"
+      FROM (VALUES ${Prisma.join(resultados)}) AS v("id", "antes", "despues", "movimiento")
+     WHERE l."id" = v."id" AND l."companyId" = ${companyId} AND l."sessionId" = ${conteo.id}`
+  if (escritas !== evaluadas.length) fallo('LOTE_INCOMPLETO', 'No se pudieron guardar los resultados del conteo.')
+
+  const sinContar = await tx.inventoryLevel.count({ where: { companyId, locationId: sucursal.id, onHand: { gt: 0 }, catalogVariantId: { notIn: variantes } } })
+  const resumen: ResumenConteoAplicado = { lineas: lineas.length, ajustadas: items.length, unidadesSobrantes, unidadesFaltantes, sinContar }
+  await tx.inventoryCountSession.update({
+    where: { id: conteo.id },
+    data: {
+      status: 'APPLIED',
+      appliedAt: ahora,
+      appliedById: ctx.actorId,
+      countedLines: resumen.lineas,
+      adjustedLines: resumen.ajustadas,
+      unitsOver: resumen.unidadesSobrantes,
+      unitsShort: resumen.unidadesFaltantes,
+      uncountedLines: resumen.sinContar,
+    },
+  })
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_STOCK_CHANGED',
+    conteo.id,
+    { tipo: 'ADJUSTMENT', conteo: conteo.number, sucursal: sucursal.nombre, lineas: resumen.lineas, ajustadas: resumen.ajustadas, sobrantes: unidadesSobrantes, faltantes: unidadesFaltantes, sinContar },
+    'InventoryCountSession'
+  )
+  return { aplicada: true, conteoId: conteo.id, numero: conteo.number, resumen, repetido: false, variantesBajadas: bajadas }
+}
+
+/** Descarta el conteo sin tocar existencias. Queda guardado (quién y por qué), pero ya no admite cambios. */
+export async function cancelarConteoEnTx(tx: Tx, companyId: string, e: { conteoId: string; motivo?: string | null; ahora?: Date }, ctx: ContextoAuditoria): Promise<{ conteoId: string; numero: string; repetido: boolean }> {
+  const motivo = normalizarTextoLibre(e.motivo, MAX_MOTIVO_CANCELACION, 'El motivo')
+  if (!motivo.ok) fallo('MOTIVO_INVALIDO', motivo.error)
+  const conteo = await bloquearConteo(tx, companyId, e.conteoId)
+  if (conteo.status === 'CANCELLED') return { conteoId: conteo.id, numero: conteo.number, repetido: true }
+  exigirAbierto(conteo)
+  await tx.inventoryCountSession.update({
+    where: { id: conteo.id },
+    data: { status: 'CANCELLED', cancelledAt: e.ahora ?? new Date(), cancelledById: ctx.actorId, cancelReason: motivo.valor },
+  })
+  return { conteoId: conteo.id, numero: conteo.number, repetido: false }
 }

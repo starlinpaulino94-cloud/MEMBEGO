@@ -3,7 +3,7 @@ import { normalizarCapacidades } from '@/modules/catalog/domain'
 import type { ContextoAuditoria } from './auditoria'
 import { MAX_LINEAS_IMPORTACION } from './entradas'
 import { indexarCatalogo, leerImportacion, validarImportacion, type FilaCsv, type InformeImportacion, type VarianteImportable } from './importacion'
-import { registrarEntradaMultipleEnTx, type ResultadoEntradaMultiple } from './service'
+import { importarConteoEnTx, registrarEntradaMultipleEnTx, type ResultadoEntradaMultiple, type ResultadoImportarConteo } from './service'
 
 /**
  * COMMERCE CORE · inventario — INV-2a: importar existencias desde un CSV (la
@@ -72,4 +72,36 @@ export async function aplicarImportacionEnTx(
     ctx
   )
   return { ok: true, resultado: { aplicada: true, entrada } }
+}
+
+// ── INV-2b · Importar lo contado en una hoja ─────────────────────────────────
+
+/** Lee y valida la hoja contada contra el catálogo, sin escribir nada. Una celda vacía significa «no se contó». */
+export async function informeDeConteoImportadoEnTx(tx: Tx, companyId: string, texto: unknown): Promise<ResultadoInforme> {
+  const lectura = leerImportacion(texto, 'CONTEO')
+  if (!lectura.ok) return { ok: false, error: lectura.error }
+  const conValor = lectura.filas.filter((f) => f.cantidad !== '')
+  // Un archivo con más filas contadas que el tope se informa SIN consultar el catálogo.
+  const catalogo = conValor.length > MAX_LINEAS_IMPORTACION ? [] : await resolverCatalogoDeImportacionEnTx(tx, companyId, conValor)
+  return { ok: true, informe: validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'CONTEO') }
+}
+
+export type ResultadoAplicacionConteo = ({ aplicada: true } & ResultadoImportarConteo) | { aplicada: false; informe: InformeImportacion }
+
+/**
+ * Carga la hoja contada en el conteo abierto: si el informe tiene UN solo error
+ * no escribe nada y lo devuelve; si está limpio, lo registra todo junto. Como
+ * al aplicar entradas, NO reutiliza la revisión de antes: vuelve a leer y validar.
+ */
+export async function aplicarImportacionDeConteoEnTx(
+  tx: Tx,
+  companyId: string,
+  e: { conteoId: string; texto: unknown },
+  ctx: ContextoAuditoria
+): Promise<{ ok: true; resultado: ResultadoAplicacionConteo } | { ok: false; error: string }> {
+  const r = await informeDeConteoImportadoEnTx(tx, companyId, e.texto)
+  if (!r.ok) return r
+  if (!r.informe.ok) return { ok: true, resultado: { aplicada: false, informe: r.informe } }
+  const resultado = await importarConteoEnTx(tx, companyId, { conteoId: e.conteoId, lineas: r.informe.lineas }, ctx)
+  return { ok: true, resultado: { aplicada: true, ...resultado } }
 }

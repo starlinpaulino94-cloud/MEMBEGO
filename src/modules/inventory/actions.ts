@@ -39,11 +39,17 @@ import { formSubmitLimiter } from '@/lib/rate-limit'
 import type { SessionUser } from '@/types'
 import type { ContextoAuditoria } from './auditoria'
 import { avisarStockBajo } from './avisos'
+import type { ModoConteo } from './conteos'
 import { InventarioError } from './errores'
 import type { InformeImportacion } from './importacion'
-import { aplicarImportacionEnTx, informeDeImportacionEnTx } from './importar'
+import { aplicarImportacionDeConteoEnTx, aplicarImportacionEnTx, informeDeConteoImportadoEnTx, informeDeImportacionEnTx } from './importar'
 import { buscarVariantesParaEntradaEnTx, historialDeVarianteEnTx, type HistorialPagina, type VarianteBuscable } from './queries'
 import {
+  abrirConteoEnTx,
+  aplicarConteoEnTx,
+  cancelarConteoEnTx,
+  quitarLineaDeConteoEnTx,
+  registrarConteoProductoEnTx,
   ajustarEnTx,
   configurarUmbralEnTx,
   configurarUmbralOtrasSucursalesEnTx,
@@ -54,6 +60,8 @@ import {
   registrarEntradaMultipleEnTx,
   resolverDanadoEnTx,
   transferirEnTx,
+  type LineaRechazada,
+  type ResumenConteoAplicado,
   type SaldoVista,
 } from './service'
 
@@ -368,6 +376,170 @@ export async function aplicarImportacion(entrada: {
     if (!r.resultado.aplicada) return { ok: true, aplicada: false, informe: sinLineas(r.resultado.informe) }
     refrescar()
     return { ok: true, aplicada: true, entrada: r.resultado.entrada }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+// ── INV-2b · conteo físico por sucursal ──────────────────────────────────────
+
+export interface ResumenAperturaConteo {
+  conteoId: string
+  numero: string
+  /** true si esa persona ya tenía abierto el conteo de la sucursal: es el mismo. */
+  repetido: boolean
+}
+
+/**
+ * Abre el conteo de una sucursal (uno solo abierto por sucursal). La función es
+ * `ajustar`: contar es el paso previo de un ajuste, y aplicarlo los hace.
+ */
+export async function iniciarConteo(entrada: { sucursalId: string; nota?: string | null }): Promise<ResultadoInventario<ResumenAperturaConteo>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => abrirConteoEnTx(tx, c.companyId, { sucursalId: texto(entrada.sucursalId), nota: entrada.nota }, c.ctx))
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * Cuenta UN producto (un escaneo suma; escribir la cantidad la fija). Sin límite
+ * de envíos a propósito: un lector dispara varias capturas por segundo.
+ */
+export async function contarProductoEnConteo(entrada: {
+  conteoId: string
+  varianteId: string
+  cantidad: number
+  modo: ModoConteo
+}): Promise<ResultadoInventario<{ varianteId: string; contado: number; nueva: boolean; lineas: number }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      registrarConteoProductoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId), cantidad: entrada.cantidad, modo: entrada.modo }, c.ctx)
+    )
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Saca un producto del conteo abierto (lo que no tiene línea no se ajusta). */
+export async function quitarProductoDelConteo(entrada: { conteoId: string; varianteId: string }): Promise<ResultadoInventario<{ quitada: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => quitarLineaDeConteoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId) }))
+    refrescar()
+    return { ok: true, quitada: r.quitada }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * Busca productos para contar: nombre, SKU o código de barras. A CIEGAS: no
+ * pide sucursal, así que no devuelve lo que hay (`disponible` siempre es null).
+ */
+export async function buscarProductosParaConteo(q: string): Promise<ResultadoInventario<{ productos: VarianteBuscable[] }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof q !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const productos = await conEmpresa(c.companyId, (tx) => buscarVariantesParaEntradaEnTx(tx, c.companyId, q, null))
+    return { ok: true, productos }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Lee la hoja contada y dice, fila por fila, qué pasaría. NO escribe nada. */
+export async function previsualizarConteoImportado(entrada: { texto: string }): Promise<ResultadoInventario<{ informe: InformeVista }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  if (!(await formSubmitLimiter(`inv-conteo-importar:${c.ctx.actorId ?? c.companyId}`))) return { ok: false, error: 'Demasiados intentos. Espera un momento.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => informeDeConteoImportadoEnTx(tx, c.companyId, entrada.texto))
+    if (!r.ok) return { ok: false, error: r.error }
+    return { ok: true, informe: sinLineas(r.informe) }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * Carga la hoja contada en el conteo abierto: vuelve a leerla y validarla y, solo
+ * si no tiene un error, la registra todo junta. Un producto que ya tenía línea
+ * se reemplaza. Con un error devuelve el informe y no escribe nada.
+ */
+export async function importarConteo(entrada: {
+  conteoId: string
+  texto: string
+}): Promise<ResultadoInventario<{ aplicada: true; nuevas: number; reemplazadas: number; lineas: number } | { aplicada: false; informe: InformeVista }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  if (!(await formSubmitLimiter(`inv-conteo-importar:${c.ctx.actorId ?? c.companyId}`))) return { ok: false, error: 'Demasiados intentos. Espera un momento.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => aplicarImportacionDeConteoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), texto: entrada.texto }, c.ctx))
+    if (!r.ok) return { ok: false, error: r.error }
+    if (!r.resultado.aplicada) return { ok: true, aplicada: false, informe: sinLineas(r.resultado.informe) }
+    refrescar()
+    const { nuevas, reemplazadas, lineas } = r.resultado
+    return { ok: true, aplicada: true, nuevas, reemplazadas, lineas }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * APLICA el conteo: un ajuste por producto por la diferencia, todo o nada. Si
+ * alguna línea no se puede aplicar (dejaría menos de lo apartado), no se aplica
+ * ninguna y se devuelven las que fallan. Tras confirmar, los productos cuyo
+ * vendible bajó pasan por el aviso de stock bajo, igual que un faltante a mano.
+ */
+export async function aplicarConteo(entrada: {
+  conteoId: string
+}): Promise<
+  ResultadoInventario<
+    { aplicada: true; numero: string; resumen: ResumenConteoAplicado; repetido: boolean } | { aplicada: false; numero: string; rechazadas: LineaRechazada[] }
+  >
+> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => aplicarConteoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId) }, c.ctx))
+    if (!r.aplicada) return { ok: true, aplicada: false, numero: r.numero, rechazadas: r.rechazadas }
+    refrescar()
+    if (!r.repetido && r.variantesBajadas.length > 0) {
+      const bajadas = r.variantesBajadas
+      after(() => avisarStockBajo(c.companyId, bajadas))
+    }
+    return { ok: true, aplicada: true, numero: r.numero, resumen: r.resumen, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Descarta el conteo sin tocar existencias; queda guardado con quién y por qué. */
+export async function cancelarConteo(entrada: { conteoId: string; motivo?: string | null }): Promise<ResultadoInventario<{ numero: string }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => cancelarConteoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), motivo: entrada.motivo }, c.ctx))
+    refrescar()
+    return { ok: true, numero: r.numero }
   } catch (e) {
     return aError(e)
   }

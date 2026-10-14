@@ -51,12 +51,20 @@ test('todas las acciones exportadas autorizan ANTES de tocar la base', () => {
   const exportadas = [...sinComentarios.matchAll(/export async function (\w+)/g)].map((m) => m[1])
   assert.deepEqual(exportadas.sort(), [
     'ajustarInventario',
+    'aplicarConteo',
     'aplicarImportacion',
+    'buscarProductosParaConteo',
     'buscarProductosParaEntrada',
+    'cancelarConteo',
     'cargarMasHistorialInventario',
     'contarInventario',
+    'contarProductoEnConteo',
     'fijarUmbralInventario',
+    'importarConteo',
+    'iniciarConteo',
+    'previsualizarConteoImportado',
     'previsualizarImportacion',
+    'quitarProductoDelConteo',
     'registrarDanoInventario',
     'registrarDevolucionInventario',
     'registrarEntradaInventario',
@@ -438,4 +446,159 @@ test('INV-2a · la migración es aditiva e idempotente: solo crea objetos nuevos
 
 test('INV-2a · /api/health avisa si falta la tabla de entradas (despliegue adelantado a la base)', () => {
   assert.match(leer('src/app/api/health/route.ts'), /'inventory_receipts\.esquema', to_regclass\('public\.inventory_receipts'\) IS NOT NULL/)
+})
+
+// ── INV-2b · conteo físico por sucursal ──────────────────────────────────────
+
+const CONTEOS = 'src/app/(admin)/admin/inventario/conteos'
+
+test('INV-2b · las pantallas de conteos se guardan como las demás: rol, empresa de la sesión, nada de cliente global ni de empresa por la URL', () => {
+  const paginas = ['page.tsx', '[id]/page.tsx', '[id]/revisar/page.tsx', '[id]/importar/page.tsx']
+  for (const pagina of paginas) {
+    const s = sinComent(leer(`${CONTEOS}/${pagina}`))
+    assert.match(s, /requireRole\(ADMIN_ROLES\)/, `${pagina} sin guardia de rol`)
+    assert.match(s, /requireCompanyContext\(user\)/, `${pagina} no resuelve la empresa de la sesión`)
+    assert.match(s, /conEmpresa\(companyId/, `${pagina} no lee dentro de conEmpresa`)
+    assert.doesNotMatch(s, /\bprisma\./, `${pagina} usa el cliente global`)
+    assert.doesNotMatch(s, /sp\.companyId|sp\.empresa|params\.companyId/, `${pagina} toma la empresa de la URL`)
+    assert.match(s, /describirFalloDeCarga\(/, `${pagina} no distingue una migración pendiente`)
+    assert.match(s, /puedeFuncion\('inventario', 'ajustar'\)/, `${pagina} no esconde la forma a quien no puede ajustar`)
+  }
+  // Un conteo ajeno o inventado se ve igual: 404.
+  for (const pagina of ['[id]/page.tsx', '[id]/revisar/page.tsx', '[id]/importar/page.tsx']) assert.match(leer(`${CONTEOS}/${pagina}`), /notFound\(\)/, pagina)
+  assert.match(leer(`${CONTEOS}/page.tsx`), /<NavegacionInventario actual="conteos"/)
+  assert.match(leer('src/components/inventario/NavegacionInventario.tsx'), /id: 'conteos'[\s\S]*href: '\/admin\/inventario\/conteos'/)
+})
+
+test('INV-2b · las descargas de conteos se guardan SOLAS y la empresa sale de la sesión; la hoja en blanco se lee A CIEGAS', () => {
+  const rutas: Array<[string, RegExp]> = [
+    ['[id]/hoja/route.ts', /requireSection\('inventario', 'ajustar'\)/],
+    ['[id]/exportar/route.ts', /requireSection\('inventario'\)/],
+  ]
+  for (const [ruta, guardia] of rutas) {
+    const s = sinComent(leer(`${CONTEOS}/${ruta}`))
+    assert.match(s, guardia, ruta)
+    assert.match(s, /if \(!user\) return NextResponse\.json\(\{ error: 'No autorizado\.' \}, \{ status: 403 \}\)/, ruta)
+    assert.match(s, /resolveCompanyId\(user\)/, ruta)
+    assert.ok(s.indexOf('requireSection(') < s.indexOf('conEmpresa('), `${ruta} toca la base antes de autorizar`)
+    assert.doesNotMatch(s, /\bprisma\./, ruta)
+    assert.match(s, /conteoDetalleEnTx\(tx, companyId, id,/, `${ruta}: el id de la URL solo identifica el conteo, dentro de la empresa de la sesión`)
+    assert.match(s, /status: 404/, ruta)
+  }
+  const hoja = sinComent(leer(`${CONTEOS}/[id]/hoja/route.ts`))
+  assert.match(hoja, /conEsperado: false/, 'la hoja en blanco no puede leer lo que decía el sistema')
+  assert.doesNotMatch(hoja, /conEsperado: true/)
+  assert.match(sinComent(leer(`${CONTEOS}/[id]/exportar/route.ts`)), /conEsperado: true/, 'el informe de diferencias sí lleva lo esperado')
+})
+
+test('INV-2b · CONTEO A CIEGAS: ni la captura, ni la importación, ni la búsqueda ven lo que decía el sistema', () => {
+  // La pantalla del conteo lee primero a ciegas y solo relee con lo esperado si ya NO está abierto.
+  const detalle = sinComent(leer(`${CONTEOS}/[id]/page.tsx`))
+  const ciego = detalle.indexOf('conEsperado: false')
+  const completo = detalle.indexOf('conEsperado: true')
+  assert.ok(ciego >= 0 && completo > ciego, 'la lectura a ciegas va primero')
+  assert.match(detalle, /ciego\.estado !== 'OPEN'\) return[\s\S]*conEsperado: true/, 'lo esperado solo se lee cuando el conteo ya no está abierto')
+  assert.match(sinComent(leer(`${CONTEOS}/[id]/importar/page.tsx`)), /conEsperado: false/)
+  assert.doesNotMatch(sinComent(leer(`${CONTEOS}/[id]/importar/page.tsx`)), /conEsperado: true/)
+  // Los componentes de captura no saben que existe: ni el nombre del campo.
+  for (const f of ['CapturaConteo.tsx', 'FilaConteoEditable.tsx', 'ImportarConteoForm.tsx', 'IniciarConteoForm.tsx']) {
+    const s = sinComent(leer(`src/components/inventario/${f}`))
+    assert.doesNotMatch(s, /esperado|expected|existenciaAntes|onHand/i, `${f} toca lo que decía el sistema`)
+  }
+  // La búsqueda para contar no pide sucursal: devuelve `disponible: null`.
+  const accion = sinComent(sinComentarios.slice(sinComentarios.indexOf('export async function buscarProductosParaConteo'))).split('\n}\n')[0]
+  assert.match(accion, /buscarVariantesParaEntradaEnTx\(tx, c\.companyId, q, null\)/)
+})
+
+test('INV-2b · las acciones del conteo autorizan con «ajustar» ANTES de tocar la base, limitan los archivos y no toman la empresa de la entrada', () => {
+  const acciones = ['iniciarConteo', 'contarProductoEnConteo', 'quitarProductoDelConteo', 'buscarProductosParaConteo', 'previsualizarConteoImportado', 'importarConteo', 'aplicarConteo', 'cancelarConteo']
+  for (const nombre of acciones) {
+    const cuerpo = sinComentarios.slice(sinComentarios.indexOf(`export async function ${nombre}`)).split('\n}\n')[0]
+    assert.match(cuerpo, /await contexto\('ajustar'\)/, `${nombre} no exige «ajustar»`)
+    assert.ok(cuerpo.indexOf('await contexto(') < cuerpo.indexOf('conEmpresa('), `${nombre} toca la base antes de autorizar`)
+    assert.match(cuerpo, /conEmpresa\(c\.companyId,/, `${nombre} no abre la transacción con la empresa de la sesión`)
+    assert.doesNotMatch(cuerpo, /\bentrada\b[^\n]*company/i, `${nombre} lee una empresa de la entrada`)
+  }
+  for (const nombre of ['previsualizarConteoImportado', 'importarConteo']) {
+    const cuerpo = sinComentarios.slice(sinComentarios.indexOf(`export async function ${nombre}`)).split('\n}\n')[0]
+    assert.match(cuerpo, /formSubmitLimiter\(`inv-conteo-importar:/, `${nombre} no limita las subidas`)
+  }
+  // El lector dispara varias capturas por segundo: contar NO se limita (se perderían conteos).
+  const contar = sinComentarios.slice(sinComentarios.indexOf('export async function contarProductoEnConteo')).split('\n}\n')[0]
+  assert.doesNotMatch(contar, /formSubmitLimiter/)
+  // Tras aplicar, lo que bajó pasa por el aviso de stock bajo FUERA de la transacción y de la respuesta.
+  const aplicar = sinComentarios.slice(sinComentarios.indexOf('export async function aplicarConteo')).split('\n}\n')[0]
+  assert.match(aplicar, /after\(\(\) => avisarStockBajo\(c\.companyId, bajadas\)\)/)
+  assert.match(aplicar, /!r\.repetido/, 'un conteo ya aplicado no vuelve a avisar')
+})
+
+test('INV-2b · el servicio de conteos bloquea el conteo ANTES de leer sus líneas, crea los saldos en orden fijo y escribe los resultados ANTES de cerrarlo', () => {
+  const f = sinComent(leer('src/modules/inventory/service.ts'))
+  const desde = f.indexOf('export async function abrirConteoEnTx')
+  assert.ok(desde > 0)
+  const seccion = f.slice(desde)
+  for (const nombre of ['registrarConteoProductoEnTx', 'quitarLineaDeConteoEnTx', 'importarConteoEnTx', 'aplicarConteoEnTx', 'cancelarConteoEnTx']) {
+    const cuerpo = seccion.slice(seccion.indexOf(`export async function ${nombre}`)).split('\nexport ')[0]
+    assert.match(cuerpo, /await bloquearConteo\(tx, companyId, e\.conteoId\)/, `${nombre} no bloquea el conteo`)
+    const primeraLectura = cuerpo.search(/tx\.inventory(CountLine|Level|CountSession)\./)
+    assert.ok(primeraLectura < 0 || cuerpo.indexOf('bloquearConteo(') < primeraLectura, `${nombre} lee antes de bloquear el conteo`)
+  }
+  const aplicar = seccion.slice(seccion.indexOf('export async function aplicarConteoEnTx')).split('\nexport ')[0]
+  // Orden fijo para crear saldos: dos conteos con los mismos productos nuevos no se interbloquean (ver INV-2a).
+  assert.match(aplicar, /inventoryLevel\.createMany\(\{ data: \[\.\.\.variantes\]\.sort\(\)/)
+  assert.ok(aplicar.indexOf('.sort()') < aplicar.indexOf('await bloquear('), 'primero se crean, ordenados; después se bloquean todos')
+  assert.ok(aplicar.indexOf('await bloquear(') < aplicar.indexOf('escribirMovimientosPorLote('), 'los saldos se bloquean antes de escribir')
+  // El disparador de la base solo deja tocar las líneas mientras el conteo está abierto: el resultado de cada línea va primero.
+  assert.ok(aplicar.indexOf('UPDATE "inventory_count_lines"') > 0 && aplicar.indexOf('UPDATE "inventory_count_lines"') < aplicar.indexOf("status: 'APPLIED'"), 'los resultados se escriben antes de pasar el conteo a «aplicado»')
+  // Todo o nada: si hay rechazadas, no se escribe NADA.
+  assert.ok(aplicar.indexOf('rechazadas.length > 0') < aplicar.indexOf('escribirMovimientosPorLote('), 'las rechazadas cortan antes de escribir')
+  // Y el único que escribe contadores de saldo sigue siendo el par de siempre.
+  assert.equal([...f.matchAll(/UPDATE "inventory_levels"/g)].length, 1, 'ninguna otra puerta escribe saldos')
+})
+
+test('INV-2b · las lecturas nuevas escriben la empresa en CADA consulta', () => {
+  const q = sinComent(leer('src/modules/inventory/queries.ts'))
+  for (const nombre of ['conteosDeLaEmpresaEnTx', 'conteoDetalleEnTx', 'conteoAbiertoDeSucursalEnTx', 'porContarEnTx', 'hojaDeConteoEnTx', 'saldosActualesDeConteoEnTx']) {
+    const f = q.slice(q.indexOf(`export async function ${nombre}`)).split('\nexport ')[0]
+    assert.match(f, /companyId/, `${nombre} no filtra por empresa`)
+    // Cada `where: {…}` escrito en línea debe llevar la empresa a la vista; los `where: donde` apuntan a una constante que también se comprueba.
+    for (const m of f.matchAll(/where: \{([^]{0,160})/g)) assert.match(m[1], /companyId/, `${nombre}: un where sin empresa → ${m[0].slice(0, 60)}`)
+    for (const m of f.matchAll(/const donde = \{([^]{0,160})/g)) assert.match(m[1], /companyId/, `${nombre}: donde sin empresa`)
+  }
+})
+
+test('INV-2b · lo PURO sigue siendo puro, y los componentes de cliente del conteo no arrastran el servidor', () => {
+  for (const archivo of ['conteos.ts', 'entradas.ts', 'importacion.ts']) {
+    const s = leer(`src/modules/inventory/${archivo}`)
+    assert.doesNotMatch(s, /server-only|from '@\/lib\/prisma'|from '@\/lib\/tenant'|@prisma\/client'/, `${archivo} debe seguir siendo puro`)
+  }
+  for (const f of ['CapturaConteo.tsx', 'FilaConteoEditable.tsx', 'ImportarConteoForm.tsx', 'IniciarConteoForm.tsx', 'AplicarConteoForm.tsx']) {
+    const s = leer(`src/components/inventario/${f}`)
+    assert.match(s, /^'use client'/, f)
+    for (const origen of [...s.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])) {
+      assert.doesNotMatch(origen, /modules\/inventory\/(domain|service|queries|auditoria|errores|barrido|importar|errores-pantalla)$/, `${f} importa ${origen}`)
+    }
+  }
+  // El informe de diferencias NO es de cliente (solo pinta) y nunca se monta en la pantalla de captura.
+  assert.doesNotMatch(leer('src/components/inventario/InformeDiferencias.tsx'), /^'use client'/)
+  assert.doesNotMatch(sinComent(leer(`${CONTEOS}/[id]/page.tsx`).split('conteo.estado === \'CANCELLED\'')[0]), /<InformeDiferencias/, 'el informe solo aparece cuando el conteo ya no está abierto')
+})
+
+test('INV-2b · la migración es aditiva e idempotente, un solo conteo abierto por sucursal, y lo cerrado no cambia en la base', () => {
+  const sql = leer('prisma/migrations/20261057_inventory_counts/migration.sql')
+  const sinNotas = sql.replace(/^--.*$/gm, '')
+  assert.doesNotMatch(sinNotas, /\bDROP\s+(TABLE|COLUMN|TYPE)\b|\bALTER\s+TABLE\s+"(?!inventory_count)/i, 'no toca ninguna tabla existente')
+  assert.doesNotMatch(sinNotas, /\bTRUNCATE\s+TABLE|\bDELETE\s+FROM|\bUPDATE\s+"/i)
+  for (const crea of sinNotas.matchAll(/CREATE\s+(TABLE|UNIQUE INDEX|INDEX)\s+(IF NOT EXISTS)?/gi)) assert.ok(crea[2], `«${crea[0]}» sin IF NOT EXISTS: no es idempotente`)
+  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS "inventory_count_sessions_un_abierto_por_sucursal"[\s\S]*WHERE "status" = 'OPEN'/)
+  assert.match(sql, /inventory_count_sessions_sin_cambios[\s\S]*BEFORE UPDATE OR DELETE/)
+  assert.match(sql, /inventory_count_lines_solo_abierta[\s\S]*BEFORE INSERT OR UPDATE OR DELETE/)
+  assert.match(sql, /BEFORE TRUNCATE ON "inventory_count_sessions"/)
+  assert.match(sql, /BEFORE TRUNCATE ON "inventory_count_lines"/)
+  // Sellada: la suma de control del archivo está en SUMAS.txt.
+  assert.match(leer('prisma/migrations/SUMAS.txt'), /20261057_inventory_counts/)
+})
+
+test('INV-2b · /api/health avisa si falta la tabla de conteos (despliegue adelantado a la base)', () => {
+  assert.match(leer('src/app/api/health/route.ts'), /inventory_count_sessions\.esquema', to_regclass\('public\.inventory_count_sessions'\) IS NOT NULL/)
 })

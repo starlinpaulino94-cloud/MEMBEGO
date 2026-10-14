@@ -164,3 +164,42 @@ export function leerFiltrosEntradas(sp: ParametrosUrl): PeticionEntradas {
 export function consultaDeFiltrosEntradas(f: FiltrosEntradas, cursor?: string | null): string {
   return consultaDeFiltros({ sucursalId: f.sucursalId, desde: f.desde, hasta: f.hasta, q: f.q }, cursor)
 }
+
+// ── INV-2b · Conteos físicos ─────────────────────────────────────────────────
+
+export interface FiltrosConteos {
+  sucursalId?: string
+  estado?: 'OPEN' | 'APPLIED' | 'CANCELLED'
+  /** `YYYY-MM-DD` en la zona horaria de la empresa, ambos extremos incluidos (fecha de apertura). */
+  desde?: string
+  hasta?: string
+  /** Número del conteo (`CNT-2026-000003`) o texto de su nota. */
+  q?: string
+}
+
+export interface PeticionConteos {
+  filtros: FiltrosConteos
+  cursor: string | null
+}
+
+/** Lee la URL de la lista de conteos con las mismas reglas que la de movimientos y entradas. */
+export function leerFiltrosConteos(sp: ParametrosUrl): PeticionConteos {
+  const { filtros, cursor } = leerFiltrosMovimientos(sp)
+  const estado = primero(sp.estado)
+  return {
+    filtros: {
+      ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+      ...(estado === 'OPEN' || estado === 'APPLIED' || estado === 'CANCELLED' ? { estado } : {}),
+      ...(filtros.desde ? { desde: filtros.desde } : {}),
+      ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+      ...(filtros.q ? { q: filtros.q } : {}),
+    },
+    cursor,
+  }
+}
+
+export function consultaDeFiltrosConteos(f: FiltrosConteos, cursor?: string | null): string {
+  const p = new URLSearchParams(consultaDeFiltros({ sucursalId: f.sucursalId, desde: f.desde, hasta: f.hasta, q: f.q }, cursor))
+  if (f.estado) p.set('estado', f.estado)
+  return p.toString()
+}

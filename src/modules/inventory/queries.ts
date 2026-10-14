@@ -2,7 +2,8 @@ import type { CatalogVariantStatus, InventoryMovementType, InventoryReservationS
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import { disponible, estadoDeStock, type EstadoStock } from './domain'
-import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosEntradas, type FiltrosMovimientos } from './filtros'
+import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosConteos, type FiltrosEntradas, type FiltrosMovimientos } from './filtros'
+import { MAX_POR_CONTAR_VISIBLES, TOPE_FILAS_HOJA, type EstadoConteo } from './conteos'
 import { limiteDiaLocal } from '@/modules/reportes/rango'
 
 /**
@@ -907,4 +908,274 @@ export async function buscarVariantesParaEntradaEnTx(tx: Tx, companyId: string, 
     })
   }
   return salida.slice(0, tope)
+}
+
+// ── INV-2b · Conteos físicos ─────────────────────────────────────────────────
+
+export const POR_PAGINA_CONTEOS = 30
+
+export interface FilaConteo {
+  id: string
+  numero: string
+  estado: EstadoConteo
+  sucursalId: string
+  sucursalNombre: string
+  nota: string | null
+  creadoEn: Date
+  aplicadoEn: Date | null
+  canceladoEn: Date | null
+  abiertoPorNombre: string | null
+  /** Productos capturados: los de ahora si está abierto, los que se aplicaron si ya se aplicó. */
+  lineas: number
+  /** Solo en un conteo aplicado (resumen congelado). */
+  ajustadas: number | null
+  unidadesSobrantes: number | null
+  unidadesFaltantes: number | null
+  sinContar: number | null
+}
+
+export interface ConteosPagina {
+  filas: FilaConteo[]
+  siguiente: string | null
+}
+
+const SELECT_CONTEO = {
+  id: true,
+  number: true,
+  status: true,
+  locationId: true,
+  note: true,
+  createdAt: true,
+  appliedAt: true,
+  cancelledAt: true,
+  openedById: true,
+  countedLines: true,
+  adjustedLines: true,
+  unitsOver: true,
+  unitsShort: true,
+  uncountedLines: true,
+  location: { select: { nombre: true } },
+  _count: { select: { lines: true } },
+} satisfies Prisma.InventoryCountSessionSelect
+
+type ConteoCrudo = Prisma.InventoryCountSessionGetPayload<{ select: typeof SELECT_CONTEO }>
+
+function filaDeConteo(r: ConteoCrudo, nombres: Map<string, string>): FilaConteo {
+  return {
+    id: r.id,
+    numero: r.number,
+    estado: r.status,
+    sucursalId: r.locationId,
+    sucursalNombre: r.location.nombre,
+    nota: r.note,
+    creadoEn: r.createdAt,
+    aplicadoEn: r.appliedAt,
+    canceladoEn: r.cancelledAt,
+    abiertoPorNombre: r.openedById ? (nombres.get(r.openedById) ?? null) : null,
+    lineas: r.status === 'APPLIED' ? (r.countedLines ?? r._count.lines) : r._count.lines,
+    ajustadas: r.adjustedLines,
+    unidadesSobrantes: r.unitsOver,
+    unidadesFaltantes: r.unitsShort,
+    sinContar: r.uncountedLines,
+  }
+}
+
+/**
+ * Los conteos de la empresa, del más reciente al más antiguo, con los filtros de
+ * la pantalla. Paginado por cursor (`createdAt|id`) como movimientos y entradas.
+ */
+export async function conteosDeLaEmpresaEnTx(
+  tx: Tx,
+  companyId: string,
+  f: FiltrosConteos,
+  opciones: { zonaHoraria: string; cursor?: string | null; limite?: number }
+): Promise<ConteosPagina> {
+  const limite = Math.max(1, Math.min(opciones.limite ?? POR_PAGINA_CONTEOS, 200))
+  const antes = leerCursor(opciones.cursor)
+  const q = f.q?.trim()
+  const fechas = rangoDeFechas(f, opciones.zonaHoraria)
+  const filas = await tx.inventoryCountSession.findMany({
+    where: {
+      companyId,
+      ...(f.sucursalId ? { locationId: f.sucursalId } : {}),
+      ...(f.estado ? { status: f.estado } : {}),
+      ...(fechas.gte || fechas.lt ? { createdAt: fechas } : {}),
+      ...(q ? { OR: [{ number: { contains: q, mode: 'insensitive' } }, { note: { contains: q, mode: 'insensitive' } }] } : {}),
+      ...(antes ? { AND: [{ OR: [{ createdAt: { lt: antes.creadoEn } }, { createdAt: antes.creadoEn, id: { lt: antes.id } }] }] } : {}),
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limite + 1,
+    select: SELECT_CONTEO,
+  })
+  const hayMas = filas.length > limite
+  const pagina = hayMas ? filas.slice(0, limite) : filas
+  const nombres = await nombresDeUsuarios(tx, pagina.map((r) => r.openedById))
+  const ultimo = pagina[pagina.length - 1]
+  return { filas: pagina.map((r) => filaDeConteo(r, nombres)), siguiente: hayMas && ultimo ? armarCursor(ultimo.createdAt, ultimo.id) : null }
+}
+
+export interface LineaDeConteo {
+  varianteId: string
+  sku: string
+  barcode: string | null
+  itemNombre: string
+  nombreVariante: string
+  esDefault: boolean
+  contado: number
+  /** Lo que decía el sistema al contar. null cuando se pide a ciegas (la pantalla de captura no lo recibe). */
+  esperado: number | null
+  contadoPorNombre: string | null
+  contadoEn: Date
+  /** Solo en un conteo aplicado: las existencias reales justo antes y justo después del ajuste. */
+  existenciaAntes: number | null
+  existenciaDespues: number | null
+  ajustado: boolean
+}
+
+export interface DetalleConteo extends FilaConteo {
+  aplicadoPorNombre: string | null
+  canceladoPorNombre: string | null
+  motivoCancelacion: string | null
+  detalle: LineaDeConteo[]
+}
+
+/**
+ * Un conteo con todas sus líneas; null si no existe o es de otra empresa (se ven
+ * igual a propósito). `conEsperado: false` es el CONTEO A CIEGAS: lo que decía
+ * el sistema ni siquiera sale de la base hacia la pantalla de captura, para que
+ * nadie cuente «hasta que cuadre».
+ */
+export async function conteoDetalleEnTx(tx: Tx, companyId: string, id: string, opciones: { conEsperado: boolean }): Promise<DetalleConteo | null> {
+  if (typeof id !== 'string' || id === '' || id.length > 120) return null
+  const r = await tx.inventoryCountSession.findFirst({
+    where: { id, companyId },
+    select: {
+      ...SELECT_CONTEO,
+      appliedById: true,
+      cancelledById: true,
+      cancelReason: true,
+      lines: {
+        orderBy: [{ countedAt: 'desc' }, { id: 'desc' }],
+        select: {
+          catalogVariantId: true,
+          counted: true,
+          expected: true,
+          countedById: true,
+          countedAt: true,
+          onHandBefore: true,
+          onHandAfter: true,
+          movementId: true,
+          variant: { select: { sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } } } },
+        },
+      },
+    },
+  })
+  if (!r) return null
+  const nombres = await nombresDeUsuarios(tx, [r.openedById, r.appliedById, r.cancelledById, ...r.lines.map((l) => l.countedById)])
+  return {
+    ...filaDeConteo(r, nombres),
+    aplicadoPorNombre: r.appliedById ? (nombres.get(r.appliedById) ?? null) : null,
+    canceladoPorNombre: r.cancelledById ? (nombres.get(r.cancelledById) ?? null) : null,
+    motivoCancelacion: r.cancelReason,
+    detalle: r.lines.map((l) => ({
+      varianteId: l.catalogVariantId,
+      sku: l.variant.sku,
+      barcode: l.variant.barcode,
+      itemNombre: l.variant.item.name,
+      nombreVariante: l.variant.name,
+      esDefault: l.variant.isDefault,
+      contado: l.counted,
+      esperado: opciones.conEsperado ? l.expected : null,
+      contadoPorNombre: l.countedById ? (nombres.get(l.countedById) ?? null) : null,
+      contadoEn: l.countedAt,
+      existenciaAntes: opciones.conEsperado ? l.onHandBefore : null,
+      existenciaDespues: opciones.conEsperado ? l.onHandAfter : null,
+      ajustado: l.movementId !== null,
+    })),
+  }
+}
+
+export interface ConteoAbierto {
+  id: string
+  numero: string
+}
+
+/** El conteo abierto de una sucursal, si hay (como mucho uno). */
+export async function conteoAbiertoDeSucursalEnTx(tx: Tx, companyId: string, sucursalId: string): Promise<ConteoAbierto | null> {
+  const r = await tx.inventoryCountSession.findFirst({ where: { companyId, locationId: sucursalId, status: 'OPEN' }, select: { id: true, number: true } })
+  return r ? { id: r.id, numero: r.number } : null
+}
+
+export interface ProductoPorContar {
+  varianteId: string
+  sku: string
+  nombre: string
+}
+
+/**
+ * Los productos con existencias en la sucursal del conteo que todavía no tienen
+ * línea: solo NOMBRES, sin cantidades (conteo a ciegas). Sirve para no dejar
+ * pasillos sin contar. El total siempre es exacto; la lista se acota.
+ */
+export async function porContarEnTx(tx: Tx, companyId: string, conteoId: string, sucursalId: string): Promise<{ total: number; items: ProductoPorContar[] }> {
+  const donde = { companyId, locationId: sucursalId, onHand: { gt: 0 }, variant: { countLines: { none: { sessionId: conteoId } } } } satisfies Prisma.InventoryLevelWhereInput
+  const [total, filas] = await Promise.all([
+    tx.inventoryLevel.count({ where: donde }),
+    tx.inventoryLevel.findMany({
+      where: donde,
+      orderBy: [{ variant: { item: { name: 'asc' } } }, { variant: { position: 'asc' } }, { id: 'asc' }],
+      take: MAX_POR_CONTAR_VISIBLES,
+      select: { catalogVariantId: true, variant: { select: { sku: true, name: true, isDefault: true, item: { select: { name: true } } } } },
+    }),
+  ])
+  return {
+    total,
+    items: filas.map((l) => ({
+      varianteId: l.catalogVariantId,
+      sku: l.variant.sku,
+      nombre: l.variant.isDefault ? l.variant.item.name : `${l.variant.item.name} · ${l.variant.name}`,
+    })),
+  }
+}
+
+export interface FilaHojaDeConteo {
+  sku: string
+  barcode: string | null
+  producto: string
+}
+
+/**
+ * La HOJA DE CONTEO EN BLANCO de una sucursal: qué productos tienen existencias,
+ * sin decir cuántas (para contar en papel o en Excel y subir el resultado). Es el
+ * conteo a ciegas llevado al papel.
+ */
+export async function hojaDeConteoEnTx(tx: Tx, companyId: string, sucursalId: string): Promise<{ filas: FilaHojaDeConteo[]; truncado: boolean }> {
+  const filas = await tx.inventoryLevel.findMany({
+    where: { companyId, locationId: sucursalId, onHand: { gt: 0 } },
+    orderBy: [{ variant: { item: { name: 'asc' } } }, { variant: { position: 'asc' } }, { id: 'asc' }],
+    take: TOPE_FILAS_HOJA + 1,
+    select: { variant: { select: { sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } } } } },
+  })
+  const truncado = filas.length > TOPE_FILAS_HOJA
+  return {
+    filas: (truncado ? filas.slice(0, TOPE_FILAS_HOJA) : filas).map((l) => ({
+      sku: l.variant.sku,
+      barcode: l.variant.barcode,
+      producto: l.variant.isDefault ? l.variant.item.name : `${l.variant.item.name} · ${l.variant.name}`,
+    })),
+    truncado,
+  }
+}
+
+/**
+ * Las existencias de AHORA de los productos de un conteo, por variante. Sirve para
+ * avisar de antemano qué líneas no se podrán aplicar (dejarían menos de lo
+ * apartado); aplicar vuelve a comprobarlo bajo candado.
+ */
+export async function saldosActualesDeConteoEnTx(tx: Tx, companyId: string, conteoId: string, sucursalId: string): Promise<Map<string, { onHand: number; reserved: number; damaged: number }>> {
+  const filas = await tx.inventoryLevel.findMany({
+    where: { companyId, locationId: sucursalId, variant: { countLines: { some: { sessionId: conteoId } } } },
+    select: { catalogVariantId: true, onHand: true, reserved: true, damaged: true },
+  })
+  return new Map(filas.map((f) => [f.catalogVariantId, { onHand: f.onHand, reserved: f.reserved, damaged: f.damaged }]))
 }

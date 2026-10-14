@@ -99,6 +99,13 @@ export function normalizarEncabezado(h: string): string {
 const ALIAS_SKU = new Set(['sku', 'codigo_sku', 'cod_sku'])
 const ALIAS_CODIGO = new Set(['codigo_de_barras', 'codigo_barras', 'barcode', 'ean', 'upc', 'gtin', 'cod_barras'])
 const ALIAS_CANTIDAD = new Set(['cantidad', 'unidades', 'qty', 'quantity', 'cantidad_recibida'])
+/** El conteo físico acepta además los nombres con que se llama a lo contado. */
+const ALIAS_CONTADO = new Set(['contado', 'conteo', 'cantidad_contada', 'contada', 'cantidad', 'unidades', 'qty', 'quantity'])
+
+/** Qué se importa: unas entradas de mercancía (cantidad ≥ 1) o un conteo físico (contado ≥ 0, y una celda vacía es «no se contó»). */
+export type TipoImportacion = 'ENTRADA' | 'CONTEO'
+
+const NOMBRE_COLUMNA: Record<TipoImportacion, string> = { ENTRADA: 'cantidad', CONTEO: 'contado' }
 
 export interface FilaCsv {
   /** Número de línea en el archivo (1 = encabezado; la primera de datos es la 2): el que ve la persona en su hoja. */
@@ -111,7 +118,7 @@ export interface FilaCsv {
 export type LecturaCsv = { ok: true; filas: FilaCsv[]; delimitador: Delimitador } | { ok: false; error: string }
 
 /** Lee el texto de un archivo a filas con SKU/código y cantidad. No mira la base. */
-export function leerImportacion(texto: unknown): LecturaCsv {
+export function leerImportacion(texto: unknown, tipo: TipoImportacion = 'ENTRADA'): LecturaCsv {
   if (typeof texto !== 'string') return { ok: false, error: 'No se pudo leer el archivo.' }
   if (texto.length > MAX_CARACTERES_IMPORTACION) return { ok: false, error: 'El archivo es demasiado grande (máximo 2 MB). Divídelo en varios.' }
   const limpio = texto.replace(/^\uFEFF/, '')
@@ -126,11 +133,13 @@ export function leerImportacion(texto: unknown): LecturaCsv {
   const encabezados = (filas[0] ?? []).map(normalizarEncabezado)
   const iSku = encabezados.findIndex((h) => ALIAS_SKU.has(h))
   const iCodigo = encabezados.findIndex((h) => ALIAS_CODIGO.has(h))
-  const iCantidad = encabezados.findIndex((h) => ALIAS_CANTIDAD.has(h))
+  const iCantidad = encabezados.findIndex((h) => (tipo === 'CONTEO' ? ALIAS_CONTADO : ALIAS_CANTIDAD).has(h))
   if (iCantidad < 0 || (iSku < 0 && iCodigo < 0)) {
-    return { ok: false, error: 'La primera fila debe tener los encabezados «sku» (o «codigo_de_barras») y «cantidad». Descarga la plantilla para ver el formato.' }
+    return { ok: false, error: `La primera fila debe tener los encabezados «sku» (o «codigo_de_barras») y «${NOMBRE_COLUMNA[tipo]}». Descarga ${tipo === 'CONTEO' ? 'la hoja de conteo' : 'la plantilla'} para ver el formato.` }
   }
-  const celda = (f: string[], i: number) => (i < 0 ? '' : (f[i] ?? '').trim())
+  // La hoja en blanco que descarga la app entrecomilla con un apóstrofo lo que Excel evaluaría como fórmula (`'=ABC`):
+  // al leerla de vuelta se quita, para que el SKU sea el mismo que en el catálogo.
+  const celda = (f: string[], i: number) => (i < 0 ? '' : (f[i] ?? '').trim().replace(/^'(?=[=+\-@])/, ''))
   const datos: FilaCsv[] = []
   for (let n = 1; n < filas.length; n++) {
     const f = filas[n]
@@ -195,18 +204,21 @@ export interface InformeImportacion {
   vistaPrevia: LineaVistaPrevia[]
   /** Las líneas para el servicio; vacío si hay errores (no se aplica nada a medias). */
   lineas: LineaEntrada[]
+  /** Solo en un conteo: filas con la celda vacía, que significan «no se contó» y no se tocan. */
+  omitidas?: number
 }
 
 const NOTACION_CIENTIFICA = /^\d+([.,]\d+)?e\+?\d+$/i
 const ENTERO = /^\d{1,7}$/
 
-function cantidadDe(texto: string): { ok: true; valor: number } | { ok: false; mensaje: string } {
+function cantidadDe(texto: string, minimo: number): { ok: true; valor: number } | { ok: false; mensaje: string } {
   if (texto === '') return { ok: false, mensaje: 'Falta la cantidad.' }
   if (!ENTERO.test(texto)) {
-    return { ok: false, mensaje: `La cantidad «${texto.slice(0, 20)}» no es un número entero positivo (sin decimales, signos ni separadores de miles).` }
+    const que = minimo === 0 ? 'de cero en adelante' : 'positivo'
+    return { ok: false, mensaje: `La cantidad «${texto.slice(0, 20)}» no es un número entero ${que} (sin decimales, signos ni separadores de miles).` }
   }
   const n = Number(texto)
-  if (n < 1) return { ok: false, mensaje: 'La cantidad debe ser al menos 1.' }
+  if (n < minimo) return { ok: false, mensaje: `La cantidad debe ser al menos ${minimo}.` }
   if (n > CANTIDAD_MAXIMA) return { ok: false, mensaje: `La cantidad no puede pasar de ${CANTIDAD_MAXIMA.toLocaleString('es-DO')}.` }
   return { ok: true, valor: n }
 }
@@ -215,7 +227,9 @@ function cantidadDe(texto: string): { ok: true; valor: number } | { ok: false; m
  * Valida todas las filas contra el catálogo y arma el informe. Cada fila dice
  * QUÉ producto encontró: es la defensa contra el cero que Excel se comió.
  */
-export function validarImportacion(filas: readonly FilaCsv[], catalogo: CatalogoCodigos): InformeImportacion {
+export function validarImportacion(filas: readonly FilaCsv[], catalogo: CatalogoCodigos, tipo: TipoImportacion = 'ENTRADA'): InformeImportacion {
+  const esConteo = tipo === 'CONTEO'
+  let omitidas = 0
   const errores: ErrorFila[] = []
   const avisos = new Set<string>()
   const lineas: LineaEntrada[] = []
@@ -223,13 +237,15 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
   const primeraVez = new Map<string, number>()
   let unidades = 0
 
-  if (filas.length > MAX_LINEAS_IMPORTACION) {
+  // En un conteo la hoja en blanco trae TODOS los productos (hasta miles) y solo importan las filas con algo contado.
+  const conValor = esConteo ? filas.filter((f) => f.cantidad !== '').length : filas.length
+  if (conValor > MAX_LINEAS_IMPORTACION) {
     return {
       ok: false,
       filasLeidas: filas.length,
       productos: 0,
       unidades: 0,
-      errores: [{ fila: 0, mensaje: `El archivo trae ${filas.length} filas y el máximo por archivo es ${MAX_LINEAS_IMPORTACION}. Divídelo en varios.` }],
+      errores: [{ fila: 0, mensaje: `El archivo trae ${conValor} filas${esConteo ? ' con algo contado' : ''} y el máximo por archivo es ${MAX_LINEAS_IMPORTACION}. Divídelo en varios.` }],
       totalErrores: 1,
       avisos: [],
       vistaPrevia: [],
@@ -238,9 +254,14 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
   }
 
   for (const f of filas) {
+    // En un conteo, la celda vacía de la hoja en blanco significa «no se contó»: no es un error y no se toca.
+    if (esConteo && f.cantidad === '') {
+      omitidas++
+      continue
+    }
     // Todos los problemas de UNA fila juntos, en un solo mensaje: quien corrige su hoja los arregla de una vez.
     const problemas: string[] = []
-    const cantidad = cantidadDe(f.cantidad)
+    const cantidad = cantidadDe(f.cantidad, esConteo ? 0 : 1)
     if (!cantidad.ok) problemas.push(cantidad.mensaje)
 
     let variante: VarianteImportable | null = null
@@ -271,7 +292,7 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
           variante = null
         } else {
           primeraVez.set(variante.id, f.fila)
-          if (variante.descontinuada) avisos.add(`«${variante.nombre}» está descontinuado en el catálogo; entra al inventario igual.`)
+          if (variante.descontinuada) avisos.add(`«${variante.nombre}» está descontinuado en el catálogo; ${esConteo ? 'se cuenta' : 'entra al inventario'} igual.`)
         }
       }
     }
@@ -288,6 +309,7 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
 
   const ok = errores.length === 0 && lineas.length > 0
   return {
+    ...(esConteo ? { omitidas } : {}),
     ok,
     filasLeidas: filas.length,
     productos: lineas.length,

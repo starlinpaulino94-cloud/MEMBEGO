@@ -4,7 +4,7 @@
 > `/admin/inventario`, sus consumidores (pedidos, checkout, POS, ofertas), el cron, las pruebas y la documentación.
 > Se compara con el inventario del Car Wash (`ProductoInventario`), que es OTRO módulo.
 >
-> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1 o INV-2a ya lo cerraron** (ver §5 y §7).
+> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a o INV-2b ya lo cerraron** (ver §5, §7 y §9).
 
 ## 1. Veredicto
 
@@ -34,7 +34,7 @@ separa un «control de stock» de un módulo de inventario profesional.
 |---|---|---|---|
 | Recepción de mercancía múltiple | Una variante, una sucursal, un formulario por vez | Una factura trae 20–50 líneas: son 20–50 envíos | **INV-2a ✔** |
 | Importar existencias (CSV) | No existe | Abrir una tienda con 300 SKU es imposible a mano | **INV-2a ✔** |
-| Sesión de conteo físico por sucursal | Conteo de una variante a la vez | Un inventario real recorre toda la tienda y necesita informe de varianza | INV-2b |
+| Sesión de conteo físico por sucursal | Conteo de una variante a la vez | Un inventario real recorre toda la tienda y necesita informe de varianza | **INV-2b ✔** |
 | Transferencias con estado | Inmediatas (salen y entran en la misma transacción) | Entre sucursales reales pasan horas o días: falta «enviada → recibida» y recepción parcial | INV-2c |
 | Búsqueda por código de barras | La lista buscaba por nombre y SKU; la variante ya tiene `barcode` | El lector es la forma normal de encontrar un producto en bodega | **INV-1 ✔** |
 
@@ -100,7 +100,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 |---|---|---|---|---|
 | **INV-1 · Visibilidad** | Movimientos de toda la empresa con filtros y CSV; búsqueda y salto por código de barras; avisos de stock bajo en POS y movimientos manuales; reservas vivas de la empresa; umbral en varias sucursales; estado manual advertido | Sin cambios | S | **Hecha** |
 | **INV-2a · Entradas en volumen** | Documento de entrada con varias líneas, número `ENT-AAAA-NNNNNN`, factura y nota; captura con lector; importación CSV todo o nada (hasta 1.000 filas) con revisión previa y plantilla; lista, detalle y CSV de cada entrada | `InventoryReceipt`, `InventoryReceiptLine` (migración `20261056`) | M | **Hecha** (este documento, §7) |
-| INV-2b · Conteo físico por sucursal | Sesión de conteo (una abierta por sucursal), hoja a ciegas, captura por lector o CSV, informe de varianza y ajuste como delta | `InventoryCountSession`/líneas | M | pendiente |
+| **INV-2b · Conteo físico por sucursal** | Sesión de conteo (una abierta por sucursal), a ciegas, captura por lector o por hoja CSV, informe de diferencias con CSV, ajuste por la diferencia (no por el número), todo o nada | `InventoryCountSession`, `InventoryCountLine` (migración `20261057`) | M | **Hecha** (este documento, §9) |
 | INV-2c · Transferencias con estado | «Con envío»: enviada → parcial/recibida o cancelada; recepción parcial; en tránsito visible en la ficha; aviso al destino. La transferencia directa actual se conserva | `InventoryTransfer`/líneas | M | pendiente |
 | INV-3 · Compras y costo | Proveedores y órdenes de compra; costo unitario en entradas; costo promedio ponderado y valor del inventario; COGS; punto de reorden y lista de qué comprar | Proveedores/OC de Commerce Core; `unitCost` en movimientos | L | pendiente |
 | INV-4 · Reportes | Kardex valorizado, rotación y días de inventario, stock sin movimiento, mermas por motivo codificado, margen real; tarjeta de dashboard | Catálogo de motivos | M | pendiente |
@@ -248,3 +248,102 @@ Hallazgos de la propia verificación (importa que se sepan):
   suite completa y pasó 3 de 3 aislada y en la siguiente corrida completa. No toca el inventario; no se modificó.
 - En esta máquina el servidor de E2E imprime muchos `fetch failed … 127.0.0.1:54329`: son llamadas de Supabase Auth a un
   servidor que no existe en el arnés (las sesiones se firman localmente). Ruido previo, no afecta a los resultados.
+
+## 9. INV-2b · qué se hizo
+
+> Segunda de las tres partes de INV-2. Decisiones aprobadas que aplican aquí: lo no contado no se toca; un conteo
+> abierto por sucursal; los ajustes se aplican como DIFERENCIA contra lo que decía el sistema al contar, y se rechazan
+> las líneas que dejarían menos de lo apartado; documentos inmutables una vez aplicados; importación todo o nada con
+> tope de 1.000 filas; y la misma función de permiso `ajustar`, sin funciones nuevas.
+
+- **Un conteo es un documento** — `/admin/inventario/conteos`. Número `CNT-AAAA-NNNNNN`, sucursal, nota, quién lo abrió.
+  Estados **Abierto → Aplicado / Cancelado**. Solo puede haber UNO abierto por sucursal (índice único parcial en la
+  base); abrirlo de nuevo la misma persona devuelve el suyo (un doble clic no abre dos) y otra recibe el aviso con el
+  número que está abierto. Mientras está abierto es un borrador de trabajo (se captura, se corrige, se quita una línea);
+  desde que se aplica o se cancela queda congelado **en la base**, no solo en el servicio.
+- **A ciegas de verdad** — en la pantalla de captura no hay una sola cifra del sistema: `conteoDetalleEnTx(…, { conEsperado:
+  false })` ni siquiera la lee, la búsqueda para contar no pide sucursal (devuelve `disponible: null`) y la hoja en
+  blanco solo lista productos. Una guardia comprueba esto en el código; una prueba E2E, en la pantalla. Lo esperado
+  aparece solo en «Revisar y aplicar» y en el conteo ya cerrado.
+- **Captura** — con lector de código de barras: cada escaneo SUMA (con «unidades por escaneo» para contar por cajas) y
+  entra en una **cola** que se atiende en orden, así que una ráfaga de escaneos no pierde ninguno y el campo nunca se
+  bloquea; escribir el número en la lista lo FIJA (y retoma la foto de lo esperado, porque es un recuento de ese
+  momento). Cada línea guarda lo contado y lo que decía el sistema **en ese momento**. Hasta 1.000 productos por
+  conteo; para seguir, se aplica y se abre otro.
+- **Hoja en blanco y CSV** — `/conteos/[id]/hoja` baja SKU, código de barras y nombre de cada producto con existencias
+  y una columna «contado» vacía (sin decir cuántos hay). Se cuenta en papel o en Excel, se llena «contado» y se sube en
+  `/conteos/[id]/importar`: dos pasos, **todo o nada**, el servidor vuelve a validar al cargar. Una celda vacía significa
+  «no se contó» y no se toca; un 0 es «lo busqué y no hay». El apóstrofo con que la hoja neutraliza un SKU que Excel
+  evaluaría como fórmula se quita al leerla de vuelta. El tope de 1.000 se mide sobre las filas con algo contado, no
+  sobre las miles de la hoja.
+- **Revisar** — `/conteos/[id]/revisar`: resumen (contados, coinciden, sobrantes y faltantes en líneas y en unidades,
+  con existencias y sin contar) y cada producto con esperado, contado y diferencia, de lo que más descuadra a lo que
+  menos. Avisa de antemano qué líneas **hoy no se podrían aplicar**. El informe baja en CSV.
+- **Aplicar** — `aplicarConteoEnTx`, todo o nada y en una transacción: bloquea el conteo, crea los saldos que falten
+  (en orden fijo) y los bloquea juntos en orden de id, y ajusta cada producto por la **diferencia** (contado − esperado
+  al contar) aplicada a lo que hay AHORA. Ejemplo medido: el sistema decía 10, se contó 8 y mientras tanto se
+  vendieron 3 → hay 7 y queda en 5, no en 8; el número contado no pisa las ventas. Antes de rechazar un faltante por
+  reservas se vencen las caducadas que nadie ha barrido. Si alguna línea dejaría menos de lo apartado, **no se aplica
+  ninguna** y se muestran todas las que fallan (se recuentan o se quitan). Cada ajuste es un movimiento `ADJUSTMENT` con
+  el motivo «Conteo físico CNT-…» enlazado a su línea; lo que bajó pasa por el aviso de stock bajo después de
+  confirmar. Aplicar dos veces —también a la vez— no repite nada.
+- **Cancelar** — descarta el conteo sin tocar existencias y guarda quién y por qué.
+- **Degradación** — con la migración sin aplicar, las pantallas dicen exactamente eso (`describirFalloDeCarga`) y
+  `/api/health` lo reporta (`inventory_count_sessions.esquema`).
+
+Archivos principales: `prisma/schema/inventario.prisma`, `prisma/migrations/20261057_inventory_counts/`,
+`src/modules/inventory/{conteos,importar,importacion}.ts` (+ `service`, `queries`, `filtros`, `exportacion`, `actions`),
+`src/components/inventario/{IniciarConteoForm,CapturaConteo,FilaConteoEditable,ImportarConteoForm,AplicarConteoForm,InformeDiferencias}.tsx`,
+`src/app/(admin)/admin/inventario/conteos/`.
+
+### Cómo aplicar la migración (obligatorio y en este orden)
+
+1. **SQL primero**: copiar `prisma/migrations/20261057_inventory_counts/migration.sql` al SQL Editor de Supabase y
+   ejecutarlo (aditivo e idempotente: se puede correr dos veces). Solo crea objetos nuevos y no depende de `20261056`.
+2. **Después el código**. Un código desplegado antes deja las pantallas de conteos con un mensaje claro y el resto
+   intacto, pero abrir un conteo fallaría.
+3. Verificar con `npm run db:doctor` y `/api/health` (debe listar `inventory_count_sessions.esquema` en verde).
+
+## 10. Verificación de INV-2b (2026-10-14)
+
+Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`, las 214 migraciones aplicadas desde vacío, la nueva dos
+veces seguidas sin error y `prisma migrate diff` sin diferencias; no se tocó ninguna base real). Sin Supabase real,
+Vercel, lector de código de barras físico, Excel, móvil ni Safari: **no verificados**.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (los avisos son preexistentes; ninguno en los archivos tocados) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; entrada compartida 856/1000 KB (86 %), trozo mayor 409/600 KB |
+| Unitarias (`bun run test`) | 4248 pruebas: 4241 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest` como en CI) | 696/696, cero omitidas |
+| Pruebas nuevas | 18 puras (`inventario-conteos.test.ts`), 9 guardias nuevas (`inventario-permisos.test.ts`, ya 42), 16 contra PostgreSQL (`inventory-conteos.db.test.ts`) y un recorrido E2E nuevo |
+| E2E (`bun run e2e:limpio`, escritorio) | 68/68 sobre la compilación final: `inventario-admin` (7, con el recorrido nuevo), `comercio-experiencia`, `pedidos-membego`, `pos-membego`, `carrito-checkout`, `catalogo-admin`, `catalogo-api` y `catalogo-publico` |
+| Mutaciones | 43 de 45 detectadas (ver abajo) |
+| Rendimiento (local, sin latencia de red) | 1.000 líneas: importar ≈ 0,2 s, aplicar ≈ 0,6–0,9 s, frente a los 45 s de una transacción |
+
+Qué cubre el recorrido E2E: pestaña vacía → abrir el conteo → pantalla a ciegas (sin cifras del sistema ni cantidades en
+«por contar») → escaneo por código de barras y por SKU con «unidades por escaneo», código inexistente, ráfaga de tres
+escaneos seguidos → corregir escribiendo el número → una venta mientras se cuenta → hoja en blanco → importar un archivo
+con errores (no entra nada) y uno limpio → revisar (esperado, contado, diferencia, resumen) y CSV → aplicar (la venta se
+conserva: 17 + 5 = 22) → conteo aplicado no se captura ni se revisa → historial con «Conteo físico» → un faltante bajo
+lo apartado se avisa de antemano, se rechaza TODO sin mover nada, se corrige y se aplica → cancelar con motivo → id
+inventado, sin sesión y empresa sin la capacidad.
+
+Hallazgos de la propia verificación:
+
+- **Mutaciones que sobrevivieron al principio y obligaron a reforzar pruebas**: leer «existencia antes/después» a ciegas
+  de un conteo ya aplicado (no había aserción), la foto de «esperado» al importar una hoja, y quitar el cerrojo que
+  serializa las aperturas de una sucursal (la prueba aceptaba el error de la base de la misma persona; ahora la misma
+  persona nunca falla). Las 2 que siguen vivas son equivalentes: el `TRUNCATE` propio del disparador de sesiones (como
+  las líneas apuntan a la sesión, vaciarla exige vaciar también las líneas, cuyo disparador lo frena) y el
+  `.sort()` de los saldos al aplicar (las líneas ya salen ordenadas por producto; queda como cinturón y lo fija una
+  guardia estática).
+- **El orden de bloqueo se tuvo en cuenta desde el diseño** por lo aprendido en INV-2a: los saldos nuevos se crean en
+  orden fijo y hay una prueba de carrera de «aplicar un conteo mientras llegan entradas de los mismos productos»
+  (12 rondas × 16 productos nuevos). Esa prueba no distingue el orden de creación por sí sola (las entradas, mucho más
+  cortas, ganan la carrera antes de que el conteo llegue a crear saldos); el orden lo protege la guardia estática y
+  la de INV-2a lo protege en las entradas.
+- **La prueba del ledger** (`inventory.db.test.ts`, 12) se actualizó de nuevo: al apuntar también las líneas de conteo
+  al ledger, vaciarlo junto con las líneas de entrada y de conteo sigue frenado por su disparador.
+- Medido contra la base local, no contra Supabase: la latencia de red por consulta no está en esos tiempos (el número de
+  consultas de aplicar no crece con las líneas).

@@ -1,18 +1,19 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
-export type VistaInventario = 'existencias' | 'movimientos' | 'reservas' | 'entradas'
+export type VistaInventario = 'existencias' | 'movimientos' | 'reservas' | 'entradas' | 'conteos'
 
 const VISTAS: ReadonlyArray<{ id: VistaInventario; etiqueta: string; href: string }> = [
   { id: 'existencias', etiqueta: 'Existencias', href: '/admin/inventario' },
   { id: 'movimientos', etiqueta: 'Movimientos', href: '/admin/inventario/movimientos' },
   { id: 'reservas', etiqueta: 'Reservas', href: '/admin/inventario/reservas' },
   { id: 'entradas', etiqueta: 'Entradas', href: '/admin/inventario/entradas' },
+  { id: 'conteos', etiqueta: 'Conteos', href: '/admin/inventario/conteos' },
 ]
 
 /**
  * Las vistas de la empresa entera del inventario: lo que hay, lo que se movió,
- * lo que está apartado y la mercancía que entró. La ficha de UN producto cuelga
+ * lo que está apartado, la mercancía que entró y los inventarios físicos. La ficha de UN producto cuelga
  * de «Existencias».
  * Componente de servidor: son tres enlaces, no necesita estado.
  */

@@ -1,5 +1,6 @@
 import type { InventoryMovementType } from '@prisma/client'
-import { armarCsvBloques } from '@/lib/csv'
+import { armarCsv, armarCsvBloques } from '@/lib/csv'
+import { ETIQUETA_ESTADO_CONTEO, ETIQUETA_RESULTADO, clasificarDiferencia, diferenciaDeConteo, ordenarPorDiferencia, resumirVarianza, type EstadoConteo } from './conteos'
 import { ETIQUETA_MOVIMIENTO, describirReferencia } from './formato'
 
 /**
@@ -163,6 +164,105 @@ export function entradaToCsv(e: EntradaParaCsv, zonaHoraria: string): string {
         l.cantidad,
         l.existenciaAntes,
         l.existenciaDespues,
+      ]),
+    },
+  ])
+}
+
+// ── INV-2b · Conteos físicos ─────────────────────────────────────────────────
+
+export interface FilaHojaParaCsv {
+  sku: string
+  barcode: string | null
+  producto: string
+}
+
+/**
+ * La HOJA DE CONTEO EN BLANCO de una sucursal: SKU, código de barras y nombre de
+ * cada producto con existencias, y una columna «contado» vacía. NO dice cuántos
+ * hay (conteo a ciegas). Es también el formato que se sube de vuelta: las
+ * columnas `sku`, `codigo_de_barras` y `contado` son las que lee la importación,
+ * y las celdas de `contado` que se dejan vacías significan «no se contó».
+ */
+export function hojaDeConteoToCsv(filas: readonly FilaHojaParaCsv[]): string {
+  return armarCsv(['sku', 'codigo_de_barras', 'producto', 'contado'], filas.map((f) => [SIN_FORMULA(f.sku), SIN_FORMULA(f.barcode), SIN_FORMULA(f.producto), '']))
+}
+
+export interface ConteoParaCsv {
+  numero: string
+  estado: EstadoConteo
+  sucursalNombre: string
+  nota: string | null
+  creadoEn: Date
+  aplicadoEn: Date | null
+  abiertoPorNombre: string | null
+  aplicadoPorNombre: string | null
+  sinContar: number | null
+  detalle: ReadonlyArray<{
+    sku: string
+    barcode: string | null
+    itemNombre: string
+    nombreVariante: string
+    esDefault: boolean
+    contado: number
+    /** null = la lectura fue a ciegas: con eso no se puede armar un informe de diferencias. */
+    esperado: number | null
+    existenciaAntes: number | null
+    existenciaDespues: number | null
+    ajustado: boolean
+  }>
+}
+
+/**
+ * El informe de diferencias de un conteo: encabezado, resumen y una fila por
+ * producto contado, de lo que más descuadra a lo que menos. «Esperado» es lo que
+ * decía el sistema AL CONTAR; en un conteo aplicado, «antes/después» son las
+ * existencias reales del momento de aplicar.
+ */
+export function conteoToCsv(c: ConteoParaCsv, zonaHoraria: string): string {
+  const lineas = c.detalle.map((l) => {
+    if (l.esperado === null) throw new Error('El informe de diferencias necesita lo que decía el sistema: la lectura fue a ciegas.')
+    return { ...l, esperado: l.esperado, nombre: l.esDefault ? l.itemNombre : `${l.itemNombre} · ${l.nombreVariante}` }
+  })
+  const resumen = resumirVarianza(lineas)
+  const aplicado = c.estado === 'APPLIED'
+  return armarCsvBloques([
+    {
+      titulo: 'Conteo físico',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Número', c.numero],
+        ['Estado', ETIQUETA_ESTADO_CONTEO[c.estado]],
+        ['Sucursal', SIN_FORMULA(c.sucursalNombre)],
+        ['Nota', SIN_FORMULA(c.nota)],
+        ['Abierto', fechaHoraCsv(c.creadoEn, zonaHoraria)],
+        ['Abierto por', SIN_FORMULA(c.abiertoPorNombre ?? 'Sistema')],
+        ['Aplicado', c.aplicadoEn ? fechaHoraCsv(c.aplicadoEn, zonaHoraria) : ''],
+        ['Aplicado por', SIN_FORMULA(c.aplicadoPorNombre)],
+        ['Zona horaria', zonaHoraria],
+        ['Productos contados', resumen.lineas],
+        ['Coinciden', resumen.coinciden],
+        ['Con sobrante', resumen.sobrantes],
+        ['Con faltante', resumen.faltantes],
+        ['Unidades sobrantes', resumen.unidadesSobrantes],
+        ['Unidades faltantes', resumen.unidadesFaltantes],
+        ['Con existencias y sin contar', c.sinContar ?? ''],
+      ],
+    },
+    {
+      titulo: 'Diferencias',
+      encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Esperado al contar', 'Contado', 'Diferencia', 'Resultado', 'Existencia antes de ajustar', 'Existencia despues de ajustar', 'Ajustado'],
+      filas: ordenarPorDiferencia(lineas).map((l) => [
+        SIN_FORMULA(l.sku),
+        SIN_FORMULA(l.barcode),
+        SIN_FORMULA(l.nombre),
+        l.esperado,
+        l.contado,
+        diferenciaDeConteo(l.contado, l.esperado),
+        ETIQUETA_RESULTADO[clasificarDiferencia(diferenciaDeConteo(l.contado, l.esperado))],
+        aplicado ? (l.existenciaAntes ?? '') : '',
+        aplicado ? (l.existenciaDespues ?? '') : '',
+        aplicado ? (l.ajustado ? 'Si' : 'No') : '',
       ]),
     },
   ])

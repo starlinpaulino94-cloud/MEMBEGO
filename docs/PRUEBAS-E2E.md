@@ -197,7 +197,13 @@ líneas, factura y nota → su CSV (y una entrada inventada da 404) → existenc
 → lista y filtros (también una URL manipulada) → importación CSV: un archivo con filas malas
 no registra NADA (ni siquiera sus filas buenas) y un archivo limpio sí (una fila por SKU y
 otra por código de barras) → plantilla descargable → sin sesión, o de una empresa sin la
-capacidad, no sale ni una fila. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
+capacidad, no sale ni una fila. **INV-2b** añade el conteo físico: pestaña Conteos vacía → abrir el conteo de
+Principal → pantalla a ciegas (ni una cifra del sistema; los pendientes salen sin cantidades) → escaneo por código y por
+SKU, «unidades por escaneo», código inexistente y una ráfaga de escaneos seguidos (la cola no pierde ninguno) → corregir
+escribiendo el número → una venta mientras se cuenta → hoja en blanco → importar un archivo con errores (no entra nada)
+y uno limpio → revisar (esperado, contado, diferencia) y su CSV → aplicar por la diferencia (la venta se conserva) → un
+faltante bajo lo apartado se avisa, se rechaza todo y, corregido, se aplica → cancelar con motivo → id inventado, sin
+sesión y sin la capacidad. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
 disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
 144 combinaciones tipo×origen×destino las prueban `tests/postgres/inventory.db.test.ts`
 y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba

@@ -142,6 +142,9 @@ model InventoryMovement {
   /// La línea de entrada (INV-2a) que produjo este movimiento, si vino de una.
   receiptLine InventoryReceiptLine?
 
+  /// La línea de conteo (INV-2b) cuyo ajuste produjo este movimiento, si vino de un conteo.
+  countLine InventoryCountLine?
+
   @@unique([companyId, idempotencyKey])
   @@index([inventoryLevelId, createdAt])
   @@index([companyId, createdAt])
@@ -272,4 +275,100 @@ model InventoryReceiptLine {
   @@unique([receiptId, position])
   @@index([companyId, catalogVariantId])
   @@map("inventory_receipt_lines")
+}
+
+// ── Conteo físico por sucursal (INV-2b) ──────────────────────────────────────
+
+enum InventoryCountStatus {
+  /// Se está contando. Las líneas se pueden capturar, corregir y quitar.
+  OPEN
+  /// Se aplicaron los ajustes. Desde aquí el conteo y sus líneas no cambian.
+  APPLIED
+  /// Se descartó sin tocar existencias. Tampoco cambia.
+  CANCELLED
+}
+
+/// Un inventario físico de UNA sucursal. Solo puede haber UNO abierto por
+/// sucursal (índice único parcial en la migración). Al aplicarlo, cada producto
+/// contado genera como mucho un ajuste por la DIFERENCIA (contado − esperado al
+/// contar), de modo que las ventas ocurridas mientras se contaba no se pierden.
+/// Lo que no se contó no se toca.
+model InventoryCountSession {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  /// Correlativo legible por empresa y año: `CNT-2026-000001`.
+  number String
+
+  locationId String
+  location   Sucursal @relation(fields: [locationId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  status InventoryCountStatus @default(OPEN)
+
+  /// Para qué es el conteo («Inventario de cierre de mes»). Texto libre acotado.
+  note String?
+
+  /// Quién lo abrió, lo aplicó o lo canceló. Sin FK: un usuario que se borra no
+  /// puede reescribir la historia.
+  openedById    String?
+  appliedById   String?
+  cancelledById String?
+
+  createdAt    DateTime  @default(now())
+  appliedAt    DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  /// Resumen congelado al aplicar (la lista no recorre las líneas).
+  countedLines   Int?
+  adjustedLines  Int?
+  unitsOver      Int?
+  unitsShort     Int?
+  /// Productos con existencias en la sucursal que NO se contaron (no se tocaron).
+  uncountedLines Int?
+
+  lines InventoryCountLine[]
+
+  @@unique([companyId, number])
+  /// Destino de la FK compuesta de las líneas.
+  @@unique([id, companyId])
+  @@index([companyId, createdAt])
+  @@index([companyId, locationId, status])
+  @@map("inventory_count_sessions")
+}
+
+model InventoryCountLine {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  sessionId String
+  session   InventoryCountSession @relation(fields: [sessionId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// Lo que la persona contó (vendible + apartado; lo dañado no se cuenta).
+  counted  Int
+  /// Lo que decía el sistema en el momento de contar. Es la referencia de la
+  /// diferencia; NO se muestra mientras se cuenta (conteo a ciegas).
+  expected Int
+
+  countedById String?
+  createdAt   DateTime @default(now())
+  /// Cuándo se capturó por última vez (la fecha de referencia de `expected`).
+  countedAt   DateTime @default(now())
+
+  /// Resultado al aplicar. `onHandBefore/After` son las existencias reales de
+  /// ese momento; `movementId` es el ajuste (null si coincidía).
+  onHandBefore Int?
+  onHandAfter  Int?
+  movementId   String?            @unique
+  movement     InventoryMovement? @relation(fields: [movementId], references: [id], onDelete: Restrict)
+
+  /// Un producto, una línea por conteo: contarlo otra vez la corrige.
+  @@unique([sessionId, catalogVariantId])
+  @@index([companyId, catalogVariantId])
+  @@map("inventory_count_lines")
 }
