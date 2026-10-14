@@ -39,9 +39,9 @@ test('los roles acotados (Marketing, Supervisión) no ven el inventario; los ple
 const src = readFileSync('src/modules/inventory/actions.ts', 'utf8')
 const sinComentarios = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-test('las funciones de permiso son «ajustar» y «transferir», y las dos se exigen de verdad', () => {
+test('las funciones de permiso son «ajustar», «costos» y «transferir», y las tres se exigen de verdad', () => {
   const funciones = (FUNCIONES_POR_SECCION.inventario ?? []).map((f) => f.codigo)
-  assert.deepEqual(funciones.sort(), ['ajustar', 'transferir'])
+  assert.deepEqual(funciones.sort(), ['ajustar', 'costos', 'transferir'])
   const usadas = new Set([...sinComentarios.matchAll(/contexto\('(\w+)'\)/g)].map((m) => m[1]))
   for (const m of sinComentarios.matchAll(/operar\(\s*'(\w+)'/g)) usadas.add(m[1])
   for (const f of funciones) assert.ok(usadas.has(f), `la función «${f}» está en el catálogo de permisos y ninguna acción la pide`)
@@ -61,6 +61,7 @@ test('todas las acciones exportadas autorizan ANTES de tocar la base', () => {
     'cargarMasHistorialInventario',
     'contarInventario',
     'contarProductoEnConteo',
+    'corregirCostoInventario',
     'enviarTransferencia',
     'fijarUmbralInventario',
     'importarConteo',
@@ -350,7 +351,7 @@ test('INV-2a · las descargas de entradas se guardan SOLAS (un route handler no 
   }
   const exportar = sinComent(leer('src/app/(admin)/admin/inventario/entradas/[id]/exportar/route.ts'))
   assert.match(exportar, /resolveCompanyId\(user\)/)
-  assert.match(exportar, /entradaDetalleEnTx\(tx, companyId, id\)/, 'el id de la URL solo identifica la entrada, dentro de la empresa de la sesión')
+  assert.match(exportar, /entradaDetalleEnTx\(tx, companyId, id(, \{ conCostos \})?\)/, 'el id de la URL solo identifica la entrada, dentro de la empresa de la sesión')
   assert.match(exportar, /status: 404/)
 })
 
@@ -374,7 +375,7 @@ test('INV-2a · las acciones nuevas autorizan con la función «ajustar», limit
   assert.match(entrada, /origen: 'MANUAL', idempotencyKey/, 'el origen no lo elige el navegador')
   // Aplicar NO reutiliza la revisión que viajó por el navegador: el texto se lee y se valida otra vez en el servidor.
   const imp = sinComent(leer('src/modules/inventory/importar.ts'))
-  assert.match(imp, /const r = await informeDeImportacionEnTx\(tx, companyId, e\.texto\)/)
+  assert.match(imp, /const r = await informeDeImportacionEnTx\(tx, companyId, e\.texto(, \{ permitirCostos: e\.permitirCostos \})?\)/)
   assert.match(imp, /lineas: r\.informe\.lineas/)
   assert.doesNotMatch(sinComentarios, /informe\.lineas|lineas: entrada\.informe/, 'las líneas validadas nunca vienen del navegador')
 })
@@ -731,4 +732,170 @@ test('INV-2c · la migración es aditiva e idempotente, los estados no se saltan
   assert.match(sql, /OLD\."status" = 'PARTIAL' AND NEW\."status" IN \('RECEIVED', 'CANCELLED'\)/)
   assert.match(leer('prisma/migrations/SUMAS.txt'), /20261058_inventory_transfers/)
   assert.match(leer('src/app/api/health/route.ts'), /inventory_transfers\.esquema', to_regclass\('public\.inventory_transfers'\) IS NOT NULL/)
+})
+
+// ── INV-3a · costo y valor del inventario ────────────────────────────────────
+
+const VALOR = 'src/app/(admin)/admin/inventario/valor'
+
+test('INV-3a · la pantalla del valor se guarda como las demás y NO lee nada si quien llega no tiene la función «costos»', () => {
+  const s = sinComent(leer(`${VALOR}/page.tsx`))
+  assert.match(s, /requireRole\(ADMIN_ROLES\)/)
+  assert.match(s, /requireCompanyContext\(user\)/)
+  assert.match(s, /conEmpresa\(companyId/)
+  assert.doesNotMatch(s, /\bprisma\./)
+  assert.doesNotMatch(s, /sp\.companyId|sp\.empresa|params\.companyId/)
+  assert.match(s, /describirFalloDeCarga\(/)
+  assert.match(s, /puedeFuncion\('inventario', 'costos'\)/)
+  // La lectura va dentro de `if (puedeCostos)`: sin la función, la consulta ni se hace.
+  assert.match(s, /if \(puedeCostos\) \{\s*try \{\s*datos = await conEmpresa\(companyId/)
+  assert.ok(s.indexOf("puedeFuncion('inventario', 'costos')") < s.indexOf('conEmpresa('))
+  assert.match(s, /<NavegacionInventario actual="valor"/)
+})
+
+test('INV-3a · la descarga del valor exige la función «costos» ANTES de tocar la base y la empresa sale de la sesión', () => {
+  const s = sinComent(leer(`${VALOR}/exportar/route.ts`))
+  assert.match(s, /requireSection\('inventario', 'costos'\)/)
+  assert.match(s, /if \(!user\) return NextResponse\.json\(\{ error: 'No autorizado\.' \}, \{ status: 403 \}\)/)
+  assert.match(s, /resolveCompanyId\(user\)/)
+  assert.ok(s.indexOf('requireSection(') < s.indexOf('conEmpresa('))
+  assert.doesNotMatch(s, /\bprisma\./)
+  assert.match(s, /valorDelInventarioEnTx\(tx, companyId, f,/)
+})
+
+test('INV-3a · «Valor» solo se ofrece a quien tiene «costos»; la plantilla, la entrada y su CSV llevan costos solo con esa función', () => {
+  const nav = sinComent(leer('src/components/inventario/NavegacionInventario.tsx'))
+  assert.match(nav, /export async function NavegacionInventario/)
+  assert.match(nav, /const verValor = await puedeFuncion\('inventario', 'costos'\)/)
+  assert.match(nav, /v\.id !== 'valor' \|\| verValor/)
+  assert.match(nav, /id: 'valor'[\s\S]*href: '\/admin\/inventario\/valor'/)
+  assert.match(sinComent(leer('src/app/(admin)/admin/inventario/importar/plantilla/route.ts')), /plantillaImportacionCsv\(await puedeFuncion\('inventario', 'costos'\)\)/)
+  for (const ruta of ['src/app/(admin)/admin/inventario/entradas/[id]/page.tsx', 'src/app/(admin)/admin/inventario/entradas/[id]/exportar/route.ts']) {
+    const r = sinComent(leer(ruta))
+    assert.match(r, /const conCostos = await puedeFuncion\('inventario', 'costos'\)/, ruta)
+    assert.match(r, /entradaDetalleEnTx\(tx, companyId, id, \{ conCostos \}\)/, ruta)
+  }
+  // La consulta ni LEE el costo cuando no se pide: lo que no se lee no puede filtrarse.
+  assert.match(sinComent(leer('src/modules/inventory/queries.ts')), /\.\.\.\(opciones\.conCostos \? \{ unitCost: true \} : \{\}\)/)
+  for (const ruta of ['src/app/(admin)/admin/inventario/entradas/nueva/page.tsx', 'src/app/(admin)/admin/inventario/importar/page.tsx']) {
+    assert.match(sinComent(leer(ruta)), /puedeFuncion\('inventario', 'costos'\)/, ruta)
+  }
+})
+
+test('INV-3a · corregir el costo exige «costos» ANTES de tocar la base; registrar o importar con costo también, y solo se pregunta si viene uno', () => {
+  const corregir = sinComentarios.slice(sinComentarios.indexOf('export async function corregirCostoInventario')).split('\n}\n')[0]
+  assert.match(corregir, /await contexto\('costos'\)/)
+  assert.doesNotMatch(corregir, /contexto\('ajustar'\)/)
+  assert.ok(corregir.indexOf('await contexto(') < corregir.indexOf('conEmpresa('))
+  assert.match(corregir, /conEmpresa\(c\.companyId,/)
+  for (const nombre of ['registrarEntradaInventario', 'registrarEntradaMultiple']) {
+    const cuerpo = sinComentarios.slice(sinComentarios.indexOf(`export async function ${nombre}`)).split('\n}\n')[0]
+    assert.match(cuerpo, /traeCosto\([^)]*\)[\s\S]*puedeFuncion\('inventario', 'costos'\)[\s\S]*SIN_PERMISO_DE_COSTOS/, `${nombre} no revisa «costos» cuando viene un costo`)
+    assert.ok(cuerpo.indexOf("puedeFuncion('inventario', 'costos')") < cuerpo.indexOf('conEmpresa(') || cuerpo.indexOf('conEmpresa(') < 0 || cuerpo.indexOf('operar(') > cuerpo.indexOf("puedeFuncion('inventario', 'costos')"), `${nombre}: el permiso se mira después de tocar la base`)
+  }
+  for (const nombre of ['previsualizarImportacion', 'aplicarImportacion']) {
+    const cuerpo = sinComentarios.slice(sinComentarios.indexOf(`export async function ${nombre}`)).split('\n}\n')[0]
+    assert.match(cuerpo, /const permitirCostos = await puedeFuncion\('inventario', 'costos'\)/, nombre)
+    assert.ok(cuerpo.indexOf('permitirCostos =') < cuerpo.indexOf('conEmpresa('), nombre)
+    // …y se LE PASA al servicio tal cual (no `true`, no otra cosa).
+    assert.match(cuerpo, nombre === 'aplicarImportacion' ? /idempotencyKey: clave\(entrada\.clave\), permitirCostos \}/ : /informeDeImportacionEnTx\(tx, c\.companyId, entrada\.texto, \{ permitirCostos \}\)/, `${nombre} no pasa el permiso al servicio`)
+  }
+})
+
+test('INV-3a · el costo se escribe en las DOS puertas del ledger y en ninguna otra; un solo UPDATE de saldos sigue siendo el de siempre', () => {
+  const f = sinComent(leer('src/modules/inventory/service.ts'))
+  assert.equal([...f.matchAll(/tx\.inventoryMovement\.create(Many|ManyAndReturn)?\(/g)].length, 2, 'solo dos puertas escriben movimientos')
+  assert.equal([...f.matchAll(/unitCost: costo === null \? null : costoADecimal\(costo\)/g)].length, 2, 'las dos puertas escriben unitCost')
+  assert.equal([...f.matchAll(/UPDATE "inventory_levels"/g)].length, 1)
+  // Las ventas LEEN el costo: ninguna lectura de costos bloquea.
+  const lectura = f.slice(f.indexOf('async function costosVigentes')).split('\n}\n')[0]
+  assert.doesNotMatch(lectura, /FOR UPDATE/, 'una venta nunca debe esperar al costo')
+  assert.match(lectura, /"companyId" = \$\{companyId\}/)
+  // El candado del renglón de costo solo lo pone quien lo mueve, y siempre en orden de producto.
+  assert.equal([...f.matchAll(/FROM "inventory_variant_costs"[\s\S]{0,160}FOR UPDATE/g)].length, 2, 'solo aplicar-costos y corregir bloquean el renglón')
+  const aplicar = f.slice(f.indexOf('async function aplicarCostosDeEntradaEnTx')).split('\n}\n')[0]
+  assert.match(aplicar, /\.sort\(\(a, b\) =>/, 'ordena por producto antes de crear y bloquear')
+  assert.match(aplicar, /ORDER BY "catalogVariantId"\s+FOR UPDATE/)
+  assert.ok(aplicar.indexOf('createManyAndReturn') < aplicar.indexOf('FOR UPDATE'), 'primero se crean (ordenados), después se bloquean')
+  assert.ok(aplicar.indexOf('FOR UPDATE') < aplicar.indexOf('FROM "inventory_levels"'), 'las existencias se leen YA con el candado puesto')
+  // Orden de bloqueo: saldos → renglón de costo; el costo se mueve ANTES de escribir los movimientos (pesan las existencias de antes).
+  const entrada = f.slice(f.indexOf('export async function registrarEntradaMultipleEnTx')).split('\nexport ')[0]
+  assert.ok(entrada.indexOf('await bloquear(') < entrada.indexOf('aplicarCostosDeEntradaEnTx('), 'primero los saldos')
+  assert.ok(entrada.indexOf('aplicarCostosDeEntradaEnTx(') < entrada.indexOf('escribirMovimientosPorLote('), 'el promedio se mueve antes de escribir')
+  assert.ok(entrada.indexOf('idempotencyKey: clave') < entrada.indexOf('aplicarCostosDeEntradaEnTx('), 'un reintento no mueve el promedio otra vez')
+  const simple = f.slice(f.indexOf('async function moverSimple')).split('\n}\n')[0]
+  assert.ok(simple.indexOf('prepararNivel(') < simple.indexOf('aplicarCostosDeEntradaEnTx('))
+  assert.ok(simple.indexOf('aplicarCostosDeEntradaEnTx(') < simple.indexOf('escribirMovimiento('))
+  // Un conteo aplicado se valora con el promedio: su lote lleva el producto de cada línea.
+  assert.match(f, /meta: \{ userId: ctx\.actorId, referencia: \{ tipo: 'STOCK_COUNT', id: conteo\.id \} \},\s*varianteId: x\.l\.catalogVariantId/)
+})
+
+test('INV-3a · corregir el costo valida, bloquea el renglón y deja su rastro (historia inmutable y bitácora) en la misma transacción', () => {
+  const f = sinComent(leer('src/modules/inventory/service.ts'))
+  const c = f.slice(f.indexOf('export async function corregirCostoEnTx')).split('\nexport ')[0]
+  assert.ok(c.indexOf('validarCorreccionDeCosto(') < c.indexOf('tx.'), 'valida antes de tocar la base')
+  assert.match(c, /exigirVarianteControlada\(tx, companyId, e\.varianteId\)/)
+  assert.match(c, /SIN_EXISTENCIAS_PREVIAS/)
+  assert.ok(c.indexOf('FOR UPDATE') < c.indexOf('tx.inventoryCostAdjustment.create'), 'bloquea antes de escribir la historia')
+  assert.match(c, /tx\.inventoryCostAdjustment\.create/)
+  assert.match(c, /auditarInventario\(/)
+  assert.doesNotMatch(c, /inventoryMovement/, 'una corrección no toca el ledger')
+})
+
+test('INV-3a · las lecturas del valor llevan la empresa en CADA consulta', () => {
+  const v = sinComent(leer('src/modules/inventory/valor.ts'))
+  const consultas = [...v.matchAll(/\$queryRaw<[^`]*`([^`]*)`/g)]
+  assert.ok(consultas.length >= 6, 'se esperaban las consultas del valor, del costo de ventas y del tránsito')
+  for (const m of consultas) assert.match(m[1], /"companyId" = \$\{companyId\}|\$\{hayExistencias\}|\$\{desde\}|\$\{agrupado\}/, `consulta sin empresa → ${m[1].slice(0, 80)}`)
+  assert.match(v, /const hayExistencias = Prisma\.sql`l\."companyId" = \$\{companyId\}/)
+  // Y los joins van por empresa: un producto de otra empresa nunca se cuela por la clave del producto.
+  assert.match(v, /JOIN "catalog_variants" v ON v\."id" = l\."catalogVariantId" AND v\."companyId" = l\."companyId"/)
+  assert.match(v, /LEFT JOIN "inventory_variant_costs" c ON c\."catalogVariantId" = v\."id" AND c\."companyId" = v\."companyId"/)
+  // (La tabla de usuarios no es de una empresa: solo se leen los nombres de quienes ya aparecen en filas de ESTA empresa.)
+  for (const m of v.matchAll(/tx\.(\w+)\.(findFirst|findMany|aggregate)\(\{\s*where: \{([^}]*)/g)) {
+    if (m[1] === 'user') continue
+    assert.match(m[3], /companyId/, `where sin empresa → ${m[0].slice(0, 60)}`)
+  }
+})
+
+test('INV-3a · lo PURO sigue siendo puro, el servidor-solo no llega al navegador y los montos no son flotantes', () => {
+  const costos = leer('src/modules/inventory/costos.ts')
+  assert.doesNotMatch(costos, /server-only|from '@\/lib\/prisma'|from '@\/lib\/tenant'|@prisma\/client'/, 'costos.ts debe ser puro')
+  assert.doesNotMatch(sinComent(costos), /parseFloat|Number\(\s*(entero|decimales|t)\b|toFixed\(\s*2\s*\)/, 'los montos son enteros, no flotantes')
+  for (const f of readdirSync('src/components/inventario').filter((n) => n.endsWith('.tsx'))) {
+    const c = leer(`src/components/inventario/${f}`)
+    if (!/^'use client'/.test(c)) continue
+    // (También los imports «de efecto»: `import '@/modules/...'` sin `from`.)
+    for (const origen of [...c.matchAll(/(?:from|import)\s+'([^']+)'/g)].map((m) => m[1])) {
+      assert.doesNotMatch(origen, /modules\/inventory\/(domain|service|queries|auditoria|errores|barrido|importar|errores-pantalla|valor)$/, `${f} importa ${origen}`)
+    }
+  }
+})
+
+test('INV-3a · la migración solo AÑADE: dos columnas NULL, dos tablas, y lo que no se reescribe lo impide la base', () => {
+  const sql = leer('prisma/migrations/20261059_inventory_costs/migration.sql')
+  const sinNotas = sql.replace(/^--.*$/gm, '')
+  assert.doesNotMatch(sinNotas, /\bDROP\s+(TABLE|COLUMN|TYPE)\b|\bTRUNCATE\s+TABLE|\bDELETE\s+FROM|\bUPDATE\s+"|\bSET\s+NOT\s+NULL|\bALTER\s+COLUMN/i, 'no destruye ni reescribe nada')
+  // Lo único que toca de las tablas viejas: añadirles la columna del costo y su CHECK.
+  const alteradas = [...sinNotas.matchAll(/ALTER\s+TABLE\s+"(\w+)"\s+(ADD COLUMN IF NOT EXISTS "unitCost" DECIMAL\(14,4\)|ADD CONSTRAINT|VALIDATE CONSTRAINT)/gi)].map((m) => m[1])
+  for (const t of alteradas) assert.ok(['inventory_movements', 'inventory_receipt_lines', 'inventory_variant_costs', 'inventory_cost_adjustments'].includes(t), `toca ${t}`)
+  assert.match(sinNotas, /ALTER TABLE "inventory_movements"\s+ADD COLUMN IF NOT EXISTS "unitCost" DECIMAL\(14,4\);/)
+  assert.match(sinNotas, /ALTER TABLE "inventory_receipt_lines" ADD COLUMN IF NOT EXISTS "unitCost" DECIMAL\(14,4\);/)
+  assert.doesNotMatch(sinNotas, /"unitCost"[^;]*(NOT NULL|DEFAULT)/i, 'la columna nueva es NULL y sin valor por defecto (no reescribe la tabla)')
+  assert.match(sinNotas, /"inventory_movements_costo"[\s\S]{0,200}NOT VALID/)
+  assert.match(sinNotas, /VALIDATE CONSTRAINT "inventory_movements_costo"/)
+  for (const crea of sinNotas.matchAll(/CREATE\s+(TABLE|UNIQUE INDEX|INDEX)\s+(IF NOT EXISTS)?/gi)) assert.ok(crea[2], `«${crea[0]}» sin IF NOT EXISTS: no es idempotente`)
+  assert.match(sql, /inventory_cost_adjustments_sin_cambios[\s\S]*BEFORE UPDATE OR DELETE/)
+  assert.match(sql, /BEFORE TRUNCATE ON "inventory_cost_adjustments"/)
+  assert.match(sql, /BEFORE TRUNCATE ON "inventory_variant_costs"/)
+  assert.match(sql, /inventory_variant_costs_identidad[\s\S]*BEFORE UPDATE OR DELETE/)
+  assert.match(leer('prisma/migrations/SUMAS.txt'), /20261059_inventory_costs/)
+  // Aviso de orden de despliegue: esta migración SÍ tiene que ir antes que el código.
+  assert.match(sql, /AQUÍ ES OBLIGATORIO: ESTE SQL PRIMERO/)
+})
+
+test('INV-3a · /api/health avisa si falta la tabla o la columna del costo (despliegue adelantado a la base)', () => {
+  const h = leer('src/app/api/health/route.ts')
+  assert.match(h, /inventory_variant_costs\.esquema', to_regclass\('public\.inventory_variant_costs'\) IS NOT NULL/)
+  assert.match(h, /inventory_movements\.unitCost'[\s\S]*column_name = 'unitCost'/)
 })

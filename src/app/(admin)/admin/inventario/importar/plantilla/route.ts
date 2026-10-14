@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireSection } from '@/lib/auth/guards'
+import { puedeFuncion, requireSection } from '@/lib/auth/guards'
 import { respuestaCsv } from '@/lib/csv'
 import { plantillaImportacionCsv } from '@/modules/inventory/importacion'
 
@@ -13,5 +13,6 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const user = await requireSection('inventario', 'ajustar')
   if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 403 })
-  return respuestaCsv(plantillaImportacionCsv(), 'plantilla-entrada-inventario', { fechar: false })
+  // Quien puede registrar costos recibe la plantilla con la columna «costo»; los demás, sin ella.
+  return respuestaCsv(plantillaImportacionCsv(await puedeFuncion('inventario', 'costos')), 'plantilla-entrada-inventario', { fechar: false })
 }

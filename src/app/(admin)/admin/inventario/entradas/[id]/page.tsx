@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
-import { requireRole } from '@/lib/auth/guards'
+import { puedeFuncion, requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { formatDateTimeExacto } from '@/lib/format'
 import { zonaSegura } from '@/lib/zona-horaria'
@@ -22,13 +22,15 @@ export default async function EntradaInventarioPage({ params }: { params: Promis
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await requireCompanyContext(user)
   const { id } = await params
+  // Lo que costó la entrada solo lo ve quien tiene la función «costos»; la consulta ni lo lee para los demás.
+  const conCostos = await puedeFuncion('inventario', 'costos')
 
   let datos: { zona: string; entrada: Awaited<ReturnType<typeof entradaDetalleEnTx>> } | null = null
   let fallo = ''
   try {
     datos = await conEmpresa(companyId, async (tx) => {
       const empresa = await tx.company.findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
-      return { zona: zonaSegura(empresa?.zonaHoraria), entrada: await entradaDetalleEnTx(tx, companyId, id) }
+      return { zona: zonaSegura(empresa?.zonaHoraria), entrada: await entradaDetalleEnTx(tx, companyId, id, { conCostos }) }
     })
   } catch (e) {
     fallo = describirFalloDeCarga('admin-inventario-entrada', e)
@@ -65,6 +67,7 @@ export default async function EntradaInventarioPage({ params }: { params: Promis
             ['Unidades', `+${formatearCantidad(entrada.unidades)}`],
             ['Registrada por', entrada.usuarioNombre ?? 'Sistema'],
             ['Origen', entrada.origen === 'CSV' ? 'Archivo CSV' : 'Capturada a mano'],
+            ...(entrada.valorTotal !== undefined ? ([['Costo de la entrada', entrada.valorTotal]] as const) : []),
           ] as const
         ).map(([etiqueta, valor]) => (
           <Card key={etiqueta}>
@@ -117,10 +120,16 @@ export default async function EntradaInventarioPage({ params }: { params: Promis
                 <p className="text-xs text-muted-foreground">
                   {formatearCantidad(l.existenciaAntes)} → {formatearCantidad(l.existenciaDespues)}
                 </p>
+                {l.costo !== undefined && <p className="text-xs text-muted-foreground">{l.costo === null ? 'Sin costo' : `a ${l.costo} c/u`}</p>}
               </div>
             </li>
           ))}
         </ul>
+        {entrada.lineasSinCosto !== undefined && entrada.lineasSinCosto > 0 && (
+          <p className="pt-2 text-xs text-muted-foreground">
+            {formatearCantidad(entrada.lineasSinCosto)} línea{entrada.lineasSinCosto === 1 ? '' : 's'} sin costo: no movieron el costo promedio del producto, y el «costo de la entrada» solo suma las que lo traen.
+          </p>
+        )}
         <p className="pt-2 text-xs text-muted-foreground">
           Una entrada registrada no se edita. Si algo se capturó mal, corrígelo con un ajuste en la ficha del producto: queda el rastro de qué se corrigió y por qué.
         </p>

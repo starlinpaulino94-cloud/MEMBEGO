@@ -151,6 +151,10 @@ model CatalogVariant {
   countLines      InventoryCountLine[]
   /// Transferencias con envío (INV-2c) que han llevado esta variante.
   transferLines   InventoryTransferLine[]
+  /// Costo promedio ponderado de esta variante (INV-3a); no existe hasta la primera entrada con costo o corrección.
+  inventoryCost   InventoryVariantCost?
+  /// Correcciones de su costo promedio (INV-3a).
+  costAdjustments InventoryCostAdjustment[]
   deals           Deal[]
   /// Pedidos Membego que la piden (Fase 3). RESTRICT: con pedidos no se borra.
   orderLines      MembegoOrderLine[]

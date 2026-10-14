@@ -58,6 +58,16 @@ import {
   type LineaDeTraslado,
   type LineaTraslado,
 } from './traslados'
+import {
+  TIPOS_VALORADOS_AL_PROMEDIO,
+  costoADecimal,
+  costoDeDecimal,
+  costoOpcional,
+  formatearCosto,
+  promedioPonderado,
+  validarCorreccionDeCosto,
+  type Costo,
+} from './costos'
 import { InventarioError, fallo } from './errores'
 
 /**
@@ -212,6 +222,36 @@ interface MetaMovimiento {
   userId: string | null
   referencia?: Referencia | null
   idempotencyKey?: string | null
+  /**
+   * INV-3a: el costo unitario con que se valora el movimiento. `undefined` = que lo decida el tipo (una venta, devolución,
+   * daño o ajuste se valoran con el promedio de ese instante; lo demás, sin costo); `null` = sin costo, aunque el tipo se
+   * valoraría; un número = ese costo (el de una línea de entrada).
+   */
+  costo?: Costo | null
+}
+
+/**
+ * El costo con que vale hoy cada producto: su promedio, o el de referencia de su ficha; null = no tiene costo. UNA consulta
+ * para todos (las ventas y los conteos la pagan en cada movimiento). Es una LECTURA: no bloquea nada, así que una venta
+ * nunca espera a una entrada que está moviendo el promedio.
+ */
+async function costosVigentes(tx: Tx, companyId: string, varianteIds: readonly string[]): Promise<Map<string, Costo | null>> {
+  const unicos = [...new Set(varianteIds)]
+  const salida = new Map<string, Costo | null>()
+  if (unicos.length === 0) return salida
+  const filas = await tx.$queryRaw<{ id: string; costo: Prisma.Decimal | null }[]>`
+    SELECT v."id", COALESCE(c."averageCost", v."cost") AS "costo"
+      FROM "catalog_variants" v
+      LEFT JOIN "inventory_variant_costs" c ON c."catalogVariantId" = v."id" AND c."companyId" = v."companyId"
+     WHERE v."companyId" = ${companyId} AND v."id" IN (${Prisma.join(unicos)})`
+  for (const f of filas) salida.set(f.id, f.costo === null ? null : costoDeDecimal(f.costo))
+  return salida
+}
+
+/** El costo con que se escribe un movimiento (ver `MetaMovimiento.costo`). */
+function costoDeMovimiento(tipo: string, explicito: Costo | null | undefined, vigente: Costo | null | undefined): Costo | null {
+  if (explicito !== undefined) return explicito
+  return TIPOS_VALORADOS_AL_PROMEDIO.has(tipo) ? (vigente ?? null) : null
 }
 
 /** Traduce el error del ledger puro a uno que se le puede enseñar a la persona. */
@@ -248,6 +288,8 @@ async function escribirMovimiento(
     traducir(e, m, nivel)
   }
   const saldo = saldoDeCubetas(despues)
+  const vigente = meta.costo === undefined && TIPOS_VALORADOS_AL_PROMEDIO.has(m.type) ? (await costosVigentes(tx, companyId, [nivel.catalogVariantId])).get(nivel.catalogVariantId) : undefined
+  const costo = costoDeMovimiento(m.type, meta.costo, vigente)
   const movimiento = await tx.inventoryMovement.create({
     data: {
       companyId,
@@ -263,6 +305,7 @@ async function escribirMovimiento(
       referenceType: meta.referencia?.tipo ?? null,
       referenceId: meta.referencia?.id ?? null,
       idempotencyKey: meta.idempotencyKey ?? null,
+      unitCost: costo === null ? null : costoADecimal(costo),
     },
   })
   await tx.inventoryLevel.update({ where: { id: nivelId }, data: { onHand: saldo.onHand, reserved: saldo.reserved, damaged: saldo.damaged } })
@@ -344,6 +387,136 @@ async function saldoActual(tx: Tx, companyId: string, nivelId: string): Promise<
   return vista(n)
 }
 
+// ── INV-3a · Costo promedio ponderado ────────────────────────────────────────
+
+interface CostoDeLinea {
+  varianteId: string
+  cantidad: number
+  costo: Costo
+}
+
+/**
+ * Mueve el costo PROMEDIO de los productos de una entrada que trae costo.
+ *
+ * Quien llama tiene bloqueados los saldos de la entrada y TODAVÍA NO ha escrito sus movimientos: las existencias que se
+ * leen aquí son las de antes. Pesa todo lo que la empresa tiene del producto (vendible + apartado + dañado, en todas las
+ * sucursales), no solo la sucursal que recibe.
+ *
+ * ORDEN DE BLOQUEO. Primero los saldos (quien llama), después el renglón de costo de cada producto, en orden de producto.
+ * Los renglones que faltan se crean en ese mismo orden fijo: un `INSERT … ON CONFLICT` espera a la fila que otra
+ * transacción acaba de insertar, y dos entradas con los mismos productos nuevos en distinto orden se interbloquearían
+ * (es lo que pasó con los saldos en INV-2a). Las ventas solo LEEN el costo: nunca esperan por aquí.
+ *
+ * Una pequeña aproximación asumida: las existencias se leen sin bloquear las otras sucursales, así que una venta que
+ * confirme en otra sucursal en el mismo instante puede mover el peso de lo viejo en, como mucho, las unidades de esa venta.
+ */
+async function aplicarCostosDeEntradaEnTx(tx: Tx, companyId: string, lineas: readonly CostoDeLinea[]): Promise<void> {
+  if (lineas.length === 0) return
+  const ordenadas = [...lineas].sort((a, b) => (a.varianteId < b.varianteId ? -1 : a.varianteId > b.varianteId ? 1 : 0))
+  const ids = ordenadas.map((l) => l.varianteId)
+  if (new Set(ids).size !== ids.length) fallo('LOTE_INVALIDO', 'Un producto no puede aparecer dos veces al mover el costo promedio.')
+
+  const creados = await tx.inventoryVariantCost.createManyAndReturn({
+    data: ordenadas.map((l) => ({ companyId, catalogVariantId: l.varianteId, averageCost: costoADecimal(l.costo) })),
+    skipDuplicates: true,
+    select: { catalogVariantId: true },
+  })
+  const nuevos = new Set(creados.map((c) => c.catalogVariantId))
+  const bloqueados = await tx.$queryRaw<{ catalogVariantId: string; averageCost: Prisma.Decimal }[]>`
+    SELECT "catalogVariantId", "averageCost"
+      FROM "inventory_variant_costs"
+     WHERE "companyId" = ${companyId} AND "catalogVariantId" IN (${Prisma.join(ids)})
+     ORDER BY "catalogVariantId"
+       FOR UPDATE`
+  if (bloqueados.length !== ids.length) fallo('COSTO_NO_ENCONTRADO', 'No se pudo preparar el costo promedio de la entrada.')
+  const promedioDe = new Map(bloqueados.map((b) => [b.catalogVariantId, costoDeDecimal(b.averageCost)]))
+
+  const existencias = await tx.$queryRaw<{ catalogVariantId: string; unidades: number }[]>`
+    SELECT "catalogVariantId", COALESCE(SUM("onHand" + "damaged"), 0)::int AS "unidades"
+      FROM "inventory_levels"
+     WHERE "companyId" = ${companyId} AND "catalogVariantId" IN (${Prisma.join(ids)})
+     GROUP BY "catalogVariantId"`
+  const unidadesDe = new Map(existencias.map((x) => [x.catalogVariantId, Number(x.unidades)]))
+  const referencias = await tx.$queryRaw<{ id: string; cost: Prisma.Decimal | null }[]>`
+    SELECT "id", "cost" FROM "catalog_variants" WHERE "companyId" = ${companyId} AND "id" IN (${Prisma.join(ids)})`
+  const referenciaDe = new Map(referencias.map((r) => [r.id, r.cost === null ? null : costoDeDecimal(r.cost)]))
+
+  const filas = ordenadas.map((l) => {
+    const promedio = promedioPonderado(
+      { unidades: unidadesDe.get(l.varianteId) ?? 0, promedio: nuevos.has(l.varianteId) ? null : (promedioDe.get(l.varianteId) ?? null), referencia: referenciaDe.get(l.varianteId) ?? null },
+      { unidades: l.cantidad, costo: l.costo }
+    )
+    return Prisma.sql`(${l.varianteId}, ${costoADecimal(promedio)}::numeric, ${costoADecimal(l.costo)}::numeric)`
+  })
+  // `now() AT TIME ZONE 'UTC'` y no `now()`: la columna es `timestamp` sin zona y Prisma escribe en UTC.
+  const actualizados = await tx.$executeRaw`
+    UPDATE "inventory_variant_costs" AS t
+       SET "averageCost" = v."promedio", "lastCost" = v."ultimo", "lastCostAt" = (now() AT TIME ZONE 'UTC'), "updatedAt" = (now() AT TIME ZONE 'UTC')
+      FROM (VALUES ${Prisma.join(filas)}) AS v("id", "promedio", "ultimo")
+     WHERE t."catalogVariantId" = v."id" AND t."companyId" = ${companyId}`
+  if (actualizados !== ordenadas.length) fallo('LOTE_INCOMPLETO', 'No se pudo actualizar el costo promedio de todos los productos de la entrada.')
+}
+
+export interface ResultadoCorreccionCosto {
+  varianteId: string
+  /** El costo vigente antes de corregir (el promedio, o el de referencia del catálogo); null si no tenía. */
+  costoAnterior: string | null
+  costoNuevo: string
+  /** Unidades de toda la empresa que valen distinto desde ahora. */
+  unidades: number
+}
+
+/**
+ * CORRIGE el costo promedio de un producto, con motivo. Es la salida de un costo mal capturado (un cero de más en una
+ * entrada) y la forma de fijar el costo de lo que ya había antes de llevar costos. No toca el ledger: los movimientos
+ * viejos conservan el costo con que se valoraron; lo que cambia es el costo con que vale el producto DESDE AHORA (el
+ * valor del inventario y las próximas salidas). Deja una fila inmutable en el historial de correcciones y una en la bitácora.
+ */
+export async function corregirCostoEnTx(tx: Tx, companyId: string, e: { varianteId: string; costo: unknown; motivo: unknown }, ctx: ContextoAuditoria): Promise<ResultadoCorreccionCosto> {
+  const v = validarCorreccionDeCosto(e.costo, e.motivo)
+  if (!v.ok) fallo(v.codigo, v.error)
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  // Solo un producto que ya ha tenido existencias: el costo de uno que nunca se ha recibido se escribe en su ficha del catálogo.
+  const tuvoExistencias = await tx.inventoryLevel.findFirst({ where: { companyId, catalogVariantId: variante.id }, select: { id: true } })
+  if (!tuvoExistencias) fallo('SIN_EXISTENCIAS_PREVIAS', 'Este producto todavía no ha tenido existencias. Escribe su costo de referencia en su ficha del catálogo.')
+
+  const creados = await tx.inventoryVariantCost.createManyAndReturn({
+    data: [{ companyId, catalogVariantId: variante.id, averageCost: costoADecimal(v.costo) }],
+    skipDuplicates: true,
+    select: { catalogVariantId: true },
+  })
+  const esNuevo = creados.length > 0
+  const bloqueado = await tx.$queryRaw<{ averageCost: Prisma.Decimal }[]>`
+    SELECT "averageCost" FROM "inventory_variant_costs"
+     WHERE "companyId" = ${companyId} AND "catalogVariantId" = ${variante.id}
+       FOR UPDATE`
+  if (!bloqueado[0]) fallo('COSTO_NO_ENCONTRADO', 'No se pudo preparar el costo del producto.')
+  const referencia = await tx.catalogVariant.findFirst({ where: { id: variante.id, companyId }, select: { cost: true } })
+  const anterior: Costo | null = esNuevo ? (referencia?.cost ? costoDeDecimal(referencia.cost) : null) : costoDeDecimal(bloqueado[0].averageCost)
+  if (!esNuevo && anterior === v.costo) fallo('SIN_CAMBIOS', 'El costo promedio ya es ese: no hay nada que corregir.')
+
+  const existencias = await tx.$queryRaw<{ unidades: number }[]>`
+    SELECT COALESCE(SUM("onHand" + "damaged"), 0)::int AS "unidades" FROM "inventory_levels"
+     WHERE "companyId" = ${companyId} AND "catalogVariantId" = ${variante.id}`
+  const unidades = Number(existencias[0]?.unidades ?? 0)
+  if (!esNuevo) {
+    await tx.inventoryVariantCost.update({ where: { catalogVariantId_companyId: { catalogVariantId: variante.id, companyId } }, data: { averageCost: costoADecimal(v.costo) } })
+  }
+  await tx.inventoryCostAdjustment.create({
+    data: { companyId, catalogVariantId: variante.id, previousCost: anterior === null ? null : costoADecimal(anterior), newCost: costoADecimal(v.costo), unitsOnHand: unidades, reason: v.motivo, userId: ctx.actorId },
+  })
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_CONFIGURED',
+    variante.id,
+    { tipo: 'COSTO', sku: variante.sku, producto: variante.item.name, antes: anterior === null ? null : formatearCosto(anterior), despues: formatearCosto(v.costo), unidades, motivo: v.motivo },
+    'InventoryVariantCost'
+  )
+  return { varianteId: variante.id, costoAnterior: anterior === null ? null : formatearCosto(anterior), costoNuevo: formatearCosto(v.costo), unidades }
+}
+
 // ── Movimientos simples (un saldo, una dirección) ────────────────────────────
 
 interface Plan {
@@ -357,6 +530,8 @@ interface Plan {
   /** Deja rastro en la bitácora de actividad (lo que hace una persona a mano). */
   auditar: boolean
   referenciaPorDefecto?: Referencia
+  /** INV-3a: el costo unitario de una ENTRADA. Si viene, mueve el costo promedio del producto y valora el movimiento. */
+  costoEntrada?: Costo
 }
 
 async function moverSimple(tx: Tx, companyId: string, e: EntradaBase, plan: Plan, ctx: ContextoAuditoria): Promise<ResultadoMovimiento> {
@@ -369,12 +544,14 @@ async function moverSimple(tx: Tx, companyId: string, e: EntradaBase, plan: Plan
   const previo = await prepararNivel(tx, companyId, nivelId, clave, { type: plan.tipo, sourceBucket: plan.origen, destinationBucket: plan.destino, quantity: plan.cantidad }, ahora)
   if (previo) return { nivelId, movimientoId: previo.id, saldo: await saldoActual(tx, companyId, nivelId), repetido: true }
 
+  // El costo promedio se mueve ANTES de escribir el movimiento: las existencias que pesan son las de antes de esta entrada.
+  if (plan.costoEntrada !== undefined) await aplicarCostosDeEntradaEnTx(tx, companyId, [{ varianteId: variante.id, cantidad: plan.cantidad, costo: plan.costoEntrada }])
   const { movimiento, saldo } = await escribirMovimiento(
     tx,
     companyId,
     nivelId,
     { type: plan.tipo, sourceBucket: plan.origen, destinationBucket: plan.destino, quantity: plan.cantidad, reason: plan.motivo },
-    { userId: ctx.actorId, referencia: referenciaValida(e.referencia) ?? plan.referenciaPorDefecto ?? null, idempotencyKey: clave }
+    { userId: ctx.actorId, referencia: referenciaValida(e.referencia) ?? plan.referenciaPorDefecto ?? null, idempotencyKey: clave, costo: plan.costoEntrada }
   )
   if (plan.auditar) {
     await auditarInventario(tx, ctx, companyId, 'INVENTORY_STOCK_CHANGED', nivelId, {
@@ -392,8 +569,16 @@ async function moverSimple(tx: Tx, companyId: string, e: EntradaBase, plan: Plan
 }
 
 /** Llega mercancía (compra a un proveedor, producción propia): entra a lo vendible. */
-export async function recibirEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number }, ctx: ContextoAuditoria) {
-  return moverSimple(tx, companyId, e, { tipo: 'PURCHASE', origen: null, destino: 'AVAILABLE', cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, false), sucursalActiva: true, auditar: true }, ctx)
+export async function recibirEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number; costo?: unknown }, ctx: ContextoAuditoria) {
+  const costo = costoOpcional(e.costo)
+  if (!costo.ok) fallo('COSTO_INVALIDO', costo.error)
+  return moverSimple(
+    tx,
+    companyId,
+    e,
+    { tipo: 'PURCHASE', origen: null, destino: 'AVAILABLE', cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, false), sucursalActiva: true, auditar: true, costoEntrada: costo.valor ?? undefined },
+    ctx
+  )
 }
 
 /** El cliente devuelve mercancía: vuelve a lo vendible. */
@@ -799,6 +984,8 @@ interface ItemLote {
   antes: Saldo
   despues: Saldo
   meta: MetaMovimiento
+  /** El producto del saldo: hace falta para valorar con el promedio los tipos que lo piden (conteos). */
+  varianteId?: string
 }
 
 /**
@@ -823,22 +1010,30 @@ interface ItemLote {
 async function escribirMovimientosPorLote(tx: Tx, companyId: string, items: readonly ItemLote[]): Promise<string[]> {
   if (items.length === 0) return []
   if (new Set(items.map((i) => i.nivelId)).size !== items.length) fallo('LOTE_INVALIDO', 'Un saldo no puede aparecer dos veces en el mismo lote.')
+  // INV-3a: los movimientos que se valoran con el promedio lo leen de UNA vez para todo el lote.
+  const aValorar = items.filter((i) => i.meta.costo === undefined && TIPOS_VALORADOS_AL_PROMEDIO.has(i.movimiento.type))
+  for (const i of aValorar) if (!i.varianteId) fallo('LOTE_INVALIDO', 'Falta el producto de un movimiento que se valora con el costo promedio.')
+  const vigentes = await costosVigentes(tx, companyId, aValorar.map((i) => i.varianteId!))
   const creados = await tx.inventoryMovement.createManyAndReturn({
-    data: items.map((i) => ({
-      companyId,
-      inventoryLevelId: i.nivelId,
-      type: i.movimiento.type,
-      sourceBucket: i.movimiento.sourceBucket,
-      destinationBucket: i.movimiento.destinationBucket,
-      quantity: i.movimiento.quantity,
-      previousOnHand: i.antes.onHand,
-      newOnHand: i.despues.onHand,
-      reason: i.movimiento.reason ?? null,
-      userId: i.meta.userId,
-      referenceType: i.meta.referencia?.tipo ?? null,
-      referenceId: i.meta.referencia?.id ?? null,
-      idempotencyKey: i.meta.idempotencyKey ?? null,
-    })),
+    data: items.map((i) => {
+      const costo = costoDeMovimiento(i.movimiento.type, i.meta.costo, i.varianteId ? vigentes.get(i.varianteId) : undefined)
+      return {
+        companyId,
+        inventoryLevelId: i.nivelId,
+        type: i.movimiento.type,
+        sourceBucket: i.movimiento.sourceBucket,
+        destinationBucket: i.movimiento.destinationBucket,
+        quantity: i.movimiento.quantity,
+        previousOnHand: i.antes.onHand,
+        newOnHand: i.despues.onHand,
+        reason: i.movimiento.reason ?? null,
+        userId: i.meta.userId,
+        referenceType: i.meta.referencia?.tipo ?? null,
+        referenceId: i.meta.referencia?.id ?? null,
+        idempotencyKey: i.meta.idempotencyKey ?? null,
+        unitCost: costo === null ? null : costoADecimal(costo),
+      }
+    }),
     select: { id: true, inventoryLevelId: true },
   })
   const idPorNivel = new Map(creados.map((c) => [c.inventoryLevelId, c.id]))
@@ -948,13 +1143,15 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
   if (clave) {
     const previa = await tx.inventoryReceipt.findFirst({
       where: { companyId, idempotencyKey: clave },
-      select: { id: true, number: true, locationId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantity: true } } },
+      select: { id: true, number: true, locationId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantity: true, unitCost: true } } },
     })
     if (previa) {
+      // El costo es parte de la operación: la misma clave con otro costo no es un reintento.
+      const costoDe = (d: { toFixed(n: number): string } | null) => (d === null ? null : costoADecimal(costoDeDecimal(d)))
       const mismas =
         previa.locationId === sucursal.id &&
         previa.lines.length === validas.lineas.length &&
-        validas.lineas.every((l) => previa.lines.some((p) => p.catalogVariantId === l.varianteId && p.quantity === l.cantidad))
+        validas.lineas.every((l) => previa.lines.some((p) => p.catalogVariantId === l.varianteId && p.quantity === l.cantidad && costoDe(p.unitCost) === (l.costo ?? null)))
       if (!mismas) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra entrada distinta.')
       return { entradaId: previa.id, numero: previa.number, lineas: previa.lineCount, unidades: previa.unitCount, repetido: true }
     }
@@ -965,6 +1162,7 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
     const nivelId = nivelDeVariante.get(l.varianteId)!
     const fila = bloqueados.get(nivelId)!
     const movimiento: Movimiento = { type: 'PURCHASE', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: l.cantidad, reason: null }
+    const costo: Costo | null = l.costo ? costoDeDecimal(l.costo) : null
     let despues
     try {
       despues = aplicarMovimiento(cubetasDeSaldo(fila), movimiento)
@@ -973,8 +1171,14 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
       const nombre = v.isDefault ? v.item.name : `${v.item.name} · ${v.name}`
       fallo('EXISTENCIA_MAXIMA', `«${nombre}»: ${err instanceof Error ? err.message : 'la existencia no es válida.'}`)
     }
-    return { nivelId, movimiento, antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged }, despues: saldoDeCubetas(despues), meta: { userId: ctx.actorId } }
+    return { nivelId, movimiento, antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged }, despues: saldoDeCubetas(despues), meta: { userId: ctx.actorId, costo }, varianteId: l.varianteId }
   })
+  // INV-3a: el costo promedio de los productos que traen costo, ANTES de escribir los movimientos (pesan las existencias de antes).
+  await aplicarCostosDeEntradaEnTx(
+    tx,
+    companyId,
+    validas.lineas.flatMap((l) => (l.costo ? [{ varianteId: l.varianteId, cantidad: l.cantidad, costo: costoDeDecimal(l.costo) }] : []))
+  )
 
   const numero = await siguienteNumero(tx, PREFIJO_ENTRADA, (prefijo) => ultimaEntrada(tx, companyId, prefijo), ahora, `entrada:${companyId}`)
   let entrada
@@ -1003,7 +1207,7 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
   for (const i of items) i.meta = { ...i.meta, referencia: { tipo: 'RECEIPT', id: entrada.id } }
   const movimientoIds = await escribirMovimientosPorLote(tx, companyId, items)
   await tx.inventoryReceiptLine.createMany({
-    data: validas.lineas.map((l, idx) => ({ companyId, receiptId: entrada.id, catalogVariantId: l.varianteId, position: idx, quantity: l.cantidad, movementId: movimientoIds[idx] })),
+    data: validas.lineas.map((l, idx) => ({ companyId, receiptId: entrada.id, catalogVariantId: l.varianteId, position: idx, quantity: l.cantidad, unitCost: l.costo ?? null, movementId: movimientoIds[idx] })),
   })
 
   await auditarInventario(
@@ -1376,6 +1580,7 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
       antes: { onHand: x.fila.onHand, reserved: x.fila.reserved, damaged: x.fila.damaged },
       despues,
       meta: { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: conteo.id } },
+      varianteId: x.l.catalogVariantId,
     })
     idLineaDeItem.push(x.l.id)
     if (x.delta > 0) unidadesSobrantes += x.delta

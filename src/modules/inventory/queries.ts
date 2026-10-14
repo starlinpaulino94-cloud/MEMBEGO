@@ -1,6 +1,7 @@
 import type { CatalogVariantStatus, InventoryMovementType, InventoryReservationStatus, Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
+import { costoDeDecimal, formatearCosto, formatearMonto, valorDe } from './costos'
 import { disponible, estadoDeStock, type EstadoStock } from './domain'
 import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosConteos, type FiltrosEntradas, type FiltrosMovimientos, type FiltrosTraslados } from './filtros'
 import { pendienteDeLinea, type EstadoTraslado } from './traslados'
@@ -768,15 +769,21 @@ export interface LineaDeEntrada {
   cantidad: number
   existenciaAntes: number
   existenciaDespues: number
+  /** INV-3a: costo unitario capturado, ya formateado; null = no se capturó. SOLO está si se pidió con `conCostos`. */
+  costo?: string | null
 }
 
 export interface DetalleEntrada extends FilaEntrada {
   nota: string | null
   detalle: LineaDeEntrada[]
+  /** INV-3a: lo que costó la entrada (solo las líneas con costo), ya formateado. SOLO está si se pidió con `conCostos`. */
+  valorTotal?: string
+  /** INV-3a: cuántas líneas no traen costo. SOLO está si se pidió con `conCostos`. */
+  lineasSinCosto?: number
 }
 
 /** Una entrada con todas sus líneas; null si no existe o es de otra empresa (se ven igual a propósito). */
-export async function entradaDetalleEnTx(tx: Tx, companyId: string, id: string): Promise<DetalleEntrada | null> {
+export async function entradaDetalleEnTx(tx: Tx, companyId: string, id: string, opciones: { conCostos?: boolean } = {}): Promise<DetalleEntrada | null> {
   if (typeof id !== 'string' || id === '' || id.length > 120) return null
   const r = await tx.inventoryReceipt.findFirst({
     where: { id, companyId },
@@ -797,6 +804,8 @@ export async function entradaDetalleEnTx(tx: Tx, companyId: string, id: string):
         select: {
           position: true,
           quantity: true,
+          // El costo solo se lee si quien pregunta puede verlo: lo que no se lee no puede filtrarse.
+          ...(opciones.conCostos ? { unitCost: true } : {}),
           variant: { select: { id: true, sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } } } },
           movement: { select: { previousOnHand: true, newOnHand: true } },
         },
@@ -828,8 +837,21 @@ export async function entradaDetalleEnTx(tx: Tx, companyId: string, id: string):
       cantidad: l.quantity,
       existenciaAntes: l.movement.previousOnHand,
       existenciaDespues: l.movement.newOnHand,
+      ...(opciones.conCostos ? { costo: unitCostDe(l) === null ? null : formatearCosto(unitCostDe(l)!) } : {}),
     })),
+    ...(opciones.conCostos
+      ? {
+          valorTotal: formatearMonto(r.lines.reduce((suma, l) => (unitCostDe(l) === null ? suma : suma + valorDe(l.quantity, unitCostDe(l)!)), BigInt(0))),
+          lineasSinCosto: r.lines.filter((l) => unitCostDe(l) === null).length,
+        }
+      : {}),
   }
+}
+
+/** El costo unitario de una línea leída con `conCostos` (la consulta lo trae solo entonces); null = no se capturó. */
+function unitCostDe(l: object): ReturnType<typeof costoDeDecimal> | null {
+  const c = (l as { unitCost?: { toFixed(n: number): string } | null }).unitCost
+  return c ? costoDeDecimal(c) : null
 }
 
 export interface VarianteBuscable {

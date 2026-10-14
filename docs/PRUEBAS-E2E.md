@@ -209,7 +209,16 @@ transferencia» con un lector (se ve lo que hay en el origen y no deja pasar de 
 sucursales» → aviso a los administradores → recibir una parte («Recibida en parte»; lo que falta sigue en camino; escribir más de lo que
 falta no deja recibir) → cerrar con faltante (sin motivo no deja; con motivo queda «Recibida» y lo perdido) → su CSV →
 cancelar otra (lo que seguía en camino VUELVE al origen) → recibir todo de una vez → la lista y sus filtros → lo que NO
-debe pasar (id inventado y CSV de un id inventado, sin sesión, sin la capacidad). **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
+debe pasar (id inventado y CSV de un id inventado, sin sesión, sin la capacidad). **INV-3a** añade el costo
+y el valor: la pestaña Valor (los vasos con costo de referencia valen; un producto sin costo se dice, con su aviso) → una
+entrada con costo (la coma se rechaza con un mensaje que dice qué hacer; con punto, el detalle muestra lo que costó) → otra en
+otra sucursal con una línea sin costo (no mueve el promedio) → la ficha: el promedio ponderado de 10 a 5 y 10 a 7 es 6 →
+el valor por producto y por sucursal, «solo sin costo», búsqueda y una URL manipulada → fijar el costo de lo que ya había
+(sin motivo no deja) → la entrada de un producto desde su ficha con costo (pondera 20 a 6 con 5 a 10 = 6.80) → importar un
+CSV con columna de costo (la coma rechaza TODO el archivo; el limpio dice cuántas líneas traen costo) → el costo de ventas del
+mes con el costo que cada venta congeló y el aviso de lo vendido sin costo → los archivos (valor y entrada, números sin
+separador de miles) → y quien tiene NEGADA la función `costos` no ve la pestaña, la pantalla, la tarjeta de la ficha, el campo
+de costo, el costo de la entrada ni su CSV; la descarga del valor da 403 y un archivo con costos se rechaza. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
 disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
 144 combinaciones tipo×origen×destino las prueban `tests/postgres/inventory.db.test.ts`
 y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba

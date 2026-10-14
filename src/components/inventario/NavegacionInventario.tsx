@@ -1,7 +1,8 @@
 import Link from 'next/link'
+import { puedeFuncion } from '@/lib/auth/guards'
 import { cn } from '@/lib/utils'
 
-export type VistaInventario = 'existencias' | 'movimientos' | 'reservas' | 'entradas' | 'conteos' | 'transferencias'
+export type VistaInventario = 'existencias' | 'movimientos' | 'reservas' | 'entradas' | 'conteos' | 'transferencias' | 'valor'
 
 const VISTAS: ReadonlyArray<{ id: VistaInventario; etiqueta: string; href: string }> = [
   { id: 'existencias', etiqueta: 'Existencias', href: '/admin/inventario' },
@@ -10,18 +11,21 @@ const VISTAS: ReadonlyArray<{ id: VistaInventario; etiqueta: string; href: strin
   { id: 'entradas', etiqueta: 'Entradas', href: '/admin/inventario/entradas' },
   { id: 'conteos', etiqueta: 'Conteos', href: '/admin/inventario/conteos' },
   { id: 'transferencias', etiqueta: 'Transferencias', href: '/admin/inventario/transferencias' },
+  { id: 'valor', etiqueta: 'Valor', href: '/admin/inventario/valor' },
 ]
 
 /**
  * Las vistas de la empresa entera del inventario: lo que hay, lo que se movió,
- * lo que está apartado, la mercancía que entró, los inventarios físicos y las transferencias entre sucursales. La ficha de UN producto cuelga
- * de «Existencias».
- * Componente de servidor: son tres enlaces, no necesita estado.
+ * lo que está apartado, la mercancía que entró, los inventarios físicos, las transferencias entre sucursales y lo que vale todo
+ * (INV-3a). La ficha de UN producto cuelga de «Existencias».
+ * Componente de servidor: son enlaces, no necesita estado. «Valor» solo aparece para quien tiene la función `costos`: sin ella
+ * la pantalla ni se ofrece (y, si alguien escribe la URL, la propia página se lo niega).
  */
-export function NavegacionInventario({ actual }: { actual: VistaInventario }) {
+export async function NavegacionInventario({ actual }: { actual: VistaInventario }) {
+  const verValor = await puedeFuncion('inventario', 'costos')
   return (
     <nav aria-label="Vistas del inventario" className="flex flex-wrap gap-2">
-      {VISTAS.map((v) => (
+      {VISTAS.filter((v) => v.id !== 'valor' || verValor).map((v) => (
         <Link
           key={v.id}
           href={v.href}

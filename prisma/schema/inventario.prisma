@@ -137,6 +137,12 @@ model InventoryMovement {
   /// misma clave devuelve el primero. Único por empresa.
   idempotencyKey String?
 
+  /// Costo unitario con que se VALORÓ este movimiento (INV-3a). En una entrada es el costo que se capturó (null si no se
+  /// capturó); en una venta, devolución, daño o ajuste es el costo promedio vigente en ese instante (null si el producto no
+  /// tenía costo). Queda congelado: el costo de ventas de un mes no cambia aunque el promedio cambie después. En las
+  /// reservas y las transferencias va null. Los movimientos anteriores a INV-3a no lo tienen.
+  unitCost Decimal? @db.Decimal(14, 4)
+
   createdAt DateTime @default(now())
 
   /// La línea de entrada (INV-2a) que produjo este movimiento, si vino de una.
@@ -267,6 +273,9 @@ model InventoryReceiptLine {
   position Int
   /// Unidades que entraron. Siempre positiva.
   quantity Int
+
+  /// Costo unitario capturado en esta línea (INV-3a); null = no se capturó. Sin impuestos, en la moneda de la empresa.
+  unitCost Decimal? @db.Decimal(14, 4)
 
   /// El movimiento PURCHASE del ledger que esta línea produjo (uno por línea).
   movementId String            @unique
@@ -477,3 +486,60 @@ model InventoryTransferLine {
   @@index([companyId, catalogVariantId])
   @@map("inventory_transfer_lines")
 }
+
+// ── Costo y valor del inventario (INV-3a) ────────────────────────────────────
+
+/// El costo PROMEDIO PONDERADO de un producto, uno por producto para toda la empresa (las transferencias no lo cambian).
+/// Es una caché que mantienen las entradas con costo y la corrección de costo; la verdad de cada valoración está en el
+/// `unitCost` de los movimientos. Se crea con la primera entrada con costo o la primera corrección. Mientras no exista,
+/// el costo vigente del producto es el `cost` de referencia del catálogo (si lo tiene).
+model InventoryVariantCost {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// Costo promedio vigente. Con cuatro decimales; nunca negativo.
+  averageCost Decimal   @db.Decimal(14, 4)
+  /// Costo de la última entrada con costo (no lo toca una corrección).
+  lastCost    Decimal?  @db.Decimal(14, 4)
+  lastCostAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Un solo costo por producto.
+  @@unique([catalogVariantId, companyId])
+  @@index([companyId])
+  @@map("inventory_variant_costs")
+}
+
+/// APPEND-ONLY. Una corrección del costo promedio de un producto: quién, cuándo, de cuánto a cuánto, con cuántas
+/// unidades en existencia y por qué. La base rechaza UPDATE, DELETE y TRUNCATE. Los movimientos del ledger NO se tocan.
+model InventoryCostAdjustment {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// El costo vigente antes de corregir (el promedio, o el de referencia del catálogo); null si no tenía.
+  previousCost Decimal? @db.Decimal(14, 4)
+  newCost      Decimal  @db.Decimal(14, 4)
+  /// Unidades en existencia de toda la empresa (vendible + apartado + dañado) en ese instante: con ellas se sabe cuánto
+  /// cambió el valor del inventario.
+  unitsOnHand  Int
+  reason       String
+  /// Quién lo hizo. Sin FK, como en el ledger: un usuario que se borra no reescribe el historial.
+  userId       String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([catalogVariantId, createdAt])
+  @@map("inventory_cost_adjustments")
+}
+

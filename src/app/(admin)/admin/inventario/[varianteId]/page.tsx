@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { AlertTriangle, ChevronLeft, Truck } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, Coins, Truck } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { puedeFuncion, requireRole } from '@/lib/auth/guards'
@@ -11,6 +11,8 @@ import { PageHeader } from '@/components/ui/page-header'
 import { detalleVarianteEnTx, enTransitoDeVarianteEnTx, historialDeVarianteEnTx, reservasVivasEnTx, type EnTransitoDeVariante } from '@/modules/inventory/queries'
 import { advertenciaEstadoManual, formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 import { formatDateTime } from '@/lib/format'
+import { costoDeVarianteEnTx, type CostoDeVarianteVista } from '@/modules/inventory/valor'
+import { CorregirCostoForm } from '@/components/inventario/CorregirCostoForm'
 import { SucursalInventarioCard } from '@/components/inventario/SucursalInventarioCard'
 import { TransferirForm } from '@/components/inventario/TransferirForm'
 import { HistorialMovimientos } from '@/components/inventario/HistorialMovimientos'
@@ -45,7 +47,17 @@ export default async function InventarioVariantePage({ params }: { params: Promi
       console.error('[admin-inventario-ficha] lo que va en camino no está disponible', e instanceof Error ? e.message : e)
     }
   }
-  const [puedeAjustar, puedeTransferir] = await Promise.all([puedeFuncion('inventario', 'ajustar'), puedeFuncion('inventario', 'transferir')])
+  const [puedeAjustar, puedeTransferir, puedeCostos] = await Promise.all([puedeFuncion('inventario', 'ajustar'), puedeFuncion('inventario', 'transferir'), puedeFuncion('inventario', 'costos')])
+  // El costo y el valor (INV-3a): solo con la función `costos`, y leído —como lo que va en camino— en su PROPIA transacción y con
+  // su propio try: si algo falla, la ficha sigue funcionando sin esta tarjeta.
+  let costo: CostoDeVarianteVista | null = null
+  if (puedeCostos && detalle.controlaInventario) {
+    try {
+      costo = await conEmpresa(companyId, (tx) => costoDeVarianteEnTx(tx, companyId, varianteId))
+    } catch (e) {
+      console.error('[admin-inventario-ficha] el costo no está disponible', e instanceof Error ? e.message : e)
+    }
+  }
 
   const activas = detalle.sucursales.filter((s) => s.activa)
   const total = detalle.sucursales.reduce(
@@ -144,6 +156,73 @@ export default async function InventarioVariantePage({ params }: { params: Promi
         </Card>
       )}
 
+      {costo && (
+        <Card aria-label="Costo y valor del producto">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Coins className="h-4 w-4" aria-hidden />
+              Costo y valor
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Costo vigente</p>
+                <p className="text-lg font-semibold tabular-nums">{costo.costo ?? 'Sin costo'}</p>
+                <p className="text-xs text-muted-foreground">{costo.fuente === 'PROMEDIO' ? 'promedio de las entradas' : costo.fuente === 'REFERENCIA' ? 'referencia del catálogo' : 'no suma al valor'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Valor de lo que hay</p>
+                <p className="text-lg font-semibold tabular-nums">{costo.valor ?? '—'}</p>
+                <p className="text-xs text-muted-foreground">{formatearCantidad(costo.unidades)} unidades</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Último costo de entrada</p>
+                <p className="text-lg tabular-nums">{costo.ultimoCosto ?? '—'}</p>
+                {costo.ultimoCostoEn && <p className="text-xs text-muted-foreground">{formatDateTime(costo.ultimoCostoEn)}</p>}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Referencia del catálogo</p>
+                <p className="text-lg tabular-nums">{costo.referencia ?? '—'}</p>
+              </div>
+            </div>
+            {costo.fuente === null && detalle.sucursales.length > 0 && (
+              <Alert className="border-warning/40">
+                <AlertTriangle className="h-4 w-4 text-warning" aria-hidden />
+                <AlertDescription>
+                  Este producto no tiene costo: lo que hay de él no suma al valor del inventario y sus ventas quedan sin costo. Registra una entrada con costo o fíjalo aquí abajo.
+                </AlertDescription>
+              </Alert>
+            )}
+            {detalle.sucursales.some((s) => s.nivelId !== null) ? (
+              <CorregirCostoForm varianteId={detalle.varianteId} costoActual={costo.costo} />
+            ) : (
+              <p className="text-xs text-muted-foreground">Este producto todavía no ha tenido existencias: su costo de referencia se escribe en su ficha del catálogo.</p>
+            )}
+            {costo.correcciones.length > 0 && (
+              <div>
+                <p className="mb-1 text-sm font-medium">Últimas correcciones</p>
+                <ul className="divide-y rounded-lg border text-sm" aria-label="Correcciones del costo">
+                  {costo.correcciones.map((c) => (
+                    <li key={c.id} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 p-2.5">
+                      <span>
+                        {c.anterior ?? 'sin costo'} → <strong className="tabular-nums">{c.nuevo}</strong> <span className="text-xs text-muted-foreground">· {c.motivo}</span>
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDateTime(c.creadoEn)} · {c.autor ?? 'Sistema'} · {formatearCantidad(c.unidades)} unidades
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Corregir el costo cambia lo que vale el inventario y el costo de las ventas desde ahora; las ventas y movimientos que ya ocurrieron conservan el costo con que se valoraron.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {detalle.controlaInventario && (
         <>
           {activas.length === 0 && detalle.sucursales.length === 0 && (
@@ -162,6 +241,7 @@ export default async function InventarioVariantePage({ params }: { params: Promi
                 key={s.sucursalId}
                 varianteId={detalle.varianteId}
                 puedeAjustar={puedeAjustar}
+                puedeCostos={puedeCostos}
                 hayOtrasConSaldo={detalle.sucursales.some((o) => o.activa && o.sucursalId !== s.sucursalId && o.nivelId !== null)}
                 saldo={{ sucursalId: s.sucursalId, nombre: s.nombre, activa: s.activa, onHand: s.onHand, reserved: s.reserved, damaged: s.damaged, disponible: s.disponible, lowStockThreshold: s.lowStockThreshold, estado: s.estado }}
               />

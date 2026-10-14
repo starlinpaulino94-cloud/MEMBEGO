@@ -4,7 +4,7 @@
 > `/admin/inventario`, sus consumidores (pedidos, checkout, POS, ofertas), el cron, las pruebas y la documentación.
 > Se compara con el inventario del Car Wash (`ProductoInventario`), que es OTRO módulo.
 >
-> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b o INV-2c ya lo cerraron** (ver §5, §7, §9 y §11).
+> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c o INV-3a ya lo cerraron** (ver §5, §7, §9, §11 y §13).
 
 ## 1. Veredicto
 
@@ -46,8 +46,10 @@ de problemas, no una propuesta de compra. → INV-3.
 
 ### 3.3 Valor del inventario
 
-`CatalogVariant.cost` es un costo fijo; los movimientos no llevan costo, así que no hay costo promedio, valor del
-inventario por sucursal, costo de ventas (COGS) ni mermas valorizadas. → INV-3 / INV-4.
+`CatalogVariant.cost` es un costo fijo; los movimientos no llevaban costo, así que no había costo promedio, valor del
+inventario por sucursal, costo de ventas (COGS) ni mermas valorizadas. → **INV-3a ✔** (costo promedio ponderado, valor del
+inventario, costo de ventas del mes y corrección de costo; ver §13). Sigue pendiente, en INV-4, el kardex valorizado y las
+mermas valoradas por motivo.
 
 ### 3.4 Historial y reportes
 
@@ -102,7 +104,9 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-2a · Entradas en volumen** | Documento de entrada con varias líneas, número `ENT-AAAA-NNNNNN`, factura y nota; captura con lector; importación CSV todo o nada (hasta 1.000 filas) con revisión previa y plantilla; lista, detalle y CSV de cada entrada | `InventoryReceipt`, `InventoryReceiptLine` (migración `20261056`) | M | **Hecha** (este documento, §7) |
 | **INV-2b · Conteo físico por sucursal** | Sesión de conteo (una abierta por sucursal), a ciegas, captura por lector o por hoja CSV, informe de diferencias con CSV, ajuste por la diferencia (no por el número), todo o nada | `InventoryCountSession`, `InventoryCountLine` (migración `20261057`) | M | **Hecha** (este documento, §9) |
 | **INV-2c · Transferencias con estado** | «Con envío»: enviada → parcial/recibida o cancelada; recepción parcial; cerrar con faltante y motivo; en tránsito visible en la ficha; aviso a los administradores al enviar. La transferencia directa actual se conserva | `InventoryTransfer`, `InventoryTransferLine` (migración `20261058`) | M | **Hecha** (este documento, §11) |
-| INV-3 · Compras y costo | Proveedores y órdenes de compra; costo unitario en entradas; costo promedio ponderado y valor del inventario; COGS; punto de reorden y lista de qué comprar | Proveedores/OC de Commerce Core; `unitCost` en movimientos | L | pendiente |
+| **INV-3a · Costo y valor del inventario** | Costo unitario en las líneas de entrada (manual, CSV y entrada de un producto); costo promedio ponderado por producto; ventas, devoluciones, daños y ajustes valorados con el promedio de su instante; pantalla «Valor del inventario» por sucursal y producto (con CSV); costo de ventas del mes; corregir el costo con motivo. Función de permiso nueva `costos` | `unitCost` en movimientos y líneas de entrada; `InventoryVariantCost`, `InventoryCostAdjustment` (migración `20261059`) | M | **Hecha** (este documento, §13) |
+| INV-3b · Proveedores y órdenes de compra | Proveedores; orden de compra `OC-AAAA-NNNNNN` (Borrador → Pedida → Recibida en parte → Recibida, o Cancelada); recibir una orden crea una entrada con los costos de la orden; vínculo producto-proveedor con último costo y días de entrega | Proveedores/OC de Commerce Core | M | pendiente |
+| INV-3c · Reposición | «Llenar hasta» por producto y sucursal; pantalla «Qué comprar» con la cantidad sugerida (descontando lo pedido y lo que va en camino), agrupada por proveedor, que crea órdenes en borrador | Campo en el saldo | S | pendiente |
 | INV-4 · Reportes | Kardex valorizado, rotación y días de inventario, stock sin movimiento, mermas por motivo codificado, margen real; tarjeta de dashboard | Catálogo de motivos | M | pendiente |
 | INV-5 · Trazabilidad | Lotes y vencimiento con FEFO; series; kits que descuentan componentes; API v1; rol de bodega | Lotes, kits | L por pieza | pendiente |
 
@@ -468,6 +472,146 @@ Hallazgos de la propia verificación (importa que se sepan):
   hace falta, es un cambio de INV-5 (rol de bodega).
 - Medido contra la base local, no contra Supabase: la latencia de red por consulta no está en esos tiempos (el número de
   consultas de enviar, recibir y cancelar no crece con las líneas: son lotes).
+- En esta máquina el servidor de E2E imprime muchos `fetch failed … 127.0.0.1:54329` (Supabase Auth inexistente en el
+  arnés): ruido previo, no afecta a los resultados.
+
+## 13. INV-3a · qué se hizo
+
+> Primera de las tres partes de INV-3 (el orden se cambió respecto a la hoja de ruta original: primero el costo y después
+> las compras, para que las órdenes de compra nazcan ya sabiendo de costos). Decisiones aprobadas que aplican aquí: UN costo
+> promedio por producto para toda la empresa (las transferencias no lo cambian); el costo es opcional en las entradas y una
+> entrada sin costo no lo mueve; lo que no tiene costo se dice, no se cuenta como cero; devoluciones y sobrantes se valoran
+> con el promedio del momento; sin historial hacia atrás; costo sin impuestos y en la moneda de la empresa; permiso nuevo
+> `costos`; corrección de costo con motivo y auditada; nada de Car Wash.
+
+- **Costo en las entradas** — cada línea de una entrada acepta un costo unitario (hasta cuatro decimales, con punto, sin
+  comas ni signos; cero es un costo válido, una celda vacía es «sin costo»). Vale igual en la entrada de varias líneas, en la
+  importación CSV (columna opcional `costo`; la plantilla la trae solo para quien puede registrar costos) y en la entrada de
+  UN producto de su ficha. Se guarda en la línea (`inventory_receipt_lines.unitCost`) y en el movimiento del ledger.
+- **Costo promedio ponderado** — `inventory_variant_costs`, uno por producto. Una entrada CON costo lo recalcula con
+  TODO lo que la empresa tiene del producto (vendible + apartado + dañado, en todas las sucursales):
+  `(existencias × promedio + entrada × costo) / (existencias + entrada)`, en aritmética entera (diezmilésimas) y redondeando la
+  mitad hacia arriba. Sin existencias previas, el costo nuevo reemplaza al viejo. Si el producto no tenía promedio pesa el
+  `cost` de referencia de su ficha del catálogo; si no tenía ninguno, las unidades viejas se valoran al costo de la entrada
+  (no se diluyen con ceros). Una entrada sin costo no lo toca.
+- **Lo que sale queda valorado** — ventas (directas y por reserva consumida), devoluciones, daños y ajustes —también los de un
+  conteo aplicado— guardan en su movimiento el promedio de ESE instante (`inventory_movements.unitCost`) y ya no cambia:
+  el costo de ventas de un mes no se mueve porque el promedio cambie después. Las reservas y las transferencias no se
+  valoran. Un producto sin promedio ni referencia deja el movimiento sin costo (NULL), no en cero.
+- **Valor del inventario** — `/admin/inventario/valor` (pestaña «Valor», solo con la función `costos`): valor total,
+  existencias, costo de ventas del mes, lo que va en camino entre sucursales (aparte: no está en ninguna), valor por
+  sucursal, y cada producto con su costo, de dónde sale (promedio o referencia del catálogo) y su valor, de más a menos.
+  Filtros por producto, sucursal, solo sin costo y mes del costo de ventas; 50 por página; CSV con los mismos filtros
+  (números planos que se suman, «Sin costo» sin cifra, tope de 20.000 filas con aviso si corta).
+- **Lo que no tiene costo no se esconde** — un aviso dice cuántos productos y unidades no suman al valor, con el enlace para
+  verlos, y cuántas unidades vendidas del mes no tenían costo conocido (las ventas de antes de esta fase, y las de productos sin
+  costo). El costo de ventas empieza a contar desde que se aplica la migración.
+- **Corregir el costo** — en la ficha del producto («Costo y valor»): costo nuevo + motivo obligatorio. Cambia el promedio
+  desde ahora (valor del inventario y próximas salidas); no toca el ledger. Deja una fila inmutable en
+  `inventory_cost_adjustments` (de cuánto a cuánto, con cuántas unidades, quién, por qué) y una en la bitácora. También es
+  la forma de fijar el costo de lo que ya había antes de llevar costos. Solo para productos que ya tuvieron existencias.
+- **Permisos** — función nueva `costos` («Ver y fijar costos, y ver el valor del inventario»). Exige: la pantalla y el CSV
+  del valor, la tarjeta de costo de la ficha, corregir el costo, registrar un costo en cualquier entrada y subir un CSV con
+  costos. Sin ella, la consulta ni LEE el costo de una entrada (no solo lo esconde), el CSV de la entrada no trae costos, la
+  pestaña «Valor» no aparece, la plantilla no trae la columna y un archivo con costos se rechaza —no se ignoran en silencio—.
+  **Cómo funciona el permiso hoy (importa):** el motor de Permisos de este sistema concede por defecto toda función que no
+  se haya negado. Por eso, quien ya tiene la sección Inventario (administradores y gerentes) tiene `costos` desde que se
+  despliega esto. Para quitárselo a alguien: Permisos del empleado → Inventario → desmarcar «Ver y fijar costos…».
+  Hacerlo al revés (que nadie lo tenga hasta concederlo) exigiría cambiar el motor de Permisos, y no se hizo.
+- **Concurrencia** — el orden de bloqueo es documento → saldos (por id) → renglón de costo (por producto); los renglones
+  que faltan se crean en ese orden fijo (la lección de INV-2a). Las ventas solo LEEN el costo (nunca esperan a una entrada;
+  hay una prueba que lo demuestra reteniendo el candado). Una aproximación asumida: las existencias que pesan se leen sin
+  bloquear las otras sucursales, así que una venta que confirme en el mismo instante en otra sucursal puede mover el peso de lo
+  viejo en, como mucho, sus unidades.
+- **Degradación** — `/api/health` avisa (`inventory_variant_costs.esquema`, `inventory_movements.unitCost`) si el código llega
+  antes que el SQL. La tarjeta de costo de la ficha se lee en su propia transacción con su propio `try`.
+
+Archivos principales: `prisma/schema/inventario.prisma`, `prisma/migrations/20261059_inventory_costs/`,
+`src/modules/inventory/{costos,valor}.ts` (+ `service`, `entradas`, `importacion`, `importar`, `filtros`, `exportacion`,
+`queries`, `actions`), `src/components/inventario/{CorregirCostoForm,EntradaMultipleForm,ImportarForm,SucursalInventarioCard,NavegacionInventario}.tsx`,
+`src/app/(admin)/admin/inventario/valor/` y la tarjeta de la ficha `src/app/(admin)/admin/inventario/[varianteId]/page.tsx`.
+
+### Cómo aplicar la migración (obligatorio y en este orden — esta vez el orden SÍ importa)
+
+1. **SQL primero**: copiar `prisma/migrations/20261059_inventory_costs/migration.sql` al SQL Editor de Supabase y ejecutarlo
+   (aditivo e idempotente: se puede correr dos veces). Solo añade dos columnas NULL a `inventory_movements` y a
+   `inventory_receipt_lines` (sin valor por defecto: PostgreSQL no reescribe la tabla) y dos tablas nuevas; los CHECK de las
+   tablas viejas se crean `NOT VALID` y se validan aparte.
+2. **Después el código.** **A diferencia de INV-2a/2b/2c, desplegar el código SIN el SQL rompe el inventario y los pedidos:**
+   esta migración toca `inventory_movements`, que escribe cada venta, y el código nuevo lee y escribe `unitCost` en todos sus
+   movimientos. Con el SQL aplicado y el código viejo todavía en producción no pasa nada (la columna se ignora).
+3. Verificar con `npm run db:doctor` y `/api/health` (debe listar `inventory_variant_costs.esquema` e
+   `inventory_movements.unitCost` en verde).
+
+## 14. Verificación de INV-3a (2026-10-14)
+
+Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`; la migración nueva aplicada con `prisma migrate deploy` sobre
+las 215 anteriores —216 en total—, re-ejecutada varias veces sobre una base ya migrada sin error —es lo que restauró cada
+mutación— y `prisma migrate diff` contra el esquema sin diferencias; no se tocó ninguna base real). Sin Supabase real,
+Vercel, lector de código de barras físico, Excel con la columna de costo, móvil ni Safari: **no verificados**.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (190 avisos, los mismos de antes: ninguno nuevo) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; las 2 rutas nuevas compiladas; entrada compartida 856/1000 KB (86 %), trozo mayor 409/600 KB (sin cambio) |
+| Unitarias (`bun run test`) | 4310 pruebas: 4303 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest` como en CI) | 739/739, cero omitidas |
+| Pruebas nuevas | 33 puras (`inventario-costos.test.ts`, incluidas dos propiedades al azar), 10 guardias nuevas (`inventario-permisos.test.ts`, ya 60), 24 contra PostgreSQL (`inventory-costos.db.test.ts`) y un recorrido E2E nuevo |
+| E2E (`bun run e2e:limpio`, escritorio) | 70/70 sobre la compilación final: `inventario-admin` (9, con el recorrido nuevo), `comercio-experiencia`, `pedidos-membego`, `pos-membego`, `carrito-checkout`, `catalogo-admin`, `catalogo-api` y `catalogo-publico` |
+| Mutaciones | 96 distintas, 94 detectadas (ver abajo) |
+| Rendimiento (local, sin latencia de red) | entrada de 1.000 líneas con costo: ≈0,6–0,8 s la primera y ≈0,6–0,7 s la que pondera sobre promedios ya existentes, frente a los 45 s de una transacción; la venta, con la lectura del promedio añadida: ≈19–24 ms frente a ≈20–21 ms sin ella (dentro del ruido) |
+
+Qué cubre el recorrido E2E: la pestaña «Valor» (los vasos valen por su costo de referencia; el plato sin costo se dice, con su
+aviso) → una entrada con un costo con coma (se rechaza con un mensaje que dice qué hacer) y con punto (el detalle enseña lo que
+costó) → otra, en otra sucursal, con una línea sin costo (no mueve el promedio) → la ficha: 10 a 5 más 10 a 7 es 6 → el valor
+por producto y por sucursal, «solo sin costo», búsqueda y una URL manipulada → fijar el costo de lo que ya había (sin motivo no
+deja) → la entrada de un producto desde su ficha con costo (20 a 6 con 5 a 10 = 6.80) → importar un CSV con columna de costo
+(una coma rechaza TODO el archivo; el limpio dice cuántas líneas traen costo) → el costo de ventas del mes con el costo que
+cada venta congeló y el aviso de lo vendido sin costo → los archivos (números sin separador de miles) → y, con la función
+`costos` negada, nada de nada: ni la pestaña, ni la pantalla, ni la tarjeta, ni el campo de costo, ni el costo de la entrada ni
+su CSV; la descarga del valor da 403 y un archivo con costos se rechaza.
+
+Qué cubren las 24 pruebas contra PostgreSQL: el promedio con las existencias de todas las sucursales (10 a 5 + 10 a 7 = 6) y con
+lo dañado; la entrada sin costo que no lo mueve ni lo inventa; el costo de referencia que pesa mientras no hay promedio; ventas,
+reservas consumidas, devoluciones, daños, ajustes y un conteo aplicado valorados con el promedio de su instante y que NO cambian
+cuando el promedio cambia después; reservas y transferencias sin valorar; corregir (historia inmutable, ledger intacto, motivo
+obligatorio, producto sin existencias, servicio, otra empresa); la entrada de un producto y la de varias líneas, repetidas con la
+misma clave (con otro costo, o sin él, es otra operación); tres entradas a la vez sobre un promedio ya existente sin perder
+ninguna, otras en sucursales distintas, las cruzadas con productos nuevos en distinto orden (sin interbloqueo), y una venta que
+no espera al candado del costo mientras que una entrada sí; la base (rangos, correcciones inmutables, renglón de costo que no
+se borra ni cambia de producto o empresa, claves foráneas compuestas, un costo por producto); una propiedad de 200 operaciones
+al azar contra un modelo puro; el valor por producto/sucursal/en tránsito/paginado y el costo de ventas por mes.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **El motor de Permisos concede por defecto.** Una función nueva se le concede a todo el que ya tenga la sección (la
+  negación es la excepción), y solo `SUPERADMIN` está exento de los permisos por empleado —los administradores no—. Se
+  respetó el modelo (negar `costos` a alguien funciona y está probado de punta a punta), pero significa que los gerentes verán
+  costos desde que se despliega esto. Ver el recuadro de permisos en §13.
+- **Mis propias pruebas de carrera no mordían el candado del costo.** Las cuatro primeras usaban productos nuevos, y para un
+  producto nuevo el `INSERT … ON CONFLICT` del renglón ya serializa a las entradas: quitar el `FOR UPDATE` no rompía nada. La
+  mutación que lo quitó sobrevivió, y obligó a una prueba sobre un promedio YA existente (tres entradas a la vez en tres
+  sucursales, 12 rondas): sin el candado se pierde una entrada.
+- **Mutaciones**: 96 distintas (21 del servicio, 28 de lo puro —costos, líneas, importación, filtros, archivos—, 31 de las
+  lecturas del valor y de las guardias de permiso, 16 de los objetos de la base), 94 detectadas. Al principio sobrevivían 6 reales
+  y obligaron a reforzar pruebas: el candado del costo (arriba); el límite inferior del mes en el costo de ventas (no había una
+  venta de un mes anterior); el valor de lo que va en camino ante una recepción parcial; la ficha de un producto con solo costo de
+  referencia; que la importación PASE el permiso al servicio (una guardia solo miraba que se calculara); y que el renglón de costo
+  no cambie de `id`. Además, una revisión mía encontró que la prueba de la línea de entrada con costo negativo fallaba por usar un
+  movimiento ya enlazado y no por el CHECK (su expresión aceptaba cualquier mensaje de esa tabla): se corrigió antes de medir.
+  Las 2 que siguen vivas son equivalentes: valorar «todo» en lugar de solo ventas, devoluciones, daños y ajustes (el filtro por
+  tipo está además en la consulta que lee el promedio, así que se protege dos veces) y no tratar aparte el caso de cero existencias
+  previas (la fórmula da exactamente el costo de la entrada).
+- **Una guardia vieja no veía los imports «de efecto»** (`import '@/modules/...'` sin `from`): un componente de cliente podía
+  arrastrar un módulo de servidor sin que ninguna prueba lo notara. Ahora los mira.
+- **Cambios a pruebas que no son de esta fase**: al ofrecer un campo de costo en cada línea de la entrada, `getByRole('textbox')`
+  de la prueba E2E de INV-2a dejó de ser único (cantidad y costo); sus 6 usos ahora piden la cantidad por su etiqueta. La
+  etiqueta de la bitácora `INVENTORY_CONFIGURED` pasó de «umbral de stock bajo modificado» a «configuración modificada (umbral
+  de stock bajo o costo de un producto)», porque la corrección de costo se registra con esa acción (añadir una nueva exigiría
+  modificar un tipo de PostgreSQL).
+- **El orden de despliegue es distinto esta vez**: el SQL tiene que ir ANTES que el código (§13). `/api/health` lo avisa si no.
+- Medido contra la base local, no contra Supabase: la latencia de red por consulta no está en esos tiempos. La entrada en lote
+  hace cinco consultas más que antes (crear los renglones, bloquearlos, leer existencias, leer referencias y actualizar), no una por línea.
 - En esta máquina el servidor de E2E imprime muchos `fetch failed … 127.0.0.1:54329` (Supabase Auth inexistente en el
   arnés): ruido previo, no afecta a los resultados.
 

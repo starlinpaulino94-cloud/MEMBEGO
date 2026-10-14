@@ -6,6 +6,7 @@ import { Loader2, ScanBarcode, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { buscarProductosParaEntrada, registrarEntradaMultiple } from '@/modules/inventory/actions'
 import { MAX_LINEAS_ENTRADA, MAX_NOTA, MAX_REFERENCIA } from '@/modules/inventory/entradas'
+import { costoOpcional } from '@/modules/inventory/costos'
 import { formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -38,6 +39,8 @@ interface LineaForm {
   disponible: number | null
   /** Texto del campo: puede estar a medias mientras se teclea. */
   cantidad: string
+  /** INV-3a: costo unitario (sin impuestos), solo si quien captura puede registrar costos. Vacío = sin costo. */
+  costo: string
 }
 
 const entero = (t: string): number | null => (/^\d{1,7}$/.test(t.trim()) ? Number(t.trim()) : null)
@@ -49,7 +52,7 @@ const entero = (t: string): number | null => (/^\d{1,7}$/.test(t.trim()) ? Numbe
  * Enter: la coincidencia exacta se añade sola; escanear el mismo producto otra
  * vez suma una unidad a su línea.
  */
-export function EntradaMultipleForm({ sucursales }: { sucursales: SucursalOpcionForm[] }) {
+export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursales: SucursalOpcionForm[]; conCostos?: boolean }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [sucursalId, setSucursalId] = useState(sucursales[0]?.id ?? '')
@@ -101,7 +104,7 @@ export function EntradaMultipleForm({ sucursales }: { sucursales: SucursalOpcion
         toast.error(`Una entrada admite hasta ${MAX_LINEAS_ENTRADA} productos. Regístrala y empieza otra.`)
         return actuales
       }
-      return [...actuales, { varianteId: p.id, nombre: nombreCompleto(p.itemNombre, p.nombreVariante, p.esDefault), sku: p.sku, disponible: p.disponible, cantidad: '1' }]
+      return [...actuales, { varianteId: p.id, nombre: nombreCompleto(p.itemNombre, p.nombreVariante, p.esDefault), sku: p.sku, disponible: p.disponible, cantidad: '1', costo: '' }]
     })
     setQ('')
     setSugerencias([])
@@ -139,11 +142,20 @@ export function EntradaMultipleForm({ sucursales }: { sucursales: SucursalOpcion
       toast.error('Agrega al menos un producto a la entrada.')
       return
     }
-    const cuerpo = lineas.map((l) => ({ varianteId: l.varianteId, cantidad: entero(l.cantidad) ?? 0 }))
+    const cuerpo = lineas.map((l) => ({ varianteId: l.varianteId, cantidad: entero(l.cantidad) ?? 0, ...(conCostos && l.costo.trim() !== '' ? { costo: l.costo.trim() } : {}) }))
     const mala = cuerpo.findIndex((l) => l.cantidad < 1)
     if (mala >= 0) {
       toast.error(`Revisa la cantidad de «${lineas[mala].nombre}»: es un entero de 1 en adelante.`)
       return
+    }
+    // El servidor vuelve a validar todo; esto solo ahorra el viaje y señala cuál línea es.
+    for (let i = 0; i < lineas.length; i++) {
+      if (!conCostos) break
+      const c = costoOpcional(lineas[i].costo)
+      if (!c.ok) {
+        toast.error(`Revisa el costo de «${lineas[i].nombre}»: ${c.error}`)
+        return
+      }
     }
     start(async () => {
       const r = await registrarEntradaMultiple({ sucursalId, lineas: cuerpo, referencia, nota, clave: clave.current })
@@ -262,6 +274,23 @@ export function EntradaMultipleForm({ sucursales }: { sucursales: SucursalOpcion
                       onChange={(e) => setLineas((ls) => ls.map((x, k) => (k === i ? { ...x, cantidad: e.target.value } : x)))}
                       className="w-24 text-right tabular-nums"
                     />
+                    {conCostos && (
+                      <>
+                        <Label htmlFor={`en-costo-${i}`} className="sr-only">
+                          Costo unitario de {l.nombre}
+                        </Label>
+                        <Input
+                          id={`en-costo-${i}`}
+                          inputMode="decimal"
+                          autoComplete="off"
+                          placeholder="Costo"
+                          value={l.costo}
+                          aria-invalid={!costoOpcional(l.costo).ok}
+                          onChange={(e) => setLineas((ls) => ls.map((x, k) => (k === i ? { ...x, costo: e.target.value } : x)))}
+                          className="w-28 text-right tabular-nums"
+                        />
+                      </>
+                    )}
                     <Button type="button" variant="ghost" size="icon" aria-label={`Quitar ${l.nombre}`} onClick={() => setLineas((ls) => ls.filter((_, k) => k !== i))}>
                       <Trash2 className="h-4 w-4" aria-hidden />
                     </Button>
@@ -280,6 +309,11 @@ export function EntradaMultipleForm({ sucursales }: { sucursales: SucursalOpcion
               Registrar entrada
             </Button>
           </div>
+          {conCostos && (
+            <p className="text-xs text-muted-foreground">
+              El costo es opcional y va por unidad, sin impuestos y con punto decimal (ej: 12.50). Un producto con costo actualiza su costo promedio; sin costo la entrada no lo cambia.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">Se registra todo junto: si un producto falla, no entra ninguno. Una entrada ya registrada no se edita; un error se corrige con un ajuste.</p>
         </CardContent>
       </Card>

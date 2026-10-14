@@ -1,4 +1,5 @@
 import { armarCsv } from '@/lib/csv'
+import { costoADecimal, formatearCosto, parsearCosto } from './costos'
 import { CANTIDAD_MAXIMA } from './domain'
 import { MAX_LINEAS_IMPORTACION, type LineaEntrada } from './entradas'
 
@@ -99,6 +100,8 @@ export function normalizarEncabezado(h: string): string {
 const ALIAS_SKU = new Set(['sku', 'codigo_sku', 'cod_sku'])
 const ALIAS_CODIGO = new Set(['codigo_de_barras', 'codigo_barras', 'barcode', 'ean', 'upc', 'gtin', 'cod_barras'])
 const ALIAS_CANTIDAD = new Set(['cantidad', 'unidades', 'qty', 'quantity', 'cantidad_recibida'])
+/** INV-3a: el costo unitario de la fila (solo en las entradas). Sin impuestos. */
+const ALIAS_COSTO = new Set(['costo', 'costo_unitario', 'costo_por_unidad', 'costo_de_compra', 'precio_de_compra', 'unit_cost', 'cost'])
 /** El conteo físico acepta además los nombres con que se llama a lo contado. */
 const ALIAS_CONTADO = new Set(['contado', 'conteo', 'cantidad_contada', 'contada', 'cantidad', 'unidades', 'qty', 'quantity'])
 
@@ -113,6 +116,8 @@ export interface FilaCsv {
   sku: string | null
   barcode: string | null
   cantidad: string
+  /** INV-3a: lo que dice la celda del costo (puede ser ''). SOLO está si el archivo trae una columna de costo. */
+  costo?: string
 }
 
 export type LecturaCsv = { ok: true; filas: FilaCsv[]; delimitador: Delimitador } | { ok: false; error: string }
@@ -134,6 +139,7 @@ export function leerImportacion(texto: unknown, tipo: TipoImportacion = 'ENTRADA
   const iSku = encabezados.findIndex((h) => ALIAS_SKU.has(h))
   const iCodigo = encabezados.findIndex((h) => ALIAS_CODIGO.has(h))
   const iCantidad = encabezados.findIndex((h) => (tipo === 'CONTEO' ? ALIAS_CONTADO : ALIAS_CANTIDAD).has(h))
+  const iCosto = tipo === 'ENTRADA' ? encabezados.findIndex((h) => ALIAS_COSTO.has(h)) : -1
   if (iCantidad < 0 || (iSku < 0 && iCodigo < 0)) {
     return { ok: false, error: `La primera fila debe tener los encabezados «sku» (o «codigo_de_barras») y «${NOMBRE_COLUMNA[tipo]}». Descarga ${tipo === 'CONTEO' ? 'la hoja de conteo' : 'la plantilla'} para ver el formato.` }
   }
@@ -145,7 +151,7 @@ export function leerImportacion(texto: unknown, tipo: TipoImportacion = 'ENTRADA
     const f = filas[n]
     // Una fila en blanco (Excel deja muchas al final) no es un dato.
     if (f.every((c) => c.trim() === '')) continue
-    datos.push({ fila: n + 1, sku: celda(f, iSku) || null, barcode: celda(f, iCodigo) || null, cantidad: celda(f, iCantidad) })
+    datos.push({ fila: n + 1, sku: celda(f, iSku) || null, barcode: celda(f, iCodigo) || null, cantidad: celda(f, iCantidad), ...(iCosto >= 0 ? { costo: celda(f, iCosto) } : {}) })
   }
   if (datos.length === 0) return { ok: false, error: 'El archivo no trae ninguna fila de datos debajo de los encabezados.' }
   return { ok: true, filas: datos, delimitador }
@@ -190,6 +196,8 @@ export interface LineaVistaPrevia {
   sku: string
   nombre: string
   cantidad: number
+  /** INV-3a: el costo unitario de la fila, ya formateado; falta si la fila no trae costo. */
+  costo?: string
 }
 
 export interface InformeImportacion {
@@ -206,6 +214,13 @@ export interface InformeImportacion {
   lineas: LineaEntrada[]
   /** Solo en un conteo: filas con la celda vacía, que significan «no se contó» y no se tocan. */
   omitidas?: number
+  /** Solo en una entrada con columna de costo: líneas que traen costo (las demás entran sin él y no mueven el promedio). */
+  conCosto?: number
+}
+
+export interface OpcionesValidacion {
+  /** ¿Quien importa puede registrar costos (`inventario/costos`)? Si no, un archivo con costos se rechaza: no se ignoran en silencio. */
+  permitirCostos?: boolean
 }
 
 const NOTACION_CIENTIFICA = /^\d+([.,]\d+)?e\+?\d+$/i
@@ -227,9 +242,10 @@ function cantidadDe(texto: string, minimo: number): { ok: true; valor: number } 
  * Valida todas las filas contra el catálogo y arma el informe. Cada fila dice
  * QUÉ producto encontró: es la defensa contra el cero que Excel se comió.
  */
-export function validarImportacion(filas: readonly FilaCsv[], catalogo: CatalogoCodigos, tipo: TipoImportacion = 'ENTRADA'): InformeImportacion {
+export function validarImportacion(filas: readonly FilaCsv[], catalogo: CatalogoCodigos, tipo: TipoImportacion = 'ENTRADA', opciones: OpcionesValidacion = {}): InformeImportacion {
   const esConteo = tipo === 'CONTEO'
   let omitidas = 0
+  let conCosto = 0
   const errores: ErrorFila[] = []
   const avisos = new Set<string>()
   const lineas: LineaEntrada[] = []
@@ -263,6 +279,20 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
     const problemas: string[] = []
     const cantidad = cantidadDe(f.cantidad, esConteo ? 0 : 1)
     if (!cantidad.ok) problemas.push(cantidad.mensaje)
+
+    // INV-3a: el costo es opcional; una celda vacía es «sin costo» (no es cero ni es un error), y 0 es un costo.
+    let costo: string | null = null
+    let costoVista: string | null = null
+    if (!esConteo && f.costo !== undefined && f.costo !== '') {
+      if (!opciones.permitirCostos) problemas.push('Esta fila trae un costo y tu usuario no tiene permiso para registrar costos: quita la columna «costo» del archivo.')
+      else {
+        const c = parsearCosto(f.costo)
+        if (c.ok) {
+          costo = costoADecimal(c.valor)
+          costoVista = formatearCosto(c.valor)
+        } else problemas.push(c.error)
+      }
+    }
 
     let variante: VarianteImportable | null = null
     if (!f.sku && !f.barcode) problemas.push('Falta el SKU o el código de barras.')
@@ -302,14 +332,16 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
       continue
     }
     if (!variante || !cantidad.ok) continue
-    lineas.push({ varianteId: variante.id, cantidad: cantidad.valor })
+    lineas.push(costo === null ? { varianteId: variante.id, cantidad: cantidad.valor } : { varianteId: variante.id, cantidad: cantidad.valor, costo })
+    if (costo !== null) conCosto++
     unidades += cantidad.valor
-    if (vista.length < MAX_FILAS_VISTA_PREVIA) vista.push({ fila: f.fila, sku: variante.sku, nombre: variante.nombre, cantidad: cantidad.valor })
+    if (vista.length < MAX_FILAS_VISTA_PREVIA) vista.push({ fila: f.fila, sku: variante.sku, nombre: variante.nombre, cantidad: cantidad.valor, ...(costoVista !== null ? { costo: costoVista } : {}) })
   }
 
   const ok = errores.length === 0 && lineas.length > 0
   return {
     ...(esConteo ? { omitidas } : {}),
+    ...(!esConteo && filas.some((f) => f.costo !== undefined) ? { conCosto } : {}),
     ok,
     filasLeidas: filas.length,
     productos: lineas.length,
@@ -329,7 +361,16 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
  * que NO existen: si se suben sin borrarlas, el informe las rechaza (todo o
  * nada) en vez de meter existencias de mentira.
  */
-export function plantillaImportacionCsv(): string {
+export function plantillaImportacionCsv(conCostos = false): string {
+  if (conCostos) {
+    return armarCsv(
+      ['sku', 'codigo_de_barras', 'cantidad', 'costo', 'nombre (opcional, solo para ti)'],
+      [
+        ['EJEMPLO-BORRAR-1', '', 10, '12.50', 'Escribe el SKU, o el código de barras, de un producto que ya exista'],
+        ['', 'EJEMPLO-BORRAR-2', 5, '', 'El costo es opcional: sin él la entrada no cambia el costo promedio. Usa punto decimal, sin comas ni impuestos'],
+      ]
+    )
+  }
   return armarCsv(
     ['sku', 'codigo_de_barras', 'cantidad', 'nombre (opcional, solo para ti)'],
     [
