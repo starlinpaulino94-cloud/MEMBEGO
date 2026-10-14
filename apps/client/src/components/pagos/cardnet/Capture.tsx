@@ -19,14 +19,9 @@ import {
 import {
   decideCaptureStatus,
   isCardnetSessionExpired,
-  resolveCardnetMerchantOrigin,
   shouldRenderPaymentSuccess,
   validateCardnetCaptureSession,
 } from './security'
-
-const cardnetMerchantOrigin = resolveCardnetMerchantOrigin(
-  process.env.EXPO_PUBLIC_CARDNET_MERCHANT_ORIGIN,
-)
 
 export interface CardnetCaptureProps {
   readonly session: CardnetCaptureSession
@@ -236,11 +231,6 @@ export function CardnetCapture({
     }, CAPTURE_WATCH_MS)
     return () => clearInterval(interval)
   }, [watching])
-  const nativeCaptureActive = Platform.OS !== 'web' &&
-    config !== null &&
-    cardnetMerchantOrigin !== null &&
-    !captureFailure &&
-    !captureIsClosed
 
   const captureContent = (
     <View className="mx-auto w-full max-w-[720px] gap-4 px-4 py-4 md:px-6">
@@ -259,8 +249,6 @@ export function CardnetCapture({
         <CardnetCaptureIntroduction />
         {!config ? (
           <CardnetCaptureError title="No pudimos validar la sesión de CardNET" description="Cierra esta ventana e inicia una nueva sesión de pago." onRetry={onRestartSession} />
-        ) : Platform.OS !== 'web' && !cardnetMerchantOrigin ? (
-          <CardnetCaptureError title="No pudimos preparar CardNET" description="El origen seguro de la tienda no es válido." onRetry={onRestartSession} />
         ) : captureFailure ? (
           <CardnetCaptureError onRetry={onRestartSession} />
         ) : captureIsClosed ? (
@@ -274,7 +262,6 @@ export function CardnetCapture({
             key={surfaceKey}
             config={config}
             disabled={false}
-            merchantOrigin={cardnetMerchantOrigin ?? 'https://membego.com'}
             onError={handleCaptureError}
             onToken={receiveToken}
             session={session}
@@ -318,25 +305,15 @@ export function CardnetCapture({
             </Button>
           </View>
         </View>
-        {nativeCaptureActive && config ? (
-          <CardnetCaptureSurface
-            key={surfaceKey}
-            config={config}
-            disabled={false}
-            merchantOrigin={cardnetMerchantOrigin ?? 'https://membego.com'}
-            onError={handleCaptureError}
-            onToken={receiveToken}
-            session={session}
-          />
-        ) : (
-          <ScrollView
-            className="flex-1"
-            contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            {captureContent}
-          </ScrollView>
-        )}
+        {/* En el teléfono el formulario de CardNET se abre en el navegador del sistema (ver CaptureSurface.native.tsx):
+            aquí queda el resumen del pago, el botón para abrirlo y lo que diga el servidor. */}
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {captureContent}
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   )

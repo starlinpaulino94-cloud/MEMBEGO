@@ -8,6 +8,7 @@ import { CatalogoError } from '../../src/modules/catalog/errores'
 import {
   ajustarEnTx,
   configurarUmbralEnTx,
+  configurarUmbralOtrasSucursalesEnTx,
   consumirReservaEnTx,
   contarEnTx,
   danarEnTx,
@@ -22,7 +23,18 @@ import {
 } from '../../src/modules/inventory/service'
 import { InventarioError } from '../../src/modules/inventory/errores'
 import { barridoInventario } from '../../src/modules/inventory/barrido'
-import { alertasDeStockEnTx, detalleVarianteEnTx, historialDeVarianteEnTx, listarInventarioEnTx, reservasVivasEnTx } from '../../src/modules/inventory/queries'
+import {
+  alertasDeStockEnTx,
+  detalleVarianteEnTx,
+  historialDeVarianteEnTx,
+  listarInventarioEnTx,
+  movimientosEmpresaEnTx,
+  reservasVivasEmpresaEnTx,
+  reservasVivasEnTx,
+  usuariosParaFiltroEnTx,
+} from '../../src/modules/inventory/queries'
+import { USUARIO_SISTEMA } from '../../src/modules/inventory/filtros'
+import { advertenciaEstadoManual } from '../../src/modules/inventory/formato'
 import { MOVIMIENTOS_PERMITIDOS, TIPOS_DE_MOVIMIENTO, BUCKETS, cuadra, disponible, validarMovimiento } from '../../src/modules/inventory/domain'
 
 /**
@@ -271,7 +283,11 @@ test('12 · el ledger es inmutable: UPDATE, DELETE y TRUNCATE los rechaza la bas
   await assert.rejects(prisma.$executeRaw`UPDATE "inventory_movements" SET "quantity" = 999 WHERE "id" = ${m.id}`, /inventory_movements_inmutable/)
   await assert.rejects(prisma.$executeRaw`UPDATE "inventory_movements" SET "reason" = 'editado' WHERE "id" = ${m.id}`, /inventory_movements_inmutable/)
   await assert.rejects(prisma.$executeRaw`DELETE FROM "inventory_movements" WHERE "id" = ${m.id}`, /inventory_movements_inmutable/)
-  await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE "inventory_movements"'), /inventory_movements_inmutable/)
+  // Desde INV-2a las líneas de una entrada apuntan al ledger: un TRUNCATE a secas ya lo frena PostgreSQL por la FK (antes que el
+  // disparador). Vaciarlo junto con las líneas salta esa FK, y entonces lo frena el disparador del propio ledger.
+  await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE "inventory_movements"'), /inventory_movements_inmutable|cannot truncate a table referenced in a foreign key constraint/)
+  await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE "inventory_movements", "inventory_receipt_lines", "inventory_count_lines", "inventory_transfer_lines"'), /inventory_movements_inmutable/)
+  await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE "inventory_movements" CASCADE'), /inmutable/)
   await assert.rejects(prisma.inventoryMovement.update({ where: { id: m.id }, data: { quantity: 1 } }), /inmutable/)
   await assert.rejects(prisma.inventoryMovement.deleteMany({ where: { id: m.id } }), /inmutable/)
   const intacto = await prisma.inventoryMovement.findUniqueOrThrow({ where: { id: m.id } })
@@ -826,4 +842,178 @@ test('37 · una referencia sin tipo, o con tipo o id desmesurados, se rechaza an
   assert.equal(await prisma.inventoryReservation.count({ where: { inventoryLevelId: n.id } }), 0)
   // Una buena pasa.
   await enA((tx) => reservarEnTx(tx, ctx.a, { ...base(v, suc), cantidad: 1, referencia: { tipo: 'ORDER', id: 'pedido-ok' }, ahora: T0 }, como(null)))
+})
+
+// ── INV-1 · visibilidad: movimientos de la empresa, reservas, códigos y umbrales ──
+
+const ZONA = 'America/Santo_Domingo'
+const tok = `mvx${sufijo}`
+
+/** Un producto físico de la empresa A con SKU y (opcional) código de barras propios; devuelve el id de su variante. */
+async function productoConCodigo(nombre: string, sku: string, barcode: string | null = null) {
+  const r = await enA((tx) => crearItemEnTx(tx, ctx.a, { name: nombre, type: 'PHYSICAL_PRODUCT', price: 50, sku, barcode }, como(ctx.usuario)))
+  const v = await prisma.catalogVariant.findFirstOrThrow({ where: { catalogItemId: r.id }, select: { id: true } })
+  return v.id
+}
+
+test('38 · los movimientos de la empresa se filtran por tipo, sucursal, persona, código y fecha, y se paginan sin repetir ni saltar', async () => {
+  const s1 = await sucursalLimpia(`mv1-${sufijo}`)
+  const s2 = await sucursalLimpia(`mv2-${sufijo}`)
+  const s3 = await sucursalLimpia(`mv3-${sufijo}`)
+  const barcode1 = `7501${Date.now().toString().slice(-8)}`
+  const v1 = await productoConCodigo(`Zapato ${tok}`, `MV-Z-${sufijo}`, barcode1)
+  const v2 = await productoConCodigo(`Bota ${tok}`, `MV-B-${sufijo}`)
+
+  await enA((tx) => recibirEnTx(tx, ctx.a, { ...base(v1, s1), cantidad: 10 }, como(ctx.usuario))) // PURCHASE · persona
+  await enA((tx) => venderEnTx(tx, ctx.a, { ...base(v1, s1), cantidad: 2 }, como(null))) // SALE · sistema
+  await enA((tx) => danarEnTx(tx, ctx.a, { ...base(v1, s1), cantidad: 1, motivo: 'Se cayó del estante' }, como(ctx.usuario))) // DAMAGE · persona
+  await enA((tx) => recibirEnTx(tx, ctx.a, { ...base(v2, s2), cantidad: 5 }, como(null))) // PURCHASE · sistema
+
+  const ver = (f: Parameters<typeof movimientosEmpresaEnTx>[2], limite?: number, cursor?: string | null) =>
+    enA((tx) => movimientosEmpresaEnTx(tx, ctx.a, f, { zonaHoraria: ZONA, limite, cursor }))
+
+  const todos = await ver({ q: tok })
+  assert.equal(todos.filas.length, 4)
+  assert.equal(todos.siguiente, null)
+  for (let i = 1; i < todos.filas.length; i++) assert.ok(todos.filas[i - 1].creadoEn >= todos.filas[i].creadoEn, 'del más reciente al más antiguo')
+
+  const venta = await ver({ q: tok, tipo: 'SALE' })
+  assert.equal(venta.filas.length, 1)
+  assert.equal(venta.filas[0].efectoOnHand, -2)
+  assert.equal(venta.filas[0].usuarioNombre, null, 'una venta no la hizo una persona')
+  assert.equal(venta.filas[0].varianteId, v1)
+  assert.equal(venta.filas[0].sucursalId, s1)
+
+  assert.equal((await ver({ q: tok, sucursalId: s2 })).filas.length, 1, 'filtra por sucursal')
+  assert.equal((await ver({ q: tok, usuario: USUARIO_SISTEMA })).filas.length, 2, '«Sistema» = movimientos sin persona')
+  const deLaPersona = await ver({ q: tok, usuario: ctx.usuario })
+  assert.equal(deLaPersona.filas.length, 2)
+  assert.ok(deLaPersona.filas.every((f) => f.usuarioNombre === 'Inventario'))
+  const opciones = await enA((tx) => usuariosParaFiltroEnTx(tx, ctx.a))
+  assert.ok(Array.isArray(opciones), 'las opciones de «quién» salen de la empresa')
+
+  assert.equal((await ver({ q: barcode1 })).filas.length, 3, 'busca por código de barras')
+  assert.equal((await ver({ q: `MV-B-${sufijo}`.toLowerCase() })).filas.length, 1, 'y por SKU, sin importar mayúsculas')
+  assert.equal((await ver({ q: tok, tipo: 'DAMAGE', sucursalId: s1 })).filas.length, 1, 'los filtros se combinan')
+
+  // Paginación por cursor: dos páginas de dos, sin repetir ni saltar nada.
+  const p1 = await ver({ q: tok }, 2)
+  assert.equal(p1.filas.length, 2)
+  assert.ok(p1.siguiente)
+  const p2 = await ver({ q: tok }, 2, p1.siguiente)
+  assert.equal(p2.filas.length, 2)
+  assert.equal(p2.siguiente, null)
+  const ids = [...p1.filas, ...p2.filas].map((f) => f.id)
+  assert.equal(new Set(ids).size, 4)
+  assert.deepEqual(ids, todos.filas.map((f) => f.id), 'el orden de las páginas es el mismo que el de la lista completa')
+  assert.equal((await ver({ q: tok }, 2, 'basura|')).filas.length, 2, 'un cursor inválido se ignora y empieza por lo más reciente')
+
+  // Fechas: días LOCALES de la empresa (Santo Domingo, UTC−4). 03:30 UTC es el 4 a las 23:30 local; 04:00 UTC ya es el 5 a las 00:00.
+  const nivel3 = await prisma.inventoryLevel.create({ data: { companyId: ctx.a, catalogVariantId: v2, locationId: s3, onHand: 2 }, select: { id: true } })
+  for (const iso of ['2030-03-05T03:30:00.000Z', '2030-03-05T04:00:00.000Z']) {
+    await prisma.inventoryMovement.create({
+      data: { companyId: ctx.a, inventoryLevelId: nivel3.id, type: 'PURCHASE', destinationBucket: 'AVAILABLE', quantity: 1, previousOnHand: 0, newOnHand: 1, createdAt: new Date(iso) },
+    })
+  }
+  const dia = (desde?: string, hasta?: string) => ver({ sucursalId: s3, desde, hasta }).then((r) => r.filas.length)
+  assert.equal(await dia('2030-03-04', '2030-03-04'), 1, 'las 23:30 locales del 4')
+  assert.equal(await dia('2030-03-05', '2030-03-05'), 1, 'las 00:00 locales del 5')
+  assert.equal(await dia('2030-03-04', '2030-03-05'), 2)
+  assert.equal(await dia(undefined, '2030-03-03'), 0)
+  assert.equal(await dia('2030-03-06'), 0)
+
+  // Aislamiento: la otra empresa no ve nada de esto, ni aunque nombre la sucursal o la persona de A.
+  const enOtra = (f: Parameters<typeof movimientosEmpresaEnTx>[2]) => enB((tx) => movimientosEmpresaEnTx(tx, ctx.b, f, { zonaHoraria: ZONA })).then((r) => r.filas.length)
+  assert.equal(await enOtra({ q: tok }), 0)
+  assert.equal(await enOtra({ sucursalId: s1 }), 0)
+  assert.equal(await enOtra({ usuario: ctx.usuario, q: tok }), 0)
+  assert.equal(await enOtra({ tipo: 'SALE', sucursalId: s2 }), 0)
+})
+
+test('39 · las reservas vivas de la empresa: solo las no vencidas, con su total, y solo las de esta empresa', async () => {
+  const suc = await sucursalLimpia(`rsv-${sufijo}`)
+  await enA((tx) => recibirEnTx(tx, ctx.a, { ...base(ctx.varA, suc), cantidad: 20 }, como(null)))
+  const viva = `ped-viva-${sufijo}`
+  const vencida = `ped-vencida-${sufijo}`
+  await enA((tx) => reservarEnTx(tx, ctx.a, { ...base(ctx.varA, suc), cantidad: 3, ttlMinutos: 60, referencia: { tipo: 'ORDER', id: viva }, ahora: new Date() }, como(null)))
+  // Una que ya pasó de hora pero que nadie ha barrido: sigue ACTIVE en la tabla y NO debe contarse como viva.
+  await enA((tx) => reservarEnTx(tx, ctx.a, { ...base(ctx.varA, suc), cantidad: 2, ttlMinutos: 1, referencia: { tipo: 'ORDER', id: vencida }, ahora: new Date('2020-01-01T00:00:00.000Z') }, como(null)))
+  assert.equal(await prisma.inventoryReservation.count({ where: { referenceId: vencida, status: 'ACTIVE' } }), 1, 'precondición: vencida pero aún ACTIVE')
+
+  const r = await enA((tx) => reservasVivasEmpresaEnTx(tx, ctx.a, new Date()))
+  const mia = r.filas.find((f) => f.referenciaId === viva)
+  assert.ok(mia, 'la reserva viva aparece')
+  assert.equal(mia.cantidad, 3)
+  assert.equal(mia.varianteId, ctx.varA)
+  assert.equal(mia.sucursalNombre, `rsv-${sufijo}`)
+  assert.equal(mia.referenciaTipo, 'ORDER')
+  assert.ok(!r.filas.some((f) => f.referenciaId === vencida), 'la vencida no cuenta')
+  assert.ok(r.total >= r.filas.length && r.unidades >= 3)
+  for (let i = 1; i < r.filas.length; i++) assert.ok(r.filas[i - 1].expiresAt <= r.filas[i].expiresAt, 'la que vence primero va primero')
+
+  const enOtra = await enB((tx) => reservasVivasEmpresaEnTx(tx, ctx.b, new Date()))
+  assert.ok(!enOtra.filas.some((f) => f.referenciaId === viva), 'la otra empresa no ve las reservas de A')
+})
+
+test('40 · la lista de existencias busca por código de barras y reconoce una búsqueda EXACTA (lector de código)', async () => {
+  const codigo = `7502${Date.now().toString().slice(-9)}`
+  const pa = await productoConCodigo(`Lámpara ${tok}`, `LAM-${sufijo}`, codigo)
+  const lista = (q: string) => enA((tx) => listarInventarioEnTx(tx, ctx.a, { q }))
+
+  const exacta = await lista(codigo)
+  assert.ok(exacta.filas.some((f) => f.varianteId === pa && f.barcode === codigo), 'encuentra por código de barras')
+  assert.equal(exacta.varianteExacta, pa)
+  assert.equal((await lista(`LAM-${sufijo}`.toLowerCase())).varianteExacta, pa, 'el SKU exacto también salta, sin importar mayúsculas')
+  const parcial = await lista(codigo.slice(0, 7))
+  assert.ok(parcial.filas.some((f) => f.varianteId === pa))
+  assert.equal(parcial.varianteExacta, null, 'un fragmento no salta a ninguna ficha')
+  assert.equal((await lista(`Lámpara ${tok}`)).varianteExacta, null, 'ni el nombre')
+
+  // Ambigüedad: el SKU de otro producto es justo este código. Dos coincidencias exactas → no se salta a ninguna.
+  await productoConCodigo(`Otra ${tok}`, codigo)
+  assert.equal((await lista(codigo)).varianteExacta, null)
+})
+
+test('41 · el estado que la empresa fijó a mano en el catálogo se ve junto a las existencias (y manda para vender)', async () => {
+  const suc = await sucursalLimpia(`est-${sufijo}`)
+  const v = await productoConCodigo(`Reloj ${tok}`, `REL-${sufijo}`)
+  await enA((tx) => recibirEnTx(tx, ctx.a, { ...base(v, suc), cantidad: 7 }, como(null)))
+  const fila = async () => (await enA((tx) => listarInventarioEnTx(tx, ctx.a, { q: `REL-${sufijo}` }))).filas[0]
+
+  assert.equal((await fila()).estadoVariante, 'ACTIVE')
+  assert.equal(advertenciaEstadoManual('ACTIVE', 7), null)
+
+  await prisma.catalogVariant.update({ where: { id: v }, data: { status: 'OUT_OF_STOCK' } })
+  const f = await fila()
+  assert.equal(f.estadoVariante, 'OUT_OF_STOCK')
+  assert.equal(f.disponible, 7)
+  assert.match(advertenciaEstadoManual(f.estadoVariante, f.disponible) ?? '', /no se vende aunque haya 7 unidades disponibles/)
+  const d = await enA((tx) => detalleVarianteEnTx(tx, ctx.a, v))
+  assert.equal(d?.estadoVariante, 'OUT_OF_STOCK')
+})
+
+test('42 · el umbral se aplica a las demás sucursales con saldo, no a las que nunca llevaron el producto ni a las cerradas', async () => {
+  const s1 = await sucursalLimpia(`um1-${sufijo}`)
+  const s2 = await sucursalLimpia(`um2-${sufijo}`)
+  const s3SinSaldo = await sucursalLimpia(`um3-${sufijo}`)
+  const s4 = await sucursalLimpia(`um4-${sufijo}`)
+  const v = await productoConCodigo(`Mochila ${tok}`, `MOC-${sufijo}`)
+  for (const s of [s1, s2, s4]) await enA((tx) => recibirEnTx(tx, ctx.a, { ...base(v, s), cantidad: 5 }, como(null)))
+  await prisma.sucursal.update({ where: { id: s4 }, data: { activa: false } })
+
+  await enA((tx) => configurarUmbralEnTx(tx, ctx.a, { varianteId: v, sucursalId: s1, umbral: 3 }, como(ctx.usuario)))
+  const r = await enA((tx) => configurarUmbralOtrasSucursalesEnTx(tx, ctx.a, { varianteId: v, sucursalOrigenId: s1, umbral: 3 }, como(ctx.usuario)))
+  assert.equal(r.sucursales, 1, 'solo la otra sucursal activa con saldo')
+  assert.equal((await nivelDe(v, s1)).lowStockThreshold, 3)
+  assert.equal((await nivelDe(v, s2)).lowStockThreshold, 3)
+  assert.equal((await nivelDe(v, s4)).lowStockThreshold, 0, 'una sucursal desactivada no se toca')
+  assert.equal(await prisma.inventoryLevel.count({ where: { catalogVariantId: v, locationId: s3SinSaldo } }), 0, 'no crea saldos en cero donde el producto nunca estuvo')
+  assert.equal(await prisma.auditLog.count({ where: { companyId: ctx.a, accion: 'INVENTORY_CONFIGURED', entidadId: (await nivelDe(v, s2)).id } }), 1, 'cada cambio queda auditado')
+
+  const otraVez = await enA((tx) => configurarUmbralOtrasSucursalesEnTx(tx, ctx.a, { varianteId: v, sucursalOrigenId: s1, umbral: 3 }, como(ctx.usuario)))
+  assert.equal(otraVez.sucursales, 0, 'repetirlo no cambia nada ni audita de nuevo')
+
+  assert.equal(await codigoDe(enA((tx) => configurarUmbralOtrasSucursalesEnTx(tx, ctx.a, { varianteId: v, sucursalOrigenId: s1, umbral: -1 }, como(null)))), 'UMBRAL_INVALIDO')
+  assert.equal(await codigoDe(enA((tx) => configurarUmbralOtrasSucursalesEnTx(tx, ctx.a, { varianteId: ctx.varServicio, sucursalOrigenId: s1, umbral: 2 }, como(null)))), 'SIN_CONTROL_DE_INVENTARIO')
+  assert.equal(await codigoDe(enB((tx) => configurarUmbralOtrasSucursalesEnTx(tx, ctx.b, { varianteId: v, sucursalOrigenId: ctx.sucB, umbral: 2 }, como(null)))), 'VARIANTE_NO_ENCONTRADA', 'la otra empresa no puede tocar la variante de A')
 })

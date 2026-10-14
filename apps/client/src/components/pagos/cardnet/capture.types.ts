@@ -11,7 +11,6 @@ export type CardnetCaptureFailure =
 export interface CardnetCaptureSurfaceProps {
   readonly session: CardnetCaptureSession
   readonly config: CardnetCaptureConfig
-  readonly merchantOrigin: string
   readonly disabled?: boolean
   readonly onToken: (token: string) => void
   readonly onError: (reason: CardnetCaptureFailure) => void

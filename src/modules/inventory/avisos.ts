@@ -18,8 +18,11 @@ import { nombreCompleto } from './formato'
  *
  * Reglas:
  *  · Solo niveles con umbral > 0 (sin umbral, la empresa no pidió aviso).
- *  · Un aviso por nivel y día (`dedupeKey`): el tercer pedido del día no
- *    vuelve a sonar la campana por el mismo producto.
+ *  · Un aviso por nivel, estado y día (`dedupeKey`): el tercer pedido del día no
+ *    vuelve a sonar la campana por el mismo producto. El estado va en la clave a
+ *    propósito: si por la mañana avisó «Stock bajo» y por la tarde el producto se
+ *    AGOTA, esa escalada tiene que avisar otra vez; con una sola clave por día
+ *    quedaba callada justo cuando más importa.
  *  · Best-effort y FUERA de la transacción del pedido: nunca lanza.
  */
 export async function avisarStockBajo(companyId: string, varianteIds: readonly string[], ahora = new Date()): Promise<number> {
@@ -51,7 +54,7 @@ export async function avisarStockBajo(companyId: string, varianteIds: readonly s
           ? `«${nombre}» se agotó en ${n.location.nombre}. Los clientes lo ven como «Agotado» hasta que entres existencias.`
           : `«${nombre}» tiene ${quedan} ${quedan === 1 ? 'unidad' : 'unidades'} en ${n.location.nombre} (avisas en ${n.lowStockThreshold}).`
       const [r] = await Promise.allSettled([
-        notificarAdmins(companyId, { tipo: 'SISTEMA', titulo, mensaje, href: `/admin/inventario/${n.variant.id}`, dedupeKey: `stock-bajo:${n.id}:${dia}` }),
+        notificarAdmins(companyId, { tipo: 'SISTEMA', titulo, mensaje, href: `/admin/inventario/${n.variant.id}`, dedupeKey: `stock-bajo:${n.id}:${dia}:${estado}` }),
         emitirEventoEstrategia({
           companyId,
           type: AUTOMATION_EVENTS.INVENTORY_LOW_STOCK,

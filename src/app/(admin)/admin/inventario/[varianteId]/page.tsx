@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ChevronLeft } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, Truck } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { puedeFuncion, requireRole } from '@/lib/auth/guards'
@@ -8,8 +8,8 @@ import { requireCompanyContext } from '@/lib/auth/company-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { PageHeader } from '@/components/ui/page-header'
-import { detalleVarianteEnTx, historialDeVarianteEnTx, reservasVivasEnTx } from '@/modules/inventory/queries'
-import { formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
+import { detalleVarianteEnTx, enTransitoDeVarianteEnTx, historialDeVarianteEnTx, reservasVivasEnTx, type EnTransitoDeVariante } from '@/modules/inventory/queries'
+import { advertenciaEstadoManual, formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 import { formatDateTime } from '@/lib/format'
 import { SucursalInventarioCard } from '@/components/inventario/SucursalInventarioCard'
 import { TransferirForm } from '@/components/inventario/TransferirForm'
@@ -34,6 +34,17 @@ export default async function InventarioVariantePage({ params }: { params: Promi
   // «No existe» y «es de otra empresa» se ven igual a propósito.
   if (!datos) notFound()
   const { detalle, historial, reservas } = datos
+  // Lo que va EN CAMINO entre sucursales (INV-2c). En su PROPIA transacción y con su propio try: un error dentro de una
+  // transacción de PostgreSQL la aborta entera, y si la migración de transferencias aún no se aplicó la ficha tiene que
+  // seguir funcionando, solo que sin esta tarjeta.
+  let enTransito: EnTransitoDeVariante | null = null
+  if (detalle.controlaInventario) {
+    try {
+      enTransito = await conEmpresa(companyId, (tx) => enTransitoDeVarianteEnTx(tx, companyId, varianteId))
+    } catch (e) {
+      console.error('[admin-inventario-ficha] lo que va en camino no está disponible', e instanceof Error ? e.message : e)
+    }
+  }
   const [puedeAjustar, puedeTransferir] = await Promise.all([puedeFuncion('inventario', 'ajustar'), puedeFuncion('inventario', 'transferir')])
 
   const activas = detalle.sucursales.filter((s) => s.activa)
@@ -76,6 +87,19 @@ export default async function InventarioVariantePage({ params }: { params: Promi
         </Alert>
       )}
 
+      {detalle.controlaInventario && advertenciaEstadoManual(detalle.estadoVariante, total.disponible) && (
+        <Alert className="border-warning/40">
+          <AlertTriangle className="h-4 w-4 text-warning" aria-hidden />
+          <AlertDescription>
+            {advertenciaEstadoManual(detalle.estadoVariante, total.disponible)}{' '}
+            <Link href={`/admin/catalogo/${detalle.itemId}`} className="underline">
+              Cambiar su estado en el catálogo
+            </Link>
+            .
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-label="Totales de todas las sucursales">
         {(
           [
@@ -93,6 +117,32 @@ export default async function InventarioVariantePage({ params }: { params: Promi
           </Card>
         ))}
       </div>
+
+      {enTransito && enTransito.total > 0 && (
+        <Card aria-label="Lo que va en camino">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Truck className="h-4 w-4" aria-hidden />
+              En camino entre sucursales ({formatearCantidad(enTransito.total)})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y text-sm" aria-label="Transferencias en camino de este producto">
+              {enTransito.traslados.map((t) => (
+                <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span>
+                    {formatearCantidad(t.pendiente)} de {t.origenNombre} a {t.destinoNombre}
+                  </span>
+                  <Link href={`/admin/inventario/transferencias/${t.id}`} className="text-xs underline underline-offset-2">
+                    {t.numero}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <p className="pt-2 text-xs text-muted-foreground">Ya salieron del origen y todavía no llegan al destino: no están disponibles en ninguna sucursal, así que no suman en los totales de arriba.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {detalle.controlaInventario && (
         <>
@@ -112,6 +162,7 @@ export default async function InventarioVariantePage({ params }: { params: Promi
                 key={s.sucursalId}
                 varianteId={detalle.varianteId}
                 puedeAjustar={puedeAjustar}
+                hayOtrasConSaldo={detalle.sucursales.some((o) => o.activa && o.sucursalId !== s.sucursalId && o.nivelId !== null)}
                 saldo={{ sucursalId: s.sucursalId, nombre: s.nombre, activa: s.activa, onHand: s.onHand, reserved: s.reserved, damaged: s.damaged, disponible: s.disponible, lowStockThreshold: s.lowStockThreshold, estado: s.estado }}
               />
             ))}
