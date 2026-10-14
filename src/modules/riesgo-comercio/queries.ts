@@ -52,12 +52,24 @@ export async function metricasDeEmpresasEnTx(tx: Tx, ahora: Date): Promise<Metri
       FROM "merchant_billing_configs" b
      WHERE true ${SIN_DEMO('b."companyId"')}`
 
-  const ids = new Set<string>([...pedidos.map((p) => String(p.companyId)), ...cuentas.map((c) => String(c.companyId))])
+  // Supplier & Fulfillment Commerce (§45): visitas y ventas adicionales de la ventana, por empresa.
+  const visitas = await tx.$queryRaw<Record<string, unknown>[]>`
+    SELECT v."companyId" AS "companyId",
+           count(*) FILTER (WHERE v."status" = 'CLOSED')::int AS "visitasCerradas",
+           count(*) FILTER (WHERE v."status" = 'CLOSED' AND v."ancillaryTotal" > 0)::int AS "visitasConExtras",
+           (SELECT count(*) FROM "ancillary_sales" s WHERE s."companyId" = v."companyId" AND s."reportedAt" >= ${desde} AND s."status" <> 'REVERSED')::int AS "ventasAdicionales",
+           (SELECT count(*) FROM "visit_disputes" d WHERE d."companyId" = v."companyId" AND d."openedAt" >= ${desde} AND d."status" = 'RESOLVED_CUSTOMER')::int AS "disputasAFavorDelCliente"
+      FROM "membego_visits" v
+     WHERE v."openedAt" >= ${desde} ${SIN_DEMO('v."companyId"')}
+     GROUP BY v."companyId"`
+
+  const ids = new Set<string>([...pedidos.map((p) => String(p.companyId)), ...cuentas.map((c) => String(c.companyId)), ...visitas.map((v) => String(v.companyId))])
   if (ids.size === 0) return []
   const empresas = await tx.$queryRaw<{ id: string; name: string }[]>`SELECT "id", "name" FROM "companies" WHERE "id" IN (${Prisma.join([...ids])})`
   const nombre = new Map(empresas.map((e) => [e.id, e.name]))
   const ped = new Map(pedidos.map((p) => [String(p.companyId), p]))
   const cta = new Map(cuentas.map((c) => [String(c.companyId), c]))
+  const vis = new Map(visitas.map((v) => [String(v.companyId), v]))
 
   return [...ids].map((id): MetricasDeEmpresa => {
     const p = ped.get(id)
@@ -74,6 +86,10 @@ export async function metricasDeEmpresasEnTx(tx: Tx, ahora: Date): Promise<Metri
       saldo: c ? num(c.saldo) : null,
       limiteDeCredito: c ? num(c.limite) : null,
       estadoDeCuenta: c ? (c.estado as MetricasDeEmpresa['estadoDeCuenta']) : null,
+      visitasCerradas: num(vis.get(id)?.visitasCerradas),
+      visitasConExtras: num(vis.get(id)?.visitasConExtras),
+      ventasAdicionales: num(vis.get(id)?.ventasAdicionales),
+      disputasAFavorDelCliente: num(vis.get(id)?.disputasAFavorDelCliente),
     }
   })
 }

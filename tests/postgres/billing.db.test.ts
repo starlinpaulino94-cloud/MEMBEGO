@@ -477,9 +477,13 @@ test('12 · la base rechaza una posición con hueco o repetida, y un saldo que n
 test('13 · el signo del monto lo decide el tipo, un ajuste lleva motivo, un asiento en cero no existe y el libro no habla de Supply', async () => {
   const ultimo = await prisma.merchantLedgerEntry.findFirstOrThrow({ where: { companyId: E.a.id }, orderBy: { seq: 'desc' } })
   const base = { seq: ultimo.seq + 1 }
-  const intento = (o: { type: string; amount: string; reason?: string | null; referenceType?: string; referenceId?: string }) =>
+  const intento = (o: { type: string; amount: string; reason?: string | null; referenceType?: string; referenceId?: string; key?: string }) =>
     rechazo((tx) => insertarAsiento(tx, E.a, { ...base, balance: ultimo.balance.plus(o.amount).toFixed(2), ...o }), { sinDisparadores: true })
-  for (const t of TIPOS_QUE_SUMAN) assert.match(await intento({ type: t, amount: '-10', referenceType: 'COMMISSION' }), /merchant_ledger_entries_signo/)
+  // ANCILLARY_FEE (Supplier & Fulfillment Commerce) referencia una venta adicional con clave `ancillary:`; el signo lo vigila el mismo CHECK.
+  for (const t of TIPOS_QUE_SUMAN) {
+    const ref = t === 'ANCILLARY_FEE' ? { referenceType: 'ANCILLARY_SALE', key: `ancillary:${randomUUID()}` } : { referenceType: 'COMMISSION' }
+    assert.match(await intento({ type: t, amount: '-10', ...ref }), /merchant_ledger_entries_signo/)
+  }
   for (const t of TIPOS_QUE_RESTAN) {
     assert.match(await intento({ type: t, amount: '10', reason: 'x', referenceType: t === 'REFUND' ? 'COMMISSION' : t === 'PAYMENT' ? 'PAYMENT' : 'MANUAL' }), /merchant_ledger_entries_signo/)
   }

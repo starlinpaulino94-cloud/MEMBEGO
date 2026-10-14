@@ -59,6 +59,11 @@ const TIPO_ICON: Record<string, { icon: LucideIcon; cls: string }> = {
   SUPPLY_ACUERDO_POR_VENCER: { icon: TimerOff, cls: 'bg-warning/15 text-warning' },
   SUPPLY_DEPOSITO_POR_CERRAR: { icon: Banknote, cls: 'bg-warning/15 text-warning' },
   SUPPLY_LIQUIDACION_PENDIENTE: { icon: Wallet, cls: 'bg-info/10 text-info' },
+  // Supplier & Fulfillment Commerce · visitas atribuidas a Membego.
+  VISITA_CONFIRMA_CONSUMO: { icon: Wallet, cls: 'bg-primary/10 text-primary' },
+  VISITA_COMPRA_ADICIONAL: { icon: Wallet, cls: 'bg-info/10 text-info' },
+  VISITA_DISPUTA: { icon: Wallet, cls: 'bg-warning/10 text-warning' },
+  SUPPLY_SOLICITUD_MERCHANT: { icon: Wallet, cls: 'bg-primary/10 text-primary' },
 }
 
 function timeAgo(date: Date) {

@@ -107,6 +107,9 @@ model CatalogItem {
   @@unique([id, companyId])
   @@index([companyId, status, position])
   @@index([companyId, type])
+  /// Supplier & Fulfillment Commerce: ítems del catálogo del proveedor mapeados a este (sin duplicar).
+  supplyV2CatalogItems SupplyV2CatalogItem[] @relation("SupplyV2CatalogItemCatalogCore")
+
   @@map("catalog_items")
 }
 

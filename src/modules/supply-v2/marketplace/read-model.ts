@@ -6,6 +6,7 @@ import { motivoNoComprable } from '../core/estados'
 import { calcularPrecioOferta } from '../core/precios'
 import { SIN_TOPE, unidadesLibres, unidadesLibresComision } from '../offers/domain'
 import { RUTA_OFERTAS_PUBLICAS } from '../core/catalogo'
+import { presentacionComercial, type PresentacionComercial } from '@/modules/comercio/modo-comercial'
 
 /**
  * MEMBEGO SUPPLY · READ MODEL PÚBLICO del marketplace (§17–§19, §53).
@@ -40,6 +41,8 @@ export interface MarketplaceSupplyOffer {
   unlimited: boolean
   perCustomerLimit: number
   href: string
+  /** Quién vende (Membego), si es regalo/patrocinio y dónde se canjea (§12–§19), ya resuelto. */
+  comercial: PresentacionComercial
 }
 
 const SELECT = {
@@ -57,9 +60,13 @@ const SELECT = {
   endsAt: true,
   perCustomerLimit: true,
   sourceType: true,
+  priceMode: true,
   availabilityMode: true,
   availabilityQuantity: true,
-  supplier: { select: { commercialName: true } },
+  // El punto de canje: el proveedor y, si su empresa tiene vitrina, su slug y sucursales (§15, §49).
+  supplier: { select: { commercialName: true, company: { select: { slug: true, name: true, isPublished: true, isActive: true, esDemo: true, sucursales: { where: { activa: true }, select: { id: true, nombre: true }, orderBy: { nombre: 'asc' } } } } } },
+  // Un beneficio ACTIVO financiado por Membego sobre la oferta = patrocinio (§18). Solo se cuenta.
+  benefits: { where: { status: 'ACTIVE', scope: 'SPECIFIC_OFFER', funding: { in: ['MEMBEGO', 'SHARED'] } }, select: { id: true } },
   catalogItem: { select: { name: true } },
   allocation: { select: { allocatedQuantity: true, reservedQuantity: true, issuedQuantity: true, releasedQuantity: true } },
   // Solo para contar disponibilidad en comisión; NUNCA sale al DTO (ni comisión, ni neto, ni acuerdo).
@@ -94,7 +101,29 @@ function aDto(o: Fila, ahora: Date): MarketplaceSupplyOffer {
     unlimited,
     perCustomerLimit: o.perCustomerLimit,
     href: `${RUTA_OFERTAS_PUBLICAS}/${o.slug}`,
+    comercial: comercialDeOferta(o, precio.salePrice.toFixed(2)),
   }
+}
+
+/** La empresa del proveedor tiene vitrina: Merchant publicado y activo (no demo). */
+function conVitrina(c: { isPublished: boolean; isActive: boolean; esDemo: boolean } | null): boolean {
+  return !!c && c.isPublished && c.isActive && !c.esDemo
+}
+
+function comercialDeOferta(o: Fila, salePrice: string): PresentacionComercial {
+  const empresa = o.supplier.company
+  return presentacionComercial({
+    origen: 'SUPPLY',
+    // La «empresa» dueña del listado es Membego (la casa); no se enseña como vendedora de nada.
+    empresa: { nombre: 'Membego', slug: '' },
+    supply: {
+      priceMode: o.priceMode,
+      sourceType: o.sourceType,
+      salePrice,
+      subsidioMembego: o.benefits.length > 0,
+      proveedor: { nombre: o.supplier.commercialName, slug: conVitrina(empresa) ? empresa!.slug : null, sucursales: empresa?.sucursales ?? [] },
+    },
+  })
 }
 
 /** Ofertas comprables HOY (§18): activas, vigentes y con unidades. */

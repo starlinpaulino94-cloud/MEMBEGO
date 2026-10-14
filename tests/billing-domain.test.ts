@@ -157,7 +157,8 @@ test('los valores de la plataforma son válidos', () => {
 // ── Asientos ─────────────────────────────────────────────────────────────────
 
 test('el signo del asiento lo decide el tipo; el motivo es obligatorio donde corresponde', () => {
-  const TIPOS: MerchantLedgerEntryType[] = ['REDEMPTION_FEE', 'ORDER_FEE', 'REFUND', 'ADJUSTMENT', 'PAYMENT', 'CREDIT', 'PROMOTIONAL_CREDIT']
+  // ANCILLARY_FEE: la comisión de una venta adicional (Supplier & Fulfillment Commerce), que suma.
+  const TIPOS: MerchantLedgerEntryType[] = ['REDEMPTION_FEE', 'ORDER_FEE', 'ANCILLARY_FEE', 'REFUND', 'ADJUSTMENT', 'PAYMENT', 'CREDIT', 'PROMOTIONAL_CREDIT']
   assert.equal(TIPOS.length, TIPOS_QUE_SUMAN.length + TIPOS_QUE_RESTAN.length + 1, 'cada tipo suma, resta o es el ajuste')
   for (const t of TIPOS_QUE_SUMAN) {
     assert.equal(validarAsiento({ type: t, amount: '10' }), null)

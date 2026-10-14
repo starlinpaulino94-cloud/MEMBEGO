@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
+import { exigirProveedorOperativoEnTx } from '../suppliers/acceso'
 import { estadoInicialOferta, exigirTransicion, OFERTA_EDITABLE, TRANSICIONES_OFERTA } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
 import { mismoMonto, type Monto } from '../core/dinero'
@@ -162,12 +163,14 @@ export async function publicarOfertaEnTx(tx: Tx, offerId: string, ctx: ContextoA
   await tx.$queryRaw`SELECT "id" FROM "supply_v2_offers" WHERE "id" = ${offerId} FOR UPDATE`
   const o = await tx.supplyV2Offer.findUnique({
     where: { id: offerId },
-    select: { id: true, code: true, title: true, status: true, sourceType: true, allocationId: true, catalogItemId: true, quantityLimit: true, startsAt: true, endsAt: true, supplier: { select: { companyId: true } } },
+    select: { id: true, code: true, title: true, status: true, sourceType: true, allocationId: true, catalogItemId: true, supplierId: true, quantityLimit: true, startsAt: true, endsAt: true, supplier: { select: { companyId: true } } },
   })
   if (!o) fallo('OFERTA_NO_ENCONTRADA', 'La oferta no existe.')
   if (o.status !== 'DRAFT' && (o.allocationId || o.sourceType === 'COMMISSION')) return { id: o.id, status: o.status, allocationId: o.allocationId }
   if (o.status !== 'DRAFT') fallo('OFERTA_NO_PUBLICABLE', `Una oferta ${o.status} no se puede publicar.`)
   if (o.endsAt && o.endsAt <= new Date()) fallo('OFERTA_VENCIDA', 'La vigencia de la oferta ya pasó: cambia la fecha de fin antes de publicar.')
+  // Supplier & Fulfillment Commerce §8: ninguna campaña pública cuyo canje dependa de un proveedor que no puede operar.
+  await exigirProveedorOperativoEnTx(tx, o.supplierId, 'oferta')
 
   if (o.sourceType === 'COMMISSION') {
     const acuerdo = await resolverAcuerdoComisionDeItemEnTx(tx, o.catalogItemId)

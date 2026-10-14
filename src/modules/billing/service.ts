@@ -168,6 +168,82 @@ async function reevaluarEstado(tx: Tx, companyId: string, ctx: ContextoFacturaci
   return nueva
 }
 
+// ── Comisión de una VENTA ADICIONAL (Supplier & Fulfillment Commerce §27–§36) ─
+//
+// El documento vive en `ancillary_sales` (módulo visitas-membego); aquí solo se
+// escribe EN ESTE libro, con la cuenta bloqueada, append-only e idempotente.
+// La base viene ya calculada por el dominio de la visita (los extras, nunca la
+// unidad que Membego compró); este módulo no la recalcula ni la conoce.
+// Orden de candados: visita → venta → cuenta de billing (quien llama ya tiene
+// los dos primeros).
+
+export interface VentaAdicionalParaCobro {
+  saleId: string
+  /** Positivo, dos decimales: la comisión calculada por el dominio de la visita. */
+  commissionAmount: Monto
+  currency: string
+  idempotencyKey: string
+  reason: string
+}
+
+export async function asentarComisionDeVentaAdicionalEnTx(tx: Tx, companyId: string, v: VentaAdicionalParaCobro, ctx: ContextoFacturacion, ahora = new Date()): Promise<{ entryId: string; repetido: boolean }> {
+  const cuenta = await cuentaBloqueada(tx, companyId)
+  const monto = decimal(v.commissionAmount)
+  if (!monto.greaterThan(0)) fallo('ASIENTO_INVALIDO', 'La comisión de una venta adicional tiene que ser mayor que cero.')
+  const { asiento, repetido } = await asentar(tx, companyId, {
+    type: 'ANCILLARY_FEE',
+    amount: monto,
+    currency: cuenta.currency === v.currency ? v.currency : cuenta.currency,
+    referenceType: 'ANCILLARY_SALE',
+    referenceId: v.saleId,
+    reason: v.reason,
+    idempotencyKey: v.idempotencyKey,
+    actorId: ctx.actorId,
+    ahora,
+  })
+  if (!repetido) await reevaluarEstado(tx, companyId, ctx, ahora)
+  return { entryId: asiento.id, repetido }
+}
+
+export async function revertirComisionDeVentaAdicionalEnTx(tx: Tx, companyId: string, v: { saleId: string; commissionAmount: Monto; currency: string; idempotencyKey: string; reason: string }, ctx: ContextoFacturacion, ahora = new Date()): Promise<{ entryId: string; repetido: boolean }> {
+  const cuenta = await cuentaBloqueada(tx, companyId)
+  const monto = decimal(v.commissionAmount)
+  if (!monto.greaterThan(0)) fallo('ASIENTO_INVALIDO', 'Nada que revertir.')
+  const { asiento, repetido } = await asentar(tx, companyId, {
+    type: 'REFUND',
+    amount: monto.negated(),
+    currency: cuenta.currency,
+    referenceType: 'ANCILLARY_SALE',
+    referenceId: v.saleId,
+    reason: v.reason,
+    idempotencyKey: v.idempotencyKey,
+    actorId: ctx.actorId,
+    ahora,
+  })
+  if (!repetido) await reevaluarEstado(tx, companyId, ctx, ahora)
+  return { entryId: asiento.id, repetido }
+}
+
+/** Ajuste (con signo, normalmente negativo) por la resolución de una disputa. Nunca edita el cargo. */
+export async function ajustarComisionDeVentaAdicionalEnTx(tx: Tx, companyId: string, v: { saleId: string; delta: Monto; idempotencyKey: string; reason: string }, ctx: ContextoFacturacion, ahora = new Date()): Promise<{ entryId: string; repetido: boolean }> {
+  const cuenta = await cuentaBloqueada(tx, companyId)
+  const delta = decimal(v.delta)
+  if (delta.isZero()) fallo('ASIENTO_INVALIDO', 'Un ajuste en cero no mueve la cuenta.')
+  const { asiento, repetido } = await asentar(tx, companyId, {
+    type: 'ADJUSTMENT',
+    amount: delta,
+    currency: cuenta.currency,
+    referenceType: 'ANCILLARY_SALE',
+    referenceId: v.saleId,
+    reason: v.reason,
+    idempotencyKey: v.idempotencyKey,
+    actorId: ctx.actorId,
+    ahora,
+  })
+  if (!repetido) await reevaluarEstado(tx, companyId, ctx, ahora)
+  return { entryId: asiento.id, repetido }
+}
+
 // ── Comisión de un pedido ────────────────────────────────────────────────────
 
 export type ResultadoComision =
