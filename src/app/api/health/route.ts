@@ -108,6 +108,10 @@ export async function GET(req: NextRequest) {
         UNION ALL SELECT 'inventory_movements.unitCost', EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'inventory_movements' AND column_name = 'unitCost')
+        UNION ALL SELECT 'inventory_purchase_orders.esquema', to_regclass('public.inventory_purchase_orders') IS NOT NULL
+        UNION ALL SELECT 'inventory_receipts.purchaseOrderId', EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'inventory_receipts' AND column_name = 'purchaseOrderId')
         UNION ALL SELECT 'entregas_webhook.proximoIntentoAt', EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'entregas_webhook' AND column_name = 'proximoIntentoAt')`

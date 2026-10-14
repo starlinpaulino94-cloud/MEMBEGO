@@ -1,5 +1,6 @@
 import type { InventoryMovementType } from '@prisma/client'
 import { armarCsv, armarCsvBloques } from '@/lib/csv'
+import { ETIQUETA_ESTADO_ORDEN, type EstadoOrden } from './compras'
 import { ETIQUETA_ESTADO_TRASLADO, pendienteDeLinea, type EstadoTraslado } from './traslados'
 import { ETIQUETA_ESTADO_CONTEO, ETIQUETA_RESULTADO, clasificarDiferencia, diferenciaDeConteo, ordenarPorDiferencia, resumirVarianza, type EstadoConteo } from './conteos'
 import { ETIQUETA_MOVIMIENTO, describirReferencia } from './formato'
@@ -396,6 +397,77 @@ export function valorToCsv(v: ValorParaCsv, ctx: { zonaHoraria: string; generado
       titulo: 'Productos',
       encabezados: ['Producto', 'SKU', 'Unidades', 'Danadas', 'Costo unitario', 'Fuente del costo', 'Valor'],
       filas: v.filas.map((f) => [SIN_FORMULA(f.nombre), SIN_FORMULA(f.sku), f.unidades, f.danadas, plano(f.costo), f.fuente ? ETIQUETA_FUENTE[f.fuente] : 'Sin costo', plano(f.valor)]),
+    },
+  ])
+}
+
+// ── INV-3b · Órdenes de compra ───────────────────────────────────────────────
+
+export interface OrdenParaCsv {
+  numero: string
+  estado: EstadoOrden
+  proveedorNombre: string
+  sucursalNombre: string
+  referencia: string | null
+  nota: string | null
+  creadoEn: Date
+  pedidoEn: Date | null
+  previstaEn: Date | null
+  cerradoEn: Date | null
+  creadoPorNombre: string | null
+  pedidoPorNombre: string | null
+  cerradoPorNombre: string | null
+  motivoCierre: string | null
+  valor: string
+  valorRecibido: string
+  valorPendiente: string
+  detalle: ReadonlyArray<{ sku: string; barcode: string | null; itemNombre: string; nombreVariante: string; esDefault: boolean; pedido: number; recibido: number; cancelado: number; pendiente: number; costo: string; valor: string }>
+  entradas: ReadonlyArray<{ numero: string; creadoEn: Date; referencia: string | null; unidades: number; usuarioNombre: string | null }>
+}
+
+/** Una orden de compra completa: encabezado y resumen, cada línea con su costo y cada entrada de mercancía que produjo. */
+export function ordenToCsv(o: OrdenParaCsv, zonaHoraria: string): string {
+  const suma = (f: (l: OrdenParaCsv['detalle'][number]) => number) => o.detalle.reduce((s, l) => s + f(l), 0)
+  return armarCsvBloques([
+    {
+      titulo: 'Orden de compra',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Número', o.numero],
+        ['Estado', ETIQUETA_ESTADO_ORDEN[o.estado]],
+        ['Proveedor', SIN_FORMULA(o.proveedorNombre)],
+        ['Recibe la sucursal', SIN_FORMULA(o.sucursalNombre)],
+        ['Referencia', SIN_FORMULA(o.referencia)],
+        ['Nota', SIN_FORMULA(o.nota)],
+        ['Creada', fechaHoraCsv(o.creadoEn, zonaHoraria)],
+        ['Creada por', SIN_FORMULA(o.creadoPorNombre ?? 'Sistema')],
+        ['Pedida', o.pedidoEn ? fechaHoraCsv(o.pedidoEn, zonaHoraria) : ''],
+        ['Pedida por', SIN_FORMULA(o.pedidoPorNombre)],
+        // La fecha prevista es un día, no un instante: se escribe tal cual (medianoche UTC) y no en la zona de la empresa.
+        ['Fecha prevista', o.previstaEn ? o.previstaEn.toISOString().slice(0, 10) : ''],
+        ['Cerrada', o.cerradoEn ? fechaHoraCsv(o.cerradoEn, zonaHoraria) : ''],
+        ['Cerrada por', SIN_FORMULA(o.cerradoPorNombre)],
+        ['Motivo del cierre', SIN_FORMULA(o.motivoCierre)],
+        ['Zona horaria', zonaHoraria],
+        ['Productos', o.detalle.length],
+        ['Unidades pedidas', suma((l) => l.pedido)],
+        ['Unidades recibidas', suma((l) => l.recibido)],
+        ['Unidades cerradas como faltante', suma((l) => l.cancelado)],
+        ['Unidades por llegar', suma((l) => l.pendiente)],
+        ['Valor pedido', plano(o.valor)],
+        ['Valor recibido', plano(o.valorRecibido)],
+        ['Valor por llegar', plano(o.valorPendiente)],
+      ],
+    },
+    {
+      titulo: 'Líneas',
+      encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Costo unitario', 'Pedido', 'Recibido', 'Faltante', 'Por llegar', 'Valor pedido'],
+      filas: o.detalle.map((l) => [SIN_FORMULA(l.sku), SIN_FORMULA(l.barcode), SIN_FORMULA(l.esDefault ? l.itemNombre : `${l.itemNombre} · ${l.nombreVariante}`), plano(l.costo), l.pedido, l.recibido, l.cancelado, l.pendiente, plano(l.valor)]),
+    },
+    {
+      titulo: 'Entradas de mercancía',
+      encabezados: ['Entrada', 'Fecha y hora', 'Unidades', 'Factura o referencia', 'Registrada por'],
+      filas: o.entradas.map((e) => [e.numero, fechaHoraCsv(e.creadoEn, zonaHoraria), e.unidades, SIN_FORMULA(e.referencia), SIN_FORMULA(e.usuarioNombre ?? 'Sistema')]),
     },
   ])
 }

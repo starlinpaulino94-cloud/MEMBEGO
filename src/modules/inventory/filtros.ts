@@ -1,4 +1,5 @@
 import type { InventoryMovementType } from '@prisma/client'
+import { esEstadoOrden, type EstadoOrden } from './compras'
 import { TIPOS_DE_MOVIMIENTO } from './domain'
 
 /**
@@ -241,6 +242,50 @@ export function leerFiltrosTraslados(sp: ParametrosUrl): PeticionTraslados {
 export function consultaDeFiltrosTraslados(f: FiltrosTraslados, cursor?: string | null): string {
   const p = new URLSearchParams(consultaDeFiltros({ sucursalId: f.sucursalId, desde: f.desde, hasta: f.hasta, q: f.q }, cursor))
   if (f.estado) p.set('estado', f.estado)
+  return p.toString()
+}
+
+// ── INV-3b · Compras ─────────────────────────────────────────────────────────
+
+export interface FiltrosOrdenes {
+  proveedorId?: string
+  /** La sucursal que recibe la mercancía. */
+  sucursalId?: string
+  estado?: EstadoOrden
+  /** `YYYY-MM-DD` en la zona horaria de la empresa, ambos extremos incluidos (fecha de creación). */
+  desde?: string
+  hasta?: string
+  /** Número de la orden (`OC-2026-000003`), su referencia, su nota o el nombre del proveedor. */
+  q?: string
+}
+
+export interface PeticionOrdenes {
+  filtros: FiltrosOrdenes
+  cursor: string | null
+}
+
+/** Lee la URL de la lista de órdenes de compra con las mismas reglas que movimientos, entradas y transferencias. */
+export function leerFiltrosOrdenes(sp: ParametrosUrl): PeticionOrdenes {
+  const { filtros, cursor } = leerFiltrosMovimientos(sp)
+  const estado = primero(sp.estado)
+  const proveedorId = idValido(primero(sp.proveedor))
+  return {
+    filtros: {
+      ...(proveedorId ? { proveedorId } : {}),
+      ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+      ...(esEstadoOrden(estado) ? { estado } : {}),
+      ...(filtros.desde ? { desde: filtros.desde } : {}),
+      ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+      ...(filtros.q ? { q: filtros.q } : {}),
+    },
+    cursor,
+  }
+}
+
+export function consultaDeFiltrosOrdenes(f: FiltrosOrdenes, cursor?: string | null): string {
+  const p = new URLSearchParams(consultaDeFiltros({ sucursalId: f.sucursalId, desde: f.desde, hasta: f.hasta, q: f.q }, cursor))
+  if (f.estado) p.set('estado', f.estado)
+  if (f.proveedorId) p.set('proveedor', f.proveedorId)
   return p.toString()
 }
 

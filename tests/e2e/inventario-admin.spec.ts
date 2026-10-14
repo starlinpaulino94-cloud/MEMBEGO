@@ -1321,6 +1321,320 @@ test.describe('Inventario · panel', () => {
     await ctx.close()
   })
 
+  test('INV-3b · proveedores y órdenes de compra: crear, pedir, recibir en tandas con costo, cerrar con faltante, cancelar — y quien no tiene «comprar» no ve ni una orden', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    // Una empresa propia: los totales y los números de orden tienen que ser exactos.
+    const emp = await empresaCatalogo(sufijo, 'invcompra', { capacidad: true })
+    const prisma = prismaDeArnes()
+    await sucursalSembrada(emp.id, 'Principal')
+    const NA = `Harina E2E ${sufijo}`
+    const NB = `Azúcar E2E ${sufijo}`
+    const SA = `CMP-A-${sufijo}`
+    const SB = `CMP-B-${sufijo}`
+    const mk = async (name: string, slug: string, sku: string) => {
+      const it = await itemSembrado(emp.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, price: 100, porDefecto: true }] })
+      return varianteDe(it.id)
+    }
+    const vA = await mk(NA, `harina-cmp-${sufijo}`, SA)
+    const vB = await mk(NB, `azucar-cmp-${sufijo}`, SB)
+    const PROVEEDOR = `Distribuidora Norte ${sufijo}`
+    const email = 'e2e.catalogo.con@membego.test'
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, emp.id)
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    const fila = (lista: Locator, nombre: string) => lista.getByRole('listitem').filter({ hasText: nombre })
+
+    try {
+      // ── Las pestañas nuevas, y la de proveedores vacía ───────────────────
+      await p.goto('/admin/inventario')
+      await expect(vistas.getByRole('link', { name: 'Compras' })).toBeVisible()
+      await vistas.getByRole('link', { name: 'Proveedores' }).click()
+      await p.waitForURL('**/admin/inventario/proveedores')
+      await expect(p.getByRole('heading', { name: 'Proveedores', level: 1 })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Proveedores' })).toHaveAttribute('aria-current', 'page')
+      await expect(p.getByText('Todavía no hay proveedores')).toBeVisible()
+
+      // ── Sin proveedor no hay orden que hacer ──────────────────────────────
+      await p.goto('/admin/inventario/compras/nueva')
+      await expect(p.getByText(/primero registra a tu proveedor/)).toBeVisible()
+
+      // ── Crear un proveedor: el nombre no se repite (ni por mayúsculas) ───
+      await p.goto('/admin/inventario/proveedores')
+      const nuevoProveedor = p.getByRole('form', { name: 'Nuevo proveedor' })
+      await nuevoProveedor.getByLabel('Nombre *').fill(PROVEEDOR)
+      await nuevoProveedor.getByLabel(/^Días de crédito/).fill('30')
+      await nuevoProveedor.getByLabel(/^Contacto/).fill('Ana Pérez')
+      await nuevoProveedor.getByRole('button', { name: 'Crear proveedor' }).click()
+      await expect(p.getByText(`Proveedor «${PROVEEDOR}» creado.`)).toBeVisible({ timeout: 15_000 })
+      const listaProveedores = p.getByRole('list', { name: 'Proveedores' })
+      await expect(fila(listaProveedores, PROVEEDOR)).toContainText('30 días de crédito')
+      await nuevoProveedor.getByLabel('Nombre *').fill(PROVEEDOR.toUpperCase())
+      await nuevoProveedor.getByRole('button', { name: 'Crear proveedor' }).click()
+      await expect(p.getByText(/Ya tienes un proveedor con ese nombre/)).toBeVisible({ timeout: 15_000 })
+      await expect(listaProveedores.getByRole('listitem')).toHaveCount(1)
+
+      // ── Una orden nueva: el costo es obligatorio y se rechaza con coma ───
+      await p.goto('/admin/inventario/compras/nueva')
+      let form = p.getByRole('form', { name: 'Nueva orden de compra' })
+      await expect(form.getByLabel('Proveedor')).toContainText(PROVEEDOR)
+      const buscar = form.getByLabel('Escanear o buscar un producto')
+      const lineas = form.getByRole('list', { name: 'Productos de la orden' })
+      await buscar.fill(SA)
+      await buscar.press('Enter')
+      await expect(fila(lineas, NA)).toHaveCount(1)
+      await buscar.fill(SB)
+      await buscar.press('Enter')
+      await expect(fila(lineas, NB)).toHaveCount(1)
+      await fila(lineas, NA).getByLabel(/^Cantidad de /).fill('10')
+      await form.getByRole('button', { name: 'Guardar borrador' }).click()
+      await expect(p.getByText(/escribe el costo\. Una orden de compra dice cuánto cuesta/)).toBeVisible()
+      await fila(lineas, NA).getByLabel(/^Costo de /).fill('1,5')
+      await form.getByRole('button', { name: 'Guardar borrador' }).click()
+      await expect(p.getByText(/lleva una coma/)).toBeVisible()
+      await expect(p).toHaveURL(/\/compras\/nueva$/)
+      await fila(lineas, NA).getByLabel(/^Costo de /).fill('5')
+      await fila(lineas, NB).getByLabel(/^Cantidad de /).fill('6')
+      await fila(lineas, NB).getByLabel(/^Costo de /).fill('2.5')
+      await expect(form.getByText(/2 productos · 16 unidades · 65\.00/)).toBeVisible() // 10 × 5 + 6 × 2.50
+      await form.getByLabel(/^Cotización o referencia/).fill('Cotización 2231')
+      await form.getByRole('button', { name: 'Guardar borrador' }).click()
+      await p.waitForURL(/\/admin\/inventario\/compras\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+      const idOrden = p.url().split('/').pop()!
+      const numero = (await p.getByRole('heading', { level: 1 }).innerText()).trim()
+      expect(numero).toMatch(/^OC-\d{4}-\d{6}$/)
+      await expect(p.getByText('Borrador', { exact: true }).first()).toBeVisible()
+      await expect(p.getByLabel('Resumen de la orden')).toContainText('16 · 65.00')
+      // Un borrador no mueve el inventario ni los costos.
+      await p.goto(`/admin/inventario/${vA}`)
+      await expect(p.getByLabel('Costo y valor del producto')).toContainText('Sin costo')
+      expect(await prisma.inventoryLevel.count({ where: { catalogVariantId: vA } })).toBe(0)
+
+      // ── Editar el borrador: cambia la cantidad, conserva el número ───────
+      await p.goto(`/admin/inventario/compras/${idOrden}`)
+      await p.getByRole('link', { name: 'Editar' }).click()
+      await p.waitForURL(`**/compras/${idOrden}/editar`)
+      form = p.getByRole('form', { name: 'Editar orden de compra' })
+      await expect(fila(form.getByRole('list', { name: 'Productos de la orden' }), NA).getByLabel(/^Costo de /)).toHaveValue('5')
+      await fila(form.getByRole('list', { name: 'Productos de la orden' }), NA).getByLabel(/^Cantidad de /).fill('12')
+      await form.getByRole('button', { name: 'Guardar borrador' }).click()
+      await p.waitForURL(`**/compras/${idOrden}`)
+      await expect(p.getByRole('heading', { level: 1 })).toHaveText(numero)
+      await expect(p.getByLabel('Resumen de la orden')).toContainText('18 · 75.00') // 12 × 5 + 6 × 2.50
+
+      // ── Pedirla: desde aquí las líneas no se editan ───────────────────────
+      await p.getByRole('button', { name: 'Pedir al proveedor' }).click()
+      await expect(p.getByText(new RegExp(`Orden ${numero} pedida a ${PROVEEDOR}`))).toBeVisible({ timeout: 15_000 })
+      await expect(p.getByText('Pedida', { exact: true }).first()).toBeVisible()
+      await expect(p.getByRole('link', { name: 'Editar' })).toHaveCount(0)
+      await p.goto(`/admin/inventario/compras/${idOrden}/editar`)
+      await expect(p.getByText(/Esta orden ya se pidió: no se edita/)).toBeVisible()
+      // Todavía no llegó nada: la ficha lo enseña como pedido, no como existencia.
+      await p.goto(`/admin/inventario/${vA}`)
+      await expect(p.getByLabel('Lo que está pedido a proveedores')).toContainText('12 de')
+      await expect(p.getByLabel('Lo que está pedido a proveedores')).toContainText(numero)
+
+      // ── Recibir una parte: entra al inventario con el costo de la orden ──
+      await p.goto(`/admin/inventario/compras/${idOrden}`)
+      const recibir = p.getByRole('list', { name: 'Lo que llegó' })
+      await expect(fila(recibir, NA).getByLabel(/^Llegó de /)).toHaveValue('12')
+      await fila(recibir, NA).getByLabel(/^Llegó de /).fill('13')
+      await expect(fila(recibir, NA).getByLabel(/^Llegó de /)).toHaveAttribute('aria-invalid', 'true') // no se recibe más de lo pedido
+      await expect(p.getByRole('button', { name: 'Recibir lo que llegó' })).toBeDisabled()
+      await fila(recibir, NA).getByLabel(/^Llegó de /).fill('7')
+      await fila(recibir, NB).getByLabel(/^Llegó de /).fill('0')
+      await p.getByLabel(/^Factura o remisión/).fill('FAC-00231')
+      await p.getByRole('button', { name: 'Recibir lo que llegó' }).click()
+      await expect(p.getByText(/Recibidas 7 en Principal \(entrada ENT-/)).toBeVisible({ timeout: 20_000 })
+      await expect(p.getByText('Recibida en parte', { exact: true }).first()).toBeVisible()
+      await expect(p.getByLabel('Resumen de la orden')).toContainText('7 · 35.00') // recibido
+      await expect(p.getByLabel('Resumen de la orden')).toContainText('11 · 40.00') // por llegar: 5 × 5 + 6 × 2.50
+      const entradas = p.getByRole('list', { name: 'Entradas de la orden' })
+      await expect(entradas.getByRole('listitem')).toHaveCount(1)
+      await expect(entradas).toContainText('FAC-00231')
+      await expect(entradas).toContainText('+7')
+      // La ficha del producto: el costo promedio nace con el de la orden, el proveedor queda vinculado con su último costo.
+      await p.goto(`/admin/inventario/${vA}`)
+      await expect(p.getByLabel('Costo y valor del producto')).toContainText('5.00')
+      await expect(p.getByLabel('Costo y valor del producto')).toContainText('35.00') // 7 × 5.00
+      const proveedoresFicha = p.getByLabel('Proveedores de este producto')
+      await expect(proveedoresFicha).toContainText(PROVEEDOR)
+      await expect(proveedoresFicha).toContainText('último costo 5.00')
+      await expect(p.getByLabel('Lo que está pedido a proveedores')).toContainText('5 de')
+      // La entrada que produjo la tanda dice de qué orden viene.
+      await p.goto(`/admin/inventario/compras/${idOrden}`)
+      await entradas.getByRole('link').first().click()
+      await p.waitForURL(/\/admin\/inventario\/entradas\/(?!nueva)[^/]+$/)
+      await expect(p.getByRole('link', { name: numero })).toBeVisible()
+      await expect(p.getByLabel('Resumen de la entrada')).toContainText('35.00')
+
+      // ── Cerrar con faltante: exige motivo; el resto de la orden queda como faltante ──
+      await p.goto(`/admin/inventario/compras/${idOrden}`)
+      await p.getByRole('button', { name: 'Cerrar con faltante' }).click()
+      await fila(recibir, NA).getByLabel(/^Llegó de /).fill('5')
+      await fila(recibir, NB).getByLabel(/^Llegó de /).fill('2')
+      await p.getByRole('button', { name: 'Confirmar cierre con faltante' }).click()
+      await expect(p.getByText(/necesita un motivo/)).toBeVisible()
+      await p.getByLabel(/^Motivo del faltante/).fill('El proveedor se quedó sin azúcar')
+      await p.getByRole('button', { name: 'Confirmar cierre con faltante' }).click()
+      await expect(p.getByText(new RegExp(`Orden ${numero} cerrada: 7 recibidas, 4 de faltante`))).toBeVisible({ timeout: 20_000 })
+      await expect(p.getByText('Recibida', { exact: true }).first()).toBeVisible()
+      await expect(p.getByText(/El proveedor se quedó sin azúcar/)).toBeVisible()
+      await expect(p.getByRole('list', { name: 'Entradas de la orden' }).getByRole('listitem')).toHaveCount(2)
+      await expect(p.getByRole('button', { name: 'Recibir lo que llegó' })).toHaveCount(0)
+      await expect(p.getByLabel('Resumen de la orden')).toContainText('14 · 65.00') // recibido: 12 × 5 + 2 × 2.50
+      await expect(p.getByLabel('Resumen de la orden')).toContainText('Faltante')
+      // El promedio de B nació con el costo de la orden; el de A, con lo que había.
+      await p.goto(`/admin/inventario/${vB}`)
+      await expect(p.getByLabel('Costo y valor del producto')).toContainText('2.50')
+      await expect(p.getByLabel('Lo que está pedido a proveedores')).toHaveCount(0)
+
+      // ── Otra orden: cancelar un borrador no pide motivo, una pedida sí ───
+      const crear = async (cantidad: string, costo: string) => {
+        await p.goto('/admin/inventario/compras/nueva')
+        const f = p.getByRole('form', { name: 'Nueva orden de compra' })
+        const b = f.getByLabel('Escanear o buscar un producto')
+        await b.fill(SA)
+        await b.press('Enter')
+        const l = f.getByRole('list', { name: 'Productos de la orden' })
+        await expect(fila(l, NA)).toHaveCount(1)
+        await fila(l, NA).getByLabel(/^Cantidad de /).fill(cantidad)
+        await expect(fila(l, NA).getByLabel(/^Costo de /)).toHaveValue('5') // sugiere el último costo de ESE proveedor
+        await fila(l, NA).getByLabel(/^Costo de /).fill(costo)
+        await f.getByRole('button', { name: 'Guardar y pedir' }).click()
+        await p.waitForURL(/\/admin\/inventario\/compras\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+        return p.url().split('/').pop()!
+      }
+      const idCancelable = await crear('3', '6')
+      await expect(p.getByText('Pedida', { exact: true }).first()).toBeVisible()
+      await p.getByRole('button', { name: 'Cancelar orden' }).click()
+      await p.getByRole('button', { name: /^Sí, cancelar la orden / }).click()
+      await expect(p.getByText(/necesita un motivo/)).toBeVisible()
+      await p.getByLabel(/^Motivo/).fill('Ya no lo necesitamos')
+      await p.getByRole('button', { name: /^Sí, cancelar la orden / }).click()
+      await expect(p.getByText(/Orden OC-\d{4}-\d{6} cancelada/)).toBeVisible({ timeout: 15_000 })
+      await expect(p.getByText('Cancelada', { exact: true }).first()).toBeVisible()
+      await expect(p.getByText(/No entró nada al inventario/)).toBeVisible()
+      await expect(p.getByRole('button', { name: 'Recibir lo que llegó' })).toHaveCount(0)
+
+      // ── La lista: filtros, y lo que espera mercancía arriba ───────────────
+      const idEsperando = await crear('4', '5')
+      await p.goto('/admin/inventario/compras')
+      await expect(p.getByRole('heading', { name: 'Compras a proveedores', level: 1 })).toBeVisible()
+      await expect(p.getByRole('list', { name: 'Órdenes esperando mercancía' }).getByRole('listitem')).toHaveCount(1)
+      const todas = p.getByRole('list', { name: 'Órdenes de compra' })
+      await expect(todas.getByRole('listitem')).toHaveCount(3)
+      await p.goto('/admin/inventario/compras?estado=CANCELLED')
+      await expect(todas.getByRole('listitem')).toHaveCount(1)
+      await p.goto(`/admin/inventario/compras?q=${encodeURIComponent(numero)}`)
+      await expect(todas.getByRole('listitem')).toHaveCount(1)
+      await expect(todas).toContainText('Recibida')
+      await p.goto('/admin/inventario/compras?estado=nada&proveedor=con%20espacio&desde=2026-02-31&q=%27%3Cscript%3E') // una URL manipulada no rompe nada
+      await expect(p.getByRole('heading', { name: 'Compras a proveedores', level: 1 })).toBeVisible()
+      await p.goto(`/admin/inventario/proveedores`)
+      await expect(fila(p.getByRole('list', { name: 'Proveedores' }), PROVEEDOR)).toContainText('1 orden esperando mercancía')
+      await expect(fila(p.getByRole('list', { name: 'Proveedores' }), PROVEEDOR)).toContainText('2 productos')
+
+      // ── El detalle del proveedor, y desactivarlo ──────────────────────────
+      await fila(p.getByRole('list', { name: 'Proveedores' }), PROVEEDOR).getByRole('link').click()
+      await expect(p.getByRole('heading', { name: PROVEEDOR, level: 1 })).toBeVisible()
+      await expect(p.getByRole('list', { name: 'Productos del proveedor' })).toContainText(NA)
+      await expect(p.getByRole('list', { name: 'Órdenes del proveedor' }).getByRole('listitem')).toHaveCount(3)
+      await p.getByRole('button', { name: 'Desactivar proveedor' }).click()
+      await expect(p.getByText(/quedó desactivado: ya no recibe pedidos nuevos/)).toBeVisible({ timeout: 15_000 })
+      await p.goto('/admin/inventario/compras/nueva')
+      await expect(p.getByText(/primero registra a tu proveedor/)).toBeVisible()
+      // La orden que ya estaba pedida se sigue recibiendo.
+      await p.goto(`/admin/inventario/compras/${idEsperando}`)
+      await p.getByRole('button', { name: 'Recibir todo lo pendiente' }).click()
+      await expect(p.getByText(/cerrada: 4 recibidas/)).toBeVisible({ timeout: 20_000 })
+      await p.goto('/admin/inventario/proveedores')
+      await p.getByRole('button', { name: 'Buscar' }).click()
+      await expect(p.getByText('Todavía no hay proveedores')).toBeVisible() // desactivado: no sale sin «incluir desactivados»
+      await p.goto('/admin/inventario/proveedores?inactivos=1')
+      await expect(fila(p.getByRole('list', { name: 'Proveedores' }), PROVEEDOR)).toContainText('Desactivado')
+      void idCancelable
+
+      // ── Vincular un proveedor a un producto desde su ficha ────────────────
+      const otro = `Mayorista Sur ${sufijo}`
+      await prisma.inventorySupplier.create({ data: { companyId: emp.id, name: otro } })
+      await p.goto(`/admin/inventario/${vB}`)
+      const vinculo = p.getByRole('form', { name: 'Agregar proveedor al producto' })
+      await vinculo.getByLabel('Proveedor').selectOption({ label: otro })
+      await vinculo.getByLabel('Su código').fill('MS-77')
+      await vinculo.getByLabel('Días de entrega').fill('4')
+      await vinculo.getByLabel('Preferido').check()
+      await vinculo.getByRole('button', { name: 'Guardar' }).click()
+      await expect(p.getByText(/Proveedor guardado como el preferido/)).toBeVisible({ timeout: 15_000 })
+      const proveedoresB = p.getByRole('list', { name: 'Proveedores del producto' })
+      await expect(fila(proveedoresB, otro)).toContainText('Preferido')
+      await expect(fila(proveedoresB, otro)).toContainText('Código MS-77')
+      await expect(fila(proveedoresB, otro)).toContainText('entrega en 4 días')
+      await fila(proveedoresB, otro).getByRole('button', { name: `Quitar a ${otro}` }).click()
+      await expect(p.getByText(/ya no figura como proveedor/)).toBeVisible({ timeout: 15_000 })
+
+      // ── El archivo de la orden ────────────────────────────────────────────
+      const csv = await p.request.get(`/admin/inventario/compras/${idOrden}/exportar`)
+      expect(csv.status()).toBe(200)
+      expect(csv.headers()['content-type'] ?? '').toContain('text/csv')
+      const texto = await csv.text()
+      expect(texto).toContain('Orden de compra')
+      expect(texto).toContain(numero)
+      expect(texto).toContain(PROVEEDOR)
+      expect(texto).toContain('El proveedor se quedó sin azúcar')
+      expect(texto).toMatch(/Valor pedido;75\.00/)
+
+      // ── Una orden ajena o inventada no existe ──────────────────────────────
+      await p.goto('/admin/inventario/compras/cinexistente000000000000')
+      expect(await p.locator('meta[name=robots][content*=noindex]').count()).toBeGreaterThan(0)
+      await expect(p.getByText(/^OC-\d{4}-\d{6}$/)).toHaveCount(0)
+      await expect(p.getByRole('list', { name: 'Líneas de la orden' })).toHaveCount(0)
+      expect((await p.request.get('/admin/inventario/compras/cinexistente000000000000/exportar')).status()).toBe(404)
+
+      // ── La entrada que creó la recepción enlaza a su orden (el control positivo de la comprobación de abajo) ───
+      const entrada = await prisma.inventoryReceipt.findFirstOrThrow({ where: { purchaseOrderId: idOrden }, select: { id: true } })
+      await p.goto(`/admin/inventario/entradas/${entrada.id}`)
+      await expect(p.getByText('Orden de compra:')).toBeVisible()
+      await expect(p.getByRole('link', { name: numero })).toBeVisible()
+
+      // ── Quien NO tiene la función «comprar» no ve ni una orden ───────────
+      await prisma.user.update({ where: { email }, data: { permisos: { v: 1, secciones: {}, funciones: { inventario: { comprar: false } } } } })
+      await p.goto('/admin/inventario')
+      await expect(vistas.getByRole('link', { name: 'Existencias' })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Compras' })).toHaveCount(0)
+      await expect(vistas.getByRole('link', { name: 'Proveedores' })).toHaveCount(0)
+      await p.goto('/admin/inventario/compras')
+      await expect(p.getByText(/No tienes permiso para ver ni gestionar las compras a proveedores/)).toBeVisible()
+      await expect(p.getByRole('list', { name: 'Órdenes de compra' })).toHaveCount(0)
+      await p.goto(`/admin/inventario/compras/${idOrden}`)
+      await expect(p.getByText(/No tienes permiso para ver las órdenes de compra/)).toBeVisible()
+      expect(await p.locator('body').innerText()).not.toContain('75.00')
+      await p.goto('/admin/inventario/proveedores')
+      await expect(p.getByText(/No tienes permiso para ver ni gestionar los proveedores/)).toBeVisible()
+      await p.goto('/admin/inventario/compras/nueva')
+      await expect(p.getByText(/No tienes permiso para hacer órdenes de compra/)).toBeVisible()
+      expect((await p.request.get(`/admin/inventario/compras/${idOrden}/exportar`)).status()).toBe(403)
+      await p.goto(`/admin/inventario/${vA}`)
+      await expect(p.getByLabel('Proveedores de este producto')).toHaveCount(0)
+      await expect(p.getByLabel('Lo que está pedido a proveedores')).toHaveCount(0)
+      // Lo demás del inventario sigue funcionando: la ficha y la entrada se ven, sin el enlace a la orden.
+      await expect(p.getByLabel('Costo y valor del producto')).toBeVisible()
+      await p.goto(`/admin/inventario/entradas/${entrada.id}`)
+      await expect(p.getByRole('heading', { level: 1 })).toContainText('ENT-')
+      await expect(p.getByText('Orden de compra:')).toHaveCount(0)
+    } finally {
+      await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
+    }
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
   test('aislamiento: la variante de otra empresa no se abre ni se lista', async ({ browser }) => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()

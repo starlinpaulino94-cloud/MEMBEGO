@@ -4,7 +4,7 @@
 > `/admin/inventario`, sus consumidores (pedidos, checkout, POS, ofertas), el cron, las pruebas y la documentación.
 > Se compara con el inventario del Car Wash (`ProductoInventario`), que es OTRO módulo.
 >
-> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c o INV-3a ya lo cerraron** (ver §5, §7, §9, §11 y §13).
+> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a o INV-3b ya lo cerraron** (ver §5, §7, §9, §11, §13 y §15).
 
 ## 1. Veredicto
 
@@ -40,9 +40,10 @@ separa un «control de stock» de un módulo de inventario profesional.
 
 ### 3.2 Compras y reposición
 
-No hay proveedores ni órdenes de compra en Commerce Core (el Car Wash sí: `Proveedor`, `OrdenCompra`, y recibir la orden
-genera la entrada — es el modelo a seguir), ni punto de reorden, ni «qué comprar». La alerta de stock bajo es una lista
-de problemas, no una propuesta de compra. → INV-3.
+No había proveedores ni órdenes de compra en Commerce Core (el Car Wash sí: `Proveedor`, `OrdenCompra`, y recibir la orden
+genera la entrada — es el modelo que se siguió), ni punto de reorden, ni «qué comprar». → **Proveedores y órdenes de compra:
+INV-3b ✔** (ver §15). Sigue pendiente, en INV-3c, el punto de reorden y «qué comprar»: la alerta de stock bajo es todavía una
+lista de problemas, no una propuesta de compra.
 
 ### 3.3 Valor del inventario
 
@@ -105,7 +106,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-2b · Conteo físico por sucursal** | Sesión de conteo (una abierta por sucursal), a ciegas, captura por lector o por hoja CSV, informe de diferencias con CSV, ajuste por la diferencia (no por el número), todo o nada | `InventoryCountSession`, `InventoryCountLine` (migración `20261057`) | M | **Hecha** (este documento, §9) |
 | **INV-2c · Transferencias con estado** | «Con envío»: enviada → parcial/recibida o cancelada; recepción parcial; cerrar con faltante y motivo; en tránsito visible en la ficha; aviso a los administradores al enviar. La transferencia directa actual se conserva | `InventoryTransfer`, `InventoryTransferLine` (migración `20261058`) | M | **Hecha** (este documento, §11) |
 | **INV-3a · Costo y valor del inventario** | Costo unitario en las líneas de entrada (manual, CSV y entrada de un producto); costo promedio ponderado por producto; ventas, devoluciones, daños y ajustes valorados con el promedio de su instante; pantalla «Valor del inventario» por sucursal y producto (con CSV); costo de ventas del mes; corregir el costo con motivo. Función de permiso nueva `costos` | `unitCost` en movimientos y líneas de entrada; `InventoryVariantCost`, `InventoryCostAdjustment` (migración `20261059`) | M | **Hecha** (este documento, §13) |
-| INV-3b · Proveedores y órdenes de compra | Proveedores; orden de compra `OC-AAAA-NNNNNN` (Borrador → Pedida → Recibida en parte → Recibida, o Cancelada); recibir una orden crea una entrada con los costos de la orden; vínculo producto-proveedor con último costo y días de entrega | Proveedores/OC de Commerce Core | M | pendiente |
+| **INV-3b · Proveedores y órdenes de compra** | Proveedores; orden de compra `OC-AAAA-NNNNNN` (Borrador → Pedida → Recibida en parte → Recibida, o Cancelada) con el costo de cada línea; recibir en tandas crea una entrada con los costos de la orden (nunca más de lo pedido; cerrar con faltante exige motivo); vínculo producto-proveedor con código, último costo, días de entrega y preferido; CSV de la orden. Función de permiso nueva `comprar` | `InventorySupplier`, `InventoryPurchaseOrder`, `InventoryPurchaseOrderLine`, `InventoryVariantSupplier`; `purchaseOrderId` en las entradas (migración `20261060`) | M | **Hecha** (este documento, §15) |
 | INV-3c · Reposición | «Llenar hasta» por producto y sucursal; pantalla «Qué comprar» con la cantidad sugerida (descontando lo pedido y lo que va en camino), agrupada por proveedor, que crea órdenes en borrador | Campo en el saldo | S | pendiente |
 | INV-4 · Reportes | Kardex valorizado, rotación y días de inventario, stock sin movimiento, mermas por motivo codificado, margen real; tarjeta de dashboard | Catálogo de motivos | M | pendiente |
 | INV-5 · Trazabilidad | Lotes y vencimiento con FEFO; series; kits que descuentan componentes; API v1; rol de bodega | Lotes, kits | L por pieza | pendiente |
@@ -615,3 +616,161 @@ Hallazgos de la propia verificación (importa que se sepan):
 - En esta máquina el servidor de E2E imprime muchos `fetch failed … 127.0.0.1:54329` (Supabase Auth inexistente en el
   arnés): ruido previo, no afecta a los resultados.
 
+
+## 15. INV-3b · qué se hizo
+
+> Segunda de las tres partes de INV-3. Decisiones aprobadas que aplican aquí: la recepción de una orden NO es un camino nuevo
+> hacia el stock —crea una entrada de mercancía normal—; el costo de cada línea es obligatorio en la orden (cero es válido);
+> nunca se recibe más de lo pedido; lo que no llega se cierra como faltante CON motivo; un proveedor se desactiva, no se
+> borra; un producto tiene un solo proveedor preferido; permiso nuevo `comprar`; nada de Car Wash. El punto de reorden y «qué
+> comprar» quedan para INV-3c.
+
+- **Proveedores** — `/admin/inventario/proveedores` (pestaña «Proveedores», solo con la función `comprar`): nombre (único por
+  empresa sin distinguir mayúsculas), RNC/cédula, contacto, teléfono, correo, días de crédito (0 = de contado) y notas. Se
+  desactiva y se reactiva; no se borra. Un proveedor inactivo no puede recibir órdenes nuevas ni vínculos nuevos, pero sus
+  órdenes abiertas se siguen pudiendo recibir (lo pedido llega igual). La ficha muestra sus productos y sus órdenes.
+- **Orden de compra** — `/admin/inventario/compras`: número `OC-AAAA-NNNNNN` por empresa, proveedor, sucursal que recibe,
+  referencia, fecha prevista, nota y hasta 200 líneas (producto, cantidad y costo unitario). Estados: **Borrador** (las líneas
+  se editan, se puede cancelar sin motivo) → **Pedida** (desde aquí el contenido queda congelado, también en la base) →
+  **Recibida en parte** → **Recibida**, o **Cancelada**. Lista con filtros por estado, proveedor, sucursal, fechas y texto,
+  y CSV de la orden completa (encabezado, resumen, cada línea y cada entrada que produjo).
+- **Recibir** — cada recepción crea UNA entrada de mercancía (`ENT-…`, enlazada a la orden) con los costos de la orden; por
+  eso mueve el stock y el costo promedio exactamente como cualquier entrada (INV-3a) y no hay un segundo camino al ledger.
+  Se puede recibir en tandas. **Nunca más de lo pendiente** (el formulario no deja enviar y el servicio lo rechaza con
+  `RECIBE_MAS_DE_LO_PEDIDO`). Se puede **cerrar con faltante**: lo que no llegó queda como «cerrado», exige un motivo, y la
+  orden termina Recibida; cerrarla sin haber recibido nada se rechaza (`NADA_RECIBIDO`: eso es cancelar).
+- **Cancelar** — un borrador se cancela sin motivo; una orden Pedida (nada recibido) exige motivo y sus líneas quedan como
+  cerradas; una Recibida en parte NO se cancela (se cierra con faltante). Una orden Recibida o Cancelada no cambia más.
+- **Proveedores por producto** — en la ficha del producto: la tarjeta «Proveedores de este producto» (código del proveedor,
+  último costo, días de entrega, preferido —uno solo por producto— y desvincular) y la tarjeta «Pedido a proveedores» (lo que
+  está pedido y aún no llega, por orden). El último costo de cada vínculo lo escribe cada recepción; comprarle a un proveedor
+  un producto que no tenía vinculado crea el vínculo.
+- **Entradas** — el detalle de una entrada enlaza a su orden. El enlace se lee aparte y solo con `comprar`, de modo que la
+  guardia que impide leer costos sin `costos` sigue intacta.
+- **Permisos** — función nueva `comprar` («Proveedores y órdenes de compra»). Exige: ver las pestañas «Compras» y
+  «Proveedores», crear y editar proveedores, vincularlos a productos y crear, pedir, recibir, cancelar y exportar órdenes.
+  **Cómo funciona hoy (importa, igual que con `costos`):** el motor de Permisos concede por defecto toda función no negada, así
+  que quien ya tiene la sección Inventario tiene `comprar` desde que se despliega. Dos consecuencias a tener presentes:
+  `comprar` implica **ver y escribir los costos de las órdenes** (sin necesitar `costos`), y **recibir una orden mueve el stock
+  y el costo promedio sin necesitar `ajustar` ni `costos`** —es el camino normal de mercancía que llega—. Para quitarlo:
+  Permisos del empleado → Inventario → desmarcar «Proveedores y órdenes de compra».
+- **La base lo impone, no solo el código** — triggers: ninguna orden se borra; una orden terminada (Recibida/Cancelada) queda
+  congelada; identidad (`id`, empresa, número) inmutable; los datos pedidos no cambian después del borrador; las transiciones
+  de estado permitidas son una tabla (Borrador→Borrador|Pedida|Cancelada, Pedida→Parcial|Recibida|Cancelada,
+  Parcial→Recibida); los contadores de las líneas (recibido y cerrado) solo suben. CHECK por estado: cada estado exige lo
+  suyo (una Pedida trae quién y cuándo pidió, una Cancelada de una Pedida trae motivo, una Recibida no tiene faltante sin
+  motivo, etc.) y lo que no le corresponde no puede estar. Claves foráneas compuestas `(id, companyId)` (una orden no
+  puede mezclar productos, proveedores ni sucursales de otra empresa) y `TRUNCATE` bloqueado.
+- **Concurrencia** — orden de bloqueo: la orden (`SELECT … FOR UPDATE`) → los saldos (por id) → los renglones de costo
+  (por producto). La clave de idempotencia se revisa DESPUÉS de bloquear la orden y ANTES de mirar el estado: repetir una
+  recepción ya aplicada devuelve la misma entrada aunque la orden ya esté terminada; con otra cantidad, es otra operación.
+  Crear un borrador con la misma clave de idempotencia bajo concurrencia toma antes un candado de asesor sobre la clave y no
+  duplica. Los contadores de las líneas se actualizan antes que el estado de la cabecera (lo exige el trigger).
+- **Degradación** — `/api/health` avisa (`inventory_purchase_orders.esquema`, `inventory_receipts.purchaseOrderId`) si el
+  código llega antes que el SQL. Las dos tarjetas nuevas de la ficha del producto se leen cada una en su propio `try`.
+
+Archivos principales: `prisma/schema/{inventario,identidad,catalogo}.prisma`, `prisma/migrations/20261060_inventory_purchasing/`,
+`src/modules/inventory/{compras,compras-service,compras-queries}.ts` (+ `service`, `filtros`, `exportacion`, `auditoria`,
+`queries`, `actions`), `src/lib/auth/funciones.ts`,
+`src/components/inventario/{ProveedorForm,OrdenCompraForm,AccionesOrdenCompra,RecibirOrdenCompraForm,ProveedoresDeProductoCard,NavegacionInventario}.tsx`,
+`src/app/(admin)/admin/inventario/{compras,proveedores}/` y las tarjetas de la ficha `src/app/(admin)/admin/inventario/[varianteId]/page.tsx`.
+
+### Cómo aplicar la migración (obligatorio y en este orden)
+
+1. **SQL primero**, y en este orden: `prisma/migrations/20261059_inventory_costs/migration.sql` (INV-3a, 176 líneas; si aún
+   no se aplicó) y después `prisma/migrations/20261060_inventory_purchasing/migration.sql` (374 líneas). Ambas son aditivas e
+   idempotentes (se pueden correr dos veces). Copiar el archivo **completo** con «Copy raw file» de GitHub: un pegado cortado
+   a la mitad da `unterminated dollar-quoted string` en el SQL Editor, y no es un fallo del SQL. Antes del código se puede
+   comprobar con `select to_regclass('public.inventory_variant_costs'), to_regclass('public.inventory_purchase_orders');`
+   (ninguna debe ser `null`).
+2. **Después el código.** El código de INV-3b depende también del SQL de INV-3a (la recepción escribe `unitCost`): sin
+   `20261059` aplicado, no desplegar. Con el SQL aplicado y el código viejo todavía en producción no pasa nada.
+3. Verificar con `npm run db:doctor` y `/api/health` (debe listar `inventory_purchase_orders.esquema` e
+   `inventory_receipts.purchaseOrderId` en verde, además de los dos de INV-3a).
+
+## 16. Verificación de INV-3b (2026-10-14)
+
+Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`; las migraciones nuevas aplicadas con `prisma migrate deploy` sobre
+las anteriores —227 en total tras traer lo último de `main`—, la de INV-3b re-ejecutada varias veces sobre una base ya
+migrada sin error —es lo que restauró cada mutación de la base— y `prisma migrate diff` contra el esquema sin diferencias en
+las dos bases de prueba; no se tocó ninguna base real). Sin Supabase real, Vercel, lector de código de barras físico, móvil
+ni Safari: **no verificados**. Tampoco se midió el tiempo de recibir una orden de 200 líneas (INV-3a midió la entrada de 1.000
+líneas; la recepción usa esa misma entrada, pero no hay una medición propia).
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; las 7 rutas nuevas compiladas; entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB (sin cambio) |
+| Unitarias (`bun run test`) | 4388 pruebas: 4381 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest` como en CI) | 803/803, cero omitidas |
+| Pruebas nuevas | 26 puras (`inventario-compras.test.ts`), 12 guardias nuevas (`inventario-permisos.test.ts`, ya 72), 38 contra PostgreSQL (`inventory-compras.db.test.ts`) y un recorrido E2E nuevo |
+| E2E (`bun run e2e:limpio`, escritorio) | 71/71 en la corrida combinada final sobre la compilación final: `inventario-admin` (10, con el recorrido nuevo), `comercio-experiencia`, `pedidos-membego`, `pos-membego`, `carrito-checkout`, `catalogo-admin`, `catalogo-api` y `catalogo-publico` |
+| Mutaciones | 279 distintas, 276 detectadas, 3 equivalentes (ver abajo) |
+
+Qué cubre el recorrido E2E: la pestaña «Compras» y «Proveedores» (solo con `comprar`) → un proveedor con crédito y contacto, y
+el mismo nombre en mayúsculas rechazado con su mensaje → una orden nueva (sin proveedor no se puede hacer; el costo es
+obligatorio) → editar el borrador (conserva el número) y pedirla (desde ahí las líneas no se editan) → recibir en tandas con el
+costo de la orden (el estado pasa a «Recibida en parte»; más de lo pendiente deshabilita el botón y marca el campo; la tarjeta
+«Lo que está pedido a proveedores» de la ficha se actualiza con lo que aún no llega) → cerrar con faltante (sin motivo no deja) → cancelar una orden
+pedida (sin motivo no deja) → la lista y sus filtros → el detalle del proveedor, desactivarlo (ya no recibe pedidos nuevos, pero
+su orden en curso se sigue recibiendo) → vincular un proveedor desde la ficha del producto (código, días de entrega, preferido) y
+quitarlo → el CSV de la orden → la entrada que creó la recepción enlaza a su orden → una orden inventada no existe (ni su
+descarga: 404) → y con la función `comprar` negada: ni las pestañas, ni las órdenes (cada pantalla dice que no hay permiso y no
+enseña ni una cifra), ni las tarjetas de la ficha, ni el enlace de la entrada; la descarga de la orden da 403. Lo que NO ejerce este
+recorrido (lo cubren las pruebas contra PostgreSQL): que no se pueda pedir lo que no controla inventario, las carreras y la base
+escrita por fuera.
+
+Qué cubren las 38 pruebas contra PostgreSQL: el proveedor (datos normalizados, nombre único sin mayúsculas ni espacios de más,
+otra empresa puede repetirlo, desactivar y reactivar); el borrador (numeración sin huecos con seis a la vez, líneas con costo,
+no mueve nada, editar solo el borrador); pedir (congela, dos veces no hace nada); recibir en tandas (una entrada por tanda con el
+costo de la línea, el promedio ponderado con lo que ya había, el último costo del proveedor, nunca más de lo pedido ni un producto
+ajeno, «todo»); cerrar con faltante y cancelar (motivo, todo-o-nada, la parcial no se cancela); la misma recepción repetida ocho
+veces a la vez o con la orden ya cerrada no suma dos veces; cinco recepciones de 20 sobre 90 pendientes (ganan cuatro);
+dos órdenes con los mismos productos en distinto orden sin interbloqueo; recibir y cancelar a la vez (una sola gana); el preferido
+(dos a la vez dejan uno); el rastro en la bitácora; la base escrita por fuera (estados saltados, lo pedido y lo cerrado
+inmutables, contadores que no bajan, formas imposibles, claves repetidas, mezcla de empresas, una prueba por cláusula de cada
+CHECK); las lecturas (lista, filtros, paginación, detalle, búsqueda de productos, ficha) y el aislamiento entre empresas.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **El E2E encontró una diferencia real entre la base de producción y la del E2E/CI.** El E2E arma su base con `prisma db push`,
+  que no trae lo que el esquema de Prisma no puede expresar: aquí, el índice único `(companyId, lower(name))` de proveedores. Sin
+  él, «DISTRIBUIDORA NORTE» se creó junto a «Distribuidora Norte» y la regla del nombre único dependía por completo de un índice que
+  no existe en esa base. Se añadió una comprobación en el servicio (`exigirNombreLibre`, antes de escribir; el índice sigue siendo la
+  garantía contra dos altas a la vez) y una prueba que quita el índice dentro de una transacción que se deshace (la 38). Los demás
+  objetos solo-SQL (índice parcial del preferido, triggers, CHECK) son respaldo de reglas que el servicio ya aplica por su cuenta; el
+  preferido, por ejemplo, desmarca al anterior en el servicio y la prueba 26 lo ejerce.
+- **Mis mutaciones de la base se volvieron falsamente «detectadas» por un error mío.** Una edición tardía de la prueba 8 (una orden
+  más por la réplica con menos líneas) rompió su conteo; desde entonces cualquier mutación del servicio «moría» por eso y no por lo
+  que mutaba. Se arregló la prueba y se rehicieron las del servicio desde cero.
+- **Mutaciones**: 279 distintas (67 del servicio, 54 de lo puro, 55 de las lecturas y 103 de los objetos de la base), 276
+  detectadas. En algún momento sobrevivieron 42 (3 de ellas equivalentes; las otras 39 eran reales y obligaron a reforzar pruebas), las más instructivas: reenviar un borrador con MENOS líneas
+  que la primera vez (la réplica comparaba solo el número de líneas); que el motivo de cierre se guardara aunque no faltara nada;
+  cerrar sin faltante con una orden ya agotada; el orden de las listas (proveedores por id, órdenes del proveedor más nuevas
+  primero); lo pendiente cuando el faltante se subió por fuera del servicio; el preferido que no sea el primero alfabéticamente; los
+  campos `id`/`companyId` de una orden y de sus líneas, y las transiciones Pedida→Borrador y Parcial→Borrador, que el trigger
+  prohibía pero ninguna prueba exigía; y 21 cláusulas de los CHECK que ninguna prueba ejercía por sí sola (la prueba 37 ahora pone una
+  desviación mínima por cláusula; las líneas se insertan con los triggers desactivados en esa sesión para que el trigger no tape
+  al CHECK). Un CHECK acepta el NULL, así que cada brazo tiene su `IS NOT NULL`
+  explícito y una mutación lo comprobó.
+  Los 3 que siguen vivos son equivalentes: no ordenar los vínculos que crea la recepción (los saldos ya se bloquearon en orden
+  fijo antes, así que dos recepciones que se pisarían en un vínculo nunca llegan ahí a la vez); el detalle sin ordenar las líneas
+  (el índice por `(orderId, position)` ya las devuelve en ese orden); y quitar el índice único `(companyId, name)` exacto (lo cubre
+  el de `lower(name)`; está porque el esquema de Prisma lo declara).
+- **E2E**: la primera ejecución real del recorrido nuevo falló por mi suposición de que una orden inexistente da 404 en la página;
+  con streaming responde 200 con `noindex`, como en las demás pantallas de inventario (la descarga sí da 404). Se alineó la prueba.
+  El botón de recibir ya estaba deshabilitado ante cantidades de más; la prueba ahora lo comprueba en vez de intentar un clic.
+- **Fallos que NO se pudieron atribuir ni reproducir** (dos): (1) en la primera corrida combinada de E2E,
+  `comercio-experiencia` falló una vez («Ofertas destacadas» no apareció en `/cliente/inicio`); no se reprodujo ni sola (9/9) ni en
+  otra corrida combinada completa (71/71), y no hay rastro en el servidor; esa pantalla no depende de lo de esta fase y no se tocó.
+  (2) en la primera ejecución completa de `test:db`, hecha mientras corrían a la vez el lint y las unitarias, falló
+  `supply-v2-slice9` («el worker reclama y muere…», sobre un arriendo con reloj); pasa en solitario (85/85) y en la repetición de
+  la suite completa sobre una máquina libre (802/802, y 803/803 en la final). Lo más probable es carga de la máquina, pero es una
+  suposición.
+- **El permiso `comprar` se concede por defecto** (igual que `costos`; ver §13): los administradores y gerentes con la sección
+  Inventario pueden crear y recibir órdenes y ver sus costos desde el despliegue. Hay una guardia que exige que cada acción nueva
+  pase por `contexto('comprar')` y cada ruta por `requireSection('inventario','comprar')`.
+- **Orden de despliegue**: igual que en INV-3a, el SQL va antes que el código y `20261059` antes que `20261060` (§15). `/api/health`
+  lo avisa si falta.
+- Esta máquina imprime `fetch failed … 127.0.0.1:54329` y `The destination stream closed early` en el servidor de E2E (Supabase
+  Auth inexistente en el arnés; ruido previo, visible también en las verificaciones anteriores).
