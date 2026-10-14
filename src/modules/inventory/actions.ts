@@ -32,7 +32,7 @@
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { conEmpresa } from '@/lib/tenant'
-import { requireSection } from '@/lib/auth/guards'
+import { puedeFuncion, requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { getRequestMeta } from '@/lib/server-utils'
 import { formSubmitLimiter } from '@/lib/rate-limit'
@@ -62,9 +62,11 @@ import {
   devolverEnTx,
   recibirEnTx,
   registrarEntradaMultipleEnTx,
+  corregirCostoEnTx,
   resolverDanadoEnTx,
   transferirEnTx,
   type LineaRechazada,
+  type ResultadoCorreccionCosto,
   type ResumenConteoAplicado,
   type SaldoVista,
 } from './service'
@@ -109,7 +111,14 @@ export interface EntradaMovimiento {
   cantidad: number
   motivo?: string | null
   clave?: string | null
+  /** INV-3a: solo lo lee «registrar entrada». Costo unitario de lo que llega, sin impuestos; exige la función «costos». */
+  costo?: string | null
 }
+
+/** ¿Este valor es un costo escrito (aunque sea mal)? Vacío o ausente = no se capturó. */
+const traeCosto = (v: unknown) => (typeof v === 'string' ? v.trim() !== '' : typeof v === 'number')
+
+const SIN_PERMISO_DE_COSTOS = 'Tu usuario no tiene permiso para registrar costos. Quita el costo e inténtalo de nuevo.'
 
 type ResultadoSaldo = ResultadoInventario<{ saldo: SaldoVista; repetido: boolean }>
 
@@ -139,8 +148,10 @@ const clave = (v: unknown) => (typeof v === 'string' && v !== '' ? v : null)
 
 /** Llega mercancía: entra a lo vendible. */
 export async function registrarEntradaInventario(entrada: EntradaMovimiento): Promise<ResultadoSaldo> {
+  // El costo mueve el valor del inventario: solo quien puede ver y fijar costos lo registra. Se pregunta únicamente si viene uno.
+  if (esObjeto(entrada) && traeCosto(entrada.costo) && !(await puedeFuncion('inventario', 'costos'))) return { ok: false, error: SIN_PERMISO_DE_COSTOS }
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    recibirEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx)
+    recibirEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave), costo: e.costo }, ctx)
   )
 }
 
@@ -303,7 +314,7 @@ const sinLineas = (i: InformeImportacion): InformeVista => {
  */
 export async function registrarEntradaMultiple(entrada: {
   sucursalId: string
-  lineas: { varianteId: string; cantidad: number }[]
+  lineas: { varianteId: string; cantidad: number; costo?: string | null }[]
   referencia?: string | null
   nota?: string | null
   clave?: string | null
@@ -311,7 +322,8 @@ export async function registrarEntradaMultiple(entrada: {
   const c = await contexto('ajustar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
-  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : []
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, costo: l?.costo })) : []
+  if (lineas.some((l) => traeCosto(l.costo)) && !(await puedeFuncion('inventario', 'costos'))) return { ok: false, error: SIN_PERMISO_DE_COSTOS }
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
       registrarEntradaMultipleEnTx(
@@ -348,7 +360,8 @@ export async function previsualizarImportacion(entrada: { texto: string }): Prom
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   if (!(await formSubmitLimiter(`inv-importar:${c.ctx.actorId ?? c.companyId}`))) return { ok: false, error: 'Demasiados intentos. Espera un momento.' }
   try {
-    const r = await conEmpresa(c.companyId, (tx) => informeDeImportacionEnTx(tx, c.companyId, entrada.texto))
+    const permitirCostos = await puedeFuncion('inventario', 'costos')
+    const r = await conEmpresa(c.companyId, (tx) => informeDeImportacionEnTx(tx, c.companyId, entrada.texto, { permitirCostos }))
     if (!r.ok) return { ok: false, error: r.error }
     return { ok: true, informe: sinLineas(r.informe) }
   } catch (e) {
@@ -373,8 +386,9 @@ export async function aplicarImportacion(entrada: {
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   if (!(await formSubmitLimiter(`inv-importar:${c.ctx.actorId ?? c.companyId}`))) return { ok: false, error: 'Demasiados intentos. Espera un momento.' }
   try {
+    const permitirCostos = await puedeFuncion('inventario', 'costos')
     const r = await conEmpresa(c.companyId, (tx) =>
-      aplicarImportacionEnTx(tx, c.companyId, { sucursalId: texto(entrada.sucursalId), texto: entrada.texto, referencia: entrada.referencia, nota: entrada.nota, idempotencyKey: clave(entrada.clave) }, c.ctx)
+      aplicarImportacionEnTx(tx, c.companyId, { sucursalId: texto(entrada.sucursalId), texto: entrada.texto, referencia: entrada.referencia, nota: entrada.nota, idempotencyKey: clave(entrada.clave), permitirCostos }, c.ctx)
     )
     if (!r.ok) return { ok: false, error: r.error }
     if (!r.resultado.aplicada) return { ok: true, aplicada: false, informe: sinLineas(r.resultado.informe) }
@@ -668,6 +682,26 @@ export async function cancelarTransferencia(entrada: { trasladoId: string; motiv
     const r = await conEmpresa(c.companyId, (tx) => cancelarTrasladoEnTx(tx, c.companyId, { trasladoId: texto(entrada.trasladoId), motivo: entrada.motivo }, c.ctx))
     refrescar()
     return { ok: true, numero: r.numero, devueltas: r.devueltas, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+// ── INV-3a · corregir el costo de un producto ────────────────────────────────
+
+/**
+ * Corrige el costo promedio de un producto (con motivo). La función es `costos`: cambiar el costo cambia lo que vale el
+ * inventario y lo que costarán las ventas desde ahora. Los movimientos que ya ocurrieron conservan el costo con que se
+ * valoraron.
+ */
+export async function corregirCostoInventario(entrada: { varianteId: string; costo: string; motivo: string }): Promise<ResultadoInventario<ResultadoCorreccionCosto>> {
+  const c = await contexto('costos')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => corregirCostoEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), costo: entrada.costo, motivo: entrada.motivo }, c.ctx))
+    refrescar()
+    return { ok: true, ...r }
   } catch (e) {
     return aError(e)
   }

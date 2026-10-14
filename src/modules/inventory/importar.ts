@@ -42,12 +42,12 @@ export async function resolverCatalogoDeImportacionEnTx(tx: Tx, companyId: strin
 export type ResultadoInforme = { ok: true; informe: InformeImportacion } | { ok: false; error: string }
 
 /** Lee y valida el archivo contra el catálogo de la empresa, sin escribir nada. */
-export async function informeDeImportacionEnTx(tx: Tx, companyId: string, texto: unknown): Promise<ResultadoInforme> {
+export async function informeDeImportacionEnTx(tx: Tx, companyId: string, texto: unknown, opciones: { permitirCostos?: boolean } = {}): Promise<ResultadoInforme> {
   const lectura = leerImportacion(texto)
   if (!lectura.ok) return { ok: false, error: lectura.error }
   // Un archivo con más filas que el tope se informa SIN consultar el catálogo.
   const catalogo = lectura.filas.length > MAX_LINEAS_IMPORTACION ? [] : await resolverCatalogoDeImportacionEnTx(tx, companyId, lectura.filas)
-  return { ok: true, informe: validarImportacion(lectura.filas, indexarCatalogo(catalogo)) }
+  return { ok: true, informe: validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'ENTRADA', opciones) }
 }
 
 export type ResultadoAplicacion = { aplicada: true; entrada: ResultadoEntradaMultiple } | { aplicada: false; informe: InformeImportacion }
@@ -59,10 +59,10 @@ export type ResultadoAplicacion = { aplicada: true; entrada: ResultadoEntradaMul
 export async function aplicarImportacionEnTx(
   tx: Tx,
   companyId: string,
-  e: { sucursalId: string; texto: unknown; referencia?: string | null; nota?: string | null; idempotencyKey?: string | null },
+  e: { sucursalId: string; texto: unknown; referencia?: string | null; nota?: string | null; idempotencyKey?: string | null; permitirCostos?: boolean },
   ctx: ContextoAuditoria
 ): Promise<{ ok: true; resultado: ResultadoAplicacion } | { ok: false; error: string }> {
-  const r = await informeDeImportacionEnTx(tx, companyId, e.texto)
+  const r = await informeDeImportacionEnTx(tx, companyId, e.texto, { permitirCostos: e.permitirCostos })
   if (!r.ok) return r
   if (!r.informe.ok) return { ok: true, resultado: { aplicada: false, informe: r.informe } }
   const entrada = await registrarEntradaMultipleEnTx(

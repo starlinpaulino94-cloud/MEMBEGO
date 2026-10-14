@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
+import { Prisma } from '@prisma/client'
 import { cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 import { empresaCatalogo, existenciasSembradas, itemSembrado, sucursalSembrada, varianteDe, type EmpresaCatalogo } from './catalogo-arnes'
 
@@ -385,16 +386,16 @@ test.describe('Inventario · panel', () => {
     await buscar.fill(SKU_A)
     await buscar.press('Enter')
     await expect(filaA).toHaveCount(1)
-    await expect(filaA.getByRole('textbox')).toHaveValue('1')
+    await expect(filaA.getByLabel(/^Cantidad de /)).toHaveValue('1')
     await expect(buscar).toHaveValue('')
     await buscar.fill(SKU_A.toLowerCase()) // el SKU no distingue mayúsculas
     await buscar.press('Enter')
     await expect(filaA).toHaveCount(1)
-    await expect(filaA.getByRole('textbox')).toHaveValue('2')
+    await expect(filaA.getByLabel(/^Cantidad de /)).toHaveValue('2')
     await buscar.fill(COD_B) // el código de barras exacto, como lo escribe un lector
     await buscar.press('Enter')
     await expect(filaB).toHaveCount(1)
-    await expect(filaB.getByRole('textbox')).toHaveValue('1')
+    await expect(filaB.getByLabel(/^Cantidad de /)).toHaveValue('1')
 
     // Lo que no se puede recibir: un código que no existe y un servicio (no controla inventario).
     await buscar.fill('NO-EXISTE-999')
@@ -406,12 +407,12 @@ test.describe('Inventario · panel', () => {
     await expect(lineas.getByRole('listitem')).toHaveCount(2)
 
     // Cantidades: una a cero no deja registrar; con valores válidos, el resumen cuenta bien.
-    await filaA.getByRole('textbox').fill('12')
-    await filaB.getByRole('textbox').fill('0')
+    await filaA.getByLabel(/^Cantidad de /).fill('12')
+    await filaB.getByLabel(/^Cantidad de /).fill('0')
     await form.getByRole('button', { name: 'Registrar entrada' }).click()
     await expect(p.getByText(new RegExp(`Revisa la cantidad de «${NOMBRE_B}»`))).toBeVisible()
     await expect(p).toHaveURL(/\/entradas\/nueva$/)
-    await filaB.getByRole('textbox').fill('5')
+    await filaB.getByLabel(/^Cantidad de /).fill('5')
     await expect(form.getByText(/2 productos · 17 unidades/)).toBeVisible()
 
     await form.getByRole('button', { name: 'Registrar entrada' }).click()
@@ -1075,6 +1076,246 @@ test.describe('Inventario · panel', () => {
     await pSin.goto('/admin/inventario/transferencias')
     await expect(pSin).not.toHaveURL(/\/admin\/inventario\/transferencias$/)
     await ctxSin.close()
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-3a · costo y valor: entradas con costo, promedio ponderado, valor del inventario, costo de ventas, corregir, importar con costo — y quien no tiene «costos» no ve ni una cifra', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    // Una empresa propia: los totales del valor tienen que ser exactos y no depender de lo que dejaron las demás pruebas.
+    const emp = await empresaCatalogo(sufijo, 'invcosto', { capacidad: true })
+    const prisma = prismaDeArnes()
+    const principal = (await sucursalSembrada(emp.id, 'Principal')).id
+    const norte = (await sucursalSembrada(emp.id, 'Norte')).id
+    const NA = `Taza E2E ${sufijo}`
+    const NB = `Plato E2E ${sufijo}`
+    const NC = `Vaso E2E ${sufijo}`
+    const SA = `CST-A-${sufijo}`
+    const SB = `CST-B-${sufijo}`
+    const SC = `CST-C-${sufijo}`
+    const mk = async (name: string, slug: string, sku: string, cost?: number) => {
+      const it = await itemSembrado(emp.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, price: 100, cost, porDefecto: true }] })
+      return varianteDe(it.id)
+    }
+    const vA = await mk(NA, `taza-cst-${sufijo}`, SA)
+    const vB = await mk(NB, `plato-cst-${sufijo}`, SB)
+    const vC = await mk(NC, `vaso-cst-${sufijo}`, SC, 3) // con costo de referencia en su ficha
+    await existenciasSembradas(emp.id, vB, principal, 4) // existencias de antes de llevar costos: sin costo
+    await existenciasSembradas(emp.id, vC, norte, 2)
+    const email = 'e2e.catalogo.con@membego.test'
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, emp.id)
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    const fila = (lista: Locator, nombre: string) => lista.getByRole('listitem').filter({ hasText: nombre })
+
+    try {
+      // ── La pestaña «Valor»: lo que tiene referencia vale, lo que no tiene costo se dice ──
+      await p.goto('/admin/inventario')
+      await vistas.getByRole('link', { name: 'Valor' }).click()
+      await p.waitForURL('**/admin/inventario/valor')
+      await expect(p.getByRole('heading', { name: 'Valor del inventario', level: 1 })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Valor' })).toHaveAttribute('aria-current', 'page')
+      const resumen = p.getByLabel('Resumen del valor')
+      await expect(resumen).toContainText('6.00') // 2 vasos × la referencia de 3.00
+      const sinCosto = p.getByLabel('Lo que no tiene costo')
+      await expect(sinCosto).toContainText('1 producto (4 unidades) no tiene costo')
+      const productos = p.getByRole('list', { name: 'Valor por producto' })
+      await expect(productos.getByRole('listitem')).toHaveCount(2)
+      await expect(fila(productos, NC)).toContainText('referencia del catálogo')
+      await expect(fila(productos, NB)).toContainText('Sin costo')
+
+      // ── Una entrada CON costo: el promedio nace con el costo de la entrada ──
+      await p.goto('/admin/inventario/entradas/nueva')
+      let form = p.getByRole('form', { name: 'Nueva entrada de mercancía' })
+      await form.getByLabel('Sucursal que recibe').selectOption({ label: 'Principal' })
+      let buscar = form.getByLabel('Escanear o buscar un producto')
+      let lineas = form.getByRole('list', { name: 'Productos de la entrada' })
+      await buscar.fill(SA)
+      await buscar.press('Enter')
+      await expect(fila(lineas, NA)).toHaveCount(1)
+      await fila(lineas, NA).getByLabel(/^Cantidad de /).fill('10')
+      await fila(lineas, NA).getByLabel(/^Costo unitario de /).fill('1,5')
+      await form.getByRole('button', { name: 'Registrar entrada' }).click()
+      await expect(p.getByText(/Revisa el costo de/)).toBeVisible() // la coma se rechaza con un mensaje que dice qué hacer
+      await expect(p).toHaveURL(/\/entradas\/nueva$/)
+      await fila(lineas, NA).getByLabel(/^Costo unitario de /).fill('5')
+      await form.getByRole('button', { name: 'Registrar entrada' }).click()
+      await p.waitForURL(/\/admin\/inventario\/entradas\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+      const idEntrada1 = p.url().split('/').pop()!
+      await expect(p.getByLabel('Resumen de la entrada')).toContainText('50.00') // 10 × 5.00
+      await expect(p.getByRole('list', { name: 'Líneas de la entrada' })).toContainText('a 5.00 c/u')
+
+      // ── Otra, en Norte, a otro costo, y una línea SIN costo ──────────────
+      await p.goto('/admin/inventario/entradas/nueva')
+      form = p.getByRole('form', { name: 'Nueva entrada de mercancía' })
+      await form.getByLabel('Sucursal que recibe').selectOption({ label: 'Norte' })
+      buscar = form.getByLabel('Escanear o buscar un producto')
+      lineas = form.getByRole('list', { name: 'Productos de la entrada' })
+      await buscar.fill(SA)
+      await buscar.press('Enter')
+      await expect(fila(lineas, NA)).toHaveCount(1)
+      await buscar.fill(SB)
+      await buscar.press('Enter')
+      await expect(fila(lineas, NB)).toHaveCount(1)
+      await fila(lineas, NA).getByLabel(/^Cantidad de /).fill('10')
+      await fila(lineas, NA).getByLabel(/^Costo unitario de /).fill('7')
+      await form.getByRole('button', { name: 'Registrar entrada' }).click()
+      await p.waitForURL(/\/admin\/inventario\/entradas\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+      await expect(p.getByLabel('Resumen de la entrada')).toContainText('70.00') // solo cuenta la línea con costo
+      await expect(p.getByRole('list', { name: 'Líneas de la entrada' })).toContainText('Sin costo')
+      await expect(p.getByText(/1 línea sin costo: no movieron el costo promedio/)).toBeVisible()
+
+      // ── La ficha: el promedio ponderado de 10 a 5 y 10 a 7 es 6 ──────────
+      await p.goto(`/admin/inventario/${vA}`)
+      const costoA = p.getByLabel('Costo y valor del producto')
+      await expect(costoA).toContainText('6.00')
+      await expect(costoA).toContainText('promedio de las entradas')
+      await expect(costoA).toContainText('120.00') // 20 unidades × 6.00
+
+      // ── La pantalla del valor, con todo junto ────────────────────────────
+      await p.goto('/admin/inventario/valor')
+      await expect(p.getByLabel('Resumen del valor')).toContainText('126.00') // 120.00 de las tazas + 6.00 de los vasos
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('1 producto (5 unidades) no tiene costo')
+      const sucursales = p.getByRole('list', { name: 'Valor por sucursal' })
+      await expect(fila(sucursales, 'Principal')).toContainText('60.00')
+      await expect(fila(sucursales, 'Norte')).toContainText('66.00')
+      await p.goto('/admin/inventario/valor?sinCosto=1')
+      await expect(productos.getByRole('listitem')).toHaveCount(1)
+      await expect(productos).toContainText(NB)
+      await p.goto('/admin/inventario/valor?q=taza')
+      await expect(productos.getByRole('listitem')).toHaveCount(1)
+      await expect(productos).toContainText(NA)
+      await p.goto('/admin/inventario/valor?pagina=999&mes=2026-13&sucursal=ajena&q=%27%3Cscript%3E') // una URL manipulada no rompe nada
+      await expect(p.getByRole('heading', { name: 'Valor del inventario', level: 1 })).toBeVisible()
+
+      // ── Fijar el costo de lo que ya había: exige un motivo ───────────────
+      await p.goto(`/admin/inventario/${vB}`)
+      const cardB = p.getByLabel('Costo y valor del producto')
+      await expect(cardB).toContainText('Sin costo')
+      const corregir = p.getByRole('form', { name: 'Corregir el costo' })
+      await corregir.getByLabel('Costo del producto').fill('2.5')
+      await corregir.getByRole('button', { name: 'Fijar costo' }).click()
+      await expect(p.getByText(/Escribe el motivo de la corrección/)).toBeVisible()
+      await corregir.getByLabel(/^Motivo/).fill('Costo de la última compra')
+      await corregir.getByRole('button', { name: 'Fijar costo' }).click()
+      await expect(p.getByText(/Costo corregido a 2\.50/)).toBeVisible({ timeout: 15_000 })
+      await expect(cardB).toContainText('2.50')
+      await expect(cardB).toContainText('12.50') // 5 unidades × 2.50
+      await expect(p.getByRole('list', { name: 'Correcciones del costo' })).toContainText('sin costo → 2.50')
+      await expect(p.getByRole('list', { name: 'Correcciones del costo' })).toContainText('Costo de la última compra')
+      await p.goto('/admin/inventario/valor')
+      await expect(p.getByLabel('Resumen del valor')).toContainText('138.50') // 126.00 + 12.50
+      await expect(p.getByLabel('Lo que no tiene costo')).toHaveCount(0)
+
+      // ── La entrada de un solo producto desde su ficha, con costo: pondera 20 a 6 con 5 a 10 = 6.80 ──
+      await p.goto(`/admin/inventario/${vA}`)
+      const tPrincipal = tarjeta(p, 'Principal')
+      const f = p.getByRole('form', { name: 'Registrar movimiento en Principal' })
+      await f.getByLabel('Movimiento').selectOption({ label: 'Entrada de mercancía' })
+      await f.getByRole('textbox').first().fill('5')
+      await f.getByLabel(/^Costo unitario/).fill('10')
+      await f.getByRole('button', { name: 'Registrar' }).click()
+      await expect(p.getByText(/Entrada registrada/)).toBeVisible({ timeout: 15_000 })
+      await expect(p.getByLabel('Costo y valor del producto')).toContainText('6.80')
+      await expect(p.getByLabel('Costo y valor del producto')).toContainText('170.00') // 25 unidades × 6.80
+      expect(await cifra(tPrincipal, 'Disponible')).toBe(15)
+
+      // ── Importar un CSV con columna de costo ─────────────────────────────
+      await p.goto('/admin/inventario/importar')
+      await expect(p.getByText(/y costo unitario opcional/)).toBeVisible()
+      const plantilla = await p.request.get('/admin/inventario/importar/plantilla')
+      expect(plantilla.status()).toBe(200)
+      expect(await plantilla.text()).toContain(';costo;')
+      await p.getByLabel('Sucursal que recibe').selectOption({ label: 'Norte' })
+      const subir = (nombre: string, contenido: string) => p.getByLabel('Archivo CSV').setInputFiles({ name: nombre, mimeType: 'text/csv', buffer: Buffer.from(contenido, 'utf8') })
+      await subir('malo.csv', `sku;cantidad;costo\n${SA};2;1,5\n${SC};1;\n`)
+      await p.getByRole('button', { name: 'Revisar archivo' }).click()
+      await expect(p.getByText(/1 fila con problemas/)).toBeVisible({ timeout: 15_000 })
+      await expect(p.getByRole('list', { name: 'Filas con problemas' })).toContainText('coma')
+      await subir('limpio.csv', `sku;cantidad;costo\n${SA};2;8\n${SC};1;\n`)
+      await p.getByRole('button', { name: 'Revisar archivo' }).click()
+      await expect(p.getByText(/El archivo está limpio/)).toBeVisible({ timeout: 15_000 })
+      await expect(p.getByText(/1 de 2 líneas traen costo/)).toBeVisible()
+      await expect(p.getByRole('list', { name: 'Vista previa de la entrada' })).toContainText('a 8.00 c/u')
+      await p.getByRole('button', { name: 'Registrar entrada de 2 productos en Norte' }).click()
+      await p.waitForURL(/\/admin\/inventario\/entradas\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+      await p.goto(`/admin/inventario/${vA}`)
+      await expect(p.getByLabel('Costo y valor del producto')).toContainText('6.8889') // (25 × 6.80 + 2 × 8.00) / 27
+      await p.goto(`/admin/inventario/${vC}`)
+      await expect(p.getByLabel('Costo y valor del producto')).toContainText('referencia del catálogo') // sin costo en la línea: el vaso no cambió
+
+      // ── El costo de ventas del mes, con el costo que cada venta congeló ───
+      const nivelA = await prisma.inventoryLevel.findFirstOrThrow({ where: { catalogVariantId: vA, locationId: principal } })
+      const venta = (cantidad: number, costo: string | null) =>
+        prisma.inventoryMovement.create({
+          data: { companyId: emp.id, inventoryLevelId: nivelA.id, type: 'SALE', sourceBucket: 'AVAILABLE', quantity: cantidad, previousOnHand: 15, newOnHand: 15 - cantidad, unitCost: costo },
+        })
+      await venta(2, '6.8889') // 13.7778
+      await venta(1, null) // una venta de antes de llevar costos
+      await p.goto('/admin/inventario/valor')
+      const cogs = p.getByLabel('Costo de ventas del mes')
+      await expect(cogs).toContainText(/Costo de ventas · \d{4}-\d{2}/)
+      await expect(cogs).toContainText('13.78')
+      await expect(cogs).toContainText('3 unidades vendidas')
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('1 unidad vendida')
+
+      // ── Los archivos: el valor y la entrada, con números que se suman ────
+      const csvValor = await p.request.get('/admin/inventario/valor/exportar')
+      expect(csvValor.status()).toBe(200)
+      expect(csvValor.headers()['content-type'] ?? '').toContain('text/csv')
+      const textoValor = await csvValor.text()
+      expect(textoValor).toContain('Valor del inventario')
+      expect(textoValor).toContain(NA)
+      expect(textoValor).not.toMatch(/\d,\d{3}\.\d{2}/) // sin separador de miles
+      const csvEntrada = await p.request.get(`/admin/inventario/entradas/${idEntrada1}/exportar`)
+      expect(await csvEntrada.text()).toContain('Costo unitario')
+
+      // ── Quien NO tiene la función «costos» no ve una sola cifra ──────────
+      await prisma.user.update({ where: { email }, data: { permisos: { v: 1, secciones: {}, funciones: { inventario: { costos: false } } } } })
+      await p.goto('/admin/inventario')
+      await expect(vistas.getByRole('link', { name: 'Existencias' })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Valor' })).toHaveCount(0)
+      await p.goto('/admin/inventario/valor')
+      await expect(p.getByText(/No tienes permiso para ver costos ni el valor del inventario/)).toBeVisible()
+      await expect(p.getByLabel('Resumen del valor')).toHaveCount(0)
+      const sinValor = await p.request.get('/admin/inventario/valor/exportar')
+      expect(sinValor.status()).toBe(403)
+      expect(sinValor.headers()['content-type'] ?? '').not.toContain('text/csv')
+      await p.goto(`/admin/inventario/${vA}`)
+      await expect(p.getByLabel('Costo y valor del producto')).toHaveCount(0)
+      await expect(p.getByLabel(/^Costo unitario/)).toHaveCount(0)
+      expect(await p.locator('body').innerText()).not.toContain('6.8889')
+      await p.goto(`/admin/inventario/entradas/${idEntrada1}`)
+      await expect(p.getByRole('heading', { level: 1 })).toContainText('ENT-')
+      await expect(p.getByText('Costo de la entrada')).toHaveCount(0)
+      expect(await p.locator('body').innerText()).not.toContain('50.00')
+      const sinCostoCsv = await p.request.get(`/admin/inventario/entradas/${idEntrada1}/exportar`)
+      expect(sinCostoCsv.status()).toBe(200)
+      expect(await sinCostoCsv.text()).not.toMatch(/[Cc]osto/)
+      await p.goto('/admin/inventario/entradas/nueva')
+      form = p.getByRole('form', { name: 'Nueva entrada de mercancía' })
+      buscar = form.getByLabel('Escanear o buscar un producto')
+      await buscar.fill(SA)
+      await buscar.press('Enter')
+      await expect(form.getByRole('list', { name: 'Productos de la entrada' }).getByRole('listitem')).toHaveCount(1)
+      await expect(form.getByLabel(/^Costo unitario de /)).toHaveCount(0)
+      const plantillaSin = await p.request.get('/admin/inventario/importar/plantilla')
+      expect(await plantillaSin.text()).not.toContain('costo')
+      await p.goto('/admin/inventario/importar')
+      await p.getByLabel('Sucursal que recibe').selectOption({ label: 'Norte' })
+      await subir('con-costo.csv', `sku;cantidad;costo\n${SA};1;5\n`)
+      await p.getByRole('button', { name: 'Revisar archivo' }).click()
+      await expect(p.getByText(/no tiene permiso para registrar costos/)).toBeVisible({ timeout: 15_000 })
+    } finally {
+      await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
+    }
 
     expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
     await ctx.close()

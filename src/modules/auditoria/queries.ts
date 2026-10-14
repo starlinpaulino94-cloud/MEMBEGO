@@ -224,7 +224,7 @@ export const ACCION_LABEL: Record<string, string> = {
   CATALOG_VARIANT_CHANGED: 'Catálogo · variante modificada (precio, estado o alta/baja)',
   INVENTORY_STOCK_CHANGED: 'Inventario · existencias movidas (entrada, ajuste, daño o devolución)',
   INVENTORY_TRANSFERRED: 'Inventario · transferencia entre sucursales',
-  INVENTORY_CONFIGURED: 'Inventario · umbral de stock bajo modificado',
+  INVENTORY_CONFIGURED: 'Inventario · configuración modificada (umbral de stock bajo o costo de un producto)',
   SUPPLY_BRIDGE_HOUSE_CHANGED: 'Puente Supply → Catálogo · empresa de la casa designada o retirada',
   ORDER_CREATED: 'Pedidos Membego · pedido creado',
   ORDER_ACCEPTED: 'Pedidos Membego · pedido aceptado por la empresa',

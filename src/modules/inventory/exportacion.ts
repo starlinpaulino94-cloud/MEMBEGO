@@ -133,7 +133,9 @@ export interface EntradaParaCsv {
   usuarioNombre: string | null
   lineas: number
   unidades: number
-  detalle: ReadonlyArray<{ sku: string; barcode: string | null; itemNombre: string; nombreVariante: string; esDefault: boolean; cantidad: number; existenciaAntes: number; existenciaDespues: number }>
+  /** INV-3a: lo que costó la entrada. Si falta (porque quien exporta no puede ver costos) el archivo no lleva ninguna cifra de costo. */
+  valorTotal?: string
+  detalle: ReadonlyArray<{ sku: string; barcode: string | null; itemNombre: string; nombreVariante: string; esDefault: boolean; cantidad: number; existenciaAntes: number; existenciaDespues: number; costo?: string | null }>
 }
 
 /** Una entrada con todas sus líneas: lo que se le manda al contador o al proveedor. */
@@ -153,11 +155,12 @@ export function entradaToCsv(e: EntradaParaCsv, zonaHoraria: string): string {
         ['Registrada por', SIN_FORMULA(e.usuarioNombre ?? 'Sistema')],
         ['Productos', e.lineas],
         ['Unidades', e.unidades],
+        ...(e.valorTotal !== undefined ? [['Costo de la entrada (solo lineas con costo)', e.valorTotal]] : []),
       ],
     },
     {
       titulo: 'Líneas',
-      encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Cantidad', 'Existencia antes', 'Existencia despues'],
+      encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Cantidad', 'Existencia antes', 'Existencia despues', ...(e.valorTotal !== undefined ? ['Costo unitario'] : [])],
       filas: e.detalle.map((l) => [
         SIN_FORMULA(l.sku),
         SIN_FORMULA(l.barcode),
@@ -165,6 +168,7 @@ export function entradaToCsv(e: EntradaParaCsv, zonaHoraria: string): string {
         l.cantidad,
         l.existenciaAntes,
         l.existenciaDespues,
+        ...(e.valorTotal !== undefined ? [l.costo ?? 'Sin costo'] : []),
       ]),
     },
   ])
@@ -334,6 +338,64 @@ export function trasladoToCsv(t: TrasladoParaCsv, zonaHoraria: string): string {
         SIN_FORMULA(m.usuarioNombre ?? 'Sistema'),
         SIN_FORMULA(m.motivo),
       ]),
+    },
+  ])
+}
+
+// ── INV-3a · Valor del inventario ────────────────────────────────────────────
+
+export interface ValorParaCsv {
+  resumen: { valor: string; unidades: number; unidadesSinCosto: number; productos: number; productosSinCosto: number; danadas: number }
+  porSucursal: ReadonlyArray<{ nombre: string; activa: boolean; unidades: number; unidadesSinCosto: number; valor: string }>
+  enTransito: { unidades: number; unidadesSinCosto: number; valor: string } | null
+  costoDeVentas: { mes: string; costo: string; unidadesVendidas: number; unidadesSinCosto: number; unidadesDevueltas: number }
+  filas: ReadonlyArray<{ nombre: string; sku: string; unidades: number; danadas: number; costo: string | null; fuente: 'PROMEDIO' | 'REFERENCIA' | null; valor: string | null }>
+  totalFilas: number
+}
+
+/** Un monto ya formateado con separador de miles («1,234.50») a número plano («1234.50») para que la hoja de cálculo lo sume. */
+const plano = (t: string | null): string => (t === null ? '' : t.replace(/,/g, ''))
+
+const ETIQUETA_FUENTE = { PROMEDIO: 'Costo promedio de las entradas', REFERENCIA: 'Costo de referencia del catálogo' } as const
+
+/**
+ * El valor del inventario para el contador: el resumen, el valor por sucursal y cada producto con su costo. Lo que no
+ * tiene costo sale como «Sin costo» y con la celda del valor VACÍA —nunca en cero—. Si el tope cortó las filas, el
+ * archivo lo dice.
+ */
+export function valorToCsv(v: ValorParaCsv, ctx: { zonaHoraria: string; generadoEn: Date; filtros: ReadonlyArray<readonly [string, string]>; tope: number }): string {
+  const truncado = v.totalFilas > v.filas.length
+  return armarCsvBloques([
+    {
+      titulo: 'Valor del inventario',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Generado', fechaHoraCsv(ctx.generadoEn, ctx.zonaHoraria)],
+        ['Zona horaria', ctx.zonaHoraria],
+        ...ctx.filtros.map(([k, val]): [string, string] => [`Filtro: ${k}`, SIN_FORMULA(val)]),
+        ['Productos en el archivo', v.filas.length],
+        ...(truncado ? [['AVISO', `El archivo trae solo los primeros ${ctx.tope} de ${v.totalFilas} productos (los de más valor): filtra para ver el resto`]] : []),
+        ['Productos con existencias', v.resumen.productos],
+        ['Unidades en existencia (vendible, apartado y dañado)', v.resumen.unidades],
+        ['De ellas dañadas', v.resumen.danadas],
+        ['Valor del inventario (solo productos con costo)', plano(v.resumen.valor)],
+        ['Productos SIN costo (no suman al valor)', v.resumen.productosSinCosto],
+        ['Unidades SIN costo (no suman al valor)', v.resumen.unidadesSinCosto],
+        ...(v.enTransito ? [['En camino entre sucursales: unidades', v.enTransito.unidades], ['En camino entre sucursales: valor', plano(v.enTransito.valor)]] : []),
+        [`Costo de ventas de ${v.costoDeVentas.mes}`, plano(v.costoDeVentas.costo)],
+        [`Unidades vendidas en ${v.costoDeVentas.mes}`, v.costoDeVentas.unidadesVendidas],
+        [`Unidades vendidas sin costo conocido en ${v.costoDeVentas.mes}`, v.costoDeVentas.unidadesSinCosto],
+      ],
+    },
+    {
+      titulo: 'Por sucursal',
+      encabezados: ['Sucursal', 'Unidades', 'Unidades sin costo', 'Valor'],
+      filas: v.porSucursal.map((s) => [SIN_FORMULA(s.activa ? s.nombre : `${s.nombre} (desactivada)`), s.unidades, s.unidadesSinCosto, plano(s.valor)]),
+    },
+    {
+      titulo: 'Productos',
+      encabezados: ['Producto', 'SKU', 'Unidades', 'Danadas', 'Costo unitario', 'Fuente del costo', 'Valor'],
+      filas: v.filas.map((f) => [SIN_FORMULA(f.nombre), SIN_FORMULA(f.sku), f.unidades, f.danadas, plano(f.costo), f.fuente ? ETIQUETA_FUENTE[f.fuente] : 'Sin costo', plano(f.valor)]),
     },
   ])
 }

@@ -186,6 +186,7 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
   inventario: [
     { codigo: 'ajustar', label: 'Registrar entradas, ajustes, conteos, daños y devoluciones, y fijar umbrales de stock bajo' },
     { codigo: 'transferir', label: 'Transferir existencias entre sucursales' },
+    { codigo: 'costos', label: 'Ver y fijar costos, y ver el valor del inventario' },
   ],
   /**
    * MEMBEGO SUPPLY · portal del proveedor (Supplier Lite). El dueño

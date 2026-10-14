@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 export default async function ImportarInventarioPage() {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await requireCompanyContext(user)
-  const puedeAjustar = await puedeFuncion('inventario', 'ajustar')
+  const [puedeAjustar, puedeCostos] = await Promise.all([puedeFuncion('inventario', 'ajustar'), puedeFuncion('inventario', 'costos')])
 
   let sucursales: Awaited<ReturnType<typeof sucursalesActivasEnTx>> | null = null
   let fallo = ''
@@ -56,7 +56,7 @@ export default async function ImportarInventarioPage() {
           </AlertDescription>
         </Alert>
       ) : (
-        <ImportarForm sucursales={sucursales} />
+        <ImportarForm sucursales={sucursales} conCostos={puedeCostos} />
       )}
     </div>
   )

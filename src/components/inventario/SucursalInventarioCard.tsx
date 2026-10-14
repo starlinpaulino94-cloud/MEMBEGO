@@ -51,11 +51,14 @@ export function SucursalInventarioCard({
   varianteId,
   saldo,
   puedeAjustar,
+  puedeCostos = false,
   hayOtrasConSaldo = false,
 }: {
   varianteId: string
   saldo: SaldoSucursalVista
   puedeAjustar: boolean
+  /** INV-3a: ¿puede registrar costos? Solo entonces la entrada ofrece el campo «Costo unitario». */
+  puedeCostos?: boolean
   /** ¿Hay otras sucursales activas donde este producto ya tiene saldo? Solo entonces tiene sentido ofrecer aplicar el umbral a todas. */
   hayOtrasConSaldo?: boolean
 }) {
@@ -66,6 +69,7 @@ export function SucursalInventarioCard({
   // de movimiento (también controlado) a su primera opción sin avisar a React.
   const [cantidad, setCantidad] = useState('')
   const [motivo, setMotivo] = useState('')
+  const [costo, setCosto] = useState('')
   const clave = useRef(nuevaClave())
   const k = saldo.sucursalId
 
@@ -84,7 +88,7 @@ export function SucursalInventarioCard({
       let r: { ok: true; mensaje: string } | { ok: false; error: string }
       switch (operacion) {
         case 'ENTRADA': {
-          const x = await registrarEntradaInventario({ ...base, cantidad: numero })
+          const x = await registrarEntradaInventario({ ...base, cantidad: numero, ...(puedeCostos && costo.trim() !== '' ? { costo: costo.trim() } : {}) })
           r = x.ok ? { ok: true, mensaje: `Entrada registrada. Disponible: ${formatearCantidad(x.saldo.disponible)}.` } : x
           break
         }
@@ -126,6 +130,7 @@ export function SucursalInventarioCard({
       clave.current = nuevaClave()
       setCantidad('')
       setMotivo('')
+      setCosto('')
       router.refresh()
     })
   }
@@ -193,6 +198,13 @@ export function SucursalInventarioCard({
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">{def.ayuda}</p>
+              {puedeCostos && operacion === 'ENTRADA' && (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`costo-${k}`}>Costo unitario (opcional)</Label>
+                  <Input id={`costo-${k}`} name="costo" inputMode="decimal" autoComplete="off" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="Ej: 12.50, sin impuestos" className="w-48" />
+                  <p className="text-xs text-muted-foreground">Con costo, el costo promedio del producto se actualiza; sin él, no cambia.</p>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor={`motivo-${k}`}>{def.motivoObligatorio ? 'Motivo *' : 'Motivo (opcional)'}</Label>
                 <Input id={`motivo-${k}`} name="motivo" maxLength={300} required={def.motivoObligatorio} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={def.motivoObligatorio ? 'Qué pasó' : 'Ej: factura 123 del proveedor'} />

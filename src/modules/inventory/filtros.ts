@@ -243,3 +243,54 @@ export function consultaDeFiltrosTraslados(f: FiltrosTraslados, cursor?: string 
   if (f.estado) p.set('estado', f.estado)
   return p.toString()
 }
+
+// ── INV-3a · Valor del inventario ────────────────────────────────────────────
+
+export const FILAS_POR_PAGINA_VALOR = 50
+export const PAGINA_MAXIMA_VALOR = 2000
+
+export interface FiltrosValor {
+  /** Solo las existencias de esta sucursal (si falta, todas). */
+  sucursalId?: string
+  /** Nombre, SKU o código de barras del producto. */
+  q?: string
+  /** Solo los productos en existencia que no tienen costo. */
+  sinCosto?: boolean
+  /** `YYYY-MM`, el mes del costo de ventas (si falta, el mes en curso de la empresa). */
+  mes?: string
+  /** Página de la tabla, desde 1. */
+  pagina: number
+}
+
+/** Un mes `YYYY-MM` que existe en el calendario, o undefined. */
+export function mesValido(v: string | undefined): string | undefined {
+  if (!v || !/^\d{4}-\d{2}$/.test(v)) return undefined
+  const mes = Number(v.slice(5))
+  const anio = Number(v.slice(0, 4))
+  return mes >= 1 && mes <= 12 && anio >= 2000 && anio <= 2100 ? v : undefined
+}
+
+/** Lee la URL de «Valor del inventario» con las mismas reglas de sucursal y texto que las demás listas. */
+export function leerFiltrosValor(sp: ParametrosUrl): FiltrosValor {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const mes = mesValido(primero(sp.mes))
+  const n = Number(primero(sp.pagina))
+  return {
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    ...(primero(sp.sinCosto) === '1' ? { sinCosto: true } : {}),
+    ...(mes ? { mes } : {}),
+    pagina: Number.isInteger(n) && n >= 1 && n <= PAGINA_MAXIMA_VALOR ? n : 1,
+  }
+}
+
+/** La consulta de la URL para estos filtros (y, si se pide, otra página). Sin la página 1: es la de por defecto. */
+export function consultaDeFiltrosValor(f: FiltrosValor, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.q) p.set('q', f.q)
+  if (f.sinCosto) p.set('sinCosto', '1')
+  if (f.mes) p.set('mes', f.mes)
+  if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}

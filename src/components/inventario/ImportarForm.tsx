@@ -27,7 +27,7 @@ const MAX_BYTES = 2 * 1024 * 1024
  *   2. «Registrar»: solo si no hay un solo error. El servidor vuelve a leer y a
  *      validar el archivo (no se fía de la revisión que viajó por el navegador).
  */
-export function ImportarForm({ sucursales }: { sucursales: SucursalOpcionForm[] }) {
+export function ImportarForm({ sucursales, conCostos = false }: { sucursales: SucursalOpcionForm[]; conCostos?: boolean }) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [sucursalId, setSucursalId] = useState(sucursales[0]?.id ?? '')
@@ -118,7 +118,13 @@ export function ImportarForm({ sucursales }: { sucursales: SucursalOpcionForm[] 
             <Label htmlFor="im-archivo">Archivo CSV</Label>
             <Input id="im-archivo" ref={entrada} type="file" accept=".csv,.txt,text/csv,text/plain" onChange={alElegirArchivo} />
             <p className="text-xs text-muted-foreground">
-              Columnas: <code>sku</code> o <code>codigo_de_barras</code>, y <code>cantidad</code> (entero). Separado por punto y coma o coma. Hasta 1.000 filas.
+              Columnas: <code>sku</code> o <code>codigo_de_barras</code>, y <code>cantidad</code> (entero)
+              {conCostos && (
+                <>
+                  , y <code>costo</code> unitario opcional (sin impuestos, con punto decimal; vacío = sin costo)
+                </>
+              )}
+              . Separado por punto y coma o coma. Hasta 1.000 filas.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -172,7 +178,10 @@ export function ImportarForm({ sucursales }: { sucursales: SucursalOpcionForm[] 
               </Alert>
             ) : (
               <Alert>
-                <AlertDescription>El archivo está limpio. Revisa que los nombres sean los productos que esperabas (Excel a veces se come los ceros de un código) y registra la entrada.</AlertDescription>
+                <AlertDescription>
+                  El archivo está limpio. Revisa que los nombres sean los productos que esperabas (Excel a veces se come los ceros de un código) y registra la entrada.
+                  {informe.conCosto !== undefined && ` ${formatearCantidad(informe.conCosto)} de ${formatearCantidad(informe.productos)} línea${informe.productos === 1 ? '' : 's'} traen costo; las demás entran sin él y no cambian el costo promedio.`}
+                </AlertDescription>
               </Alert>
             )}
 
@@ -196,7 +205,10 @@ export function ImportarForm({ sucursales }: { sucursales: SucursalOpcionForm[] 
                       <span>
                         {l.nombre} <span className="text-xs text-muted-foreground">SKU {l.sku} · fila {l.fila}</span>
                       </span>
-                      <span className="font-semibold tabular-nums text-success">+{formatearCantidad(l.cantidad)}</span>
+                      <span className="text-right">
+                        <span className="font-semibold tabular-nums text-success">+{formatearCantidad(l.cantidad)}</span>
+                        {l.costo !== undefined && <span className="block text-xs text-muted-foreground">a {l.costo} c/u</span>}
+                      </span>
                     </li>
                   ))}
                 </ul>
