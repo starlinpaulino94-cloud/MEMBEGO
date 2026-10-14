@@ -230,7 +230,8 @@ test('5 · reversa total → REFUND de la comisión; ventana vencida → la visi
   const hace3h = new Date(Date.now() - 3 * 3_600_000)
   const v = await sinEmpresa('prueba', (tx) => abrirVisitaDeRedencionEnTx(tx, { redemptionId: r.id, operador: otra.empleado }, como(otra.duenoId), hace3h))
   await assert.rejects(sinEmpresa('prueba', (tx) => registrarVentaAdicionalEnTx(tx, { visitId: v.id, operador: otra.empleado, lineas: [{ description: 'Café', quantity: 1, unitPrice: 120 }], idempotencyKey: `tarde5-${otra.sufijo}` }, como(otra.duenoId))), /ventana/)
-  assert.equal(await sinEmpresa('prueba', (tx) => cerrarVisitasVencidasEnTx(tx, como(null))), 1)
+  // El cron cierra TODAS las vencidas de la base (esta puede traer visitas de corridas anteriores): al menos la nuestra.
+  assert.ok((await sinEmpresa('prueba', (tx) => cerrarVisitasVencidasEnTx(tx, como(null)))) >= 1)
   assert.equal((await prisma.membegoVisit.findUniqueOrThrow({ where: { id: v.id } })).status, 'CLOSED')
   assert.equal(await sinEmpresa('prueba', (tx) => cerrarVisitasVencidasEnTx(tx, como(null))), 0, 'idempotente')
 })
