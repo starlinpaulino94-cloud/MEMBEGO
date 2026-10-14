@@ -18,6 +18,8 @@ export type TipoDeSenal =
   | 'EMPRESA_AJUSTA_MUCHO'
   | 'EMPRESA_CREDITO_AL_LIMITE'
   | 'EMPRESA_CUENTA_RESTRINGIDA'
+  /** Supplier & Fulfillment Commerce (§45, §49): visitas con compras adicionales sospechosamente bajas o disputadas. */
+  | 'PROVEEDOR_SUBREPORTE_VENTAS_ADICIONALES'
   | 'CLIENTE_CANCELA_MUCHO'
   | 'CLIENTE_CUPONES_VENCIDOS'
   | 'CLIENTE_RAFAGA'
@@ -39,6 +41,19 @@ export const UMBRALES = {
   ajustes: { media: 0.2, alta: 0.4 },
   /** Saldo ÷ límite de crédito. */
   credito: { media: 0.8, alta: 1 },
+  /**
+   * Ventas adicionales (Supplier & Fulfillment Commerce §45): con visitas
+   * suficientes, una fracción muy baja de visitas con extras, o muchas
+   * disputas resueltas a favor del cliente, son SEÑAL (nunca sanción, §49).
+   */
+  extras: {
+    minimoDeVisitas: 10,
+    /** Visitas con extras ÷ visitas cerradas. */
+    conExtras: { media: 0.05, alta: 0.01 },
+    /** Disputas a favor del cliente ÷ ventas adicionales. */
+    disputasPerdidas: { media: 0.2, alta: 0.4 },
+    minimoDeVentas: 5,
+  },
   cliente: {
     cancelados: { media: 5, alta: 10 },
     cuponesVencidos: { media: 3, alta: 6 },
@@ -82,6 +97,11 @@ export interface MetricasDeEmpresa {
   saldo: number | null
   limiteDeCredito: number | null
   estadoDeCuenta: 'ACTIVE' | 'GRACE_PERIOD' | 'SUSPENDED' | null
+  /** Supplier & Fulfillment Commerce: visitas cerradas, con extras, ventas adicionales y disputas a favor del cliente en la ventana. */
+  visitasCerradas?: number
+  visitasConExtras?: number
+  ventasAdicionales?: number
+  disputasAFavorDelCliente?: number
 }
 
 export interface MetricasDeCliente {
@@ -129,6 +149,19 @@ export function evaluarEmpresa(m: MetricasDeEmpresa): Senal[] {
     const uso = m.saldo / m.limiteDeCredito
     const c = nivel(uso, U.credito)
     if (c) salida.push({ tipo: 'EMPRESA_CREDITO_AL_LIMITE', severidad: c, sujeto, titulo: 'Crédito casi agotado', detalle: `Debe ${m.saldo.toFixed(2)} de un límite de ${m.limiteDeCredito.toFixed(2)} (${pct(uso)}).`, valor: uso, umbral: c === 'ALTA' ? U.credito.alta : U.credito.media })
+  }
+  // Ventas adicionales (§45): señal de subreporte. Solo con volumen suficiente; nunca puntúa ni sanciona (§49).
+  const vc = m.visitasCerradas ?? 0
+  if (vc >= U.extras.minimoDeVisitas) {
+    const f = (m.visitasConExtras ?? 0) / vc
+    const sev = f <= U.extras.conExtras.alta ? 'ALTA' : f <= U.extras.conExtras.media ? 'MEDIA' : null
+    if (sev) salida.push({ tipo: 'PROVEEDOR_SUBREPORTE_VENTAS_ADICIONALES', severidad: sev, sujeto, titulo: 'Casi ninguna visita reporta compras adicionales', detalle: `${m.visitasConExtras ?? 0} de ${vc} visitas cerradas ${ventana} (${pct(f)}) reportaron compras adicionales. Es una señal para revisar con el negocio, no una conclusión.`, valor: f, umbral: sev === 'ALTA' ? U.extras.conExtras.alta : U.extras.conExtras.media })
+  }
+  const va = m.ventasAdicionales ?? 0
+  if (va >= U.extras.minimoDeVentas && (m.disputasAFavorDelCliente ?? 0) > 0) {
+    const f = (m.disputasAFavorDelCliente ?? 0) / va
+    const sev = nivel(f, U.extras.disputasPerdidas)
+    if (sev) salida.push({ tipo: 'PROVEEDOR_SUBREPORTE_VENTAS_ADICIONALES', severidad: sev, sujeto, titulo: 'Muchas compras adicionales corregidas a favor del cliente', detalle: `${m.disputasAFavorDelCliente} de ${va} ventas adicionales ${ventana} (${pct(f)}) se resolvieron a favor del cliente.`, valor: f, umbral: sev === 'ALTA' ? U.extras.disputasPerdidas.alta : U.extras.disputasPerdidas.media })
   }
   if (m.estadoDeCuenta === 'GRACE_PERIOD' || m.estadoDeCuenta === 'SUSPENDED') {
     salida.push({ tipo: 'EMPRESA_CUENTA_RESTRINGIDA', severidad: 'ALTA', sujeto, titulo: m.estadoDeCuenta === 'SUSPENDED' ? 'Cuenta Membego suspendida' : 'Cuenta Membego en periodo de gracia', detalle: m.estadoDeCuenta === 'SUSPENDED' ? 'No puede recibir pedidos nuevos hasta que regularice su cuenta.' : 'Pasó su límite de crédito: si no regulariza, se suspende.', valor: 1, umbral: 1 })
@@ -180,6 +213,7 @@ export const ETIQUETA_TIPO_DE_SENAL: Readonly<Record<TipoDeSenal, string>> = {
   EMPRESA_AJUSTA_MUCHO: 'Ajustes de monto',
   EMPRESA_CREDITO_AL_LIMITE: 'Crédito',
   EMPRESA_CUENTA_RESTRINGIDA: 'Cuenta restringida',
+  PROVEEDOR_SUBREPORTE_VENTAS_ADICIONALES: 'Ventas adicionales',
   CLIENTE_CANCELA_MUCHO: 'Cancelaciones',
   CLIENTE_CUPONES_VENCIDOS: 'Cupones vencidos',
   CLIENTE_RAFAGA: 'Ráfaga',

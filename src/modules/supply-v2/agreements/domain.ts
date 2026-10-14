@@ -197,11 +197,22 @@ export function snapshotDeAcuerdo(a: {
   allowDepositApplication?: boolean | null
   settlementFrequency?: string | null
   commissionBase?: SupplyV2CommissionBase | null
+  // Supplier & Fulfillment Commerce (§37): la política de ventas adicionales va en la foto.
+  ancillaryCommissionEnabled?: boolean | null
+  ancillaryCommissionRate?: { toString(): string } | null
+  attributionWindowMinutes?: number | null
+  requiresCustomerConfirmation?: boolean | null
+  receiptRequiredAbove?: { toString(): string } | null
   startsAt: Date
   endsAt: Date | null
   notes: string | null
 }) {
   return {
+    ancillaryCommissionEnabled: a.ancillaryCommissionEnabled ?? true,
+    ancillaryCommissionRate: a.ancillaryCommissionRate?.toString() ?? null,
+    attributionWindowMinutes: a.attributionWindowMinutes ?? 120,
+    requiresCustomerConfirmation: a.requiresCustomerConfirmation ?? false,
+    receiptRequiredAbove: a.receiptRequiredAbove?.toString() ?? null,
     code: a.code,
     supplierId: a.supplierId,
     type: a.type,

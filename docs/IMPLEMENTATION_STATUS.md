@@ -97,6 +97,34 @@ Esta ejecución es posterior al merge `ab5c1711` y a los ajustes de portabilidad
 | Build | PASS — `npm run build` con configuración sintética de CI; Turbopack compiló y generó 52 páginas estáticas. Sin base accesible, Prisma registró advertencias de conexión capturadas por las páginas que permiten degradación. |
 | PostgreSQL, RLS conductual, E2E local y CardNET QA | NOT RUN en esta rama |
 
+### Supplier & Fulfillment Commerce — 2026-10-14 (rama `claude/adoring-mayer-xumnur`)
+
+Documento de arquitectura y decisiones: [SUPPLIER_FULFILLMENT_COMMERCE.md](SUPPLIER_FULFILLMENT_COMMERCE.md). Sin arquitectura paralela: una sola `Company` por organización, el mismo sistema de permisos, el mismo motor QR/redención, el mismo libro de Merchant Billing y el mismo outbox.
+
+**Construido.** Acceso operativo del proveedor (Supplier Lite: `accessStatus`, invitación del dueño que crea la empresa `proveedor`, presets de rol por `Invitacion.permisos`, lista de preparación con contrato y prueba del escáner, dispensa con motivo, relevamiento). Portal del proveedor (inventario de Membego, escáner, canjes, ventas adicionales, incidencias, liquidaciones con la comisión de extras, personal, configuración con mini catálogo, solicitud «Ser empresa Membego»). Modos comerciales en el Marketplace (`modoComercial`, bloque `comercial` en las tres proyecciones públicas, `Deal.sponsor`). Visita atribuida (`MembegoVisit`) abierta en la misma transacción que la redención; ventas adicionales con precio releído del servidor y línea personalizada auditada; comisión `ANCILLARY_FEE` solo sobre extras; confirmación del cliente (`CUSTOMER_CONFIRMED`, nunca `PAYMENT_VERIFIED`); disputas resueltas con reverso o ajuste por asientos nuevos; evidencia externa desde la plataforma; cierre por ventana vencida en el cron. Supplier → Merchant (`SupplyV2MerchantApplication`): la aprobación enciende comercio en la misma empresa sin publicar la vitrina. Señal de riesgo `PROVEEDOR_SUBREPORTE_VENTAS_ADICIONALES`, scorecard y embudo de visitas para el superadmin.
+
+**Reutilizado sin cambios.** Supply V2 (acuerdos, lotes, ledger de lotes, derechos, vouchers, QR, redenciones, liquidaciones, outbox), `Invitacion`/`aceptarInvitacion`, `requireSection`, capacidades y overrides, `Notificacion` con `dedupeKey`, `riesgo-comercio`, `createRateLimiter`, numeración `siguienteNumero`.
+
+**Migraciones.** `20261056`–`20261065` (diez, aditivas e idempotentes, selladas): acceso del proveedor con backfill clasificado, `fulfillmentBacking`/`sellableAsExtra`/`catalogItemId` del ítem de Supply, `Deal.sponsor`, visitas/ventas adicionales/disputas con CHECKs y triggers, CHECK del libro ampliado a `ANCILLARY_FEE`, solicitud Supplier → Merchant. `prisma migrate diff` sin diferencias.
+
+**Parcial / no construido.** Visitas abiertas desde pedidos del marketplace o reclamos de Deal (modelo listo, enganche pendiente). Liquidación del subsidio de una promoción financiada por Membego (solo se muestra). Reglas fiscales/DGII de las ventas adicionales (no se inventan). Texto del contrato marco del proveedor.
+
+**USER DECISION REQUIRED** (estructuras configurables, valores provisionales): copy legal de «Vendido por / Ofrecido por / Regalo de / Canje en» (`COPY_COMERCIAL`); porcentaje de comisión sobre extras y ventana de atribución (acuerdo → cuenta → 8 % / 120 min); exigir confirmación del cliente o recibo por monto; economía del `Deal.sponsor`; comprobantes fiscales; contrato marco. Detalle en la §16 del documento de arquitectura.
+
+| Comprobación | Resultado |
+|---|---|
+| TypeScript | PASS — `npx tsc --noEmit` |
+| ESLint | PASS — `npm run lint`, 0 errores (advertencias heredadas) |
+| Unit | PASS — `npm test`: 4.209 tests, 4.202 pasan, 0 fallan, 7 omitidos heredados (incluye los nuevos de acceso, navegación, modos comerciales, visitas, solicitud merchant y riesgo) |
+| PostgreSQL | PASS — `npm run test:db`: 685 pasan, 0 fallan (incluye `supplier-access`, `supplier-inventario`, `display-modes`, `visitas-membego`, `supplier-merchant-application`) |
+| Migraciones | PASS — `prisma validate`, `prisma migrate deploy` en base local, `migrate diff --exit-code` sin diferencias, `SUMAS.txt` sellado |
+| RLS | PASS — `rls:cobertura`, `rls:preflight` (ninguna tabla sin decidir) y `rls:probar` en base desechable con Capa 1 + Capa 2: 50 comprobaciones, 0 fallos |
+| Permisos | PASS — `scripts/permisos-catalogo.mjs`, `transacciones-anidadas.mjs` |
+| Build | PASS — `npm run build` (Turbopack) |
+| E2E | PASS — `npm run e2e:limpio -- tests/e2e/supplier-fulfillment-commerce.spec.ts` contra el build de producción y una base desechable: escritorio (recorrido §86 completo: activación → supply → QR → visita → extras → comisión 32 solo sobre extras → confirmación del cliente → disputa → ajuste −20 → Supplier → Merchant en la misma empresa) y móvil (escáner + confirmación): 2 pasan, 0 fallan. Los dos proyectos se saltan a propósito el recorrido del otro. |
+| Secretos | PASS — ningún secreto en el diff; `.env.local` sigue fuera del repositorio |
+| Producción, Supabase real, CardNET, dispositivos | NOT RUN — fuera del alcance de esta sesión |
+
 ## HISTORIA / FASES ANTERIORES
 
 Las fases siguientes son hitos de implementación, no certificados actuales de producción. Sus resultados de pruebas pertenecen al commit y al entorno que cada documento indica.

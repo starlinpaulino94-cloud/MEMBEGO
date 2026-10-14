@@ -61,8 +61,21 @@ function itemVisible(ahora: Date) {
 }
 
 const INCLUIR = {
-  supplyOffer: { select: { slug: true, status: true } },
-  company: { select: { slug: true, name: true } },
+  // Supplier & Fulfillment Commerce (§12–§15): lo justo de la oferta de Membego para
+  // decir quién vende (Membego), si es regalo o patrocinio, y dónde se canjea (el
+  // proveedor; con enlace solo si su empresa tiene vitrina). Nunca costos ni lotes.
+  supplyOffer: {
+    select: {
+      slug: true,
+      status: true,
+      priceMode: true,
+      sourceType: true,
+      salePrice: true,
+      benefits: { where: { status: 'ACTIVE', scope: 'SPECIFIC_OFFER', funding: { in: ['MEMBEGO', 'SHARED'] } }, select: { id: true } },
+      supplier: { select: { commercialName: true, company: { select: { slug: true, name: true, isPublished: true, isActive: true, esDemo: true, sucursales: { where: { activa: true }, select: { id: true, nombre: true }, orderBy: { nombre: 'asc' } } } } } },
+    },
+  },
+  company: { select: { slug: true, name: true, sucursales: { where: { activa: true }, select: { id: true, nombre: true }, orderBy: { nombre: 'asc' } } } },
   variants: {
     orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
     // Umbral y sucursal entran para derivar «Pocas unidades» y «dónde recoger»; las cantidades NO salen (ver publico-nucleo).

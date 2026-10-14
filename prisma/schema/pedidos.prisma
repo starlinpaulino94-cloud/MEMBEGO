@@ -175,6 +175,9 @@ model MembegoOrder {
   /// Fase 4: la comisión que Membego cobra por este pedido (a lo sumo una).
   commission   Commission?
   dealClaim    DealClaim?
+  /// Supplier & Fulfillment Commerce: la visita atribuida que abrió este pedido al recogerlo (§31).
+  visit MembegoVisit?
+
 
   @@unique([companyId, code])
   @@unique([companyId, idempotencyKey])

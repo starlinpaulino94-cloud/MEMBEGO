@@ -103,6 +103,12 @@ enum NotifTipo {
   SUPPLY_DEPOSITO_POR_CERRAR
   /// Hay una liquidación calculada esperando aprobación o pago.
   SUPPLY_LIQUIDACION_PENDIENTE
+  // Supplier & Fulfillment Commerce · visitas atribuidas a Membego (§50–§51).
+  VISITA_CONFIRMA_CONSUMO
+  VISITA_COMPRA_ADICIONAL
+  VISITA_DISPUTA
+  SUPPLY_SOLICITUD_MERCHANT
+
 }
 
 enum AuditAccion {
@@ -547,6 +553,38 @@ enum AuditAccion {
   AUTO_RESPUESTA_ACTUALIZADA
   /// Se eliminó una respuesta automática.
   AUTO_RESPUESTA_ELIMINADA
+
+  // Supplier & Fulfillment Commerce · acceso operativo del proveedor (Supplier Lite).
+  /// El superadmin invitó al dueño del proveedor a su portal (y creó/vinculó su empresa).
+  SUPPLY_V2_SUPPLIER_INVITED
+  /// El acceso del proveedor cambió de estado (pendiente, activo, suspendido, baja); el payload lleva de dónde a dónde.
+  SUPPLY_V2_SUPPLIER_ACCESS_CHANGED
+  /// El dueño aceptó el contrato marco desde el portal.
+  SUPPLY_V2_SUPPLIER_TERMS_ACCEPTED
+  /// Un operador del proveedor completó la prueba del escáner.
+  SUPPLY_V2_SUPPLIER_QR_TESTED
+  /// El superadmin dispensó la lista de preparación (proveedor histórico o excepción con motivo).
+  SUPPLY_V2_SUPPLIER_READINESS_WAIVED
+  /// El dueño del proveedor invitó a alguien de su personal con un rol de proveedor.
+  SUPPLY_V2_SUPPLIER_STAFF_INVITED
+  SUPPLY_V2_MERCHANT_APPLICATION_SUBMITTED
+  SUPPLY_V2_MERCHANT_APPLICATION_REVIEWED
+  SUPPLY_V2_MERCHANT_APPLICATION_APPROVED
+  SUPPLY_V2_MERCHANT_APPLICATION_REJECTED
+  SUPPLY_V2_MERCHANT_APPLICATION_WITHDRAWN
+
+  // Supplier & Fulfillment Commerce · visitas atribuidas, ventas adicionales, comisión y disputas (§22–§36).
+  VISIT_OPENED
+  VISIT_CLOSED
+  VISIT_CANCELLED
+  ANCILLARY_SALE_RECORDED
+  ANCILLARY_SALE_CONFIRMED
+  ANCILLARY_SALE_REVERSED
+  ANCILLARY_SALE_ADJUSTED
+  ANCILLARY_COMMISSION_POSTED
+  ANCILLARY_COMMISSION_REVERSED
+  VISIT_DISPUTE_OPENED
+  VISIT_DISPUTE_RESOLVED
 }
 
 // ─────────────────────────────────────────────
@@ -671,6 +709,17 @@ model User {
   supplyVentasEntregadas       SupplyVentaDirecta[]       @relation("SupplyVentaEntregadaPor")
   // ── Membego Supply 2.0 (supply-v2.prisma) ─────────────────────────────────
   supplyV2ProveedoresCreados   SupplyV2Supplier[]           @relation("SupplyV2SupplierCreatedBy")
+  supplyV2ContratosAceptados   SupplyV2Supplier[]           @relation("SupplyV2SupplierTermsAcceptedBy")
+  // Supplier & Fulfillment Commerce · visitas atribuidas a Membego.
+  visitasMembegoComoCliente    MembegoVisit[]               @relation("MembegoVisitCustomer")
+  visitasMembegoAbiertas       MembegoVisit[]               @relation("MembegoVisitOpenedBy")
+  visitasMembegoCerradas       MembegoVisit[]               @relation("MembegoVisitClosedBy")
+  ventasAdicionalesReportadas  AncillarySale[]              @relation("AncillarySaleReportedBy")
+  ventasAdicionalesReversadas  AncillarySale[]              @relation("AncillarySaleReversedBy")
+  disputasDeVisitaComoCliente  VisitDispute[]               @relation("VisitDisputeCustomer")
+  disputasDeVisitaResueltas    VisitDispute[]               @relation("VisitDisputeResolvedBy")
+  solicitudesMerchantEnviadas  SupplyV2MerchantApplication[] @relation("SupplyV2MerchantApplicationSubmittedBy")
+  solicitudesMerchantRevisadas SupplyV2MerchantApplication[] @relation("SupplyV2MerchantApplicationReviewer")
   supplyV2AcuerdosCreados      SupplyV2Agreement[]          @relation("SupplyV2AgreementCreatedBy")
   supplyV2AcuerdosAprobados    SupplyV2Agreement[]          @relation("SupplyV2AgreementApprovedBy")
   supplyV2VersionesCreadas     SupplyV2AgreementVersion[]   @relation("SupplyV2AgreementVersionCreatedBy")
@@ -1059,6 +1108,11 @@ model Company {
   supplyVentas           SupplyVentaDirecta[]      @relation("SupplyProveedorVentas")
   // ── Membego Supply 2.0 (supply-v2.prisma) · referencia, no duplicado ─────
   supplyV2Supplier       SupplyV2Supplier?         @relation("SupplyV2SupplierCompany")
+  // Supplier & Fulfillment Commerce · visitas atribuidas a Membego en esta empresa.
+  membegoVisits          MembegoVisit[]
+  ancillarySales         AncillarySale[]
+  visitDisputes          VisitDispute[]
+  supplyV2MerchantApplications SupplyV2MerchantApplication[]
 
   @@index([isPublished, isFeatured])
   @@index([ciudad, provincia])
@@ -1148,6 +1202,9 @@ model Sucursal {
   @@index([companyId, activa, mostrarEnMapa])
   @@index([cityId])
   @@index([sectorId])
+  /// Supplier & Fulfillment Commerce: visitas atribuidas a Membego en esta sucursal.
+  membegoVisits MembegoVisit[]
+
   @@map("sucursales")
 }
 

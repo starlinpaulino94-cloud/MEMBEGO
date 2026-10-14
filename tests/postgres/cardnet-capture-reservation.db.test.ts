@@ -275,6 +275,33 @@ test('approved Purchase persists one intent and fulfills the membership exactly 
   console.log(`QA Purchase lifecycle SQL scope: sessionId=${sessionId} intentId=${intent.id} membershipId=${fixture.membershipId}; providerStub customerGets=2 charges=1 purchaseSearches=0 profileActivations=0`)
 })
 
+test('the browser capture window opens only for its own open session, with its nonce, until it is consumed', async () => {
+  const fixture = await createFixture()
+  resetScenario()
+  scenario.email = fixture.email
+  const started = await startSession(fixture.user, fixture.membershipId)
+  assert.equal(started.status, 200)
+  const sessionId = responseString(started.body, 'sessionId')
+  const captureNonce = responseString(started.body, 'captureNonce')
+  const { cargarVentanaCardnet } = await import('../../src/modules/pagos/cardnetVentana')
+
+  const ventana = await cargarVentanaCardnet(sessionId, captureNonce)
+  assert.ok(ventana, 'the open session with its own nonce opens the window')
+  assert.equal(ventana.sessionId, sessionId)
+  assert.equal(ventana.uniqueId, 'qa-customer-unique-id')
+  assert.equal(ventana.publicKey, 'qa-public-key')
+  assert.equal(ventana.captureUrl, 'https://lab.cardnet.com.do')
+
+  assert.equal(await cargarVentanaCardnet(sessionId, `${captureNonce}x`), null, 'wrong nonce')
+  assert.equal(await cargarVentanaCardnet(`${sessionId}x`, captureNonce), null, 'unknown session')
+  assert.equal(await cargarVentanaCardnet(sessionId, null), null, 'no nonce')
+  assert.equal(await cargarVentanaCardnet(sessionId, captureNonce, new Date(Date.now() + 24 * 60 * 60_000)), null, 'expired')
+
+  const confirmed = await confirmSession(fixture.user, sessionId, captureNonce)
+  assert.equal(confirmed.status, 202)
+  assert.equal(await cargarVentanaCardnet(sessionId, captureNonce), null, 'a consumed capture no longer opens')
+})
+
 test('expired capture clears its reservation before rejecting consume', async () => {
   const fixture = await createFixture()
   resetScenario()

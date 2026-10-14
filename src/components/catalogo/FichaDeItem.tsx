@@ -38,13 +38,29 @@ export function FichaDeItem({
   ranuraCompra: ReactNode
 }) {
   const { item, ofertaSlug, pedido, ofertas, mejorOferta, pct, agotado, servicio } = ficha
+  // Quién vende, quién entrega y quién financia, ya resuelto (§12–§19).
+  const { comercial } = item
+  const canjeConVitrina = comercial.canje.slug ? rutaDeEmpresa(espacio, comercial.canje.slug) : null
 
   return (
-    <div>
-      <Link href={`${rutaDeEmpresa(espacio, item.company.slug)}#${servicio ? 'servicios' : 'catalogo'}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        {item.company.name}
-      </Link>
+    <div data-modo-comercial={comercial.modo}>
+      {ofertaSlug ? (
+        // Una oferta de Membego no «vuelve» a la empresa de la casa: el punto de canje es el proveedor,
+        // con enlace solo si tiene vitrina (Supplier Lite no la tiene, §15, §49).
+        canjeConVitrina ? (
+          <Link href={canjeConVitrina} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground" data-testid="canje-enlace">
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            {comercial.canje.nombre}
+          </Link>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground" data-testid="canje-sin-vitrina">Punto de canje: {comercial.canje.nombre}</span>
+        )
+      ) : (
+        <Link href={`${rutaDeEmpresa(espacio, item.company.slug)}#${servicio ? 'servicios' : 'catalogo'}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          {item.company.name}
+        </Link>
+      )}
 
       <div className="mt-6 grid gap-8 md:grid-cols-2">
         <div className="space-y-3">
@@ -76,13 +92,29 @@ export function FichaDeItem({
           <p className="text-caption text-muted-foreground">{ETIQUETA_TIPO[item.type]}</p>
           <h1 className="mt-1 text-h1 text-foreground">{item.name}</h1>
           {ofertaSlug ? (
-            <p className="mt-1 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-caption font-medium text-primary">Oferta MembeGo</p>
+            <div className="mt-1 space-y-1">
+              {comercial.etiqueta && <p className="inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-caption font-medium text-primary" data-testid="etiqueta-comercial">{comercial.etiqueta}</p>}
+              <p className="text-muted-foreground" data-testid="linea-vendedor">{comercial.lineaVendedor}</p>
+              {comercial.lineaCanje && (
+                <p className="text-muted-foreground" data-testid="linea-canje">
+                  {canjeConVitrina ? (
+                    <>
+                      Canje en <Link href={canjeConVitrina} className="underline">{comercial.canje.nombre}</Link>
+                    </>
+                  ) : (
+                    comercial.lineaCanje
+                  )}
+                </p>
+              )}
+              {comercial.lineaFinanciacion && <p className="text-caption text-primary" data-testid="linea-financiacion">{comercial.lineaFinanciacion}</p>}
+            </div>
           ) : (
-            <p className="mt-1 text-muted-foreground">
-              de{' '}
+            <p className="mt-1 text-muted-foreground" data-testid="linea-vendedor">
+              Vendido por{' '}
               <Link href={rutaDeEmpresa(espacio, item.company.slug)} className="underline">
                 {item.company.name}
               </Link>
+              {comercial.lineaFinanciacion && <span className="block text-caption text-primary" data-testid="linea-financiacion">{comercial.lineaFinanciacion}</span>}
             </p>
           )}
 
@@ -100,6 +132,8 @@ export function FichaDeItem({
                 </p>
                 {ofertas.length > 1 && <p className="mt-1 text-caption text-muted-foreground">Hay {ofertas.length} ofertas sobre este ítem; esta es la mejor.</p>}
               </div>
+            ) : comercial.modo === 'MEMBEGO_GIFT' ? (
+              <p className="text-price-lg tabular-nums text-success" data-testid="precio-gratis">Gratis</p>
             ) : item.priceFrom != null ? (
               <p className="text-price-lg tabular-nums text-foreground">
                 {item.hasVariants && <span className="mr-1 text-caption font-normal text-muted-foreground">Desde</span>}

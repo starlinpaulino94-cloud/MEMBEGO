@@ -188,6 +188,21 @@ export const FUNCIONES_POR_SECCION: Partial<Record<AdminSection, FuncionPermiso[
     { codigo: 'transferir', label: 'Transferir existencias entre sucursales' },
     { codigo: 'costos', label: 'Ver y fijar costos, y ver el valor del inventario' },
   ],
+  /**
+   * MEMBEGO SUPPLY · portal del proveedor (Supplier Lite). El dueño
+   * (ADMINISTRADOR) lo trae todo; los presets de operador, finanzas y solo
+   * lectura (`supply-v2/suppliers/acceso-dominio.ts`) NIEGAN funciones de
+   * aquí. Cada una tiene su guardia viva en `supply-v2/actions-*.ts`.
+   */
+  supply: [
+    { codigo: 'escanear', label: 'Escanear QR, entregar beneficios y registrar incidencias' },
+    { codigo: 'ventas_adicionales', label: 'Registrar ventas adicionales en una visita' },
+    { codigo: 'inventario', label: 'Ver el inventario y los derechos comprados por Membego' },
+    { codigo: 'liquidaciones', label: 'Ver liquidaciones, obligaciones y comisiones' },
+    { codigo: 'personal', label: 'Invitar y administrar el personal del proveedor' },
+    { codigo: 'configuracion', label: 'Aceptar el contrato, probar el escáner y configurar extras' },
+    { codigo: 'solicitud_merchant', label: 'Solicitar convertirse en empresa activa de Membego' },
+  ],
   'pedidos-membego': [
     { codigo: 'gestionar', label: 'Aceptar pedidos, ajustar el monto, marcarlos listos y registrar el pago' },
     { codigo: 'cancelar', label: 'Cancelar pedidos' },
