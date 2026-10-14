@@ -203,7 +203,13 @@ SKU, «unidades por escaneo», código inexistente y una ráfaga de escaneos seg
 escribiendo el número → una venta mientras se cuenta → hoja en blanco → importar un archivo con errores (no entra nada)
 y uno limpio → revisar (esperado, contado, diferencia) y su CSV → aplicar por la diferencia (la venta se conserva) → un
 faltante bajo lo apartado se avisa, se rechaza todo y, corregido, se aplica → cancelar con motivo → id inventado, sin
-sesión y sin la capacidad. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
+sesión y sin la capacidad. **INV-2c** añade las transferencias con envío: pestaña Transferencias vacía → «Nueva
+transferencia» con un lector (se ve lo que hay en el origen y no deja pasar de ahí) → enviar: la transferencia
+`TRF-AAAA-000001` queda «En camino», el origen baja, el destino no sube y la ficha del producto muestra «En camino entre
+sucursales» → aviso a los administradores → recibir una parte («Recibida en parte»; lo que falta sigue en camino; escribir más de lo que
+falta no deja recibir) → cerrar con faltante (sin motivo no deja; con motivo queda «Recibida» y lo perdido) → su CSV →
+cancelar otra (lo que seguía en camino VUELVE al origen) → recibir todo de una vez → la lista y sus filtros → lo que NO
+debe pasar (id inventado y CSV de un id inventado, sin sesión, sin la capacidad). **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
 disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
 144 combinaciones tipo×origen×destino las prueban `tests/postgres/inventory.db.test.ts`
 y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba

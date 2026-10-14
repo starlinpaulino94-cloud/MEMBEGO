@@ -2,7 +2,8 @@ import type { CatalogVariantStatus, InventoryMovementType, InventoryReservationS
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import { disponible, estadoDeStock, type EstadoStock } from './domain'
-import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosConteos, type FiltrosEntradas, type FiltrosMovimientos } from './filtros'
+import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosConteos, type FiltrosEntradas, type FiltrosMovimientos, type FiltrosTraslados } from './filtros'
+import { pendienteDeLinea, type EstadoTraslado } from './traslados'
 import { MAX_POR_CONTAR_VISIBLES, TOPE_FILAS_HOJA, type EstadoConteo } from './conteos'
 import { limiteDiaLocal } from '@/modules/reportes/rango'
 
@@ -1178,4 +1179,257 @@ export async function saldosActualesDeConteoEnTx(tx: Tx, companyId: string, cont
     select: { catalogVariantId: true, onHand: true, reserved: true, damaged: true },
   })
   return new Map(filas.map((f) => [f.catalogVariantId, { onHand: f.onHand, reserved: f.reserved, damaged: f.damaged }]))
+}
+
+// ── INV-2c · Transferencias con envío ────────────────────────────────────────
+
+export const POR_PAGINA_TRASLADOS = 30
+
+export interface FilaTraslado {
+  id: string
+  numero: string
+  estado: EstadoTraslado
+  origenId: string
+  origenNombre: string
+  destinoId: string
+  destinoNombre: string
+  nota: string | null
+  creadoEn: Date
+  cerradoEn: Date | null
+  enviadoPorNombre: string | null
+  lineas: number
+  unidades: number
+  recibidas: number
+  /** Lo que sigue en camino ahora mismo (0 si ya se cerró). */
+  enTransito: number
+}
+
+export interface TrasladosPagina {
+  filas: FilaTraslado[]
+  siguiente: string | null
+}
+
+const SELECT_TRASLADO = {
+  id: true,
+  number: true,
+  status: true,
+  fromLocationId: true,
+  toLocationId: true,
+  note: true,
+  createdAt: true,
+  closedAt: true,
+  sentById: true,
+  lineCount: true,
+  unitCount: true,
+  fromLocation: { select: { nombre: true } },
+  toLocation: { select: { nombre: true } },
+  lines: { select: { quantitySent: true, quantityReceived: true, quantityReturned: true, quantityLost: true } },
+} satisfies Prisma.InventoryTransferSelect
+
+type TrasladoCrudo = Prisma.InventoryTransferGetPayload<{ select: typeof SELECT_TRASLADO }>
+
+function filaDeTraslado(r: TrasladoCrudo, nombres: Map<string, string>): FilaTraslado {
+  const lineas = r.lines.map((l) => ({ enviado: l.quantitySent, recibido: l.quantityReceived, devuelto: l.quantityReturned, perdido: l.quantityLost }))
+  return {
+    id: r.id,
+    numero: r.number,
+    estado: r.status,
+    origenId: r.fromLocationId,
+    origenNombre: r.fromLocation.nombre,
+    destinoId: r.toLocationId,
+    destinoNombre: r.toLocation.nombre,
+    nota: r.note,
+    creadoEn: r.createdAt,
+    cerradoEn: r.closedAt,
+    enviadoPorNombre: r.sentById ? (nombres.get(r.sentById) ?? null) : null,
+    lineas: r.lineCount,
+    unidades: r.unitCount,
+    recibidas: lineas.reduce((s, l) => s + l.recibido, 0),
+    enTransito: r.status === 'SENT' || r.status === 'PARTIAL' ? lineas.reduce((s, l) => s + pendienteDeLinea(l), 0) : 0,
+  }
+}
+
+/**
+ * Las transferencias de la empresa, de la más reciente a la más antigua, con los
+ * filtros de la pantalla. `abiertas` trae solo las que siguen en camino (enviadas
+ * o recibidas en parte). Paginado por cursor (`createdAt|id`).
+ */
+export async function trasladosDeLaEmpresaEnTx(
+  tx: Tx,
+  companyId: string,
+  f: FiltrosTraslados,
+  opciones: { zonaHoraria: string; cursor?: string | null; limite?: number; abiertas?: boolean }
+): Promise<TrasladosPagina> {
+  const limite = Math.max(1, Math.min(opciones.limite ?? POR_PAGINA_TRASLADOS, 200))
+  const antes = leerCursor(opciones.cursor)
+  const q = f.q?.trim()
+  const fechas = rangoDeFechas(f, opciones.zonaHoraria)
+  const filas = await tx.inventoryTransfer.findMany({
+    where: {
+      companyId,
+      ...(f.sucursalId ? { OR: [{ fromLocationId: f.sucursalId }, { toLocationId: f.sucursalId }] } : {}),
+      ...(opciones.abiertas ? { status: { in: ['SENT', 'PARTIAL'] as EstadoTraslado[] } } : f.estado ? { status: f.estado } : {}),
+      ...(fechas.gte || fechas.lt ? { createdAt: fechas } : {}),
+      AND: [
+        ...(q ? [{ OR: [{ number: { contains: q, mode: 'insensitive' as const } }, { note: { contains: q, mode: 'insensitive' as const } }] }] : []),
+        ...(antes ? [{ OR: [{ createdAt: { lt: antes.creadoEn } }, { createdAt: antes.creadoEn, id: { lt: antes.id } }] }] : []),
+      ],
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limite + 1,
+    select: SELECT_TRASLADO,
+  })
+  const hayMas = filas.length > limite
+  const pagina = hayMas ? filas.slice(0, limite) : filas
+  const nombres = await nombresDeUsuarios(tx, pagina.map((r) => r.sentById))
+  const ultimo = pagina[pagina.length - 1]
+  return { filas: pagina.map((r) => filaDeTraslado(r, nombres)), siguiente: hayMas && ultimo ? armarCursor(ultimo.createdAt, ultimo.id) : null }
+}
+
+export interface LineaDeTrasladoVista {
+  varianteId: string
+  sku: string
+  barcode: string | null
+  itemNombre: string
+  nombreVariante: string
+  esDefault: boolean
+  enviado: number
+  recibido: number
+  devuelto: number
+  perdido: number
+  /** Lo que sigue en camino de este producto. */
+  pendiente: number
+}
+
+export interface MovimientoDeTraslado {
+  id: string
+  tipo: InventoryMovementType
+  cantidad: number
+  sucursalNombre: string
+  producto: string
+  sku: string
+  creadoEn: Date
+  usuarioNombre: string | null
+  motivo: string | null
+}
+
+export interface DetalleTraslado extends FilaTraslado {
+  cerradoPorNombre: string | null
+  motivoCierre: string | null
+  perdidas: number
+  devueltas: number
+  detalle: LineaDeTrasladoVista[]
+  /** Cada movimiento del ledger que esta transferencia produjo: la salida, cada recepción y, si se canceló, la devolución. */
+  historial: MovimientoDeTraslado[]
+}
+
+/** Una transferencia con todas sus líneas e historial; null si no existe o es de otra empresa (se ven igual a propósito). */
+export async function trasladoDetalleEnTx(tx: Tx, companyId: string, id: string): Promise<DetalleTraslado | null> {
+  if (typeof id !== 'string' || id === '' || id.length > 120) return null
+  const r = await tx.inventoryTransfer.findFirst({
+    where: { id, companyId },
+    select: {
+      ...SELECT_TRASLADO,
+      closedById: true,
+      closeReason: true,
+      receivedUnits: true,
+      returnedUnits: true,
+      lostUnits: true,
+      lines: {
+        orderBy: [{ position: 'asc' }],
+        select: {
+          catalogVariantId: true,
+          quantitySent: true,
+          quantityReceived: true,
+          quantityReturned: true,
+          quantityLost: true,
+          variant: { select: { sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } } } },
+        },
+      },
+    },
+  })
+  if (!r) return null
+  const movimientos = await tx.inventoryMovement.findMany({
+    where: { companyId, referenceType: 'TRANSFER', referenceId: r.id },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    take: 1000,
+    select: {
+      id: true,
+      type: true,
+      quantity: true,
+      createdAt: true,
+      userId: true,
+      reason: true,
+      level: { select: { location: { select: { nombre: true } }, variant: { select: { sku: true, name: true, isDefault: true, item: { select: { name: true } } } } } },
+    },
+  })
+  const nombres = await nombresDeUsuarios(tx, [r.sentById, r.closedById, ...movimientos.map((m) => m.userId)])
+  const detalle: LineaDeTrasladoVista[] = r.lines.map((l) => ({
+    varianteId: l.catalogVariantId,
+    sku: l.variant.sku,
+    barcode: l.variant.barcode,
+    itemNombre: l.variant.item.name,
+    nombreVariante: l.variant.name,
+    esDefault: l.variant.isDefault,
+    enviado: l.quantitySent,
+    recibido: l.quantityReceived,
+    devuelto: l.quantityReturned,
+    perdido: l.quantityLost,
+    pendiente: pendienteDeLinea({ enviado: l.quantitySent, recibido: l.quantityReceived, devuelto: l.quantityReturned, perdido: l.quantityLost }),
+  }))
+  return {
+    ...filaDeTraslado(r, nombres),
+    cerradoPorNombre: r.closedById ? (nombres.get(r.closedById) ?? null) : null,
+    motivoCierre: r.closeReason,
+    perdidas: r.lostUnits ?? 0,
+    devueltas: r.returnedUnits ?? 0,
+    detalle,
+    historial: movimientos.map((m) => ({
+      id: m.id,
+      tipo: m.type,
+      cantidad: m.quantity,
+      sucursalNombre: m.level.location.nombre,
+      producto: m.level.variant.isDefault ? m.level.variant.item.name : `${m.level.variant.item.name} · ${m.level.variant.name}`,
+      sku: m.level.variant.sku,
+      creadoEn: m.createdAt,
+      usuarioNombre: m.userId ? (nombres.get(m.userId) ?? null) : null,
+      motivo: m.reason,
+    })),
+  }
+}
+
+export interface EnTransitoDeVariante {
+  total: number
+  traslados: Array<{ id: string; numero: string; origenNombre: string; destinoNombre: string; pendiente: number }>
+}
+
+/**
+ * Lo que de UNA variante va EN CAMINO entre sucursales ahora mismo: salió del origen
+ * y todavía no llegó. No está disponible en ninguna sucursal; esto es lo único que lo
+ * enseña. Se lee en su propia transacción desde la ficha para que, si la migración
+ * aún no se aplicó, la ficha siga funcionando sin esta tarjeta.
+ */
+export async function enTransitoDeVarianteEnTx(tx: Tx, companyId: string, varianteId: string): Promise<EnTransitoDeVariante> {
+  const lineas = await tx.inventoryTransferLine.findMany({
+    where: { companyId, catalogVariantId: varianteId, transfer: { status: { in: ['SENT', 'PARTIAL'] } } },
+    orderBy: [{ transfer: { createdAt: 'asc' } }],
+    take: 200,
+    select: {
+      quantitySent: true,
+      quantityReceived: true,
+      quantityReturned: true,
+      quantityLost: true,
+      transfer: { select: { id: true, number: true, fromLocation: { select: { nombre: true } }, toLocation: { select: { nombre: true } } } },
+    },
+  })
+  const traslados = lineas
+    .map((l) => ({
+      id: l.transfer.id,
+      numero: l.transfer.number,
+      origenNombre: l.transfer.fromLocation.nombre,
+      destinoNombre: l.transfer.toLocation.nombre,
+      pendiente: pendienteDeLinea({ enviado: l.quantitySent, recibido: l.quantityReceived, devuelto: l.quantityReturned, perdido: l.quantityLost }),
+    }))
+    .filter((t) => t.pendiente > 0)
+  return { total: traslados.reduce((s, t) => s + t.pendiente, 0), traslados }
 }

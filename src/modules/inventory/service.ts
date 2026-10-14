@@ -43,7 +43,22 @@ import {
   type EstadoConteo,
   type ModoConteo,
 } from './conteos'
-import { fallo } from './errores'
+import {
+  MAX_MOTIVO_TRASLADO,
+  MAX_NOTA_TRASLADO,
+  PREFIJO_TRASLADO,
+  motivoDeDevolucion,
+  motivoDeEnvio,
+  motivoDeRecepcion,
+  pendienteDeLinea,
+  planDeCancelacion,
+  planDeRecepcion,
+  validarLineasTraslado,
+  type EstadoTraslado,
+  type LineaDeTraslado,
+  type LineaTraslado,
+} from './traslados'
+import { InventarioError, fallo } from './errores'
 
 /**
  * COMMERCE CORE · inventario — el servicio (Fase 2).
@@ -510,10 +525,11 @@ export async function transferirEnTx(
   const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
   const origen = await exigirSucursal(tx, companyId, e.origenId, false)
   const destino = await exigirSucursal(tx, companyId, e.destinoId, true)
-  const [origenNivel, destinoNivel] = [
-    await obtenerNivel(tx, companyId, variante.id, origen.id),
-    await obtenerNivel(tx, companyId, variante.id, destino.id),
-  ]
+  // Los saldos que falten se crean en un orden FIJO (por sucursal): con A→B y B→A a la vez, cada una insertando primero el
+  // saldo de SU origen, se esperarían la una a la otra (el INSERT espera a la fila que la otra acaba de insertar).
+  const nivelesDe = new Map<string, string>()
+  for (const sucursalId of [origen.id, destino.id].sort()) nivelesDe.set(sucursalId, await obtenerNivel(tx, companyId, variante.id, sucursalId))
+  const [origenNivel, destinoNivel] = [nivelesDe.get(origen.id)!, nivelesDe.get(destino.id)!]
   // Los dos candados juntos y en orden de id: dos transferencias cruzadas
   // (A→B y B→A) no se esperan una a la otra.
   await bloquear(tx, companyId, [origenNivel, destinoNivel])
@@ -1420,4 +1436,449 @@ export async function cancelarConteoEnTx(tx: Tx, companyId: string, e: { conteoI
     data: { status: 'CANCELLED', cancelledAt: e.ahora ?? new Date(), cancelledById: ctx.actorId, cancelReason: motivo.valor },
   })
   return { conteoId: conteo.id, numero: conteo.number, repetido: false }
+}
+
+// ── INV-2c · Transferencias con envío entre sucursales ───────────────────────
+
+/**
+ * Una transferencia CON ENVÍO, en tres tiempos:
+ *
+ *   1. ENVIAR (`enviarTrasladoEnTx`): las unidades SALEN del origen (TRANSFER_OUT)
+ *      y quedan EN TRÁNSITO —no disponibles en ninguna sucursal—. Todo o nada.
+ *   2. RECIBIR (`recibirTrasladoEnTx`): el destino recibe lo que llegó, en una o
+ *      varias recepciones (TRANSFER_IN). Recibir todo la cierra; si no llegó todo se
+ *      puede cerrar con faltante, y entonces el motivo es obligatorio.
+ *   3. CANCELAR (`cancelarTrasladoEnTx`): lo que sigue en tránsito VUELVE al origen.
+ *
+ * La transferencia directa de siempre (`transferirEnTx`: sale y entra en el mismo
+ * instante) no pasa por aquí y no cambia.
+ *
+ * CONCURRENCIA. Enviar bloquea los saldos del origen (orden de id); recibir y
+ * cancelar bloquean PRIMERO la transferencia y después los saldos (orden de id).
+ * Enviar no espera a ninguna transferencia que ya exista, así que no hay ciclos. Los
+ * saldos que falten se crean siempre en un orden fijo (por producto).
+ */
+
+/** El último correlativo de transferencias de la empresa para el prefijo con año (`TRF-2026-`). */
+async function ultimoTraslado(tx: Tx, companyId: string, prefijo: string): Promise<string | null> {
+  const filas = await tx.$queryRaw<{ number: string }[]>`
+    SELECT "number" FROM "inventory_transfers"
+     WHERE "companyId" = ${companyId} AND "number" ~ ${'^' + prefijo + '[0-9]{6,}$'}
+     ORDER BY "number" DESC LIMIT 1`
+  return filas[0]?.number ?? null
+}
+
+interface TrasladoBloqueado {
+  id: string
+  number: string
+  status: EstadoTraslado
+  fromLocationId: string
+  toLocationId: string
+}
+
+/** Bloquea la transferencia y la devuelve; si no existe (o es de otra empresa) se dice igual: no existe. */
+async function bloquearTraslado(tx: Tx, companyId: string, trasladoId: string): Promise<TrasladoBloqueado> {
+  if (typeof trasladoId !== 'string' || trasladoId === '' || trasladoId.length > 120) fallo('TRASLADO_NO_ENCONTRADO', 'La transferencia no existe.')
+  const filas = await tx.$queryRaw<TrasladoBloqueado[]>`
+    SELECT "id", "number", "status", "fromLocationId", "toLocationId"
+      FROM "inventory_transfers"
+     WHERE "id" = ${trasladoId} AND "companyId" = ${companyId}
+       FOR UPDATE`
+  if (!filas[0]) fallo('TRASLADO_NO_ENCONTRADO', 'La transferencia no existe.')
+  return filas[0]
+}
+
+function exigirTrasladoAbierto(t: TrasladoBloqueado): void {
+  if (t.status === 'RECEIVED' || t.status === 'CANCELLED') {
+    fallo('TRASLADO_CERRADO', t.status === 'RECEIVED' ? `La transferencia ${t.number} ya está recibida: no admite cambios.` : `La transferencia ${t.number} está cancelada: no admite cambios.`)
+  }
+}
+
+/** Las líneas de una transferencia, en el orden en que se capturaron, con lo que ha pasado con cada una. */
+async function lineasDeTraslado(tx: Tx, companyId: string, trasladoId: string) {
+  const filas = await tx.inventoryTransferLine.findMany({
+    where: { companyId, transferId: trasladoId },
+    orderBy: [{ position: 'asc' }],
+    select: { id: true, catalogVariantId: true, quantitySent: true, quantityReceived: true, quantityReturned: true, quantityLost: true },
+  })
+  const lineas: Array<LineaDeTraslado & { id: string }> = filas.map((l) => ({
+    id: l.id,
+    varianteId: l.catalogVariantId,
+    enviado: l.quantitySent,
+    recibido: l.quantityReceived,
+    devuelto: l.quantityReturned,
+    perdido: l.quantityLost,
+  }))
+  return lineas
+}
+
+/** Crea, EN ORDEN FIJO por producto, los saldos que falten de unas variantes en una sucursal. */
+async function crearSaldosEnOrden(tx: Tx, companyId: string, sucursalId: string, variantes: readonly string[]) {
+  await tx.inventoryLevel.createMany({ data: [...new Set(variantes)].sort().map((v) => ({ companyId, catalogVariantId: v, locationId: sucursalId })), skipDuplicates: true })
+  const niveles = await tx.inventoryLevel.findMany({ where: { companyId, locationId: sucursalId, catalogVariantId: { in: [...variantes] } }, select: { id: true, catalogVariantId: true } })
+  const nivelDe = new Map(niveles.map((n) => [n.catalogVariantId, n.id]))
+  if (nivelDe.size !== new Set(variantes).size) fallo('NIVEL_NO_ENCONTRADO', 'No se pudieron preparar los saldos de la transferencia.')
+  return nivelDe
+}
+
+export interface EntradaEnvio {
+  origenId: string
+  destinoId: string
+  lineas: readonly LineaTraslado[]
+  nota?: string | null
+  idempotencyKey?: string | null
+  ahora?: Date
+}
+
+export interface ResultadoEnvio {
+  trasladoId: string
+  numero: string
+  lineas: number
+  unidades: number
+  /** true si la clave de idempotencia ya existía: no se hizo nada nuevo. */
+  repetido: boolean
+  /** Los productos cuyo vendible bajó en el origen (para revisar sus umbrales de aviso). */
+  variantes: string[]
+  origenNombre: string
+  destinoNombre: string
+}
+
+export async function enviarTrasladoEnTx(tx: Tx, companyId: string, e: EntradaEnvio, ctx: ContextoAuditoria): Promise<ResultadoEnvio> {
+  const validas = validarLineasTraslado(e.lineas)
+  if (!validas.ok) fallo(validas.codigo, validas.error)
+  const nota = normalizarTextoLibre(e.nota, MAX_NOTA_TRASLADO, 'La nota')
+  if (!nota.ok) fallo('NOTA_INVALIDA', nota.error)
+  const clave = claveValida(e.idempotencyKey)
+  if (e.origenId === e.destinoId) fallo('MISMA_SUCURSAL', 'El origen y el destino son la misma sucursal.')
+  const ahora = e.ahora ?? new Date()
+
+  const origen = await exigirSucursal(tx, companyId, e.origenId, false)
+  const destino = await exigirSucursal(tx, companyId, e.destinoId, true)
+
+  const ids = validas.lineas.map((l) => l.varianteId)
+  const variantes = await tx.catalogVariant.findMany({
+    where: { companyId, id: { in: ids } },
+    select: { id: true, name: true, isDefault: true, item: { select: { name: true, type: true, capabilities: true } } },
+  })
+  const porId = new Map(variantes.map((v) => [v.id, v]))
+  const nombreDe = (id: string) => {
+    const v = porId.get(id)!
+    return v.isDefault ? v.item.name : `${v.item.name} · ${v.name}`
+  }
+  for (const l of validas.lineas) {
+    const v = porId.get(l.varianteId)
+    if (!v) fallo('VARIANTE_NO_ENCONTRADA', 'Uno de los productos del envío ya no existe.')
+    if (!normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory) {
+      fallo('SIN_CONTROL_DE_INVENTARIO', `«${v.item.name}» no controla inventario. Actívalo en su ficha del catálogo para llevar existencias.`)
+    }
+  }
+
+  // Los saldos del origen: los que existan se BLOQUEAN todos juntos, en orden de id. El que no existe es un saldo en cero.
+  const niveles = await tx.inventoryLevel.findMany({ where: { companyId, locationId: origen.id, catalogVariantId: { in: ids } }, select: { id: true, catalogVariantId: true } })
+  const nivelDe = new Map(niveles.map((n) => [n.catalogVariantId, n.id]))
+  let filas = niveles.length > 0 ? await bloquear(tx, companyId, niveles.map((n) => n.id)) : new Map<string, FilaNivel>()
+
+  // Idempotencia, YA con los candados: el segundo de dos envíos idénticos llega aquí tras el primero.
+  if (clave) {
+    const previo = await tx.inventoryTransfer.findFirst({
+      where: { companyId, idempotencyKey: clave },
+      select: { id: true, number: true, fromLocationId: true, toLocationId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantitySent: true } } },
+    })
+    if (previo) {
+      const mismas =
+        previo.fromLocationId === origen.id &&
+        previo.toLocationId === destino.id &&
+        previo.lines.length === validas.lineas.length &&
+        validas.lineas.every((l) => previo.lines.some((p) => p.catalogVariantId === l.varianteId && p.quantitySent === l.cantidad))
+      if (!mismas) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otro envío distinto.')
+      return { trasladoId: previo.id, numero: previo.number, lineas: previo.lineCount, unidades: previo.unitCount, repetido: true, variantes: [], origenNombre: origen.nombre, destinoNombre: destino.nombre }
+    }
+  }
+
+  const evaluar = () =>
+    validas.lineas.map((l) => {
+      const nivelId = nivelDe.get(l.varianteId)
+      const fila = nivelId ? (filas.get(nivelId) ?? null) : null
+      let ok = false
+      if (fila) {
+        try {
+          aplicarMovimiento(cubetasDeSaldo(fila), { type: 'TRANSFER_OUT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: l.cantidad, reason: null })
+          ok = true
+        } catch {
+          ok = false
+        }
+      }
+      return { l, nivelId: nivelId ?? null, fila, ok }
+    })
+  // Una reserva vencida que nadie ha barrido sigue «apartando»: antes de decir que no alcanza, se vencen las caducadas.
+  let evaluadas = evaluar()
+  const paraVencer = evaluadas.filter((x) => !x.ok && x.fila && x.fila.reserved > 0).map((x) => x.fila!.id)
+  if (paraVencer.length > 0) {
+    let vencidas = 0
+    for (const id of paraVencer) vencidas += await vencerDeNivel(tx, companyId, id, ahora)
+    if (vencidas > 0) {
+      filas = await bloquear(tx, companyId, niveles.map((n) => n.id))
+      evaluadas = evaluar()
+    }
+  }
+  const noAlcanza = evaluadas.filter((x) => !x.ok)
+  if (noAlcanza.length > 0) {
+    const detalle = noAlcanza.map((x) => `«${nombreDe(x.l.varianteId)}» (pides ${x.l.cantidad.toLocaleString('es-DO')}, hay ${(x.fila ? disponible(x.fila) : 0).toLocaleString('es-DO')} disponible${x.fila && disponible(x.fila) === 1 ? '' : 's'})`)
+    fallo('STOCK_INSUFICIENTE', `No alcanza para enviar desde «${origen.nombre}»: ${detalle.join('; ')}.`)
+  }
+
+  const numero = await siguienteNumero(tx, PREFIJO_TRASLADO, (prefijo) => ultimoTraslado(tx, companyId, prefijo), ahora, `traslado:${companyId}`)
+  let traslado
+  try {
+    traslado = await tx.inventoryTransfer.create({
+      data: {
+        companyId,
+        number: numero,
+        fromLocationId: origen.id,
+        toLocationId: destino.id,
+        note: nota.valor,
+        idempotencyKey: clave,
+        sentById: ctx.actorId,
+        lineCount: validas.lineas.length,
+        unitCount: validas.unidades,
+      },
+      select: { id: true },
+    })
+  } catch (err) {
+    if (esViolacionUnica(err)) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otro envío distinto.')
+    throw err
+  }
+
+  const items: ItemLote[] = evaluadas.map((x) => {
+    const fila = x.fila!
+    const movimiento: Movimiento = { type: 'TRANSFER_OUT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: x.l.cantidad, reason: motivoDeEnvio(numero, destino.nombre) }
+    return {
+      nivelId: fila.id,
+      movimiento,
+      antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged },
+      despues: saldoDeCubetas(aplicarMovimiento(cubetasDeSaldo(fila), movimiento)),
+      meta: { userId: ctx.actorId, referencia: { tipo: 'TRANSFER', id: traslado.id } },
+    }
+  })
+  const movimientoIds = await escribirMovimientosPorLote(tx, companyId, items)
+  await tx.inventoryTransferLine.createMany({
+    data: validas.lineas.map((l, idx) => ({ companyId, transferId: traslado.id, catalogVariantId: l.varianteId, position: idx, quantitySent: l.cantidad, outMovementId: movimientoIds[idx] })),
+  })
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_TRANSFERRED',
+    traslado.id,
+    { tipo: 'ENVIO', traslado: numero, desde: origen.nombre, hacia: destino.nombre, lineas: validas.lineas.length, unidades: validas.unidades },
+    'InventoryTransfer'
+  )
+  return { trasladoId: traslado.id, numero, lineas: validas.lineas.length, unidades: validas.unidades, repetido: false, variantes: ids, origenNombre: origen.nombre, destinoNombre: destino.nombre }
+}
+
+export interface EntradaRecepcion {
+  trasladoId: string
+  /** Lo que llegó de cada producto. Si falta, `todo` debe venir. */
+  lineas?: readonly LineaTraslado[]
+  /** Recibir todo lo que falte por llegar. */
+  todo?: boolean
+  /** Dar por perdido lo que no llegó y cerrar. Exige motivo. */
+  cerrarConFaltante?: boolean
+  motivo?: string | null
+  idempotencyKey?: string | null
+  ahora?: Date
+}
+
+export interface ResultadoRecepcion {
+  trasladoId: string
+  numero: string
+  estado: EstadoTraslado
+  recibidas: number
+  perdidas: number
+  /** Lo que sigue en camino después de esta recepción. */
+  enTransito: number
+  /** true si la clave de idempotencia ya existía: no se hizo nada nuevo. */
+  repetido: boolean
+}
+
+export async function recibirTrasladoEnTx(tx: Tx, companyId: string, e: EntradaRecepcion, ctx: ContextoAuditoria): Promise<ResultadoRecepcion> {
+  const motivo = normalizarTextoLibre(e.motivo, MAX_MOTIVO_TRASLADO, 'El motivo')
+  if (!motivo.ok) fallo('MOTIVO_INVALIDO', motivo.error)
+  const clave = claveValida(e.idempotencyKey)
+  const ahora = e.ahora ?? new Date()
+  const traslado = await bloquearTraslado(tx, companyId, e.trasladoId)
+
+  const lineas = await lineasDeTraslado(tx, companyId, traslado.id)
+  const estadoActual = async (repetido: boolean): Promise<ResultadoRecepcion> => {
+    const t = await tx.inventoryTransfer.findFirstOrThrow({ where: { id: traslado.id, companyId }, select: { status: true } })
+    const fresco = await lineasDeTraslado(tx, companyId, traslado.id)
+    return { trasladoId: traslado.id, numero: traslado.number, estado: t.status, recibidas: 0, perdidas: 0, enTransito: fresco.reduce((s, l) => s + pendienteDeLinea(l), 0), repetido }
+  }
+
+  // Idempotencia, YA con la transferencia bloqueada: el segundo de dos envíos idénticos llega aquí tras el primero.
+  if (clave) {
+    const previos = await tx.inventoryMovement.findMany({
+      where: { companyId, referenceType: 'TRANSFER', referenceId: traslado.id, idempotencyKey: { startsWith: `${clave}:in:` } },
+      select: { idempotencyKey: true, quantity: true },
+    })
+    if (previos.length > 0) {
+      const pedidas = e.todo ? null : new Map((e.lineas ?? []).filter((l) => l?.cantidad > 0).map((l) => [`${clave}:in:${l.varianteId}`, l.cantidad]))
+      // Mismo envío = mismos productos y cantidades (con `todo`, no se puede comparar: cuenta lo que ya llegó con esa clave).
+      if (pedidas && (pedidas.size !== previos.length || previos.some((p) => pedidas.get(p.idempotencyKey ?? '') !== p.quantity))) {
+        fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra recepción distinta.')
+      }
+      return { ...(await estadoActual(true)), recibidas: previos.reduce((s, p) => s + p.quantity, 0) }
+    }
+  }
+  exigirTrasladoAbierto(traslado)
+
+  const plan = planDeRecepcion(lineas, e.todo ? 'TODO' : (e.lineas ?? []), e.cerrarConFaltante === true, motivo.valor)
+  if (!plan.ok) fallo(plan.codigo, plan.error)
+
+  const origen = await exigirSucursal(tx, companyId, traslado.fromLocationId, false)
+  let destino: Awaited<ReturnType<typeof exigirSucursal>> | null = null
+  if (plan.recibir.length > 0) {
+    try {
+      destino = await exigirSucursal(tx, companyId, traslado.toLocationId, true)
+    } catch (err) {
+      if (err instanceof InventarioError && err.codigo === 'SUCURSAL_INACTIVA') {
+        fallo('SUCURSAL_INACTIVA', `${err.message} No se puede recibir en una sucursal cerrada: cancela la transferencia para que lo pendiente vuelva a «${origen.nombre}».`)
+      }
+      throw err
+    }
+    const variantes = plan.recibir.map((r) => r.varianteId)
+    const nivelDe = await crearSaldosEnOrden(tx, companyId, destino.id, variantes)
+    const filas = await bloquear(tx, companyId, [...nivelDe.values()])
+    const items: ItemLote[] = plan.recibir.map((r) => {
+      const fila = filas.get(nivelDe.get(r.varianteId)!)!
+      const movimiento: Movimiento = { type: 'TRANSFER_IN', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: r.cantidad, reason: motivoDeRecepcion(traslado.number, origen.nombre) }
+      let despues
+      try {
+        despues = aplicarMovimiento(cubetasDeSaldo(fila), movimiento)
+      } catch (err) {
+        traducir(err, movimiento, fila)
+      }
+      return {
+        nivelId: fila.id,
+        movimiento,
+        antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged },
+        despues: saldoDeCubetas(despues),
+        meta: { userId: ctx.actorId, referencia: { tipo: 'TRANSFER', id: traslado.id }, idempotencyKey: clave ? `${clave}:in:${r.varianteId}` : null },
+      }
+    })
+    await escribirMovimientosPorLote(tx, companyId, items)
+  }
+
+  // Lo recibido y lo perdido de cada línea: se escribe ANTES de cerrar la transferencia, que después no admite cambios.
+  const recibidoAhora = new Map(plan.recibir.map((r) => [r.varianteId, r.cantidad]))
+  const perdidoAhora = new Map(plan.perder.map((r) => [r.varianteId, r.cantidad]))
+  const tocadas = lineas.filter((l) => recibidoAhora.has(l.varianteId) || perdidoAhora.has(l.varianteId))
+  if (tocadas.length > 0) {
+    const valores = tocadas.map((l) => Prisma.sql`(${l.id}, ${recibidoAhora.get(l.varianteId) ?? 0}::int, ${perdidoAhora.get(l.varianteId) ?? 0}::int)`)
+    const escritas = await tx.$executeRaw`
+      UPDATE "inventory_transfer_lines" AS l
+         SET "quantityReceived" = l."quantityReceived" + v."recibido", "quantityLost" = l."quantityLost" + v."perdido"
+        FROM (VALUES ${Prisma.join(valores)}) AS v("id", "recibido", "perdido")
+       WHERE l."id" = v."id" AND l."companyId" = ${companyId} AND l."transferId" = ${traslado.id}`
+    if (escritas !== tocadas.length) fallo('LOTE_INCOMPLETO', 'No se pudieron actualizar todas las líneas de la transferencia.')
+  }
+
+  const recibidasAhora = plan.recibir.reduce((s, r) => s + r.cantidad, 0)
+  const perdidasAhora = plan.perder.reduce((s, r) => s + r.cantidad, 0)
+  if (plan.estadoFinal === 'RECEIVED') {
+    const totalRecibido = lineas.reduce((s, l) => s + l.recibido, 0) + recibidasAhora
+    const totalPerdido = lineas.reduce((s, l) => s + l.perdido, 0) + perdidasAhora
+    await tx.inventoryTransfer.update({
+      where: { id: traslado.id },
+      data: { status: 'RECEIVED', closedAt: ahora, closedById: ctx.actorId, closeReason: perdidasAhora > 0 ? motivo.valor : null, receivedUnits: totalRecibido, returnedUnits: 0, lostUnits: totalPerdido },
+    })
+  } else if (traslado.status === 'SENT') {
+    await tx.inventoryTransfer.update({ where: { id: traslado.id }, data: { status: 'PARTIAL' } })
+  }
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_TRANSFERRED',
+    traslado.id,
+    { tipo: 'RECEPCION', traslado: traslado.number, recibidas: recibidasAhora, perdidas: perdidasAhora, enTransito: plan.pendienteDespues, estado: plan.estadoFinal, motivo: motivo.valor },
+    'InventoryTransfer'
+  )
+  return { trasladoId: traslado.id, numero: traslado.number, estado: plan.estadoFinal, recibidas: recibidasAhora, perdidas: perdidasAhora, enTransito: plan.pendienteDespues, repetido: false }
+}
+
+/** Cancela la transferencia: lo que sigue en tránsito VUELVE al origen. Lo que ya llegó al destino se queda allí. */
+export async function cancelarTrasladoEnTx(
+  tx: Tx,
+  companyId: string,
+  e: { trasladoId: string; motivo?: string | null; ahora?: Date },
+  ctx: ContextoAuditoria
+): Promise<{ trasladoId: string; numero: string; devueltas: number; repetido: boolean }> {
+  const motivo = normalizarTextoLibre(e.motivo, MAX_MOTIVO_TRASLADO, 'El motivo')
+  if (!motivo.ok) fallo('MOTIVO_INVALIDO', motivo.error)
+  const ahora = e.ahora ?? new Date()
+  const traslado = await bloquearTraslado(tx, companyId, e.trasladoId)
+  if (traslado.status === 'CANCELLED') return { trasladoId: traslado.id, numero: traslado.number, devueltas: 0, repetido: true }
+  exigirTrasladoAbierto(traslado)
+
+  const lineas = await lineasDeTraslado(tx, companyId, traslado.id)
+  const devolver = planDeCancelacion(lineas)
+  if (devolver.length === 0) fallo('NADA_QUE_DEVOLVER', 'Esta transferencia no tiene nada en camino que devolver.')
+  const origen = await exigirSucursal(tx, companyId, traslado.fromLocationId, false)
+
+  // Volver al origen es devolver lo que salió: se admite aunque la sucursal ya esté cerrada.
+  const nivelDe = await crearSaldosEnOrden(tx, companyId, origen.id, devolver.map((d) => d.varianteId))
+  const filas = await bloquear(tx, companyId, [...nivelDe.values()])
+  const items: ItemLote[] = devolver.map((d) => {
+    const fila = filas.get(nivelDe.get(d.varianteId)!)!
+    const movimiento: Movimiento = { type: 'TRANSFER_IN', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: d.cantidad, reason: motivoDeDevolucion(traslado.number) }
+    let despues
+    try {
+      despues = aplicarMovimiento(cubetasDeSaldo(fila), movimiento)
+    } catch (err) {
+      traducir(err, movimiento, fila)
+    }
+    return {
+      nivelId: fila.id,
+      movimiento,
+      antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged },
+      despues: saldoDeCubetas(despues),
+      meta: { userId: ctx.actorId, referencia: { tipo: 'TRANSFER', id: traslado.id } },
+    }
+  })
+  await escribirMovimientosPorLote(tx, companyId, items)
+
+  const devueltoDe = new Map(devolver.map((d) => [d.varianteId, d.cantidad]))
+  const tocadas = lineas.filter((l) => devueltoDe.has(l.varianteId))
+  const valores = tocadas.map((l) => Prisma.sql`(${l.id}, ${devueltoDe.get(l.varianteId)!}::int)`)
+  const escritas = await tx.$executeRaw`
+    UPDATE "inventory_transfer_lines" AS l
+       SET "quantityReturned" = l."quantityReturned" + v."devuelto"
+      FROM (VALUES ${Prisma.join(valores)}) AS v("id", "devuelto")
+     WHERE l."id" = v."id" AND l."companyId" = ${companyId} AND l."transferId" = ${traslado.id}`
+  if (escritas !== tocadas.length) fallo('LOTE_INCOMPLETO', 'No se pudieron actualizar todas las líneas de la transferencia.')
+
+  const devueltas = devolver.reduce((s, d) => s + d.cantidad, 0)
+  await tx.inventoryTransfer.update({
+    where: { id: traslado.id },
+    data: {
+      status: 'CANCELLED',
+      closedAt: ahora,
+      closedById: ctx.actorId,
+      closeReason: motivo.valor,
+      receivedUnits: lineas.reduce((s, l) => s + l.recibido, 0),
+      returnedUnits: devueltas,
+      lostUnits: 0,
+    },
+  })
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_TRANSFERRED',
+    traslado.id,
+    { tipo: 'CANCELACION', traslado: traslado.number, devueltas, motivo: motivo.valor },
+    'InventoryTransfer'
+  )
+  return { trasladoId: traslado.id, numero: traslado.number, devueltas, repetido: false }
 }

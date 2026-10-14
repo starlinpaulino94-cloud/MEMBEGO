@@ -39,6 +39,7 @@ import { formSubmitLimiter } from '@/lib/rate-limit'
 import type { SessionUser } from '@/types'
 import type { ContextoAuditoria } from './auditoria'
 import { avisarStockBajo } from './avisos'
+import { notificarAdmins } from '@/modules/notificaciones/service'
 import type { ModoConteo } from './conteos'
 import { InventarioError } from './errores'
 import type { InformeImportacion } from './importacion'
@@ -46,6 +47,9 @@ import { aplicarImportacionDeConteoEnTx, aplicarImportacionEnTx, informeDeConteo
 import { buscarVariantesParaEntradaEnTx, historialDeVarianteEnTx, type HistorialPagina, type VarianteBuscable } from './queries'
 import {
   abrirConteoEnTx,
+  cancelarTrasladoEnTx,
+  enviarTrasladoEnTx,
+  recibirTrasladoEnTx,
   aplicarConteoEnTx,
   cancelarConteoEnTx,
   quitarLineaDeConteoEnTx,
@@ -540,6 +544,130 @@ export async function cancelarConteo(entrada: { conteoId: string; motivo?: strin
     const r = await conEmpresa(c.companyId, (tx) => cancelarConteoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), motivo: entrada.motivo }, c.ctx))
     refrescar()
     return { ok: true, numero: r.numero }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+// ── INV-2c · transferencias con envío ────────────────────────────────────────
+//
+// La función es `transferir` (la misma de la transferencia directa), no `ajustar`:
+// mover mercancía entre sucursales y corregir existencias son permisos distintos.
+
+export interface ResumenEnvio {
+  trasladoId: string
+  numero: string
+  lineas: number
+  unidades: number
+  repetido: boolean
+}
+
+/**
+ * Envía mercancía a otra sucursal: sale del origen y queda EN TRÁNSITO hasta que el
+ * destino la reciba. Todo o nada. Tras confirmar: aviso de stock bajo en el origen y
+ * una notificación a los administradores («viene en camino»), ambos fuera de la
+ * transacción y de la respuesta (`after`).
+ */
+export async function enviarTransferencia(entrada: {
+  origenId: string
+  destinoId: string
+  lineas: { varianteId: string; cantidad: number }[]
+  nota?: string | null
+  clave?: string | null
+}): Promise<ResultadoInventario<ResumenEnvio>> {
+  const c = await contexto('transferir')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : []
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      enviarTrasladoEnTx(tx, c.companyId, { origenId: texto(entrada.origenId), destinoId: texto(entrada.destinoId), lineas, nota: entrada.nota, idempotencyKey: clave(entrada.clave) }, c.ctx)
+    )
+    refrescar()
+    if (!r.repetido) {
+      const { companyId } = c
+      after(() => avisarStockBajo(companyId, r.variantes))
+      after(() =>
+        notificarAdmins(companyId, {
+          tipo: 'SISTEMA',
+          titulo: 'Transferencia en camino',
+          mensaje: `${r.numero}: ${r.unidades.toLocaleString('es-DO')} unidad${r.unidades === 1 ? '' : 'es'} de ${r.lineas.toLocaleString('es-DO')} producto${r.lineas === 1 ? '' : 's'} salieron de ${r.origenNombre} hacia ${r.destinoNombre}. Recíbela cuando llegue.`,
+          href: `/admin/inventario/transferencias/${r.trasladoId}`,
+          dedupeKey: `traslado-enviado:${r.trasladoId}`,
+        })
+      )
+    }
+    return { ok: true, trasladoId: r.trasladoId, numero: r.numero, lineas: r.lineas, unidades: r.unidades, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Busca productos que controlan inventario para añadir a un envío; devuelve lo disponible en la sucursal de origen. */
+export async function buscarProductosParaTransferencia(q: string, origenId: string | null): Promise<ResultadoInventario<{ productos: VarianteBuscable[] }>> {
+  const c = await contexto('transferir')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof q !== 'string' || (origenId !== null && typeof origenId !== 'string')) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const productos = await conEmpresa(c.companyId, (tx) => buscarVariantesParaEntradaEnTx(tx, c.companyId, q, origenId || null))
+    return { ok: true, productos }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+export interface ResumenRecepcion {
+  trasladoId: string
+  numero: string
+  estado: 'SENT' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED'
+  recibidas: number
+  perdidas: number
+  enTransito: number
+  repetido: boolean
+}
+
+/**
+ * Registra lo que llegó: parte de las líneas o todo lo que falte. Si algo no llegó, o se
+ * sigue esperando (queda «recibida en parte») o se cierra con faltante, y entonces el
+ * motivo es obligatorio.
+ */
+export async function recibirTransferencia(entrada: {
+  trasladoId: string
+  lineas?: { varianteId: string; cantidad: number }[]
+  todo?: boolean
+  cerrarConFaltante?: boolean
+  motivo?: string | null
+  clave?: string | null
+}): Promise<ResultadoInventario<ResumenRecepcion>> {
+  const c = await contexto('transferir')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : undefined
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      recibirTrasladoEnTx(
+        tx,
+        c.companyId,
+        { trasladoId: texto(entrada.trasladoId), lineas, todo: entrada.todo === true, cerrarConFaltante: entrada.cerrarConFaltante === true, motivo: entrada.motivo, idempotencyKey: clave(entrada.clave) },
+        c.ctx
+      )
+    )
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Cancela el envío: lo que sigue en camino vuelve al origen. */
+export async function cancelarTransferencia(entrada: { trasladoId: string; motivo?: string | null }): Promise<ResultadoInventario<{ numero: string; devueltas: number; repetido: boolean }>> {
+  const c = await contexto('transferir')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => cancelarTrasladoEnTx(tx, c.companyId, { trasladoId: texto(entrada.trasladoId), motivo: entrada.motivo }, c.ctx))
+    refrescar()
+    return { ok: true, numero: r.numero, devueltas: r.devueltas, repetido: r.repetido }
   } catch (e) {
     return aError(e)
   }

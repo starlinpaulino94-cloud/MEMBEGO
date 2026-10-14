@@ -286,7 +286,7 @@ test('12 · el ledger es inmutable: UPDATE, DELETE y TRUNCATE los rechaza la bas
   // Desde INV-2a las líneas de una entrada apuntan al ledger: un TRUNCATE a secas ya lo frena PostgreSQL por la FK (antes que el
   // disparador). Vaciarlo junto con las líneas salta esa FK, y entonces lo frena el disparador del propio ledger.
   await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE "inventory_movements"'), /inventory_movements_inmutable|cannot truncate a table referenced in a foreign key constraint/)
-  await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE "inventory_movements", "inventory_receipt_lines", "inventory_count_lines"'), /inventory_movements_inmutable/)
+  await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE "inventory_movements", "inventory_receipt_lines", "inventory_count_lines", "inventory_transfer_lines"'), /inventory_movements_inmutable/)
   await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE "inventory_movements" CASCADE'), /inmutable/)
   await assert.rejects(prisma.inventoryMovement.update({ where: { id: m.id }, data: { quantity: 1 } }), /inmutable/)
   await assert.rejects(prisma.inventoryMovement.deleteMany({ where: { id: m.id } }), /inmutable/)

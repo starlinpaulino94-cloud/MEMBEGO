@@ -55,16 +55,20 @@ test('todas las acciones exportadas autorizan ANTES de tocar la base', () => {
     'aplicarImportacion',
     'buscarProductosParaConteo',
     'buscarProductosParaEntrada',
+    'buscarProductosParaTransferencia',
     'cancelarConteo',
+    'cancelarTransferencia',
     'cargarMasHistorialInventario',
     'contarInventario',
     'contarProductoEnConteo',
+    'enviarTransferencia',
     'fijarUmbralInventario',
     'importarConteo',
     'iniciarConteo',
     'previsualizarConteoImportado',
     'previsualizarImportacion',
     'quitarProductoDelConteo',
+    'recibirTransferencia',
     'registrarDanoInventario',
     'registrarDevolucionInventario',
     'registrarEntradaInventario',
@@ -601,4 +605,130 @@ test('INV-2b · la migración es aditiva e idempotente, un solo conteo abierto p
 
 test('INV-2b · /api/health avisa si falta la tabla de conteos (despliegue adelantado a la base)', () => {
   assert.match(leer('src/app/api/health/route.ts'), /inventory_count_sessions\.esquema', to_regclass\('public\.inventory_count_sessions'\) IS NOT NULL/)
+})
+
+// ── INV-2c · transferencias con envío ────────────────────────────────────────
+
+const TRASLADOS = 'src/app/(admin)/admin/inventario/transferencias'
+
+test('INV-2c · las pantallas de transferencias se guardan como las demás: rol, empresa de la sesión, nada de cliente global ni de empresa por la URL', () => {
+  for (const pagina of ['page.tsx', 'nueva/page.tsx', '[id]/page.tsx']) {
+    const s = sinComent(leer(`${TRASLADOS}/${pagina}`))
+    assert.match(s, /requireRole\(ADMIN_ROLES\)/, `${pagina} sin guardia de rol`)
+    assert.match(s, /requireCompanyContext\(user\)/, `${pagina} no resuelve la empresa de la sesión`)
+    assert.match(s, /conEmpresa\(companyId/, `${pagina} no lee dentro de conEmpresa`)
+    assert.doesNotMatch(s, /\bprisma\./, `${pagina} usa el cliente global`)
+    assert.doesNotMatch(s, /sp\.companyId|sp\.empresa|params\.companyId/, `${pagina} toma la empresa de la URL`)
+    assert.match(s, /describirFalloDeCarga\(/, `${pagina} no distingue una migración pendiente`)
+    // Mover mercancía entre sucursales es la función «transferir», no «ajustar».
+    assert.match(s, /puedeFuncion\('inventario', 'transferir'\)/, `${pagina} no esconde la forma a quien no puede transferir`)
+    assert.doesNotMatch(s, /puedeFuncion\('inventario', 'ajustar'\)/, `${pagina} usa el permiso equivocado`)
+  }
+  assert.match(leer(`${TRASLADOS}/[id]/page.tsx`), /notFound\(\)/, 'una transferencia ajena o inventada se ve igual: 404')
+  assert.match(leer(`${TRASLADOS}/page.tsx`), /<NavegacionInventario actual="transferencias"/)
+  assert.match(leer('src/components/inventario/NavegacionInventario.tsx'), /id: 'transferencias'[\s\S]*href: '\/admin\/inventario\/transferencias'/)
+})
+
+test('INV-2c · la descarga de una transferencia se guarda SOLA y la empresa sale de la sesión', () => {
+  const s = sinComent(leer(`${TRASLADOS}/[id]/exportar/route.ts`))
+  assert.match(s, /requireSection\('inventario'\)/)
+  assert.match(s, /if \(!user\) return NextResponse\.json\(\{ error: 'No autorizado\.' \}, \{ status: 403 \}\)/)
+  assert.match(s, /resolveCompanyId\(user\)/)
+  assert.ok(s.indexOf('requireSection(') < s.indexOf('conEmpresa('), 'toca la base antes de autorizar')
+  assert.doesNotMatch(s, /\bprisma\./)
+  assert.match(s, /trasladoDetalleEnTx\(tx, companyId, id\)/, 'el id de la URL solo identifica la transferencia, dentro de la empresa de la sesión')
+  assert.match(s, /status: 404/)
+})
+
+test('INV-2c · las acciones de transferencia autorizan con «transferir» (no «ajustar») ANTES de tocar la base y no toman la empresa de la entrada', () => {
+  for (const nombre of ['enviarTransferencia', 'buscarProductosParaTransferencia', 'recibirTransferencia', 'cancelarTransferencia']) {
+    const cuerpo = sinComentarios.slice(sinComentarios.indexOf(`export async function ${nombre}`)).split('\n}\n')[0]
+    assert.match(cuerpo, /await contexto\('transferir'\)/, `${nombre} no exige «transferir»`)
+    assert.doesNotMatch(cuerpo, /contexto\('ajustar'\)/, `${nombre} usa el permiso equivocado`)
+    assert.ok(cuerpo.indexOf('await contexto(') < cuerpo.indexOf('conEmpresa('), `${nombre} toca la base antes de autorizar`)
+    assert.match(cuerpo, /conEmpresa\(c\.companyId,/, `${nombre} no abre la transacción con la empresa de la sesión`)
+    assert.doesNotMatch(cuerpo, /\bentrada\b[^\n]*company/i, `${nombre} lee una empresa de la entrada`)
+  }
+  // Tras enviar: aviso de stock bajo en el origen y notificación al destino, FUERA de la transacción y de la respuesta; un reintento no repite el aviso.
+  const enviar = sinComentarios.slice(sinComentarios.indexOf('export async function enviarTransferencia')).split('\n}\n')[0]
+  assert.match(enviar, /if \(!r\.repetido\) \{[\s\S]*after\(\(\) => avisarStockBajo\(companyId, r\.variantes\)\)[\s\S]*after\(\(\) =>\s*notificarAdmins\(companyId/)
+  assert.match(enviar, /dedupeKey: `traslado-enviado:\$\{r\.trasladoId\}`/)
+})
+
+test('INV-2c · el servicio de transferencias bloquea la transferencia ANTES de leer sus líneas, crea los saldos en orden fijo y escribe los contadores ANTES de cerrarla', () => {
+  const f = sinComent(leer('src/modules/inventory/service.ts'))
+  const desde = f.indexOf('export async function enviarTrasladoEnTx')
+  assert.ok(desde > 0)
+  const seccion = f.slice(desde)
+  for (const nombre of ['recibirTrasladoEnTx', 'cancelarTrasladoEnTx']) {
+    const cuerpo = seccion.slice(seccion.indexOf(`export async function ${nombre}`)).split('\nexport ')[0]
+    assert.match(cuerpo, /await bloquearTraslado\(tx, companyId, e\.trasladoId\)/, `${nombre} no bloquea la transferencia`)
+    const primeraLectura = cuerpo.search(/tx\.inventory(Transfer|TransferLine|Level|Movement)\.|lineasDeTraslado\(/)
+    assert.ok(primeraLectura < 0 || cuerpo.indexOf('bloquearTraslado(') < primeraLectura, `${nombre} lee antes de bloquear la transferencia`)
+  }
+  // Los saldos que falten se crean siempre en un orden fijo (por producto): ver INV-2a.
+  assert.match(f, /async function crearSaldosEnOrden[\s\S]*\[\.\.\.new Set\(variantes\)\]\.sort\(\)\.map/)
+  const recibir = seccion.slice(seccion.indexOf('export async function recibirTrasladoEnTx')).split('\nexport ')[0]
+  assert.ok(recibir.indexOf('crearSaldosEnOrden(') < recibir.indexOf('await bloquear('), 'primero se crean, ordenados; después se bloquean')
+  assert.ok(recibir.indexOf('await bloquear(') < recibir.indexOf('escribirMovimientosPorLote('), 'los saldos se bloquean antes de escribir')
+  // El disparador de la base solo deja tocar las líneas mientras la transferencia está abierta: los contadores van primero.
+  assert.ok(recibir.indexOf('UPDATE "inventory_transfer_lines"') > 0 && recibir.indexOf('UPDATE "inventory_transfer_lines"') < recibir.indexOf("status: 'RECEIVED'"), 'recibir: contadores antes de cerrar')
+  const cancelar = seccion.slice(seccion.indexOf('export async function cancelarTrasladoEnTx')).split('\nexport ')[0]
+  assert.ok(cancelar.indexOf('UPDATE "inventory_transfer_lines"') > 0 && cancelar.indexOf('UPDATE "inventory_transfer_lines"') < cancelar.indexOf("status: 'CANCELLED'"), 'cancelar: contadores antes de cerrar')
+  // Enviar: no crea saldos en el destino (hasta que algo llegue no hay nada allí) y la idempotencia se mira YA con los candados.
+  const enviar = seccion.slice(0, seccion.indexOf('export async function recibirTrasladoEnTx'))
+  assert.doesNotMatch(enviar, /crearSaldosEnOrden\(/, 'enviar no toca el destino')
+  assert.ok(enviar.indexOf('await bloquear(') < enviar.indexOf('idempotencyKey: clave'), 'la idempotencia se revisa con los candados puestos')
+  assert.ok(enviar.indexOf('noAlcanza.length > 0') < enviar.indexOf('siguienteNumero('), 'un envío que no alcanza no gasta un número')
+  // La idempotencia de una recepción se mira ANTES de exigir que siga abierta: reintentar una que ya cerró la transferencia es inocuo.
+  assert.ok(recibir.indexOf('startsWith:') > 0 && recibir.indexOf('startsWith:') < recibir.indexOf('exigirTrasladoAbierto(traslado)'))
+  // La transferencia directa de siempre crea sus dos saldos en orden fijo (por sucursal): A→B y B→A a la vez no se interbloquean.
+  const directa = f.slice(f.indexOf('export async function transferirEnTx')).split('\nexport ')[0]
+  assert.match(directa, /for \(const sucursalId of \[origen\.id, destino\.id\]\.sort\(\)\) nivelesDe\.set/)
+  assert.equal([...f.matchAll(/UPDATE "inventory_levels"/g)].length, 1, 'ninguna otra puerta escribe saldos')
+})
+
+test('INV-2c · las lecturas de transferencias escriben la empresa en CADA consulta', () => {
+  const q = sinComent(leer('src/modules/inventory/queries.ts'))
+  for (const nombre of ['trasladosDeLaEmpresaEnTx', 'trasladoDetalleEnTx', 'enTransitoDeVarianteEnTx']) {
+    const f = q.slice(q.indexOf(`export async function ${nombre}`)).split('\nexport ')[0]
+    assert.match(f, /companyId/, `${nombre} no filtra por empresa`)
+    for (const m of f.matchAll(/where: \{([^]{0,160})/g)) assert.match(m[1], /companyId/, `${nombre}: un where sin empresa → ${m[0].slice(0, 60)}`)
+  }
+})
+
+test('INV-2c · la ficha de un producto lee lo que va en camino en su PROPIA transacción y con su propio try: sin la migración, la ficha sigue funcionando', () => {
+  const s = sinComent(leer('src/app/(admin)/admin/inventario/[varianteId]/page.tsx'))
+  assert.match(s, /try \{\s*enTransito = await conEmpresa\(companyId, \(tx\) => enTransitoDeVarianteEnTx\(tx, companyId, varianteId\)\)\s*\} catch/)
+  const principal = s.slice(s.indexOf('const datos = await conEmpresa'), s.indexOf('if (!datos) notFound()'))
+  assert.doesNotMatch(principal, /enTransitoDeVarianteEnTx/, 'si estuviera en la transacción principal, un error la abortaría entera')
+})
+
+test('INV-2c · lo PURO sigue siendo puro, y los componentes de cliente de transferencias no arrastran el servidor', () => {
+  const s = leer('src/modules/inventory/traslados.ts')
+  assert.doesNotMatch(s, /server-only|from '@\/lib\/prisma'|from '@\/lib\/tenant'|@prisma\/client'/, 'traslados.ts debe ser puro')
+  for (const f of ['EnviarTransferenciaForm.tsx', 'RecibirTransferenciaForm.tsx']) {
+    const c = leer(`src/components/inventario/${f}`)
+    assert.match(c, /^'use client'/, f)
+    for (const origen of [...c.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])) {
+      assert.doesNotMatch(origen, /modules\/inventory\/(domain|service|queries|auditoria|errores|barrido|importar|errores-pantalla)$/, `${f} importa ${origen}`)
+    }
+  }
+})
+
+test('INV-2c · la migración es aditiva e idempotente, los estados no se saltan en la base, y lo cerrado no cambia', () => {
+  const sql = leer('prisma/migrations/20261058_inventory_transfers/migration.sql')
+  const sinNotas = sql.replace(/^--.*$/gm, '')
+  assert.doesNotMatch(sinNotas, /\bDROP\s+(TABLE|COLUMN|TYPE)\b|\bALTER\s+TABLE\s+"(?!inventory_transfer)/i, 'no toca ninguna tabla existente')
+  assert.doesNotMatch(sinNotas, /\bTRUNCATE\s+TABLE|\bDELETE\s+FROM|\bUPDATE\s+"/i)
+  for (const crea of sinNotas.matchAll(/CREATE\s+(TABLE|UNIQUE INDEX|INDEX)\s+(IF NOT EXISTS)?/gi)) assert.ok(crea[2], `«${crea[0]}» sin IF NOT EXISTS: no es idempotente`)
+  assert.match(sql, /inventory_transfers_sin_cambios[\s\S]*BEFORE UPDATE OR DELETE/)
+  assert.match(sql, /inventory_transfer_lines_avance[\s\S]*BEFORE INSERT OR UPDATE OR DELETE/)
+  assert.match(sql, /BEFORE TRUNCATE ON "inventory_transfers"/)
+  assert.match(sql, /BEFORE TRUNCATE ON "inventory_transfer_lines"/)
+  // La tabla de transiciones de la base es la misma que la del dominio.
+  assert.match(sql, /OLD\."status" = 'SENT' AND NEW\."status" IN \('PARTIAL', 'RECEIVED', 'CANCELLED'\)/)
+  assert.match(sql, /OLD\."status" = 'PARTIAL' AND NEW\."status" IN \('RECEIVED', 'CANCELLED'\)/)
+  assert.match(leer('prisma/migrations/SUMAS.txt'), /20261058_inventory_transfers/)
+  assert.match(leer('src/app/api/health/route.ts'), /inventory_transfers\.esquema', to_regclass\('public\.inventory_transfers'\) IS NOT NULL/)
 })

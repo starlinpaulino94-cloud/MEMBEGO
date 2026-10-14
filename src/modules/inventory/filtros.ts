@@ -203,3 +203,43 @@ export function consultaDeFiltrosConteos(f: FiltrosConteos, cursor?: string | nu
   if (f.estado) p.set('estado', f.estado)
   return p.toString()
 }
+
+// ── INV-2c · Transferencias con envío ────────────────────────────────────────
+
+export interface FiltrosTraslados {
+  /** La sucursal de cualquiera de los dos extremos: la que envía o la que recibe. */
+  sucursalId?: string
+  estado?: 'SENT' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED'
+  /** `YYYY-MM-DD` en la zona horaria de la empresa, ambos extremos incluidos (fecha de envío). */
+  desde?: string
+  hasta?: string
+  /** Número de la transferencia (`TRF-2026-000003`) o texto de su nota. */
+  q?: string
+}
+
+export interface PeticionTraslados {
+  filtros: FiltrosTraslados
+  cursor: string | null
+}
+
+/** Lee la URL de la lista de transferencias con las mismas reglas que movimientos, entradas y conteos. */
+export function leerFiltrosTraslados(sp: ParametrosUrl): PeticionTraslados {
+  const { filtros, cursor } = leerFiltrosMovimientos(sp)
+  const estado = primero(sp.estado)
+  return {
+    filtros: {
+      ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+      ...(estado === 'SENT' || estado === 'PARTIAL' || estado === 'RECEIVED' || estado === 'CANCELLED' ? { estado } : {}),
+      ...(filtros.desde ? { desde: filtros.desde } : {}),
+      ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+      ...(filtros.q ? { q: filtros.q } : {}),
+    },
+    cursor,
+  }
+}
+
+export function consultaDeFiltrosTraslados(f: FiltrosTraslados, cursor?: string | null): string {
+  const p = new URLSearchParams(consultaDeFiltros({ sucursalId: f.sucursalId, desde: f.desde, hasta: f.hasta, q: f.q }, cursor))
+  if (f.estado) p.set('estado', f.estado)
+  return p.toString()
+}

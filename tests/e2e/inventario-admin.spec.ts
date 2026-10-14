@@ -849,6 +849,237 @@ test.describe('Inventario · panel', () => {
     await ctx.close()
   })
 
+  test('INV-2c · transferencia con envío: enviar, ver lo que va en camino, recibir en partes, cerrar con faltante, cancelar y recibir todo', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+    const prisma = prismaDeArnes()
+
+    // Dos productos con existencias en Principal; Norte no tiene nada de ellos.
+    const principalId = (await sucursalSembrada(con.id, 'Principal')).id
+    const norteId = (await sucursalSembrada(con.id, 'Norte')).id
+    const N1 = `Mochila E2E ${sufijo}`
+    const N2 = `Botella E2E ${sufijo}`
+    const S1 = `TRF1-${sufijo}`
+    const S2 = `TRF2-${sufijo}`
+    const base = parseInt(sufijo, 36) % 900_000
+    const C1 = String(7_504_000_000_000 + base)
+    const mk = async (name: string, slug: string, sku: string, barcode: string | undefined, stock: number) => {
+      const it = await itemSembrado(con.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, barcode, price: 100, porDefecto: true }] })
+      const id = await varianteDe(it.id)
+      await existenciasSembradas(con.id, id, principalId, stock)
+      return id
+    }
+    const v1 = await mk(N1, `mochila-trf-${sufijo}`, S1, C1, 12)
+    const v2 = await mk(N2, `botella-trf-${sufijo}`, S2, undefined, 6)
+    const enSuc = async (v: string, suc: string) => (await prisma.inventoryLevel.findFirst({ where: { catalogVariantId: v, locationId: suc } }))?.onHand ?? null
+
+    // ── La pestaña «Transferencias»: vacía, con su botón ──────────────────
+    await p.goto('/admin/inventario')
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    await vistas.getByRole('link', { name: 'Transferencias' }).click()
+    await p.waitForURL('**/admin/inventario/transferencias')
+    await expect(p.getByRole('heading', { name: 'Transferencias entre sucursales', level: 1 })).toBeVisible()
+    await expect(vistas.getByRole('link', { name: 'Transferencias' })).toHaveAttribute('aria-current', 'page')
+    await expect(p.getByText('Todavía no hay transferencias con envío')).toBeVisible()
+
+    // ── Enviar: se escanea, se ve lo que hay en el origen y no se puede pasar de ahí ──
+    await p.getByRole('link', { name: 'Nueva transferencia' }).click()
+    await p.waitForURL('**/admin/inventario/transferencias/nueva')
+    const form = p.getByRole('form', { name: 'Nueva transferencia con envío' })
+    await form.getByLabel('Sucursal que envía').selectOption({ label: 'Principal' })
+    await form.getByLabel('Sucursal que recibe').selectOption({ label: 'Norte' })
+    await form.getByLabel(/^Nota/).fill('Reposición E2E')
+    const buscar = form.getByLabel('Escanear o buscar un producto para enviar')
+    const lineas = form.getByRole('list', { name: 'Productos del envío' })
+    await buscar.fill(C1)
+    await buscar.press('Enter')
+    const f1 = lineas.getByRole('listitem').filter({ hasText: N1 })
+    await expect(f1).toContainText('hay 12 disponibles en Principal')
+    await f1.getByRole('textbox').fill('8')
+    await buscar.fill(S2)
+    await buscar.press('Enter')
+    const f2 = lineas.getByRole('listitem').filter({ hasText: N2 })
+    await expect(f2).toContainText('hay 6 disponibles en Principal')
+    await f2.getByRole('textbox').fill('9') // más de lo que hay
+    await form.getByRole('button', { name: 'Enviar transferencia' }).click()
+    await expect(p.getByText(/No alcanza para enviar desde «Principal»/)).toBeVisible({ timeout: 15_000 })
+    await expect(p).toHaveURL(/\/transferencias\/nueva$/)
+    expect(await enSuc(v1, principalId), 'un envío que no alcanza no saca NADA').toBe(12)
+    await f2.getByRole('textbox').fill('6')
+    await expect(form.getByText(/2 productos · 14 unidades · de Principal a Norte/)).toBeVisible()
+    await form.getByRole('button', { name: 'Enviar transferencia' }).click()
+    await p.waitForURL(/\/admin\/inventario\/transferencias\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+    const id1 = p.url().split('/').pop()!
+    await expect(p.getByRole('heading', { name: /^TRF-\d{4}-000001$/, level: 1 })).toBeVisible()
+    const num1 = (await p.getByRole('heading', { level: 1 }).innerText()).trim()
+    await expect(p.getByText('En camino', { exact: true }).first()).toBeVisible()
+    await expect(p.getByText('Reposición E2E')).toBeVisible()
+    const resumen = p.getByLabel('Resumen de la transferencia')
+    await expect(resumen.getByText('Enviadas').locator('..')).toContainText('14')
+    await expect(resumen.getByText('En camino').locator('..')).toContainText('14')
+    expect(await enSuc(v1, principalId)).toBe(4)
+    expect(await enSuc(v2, principalId)).toBe(0)
+    expect(await enSuc(v1, norteId), 'enviar no toca el destino').toBeNull()
+    // Se avisa a los administradores de que viene en camino (después de responder).
+    await expect.poll(() => prisma.notificacion.count({ where: { dedupeKey: `traslado-enviado:${id1}` } }), { timeout: 15_000 }).toBeGreaterThan(0)
+
+    // ── En camino: ni en el origen ni en el destino; la ficha lo dice aparte ──
+    await p.goto(`/admin/inventario/${v1}`)
+    const camino = p.getByLabel('Lo que va en camino')
+    await expect(camino).toContainText('En camino entre sucursales (8)')
+    await expect(camino).toContainText('8 de Principal a Norte')
+    await expect(camino.getByRole('link', { name: num1 })).toHaveAttribute('href', `/admin/inventario/transferencias/${id1}`)
+    await expect(p.getByLabel('Totales de todas las sucursales')).toContainText('Disponible (total)')
+    expect(await p.getByLabel('Totales de todas las sucursales').innerText()).toMatch(/Disponible \(total\)\s*\n?\s*4\b/)
+
+    // ── La lista: «en camino ahora» ───────────────────────────────────────
+    await p.goto('/admin/inventario/transferencias')
+    await expect(p.getByRole('list', { name: 'Transferencias en camino' })).toContainText(num1)
+    await expect(p.getByRole('list', { name: 'Transferencias en camino' })).toContainText('14 unidades por llegar')
+
+    // ── Recibir en partes: una parte, luego cerrar con faltante ───────────
+    await p.goto(`/admin/inventario/transferencias/${id1}`)
+    const llego = p.getByRole('list', { name: 'Lo que llegó' })
+    await llego.getByLabel(`Llegó de ${N1}`).fill('9') // más de lo que falta (8)
+    await expect(p.getByRole('button', { name: 'Recibir lo que llegó' })).toBeDisabled()
+    await llego.getByLabel(`Llegó de ${N1}`).fill('5')
+    await llego.getByLabel(`Llegó de ${N2}`).fill('0')
+    await p.getByRole('button', { name: 'Recibir lo que llegó' }).click()
+    await expect(p.getByText('Recibida en parte', { exact: true }).first()).toBeVisible({ timeout: 20_000 })
+    expect(await enSuc(v1, norteId)).toBe(5)
+    expect(await enSuc(v2, norteId)).toBeNull()
+    await expect(p.getByLabel('Resumen de la transferencia').getByText('En camino').locator('..')).toContainText('9')
+    await p.goto(`/admin/inventario/${v1}`)
+    await expect(p.getByLabel('Lo que va en camino')).toContainText('En camino entre sucursales (3)')
+
+    await p.goto(`/admin/inventario/transferencias/${id1}`)
+    await p.getByRole('button', { name: 'Cerrar con faltante' }).click()
+    await p.getByRole('list', { name: 'Lo que llegó' }).getByLabel(`Llegó de ${N1}`).fill('3')
+    await p.getByRole('list', { name: 'Lo que llegó' }).getByLabel(`Llegó de ${N2}`).fill('4')
+    await p.getByRole('button', { name: 'Confirmar cierre con faltante' }).click() // sin motivo: no cierra
+    await expect(p.getByText(/Cerrar con faltante necesita un motivo/)).toBeVisible({ timeout: 15_000 })
+    expect(await enSuc(v2, norteId), 'sin motivo no se movió nada').toBeNull()
+    await p.getByLabel(/^Motivo del faltante/).fill('Se mojaron 2 botellas en el camino')
+    await p.getByRole('button', { name: 'Confirmar cierre con faltante' }).click()
+    await expect(p.getByText(/Cerrada .*Se mojaron 2 botellas en el camino/)).toBeVisible({ timeout: 20_000 })
+    await expect(p.getByText('Recibida', { exact: true }).first()).toBeVisible()
+    expect(await enSuc(v1, norteId)).toBe(8)
+    expect(await enSuc(v2, norteId)).toBe(4)
+    const res = p.getByLabel('Resumen de la transferencia')
+    await expect(res.getByText('Recibidas').locator('..')).toContainText('12')
+    await expect(res.getByText('Perdidas').locator('..')).toContainText('2')
+    await expect(res.getByText('En camino').locator('..')).toContainText('0')
+    await expect(p.getByRole('button', { name: 'Recibir lo que llegó' })).toHaveCount(0)
+    const movs = p.getByRole('list', { name: 'Movimientos de la transferencia' })
+    await expect(movs.getByRole('listitem')).toHaveCount(5) // 2 salidas + 3 entradas (5 de uno, 3 del mismo, 4 del otro)
+    await expect(movs.getByRole('listitem').first()).toContainText('Salida')
+    await p.goto(`/admin/inventario/${v1}`)
+    await expect(p.getByLabel('Lo que va en camino')).toHaveCount(0)
+
+    // ── El CSV de la transferencia ────────────────────────────────────────
+    const csv = await p.request.get(`/admin/inventario/transferencias/${id1}/exportar`)
+    expect(csv.status()).toBe(200)
+    expect(csv.headers()['content-type']).toContain('text/csv')
+    const textoCsv = await csv.text()
+    for (const esperado of [`Número;${num1}`, 'Estado;Recibida', 'Origen;Principal', 'Destino;Norte', 'Unidades perdidas;2', `${S1};${C1};${N1};8;8;0;0;0`, `${S2};;${N2};6;4;0;2;0`, 'Se mojaron 2 botellas en el camino']) {
+      expect(textoCsv).toContain(esperado)
+    }
+
+    // ── Cancelar: lo que sigue en camino VUELVE al origen ─────────────────
+    await p.goto('/admin/inventario/transferencias/nueva')
+    const form2 = p.getByRole('form', { name: 'Nueva transferencia con envío' })
+    await form2.getByLabel('Sucursal que envía').selectOption({ label: 'Principal' })
+    await form2.getByLabel('Sucursal que recibe').selectOption({ label: 'Norte' })
+    await form2.getByLabel('Escanear o buscar un producto para enviar').fill(S1)
+    await form2.getByLabel('Escanear o buscar un producto para enviar').press('Enter')
+    await form2.getByRole('list', { name: 'Productos del envío' }).getByRole('textbox').fill('3')
+    await form2.getByRole('button', { name: 'Enviar transferencia' }).click()
+    await p.waitForURL(/\/admin\/inventario\/transferencias\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+    const id2 = p.url().split('/').pop()!
+    await expect(p.getByRole('heading', { name: /^TRF-\d{4}-000002$/, level: 1 })).toBeVisible()
+    expect(await enSuc(v1, principalId)).toBe(1)
+    await p.getByRole('button', { name: 'Cancelar envío' }).click()
+    await p.getByLabel(/^Motivo \(opcional\)/).fill('El destino ya no lo necesita')
+    await p.getByRole('button', { name: /^Sí, cancelar la transferencia TRF-/ }).click()
+    await expect(p.getByText('Cancelada', { exact: true }).first()).toBeVisible({ timeout: 20_000 })
+    await expect(p.getByText(/Cancelada .*El destino ya no lo necesita/)).toBeVisible()
+    expect(await enSuc(v1, principalId), 'volvieron al origen').toBe(4)
+    expect(await enSuc(v1, norteId), 'y lo que ya había llegado se quedó').toBe(8)
+    await expect(p.getByLabel('Resumen de la transferencia').getByText('Devueltas al origen').locator('..')).toContainText('3')
+
+    // ── Una tercera se recibe completa de una vez y otra queda en camino ──
+    const enviarRapido = async (sku: string, cantidad: string) => {
+      await p.goto('/admin/inventario/transferencias/nueva')
+      const f = p.getByRole('form', { name: 'Nueva transferencia con envío' })
+      await f.getByLabel('Sucursal que envía').selectOption({ label: 'Principal' })
+      await f.getByLabel('Sucursal que recibe').selectOption({ label: 'Norte' })
+      await f.getByLabel('Escanear o buscar un producto para enviar').fill(sku)
+      await f.getByLabel('Escanear o buscar un producto para enviar').press('Enter')
+      await f.getByRole('list', { name: 'Productos del envío' }).getByRole('textbox').fill(cantidad)
+      await f.getByRole('button', { name: 'Enviar transferencia' }).click()
+      await p.waitForURL(/\/admin\/inventario\/transferencias\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+      return p.url().split('/').pop()!
+    }
+    const id3 = await enviarRapido(S1, '2')
+    await p.getByRole('button', { name: 'Recibir todo lo pendiente' }).click()
+    await expect(p.getByText('Recibida', { exact: true }).first()).toBeVisible({ timeout: 20_000 })
+    expect(await enSuc(v1, norteId)).toBe(10)
+    const id4 = await enviarRapido(S1, '1')
+
+    // ── La lista y sus filtros ────────────────────────────────────────────
+    await p.goto('/admin/inventario/transferencias')
+    await expect(p.getByRole('list', { name: 'Transferencias en camino' }).getByRole('listitem')).toHaveCount(1)
+    await expect(p.getByRole('list', { name: 'Transferencias en camino' })).toContainText('TRF-')
+    const todas = p.getByRole('list', { name: 'Transferencias', exact: true })
+    await expect(todas.getByRole('listitem')).toHaveCount(4)
+    await expect(todas.getByRole('listitem').first()).toContainText('En camino')
+    const filtrar = p.getByRole('form', { name: 'Filtrar transferencias' })
+    await filtrar.getByLabel('Estado').selectOption({ label: 'Cancelada' })
+    await filtrar.getByRole('button', { name: 'Filtrar' }).click()
+    await p.waitForURL(/estado=CANCELLED/)
+    await expect(todas.getByRole('listitem')).toHaveCount(1)
+    await expect(todas.getByRole('link', { name: new RegExp(num1.replace('000001', '000002')) })).toHaveAttribute('href', `/admin/inventario/transferencias/${id2}`)
+    await p.goto('/admin/inventario/transferencias?estado=XXX&desde=2030-02-31&cursor=basura&sucursal=ajena&q=%27%3Cscript%3E')
+    await expect(p.getByRole('heading', { name: 'Transferencias entre sucursales', level: 1 })).toBeVisible()
+    // El detalle abierto de la que quedó en camino sigue con su formulario para recibirla.
+    await p.goto(`/admin/inventario/transferencias/${id4}`)
+    await expect(p.getByRole('button', { name: 'Recibir todo lo pendiente' })).toBeVisible()
+    expect(id3).not.toBe(id4)
+
+    // ── Lo que NO debe pasar ──────────────────────────────────────────────
+    await p.goto('/admin/inventario/transferencias/cinexistente000000000000')
+    expect(await p.locator('meta[name=robots][content*=noindex]').count()).toBeGreaterThan(0)
+    await expect(p.getByRole('list', { name: 'Líneas de la transferencia' })).toHaveCount(0)
+    const inventada = await p.request.get('/admin/inventario/transferencias/cinexistente000000000000/exportar')
+    expect(inventada.status()).toBe(404)
+    expect(inventada.headers()['content-type'] ?? '').not.toContain('text/csv')
+    const anonimo = await browser.newContext()
+    const sinSesion = await anonimo.request.get(`/admin/inventario/transferencias/${id1}/exportar`, { maxRedirects: 0 })
+    expect(sinSesion.headers()['content-type'] ?? '').not.toContain('text/csv')
+    expect(await sinSesion.text()).not.toContain(S1)
+    await anonimo.close()
+    const ctxSin = await browser.newContext()
+    await entrarComo(ctxSin, 'catalogoSinCapacidad', BASE, sin.id)
+    const sinCapacidad = await ctxSin.request.get(`/admin/inventario/transferencias/${id1}/exportar`, { maxRedirects: 0 })
+    expect(sinCapacidad.headers()['content-type'] ?? '').not.toContain('text/csv')
+    expect([302, 303, 307, 308, 403, 404]).toContain(sinCapacidad.status())
+    expect(await sinCapacidad.text()).not.toContain(S1)
+    const pSin = await ctxSin.newPage()
+    await pSin.goto('/admin/inventario/transferencias')
+    await expect(pSin).not.toHaveURL(/\/admin\/inventario\/transferencias$/)
+    await ctxSin.close()
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
   test('aislamiento: la variante de otra empresa no se abre ni se lista', async ({ browser }) => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()

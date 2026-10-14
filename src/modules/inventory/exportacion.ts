@@ -1,5 +1,6 @@
 import type { InventoryMovementType } from '@prisma/client'
 import { armarCsv, armarCsvBloques } from '@/lib/csv'
+import { ETIQUETA_ESTADO_TRASLADO, pendienteDeLinea, type EstadoTraslado } from './traslados'
 import { ETIQUETA_ESTADO_CONTEO, ETIQUETA_RESULTADO, clasificarDiferencia, diferenciaDeConteo, ordenarPorDiferencia, resumirVarianza, type EstadoConteo } from './conteos'
 import { ETIQUETA_MOVIMIENTO, describirReferencia } from './formato'
 
@@ -263,6 +264,75 @@ export function conteoToCsv(c: ConteoParaCsv, zonaHoraria: string): string {
         aplicado ? (l.existenciaAntes ?? '') : '',
         aplicado ? (l.existenciaDespues ?? '') : '',
         aplicado ? (l.ajustado ? 'Si' : 'No') : '',
+      ]),
+    },
+  ])
+}
+
+// ── INV-2c · Transferencias con envío ────────────────────────────────────────
+
+export interface TrasladoParaCsv {
+  numero: string
+  estado: EstadoTraslado
+  origenNombre: string
+  destinoNombre: string
+  nota: string | null
+  creadoEn: Date
+  cerradoEn: Date | null
+  enviadoPorNombre: string | null
+  cerradoPorNombre: string | null
+  motivoCierre: string | null
+  detalle: ReadonlyArray<{ sku: string; barcode: string | null; itemNombre: string; nombreVariante: string; esDefault: boolean; enviado: number; recibido: number; devuelto: number; perdido: number }>
+  historial: ReadonlyArray<{ tipo: string; cantidad: number; sucursalNombre: string; producto: string; sku: string; creadoEn: Date; usuarioNombre: string | null; motivo: string | null }>
+}
+
+const ETIQUETA_TIPO_HISTORIAL: Record<string, string> = { TRANSFER_OUT: 'Salida del origen', TRANSFER_IN: 'Entrada al destino' }
+
+/** Una transferencia con envío completa: encabezado, resumen, líneas y cada movimiento del ledger que produjo. */
+export function trasladoToCsv(t: TrasladoParaCsv, zonaHoraria: string): string {
+  const lineas = t.detalle.map((l) => ({ ...l, nombre: l.esDefault ? l.itemNombre : `${l.itemNombre} · ${l.nombreVariante}`, pendiente: pendienteDeLinea(l) }))
+  const suma = (f: (l: (typeof lineas)[number]) => number) => lineas.reduce((s, l) => s + f(l), 0)
+  return armarCsvBloques([
+    {
+      titulo: 'Transferencia',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Número', t.numero],
+        ['Estado', ETIQUETA_ESTADO_TRASLADO[t.estado]],
+        ['Origen', SIN_FORMULA(t.origenNombre)],
+        ['Destino', SIN_FORMULA(t.destinoNombre)],
+        ['Nota', SIN_FORMULA(t.nota)],
+        ['Enviada', fechaHoraCsv(t.creadoEn, zonaHoraria)],
+        ['Enviada por', SIN_FORMULA(t.enviadoPorNombre ?? 'Sistema')],
+        ['Cerrada', t.cerradoEn ? fechaHoraCsv(t.cerradoEn, zonaHoraria) : ''],
+        ['Cerrada por', SIN_FORMULA(t.cerradoPorNombre)],
+        ['Motivo del cierre', SIN_FORMULA(t.motivoCierre)],
+        ['Zona horaria', zonaHoraria],
+        ['Productos', lineas.length],
+        ['Unidades enviadas', suma((l) => l.enviado)],
+        ['Unidades recibidas', suma((l) => l.recibido)],
+        ['Unidades devueltas al origen', suma((l) => l.devuelto)],
+        ['Unidades perdidas', suma((l) => l.perdido)],
+        ['Unidades en camino', suma((l) => l.pendiente)],
+      ],
+    },
+    {
+      titulo: 'Líneas',
+      encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Enviado', 'Recibido', 'Devuelto al origen', 'Perdido', 'En camino'],
+      filas: lineas.map((l) => [SIN_FORMULA(l.sku), SIN_FORMULA(l.barcode), SIN_FORMULA(l.nombre), l.enviado, l.recibido, l.devuelto, l.perdido, l.pendiente]),
+    },
+    {
+      titulo: 'Movimientos',
+      encabezados: ['Fecha y hora', 'Movimiento', 'Sucursal', 'SKU', 'Producto', 'Cantidad', 'Usuario', 'Motivo'],
+      filas: t.historial.map((m) => [
+        fechaHoraCsv(m.creadoEn, zonaHoraria),
+        ETIQUETA_TIPO_HISTORIAL[m.tipo] ?? m.tipo,
+        SIN_FORMULA(m.sucursalNombre),
+        SIN_FORMULA(m.sku),
+        SIN_FORMULA(m.producto),
+        m.cantidad,
+        SIN_FORMULA(m.usuarioNombre ?? 'Sistema'),
+        SIN_FORMULA(m.motivo),
       ]),
     },
   ])

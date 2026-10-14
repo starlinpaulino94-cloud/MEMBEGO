@@ -149,6 +149,8 @@ model CatalogVariant {
   receiptLines    InventoryReceiptLine[]
   /// Conteos físicos (INV-2b) en los que se ha contado esta variante.
   countLines      InventoryCountLine[]
+  /// Transferencias con envío (INV-2c) que han llevado esta variante.
+  transferLines   InventoryTransferLine[]
   deals           Deal[]
   /// Pedidos Membego que la piden (Fase 3). RESTRICT: con pedidos no se borra.
   orderLines      MembegoOrderLine[]

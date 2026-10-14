@@ -4,7 +4,7 @@
 > `/admin/inventario`, sus consumidores (pedidos, checkout, POS, ofertas), el cron, las pruebas y la documentación.
 > Se compara con el inventario del Car Wash (`ProductoInventario`), que es OTRO módulo.
 >
-> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a o INV-2b ya lo cerraron** (ver §5, §7 y §9).
+> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b o INV-2c ya lo cerraron** (ver §5, §7, §9 y §11).
 
 ## 1. Veredicto
 
@@ -35,7 +35,7 @@ separa un «control de stock» de un módulo de inventario profesional.
 | Recepción de mercancía múltiple | Una variante, una sucursal, un formulario por vez | Una factura trae 20–50 líneas: son 20–50 envíos | **INV-2a ✔** |
 | Importar existencias (CSV) | No existe | Abrir una tienda con 300 SKU es imposible a mano | **INV-2a ✔** |
 | Sesión de conteo físico por sucursal | Conteo de una variante a la vez | Un inventario real recorre toda la tienda y necesita informe de varianza | **INV-2b ✔** |
-| Transferencias con estado | Inmediatas (salen y entran en la misma transacción) | Entre sucursales reales pasan horas o días: falta «enviada → recibida» y recepción parcial | INV-2c |
+| Transferencias con estado | Inmediatas (salen y entran en la misma transacción) | Entre sucursales reales pasan horas o días: falta «enviada → recibida» y recepción parcial | **INV-2c ✔** |
 | Búsqueda por código de barras | La lista buscaba por nombre y SKU; la variante ya tiene `barcode` | El lector es la forma normal de encontrar un producto en bodega | **INV-1 ✔** |
 
 ### 3.2 Compras y reposición
@@ -101,7 +101,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-1 · Visibilidad** | Movimientos de toda la empresa con filtros y CSV; búsqueda y salto por código de barras; avisos de stock bajo en POS y movimientos manuales; reservas vivas de la empresa; umbral en varias sucursales; estado manual advertido | Sin cambios | S | **Hecha** |
 | **INV-2a · Entradas en volumen** | Documento de entrada con varias líneas, número `ENT-AAAA-NNNNNN`, factura y nota; captura con lector; importación CSV todo o nada (hasta 1.000 filas) con revisión previa y plantilla; lista, detalle y CSV de cada entrada | `InventoryReceipt`, `InventoryReceiptLine` (migración `20261056`) | M | **Hecha** (este documento, §7) |
 | **INV-2b · Conteo físico por sucursal** | Sesión de conteo (una abierta por sucursal), a ciegas, captura por lector o por hoja CSV, informe de diferencias con CSV, ajuste por la diferencia (no por el número), todo o nada | `InventoryCountSession`, `InventoryCountLine` (migración `20261057`) | M | **Hecha** (este documento, §9) |
-| INV-2c · Transferencias con estado | «Con envío»: enviada → parcial/recibida o cancelada; recepción parcial; en tránsito visible en la ficha; aviso al destino. La transferencia directa actual se conserva | `InventoryTransfer`/líneas | M | pendiente |
+| **INV-2c · Transferencias con estado** | «Con envío»: enviada → parcial/recibida o cancelada; recepción parcial; cerrar con faltante y motivo; en tránsito visible en la ficha; aviso a los administradores al enviar. La transferencia directa actual se conserva | `InventoryTransfer`, `InventoryTransferLine` (migración `20261058`) | M | **Hecha** (este documento, §11) |
 | INV-3 · Compras y costo | Proveedores y órdenes de compra; costo unitario en entradas; costo promedio ponderado y valor del inventario; COGS; punto de reorden y lista de qué comprar | Proveedores/OC de Commerce Core; `unitCost` en movimientos | L | pendiente |
 | INV-4 · Reportes | Kardex valorizado, rotación y días de inventario, stock sin movimiento, mermas por motivo codificado, margen real; tarjeta de dashboard | Catálogo de motivos | M | pendiente |
 | INV-5 · Trazabilidad | Lotes y vencimiento con FEFO; series; kits que descuentan componentes; API v1; rol de bodega | Lotes, kits | L por pieza | pendiente |
@@ -347,3 +347,127 @@ Hallazgos de la propia verificación:
   al ledger, vaciarlo junto con las líneas de entrada y de conteo sigue frenado por su disparador.
 - Medido contra la base local, no contra Supabase: la latencia de red por consulta no está en esos tiempos (el número de
   consultas de aplicar no crece con las líneas).
+
+## 11. INV-2c · qué se hizo
+
+> Tercera y última de las partes de INV-2. Decisiones aprobadas que aplican aquí: la transferencia directa de siempre se
+> CONSERVA y se añade la «con envío»; lo enviado queda **en tránsito** (no disponible en ninguna sucursal) hasta que se
+> recibe; recepciones parciales; cancelar devuelve al origen lo que sigue en camino; cerrar con faltante exige motivo; el
+> destino se entera al enviar; documentos inmutables una vez cerrados; y la misma función de permiso `transferir`, sin
+> funciones nuevas. El costo sigue fuera (INV-3).
+
+- **Una transferencia con envío es un documento** — `/admin/inventario/transferencias`. Número `TRF-AAAA-NNNNNN`, sucursal
+  que envía y que recibe, nota, quién la envió y hasta 200 productos. Estados **En camino → Recibida en parte → Recibida**,
+  o **Cancelada**; ninguno se salta (la tabla de transiciones está en el código y, igual, en un disparador de la base).
+- **Enviar** — `enviarTrasladoEnTx`, todo o nada y en una transacción: bloquea los saldos del origen en orden de id, vence
+  las reservas caducadas que nadie ha barrido y comprueba que cada línea tenga lo vendible. Lo **apartado no se envía**. Si
+  alguna línea no alcanza, **no sale ninguna** y el error lista todas las que fallan (y no se gasta un número). Cada
+  línea es un movimiento `TRANSFER_OUT` del ledger enlazado a su línea. El destino tiene que estar activo. Enviar dos veces
+  lo mismo —también a la vez— crea UNA transferencia; la misma clave con otro contenido se rechaza.
+- **En tránsito** — las unidades salieron del origen y no están en el destino: no son disponibles en ninguna parte, ni
+  suman en los totales. Se ven en la lista («En camino ahora»), en el detalle de la transferencia y en una tarjeta aparte
+  de la **ficha del producto** («En camino entre sucursales») con un enlace a cada transferencia. Las unidades se
+  conservan: sucursales + en camino + perdidas = lo que había (lo comprueban las pruebas tras cada operación).
+- **Recibir** — `recibirTrasladoEnTx`: el destino indica cuántas llegaron de cada línea (o «recibir todo lo pendiente»).
+  Cada recepción es un movimiento `TRANSFER_IN` y la transferencia pasa a «Recibida en parte» o, al llegar lo último, a
+  «Recibida». No se puede recibir más de lo que falta. Si el destino se cerró, el mensaje manda a cancelar. Una recepción
+  repetida (misma clave) no suma dos veces, ni siquiera con la transferencia ya cerrada.
+- **Cerrar con faltante** — lo que no llegó se da por **perdido**, con un **motivo obligatorio** (queda en el documento y en
+  el historial); las unidades perdidas no vuelven a ningún saldo. Recibida con faltante es un estado final.
+- **Cancelar** — lo que sigue en camino **vuelve al origen** (aunque el origen se haya cerrado); lo ya recibido se queda
+  donde está. Cancelar dos veces no repite nada; recibir y cancelar a la vez: gana uno, el otro recibe «cerrada».
+- **Avisos** — al enviar se avisa a los administradores de la empresa («Transferencia en camino», con el número, las
+  unidades, el origen y el destino, y un enlace), después de responder y sin bloquear el envío; un reintento idéntico no
+  avisa dos veces (clave de deduplicación por transferencia). Es un aviso a toda la administración de la empresa, no
+  solo a quien atiende la sucursal que recibe: el modelo de permisos no distingue a los encargados por sucursal.
+- **CSV** — `/transferencias/[id]/exportar`: encabezado, líneas (enviado, recibido, devuelto, perdido, en camino) y los
+  movimientos del ledger que produjo; con la defensa contra fórmulas de Excel de los demás CSV.
+- **La transferencia directa no cambia** — sigue saliendo y entrando en el mismo instante desde la ficha. Lo único que
+  cambió es que ahora crea los saldos que falten **en orden fijo** (ver §12: un interbloqueo que ya existía y se encontró
+  al probar las cruzadas).
+- **Degradación** — con la migración sin aplicar, las pantallas dicen exactamente eso (`describirFalloDeCarga`), la ficha
+  del producto sigue funcionando sin su tarjeta de «en camino» (se lee en su propia transacción, con su propio `try`) y
+  `/api/health` lo reporta (`inventory_transfers.esquema`).
+
+Archivos principales: `prisma/schema/inventario.prisma`, `prisma/migrations/20261058_inventory_transfers/`,
+`src/modules/inventory/traslados.ts` (puro) + `service`, `queries`, `filtros`, `exportacion`, `actions`,
+`src/components/inventario/{EnviarTransferenciaForm,RecibirTransferenciaForm}.tsx`,
+`src/app/(admin)/admin/inventario/transferencias/` y la tarjeta de la ficha `src/app/(admin)/admin/inventario/[varianteId]/page.tsx`.
+
+### Cómo aplicar la migración (obligatorio y en este orden)
+
+1. **SQL primero**: copiar `prisma/migrations/20261058_inventory_transfers/migration.sql` al SQL Editor de Supabase y
+   ejecutarlo (aditivo e idempotente: se puede correr dos veces). Solo crea objetos nuevos; requiere que ya existan las
+   tablas del ledger y las de catálogo y sucursales (las de INV-2a e INV-2b NO son necesarias).
+2. **Después el código**. Un código desplegado antes deja las pantallas de transferencias con un mensaje claro y el resto
+   intacto, pero enviar una transferencia con envío fallaría.
+3. Verificar con `npm run db:doctor` y `/api/health` (debe listar `inventory_transfers.esquema` en verde).
+
+## 12. Verificación de INV-2c (2026-10-14)
+
+Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`; la migración nueva aplicada con `prisma migrate deploy`
+sobre las 214 anteriores —215 en total—, re-ejecutada decenas de veces sobre una base ya migrada sin error —es lo que
+restauró cada mutación— y `prisma migrate diff` contra el esquema sin diferencias; no se tocó ninguna base real). Sin Supabase
+real, Vercel, lector de código de barras físico, móvil ni Safari: **no verificados**.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (los avisos son preexistentes) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; las 4 rutas nuevas compiladas; entrada compartida 856/1000 KB (86 %), trozo mayor 409/600 KB (sin cambio frente a INV-2b) |
+| Unitarias (`bun run test`) | 4267 pruebas: 4260 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest` como en CI) | 715/715, cero omitidas |
+| Pruebas nuevas | 11 puras (`inventario-traslados.test.ts`), 8 guardias nuevas (`inventario-permisos.test.ts`, ya 50), 19 contra PostgreSQL (`inventory-traslados.db.test.ts`) y un recorrido E2E nuevo |
+| E2E (`bun run e2e:limpio`, escritorio) | 69/69 sobre la compilación final: `inventario-admin` (8, con el recorrido nuevo), `comercio-experiencia`, `pedidos-membego`, `pos-membego`, `carrito-checkout`, `catalogo-admin`, `catalogo-api` y `catalogo-publico` |
+| Mutaciones | 74 de 76 detectadas (ver abajo) |
+| Rendimiento (local, sin latencia de red) | 200 líneas: enviar ≈ 0,16–0,23 s, recibir en parte ≈ 0,11–0,13 s, cerrar ≈ 0,13 s, frente a los 45 s de una transacción |
+
+Qué cubre el recorrido E2E: pestaña vacía → «Nueva transferencia» con un lector (se ve lo que hay en el origen y no deja
+pasar de ahí) → enviar: queda «En camino», el origen baja y el destino no sube → la ficha del producto muestra «En camino
+entre sucursales» aparte de los totales → aviso a los administradores → la lista («En camino ahora») → recibir una parte
+(«Recibida en parte»; más de lo que falta no deja) → cerrar con faltante (sin motivo no deja; con motivo queda «Recibida» y
+lo perdido) → su CSV → cancelar otra (lo que seguía en camino vuelve al origen) → recibir todo de una vez → la lista y sus
+filtros → id inventado, CSV de un id inventado, sin sesión y empresa sin la capacidad.
+
+Qué cubren las 19 pruebas contra PostgreSQL: envío que saca del origen sin sumar en el destino ni en ningún disponible;
+todo o nada (una línea que no alcanza no deja salir ninguna y no gasta número); lo apartado no se envía (ni una reserva
+vencida que nadie barrió); mismo envío 5 veces a la vez = una transferencia; recibir en partes; cerrar con faltante con
+motivo; cancelar devolviendo solo lo pendiente; recepción repetida; destino cerrado; dos recepciones a la vez y recibir
+contra cancelar a la vez (las unidades se conservan); envíos cruzados A→B y B→A con saldos nuevos (12 rondas) y la
+transferencia directa cruzada (25 rondas); los estados, los contadores y las columnas que identifican a una transferencia
+o a una línea (una por una); las claves únicas y las claves foráneas compuestas escritas por fuera del servicio; la lista
+con sus filtros y sin cruzar empresas; y 200 líneas dentro del tiempo de una transacción.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Un interbloqueo que ya existía, en la transferencia DIRECTA.** Al probar los envíos cruzados con saldos que aún no
+  existen, la transferencia directa de siempre (A→B contra B→A) también se interbloqueaba: cada una insertaba primero el
+  saldo de SU origen y se esperaban entre sí (el mismo mecanismo que en INV-2a). Pasaba desapercibido porque la prueba
+  existente cruzaba productos que ya tenían saldo en las dos sucursales. Corregido creando los dos saldos en orden fijo
+  de sucursal; la prueba nueva (13b, 25 rondas) falla **3 de 3** sin ese orden y pasa con él. Es un cambio al código
+  de la transferencia que ya estaba en producción: no cambia ningún resultado, solo el orden en que se crean los saldos
+  que faltan.
+- **Mutaciones**: 76 en total, 74 detectadas. Al principio sobrevivían **13** que no eran equivalentes y obligaron a reforzar pruebas: la base no
+  tenía probadas sus claves únicas (número, clave de idempotencia, movimiento de salida, producto por transferencia), ni
+  sus claves foráneas compuestas (producto de otra empresa, línea de otra empresa), ni que los contadores de devuelto y
+  perdido no bajan (solo se probaba el de recibido), ni que cada columna que identifica a la transferencia o a la línea
+  esté protegida (se probaban dos), ni que «recibida en parte» no vuelve a «enviada», ni que el `DELETE` falla por su
+  propio motivo (fallaba por otro de la misma familia sin que nadie lo notara), ni el mensaje de una transferencia
+  cancelada. Las 2 que siguen vivas son equivalentes: el `TRUNCATE` propio del disparador de la cabecera (como las líneas
+  apuntan a ella, vaciarla exige vaciar también las líneas, cuyo disparador lo frena) y el filtro de estado abierto en
+  «en camino» (una transferencia cerrada siempre tiene 0 pendiente).
+- **Los mensajes de Prisma no traen el nombre de la restricción en las violaciones de unicidad** (`Key (…) already
+  exists`, código 23505), solo en las de clave foránea: las pruebas de unicidad reconocen la columna, no el índice.
+- **La prueba del ledger** (`inventory.db.test.ts`, 12) se actualizó otra vez: al apuntar también las líneas de
+  transferencia al ledger, vaciarlo junto con las líneas de entrada, de conteo y de transferencia sigue frenado por su
+  disparador.
+- **El orden de bloqueo se tuvo en cuenta desde el diseño** por lo aprendido en INV-2a: se bloquea primero el documento,
+  luego los saldos por id; los saldos que faltan se crean en orden fijo; la idempotencia se comprueba DESPUÉS de los
+  candados; y una guardia estática lo comprueba en el código del servicio.
+- **Una limitación de diseño, a propósito**: el aviso al enviar llega a toda la administración de la empresa, no a un
+  encargado concreto de la sucursal que recibe, porque el modelo de permisos no distingue encargados por sucursal. Si
+  hace falta, es un cambio de INV-5 (rol de bodega).
+- Medido contra la base local, no contra Supabase: la latencia de red por consulta no está en esos tiempos (el número de
+  consultas de enviar, recibir y cancelar no crece con las líneas: son lotes).
+- En esta máquina el servidor de E2E imprime muchos `fetch failed … 127.0.0.1:54329` (Supabase Auth inexistente en el
+  arnés): ruido previo, no afecta a los resultados.
+
