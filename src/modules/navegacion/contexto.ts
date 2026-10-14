@@ -46,6 +46,10 @@ const CAPACIDADES_DEL_MENU: readonly CapacidadNav[] = [
   'CATALOGO_UNIFICADO',
   'PEDIDOS_MEMBEGO',
   'DEALS_MARKETPLACE',
+  // Supplier Lite: sin esto, «Entregas Membego» (capacidad MEMBEGO_SUPPLIER)
+  // desaparecía del menú de TODA empresa cuyas capacidades cargaran, porque
+  // `capacidadVisible` filtra contra esta lista.
+  'MEMBEGO_SUPPLIER',
 ]
 
 const VERTICALES: readonly TipoEmpresaNav[] = [

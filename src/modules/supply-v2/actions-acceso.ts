@@ -1,0 +1,188 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { escaparHtml } from '@/lib/html'
+import { SITE_NAME, appUrlFor } from '@/lib/site'
+import { sinEmpresa } from '@/lib/tenant'
+import { encolarEmail } from '@/modules/jobs/emisiones'
+import { exigirPermisoSupplyV2, exigirProveedorSupplyV2, FUNCION_PORTAL } from './permisos'
+import { comoError, contextoDeAuditoria, refrescarSupplyV2, texto, type EstadoAccion } from './actions-util'
+import { RUTA_PORTAL_PROVEEDOR } from './core/catalogo'
+import {
+  aceptarContratoDeProveedorEnTx,
+  codigoDePruebaEnTx,
+  darDeBajaAccesoEnTx,
+  dispensarPreparacionEnTx,
+  invitarDuenoDeProveedorEnTx,
+  invitarPersonalDeProveedorEnTx,
+  reactivarAccesoEnTx,
+  reevaluarPreparacionEnTx,
+  suspenderAccesoEnTx,
+  type InvitacionDePersonal,
+  type InvitacionDeProveedor,
+} from './suppliers/acceso'
+import { PRESETS_ROL_PROVEEDOR, esRolDeProveedor, type Preparacion } from './suppliers/acceso-dominio'
+
+/**
+ * SUPPLIER & FULFILLMENT COMMERCE · Slice 1 · server actions del acceso.
+ *
+ * Superadmin: invitar al dueño, suspender, reactivar, dar de baja, dispensar.
+ * Proveedor (portal): aceptar el contrato, pedir un código de prueba, invitar
+ * a su personal. Cada action: GUARDIA → REGLA (en el módulo) → BITÁCORA
+ * (misma transacción) → correo FUERA de la transacción.
+ */
+
+const DIAS_VALIDEZ = 7
+
+function refrescarProveedor(supplierId: string): void {
+  refrescarSupplyV2('proveedores', `proveedores/${supplierId}`)
+  revalidatePath(RUTA_PORTAL_PROVEEDOR)
+  revalidatePath(`${RUTA_PORTAL_PROVEEDOR}/configuracion`)
+  revalidatePath(`${RUTA_PORTAL_PROVEEDOR}/personal`)
+}
+
+async function mandarCorreoDeInvitacion(d: { email: string; companyName: string; token: string; dueno: boolean }): Promise<void> {
+  const nombreSeguro = escaparHtml(d.companyName)
+  const url = appUrlFor(`/invitacion/${d.token}`)
+  const titulo = d.dueno ? `Activa el portal de proveedor de ${d.companyName} en ${SITE_NAME}` : `Te invitaron al equipo de ${d.companyName} en ${SITE_NAME}`
+  const intro = d.dueno
+    ? `${SITE_NAME} compra productos y servicios a ${nombreSeguro}. Activa tu cuenta para ver lo contratado, escanear los QR de los clientes y registrar tus entregas y ventas adicionales.`
+    : `${nombreSeguro} te invitó a su equipo de proveedor en ${SITE_NAME}. Crea tu cuenta para empezar.`
+  await encolarEmail({
+    to: d.email,
+    subject: titulo,
+    html: `
+      <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:#0f172a">
+        <h1 style="font-size:20px;margin:0 0 8px">${d.dueno ? 'Tu portal de proveedor' : 'Únete al equipo'}</h1>
+        <p style="font-size:15px;line-height:1.5;color:#334155;margin:0 0 24px">${intro}</p>
+        <a href="${url}" style="display:inline-block;background:#0ea5e9;color:#fff;text-decoration:none;font-weight:600;padding:12px 24px;border-radius:10px">Activar mi cuenta</a>
+        <p style="font-size:12px;color:#94a3b8;margin:24px 0 0">La invitación expira en ${DIAS_VALIDEZ} días. Si no la esperabas, ignora este correo.</p>
+      </div>`,
+    text: `${intro.replace(/<[^>]+>/g, '')} Activa aquí: ${url}`,
+  })
+}
+
+// ── Superadmin ───────────────────────────────────────────────────────────────
+
+export async function invitarDuenoDeProveedorAction(_prev: EstadoAccion<InvitacionDeProveedor>, fd: FormData): Promise<EstadoAccion<InvitacionDeProveedor>> {
+  try {
+    const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SUPPLIER_MANAGE')
+    const ctx = await contextoDeAuditoria(actor)
+    const supplierId = texto(fd, 'supplierId', 60)
+    const email = texto(fd, 'email', 160)
+    if (!email) return { error: 'Escribe el correo del dueño del proveedor.' }
+    const inv = await sinEmpresa('Supply: invitar al dueño del proveedor a su portal', (tx) => invitarDuenoDeProveedorEnTx(tx, { supplierId, email }, ctx))
+    await mandarCorreoDeInvitacion({ email: inv.email, companyName: inv.companyName, token: inv.token, dueno: true })
+    refrescarProveedor(supplierId)
+    return { success: inv.reenviada ? `Invitación reenviada a ${inv.email}.` : `Invitación enviada a ${inv.email}.${inv.empresaCreada ? ' Se creó su empresa Supplier Lite (sin vitrina).' : ''}`, id: inv.supplierId, data: inv }
+  } catch (e) {
+    return comoError(e, 'invitarDuenoDeProveedor')
+  }
+}
+
+export async function suspenderAccesoProveedorAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
+  try {
+    const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SUPPLIER_MANAGE')
+    const ctx = await contextoDeAuditoria(actor)
+    const supplierId = texto(fd, 'supplierId', 60)
+    const motivo = texto(fd, 'motivo', 500)
+    if (!motivo) return { error: 'Escribe el motivo de la suspensión.' }
+    await sinEmpresa('Supply: suspender el acceso de un proveedor', (tx) => suspenderAccesoEnTx(tx, { supplierId, motivo }, ctx))
+    refrescarProveedor(supplierId)
+    return { success: 'Acceso suspendido: el proveedor no puede entrar a su portal hasta reactivarlo.', id: supplierId }
+  } catch (e) {
+    return comoError(e, 'suspenderAccesoProveedor')
+  }
+}
+
+export async function reactivarAccesoProveedorAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
+  try {
+    const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SUPPLIER_MANAGE')
+    const ctx = await contextoDeAuditoria(actor)
+    const supplierId = texto(fd, 'supplierId', 60)
+    await sinEmpresa('Supply: reactivar el acceso de un proveedor', (tx) => reactivarAccesoEnTx(tx, { supplierId, motivo: texto(fd, 'motivo', 500) || null }, ctx))
+    refrescarProveedor(supplierId)
+    return { success: 'Acceso reactivado.', id: supplierId }
+  } catch (e) {
+    return comoError(e, 'reactivarAccesoProveedor')
+  }
+}
+
+export async function darDeBajaAccesoProveedorAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
+  try {
+    const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SUPPLIER_MANAGE')
+    const ctx = await contextoDeAuditoria(actor)
+    const supplierId = texto(fd, 'supplierId', 60)
+    const motivo = texto(fd, 'motivo', 500)
+    if (!motivo) return { error: 'Escribe el motivo de la baja.' }
+    await sinEmpresa('Supply: dar de baja el acceso de un proveedor', (tx) => darDeBajaAccesoEnTx(tx, { supplierId, motivo }, ctx))
+    refrescarProveedor(supplierId)
+    return { success: 'Acceso dado de baja. Sus acuerdos y su historial se conservan.', id: supplierId }
+  } catch (e) {
+    return comoError(e, 'darDeBajaAccesoProveedor')
+  }
+}
+
+export async function dispensarPreparacionAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
+  try {
+    const actor = await exigirPermisoSupplyV2('SUPPLY_V2_SUPPLIER_MANAGE')
+    const ctx = await contextoDeAuditoria(actor)
+    const supplierId = texto(fd, 'supplierId', 60)
+    await sinEmpresa('Supply: dispensar la lista de preparación de un proveedor', (tx) => dispensarPreparacionEnTx(tx, { supplierId, motivo: texto(fd, 'motivo', 500) }, ctx))
+    refrescarProveedor(supplierId)
+    return { success: 'Preparación dispensada: el proveedor puede recibir acuerdos y ofertas nuevos.', id: supplierId }
+  } catch (e) {
+    return comoError(e, 'dispensarPreparacion')
+  }
+}
+
+// ── Portal del proveedor ─────────────────────────────────────────────────────
+
+export async function aceptarContratoProveedorAction(_prev: EstadoAccion<Preparacion>, _fd: FormData): Promise<EstadoAccion<Preparacion>> {
+  try {
+    const p = await exigirProveedorSupplyV2(FUNCION_PORTAL.configuracion)
+    const ctx = await contextoDeAuditoria(p)
+    const r = await sinEmpresa('Supply: el dueño del proveedor acepta el contrato', async (tx) => {
+      const a = await aceptarContratoDeProveedorEnTx(tx, { supplierId: p.supplierId, userId: p.id }, ctx)
+      return { ...a, preparacion: await reevaluarPreparacionEnTx(tx, p.supplierId, ctx) }
+    })
+    refrescarProveedor(p.supplierId)
+    return { success: r.yaAceptado ? 'El contrato ya estaba aceptado.' : 'Contrato aceptado.', data: r.preparacion }
+  } catch (e) {
+    return comoError(e, 'aceptarContratoProveedor')
+  }
+}
+
+export async function generarCodigoDePruebaAction(_prev: EstadoAccion<{ codigo: string }>, _fd: FormData): Promise<EstadoAccion<{ codigo: string }>> {
+  try {
+    const p = await exigirProveedorSupplyV2(FUNCION_PORTAL.configuracion)
+    const codigo = await sinEmpresa('Supply: código de prueba del escáner del proveedor', (tx) => codigoDePruebaEnTx(tx, p.supplierId))
+    refrescarProveedor(p.supplierId)
+    return { success: 'Código de prueba listo: escanéalo o escríbelo en el escáner.', data: { codigo } }
+  } catch (e) {
+    return comoError(e, 'generarCodigoDePrueba')
+  }
+}
+
+export async function invitarPersonalProveedorAction(_prev: EstadoAccion<InvitacionDePersonal>, fd: FormData): Promise<EstadoAccion<InvitacionDePersonal>> {
+  try {
+    const p = await exigirProveedorSupplyV2(FUNCION_PORTAL.personal)
+    const ctx = await contextoDeAuditoria(p)
+    const email = texto(fd, 'email', 160)
+    const rol = texto(fd, 'rol', 40)
+    if (!email) return { error: 'Escribe el correo de la persona.' }
+    if (!esRolDeProveedor(rol)) return { error: 'Elige el rol dentro del proveedor.' }
+    if (rol === 'SUPPLIER_OWNER' && !['ADMINISTRADOR', 'ADMIN_EMPRESA', 'SUPERADMIN'].includes(p.user.metadata.role)) {
+      return { error: 'Solo el dueño puede invitar a otro dueño.' }
+    }
+    const inv = await sinEmpresa('Supply: el proveedor invita a su personal', (tx) =>
+      invitarPersonalDeProveedorEnTx(tx, { supplierId: p.supplierId, companyId: p.companyId, email, rol }, ctx)
+    )
+    await mandarCorreoDeInvitacion({ email: inv.email, companyName: inv.companyName, token: inv.token, dueno: false })
+    refrescarProveedor(p.supplierId)
+    revalidatePath('/admin/empleados')
+    return { success: `${inv.reenviada ? 'Invitación reenviada' : 'Invitación enviada'} a ${inv.email} como ${PRESETS_ROL_PROVEEDOR[rol].label.toLowerCase()}.`, data: inv }
+  } catch (e) {
+    return comoError(e, 'invitarPersonalProveedor')
+  }
+}

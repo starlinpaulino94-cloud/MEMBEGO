@@ -547,6 +547,20 @@ enum AuditAccion {
   AUTO_RESPUESTA_ACTUALIZADA
   /// Se eliminó una respuesta automática.
   AUTO_RESPUESTA_ELIMINADA
+
+  // Supplier & Fulfillment Commerce · acceso operativo del proveedor (Supplier Lite).
+  /// El superadmin invitó al dueño del proveedor a su portal (y creó/vinculó su empresa).
+  SUPPLY_V2_SUPPLIER_INVITED
+  /// El acceso del proveedor cambió de estado (pendiente, activo, suspendido, baja); el payload lleva de dónde a dónde.
+  SUPPLY_V2_SUPPLIER_ACCESS_CHANGED
+  /// El dueño aceptó el contrato marco desde el portal.
+  SUPPLY_V2_SUPPLIER_TERMS_ACCEPTED
+  /// Un operador del proveedor completó la prueba del escáner.
+  SUPPLY_V2_SUPPLIER_QR_TESTED
+  /// El superadmin dispensó la lista de preparación (proveedor histórico o excepción con motivo).
+  SUPPLY_V2_SUPPLIER_READINESS_WAIVED
+  /// El dueño del proveedor invitó a alguien de su personal con un rol de proveedor.
+  SUPPLY_V2_SUPPLIER_STAFF_INVITED
 }
 
 // ─────────────────────────────────────────────
@@ -671,6 +685,7 @@ model User {
   supplyVentasEntregadas       SupplyVentaDirecta[]       @relation("SupplyVentaEntregadaPor")
   // ── Membego Supply 2.0 (supply-v2.prisma) ─────────────────────────────────
   supplyV2ProveedoresCreados   SupplyV2Supplier[]           @relation("SupplyV2SupplierCreatedBy")
+  supplyV2ContratosAceptados   SupplyV2Supplier[]           @relation("SupplyV2SupplierTermsAcceptedBy")
   supplyV2AcuerdosCreados      SupplyV2Agreement[]          @relation("SupplyV2AgreementCreatedBy")
   supplyV2AcuerdosAprobados    SupplyV2Agreement[]          @relation("SupplyV2AgreementApprovedBy")
   supplyV2VersionesCreadas     SupplyV2AgreementVersion[]   @relation("SupplyV2AgreementVersionCreatedBy")

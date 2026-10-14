@@ -173,6 +173,13 @@ export const ACCION_LABEL: Record<string, string> = {
   SUPPLY_PEDIDO_REEMBOLSADO: 'Supply · cobro reembolsado',
   // Membego Supply · Slice 1 (procurement).
   SUPPLY_V2_SUPPLIER_CREATED: 'Supply · proveedor creado',
+  // Supplier & Fulfillment Commerce · acceso operativo (Supplier Lite).
+  SUPPLY_V2_SUPPLIER_INVITED: 'Supply · dueño del proveedor invitado a su portal',
+  SUPPLY_V2_SUPPLIER_ACCESS_CHANGED: 'Supply · acceso del proveedor cambiado',
+  SUPPLY_V2_SUPPLIER_TERMS_ACCEPTED: 'Supply · contrato de proveedor aceptado',
+  SUPPLY_V2_SUPPLIER_QR_TESTED: 'Supply · prueba del escáner completada',
+  SUPPLY_V2_SUPPLIER_READINESS_WAIVED: 'Supply · preparación del proveedor dispensada',
+  SUPPLY_V2_SUPPLIER_STAFF_INVITED: 'Supply · personal del proveedor invitado',
   SUPPLY_V2_CATALOG_ITEM_CREATED: 'Supply · producto del proveedor creado',
   SUPPLY_V2_AGREEMENT_CREATED: 'Supply · acuerdo creado',
   SUPPLY_V2_AGREEMENT_ACTIVATED: 'Supply · acuerdo activado',

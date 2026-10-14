@@ -6,10 +6,12 @@ import type { SupplyV2IncidentType } from '@prisma/client'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
 import { sinEmpresa } from '@/lib/tenant'
-import { exigirCliente, exigirPermisoSupplyV2, exigirProveedorSupplyV2 } from './permisos'
+import { exigirCliente, exigirPermisoSupplyV2, exigirProveedorSupplyV2, FUNCION_PORTAL } from './permisos'
+import { esCodigoDePrueba } from './suppliers/acceso-dominio'
+import { registrarPruebaDeEscanerEnTx } from './suppliers/acceso'
 import { comoError, contextoDeAuditoria, refrescarSupplyV2, texto, type EstadoAccion } from './actions-util'
 import { RUTA_COMPRAS_CLIENTE, RUTA_PORTAL_PROVEEDOR } from './core/catalogo'
-import { MENSAJES_RECHAZO, normalizarCodigoLeido, type RedeemPreview } from './redemption/domain'
+import { MENSAJES_RECHAZO, normalizarCodigoLeido, previewRechazado, type RedeemPreview } from './redemption/domain'
 import {
   abrirSesionQrEnTx,
   confirmarEntregaEnTx,
@@ -67,17 +69,28 @@ export async function usarBeneficioAction(_prev: EstadoAccion<QrParaMostrar>, fd
 
 // ── Proveedor: escanear (preview) y confirmar (§15–§19, §22–§26) ────────────
 
-export interface PreviewParaEscaner extends RedeemPreview {
+export type PreviewParaEscaner = RedeemPreview & {
   /** El código tal como se validó, para reenviarlo al confirmar. */
   nonce?: string
+  /** Fue la prueba del escáner (código TEST-…), no un beneficio. */
+  prueba?: boolean
 }
 
 export async function escanearBeneficioAction(_prev: EstadoAccion<PreviewParaEscaner>, fd: FormData): Promise<EstadoAccion<PreviewParaEscaner>> {
   try {
-    const p = await exigirProveedorSupplyV2()
+    const p = await exigirProveedorSupplyV2(FUNCION_PORTAL.escanear)
     if (!(await limiteEscaneo(p.id))) return { error: MENSAJES_RECHAZO.RATE_LIMITED }
     const ctx = await contextoDeAuditoria(p)
-    const nonce = normalizarCodigoLeido(texto(fd, 'codigo', 200))
+    const leido = texto(fd, 'codigo', 200)
+    // Supplier Lite (§8 «QR probado»): un código TEST-… es la prueba del escáner, no un beneficio.
+    if (esCodigoDePrueba(leido.trim())) {
+      const prueba = await sinEmpresa('Supply: el proveedor prueba su escáner', (tx) =>
+        registrarPruebaDeEscanerEnTx(tx, { supplierId: p.supplierId, userId: p.id, codigo: leido.trim() }, ctx)
+      )
+      refrescarPortal()
+      return prueba?.ok ? { success: prueba.mensaje, data: { ...previewRechazado('INVALID_QR'), message: prueba.mensaje, prueba: true } } : { error: prueba?.mensaje ?? MENSAJES_RECHAZO.INVALID_QR }
+    }
+    const nonce = normalizarCodigoLeido(leido)
     const branchId = texto(fd, 'branchId', 60) || null
     const preview = await sinEmpresa('Supply: el proveedor resuelve un QR', (tx) =>
       previsualizarCanjeEnTx(tx, { nonce, empleado: { userId: p.id, companyId: p.companyId, supplierId: p.supplierId }, branchId }, ctx)
@@ -91,7 +104,7 @@ export async function escanearBeneficioAction(_prev: EstadoAccion<PreviewParaEsc
 
 export async function confirmarEntregaAction(_prev: EstadoAccion<EntregaConfirmada>, fd: FormData): Promise<EstadoAccion<EntregaConfirmada>> {
   try {
-    const p = await exigirProveedorSupplyV2()
+    const p = await exigirProveedorSupplyV2(FUNCION_PORTAL.escanear)
     if (!(await limiteEscaneo(p.id))) return { error: MENSAJES_RECHAZO.RATE_LIMITED }
     const ctx = await contextoDeAuditoria(p)
     const meta = await getRequestMeta()
@@ -113,7 +126,7 @@ export async function confirmarEntregaAction(_prev: EstadoAccion<EntregaConfirma
 
 export async function registrarIncidenciaAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
   try {
-    const p = await exigirProveedorSupplyV2()
+    const p = await exigirProveedorSupplyV2(FUNCION_PORTAL.escanear)
     const ctx = await contextoDeAuditoria(p)
     const tipo = texto(fd, 'type', 40) as SupplyV2IncidentType
     if (!INCIDENT_TYPES.includes(tipo)) return { error: 'Elige el tipo de incidencia.' }

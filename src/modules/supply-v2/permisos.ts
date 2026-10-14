@@ -1,5 +1,6 @@
 import 'server-only'
 
+import type { SupplyV2SupplierAccessStatus } from '@prisma/client'
 import type { SessionUser } from '@/types'
 import { getUser } from '@/lib/auth'
 import { requireSection } from '@/lib/auth/guards'
@@ -67,22 +68,43 @@ export interface ProveedorSupplyV2 {
   companyId: string
   supplierId: string
   supplierName: string
+  accessStatus: SupplyV2SupplierAccessStatus
 }
 
-export async function proveedorDeLaSesion(): Promise<ProveedorSupplyV2 | null> {
-  const user = await requireSection('supply')
+/**
+ * Funciones del portal del proveedor (catálogo en `src/lib/auth/funciones.ts`,
+ * presets en `suppliers/acceso-dominio.ts`). Cada server action del portal
+ * exige la suya: el dueño las trae todas; un operador no ve liquidaciones y
+ * finanzas no escanea.
+ */
+export const FUNCION_PORTAL = {
+  escanear: 'escanear',
+  ventas_adicionales: 'ventas_adicionales',
+  inventario: 'inventario',
+  liquidaciones: 'liquidaciones',
+  personal: 'personal',
+  configuracion: 'configuracion',
+  solicitud_merchant: 'solicitud_merchant',
+} as const
+export type FuncionPortal = (typeof FUNCION_PORTAL)[keyof typeof FUNCION_PORTAL]
+
+export async function proveedorDeLaSesion(funcion?: FuncionPortal): Promise<ProveedorSupplyV2 | null> {
+  const user = await requireSection('supply', funcion)
   if (!user) return null
   const companyId = user.metadata.companyId
   if (!companyId || !user.metadata.dbUserId) return null
   const supplier = await sinEmpresa('Supply: resolver el proveedor de la empresa de la sesión', (tx) =>
-    tx.supplyV2Supplier.findUnique({ where: { companyId }, select: { id: true, status: true, commercialName: true } })
+    tx.supplyV2Supplier.findUnique({ where: { companyId }, select: { id: true, status: true, commercialName: true, accessStatus: true } })
   )
   if (!supplier || supplier.status !== 'ACTIVE') return null
-  return { user, id: user.metadata.dbUserId, companyId, supplierId: supplier.id, supplierName: supplier.commercialName }
+  // Supplier Lite: un acceso suspendido o dado de baja cierra el portal entero;
+  // DRAFT (histórico) y ACTIVATION_PENDING entran, para completar su preparación.
+  if (supplier.accessStatus === 'SUSPENDED' || supplier.accessStatus === 'TERMINATED') return null
+  return { user, id: user.metadata.dbUserId, companyId, supplierId: supplier.id, supplierName: supplier.commercialName, accessStatus: supplier.accessStatus }
 }
 
-export async function exigirProveedorSupplyV2(): Promise<ProveedorSupplyV2> {
-  const p = await proveedorDeLaSesion()
-  if (!p) throw new Error('Tu empresa no está habilitada para entregar beneficios de Membego Supply.')
+export async function exigirProveedorSupplyV2(funcion?: FuncionPortal): Promise<ProveedorSupplyV2> {
+  const p = await proveedorDeLaSesion(funcion)
+  if (!p) throw new Error(funcion ? 'No tienes permiso para esta función del portal del proveedor.' : 'Tu empresa no está habilitada para entregar beneficios de Membego Supply.')
   return p
 }

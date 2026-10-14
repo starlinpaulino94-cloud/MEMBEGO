@@ -17,6 +17,9 @@ import { TimelineFinanciero } from '@/components/supply-v2/finanzas/timeline-fin
 import { dineroSupplyV2, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 import { AGREEMENT_TYPE_LABELS, CATALOG_ITEM_TYPE_LABELS, SUPPLIER_SOURCE_LABELS } from '@/modules/supply-v2/core/catalogo'
 import { sinEmpresa } from '@/lib/tenant'
+import { AccesoProveedor } from '@/components/supply-v2/proveedores/acceso-proveedor'
+import { preparacionDelProveedorEnTx } from '@/modules/supply-v2/suppliers/acceso'
+import { clasificarProveedor } from '@/modules/supply-v2/suppliers/acceso-dominio'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +32,8 @@ export default async function ProveedorDetallePage({ params }: { params: Promise
   const { id } = await params
   const [p, fin] = await Promise.all([fichaProveedor(id), perfilFinancieroProveedor(id)])
   if (!p) notFound()
+  // Supplier Lite: la lista de preparación del acceso operativo (§8).
+  const preparacion = await sinEmpresa('Supply: preparación del acceso del proveedor', (tx) => preparacionDelProveedorEnTx(tx, p.id))
 
   // Lo que la empresa ya vende en Membego, para el vínculo opcional del producto.
   const existentes: VinculoExistente[] = p.companyId
@@ -67,6 +72,27 @@ export default async function ProveedorDetallePage({ params }: { params: Promise
         <StatCard label="Valor disponible" value={formatMoneyRD(p.resumen.valorDisponible)} accent="brand" />
         <StatCard label="Compras" value={p.purchaseOrders.length.toLocaleString('es-DO')} sub={`${p.agreements.filter((a) => a.status === 'ACTIVE').length} acuerdos vigentes`} />
       </div>
+
+      <Card data-testid="acceso-portal">
+        <CardHeader>
+          <CardTitle>Acceso al portal del proveedor</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AccesoProveedor
+            supplierId={p.id}
+            accessStatus={p.accessStatus}
+            clase={clasificarProveedor(p)}
+            invitedEmail={p.invitedEmail}
+            invitedAt={p.invitedAt ? formatDate(p.invitedAt) : null}
+            activatedAt={p.activatedAt ? formatDate(p.activatedAt) : null}
+            readinessWaivedReason={p.readinessWaivedReason}
+            accessStatusReason={p.accessStatusReason}
+            emailSugerido={p.email}
+            preparacion={preparacion}
+            companyName={p.company?.name ?? null}
+          />
+        </CardContent>
+      </Card>
 
       {fin && (
         <Card data-testid="perfil-financiero">
