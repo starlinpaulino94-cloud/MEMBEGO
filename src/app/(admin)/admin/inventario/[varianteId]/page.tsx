@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { AlertTriangle, ChevronLeft, Coins, Truck } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, Coins, ShoppingCart, Truck } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { puedeFuncion, requireRole } from '@/lib/auth/guards'
@@ -10,9 +10,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { PageHeader } from '@/components/ui/page-header'
 import { detalleVarianteEnTx, enTransitoDeVarianteEnTx, historialDeVarianteEnTx, reservasVivasEnTx, type EnTransitoDeVariante } from '@/modules/inventory/queries'
 import { advertenciaEstadoManual, formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
-import { formatDateTime } from '@/lib/format'
+import { formatDate, formatDateTime } from '@/lib/format'
+import { pedidoEnCaminoDeVarianteEnTx, proveedoresActivosEnTx, proveedoresDeVarianteEnTx, type OpcionProveedor, type PedidoDeVariante, type ProveedorDeProducto } from '@/modules/inventory/compras-queries'
 import { costoDeVarianteEnTx, type CostoDeVarianteVista } from '@/modules/inventory/valor'
 import { CorregirCostoForm } from '@/components/inventario/CorregirCostoForm'
+import { ProveedoresDeProductoCard } from '@/components/inventario/ProveedoresDeProductoCard'
 import { SucursalInventarioCard } from '@/components/inventario/SucursalInventarioCard'
 import { TransferirForm } from '@/components/inventario/TransferirForm'
 import { HistorialMovimientos } from '@/components/inventario/HistorialMovimientos'
@@ -47,7 +49,7 @@ export default async function InventarioVariantePage({ params }: { params: Promi
       console.error('[admin-inventario-ficha] lo que va en camino no está disponible', e instanceof Error ? e.message : e)
     }
   }
-  const [puedeAjustar, puedeTransferir, puedeCostos] = await Promise.all([puedeFuncion('inventario', 'ajustar'), puedeFuncion('inventario', 'transferir'), puedeFuncion('inventario', 'costos')])
+  const [puedeAjustar, puedeTransferir, puedeCostos, puedeComprar] = await Promise.all([puedeFuncion('inventario', 'ajustar'), puedeFuncion('inventario', 'transferir'), puedeFuncion('inventario', 'costos'), puedeFuncion('inventario', 'comprar')])
   // El costo y el valor (INV-3a): solo con la función `costos`, y leído —como lo que va en camino— en su PROPIA transacción y con
   // su propio try: si algo falla, la ficha sigue funcionando sin esta tarjeta.
   let costo: CostoDeVarianteVista | null = null
@@ -56,6 +58,21 @@ export default async function InventarioVariantePage({ params }: { params: Promi
       costo = await conEmpresa(companyId, (tx) => costoDeVarianteEnTx(tx, companyId, varianteId))
     } catch (e) {
       console.error('[admin-inventario-ficha] el costo no está disponible', e instanceof Error ? e.message : e)
+    }
+  }
+
+  // Los proveedores del producto y lo que está pedido (INV-3b): solo con la función `comprar` (traen costos) y, como lo anterior,
+  // en su PROPIA transacción y con su propio try: si la migración de compras aún no se aplicó, la ficha sigue funcionando.
+  let compras: { proveedores: ProveedorDeProducto[]; opciones: OpcionProveedor[]; pedido: PedidoDeVariante } | null = null
+  if (puedeComprar && detalle.controlaInventario) {
+    try {
+      compras = await conEmpresa(companyId, async (tx) => ({
+        proveedores: await proveedoresDeVarianteEnTx(tx, companyId, varianteId),
+        opciones: await proveedoresActivosEnTx(tx, companyId),
+        pedido: await pedidoEnCaminoDeVarianteEnTx(tx, companyId, varianteId),
+      }))
+    } catch (e) {
+      console.error('[admin-inventario-ficha] los proveedores no están disponibles', e instanceof Error ? e.message : e)
     }
   }
 
@@ -156,6 +173,33 @@ export default async function InventarioVariantePage({ params }: { params: Promi
         </Card>
       )}
 
+      {compras && compras.pedido.total > 0 && (
+        <Card aria-label="Lo que está pedido a proveedores">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShoppingCart className="h-4 w-4" aria-hidden />
+              Pedido a proveedores ({formatearCantidad(compras.pedido.total)})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y text-sm" aria-label="Órdenes de compra con este producto por llegar">
+              {compras.pedido.ordenes.map((o) => (
+                <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span>
+                    {formatearCantidad(o.pendiente)} de {o.proveedorNombre} para {o.sucursalNombre}
+                    {o.previstaEn && <span className="text-xs text-muted-foreground"> · prevista {formatDate(o.previstaEn, { zonaHoraria: 'UTC' })}</span>}
+                  </span>
+                  <Link href={`/admin/inventario/compras/${o.id}`} className="text-xs underline underline-offset-2">
+                    {o.numero}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <p className="pt-2 text-xs text-muted-foreground">Ya se pidió y todavía no ha llegado: no está en el inventario, así que no suma en los totales de arriba.</p>
+          </CardContent>
+        </Card>
+      )}
+
       {costo && (
         <Card aria-label="Costo y valor del producto">
           <CardHeader className="pb-2">
@@ -219,6 +263,24 @@ export default async function InventarioVariantePage({ params }: { params: Promi
             <p className="text-xs text-muted-foreground">
               Corregir el costo cambia lo que vale el inventario y el costo de las ventas desde ahora; las ventas y movimientos que ya ocurrieron conservan el costo con que se valoraron.
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {compras && (
+        <Card aria-label="Proveedores de este producto">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShoppingCart className="h-4 w-4" aria-hidden />
+              Proveedores
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ProveedoresDeProductoCard
+              varianteId={detalle.varianteId}
+              opciones={compras.opciones}
+              proveedores={compras.proveedores.map((p) => ({ ...p, ultimoCostoEn: p.ultimoCostoEn ? formatDate(p.ultimoCostoEn) : null }))}
+            />
           </CardContent>
         </Card>
       )}

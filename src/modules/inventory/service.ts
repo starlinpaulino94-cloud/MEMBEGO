@@ -1062,6 +1062,8 @@ export interface EntradaMultiple {
   idempotencyKey?: string | null
   /** Tope de líneas; el de una importación es mayor que el de una captura a mano. */
   maxLineas?: number
+  /** INV-3b: la orden de compra a la que responde esta entrada (solo la pone `recibirOrdenEnTx`). */
+  ordenCompraId?: string | null
   /** Para pruebas: el «ahora» del número correlativo y la fecha. */
   ahora?: Date
 }
@@ -1143,13 +1145,14 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
   if (clave) {
     const previa = await tx.inventoryReceipt.findFirst({
       where: { companyId, idempotencyKey: clave },
-      select: { id: true, number: true, locationId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantity: true, unitCost: true } } },
+      select: { id: true, number: true, locationId: true, purchaseOrderId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantity: true, unitCost: true } } },
     })
     if (previa) {
-      // El costo es parte de la operación: la misma clave con otro costo no es un reintento.
+      // El costo es parte de la operación: la misma clave con otro costo no es un reintento. Tampoco lo es la que responde a otra orden.
       const costoDe = (d: { toFixed(n: number): string } | null) => (d === null ? null : costoADecimal(costoDeDecimal(d)))
       const mismas =
         previa.locationId === sucursal.id &&
+        previa.purchaseOrderId === (e.ordenCompraId ?? null) &&
         previa.lines.length === validas.lineas.length &&
         validas.lineas.every((l) => previa.lines.some((p) => p.catalogVariantId === l.varianteId && p.quantity === l.cantidad && costoDe(p.unitCost) === (l.costo ?? null)))
       if (!mismas) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra entrada distinta.')
@@ -1195,6 +1198,7 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
         idempotencyKey: clave,
         lineCount: validas.lineas.length,
         unitCount: validas.unidades,
+        purchaseOrderId: e.ordenCompraId ?? null,
       },
       select: { id: true },
     })

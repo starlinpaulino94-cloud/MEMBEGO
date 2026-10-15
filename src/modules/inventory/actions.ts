@@ -45,6 +45,23 @@ import { InventarioError } from './errores'
 import type { InformeImportacion } from './importacion'
 import { aplicarImportacionDeConteoEnTx, aplicarImportacionEnTx, informeDeConteoImportadoEnTx, informeDeImportacionEnTx } from './importar'
 import { buscarVariantesParaEntradaEnTx, historialDeVarianteEnTx, type HistorialPagina, type VarianteBuscable } from './queries'
+import { buscarProductosParaOrdenEnTx, type ProductoParaOrden } from './compras-queries'
+import {
+  actualizarProveedorEnTx,
+  cambiarActivoProveedorEnTx,
+  cancelarOrdenEnTx,
+  crearProveedorEnTx,
+  desvincularProveedorEnTx,
+  guardarOrdenEnTx,
+  pedirOrdenEnTx,
+  recibirOrdenEnTx,
+  vincularProveedorEnTx,
+  type ResultadoOrden,
+  type ResultadoPedir,
+  type ResultadoProveedor,
+  type ResultadoRecepcionOrden,
+  type ResultadoVinculo,
+} from './compras-service'
 import {
   abrirConteoEnTx,
   cancelarTrasladoEnTx,
@@ -702,6 +719,186 @@ export async function corregirCostoInventario(entrada: { varianteId: string; cos
     const r = await conEmpresa(c.companyId, (tx) => corregirCostoEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), costo: entrada.costo, motivo: entrada.motivo }, c.ctx))
     refrescar()
     return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+// ── INV-3b · proveedores y órdenes de compra ─────────────────────────────────
+//
+// La función es `comprar`. Recibir mercancía de una orden es una entrada de mercancía (con costo) y por eso mueve el stock
+// y el costo promedio, pero lo decide quien compra: no se le pide además `ajustar` ni `costos`. Lo que SÍ hace falta es
+// `comprar`, que es también la que deja ver los costos de las órdenes.
+
+const SIN_DATOS = { ok: false, error: 'Datos no válidos.' } as const
+
+/** Crea un proveedor: nombre y, si se quiere, RNC, contacto, teléfono, correo, días de crédito y notas. */
+export async function crearProveedor(datos: { nombre: string; rnc?: string | null; contacto?: string | null; telefono?: string | null; correo?: string | null; diasCredito?: number | string | null; notas?: string | null }): Promise<ResultadoInventario<ResultadoProveedor>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(datos)) return SIN_DATOS
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => crearProveedorEnTx(tx, c.companyId, datos, c.ctx))
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+export async function actualizarProveedor(entrada: { proveedorId: string; datos: { nombre: string; rnc?: string | null; contacto?: string | null; telefono?: string | null; correo?: string | null; diasCredito?: number | string | null; notas?: string | null } }): Promise<ResultadoInventario<ResultadoProveedor>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada) || !esObjeto(entrada.datos)) return SIN_DATOS
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => actualizarProveedorEnTx(tx, c.companyId, { proveedorId: texto(entrada.proveedorId), datos: entrada.datos }, c.ctx))
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Desactiva o reactiva un proveedor: uno desactivado no recibe pedidos nuevos, pero conserva su historial y se siguen recibiendo sus órdenes en curso. */
+export async function cambiarActivoProveedor(entrada: { proveedorId: string; activo: boolean }): Promise<ResultadoInventario<{ nombre: string; activo: boolean; cambiado: boolean }>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return SIN_DATOS
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => cambiarActivoProveedorEnTx(tx, c.companyId, { proveedorId: texto(entrada.proveedorId), activo: entrada.activo === true }, c.ctx))
+    refrescar()
+    return { ok: true, nombre: r.nombre, activo: r.activo, cambiado: r.cambiado }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Crea una orden en borrador, o reemplaza el contenido de uno (`ordenId`). Un borrador no mueve stock ni costos. */
+export async function guardarOrdenCompra(entrada: {
+  ordenId?: string | null
+  cabecera: { proveedorId: string; sucursalId: string; referencia?: string | null; nota?: string | null; fechaPrevista?: string | null }
+  lineas: { varianteId: string; cantidad: number; costo: string }[]
+  clave?: string | null
+}): Promise<ResultadoInventario<ResultadoOrden>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada) || !esObjeto(entrada.cabecera)) return SIN_DATOS
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, costo: l?.costo })) : []
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      guardarOrdenEnTx(tx, c.companyId, { ordenId: clave(entrada.ordenId), cabecera: entrada.cabecera, lineas, idempotencyKey: clave(entrada.clave) }, c.ctx)
+    )
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Pide la orden al proveedor: desde aquí sus líneas no cambian. */
+export async function pedirOrdenCompra(entrada: { ordenId: string }): Promise<ResultadoInventario<ResultadoPedir>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return SIN_DATOS
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => pedirOrdenEnTx(tx, c.companyId, { ordenId: texto(entrada.ordenId) }, c.ctx))
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Cancela un borrador (se descarta) o una orden pedida sin nada recibido (con motivo). */
+export async function cancelarOrdenCompra(entrada: { ordenId: string; motivo?: string | null }): Promise<ResultadoInventario<{ numero: string; repetido: boolean }>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return SIN_DATOS
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => cancelarOrdenEnTx(tx, c.companyId, { ordenId: texto(entrada.ordenId), motivo: entrada.motivo }, c.ctx))
+    refrescar()
+    return { ok: true, numero: r.numero, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * Registra lo que llegó de una orden pedida: parte de las líneas o todo lo que falte. Cada tanda es una entrada de
+ * mercancía con el costo de la orden. Lo que no llegue se sigue esperando o se cierra con faltante (motivo obligatorio).
+ */
+export async function recibirOrdenCompra(entrada: {
+  ordenId: string
+  lineas?: { varianteId: string; cantidad: number }[]
+  todo?: boolean
+  cerrarConFaltante?: boolean
+  motivo?: string | null
+  referencia?: string | null
+  nota?: string | null
+  clave?: string | null
+}): Promise<ResultadoInventario<ResultadoRecepcionOrden>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return SIN_DATOS
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : undefined
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      recibirOrdenEnTx(
+        tx,
+        c.companyId,
+        { ordenId: texto(entrada.ordenId), lineas, todo: entrada.todo === true, cerrarConFaltante: entrada.cerrarConFaltante === true, motivo: entrada.motivo, referencia: entrada.referencia, nota: entrada.nota, idempotencyKey: clave(entrada.clave) },
+        c.ctx
+      )
+    )
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Busca productos que controlan inventario para añadir a una orden; trae el último costo al que se le compró al proveedor. */
+export async function buscarProductosParaOrden(q: string, sucursalId: string | null, proveedorId: string | null): Promise<ResultadoInventario<{ productos: ProductoParaOrden[] }>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof q !== 'string' || (sucursalId !== null && typeof sucursalId !== 'string') || (proveedorId !== null && typeof proveedorId !== 'string')) return SIN_DATOS
+  try {
+    const productos = await conEmpresa(c.companyId, (tx) => buscarProductosParaOrdenEnTx(tx, c.companyId, q, sucursalId || null, proveedorId || null))
+    return { ok: true, productos }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** Registra que un proveedor surte un producto (su código, días de entrega y si es el preferido). */
+export async function vincularProveedorDeProducto(entrada: { varianteId: string; proveedorId: string; codigoProveedor?: string | null; diasEntrega?: number | string | null; preferido?: boolean }): Promise<ResultadoInventario<ResultadoVinculo>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return SIN_DATOS
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      vincularProveedorEnTx(
+        tx,
+        c.companyId,
+        { varianteId: texto(entrada.varianteId), proveedorId: texto(entrada.proveedorId), datos: { codigoProveedor: entrada.codigoProveedor, diasEntrega: entrada.diasEntrega, preferido: entrada.preferido === true } },
+        c.ctx
+      )
+    )
+    refrescar()
+    return { ok: true, ...r }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+export async function desvincularProveedorDeProducto(entrada: { varianteId: string; proveedorId: string }): Promise<ResultadoInventario<{ quitado: boolean }>> {
+  const c = await contexto('comprar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return SIN_DATOS
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => desvincularProveedorEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), proveedorId: texto(entrada.proveedorId) }, c.ctx))
+    refrescar()
+    return { ok: true, quitado: r.quitado }
   } catch (e) {
     return aError(e)
   }

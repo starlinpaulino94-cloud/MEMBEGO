@@ -13,6 +13,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { BotonExportar } from '@/components/ui/boton-exportar'
 import { PageHeader } from '@/components/ui/page-header'
 import { entradaDetalleEnTx } from '@/modules/inventory/queries'
+import { ordenDeEntradaEnTx, type OrdenDeEntrada } from '@/modules/inventory/compras-queries'
 import { formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 import { describirFalloDeCarga } from '@/modules/inventory/errores-pantalla'
 
@@ -45,6 +46,16 @@ export default async function EntradaInventarioPage({ params }: { params: Promis
   // «No existe» y «es de otra empresa» se ven igual a propósito.
   if (!datos?.entrada) notFound()
   const { entrada, zona } = datos
+  // La orden de compra que la produjo (INV-3b): solo con la función `comprar`, y en su PROPIA transacción y con su propio try:
+  // si la migración de compras aún no se aplicó, la entrada se ve igual, solo que sin este enlace.
+  let orden: OrdenDeEntrada | null = null
+  if (await puedeFuncion('inventario', 'comprar')) {
+    try {
+      orden = await conEmpresa(companyId, (tx) => ordenDeEntradaEnTx(tx, companyId, id))
+    } catch (e) {
+      console.error('[admin-inventario-entrada] la orden de compra no está disponible', e instanceof Error ? e.message : e)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -79,9 +90,18 @@ export default async function EntradaInventarioPage({ params }: { params: Promis
         ))}
       </div>
 
-      {(entrada.referencia || entrada.nota) && (
+      {(entrada.referencia || entrada.nota || orden) && (
         <Card>
           <CardContent className="space-y-1 p-4 text-sm">
+            {orden && (
+              <p>
+                <span className="text-muted-foreground">Orden de compra: </span>
+                <Link href={`/admin/inventario/compras/${orden.id}`} className="underline underline-offset-2">
+                  {orden.numero}
+                </Link>{' '}
+                <span className="text-muted-foreground">({orden.proveedorNombre})</span>
+              </p>
+            )}
             {entrada.referencia && (
               <p>
                 <span className="text-muted-foreground">Factura o referencia: </span>

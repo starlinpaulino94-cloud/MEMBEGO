@@ -693,7 +693,7 @@ export interface EntradasPagina {
 }
 
 /** Nombres de las personas detrás de un conjunto de ids de usuario (los que ya no existen, no salen). */
-async function nombresDeUsuarios(tx: Tx, ids: readonly (string | null)[]): Promise<Map<string, string>> {
+export async function nombresDeUsuarios(tx: Tx, ids: readonly (string | null)[]): Promise<Map<string, string>> {
   const unicos = [...new Set(ids.filter((x): x is string => Boolean(x)))]
   if (unicos.length === 0) return new Map()
   const us = await tx.user.findMany({ where: { id: { in: unicos } }, select: { id: true, name: true, email: true } })

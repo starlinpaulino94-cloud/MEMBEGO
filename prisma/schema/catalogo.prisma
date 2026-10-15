@@ -158,6 +158,10 @@ model CatalogVariant {
   inventoryCost   InventoryVariantCost?
   /// Correcciones de su costo promedio (INV-3a).
   costAdjustments InventoryCostAdjustment[]
+  /// Líneas de órdenes de compra (INV-3b) que lo piden.
+  purchaseOrderLines InventoryPurchaseOrderLine[]
+  /// Proveedores que lo surten (INV-3b).
+  supplierLinks   InventoryVariantSupplier[]
   deals           Deal[]
   /// Pedidos Membego que la piden (Fase 3). RESTRICT: con pedidos no se borra.
   orderLines      MembegoOrderLine[]
