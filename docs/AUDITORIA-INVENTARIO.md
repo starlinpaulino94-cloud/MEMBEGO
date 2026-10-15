@@ -4,7 +4,7 @@
 > `/admin/inventario`, sus consumidores (pedidos, checkout, POS, ofertas), el cron, las pruebas y la documentación.
 > Se compara con el inventario del Car Wash (`ProductoInventario`), que es OTRO módulo.
 >
-> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a, INV-3b, INV-3c, INV-4a o INV-4b ya lo cerraron** (ver §5, §7, §9, §11, §13, §15, §17, §19 y §21).
+> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a, INV-3b, INV-3c, INV-4a, INV-4b o INV-4c ya lo cerraron** (ver §5, §7, §9, §11, §13, §15, §17, §19, §21 y §23).
 
 ## 1. Veredicto
 
@@ -51,7 +51,7 @@ agrupado por proveedor, y crea borradores de orden. Sigue sin haber pronóstico 
 `CatalogVariant.cost` es un costo fijo; los movimientos no llevaban costo, así que no había costo promedio, valor del
 inventario por sucursal, costo de ventas (COGS) ni mermas valorizadas. → **INV-3a ✔** (costo promedio ponderado, valor del
 inventario, costo de ventas del mes y corrección de costo; ver §13). **El kardex con sus entradas y salidas valoradas: INV-4a ✔**
-(ver §19). **Las mermas valoradas por motivo: INV-4b ✔** (ver §21). Sigue pendiente, en INV-4c, el margen real.
+(ver §19). **Las mermas valoradas por motivo: INV-4b ✔** (ver §21). **El margen real, precio contra costo congelado: INV-4c ✔** (ver §23).
 
 ### 3.4 Historial y reportes
 
@@ -63,7 +63,7 @@ inventario, costo de ventas del mes y corrección de costo; ver §13). **El kard
 | Reservas vivas de la empresa | Solo por variante, máximo 50 | **INV-1 ✔** |
 | Kardex, rotación, stock sin movimiento | `modules/reportes` tiene 20 reportes y ninguno es de inventario | **INV-4a ✔** (kardex con entradas y salidas valoradas, stock sin ventas, rotación y cobertura) |
 | Motivos codificados y mermas por motivo | Los motivos eran texto libre, imposibles de sumar | **INV-4b ✔** (catálogo de motivos en el ledger e informe «Mermas por motivo») |
-| Margen real, tarjeta de dashboard | No se cruza costo con precio | INV-4c |
+| Margen real, tarjeta de dashboard | No se cruzaba costo con precio; el dashboard no enseñaba inventario más que el stock bajo | **INV-4c ✔** (informe «Margen real» y tarjeta «Inventario» del dashboard) |
 
 ### 3.5 Avisos
 
@@ -113,7 +113,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-3c · Reposición** | «Llenar hasta» por producto y sucursal (junto al umbral que ya existía; tiene que quedar por encima de él); pestaña «Reposición» con la cantidad sugerida —lo disponible más lo pedido que no ha llegado más lo que va en camino se descuentan; un borrador no—, agrupada por proveedor y sucursal, con filtros y CSV, que crea borradores de orden con el último costo de cada proveedor. Sin función nueva (`comprar` para ver y crear, `ajustar` para fijar el objetivo) | `targetStock` en el saldo (migración `20261066`) | S | **Hecha** (este documento, §17) |
 | **INV-4a · Informes de existencias** | Kardex de un producto (entradas, salidas y saldo, con lo que valieron si se tiene la función `costos`), stock sin ventas (qué tiene existencias y no se vende, y cuánto dinero tiene parado), rotación y cobertura (cuánto se vende, cuántas veces rota, para cuántos días alcanza; costo de ventas y días de inventario con `costos`), todos con filtros y CSV. Sin función de permiso nueva | Sin cambios (todo se lee del ledger) | M | **Hecha** (este documento, §19) |
 | **INV-4b · Motivos codificados** | Catálogo de 14 motivos (vencido, robo, pérdida, muestra, consumo interno, devuelto al proveedor, diferencia de conteo, apareció mercancía, error de captura, golpe, mal almacenamiento, daño en el transporte, defecto de fábrica y «otro») que el ajuste, el daño y la baja **exigen** elegir; el texto libre queda como detalle. Los conteos escriben solos «diferencia de conteo». Informe «Mermas por motivo» (lo perdido, los sobrantes y lo dañado, cada uno por motivo, con unidades y —con `costos`— lo que valieron), con filtros y CSV; el motivo se ve en Movimientos, en el historial de la ficha y en el kardex (pantalla y CSV). Sin función de permiso nueva | `reasonCode` en el movimiento (migración `20261067`) | M | **Hecha** (este documento, §21) |
-| INV-4c · Margen real | Margen real por producto (precio de venta contra el costo congelado de lo vendido) y tarjeta de inventario en el dashboard | Sin cambios previstos | S | pendiente |
+| **INV-4c · Margen real** | Informe «Margen real» (solo con la función `costos`): por producto, lo cobrado (precio de la línea del pedido menos su descuento) contra el costo que el ledger congeló al vender, con margen y porcentaje; lo que no se puede comparar (sin costo, reembolsado, en otra moneda, sin pedido) se enseña aparte, nunca como cero; filtros, cinco órdenes y CSV. Tarjeta «Inventario» en el dashboard: valor, margen del mes y lo perdido (unidades para quien no tiene `costos`). Sin función de permiso nueva | **Ninguno** (todo se lee del ledger y de los pedidos) | S | **Hecha** (este documento, §23) |
 | INV-5 · Trazabilidad | Lotes y vencimiento con FEFO; series; kits que descuentan componentes; API v1; rol de bodega | Lotes, kits | L por pieza | pendiente |
 
 ## 5. INV-1 · qué se hizo
@@ -1256,3 +1256,151 @@ Hallazgos de la propia verificación (importa que se sepan):
 Aspecto visual y móvil; un ledger grande; Supabase real (incluida la aplicación real del SQL y el comportamiento del `/api/health`
 contra esa base); lector de código de barras físico; Safari. El informe **no incluye** las pérdidas en tránsito de las
 transferencias ni motivos propios por empresa (ver §21), y lo anterior a la migración sale «Sin motivo codificado».
+
+## 23. INV-4c · qué se hizo
+
+> Última parte de INV-4. **No hay migración ni SQL que aplicar y no hay función de permiso nueva**: el margen se calcula de lo que ya
+> estaba guardado —los movimientos de venta del ledger, con el costo que congelaron (INV-3a), y las líneas de los pedidos, con su
+> precio—. Se puede desplegar sin tocar la base. Lo único: la tarjeta del dashboard usa lo perdido (INV-4b, SQL `20261067`) y el costo
+> (INV-3a, `20261059`); mientras alguno falte, la tarjeta no aparece —y el dashboard sigue funcionando— y el informe de margen dice que
+> «necesita una actualización de la base de datos» en vez de fallar.
+
+**El problema.** El inventario sabía lo que costaba cada venta (INV-3a) y los pedidos sabían a cuánto se vendió, pero nadie los cruzaba:
+no había forma de ver «de este producto cobré tanto y me costó tanto» ni de ver, de un vistazo, cómo va el inventario en el
+dashboard.
+
+**Lo que hay ahora.**
+
+- **Informe «Margen real»** (`/admin/inventario/reportes/margen`, quinta tarjeta del hub «Reportes»). Para un rango de días (por
+  defecto los últimos 30, días LOCALES de la empresa, ambos incluidos), producto por producto: unidades vendidas, **ingresos**, **costo**,
+  **margen** (ingresos menos costo; negativo si se vendió por debajo del costo) y **margen %** (el margen entre lo cobrado). Con
+  filtros de sucursal y de producto (nombre, SKU o código de barras), cinco órdenes (más margen, **menos margen primero** —lo que se vende
+  bajo el costo—, mejor porcentaje, más ingresos, más unidades), 50 productos por página y CSV con los mismos filtros (hasta 20.000
+  productos, con un resumen que dice si el archivo está completo).
+  - *Ingresos* = el precio de cada línea del pedido menos su descuento (`lineTotal`). **No incluye impuestos ni el ajuste del pedido**
+    (que no se reparte entre líneas). Solo cuentan pedidos **completados**.
+  - *Costo* = el costo promedio que el ledger congeló en el movimiento de venta, no el de hoy.
+  - *De dónde se unen*: la venta es un movimiento `SALE` cuya referencia es el pedido; se agrupa por (pedido, variante) y se une a la
+    línea de ese pedido para esa variante. Si el ledger vendió solo una parte de la línea, el ingreso es esa parte (nunca la línea
+    entera ni más).
+  - ***Lo que NO entra al margen* —y se enseña aparte, con el porqué—**: (1) **las unidades sin costo conocido**: ni con costo cero, que
+    inflaría el margen al 100 %; se cuentan con lo que se cobró por ellas, y el margen y el porcentaje se calculan solo sobre lo que
+    tiene costo; (2) **los pedidos reembolsados**, devuelvan o no la mercancía al inventario (lo cobrado se devolvió: no fue una
+    venta); (3) **los pedidos en otra moneda** que la de la empresa (el costo del inventario está en la moneda de la empresa; comparar
+    sería inventar un margen); (4) **las ventas sin pedido** que diga a cuánto se vendieron (una venta a mano, o una que cita un
+    pedido que no existe, que no es de ese tipo o donde ese producto no tiene línea).
+- **Solo con la función `costos`.** Un margen es costo contra precio: sin la función no hay una versión «sin dinero» que enseñar. La
+  pantalla lo dice («No tienes permiso para ver costos ni el margen»), **la lectura ni se ejecuta**, el botón de descarga no existe, el
+  archivo responde 403 (`requireSection('inventario', 'costos')`, antes de tocar la base) y el hub no ofrece la tarjeta del informe.
+  Los otros cuatro informes siguen enseñando unidades y días sin ella.
+- **Tarjeta «Inventario» en el dashboard.** Debajo de «Comercio Membego»: **valor del inventario** (con las unidades y las que no tienen
+  costo), **margen del mes** (con su porcentaje, las unidades vendidas y cuántas no entran por no tener costo) y **perdido este mes**
+  (faltantes y bajas de lo dañado: unidades, movimientos y lo que valieron). Cada cifra lleva a su informe. Es la misma cuenta de
+  «Valor», «Margen real» y «Mermas por motivo», no una estimación aparte; el mes es el calendario de la empresa. **Quien puede ver la
+  sección Inventario pero no tiene `costos` ve «Unidades en existencia» y «Perdido este mes» en unidades**: ni el valor, ni el margen,
+  ni lo que costó lo perdido (con la función apagada no se lee ni un costo). Quien no puede ver la sección no ve la tarjeta, y si la
+  lectura falla el dashboard sigue (la tarjeta simplemente no sale).
+- **Un refactor pequeño de 4b** para no duplicar SQL: `mermas-queries.ts` expone `perdidoEnRangoEnTx` (el total de lo perdido en un
+  rango) con la misma agregación del informe de mermas; las pruebas de mermas siguen intactas.
+
+### Lo que NO hace (a propósito, o pendiente)
+
+- **No es una utilidad contable.** El margen es bruto sobre el producto: no resta la comisión del marketplace, las comisiones de
+  cobro, los impuestos ni los gastos. Y no tiene por qué coincidir con el «costo de ventas» de la pantalla de Valor (que incluye
+  devoluciones sueltas y ventas sin precio) ni con «Ventas Membego del mes» del dashboard (que suma el total de los pedidos con
+  impuestos): son cuentas distintas (la pantalla del margen lo explica respecto a «Valor»).
+- **Un reembolso sin devolver la mercancía al inventario** sale del margen y queda visible como «Pedidos reembolsados»; no es una merma
+  en el informe de mermas (el ledger no tiene un ajuste para eso). Quien necesite verlo como pérdida tiene que dar de baja la mercancía.
+- **El margen de un periodo pasado puede cambiar** si después se reembolsa un pedido de ese periodo (en ese momento deja de ser venta).
+- **No hay conversión de monedas**: lo vendido en otra moneda queda fuera, con sus unidades y su costo a la vista.
+- **No hay margen por categoría, por cliente ni por canal, ni comparación contra el periodo anterior, ni precio sugerido.** El margen
+  es por producto (variante) y por rango.
+- **Las ventas anteriores a INV-3a no tienen costo congelado**: salen como «sin costo» (no se reconstruyen).
+- La búsqueda de productos del informe neutraliza los comodines (`%`, `_`); la de INV-2 sigue sin hacerlo (observación que no se tocó).
+
+Archivos principales: `src/modules/inventory/{margen,margen-queries,dashboard}.ts` (lo puro, las lecturas y el resumen del dashboard),
+`mermas-queries.ts` (`perdidoEnRangoEnTx`), `filtros.ts`, `exportacion.ts` (`margenToCsv`),
+`src/app/(admin)/admin/inventario/reportes/{page.tsx,margen/}` (+ `margen/exportar/`), `src/components/admin/TarjetaInventario.tsx` y
+`src/app/(admin)/admin/dashboard/page.tsx`.
+
+### Cómo desplegar
+
+No hay migración: el código se despliega solo. Las SQL pendientes de entregas anteriores (`20261059`, `20261060`, `20261066`,
+`20261067`) siguen siendo necesarias si aún no se aplicaron; la tarjeta del dashboard y el margen necesitan `20261059` (costos) y la tarjeta
+además `20261067` (motivos, para lo perdido).
+
+## 24. Verificación de INV-4c (2026-10-15)
+
+Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`). **No hay migración nueva**, así que no se tocó el esquema ni ninguna base
+real. Sin Supabase real, Vercel, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ven las pantallas** (el informe, la
+tarjeta del dashboard y el hub): el recorrido E2E comprueba qué dicen y qué hacen, no su aspecto; ni capturas ni revisión visual en
+móvil. **Tampoco se midió con un ledger grande**: el informe cruza los movimientos de venta de un rango con las líneas de sus pedidos
+(índices `(companyId, createdAt)` en el ledger y `orderId` en las líneas, que ya existían; no se creó ninguno) y la tarjeta hace unas
+pocas consultas agregadas (valor, margen del mes y lo perdido) por visita al dashboard; se probó que cuentan bien, no cuánto tardan con millones de movimientos ni con la latencia de una
+base remota.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; 2 rutas nuevas compiladas (una página y una descarga); entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB; indicador general 8.905/9.200 KB (97 %), igual que en INV-4b |
+| Unitarias (`bun run test`) | 4514 pruebas: 4507 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest` como en CI) | **893/893** (en esta corrida también pasó el archivo que a veces falla bajo carga, `supply-v2-slice9`). Las pruebas de margen y de mermas se repitieron después del último retoque de pantalla: 30/30 |
+| Pruebas nuevas | 19 puras (`inventario-margen.test.ts`), 3 guardias nuevas (`inventario-permisos.test.ts`, ya 97; y una de 4b que se adaptó al refactor, más estricta), 19 contra PostgreSQL (`inventory-margen.db.test.ts`) y un recorrido E2E nuevo; el recorrido de `inventario-admin` ya cuenta 14 y su aserción del hub pasó de 4 a 5 informes (y a 4 sin `costos`) |
+| E2E (`bun run e2e:limpio`, escritorio) | **75/75** en la corrida combinada final: `inventario-admin` (14), `comercio-experiencia`, `pedidos-membego`, `pos-membego`, `carrito-checkout`, `catalogo-admin`, `catalogo-api` y `catalogo-publico`. La primera corrida falló en el recorrido nuevo (ver abajo) |
+| Mutaciones | 122 en tres capas: 114 detectadas a la primera y 8 sobrevivieron (5 pruebas o guardas débiles, 1 código muerto, 1 equivalente y 1 que solo ve la capa estática); ver abajo |
+
+Qué cubre el recorrido E2E: el hub ofrece «Margen real» → el resumen (ingresos 600, costo 440 —lo vendido sin costo no suma—, margen
+−40 con signo menos de verdad, −10,0 % y el aviso de las 5 unidades sin costo con lo que se cobró por ellas) → producto por producto de
+lo que más margen dejó a lo que menos (con «Bajo el costo» y «5 sin costo») → lo reembolsado fuera del margen y a la vista → ordenar por
+«menos margen primero» y buscar un producto → el CSV (el negativo como número, el filtro por producto, lo reembolsado) → la tarjeta del
+dashboard (valor 2.620 con las 7 unidades sin costo, margen del mes, 3 unidades perdidas por 180) y su enlace al informe → y con
+`costos` negada el informe avisa sin ninguna cifra, el archivo da 403 y la tarjeta enseña solo unidades.
+
+Qué cubren las 19 pruebas contra PostgreSQL, **con el flujo real de pedidos** (crear → listo → completar por QR → reembolsar): el margen de
+cada producto con descuento de línea, dos sucursales, bajo el costo, centavos y costos de cuatro decimales (exactos); lo vendido sin costo
+(aparte, no como cero); los totales (la base excluye lo sin costo; el porcentaje sale del total, no del promedio de porcentajes); lo que no
+entra —reembolsado devolviendo o sin devolver la mercancía, otra moneda, venta sin pedido, venta que cita un pedido con otro tipo de
+referencia o donde el producto no tiene línea— y que la clase más informativa decide primero; una línea que el ledger vendió a medias; los
+cinco órdenes y el orden fijo con empates; el rango (por defecto exactamente 30 días: hace 29 entra, hace 30 no; primer y último día en el
+calendario de la empresa); los filtros (sucursal, nombre, SKU, código de barras, comodines, sucursal ajena); páginas y archivo con 52
+productos; que los totales son exactamente la suma de las filas con cualquier filtro; el cambio de moneda de la empresa; el aislamiento
+entre empresas; y la tarjeta del dashboard (valor, margen del mes, lo perdido, con y sin la función de costos; el límite del mes; una
+empresa vacía).
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **La primera corrida del E2E encontró un defecto real de la pantalla, no de la prueba**: el margen en dinero usaba el signo menos de verdad
+  (`−40.00`) y el porcentaje negativo salía con un guion corto (`-10.0 %`), así que el mismo margen se leía distinto en una cifra y en la
+  otra. Se corrigió con un formateador compartido (`formatearPorcentaje`) en la pantalla y en la tarjeta, con sus pruebas y sus mutaciones.
+  En esa corrida 72 pasaron, 1 falló y 2 no llegaron a correr (iban detrás en el mismo archivo).
+- **Mutaciones: 122.** Se ejecutaron 116 en tres capas (41 de lo puro, el CSV y los filtros; 48 de las lecturas contra PostgreSQL; 27 de las
+  guardias estáticas, las pantallas y la tarjeta) y, al analizar los sobrevivientes, 6 más (el formateador del porcentaje y una de las
+  guardias), que se detectaron todas. **Sobrevivieron 8 de las 116** (las pruebas de margen pasaron a la primera, y precisamente por eso se
+  les buscó el hueco):
+  - *5 eran pruebas o guardas débiles, ya reforzadas y detectadas*: nada probaba el orden de los empates (con empates idénticos el orden
+    dependía de la base: ahora seis productos iguales creados al revés salen siempre por SKU en los cinco órdenes); el borde del rango por
+    defecto (hace 29 días entra, hace 30 no: «31 días» pasaba); un pedido reembolsado que además está en otra moneda (la clase la decide el
+    orden de las condiciones del SQL: ahora hay prueba y guarda); la moneda del archivo sin neutralizar contra fórmulas; y una guarda cuyo
+    ancla («la lectura va dentro de `if (puedeCostos)`») se daba por buena aunque el ancla desapareciera.
+  - *1 era código muerto*: el SQL de las filas calculaba una columna `base` que nadie leía (el margen y el porcentaje se calculan aparte).
+    Se eliminó.
+  - *1 equivalente*: quitar `o."id" IS NULL OR` de la clasificación no cambia nada, porque una línea no puede existir sin su pedido (clave
+    foránea): si el pedido no existe tampoco hay línea, y esa otra condición ya lo manda a «ventas sin pedido». Se dejó como defensa.
+  - *1 que solo ve la capa estática*: leer el costo en el total de lo perdido del dashboard «siempre» da el mismo resultado en ejecución
+    (el valor se enmascara una segunda vez sin permiso), pero la guarda estática lo detecta y se comprobó en esa capa.
+- **Una guarda de 4b se adaptó** al refactor de `mermas-queries.ts` (el `FROM` y el costo salieron a funciones que comparten el informe y la
+  tarjeta): busca lo mismo en el sitio nuevo y ahora también exige que el total de lo perdido pida SU `conCostos`.
+- **Una guardia de diseño que ya existía mandó**: la página, la tarjeta y el hub usan `BotonExportar`, `Alert`, `Badge` y los colores de
+  tema, sin subir el techo de deuda de diseño.
+- **La tabla de rutas del documento de separación se regeneró** (`bun run docs:rutas`): +1 página y +1 descarga del panel.
+- En esta máquina el servidor de E2E imprime `TypeError: fetch failed` (Supabase Auth inexistente en el arnés): ruido previo, no afecta a los
+  resultados.
+
+### Lo que NO se verificó
+
+Aspecto visual y móvil; un ledger grande; Supabase real; un pedido de otra moneda **cerrado de verdad** (la prueba lo completa en pesos y
+cambia su moneda por SQL, porque cerrar un pedido en otra moneda depende de la cuenta Membego, que no es el asunto); la línea vendida a medias
+(se fabrica por SQL: la aplicación no la produce); ventas del POS y de otros orígenes (siguen el mismo camino que las del marketplace, pero las
+pruebas solo recorren el marketplace); y la tarjeta del dashboard en el E2E se alimenta sembrando filas, no con una venta real (el flujo real
+sí está en las pruebas de PostgreSQL). Quedan fuera del margen, a propósito, las comisiones del marketplace, los impuestos y los gastos
+(ver §23).

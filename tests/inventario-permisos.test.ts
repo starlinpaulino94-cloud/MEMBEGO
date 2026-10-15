@@ -1514,16 +1514,114 @@ test('INV-4b · las lecturas de mermas solo LEEN, escriben la empresa en CADA co
   const sqls = [...f.matchAll(/\$queryRaw<[\s\S]*?>`([\s\S]*?)`\n/g)]
   assert.equal(sqls.length, 2, 'los agregados por motivo y el detalle')
   for (const [, texto] of sqls) assert.ok(/"companyId" = \$\{companyId\}/.test(texto) || texto.includes('${desdeSql}'), `un SQL a mano sin empresa → ${texto.trim().slice(0, 80)}…`)
-  const desde = f.match(/const desdeSql = Prisma\.sql`([\s\S]*?)`\n/)
-  assert.ok(desde, 'ya no hay un fragmento `desdeSql`; revisa esta prueba')
+  // INV-4c: el FROM/WHERE vive en UNA función que comparten el informe y el total del dashboard.
+  const desde = f.match(/function desdeMermasSql\([^)]*\): Prisma\.Sql \{\s*return Prisma\.sql`([\s\S]*?)`\n\}/)
+  assert.ok(desde, 'ya no hay una función `desdeMermasSql`; revisa esta prueba')
   for (const alias of ['l', 'v', 'i', 's']) assert.match(desde[1], new RegExp(`${alias}\\."companyId" = m\\."companyId"|${alias}\\."companyId" = l\\."companyId"|${alias}\\."companyId" = v\\."companyId"`), `el JOIN de «${alias}» no acota por empresa`)
   assert.match(desde[1], /m\."companyId" = \$\{companyId\}/, 'los movimientos se acotan por la empresa de la sesión')
   assert.match(desde[1], /m\."type" IN \('ADJUSTMENT', 'DAMAGE'\)/, 'solo ajustes y daños')
   // El costo del movimiento es un NULL constante sin la función: ni siquiera se lee.
-  assert.match(f, /const costoSql = opciones\.conCostos \? Prisma\.sql`m\."unitCost"` : Prisma\.sql`NULL::numeric`/)
-  assert.equal([...f.matchAll(/unitCost/g)].length, 1, 'el costo solo se nombra en esa línea')
+  assert.match(f, /function costoDeMermasSql\(conCostos: boolean\): Prisma\.Sql \{\s*return conCostos \? Prisma\.sql`m\."unitCost"` : Prisma\.sql`NULL::numeric`\s*\}/)
+  assert.equal([...f.matchAll(/unitCost/g)].length, 1, 'el costo solo se nombra en esa función')
+  // Y los dos que la llaman le pasan lo que la persona puede ver, nunca un `true` fijo.
+  assert.match(f, /const costoSql = costoDeMermasSql\(opciones\.conCostos\)/)
+  assert.match(f, /costoDeMermasSql\(conCostos\), conCostos\)/, 'el total de lo perdido (dashboard) tampoco lee costos sin permiso')
   // La clase en SQL es la misma regla que `claseDeMovimiento`, en el mismo orden (la baja antes que el faltante).
   const clase = f.match(/const CLASE_SQL = Prisma\.sql`([\s\S]*?)`\n/)![1]
   assert.ok(clase.indexOf("'BAJA'") < clase.indexOf("'FALTANTE'"), 'la baja se decide antes que el faltante')
   assert.doesNotMatch(f, /parseFloat|toFixed\(\d\)\)\s*\*/, 'los montos no son flotantes')
+})
+
+// ── INV-4c · margen real y tarjeta del dashboard ─────────────────────────────
+
+test('INV-4c · el margen es información de COSTOS: la pantalla solo lee con la función y la descarga se guarda con ella ANTES de tocar la base', () => {
+  const r = sinComent(leer(`${REPORTES}/margen/exportar/route.ts`))
+  assert.match(r, /requireSection\('inventario', 'costos'\)/, 'sin la función «costos» no hay archivo, ni uno sin costos')
+  assert.match(r, /if \(!user\) return NextResponse\.json\(\{ error: 'No autorizado\.' \}, \{ status: 403 \}\)/)
+  assert.match(r, /resolveCompanyId\(user\)/, 'la empresa sale de la sesión')
+  assert.ok(r.indexOf('requireSection(') < r.indexOf('conEmpresa('), 'toca la base antes de autorizar')
+  assert.doesNotMatch(r, /searchParams\.get\('(empresa|company|companyId)'\)/, 'la empresa no sale de la URL')
+  assert.match(r, /margenEnTx\(tx, companyId, f, \{[^}]*todas: true/)
+  assert.doesNotMatch(r, /\bprisma\./)
+  assert.match(r, /sucursalesDeLaEmpresaEnTx\(tx, companyId\)/)
+  assert.match(r, /delete f\.sucursalId/, 'una sucursal ajena no filtra')
+
+  const p = sinComent(leer(`${REPORTES}/margen/page.tsx`))
+  assert.match(p, /const puedeCostos = await puedeFuncion\('inventario', 'costos'\)/)
+  // La lectura vive dentro de `if (puedeCostos)`: sin la función ni siquiera se pide.
+  const lectura = p.indexOf('margenEnTx(tx, companyId, f')
+  assert.ok(p.indexOf('if (puedeCostos) {') >= 0, 'la lectura se pide solo bajo `if (puedeCostos)`')
+  assert.ok(lectura > p.indexOf('if (puedeCostos) {'), 'la lectura va dentro de la condición de costos')
+  assert.equal([...p.matchAll(/margenEnTx\(/g)].length, 1, 'una sola lectura (la que está tras la condición)')
+  assert.match(p, /!puedeCostos \?/, 'sin la función, la pantalla lo dice en vez de enseñar cifras')
+  assert.match(p, /puedeCostos && datos && v \? <BotonExportar /, 'el botón de descarga solo existe con la función')
+  assert.match(p, /<NavegacionInventario actual="reportes"/)
+  assert.match(p, /describirFalloDeCarga\(/)
+  assert.doesNotMatch(p, /\|\|\s*(true|1)\b/, 'una condición que siempre se cumple')
+  assert.equal(adminSectionForPath('/admin/inventario/reportes/margen'), 'inventario')
+  assert.equal(adminSectionForPath('/admin/inventario/reportes/margen/exportar'), 'inventario')
+
+  // El hub ofrece el informe SOLO a quien tiene la función.
+  const hub = sinComent(leer(`${REPORTES}/page.tsx`))
+  assert.match(hub, /href: '\/admin\/inventario\/reportes\/margen'[\s\S]*?soloCostos: true/, 'el informe del margen está marcado «solo con costos»')
+  assert.match(hub, /informes\.filter\(\(i\) => !i\.soloCostos \|\| verCostos\)/)
+  assert.equal([...hub.matchAll(/soloCostos: true/g)].length, 1, 'solo el margen exige la función (los demás informes enseñan unidades sin ella)')
+})
+
+test('INV-4c · las lecturas del margen solo LEEN, escriben la empresa en CADA consulta y unión, y cuentan solo pedidos completados en la moneda de la empresa', () => {
+  const f = sinComent(leer('src/modules/inventory/margen-queries.ts'))
+  assert.doesNotMatch(f, /\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(|\$executeRaw|INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM/i, 'una lectura no escribe')
+  const sqls = [...f.matchAll(/\$queryRaw<[\s\S]*?>`([\s\S]*?)`\n/g)]
+  assert.equal(sqls.length, 2, 'los totales y las filas')
+  for (const [, texto] of sqls) assert.ok(texto.includes('${ventasClasificadasSql('), `un SQL a mano → ${texto.trim().slice(0, 80)}…`)
+  const base = f.match(/function ventasClasificadasSql\([^)]*\): Prisma\.Sql \{[\s\S]*?return Prisma\.sql`([\s\S]*?)`\n\}/)
+  assert.ok(base, 'ya no hay una función `ventasClasificadasSql`; revisa esta prueba')
+  const sql = base[1]
+  // Cada tabla se acota por la empresa: los movimientos, las líneas, los pedidos y cada unión.
+  assert.match(sql, /m\."companyId" = \$\{p\.companyId\}/)
+  assert.match(sql, /ol\."companyId" = \$\{p\.companyId\}/)
+  assert.match(sql, /o\."companyId" = \$\{p\.companyId\}/)
+  for (const alias of ['l', 'v', 'i']) assert.match(sql, new RegExp(`${alias}\\."companyId" = (m|l|v)\\."companyId"`), `el JOIN de «${alias}» no acota por empresa`)
+  // Solo ventas, y solo cuenta el pedido COMPLETADO, en la moneda de la empresa; el reembolsado va aparte.
+  assert.match(sql, /m\."type" = 'SALE'/)
+  assert.match(sql, /o\."status" NOT IN \('COMPLETED', 'REFUNDED'\) THEN 'SIN_INGRESO'/)
+  assert.match(sql, /WHEN o\."status" = 'REFUNDED' THEN 'REEMBOLSADO'/)
+  assert.match(sql, /WHEN o\."currency" <> \$\{p\.moneda\} THEN 'OTRA_MONEDA'/)
+  assert.ok(sql.indexOf("'REEMBOLSADO'") < sql.indexOf("'MARGEN'"), 'lo reembolsado se decide antes que lo que entra')
+  assert.ok(sql.indexOf("'REEMBOLSADO'") < sql.indexOf("'OTRA_MONEDA'"), 'un pedido reembolsado en otra moneda es un reembolso: la clase más informativa decide primero')
+  assert.match(sql, /ln\."total" \* p\."cantidad" \/ NULLIF\(ln\."cantidad", 0\)/, 'el ingreso es la línea, en proporción a las unidades vendidas')
+  // Las filas del informe solo traen lo que entra, y los ORDER BY son fragmentos fijos (la URL elige uno, no se concatena).
+  assert.match(f, /WHERE c\."clase" = 'MARGEN'/)
+  assert.match(f, /ORDER BY \$\{ORDEN_SQL\[f\.orden\]\}, x\."sku" ASC, x\."varianteId" ASC/)
+  assert.doesNotMatch(f, /Prisma\.raw\(|\$queryRawUnsafe/, 'nada se concatena a mano')
+  assert.match(f, /m\."createdAt" >= \$\{p\.gte\} AND m\."createdAt" < \$\{p\.lt\}/)
+  assert.doesNotMatch(f, /parseFloat|toFixed\(\d\)\)\s*\*/, 'los montos no son flotantes')
+})
+
+test('INV-4c · la tarjeta del dashboard: sin la sección no se lee nada, sin «costos» no se lee ni un costo, y el dinero solo se pinta con ellos', () => {
+  const d = sinComent(leer('src/app/(admin)/admin/dashboard/page.tsx'))
+  assert.match(d, /const userInventario = await requireSection\('inventario'\)/)
+  assert.match(d, /userInventario \? await usuarioPuedeFuncion\(userInventario, 'inventario', 'costos'\) : false/)
+  assert.match(d, /userInventario\s*\?\s*resumenInventarioEmpresa\(companyId, [^)]*\{ conCostos \}\)/, 'sin la sección no se pide; con ella, SU conCostos (no un true fijo)')
+  assert.match(d, /\.catch\(\(e\) => \{[\s\S]*?return null/, 'si la tarjeta falla, el dashboard sigue')
+  assert.match(d, /\{inventario \? <TarjetaInventario resumen=\{inventario\} company=\{company\} \/> : null\}/)
+
+  const m = sinComent(leer('src/modules/inventory/dashboard.ts'))
+  assert.doesNotMatch(m, /\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(|\$executeRaw|\$queryRaw/, 'solo compone lecturas ya guardadas')
+  const costos = m.slice(m.indexOf('if (opciones.conCostos) {'), m.indexOf('} else {'))
+  assert.match(costos, /valorTotalEnTx\(tx, companyId\)/)
+  assert.match(costos, /totalesDeMargenEnTx\(tx, companyId, rango\)/)
+  const sinCostos = m.slice(m.indexOf('} else {'), m.indexOf('const perdido'))
+  assert.doesNotMatch(sinCostos, /valorTotalEnTx|totalesDeMargenEnTx|inventoryVariantCost|averageCost|unitCost|cost\b/, 'sin costos no se toca nada de costos')
+  assert.equal([...m.matchAll(/valorTotalEnTx\(/g)].length, 1)
+  assert.equal([...m.matchAll(/totalesDeMargenEnTx\(/g)].length, 1)
+  assert.match(m, /perdidoEnRangoEnTx\(tx, companyId, rango, opciones\.conCostos\)/, 'lo perdido tampoco lee costos sin permiso')
+
+  // El componente enseña dinero solo si la lectura lo trajo (`conCostos`), y es del servidor, sin base de datos.
+  const t = sinComent(leer('src/components/admin/TarjetaInventario.tsx'))
+  assert.doesNotMatch(t, /from '@\/lib\/(prisma|tenant)'|@prisma\/client'|modules\/inventory\/(service|queries|\w+-queries)'/, 'es de presentación')
+  assert.match(t, /\{resumen\.conCostos && resumen\.valor !== null \? \(/)
+  assert.match(t, /\{resumen\.conCostos && m !== null \? \(/)
+  assert.match(t, /resumen\.conCostos && resumen\.perdido\.valor !== null/)
+  assert.equal([...t.matchAll(/dinero\(/g)].length, 3, 'las tres cifras de dinero (valor, margen y lo perdido) pasan por `dinero`, que solo se llama detrás de esas condiciones')
 })

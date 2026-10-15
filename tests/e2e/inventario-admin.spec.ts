@@ -1894,7 +1894,7 @@ test.describe('Inventario · panel', () => {
       await expect(p.getByRole('heading', { name: 'Reportes de existencias', level: 1 })).toBeVisible()
       await expect(vistas.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page')
       const informes = p.getByRole('list', { name: 'Informes' })
-      await expect(informes.getByRole('listitem')).toHaveCount(4)
+      await expect(informes.getByRole('listitem')).toHaveCount(5) // kardex, sin ventas, mermas, margen real (solo con costos) y rotación
       await expect(p.getByText('Con costos: cuánto dinero tienen inmovilizado.')).toBeVisible()
 
       // ── Kardex: se busca el producto, y sus movimientos dejan el saldo ────
@@ -2010,6 +2010,9 @@ test.describe('Inventario · panel', () => {
       await expect(vistas.getByRole('link', { name: 'Reportes' })).toBeVisible()
       await p.goto('/admin/inventario/reportes')
       await expect(p.getByText('Con costos:')).toHaveCount(0)
+      // INV-4c: el margen es costo contra precio, así que sin la función ni se ofrece (quedan los otros cuatro informes).
+      await expect(p.getByRole('list', { name: 'Informes' }).getByRole('listitem')).toHaveCount(4)
+      await expect(p.getByRole('link', { name: /Margen real/ })).toHaveCount(0)
       await p.goto(`/admin/inventario/reportes/kardex?variante=${vA}`)
       const sinDinero = async () => {
         const texto = await p.locator('body').innerText()
@@ -2181,6 +2184,186 @@ test.describe('Inventario · panel', () => {
       const st = await sinCostos.text()
       expect(st).toContain('Lo perdido: unidades;14')
       for (const dinero of ['45.00', 'Costo unitario', 'valor', 'SIN costo', 'Unidades sin costo']) expect(st, `el archivo dejó pasar «${dinero}»`).not.toContain(dinero)
+    } finally {
+      await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
+    }
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-4c · margen real y tarjeta del dashboard: lo cobrado contra lo que costó, lo que no entra y por qué, y quien no tiene «costos» no ve ni un peso', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    // Una empresa propia: el informe y la tarjeta son de toda la empresa y tienen que contener solo lo de esta prueba.
+    const emp = await empresaCatalogo(sufijo, 'invmgn', { capacidad: true, pedidos: true })
+    const prisma = prismaDeArnes()
+    const principal = (await sucursalSembrada(emp.id, 'Principal')).id
+    const cli = await prisma.cliente.create({ data: { companyId: emp.id, supabaseId: `e2e-mgn-${sufijo}`, nombre: 'Cliente margen', email: `mgn-${sufijo}@prueba.test` }, select: { id: true } })
+    const mk = async (name: string, slug: string, sku: string, precio: number, costo: number | null) => {
+      const it = await itemSembrado(emp.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, price: precio, porDefecto: true }] })
+      const v = await varianteDe(it.id)
+      if (costo !== null) await prisma.catalogVariant.update({ where: { id: v }, data: { cost: costo } })
+      return v
+    }
+    const NA = `Camisa MGN ${sufijo}`
+    const NB = `Gorra MGN ${sufijo}`
+    const NC = `Cinta MGN ${sufijo}`
+    const ND = `Taza MGN ${sufijo}`
+    const vA = await mk(NA, `camisa-mgn-${sufijo}`, `MGN-A-${sufijo}`, 100, 60)
+    const vB = await mk(NB, `gorra-mgn-${sufijo}`, `MGN-B-${sufijo}`, 50, 80)
+    const vC = await mk(NC, `cinta-mgn-${sufijo}`, `MGN-C-${sufijo}`, 40, null)
+    const vD = await mk(ND, `taza-mgn-${sufijo}`, `MGN-D-${sufijo}`, 10, 4)
+    const nivel = (v: string, onHand: number) => prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: v, locationId: principal, onHand } })
+    const nA = await nivel(vA, 30)
+    const nB = await nivel(vB, 10)
+    const nC = await nivel(vC, 7)
+    const nD = await nivel(vD, 5)
+    let seq = 0
+    /** Un pedido de marketplace con su línea y la venta que dejó en el ledger (con el costo que se congeló). */
+    const venta = async (nivelId: string, variante: string, descripcion: string, sku: string, cantidad: number, precio: number, costo: string | null, estado: 'COMPLETED' | 'REFUNDED') => {
+      seq += 1
+      const total = cantidad * precio
+      const ahora = new Date()
+      const o = await prisma.membegoOrder.create({
+        data: {
+          companyId: emp.id,
+          code: `MBG-MGN-${sufijo}-${seq}`.toUpperCase(),
+          locationId: principal,
+          customerId: cli.id,
+          status: estado,
+          origin: 'MARKETPLACE',
+          subtotal: total,
+          commissionableBase: total,
+          total,
+          acceptedAt: ahora,
+          readyAt: ahora,
+          completedAt: ahora,
+          customerConfirmedAt: ahora,
+          ...(estado === 'REFUNDED' ? { refundedAt: ahora, refundReason: 'Prueba' } : {}),
+        },
+      })
+      await prisma.membegoOrderLine.create({ data: { companyId: emp.id, orderId: o.id, catalogVariantId: variante, description: descripcion, sku, quantity: cantidad, unitPrice: precio, lineTotal: total } })
+      await prisma.inventoryMovement.create({
+        data: { companyId: emp.id, inventoryLevelId: nivelId, type: 'SALE', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: cantidad, previousOnHand: 100, newOnHand: 100 - cantidad, unitCost: costo, referenceType: 'ORDER', referenceId: o.id },
+      })
+    }
+    // A: 2 u a 100 = 200, costaron 120. B: 4 u a 50 = 200, costaron 320 (bajo el costo). C: 5 u a 40 = 200, SIN costo. D: reembolsado.
+    await venta(nA.id, vA, NA, `MGN-A-${sufijo}`, 2, 100, '60.0000', 'COMPLETED')
+    await venta(nB.id, vB, NB, `MGN-B-${sufijo}`, 4, 50, '80.0000', 'COMPLETED')
+    await venta(nC.id, vC, NC, `MGN-C-${sufijo}`, 5, 40, null, 'COMPLETED')
+    await venta(nD.id, vD, ND, `MGN-D-${sufijo}`, 2, 10, '4.0000', 'REFUNDED')
+    // Una pérdida del mes: 3 unidades de A que se perdieron (a 60 = 180).
+    await prisma.inventoryMovement.create({
+      data: { companyId: emp.id, inventoryLevelId: nA.id, type: 'ADJUSTMENT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: 3, previousOnHand: 33, newOnHand: 30, reason: 'Pérdida o extravío', reasonCode: 'LOST', unitCost: '60.0000' },
+    })
+
+    const email = 'e2e.catalogo.con@membego.test'
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, emp.id)
+
+    try {
+      // ── La puerta: el hub ofrece el margen a quien tiene «costos» ─────────
+      await p.goto('/admin/inventario/reportes')
+      await p.getByRole('list', { name: 'Informes' }).getByRole('link', { name: /Margen real/ }).click()
+      await p.waitForURL('**/admin/inventario/reportes/margen')
+      await expect(p.getByRole('heading', { name: 'Margen real', level: 1 })).toBeVisible()
+
+      // ── El resumen: lo que entra al margen (sin lo reembolsado ni lo que no tiene costo) ──
+      const resumen = p.getByLabel('Resumen del margen')
+      await expect(resumen.getByLabel('Ingresos')).toContainText('600.00') // 200 + 200 + 200
+      await expect(resumen.getByLabel('Ingresos')).toContainText('11 unidades de 3 productos')
+      await expect(resumen.getByLabel('Costo de lo vendido')).toContainText('440.00') // 120 + 320; los 5 sin costo no suman
+      await expect(resumen.getByLabel('Margen', { exact: true })).toContainText('−40.00') // (600 − 200 sin costo) − 440
+      await expect(resumen.getByLabel('Margen porcentual')).toContainText(/−10[.,]0 %/)
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('5 unidades vendidas no tenían costo conocido')
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('200.00')
+
+      // ── Producto por producto: de lo que más margen dejó a lo que menos ───
+      const lista = p.getByRole('list', { name: 'Margen por producto' })
+      await expect(lista.getByRole('listitem')).toHaveCount(3)
+      await expect(lista.getByRole('listitem').nth(0)).toContainText(NA)
+      await expect(lista.getByRole('listitem').nth(0)).toContainText('2 unidades · ingresos 200.00 · costo 120.00')
+      await expect(lista.getByRole('listitem').nth(0)).toContainText('80.00')
+      await expect(lista.getByRole('listitem').nth(0)).toContainText(/40[.,]0 %/)
+      await expect(lista.getByRole('listitem').nth(1)).toContainText(NC)
+      await expect(lista.getByRole('listitem').nth(1)).toContainText('5 sin costo')
+      await expect(lista.getByRole('listitem').nth(2)).toContainText(NB)
+      await expect(lista.getByRole('listitem').nth(2)).toContainText('Bajo el costo')
+      await expect(lista.getByRole('listitem').nth(2)).toContainText('−120.00')
+      await expect(lista.getByRole('listitem').nth(2)).toContainText(/−60[.,]0 %/)
+
+      // ── Lo que no entra, y por qué ────────────────────────────────────────
+      const excluidas = p.getByRole('list', { name: 'Ventas excluidas' })
+      await expect(excluidas.getByRole('listitem')).toHaveCount(1)
+      await expect(excluidas).toContainText('Pedidos reembolsados')
+      await expect(excluidas).toContainText('2 unidades')
+      await expect(excluidas).toContainText('costo 8.00')
+
+      // ── Ordenar: lo que se vende bajo el costo, primero ───────────────────
+      await p.getByLabel('Ordenar').selectOption('peor')
+      await p.getByRole('button', { name: 'Filtrar' }).click()
+      await p.waitForURL(/orden=peor/)
+      await expect(p.getByRole('list', { name: 'Margen por producto' }).getByRole('listitem').nth(0)).toContainText(NB)
+      // …y buscar un producto acota el resumen y la lista.
+      await p.getByRole('textbox', { name: 'Producto' }).fill('Camisa MGN')
+      await p.getByRole('button', { name: 'Filtrar' }).click()
+      await p.waitForURL(/q=Camisa/)
+      await expect(p.getByRole('list', { name: 'Margen por producto' }).getByRole('listitem')).toHaveCount(1)
+      await expect(p.getByLabel('Resumen del margen').getByLabel('Margen', { exact: true })).toContainText('80.00')
+
+      // ── El archivo: los mismos números, planos, con el negativo como número ──
+      const csv = await p.request.get('/admin/inventario/reportes/margen/exportar')
+      expect(csv.status()).toBe(200)
+      const t = await csv.text()
+      expect(t).toContain('Margen;-40.00')
+      expect(t).toContain('Margen %;-10.0')
+      expect(t).toContain('Unidades sin costo (no entran al margen);5')
+      expect(t).toContain('Pedidos reembolsados (fuera del margen): unidades;2')
+      expect(t).toMatch(new RegExp(`${NB};MGN-B-${sufijo.toUpperCase()};4;200\\.00;320\\.00;-120\\.00;-60\\.0;0;0\\.00`, 'i'))
+      expect(t).toContain(`${NC};`)
+      const filtrado = await p.request.get('/admin/inventario/reportes/margen/exportar?q=Camisa%20MGN')
+      const ft = await filtrado.text()
+      expect(ft).toContain('Filtro: Producto;Camisa MGN')
+      expect(ft).toContain('Margen;80.00')
+      expect(ft).not.toContain(NB)
+
+      // ── La tarjeta del dashboard: valor, margen del mes y lo perdido ──────
+      await p.goto('/admin/dashboard')
+      const tarjeta = p.getByRole('region', { name: 'Inventario' })
+      await expect(tarjeta).toBeVisible()
+      // Valor: A 30 × 60 + B 10 × 80 + D 5 × 4 = 2.620 (los 7 de C no tienen costo y no suman).
+      await expect(tarjeta.getByRole('link', { name: /Valor del inventario/ })).toContainText('2,620')
+      await expect(tarjeta.getByRole('link', { name: /Valor del inventario/ })).toContainText('52 unidades · 7 sin costo')
+      await expect(tarjeta.getByRole('link', { name: /Margen del mes/ })).toContainText('40')
+      await expect(tarjeta.getByRole('link', { name: /Margen del mes/ })).toContainText(/−10[.,]0 %/)
+      await expect(tarjeta.getByRole('link', { name: /Margen del mes/ })).toContainText('5 sin costo no entran')
+      await expect(tarjeta.getByRole('link', { name: /Perdido este mes/ })).toContainText('3 unidades')
+      await expect(tarjeta.getByRole('link', { name: /Perdido este mes/ })).toContainText('1 movimiento')
+      await expect(tarjeta.getByRole('link', { name: /Perdido este mes/ })).toContainText('180')
+      await tarjeta.getByRole('link', { name: /Margen del mes/ }).click()
+      await p.waitForURL('**/admin/inventario/reportes/margen')
+
+      // ── Quien NO tiene «costos» no ve ni un peso: ni margen, ni valor, ni archivo ──
+      await prisma.user.update({ where: { email }, data: { permisos: { v: 1, secciones: {}, funciones: { inventario: { costos: false } } } } })
+      await p.goto('/admin/inventario/reportes/margen')
+      await expect(p.getByText('No tienes permiso para ver costos ni el margen')).toBeVisible()
+      const cuerpoMargen = await p.locator('body').innerText()
+      for (const dinero of ['600.00', '440.00', '120.00', '−40.00', '320.00', NA]) expect(cuerpoMargen, `se coló «${dinero}»`).not.toContain(dinero)
+      expect((await p.request.get('/admin/inventario/reportes/margen/exportar')).status()).toBe(403)
+      await p.goto('/admin/dashboard')
+      const sinCostos = p.getByRole('region', { name: 'Inventario' })
+      await expect(sinCostos).toBeVisible()
+      await expect(sinCostos.getByRole('link', { name: /Unidades en existencia/ })).toContainText('52')
+      await expect(sinCostos.getByRole('link', { name: /Perdido este mes/ })).toContainText('3 unidades')
+      await expect(sinCostos.getByRole('link', { name: /Valor del inventario|Margen del mes/ })).toHaveCount(0)
+      const cuerpoTarjeta = await sinCostos.innerText()
+      for (const dinero of ['2,620', '180', 'RD$', 'sin costo', 'Margen']) expect(cuerpoTarjeta, `la tarjeta dejó pasar «${dinero}»`).not.toContain(dinero)
     } finally {
       await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
     }

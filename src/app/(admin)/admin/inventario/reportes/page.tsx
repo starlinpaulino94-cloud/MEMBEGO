@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BookOpen, PackageX, RefreshCw, TrendingDown } from 'lucide-react'
+import { BookOpen, PackageX, Percent, RefreshCw, TrendingDown } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { puedeFuncion, requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 
 /**
  * REPORTES DE EXISTENCIAS (INV-4a): la puerta a los informes que responden «qué pasó con este producto», «qué tengo parado», «qué se me va a acabar o me
- * sobra» (INV-4a) y «cuánto perdí y por qué» (INV-4b). Cada informe es su propia pantalla (con su CSV) y todos respetan la función `costos`: quien
+ * sobra» (INV-4a), «cuánto perdí y por qué» (INV-4b) y «cuánto gané» (INV-4c, el margen real: solo con la función `costos`, porque es costo contra precio). Cada informe es su propia pantalla (con su CSV) y todos respetan la función `costos`: quien
  * no la tiene ve unidades y días, nunca dinero.
  */
 export default async function ReportesInventarioPage() {
@@ -20,7 +20,7 @@ export default async function ReportesInventarioPage() {
   await requireCompanyContext(user)
   const verCostos = await puedeFuncion('inventario', 'costos')
 
-  const informes = [
+  const informes: Array<{ href: string; icono: typeof BookOpen; titulo: string; texto: string; costos: string; soloCostos?: boolean }> = [
     {
       href: '/admin/inventario/reportes/kardex',
       icono: BookOpen,
@@ -43,6 +43,14 @@ export default async function ReportesInventarioPage() {
       costos: 'Con costos: cuánto costó lo perdido, motivo por motivo.',
     },
     {
+      href: '/admin/inventario/reportes/margen',
+      icono: Percent,
+      titulo: 'Margen real',
+      texto: 'Lo que cobraste contra lo que costó lo que vendiste, producto por producto, con el costo que tenía cada uno el día que se vendió.',
+      costos: 'Solo con costos: ingresos, costo, margen y porcentaje.',
+      soloCostos: true,
+    },
+    {
       href: '/admin/inventario/reportes/rotacion',
       icono: RefreshCw,
       titulo: 'Rotación y cobertura',
@@ -56,8 +64,8 @@ export default async function ReportesInventarioPage() {
       <PageHeader title="Reportes de existencias" description="Lo que pasó con cada producto, lo que tienes parado y lo que se te acaba o te sobra." />
       <NavegacionInventario actual="reportes" />
 
-      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Informes">
-        {informes.map((i) => (
+      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Informes">
+        {informes.filter((i) => !i.soloCostos || verCostos).map((i) => (
           <li key={i.href}>
             <Link href={i.href} className="block h-full rounded-xl transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <Card className="h-full">

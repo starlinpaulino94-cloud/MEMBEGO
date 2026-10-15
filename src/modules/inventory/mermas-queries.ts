@@ -75,6 +75,67 @@ const CLASE_SQL = Prisma.sql`CASE
     WHEN m."type" = 'ADJUSTMENT' AND m."sourceBucket" IS NOT NULL AND m."destinationBucket" IS NULL THEN 'FALTANTE'
   END`
 
+/** El costo de un movimiento, solo si quien pide el informe puede verlo: sin la función `costos` la columna es un NULL constante. */
+function costoDeMermasSql(conCostos: boolean): Prisma.Sql {
+  return conCostos ? Prisma.sql`m."unitCost"` : Prisma.sql`NULL::numeric`
+}
+
+/** Los ajustes y daños de la empresa en un rango (`gte` incluido, `lt` excluido), con filtros opcionales ya armados. */
+function desdeMermasSql(companyId: string, gte: Date, lt: Date, filtros: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`
+    FROM "inventory_movements" m
+    JOIN "inventory_levels" l ON l."id" = m."inventoryLevelId" AND l."companyId" = m."companyId"
+    JOIN "catalog_variants" v ON v."id" = l."catalogVariantId" AND v."companyId" = l."companyId"
+    JOIN "catalog_items" i ON i."id" = v."catalogItemId" AND i."companyId" = v."companyId"
+    JOIN "sucursales" s ON s."id" = l."locationId" AND s."companyId" = l."companyId"
+    WHERE m."companyId" = ${companyId} AND m."type" IN ('ADJUSTMENT', 'DAMAGE') AND m."createdAt" >= ${gte} AND m."createdAt" < ${lt}
+      ${filtros}`
+}
+
+/** Las cifras de cada grupo (lo perdido, los sobrantes, lo dañado) POR MOTIVO, de lo que más pesa a lo que menos. */
+async function gruposDeMermasEnTx(tx: Tx, desdeSql: Prisma.Sql, costoSql: Prisma.Sql, conCostos: boolean): Promise<MermasVista['grupos']> {
+  const agregados = await tx.$queryRaw<{ clase: ClaseDeMotivo | null; codigo: string | null; movimientos: number; unidades: number; sinCosto: number; valor: Prisma.Decimal }[]>`
+    SELECT x."clase", x."codigo", COUNT(*)::int AS "movimientos", SUM(x."cantidad")::int AS "unidades",
+           COALESCE(SUM(CASE WHEN x."costo" IS NULL THEN x."cantidad" ELSE 0 END), 0)::int AS "sinCosto",
+           COALESCE(SUM(x."cantidad" * x."costo"), 0) AS "valor"
+      FROM (SELECT ${CLASE_SQL} AS "clase", m."reasonCode" AS "codigo", m."quantity" AS "cantidad", ${costoSql} AS "costo" ${desdeSql}) x
+     WHERE x."clase" IS NOT NULL
+     GROUP BY x."clase", x."codigo"`
+
+  const porGrupo = new Map<GrupoDeMerma, Map<string | null, { movimientos: number; unidades: number; sinCosto: number; valor: Costo }>>(GRUPOS_DE_MERMA.map((g) => [g, new Map()]))
+  for (const a of agregados) {
+    if (a.clase === null) continue
+    const filas = porGrupo.get(grupoDeClase(a.clase))!
+    // Faltantes y bajas comparten grupo: con el mismo motivo se suman en una sola fila.
+    const previa = filas.get(a.codigo) ?? { movimientos: 0, unidades: 0, sinCosto: 0, valor: BigInt(0) }
+    filas.set(a.codigo, {
+      movimientos: previa.movimientos + Number(a.movimientos),
+      unidades: previa.unidades + Number(a.unidades),
+      sinCosto: previa.sinCosto + Number(a.sinCosto),
+      valor: previa.valor + costoDeDecimal(a.valor),
+    })
+  }
+  return Object.fromEntries(
+    GRUPOS_DE_MERMA.map((g) => {
+      const filas = ordenarPorMotivo(
+        [...porGrupo.get(g)!].map(([codigo, c]) =>
+          filaPorMotivo({ codigo, movimientos: c.movimientos, unidades: c.unidades, valor: conCostos ? c.valor : null, unidadesSinCosto: conCostos ? c.sinCosto : null })
+        )
+      )
+      return [g, { filas, total: totalDeGrupo(filas) }]
+    })
+  ) as MermasVista['grupos']
+}
+
+/**
+ * Lo que se PERDIÓ en un rango (faltantes y bajas de lo dañado), sin filtros: unidades y movimientos y, solo con `conCostos`, lo que
+ * valió y las unidades sin costo. Es la misma cuenta del informe de mermas (INV-4b), para quien solo necesita el total (el dashboard).
+ */
+export async function perdidoEnRangoEnTx(tx: Tx, companyId: string, rango: { gte: Date; lt: Date }, conCostos: boolean): Promise<TotalGrupo> {
+  const grupos = await gruposDeMermasEnTx(tx, desdeMermasSql(companyId, rango.gte, rango.lt, Prisma.empty), costoDeMermasSql(conCostos), conCostos)
+  return grupos.PERDIDA.total
+}
+
 /**
  * Las mermas de un rango de días: lo perdido (faltantes y bajas), los sobrantes y lo dañado, cada uno POR MOTIVO, con unidades y,
  * si se pueden ver costos, lo que valieron; y el detalle movimiento por movimiento. Por defecto, los últimos 30 días.
@@ -100,47 +161,10 @@ export async function mermasEnTx(
     ? Prisma.sql`AND (i."name" ILIKE ${patronContiene(f.q)} OR v."name" ILIKE ${patronContiene(f.q)} OR v."sku" ILIKE ${patronContiene(f.q)} OR v."barcode" ILIKE ${patronContiene(f.q)})`
     : Prisma.empty
   // El costo solo se lee con la función `costos`: sin ella la columna es un NULL constante.
-  const costoSql = opciones.conCostos ? Prisma.sql`m."unitCost"` : Prisma.sql`NULL::numeric`
-  const desdeSql = Prisma.sql`
-    FROM "inventory_movements" m
-    JOIN "inventory_levels" l ON l."id" = m."inventoryLevelId" AND l."companyId" = m."companyId"
-    JOIN "catalog_variants" v ON v."id" = l."catalogVariantId" AND v."companyId" = l."companyId"
-    JOIN "catalog_items" i ON i."id" = v."catalogItemId" AND i."companyId" = v."companyId"
-    JOIN "sucursales" s ON s."id" = l."locationId" AND s."companyId" = l."companyId"
-    WHERE m."companyId" = ${companyId} AND m."type" IN ('ADJUSTMENT', 'DAMAGE') AND m."createdAt" >= ${gte} AND m."createdAt" < ${lt}
-      ${filtroSucursal} ${filtroMotivo} ${busqueda}`
+  const costoSql = costoDeMermasSql(opciones.conCostos)
+  const desdeSql = desdeMermasSql(companyId, gte, lt, Prisma.sql`${filtroSucursal} ${filtroMotivo} ${busqueda}`)
 
-  const agregados = await tx.$queryRaw<{ clase: ClaseDeMotivo | null; codigo: string | null; movimientos: number; unidades: number; sinCosto: number; valor: Prisma.Decimal }[]>`
-    SELECT x."clase", x."codigo", COUNT(*)::int AS "movimientos", SUM(x."cantidad")::int AS "unidades",
-           COALESCE(SUM(CASE WHEN x."costo" IS NULL THEN x."cantidad" ELSE 0 END), 0)::int AS "sinCosto",
-           COALESCE(SUM(x."cantidad" * x."costo"), 0) AS "valor"
-      FROM (SELECT ${CLASE_SQL} AS "clase", m."reasonCode" AS "codigo", m."quantity" AS "cantidad", ${costoSql} AS "costo" ${desdeSql}) x
-     WHERE x."clase" IS NOT NULL
-     GROUP BY x."clase", x."codigo"`
-
-  const porGrupo = new Map<GrupoDeMerma, Map<string | null, { movimientos: number; unidades: number; sinCosto: number; valor: Costo }>>(GRUPOS_DE_MERMA.map((g) => [g, new Map()]))
-  for (const a of agregados) {
-    if (a.clase === null) continue
-    const filas = porGrupo.get(grupoDeClase(a.clase))!
-    // Faltantes y bajas comparten grupo: con el mismo motivo se suman en una sola fila.
-    const previa = filas.get(a.codigo) ?? { movimientos: 0, unidades: 0, sinCosto: 0, valor: BigInt(0) }
-    filas.set(a.codigo, {
-      movimientos: previa.movimientos + Number(a.movimientos),
-      unidades: previa.unidades + Number(a.unidades),
-      sinCosto: previa.sinCosto + Number(a.sinCosto),
-      valor: previa.valor + costoDeDecimal(a.valor),
-    })
-  }
-  const grupos = Object.fromEntries(
-    GRUPOS_DE_MERMA.map((g) => {
-      const filas = ordenarPorMotivo(
-        [...porGrupo.get(g)!].map(([codigo, c]) =>
-          filaPorMotivo({ codigo, movimientos: c.movimientos, unidades: c.unidades, valor: opciones.conCostos ? c.valor : null, unidadesSinCosto: opciones.conCostos ? c.sinCosto : null })
-        )
-      )
-      return [g, { filas, total: totalDeGrupo(filas) }]
-    })
-  ) as MermasVista['grupos']
+  const grupos = await gruposDeMermasEnTx(tx, desdeSql, costoSql, opciones.conCostos)
 
   const total = GRUPOS_DE_MERMA.reduce((t, g) => t + grupos[g].total.movimientos, 0)
   const porPagina = opciones.todas ? TOPE_FILAS_MERMAS_CSV : FILAS_POR_PAGINA_REPORTES

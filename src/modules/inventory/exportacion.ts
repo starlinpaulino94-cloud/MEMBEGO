@@ -11,6 +11,8 @@ import { detalleDeMotivo, etiquetaDeMotivo } from './motivos'
 import type { KardexVista, RotacionVista, SinVentasVista } from './reportes-queries'
 import type { MermasVista } from './mermas-queries'
 import { ETIQUETA_GRUPO, GRUPOS_DE_MERMA } from './mermas'
+import type { MargenVista } from './margen-queries'
+import { ETIQUETA_EXCLUIDA, formatearMontoFirmado } from './margen'
 import { ETIQUETA_CLASE } from './motivos'
 
 /**
@@ -766,6 +768,52 @@ export function mermasToCsv(v: MermasVista, ctx: ContextoInforme & { tope: numbe
         ...(c ? [m.costo === null ? '' : plano(formatearCosto(m.costo)), m.valor === null ? '' : plano(formatearMonto(m.valor))] : []),
         SIN_FORMULA(m.usuarioNombre ?? 'Sistema'),
       ]),
+    },
+  ])
+}
+
+/**
+ * El margen real para llevarlo a una hoja de cálculo: el resumen (lo vendido, lo cobrado, lo que costó, el margen y su porcentaje),
+ * lo vendido que NO entra al margen y por qué, y un renglón por producto. Los montos van planos, sin separador de miles, y el margen
+ * con un `-` normal si es negativo (para que la hoja lo sume). Lo que no se puede calcular (un porcentaje sin base) queda VACÍO, nunca
+ * cero. Si el tope cortó los productos, el archivo lo dice.
+ */
+export function margenToCsv(v: MargenVista, ctx: ContextoInforme & { tope: number }): string {
+  const dinero = (c: bigint) => plano(formatearMontoFirmado(c, '-'))
+  const pct = (n: number | null) => (n === null ? '' : n.toFixed(1))
+  const t = v.totales
+  const cortado = t.productos > v.filas.length
+  return armarCsvBloques([
+    {
+      titulo: 'Margen real',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Generado', fechaHoraCsv(ctx.generadoEn, ctx.zonaHoraria)],
+        ['Zona horaria', ctx.zonaHoraria],
+        ['Moneda', SIN_FORMULA(v.moneda)],
+        ['Desde', v.desde],
+        ['Hasta', v.hasta],
+        ...ctx.filtros.map(([k, val]): [string, string] => [`Filtro: ${k}`, SIN_FORMULA(val)]),
+        ['Productos vendidos', t.productos],
+        ['Unidades vendidas', t.unidades],
+        ['Ingresos (precio de la línea menos su descuento y sin impuestos)', dinero(t.ingresos)],
+        ['Costo de lo vendido (solo lo que tiene costo)', dinero(t.costo)],
+        ['Margen', dinero(t.margen)],
+        ['Margen %', pct(t.margenPct)],
+        ['Unidades sin costo (no entran al margen)', t.unidadesSinCosto],
+        ['Ingresos de esas unidades (no entran al margen)', dinero(t.ingresosSinCosto)],
+        ...v.excluidas.flatMap((e): Array<[string, string | number]> => [
+          [`${ETIQUETA_EXCLUIDA[e.clase]} (fuera del margen): unidades`, e.unidades],
+          [`${ETIQUETA_EXCLUIDA[e.clase]} (fuera del margen): costo`, dinero(e.costo)],
+        ]),
+        ['Productos en el archivo', v.filas.length],
+        ['Datos completos', cortado ? `NO - el archivo trae solo ${ctx.tope} de ${t.productos} productos. Acota las fechas o los filtros y vuelve a exportar.` : 'Si'],
+      ],
+    },
+    {
+      titulo: 'Por producto',
+      encabezados: ['Producto', 'SKU', 'Unidades', 'Ingresos', 'Costo', 'Margen', 'Margen %', 'Unidades sin costo', 'Ingresos sin costo'],
+      filas: v.filas.map((f) => [SIN_FORMULA(f.producto), SIN_FORMULA(f.sku), f.unidades, dinero(f.ingresos), dinero(f.costo), dinero(f.margen), pct(f.margenPct), f.unidadesSinCosto, dinero(f.ingresosSinCosto)]),
     },
   ])
 }

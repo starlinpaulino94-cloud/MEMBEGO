@@ -5,6 +5,7 @@ import type { FiltrosReposicion } from './reposicion'
 import { PAGINA_MAXIMA_REPORTES, esEstadoCobertura, periodoValido, PERIODO_POR_DEFECTO, type FiltrosKardex, type FiltrosRotacion, type FiltrosSinVentas } from './reportes'
 import { FILTRO_SIN_MOTIVO, type FiltrosMermas } from './mermas'
 import { esMotivoDelCatalogo } from './motivos'
+import { ORDEN_MARGEN_POR_DEFECTO, esOrdenMargen, type FiltrosMargen } from './margen'
 
 /**
  * COMMERCE CORE · inventario — los filtros de la pantalla de movimientos y de su
@@ -466,6 +467,34 @@ export function consultaDeFiltrosMermas(f: FiltrosMermas, pagina: number = f.pag
   if (f.sucursalId) p.set('sucursal', f.sucursalId)
   if (f.motivo) p.set('motivo', f.motivo)
   if (f.q) p.set('q', f.q)
+  if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}
+
+/**
+ * INV-4c · La URL del «margen real»: el rango de días (locales), la sucursal, el texto del producto, el orden y la página. Un orden
+ * que no existe cae al de siempre; una sucursal ajena no filtra (lo decide la pantalla contra las de la empresa).
+ */
+export function leerFiltrosMargen(sp: ParametrosUrl): FiltrosMargen {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const orden = primero(sp.orden)
+  return {
+    ...(filtros.desde ? { desde: filtros.desde } : {}),
+    ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    orden: esOrdenMargen(orden) ? orden : ORDEN_MARGEN_POR_DEFECTO,
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+export function consultaDeFiltrosMargen(f: FiltrosMargen, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.desde) p.set('desde', f.desde)
+  if (f.hasta) p.set('hasta', f.hasta)
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.q) p.set('q', f.q)
+  if (f.orden !== ORDEN_MARGEN_POR_DEFECTO) p.set('orden', f.orden)
   if (pagina > 1) p.set('pagina', String(pagina))
   return p.toString()
 }
