@@ -72,6 +72,8 @@ import {
   quitarLineaDeConteoEnTx,
   registrarConteoProductoEnTx,
   ajustarEnTx,
+  configurarObjetivoEnTx,
+  configurarObjetivoOtrasSucursalesEnTx,
   configurarUmbralEnTx,
   configurarUmbralOtrasSucursalesEnTx,
   contarEnTx,
@@ -249,6 +251,36 @@ export async function fijarUmbralInventario(entrada: {
     })
     refrescar()
     return { ok: true, umbral: r.umbral, otras: r.otras }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-3c · Fija el «llenar hasta» de una variante en una sucursal (0 = sin objetivo: no sale en Reposición). Con
+ * `aplicarAOtras`, el mismo valor se aplica también a las demás sucursales activas donde el producto ya tiene saldo. Lo
+ * pide la misma función que el umbral (`ajustar`): es la misma clase de configuración del saldo.
+ */
+export async function fijarObjetivoInventario(entrada: {
+  varianteId: string
+  sucursalId: string
+  llenarHasta: number
+  aplicarAOtras?: boolean
+}): Promise<ResultadoInventario<{ llenarHasta: number; otras: number }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, async (tx) => {
+      const propia = await configurarObjetivoEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), sucursalId: texto(entrada.sucursalId), llenarHasta: entrada.llenarHasta as number }, c.ctx)
+      const otras =
+        entrada.aplicarAOtras === true
+          ? await configurarObjetivoOtrasSucursalesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), sucursalOrigenId: texto(entrada.sucursalId), llenarHasta: entrada.llenarHasta as number }, c.ctx)
+          : { sucursales: 0 }
+      return { llenarHasta: propia.llenarHasta, otras: otras.sucursales }
+    })
+    refrescar()
+    return { ok: true, llenarHasta: r.llenarHasta, otras: r.otras }
   } catch (e) {
     return aError(e)
   }

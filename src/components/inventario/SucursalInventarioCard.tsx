@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import {
   ajustarInventario,
   contarInventario,
+  fijarObjetivoInventario,
   fijarUmbralInventario,
   registrarDanoInventario,
   registrarDevolucionInventario,
@@ -30,6 +31,8 @@ export interface SaldoSucursalVista {
   damaged: number
   disponible: number
   lowStockThreshold: number
+  /** INV-3c · «Llenar hasta»: 0 = sin objetivo. */
+  targetStock: number
   estado: 'AGOTADO' | 'BAJO' | 'OK'
 }
 
@@ -156,6 +159,27 @@ export function SucursalInventarioCard({
     })
   }
 
+  function guardarObjetivo(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const f = new FormData(e.currentTarget)
+    const llenarHasta = Number(String(f.get('llenarHasta') ?? '').trim())
+    const aplicarAOtras = f.get('aplicarAOtras') === 'on'
+    if (!Number.isInteger(llenarHasta) || llenarHasta < 0) {
+      toast.error('«Llenar hasta» es un número entero, 0 o más.')
+      return
+    }
+    start(async () => {
+      const r = await fijarObjetivoInventario({ varianteId, sucursalId: saldo.sucursalId, llenarHasta, aplicarAOtras })
+      if (!r.ok) {
+        toast.error(r.error)
+        return
+      }
+      const base = r.llenarHasta === 0 ? 'Sin objetivo: este producto no saldrá en Reposición.' : `Reposición propondrá pedir hasta tener ${formatearCantidad(r.llenarHasta)}.`
+      toast.success(r.otras > 0 ? `${base} También se aplicó en ${r.otras} ${r.otras === 1 ? 'sucursal más' : 'sucursales más'}.` : base)
+      router.refresh()
+    })
+  }
+
   return (
     <Card data-sucursal={saldo.nombre}>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-2">
@@ -230,6 +254,25 @@ export function SucursalInventarioCard({
                 </label>
               )}
               <p className="basis-full text-xs text-muted-foreground">0 = sin aviso. Cuenta lo disponible (sin lo apartado).</p>
+            </form>
+
+            <form onSubmit={guardarObjetivo} className="flex flex-wrap items-end gap-3 border-t pt-4" aria-label={`Llenar hasta en ${saldo.nombre}`}>
+              <div className="space-y-1.5">
+                <Label htmlFor={`llenar-${k}`}>Llenar hasta</Label>
+                <Input id={`llenar-${k}`} name="llenarHasta" inputMode="numeric" defaultValue={saldo.targetStock} className="w-32" />
+              </div>
+              <Button type="submit" size="sm" variant="outline" disabled={pending}>
+                Guardar objetivo
+              </Button>
+              {hayOtrasConSaldo && (
+                <label className="flex basis-full items-center gap-2 text-sm">
+                  <input type="checkbox" name="aplicarAOtras" className="h-4 w-4" />
+                  Aplicar también a las otras sucursales donde este producto ya tiene existencias
+                </label>
+              )}
+              <p className="basis-full text-xs text-muted-foreground">
+                Hasta cuánto quieres tener aquí. 0 = sin objetivo. En Reposición se propone pedir lo que falta para llegar, descontando lo ya pedido y lo que va en camino. Tiene que ser mayor que el umbral de aviso.
+              </p>
             </form>
           </>
         ) : (

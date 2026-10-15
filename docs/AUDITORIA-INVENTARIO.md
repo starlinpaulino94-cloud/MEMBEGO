@@ -4,7 +4,7 @@
 > `/admin/inventario`, sus consumidores (pedidos, checkout, POS, ofertas), el cron, las pruebas y la documentación.
 > Se compara con el inventario del Car Wash (`ProductoInventario`), que es OTRO módulo.
 >
-> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a o INV-3b ya lo cerraron** (ver §5, §7, §9, §11, §13 y §15).
+> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a, INV-3b o INV-3c ya lo cerraron** (ver §5, §7, §9, §11, §13, §15 y §17).
 
 ## 1. Veredicto
 
@@ -42,8 +42,9 @@ separa un «control de stock» de un módulo de inventario profesional.
 
 No había proveedores ni órdenes de compra en Commerce Core (el Car Wash sí: `Proveedor`, `OrdenCompra`, y recibir la orden
 genera la entrada — es el modelo que se siguió), ni punto de reorden, ni «qué comprar». → **Proveedores y órdenes de compra:
-INV-3b ✔** (ver §15). Sigue pendiente, en INV-3c, el punto de reorden y «qué comprar»: la alerta de stock bajo es todavía una
-lista de problemas, no una propuesta de compra.
+INV-3b ✔** (ver §15). **Punto de reorden y «qué comprar»: INV-3c ✔** (ver §17): el umbral que ya existía más un «llenar hasta» por
+producto y sucursal; la pantalla Reposición propone lo que falta para llegar, descontando lo ya pedido y lo que va en camino,
+agrupado por proveedor, y crea borradores de orden. Sigue sin haber pronóstico de ventas ni carga masiva de objetivos.
 
 ### 3.3 Valor del inventario
 
@@ -107,7 +108,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-2c · Transferencias con estado** | «Con envío»: enviada → parcial/recibida o cancelada; recepción parcial; cerrar con faltante y motivo; en tránsito visible en la ficha; aviso a los administradores al enviar. La transferencia directa actual se conserva | `InventoryTransfer`, `InventoryTransferLine` (migración `20261058`) | M | **Hecha** (este documento, §11) |
 | **INV-3a · Costo y valor del inventario** | Costo unitario en las líneas de entrada (manual, CSV y entrada de un producto); costo promedio ponderado por producto; ventas, devoluciones, daños y ajustes valorados con el promedio de su instante; pantalla «Valor del inventario» por sucursal y producto (con CSV); costo de ventas del mes; corregir el costo con motivo. Función de permiso nueva `costos` | `unitCost` en movimientos y líneas de entrada; `InventoryVariantCost`, `InventoryCostAdjustment` (migración `20261059`) | M | **Hecha** (este documento, §13) |
 | **INV-3b · Proveedores y órdenes de compra** | Proveedores; orden de compra `OC-AAAA-NNNNNN` (Borrador → Pedida → Recibida en parte → Recibida, o Cancelada) con el costo de cada línea; recibir en tandas crea una entrada con los costos de la orden (nunca más de lo pedido; cerrar con faltante exige motivo); vínculo producto-proveedor con código, último costo, días de entrega y preferido; CSV de la orden. Función de permiso nueva `comprar` | `InventorySupplier`, `InventoryPurchaseOrder`, `InventoryPurchaseOrderLine`, `InventoryVariantSupplier`; `purchaseOrderId` en las entradas (migración `20261060`) | M | **Hecha** (este documento, §15) |
-| INV-3c · Reposición | «Llenar hasta» por producto y sucursal; pantalla «Qué comprar» con la cantidad sugerida (descontando lo pedido y lo que va en camino), agrupada por proveedor, que crea órdenes en borrador | Campo en el saldo | S | pendiente |
+| **INV-3c · Reposición** | «Llenar hasta» por producto y sucursal (junto al umbral que ya existía; tiene que quedar por encima de él); pestaña «Reposición» con la cantidad sugerida —lo disponible más lo pedido que no ha llegado más lo que va en camino se descuentan; un borrador no—, agrupada por proveedor y sucursal, con filtros y CSV, que crea borradores de orden con el último costo de cada proveedor. Sin función nueva (`comprar` para ver y crear, `ajustar` para fijar el objetivo) | `targetStock` en el saldo (migración `20261066`) | S | **Hecha** (este documento, §17) |
 | INV-4 · Reportes | Kardex valorizado, rotación y días de inventario, stock sin movimiento, mermas por motivo codificado, margen real; tarjeta de dashboard | Catálogo de motivos | M | pendiente |
 | INV-5 · Trazabilidad | Lotes y vencimiento con FEFO; series; kits que descuentan componentes; API v1; rol de bodega | Lotes, kits | L por pieza | pendiente |
 
@@ -774,3 +775,157 @@ Hallazgos de la propia verificación (importa que se sepan):
   lo avisa si falta.
 - Esta máquina imprime `fetch failed … 127.0.0.1:54329` y `The destination stream closed early` en el servidor de E2E (Supabase
   Auth inexistente en el arnés; ruido previo, visible también en las verificaciones anteriores).
+
+## 17. INV-3c · qué se hizo
+
+> Última de las tres partes de INV-3: la alerta de stock bajo deja de ser una lista de problemas y pasa a ser una propuesta de
+> compra. Decisiones que se tomaron aquí (no había una aprobación previa más fina que la hoja de ruta): el objetivo vive en el
+> saldo, junto al umbral que ya existía; lo pedido y lo que va en camino se descuentan, un borrador NO; crear el borrador no pide
+> nada; la máquina no elige entre varios proveedores; nada de Car Wash.
+
+- **«Llenar hasta»** — un número más por producto y sucursal (`inventory_levels.targetStock`; 0 = sin objetivo). Se fija en la
+  ficha del producto, en la tarjeta de cada sucursal, con «aplicar también a las otras sucursales donde ya tiene existencias»
+  (igual que el umbral: no se crean saldos en cero donde el producto nunca estuvo). Es configuración del saldo: lo pide la misma
+  función que el umbral (`ajustar`), no deja movimientos en el ledger, se audita con su antes y su después y repetirlo no
+  hace nada. **Tiene que quedar por encima del umbral de aviso** (y el umbral por debajo del objetivo): con un umbral igual o
+  mayor, «pedir hasta llegar» no pediría nada. El mensaje dice en qué sucursal; si al aplicar a las otras alguna lo impide, todo
+  se deshace.
+- **La posición y la sugerencia** — la posición de un producto en una sucursal es lo disponible (existencias − apartado) **más** lo
+  pedido a proveedores que no ha llegado (órdenes pedidas o recibidas en parte, solo las que reciben en ESA sucursal, sin lo cerrado
+  como faltante) **más** lo que va en camino hacia ella desde otra (transferencias enviadas o recibidas en parte, sin lo devuelto
+  ni lo perdido). Con umbral se repone cuando la posición baja AL umbral (igual o menos, como la alerta); sin umbral, en cuanto
+  queda por debajo del objetivo. Se sugiere exactamente lo que falta para llegar al objetivo. Recibir, cancelar o cerrar con
+  faltante mueve la sugerencia sola, porque se calcula en cada lectura: no hay nada guardado que se desactualice.
+- **Un borrador no es un compromiso** — la pantalla lo enseña («En borrador N») y avisa en el grupo que ya hay uno de ese
+  proveedor para esa sucursal (con su enlace), pero no lo descuenta: hasta que se pida, la mercancía no viene. Ese aviso es la
+  protección contra duplicar a ciegas; no hay restricción en la base (dos borradores iguales son legítimos).
+- **Qué comprar** — pestaña «Reposición» (`/admin/inventario/reposicion`, solo con `comprar`): resumen (productos y grupos por
+  reponer, unidades, valor sugerido, cuántos sin proveedor), filtros (producto/SKU/código de barras, sucursal, proveedor o «sin
+  proveedor»), y un grupo por proveedor Y sucursal —una orden tiene un proveedor y recibe en una sucursal—. Cada línea trae lo
+  que hay, lo pedido, lo que va en camino, lo que está en borrador, el objetivo, el umbral y la cantidad sugerida, y se puede
+  corregir o dejar fuera. **«Crear borrador de orden»** abre un borrador normal (nota «Borrador creado desde Reposición.», con el
+  costo y la cantidad de cada línea) y lleva a su pantalla: no pide nada ni mueve existencias; pedirlo es otra decisión, en la
+  pantalla de la orden. Es la misma acción de órdenes de INV-3b (`comprar`, idempotente), no una puerta nueva. Una orden admite
+  200 productos: si el grupo trae más, vienen marcados los primeros 200 y la pantalla lo dice.
+- **El proveedor de cada producto** — el preferido, si está activo; si no hay preferido activo pero solo tiene UN proveedor
+  activo, ese; con varios sin preferido o con ninguno, «sin proveedor» (elegir entre varios es una decisión de compra: la
+  pantalla manda a la ficha del producto a vincular uno). Un proveedor desactivado nunca se elige. El costo sugerido es el
+  **último costo de ESE proveedor para ese producto**; sin él, la línea sale sin costo y hay que escribirlo (el borrador exige costo
+  en cada línea) —no se inventa uno—. A propósito NO se usa el costo promedio ni el de referencia: son información de la
+  función `costos`, y esta pantalla solo exige `comprar`.
+- **Lo que explica por qué algo no sale** — un aviso cuenta las alertas de stock bajo que no tienen «llenar hasta» (no hay hasta
+  cuánto proponer) con el enlace a ellas, y la alerta de la página de existencias ofrece «Ver qué comprar» a quien puede comprar.
+  Sin ningún objetivo, la pantalla dice cómo fijarlo; con todo al día, lo dice. Si hay más de 5.000 saldos con objetivo, la
+  lista se corta y lo avisa.
+- **Archivo** — CSV con los mismos filtros: resumen (con los filtros aplicados y el aviso de corte) y una fila por producto y
+  sucursal; números planos que se suman, textos neutralizados contra fórmulas, y la celda de costo y de valor VACÍA —nunca cero—
+  cuando no se sabe.
+- **Qué cuenta** — solo productos que controlan inventario, no descontinuados ni archivados, en sucursales activas y de esa
+  empresa. Todo se lee dentro de la empresa de la sesión, sin bloquear nada (es una lectura puntual: dos personas que miren a la
+  vez ven lo mismo, y una venta que ocurra mientras tanto aparece en la siguiente lectura).
+- **Permisos** — sin función nueva: ver la propuesta, descargarla y crear borradores es `comprar` (la etiqueta del permiso ahora
+  dice «y reposición»); fijar «llenar hasta» es `ajustar`, como el umbral. Como todo permiso de este sistema, `comprar` se concede
+  por defecto a quien ya tiene la sección Inventario (ver §13 y §15).
+- **Degradación** — `/api/health` avisa (`inventory_levels.targetStock`) si el código llega antes que el SQL.
+
+### Lo que NO hace (a propósito, o pendiente)
+
+- **No pronostica**: no mira cuánto se vende ni cuánto tarda el proveedor (aunque el vínculo ya guarda los días de entrega); el
+  objetivo lo fija una persona. Tampoco redondea a cajas o múltiplos de compra ni respeta mínimos del proveedor.
+- **No elige entre varios proveedores**, ni parte una propuesta en varias órdenes cuando un grupo pasa de 200 productos (avisa y
+  se hace en dos veces).
+- **No hay carga masiva de objetivos**: se fijan producto por producto (con «aplicar a las otras sucursales»). Con cientos de
+  productos eso es lento; una importación CSV de umbrales y objetivos, como la de existencias, queda como mejora.
+- **No pide sola**: nada de pedidos automáticos ni de avisos por correo cuando algo entra en la propuesta (hoy hay que abrir la
+  pantalla o ver la alerta).
+
+Archivos principales: `prisma/schema/inventario.prisma`, `prisma/migrations/20261066_inventory_reorder/`,
+`src/modules/inventory/{reposicion,reposicion-queries}.ts` (+ `service` —`configurarObjetivoEnTx` y la regla en el umbral—,
+`filtros`, `exportacion`, `queries`, `actions`), `src/lib/auth/funciones.ts`,
+`src/components/inventario/{ReposicionGrupoCard,SucursalInventarioCard,NavegacionInventario}.tsx` y
+`src/app/(admin)/admin/inventario/reposicion/` (+ `exportar/`).
+
+### Cómo aplicar la migración (obligatorio y en este orden)
+
+1. **SQL primero**, y en este orden si faltara alguno: `20261059_inventory_costs` (INV-3a), `20261060_inventory_purchasing`
+   (INV-3b) y por último `prisma/migrations/20261066_inventory_reorder/migration.sql`. Es aditiva e idempotente (se puede correr dos
+   veces): una columna entera en `inventory_levels` con valor por defecto constante (PostgreSQL 11 o superior no reescribe la
+   tabla), su CHECK creado `NOT VALID` y validado aparte, y un índice parcial. Copiar el archivo **completo** con «Copy raw file».
+   Se puede comprobar con
+   `select column_name from information_schema.columns where table_name = 'inventory_levels' and column_name = 'targetStock';`
+   (debe devolver una fila).
+2. **Después el código.** **Como en INV-3a, desplegar el código SIN el SQL rompe el inventario y los pedidos**: Prisma pide todas
+   las columnas del saldo en cada lectura, y las ventas leen saldos. Con el SQL aplicado y el código viejo todavía en producción no
+   pasa nada (la columna se ignora).
+3. Verificar con `npm run db:doctor` y `/api/health` (debe listar `inventory_levels.targetStock` en verde).
+
+## 18. Verificación de INV-3c (2026-10-15)
+
+Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`; la migración nueva aplicada con `prisma migrate deploy` sobre las
+227 anteriores —228 en total, con lo último de `main`—, re-ejecutada dos veces sobre una base ya migrada sin error y
+`prisma migrate diff` contra el esquema sin diferencias en las dos bases de prueba; no se tocó ninguna base real). Sin Supabase real,
+Vercel, lector de código de barras físico, móvil ni Safari: **no verificados**. Tampoco se midió la propuesta con miles de saldos
+con objetivo: se probó que corta al tope (5.000) y lo dice, no cuánto tarda con ese volumen ni con la latencia de una base remota.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; las 2 rutas nuevas compiladas; entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB (sin cambio) |
+| Unitarias (`bun run test`) | 4427 pruebas: 4420 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest` como en CI) | 826/826, cero omitidas |
+| Pruebas nuevas | 29 puras (`inventario-reposicion.test.ts`), 10 guardias nuevas (`inventario-permisos.test.ts`, ya 82), 23 contra PostgreSQL (`inventory-reposicion.db.test.ts`) y un recorrido E2E nuevo |
+| E2E (`bun run e2e:limpio`, escritorio) | 72/72 en la corrida combinada final sobre la compilación final: `inventario-admin` (11, con el recorrido nuevo), `comercio-experiencia`, `pedidos-membego`, `pos-membego`, `carrito-checkout`, `catalogo-admin`, `catalogo-api` y `catalogo-publico` |
+| Mutaciones | 217 distintas, 210 detectadas, 7 equivalentes (ver abajo) |
+
+Qué cubre el recorrido E2E: la pestaña Reposición vacía explica cómo empezar → en la ficha, «Llenar hasta» 20 (un umbral de 25 se
+rechaza por quedar sobre el objetivo, uno de 5 vale, y bajar el objetivo al umbral también se rechaza) → la propuesta agrupa por
+proveedor y sucursal con lo que falta (20 − 3 = 17), el último costo de ese proveedor y, donde nunca se le compró, el costo VACÍO;
+lo que no tiene proveedor se manda a su ficha y no tiene botón → crear el borrador exige el costo, deja corregir la cantidad, lleva
+su nota y no mueve existencias → de vuelta, el borrador se avisa pero no se descuenta → pedirlo lo vuelve compromiso y el grupo
+desaparece → filtros (sin proveedor, sin resultados, sucursal y proveedor ajenos que no filtran) → el CSV → y con `comprar`
+negada no hay pestaña, ni enlace, ni cifras, y la descarga da 403, pero «llenar hasta» sigue disponible (es de `ajustar`).
+
+Qué cubren las 23 pruebas contra PostgreSQL: fijar el objetivo (crea el saldo si no existe, se audita con su antes y su después,
+repetirlo no deja otra huella, el rango y los productos/sucursales que no valen, una sucursal desactivada admite configuración);
+que no se deje chocar con el umbral ni al fijarlo ni al mover el umbral, con el mensaje que dice la sucursal; aplicar a las otras
+sucursales (solo con saldo y activas, nunca la de origen, repetirlo no cambia nada, un choque deshace todo); el CHECK de la base y su
+índice parcial; la sugerencia (disponible sin lo apartado, una venta la sube, con y sin umbral); lo pedido (pedida, recibida en
+parte, cerrada con faltante, cancelada, de otra sucursal, y los contadores subidos por fuera del servicio); lo que va en camino
+(recibir en partes, cerrar con faltante, devuelto y perdido); el borrador que se enseña y no se descuenta; el borrador creado desde
+la propuesta y su idempotencia; la elección del proveedor (preferido, único activo, varios, ninguno, desactivado) y del costo; los
+filtros y la búsqueda (nombre, SKU, código de barras y nombre de la variante); el orden de los grupos; qué cuenta (descontinuados,
+archivados, sin control de inventario, sucursal cerrada, otra empresa); las alertas sin objetivo; el corte por tope; y una carrera
+de 12 rondas entre fijar un umbral y fijar un objetivo incompatibles a la vez (solo uno gana y nunca quedan cruzados).
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Dos guardias de diseño que ya existían saltaron**: mi pantalla escribía a mano el botón de exportar (hay un componente común,
+  `BotonExportar`) y mis avisos de «ya tienes un borrador» usaban clases de color propias (+12 sobre el techo de deuda de diseño).
+  Se cambiaron por los componentes comunes (`BotonExportar`, `Alert`) en vez de subir el techo.
+- **Mi cambio rompió, sin querer, una guardia vieja**: la de INV-1 que comprueba que aplicar el umbral a otras sucursales no crea
+  saldos en cero cortaba el código hasta el final del archivo, y mi función nueva (que sí usa `obtenerNivel`, a propósito) quedaba
+  dentro del corte. Se acotó a la función. Y el `tsc` encontró un error de tipos en mi propio recorrido E2E (`sucursalSembrada`
+  devuelve un objeto, no un texto).
+- **Una guardia mía pasaba aunque faltara el candado.** La que comprueba que `configurarObjetivoEnTx` bloquea el saldo ANTES de
+  escribir comparaba posiciones con `<` y no exigía que existieran: si el `bloquear` desaparecía, `indexOf` daba −1 y la prueba
+  seguía en verde. Las mutaciones lo mostraron; ahora exige que cada paso exista, que el objetivo vigente se lea DESPUÉS de
+  bloquear, y hay una carrera real contra la base que falla si el candado se quita (también si se lee el umbral sin bloquear).
+- **Mutaciones**: 217 distintas (67 de lo puro, 35 del CSV y los filtros de la URL, 74 del servicio y las lecturas contra PostgreSQL
+  y 41 de las guardias, la migración y el esquema), 210 detectadas. En algún momento sobrevivieron 28; 7 eran equivalentes y 21
+  eran pruebas débiles que se reforzaron: el desempate del orden (variante, SKU, id, sucursal), el resumen con varias líneas sin
+  proveedor, las alertas sin objetivo (la prueba terminaba con 0 alertas, así que «0 en Norte» era cierto aunque el filtro por
+  sucursal no existiera: ahora cuenta exacto y mira antes de apagar nada), la sucursal de origen al aplicar a las otras, validar
+  cuando no hay otras donde aplicar, buscar por el nombre de la variante, que un borrador ya pedido deje de contar como borrador, y
+  los contadores de lo cerrado, devuelto y perdido (el servicio no los deja en una orden o transferencia abierta, así que solo se
+  alcanzan escribiendo por fuera). Las 7 equivalentes: dos reescrituras del chequeo del objetivo contra el umbral que dan el mismo
+  resultado en cada caso (con un 0 el otro operando ya basta), `Number.isFinite` rechaza el texto aunque se le quite el
+  `typeof`, pedir `<=` en lugar de `<` al objetivo sin umbral (la sugerencia sería 0 y la propia regla la descarta), el desempate de
+  borradores por una clave que nunca existe para «sin proveedor», quitar el `HAVING … > 0` de las sumas (solo reduce filas), y la
+  resta de lo recibido en la suma de un borrador (un borrador no recibe nada).
+- **Una simplificación por el camino**: el lector de filtros trataba `sin` como un caso aparte, pero `sin` ya es un id válido; el caso
+  era redundante (la mutación que lo quitaba sobrevivía) y se quitó.
+- **El orden de despliegue es el de INV-3a**: SQL antes que el código (§17). `/api/health` lo avisa si no.
+- Medido contra la base local, no contra Supabase: la propuesta hace cinco consultas (saldos, lo pedido, lo que va en camino, los
+  borradores y los proveedores de lo que se repone) más la de las alertas sin objetivo, no una por línea.
+- En esta máquina el servidor de E2E imprime `fetch failed … 127.0.0.1:54329` y `The destination stream closed early`
+  (Supabase Auth inexistente en el arnés): ruido previo, no afecta a los resultados.

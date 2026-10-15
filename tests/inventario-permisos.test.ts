@@ -69,6 +69,7 @@ test('todas las acciones exportadas autorizan ANTES de tocar la base', () => {
     'crearProveedor',
     'desvincularProveedorDeProducto',
     'enviarTransferencia',
+    'fijarObjetivoInventario',
     'fijarUmbralInventario',
     'guardarOrdenCompra',
     'importarConteo',
@@ -178,7 +179,7 @@ test('los componentes de cliente del inventario NO importan el dominio, el servi
     const s = readFileSync(`${dir}/${f}`, 'utf8')
     const imports = [...s.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])
     for (const origen of imports) {
-      assert.doesNotMatch(origen, /modules\/inventory\/(domain|service|queries|auditoria|errores|barrido|compras-service|compras-queries)$/, `${f} importa ${origen}`)
+      assert.doesNotMatch(origen, /modules\/inventory\/(domain|service|queries|auditoria|errores|barrido|compras-service|compras-queries|reposicion-queries)$/, `${f} importa ${origen}`)
       assert.doesNotMatch(origen, /^@prisma\/client$|lib\/prisma$|lib\/commerce-primitives|modules\/catalog\//, `${f} importa ${origen}`)
     }
   }
@@ -298,7 +299,7 @@ test('INV-1 · el umbral en varias sucursales extiende la acción existente (no 
   assert.match(cuerpo, /entrada\.aplicarAOtras === true/)
   assert.match(cuerpo, /configurarUmbralOtrasSucursalesEnTx\(tx, c\.companyId,/, 'todo en la MISMA transacción y con la empresa de la sesión')
   const svc = sinComent(leer('src/modules/inventory/service.ts'))
-  const otras = svc.slice(svc.indexOf('export async function configurarUmbralOtrasSucursalesEnTx'))
+  const otras = svc.slice(svc.indexOf('export async function configurarUmbralOtrasSucursalesEnTx')).split('\nexport ')[0]
   assert.match(otras, /where: \{ companyId, catalogVariantId: variante\.id, locationId: \{ not: e\.sucursalOrigenId \}, location: \{ activa: true \} \}/, 'solo sucursales activas con saldo, de esta empresa')
   assert.doesNotMatch(otras, /obtenerNivel\(/, 'no crea saldos en cero donde el producto nunca estuvo')
 })
@@ -958,7 +959,9 @@ test('INV-3b · «Compras» y «Proveedores» solo se ofrecen a quien tiene «co
   assert.match(nav, /id: 'compras'[\s\S]*href: '\/admin\/inventario\/compras'/)
   assert.match(nav, /id: 'proveedores'[\s\S]*href: '\/admin\/inventario\/proveedores'/)
   assert.match(nav, /puedeFuncion\('inventario', 'comprar'\)/)
-  assert.match(nav, /\(v\.id !== 'compras' && v\.id !== 'proveedores'\) \|\| puedeComprar/)
+  // INV-3c: las tres vistas de compras comparten una sola lista de «requieren comprar», y el filtro la usa.
+  assert.match(nav, /REQUIEREN_COMPRAR[^=]*= new Set\(\['reposicion', 'compras', 'proveedores'\]\)/)
+  assert.match(nav, /\(!REQUIEREN_COMPRAR\.has\(v\.id\) \|\| puedeComprar\)/)
   assert.ok(FUNCIONES_POR_SECCION.inventario?.some((f) => f.codigo === 'comprar'))
 })
 
@@ -1067,7 +1070,7 @@ test('INV-3b · lo PURO sigue siendo puro, el servidor-solo no llega al navegado
     const c = leer(`src/components/inventario/${f}`)
     assert.match(c, /^'use client'/, f)
     for (const origen of [...c.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])) {
-      assert.doesNotMatch(origen, /modules\/inventory\/(domain|service|queries|auditoria|errores|barrido|importar|errores-pantalla|compras-service|compras-queries)$/, `${f} importa ${origen}`)
+      assert.doesNotMatch(origen, /modules\/inventory\/(domain|service|queries|auditoria|errores|barrido|importar|errores-pantalla|compras-service|compras-queries|reposicion-queries)$/, `${f} importa ${origen}`)
       assert.doesNotMatch(origen, /^@prisma\/client$|lib\/prisma$|lib\/tenant$/, `${f} importa ${origen}`)
     }
   }
@@ -1119,4 +1122,157 @@ test('INV-3b · el catálogo de funciones documenta lo que «comprar» incluye, 
   for (const tipo of ['InventorySupplier', 'InventoryPurchaseOrder', 'InventoryVariantSupplier']) assert.match(aud, new RegExp(`'${tipo}'`), tipo)
   // Las acciones de bitácora siguen siendo las tres de siempre (una nueva exigiría una migración del tipo de PostgreSQL).
   assert.match(aud, /Extract<AuditAccion, 'INVENTORY_STOCK_CHANGED' \| 'INVENTORY_TRANSFERRED' \| 'INVENTORY_CONFIGURED'>/)
+})
+
+// ── INV-3c · Reposición ──────────────────────────────────────────────────────
+
+const REPOSICION = 'src/app/(admin)/admin/inventario/reposicion'
+
+test('INV-3c · la pantalla de reposición se guarda como las demás y NO lee nada si quien llega no tiene «comprar»', () => {
+  const s = sinComent(leer(`${REPOSICION}/page.tsx`))
+  assert.match(s, /requireRole\(ADMIN_ROLES\)/)
+  assert.match(s, /requireCompanyContext\(user\)/)
+  assert.match(s, /conEmpresa\(companyId/)
+  assert.doesNotMatch(s, /\bprisma\./, 'usa el cliente global')
+  assert.doesNotMatch(s, /sp\.companyId|sp\.empresa|params\.companyId/, 'toma la empresa de la URL')
+  assert.match(s, /describirFalloDeCarga\(/, 'no distingue una migración pendiente')
+  // Trae proveedores y el último costo de cada uno: sin «comprar» ni lee (y tampoco se ofrece).
+  assert.match(s, /puedeFuncion\('inventario', 'comprar'\)/)
+  assert.ok(s.indexOf("puedeFuncion('inventario', 'comprar')") < s.indexOf('conEmpresa('), 'lee antes de comprobar «comprar»')
+  assert.match(s, /if \(!puedeComprar\) \{\s*return \(/, 'comprueba el resultado: sin «comprar» devuelve el aviso y no sigue')
+  assert.doesNotMatch(s, /puedeFuncion\('inventario', '(ajustar|transferir|costos)'\)/, 'usa el permiso equivocado')
+  assert.match(s, /<NavegacionInventario actual="reposicion" \/>\s*\{!datos \|\| !r \?/, 'la pestaña de la pantalla es la de reposición')
+  // Lo que llega por la URL solo filtra si es de ESTA empresa.
+  assert.match(s, /sucursales\.some\(\(s\) => s\.id === f\.sucursalId\)/)
+  assert.match(s, /f\.proveedorId !== 'sin' && !proveedores\.some\(\(p\) => p\.id === f\.proveedorId\)/)
+  // Al navegador solo cruzan textos y números (el costo, como el texto de su campo): nada de bigint ni de tipos del servidor.
+  assert.match(s, /costo: l\.ultimoCosto === null \? '' : costoParaCampo\(l\.ultimoCosto\)/)
+})
+
+test('INV-3c · «Reposición» solo se ofrece a quien tiene «comprar», y la alerta de stock bajo lo ofrece solo a ellos', () => {
+  const nav = sinComent(leer('src/components/inventario/NavegacionInventario.tsx'))
+  assert.match(nav, /id: 'reposicion'[\s\S]*href: '\/admin\/inventario\/reposicion'/)
+  const home = sinComent(leer('src/app/(admin)/admin/inventario/page.tsx'))
+  assert.match(home, /const puedeComprar = await puedeFuncion\('inventario', 'comprar'\)/)
+  assert.match(home, /\{puedeComprar && \(\s*<p[^>]*>\s*<Link href="\/admin\/inventario\/reposicion"/)
+})
+
+test('INV-3c · la descarga de reposición exige «comprar» ANTES de tocar la base, la empresa sale de la sesión y la URL solo filtra dentro de ella', () => {
+  const s = sinComent(leer(`${REPOSICION}/exportar/route.ts`))
+  assert.match(s, /requireSection\('inventario', 'comprar'\)/, 'el archivo trae proveedores y costos')
+  assert.match(s, /if \(!user\) return NextResponse\.json\(\{ error: 'No autorizado\.' \}, \{ status: 403 \}\)/)
+  assert.match(s, /resolveCompanyId\(user\)/)
+  assert.ok(s.indexOf('requireSection(') < s.indexOf('conEmpresa('), 'toca la base antes de autorizar')
+  assert.doesNotMatch(s, /\bprisma\./)
+  assert.match(s, /const pedido = leerFiltrosReposicion\(crudo\)\n/, 'los mismos filtros que la pantalla, sin tocarlos')
+  assert.match(s, /if \(!sucursal\) delete f\.sucursalId/, 'una sucursal ajena no filtra')
+  assert.match(s, /if \(pedido\.proveedorId !== 'sin' && !proveedor\) delete f\.proveedorId/, 'un proveedor ajeno no filtra')
+})
+
+test('INV-3c · fijar «llenar hasta» autoriza con «ajustar» (como el umbral) ANTES de tocar la base, y aplicar a las otras sucursales va en la MISMA transacción', () => {
+  const cuerpo = sinComentarios.slice(sinComentarios.indexOf('export async function fijarObjetivoInventario')).split('\n}\n')[0]
+  assert.match(cuerpo, /await contexto\('ajustar'\)/)
+  assert.doesNotMatch(cuerpo, /contexto\('(comprar|costos|transferir)'\)|puedeFuncion\(/, 'usa el permiso equivocado')
+  assert.ok(cuerpo.indexOf('await contexto(') < cuerpo.indexOf('conEmpresa('), 'toca la base antes de autorizar')
+  assert.match(cuerpo, /conEmpresa\(c\.companyId, async \(tx\) =>/)
+  assert.match(cuerpo, /entrada\.aplicarAOtras === true/)
+  assert.match(cuerpo, /configurarObjetivoOtrasSucursalesEnTx\(tx, c\.companyId,/, 'todo en la MISMA transacción y con la empresa de la sesión')
+  assert.doesNotMatch(cuerpo, /\bentrada\b[^\n]*company/i, 'lee una empresa de la entrada')
+  // Crear el borrador desde la propuesta NO es una acción nueva: pasa por la de órdenes, que ya exige «comprar».
+  const lectura = sinComentarios
+  assert.doesNotMatch(lectura, /reposicion-queries/, 'las acciones no leen la propuesta: eso lo hacen las pantallas, detrás de «comprar»')
+  const grupo = leer('src/components/inventario/ReposicionGrupoCard.tsx')
+  assert.match(grupo, /^'use client'/)
+  assert.match(grupo, /guardarOrdenCompra\(\{ cabecera: \{ proveedorId: proveedor\.id, sucursalId: grupo\.sucursalId, nota: NOTA_BORRADOR_REPOSICION \}, lineas, clave: clave\.current \}\)/)
+  assert.doesNotMatch(grupo, /pedirOrdenCompra|recibirOrdenCompra|cancelarOrdenCompra/, 'crear el borrador no pide nada: pedirlo es otra decisión, en la pantalla de la orden')
+})
+
+test('INV-3c · el servicio de «llenar hasta» valida, bloquea el saldo ANTES de escribir, no deja chocar con el umbral y deja su rastro', () => {
+  const svc = sinComent(leer('src/modules/inventory/service.ts'))
+  const objetivo = svc.slice(svc.indexOf('export async function configurarObjetivoEnTx')).split('\nexport ')[0]
+  const en = (t: string) => {
+    const i = objetivo.indexOf(t)
+    assert.ok(i >= 0, `configurarObjetivoEnTx ya no contiene «${t}»`)
+    return i
+  }
+  assert.ok(en('validarObjetivo(') < en('exigirVarianteControlada('), 'valida antes de tocar la base')
+  assert.ok(en('bloquear(tx, companyId, [nivelId])') < en('inventoryLevel.update('), 'escribe sin bloquear el saldo')
+  assert.ok(en('bloquear(tx, companyId, [nivelId])') < en('findUniqueOrThrow('), 'lee el objetivo vigente DESPUÉS de bloquear (si no, dos personas pasan la regla a la vez)')
+  assert.match(objetivo, /errorObjetivoContraUmbral\(\{ umbral: fila\.lowStockThreshold, llenarHasta: o\.valor, sucursal: sucursal\.nombre \}\)/)
+  assert.ok(en('errorObjetivoContraUmbral(') < en('inventoryLevel.update('), 'comprueba el umbral después de bloquear y antes de escribir')
+  assert.match(objetivo, /if \(targetStock === o\.valor\) return/, 'repetir el mismo valor no escribe ni audita')
+  assert.match(objetivo, /auditarInventario\(tx, ctx, companyId, 'INVENTORY_CONFIGURED', nivelId,/)
+  // Mover el umbral también respeta el objetivo.
+  const umbral = svc.slice(svc.indexOf('export async function configurarUmbralEnTx')).split('\nexport ')[0]
+  assert.match(umbral, /errorObjetivoContraUmbral\(\{ umbral: u\.valor, llenarHasta: targetStock, sucursal: sucursal\.nombre \}\)/)
+  assert.ok(umbral.indexOf('errorObjetivoContraUmbral(') >= 0 && umbral.indexOf('errorObjetivoContraUmbral(') < umbral.indexOf('inventoryLevel.update('))
+  assert.ok(umbral.indexOf('bloquear(tx, companyId, [nivelId])') < umbral.indexOf('findUniqueOrThrow('), 'el umbral también lee el objetivo vigente DESPUÉS de bloquear')
+  // Al aplicar a otras sucursales cada una pasa por la misma función (y por sus reglas).
+  const otras = svc.slice(svc.indexOf('export async function configurarObjetivoOtrasSucursalesEnTx')).split('\nexport ')[0]
+  assert.match(otras, /configurarObjetivoEnTx\(tx, companyId,/)
+  assert.doesNotMatch(otras, /obtenerNivel\(/, 'no crea saldos en cero donde el producto nunca estuvo')
+  assert.match(otras, /location: \{ activa: true \}/, 'solo sucursales activas')
+  assert.match(otras, /locationId: \{ not: e\.sucursalOrigenId \}/)
+})
+
+test('INV-3c · las lecturas de reposición solo LEEN y escriben la empresa en CADA consulta', () => {
+  const f = sinComent(leer('src/modules/inventory/reposicion-queries.ts'))
+  assert.doesNotMatch(f, /\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(|\$executeRaw|INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM/i, 'una lectura no escribe')
+  const lecturas = [...f.matchAll(/tx\.(\w+)\.(findFirst|findMany|count)\(\{\s*where: \{([\s\S]{0,120})/g)]
+  assert.ok(lecturas.length >= 4, 'la expresión ya no encuentra consultas; revisa esta prueba')
+  for (const [llamada, , , donde] of lecturas) assert.match(donde, /companyId/, `una consulta no filtra por empresa → ${llamada.slice(0, 90)}…`)
+  const sqls = [...f.matchAll(/\$queryRaw<[^>]*>`([\s\S]*?)`/g)]
+  assert.equal(sqls.length, 3, 'pedido, en camino y borradores')
+  for (const [, texto] of sqls) assert.match(texto, /"companyId" = \$\{companyId\}/, `un SQL a mano sin empresa → ${texto.trim().slice(0, 80)}…`)
+  // Las reglas de qué cuenta se escriben una vez y valen para la propuesta y para las alertas sin objetivo.
+  assert.equal([...f.matchAll(/location: \{ activa: true \}, variant: variante/g)].length, 2)
+  assert.match(f, /status: \{ not: 'DISCONTINUED' \}/)
+  assert.match(f, /capabilities: \{ path: \['trackInventory'\], equals: true \}/)
+  assert.match(f, /where: \{ companyId, status: 'DRAFT' \}/)
+  assert.match(f, /o\."status" IN \('ORDERED', 'PARTIAL'\)/, 'pedido = órdenes pedidas o recibidas en parte')
+  assert.match(f, /t\."status" IN \('SENT', 'PARTIAL'\)/, 'en camino = transferencias enviadas o recibidas en parte')
+  assert.match(f, /o\."status" = 'DRAFT'/)
+  assert.doesNotMatch(f, /parseFloat|toFixed\(\d\)\)\s*\*/, 'los montos no son flotantes')
+})
+
+test('INV-3c · lo PURO de reposición sigue siendo puro, y el componente de la propuesta no arrastra el servidor al navegador', () => {
+  const pura = leer('src/modules/inventory/reposicion.ts')
+  assert.doesNotMatch(pura, /server-only|from '@\/lib\/prisma'|from '@\/lib\/tenant'|@prisma\/client'/, 'reposicion.ts debe ser puro')
+  assert.doesNotMatch(sinComent(pura), /parseFloat|toFixed\(|Math\.round\(.*costo/, 'los costos viajan como enteros')
+  const c = leer('src/components/inventario/ReposicionGrupoCard.tsx')
+  for (const origen of [...c.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1])) {
+    assert.doesNotMatch(origen, /modules\/inventory\/(domain|service|queries|auditoria|errores|barrido|importar|errores-pantalla|compras-service|compras-queries|reposicion-queries)$/, `importa ${origen}`)
+    assert.doesNotMatch(origen, /^@prisma\/client$|lib\/prisma$|lib\/tenant$/, `importa ${origen}`)
+  }
+})
+
+test('INV-3c · la migración solo AÑADE una columna con valor por defecto constante, su CHECK sin bloquear la tabla y un índice parcial', () => {
+  const sql = leer('prisma/migrations/20261066_inventory_reorder/migration.sql')
+  const sinNotas = sql.replace(/^--.*$/gm, '')
+  assert.doesNotMatch(sinNotas, /\bDROP\s+(TABLE|COLUMN|TYPE|CONSTRAINT|INDEX)\b/i, 'no borra nada')
+  assert.doesNotMatch(sinNotas, /\bTRUNCATE\s+TABLE|\bDELETE\s+FROM|\bUPDATE\s+"/i, 'no toca filas')
+  for (const crea of sinNotas.matchAll(/CREATE\s+(TABLE|UNIQUE INDEX|INDEX)\s+(IF NOT EXISTS)?/gi)) assert.ok(crea[2], `«${crea[0]}» sin IF NOT EXISTS: no es idempotente`)
+  const alteraciones = [...sinNotas.matchAll(/ALTER\s+TABLE\s+"(\w+)"\s+([^;]*);/gi)]
+  for (const [, tabla] of alteraciones) assert.equal(tabla, 'inventory_levels', `toca la tabla «${tabla}»`)
+  assert.match(sinNotas, /ADD COLUMN IF NOT EXISTS "targetStock" INTEGER NOT NULL DEFAULT 0;/, 'una columna con DEFAULT constante: no reescribe la tabla')
+  assert.match(sinNotas, /"targetStock" >= 0 AND "targetStock" <= 1000000\) NOT VALID;/, 'el CHECK se crea sin bloquear')
+  assert.match(sinNotas, /VALIDATE CONSTRAINT "inventory_levels_objetivo"/, 'y se valida aparte')
+  assert.match(sinNotas, /CREATE INDEX IF NOT EXISTS "inventory_levels_objetivo_idx" ON "inventory_levels" \("companyId"\) WHERE "targetStock" > 0;/, 'índice PARCIAL: las ventas no pagan por él')
+  assert.match(leer('prisma/migrations/SUMAS.txt'), /20261066_inventory_reorder/)
+  // Y el esquema de Prisma declara lo mismo.
+  assert.match(leer('prisma/schema/inventario.prisma'), /targetStock Int @default\(0\)/)
+})
+
+test('INV-3c · /api/health avisa si falta la columna de «llenar hasta» (despliegue adelantado a la base)', () => {
+  const h = leer('src/app/api/health/route.ts')
+  assert.match(h, /inventory_levels\.targetStock', EXISTS \([\s\S]*table_name = 'inventory_levels' AND column_name = 'targetStock'\)/)
+})
+
+test('INV-3c · el catálogo de funciones dice que «comprar» incluye la reposición, y la ficha de la sucursal ofrece «llenar hasta» solo a quien puede ajustar', () => {
+  const comprar = FUNCIONES_POR_SECCION.inventario?.find((f) => f.codigo === 'comprar')
+  assert.ok(comprar && /reposici/i.test(comprar.label), 'la etiqueta menciona la reposición')
+  const card = leer('src/components/inventario/SucursalInventarioCard.tsx')
+  const ajustar = card.slice(card.indexOf('{puedeAjustar ? ('))
+  assert.match(ajustar, /aria-label=\{`Llenar hasta en \$\{saldo\.nombre\}`\}/, 'el formulario está dentro de la rama «puedeAjustar»')
+  assert.ok(ajustar.indexOf('Llenar hasta en') < ajustar.indexOf('No tienes permiso para mover existencias'), 'va antes del mensaje de «sin permiso»')
 })

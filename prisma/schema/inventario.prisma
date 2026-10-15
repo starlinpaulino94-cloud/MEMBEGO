@@ -85,6 +85,10 @@ model InventoryLevel {
 
   /// Avisar cuando `onHand − reserved` baje a este número. 0 = sin umbral.
   lowStockThreshold Int @default(0)
+  /// «Llenar hasta» (INV-3c): hasta cuánto se quiere tener en esta sucursal. 0 = sin objetivo. Reposición sugiere pedir lo que
+  /// falta para llegar aquí, descontando lo ya pedido y lo que va en camino. (Hay un índice parcial `WHERE targetStock > 0`
+  /// en la migración que Prisma no sabe expresar.)
+  targetStock Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

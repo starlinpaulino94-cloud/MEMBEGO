@@ -1,6 +1,7 @@
 import type { InventoryMovementType } from '@prisma/client'
 import { esEstadoOrden, type EstadoOrden } from './compras'
 import { TIPOS_DE_MOVIMIENTO } from './domain'
+import type { FiltrosReposicion } from './reposicion'
 
 /**
  * COMMERCE CORE · inventario — los filtros de la pantalla de movimientos y de su
@@ -337,5 +338,26 @@ export function consultaDeFiltrosValor(f: FiltrosValor, pagina: number = f.pagin
   if (f.sinCosto) p.set('sinCosto', '1')
   if (f.mes) p.set('mes', f.mes)
   if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}
+
+// ── INV-3c · Reposición ──────────────────────────────────────────────────────
+
+/**
+ * Los filtros de la pantalla de Reposición (y de su archivo) desde la URL. Todo lo que llega es texto libre: una sucursal o un
+ * proveedor solo filtran si la página comprueba que son de la empresa; `sin` pide lo que no tiene proveedor.
+ */
+export function leerFiltrosReposicion(sp: ParametrosUrl): FiltrosReposicion {
+  const sucursalId = idValido(primero(sp.sucursal))
+  const proveedorId = idValido(primero(sp.proveedor)) // `sin` pasa como un id más: la consulta lo entiende
+  const q = primero(sp.q)?.trim().slice(0, 80)
+  return { ...(sucursalId ? { sucursalId } : {}), ...(proveedorId ? { proveedorId } : {}), ...(q ? { q } : {}) }
+}
+
+export function consultaDeFiltrosReposicion(f: FiltrosReposicion): string {
+  const p = new URLSearchParams()
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.proveedorId) p.set('proveedor', f.proveedorId)
+  if (f.q) p.set('q', f.q)
   return p.toString()
 }

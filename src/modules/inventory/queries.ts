@@ -31,6 +31,8 @@ export interface SucursalSaldo {
   damaged: number
   disponible: number
   lowStockThreshold: number
+  /** INV-3c · «Llenar hasta»: 0 = sin objetivo (no sale en Reposición). */
+  targetStock: number
   estado: EstadoStock
 }
 
@@ -122,7 +124,7 @@ export async function listarInventarioEnTx(tx: Tx, companyId: string, f: Filtros
       item: { select: { id: true, name: true, status: true } },
       inventoryLevels: {
         where: { companyId, ...(f.sucursalId ? { locationId: f.sucursalId } : {}) },
-        select: { id: true, locationId: true, onHand: true, reserved: true, damaged: true, lowStockThreshold: true, location: { select: { nombre: true, activa: true } } },
+        select: { id: true, locationId: true, onHand: true, reserved: true, damaged: true, lowStockThreshold: true, targetStock: true, location: { select: { nombre: true, activa: true } } },
       },
     },
     orderBy: [{ item: { name: 'asc' } }, { position: 'asc' }, { id: 'asc' }],
@@ -143,6 +145,7 @@ export async function listarInventarioEnTx(tx: Tx, companyId: string, f: Filtros
         damaged: n.damaged,
         disponible: disponible(n),
         lowStockThreshold: n.lowStockThreshold,
+        targetStock: n.targetStock,
         estado: estadoDeStock(n),
       }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
@@ -287,7 +290,7 @@ export async function detalleVarianteEnTx(tx: Tx, companyId: string, varianteId:
       isDefault: true,
       status: true,
       item: { select: { id: true, name: true, type: true, capabilities: true } },
-      inventoryLevels: { where: { companyId }, select: { id: true, locationId: true, onHand: true, reserved: true, damaged: true, lowStockThreshold: true } },
+      inventoryLevels: { where: { companyId }, select: { id: true, locationId: true, onHand: true, reserved: true, damaged: true, lowStockThreshold: true, targetStock: true } },
     },
   })
   if (!v) return null
@@ -298,7 +301,7 @@ export async function detalleVarianteEnTx(tx: Tx, companyId: string, varianteId:
     const n = porSucursal.get(s.id)
     const conExistencias = n ? n.onHand > 0 || n.damaged > 0 : false
     if (!s.activa && !conExistencias) continue
-    const base = n ?? { id: null, onHand: 0, reserved: 0, damaged: 0, lowStockThreshold: 0 }
+    const base = n ?? { id: null, onHand: 0, reserved: 0, damaged: 0, lowStockThreshold: 0, targetStock: 0 }
     filas.push({
       sucursalId: s.id,
       nombre: s.nombre,
@@ -309,6 +312,7 @@ export async function detalleVarianteEnTx(tx: Tx, companyId: string, varianteId:
       damaged: base.damaged,
       disponible: disponible(base),
       lowStockThreshold: base.lowStockThreshold,
+      targetStock: base.targetStock,
       estado: estadoDeStock(base),
     })
   }
