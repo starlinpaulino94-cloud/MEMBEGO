@@ -4,6 +4,7 @@ import type { TotalMargen } from './margen'
 import { totalesDeMargenEnTx } from './margen-queries'
 import type { TotalGrupo } from './mermas'
 import { perdidoEnRangoEnTx } from './mermas-queries'
+import { resumenVencimientosEnTx, type ResumenVencimientos } from './vencimientos-queries'
 import { mesActual, rangoDeMes, valorTotalEnTx } from './valor'
 
 /**
@@ -28,6 +29,8 @@ export interface ResumenInventario {
   margen: TotalMargen | null
   /** Lo perdido este mes (faltantes y bajas de lo dañado). Sin costos, solo unidades y movimientos. */
   perdido: TotalGrupo
+  /** INV-5b1: lo que vence pronto (lotes). Son conteos y unidades: no lee costos, así que lo ve quien ve la tarjeta. */
+  vencimientos: ResumenVencimientos
 }
 
 export async function resumenInventarioEmpresa(companyId: string, zonaHoraria: string, opciones: { conCostos: boolean; ahora?: Date }): Promise<ResumenInventario> {
@@ -50,6 +53,7 @@ export async function resumenInventarioEmpresa(companyId: string, zonaHoraria: s
       unidadesEnExistencia = (u._sum.onHand ?? 0) + (u._sum.damaged ?? 0)
     }
     const perdido = await perdidoEnRangoEnTx(tx, companyId, rango, opciones.conCostos)
-    return { mes, conCostos: opciones.conCostos, unidadesEnExistencia, valor, unidadesSinCosto, margen, perdido }
+    const vencimientos = await resumenVencimientosEnTx(tx, companyId, { zonaHoraria, ahora: opciones.ahora })
+    return { mes, conCostos: opciones.conCostos, unidadesEnExistencia, valor, unidadesSinCosto, margen, perdido, vencimientos }
   })
 }

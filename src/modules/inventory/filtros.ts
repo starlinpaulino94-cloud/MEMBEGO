@@ -6,6 +6,7 @@ import { PAGINA_MAXIMA_REPORTES, esEstadoCobertura, periodoValido, PERIODO_POR_D
 import { FILTRO_SIN_MOTIVO, type FiltrosMermas } from './mermas'
 import { esMotivoDelCatalogo } from './motivos'
 import { ORDEN_MARGEN_POR_DEFECTO, esOrdenMargen, type FiltrosMargen } from './margen'
+import { VENTANA_POR_DEFECTO, esClaseVencimiento, ventanaValida, type FiltrosVencimientos } from './vencimientos'
 
 /**
  * COMMERCE CORE · inventario — los filtros de la pantalla de movimientos y de su
@@ -414,6 +415,30 @@ export function leerFiltrosSinVentas(sp: ParametrosUrl): FiltrosSinVentas {
 export function consultaDeFiltrosSinVentas(f: FiltrosSinVentas, pagina: number = f.pagina): string {
   const p = new URLSearchParams()
   if (f.dias !== PERIODO_POR_DEFECTO) p.set('dias', String(f.dias))
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.q) p.set('q', f.q)
+  if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}
+
+/** La URL de «vence pronto»: la ventana en días (solo las que hay), el estado, la sucursal, el texto y la página. */
+export function leerFiltrosVencimientos(sp: ParametrosUrl): FiltrosVencimientos {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const clase = primero(sp.estado)
+  return {
+    dias: ventanaValida(primero(sp.dias)),
+    ...(esClaseVencimiento(clase) ? { clase } : {}),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+/** La consulta de la URL (y, si se pide, otra página). Sin lo que es el valor de siempre: 30 días y la página 1. */
+export function consultaDeFiltrosVencimientos(f: FiltrosVencimientos, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.dias !== VENTANA_POR_DEFECTO) p.set('dias', String(f.dias))
+  if (f.clase) p.set('estado', f.clase)
   if (f.sucursalId) p.set('sucursal', f.sucursalId)
   if (f.q) p.set('q', f.q)
   if (pagina > 1) p.set('pagina', String(pagina))

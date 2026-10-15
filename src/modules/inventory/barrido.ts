@@ -1,7 +1,9 @@
 import 'server-only'
 
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { avisarVencimientos } from './avisos'
 import { vencerLotesEnTx, vencerReservasEnTx } from './service'
+import { VENTANA_POR_DEFECTO } from './vencimientos'
 
 /**
  * COMMERCE CORE · inventario — BARRIDO del cron (Fase 2).
@@ -15,6 +17,10 @@ import { vencerLotesEnTx, vencerReservasEnTx } from './service'
  * INV-5a · También saca de lo vendible los LOTES VENCIDOS (pasan a dañado, motivo «Vencido»). Tampoco depende de esto la venta
  * (FEFO no vende lo vencido aunque nadie haya barrido), pero sin barrer, `disponible` seguiría contando lo que ya no se puede vender.
  *
+ * INV-5b1 · Y avisa a los administradores de lo que vence pronto y de lo que acaba de vencer (`avisarVencimientos`: una vez por semana y
+ * nivel el primero, una vez por día el segundo). Por eso recorre también las empresas con lotes que vencen dentro de la ventana de aviso,
+ * no solo las que ya tienen alguno vencido.
+ *
  * Idempotente: una segunda pasada no encuentra nada que repetir (cada paso
  * filtra por `status = ACTIVE`). Cada empresa va en su propia transacción: un
  * fallo en una no deshace las demás.
@@ -26,6 +32,8 @@ export interface ResultadoBarridoInventario {
   /** INV-5a: lotes vencidos cuyas unidades disponibles se sacaron de lo vendible, y cuántas unidades fueron. */
   lotesVencidos: number
   unidadesVencidas: number
+  /** INV-5b1: avisos de lotes por vencer o vencidos que se crearon (los repetidos no cuentan). */
+  avisosDeVencimiento: number
   /** Empresas cuyo barrido falló (el detalle queda en el log). */
   empresasConError: number
 }
@@ -41,9 +49,9 @@ export async function barridoInventario(ahora: Date = new Date()): Promise<Resul
       distinct: ['companyId'],
       take: MAX_EMPRESAS,
     }),
-    // Las empresas que llevan lotes (y que tienen alguno ya vencido en algún huso: un día de margen sobre el instante de ahora).
+    // Las empresas que llevan lotes con algo que vence dentro de la ventana de aviso (o ya venció), con un día de margen por los husos.
     conLotes: await tx.inventoryLot.findMany({
-      where: { expiresOn: { lt: new Date(ahora.getTime() + 86_400_000) }, balances: { some: { onHand: { gt: 0 } } } },
+      where: { expiresOn: { lt: new Date(ahora.getTime() + (VENTANA_POR_DEFECTO + 1) * 86_400_000) }, balances: { some: { onHand: { gt: 0 } } } },
       select: { companyId: true },
       distinct: ['companyId'],
       take: MAX_EMPRESAS,
@@ -53,6 +61,7 @@ export async function barridoInventario(ahora: Date = new Date()): Promise<Resul
   let reservasVencidas = 0
   let lotesVencidos = 0
   let unidadesVencidas = 0
+  let avisosDeVencimiento = 0
   let empresasConError = 0
   for (const companyId of empresas) {
     try {
@@ -61,10 +70,12 @@ export async function barridoInventario(ahora: Date = new Date()): Promise<Resul
       const lotes = await conEmpresa(companyId, (tx) => vencerLotesEnTx(tx, companyId, ahora))
       lotesVencidos += lotes.lotes
       unidadesVencidas += lotes.unidades
+      // Después de barrer: lo que acaba de vencer y lo que vence pronto (best-effort: no lanza).
+      avisosDeVencimiento += await avisarVencimientos(companyId, { ahora, ...(lotes.unidades > 0 ? { vencidos: lotes } : {}) })
     } catch (e) {
       empresasConError++
       console.error('[inventario:barrido]', companyId, e instanceof Error ? e.message : e)
     }
   }
-  return { empresas: empresas.length, reservasVencidas, lotesVencidos, unidadesVencidas, empresasConError }
+  return { empresas: empresas.length, reservasVencidas, lotesVencidos, unidadesVencidas, avisosDeVencimiento, empresasConError }
 }

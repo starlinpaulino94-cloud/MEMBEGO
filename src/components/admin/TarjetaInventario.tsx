@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Warehouse } from 'lucide-react'
+import { CalendarClock, Warehouse } from 'lucide-react'
 import { formatMoney } from '@/lib/format'
 import { costoADecimal, type Costo } from '@/modules/inventory/costos'
 import type { ResumenInventario } from '@/modules/inventory/dashboard'
@@ -14,6 +14,12 @@ function aNumero(c: Costo): number {
 }
 
 const TILE = 'rounded-lg border border-border p-3 transition hover:bg-muted/40'
+
+/** Las columnas según cuántas cifras hay: valor o unidades, margen (con costos), lo perdido y —si la empresa lleva lotes— lo que vence. */
+function columnas(r: ResumenInventario): string {
+  const n = 2 + (r.conCostos ? 1 : 0) + (r.vencimientos.llevaLotes ? 1 : 0)
+  return n === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : n === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+}
 
 /**
  * La tarjeta de INVENTARIO del dashboard (INV-4c): cuánto hay y cuánto vale, cuánto se ganó este mes y cuánto se perdió. Es la misma
@@ -35,7 +41,7 @@ export function TarjetaInventario({ resumen, company }: { resumen: ResumenInvent
           Ver reportes
         </Link>
       </div>
-      <dl className={`mt-3 grid gap-3 ${resumen.conCostos ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+      <dl className={`mt-3 grid gap-3 ${columnas(resumen)}`}>
         {resumen.conCostos && resumen.valor !== null ? (
           <Link href="/admin/inventario/valor" className={TILE}>
             <dt className="text-caption">Valor del inventario</dt>
@@ -61,6 +67,24 @@ export function TarjetaInventario({ resumen, company }: { resumen: ResumenInvent
                 ? 'Sin ventas este mes'
                 : `${m.margenPct === null ? 'Sin base para el porcentaje' : formatearPorcentaje(m.margenPct)} · ${fmt(m.unidades)} unidad${m.unidades === 1 ? '' : 'es'} vendida${m.unidades === 1 ? '' : 's'}`}
               {m.unidadesSinCosto > 0 ? ` · ${fmt(m.unidadesSinCosto)} sin costo no entran` : ''}
+            </p>
+          </Link>
+        ) : null}
+        {resumen.vencimientos.llevaLotes ? (
+          <Link
+            href={resumen.vencimientos.vencidos.lotes > 0 ? '/admin/inventario/reportes/vencimientos?estado=VENCIDO' : '/admin/inventario/reportes/vencimientos'}
+            className={`${TILE} ${resumen.vencimientos.vencidos.lotes > 0 || resumen.vencimientos.porVencer.urgentes > 0 ? 'border-warning/50 bg-warning/5' : ''}`}
+          >
+            <dt className="flex items-center gap-1 text-caption">
+              <CalendarClock className="size-3.5" aria-hidden /> Vence pronto
+            </dt>
+            <dd className="text-h3 tabular-nums text-foreground">
+              {fmt(resumen.vencimientos.porVencer.lotes)} <span className="text-small text-muted-foreground">lote{resumen.vencimientos.porVencer.lotes === 1 ? '' : 's'}</span>
+            </dd>
+            <p className="text-label-sm text-muted-foreground">
+              {resumen.vencimientos.porVencer.lotes === 0 && resumen.vencimientos.vencidos.lotes === 0
+                ? `Nada vence en ${resumen.vencimientos.dias} días`
+                : `en ${resumen.vencimientos.dias} días${resumen.vencimientos.porVencer.urgentes > 0 ? ` · ${fmt(resumen.vencimientos.porVencer.urgentes)} urgente${resumen.vencimientos.porVencer.urgentes === 1 ? '' : 's'}` : ''}${resumen.vencimientos.vencidos.lotes > 0 ? ` · ${fmt(resumen.vencimientos.vencidos.lotes)} ya vencido${resumen.vencimientos.vencidos.lotes === 1 ? '' : 's'}` : ''}`}
             </p>
           </Link>
         ) : null}

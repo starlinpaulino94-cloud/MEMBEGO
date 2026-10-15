@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BookOpen, PackageX, Percent, RefreshCw, TrendingDown } from 'lucide-react'
+import { BookOpen, CalendarClock, PackageX, Percent, RefreshCw, TrendingDown } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { puedeFuncion, requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
@@ -7,12 +7,13 @@ import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { NavegacionInventario } from '@/components/inventario/NavegacionInventario'
 import { DIAS_EXCESO_COBERTURA, DIAS_POCA_COBERTURA } from '@/modules/inventory/reportes'
+import { VENTANA_POR_DEFECTO } from '@/modules/inventory/vencimientos'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * REPORTES DE EXISTENCIAS (INV-4a): la puerta a los informes que responden «qué pasó con este producto», «qué tengo parado», «qué se me va a acabar o me
- * sobra» (INV-4a), «cuánto perdí y por qué» (INV-4b) y «cuánto gané» (INV-4c, el margen real: solo con la función `costos`, porque es costo contra precio). Cada informe es su propia pantalla (con su CSV) y todos respetan la función `costos`: quien
+ * sobra» (INV-4a), «cuánto perdí y por qué» (INV-4b), «qué se me vence» (INV-5b) y «cuánto gané» (INV-4c, el margen real: solo con la función `costos`, porque es costo contra precio). Cada informe es su propia pantalla (con su CSV) y todos respetan la función `costos`: quien
  * no la tiene ve unidades y días, nunca dinero.
  */
 export default async function ReportesInventarioPage() {
@@ -49,6 +50,13 @@ export default async function ReportesInventarioPage() {
       texto: 'Lo que cobraste contra lo que costó lo que vendiste, producto por producto, con el costo que tenía cada uno el día que se vendió.',
       costos: 'Solo con costos: ingresos, costo, margen y porcentaje.',
       soloCostos: true,
+    },
+    {
+      href: '/admin/inventario/reportes/vencimientos',
+      icono: CalendarClock,
+      titulo: 'Vence pronto',
+      texto: `Los lotes con existencias que ya vencieron o vencen en los próximos días (${VENTANA_POR_DEFECTO} por defecto; de 7 a 90), por sucursal y de lo que antes vence a lo que después.`,
+      costos: 'Con costos: cuánto dinero hay en riesgo.',
     },
     {
       href: '/admin/inventario/reportes/rotacion',

@@ -115,7 +115,11 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-4b · Motivos codificados** | Catálogo de 14 motivos (vencido, robo, pérdida, muestra, consumo interno, devuelto al proveedor, diferencia de conteo, apareció mercancía, error de captura, golpe, mal almacenamiento, daño en el transporte, defecto de fábrica y «otro») que el ajuste, el daño y la baja **exigen** elegir; el texto libre queda como detalle. Los conteos escriben solos «diferencia de conteo». Informe «Mermas por motivo» (lo perdido, los sobrantes y lo dañado, cada uno por motivo, con unidades y —con `costos`— lo que valieron), con filtros y CSV; el motivo se ve en Movimientos, en el historial de la ficha y en el kardex (pantalla y CSV). Sin función de permiso nueva | `reasonCode` en el movimiento (migración `20261067`) | M | **Hecha** (este documento, §21) |
 | **INV-4c · Margen real** | Informe «Margen real» (solo con la función `costos`): por producto, lo cobrado (precio de la línea del pedido menos su descuento) contra el costo que el ledger congeló al vender, con margen y porcentaje; lo que no se puede comparar (sin costo, reembolsado, en otra moneda, sin pedido) se enseña aparte, nunca como cero; filtros, cinco órdenes y CSV. Tarjeta «Inventario» en el dashboard: valor, margen del mes y lo perdido (unidades para quien no tiene `costos`). Sin función de permiso nueva | **Ninguno** (todo se lee del ledger y de los pedidos) | S | **Hecha** (este documento, §23) |
 | **INV-5a · Lotes y vencimiento** | Un producto puede LLEVAR LOTES (se activa por producto, de un solo sentido): cada unidad es de un lote con su código y, si lo tiene, su día de vencimiento; lo que ya había pasa al lote «SIN LOTE»; se vende, se aparta y se saca **primero lo que antes vence** (FEFO) y **lo vencido no se vende**; las devoluciones vuelven a su lote; dañar, ajustar, dar de baja y recuperar por lote; mover unidades entre lotes (corregir uno mal capturado, sin que cuente como merma); el barrido diario saca lo vencido de lo vendible. La base mantiene los saldos por lote y vigila que los lotes sumen lo que hay | `InventoryLotTracking`, `InventoryLot`, `InventoryLotBalance`, `InventoryLotOpening`, `InventoryMovementLot` (migración `20261068`) | L | **Hecha** (este documento, §25) |
-| INV-5b · Lotes II | Informe y aviso de lo que vence pronto, lotes en conteos, transferencias y órdenes de compra, corregir el vencimiento de un lote, desactivar lotes | — | M | pendiente |
+| **INV-5b1 · Vence pronto** | Informe «Vence pronto» (los lotes con existencias que ya vencieron o vencen en 7 a 90 días, por sucursal, de lo que antes vence a lo que después, con lo vendible, lo apartado y lo dañado, filtros, páginas y CSV), una cifra en la tarjeta de inventario del dashboard y un aviso a los administradores desde el barrido diario (una vez por semana y nivel de urgencia, y una vez por día lo que venció) | — (sin migración) | S | **hecha** |
+| INV-5b2 · Lotes en órdenes de compra | Recibir una orden de compra con los lotes de lo que llega (hoy se niega para un producto con lotes) | — | S | pendiente |
+| INV-5b3 · Lotes en conteos | Contar por lote y aplicar la diferencia lote por lote | Conteo por lote | M | pendiente |
+| INV-5b4 · Lotes en transferencias | Que el lote viaje con lo que se transfiere (directa y con envío) | Lotes de la línea | M | pendiente |
+| INV-5b5 · Corregir y desactivar | Corregir el vencimiento de un lote con su historia y desactivar los lotes de un producto | Historia del vencimiento | M | pendiente |
 | INV-5c · Series | Número de serie por unidad | Series | L | pendiente |
 | INV-5d · Kits | Kits que descuentan componentes | Kits | L | pendiente |
 | INV-5e · API v1 y rol de bodega | API pública del inventario; un rol que mueve stock sin ver finanzas | — | M | pendiente |
@@ -1594,3 +1598,116 @@ las vende, pero «disponible» las incluye). **Activar es de un solo sentido** (
 omisión. Para un producto con lotes siguen negados el conteo, la transferencia, la orden de compra y la importación por CSV (son 5b). El
 E2E se corrió solo en escritorio. La API v1, la app móvil y el POS no usan todavía nada específico de lotes (las ventas del POS siguen el
 mismo camino del servicio, pero las pruebas solo recorren el marketplace y el servicio).
+
+## 27. INV-5b1 · qué se hizo
+
+> Primera entrega de INV-5b («Lotes II»), que se parte en entregas más chicas (ver la hoja de ruta, §4). **Sin migración y sin permiso nuevo**:
+> solo LEE las tablas de lotes de 5a, así que no hay SQL que aplicar antes de desplegar. Eso sí, **da por hecho que `20261068` ya está
+> aplicada** (si no lo está, el informe no encuentra las tablas y la pantalla lo dice en vez de reventar).
+
+**El problema.** Con 5a la empresa sabe de qué lote es cada unidad y cuándo vence, pero para enterarse de qué se le va a vencer tenía que
+abrir la ficha de cada producto. Lo que una tienda necesita es la pregunta de arriba abajo: *qué se me vence y cuándo*.
+
+**El informe «Vence pronto»** (`/admin/inventario/reportes/vencimientos`, en el hub de reportes). Cada fila es **un lote en una sucursal** con
+existencias cuyo vencimiento ya pasó o cae dentro de la ventana que se elija (7, 15, **30**, 60 o 90 días; el último día de la ventana
+entra). Va de lo que antes vence a lo que después (lo ya vencido, primero; a igual día, por nombre, SKU, lote y sucursal: el orden no
+depende de la base). Cada fila dice el producto (con enlace a su ficha), la sucursal, el lote y su día, «Vence en 5 días» / «Vence hoy» /
+«Venció hace 10 días» con su marca (vencido, urgente —7 días o menos— o por vencer) y tres cifras: lo **vendible** (lo que hay menos lo
+apartado), lo **apartado** y lo **dañado**.
+
+- *Qué cuenta y qué no.* Entran los lotes con existencias vendibles o apartadas. **No** entra lo que ya está dañado (ya salió de lo
+  vendible: el barrido de 5a lo pasó ahí), ni un lote sin fecha de vencimiento, ni uno que vence más allá de la ventana. Un lote que vence
+  **hoy** todavía se vende: sale como «por vencer», no como vencido (las mismas reglas con que vende el servicio).
+- *«Hoy».* Es el día de la **empresa** (su zona horaria), no el del servidor: de noche en Santo Domingo ya es otro día en UTC.
+- *Filtros.* La ventana, el estado (todos / por vencer / vencidos), el producto o el lote (nombre, SKU, código de barras o código de lote;
+  los comodines del texto son texto) y la sucursal (si no es de la empresa, no filtra). Paginado de 50; los totales son de todo lo que cumple
+  los filtros, no de la página: lotes distintos (un lote en dos sucursales cuenta una vez), cuántos ya vencieron y unidades vendibles.
+- *Costos.* **Solo con la función `costos`**: con ella, cuánto dinero hay en riesgo (lo vendible por el costo promedio) y, aparte, las
+  unidades sin costo conocido (no valen cero: no se sabe); sin ella la tabla de costos ni se une a la consulta y la pantalla no enseña dinero.
+- *El archivo.* `exportar` descarga los lotes con **los mismos filtros** (misma función de lectura de la URL), hasta 20.000, con un bloque
+  de alcance (ventana, filtros, zona horaria, «Datos completos: NO» si el tope lo cortó), los días restantes en negativo si ya venció, las
+  celdas de costo vacías si no hay costo y los textos libres neutralizados contra fórmulas de hoja de cálculo. Se guarda solo
+  (`requireSection('inventario')`): la función `costos` no es requisito para descargar, solo decide si el archivo lleva dinero.
+
+**La tarjeta «Inventario» del dashboard** gana una cuarta cifra, «Vence pronto»: cuántos lotes (distintos) vencen en 30 días, cuántos de ellos
+en 7 o menos, y cuántos ya vencieron y siguen con existencias; se pinta en aviso si hay urgentes o vencidos, y lleva al informe (directo a
+los vencidos si los hay). **Solo se ofrece si la empresa lleva lotes** en algún producto; son conteos, no dinero, así que la ve quien ve
+la tarjeta, con o sin `costos`.
+
+**El aviso (`avisarVencimientos`, desde el barrido diario del cron).** Dos avisos a los administradores de la empresa, los dos sin repetirse:
+
+| Aviso | Cuándo | Clave (no se repite) |
+|---|---|---|
+| **Lotes por vencer** | Hay lotes con existencias vendibles que vencen dentro de 30 días | Una vez por **semana ISO y nivel**: `lotes-por-vencer:empresa:2027-W24:normal` o `:urgente` |
+| **Mercancía vencida** | El barrido acaba de sacar de lo vendible unidades de lotes vencidos | Una vez por **día**: `lotes-vencidos:empresa:2027-06-15` |
+
+El nivel va en la clave a propósito, igual que el estado en el aviso de stock bajo: si el lunes avisó «por vencer» y el jueves un lote pasa a
+vencer en menos de una semana, esa escalada tiene que avisar otra vez. Una empresa que no lleva lotes no recibe nada. Para que el aviso de
+«por vencer» llegue **antes** de que algo venza, el barrido recorre ahora también las empresas con lotes dentro de la ventana de aviso (antes
+solo las que ya tenían alguno vencido o una reserva caducada). Es best-effort y fuera de cualquier transacción de inventario: nunca lanza.
+
+**Archivos.** `modules/inventory/vencimientos.ts` (reglas puras: la ventana, las clases, la urgencia, la semana ISO, los textos de los
+avisos), `vencimientos-queries.ts` (el informe y el resumen: solo lecturas), `filtros.ts` y `exportacion.ts` (la URL y el CSV, junto a los
+demás informes), `avisos.ts` y `barrido.ts` (el aviso), `dashboard.ts` y `components/admin/TarjetaInventario.tsx` (la cifra), y la página y
+la descarga bajo `app/(admin)/admin/inventario/reportes/vencimientos/`. La tabla de rutas del documento de separación se regeneró
+(`bun run docs:rutas`): +1 página y +1 descarga del panel.
+
+**Lo que 5b1 NO hace (a propósito, para las siguientes entregas de 5b).** No corrige el vencimiento de un lote ni desactiva lotes; no
+deja contar, transferir ni pedir en una orden de compra un producto con lotes (siguen negados con su mensaje); no manda correo ni push
+(el aviso es la campana de siempre); y no hay ventana ni días de aviso configurables por empresa (30 días y 7 de urgencia, en el código).
+
+## 28. Verificación de INV-5b1 (2026-10-15)
+
+Local, sobre PostgreSQL 16 desechable. **INV-5b1 no trae migración ni SQL que aplicar**: lee las tablas de la `20261068` (INV-5a), que
+sigue pendiente de aplicarse a mano en Supabase antes de desplegar este código. Se probó contra bases desechables (`supplytest`,
+`membego_inv2`, `membego_e2e_inv2`); **no se tocó ninguna base real**. Sin Supabase real, Vercel, móvil ni Safari: **no verificados**.
+**Tampoco se miró cómo se ven las pantallas** (el informe, la tarjeta del dashboard): el E2E comprueba qué dicen y qué hacen, no su
+aspecto; ni capturas ni revisión visual en móvil.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo: son de `apps/client`) |
+| `bun run build` y `bun run presupuesto` | verdes; entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB; indicador general 8.928/9.200 KB (97 %, igual que tras 5a) |
+| Unitarias (`bun run test`) | 4573 pruebas: 4566 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest`) | **948/948** (937 de antes + 11 nuevas) |
+| Pruebas nuevas | 15 de reglas puras y guardias (`inventario-vencimientos.test.ts`), 11 contra PostgreSQL (`inventory-vencimientos.db.test.ts`) y 1 recorrido E2E (en `inventario-lotes.spec.ts`); el hub de reportes pasó de 5 a 6 informes en `inventario-admin.spec.ts` |
+| E2E (`node scripts/e2e/correr.mjs`, escritorio) | **18/18** con el build final: `inventario-admin` (14) y `inventario-lotes` (4) |
+| Mutaciones | 72 en dos capas (reglas y guardias rápidas, y PostgreSQL): 70 detectadas y 2 que sobreviven, ambas equivalentes |
+
+Qué cubren las pruebas contra PostgreSQL: solo entran lotes con existencias (vendibles o apartadas) y con fecha, vencidos o dentro de la
+ventana (el último día entra; el día siguiente, no; un lote sin fecha o «SIN LOTE» nunca); las unidades son lo vendible (lo dañado no
+cuenta y lo apartado se enseña aparte); el orden va de lo que antes vence a lo que después, con desempate estable; los filtros de estado,
+ventana, producto/SKU/código de barras/lote y sucursal; que el total y la paginación cuentan lotes por sucursal y no filas repetidas; que
+una sucursal o un lote de **otra empresa** nunca entra, ni por filtro ni por un identificador ajeno en la URL; que **sin la función `costos` no se
+lee ningún costo** (ni el valor, ni el promedio, ni la tabla de costos se une a la consulta) y con ella el valor sale de
+`COALESCE(promedio del producto, costo del lote)` y lo que no tiene costo se cuenta aparte en vez de valer cero; el resumen del dashboard y
+del aviso; y que «hoy» es el día de la zona horaria de la empresa.
+
+Qué cubre el recorrido E2E: el hub de reportes ofrece «Vence pronto» → la lista saca de lo que antes vence a lo que después, con el estado,
+los días («Venció hace 10 días», «Vence en 10 días»), la sucursal y lo vendible, apartado y dañado de cada lote → el producto lleva a su
+ficha → los filtros acotan (estado, ventana, producto o lote, sucursal; «Quitar filtros» conserva la ventana) y una sucursal inventada no
+filtra → el archivo trae lo mismo, con los días en negativo para lo vencido, el filtro dicho en su cabecera, y solo lo descarga quien
+tiene permiso → la tarjeta de inventario del dashboard resume «2 lotes en 30 días, 1 ya vencido» y lleva directo a los vencidos.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Un defecto real del producto, que encontró el E2E: tras «Quitar filtros» el formulario conservaba lo que se había elegido antes.** El
+  enlace está dentro del formulario y navega de forma suave: React reutilizaba los campos y no aplicaba el nuevo valor por defecto, así que
+  la lista volvía a mostrar todo pero el campo seguía diciendo «Vencidos» (o el texto buscado), y el siguiente «Filtrar» los volvía a
+  mandar. Se corrigió con una `key` en el formulario (la consulta ya normalizada), para que se monte de nuevo cuando cambian los filtros.
+  **Los demás informes de inventario (mermas, rotación, sin ventas, margen) y otras listas con el mismo patrón no se tocaron**: nacieron con
+  el mismo formulario y es probable que tengan el mismo defecto; queda anotado para una entrega aparte.
+- **Dos fallos del propio spec (no del producto):** leer la lista justo al cambiar la URL, cuando aún no había pintado nada (se pasó a
+  esperas con reintento), y encadenar un formulario con el «Quitar filtros» anterior sin esperar a que terminara de navegar, con lo que el
+  formulario viejo mandaba el texto de la búsqueda anterior (se añadieron las esperas a que el formulario vuelva a su valor vacío).
+- **Pruebas mías que fallaron por equivocaciones de las pruebas:** el CSV usa `;` y no `,` como separador, el costo sale con dos
+  decimales (`12.50`) y una ruta de importación estaba mal escrita. Ninguna era del código.
+- **Mutaciones: 72, 70 detectadas.** Las 2 que sobreviven son equivalentes: quitar el recorte de espacios de la ventana (`Number(' 7 ')` ya
+  vale 7, el recorte no cambia nada) y quitar `expiresOn IS NOT NULL` de la consulta (`NULL <= límite` ya excluye la fila: el filtro es
+  redundante y se deja por claridad).
+
+**Qué NO se verificó:** cómo se ve nada (ni escritorio con capturas, ni móvil); Supabase real, RLS o permisos de la base real (todo se
+probó con el rol de la base desechable); el rendimiento con un ledger grande (las consultas leen los saldos por lote con los índices de
+5a, pero no se midió con millones de filas); que el cron del barrido **corra de verdad en producción** y que el aviso llegue a la
+campana de un administrador real (se probó llamando al barrido y leyendo la notificación, no con el cron desplegado); y el aviso de
+correo o push, que no existe (es la campana de siempre).

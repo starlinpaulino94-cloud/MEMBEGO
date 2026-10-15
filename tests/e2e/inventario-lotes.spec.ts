@@ -11,6 +11,10 @@ import { empresaCatalogo, itemSembrado, sucursalSembrada, varianteDe, type Empre
  *   merma) → el historial dice de qué lotes es cada movimiento → una entrada de varias líneas con los lotes de cada producto, y su
  *   detalle → un producto sin lotes no pide lotes → y nada del producto con lotes se puede transferir.
  *
+ * INV-5b1 (lo que vence pronto): el hub ofrece el informe → la lista de lo vencido y lo que vence en la ventana, de lo que antes vence a lo
+ * que después, con lo vendible, lo apartado y lo dañado → los filtros (estado, ventana, producto o lote, sucursal) → el CSV con los mismos
+ * filtros → la tarjeta «Inventario» del dashboard con su «Vence pronto».
+ *
  * Las fechas son relativas a HOY (10 días atrás, 10 y 400 días adelante): la prueba no depende del día en que se corra.
  *
  * La base de E2E se crea con `db push` y `scripts/e2e/base-limpia.mjs` le aplica la migración de lotes (los saldos por lote los
@@ -243,6 +247,116 @@ test.describe('Inventario · lotes y vencimiento', () => {
     expect(await cifras(filaDe(p, 'Norte', 'JAB-B'))).toEqual([4, 0, 0])
     // Y en la otra sucursal no hay nada de esos lotes.
     await expect(filaDe(p, 'Principal', 'JAB-A')).toHaveCount(0)
+    expect(errores, errores.join('\n')).toEqual([])
+    await ctx.close()
+  })
+  test('INV-5b1 · vence pronto: el hub lo ofrece, la lista va de lo que antes vence a lo que después, los filtros acotan, el archivo trae lo mismo y el dashboard lo resume', async ({ browser }) => {
+    test.setTimeout(180_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+    const lista = p.getByRole('list', { name: 'Lotes que vencen pronto' })
+    const filasLista = () => lista.locator('li[data-lote]')
+    const codigosLista = () => filasLista().evaluateAll((l) => l.map((x) => x.getAttribute('data-lote')))
+
+    // ── La puerta: el hub de reportes ofrece «Vence pronto» ───────────────
+    await p.goto('/admin/inventario/reportes')
+    await p.getByRole('list', { name: 'Informes' }).getByRole('link', { name: /Vence pronto/ }).click()
+    await p.waitForURL('**/admin/inventario/reportes/vencimientos')
+    await expect(p.getByRole('heading', { name: 'Vence pronto', level: 1 })).toBeVisible()
+
+    // ── La lista: lo vencido primero y, a igual día, por nombre; solo lo que vence en 30 días o ya venció (el de 400 días y «SIN LOTE» no salen) ──
+    await expect(filasLista()).toHaveCount(3)
+    await expect.poll(codigosLista, { timeout: 15_000 }).toEqual(['E2E-VIEJO', 'E2E-PRONTO', 'JAB-A'])
+    await expect(lista.locator('li[data-lote="E2E-VIEJO"]')).toHaveAttribute('data-estado', 'VENCIDO')
+    await expect(lista.locator('li[data-lote="E2E-VIEJO"]')).toContainText('Venció hace 10 días')
+    await expect(lista.locator('li[data-lote="E2E-VIEJO"]')).toContainText(VIEJO)
+    await expect(lista.locator('li[data-lote="E2E-PRONTO"]')).toHaveAttribute('data-estado', 'POR_VENCER')
+    await expect(lista.locator('li[data-lote="E2E-PRONTO"]')).toContainText('Vence en 10 días')
+    await expect(lista.locator('li[data-lote="E2E-PRONTO"]')).toContainText('Principal')
+    await expect(lista.locator('li[data-lote="JAB-A"]')).toContainText('Norte')
+    // Lo vendible, lo apartado y lo dañado de cada lote (lo que dejaron las pruebas de arriba).
+    await expect(lista.locator('li[data-lote="E2E-VIEJO"]')).toContainText('2 vendibles')
+    await expect(lista.locator('li[data-lote="E2E-VIEJO"]')).toContainText('1 dañada')
+    await expect(lista.locator('li[data-lote="E2E-PRONTO"]')).toContainText('7 vendibles')
+    await expect(lista.locator('li[data-lote="E2E-PRONTO"]')).toContainText('2 dañadas')
+    await expect(lista.locator('li[data-lote="JAB-A"]')).toContainText('6 vendibles')
+    const resumen = p.getByLabel('Resumen de lo que vence pronto')
+    await expect(resumen).toContainText('15') // unidades vendibles: 2 + 7 + 6
+    await expect(p.getByLabel('Lotes ya vencidos')).toContainText('Hay 1 lote vencido')
+    // El producto lleva a su ficha.
+    await filasLista().first().getByRole('link', { name: new RegExp(PRODUCTO) }).click()
+    await p.waitForURL(`**/admin/inventario/${variante}`)
+    await p.goBack()
+
+    // ── Los filtros: estado, ventana, producto o lote, sucursal ───────────
+    const form = p.getByRole('form', { name: 'Filtrar lo que vence pronto' })
+    await form.getByLabel('Estado').selectOption('VENCIDO')
+    await form.getByRole('button', { name: 'Filtrar' }).click()
+    await p.waitForURL(/estado=VENCIDO/)
+    await expect.poll(codigosLista, { timeout: 15_000 }).toEqual(['E2E-VIEJO'])
+    await p.getByRole('link', { name: 'Quitar filtros' }).click()
+    await expect(filasLista()).toHaveCount(3)
+    await expect(form.getByLabel('Estado')).toHaveValue('') // el formulario vuelve a lo que dice la URL (no conserva «Vencidos»)
+    await form.getByLabel('Vence en').selectOption('7')
+    await form.getByRole('button', { name: 'Filtrar' }).click()
+    await p.waitForURL(/dias=7/)
+    await expect.poll(codigosLista, { timeout: 15_000 }).toEqual(['E2E-VIEJO'])
+    await form.getByLabel('Vence en').selectOption('15')
+    await form.getByRole('button', { name: 'Filtrar' }).click()
+    await expect(filasLista()).toHaveCount(3)
+    await form.getByLabel('Producto o lote').fill('jab-a')
+    await form.getByRole('button', { name: 'Filtrar' }).click()
+    await p.waitForURL(/q=jab-a/)
+    await expect.poll(codigosLista, { timeout: 15_000 }).toEqual(['JAB-A'])
+    await form.getByLabel('Producto o lote').fill('no-existe-este-lote')
+    await form.getByRole('button', { name: 'Filtrar' }).click()
+    await expect(p.getByText('Nada coincide con esos filtros')).toBeVisible()
+    await p.getByRole('link', { name: 'Quitar filtros' }).click()
+    await expect(filasLista()).toHaveCount(3)
+    await expect(form.getByLabel('Producto o lote')).toHaveValue('')
+    await form.getByLabel('Sucursal').selectOption({ label: 'Norte' })
+    await form.getByRole('button', { name: 'Filtrar' }).click()
+    await p.waitForURL(/sucursal=/)
+    await expect.poll(codigosLista, { timeout: 15_000 }).toEqual(['JAB-A'])
+    await expect(p.getByLabel('Resumen de lo que vence pronto')).toContainText('6')
+    // Una sucursal inventada no filtra (la pantalla las ignora si no son de la empresa).
+    await p.goto('/admin/inventario/reportes/vencimientos?sucursal=cinexistente000000000000')
+    await expect(filasLista()).toHaveCount(3)
+
+    // ── El archivo: los mismos filtros, y lo vencido con los días en negativo ──
+    const csv = await p.request.get('/admin/inventario/reportes/vencimientos/exportar')
+    expect(csv.status()).toBe(200)
+    expect(csv.headers()['content-type']).toContain('text/csv')
+    const t = await csv.text()
+    expect(t).toContain('Lotes que vencen en 30 dias o ya vencieron')
+    expect(t).toContain('Ventana (dias);30')
+    expect(t).toContain('Lotes ya vencidos;1')
+    expect(t).toMatch(new RegExp(`${PRODUCTO}[^\n]*;E2E-VIEJO;${VIEJO};-10;Vencidos;Vencido;2;0;1`))
+    expect(t).toContain(`;E2E-PRONTO;${PRONTO};10;Por vencer;Por vencer;7;0;2`)
+    expect(t).not.toContain('E2E-LEJANO')
+    const filtrado = await (await p.request.get('/admin/inventario/reportes/vencimientos/exportar?estado=VENCIDO&dias=7')).text()
+    expect(filtrado).toContain('Filtro: Estado;Vencidos')
+    expect(filtrado).toContain('E2E-VIEJO')
+    expect(filtrado).not.toContain('E2E-PRONTO')
+    expect(filtrado).not.toContain('JAB-A')
+    const anonimo = await (await browser.newContext()).request.get('/admin/inventario/reportes/vencimientos/exportar', { maxRedirects: 0 })
+    expect([302, 303, 307, 308, 401, 403]).toContain(anonimo.status())
+
+    // ── El dashboard: la tarjeta de inventario resume lo que vence ────────
+    await p.goto('/admin/dashboard')
+    const tarjeta = p.getByRole('region', { name: 'Inventario' })
+    await expect(tarjeta).toBeVisible()
+    const vence = tarjeta.getByRole('link', { name: /Vence pronto/ })
+    await expect(vence).toContainText('2 lotes')
+    await expect(vence).toContainText('en 30 días')
+    await expect(vence).toContainText('1 ya vencido')
+    await vence.click()
+    await p.waitForURL(/\/admin\/inventario\/reportes\/vencimientos\?estado=VENCIDO/)
+    await expect.poll(codigosLista, { timeout: 15_000 }).toEqual(['E2E-VIEJO'])
+
     expect(errores, errores.join('\n')).toEqual([])
     await ctx.close()
   })

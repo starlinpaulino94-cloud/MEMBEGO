@@ -14,6 +14,8 @@ import { ETIQUETA_GRUPO, GRUPOS_DE_MERMA } from './mermas'
 import type { MargenVista } from './margen-queries'
 import { ETIQUETA_EXCLUIDA, formatearMontoFirmado } from './margen'
 import { ETIQUETA_CLASE } from './motivos'
+import type { VencimientosVista } from './vencimientos-queries'
+import { ETIQUETA_CLASE_VENCIMIENTO, ETIQUETA_URGENCIA } from './vencimientos'
 
 /**
  * COMMERCE CORE · inventario — el CSV de movimientos.
@@ -651,6 +653,60 @@ export function sinVentasToCsv(v: SinVentasVista, ctx: ContextoInforme & { tope:
         f.ultimaVenta ? diaCsv(f.ultimaVenta, ctx.zonaHoraria) : 'Nunca',
         f.diasSinVender ?? '',
         diaCsv(f.ultimaEntrada, ctx.zonaHoraria),
+        ...(conCostos ? [f.costo === null ? '' : plano(formatearCosto(f.costo)), f.valor === null ? '' : plano(formatearMonto(f.valor))] : []),
+      ]),
+    },
+  ])
+}
+
+/**
+ * «Vence pronto»: los lotes con existencias que ya vencieron o vencen dentro de la ventana, por sucursal. El archivo dice qué ventana y
+ * qué filtros tenía (dos archivos del mismo día no se distinguen si no), cuántos lotes y unidades vendibles suma y, si el tope lo cortó,
+ * que lo cortó. Con la función de costos suma el valor de lo vendible que vence; sin ella el archivo no trae nada valorado. Un lote
+ * sin costo conocido deja VACÍAS sus celdas de costo y valor (no vale cero: no se sabe). Los días restantes van en negativo si ya venció.
+ */
+export function vencimientosToCsv(v: VencimientosVista, ctx: ContextoInforme & { tope: number }): string {
+  const conCostos = v.resumen.valor !== null
+  const truncado = v.total > v.filas.length
+  return armarCsvBloques([
+    {
+      titulo: `Lotes que vencen en ${v.dias} dias o ya vencieron`,
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Generado', fechaHoraCsv(ctx.generadoEn, ctx.zonaHoraria)],
+        ['Zona horaria', ctx.zonaHoraria],
+        ['Hoy (dia de la empresa)', v.hoy],
+        ['Ventana (dias)', v.dias],
+        ...ctx.filtros.map(([k, val]): [string, string] => [`Filtro: ${k}`, SIN_FORMULA(val)]),
+        ['Lotes distintos', v.resumen.lotes],
+        ['Lotes ya vencidos', v.resumen.lotesVencidos],
+        ['Lotes en sucursal (filas)', v.total],
+        ['Unidades vendibles', v.resumen.unidades],
+        ...(conCostos
+          ? [
+              ['Valor de lo vendible (solo lo que tiene costo)', plano(formatearMonto(v.resumen.valor!))],
+              ['Unidades SIN costo (no suman al valor)', v.resumen.unidadesSinCosto ?? 0],
+            ]
+          : []),
+        ['Filas en el archivo', v.filas.length],
+        ['Datos completos', truncado ? `NO - el archivo trae solo los primeros ${ctx.tope} de ${v.total} lotes. Filtra por sucursal, estado o producto para ver el resto.` : 'Si'],
+      ],
+    },
+    {
+      titulo: 'Lotes',
+      encabezados: ['Producto', 'SKU', 'Sucursal', 'Lote', 'Vence', 'Dias restantes', 'Estado', 'Urgencia', 'Vendible', 'Apartado', 'Danado', ...(conCostos ? ['Costo unitario', 'Valor'] : [])],
+      filas: v.filas.map((f) => [
+        SIN_FORMULA(f.nombre),
+        SIN_FORMULA(f.sku),
+        SIN_FORMULA(f.sucursalActiva ? f.sucursalNombre : `${f.sucursalNombre} (desactivada)`),
+        SIN_FORMULA(f.codigo),
+        f.vencimiento,
+        f.diasRestantes,
+        ETIQUETA_CLASE_VENCIMIENTO[f.clase],
+        ETIQUETA_URGENCIA[f.urgencia],
+        f.vendible,
+        f.apartado,
+        f.danado,
         ...(conCostos ? [f.costo === null ? '' : plano(formatearCosto(f.costo)), f.valor === null ? '' : plano(formatearMonto(f.valor))] : []),
       ]),
     },
