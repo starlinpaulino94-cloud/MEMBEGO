@@ -98,9 +98,14 @@ export default async function InventarioVariantePage({ params }: { params: Promi
         title={nombreCompleto(detalle.itemNombre, detalle.nombreVariante, detalle.esDefault)}
         description={`SKU ${detalle.sku}`}
         action={
-          <Link href={`/admin/catalogo/${detalle.itemId}`} className="text-sm underline">
-            Ver en el catálogo
-          </Link>
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <Link href={`/admin/inventario/reportes/kardex?variante=${detalle.varianteId}`} className="underline">
+              Kardex
+            </Link>
+            <Link href={`/admin/catalogo/${detalle.itemId}`} className="underline">
+              Ver en el catálogo
+            </Link>
+          </div>
         }
       />
 

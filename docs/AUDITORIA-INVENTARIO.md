@@ -4,7 +4,7 @@
 > `/admin/inventario`, sus consumidores (pedidos, checkout, POS, ofertas), el cron, las pruebas y la documentación.
 > Se compara con el inventario del Car Wash (`ProductoInventario`), que es OTRO módulo.
 >
-> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a, INV-3b o INV-3c ya lo cerraron** (ver §5, §7, §9, §11, §13, §15 y §17).
+> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a, INV-3b, INV-3c o INV-4a ya lo cerraron** (ver §5, §7, §9, §11, §13, §15, §17 y §19).
 
 ## 1. Veredicto
 
@@ -50,8 +50,8 @@ agrupado por proveedor, y crea borradores de orden. Sigue sin haber pronóstico 
 
 `CatalogVariant.cost` es un costo fijo; los movimientos no llevaban costo, así que no había costo promedio, valor del
 inventario por sucursal, costo de ventas (COGS) ni mermas valorizadas. → **INV-3a ✔** (costo promedio ponderado, valor del
-inventario, costo de ventas del mes y corrección de costo; ver §13). Sigue pendiente, en INV-4, el kardex valorizado y las
-mermas valoradas por motivo.
+inventario, costo de ventas del mes y corrección de costo; ver §13). **El kardex con sus entradas y salidas valoradas: INV-4a ✔**
+(ver §19). Siguen pendientes, en INV-4b y INV-4c, las mermas valoradas por motivo y el margen real.
 
 ### 3.4 Historial y reportes
 
@@ -61,7 +61,8 @@ mermas valoradas por motivo.
 | Filtros del historial (tipo, fecha, sucursal, persona) | Solo «cargar más» | **INV-1 ✔** |
 | Exportar | Nada se exportaba | **INV-1 ✔** (CSV) |
 | Reservas vivas de la empresa | Solo por variante, máximo 50 | **INV-1 ✔** |
-| Kardex valorizado, rotación, stock sin movimiento, mermas por motivo | `modules/reportes` tiene 20 reportes y ninguno es de inventario | INV-4 |
+| Kardex, rotación, stock sin movimiento | `modules/reportes` tiene 20 reportes y ninguno es de inventario | **INV-4a ✔** (kardex con entradas y salidas valoradas, stock sin ventas, rotación y cobertura) |
+| Mermas por motivo codificado, margen real, tarjeta de dashboard | Los motivos son texto libre; no se cruza costo con precio | INV-4b / INV-4c |
 
 ### 3.5 Avisos
 
@@ -109,7 +110,9 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-3a · Costo y valor del inventario** | Costo unitario en las líneas de entrada (manual, CSV y entrada de un producto); costo promedio ponderado por producto; ventas, devoluciones, daños y ajustes valorados con el promedio de su instante; pantalla «Valor del inventario» por sucursal y producto (con CSV); costo de ventas del mes; corregir el costo con motivo. Función de permiso nueva `costos` | `unitCost` en movimientos y líneas de entrada; `InventoryVariantCost`, `InventoryCostAdjustment` (migración `20261059`) | M | **Hecha** (este documento, §13) |
 | **INV-3b · Proveedores y órdenes de compra** | Proveedores; orden de compra `OC-AAAA-NNNNNN` (Borrador → Pedida → Recibida en parte → Recibida, o Cancelada) con el costo de cada línea; recibir en tandas crea una entrada con los costos de la orden (nunca más de lo pedido; cerrar con faltante exige motivo); vínculo producto-proveedor con código, último costo, días de entrega y preferido; CSV de la orden. Función de permiso nueva `comprar` | `InventorySupplier`, `InventoryPurchaseOrder`, `InventoryPurchaseOrderLine`, `InventoryVariantSupplier`; `purchaseOrderId` en las entradas (migración `20261060`) | M | **Hecha** (este documento, §15) |
 | **INV-3c · Reposición** | «Llenar hasta» por producto y sucursal (junto al umbral que ya existía; tiene que quedar por encima de él); pestaña «Reposición» con la cantidad sugerida —lo disponible más lo pedido que no ha llegado más lo que va en camino se descuentan; un borrador no—, agrupada por proveedor y sucursal, con filtros y CSV, que crea borradores de orden con el último costo de cada proveedor. Sin función nueva (`comprar` para ver y crear, `ajustar` para fijar el objetivo) | `targetStock` en el saldo (migración `20261066`) | S | **Hecha** (este documento, §17) |
-| INV-4 · Reportes | Kardex valorizado, rotación y días de inventario, stock sin movimiento, mermas por motivo codificado, margen real; tarjeta de dashboard | Catálogo de motivos | M | pendiente |
+| **INV-4a · Informes de existencias** | Kardex de un producto (entradas, salidas y saldo, con lo que valieron si se tiene la función `costos`), stock sin ventas (qué tiene existencias y no se vende, y cuánto dinero tiene parado), rotación y cobertura (cuánto se vende, cuántas veces rota, para cuántos días alcanza; costo de ventas y días de inventario con `costos`), todos con filtros y CSV. Sin función de permiso nueva | Sin cambios (todo se lee del ledger) | M | **Hecha** (este documento, §19) |
+| INV-4b · Motivos codificados | Catálogo de motivos para ajustes, daños y bajas y las mermas por motivo (cuánto se perdió y cuánto costó, por qué) | Código de motivo en el ledger (migración) | M | pendiente |
+| INV-4c · Margen real | Margen real por producto (precio de venta contra el costo congelado de lo vendido) y tarjeta de inventario en el dashboard | Sin cambios previstos | S | pendiente |
 | INV-5 · Trazabilidad | Lotes y vencimiento con FEFO; series; kits que descuentan componentes; API v1; rol de bodega | Lotes, kits | L por pieza | pendiente |
 
 ## 5. INV-1 · qué se hizo
@@ -929,3 +932,161 @@ Hallazgos de la propia verificación (importa que se sepan):
   borradores y los proveedores de lo que se repone) más la de las alertas sin objetivo, no una por línea.
 - En esta máquina el servidor de E2E imprime `fetch failed … 127.0.0.1:54329` y `The destination stream closed early`
   (Supabase Auth inexistente en el arnés): ruido previo, no afecta a los resultados.
+
+## 19. INV-4a · qué se hizo
+
+> Primera de las tres partes de INV-4. **No hay migración ni SQL que aplicar y no hay función de permiso nueva**: los tres informes se
+> calculan de lo que el ledger ya guardaba (los movimientos, con la existencia antes y después de cada uno y, desde INV-3a, el costo
+> con que se valoró). Se partió INV-4 en tres entregas para no mezclar lo que solo lee con lo que toca el ledger: **4a** informes de
+> existencias (esta), **4b** motivos codificados y mermas por motivo (necesita una columna y un catálogo: SQL primero) y **4c** margen
+> real y la tarjeta del dashboard.
+
+Una pestaña nueva, «Reportes» (`/admin/inventario/reportes`), visible para todo el que tiene la sección Inventario (no pide `costos`
+ni `comprar`), con tres informes. Cada uno tiene sus filtros en la URL, su botón de CSV con los **mismos** filtros y, si hay
+dinero de por medio, solo lo lee y lo enseña quien tiene la función `costos`:
+
+- **Kardex de un producto** (`/reportes/kardex`). Se busca el producto (nombre, SKU o código de barras; incluye descontinuados, su
+  historia sigue ahí) o se llega con un clic desde su ficha («Kardex»). Muestra, para un rango de días y una sucursal (o todas), la
+  existencia al empezar, cada movimiento que **entró o salió** con el saldo que dejó, y la existencia al terminar. Por defecto, los
+  últimos 30 días de la empresa. *La existencia que se sigue es la física*: vendible + apartada + dañada, lo que la empresa tiene y
+  todavía no ha dado de baja. Un movimiento la cambia solo si entra desde fuera (una entrada, una devolución, la pata de llegada de
+  una transferencia) o sale del inventario (una venta, la pata de salida, una baja de lo dañado); apartar, dañar y recuperar solo
+  cambian la mercancía de cubeta y se muestran sin mover el saldo («de vendible a dañado»). Las reservas y sus liberaciones no
+  aparecen: no mueven nada. *Cómo se calcula el saldo*: la existencia física de hoy menos lo que cambió después del final del
+  rango (el cierre) y después del comienzo (la apertura); no se guarda ningún saldo aparte que pueda desactualizarse, y las pruebas
+  comprueban que apertura + entradas − salidas = cierre en cualquier rango y que el cierre de un rango que llega a hoy es la existencia
+  que hay. Con `costos`: lo que valió lo que entró y lo que salió (con el costo que cada movimiento congeló) y, aparte, cuántas
+  unidades no tenían costo —nunca como cero—. Máximo 1.000 movimientos en pantalla y 20.000 en el archivo; si se corta, enseña el
+  comienzo del periodo, lo dice, y la existencia al terminar sigue siendo la del periodo completo.
+- **Stock sin ventas** (`/reportes/sin-ventas`). Los saldos (producto y sucursal) con existencia que llevan 30, 60, 90, 180 o 365 días
+  (90 por defecto) sin una venta —o que nunca vendieron—, de lo que más dinero tienen parado a lo que menos (sin `costos`, por
+  unidades). Cuenta como venta el movimiento de venta (caja, pedido o a mano); una devolución, una entrada o una transferencia no.
+  **Un saldo creado dentro del periodo no aparece**: todavía no tuvo tiempo de venderse. Muestra la última venta («hace 106
+  días», o «nunca se ha vendido»), la última entrada y, con `costos`, el costo y el valor de cada uno y el dinero parado en total
+  (a costo promedio, con el costo de referencia del catálogo si no hay promedio), con las unidades sin costo contadas aparte.
+- **Rotación y cobertura** (`/reportes/rotacion`). Por producto (todas las sucursales o una), para un periodo de 30 a 365 días: lo
+  vendido **menos lo devuelto**, la venta por día, la existencia promedio, cuántas veces rotó y para cuántos días alcanza lo que se
+  puede vender hoy (vendible sin lo apartado) a ese ritmo. Estados: *agotado con ventas* (había ventas y no queda nada), *se agota
+  pronto* (14 días o menos), *normal*, *exceso* (más de 180 días) y *sin ventas* (no hay ritmo, así que **no se inventa una cobertura
+  infinita**: se dice «sin ventas»). Primero lo más urgente; el exceso y lo que no vende, al final; los chips por estado cuentan todo
+  lo que cumple los filtros de sucursal y texto. La existencia al empezar el periodo sale de restar a la de hoy lo que cambió desde
+  entonces (el ledger lo guarda), y el promedio es el de esos dos puntos —una aproximación, no un promedio día a día; la pantalla lo
+  dice—. Con `costos`: el costo de lo vendido en el periodo, lo que vale todo el inventario y los **días de inventario** (el valor
+  del inventario entre lo que cuesta vender un día; «—» si no hubo costo de ventas). Si hay más de 5.000 productos con existencias
+  o ventas se leen primero los que más vendieron y la pantalla lo dice.
+- **Archivos.** Tres CSV (`kardex`, `stock-sin-ventas-N-dias`, `rotacion-N-dias`) con los mismos filtros, un bloque de resumen
+  —con los filtros aplicados y si el archivo está completo—, números planos que se suman, textos neutralizados contra fórmulas de hoja
+  de cálculo, y las celdas de costo y valor **vacías** —nunca cero— cuando no se sabe. Sin `costos`, ni las columnas existen.
+- **Permisos y aislamiento.** Las descargas piden la sección (no `costos`); lo que `costos` decide es si el archivo y la pantalla
+  traen dinero. Sin la función **el costo ni siquiera se lee**: el movimiento se pide sin su costo, en SQL el costo es un `NULL`
+  constante y la tabla de costos no se une, y el costo de ventas y el valor del inventario no se calculan. Todo se lee dentro de la
+  empresa de la sesión, con la empresa escrita en cada consulta; una sucursal de la URL que no es de la empresa no filtra, y un
+  producto que no es de la empresa responde 404 en el archivo y «no existe en tu empresa» en la pantalla.
+
+### Lo que NO hace (a propósito, o pendiente)
+
+- **No hay saldo valorizado histórico.** Un kardex «valorizado» clásico enseña, en cada fila, cuánto vale la existencia en ese
+  instante. Aquí el costo promedio solo se guarda vigente (INV-3a), así que reconstruir ese saldo hacia atrás no se puede hacer sin
+  inventarlo. Lo que sí hay: lo que valió cada entrada y cada salida con el costo que congeló, y el valor de hoy en «Valor». Un saldo
+  valorizado exacto pediría guardar el promedio resultante en cada movimiento (una columna y un barrido): queda anotado, no hecho.
+- **Orden de movimientos concurrentes.** El orden del kardex es el de la fecha del movimiento (el comienzo de su transacción) y, si
+  empatan, el del id. Dos movimientos del mismo producto confirmados casi al mismo tiempo pueden aparecer en el orden contrario al
+  que se aplicaron, y entonces un saldo intermedio podría diferir de lo que se vio en ese instante; **la apertura, el cierre y los
+  totales son exactos** (no dependen del orden).
+- **Rotación aproximada**: existencia promedio de dos puntos, sin estacionalidad ni pronóstico; la cobertura asume que el ritmo del
+  periodo seguirá igual. No hay clasificación ABC, ni rotación por categoría o marca, ni gráficas.
+- **Un solo producto por kardex.** No hay un kardex de toda la empresa (para eso está «Movimientos», con filtros y CSV).
+- **No hay mermas por motivo ni margen real ni tarjeta en el dashboard**: son INV-4b e INV-4c.
+- **Los días de inventario se alargan con las ventas sin costo** (el costo de ventas las deja fuera); la pantalla lo avisa.
+- Observación que no se tocó: la búsqueda de productos de las entradas, las transferencias y los conteos (INV-2) trata un `%` como
+  «todo» (Prisma no neutraliza los comodines); solo devuelve los primeros diez de la propia empresa, sin fuga. La búsqueda del kardex sí
+  los neutraliza, con prueba.
+
+Archivos principales: `src/modules/inventory/{reportes,reportes-queries}.ts` (lo puro y las lecturas), `valor.ts`
+(`costoDeVentasEnRangoEnTx` y `valorTotalEnTx`, que ahora comparten la pantalla de Valor y la rotación), `filtros.ts`,
+`exportacion.ts`, `src/components/inventario/NavegacionInventario.tsx` y
+`src/app/(admin)/admin/inventario/reportes/{,kardex,sin-ventas,rotacion}/` (+ `exportar/`).
+
+### Cómo desplegar
+
+No hay migración. Con el código desplegado la pestaña «Reportes» funciona sobre lo que ya hay; los costos del kardex y del costo de
+ventas de la rotación solo aparecen para quien tiene `costos` y desde que se aplicó `20261059` (INV-3a). Si esa migración no se hubiera
+aplicado, las pantallas muestran el aviso de «necesita una actualización de la base de datos» en lugar de fallar.
+
+## 20. Verificación de INV-4a (2026-10-15)
+
+Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`; **no hay migración nueva**, así que no se tocó el esquema ni ninguna base
+real). Sin Supabase real, Vercel, lector de código de barras físico, móvil ni Safari: **no verificados**. **Tampoco se miró cómo
+se ven las tres pantallas** (el recorrido E2E comprueba qué dicen y qué hacen, no su aspecto: ni capturas ni revisión visual en
+móvil). **Tampoco se midió con un ledger grande**: el kardex y la rotación leen el ledger por rango de fechas con los índices que ya
+existen (`inventoryLevelId + createdAt` y `companyId + createdAt`), y la rotación lee hasta 5.000 productos por pantalla; se probó que
+corta y lo dice, no cuánto tarda con millones de movimientos ni con la latencia de una base remota.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; las 7 rutas nuevas compiladas (4 páginas y 3 descargas); entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB (sin cambio). El indicador general de JavaScript de cliente marca 8.900/9.200 KB (97 %, con aviso amarillo: es un indicador, no un tope duro; antes de INV-4a, con la misma rama pero sin la fusión con `main`, 8.639 KB) |
+| Unitarias (`bun run test`) | 4460 pruebas: 4453 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest` como en CI) | 852/853: ver «un fallo ajeno» abajo |
+| Pruebas nuevas | 28 puras (`inventario-reportes.test.ts`), 5 guardias nuevas (`inventario-permisos.test.ts`, ya 87), 27 contra PostgreSQL (`inventory-reportes.db.test.ts`) y un recorrido E2E nuevo |
+| E2E (`bun run e2e:limpio`, escritorio) | 73/73 en la corrida combinada final (los 72 de antes más el recorrido nuevo): `inventario-admin` (12), `comercio-experiencia`, `pedidos-membego`, `pos-membego`, `carrito-checkout`, `catalogo-admin`, `catalogo-api` y `catalogo-publico`. En la primera corrida el recorrido nuevo falló por un selector mío ambiguo (`getByLabel('Producto')` también encontraba el formulario «Buscar el producto del kardex»); se corrigió con un selector de rol y repitió completo |
+| Mutaciones | 217 distintas: 213 detectadas, 3 equivalentes y 1 que era un error de mi código, no de la prueba (ver abajo) |
+
+Qué cubre el recorrido E2E: la pestaña Reportes con sus tres informes → el kardex (se busca el producto, +100 con lo que valió y −30
+con su costo, el saldo de cada movimiento, un rango sin movimientos que conserva la existencia de partida, un producto que no existe,
+el enlace desde la ficha) y su CSV (400 sin producto, 404 si no existe) → el stock sin ventas (lo que nunca se vendió con su dinero
+parado, lo sin costo contado aparte, un periodo más largo que los saldos que no lista nada, sucursal ajena y periodo raro que no
+filtran) y su CSV → la rotación (venta por día, para cuántos días alcanza, chips por estado, costo de ventas y días de inventario)
+y su CSV con y sin filtro → y con `costos` negada las tres pantallas y los tres archivos siguen funcionando **sin una sola cifra de
+dinero ni columna de costo**.
+
+Qué cubren las 27 pruebas contra PostgreSQL: el kardex contra el ledger real (cada tipo de movimiento: entrada, venta, daño, baja,
+devolución, transferencia con sus dos patas, ajuste), apertura + entradas − salidas = cierre en cualquier rango y sucursal
+(barrido de 3 × 55 rangos), que el cierre de hoy es la existencia física (vendible + apartada + dañada, también con dañadas que
+siguen en la sucursal), que las reservas y sus liberaciones no aparecen, el orden a igual hora, el corte por tope, el día LOCAL de
+la empresa y el primer y último día del rango, sin costos y con ellos, un producto o sucursal ajenos o sin saldo; el stock sin ventas
+(qué cuenta y qué no: saldo nuevo, saldo vacío, devolución, entrada, transferencia recibida; costo de referencia sin promedio;
+orden por dinero o por unidades; búsqueda por nombre, SKU y código de barras; páginas y archivo de más de 50 filas); la rotación
+(vendidas menos devueltas, existencia de partida, cobertura, cada estado y sus límites, ventas netas negativas, filtros, conteos por
+estado, corte por tope, páginas y archivo, costo de ventas y días de inventario por periodo y por sucursal); lo que vale todo el
+inventario (dañadas, costo de referencia, sin costo); la búsqueda del producto del kardex (exacta primero, descontinuados, comodines,
+tope); y el aislamiento entre empresas.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Las pruebas encontraron tres errores míos antes de que llegaran a nadie.** (1) La búsqueda del kardex trataba un `%` como «todo»:
+  Prisma no neutraliza los comodines ni en `contains` ni en un `equals` insensible (que es un `ILIKE`); se escapan, con prueba.
+  (2) Un kardex de una sucursal donde el producto nunca tuvo saldo salía con el nombre de la sucursal VACÍO; ahora se lee la
+  sucursal aparte. (3) La rotación listaba productos sin existencia cuyas ventas netas del periodo eran negativas (más devoluciones
+  que ventas) como «sin ventas»; ahora solo entran los que tienen existencia o ventas positivas.
+- **Mutaciones: 217 distintas.** Se ejecutaron 229 en tres capas (92 de lo puro, el CSV y los filtros de la URL; 103 de las lecturas
+  contra PostgreSQL —sin contar dos mal escritas que se rehicieron—; y 34 de las guardias y las pantallas); 12 de ellas son la misma
+  mutación probada contra dos capas. **En algún momento sobrevivieron 43** (3 del CSV, 33 de las lecturas y 7 de las guardias). De
+  ellas, 3 son equivalentes, 1 destapó un error de mi código (abajo) y el resto eran pruebas débiles que se reforzaron:
+  - *CSV (3)*: la prueba comprobaba que el producto con `=`/`+` iba neutralizado, pero lo hacía mirando el título del archivo, que
+    también lo lleva; y ninguna cifra pasaba de 1.000, así que quitar el «sin separador de miles» no se notaba. Ahora el resumen se
+    comprueba con su línea exacta y hay una prueba con montos de millones en los tres archivos.
+  - *Lecturas contra PostgreSQL (33: 22 con un caso nuevo; 7 que quitan la empresa de una consulta o el filtro de costo y que cubren
+    las guardias estáticas, porque el resultado no cambia mientras el id del saldo ya sea de la empresa —por eso la guardia las
+    comprueba una a una—; 3 equivalentes; y 1 que era mi código)*: el ledger de prueba terminaba sin unidades dañadas y sin movimientos justo en el primer día del
+    rango; no había una reserva liberada, ni dos movimientos a la misma hora, ni una devolución o una entrada «reciente» en el stock
+    sin ventas, ni costo de referencia sin promedio, ni un producto buscado por código de barras, ni más de 50 filas (así que «el
+    archivo trae todo» y «la página 2» no se distinguían de una sola página), ni una venta fuera del periodo en el costo de ventas, ni
+    una sucursal que acotara el costo y el valor, ni dañadas en lo que vale todo el inventario. Cada uno tiene ya su caso.
+  - *Guardias (7)*: la ventana de 140 caracteres con que la guardia buscaba la empresa en cada consulta **se comía la consulta
+    siguiente** si estaban pegadas (una de las consultas del kardex no se revisaba nunca); `conCostos: true` pasaba la misma
+    expresión que `conCostos`; y «el dinero va detrás de una condición» se comprobaba por cercanía de palabras. Ahora la ventana no
+    consume, el costo tiene que ser el de la persona (no un `true` fijo) y cada bloque de dinero se comprueba con su condición.
+  - *Las 3 equivalentes*: pedir `>=` en lugar de `>` al inicio del rango en la suma de efectos (solo cambia si un movimiento cae
+    exactamente en el instante de la medianoche), y quitar dos desempates de la rotación en JavaScript (por ventas y por id), que ya
+    vienen resueltos por el `ORDER BY` de la consulta y por un orden estable.
+- **Un fallo ajeno en `test:db`**: `supply-v2-slice9` («el worker reclama y muere antes de entregar; el arriendo lo rescata») falló
+  una vez en la corrida completa; aislado, el mismo archivo pasa 3 de 3 (85/85). Ya había fallado alguna vez bajo carga en una
+  verificación anterior y sigue **sin explicación**; no toca nada de inventario ni de esta entrega.
+- **Una guardia de diseño que ya existía mandó**: el hub y las tres pantallas usan `BotonExportar`, `Alert` y los colores de tema, sin
+  subir el techo de deuda de diseño.
+- **La tabla de rutas del documento de separación se regeneró** (`bun run docs:rutas`): +4 páginas y +3 descargas del panel.
+- Medido contra la base local, no contra Supabase: cada informe son de dos a seis consultas (no una por fila), y el kardex lee los
+  efectos con una suma, no trayendo los movimientos.
+- En esta máquina el servidor de E2E imprime `fetch failed … 127.0.0.1:54329` y `The destination stream closed early` (Supabase Auth
+  inexistente en el arnés): ruido previo, no afecta a los resultados.

@@ -2,6 +2,7 @@ import type { InventoryMovementType } from '@prisma/client'
 import { esEstadoOrden, type EstadoOrden } from './compras'
 import { TIPOS_DE_MOVIMIENTO } from './domain'
 import type { FiltrosReposicion } from './reposicion'
+import { PAGINA_MAXIMA_REPORTES, esEstadoCobertura, periodoValido, PERIODO_POR_DEFECTO, type FiltrosKardex, type FiltrosRotacion, type FiltrosSinVentas } from './reportes'
 
 /**
  * COMMERCE CORE · inventario — los filtros de la pantalla de movimientos y de su
@@ -359,5 +360,82 @@ export function consultaDeFiltrosReposicion(f: FiltrosReposicion): string {
   if (f.sucursalId) p.set('sucursal', f.sucursalId)
   if (f.proveedorId) p.set('proveedor', f.proveedorId)
   if (f.q) p.set('q', f.q)
+  return p.toString()
+}
+
+// ── INV-4a · Informes de existencias ─────────────────────────────────────────
+
+function paginaDeInforme(v: string | undefined): number {
+  const n = Number(v)
+  return Number.isInteger(n) && n >= 1 && n <= PAGINA_MAXIMA_REPORTES ? n : 1
+}
+
+/**
+ * La URL del kardex: el producto, la sucursal, el rango de días (locales) y, mientras no hay producto, el texto con que se busca.
+ * Las fechas y el texto se leen igual que en Movimientos (un rango al revés se endereza).
+ */
+export function leerFiltrosKardex(sp: ParametrosUrl): FiltrosKardex {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const varianteId = idValido(primero(sp.variante))
+  return {
+    ...(varianteId ? { varianteId } : {}),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.desde ? { desde: filtros.desde } : {}),
+    ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+  }
+}
+
+export function consultaDeFiltrosKardex(f: FiltrosKardex): string {
+  const p = new URLSearchParams()
+  if (f.varianteId) p.set('variante', f.varianteId)
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.desde) p.set('desde', f.desde)
+  if (f.hasta) p.set('hasta', f.hasta)
+  if (f.q) p.set('q', f.q)
+  return p.toString()
+}
+
+/** La URL de «stock sin ventas»: los días (solo los periodos que hay), la sucursal, el texto y la página. */
+export function leerFiltrosSinVentas(sp: ParametrosUrl): FiltrosSinVentas {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  return {
+    dias: periodoValido(primero(sp.dias)),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+/** La consulta de la URL (y, si se pide, otra página). Sin lo que es el valor de siempre: 90 días y la página 1. */
+export function consultaDeFiltrosSinVentas(f: FiltrosSinVentas, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.dias !== PERIODO_POR_DEFECTO) p.set('dias', String(f.dias))
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.q) p.set('q', f.q)
+  if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}
+
+/** La URL de «rotación y cobertura»: los días, la sucursal, el texto, el estado de cobertura y la página. */
+export function leerFiltrosRotacion(sp: ParametrosUrl): FiltrosRotacion {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const estado = primero(sp.estado)
+  return {
+    dias: periodoValido(primero(sp.dias)),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    ...(esEstadoCobertura(estado) ? { estado } : {}),
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+export function consultaDeFiltrosRotacion(f: FiltrosRotacion, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.dias !== PERIODO_POR_DEFECTO) p.set('dias', String(f.dias))
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.q) p.set('q', f.q)
+  if (f.estado) p.set('estado', f.estado)
+  if (pagina > 1) p.set('pagina', String(pagina))
   return p.toString()
 }

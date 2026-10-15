@@ -6,6 +6,8 @@ import { formatearCosto, formatearMonto, valorDe } from './costos'
 import { ETIQUETA_ESTADO_TRASLADO, pendienteDeLinea, type EstadoTraslado } from './traslados'
 import { ETIQUETA_ESTADO_CONTEO, ETIQUETA_RESULTADO, clasificarDiferencia, diferenciaDeConteo, ordenarPorDiferencia, resumirVarianza, type EstadoConteo } from './conteos'
 import { ETIQUETA_MOVIMIENTO, describirReferencia } from './formato'
+import { ETIQUETA_ESTADO_COBERTURA, describirCambioDeCubeta } from './reportes'
+import type { KardexVista, RotacionVista, SinVentasVista } from './reportes-queries'
 
 /**
  * COMMERCE CORE · inventario — el CSV de movimientos.
@@ -520,6 +522,184 @@ export function reposicionToCsv(grupos: readonly GrupoDeReposicion[], contexto: 
           l.ultimoCosto === null ? '' : plano(formatearMonto(valorDe(l.sugerida, l.ultimoCosto))),
         ])
       ),
+    },
+  ])
+}
+
+// ── INV-4a · Informes de existencias ─────────────────────────────────────────
+
+/** Un número con punto decimal y los decimales que hagan falta, o VACÍO si no hay (nunca un cero inventado). */
+const decimal = (n: number | null, d = 2): string | number => (n === null ? '' : Number(n.toFixed(d)))
+
+/** El día de una fecha en la zona de la empresa: `2026-10-13`. */
+const diaCsv = (f: Date | null, zona: string): string => (f ? fechaHoraCsv(f, zona).slice(0, 10) : '')
+
+interface ContextoInforme {
+  zonaHoraria: string
+  generadoEn: Date
+  /** «Sucursal: Centro», «Producto: …» ya en palabras. */
+  filtros: ReadonlyArray<readonly [string, string]>
+}
+
+/**
+ * El kardex de UN producto para llevarlo a una hoja de cálculo: el resumen del periodo (apertura, entradas, salidas, cierre) y
+ * cada movimiento con lo que entró o salió y el saldo que dejó. Las columnas de costo solo existen si quien exporta puede
+ * verlos; un movimiento sin costo conocido deja VACÍAS sus celdas de costo y valor. Si el tope cortó los movimientos, el
+ * archivo lo dice.
+ */
+export function kardexToCsv(k: KardexVista, ctx: Omit<ContextoInforme, 'filtros'> & { tope: number }): string {
+  const c = k.conCostos
+  return armarCsvBloques([
+    {
+      titulo: `Kardex · ${textoCsv(k.variante.nombre)}`,
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Generado', fechaHoraCsv(ctx.generadoEn, ctx.zonaHoraria)],
+        ['Zona horaria', ctx.zonaHoraria],
+        ['Producto', SIN_FORMULA(k.variante.nombre)],
+        ['SKU', SIN_FORMULA(k.variante.sku)],
+        ['Sucursal', SIN_FORMULA(k.sucursal ? k.sucursal.nombre : 'Todas')],
+        ['Desde', k.desde],
+        ['Hasta', k.hasta],
+        ['Existencia al empezar (vendible, apartado y dañado)', k.apertura],
+        ['Entradas', k.totales.entradas],
+        ['Salidas', k.totales.salidas],
+        ['Existencia al terminar', k.cierre],
+        ...(c
+          ? [
+              ['Valor de las entradas (solo las que tienen costo)', plano(formatearMonto(k.totales.valorEntradas))],
+              ['Valor de las salidas (solo las que tienen costo)', plano(formatearMonto(k.totales.valorSalidas))],
+              ['Unidades que entraron SIN costo (no suman al valor)', k.totales.entradasSinCosto],
+              ['Unidades que salieron SIN costo (no suman al valor)', k.totales.salidasSinCosto],
+            ]
+          : []),
+        ['Movimientos en el archivo', k.filas.length],
+        [
+          'Datos completos',
+          k.truncado ? `NO - el archivo trae solo los primeros ${ctx.tope} movimientos del periodo; las existencias al terminar son las del periodo completo. Acota las fechas y vuelve a exportar.` : 'Si',
+        ],
+      ],
+    },
+    {
+      titulo: 'Movimientos (del más antiguo al más reciente)',
+      encabezados: ['Fecha y hora', 'Sucursal', 'Movimiento', 'Entra', 'Sale', 'Saldo', 'Cambio de cubeta', ...(c ? ['Costo unitario', 'Valor'] : []), 'Motivo', 'Usuario', 'Referencia'],
+      filas: k.filas.map((f) => [
+        fechaHoraCsv(f.creadoEn, ctx.zonaHoraria),
+        SIN_FORMULA(f.sucursalNombre),
+        ETIQUETA_MOVIMIENTO[f.tipo as InventoryMovementType] ?? f.tipo,
+        f.entra,
+        f.sale,
+        f.saldo,
+        SIN_FORMULA(describirCambioDeCubeta(f)),
+        // Apartar, dañar y recuperar no entran ni salen: no llevan costo en el kardex (el costo del daño vive en sus propios informes).
+        ...(c ? [f.sentido === 'INTERNO' || f.costo === null ? '' : plano(formatearCosto(f.costo)), f.valor === null ? '' : plano(formatearMonto(f.valor))] : []),
+        SIN_FORMULA(f.motivo),
+        SIN_FORMULA(f.usuarioNombre ?? 'Sistema'),
+        SIN_FORMULA(describirReferencia(f.referenciaTipo, f.referenciaId)),
+      ]),
+    },
+  ])
+}
+
+/**
+ * El stock sin ventas: lo que tiene existencias y lleva N días sin venderse, de lo que más dinero inmoviliza a lo que menos. Sin
+ * la función de costos el archivo no trae costo ni valor. Un producto sin costo conocido deja esas celdas VACÍAS.
+ */
+export function sinVentasToCsv(v: SinVentasVista, ctx: ContextoInforme & { tope: number }): string {
+  const conCostos = v.resumen.valor !== null
+  const truncado = v.total > v.filas.length
+  return armarCsvBloques([
+    {
+      titulo: `Stock sin ventas en ${v.dias} días`,
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Generado', fechaHoraCsv(ctx.generadoEn, ctx.zonaHoraria)],
+        ['Zona horaria', ctx.zonaHoraria],
+        ['Días sin vender', v.dias],
+        ...ctx.filtros.map(([k, val]): [string, string] => [`Filtro: ${k}`, SIN_FORMULA(val)]),
+        ['Saldos (producto y sucursal) sin ventas', v.total],
+        ['Unidades inmovilizadas', v.resumen.unidades],
+        ...(conCostos
+          ? [
+              ['Valor inmovilizado (solo lo que tiene costo)', plano(formatearMonto(v.resumen.valor!))],
+              ['Unidades SIN costo (no suman al valor)', v.resumen.unidadesSinCosto ?? 0],
+            ]
+          : []),
+        ['Filas en el archivo', v.filas.length],
+        ['Datos completos', truncado ? `NO - el archivo trae solo los primeros ${ctx.tope} de ${v.total} saldos. Filtra por sucursal o producto para ver el resto.` : 'Si'],
+      ],
+    },
+    {
+      titulo: 'Saldos sin ventas',
+      encabezados: ['Producto', 'SKU', 'Sucursal', 'Existencia', 'Ultima venta', 'Dias sin vender', 'Ultima entrada', ...(conCostos ? ['Costo unitario', 'Valor'] : [])],
+      filas: v.filas.map((f) => [
+        SIN_FORMULA(f.nombre),
+        SIN_FORMULA(f.sku),
+        SIN_FORMULA(f.sucursalActiva ? f.sucursalNombre : `${f.sucursalNombre} (desactivada)`),
+        f.existencia,
+        f.ultimaVenta ? diaCsv(f.ultimaVenta, ctx.zonaHoraria) : 'Nunca',
+        f.diasSinVender ?? '',
+        diaCsv(f.ultimaEntrada, ctx.zonaHoraria),
+        ...(conCostos ? [f.costo === null ? '' : plano(formatearCosto(f.costo)), f.valor === null ? '' : plano(formatearMonto(f.valor))] : []),
+      ]),
+    },
+  ])
+}
+
+/**
+ * La rotación y la cobertura: por producto lo vendido (menos lo devuelto), el ritmo diario, cuántas veces rotó la existencia
+ * promedio y para cuántos días alcanza lo que hay. Con la función de costos suma el costo de ventas, el valor del inventario y los
+ * días de inventario; sin ella el archivo no trae nada valorado. La cobertura de un producto sin ventas va VACÍA: no hay ritmo.
+ */
+export function rotacionToCsv(v: RotacionVista, ctx: ContextoInforme & { tope: number }): string {
+  const truncadoPorTope = v.truncado
+  const recortado = v.total > v.filas.length
+  return armarCsvBloques([
+    {
+      titulo: `Rotación y cobertura de los últimos ${v.dias} días`,
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Generado', fechaHoraCsv(ctx.generadoEn, ctx.zonaHoraria)],
+        ['Zona horaria', ctx.zonaHoraria],
+        ['Periodo en días', v.dias],
+        ...ctx.filtros.map(([k, val]): [string, string] => [`Filtro: ${k}`, SIN_FORMULA(val)]),
+        ['Productos en el archivo', v.filas.length],
+        ['Unidades vendidas (menos devueltas), de todos los productos del filtro', v.unidadesVendidas],
+        ...(['AGOTADO', 'POCA', 'NORMAL', 'EXCESO', 'SIN_VENTAS'] as const).map((e): [string, number] => [`Productos: ${ETIQUETA_ESTADO_COBERTURA[e]}`, v.porEstado[e]]),
+        ...(v.valorado
+          ? [
+              ['Costo de ventas del periodo (solo lo que tenía costo)', plano(formatearMonto(v.valorado.costoDeVentas))],
+              ['Unidades vendidas SIN costo conocido (no suman al costo de ventas)', v.valorado.unidadesSinCosto],
+              ['Valor del inventario (solo lo que tiene costo)', plano(formatearMonto(v.valorado.valorInventario))],
+              ['Dias de inventario', v.valorado.diasDeInventario ?? ''],
+            ]
+          : []),
+        [
+          'Datos completos',
+          truncadoPorTope
+            ? `NO - había más productos de los que se leen (${ctx.tope}): se leyeron primero los que más vendieron. Filtra por sucursal o producto.`
+            : recortado
+              ? `NO - el archivo trae solo los primeros ${ctx.tope} de ${v.total} productos. Filtra por estado, sucursal o producto.`
+              : 'Si',
+        ],
+      ],
+    },
+    {
+      titulo: 'Productos (de lo más urgente a lo que no se vende)',
+      encabezados: ['Producto', 'SKU', 'Existencia', 'Disponible', 'Vendidas', 'Venta diaria', 'Existencia promedio', 'Veces que rotó', 'Cobertura en dias', 'Estado', 'Ultima venta'],
+      filas: v.filas.map((f) => [
+        SIN_FORMULA(f.nombre),
+        SIN_FORMULA(f.sku),
+        f.existencia,
+        f.disponible,
+        f.vendidas,
+        decimal(f.ventaDiaria, 2),
+        decimal(f.existenciaPromedio, 1),
+        decimal(f.veces, 2),
+        decimal(f.coberturaDias, 1),
+        ETIQUETA_ESTADO_COBERTURA[f.estado],
+        diaCsv(f.ultimaVenta, ctx.zonaHoraria),
+      ]),
     },
   ])
 }

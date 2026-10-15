@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { puedeFuncion } from '@/lib/auth/guards'
 import { cn } from '@/lib/utils'
 
-export type VistaInventario = 'existencias' | 'movimientos' | 'reservas' | 'entradas' | 'conteos' | 'transferencias' | 'valor' | 'reposicion' | 'compras' | 'proveedores'
+export type VistaInventario = 'existencias' | 'movimientos' | 'reservas' | 'entradas' | 'conteos' | 'transferencias' | 'reportes' | 'valor' | 'reposicion' | 'compras' | 'proveedores'
 
 /** Las vistas que piden la función `comprar` (leen proveedores y costos de órdenes). */
 const REQUIEREN_COMPRAR: ReadonlySet<VistaInventario> = new Set(['reposicion', 'compras', 'proveedores'])
@@ -14,6 +14,7 @@ const VISTAS: ReadonlyArray<{ id: VistaInventario; etiqueta: string; href: strin
   { id: 'entradas', etiqueta: 'Entradas', href: '/admin/inventario/entradas' },
   { id: 'conteos', etiqueta: 'Conteos', href: '/admin/inventario/conteos' },
   { id: 'transferencias', etiqueta: 'Transferencias', href: '/admin/inventario/transferencias' },
+  { id: 'reportes', etiqueta: 'Reportes', href: '/admin/inventario/reportes' },
   { id: 'valor', etiqueta: 'Valor', href: '/admin/inventario/valor' },
   { id: 'reposicion', etiqueta: 'Reposición', href: '/admin/inventario/reposicion' },
   { id: 'compras', etiqueta: 'Compras', href: '/admin/inventario/compras' },
@@ -22,8 +23,8 @@ const VISTAS: ReadonlyArray<{ id: VistaInventario; etiqueta: string; href: strin
 
 /**
  * Las vistas de la empresa entera del inventario: lo que hay, lo que se movió,
- * lo que está apartado, la mercancía que entró, los inventarios físicos, las transferencias entre sucursales y lo que vale todo
- * (INV-3a), las compras a proveedores (INV-3b) y qué hay que comprar (INV-3c). La ficha de UN producto cuelga de
+ * lo que está apartado, la mercancía que entró, los inventarios físicos, las transferencias entre sucursales, los informes
+ * (kardex, stock sin ventas, rotación; INV-4a) y lo que vale todo (INV-3a), las compras a proveedores (INV-3b) y qué hay que comprar (INV-3c). La ficha de UN producto cuelga de
  * «Existencias». Componente de servidor: son enlaces, no necesita estado. «Valor» solo aparece para quien tiene la función
  * `costos`, y «Reposición», «Compras» y «Proveedores» para quien tiene `comprar`: sin ellas la pantalla ni se ofrece (y, si
  * alguien escribe la URL, la propia página se lo niega).

@@ -1276,3 +1276,124 @@ test('INV-3c · el catálogo de funciones dice que «comprar» incluye la reposi
   assert.match(ajustar, /aria-label=\{`Llenar hasta en \$\{saldo\.nombre\}`\}/, 'el formulario está dentro de la rama «puedeAjustar»')
   assert.ok(ajustar.indexOf('Llenar hasta en') < ajustar.indexOf('No tienes permiso para mover existencias'), 'va antes del mensaje de «sin permiso»')
 })
+
+// ── INV-4a · informes de existencias ─────────────────────────────────────────
+
+const REPORTES = 'src/app/(admin)/admin/inventario/reportes'
+
+test('INV-4a · las tres descargas se guardan ANTES de tocar la base, la empresa sale de la sesión y el costo solo se lee con «costos»', () => {
+  for (const [informe, lectura] of [
+    ['kardex', 'kardexEnTx'],
+    ['sin-ventas', 'sinVentasEnTx'],
+    ['rotacion', 'rotacionEnTx'],
+  ] as const) {
+    const s = sinComent(leer(`${REPORTES}/${informe}/exportar/route.ts`))
+    assert.match(s, /requireSection\('inventario'\)/, informe)
+    assert.doesNotMatch(s, /requireSection\('inventario', '/, `${informe}: la función «costos» NO es requisito para descargar: solo decide si el archivo lleva dinero`)
+    assert.match(s, /if \(!user\) return NextResponse\.json\(\{ error: 'No autorizado\.' \}, \{ status: 403 \}\)/, informe)
+    assert.match(s, /resolveCompanyId\(user\)/, informe)
+    assert.ok(s.indexOf('requireSection(') < s.indexOf('conEmpresa('), `${informe} toca la base antes de autorizar`)
+    assert.match(s, /const conCostos = await puedeFuncion\('inventario', 'costos'\)/, informe)
+    assert.ok(s.indexOf("puedeFuncion('inventario', 'costos')") < s.indexOf('conEmpresa('), `${informe}: decide los costos antes de leer`)
+    assert.match(s, new RegExp(`${lectura}\\(tx, companyId, [^)]*[{,]\\s*conCostos\\s*[,}]`), `${informe} no pasa SU conCostos a la lectura (ni un true fijo)`)
+    assert.doesNotMatch(s, /\bprisma\./, informe)
+    assert.match(s, /respuestaCsv\(/, informe)
+    // La sucursal de la URL solo filtra si es de la empresa.
+    assert.match(s, /sucursalesDeLaEmpresaEnTx\(tx, companyId\)/, informe)
+    assert.match(s, /delete f\.sucursalId/, informe)
+  }
+  // El kardex además exige un producto y responde 404 si no es de la empresa.
+  const k = sinComent(leer(`${REPORTES}/kardex/exportar/route.ts`))
+  assert.match(k, /if \(!pedido\.varianteId\) return NextResponse\.json\(\{ error: 'Falta el producto del kardex\.' \}, \{ status: 400 \}\)/)
+  assert.match(k, /if \(!r\.kardex\) return NextResponse\.json\(\{ error: 'Producto no encontrado\.' \}, \{ status: 404 \}\)/)
+  // Las otras dos traen todo (hasta su tope), no solo una página.
+  assert.match(sinComent(leer(`${REPORTES}/sin-ventas/exportar/route.ts`)), /todas: true/)
+  assert.match(sinComent(leer(`${REPORTES}/rotacion/exportar/route.ts`)), /todas: true/)
+})
+
+test('INV-4a · las pantallas piden los costos a la función «costos», se los pasan a la lectura y enseñan dinero solo si la lectura lo trajo', () => {
+  for (const [informe, lectura] of [
+    ['kardex', 'kardexEnTx'],
+    ['sin-ventas', 'sinVentasEnTx'],
+    ['rotacion', 'rotacionEnTx'],
+  ] as const) {
+    const s = sinComent(leer(`${REPORTES}/${informe}/page.tsx`))
+    assert.match(s, /const conCostos = await puedeFuncion\('inventario', 'costos'\)/, informe)
+    assert.match(s, new RegExp(`${lectura}\\(tx, companyId, [^)]*[{,]\\s*conCostos\\s*[,}]`), `${informe} no pasa SU conCostos (ni un true fijo)`)
+    assert.doesNotMatch(s, /\|\|\s*(true|1)\b/, `${informe}: una condición que siempre se cumple`)
+    assert.match(s, /<NavegacionInventario actual="reportes"/, informe)
+    assert.match(s, /<BotonExportar /, `${informe}: usa el botón compartido`)
+    assert.doesNotMatch(s, /<a [^>]*exportar|download=/, `${informe}: sin botón de exportar a mano`)
+    assert.match(s, /describirFalloDeCarga\(/, `${informe}: dice por qué no cargó`)
+    // Cada montón de dinero va detrás de una condición que depende de los costos.
+    for (const uso of s.matchAll(/formatear(?:Monto|Costo)\(/g)) {
+      const antes = s.slice(Math.max(0, uso.index! - 400), uso.index!)
+      assert.match(antes, /conCostos|v\.valorado|v\.resumen\.valor !== null|k\.conCostos/, `${informe}: dinero sin condición de costos → …${antes.slice(-120)}`)
+    }
+  }
+  assert.match(sinComent(leer(`${REPORTES}/page.tsx`)), /puedeFuncion\('inventario', 'costos'\)/, 'el hub solo habla de dinero a quien puede verlo')
+  // Cada bloque de dinero cuelga de SU condición, escrita junto a él (el tipo ya obliga en los que pueden ser null; en el kardex no).
+  const kardexPagina = sinComent(leer(`${REPORTES}/kardex/page.tsx`))
+  assert.match(kardexPagina, /\{conCostos && <p[^>]*>valieron \{formatearMonto\(k\.totales\.valorEntradas\)\}<\/p>\}/)
+  assert.match(kardexPagina, /\{conCostos && <p[^>]*>costaron \{formatearMonto\(k\.totales\.valorSalidas\)\}<\/p>\}/)
+  assert.match(kardexPagina, /\{conCostos && \(k\.totales\.entradasSinCosto > 0 \|\| k\.totales\.salidasSinCosto > 0\) && \(/)
+  assert.match(kardexPagina, /\{conCostos && \(m\.entra > 0 \|\| m\.sale > 0\) && \(/)
+  const sinVentasPagina = sinComent(leer(`${REPORTES}/sin-ventas/page.tsx`))
+  assert.match(sinVentasPagina, /\{v\.resumen\.valor !== null && \(\s*<Card aria-label="Dinero parado">/)
+  assert.match(sinVentasPagina, /\{conCostos && \(v\.resumen\.unidadesSinCosto \?\? 0\) > 0 && \(/)
+  assert.match(sinVentasPagina, /\{conCostos &&\s*\(l\.valor === null \|\| l\.costo === null/)
+  const rotacionPagina = sinComent(leer(`${REPORTES}/rotacion/page.tsx`))
+  assert.match(rotacionPagina, /\{v\.valorado && \(\s*<>/)
+  assert.match(rotacionPagina, /\{v\.valorado && v\.valorado\.unidadesSinCosto > 0 && \(/)
+})
+
+test('INV-4a · «Reportes» se ofrece a todo quien tiene el inventario (no pide «costos» ni «comprar»), y la ficha del producto enlaza a su kardex', () => {
+  const nav = sinComent(leer('src/components/inventario/NavegacionInventario.tsx'))
+  assert.match(nav, /id: 'reportes'[\s\S]*href: '\/admin\/inventario\/reportes'/)
+  assert.match(nav, /export type VistaInventario = [^\n]*'reportes'/)
+  assert.doesNotMatch(nav, /REQUIEREN_COMPRAR[^\n]*'reportes'/)
+  assert.doesNotMatch(nav, /v\.id !== 'reportes'/)
+  for (const ruta of ['/admin/inventario/reportes', '/admin/inventario/reportes/kardex', '/admin/inventario/reportes/sin-ventas/exportar']) assert.equal(adminSectionForPath(ruta), 'inventario', ruta)
+  assert.match(sinComent(leer('src/app/(admin)/admin/inventario/[varianteId]/page.tsx')), /\/admin\/inventario\/reportes\/kardex\?variante=\$\{detalle\.varianteId\}/)
+})
+
+test('INV-4a · las lecturas de los informes solo LEEN, escriben la empresa en CADA consulta y no leen costos sin «conCostos»', () => {
+  const f = sinComent(leer('src/modules/inventory/reportes-queries.ts'))
+  assert.doesNotMatch(f, /\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(|\$executeRaw|INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM/i, 'una lectura no escribe')
+  // Con `(?=…)` la ventana de 140 caracteres no se «come» la consulta siguiente: dos llamadas pegadas se revisan las dos.
+  const lecturas = [...f.matchAll(/tx\.(\w+)\.(findFirst|findMany|count)\(\{\s*where: \{(?=([\s\S]{0,140}))/g)]
+  assert.equal(lecturas.length, 6, 'producto, sucursal, saldos, movimientos y las dos búsquedas; si cambia, revisa esta prueba')
+  for (const [llamada, , , donde] of lecturas) assert.match(donde, /companyId/, `una consulta no filtra por empresa → ${llamada.slice(0, 90)}…`)
+  const sqls = [...f.matchAll(/\$queryRaw<[^>]*>`([\s\S]*?)`/g)]
+  assert.equal(sqls.length, 4, 'efectos del kardex, resumen y filas de sin ventas, y rotación')
+  // «Stock sin ventas» arma su FROM/WHERE una vez (`desde`) y lo usa el resumen y las filas: la empresa tiene que estar ahí.
+  const desde = f.match(/const desde = Prisma\.sql`([\s\S]*?)`\n/)
+  assert.ok(desde, 'ya no hay un fragmento `desde`; revisa esta prueba')
+  assert.match(desde[1], /l\."companyId" = \$\{companyId\}/, 'el fragmento compartido de «sin ventas» no filtra por empresa')
+  assert.match(desde[1], /m\."companyId" = l\."companyId"/, 'la subconsulta de ventas tampoco se sale de la empresa')
+  for (const [, texto] of sqls) assert.ok(/"companyId" = \$\{companyId\}/.test(texto) || texto.includes('${desde}'), `un SQL a mano sin empresa → ${texto.trim().slice(0, 80)}…`)
+  // La rotación junta tres tablas por producto (productos, saldos y movimientos): cada una acota por empresa, no basta con una.
+  const rotacion = sqls.map(([, texto]) => texto).find((texto) => texto.includes('"vendidas"') && texto.includes('catalog_variants'))
+  assert.ok(rotacion, 'ya no se encuentra el SQL de la rotación; revisa esta prueba')
+  for (const alias of ['v', 'l', 'm']) assert.match(rotacion, new RegExp(`${alias}\\."companyId" = \\$\\{companyId\\}`), `la rotación no acota «${alias}» por empresa`)
+  // Y el de los efectos del kardex, que mira movimientos por el id del saldo, también acota los movimientos.
+  const efectos = sqls.map(([, texto]) => texto).find((texto) => texto.includes('"desdeInicio"'))
+  assert.ok(efectos && /m\."companyId" = \$\{companyId\}/.test(efectos), 'los efectos del kardex no acotan los movimientos por empresa')
+  // El costo del movimiento solo se selecciona con la función; en SQL es un NULL constante y la tabla de costos ni se une.
+  assert.match(f, /\.\.\.\(opciones\.conCostos \? \{ unitCost: true \} : \{\}\)/)
+  assert.match(f, /opciones\.conCostos \? Prisma\.sql`COALESCE\(c\."averageCost", v\."cost"\)` : Prisma\.sql`NULL::numeric`/)
+  assert.match(f, /opciones\.conCostos \? Prisma\.sql`LEFT JOIN "inventory_variant_costs" c ON c\."catalogVariantId" = v\."id" AND c\."companyId" = v\."companyId"` : Prisma\.empty/)
+  assert.match(f, /if \(opciones\.conCostos\) \{\s*const costoVentas = await costoDeVentasEnRangoEnTx/, 'el costo de ventas y el valor del inventario solo se leen con la función')
+  // Las reservas no mueven existencias: fuera del kardex.
+  assert.match(f, /type: \{ notIn: \['RESERVATION', 'RESERVATION_RELEASE'\] \}/)
+  assert.doesNotMatch(f, /parseFloat|toFixed\(\d\)\)\s*\*/, 'los montos no son flotantes')
+})
+
+test('INV-4a · lo PURO de los informes sigue siendo puro', () => {
+  const pura = leer('src/modules/inventory/reportes.ts')
+  assert.doesNotMatch(pura, /server-only|from '@\/lib\/prisma'|from '@\/lib\/tenant'|@prisma\/client'/, 'reportes.ts debe ser puro')
+  assert.doesNotMatch(sinComent(pura), /parseFloat|Math\.round\(.*costo/, 'los costos viajan como enteros')
+  // La exportación solo importa TIPOS de las lecturas (si no, arrastraría Prisma a quien la use en pruebas puras).
+  const exp = leer('src/modules/inventory/exportacion.ts')
+  assert.match(exp, /import type \{ KardexVista, RotacionVista, SinVentasVista \} from '\.\/reportes-queries'/)
+})

@@ -1800,6 +1800,206 @@ test.describe('Inventario · panel', () => {
     await ctx.close()
   })
 
+  test('INV-4a · reportes: kardex de un producto, stock sin ventas y rotación — con sus archivos — y quien no tiene «costos» no ve ni un peso', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    // Una empresa propia: los informes son de toda la empresa y tienen que contener solo lo de esta prueba.
+    const emp = await empresaCatalogo(sufijo, 'invrep4', { capacidad: true })
+    const prisma = prismaDeArnes()
+    const principal = (await sucursalSembrada(emp.id, 'Principal')).id
+    const NA = `Arroz INF ${sufijo}`
+    const NB = `Frijol INF ${sufijo}`
+    const NC = `Lenteja INF ${sufijo}`
+    const mk = async (name: string, slug: string, sku: string) => {
+      const it = await itemSembrado(emp.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, price: 100, porDefecto: true }] })
+      return varianteDe(it.id)
+    }
+    const vA = await mk(NA, `arroz-inf-${sufijo}`, `INF-A-${sufijo}`)
+    const vB = await mk(NB, `frijol-inf-${sufijo}`, `INF-B-${sufijo}`)
+    const vC = await mk(NC, `lenteja-inf-${sufijo}`, `INF-C-${sufijo}`)
+    const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000)
+    const dia = (d: Date) => d.toISOString().slice(0, 10)
+    // A: 100 entraron hace 20 días a 5.00 y se vendieron 30 hace 5 → quedan 70. B: 10 a 2.00 desde hace 120 días, sin una venta.
+    // C: 8 desde hace 120 días, sin costo y sin una venta.
+    const nivel = async (variante: string, onHand: number, creado: number) =>
+      prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: variante, locationId: principal, onHand, createdAt: hace(creado) } })
+    const lvA = await nivel(vA, 70, 60)
+    const lvB = await nivel(vB, 10, 120)
+    const lvC = await nivel(vC, 8, 120)
+    const entrada = (nivelId: string, cantidad: number, antes: number, dias: number, costo: string | null) =>
+      prisma.inventoryMovement.create({
+        data: { companyId: emp.id, inventoryLevelId: nivelId, type: 'PURCHASE', destinationBucket: 'AVAILABLE', quantity: cantidad, previousOnHand: antes, newOnHand: antes + cantidad, unitCost: costo, createdAt: hace(dias) },
+      })
+    await entrada(lvA.id, 100, 0, 20, '5.0000')
+    await prisma.inventoryMovement.create({
+      data: { companyId: emp.id, inventoryLevelId: lvA.id, type: 'SALE', sourceBucket: 'AVAILABLE', quantity: 30, previousOnHand: 100, newOnHand: 70, unitCost: '5.0000', createdAt: hace(5) },
+    })
+    await entrada(lvB.id, 10, 0, 120, '2.0000')
+    await entrada(lvC.id, 8, 0, 120, null)
+    for (const [v, costo] of [[vA, '5.0000'], [vB, '2.0000']] as const) await prisma.inventoryVariantCost.create({ data: { companyId: emp.id, catalogVariantId: v, averageCost: costo } })
+
+    const email = 'e2e.catalogo.con@membego.test'
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, emp.id)
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    const fila = (lista: Locator, nombre: string) => lista.getByRole('listitem').filter({ hasText: nombre })
+
+    try {
+      // ── La puerta: una pestaña «Reportes» con los tres informes ───────────
+      await p.goto('/admin/inventario')
+      await vistas.getByRole('link', { name: 'Reportes' }).click()
+      await p.waitForURL('**/admin/inventario/reportes')
+      await expect(p.getByRole('heading', { name: 'Reportes de existencias', level: 1 })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page')
+      const informes = p.getByRole('list', { name: 'Informes' })
+      await expect(informes.getByRole('listitem')).toHaveCount(3)
+      await expect(p.getByText('Con costos: cuánto dinero tienen inmovilizado.')).toBeVisible()
+
+      // ── Kardex: se busca el producto, y sus movimientos dejan el saldo ────
+      await informes.getByRole('link', { name: /Kardex de un producto/ }).click()
+      await p.waitForURL('**/admin/inventario/reportes/kardex')
+      await expect(p.getByText('Busca un producto para ver su kardex')).toBeVisible()
+      await p.getByRole('textbox', { name: 'Producto' }).fill(NA)
+      await p.getByRole('button', { name: 'Buscar' }).click()
+      await p.getByRole('list', { name: 'Productos encontrados' }).getByRole('link', { name: new RegExp(NA) }).click()
+      await p.waitForURL(/\/reportes\/kardex\?.*variante=/)
+      await expect(p.getByText(NA, { exact: false }).first()).toBeVisible()
+      const resumen = p.getByLabel('Resumen del periodo')
+      await expect(resumen.getByText('Al empezar').locator('..')).toContainText('0')
+      await expect(resumen.getByText('Entradas').locator('..')).toContainText('+100')
+      await expect(resumen.getByText('Entradas').locator('..')).toContainText('valieron 500.00')
+      await expect(resumen.getByText('Salidas').locator('..')).toContainText('−30')
+      await expect(resumen.getByText('Salidas').locator('..')).toContainText('costaron 150.00')
+      await expect(resumen.getByText('Al terminar').locator('..')).toContainText('70')
+      const kardex = p.getByRole('list', { name: 'Movimientos del kardex' })
+      await expect(kardex.getByRole('listitem')).toHaveCount(2)
+      await expect(kardex.getByRole('listitem').nth(0)).toContainText('Entrada de mercancía')
+      await expect(kardex.getByRole('listitem').nth(0)).toContainText('+100')
+      await expect(kardex.getByRole('listitem').nth(0)).toContainText('saldo 100')
+      await expect(kardex.getByRole('listitem').nth(1)).toContainText('Venta')
+      await expect(kardex.getByRole('listitem').nth(1)).toContainText('saldo 70')
+      await expect(kardex.getByRole('listitem').nth(1)).toContainText('150.00')
+      // Un rango sin movimientos conserva la existencia con la que empezó y con la que terminó.
+      const idA = new URL(p.url()).searchParams.get('variante')!
+      expect(idA).toBe(vA)
+      await p.goto(`/admin/inventario/reportes/kardex?variante=${vA}&desde=${dia(hace(3))}`)
+      await expect(p.getByText(/no tuvo movimientos entre el/)).toBeVisible()
+      await expect(p.getByLabel('Resumen del periodo').getByText('Al empezar').locator('..')).toContainText('70')
+      // Un producto de otra empresa o que no existe no da un kardex ajeno.
+      await p.goto('/admin/inventario/reportes/kardex?variante=cinexistente000000000000')
+      await expect(p.getByText('Ese producto no existe en tu empresa.')).toBeVisible()
+      // Desde la ficha del producto se llega con un clic.
+      await p.goto(`/admin/inventario/${vB}`)
+      await p.getByRole('link', { name: 'Kardex', exact: true }).click()
+      await p.waitForURL(new RegExp(`/reportes/kardex\\?variante=${vB}`))
+      // El archivo del kardex: el mismo resumen, valores sin separador de miles.
+      const kcsv = await p.request.get(`/admin/inventario/reportes/kardex/exportar?variante=${vA}`)
+      expect(kcsv.status()).toBe(200)
+      expect(kcsv.headers()['content-type'] ?? '').toContain('text/csv')
+      const kt = await kcsv.text()
+      expect(kt).toContain('Entradas;100')
+      expect(kt).toContain('Salidas;30')
+      expect(kt).toContain('Existencia al terminar;70')
+      expect(kt).toMatch(/Valor de las entradas[^;]*;500\.00/)
+      expect(kt).toContain('Datos completos;Si')
+      expect((await p.request.get('/admin/inventario/reportes/kardex/exportar')).status()).toBe(400)
+      expect((await p.request.get('/admin/inventario/reportes/kardex/exportar?variante=cinexistente000000000000')).status()).toBe(404)
+
+      // ── Stock sin ventas: lo que tiene existencias y no se ha vendido ─────
+      await p.goto('/admin/inventario/reportes/sin-ventas')
+      await expect(p.getByRole('heading', { name: 'Stock sin ventas', level: 1 })).toBeVisible()
+      const sinVentas = p.getByRole('list', { name: 'Productos sin ventas' })
+      await expect(sinVentas.getByRole('listitem')).toHaveCount(2)
+      await expect(fila(sinVentas, NB)).toContainText('Nunca se ha vendido')
+      await expect(fila(sinVentas, NB)).toContainText('20.00')
+      await expect(fila(sinVentas, NC)).toContainText('Sin costo')
+      await expect(sinVentas.getByText(NA)).toHaveCount(0) // se vendió hace 5 días
+      await expect(p.getByLabel('Dinero parado')).toContainText('20.00')
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('8 unidades paradas no tienen costo')
+      // Un periodo más largo que la edad de los saldos: ninguno ha tenido tiempo de venderse.
+      await p.goto('/admin/inventario/reportes/sin-ventas?dias=365')
+      await expect(p.getByText('Todo lo que tienes se vendió en los últimos 365 días')).toBeVisible()
+      await p.goto(`/admin/inventario/reportes/sin-ventas?q=${encodeURIComponent('no-existe-xyz')}`)
+      await expect(p.getByText('Nada coincide con esos filtros')).toBeVisible()
+      await p.goto('/admin/inventario/reportes/sin-ventas?sucursal=de-otra-empresa&dias=7') // lo ajeno no filtra y un periodo raro vuelve al de siempre
+      await expect(fila(p.getByRole('list', { name: 'Productos sin ventas' }), NB)).toBeVisible()
+      const scsv = await p.request.get('/admin/inventario/reportes/sin-ventas/exportar')
+      expect(scsv.status()).toBe(200)
+      const st = await scsv.text()
+      expect(st).toContain(NB)
+      expect(st).toContain(NC)
+      expect(st).not.toContain(NA)
+      expect(st).toMatch(/Valor inmovilizado[^;]*;20\.00/)
+
+      // ── Rotación y cobertura ──────────────────────────────────────────────
+      await p.goto('/admin/inventario/reportes/rotacion?dias=30')
+      await expect(p.getByRole('heading', { name: 'Rotación y cobertura', level: 1 })).toBeVisible()
+      const estados = p.getByRole('navigation', { name: 'Filtrar por estado de cobertura' })
+      await expect(estados.getByRole('link', { name: 'Todos · 3' })).toBeVisible()
+      await expect(estados.getByRole('link', { name: 'Normal · 1' })).toBeVisible()
+      await expect(estados.getByRole('link', { name: 'Sin ventas · 2' })).toBeVisible()
+      const rot = p.getByRole('list', { name: 'Rotación por producto' })
+      await expect(rot.getByRole('listitem')).toHaveCount(3)
+      await expect(fila(rot, NA)).toContainText('Vendió 30 (1 por día)')
+      await expect(fila(rot, NA)).toContainText('alcanza para 70 días')
+      await expect(fila(rot, NA)).toContainText('Normal')
+      await expect(fila(rot, NB)).toContainText('sin ventas: no hay ritmo')
+      await expect(p.getByLabel('Costo de ventas del periodo')).toContainText('150.00')
+      await expect(p.getByLabel('Días de inventario')).toContainText('74') // 370 de inventario entre 5.00 de costo por día
+      await expect(p.getByLabel('Lo que no tiene costo')).toHaveCount(0) // nada de lo vendido careció de costo
+      await estados.getByRole('link', { name: 'Sin ventas · 2' }).click()
+      await p.waitForURL(/estado=SIN_VENTAS/)
+      await expect(p.getByRole('list', { name: 'Rotación por producto' }).getByRole('listitem')).toHaveCount(2)
+      await expect(p.getByRole('list', { name: 'Rotación por producto' }).getByText(NA)).toHaveCount(0)
+      const rcsv = await p.request.get('/admin/inventario/reportes/rotacion/exportar?dias=30')
+      expect(rcsv.status()).toBe(200)
+      const rt = await rcsv.text()
+      expect(rt).toContain(NA)
+      expect(rt).toMatch(/Costo de ventas del periodo[^;]*;150\.00/)
+      expect(rt).toMatch(/Dias de inventario;74/)
+      const rfiltrado = await p.request.get('/admin/inventario/reportes/rotacion/exportar?dias=30&estado=SIN_VENTAS')
+      const rft = await rfiltrado.text()
+      expect(rft).toContain('Filtro: Estado;Sin ventas')
+      expect(rft).not.toContain(NA)
+
+      // ── Quien NO tiene «costos» ve unidades y días, nunca dinero ──────────
+      await prisma.user.update({ where: { email }, data: { permisos: { v: 1, secciones: {}, funciones: { inventario: { costos: false } } } } })
+      await p.goto('/admin/inventario')
+      await expect(vistas.getByRole('link', { name: 'Reportes' })).toBeVisible()
+      await p.goto('/admin/inventario/reportes')
+      await expect(p.getByText('Con costos:')).toHaveCount(0)
+      await p.goto(`/admin/inventario/reportes/kardex?variante=${vA}`)
+      const sinDinero = async () => {
+        const texto = await p.locator('body').innerText()
+        for (const dinero of ['500.00', '150.00', '20.00', '370.00', 'valieron', 'costaron', 'Dinero parado', 'Costo de ventas', 'Días de inventario', 'Sin costo', 'c/u']) expect(texto, `se coló «${dinero}»`).not.toContain(dinero)
+      }
+      await expect(p.getByRole('list', { name: 'Movimientos del kardex' }).getByRole('listitem')).toHaveCount(2)
+      await sinDinero()
+      await p.goto('/admin/inventario/reportes/sin-ventas')
+      await expect(fila(p.getByRole('list', { name: 'Productos sin ventas' }), NB)).toBeVisible()
+      await sinDinero()
+      await p.goto('/admin/inventario/reportes/rotacion?dias=30')
+      await expect(fila(p.getByRole('list', { name: 'Rotación por producto' }), NA)).toContainText('alcanza para 70 días')
+      await sinDinero()
+      for (const ruta of [`kardex/exportar?variante=${vA}`, 'sin-ventas/exportar', 'rotacion/exportar?dias=30']) {
+        const r = await p.request.get(`/admin/inventario/reportes/${ruta}`)
+        expect(r.status(), ruta).toBe(200)
+        const t = await r.text()
+        for (const dinero of ['500.00', '150.00', '20.00', 'Costo unitario', 'Valor inmovilizado', 'Costo de ventas', 'SIN costo', 'Dias de inventario']) expect(t, `${ruta}: se coló «${dinero}»`).not.toContain(dinero)
+      }
+    } finally {
+      await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
+    }
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
   test('aislamiento: la variante de otra empresa no se abre ni se lista', async ({ browser }) => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
