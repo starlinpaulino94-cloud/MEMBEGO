@@ -158,3 +158,20 @@ test('resolverMotivo: cada motivo del catálogo se acepta en sus clases y se rec
     }
   }
 })
+
+// ── INV-5a · el motivo que escribe el sistema al mover unidades entre lotes ──
+
+test('«Reasignación de lote» es un motivo del SISTEMA: se reconoce y se etiqueta, pero nadie lo elige ni vale en un formulario', async () => {
+  const { MOTIVOS_DEL_SISTEMA, MOTIVO_REASIGNACION_DE_LOTE } = await import('../src/modules/inventory/motivos')
+  assert.equal(MOTIVO_REASIGNACION_DE_LOTE, 'LOT_REASSIGN')
+  assert.match(MOTIVO_REASIGNACION_DE_LOTE, /^[A-Z][A-Z0-9_]{1,39}$/, 'la base lo aceptaría')
+  assert.deepEqual(MOTIVOS_DEL_SISTEMA.map((m) => m.codigo), ['LOT_REASSIGN'])
+  assert.equal(etiquetaDeMotivo('LOT_REASSIGN'), 'Reasignación de lote')
+  assert.equal(esMotivoDelCatalogo('LOT_REASSIGN'), true)
+  for (const clase of CLASES_DE_MOTIVO) {
+    assert.equal(esMotivoDeClase('LOT_REASSIGN', clase), false, `no es un motivo de ${clase}`)
+    assert.ok(!motivosDeClase(clase).some((m) => m.codigo === 'LOT_REASSIGN'), `no sale en el selector de ${clase}`)
+    assert.equal(resolverMotivo({ clase, codigo: 'LOT_REASSIGN', detalle: 'x', textoObligatorio: true }).ok, false, `un formulario no puede elegirlo (${clase})`)
+  }
+  assert.ok(!MOTIVOS.some((m) => m.codigo === 'LOT_REASSIGN'), 'el catálogo que se elige no lo incluye')
+})

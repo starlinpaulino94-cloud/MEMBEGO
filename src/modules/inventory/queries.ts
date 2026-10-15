@@ -7,6 +7,7 @@ import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosC
 import { pendienteDeLinea, type EstadoTraslado } from './traslados'
 import { MAX_POR_CONTAR_VISIBLES, TOPE_FILAS_HOJA, type EstadoConteo } from './conteos'
 import { limiteDiaLocal } from '@/modules/reportes/rango'
+import { lotesDeMovimientosEnTx } from './lotes-queries'
 
 /**
  * COMMERCE CORE · inventario — lecturas para el panel (Fase 2).
@@ -347,6 +348,8 @@ export interface FilaMovimiento {
   usuarioNombre: string | null
   referenciaTipo: string | null
   referenciaId: string | null
+  /** INV-5a: de qué lotes es el movimiento («A-1 ×4, B ×2»). Solo lo llena el historial de un producto; null si no lleva lotes. */
+  lotes?: string | null
 }
 
 export interface HistorialPagina {
@@ -398,6 +401,7 @@ export async function historialDeVarianteEnTx(tx: Tx, companyId: string, variant
   const usuarios = ids.length ? await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } }) : []
   const nombres = new Map(usuarios.map((u) => [u.id, u.name || u.email]))
   const ultimo = pagina[pagina.length - 1]
+  const lotes = await lotesDeMovimientosEnTx(tx, companyId, pagina.map((m) => m.id))
   return {
     filas: pagina.map((m) => ({
       id: m.id,
@@ -413,6 +417,7 @@ export async function historialDeVarianteEnTx(tx: Tx, companyId: string, variant
       usuarioNombre: m.userId ? (nombres.get(m.userId) ?? null) : null,
       referenciaTipo: m.referenceType,
       referenciaId: m.referenceId,
+      lotes: lotes.get(m.id) ?? null,
     })),
     siguiente: hayMas && ultimo ? `${ultimo.createdAt.toISOString()}|${ultimo.id}` : null,
   }
@@ -781,6 +786,8 @@ export interface LineaDeEntrada {
   existenciaDespues: number
   /** INV-3a: costo unitario capturado, ya formateado; null = no se capturó. SOLO está si se pidió con `conCostos`. */
   costo?: string | null
+  /** INV-5a: de qué lotes llegó («A-1 ×4, B ×2»); null si el producto no lleva lotes. */
+  lotes?: string | null
 }
 
 export interface DetalleEntrada extends FilaEntrada {
@@ -817,13 +824,14 @@ export async function entradaDetalleEnTx(tx: Tx, companyId: string, id: string, 
           // El costo solo se lee si quien pregunta puede verlo: lo que no se lee no puede filtrarse.
           ...(opciones.conCostos ? { unitCost: true } : {}),
           variant: { select: { id: true, sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } } } },
-          movement: { select: { previousOnHand: true, newOnHand: true } },
+          movement: { select: { id: true, previousOnHand: true, newOnHand: true } },
         },
       },
     },
   })
   if (!r) return null
   const nombres = await nombresDeUsuarios(tx, [r.userId])
+  const lotes = await lotesDeMovimientosEnTx(tx, companyId, r.lines.map((l) => l.movement.id))
   return {
     id: r.id,
     numero: r.number,
@@ -847,6 +855,7 @@ export async function entradaDetalleEnTx(tx: Tx, companyId: string, id: string, 
       cantidad: l.quantity,
       existenciaAntes: l.movement.previousOnHand,
       existenciaDespues: l.movement.newOnHand,
+      lotes: lotes.get(l.movement.id) ?? null,
       ...(opciones.conCostos ? { costo: unitCostDe(l) === null ? null : formatearCosto(unitCostDe(l)!) } : {}),
     })),
     ...(opciones.conCostos
@@ -875,6 +884,10 @@ export interface VarianteBuscable {
   disponible: number | null
   /** El texto buscado es EXACTAMENTE su SKU o su código de barras (lo que hace un lector). */
   exacto: boolean
+  /** INV-5a: ¿lleva lotes? Entonces su línea de entrada dice de qué lotes es lo que llega. */
+  llevaLotes: boolean
+  /** INV-5a: ¿cada lote nuevo debe traer fecha de vencimiento? */
+  exigeVencimiento: boolean
 }
 
 /**
@@ -898,6 +911,7 @@ export async function buscarVariantesParaEntradaEnTx(tx: Tx, companyId: string, 
     isDefault: true,
     item: { select: { name: true } },
     inventoryLevels: { where: { companyId, ...(sucursalId ? { locationId: sucursalId } : { id: 'sin-sucursal' }) }, select: { onHand: true, reserved: true } },
+    lotTracking: { where: { companyId }, select: { requiresExpiry: true } },
   } satisfies Prisma.CatalogVariantSelect
   // Dos consultas y no una: la coincidencia EXACTA (lo que escribe un lector) tiene que aparecer aunque haya mil
   // coincidencias parciales por delante en el orden alfabético.
@@ -938,6 +952,8 @@ export async function buscarVariantesParaEntradaEnTx(tx: Tx, companyId: string, 
       esDefault: v.isDefault,
       disponible: sucursalId ? (nivel ? disponible(nivel) : 0) : null,
       exacto: esCodigoExacto(t, v),
+      llevaLotes: v.lotTracking.length > 0,
+      exigeVencimiento: v.lotTracking[0]?.requiresExpiry === true,
     })
   }
   return salida.slice(0, tope)

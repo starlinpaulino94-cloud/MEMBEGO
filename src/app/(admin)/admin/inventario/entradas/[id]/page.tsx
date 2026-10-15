@@ -134,6 +134,7 @@ export default async function EntradaInventarioPage({ params }: { params: Promis
                   SKU {l.sku}
                   {l.barcode && ` · ${l.barcode}`}
                 </p>
+                {l.lotes && <p className="text-xs">Lotes: {l.lotes}</p>}
               </div>
               <div className="text-right tabular-nums">
                 <p className="font-semibold text-success">+{formatearCantidad(l.cantidad)}</p>

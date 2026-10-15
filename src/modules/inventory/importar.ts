@@ -3,7 +3,7 @@ import { normalizarCapacidades } from '@/modules/catalog/domain'
 import type { ContextoAuditoria } from './auditoria'
 import { MAX_LINEAS_IMPORTACION } from './entradas'
 import { indexarCatalogo, leerImportacion, validarImportacion, type FilaCsv, type InformeImportacion, type VarianteImportable } from './importacion'
-import { importarConteoEnTx, registrarEntradaMultipleEnTx, type ResultadoEntradaMultiple, type ResultadoImportarConteo } from './service'
+import { exigirSinLotes, importarConteoEnTx, registrarEntradaMultipleEnTx, type ResultadoEntradaMultiple, type ResultadoImportarConteo } from './service'
 
 /**
  * COMMERCE CORE · inventario — INV-2a: importar existencias desde un CSV (la
@@ -47,7 +47,11 @@ export async function informeDeImportacionEnTx(tx: Tx, companyId: string, texto:
   if (!lectura.ok) return { ok: false, error: lectura.error }
   // Un archivo con más filas que el tope se informa SIN consultar el catálogo.
   const catalogo = lectura.filas.length > MAX_LINEAS_IMPORTACION ? [] : await resolverCatalogoDeImportacionEnTx(tx, companyId, lectura.filas)
-  return { ok: true, informe: validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'ENTRADA', opciones) }
+  const informe = validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'ENTRADA', opciones)
+  // INV-5a: un archivo todavía no trae lotes; un producto que los lleva se recibe con una entrada de mercancía. Se dice en la
+  // revisión, no hasta que se aplica.
+  if (informe.ok) await exigirSinLotes(tx, companyId, informe.lineas.map((l) => l.varianteId), 'la importación de entradas por archivo')
+  return { ok: true, informe }
 }
 
 export type ResultadoAplicacion = { aplicada: true; entrada: ResultadoEntradaMultiple } | { aplicada: false; informe: InformeImportacion }
@@ -83,7 +87,9 @@ export async function informeDeConteoImportadoEnTx(tx: Tx, companyId: string, te
   const conValor = lectura.filas.filter((f) => f.cantidad !== '')
   // Un archivo con más filas contadas que el tope se informa SIN consultar el catálogo.
   const catalogo = conValor.length > MAX_LINEAS_IMPORTACION ? [] : await resolverCatalogoDeImportacionEnTx(tx, companyId, conValor)
-  return { ok: true, informe: validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'CONTEO') }
+  const informe = validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'CONTEO')
+  if (informe.ok) await exigirSinLotes(tx, companyId, informe.lineas.map((l) => l.varianteId), 'el conteo físico')
+  return { ok: true, informe }
 }
 
 export type ResultadoAplicacionConteo = ({ aplicada: true } & ResultadoImportarConteo) | { aplicada: false; informe: InformeImportacion }

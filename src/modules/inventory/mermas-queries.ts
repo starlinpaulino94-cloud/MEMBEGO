@@ -19,7 +19,7 @@ import {
   type GrupoDeMerma,
   type TotalGrupo,
 } from './mermas'
-import { detalleDeMotivo, etiquetaDeMotivo, type ClaseDeMotivo } from './motivos'
+import { MOTIVO_REASIGNACION_DE_LOTE, detalleDeMotivo, etiquetaDeMotivo, type ClaseDeMotivo } from './motivos'
 
 /**
  * COMMERCE CORE · inventario — INV-4b: lecturas del informe de mermas por motivo.
@@ -89,6 +89,7 @@ function desdeMermasSql(companyId: string, gte: Date, lt: Date, filtros: Prisma.
     JOIN "catalog_items" i ON i."id" = v."catalogItemId" AND i."companyId" = v."companyId"
     JOIN "sucursales" s ON s."id" = l."locationId" AND s."companyId" = l."companyId"
     WHERE m."companyId" = ${companyId} AND m."type" IN ('ADJUSTMENT', 'DAMAGE') AND m."createdAt" >= ${gte} AND m."createdAt" < ${lt}
+      AND m."reasonCode" IS DISTINCT FROM ${MOTIVO_REASIGNACION_DE_LOTE}
       ${filtros}`
 }
 

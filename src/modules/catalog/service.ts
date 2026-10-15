@@ -454,6 +454,11 @@ export async function eliminarVarianteEnTx(
   if (movimientos > 0) {
     fallo('VARIANTE_CON_INVENTARIO', 'Esta variante tiene historial de inventario y no se puede borrar. Márcala como descontinuada.')
   }
+  // INV-5a: los lotes de un producto sin movimientos son solo configuración (la base lo permite; con historial no).
+  await tx.inventoryLotOpening.deleteMany({ where: { companyId, level: { catalogVariantId: actual.id } } })
+  await tx.inventoryLotBalance.deleteMany({ where: { companyId, catalogVariantId: actual.id } })
+  await tx.inventoryLot.deleteMany({ where: { companyId, catalogVariantId: actual.id } })
+  await tx.inventoryLotTracking.deleteMany({ where: { companyId, catalogVariantId: actual.id } })
   await tx.inventoryLevel.deleteMany({ where: { companyId, catalogVariantId: actual.id } })
 
   await tx.catalogVariant.delete({ where: { id: actual.id } })

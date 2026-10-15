@@ -82,6 +82,8 @@ import {
   recibirEnTx,
   registrarEntradaMultipleEnTx,
   corregirCostoEnTx,
+  activarLotesEnTx,
+  moverEntreLotesEnTx,
   resolverDanadoEnTx,
   transferirEnTx,
   type LineaRechazada,
@@ -135,6 +137,10 @@ export interface EntradaMovimiento {
   clave?: string | null
   /** INV-3a: solo lo lee «registrar entrada». Costo unitario de lo que llega, sin impuestos; exige la función «costos». */
   costo?: string | null
+  /** INV-5a · Producto con lotes: de qué lotes es lo que ENTRA (entrada, devolución, sobrante): `[{ codigo, vencimiento?, cantidad }]`. */
+  lotes?: unknown
+  /** INV-5a · Producto con lotes: de qué lotes SALE (faltante, daño, baja, recuperar): `[{ loteId, cantidad }]`. Sin indicarlo, el que antes vence. */
+  lotesSalida?: unknown
 }
 
 /** ¿Este valor es un costo escrito (aunque sea mal)? Vacío o ausente = no se capturó. */
@@ -173,21 +179,21 @@ export async function registrarEntradaInventario(entrada: EntradaMovimiento): Pr
   // El costo mueve el valor del inventario: solo quien puede ver y fijar costos lo registra. Se pregunta únicamente si viene uno.
   if (esObjeto(entrada) && traeCosto(entrada.costo) && !(await puedeFuncion('inventario', 'costos'))) return { ok: false, error: SIN_PERMISO_DE_COSTOS }
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    recibirEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave), costo: e.costo }, ctx)
+    recibirEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave), costo: e.costo, lotes: e.lotes }, ctx)
   )
 }
 
 /** El cliente devuelve mercancía. */
 export async function registrarDevolucionInventario(entrada: EntradaMovimiento): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    devolverEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx)
+    devolverEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave), lotes: e.lotes }, ctx)
   )
 }
 
 /** Mercancía dañada: sale de lo vendible a la cubeta de dañado. El motivo del catálogo es obligatorio. */
 export async function registrarDanoInventario(entrada: EntradaMovimiento): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    danarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true, idempotencyKey: clave(e.clave) }, ctx),
+    danarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true, idempotencyKey: clave(e.clave), lotesSalida: e.lotesSalida }, ctx),
     () => true
   )
 }
@@ -207,6 +213,7 @@ export async function resolverDanadoInventario(entrada: EntradaMovimiento & { de
         ...(e.destino === 'BAJA' ? { motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true } : {}),
         idempotencyKey: clave(e.clave),
         destino: e.destino as 'VENDIBLE' | 'BAJA',
+        lotesSalida: e.lotesSalida,
       },
       ctx
     )
@@ -216,7 +223,7 @@ export async function resolverDanadoInventario(entrada: EntradaMovimiento & { de
 /** Corrige un descuadre: `cambio` positivo = sobrante, negativo = faltante. El motivo del catálogo es obligatorio. */
 export async function ajustarInventario(entrada: Omit<EntradaMovimiento, 'cantidad'> & { cambio: number }): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    ajustarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cambio: e.cambio as number, motivo: e.motivo as string | null, motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true, idempotencyKey: clave(e.clave) }, ctx),
+    ajustarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cambio: e.cambio as number, motivo: e.motivo as string | null, motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true, idempotencyKey: clave(e.clave), lotes: e.lotes, lotesSalida: e.lotesSalida }, ctx),
     (e) => typeof e.cambio === 'number' && e.cambio < 0
   )
 }
@@ -236,6 +243,42 @@ export async function contarInventario(entrada: Omit<EntradaMovimiento, 'cantida
   } catch (e) {
     return aError(e)
   }
+}
+
+/**
+ * INV-5a · Activa los LOTES de un producto: desde aquí cada unidad es de un lote y cada movimiento se reparte entre lotes. Es de
+ * UN SOLO SENTIDO. Lo que ya había pasa íntegro al lote «SIN LOTE». La pide la función `ajustar`: cambia cómo se mueve el stock.
+ */
+export async function activarLotesInventario(entrada: { varianteId: string; exigirVencimiento?: boolean }): Promise<ResultadoInventario<{ sucursales: number; unidades: number; repetido: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => activarLotesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), exigirVencimiento: entrada.exigirVencimiento === true }, c.ctx))
+    refrescar()
+    return { ok: true, sucursales: r.sucursales, unidades: r.unidades, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** INV-5a · Pasa unidades disponibles de un lote a otro en una sucursal (corregir un lote mal capturado). No es una merma. */
+export async function moverEntreLotesInventario(entrada: {
+  varianteId: string
+  sucursalId: string
+  deLoteId: string
+  aLoteId: string
+  cantidad: number
+  clave?: string | null
+}): Promise<ResultadoSaldo> {
+  return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
+    moverEntreLotesEnTx(
+      tx,
+      companyId,
+      { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), deLoteId: texto(e.deLoteId), aLoteId: texto(e.aLoteId), cantidad: e.cantidad as number, idempotencyKey: clave(e.clave) },
+      ctx
+    )
+  )
 }
 
 /**
@@ -375,7 +418,7 @@ const sinLineas = (i: InformeImportacion): InformeVista => {
  */
 export async function registrarEntradaMultiple(entrada: {
   sucursalId: string
-  lineas: { varianteId: string; cantidad: number; costo?: string | null }[]
+  lineas: { varianteId: string; cantidad: number; costo?: string | null; lotes?: unknown }[]
   referencia?: string | null
   nota?: string | null
   clave?: string | null
@@ -383,7 +426,9 @@ export async function registrarEntradaMultiple(entrada: {
   const c = await contexto('ajustar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
-  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, costo: l?.costo })) : []
+  const lineas = Array.isArray(entrada.lineas)
+    ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, costo: l?.costo, ...(l?.lotes === undefined || l?.lotes === null ? {} : { lotes: l.lotes as never }) }))
+    : []
   if (lineas.some((l) => traeCosto(l.costo)) && !(await puedeFuncion('inventario', 'costos'))) return { ok: false, error: SIN_PERMISO_DE_COSTOS }
   try {
     const r = await conEmpresa(c.companyId, (tx) =>

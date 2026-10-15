@@ -25,7 +25,7 @@ import {
 import { costoADecimal, costoDeDecimal, formatearMonto, valorDe, type Costo } from './costos'
 import { normalizarTextoLibre } from './entradas'
 import { fallo } from './errores'
-import { registrarEntradaMultipleEnTx } from './service'
+import { exigirSinLotes, registrarEntradaMultipleEnTx } from './service'
 
 /**
  * COMMERCE CORE · inventario — INV-3b: proveedores y órdenes de compra (servicio).
@@ -290,6 +290,8 @@ export async function guardarOrdenEnTx(tx: Tx, companyId: string, e: EntradaOrde
   const proveedor = await exigirProveedor(tx, companyId, c.proveedorId, true)
   const sucursal = await exigirSucursal(tx, companyId, c.sucursalId, true)
   await exigirVariantesControladas(tx, companyId, lin.lineas.map((l) => l.varianteId))
+  // INV-5a: recibir una orden todavía no reparte por lote; un producto con lotes entra con una entrada de mercancía (que sí los trae).
+  await exigirSinLotes(tx, companyId, lin.lineas.map((l) => l.varianteId), 'la orden de compra')
 
   let ordenId: string
   let numero: string

@@ -114,7 +114,11 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-4a · Informes de existencias** | Kardex de un producto (entradas, salidas y saldo, con lo que valieron si se tiene la función `costos`), stock sin ventas (qué tiene existencias y no se vende, y cuánto dinero tiene parado), rotación y cobertura (cuánto se vende, cuántas veces rota, para cuántos días alcanza; costo de ventas y días de inventario con `costos`), todos con filtros y CSV. Sin función de permiso nueva | Sin cambios (todo se lee del ledger) | M | **Hecha** (este documento, §19) |
 | **INV-4b · Motivos codificados** | Catálogo de 14 motivos (vencido, robo, pérdida, muestra, consumo interno, devuelto al proveedor, diferencia de conteo, apareció mercancía, error de captura, golpe, mal almacenamiento, daño en el transporte, defecto de fábrica y «otro») que el ajuste, el daño y la baja **exigen** elegir; el texto libre queda como detalle. Los conteos escriben solos «diferencia de conteo». Informe «Mermas por motivo» (lo perdido, los sobrantes y lo dañado, cada uno por motivo, con unidades y —con `costos`— lo que valieron), con filtros y CSV; el motivo se ve en Movimientos, en el historial de la ficha y en el kardex (pantalla y CSV). Sin función de permiso nueva | `reasonCode` en el movimiento (migración `20261067`) | M | **Hecha** (este documento, §21) |
 | **INV-4c · Margen real** | Informe «Margen real» (solo con la función `costos`): por producto, lo cobrado (precio de la línea del pedido menos su descuento) contra el costo que el ledger congeló al vender, con margen y porcentaje; lo que no se puede comparar (sin costo, reembolsado, en otra moneda, sin pedido) se enseña aparte, nunca como cero; filtros, cinco órdenes y CSV. Tarjeta «Inventario» en el dashboard: valor, margen del mes y lo perdido (unidades para quien no tiene `costos`). Sin función de permiso nueva | **Ninguno** (todo se lee del ledger y de los pedidos) | S | **Hecha** (este documento, §23) |
-| INV-5 · Trazabilidad | Lotes y vencimiento con FEFO; series; kits que descuentan componentes; API v1; rol de bodega | Lotes, kits | L por pieza | pendiente |
+| **INV-5a · Lotes y vencimiento** | Un producto puede LLEVAR LOTES (se activa por producto, de un solo sentido): cada unidad es de un lote con su código y, si lo tiene, su día de vencimiento; lo que ya había pasa al lote «SIN LOTE»; se vende, se aparta y se saca **primero lo que antes vence** (FEFO) y **lo vencido no se vende**; las devoluciones vuelven a su lote; dañar, ajustar, dar de baja y recuperar por lote; mover unidades entre lotes (corregir uno mal capturado, sin que cuente como merma); el barrido diario saca lo vencido de lo vendible. La base mantiene los saldos por lote y vigila que los lotes sumen lo que hay | `InventoryLotTracking`, `InventoryLot`, `InventoryLotBalance`, `InventoryLotOpening`, `InventoryMovementLot` (migración `20261068`) | L | **Hecha** (este documento, §25) |
+| INV-5b · Lotes II | Informe y aviso de lo que vence pronto, lotes en conteos, transferencias y órdenes de compra, corregir el vencimiento de un lote, desactivar lotes | — | M | pendiente |
+| INV-5c · Series | Número de serie por unidad | Series | L | pendiente |
+| INV-5d · Kits | Kits que descuentan componentes | Kits | L | pendiente |
+| INV-5e · API v1 y rol de bodega | API pública del inventario; un rol que mueve stock sin ver finanzas | — | M | pendiente |
 
 ## 5. INV-1 · qué se hizo
 
@@ -1404,3 +1408,189 @@ cambia su moneda por SQL, porque cerrar un pedido en otra moneda depende de la c
 pruebas solo recorren el marketplace); y la tarjeta del dashboard en el E2E se alimenta sembrando filas, no con una venta real (el flujo real
 sí está en las pruebas de PostgreSQL). Quedan fuera del margen, a propósito, las comisiones del marketplace, los impuestos y los gastos
 (ver §23).
+
+## 25. INV-5a · qué se hizo
+
+> Primera parte de INV-5 (trazabilidad). **Lleva una migración, `20261068_inventory_lots`, y va ANTES que el código**: ESTE SQL PRIMERO en
+> el SQL Editor de Supabase, después el despliegue. Con el SQL aplicado y el código viejo no pasa nada (los disparadores no hacen nada
+> sobre un producto sin lotes y nadie activa lotes sin la pantalla nueva); con el código nuevo y **sin** el SQL, el inventario y los
+> pedidos **fallan** (cada movimiento pregunta si el producto lleva lotes). `/api/health` avisa («DRIFT») si falta la tabla de repartos.
+> Es aditiva, idempotente y de **una sola transacción** (todo o nada) con `lock_timeout = 5 s`: si no consigue un bloqueo falla sin dejar
+> nada a medias y se reintenta. **Construye un índice único sobre `inventory_movements`** (destino de una clave foránea compuesta), que
+> bloquea las ESCRITURAS del ledger mientras dura —segundos aun con cientos de miles de movimientos—: aplícala fuera de hora punta.
+> Siguen pendientes de aplicar, si no lo están ya, `20261059`, `20261060`, `20261066` y `20261067`.
+
+**El problema.** El inventario sabía CUÁNTO hay de cada producto en cada sucursal, no DE QUÉ LOTE es ni CUÁNDO VENCE. Para un producto
+perecedero (cosméticos, alimentos, medicinas) eso es exactamente lo que importa: qué se vende primero, qué ya no se puede vender, y de qué
+lote salió lo que un cliente devolvió.
+
+**El modelo.** Un producto **lleva lotes** si se activan (por producto; una fila en `inventory_lot_tracking`). Entonces:
+
+- **Lotes** (`inventory_lots`): un código por producto (sin distinguir mayúsculas: «lote a» y «LOTE A» son el mismo) y, si lo tiene, el
+  **día** en que vence (fecha de calendario, sin hora ni zona: «vence el 31» es el 31). Un lote **no se edita**: ni su código ni su
+  vencimiento. Cada producto con lotes tiene además **«SIN LOTE»**, que recibe lo que ya había al activar y lo que llega sin etiquetar.
+- **Saldos por lote** (`inventory_lot_balances`): cuánto hay de cada lote en cada sucursal, en las mismas tres cubetas que el saldo de la
+  sucursal (disponible+apartado, apartado, dañado).
+- **Aperturas** (`inventory_lot_openings`): lo que había al activar, siempre en «SIN LOTE»: el saldo de partida.
+- **Repartos** (`inventory_movement_lots`): cómo se reparte CADA movimiento del ledger entre lotes (un movimiento de 10 unidades puede
+  salir 7 de un lote y 3 de otro). Append-only, como el ledger.
+
+**La regla de oro: los saldos por lote los mantiene la BASE, no la aplicación.** Un saldo por lote nace en cero y solo se mueve con una
+apertura o con un reparto: un disparador `AFTER INSERT` aplica cada uno con el mismo traslado de cubetas que usa el saldo de la sucursal
+(`inventory_lot_efecto`, comprobada contra el dominio para los 13 traslados permitidos). Cualquier otro `UPDATE` de un contador se rechaza.
+Así **saldo por lote = apertura + efecto de sus repartos**, siempre, y un error del servicio no puede hacerlos divergir.
+
+**Y los lotes suman lo que hay.** Disparadores diferidos —se comprueban al terminar la transacción— vigilan que (a) la suma de los saldos
+por lote de cada saldo de sucursal es igual a ese saldo, en las tres cubetas; (b) cada movimiento nuevo de un producto con lotes está
+repartido por completo (la suma de su reparto es su cantidad); (c) un producto sin lotes no tiene saldos por lote; (d) un producto con
+lotes tiene su «SIN LOTE»; (e) borrar la activación de un producto (solo se permite sin historial) no deja lotes atrás. Un script o una
+puerta nueva que mueva stock sin repartirlo hace fallar la transacción. Cada comprobación RELEE
+el saldo y suma con `COALESCE` (una suma `NULL` ni acepta ni rechaza: lo dejaría pasar).
+
+**Cómo se comporta cada operación con un producto con lotes** (todo lo demás sigue igual para un producto sin lotes):
+
+| Operación | De qué lote |
+|---|---|
+| **Entrada** (de varias líneas o de un producto) | Cada línea trae sus lotes: código, vencimiento (obligatorio si el producto lo exige) y cantidad; suman la de la línea. Los lotes que faltan se crean; «SIN LOTE» para lo que no trae. Un lote que ya existe con **otro vencimiento** se rechaza. Sin decir el lote, se rechaza |
+| **Vender** | **FEFO**: primero el que antes vence, después los que no vencen; **lo vencido no se vende** (el último día todavía sí; el siguiente, no). Si no alcanza lo vendible, dice cuánto hay vencido |
+| **Apartar** (reservar) | Por FEFO, igual que vender |
+| **Liberar / vencer una reserva** | Vuelve a los **mismos** lotes de que se apartó (se deriva del ledger: no hay otra tabla que pueda contradecirlo) |
+| **Cobrar una reserva** (completar un pedido) | Sale de los lotes en que se apartó. Si alguno **venció entretanto** no se entrega vencido: se libera y se aparta de nuevo del siguiente lote vigente; si no hay con qué reponerlo, la venta no se completa |
+| **Devolver** (reembolso con devolución) | A los lotes de que salió **ese pedido**; lo que las ventas del pedido no explican (un pedido anterior a los lotes) va a «SIN LOTE» |
+| **Dañar / dar de baja / recuperar / faltante** | El lote elegido (aunque esté vencido) o, sin elegir, el que antes vence |
+| **Sobrante** | El lote que se diga (se crea si es nuevo) o «SIN LOTE» |
+| **Mover entre lotes** | Un par de ajustes con el motivo del SISTEMA «Reasignación de lote» (`LOT_REASSIGN`): dejan rastro, valen lo mismo y **no cuentan como merma** (el informe de mermas los excluye y el motivo no sale en ningún selector) |
+| **Barrido diario** (cron) | Las unidades **disponibles** de un lote vencido pasan a dañado con el motivo «Vencido». Lo apartado se resuelve al cobrar o al vencer su reserva |
+
+**«Hoy» es el día de la EMPRESA**, no el del servidor: se calcula con la zona horaria de la empresa (a las 22:00 en Santo Domingo ya es el
+día siguiente en UTC, y el lote que vence ese día todavía se vende). Las fechas viajan como texto `AAAA-MM-DD` de punta a punta.
+
+**Concurrencia.** Cada operación sobre un saldo toma un candado de empresa **compartido** (muchas a la vez, sin estorbarse) **antes** de
+bloquear los saldos; activar los lotes de un producto toma el **exclusivo**: espera a que terminen las operaciones en curso y no deja
+entrar otras hasta confirmar. Sin él, una venta que decidió «este producto no lleva lotes» y una activación recién confirmada se
+cruzarían. El orden es siempre el mismo (candado de empresa, saldos en orden de id): no hay ciclos.
+
+**Activar es de UN SOLO SENTIDO** (decisión de esta parte; desactivar con historial dejaría repartos y saldos que ya no cuadran con nada). La
+pantalla lo pide en dos pasos y lo dice. **No se activa** con un conteo abierto, una transferencia en tránsito o una orden de compra sin
+cerrar que incluya el producto, ni con lo apartado descuadrado respecto a sus reservas vivas. Las reservas caducadas que nadie ha barrido se
+vencen al activar, **después** de crear la activación y ya con su reparto (§26: hacerlo antes hacía fallar la activación). Lo que ya había (en todas las sucursales y las
+tres cubetas) pasa íntegro a «SIN LOTE» como apertura. Un producto que NUNCA tuvo movimientos sí se limpia entero al borrar su variante.
+
+**Lo que 5a NO hace (a propósito, para 5b).** Un producto con lotes **no se puede contar, transferir, pedir en una orden de compra ni
+importar por CSV**: esos flujos todavía no reparten por lote y se niegan con un mensaje claro (en vez de descuadrarlo); se recibe con una
+entrada de mercancía, que sí trae lotes. No hay informe ni aviso de «lo que vence pronto»; no se corrige el vencimiento de un lote (se mueven
+sus unidades a otro); no se desactivan los lotes; no hay series, kits, API v1 ni rol de bodega.
+
+**Pantallas.** *La ficha del producto*: si no lleva lotes y puedes ajustar, la tarjeta «Lotes y vencimiento» ofrece activarlos (con la casilla
+«Exigir fecha de vencimiento en cada lote nuevo»); si los lleva, una **tabla de lotes por sucursal** de lo que antes vence a lo que no
+(estado Vencido / Por vencer —30 días— / Vigente / No vence, con «Vence en 12 días»), y el formulario de movimientos pide el lote de lo que
+entra (con sugerencias de los lotes que ya existen y el vencimiento bloqueado si el lote ya existe) y ofrece «De qué lote» en lo que sale
+(automático por defecto), más el formulario «Mover unidades de un lote a otro». *La entrada de varias líneas*: cada producto con lotes trae
+sus filas de lote (código, vencimiento, cantidad) y su total; el formulario aplica las mismas reglas del servidor antes de enviar. *El
+historial de la ficha y el detalle de una entrada* dicen «Lotes: A-1 ×4, B ×2».
+
+**Archivos.** Migración `prisma/migrations/20261068_inventory_lots/` (sellada en `SUMAS.txt`) y los cinco modelos en
+`prisma/schema/inventario.prisma`; `modules/inventory/lotes.ts` (reglas puras) y `lotes-queries.ts` (lecturas); el servicio
+(`service.ts`: `activarLotesEnTx`, `moverEntreLotesEnTx`, `vencerLotesEnTx`, el candado, las dos puertas del ledger y cada operación),
+`barrido.ts`, `importar.ts`, `compras-service.ts` y `catalog/service.ts` (limpieza al borrar); las acciones y las pantallas
+(`ActivarLotesCard`, `LotesDeSucursal`, `SucursalInventarioCard`, `EntradaMultipleForm`, la ficha, el historial y el detalle de entrada);
+`scripts/e2e/base-limpia.mjs` (la base de E2E recibe los disparadores de lotes: sin ellos los saldos por lote no se moverían).
+
+## 26. Verificación de INV-5a (2026-10-15)
+
+Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`). La migración `20261068` se aplicó **solo a bases desechables** (`supplytest`,
+`membego_inv2` y las `membego_e2e_*`) con `psql`, como se hará a mano en Supabase; **no se tocó ninguna base real**. Sin Supabase real,
+Vercel, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ven las pantallas** (la tabla de lotes, la tarjeta de activar, el
+formulario de entrada con lotes): el E2E comprueba qué dicen y qué hacen, no su aspecto; ni capturas ni revisión visual en móvil.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo: son de `apps/client`) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB; indicador general 8.928/9.200 KB (97 %; 8.905 antes de 5a) |
+| Unitarias (`bun run test`) | 4558 pruebas: 4551 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest`) | **937/937** con el código final |
+| Pruebas nuevas | 27 puras (`inventario-lotes-puro.test.ts`), 14 guardias (`inventario-lotes.test.ts`), 3 más en archivos que ya existían (2 en `inventario-entradas.test.ts` —las líneas con lotes y su fusión— y 1 en `inventario-motivos.test.ts` —el motivo del sistema—), 13 del esquema contra PostgreSQL (`inventory-lotes-esquema.db.test.ts`), 31 del servicio (`inventory-lotes.db.test.ts`) y 3 recorridos E2E (`inventario-lotes.spec.ts`) |
+| E2E (`node scripts/e2e/correr.mjs`, escritorio) | **17/17** con el build final: `inventario-admin` (14) y `inventario-lotes` (3). La primera corrida dio 16/17 (ver abajo) |
+| Mutaciones | 162 en tres capas (ver abajo): 157 detectadas y 5 que sobreviven, todas explicadas |
+
+Qué cubren las pruebas contra PostgreSQL. **Esquema (sin pasar por el servicio, a mano):** activar deja «SIN LOTE», saldos por lote en cero
+y una apertura, y todo cuadra al cerrar; los saldos por lote solo los mueve la base, y se mueven igual que el saldo de la sucursal **para
+cada uno de los 13 traslados de cubetas que el dominio permite**; los lotes suman lo que hay en las tres cubetas (un movimiento sin repartir,
+de menos o de más, un saldo que cambia solo —disponible, dañado o apartado— o un reparto añadido después a un movimiento viejo hacen fallar
+el cierre); ningún saldo por lote queda negativo ni con más apartado que existencias; las claves compuestas por producto y por empresa; la
+inmutabilidad de repartos, aperturas y lotes; y la limpieza de un producto solo sin historial. **Servicio (con el flujo real de pedidos
+incluido: crear → listo → completar por QR → reembolsar con devolución):** FEFO en cada operación, con una prueba de propiedades con
+semilla que compara lo que hace la base con el plan puro; el último día vende y el siguiente no; apartar, liberar, vencer y cobrar una
+reserva, también cuando su lote venció entretanto; devoluciones al lote de que salió el pedido (sin depender del nombre ni del orden de
+creación de los lotes); daño, baja, ajuste y recuperar por lote; mover entre lotes con su clave de idempotencia; el barrido (y que vence
+antes las reservas caducadas); «hoy» en la zona horaria de la empresa; los flujos que todavía no admiten lotes; las lecturas; y la
+concurrencia: ventas simultáneas de la última unidad, activar mientras se vende, entradas simultáneas del mismo lote y el **candado de
+empresa con compuertas** (sin depender de la suerte de una carrera).
+
+Qué cubre el recorrido E2E: la ficha de un producto sin lotes los ofrece y su formulario no pide ninguno → activar se pide en dos pasos
+(cancelar lo cierra) y desde ahí no hay conteo suelto ni transferencia → recibir exige el lote y con uno nuevo guarda su vencimiento; escribir
+un lote que ya existe bloquea la fecha y dice cuándo vence → la tabla sale de lo que antes vence a lo que no, con su estado → dañar sin
+decir el lote saca del que antes vence y no está vencido, y un faltante de más de lo que tiene el lote elegido avisa sin mover nada →
+mover unidades entre lotes → el historial dice de qué lotes es cada movimiento y la reasignación **no** aparece en «Mermas por motivo» → una
+entrada de varias líneas con un producto con lotes y otro sin ellos.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Un defecto real, encontrado por una mutación sobreviviente: activar los lotes fallaba si el producto tenía una reserva caducada que
+  nadie había barrido.** Al intentar matar la mutación «activar no vence las reservas caducadas» se escribió la prueba 31 (reservar con una
+  hora de vida, activar una semana después) y falló con el código real: `activarLotesEnTx` vencía esa reserva ANTES de crear la activación,
+  y el movimiento de liberación quedaba sin reparto; la base lo comprueba al cerrar, con el producto ya con lotes, y rechazaba toda la
+  activación. Se corrigió venciendo las reservas **después** de crear la activación (su liberación ya trae su reparto y devuelve lo apartado
+  a vendible). En producción lo habría visto quien activara un producto con una reserva abandonada.
+- **Un hueco de idempotencia, también de una mutación:** mover entre lotes con la misma clave, la misma cantidad y el mismo origen pero OTRO
+  destino se tomaba por un reintento. Ahora compara también el destino (y hay una prueba por cada combinación: otro origen, otro destino e
+  intercambiados).
+- **Un hueco del SQL, de otra mutación:** borrar solo la fila de activación de un producto sin historial dejaba sus lotes y saldos por lote
+  de un producto «sin lotes» y ningún disparador lo veía (ninguno se dispara al borrar la activación). La migración lleva ahora un
+  disparador diferido (`inventory_lot_tracking_sin_lotes_huerfanos`) que lo rechaza al cerrar; limpiar el producto entero, en cualquier orden
+  dentro de la transacción, sigue pasando. Se incorporó a la misma migración, que no estaba aplicada en ninguna base real, y se volvió a sellar.
+- **La primera corrida del E2E falló en el recorrido nuevo, por un error del spec y no del producto:** la entrada de varias líneas llega a
+  la sucursal que el formulario trae elegida («Norte») y el spec miraba la tabla de «Principal». Con la sucursal correcta pasó, y se añadió que
+  esos lotes **no** aparecen en la otra sucursal.
+- **Mutaciones: 162.** Se ejecutaron 159 en tres capas (54 de las reglas puras, 45 de la migración —cada una aplicada a una base limpia
+  de lo de lotes y probada con las dos pruebas de PostgreSQL— y 60 del servicio) y, al analizar los sobrevivientes, 3 más. De las 159,
+  **132 se detectaron a la primera, 26 sobrevivieron y 1 estaba mal armada** (el reemplazo no era válido dentro de un bloque `DO`; se rehízo
+  y se detectó). Lo que pasó con los 26:
+  - *14 eran pruebas débiles y se reforzaron* (cada una con una prueba que antes no existía y que se comprobó contra su mutación): el
+    disparador del reparto (solo lo ve un reparto añadido después que deja los saldos cuadrados), lo apartado en el cuadre, el legado con
+    vencimiento, el saldo por lote negativo y con más apartado que existencias, el renglón de cantidad cero junto a uno bueno, el saldo por
+    lote de otro producto o de otra empresa, el empate de FEFO (a igual día y antigüedad decide el código y luego el id), los dos candados de
+    empresa, el orden de salida de las devoluciones, la clave de mover entre lotes, lotes indicados a un producto que no los lleva, el
+    barrido con reservas caducadas y activar con reservas caducadas.
+  - *6 las detecta solo una guardia que lee el texto del código*, no una ejecución: las dos «puertas» del ledger (`escribirMovimiento` y
+    `escribirMovimientosPorLote`: exigen el reparto a un producto con lotes y lo prohíben a uno sin lotes; son funciones internas que ninguna
+    ruta pública puede alimentar mal, y la base lo rechazaría igual al cerrar, como prueban las pruebas del esquema), el reparto de una
+    reserva que resta lo ya liberado (hoy nada lo lee con liberaciones previas: se escribe y se consume en la misma transacción) y el límite
+    «vence hoy» del barrido (con `<=` el barrido solo mira filas de más y el plan las descarta: igual de correcto en ejecución).
+  - *1 la mata otra suite*, no la de lotes: la comprobación de stock al reservar un producto sin lotes (`inventory.db.test.ts`).
+  - *5 son equivalentes o redundantes y se dejaron como defensa*: el **índice parcial que impide dos «SIN LOTE»** (la regla `legado` obliga a
+    que el legado sea justo ese código y el índice único por producto y código ya impide un segundo); **un producto sin lotes con repartos**
+    y **un saldo sin seguimiento con lotes** (inalcanzables: un reparto necesita un movimiento, y con movimientos la activación no se
+    puede borrar; un saldo por lote necesita un lote y un lote no se crea sin activación; el disparador nuevo cierra el único camino que
+    quedaba); que `asegurarLotes` vuelva a validar el código de un lote nuevo (ya lo validó `validarLotesDeLinea` antes de llegar); y la
+    memoria por transacción de «este producto lleva lotes» (es solo rendimiento: sin ella se pregunta cada vez y el resultado es el mismo).
+  - Las 3 mutaciones añadidas (los dos del disparador nuevo y el destino de la clave de mover) se detectaron todas.
+- **Tres pruebas que ya existían se adaptaron** de forma legítima a lo que 5a añade, sin aflojarlas: la lista de acciones exportadas de
+  `inventario-permisos.test.ts` (las dos acciones nuevas, `activarLotesInventario` y `moverEntreLotesInventario`), su línea de importación de
+  `compras-service.ts` (ahora trae también el guardia `exigirSinLotes`) y la prueba de `inventory.db.test.ts` que intenta vaciar el ledger con
+  `TRUNCATE` (ahora incluye la tabla de repartos, que también lo referencia).
+- En esta máquina el servidor de E2E imprime `TypeError: fetch failed … 127.0.0.1:54329` (Supabase Auth inexistente en el arnés): ruido
+  previo, no afecta a los resultados. El build imprime errores de conexión a `127.0.0.1:5432` al generar páginas estáticas (no hay base en
+  esa dirección durante la compilación): también previos.
+
+### Lo que NO se verificó
+
+Aspecto visual y móvil. **Una base real**: ni Supabase ni el rol `membego_app` con las políticas de seguridad por fila sobre las tablas
+nuevas (el mecanismo genérico de capas existe, pero no se probó contra ellas). **Cuánto tarda la migración con un ledger grande**: el índice
+único sobre `inventory_movements` bloquea las escrituras mientras se construye y solo se probó con bases desechables. **Concurrencia real**:
+las pruebas usan un solo proceso y una sola base local, no varias instancias del servidor ni la latencia de Supabase. **Las unidades
+vencidas que el barrido diario aún no ha sacado cuentan como disponibles** en las cifras de existencia hasta que corra el cron (FEFO ya no
+las vende, pero «disponible» las incluye). **Activar es de un solo sentido** (no hay «desactivar»): es una decisión de esta parte, no una
+omisión. Para un producto con lotes siguen negados el conteo, la transferencia, la orden de compra y la importación por CSV (son 5b). El
+E2E se corrió solo en escritorio. La API v1, la app móvil y el POS no usan todavía nada específico de lotes (las ventas del POS siguen el
+mismo camino del servicio, pero las pruebas solo recorren el marketplace y el servicio).

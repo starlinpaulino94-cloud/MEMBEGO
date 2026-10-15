@@ -103,6 +103,15 @@ execFileSync('npx', ['prisma', 'db', 'push', '--skip-generate', '--accept-data-l
 })
 console.log('ok')
 
+// INV-5a · Los lotes SÍ necesitan su migración: los saldos por lote los mantiene la base con disparadores (el servicio solo escribe los
+// repartos), y `db push` no los trae. Sin ellos activar los lotes de un producto con existencias dejaría todos los saldos por lote en
+// cero. Es idempotente y solo crea disparadores, funciones y restricciones (las tablas ya las puso el push).
+process.stdout.write('  lotes (disparadores)… ')
+execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../prisma/migrations/20261068_inventory_lots/migration.sql', import.meta.url).pathname], {
+  stdio: ['ignore', 'ignore', 'inherit'],
+})
+console.log('ok')
+
 console.log('─'.repeat(60))
 console.log('Lista. El servidor y Playwright tienen que apuntar a esta base:')
 console.log(`  export DATABASE_URL="${url.replace(/:[^:@/]*@/, ':***@')}"`)

@@ -44,6 +44,12 @@ export interface Motivo {
 export const MOTIVO_DE_CONTEO = 'COUNT_DIFFERENCE'
 /** «Otro»: el motivo que no explica nada por sí solo, así que exige detalle. */
 export const MOTIVO_OTRO = 'OTHER'
+/**
+ * INV-5a · Mover unidades de un lote a otro (corregir un lote mal capturado) se escribe como un par de ajustes con este motivo. NO es
+ * una pérdida ni una ganancia —las unidades siguen en la sucursal—, así que ni se elige a mano (no está en ninguna clase) ni entra en
+ * las mermas: lo escribe el sistema y los informes lo dejan fuera.
+ */
+export const MOTIVO_REASIGNACION_DE_LOTE = 'LOT_REASSIGN'
 
 export const MOTIVOS: readonly Motivo[] = [
   { codigo: 'EXPIRED', etiqueta: 'Vencido', ayuda: 'Pasó su fecha de caducidad.', clases: ['FALTANTE', 'DANO', 'BAJA'] },
@@ -62,7 +68,15 @@ export const MOTIVOS: readonly Motivo[] = [
   { codigo: MOTIVO_OTRO, etiqueta: 'Otro', ayuda: 'Ninguno de los anteriores: explícalo en el detalle.', clases: ['FALTANTE', 'SOBRANTE', 'DANO', 'BAJA'] },
 ]
 
-const POR_CODIGO = new Map(MOTIVOS.map((m) => [m.codigo, m]))
+/**
+ * Los motivos que escribe el SISTEMA y que nadie elige: se reconocen y se etiquetan en pantalla, pero no están en ninguna clase, así
+ * que no salen en ningún selector ni valen como motivo de un formulario (`resolverMotivo` los rechaza).
+ */
+export const MOTIVOS_DEL_SISTEMA: readonly Motivo[] = [
+  { codigo: MOTIVO_REASIGNACION_DE_LOTE, etiqueta: 'Reasignación de lote', ayuda: 'Las unidades pasaron de un lote a otro: no es una pérdida ni una ganancia.', clases: [] },
+]
+
+const POR_CODIGO = new Map([...MOTIVOS, ...MOTIVOS_DEL_SISTEMA].map((m) => [m.codigo, m]))
 
 /** Los motivos que se pueden elegir para una clase, en el orden del catálogo (con «Otro» siempre al final). */
 export function motivosDeClase(clase: ClaseDeMotivo): readonly Motivo[] {

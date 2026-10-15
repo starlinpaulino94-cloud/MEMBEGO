@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, ScanBarcode, Trash2 } from 'lucide-react'
+import { Loader2, Plus, ScanBarcode, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { buscarProductosParaEntrada, registrarEntradaMultiple } from '@/modules/inventory/actions'
 import { MAX_LINEAS_ENTRADA, MAX_NOTA, MAX_REFERENCIA } from '@/modules/inventory/entradas'
 import { costoOpcional } from '@/modules/inventory/costos'
+import { CODIGO_SIN_LOTE, MAX_LOTES_POR_LINEA, validarLotesDeLinea } from '@/modules/inventory/lotes'
 import { formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,16 @@ interface ProductoBuscado {
   esDefault: boolean
   disponible: number | null
   exacto: boolean
+  /** INV-5a: el producto lleva lotes. */
+  llevaLotes: boolean
+  exigeVencimiento: boolean
+}
+
+/** Un lote de una línea, tal como se teclea (todo texto: puede estar a medias). */
+interface LoteForm {
+  codigo: string
+  vence: string
+  cantidad: string
 }
 
 interface LineaForm {
@@ -41,9 +52,16 @@ interface LineaForm {
   cantidad: string
   /** INV-3a: costo unitario (sin impuestos), solo si quien captura puede registrar costos. Vacío = sin costo. */
   costo: string
+  /** INV-5a: si el producto lleva lotes, la cantidad es la suma de sus lotes y cada lote dice su código, su vencimiento y cuántos son. */
+  llevaLotes: boolean
+  exigeVencimiento: boolean
+  lotes: LoteForm[]
 }
 
 const entero = (t: string): number | null => (/^\d{1,7}$/.test(t.trim()) ? Number(t.trim()) : null)
+
+/** Las unidades de una línea: su cantidad, o —si lleva lotes— la suma de los suyos. */
+const unidadesDe = (l: LineaForm): number => (l.llevaLotes ? l.lotes.reduce((s, x) => s + (entero(x.cantidad) ?? 0), 0) : (entero(l.cantidad) ?? 0))
 
 /**
  * UNA entrada de mercancía con todas sus líneas: se escanea o se busca cada
@@ -99,12 +117,30 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
   function agregar(p: ProductoBuscado) {
     setLineas((actuales) => {
       const i = actuales.findIndex((l) => l.varianteId === p.id)
-      if (i >= 0) return actuales.map((l, k) => (k === i ? { ...l, cantidad: String((entero(l.cantidad) ?? 0) + 1) } : l))
+      // Escanear otra vez el mismo producto suma una unidad (en su primer lote, si lleva lotes).
+      if (i >= 0) {
+        return actuales.map((l, k) =>
+          k !== i ? l : l.llevaLotes ? { ...l, lotes: l.lotes.map((x, j) => (j === 0 ? { ...x, cantidad: String((entero(x.cantidad) ?? 0) + 1) } : x)) } : { ...l, cantidad: String((entero(l.cantidad) ?? 0) + 1) }
+        )
+      }
       if (actuales.length >= MAX_LINEAS_ENTRADA) {
         toast.error(`Una entrada admite hasta ${MAX_LINEAS_ENTRADA} productos. Regístrala y empieza otra.`)
         return actuales
       }
-      return [...actuales, { varianteId: p.id, nombre: nombreCompleto(p.itemNombre, p.nombreVariante, p.esDefault), sku: p.sku, disponible: p.disponible, cantidad: '1', costo: '' }]
+      return [
+        ...actuales,
+        {
+          varianteId: p.id,
+          nombre: nombreCompleto(p.itemNombre, p.nombreVariante, p.esDefault),
+          sku: p.sku,
+          disponible: p.disponible,
+          cantidad: '1',
+          costo: '',
+          llevaLotes: p.llevaLotes,
+          exigeVencimiento: p.exigeVencimiento,
+          lotes: p.llevaLotes ? [{ codigo: '', vence: '', cantidad: '1' }] : [],
+        },
+      ]
     })
     setQ('')
     setSugerencias([])
@@ -130,7 +166,7 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
   }
 
   const visibles = q.trim() === '' ? [] : sugerencias
-  const unidades = lineas.reduce((s, l) => s + (entero(l.cantidad) ?? 0), 0)
+  const unidades = lineas.reduce((s, l) => s + unidadesDe(l), 0)
 
   function registrar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -142,11 +178,26 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
       toast.error('Agrega al menos un producto a la entrada.')
       return
     }
-    const cuerpo = lineas.map((l) => ({ varianteId: l.varianteId, cantidad: entero(l.cantidad) ?? 0, ...(conCostos && l.costo.trim() !== '' ? { costo: l.costo.trim() } : {}) }))
+    const cuerpo = lineas.map((l) => ({
+      varianteId: l.varianteId,
+      cantidad: unidadesDe(l),
+      ...(conCostos && l.costo.trim() !== '' ? { costo: l.costo.trim() } : {}),
+      ...(l.llevaLotes ? { lotes: l.lotes.map((x) => ({ codigo: x.codigo, vencimiento: x.vence === '' ? null : x.vence, cantidad: entero(x.cantidad) ?? 0 })) } : {}),
+    }))
     const mala = cuerpo.findIndex((l) => l.cantidad < 1)
     if (mala >= 0) {
       toast.error(`Revisa la cantidad de «${lineas[mala].nombre}»: es un entero de 1 en adelante.`)
       return
+    }
+    // Los lotes de cada producto que los lleva, con las mismas reglas del servidor (que las vuelve a aplicar).
+    for (let i = 0; i < lineas.length; i++) {
+      const lote = cuerpo[i].lotes
+      if (!lineas[i].llevaLotes || !lote) continue
+      const v = validarLotesDeLinea(lote, cuerpo[i].cantidad, { exigirVencimiento: lineas[i].exigeVencimiento })
+      if (!v.ok) {
+        toast.error(`«${lineas[i].nombre}»: ${v.error}`)
+        return
+      }
     }
     // El servidor vuelve a validar todo; esto solo ahorra el viaje y señala cuál línea es.
     for (let i = 0; i < lineas.length; i++) {
@@ -262,18 +313,26 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Label htmlFor={`en-cant-${i}`} className="sr-only">
-                      Cantidad de {l.nombre}
-                    </Label>
-                    <Input
-                      id={`en-cant-${i}`}
-                      inputMode="numeric"
-                      autoComplete="off"
-                      value={l.cantidad}
-                      aria-invalid={entero(l.cantidad) === null || entero(l.cantidad) === 0}
-                      onChange={(e) => setLineas((ls) => ls.map((x, k) => (k === i ? { ...x, cantidad: e.target.value } : x)))}
-                      className="w-24 text-right tabular-nums"
-                    />
+                    {l.llevaLotes ? (
+                      <p className="w-24 text-right text-sm tabular-nums" aria-label={`Total de ${l.nombre}`}>
+                        {formatearCantidad(unidadesDe(l))}
+                      </p>
+                    ) : (
+                      <>
+                        <Label htmlFor={`en-cant-${i}`} className="sr-only">
+                          Cantidad de {l.nombre}
+                        </Label>
+                        <Input
+                          id={`en-cant-${i}`}
+                          inputMode="numeric"
+                          autoComplete="off"
+                          value={l.cantidad}
+                          aria-invalid={entero(l.cantidad) === null || entero(l.cantidad) === 0}
+                          onChange={(e) => setLineas((ls) => ls.map((x, k) => (k === i ? { ...x, cantidad: e.target.value } : x)))}
+                          className="w-24 text-right tabular-nums"
+                        />
+                      </>
+                    )}
                     {conCostos && (
                       <>
                         <Label htmlFor={`en-costo-${i}`} className="sr-only">
@@ -295,6 +354,72 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
                       <Trash2 className="h-4 w-4" aria-hidden />
                     </Button>
                   </div>
+                  {l.llevaLotes && (
+                    <div className="basis-full space-y-2 rounded-lg border border-dashed p-3" role="group" aria-label={`Lotes de ${l.nombre}`}>
+                      <p className="text-xs text-muted-foreground">
+                        Este producto lleva lotes: indica de qué lote es lo que llegó{l.exigeVencimiento ? ' y cuándo vence' : ''}. Escribe {CODIGO_SIN_LOTE} si no trae.
+                      </p>
+                      {l.lotes.map((x, j) => (
+                        <div key={j} className="grid gap-2 sm:grid-cols-[1.4fr_1fr_6rem_auto]">
+                          <div>
+                            <Label htmlFor={`en-lote-${i}-${j}`} className="sr-only">
+                              Código del lote {j + 1} de {l.nombre}
+                            </Label>
+                            <Input
+                              id={`en-lote-${i}-${j}`}
+                              placeholder="Código del lote"
+                              autoComplete="off"
+                              maxLength={60}
+                              value={x.codigo}
+                              onChange={(e) => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: y.lotes.map((z, m) => (m === j ? { ...z, codigo: e.target.value } : z)) } : y)))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor={`en-vence-${i}-${j}`} className="sr-only">
+                              Vencimiento del lote {j + 1} de {l.nombre}
+                            </Label>
+                            <Input
+                              id={`en-vence-${i}-${j}`}
+                              type="date"
+                              value={x.vence}
+                              disabled={x.codigo.trim().toUpperCase() === CODIGO_SIN_LOTE}
+                              onChange={(e) => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: y.lotes.map((z, m) => (m === j ? { ...z, vence: e.target.value } : z)) } : y)))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor={`en-lote-cant-${i}-${j}`} className="sr-only">
+                              Cantidad del lote {j + 1} de {l.nombre}
+                            </Label>
+                            <Input
+                              id={`en-lote-cant-${i}-${j}`}
+                              inputMode="numeric"
+                              autoComplete="off"
+                              value={x.cantidad}
+                              aria-invalid={entero(x.cantidad) === null || entero(x.cantidad) === 0}
+                              onChange={(e) => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: y.lotes.map((z, m) => (m === j ? { ...z, cantidad: e.target.value } : z)) } : y)))}
+                              className="text-right tabular-nums"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Quitar el lote ${j + 1} de ${l.nombre}`}
+                            disabled={l.lotes.length === 1}
+                            onClick={() => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: y.lotes.filter((_, m) => m !== j) } : y)))}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </Button>
+                        </div>
+                      ))}
+                      {l.lotes.length < MAX_LOTES_POR_LINEA && (
+                        <Button type="button" variant="outline" size="sm" onClick={() => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: [...y.lotes, { codigo: '', vence: '', cantidad: '1' }] } : y)))}>
+                          <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                          Agregar otro lote
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

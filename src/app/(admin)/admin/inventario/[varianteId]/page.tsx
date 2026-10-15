@@ -13,6 +13,8 @@ import { advertenciaEstadoManual, formatearCantidad, nombreCompleto } from '@/mo
 import { formatDate, formatDateTime } from '@/lib/format'
 import { pedidoEnCaminoDeVarianteEnTx, proveedoresActivosEnTx, proveedoresDeVarianteEnTx, type OpcionProveedor, type PedidoDeVariante, type ProveedorDeProducto } from '@/modules/inventory/compras-queries'
 import { costoDeVarianteEnTx, type CostoDeVarianteVista } from '@/modules/inventory/valor'
+import { lotesDeVarianteEnTx, type LotesDeVariante } from '@/modules/inventory/lotes-queries'
+import { ActivarLotesCard } from '@/components/inventario/ActivarLotesCard'
 import { CorregirCostoForm } from '@/components/inventario/CorregirCostoForm'
 import { ProveedoresDeProductoCard } from '@/components/inventario/ProveedoresDeProductoCard'
 import { SucursalInventarioCard } from '@/components/inventario/SucursalInventarioCard'
@@ -50,6 +52,16 @@ export default async function InventarioVariantePage({ params }: { params: Promi
     }
   }
   const [puedeAjustar, puedeTransferir, puedeCostos, puedeComprar] = await Promise.all([puedeFuncion('inventario', 'ajustar'), puedeFuncion('inventario', 'transferir'), puedeFuncion('inventario', 'costos'), puedeFuncion('inventario', 'comprar')])
+  // Los lotes (INV-5a): si el producto los lleva, qué lotes tiene y cuánto hay de cada uno en cada sucursal. Como lo anterior, en su
+  // PROPIA transacción y con su propio try: si la migración de lotes aún no se aplicó, la ficha sigue funcionando.
+  let lotes: LotesDeVariante | null = null
+  if (detalle.controlaInventario) {
+    try {
+      lotes = await conEmpresa(companyId, (tx) => lotesDeVarianteEnTx(tx, companyId, varianteId))
+    } catch (e) {
+      console.error('[admin-inventario-ficha] los lotes no están disponibles', e instanceof Error ? e.message : e)
+    }
+  }
   // El costo y el valor (INV-3a): solo con la función `costos`, y leído —como lo que va en camino— en su PROPIA transacción y con
   // su propio try: si algo falla, la ficha sigue funcionando sin esta tarjeta.
   let costo: CostoDeVarianteVista | null = null
@@ -302,6 +314,14 @@ export default async function InventarioVariantePage({ params }: { params: Promi
               </AlertDescription>
             </Alert>
           )}
+          {lotes && !lotes.lleva && puedeAjustar && detalle.sucursales.length > 0 && <ActivarLotesCard varianteId={detalle.varianteId} />}
+          {lotes?.lleva && (
+            <Alert>
+              <AlertDescription>
+                Este producto lleva <strong>lotes</strong>: se vende, se aparta y se saca primero lo que antes vence, y lo vencido no se vende. Todavía no se puede contar, transferir ni pedir en una orden de compra; sí recibir con una entrada de mercancía.
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="grid gap-4 lg:grid-cols-2">
             {detalle.sucursales.map((s) => (
               <SucursalInventarioCard
@@ -310,11 +330,12 @@ export default async function InventarioVariantePage({ params }: { params: Promi
                 puedeAjustar={puedeAjustar}
                 puedeCostos={puedeCostos}
                 hayOtrasConSaldo={detalle.sucursales.some((o) => o.activa && o.sucursalId !== s.sucursalId && o.nivelId !== null)}
+                lotes={lotes?.lleva ? { exigeVencimiento: lotes.exigeVencimiento, deSucursal: lotes.porSucursal[s.sucursalId] ?? [], catalogo: lotes.catalogo } : undefined}
                 saldo={{ sucursalId: s.sucursalId, nombre: s.nombre, activa: s.activa, onHand: s.onHand, reserved: s.reserved, damaged: s.damaged, disponible: s.disponible, lowStockThreshold: s.lowStockThreshold, targetStock: s.targetStock, estado: s.estado }}
               />
             ))}
           </div>
-          {activas.length > 1 && puedeTransferir && (
+          {activas.length > 1 && puedeTransferir && !lotes?.lleva && (
             <TransferirForm varianteId={detalle.varianteId} sucursales={activas.map((s) => ({ id: s.sucursalId, nombre: s.nombre, disponible: s.disponible }))} />
           )}
         </>

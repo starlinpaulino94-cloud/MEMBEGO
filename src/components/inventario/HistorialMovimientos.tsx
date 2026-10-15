@@ -47,6 +47,7 @@ export function HistorialMovimientos({ varianteId, inicial }: { varianteId: stri
                   {formatDateTimeExacto(f.creadoEn)} · {f.usuarioNombre ?? 'Sistema'}
                   {ref && ` · ${ref}`}
                 </p>
+                {f.lotes && <p className="mt-0.5 text-xs">Lotes: {f.lotes}</p>}
                 {f.motivoCodigo && <p className="mt-0.5 text-xs font-medium">Motivo: {etiquetaDeMotivo(f.motivoCodigo)}</p>}
                 {detalleDeMotivo(f.motivoCodigo, f.motivo) && <p className="mt-0.5 break-words text-xs">{detalleDeMotivo(f.motivoCodigo, f.motivo)}</p>}
               </div>
