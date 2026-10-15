@@ -305,7 +305,7 @@ export default async function InventarioVariantePage({ params }: { params: Promi
                 puedeAjustar={puedeAjustar}
                 puedeCostos={puedeCostos}
                 hayOtrasConSaldo={detalle.sucursales.some((o) => o.activa && o.sucursalId !== s.sucursalId && o.nivelId !== null)}
-                saldo={{ sucursalId: s.sucursalId, nombre: s.nombre, activa: s.activa, onHand: s.onHand, reserved: s.reserved, damaged: s.damaged, disponible: s.disponible, lowStockThreshold: s.lowStockThreshold, estado: s.estado }}
+                saldo={{ sucursalId: s.sucursalId, nombre: s.nombre, activa: s.activa, onHand: s.onHand, reserved: s.reserved, damaged: s.damaged, disponible: s.disponible, lowStockThreshold: s.lowStockThreshold, targetStock: s.targetStock, estado: s.estado }}
               />
             ))}
           </div>

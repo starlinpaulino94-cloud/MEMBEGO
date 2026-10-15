@@ -68,6 +68,7 @@ import {
   validarCorreccionDeCosto,
   type Costo,
 } from './costos'
+import { errorObjetivoContraUmbral, validarObjetivo } from './reposicion'
 import { InventarioError, fallo } from './errores'
 
 /**
@@ -928,6 +929,10 @@ export async function configurarUmbralEnTx(
   const nivelId = await obtenerNivel(tx, companyId, variante.id, sucursal.id)
   const [fila] = [...(await bloquear(tx, companyId, [nivelId])).values()]
   if (fila.lowStockThreshold === u.valor) return { nivelId, umbral: u.valor }
+  // INV-3c: con «llenar hasta» definido, el umbral tiene que quedar por debajo (si no, Reposición no pediría nada).
+  const { targetStock } = await tx.inventoryLevel.findUniqueOrThrow({ where: { id: nivelId }, select: { targetStock: true } })
+  const choque = errorObjetivoContraUmbral({ umbral: u.valor, llenarHasta: targetStock, sucursal: sucursal.nombre })
+  if (choque) fallo('UMBRAL_MAYOR_QUE_OBJETIVO', choque)
   await tx.inventoryLevel.update({ where: { id: nivelId }, data: { lowStockThreshold: u.valor } })
   await auditarInventario(tx, ctx, companyId, 'INVENTORY_CONFIGURED', nivelId, {
     sku: variante.sku,
@@ -967,6 +972,66 @@ export async function configurarUmbralOtrasSucursalesEnTx(
   for (const n of otras) {
     if (n.lowStockThreshold === u.valor) continue
     await configurarUmbralEnTx(tx, companyId, { varianteId: variante.id, sucursalId: n.locationId, umbral: u.valor }, ctx)
+    cambiadas++
+  }
+  return { sucursales: cambiadas }
+}
+
+/**
+ * INV-3c · Fija el «llenar hasta» de una variante en una sucursal (0 = sin objetivo: no aparece en Reposición). Tiene que
+ * quedar por encima del umbral de aviso de ese saldo, si lo hay. Repetirlo con el mismo valor no hace nada ni se audita.
+ */
+export async function configurarObjetivoEnTx(
+  tx: Tx,
+  companyId: string,
+  e: { varianteId: string; sucursalId: string; llenarHasta: number },
+  ctx: ContextoAuditoria
+): Promise<{ nivelId: string; llenarHasta: number }> {
+  const o = validarObjetivo(e.llenarHasta)
+  if (!o.ok) fallo('OBJETIVO_INVALIDO', o.error)
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  const sucursal = await exigirSucursal(tx, companyId, e.sucursalId, false)
+  const nivelId = await obtenerNivel(tx, companyId, variante.id, sucursal.id)
+  const [fila] = [...(await bloquear(tx, companyId, [nivelId])).values()]
+  const { targetStock } = await tx.inventoryLevel.findUniqueOrThrow({ where: { id: nivelId }, select: { targetStock: true } })
+  if (targetStock === o.valor) return { nivelId, llenarHasta: o.valor }
+  const choque = errorObjetivoContraUmbral({ umbral: fila.lowStockThreshold, llenarHasta: o.valor, sucursal: sucursal.nombre })
+  if (choque) fallo('OBJETIVO_MENOR_QUE_UMBRAL', choque)
+  await tx.inventoryLevel.update({ where: { id: nivelId }, data: { targetStock: o.valor } })
+  await auditarInventario(tx, ctx, companyId, 'INVENTORY_CONFIGURED', nivelId, {
+    sku: variante.sku,
+    producto: variante.item.name,
+    sucursal: sucursal.nombre,
+    antes: { llenarHasta: targetStock },
+    despues: { llenarHasta: o.valor },
+  })
+  return { nivelId, llenarHasta: o.valor }
+}
+
+/**
+ * INV-3c · Aplica el MISMO «llenar hasta» a las demás sucursales ACTIVAS donde la variante ya tiene un saldo (igual que el
+ * umbral: no se crean saldos en cero donde el producto nunca estuvo). Cada sucursal pasa por `configurarObjetivoEnTx`, así
+ * que repetirlo es inofensivo; si en alguna el umbral lo impide, todo se deshace y el mensaje dice cuál. Devuelve en cuántas
+ * hubo un cambio real.
+ */
+export async function configurarObjetivoOtrasSucursalesEnTx(
+  tx: Tx,
+  companyId: string,
+  e: { varianteId: string; sucursalOrigenId: string; llenarHasta: number },
+  ctx: ContextoAuditoria
+): Promise<{ sucursales: number }> {
+  const o = validarObjetivo(e.llenarHasta)
+  if (!o.ok) fallo('OBJETIVO_INVALIDO', o.error)
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  const otras = await tx.inventoryLevel.findMany({
+    where: { companyId, catalogVariantId: variante.id, locationId: { not: e.sucursalOrigenId }, location: { activa: true } },
+    select: { locationId: true, targetStock: true },
+    orderBy: { id: 'asc' },
+  })
+  let cambiadas = 0
+  for (const n of otras) {
+    if (n.targetStock === o.valor) continue
+    await configurarObjetivoEnTx(tx, companyId, { varianteId: variante.id, sucursalId: n.locationId, llenarHasta: o.valor }, ctx)
     cambiadas++
   }
   return { sucursales: cambiadas }

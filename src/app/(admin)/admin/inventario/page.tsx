@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { AlertTriangle, Package, Search, Warehouse } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
-import { requireRole } from '@/lib/auth/guards'
+import { puedeFuncion, requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,8 @@ function enlace(base: Record<string, string | undefined>, cambios: Record<string
 export default async function InventarioPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await requireCompanyContext(user)
+  // INV-3c: la alerta de stock bajo ofrece pasar a «qué comprar» a quien puede comprar.
+  const puedeComprar = await puedeFuncion('inventario', 'comprar')
   const sp = await searchParams
 
   const q = sp.q?.slice(0, 80)
@@ -107,6 +109,14 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
                     </li>
                   ))}
                 </ul>
+                {puedeComprar && (
+                  <p className="pt-2 text-xs text-muted-foreground">
+                    <Link href="/admin/inventario/reposicion" className="underline">
+                      Ver qué comprar
+                    </Link>{' '}
+                    (lo que falta para llegar a «llenar hasta», agrupado por proveedor).
+                  </p>
+                )}
                 {datos.alertas.total > datos.alertas.alertas.length && (
                   <p className="pt-2 text-xs text-muted-foreground">
                     Y {datos.alertas.total - datos.alertas.alertas.length} más.{' '}

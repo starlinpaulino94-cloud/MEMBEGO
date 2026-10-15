@@ -1,6 +1,8 @@
 import type { InventoryMovementType } from '@prisma/client'
 import { armarCsv, armarCsvBloques } from '@/lib/csv'
 import { ETIQUETA_ESTADO_ORDEN, type EstadoOrden } from './compras'
+import { resumirReposicion, type GrupoDeReposicion } from './reposicion'
+import { formatearCosto, formatearMonto, valorDe } from './costos'
 import { ETIQUETA_ESTADO_TRASLADO, pendienteDeLinea, type EstadoTraslado } from './traslados'
 import { ETIQUETA_ESTADO_CONTEO, ETIQUETA_RESULTADO, clasificarDiferencia, diferenciaDeConteo, ordenarPorDiferencia, resumirVarianza, type EstadoConteo } from './conteos'
 import { ETIQUETA_MOVIMIENTO, describirReferencia } from './formato'
@@ -468,6 +470,56 @@ export function ordenToCsv(o: OrdenParaCsv, zonaHoraria: string): string {
       titulo: 'Entradas de mercancía',
       encabezados: ['Entrada', 'Fecha y hora', 'Unidades', 'Factura o referencia', 'Registrada por'],
       filas: o.entradas.map((e) => [e.numero, fechaHoraCsv(e.creadoEn, zonaHoraria), e.unidades, SIN_FORMULA(e.referencia), SIN_FORMULA(e.usuarioNombre ?? 'Sistema')]),
+    },
+  ])
+}
+
+// ── INV-3c · Reposición ──────────────────────────────────────────────────────
+
+/**
+ * Lo que hay que reponer, para llevarlo al proveedor o a una hoja de cálculo: un bloque de resumen y una fila por producto y
+ * sucursal, con su proveedor y su costo. Los números van planos (se suman); un producto sin costo conocido deja VACÍAS las
+ * celdas de costo y valor —nunca un cero—. Si la lista se cortó por el tope, el archivo lo dice.
+ */
+export function reposicionToCsv(grupos: readonly GrupoDeReposicion[], contexto: { alDia: number; conObjetivo: number; truncado: boolean; filtros: ReadonlyArray<readonly [string, string]> }): string {
+  const resumen = resumirReposicion(grupos)
+  return armarCsvBloques([
+    {
+      titulo: 'Reposición',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ...contexto.filtros.map(([k, v]) => [SIN_FORMULA(k), SIN_FORMULA(v)]),
+        ['Productos por reponer', resumen.productos],
+        ['Unidades sugeridas', resumen.unidades],
+        ['Valor sugerido (con el último costo conocido)', plano(resumen.valor)],
+        ['Productos sin proveedor al que pedirlos', resumen.sinProveedor],
+        ['Productos sin costo conocido', resumen.sinCosto],
+        ['Saldos con objetivo que están al día', contexto.alDia],
+        ['Saldos con objetivo en total', contexto.conObjetivo],
+        ...(contexto.truncado ? [['Aviso', 'Había más saldos con objetivo de los que caben en este archivo: la lista está cortada.']] : []),
+      ],
+    },
+    {
+      titulo: 'Qué comprar',
+      encabezados: ['Proveedor', 'Sucursal', 'Producto', 'SKU', 'Codigo de barras', 'Disponible', 'Pedido', 'En camino', 'En borrador', 'Avisar en', 'Llenar hasta', 'Sugerida', 'Ultimo costo', 'Valor'],
+      filas: grupos.flatMap((g) =>
+        g.lineas.map((l) => [
+          SIN_FORMULA(g.proveedor?.nombre ?? 'Sin proveedor'),
+          SIN_FORMULA(g.sucursalNombre),
+          SIN_FORMULA(l.esDefault ? l.producto : `${l.producto} · ${l.nombreVariante}`),
+          SIN_FORMULA(l.sku),
+          SIN_FORMULA(l.barcode),
+          l.disponible,
+          l.pedido,
+          l.enCamino,
+          l.enBorrador,
+          l.umbral,
+          l.llenarHasta,
+          l.sugerida,
+          l.ultimoCosto === null ? '' : plano(formatearCosto(l.ultimoCosto)),
+          l.ultimoCosto === null ? '' : plano(formatearMonto(valorDe(l.sugerida, l.ultimoCosto))),
+        ])
+      ),
     },
   ])
 }

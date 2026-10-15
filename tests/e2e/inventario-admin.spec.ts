@@ -1635,6 +1635,171 @@ test.describe('Inventario · panel', () => {
     await ctx.close()
   })
 
+  test('INV-3c · reposición: «llenar hasta», la propuesta agrupa por proveedor, el borrador se crea con lo sugerido y lo pedido se descuenta — y quien no tiene «comprar» no ve nada', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    // Una empresa propia: la propuesta es de toda la empresa y tiene que contener solo lo de esta prueba.
+    const emp = await empresaCatalogo(sufijo, 'invrepos', { capacidad: true })
+    const prisma = prismaDeArnes()
+    const principal = (await sucursalSembrada(emp.id, 'Principal')).id
+    const NA = `Harina REP ${sufijo}`
+    const NB = `Azúcar REP ${sufijo}`
+    const NC = `Sal REP ${sufijo}`
+    const mk = async (name: string, slug: string, sku: string) => {
+      const it = await itemSembrado(emp.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, price: 100, porDefecto: true }] })
+      return varianteDe(it.id)
+    }
+    const vA = await mk(NA, `harina-rep-${sufijo}`, `REP-A-${sufijo}`)
+    const vB = await mk(NB, `azucar-rep-${sufijo}`, `REP-B-${sufijo}`)
+    const vC = await mk(NC, `sal-rep-${sufijo}`, `REP-C-${sufijo}`)
+    const PROVEEDOR = `Surtidor REP ${sufijo}`
+    const email = 'e2e.catalogo.con@membego.test'
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, emp.id)
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    const fila = (lista: Locator, nombre: string) => lista.getByRole('listitem').filter({ hasText: nombre })
+
+    try {
+      // ── Sin ningún objetivo, la pantalla lo explica ───────────────────────
+      await p.goto('/admin/inventario')
+      await vistas.getByRole('link', { name: 'Reposición' }).click()
+      await p.waitForURL('**/admin/inventario/reposicion')
+      await expect(p.getByRole('heading', { name: 'Reposición', level: 1 })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Reposición' })).toHaveAttribute('aria-current', 'page')
+      await expect(p.getByText('Todavía no has dicho hasta cuánto quieres tener de ningún producto.')).toBeVisible()
+
+      // ── «Llenar hasta» desde la ficha del producto ───────────────────────
+      await prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: vA, locationId: principal, onHand: 3 } })
+      await p.goto(`/admin/inventario/${vA}`)
+      const llenar = p.getByRole('form', { name: 'Llenar hasta en Principal' })
+      await llenar.getByLabel('Llenar hasta').fill('20')
+      await llenar.getByRole('button', { name: 'Guardar objetivo' }).click()
+      await expect(p.getByText('Reposición propondrá pedir hasta tener 20.')).toBeVisible({ timeout: 15_000 })
+      // El umbral no puede quedar igual o por encima del objetivo; por debajo, sí.
+      const avisar = p.getByRole('form', { name: 'Umbral de stock bajo en Principal' })
+      await avisar.getByLabel('Avisar cuando queden').fill('25')
+      await avisar.getByRole('button', { name: 'Guardar umbral' }).click()
+      await expect(p.getByText(/«Llenar hasta» \(20\) en Principal tiene que ser mayor que el umbral de aviso \(25\)/)).toBeVisible({ timeout: 15_000 })
+      await avisar.getByLabel('Avisar cuando queden').fill('5')
+      await avisar.getByRole('button', { name: 'Guardar umbral' }).click()
+      await expect(p.getByText('Te avisaremos cuando queden 5 o menos.')).toBeVisible({ timeout: 15_000 })
+      // Y el objetivo no puede bajar al umbral.
+      await llenar.getByLabel('Llenar hasta').fill('5')
+      await llenar.getByRole('button', { name: 'Guardar objetivo' }).click()
+      await expect(p.getByText(/«Llenar hasta» \(5\) en Principal tiene que ser mayor que el umbral de aviso \(5\)/)).toBeVisible({ timeout: 15_000 })
+      expect((await prisma.inventoryLevel.findFirstOrThrow({ where: { catalogVariantId: vA, locationId: principal } })).targetStock).toBe(20)
+
+      // ── Lo demás se siembra: otro producto con objetivo y sin existencias, uno sin proveedor, y los proveedores ──
+      const prov = await prisma.inventorySupplier.create({ data: { companyId: emp.id, name: PROVEEDOR } })
+      await prisma.inventoryVariantSupplier.create({ data: { companyId: emp.id, catalogVariantId: vA, supplierId: prov.id, preferred: true, lastCost: '2.5000' } })
+      await prisma.inventoryVariantSupplier.create({ data: { companyId: emp.id, catalogVariantId: vB, supplierId: prov.id, preferred: true } })
+      await prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: vB, locationId: principal, onHand: 0, targetStock: 10 } })
+      await prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: vC, locationId: principal, onHand: 1, targetStock: 4 } })
+
+      // ── La propuesta: agrupada por proveedor, con lo que falta para llegar al objetivo ──
+      await p.goto('/admin/inventario/reposicion')
+      const resumen = p.getByRole('list', { name: 'Resumen de la reposición' }).or(p.getByLabel('Resumen de la reposición'))
+      await expect(resumen).toContainText('Por reponer')
+      await expect(resumen).toContainText('30') // 17 + 10 + 3 unidades
+      const grupo = p.getByRole('form', { name: `Reposición de ${PROVEEDOR} en Principal` })
+      const lista = grupo.getByRole('list', { name: `Productos por reponer: ${PROVEEDOR} → Principal` })
+      await expect(lista.getByRole('listitem')).toHaveCount(2)
+      await expect(grupo.getByLabel(`Cantidad de ${NA}`)).toHaveValue('17') // 20 − 3 disponibles
+      await expect(grupo.getByLabel(`Costo de ${NA}`)).toHaveValue('2.5') // el último costo de ese proveedor
+      await expect(grupo.getByLabel(`Cantidad de ${NB}`)).toHaveValue('10')
+      await expect(grupo.getByLabel(`Costo de ${NB}`)).toHaveValue('') // nunca se le compró: no se inventa un costo
+      await expect(fila(lista, NA)).toContainText('Hay 3')
+      await expect(fila(lista, NA)).toContainText('Llenar hasta 20')
+      await expect(fila(lista, NA)).toContainText('Avisa en 5')
+      // Sin proveedor no hay orden que crear: se manda a la ficha del producto.
+      const sinProveedor = p.getByRole('list', { name: 'Productos por reponer: Sin proveedor → Principal' })
+      await expect(fila(sinProveedor, NC)).toContainText('Sugerido 3')
+      await expect(p.getByRole('form', { name: 'Reposición de productos sin proveedor en Principal' }).getByRole('button', { name: 'Crear borrador de orden' })).toHaveCount(0)
+      await expect(p.getByText(/Estos productos no tienen un proveedor al que pedirlos/)).toBeVisible()
+
+      // ── Crear el borrador: el costo es obligatorio, y lo marcado es lo que se pide ──
+      await grupo.getByRole('button', { name: 'Crear borrador de orden' }).click()
+      await expect(p.getByText(new RegExp(`«${NB}»: escribe el costo`))).toBeVisible()
+      await grupo.getByLabel(`Costo de ${NB}`).fill('4')
+      await grupo.getByLabel(`Cantidad de ${NA}`).fill('15') // se puede corregir lo sugerido
+      await grupo.getByRole('button', { name: 'Crear borrador de orden' }).click()
+      await p.waitForURL(/\/admin\/inventario\/compras\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+      const idBorrador = p.url().split('/').pop()!
+      await expect(p.getByText('Borrador', { exact: true }).first()).toBeVisible()
+      await expect(p.getByText('Borrador creado desde Reposición.')).toBeVisible()
+      const numero = (await p.getByRole('heading', { level: 1 }).innerText()).trim()
+      expect(numero).toMatch(/^OC-\d{4}-\d{6}$/)
+      const lineasOrden = p.getByRole('list', { name: 'Líneas de la orden' })
+      await expect(fila(lineasOrden, NA)).toContainText('15')
+      await expect(fila(lineasOrden, NB)).toContainText('10')
+      // Un borrador no pide nada ni mueve existencias.
+      expect((await prisma.inventoryLevel.findFirstOrThrow({ where: { catalogVariantId: vA, locationId: principal } })).onHand).toBe(3)
+
+      // ── De vuelta en la propuesta: el borrador se avisa, pero NO se descuenta ──
+      await p.goto('/admin/inventario/reposicion')
+      await expect(p.getByText(/Ya tienes un borrador de este proveedor para esta sucursal/)).toBeVisible()
+      await expect(p.getByRole('link', { name: numero })).toBeVisible()
+      await expect(fila(p.getByRole('list', { name: `Productos por reponer: ${PROVEEDOR} → Principal` }), NA)).toContainText('En borrador 15')
+      await expect(p.getByRole('form', { name: `Reposición de ${PROVEEDOR} en Principal` }).getByLabel(`Cantidad de ${NA}`)).toHaveValue('17')
+
+      // ── Pedir el borrador lo vuelve compromiso: lo pedido se descuenta y el grupo se va ──
+      await p.goto(`/admin/inventario/compras/${idBorrador}`)
+      await p.getByRole('button', { name: 'Pedir al proveedor' }).click()
+      await expect(p.getByText(new RegExp(`Orden ${numero} pedida a ${PROVEEDOR}`))).toBeVisible({ timeout: 15_000 })
+      await p.goto('/admin/inventario/reposicion')
+      await expect(p.getByRole('form', { name: `Reposición de ${PROVEEDOR} en Principal` })).toHaveCount(0)
+      await expect(fila(p.getByRole('list', { name: 'Productos por reponer: Sin proveedor → Principal' }), NC)).toBeVisible()
+      // A (3 hay + 15 pedidos = 18 > su umbral de 5) y B (0 + 10 pedidos = su objetivo) ya no necesitan nada.
+      await expect(p.getByText(NA)).toHaveCount(0)
+      await expect(p.getByText(NB)).toHaveCount(0)
+
+      // ── Filtros ──────────────────────────────────────────────────────────
+      await p.goto('/admin/inventario/reposicion?proveedor=sin')
+      await expect(fila(p.getByRole('list', { name: 'Productos por reponer: Sin proveedor → Principal' }), NC)).toBeVisible()
+      await p.goto(`/admin/inventario/reposicion?q=${encodeURIComponent('no-existe-xyz')}`)
+      await expect(p.getByText(/Ningún producto con «llenar hasta» coincide con esos filtros/)).toBeVisible()
+      await p.goto('/admin/inventario/reposicion?sucursal=de-otra-empresa&proveedor=de-otra-empresa')
+      await expect(fila(p.getByRole('list', { name: 'Productos por reponer: Sin proveedor → Principal' }), NC)).toBeVisible() // lo ajeno no filtra
+
+      // ── El archivo: los mismos números, sin separador de miles ───────────
+      const csv = await p.request.get('/admin/inventario/reposicion/exportar')
+      expect(csv.status()).toBe(200)
+      expect(csv.headers()['content-type'] ?? '').toContain('text/csv')
+      const texto = await csv.text()
+      expect(texto).toContain('Reposición')
+      expect(texto).toContain('Qué comprar')
+      expect(texto).toContain(NC)
+      expect(texto).toContain('Sin proveedor')
+      expect(texto).not.toContain(NA) // ya está pedido
+      const filtrado = await p.request.get('/admin/inventario/reposicion/exportar?proveedor=sin')
+      expect(await filtrado.text()).toContain('solo lo que no tiene proveedor')
+
+      // ── Quien NO tiene la función «comprar» no ve ni una línea ───────────
+      await prisma.user.update({ where: { email }, data: { permisos: { v: 1, secciones: {}, funciones: { inventario: { comprar: false } } } } })
+      await p.goto('/admin/inventario')
+      await expect(vistas.getByRole('link', { name: 'Existencias' })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Reposición' })).toHaveCount(0)
+      await expect(p.getByRole('link', { name: 'Ver qué comprar' })).toHaveCount(0)
+      await p.goto('/admin/inventario/reposicion')
+      await expect(p.getByText(/No tienes permiso para ver ni gestionar las compras a proveedores/)).toBeVisible()
+      expect(await p.locator('body').innerText()).not.toContain(NC)
+      expect((await p.request.get('/admin/inventario/reposicion/exportar')).status()).toBe(403)
+      // «Llenar hasta» es configuración del saldo (la misma función que el umbral): sigue disponible.
+      await p.goto(`/admin/inventario/${vA}`)
+      await expect(p.getByRole('form', { name: 'Llenar hasta en Principal' })).toBeVisible()
+    } finally {
+      await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
+    }
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
   test('aislamiento: la variante de otra empresa no se abre ni se lista', async ({ browser }) => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
