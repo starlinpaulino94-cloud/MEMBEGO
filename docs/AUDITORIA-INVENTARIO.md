@@ -4,7 +4,7 @@
 > `/admin/inventario`, sus consumidores (pedidos, checkout, POS, ofertas), el cron, las pruebas y la documentación.
 > Se compara con el inventario del Car Wash (`ProductoInventario`), que es OTRO módulo.
 >
-> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a, INV-3b, INV-3c o INV-4a ya lo cerraron** (ver §5, §7, §9, §11, §13, §15, §17 y §19).
+> Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a, INV-3b, INV-3c, INV-4a o INV-4b ya lo cerraron** (ver §5, §7, §9, §11, §13, §15, §17, §19 y §21).
 
 ## 1. Veredicto
 
@@ -51,7 +51,7 @@ agrupado por proveedor, y crea borradores de orden. Sigue sin haber pronóstico 
 `CatalogVariant.cost` es un costo fijo; los movimientos no llevaban costo, así que no había costo promedio, valor del
 inventario por sucursal, costo de ventas (COGS) ni mermas valorizadas. → **INV-3a ✔** (costo promedio ponderado, valor del
 inventario, costo de ventas del mes y corrección de costo; ver §13). **El kardex con sus entradas y salidas valoradas: INV-4a ✔**
-(ver §19). Siguen pendientes, en INV-4b y INV-4c, las mermas valoradas por motivo y el margen real.
+(ver §19). **Las mermas valoradas por motivo: INV-4b ✔** (ver §21). Sigue pendiente, en INV-4c, el margen real.
 
 ### 3.4 Historial y reportes
 
@@ -62,7 +62,8 @@ inventario, costo de ventas del mes y corrección de costo; ver §13). **El kard
 | Exportar | Nada se exportaba | **INV-1 ✔** (CSV) |
 | Reservas vivas de la empresa | Solo por variante, máximo 50 | **INV-1 ✔** |
 | Kardex, rotación, stock sin movimiento | `modules/reportes` tiene 20 reportes y ninguno es de inventario | **INV-4a ✔** (kardex con entradas y salidas valoradas, stock sin ventas, rotación y cobertura) |
-| Mermas por motivo codificado, margen real, tarjeta de dashboard | Los motivos son texto libre; no se cruza costo con precio | INV-4b / INV-4c |
+| Motivos codificados y mermas por motivo | Los motivos eran texto libre, imposibles de sumar | **INV-4b ✔** (catálogo de motivos en el ledger e informe «Mermas por motivo») |
+| Margen real, tarjeta de dashboard | No se cruza costo con precio | INV-4c |
 
 ### 3.5 Avisos
 
@@ -111,7 +112,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-3b · Proveedores y órdenes de compra** | Proveedores; orden de compra `OC-AAAA-NNNNNN` (Borrador → Pedida → Recibida en parte → Recibida, o Cancelada) con el costo de cada línea; recibir en tandas crea una entrada con los costos de la orden (nunca más de lo pedido; cerrar con faltante exige motivo); vínculo producto-proveedor con código, último costo, días de entrega y preferido; CSV de la orden. Función de permiso nueva `comprar` | `InventorySupplier`, `InventoryPurchaseOrder`, `InventoryPurchaseOrderLine`, `InventoryVariantSupplier`; `purchaseOrderId` en las entradas (migración `20261060`) | M | **Hecha** (este documento, §15) |
 | **INV-3c · Reposición** | «Llenar hasta» por producto y sucursal (junto al umbral que ya existía; tiene que quedar por encima de él); pestaña «Reposición» con la cantidad sugerida —lo disponible más lo pedido que no ha llegado más lo que va en camino se descuentan; un borrador no—, agrupada por proveedor y sucursal, con filtros y CSV, que crea borradores de orden con el último costo de cada proveedor. Sin función nueva (`comprar` para ver y crear, `ajustar` para fijar el objetivo) | `targetStock` en el saldo (migración `20261066`) | S | **Hecha** (este documento, §17) |
 | **INV-4a · Informes de existencias** | Kardex de un producto (entradas, salidas y saldo, con lo que valieron si se tiene la función `costos`), stock sin ventas (qué tiene existencias y no se vende, y cuánto dinero tiene parado), rotación y cobertura (cuánto se vende, cuántas veces rota, para cuántos días alcanza; costo de ventas y días de inventario con `costos`), todos con filtros y CSV. Sin función de permiso nueva | Sin cambios (todo se lee del ledger) | M | **Hecha** (este documento, §19) |
-| INV-4b · Motivos codificados | Catálogo de motivos para ajustes, daños y bajas y las mermas por motivo (cuánto se perdió y cuánto costó, por qué) | Código de motivo en el ledger (migración) | M | pendiente |
+| **INV-4b · Motivos codificados** | Catálogo de 14 motivos (vencido, robo, pérdida, muestra, consumo interno, devuelto al proveedor, diferencia de conteo, apareció mercancía, error de captura, golpe, mal almacenamiento, daño en el transporte, defecto de fábrica y «otro») que el ajuste, el daño y la baja **exigen** elegir; el texto libre queda como detalle. Los conteos escriben solos «diferencia de conteo». Informe «Mermas por motivo» (lo perdido, los sobrantes y lo dañado, cada uno por motivo, con unidades y —con `costos`— lo que valieron), con filtros y CSV; el motivo se ve en Movimientos, en el historial de la ficha y en el kardex (pantalla y CSV). Sin función de permiso nueva | `reasonCode` en el movimiento (migración `20261067`) | M | **Hecha** (este documento, §21) |
 | INV-4c · Margen real | Margen real por producto (precio de venta contra el costo congelado de lo vendido) y tarjeta de inventario en el dashboard | Sin cambios previstos | S | pendiente |
 | INV-5 · Trazabilidad | Lotes y vencimiento con FEFO; series; kits que descuentan componentes; API v1; rol de bodega | Lotes, kits | L por pieza | pendiente |
 
@@ -1090,3 +1091,168 @@ Hallazgos de la propia verificación (importa que se sepan):
   efectos con una suma, no trayendo los movimientos.
 - En esta máquina el servidor de E2E imprime `fetch failed … 127.0.0.1:54329` y `The destination stream closed early` (Supabase Auth
   inexistente en el arnés): ruido previo, no afecta a los resultados.
+
+## 21. INV-4b · qué se hizo
+
+> Segunda de las tres partes de INV-4. **Sí hay SQL que aplicar** (`prisma/migrations/20261067_inventory_reason_codes`), **antes de
+> desplegar el código** (ver «Cómo aplicar la migración»). No hay función de permiso nueva: el motivo lo elige quien ya puede
+> ajustar (`ajustar`) y el informe lo ve quien ya tiene la sección Inventario; el dinero sigue detrás de `costos`.
+
+**El problema.** Hasta INV-4a, el «por qué» de un ajuste, un daño o una baja era texto libre (`inventory_movements.reason`). Sirve para
+leer un movimiento, no para sumar: «vencido», «venció», «caducado» y «se venció el lote 12» son lo mismo para una persona y cuatro
+cosas para un informe. Para saber cuánto se perdió y por qué hace falta un código estable.
+
+**Lo que hay ahora.**
+
+- **Un código de motivo en el ledger.** `inventory_movements.reasonCode` (texto, nulo). El texto libre se conserva como **detalle**
+  (`reason`, que la base sigue exigiendo en ajustes y daños: si la persona no escribe nada se guarda la etiqueta del motivo, así
+  que el texto nunca queda vacío ni miente). Solo un ajuste o un daño puede llevar código (una venta con «motivo: robo» sería un
+  dato que nadie sabría leer); lo comprueban el servicio y un `CHECK` de la base.
+- **Un catálogo de 14 motivos, en el código** (`src/modules/inventory/motivos.ts`), no en una tabla: añadir un motivo no exige una
+  migración. Cada motivo vale solo para lo que explica, en cuatro clases: **faltante** (un ajuste que resta), **sobrante** (un ajuste
+  que suma), **dañado** (vendible → dañado) y **baja** (lo dañado sale del inventario). *Vencido* explica un faltante, un daño o una
+  baja; *robo*, *pérdida*, *muestra o regalo* y *consumo interno*, un faltante; *devuelto al proveedor*, un faltante o una baja;
+  *diferencia de conteo*, un faltante o un sobrante; *apareció mercancía* y *error de captura*, un sobrante; *golpe*, *mal
+  almacenamiento*, *transporte* y *defecto de fábrica*, un daño o una baja; y *otro*, cualquiera, **pero exige detalle**. Un motivo
+  de otra clase se rechaza (no se puede explicar un sobrante con «robo»).
+- **Las pantallas lo exigen.** El formulario de la ficha del producto (ajustar, dañar, dar de baja) trae un selector de motivo
+  obligatorio —solo con los motivos de esa clase— y un «Detalle» opcional (obligatorio con «otro»); las acciones del servidor lo
+  vuelven a exigir, así que una petición hecha a mano sin motivo también falla con «Elige el motivo.». **Recuperar** lo dañado
+  (vuelve a vendible) no es una pérdida: no lleva motivo del catálogo y el servicio lo rechaza si se le manda uno.
+- **Los procesos que no eligen un motivo siguen funcionando como antes** (la API de servicio y las pruebas pueden escribir solo
+  texto; el código queda nulo). **Los conteos físicos escriben solos «diferencia de conteo»** en cada diferencia —el conteo manual
+  de una variante y el que aplica una sesión de conteo—: nadie lo elige y es la verdad.
+- **Se ve donde se mira el ledger.** Un renglón «Motivo: …» (y el detalle debajo, si dice algo distinto de la etiqueta) en
+  Movimientos, en el historial de la ficha y en el kardex; y dos columnas nuevas en los CSV de Movimientos y de Kardex: «Motivo
+  (catalogo)» y «Detalle del motivo» (la columna «Motivo» de antes no se quitó para no romper hojas que ya la usan). Lo anterior a
+  esta migración, y lo que escribieron procesos que no eligen motivo, sale como **«Sin motivo codificado»**: el ledger es inmutable
+  y no se reescribe, así que no se inventa un motivo para lo histórico.
+- **Informe «Mermas por motivo»** (`/admin/inventario/reportes/mermas`, cuarta tarjeta del hub «Reportes»). Para un rango de días
+  (por defecto los últimos 30, días LOCALES de la empresa, ambos incluidos), con filtros de motivo (o «Sin motivo codificado»),
+  sucursal y producto (nombre, SKU o código de barras), tres grupos:
+  - **Lo perdido** = faltantes + bajas de lo dañado: lo que salió del inventario sin venderse;
+  - **Sobrantes**: ajustes que sumaron (no son una pérdida, pero se ven al lado porque suelen ser la otra cara del mismo descuadre);
+  - **Dañado**: vendible → dañado. **No se suma a lo perdido**: sigue en la sucursal (y en el valor del inventario) hasta que se dé
+    de baja, y una pieza que se daña hoy y se da de baja mañana sería, si no, dos pérdidas. Recuperar lo dañado no cuenta en nada.
+
+  Cada grupo se desglosa **por motivo** (movimientos, unidades y, con `costos`, lo que valieron y qué parte del grupo es), de lo
+  que más pesa a lo que menos, con un clic para filtrar por ese motivo; debajo, el detalle movimiento por movimiento (producto,
+  sucursal, persona, motivo, detalle, y con `costos` su costo y valor), del más reciente al más antiguo, 50 por página. Valor =
+  unidades × el costo que el propio movimiento congeló (INV-3a): **lo que no tiene costo se cuenta aparte, nunca como cero**, y la
+  pantalla lo avisa. Sin `costos`, **el costo ni siquiera se lee** (en SQL es un `NULL` constante): ni la pantalla ni el archivo
+  traen una cifra de dinero ni una columna de costo. CSV con los mismos filtros (hasta 20.000 movimientos, con un resumen que dice
+  si el archivo está completo y los filtros aplicados), números planos, textos neutralizados contra fórmulas de hoja de cálculo.
+- **Aislamiento.** Todo se lee dentro de la empresa de la sesión, con la empresa escrita en cada consulta y en cada unión; una
+  sucursal de la URL que no es de la empresa no filtra; un código de motivo que el catálogo no conoce no filtra (se ignora). La
+  descarga pide la sección Inventario (no `costos`): `costos` decide solo si el archivo trae dinero.
+
+### Lo que NO hace (a propósito, o pendiente)
+
+- **No se reescribe el ledger.** Los movimientos anteriores no ganan motivo: aparecen como «Sin motivo codificado». No hay un
+  barrido que intente adivinar el motivo desde el texto libre (sería inventar datos en un registro inmutable).
+- **Las pérdidas en tránsito de una transferencia (cerrar con faltante, INV-2c) no están en el informe**: se registran en el
+  documento de la transferencia con su propio motivo en texto, no como un ajuste del ledger. Es una limitación conocida; si se quiere
+  verlas por motivo, el siguiente paso sería darles también un código.
+- **El catálogo es único para todas las empresas** y vive en el código: no hay motivos propios por empresa ni se pueden desactivar
+  los de fábrica desde la pantalla. Un motivo que un día se retire del catálogo seguiría mostrándose con su código (nunca se oculta).
+- **No hay un tope de «merma aceptable», alertas por merma ni comparación contra el periodo anterior**; es un informe, no un
+  control.
+- **Una devolución de un cliente (`RETURN`), una venta o una entrada no son ajustes ni daños**: no llevan motivo del catálogo y no
+  entran al informe (siguen en el kardex y en Movimientos). Solo cuentan los ajustes (manuales, de conteo o de baja) y los daños.
+- Observación que no se tocó: la búsqueda de productos de INV-2 (entradas, transferencias y conteos) sigue tratando un `%` como
+  «todo»; el informe de mermas sí neutraliza los comodines.
+
+Archivos principales: `prisma/migrations/20261067_inventory_reason_codes/`, `prisma/schema/inventario.prisma` (`reasonCode`),
+`src/modules/inventory/{motivos,mermas,mermas-queries}.ts` (catálogo y reglas puras, informe puro y lecturas), `service.ts` (las
+dos únicas puertas de escritura del ledger, `escribirMovimiento` y `escribirMovimientosPorLote`, y los cuatro movimientos manuales),
+`actions.ts`, `filtros.ts`, `exportacion.ts`, `src/components/inventario/{SucursalInventarioCard,HistorialMovimientos}.tsx`,
+`src/app/(admin)/admin/inventario/{movimientos,reportes/kardex,reportes/mermas}/` y el centinela `inventory_movements.reasonCode`
+de `/api/health`.
+
+### Cómo aplicar la migración (obligatorio y en este orden)
+
+1. **SQL primero.** En el editor SQL de Supabase, ejecutar `prisma/migrations/20261067_inventory_reason_codes/migration.sql`
+   (es aditiva e idempotente: se puede repetir sin daño). Añade una columna nula sin valor por defecto —PostgreSQL no reescribe la
+   tabla: es instantáneo aunque el ledger sea enorme— y dos `CHECK` que se crean `NOT VALID` y se validan aparte. No crea índices.
+2. **Código después.** Con el SQL aplicado y el código viejo no pasa nada (la columna se ignora). **Con el código nuevo y SIN el SQL,
+   el inventario y los pedidos fallan**: Prisma pide todas las columnas del movimiento en cada lectura y cada venta escribe uno. Por
+   eso `/api/health` tiene un centinela nuevo (`inventory_movements.reasonCode`): si el despliegue se adelanta, el health lo dice.
+3. Dependencia: `20261059` (INV-3a) ya tiene que estar aplicada (ahí nació `unitCost`, que el informe valora). Si las migraciones
+   pendientes de las entregas anteriores (`20261059`, `20261060`, `20261066`) todavía no se aplicaron, se aplican primero y en su orden.
+
+## 22. Verificación de INV-4b (2026-10-15)
+
+Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`). La migración `20261067` se aplicó **solo** a esas bases desechables
+(dos veces seguidas, para comprobar que es idempotente, y sin diferencias de esquema contra `schema.prisma`); **no se aplicó a
+ninguna base real: eso lo hace el dueño en Supabase, antes de desplegar**. Sin Supabase real, Vercel, lector de código de barras
+físico, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ven las pantallas** (el formulario con el selector de motivo,
+el cuarto informe y el hub): el recorrido E2E comprueba qué dicen y qué hacen, no su aspecto; ni capturas ni revisión visual en móvil.
+**Tampoco se midió con un ledger grande**: el informe lee los ajustes y daños de un rango de fechas con el índice `(companyId,
+createdAt)` que ya existía (a propósito no se creó ninguno), y se probó que el archivo trae todos los movimientos y que las páginas
+no repiten ni pierden ninguno, no cuánto tarda con millones de movimientos ni con la latencia de una base remota.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo) |
+| `bun run build` (Turbopack) y `bun run presupuesto` | verdes; 2 rutas nuevas compiladas (una página y una descarga); entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB (sin cambio). Indicador general de JavaScript de cliente 8.905/9.200 KB (97 %, aviso amarillo, no un tope duro; 8.900 en INV-4a) |
+| Unitarias (`bun run test`) | 4492 pruebas: 4485 pasan, 0 fallan, 7 omitidas heredadas |
+| PostgreSQL (`bun run test:db`, base `supplytest` como en CI) | **874/874** (en esta corrida el archivo que a veces falla bajo carga, `supply-v2-slice9`, pasó) |
+| Pruebas nuevas | 12 puras del catálogo y las reglas de motivo (`inventario-motivos.test.ts`), 12 puras del informe y su CSV (`inventario-mermas.test.ts`), 7 guardias nuevas (`inventario-permisos.test.ts`, ya 94), 10 contra PostgreSQL de los escritores (`inventory-motivos.db.test.ts`), 11 contra PostgreSQL del informe (`inventory-mermas.db.test.ts`) y un recorrido E2E nuevo; además se actualizaron `inventario-inv1`, `inventario-reportes` y el recorrido principal de `inventario-admin` (el formulario ahora exige el motivo) |
+| E2E (`bun run e2e:limpio`, escritorio) | **74/74** en la corrida combinada final: `inventario-admin` (13: los 12 de antes más el de mermas), `comercio-experiencia`, `pedidos-membego`, `pos-membego`, `carrito-checkout`, `catalogo-admin`, `catalogo-api` y `catalogo-publico`. Ver «la primera corrida» abajo |
+| Mutaciones | 138 en tres capas: 125 detectadas a la primera, 13 sobrevivieron (1 estaba mal escrita, 9 eran pruebas débiles y 3 son equivalentes o inalcanzables); ver abajo |
+
+Qué cubre el recorrido E2E: el formulario de la ficha exige el motivo del catálogo (solo los de su clase: no ofrece «Apareció
+mercancía» en un faltante), «Otro» pide detalle (vacío lo frena el navegador; solo espacios, el aviso de la pantalla) y nada se
+escribe → un ajuste, un daño y una baja con su motivo y su detalle, el historial de la ficha enseña «Motivo: …» solo en lo que lo
+lleva (la entrada, la transferencia y el conteo —que pone «Diferencia de conteo» solo— se comprueban contra el ledger real) → el
+cuarto informe del hub → el resumen (lo perdido no incluye lo dañado ni los sobrantes; el costo de A y los 5 sin costo de B contados
+aparte), cada grupo por motivo de lo que más vale a lo que menos, el detalle sin ventas, entradas ni recuperar, el filtro por motivo
+con un clic, el CSV con los mismos filtros → y con `costos` negada el informe y el archivo siguen funcionando **sin una sola
+cifra de dinero ni columna de costo**.
+
+Qué cubren las pruebas contra PostgreSQL: que el código llega al ledger por las DOS puertas (un movimiento y un lote), solo en
+ajustes y daños; que un motivo de otra clase, inventado, «Otro» sin detalle o ninguno cuando se exige se rechaza SIN escribir ni mover
+el saldo; que el texto nunca queda vacío (sin detalle, la etiqueta); la distinción entre daño y baja («devuelto al proveedor» sirve para
+dar de baja, no para dañar); que recuperar no lleva motivo aunque se exija; el conteo manual y el de una sesión; la idempotencia y
+la bitácora; lo que vigila la base (formato, tipo, inmutabilidad); y en el informe: qué cuenta como merma y qué no, el valor con el costo
+congelado y lo sin costo aparte, que sin `costos` no se lee ni uno, el orden, el rango en el calendario de la empresa (primer y último
+día), los filtros (motivo, «sin motivo», sucursal, producto por nombre, SKU y código de barras), el orden fijo cuando dos movimientos
+caen a la misma hora, las páginas y el archivo, que la clase que calcula el SQL es la que calcula el código para cada ajuste y daño, y el
+aislamiento entre empresas.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **La primera corrida del E2E combinado falló, y era mi prueba.** El recorrido principal esperaba el aviso de la pantalla al
+  registrar «Otro» sin detalle, pero el campo es `required` y el navegador frena el envío antes (el aviso nunca llega a mostrarse).
+  La app hacía lo correcto: se corrigió la prueba para cubrir los dos caminos (vacío → navegador; solo espacios → aviso de la
+  pantalla). El spec repitió completo (13/13) y después la combinada (74/74). En esa primera corrida 62 pasaron, 1 falló y 11 no
+  llegaron a correr porque dependían de ese recorrido.
+- **Mutaciones: 138 ejecutadas** (66 de lo puro, el CSV y los filtros; 44 de los escritores y las lecturas contra PostgreSQL; 28 de
+  las guardias estáticas y la migración). 125 detectadas a la primera; **13 sobrevivieron**:
+  - *1 mal escrita* («ordena el arreglo recibido»): mi mutación copiaba el arreglo, que es lo mismo que el original. Rehecha de
+    verdad (`filas.sort` en sitio) se detecta.
+  - *9 eran pruebas débiles, ya reforzadas y detectadas*: la prueba del catálogo comparaba el catálogo **contra sí mismo** (si «vencido»
+    dejaba de poder darse de baja nadie lo notaba): ahora la lista exacta de cada clase está escrita en la prueba; un código inventado se
+    rechazaba, pero con el mensaje de otra causa («no sirve para esto» en vez de «no está en el catálogo»); un valor desconocido y un
+    cero conocido se ordenaban igual; la prueba del CSV sin costos nunca traía un movimiento con costo, así que mostrar las columnas
+    de costo siempre pasaba; y contra PostgreSQL faltaban: daño frente a baja (la clase de cada una), recuperar cuando se exige motivo,
+    buscar por código de barras y el orden fijo cuando dos movimientos caen a la misma hora.
+  - *3 equivalentes o inalcanzables*: (1) incluir `SALE` en el `IN` de tipos del informe no cambia nada, porque la clase de una venta
+    es nula y se descarta después; (2) la clase «daño» sin mirar las cubetas no cambia nada, porque la base ya obliga a que todo
+    `DAMAGE` vaya de vendible a dañado (`CHECK` de `20261038`); (3) quitar la guarda `MOTIVO_NO_APLICA` de `escribirMovimiento`: ninguna
+    función pública puede pasarle un código con un tipo que no sea ajuste o daño, así que es defensa en profundidad que hoy no se
+    alcanza; la respalda el `CHECK` de la base, que sí se prueba directo (prueba 9).
+- **Las pruebas encontraron errores míos antes de que llegaran a nadie** (aritmética de un caso, un campo de la bitácora que se
+  llama `accion`, expresiones de las guardias que se tragaban la siguiente consulta, una guardia de «sin dinero» que confundía el
+  encabezado `Concepto;Valor` con dinero): todos corregidos en el momento, ninguno llegó a producción.
+- **Una guardia de diseño que ya existía mandó**: el informe usa `BotonExportar`, `Alert` y los colores de tema, sin subir el techo de
+  deuda de diseño.
+- **La tabla de rutas del documento de separación se regeneró** (`bun run docs:rutas`): +1 página y +1 descarga del panel.
+- En esta máquina el servidor de E2E imprime `TypeError: fetch failed` (Supabase Auth inexistente en el arnés): ruido previo, no
+  afecta a los resultados.
+
+### Lo que NO se verificó
+
+Aspecto visual y móvil; un ledger grande; Supabase real (incluida la aplicación real del SQL y el comportamiento del `/api/health`
+contra esa base); lector de código de barras físico; Safari. El informe **no incluye** las pérdidas en tránsito de las
+transferencias ni motivos propios por empresa (ver §21), y lo anterior a la migración sale «Sin motivo codificado».

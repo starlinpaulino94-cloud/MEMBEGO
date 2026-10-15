@@ -149,8 +149,10 @@ test('las filas salen con fecha y hora de la ZONA DE LA EMPRESA, tipo en palabra
   assert.equal(c[0], '2030-01-01 06:00:00', '10:00 UTC son las 06:00 en Santo Domingo (UTC−4)')
   assert.deepEqual(c.slice(1, 5), ['Principal', 'Camiseta · Grande', 'CAM-001', 'Venta'])
   assert.deepEqual(c.slice(5, 9), ['2', '-2', '10', '8'])
-  assert.equal(c[10], 'Sistema')
-  assert.equal(c[11], 'Pedido 12345678')
+  assert.equal(c[9], '', 'sin motivo del catálogo (una venta no lo lleva)')
+  assert.equal(c[10], 'Factura 123', 'el texto del movimiento va como detalle')
+  assert.equal(c[11], 'Sistema')
+  assert.equal(c[12], 'Pedido 12345678')
   assert.equal(fechaHoraCsv(new Date('2030-07-01T03:59:59.000Z'), 'America/Santo_Domingo'), '2030-06-30 23:59:59')
 })
 
@@ -180,4 +182,15 @@ test('el filtro de fechas son días LOCALES de la empresa, ambos extremos inclui
   assert.deepEqual(rangoDeFechas({}, 'America/Santo_Domingo'), {})
   assert.equal(rangoDeFechas({ hasta: '2030-03-05' }, 'America/Santo_Domingo').gte, undefined)
   assert.equal(rangoDeFechas({ desde: '2030-03-04' }, 'America/Santo_Domingo').lt, undefined)
+})
+
+test('INV-4b · el motivo del catálogo sale con su etiqueta y el detalle aparte; si el detalle es la propia etiqueta no se repite; un código viejo se enseña tal cual', () => {
+  const encabezados = movimientosToCsv([], contexto).split('\n').find((l) => l.startsWith('Fecha y hora'))!
+  assert.match(encabezados, /Existencia despues;Motivo \(catalogo\);Detalle del motivo;Usuario;Referencia/)
+  const columnas = (f: Partial<FilaExportada>) => movimientosToCsv([fila({ tipo: 'ADJUSTMENT', efecto: -3, ...f })], contexto).split('\n').find((l) => l.includes('CAM-001'))!.split(';').slice(9, 11)
+  assert.deepEqual(columnas({ motivoCodigo: 'THEFT', motivo: 'Se llevaron una caja' }), ['Robo o hurto', 'Se llevaron una caja'])
+  assert.deepEqual(columnas({ motivoCodigo: 'EXPIRED', motivo: 'Vencido' }), ['Vencido', ''], 'sin detalle se guardó la etiqueta: no se repite')
+  assert.deepEqual(columnas({ motivoCodigo: 'MOTIVO_RETIRADO', motivo: 'x' }), ['MOTIVO_RETIRADO', 'x'], 'un código que el catálogo ya no conoce no se esconde')
+  assert.deepEqual(columnas({ motivoCodigo: null, motivo: 'Faltante de antes' }), ['', 'Faltante de antes'], 'lo anterior a los motivos conserva su texto')
+  assert.deepEqual(columnas({ motivoCodigo: 'OTHER', motivo: '=HYPERLINK("http://x")' }), ['Otro', `"'=HYPERLINK(""http://x"")"`], 'el detalle con fórmula se neutraliza')
 })

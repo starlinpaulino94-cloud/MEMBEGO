@@ -382,8 +382,8 @@ test('kardexToCsv con costos: resumen, valores sin separador de miles, lo que no
   assert.match(csv, /^Valor de las salidas \(solo las que tienen costo\);18\.80$/m)
   assert.match(csv, /^Unidades que entraron SIN costo \(no suman al valor\);6$/m)
   assert.match(csv, /^Datos completos;Si$/m)
-  assert.match(csv, /Fecha y hora;Sucursal;Movimiento;Entra;Sale;Saldo;Cambio de cubeta;Costo unitario;Valor;Motivo;Usuario;Referencia/)
-  assert.match(csv, /Entrada de mercancía;10;0;20;;4\.50;45\.00;"'=HYPERLINK\(""http:\/\/x""\)";Ana;/, 'el motivo con fórmula queda entre comillas y con apóstrofo')
+  assert.match(csv, /Fecha y hora;Sucursal;Movimiento;Entra;Sale;Saldo;Cambio de cubeta;Costo unitario;Valor;Motivo \(catalogo\);Detalle del motivo;Usuario;Referencia/)
+  assert.match(csv, /Entrada de mercancía;10;0;20;;4\.50;45\.00;;"'=HYPERLINK\(""http:\/\/x""\)";Ana;/, 'el detalle con fórmula queda entre comillas y con apóstrofo (la columna del motivo del catálogo va vacía)')
   assert.match(csv, /Entrada de mercancía;6;0;26;;;;/, 'sin costo conocido: costo y valor VACÍOS')
   assert.match(csv, /Venta;0;4;22;;4\.70;18\.80;/)
   assert.match(csv, /Daño;0;0;22;de vendible a dañado;;;/, 'dañar no entra ni sale: sin valor')
@@ -396,7 +396,7 @@ test('kardexToCsv con costos: resumen, valores sin separador de miles, lo que no
 test('kardexToCsv sin costos: no hay columnas ni totales de costo, ni la cuenta de lo que falta', () => {
   const csv = kardexToCsv(kardexDePrueba(false), { zonaHoraria: ZONA, generadoEn: AHORA, tope: 20000 })
   assert.doesNotMatch(csv, /Costo unitario|Valor de las|SIN costo|;Valor;/i)
-  assert.match(csv, /Fecha y hora;Sucursal;Movimiento;Entra;Sale;Saldo;Cambio de cubeta;Motivo;Usuario;Referencia/)
+  assert.match(csv, /Fecha y hora;Sucursal;Movimiento;Entra;Sale;Saldo;Cambio de cubeta;Motivo \(catalogo\);Detalle del motivo;Usuario;Referencia/)
   assert.match(csv, /^Entradas;16$/m)
 })
 

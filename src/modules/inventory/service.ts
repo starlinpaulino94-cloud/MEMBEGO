@@ -30,6 +30,7 @@ import {
   validarLineasEntrada,
   type LineaEntrada,
 } from './entradas'
+import { MOTIVO_DE_CONTEO, resolverMotivo, type ClaseDeMotivo } from './motivos'
 import {
   MAX_LINEAS_CONTEO,
   MAX_MOTIVO_CANCELACION,
@@ -113,6 +114,16 @@ export interface EntradaBase {
   ahora?: Date
 }
 
+/**
+ * INV-4b · Lo que añaden los movimientos que se explican con un motivo del catálogo (ajuste, daño, baja): el CÓDIGO elegido y, si
+ * quien llama es una pantalla, la orden de exigirlo. `motivo` (el de `EntradaBase`) pasa a ser el DETALLE en texto libre.
+ */
+export interface ConMotivoCodificado {
+  motivoCodigo?: string | null
+  /** Las pantallas lo exigen; los procesos y las pruebas que no eligen un motivo siguen escribiendo solo texto. */
+  exigirMotivoCodificado?: boolean
+}
+
 export interface SaldoVista extends Saldo {
   disponible: number
 }
@@ -163,6 +174,13 @@ function motivoValido(m: unknown, obligatorio: boolean): string | null {
   if (!r.ok) fallo('MOTIVO_INVALIDO', r.error)
   if (obligatorio && !r.valor) fallo('MOTIVO_OBLIGATORIO', 'Escribe el motivo: un ajuste o un daño sin explicación es un faltante sin explicar.')
   return r.valor
+}
+
+/** INV-4b · El motivo de un ajuste, un daño o una baja: el código del catálogo (si se eligió) y el texto que queda en el movimiento. */
+function motivoCodificado(e: EntradaBase & ConMotivoCodificado, clase: ClaseDeMotivo): { codigo: string | null; texto: string | null } {
+  const r = resolverMotivo({ clase, codigo: e.motivoCodigo, detalle: e.motivo, exigirCodigo: e.exigirMotivoCodificado === true, textoObligatorio: true })
+  if (!r.ok) fallo(r.codigo, r.error)
+  return { codigo: r.codigo, texto: r.texto }
 }
 
 /** La referencia de un movimiento o reserva: tipo corto y id acotados (los fija el sistema, pero no se confía). */
@@ -229,6 +247,8 @@ interface MetaMovimiento {
    * valoraría; un número = ese costo (el de una línea de entrada).
    */
   costo?: Costo | null
+  /** INV-4b: el motivo del catálogo (solo un ajuste o un daño lo lleva). */
+  motivoCodigo?: string | null
 }
 
 /**
@@ -280,6 +300,7 @@ async function escribirMovimiento(
   m: Movimiento,
   meta: MetaMovimiento
 ): Promise<{ movimiento: InventoryMovement; saldo: Saldo }> {
+  if (meta.motivoCodigo && m.type !== 'ADJUSTMENT' && m.type !== 'DAMAGE') fallo('MOTIVO_NO_APLICA', 'Solo un ajuste o un daño se explica con un motivo del catálogo.')
   const nivel = await tx.inventoryLevel.findFirstOrThrow({ where: { id: nivelId, companyId } })
   const antes = cubetasDeSaldo(nivel)
   let despues
@@ -302,6 +323,7 @@ async function escribirMovimiento(
       previousOnHand: nivel.onHand,
       newOnHand: saldo.onHand,
       reason: m.reason ?? null,
+      reasonCode: meta.motivoCodigo ?? null,
       userId: meta.userId,
       referenceType: meta.referencia?.tipo ?? null,
       referenceId: meta.referencia?.id ?? null,
@@ -526,6 +548,8 @@ interface Plan {
   destino: Movimiento['destinationBucket']
   cantidad: number
   motivo: string | null
+  /** INV-4b: el motivo del catálogo (ajuste, daño, baja). */
+  motivoCodigo?: string | null
   /** Exige sucursal abierta (entradas); las salidas se permiten en una cerrada. */
   sucursalActiva: boolean
   /** Deja rastro en la bitácora de actividad (lo que hace una persona a mano). */
@@ -552,13 +576,14 @@ async function moverSimple(tx: Tx, companyId: string, e: EntradaBase, plan: Plan
     companyId,
     nivelId,
     { type: plan.tipo, sourceBucket: plan.origen, destinationBucket: plan.destino, quantity: plan.cantidad, reason: plan.motivo },
-    { userId: ctx.actorId, referencia: referenciaValida(e.referencia) ?? plan.referenciaPorDefecto ?? null, idempotencyKey: clave, costo: plan.costoEntrada }
+    { userId: ctx.actorId, referencia: referenciaValida(e.referencia) ?? plan.referenciaPorDefecto ?? null, idempotencyKey: clave, costo: plan.costoEntrada, motivoCodigo: plan.motivoCodigo ?? null }
   )
   if (plan.auditar) {
     await auditarInventario(tx, ctx, companyId, 'INVENTORY_STOCK_CHANGED', nivelId, {
       tipo: plan.tipo,
       cantidad: plan.cantidad,
       motivo: plan.motivo,
+      ...(plan.motivoCodigo ? { motivoCodigo: plan.motivoCodigo } : {}),
       sku: variante.sku,
       producto: variante.item.name,
       sucursal: sucursal.nombre,
@@ -597,23 +622,31 @@ export async function venderEnTx(tx: Tx, companyId: string, e: EntradaBase & { c
 }
 
 /** Se daña mercancía vendible: pasa a la cubeta de dañado (no se vende). */
-export async function danarEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number }, ctx: ContextoAuditoria) {
-  return moverSimple(tx, companyId, e, { tipo: 'DAMAGE', origen: 'AVAILABLE', destino: 'DAMAGED', cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, true), sucursalActiva: false, auditar: true }, ctx)
+export async function danarEnTx(tx: Tx, companyId: string, e: EntradaBase & ConMotivoCodificado & { cantidad: number }, ctx: ContextoAuditoria) {
+  const m = motivoCodificado(e, 'DANO')
+  return moverSimple(
+    tx,
+    companyId,
+    e,
+    { tipo: 'DAMAGE', origen: 'AVAILABLE', destino: 'DAMAGED', cantidad: cantidadValida(e.cantidad), motivo: m.texto, motivoCodigo: m.codigo, sucursalActiva: false, auditar: true },
+    ctx
+  )
 }
 
 /**
  * Corrige un descuadre: `cambio` positivo = sobrante, negativo = faltante. Solo
  * toca lo vendible: lo apartado se libera o se consume, no se «ajusta».
  */
-export async function ajustarEnTx(tx: Tx, companyId: string, e: EntradaBase & { cambio: number }, ctx: ContextoAuditoria) {
+export async function ajustarEnTx(tx: Tx, companyId: string, e: EntradaBase & ConMotivoCodificado & { cambio: number }, ctx: ContextoAuditoria) {
   if (typeof e.cambio !== 'number' || !Number.isInteger(e.cambio) || e.cambio === 0) fallo('CANTIDAD_INVALIDA', 'El ajuste debe ser un número entero distinto de cero.')
   const cantidad = cantidadValida(Math.abs(e.cambio))
   const sube = e.cambio > 0
+  const m = motivoCodificado(e, sube ? 'SOBRANTE' : 'FALTANTE')
   return moverSimple(
     tx,
     companyId,
     e,
-    { tipo: 'ADJUSTMENT', origen: sube ? null : 'AVAILABLE', destino: sube ? 'AVAILABLE' : null, cantidad, motivo: motivoValido(e.motivo, true), sucursalActiva: sube, auditar: true },
+    { tipo: 'ADJUSTMENT', origen: sube ? null : 'AVAILABLE', destino: sube ? 'AVAILABLE' : null, cantidad, motivo: m.texto, motivoCodigo: m.codigo, sucursalActiva: sube, auditar: true },
     ctx
   )
 }
@@ -622,13 +655,16 @@ export async function ajustarEnTx(tx: Tx, companyId: string, e: EntradaBase & { 
  * Lo dañado se resuelve: resultó vendible (vuelve a lo vendible) o se da de baja
  * (sale del inventario). Es un ajuste, y por eso lleva motivo.
  */
-export async function resolverDanadoEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number; destino: 'VENDIBLE' | 'BAJA' }, ctx: ContextoAuditoria) {
+export async function resolverDanadoEnTx(tx: Tx, companyId: string, e: EntradaBase & ConMotivoCodificado & { cantidad: number; destino: 'VENDIBLE' | 'BAJA' }, ctx: ContextoAuditoria) {
   if (e.destino !== 'VENDIBLE' && e.destino !== 'BAJA') fallo('MOVIMIENTO_INVALIDO', 'Indica si lo dañado vuelve a venderse o se da de baja.')
+  // Recuperar lo dañado no es una pérdida: no lleva motivo del catálogo (solo el texto). Dar de baja sí.
+  if (e.destino === 'VENDIBLE' && e.motivoCodigo) fallo('MOTIVO_NO_APLICA', 'Recuperar lo dañado no es una pérdida: no lleva motivo del catálogo.')
+  const m = e.destino === 'BAJA' ? motivoCodificado(e, 'BAJA') : { codigo: null, texto: motivoValido(e.motivo, true) }
   return moverSimple(
     tx,
     companyId,
     e,
-    { tipo: 'ADJUSTMENT', origen: 'DAMAGED', destino: e.destino === 'VENDIBLE' ? 'AVAILABLE' : null, cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, true), sucursalActiva: false, auditar: true },
+    { tipo: 'ADJUSTMENT', origen: 'DAMAGED', destino: e.destino === 'VENDIBLE' ? 'AVAILABLE' : null, cantidad: cantidadValida(e.cantidad), motivo: m.texto, motivoCodigo: m.codigo, sucursalActiva: false, auditar: true },
     ctx
   )
 }
@@ -665,7 +701,7 @@ export async function contarEnTx(
     companyId,
     nivelId,
     { type: 'ADJUSTMENT', sourceBucket: sube ? null : 'AVAILABLE', destinationBucket: sube ? 'AVAILABLE' : null, quantity: Math.abs(diferencia), reason: motivo },
-    { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: randomUUID() } }
+    { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: randomUUID() }, motivoCodigo: MOTIVO_DE_CONTEO }
   )
   await auditarInventario(tx, ctx, companyId, 'INVENTORY_STOCK_CHANGED', nivelId, {
     tipo: 'ADJUSTMENT',
@@ -1092,6 +1128,7 @@ async function escribirMovimientosPorLote(tx: Tx, companyId: string, items: read
         previousOnHand: i.antes.onHand,
         newOnHand: i.despues.onHand,
         reason: i.movimiento.reason ?? null,
+        reasonCode: i.meta.motivoCodigo ?? null,
         userId: i.meta.userId,
         referenceType: i.meta.referencia?.tipo ?? null,
         referenceId: i.meta.referencia?.id ?? null,
@@ -1648,7 +1685,7 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
       movimiento: x.plan.movimiento,
       antes: { onHand: x.fila.onHand, reserved: x.fila.reserved, damaged: x.fila.damaged },
       despues,
-      meta: { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: conteo.id } },
+      meta: { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: conteo.id }, motivoCodigo: MOTIVO_DE_CONTEO },
       varianteId: x.l.catalogVariantId,
     })
     idLineaDeItem.push(x.l.id)

@@ -126,8 +126,11 @@ model InventoryMovement {
   previousOnHand Int
   newOnHand      Int
 
-  /// Obligatorio en ADJUSTMENT y DAMAGE.
+  /// Obligatorio en ADJUSTMENT y DAMAGE. Es el DETALLE en texto libre; el motivo contable es `reasonCode`.
   reason String?
+  /// INV-4b · El motivo del catálogo (`modules/inventory/motivos.ts`): `EXPIRED`, `THEFT`, `COUNT_DIFFERENCE`… Solo lo llevan los
+  /// ajustes y los daños, y NULL en todo lo anterior a INV-4b (el ledger no se reescribe).
+  reasonCode String?
   /// Quién lo hizo (null = el sistema: un vencimiento, un proceso). Sin FK: un
   /// usuario que se borra no puede reescribir el ledger.
   userId String?

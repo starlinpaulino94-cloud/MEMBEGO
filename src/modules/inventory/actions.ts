@@ -128,7 +128,10 @@ export interface EntradaMovimiento {
   varianteId: string
   sucursalId: string
   cantidad: number
+  /** El DETALLE en texto libre. En un ajuste, un daño o una baja el motivo se ELIGE (`motivoCodigo`) y esto lo completa. */
   motivo?: string | null
+  /** INV-4b: el motivo del catálogo; lo exigen el ajuste, el daño y dar de baja lo dañado. */
+  motivoCodigo?: string | null
   clave?: string | null
   /** INV-3a: solo lo lee «registrar entrada». Costo unitario de lo que llega, sin impuestos; exige la función «costos». */
   costo?: string | null
@@ -181,30 +184,39 @@ export async function registrarDevolucionInventario(entrada: EntradaMovimiento):
   )
 }
 
-/** Mercancía dañada: sale de lo vendible a la cubeta de dañado. Motivo obligatorio. */
+/** Mercancía dañada: sale de lo vendible a la cubeta de dañado. El motivo del catálogo es obligatorio. */
 export async function registrarDanoInventario(entrada: EntradaMovimiento): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    danarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx),
+    danarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true, idempotencyKey: clave(e.clave) }, ctx),
     () => true
   )
 }
 
-/** Resuelve lo dañado: vuelve a venderse o se da de baja. Motivo obligatorio. */
+/** Resuelve lo dañado: vuelve a venderse (con su motivo en texto) o se da de baja (con un motivo del catálogo). */
 export async function resolverDanadoInventario(entrada: EntradaMovimiento & { destino: 'VENDIBLE' | 'BAJA' }): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
     resolverDanadoEnTx(
       tx,
       companyId,
-      { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave), destino: e.destino as 'VENDIBLE' | 'BAJA' },
+      {
+        varianteId: texto(e.varianteId),
+        sucursalId: texto(e.sucursalId),
+        cantidad: e.cantidad as number,
+        motivo: e.motivo as string | null,
+        // Dar de baja se explica con un motivo del catálogo; recuperar lo dañado, no (no es una pérdida).
+        ...(e.destino === 'BAJA' ? { motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true } : {}),
+        idempotencyKey: clave(e.clave),
+        destino: e.destino as 'VENDIBLE' | 'BAJA',
+      },
       ctx
     )
   )
 }
 
-/** Corrige un descuadre: `cambio` positivo = sobrante, negativo = faltante. Motivo obligatorio. */
+/** Corrige un descuadre: `cambio` positivo = sobrante, negativo = faltante. El motivo del catálogo es obligatorio. */
 export async function ajustarInventario(entrada: Omit<EntradaMovimiento, 'cantidad'> & { cambio: number }): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    ajustarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cambio: e.cambio as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx),
+    ajustarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cambio: e.cambio as number, motivo: e.motivo as string | null, motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true, idempotencyKey: clave(e.clave) }, ctx),
     (e) => typeof e.cambio === 'number' && e.cambio < 0
   )
 }

@@ -92,6 +92,8 @@ export interface MovimientoParaKardex {
   origen: Cubeta | null
   destino: Cubeta | null
   motivo: string | null
+  /** INV-4b: el motivo del catálogo (ajustes y daños); null en lo demás y en todo lo anterior a INV-4b. */
+  motivoCodigo?: string | null
   referenciaTipo: string | null
   referenciaId: string | null
   usuarioNombre: string | null

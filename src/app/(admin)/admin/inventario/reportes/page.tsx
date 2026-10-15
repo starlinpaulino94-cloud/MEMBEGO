@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BookOpen, PackageX, RefreshCw } from 'lucide-react'
+import { BookOpen, PackageX, RefreshCw, TrendingDown } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { puedeFuncion, requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
@@ -11,8 +11,8 @@ import { DIAS_EXCESO_COBERTURA, DIAS_POCA_COBERTURA } from '@/modules/inventory/
 export const dynamic = 'force-dynamic'
 
 /**
- * REPORTES DE EXISTENCIAS (INV-4a): la puerta a los tres informes que responden «qué pasó con este producto», «qué tengo parado» y
- * «qué se me va a acabar o me sobra». Cada informe es su propia pantalla (con su CSV) y todos respetan la función `costos`: quien
+ * REPORTES DE EXISTENCIAS (INV-4a): la puerta a los informes que responden «qué pasó con este producto», «qué tengo parado», «qué se me va a acabar o me
+ * sobra» (INV-4a) y «cuánto perdí y por qué» (INV-4b). Cada informe es su propia pantalla (con su CSV) y todos respetan la función `costos`: quien
  * no la tiene ve unidades y días, nunca dinero.
  */
 export default async function ReportesInventarioPage() {
@@ -36,6 +36,13 @@ export default async function ReportesInventarioPage() {
       costos: 'Con costos: cuánto dinero tienen inmovilizado.',
     },
     {
+      href: '/admin/inventario/reportes/mermas',
+      icono: TrendingDown,
+      titulo: 'Mermas por motivo',
+      texto: 'Cuánto se perdió en un periodo y por qué: faltantes, bajas de lo dañado, sobrantes y lo dañado, cada uno por su motivo.',
+      costos: 'Con costos: cuánto costó lo perdido, motivo por motivo.',
+    },
+    {
       href: '/admin/inventario/reportes/rotacion',
       icono: RefreshCw,
       titulo: 'Rotación y cobertura',
@@ -49,7 +56,7 @@ export default async function ReportesInventarioPage() {
       <PageHeader title="Reportes de existencias" description="Lo que pasó con cada producto, lo que tienes parado y lo que se te acaba o te sobra." />
       <NavegacionInventario actual="reportes" />
 
-      <ul className="grid gap-4 md:grid-cols-3" aria-label="Informes">
+      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Informes">
         {informes.map((i) => (
           <li key={i.href}>
             <Link href={i.href} className="block h-full rounded-xl transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">

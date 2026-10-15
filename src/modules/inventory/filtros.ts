@@ -3,6 +3,8 @@ import { esEstadoOrden, type EstadoOrden } from './compras'
 import { TIPOS_DE_MOVIMIENTO } from './domain'
 import type { FiltrosReposicion } from './reposicion'
 import { PAGINA_MAXIMA_REPORTES, esEstadoCobertura, periodoValido, PERIODO_POR_DEFECTO, type FiltrosKardex, type FiltrosRotacion, type FiltrosSinVentas } from './reportes'
+import { FILTRO_SIN_MOTIVO, type FiltrosMermas } from './mermas'
+import { esMotivoDelCatalogo } from './motivos'
 
 /**
  * COMMERCE CORE · inventario — los filtros de la pantalla de movimientos y de su
@@ -436,6 +438,34 @@ export function consultaDeFiltrosRotacion(f: FiltrosRotacion, pagina: number = f
   if (f.sucursalId) p.set('sucursal', f.sucursalId)
   if (f.q) p.set('q', f.q)
   if (f.estado) p.set('estado', f.estado)
+  if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}
+
+/**
+ * INV-4b · La URL de «mermas por motivo»: el rango de días (locales), la sucursal, el motivo (un código del catálogo o `sin`), el
+ * texto del producto y la página. Un motivo que el catálogo no conoce se ignora (no filtra nada), igual que una sucursal ajena.
+ */
+export function leerFiltrosMermas(sp: ParametrosUrl): FiltrosMermas {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const motivo = primero(sp.motivo)
+  return {
+    ...(filtros.desde ? { desde: filtros.desde } : {}),
+    ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(motivo === FILTRO_SIN_MOTIVO || esMotivoDelCatalogo(motivo) ? { motivo } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+export function consultaDeFiltrosMermas(f: FiltrosMermas, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.desde) p.set('desde', f.desde)
+  if (f.hasta) p.set('hasta', f.hasta)
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.motivo) p.set('motivo', f.motivo)
+  if (f.q) p.set('q', f.q)
   if (pagina > 1) p.set('pagina', String(pagina))
   return p.toString()
 }

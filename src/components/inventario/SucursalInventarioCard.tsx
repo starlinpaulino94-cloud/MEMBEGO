@@ -15,6 +15,7 @@ import {
   resolverDanadoInventario,
 } from '@/modules/inventory/actions'
 import { BADGE_ESTADO_STOCK, ETIQUETA_ESTADO_STOCK, OPERACIONES, formatearCantidad, type OperacionManual } from '@/modules/inventory/formato'
+import { MOTIVO_OTRO, motivosDeClase } from '@/modules/inventory/motivos'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -72,6 +73,8 @@ export function SucursalInventarioCard({
   // de movimiento (también controlado) a su primera opción sin avisar a React.
   const [cantidad, setCantidad] = useState('')
   const [motivo, setMotivo] = useState('')
+  // INV-4b: el motivo del catálogo (ajuste, daño, baja); `motivo` pasa a ser el detalle en texto libre.
+  const [motivoCodigo, setMotivoCodigo] = useState('')
   const [costo, setCosto] = useState('')
   const clave = useRef(nuevaClave())
   const k = saldo.sucursalId
@@ -86,7 +89,15 @@ export function SucursalInventarioCard({
       toast.error(operacion === 'CONTEO' ? 'Escribe cuántas unidades contaste (0 o más).' : 'Escribe una cantidad entera de 1 en adelante.')
       return
     }
-    const base = { varianteId, sucursalId: saldo.sucursalId, motivo, clave: clave.current }
+    if (def.claseMotivo && motivoCodigo === '') {
+      toast.error('Elige el motivo.')
+      return
+    }
+    if (def.claseMotivo && motivoCodigo === MOTIVO_OTRO && motivo.trim() === '') {
+      toast.error('Con «Otro» escribe el detalle: por sí solo no explica nada.')
+      return
+    }
+    const base = { varianteId, sucursalId: saldo.sucursalId, motivo, ...(def.claseMotivo ? { motivoCodigo } : {}), clave: clave.current }
     start(async () => {
       let r: { ok: true; mensaje: string } | { ok: false; error: string }
       switch (operacion) {
@@ -133,6 +144,7 @@ export function SucursalInventarioCard({
       clave.current = nuevaClave()
       setCantidad('')
       setMotivo('')
+      setMotivoCodigo('')
       setCosto('')
       router.refresh()
     })
@@ -206,7 +218,11 @@ export function SucursalInventarioCard({
                   <select
                     id={`op-${k}`}
                     value={operacion}
-                    onChange={(e) => setOperacion(e.target.value as OperacionManual)}
+                    onChange={(e) => {
+                      setOperacion(e.target.value as OperacionManual)
+                      // Los motivos dependen de la operación: el que se había elegido puede no servir para la nueva.
+                      setMotivoCodigo('')
+                    }}
                     className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
                   >
                     {disponibles.map((o) => (
@@ -229,10 +245,45 @@ export function SucursalInventarioCard({
                   <p className="text-xs text-muted-foreground">Con costo, el costo promedio del producto se actualiza; sin él, no cambia.</p>
                 </div>
               )}
-              <div className="space-y-1.5">
-                <Label htmlFor={`motivo-${k}`}>{def.motivoObligatorio ? 'Motivo *' : 'Motivo (opcional)'}</Label>
-                <Input id={`motivo-${k}`} name="motivo" maxLength={300} required={def.motivoObligatorio} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={def.motivoObligatorio ? 'Qué pasó' : 'Ej: factura 123 del proveedor'} />
-              </div>
+              {def.claseMotivo ? (
+                <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr]">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`motivo-codigo-${k}`}>Motivo *</Label>
+                    <select
+                      id={`motivo-codigo-${k}`}
+                      name="motivoCodigo"
+                      required
+                      value={motivoCodigo}
+                      onChange={(e) => setMotivoCodigo(e.target.value)}
+                      className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="">Elige el motivo…</option>
+                      {motivosDeClase(def.claseMotivo).map((m) => (
+                        <option key={m.codigo} value={m.codigo}>
+                          {m.etiqueta}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`motivo-${k}`}>{motivoCodigo === MOTIVO_OTRO ? 'Detalle *' : 'Detalle (opcional)'}</Label>
+                    <Input
+                      id={`motivo-${k}`}
+                      name="motivo"
+                      maxLength={300}
+                      required={motivoCodigo === MOTIVO_OTRO}
+                      value={motivo}
+                      onChange={(e) => setMotivo(e.target.value)}
+                      placeholder={motivoCodigo === MOTIVO_OTRO ? 'Qué pasó' : 'Ej: lote 12, estante 3'}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`motivo-${k}`}>{def.motivoObligatorio ? 'Motivo *' : 'Motivo (opcional)'}</Label>
+                  <Input id={`motivo-${k}`} name="motivo" maxLength={300} required={def.motivoObligatorio} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={def.motivoObligatorio ? 'Qué pasó' : 'Ej: factura 123 del proveedor'} />
+                </div>
+              )}
               <Button type="submit" size="sm" disabled={pending}>
                 {pending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
                 Registrar

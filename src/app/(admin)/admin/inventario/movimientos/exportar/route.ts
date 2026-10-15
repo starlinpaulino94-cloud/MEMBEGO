@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
       existenciaAntes: m.previousOnHand,
       existenciaDespues: m.newOnHand,
       motivo: m.motivo,
+      motivoCodigo: m.motivoCodigo,
       usuario: m.usuarioNombre,
       referenciaTipo: m.referenciaTipo,
       referenciaId: m.referenciaId,

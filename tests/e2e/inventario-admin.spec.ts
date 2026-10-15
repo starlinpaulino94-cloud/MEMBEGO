@@ -45,11 +45,16 @@ async function cifra(t: Locator, etiqueta: string): Promise<number> {
   return Number(m[1].replace(/[.,]/g, ''))
 }
 
-async function registrar(p: Page, sucursal: string, o: { operacion: string; cantidad: number; motivo?: string }) {
+/**
+ * Llena el formulario de movimientos de una sucursal. `codigo` es el motivo del catálogo (ajuste, daño y baja lo piden) y entonces
+ * `motivo` es su DETALLE; en las demás operaciones `motivo` es el texto de siempre.
+ */
+async function registrar(p: Page, sucursal: string, o: { operacion: string; cantidad: number; motivo?: string; codigo?: string }) {
   const f = p.getByRole('form', { name: `Registrar movimiento en ${sucursal}` })
   await f.getByLabel('Movimiento').selectOption({ label: o.operacion })
   await f.getByRole('textbox').first().fill(String(o.cantidad))
-  if (o.motivo !== undefined) await f.getByLabel(/^Motivo/).fill(o.motivo)
+  if (o.codigo !== undefined) await f.getByLabel('Motivo *').selectOption({ label: o.codigo })
+  if (o.motivo !== undefined) await f.getByLabel(o.codigo !== undefined ? /^Detalle/ : /^Motivo/).fill(o.motivo)
   await f.getByRole('button', { name: 'Registrar' }).click()
 }
 
@@ -121,21 +126,37 @@ test.describe('Inventario · panel', () => {
     await registrar(p, 'Principal', { operacion: 'Ajuste: faltante', cantidad: 3 })
     await expect(p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByLabel('Motivo *')).toBeVisible()
     expect(await cifra(principal, 'Disponible')).toBe(10)
-    // …y con motivo, baja.
-    await p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByLabel('Motivo *').fill('Merma')
-    await p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByRole('button', { name: 'Registrar' }).click()
+    // …y eligiendo el motivo del catálogo (con su detalle), baja. Con «Otro» el detalle es obligatorio.
+    const formulario = p.getByRole('form', { name: 'Registrar movimiento en Principal' })
+    await expect(formulario.getByLabel('Motivo *').locator('option')).toContainText(['Elige el motivo…', 'Vencido', 'Robo o hurto', 'Pérdida o extravío', 'Muestra o regalo', 'Consumo interno', 'Devuelto al proveedor', 'Diferencia de conteo', 'Otro'])
+    await expect(formulario.getByLabel('Motivo *').locator('option', { hasText: 'Apareció mercancía' })).toHaveCount(0) // ese es de sobrantes
+    await formulario.getByLabel('Motivo *').selectOption({ label: 'Otro' })
+    const detalle = formulario.getByLabel('Detalle *')
+    await expect(detalle).toBeVisible()
+    // Vacío: lo frena el propio navegador (el campo es `required` con «Otro»); no se envía nada.
+    await formulario.getByRole('button', { name: 'Registrar' }).click()
+    expect(await detalle.evaluate((el) => (el as HTMLInputElement).validity.valueMissing)).toBe(true)
+    expect(await cifra(principal, 'Disponible')).toBe(10)
+    // Solo espacios: el navegador lo da por escrito, y lo frena la pantalla (y, detrás, el servidor) con su aviso.
+    await detalle.fill('   ')
+    await formulario.getByRole('button', { name: 'Registrar' }).click()
+    await expect(p.getByText(/Con «Otro» escribe el detalle/).first()).toBeVisible({ timeout: 15_000 })
+    expect(await cifra(principal, 'Disponible')).toBe(10)
+    await formulario.getByLabel('Motivo *').selectOption({ label: 'Vencido' })
+    await formulario.getByLabel(/^Detalle/).fill('Merma')
+    await formulario.getByRole('button', { name: 'Registrar' }).click()
     await expect.poll(() => cifra(principal, 'Disponible'), { timeout: 15_000 }).toBe(7)
 
     // ── Un faltante imposible avisa y no mueve nada ───────────────────────
-    await registrar(p, 'Principal', { operacion: 'Ajuste: faltante', cantidad: 99, motivo: 'Imposible' })
+    await registrar(p, 'Principal', { operacion: 'Ajuste: faltante', cantidad: 99, codigo: 'Pérdida o extravío', motivo: 'Imposible' })
     await expect(p.getByText(/No hay suficiente: pides 99 y hay 7 disponible/).first()).toBeVisible({ timeout: 15_000 })
     expect(await cifra(principal, 'Disponible')).toBe(7)
 
     // ── Daño y baja de lo dañado ──────────────────────────────────────────
-    await registrar(p, 'Principal', { operacion: 'Mercancía dañada', cantidad: 2, motivo: 'Se mojaron' })
+    await registrar(p, 'Principal', { operacion: 'Mercancía dañada', cantidad: 2, codigo: 'Mal almacenamiento', motivo: 'Se mojaron' })
     await expect.poll(() => cifra(principal, 'Dañado'), { timeout: 15_000 }).toBe(2)
     expect(await cifra(principal, 'Disponible')).toBe(5)
-    await registrar(p, 'Principal', { operacion: 'Dar de baja lo dañado', cantidad: 2, motivo: 'Irrecuperable' })
+    await registrar(p, 'Principal', { operacion: 'Dar de baja lo dañado', cantidad: 2, codigo: 'Defecto de fábrica', motivo: 'Irrecuperable' })
     await expect.poll(() => cifra(principal, 'Dañado'), { timeout: 15_000 }).toBe(0)
     // Sin dañados, esa operación deja de ofrecerse.
     await expect(p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByLabel('Movimiento').locator('option', { hasText: 'Dar de baja lo dañado' })).toHaveCount(0)
@@ -192,6 +213,22 @@ test.describe('Inventario · panel', () => {
     await expect(historial.getByText('+10')).toBeVisible()
     await expect(historial.getByText('Merma')).toBeVisible()
     await expect(historial.getByText('Compra E2E')).toBeVisible()
+    // INV-4b: cada ajuste y cada daño lleva su motivo del catálogo (el conteo pone el suyo solo); la entrada, ninguno.
+    await expect(historial.getByText('Motivo: Vencido')).toBeVisible()
+    await expect(historial.getByText('Motivo: Mal almacenamiento')).toBeVisible()
+    await expect(historial.getByText('Motivo: Defecto de fábrica')).toBeVisible()
+    await expect(historial.getByText('Motivo: Diferencia de conteo')).toBeVisible()
+    await expect(historial.getByText(/^Motivo: /)).toHaveCount(4)
+    const codigos = await prismaDeArnes().inventoryMovement.findMany({ where: { companyId: con.id, level: { catalogVariantId: variante } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { type: true, reasonCode: true } })
+    expect(codigos.map((m) => [m.type, m.reasonCode])).toEqual([
+      ['PURCHASE', null],
+      ['ADJUSTMENT', 'EXPIRED'],
+      ['DAMAGE', 'STORAGE'],
+      ['ADJUSTMENT', 'DEFECT'],
+      ['TRANSFER_OUT', null],
+      ['TRANSFER_IN', null],
+      ['ADJUSTMENT', 'COUNT_DIFFERENCE'],
+    ])
     // Exactamente los 7 que hizo el recorrido: entrada, faltante, daño, baja,
     // las dos patas de la transferencia y el conteo (los rechazados no escriben).
     const filas = historial.getByRole('listitem')
@@ -1857,7 +1894,7 @@ test.describe('Inventario · panel', () => {
       await expect(p.getByRole('heading', { name: 'Reportes de existencias', level: 1 })).toBeVisible()
       await expect(vistas.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page')
       const informes = p.getByRole('list', { name: 'Informes' })
-      await expect(informes.getByRole('listitem')).toHaveCount(3)
+      await expect(informes.getByRole('listitem')).toHaveCount(4)
       await expect(p.getByText('Con costos: cuánto dinero tienen inmovilizado.')).toBeVisible()
 
       // ── Kardex: se busca el producto, y sus movimientos dejan el saldo ────
@@ -1992,6 +2029,158 @@ test.describe('Inventario · panel', () => {
         const t = await r.text()
         for (const dinero of ['500.00', '150.00', '20.00', 'Costo unitario', 'Valor inmovilizado', 'Costo de ventas', 'SIN costo', 'Dias de inventario']) expect(t, `${ruta}: se coló «${dinero}»`).not.toContain(dinero)
       }
+    } finally {
+      await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
+    }
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-4b · mermas por motivo: lo perdido, los sobrantes y lo dañado cada uno por su motivo, con su archivo — y quien no tiene «costos» no ve ni un peso', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    // Una empresa propia: el informe es de toda la empresa y tiene que contener solo lo de esta prueba.
+    const emp = await empresaCatalogo(sufijo, 'invmer', { capacidad: true })
+    const prisma = prismaDeArnes()
+    const principal = (await sucursalSembrada(emp.id, 'Principal')).id
+    const NA = `Jabón MER ${sufijo}`
+    const NB = `Cera MER ${sufijo}`
+    const mk = async (name: string, slug: string, sku: string) => {
+      const it = await itemSembrado(emp.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, price: 100, porDefecto: true }] })
+      return varianteDe(it.id)
+    }
+    const vA = await mk(NA, `jabon-mer-${sufijo}`, `MER-A-${sufijo}`)
+    const vB = await mk(NB, `cera-mer-${sufijo}`, `MER-B-${sufijo}`)
+    const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000)
+    const nivelA = await prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: vA, locationId: principal, onHand: 70, damaged: 4, createdAt: hace(60) } })
+    const nivelB = await prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: vB, locationId: principal, onHand: 20, createdAt: hace(60) } })
+    type Mov = { nivel: string; type: 'ADJUSTMENT' | 'DAMAGE' | 'PURCHASE' | 'SALE'; origen: 'AVAILABLE' | 'DAMAGED' | null; destino: 'AVAILABLE' | 'DAMAGED' | null; cantidad: number; dias: number; codigo: string | null; texto: string | null; costo: string | null }
+    const mov = (m: Mov) =>
+      prisma.inventoryMovement.create({
+        data: {
+          companyId: emp.id,
+          inventoryLevelId: m.nivel,
+          type: m.type,
+          sourceBucket: m.origen,
+          destinationBucket: m.destino,
+          quantity: m.cantidad,
+          previousOnHand: 100,
+          newOnHand: 100,
+          reason: m.texto,
+          reasonCode: m.codigo,
+          unitCost: m.costo,
+          createdAt: hace(m.dias),
+        },
+      })
+    // A (a 5.00): 100 entraron, se vendieron 3 y hubo de todo lo que explica un motivo. B (sin costo): un faltante.
+    await mov({ nivel: nivelA.id, type: 'PURCHASE', origen: null, destino: 'AVAILABLE', cantidad: 100, dias: 40, codigo: null, texto: null, costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'SALE', origen: 'AVAILABLE', destino: null, cantidad: 3, dias: 11, codigo: null, texto: null, costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'AVAILABLE', destino: null, cantidad: 4, dias: 10, codigo: 'EXPIRED', texto: 'Vencido', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'AVAILABLE', destino: null, cantidad: 2, dias: 9, codigo: 'THEFT', texto: 'Se llevaron dos de la vitrina', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'AVAILABLE', destino: null, cantidad: 1, dias: 8, codigo: null, texto: 'Faltante anterior a los motivos', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: null, destino: 'AVAILABLE', cantidad: 3, dias: 7, codigo: 'FOUND', texto: 'Apareció mercancía', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'DAMAGE', origen: 'AVAILABLE', destino: 'DAMAGED', cantidad: 6, dias: 6, codigo: 'HANDLING', texto: 'Golpe o mal manejo', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'DAMAGED', destino: null, cantidad: 2, dias: 5, codigo: 'EXPIRED', texto: 'Vencido', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'DAMAGED', destino: 'AVAILABLE', cantidad: 1, dias: 4, codigo: null, texto: 'Resultó vendible', costo: '5.0000' })
+    await mov({ nivel: nivelB.id, type: 'ADJUSTMENT', origen: 'AVAILABLE', destino: null, cantidad: 5, dias: 12, codigo: 'LOST', texto: 'Pérdida o extravío', costo: null })
+
+    const email = 'e2e.catalogo.con@membego.test'
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, emp.id)
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    const fila = (lista: Locator, nombre: string) => lista.getByRole('listitem').filter({ hasText: nombre })
+
+    try {
+      // ── La puerta: el cuarto informe del hub ──────────────────────────────
+      await p.goto('/admin/inventario/reportes')
+      await p.getByRole('list', { name: 'Informes' }).getByRole('link', { name: /Mermas por motivo/ }).click()
+      await p.waitForURL('**/admin/inventario/reportes/mermas')
+      await expect(p.getByRole('heading', { name: 'Mermas por motivo', level: 1 })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page')
+
+      // ── El resumen: lo perdido NO incluye lo dañado ni los sobrantes ──────
+      const resumen = p.getByLabel('Resumen de las mermas')
+      await expect(resumen.getByLabel('Lo perdido')).toContainText('14') // 4 + 2 + 1 + 2 (baja) + 5
+      await expect(resumen.getByLabel('Lo perdido')).toContainText('5 movimientos')
+      await expect(resumen.getByLabel('Lo perdido')).toContainText('45.00') // 9 × 5.00 de A; los 5 de B no tienen costo
+      await expect(resumen.getByLabel('Sobrantes')).toContainText('15.00')
+      await expect(resumen.getByLabel('Dañado')).toContainText('30.00')
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('5 unidades perdidas no tenían costo conocido')
+
+      // ── Lo perdido por motivo: de lo que más vale a lo que menos ──────────
+      const perdido = p.getByRole('list', { name: 'Lo perdido por motivo' })
+      await expect(perdido.getByRole('listitem')).toHaveCount(4)
+      await expect(perdido.getByRole('listitem').nth(0)).toContainText('Vencido')
+      await expect(perdido.getByRole('listitem').nth(0)).toContainText('6 unidades')
+      await expect(perdido.getByRole('listitem').nth(0)).toContainText('30.00')
+      await expect(perdido.getByRole('listitem').nth(1)).toContainText('Robo o hurto')
+      await expect(perdido.getByRole('listitem').nth(2)).toContainText('Sin motivo codificado')
+      await expect(perdido.getByRole('listitem').nth(3)).toContainText('Pérdida o extravío')
+      await expect(perdido.getByRole('listitem').nth(3)).toContainText('5 sin costo')
+      await expect(p.getByRole('list', { name: 'Sobrantes por motivo' }).getByRole('listitem')).toHaveCount(1)
+      await expect(p.getByRole('list', { name: 'Dañado por motivo' }).getByText('Golpe o mal manejo')).toBeVisible()
+
+      // ── El detalle: ni la venta, ni la entrada, ni recuperar lo dañado ────
+      const detalle = p.getByRole('list', { name: 'Movimientos de merma' })
+      await expect(detalle.getByRole('listitem')).toHaveCount(7) // 5 pérdidas (con el faltante sin motivo) + 1 sobrante + 1 daño
+      await expect(fila(detalle, 'Se llevaron dos de la vitrina')).toContainText('Robo o hurto')
+      await expect(fila(detalle, 'Faltante anterior a los motivos')).toContainText('Sin motivo codificado')
+      await expect(detalle.getByText('Resultó vendible')).toHaveCount(0)
+
+      // ── Filtrar por un motivo desde la tabla ──────────────────────────────
+      await perdido.getByRole('link', { name: 'Vencido' }).click()
+      await p.waitForURL(/motivo=EXPIRED/)
+      await expect(p.getByRole('list', { name: 'Movimientos de merma' }).getByRole('listitem')).toHaveCount(2)
+      await p.goto('/admin/inventario/reportes/mermas?motivo=sin')
+      await expect(p.getByRole('list', { name: 'Movimientos de merma' }).getByRole('listitem')).toHaveCount(1)
+      await p.goto(`/admin/inventario/reportes/mermas?q=${encodeURIComponent('no-existe-xyz')}`)
+      await expect(p.getByText('Nada coincide con esos filtros')).toBeVisible()
+      await p.goto('/admin/inventario/reportes/mermas?sucursal=de-otra-empresa&motivo=NO_EXISTE') // lo ajeno no filtra
+      await expect(p.getByRole('list', { name: 'Movimientos de merma' }).getByRole('listitem')).toHaveCount(7)
+      await p.goto(`/admin/inventario/reportes/mermas?desde=${new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10)}`)
+      await expect(p.getByText(/No hubo mermas entre el/)).toBeVisible()
+
+      // ── El motivo se ve también en el kardex y en Movimientos ────────────
+      await p.goto(`/admin/inventario/reportes/kardex?variante=${vA}`)
+      await expect(p.getByText('Motivo: Vencido').first()).toBeVisible()
+      await expect(p.getByText('Motivo: Golpe o mal manejo')).toBeVisible()
+      await p.goto(`/admin/inventario/movimientos?q=${encodeURIComponent(NA)}`)
+      await expect(p.getByText('Motivo: Robo o hurto')).toBeVisible()
+
+      // ── El archivo ───────────────────────────────────────────────────────
+      const csv = await p.request.get('/admin/inventario/reportes/mermas/exportar')
+      expect(csv.status()).toBe(200)
+      expect(csv.headers()['content-type'] ?? '').toContain('text/csv')
+      const texto = await csv.text()
+      expect(texto).toContain('Mermas por motivo')
+      expect(texto).toContain('Lo perdido: unidades;14')
+      expect(texto).toMatch(/Lo perdido: valor[^;]*;45\.00/)
+      expect(texto).toContain('Robo o hurto')
+      expect(texto).toContain('Se llevaron dos de la vitrina')
+      expect(texto).toContain('Datos completos;Si')
+      expect(texto).not.toContain('Resultó vendible')
+      const filtrado = await p.request.get('/admin/inventario/reportes/mermas/exportar?motivo=EXPIRED')
+      const ft = await filtrado.text()
+      expect(ft).toContain('Filtro: Motivo;Vencido')
+      expect(ft).not.toContain('Robo o hurto;')
+
+      // ── Quien NO tiene «costos» ve unidades y motivos, nunca dinero ───────
+      await prisma.user.update({ where: { email }, data: { permisos: { v: 1, secciones: {}, funciones: { inventario: { costos: false } } } } })
+      await p.goto('/admin/inventario/reportes/mermas')
+      await expect(p.getByRole('list', { name: 'Lo perdido por motivo' }).getByRole('listitem')).toHaveCount(4)
+      const cuerpo = await p.locator('body').innerText()
+      for (const dinero of ['45.00', '30.00', '15.00', 'Sin costo', 'sin costo', 'c/u', 'no tenían costo']) expect(cuerpo, `se coló «${dinero}»`).not.toContain(dinero)
+      const sinCostos = await p.request.get('/admin/inventario/reportes/mermas/exportar')
+      expect(sinCostos.status()).toBe(200)
+      const st = await sinCostos.text()
+      expect(st).toContain('Lo perdido: unidades;14')
+      for (const dinero of ['45.00', 'Costo unitario', 'valor', 'SIN costo', 'Unidades sin costo']) expect(st, `el archivo dejó pasar «${dinero}»`).not.toContain(dinero)
     } finally {
       await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
     }

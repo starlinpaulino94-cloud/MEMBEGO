@@ -18,6 +18,7 @@ import { consultaDeFiltrosKardex, leerFiltrosKardex } from '@/modules/inventory/
 import { formatearCosto, formatearMonto } from '@/modules/inventory/costos'
 import { ETIQUETA_MOVIMIENTO, describirReferencia, formatearCantidad } from '@/modules/inventory/formato'
 import { describirCambioDeCubeta } from '@/modules/inventory/reportes'
+import { detalleDeMotivo, etiquetaDeMotivo } from '@/modules/inventory/motivos'
 import { TOPE_FILAS_KARDEX, buscarProductosParaKardexEnTx, kardexEnTx, type KardexVista, type ProductoDelKardex } from '@/modules/inventory/reportes-queries'
 import { describirFalloDeCarga } from '@/modules/inventory/errores-pantalla'
 import type { InventoryMovementType } from '@prisma/client'
@@ -280,7 +281,8 @@ export default async function KardexPage({ searchParams }: { searchParams: Promi
                         {formatDateTimeExacto(m.creadoEn, { zonaHoraria: datos.zona })} · {m.usuarioNombre ?? 'Sistema'}
                         {ref && ` · ${ref}`}
                       </p>
-                      {m.motivo && <p className="mt-0.5 break-words text-xs">{m.motivo}</p>}
+                      {m.motivoCodigo && <p className="mt-0.5 text-xs font-medium">Motivo: {etiquetaDeMotivo(m.motivoCodigo)}</p>}
+                      {detalleDeMotivo(m.motivoCodigo, m.motivo) && <p className="mt-0.5 break-words text-xs">{detalleDeMotivo(m.motivoCodigo, m.motivo)}</p>}
                     </div>
                     <div className="text-right tabular-nums">
                       <p className={m.entra > 0 ? 'font-semibold text-success' : m.sale > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'}>

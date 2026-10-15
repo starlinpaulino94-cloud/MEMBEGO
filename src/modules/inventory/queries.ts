@@ -341,6 +341,8 @@ export interface FilaMovimiento {
   previousOnHand: number
   newOnHand: number
   motivo: string | null
+  /** INV-4b: el motivo del catálogo (solo ajustes y daños; null en todo lo anterior a INV-4b). */
+  motivoCodigo: string | null
   sucursalNombre: string
   usuarioNombre: string | null
   referenciaTipo: string | null
@@ -383,6 +385,7 @@ export async function historialDeVarianteEnTx(tx: Tx, companyId: string, variant
       previousOnHand: true,
       newOnHand: true,
       reason: true,
+      reasonCode: true,
       userId: true,
       referenceType: true,
       referenceId: true,
@@ -405,6 +408,7 @@ export async function historialDeVarianteEnTx(tx: Tx, companyId: string, variant
       previousOnHand: m.previousOnHand,
       newOnHand: m.newOnHand,
       motivo: m.reason,
+      motivoCodigo: m.reasonCode,
       sucursalNombre: m.level.location.nombre,
       usuarioNombre: m.userId ? (nombres.get(m.userId) ?? null) : null,
       referenciaTipo: m.referenceType,
@@ -523,6 +527,7 @@ export async function movimientosEmpresaEnTx(
       previousOnHand: true,
       newOnHand: true,
       reason: true,
+      reasonCode: true,
       userId: true,
       referenceType: true,
       referenceId: true,
@@ -551,6 +556,7 @@ export async function movimientosEmpresaEnTx(
       previousOnHand: m.previousOnHand,
       newOnHand: m.newOnHand,
       motivo: m.reason,
+      motivoCodigo: m.reasonCode,
       sucursalNombre: m.level.location.nombre,
       usuarioNombre: m.userId ? (nombres.get(m.userId) ?? null) : null,
       referenciaTipo: m.referenceType,

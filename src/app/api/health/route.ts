@@ -115,6 +115,9 @@ export async function GET(req: NextRequest) {
         UNION ALL SELECT 'inventory_levels.targetStock', EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'inventory_levels' AND column_name = 'targetStock')
+        UNION ALL SELECT 'inventory_movements.reasonCode', EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'inventory_movements' AND column_name = 'reasonCode')
         UNION ALL SELECT 'entregas_webhook.proximoIntentoAt', EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'entregas_webhook' AND column_name = 'proximoIntentoAt')`

@@ -21,6 +21,7 @@ import {
 import { TIPOS_DE_MOVIMIENTO } from '@/modules/inventory/domain'
 import { USUARIO_SISTEMA, consultaDeFiltros, cuantosFiltros, leerFiltrosMovimientos } from '@/modules/inventory/filtros'
 import { ETIQUETA_MOVIMIENTO, describirReferencia, efectoLegible, formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
+import { detalleDeMotivo, etiquetaDeMotivo } from '@/modules/inventory/motivos'
 import { TOPE_FILAS_MOVIMIENTOS } from '@/modules/inventory/exportacion'
 
 export const dynamic = 'force-dynamic'
@@ -191,7 +192,8 @@ export default async function MovimientosInventarioPage({ searchParams }: { sear
                             ` · ${ref}`
                           ))}
                       </p>
-                      {m.motivo && <p className="mt-0.5 break-words text-xs">{m.motivo}</p>}
+                      {m.motivoCodigo && <p className="mt-0.5 text-xs font-medium">Motivo: {etiquetaDeMotivo(m.motivoCodigo)}</p>}
+                      {detalleDeMotivo(m.motivoCodigo, m.motivo) && <p className="mt-0.5 break-words text-xs">{detalleDeMotivo(m.motivoCodigo, m.motivo)}</p>}
                     </div>
                     <div className="text-right tabular-nums">
                       <p className={m.efectoOnHand > 0 ? 'font-semibold text-success' : m.efectoOnHand < 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'}>

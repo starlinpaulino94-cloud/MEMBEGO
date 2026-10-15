@@ -7,7 +7,11 @@ import { ETIQUETA_ESTADO_TRASLADO, pendienteDeLinea, type EstadoTraslado } from 
 import { ETIQUETA_ESTADO_CONTEO, ETIQUETA_RESULTADO, clasificarDiferencia, diferenciaDeConteo, ordenarPorDiferencia, resumirVarianza, type EstadoConteo } from './conteos'
 import { ETIQUETA_MOVIMIENTO, describirReferencia } from './formato'
 import { ETIQUETA_ESTADO_COBERTURA, describirCambioDeCubeta } from './reportes'
+import { detalleDeMotivo, etiquetaDeMotivo } from './motivos'
 import type { KardexVista, RotacionVista, SinVentasVista } from './reportes-queries'
+import type { MermasVista } from './mermas-queries'
+import { ETIQUETA_GRUPO, GRUPOS_DE_MERMA } from './mermas'
+import { ETIQUETA_CLASE } from './motivos'
 
 /**
  * COMMERCE CORE · inventario — el CSV de movimientos.
@@ -43,6 +47,8 @@ export interface FilaExportada {
   existenciaAntes: number
   existenciaDespues: number
   motivo: string | null
+  /** INV-4b: el código del motivo del catálogo (ajustes y daños); null en lo demás y en todo lo anterior a INV-4b. */
+  motivoCodigo?: string | null
   /** Nombre de quien lo hizo; null = el sistema. */
   usuario: string | null
   referenciaTipo: string | null
@@ -104,7 +110,8 @@ export function movimientosToCsv(filas: readonly FilaExportada[], ctx: ContextoE
         'Efecto en existencia',
         'Existencia antes',
         'Existencia despues',
-        'Motivo',
+        'Motivo (catalogo)',
+        'Detalle del motivo',
         'Usuario',
         'Referencia',
       ],
@@ -118,7 +125,8 @@ export function movimientosToCsv(filas: readonly FilaExportada[], ctx: ContextoE
         f.efecto,
         f.existenciaAntes,
         f.existenciaDespues,
-        SIN_FORMULA(f.motivo),
+        f.motivoCodigo ? etiquetaDeMotivo(f.motivoCodigo) : '',
+        SIN_FORMULA(detalleDeMotivo(f.motivoCodigo, f.motivo)),
         SIN_FORMULA(f.usuario ?? 'Sistema'),
         SIN_FORMULA(describirReferencia(f.referenciaTipo, f.referenciaId)),
       ]),
@@ -582,7 +590,7 @@ export function kardexToCsv(k: KardexVista, ctx: Omit<ContextoInforme, 'filtros'
     },
     {
       titulo: 'Movimientos (del más antiguo al más reciente)',
-      encabezados: ['Fecha y hora', 'Sucursal', 'Movimiento', 'Entra', 'Sale', 'Saldo', 'Cambio de cubeta', ...(c ? ['Costo unitario', 'Valor'] : []), 'Motivo', 'Usuario', 'Referencia'],
+      encabezados: ['Fecha y hora', 'Sucursal', 'Movimiento', 'Entra', 'Sale', 'Saldo', 'Cambio de cubeta', ...(c ? ['Costo unitario', 'Valor'] : []), 'Motivo (catalogo)', 'Detalle del motivo', 'Usuario', 'Referencia'],
       filas: k.filas.map((f) => [
         fechaHoraCsv(f.creadoEn, ctx.zonaHoraria),
         SIN_FORMULA(f.sucursalNombre),
@@ -593,7 +601,8 @@ export function kardexToCsv(k: KardexVista, ctx: Omit<ContextoInforme, 'filtros'
         SIN_FORMULA(describirCambioDeCubeta(f)),
         // Apartar, dañar y recuperar no entran ni salen: no llevan costo en el kardex (el costo del daño vive en sus propios informes).
         ...(c ? [f.sentido === 'INTERNO' || f.costo === null ? '' : plano(formatearCosto(f.costo)), f.valor === null ? '' : plano(formatearMonto(f.valor))] : []),
-        SIN_FORMULA(f.motivo),
+        f.motivoCodigo ? etiquetaDeMotivo(f.motivoCodigo) : '',
+        SIN_FORMULA(detalleDeMotivo(f.motivoCodigo, f.motivo)),
         SIN_FORMULA(f.usuarioNombre ?? 'Sistema'),
         SIN_FORMULA(describirReferencia(f.referenciaTipo, f.referenciaId)),
       ]),
@@ -699,6 +708,63 @@ export function rotacionToCsv(v: RotacionVista, ctx: ContextoInforme & { tope: n
         decimal(f.coberturaDias, 1),
         ETIQUETA_ESTADO_COBERTURA[f.estado],
         diaCsv(f.ultimaVenta, ctx.zonaHoraria),
+      ]),
+    },
+  ])
+}
+
+/**
+ * Las mermas por motivo para llevarlas a una hoja de cálculo: el resumen de cada grupo (lo perdido, los sobrantes, lo dañado), cada
+ * grupo POR MOTIVO, y el detalle movimiento por movimiento. Las columnas de costo solo existen si quien exporta puede verlas; un
+ * movimiento sin costo conocido deja VACÍAS sus celdas de costo y valor (nunca un cero). Si el tope cortó el detalle, el archivo lo
+ * dice. «Sin motivo codificado» es lo anterior a INV-4b o lo hecho por procesos que no eligen uno.
+ */
+export function mermasToCsv(v: MermasVista, ctx: ContextoInforme & { tope: number }): string {
+  const c = v.conCostos
+  const cortado = v.total > v.movimientos.length
+  return armarCsvBloques([
+    {
+      titulo: 'Mermas por motivo',
+      encabezados: ['Concepto', 'Valor'],
+      filas: [
+        ['Generado', fechaHoraCsv(ctx.generadoEn, ctx.zonaHoraria)],
+        ['Zona horaria', ctx.zonaHoraria],
+        ['Desde', v.desde],
+        ['Hasta', v.hasta],
+        ...ctx.filtros.map(([k, val]): [string, string] => [`Filtro: ${k}`, SIN_FORMULA(val)]),
+        ...GRUPOS_DE_MERMA.flatMap((g): Array<[string, string | number]> => {
+          const t = v.grupos[g].total
+          return [
+            [`${ETIQUETA_GRUPO[g]}: movimientos`, t.movimientos],
+            [`${ETIQUETA_GRUPO[g]}: unidades`, t.unidades],
+            ...(c ? ([[`${ETIQUETA_GRUPO[g]}: valor (solo lo que tiene costo)`, t.valor === null ? '' : plano(formatearMonto(t.valor))], [`${ETIQUETA_GRUPO[g]}: unidades SIN costo (no suman al valor)`, t.unidadesSinCosto ?? 0]] as Array<[string, string | number]>) : []),
+          ]
+        }),
+        ['Movimientos en el archivo', v.movimientos.length],
+        ['Datos completos', cortado ? `NO - el archivo trae solo los ${ctx.tope} movimientos más recientes de ${v.total}. Acota las fechas o los filtros y vuelve a exportar.` : 'Si'],
+      ],
+    },
+    {
+      titulo: 'Por motivo',
+      encabezados: ['Grupo', 'Motivo', 'Movimientos', 'Unidades', ...(c ? ['Valor', 'Unidades sin costo'] : [])],
+      filas: GRUPOS_DE_MERMA.flatMap((g) =>
+        v.grupos[g].filas.map((f) => [ETIQUETA_GRUPO[g], SIN_FORMULA(f.etiqueta), f.movimientos, f.unidades, ...(c ? [f.valor === null ? '' : plano(formatearMonto(f.valor)), f.unidadesSinCosto ?? ''] : [])])
+      ),
+    },
+    {
+      titulo: 'Movimientos (del más reciente al más antiguo)',
+      encabezados: ['Fecha y hora', 'Clase', 'Motivo', 'Detalle del motivo', 'Producto', 'SKU', 'Sucursal', 'Unidades', ...(c ? ['Costo unitario', 'Valor'] : []), 'Usuario'],
+      filas: v.movimientos.map((m) => [
+        fechaHoraCsv(m.creadoEn, ctx.zonaHoraria),
+        ETIQUETA_CLASE[m.clase],
+        SIN_FORMULA(m.etiquetaMotivo),
+        SIN_FORMULA(m.detalle),
+        SIN_FORMULA(m.producto),
+        SIN_FORMULA(m.sku),
+        SIN_FORMULA(m.sucursalNombre),
+        m.unidades,
+        ...(c ? [m.costo === null ? '' : plano(formatearCosto(m.costo)), m.valor === null ? '' : plano(formatearMonto(m.valor))] : []),
+        SIN_FORMULA(m.usuarioNombre ?? 'Sistema'),
       ]),
     },
   ])
