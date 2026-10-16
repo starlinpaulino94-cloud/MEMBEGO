@@ -8,7 +8,7 @@
  *
  *   H1  un pago con tarjeta aprobado activa la membresía pero NO deja `Transaction` (ni ticket ni factura),
  *       y la conciliación lo detecta como cobro sin transacción                      → fase 2 lo invierte.
- *   H2  el libro de ventas no tiene método «tarjeta» (`MetodoCobroTipo`)              → fase 1.
+ *   H2  el libro de ventas no tenía método «tarjeta» (`MetodoCobroTipo`)              → CORREGIDO en la fase 1.
  *   H3  contraste: el panel de administración SÍ registra la venta                    → es el patrón a reutilizar.
  *   H4  la renovación automática con tarjeta guardada cobra y renueva, y tampoco deja `Transaction` → fase 2.
  *   H5  falso positivo: un pago aprobado ANTES de la columna de cumplimiento (fila con el valor por defecto
@@ -120,8 +120,9 @@ test('H1 · un pago con tarjeta aprobado activa la membresía y entrega, pero NO
   assert.equal(r.cuadra, false)
 })
 
-test('H2 · el libro de ventas no tiene método «tarjeta»: aunque se registrara, saldría como «Otro»', () => {
-  assert.deepEqual(Object.values(MetodoCobroTipo).sort(), ['EFECTIVO', 'OTRO', 'TRANSFERENCIA'], 'DEFECTO H2 (fase 1: añadir TARJETA)')
+test('H2 · (fase 1) el libro de ventas ya tiene método «tarjeta»', () => {
+  // Antes de la fase 1 esta aserción era ['EFECTIVO', 'OTRO', 'TRANSFERENCIA'] y un cobro con tarjeta salía como «Otro».
+  assert.deepEqual(Object.values(MetodoCobroTipo).sort(), ['EFECTIVO', 'OTRO', 'TARJETA', 'TRANSFERENCIA'])
 })
 
 test('H3 · contraste: la confirmación desde el panel SÍ deja venta con ticket (el patrón que la pasarela no usa)', async () => {

@@ -33,6 +33,8 @@ model PagoIntento {
   compra       ProductoCompra? @relation(fields: [compraId], references: [id], onDelete: SetNull)
   membershipId String?
   membership   Membership?     @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  /// La venta (libro de transacciones) que dejó este cobro aprobado. Ver `Transaction.pagoIntentoId`.
+  transaccion  Transaction?
 
   monto  Decimal @db.Decimal(10, 2)
   moneda String  @default("DOP")

@@ -40,6 +40,7 @@ export const ESTADO_LABEL: Record<string, string> = {
 export const METODO_LABEL: Record<string, string> = {
   EFECTIVO: 'Efectivo',
   TRANSFERENCIA: 'Transferencia',
+  TARJETA: 'Tarjeta',
   OTRO: 'Otro',
 }
 

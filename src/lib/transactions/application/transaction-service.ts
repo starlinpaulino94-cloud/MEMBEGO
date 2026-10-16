@@ -12,7 +12,7 @@
  * se registra la verdad oficial de la operación.
  */
 
-import { Prisma, type PrismaClient } from '@prisma/client'
+import { Prisma, type MetodoCobroTipo, type PrismaClient } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { validateTransition } from '../domain/lifecycle'
 import {
@@ -60,7 +60,9 @@ export interface CrearTransaccionInput {
   /** Caja (POS): sesión, monto y forma de cobro para arqueo y reportes. */
   readonly cajaSesionId?: string | null
   readonly monto?: number | null
-  readonly metodoCobro?: 'EFECTIVO' | 'TRANSFERENCIA' | 'OTRO' | null
+  readonly metodoCobro?: MetodoCobroTipo | null
+  /** Cobro de pasarela que originó la venta (único en el libro). Solo ventas `SALE` con método TARJETA. */
+  readonly pagoIntentoId?: string | null
   readonly membershipId?: string | null
   readonly visitId?: string | null
   readonly qrTokenUsadoId?: string | null
@@ -115,6 +117,7 @@ export async function crearTransaccionAplicada(
       cajaSesionId: input.cajaSesionId ?? null,
       monto: input.monto ?? null,
       metodoCobro: input.metodoCobro ?? null,
+      pagoIntentoId: input.pagoIntentoId ?? null,
       membershipId: input.membershipId ?? null,
       visitId: input.visitId ?? null,
       qrTokenUsadoId: input.qrTokenUsadoId ?? null,
