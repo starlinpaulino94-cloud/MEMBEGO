@@ -84,6 +84,7 @@ import {
   registrarEntradaMultipleEnTx,
   corregirCostoEnTx,
   activarLotesEnTx,
+  asignarSeriesEnTx,
   corregirVencimientoLoteEnTx,
   desactivarLotesEnTx,
   moverEntreLotesEnTx,
@@ -252,14 +253,33 @@ export async function contarInventario(entrada: Omit<EntradaMovimiento, 'cantida
  * INV-5a · Activa los LOTES de un producto: desde aquí cada unidad es de un lote y cada movimiento se reparte entre lotes. Es de
  * UN SOLO SENTIDO. Lo que ya había pasa íntegro al lote «SIN LOTE». La pide la función `ajustar`: cambia cómo se mueve el stock.
  */
-export async function activarLotesInventario(entrada: { varianteId: string; exigirVencimiento?: boolean }): Promise<ResultadoInventario<{ sucursales: number; unidades: number; repetido: boolean }>> {
+export async function activarLotesInventario(entrada: { varianteId: string; exigirVencimiento?: boolean; series?: boolean }): Promise<ResultadoInventario<{ sucursales: number; unidades: number; repetido: boolean }>> {
   const c = await contexto('ajustar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   try {
-    const r = await conEmpresa(c.companyId, (tx) => activarLotesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), exigirVencimiento: entrada.exigirVencimiento === true }, c.ctx))
+    const r = await conEmpresa(c.companyId, (tx) => activarLotesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), exigirVencimiento: entrada.exigirVencimiento === true, series: entrada.series === true }, c.ctx))
     refrescar()
     return { ok: true, sucursales: r.sucursales, unidades: r.unidades, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5c · Le pone serie a unidades que no la tenían (las del «SIN SERIE» de un producto con series): `series` es la lista de números de
+ * serie, uno por unidad, y se descuentan de lo disponible del lote legado en esa sucursal. La pide la función `ajustar`.
+ */
+export async function asignarSeriesInventario(entrada: { varianteId: string; sucursalId: string; series: string[]; clave?: string | null }): Promise<ResultadoInventario<{ asignadas: number; saldo: SaldoVista; repetido: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      asignarSeriesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), sucursalId: texto(entrada.sucursalId), series: Array.isArray(entrada.series) ? entrada.series.map(texto) : [], idempotencyKey: clave(entrada.clave) }, c.ctx)
+    )
+    refrescar()
+    return { ok: true, asignadas: r.asignadas, saldo: r.saldo, repetido: r.repetido }
   } catch (e) {
     return aError(e)
   }

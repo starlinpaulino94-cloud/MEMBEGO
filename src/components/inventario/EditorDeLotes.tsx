@@ -1,10 +1,11 @@
 'use client'
 
 import { Plus, Trash2 } from 'lucide-react'
-import { CODIGO_SIN_LOTE, MAX_LOTES_POR_LINEA } from '@/modules/inventory/lotes'
+import { CODIGO_SIN_LOTE, MAX_LOTES_POR_LINEA, MAX_SERIES_POR_LINEA, separarSeries } from '@/modules/inventory/lotes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 
 /** Un lote de una línea, tal como se teclea (todo texto: puede estar a medias). */
 export interface LoteForm {
@@ -17,11 +18,18 @@ const entero = (t: string): number | null => (/^\d{1,7}$/.test(t.trim()) ? Numbe
 
 export const loteNuevo = (cantidad: number | string = 1): LoteForm => ({ codigo: '', vence: '', cantidad: String(cantidad) })
 
-/** Las unidades que suman los lotes de una línea (un renglón a medias o vacío cuenta cero). */
-export const sumaDeLotes = (lotes: readonly LoteForm[]): number => lotes.reduce((s, x) => s + (entero(x.cantidad) ?? 0), 0)
+/**
+ * INV-5c · En un producto con SERIES la línea guarda lo tecleado (una serie por renglón, o separadas por coma) en el `codigo` del único
+ * renglón del formulario; estas son las series que ese texto contiene.
+ */
+export const seriesDeLotes = (lotes: readonly LoteForm[]): string[] => separarSeries(lotes.map((x) => x.codigo).join('\n'))
 
-/** Los lotes como los recibe el servidor: `[{ codigo, vencimiento, cantidad }]`. */
-export const lotesParaEnviar = (lotes: readonly LoteForm[]) => lotes.map((x) => ({ codigo: x.codigo, vencimiento: x.vence === '' ? null : x.vence, cantidad: entero(x.cantidad) ?? 0 }))
+/** Las unidades que suman los lotes de una línea (un renglón a medias o vacío cuenta cero); con `series`, las que se teclearon. */
+export const sumaDeLotes = (lotes: readonly LoteForm[], series = false): number => (series ? seriesDeLotes(lotes).length : lotes.reduce((s, x) => s + (entero(x.cantidad) ?? 0), 0))
+
+/** Los lotes como los recibe el servidor: `[{ codigo, vencimiento, cantidad }]`; con `series`, una serie por unidad. */
+export const lotesParaEnviar = (lotes: readonly LoteForm[], series = false) =>
+  series ? seriesDeLotes(lotes).map((codigo) => ({ codigo, vencimiento: null, cantidad: 1 })) : lotes.map((x) => ({ codigo: x.codigo, vencimiento: x.vence === '' ? null : x.vence, cantidad: entero(x.cantidad) ?? 0 }))
 
 /**
  * Los LOTES de UNA línea de un producto que los lleva: por cada lote, su código, su vencimiento y cuántas unidades son. «SIN LOTE» es el
@@ -35,15 +43,43 @@ export function EditorDeLotes({
   onChange,
   idBase,
   indice,
+  series = false,
 }: {
   nombre: string
   exigeVencimiento: boolean
+  /** INV-5c: el producto lleva series: un número de serie por unidad en vez de lotes. */
+  series?: boolean
   lotes: LoteForm[]
   onChange: (lotes: LoteForm[]) => void
   idBase: string
   indice: number
 }) {
   const cambiar = (j: number, parcial: Partial<LoteForm>) => onChange(lotes.map((z, m) => (m === j ? { ...z, ...parcial } : z)))
+  if (series) {
+    const cuantas = seriesDeLotes(lotes).length
+    return (
+      <div className="basis-full space-y-2 rounded-lg border border-dashed p-3" role="group" aria-label={`Series de ${nombre}`}>
+        <p className="text-xs text-muted-foreground">
+          Este producto lleva series: escribe o pega el número de serie de cada unidad que llegó, uno por renglón. Cada serie es una sola unidad y no se puede repetir (hasta {MAX_SERIES_POR_LINEA} por línea).
+        </p>
+        <Label htmlFor={`${idBase}-series-${indice}`} className="sr-only">
+          Números de serie de {nombre}
+        </Label>
+        <Textarea
+          id={`${idBase}-series-${indice}`}
+          rows={4}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={'SN-0001\nSN-0002'}
+          value={lotes[0]?.codigo ?? ''}
+          onChange={(e) => onChange([{ codigo: e.target.value, vence: '', cantidad: '1' }])}
+        />
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {cuantas} {cuantas === 1 ? 'serie' : 'series'}
+        </p>
+      </div>
+    )
+  }
   return (
     <div className="basis-full space-y-2 rounded-lg border border-dashed p-3" role="group" aria-label={`Lotes de ${nombre}`}>
       <p className="text-xs text-muted-foreground">

@@ -26,6 +26,7 @@ interface LineaPorRecibir {
   /** INV-5b2: el producto lleva lotes: lo que llega se reparte entre lotes (código, vencimiento y cantidad). */
   llevaLotes: boolean
   exigeVencimiento: boolean
+  llevaSeries: boolean
 }
 
 const entero = (t: string): number | null => (/^\d{1,7}$/.test(t.trim()) ? Number(t.trim()) : null)
@@ -53,7 +54,7 @@ export function RecibirOrdenCompraForm({ ordenId, sucursalNombre, hayRecibido, l
 
   const hayLotes = lineas.some((l) => l.llevaLotes)
   /** Lo que llegó de una línea: la suma de sus lotes si los lleva; si no, lo que se escribió (-1 = no es un entero). */
-  const llegoDe = (l: LineaPorRecibir): number => (l.llevaLotes ? sumaDeLotes(lotes[l.varianteId] ?? []) : (entero(llego[l.varianteId] ?? '0') ?? -1))
+  const llegoDe = (l: LineaPorRecibir): number => (l.llevaLotes ? sumaDeLotes(lotes[l.varianteId] ?? [], l.llevaSeries) : (entero(llego[l.varianteId] ?? '0') ?? -1))
   const pedidas = lineas.map((l) => ({ varianteId: l.varianteId, cantidad: llegoDe(l) }))
   const hayError = pedidas.some((p, i) => p.cantidad < 0 || p.cantidad > lineas[i].pendiente)
   const total = pedidas.reduce((s, p) => s + Math.max(p.cantidad, 0), 0)
@@ -69,7 +70,7 @@ export function RecibirOrdenCompraForm({ ordenId, sucursalNombre, hayRecibido, l
     // Los lotes de cada producto que los lleva y que llegó, con las mismas reglas del servidor (que las vuelve a aplicar).
     for (let k = 0; k < lineas.length; k++) {
       if (!lineas[k].llevaLotes || pedidas[k].cantidad === 0) continue
-      const v = validarLotesDeLinea(lotesParaEnviar(lotes[lineas[k].varianteId] ?? []), pedidas[k].cantidad, { exigirVencimiento: lineas[k].exigeVencimiento })
+      const v = validarLotesDeLinea(lotesParaEnviar(lotes[lineas[k].varianteId] ?? [], lineas[k].llevaSeries), pedidas[k].cantidad, { exigirVencimiento: lineas[k].exigeVencimiento, series: lineas[k].llevaSeries })
       if (!v.ok) {
         toast.error(`«${lineas[k].nombre}»: ${v.error}`)
         return false
@@ -89,7 +90,7 @@ export function RecibirOrdenCompraForm({ ordenId, sucursalNombre, hayRecibido, l
         ordenId,
         ...(opciones.todo
           ? { todo: true }
-          : { lineas: pedidas.flatMap((p, i) => (p.cantidad > 0 ? [{ ...p, ...(lineas[i].llevaLotes ? { lotes: lotesParaEnviar(lotes[p.varianteId] ?? []) } : {}) }] : [])) }),
+          : { lineas: pedidas.flatMap((p, i) => (p.cantidad > 0 ? [{ ...p, ...(lineas[i].llevaLotes ? { lotes: lotesParaEnviar(lotes[p.varianteId] ?? [], lineas[i].llevaSeries) } : {}) }] : [])) }),
         cerrarConFaltante: opciones.cerrarConFaltante === true,
         motivo,
         referencia,
@@ -160,6 +161,7 @@ export function RecibirOrdenCompraForm({ ordenId, sucursalNombre, hayRecibido, l
                 <EditorDeLotes
                   nombre={l.nombre}
                   exigeVencimiento={l.exigeVencimiento}
+                  series={l.llevaSeries}
                   lotes={lotes[l.varianteId] ?? []}
                   idBase="ro"
                   indice={i}

@@ -332,7 +332,15 @@ export default async function InventarioVariantePage({ params }: { params: Promi
           {lotes?.lleva && (
             <Alert>
               <AlertDescription>
+                {lotes.series ? (
+                  <>
+                    Este producto lleva <strong>series</strong>: cada unidad tiene su número de serie y no puede estar en dos sitios a la vez. Se vende primero la serie más antigua. Se recibe con una entrada de mercancía o una orden de compra (un número de serie por unidad), se transfiere serie por serie y lo que ya había se queda «SIN SERIE» hasta asignarle su número. Busca una serie y su historia en Inventario → Reportes → Buscar una serie.
+                  </>
+                ) : (
+                  <>
                 Este producto lleva <strong>lotes</strong>: se vende, se aparta y se saca primero lo que antes vence, y lo vencido no se vende. Se transfiere (y se envía a otra sucursal) lote por lote: sale el que antes vence, o los que elijas, y entra al destino en esos mismos lotes. Se cuenta lote por lote en un conteo (Inventario → Conteos), y se recibe con una entrada de mercancía o con una orden de compra (diciendo de qué lote llegó).
+                  </>
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -345,7 +353,7 @@ export default async function InventarioVariantePage({ params }: { params: Promi
                 puedeAjustar={puedeAjustar}
                 puedeCostos={puedeCostos}
                 hayOtrasConSaldo={detalle.sucursales.some((o) => o.activa && o.sucursalId !== s.sucursalId && o.nivelId !== null)}
-                lotes={lotes?.lleva ? { exigeVencimiento: lotes.exigeVencimiento, deSucursal: lotes.porSucursal[s.sucursalId] ?? [], catalogo: lotes.catalogo } : undefined}
+                lotes={lotes?.lleva ? { exigeVencimiento: lotes.exigeVencimiento, series: lotes.series, deSucursal: lotes.porSucursal[s.sucursalId] ?? [], catalogo: lotes.catalogo } : undefined}
                 saldo={{ sucursalId: s.sucursalId, nombre: s.nombre, activa: s.activa, onHand: s.onHand, reserved: s.reserved, damaged: s.damaged, disponible: s.disponible, lowStockThreshold: s.lowStockThreshold, targetStock: s.targetStock, estado: s.estado }}
               />
             ))}

@@ -39,6 +39,8 @@ export interface LotesDeVariante {
   /** ¿El producto lleva lotes? Si no, todo lo demás va vacío. */
   lleva: boolean
   exigeVencimiento: boolean
+  /** INV-5c: ¿el producto lleva SERIES (un lote de una unidad por número de serie)? */
+  series: boolean
   /** El día de hoy en el calendario de la empresa. */
   hoy: string
   catalogo: LoteDelCatalogo[]
@@ -49,11 +51,11 @@ export interface LotesDeVariante {
 /** Los lotes de un producto: los suyos, y cuánto hay de cada uno en cada sucursal. */
 export async function lotesDeVarianteEnTx(tx: Tx, companyId: string, varianteId: string, ahora: Date = new Date()): Promise<LotesDeVariante> {
   const [seguimiento, empresa] = await Promise.all([
-    tx.inventoryLotTracking.findFirst({ where: { companyId, catalogVariantId: varianteId }, select: { requiresExpiry: true } }),
+    tx.inventoryLotTracking.findFirst({ where: { companyId, catalogVariantId: varianteId }, select: { requiresExpiry: true, tracksSerials: true } }),
     tx.company.findUnique({ where: { id: companyId }, select: { zonaHoraria: true } }),
   ])
   const hoy = diaLocal(ahora, empresa?.zonaHoraria ?? '')
-  if (!seguimiento) return { lleva: false, exigeVencimiento: false, hoy, catalogo: [], porSucursal: {} }
+  if (!seguimiento) return { lleva: false, exigeVencimiento: false, series: false, hoy, catalogo: [], porSucursal: {} }
 
   const filas = await tx.$queryRaw<
     { loteId: string; codigo: string; vencimiento: string | null; legado: boolean; creadoEn: number; sucursalId: string | null; onHand: number | null; reserved: number | null; damaged: number | null }[]
@@ -103,7 +105,7 @@ export async function lotesDeVarianteEnTx(tx: Tx, companyId: string, varianteId:
     crudos.set(f.sucursalId, [...(crudos.get(f.sucursalId) ?? []), comoLote(f)])
   }
   for (const [sucursalId, lotes] of crudos) porSucursal[sucursalId] = lotes.sort(ordenFefo).map(vista)
-  return { lleva: true, exigeVencimiento: seguimiento.requiresExpiry, hoy, catalogo, porSucursal }
+  return { lleva: true, exigeVencimiento: seguimiento.requiresExpiry, series: seguimiento.tracksSerials, hoy, catalogo, porSucursal }
 }
 
 /**

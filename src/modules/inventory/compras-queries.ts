@@ -322,6 +322,8 @@ export interface LineaDeOrdenVista {
   llevaLotes: boolean
   /** INV-5b2: ¿cada lote nuevo debe traer vencimiento? */
   exigeVencimiento: boolean
+  /** INV-5c: el producto lleva SERIES (al recibirlo hay un número de serie por unidad). */
+  llevaSeries: boolean
   /** INV-5b2: de qué lotes ha llegado lo recibido hasta ahora («A-1 ×4, B ×2»); null si no hay nada con lotes. */
   lotesRecibidos: string | null
 }
@@ -368,7 +370,7 @@ export async function ordenDetalleEnTx(tx: Tx, companyId: string, id: string): P
           quantityReceived: true,
           quantityCancelled: true,
           unitCost: true,
-          variant: { select: { sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } }, lotTracking: { select: { requiresExpiry: true } } } },
+          variant: { select: { sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } }, lotTracking: { select: { requiresExpiry: true, tracksSerials: true } } } },
         },
       },
       receipts: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 200, select: { id: true, number: true, createdAt: true, reference: true, unitCount: true, userId: true } },
@@ -412,6 +414,7 @@ export async function ordenDetalleEnTx(tx: Tx, companyId: string, id: string): P
       valor: formatearMonto(valorDe(l.quantityOrdered, costo)),
       llevaLotes: l.variant.lotTracking.length > 0,
       exigeVencimiento: l.variant.lotTracking[0]?.requiresExpiry === true,
+      llevaSeries: l.variant.lotTracking[0]?.tracksSerials === true,
       lotesRecibidos: textoDeLotes(lotesPorProducto.get(l.catalogVariantId)),
     }
   })

@@ -1894,7 +1894,7 @@ test.describe('Inventario · panel', () => {
       await expect(p.getByRole('heading', { name: 'Reportes de existencias', level: 1 })).toBeVisible()
       await expect(vistas.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page')
       const informes = p.getByRole('list', { name: 'Informes' })
-      await expect(informes.getByRole('listitem')).toHaveCount(6) // kardex, sin ventas, mermas, margen real (solo con costos), vence pronto y rotación
+      await expect(informes.getByRole('listitem')).toHaveCount(7) // kardex, sin ventas, mermas, margen real (solo con costos), vence pronto, buscar una serie y rotación
       await expect(p.getByText('Con costos: cuánto dinero tienen inmovilizado.')).toBeVisible()
 
       // ── Kardex: se busca el producto, y sus movimientos dejan el saldo ────
@@ -2010,8 +2010,8 @@ test.describe('Inventario · panel', () => {
       await expect(vistas.getByRole('link', { name: 'Reportes' })).toBeVisible()
       await p.goto('/admin/inventario/reportes')
       await expect(p.getByText('Con costos:')).toHaveCount(0)
-      // INV-4c: el margen es costo contra precio, así que sin la función ni se ofrece (quedan los otros cinco informes).
-      await expect(p.getByRole('list', { name: 'Informes' }).getByRole('listitem')).toHaveCount(5)
+      // INV-4c: el margen es costo contra precio, así que sin la función ni se ofrece (quedan los otros seis informes).
+      await expect(p.getByRole('list', { name: 'Informes' }).getByRole('listitem')).toHaveCount(6)
       await expect(p.getByRole('link', { name: /Margen real/ })).toHaveCount(0)
       await p.goto(`/admin/inventario/reportes/kardex?variante=${vA}`)
       const sinDinero = async () => {

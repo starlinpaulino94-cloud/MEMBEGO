@@ -34,6 +34,7 @@ interface ProductoBuscado {
   /** INV-5a: el producto lleva lotes. */
   llevaLotes: boolean
   exigeVencimiento: boolean
+  llevaSeries: boolean
 }
 
 interface LineaForm {
@@ -49,13 +50,14 @@ interface LineaForm {
   /** INV-5a: si el producto lleva lotes, la cantidad es la suma de sus lotes y cada lote dice su código, su vencimiento y cuántos son. */
   llevaLotes: boolean
   exigeVencimiento: boolean
+  llevaSeries: boolean
   lotes: LoteForm[]
 }
 
 const entero = (t: string): number | null => (/^\d{1,7}$/.test(t.trim()) ? Number(t.trim()) : null)
 
 /** Las unidades de una línea: su cantidad, o —si lleva lotes— la suma de los suyos. */
-const unidadesDe = (l: LineaForm): number => (l.llevaLotes ? sumaDeLotes(l.lotes) : (entero(l.cantidad) ?? 0))
+const unidadesDe = (l: LineaForm): number => (l.llevaLotes ? sumaDeLotes(l.lotes, l.llevaSeries) : (entero(l.cantidad) ?? 0))
 
 /**
  * UNA entrada de mercancía con todas sus líneas: se escanea o se busca cada
@@ -114,7 +116,7 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
       // Escanear otra vez el mismo producto suma una unidad (en su primer lote, si lleva lotes).
       if (i >= 0) {
         return actuales.map((l, k) =>
-          k !== i ? l : l.llevaLotes ? { ...l, lotes: l.lotes.map((x, j) => (j === 0 ? { ...x, cantidad: String((entero(x.cantidad) ?? 0) + 1) } : x)) } : { ...l, cantidad: String((entero(l.cantidad) ?? 0) + 1) }
+          k !== i ? l : l.llevaSeries ? l : l.llevaLotes ? { ...l, lotes: l.lotes.map((x, j) => (j === 0 ? { ...x, cantidad: String((entero(x.cantidad) ?? 0) + 1) } : x)) } : { ...l, cantidad: String((entero(l.cantidad) ?? 0) + 1) }
         )
       }
       if (actuales.length >= MAX_LINEAS_ENTRADA) {
@@ -132,6 +134,7 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
           costo: '',
           llevaLotes: p.llevaLotes,
           exigeVencimiento: p.exigeVencimiento,
+          llevaSeries: p.llevaSeries,
           lotes: p.llevaLotes ? [loteNuevo()] : [],
         },
       ]
@@ -176,7 +179,7 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
       varianteId: l.varianteId,
       cantidad: unidadesDe(l),
       ...(conCostos && l.costo.trim() !== '' ? { costo: l.costo.trim() } : {}),
-      ...(l.llevaLotes ? { lotes: lotesParaEnviar(l.lotes) } : {}),
+      ...(l.llevaLotes ? { lotes: lotesParaEnviar(l.lotes, l.llevaSeries) } : {}),
     }))
     const mala = cuerpo.findIndex((l) => l.cantidad < 1)
     if (mala >= 0) {
@@ -187,7 +190,7 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
     for (let i = 0; i < lineas.length; i++) {
       const lote = cuerpo[i].lotes
       if (!lineas[i].llevaLotes || !lote) continue
-      const v = validarLotesDeLinea(lote, cuerpo[i].cantidad, { exigirVencimiento: lineas[i].exigeVencimiento })
+      const v = validarLotesDeLinea(lote, cuerpo[i].cantidad, { exigirVencimiento: lineas[i].exigeVencimiento, series: lineas[i].llevaSeries })
       if (!v.ok) {
         toast.error(`«${lineas[i].nombre}»: ${v.error}`)
         return
@@ -352,6 +355,7 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
                     <EditorDeLotes
                       nombre={l.nombre}
                       exigeVencimiento={l.exigeVencimiento}
+                      series={l.llevaSeries}
                       lotes={l.lotes}
                       idBase="en"
                       indice={i}

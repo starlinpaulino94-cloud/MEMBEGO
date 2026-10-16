@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en e52d5c17: 232 migraciones, última 20261070_inventory_lot_expiry_history.
+-- Generado con scripts/generar-verificar-migraciones.mjs en be5de489: 233 migraciones, última 20261071_inventory_serials.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -245,7 +245,8 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261067_inventory_reason_codes','1490efcf431982cc2d8aeadf57077c0d5bb8b710fcb82056ae541a1703b87a74'),
   ('20261068_inventory_lots','6be70d427494a82c7e2cc6ce5d47c509b88106ad4959c9ffc38910f0298eb61c'),
   ('20261069_inventory_count_lots','54cad5bad879b22ddd3dad095b12701147440a9982b0cbc09c1129dd7636b606'),
-  ('20261070_inventory_lot_expiry_history','4b6d4b01d4bfaf785d1050a7018ee39708b3113a22f9ebab9064df99ea9bc254')
+  ('20261070_inventory_lot_expiry_history','4b6d4b01d4bfaf785d1050a7018ee39708b3113a22f9ebab9064df99ea9bc254'),
+  ('20261071_inventory_serials','fb044968ff2e800cf3e4c4c78737c4cdab4ec6278192383d8d3ec5688a9eeffa')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,

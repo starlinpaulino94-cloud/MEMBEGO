@@ -55,6 +55,7 @@ test('todas las acciones exportadas autorizan ANTES de tocar la base', () => {
     'ajustarInventario',
     'aplicarConteo',
     'aplicarImportacion',
+    'asignarSeriesInventario',
     'buscarProductosParaConteo',
     'buscarProductosParaEntrada',
     'buscarProductosParaOrden',

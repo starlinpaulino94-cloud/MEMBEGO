@@ -757,6 +757,9 @@ model InventoryLotTracking {
 
   /// Todo lote nuevo de este producto debe traer fecha de vencimiento (lo exige el servicio al crear el lote).
   requiresExpiry Boolean @default(false)
+  /// INV-5c: el producto lleva SERIES, no lotes: cada serie es un lote de UNA unidad (su código es el número de serie). Se decide al
+  /// activar y no cambia. Un producto con series no exige vencimiento.
+  tracksSerials  Boolean @default(false)
   /// Quién lo activó (sin FK: un usuario que se borra no reescribe la historia).
   activatedBy    String?
 
@@ -793,6 +796,7 @@ model InventoryLot {
   /// Destino de la FK compuesta de los saldos por lote.
   @@unique([id, catalogVariantId, companyId])
   @@index([catalogVariantId, expiresOn])
+  @@index([companyId, code])
   @@map("inventory_lots")
 }
 

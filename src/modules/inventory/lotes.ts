@@ -22,6 +22,10 @@ export const CODIGO_SIN_LOTE = 'SIN LOTE'
 export const LONGITUD_MAXIMA_CODIGO = 60
 /** Lotes máximos que una línea de entrada puede repartir. */
 export const MAX_LOTES_POR_LINEA = 20
+/** INV-5c: series máximas que una línea de entrada puede traer (cada serie es un lote de UNA unidad). */
+export const MAX_SERIES_POR_LINEA = 1000
+/** INV-5c: series que se asignan en una sola operación de «Asignar series» (cada operación escribe dos movimientos, no uno por serie). */
+export const MAX_SERIES_A_ASIGNAR = 200
 
 /** Letras y dígitos de cualquier idioma, y los signos que traen los códigos de lote reales (`-`, `_`, `.`, `/`, `#`, `+`, `:`). */
 const FORMA_DE_CODIGO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-/#+:]*$/u
@@ -369,7 +373,8 @@ export type ResultadoLotesDeLinea = { ok: true; lotes: LoteDeLinea[] } | { ok: f
  * es la cantidad de la línea. Un mismo código dos veces en la línea se junta si traen el mismo vencimiento y es un error si no (un
  * lote tiene UN vencimiento). «SIN LOTE» no lleva vencimiento. Si el producto exige vencimiento, todo lote con código lo trae.
  */
-export function validarLotesDeLinea(lotes: unknown, cantidadLinea: number, opciones: { exigirVencimiento: boolean }): ResultadoLotesDeLinea {
+export function validarLotesDeLinea(lotes: unknown, cantidadLinea: number, opciones: { exigirVencimiento: boolean; series?: boolean }): ResultadoLotesDeLinea {
+  if (opciones.series === true) return validarSeriesDeLinea(lotes, cantidadLinea)
   if (!Array.isArray(lotes) || lotes.length === 0) return { ok: false, codigo: 'LOTES_FALTAN', error: 'Este producto lleva lotes: indica de qué lote es lo que entra (o «SIN LOTE»).' }
   if (lotes.length > MAX_LOTES_POR_LINEA) return { ok: false, codigo: 'DEMASIADOS_LOTES', error: `Una línea admite hasta ${MAX_LOTES_POR_LINEA} lotes.` }
   const por = new Map<string, LoteDeLinea>()
@@ -396,5 +401,43 @@ export function validarLotesDeLinea(lotes: unknown, cantidadLinea: number, opcio
   const resultado = [...por.values()]
   const suma = resultado.reduce((s, l) => s + l.cantidad, 0)
   if (suma !== cantidadLinea) return { ok: false, codigo: 'LOTES_NO_CUADRAN', error: `Los lotes suman ${suma} unidades y la línea dice ${cantidadLinea}.` }
+  return { ok: true, lotes: resultado }
+}
+
+// ── INV-5c · Series: un lote de UNA unidad ───────────────────────────────────
+
+/**
+ * Parte lo que se teclea o se pega en «una serie por línea» (también separadas por coma, punto y coma o tabulador) en series sueltas, sin
+ * los renglones vacíos. NO normaliza ni valida (eso lo hace `validarSeriesDeLinea`): una serie mal escrita se tiene que ver, no desaparecer.
+ */
+export function separarSeries(texto: string): string[] {
+  return texto
+    .split(/[\r\n,;\t]+/)
+    .map((x) => x.trim())
+    .filter((x) => x !== '')
+}
+
+/**
+ * Las series de una línea de entrada de un producto QUE LLEVA SERIES. Cada renglón es una serie (código normalizado como el de un lote) con
+ * UNA unidad y sin vencimiento; ninguna se repite en la línea (un número de serie es de una sola unidad: repetido es un error, no se suma);
+ * «SIN LOTE» no es una serie; y su número es la cantidad de la línea. Hasta `MAX_SERIES_POR_LINEA`.
+ */
+export function validarSeriesDeLinea(series: unknown, cantidadLinea: number): ResultadoLotesDeLinea {
+  if (!Array.isArray(series) || series.length === 0) return { ok: false, codigo: 'SERIES_FALTAN', error: 'Este producto lleva series: escribe el número de serie de cada unidad.' }
+  if (series.length > MAX_SERIES_POR_LINEA) return { ok: false, codigo: 'DEMASIADAS_SERIES', error: `Una línea admite hasta ${MAX_SERIES_POR_LINEA} series.` }
+  const vistas = new Set<string>()
+  const resultado: LoteDeLinea[] = []
+  for (const crudo of series as unknown[]) {
+    const l = crudo as { codigo?: unknown; vencimiento?: unknown; cantidad?: unknown } | null
+    const codigo = normalizarCodigoLote(l?.codigo)
+    if (!codigo.ok) return { ok: false, codigo: 'SERIE_INVALIDA', error: codigo.error.replace(/lote/gi, 'serie') }
+    if (esCodigoSinLote(codigo.valor)) return { ok: false, codigo: 'SERIE_REQUERIDA', error: 'Cada unidad de un producto con series lleva su número de serie: «SIN LOTE» no es una serie.' }
+    if (l?.vencimiento !== undefined && l?.vencimiento !== null && l?.vencimiento !== '') return { ok: false, codigo: 'SERIE_CON_VENCIMIENTO', error: `La serie ${codigo.valor} no vence.` }
+    if (l?.cantidad !== undefined && l?.cantidad !== 1) return { ok: false, codigo: 'SERIE_NO_ES_UNA', error: `La serie ${codigo.valor} es una sola unidad.` }
+    if (vistas.has(codigo.valor)) return { ok: false, codigo: 'SERIE_REPETIDA', error: `La serie ${codigo.valor} está repetida: un número de serie es de una sola unidad.` }
+    vistas.add(codigo.valor)
+    resultado.push({ codigo: codigo.valor, vencimiento: null, cantidad: 1 })
+  }
+  if (resultado.length !== cantidadLinea) return { ok: false, codigo: 'LOTES_NO_CUADRAN', error: `Hay ${resultado.length} series y la línea dice ${cantidadLinea} unidades.` }
   return { ok: true, lotes: resultado }
 }

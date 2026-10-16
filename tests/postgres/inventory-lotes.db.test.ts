@@ -702,7 +702,7 @@ test('17 · las lecturas: lotes por sucursal en orden FEFO con su estado, el tex
   assert.deepEqual(r.porSucursal[ctx.suc2].map((l) => l.codigo), ['PRONTO'])
   assert.equal(r.catalogo.length, 4, 'el catálogo trae todos los lotes, también los que no tienen existencias en la sucursal')
   const noLleva = await enA((tx) => lotesDeVarianteEnTx(tx, ctx.a, sin, AHORA))
-  assert.deepEqual(noLleva, { lleva: false, exigeVencimiento: false, hoy: '2027-06-15', catalogo: [], porSucursal: {} })
+  assert.deepEqual(noLleva, { lleva: false, exigeVencimiento: false, series: false, hoy: '2027-06-15', catalogo: [], porSucursal: {} })
   // Un lote agotado no sale en la sucursal, pero sí en el catálogo.
   await vender(v, 4, { lotesSalida: [{ loteId: r.catalogo.find((l) => l.codigo === 'PRONTO')!.loteId, cantidad: 4 }] })
   const despues = await enA((tx) => lotesDeVarianteEnTx(tx, ctx.a, v, AHORA))

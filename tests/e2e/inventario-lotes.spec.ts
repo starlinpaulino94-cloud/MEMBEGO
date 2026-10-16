@@ -28,6 +28,10 @@ import { empresaCatalogo, existenciasSembradas, itemSembrado, sucursalSembrada, 
  * lotes recibidos ya no se puede deshacer → corregir el vencimiento de un lote (motivo obligatorio, vale para el lote, queda en la historia
  * de la ficha y el informe «Vence pronto» lo refleja; el «SIN LOTE» no tiene el botón).
  *
+ * INV-5c (series): activar eligiendo «por series» (lo que había queda «SIN SERIE») → asignar números de serie a lo que había → una serie
+ * repetida o que ya está en el inventario se rechaza → una entrada con series (un número por unidad) → la tabla de la ficha habla de series
+ * (sin vencimiento, sin mover entre lotes) → buscar una serie dice de qué producto es, dónde está y su historia.
+ *
  * Las fechas son relativas a HOY (10 días atrás, 10 y 400 días adelante): la prueba no depende del día en que se corra.
  *
  * La base de E2E se crea con `db push` y `scripts/e2e/base-limpia.mjs` le aplica la migración de lotes (los saldos por lote los
@@ -54,6 +58,12 @@ async function cifras(fila: Locator): Promise<number[]> {
   const celdas = await fila.locator('td').allInnerTexts()
   // Las tres cifras (disponible, apartado, dañado); la columna de «Corregir vencimiento» (INV-5b5) no cuenta.
   return celdas.slice(1, 4).map((t) => Number(t.replace(/[.,\s]/g, '')))
+}
+
+/** Las tres cifras de una fila de la tabla de SERIES (sin la columna de vencimiento): disponible, apartado, dañado. */
+async function cifrasSerie(fila: Locator): Promise<number[]> {
+  const celdas = await fila.locator('td').allInnerTexts()
+  return celdas.slice(0, 3).map((t) => Number(t.replace(/[.,\s]/g, '')))
 }
 
 /** Elige una opción de un `<select>` por un fragmento de su texto (las opciones de lotes llevan más texto que su código). */
@@ -901,6 +911,118 @@ test.describe('Inventario · lotes y vencimiento', () => {
     await p.goto('/admin/inventario/reportes/vencimientos')
     await expect(p.getByRole('heading', { name: 'Vence pronto', level: 1 })).toBeVisible()
     await expect(lista.locator('li[data-lote="Y-A"]')).toHaveCount(0)
+
+    expect(errores, errores.join('\n')).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-5c · series: activar por series, asignar números a lo que había, entrada con series (repetidas y existentes se rechazan) y buscar una serie con su historia', async ({ browser }) => {
+    test.setTimeout(240_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+    const TALADRO = `Taladro series E2E ${sufijo}`
+    const principalId = (await sucursalSembrada(con.id, 'Principal')).id
+    const taladro = await itemSembrado(con.id, { name: TALADRO, slug: `taladro-ser-${sufijo}`, controlaInventario: true, variantes: [{ name: 'Default', sku: `TAL-${sufijo}`, price: 2500, porDefecto: true }] })
+    const vTaladro = await varianteDe(taladro.id)
+    await existenciasSembradas(con.id, vTaladro, principalId, 4)
+    const tablaSeries = (sucursal: string) => p.getByRole('table', { name: `Series en ${sucursal}` })
+    const fila = (sucursal: string, codigo: string) => tablaSeries(sucursal).locator(`tbody tr[data-lote="${codigo}"]`)
+
+    // ── Activar eligiendo «por series»: sin vencimiento, y lo que había queda «SIN SERIE» ──
+    await p.goto(`/admin/inventario/${vTaladro}`)
+    const oferta = p.getByLabel('Lotes y vencimiento')
+    await oferta.getByRole('button', { name: 'Activar lotes en este producto' }).click()
+    const confirmar = oferta.getByRole('group', { name: 'Confirmar la activación de lotes' })
+    await confirmar.getByLabel(/Por series/).check()
+    await expect(confirmar.getByText('Exigir fecha de vencimiento en cada lote nuevo')).toHaveCount(0)
+    await confirmar.getByRole('button', { name: 'Sí, activar series' }).click()
+    await expect(p.getByText(/Series activadas/).first()).toBeVisible({ timeout: 15_000 })
+    await expect(p.getByText(/lleva series/).first()).toBeVisible({ timeout: 15_000 })
+    await expect(fila('Principal', 'SIN LOTE')).toContainText('SIN SERIE')
+    expect(await cifrasSerie(fila('Principal', 'SIN LOTE'))).toEqual([4, 0, 0])
+    expect(await prismaDeArnes().inventoryLotTracking.findFirstOrThrow({ where: { catalogVariantId: vTaladro } }).then((t) => [t.tracksSerials, t.requiresExpiry])).toEqual([true, false])
+    // Una serie no vence ni se corrige, y no se mueve entre lotes.
+    await expect(tablaSeries('Principal').getByRole('columnheader', { name: 'Vencimiento' })).toHaveCount(0)
+    await expect(p.getByRole('form', { name: 'Mover unidades entre lotes en Principal' })).toHaveCount(0)
+    await expect(p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByLabel(/^Vence/)).toHaveCount(0)
+
+    // ── Asignar números de serie a lo que había ──
+    const asignar = p.getByRole('form', { name: 'Asignar series en Principal' })
+    await expect(asignar).toContainText('4 unidades «SIN SERIE»')
+    await asignar.getByLabel('Números de serie a asignar en Principal').fill('TAL-001\ntal-002')
+    await expect(asignar).toContainText('2 series')
+    await asignar.getByRole('button', { name: 'Asignar series' }).click()
+    await expect(p.getByText('2 series asignadas.').first()).toBeVisible({ timeout: 15_000 })
+    await expect(fila('Principal', 'TAL-001')).toBeVisible({ timeout: 15_000 })
+    expect(await cifrasSerie(fila('Principal', 'TAL-001'))).toEqual([1, 0, 0])
+    expect(await cifrasSerie(fila('Principal', 'TAL-002'))).toEqual([1, 0, 0])
+    expect(await cifrasSerie(fila('Principal', 'SIN LOTE'))).toEqual([2, 0, 0])
+    // Una serie que ya está en el inventario no se asigna otra vez, y nada cambió.
+    await asignar.getByLabel('Números de serie a asignar en Principal').fill('TAL-001')
+    await asignar.getByRole('button', { name: 'Asignar series' }).click()
+    await expect(p.getByText(/La serie TAL-001 ya está en el inventario/).first()).toBeVisible({ timeout: 15_000 })
+    expect(await cifrasSerie(fila('Principal', 'SIN LOTE'))).toEqual([2, 0, 0])
+    // Una serie es una sola unidad: la cantidad de un movimiento suelto con serie es 1.
+    const f = p.getByRole('form', { name: 'Registrar movimiento en Principal' })
+    await f.getByLabel('Movimiento').selectOption({ label: 'Entrada de mercancía' })
+    await f.getByLabel(/^Cantidad/).first().fill('2')
+    await f.getByLabel(/^Serie/).fill('TAL-009')
+    await f.getByRole('button', { name: 'Registrar' }).click()
+    await expect(p.getByText(/Una serie es una sola unidad/).first()).toBeVisible({ timeout: 15_000 })
+
+    // ── Entrada con series: un número por unidad; repetidas y existentes se rechazan ──
+    await p.goto('/admin/inventario/entradas/nueva')
+    const buscar = p.getByLabel('Escanear o buscar un producto')
+    await buscar.fill(`TAL-${sufijo}`)
+    await buscar.press('Enter')
+    const series = p.getByRole('group', { name: new RegExp(`^Series de ${TALADRO}`) })
+    await expect(series).toBeVisible({ timeout: 15_000 })
+    await expect(series).not.toContainText('cuándo vence')
+    const texto = series.getByLabel(new RegExp(`^Números de serie de ${TALADRO}`))
+    await texto.fill('TAL-003\nTAL-003')
+    await expect(series).toContainText('2 series')
+    await p.getByRole('button', { name: 'Registrar entrada' }).click()
+    await expect(p.getByText(/repetida/).first()).toBeVisible({ timeout: 15_000 })
+    await texto.fill('TAL-001\nTAL-004')
+    await p.getByRole('button', { name: 'Registrar entrada' }).click()
+    await expect(p.getByText(/La serie TAL-001 ya está en el inventario \(Principal\)/).first()).toBeVisible({ timeout: 15_000 })
+    expect(await prismaDeArnes().inventoryLot.count({ where: { catalogVariantId: vTaladro, code: { in: ['TAL-003', 'TAL-004'] } } }), 'lo rechazado no dejó series').toBe(0)
+    await texto.fill('TAL-003\nTAL-004')
+    await expect(p.getByLabel(new RegExp(`^Total de ${TALADRO}`))).toHaveText('2')
+    await p.getByRole('button', { name: 'Registrar entrada' }).click()
+    await p.waitForURL(/\/admin\/inventario\/entradas\/[^/]+$/, { timeout: 30_000 })
+    await expect(p.getByText('Lotes: TAL-003 ×1, TAL-004 ×1')).toBeVisible()
+    for (const c of ['TAL-001', 'TAL-002', 'TAL-003', 'TAL-004']) {
+      const unidades = await prismaDeArnes().inventoryLotBalance.findMany({ where: { lot: { catalogVariantId: vTaladro, code: c } }, select: { onHand: true, damaged: true } })
+      expect(unidades.reduce((t, b) => t + b.onHand + b.damaged, 0), `la serie ${c} es una sola unidad`).toBe(1)
+    }
+
+    // ── Buscar una serie: de qué producto es, dónde está y su historia ──
+    await p.goto('/admin/inventario/reportes')
+    await p.getByRole('link', { name: /Buscar una serie/ }).click()
+    await p.waitForURL(/\/admin\/inventario\/reportes\/series$/)
+    const buscador = p.getByRole('form', { name: 'Buscar una serie' })
+    await buscador.getByLabel('Número de serie').fill('tal-00')
+    await buscador.getByRole('button', { name: 'Buscar' }).click()
+    const lista = p.getByRole('list', { name: 'Series encontradas' })
+    await expect(lista.locator(':scope > li')).toHaveCount(4, { timeout: 15_000 })
+    await buscador.getByLabel('Número de serie').fill('TAL-001')
+    await buscador.getByRole('button', { name: 'Buscar' }).click()
+    const una = lista.locator('[data-serie="TAL-001"]')
+    await expect(una).toBeVisible({ timeout: 15_000 })
+    await expect(una).toContainText(TALADRO)
+    await expect(una).toContainText('En existencia')
+    await expect(una.getByRole('list', { name: 'Dónde está la serie TAL-001' })).toContainText('Principal')
+    await expect(una.getByRole('list', { name: 'Historia de la serie TAL-001' }).getByRole('listitem').first()).toContainText('Ajuste')
+    await buscador.getByLabel('Número de serie').fill('NO-EXISTE-999')
+    await buscador.getByRole('button', { name: 'Buscar' }).click()
+    await expect(p.getByText(/No hay ninguna serie que contenga/)).toBeVisible({ timeout: 15_000 })
 
     expect(errores, errores.join('\n')).toEqual([])
     await ctx.close()

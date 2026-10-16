@@ -514,7 +514,9 @@ export async function recibirOrdenEnTx(tx: Tx, companyId: string, e: EntradaRece
         for (const l of (e.lineas ?? []).filter((x) => x?.cantidad > 0)) {
           let lotes = new Map<string, number>()
           if (Array.isArray(l.lotes) && l.lotes.length > 0) {
-            const v = validarLotesDeLinea(l.lotes, l.cantidad, { exigirVencimiento: false })
+            // INV-5c: un producto con series recibe un número de serie por unidad.
+            const series = (await tx.inventoryLotTracking.findUnique({ where: { catalogVariantId: l.varianteId }, select: { tracksSerials: true } }))?.tracksSerials === true
+            const v = validarLotesDeLinea(l.lotes, l.cantidad, { exigirVencimiento: false, series })
             if (!v.ok) fallo(v.codigo, v.error)
             lotes = new Map(v.lotes.map((x) => [x.codigo, x.cantidad]))
           }

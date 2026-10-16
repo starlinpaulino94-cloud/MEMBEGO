@@ -161,7 +161,7 @@ export default async function OrdenCompraPage({ params }: { params: Promise<{ id
           ordenId={o.id}
           sucursalNombre={o.sucursalNombre}
           hayRecibido={o.recibidas > 0}
-          lineas={o.detalle.filter((l) => l.pendiente > 0).map((l) => ({ varianteId: l.varianteId, nombre: nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault), sku: l.sku, pendiente: l.pendiente, costo: l.costo, llevaLotes: l.llevaLotes, exigeVencimiento: l.exigeVencimiento }))}
+          lineas={o.detalle.filter((l) => l.pendiente > 0).map((l) => ({ varianteId: l.varianteId, nombre: nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault), sku: l.sku, pendiente: l.pendiente, costo: l.costo, llevaLotes: l.llevaLotes, exigeVencimiento: l.exigeVencimiento, llevaSeries: l.llevaSeries }))}
         />
       )}
 

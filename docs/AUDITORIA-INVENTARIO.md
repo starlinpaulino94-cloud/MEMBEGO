@@ -130,7 +130,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-5b3 · Lotes en conteos** | Un producto con lotes se cuenta **lote por lote** (a ciegas, eligiendo el lote al escanear), la hoja en blanco y la hoja contada traen la columna `lote`, y al aplicar cada lote se ajusta por **su** diferencia; «sin contar» cuenta lotes; la ficha ya no se niega a contar por lote (el conteo suelto de un número sigue negado) | `20261069` (la línea de conteo lleva el lote; SQL primero) | M | **hecha** (§31-32) |
 | **INV-5b4 · Lotes en transferencias** | Un producto con lotes se transfiere **por lote**, directo o con envío: sale el que antes vence o los lotes que se elijan y entra al destino en esos mismos lotes; recibir lote por lote (sin pasar de lo que de cada lote sigue en camino), cancelar devuelve cada lote a su sitio, cerrar con faltante lo deja por lote; el detalle, el historial y el CSV dicen de qué lotes es cada cosa | — (sin migración: el estado por lote sale del ledger) | M | **hecha** (§34-35) |
 | **INV-5b5 · Corregir y deshacer** | Corregir el vencimiento de un lote (con motivo, para todas las sucursales y con su historia inmutable) y deshacer la activación de lotes mientras nada se haya movido con lotes. **La desactivación de un producto con historia de lotes NO se hace** (§36) | `20261070` (historia del vencimiento; el disparador del lote solo deja cambiar la fecha con historia de la misma transacción; `inventory_lot_tiene_historial` pasa a mirar los repartos) | M | **hecha** (§36-37) |
-| INV-5c · Series | Número de serie por unidad | Series | L | pendiente |
+| **INV-5c · Series** | Un producto puede llevar **series**: cada unidad tiene su número de serie y es un lote de UNA unidad, sin vencimiento. «Una serie, una unidad» lo vigila la base. Entradas y órdenes de compra con un número por unidad, «Asignar series» a lo que ya había, vender primero la serie más antigua, y «Buscar una serie» con su historia | `20261071` (bandera `tracksSerials`, la regla de la unidad única y su candado) | L | **hecha** (§38-39) |
 | INV-5d · Kits | Kits que descuentan componentes | Kits | L | pendiente |
 | INV-5e · API v1 y rol de bodega | API pública del inventario; un rol que mueve stock sin ver finanzas | — | M | pendiente |
 
@@ -2244,3 +2244,113 @@ Hallazgos de la propia verificación (importa que se sepan):
 base real** (la aplica el flujo al fusionar; cambia el cuerpo de una función y un disparador de `inventory_lots` y crea una tabla: se toma un bloqueo corto sobre `inventory_lots`, que se lee mucho y se escribe poco,
 con `lock_timeout` de 5 s); qué pasa en producción con la **historia que aún no existe** (la primera corrección real); la accesibilidad del formulario de corrección más allá de sus etiquetas; y que la rama sigue sin PR
 ni CI remoto desde INV-4a. **Y lo que se decidió no hacer:** desactivar los lotes de un producto con historia (§36).
+
+## 38. INV-5c · qué se hizo
+
+**Trae una migración, la `20261071`, y se aplica ANTES que el código** (lo hace el flujo «Migrar y desplegar» al fusionar; necesita la `20261068` de INV-5a). Es aditiva, idempotente y de una sola transacción
+(con `lock_timeout` de 5 s): suma una columna con valor por omisión (`inventory_lot_tracking.tracksSerials`, falsa), un índice y tres objetos de base de datos (una función, dos disparadores diferidos) y cambia
+el cuerpo de una función existente; no reescribe ni cambia ninguna fila. Con el código viejo, aplicarla antes no rompe nada (ningún producto tiene la bandera encendida).
+
+**La idea: una serie es un lote de una unidad.** No se creó un segundo sistema de inventario: el que ya reparte cada movimiento entre lotes (INV-5a) sirve tal cual si cada serie es un lote cuya existencia
+nunca pasa de una unidad y que no vence. Eso da gratis lo que ya funciona: entradas, órdenes de compra, ventas, apartados, daños, bajas, transferencias directas y con envío, conteos por lote y el historial.
+Lo nuevo es la **bandera** (`tracksSerials`) y las **reglas** que hacen falta para que "un lote de una unidad" sea de verdad una serie.
+
+**Qué se puede hacer.**
+
+1. **Activar eligiendo «por series».** La tarjeta de activación ofrece «Por lotes» o «Por series». Con series no hay vencimiento (pedirlo se rechaza con `SERIES_SIN_VENCIMIENTO`) y la bandera no cambia después
+   (la base lo vigila). Lo que ya había pasa, como siempre, al lote legado, que aquí se llama **«SIN SERIE»** (puede tener varias unidades: es la excepción).
+2. **Entradas con series.** La línea de una entrada de mercancía o de una recepción de orden de compra pide **un número de serie por unidad** (una caja de texto: uno por renglón, o separados por coma);
+   la cantidad de la línea son las series que se escribieron. Se rechaza una serie repetida en la línea (`SERIE_REPETIDA`: a y A son la misma), «SIN LOTE» (`SERIE_REQUERIDA`), con vencimiento
+   (`SERIE_CON_VENCIMIENTO`) o de más de una unidad, un número mal escrito y más de 1.000 por línea; todo antes de tocar nada.
+3. **«Una serie, una unidad».** Un número de serie que **ya está en el inventario** (vendible o dañado, en cualquier sucursal) no entra otra vez: `SERIE_YA_EXISTE`, con el nombre de la sucursal donde está.
+   Una serie que ya salió (vendida, dada de baja) **sí** puede volver a entrar (la devolución del cliente, el arreglo). Lo dice el servicio con un mensaje claro y lo **garantiza la base** aunque dos entradas
+   lleguen a la vez (ver abajo).
+4. **Asignar series a lo que ya había.** Al activar, lo que había queda «SIN SERIE». «Asignar series» (por sucursal, hasta 200 por vez) saca N unidades **disponibles** del «SIN SERIE» y mete N series nuevas de
+   una unidad, con **un par de ajustes** (salida del legado + entrada de las series) con el motivo de reasignación de lote: **no cuenta como merma**, las unidades no salieron; el total de la sucursal no
+   cambia. Idempotente por clave (la misma clave con otras series es `CLAVE_REUTILIZADA`); lo apartado no se asigna.
+5. **Vender primero lo «SIN SERIE» y luego la serie más antigua.** Es el orden FEFO de siempre aplicado a lotes que no vencen (el legado primero, luego por antigüedad). Se puede elegir una serie concreta al
+   dañar, ajustar o dar de baja, y al transferir (la serie se va a la otra sucursal y sigue siendo una sola unidad).
+6. **Lo que una serie NO hace.** No se mueve entre lotes (`SERIES_NO_SE_MUEVEN`: cada serie es su propio lote; lo que se hace es asignar, vender o transferir) y no tiene vencimiento que corregir
+   (`SERIE_NO_VENCE`). La tabla de la ficha habla de series: sin columna de vencimiento, sin «Corregir vencimiento», sin «Mover unidades entre lotes».
+7. **Buscar una serie** (`/admin/inventario/reportes/series`, desde el hub de reportes): por el número o parte de él, dice de qué producto es, **dónde está ahora** (o que ya no está en existencia) y
+   **toda su historia** del ledger (entró, se transfirió, se vendió, se dañó…), de lo más reciente a lo más antiguo, con la sucursal y el motivo. Solo series de la empresa, sin dinero.
+
+**La base lo vigila.** Un `CHECK` en `inventory_lot_tracking` impide que un producto lleve series Y exija vencimiento, y el disparador de la activación hace **inmutable** la bandera `tracksSerials`.
+`inventory_serial_comprobar(lote)` comprueba, al cerrar cada transacción (disparadores diferidos sobre `inventory_lot_balances` y `inventory_lots`), que una serie **no tenga más de una unidad entre todas las
+sucursales** (vendible + dañada) y que **no tenga fecha de vencimiento**; el «SIN SERIE» y los lotes de productos con lotes no se comprueban. Como dos transacciones que meten la misma serie en
+sucursales distintas no se ven entre sí hasta confirmar, la función toma un **candado de asesor por serie** (`pg_advisory_xact_lock`): las dos se turnan y la segunda ve a la primera y se rechaza.
+El servicio, además, bloquea (`FOR UPDATE`, en orden de id para no interbloquearse) las filas de las series que toca.
+
+**Cómo se hace la detección de «ya existe».** El servicio comprueba antes de escribir (`asegurarLotes`) para dar el mensaje con la sucursal; la base es la red de seguridad para la carrera. Un rechazo de
+la base llega a la pantalla como el mensaje genérico de siempre, no con el texto bonito: solo ocurre si dos entradas de la misma serie coinciden en el mismo instante.
+
+**Lo que 5c NO hace (a propósito, o pendiente).**
+- **Desactivar series con historia** sigue sin existir (igual que los lotes, §36); se puede deshacer la activación mientras ningún movimiento se haya repartido.
+- **Cambiar un producto de lotes a series o al revés** no se puede (la bandera es inmutable); habría que desactivar (solo posible sin historia) y activar de nuevo.
+- **El conteo con series NO se probó ni se adaptó.** Como una serie es un lote, el conteo por lote la trata como cualquier lote (una fila por serie), pero no hay una prueba que lo cubra ni una vista pensada para series (con muchas unidades la hoja sería pesada, y contar una serie que la base ve en otra sucursal no se ha ejercitado). Hasta que se pruebe, no cuentes con series en un conteo.
+- **Importar series por CSV** (una entrada) sigue vetado igual que los lotes: se usa la entrada de mercancía de la pantalla.
+- **Garantía, etiquetas imprimibles y escaneo de la serie en caja o en el POS** no se hicieron: el número de serie se teclea o se pega (un lector de código de barras puede escribir en el campo).
+- **La venta en el POS no pregunta qué serie se vende**: sale la más antigua (FEFO). Elegir la serie al vender es parte de la API (5e) y de una pantalla de caja que hoy no existe.
+
+**Archivos.** `prisma/migrations/20261071_inventory_serials/migration.sql` y `prisma/schema/inventario.prisma` (`tracksSerials`, índice por código), `modules/inventory/lotes.ts` (`separarSeries`,
+`validarSeriesDeLinea`, `MAX_SERIES_*`, y `validarLotesDeLinea` con `series`), `service.ts` (`activarLotesEnTx` con `series`, `asignarSeriesEnTx`, el control de `SERIE_YA_EXISTE` en `asegurarLotes`, el
+bloqueo de filas en `escribirRepartos`), `compras-service.ts`, `series-queries.ts` (`buscarSeriesEnTx`), `lotes-queries.ts` y `queries.ts` / `compras-queries.ts` (la bandera en las lecturas),
+`actions.ts` (`asignarSeriesInventario` y `activarLotesInventario` con `series`, ambas con la función `ajustar`) y `components/inventario/` (`ActivarLotesCard`, `EditorDeLotes`, `AsignarSeries`,
+`LotesDeSucursal`, `SucursalInventarioCard`, `EntradaMultipleForm`, `RecibirOrdenCompraForm`) y la página `reportes/series`. Además, `scripts/e2e/base-limpia.mjs` aplica la `20261071`.
+
+## 39. Verificación de INV-5c (2026-10-16)
+
+Local, sobre PostgreSQL 16 desechable. **INV-5c trae la migración `20261071`**: se aplicó (dos veces, para comprobar que es idempotente) a la base desechable `supplytest`, se creó con ella la base de E2E
+`membego_e2e_inv2` y se comprobó contra una base «sombra» que el esquema de Prisma y las migraciones no se desvían (`prisma migrate diff --from-migrations … --to-schema-datamodel … --exit-code`: «No difference
+detected»). **No se tocó ninguna base real**: la migración **todavía no se ha aplicado en producción**: la aplicará `migrate deploy` al fusionar la rama, antes de desplegar el código, junto con la
+`20261067`–`20261070`. Sin Supabase real, Vercel, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ve** la elección «Por lotes / Por series», la caja de series, «Asignar series» ni la página «Buscar
+una serie»: el E2E comprueba qué dicen y qué hacen, no su aspecto.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo) |
+| `bun run build` y `bun run presupuesto` | verdes; indicador general **8.995/9.200 KB (98 %)** (8.976 antes de 5c: +19 KB; quedan 205 KB de margen) |
+| Unitarias (`bun run test`) | 4642 pruebas: 4635 pasan, 0 fallan, 7 omitidas heredadas (9 nuevas) |
+| PostgreSQL (`bun run test:db`, base `supplytest`) | **1015/1015** (1001 de antes + 14 nuevas) |
+| Pruebas nuevas | 9 puras y guardias (`inventario-series.test.ts`), 14 contra PostgreSQL (`inventory-series.db.test.ts`) y 1 recorrido E2E (en `inventario-lotes.spec.ts`); se ajustaron varias pruebas existentes (ver abajo) |
+| E2E (`node scripts/e2e/correr.mjs`, escritorio) | **24/24**: `inventario-lotes` (9, con el recorrido nuevo) e `inventario-admin` (15) |
+| Deriva del esquema | `prisma migrate diff` contra una base sombra con las migraciones aplicadas: sin diferencias |
+| Mutaciones | **63** (53 de código —dominio, servicio, lecturas, acciones y pantallas— y 10 de la propia migración aplicadas a una base real): 60 detectadas, 3 que se dejan (ver abajo). 8 de código y 5 de la migración **sobrevivieron la primera vez** y se mataron con pruebas nuevas (5 de código —bitácora de asignar, lo dañado y el orden de la búsqueda, y dos guardias de pantalla— y los 5 de la migración, con la prueba 14) |
+
+Qué cubren las pruebas contra PostgreSQL (servicio real): activar con series (la bandera, lo que había al legado, sin vencimiento, la bandera y el vencimiento inmutables en la base, y un producto con lotes que
+sigue igual); la entrada con series y todo lo que se rechaza sin dejar nada a medias (repetidas, cantidad que no cuadra, «SIN LOTE», más de una unidad, con vencimiento, mal escrita, sin series); «una serie, una
+unidad» (la misma serie dos veces, en otra sucursal, por un sobrante, dañada también cuenta, vendida puede volver); dos entradas de la misma serie a la vez; la regla de la base por dentro (cuenta lo dañado,
+rechaza el vencimiento, se turna por serie con su candado y vive en disparadores diferidos); el orden de venta («SIN LOTE», luego la más antigua) y elegir una serie; apartar, transferir una serie (elegida y
+sin elegir); asignar series (sale del «SIN LOTE» de la sucursal, el total no cambia, un par de ajustes de reasignación, idempotencia por clave, bitácora) y todo lo que se rechaza; mover entre lotes y corregir
+vencimiento vetados; una orden de compra recibida con series (incluida una ya recibida); deshacer la activación (sin historia sí, con una serie recibida no, y volver a activar como lotes); y la búsqueda de una
+serie (su producto, dónde está, su historia en orden, por parte del número, la vendida sin ubicación, la dañada, la exacta primero, solo de su empresa y sin cruzar con productos con lotes).
+
+Qué cubre el recorrido E2E: un taladro con 4 unidades sueltas → activar eligiendo «Por series» (no pide vencimiento) → lo que había queda «SIN SERIE» y la tabla habla de series, sin vencimiento ni «Mover
+unidades entre lotes» → asignar `TAL-001` y `tal-002` (4 → 2 sin serie; una ya asignada se rechaza sin cambiar nada) → un movimiento suelto con serie y cantidad 2 se rechaza → una entrada con series: repetidas
+y una que ya existe (con la sucursal donde está) se rechazan sin dejar series a medias; con dos nuevas entra, el detalle dice los lotes y cada serie es una unidad contra la base → «Buscar una serie» desde el hub:
+encuentra por parte del número, enseña producto, existencia en la sucursal e historia, y dice cuándo no hay nada.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Mi primera pasada de mutaciones no valía nada, y no lo vi hasta leer los resultados.** Salían 53 de 53 «detectadas», pero dos guardias existentes de INV-5a (la bitácora de «activar» y el formulario de
+  entrada) estaban **rojas desde mis cambios**, y la batería rápida falla con cualquiera de ellas: todo «se detectaba» por una prueba que ya fallaba. Las arreglé (decían `tipo: 'LOTES'` a secas y la validación
+  sin series) y **repetí la batería entera**; las cifras de arriba son de la segunda pasada. La lección: antes de medir mutantes, comprobar que la base de comparación está en verde.
+- **La cadena completa encontró lo que las pruebas rápidas no miraban:** tres guardias de INV-5b2 que fijaban el texto exacto del servicio de compras, de su lectura y del formulario de recepción; una
+  prueba contra PostgreSQL que comparaba con `deepEqual` la forma exacta de `lotesDeVarianteEnTx` (ganó el campo `series`); la tabla de rutas del documento de separación (`bun run docs:rutas`), y una prueba
+  E2E que contaba los informes del hub (7 con `costos`, 6 sin ella; eran 6 y 5). Todo eran pruebas desfasadas por un cambio correcto, ninguna un fallo del producto, pero solo se vieron al correr TODO.
+- **Dos tropiezos de herramienta, no del producto.** El ayudante del E2E que lee las cifras de una fila de lote asumía la columna de vencimiento (en la tabla de series no hay: se escribió otro), y contar los
+  `li` de la lista de series contaba también las listas anidadas (se cuentan solo los hijos directos). Y al detener una batería con `pkill` maté mi propio intérprete en mitad de un mutante: dejó un archivo
+  mutado, que se restauró desde su copia y se verificó antes de seguir.
+- **Mutaciones: lo que enseñaron los sobrevivientes.** La bitácora de «asignar series» no estaba cubierta; lo dañado y el orden de la búsqueda tampoco; y la base entera de la regla («cuenta lo dañado», «rechaza el
+  vencimiento», «candado por serie», los dos disparadores y que sean diferidos) solo se vigilaba de rebote: la prueba 14 la mira por dentro. Tres quedan sin prueba **a propósito**: (a) el **bloqueo de filas
+  `FOR UPDATE`** de las series al escribir los repartos es **defensivo** (la inserción del lote, por su índice único, y la comprobación de la base ya serializan a dos entradas de la misma serie; si faltara, la
+  base lo sigue sosteniendo); (b) que la búsqueda distinga mayúsculas es **equivalente** (el texto se normaliza a mayúsculas y los códigos se guardan así); y (c) el filtro por empresa en la búsqueda de lotes es
+  **defensa en profundidad** (la sesión de la empresa ya filtra en la base; la guardia estática lo exige igual).
+
+**Qué NO se verificó:** cómo se ve nada (ni escritorio con capturas, ni móvil); Supabase real, RLS o permisos de la base real (todo se probó con el rol de la base desechable) y **la migración `20261071` contra la base
+real** (la aplica el flujo al fusionar; cambia el cuerpo de una función y crea dos disparadores diferidos sobre `inventory_lot_balances` e `inventory_lots`, que se escriben en cada venta: se toma un bloqueo corto
+sobre ambas, con `lock_timeout` de 5 s, y **conviene fusionar fuera de hora punta**); el **conteo con series** y su hoja; las **ventas por pedido, POS y cobro de una reserva con un producto con series** de punta a punta
+(se probaron la venta directa y el apartado del servicio, no el recorrido de un pedido); la **importación por CSV** de series; qué pasa en producción con la historia real de series; el rendimiento de la búsqueda de
+una serie con muchísimas series (hay un índice `(companyId, code)`, pero no se midió); y que la rama sigue sin PR ni CI remoto desde INV-4a. **Y lo que se decidió no hacer:** desactivar con historia (§36), cambiar de
+lotes a series y elegir la serie al vender (§38).
+

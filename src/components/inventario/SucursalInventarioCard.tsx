@@ -26,6 +26,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { nuevaClave } from './clave'
 import { LotesDeSucursal } from './LotesDeSucursal'
+import { AsignarSeries } from './AsignarSeries'
 
 export interface SaldoSucursalVista {
   sucursalId: string
@@ -44,6 +45,8 @@ export interface SaldoSucursalVista {
 /** Lo que la tarjeta necesita saber de los lotes del producto (solo si lo lleva). */
 export interface LotesParaTarjeta {
   exigeVencimiento: boolean
+  /** INV-5c: el producto lleva SERIES: cada unidad es un lote con su número de serie. */
+  series?: boolean
   /** Los lotes con existencias en ESTA sucursal, de lo que antes vence a lo que no vence. */
   deSucursal: LoteVista[]
   /** Todos los lotes del producto (para elegir el destino al mover unidades). */
@@ -115,6 +118,7 @@ export function SucursalInventarioCard({
   const codigoEscrito = normalizarCodigoLote(loteCodigo)
   const loteExistente = lotes && codigoEscrito.ok ? lotes.catalogo.find((l) => l.codigo === codigoEscrito.valor) : undefined
   const esSinLote = codigoEscrito.ok && esCodigoSinLote(codigoEscrito.valor)
+  const conSeries = lotes?.series === true
 
   function registrar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -142,6 +146,9 @@ export function SucursalInventarioCard({
         }
       } else if (!codigoEscrito.ok) {
         toast.error(codigoEscrito.error)
+        return
+      } else if (conSeries && (esSinLote || numero !== 1)) {
+        toast.error(esSinLote ? 'Un producto con series lleva el número de serie de cada unidad: «SIN LOTE» no es una serie.' : 'Una serie es una sola unidad: la cantidad es 1. Para varias, usa «Entrada de mercancía».')
         return
       } else {
         if (lotes.exigeVencimiento && !esSinLote && !loteExistente && loteVence === '') {
@@ -299,9 +306,13 @@ export function SucursalInventarioCard({
 
         {lotes && (
           <div className="space-y-2 border-t pt-4">
-            <p className="text-sm font-medium">Lotes en esta sucursal</p>
-            <LotesDeSucursal lotes={lotes.deSucursal} sucursal={saldo.nombre} corregir={puedeAjustar ? { exigeVencimiento: lotes.exigeVencimiento } : undefined} />
-            <p className="text-xs text-muted-foreground">Se vende, se aparta y se saca primero lo que antes vence. Lo vencido no se vende y el barrido diario lo pasa a dañado.</p>
+            <p className="text-sm font-medium">{conSeries ? 'Series en esta sucursal' : 'Lotes en esta sucursal'}</p>
+            <LotesDeSucursal lotes={lotes.deSucursal} sucursal={saldo.nombre} series={conSeries} corregir={puedeAjustar ? { exigeVencimiento: lotes.exigeVencimiento } : undefined} />
+            <p className="text-xs text-muted-foreground">
+              {conSeries
+                ? 'Cada serie es una sola unidad. Se vende primero la más antigua; busca una serie con su historia en Inventario → Reportes → Buscar una serie.'
+                : 'Se vende, se aparta y se saca primero lo que antes vence. Lo vencido no se vende y el barrido diario lo pasa a dañado.'}
+            </p>
           </div>
         )}
 
@@ -337,7 +348,7 @@ export function SucursalInventarioCard({
               {entra && lotes && (
                 <div className="grid gap-3 sm:grid-cols-[1.2fr_1fr]">
                   <div className="space-y-1.5">
-                    <Label htmlFor={`lote-${k}`}>{operacion === 'ENTRADA' ? 'Lote *' : 'Lote (opcional)'}</Label>
+                    <Label htmlFor={`lote-${k}`}>{conSeries ? (operacion === 'ENTRADA' ? 'Serie *' : 'Serie (opcional)') : operacion === 'ENTRADA' ? 'Lote *' : 'Lote (opcional)'}</Label>
                     <Input
                       id={`lote-${k}`}
                       name="lote"
@@ -346,7 +357,7 @@ export function SucursalInventarioCard({
                       maxLength={60}
                       value={loteCodigo}
                       onChange={(e) => setLoteCodigo(e.target.value)}
-                      placeholder={operacion === 'ENTRADA' ? `Código del empaque, o ${CODIGO_SIN_LOTE}` : operacion === 'DEVOLUCION' ? 'Vacío: vuelve al lote de que salió' : `Vacío: va a ${CODIGO_SIN_LOTE}`}
+                      placeholder={conSeries ? 'Número de serie de la unidad' : operacion === 'ENTRADA' ? `Código del empaque, o ${CODIGO_SIN_LOTE}` : operacion === 'DEVOLUCION' ? 'Vacío: vuelve al lote de que salió' : `Vacío: va a ${CODIGO_SIN_LOTE}`}
                     />
                     <datalist id={`lotes-${k}`}>
                       {lotes.catalogo.map((l) => (
@@ -354,18 +365,20 @@ export function SucursalInventarioCard({
                       ))}
                     </datalist>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`vence-${k}`}>{lotes.exigeVencimiento && !esSinLote && !loteExistente ? 'Vence *' : 'Vence (opcional)'}</Label>
-                    <Input
-                      id={`vence-${k}`}
-                      name="vence"
-                      type="date"
-                      value={loteExistente ? (loteExistente.vencimiento ?? '') : esSinLote ? '' : loteVence}
-                      disabled={esSinLote || loteExistente !== undefined}
-                      onChange={(e) => setLoteVence(e.target.value)}
-                    />
-                  </div>
-                  {loteExistente && (
+                  {!conSeries && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`vence-${k}`}>{lotes.exigeVencimiento && !esSinLote && !loteExistente ? 'Vence *' : 'Vence (opcional)'}</Label>
+                      <Input
+                        id={`vence-${k}`}
+                        name="vence"
+                        type="date"
+                        value={loteExistente ? (loteExistente.vencimiento ?? '') : esSinLote ? '' : loteVence}
+                        disabled={esSinLote || loteExistente !== undefined}
+                        onChange={(e) => setLoteVence(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  {loteExistente && !conSeries && (
                     <p className="text-xs text-muted-foreground sm:col-span-2">
                       Ese lote ya existe: {loteExistente.vencimiento ? `vence el ${loteExistente.vencimiento}` : 'no vence'}. Un lote tiene un solo vencimiento.
                     </p>
@@ -374,12 +387,12 @@ export function SucursalInventarioCard({
               )}
               {sale && lotes && (
                 <div className="space-y-1.5">
-                  <Label htmlFor={`lote-salida-${k}`}>De qué lote</Label>
+                  <Label htmlFor={`lote-salida-${k}`}>{conSeries ? 'De qué serie' : 'De qué lote'}</Label>
                   <select id={`lote-salida-${k}`} name="loteSalida" value={loteSalida} onChange={(e) => setLoteSalida(e.target.value)} className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
-                    <option value="">{deDanados ? 'Automático (el que antes vence)' : 'Automático (el que antes vence, sin lo vencido)'}</option>
+                    <option value="">{conSeries ? 'Automático (la más antigua)' : deDanados ? 'Automático (el que antes vence)' : 'Automático (el que antes vence, sin lo vencido)'}</option>
                     {lotesDeLosQueSale.map((l) => (
                       <option key={l.loteId} value={l.loteId}>
-                        {l.codigo} · {l.textoVencimiento} · {formatearCantidad(deDanados ? l.damaged : l.disponible)} {deDanados ? 'dañada(s)' : 'disponible(s)'}
+                        {l.codigo} · {conSeries ? '' : `${l.textoVencimiento} · `}{formatearCantidad(deDanados ? l.damaged : l.disponible)} {deDanados ? 'dañada(s)' : 'disponible(s)'}
                       </option>
                     ))}
                   </select>
@@ -437,7 +450,10 @@ export function SucursalInventarioCard({
               </Button>
             </form>
 
-            {lotes && lotes.deSucursal.some((l) => l.disponible > 0) && (
+            {conSeries && (lotes?.deSucursal.find((l) => l.legado)?.disponible ?? 0) > 0 && (
+              <AsignarSeries varianteId={varianteId} sucursalId={saldo.sucursalId} sucursal={saldo.nombre} sinSerie={lotes?.deSucursal.find((l) => l.legado)?.disponible ?? 0} />
+            )}
+            {lotes && !conSeries && lotes.deSucursal.some((l) => l.disponible > 0) && (
               <form onSubmit={moverLotes} className="space-y-3 border-t pt-4" aria-label={`Mover unidades entre lotes en ${saldo.nombre}`}>
                 <p className="text-sm font-medium">Mover unidades de un lote a otro</p>
                 <div className="grid gap-3 sm:grid-cols-[1fr_1fr_8rem]">

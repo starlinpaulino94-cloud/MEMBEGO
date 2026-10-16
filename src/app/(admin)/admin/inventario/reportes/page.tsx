@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BookOpen, CalendarClock, PackageX, Percent, RefreshCw, TrendingDown } from 'lucide-react'
+import { BookOpen, CalendarClock, PackageX, Percent, RefreshCw, ScanBarcode, TrendingDown } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { puedeFuncion, requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
@@ -57,6 +57,13 @@ export default async function ReportesInventarioPage() {
       titulo: 'Vence pronto',
       texto: `Los lotes con existencias que ya vencieron o vencen en los próximos días (${VENTANA_POR_DEFECTO} por defecto; de 7 a 90), por sucursal y de lo que antes vence a lo que después.`,
       costos: 'Con costos: cuánto dinero hay en riesgo.',
+    },
+    {
+      href: '/admin/inventario/reportes/series',
+      icono: ScanBarcode,
+      titulo: 'Buscar una serie',
+      texto: 'De qué producto es un número de serie, dónde está ahora y todo lo que le pasó: cuándo entró, si se transfirió, se vendió o se dio de baja.',
+      costos: 'Sin dinero: solo la historia de la unidad.',
     },
     {
       href: '/admin/inventario/reportes/rotacion',

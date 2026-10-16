@@ -888,6 +888,8 @@ export interface VarianteBuscable {
   llevaLotes: boolean
   /** INV-5a: ¿cada lote nuevo debe traer fecha de vencimiento? */
   exigeVencimiento: boolean
+  /** INV-5c: ¿lleva SERIES (un lote por unidad)? Entonces su línea de entrada trae un número de serie por unidad. */
+  llevaSeries: boolean
 }
 
 /**
@@ -911,7 +913,7 @@ export async function buscarVariantesParaEntradaEnTx(tx: Tx, companyId: string, 
     isDefault: true,
     item: { select: { name: true } },
     inventoryLevels: { where: { companyId, ...(sucursalId ? { locationId: sucursalId } : { id: 'sin-sucursal' }) }, select: { onHand: true, reserved: true } },
-    lotTracking: { where: { companyId }, select: { requiresExpiry: true } },
+    lotTracking: { where: { companyId }, select: { requiresExpiry: true, tracksSerials: true } },
   } satisfies Prisma.CatalogVariantSelect
   // Dos consultas y no una: la coincidencia EXACTA (lo que escribe un lector) tiene que aparecer aunque haya mil
   // coincidencias parciales por delante en el orden alfabético.
@@ -954,6 +956,7 @@ export async function buscarVariantesParaEntradaEnTx(tx: Tx, companyId: string, 
       exacto: esCodigoExacto(t, v),
       llevaLotes: v.lotTracking.length > 0,
       exigeVencimiento: v.lotTracking[0]?.requiresExpiry === true,
+      llevaSeries: v.lotTracking[0]?.tracksSerials === true,
     })
   }
   return salida.slice(0, tope)

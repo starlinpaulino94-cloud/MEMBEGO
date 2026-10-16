@@ -169,7 +169,7 @@ test('INV-5a · activar los lotes: precondiciones, apertura íntegra y rastro', 
   // La apertura copia las TRES cubetas, tal cual.
   assert.match(activar, /onHand: n\.onHand, reserved: n\.reserved, damaged: n\.damaged/)
   assert.match(activar, /legacy: true/)
-  assert.match(activar, /tipo: 'LOTES'/, 'deja rastro en la bitácora')
+  assert.match(activar, /tipo: e\.series === true \? 'SERIES' : 'LOTES'/, 'deja rastro en la bitácora (lotes o series)')
 })
 
 test('INV-5a · los flujos que todavía no reparten por lote se niegan a tocar un producto con lotes', () => {
@@ -253,7 +253,7 @@ test('INV-5a · las pantallas: la ficha lee los lotes aparte y sin romperse, ofr
   assert.match(t, /moverEntreLotesInventario\(/)
   assert.match(t, /lotesSalida: \[\{ loteId: loteSalida, cantidad: numero \}\]/)
   const e = leer('src/components/inventario/EntradaMultipleForm.tsx')
-  assert.match(e, /validarLotesDeLinea\(lote, cuerpo\[i\]\.cantidad, \{ exigirVencimiento: lineas\[i\]\.exigeVencimiento \}\)/, 'el formulario valida con las mismas reglas del servidor')
+  assert.match(e, /validarLotesDeLinea\(lote, cuerpo\[i\]\.cantidad, \{ exigirVencimiento: lineas\[i\]\.exigeVencimiento, series: lineas\[i\]\.llevaSeries \}\)/, 'el formulario valida con las mismas reglas del servidor')
   const act = leer('src/components/inventario/ActivarLotesCard.tsx')
   assert.match(act, /no se puede deshacer/i, 'avisa que es de un solo sentido')
   assert.match(act, /setConfirmando\(true\)/, 'en dos pasos')

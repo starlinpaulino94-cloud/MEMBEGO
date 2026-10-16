@@ -99,6 +99,8 @@ import {
   validarCodigoDeLoteNuevo,
   validarLotesDeLinea,
   validarMovimientoEntreLotes,
+  MAX_SERIES_A_ASIGNAR,
+  validarSeriesDeLinea,
   type LoteConSaldo,
   type LoteDeSaldo,
   type LoteDeLinea,
@@ -292,6 +294,8 @@ async function candadoDeLotes(tx: Tx, companyId: string, exclusivo: boolean): Pr
 interface PoliticaDeLotes {
   exigirVencimiento: boolean
   legadoId: string
+  /** INV-5c: el producto lleva SERIES (cada lote es una serie de UNA unidad), no lotes. */
+  series: boolean
 }
 
 /**
@@ -309,13 +313,13 @@ async function politicaDeLotes(tx: Tx, companyId: string, varianteId: string): P
   }
   const recordada = memo.get(varianteId)
   if (recordada !== undefined) return recordada
-  const t = await tx.inventoryLotTracking.findUnique({ where: { catalogVariantId: varianteId }, select: { companyId: true, requiresExpiry: true } })
+  const t = await tx.inventoryLotTracking.findUnique({ where: { catalogVariantId: varianteId }, select: { companyId: true, requiresExpiry: true, tracksSerials: true } })
   let politica: PoliticaDeLotes | null = null
   if (t) {
     if (t.companyId !== companyId) fallo('NIVEL_AJENO', 'El producto no pertenece a esta empresa.')
     const legado = await tx.inventoryLot.findFirst({ where: { catalogVariantId: varianteId, companyId, legacy: true }, select: { id: true } })
     if (!legado) fallo('LOTE_LEGADO_FALTA', 'Este producto lleva lotes pero no tiene su lote «SIN LOTE». Avisa a soporte.')
-    politica = { exigirVencimiento: t.requiresExpiry, legadoId: legado.id }
+    politica = { exigirVencimiento: t.requiresExpiry, legadoId: legado.id, series: t.tracksSerials }
   }
   memo.set(varianteId, politica)
   return politica
@@ -380,6 +384,15 @@ async function asegurarLotes(tx: Tx, companyId: string, varianteId: string, poli
     }
     ids.set(l.codigo, x.id)
   }
+  // INV-5c: una serie ya con unidades en el inventario (en cualquier sucursal, vendible o dañada) no entra otra vez. Se dice aquí con el
+  // nombre de la sucursal; la base lo vigila de todos modos (`inventory_serial_comprobar`) por si dos entradas llegan a la vez.
+  if (politica.series) {
+    const ocupada = await tx.inventoryLotBalance.findFirst({
+      where: { companyId, lotId: { in: ordenados.map((l) => por.get(l.codigo)!.id) }, OR: [{ onHand: { gt: 0 } }, { damaged: { gt: 0 } }] },
+      select: { lot: { select: { code: true } }, level: { select: { location: { select: { nombre: true } } } } },
+    })
+    if (ocupada) fallo('SERIE_YA_EXISTE', `La serie ${ocupada.lot.code} ya está en el inventario (${ocupada.level.location.nombre}): un número de serie es de una sola unidad.`)
+  }
   return ids
 }
 
@@ -388,6 +401,14 @@ async function asegurarLotes(tx: Tx, companyId: string, varianteId: string, poli
  * saldo de cada lote lo mueve la BASE con el reparto (ver la migración `20261068`); aquí solo se dice de qué lotes es el movimiento.
  */
 async function escribirRepartos(tx: Tx, companyId: string, varianteId: string, filas: readonly { nivelId: string; movimientoId: string; reparto: readonly RepartoLote[] }[]): Promise<void> {
+  // INV-5c: una serie es UNA unidad y no puede estar en dos sitios. Se bloquean las filas de las series que se tocan (en orden de id, para
+  // que dos movimientos no se interbloqueen): la segunda transacción que meta la misma serie espera a la primera y la base, al confirmar,
+  // la ve. (La base lo vigila de todos modos, ver `inventory_serial_comprobar`.)
+  const politica = await politicaDeLotes(tx, companyId, varianteId)
+  if (politica?.series) {
+    const ids = [...new Set(filas.flatMap((f) => f.reparto.map((r) => r.loteId)))].filter((id) => id !== politica.legadoId).sort()
+    if (ids.length > 0) await tx.$queryRaw`SELECT "id" FROM "inventory_lots" WHERE "id" IN (${Prisma.join(ids)}) AND "companyId" = ${companyId} ORDER BY "id" FOR UPDATE`
+  }
   const saldos = new Map<string, { inventoryLevelId: string; lotId: string }>()
   for (const f of filas) for (const r of f.reparto) saldos.set(`${f.nivelId}|${r.loteId}`, { inventoryLevelId: f.nivelId, lotId: r.loteId })
   const ordenados = [...saldos.values()].sort((a, b) => (a.inventoryLevelId !== b.inventoryLevelId ? (a.inventoryLevelId < b.inventoryLevelId ? -1 : 1) : a.lotId < b.lotId ? -1 : a.lotId > b.lotId ? 1 : 0))
@@ -474,7 +495,7 @@ async function resolverReparto(
   // ENTRA desde fuera.
   if (m.sourceBucket === null) {
     if (peticion?.tipo === 'ENTRANTE' && !sinContenido(peticion.lotes)) {
-      const r = validarLotesDeLinea(peticion.lotes, cantidad, { exigirVencimiento: politica.exigirVencimiento })
+      const r = validarLotesDeLinea(peticion.lotes, cantidad, { exigirVencimiento: politica.exigirVencimiento, series: politica.series })
       if (!r.ok) fallo(r.codigo, `«${c.nombre}»: ${r.error}`)
       const ids = await asegurarLotes(tx, companyId, c.varianteId, politica, r.lotes, userId)
       return fusionarReparto(r.lotes.map((x) => ({ loteId: ids.get(x.codigo)!, cantidad: x.cantidad })))
@@ -544,7 +565,7 @@ async function mismoRepartoQueElPrevio(tx: Tx, companyId: string, movimientoId: 
   }
   const cantidad = previos.reduce((s, p) => s + p.quantity, 0)
   const politica = await politicaDeLotes(tx, companyId, varianteId)
-  const r = validarLotesDeLinea(peticion.lotes, cantidad, { exigirVencimiento: politica?.exigirVencimiento === true })
+  const r = validarLotesDeLinea(peticion.lotes, cantidad, { exigirVencimiento: politica?.exigirVencimiento === true, series: politica?.series === true })
   return r.ok && r.lotes.length === previos.length && r.lotes.every((x) => previos.some((p) => p.balance.lot.code === x.codigo && p.quantity === x.cantidad))
 }
 
@@ -1521,10 +1542,11 @@ export interface ResultadoActivarLotes {
 export async function activarLotesEnTx(
   tx: Tx,
   companyId: string,
-  e: { varianteId: string; exigirVencimiento?: boolean; ahora?: Date },
+  e: { varianteId: string; exigirVencimiento?: boolean; /** INV-5c: el producto lleva SERIES (un lote por unidad) en vez de lotes. */ series?: boolean; ahora?: Date },
   ctx: ContextoAuditoria
 ): Promise<ResultadoActivarLotes> {
   const ahora = e.ahora ?? new Date()
+  if (e.series === true && e.exigirVencimiento === true) fallo('SERIES_SIN_VENCIMIENTO', 'Una serie no vence: un producto con series no exige vencimiento.')
   const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
   const nombre = variante.item.name
   await candadoDeLotes(tx, companyId, true)
@@ -1552,7 +1574,7 @@ export async function activarLotesEnTx(
     }
   }
 
-  await tx.inventoryLotTracking.create({ data: { companyId, catalogVariantId: variante.id, requiresExpiry: e.exigirVencimiento === true, activatedBy: ctx.actorId } })
+  await tx.inventoryLotTracking.create({ data: { companyId, catalogVariantId: variante.id, requiresExpiry: e.exigirVencimiento === true, tracksSerials: e.series === true, activatedBy: ctx.actorId } })
   const legado = await tx.inventoryLot.create({ data: { companyId, catalogVariantId: variante.id, code: CODIGO_SIN_LOTE, legacy: true, createdBy: ctx.actorId }, select: { id: true } })
   const conExistencias = niveles.filter((n) => n.onHand > 0 || n.damaged > 0)
   // Los saldos por lote nacen en cero; la apertura los pone al día (la base mueve el saldo con ella).
@@ -1573,7 +1595,7 @@ export async function activarLotesEnTx(
     companyId,
     'INVENTORY_CONFIGURED',
     variante.id,
-    { tipo: 'LOTES', sku: variante.sku, producto: nombre, exigirVencimiento: e.exigirVencimiento === true, sucursales: conExistencias.length, unidades },
+    { tipo: e.series === true ? 'SERIES' : 'LOTES', sku: variante.sku, producto: nombre, exigirVencimiento: e.exigirVencimiento === true, sucursales: conExistencias.length, unidades },
     'InventoryLotTracking'
   )
   return { varianteId: variante.id, legadoId: legado.id, sucursales: conExistencias.length, unidades, repetido: false }
@@ -1622,6 +1644,7 @@ export async function corregirVencimientoLoteEnTx(
   if (!lote) fallo('LOTE_NO_ENCONTRADO', 'Ese lote no existe.')
   const politica = await politicaDeLotes(tx, companyId, lote.catalogVariantId)
   if (!politica) fallo('LOTES_NO_ACTIVOS', 'Ese producto ya no lleva lotes.')
+  if (politica.series) fallo('SERIE_NO_VENCE', 'Una serie no vence: no tiene fecha que corregir.')
   const plan = planDeCorreccionDeVencimiento({ vencimiento: lote.vencimiento, legado: lote.legacy }, e.vencimiento, politica.exigirVencimiento)
   if (!plan.ok) fallo(plan.codigo, plan.error)
   if (plan.sinCambio) return { loteId: lote.id, codigo: lote.code, anterior: lote.vencimiento, nuevo: lote.vencimiento, repetido: true }
@@ -1692,6 +1715,88 @@ export async function desactivarLotesEnTx(tx: Tx, companyId: string, e: { varian
   return { varianteId: variante.id, sucursales: saldos, repetido: false }
 }
 
+// ── INV-5c · Asignar series a lo que ya había ────────────────────────────────
+
+export interface ResultadoAsignarSeries {
+  nivelId: string
+  asignadas: number
+  salidaId: string
+  entradaId: string
+  saldo: SaldoVista
+  repetido: boolean
+}
+
+/**
+ * Le pone SERIE a unidades que no la tenían: al activar las series de un producto con existencias, todo lo que había pasa al «SIN SERIE»
+ * (el lote legado, que puede tener varias unidades). Esto saca N unidades DISPONIBLES de ahí y mete N series nuevas de una unidad cada una,
+ * en la misma sucursal, con un par de ajustes («Asignación de series», el motivo de reasignación de lote: no cuenta como merma, las
+ * unidades no salieron). Las series no pueden existir ya con unidades en ningún sitio (una serie es UNA unidad; la base lo vigila).
+ */
+export async function asignarSeriesEnTx(
+  tx: Tx,
+  companyId: string,
+  e: EntradaBase & { series: readonly string[] },
+  ctx: ContextoAuditoria
+): Promise<ResultadoAsignarSeries> {
+  const clave = claveValida(e.idempotencyKey)
+  const ahora = e.ahora ?? new Date()
+  const filas = (Array.isArray(e.series) ? e.series : []).map((codigo) => ({ codigo, cantidad: 1 }))
+  if (filas.length > MAX_SERIES_A_ASIGNAR) fallo('DEMASIADAS_SERIES', `Se asignan hasta ${MAX_SERIES_A_ASIGNAR} series por operación.`)
+  const validas = validarSeriesDeLinea(filas, filas.length)
+  if (!validas.ok) fallo(validas.codigo, validas.error)
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  const sucursal = await exigirSucursal(tx, companyId, e.sucursalId, false)
+  const politica = await politicaDeLotes(tx, companyId, variante.id)
+  if (!politica?.series) fallo('SERIES_NO_APLICAN', `«${variante.item.name}» no lleva series.`)
+  const cantidad = validas.lotes.length
+  const nivelId = await obtenerNivel(tx, companyId, variante.id, sucursal.id)
+  await bloquear(tx, companyId, [nivelId])
+
+  if (clave) {
+    const salidaPrevia = await tx.inventoryMovement.findFirst({ where: { companyId, idempotencyKey: `${clave}:out` } })
+    if (salidaPrevia) {
+      const entradaPrevia = await tx.inventoryMovement.findFirst({ where: { companyId, idempotencyKey: `${clave}:in` } })
+      const mismas = entradaPrevia ? await mismoRepartoQueElPrevio(tx, companyId, entradaPrevia.id, { tipo: 'ENTRANTE', lotes: validas.lotes }, variante.id) : false
+      if (!entradaPrevia || salidaPrevia.inventoryLevelId !== nivelId || salidaPrevia.quantity !== cantidad || !mismas) {
+        fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra operación distinta.')
+      }
+      return { nivelId, asignadas: cantidad, salidaId: salidaPrevia.id, entradaId: entradaPrevia.id, saldo: await saldoActual(tx, companyId, nivelId), repetido: true }
+    }
+  }
+  await vencerDeNivel(tx, companyId, nivelId, ahora)
+  const lotes = await cargarLotesDeNivel(tx, companyId, nivelId)
+  const legado = lotes.find((l) => l.loteId === politica.legadoId)
+  const disponibles = legado ? disponibleDeLote(legado) : 0
+  if (disponibles < cantidad) {
+    fallo('STOCK_INSUFICIENTE', `En «${sucursal.nombre}» solo hay ${disponibles} unidad(es) sin serie disponibles; no se pueden asignar ${cantidad} series.`)
+  }
+  const ids = await asegurarLotes(tx, companyId, variante.id, politica, validas.lotes, ctx.actorId)
+  const referencia = { tipo: 'SERIES_ASSIGN', id: randomUUID() }
+  const texto = `Asignación de series: ${cantidad} unidad(es) sin serie`
+  const sal = await escribirMovimiento(
+    tx,
+    companyId,
+    nivelId,
+    { type: 'ADJUSTMENT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: cantidad, reason: texto },
+    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:out` : null, motivoCodigo: MOTIVO_REASIGNACION_DE_LOTE, reparto: [{ loteId: politica.legadoId, cantidad }] }
+  )
+  const ent = await escribirMovimiento(
+    tx,
+    companyId,
+    nivelId,
+    { type: 'ADJUSTMENT', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: cantidad, reason: texto },
+    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:in` : null, motivoCodigo: MOTIVO_REASIGNACION_DE_LOTE, reparto: fusionarReparto(validas.lotes.map((l) => ({ loteId: ids.get(l.codigo)!, cantidad: 1 }))) }
+  )
+  await auditarInventario(tx, ctx, companyId, 'INVENTORY_STOCK_CHANGED', nivelId, {
+    tipo: 'SERIES_ASSIGN',
+    cantidad,
+    sku: variante.sku,
+    producto: variante.item.name,
+    sucursal: sucursal.nombre,
+  })
+  return { nivelId, asignadas: cantidad, salidaId: sal.movimiento.id, entradaId: ent.movimiento.id, saldo: vista(ent.saldo), repetido: false }
+}
+
 // ── INV-5a · Mover unidades entre lotes y vencer lotes ───────────────────────
 
 export interface ResultadoMoverEntreLotes {
@@ -1720,7 +1825,9 @@ export async function moverEntreLotesEnTx(
   const clave = claveValida(e.idempotencyKey)
   const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
   const sucursal = await exigirSucursal(tx, companyId, e.sucursalId, false)
-  if (!(await politicaDeLotes(tx, companyId, variante.id))) fallo('LOTES_NO_APLICAN', `«${variante.item.name}» no lleva lotes.`)
+  const politicaMover = await politicaDeLotes(tx, companyId, variante.id)
+  if (!politicaMover) fallo('LOTES_NO_APLICAN', `«${variante.item.name}» no lleva lotes.`)
+  if (politicaMover.series) fallo('SERIES_NO_SE_MUEVEN', `«${variante.item.name}» lleva series: una serie es una unidad y no se pasa a otra. Para ponerle serie a lo que ya había usa «Asignar series»; para llevarla a otra sucursal, una transferencia.`)
   const nivelId = await obtenerNivel(tx, companyId, variante.id, sucursal.id)
   await bloquear(tx, companyId, [nivelId])
 
@@ -2033,7 +2140,7 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
       if (l.lotes && l.lotes.length > 0) fallo('LOTES_NO_APLICAN', `«${nombreDe(l.varianteId)}» no lleva lotes: quita los lotes de esa línea o actívalos en su ficha de inventario.`)
       continue
     }
-    const r = validarLotesDeLinea(l.lotes, l.cantidad, { exigirVencimiento: politica.exigirVencimiento })
+    const r = validarLotesDeLinea(l.lotes, l.cantidad, { exigirVencimiento: politica.exigirVencimiento, series: politica.series })
     if (!r.ok) fallo(r.codigo, `«${nombreDe(l.varianteId)}»: ${r.error}`)
     politicaDe.set(l.varianteId, politica)
     lotesDe.set(l.varianteId, r.lotes)
