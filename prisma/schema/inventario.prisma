@@ -203,6 +203,8 @@ model InventoryReservation {
 
   /// La línea de pedido que originó la reserva (Fase 3).
   orderLines MembegoOrderLine[]
+  /// Si salió de vender un kit (INV-5d): de cuál.
+  kitReservations InventoryKitReservation[]
 
   /// Destino de la FK compuesta de `membego_order_lines`.
   @@unique([id, companyId])
@@ -908,3 +910,66 @@ model InventoryMovementLot {
   @@index([companyId])
   @@map("inventory_movement_lots")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INV-5d · KITS
+//
+// Un KIT es una variante que no lleva existencias propias: se arma con una receta (componentes × cantidad). Vender un kit aparta, vende,
+// libera y devuelve sus componentes. La receta se edita; lo que se apartó por un pedido queda anotado aparte (`InventoryKitReservation`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// La receta de un kit: cuántas unidades de un componente lleva cada kit. Los kits no se anidan (lo vigila la base).
+model InventoryKitComponent {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  kitVariantId String
+  kit          CatalogVariant @relation("KitComponents", fields: [kitVariantId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_components_kit_company_fkey")
+
+  componentVariantId String
+  component          CatalogVariant @relation("ComponentOfKits", fields: [componentVariantId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_components_component_company_fkey")
+
+  /// Unidades del componente por cada kit.
+  quantity Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([kitVariantId, componentVariantId])
+  @@index([componentVariantId])
+  @@index([companyId])
+  @@map("inventory_kit_components")
+}
+
+/// APPEND-ONLY. Qué reservas de componentes salieron de vender un kit en un pedido (la foto de lo que se apartó, aunque la receta cambie después).
+model InventoryKitReservation {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  kitVariantId String
+  kit          CatalogVariant @relation("KitReservationsOfKit", fields: [kitVariantId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_reservations_kit_company_fkey")
+
+  componentVariantId String
+  component          CatalogVariant @relation("KitReservationsOfComponent", fields: [componentVariantId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_reservations_component_company_fkey")
+
+  reservationId String
+  reservation   InventoryReservation @relation(fields: [reservationId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_reservations_reservation_company_fkey")
+
+  /// A qué pertenece (`ORDER` + id del pedido), como en la reserva.
+  referenceType String
+  referenceId   String
+
+  /// Cuántos kits se vendieron y cuántas unidades del componente se apartaron por ellos.
+  kitQuantity Int
+  quantity    Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([reservationId])
+  @@unique([companyId, referenceType, referenceId, kitVariantId, componentVariantId], map: "inventory_kit_reservations_ref_kit_component_key")
+  @@index([companyId, referenceType, referenceId], map: "inventory_kit_reservations_companyId_ref_idx")
+  @@map("inventory_kit_reservations")
+}
+

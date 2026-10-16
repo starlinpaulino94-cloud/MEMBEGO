@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { puedeFuncion } from '@/lib/auth/guards'
 import { cn } from '@/lib/utils'
 
-export type VistaInventario = 'existencias' | 'movimientos' | 'reservas' | 'entradas' | 'conteos' | 'transferencias' | 'reportes' | 'valor' | 'reposicion' | 'compras' | 'proveedores'
+export type VistaInventario = 'existencias' | 'movimientos' | 'reservas' | 'entradas' | 'conteos' | 'transferencias' | 'kits' | 'reportes' | 'valor' | 'reposicion' | 'compras' | 'proveedores'
 
 /** Las vistas que piden la función `comprar` (leen proveedores y costos de órdenes). */
 const REQUIEREN_COMPRAR: ReadonlySet<VistaInventario> = new Set(['reposicion', 'compras', 'proveedores'])
@@ -14,6 +14,7 @@ const VISTAS: ReadonlyArray<{ id: VistaInventario; etiqueta: string; href: strin
   { id: 'entradas', etiqueta: 'Entradas', href: '/admin/inventario/entradas' },
   { id: 'conteos', etiqueta: 'Conteos', href: '/admin/inventario/conteos' },
   { id: 'transferencias', etiqueta: 'Transferencias', href: '/admin/inventario/transferencias' },
+  { id: 'kits', etiqueta: 'Kits', href: '/admin/inventario/kits' },
   { id: 'reportes', etiqueta: 'Reportes', href: '/admin/inventario/reportes' },
   { id: 'valor', etiqueta: 'Valor', href: '/admin/inventario/valor' },
   { id: 'reposicion', etiqueta: 'Reposición', href: '/admin/inventario/reposicion' },

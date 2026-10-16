@@ -95,6 +95,8 @@ import {
   type ResumenConteoAplicado,
   type SaldoVista,
 } from './service'
+import { guardarRecetaDeKitEnTx, quitarRecetaDeKitEnTx } from './kits-service'
+import { candidatosAKitEnTx, type CandidatoDeKit } from './kits-queries'
 
 export type ResultadoInventario<T = unknown> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -1095,3 +1097,48 @@ export async function desvincularProveedorDeProducto(entrada: { varianteId: stri
     return aError(e)
   }
 }
+
+/**
+ * INV-5d · Guarda la receta de un kit (componentes y cuántas unidades de cada uno). Un kit no lleva existencias propias: vender uno aparta,
+ * vende, libera y devuelve sus componentes. La pide la función `ajustar`: cambia cómo se mueve el stock.
+ */
+export async function guardarRecetaDeKit(entrada: { kitVarianteId: string; componentes: { varianteId: string; cantidad: number }[] }): Promise<ResultadoInventario<{ componentes: number; nueva: boolean; sinCambios: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => guardarRecetaDeKitEnTx(tx, c.companyId, { kitVarianteId: texto(entrada.kitVarianteId), componentes: entrada.componentes }, c.ctx))
+    refrescar()
+    return { ok: true, componentes: r.componentes, nueva: r.nueva, sinCambios: r.sinCambios }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** INV-5d · Quita la receta de un kit: vuelve a ser un producto cualquiera. Lo ya apartado en pedidos no cambia. La pide la función `ajustar`. */
+export async function quitarRecetaDeKit(entrada: { kitVarianteId: string }): Promise<ResultadoInventario<{ componentes: number }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => quitarRecetaDeKitEnTx(tx, c.companyId, { kitVarianteId: texto(entrada.kitVarianteId) }, c.ctx))
+    refrescar()
+    return { ok: true, componentes: r.componentes }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** INV-5d · Busca productos que se pueden convertir en kit (los que no controlan inventario por su cuenta ni son componentes). */
+export async function buscarCandidatosAKit(q: string): Promise<ResultadoInventario<{ candidatos: CandidatoDeKit[] }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof q !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const candidatos = await conEmpresa(c.companyId, (tx) => candidatosAKitEnTx(tx, c.companyId, q))
+    return { ok: true, candidatos }
+  } catch (e) {
+    return aError(e)
+  }
+}
+

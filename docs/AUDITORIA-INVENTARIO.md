@@ -131,7 +131,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-5b4 · Lotes en transferencias** | Un producto con lotes se transfiere **por lote**, directo o con envío: sale el que antes vence o los lotes que se elijan y entra al destino en esos mismos lotes; recibir lote por lote (sin pasar de lo que de cada lote sigue en camino), cancelar devuelve cada lote a su sitio, cerrar con faltante lo deja por lote; el detalle, el historial y el CSV dicen de qué lotes es cada cosa | — (sin migración: el estado por lote sale del ledger) | M | **hecha** (§34-35) |
 | **INV-5b5 · Corregir y deshacer** | Corregir el vencimiento de un lote (con motivo, para todas las sucursales y con su historia inmutable) y deshacer la activación de lotes mientras nada se haya movido con lotes. **La desactivación de un producto con historia de lotes NO se hace** (§36) | `20261070` (historia del vencimiento; el disparador del lote solo deja cambiar la fecha con historia de la misma transacción; `inventory_lot_tiene_historial` pasa a mirar los repartos) | M | **hecha** (§36-37) |
 | **INV-5c · Series** | Un producto puede llevar **series**: cada unidad tiene su número de serie y es un lote de UNA unidad, sin vencimiento. «Una serie, una unidad» lo vigila la base. Entradas y órdenes de compra con un número por unidad, «Asignar series» a lo que ya había, vender primero la serie más antigua, y «Buscar una serie» con su historia | `20261071` (bandera `tracksSerials`, la regla de la unidad única y su candado) | L | **hecha** (§38-39) |
-| INV-5d · Kits | Kits que descuentan componentes | Kits | L | pendiente |
+| **INV-5d · Kits** | Un kit es un producto SIN existencias propias, armado con una receta de componentes: venderlo aparta, vende, libera y devuelve los componentes (con sus lotes y series). Cuántos kits alcanzan sale del componente que primero se acaba | `20261072` (receta + foto de lo apartado por pedido; los kits no se anidan) | L | **hecha** (§40-41) |
 | INV-5e · API v1 y rol de bodega | API pública del inventario; un rol que mueve stock sin ver finanzas | — | M | pendiente |
 
 ## 5. INV-1 · qué se hizo
@@ -2353,4 +2353,100 @@ sobre ambas, con `lock_timeout` de 5 s, y **conviene fusionar fuera de hora punt
 (se probaron la venta directa y el apartado del servicio, no el recorrido de un pedido); la **importación por CSV** de series; qué pasa en producción con la historia real de series; el rendimiento de la búsqueda de
 una serie con muchísimas series (hay un índice `(companyId, code)`, pero no se midió); y que la rama sigue sin PR ni CI remoto desde INV-4a. **Y lo que se decidió no hacer:** desactivar con historia (§36), cambiar de
 lotes a series y elegir la serie al vender (§38).
+
+## 40. INV-5d · qué se hizo
+
+**Trae una migración, la `20261072`, y se aplica ANTES que el código** (lo hace el flujo «Migrar y desplegar» al fusionar; usa una función de inmutabilidad de la `20261068`). Es aditiva, idempotente y de una
+sola transacción (con `lock_timeout` de 5 s): crea dos tablas nuevas y un disparador diferido; no toca ninguna fila ni ninguna tabla existente. Con el código viejo, aplicarla antes no rompe nada. Al ser tablas
+nuevas, **a diferencia de 5a–5c no toca nada que lean las ventas**: el riesgo de fusionarla en hora punta es menor que el de aquellas.
+
+**La idea: un kit no tiene existencias, tiene una receta.** Un kit es una variante del catálogo (un «Paquete», un combo, un servicio con insumos) que **no controla inventario por su cuenta**. Su receta dice qué
+componentes lleva y cuántas unidades de cada uno. No hay un segundo ledger: vender un kit mueve los **componentes** por las mismas puertas de siempre (`reservarEnTx`, `consumirReservaEnTx`, `venderEnTx`,
+`liberarReservaEnTx`, `devolverEnTx`), así que lotes, series, FEFO, costos congelados y el historial funcionan igual.
+
+**Qué se puede hacer.**
+
+1. **Armar un kit** (Inventario → **Kits**): se elige el producto (el buscador solo ofrece lo que no controla inventario por su cuenta y no es componente de otro kit), se agregan componentes (solo productos que
+   controlan inventario) con sus unidades por kit, hasta 30. **Editar la receta** (reemplaza; guardar la misma no cambia nada ni deja rastro) y **quitarla** (en dos pasos; el producto vuelve a ser uno cualquiera).
+   Las dos las pide la función `ajustar`. Cada cambio deja bitácora.
+2. **Cuántos kits alcanzan**: el mínimo, entre los componentes, de lo disponible (lo que hay menos lo apartado) entre lo que lleva cada kit, hacia abajo; por sucursal y diciendo qué componente falta. Se enseña
+   en la página de Kits, **en el carrito del checkout y en la caja** (donde antes un producto sin inventario salía sin tope).
+3. **Vender un kit en un pedido**: al crear el pedido se **apartan todos los componentes** (todo o nada: si falta uno, no se aparta ninguno y el mensaje dice qué kit y qué componente); la línea del pedido es
+   la del kit (con su precio) y **no guarda una reserva propia**. Al cerrar el pedido (por QR o por fuera) se **venden** los componentes; si la reserva de alguno venció, se vende de lo disponible y, si ni así
+   alcanza, no se cierra nada (`STOCK_YA_NO_ALCANZA`). **Cancelar** libera los componentes y **reembolsar** con «devolver al inventario» los devuelve (a los lotes de que salieron). Reintentar no aparta ni vende dos veces.
+4. **La foto de lo apartado**: cada reserva de un componente por un kit en un pedido queda anotada (`inventory_kit_reservations`: pedido, kit, componente, reserva, kits y unidades). Cerrar, cancelar y reembolsar
+   trabajan sobre **esa foto**, no sobre la receta de hoy: **cambiar la receta no toca lo que ya se apartó o vendió**; el siguiente pedido usa la receta nueva. Esa tabla no admite UPDATE, DELETE ni TRUNCATE.
+5. **Lo que el catálogo ya no deja romper**: no se activa el control de inventario de un producto que es kit (`ITEM_ES_KIT`), no se deja de controlar el de un componente (`ITEM_EN_KITS`), y no se borra una
+   variante que está en una receta o que ya se vendió en un kit (`VARIANTE_EN_KITS`); borrar un kit sin ventas se lleva su receta. En la ficha de un componente un aviso dice en qué kits entra.
+
+**La base lo vigila.** `CHECK`: un kit no es su propio componente y las cantidades van de 1 a 1.000.000. Único: un componente una sola vez por kit; una reserva, un vínculo; un kit aparta cada componente una sola vez por
+pedido. Un disparador diferido impide que un kit sea componente de otro (en cualquiera de los dos sentidos). Todas las claves foráneas son compuestas por empresa y `RESTRICT`.
+
+**Concurrencia.** Editar la receta de un kit toma el bloqueo de su fila: varias ediciones a la vez se turnan y queda exactamente una de las recetas, no una mezcla. Los componentes se aparten en orden de id de
+variante, de modo que dos pedidos con kits que comparten componentes en distinto orden no se interbloquean (probado con ocho pedidos a la vez).
+
+**Lo que 5d NO hace (a propósito, o pendiente).**
+- **El escaparate público y las ofertas (deals) no saben de kits**: un kit se ve siempre «disponible» ahí (lo calculan a partir del control de inventario del propio producto); si falta un componente, el pedido falla
+  al crearse con un mensaje claro, pero no se oculta antes. El carrito del checkout y la caja sí enseñan lo que alcanza.
+- **El informe «Margen real» no sabe de kits**: la línea del kit no tiene un movimiento de venta propio (los movimientos son de los componentes), así que, según cómo se unen pedido y movimiento, esas ventas no se
+  comparan. No se probó cómo sale; no confíes en el margen de un kit hasta revisarlo.
+- **La conciliación (reservas de pedidos) no revisa las reservas de kits**: sus comprobaciones recorren la reserva guardada en la línea, y la del kit no tiene. Las reservas de componentes siguen contando en el
+  cuadre general de apartados (I01).
+- **El precio del kit es el de su variante**: no se calcula de los componentes y no hay «descuento por paquete» automático.
+- **Los kits no se anidan** (un kit dentro de un kit) y **no tienen existencias propias** (no se «arman» por adelantado ni se cuentan); si hace falta armar kits físicos con stock propio, es otro diseño.
+- **Series y lotes en componentes**: los lotes están probados (FEFO al apartar y vuelta a los mismos lotes al reembolsar); **las series en un componente no se probaron**.
+- **Transferencias, conteos y compras de un kit**: un kit no tiene existencias, así que no se transfiere, no se cuenta y no se compra; se hace con sus componentes.
+
+**Archivos.** `prisma/migrations/20261072_inventory_kits/migration.sql` y `prisma/schema/inventario.prisma` (`InventoryKitComponent`, `InventoryKitReservation`) más sus relaciones en el catálogo, la empresa y la reserva;
+`modules/inventory/kits.ts` (receta, unidades y cuántos alcanzan: puro), `kits-service.ts` (guardar, quitar, apartar, vender, liberar y devolver), `kits-queries.ts` (recetas, disponibilidad, lista, candidatos, dónde entra
+un producto), `actions.ts` (`guardarRecetaDeKit`, `quitarRecetaDeKit`, `buscarCandidatosAKit`, con `ajustar`), `orders/service.ts` (crear, cerrar, cancelar y reembolsar), `checkout/service.ts` y `pos/service.ts`
+(lo que alcanza), `catalog/service.ts` (las tres guardas), `components/inventario/` (`KitForm`, `KitEditable`) y las páginas `inventario/kits` y la ficha. Además, `scripts/e2e/base-limpia.mjs` aplica la `20261072`.
+
+## 41. Verificación de INV-5d (2026-10-16)
+
+Local, sobre PostgreSQL 16 desechable. **INV-5d trae la migración `20261072`**: se aplicó (dos veces, para comprobar que es idempotente) a la base desechable `supplytest`, se creó con ella la base de E2E
+`membego_e2e_inv2` y se comprobó contra una base «sombra» que el esquema de Prisma y las migraciones no se desvían (`prisma migrate diff --from-migrations … --to-schema-datamodel … --exit-code`: «No difference
+detected»). **No se tocó ninguna base real**: la migración **todavía no se ha aplicado en producción**: la aplicará `migrate deploy` al fusionar la rama, antes de desplegar el código, junto con la
+`20261067`–`20261071`. Sin Supabase real, Vercel, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ve** la página de Kits, el formulario de la receta ni el aviso de la ficha: el E2E comprueba qué dicen
+y qué hacen, no su aspecto.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo) |
+| `bun run build` y `bun run presupuesto` | verdes; indicador general **9.013/9.200 KB (98 %)** (8.995 antes de 5d: +18 KB; quedan 187 KB de margen) |
+| Unitarias (`bun run test`) | 4652 pruebas: 4645 pasan, 0 fallan, 7 omitidas heredadas (10 nuevas) |
+| PostgreSQL (`bun run test:db`, base `supplytest`) | **1028/1028** (1015 de antes + 13 nuevas) |
+| Pruebas nuevas | 10 puras y guardias (`inventario-kits.test.ts`), 13 contra PostgreSQL con pedidos reales (`inventory-kits.db.test.ts`) y 1 recorrido E2E (`inventario-kits.spec.ts`); se ajustaron pruebas existentes (ver abajo) |
+| E2E (`node scripts/e2e/correr.mjs`, escritorio) | **26/26**: `inventario-lotes` (9), `inventario-admin` (15) e `inventario-kits` (2, con su preparación) |
+| Deriva del esquema | `prisma migrate diff` contra una base sombra con las migraciones aplicadas: sin diferencias |
+| Mutaciones | **55** (46 de código —dominio, servicio, lecturas, pedidos, carrito, caja, catálogo, acciones y pantallas— y 9 de la propia migración aplicadas a una base real): 54 detectadas y 1 que se deja (ver abajo). Tres de código y una de la migración **sobrevivieron la primera pasada válida** y se mataron con pruebas nuevas |
+
+Qué cubren las pruebas contra PostgreSQL (servicio real y pedidos reales): la receta (se acepta lo bueno; idempotente; reemplaza; y todo lo que se rechaza sin dejar filas: vacía, repetida, cantidad mala, el kit en su
+propia receta, un componente inexistente o de otra empresa, sin inventario, que ya es kit, un kit que controla inventario, uno de Supply); lo que vigila la base (kit = componente, cantidad cero o negativa, anidar en los dos
+sentidos, un componente repetido, una reserva con dos vínculos, un kit que aparta dos veces el mismo componente en un pedido, la foto de lo apartado que no se edita ni se borra); cuántos kits alcanzan (mínimo, componente
+que limita, por sucursal, lo apartado no cuenta); un pedido con un kit (aparta los componentes, la línea no tiene reserva propia, el kit no tiene existencias, la foto, el cierre los vende); todo o nada con el mensaje de
+qué falta y sin dejar reservas, pedido ni filas; cancelar libera, reembolsar devuelve, y ninguno de los dos se repite; cambiar la receta no toca lo apartado y el pedido siguiente usa la nueva; reserva vencida que se vende de lo
+disponible y, si no alcanza, el pedido sigue listo sin vender nada a medias; un componente con lotes (FEFO al apartar, vender de esos lotes, volver a ellos al reembolsar); el carrito y la caja; las tres guardas del catálogo;
+los candidatos a kit; ocho pedidos de kits que comparten componentes en distinto orden a la vez; y seis ediciones simultáneas de la misma receta (queda exactamente una).
+
+Qué cubre el recorrido E2E: la pestaña vacía → armar un kit (el buscador no ofrece un producto con existencias; una cantidad en cero se frena y no guarda nada) → el kit con su receta y cuántos alcanzan por sucursal →
+editarla (4 → 2) y guardar lo mismo → la ficha de un componente avisa y enlaza → un componente no se ofrece como kit → quitar la receta pide confirmar.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Mi primera pasada de mutaciones de código no valía nada, otra vez.** Salían 46 de 46 «detectadas», pero una guardia existente —«los componentes de cliente del inventario no importan el dominio»— estaba roja desde
+  que escribí el formulario de la receta (importaba `domain` solo por un tope numérico). Como la batería rápida falla con cualquiera de ellas, todo «se detectaba». Lo arreglé (el tope se reexporta desde el módulo puro
+  de kits) y **repetí la batería**; las cifras de arriba son de la segunda pasada. Ya me pasó en 5c: la comprobación de que la base de comparación está en verde tiene que ir **antes** de medir, no después.
+- **Las pruebas de unicidad de la base no distinguían cuál regla fallaba.** El «una reserva, un vínculo» se probaba con un intento que también violaba «un componente por pedido»: la mutación de quitar la primera
+  sobrevivía. Se reescribió usando otro pedido para que solo esa regla pueda fallar, y entonces se detecta.
+- **Una pasada por pedido, no solo por servicio.** Las tres suites que ya existían de pedidos, carrito y caja (106 pruebas, junto con las de kits) siguen en verde con la integración de los kits.
+- **Mutaciones: lo que enseñaron los sobrevivientes.** El rechazo de un kit de Supply no estaba cubierto; el bloqueo de la fila al editar una receta solo se notaba con ediciones simultáneas (hay una prueba nueva); y la
+  prueba de teardown de la nueva suite fallaba al borrar el usuario porque la oferta de Supply de la prueba lo referencia (como ya hace la suite de pedidos: el usuario se deja). **Una queda sin prueba a propósito:**
+  `KIT_ES_COMPONENTE` (que el producto que se vuelve kit ya sea componente de otro) **no se puede alcanzar por el servicio** (un componente tiene que controlar inventario y un kit no puede hacerlo, y el catálogo impide
+  cambiar eso); la sostiene el disparador de la base, que sí tiene prueba.
+
+**Qué NO se verificó:** cómo se ve nada (ni escritorio con capturas, ni móvil); Supabase real, RLS o permisos de la base real y **la migración `20261072` contra la base real** (crea dos tablas y un disparador, y no
+toca las que leen las ventas: es la menos arriesgada de la serie); una VENTA de kit de punta a punta por la interfaz (carrito → pago → cierre): el E2E arma y edita kits y los pedidos reales los prueba el servicio, pero
+ningún recorrido de pantalla vende uno; las **series en un componente**; el informe de **margen**, el **escaparate público**, las **ofertas** y la **conciliación** con kits (ver §40: no saben de ellos); el rendimiento con
+muchos kits; y que la rama sigue sin PR ni CI remoto desde INV-4a. **Y lo que se decidió no hacer:** anidar kits, darles existencias propias y calcular su precio de los componentes (§40).
 

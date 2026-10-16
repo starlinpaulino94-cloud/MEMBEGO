@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { crearTransaccionAplicada } from '@/lib/transactions/application/transaction-service'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
+import { disponibilidadDeKitsEnTx } from '@/modules/inventory/kits-queries'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 import { PedidoError } from '@/modules/orders/errores'
 import { ETIQUETA_METODO } from '@/modules/orders/formato'
@@ -124,6 +125,8 @@ export async function buscarProductosDeCajaEnTx(tx: Tx, companyId: string, sucur
       inventoryLevels: { where: { locationId: sucursalId }, select: { onHand: true, reserved: true } },
     },
   })
+  // INV-5d: un KIT no tiene existencias propias: lo que alcanza es lo que dan sus componentes en la sucursal.
+  const kits = await disponibilidadDeKitsEnTx(tx, companyId, variantes.filter((v) => !normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory).map((v) => v.id), sucursalId)
   const out: ProductoDeCaja[] = []
   for (const v of variantes) {
     const caps = normalizarCapacidades(v.item.type, v.item.capabilities)
@@ -134,7 +137,7 @@ export async function buscarProductosDeCajaEnTx(tx: Tx, companyId: string, sucur
       etiqueta: v.item.variants.length > 1 ? `${v.item.name} · ${v.name}` : v.item.name,
       precio: v.price.toFixed(2),
       currency: v.item.currency,
-      disponible: caps.trackInventory ? Math.max(0, (nivel?.onHand ?? 0) - (nivel?.reserved ?? 0)) : null,
+      disponible: caps.trackInventory ? Math.max(0, (nivel?.onHand ?? 0) - (nivel?.reserved ?? 0)) : (kits.get(v.id)?.kits ?? null),
     })
     if (out.length >= limite) break
   }

@@ -14,6 +14,7 @@ import { formatDate, formatDateTime } from '@/lib/format'
 import { pedidoEnCaminoDeVarianteEnTx, proveedoresActivosEnTx, proveedoresDeVarianteEnTx, type OpcionProveedor, type PedidoDeVariante, type ProveedorDeProducto } from '@/modules/inventory/compras-queries'
 import { costoDeVarianteEnTx, type CostoDeVarianteVista } from '@/modules/inventory/valor'
 import { cambiosDeVencimientoEnTx, lotesDeVarianteEnTx, motivoParaNoDesactivarLotesEnTx, type CambioDeVencimiento, type LotesDeVariante } from '@/modules/inventory/lotes-queries'
+import { kitsDondeEntraEnTx } from '@/modules/inventory/kits-queries'
 import { ActivarLotesCard } from '@/components/inventario/ActivarLotesCard'
 import { DesactivarLotesCard } from '@/components/inventario/DesactivarLotesCard'
 import { HistorialDeVencimientos } from '@/components/inventario/HistorialDeVencimientos'
@@ -74,6 +75,15 @@ export default async function InventarioVariantePage({ params }: { params: Promi
       sePuedeDesactivar = puedeAjustar && (await conEmpresa(companyId, (tx) => motivoParaNoDesactivarLotesEnTx(tx, companyId, varianteId))) === null
     } catch (e) {
       console.error('[admin-inventario-ficha] la historia de vencimientos no está disponible', e instanceof Error ? e.message : e)
+    }
+  }
+  // INV-5d: en qué kits entra este producto (si algún día se acaba, esos kits dejan de alcanzar); en su propia transacción y su propio try.
+  let kitsDondeEntra: Awaited<ReturnType<typeof kitsDondeEntraEnTx>> = []
+  if (detalle.controlaInventario) {
+    try {
+      kitsDondeEntra = await conEmpresa(companyId, (tx) => kitsDondeEntraEnTx(tx, companyId, varianteId))
+    } catch (e) {
+      console.error('[admin-inventario-ficha] los kits no están disponibles', e instanceof Error ? e.message : e)
     }
   }
   // El costo y el valor (INV-3a): solo con la función `costos`, y leído —como lo que va en camino— en su PROPIA transacción y con
@@ -341,6 +351,23 @@ export default async function InventarioVariantePage({ params }: { params: Promi
                 Este producto lleva <strong>lotes</strong>: se vende, se aparta y se saca primero lo que antes vence, y lo vencido no se vende. Se transfiere (y se envía a otra sucursal) lote por lote: sale el que antes vence, o los que elijas, y entra al destino en esos mismos lotes. Se cuenta lote por lote en un conteo (Inventario → Conteos), y se recibe con una entrada de mercancía o con una orden de compra (diciendo de qué lote llegó).
                   </>
                 )}
+              </AlertDescription>
+            </Alert>
+          )}
+          {kitsDondeEntra.length > 0 && (
+            <Alert>
+              <AlertDescription>
+                Este producto es componente de {kitsDondeEntra.length === 1 ? 'un kit' : `${kitsDondeEntra.length} kits`}: al venderse, se descuenta de aquí.{' '}
+                {kitsDondeEntra.map((k, i) => (
+                  <span key={k.varianteId}>
+                    {i > 0 && ', '}
+                    <strong>{k.cantidad} ×</strong> en {k.nombre}
+                  </span>
+                ))}
+                .{' '}
+                <Link href="/admin/inventario/kits" className="underline">
+                  Ver los kits
+                </Link>
               </AlertDescription>
             </Alert>
           )}

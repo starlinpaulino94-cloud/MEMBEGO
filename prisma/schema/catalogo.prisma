@@ -166,6 +166,11 @@ model CatalogVariant {
   lotTracking     InventoryLotTracking[]
   /// Sus lotes (INV-5a).
   lots            InventoryLot[]
+  /// Si es un kit (INV-5d): los componentes de su receta. Si es componente: los kits en que entra.
+  kitComponents   InventoryKitComponent[] @relation("KitComponents")
+  kitsDondeEntra  InventoryKitComponent[] @relation("ComponentOfKits")
+  kitReservationsAsKit       InventoryKitReservation[] @relation("KitReservationsOfKit")
+  kitReservationsAsComponent InventoryKitReservation[] @relation("KitReservationsOfComponent")
   deals           Deal[]
   /// Pedidos Membego que la piden (Fase 3). RESTRICT: con pedidos no se borra.
   orderLines      MembegoOrderLine[]
