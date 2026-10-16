@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { PagoHistorialItem } from '@/modules/cliente/queries'
 import { EmptyState } from '@/components/system/EmptyState'
+import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import {
   Sheet,
   SheetContent,
@@ -237,17 +238,10 @@ function ReceiptDrawer({
                     <Printer className="h-4 w-4" aria-hidden />
                     Imprimir recibo
                   </button>
-                  {/* Solo se ve al imprimir: el mismo recibo que el negocio tiene en su caja. */}
-                  <div className="recibo-print hidden" aria-hidden>
-                    <style>{`
-                      @media print {
-                        body * { visibility: hidden !important; }
-                        .recibo-print, .recibo-print * { visibility: visible !important; }
-                        .recibo-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 12mm; }
-                      }
-                    `}</style>
-                    <pre className="whitespace-pre-wrap font-mono text-sm text-black">{item.recibo.texto}</pre>
-                  </div>
+                  {/* Solo existe en la hoja: el mismo recibo que el negocio tiene en su caja. */}
+                  <ReporteImprimible soloPapel titulo={item.recibo.empresaNombre} subtitulo={`Recibo de pago · ${item.recibo.ticketNumero}`}>
+                    <pre className="whitespace-pre-wrap font-mono text-sm">{item.recibo.texto}</pre>
+                  </ReporteImprimible>
                 </div>
               )}
 

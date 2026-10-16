@@ -139,7 +139,9 @@ test.describe('Pago con tarjeta · comprobante visible e imprimible', () => {
 
     await p.goto('/admin/registros?metodo=TARJETA')
     await expect(p.getByRole('row').filter({ hasText: TICKET })).toBeVisible()
-    await expect(p.getByText('Tarjeta', { exact: true }).first()).toBeVisible()
+    // El subtotal «Tarjeta» del resumen (no la opción del filtro, que está oculta).
+    const kpiTarjeta = p.locator('dl > div').filter({ has: p.locator('dt', { hasText: /^Tarjeta$/ }) })
+    await expect(kpiTarjeta).toContainText('RD$500.00')
     await ctx.close()
   })
 
