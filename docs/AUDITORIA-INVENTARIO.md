@@ -6,6 +6,16 @@
 >
 > Estado de este documento: la auditoría es de antes de INV-1; cada hallazgo dice si **INV-1, INV-2a, INV-2b, INV-2c, INV-3a, INV-3b, INV-3c, INV-4a, INV-4b o INV-4c ya lo cerraron** (ver §5, §7, §9, §11, §13, §15, §17, §19, §21 y §23).
 
+> **Nota sobre el despliegue de migraciones (2026-10-16).** Las secciones de este documento que dicen «**SQL primero**: copiar `…/migration.sql`
+> al SQL Editor de Supabase» y las que dejan una migración «pendiente de aplicarse a mano» describen el procedimiento **manual** que yo daba por
+> vigente (venía de `docs/MIGRACIONES.md`, que estaba desfasado). **Desde el 14/29-09-2026 el flujo `deploy-migraciones.yml` («Migrar y
+> desplegar») aplica `prisma migrate deploy` al fusionar en `main` y solo entonces despliega**, así que el orden «SQL antes que el código» lo
+> garantiza el flujo. Estado real de las migraciones de inventario: **todas hasta la `20261066` ya están aplicadas en
+> producción** (en el merge #615 `migrate deploy` solo tuvo que aplicar la `20261059` y en el #617 solo la `20261066`: las anteriores ya estaban
+> registradas, unas por el propio flujo y otras —las de INV-2— posiblemente a mano antes de fusionar, siguiendo mis instrucciones de entonces; son
+> idempotentes y los dos caminos son compatibles); `20261067`, `20261068` y `20261069` están en la rama y **se aplicarán al fusionarla**. Lo único manual que queda es elegir una hora valle para fusionar cuando la migración toca
+> el ledger (`20261068`). Detalle en `docs/MIGRACIONES.md`, `docs/DEVOPS.md` y `docs/AUDITORIA-ESTADO-2026-10-16.md` § 2.
+
 ## 1. Veredicto
 
 **El núcleo es sólido; lo que falta es la capa operativa de un negocio real.** El ledger inmutable, las reservas con
@@ -1192,7 +1202,7 @@ de `/api/health`.
 
 Local, sobre PostgreSQL 16 desechable (collation ICU `en-US`). La migración `20261067` se aplicó **solo** a esas bases desechables
 (dos veces seguidas, para comprobar que es idempotente, y sin diferencias de esquema contra `schema.prisma`); **no se aplicó a
-ninguna base real: eso lo hace el dueño en Supabase, antes de desplegar**. Sin Supabase real, Vercel, lector de código de barras
+ninguna base real: la aplicará el flujo «Migrar y desplegar» al fusionar la rama, antes de desplegar**. Sin Supabase real, Vercel, lector de código de barras
 físico, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ven las pantallas** (el formulario con el selector de motivo,
 el cuarto informe y el hub): el recorrido E2E comprueba qué dicen y qué hacen, no su aspecto; ni capturas ni revisión visual en móvil.
 **Tampoco se midió con un ledger grande**: el informe lee los ajustes y daños de un rango de fechas con el índice `(companyId,
@@ -1415,14 +1425,16 @@ sí está en las pruebas de PostgreSQL). Quedan fuera del margen, a propósito, 
 
 ## 25. INV-5a · qué se hizo
 
-> Primera parte de INV-5 (trazabilidad). **Lleva una migración, `20261068_inventory_lots`, y va ANTES que el código**: ESTE SQL PRIMERO en
-> el SQL Editor de Supabase, después el despliegue. Con el SQL aplicado y el código viejo no pasa nada (los disparadores no hacen nada
+> Primera parte de INV-5 (trazabilidad). **Lleva una migración, `20261068_inventory_lots`, y va ANTES que el código**: lo garantiza el flujo
+> «Migrar y desplegar» (aplica `migrate deploy` y solo entonces despliega; al escribir esto yo decía «pegarla a mano en el SQL Editor»: ver la
+> nota del principio). Con el SQL aplicado y el código viejo no pasa nada (los disparadores no hacen nada
 > sobre un producto sin lotes y nadie activa lotes sin la pantalla nueva); con el código nuevo y **sin** el SQL, el inventario y los
 > pedidos **fallan** (cada movimiento pregunta si el producto lleva lotes). `/api/health` avisa («DRIFT») si falta la tabla de repartos.
 > Es aditiva, idempotente y de **una sola transacción** (todo o nada) con `lock_timeout = 5 s`: si no consigue un bloqueo falla sin dejar
 > nada a medias y se reintenta. **Construye un índice único sobre `inventory_movements`** (destino de una clave foránea compuesta), que
-> bloquea las ESCRITURAS del ledger mientras dura —segundos aun con cientos de miles de movimientos—: aplícala fuera de hora punta.
-> Siguen pendientes de aplicar, si no lo están ya, `20261059`, `20261060`, `20261066` y `20261067`.
+> bloquea las ESCRITURAS del ledger mientras dura —segundos aun con cientos de miles de movimientos—: **fusiona fuera de hora punta** (es lo que la
+> aplica).
+> Hasta la `20261066` ya están aplicadas en producción; `20261067` y esta se aplicarán al fusionar la rama.
 
 **El problema.** El inventario sabía CUÁNTO hay de cada producto en cada sucursal, no DE QUÉ LOTE es ni CUÁNDO VENCE. Para un producto
 perecedero (cosméticos, alimentos, medicinas) eso es exactamente lo que importa: qué se vende primero, qué ya no se puede vender, y de qué
@@ -1659,7 +1671,7 @@ deja contar, transferir ni pedir en una orden de compra un producto con lotes (s
 ## 28. Verificación de INV-5b1 (2026-10-15)
 
 Local, sobre PostgreSQL 16 desechable. **INV-5b1 no trae migración ni SQL que aplicar**: lee las tablas de la `20261068` (INV-5a), que
-sigue pendiente de aplicarse a mano en Supabase antes de desplegar este código. Se probó contra bases desechables (`supplytest`,
+sigue sin aplicarse en producción hasta que se fusione la rama (el flujo «Migrar y desplegar» la aplicará antes de desplegar este código). Se probó contra bases desechables (`supplytest`,
 `membego_inv2`, `membego_e2e_inv2`); **no se tocó ninguna base real**. Sin Supabase real, Vercel, móvil ni Safari: **no verificados**.
 **Tampoco se miró cómo se ven las pantallas** (el informe, la tarjeta del dashboard): el E2E comprueba qué dicen y qué hacen, no su
 aspecto; ni capturas ni revisión visual en móvil.
@@ -1772,7 +1784,7 @@ sigue sugiriendo por producto, no por lote.
 ## 30. Verificación de INV-5b2 (2026-10-16)
 
 Local, sobre PostgreSQL 16 desechable. **INV-5b2 no trae migración ni SQL que aplicar**: usa las tablas de la `20261068` (INV-5a), que sigue
-pendiente de aplicarse a mano en Supabase antes de desplegar este código. Se probó contra bases desechables (`supplytest` y
+sin aplicarse todavía en producción (la aplicará el flujo «Migrar y desplegar» al fusionar la rama, antes de desplegar este código). Se probó contra bases desechables (`supplytest` y
 `membego_e2e_inv2`, esta vez en el puerto 5432: el contenedor cambió y hubo que reconstruirlas con `prisma migrate deploy`); **no se tocó
 ninguna base real**. Sin Supabase real, Vercel, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ve la pantalla de recepción**
 (el editor de lotes dentro de cada línea): el E2E comprueba qué dice y qué hace, no su aspecto; ni capturas ni revisión visual en móvil.
@@ -1828,7 +1840,7 @@ producto con lotes recorriendo la pantalla.
 
 ## 31. INV-5b3 · qué se hizo
 
-**Trae una migración, la `20261069`, y va PRIMERO en Supabase** (antes de desplegar el código; necesita la `20261068` de INV-5a ya aplicada). Es
+**Trae una migración, la `20261069`, y se aplica ANTES que el código** (lo hace el flujo «Migrar y desplegar» al fusionar; necesita la `20261068` de INV-5a, que va justo antes en la misma tanda). Es
 aditiva, idempotente y de una sola transacción (con `lock_timeout` de 5 s): una columna que admite `NULL`, dos índices únicos que valen lo mismo
 que el anterior para todo lo que ya existe, una clave foránea y dos funciones/disparadores. Con el código viejo, aplicarla antes no rompe nada
 (el código viejo nunca escribe el lote y sus líneas siguen siendo únicas por conteo y producto).
@@ -1899,7 +1911,7 @@ cuenta lote por lote.
 Local, sobre PostgreSQL 16 desechable. **INV-5b3 trae la migración `20261069`**: se aplicó (dos veces, para comprobar que es idempotente) a la base
 desechable `supplytest`, se creó con ella la base de E2E `membego_e2e_inv2` y se comprobó contra una base «sombra» que el esquema de Prisma y las
 migraciones no se desvían (`prisma migrate diff --from-migrations … --to-schema-datamodel … --exit-code`: «No difference detected»). **No se tocó ninguna
-base real**: la migración **no se ha aplicado en Supabase**; va primero, antes de desplegar el código. Sin Supabase real, Vercel, móvil ni Safari: **no
+base real**: la migración **todavía no se ha aplicado en producción**: la aplicará `migrate deploy` al fusionar la rama, antes de desplegar el código. Sin Supabase real, Vercel, móvil ni Safari: **no
 verificados**. **Tampoco se miró cómo se ve** la captura con la lista de lotes, ni la hoja ni el informe por lote: el E2E comprueba qué dicen y qué hacen,
 no su aspecto (ni capturas ni revisión visual en móvil).
 
@@ -1961,8 +1973,59 @@ Hallazgos de la propia verificación (importa que se sepan):
   «el reparto es del primer lote del producto»), ambos detectados.
 
 **Qué NO se verificó:** cómo se ve nada (ni escritorio con capturas, ni móvil); Supabase real, RLS o permisos de la base real (todo se probó con el rol de
-la base desechable) y **la migración `20261069` contra la base real** (hay que aplicarla a mano, antes del código); el rendimiento de un conteo grande (el
+la base desechable) y **la migración `20261069` contra la base real** (la aplica el flujo al fusionar, antes del código); el rendimiento de un conteo grande (el
 tope es 1.000 líneas, que ahora pueden ser de lotes; no se midió cuánto tarda aplicar mil líneas con muchos lotes por producto, en rondas); la revisión
 con una línea rechazada **recorriendo la pantalla** (el rechazo por lo apartado de un lote se probó en el servicio, no en el E2E); un conteo desde un celular
 con lector de códigos; ni el aviso al administrador, que no cambia. El E2E corre con un servidor al que le faltan las llamadas a un Supabase local que no
 existe aquí: el registro del servidor se llena de `fetch failed … 54329` que no son fallos de las pruebas.
+
+## 33. Seguimiento de la auditoría de estado: «Quitar filtros» y la documentación (2026-10-16)
+
+La auditoría de estado (`docs/AUDITORIA-ESTADO-2026-10-16.md`) dejó dos hallazgos que se cerraron en la entrega siguiente. **Sin migración y sin
+cambios de lógica de inventario**: son los formularios de filtros, pruebas, documentos y los verificadores SQL del registro.
+
+**«Quitar filtros» dejaba el formulario con el valor anterior.** Los formularios de filtros son `<form method="get">` con campos no controlados
+(`defaultValue`) y «Quitar filtros» es un enlace: Next navega sin recargar y React conserva el árbol, así que la lista salía sin filtros pero el formulario
+seguía enseñando lo elegido (y volver a pulsar «Filtrar» lo re-aplicaba). Se vio en el navegador en Mermas (`motivo`), Movimientos (`tipo`) y Compras
+(`estado`); «Vence pronto» ya lo tenía bien. **Cura:** una `key` en el formulario que cambia con los filtros de la URL (React lo monta de nuevo con los
+valores por defecto de la URL nueva), en las 13 pantallas que faltaban: existencias, movimientos, entradas, conteos, transferencias, compras,
+proveedores, valor, reposición y los informes de mermas, rotación, sin ventas y margen. La `key` sale de la consulta que cada pantalla ya calcula
+(`consulta`, `consultaExportar`, `consultaDeFiltrosValor`) y, en proveedores y existencias, de sus parámetros; cambia solo cuando cambian los filtros (paginar
+no remonta el formulario).
+
+**Cómo se vigila.** (1) Una guardia estática (`tests/inventario-filtros-formulario.test.ts`, 3 pruebas) recorre `/admin/inventario`, exige que cada página con
+«Quitar filtros» tenga un formulario de filtros con `key` y que esa `key` salga de los filtros (no sea una constante); si aparece una pantalla nueva con
+filtros, la cubre sola. (2) Un E2E (`inventario-admin.spec.ts`) recorre las **14** pantallas: escribe una búsqueda (y elige un estado, tipo o motivo donde
+lo hay), filtra, pulsa «Quitar filtros» y exige que el formulario —no solo la lista— vuelva a vacío. **Mutación:** quitándole la `key` solo a «Mermas» y
+reconstruyendo, la guardia estática falló (2 pruebas) y el E2E falló en esa pantalla con `«Quitar filtros» deja «motivo» elegido` (esperado `""`, recibido
+`"sin"`), con las demás pantallas anteriores en verde.
+
+**Documentación puesta al día.** `docs/MIGRACIONES.md` se reescribió: su premisa («se aplican a mano, no hay `migrate deploy` automático») era falsa desde el
+14/29-09; ahora describe el flujo real (PR → CI → merge → «Migrar y desplegar» → `migrate deploy` → Vercel), lo único manual que queda (elegir una hora valle
+al fusionar si la migración toca el ledger; no aplicar nada a mano; sellar y regenerar verificadores) y el diagnóstico (`db:doctor`, verificadores del registro).
+`docs/DEVOPS.md` gana el apartado de las migraciones que toman bloqueos sobre tablas calientes y la regla de no fusionar con el E2E remoto sin terminar en verde.
+`docs/IMPLEMENTATION_STATUS.md`: 231 migraciones selladas hasta `20261069` y 327 modelos (decía 209 y 305), y las menciones de «SQL primero / a mano» de la
+fila de inventario. En este documento, una nota al principio y las frases de §25, §28, §30, §31 y §32 que daban por pendiente «aplicar a mano en Supabase»;
+las instrucciones históricas de las secciones antiguas («SQL primero: copiar al SQL Editor») se dejan como estaban, bajo esa nota. `docs/PRUEBAS-E2E.md` y
+`docs/AUDITORIA-ESTADO-2026-10-16.md` (con su seguimiento) también se actualizaron.
+
+**Los verificadores SQL del registro**, que llevaban 19 migraciones de retraso (212 hasta `20261055`), se regeneraron (231 hasta `20261069`) y una prueba nueva
+(`tests/migraciones-verificadores.test.ts`, 3 pruebas) recalcula total, última, nombres y checksums desde `prisma/migrations` y falla si cualquiera de los dos
+archivos no coincide: contra los archivos viejos las 3 fallaron; contra los regenerados pasan. Con eso, el siguiente que añada una migración no puede olvidarse.
+
+**Verificación (local, base desechable).**
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo) |
+| Unitarias (`bun run test`) | 4608 pruebas: 4601 pasan, 0 fallan, 7 omitidas heredadas (6 nuevas: 3 de filtros y 3 de verificadores) |
+| `bun run build` y `bun run presupuesto` | verdes; indicador general 8.948/9.200 KB (97 %, igual que antes: el cambio no pesa), entrada compartida 859/1000 KB |
+| E2E (escritorio) | **21/21** con el build final: `inventario-admin` (15, una nueva) y `inventario-lotes` (6) |
+| PostgreSQL (`bun run test:db`) | **968/968** (no se tocó nada de base de datos; se corrió entera por si acaso) |
+| Mutación de la guardia y del E2E | detectada por las dos (ver arriba) |
+
+**Qué NO se verificó.** Cómo se ve nada (el cambio no toca el aspecto, pero no se miraron las pantallas); producción ni Vercel; el CI remoto de la rama (sigue
+sin PR abierto, que es el hallazgo principal de la auditoría de estado y **no se ha hecho**: abrir el PR es decisión del dueño); que el formulario se comporte igual
+en Safari o en móvil; y, de los otros hallazgos de la auditoría, **nada de lo estructural** (`service.ts`, la deuda de diseño al tope, la prueba frágil de Supply V2,
+el E2E de separación) ni la Capa 2 de RLS. Tampoco se probaron a mano los casos raros de la `key` (cambiar de filtro y volver rápido, el botón «atrás» del
+navegador): el E2E cubre «filtrar → quitar», que es el que fallaba.

@@ -6,12 +6,18 @@
 presupuesto de bundle, `npm audit`), y una comprobación en el navegador sobre el build de producción local. Cada cifra de este documento
 sale de un comando ejecutado hoy; lo que no pude comprobar está en § 9.
 
+> **Seguimiento (2026-10-16, mismo día).** Los hallazgos de § 7 («Quitar filtros») y § 8 (documentación desfasada) **se cerraron** en la entrega
+> siguiente: los 14 formularios de filtros llevan ya una `key` derivada de la URL (guardia estática + E2E de las 14 pantallas), `MIGRACIONES.md`,
+> `DEVOPS.md`, `IMPLEMENTATION_STATUS.md` y las secciones «a mano» de `AUDITORIA-INVENTARIO.md` se corrigieron, y los verificadores SQL se regeneraron
+> con una prueba que impide que vuelvan a quedarse atrás. Quedan abiertos los de § 3 (CI/E2E remoto de la rama), § 4 (deuda estructural) y § 6
+> (pruebas frágiles). Este documento conserva el estado **tal como estaba** al auditar; el detalle del arreglo está en `AUDITORIA-INVENTARIO.md` § 33.
+
 **Resumen en seis líneas.**
 
 1. El código está **sano y bien cubierto**: 0 errores de tipos y lint, 968/968 pruebas contra PostgreSQL, 20/20 E2E de inventario, autorización en
    las 40 acciones y las 15 descargas, SQL siempre parametrizado, 0 vulnerabilidades en dependencias de producción.
-2. **El despliegue de migraciones es automático** al fusionar en `main` (flujo «Migrar y desplegar»), y ya aplicó en producción las `20261059`,
-   `20261060` y `20261066`. La instrucción que repetí en cada entrega («aplica el SQL a mano en Supabase») estaba **desfasada**: viene de un
+2. **El despliegue de migraciones es automático** al fusionar en `main` (flujo «Migrar y desplegar»), y ya aplicó en producción las `20261059` y
+   `20261066` (verificado en sus registros; la `20261060` también está aplicada: si no, el merge #617 la habría aplicado en vez de solo la `20261066`). La instrucción que repetí en cada entrega («aplica el SQL a mano en Supabase») estaba **desfasada**: viene de un
    documento viejo. Las tres migraciones de la rama (`20261067`, `20261068`, `20261069`) se aplicarán solas al fusionar; la `20261068` conviene
    fusionarla en hora valle.
 3. **Siete entregas (INV-4a → 5b3, +19 309 líneas) no han pasado por el CI remoto**: el CI solo corre en `pull_request` y en `main`, y no hay PR
@@ -47,10 +53,15 @@ documentado en `docs/DEVOPS.md`. Los registros de Actions lo confirman:
 | Merge | Fecha | Qué aplicó `migrate deploy` | Vercel |
 |---|---|---|---|
 | #615 (INV-3a) | 2026-10-14 21:58 | `20261059_inventory_costs` («226 migrations found… All migrations have been successfully applied») | job `MiaKmwd4sp3edzoM72ED` |
-| #616 (INV-3b) | 2026-10-15 13:35 | `20261060_inventory_purchasing` (por inferencia: el paso «Aplicar» salió verde y en #617 solo quedaba una pendiente) | — |
+| #616 (INV-3b) | 2026-10-15 13:35 | `20261060_inventory_purchasing` (por inferencia: el paso «Aplicar» salió verde y en #617 solo quedó pendiente la `20261066`) | — |
 | #617 (INV-3c) | 2026-10-15 15:23 | `20261066_inventory_reorder` («228 migrations found») | job `QrMGYxgWOi27gIvJ4E5A` |
 
 La base es `aws-1-us-east-2.pooler.supabase.com:5432`, base `postgres` (el *session pooler*, el que admite DDL).
+
+**Matiz que salió al leer los registros.** El merge #615 también traía las migraciones de INV-2b e INV-2c (`20261057`, `20261058`) y el log solo
+aplicó la `20261059`: esas ya estaban registradas. Es decir, **las de INV-2 se habían aplicado antes por otra vía** (lo más probable: a mano, siguiendo las
+instrucciones «SQL primero» de mis informes de entonces). Como todas son idempotentes, ambos caminos conviven; solo explica por qué el flujo no las
+mostró.
 
 **Lo que dije mal.** En los informes de INV-3a a INV-5b3 y en `docs/AUDITORIA-INVENTARIO.md` (§ 26, 28, 30 y 32) repetí que las migraciones
 `20261059`, `20261060`, `20261066`, `20261067`, `20261068` y `20261069` «siguen pendientes de aplicarse **a mano** en Supabase antes de desplegar».
@@ -160,9 +171,12 @@ código tienen la misma forma (formulario sin `key`) y el mismo fallo es de espe
 
 **Gravedad.** Baja-media: no pierde datos ni rompe nada, pero engaña (el formulario dice una cosa y la lista otra) y provoca re-filtrados por error.
 **Arreglo.** Una línea por pantalla (`key` con la consulta de la URL, como en `vencimientos`) y una aserción en los E2E (`toHaveValue('')` tras
-«Quitar filtros», como ya hace el de 5b1). Lo puedo hacer en una entrega corta.
+«Quitar filtros», como ya hace el de 5b1).
 
-## 8. Documentación: lo que está desfasado
+> **Cerrado el 2026-10-16** (`AUDITORIA-INVENTARIO.md` § 33): las 13 pantallas llevan la `key`; el E2E recorre las 14 y falla si falta en una (se probó
+> quitándosela a «Mermas»: el E2E dijo `«Quitar filtros» deja «motivo» elegido`), y una guardia estática lo impide sin necesitar el navegador.
+
+## 8. Documentación: lo que estaba desfasado (corregido el 2026-10-16, ver `AUDITORIA-INVENTARIO.md` § 33)
 
 | Documento | Qué dice | Qué es verdad |
 |---|---|---|

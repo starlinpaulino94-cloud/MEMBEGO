@@ -82,7 +82,7 @@ export default async function SinVentasPage({ searchParams }: { searchParams: Pr
         </Card>
       ) : (
         <>
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar el stock sin ventas">
+          <form key={consultaExportar} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar el stock sin ventas">
             <div className="space-y-1">
               <label htmlFor="sv-dias" className="text-xs text-muted-foreground">
                 Sin vender en

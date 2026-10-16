@@ -70,7 +70,7 @@ export default async function MovimientosInventarioPage({ searchParams }: { sear
         </Card>
       ) : (
         <>
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar movimientos">
+          <form key={consulta} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar movimientos">
             <div className="space-y-1">
               <label htmlFor="mv-q" className="text-xs text-muted-foreground">
                 Producto

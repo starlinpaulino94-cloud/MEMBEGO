@@ -135,7 +135,7 @@ export default async function ComprasInventarioPage({ searchParams }: { searchPa
             </section>
           )}
 
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar órdenes de compra">
+          <form key={consulta} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar órdenes de compra">
             <div className="space-y-1">
               <label htmlFor="oc-q" className="text-xs text-muted-foreground">
                 Número, referencia o proveedor

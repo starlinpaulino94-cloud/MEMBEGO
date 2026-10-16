@@ -85,7 +85,7 @@ export default async function MermasPage({ searchParams }: { searchParams: Promi
         </Card>
       ) : (
         <>
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar las mermas">
+          <form key={consultaExportar} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar las mermas">
             <div className="space-y-1">
               <label htmlFor="me-desde" className="text-xs text-muted-foreground">
                 Desde

@@ -102,7 +102,7 @@ export default async function ConteosInventarioPage({ searchParams }: { searchPa
             </section>
           )}
 
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar conteos">
+          <form key={consulta} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar conteos">
             <div className="space-y-1">
               <label htmlFor="co-q" className="text-xs text-muted-foreground">
                 Número o nota

@@ -129,7 +129,7 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
             </Card>
           )}
 
-          <form method="get" className="flex flex-wrap items-end gap-3">
+          <form key={`${q ?? ''}|${sucursalId ?? ''}|${estado ?? ''}`} method="get" className="flex flex-wrap items-end gap-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input name="q" defaultValue={q ?? ''} placeholder="Nombre, SKU o código de barras" aria-label="Buscar por nombre, SKU o código de barras" className="w-72 pl-8" />

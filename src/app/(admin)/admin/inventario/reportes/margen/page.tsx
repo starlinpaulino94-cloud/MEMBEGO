@@ -92,7 +92,7 @@ export default async function MargenPage({ searchParams }: { searchParams: Promi
         </Card>
       ) : (
         <>
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar el margen">
+          <form key={consultaExportar} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar el margen">
             <div className="space-y-1">
               <label htmlFor="mg-desde" className="text-xs text-muted-foreground">
                 Desde

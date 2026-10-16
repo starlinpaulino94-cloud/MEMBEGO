@@ -95,7 +95,7 @@ export default async function RotacionPage({ searchParams }: { searchParams: Pro
         </Card>
       ) : (
         <>
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar la rotación">
+          <form key={consultaExportar} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar la rotación">
             <div className="space-y-1">
               <label htmlFor="ro-dias" className="text-xs text-muted-foreground">
                 Periodo

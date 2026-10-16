@@ -2372,6 +2372,53 @@ test.describe('Inventario · panel', () => {
     await ctx.close()
   })
 
+  test('«Quitar filtros» vacía también el formulario, en todas las pantallas con filtros (antes lo dejaba con el valor anterior)', async ({ browser }) => {
+    test.setTimeout(240_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+
+    /**
+     * Los formularios de filtros no son controlados (`defaultValue`) y «Quitar filtros» es un enlace: Next navega sin recargar y React
+     * conservaba el árbol, así que la lista salía sin filtros pero el formulario seguía enseñando lo elegido, y volver a pulsar «Filtrar»
+     * re-aplicaba el filtro recién quitado. Cada formulario lleva ahora una `key` que cambia con los filtros de la URL.
+     */
+    const probar = async (ruta: string, select?: { name: string; valor: string }) => {
+      await p.goto(ruta)
+      const q = p.locator('input[name="q"]').first()
+      await expect(q, `${ruta}: no hay campo de búsqueda`).toBeVisible({ timeout: 20_000 })
+      const form = q.locator('xpath=ancestor::form')
+      await q.fill('zzz-no-existe')
+      if (select) await form.locator(`select[name="${select.name}"]`).selectOption(select.valor)
+      await form.locator('button[type="submit"]').click()
+      await p.waitForURL((u) => u.searchParams.get('q') === 'zzz-no-existe' && (!select || u.searchParams.get(select.name) === select.valor), { timeout: 20_000 })
+      await p.getByRole('link', { name: 'Quitar filtros' }).first().click()
+      await p.waitForURL((u) => !u.searchParams.has('q') && (!select || !u.searchParams.has(select.name)), { timeout: 20_000 })
+      await expect(p.locator('input[name="q"]').first(), `${ruta}: «Quitar filtros» deja el texto buscado en el formulario`).toHaveValue('')
+      if (select) await expect(p.locator(`select[name="${select.name}"]`).first(), `${ruta}: «Quitar filtros» deja «${select.name}» elegido`).toHaveValue('')
+    }
+
+    await probar('/admin/inventario', { name: 'estado', valor: 'BAJO' })
+    await probar('/admin/inventario/movimientos', { name: 'tipo', valor: 'PURCHASE' })
+    await probar('/admin/inventario/entradas')
+    await probar('/admin/inventario/conteos', { name: 'estado', valor: 'OPEN' })
+    await probar('/admin/inventario/transferencias', { name: 'estado', valor: 'SENT' })
+    await probar('/admin/inventario/compras', { name: 'estado', valor: 'DRAFT' })
+    await probar('/admin/inventario/proveedores')
+    await probar('/admin/inventario/reposicion')
+    await probar('/admin/inventario/valor')
+    await probar('/admin/inventario/reportes/rotacion')
+    await probar('/admin/inventario/reportes/sin-ventas')
+    await probar('/admin/inventario/reportes/margen')
+    await probar('/admin/inventario/reportes/mermas', { name: 'motivo', valor: 'sin' })
+    await probar('/admin/inventario/reportes/vencimientos')
+
+    expect(errores, errores.join('\n')).toEqual([])
+    await ctx.close()
+  })
+
   test('aislamiento: la variante de otra empresa no se abre ni se lista', async ({ browser }) => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
