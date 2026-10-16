@@ -19,6 +19,10 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/cron/entregas-pago",
+      "schedule": "30 12 * * *"
+    },
+    {
       "path": "/api/cron/integraciones",
       "schedule": "0 13 * * *"
     },

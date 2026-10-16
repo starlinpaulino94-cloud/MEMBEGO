@@ -60,10 +60,16 @@ const situacionDe = (c: Cobro, ahora: Date) =>
     ahora
   )
 
-type AccionDeBitacora = 'CONCILIACION_COMPROBANTE_GENERADO' | 'CONCILIACION_ENTREGA_REINTENTADA' | 'CONCILIACION_ENTREGA_MARCADA'
+export type AccionDeBitacora = 'CONCILIACION_COMPROBANTE_GENERADO' | 'CONCILIACION_ENTREGA_REINTENTADA' | 'CONCILIACION_ENTREGA_MARCADA'
 
 /** Asienta la acción en la bitácora. Un fallo aquí no deshace lo hecho (ya ocurrió): se deja en el log del servidor. */
-async function asentar(companyId: string, actor: ActorDeConciliacion, accion: AccionDeBitacora, intentoId: string, payload: Record<string, unknown>) {
+export async function asentarEnBitacora(
+  companyId: string,
+  actor: ActorDeConciliacion,
+  accion: AccionDeBitacora,
+  intentoId: string,
+  payload: Record<string, unknown>
+) {
   await conEmpresa(companyId, (tx) =>
     tx.auditLog.create({
       data: {
@@ -91,7 +97,7 @@ export async function generarComprobanteDeCobro(companyId: string, intentoId: st
   const venta = await asegurarVentaDelIntento(intentoId)
   if (!venta) return falla('No se pudo registrar el comprobante. Revisa el registro del servidor e inténtalo de nuevo.')
   if (!venta.nueva) return { ok: true, mensaje: `Este cobro ya tenía su comprobante (${venta.ticketNumero}).`, ticketNumero: venta.ticketNumero, transactionId: venta.id }
-  await asentar(companyId, actor, 'CONCILIACION_COMPROBANTE_GENERADO', intentoId, {
+  await asentarEnBitacora(companyId, actor, 'CONCILIACION_COMPROBANTE_GENERADO', intentoId, {
     ticketNumero: venta.ticketNumero,
     codigo: venta.codigo,
     monto: Number(cobro.monto),
@@ -114,7 +120,7 @@ export async function reintentarEntregaDeCobro(companyId: string, intentoId: str
   }
 
   const r = await reintentarEntrega(intentoId)
-  await asentar(companyId, actor, 'CONCILIACION_ENTREGA_REINTENTADA', intentoId, {
+  await asentarEnBitacora(companyId, actor, 'CONCILIACION_ENTREGA_REINTENTADA', intentoId, {
     estadoAnterior: cobro.fulfillmentEstado,
     errorAnterior: cobro.fulfillmentError,
     resultado: r.entrega,
@@ -154,7 +160,7 @@ export async function marcarCobroEntregado(companyId: string, intentoId: string,
     })
   )
   if (cerrado.count === 0) return falla('El cobro cambió mientras lo revisabas. Recarga la pantalla.')
-  await asentar(companyId, actor, 'CONCILIACION_ENTREGA_MARCADA', intentoId, {
+  await asentarEnBitacora(companyId, actor, 'CONCILIACION_ENTREGA_MARCADA', intentoId, {
     nota: texto,
     estadoAnterior: cobro.fulfillmentEstado,
     entregadoEn: evidencia.toISOString(),
