@@ -368,6 +368,9 @@ export const ACCION_LABEL: Record<string, string> = {
   AUTO_RESPUESTA_CREADA: 'Respuesta automática creada',
   AUTO_RESPUESTA_ACTUALIZADA: 'Respuesta automática editada',
   AUTO_RESPUESTA_ELIMINADA: 'Respuesta automática eliminada',
+  CONCILIACION_COMPROBANTE_GENERADO: 'Conciliación: comprobante de tarjeta generado',
+  CONCILIACION_ENTREGA_REINTENTADA: 'Conciliación: entrega reintentada',
+  CONCILIACION_ENTREGA_MARCADA: 'Conciliación: entrega marcada como completada',
   // Integraciones: lo que sale hacia sistemas de terceros.
   INTEGRACION_SONDEADA: 'Webhook probado',
   INTEGRACION_REINTENTADA: 'Cola de eventos reenviada',

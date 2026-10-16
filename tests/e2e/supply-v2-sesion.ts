@@ -86,6 +86,8 @@ const USUARIOS = {
   /** Pago con tarjeta → comprobante: quien cobra en la caja y revisa los comprobantes, y la persona que pagó en la app. */
   tarjetaAdmin: { email: 'e2e.tarjeta.admin@membego.test', nombre: 'Cajera Tarjeta E2E', role: 'ADMINISTRADOR' },
   tarjetaCliente: { email: 'e2e.tarjeta.cliente@membego.test', nombre: 'Ana Tarjeta E2E', role: 'CLIENTE' },
+  /** Pago con tarjeta → conciliación accionable (fase 4): quien resuelve los casos de /admin/conciliacion. */
+  tarjetaConciliador: { email: 'e2e.tarjeta.conciliador@membego.test', nombre: 'Gerente Conciliación E2E', role: 'ADMINISTRADOR' },
   /** Conciliación y riesgo (F9): quien administra una empresa y no puede entrar a las pantallas de la plataforma. */
   conciliacionAdmin: { email: 'e2e.conciliacion.admin@membego.test', nombre: 'Admin Conciliación E2E', role: 'ADMINISTRADOR' },
   /** Commerce Core · Merchant Billing (F4): el superadmin que asienta pagos y ajusta la cuenta de una empresa. */

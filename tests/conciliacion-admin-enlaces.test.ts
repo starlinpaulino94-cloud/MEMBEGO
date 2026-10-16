@@ -3,42 +3,57 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 /**
- * FASE 0 · los botones «Revisar» de `/admin/conciliacion` — caracterización (H7).
+ * FASE 4 · los botones «Revisar» de `/admin/conciliacion` ya no mandan a pantallas que no enseñan el caso (H7).
  *
- * Cada hallazgo manda a una pantalla que no enseña los casos que el hallazgo cuenta. Estas aserciones fijan el
- * estado actual para que la fase 4 (conciliación accionable) las invierta a la vista, con una lista de casos por
- * hallazgo y acciones auditadas.
+ * Antes: «Cobros sin transacción» → `/admin/pagos` (solo colas de validación), «Cobrados con entrega pendiente» →
+ * `/admin/reportes/finanzas` (una cifra) y «Cajas abiertas» → `/admin/app/carwash/turnos` (exige la capacidad TURNOS). Ahora
+ * cada hallazgo trae su LISTA de casos y cada caso su acción. Estas aserciones vigilan el cableado; lo que hacen las acciones
+ * lo prueba `tests/postgres/pagos-conciliacion.db.test.ts`.
  */
 
 const fuente = (f: string) => readFileSync(f, 'utf8')
-const enlaces = () => {
-  const s = fuente('src/modules/observabilidad/conciliacion.ts')
-  return Object.fromEntries([...s.matchAll(/clave: '([a-z-]+)'[\s\S]*?href: '([^']+)'/g)].map((m) => [m[1]!, m[2]!]))
-}
+const MOTOR = fuente('src/modules/observabilidad/conciliacion.ts')
+const ACCIONES = fuente('src/modules/observabilidad/conciliacion-actions.ts')
+const SERVICIO = fuente('src/modules/observabilidad/conciliacion-servicio.ts')
+const PAGINA = fuente('src/app/(admin)/admin/conciliacion/page.tsx')
+const CASOS = fuente('src/components/conciliacion/CasosDeHallazgo.tsx')
 
-test('H7 · «Cobros sin transacción» y «Pagos cobrados con entrega pendiente» mandan a pantallas que no listan esos casos', () => {
-  const e = enlaces()
-  assert.equal(e['cobro-sin-transaccion'], '/admin/pagos')
-  assert.equal(e['cobrado-sin-entregar'], '/admin/reportes/finanzas')
+const hrefs = () => Object.fromEntries([...MOTOR.matchAll(/clave: '([a-z-]+)'[\s\S]*?href: ([^,\n]+),/g)].map((m) => [m[1]!, m[2]!.trim()]))
 
-  // `/admin/pagos` solo lista las colas de validación (transferencias, compras en sucursal, cambios de plan): nunca un
-  // pago con tarjeta ya aprobado ni una `Transaction` faltante.
-  const pagos = fuente('src/app/(admin)/admin/pagos/page.tsx')
-  assert.doesNotMatch(pagos, /pagoIntento|cobro-sin-transaccion|transacciones:\s*\{\s*none/, 'DEFECTO H7: no hay lista de cobros sin transacción')
-
-  // `/admin/reportes/finanzas` enseña una CIFRA («N pagos ya se cobraron y su entrega sigue pendiente»), no los pagos ni una acción.
-  const vista = fuente('src/components/reportes/ReporteFinanzasVista.tsx')
-  assert.match(vista, /cobradoSinEntregar\.total > 0/)
-  assert.doesNotMatch(vista, /reintentarEntrega|Reintentar/, 'DEFECTO H7: sin botón para reintentar la entrega')
+test('H7 · los hallazgos que trae lista de casos ya no mandan a una pantalla ajena', () => {
+  const e = hrefs()
+  for (const clave of ['cobro-sin-transaccion', 'cobrado-sin-entregar', 'entrega-sin-registrar', 'caja-abierta', 'caja-descuadrada']) {
+    assert.equal(e[clave], 'null', `${clave}: el caso y su acción están en el propio hallazgo, no en otra pantalla`)
+  }
+  for (const viejo of ["'/admin/pagos'", "'/admin/reportes/finanzas'", "'/admin/app/carwash/turnos'", "'/admin/reportes'"]) {
+    assert.ok(!MOTOR.includes(`href: ${viejo}`), `ya no se usa ${viejo}`)
+  }
+  assert.match(PAGINA, /<CasosDeHallazgo/, 'la pantalla pinta la lista de casos de cada hallazgo')
 })
 
-test('H7 · «Cajas abiertas de días anteriores» manda a una pantalla del vertical car wash que exige la capacidad TURNOS', () => {
-  assert.equal(enlaces()['caja-abierta'], '/admin/app/carwash/turnos')
-  const turnos = fuente('src/app/(admin)/admin/app/carwash/turnos/page.tsx')
-  assert.match(turnos, /tieneCapacidad\(companyId, 'TURNOS'\)/, 'DEFECTO H7: un negocio sin esa capacidad no ve ninguna caja')
+test('H7 · las cajas abiertas llevan a la caja de esa sucursal (no a una pantalla del vertical car wash)', () => {
+  assert.match(CASOS, /\/empleado\/caja\?caja=\$\{caso\.id\}/)
+  assert.doesNotMatch(CASOS, /carwash\/turnos/)
+  assert.doesNotMatch(PAGINA, /TURNOS/)
 })
 
-test('H7 · el motor de enlaces es comprobable: los tres hallazgos del sprint tienen un enlace', () => {
-  const e = enlaces()
-  for (const clave of ['cobro-sin-transaccion', 'cobrado-sin-entregar', 'caja-abierta']) assert.ok(e[clave], clave)
+test('H7 · cada acción del servidor exige la misma función que confirmar un pago y toma la empresa de la sesión', () => {
+  assert.match(ACCIONES, /requireSection\('pagos', 'confirmar_pago'\)/)
+  assert.match(ACCIONES, /user\.metadata\.companyId|user\?\.metadata\.companyId/)
+  assert.doesNotMatch(ACCIONES, /formData|companyId:\s*string\)/, 'la empresa no viene del cliente')
+  for (const accion of ['generarComprobanteAccion', 'reintentarEntregaAccion', 'marcarEntregadaAccion']) {
+    assert.match(ACCIONES, new RegExp(`export async function ${accion}`))
+  }
+})
+
+test('H7 · las tres acciones asientan la bitácora y ninguna recobra', () => {
+  for (const accion of ['CONCILIACION_COMPROBANTE_GENERADO', 'CONCILIACION_ENTREGA_REINTENTADA', 'CONCILIACION_ENTREGA_MARCADA']) {
+    assert.match(SERVICIO, new RegExp(accion))
+  }
+  assert.doesNotMatch(SERVICIO, /cobrar|cardnet|purchase|autorizar/i, 'la conciliación no toca la pasarela: el dinero ya entró')
+})
+
+test('H7 · «Marcar entregada» exige nota y la interfaz no deja enviarla vacía', () => {
+  assert.match(SERVICIO, /al menos 5 caracteres/)
+  assert.match(CASOS, /disabled=\{!valida \|\| pendiente\}/)
 })

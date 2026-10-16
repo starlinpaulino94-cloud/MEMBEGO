@@ -72,10 +72,16 @@ export interface CrearTransaccionInput {
   readonly executionMs?: number | null
   readonly timeZone?: string
   readonly userId?: string | null
+  /**
+   * Cuándo OCURRIÓ la operación, si no es ahora. Solo para registrar tarde algo que ya pasó (el comprobante de un cobro
+   * con tarjeta que se escribe en la conciliación): la venta cae en el día en que se cobró, no en el día en que alguien
+   * la escribió, y los reportes y el cuadre de ese día la ven donde corresponde. Por defecto, ahora.
+   */
+  readonly fecha?: Date
 }
 
-async function generarIdentificadores(db: Db, companyId: string, timeZone?: string) {
-  const fecha = fechaScope(new Date(), timeZone)
+async function generarIdentificadores(db: Db, companyId: string, timeZone?: string, cuando: Date = new Date()) {
+  const fecha = fechaScope(cuando, timeZone)
   const [txSeq, ticketSeq] = [
     await nextCounter(db, `TX:${fecha}`),
     await nextCounter(db, `TICKET:${companyId}`),
@@ -99,9 +105,10 @@ export async function crearTransaccionAplicada(
   const { codigo, ticketNumero } = await generarIdentificadores(
     db,
     input.companyId,
-    input.timeZone
+    input.timeZone,
+    input.fecha
   )
-  const now = new Date()
+  const now = input.fecha ?? new Date()
 
   const tx = await db.transaction.create({
     data: {
@@ -126,6 +133,7 @@ export async function crearTransaccionAplicada(
       resultado: input.resultado ?? null,
       executionMs: input.executionMs ?? null,
       appliedAt: now,
+      ...(input.fecha ? { createdAt: input.fecha } : {}),
     },
     select: { id: true },
   })

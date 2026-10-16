@@ -12,13 +12,13 @@
  *   H3  contraste: el panel de administración SÍ registra la venta                    → es el patrón a reutilizar.
  *   H4  la renovación automática con tarjeta guardada cobraba y renovaba, y tampoco dejaba `Transaction` → CORREGIDO en la fase 2.
  *   H5  falso positivo: un pago aprobado ANTES de la columna de cumplimiento (fila con el valor por defecto
- *       'PENDIENTE', la migración 20260912_p1b no rellenó nada) cuenta como «cobrado sin entregar» aunque la
- *       membresía esté activa y entregada                                              → fase 1 (backfill) y 4.
- *   H6  punto ciego: un cobro cuya entrega FALLÓ (`FALLIDA`) y cuyo cliente no recibió nada NO se detecta;
- *       la conciliación dice «Todo cuadra»                                             → fase 4.
+ *       'PENDIENTE', la migración 20260912_p1b no rellenó nada) contaba como «cobrado sin entregar» aunque la
+ *       membresía estuviera activa y entregada                                         → CORREGIDO en la fase 4 (se separa en «registro sin cerrar»).
+ *   H6  punto ciego: un cobro cuya entrega FALLÓ (`FALLIDA`) y cuyo cliente no recibió nada NO se detectaba;
+ *       la conciliación decía «Todo cuadra»                                            → CORREGIDO en la fase 4.
  *
- * Nada de esto se arregla aquí. Cuando una fase cambie un comportamiento, la aserción correspondiente se
- * invierte en ese mismo commit y la razón queda en su mensaje.
+ * Cuando una fase cambia un comportamiento, la aserción correspondiente se invierte en ese mismo commit y la
+ * razón queda en su mensaje.
  */
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -192,34 +192,41 @@ test('H4 · (fase 2) la renovación automática con tarjeta guardada cobra, renu
   assert.equal(snap.referenciaPago, 'Aut. AUTH-H4')
 })
 
-test('H5 · falso positivo: un pago aprobado ANTES de la columna de cumplimiento (valor por defecto PENDIENTE) cuenta como «cobrado sin entregar» aunque la membresía esté activa', async () => {
+test('H5 · (fase 4) un pago aprobado ANTES de la columna de cumplimiento, con la membresía ya activa, NO es un cliente esperando: es un registro sin cerrar', async () => {
   const e = await crearEmpresa('h5')
   const cobro = new Date(Date.now() - 20 * 86_400_000)
   const m = await membresia(e, { estado: 'ACTIVA', pagoConfirmado: true, montoPagado: 1600, fechaPago: cobro, fechaInicio: cobro, fechaVencimiento: new Date(Date.now() + 10 * 86_400_000) })
-  // Una fila tal como la dejó la migración 20260912_p1b sobre un cobro anterior: estado APROBADO y NINGUNA marca de cumplimiento.
+  // Una fila tal como la dejó la migración 20260912_p1b sobre un cobro anterior: estado APROBADO, NINGUNA marca de cumplimiento y vieja.
   await prisma.pagoIntento.create({
-    data: { companyId: e.companyId, clienteId: e.clienteId, proveedor: 'CARDNET', membershipId: m.id, monto: 1600, estado: 'APROBADO', activadoAt: cobro, autorizacion: 'AUTH-H5', createdAt: cobro },
+    data: { companyId: e.companyId, clienteId: e.clienteId, proveedor: 'CARDNET', membershipId: m.id, monto: 1600, estado: 'APROBADO', activadoAt: cobro, autorizacion: 'AUTH-H5', createdAt: cobro, updatedAt: cobro },
   })
   const i = await prisma.pagoIntento.findFirstOrThrow({ where: { membershipId: m.id } })
   assert.equal(i.fulfillmentEstado, 'PENDIENTE', 'valor por defecto de la columna (sin backfill)')
 
   const r = await conciliar(e.companyId)
-  const h = hallazgo(r, 'cobrado-sin-entregar')
-  assert.ok(h, 'DEFECTO H5: se cuenta como cliente esperando')
-  assert.equal(h.cantidad, 1)
-  assert.equal(h.monto, 1600)
-  assert.equal(h.href, '/admin/reportes/finanzas', '«Revisar» solo enseña una cifra: no hay lista ni acción')
+  // Antes de la fase 4: `cobrado-sin-entregar` con cantidad 1 y monto 1600 («DEFECTO H5: se cuenta como cliente esperando»).
+  assert.equal(hallazgo(r, 'cobrado-sin-entregar'), undefined, 'ya no se cuenta como cliente esperando')
+  const h = hallazgo(r, 'entrega-sin-registrar')
+  assert.ok(h, 'sí se ve, como registro sin cerrar')
+  assert.deepEqual([h.cantidad, h.monto, h.severidad, h.href], [1, 1600, 'MEDIA', null])
+  assert.deepEqual(h.casos.map((c) => [c.tipo, c.id, c.acciones]), [['REGISTRO_SIN_CERRAR', i.id, ['MARCAR_ENTREGADA', 'ABRIR_FICHA']]])
 })
 
-test('H6 · punto ciego: un cobro con la entrega FALLIDA y el cliente sin su membresía NO se detecta; la conciliación dice «Todo cuadra»', async () => {
+test('H6 · (fase 4) un cobro con la entrega FALLIDA y el cliente sin su membresía SE DETECTA, con su acción', async () => {
   const e = await crearEmpresa('h6')
   const m = await membresia(e) // sigue PENDIENTE: el cliente pagó y no recibió nada
-  await prisma.pagoIntento.create({
+  const i = await prisma.pagoIntento.create({
     data: { companyId: e.companyId, clienteId: e.clienteId, proveedor: 'CARDNET', membershipId: m.id, monto: PRECIO, estado: 'APROBADO', activadoAt: new Date(), autorizacion: 'AUTH-H6', fulfillmentEstado: 'FALLIDA', fulfillmentError: 'La activación falló.', fulfillmentIntentos: 1 },
+    select: { id: true },
   })
   assert.equal((await prisma.membership.findUniqueOrThrow({ where: { id: m.id } })).estado, 'PENDIENTE')
 
   const r = await conciliar(e.companyId)
-  assert.equal(hallazgo(r, 'cobrado-sin-entregar'), undefined, 'DEFECTO H6: la regla solo mira PENDIENTE; FALLIDA y PROCESANDO atascados quedan fuera (fase 4)')
-  assert.equal(r.cuadra, true, 'y el panel afirma «Todo cuadra» con un cliente que pagó y no recibió')
+  // Antes de la fase 4: `undefined` y `r.cuadra === true` («DEFECTO H6: la regla solo mira PENDIENTE»).
+  const h = hallazgo(r, 'cobrado-sin-entregar')
+  assert.ok(h, 'ahora aparece')
+  assert.deepEqual([h.cantidad, h.monto, h.severidad], [1, PRECIO, 'ALTA'])
+  assert.deepEqual(h.casos.map((c) => [c.tipo, c.id, c.acciones]), [['CLIENTE_ESPERANDO', i.id, ['REINTENTAR_ENTREGA', 'ABRIR_FICHA']]])
+  assert.match(h.casos[0]!.detalle ?? '', /fallida: La activación falló\. \(1 intento\)/)
+  assert.equal(r.cuadra, false, 'y el panel deja de afirmar «Todo cuadra»')
 })

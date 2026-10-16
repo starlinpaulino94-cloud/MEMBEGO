@@ -83,6 +83,9 @@ export async function asegurarVentaDelIntento(intentoId: string): Promise<VentaD
           metodoCobro: 'TARJETA',
           pagoIntentoId: intento.id,
           membershipId: intento.membershipId,
+          // La venta lleva la fecha del COBRO, no la de cuando se escribe: si la autorreparación o la conciliación la
+          // registran tarde, cae en el día en que el cliente pagó y los reportes y el cuadre de ese día la ven ahí.
+          fecha: intento.activadoAt ?? undefined,
           snapshot: snapshotDeCobroConTarjeta({
             detalle,
             clienteNombre: intento.cliente?.nombre ?? 'Cliente',
