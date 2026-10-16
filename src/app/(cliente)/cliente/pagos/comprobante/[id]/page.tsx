@@ -20,7 +20,7 @@ export default async function ComprobanteClientePage({ params }: { params: Promi
   if (!ticket) notFound()
 
   return (
-    <main className="container max-w-4xl py-8">
+    <div className="container max-w-4xl py-8">
       <header className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Finanzas</p>
         <h1 className="mt-1.5 text-h1 tracking-tight text-foreground">Comprobante de pago</h1>
@@ -29,6 +29,6 @@ export default async function ComprobanteClientePage({ params }: { params: Promi
         </p>
       </header>
       <ComprobanteImprimible ticket={ticket} volverHref="/cliente/pagos" />
-    </main>
+    </div>
   )
 }
