@@ -32,7 +32,7 @@ activar ⇒ atascado real).
 | 0 | Pruebas de caracterización (H1–H7) | ✅ |
 | 1 | Migración aditiva (`20261053`, `20261054`): `MetodoCobroTipo.TARJETA`, `Transaction.pagoIntentoId` único con CHECK y disparador, `PagoIntento.canal`, backfill demostrable del cumplimiento, módulo puro del comprobante | ✅ (`tests/postgres/pagos-tarjeta-modelo.db.test.ts`, `tests/comprobante-tarjeta.test.ts`) |
 | 2 | Registrar la venta (`SALE`, método `TARJETA`, canal app/web/renovación) justo después de entregar; idempotente y autorreparable; bitácora `PAGO_APROBADO` con método, canal e intento | ✅ (`tests/postgres/pagos-venta-tarjeta.db.test.ts`; H1 y H4 invertidos) |
-| 3 | Comprobante visible e imprimible: Facturas/Registros con filtro «Tarjeta», ficha de la membresía, caja («cobros en línea del día», fuera del arqueo), recibo para el cliente (app y web) | pendiente |
+| 3 | Comprobante visible e imprimible: Facturas/Registros con filtro «Tarjeta», ficha del cliente, caja («cobros en línea del día», fuera del arqueo), cuadre y cierre, recibo para el cliente (app, web y BFF) | ✅ (pruebas PG, unitarias y E2E; ver abajo) |
 | 4 | Conciliación accionable: lista de casos por hallazgo, «Generar comprobante», «Reintentar entrega», «Marcar entregada», cajas abiertas; regla de entrega que mire `FALLIDA`/`PROCESANDO` atascados y no cuente lo ya entregado | pendiente |
 | 5 | Cron de reintento de entregas con aviso a administradores | pendiente |
 | 6 | Backfill de comprobantes retroactivos (solo si se aprueba) y cierre | pendiente |
@@ -52,6 +52,44 @@ activar ⇒ atascado real).
 - **Solo se factura un cobro APROBADO con entrega COMPLETADA.**
 - **Bitácora.** `PAGO_APROBADO` lleva `metodo: 'TARJETA'`, `canal` e `intentoId` cuando el cobro vino de pasarela.
 
+## Fase 3: dónde se ve y se imprime
+
+| Superficie | Qué muestra | Quién |
+|---|---|---|
+| Caja del empleado (`/empleado/caja`) | Lista «Cobros con tarjeta en línea de hoy», **fuera de la gaveta** (el efectivo esperado no cambia), cada cobro con su botón de imprimir | Personal de caja |
+| «Mi cuadre del día» (impreso) | Sección «Cobros en línea (tarjeta)» con ticket, cliente, canal y total; **no suma** al total del empleado | Personal de caja |
+| Cierre de caja (impreso) | Bloque informativo «Cobros en línea durante el turno» por canal; el arqueo de efectivo no cambia | Personal de caja |
+| Comprobantes (`/admin/facturas`) | Filtro «Pagos con tarjeta» y la forma de pago completa («Tarjeta VISA ••••4242 (en la app)») | Administración |
+| Registros (`/admin/registros`) | Subtotal «Tarjeta» y filtro por método | Administración |
+| Ficha del cliente → Historial | «Pagos con tarjeta en línea», reimprimibles | Administración |
+| «Mis pagos» (web) y app Expo | Forma de pago, recibo Nº, autorización, negocio; **Imprimir recibo** (web) y **Compartir recibo** (app) | Cliente |
+| `GET /api/v1/cliente/pagos` | `formaDePago` y `recibo` en cada pago del historial (campos nuevos, opcionales para apps antiguas) | App |
+
+- Los cobros en línea se identifican por `SALE` + `TARJETA` + `pagoIntentoId`: así no se confunden con un cobro con
+  datáfono en el mostrador (ese se guarda como `OTRO`, sin cambios).
+- El recibo del cliente es el **mismo ticket** que imprime el personal (`recibo-cliente.ts` lee el snapshot de la venta).
+  Un recibo solo se entrega al dueño del cobro: la consulta filtra por las fichas de la persona.
+- El comprobante nunca lleva el número de tarjeta: lo garantizan los sanadores del snapshot y del recibo.
+
+### Hallazgo: doble conteo en Reportes (corregido solo para tarjeta) y uno anterior sin corregir
+
+`Total cobrado` (Finanzas y Reporte de la empresa) suma la caja (`transactions`) y los cobros de membresía
+(`montoPagado`). Con la venta de la fase 2, un pago con tarjeta de una membresía estaba en los dos y el total mostraba
+**RD$ 1,000 por un pago de RD$ 500** (reproducido con la base real). Se corrigió: el flujo de membresías deja fuera las
+que ya tienen venta de pasarela en el periodo.
+
+**Hallazgo anterior, NO corregido (necesita decisión):** una membresía cobrada en el mostrador o confirmada desde el panel
+ya dejaba venta + membresía, y por tanto ya contaba doble en `Total cobrado`. Se fijó con una prueba (la caracterización
+del caso 3 de `pagos-tarjeta-reportes.db.test.ts`) para que cambiarlo sea una decisión y no un efecto lateral, porque
+modifica cifras que ya se publicaron. Propuesta: aplicar la misma guarda a toda venta con `membershipId`.
+
+### Nota sobre la fecha de una venta tardía
+
+La venta lleva la fecha en que se **registra**. Si la autorreparación o «Generar comprobante» (fase 4) la escribe más tarde
+que el pago, caerá en el día en que se escribe. Los reportes por periodo ya quedan sin doble conteo aun así (cada mes
+cuenta lo suyo), pero el cuadre de un día pasado no la verá. Por eso la fase 4 debe fechar la venta con `activadoAt` del
+cobro, o dejarlo escrito como decisión.
+
 ## Decisiones del usuario (abiertas)
 
 1. Comprobantes retroactivos de los pagos con tarjeta anteriores: automáticos (evidencia inequívoca) o uno a uno.
@@ -59,6 +97,7 @@ activar ⇒ atascado real).
 3. Sucursal del pago en línea en el cierre del día (¿`sucursalPagoId` o «En línea»?).
 4. Numeración: mismo contador `TCK-` que la caja o serie aparte.
 5. Datos de tarjeta en el comprobante: marca y últimos 4 + autorización, nunca el número completo.
+6. Doble conteo anterior de ventas de mostrador y del panel en «Total cobrado»: ¿se corrige con la misma guarda? (ver fase 3).
 
 ## Reglas de la corrección
 

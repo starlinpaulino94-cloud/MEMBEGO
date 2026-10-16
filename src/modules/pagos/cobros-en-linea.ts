@@ -51,11 +51,16 @@ export async function getCobrosEnLineaDelTurno(
   return { cantidad: r.cantidad, total: r.total, porCanal: r.porCanal.map((c) => ({ etiqueta: c.etiqueta, cantidad: c.cantidad, total: c.total })) }
 }
 
+/** Los pagos con tarjeta de la pasarela de UN cliente, del más reciente al más viejo: para reimprimir desde su ficha. */
+export async function getCobrosConTarjetaDeCliente(companyId: string, clienteId: string, limite = 20): Promise<CobroEnLinea[]> {
+  return leerCobros(companyId, null, null, { clienteId, masRecientesPrimero: true, tomar: limite })
+}
+
 async function leerCobros(
   companyId: string,
-  gte: Date,
-  lt: Date,
-  opciones: { sucursalId?: string | null }
+  gte: Date | null,
+  lt: Date | null,
+  opciones: { sucursalId?: string | null; clienteId?: string; masRecientesPrimero?: boolean; tomar?: number }
 ): Promise<CobroEnLinea[]> {
   const filas = await conEmpresa(companyId, (tx) =>
     tx.transaction.findMany({
@@ -65,7 +70,8 @@ async function leerCobros(
         estado: 'APPLIED',
         metodoCobro: 'TARJETA',
         pagoIntentoId: { not: null },
-        createdAt: { gte, lt },
+        ...(gte && lt ? { createdAt: { gte, lt } } : {}),
+        ...(opciones.clienteId ? { clienteId: opciones.clienteId } : {}),
         ...(opciones.sucursalId ? { sucursalId: opciones.sucursalId } : {}),
       },
       select: {
@@ -78,8 +84,8 @@ async function leerCobros(
         sucursal: { select: { nombre: true } },
         _count: { select: { impresiones: true } },
       },
-      orderBy: { createdAt: 'asc' },
-      take: TOPE,
+      orderBy: { createdAt: opciones.masRecientesPrimero ? 'desc' : 'asc' },
+      take: Math.min(opciones.tomar ?? TOPE, TOPE),
     })
   )
 

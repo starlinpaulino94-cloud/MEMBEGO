@@ -118,6 +118,8 @@ export async function getClienteAllMemberships(
 
 import { unstable_cache } from 'next/cache'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
+import { etiquetaDeCobroConTarjeta, esCanalDeCobro } from '@/modules/pagos/comprobante-tarjeta'
+import { armarReciboDePago, type ReciboDePago } from '@/modules/pagos/recibo-cliente'
 
 /**
  * Empresas donde el usuario tiene cuenta de cliente — para el switcher del
@@ -545,6 +547,13 @@ export interface PagoHistorialItem {
   comprobanteUrl: string | null
   /** Nombre del miembro del equipo que aprobó/rechazó el pago. */
   validadoPor: string | null
+  /** «Tarjeta VISA ••••4242 (en la app)»: con qué y por dónde se pagó, cuando el cobro fue de pasarela. */
+  formaDePago: string | null
+  /**
+   * El recibo del cobro con tarjeta (el mismo ticket que imprime el personal). `null` si el pago no fue de pasarela o
+   * todavía no tiene su venta registrada.
+   */
+  recibo: ReciboDePago | null
 }
 
 export interface ClientePagos {
@@ -647,6 +656,33 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
         : []
       const validadorName = new Map(validadores.map((u) => [u.id, u.name]))
 
+      // Pagos con tarjeta de la pasarela: el AuditLog guarda `intentoId`, y la venta de ese intento es el recibo. Solo se
+      // leen las ventas de ESTA persona (sus fichas de cliente): un intento ajeno no devuelve nada.
+      const intentoIds = [
+        ...new Set(
+          logs
+            .map((l) => ((l.payload ?? {}) as Record<string, unknown>).intentoId)
+            .filter((v): v is string => typeof v === 'string')
+        ),
+      ]
+      const ventas = intentoIds.length
+        ? await sinEmpresa('cliente: recibos de mis pagos con tarjeta', (tx) =>
+            tx.transaction.findMany({
+              where: { pagoIntentoId: { in: intentoIds }, clienteId: { in: clienteIds }, estado: 'APPLIED' },
+              select: {
+                pagoIntentoId: true,
+                ticketNumero: true,
+                codigo: true,
+                snapshot: true,
+                monto: true,
+                createdAt: true,
+                company: { select: { name: true, zonaHoraria: true } },
+              },
+            })
+          ).catch(() => [])
+        : []
+      const ventaPorIntento = new Map(ventas.map((v) => [v.pagoIntentoId, v]))
+
       historial = logs.map((l) => {
         const p = (l.payload ?? {}) as Record<string, unknown>
         const planRef =
@@ -654,7 +690,29 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
           (typeof p.planId === 'string' && p.planId) ||
           null
         const info = membershipInfo.get(l.entidadId ?? '') ?? null
+        const intentoId = typeof p.intentoId === 'string' ? p.intentoId : null
+        const venta = intentoId ? ventaPorIntento.get(intentoId) ?? null : null
+        const recibo = venta
+          ? armarReciboDePago({
+              ticketNumero: venta.ticketNumero,
+              codigo: venta.codigo,
+              snapshot: venta.snapshot,
+              empresaNombre: venta.company.name,
+              concepto: planRef ? planName.get(planRef) ?? null : null,
+              monto: Number(venta.monto ?? 0),
+              fecha: venta.createdAt,
+              timeZone: venta.company.zonaHoraria || 'America/Santo_Domingo',
+            })
+          : null
+        // Sin venta todavía (la registra el reintento) el cliente igual ve que pagó con tarjeta y por dónde.
+        const formaDePago =
+          recibo?.formaDePago ??
+          (p.metodo === 'TARJETA'
+            ? etiquetaDeCobroConTarjeta(esCanalDeCobro(p.canal) ? p.canal : null, { marca: null, ultimos4: null })
+            : null)
         return {
+          formaDePago,
+          recibo,
           id: l.id,
           tipo: l.accion === 'PAGO_APROBADO' ? 'APROBADO' : 'RECHAZADO',
           fecha: l.createdAt,

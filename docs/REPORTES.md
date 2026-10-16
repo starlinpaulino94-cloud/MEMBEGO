@@ -471,6 +471,14 @@ No se suman en una sola cifra sin decirlo: sumarlas hace imposible cuadrar el
 reporte con la caja del día. Cuando un reporte necesite el total, lo llama
 **ingreso total** y enseña los dos sumandos al lado.
 
+**El pago con tarjeta de la app o la web se cuenta una sola vez.** Activa la
+membresía (`montoPagado`) y deja una venta `SALE` con `pagoIntentoId` en el libro.
+Para que «Total cobrado» no muestre el doble, el flujo de membresías deja fuera las
+que tienen una venta de pasarela cobrada en el MISMO periodo
+(`sinVentaDePasarelaEnElPeriodo`, `modules/pagos/cobrado.ts`). Un cobro anterior al
+comprobante (sin venta) sigue contando por su membresía. Lo vigilan
+`tests/postgres/pagos-tarjeta-reportes.db.test.ts` (Finanzas y Reporte de la empresa).
+
 Y la distinción que ningún reporte puede difuminar:
 
 - **Cobrado** — el dinero está. Es lo que se reporta como ingreso.

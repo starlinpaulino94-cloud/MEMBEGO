@@ -11,7 +11,7 @@ import assert from 'node:assert/strict'
 import { prisma } from '../../src/lib/prisma'
 import { crearTransaccionAplicada } from '../../src/lib/transactions/application/transaction-service'
 import { snapshotDeCobroConTarjeta } from '../../src/modules/pagos/comprobante-tarjeta'
-import { getCobrosEnLineaDelDia } from '../../src/modules/pagos/cobros-en-linea'
+import { getCobrosConTarjetaDeCliente, getCobrosEnLineaDelDia } from '../../src/modules/pagos/cobros-en-linea'
 import { getCierreReporte, getReporteEmpleadoDia, hoyLocal } from '../../src/modules/caja/queries'
 import { getRegistros } from '../../src/modules/registros/queries'
 
@@ -123,4 +123,18 @@ test('5 · Registros tiene su subtotal «Tarjeta» y el filtro por método lo en
   const soloTarjeta = await getRegistros(e.companyId, { metodo: 'TARJETA' }, TZ)
   assert.equal(soloTarjeta.items.length, 1)
   assert.equal(soloTarjeta.items[0]!.metodoCobro, 'TARJETA')
+})
+
+test('6 · la ficha del cliente lista SUS pagos con tarjeta (más reciente primero) y no los de otro cliente', async () => {
+  const e = await empresa('ficha')
+  const otro = await prisma.cliente.create({ data: { companyId: e.companyId, supabaseId: `sb-ct-otro-${sufijo}`, nombre: 'Otro cliente', email: `ct-otro-${sufijo}@prueba.test` }, select: { id: true } })
+  const primero = await cobroEnLinea(e, 500)
+  const segundo = await cobroEnLinea(e, 800, 'WEB')
+  await cobroEnLinea({ ...e, clienteId: otro.id }, 9999)
+  await efectivoEnCaja(e, 300) // venta en gaveta de este mismo cliente: no es un pago en línea
+  const r = await getCobrosConTarjetaDeCliente(e.companyId, e.clienteId)
+  assert.deepEqual(r.map((x) => x.id), [segundo.id, primero.id])
+  assert.deepEqual(r.map((x) => x.monto), [800, 500])
+  assert.equal((await getCobrosConTarjetaDeCliente(e.companyId, e.clienteId, 1)).length, 1, 'respeta el límite')
+  assert.equal((await getCobrosConTarjetaDeCliente('otra-empresa', e.clienteId)).length, 0, 'y no cruza de empresa')
 })
