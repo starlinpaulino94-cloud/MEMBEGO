@@ -1,6 +1,6 @@
 import type { Tx } from '@/lib/tenant'
 import { diaLocal } from '@/modules/reportes/rango'
-import { disponibleDeLote, estadoDeLote, ordenFefo, textoVencimiento, type EstadoLote, type LoteConSaldo } from './lotes'
+import { disponibleDeLote, estadoDeLote, motivoParaNoDeshacerLotes, ordenFefo, textoVencimiento, type EstadoLote, type LoteConSaldo } from './lotes'
 import type { LoteDeTraslado } from './traslados'
 
 /**
@@ -177,4 +177,51 @@ export async function lotesDeTrasladoEnTx(tx: Tx, companyId: string, trasladoId:
     salida.set(f.varianteId, [...(salida.get(f.varianteId) ?? []), lote])
   }
   return salida
+}
+
+// ── INV-5b5 · Corregir vencimientos y deshacer la activación ────────────────
+
+/** Lo que de la historia de lotes de un producto impide deshacer su activación (ver `motivoParaNoDeshacerLotes`). Solo lee. */
+export async function historiaDeLotesEnTx(tx: Tx, companyId: string, varianteId: string) {
+  const [repartos, lotesPropios, lineasDeConteo, correcciones] = await Promise.all([
+    tx.inventoryMovementLot.count({ where: { companyId, balance: { catalogVariantId: varianteId } } }),
+    tx.inventoryLot.count({ where: { companyId, catalogVariantId: varianteId, legacy: false } }),
+    tx.inventoryCountLine.count({ where: { companyId, catalogVariantId: varianteId, lotId: { not: null } } }),
+    tx.inventoryLotExpiryChange.count({ where: { companyId, catalogVariantId: varianteId } }),
+  ])
+  return { movimientosRepartidos: repartos, lotesPropios, lineasDeConteo, correcciones }
+}
+
+/** ¿Se puede deshacer la activación de lotes de este producto? `null` = sí; si no, el motivo. Solo lee. */
+export async function motivoParaNoDesactivarLotesEnTx(tx: Tx, companyId: string, varianteId: string): Promise<{ codigo: string; error: string } | null> {
+  return motivoParaNoDeshacerLotes(await historiaDeLotesEnTx(tx, companyId, varianteId))
+}
+
+/** Una corrección del vencimiento de un lote, tal como quedó en la historia. */
+export interface CambioDeVencimiento {
+  id: string
+  loteId: string
+  loteCodigo: string
+  /** `YYYY-MM-DD` o null (no vencía / ya no vence). */
+  anterior: string | null
+  nuevo: string | null
+  motivo: string
+  usuarioNombre: string | null
+  creadoEn: Date
+}
+
+/** Las correcciones de vencimiento de los lotes de un producto, de la más reciente a la más antigua (hasta 50). */
+export async function cambiosDeVencimientoEnTx(tx: Tx, companyId: string, varianteId: string): Promise<CambioDeVencimiento[]> {
+  const filas = await tx.$queryRaw<{ id: string; loteId: string; loteCodigo: string; anterior: string | null; nuevo: string | null; motivo: string; changedBy: string | null; creadoEn: Date }[]>`
+    SELECT c."id", c."lotId" AS "loteId", l."code" AS "loteCodigo", c."previousExpiresOn"::text AS "anterior", c."newExpiresOn"::text AS "nuevo",
+           c."reason" AS "motivo", c."changedBy", c."createdAt" AS "creadoEn"
+      FROM "inventory_lot_expiry_changes" c
+      JOIN "inventory_lots" l ON l."id" = c."lotId"
+     WHERE c."companyId" = ${companyId} AND c."catalogVariantId" = ${varianteId}
+     ORDER BY c."createdAt" DESC, c."id" DESC
+     LIMIT 50`
+  const ids = [...new Set(filas.map((f) => f.changedBy).filter((x): x is string => Boolean(x)))]
+  const us = ids.length > 0 ? await tx.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } }) : []
+  const nombres = new Map(us.map((u) => [u.id, u.name || u.email]))
+  return filas.map((f) => ({ id: f.id, loteId: f.loteId, loteCodigo: f.loteCodigo, anterior: f.anterior, nuevo: f.nuevo, motivo: f.motivo, usuarioNombre: f.changedBy ? (nombres.get(f.changedBy) ?? null) : null, creadoEn: f.creadoEn }))
 }

@@ -275,11 +275,8 @@ test('INV-5b4 · en el CSV de lotes, lo que escribe una persona (el código del 
 // ── Guardias estáticas ───────────────────────────────────────────────────────
 
 test('INV-5b4 · NO hay migración nueva: el estado por lote de una transferencia sale del ledger (lo que no existe no puede descuadrarse)', () => {
-  const ultimas = readdirSync('prisma/migrations')
-    .filter((n) => /^\d{8}_/.test(n))
-    .sort()
-    .slice(-1)
-  assert.deepEqual(ultimas, ['20261069_inventory_count_lots'], 'INV-5b4 no añade migraciones')
+  // 5b4 no añadió ninguna: su última migración sigue siendo la 20261069 (las que haya después son de otras entregas).
+  assert.ok(readdirSync('prisma/migrations').includes('20261069_inventory_count_lots'))
   const q = sinComent(leer('src/modules/inventory/lotes-queries.ts'))
   const cuerpo = cuerpoDe(q, 'lotesDeTrasladoEnTx')
   assert.match(cuerpo, /FROM "inventory_transfers" t/)

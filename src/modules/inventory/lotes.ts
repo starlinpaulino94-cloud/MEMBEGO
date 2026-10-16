@@ -84,6 +84,39 @@ export function parsearVencimiento(v: unknown): { ok: true; valor: string | null
   return { ok: true, valor: t }
 }
 
+/**
+ * INV-5b5 · Qué pasa al CORREGIR el vencimiento de un lote. El «SIN LOTE» no vence y no se corrige; la fecha nueva sigue las mismas
+ * reglas que al capturarla (vacía = no vence); un producto que exige vencimiento no admite dejar un lote sin fecha; y poner la fecha que
+ * ya tenía no cambia nada (un reintento no deja una segunda fila de historia).
+ */
+export type PlanDeCorreccion =
+  | { ok: true; sinCambio: true }
+  | { ok: true; sinCambio: false; anterior: string | null; nuevo: string | null }
+  | { ok: false; codigo: string; error: string }
+
+export function planDeCorreccionDeVencimiento(lote: { vencimiento: string | null; legado: boolean }, nuevo: unknown, exigeVencimiento: boolean): PlanDeCorreccion {
+  if (lote.legado) return { ok: false, codigo: 'LOTE_LEGADO', error: 'El lote «SIN LOTE» no vence: no tiene fecha que corregir.' }
+  const f = parsearVencimiento(nuevo)
+  if (!f.ok) return { ok: false, codigo: 'VENCIMIENTO_INVALIDO', error: f.error }
+  if (f.valor === null && exigeVencimiento) return { ok: false, codigo: 'VENCIMIENTO_REQUERIDO', error: 'Este producto exige fecha de vencimiento en cada lote: escribe la fecha correcta.' }
+  if (f.valor === lote.vencimiento) return { ok: true, sinCambio: true }
+  return { ok: true, sinCambio: false, anterior: lote.vencimiento, nuevo: f.valor }
+}
+
+/**
+ * INV-5b5 · ¿Se puede DESHACER la activación de lotes de un producto? Solo mientras los lotes sean configuración: ningún movimiento
+ * repartido entre lotes (ni una venta, entrada, transferencia o ajuste desde que se activaron), ningún lote aparte del «SIN LOTE», ninguna
+ * línea de conteo con lote y ninguna corrección de vencimiento. Devuelve `null` si se puede, o el motivo (código y texto) si no.
+ */
+export function motivoParaNoDeshacerLotes(h: { movimientosRepartidos: number; lotesPropios: number; lineasDeConteo: number; correcciones: number }): { codigo: string; error: string } | null {
+  if (h.movimientosRepartidos > 0 || h.lotesPropios > 0) {
+    return { codigo: 'DESACTIVAR_CON_HISTORIAL', error: 'Este producto ya se movió con lotes (ventas, entradas, transferencias o ajustes): su historia está repartida entre lotes y no se puede deshacer. Solo se deshace la activación mientras nada se haya movido con lotes.' }
+  }
+  if (h.lineasDeConteo > 0) return { codigo: 'DESACTIVAR_CON_CONTEO', error: 'Este producto ya se contó por lote en un conteo: esa historia usa sus lotes y no se puede deshacer.' }
+  if (h.correcciones > 0) return { codigo: 'DESACTIVAR_CON_HISTORIAL', error: 'Algún lote de este producto tiene correcciones de vencimiento guardadas y no se puede deshacer.' }
+  return null
+}
+
 /** Días de calendario de `hoy` a `dia` (negativo si `dia` ya pasó). Los dos son `YYYY-MM-DD`. */
 export function diasEntre(hoy: string, dia: string): number {
   return Math.round((Date.parse(`${dia}T12:00:00Z`) - Date.parse(`${hoy}T12:00:00Z`)) / 86_400_000)

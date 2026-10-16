@@ -84,6 +84,8 @@ import {
   registrarEntradaMultipleEnTx,
   corregirCostoEnTx,
   activarLotesEnTx,
+  corregirVencimientoLoteEnTx,
+  desactivarLotesEnTx,
   moverEntreLotesEnTx,
   resolverDanadoEnTx,
   transferirEnTx,
@@ -258,6 +260,41 @@ export async function activarLotesInventario(entrada: { varianteId: string; exig
     const r = await conEmpresa(c.companyId, (tx) => activarLotesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), exigirVencimiento: entrada.exigirVencimiento === true }, c.ctx))
     refrescar()
     return { ok: true, sucursales: r.sucursales, unidades: r.unidades, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5b5 · Deshace la activación de lotes de un producto: vuelve a ser un producto sin lotes. Solo mientras ningún movimiento se haya
+ * repartido entre lotes (se activó por error o antes de usarlo); después, el servicio la rechaza. No toca las existencias. La pide la
+ * función `ajustar`, como activarlos.
+ */
+export async function desactivarLotesInventario(entrada: { varianteId: string }): Promise<ResultadoInventario<{ sucursales: number; repetido: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => desactivarLotesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId) }, c.ctx))
+    refrescar()
+    return { ok: true, sucursales: r.sucursales, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5b5 · Corrige el vencimiento de un lote (vacío = no vence), con motivo obligatorio. Vale para todas las sucursales (el lote es del
+ * producto) y queda en la historia del lote. La pide la función `ajustar`.
+ */
+export async function corregirVencimientoLote(entrada: { loteId: string; vencimiento: string; motivo: string }): Promise<ResultadoInventario<{ codigo: string; anterior: string | null; nuevo: string | null; repetido: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => corregirVencimientoLoteEnTx(tx, c.companyId, { loteId: texto(entrada.loteId), vencimiento: entrada.vencimiento, motivo: entrada.motivo }, c.ctx))
+    refrescar()
+    return { ok: true, codigo: r.codigo, anterior: r.anterior, nuevo: r.nuevo, repetido: r.repetido }
   } catch (e) {
     return aError(e)
   }

@@ -300,7 +300,7 @@ export function SucursalInventarioCard({
         {lotes && (
           <div className="space-y-2 border-t pt-4">
             <p className="text-sm font-medium">Lotes en esta sucursal</p>
-            <LotesDeSucursal lotes={lotes.deSucursal} sucursal={saldo.nombre} />
+            <LotesDeSucursal lotes={lotes.deSucursal} sucursal={saldo.nombre} corregir={puedeAjustar ? { exigeVencimiento: lotes.exigeVencimiento } : undefined} />
             <p className="text-xs text-muted-foreground">Se vende, se aparta y se saca primero lo que antes vence. Lo vencido no se vende y el barrido diario lo pasa a dañado.</p>
           </div>
         )}

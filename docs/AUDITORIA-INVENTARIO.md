@@ -129,7 +129,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-5b2 · Lotes en órdenes de compra** | Un producto con lotes se pide como cualquier otro (una orden es por producto) y se recibe **diciendo de qué lote(s) llegó** cada tanda (código, vencimiento y cantidad), con el mismo editor de lotes de la entrada de mercancía; la orden, la entrada, la ficha y el CSV cuentan de qué lotes llegó; una orden abierta ya no impide activar los lotes de un producto | — (sin migración) | S | **hecha** (§29-30) |
 | **INV-5b3 · Lotes en conteos** | Un producto con lotes se cuenta **lote por lote** (a ciegas, eligiendo el lote al escanear), la hoja en blanco y la hoja contada traen la columna `lote`, y al aplicar cada lote se ajusta por **su** diferencia; «sin contar» cuenta lotes; la ficha ya no se niega a contar por lote (el conteo suelto de un número sigue negado) | `20261069` (la línea de conteo lleva el lote; SQL primero) | M | **hecha** (§31-32) |
 | **INV-5b4 · Lotes en transferencias** | Un producto con lotes se transfiere **por lote**, directo o con envío: sale el que antes vence o los lotes que se elijan y entra al destino en esos mismos lotes; recibir lote por lote (sin pasar de lo que de cada lote sigue en camino), cancelar devuelve cada lote a su sitio, cerrar con faltante lo deja por lote; el detalle, el historial y el CSV dicen de qué lotes es cada cosa | — (sin migración: el estado por lote sale del ledger) | M | **hecha** (§34-35) |
-| INV-5b5 · Corregir y desactivar | Corregir el vencimiento de un lote con su historia y desactivar los lotes de un producto | Historia del vencimiento | M | pendiente |
+| **INV-5b5 · Corregir y deshacer** | Corregir el vencimiento de un lote (con motivo, para todas las sucursales y con su historia inmutable) y deshacer la activación de lotes mientras nada se haya movido con lotes. **La desactivación de un producto con historia de lotes NO se hace** (§36) | `20261070` (historia del vencimiento; el disparador del lote solo deja cambiar la fecha con historia de la misma transacción; `inventory_lot_tiene_historial` pasa a mirar los repartos) | M | **hecha** (§36-37) |
 | INV-5c · Series | Número de serie por unidad | Series | L | pendiente |
 | INV-5d · Kits | Kits que descuentan componentes | Kits | L | pendiente |
 | INV-5e · API v1 y rol de bodega | API pública del inventario; un rol que mueve stock sin ver finanzas | — | M | pendiente |
@@ -2152,3 +2152,95 @@ Hallazgos de la propia verificación (importa que se sepan):
 líneas con muchos productos con lotes **contra una base remota** (cada línea resuelve su reparto con consultas propias; localmente un envío de 200 líneas sin lotes cabe en
 la transacción y se probó, uno con 200 líneas con lotes no); la pantalla de recepción con los 20 lotes que admite una línea (solo se probó con 2); el aviso a los
 administradores al enviar, que no cambia; y, por fin, **que la rama sigue sin PR ni CI remoto** desde INV-4a: lo que aquí se llama «verde» es local.
+
+## 36. INV-5b5 · qué se hizo
+
+**Trae una migración, la `20261070`, y se aplica ANTES que el código** (lo hace el flujo «Migrar y desplegar» al fusionar; necesita la `20261068` de INV-5a, que va antes en la
+misma tanda). Es aditiva, idempotente y de una sola transacción (con `lock_timeout` de 5 s): crea una tabla y cambia el cuerpo de dos funciones y un disparador; no reescribe ni
+cambia ninguna fila. Con el código viejo, aplicarla antes no rompe nada (el código viejo nunca cambia un vencimiento ni deshace una activación).
+
+**Dos cosas, y una que NO se hace.**
+
+1. **Corregir el vencimiento de un lote.** Hasta 5b4 el código y la fecha de un lote eran inmutables: un lote mal capturado se corregía moviendo sus unidades a otro lote. No sirve cuando
+   lo mal capturado es la **fecha** de un lote que ya tiene ventas, apartados y transferencias encima. Ahora se corrige la fecha (y solo la fecha: **el código de un lote no cambia nunca**)
+   desde la fila del lote en la ficha. Reglas: motivo **obligatorio**; la fecha sigue las reglas de siempre (día real entre 2000 y 2100; vacía = el lote no vence); un producto que exige
+   vencimiento no deja quitarlo; el «SIN LOTE» no vence y no se corrige; poner la fecha que ya tenía no cambia nada ni deja una segunda fila (un reintento es inofensivo); y **es del lote, no de
+   la sucursal**: vale en todas. No mueve ni un saldo ni un movimiento; lo que cambia es lo que depende de la fecha (el orden FEFO, qué está vencido, «Vence pronto»). Una consecuencia que
+   conviene conocer: **las unidades que el barrido diario ya pasó a «dañado» por vencidas no vuelven solas a vendible** si se alarga la fecha; se recuperan con «Recuperar», que es un movimiento
+   con su rastro y no un efecto escondido de cambiar una fecha.
+2. **Deshacer la activación de lotes.** Hasta 5b4 activar era de un solo sentido y no había salida si se hacía por error. Ahora se puede **mientras los lotes sean solo configuración**: ningún
+   movimiento repartido entre lotes desde que se activaron, ningún lote aparte del «SIN LOTE», ninguna línea de conteo con lote y ninguna corrección de vencimiento. Se quitan las aperturas, los
+   saldos por lote, el «SIN LOTE» y la activación; **las existencias del producto y su ledger no se tocan** (el «SIN LOTE» solo copiaba lo que ya había). Se puede activar de nuevo (la apertura vuelve a
+   copiar lo que haya entonces). En cuanto el producto se vende, se recibe, se transfiere o se ajusta con lotes, ya no (`DESACTIVAR_CON_HISTORIAL`; con una línea de conteo por lote,
+   `DESACTIVAR_CON_CONTEO`). La ficha solo ofrece el botón cuando se puede.
+3. **Lo que NO se hace: desactivar los lotes de un producto que ya tiene historia con lotes.** Es lo que pedía la hoja de ruta («desactivar los lotes de un producto»), pero se decidió no hacerlo y
+   decirlo. Un producto con repartos de movimiento entre lotes no puede volver a ser «sin lotes» sin que esos repartos dejen de explicar nada, y la base entera (los disparadores diferidos que
+   comprueban que los lotes sumen el saldo, los saldos por lote, lo que cuentan todas las lecturas por «¿lleva lotes?») se apoya en que un producto o lleva lotes o no. Hacerlo de verdad exigiría
+   un estado nuevo «lotes desactivados» (con los saldos por lote congelados) y rehacer ese contrato en el ledger; es una decisión de diseño con riesgo, no un detalle de esta entrega. Si se necesita,
+   es trabajo aparte y conviene decidirlo antes.
+
+**La base lo vigila.** `inventory_lot_expiry_changes` es append-only (ni UPDATE, DELETE ni TRUNCATE) y trae `txid` (la transacción que la escribió). El disparador de `inventory_lots` ya no dice
+«inmutable» a secas: solo deja cambiar `expiresOn`, y **solo si en la MISMA transacción hay una fila de historia que diga exactamente ese cambio** (fecha anterior → fecha nueva); el código, el producto,
+la empresa, `legacy`, `createdBy` y `createdAt` no cambian nunca. Así un `UPDATE` a mano, o un servicio con un error, que toque la fecha sin dejar historia, falla. Restricciones de la tabla: un cambio
+cambia algo, las fechas son días razonables y el motivo no está vacío; el lote es de ese producto y esa empresa (clave foránea compuesta, RESTRICT). Y `inventory_lot_tiene_historial` —que gobierna cuándo se
+pueden borrar lotes, saldos por lote, aperturas y la activación— pasa de «¿tuvo algún movimiento?» a **«¿tiene algún movimiento repartido entre lotes (o alguna corrección)?»**: los movimientos de
+antes de activar los lotes no dependen de ningún lote y no impiden nada.
+
+**Concurrencia.** Corregir toma el candado **compartido** de lotes de la empresa (como cualquier movimiento: no compite con las ventas) y bloquea la fila del lote; dos correcciones del mismo lote se
+turnan y forman una cadena sin huecos. Deshacer toma el candado **exclusivo** (como activar), bloquea los saldos del producto y comprueba la historia ya bajo el candado: contra una entrada con lotes a
+la vez, o gana una (y la otra se rechaza con su motivo) o gana la otra; nunca queda a medias.
+
+**Archivos.** `prisma/migrations/20261070_inventory_lot_expiry_history/migration.sql` y `prisma/schema/inventario.prisma` (`InventoryLotExpiryChange`), `modules/inventory/lotes.ts`
+(`planDeCorreccionDeVencimiento`, `motivoParaNoDeshacerLotes`), `service.ts` (`corregirVencimientoLoteEnTx`, `desactivarLotesEnTx`), `lotes-queries.ts` (`historiaDeLotesEnTx`,
+`motivoParaNoDesactivarLotesEnTx`, `cambiosDeVencimientoEnTx`), `actions.ts` (`corregirVencimientoLote` y `desactivarLotesInventario`, ambas con la función `ajustar`) y
+`components/inventario/` (`CorregirVencimientoLote`, `HistorialDeVencimientos`, `DesactivarLotesCard`, y la tabla de lotes con su columna). Además, `scripts/e2e/base-limpia.mjs` aplica la `20261070`.
+
+## 37. Verificación de INV-5b5 (2026-10-16)
+
+Local, sobre PostgreSQL 16 desechable. **INV-5b5 trae la migración `20261070`**: se aplicó (dos veces, para comprobar que es idempotente) a la base desechable `supplytest`, se creó con ella la base de
+E2E `membego_e2e_inv2` y se comprobó contra una base «sombra» que el esquema de Prisma y las migraciones no se desvían (`prisma migrate diff --from-migrations … --to-schema-datamodel … --exit-code`:
+«No difference detected»). **No se tocó ninguna base real**: la migración **todavía no se ha aplicado en producción**: la aplicará `migrate deploy` al fusionar la rama, antes de desplegar el código,
+junto con la `20261067`–`20261069`. Sin Supabase real, Vercel, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ve** la columna «Corregir vencimiento», su formulario, la tarjeta de deshacer ni la
+historia: el E2E comprueba qué dicen y qué hacen, no su aspecto.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo y ninguno en inventario) |
+| `bun run build` y `bun run presupuesto` | verdes; indicador general **8.976/9.200 KB (98 %)** (8.968 antes de 5b5: +8 KB; quedan 224 KB de margen) |
+| Unitarias (`bun run test`) | 4633 pruebas: 4626 pasan, 0 fallan, 7 omitidas heredadas (7 nuevas) |
+| PostgreSQL (`bun run test:db`, base `supplytest`) | **1001/1001** (989 de antes + 12 nuevas), a la primera |
+| Pruebas nuevas | 7 puras y guardias (`inventario-lotes-correccion.test.ts`), 12 contra PostgreSQL (`inventory-lotes-correccion.db.test.ts`) y 1 recorrido E2E (en `inventario-lotes.spec.ts`); se ajustaron 3 pruebas existentes (la lista de acciones exportadas, la de migraciones nuevas del programa y el asistente de la base de E2E) |
+| E2E (`node scripts/e2e/correr.mjs`, escritorio) | **23/23**: `inventario-admin` (15, en la cadena completa) e `inventario-lotes` (8, con el recorrido nuevo) |
+| Deriva del esquema | `prisma migrate diff` contra una base sombra con las migraciones aplicadas: sin diferencias |
+| Mutaciones | **44** (35 de código —dominio, servicio, lecturas, acciones y pantallas— y 9 de la propia migración aplicadas a una base real): 40 detectadas a la primera por la batería completa y **4 sobrevivieron** (2 de la lectura de la historia y 1 de la migración, que se mataron con pruebas nuevas, y 1 equivalente). Un segundo pase **solo con las pruebas de PostgreSQL** sobre los 17 mutantes de servicio y de lecturas de la historia enseñó 2 más que solo cazaban las guardias estáticas: 1 se mató reforzando una prueba y 1 es defensivo y se dejó (ver abajo) |
+
+Qué cubren las pruebas contra PostgreSQL (servicio real): corregir el vencimiento (cambia solo la fecha; deja historia, quién y bitácora; no mueve ni un saldo, movimiento ni reparto; se ve en el orden FEFO);
+hacia el pasado (el lote queda vencido y FEFO ya no lo toca) y hacia el futuro (se vuelve a vender, detrás del que vence antes); quitar y volver a poner la fecha; todo lo que se rechaza sin cambiar nada (sin
+motivo, motivo de más de 300 caracteres, fecha mala —también la de «0225»—, el «SIN LOTE», un lote ajeno o inexistente, quitar la fecha donde se exige); que repetir la misma fecha no deja otra fila; **la base**
+(un cambio de fecha sin historia, con historia que dice otra fecha nueva, otra fecha anterior o escrita en otra transacción se rechaza; el código y el legado no cambian; la historia no se edita, no se borra y
+no se vacía; formas imposibles; y el lote de otro producto); seis correcciones del mismo lote a la vez (cadena sin huecos) y correcciones mezcladas con transferencias a la vez; deshacer la activación de un
+producto con existencias y movimientos de antes (las existencias y el ledger no cambian, se puede activar de nuevo y el producto vuelve a rechazar lotes); deshacer rechazado tras una entrada con lotes, una
+transferencia desde el «SIN LOTE» y un conteo por lote (también cancelado); deshacer contra una entrada con lotes a la vez, ocho veces, con y sin existencias previas; y la lectura de la historia (solo la del
+producto, de la más reciente a la más antigua, con el nombre de quien la hizo, sin cruzar empresas).
+
+Qué cubre el recorrido E2E: un yogur con 4 unidades sueltas → activar lotes por error → la tarjeta «¿Activaste los lotes por error?» (en dos pasos; cancelar la cierra) → desactivar (las existencias siguen en 4 y
+se vuelve a ofrecer activar) → activar otra vez y recibir dos lotes → la tarjeta de deshacer ya no sale → «Vence pronto» ve el lote en 10 días → el «SIN LOTE» no tiene botón → corregir sin motivo avisa y no
+guarda nada → con motivo guarda, la tabla dice «Vence en 40 días», la ficha enseña la historia y las unidades siguen en 6 → «Vence pronto» ya no lo lista a 30 días.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Mi herramienta de mutaciones tenía un fallo, no el producto.** Para mutar una restricción (`CHECK`) de la migración hay que quitarla antes (el SQL es idempotente y no reemplazaría la existente); al
+  restaurar la original olvidé volver a quitar la mutada y la base quedó con la restricción débil, así que el «restaurado» final falló. No era un fallo del código: se corrigió el script, se rehízo la base y el
+  restaurado dio OK. Las dos mutaciones de `CHECK` ya estaban bien evaluadas (cada una se aplicó quitando antes la anterior).
+- **Una consecuencia de mi cambio en la tabla de lotes rompió las pruebas de 5a/5b3 en el E2E:** el ayudante que lee las cifras de una fila de lote tomaba todas las celdas y la columna nueva «Corregir» añadió
+  una; el fallo estaba en el ayudante (ahora toma solo disponible, apartado y dañado), no en la pantalla. Se vio porque se corrió la cadena completa y no solo la prueba nueva.
+- **Mutaciones: lo que enseñaron los sobrevivientes.** (a) Ninguna prueba leía la historia de un producto desde la lectura de la ficha (el producto equivocado y el orden): hay una prueba nueva. (b) Nada exigía que
+  el cambio de fecha **partiera de la fecha anterior correcta** (la base solo comprobaba la nueva): ahora se prueba y se mata. (c) El candado **exclusivo** de deshacer no se notaba, porque los saldos del producto ya
+  serializan la carrera con una entrada cuando el producto tiene existencias: la prueba de la carrera ahora incluye productos **sin** existencias y sí lo detecta. (d) Dos quedan sin prueba, **a propósito**:
+  «deshacer borra los lotes de otra empresa» es **equivalente** (el producto es de una sola empresa y su id no se repite en otra), y el **candado compartido al corregir** es **defensivo** (corregir exige un lote propio, que
+  solo existe con repartos, y eso ya impide deshacer a la vez; si faltara, la base lo sigue sosteniendo).
+
+**Qué NO se verificó:** cómo se ve nada (ni escritorio con capturas, ni móvil); Supabase real, RLS o permisos de la base real (todo se probó con el rol de la base desechable) y **la migración `20261070` contra la
+base real** (la aplica el flujo al fusionar; cambia el cuerpo de una función y un disparador de `inventory_lots` y crea una tabla: se toma un bloqueo corto sobre `inventory_lots`, que se lee mucho y se escribe poco,
+con `lock_timeout` de 5 s); qué pasa en producción con la **historia que aún no existe** (la primera corrección real); la accesibilidad del formulario de corrección más allá de sus etiquetas; y que la rama sigue sin PR
+ni CI remoto desde INV-4a. **Y lo que se decidió no hacer:** desactivar los lotes de un producto con historia (§36).

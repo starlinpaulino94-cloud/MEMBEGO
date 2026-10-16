@@ -13,8 +13,10 @@ import { advertenciaEstadoManual, formatearCantidad, nombreCompleto } from '@/mo
 import { formatDate, formatDateTime } from '@/lib/format'
 import { pedidoEnCaminoDeVarianteEnTx, proveedoresActivosEnTx, proveedoresDeVarianteEnTx, type OpcionProveedor, type PedidoDeVariante, type ProveedorDeProducto } from '@/modules/inventory/compras-queries'
 import { costoDeVarianteEnTx, type CostoDeVarianteVista } from '@/modules/inventory/valor'
-import { lotesDeVarianteEnTx, type LotesDeVariante } from '@/modules/inventory/lotes-queries'
+import { cambiosDeVencimientoEnTx, lotesDeVarianteEnTx, motivoParaNoDesactivarLotesEnTx, type CambioDeVencimiento, type LotesDeVariante } from '@/modules/inventory/lotes-queries'
 import { ActivarLotesCard } from '@/components/inventario/ActivarLotesCard'
+import { DesactivarLotesCard } from '@/components/inventario/DesactivarLotesCard'
+import { HistorialDeVencimientos } from '@/components/inventario/HistorialDeVencimientos'
 import { CorregirCostoForm } from '@/components/inventario/CorregirCostoForm'
 import { ProveedoresDeProductoCard } from '@/components/inventario/ProveedoresDeProductoCard'
 import { SucursalInventarioCard } from '@/components/inventario/SucursalInventarioCard'
@@ -60,6 +62,18 @@ export default async function InventarioVariantePage({ params }: { params: Promi
       lotes = await conEmpresa(companyId, (tx) => lotesDeVarianteEnTx(tx, companyId, varianteId))
     } catch (e) {
       console.error('[admin-inventario-ficha] los lotes no están disponibles', e instanceof Error ? e.message : e)
+    }
+  }
+  // INV-5b5: las correcciones de vencimiento y si la activación todavía se puede deshacer; otra vez en su propia transacción y su
+  // propio try, para que la ficha siga funcionando si la migración de la historia aún no se aplicó.
+  let cambiosDeVencimiento: CambioDeVencimiento[] = []
+  let sePuedeDesactivar = false
+  if (lotes?.lleva) {
+    try {
+      cambiosDeVencimiento = await conEmpresa(companyId, (tx) => cambiosDeVencimientoEnTx(tx, companyId, varianteId))
+      sePuedeDesactivar = puedeAjustar && (await conEmpresa(companyId, (tx) => motivoParaNoDesactivarLotesEnTx(tx, companyId, varianteId))) === null
+    } catch (e) {
+      console.error('[admin-inventario-ficha] la historia de vencimientos no está disponible', e instanceof Error ? e.message : e)
     }
   }
   // El costo y el valor (INV-3a): solo con la función `costos`, y leído —como lo que va en camino— en su PROPIA transacción y con
@@ -322,6 +336,7 @@ export default async function InventarioVariantePage({ params }: { params: Promi
               </AlertDescription>
             </Alert>
           )}
+          {sePuedeDesactivar && <DesactivarLotesCard varianteId={detalle.varianteId} />}
           <div className="grid gap-4 lg:grid-cols-2">
             {detalle.sucursales.map((s) => (
               <SucursalInventarioCard
@@ -335,6 +350,7 @@ export default async function InventarioVariantePage({ params }: { params: Promi
               />
             ))}
           </div>
+          <HistorialDeVencimientos cambios={cambiosDeVencimiento} />
           {activas.length > 1 && puedeTransferir && (
             <TransferirForm
               varianteId={detalle.varianteId}

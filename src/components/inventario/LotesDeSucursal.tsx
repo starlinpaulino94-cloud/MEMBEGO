@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { ETIQUETA_ESTADO_LOTE, type EstadoLote } from '@/modules/inventory/lotes'
 import { formatearCantidad } from '@/modules/inventory/formato'
 import type { LoteVista } from '@/modules/inventory/lotes-queries'
+import { CorregirVencimientoLote } from './CorregirVencimientoLote'
 
 export const BADGE_ESTADO_LOTE: Record<EstadoLote, 'destructive' | 'warning' | 'success' | 'outline'> = {
   VENCIDO: 'destructive',
@@ -14,7 +15,7 @@ export const BADGE_ESTADO_LOTE: Record<EstadoLote, 'destructive' | 'warning' | '
  * INV-5a · Los lotes de un producto en UNA sucursal: de lo que antes vence a lo que no vence (el orden en que se vende, FEFO), con su
  * vencimiento y lo que hay de cada uno. Lo VENCIDO se marca: no se vende ni se aparta, y el barrido diario lo pasa a dañado.
  */
-export function LotesDeSucursal({ lotes, sucursal }: { lotes: readonly LoteVista[]; sucursal: string }) {
+export function LotesDeSucursal({ lotes, sucursal, corregir }: { lotes: readonly LoteVista[]; sucursal: string; corregir?: { exigeVencimiento: boolean } }) {
   if (lotes.length === 0) return <p className="text-sm text-muted-foreground">No hay existencias de ningún lote en esta sucursal.</p>
   return (
     <div className="overflow-x-auto">
@@ -36,6 +37,7 @@ export function LotesDeSucursal({ lotes, sucursal }: { lotes: readonly LoteVista
             <th scope="col" className="py-1.5 text-right font-medium">
               Dañado
             </th>
+            {corregir && <th scope="col" className="py-1.5 pl-3 text-right font-medium"><span className="sr-only">Corregir</span></th>}
           </tr>
         </thead>
         <tbody className="divide-y">
@@ -57,6 +59,7 @@ export function LotesDeSucursal({ lotes, sucursal }: { lotes: readonly LoteVista
               <td className="py-2 pr-3 text-right tabular-nums">{formatearCantidad(l.disponible)}</td>
               <td className="py-2 pr-3 text-right tabular-nums">{formatearCantidad(l.reserved)}</td>
               <td className="py-2 text-right tabular-nums">{formatearCantidad(l.damaged)}</td>
+              {corregir && <td className="py-2 pl-3 text-right">{l.legado ? null : <CorregirVencimientoLote loteId={l.loteId} codigo={l.codigo} vencimiento={l.vencimiento} exigeVencimiento={corregir.exigeVencimiento} />}</td>}
             </tr>
           ))}
         </tbody>

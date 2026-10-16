@@ -90,6 +90,8 @@ import {
   fusionarReparto,
   ordenFefo,
   planDeBarrido,
+  motivoParaNoDeshacerLotes,
+  planDeCorreccionDeVencimiento,
   planDeConsumo,
   repartirFefo,
   repartoDeDevolucion,
@@ -102,7 +104,7 @@ import {
   type LoteDeLinea,
   type RepartoLote,
 } from './lotes'
-import { lotesDeTrasladoEnTx, repartosPorCodigoEnTx } from './lotes-queries'
+import { historiaDeLotesEnTx, lotesDeTrasladoEnTx, repartosPorCodigoEnTx } from './lotes-queries'
 import { diaLocal } from '@/modules/reportes/rango'
 
 /**
@@ -1575,6 +1577,119 @@ export async function activarLotesEnTx(
     'InventoryLotTracking'
   )
   return { varianteId: variante.id, legadoId: legado.id, sucursales: conExistencias.length, unidades, repetido: false }
+}
+
+// ── INV-5b5 · Corregir el vencimiento de un lote y deshacer la activación ────
+
+const MAX_MOTIVO_VENCIMIENTO = 300
+const diaDe = (t: string | null): Date | null => (t === null ? null : new Date(`${t}T00:00:00.000Z`))
+
+export interface ResultadoCorreccionDeVencimiento {
+  loteId: string
+  codigo: string
+  anterior: string | null
+  nuevo: string | null
+  /** true si el lote ya tenía esa fecha: no se escribió nada (un reintento no deja una segunda fila de historia). */
+  repetido: boolean
+}
+
+/**
+ * CORRIGE el vencimiento de un lote (y solo eso: el código de un lote no cambia nunca). Es del LOTE, no de una sucursal: vale para
+ * todas las sucursales donde haya unidades de él. Siempre con MOTIVO, y siempre deja una fila en `inventory_lot_expiry_changes` (de
+ * qué fecha a cuál, quién y por qué); la base no deja cambiar la fecha sin esa fila en la misma transacción.
+ *
+ * Lo que cambia sin tocar un saldo: si el lote está vencido o por vencer, el orden FEFO y los informes «Vence pronto». Las unidades que
+ * el barrido diario ya pasó a «dañado» por vencidas NO vuelven solas a vendible si se alarga la fecha: se recuperan con «Recuperar» (es
+ * un movimiento con su rastro, no un efecto escondido de cambiar una fecha).
+ *
+ * CONCURRENCIA. Candado COMPARTIDO de lotes (como cualquier movimiento: no compite con las ventas) y la fila del lote bloqueada: dos
+ * correcciones del mismo lote se turnan y la segunda ve la fecha que dejó la primera.
+ */
+export async function corregirVencimientoLoteEnTx(
+  tx: Tx,
+  companyId: string,
+  e: { loteId: string; vencimiento: unknown; motivo: unknown },
+  ctx: ContextoAuditoria
+): Promise<ResultadoCorreccionDeVencimiento> {
+  const motivo = normalizarTextoLibre(e.motivo, MAX_MOTIVO_VENCIMIENTO, 'El motivo')
+  if (!motivo.ok) fallo('MOTIVO_INVALIDO', motivo.error)
+  if (motivo.valor === null) fallo('MOTIVO_OBLIGATORIO', 'Corregir un vencimiento necesita un motivo: queda guardado en la historia del lote.')
+  await candadoDeLotes(tx, companyId, false)
+  const filas = await tx.$queryRaw<{ id: string; catalogVariantId: string; code: string; legacy: boolean; vencimiento: string | null }[]>`
+    SELECT "id", "catalogVariantId", "code", "legacy", "expiresOn"::text AS "vencimiento"
+      FROM "inventory_lots" WHERE "id" = ${String(e.loteId ?? '')} AND "companyId" = ${companyId} FOR UPDATE`
+  const lote = filas[0]
+  if (!lote) fallo('LOTE_NO_ENCONTRADO', 'Ese lote no existe.')
+  const politica = await politicaDeLotes(tx, companyId, lote.catalogVariantId)
+  if (!politica) fallo('LOTES_NO_ACTIVOS', 'Ese producto ya no lleva lotes.')
+  const plan = planDeCorreccionDeVencimiento({ vencimiento: lote.vencimiento, legado: lote.legacy }, e.vencimiento, politica.exigirVencimiento)
+  if (!plan.ok) fallo(plan.codigo, plan.error)
+  if (plan.sinCambio) return { loteId: lote.id, codigo: lote.code, anterior: lote.vencimiento, nuevo: lote.vencimiento, repetido: true }
+
+  // La historia PRIMERO (la base la exige en esta misma transacción para dejar cambiar la fecha), y después el cambio.
+  await tx.inventoryLotExpiryChange.create({
+    data: { companyId, catalogVariantId: lote.catalogVariantId, lotId: lote.id, previousExpiresOn: diaDe(plan.anterior), newExpiresOn: diaDe(plan.nuevo), reason: motivo.valor, changedBy: ctx.actorId },
+  })
+  await tx.inventoryLot.update({ where: { id: lote.id }, data: { expiresOn: diaDe(plan.nuevo) } })
+  const v = await tx.catalogVariant.findFirst({ where: { id: lote.catalogVariantId, companyId }, select: { sku: true, name: true, isDefault: true, item: { select: { name: true } } } })
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_CONFIGURED',
+    lote.catalogVariantId,
+    { tipo: 'LOTE_VENCIMIENTO', lote: lote.code, sku: v?.sku, producto: v?.item.name, desde: plan.anterior, hasta: plan.nuevo, motivo: motivo.valor, loteId: lote.id },
+    'InventoryLotTracking'
+  )
+  return { loteId: lote.id, codigo: lote.code, anterior: plan.anterior, nuevo: plan.nuevo, repetido: false }
+}
+
+export interface ResultadoDesactivarLotes {
+  varianteId: string
+  /** Saldos por lote (uno por sucursal con existencias) que se quitaron: eran solo el lote «SIN LOTE». */
+  sucursales: number
+  /** true si el producto ya no llevaba lotes: no se hizo nada. */
+  repetido: boolean
+}
+
+/**
+ * DESHACE la activación de lotes de un producto: vuelve a ser un producto sin lotes. Solo mientras los lotes sean CONFIGURACIÓN, es
+ * decir, mientras ningún movimiento se haya repartido entre lotes desde que se activaron (la activación se hizo por error, o se
+ * arrepintieron antes de usarla). En cuanto el producto se vende, se recibe, se transfiere o se ajusta con lotes, su historia está
+ * repartida entre lotes y se rechaza (`DESACTIVAR_CON_HISTORIAL`): quitar los lotes dejaría repartos que ya no explican ningún saldo.
+ *
+ * Quita, en este orden, las aperturas, los saldos por lote, el lote «SIN LOTE» y la activación. Las existencias del producto (sus
+ * saldos por sucursal y su ledger) NO se tocan: el «SIN LOTE» solo copiaba lo que ya había. Toma el candado EXCLUSIVO de lotes de la
+ * empresa y bloquea los saldos del producto, como al activar; una activación posterior vuelve a empezar de cero.
+ */
+export async function desactivarLotesEnTx(tx: Tx, companyId: string, e: { varianteId: string }, ctx: ContextoAuditoria): Promise<ResultadoDesactivarLotes> {
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  await candadoDeLotes(tx, companyId, true)
+  politicasPorTx.get(tx)?.delete(variante.id)
+  const ya = await politicaDeLotes(tx, companyId, variante.id)
+  if (!ya) return { varianteId: variante.id, sucursales: 0, repetido: true }
+
+  const ids = (await tx.inventoryLevel.findMany({ where: { companyId, catalogVariantId: variante.id }, select: { id: true }, orderBy: { id: 'asc' } })).map((n) => n.id)
+  if (ids.length > 0) await bloquear(tx, companyId, ids)
+  const motivo = motivoParaNoDeshacerLotes(await historiaDeLotesEnTx(tx, companyId, variante.id))
+  if (motivo) fallo(motivo.codigo, `«${variante.item.name}»: ${motivo.error}`)
+
+  const saldos = await tx.inventoryLotBalance.count({ where: { companyId, catalogVariantId: variante.id } })
+  await tx.inventoryLotOpening.deleteMany({ where: { companyId, level: { catalogVariantId: variante.id } } })
+  await tx.inventoryLotBalance.deleteMany({ where: { companyId, catalogVariantId: variante.id } })
+  await tx.inventoryLot.deleteMany({ where: { companyId, catalogVariantId: variante.id } })
+  await tx.inventoryLotTracking.deleteMany({ where: { companyId, catalogVariantId: variante.id } })
+  politicasPorTx.get(tx)?.delete(variante.id)
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_CONFIGURED',
+    variante.id,
+    { tipo: 'LOTES_DESACTIVADOS', sku: variante.sku, producto: variante.item.name, sucursales: saldos },
+    'InventoryLotTracking'
+  )
+  return { varianteId: variante.id, sucursales: saldos, repetido: false }
 }
 
 // ── INV-5a · Mover unidades entre lotes y vencer lotes ───────────────────────

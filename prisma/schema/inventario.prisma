@@ -766,8 +766,9 @@ model InventoryLotTracking {
   @@map("inventory_lot_tracking")
 }
 
-/// Un lote de un producto. Inmutable: su código y su vencimiento no cambian (un lote mal capturado se corrige moviendo sus
-/// unidades a otro lote). El lote «SIN LOTE» (`legacy`) recibe lo que ya había al activar y no vence.
+/// Un lote de un producto. Su código no cambia nunca (un código mal capturado se corrige moviendo sus unidades a otro lote); su
+/// vencimiento SÍ se puede corregir, pero solo con una fila de `InventoryLotExpiryChange` (lo vigila la base). El lote «SIN LOTE»
+/// (`legacy`) recibe lo que ya había al activar y no vence.
 model InventoryLot {
   id        String  @id @default(cuid())
   companyId String
@@ -785,13 +786,41 @@ model InventoryLot {
 
   createdAt DateTime @default(now())
 
-  balances    InventoryLotBalance[]
-  countLines  InventoryCountLine[]
+  balances       InventoryLotBalance[]
+  countLines     InventoryCountLine[]
+  expiryChanges  InventoryLotExpiryChange[]
 
   /// Destino de la FK compuesta de los saldos por lote.
   @@unique([id, catalogVariantId, companyId])
   @@index([catalogVariantId, expiresOn])
   @@map("inventory_lots")
+}
+
+/// APPEND-ONLY. Cada corrección del vencimiento de un lote: de qué fecha a cuál, por qué y quién. La base no deja cambiar el
+/// vencimiento de un lote sin una fila de esta tabla escrita en la MISMA transacción (`txid`).
+model InventoryLotExpiryChange {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogVariantId String
+  lotId            String
+  lot              InventoryLot @relation(fields: [lotId, catalogVariantId, companyId], references: [id, catalogVariantId, companyId], onDelete: Restrict, map: "inventory_lot_expiry_changes_lot_variant_company_fkey")
+
+  /// El día que decía el lote antes (null = no vencía) y el que dice ahora (null = ya no vence).
+  previousExpiresOn DateTime? @db.Date
+  newExpiresOn      DateTime? @db.Date
+  reason            String
+  /// Quién lo corrigió (sin FK: un usuario que se borra no reescribe la historia).
+  changedBy         String?
+  /// La transacción que lo escribió (la base la pone sola).
+  txid              BigInt    @default(dbgenerated("txid_current()"))
+
+  createdAt DateTime @default(now())
+
+  @@index([lotId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("inventory_lot_expiry_changes")
 }
 
 /// Cuánto hay de un lote en una sucursal (caché que MANTIENE LA BASE: nace en cero y solo se mueve con aperturas y repartos).

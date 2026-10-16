@@ -24,6 +24,10 @@ import { empresaCatalogo, existenciasSembradas, itemSembrado, sucursalSembrada, 
  * transferencia enseña los lotes de cada línea → recibir lote por lote con tope por lote → cancelar devuelve cada lote a su sitio → el
  * historial y el CSV dicen de qué lotes es cada movimiento.
  *
+ * INV-5b5 (corregir y deshacer): activar lotes por error y deshacerlo (las existencias no cambian y se ofrece activarlos otra vez) → con
+ * lotes recibidos ya no se puede deshacer → corregir el vencimiento de un lote (motivo obligatorio, vale para el lote, queda en la historia
+ * de la ficha y el informe «Vence pronto» lo refleja; el «SIN LOTE» no tiene el botón).
+ *
  * Las fechas son relativas a HOY (10 días atrás, 10 y 400 días adelante): la prueba no depende del día en que se corra.
  *
  * La base de E2E se crea con `db push` y `scripts/e2e/base-limpia.mjs` le aplica la migración de lotes (los saldos por lote los
@@ -48,7 +52,8 @@ const filaDe = (p: Page, sucursal: string, codigo: string): Locator => tabla(p, 
 /** Las cuatro cifras de una fila de lote: disponible, apartado, dañado. */
 async function cifras(fila: Locator): Promise<number[]> {
   const celdas = await fila.locator('td').allInnerTexts()
-  return celdas.slice(1).map((t) => Number(t.replace(/[.,\s]/g, '')))
+  // Las tres cifras (disponible, apartado, dañado); la columna de «Corregir vencimiento» (INV-5b5) no cuenta.
+  return celdas.slice(1, 4).map((t) => Number(t.replace(/[.,\s]/g, '')))
 }
 
 /** Elige una opción de un `<select>` por un fragmento de su texto (las opciones de lotes llevan más texto que su código). */
@@ -815,6 +820,87 @@ test.describe('Inventario · lotes y vencimiento', () => {
     await p.goto(`/admin/inventario/${vPan}`)
     await expect(tarjeta(p, 'Principal')).toBeVisible({ timeout: 15_000 })
     await expect(p.getByLabel(/^Lotes en/)).toHaveCount(0)
+
+    expect(errores, errores.join('\n')).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-5b5 · activar por error y deshacerlo; con lotes recibidos ya no; corregir el vencimiento de un lote con motivo y verlo en la historia y en «Vence pronto»', async ({ browser }) => {
+    test.setTimeout(240_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+    const YOGUR = `Yogur lotes E2E ${sufijo}`
+    const principalId = (await sucursalSembrada(con.id, 'Principal')).id
+    const yogur = await itemSembrado(con.id, { name: YOGUR, slug: `yogur-lot-${sufijo}`, controlaInventario: true, variantes: [{ name: 'Default', sku: `YOG-${sufijo}`, price: 60, porDefecto: true }] })
+    const vYogur = await varianteDe(yogur.id)
+    await existenciasSembradas(con.id, vYogur, principalId, 4)
+    const existencia = async () => (await prismaDeArnes().inventoryLevel.findFirstOrThrow({ where: { catalogVariantId: vYogur, locationId: principalId } })).onHand
+    const oferta = () => p.getByLabel('Lotes y vencimiento')
+
+    // ── Activados por error: se deshace, las existencias no cambian y se ofrece activarlos otra vez ──
+    await p.goto(`/admin/inventario/${vYogur}`)
+    await oferta().getByRole('button', { name: 'Activar lotes en este producto' }).click()
+    await oferta().getByRole('group', { name: 'Confirmar la activación de lotes' }).getByRole('button', { name: 'Sí, activar lotes' }).click()
+    const deshacer = p.getByLabel('Deshacer la activación de lotes')
+    await expect(deshacer).toBeVisible({ timeout: 15_000 })
+    await deshacer.getByRole('button', { name: 'Desactivar los lotes de este producto' }).click()
+    await deshacer.getByRole('group', { name: 'Confirmar la desactivación de lotes' }).getByRole('button', { name: 'Cancelar' }).click()
+    await expect(deshacer.getByRole('group', { name: 'Confirmar la desactivación de lotes' })).toHaveCount(0)
+    await deshacer.getByRole('button', { name: 'Desactivar los lotes de este producto' }).click()
+    await deshacer.getByRole('button', { name: 'Sí, desactivar lotes' }).click()
+    await expect(oferta()).toBeVisible({ timeout: 15_000 })
+    await expect(deshacer).toHaveCount(0)
+    expect(await existencia(), 'deshacer no toca las existencias').toBe(4)
+    expect(await prismaDeArnes().inventoryLotTracking.count({ where: { catalogVariantId: vYogur } })).toBe(0)
+
+    // ── Otra vez activados y con lotes recibidos: ya no se puede deshacer ──
+    await oferta().getByRole('button', { name: 'Activar lotes en este producto' }).click()
+    await oferta().getByRole('group', { name: 'Confirmar la activación de lotes' }).getByRole('button', { name: 'Sí, activar lotes' }).click()
+    await expect(deshacer).toBeVisible({ timeout: 15_000 })
+    await movimiento(p, 'Principal', { operacion: 'Entrada de mercancía', cantidad: 6, lote: 'Y-A', vence: PRONTO })
+    await expect(filaDe(p, 'Principal', 'Y-A')).toBeVisible({ timeout: 15_000 })
+    await movimiento(p, 'Principal', { operacion: 'Entrada de mercancía', cantidad: 4, lote: 'Y-B', vence: LEJANO })
+    await expect(filaDe(p, 'Principal', 'Y-B')).toBeVisible({ timeout: 15_000 })
+    await p.reload()
+    await expect(filaDe(p, 'Principal', 'Y-A')).toBeVisible({ timeout: 15_000 })
+    await expect(deshacer, 'con lotes recibidos ya no se ofrece deshacer').toHaveCount(0)
+
+    // ── «Vence pronto» ve el lote de Y-A en 10 días ──
+    await p.goto('/admin/inventario/reportes/vencimientos')
+    const lista = p.getByRole('list', { name: 'Lotes que vencen pronto' })
+    await expect(lista.locator('li[data-lote="Y-A"]')).toContainText('Vence en 10 días', { timeout: 15_000 })
+
+    // ── Corregir el vencimiento de Y-A: el «SIN LOTE» no tiene el botón; sin motivo no pasa; con motivo, sí ──
+    await p.goto(`/admin/inventario/${vYogur}`)
+    await expect(filaDe(p, 'Principal', 'SIN LOTE').getByRole('button', { name: /Corregir/ })).toHaveCount(0)
+    await filaDe(p, 'Principal', 'Y-A').getByRole('button', { name: 'Corregir el vencimiento del lote Y-A' }).click()
+    const corregir = p.getByRole('form', { name: 'Corregir el vencimiento del lote Y-A' })
+    await corregir.getByLabel(/^Vence el/).fill(dia(40))
+    await corregir.getByLabel('Motivo *').fill('   ')
+    await corregir.getByRole('button', { name: 'Guardar corrección' }).click()
+    await expect(p.getByText(/necesita un motivo/).first()).toBeVisible({ timeout: 15_000 })
+    expect(await prismaDeArnes().inventoryLotExpiryChange.count({ where: { catalogVariantId: vYogur } }), 'sin motivo no se guarda nada').toBe(0)
+    await corregir.getByLabel('Motivo *').fill('Se leyó mal la fecha del empaque')
+    await corregir.getByRole('button', { name: 'Guardar corrección' }).click()
+    await expect(p.getByText(new RegExp(`Vencimiento del lote Y-A corregido: ${PRONTO} → ${dia(40)}`)).first()).toBeVisible({ timeout: 15_000 })
+    await expect(filaDe(p, 'Principal', 'Y-A')).toContainText(dia(40), { timeout: 15_000 })
+    await expect(filaDe(p, 'Principal', 'Y-A')).toContainText('Vence en 40 días')
+    const historia = p.getByRole('list', { name: 'Historial de correcciones de vencimiento' })
+    await expect(historia.locator('li[data-lote="Y-A"]')).toContainText(`${PRONTO} → ${dia(40)}`)
+    await expect(historia.locator('li[data-lote="Y-A"]')).toContainText('Se leyó mal la fecha del empaque')
+    // Corregirlo es del LOTE: el número de unidades no cambió.
+    expect((await cifras(filaDe(p, 'Principal', 'Y-A')))[0]).toBe(6)
+
+    // ── «Vence pronto» ya no lo ve a los 30 días ──
+    await p.goto('/admin/inventario/reportes/vencimientos')
+    await expect(p.getByRole('heading', { name: 'Vence pronto', level: 1 })).toBeVisible()
+    await expect(lista.locator('li[data-lote="Y-A"]')).toHaveCount(0)
 
     expect(errores, errores.join('\n')).toEqual([])
     await ctx.close()

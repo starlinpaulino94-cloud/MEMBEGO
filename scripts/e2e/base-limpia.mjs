@@ -120,6 +120,14 @@ execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../p
 })
 console.log('ok')
 
+// INV-5b5 · La historia de los vencimientos: la tabla la trae `db push`, pero no su default `txid_current()` ni los disparadores (el
+// del lote que solo deja cambiar el vencimiento con historia, y los de la propia historia). Idempotente; necesita la de lotes.
+process.stdout.write('  vencimientos (historia)… ')
+execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../prisma/migrations/20261070_inventory_lot_expiry_history/migration.sql', import.meta.url).pathname], {
+  stdio: ['ignore', 'ignore', 'inherit'],
+})
+console.log('ok')
+
 console.log('─'.repeat(60))
 console.log('Lista. El servidor y Playwright tienen que apuntar a esta base:')
 console.log(`  export DATABASE_URL="${url.replace(/:[^:@/]*@/, ':***@')}"`)

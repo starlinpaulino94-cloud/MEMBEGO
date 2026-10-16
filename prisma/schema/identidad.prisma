@@ -988,6 +988,7 @@ model Company {
   inventoryLots          InventoryLot[]
   inventoryLotBalances   InventoryLotBalance[]
   inventoryLotOpenings   InventoryLotOpening[]
+  inventoryLotExpiryChanges InventoryLotExpiryChange[]
   inventoryMovementLots  InventoryMovementLot[]
   // Commerce Core · Fase 3: pedidos Membego. Relaciones inversas.
   membegoOrders          MembegoOrder[]

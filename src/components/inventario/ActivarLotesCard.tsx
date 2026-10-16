@@ -50,7 +50,7 @@ export function ActivarLotesCard({ varianteId }: { varianteId: string }) {
         ) : (
           <div className="space-y-3 rounded-lg border border-warning/40 bg-warning/5 p-3" role="group" aria-label="Confirmar la activación de lotes">
             <p className="text-sm">
-              <strong>Esto no se puede deshacer.</strong> Desde ahora este producto se cuenta lote por lote, en un conteo de Inventario → Conteos, no con la cifra suelta de esta ficha; se transfiere y se envía a otra sucursal lote por lote (sale el que antes vence, o el que elijas); se puede recibir —con una entrada de mercancía o con una orden de compra, diciendo de qué lote llegó—, vender, ajustar, dañar y dar de baja. Mientras el producto vaya en camino en una transferencia, no se pueden activar los lotes.
+              <strong>Esto no se puede deshacer en cuanto el producto se mueva con lotes</strong> (una venta, una entrada, una transferencia o un ajuste); antes de eso, sí. Desde ahora este producto se cuenta lote por lote, en un conteo de Inventario → Conteos, no con la cifra suelta de esta ficha; se transfiere y se envía a otra sucursal lote por lote (sale el que antes vence, o el que elijas); se puede recibir —con una entrada de mercancía o con una orden de compra, diciendo de qué lote llegó—, vender, ajustar, dañar y dar de baja. Mientras el producto vaya en camino en una transferencia, no se pueden activar los lotes.
             </p>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" className="h-4 w-4" checked={exigir} onChange={(e) => setExigir(e.target.checked)} />
