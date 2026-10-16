@@ -1,6 +1,7 @@
 import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { marcarEntrega } from '@/modules/pagos/intentos'
+import { registrarReciboDePasarela } from '@/modules/pagos/reciboPasarela'
 import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
 import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 import { periodEnd } from '@/lib/server-utils'
@@ -349,6 +350,20 @@ export async function renovarMembresiaPorTarjeta(
   }
 
   await marcarEntrega(m.companyId, intento.id, true)
+
+  // Recibo oficial (ticket + factura): lo que el negocio imprime desde Facturas
+  // y el cliente desde «Mis pagos». Best-effort: el cobro ya está hecho.
+  await registrarReciboDePasarela({
+    companyId: m.companyId,
+    intentoId: intento.id,
+    clienteId: m.clienteId,
+    membershipId,
+    compraId: null,
+    monto: pesos,
+    autorizacion: cobro.autorizacion ?? null,
+    proveedor: 'CARDNET',
+    detalle: `Renovación · ${m.plan.nombre}`,
+  })
 
   // Recibo por correo al cliente (best-effort; el cobro ya está hecho).
   const { enviarConfirmacionPago } = await import('@/modules/pagos/correoConfirmacion')
