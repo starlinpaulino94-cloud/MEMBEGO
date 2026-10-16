@@ -71,6 +71,12 @@ activar ⇒ atascado real).
   Un recibo solo se entrega al dueño del cobro: la consulta filtra por las fichas de la persona.
 - El comprobante nunca lleva el número de tarjeta: lo garantizan los sanadores del snapshot y del recibo.
 
+**Verificación de la fase 3:** suite PostgreSQL completa 676/676; pruebas unitarias nuevas (`cobros-en-linea-resumen`,
+`recibo-cliente`) y de base (`pagos-tarjeta-caja`, `pagos-tarjeta-reportes`, `pagos-tarjeta-cliente`); E2E de interfaz
+`tests/e2e/tarjeta-comprobante.spec.ts` (caja, Comprobantes, Registros, ficha del cliente y «Mis pagos») estable en tres
+corridas. La app Expo no se pudo ejecutar en un dispositivo aquí: su tipado se comprobó con sus dependencias instaladas (sin
+errores en los dos archivos tocados; los errores que quedan son de otros archivos y ya existían).
+
 ### Hallazgo: doble conteo en Reportes (corregido solo para tarjeta) y uno anterior sin corregir
 
 `Total cobrado` (Finanzas y Reporte de la empresa) suma la caja (`transactions`) y los cobros de membresía

@@ -169,8 +169,14 @@ test.describe('Pago con tarjeta · comprobante visible e imprimible', () => {
     await expect(p.getByText('Pago aprobado').first()).toBeVisible({ timeout: 30_000 })
     await expect(p.getByText('Tarjeta VISA ••••4242 (en la app)').first()).toBeVisible()
 
-    await p.getByRole('button', { name: 'Ver' }).first().click()
+    // La fila de ESTE pago (la base de la corrida puede traer pagos de corridas anteriores de la misma persona). El
+    // clic se reintenta hasta que la hoja abre: si cae antes de que la página termine de hidratarse, no hace nada.
+    const fila = p.getByRole('listitem').filter({ hasText: `Plan Tarjeta ${sufijo}` })
     const hoja = p.getByRole('dialog')
+    await expect(async () => {
+      await fila.getByRole('button', { name: 'Ver' }).click()
+      await expect(hoja).toBeVisible({ timeout: 2_000 })
+    }).toPass({ timeout: 30_000 })
     await expect(hoja).toContainText(`Recibo Nº`)
     await expect(hoja).toContainText(TICKET)
     await expect(hoja).toContainText(AUTORIZACION)
