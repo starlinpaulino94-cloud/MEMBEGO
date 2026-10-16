@@ -178,6 +178,17 @@ y cuenta cuántos cobros entregados no tienen comprobante (recientes con canal y
 reales, cuántos de los 9 pagos de la captura eran falsos positivos y cuántos eran clientes esperando. **No se ha ejecutado contra
 producción**: eso solo puede hacerlo quien tenga acceso a esa base.
 
+## Verificación de cierre (2026-10-16)
+
+| Comprobación | Resultado |
+|---|---|
+| Tipos (`tsc --noEmit`) y ESLint | Sin errores (12 avisos de archivos que este trabajo no tocó) |
+| Pruebas unitarias | 3,968 de 3,976 pasan; las 2 que fallan fijan el 14 de octubre de 2026 (ya pasó) y no tienen relación con este trabajo |
+| Suite PostgreSQL completa (contra la base real) | 698 de 698 |
+| Suite E2E completa de navegador (con reconstrucción) | 176 pasan, 0 fallan; 205 omitidas por diseño (proyecto móvil o credenciales externas) |
+| Migraciones | `20261053`, `20261054`, `20261055` aplicadas; sin deriva de esquema; sellos al día |
+| App Expo | Solo tipos de los archivos tocados (sin dispositivo) |
+
 ## Estado final y lo que queda
 
 Entregado (fases 0 a 6): el pago con tarjeta deja su venta y su comprobante en el libro (app, web y renovación), visible e
