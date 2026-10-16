@@ -57,3 +57,8 @@ test('H7 · «Marcar entregada» exige nota y la interfaz no deja enviarla vací
   assert.match(SERVICIO, /al menos 5 caracteres/)
   assert.match(CASOS, /disabled=\{!valida \|\| pendiente\}/)
 })
+
+test('H7 · las acciones no revalidan la pantalla: el caso resuelto no puede desaparecer antes de imprimir su comprobante', () => {
+  assert.doesNotMatch(ACCIONES, /^\s*import .*revalidatePath|\brevalidatePath\(/m)
+  assert.match(CASOS, /router\.refresh\(\)/, 'la lista se actualiza cuando la persona lo decide o cuando la acción no tiene nada que mostrar')
+})

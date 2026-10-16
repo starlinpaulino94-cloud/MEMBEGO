@@ -1,6 +1,5 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import {
@@ -39,9 +38,10 @@ async function ejecutar(
   if (!auth) return { ok: false, error: 'No autorizado.' }
   const idLimpio = id(intentoId)
   if (!idLimpio) return { ok: false, error: 'Cobro no válido.' }
-  const r = await accion(auth.companyId, idLimpio, auth.actor)
-  revalidatePath('/admin/conciliacion')
-  return r
+  // Sin `revalidatePath` a propósito: la pantalla es dinámica (no hay caché que invalidar) y revalidar haría que Next la
+  // refrescara sola al terminar la acción; el caso resuelto desaparecería y con él su botón de imprimir el comprobante
+  // recién generado. La lista se actualiza cuando la persona lo decide (`router.refresh()` en el componente).
+  return accion(auth.companyId, idLimpio, auth.actor)
 }
 
 export async function generarComprobanteAccion(intentoId: string): Promise<ResultadoDeAccion> {
