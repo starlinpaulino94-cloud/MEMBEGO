@@ -825,11 +825,33 @@ export interface PagoHistorialItem {
   metodoPagoNombre: string | null
   comprobanteUrl: string | null
   validadoPor: string | null
+  /** La venta oficial de ese pago, si quedó registrada: es lo que se imprime. */
+  transaccionId: string | null
+}
+
+/** Una venta aplicada de esta persona: su comprobante de pago imprimible. */
+export interface ComprobanteCliente {
+  id: string
+  codigo: string
+  ticketNumero: string
+  fecha: string
+  empresa: string
+  detalle: string | null
+  total: string | null
+  metodoPago: string | null
 }
 
 export interface PagosResponse {
   membership: PagoMembership | null
   historial: PagoHistorialItem[]
+  comprobantes: ComprobanteCliente[]
+}
+
+/** Enlace firmado y de vida corta al comprobante, para abrirlo en el navegador del teléfono. */
+export interface ComprobanteEnlace {
+  url: string
+  vigenciaSegundos: number
+  codigo: string
 }
 
 // --- Cuenta: vehículos ---
@@ -1262,6 +1284,8 @@ export const api = {
 
   // --- Cuenta: pagos ---
   getPagos: () => fetchBff<PagosResponse>('/api/v1/cliente/pagos'),
+  getComprobanteEnlace: (transactionId: string) =>
+    fetchBff<ComprobanteEnlace>(`/api/v1/cliente/comprobantes/${encodeURIComponent(transactionId)}/enlace`),
   comprarPromocion: (promotionId: string) =>
     parseCardnetResponse(
       postJson<unknown>(`/api/v1/cliente/promociones/${encodeURIComponent(promotionId)}/comprar`, {}),

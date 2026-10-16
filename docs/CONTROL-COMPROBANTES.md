@@ -106,6 +106,37 @@ ni escribe su `@media print`) y `tests/e2e/impresion-tickets.spec.ts` (mide en
 el navegador: una página, ticket en el origen, 72 mm, QR cargado). Los reportes
 A4 del panel (`ReporteImprimible`) son otro producto y siguen su propio camino.
 
+#### Pagos con tarjeta dejan recibo, y el cliente lo imprime (16-10-2026)
+El negocio reportaba «el comprobante de pago no me aparece». Causa: los pagos
+con tarjeta (CardNET desde la web y la app, y la renovación automática con
+tarjeta guardada) activaban la membresía o la compra **sin crear la
+`Transaction`** —solo la caja y la confirmación manual del panel llamaban a
+`registrarVentaConfirmada`—, así que no existía nada que imprimir en Facturas
+ni en el escáner, y el cliente tampoco tenía recibo.
+
+- `src/modules/pagos/reciboPasarela.ts` (`registrarReciboDePasarela`): la
+  venta oficial del cobro por pasarela («Tarjeta (CardNET)», `Aut. NNNNNN`,
+  cliente, plan/promoción). **Idempotente por intento** (`snapshot.intentoId`):
+  webhook + retorno del navegador = un solo recibo. Nunca lanza.
+- Se llama desde los puntos de entrega: `intentos.ts › entregarProducto`
+  (compra y membresía, también al reintentar) y la renovación automática en
+  `cardnetTokenGuardado.ts`. Las transferencias no pasan por ahí (las confirma
+  el admin y ese camino ya deja recibo).
+- **El cliente imprime su comprobante.** `getClientePagos` devuelve
+  `comprobantes` (todas sus ventas aplicadas) y enlaza cada pago aprobado del
+  historial con su venta (`transaccionId`). Web: «Mis pagos → Comprobantes de
+  pago → Imprimir» (`/cliente/pagos/comprobante/[id]`, con sesión y propiedad
+  verificada por `ticketParaCliente`). App: pide un **enlace firmado y caduco**
+  (`GET /api/v1/cliente/comprobantes/[id]/enlace`, HMAC en
+  `enlaceComprobante.ts`, 20 min) y lo abre en el navegador del teléfono
+  (`/comprobante/[token]`), que es quien imprime o guarda el PDF. Ambas vistas
+  usan `FacturaSheet` por `AreaDeImpresion` (una página Carta).
+- Pruebas: `tests/comprobante-cliente.test.ts` (firma/caducidad del enlace,
+  guardas estructurales), `tests/postgres/recibo-pasarela.db.test.ts`
+  (idempotencia real contra PostgreSQL, «Mis pagos», propiedad) y
+  `tests/e2e/comprobante-cliente.spec.ts` (web con sesión y app con enlace;
+  una página Carta; enlace manipulado → 404).
+
 ### 2.3 Caja por turno — `CajaSesion`
 Fuente: `src/modules/caja/*`, `src/components/caja/CajaForms.tsx`, `/empleado/caja`.
 - `abrirCaja` (balance inicial, turno, sucursal, responsable).
