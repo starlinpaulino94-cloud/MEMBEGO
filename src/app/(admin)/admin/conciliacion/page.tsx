@@ -33,7 +33,8 @@ export const metadata = {
  * automático un descuadre de dinero es la forma más rápida de convertir un
  * error visible en uno invisible.
  */
-const VENTANAS = [7, 30, 90] as const
+const VENTANAS = [7, 30, 90, 365] as const
+const ETIQUETA_VENTANA: Record<number, string> = { 7: '7 días', 30: '30 días', 90: '90 días', 365: '1 año' }
 
 export default async function ConciliacionPage({
   searchParams,
@@ -74,7 +75,7 @@ export default async function ConciliacionPage({
             aria-current={v === dias ? 'true' : undefined}
             className={`rounded-lg border px-3 py-1 ${v === dias ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border text-muted-foreground hover:bg-muted/40'}`}
           >
-            {v} días
+            {ETIQUETA_VENTANA[v]}
           </Link>
         ))}
         <span className="text-caption text-muted-foreground">Las entregas pendientes se revisan siempre completas.</span>
@@ -143,7 +144,7 @@ export default async function ConciliacionPage({
                 </div>
               </div>
               {h.casos.length > 0 && (
-                <CasosDeHallazgo casos={h.casos} total={h.cantidad} puedeResolver={puedeResolver} zonaHoraria={zonaHoraria} />
+                <CasosDeHallazgo casos={h.casos} total={h.cantidad} puedeResolver={puedeResolver} zonaHoraria={zonaHoraria} lote={h.lote} dias={dias} />
               )}
             </li>
           ))}

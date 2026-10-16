@@ -13,6 +13,7 @@ import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
 import { CierreCajaDialog } from '@/components/caja/CierreCajaDialog'
 import {
   generarComprobanteAccion,
+  generarComprobantesPendientesAccion,
   marcarEntregadaAccion,
   reintentarEntregaAccion,
 } from '@/modules/observabilidad/conciliacion-actions'
@@ -33,18 +34,25 @@ export function CasosDeHallazgo({
   total,
   puedeResolver,
   zonaHoraria,
+  lote,
+  dias,
 }: {
   casos: CasoDeConciliacion[]
   /** La cifra real del hallazgo; `casos` es lo que cabe en pantalla. */
   total: number
   puedeResolver: boolean
   zonaHoraria: string
+  /** Generar de una vez todos los comprobantes de tarjeta pendientes del periodo (con la cifra a la vista). */
+  lote?: { cantidad: number; monto: number }
+  /** El periodo que se está mirando: el lote usa el mismo. */
+  dias: number
 }) {
   const fmtFecha = (d: Date | string) =>
     new Intl.DateTimeFormat('es-DO', { timeZone: zonaHoraria, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(d))
 
   return (
     <div className="mt-3 rounded-xl border border-border/60 bg-card">
+      {lote && puedeResolver && <LoteDeComprobantes lote={lote} dias={dias} />}
       <ul className="divide-y divide-border/50" data-testid="casos-de-hallazgo">
         {casos.map((c) => (
           <FilaDeCaso key={`${c.tipo}-${c.id}`} caso={c} puedeResolver={puedeResolver} fecha={fmtFecha(c.fecha)} />
@@ -184,5 +192,57 @@ function MarcarEntregada({ caso, pendiente, onConfirmar }: { caso: CasoDeConcili
         </Button>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * «Generar los N comprobantes»: para ponerse al día con los pagos con tarjeta anteriores al comprobante. La cifra y lo que va a
+ * pasar se ven ANTES de confirmar; nada se cobra, cada comprobante lleva la fecha de su cobro y todos quedan en la bitácora.
+ */
+function LoteDeComprobantes({ lote, dias }: { lote: { cantidad: number; monto: number }; dias: number }) {
+  const router = useRouter()
+  const [abierto, setAbierto] = useState(false)
+  const [pendiente, empezar] = useTransition()
+
+  function confirmar() {
+    empezar(async () => {
+      const r = await generarComprobantesPendientesAccion(dias)
+      if (r.ok) {
+        toast.success(r.mensaje)
+        setAbierto(false)
+        router.refresh()
+      } else {
+        toast.error(r.error)
+      }
+    })
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
+      <p className="text-sm text-muted-foreground">
+        {lote.cantidad} pagos con tarjeta ya entregados no tienen comprobante ({fmtRD(lote.monto)}).
+      </p>
+      <Dialog open={abierto} onOpenChange={setAbierto}>
+        <DialogTrigger asChild>
+          <Button size="sm" variant="secondary" data-testid="lote-comprobantes">
+            <FileCheck2 className="h-4 w-4" aria-hidden /> Generar los {lote.cantidad} comprobantes
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generar {lote.cantidad} comprobantes</DialogTitle>
+            <DialogDescription>
+              Se registrará la venta de {lote.cantidad} pagos con tarjeta ya entregados ({fmtRD(lote.monto)} en total). No se cobra
+              nada. Cada comprobante lleva la fecha en que el cliente pagó, así que los reportes de esos días los verán donde
+              corresponde; el número de ticket sigue el orden de hoy. Quedan todos en la bitácora a tu nombre.
+            </DialogDescription>
+          </DialogHeader>
+          <Button disabled={pendiente} onClick={confirmar} data-testid="lote-confirmar">
+            {pendiente && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+            Generar {lote.cantidad} comprobantes
+          </Button>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }

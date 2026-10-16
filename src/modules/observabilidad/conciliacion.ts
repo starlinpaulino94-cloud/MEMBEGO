@@ -72,6 +72,11 @@ export interface Hallazgo {
   href: string | null
   /** Los casos concretos (los más recientes primero), hasta `CASOS_POR_HALLAZGO`. Vacío = solo cifra y enlace. */
   casos: CasoDeConciliacion[]
+  /**
+   * Resolver todos los casos de tarjeta de una vez («Generar los N comprobantes»): la cifra y el importe que se enseñan
+   * ANTES de pulsar. Solo en el hallazgo de cobros sin transacción y solo cuando hay más de uno.
+   */
+  lote?: { cantidad: number; monto: number }
 }
 
 export interface Conciliacion {
@@ -307,6 +312,9 @@ export async function conciliar(
           monto: suma(casosCobro),
           href: null,
           casos: tope(casosCobro),
+          ...(tarjetaSinComprobante.length > 1
+            ? { lote: { cantidad: tarjetaSinComprobante.length, monto: tarjetaSinComprobante.reduce((t, i) => t + Number(i.monto), 0) } }
+            : {}),
         })
       }
 

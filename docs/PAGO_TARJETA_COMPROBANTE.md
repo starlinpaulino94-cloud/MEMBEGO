@@ -34,8 +34,8 @@ activar ⇒ atascado real).
 | 2 | Registrar la venta (`SALE`, método `TARJETA`, canal app/web/renovación) justo después de entregar; idempotente y autorreparable; bitácora `PAGO_APROBADO` con método, canal e intento | ✅ (`tests/postgres/pagos-venta-tarjeta.db.test.ts`; H1 y H4 invertidos) |
 | 3 | Comprobante visible e imprimible: Facturas/Registros con filtro «Tarjeta», ficha del cliente, caja («cobros en línea del día», fuera del arqueo), cuadre y cierre, recibo para el cliente (app, web y BFF) | ✅ (pruebas PG, unitarias y E2E; ver abajo) |
 | 4 | Conciliación accionable: lista de casos por hallazgo, «Generar comprobante», «Reintentar entrega», «Marcar entregada» (con nota), cajas abiertas que llevan a su caja; la regla de entrega distingue «cliente esperando» de «registro sin cerrar» y mira `FALLIDA`/`PROCESANDO` atascados | ✅ (H5, H6 y H7 invertidos; ver abajo) |
-| 5 | Cron de reintento de entregas con aviso a administradores | pendiente |
-| 6 | Backfill de comprobantes retroactivos (solo si se aprueba) y cierre | pendiente |
+| 5 | Cron diario `/api/cron/entregas-pago`: reintenta entregas, repara comprobantes recientes y avisa a los administradores | ✅ (ver abajo) |
+| 6 | Comprobantes retroactivos como **acción explícita en lote** (nunca automática), SQL de diagnóstico de producción y cierre | ✅ (ver abajo) |
 
 ## Fase 2: cómo queda registrada la venta
 
@@ -127,9 +127,75 @@ contador de la empresa, así que un comprobante tardío lleva un número mayor q
 ser personal de la misma empresa con la caja activada. La conciliación no añade un cierre propio porque el cierre necesita el
 efectivo contado: lleva a la caja, donde se hace.
 
+## Fase 5: el cron de entregas
+
+`GET /api/cron/entregas-pago` (CRON_SECRET, diario a las 12:30 UTC = 08:30 hora de Santo Domingo, `vercel.json`) es la red de
+seguridad de un cobro con tarjeta. Hace tres cosas, ninguna recobra dinero, y todo es idempotente:
+
+1. **Reintenta la entrega** de los clientes que pagaron y siguen sin su producto (`reintentarEntrega`, la misma función de siempre,
+   que reclama el cobro con un candado: correrlo a la vez que un clic de la conciliación no activa dos veces). Solo cobros de los
+   últimos 7 días, hasta 5 reintentos (cuenta también los manuales) y con espera creciente (15 min, 30 min, 1 h… hasta un día).
+   Nunca insiste para siempre y nunca toca un cobro viejo que debe mirar una persona. Si entrega, deja un asiento en la bitácora
+   con `origen: 'AUTOMATICO'`.
+2. **Repara los comprobantes que faltan** de cobros ya entregados y recientes (14 días), **solo los que ya nacen con canal**: no
+   escribe nada retroactivo (eso es la fase 6).
+3. **Avisa a los administradores** de cada empresa que sigue con clientes esperando (más de 30 minutos): una notificación por
+   empresa y día (clave estable), con cuántos son, cuánto suman y si ya hace falta una persona. Lleva a `/admin/conciliacion`.
+
+Tiene presupuesto de tiempo (45 s) y tope de 50 reintentos por pasada; si no alcanza lo dice (`incompleto`) y la siguiente pasada
+sigue. Las reglas (`barrido-entregas-reglas.ts`) son puras y están probadas aparte.
+
+**Frecuencia.** La programación es diaria porque el proyecto documenta que el plan solo admite crons diarios (una programación más
+frecuente haría fallar el despliegue; una prueba estática lo vigila). Un cliente que no recibe su producto espera como mucho hasta el
+siguiente barrido **si ninguna otra vía lo reintenta antes** (el retorno del navegador, el webhook y el botón de la conciliación sí
+lo hacen al momento). Con un plan que admita más frecuencia basta subirla en `vercel.json`: el barrido respeta su espaciado y su
+aviso es uno por día.
+
+## Fase 6: ponerse al día con los pagos anteriores y verificar en producción
+
+**Comprobantes retroactivos: acción explícita, nunca automática.** Escribir ventas con fecha pasada mueve los reportes de esos
+meses, así que no hay migración ni cron que lo haga. En `/admin/conciliacion` se elige el periodo (7 días, 30, 90 o 1 año) y, cuando
+hay más de un cobro con tarjeta entregado sin comprobante, aparece **«Generar los N comprobantes»**: la confirmación enseña cuántos
+son y cuánto suman, y dice que no se cobra nada. Cada comprobante lleva la fecha en que el cliente pagó y el texto honesto
+«Tarjeta» (los cobros viejos no guardaron el canal), queda en la bitácora a nombre de quien pulsó (`origen: 'LOTE'`) y repetir no
+duplica nada. Hasta 200 por pulsación; si hay más, se vuelve a pulsar. Para uno solo sigue existiendo «Generar comprobante».
+Con esto la decisión 1 puede resolverse como se prefiera —de golpe o caso por caso— sin tocar código.
+
+**El reporte de un mes viejo no cuenta el pago dos veces.** Como la venta cae en el día del cobro y los reportes dejan fuera del flujo
+de membresías las que ya tienen venta de pasarela en el mismo periodo, escribir un comprobante viejo deja el total de ese periodo igual
+(pasa de «por la membresía» a «por la caja») y no cambia el periodo actual. Lo prueba `pagos-comprobantes-retroactivos.db.test.ts`.
+
+**Mirar producción antes de actuar.** `scripts/diagnostico-pagos-con-tarjeta.sql` (solo SELECT, ejecutado contra la base local;
+una prueba vigila que siga siendo solo lectura) clasifica los cobros sin entregar con la misma regla de la pantalla:
+
+| Situación | Qué significa | Qué hacer |
+|---|---|---|
+| `CLIENTE_ESPERANDO` | El producto no está activo | «Reintentar entrega» (o lo hace el cron si es reciente) |
+| `REGISTRO_SIN_CERRAR` | El producto ya está activo desde el cobro | «Marcar entregada» con nota |
+| `EN_CURSO` | Menos de 2 minutos: es el cobro ocurriendo | Nada |
+
+y cuenta cuántos cobros entregados no tienen comprobante (recientes con canal y anteriores sin canal). Es lo que responde, con datos
+reales, cuántos de los 9 pagos de la captura eran falsos positivos y cuántos eran clientes esperando. **No se ha ejecutado contra
+producción**: eso solo puede hacerlo quien tenga acceso a esa base.
+
+## Estado final y lo que queda
+
+Entregado (fases 0 a 6): el pago con tarjeta deja su venta y su comprobante en el libro (app, web y renovación), visible e
+imprimible para el personal (caja, cuadre, cierre, Comprobantes, Registros, ficha) y para el cliente (app, web y API), fuera del
+arqueo de efectivo y sin doble conteo en reportes; la conciliación enseña cada caso con su acción auditada; y un cron diario
+reintenta, repara y avisa.
+
+Queda, y no depende de código:
+
+- **Decisiones abiertas** de abajo (1, 3, 4, 5, 6).
+- **Probar con un pago real** (`docs/PILOT_FIELD_TEST.md`, sección 6): hace falta CardNET y una impresora térmica.
+- **Mirar producción** con el SQL de arriba, y recién entonces decidir si se generan los comprobantes viejos.
+- La app **Expo** se comprobó solo por tipos (sin dispositivo).
+- **Aviso al cliente** cuando su entrega queda atascada: no se hizo (hoy solo se avisa a los administradores).
+
 ## Decisiones del usuario (abiertas)
 
-1. Comprobantes retroactivos de los pagos con tarjeta anteriores: automáticos (evidencia inequívoca) o uno a uno.
+1. Comprobantes retroactivos de los pagos con tarjeta anteriores: **ya se pueden generar de golpe o uno a uno desde la conciliación** (acción explícita con vista previa); falta decidir si se hace, y cuándo, tras mirar producción.
 2. ~~¿Un administrador puede cerrar la caja de otro empleado?~~ Ya puede: el cierre no exige ser quien abrió (ver fase 4).
 3. Sucursal del pago en línea en el cierre del día (¿`sucursalPagoId` o «En línea»?).
 4. Numeración: mismo contador `TCK-` que la caja o serie aparte.

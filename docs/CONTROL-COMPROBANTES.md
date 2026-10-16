@@ -383,3 +383,15 @@ Recomendación: **empezar por la Fase 1** — es la que cumple literalmente el
 pedido ("todo lo que se le dé a un cliente debe generar un comprobante") y se
 apoya al 100% en la maquinaria que ya existe (`Transaction` + `ReceiptImpresion`
 + plantillas de impresión).
+
+---
+
+## Actualización (2026-10): los pagos con tarjeta de la pasarela también dejan comprobante
+
+Hasta ahora el comprobante solo nacía en la caja y en el panel (`registrarVentaConfirmada`); un pago con tarjeta aprobado en la app
+activaba la membresía pero no dejaba ticket, ni factura, ni rastro en Comprobantes/Registros. Ahora la venta nace con la entrega del
+cobro (`asegurarVentaDelIntento`): idempotente por `pagoIntentoId`, con la fecha del cobro y la etiqueta «Tarjeta … (en la app)».
+Se ve y se imprime en Comprobantes («Pagos con tarjeta»), Registros, la caja, el cuadre, el cierre, la ficha del cliente y, para
+el cliente, en «Mis pagos». Un cron diario repara los que falten y avisa de lo que no se pueda entregar. Ver
+`docs/PAGO_TARJETA_COMPROBANTE.md`.
+

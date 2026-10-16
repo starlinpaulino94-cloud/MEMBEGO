@@ -4,10 +4,12 @@ import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import {
   generarComprobanteDeCobro,
+  generarComprobantesPendientes,
   marcarCobroEntregado,
   reintentarEntregaDeCobro,
   type ActorDeConciliacion,
   type ResultadoDeAccion,
+  type ResultadoDeLote,
 } from '@/modules/observabilidad/conciliacion-servicio'
 
 /**
@@ -54,4 +56,14 @@ export async function reintentarEntregaAccion(intentoId: string): Promise<Result
 
 export async function marcarEntregadaAccion(intentoId: string, nota: string): Promise<ResultadoDeAccion> {
   return ejecutar(intentoId, (companyId, idLimpio, actor) => marcarCobroEntregado(companyId, idLimpio, actor, typeof nota === 'string' ? nota : ''))
+}
+
+/** Los periodos que la pantalla ofrece: el lote no acepta uno que la persona no haya podido ver. */
+const PERIODOS_VALIDOS = new Set([7, 30, 90, 365])
+
+export async function generarComprobantesPendientesAccion(dias: number): Promise<ResultadoDeLote> {
+  const auth = await autorizar()
+  if (!auth) return { ok: false, error: 'No autorizado.' }
+  if (!PERIODOS_VALIDOS.has(dias)) return { ok: false, error: 'El periodo no es válido.' }
+  return generarComprobantesPendientes(auth.companyId, dias, auth.actor)
 }

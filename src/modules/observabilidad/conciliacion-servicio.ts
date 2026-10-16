@@ -173,3 +173,62 @@ export async function marcarCobroEntregado(companyId: string, intentoId: string,
     ...(venta ? { ticketNumero: venta.ticketNumero, transactionId: venta.id } : {}),
   }
 }
+
+export type ResultadoDeLote =
+  | { ok: true; generados: number; yaTenian: number; fallidos: number; pendientes: number; mensaje: string }
+  | { ok: false; error: string }
+
+/** Cuántos comprobantes se generan por pulsación. Lo que sobre se genera pulsando otra vez: una pasada no puede durar de más. */
+export const TOPE_DE_LOTE = 200
+
+/**
+ * GENERAR LOS COMPROBANTES PENDIENTES — la versión «todos a la vez» de «Generar comprobante», para ponerse al día con los pagos
+ * con tarjeta anteriores a que existiera el comprobante.
+ *
+ * Es una ACCIÓN EXPLÍCITA de una persona, con la cifra a la vista antes de pulsar, y no una migración que corra sola: escribir
+ * ventas con fecha pasada mueve los reportes de esos meses y por eso la decide el negocio. Cada comprobante lleva la fecha del
+ * cobro, queda en la bitácora a nombre de quien pulsó (con `origen: 'LOTE'`) y repetir la acción no duplica nada.
+ */
+export async function generarComprobantesPendientes(
+  companyId: string,
+  ventanaDias: number,
+  actor: ActorDeConciliacion,
+  opciones: { ahora?: Date; tope?: number } = {}
+): Promise<ResultadoDeLote> {
+  if (!Number.isInteger(ventanaDias) || ventanaDias < 1 || ventanaDias > 366) return { ok: false, error: 'El periodo no es válido.' }
+  const ahora = opciones.ahora ?? new Date()
+  const tope = Math.min(opciones.tope ?? TOPE_DE_LOTE, TOPE_DE_LOTE)
+  const desde = new Date(ahora.getTime() - ventanaDias * 86_400_000)
+
+  const filas = await conEmpresa(companyId, (tx) =>
+    tx.pagoIntento.findMany({
+      where: { companyId, estado: 'APROBADO', fulfillmentEstado: 'COMPLETADA', transaccion: { is: null }, activadoAt: { gte: desde } },
+      select: { id: true },
+      orderBy: [{ activadoAt: 'asc' }, { id: 'asc' }],
+      take: tope + 1,
+    })
+  )
+  const aHacer = filas.slice(0, tope)
+  let generados = 0
+  let yaTenian = 0
+  let fallidos = 0
+  for (const { id } of aHacer) {
+    const venta = await asegurarVentaDelIntento(id)
+    if (!venta) fallidos++
+    else if (!venta.nueva) yaTenian++
+    else {
+      generados++
+      await asentarEnBitacora(companyId, actor, 'CONCILIACION_COMPROBANTE_GENERADO', id, {
+        origen: 'LOTE',
+        ticketNumero: venta.ticketNumero,
+        codigo: venta.codigo,
+      })
+    }
+  }
+  const pendientes = Math.max(0, filas.length - aHacer.length)
+  const partes = [`${generados} ${generados === 1 ? 'comprobante generado' : 'comprobantes generados'}`]
+  if (yaTenian > 0) partes.push(`${yaTenian} ya lo tenían`)
+  if (fallidos > 0) partes.push(`${fallidos} no se pudieron generar (revisa el registro del servidor)`)
+  if (pendientes > 0) partes.push(`quedan más: pulsa otra vez`)
+  return { ok: true, generados, yaTenian, fallidos, pendientes, mensaje: `${partes.join(' · ')}.` }
+}

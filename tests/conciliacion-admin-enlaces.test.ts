@@ -62,3 +62,16 @@ test('H7 · las acciones no revalidan la pantalla: el caso resuelto no puede des
   assert.doesNotMatch(ACCIONES, /^\s*import .*revalidatePath|\brevalidatePath\(/m)
   assert.match(CASOS, /router\.refresh\(\)/, 'la lista se actualiza cuando la persona lo decide o cuando la acción no tiene nada que mostrar')
 })
+
+test('el lote de comprobantes retroactivos es una acción EXPLÍCITA: mismo permiso, periodos que la pantalla ofrece y confirmación con la cifra', () => {
+  assert.match(ACCIONES, /generarComprobantesPendientesAccion/)
+  assert.match(ACCIONES, /PERIODOS_VALIDOS = new Set\(\[7, 30, 90, 365\]\)/)
+  const idx = ACCIONES.indexOf('export async function generarComprobantesPendientesAccion')
+  assert.ok(idx > 0 && ACCIONES.indexOf('autorizar()', idx) > idx, 'autoriza antes de generar')
+  assert.match(CASOS, /data-testid="lote-confirmar"/)
+  assert.match(CASOS, /No se cobra\s+nada/)
+  // Ninguna ruta lo dispara sola: ni el cron ni la migración escriben comprobantes retroactivos.
+  const barrido = readFileSync('src/modules/pagos/barrido-entregas.ts', 'utf8')
+  assert.doesNotMatch(barrido, /generarComprobantesPendientes/)
+  assert.match(barrido, /canal: \{ not: null \}/, 'el cron solo repara cobros que ya nacen con canal')
+})
