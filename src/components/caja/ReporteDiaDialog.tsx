@@ -5,8 +5,9 @@
  * imprimible y reimprimible. A diferencia del cierre de caja (atado a la
  * sesión), este suma TODOS los cobros que aplicó el empleado ese día —incluidas
  * las transferencias/pagos confirmados desde el panel, que no pasan por caja—.
- * Vista previa idéntica a la impresión: `.reporte-dia-print` se aísla al
- * imprimir. Pensado para térmica 80 mm.
+ * Vista previa idéntica a la impresión: en pantalla el contenido ocupa los 72 mm
+ * útiles de un rollo de 80 mm, y por `AreaDeImpresion` sale exactamente así,
+ * en una sola página y fuera del diálogo.
  */
 
 import { useState } from 'react'
@@ -20,6 +21,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { ANCHO_IMPRIMIBLE_MM, AreaDeImpresion } from '@/components/impresion/AreaDeImpresion'
 import { obtenerReporteDia } from '@/modules/caja/actions'
 import type { ReporteEmpleadoDia } from '@/modules/caja/queries'
 
@@ -51,11 +53,14 @@ function Sep({ char = '-' }: { char?: string }) {
   )
 }
 
-function ReportePreview({ r }: { r: ReporteEmpleadoDia }) {
+/** `papel`: en pantalla, el rollo de 80 mm con sus márgenes; al imprimir, solo los 72 mm útiles (el área pone el ancho). */
+function ReportePreview({ r, papel = true }: { r: ReporteEmpleadoDia; papel?: boolean }) {
   return (
     <div
-      className="mx-auto bg-white font-mono text-black shadow"
-      style={{ width: '80mm', fontSize: '12px', lineHeight: 1.5, padding: '3mm 4mm' }}
+      className={papel ? 'mx-auto bg-white font-mono text-black shadow' : 'font-mono text-black'}
+      style={papel
+        ? { width: '80mm', fontSize: '12px', lineHeight: 1.5, padding: `3mm ${(80 - ANCHO_IMPRIMIBLE_MM[80]) / 2}mm` }
+        : { fontSize: '12px', lineHeight: 1.5, padding: '3mm 0' }}
     >
       {r.empresa.logoUrl && (
         <div className="mb-1 text-center">
@@ -117,6 +122,7 @@ export function ReporteDiaDialog({
   const [open, setOpen] = useState(false)
   const [reporte, setReporte] = useState<ReporteEmpleadoDia | null>(null)
   const [cargando, setCargando] = useState(false)
+  const [solicitud, setSolicitud] = useState(0)
 
   function abrir(siguiente: boolean) {
     setOpen(siguiente)
@@ -153,25 +159,18 @@ export function ReporteDiaDialog({
         </div>
 
         <Button
-          onClick={() => window.print()}
+          onClick={() => setSolicitud((s) => s + 1)}
           disabled={!reporte}
           className="w-full gap-2 py-5 font-semibold"
         >
           <Printer className="h-4 w-4" /> Imprimir
         </Button>
 
+        {/* Lo que sale en el papel: fuera del diálogo (un `fixed` se repite en cada página) y en una sola hoja. */}
         {reporte && (
-          <div className="reporte-dia-print hidden" aria-hidden>
-            <style>{`
-              @media print {
-                @page { margin: 0; }
-                body * { visibility: hidden !important; }
-                .reporte-dia-print, .reporte-dia-print * { visibility: visible !important; }
-                .reporte-dia-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
-              }
-            `}</style>
-            <ReportePreview r={reporte} />
-          </div>
+          <AreaDeImpresion papel={80} solicitud={solicitud}>
+            <ReportePreview r={reporte} papel={false} />
+          </AreaDeImpresion>
         )}
       </DialogContent>
     </Dialog>

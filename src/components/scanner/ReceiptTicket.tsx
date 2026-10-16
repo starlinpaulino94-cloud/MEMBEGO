@@ -2,19 +2,24 @@
 
 /**
  * Render del comprobante (Receipt Engine, Fase E4) para el canal 'browser':
- * ReceiptDoc → HTML monoespaciado con CSS de impresión 58/80 mm, compatible
- * con térmicas instaladas como impresora del sistema (p. ej. 2Connect
+ * ReceiptDoc → HTML monoespaciado que se imprime a través de `AreaDeImpresion`
+ * (un portal fuera del panel, una sola página, ancho útil del papel 58/80 mm),
+ * compatible con térmicas instaladas como impresora del sistema (p. ej. 2Connect
  * POS80-01 V8 vía window.print). El MISMO ReceiptDoc alimenta el encoder
  * ESC/POS cuando se usa un transporte de bytes crudos.
  *
  * El QR del ticket codifica el Transaction ID (TX-…): escanearlo en el panel
  * consulta el historial de esa operación. Nunca es el QR de autenticación.
+ *
+ * Imprimir es incrementar `solicitud`: el área espera a que React pinte este
+ * ticket (con su «COPIA #N» y su QR ya decodificado) y entonces abre el diálogo.
  */
 
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { buildReceiptDoc, PAPER_COLS, type ReceiptDoc, type ReceiptLine } from '@/lib/receipts'
 import type { TicketPayload } from '@/modules/transacciones/actions'
+import { AreaDeImpresion } from '@/components/impresion/AreaDeImpresion'
 
 export function buildDocFromPayload(
   ticket: TicketPayload,
@@ -34,20 +39,25 @@ export function buildDocFromPayload(
 const ALIGN_CLASS = { left: 'text-left', center: 'text-center', right: 'text-right' } as const
 
 /**
- * Ticket imprimible. Renderiza oculto en pantalla y visible solo al imprimir
- * (la hoja de estilos aísla `.receipt-print`). El ancho responde al papel
- * configurado en la plantilla de la empresa (58 u 80 mm).
+ * Ticket imprimible. No se ve en pantalla; sale en el papel cuando `solicitud`
+ * cambia. El ancho responde al papel configurado en la plantilla de la empresa
+ * (58 u 80 mm) y es el útil de ese papel, no el del rollo.
  */
 export function ReceiptTicket({
   ticket,
   esCopia = false,
   copiaNumero,
   logoUrl,
+  solicitud = 0,
+  onImpreso,
 }: {
   ticket: TicketPayload
   esCopia?: boolean
   copiaNumero?: number
   logoUrl?: string | null
+  /** Contador de impresiones pedidas: cada incremento imprime una vez (ver `AreaDeImpresion`). */
+  solicitud?: number
+  onImpreso?: () => void
 }) {
   const doc = buildDocFromPayload(ticket, { esCopia, copiaNumero })
   const cols = PAPER_COLS[doc.paperWidthMm]
@@ -78,25 +88,10 @@ export function ReceiptTicket({
   }, [ticket.transaccion.codigo, esCopia, copiaNumero, doc.paperWidthMm])
 
   return (
-    <div className="hidden print:block" aria-hidden>
-      <style>{`
-        @media print {
-          @page { margin: 0; }
-          body * { visibility: hidden !important; }
-          .receipt-print, .receipt-print * { visibility: visible !important; }
-          /* position:absolute (no fixed): fixed recorta el ticket a una sola
-             página y los comprobantes largos salían cortados. */
-          .receipt-print {
-            position: absolute; top: 0; left: 0;
-            width: ${doc.paperWidthMm}mm;
-            padding: 2mm 3mm;
-          }
-          html, body { height: auto !important; overflow: visible !important; }
-        }
-      `}</style>
+    <AreaDeImpresion papel={doc.paperWidthMm} solicitud={solicitud} onImpreso={onImpreso}>
       <div
-        className="receipt-print mx-auto bg-white font-mono text-black"
-        style={{ width: `${doc.paperWidthMm}mm`, fontSize: doc.paperWidthMm === 58 ? '10px' : '12px', lineHeight: 1.45 }}
+        className="font-mono text-black"
+        style={{ fontSize: doc.paperWidthMm === 58 ? '10px' : '12px', lineHeight: 1.45, padding: '2mm 0' }}
       >
         {doc.lines.map((line, i) => {
           switch (line.kind) {
@@ -156,6 +151,6 @@ export function ReceiptTicket({
           }
         })}
       </div>
-    </div>
+    </AreaDeImpresion>
   )
 }

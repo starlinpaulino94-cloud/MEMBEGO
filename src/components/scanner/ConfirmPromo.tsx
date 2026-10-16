@@ -63,7 +63,10 @@ export function ConfirmPromo({
 }) {
   const [sucursalId, setSucursalId] = useState('')
   const [state, formAction, pending] = useActionState(confirmarCanjePromocion, init)
-  const [printCount, setPrintCount] = useState(0)
+  const [impresiones, setImpresiones] = useState(0)
+  const [copiaNumero, setCopiaNumero] = useState<number | undefined>()
+  const [solicitud, setSolicitud] = useState(0)
+  const [imprimiendo, setImprimiendo] = useState(false)
 
   useEffect(() => {
     if (state.success) toast.success('Canje registrado.')
@@ -74,7 +77,7 @@ export function ConfirmPromo({
   if (state.success) {
     return (
       <>
-        <div className="print:hidden space-y-5">
+        <div className="space-y-5">
           <div className="text-center">
             <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
               <CheckCircle2 className="h-9 w-9 text-success" />
@@ -126,19 +129,28 @@ export function ConfirmPromo({
             <Button
               variant="outline"
               className="flex-col gap-1 h-auto py-3"
-              onClick={() => {
-                if (state.transaccionId) {
-                  registrarImpresionTx(
-                    state.transaccionId,
-                    printCount > 0 ? 'Reimpresión desde el canje' : undefined
-                  ).catch(() => {})
+              disabled={imprimiendo}
+              onClick={async () => {
+                if (imprimiendo) return
+                setImprimiendo(true)
+                try {
+                  if (state.transaccionId) {
+                    // El servidor numera la impresión: 1 = original, 2+ = COPIA #N en el papel.
+                    const r = await registrarImpresionTx(
+                      state.transaccionId,
+                      impresiones > 0 ? 'Reimpresión desde el canje' : undefined
+                    ).catch(() => ({}) as { numero?: number })
+                    if (r.numero != null) setCopiaNumero(r.numero > 1 ? r.numero : undefined)
+                  }
+                  setImpresiones((n) => n + 1)
+                  setSolicitud((s) => s + 1)
+                } finally {
+                  setImprimiendo(false)
                 }
-                setPrintCount((c) => c + 1)
-                setTimeout(() => window.print(), printCount === 0 ? 350 : 0)
               }}
             >
               <Printer className="h-5 w-5" />
-              <span className="text-caption">{printCount > 0 ? 'Reimprimir' : 'Imprimir'}</span>
+              <span className="text-caption">{impresiones > 0 ? 'Reimprimir' : 'Imprimir'}</span>
             </Button>
             <Button variant="outline" className="flex-col gap-1 h-auto py-3" onClick={onDone}>
               <CheckCircle2 className="h-5 w-5" />
@@ -150,8 +162,10 @@ export function ConfirmPromo({
         {state.ticket && (
           <ReceiptTicket
             ticket={state.ticket}
-            esCopia={printCount > 1}
+            esCopia={copiaNumero != null && copiaNumero > 1}
+            copiaNumero={copiaNumero != null && copiaNumero > 1 ? copiaNumero : undefined}
             logoUrl={state.ticket.empresa.logoUrl}
+            solicitud={solicitud}
           />
         )}
       </>
