@@ -11,10 +11,21 @@
 --      intento de pago.
 --   3. Disparador `transactions_pago_intento_empresa` — el intento es de la MISMA empresa que la
 --      venta y está APROBADO (un intento rechazado o ajeno nunca respalda una venta).
---   4. Backfill del cumplimiento (más abajo).
+--   4. `pago_intentos.canal` — por dónde entró el cobro (APP, WEB, RENOVACION_AUTOMATICA). El
+--      comprobante lo dice («Tarjeta VISA ••••4242 (en la app)») y el cierre del día lo agrupa. Los
+--      intentos anteriores quedan con canal nulo: el comprobante dice solo «Tarjeta».
+--   5. Backfill del cumplimiento (más abajo).
 --
--- ADITIVA: una columna nula, un índice único, un CHECK sobre una columna que hoy es nula en todas
--- las filas y un disparador. Rollback: DROP del disparador, el CHECK, el índice y la columna.
+-- ADITIVA: dos columnas nulas, un índice único, dos CHECK sobre columnas que hoy son nulas en todas
+-- las filas y un disparador. Rollback: DROP del disparador, los CHECK, el índice y las columnas.
+
+ALTER TABLE "pago_intentos" ADD COLUMN IF NOT EXISTS "canal" TEXT;
+
+DO $$ BEGIN
+    ALTER TABLE "pago_intentos" ADD CONSTRAINT "pago_intentos_canal"
+      CHECK ("canal" IS NULL OR "canal" IN ('APP', 'WEB', 'RENOVACION_AUTOMATICA'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "pagoIntentoId" TEXT;
 

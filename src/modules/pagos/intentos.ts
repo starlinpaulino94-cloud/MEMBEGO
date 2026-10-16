@@ -28,6 +28,8 @@ import { anotarFallo } from '@/lib/prisma-errors'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
 import { activarMembresia } from '@/modules/pagos/activacion'
 import type { PaymentProviderKind } from '@/lib/payments'
+import type { CanalDeCobro } from '@/modules/pagos/comprobante-tarjeta'
+import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
 
 export type EstadoIntento = 'CREADO' | 'REDIRIGIDO' | 'APROBADO' | 'RECHAZADO' | 'EXPIRADO' | 'ERROR'
 
@@ -42,6 +44,8 @@ export interface CrearIntentoInput {
   moneda?: string
   ipAddress?: string | null
   userAgent?: string | null
+  /** Por dónde entra el cobro: lo dice el comprobante. */
+  canal?: CanalDeCobro | null
 }
 
 /**
@@ -68,6 +72,7 @@ export async function crearIntento(input: CrearIntentoInput) {
         estado: 'CREADO',
         ipAddress: input.ipAddress ?? null,
         userAgent: input.userAgent ?? null,
+        canal: input.canal ?? null,
       },
     })
   )
@@ -137,6 +142,9 @@ async function resultadoIntentoActual(
   ).catch(() => null)
 
   if (actual?.estado === 'APROBADO') {
+    // Una repetición (webhook + retorno del navegador, un reintento) encuentra el cobro ya entregado: si su venta
+    // faltó la primera vez, se escribe ahora. Idempotente por `pagoIntentoId`.
+    if (actual.fulfillmentEstado === 'COMPLETADA') await asegurarVentaDelIntento(intentoId)
     return {
       ok: true,
       estado: 'APROBADO',
@@ -319,6 +327,8 @@ export async function confirmarIntento(
     return resultadoIntentoActual(intentoId, intento.companyId, intento, 'La entrega ya fue reclamada por otro proceso.')
   }
   await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error, claimAt)
+  // El cobro quedó entregado: ahora sí, su venta en el libro (ticket + comprobante). Nunca lanza ni detiene nada.
+  if (entrega.completada) await asegurarVentaDelIntento(intentoId)
 
   return {
     ok: true,
@@ -356,6 +366,7 @@ export async function reintentarEntrega(
   )
   if (!intento) return { ok: false, entrega: 'PENDIENTE', error: 'Intento no encontrado.' }
   if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado === 'COMPLETADA') {
+    if (intento.estado === 'APROBADO') await asegurarVentaDelIntento(intentoId)
     return { ok: true, entrega: estadoEntregaActual(intento.fulfillmentEstado) }
   }
 
@@ -403,6 +414,7 @@ export async function reintentarEntrega(
     return { ok: true, entrega: estadoEntregaActual(actual?.fulfillmentEstado ?? 'PENDIENTE') }
   }
   await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error, claimAt)
+  if (entrega.completada) await asegurarVentaDelIntento(intentoId)
   return {
     ok: entrega.completada,
     entrega: entrega.completada ? 'COMPLETADA' : 'FALLIDA',

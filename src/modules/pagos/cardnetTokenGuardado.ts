@@ -1,6 +1,7 @@
 import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { marcarEntrega } from '@/modules/pagos/intentos'
+import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
 import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
 import { registrarEventoMembresia } from '@/modules/membresia/eventos'
 import { periodEnd } from '@/lib/server-utils'
@@ -192,6 +193,7 @@ export async function renovarMembresiaPorTarjeta(
         moneda: 'DOP',
         estado: 'CREADO',
         ipAddress: clienteIp,
+        canal: 'RENOVACION_AUTOMATICA',
       },
     })
   )
@@ -307,6 +309,8 @@ export async function renovarMembresiaPorTarjeta(
           entidadId: membershipId,
           payload: {
             motivo: 'renovacion_automatica_tarjeta',
+            metodo: 'TARJETA',
+            canal: 'RENOVACION_AUTOMATICA',
             monto: pesos,
             intentoId: intento.id,
             qrEmitido: qrEmitidoId,
@@ -349,6 +353,8 @@ export async function renovarMembresiaPorTarjeta(
   }
 
   await marcarEntrega(m.companyId, intento.id, true)
+  // El cobro automático también es una venta del libro, con su ticket y comprobante.
+  await asegurarVentaDelIntento(intento.id)
 
   // Recibo por correo al cliente (best-effort; el cobro ya está hecho).
   const { enviarConfirmacionPago } = await import('@/modules/pagos/correoConfirmacion')

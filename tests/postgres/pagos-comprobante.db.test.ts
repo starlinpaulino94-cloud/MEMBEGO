@@ -6,11 +6,11 @@
  * PostgreSQL real y con los servicios de verdad, el comportamiento ACTUAL que produce ese y otros
  * descuadres, para que la corrección (fases 1–5 del plan) cambie CADA aserción a propósito y a la vista:
  *
- *   H1  un pago con tarjeta aprobado activa la membresía pero NO deja `Transaction` (ni ticket ni factura),
- *       y la conciliación lo detecta como cobro sin transacción                      → fase 2 lo invierte.
+ *   H1  un pago con tarjeta aprobado activaba la membresía pero NO dejaba `Transaction` (ni ticket ni factura)
+ *       y la conciliación lo detectaba como cobro sin transacción                    → CORREGIDO en la fase 2.
  *   H2  el libro de ventas no tenía método «tarjeta» (`MetodoCobroTipo`)              → CORREGIDO en la fase 1.
  *   H3  contraste: el panel de administración SÍ registra la venta                    → es el patrón a reutilizar.
- *   H4  la renovación automática con tarjeta guardada cobra y renueva, y tampoco deja `Transaction` → fase 2.
+ *   H4  la renovación automática con tarjeta guardada cobraba y renovaba, y tampoco dejaba `Transaction` → CORREGIDO en la fase 2.
  *   H5  falso positivo: un pago aprobado ANTES de la columna de cumplimiento (fila con el valor por defecto
  *       'PENDIENTE', la migración 20260912_p1b no rellenó nada) cuenta como «cobrado sin entregar» aunque la
  *       membresía esté activa y entregada                                              → fase 1 (backfill) y 4.
@@ -24,7 +24,6 @@ import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { MetodoCobroTipo } from '@prisma/client'
 import { prisma } from '../../src/lib/prisma'
-import { conEmpresa } from '../../src/lib/tenant'
 import { confirmarIntento, crearIntento } from '../../src/modules/pagos/intentos'
 import { registrarVentaConfirmada } from '../../src/modules/pagos/venta'
 import { renovarMembresiaPorTarjeta } from '../../src/modules/pagos/cardnetTokenGuardado'
@@ -87,10 +86,10 @@ after(() => {
   else process.env.CARDNET_TOKENS_PRIVATE_KEY = envOriginal.priv
 })
 
-test('H1 · un pago con tarjeta aprobado activa la membresía y entrega, pero NO deja Transaction; la conciliación lo ve como «cobro sin transacción»', async () => {
+test('H1 · (fase 2) un pago con tarjeta aprobado activa la membresía, entrega Y deja su venta con ticket; la conciliación ya no lo marca', async () => {
   const e = await crearEmpresa('h1')
   const m = await membresia(e)
-  const intento = await crearIntento({ companyId: e.companyId, clienteId: e.clienteId, proveedor: 'CARDNET', membershipId: m.id, monto: PRECIO })
+  const intento = await crearIntento({ companyId: e.companyId, clienteId: e.clienteId, proveedor: 'CARDNET', membershipId: m.id, monto: PRECIO, canal: 'APP' })
 
   // El mismo camino que recorre la app: `finishApproval` → `confirmarIntento` → `entregarProducto` → `activarMembresia`.
   const res = await confirmarIntento(intento.id, { aprobada: true, autorizacion: 'AUTH-H1', motivo: null, crudo: { flujo: 'prueba' }, montoCobrado: PRECIO })
@@ -103,21 +102,32 @@ test('H1 · un pago con tarjeta aprobado activa la membresía y entrega, pero NO
   assert.equal(Number(db.montoPagado), PRECIO)
   assert.ok(db.fechaPago, 'quedó fechado el cobro')
   const i = await prisma.pagoIntento.findUniqueOrThrow({ where: { id: intento.id } })
-  assert.deepEqual([i.estado, i.fulfillmentEstado, i.autorizacion], ['APROBADO', 'COMPLETADA', 'AUTH-H1'])
+  assert.deepEqual([i.estado, i.fulfillmentEstado, i.autorizacion, i.canal], ['APROBADO', 'COMPLETADA', 'AUTH-H1', 'APP'])
 
-  // ── EL DEFECTO ── (fase 2: debe haber UNA transacción SALE por intento, con ticket)
-  assert.equal(await prisma.transaction.count({ where: { membershipId: m.id } }), 0, 'DEFECTO H1: la venta no llega al libro')
-  assert.equal(await prisma.transaction.count({ where: { companyId: e.companyId } }), 0)
+  // ── LA CORRECCIÓN ── antes de la fase 2 esta aserción era `count === 0` («DEFECTO H1: la venta no llega al libro»).
+  const ventas = await prisma.transaction.findMany({ where: { membershipId: m.id } })
+  assert.equal(ventas.length, 1, 'UNA venta del cobro')
+  const v = ventas[0]!
+  assert.deepEqual([v.tipo, v.estado, v.metodoCobro, v.pagoIntentoId, Number(v.monto)], ['SALE', 'APPLIED', 'TARJETA', intento.id, PRECIO])
+  assert.match(v.ticketNumero, /^TCK-\d+$/)
+  const snap = v.snapshot as Record<string, unknown>
+  assert.equal(snap.metodoCobroLabel, 'Tarjeta (en la app)')
+  assert.equal(snap.referenciaPago, 'Aut. AUTH-H1')
+  assert.equal(snap.total, '500.00')
+  assert.equal(snap.pagoIntentoId, intento.id)
 
-  // Y es exactamente lo que enseña la pantalla de conciliación.
+  // La conciliación ya no encuentra un cobro sin transacción (lo que enseñaba la captura de RD$ 500).
   const r = await conciliar(e.companyId)
-  const h = hallazgo(r, 'cobro-sin-transaccion')
-  assert.ok(h, 'la conciliación detecta el cobro sin transacción')
-  assert.equal(h.cantidad, 1)
-  assert.equal(h.monto, PRECIO)
-  assert.equal(h.severidad, 'ALTA')
-  assert.equal(h.href, '/admin/pagos', 'DEFECTO: «Revisar» lleva a las colas de validación, donde este pago no aparece')
-  assert.equal(r.cuadra, false)
+  assert.equal(hallazgo(r, 'cobro-sin-transaccion'), undefined)
+  assert.equal(hallazgo(r, 'cobrado-sin-entregar'), undefined)
+  assert.equal(r.cuadra, true)
+
+  // La bitácora del pago dice con qué y por dónde se pagó (la lee «Mis pagos» y el comprobante).
+  const log = await prisma.auditLog.findFirstOrThrow({ where: { companyId: e.companyId, accion: 'PAGO_APROBADO', entidadId: m.id } })
+  assert.deepEqual(
+    { metodo: (log.payload as Record<string, unknown>).metodo, canal: (log.payload as Record<string, unknown>).canal, intentoId: (log.payload as Record<string, unknown>).intentoId },
+    { metodo: 'TARJETA', canal: 'APP', intentoId: intento.id }
+  )
 })
 
 test('H2 · (fase 1) el libro de ventas ya tiene método «tarjeta»', () => {
@@ -148,7 +158,7 @@ test('H3 · contraste: la confirmación desde el panel SÍ deja venta con ticket
   // Y no hay forma de expresar «tarjeta» en esta función: el tipo de `metodoCobro` es EFECTIVO | TRANSFERENCIA | OTRO.
 })
 
-test('H4 · la renovación automática con tarjeta guardada cobra, renueva y entrega, pero tampoco deja Transaction', async () => {
+test('H4 · (fase 2) la renovación automática con tarjeta guardada cobra, renueva, entrega y deja su venta con la tarjeta usada', async () => {
   const e = await crearEmpresa('h4', true)
   const tarjeta = await prisma.tarjetaTokenizada.create({
     data: { companyId: e.companyId, clienteId: e.clienteId, customerId: 'cust-h4', paymentProfileId: 'pp-h4', token: 'CT__sintetico', marca: 'VISA', ultimos4: '4242', activa: true },
@@ -172,7 +182,14 @@ test('H4 · la renovación automática con tarjeta guardada cobra, renueva y ent
   assert.ok(db.fechaVencimiento && db.fechaVencimiento.getTime() > venceEn.getTime(), 'la vigencia se extendió')
   const i = await prisma.pagoIntento.findFirstOrThrow({ where: { membershipId: m.id } })
   assert.deepEqual([i.estado, i.fulfillmentEstado, i.autorizacion], ['APROBADO', 'COMPLETADA', 'AUTH-H4'], 'la renovación SÍ cierra la entrega (marcarEntrega)')
-  assert.equal(await prisma.transaction.count({ where: { membershipId: m.id } }), 0, 'DEFECTO H4: el cobro automático tampoco llega al libro (fase 2)')
+  // Antes de la fase 2: `count === 0` («DEFECTO H4: el cobro automático tampoco llega al libro»).
+  const v = await prisma.transaction.findMany({ where: { membershipId: m.id } })
+  assert.equal(v.length, 1)
+  assert.deepEqual([v[0]!.tipo, v[0]!.metodoCobro, v[0]!.pagoIntentoId, Number(v[0]!.monto)], ['SALE', 'TARJETA', i.id, PRECIO])
+  const snap = v[0]!.snapshot as Record<string, unknown>
+  assert.equal(snap.metodoCobroLabel, 'Tarjeta VISA ••••4242 (renovación automática)')
+  assert.match(String(snap.detalle), /^Renovación /)
+  assert.equal(snap.referenciaPago, 'Aut. AUTH-H4')
 })
 
 test('H5 · falso positivo: un pago aprobado ANTES de la columna de cumplimiento (valor por defecto PENDIENTE) cuenta como «cobrado sin entregar» aunque la membresía esté activa', async () => {

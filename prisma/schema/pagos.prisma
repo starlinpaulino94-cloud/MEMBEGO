@@ -35,6 +35,9 @@ model PagoIntento {
   membership   Membership?     @relation(fields: [membershipId], references: [id], onDelete: SetNull)
   /// La venta (libro de transacciones) que dejó este cobro aprobado. Ver `Transaction.pagoIntentoId`.
   transaccion  Transaction?
+  /// Por dónde entró el cobro: APP (la app del cliente), WEB o RENOVACION_AUTOMATICA (tarjeta guardada). Nulo en
+  /// los intentos anteriores al sprint de comprobantes (CHECK `pago_intentos_canal`).
+  canal        String?
 
   monto  Decimal @db.Decimal(10, 2)
   moneda String  @default("DOP")

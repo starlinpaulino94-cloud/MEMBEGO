@@ -36,6 +36,7 @@ test('la etiqueta dice marca, últimos 4 y canal', () => {
   assert.equal(etiquetaDeCobroConTarjeta('APP', { marca: 'VISA', ultimos4: '4242' }), 'Tarjeta VISA ••••4242 (en la app)')
   assert.equal(etiquetaDeCobroConTarjeta('WEB', { marca: null, ultimos4: '4242' }), 'Tarjeta ••••4242 (en la web)')
   assert.equal(etiquetaDeCobroConTarjeta('RENOVACION_AUTOMATICA', { marca: null, ultimos4: null }), 'Tarjeta (renovación automática)')
+  assert.equal(etiquetaDeCobroConTarjeta(null, { marca: 'VISA', ultimos4: '4242' }), 'Tarjeta VISA ••••4242', 'sin canal conocido solo se dice lo que se sabe')
 })
 
 test('los canales son un conjunto cerrado', () => {

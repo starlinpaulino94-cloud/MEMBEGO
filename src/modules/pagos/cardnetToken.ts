@@ -93,6 +93,7 @@ export async function cobrarObjetivoConToken(input: {
     moneda: 'DOP',
     ipAddress: input.clienteIp,
     userAgent: input.userAgent ?? null,
+    canal: 'WEB',
   })
 
   let cobro

@@ -244,6 +244,7 @@ export async function createOrReadIntent(
         estado: 'CREADO',
         ipAddress: null,
         userAgent: null,
+        canal: 'APP',
         cardnetUniqueId: uniqueId,
       },
     })

@@ -30,12 +30,27 @@ activar ⇒ atascado real).
 | Fase | Contenido | Estado |
 |---|---|---|
 | 0 | Pruebas de caracterización (H1–H7) | ✅ |
-| 1 | Migración aditiva: `MetodoCobroTipo.TARJETA`, `Transaction.pagoIntentoId` único, backfill demostrable del cumplimiento | pendiente |
-| 2 | Registrar la venta (`SALE`, método `TARJETA`, canal app/web/renovación) en el punto único de activación, dentro de la misma transacción; bitácora con método y ticket | pendiente |
+| 1 | Migración aditiva (`20261053`, `20261054`): `MetodoCobroTipo.TARJETA`, `Transaction.pagoIntentoId` único con CHECK y disparador, `PagoIntento.canal`, backfill demostrable del cumplimiento, módulo puro del comprobante | ✅ (`tests/postgres/pagos-tarjeta-modelo.db.test.ts`, `tests/comprobante-tarjeta.test.ts`) |
+| 2 | Registrar la venta (`SALE`, método `TARJETA`, canal app/web/renovación) justo después de entregar; idempotente y autorreparable; bitácora `PAGO_APROBADO` con método, canal e intento | ✅ (`tests/postgres/pagos-venta-tarjeta.db.test.ts`; H1 y H4 invertidos) |
 | 3 | Comprobante visible e imprimible: Facturas/Registros con filtro «Tarjeta», ficha de la membresía, caja («cobros en línea del día», fuera del arqueo), recibo para el cliente (app y web) | pendiente |
 | 4 | Conciliación accionable: lista de casos por hallazgo, «Generar comprobante», «Reintentar entrega», «Marcar entregada», cajas abiertas; regla de entrega que mire `FALLIDA`/`PROCESANDO` atascados y no cuente lo ya entregado | pendiente |
 | 5 | Cron de reintento de entregas con aviso a administradores | pendiente |
 | 6 | Backfill de comprobantes retroactivos (solo si se aprueba) y cierre | pendiente |
+
+## Fase 2: cómo queda registrada la venta
+
+- **Dónde.** `asegurarVentaDelIntento` (`src/modules/pagos/venta-tarjeta.ts`) se llama tras cada cumplimiento en
+  `confirmarIntento`, `resultadoIntentoActual` y `reintentarEntrega`, y en la renovación con tarjeta guardada.
+  Cubre los tres canales: app (sesión Expo), web (3DS y token en iframe) y renovación automática.
+- **Canal.** `pago_intentos.canal` (`APP`, `WEB`, `RENOVACION_AUTOMATICA`) se escribe al crear el intento y es el
+  dato que el comprobante imprime como «dentro de la app».
+- **Decisión de diseño (se aparta del plan inicial).** La venta se escribe **después** de entregar y no dentro de
+  la misma transacción de activación. Motivo: un fallo de facturación no puede dejar a un cliente que ya pagó sin
+  su membresía. A cambio se garantiza que (1) es idempotente por `pagoIntentoId` único, (2) se repara sola en la
+  siguiente pasada, también cuando la repetición encuentra el cobro ya entregado, y (3) la fase 4 ofrece
+  «Generar comprobante» para los casos que aun así queden sin venta.
+- **Solo se factura un cobro APROBADO con entrega COMPLETADA.**
+- **Bitácora.** `PAGO_APROBADO` lleva `metodo: 'TARJETA'`, `canal` e `intentoId` cuando el cobro vino de pasarela.
 
 ## Decisiones del usuario (abiertas)
 

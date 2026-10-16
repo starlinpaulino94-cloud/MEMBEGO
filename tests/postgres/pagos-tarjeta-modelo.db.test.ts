@@ -32,8 +32,11 @@ async function crearEmpresa(etiqueta: string): Promise<Empresa> {
   return { companyId: c.id, clienteId: cliente.id, planId: plan.id }
 }
 
-const intento = (e: Empresa, extra: Record<string, unknown> = {}) =>
-  prisma.pagoIntento.create({ data: { companyId: e.companyId, clienteId: e.clienteId, proveedor: 'CARDNET', monto: 500, estado: 'APROBADO', activadoAt: new Date(), autorizacion: 'AUTH-M', ...extra }, select: { id: true } })
+/** Un cobro de pasarela siempre apunta a UN objetivo (membresía XOR compra): aquí, una compra de promoción. */
+const intento = async (e: Empresa, extra: Record<string, unknown> = {}) => {
+  const compra = await prisma.productoCompra.create({ data: { companyId: e.companyId, clienteId: e.clienteId, estado: 'PENDIENTE_PAGO' }, select: { id: true } })
+  return prisma.pagoIntento.create({ data: { companyId: e.companyId, clienteId: e.clienteId, proveedor: 'CARDNET', monto: 500, estado: 'APROBADO', activadoAt: new Date(), autorizacion: 'AUTH-M', compraId: compra.id, ...extra }, select: { id: true } })
+}
 
 const venta = (e: Empresa, pagoIntentoId: string | null, extra: Record<string, unknown> = {}) =>
   crearTransaccionAplicada(prisma, {
@@ -98,11 +101,11 @@ test('4 · el intento tiene que ser de la MISMA empresa y estar APROBADO (dispar
   const a = await crearEmpresa('empA')
   const b = await crearEmpresa('empB')
   const deB = await intento(b)
-  assert.match(await rechazo(venta(a, deB.id)), /transactions_pago_intento_empresa.*otra empresa/s, 'el cobro de otra empresa no respalda mi venta')
+  assert.match(await rechazo(venta(a, deB.id)), /transactions_pago_intento_empresa[\s\S]*otra empresa/, 'el cobro de otra empresa no respalda mi venta')
 
   for (const estado of ['CREADO', 'REDIRIGIDO', 'RECHAZADO', 'EXPIRADO', 'ERROR']) {
     const i = await intento(a, { estado, activadoAt: null })
-    assert.match(await rechazo(venta(a, i.id)), /transactions_pago_intento_empresa.*no APROBADO/s, estado)
+    assert.match(await rechazo(venta(a, i.id)), /transactions_pago_intento_empresa[\s\S]*no APROBADO/, estado)
   }
   assert.match(await rechazo(venta(a, 'no-existe-este-id')), /foreign key|transactions_pago_intento_empresa/i)
 })
@@ -121,8 +124,12 @@ test('6 · el backfill marca COMPLETADA solo lo demostrable, no toca el resto y 
   const e = await crearEmpresa('backfill')
   const cobro = new Date(Date.now() - 25 * 86_400_000)
   const mas = (ms: number) => new Date(cobro.getTime() + ms)
-  const membresia = (extra: Record<string, unknown>) =>
-    prisma.membership.create({ data: { companyId: e.companyId, clienteId: e.clienteId, planId: e.planId, ...extra }, select: { id: true } })
+  let n = 0
+  // Una membresía por cliente y empresa (índice único): cada caso trae su propio cliente.
+  const membresia = async (extra: Record<string, unknown>) => {
+    const cliente = await prisma.cliente.create({ data: { companyId: e.companyId, supabaseId: `sb-tm-bf-${sufijo}-${n++}`, nombre: `Cliente bf ${n}`, email: `tm-bf-${sufijo}-${n}@prueba.test` }, select: { id: true } })
+    return prisma.membership.create({ data: { companyId: e.companyId, clienteId: cliente.id, planId: e.planId, ...extra }, select: { id: true } })
+  }
   const activa = (fechaPago: Date) => ({ estado: 'ACTIVA' as const, pagoConfirmado: true, montoPagado: 500, fechaPago, fechaInicio: fechaPago })
   const porDefecto = (membershipId: string | null, extra: Record<string, unknown> = {}) =>
     prisma.pagoIntento.create({ data: { companyId: e.companyId, clienteId: e.clienteId, proveedor: 'CARDNET', monto: 500, estado: 'APROBADO', activadoAt: cobro, membershipId, ...extra }, select: { id: true } })

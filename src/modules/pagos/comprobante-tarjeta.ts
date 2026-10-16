@@ -62,12 +62,15 @@ export function sanearAutorizacion(v: unknown): string | null {
   return /^[A-Za-z0-9-]{1,24}$/.test(s) ? s : null
 }
 
-/** «Tarjeta VISA ••••4242 (en la app)». Sin marca ni dígitos queda «Tarjeta (en la app)». */
-export function etiquetaDeCobroConTarjeta(canal: CanalDeCobro, tarjeta: TarjetaDeComprobante): string {
+/**
+ * «Tarjeta VISA ••••4242 (en la app)». Sin marca ni dígitos queda «Tarjeta (en la app)»; sin canal (los
+ * intentos anteriores a que se guardara) queda solo lo que se sabe: «Tarjeta».
+ */
+export function etiquetaDeCobroConTarjeta(canal: CanalDeCobro | null, tarjeta: TarjetaDeComprobante): string {
   const partes = ['Tarjeta']
   if (tarjeta.marca) partes.push(tarjeta.marca)
   if (tarjeta.ultimos4) partes.push(`••••${tarjeta.ultimos4}`)
-  return `${partes.join(' ')} (${ETIQUETA_CANAL[canal]})`
+  return canal ? `${partes.join(' ')} (${ETIQUETA_CANAL[canal]})` : partes.join(' ')
 }
 
 export interface EntradaDeComprobanteTarjeta {
@@ -75,7 +78,8 @@ export interface EntradaDeComprobanteTarjeta {
   detalle: string
   clienteNombre: string
   monto: number
-  canal: CanalDeCobro
+  /** `null` en los intentos anteriores a la columna `pago_intentos.canal`. */
+  canal: CanalDeCobro | null
   /** `pago_intentos.id`: la identidad del cobro y el ancla de idempotencia de la venta. */
   pagoIntentoId: string
   autorizacion?: unknown
@@ -108,7 +112,7 @@ export function snapshotDeCobroConTarjeta(e: EntradaDeComprobanteTarjeta): Recor
     metodoCobroLabel: etiquetaDeCobroConTarjeta(e.canal, tarjeta),
     referenciaPago: autorizacion ? `Aut. ${autorizacion}` : undefined,
     // Lo propio del cobro con tarjeta: trazabilidad pasarela → ticket. Nunca el número de tarjeta.
-    canalDeCobro: e.canal,
+    canalDeCobro: e.canal ?? undefined,
     autorizacion: autorizacion ?? undefined,
     tarjeta: tarjeta.marca || tarjeta.ultimos4 ? tarjeta : undefined,
     pagoIntentoId: e.pagoIntentoId,

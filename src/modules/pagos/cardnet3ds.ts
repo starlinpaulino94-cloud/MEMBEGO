@@ -246,6 +246,7 @@ export async function iniciarPagoTarjeta(input: {
     moneda: 'DOP',
     ipAddress: input.clientIp,
     userAgent: input.browser.userAgent,
+    canal: 'WEB',
   })
 
   let auth
