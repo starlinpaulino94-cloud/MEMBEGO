@@ -3,7 +3,7 @@ import { ETIQUETA_ESTADO_LOTE, type EstadoLote } from '@/modules/inventory/lotes
 import { formatearCantidad } from '@/modules/inventory/formato'
 import type { LoteVista } from '@/modules/inventory/lotes-queries'
 
-const BADGE_ESTADO_LOTE: Record<EstadoLote, 'destructive' | 'warning' | 'success' | 'outline'> = {
+export const BADGE_ESTADO_LOTE: Record<EstadoLote, 'destructive' | 'warning' | 'success' | 'outline'> = {
   VENCIDO: 'destructive',
   POR_VENCER: 'warning',
   VIGENTE: 'success',

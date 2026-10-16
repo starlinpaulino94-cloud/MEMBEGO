@@ -105,32 +105,56 @@ export default async function TransferenciaInventarioPage({ params }: { params: 
         </h2>
         <ul className="divide-y rounded-lg border" aria-label="Líneas de la transferencia">
           {t.detalle.map((l) => (
-            <li key={l.varianteId} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 p-3 text-sm">
-              <div className="min-w-0 flex-1">
-                <Link href={`/admin/inventario/${l.varianteId}`} className="font-medium underline-offset-2 hover:underline">
-                  {nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault)}
-                </Link>
-                <p className="text-xs text-muted-foreground">
-                  SKU {l.sku}
-                  {l.barcode && ` · ${l.barcode}`}
-                </p>
+            <li key={l.varianteId} className="p-3 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                <div className="min-w-0 flex-1">
+                  <Link href={`/admin/inventario/${l.varianteId}`} className="font-medium underline-offset-2 hover:underline">
+                    {nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault)}
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    SKU {l.sku}
+                    {l.barcode && ` · ${l.barcode}`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-4 text-right tabular-nums">
+                  {(
+                    [
+                      ['Enviado', l.enviado],
+                      ['Recibido', l.recibido],
+                      ['En camino', l.pendiente],
+                      ...(l.devuelto > 0 ? ([['Devuelto', l.devuelto]] as const) : []),
+                      ...(l.perdido > 0 ? ([['Perdido', l.perdido]] as const) : []),
+                    ] as ReadonlyArray<readonly [string, number]>
+                  ).map(([etiqueta, valor]) => (
+                    <div key={etiqueta}>
+                      <p className="text-xs text-muted-foreground">{etiqueta}</p>
+                      <p>{formatearCantidad(valor)}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-4 text-right tabular-nums">
-                {(
-                  [
-                    ['Enviado', l.enviado],
-                    ['Recibido', l.recibido],
-                    ['En camino', l.pendiente],
-                    ...(l.devuelto > 0 ? ([['Devuelto', l.devuelto]] as const) : []),
-                    ...(l.perdido > 0 ? ([['Perdido', l.perdido]] as const) : []),
-                  ] as ReadonlyArray<readonly [string, number]>
-                ).map(([etiqueta, valor]) => (
-                  <div key={etiqueta}>
-                    <p className="text-xs text-muted-foreground">{etiqueta}</p>
-                    <p>{formatearCantidad(valor)}</p>
-                  </div>
-                ))}
-              </div>
+              {l.lotes.length > 0 && (
+                <ul className="mt-2 divide-y rounded-lg bg-muted/40 px-3" aria-label={`Lotes de ${nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault)}`}>
+                  {l.lotes.map((x) => (
+                    <li key={x.loteId} data-lote={x.codigo} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2">
+                      <p className="min-w-0 flex-1">
+                        <span className="font-medium">Lote {x.codigo}</span>
+                        <span className="text-xs text-muted-foreground"> · {x.vencimiento ? `vence ${x.vencimiento}` : 'no vence'}</span>
+                      </p>
+                      <p className="flex flex-wrap items-center gap-4 text-right tabular-nums">
+                        <span>Enviado {formatearCantidad(x.enviado)}</span>
+                        <span>Recibido {formatearCantidad(x.recibido)}</span>
+                        {x.devuelto > 0 && <span>Devuelto {formatearCantidad(x.devuelto)}</span>}
+                        {x.pendiente > 0 && (
+                          <span>
+                            {abierto ? 'En camino' : 'Perdido'} {formatearCantidad(x.pendiente)}
+                          </span>
+                        )}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>
@@ -143,7 +167,22 @@ export default async function TransferenciaInventarioPage({ params }: { params: 
             numero={t.numero}
             origenNombre={t.origenNombre}
             destinoNombre={t.destinoNombre}
-            lineas={t.detalle.filter((l) => l.pendiente > 0).map((l) => ({ varianteId: l.varianteId, nombre: nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault), sku: l.sku, pendiente: l.pendiente }))}
+            lineas={t.detalle
+              .filter((l) => l.pendiente > 0)
+              .map((l) => ({
+                varianteId: l.varianteId,
+                nombre: nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault),
+                sku: l.sku,
+                pendiente: l.pendiente,
+                lotes: l.lotes
+                  .filter((x) => x.pendiente > 0)
+                  .map((x) => ({
+                    loteId: x.loteId,
+                    codigo: x.codigo,
+                    vencimiento: x.vencimiento,
+                    pendiente: x.pendiente,
+                  })),
+              }))}
           />
         ) : (
           <Alert>
@@ -164,6 +203,7 @@ export default async function TransferenciaInventarioPage({ params }: { params: 
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {m.sucursalNombre} · {formatDateTimeExacto(m.creadoEn, { zonaHoraria: zona })} · {m.usuarioNombre ?? 'Sistema'}
+                  {m.lotes && ` · lotes: ${m.lotes}`}
                   {m.motivo && ` · ${m.motivo}`}
                 </p>
               </div>

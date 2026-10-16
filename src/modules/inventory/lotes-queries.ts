@@ -1,6 +1,7 @@
 import type { Tx } from '@/lib/tenant'
 import { diaLocal } from '@/modules/reportes/rango'
 import { disponibleDeLote, estadoDeLote, ordenFefo, textoVencimiento, type EstadoLote, type LoteConSaldo } from './lotes'
+import type { LoteDeTraslado } from './traslados'
 
 /**
  * COMMERCE CORE · inventario — INV-5a: las LECTURAS de lotes para la ficha del producto y su historial. Solo lee: lo que mueve lotes
@@ -106,6 +107,15 @@ export async function lotesDeVarianteEnTx(tx: Tx, companyId: string, varianteId:
 }
 
 /**
+ * INV-5b4 · Los lotes de un producto que se pueden TRANSFERIR desde una sucursal: los de ESA sucursal con unidades disponibles, en el orden
+ * FEFO en que los entrega `lotesDeVarianteEnTx` (el primero es el que sale solo si no se elige). Pura, para que lo que ofrece la acción
+ * `lotesParaTransferir` se pruebe sin base de datos.
+ */
+export function lotesTransferiblesDe(porSucursal: Readonly<Record<string, readonly LoteVista[]>>, origenId: string): LoteVista[] {
+  return (porSucursal[origenId] ?? []).filter((l) => l.disponible > 0)
+}
+
+/**
  * De qué lotes es cada movimiento, por CÓDIGO: movimiento → (código → cantidad). Los movimientos de productos sin lotes no aparecen. Es lo
  * que compara una clave de idempotencia repetida (entrada, recepción de una orden) con lo que ya quedó registrado.
  */
@@ -136,5 +146,35 @@ export async function lotesDeMovimientosEnTx(tx: Tx, companyId: string, movimien
   const por = new Map<string, string[]>()
   for (const f of filas) por.set(f.movementId, [...(por.get(f.movementId) ?? []), `${f.balance.lot.code} ×${f.quantity}`])
   for (const [id, partes] of por) salida.set(id, partes.join(', '))
+  return salida
+}
+
+/**
+ * INV-5b4 · De qué lotes es cada línea de una transferencia y cuánto de cada uno se envió, llegó y volvió al origen. TODO sale del ledger,
+ * que es inmutable: la salida (`TRANSFER_OUT` en el origen), las recepciones (`TRANSFER_IN` en el destino) y la devolución al cancelar
+ * (`TRANSFER_IN` en el origen) llevan su reparto por lote y la referencia de la transferencia. Por eso no hay una tabla de «lotes de la
+ * línea» que pueda descuadrarse. Un lote es del PRODUCTO y de la empresa, no de la sucursal: es el mismo en el origen y en el destino.
+ * Solo aparecen las líneas de productos que llevan lotes (las demás no tienen reparto), por producto.
+ */
+export async function lotesDeTrasladoEnTx(tx: Tx, companyId: string, trasladoId: string): Promise<Map<string, LoteDeTraslado[]>> {
+  const filas = await tx.$queryRaw<{ varianteId: string; loteId: string; codigo: string; vencimiento: string | null; legado: boolean; enviado: number; recibido: number; devuelto: number }[]>`
+    SELECT tl."catalogVariantId" AS "varianteId", ml."lotId" AS "loteId", l."code" AS "codigo", l."expiresOn"::text AS "vencimiento", l."legacy" AS "legado",
+           COALESCE(SUM(CASE WHEN m."type" = 'TRANSFER_OUT' THEN ml."quantity" END), 0)::int AS "enviado",
+           COALESCE(SUM(CASE WHEN m."type" = 'TRANSFER_IN' AND lv."locationId" = t."toLocationId" THEN ml."quantity" END), 0)::int AS "recibido",
+           COALESCE(SUM(CASE WHEN m."type" = 'TRANSFER_IN' AND lv."locationId" = t."fromLocationId" THEN ml."quantity" END), 0)::int AS "devuelto"
+      FROM "inventory_transfers" t
+      JOIN "inventory_transfer_lines" tl ON tl."transferId" = t."id"
+      JOIN "inventory_levels" lv ON lv."catalogVariantId" = tl."catalogVariantId" AND lv."companyId" = t."companyId" AND lv."locationId" IN (t."fromLocationId", t."toLocationId")
+      JOIN "inventory_movements" m ON m."inventoryLevelId" = lv."id" AND m."referenceType" = 'TRANSFER' AND m."referenceId" = t."id"
+      JOIN "inventory_movement_lots" ml ON ml."movementId" = m."id"
+      JOIN "inventory_lots" l ON l."id" = ml."lotId"
+     WHERE t."id" = ${trasladoId} AND t."companyId" = ${companyId}
+     GROUP BY tl."position", tl."catalogVariantId", ml."lotId", l."code", l."expiresOn", l."legacy"
+     ORDER BY tl."position", l."legacy" DESC, (l."expiresOn" IS NULL), l."expiresOn", l."code"`
+  const salida = new Map<string, LoteDeTraslado[]>()
+  for (const f of filas) {
+    const lote: LoteDeTraslado = { loteId: f.loteId, codigo: f.codigo, vencimiento: f.vencimiento, legado: f.legado, enviado: Number(f.enviado), recibido: Number(f.recibido), devuelto: Number(f.devuelto) }
+    salida.set(f.varianteId, [...(salida.get(f.varianteId) ?? []), lote])
+  }
   return salida
 }

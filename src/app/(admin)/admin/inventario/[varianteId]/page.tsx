@@ -318,7 +318,7 @@ export default async function InventarioVariantePage({ params }: { params: Promi
           {lotes?.lleva && (
             <Alert>
               <AlertDescription>
-                Este producto lleva <strong>lotes</strong>: se vende, se aparta y se saca primero lo que antes vence, y lo vencido no se vende. Todavía no se puede transferir; se cuenta lote por lote en un conteo (Inventario → Conteos), y se recibe con una entrada de mercancía o con una orden de compra (diciendo de qué lote llegó).
+                Este producto lleva <strong>lotes</strong>: se vende, se aparta y se saca primero lo que antes vence, y lo vencido no se vende. Se transfiere (y se envía a otra sucursal) lote por lote: sale el que antes vence, o los que elijas, y entra al destino en esos mismos lotes. Se cuenta lote por lote en un conteo (Inventario → Conteos), y se recibe con una entrada de mercancía o con una orden de compra (diciendo de qué lote llegó).
               </AlertDescription>
             </Alert>
           )}
@@ -335,8 +335,12 @@ export default async function InventarioVariantePage({ params }: { params: Promi
               />
             ))}
           </div>
-          {activas.length > 1 && puedeTransferir && !lotes?.lleva && (
-            <TransferirForm varianteId={detalle.varianteId} sucursales={activas.map((s) => ({ id: s.sucursalId, nombre: s.nombre, disponible: s.disponible }))} />
+          {activas.length > 1 && puedeTransferir && (
+            <TransferirForm
+              varianteId={detalle.varianteId}
+              sucursales={activas.map((s) => ({ id: s.sucursalId, nombre: s.nombre, disponible: s.disponible }))}
+              lotesPorSucursal={lotes?.lleva ? lotes.porSucursal : undefined}
+            />
           )}
         </>
       )}

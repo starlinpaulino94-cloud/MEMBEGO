@@ -1,5 +1,6 @@
 import { exigirTransicion, puedeTransicionar, type Transiciones } from '@/lib/commerce-primitives/estados'
 import { CANTIDAD_MAXIMA, validarCantidad } from './domain'
+import { MAX_LOTES_POR_LINEA, fusionarReparto, sumaDeReparto, type RepartoLote } from './lotes'
 
 /**
  * COMMERCE CORE · inventario — transferencias CON ENVÍO entre sucursales
@@ -66,6 +67,12 @@ export function exigirPasoDeEstado(desde: EstadoTraslado, hasta: EstadoTraslado)
 export interface LineaTraslado {
   varianteId: string
   cantidad: number
+  /**
+   * INV-5b4: de qué lotes es la línea, por ID de lote (`[{ loteId, cantidad }]`, que suman `cantidad`). Al ENVIAR: de qué lotes del origen
+   * sale; sin decirlo, el que antes vence (FEFO). Al RECIBIR: de qué lotes de lo enviado llegó; ver `repartoDeRecepcion`. En un producto
+   * sin lotes no puede venir. Aquí llega como lo mandó quien captura (sin validar): lo valida `validarRepartoDeLinea`.
+   */
+  lotes?: unknown
 }
 
 export type ResultadoLineasTraslado = { ok: true; lineas: LineaTraslado[]; unidades: number } | { ok: false; codigo: string; error: string }
@@ -88,10 +95,50 @@ export function validarLineasTraslado(lineas: unknown, max: number = MAX_LINEAS_
     vistas.add(id)
     const c = validarCantidad(l?.cantidad)
     if (!c.ok) return { ok: false, codigo: 'CANTIDAD_INVALIDA', error: c.error }
-    limpias.push({ varianteId: id, cantidad: c.valor })
+    // INV-5b4: los lotes de la línea, si los trae, tienen que estar bien armados y sumar su cantidad.
+    const lotes = (l as { lotes?: unknown } | null)?.lotes
+    if (!sinLotes(lotes)) {
+      const r = validarRepartoDeLinea(lotes, c.valor)
+      if (!r.ok) return { ok: false, codigo: r.codigo, error: r.error }
+      limpias.push({ varianteId: id, cantidad: c.valor, lotes: r.reparto })
+    } else {
+      limpias.push({ varianteId: id, cantidad: c.valor })
+    }
     unidades += c.valor
   }
   return { ok: true, lineas: limpias, unidades }
+}
+
+// ── INV-5b4 · Los lotes de una línea ─────────────────────────────────────────
+
+/** «No dijo lotes»: ausente, `null` o una lista vacía. */
+export const sinLotes = (v: unknown): boolean => v === undefined || v === null || (Array.isArray(v) && v.length === 0)
+
+export type ResultadoRepartoDeLinea = { ok: true; reparto: RepartoLote[] } | { ok: false; codigo: string; error: string }
+
+/**
+ * Valida los lotes que dice quien captura —`[{ loteId, cantidad }]`—: una lista de a lo más `MAX_LOTES_POR_LINEA` renglones, cada uno con
+ * un id de lote y una cantidad entera positiva, y que SUMEN la cantidad de la línea. Un lote repetido se junta. No mira contra la base
+ * (si el lote existe, es de ese producto o tiene existencias lo comprueba el servicio).
+ */
+export function validarRepartoDeLinea(lotes: unknown, cantidad: number): ResultadoRepartoDeLinea {
+  if (!Array.isArray(lotes)) return { ok: false, codigo: 'LOTE_INVALIDO', error: 'Los lotes no están bien indicados.' }
+  if (lotes.length > MAX_LOTES_POR_LINEA) return { ok: false, codigo: 'DEMASIADOS_LOTES', error: `Se admiten hasta ${MAX_LOTES_POR_LINEA} lotes por producto.` }
+  const pedido: RepartoLote[] = []
+  for (const crudo of lotes as unknown[]) {
+    const x = crudo as { loteId?: unknown; cantidad?: unknown } | null
+    const id = typeof x?.loteId === 'string' ? x.loteId.trim() : ''
+    if (id === '' || id.length > 120) return { ok: false, codigo: 'LOTE_INVALIDO', error: 'Uno de los lotes no está bien indicado.' }
+    const c = validarCantidad(x?.cantidad)
+    if (!c.ok) return { ok: false, codigo: 'CANTIDAD_INVALIDA', error: `Lote: ${c.error}` }
+    pedido.push({ loteId: id, cantidad: c.valor })
+  }
+  const reparto = fusionarReparto(pedido)
+  const suma = sumaDeReparto(reparto)
+  if (suma !== cantidad) {
+    return { ok: false, codigo: 'LOTES_NO_CUADRAN', error: `Los lotes suman ${suma.toLocaleString('es-DO')} unidades y el producto es de ${cantidad.toLocaleString('es-DO')}.` }
+  }
+  return { ok: true, reparto }
 }
 
 // ── Lo que va llegando ───────────────────────────────────────────────────────
@@ -132,6 +179,81 @@ export function resumirTraslado(lineas: readonly LineaDeTraslado[]): ResumenDeTr
     r.enTransito += pendienteDeLinea(l)
   }
   return r
+}
+
+/**
+ * Lo que se tecleó en una lista de lotes (`loteId → texto`) como reparto: los renglones con una cantidad entera de 1 en adelante, su suma y
+ * si algún renglón está mal escrito (vacío o 0 no cuentan; un decimal, un negativo o letras sí son error). Para los formularios, que
+ * muestran la suma y bloquean el envío antes de ir al servidor, que vuelve a validar todo.
+ */
+export function repartoDeTextos(valores: Readonly<Record<string, string>>): { reparto: RepartoLote[]; suma: number; hayError: boolean } {
+  const reparto: RepartoLote[] = []
+  let hayError = false
+  for (const [loteId, crudo] of Object.entries(valores)) {
+    const t = (crudo ?? '').trim()
+    if (t === '' || t === '0') continue
+    if (!/^\d{1,7}$/.test(t)) {
+      hayError = true
+      continue
+    }
+    reparto.push({ loteId, cantidad: Number(t) })
+  }
+  return { reparto, suma: sumaDeReparto(reparto), hayError }
+}
+
+/** Un lote de una transferencia con lo que ha pasado con él (todo sale del ledger: lo enviado, lo recibido y lo devuelto al origen). */
+export interface LoteDeTraslado {
+  loteId: string
+  codigo: string
+  /** `YYYY-MM-DD` o null (no vence). */
+  vencimiento: string | null
+  legado: boolean
+  enviado: number
+  recibido: number
+  devuelto: number
+}
+
+/** Lo que de un lote sigue EN TRÁNSITO: enviado menos lo que llegó y lo que volvió al origen. (Lo perdido solo existe al cerrar, y entonces ya no se mira.) */
+export function pendienteDeLote(l: Pick<LoteDeTraslado, 'enviado' | 'recibido' | 'devuelto'>): number {
+  return l.enviado - l.recibido - l.devuelto
+}
+
+/**
+ * De qué lotes llegó lo que se recibe de UNA línea de un producto con lotes. `pendientes` son los lotes de esa línea con lo que sigue en
+ * tránsito de cada uno; `pedido` lo que dijo quien recibe (`[{ loteId, cantidad }]`), si lo dijo.
+ *   · Con lotes: tienen que ser lotes de ESTA línea, suman la cantidad y ninguno pasa de lo que de él sigue en camino.
+ *   · Sin lotes: si llega todo lo que falta de la línea, llega todo lo que falta de cada lote; si no, solo se sabe de qué lote es cuando
+ *     de la línea queda UN solo lote en camino; con varios hay que decirlo (sería inventar de cuál).
+ */
+export function repartoDeRecepcion(pendientes: readonly LoteDeTraslado[], cantidad: number, pedido: unknown): ResultadoRepartoDeLinea {
+  const vivos = pendientes.filter((l) => pendienteDeLote(l) > 0)
+  const enCamino = vivos.reduce((s, l) => s + pendienteDeLote(l), 0)
+  if (!sinLotes(pedido)) {
+    const r = validarRepartoDeLinea(pedido, cantidad)
+    if (!r.ok) return r
+    const porId = new Map(pendientes.map((l) => [l.loteId, l]))
+    for (const x of r.reparto) {
+      const lote = porId.get(x.loteId)
+      if (!lote) return { ok: false, codigo: 'LOTE_AJENO', error: 'Uno de los lotes no es de esta transferencia.' }
+      const falta = pendienteDeLote(lote)
+      if (x.cantidad > falta) {
+        return {
+          ok: false,
+          codigo: 'RECIBE_MAS_DE_LO_ENVIADO',
+          error: falta <= 0 ? `El lote ${lote.codigo} ya llegó completo.` : `Del lote ${lote.codigo} solo faltan ${falta.toLocaleString('es-DO')} por llegar; no puedes recibir ${x.cantidad.toLocaleString('es-DO')}.`,
+        }
+      }
+    }
+    return r
+  }
+  if (cantidad === enCamino) return { ok: true, reparto: vivos.map((l) => ({ loteId: l.loteId, cantidad: pendienteDeLote(l) })) }
+  if (vivos.length === 1) return { ok: true, reparto: [{ loteId: vivos[0].loteId, cantidad }] }
+  return { ok: false, codigo: 'LOTES_FALTAN', error: 'Este producto llega en varios lotes: indica de qué lote llegó lo que recibes (o recibe todo lo que falta).' }
+}
+
+/** De qué lotes vuelve al origen lo que sigue en tránsito al cancelar: de cada lote, todo lo que falta. */
+export function repartoDeCancelacion(pendientes: readonly LoteDeTraslado[]): RepartoLote[] {
+  return pendientes.filter((l) => pendienteDeLote(l) > 0).map((l) => ({ loteId: l.loteId, cantidad: pendienteDeLote(l) }))
 }
 
 export type PlanDeRecepcion =
@@ -177,7 +299,7 @@ export function planDeRecepcion(lineas: readonly LineaDeTraslado[], pedidas: rea
       if (c.valor > falta) {
         return { ok: false, codigo: 'RECIBE_MAS_DE_LO_ENVIADO', error: falta === 0 ? 'Ese producto ya llegó completo.' : `Solo faltan ${falta.toLocaleString('es-DO')} por llegar de ese producto; no puedes recibir ${c.valor.toLocaleString('es-DO')}.` }
       }
-      recibir.push({ varianteId: p.varianteId, cantidad: c.valor })
+      recibir.push({ varianteId: p.varianteId, cantidad: c.valor, ...(sinLotes(p.lotes) ? {} : { lotes: p.lotes }) })
     }
   }
   const recibidoAhora = new Map(recibir.map((r) => [r.varianteId, r.cantidad]))

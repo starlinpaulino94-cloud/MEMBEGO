@@ -46,6 +46,7 @@ import type { InformeImportacion } from './importacion'
 import { aplicarImportacionDeConteoEnTx, aplicarImportacionEnTx, informeDeConteoImportadoEnTx, informeDeImportacionEnTx } from './importar'
 import { buscarVariantesParaEntradaEnTx, historialDeVarianteEnTx, lotesParaContarEnTx, type HistorialPagina, type LoteParaContar, type VarianteBuscable } from './queries'
 import { buscarProductosParaOrdenEnTx, type ProductoParaOrden } from './compras-queries'
+import { lotesDeVarianteEnTx, lotesTransferiblesDe, type LoteVista } from './lotes-queries'
 import {
   actualizarProveedorEnTx,
   cambiarActivoProveedorEnTx,
@@ -348,6 +349,8 @@ export async function transferirInventario(entrada: {
   destinoId: string
   cantidad: number
   motivo?: string | null
+  /** INV-5b4: de qué lotes del origen sale, `[{ loteId, cantidad }]`. Sin decirlo, el que antes vence. */
+  lotes?: { loteId: string; cantidad: number }[]
   clave?: string | null
 }): Promise<ResultadoInventario<{ repetido: boolean }>> {
   const c = await contexto('transferir')
@@ -358,7 +361,7 @@ export async function transferirInventario(entrada: {
       transferirEnTx(
         tx,
         c.companyId,
-        { varianteId: texto(entrada.varianteId), origenId: texto(entrada.origenId), destinoId: texto(entrada.destinoId), cantidad: entrada.cantidad as number, motivo: entrada.motivo as string | null, idempotencyKey: clave(entrada.clave) },
+        { varianteId: texto(entrada.varianteId), origenId: texto(entrada.origenId), destinoId: texto(entrada.destinoId), cantidad: entrada.cantidad as number, motivo: entrada.motivo as string | null, lotes: entrada.lotes, idempotencyKey: clave(entrada.clave) },
         c.ctx
       )
     )
@@ -714,14 +717,14 @@ export interface ResumenEnvio {
 export async function enviarTransferencia(entrada: {
   origenId: string
   destinoId: string
-  lineas: { varianteId: string; cantidad: number }[]
+  lineas: { varianteId: string; cantidad: number; lotes?: { loteId: string; cantidad: number }[] }[]
   nota?: string | null
   clave?: string | null
 }): Promise<ResultadoInventario<ResumenEnvio>> {
   const c = await contexto('transferir')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
-  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : []
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, lotes: l?.lotes })) : []
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
       enviarTrasladoEnTx(tx, c.companyId, { origenId: texto(entrada.origenId), destinoId: texto(entrada.destinoId), lineas, nota: entrada.nota, idempotencyKey: clave(entrada.clave) }, c.ctx)
@@ -741,6 +744,23 @@ export async function enviarTransferencia(entrada: {
       )
     }
     return { ok: true, trasladoId: r.trasladoId, numero: r.numero, lineas: r.lineas, unidades: r.unidades, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5b4 · Los lotes de un producto que se pueden TRANSFERIR desde una sucursal: los que tienen unidades disponibles allí, en orden FEFO
+ * (el primero es el que sale solo, si no se elige). Con la cantidad disponible de cada uno: quien transfiere necesita saber cuánto hay para
+ * repartir (no es un conteo a ciegas). Un producto sin lotes devuelve `lleva: false`.
+ */
+export async function lotesParaTransferir(entrada: { varianteId: string; origenId: string }): Promise<ResultadoInventario<{ lleva: boolean; hoy: string; lotes: LoteVista[] }>> {
+  const c = await contexto('transferir')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada) || typeof entrada.varianteId !== 'string' || typeof entrada.origenId !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => lotesDeVarianteEnTx(tx, c.companyId, entrada.varianteId))
+    return { ok: true, lleva: r.lleva, hoy: r.hoy, lotes: lotesTransferiblesDe(r.porSucursal, entrada.origenId) }
   } catch (e) {
     return aError(e)
   }
@@ -776,7 +796,7 @@ export interface ResumenRecepcion {
  */
 export async function recibirTransferencia(entrada: {
   trasladoId: string
-  lineas?: { varianteId: string; cantidad: number }[]
+  lineas?: { varianteId: string; cantidad: number; lotes?: { loteId: string; cantidad: number }[] }[]
   todo?: boolean
   cerrarConFaltante?: boolean
   motivo?: string | null
@@ -785,7 +805,7 @@ export async function recibirTransferencia(entrada: {
   const c = await contexto('transferir')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
-  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : undefined
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, lotes: l?.lotes })) : undefined
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
       recibirTrasladoEnTx(

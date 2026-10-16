@@ -4,10 +4,10 @@ import { normalizarCapacidades } from '@/modules/catalog/domain'
 import { costoDeDecimal, formatearCosto, formatearMonto, valorDe } from './costos'
 import { disponible, estadoDeStock, type EstadoStock } from './domain'
 import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosConteos, type FiltrosEntradas, type FiltrosMovimientos, type FiltrosTraslados } from './filtros'
-import { pendienteDeLinea, type EstadoTraslado } from './traslados'
+import { pendienteDeLinea, pendienteDeLote, type EstadoTraslado, type LoteDeTraslado } from './traslados'
 import { MAX_POR_CONTAR_VISIBLES, TOPE_FILAS_HOJA, claveDeLinea, type EstadoConteo } from './conteos'
 import { limiteDiaLocal } from '@/modules/reportes/rango'
-import { lotesDeMovimientosEnTx } from './lotes-queries'
+import { lotesDeMovimientosEnTx, lotesDeTrasladoEnTx } from './lotes-queries'
 
 /**
  * COMMERCE CORE · inventario — lecturas para el panel (Fase 2).
@@ -1412,6 +1412,8 @@ export interface LineaDeTrasladoVista {
   perdido: number
   /** Lo que sigue en camino de este producto. */
   pendiente: number
+  /** INV-5b4: de qué lotes es la línea y cuánto de cada uno se envió, llegó, volvió y sigue en camino. Vacío si el producto no lleva lotes. */
+  lotes: (LoteDeTraslado & { pendiente: number })[]
 }
 
 export interface MovimientoDeTraslado {
@@ -1424,6 +1426,8 @@ export interface MovimientoDeTraslado {
   creadoEn: Date
   usuarioNombre: string | null
   motivo: string | null
+  /** INV-5b4: «A-1 ×4, B ×2», de qué lotes es el movimiento; null si el producto no lleva lotes. */
+  lotes: string | null
 }
 
 export interface DetalleTraslado extends FilaTraslado {
@@ -1477,6 +1481,8 @@ export async function trasladoDetalleEnTx(tx: Tx, companyId: string, id: string)
     },
   })
   const nombres = await nombresDeUsuarios(tx, [r.sentById, r.closedById, ...movimientos.map((m) => m.userId)])
+  const lotesDeLinea = await lotesDeTrasladoEnTx(tx, companyId, r.id)
+  const lotesDeMovimiento = await lotesDeMovimientosEnTx(tx, companyId, movimientos.map((m) => m.id))
   const detalle: LineaDeTrasladoVista[] = r.lines.map((l) => ({
     varianteId: l.catalogVariantId,
     sku: l.variant.sku,
@@ -1489,6 +1495,7 @@ export async function trasladoDetalleEnTx(tx: Tx, companyId: string, id: string)
     devuelto: l.quantityReturned,
     perdido: l.quantityLost,
     pendiente: pendienteDeLinea({ enviado: l.quantitySent, recibido: l.quantityReceived, devuelto: l.quantityReturned, perdido: l.quantityLost }),
+    lotes: (lotesDeLinea.get(l.catalogVariantId) ?? []).map((x) => ({ ...x, pendiente: pendienteDeLote(x) })),
   }))
   return {
     ...filaDeTraslado(r, nombres),
@@ -1507,6 +1514,7 @@ export async function trasladoDetalleEnTx(tx: Tx, companyId: string, id: string)
       creadoEn: m.createdAt,
       usuarioNombre: m.userId ? (nombres.get(m.userId) ?? null) : null,
       motivo: m.reason,
+      lotes: lotesDeMovimiento.get(m.id) ?? null,
     })),
   }
 }

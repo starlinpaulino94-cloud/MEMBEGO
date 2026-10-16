@@ -18,7 +18,6 @@ import {
   registrarEntradaMultipleEnTx,
   reservarEnTx,
   resolverDanadoEnTx,
-  transferirEnTx,
   vencerLotesEnTx,
   venderEnTx,
   abrirConteoEnTx,
@@ -634,15 +633,13 @@ test('14 · el barrido saca de lo vendible lo disponible de los lotes vencidos (
 
 // ── Lo que todavía no admite lotes ───────────────────────────────────────────
 
-test('15 · el conteo suelto y las transferencias se niegan, con un mensaje claro, a tocar un producto con lotes (y un conteo pide el lote)', async () => {
+test('15 · el conteo suelto se niega, con un mensaje claro, a tocar un producto con lotes (y un conteo pide el lote); las transferencias YA trabajan por lote (INV-5b4)', async () => {
   const v = await producto('Bloqueado')
   await activar(v)
   await entrada(v, [{ codigo: 'L', cantidad: 5 }])
   const antes = await prisma.inventoryMovement.count({ where: { companyId: ctx.a } })
   const sin = (p: Promise<unknown>) => codigoDe(p)
   assert.equal(await sin(enA((tx) => contarEnTx(tx, ctx.a, { varianteId: v, sucursalId: ctx.suc1, conteo: 3 }, como(ctx.usuario)))), 'LOTES_NO_SOPORTADO')
-  assert.equal(await sin(enA((tx) => transferirEnTx(tx, ctx.a, { varianteId: v, origenId: ctx.suc1, destinoId: ctx.suc2, cantidad: 1 }, como(ctx.usuario)))), 'LOTES_NO_SOPORTADO')
-  assert.equal(await sin(enA((tx) => enviarTrasladoEnTx(tx, ctx.a, { origenId: ctx.suc1, destinoId: ctx.suc2, lineas: [{ varianteId: v, cantidad: 1 }] }, como(ctx.usuario)))), 'LOTES_NO_SOPORTADO')
   const conteo = await enA((tx) => abrirConteoEnTx(tx, ctx.a, { sucursalId: ctx.suc2 }, como(ctx.usuario)))
   // INV-5b3: un conteo (sesión) ya cuenta por lote: sin decir el lote, lo pide.
   assert.equal(await sin(enA((tx) => registrarConteoProductoEnTx(tx, ctx.a, { conteoId: conteo.conteoId, varianteId: v, cantidad: 1, modo: 'FIJAR' }, como(ctx.usuario)))), 'LOTES_FALTAN')

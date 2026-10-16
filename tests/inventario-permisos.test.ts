@@ -76,6 +76,7 @@ test('todas las acciones exportadas autorizan ANTES de tocar la base', () => {
     'importarConteo',
     'iniciarConteo',
     'lotesParaContarProducto',
+    'lotesParaTransferir',
     'moverEntreLotesInventario',
     'pedirOrdenCompra',
     'previsualizarConteoImportado',

@@ -128,7 +128,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-5b1 · Vence pronto** | Informe «Vence pronto» (los lotes con existencias que ya vencieron o vencen en 7 a 90 días, por sucursal, de lo que antes vence a lo que después, con lo vendible, lo apartado y lo dañado, filtros, páginas y CSV), una cifra en la tarjeta de inventario del dashboard y un aviso a los administradores desde el barrido diario (una vez por semana y nivel de urgencia, y una vez por día lo que venció) | — (sin migración) | S | **hecha** |
 | **INV-5b2 · Lotes en órdenes de compra** | Un producto con lotes se pide como cualquier otro (una orden es por producto) y se recibe **diciendo de qué lote(s) llegó** cada tanda (código, vencimiento y cantidad), con el mismo editor de lotes de la entrada de mercancía; la orden, la entrada, la ficha y el CSV cuentan de qué lotes llegó; una orden abierta ya no impide activar los lotes de un producto | — (sin migración) | S | **hecha** (§29-30) |
 | **INV-5b3 · Lotes en conteos** | Un producto con lotes se cuenta **lote por lote** (a ciegas, eligiendo el lote al escanear), la hoja en blanco y la hoja contada traen la columna `lote`, y al aplicar cada lote se ajusta por **su** diferencia; «sin contar» cuenta lotes; la ficha ya no se niega a contar por lote (el conteo suelto de un número sigue negado) | `20261069` (la línea de conteo lleva el lote; SQL primero) | M | **hecha** (§31-32) |
-| INV-5b4 · Lotes en transferencias | Que el lote viaje con lo que se transfiere (directa y con envío) | Lotes de la línea | M | pendiente |
+| **INV-5b4 · Lotes en transferencias** | Un producto con lotes se transfiere **por lote**, directo o con envío: sale el que antes vence o los lotes que se elijan y entra al destino en esos mismos lotes; recibir lote por lote (sin pasar de lo que de cada lote sigue en camino), cancelar devuelve cada lote a su sitio, cerrar con faltante lo deja por lote; el detalle, el historial y el CSV dicen de qué lotes es cada cosa | — (sin migración: el estado por lote sale del ledger) | M | **hecha** (§34-35) |
 | INV-5b5 · Corregir y desactivar | Corregir el vencimiento de un lote con su historia y desactivar los lotes de un producto | Historia del vencimiento | M | pendiente |
 | INV-5c · Series | Número de serie por unidad | Series | L | pendiente |
 | INV-5d · Kits | Kits que descuentan componentes | Kits | L | pendiente |
@@ -2029,3 +2029,126 @@ sin PR abierto, que es el hallazgo principal de la auditoría de estado y **no s
 en Safari o en móvil; y, de los otros hallazgos de la auditoría, **nada de lo estructural** (`service.ts`, la deuda de diseño al tope, la prueba frágil de Supply V2,
 el E2E de separación) ni la Capa 2 de RLS. Tampoco se probaron a mano los casos raros de la `key` (cambiar de filtro y volver rápido, el botón «atrás» del
 navegador): el E2E cubre «filtrar → quitar», que es el que fallaba.
+
+## 34. INV-5b4 · qué se hizo
+
+**Sin migración.** Es la primera entrega de lotes que no toca el esquema: lo que cada lote tiene enviado, recibido, devuelto y en camino **sale del ledger**
+(que es inmutable) y no de una tabla nueva; una tabla «lotes de la línea» habría sido un dato más que podía descuadrarse del ledger. Por eso **no hay SQL que
+aplicar** ni cambia el orden de despliegue: se fusiona como cualquier cambio de código (la `20261068`, que da los lotes, ya va antes en la misma tanda).
+
+**El problema.** Hasta 5b3 un producto con lotes no se podía transferir: la transferencia directa y el envío con estado se negaban con `LOTES_NO_SOPORTADO`. Un
+lote es **del producto y de la empresa, no de la sucursal**, así que el mismo lote existe en el origen y en el destino; transferir es mover unidades de **ese**
+lote de un saldo a otro, y el destino debe recibirlas **en el mismo lote** (con el mismo código y el mismo vencimiento), no en «SIN LOTE».
+
+**Qué hace cada camino.**
+
+| Camino | De qué lotes sale | Cómo entra al destino |
+|---|---|---|
+| Transferencia directa (ficha del producto) | El que antes vence (FEFO, sin tocar lo vencido) o los que se elijan (`[{ loteId, cantidad }]`) | Una entrada con **el mismo reparto**, en el mismo momento |
+| Enviar (transferencia con estado) | Igual, **por línea**; un envío puede llevar productos con y sin lotes | Al **recibir**, lote por lote (ver abajo); mientras tanto, nada en el destino |
+| Recibir | — | Se dice de qué lotes llegó, o se deduce cuando no hay duda |
+| Cancelar | — | Vuelve al origen, **de cada lote, lo que sigue en camino** |
+| Cerrar con faltante | — | Lo que no llegó queda como perdido y, en el detalle, de qué lote era |
+
+**Recibir (la regla que cuesta).** Cada tanda de recepción dice de qué lotes llegó lo recibido (`lotes: [{ loteId, cantidad }]` por línea; deben sumar lo que llegó
+de esa línea). No se puede recibir de un lote **más de lo que de él sigue en camino** (enviado menos recibido menos devuelto), aunque a la línea le falte más:
+si se enviaron 6 del lote A y 4 del B y ya llegaron 6 de A, recibir 1 más de A se rechaza (`RECIBE_MAS_DE_LO_ENVIADO`) aunque queden 4 en camino de la línea. Un lote
+que no se envió en esa línea se rechaza (`LOTE_AJENO`). Sin decir los lotes: si llega **todo lo que falta** de la línea, llega todo lo que falta de cada lote;
+si no, solo se sabe de qué lote es cuando de la línea **queda un solo lote en camino**; con varios hay que decirlo (`LOTES_FALTAN`) y no se inventa. «Recibir todo lo
+pendiente» siempre se resuelve solo. **El tope por lote lo hace cumplir el servicio, con la transferencia bloqueada** (`FOR UPDATE` de la fila de la
+transferencia, que ya serializaba recepciones y cancelaciones); **no lo hace cumplir la base**: lo que la base vigila (disparadores diferidos) es que los lotes
+sumen el saldo de la sucursal y que cada movimiento esté repartido por completo, no cuánto de cada lote se envió. Si el ledger y la línea no cuadran (alguien
+escribió por fuera del servicio), recibir y cancelar se niegan a repartir a ciegas (`TRASLADO_DESCUADRADO`).
+
+**Idempotencia.** La misma clave con **los mismos lotes** es un reintento; con otros lotes, `CLAVE_REUTILIZADA` (directa, envío y recepción). Solo se compara lo que se
+dijo: sin decir lotes manda FEFO y reintentar devuelve lo de siempre.
+
+**Lo vencido.** FEFO no reparte lo vencido; si lo vendible no alcanza, el error dice cuánto hay vencido. **Eligiendo los lotes a mano sí se puede mover un lote vencido**
+(es la misma regla de dañar, ajustar o dar de baja eligiendo lote; la pantalla marca cada lote como vencido, por vencer o vigente). Un lote que vence **mientras va en
+camino** llega igual: la mercancía llegó, y en el destino ya figura vencida como cualquier otra.
+
+**Pantallas.**
+
+- **Ficha del producto con lotes:** el formulario «Transferir entre sucursales» ya aparece y pregunta «De qué lotes sale»: *el que antes vence (automático)* o *elegir los
+  lotes* (una fila por lote del origen con lo disponible y un campo; la cantidad pasa a ser la suma). El aviso y la tarjeta de activar lotes dejaron de decir que no se
+  puede transferir.
+- **Nueva transferencia con envío:** al añadir un producto que lleva lotes, la línea dice «lleva lotes» y ofrece «Elegir de qué lotes sale» (se cargan los lotes del origen;
+  si se cambia el origen se vuelven a cargar y lo tecleado se descarta); un producto sin lotes en el mismo envío no cambia.
+- **Detalle de la transferencia:** cada línea con lotes enseña una sublista por lote (enviado, recibido, devuelto y en camino; cerrada con faltante, lo que quedó de un lote
+  se llama «Perdido»); la recepción pide **lote por lote** (con tope por lote); el historial dice de qué lotes es cada movimiento.
+- **CSV de la transferencia:** gana un bloque «Lotes» (por línea) y una columna «Lotes» en los movimientos, **solo si la transferencia lleva lotes** (sin ellos es el mismo
+  archivo de siempre); el código del lote se neutraliza contra fórmulas de hoja de cálculo.
+
+**Lo que sigue prohibido a propósito.** Activar los lotes de un producto **mientras va en una transferencia en camino** (`ACTIVAR_CON_TRANSFERENCIA`): su línea en tránsito
+no tiene lotes de los que repartir y cambiaría de régimen a mitad de camino; se recibe o se cancela primero. El conteo **suelto** de la ficha y la importación de
+entradas por CSV siguen sin trabajar con lotes (los únicos dos lugares que aún llaman a `exigirSinLotes`).
+
+**Archivos.** `modules/inventory/traslados.ts` (lo puro: `validarRepartoDeLinea`, `pendienteDeLote`, `repartoDeRecepcion`, `repartoDeCancelacion`, `repartoDeTextos`, `sinLotes`),
+`lotes-queries.ts` (`lotesDeTrasladoEnTx`), `service.ts` (`transferirEnTx`, `enviarTrasladoEnTx`, `recibirTrasladoEnTx`, `cancelarTrasladoEnTx` y sus dos ayudas
+`repartosDeRecepcion` y `repartosDeCancelacionEnTx`), `queries.ts` (el detalle), `actions.ts` (`lotes` en las tres acciones y `lotesParaTransferir`, con el permiso `transferir`),
+`exportacion.ts` y `components/inventario/` (`ElegirLotes`, `TransferirForm`, `EnviarTransferenciaForm`, `RecibirTransferenciaForm`) con las páginas de la ficha y de la transferencia.
+
+**Lo que 5b4 NO hace.** No hay migración (y por eso no hay ninguna garantía **de base** del tope por lote: es del servicio); la tarjeta «En camino entre sucursales» de la ficha
+sigue siendo por producto, no por lote; la lista de transferencias no enseña lotes; no se puede corregir el vencimiento de un lote ni desactivar los lotes de un producto (5b5);
+y cada línea de un envío resuelve su reparto con consultas propias (no se midió un envío de 200 líneas con muchos productos con lotes contra una base remota).
+
+## 35. Verificación de INV-5b4 (2026-10-16)
+
+Local, sobre PostgreSQL 16 desechable. **INV-5b4 no trae migración**: no hay SQL que aplicar, no se tocó ninguna base real y el orden de despliegue no cambia (la
+`20261068`–`20261069` siguen esperando al merge de la rama, como antes). Sin Supabase real, Vercel, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se
+ven** la elección de lotes, la recepción por lote ni el detalle de la transferencia: el E2E comprueba qué dicen y qué hacen, no su aspecto (ni capturas ni revisión visual
+en móvil).
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo y ninguno en inventario: son de `apps/client` y de soporte de pruebas) |
+| `bun run build` y `bun run presupuesto` | verdes; entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB; indicador general **8.968/9.200 KB (97 %)** (8.948 antes de 5b4: +20 KB, de los formularios de lotes; quedan 232 KB de margen) |
+| Unitarias (`bun run test`) | 4626 pruebas: 4619 pasan, 0 fallan, 7 omitidas heredadas (18 nuevas de 5b4 y 6 de la entrega anterior) |
+| PostgreSQL (`bun run test:db`, base `supplytest`) | **989/989** (968 de antes + 21 nuevas), a la primera |
+| Pruebas nuevas | 18 puras y guardias (`inventario-traslados-lotes.test.ts`), 21 contra PostgreSQL (`inventory-traslados-lotes.db.test.ts`) y 1 recorrido E2E (en `inventario-lotes.spec.ts`); se ajustaron 5 pruebas de 4 archivos que daban por bueno el bloqueo anterior (la guardia de lo que se niega con lotes, la de la ficha, la lista de acciones exportadas, una prueba de 5a contra PostgreSQL y una afirmación del E2E de 5a) |
+| E2E (`node scripts/e2e/correr.mjs`, escritorio) | **22/22** con el build final: `inventario-admin` (15) e `inventario-lotes` (7) |
+| Deriva del esquema | no aplica: **no hay cambios de esquema ni migración** |
+| Mutaciones | **56**: 51 detectadas a la primera y 5 sobrevivieron; las 5 se mataron (ver abajo). Aparte, un segundo pase con **solo** las pruebas contra PostgreSQL (21 mutantes del servicio y de la lectura por lote, sin las guardias estáticas): 20 detectados y 1 sobrevivió, ya detectado con una prueba nueva |
+
+Qué cubren las pruebas contra PostgreSQL (servicio real): transferir directo sin elegir (FEFO: sale A entero y parte de B, y entra al destino en los mismos lotes con su
+vencimiento, sin crear lotes nuevos) y eligiendo (lo que no cuadra —un lote sin lo pedido, un lote de otro producto, lotes que no suman, mal armados— se rechaza sin mover
+nada); FEFO que no toca lo vencido y dice cuánto hay vencido; un producto sin lotes que no admite lotes y se transfiere como siempre; la misma clave con los mismos lotes
+(reintento) y con otros (`CLAVE_REUTILIZADA`), en la directa, el envío y la recepción; enviar eligiendo lotes junto a un producto sin lotes, con lo enviado por lote saliendo
+del ledger; **todo o nada** al enviar (ni movimientos, ni repartos, ni lotes, ni número gastado); recibir por lote en tandas (el tope es **por lote**, un lote ajeno, la duda
+entre varios lotes, deducirlo cuando queda uno, «todo lo pendiente»); cerrar con faltante (el motivo, y que origen + destino + perdido sumen lo que había de **cada lote**);
+cancelar devolviendo cada lote a su sitio (y solo los que tienen algo en camino); dos transferencias del mismo producto entre las mismas sucursales a la vez en camino
+sin mezclarse; la concurrencia (tres recepciones del mismo lote, recibir contra cancelar, y tres salidas del último lote); un lote que vence mientras va en camino; activar
+lotes que sigue vetado en tránsito; un producto que pasa por tres sucursales conservando sus lotes; y el ledger que **no cuadra con las líneas** (se desajusta a mano con
+la replicación desactivada) para comprobar que recibir y cancelar se niegan a repartir a ciegas.
+
+Qué cubre el recorrido E2E: la leche con dos lotes (L-A vence pronto y L-B lejano) y un pan sin lotes → transferir desde la ficha sin elegir (sale L-A y entra en L-A; L-A se
+agota en el origen) → transferir **eligiendo** los lotes de Norte a Principal (la cantidad es la suma de lo tecleado y el historial dice los lotes) → un envío donde la línea de
+la leche dice «lleva lotes», deja elegirlos y viaja junto al pan; más de lo que hay **rechaza todo el envío** y un lote al que le falta lo pedido (aunque en total alcance)
+también y dice cuál → la transferencia enseña los lotes de cada línea y de cada movimiento → recibir lote por lote (por encima del tope de un lote el botón se bloquea) →
+cancelar → el CSV con el bloque y la columna de lotes → las fichas con cada lote en su sitio.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Tres errores míos, ya corregidos antes de entregar.** (1) Ejecuté `prettier` sobre cinco archivos de pantallas sin configuración y los **reformateó enteros** (comillas
+  dobles, punto y coma, 80 columnas): el repositorio **no tiene configuración de prettier** y se escribe a mano a unas 240 columnas. Se deshizo (se volvió a formatear con
+  esas opciones y se revirtió a mano lo que no era mío) y se comprobó con `git diff --stat` que el cambio solo trae lo propio; **no se vuelve a ejecutar prettier sobre el
+  repositorio**. (2) Mi primer recorrido E2E esperaba un mensaje de lote cuando el error real era el de «no alcanza en total» (el servicio comprueba primero lo que hay en la
+  sucursal y después el lote); ahora el E2E cubre **los dos** rechazos. (3) Mis pruebas de «mal armado» daban por hecho un solo código: la transferencia directa responde
+  `LOTES_FALTAN` (la regla que ya usan dañar, ajustar y dar de baja) y el envío `LOTE_INVALIDO` (lo rechaza antes la validación de líneas); ambos rechazan, pero **son dos
+  códigos distintos para lo mismo** y no se unificaron.
+- **El E2E encontró un defecto de accesibilidad real:** la lista de lotes de la línea en el detalle y la de la recepción tenían **el mismo nombre accesible**
+  («Lotes de …»), así que un lector de pantalla (y el propio E2E) no podía distinguirlas; la de la recepción pasó a «Lotes por recibir de …».
+- **Mutaciones: lo que enseñaron los 5 sobrevivientes del primer pase.** Ninguna prueba comprobaba que la lectura que ofrece lotes al transferir **filtrara por la
+  sucursal de origen** (se sacó a una función pura, `lotesTransferiblesDe`, y se prueba), ni —en las pantallas— que elegir lotes haga que la cantidad sea la **suma**, que un
+  envío solo mande lotes cuando se eligieron, ni que el tope de la recepción sea por lote; cada uno tiene ahora su guardia. Y el pase solo con PostgreSQL enseñó que **nada
+  detectaba que la lectura por lote mezclara los movimientos de otras transferencias** del mismo producto: dos transferencias terminadas se compensan (lo enviado = lo
+  recibido + lo devuelto) y por eso la prueba que repetía rondas no lo notaba; hacen falta **dos en camino a la vez** entre las mismas sucursales, y ahora hay una prueba.
+- **Dos decisiones que conviene conocer.** (a) **Eligiendo los lotes a mano sí se puede transferir un lote vencido** (FEFO nunca lo hace): es la misma regla que ya existía
+  al dañar, ajustar o dar de baja eligiendo lote, y la pantalla marca cada lote como vencido, por vencer o vigente; no se bloqueó porque a veces la mercancía vencida se
+  mueve para destruirla. Si se quiere vetar, es un cambio de una línea y una prueba. (b) **El tope por lote al recibir lo hace cumplir el servicio, no la base** (ver §34).
+
+**Qué NO se verificó:** cómo se ve nada (ni escritorio con capturas, ni móvil); Supabase real, RLS o permisos de la base real (todo se probó con el rol de la base desechable);
+**que el tope por lote aguante una recepción real simultánea desde dos dispositivos** más allá de las 3 peticiones en paralelo de la prueba; el rendimiento de un envío de 200
+líneas con muchos productos con lotes **contra una base remota** (cada línea resuelve su reparto con consultas propias; localmente un envío de 200 líneas sin lotes cabe en
+la transacción y se probó, uno con 200 líneas con lotes no); la pantalla de recepción con los 20 lotes que admite una línea (solo se probó con 2); el aviso a los
+administradores al enviar, que no cambia; y, por fin, **que la rama sigue sin PR ni CI remoto** desde INV-4a: lo que aquí se llama «verde» es local.

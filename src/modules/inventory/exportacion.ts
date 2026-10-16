@@ -331,8 +331,20 @@ export interface TrasladoParaCsv {
   enviadoPorNombre: string | null
   cerradoPorNombre: string | null
   motivoCierre: string | null
-  detalle: ReadonlyArray<{ sku: string; barcode: string | null; itemNombre: string; nombreVariante: string; esDefault: boolean; enviado: number; recibido: number; devuelto: number; perdido: number }>
-  historial: ReadonlyArray<{ tipo: string; cantidad: number; sucursalNombre: string; producto: string; sku: string; creadoEn: Date; usuarioNombre: string | null; motivo: string | null }>
+  detalle: ReadonlyArray<{
+    sku: string
+    barcode: string | null
+    itemNombre: string
+    nombreVariante: string
+    esDefault: boolean
+    enviado: number
+    recibido: number
+    devuelto: number
+    perdido: number
+    /** INV-5b4: de qué lotes es la línea (vacío o ausente si el producto no lleva lotes). */
+    lotes?: ReadonlyArray<{ codigo: string; vencimiento: string | null; enviado: number; recibido: number; devuelto: number; pendiente: number }>
+  }>
+  historial: ReadonlyArray<{ tipo: string; cantidad: number; sucursalNombre: string; producto: string; sku: string; creadoEn: Date; usuarioNombre: string | null; motivo: string | null; lotes?: string | null }>
 }
 
 const ETIQUETA_TIPO_HISTORIAL: Record<string, string> = { TRANSFER_OUT: 'Salida del origen', TRANSFER_IN: 'Entrada al destino' }
@@ -341,6 +353,9 @@ const ETIQUETA_TIPO_HISTORIAL: Record<string, string> = { TRANSFER_OUT: 'Salida 
 export function trasladoToCsv(t: TrasladoParaCsv, zonaHoraria: string): string {
   const lineas = t.detalle.map((l) => ({ ...l, nombre: l.esDefault ? l.itemNombre : `${l.itemNombre} · ${l.nombreVariante}`, pendiente: pendienteDeLinea(l) }))
   const suma = (f: (l: (typeof lineas)[number]) => number) => lineas.reduce((s, l) => s + f(l), 0)
+  // INV-5b4: las columnas y el bloque de lotes aparecen SOLO si la transferencia lleva algún producto con lotes (el CSV de siempre no cambia).
+  const filasDeLotes = lineas.flatMap((l) => (l.lotes ?? []).map((x) => [SIN_FORMULA(l.sku), SIN_FORMULA(l.nombre), SIN_FORMULA(x.codigo), x.vencimiento ?? 'No vence', x.enviado, x.recibido, x.devuelto, x.pendiente]))
+  const conLotes = t.historial.some((m) => m.lotes)
   return armarCsvBloques([
     {
       titulo: 'Transferencia',
@@ -370,9 +385,12 @@ export function trasladoToCsv(t: TrasladoParaCsv, zonaHoraria: string): string {
       encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Enviado', 'Recibido', 'Devuelto al origen', 'Perdido', 'En camino'],
       filas: lineas.map((l) => [SIN_FORMULA(l.sku), SIN_FORMULA(l.barcode), SIN_FORMULA(l.nombre), l.enviado, l.recibido, l.devuelto, l.perdido, l.pendiente]),
     },
+    ...(filasDeLotes.length > 0
+      ? [{ titulo: 'Lotes', encabezados: ['SKU', 'Producto', 'Lote', 'Vencimiento', 'Enviado', 'Recibido', 'Devuelto al origen', 'En camino'], filas: filasDeLotes }]
+      : []),
     {
       titulo: 'Movimientos',
-      encabezados: ['Fecha y hora', 'Movimiento', 'Sucursal', 'SKU', 'Producto', 'Cantidad', 'Usuario', 'Motivo'],
+      encabezados: ['Fecha y hora', 'Movimiento', 'Sucursal', 'SKU', 'Producto', 'Cantidad', 'Usuario', 'Motivo', ...(conLotes ? ['Lotes'] : [])],
       filas: t.historial.map((m) => [
         fechaHoraCsv(m.creadoEn, zonaHoraria),
         ETIQUETA_TIPO_HISTORIAL[m.tipo] ?? m.tipo,
@@ -382,6 +400,7 @@ export function trasladoToCsv(t: TrasladoParaCsv, zonaHoraria: string): string {
         m.cantidad,
         SIN_FORMULA(m.usuarioNombre ?? 'Sistema'),
         SIN_FORMULA(m.motivo),
+        ...(conLotes ? [SIN_FORMULA(m.lotes ?? '')] : []),
       ]),
     },
   ])

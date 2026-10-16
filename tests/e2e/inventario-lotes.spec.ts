@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
-import { empresaCatalogo, itemSembrado, sucursalSembrada, varianteDe, type EmpresaCatalogo } from './catalogo-arnes'
+import { empresaCatalogo, existenciasSembradas, itemSembrado, sucursalSembrada, varianteDe, type EmpresaCatalogo } from './catalogo-arnes'
 
 /**
  * INVENTARIO · LOTES Y VENCIMIENTO (INV-5a), de punta a punta en el panel.
@@ -18,6 +18,11 @@ import { empresaCatalogo, itemSembrado, sucursalSembrada, varianteDe, type Empre
  * INV-5b3 (conteo por lote): contar a ciegas eligiendo el lote de un producto que los lleva → la lista de lo contado y lo que falta por
  * contar salen por lote → importar una hoja con la columna «lote» (con errores no entra nada) → la hoja en blanco trae una fila por lote →
  * revisar las diferencias por lote y su CSV → aplicar ajusta cada lote por su diferencia → la ficha, el historial y el informe lo muestran.
+ *
+ * INV-5b4 (transferencias con lotes): transferir desde la ficha sin elegir lote (sale el que antes vence) y eligiéndolos → enviar con lotes
+ * (la línea de un producto con lotes deja elegirlos y su cantidad es la suma; un producto sin lotes viaja en el mismo envío) → la
+ * transferencia enseña los lotes de cada línea → recibir lote por lote con tope por lote → cancelar devuelve cada lote a su sitio → el
+ * historial y el CSV dicen de qué lotes es cada movimiento.
  *
  * Las fechas son relativas a HOY (10 días atrás, 10 y 400 días adelante): la prueba no depende del día en que se corra.
  *
@@ -124,9 +129,9 @@ test.describe('Inventario · lotes y vencimiento', () => {
     await expect(p.getByLabel('Lotes y vencimiento')).toHaveCount(0)
     await expect(p.getByText(/Este producto lleva/).first()).toBeVisible()
     expect(await cifras(filaDe(p, 'Principal', 'SIN LOTE'))).toEqual([4, 0, 0])
-    // Con lotes no hay conteo suelto ni transferencia.
+    // Con lotes no hay conteo suelto; la transferencia SÍ (INV-5b4) y pregunta de qué lotes sale.
     await expect(p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByLabel('Movimiento').locator('option', { hasText: 'Conteo físico' })).toHaveCount(0)
-    await expect(p.getByRole('form', { name: 'Transferir existencias' })).toHaveCount(0)
+    await expect(p.getByRole('form', { name: 'Transferir existencias' }).getByRole('group', { name: 'De qué lotes sale' })).toBeVisible()
 
     // ── Recibir: el lote es obligatorio; el vencimiento de un lote existente no se reescribe ──
     await movimiento(p, 'Principal', { operacion: 'Entrada de mercancía', cantidad: 5 })
@@ -651,6 +656,165 @@ test.describe('Inventario · lotes y vencimiento', () => {
     await expect(conteos.getByRole('listitem').first()).toContainText('Aplicado')
     await expect(conteos.getByRole('listitem').first()).toContainText('+1')
     await expect(conteos.getByRole('listitem').first()).toContainText('−2')
+
+    expect(errores, errores.join('\n')).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-5b4 · transferencias con lotes: transferir sin elegir (FEFO) y eligiendo, enviar con lotes junto a un producto sin lotes, recibir lote por lote con tope, cancelar devuelve cada lote a su sitio', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+    const LECHE = `Leche con lotes E2E ${sufijo}`
+    const PAN = `Pan sin lotes E2E ${sufijo}`
+    const principalId = (await sucursalSembrada(con.id, 'Principal')).id
+    const leche = await itemSembrado(con.id, { name: LECHE, slug: `leche-lot-${sufijo}`, controlaInventario: true, variantes: [{ name: 'Default', sku: `LEC-${sufijo}`, price: 90, porDefecto: true }] })
+    const pan = await itemSembrado(con.id, { name: PAN, slug: `pan-lot-${sufijo}`, controlaInventario: true, variantes: [{ name: 'Default', sku: `PAN-${sufijo}`, price: 40, porDefecto: true }] })
+    const vLeche = await varianteDe(leche.id)
+    const vPan = await varianteDe(pan.id)
+    await existenciasSembradas(con.id, vPan, principalId, 10)
+
+    // ── Los lotes: se activan y entran L-A (vence pronto, 6) y L-B (lejano, 4) en Principal ──
+    await p.goto(`/admin/inventario/${vLeche}`)
+    const oferta = p.getByLabel('Lotes y vencimiento')
+    await oferta.getByRole('button', { name: 'Activar lotes en este producto' }).click()
+    await oferta.getByRole('group', { name: 'Confirmar la activación de lotes' }).getByRole('button', { name: 'Sí, activar lotes' }).click()
+    await expect(p.getByText(/Este producto lleva/).first()).toBeVisible({ timeout: 15_000 })
+    await expect(p.getByText(/Se transfiere \(y se envía a otra sucursal\) lote por lote/)).toBeVisible()
+    await movimiento(p, 'Principal', { operacion: 'Entrada de mercancía', cantidad: 6, lote: 'L-A', vence: PRONTO })
+    await expect(filaDe(p, 'Principal', 'L-A')).toBeVisible({ timeout: 15_000 })
+    await movimiento(p, 'Principal', { operacion: 'Entrada de mercancía', cantidad: 4, lote: 'L-B', vence: LEJANO })
+    await expect(filaDe(p, 'Principal', 'L-B')).toBeVisible({ timeout: 15_000 })
+
+    // ── Transferir desde la ficha SIN elegir: sale el que antes vence (L-A) y entra al destino en el mismo lote ──
+    const tr = p.getByRole('form', { name: 'Transferir existencias' })
+    await elegir(tr.getByLabel('Desde'), 'Principal')
+    await elegir(tr.getByLabel('Hacia'), 'Norte')
+    await expect(tr.getByRole('radio', { name: 'El que antes vence (automático)' })).toBeChecked()
+    await tr.getByLabel('Cantidad').fill('8')
+    await tr.getByRole('button', { name: 'Transferir' }).click()
+    await expect(filaDe(p, 'Norte', 'L-A')).toBeVisible({ timeout: 15_000 })
+    expect(await cifras(filaDe(p, 'Norte', 'L-A'))).toEqual([6, 0, 0])
+    expect(await cifras(filaDe(p, 'Norte', 'L-B'))).toEqual([2, 0, 0])
+    await expect(filaDe(p, 'Principal', 'L-A'), 'L-A se agotó en Principal').toHaveCount(0)
+    expect(await cifras(filaDe(p, 'Principal', 'L-B'))).toEqual([2, 0, 0])
+
+    // ── Transferir ELIGIENDO los lotes (de Norte a Principal: 1 de L-A y 2 de L-B); la cantidad es la suma ──
+    await elegir(tr.getByLabel('Desde'), 'Norte')
+    await elegir(tr.getByLabel('Hacia'), 'Principal')
+    await tr.getByRole('radio', { name: 'Elegir los lotes' }).check()
+    await expect(tr.getByLabel('Cantidad')).toHaveText('0')
+    await tr.getByLabel('Cuánto sale del lote L-A de este producto').fill('1')
+    await tr.getByLabel('Cuánto sale del lote L-B de este producto').fill('2')
+    await expect(tr.getByLabel('Cantidad')).toHaveText('3')
+    await tr.getByRole('button', { name: 'Transferir' }).click()
+    await expect.poll(async () => (await cifras(filaDe(p, 'Principal', 'L-A')).catch(() => [-1]))[0], { timeout: 15_000 }).toBe(1)
+    expect(await cifras(filaDe(p, 'Principal', 'L-B'))).toEqual([4, 0, 0])
+    expect(await cifras(filaDe(p, 'Norte', 'L-A'))).toEqual([5, 0, 0])
+    await expect(filaDe(p, 'Norte', 'L-B'), 'L-B se agotó en Norte').toHaveCount(0)
+    // El historial de la ficha dice de qué lotes es la transferencia.
+    await expect(p.getByRole('list', { name: 'Historial de movimientos' }).getByText(/Lotes: L-B ×2, L-A ×1/).first()).toBeVisible()
+
+    // ── Enviar con lotes: la línea deja elegirlos y viaja junto a un producto sin lotes ──
+    await p.goto('/admin/inventario/transferencias/nueva')
+    const form = p.getByRole('form', { name: 'Nueva transferencia con envío' })
+    await form.getByLabel('Sucursal que envía').selectOption({ label: 'Principal' })
+    await form.getByLabel('Sucursal que recibe').selectOption({ label: 'Norte' })
+    const buscar = form.getByLabel('Escanear o buscar un producto para enviar')
+    const lineas = form.getByRole('list', { name: 'Productos del envío' })
+    await buscar.fill(`LEC-${sufijo}`)
+    await buscar.press('Enter')
+    const fLeche = lineas.getByRole('listitem').filter({ hasText: LECHE })
+    await expect(fLeche).toContainText('lleva lotes')
+    await expect(fLeche).toContainText('Sale el lote que antes vence')
+    await fLeche.getByLabel('Elegir de qué lotes sale').check()
+    await expect(fLeche.getByRole('table', { name: `Lotes de ${LECHE}` })).toBeVisible({ timeout: 15_000 })
+    // Los lotes se enseñan con lo que hay y en orden FEFO.
+    await expect(fLeche.locator('tr[data-lote="L-A"]')).toContainText('1')
+    await expect(fLeche.locator('tr[data-lote="L-B"]')).toContainText('4')
+    await fLeche.getByLabel(`Cuánto sale del lote L-A de ${LECHE}`).fill('1')
+    await fLeche.getByLabel(`Cuánto sale del lote L-B de ${LECHE}`).fill('3')
+    await expect(fLeche.getByLabel(`Cantidad de ${LECHE}`)).toHaveText('4')
+    await buscar.fill(`PAN-${sufijo}`)
+    await buscar.press('Enter')
+    const fPan = lineas.getByRole('listitem').filter({ hasText: PAN })
+    await expect(fPan).not.toContainText('lleva lotes')
+    await fPan.getByRole('textbox').fill('3')
+    await expect(form.getByText(/2 productos · 7 unidades · de Principal a Norte/)).toBeVisible()
+    // Más de lo que hay en total rechaza TODO el envío (y el pan, que sí alcanzaba, tampoco sale).
+    await fLeche.getByLabel(`Cuánto sale del lote L-B de ${LECHE}`).fill('9')
+    await form.getByRole('button', { name: 'Enviar transferencia' }).click()
+    await expect(p.getByText(/No alcanza para enviar desde «Principal»/).first()).toBeVisible({ timeout: 15_000 })
+    await expect(p).toHaveURL(/\/transferencias\/nueva$/)
+    // Alcanza en total pero NO en el lote elegido (de L-A hay 1 y se piden 3): también se rechaza todo, y dice qué lote.
+    await fLeche.getByLabel(`Cuánto sale del lote L-A de ${LECHE}`).fill('3')
+    await fLeche.getByLabel(`Cuánto sale del lote L-B de ${LECHE}`).fill('1')
+    await form.getByRole('button', { name: 'Enviar transferencia' }).click()
+    await expect(p.getByText(/El lote L-A solo tiene 1 unidad/).first()).toBeVisible({ timeout: 15_000 })
+    await expect(p).toHaveURL(/\/transferencias\/nueva$/)
+    await fLeche.getByLabel(`Cuánto sale del lote L-A de ${LECHE}`).fill('1')
+    await fLeche.getByLabel(`Cuánto sale del lote L-B de ${LECHE}`).fill('3')
+    await form.getByRole('button', { name: 'Enviar transferencia' }).click()
+    await p.waitForURL(/\/admin\/inventario\/transferencias\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+    const trasladoId = p.url().split('/').pop()!
+
+    // ── La transferencia enseña los lotes de cada línea ──
+    const lotesLinea = p.getByRole('list', { name: `Lotes de ${LECHE}` })
+    await expect(lotesLinea.locator('li[data-lote="L-A"]')).toContainText('Enviado 1')
+    await expect(lotesLinea.locator('li[data-lote="L-B"]')).toContainText('Enviado 3')
+    await expect(lotesLinea.locator('li[data-lote="L-B"]')).toContainText('En camino 3')
+    await expect(p.getByRole('list', { name: `Lotes de ${PAN}` })).toHaveCount(0)
+    const movs = p.getByRole('list', { name: 'Movimientos de la transferencia' })
+    await expect(movs).toContainText('lotes: L-B ×3, L-A ×1')
+
+    // ── Recibir lote por lote: el tope es POR LOTE ──
+    const llego = p.getByRole('list', { name: 'Lo que llegó' })
+    await expect(llego.getByLabel(`Llegó del lote L-B de ${LECHE}`)).toHaveValue('3')
+    await llego.getByLabel(`Llegó del lote L-B de ${LECHE}`).fill('4') // de L-B solo faltan 3
+    await expect(p.getByRole('button', { name: 'Recibir lo que llegó' })).toBeDisabled()
+    await llego.getByLabel(`Llegó del lote L-B de ${LECHE}`).fill('1')
+    await llego.getByLabel(`Llegó del lote L-A de ${LECHE}`).fill('0')
+    await llego.getByLabel(`Llegó de ${PAN}`).fill('0')
+    await p.getByRole('button', { name: 'Recibir lo que llegó' }).click()
+    await expect(p.getByText('Recibida en parte', { exact: true }).first()).toBeVisible({ timeout: 20_000 })
+    await expect(lotesLinea.locator('li[data-lote="L-B"]')).toContainText('Recibido 1')
+    await expect(lotesLinea.locator('li[data-lote="L-B"]')).toContainText('En camino 2')
+    await expect(lotesLinea.locator('li[data-lote="L-A"]')).toContainText('En camino 1')
+    await expect(movs).toContainText('lotes: L-B ×1')
+
+    // ── Cancelar: lo que sigue en camino vuelve al origen, lote por lote ──
+    await p.getByRole('button', { name: 'Cancelar envío' }).click()
+    await p.getByRole('button', { name: /^Sí, cancelar la transferencia/ }).click()
+    await expect(p.getByText('Cancelada', { exact: true }).first()).toBeVisible({ timeout: 20_000 })
+    await expect(lotesLinea.locator('li[data-lote="L-B"]')).toContainText('Devuelto 2')
+    await expect(lotesLinea.locator('li[data-lote="L-A"]')).toContainText('Devuelto 1')
+    await expect(movs).toContainText('lotes: L-B ×2, L-A ×1')
+    // El archivo trae el bloque de lotes y la columna de lotes de cada movimiento.
+    const csv = await p.request.get(`/admin/inventario/transferencias/${trasladoId}/exportar`)
+    expect(csv.status()).toBe(200)
+    const texto = await csv.text()
+    expect(texto).toContain('SKU;Producto;Lote;Vencimiento;Enviado;Recibido;Devuelto al origen;En camino')
+    expect(texto).toMatch(new RegExp(`LEC-${sufijo};${LECHE};L-B;${LEJANO};3;1;2;0`, 'i'))
+    expect(texto).toMatch(new RegExp(`LEC-${sufijo};${LECHE};L-A;${PRONTO};1;0;1;0`, 'i'))
+    expect(texto).toContain('Motivo;Lotes')
+
+    // ── La ficha: cada lote volvió a su sitio (A 1+1, B 1+2 en Principal; lo recibido se quedó en Norte) ──
+    await p.goto(`/admin/inventario/${vLeche}`)
+    await expect(filaDe(p, 'Principal', 'L-A')).toBeVisible({ timeout: 15_000 })
+    expect(await cifras(filaDe(p, 'Principal', 'L-A'))).toEqual([1, 0, 0])
+    expect(await cifras(filaDe(p, 'Principal', 'L-B'))).toEqual([3, 0, 0])
+    expect(await cifras(filaDe(p, 'Norte', 'L-A'))).toEqual([5, 0, 0])
+    expect(await cifras(filaDe(p, 'Norte', 'L-B'))).toEqual([1, 0, 0])
+    // El pan (sin lotes) volvió entero a Principal: 10.
+    await p.goto(`/admin/inventario/${vPan}`)
+    await expect(tarjeta(p, 'Principal')).toBeVisible({ timeout: 15_000 })
+    await expect(p.getByLabel(/^Lotes en/)).toHaveCount(0)
 
     expect(errores, errores.join('\n')).toEqual([])
     await ctx.close()

@@ -174,12 +174,12 @@ test('INV-5a · activar los lotes: precondiciones, apertura íntegra y rastro', 
 
 test('INV-5a · los flujos que todavía no reparten por lote se niegan a tocar un producto con lotes', () => {
   const svc = sinComentarios(leer('src/modules/inventory/service.ts'))
-  // INV-5b3: el conteo de una sesión ya cuenta por lote; quedan el conteo suelto de la ficha y las transferencias.
-  for (const f of ['contarEnTx', 'transferirEnTx', 'enviarTrasladoEnTx']) {
+  // INV-5b3: el conteo de una sesión ya cuenta por lote; INV-5b4: las transferencias (directa y con envío) también. Queda el conteo suelto de la ficha.
+  for (const f of ['contarEnTx']) {
     assert.match(cuerpoDe(svc, f), /exigirSinLotes\(/, f)
   }
-  for (const f of ['registrarConteoProductoEnTx', 'importarConteoEnTx', 'aplicarConteoEnTx']) {
-    assert.doesNotMatch(cuerpoDe(svc, f), /exigirSinLotes\(/, `${f}: ya cuenta por lote`)
+  for (const f of ['registrarConteoProductoEnTx', 'importarConteoEnTx', 'aplicarConteoEnTx', 'transferirEnTx', 'enviarTrasladoEnTx', 'recibirTrasladoEnTx', 'cancelarTrasladoEnTx']) {
+    assert.doesNotMatch(cuerpoDe(svc, f), /exigirSinLotes\(/, `${f}: ya trabaja por lote`)
   }
   // INV-5b2: la orden de compra YA trabaja con lotes (se pide por producto y los lotes se dicen al recibir): no se niega.
   assert.doesNotMatch(sinComentarios(leer('src/modules/inventory/compras-service.ts')), /exigirSinLotes/, 'orden de compra: ya no se niega')
@@ -239,13 +239,14 @@ test('INV-5a · las acciones pasan los lotes a quien los reparte y activar / mov
   assert.match(a, /\.\.\.\(l\?\.lotes === undefined \|\| l\?\.lotes === null \? \{\} : \{ lotes: l\.lotes as never \}\)/, 'las líneas de una entrada llevan sus lotes')
 })
 
-test('INV-5a · las pantallas: la ficha lee los lotes aparte y sin romperse, ofrece activarlos, y un producto con lotes no se transfiere', () => {
+test('INV-5a · las pantallas: la ficha lee los lotes aparte y sin romperse, ofrece activarlos, y un producto con lotes se transfiere por lote', () => {
   const p = sinComentarios(leer('src/app/(admin)/admin/inventario/[varianteId]/page.tsx'))
   assert.match(p, /lotesDeVarianteEnTx\(tx, companyId, varianteId\)/)
   assert.match(p, /console\.error\('\[admin-inventario-ficha\] los lotes no están disponibles'/, 'en su propio try')
   assert.match(p, /lotes && !lotes\.lleva && puedeAjustar/)
   assert.match(p, /<ActivarLotesCard varianteId=/)
-  assert.match(p, /puedeTransferir && !lotes\?\.lleva/, 'sin transferir lo que lleva lotes')
+  assert.doesNotMatch(p, /puedeTransferir && !lotes\?\.lleva/, 'INV-5b4: lo que lleva lotes SÍ se transfiere')
+  assert.match(p, /lotesPorSucursal=\{lotes\?\.lleva \? lotes\.porSucursal : undefined\}/, 'el formulario recibe los lotes de cada sucursal')
   assert.match(p, /lotes=\{lotes\?\.lleva \?/, 'la tarjeta de cada sucursal recibe los lotes')
   const t = leer('src/components/inventario/SucursalInventarioCard.tsx')
   assert.match(t, /!\(lotes && o\.valor === 'CONTEO'\)/, 'sin conteo suelto con lotes')
