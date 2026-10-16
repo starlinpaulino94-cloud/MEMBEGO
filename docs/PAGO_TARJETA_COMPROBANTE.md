@@ -21,7 +21,7 @@ PENDIENTE`. La prueba H4 la **descarta**: `renovarMembresiaPorTarjeta` llama `ma
 `COMPLETADA`. Los «9 pagos / RD$ 14,400» salen de H5 (cobros anteriores a la columna) y, en menor medida, de
 la ventana en que una función serverless muere entre el cobro y `marcarEntrega`.
 
-**Qué NO se sabe sin mirar producción:** cuántos de esos 9 son de H5 y cuántos entregas atascadas reales. Se
+**Qué NO se sabe sin mirar producción** (la fase 4 los separa en pantalla; sigue sin consultarse producción): cuántos de esos 9 son de H5 y cuántos entregas atascadas reales. Se
 distinguen con una consulta de solo lectura (membresía activa + `fechaPago ≥ activadoAt` ⇒ H5; membresía sin
 activar ⇒ atascado real).
 
@@ -33,7 +33,7 @@ activar ⇒ atascado real).
 | 1 | Migración aditiva (`20261053`, `20261054`): `MetodoCobroTipo.TARJETA`, `Transaction.pagoIntentoId` único con CHECK y disparador, `PagoIntento.canal`, backfill demostrable del cumplimiento, módulo puro del comprobante | ✅ (`tests/postgres/pagos-tarjeta-modelo.db.test.ts`, `tests/comprobante-tarjeta.test.ts`) |
 | 2 | Registrar la venta (`SALE`, método `TARJETA`, canal app/web/renovación) justo después de entregar; idempotente y autorreparable; bitácora `PAGO_APROBADO` con método, canal e intento | ✅ (`tests/postgres/pagos-venta-tarjeta.db.test.ts`; H1 y H4 invertidos) |
 | 3 | Comprobante visible e imprimible: Facturas/Registros con filtro «Tarjeta», ficha del cliente, caja («cobros en línea del día», fuera del arqueo), cuadre y cierre, recibo para el cliente (app, web y BFF) | ✅ (pruebas PG, unitarias y E2E; ver abajo) |
-| 4 | Conciliación accionable: lista de casos por hallazgo, «Generar comprobante», «Reintentar entrega», «Marcar entregada», cajas abiertas; regla de entrega que mire `FALLIDA`/`PROCESANDO` atascados y no cuente lo ya entregado | pendiente |
+| 4 | Conciliación accionable: lista de casos por hallazgo, «Generar comprobante», «Reintentar entrega», «Marcar entregada» (con nota), cajas abiertas que llevan a su caja; la regla de entrega distingue «cliente esperando» de «registro sin cerrar» y mira `FALLIDA`/`PROCESANDO` atascados | ✅ (H5, H6 y H7 invertidos; ver abajo) |
 | 5 | Cron de reintento de entregas con aviso a administradores | pendiente |
 | 6 | Backfill de comprobantes retroactivos (solo si se aprueba) y cierre | pendiente |
 
@@ -96,10 +96,41 @@ que el pago, caerá en el día en que se escribe. Los reportes por periodo ya qu
 cuenta lo suyo), pero el cuadre de un día pasado no la verá. Por eso la fase 4 debe fechar la venta con `activadoAt` del
 cobro, o dejarlo escrito como decisión.
 
+## Fase 4: conciliación accionable
+
+`/admin/conciliacion` es ahora una lista de casos con su acción. Ninguna acción recobra dinero, todas se comprueban otra
+vez en el servidor, son idempotentes y dejan un asiento en la bitácora (migración `20261055`, tres acciones nuevas).
+
+| Hallazgo | Casos que lista | Acción |
+|---|---|---|
+| Cobros sin transacción registrada | Cobros con tarjeta ya entregados sin venta, y membresías cobradas sin venta ni pasarela | **Generar comprobante** (tarjeta; se imprime ahí mismo) · Abrir ficha (el resto: el método y quién cobró no se inventan) |
+| Pagos cobrados con entrega pendiente | El cliente pagó y su producto **no** está activo: entrega `FALLIDA`, `PENDIENTE` o `PROCESANDO` atascada | **Reintentar entrega** (vuelve a activar, no recobra) |
+| Cobros entregados que quedaron sin cerrar *(nuevo)* | El producto **sí** está activo (se activó a partir del cobro) pero el cobro nunca se marcó entregado | **Marcar entregada**: exige nota (5 a 300 caracteres), usa la fecha de la activación y genera el comprobante |
+| Cajas abiertas de días anteriores | Sucursal, quién abrió, desde cuándo, cuántos cobros | **Abrir caja** → `/empleado/caja?caja=<id>` (se cierra contando el efectivo) |
+| Turnos con faltante o sobrante | Sucursal, quién cerró, diferencia | **Ver cierre** (el reporte imprimible del turno) |
+
+**La regla de entrega** (`conciliacion-entrega.ts`, pura y probada): un cobro cuyo producto se activó a partir del cobro
+está entregado aunque el registro no lo diga; uno cuyo producto no está activo es un cliente esperando. Un pago anterior de
+la misma membresía no prueba nada sobre el cobro nuevo. Una entrega `PENDIENTE` o `PROCESANDO` de menos de 2 minutos es el
+cobro en curso y no se muestra. Con esto, pagos como los 9 de RD$ 14,400 de la captura se reparten según su causa real en vez de
+contarse todos como clientes esperando (cuántos son de cada tipo solo se sabrá al abrir la pantalla con los datos de
+producción), y un cobro con la entrega fallida deja de salir como «Todo cuadra».
+
+**Permisos.** Los botones usan la misma función que confirmar un pago (`pagos` · `confirmar_pago`); la empresa sale de la
+sesión, nunca del formulario. «Marcar entregada» solo se permite con evidencia: nunca sobre un cliente que no tiene su producto.
+
+**Venta tardía.** La venta se fecha con el momento del **cobro** (`crearTransaccionAplicada({ fecha })`), no con el de su
+escritura: «Generar comprobante» o la autorreparación la dejan en el día en que el cliente pagó. El número de ticket sigue el
+contador de la empresa, así que un comprobante tardío lleva un número mayor que sus vecinos de ese día.
+
+**Decisión 2 resuelta por cómo ya funciona la caja:** cerrar una caja no exige ser quien la abrió; la acción de cierre solo pide
+ser personal de la misma empresa con la caja activada. La conciliación no añade un cierre propio porque el cierre necesita el
+efectivo contado: lleva a la caja, donde se hace.
+
 ## Decisiones del usuario (abiertas)
 
 1. Comprobantes retroactivos de los pagos con tarjeta anteriores: automáticos (evidencia inequívoca) o uno a uno.
-2. ¿Un administrador puede cerrar la caja de otro empleado?
+2. ~~¿Un administrador puede cerrar la caja de otro empleado?~~ Ya puede: el cierre no exige ser quien abrió (ver fase 4).
 3. Sucursal del pago en línea en el cierre del día (¿`sucursalPagoId` o «En línea»?).
 4. Numeración: mismo contador `TCK-` que la caja o serie aparte.
 5. Datos de tarjeta en el comprobante: marca y últimos 4 + autorización, nunca el número completo.
