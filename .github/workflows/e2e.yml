@@ -31,7 +31,9 @@ jobs:
   recorrido-publico:
     name: Recorrido público
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 597 pruebas con un solo worker tardan ~27 min más ~3,5 min de preparación:
+    # con 30 min la corrida se cancelaba al filo (runs #830 y #618) sin ningún fallo.
+    timeout-minutes: 45
 
     services:
       # PostgreSQL real, no una simulación. La mitad de los fallos que estas
