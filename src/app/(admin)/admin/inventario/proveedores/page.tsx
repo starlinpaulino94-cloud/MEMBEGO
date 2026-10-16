@@ -59,7 +59,7 @@ export default async function ProveedoresInventarioPage({ searchParams }: { sear
         </Card>
       ) : (
         <>
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Buscar proveedores">
+          <form key={`${q}|${incluirInactivos ? 1 : 0}`} method="get" className="flex flex-wrap items-end gap-3" aria-label="Buscar proveedores">
             <div className="space-y-1">
               <label htmlFor="pv-q" className="text-xs text-muted-foreground">
                 Nombre, RNC o contacto

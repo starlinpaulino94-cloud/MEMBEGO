@@ -106,7 +106,7 @@ export default async function TransferenciasInventarioPage({ searchParams }: { s
             </section>
           )}
 
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar transferencias">
+          <form key={consulta} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar transferencias">
             <div className="space-y-1">
               <label htmlFor="tf-q" className="text-xs text-muted-foreground">
                 Número o nota

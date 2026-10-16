@@ -1,4 +1,5 @@
 import { CANTIDAD_MAXIMA, EXISTENCIA_MAXIMA, aplicarMovimiento, cubetasDeSaldo, disponible, type Movimiento, type Saldo } from './domain'
+import { CODIGO_SIN_LOTE, esCodigoSinLote } from './lotes'
 
 /**
  * COMMERCE CORE · inventario — conteo físico por sucursal (INV-2b). PURO: sin
@@ -8,6 +9,9 @@ import { CANTIDAD_MAXIMA, EXISTENCIA_MAXIMA, aplicarMovimiento, cubetasDeSaldo, 
  * se cuenta), el sistema recuerda lo que decía en el momento de contar, y al
  * aplicar se ajusta por la DIFERENCIA — no por el número — para que las ventas
  * ocurridas mientras se contaba no se pierdan. Lo que no se contó no se toca.
+ *
+ * INV-5b3 · Un producto que LLEVA LOTES se cuenta POR LOTE: su línea es «producto + lote», con lo contado de ese lote y lo que el
+ * sistema decía de ese lote al contar. Todo lo de arriba vale igual, con el saldo del lote en el lugar del saldo del producto.
  */
 
 /** Prefijo del correlativo: `CNT-2026-000001`. */
@@ -100,13 +104,62 @@ export function resumirVarianza(lineas: ReadonlyArray<{ contado: number; esperad
   return r
 }
 
-/** Lo que más descuadra, primero (por unidades, sin importar el signo); a igualdad, por nombre. */
-export function ordenarPorDiferencia<T extends { contado: number; esperado: number; nombre: string }>(lineas: readonly T[]): T[] {
+/** Lo que más descuadra, primero (por unidades, sin importar el signo); a igualdad, por nombre y, dentro de un producto, por lote. */
+export function ordenarPorDiferencia<T extends { contado: number; esperado: number; nombre: string; lote?: string | null }>(lineas: readonly T[]): T[] {
   return [...lineas].sort((a, b) => {
     const da = Math.abs(diferenciaDeConteo(a.contado, a.esperado))
     const db = Math.abs(diferenciaDeConteo(b.contado, b.esperado))
-    return db - da || a.nombre.localeCompare(b.nombre, 'es')
+    return db - da || a.nombre.localeCompare(b.nombre, 'es') || (a.lote ?? '').localeCompare(b.lote ?? '', 'es')
   })
+}
+
+// ── INV-5b3 · Contar por lote ────────────────────────────────────────────────
+
+/** Lo que identifica una línea de conteo: el producto y, si lleva lotes, el lote. Sirve de llave en mapas, listas y filas de pantalla. */
+export function claveDeLinea(varianteId: string, loteId: string | null | undefined): string {
+  return `${varianteId}|${loteId ?? ''}`
+}
+
+/** «SIN LOTE» o «Lote A-1»: cómo se nombra un lote en una línea de conteo. */
+export function nombreDeLote(codigo: string): string {
+  return esCodigoSinLote(codigo) ? CODIGO_SIN_LOTE : `Lote ${codigo}`
+}
+
+/** «Lote A-1 · vence 2027-09-01», «Lote A-1 · no vence» o «SIN LOTE» (el lote de lo que ya había no lleva fecha). */
+export function etiquetaDeLote(codigo: string, vencimiento: string | null): string {
+  if (esCodigoSinLote(codigo)) return CODIGO_SIN_LOTE
+  return `${nombreDeLote(codigo)} · ${vencimiento ? `vence ${vencimiento}` : 'no vence'}`
+}
+
+/** El nombre de una línea para un mensaje: el producto y, si lo hay, su lote («Crema · lote A-1»). */
+export function nombreDeLinea(producto: string, loteCodigo: string | null | undefined): string {
+  return loteCodigo ? `${producto} · ${esCodigoSinLote(loteCodigo) ? CODIGO_SIN_LOTE : `lote ${loteCodigo}`}` : producto
+}
+
+/**
+ * El orden en que se aplican las líneas de UN producto con lotes: primero lo que SOBRA (suben) y después lo que FALTA (bajan); a igual
+ * signo, por código de lote. Es solo determinista: la suma de los ajustes es la misma en cualquier orden.
+ */
+export function compararParaAplicar(a: { delta: number; loteCodigo: string | null }, b: { delta: number; loteCodigo: string | null }): number {
+  const sa = a.delta > 0 ? 0 : 1
+  const sb = b.delta > 0 ? 0 : 1
+  return sa - sb || (a.loteCodigo ?? '').localeCompare(b.loteCodigo ?? '', 'es')
+}
+
+/**
+ * Reparte movimientos en RONDAS de modo que un mismo saldo de sucursal aparezca UNA sola vez por ronda: la escritura por lote de
+ * movimientos (`escribirMovimientosPorLote`) exige que el «antes» de cada saldo sea el real, y dos ajustes del mismo producto (uno por
+ * lote) se aplican uno tras otro. La k-ésima aparición de un saldo va a la ronda k; se conserva el orden.
+ */
+export function repartirEnRondas<T extends { nivelId: string }>(items: readonly T[]): T[][] {
+  const rondas: T[][] = []
+  const vistas = new Map<string, number>()
+  for (const item of items) {
+    const k = vistas.get(item.nivelId) ?? 0
+    vistas.set(item.nivelId, k + 1)
+    ;(rondas[k] ??= []).push(item)
+  }
+  return rondas
 }
 
 // ── El ajuste de una línea ───────────────────────────────────────────────────

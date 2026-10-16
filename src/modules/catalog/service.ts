@@ -253,6 +253,16 @@ export async function actualizarItemEnTx(
         fallo('ITEM_CON_EXISTENCIAS', 'Este producto todavía tiene existencias registradas. Déjalas en cero (venta, ajuste o baja) antes de dejar de controlar su inventario.')
       }
     }
+    // INV-5d: un kit no lleva existencias propias (se arma de sus componentes) y un componente tiene que llevarlas.
+    const antesControlaba = normalizarCapacidades(item.type, item.capabilities).trackInventory
+    if (nuevas.trackInventory && !antesControlaba) {
+      const esKit = await tx.inventoryKitComponent.count({ where: { companyId, kit: { catalogItemId: item.id } } })
+      if (esKit > 0) fallo('ITEM_ES_KIT', 'Este producto es un kit: se arma de sus componentes y no lleva existencias propias. Quítale la receta (Inventario → Kits) antes de controlar su inventario.')
+    }
+    if (!nuevas.trackInventory && antesControlaba) {
+      const enKits = await tx.inventoryKitComponent.count({ where: { companyId, component: { catalogItemId: item.id } } })
+      if (enKits > 0) fallo('ITEM_EN_KITS', 'Este producto es componente de uno o más kits y necesita llevar existencias. Quítalo de esos kits (Inventario → Kits) antes de dejar de controlar su inventario.')
+    }
     data.capabilities = { ...nuevas }
     despues.capabilities = 'actualizadas'
   }
@@ -454,6 +464,18 @@ export async function eliminarVarianteEnTx(
   if (movimientos > 0) {
     fallo('VARIANTE_CON_INVENTARIO', 'Esta variante tiene historial de inventario y no se puede borrar. Márcala como descontinuada.')
   }
+  // INV-5d: una variante en una receta de kits (o con kits vendidos) no se borra; la receta de un kit sin ventas es solo configuración.
+  const enKits = await tx.inventoryKitComponent.count({ where: { companyId, componentVariantId: actual.id } })
+  const kitsVendidos = await tx.inventoryKitReservation.count({ where: { companyId, OR: [{ kitVariantId: actual.id }, { componentVariantId: actual.id }] } })
+  if (enKits > 0 || kitsVendidos > 0) {
+    fallo('VARIANTE_EN_KITS', 'Esta variante forma parte de un kit (o se vendió en uno) y no se puede borrar. Quítala de los kits o márcala como descontinuada.')
+  }
+  await tx.inventoryKitComponent.deleteMany({ where: { companyId, kitVariantId: actual.id } })
+  // INV-5a: los lotes de un producto sin movimientos son solo configuración (la base lo permite; con historial no).
+  await tx.inventoryLotOpening.deleteMany({ where: { companyId, level: { catalogVariantId: actual.id } } })
+  await tx.inventoryLotBalance.deleteMany({ where: { companyId, catalogVariantId: actual.id } })
+  await tx.inventoryLot.deleteMany({ where: { companyId, catalogVariantId: actual.id } })
+  await tx.inventoryLotTracking.deleteMany({ where: { companyId, catalogVariantId: actual.id } })
   await tx.inventoryLevel.deleteMany({ where: { companyId, catalogVariantId: actual.id } })
 
   await tx.catalogVariant.delete({ where: { id: actual.id } })

@@ -110,7 +110,7 @@ export default async function ReposicionInventarioPage({ searchParams }: { searc
         </Card>
       ) : (
         <>
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar la reposición">
+          <form key={consulta} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar la reposición">
             <div className="space-y-1">
               <label htmlFor="rp-q" className="text-xs text-muted-foreground">
                 Producto, SKU o código de barras

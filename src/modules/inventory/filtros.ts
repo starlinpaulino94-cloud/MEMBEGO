@@ -2,6 +2,11 @@ import type { InventoryMovementType } from '@prisma/client'
 import { esEstadoOrden, type EstadoOrden } from './compras'
 import { TIPOS_DE_MOVIMIENTO } from './domain'
 import type { FiltrosReposicion } from './reposicion'
+import { PAGINA_MAXIMA_REPORTES, esEstadoCobertura, periodoValido, PERIODO_POR_DEFECTO, type FiltrosKardex, type FiltrosRotacion, type FiltrosSinVentas } from './reportes'
+import { FILTRO_SIN_MOTIVO, type FiltrosMermas } from './mermas'
+import { esMotivoDelCatalogo } from './motivos'
+import { ORDEN_MARGEN_POR_DEFECTO, esOrdenMargen, type FiltrosMargen } from './margen'
+import { VENTANA_POR_DEFECTO, esClaseVencimiento, ventanaValida, type FiltrosVencimientos } from './vencimientos'
 
 /**
  * COMMERCE CORE · inventario — los filtros de la pantalla de movimientos y de su
@@ -359,5 +364,162 @@ export function consultaDeFiltrosReposicion(f: FiltrosReposicion): string {
   if (f.sucursalId) p.set('sucursal', f.sucursalId)
   if (f.proveedorId) p.set('proveedor', f.proveedorId)
   if (f.q) p.set('q', f.q)
+  return p.toString()
+}
+
+// ── INV-4a · Informes de existencias ─────────────────────────────────────────
+
+function paginaDeInforme(v: string | undefined): number {
+  const n = Number(v)
+  return Number.isInteger(n) && n >= 1 && n <= PAGINA_MAXIMA_REPORTES ? n : 1
+}
+
+/**
+ * La URL del kardex: el producto, la sucursal, el rango de días (locales) y, mientras no hay producto, el texto con que se busca.
+ * Las fechas y el texto se leen igual que en Movimientos (un rango al revés se endereza).
+ */
+export function leerFiltrosKardex(sp: ParametrosUrl): FiltrosKardex {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const varianteId = idValido(primero(sp.variante))
+  return {
+    ...(varianteId ? { varianteId } : {}),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.desde ? { desde: filtros.desde } : {}),
+    ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+  }
+}
+
+export function consultaDeFiltrosKardex(f: FiltrosKardex): string {
+  const p = new URLSearchParams()
+  if (f.varianteId) p.set('variante', f.varianteId)
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.desde) p.set('desde', f.desde)
+  if (f.hasta) p.set('hasta', f.hasta)
+  if (f.q) p.set('q', f.q)
+  return p.toString()
+}
+
+/** La URL de «stock sin ventas»: los días (solo los periodos que hay), la sucursal, el texto y la página. */
+export function leerFiltrosSinVentas(sp: ParametrosUrl): FiltrosSinVentas {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  return {
+    dias: periodoValido(primero(sp.dias)),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+/** La consulta de la URL (y, si se pide, otra página). Sin lo que es el valor de siempre: 90 días y la página 1. */
+export function consultaDeFiltrosSinVentas(f: FiltrosSinVentas, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.dias !== PERIODO_POR_DEFECTO) p.set('dias', String(f.dias))
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.q) p.set('q', f.q)
+  if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}
+
+/** La URL de «vence pronto»: la ventana en días (solo las que hay), el estado, la sucursal, el texto y la página. */
+export function leerFiltrosVencimientos(sp: ParametrosUrl): FiltrosVencimientos {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const clase = primero(sp.estado)
+  return {
+    dias: ventanaValida(primero(sp.dias)),
+    ...(esClaseVencimiento(clase) ? { clase } : {}),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+/** La consulta de la URL (y, si se pide, otra página). Sin lo que es el valor de siempre: 30 días y la página 1. */
+export function consultaDeFiltrosVencimientos(f: FiltrosVencimientos, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.dias !== VENTANA_POR_DEFECTO) p.set('dias', String(f.dias))
+  if (f.clase) p.set('estado', f.clase)
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.q) p.set('q', f.q)
+  if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}
+
+/** La URL de «rotación y cobertura»: los días, la sucursal, el texto, el estado de cobertura y la página. */
+export function leerFiltrosRotacion(sp: ParametrosUrl): FiltrosRotacion {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const estado = primero(sp.estado)
+  return {
+    dias: periodoValido(primero(sp.dias)),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    ...(esEstadoCobertura(estado) ? { estado } : {}),
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+export function consultaDeFiltrosRotacion(f: FiltrosRotacion, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.dias !== PERIODO_POR_DEFECTO) p.set('dias', String(f.dias))
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.q) p.set('q', f.q)
+  if (f.estado) p.set('estado', f.estado)
+  if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}
+
+/**
+ * INV-4b · La URL de «mermas por motivo»: el rango de días (locales), la sucursal, el motivo (un código del catálogo o `sin`), el
+ * texto del producto y la página. Un motivo que el catálogo no conoce se ignora (no filtra nada), igual que una sucursal ajena.
+ */
+export function leerFiltrosMermas(sp: ParametrosUrl): FiltrosMermas {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const motivo = primero(sp.motivo)
+  return {
+    ...(filtros.desde ? { desde: filtros.desde } : {}),
+    ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(motivo === FILTRO_SIN_MOTIVO || esMotivoDelCatalogo(motivo) ? { motivo } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+export function consultaDeFiltrosMermas(f: FiltrosMermas, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.desde) p.set('desde', f.desde)
+  if (f.hasta) p.set('hasta', f.hasta)
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.motivo) p.set('motivo', f.motivo)
+  if (f.q) p.set('q', f.q)
+  if (pagina > 1) p.set('pagina', String(pagina))
+  return p.toString()
+}
+
+/**
+ * INV-4c · La URL del «margen real»: el rango de días (locales), la sucursal, el texto del producto, el orden y la página. Un orden
+ * que no existe cae al de siempre; una sucursal ajena no filtra (lo decide la pantalla contra las de la empresa).
+ */
+export function leerFiltrosMargen(sp: ParametrosUrl): FiltrosMargen {
+  const { filtros } = leerFiltrosMovimientos(sp)
+  const orden = primero(sp.orden)
+  return {
+    ...(filtros.desde ? { desde: filtros.desde } : {}),
+    ...(filtros.hasta ? { hasta: filtros.hasta } : {}),
+    ...(filtros.sucursalId ? { sucursalId: filtros.sucursalId } : {}),
+    ...(filtros.q ? { q: filtros.q } : {}),
+    orden: esOrdenMargen(orden) ? orden : ORDEN_MARGEN_POR_DEFECTO,
+    pagina: paginaDeInforme(primero(sp.pagina)),
+  }
+}
+
+export function consultaDeFiltrosMargen(f: FiltrosMargen, pagina: number = f.pagina): string {
+  const p = new URLSearchParams()
+  if (f.desde) p.set('desde', f.desde)
+  if (f.hasta) p.set('hasta', f.hasta)
+  if (f.sucursalId) p.set('sucursal', f.sucursalId)
+  if (f.q) p.set('q', f.q)
+  if (f.orden !== ORDEN_MARGEN_POR_DEFECTO) p.set('orden', f.orden)
+  if (pagina > 1) p.set('pagina', String(pagina))
   return p.toString()
 }

@@ -103,6 +103,47 @@ execFileSync('npx', ['prisma', 'db', 'push', '--skip-generate', '--accept-data-l
 })
 console.log('ok')
 
+// INV-5a · Los lotes SÍ necesitan su migración: los saldos por lote los mantiene la base con disparadores (el servicio solo escribe los
+// repartos), y `db push` no los trae. Sin ellos activar los lotes de un producto con existencias dejaría todos los saldos por lote en
+// cero. Es idempotente y solo crea disparadores, funciones y restricciones (las tablas ya las puso el push).
+process.stdout.write('  lotes (disparadores)… ')
+execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../prisma/migrations/20261068_inventory_lots/migration.sql', import.meta.url).pathname], {
+  stdio: ['ignore', 'ignore', 'inherit'],
+})
+console.log('ok')
+
+// INV-5b3 · El conteo por lote: el índice único parcial (un producto sin lotes, una línea) y el disparador que exige lote en los
+// productos que los llevan tampoco los trae `db push`. Idempotente; necesita la de lotes ya aplicada.
+process.stdout.write('  conteo por lote…      ')
+execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../prisma/migrations/20261069_inventory_count_lots/migration.sql', import.meta.url).pathname], {
+  stdio: ['ignore', 'ignore', 'inherit'],
+})
+console.log('ok')
+
+// INV-5b5 · La historia de los vencimientos: la tabla la trae `db push`, pero no su default `txid_current()` ni los disparadores (el
+// del lote que solo deja cambiar el vencimiento con historia, y los de la propia historia). Idempotente; necesita la de lotes.
+process.stdout.write('  vencimientos (historia)… ')
+execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../prisma/migrations/20261070_inventory_lot_expiry_history/migration.sql', import.meta.url).pathname], {
+  stdio: ['ignore', 'ignore', 'inherit'],
+})
+console.log('ok')
+
+// INV-5c · Las series: la columna y su restricción las trae `db push`, pero no el índice de búsqueda de series ni los disparadores diferidos
+// de «una serie, una unidad». Idempotente; necesita la de lotes.
+process.stdout.write('  series (una unidad)…    ')
+execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../prisma/migrations/20261071_inventory_serials/migration.sql', import.meta.url).pathname], {
+  stdio: ['ignore', 'ignore', 'inherit'],
+})
+console.log('ok')
+
+// INV-5d · Los kits: las tablas las trae `db push`, pero no el disparador que impide anidarlos ni los que vuelven inmutable lo apartado.
+// Idempotente; necesita la de lotes (usa su función de inmutabilidad).
+process.stdout.write('  kits (receta)…          ')
+execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../prisma/migrations/20261072_inventory_kits/migration.sql', import.meta.url).pathname], {
+  stdio: ['ignore', 'ignore', 'inherit'],
+})
+console.log('ok')
+
 console.log('─'.repeat(60))
 console.log('Lista. El servidor y Playwright tienen que apuntar a esta base:')
 console.log(`  export DATABASE_URL="${url.replace(/:[^:@/]*@/, ':***@')}"`)

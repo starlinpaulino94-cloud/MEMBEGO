@@ -95,10 +95,15 @@ model InventoryLevel {
 
   movements    InventoryMovement[]
   reservations InventoryReservation[]
+  /// INV-5a · cuánto hay de cada lote aquí (solo si el producto lleva lotes).
+  lotBalances  InventoryLotBalance[]
+  lotOpenings  InventoryLotOpening[]
 
   @@unique([catalogVariantId, locationId])
   /// Destino de las FK compuestas de movimientos y reservas.
   @@unique([id, companyId])
+  /// Destino de la FK compuesta de los saldos por lote (INV-5a): el saldo por lote hereda la variante y la empresa.
+  @@unique([id, catalogVariantId, companyId])
   @@index([companyId, locationId])
   @@map("inventory_levels")
 }
@@ -126,8 +131,11 @@ model InventoryMovement {
   previousOnHand Int
   newOnHand      Int
 
-  /// Obligatorio en ADJUSTMENT y DAMAGE.
+  /// Obligatorio en ADJUSTMENT y DAMAGE. Es el DETALLE en texto libre; el motivo contable es `reasonCode`.
   reason String?
+  /// INV-4b · El motivo del catálogo (`modules/inventory/motivos.ts`): `EXPIRED`, `THEFT`, `COUNT_DIFFERENCE`… Solo lo llevan los
+  /// ajustes y los daños, y NULL en todo lo anterior a INV-4b (el ledger no se reescribe).
+  reasonCode String?
   /// Quién lo hizo (null = el sistema: un vencimiento, un proceso). Sin FK: un
   /// usuario que se borra no puede reescribir el ledger.
   userId String?
@@ -158,7 +166,12 @@ model InventoryMovement {
   /// La línea de transferencia con envío (INV-2c) cuya salida produjo este movimiento, si vino de una.
   transferOutLine InventoryTransferLine?
 
+  /// INV-5a · el reparto de este movimiento entre lotes (vacío si el producto no lleva lotes).
+  lotSplits InventoryMovementLot[]
+
   @@unique([companyId, idempotencyKey])
+  /// Destino de la FK compuesta de los repartos por lote (INV-5a): un reparto solo cuelga de un movimiento de ese saldo.
+  @@unique([id, inventoryLevelId, companyId])
   @@index([inventoryLevelId, createdAt])
   @@index([companyId, createdAt])
   @@index([companyId, referenceType, referenceId])
@@ -190,6 +203,8 @@ model InventoryReservation {
 
   /// La línea de pedido que originó la reserva (Fase 3).
   orderLines MembegoOrderLine[]
+  /// Si salió de vender un kit (INV-5d): de cuál.
+  kitReservations InventoryKitReservation[]
 
   /// Destino de la FK compuesta de `membego_order_lines`.
   @@unique([id, companyId])
@@ -371,6 +386,11 @@ model InventoryCountLine {
   catalogVariantId String
   variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
 
+  /// INV-5b3 · El lote que se contó. null = producto sin lotes (una línea por producto, como siempre); con lote, una línea por
+  /// producto Y lote. Un producto con lotes solo admite líneas con lote (lo vigila la base).
+  lotId String?
+  lot   InventoryLot? @relation(fields: [lotId, catalogVariantId, companyId], references: [id, catalogVariantId, companyId], onDelete: Restrict)
+
   /// Lo que la persona contó (vendible + apartado; lo dañado no se cuenta).
   counted  Int
   /// Lo que decía el sistema en el momento de contar. Es la referencia de la
@@ -389,9 +409,11 @@ model InventoryCountLine {
   movementId   String?            @unique
   movement     InventoryMovement? @relation(fields: [movementId], references: [id], onDelete: Restrict)
 
-  /// Un producto, una línea por conteo: contarlo otra vez la corrige.
-  @@unique([sessionId, catalogVariantId])
+  /// Un producto (y lote), una línea por conteo: contarlo otra vez la corrige. Con `lotId` null Postgres no ve iguales dos filas: la
+  /// migración 20261069 añade el índice único parcial `inventory_count_lines_sin_lote_key` para los productos sin lotes.
+  @@unique([sessionId, catalogVariantId, lotId])
   @@index([companyId, catalogVariantId])
+  @@index([companyId, lotId])
   @@map("inventory_count_lines")
 }
 
@@ -713,5 +735,241 @@ model InventoryVariantSupplier {
   @@unique([catalogVariantId, supplierId])
   @@index([companyId, supplierId])
   @@map("inventory_variant_suppliers")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INV-5a · LOTES Y VENCIMIENTO (trazabilidad por lote, con FEFO)
+//
+// Un producto puede LLEVAR LOTES (`InventoryLotTracking`, por producto, de un solo sentido). Entonces cada unidad es de un lote
+// (`InventoryLot`: código y, si lo tiene, el DÍA en que vence) y cada movimiento del ledger se REPARTE entre lotes
+// (`InventoryMovementLot`). El saldo por lote (`InventoryLotBalance`) lo mantiene la BASE a partir de la apertura
+// (`InventoryLotOpening`: lo que había al activar, siempre en el lote «SIN LOTE») y de los repartos: la aplicación nunca lo
+// escribe. Y la base comprueba al terminar cada transacción que los lotes SUMAN el saldo de la sucursal. Ver la migración
+// `20261068_inventory_lots` (disparadores, CHECK y el índice único `(catalogVariantId, upper(code))`, que Prisma no expresa).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Este producto lleva lotes. Una fila por producto; no se borra (salvo la limpieza de un producto sin movimientos).
+model InventoryLotTracking {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogVariantId String         @unique
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// Todo lote nuevo de este producto debe traer fecha de vencimiento (lo exige el servicio al crear el lote).
+  requiresExpiry Boolean @default(false)
+  /// INV-5c: el producto lleva SERIES, no lotes: cada serie es un lote de UNA unidad (su código es el número de serie). Se decide al
+  /// activar y no cambia. Un producto con series no exige vencimiento.
+  tracksSerials  Boolean @default(false)
+  /// Quién lo activó (sin FK: un usuario que se borra no reescribe la historia).
+  activatedBy    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId])
+  @@map("inventory_lot_tracking")
+}
+
+/// Un lote de un producto. Su código no cambia nunca (un código mal capturado se corrige moviendo sus unidades a otro lote); su
+/// vencimiento SÍ se puede corregir, pero solo con una fila de `InventoryLotExpiryChange` (lo vigila la base). El lote «SIN LOTE»
+/// (`legacy`) recibe lo que ya había al activar y no vence.
+model InventoryLot {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogVariantId String
+  variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  /// Como viene en el empaque, normalizado (mayúsculas, sin espacios sobrantes). Único por producto sin distinguir mayúsculas.
+  code      String
+  /// El día en que vence (fecha de calendario, sin hora ni zona). null = no vence.
+  expiresOn DateTime? @db.Date
+  legacy    Boolean   @default(false)
+  createdBy String?
+
+  createdAt DateTime @default(now())
+
+  balances       InventoryLotBalance[]
+  countLines     InventoryCountLine[]
+  expiryChanges  InventoryLotExpiryChange[]
+
+  /// Destino de la FK compuesta de los saldos por lote.
+  @@unique([id, catalogVariantId, companyId])
+  @@index([catalogVariantId, expiresOn])
+  @@index([companyId, code])
+  @@map("inventory_lots")
+}
+
+/// APPEND-ONLY. Cada corrección del vencimiento de un lote: de qué fecha a cuál, por qué y quién. La base no deja cambiar el
+/// vencimiento de un lote sin una fila de esta tabla escrita en la MISMA transacción (`txid`).
+model InventoryLotExpiryChange {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  catalogVariantId String
+  lotId            String
+  lot              InventoryLot @relation(fields: [lotId, catalogVariantId, companyId], references: [id, catalogVariantId, companyId], onDelete: Restrict, map: "inventory_lot_expiry_changes_lot_variant_company_fkey")
+
+  /// El día que decía el lote antes (null = no vencía) y el que dice ahora (null = ya no vence).
+  previousExpiresOn DateTime? @db.Date
+  newExpiresOn      DateTime? @db.Date
+  reason            String
+  /// Quién lo corrigió (sin FK: un usuario que se borra no reescribe la historia).
+  changedBy         String?
+  /// La transacción que lo escribió (la base la pone sola).
+  txid              BigInt    @default(dbgenerated("txid_current()"))
+
+  createdAt DateTime @default(now())
+
+  @@index([lotId, createdAt])
+  @@index([companyId, createdAt])
+  @@map("inventory_lot_expiry_changes")
+}
+
+/// Cuánto hay de un lote en una sucursal (caché que MANTIENE LA BASE: nace en cero y solo se mueve con aperturas y repartos).
+model InventoryLotBalance {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  inventoryLevelId String
+  catalogVariantId String
+  level            InventoryLevel @relation(fields: [inventoryLevelId, catalogVariantId, companyId], references: [id, catalogVariantId, companyId], onDelete: Restrict, map: "inventory_lot_balances_level_variant_company_fkey")
+
+  lotId String
+  lot   InventoryLot @relation(fields: [lotId, catalogVariantId, companyId], references: [id, catalogVariantId, companyId], onDelete: Restrict)
+
+  /// Mismas tres cubetas que el saldo de la sucursal: disponible+apartado, apartado, dañado.
+  onHand   Int @default(0)
+  reserved Int @default(0)
+  damaged  Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  openings InventoryLotOpening[]
+  splits   InventoryMovementLot[]
+
+  /// Un saldo por lote y sucursal; destino de las FK de aperturas y repartos.
+  @@unique([inventoryLevelId, lotId])
+  @@index([lotId])
+  @@index([companyId])
+  @@map("inventory_lot_balances")
+}
+
+/// APPEND-ONLY. Lo que había de un lote en una sucursal el día que se activaron los lotes (siempre el lote «SIN LOTE»): el saldo de
+/// partida desde el que se reconstruye cualquier saldo por lote.
+model InventoryLotOpening {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  inventoryLevelId String
+  level            InventoryLevel @relation(fields: [inventoryLevelId, companyId], references: [id, companyId], onDelete: Restrict)
+
+  lotId   String
+  balance InventoryLotBalance @relation(fields: [inventoryLevelId, lotId], references: [inventoryLevelId, lotId], onDelete: Restrict)
+
+  onHand   Int
+  reserved Int
+  damaged  Int
+
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@unique([inventoryLevelId, lotId])
+  @@index([companyId])
+  @@map("inventory_lot_openings")
+}
+
+/// APPEND-ONLY. Cuántas unidades de un movimiento del ledger son de cada lote. La suma de los repartos de un movimiento es su
+/// cantidad (lo vigila la base al terminar la transacción).
+model InventoryMovementLot {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  movementId       String
+  inventoryLevelId String
+  movement         InventoryMovement @relation(fields: [movementId, inventoryLevelId, companyId], references: [id, inventoryLevelId, companyId], onDelete: Restrict, map: "inventory_movement_lots_movement_level_company_fkey")
+
+  lotId   String
+  balance InventoryLotBalance @relation(fields: [inventoryLevelId, lotId], references: [inventoryLevelId, lotId], onDelete: Restrict)
+
+  /// Siempre positiva: la dirección la dan las cubetas del movimiento.
+  quantity Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([movementId, lotId])
+  @@index([inventoryLevelId, lotId])
+  @@index([lotId])
+  @@index([companyId])
+  @@map("inventory_movement_lots")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INV-5d · KITS
+//
+// Un KIT es una variante que no lleva existencias propias: se arma con una receta (componentes × cantidad). Vender un kit aparta, vende,
+// libera y devuelve sus componentes. La receta se edita; lo que se apartó por un pedido queda anotado aparte (`InventoryKitReservation`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// La receta de un kit: cuántas unidades de un componente lleva cada kit. Los kits no se anidan (lo vigila la base).
+model InventoryKitComponent {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  kitVariantId String
+  kit          CatalogVariant @relation("KitComponents", fields: [kitVariantId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_components_kit_company_fkey")
+
+  componentVariantId String
+  component          CatalogVariant @relation("ComponentOfKits", fields: [componentVariantId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_components_component_company_fkey")
+
+  /// Unidades del componente por cada kit.
+  quantity Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([kitVariantId, componentVariantId])
+  @@index([componentVariantId])
+  @@index([companyId])
+  @@map("inventory_kit_components")
+}
+
+/// APPEND-ONLY. Qué reservas de componentes salieron de vender un kit en un pedido (la foto de lo que se apartó, aunque la receta cambie después).
+model InventoryKitReservation {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  kitVariantId String
+  kit          CatalogVariant @relation("KitReservationsOfKit", fields: [kitVariantId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_reservations_kit_company_fkey")
+
+  componentVariantId String
+  component          CatalogVariant @relation("KitReservationsOfComponent", fields: [componentVariantId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_reservations_component_company_fkey")
+
+  reservationId String
+  reservation   InventoryReservation @relation(fields: [reservationId, companyId], references: [id, companyId], onDelete: Restrict, map: "inventory_kit_reservations_reservation_company_fkey")
+
+  /// A qué pertenece (`ORDER` + id del pedido), como en la reserva.
+  referenceType String
+  referenceId   String
+
+  /// Cuántos kits se vendieron y cuántas unidades del componente se apartaron por ellos.
+  kitQuantity Int
+  quantity    Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([reservationId])
+  @@unique([companyId, referenceType, referenceId, kitVariantId, componentVariantId], map: "inventory_kit_reservations_ref_kit_component_key")
+  @@index([companyId, referenceType, referenceId], map: "inventory_kit_reservations_companyId_ref_idx")
+  @@map("inventory_kit_reservations")
 }
 

@@ -4,14 +4,16 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, ScanBarcode, Trash2, Truck } from 'lucide-react'
 import { toast } from 'sonner'
-import { buscarProductosParaTransferencia, enviarTransferencia } from '@/modules/inventory/actions'
-import { MAX_LINEAS_TRASLADO, MAX_NOTA_TRASLADO } from '@/modules/inventory/traslados'
+import { buscarProductosParaTransferencia, enviarTransferencia, lotesParaTransferir } from '@/modules/inventory/actions'
+import type { LoteVista } from '@/modules/inventory/lotes-queries'
+import { MAX_LINEAS_TRASLADO, MAX_NOTA_TRASLADO, repartoDeTextos } from '@/modules/inventory/traslados'
 import { formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { nuevaClave } from './clave'
+import { ElegirLotes } from './ElegirLotes'
 import type { SucursalOpcionForm } from './EntradaMultipleForm'
 
 /** Lo que devuelve la búsqueda (el mismo contorno que `VarianteBuscable`, sin importar el módulo de lecturas al navegador). */
@@ -24,6 +26,8 @@ interface ProductoBuscado {
   esDefault: boolean
   disponible: number | null
   exacto: boolean
+  /** INV-5b4: el producto lleva lotes. */
+  llevaLotes?: boolean
 }
 
 interface LineaForm {
@@ -34,6 +38,14 @@ interface LineaForm {
   disponible: number | null
   /** Texto del campo: puede estar a medias mientras se teclea. */
   cantidad: string
+  /** INV-5b4: el producto lleva lotes. */
+  lleva: boolean
+  /** Los lotes del origen con unidades disponibles (FEFO); null = todavía no se cargan. */
+  lotes: LoteVista[] | null
+  /** true = se eligen los lotes (la cantidad es la suma); false = sale el que antes vence. */
+  elegir: boolean
+  /** Lo tecleado por lote (`loteId → texto`). */
+  eleccion: Record<string, string>
 }
 
 const entero = (t: string): number | null => (/^\d{1,7}$/.test(t.trim()) ? Number(t.trim()) : null)
@@ -57,6 +69,25 @@ export function EnviarTransferenciaForm({ sucursales }: { sucursales: SucursalOp
   const clave = useRef(nuevaClave())
   const peticion = useRef(0)
   const enviada = useRef(false)
+  const origenActual = useRef(origenId)
+  const pidiendo = useRef(new Set<string>())
+
+  // INV-5b4: los lotes del origen de cada producto que los lleva, en cuanto se añade o cambia el origen.
+  useEffect(() => {
+    origenActual.current = origenId
+    for (const l of lineas) {
+      if (!l.lleva || l.lotes !== null) continue
+      const llave = `${origenId}|${l.varianteId}`
+      if (pidiendo.current.has(llave)) continue
+      pidiendo.current.add(llave)
+      void lotesParaTransferir({ varianteId: l.varianteId, origenId }).then((r) => {
+        pidiendo.current.delete(llave)
+        if (origenActual.current !== origenId) return
+        if (!r.ok) toast.error(r.error)
+        setLineas((ls) => ls.map((x) => (x.varianteId === l.varianteId && x.lotes === null ? { ...x, lotes: r.ok ? r.lotes : [] } : x)))
+      })
+    }
+  }, [lineas, origenId])
 
   // Búsqueda mientras se teclea (con pausa). Las respuestas viejas se descartan: llegan fuera de orden.
   useEffect(() => {
@@ -95,7 +126,20 @@ export function EnviarTransferenciaForm({ sucursales }: { sucursales: SucursalOp
         toast.error(`Un envío admite hasta ${MAX_LINEAS_TRASLADO} productos. Envíalo y empieza otro.`)
         return actuales
       }
-      return [...actuales, { varianteId: p.id, nombre: nombreCompleto(p.itemNombre, p.nombreVariante, p.esDefault), sku: p.sku, disponible: p.disponible, cantidad: '1' }]
+      return [
+        ...actuales,
+        {
+          varianteId: p.id,
+          nombre: nombreCompleto(p.itemNombre, p.nombreVariante, p.esDefault),
+          sku: p.sku,
+          disponible: p.disponible,
+          cantidad: '1',
+          lleva: p.llevaLotes === true,
+          lotes: null,
+          elegir: false,
+          eleccion: {},
+        },
+      ]
     })
     setQ('')
     setSugerencias([])
@@ -121,7 +165,8 @@ export function EnviarTransferenciaForm({ sucursales }: { sucursales: SucursalOp
   }
 
   const visibles = q.trim() === '' ? [] : sugerencias
-  const unidades = lineas.reduce((s, l) => s + (entero(l.cantidad) ?? 0), 0)
+  const cantidadDe = (l: LineaForm): number => (l.lleva && l.elegir ? repartoDeTextos(l.eleccion).suma : (entero(l.cantidad) ?? 0))
+  const unidades = lineas.reduce((s, l) => s + cantidadDe(l), 0)
   const origen = sucursales.find((s) => s.id === origenId)?.nombre ?? ''
   const destino = sucursales.find((s) => s.id === destinoId)?.nombre ?? ''
 
@@ -139,10 +184,14 @@ export function EnviarTransferenciaForm({ sucursales }: { sucursales: SucursalOp
       toast.error('Agrega al menos un producto al envío.')
       return
     }
-    const cuerpo = lineas.map((l) => ({ varianteId: l.varianteId, cantidad: entero(l.cantidad) ?? 0 }))
-    const mala = cuerpo.findIndex((l) => l.cantidad < 1)
+    const cuerpo = lineas.map((l) => ({
+      varianteId: l.varianteId,
+      cantidad: cantidadDe(l),
+      ...(l.lleva && l.elegir ? { lotes: repartoDeTextos(l.eleccion).reparto } : {}),
+    }))
+    const mala = cuerpo.findIndex((l, i) => l.cantidad < 1 || (lineas[i].lleva && lineas[i].elegir && repartoDeTextos(lineas[i].eleccion).hayError))
     if (mala >= 0) {
-      toast.error(`Revisa la cantidad de «${lineas[mala].nombre}»: es un entero de 1 en adelante.`)
+      toast.error(lineas[mala].lleva && lineas[mala].elegir ? `Revisa los lotes de «${lineas[mala].nombre}»: enteros de 1 en adelante, en al menos un lote.` : `Revisa la cantidad de «${lineas[mala].nombre}»: es un entero de 1 en adelante.`)
       return
     }
     start(async () => {
@@ -171,8 +220,8 @@ export function EnviarTransferenciaForm({ sucursales }: { sucursales: SucursalOp
               onChange={(e) => {
                 setOrigenId(e.target.value)
                 if (e.target.value === destinoId) setDestinoId(sucursales.find((s) => s.id !== e.target.value)?.id ?? '')
-                // Lo disponible que se enseñó era de la otra sucursal.
-                setLineas((ls) => ls.map((l) => ({ ...l, disponible: null })))
+                // Lo disponible que se enseñó era de la otra sucursal, y los lotes tecleados también.
+                setLineas((ls) => ls.map((l) => ({ ...l, disponible: null, lotes: null, eleccion: {} })))
               }}
               className={campo}
             >
@@ -250,31 +299,62 @@ export function EnviarTransferenciaForm({ sucursales }: { sucursales: SucursalOp
           ) : (
             <ul className="divide-y rounded-lg border" aria-label="Productos del envío">
               {lineas.map((l, i) => (
-                <li key={l.varianteId} className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{l.nombre}</p>
-                    <p className="text-xs text-muted-foreground">
-                      SKU {l.sku}
-                      {l.disponible !== null && ` · hay ${formatearCantidad(l.disponible)} disponibles en ${origen}`}
-                    </p>
+                <li key={l.varianteId} className="space-y-3 p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">{l.nombre}</p>
+                      <p className="text-xs text-muted-foreground">
+                        SKU {l.sku}
+                        {l.disponible !== null && ` · hay ${formatearCantidad(l.disponible)} disponibles en ${origen}`}
+                        {l.lleva && ' · lleva lotes'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {l.lleva && l.elegir ? (
+                        <output className="w-24 text-right font-medium tabular-nums" aria-label={`Cantidad de ${l.nombre}`}>
+                          {formatearCantidad(cantidadDe(l))}
+                        </output>
+                      ) : (
+                        <>
+                          <Label htmlFor={`tr-cant-${i}`} className="sr-only">
+                            Cantidad de {l.nombre}
+                          </Label>
+                          <Input
+                            id={`tr-cant-${i}`}
+                            inputMode="numeric"
+                            autoComplete="off"
+                            value={l.cantidad}
+                            aria-invalid={entero(l.cantidad) === null || entero(l.cantidad) === 0 || (l.disponible !== null && (entero(l.cantidad) ?? 0) > l.disponible)}
+                            onChange={(e) => setLineas((ls) => ls.map((x, k) => (k === i ? { ...x, cantidad: e.target.value } : x)))}
+                            className="w-24 text-right tabular-nums"
+                          />
+                        </>
+                      )}
+                      <Button type="button" variant="ghost" size="icon" aria-label={`Quitar ${l.nombre}`} onClick={() => setLineas((ls) => ls.filter((_, k) => k !== i))}>
+                        <Trash2 className="h-4 w-4" aria-hidden />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor={`tr-cant-${i}`} className="sr-only">
-                      Cantidad de {l.nombre}
-                    </Label>
-                    <Input
-                      id={`tr-cant-${i}`}
-                      inputMode="numeric"
-                      autoComplete="off"
-                      value={l.cantidad}
-                      aria-invalid={entero(l.cantidad) === null || entero(l.cantidad) === 0 || (l.disponible !== null && (entero(l.cantidad) ?? 0) > l.disponible)}
-                      onChange={(e) => setLineas((ls) => ls.map((x, k) => (k === i ? { ...x, cantidad: e.target.value } : x)))}
-                      className="w-24 text-right tabular-nums"
-                    />
-                    <Button type="button" variant="ghost" size="icon" aria-label={`Quitar ${l.nombre}`} onClick={() => setLineas((ls) => ls.filter((_, k) => k !== i))}>
-                      <Trash2 className="h-4 w-4" aria-hidden />
-                    </Button>
-                  </div>
+                  {l.lleva && (
+                    <div className="space-y-2 rounded-lg bg-muted/40 p-3">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" className="h-4 w-4" checked={l.elegir} onChange={(e) => setLineas((ls) => ls.map((x, k) => (k === i ? { ...x, elegir: e.target.checked } : x)))} />
+                        Elegir de qué lotes sale
+                      </label>
+                      {!l.elegir ? (
+                        <p className="text-xs text-muted-foreground">Sale el lote que antes vence; en el destino entra en el mismo lote.</p>
+                      ) : l.lotes === null ? (
+                        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          Cargando los lotes de {origen}…
+                        </p>
+                      ) : l.lotes.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No hay lotes con unidades disponibles en {origen}.</p>
+                      ) : (
+                        <ElegirLotes idBase={`tr-lote-${i}`} producto={l.nombre} lotes={l.lotes} valores={l.eleccion} alCambiar={(eleccion) => setLineas((ls) => ls.map((x, k) => (k === i ? { ...x, eleccion } : x)))} />
+                      )}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

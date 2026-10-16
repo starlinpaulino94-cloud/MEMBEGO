@@ -44,8 +44,9 @@ import type { ModoConteo } from './conteos'
 import { InventarioError } from './errores'
 import type { InformeImportacion } from './importacion'
 import { aplicarImportacionDeConteoEnTx, aplicarImportacionEnTx, informeDeConteoImportadoEnTx, informeDeImportacionEnTx } from './importar'
-import { buscarVariantesParaEntradaEnTx, historialDeVarianteEnTx, type HistorialPagina, type VarianteBuscable } from './queries'
+import { buscarVariantesParaEntradaEnTx, historialDeVarianteEnTx, lotesParaContarEnTx, type HistorialPagina, type LoteParaContar, type VarianteBuscable } from './queries'
 import { buscarProductosParaOrdenEnTx, type ProductoParaOrden } from './compras-queries'
+import { lotesDeVarianteEnTx, lotesTransferiblesDe, type LoteVista } from './lotes-queries'
 import {
   actualizarProveedorEnTx,
   cambiarActivoProveedorEnTx,
@@ -82,6 +83,11 @@ import {
   recibirEnTx,
   registrarEntradaMultipleEnTx,
   corregirCostoEnTx,
+  activarLotesEnTx,
+  asignarSeriesEnTx,
+  corregirVencimientoLoteEnTx,
+  desactivarLotesEnTx,
+  moverEntreLotesEnTx,
   resolverDanadoEnTx,
   transferirEnTx,
   type LineaRechazada,
@@ -89,6 +95,8 @@ import {
   type ResumenConteoAplicado,
   type SaldoVista,
 } from './service'
+import { guardarRecetaDeKitEnTx, quitarRecetaDeKitEnTx } from './kits-service'
+import { candidatosAKitEnTx, type CandidatoDeKit } from './kits-queries'
 
 export type ResultadoInventario<T = unknown> = ({ ok: true } & T) | { ok: false; error: string }
 
@@ -128,10 +136,17 @@ export interface EntradaMovimiento {
   varianteId: string
   sucursalId: string
   cantidad: number
+  /** El DETALLE en texto libre. En un ajuste, un daño o una baja el motivo se ELIGE (`motivoCodigo`) y esto lo completa. */
   motivo?: string | null
+  /** INV-4b: el motivo del catálogo; lo exigen el ajuste, el daño y dar de baja lo dañado. */
+  motivoCodigo?: string | null
   clave?: string | null
   /** INV-3a: solo lo lee «registrar entrada». Costo unitario de lo que llega, sin impuestos; exige la función «costos». */
   costo?: string | null
+  /** INV-5a · Producto con lotes: de qué lotes es lo que ENTRA (entrada, devolución, sobrante): `[{ codigo, vencimiento?, cantidad }]`. */
+  lotes?: unknown
+  /** INV-5a · Producto con lotes: de qué lotes SALE (faltante, daño, baja, recuperar): `[{ loteId, cantidad }]`. Sin indicarlo, el que antes vence. */
+  lotesSalida?: unknown
 }
 
 /** ¿Este valor es un costo escrito (aunque sea mal)? Vacío o ausente = no se capturó. */
@@ -170,41 +185,51 @@ export async function registrarEntradaInventario(entrada: EntradaMovimiento): Pr
   // El costo mueve el valor del inventario: solo quien puede ver y fijar costos lo registra. Se pregunta únicamente si viene uno.
   if (esObjeto(entrada) && traeCosto(entrada.costo) && !(await puedeFuncion('inventario', 'costos'))) return { ok: false, error: SIN_PERMISO_DE_COSTOS }
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    recibirEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave), costo: e.costo }, ctx)
+    recibirEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave), costo: e.costo, lotes: e.lotes }, ctx)
   )
 }
 
 /** El cliente devuelve mercancía. */
 export async function registrarDevolucionInventario(entrada: EntradaMovimiento): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    devolverEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx)
+    devolverEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave), lotes: e.lotes }, ctx)
   )
 }
 
-/** Mercancía dañada: sale de lo vendible a la cubeta de dañado. Motivo obligatorio. */
+/** Mercancía dañada: sale de lo vendible a la cubeta de dañado. El motivo del catálogo es obligatorio. */
 export async function registrarDanoInventario(entrada: EntradaMovimiento): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    danarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx),
+    danarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true, idempotencyKey: clave(e.clave), lotesSalida: e.lotesSalida }, ctx),
     () => true
   )
 }
 
-/** Resuelve lo dañado: vuelve a venderse o se da de baja. Motivo obligatorio. */
+/** Resuelve lo dañado: vuelve a venderse (con su motivo en texto) o se da de baja (con un motivo del catálogo). */
 export async function resolverDanadoInventario(entrada: EntradaMovimiento & { destino: 'VENDIBLE' | 'BAJA' }): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
     resolverDanadoEnTx(
       tx,
       companyId,
-      { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cantidad: e.cantidad as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave), destino: e.destino as 'VENDIBLE' | 'BAJA' },
+      {
+        varianteId: texto(e.varianteId),
+        sucursalId: texto(e.sucursalId),
+        cantidad: e.cantidad as number,
+        motivo: e.motivo as string | null,
+        // Dar de baja se explica con un motivo del catálogo; recuperar lo dañado, no (no es una pérdida).
+        ...(e.destino === 'BAJA' ? { motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true } : {}),
+        idempotencyKey: clave(e.clave),
+        destino: e.destino as 'VENDIBLE' | 'BAJA',
+        lotesSalida: e.lotesSalida,
+      },
       ctx
     )
   )
 }
 
-/** Corrige un descuadre: `cambio` positivo = sobrante, negativo = faltante. Motivo obligatorio. */
+/** Corrige un descuadre: `cambio` positivo = sobrante, negativo = faltante. El motivo del catálogo es obligatorio. */
 export async function ajustarInventario(entrada: Omit<EntradaMovimiento, 'cantidad'> & { cambio: number }): Promise<ResultadoSaldo> {
   return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
-    ajustarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cambio: e.cambio as number, motivo: e.motivo as string | null, idempotencyKey: clave(e.clave) }, ctx),
+    ajustarEnTx(tx, companyId, { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), cambio: e.cambio as number, motivo: e.motivo as string | null, motivoCodigo: e.motivoCodigo as string | null, exigirMotivoCodificado: true, idempotencyKey: clave(e.clave), lotes: e.lotes, lotesSalida: e.lotesSalida }, ctx),
     (e) => typeof e.cambio === 'number' && e.cambio < 0
   )
 }
@@ -224,6 +249,96 @@ export async function contarInventario(entrada: Omit<EntradaMovimiento, 'cantida
   } catch (e) {
     return aError(e)
   }
+}
+
+/**
+ * INV-5a · Activa los LOTES de un producto: desde aquí cada unidad es de un lote y cada movimiento se reparte entre lotes. Es de
+ * UN SOLO SENTIDO. Lo que ya había pasa íntegro al lote «SIN LOTE». La pide la función `ajustar`: cambia cómo se mueve el stock.
+ */
+export async function activarLotesInventario(entrada: { varianteId: string; exigirVencimiento?: boolean; series?: boolean }): Promise<ResultadoInventario<{ sucursales: number; unidades: number; repetido: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => activarLotesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), exigirVencimiento: entrada.exigirVencimiento === true, series: entrada.series === true }, c.ctx))
+    refrescar()
+    return { ok: true, sucursales: r.sucursales, unidades: r.unidades, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5c · Le pone serie a unidades que no la tenían (las del «SIN SERIE» de un producto con series): `series` es la lista de números de
+ * serie, uno por unidad, y se descuentan de lo disponible del lote legado en esa sucursal. La pide la función `ajustar`.
+ */
+export async function asignarSeriesInventario(entrada: { varianteId: string; sucursalId: string; series: string[]; clave?: string | null }): Promise<ResultadoInventario<{ asignadas: number; saldo: SaldoVista; repetido: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) =>
+      asignarSeriesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId), sucursalId: texto(entrada.sucursalId), series: Array.isArray(entrada.series) ? entrada.series.map(texto) : [], idempotencyKey: clave(entrada.clave) }, c.ctx)
+    )
+    refrescar()
+    return { ok: true, asignadas: r.asignadas, saldo: r.saldo, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5b5 · Deshace la activación de lotes de un producto: vuelve a ser un producto sin lotes. Solo mientras ningún movimiento se haya
+ * repartido entre lotes (se activó por error o antes de usarlo); después, el servicio la rechaza. No toca las existencias. La pide la
+ * función `ajustar`, como activarlos.
+ */
+export async function desactivarLotesInventario(entrada: { varianteId: string }): Promise<ResultadoInventario<{ sucursales: number; repetido: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => desactivarLotesEnTx(tx, c.companyId, { varianteId: texto(entrada.varianteId) }, c.ctx))
+    refrescar()
+    return { ok: true, sucursales: r.sucursales, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5b5 · Corrige el vencimiento de un lote (vacío = no vence), con motivo obligatorio. Vale para todas las sucursales (el lote es del
+ * producto) y queda en la historia del lote. La pide la función `ajustar`.
+ */
+export async function corregirVencimientoLote(entrada: { loteId: string; vencimiento: string; motivo: string }): Promise<ResultadoInventario<{ codigo: string; anterior: string | null; nuevo: string | null; repetido: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => corregirVencimientoLoteEnTx(tx, c.companyId, { loteId: texto(entrada.loteId), vencimiento: entrada.vencimiento, motivo: entrada.motivo }, c.ctx))
+    refrescar()
+    return { ok: true, codigo: r.codigo, anterior: r.anterior, nuevo: r.nuevo, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** INV-5a · Pasa unidades disponibles de un lote a otro en una sucursal (corregir un lote mal capturado). No es una merma. */
+export async function moverEntreLotesInventario(entrada: {
+  varianteId: string
+  sucursalId: string
+  deLoteId: string
+  aLoteId: string
+  cantidad: number
+  clave?: string | null
+}): Promise<ResultadoSaldo> {
+  return operar('ajustar', entrada, (companyId, e, ctx, tx) =>
+    moverEntreLotesEnTx(
+      tx,
+      companyId,
+      { varianteId: texto(e.varianteId), sucursalId: texto(e.sucursalId), deLoteId: texto(e.deLoteId), aLoteId: texto(e.aLoteId), cantidad: e.cantidad as number, idempotencyKey: clave(e.clave) },
+      ctx
+    )
+  )
 }
 
 /**
@@ -293,6 +408,8 @@ export async function transferirInventario(entrada: {
   destinoId: string
   cantidad: number
   motivo?: string | null
+  /** INV-5b4: de qué lotes del origen sale, `[{ loteId, cantidad }]`. Sin decirlo, el que antes vence. */
+  lotes?: { loteId: string; cantidad: number }[]
   clave?: string | null
 }): Promise<ResultadoInventario<{ repetido: boolean }>> {
   const c = await contexto('transferir')
@@ -303,7 +420,7 @@ export async function transferirInventario(entrada: {
       transferirEnTx(
         tx,
         c.companyId,
-        { varianteId: texto(entrada.varianteId), origenId: texto(entrada.origenId), destinoId: texto(entrada.destinoId), cantidad: entrada.cantidad as number, motivo: entrada.motivo as string | null, idempotencyKey: clave(entrada.clave) },
+        { varianteId: texto(entrada.varianteId), origenId: texto(entrada.origenId), destinoId: texto(entrada.destinoId), cantidad: entrada.cantidad as number, motivo: entrada.motivo as string | null, lotes: entrada.lotes, idempotencyKey: clave(entrada.clave) },
         c.ctx
       )
     )
@@ -363,7 +480,7 @@ const sinLineas = (i: InformeImportacion): InformeVista => {
  */
 export async function registrarEntradaMultiple(entrada: {
   sucursalId: string
-  lineas: { varianteId: string; cantidad: number; costo?: string | null }[]
+  lineas: { varianteId: string; cantidad: number; costo?: string | null; lotes?: unknown }[]
   referencia?: string | null
   nota?: string | null
   clave?: string | null
@@ -371,7 +488,9 @@ export async function registrarEntradaMultiple(entrada: {
   const c = await contexto('ajustar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
-  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, costo: l?.costo })) : []
+  const lineas = Array.isArray(entrada.lineas)
+    ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, costo: l?.costo, ...(l?.lotes === undefined || l?.lotes === null ? {} : { lotes: l.lotes as never }) }))
+    : []
   if (lineas.some((l) => traeCosto(l.costo)) && !(await puedeFuncion('inventario', 'costos'))) return { ok: false, error: SIN_PERMISO_DE_COSTOS }
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
@@ -481,15 +600,17 @@ export async function iniciarConteo(entrada: { sucursalId: string; nota?: string
 export async function contarProductoEnConteo(entrada: {
   conteoId: string
   varianteId: string
+  /** INV-5b3: el lote que se cuenta. Obligatorio si el producto lleva lotes. */
+  loteId?: string | null
   cantidad: number
   modo: ModoConteo
-}): Promise<ResultadoInventario<{ varianteId: string; contado: number; nueva: boolean; lineas: number }>> {
+}): Promise<ResultadoInventario<{ varianteId: string; loteId: string | null; contado: number; nueva: boolean; lineas: number }>> {
   const c = await contexto('ajustar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
-      registrarConteoProductoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId), cantidad: entrada.cantidad, modo: entrada.modo }, c.ctx)
+      registrarConteoProductoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId), loteId: clave(entrada.loteId), cantidad: entrada.cantidad, modo: entrada.modo }, c.ctx)
     )
     refrescar()
     return { ok: true, ...r }
@@ -498,13 +619,13 @@ export async function contarProductoEnConteo(entrada: {
   }
 }
 
-/** Saca un producto del conteo abierto (lo que no tiene línea no se ajusta). */
-export async function quitarProductoDelConteo(entrada: { conteoId: string; varianteId: string }): Promise<ResultadoInventario<{ quitada: boolean }>> {
+/** Saca un producto (o un lote de un producto) del conteo abierto (lo que no tiene línea no se ajusta). */
+export async function quitarProductoDelConteo(entrada: { conteoId: string; varianteId: string; loteId?: string | null }): Promise<ResultadoInventario<{ quitada: boolean }>> {
   const c = await contexto('ajustar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   try {
-    const r = await conEmpresa(c.companyId, (tx) => quitarLineaDeConteoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId) }))
+    const r = await conEmpresa(c.companyId, (tx) => quitarLineaDeConteoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId), loteId: clave(entrada.loteId) }))
     refrescar()
     return { ok: true, quitada: r.quitada }
   } catch (e) {
@@ -523,6 +644,27 @@ export async function buscarProductosParaConteo(q: string): Promise<ResultadoInv
   try {
     const productos = await conEmpresa(c.companyId, (tx) => buscarVariantesParaEntradaEnTx(tx, c.companyId, q, null))
     return { ok: true, productos }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5b3 · Los lotes entre los que se elige al contar un producto con lotes: código y vencimiento, NUNCA cantidades (conteo a ciegas).
+ * Necesita el conteo abierto: la sucursal sale de él.
+ */
+export async function lotesParaContarProducto(entrada: { conteoId: string; varianteId: string }): Promise<ResultadoInventario<{ lotes: LoteParaContar[] }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada) || typeof entrada.conteoId !== 'string' || typeof entrada.varianteId !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const lotes = await conEmpresa(c.companyId, async (tx) => {
+      const conteo = await tx.inventoryCountSession.findFirst({ where: { id: entrada.conteoId, companyId: c.companyId, status: 'OPEN' }, select: { id: true, locationId: true } })
+      if (!conteo) return null
+      return lotesParaContarEnTx(tx, c.companyId, conteo.id, entrada.varianteId, conteo.locationId)
+    })
+    if (lotes === null) return { ok: false, error: 'El conteo no existe o ya no está abierto.' }
+    return { ok: true, lotes }
   } catch (e) {
     return aError(e)
   }
@@ -634,14 +776,14 @@ export interface ResumenEnvio {
 export async function enviarTransferencia(entrada: {
   origenId: string
   destinoId: string
-  lineas: { varianteId: string; cantidad: number }[]
+  lineas: { varianteId: string; cantidad: number; lotes?: { loteId: string; cantidad: number }[] }[]
   nota?: string | null
   clave?: string | null
 }): Promise<ResultadoInventario<ResumenEnvio>> {
   const c = await contexto('transferir')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
-  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : []
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, lotes: l?.lotes })) : []
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
       enviarTrasladoEnTx(tx, c.companyId, { origenId: texto(entrada.origenId), destinoId: texto(entrada.destinoId), lineas, nota: entrada.nota, idempotencyKey: clave(entrada.clave) }, c.ctx)
@@ -661,6 +803,23 @@ export async function enviarTransferencia(entrada: {
       )
     }
     return { ok: true, trasladoId: r.trasladoId, numero: r.numero, lineas: r.lineas, unidades: r.unidades, repetido: r.repetido }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5b4 · Los lotes de un producto que se pueden TRANSFERIR desde una sucursal: los que tienen unidades disponibles allí, en orden FEFO
+ * (el primero es el que sale solo, si no se elige). Con la cantidad disponible de cada uno: quien transfiere necesita saber cuánto hay para
+ * repartir (no es un conteo a ciegas). Un producto sin lotes devuelve `lleva: false`.
+ */
+export async function lotesParaTransferir(entrada: { varianteId: string; origenId: string }): Promise<ResultadoInventario<{ lleva: boolean; hoy: string; lotes: LoteVista[] }>> {
+  const c = await contexto('transferir')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada) || typeof entrada.varianteId !== 'string' || typeof entrada.origenId !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => lotesDeVarianteEnTx(tx, c.companyId, entrada.varianteId))
+    return { ok: true, lleva: r.lleva, hoy: r.hoy, lotes: lotesTransferiblesDe(r.porSucursal, entrada.origenId) }
   } catch (e) {
     return aError(e)
   }
@@ -696,7 +855,7 @@ export interface ResumenRecepcion {
  */
 export async function recibirTransferencia(entrada: {
   trasladoId: string
-  lineas?: { varianteId: string; cantidad: number }[]
+  lineas?: { varianteId: string; cantidad: number; lotes?: { loteId: string; cantidad: number }[] }[]
   todo?: boolean
   cerrarConFaltante?: boolean
   motivo?: string | null
@@ -705,7 +864,7 @@ export async function recibirTransferencia(entrada: {
   const c = await contexto('transferir')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
-  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : undefined
+  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, lotes: l?.lotes })) : undefined
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
       recibirTrasladoEnTx(
@@ -861,7 +1020,8 @@ export async function cancelarOrdenCompra(entrada: { ordenId: string; motivo?: s
  */
 export async function recibirOrdenCompra(entrada: {
   ordenId: string
-  lineas?: { varianteId: string; cantidad: number }[]
+  /** INV-5b2: de un producto que lleva lotes, de qué lotes llegó (`[{ codigo, vencimiento?, cantidad }]`; suman la cantidad). */
+  lineas?: { varianteId: string; cantidad: number; lotes?: unknown }[]
   todo?: boolean
   cerrarConFaltante?: boolean
   motivo?: string | null
@@ -872,7 +1032,9 @@ export async function recibirOrdenCompra(entrada: {
   const c = await contexto('comprar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return SIN_DATOS
-  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : undefined
+  const lineas = Array.isArray(entrada.lineas)
+    ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, ...(l?.lotes === undefined || l?.lotes === null ? {} : { lotes: l.lotes as never }) }))
+    : undefined
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
       recibirOrdenEnTx(
@@ -935,3 +1097,48 @@ export async function desvincularProveedorDeProducto(entrada: { varianteId: stri
     return aError(e)
   }
 }
+
+/**
+ * INV-5d · Guarda la receta de un kit (componentes y cuántas unidades de cada uno). Un kit no lleva existencias propias: vender uno aparta,
+ * vende, libera y devuelve sus componentes. La pide la función `ajustar`: cambia cómo se mueve el stock.
+ */
+export async function guardarRecetaDeKit(entrada: { kitVarianteId: string; componentes: { varianteId: string; cantidad: number }[] }): Promise<ResultadoInventario<{ componentes: number; nueva: boolean; sinCambios: boolean }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => guardarRecetaDeKitEnTx(tx, c.companyId, { kitVarianteId: texto(entrada.kitVarianteId), componentes: entrada.componentes }, c.ctx))
+    refrescar()
+    return { ok: true, componentes: r.componentes, nueva: r.nueva, sinCambios: r.sinCambios }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** INV-5d · Quita la receta de un kit: vuelve a ser un producto cualquiera. Lo ya apartado en pedidos no cambia. La pide la función `ajustar`. */
+export async function quitarRecetaDeKit(entrada: { kitVarianteId: string }): Promise<ResultadoInventario<{ componentes: number }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const r = await conEmpresa(c.companyId, (tx) => quitarRecetaDeKitEnTx(tx, c.companyId, { kitVarianteId: texto(entrada.kitVarianteId) }, c.ctx))
+    refrescar()
+    return { ok: true, componentes: r.componentes }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/** INV-5d · Busca productos que se pueden convertir en kit (los que no controlan inventario por su cuenta ni son componentes). */
+export async function buscarCandidatosAKit(q: string): Promise<ResultadoInventario<{ candidatos: CandidatoDeKit[] }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (typeof q !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const candidatos = await conEmpresa(c.companyId, (tx) => candidatosAKitEnTx(tx, c.companyId, q))
+    return { ok: true, candidatos }
+  } catch (e) {
+    return aError(e)
+  }
+}
+

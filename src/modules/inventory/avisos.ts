@@ -1,11 +1,15 @@
 import 'server-only'
 
 import { conEmpresa } from '@/lib/tenant'
+import { zonaSegura } from '@/lib/zona-horaria'
+import { diaLocal } from '@/modules/reportes/rango'
 import { notificarAdmins } from '@/modules/notificaciones/service'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { AUTOMATION_EVENTS } from '@/lib/automation/domain/events'
 import { disponible, estadoDeStock } from './domain'
 import { nombreCompleto } from './formato'
+import { avisoPorVencer, avisoVencidos, semanaIso } from './vencimientos'
+import { resumenVencimientosEnTx } from './vencimientos-queries'
 
 /**
  * COMMERCE CORE · inventario — AVISO DE STOCK BAJO.
@@ -67,6 +71,60 @@ export async function avisarStockBajo(companyId: string, varianteIds: readonly s
     return avisados
   } catch (e) {
     console.error('[inventario:stock-bajo]', e instanceof Error ? e.message : e)
+    return 0
+  }
+}
+
+/**
+ * COMMERCE CORE · inventario — INV-5b1: AVISO DE LOTES POR VENCER Y VENCIDOS. Lo llama el barrido diario, empresa por empresa.
+ *
+ * Dos avisos, los dos a los administradores de la empresa y los dos sin repetirse:
+ *  · POR VENCER: hay lotes con existencias vendibles que vencen dentro de la ventana (30 días). A lo sumo uno por semana ISO y por
+ *    nivel de urgencia (`dedupeKey`): el nivel va en la clave a propósito, igual que el estado en el de stock bajo, porque si el lunes
+ *    avisó «por vencer» y el jueves un lote pasa a vencer en menos de una semana, esa escalada tiene que avisar otra vez.
+ *  · VENCIDOS: el barrido acaba de sacar de lo vendible unidades de lotes vencidos (`vencidos`). Uno por día: una segunda pasada del
+ *    mismo día no encuentra nada que sacar y no avisa.
+ *
+ * Solo cuenta lotes con fecha de vencimiento y existencias. Una empresa que no lleva lotes no recibe nada. Best-effort y FUERA de
+ * cualquier transacción de inventario: nunca lanza.
+ */
+export async function avisarVencimientos(companyId: string, opciones: { ahora?: Date; vencidos?: { lotes: number; unidades: number } } = {}): Promise<number> {
+  try {
+    const ahora = opciones.ahora ?? new Date()
+    const { zona, resumen } = await conEmpresa(companyId, async (tx) => {
+      const empresa = await tx.company.findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+      const zona = zonaSegura(empresa?.zonaHoraria)
+      return { zona, resumen: await resumenVencimientosEnTx(tx, companyId, { zonaHoraria: zona, ahora }) }
+    })
+    const dia = diaLocal(ahora, zona)
+    let avisados = 0
+    if (resumen.llevaLotes && resumen.porVencer.lotes > 0) {
+      const a = avisoPorVencer({ lotes: resumen.porVencer.lotes, urgentes: resumen.porVencer.urgentes, unidades: resumen.porVencer.unidades, dias: resumen.dias })
+      const nivel = resumen.porVencer.urgentes > 0 ? 'urgente' : 'normal'
+      const n = await notificarAdmins(companyId, {
+        tipo: 'SISTEMA',
+        titulo: a.titulo,
+        mensaje: a.mensaje,
+        href: '/admin/inventario/reportes/vencimientos',
+        dedupeKey: `lotes-por-vencer:${companyId}:${semanaIso(dia)}:${nivel}`,
+      })
+      if (n > 0) avisados++
+    }
+    const v = opciones.vencidos
+    if (v && v.unidades > 0) {
+      const a = avisoVencidos(v)
+      const n = await notificarAdmins(companyId, {
+        tipo: 'SISTEMA',
+        titulo: a.titulo,
+        mensaje: a.mensaje,
+        href: '/admin/inventario/reportes/mermas?motivo=EXPIRED',
+        dedupeKey: `lotes-vencidos:${companyId}:${dia}`,
+      })
+      if (n > 0) avisados++
+    }
+    return avisados
+  } catch (e) {
+    console.error('[inventario:vencimientos]', e instanceof Error ? e.message : e)
     return 0
   }
 }

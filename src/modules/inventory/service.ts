@@ -10,6 +10,7 @@ import {
   aplicarMovimiento,
   cubetasDeSaldo,
   CANTIDAD_MAXIMA,
+  EXISTENCIA_MAXIMA,
   disponible,
   normalizarMotivo,
   reservaVencida,
@@ -30,18 +31,24 @@ import {
   validarLineasEntrada,
   type LineaEntrada,
 } from './entradas'
+import { MOTIVO_DE_CONTEO, MOTIVO_REASIGNACION_DE_LOTE, resolverMotivo, type ClaseDeMotivo } from './motivos'
 import {
   MAX_LINEAS_CONTEO,
   MAX_MOTIVO_CANCELACION,
   MAX_NOTA_CONTEO,
   PREFIJO_CONTEO,
+  claveDeLinea,
+  compararParaAplicar,
   diferenciaDeConteo,
   esModoConteo,
   motivoDeConteo,
+  nombreDeLinea,
   planDeAjuste,
+  repartirEnRondas,
   validarCantidadContada,
   type EstadoConteo,
   type ModoConteo,
+  type PlanDeAjuste,
 } from './conteos'
 import {
   MAX_MOTIVO_TRASLADO,
@@ -52,7 +59,11 @@ import {
   motivoDeRecepcion,
   pendienteDeLinea,
   planDeCancelacion,
+  pendienteDeLote,
   planDeRecepcion,
+  repartoDeCancelacion,
+  repartoDeRecepcion,
+  sinLotes,
   validarLineasTraslado,
   type EstadoTraslado,
   type LineaDeTraslado,
@@ -70,6 +81,33 @@ import {
 } from './costos'
 import { errorObjetivoContraUmbral, validarObjetivo } from './reposicion'
 import { InventarioError, fallo } from './errores'
+import {
+  CODIGO_SIN_LOTE,
+  asignacionDeReserva,
+  disponibleDeLote,
+  esCodigoSinLote,
+  MAX_LOTES_POR_LINEA,
+  fusionarReparto,
+  ordenFefo,
+  planDeBarrido,
+  motivoParaNoDeshacerLotes,
+  planDeCorreccionDeVencimiento,
+  planDeConsumo,
+  repartirFefo,
+  repartoDeDevolucion,
+  sumaDeReparto,
+  validarCodigoDeLoteNuevo,
+  validarLotesDeLinea,
+  validarMovimientoEntreLotes,
+  MAX_SERIES_A_ASIGNAR,
+  validarSeriesDeLinea,
+  type LoteConSaldo,
+  type LoteDeSaldo,
+  type LoteDeLinea,
+  type RepartoLote,
+} from './lotes'
+import { historiaDeLotesEnTx, lotesDeTrasladoEnTx, repartosPorCodigoEnTx } from './lotes-queries'
+import { diaLocal } from '@/modules/reportes/rango'
 
 /**
  * COMMERCE CORE · inventario — el servicio (Fase 2).
@@ -113,6 +151,16 @@ export interface EntradaBase {
   ahora?: Date
 }
 
+/**
+ * INV-4b · Lo que añaden los movimientos que se explican con un motivo del catálogo (ajuste, daño, baja): el CÓDIGO elegido y, si
+ * quien llama es una pantalla, la orden de exigirlo. `motivo` (el de `EntradaBase`) pasa a ser el DETALLE en texto libre.
+ */
+export interface ConMotivoCodificado {
+  motivoCodigo?: string | null
+  /** Las pantallas lo exigen; los procesos y las pruebas que no eligen un motivo siguen escribiendo solo texto. */
+  exigirMotivoCodificado?: boolean
+}
+
 export interface SaldoVista extends Saldo {
   disponible: number
 }
@@ -134,7 +182,7 @@ async function exigirVarianteControlada(tx: Tx, companyId: string, varianteId: s
   if (typeof varianteId !== 'string' || varianteId === '') fallo('VARIANTE_NO_ENCONTRADA', 'La variante no existe.')
   const v = await tx.catalogVariant.findFirst({
     where: { id: varianteId, companyId },
-    select: { id: true, sku: true, name: true, item: { select: { id: true, name: true, type: true, capabilities: true } } },
+    select: { id: true, sku: true, name: true, isDefault: true, item: { select: { id: true, name: true, type: true, capabilities: true } } },
   })
   if (!v) fallo('VARIANTE_NO_ENCONTRADA', 'La variante no existe.')
   if (!normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory) {
@@ -163,6 +211,13 @@ function motivoValido(m: unknown, obligatorio: boolean): string | null {
   if (!r.ok) fallo('MOTIVO_INVALIDO', r.error)
   if (obligatorio && !r.valor) fallo('MOTIVO_OBLIGATORIO', 'Escribe el motivo: un ajuste o un daño sin explicación es un faltante sin explicar.')
   return r.valor
+}
+
+/** INV-4b · El motivo de un ajuste, un daño o una baja: el código del catálogo (si se eligió) y el texto que queda en el movimiento. */
+function motivoCodificado(e: EntradaBase & ConMotivoCodificado, clase: ClaseDeMotivo): { codigo: string | null; texto: string | null } {
+  const r = resolverMotivo({ clase, codigo: e.motivoCodigo, detalle: e.motivo, exigirCodigo: e.exigirMotivoCodificado === true, textoObligatorio: true })
+  if (!r.ok) fallo(r.codigo, r.error)
+  return { codigo: r.codigo, texto: r.texto }
 }
 
 /** La referencia de un movimiento o reserva: tipo corto y id acotados (los fija el sistema, pero no se confía). */
@@ -208,6 +263,8 @@ async function obtenerNivel(tx: Tx, companyId: string, varianteId: string, sucur
 
 /** Bloquea las filas en orden de id y devuelve sus contadores. */
 async function bloquear(tx: Tx, companyId: string, ids: string[]): Promise<Map<string, FilaNivel>> {
+  // INV-5a: SIEMPRE antes que los candados de saldos (ver `candadoDeLotes`): ese orden fijo es lo que evita los ciclos.
+  await candadoDeLotes(tx, companyId, false)
   const unicos = [...new Set(ids)].sort()
   const filas = await tx.$queryRaw<FilaNivel[]>`
     SELECT "id", "catalogVariantId", "locationId", "onHand", "reserved", "damaged", "lowStockThreshold"
@@ -217,6 +274,315 @@ async function bloquear(tx: Tx, companyId: string, ids: string[]): Promise<Map<s
        FOR UPDATE`
   if (filas.length !== unicos.length) fallo('NIVEL_NO_ENCONTRADO', 'El saldo de inventario no existe.')
   return new Map(filas.map((f) => [f.id, f]))
+}
+
+// ── INV-5a · Lotes y vencimiento ─────────────────────────────────────────────
+
+/**
+ * CANDADO DE EMPRESA PARA LOS LOTES. Cada operación sobre un saldo toma este candado COMPARTIDO (muchas a la vez, sin estorbarse);
+ * activar los lotes de un producto lo toma EXCLUSIVO: espera a que terminen las operaciones en curso y no deja entrar otras hasta
+ * confirmar. Sin él, una venta que decidió «este producto no lleva lotes» y una activación recién confirmada se cruzarían (la base
+ * lo rechazaría al cerrar, pero como un error en vez de una espera). Se toma SIEMPRE antes que los candados de los saldos.
+ */
+async function candadoDeLotes(tx: Tx, companyId: string, exclusivo: boolean): Promise<void> {
+  const llave = `inventory_lots:${companyId}`
+  if (exclusivo) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${llave}, 0))`
+  else await tx.$executeRaw`SELECT pg_advisory_xact_lock_shared(hashtextextended(${llave}, 0))`
+}
+
+/** Un producto que lleva lotes: si exige vencimiento y cuál es su lote «SIN LOTE». */
+interface PoliticaDeLotes {
+  exigirVencimiento: boolean
+  legadoId: string
+  /** INV-5c: el producto lleva SERIES (cada lote es una serie de UNA unidad), no lotes. */
+  series: boolean
+}
+
+/**
+ * Qué productos llevan lotes, recordado por transacción: un lote de 200 líneas pregunta por cada producto una sola vez. Es seguro
+ * porque el único cambio posible (activar) toma el candado EXCLUSIVO de la empresa y olvida lo recordado (`activarLotesEnTx`).
+ */
+const politicasPorTx = new WeakMap<Tx, Map<string, PoliticaDeLotes | null>>()
+
+/** `null` = el producto no lleva lotes. */
+async function politicaDeLotes(tx: Tx, companyId: string, varianteId: string): Promise<PoliticaDeLotes | null> {
+  let memo = politicasPorTx.get(tx)
+  if (!memo) {
+    memo = new Map()
+    politicasPorTx.set(tx, memo)
+  }
+  const recordada = memo.get(varianteId)
+  if (recordada !== undefined) return recordada
+  const t = await tx.inventoryLotTracking.findUnique({ where: { catalogVariantId: varianteId }, select: { companyId: true, requiresExpiry: true, tracksSerials: true } })
+  let politica: PoliticaDeLotes | null = null
+  if (t) {
+    if (t.companyId !== companyId) fallo('NIVEL_AJENO', 'El producto no pertenece a esta empresa.')
+    const legado = await tx.inventoryLot.findFirst({ where: { catalogVariantId: varianteId, companyId, legacy: true }, select: { id: true } })
+    if (!legado) fallo('LOTE_LEGADO_FALTA', 'Este producto lleva lotes pero no tiene su lote «SIN LOTE». Avisa a soporte.')
+    politica = { exigirVencimiento: t.requiresExpiry, legadoId: legado.id, series: t.tracksSerials }
+  }
+  memo.set(varianteId, politica)
+  return politica
+}
+
+/** El día de HOY en el calendario de la empresa (su zona horaria), como `YYYY-MM-DD`. */
+async function hoyDeEmpresa(tx: Tx, companyId: string, ahora: Date): Promise<string> {
+  const c = await tx.company.findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })
+  return diaLocal(ahora, c?.zonaHoraria ?? '')
+}
+
+/** Los lotes de un saldo con lo que hay de cada uno (las tres cubetas). Quien llama tiene el saldo bloqueado. */
+async function cargarLotesDeNivel(tx: Tx, companyId: string, nivelId: string): Promise<LoteConSaldo[]> {
+  const filas = await tx.$queryRaw<
+    { loteId: string; codigo: string; vencimiento: string | null; legado: boolean; creadoEn: number; onHand: number; reserved: number; damaged: number }[]
+  >`
+    SELECT b."lotId" AS "loteId", l."code" AS "codigo", l."expiresOn"::text AS "vencimiento", l."legacy" AS "legado",
+           (EXTRACT(EPOCH FROM l."createdAt") * 1000)::float8 AS "creadoEn", b."onHand", b."reserved", b."damaged"
+      FROM "inventory_lot_balances" b
+      JOIN "inventory_lots" l ON l."id" = b."lotId"
+     WHERE b."inventoryLevelId" = ${nivelId} AND b."companyId" = ${companyId}`
+  return filas.map((f) => ({ ...f, creadoEn: Number(f.creadoEn) }))
+}
+
+/** El mensaje cuando no alcanza lo VENDIBLE de un producto con lotes (lo vencido no cuenta, y se dice cuánto hay). */
+function faltaVendible(pides: number, vendible: number, vencido: number, apartado: number): never {
+  const apartadas = apartado > 0 ? ` (${apartado} más están apartadas)` : ''
+  const vencidas = vencido > 0 ? `; otras ${vencido} están vencidas y no se pueden vender` : ''
+  fallo('STOCK_INSUFICIENTE', `No hay suficiente: pides ${pides} y hay ${vendible} disponible(s) para vender${apartadas}${vencidas}.`)
+}
+
+/**
+ * Crea (si faltan) los lotes que una entrada trae y devuelve el id de cada código. «SIN LOTE» es el legado. Un lote es de UN producto
+ * y tiene UN vencimiento: si ya existía con otro, se rechaza (el vencimiento de un lote no se reescribe). Se crean en orden de código
+ * y con `skipDuplicates`: dos entradas simultáneas del mismo lote nuevo no chocan ni se interbloquean.
+ */
+async function asegurarLotes(tx: Tx, companyId: string, varianteId: string, politica: PoliticaDeLotes, lotes: readonly LoteDeLinea[], userId: string | null): Promise<Map<string, string>> {
+  const ids = new Map<string, string>()
+  const conCodigo = lotes.filter((l) => !esCodigoSinLote(l.codigo))
+  for (const l of lotes) if (esCodigoSinLote(l.codigo)) ids.set(l.codigo, politica.legadoId)
+  if (conCodigo.length === 0) return ids
+  for (const l of conCodigo) {
+    const nuevo = validarCodigoDeLoteNuevo(l.codigo)
+    if (!nuevo.ok) fallo('LOTE_INVALIDO', nuevo.error)
+  }
+  const ordenados = [...conCodigo].sort((a, b) => (a.codigo < b.codigo ? -1 : a.codigo > b.codigo ? 1 : 0))
+  await tx.inventoryLot.createMany({
+    data: ordenados.map((l) => ({ companyId, catalogVariantId: varianteId, code: l.codigo, expiresOn: l.vencimiento === null ? null : new Date(`${l.vencimiento}T00:00:00.000Z`), createdBy: userId })),
+    skipDuplicates: true,
+  })
+  const existentes = await tx.inventoryLot.findMany({
+    where: { companyId, catalogVariantId: varianteId, code: { in: ordenados.map((l) => l.codigo) } },
+    select: { id: true, code: true, expiresOn: true },
+  })
+  const por = new Map(existentes.map((x) => [x.code, x]))
+  for (const l of ordenados) {
+    const x = por.get(l.codigo)
+    if (!x) fallo('LOTE_NO_ENCONTRADO', `No se pudo preparar el lote ${l.codigo}.`)
+    const guardado = x.expiresOn === null ? null : x.expiresOn.toISOString().slice(0, 10)
+    if (guardado !== l.vencimiento) {
+      fallo('LOTE_VENCIMIENTO_DISTINTO', `El lote ${l.codigo} ya existe ${guardado === null ? 'sin vencimiento' : `y vence el ${guardado}`}: un lote tiene un solo vencimiento.`)
+    }
+    ids.set(l.codigo, x.id)
+  }
+  // INV-5c: una serie ya con unidades en el inventario (en cualquier sucursal, vendible o dañada) no entra otra vez. Se dice aquí con el
+  // nombre de la sucursal; la base lo vigila de todos modos (`inventory_serial_comprobar`) por si dos entradas llegan a la vez.
+  if (politica.series) {
+    const ocupada = await tx.inventoryLotBalance.findFirst({
+      where: { companyId, lotId: { in: ordenados.map((l) => por.get(l.codigo)!.id) }, OR: [{ onHand: { gt: 0 } }, { damaged: { gt: 0 } }] },
+      select: { lot: { select: { code: true } }, level: { select: { location: { select: { nombre: true } } } } },
+    })
+    if (ocupada) fallo('SERIE_YA_EXISTE', `La serie ${ocupada.lot.code} ya está en el inventario (${ocupada.level.location.nombre}): un número de serie es de una sola unidad.`)
+  }
+  return ids
+}
+
+/**
+ * Escribe el REPARTO de un movimiento entre lotes: crea (si faltan) los saldos por lote en cero y los renglones del reparto. El
+ * saldo de cada lote lo mueve la BASE con el reparto (ver la migración `20261068`); aquí solo se dice de qué lotes es el movimiento.
+ */
+async function escribirRepartos(tx: Tx, companyId: string, varianteId: string, filas: readonly { nivelId: string; movimientoId: string; reparto: readonly RepartoLote[] }[]): Promise<void> {
+  // INV-5c: una serie es UNA unidad y no puede estar en dos sitios. Se bloquean las filas de las series que se tocan (en orden de id, para
+  // que dos movimientos no se interbloqueen): la segunda transacción que meta la misma serie espera a la primera y la base, al confirmar,
+  // la ve. (La base lo vigila de todos modos, ver `inventory_serial_comprobar`.)
+  const politica = await politicaDeLotes(tx, companyId, varianteId)
+  if (politica?.series) {
+    const ids = [...new Set(filas.flatMap((f) => f.reparto.map((r) => r.loteId)))].filter((id) => id !== politica.legadoId).sort()
+    if (ids.length > 0) await tx.$queryRaw`SELECT "id" FROM "inventory_lots" WHERE "id" IN (${Prisma.join(ids)}) AND "companyId" = ${companyId} ORDER BY "id" FOR UPDATE`
+  }
+  const saldos = new Map<string, { inventoryLevelId: string; lotId: string }>()
+  for (const f of filas) for (const r of f.reparto) saldos.set(`${f.nivelId}|${r.loteId}`, { inventoryLevelId: f.nivelId, lotId: r.loteId })
+  const ordenados = [...saldos.values()].sort((a, b) => (a.inventoryLevelId !== b.inventoryLevelId ? (a.inventoryLevelId < b.inventoryLevelId ? -1 : 1) : a.lotId < b.lotId ? -1 : a.lotId > b.lotId ? 1 : 0))
+  await tx.inventoryLotBalance.createMany({ data: ordenados.map((x) => ({ companyId, catalogVariantId: varianteId, ...x })), skipDuplicates: true })
+  await tx.inventoryMovementLot.createMany({
+    data: filas.flatMap((f) => f.reparto.map((r) => ({ companyId, movementId: f.movimientoId, inventoryLevelId: f.nivelId, lotId: r.loteId, quantity: r.cantidad }))),
+  })
+}
+
+/**
+ * Lo que quien llama dice de los lotes de un movimiento de UN producto con lotes:
+ *   · ENTRANTE: de qué lotes es lo que entra, por CÓDIGO (se crean si faltan): `[{ codigo, vencimiento?, cantidad }]`.
+ *   · SALIENTE: de qué lotes sale, por ID de lote: `[{ loteId, cantidad }]`. Sin esto, sale por FEFO (lo que antes vence).
+ *   · DEVOLUCION: vuelve a los lotes de que salió en esa referencia (un pedido); lo que no explique, al lote «SIN LOTE».
+ * Si el producto no lleva lotes, ninguno de los tres puede venir con contenido.
+ */
+export type PeticionDeLotes = { tipo: 'ENTRANTE'; lotes: unknown } | { tipo: 'SALIENTE'; lotes: unknown } | { tipo: 'DEVOLUCION'; referencia: Referencia | null }
+
+const sinContenido = (v: unknown) => v === undefined || v === null || (Array.isArray(v) && v.length === 0)
+
+/**
+ * Lo que el movimiento de una referencia sacó de cada lote y todavía no volvió (ventas menos devoluciones), en el orden en que salió
+ * (a igual momento, primero el lote que antes vence: es el que FEFO tocó primero).
+ */
+async function vendidoPorLote(tx: Tx, companyId: string, nivelId: string, referencia: Referencia): Promise<RepartoLote[]> {
+  const filas = await tx.$queryRaw<{ loteId: string; neto: number }[]>`
+    SELECT ml."lotId" AS "loteId", SUM(CASE WHEN m."type" = 'SALE' THEN ml."quantity" ELSE -ml."quantity" END)::int AS "neto"
+      FROM "inventory_movement_lots" ml
+      JOIN "inventory_movements" m ON m."id" = ml."movementId"
+      JOIN "inventory_lots" l ON l."id" = ml."lotId"
+     WHERE m."companyId" = ${companyId} AND m."inventoryLevelId" = ${nivelId}
+       AND m."referenceType" = ${referencia.tipo} AND m."referenceId" = ${referencia.id}
+       AND m."type" IN ('SALE', 'RETURN')
+     GROUP BY ml."lotId", l."expiresOn"
+     ORDER BY MIN(m."createdAt"), l."expiresOn" NULLS LAST, ml."lotId"`
+  return filas.filter((f) => Number(f.neto) > 0).map((f) => ({ loteId: f.loteId, cantidad: Number(f.neto) }))
+}
+
+/** Valida un reparto de SALIDA elegido por quien captura (por id de lote) contra lo que cada lote tiene en la cubeta de la que sale. */
+function validarRepartoSalida(crudo: unknown, cantidad: number, lotes: readonly LoteConSaldo[], cubeta: 'AVAILABLE' | 'RESERVED' | 'DAMAGED', nombre: string): RepartoLote[] {
+  if (!Array.isArray(crudo) || crudo.length === 0) fallo('LOTES_FALTAN', `«${nombre}» lleva lotes: indica de qué lote sale.`)
+  if (crudo.length > MAX_LOTES_POR_LINEA) fallo('DEMASIADOS_LOTES', `Se admiten hasta ${MAX_LOTES_POR_LINEA} lotes por movimiento.`)
+  const pedido: RepartoLote[] = []
+  for (const x of crudo as unknown[]) {
+    const l = x as { loteId?: unknown; cantidad?: unknown } | null
+    if (typeof l?.loteId !== 'string' || l.loteId === '') fallo('LOTE_INVALIDO', 'Uno de los lotes no está bien indicado.')
+    pedido.push({ loteId: l.loteId, cantidad: cantidadValida(l.cantidad) })
+  }
+  const reparto = fusionarReparto(pedido)
+  if (sumaDeReparto(reparto) !== cantidad) fallo('LOTES_NO_CUADRAN', `Los lotes suman ${sumaDeReparto(reparto)} unidades y el movimiento es de ${cantidad}.`)
+  const por = new Map(lotes.map((l) => [l.loteId, l]))
+  for (const r of reparto) {
+    const lote = por.get(r.loteId)
+    if (!lote) fallo('LOTE_NO_ENCONTRADO', 'Ese lote no tiene existencias en esta sucursal.')
+    const tiene = cubeta === 'AVAILABLE' ? disponibleDeLote(lote) : cubeta === 'DAMAGED' ? lote.damaged : lote.reserved
+    if (r.cantidad > tiene) {
+      const que = cubeta === 'DAMAGED' ? 'dañada(s)' : cubeta === 'RESERVED' ? 'apartada(s)' : 'disponible(s)'
+      fallo('STOCK_INSUFICIENTE', `El lote ${lote.codigo} solo tiene ${Math.max(0, tiene)} unidad(es) ${que}; no se pueden usar ${r.cantidad}.`)
+    }
+  }
+  return reparto
+}
+
+/**
+ * De qué lotes es un movimiento. `undefined` = el producto no lleva lotes (el movimiento no se reparte). Quien llama tiene el saldo
+ * BLOQUEADO. Lo que entra, por código (se crean los lotes que falten) o, sin indicarlo, al lote «SIN LOTE» (salvo una compra, que
+ * debe decir de qué lote es); lo que sale, por los lotes elegidos o por FEFO (lo que antes vence; lo vencido no se vende).
+ */
+async function resolverReparto(
+  tx: Tx,
+  companyId: string,
+  c: { nivelId: string; varianteId: string; nombre: string },
+  m: Pick<Movimiento, 'type' | 'sourceBucket' | 'destinationBucket' | 'quantity'>,
+  peticion: PeticionDeLotes | undefined,
+  ahora: Date,
+  userId: string | null
+): Promise<RepartoLote[] | undefined> {
+  const politica = await politicaDeLotes(tx, companyId, c.varianteId)
+  if (!politica) {
+    if (peticion && peticion.tipo !== 'DEVOLUCION' && !sinContenido(peticion.lotes)) fallo('LOTES_NO_APLICAN', `«${c.nombre}» no lleva lotes: quita el lote o actívalos en su ficha de inventario.`)
+    return undefined
+  }
+  const cantidad = m.quantity
+  // ENTRA desde fuera.
+  if (m.sourceBucket === null) {
+    if (peticion?.tipo === 'ENTRANTE' && !sinContenido(peticion.lotes)) {
+      const r = validarLotesDeLinea(peticion.lotes, cantidad, { exigirVencimiento: politica.exigirVencimiento, series: politica.series })
+      if (!r.ok) fallo(r.codigo, `«${c.nombre}»: ${r.error}`)
+      const ids = await asegurarLotes(tx, companyId, c.varianteId, politica, r.lotes, userId)
+      return fusionarReparto(r.lotes.map((x) => ({ loteId: ids.get(x.codigo)!, cantidad: x.cantidad })))
+    }
+    if (m.type === 'PURCHASE') fallo('LOTES_FALTAN', `«${c.nombre}» lleva lotes: indica de qué lote es lo que entra (o «SIN LOTE»).`)
+    if (m.type === 'RETURN' && peticion?.tipo === 'DEVOLUCION' && peticion.referencia) {
+      return repartoDeDevolucion(await vendidoPorLote(tx, companyId, c.nivelId, peticion.referencia), cantidad, politica.legadoId)
+    }
+    return [{ loteId: politica.legadoId, cantidad }]
+  }
+  // SALE de una cubeta del saldo.
+  const lotes = await cargarLotesDeNivel(tx, companyId, c.nivelId)
+  if (peticion?.tipo === 'SALIENTE' && !sinContenido(peticion.lotes)) return validarRepartoSalida(peticion.lotes, cantidad, lotes, m.sourceBucket, c.nombre)
+  if (m.sourceBucket === 'AVAILABLE') {
+    const r = repartirFefo(lotes, cantidad, await hoyDeEmpresa(tx, companyId, ahora))
+    if (!r.ok) faltaVendible(cantidad, r.vendible, r.vencido, lotes.reduce((s, l) => s + l.reserved, 0))
+    return r.reparto
+  }
+  if (m.sourceBucket === 'DAMAGED') {
+    // Lo dañado sale primero de donde antes vence (lo vencido es lo primero que se da de baja).
+    const reparto: RepartoLote[] = []
+    let resto = cantidad
+    for (const l of lotes.filter((x) => x.damaged > 0).sort(ordenFefo)) {
+      if (resto === 0) break
+      const toma = Math.min(resto, l.damaged)
+      reparto.push({ loteId: l.loteId, cantidad: toma })
+      resto -= toma
+    }
+    if (resto > 0) fallo('STOCK_INSUFICIENTE', `Solo hay ${lotes.reduce((s, l) => s + l.damaged, 0)} unidad(es) dañada(s); no se pueden usar ${cantidad}.`)
+    return reparto
+  }
+  fallo('REPARTO_FALTANTE', 'Lo apartado se saca con el reparto de su reserva.')
+}
+
+/** Las unidades apartadas de una reserva, por lote, según el ledger (ver `asignacionDeReserva`). `undefined` si el producto no lleva lotes. */
+async function repartoDeReserva(tx: Tx, companyId: string, r: Pick<InventoryReservation, 'id' | 'inventoryLevelId' | 'quantity'>): Promise<RepartoLote[] | undefined> {
+  const nivel = await tx.inventoryLevel.findFirstOrThrow({ where: { id: r.inventoryLevelId, companyId }, select: { catalogVariantId: true } })
+  const politica = await politicaDeLotes(tx, companyId, nivel.catalogVariantId)
+  if (!politica) return undefined
+  const filas = await tx.$queryRaw<{ loteId: string; neto: number }[]>`
+    SELECT ml."lotId" AS "loteId", SUM(CASE WHEN m."type" = 'RESERVATION' THEN ml."quantity" ELSE -ml."quantity" END)::int AS "neto"
+      FROM "inventory_movement_lots" ml
+      JOIN "inventory_movements" m ON m."id" = ml."movementId"
+     WHERE m."companyId" = ${companyId} AND m."inventoryLevelId" = ${r.inventoryLevelId}
+       AND m."referenceType" = 'RESERVATION' AND m."referenceId" = ${r.id}
+       AND m."type" IN ('RESERVATION', 'RESERVATION_RELEASE')
+     GROUP BY ml."lotId"`
+  const a = asignacionDeReserva(filas.map((f) => ({ loteId: f.loteId, cantidad: Number(f.neto) })), r.quantity, politica.legadoId)
+  if (!a.ok) fallo('RESERVA_DESCUADRADA', `${a.error} Avisa a soporte.`)
+  return a.reparto
+}
+
+/**
+ * La MISMA clave con OTROS lotes no es un reintento: devuelve `false` si el movimiento previo se repartió distinto de lo que se pide
+ * ahora. Solo compara cuando quien llama indicó lotes (sin indicarlos manda FEFO, y reintentar devuelve el movimiento de siempre).
+ */
+async function mismoRepartoQueElPrevio(tx: Tx, companyId: string, movimientoId: string, peticion: PeticionDeLotes | undefined, varianteId: string): Promise<boolean> {
+  if (!peticion || peticion.tipo === 'DEVOLUCION' || sinContenido(peticion.lotes)) return true
+  const previos = await tx.inventoryMovementLot.findMany({
+    where: { companyId, movementId: movimientoId },
+    select: { lotId: true, quantity: true, balance: { select: { lot: { select: { code: true } } } } },
+  })
+  if (previos.length === 0) return false // el movimiento previo no se repartió: el producto no llevaba lotes
+  if (peticion.tipo === 'SALIENTE') {
+    const pedido = Array.isArray(peticion.lotes) ? fusionarReparto((peticion.lotes as { loteId?: string; cantidad?: number }[]).map((x) => ({ loteId: String(x?.loteId), cantidad: Number(x?.cantidad) }))) : []
+    return pedido.length === previos.length && pedido.every((x) => previos.some((p) => p.lotId === x.loteId && p.quantity === x.cantidad))
+  }
+  const cantidad = previos.reduce((s, p) => s + p.quantity, 0)
+  const politica = await politicaDeLotes(tx, companyId, varianteId)
+  const r = validarLotesDeLinea(peticion.lotes, cantidad, { exigirVencimiento: politica?.exigirVencimiento === true, series: politica?.series === true })
+  return r.ok && r.lotes.length === previos.length && r.lotes.every((x) => previos.some((p) => p.balance.lot.code === x.codigo && p.quantity === x.cantidad))
+}
+
+/** Los flujos que todavía no reparten por lote se niegan a tocar un producto que los lleva (en vez de descuadrarlo). */
+export async function exigirSinLotes(
+  tx: Tx,
+  companyId: string,
+  varianteIds: readonly string[],
+  operacion: string,
+  sugerencia = 'Usa una entrada de mercancía, una venta, un ajuste o un daño, que sí los reparten.'
+): Promise<void> {
+  const unicos = [...new Set(varianteIds)]
+  if (unicos.length === 0) return
+  const con = await tx.inventoryLotTracking.findMany({ where: { companyId, catalogVariantId: { in: unicos } }, select: { variant: { select: { name: true, isDefault: true, item: { select: { name: true } } } } } })
+  if (con.length === 0) return
+  const nombres = con.map((c) => (c.variant.isDefault ? c.variant.item.name : `${c.variant.item.name} · ${c.variant.name}`))
+  fallo('LOTES_NO_SOPORTADO', `${nombres.map((n) => `«${n}»`).join(', ')} ${nombres.length === 1 ? 'lleva' : 'llevan'} lotes y ${operacion} todavía no trabaja con lotes. ${sugerencia}`)
 }
 
 interface MetaMovimiento {
@@ -229,6 +595,13 @@ interface MetaMovimiento {
    * valoraría; un número = ese costo (el de una línea de entrada).
    */
   costo?: Costo | null
+  /** INV-4b: el motivo del catálogo (solo un ajuste o un daño lo lleva). */
+  motivoCodigo?: string | null
+  /**
+   * INV-5a: de qué lotes es el movimiento (suma su cantidad). OBLIGATORIO si el producto lleva lotes y prohibido si no: la puerta
+   * lo comprueba, y la base lo vuelve a comprobar al cerrar la transacción.
+   */
+  reparto?: readonly RepartoLote[]
 }
 
 /**
@@ -280,7 +653,15 @@ async function escribirMovimiento(
   m: Movimiento,
   meta: MetaMovimiento
 ): Promise<{ movimiento: InventoryMovement; saldo: Saldo }> {
+  if (meta.motivoCodigo && m.type !== 'ADJUSTMENT' && m.type !== 'DAMAGE') fallo('MOTIVO_NO_APLICA', 'Solo un ajuste o un daño se explica con un motivo del catálogo.')
   const nivel = await tx.inventoryLevel.findFirstOrThrow({ where: { id: nivelId, companyId } })
+  // INV-5a: un producto con lotes reparte CADA movimiento entre sus lotes; uno sin lotes, nunca.
+  const lotes = await politicaDeLotes(tx, companyId, nivel.catalogVariantId)
+  if (lotes) {
+    if (!meta.reparto || sumaDeReparto(meta.reparto) !== m.quantity) fallo('REPARTO_FALTANTE', 'Un movimiento de un producto con lotes debe indicar de qué lotes sale o entra, y la suma debe ser su cantidad.')
+  } else if (meta.reparto) {
+    fallo('LOTES_NO_APLICAN', 'Este producto no lleva lotes.')
+  }
   const antes = cubetasDeSaldo(nivel)
   let despues
   try {
@@ -302,6 +683,7 @@ async function escribirMovimiento(
       previousOnHand: nivel.onHand,
       newOnHand: saldo.onHand,
       reason: m.reason ?? null,
+      reasonCode: meta.motivoCodigo ?? null,
       userId: meta.userId,
       referenceType: meta.referencia?.tipo ?? null,
       referenceId: meta.referencia?.id ?? null,
@@ -310,6 +692,7 @@ async function escribirMovimiento(
     },
   })
   await tx.inventoryLevel.update({ where: { id: nivelId }, data: { onHand: saldo.onHand, reserved: saldo.reserved, damaged: saldo.damaged } })
+  if (lotes && meta.reparto) await escribirRepartos(tx, companyId, nivel.catalogVariantId, [{ nivelId, movimientoId: movimiento.id, reparto: meta.reparto }])
   return { movimiento, saldo }
 }
 
@@ -326,12 +709,14 @@ async function cerrarReserva(
   userId: string | null,
   motivo: string
 ): Promise<void> {
+  // INV-5a: lo apartado vuelve a los MISMOS lotes de que se apartó.
+  const reparto = await repartoDeReserva(tx, companyId, r)
   await escribirMovimiento(
     tx,
     companyId,
     r.inventoryLevelId,
     { type: 'RESERVATION_RELEASE', sourceBucket: 'RESERVED', destinationBucket: 'AVAILABLE', quantity: r.quantity, reason: motivo },
-    { userId, referencia: { tipo: 'RESERVATION', id: r.id } }
+    { userId, referencia: { tipo: 'RESERVATION', id: r.id }, reparto }
   )
   await tx.inventoryReservation.update({ where: { id: r.id }, data: { status: estado, resolvedAt: ahora } })
 }
@@ -526,6 +911,8 @@ interface Plan {
   destino: Movimiento['destinationBucket']
   cantidad: number
   motivo: string | null
+  /** INV-4b: el motivo del catálogo (ajuste, daño, baja). */
+  motivoCodigo?: string | null
   /** Exige sucursal abierta (entradas); las salidas se permiten en una cerrada. */
   sucursalActiva: boolean
   /** Deja rastro en la bitácora de actividad (lo que hace una persona a mano). */
@@ -533,6 +920,8 @@ interface Plan {
   referenciaPorDefecto?: Referencia
   /** INV-3a: el costo unitario de una ENTRADA. Si viene, mueve el costo promedio del producto y valora el movimiento. */
   costoEntrada?: Costo
+  /** INV-5a: lo que se indicó de los lotes (solo importa si el producto los lleva). */
+  lotes?: PeticionDeLotes
 }
 
 async function moverSimple(tx: Tx, companyId: string, e: EntradaBase, plan: Plan, ctx: ContextoAuditoria): Promise<ResultadoMovimiento> {
@@ -543,8 +932,21 @@ async function moverSimple(tx: Tx, companyId: string, e: EntradaBase, plan: Plan
   const nivelId = await obtenerNivel(tx, companyId, variante.id, sucursal.id)
 
   const previo = await prepararNivel(tx, companyId, nivelId, clave, { type: plan.tipo, sourceBucket: plan.origen, destinationBucket: plan.destino, quantity: plan.cantidad }, ahora)
-  if (previo) return { nivelId, movimientoId: previo.id, saldo: await saldoActual(tx, companyId, nivelId), repetido: true }
+  if (previo) {
+    if (!(await mismoRepartoQueElPrevio(tx, companyId, previo.id, plan.lotes, variante.id))) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra operación distinta.')
+    return { nivelId, movimientoId: previo.id, saldo: await saldoActual(tx, companyId, nivelId), repetido: true }
+  }
 
+  // INV-5a: de qué lotes es el movimiento (si el producto los lleva).
+  const reparto = await resolverReparto(
+    tx,
+    companyId,
+    { nivelId, varianteId: variante.id, nombre: variante.item.name },
+    { type: plan.tipo, sourceBucket: plan.origen, destinationBucket: plan.destino, quantity: plan.cantidad },
+    plan.lotes,
+    ahora,
+    ctx.actorId
+  )
   // El costo promedio se mueve ANTES de escribir el movimiento: las existencias que pesan son las de antes de esta entrada.
   if (plan.costoEntrada !== undefined) await aplicarCostosDeEntradaEnTx(tx, companyId, [{ varianteId: variante.id, cantidad: plan.cantidad, costo: plan.costoEntrada }])
   const { movimiento, saldo } = await escribirMovimiento(
@@ -552,13 +954,14 @@ async function moverSimple(tx: Tx, companyId: string, e: EntradaBase, plan: Plan
     companyId,
     nivelId,
     { type: plan.tipo, sourceBucket: plan.origen, destinationBucket: plan.destino, quantity: plan.cantidad, reason: plan.motivo },
-    { userId: ctx.actorId, referencia: referenciaValida(e.referencia) ?? plan.referenciaPorDefecto ?? null, idempotencyKey: clave, costo: plan.costoEntrada }
+    { userId: ctx.actorId, referencia: referenciaValida(e.referencia) ?? plan.referenciaPorDefecto ?? null, idempotencyKey: clave, costo: plan.costoEntrada, motivoCodigo: plan.motivoCodigo ?? null, reparto }
   )
   if (plan.auditar) {
     await auditarInventario(tx, ctx, companyId, 'INVENTORY_STOCK_CHANGED', nivelId, {
       tipo: plan.tipo,
       cantidad: plan.cantidad,
       motivo: plan.motivo,
+      ...(plan.motivoCodigo ? { motivoCodigo: plan.motivoCodigo } : {}),
       sku: variante.sku,
       producto: variante.item.name,
       sucursal: sucursal.nombre,
@@ -570,21 +973,23 @@ async function moverSimple(tx: Tx, companyId: string, e: EntradaBase, plan: Plan
 }
 
 /** Llega mercancía (compra a un proveedor, producción propia): entra a lo vendible. */
-export async function recibirEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number; costo?: unknown }, ctx: ContextoAuditoria) {
+export async function recibirEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number; costo?: unknown; lotes?: unknown }, ctx: ContextoAuditoria) {
   const costo = costoOpcional(e.costo)
   if (!costo.ok) fallo('COSTO_INVALIDO', costo.error)
   return moverSimple(
     tx,
     companyId,
     e,
-    { tipo: 'PURCHASE', origen: null, destino: 'AVAILABLE', cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, false), sucursalActiva: true, auditar: true, costoEntrada: costo.valor ?? undefined },
+    { tipo: 'PURCHASE', origen: null, destino: 'AVAILABLE', cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, false), sucursalActiva: true, auditar: true, costoEntrada: costo.valor ?? undefined, lotes: { tipo: 'ENTRANTE', lotes: e.lotes } },
     ctx
   )
 }
 
 /** El cliente devuelve mercancía: vuelve a lo vendible. */
-export async function devolverEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number }, ctx: ContextoAuditoria) {
-  return moverSimple(tx, companyId, e, { tipo: 'RETURN', origen: null, destino: 'AVAILABLE', cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, false), sucursalActiva: true, auditar: true }, ctx)
+export async function devolverEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number; lotes?: unknown }, ctx: ContextoAuditoria) {
+  // INV-5a: con lotes, vuelve a los lotes de que salió en esa referencia (un pedido); los lotes explícitos mandan sobre eso.
+  const lotes: PeticionDeLotes = sinContenido(e.lotes) ? { tipo: 'DEVOLUCION', referencia: referenciaValida(e.referencia) } : { tipo: 'ENTRANTE', lotes: e.lotes }
+  return moverSimple(tx, companyId, e, { tipo: 'RETURN', origen: null, destino: 'AVAILABLE', cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, false), sucursalActiva: true, auditar: true, lotes }, ctx)
 }
 
 /**
@@ -592,28 +997,44 @@ export async function devolverEnTx(tx: Tx, companyId: string, e: EntradaBase & {
  * el sistema (caja, pedidos), no el panel: no deja rastro en la bitácora de
  * actividad —el ledger ya lo tiene—.
  */
-export async function venderEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number }, ctx: ContextoAuditoria) {
-  return moverSimple(tx, companyId, e, { tipo: 'SALE', origen: 'AVAILABLE', destino: null, cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, false), sucursalActiva: false, auditar: false }, ctx)
+export async function venderEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number; lotesSalida?: unknown }, ctx: ContextoAuditoria) {
+  return moverSimple(
+    tx,
+    companyId,
+    e,
+    { tipo: 'SALE', origen: 'AVAILABLE', destino: null, cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, false), sucursalActiva: false, auditar: false, lotes: { tipo: 'SALIENTE', lotes: e.lotesSalida } },
+    ctx
+  )
 }
 
 /** Se daña mercancía vendible: pasa a la cubeta de dañado (no se vende). */
-export async function danarEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number }, ctx: ContextoAuditoria) {
-  return moverSimple(tx, companyId, e, { tipo: 'DAMAGE', origen: 'AVAILABLE', destino: 'DAMAGED', cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, true), sucursalActiva: false, auditar: true }, ctx)
+export async function danarEnTx(tx: Tx, companyId: string, e: EntradaBase & ConMotivoCodificado & { cantidad: number; lotesSalida?: unknown }, ctx: ContextoAuditoria) {
+  const m = motivoCodificado(e, 'DANO')
+  return moverSimple(
+    tx,
+    companyId,
+    e,
+    { tipo: 'DAMAGE', origen: 'AVAILABLE', destino: 'DAMAGED', cantidad: cantidadValida(e.cantidad), motivo: m.texto, motivoCodigo: m.codigo, sucursalActiva: false, auditar: true, lotes: { tipo: 'SALIENTE', lotes: e.lotesSalida } },
+    ctx
+  )
 }
 
 /**
  * Corrige un descuadre: `cambio` positivo = sobrante, negativo = faltante. Solo
  * toca lo vendible: lo apartado se libera o se consume, no se «ajusta».
  */
-export async function ajustarEnTx(tx: Tx, companyId: string, e: EntradaBase & { cambio: number }, ctx: ContextoAuditoria) {
+export async function ajustarEnTx(tx: Tx, companyId: string, e: EntradaBase & ConMotivoCodificado & { cambio: number; lotes?: unknown; lotesSalida?: unknown }, ctx: ContextoAuditoria) {
   if (typeof e.cambio !== 'number' || !Number.isInteger(e.cambio) || e.cambio === 0) fallo('CANTIDAD_INVALIDA', 'El ajuste debe ser un número entero distinto de cero.')
   const cantidad = cantidadValida(Math.abs(e.cambio))
   const sube = e.cambio > 0
+  const m = motivoCodificado(e, sube ? 'SOBRANTE' : 'FALTANTE')
+  // INV-5a: un sobrante dice de qué lote es (sin decirlo, va al «SIN LOTE»); un faltante, de cuál sale (sin decirlo, por FEFO).
+  const lotes: PeticionDeLotes = sube ? { tipo: 'ENTRANTE', lotes: e.lotes } : { tipo: 'SALIENTE', lotes: e.lotesSalida }
   return moverSimple(
     tx,
     companyId,
     e,
-    { tipo: 'ADJUSTMENT', origen: sube ? null : 'AVAILABLE', destino: sube ? 'AVAILABLE' : null, cantidad, motivo: motivoValido(e.motivo, true), sucursalActiva: sube, auditar: true },
+    { tipo: 'ADJUSTMENT', origen: sube ? null : 'AVAILABLE', destino: sube ? 'AVAILABLE' : null, cantidad, motivo: m.texto, motivoCodigo: m.codigo, sucursalActiva: sube, auditar: true, lotes },
     ctx
   )
 }
@@ -622,13 +1043,16 @@ export async function ajustarEnTx(tx: Tx, companyId: string, e: EntradaBase & { 
  * Lo dañado se resuelve: resultó vendible (vuelve a lo vendible) o se da de baja
  * (sale del inventario). Es un ajuste, y por eso lleva motivo.
  */
-export async function resolverDanadoEnTx(tx: Tx, companyId: string, e: EntradaBase & { cantidad: number; destino: 'VENDIBLE' | 'BAJA' }, ctx: ContextoAuditoria) {
+export async function resolverDanadoEnTx(tx: Tx, companyId: string, e: EntradaBase & ConMotivoCodificado & { cantidad: number; destino: 'VENDIBLE' | 'BAJA'; lotesSalida?: unknown }, ctx: ContextoAuditoria) {
   if (e.destino !== 'VENDIBLE' && e.destino !== 'BAJA') fallo('MOVIMIENTO_INVALIDO', 'Indica si lo dañado vuelve a venderse o se da de baja.')
+  // Recuperar lo dañado no es una pérdida: no lleva motivo del catálogo (solo el texto). Dar de baja sí.
+  if (e.destino === 'VENDIBLE' && e.motivoCodigo) fallo('MOTIVO_NO_APLICA', 'Recuperar lo dañado no es una pérdida: no lleva motivo del catálogo.')
+  const m = e.destino === 'BAJA' ? motivoCodificado(e, 'BAJA') : { codigo: null, texto: motivoValido(e.motivo, true) }
   return moverSimple(
     tx,
     companyId,
     e,
-    { tipo: 'ADJUSTMENT', origen: 'DAMAGED', destino: e.destino === 'VENDIBLE' ? 'AVAILABLE' : null, cantidad: cantidadValida(e.cantidad), motivo: motivoValido(e.motivo, true), sucursalActiva: false, auditar: true },
+    { tipo: 'ADJUSTMENT', origen: 'DAMAGED', destino: e.destino === 'VENDIBLE' ? 'AVAILABLE' : null, cantidad: cantidadValida(e.cantidad), motivo: m.texto, motivoCodigo: m.codigo, sucursalActiva: false, auditar: true, lotes: { tipo: 'SALIENTE', lotes: e.lotesSalida } },
     ctx
   )
 }
@@ -646,6 +1070,8 @@ export async function contarEnTx(
   if (typeof e.conteo !== 'number' || !Number.isInteger(e.conteo) || e.conteo < 0) fallo('CANTIDAD_INVALIDA', 'El conteo debe ser un número entero de cero en adelante.')
   const ahora = e.ahora ?? new Date()
   const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  // INV-5b3: un producto con lotes se cuenta lote por lote, y eso lo hace un conteo (Inventario → Conteos), no esta cifra suelta.
+  await exigirSinLotes(tx, companyId, [variante.id], 'el conteo suelto', 'Cuéntalo en un conteo (Inventario → Conteos), que cuenta lote por lote.')
   const sucursal = await exigirSucursal(tx, companyId, e.sucursalId, false)
   const nivelId = await obtenerNivel(tx, companyId, variante.id, sucursal.id)
   await bloquear(tx, companyId, [nivelId])
@@ -665,7 +1091,7 @@ export async function contarEnTx(
     companyId,
     nivelId,
     { type: 'ADJUSTMENT', sourceBucket: sube ? null : 'AVAILABLE', destinationBucket: sube ? 'AVAILABLE' : null, quantity: Math.abs(diferencia), reason: motivo },
-    { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: randomUUID() } }
+    { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: randomUUID() }, motivoCodigo: MOTIVO_DE_CONTEO }
   )
   await auditarInventario(tx, ctx, companyId, 'INVENTORY_STOCK_CHANGED', nivelId, {
     tipo: 'ADJUSTMENT',
@@ -699,7 +1125,17 @@ export interface ResultadoTransferencia {
 export async function transferirEnTx(
   tx: Tx,
   companyId: string,
-  e: { varianteId: string; origenId: string; destinoId: string; cantidad: number; motivo?: string | null; idempotencyKey?: string | null; ahora?: Date },
+  e: {
+    varianteId: string
+    origenId: string
+    destinoId: string
+    cantidad: number
+    motivo?: string | null
+    /** INV-5b4: de qué lotes del origen sale, `[{ loteId, cantidad }]`; sin decirlo, el que antes vence. Los mismos lotes entran al destino. */
+    lotes?: unknown
+    idempotencyKey?: string | null
+    ahora?: Date
+  },
   ctx: ContextoAuditoria
 ): Promise<ResultadoTransferencia> {
   const cantidad = cantidadValida(e.cantidad)
@@ -709,6 +1145,8 @@ export async function transferirEnTx(
   if (e.origenId === e.destinoId) fallo('MISMA_SUCURSAL', 'El origen y el destino son la misma sucursal.')
 
   const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  // INV-5b4: un producto con lotes se transfiere por lote (el que antes vence, o los que se elijan) y entra al destino en esos mismos lotes.
+  const peticion: PeticionDeLotes | undefined = sinLotes(e.lotes) ? undefined : { tipo: 'SALIENTE', lotes: e.lotes }
   const origen = await exigirSucursal(tx, companyId, e.origenId, false)
   const destino = await exigirSucursal(tx, companyId, e.destinoId, true)
   // Los saldos que falten se crean en un orden FIJO (por sucursal): con A→B y B→A a la vez, cada una insertando primero el
@@ -724,7 +1162,8 @@ export async function transferirEnTx(
     const salidaPrevia = await tx.inventoryMovement.findFirst({ where: { companyId, idempotencyKey: `${clave}:out` } })
     if (salidaPrevia) {
       const entradaPrevia = await tx.inventoryMovement.findFirst({ where: { companyId, idempotencyKey: `${clave}:in` } })
-      if (!entradaPrevia || salidaPrevia.inventoryLevelId !== origenNivel || salidaPrevia.quantity !== cantidad) {
+      // La MISMA clave con OTROS lotes no es un reintento.
+      if (!entradaPrevia || salidaPrevia.inventoryLevelId !== origenNivel || salidaPrevia.quantity !== cantidad || !(await mismoRepartoQueElPrevio(tx, companyId, salidaPrevia.id, peticion, variante.id))) {
         fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra operación distinta.')
       }
       return {
@@ -738,6 +1177,16 @@ export async function transferirEnTx(
   await vencerDeNivel(tx, companyId, origenNivel, ahora)
   await vencerDeNivel(tx, companyId, destinoNivel, ahora)
 
+  // INV-5b4: de qué lotes sale (undefined si el producto no los lleva). Con los saldos del origen ya bloqueados.
+  const reparto = await resolverReparto(
+    tx,
+    companyId,
+    { nivelId: origenNivel, varianteId: variante.id, nombre: variante.item.name },
+    { type: 'TRANSFER_OUT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: cantidad },
+    peticion,
+    ahora,
+    ctx.actorId
+  )
   const transferenciaId = randomUUID()
   const referencia = { tipo: 'TRANSFER', id: transferenciaId }
   const sal = await escribirMovimiento(
@@ -745,14 +1194,14 @@ export async function transferirEnTx(
     companyId,
     origenNivel,
     { type: 'TRANSFER_OUT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: cantidad, reason: motivo },
-    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:out` : null }
+    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:out` : null, reparto }
   )
   const ent = await escribirMovimiento(
     tx,
     companyId,
     destinoNivel,
     { type: 'TRANSFER_IN', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: cantidad, reason: motivo },
-    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:in` : null }
+    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:in` : null, reparto }
   )
   await auditarInventario(tx, ctx, companyId, 'INVENTORY_TRANSFERRED', origenNivel, {
     transferenciaId,
@@ -762,6 +1211,7 @@ export async function transferirEnTx(
     producto: variante.item.name,
     desde: origen.nombre,
     hacia: destino.nombre,
+    ...(reparto ? { lotes: reparto.length } : {}),
   })
   return {
     transferenciaId,
@@ -811,7 +1261,17 @@ export async function reservarEnTx(
   // Se comprueba ANTES de crear la fila: si no alcanza, no queda una reserva
   // huérfana aunque quien llama atrape el error dentro de su misma transacción.
   const nivel = await tx.inventoryLevel.findFirstOrThrow({ where: { id: nivelId, companyId } })
-  if (disponible(nivel) < cantidad) {
+  // INV-5a: con lotes se aparta por FEFO y solo de lo que no ha vencido; sin lotes, de lo disponible.
+  const reparto = await resolverReparto(
+    tx,
+    companyId,
+    { nivelId, varianteId: variante.id, nombre: variante.item.name },
+    { type: 'RESERVATION', sourceBucket: 'AVAILABLE', destinationBucket: 'RESERVED', quantity: cantidad },
+    undefined,
+    ahora,
+    ctx.actorId
+  )
+  if (!reparto && disponible(nivel) < cantidad) {
     const apartadas = nivel.reserved > 0 ? ` (${nivel.reserved} más están apartadas)` : ''
     fallo('STOCK_INSUFICIENTE', `No hay suficiente: pides ${cantidad} y hay ${disponible(nivel)} disponible(s)${apartadas}.`)
   }
@@ -825,7 +1285,7 @@ export async function reservarEnTx(
     companyId,
     nivelId,
     { type: 'RESERVATION', sourceBucket: 'AVAILABLE', destinationBucket: 'RESERVED', quantity: cantidad, reason: motivoValido(e.motivo, false) },
-    { userId: ctx.actorId, referencia: { tipo: 'RESERVATION', id: reserva.id }, idempotencyKey: clave }
+    { userId: ctx.actorId, referencia: { tipo: 'RESERVATION', id: reserva.id }, idempotencyKey: clave, reparto }
   )
   return { reservaId: reserva.id, nivelId, expiresAt, saldo: vista(saldo), repetido: false }
 }
@@ -881,12 +1341,27 @@ export async function consumirReservaEnTx(
   if (reservaVencida(r.expiresAt, ahora)) fallo('RESERVA_VENCIDA', 'La reserva venció: el stock pudo liberarse. Vuelve a reservar.')
 
   const referencia = referenciaValida(opciones.referencia) ?? (r.referenceType && r.referenceId ? { tipo: r.referenceType, id: r.referenceId } : { tipo: 'RESERVATION', id: r.id })
+  // INV-5a: se vende de los lotes en que se apartó. Si alguno venció entretanto NO se entrega vencido: se libera y se aparta de nuevo
+  // del siguiente lote que sí se vende (si no hay con qué reponerlo, la venta no se puede completar).
+  let reparto = await repartoDeReserva(tx, companyId, r)
+  if (reparto) {
+    const lotes = await cargarLotesDeNivel(tx, companyId, r.inventoryLevelId)
+    const plan = planDeConsumo(reparto, lotes, await hoyDeEmpresa(tx, companyId, ahora))
+    if (!plan.ok) fallo('LOTES_VENCIDOS', 'Los lotes de lo apartado ya vencieron y no hay otros vigentes para reponerlos. Repón el stock o cancela el pedido.')
+    if (plan.liberar.length > 0) {
+      const ref = { tipo: 'RESERVATION', id: r.id }
+      const motivoCambio = 'Lote vencido: se repone con otro lote'
+      await escribirMovimiento(tx, companyId, r.inventoryLevelId, { type: 'RESERVATION_RELEASE', sourceBucket: 'RESERVED', destinationBucket: 'AVAILABLE', quantity: sumaDeReparto(plan.liberar), reason: motivoCambio }, { userId: ctx.actorId, referencia: ref, reparto: plan.liberar })
+      await escribirMovimiento(tx, companyId, r.inventoryLevelId, { type: 'RESERVATION', sourceBucket: 'AVAILABLE', destinationBucket: 'RESERVED', quantity: sumaDeReparto(plan.reapartar), reason: motivoCambio }, { userId: ctx.actorId, referencia: ref, reparto: plan.reapartar })
+    }
+    reparto = plan.vender
+  }
   const { movimiento, saldo } = await escribirMovimiento(
     tx,
     companyId,
     r.inventoryLevelId,
     { type: 'SALE', sourceBucket: 'RESERVED', destinationBucket: null, quantity: r.quantity, reason: null },
-    { userId: ctx.actorId, referencia }
+    { userId: ctx.actorId, referencia, reparto }
   )
   await tx.inventoryReservation.update({ where: { id: r.id }, data: { status: 'CONSUMED', resolvedAt: ahora } })
   return { repetido: false, saldo: vista(saldo), movimientoId: movimiento.id }
@@ -1037,6 +1512,424 @@ export async function configurarObjetivoOtrasSucursalesEnTx(
   return { sucursales: cambiadas }
 }
 
+// ── INV-5a · Activar los lotes de un producto ────────────────────────────────
+
+export interface ResultadoActivarLotes {
+  varianteId: string
+  /** El lote «SIN LOTE» del producto. */
+  legadoId: string
+  /** Sucursales con existencias que pasaron al lote «SIN LOTE». */
+  sucursales: number
+  /** Unidades (vendibles + apartadas + dañadas) que pasaron al lote «SIN LOTE». */
+  unidades: number
+  /** true si el producto ya llevaba lotes: no se hizo nada. */
+  repetido: boolean
+}
+
+/**
+ * ACTIVA los lotes de un producto. Es de UN SOLO SENTIDO (por ahora): desde aquí cada unidad es de un lote y cada movimiento se
+ * reparte entre lotes. Lo que ya había (en todas las sucursales, en sus tres cubetas) pasa íntegro al lote «SIN LOTE» como una
+ * APERTURA: el saldo de partida de cada saldo por lote, del que sale cualquier saldo posterior.
+ *
+ * CONCURRENCIA. Toma el candado EXCLUSIVO de lotes de la empresa (espera a que terminen las operaciones en curso y no deja entrar
+ * otras hasta confirmar) y luego bloquea todos los saldos del producto. Por eso lo que se lee aquí no cambia mientras se activa.
+ *
+ * NO SE ACTIVA con trabajo a medias que no sabe de lotes: un conteo abierto o una transferencia en tránsito que incluya el producto
+ * (esos flujos todavía no reparten por lote; ciérralos y vuelve). Una ORDEN DE COMPRA abierta sí deja activar (INV-5b2): se pide por
+ * producto y los lotes se dicen al recibir, de modo que lo que llegue después entra con su lote. Y no se activa si lo apartado de
+ * un saldo no coincide con la suma de sus reservas vivas: la apertura copiaría un descuadre.
+ */
+export async function activarLotesEnTx(
+  tx: Tx,
+  companyId: string,
+  e: { varianteId: string; exigirVencimiento?: boolean; /** INV-5c: el producto lleva SERIES (un lote por unidad) en vez de lotes. */ series?: boolean; ahora?: Date },
+  ctx: ContextoAuditoria
+): Promise<ResultadoActivarLotes> {
+  const ahora = e.ahora ?? new Date()
+  if (e.series === true && e.exigirVencimiento === true) fallo('SERIES_SIN_VENCIMIENTO', 'Una serie no vence: un producto con series no exige vencimiento.')
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  const nombre = variante.item.name
+  await candadoDeLotes(tx, companyId, true)
+  // Lo recordado de este producto ya no vale: se lee de nuevo bajo el candado.
+  politicasPorTx.get(tx)?.delete(variante.id)
+
+  const ya = await politicaDeLotes(tx, companyId, variante.id)
+  if (ya) return { varianteId: variante.id, legadoId: ya.legadoId, sucursales: 0, unidades: 0, repetido: true }
+
+  const abiertos = await tx.inventoryCountLine.findFirst({ where: { companyId, catalogVariantId: variante.id, session: { status: 'OPEN' } }, select: { session: { select: { number: true } } } })
+  if (abiertos) fallo('ACTIVAR_CON_CONTEO_ABIERTO', `«${nombre}» está en el conteo ${abiertos.session.number}, que sigue abierto. Aplícalo o cancélalo y vuelve a intentar.`)
+  const enTransito = await tx.inventoryTransferLine.findFirst({ where: { companyId, catalogVariantId: variante.id, transfer: { status: { in: ['SENT', 'PARTIAL'] } } }, select: { transfer: { select: { number: true } } } })
+  if (enTransito) fallo('ACTIVAR_CON_TRANSFERENCIA', `«${nombre}» va en la transferencia ${enTransito.transfer.number}, que sigue en tránsito. Recíbela o cancélala y vuelve a intentar.`)
+
+  const ids = (await tx.inventoryLevel.findMany({ where: { companyId, catalogVariantId: variante.id }, select: { id: true }, orderBy: { id: 'asc' } })).map((n) => n.id)
+  if (ids.length > 0) {
+    await bloquear(tx, companyId, ids)
+  }
+  const niveles = ids.length > 0 ? await tx.inventoryLevel.findMany({ where: { companyId, id: { in: ids } }, select: { id: true, onHand: true, reserved: true, damaged: true }, orderBy: { id: 'asc' } }) : []
+  const vivas = await tx.inventoryReservation.groupBy({ by: ['inventoryLevelId'], where: { companyId, inventoryLevelId: { in: ids }, status: 'ACTIVE' }, _sum: { quantity: true } })
+  const apartadoPorReservas = new Map(vivas.map((v) => [v.inventoryLevelId, v._sum.quantity ?? 0]))
+  for (const n of niveles) {
+    if ((apartadoPorReservas.get(n.id) ?? 0) !== n.reserved) {
+      fallo('ACTIVAR_RESERVAS_DESCUADRADAS', `«${nombre}» tiene ${n.reserved} unidad(es) apartada(s) y sus reservas vivas suman ${apartadoPorReservas.get(n.id) ?? 0}. Corrige las reservas antes de activar los lotes.`)
+    }
+  }
+
+  await tx.inventoryLotTracking.create({ data: { companyId, catalogVariantId: variante.id, requiresExpiry: e.exigirVencimiento === true, tracksSerials: e.series === true, activatedBy: ctx.actorId } })
+  const legado = await tx.inventoryLot.create({ data: { companyId, catalogVariantId: variante.id, code: CODIGO_SIN_LOTE, legacy: true, createdBy: ctx.actorId }, select: { id: true } })
+  const conExistencias = niveles.filter((n) => n.onHand > 0 || n.damaged > 0)
+  // Los saldos por lote nacen en cero; la apertura los pone al día (la base mueve el saldo con ella).
+  await tx.inventoryLotBalance.createMany({ data: conExistencias.map((n) => ({ companyId, catalogVariantId: variante.id, inventoryLevelId: n.id, lotId: legado.id })) })
+  await tx.inventoryLotOpening.createMany({
+    data: conExistencias.map((n) => ({ companyId, inventoryLevelId: n.id, lotId: legado.id, onHand: n.onHand, reserved: n.reserved, damaged: n.damaged, createdBy: ctx.actorId })),
+  })
+  const unidades = conExistencias.reduce((s, n) => s + n.onHand + n.damaged, 0)
+  // Lo que se recordó hace un momento («este producto no lleva lotes») ya no es verdad.
+  politicasPorTx.get(tx)?.delete(variante.id)
+  // Las reservas caducadas que nadie ha barrido se vencen DESPUÉS de activar, no antes: su movimiento de liberación tiene que traer
+  // su reparto (la base comprueba al cerrar que todo movimiento de un producto con lotes está repartido, y uno escrito antes de que
+  // el producto llevara lotes no lo estaría). Lo apartado se copió tal cual a la apertura y la liberación lo devuelve a vendible.
+  for (const id of ids) await vencerDeNivel(tx, companyId, id, ahora)
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_CONFIGURED',
+    variante.id,
+    { tipo: e.series === true ? 'SERIES' : 'LOTES', sku: variante.sku, producto: nombre, exigirVencimiento: e.exigirVencimiento === true, sucursales: conExistencias.length, unidades },
+    'InventoryLotTracking'
+  )
+  return { varianteId: variante.id, legadoId: legado.id, sucursales: conExistencias.length, unidades, repetido: false }
+}
+
+// ── INV-5b5 · Corregir el vencimiento de un lote y deshacer la activación ────
+
+const MAX_MOTIVO_VENCIMIENTO = 300
+const diaDe = (t: string | null): Date | null => (t === null ? null : new Date(`${t}T00:00:00.000Z`))
+
+export interface ResultadoCorreccionDeVencimiento {
+  loteId: string
+  codigo: string
+  anterior: string | null
+  nuevo: string | null
+  /** true si el lote ya tenía esa fecha: no se escribió nada (un reintento no deja una segunda fila de historia). */
+  repetido: boolean
+}
+
+/**
+ * CORRIGE el vencimiento de un lote (y solo eso: el código de un lote no cambia nunca). Es del LOTE, no de una sucursal: vale para
+ * todas las sucursales donde haya unidades de él. Siempre con MOTIVO, y siempre deja una fila en `inventory_lot_expiry_changes` (de
+ * qué fecha a cuál, quién y por qué); la base no deja cambiar la fecha sin esa fila en la misma transacción.
+ *
+ * Lo que cambia sin tocar un saldo: si el lote está vencido o por vencer, el orden FEFO y los informes «Vence pronto». Las unidades que
+ * el barrido diario ya pasó a «dañado» por vencidas NO vuelven solas a vendible si se alarga la fecha: se recuperan con «Recuperar» (es
+ * un movimiento con su rastro, no un efecto escondido de cambiar una fecha).
+ *
+ * CONCURRENCIA. Candado COMPARTIDO de lotes (como cualquier movimiento: no compite con las ventas) y la fila del lote bloqueada: dos
+ * correcciones del mismo lote se turnan y la segunda ve la fecha que dejó la primera.
+ */
+export async function corregirVencimientoLoteEnTx(
+  tx: Tx,
+  companyId: string,
+  e: { loteId: string; vencimiento: unknown; motivo: unknown },
+  ctx: ContextoAuditoria
+): Promise<ResultadoCorreccionDeVencimiento> {
+  const motivo = normalizarTextoLibre(e.motivo, MAX_MOTIVO_VENCIMIENTO, 'El motivo')
+  if (!motivo.ok) fallo('MOTIVO_INVALIDO', motivo.error)
+  if (motivo.valor === null) fallo('MOTIVO_OBLIGATORIO', 'Corregir un vencimiento necesita un motivo: queda guardado en la historia del lote.')
+  await candadoDeLotes(tx, companyId, false)
+  const filas = await tx.$queryRaw<{ id: string; catalogVariantId: string; code: string; legacy: boolean; vencimiento: string | null }[]>`
+    SELECT "id", "catalogVariantId", "code", "legacy", "expiresOn"::text AS "vencimiento"
+      FROM "inventory_lots" WHERE "id" = ${String(e.loteId ?? '')} AND "companyId" = ${companyId} FOR UPDATE`
+  const lote = filas[0]
+  if (!lote) fallo('LOTE_NO_ENCONTRADO', 'Ese lote no existe.')
+  const politica = await politicaDeLotes(tx, companyId, lote.catalogVariantId)
+  if (!politica) fallo('LOTES_NO_ACTIVOS', 'Ese producto ya no lleva lotes.')
+  if (politica.series) fallo('SERIE_NO_VENCE', 'Una serie no vence: no tiene fecha que corregir.')
+  const plan = planDeCorreccionDeVencimiento({ vencimiento: lote.vencimiento, legado: lote.legacy }, e.vencimiento, politica.exigirVencimiento)
+  if (!plan.ok) fallo(plan.codigo, plan.error)
+  if (plan.sinCambio) return { loteId: lote.id, codigo: lote.code, anterior: lote.vencimiento, nuevo: lote.vencimiento, repetido: true }
+
+  // La historia PRIMERO (la base la exige en esta misma transacción para dejar cambiar la fecha), y después el cambio.
+  await tx.inventoryLotExpiryChange.create({
+    data: { companyId, catalogVariantId: lote.catalogVariantId, lotId: lote.id, previousExpiresOn: diaDe(plan.anterior), newExpiresOn: diaDe(plan.nuevo), reason: motivo.valor, changedBy: ctx.actorId },
+  })
+  await tx.inventoryLot.update({ where: { id: lote.id }, data: { expiresOn: diaDe(plan.nuevo) } })
+  const v = await tx.catalogVariant.findFirst({ where: { id: lote.catalogVariantId, companyId }, select: { sku: true, name: true, isDefault: true, item: { select: { name: true } } } })
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_CONFIGURED',
+    lote.catalogVariantId,
+    { tipo: 'LOTE_VENCIMIENTO', lote: lote.code, sku: v?.sku, producto: v?.item.name, desde: plan.anterior, hasta: plan.nuevo, motivo: motivo.valor, loteId: lote.id },
+    'InventoryLotTracking'
+  )
+  return { loteId: lote.id, codigo: lote.code, anterior: plan.anterior, nuevo: plan.nuevo, repetido: false }
+}
+
+export interface ResultadoDesactivarLotes {
+  varianteId: string
+  /** Saldos por lote (uno por sucursal con existencias) que se quitaron: eran solo el lote «SIN LOTE». */
+  sucursales: number
+  /** true si el producto ya no llevaba lotes: no se hizo nada. */
+  repetido: boolean
+}
+
+/**
+ * DESHACE la activación de lotes de un producto: vuelve a ser un producto sin lotes. Solo mientras los lotes sean CONFIGURACIÓN, es
+ * decir, mientras ningún movimiento se haya repartido entre lotes desde que se activaron (la activación se hizo por error, o se
+ * arrepintieron antes de usarla). En cuanto el producto se vende, se recibe, se transfiere o se ajusta con lotes, su historia está
+ * repartida entre lotes y se rechaza (`DESACTIVAR_CON_HISTORIAL`): quitar los lotes dejaría repartos que ya no explican ningún saldo.
+ *
+ * Quita, en este orden, las aperturas, los saldos por lote, el lote «SIN LOTE» y la activación. Las existencias del producto (sus
+ * saldos por sucursal y su ledger) NO se tocan: el «SIN LOTE» solo copiaba lo que ya había. Toma el candado EXCLUSIVO de lotes de la
+ * empresa y bloquea los saldos del producto, como al activar; una activación posterior vuelve a empezar de cero.
+ */
+export async function desactivarLotesEnTx(tx: Tx, companyId: string, e: { varianteId: string }, ctx: ContextoAuditoria): Promise<ResultadoDesactivarLotes> {
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  await candadoDeLotes(tx, companyId, true)
+  politicasPorTx.get(tx)?.delete(variante.id)
+  const ya = await politicaDeLotes(tx, companyId, variante.id)
+  if (!ya) return { varianteId: variante.id, sucursales: 0, repetido: true }
+
+  const ids = (await tx.inventoryLevel.findMany({ where: { companyId, catalogVariantId: variante.id }, select: { id: true }, orderBy: { id: 'asc' } })).map((n) => n.id)
+  if (ids.length > 0) await bloquear(tx, companyId, ids)
+  const motivo = motivoParaNoDeshacerLotes(await historiaDeLotesEnTx(tx, companyId, variante.id))
+  if (motivo) fallo(motivo.codigo, `«${variante.item.name}»: ${motivo.error}`)
+
+  const saldos = await tx.inventoryLotBalance.count({ where: { companyId, catalogVariantId: variante.id } })
+  await tx.inventoryLotOpening.deleteMany({ where: { companyId, level: { catalogVariantId: variante.id } } })
+  await tx.inventoryLotBalance.deleteMany({ where: { companyId, catalogVariantId: variante.id } })
+  await tx.inventoryLot.deleteMany({ where: { companyId, catalogVariantId: variante.id } })
+  await tx.inventoryLotTracking.deleteMany({ where: { companyId, catalogVariantId: variante.id } })
+  politicasPorTx.get(tx)?.delete(variante.id)
+  await auditarInventario(
+    tx,
+    ctx,
+    companyId,
+    'INVENTORY_CONFIGURED',
+    variante.id,
+    { tipo: 'LOTES_DESACTIVADOS', sku: variante.sku, producto: variante.item.name, sucursales: saldos },
+    'InventoryLotTracking'
+  )
+  return { varianteId: variante.id, sucursales: saldos, repetido: false }
+}
+
+// ── INV-5c · Asignar series a lo que ya había ────────────────────────────────
+
+export interface ResultadoAsignarSeries {
+  nivelId: string
+  asignadas: number
+  salidaId: string
+  entradaId: string
+  saldo: SaldoVista
+  repetido: boolean
+}
+
+/**
+ * Le pone SERIE a unidades que no la tenían: al activar las series de un producto con existencias, todo lo que había pasa al «SIN SERIE»
+ * (el lote legado, que puede tener varias unidades). Esto saca N unidades DISPONIBLES de ahí y mete N series nuevas de una unidad cada una,
+ * en la misma sucursal, con un par de ajustes («Asignación de series», el motivo de reasignación de lote: no cuenta como merma, las
+ * unidades no salieron). Las series no pueden existir ya con unidades en ningún sitio (una serie es UNA unidad; la base lo vigila).
+ */
+export async function asignarSeriesEnTx(
+  tx: Tx,
+  companyId: string,
+  e: EntradaBase & { series: readonly string[] },
+  ctx: ContextoAuditoria
+): Promise<ResultadoAsignarSeries> {
+  const clave = claveValida(e.idempotencyKey)
+  const ahora = e.ahora ?? new Date()
+  const filas = (Array.isArray(e.series) ? e.series : []).map((codigo) => ({ codigo, cantidad: 1 }))
+  if (filas.length > MAX_SERIES_A_ASIGNAR) fallo('DEMASIADAS_SERIES', `Se asignan hasta ${MAX_SERIES_A_ASIGNAR} series por operación.`)
+  const validas = validarSeriesDeLinea(filas, filas.length)
+  if (!validas.ok) fallo(validas.codigo, validas.error)
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  const sucursal = await exigirSucursal(tx, companyId, e.sucursalId, false)
+  const politica = await politicaDeLotes(tx, companyId, variante.id)
+  if (!politica?.series) fallo('SERIES_NO_APLICAN', `«${variante.item.name}» no lleva series.`)
+  const cantidad = validas.lotes.length
+  const nivelId = await obtenerNivel(tx, companyId, variante.id, sucursal.id)
+  await bloquear(tx, companyId, [nivelId])
+
+  if (clave) {
+    const salidaPrevia = await tx.inventoryMovement.findFirst({ where: { companyId, idempotencyKey: `${clave}:out` } })
+    if (salidaPrevia) {
+      const entradaPrevia = await tx.inventoryMovement.findFirst({ where: { companyId, idempotencyKey: `${clave}:in` } })
+      const mismas = entradaPrevia ? await mismoRepartoQueElPrevio(tx, companyId, entradaPrevia.id, { tipo: 'ENTRANTE', lotes: validas.lotes }, variante.id) : false
+      if (!entradaPrevia || salidaPrevia.inventoryLevelId !== nivelId || salidaPrevia.quantity !== cantidad || !mismas) {
+        fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra operación distinta.')
+      }
+      return { nivelId, asignadas: cantidad, salidaId: salidaPrevia.id, entradaId: entradaPrevia.id, saldo: await saldoActual(tx, companyId, nivelId), repetido: true }
+    }
+  }
+  await vencerDeNivel(tx, companyId, nivelId, ahora)
+  const lotes = await cargarLotesDeNivel(tx, companyId, nivelId)
+  const legado = lotes.find((l) => l.loteId === politica.legadoId)
+  const disponibles = legado ? disponibleDeLote(legado) : 0
+  if (disponibles < cantidad) {
+    fallo('STOCK_INSUFICIENTE', `En «${sucursal.nombre}» solo hay ${disponibles} unidad(es) sin serie disponibles; no se pueden asignar ${cantidad} series.`)
+  }
+  const ids = await asegurarLotes(tx, companyId, variante.id, politica, validas.lotes, ctx.actorId)
+  const referencia = { tipo: 'SERIES_ASSIGN', id: randomUUID() }
+  const texto = `Asignación de series: ${cantidad} unidad(es) sin serie`
+  const sal = await escribirMovimiento(
+    tx,
+    companyId,
+    nivelId,
+    { type: 'ADJUSTMENT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: cantidad, reason: texto },
+    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:out` : null, motivoCodigo: MOTIVO_REASIGNACION_DE_LOTE, reparto: [{ loteId: politica.legadoId, cantidad }] }
+  )
+  const ent = await escribirMovimiento(
+    tx,
+    companyId,
+    nivelId,
+    { type: 'ADJUSTMENT', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: cantidad, reason: texto },
+    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:in` : null, motivoCodigo: MOTIVO_REASIGNACION_DE_LOTE, reparto: fusionarReparto(validas.lotes.map((l) => ({ loteId: ids.get(l.codigo)!, cantidad: 1 }))) }
+  )
+  await auditarInventario(tx, ctx, companyId, 'INVENTORY_STOCK_CHANGED', nivelId, {
+    tipo: 'SERIES_ASSIGN',
+    cantidad,
+    sku: variante.sku,
+    producto: variante.item.name,
+    sucursal: sucursal.nombre,
+  })
+  return { nivelId, asignadas: cantidad, salidaId: sal.movimiento.id, entradaId: ent.movimiento.id, saldo: vista(ent.saldo), repetido: false }
+}
+
+// ── INV-5a · Mover unidades entre lotes y vencer lotes ───────────────────────
+
+export interface ResultadoMoverEntreLotes {
+  nivelId: string
+  salidaId: string
+  entradaId: string
+  saldo: SaldoVista
+  repetido: boolean
+}
+
+/**
+ * Pasa unidades DISPONIBLES de un lote a otro de la misma sucursal: la salida de corregir un lote mal capturado (un código mal
+ * tecleado, un vencimiento equivocado: un lote no se edita, sus unidades se mueven a otro). Se escribe como un par de ajustes —uno
+ * que saca del lote de origen y otro que mete en el de destino— con el motivo «Reasignación de lote»: dejan rastro de qué se
+ * corrigió, valen lo mismo (se valoran con el mismo costo promedio) y NO cuentan como merma, porque las unidades no salieron.
+ * Las dos patas van en la misma transacción y con la misma referencia.
+ */
+export async function moverEntreLotesEnTx(
+  tx: Tx,
+  companyId: string,
+  e: EntradaBase & { deLoteId: string; aLoteId: string; cantidad: number },
+  ctx: ContextoAuditoria
+): Promise<ResultadoMoverEntreLotes> {
+  const cantidad = cantidadValida(e.cantidad)
+  const ahora = e.ahora ?? new Date()
+  const clave = claveValida(e.idempotencyKey)
+  const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
+  const sucursal = await exigirSucursal(tx, companyId, e.sucursalId, false)
+  const politicaMover = await politicaDeLotes(tx, companyId, variante.id)
+  if (!politicaMover) fallo('LOTES_NO_APLICAN', `«${variante.item.name}» no lleva lotes.`)
+  if (politicaMover.series) fallo('SERIES_NO_SE_MUEVEN', `«${variante.item.name}» lleva series: una serie es una unidad y no se pasa a otra. Para ponerle serie a lo que ya había usa «Asignar series»; para llevarla a otra sucursal, una transferencia.`)
+  const nivelId = await obtenerNivel(tx, companyId, variante.id, sucursal.id)
+  await bloquear(tx, companyId, [nivelId])
+
+  if (clave) {
+    const salidaPrevia = await tx.inventoryMovement.findFirst({ where: { companyId, idempotencyKey: `${clave}:out` } })
+    if (salidaPrevia) {
+      const entradaPrevia = await tx.inventoryMovement.findFirst({ where: { companyId, idempotencyKey: `${clave}:in` } })
+      // La MISMA clave con otro lote de origen —o de destino— es otra operación, no un reintento.
+      const mismoLote = await mismoRepartoQueElPrevio(tx, companyId, salidaPrevia.id, { tipo: 'SALIENTE', lotes: [{ loteId: e.deLoteId, cantidad }] }, variante.id)
+      const mismoDestino = entradaPrevia ? await mismoRepartoQueElPrevio(tx, companyId, entradaPrevia.id, { tipo: 'SALIENTE', lotes: [{ loteId: e.aLoteId, cantidad }] }, variante.id) : false
+      if (!entradaPrevia || salidaPrevia.inventoryLevelId !== nivelId || salidaPrevia.quantity !== cantidad || !mismoLote || !mismoDestino) {
+        fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra operación distinta.')
+      }
+      return { nivelId, salidaId: salidaPrevia.id, entradaId: entradaPrevia.id, saldo: await saldoActual(tx, companyId, nivelId), repetido: true }
+    }
+  }
+  await vencerDeNivel(tx, companyId, nivelId, ahora)
+
+  const lotes = await cargarLotesDeNivel(tx, companyId, nivelId)
+  const origen = lotes.find((l) => l.loteId === e.deLoteId)
+  if (!origen) fallo('LOTE_NO_ENCONTRADO', 'El lote de origen no tiene existencias en esta sucursal.')
+  const destinoFila = await tx.inventoryLot.findFirst({ where: { id: e.aLoteId, companyId, catalogVariantId: variante.id }, select: { id: true, code: true, expiresOn: true, legacy: true, createdAt: true } })
+  if (!destinoFila) fallo('LOTE_NO_ENCONTRADO', 'El lote de destino no existe en este producto.')
+  const destino: LoteConSaldo = lotes.find((l) => l.loteId === destinoFila.id) ?? {
+    loteId: destinoFila.id,
+    codigo: destinoFila.code,
+    vencimiento: destinoFila.expiresOn === null ? null : destinoFila.expiresOn.toISOString().slice(0, 10),
+    legado: destinoFila.legacy,
+    creadoEn: destinoFila.createdAt.getTime(),
+    onHand: 0,
+    reserved: 0,
+    damaged: 0,
+  }
+  const error = validarMovimientoEntreLotes({ origen, destino, cantidad })
+  if (error) fallo('MOVIMIENTO_INVALIDO', error)
+
+  const referencia = { tipo: 'LOT_REASSIGN', id: randomUUID() }
+  const texto = `Reasignación de lote: ${origen.codigo} → ${destino.codigo}`
+  const sal = await escribirMovimiento(
+    tx,
+    companyId,
+    nivelId,
+    { type: 'ADJUSTMENT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: cantidad, reason: texto },
+    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:out` : null, motivoCodigo: MOTIVO_REASIGNACION_DE_LOTE, reparto: [{ loteId: origen.loteId, cantidad }] }
+  )
+  const ent = await escribirMovimiento(
+    tx,
+    companyId,
+    nivelId,
+    { type: 'ADJUSTMENT', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: cantidad, reason: texto },
+    { userId: ctx.actorId, referencia, idempotencyKey: clave ? `${clave}:in` : null, motivoCodigo: MOTIVO_REASIGNACION_DE_LOTE, reparto: [{ loteId: destino.loteId, cantidad }] }
+  )
+  await auditarInventario(tx, ctx, companyId, 'INVENTORY_STOCK_CHANGED', nivelId, {
+    tipo: 'LOT_REASSIGN',
+    cantidad,
+    de: origen.codigo,
+    a: destino.codigo,
+    sku: variante.sku,
+    producto: variante.item.name,
+    sucursal: sucursal.nombre,
+  })
+  return { nivelId, salidaId: sal.movimiento.id, entradaId: ent.movimiento.id, saldo: vista(ent.saldo), repetido: false }
+}
+
+/**
+ * Saca de lo vendible las unidades DISPONIBLES de los lotes vencidos de la empresa: pasan a dañado con el motivo «Vencido». Es lo que
+ * hace el barrido diario; la venta NO depende de él (FEFO no vende lo vencido aunque nadie haya barrido), pero sin barrer, `disponible`
+ * seguiría contando unidades que ya no se pueden vender. Idempotente: una segunda pasada no encuentra nada. Lo apartado de un lote
+ * vencido no se toca aquí: se resuelve al consumir o al vencer su reserva (y de ahí vuelve a disponible y lo recoge la siguiente pasada).
+ * Devuelve cuántos lotes y unidades sacó.
+ */
+export async function vencerLotesEnTx(tx: Tx, companyId: string, ahora: Date, limite = 500): Promise<{ lotes: number; unidades: number }> {
+  const hoy = await hoyDeEmpresa(tx, companyId, ahora)
+  const candidatos = await tx.$queryRaw<{ nivelId: string }[]>`
+    SELECT DISTINCT b."inventoryLevelId" AS "nivelId"
+      FROM "inventory_lot_balances" b
+      JOIN "inventory_lots" l ON l."id" = b."lotId"
+     WHERE b."companyId" = ${companyId} AND l."expiresOn" IS NOT NULL AND l."expiresOn" < ${hoy}::date AND b."onHand" - b."reserved" > 0
+     ORDER BY b."inventoryLevelId"
+     LIMIT ${limite}`
+  let lotesVencidos = 0
+  let unidades = 0
+  for (const { nivelId } of candidatos) {
+    await bloquear(tx, companyId, [nivelId])
+    await vencerDeNivel(tx, companyId, nivelId, ahora)
+    const lotes = await cargarLotesDeNivel(tx, companyId, nivelId)
+    for (const baja of planDeBarrido(lotes.map((l): LoteDeSaldo => ({ ...l, nivelId })), hoy)) {
+      const lote = lotes.find((l) => l.loteId === baja.loteId)!
+      await escribirMovimiento(
+        tx,
+        companyId,
+        nivelId,
+        { type: 'DAMAGE', sourceBucket: 'AVAILABLE', destinationBucket: 'DAMAGED', quantity: baja.cantidad, reason: `Lote ${lote.codigo} vencido el ${lote.vencimiento}` },
+        { userId: null, referencia: { tipo: 'LOT_EXPIRY', id: baja.loteId }, motivoCodigo: 'EXPIRED', reparto: [{ loteId: baja.loteId, cantidad: baja.cantidad }] }
+      )
+      lotesVencidos++
+      unidades += baja.cantidad
+    }
+  }
+  return { lotes: lotesVencidos, unidades }
+}
+
 // ── INV-2a · Entrada de mercancía con varias líneas ──────────────────────────
 
 /**
@@ -1051,6 +1944,16 @@ interface ItemLote {
   meta: MetaMovimiento
   /** El producto del saldo: hace falta para valorar con el promedio los tipos que lo piden (conteos). */
   varianteId?: string
+}
+
+/** INV-5a: los saldos de este lote que son de un producto con lotes (una consulta para todo el lote). */
+async function nivelesConLotes(tx: Tx, companyId: string, nivelIds: readonly string[]): Promise<Map<string, string>> {
+  const filas = await tx.$queryRaw<{ id: string; catalogVariantId: string }[]>`
+    SELECT l."id", l."catalogVariantId"
+      FROM "inventory_levels" l
+      JOIN "inventory_lot_tracking" t ON t."catalogVariantId" = l."catalogVariantId"
+     WHERE l."companyId" = ${companyId} AND l."id" IN (${Prisma.join(nivelIds)})`
+  return new Map(filas.map((f) => [f.id, f.catalogVariantId]))
 }
 
 /**
@@ -1075,6 +1978,15 @@ interface ItemLote {
 async function escribirMovimientosPorLote(tx: Tx, companyId: string, items: readonly ItemLote[]): Promise<string[]> {
   if (items.length === 0) return []
   if (new Set(items.map((i) => i.nivelId)).size !== items.length) fallo('LOTE_INVALIDO', 'Un saldo no puede aparecer dos veces en el mismo lote.')
+  // INV-5a: los saldos de productos con lotes traen su reparto (y suma su cantidad); los demás, nunca.
+  const conLotes = await nivelesConLotes(tx, companyId, items.map((i) => i.nivelId))
+  for (const i of items) {
+    if (conLotes.has(i.nivelId)) {
+      if (!i.meta.reparto || sumaDeReparto(i.meta.reparto) !== i.movimiento.quantity) fallo('REPARTO_FALTANTE', 'Un movimiento de un producto con lotes debe indicar de qué lotes sale o entra, y la suma debe ser su cantidad.')
+    } else if (i.meta.reparto) {
+      fallo('LOTES_NO_APLICAN', 'Un producto que no lleva lotes no puede traer reparto por lotes.')
+    }
+  }
   // INV-3a: los movimientos que se valoran con el promedio lo leen de UNA vez para todo el lote.
   const aValorar = items.filter((i) => i.meta.costo === undefined && TIPOS_VALORADOS_AL_PROMEDIO.has(i.movimiento.type))
   for (const i of aValorar) if (!i.varianteId) fallo('LOTE_INVALIDO', 'Falta el producto de un movimiento que se valora con el costo promedio.')
@@ -1092,6 +2004,7 @@ async function escribirMovimientosPorLote(tx: Tx, companyId: string, items: read
         previousOnHand: i.antes.onHand,
         newOnHand: i.despues.onHand,
         reason: i.movimiento.reason ?? null,
+        reasonCode: i.meta.motivoCodigo ?? null,
         userId: i.meta.userId,
         referenceType: i.meta.referencia?.tipo ?? null,
         referenceId: i.meta.referencia?.id ?? null,
@@ -1111,11 +2024,19 @@ async function escribirMovimientosPorLote(tx: Tx, companyId: string, items: read
       FROM (VALUES ${Prisma.join(filas)}) AS v("id", "onHand", "reserved", "damaged")
      WHERE l."id" = v."id" AND l."companyId" = ${companyId}`
   if (actualizados !== items.length) fallo('LOTE_INCOMPLETO', 'No se pudieron actualizar todos los saldos de la entrada.')
-  return items.map((i) => {
+  const ids = items.map((i) => {
     const id = idPorNivel.get(i.nivelId)
     if (!id) fallo('LOTE_INCOMPLETO', 'Falta el movimiento de una línea de la entrada.')
     return id
   })
+  // INV-5a: el reparto de cada movimiento de un producto con lotes (un producto por vez: los saldos por lote cuelgan de su producto).
+  const porProducto = new Map<string, { nivelId: string; movimientoId: string; reparto: readonly RepartoLote[] }[]>()
+  items.forEach((i, idx) => {
+    const variante = conLotes.get(i.nivelId)
+    if (variante && i.meta.reparto) porProducto.set(variante, [...(porProducto.get(variante) ?? []), { nivelId: i.nivelId, movimientoId: ids[idx], reparto: i.meta.reparto }])
+  })
+  for (const [variante, filas] of [...porProducto.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) await escribirRepartos(tx, companyId, variante, filas)
+  return ids
 }
 
 export interface EntradaMultiple {
@@ -1206,23 +2127,59 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
   if (nivelDeVariante.size !== ids.length) fallo('NIVEL_NO_ENCONTRADO', 'No se pudieron preparar los saldos de la entrada.')
   const bloqueados = await bloquear(tx, companyId, niveles.map((n) => n.id))
 
+  // INV-5a: los productos CON lotes traen los suyos en cada línea (y suman su cantidad); los demás no pueden traerlos.
+  const nombreDe = (id: string) => {
+    const v = porId.get(id)!
+    return v.isDefault ? v.item.name : `${v.item.name} · ${v.name}`
+  }
+  const politicaDe = new Map<string, PoliticaDeLotes>()
+  const lotesDe = new Map<string, LoteDeLinea[]>()
+  for (const l of validas.lineas) {
+    const politica = await politicaDeLotes(tx, companyId, l.varianteId)
+    if (!politica) {
+      if (l.lotes && l.lotes.length > 0) fallo('LOTES_NO_APLICAN', `«${nombreDe(l.varianteId)}» no lleva lotes: quita los lotes de esa línea o actívalos en su ficha de inventario.`)
+      continue
+    }
+    const r = validarLotesDeLinea(l.lotes, l.cantidad, { exigirVencimiento: politica.exigirVencimiento, series: politica.series })
+    if (!r.ok) fallo(r.codigo, `«${nombreDe(l.varianteId)}»: ${r.error}`)
+    politicaDe.set(l.varianteId, politica)
+    lotesDe.set(l.varianteId, r.lotes)
+  }
+
   // Idempotencia, YA con los candados: el segundo de dos envíos idénticos llega aquí tras el primero.
   if (clave) {
     const previa = await tx.inventoryReceipt.findFirst({
       where: { companyId, idempotencyKey: clave },
-      select: { id: true, number: true, locationId: true, purchaseOrderId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantity: true, unitCost: true } } },
+      select: { id: true, number: true, locationId: true, purchaseOrderId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantity: true, unitCost: true, movementId: true } } },
     })
     if (previa) {
       // El costo es parte de la operación: la misma clave con otro costo no es un reintento. Tampoco lo es la que responde a otra orden.
       const costoDe = (d: { toFixed(n: number): string } | null) => (d === null ? null : costoADecimal(costoDeDecimal(d)))
+      // INV-5a: los lotes también son parte de la operación (código y cantidad de cada uno).
+      const repartosPrevios = lotesDe.size > 0 ? await repartosPorCodigoEnTx(tx, companyId, previa.lines.map((p) => p.movementId)) : new Map<string, Map<string, number>>()
+      const mismosLotes = (l: LineaEntrada, p: { movementId: string }) => {
+        const pedidos = lotesDe.get(l.varianteId)
+        const previos = repartosPrevios.get(p.movementId)
+        if (!pedidos) return !previos || previos.size === 0
+        return !!previos && previos.size === pedidos.length && pedidos.every((x) => previos.get(x.codigo) === x.cantidad)
+      }
       const mismas =
         previa.locationId === sucursal.id &&
         previa.purchaseOrderId === (e.ordenCompraId ?? null) &&
         previa.lines.length === validas.lineas.length &&
-        validas.lineas.every((l) => previa.lines.some((p) => p.catalogVariantId === l.varianteId && p.quantity === l.cantidad && costoDe(p.unitCost) === (l.costo ?? null)))
+        validas.lineas.every((l) => previa.lines.some((p) => p.catalogVariantId === l.varianteId && p.quantity === l.cantidad && costoDe(p.unitCost) === (l.costo ?? null) && mismosLotes(l, p)))
       if (!mismas) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra entrada distinta.')
       return { entradaId: previa.id, numero: previa.number, lineas: previa.lineCount, unidades: previa.unitCount, repetido: true }
     }
+  }
+
+  // INV-5a: los lotes que faltan se crean (en orden de producto y de código: dos entradas simultáneas no se interbloquean).
+  const repartoDe = new Map<string, RepartoLote[]>()
+  for (const l of [...validas.lineas].sort((a, b) => (a.varianteId < b.varianteId ? -1 : a.varianteId > b.varianteId ? 1 : 0))) {
+    const lotes = lotesDe.get(l.varianteId)
+    if (!lotes) continue
+    const ids = await asegurarLotes(tx, companyId, l.varianteId, politicaDe.get(l.varianteId)!, lotes, ctx.actorId)
+    repartoDe.set(l.varianteId, fusionarReparto(lotes.map((x) => ({ loteId: ids.get(x.codigo)!, cantidad: x.cantidad }))))
   }
 
   // Cada línea se aplica con el ledger PURO sobre el saldo bloqueado: el invariante y el tope de existencia son los de siempre.
@@ -1235,11 +2192,9 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
     try {
       despues = aplicarMovimiento(cubetasDeSaldo(fila), movimiento)
     } catch (err) {
-      const v = porId.get(l.varianteId)!
-      const nombre = v.isDefault ? v.item.name : `${v.item.name} · ${v.name}`
-      fallo('EXISTENCIA_MAXIMA', `«${nombre}»: ${err instanceof Error ? err.message : 'la existencia no es válida.'}`)
+      fallo('EXISTENCIA_MAXIMA', `«${nombreDe(l.varianteId)}»: ${err instanceof Error ? err.message : 'la existencia no es válida.'}`)
     }
-    return { nivelId, movimiento, antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged }, despues: saldoDeCubetas(despues), meta: { userId: ctx.actorId, costo }, varianteId: l.varianteId }
+    return { nivelId, movimiento, antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged }, despues: saldoDeCubetas(despues), meta: { userId: ctx.actorId, costo, reparto: repartoDe.get(l.varianteId) }, varianteId: l.varianteId }
   })
   // INV-3a: el costo promedio de los productos que traen costo, ANTES de escribir los movimientos (pesan las existencias de antes).
   await aplicarCostosDeEntradaEnTx(
@@ -1346,10 +2301,33 @@ function exigirAbierto(c: ConteoBloqueado): void {
   }
 }
 
-/** Lo que dice el sistema hoy de un producto en una sucursal (0 si nunca tuvo saldo). */
-async function existenciaDe(tx: Tx, companyId: string, varianteId: string, sucursalId: string): Promise<number> {
+/** Lo que dice el sistema hoy de un producto en una sucursal (0 si nunca tuvo saldo). INV-5b3: con `loteId`, de ESE lote (0 si nunca tuvo saldo ahí). */
+async function existenciaDe(tx: Tx, companyId: string, varianteId: string, sucursalId: string, loteId: string | null = null): Promise<number> {
+  if (loteId) {
+    const b = await tx.inventoryLotBalance.findFirst({ where: { companyId, lotId: loteId, level: { locationId: sucursalId } }, select: { onHand: true } })
+    return b?.onHand ?? 0
+  }
   const n = await tx.inventoryLevel.findFirst({ where: { companyId, catalogVariantId: varianteId, locationId: sucursalId }, select: { onHand: true } })
   return n?.onHand ?? 0
+}
+
+/**
+ * INV-5b3 · El lote de una línea de conteo. Un producto que LLEVA lotes se cuenta lote por lote: la línea debe decir cuál (y ser de ese
+ * producto); uno que no los lleva se cuenta sin lote. Devuelve el id del lote, o null si el producto no los lleva.
+ */
+async function loteDeLineaDeConteo(tx: Tx, companyId: string, variante: { id: string; item: { name: string }; name: string; isDefault: boolean }, loteId: unknown): Promise<string | null> {
+  const nombre = variante.isDefault ? variante.item.name : `${variante.item.name} · ${variante.name}`
+  const dado = loteId === undefined || loteId === null || loteId === '' ? null : loteId
+  if (dado !== null && (typeof dado !== 'string' || dado.length > 120)) fallo('LOTE_INVALIDO', 'El lote no es válido.')
+  const politica = await politicaDeLotes(tx, companyId, variante.id)
+  if (!politica) {
+    if (dado) fallo('LOTES_NO_APLICAN', `«${nombre}» no lleva lotes: se cuenta sin indicar un lote.`)
+    return null
+  }
+  if (!dado) fallo('LOTES_FALTAN', `«${nombre}» lleva lotes: indica de qué lote es lo que cuentas.`)
+  const lote = await tx.inventoryLot.findFirst({ where: { id: dado as string, companyId, catalogVariantId: variante.id }, select: { id: true } })
+  if (!lote) fallo('LOTE_NO_ENCONTRADO', `Ese lote no existe en «${nombre}».`)
+  return lote.id
 }
 
 export interface ResultadoAbrirConteo {
@@ -1388,6 +2366,8 @@ export async function abrirConteoEnTx(tx: Tx, companyId: string, e: { sucursalId
 export interface EntradaConteoProducto {
   conteoId: string
   varianteId: string
+  /** INV-5b3: el lote que se cuenta. Obligatorio si el producto lleva lotes; prohibido si no. */
+  loteId?: string | null
   cantidad: number
   modo: ModoConteo
   ahora?: Date
@@ -1395,18 +2375,19 @@ export interface EntradaConteoProducto {
 
 export interface ResultadoConteoProducto {
   varianteId: string
-  /** Lo contado de ese producto después de esta captura. */
+  /** INV-5b3: el lote contado (null en un producto sin lotes). */
+  loteId: string | null
+  /** Lo contado de ese producto (y lote) después de esta captura. */
   contado: number
   /** true si era la primera vez que se contaba en este conteo. */
   nueva: boolean
-  /** Productos con línea en el conteo, contando este. */
+  /** Líneas del conteo (productos, o producto y lote), contando esta. */
   lineas: number
 }
 
 /**
- * Cuenta UN producto. `SUMAR` es un escaneo (una unidad más, o las que diga);
- * `FIJAR` es escribir el número (reemplaza lo contado y vuelve a tomar la foto de
- * lo que decía el sistema: es un recuento en este momento).
+ * Cuenta UN producto (o, si lleva lotes, UN LOTE de un producto). `SUMAR` es un escaneo (una unidad más, o las que diga); `FIJAR` es
+ * escribir el número (reemplaza lo contado y vuelve a tomar la foto de lo que decía el sistema: es un recuento en este momento).
  */
 export async function registrarConteoProductoEnTx(tx: Tx, companyId: string, e: EntradaConteoProducto, ctx: ContextoAuditoria): Promise<ResultadoConteoProducto> {
   if (!esModoConteo(e.modo)) fallo('MODO_INVALIDO', 'Indica si sumas una captura o escribes la cantidad.')
@@ -1414,19 +2395,22 @@ export async function registrarConteoProductoEnTx(tx: Tx, companyId: string, e: 
   if (!cantidad.ok) fallo('CANTIDAD_INVALIDA', cantidad.error)
   const conteo = await bloquearConteo(tx, companyId, e.conteoId)
   exigirAbierto(conteo)
+  // INV-5b3: como toda operación sobre un saldo, toma el candado COMPARTIDO de lotes: «este producto lleva lotes» no cambia mientras se captura.
+  await candadoDeLotes(tx, companyId, false)
   const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
-  const previa = await tx.inventoryCountLine.findFirst({ where: { companyId, sessionId: conteo.id, catalogVariantId: variante.id }, select: { id: true, counted: true } })
+  const loteId = await loteDeLineaDeConteo(tx, companyId, variante, e.loteId)
+  const previa = await tx.inventoryCountLine.findFirst({ where: { companyId, sessionId: conteo.id, catalogVariantId: variante.id, lotId: loteId }, select: { id: true, counted: true } })
   const total = await tx.inventoryCountLine.count({ where: { companyId, sessionId: conteo.id } })
   if (!previa && total >= MAX_LINEAS_CONTEO) {
-    fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} productos. Aplícalo y abre otro para seguir.`)
+    fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} líneas (productos, o producto y lote). Aplícalo y abre otro para seguir.`)
   }
-  const esperado = await existenciaDe(tx, companyId, variante.id, conteo.locationId)
+  const esperado = await existenciaDe(tx, companyId, variante.id, conteo.locationId, loteId)
   const ahora = e.ahora ?? new Date()
   if (!previa) {
     await tx.inventoryCountLine.create({
-      data: { companyId, sessionId: conteo.id, catalogVariantId: variante.id, counted: cantidad.valor, expected: esperado, countedById: ctx.actorId, countedAt: ahora },
+      data: { companyId, sessionId: conteo.id, catalogVariantId: variante.id, lotId: loteId, counted: cantidad.valor, expected: esperado, countedById: ctx.actorId, countedAt: ahora },
     })
-    return { varianteId: variante.id, contado: cantidad.valor, nueva: true, lineas: total + 1 }
+    return { varianteId: variante.id, loteId, contado: cantidad.valor, nueva: true, lineas: total + 1 }
   }
   const contado = e.modo === 'SUMAR' ? previa.counted + cantidad.valor : cantidad.valor
   if (contado > CANTIDAD_MAXIMA) fallo('CANTIDAD_INVALIDA', `Un conteo no puede pasar de ${CANTIDAD_MAXIMA.toLocaleString('es-DO')} unidades por producto.`)
@@ -1434,15 +2418,16 @@ export async function registrarConteoProductoEnTx(tx: Tx, companyId: string, e: 
     where: { id: previa.id },
     data: { counted: contado, countedById: ctx.actorId, countedAt: ahora, ...(e.modo === 'FIJAR' ? { expected: esperado } : {}) },
   })
-  return { varianteId: variante.id, contado, nueva: false, lineas: total }
+  return { varianteId: variante.id, loteId, contado, nueva: false, lineas: total }
 }
 
-/** Saca un producto del conteo (mientras está abierto): lo que no tiene línea no se ajusta. */
-export async function quitarLineaDeConteoEnTx(tx: Tx, companyId: string, e: { conteoId: string; varianteId: string }): Promise<{ quitada: boolean }> {
+/** Saca un producto (o un lote de un producto) del conteo, mientras está abierto: lo que no tiene línea no se ajusta. */
+export async function quitarLineaDeConteoEnTx(tx: Tx, companyId: string, e: { conteoId: string; varianteId: string; loteId?: string | null }): Promise<{ quitada: boolean }> {
   const conteo = await bloquearConteo(tx, companyId, e.conteoId)
   exigirAbierto(conteo)
   if (typeof e.varianteId !== 'string' || e.varianteId === '') fallo('VARIANTE_NO_ENCONTRADA', 'La variante no existe.')
-  const r = await tx.inventoryCountLine.deleteMany({ where: { companyId, sessionId: conteo.id, catalogVariantId: e.varianteId } })
+  if (e.loteId !== undefined && e.loteId !== null && (typeof e.loteId !== 'string' || e.loteId.length > 120)) fallo('LOTE_INVALIDO', 'El lote no es válido.')
+  const r = await tx.inventoryCountLine.deleteMany({ where: { companyId, sessionId: conteo.id, catalogVariantId: e.varianteId, lotId: e.loteId || null } })
   return { quitada: r.count > 0 }
 }
 
@@ -1452,31 +2437,43 @@ export interface ResultadoImportarConteo {
   lineas: number
 }
 
+/** Una línea de la hoja contada: un producto o, si lleva lotes, un producto en un lote. */
+export interface LineaDeConteoImportada {
+  varianteId: string
+  /** INV-5b3: obligatorio en un producto con lotes, prohibido en uno sin ellos. */
+  loteId?: string | null
+  cantidad: number
+}
+
 /**
  * Carga de golpe lo contado en una hoja (CSV): TODO O NADA y siempre como
- * `FIJAR`. Un producto que ya tenía línea se reemplaza (la hoja es el recuento
- * más reciente); los demás no se tocan.
+ * `FIJAR`. Una línea que ya existía (el mismo producto y, si lleva lotes, el mismo
+ * lote) se reemplaza (la hoja es el recuento más reciente); las demás no se tocan.
  */
 export async function importarConteoEnTx(
   tx: Tx,
   companyId: string,
-  e: { conteoId: string; lineas: ReadonlyArray<{ varianteId: string; cantidad: number }>; ahora?: Date },
+  e: { conteoId: string; lineas: ReadonlyArray<LineaDeConteoImportada>; ahora?: Date },
   ctx: ContextoAuditoria
 ): Promise<ResultadoImportarConteo> {
   if (!Array.isArray(e.lineas) || e.lineas.length === 0) fallo('CONTEO_SIN_LINEAS', 'El archivo no trae ningún producto contado.')
-  if (e.lineas.length > MAX_LINEAS_CONTEO) fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} productos.`)
+  if (e.lineas.length > MAX_LINEAS_CONTEO) fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} líneas (productos, o producto y lote).`)
   const ids: string[] = []
   const vistos = new Set<string>()
   for (const l of e.lineas) {
     if (!l || typeof l.varianteId !== 'string' || l.varianteId === '') fallo('LINEA_INVALIDA', 'Una línea del archivo no tiene producto.')
+    if (l.loteId !== undefined && l.loteId !== null && (typeof l.loteId !== 'string' || l.loteId === '' || l.loteId.length > 120)) fallo('LOTE_INVALIDO', 'Una línea del archivo trae un lote que no es válido.')
     const c = validarCantidadContada(l.cantidad, 'FIJAR')
     if (!c.ok) fallo('CANTIDAD_INVALIDA', c.error)
-    if (vistos.has(l.varianteId)) fallo('LINEA_REPETIDA', 'Un producto aparece dos veces en el archivo.')
-    vistos.add(l.varianteId)
+    const clave = claveDeLinea(l.varianteId, l.loteId)
+    if (vistos.has(clave)) fallo('LINEA_REPETIDA', 'Un producto (o un lote de un producto) aparece dos veces en el archivo.')
+    vistos.add(clave)
     ids.push(l.varianteId)
   }
   const conteo = await bloquearConteo(tx, companyId, e.conteoId)
   exigirAbierto(conteo)
+  // INV-5b3: el candado COMPARTIDO de lotes (ver `registrarConteoProductoEnTx`).
+  await candadoDeLotes(tx, companyId, false)
 
   const variantes = await tx.catalogVariant.findMany({
     where: { companyId, id: { in: ids } },
@@ -1490,27 +2487,47 @@ export async function importarConteoEnTx(
       fallo('SIN_CONTROL_DE_INVENTARIO', `«${v.item.name}» no controla inventario. Actívalo en su ficha del catálogo para contarlo.`)
     }
   }
+  // INV-5b3: un producto con lotes se cuenta lote por lote (y el lote es de ese producto); uno sin lotes, sin lote.
+  const llevan = new Set((await tx.inventoryLotTracking.findMany({ where: { companyId, catalogVariantId: { in: [...new Set(ids)] } }, select: { catalogVariantId: true } })).map((t) => t.catalogVariantId))
+  const loteIds = [...new Set(e.lineas.flatMap((l) => (l.loteId ? [l.loteId] : [])))]
+  const lotes = loteIds.length > 0 ? await tx.inventoryLot.findMany({ where: { companyId, id: { in: loteIds } }, select: { id: true, catalogVariantId: true } }) : []
+  const varianteDeLote = new Map(lotes.map((l) => [l.id, l.catalogVariantId]))
+  const nombreDe = (id: string) => {
+    const v = porId.get(id)!
+    return v.isDefault ? v.item.name : `${v.item.name} · ${v.name}`
+  }
+  for (const l of e.lineas) {
+    if (llevan.has(l.varianteId)) {
+      if (!l.loteId) fallo('LOTES_FALTAN', `«${nombreDe(l.varianteId)}» lleva lotes: indica de qué lote es lo que cuentas.`)
+      if (varianteDeLote.get(l.loteId) !== l.varianteId) fallo('LOTE_NO_ENCONTRADO', `Uno de los lotes del archivo no existe en «${nombreDe(l.varianteId)}».`)
+    } else if (l.loteId) {
+      fallo('LOTES_NO_APLICAN', `«${nombreDe(l.varianteId)}» no lleva lotes: se cuenta sin indicar un lote.`)
+    }
+  }
 
-  const previas = await tx.inventoryCountLine.findMany({ where: { companyId, sessionId: conteo.id }, select: { id: true, catalogVariantId: true } })
-  const previaDe = new Map(previas.map((p) => [p.catalogVariantId, p.id]))
-  const nuevas = ids.filter((id) => !previaDe.has(id)).length
+  const previas = await tx.inventoryCountLine.findMany({ where: { companyId, sessionId: conteo.id }, select: { id: true, catalogVariantId: true, lotId: true } })
+  const previaDe = new Map(previas.map((p) => [claveDeLinea(p.catalogVariantId, p.lotId), p.id]))
+  const nuevas = e.lineas.filter((l) => !previaDe.has(claveDeLinea(l.varianteId, l.loteId))).length
   if (previas.length + nuevas > MAX_LINEAS_CONTEO) {
-    fallo('DEMASIADAS_LINEAS', `Con este archivo el conteo pasaría de ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} productos. Aplícalo y abre otro para seguir.`)
+    fallo('DEMASIADAS_LINEAS', `Con este archivo el conteo pasaría de ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} líneas. Aplícalo y abre otro para seguir.`)
   }
 
   const niveles = await tx.inventoryLevel.findMany({ where: { companyId, locationId: conteo.locationId, catalogVariantId: { in: ids } }, select: { catalogVariantId: true, onHand: true } })
-  const esperadoDe = new Map(niveles.map((n) => [n.catalogVariantId, n.onHand]))
+  const esperadoDeProducto = new Map(niveles.map((n) => [n.catalogVariantId, n.onHand]))
+  const saldosDeLote = loteIds.length > 0 ? await tx.inventoryLotBalance.findMany({ where: { companyId, lotId: { in: loteIds }, level: { locationId: conteo.locationId } }, select: { lotId: true, onHand: true } }) : []
+  const esperadoDeLote = new Map(saldosDeLote.map((b) => [b.lotId, b.onHand]))
+  const esperadoDe = (l: LineaDeConteoImportada) => (l.loteId ? (esperadoDeLote.get(l.loteId) ?? 0) : (esperadoDeProducto.get(l.varianteId) ?? 0))
   const ahora = e.ahora ?? new Date()
 
-  const aCrear = e.lineas.filter((l) => !previaDe.has(l.varianteId))
+  const aCrear = e.lineas.filter((l) => !previaDe.has(claveDeLinea(l.varianteId, l.loteId)))
   if (aCrear.length > 0) {
     await tx.inventoryCountLine.createMany({
-      data: aCrear.map((l) => ({ companyId, sessionId: conteo.id, catalogVariantId: l.varianteId, counted: l.cantidad, expected: esperadoDe.get(l.varianteId) ?? 0, countedById: ctx.actorId, countedAt: ahora })),
+      data: aCrear.map((l) => ({ companyId, sessionId: conteo.id, catalogVariantId: l.varianteId, lotId: l.loteId || null, counted: l.cantidad, expected: esperadoDe(l), countedById: ctx.actorId, countedAt: ahora })),
     })
   }
-  const aCambiar = e.lineas.filter((l) => previaDe.has(l.varianteId))
+  const aCambiar = e.lineas.filter((l) => previaDe.has(claveDeLinea(l.varianteId, l.loteId)))
   if (aCambiar.length > 0) {
-    const filas = aCambiar.map((l) => Prisma.sql`(${previaDe.get(l.varianteId)!}, ${l.cantidad}::int, ${esperadoDe.get(l.varianteId) ?? 0}::int)`)
+    const filas = aCambiar.map((l) => Prisma.sql`(${previaDe.get(claveDeLinea(l.varianteId, l.loteId))!}, ${l.cantidad}::int, ${esperadoDe(l)}::int)`)
     // `AT TIME ZONE 'UTC'`: la columna es `timestamp` sin zona y Prisma escribe en UTC (ver `escribirMovimientosPorLote`).
     const cambiadas = await tx.$executeRaw`
       UPDATE "inventory_count_lines" AS l
@@ -1524,11 +2541,14 @@ export async function importarConteoEnTx(
 
 export interface LineaRechazada {
   varianteId: string
+  /** INV-5b3: el lote de la línea (null en un producto sin lotes). */
+  loteId: string | null
   sku: string
+  /** El producto y, si lleva lotes, su lote («Crema · lote A-1»). */
   nombre: string
   contado: number
   esperado: number
-  /** Las existencias reales de ahora. */
+  /** Las existencias reales de ahora (de ese lote, si la línea es de un lote). */
   existenciaActual: number
   motivo: string
 }
@@ -1555,10 +2575,14 @@ export type ResultadoAplicarConteo =
   | { aplicada: false; conteoId: string; numero: string; rechazadas: LineaRechazada[] }
 
 /**
- * APLICA el conteo: un ajuste por producto por la diferencia, todo en una
+ * APLICA el conteo: un ajuste por línea por la diferencia, todo en una
  * transacción. Si alguna línea no se puede aplicar, NO se aplica ninguna y se
  * devuelven todas las que fallan (la persona las corrige o las quita y vuelve a
  * aplicar). Aplicar dos veces el mismo conteo no repite nada.
+ *
+ * INV-5b3 · Una línea de un producto con lotes es de UN LOTE: se compara contra el saldo de ese lote (no contra el del producto) y su
+ * ajuste lleva ese lote por reparto. Los ajustes de varios lotes del mismo producto se aplican uno tras otro (cada uno es un
+ * movimiento del producto), en rondas: ver `repartirEnRondas`.
  */
 export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId: string; ahora?: Date }, ctx: ContextoAuditoria): Promise<ResultadoAplicarConteo> {
   const conteo = await bloquearConteo(tx, companyId, e.conteoId)
@@ -1581,23 +2605,26 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
 
   const lineas = await tx.inventoryCountLine.findMany({
     where: { companyId, sessionId: conteo.id },
-    orderBy: [{ catalogVariantId: 'asc' }],
+    orderBy: [{ catalogVariantId: 'asc' }, { lotId: 'asc' }, { id: 'asc' }],
     select: {
       id: true,
       catalogVariantId: true,
+      lotId: true,
       counted: true,
       expected: true,
+      lot: { select: { code: true } },
       variant: { select: { sku: true, name: true, isDefault: true, item: { select: { name: true, type: true, capabilities: true } } } },
     },
   })
   if (lineas.length === 0) fallo('CONTEO_SIN_LINEAS', 'Cuenta al menos un producto antes de aplicar el conteo.')
-  const nombreDe = (l: (typeof lineas)[number]) => (l.variant.isDefault ? l.variant.item.name : `${l.variant.item.name} · ${l.variant.name}`)
+  const nombreDe = (l: (typeof lineas)[number]) => nombreDeLinea(l.variant.isDefault ? l.variant.item.name : `${l.variant.item.name} · ${l.variant.name}`, l.lot?.code)
 
   const sucursal = await exigirSucursal(tx, companyId, conteo.locationId, false)
   if (lineas.some((l) => diferenciaDeConteo(l.counted, l.expected) > 0)) await exigirSucursal(tx, companyId, conteo.locationId, true)
 
-  // Los saldos: se crean en cero los que falten (en orden fijo) y se BLOQUEAN todos juntos, en orden de id.
-  const variantes = lineas.map((l) => l.catalogVariantId)
+  // Los saldos: se crean en cero los que falten (en orden fijo) y se BLOQUEAN todos juntos, en orden de id. Un producto con lotes
+  // tiene UN saldo por sucursal aunque se cuente en varios lotes.
+  const variantes = [...new Set(lineas.map((l) => l.catalogVariantId))]
   await tx.inventoryLevel.createMany({ data: [...variantes].sort().map((v) => ({ companyId, catalogVariantId: v, locationId: sucursal.id })), skipDuplicates: true })
   const niveles = await tx.inventoryLevel.findMany({ where: { companyId, locationId: sucursal.id, catalogVariantId: { in: variantes } }, select: { id: true, catalogVariantId: true } })
   const nivelDe = new Map(niveles.map((n) => [n.catalogVariantId, n.id]))
@@ -1605,65 +2632,118 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
   const idsNivel = niveles.map((n) => n.id)
   let filas = await bloquear(tx, companyId, idsNivel)
 
+  // INV-5b3: los lotes de cada saldo con líneas por lote, leídos con el saldo ya bloqueado.
+  const nivelesConLineasDeLote = [...new Set(lineas.filter((l) => l.lotId).map((l) => nivelDe.get(l.catalogVariantId)!))]
+  let lotesDeNivel = new Map<string, Map<string, LoteConSaldo>>()
+  const cargarLotes = async () => {
+    lotesDeNivel = new Map()
+    for (const n of nivelesConLineasDeLote) lotesDeNivel.set(n, new Map((await cargarLotesDeNivel(tx, companyId, n)).map((l) => [l.loteId, l])))
+  }
+  await cargarLotes()
+
   const motivo = motivoDeConteo(conteo.number)
-  const evaluar = () =>
-    lineas.map((l) => {
+  const SIN_SALDO: Saldo = { onHand: 0, reserved: 0, damaged: 0 }
+  const evaluar = () => {
+    const evaluadas = lineas.map((l) => {
       const fila = filas.get(nivelDe.get(l.catalogVariantId)!)!
       const delta = diferenciaDeConteo(l.counted, l.expected)
       const trackea = normalizarCapacidades(l.variant.item.type, l.variant.item.capabilities).trackInventory
-      const plan = trackea ? planDeAjuste(delta, fila, motivo) : ({ tipo: 'RECHAZADA', motivo: `«${l.variant.item.name}» ya no controla inventario: actívalo en su ficha del catálogo o quítalo del conteo.` } as const)
-      return { l, fila, delta, plan }
+      // Una línea de un lote se compara contra el saldo de ESE lote (0 si nunca tuvo saldo en la sucursal); las demás, contra el del producto.
+      const saldo: Saldo = l.lotId ? (lotesDeNivel.get(fila.id)?.get(l.lotId) ?? SIN_SALDO) : fila
+      const plan: PlanDeAjuste = trackea ? planDeAjuste(delta, saldo, motivo) : { tipo: 'RECHAZADA', motivo: `«${l.variant.item.name}» ya no controla inventario: actívalo en su ficha del catálogo o quítalo del conteo.` }
+      return { l, fila, saldo, delta, plan }
     })
+    // Los ajustes de varios lotes del mismo producto se aplican uno tras otro sobre el saldo del PRODUCTO: se comprueba que cada paso quepa.
+    const porNivel = new Map<string, typeof evaluadas>()
+    for (const x of evaluadas) if (x.l.lotId && x.plan.tipo === 'AJUSTE') porNivel.set(x.fila.id, [...(porNivel.get(x.fila.id) ?? []), x])
+    for (const grupo of porNivel.values()) {
+      grupo.sort((a, b) => compararParaAplicar({ delta: a.delta, loteCodigo: a.l.lot?.code ?? null }, { delta: b.delta, loteCodigo: b.l.lot?.code ?? null }))
+      let estado: Saldo = { onHand: grupo[0].fila.onHand, reserved: grupo[0].fila.reserved, damaged: grupo[0].fila.damaged }
+      for (const x of grupo) {
+        if (x.plan.tipo !== 'AJUSTE') continue
+        try {
+          estado = saldoDeCubetas(aplicarMovimiento(cubetasDeSaldo(estado), x.plan.movimiento))
+        } catch {
+          x.plan = {
+            tipo: 'RECHAZADA',
+            motivo:
+              x.delta > 0
+                ? `La existencia del producto superaría el máximo admitido (${EXISTENCIA_MAXIMA.toLocaleString('es-DO')}). Revisa el conteo de este lote.`
+                : 'Quitar esta diferencia dejaría menos de lo apartado en el producto. Libera o cobra las reservas, o corrige el conteo de este lote.',
+          }
+        }
+      }
+    }
+    return evaluadas
+  }
 
   // Una reserva vencida que nadie ha barrido aún sigue «apartando»: antes de rechazar un faltante por eso, se vencen las caducadas.
   let evaluadas = evaluar()
-  const paraVencer = evaluadas.filter((x) => x.plan.tipo === 'RECHAZADA' && x.delta < 0 && x.fila.reserved > 0).map((x) => x.fila.id)
+  const paraVencer = [...new Set(evaluadas.filter((x) => x.plan.tipo === 'RECHAZADA' && x.delta < 0 && x.saldo.reserved > 0).map((x) => x.fila.id))]
   if (paraVencer.length > 0) {
     let vencidas = 0
     for (const id of paraVencer) vencidas += await vencerDeNivel(tx, companyId, id, ahora)
     if (vencidas > 0) {
       filas = await bloquear(tx, companyId, idsNivel)
+      await cargarLotes()
       evaluadas = evaluar()
     }
   }
 
   const rechazadas = evaluadas.flatMap((x) =>
     x.plan.tipo === 'RECHAZADA'
-      ? [{ varianteId: x.l.catalogVariantId, sku: x.l.variant.sku, nombre: nombreDe(x.l), contado: x.l.counted, esperado: x.l.expected, existenciaActual: x.fila.onHand, motivo: x.plan.motivo } satisfies LineaRechazada]
+      ? [{ varianteId: x.l.catalogVariantId, loteId: x.l.lotId, sku: x.l.variant.sku, nombre: nombreDe(x.l), contado: x.l.counted, esperado: x.l.expected, existenciaActual: x.saldo.onHand, motivo: x.plan.motivo } satisfies LineaRechazada]
       : []
   )
   if (rechazadas.length > 0) return { aplicada: false, conteoId: conteo.id, numero: conteo.number, rechazadas }
 
-  // Los ajustes: uno por producto con diferencia, con el ledger puro sobre el saldo bloqueado.
-  const items: ItemLote[] = []
-  const idLineaDeItem: string[] = []
-  const bajadas: string[] = []
+  // Los ajustes: uno por línea con diferencia, con el ledger puro sobre el saldo bloqueado. Las líneas de lotes de un mismo producto
+  // van en rondas distintas (un saldo aparece una sola vez por ronda) y en cada una el «antes» es el saldo que dejó la anterior.
+  const aplicables = evaluadas
+    .flatMap((x) => (x.plan.tipo === 'AJUSTE' ? [{ ...x, movimiento: x.plan.movimiento }] : []))
+    .sort((a, b) => (a.fila.id < b.fila.id ? -1 : a.fila.id > b.fila.id ? 1 : 0) || compararParaAplicar({ delta: a.delta, loteCodigo: a.l.lot?.code ?? null }, { delta: b.delta, loteCodigo: b.l.lot?.code ?? null }))
+  const estadoDeNivel = new Map<string, Saldo>([...filas.values()].map((f) => [f.id, { onHand: f.onHand, reserved: f.reserved, damaged: f.damaged }]))
+  const movimientoDeLinea = new Map<string, string>()
+  const bajadas = new Set<string>()
   let unidadesSobrantes = 0
   let unidadesFaltantes = 0
-  for (const x of evaluadas) {
-    if (x.plan.tipo !== 'AJUSTE') continue
-    const despues = saldoDeCubetas(aplicarMovimiento(cubetasDeSaldo(x.fila), x.plan.movimiento))
-    items.push({
-      nivelId: x.fila.id,
-      movimiento: x.plan.movimiento,
-      antes: { onHand: x.fila.onHand, reserved: x.fila.reserved, damaged: x.fila.damaged },
-      despues,
-      meta: { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: conteo.id } },
-      varianteId: x.l.catalogVariantId,
-    })
-    idLineaDeItem.push(x.l.id)
+  for (const x of aplicables) {
     if (x.delta > 0) unidadesSobrantes += x.delta
     else {
       unidadesFaltantes += -x.delta
-      bajadas.push(x.l.catalogVariantId)
+      bajadas.add(x.l.catalogVariantId)
     }
   }
-  const movimientoIds = await escribirMovimientosPorLote(tx, companyId, items)
-  const movimientoDeLinea = new Map(idLineaDeItem.map((id, i) => [id, movimientoIds[i]]))
-  const despuesDeNivel = new Map(items.map((i) => [i.nivelId, i.despues.onHand]))
+  for (const ronda of repartirEnRondas(aplicables.map((x) => ({ nivelId: x.fila.id, x })))) {
+    const items: ItemLote[] = ronda.map(({ nivelId, x }) => {
+      const antes = estadoDeNivel.get(nivelId)!
+      return {
+        nivelId,
+        movimiento: x.movimiento,
+        antes,
+        despues: saldoDeCubetas(aplicarMovimiento(cubetasDeSaldo(antes), x.movimiento)),
+        meta: {
+          userId: ctx.actorId,
+          referencia: { tipo: 'STOCK_COUNT', id: conteo.id },
+          motivoCodigo: MOTIVO_DE_CONTEO,
+          ...(x.l.lotId ? { reparto: [{ loteId: x.l.lotId, cantidad: x.movimiento.quantity }] } : {}),
+        },
+        varianteId: x.l.catalogVariantId,
+      }
+    })
+    const ids = await escribirMovimientosPorLote(tx, companyId, items)
+    ronda.forEach(({ nivelId, x }, i) => {
+      estadoDeNivel.set(nivelId, items[i].despues)
+      movimientoDeLinea.set(x.l.id, ids[i])
+    })
+  }
 
   // El resultado de CADA línea (también las que coincidieron): se escribe ANTES de cerrar el conteo, que después no admite cambios.
-  const resultados = evaluadas.map((x) => Prisma.sql`(${x.l.id}, ${x.fila.onHand}::int, ${despuesDeNivel.get(x.fila.id) ?? x.fila.onHand}::int, ${movimientoDeLinea.get(x.l.id) ?? null}::text)`)
+  // «Antes» y «después» son las existencias reales del producto o, en una línea de lote, de ese lote.
+  const resultados = evaluadas.map((x) => {
+    const ajustada = movimientoDeLinea.has(x.l.id)
+    return Prisma.sql`(${x.l.id}, ${x.saldo.onHand}::int, ${x.saldo.onHand + (ajustada ? x.delta : 0)}::int, ${movimientoDeLinea.get(x.l.id) ?? null}::text)`
+  })
   const escritas = await tx.$executeRaw`
     UPDATE "inventory_count_lines" AS l
        SET "onHandBefore" = v."antes", "onHandAfter" = v."despues", "movementId" = v."movimiento"
@@ -1671,8 +2751,16 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
      WHERE l."id" = v."id" AND l."companyId" = ${companyId} AND l."sessionId" = ${conteo.id}`
   if (escritas !== evaluadas.length) fallo('LOTE_INCOMPLETO', 'No se pudieron guardar los resultados del conteo.')
 
-  const sinContar = await tx.inventoryLevel.count({ where: { companyId, locationId: sucursal.id, onHand: { gt: 0 }, catalogVariantId: { notIn: variantes } } })
-  const resumen: ResumenConteoAplicado = { lineas: lineas.length, ajustadas: items.length, unidadesSobrantes, unidadesFaltantes, sinContar }
+  // Lo que tiene existencias en la sucursal y no se contó: productos sin lotes (el producto entero) y lotes (cada lote).
+  const productosSinContar = await tx.inventoryLevel.count({ where: { companyId, locationId: sucursal.id, onHand: { gt: 0 }, catalogVariantId: { notIn: variantes }, variant: { lotTracking: { none: {} } } } })
+  const lotesSinContar = await tx.$queryRaw<{ n: number }[]>`
+    SELECT count(*)::int AS "n"
+      FROM "inventory_lot_balances" b
+      JOIN "inventory_levels" lv ON lv."id" = b."inventoryLevelId"
+     WHERE b."companyId" = ${companyId} AND lv."locationId" = ${sucursal.id} AND b."onHand" > 0
+       AND NOT EXISTS (SELECT 1 FROM "inventory_count_lines" cl WHERE cl."sessionId" = ${conteo.id} AND cl."catalogVariantId" = b."catalogVariantId" AND cl."lotId" = b."lotId")`
+  const sinContar = productosSinContar + (lotesSinContar[0]?.n ?? 0)
+  const resumen: ResumenConteoAplicado = { lineas: lineas.length, ajustadas: aplicables.length, unidadesSobrantes, unidadesFaltantes, sinContar }
   await tx.inventoryCountSession.update({
     where: { id: conteo.id },
     data: {
@@ -1692,10 +2780,10 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
     companyId,
     'INVENTORY_STOCK_CHANGED',
     conteo.id,
-    { tipo: 'ADJUSTMENT', conteo: conteo.number, sucursal: sucursal.nombre, lineas: resumen.lineas, ajustadas: resumen.ajustadas, sobrantes: unidadesSobrantes, faltantes: unidadesFaltantes, sinContar },
+    { tipo: 'ADJUSTMENT', conteo: conteo.number, sucursal: sucursal.nombre, lineas: resumen.lineas, ajustadas: resumen.ajustadas, sobrantes: unidadesSobrantes, faltantes: unidadesFaltantes, sinContar, lineasDeLote: lineas.filter((l) => l.lotId).length },
     'InventoryCountSession'
   )
-  return { aplicada: true, conteoId: conteo.id, numero: conteo.number, resumen, repetido: false, variantesBajadas: bajadas }
+  return { aplicada: true, conteoId: conteo.id, numero: conteo.number, resumen, repetido: false, variantesBajadas: [...bajadas] }
 }
 
 /** Descarta el conteo sin tocar existencias. Queda guardado (quién y por qué), pero ya no admite cambios. */
@@ -1856,14 +2944,22 @@ export async function enviarTrasladoEnTx(tx: Tx, companyId: string, e: EntradaEn
   if (clave) {
     const previo = await tx.inventoryTransfer.findFirst({
       where: { companyId, idempotencyKey: clave },
-      select: { id: true, number: true, fromLocationId: true, toLocationId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantitySent: true } } },
+      select: { id: true, number: true, fromLocationId: true, toLocationId: true, lineCount: true, unitCount: true, lines: { select: { catalogVariantId: true, quantitySent: true, outMovementId: true } } },
     })
     if (previo) {
-      const mismas =
+      let mismas =
         previo.fromLocationId === origen.id &&
         previo.toLocationId === destino.id &&
         previo.lines.length === validas.lineas.length &&
         validas.lineas.every((l) => previo.lines.some((p) => p.catalogVariantId === l.varianteId && p.quantitySent === l.cantidad))
+      // INV-5b4: la MISMA clave con OTROS lotes no es un reintento (solo se compara lo que se dijo; sin decirlo manda FEFO y reintentar devuelve lo de siempre).
+      if (mismas) {
+        for (const l of validas.lineas) {
+          if (sinLotes(l.lotes)) continue
+          const p = previo.lines.find((x) => x.catalogVariantId === l.varianteId)!
+          if (!(await mismoRepartoQueElPrevio(tx, companyId, p.outMovementId, { tipo: 'SALIENTE', lotes: l.lotes }, l.varianteId))) mismas = false
+        }
+      }
       if (!mismas) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otro envío distinto.')
       return { trasladoId: previo.id, numero: previo.number, lineas: previo.lineCount, unidades: previo.unitCount, repetido: true, variantes: [], origenNombre: origen.nombre, destinoNombre: destino.nombre }
     }
@@ -1900,6 +2996,23 @@ export async function enviarTrasladoEnTx(tx: Tx, companyId: string, e: EntradaEn
     const detalle = noAlcanza.map((x) => `«${nombreDe(x.l.varianteId)}» (pides ${x.l.cantidad.toLocaleString('es-DO')}, hay ${(x.fila ? disponible(x.fila) : 0).toLocaleString('es-DO')} disponible${x.fila && disponible(x.fila) === 1 ? '' : 's'})`)
     fallo('STOCK_INSUFICIENTE', `No alcanza para enviar desde «${origen.nombre}»: ${detalle.join('; ')}.`)
   }
+  // INV-5b4: de qué lotes sale cada línea de un producto con lotes (los que se eligieron, o el que antes vence y no está vencido). Con los
+  // saldos del origen bloqueados; si un lote no tiene lo pedido, falla todo el envío antes de escribir nada.
+  const repartos = new Map<string, RepartoLote[] | undefined>()
+  for (const x of evaluadas) {
+    repartos.set(
+      x.l.varianteId,
+      await resolverReparto(
+        tx,
+        companyId,
+        { nivelId: x.fila!.id, varianteId: x.l.varianteId, nombre: nombreDe(x.l.varianteId) },
+        { type: 'TRANSFER_OUT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: x.l.cantidad },
+        sinLotes(x.l.lotes) ? undefined : { tipo: 'SALIENTE', lotes: x.l.lotes },
+        ahora,
+        ctx.actorId
+      )
+    )
+  }
 
   const numero = await siguienteNumero(tx, PREFIJO_TRASLADO, (prefijo) => ultimoTraslado(tx, companyId, prefijo), ahora, `traslado:${companyId}`)
   let traslado
@@ -1931,7 +3044,8 @@ export async function enviarTrasladoEnTx(tx: Tx, companyId: string, e: EntradaEn
       movimiento,
       antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged },
       despues: saldoDeCubetas(aplicarMovimiento(cubetasDeSaldo(fila), movimiento)),
-      meta: { userId: ctx.actorId, referencia: { tipo: 'TRANSFER', id: traslado.id } },
+      meta: { userId: ctx.actorId, referencia: { tipo: 'TRANSFER', id: traslado.id }, reparto: repartos.get(x.l.varianteId) },
+      varianteId: x.l.varianteId,
     }
   })
   const movimientoIds = await escribirMovimientosPorLote(tx, companyId, items)
@@ -1948,6 +3062,65 @@ export async function enviarTrasladoEnTx(tx: Tx, companyId: string, e: EntradaEn
     'InventoryTransfer'
   )
   return { trasladoId: traslado.id, numero, lineas: validas.lineas.length, unidades: validas.unidades, repetido: false, variantes: ids, origenNombre: origen.nombre, destinoNombre: destino.nombre }
+}
+
+/**
+ * INV-5b4: de qué lotes es lo que se recibe en cada línea. Devuelve el reparto de cada producto QUE LLEVA lotes (los demás no aparecen).
+ * Quien llama tiene la transferencia bloqueada. Un producto sin lotes al que se le dicen lotes falla con `LOTES_NO_APLICAN`.
+ */
+async function repartosDeRecepcion(
+  tx: Tx,
+  companyId: string,
+  trasladoId: string,
+  lineas: readonly LineaDeTraslado[],
+  recibir: readonly { varianteId: string; cantidad: number; lotes?: unknown }[]
+): Promise<Map<string, RepartoLote[]>> {
+  const porVariante = await lotesDeTrasladoEnTx(tx, companyId, trasladoId)
+  const nombres = await nombresDeVariantes(tx, companyId, recibir.map((r) => r.varianteId))
+  const repartos = new Map<string, RepartoLote[]>()
+  for (const r of recibir) {
+    const pendientes = porVariante.get(r.varianteId)
+    if (!pendientes || pendientes.length === 0) {
+      if (!sinLotes(r.lotes)) fallo('LOTES_NO_APLICAN', `«${nombres.get(r.varianteId) ?? 'El producto'}» no se envió por lotes: quita los lotes de esa línea.`)
+      continue
+    }
+    // El ledger y la línea cuentan lo mismo: si no, algo escribió por fuera y no se reparte a ciegas.
+    const linea = lineas.find((l) => l.varianteId === r.varianteId)
+    const enCamino = pendientes.reduce((s, l) => s + pendienteDeLote(l), 0)
+    if (!linea || enCamino !== pendienteDeLinea(linea)) {
+      fallo('TRASLADO_DESCUADRADO', `Los lotes de «${nombres.get(r.varianteId) ?? 'un producto'}» no cuadran con lo que falta por llegar. Avisa a soporte antes de seguir.`)
+    }
+    const reparto = repartoDeRecepcion(pendientes, r.cantidad, r.lotes)
+    if (!reparto.ok) fallo(reparto.codigo, `«${nombres.get(r.varianteId) ?? 'El producto'}»: ${reparto.error}`)
+    repartos.set(r.varianteId, reparto.reparto)
+  }
+  return repartos
+}
+
+/** INV-5b4: de qué lotes vuelve al origen lo que se cancela (por producto con lotes): de cada lote, lo que sigue en camino. */
+async function repartosDeCancelacionEnTx(
+  tx: Tx,
+  companyId: string,
+  trasladoId: string,
+  devolver: readonly { varianteId: string; cantidad: number }[]
+): Promise<Map<string, RepartoLote[]>> {
+  const porVariante = await lotesDeTrasladoEnTx(tx, companyId, trasladoId)
+  const repartos = new Map<string, RepartoLote[]>()
+  for (const d of devolver) {
+    const pendientes = porVariante.get(d.varianteId)
+    if (!pendientes || pendientes.length === 0) continue
+    const reparto = repartoDeCancelacion(pendientes)
+    if (sumaDeReparto(reparto) !== d.cantidad) {
+      fallo('TRASLADO_DESCUADRADO', 'Los lotes de un producto no cuadran con lo que falta por llegar. Avisa a soporte antes de cancelar.')
+    }
+    repartos.set(d.varianteId, reparto)
+  }
+  return repartos
+}
+
+async function nombresDeVariantes(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, string>> {
+  const vs = await tx.catalogVariant.findMany({ where: { companyId, id: { in: [...new Set(ids)] } }, select: { id: true, name: true, isDefault: true, item: { select: { name: true } } } })
+  return new Map(vs.map((v) => [v.id, v.isDefault ? v.item.name : `${v.item.name} · ${v.name}`]))
 }
 
 export interface EntradaRecepcion {
@@ -1993,13 +3166,23 @@ export async function recibirTrasladoEnTx(tx: Tx, companyId: string, e: EntradaR
   if (clave) {
     const previos = await tx.inventoryMovement.findMany({
       where: { companyId, referenceType: 'TRANSFER', referenceId: traslado.id, idempotencyKey: { startsWith: `${clave}:in:` } },
-      select: { idempotencyKey: true, quantity: true },
+      select: { id: true, idempotencyKey: true, quantity: true },
     })
     if (previos.length > 0) {
       const pedidas = e.todo ? null : new Map((e.lineas ?? []).filter((l) => l?.cantidad > 0).map((l) => [`${clave}:in:${l.varianteId}`, l.cantidad]))
       // Mismo envío = mismos productos y cantidades (con `todo`, no se puede comparar: cuenta lo que ya llegó con esa clave).
       if (pedidas && (pedidas.size !== previos.length || previos.some((p) => pedidas.get(p.idempotencyKey ?? '') !== p.quantity))) {
         fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra recepción distinta.')
+      }
+      // INV-5b4: la MISMA clave con OTROS lotes no es un reintento (solo se compara lo que se dijo).
+      if (!e.todo) {
+        for (const l of e.lineas ?? []) {
+          if (sinLotes(l?.lotes)) continue
+          const p = previos.find((x) => x.idempotencyKey === `${clave}:in:${l.varianteId}`)
+          if (!p || !(await mismoRepartoQueElPrevio(tx, companyId, p.id, { tipo: 'SALIENTE', lotes: l.lotes }, l.varianteId))) {
+            fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra recepción distinta.')
+          }
+        }
       }
       return { ...(await estadoActual(true)), recibidas: previos.reduce((s, p) => s + p.quantity, 0) }
     }
@@ -2023,6 +3206,9 @@ export async function recibirTrasladoEnTx(tx: Tx, companyId: string, e: EntradaR
     const variantes = plan.recibir.map((r) => r.varianteId)
     const nivelDe = await crearSaldosEnOrden(tx, companyId, destino.id, variantes)
     const filas = await bloquear(tx, companyId, [...nivelDe.values()])
+    // INV-5b4: de qué lotes llegó lo que se recibe. Con la transferencia bloqueada, lo que sigue en camino de cada lote sale del ledger y
+    // ninguna recepción concurrente lo cambia: aquí se hace cumplir el tope por lote.
+    const repartos = await repartosDeRecepcion(tx, companyId, traslado.id, lineas, plan.recibir)
     const items: ItemLote[] = plan.recibir.map((r) => {
       const fila = filas.get(nivelDe.get(r.varianteId)!)!
       const movimiento: Movimiento = { type: 'TRANSFER_IN', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: r.cantidad, reason: motivoDeRecepcion(traslado.number, origen.nombre) }
@@ -2037,7 +3223,8 @@ export async function recibirTrasladoEnTx(tx: Tx, companyId: string, e: EntradaR
         movimiento,
         antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged },
         despues: saldoDeCubetas(despues),
-        meta: { userId: ctx.actorId, referencia: { tipo: 'TRANSFER', id: traslado.id }, idempotencyKey: clave ? `${clave}:in:${r.varianteId}` : null },
+        meta: { userId: ctx.actorId, referencia: { tipo: 'TRANSFER', id: traslado.id }, idempotencyKey: clave ? `${clave}:in:${r.varianteId}` : null, reparto: repartos.get(r.varianteId) },
+        varianteId: r.varianteId,
       }
     })
     await escribirMovimientosPorLote(tx, companyId, items)
@@ -2103,6 +3290,8 @@ export async function cancelarTrasladoEnTx(
   // Volver al origen es devolver lo que salió: se admite aunque la sucursal ya esté cerrada.
   const nivelDe = await crearSaldosEnOrden(tx, companyId, origen.id, devolver.map((d) => d.varianteId))
   const filas = await bloquear(tx, companyId, [...nivelDe.values()])
+  // INV-5b4: lo que vuelve al origen vuelve a los lotes de que salió: de cada lote, todo lo que sigue en camino.
+  const repartos = await repartosDeCancelacionEnTx(tx, companyId, traslado.id, devolver)
   const items: ItemLote[] = devolver.map((d) => {
     const fila = filas.get(nivelDe.get(d.varianteId)!)!
     const movimiento: Movimiento = { type: 'TRANSFER_IN', sourceBucket: null, destinationBucket: 'AVAILABLE', quantity: d.cantidad, reason: motivoDeDevolucion(traslado.number) }
@@ -2117,7 +3306,8 @@ export async function cancelarTrasladoEnTx(
       movimiento,
       antes: { onHand: fila.onHand, reserved: fila.reserved, damaged: fila.damaged },
       despues: saldoDeCubetas(despues),
-      meta: { userId: ctx.actorId, referencia: { tipo: 'TRANSFER', id: traslado.id } },
+      meta: { userId: ctx.actorId, referencia: { tipo: 'TRANSFER', id: traslado.id }, reparto: repartos.get(d.varianteId) },
+      varianteId: d.varianteId,
     }
   })
   await escribirMovimientosPorLote(tx, companyId, items)

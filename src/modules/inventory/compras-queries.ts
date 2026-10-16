@@ -3,6 +3,7 @@ import type { Tx } from '@/lib/tenant'
 import { costoDeDecimal, formatearCosto, formatearMonto, valorDe, type Costo } from './costos'
 import { costoParaCampo, pendienteDeOrden, type EstadoOrden } from './compras'
 import { armarCursor, leerCursor, type FiltrosOrdenes } from './filtros'
+import { repartosPorCodigoEnTx } from './lotes-queries'
 import { buscarVariantesParaEntradaEnTx, nombresDeUsuarios, rangoDeFechas, type VarianteBuscable } from './queries'
 
 /**
@@ -317,6 +318,14 @@ export interface LineaDeOrdenVista {
   costoCampo: string
   /** Lo que cuesta la línea pedida («125.00»). */
   valor: string
+  /** INV-5b2: el producto lleva lotes AHORA (al recibirlo hay que decir de qué lote llegó). */
+  llevaLotes: boolean
+  /** INV-5b2: ¿cada lote nuevo debe traer vencimiento? */
+  exigeVencimiento: boolean
+  /** INV-5c: el producto lleva SERIES (al recibirlo hay un número de serie por unidad). */
+  llevaSeries: boolean
+  /** INV-5b2: de qué lotes ha llegado lo recibido hasta ahora («A-1 ×4, B ×2»); null si no hay nada con lotes. */
+  lotesRecibidos: string | null
 }
 
 export interface EntradaDeOrden {
@@ -361,7 +370,7 @@ export async function ordenDetalleEnTx(tx: Tx, companyId: string, id: string): P
           quantityReceived: true,
           quantityCancelled: true,
           unitCost: true,
-          variant: { select: { sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } } } },
+          variant: { select: { sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } }, lotTracking: { select: { requiresExpiry: true, tracksSerials: true } } } },
         },
       },
       receipts: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 200, select: { id: true, number: true, createdAt: true, reference: true, unitCount: true, userId: true } },
@@ -369,6 +378,24 @@ export async function ordenDetalleEnTx(tx: Tx, companyId: string, id: string): P
   })
   if (!r) return null
   const nombres = await nombresDeUsuarios(tx, [r.createdById, r.orderedById, r.closedById, ...r.receipts.map((e) => e.userId)])
+  // INV-5b2: de qué lotes llegó lo recibido, producto por producto (sumando todas las tandas).
+  const lineasDeEntradas = await tx.inventoryReceiptLine.findMany({ where: { companyId, receipt: { purchaseOrderId: r.id } }, select: { catalogVariantId: true, movementId: true } })
+  const repartos = await repartosPorCodigoEnTx(tx, companyId, lineasDeEntradas.map((l) => l.movementId))
+  const lotesPorProducto = new Map<string, Map<string, number>>()
+  for (const l of lineasDeEntradas) {
+    const reparto = repartos.get(l.movementId)
+    if (!reparto) continue
+    const acumulado = lotesPorProducto.get(l.catalogVariantId) ?? new Map<string, number>()
+    for (const [codigo, cantidad] of reparto) acumulado.set(codigo, (acumulado.get(codigo) ?? 0) + cantidad)
+    lotesPorProducto.set(l.catalogVariantId, acumulado)
+  }
+  const textoDeLotes = (m: Map<string, number> | undefined): string | null =>
+    m && m.size > 0
+      ? [...m.entries()]
+          .sort(([ca, na], [cb, nb]) => nb - na || (ca < cb ? -1 : ca > cb ? 1 : 0))
+          .map(([codigo, cantidad]) => `${codigo} ×${cantidad}`)
+          .join(', ')
+      : null
   const detalle: LineaDeOrdenVista[] = r.lines.map((l) => {
     const costo = cargo(l.unitCost)
     return {
@@ -385,6 +412,10 @@ export async function ordenDetalleEnTx(tx: Tx, companyId: string, id: string): P
       costo: formatearCosto(costo),
       costoCampo: costoParaCampo(costo),
       valor: formatearMonto(valorDe(l.quantityOrdered, costo)),
+      llevaLotes: l.variant.lotTracking.length > 0,
+      exigeVencimiento: l.variant.lotTracking[0]?.requiresExpiry === true,
+      llevaSeries: l.variant.lotTracking[0]?.tracksSerials === true,
+      lotesRecibidos: textoDeLotes(lotesPorProducto.get(l.catalogVariantId)),
     }
   })
   const costos = new Map(r.lines.map((l) => [l.catalogVariantId, cargo(l.unitCost)]))

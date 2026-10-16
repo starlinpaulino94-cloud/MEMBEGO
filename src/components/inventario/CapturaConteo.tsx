@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Loader2, ScanBarcode, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
-import { buscarProductosParaConteo, contarProductoEnConteo } from '@/modules/inventory/actions'
+import { buscarProductosParaConteo, contarProductoEnConteo, lotesParaContarProducto } from '@/modules/inventory/actions'
+import { etiquetaDeLote } from '@/modules/inventory/conteos'
 import { nombreCompleto } from '@/modules/inventory/formato'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +21,17 @@ interface ProductoBuscado {
   nombreVariante: string
   esDefault: boolean
   exacto: boolean
+  /** INV-5b3: el producto lleva lotes: se cuenta lote por lote. */
+  llevaLotes: boolean
+}
+
+/** Un lote entre los que se elige al contar (sin cantidades: es un conteo a ciegas). */
+interface LoteElegible {
+  loteId: string
+  codigo: string
+  vencimiento: string | null
+  legado: boolean
+  contado: boolean
 }
 
 interface Ultimo {
@@ -37,6 +50,9 @@ const entero = (t: string): number | null => (/^\d{1,4}$/.test(t.trim()) && Numb
  *
  * A CIEGAS: no hay ni una cifra del sistema en esta pantalla; la búsqueda ni
  * siquiera pide sucursal. «Unidades por escaneo» sirve para contar por cajas.
+ *
+ * INV-5b3 · Un producto que LLEVA LOTES no se suma solo: al escanearlo se abre la lista de sus lotes (código y vencimiento, sin
+ * cantidades) y cada clic cuenta las unidades indicadas en ESE lote. La lista sigue abierta para contar varios lotes del mismo producto.
  */
 export function CapturaConteo({ conteoId }: { conteoId: string }) {
   const router = useRouter()
@@ -46,6 +62,7 @@ export function CapturaConteo({ conteoId }: { conteoId: string }) {
   const [buscando, setBuscando] = useState(false)
   const [pendientes, setPendientes] = useState(0)
   const [ultimo, setUltimo] = useState<Ultimo | null>(null)
+  const [eligiendo, setEligiendo] = useState<{ producto: ProductoBuscado; lotes: LoteElegible[] } | null>(null)
   const cola = useRef<Promise<void>>(Promise.resolve())
   const enCurso = useRef(0)
   const peticion = useRef(0)
@@ -81,14 +98,50 @@ export function CapturaConteo({ conteoId }: { conteoId: string }) {
       })
   }
 
+  /** Cuenta `unidades` más de un producto; si lleva lotes, abre la lista de sus lotes para elegir en cuál. */
   async function sumar(p: ProductoBuscado, unidades: number) {
     const nombre = nombreCompleto(p.itemNombre, p.nombreVariante, p.esDefault)
+    if (p.llevaLotes) {
+      const l = await lotesParaContarProducto({ conteoId, varianteId: p.id })
+      if (!l.ok) {
+        setUltimo({ ok: false, texto: `${nombre}: ${l.error}` })
+        toast.error(l.error)
+        return
+      }
+      setEligiendo({ producto: p, lotes: l.lotes })
+      setUltimo({ ok: true, texto: `${nombre} lleva lotes: elige el lote que estás contando.` })
+      return
+    }
+    setEligiendo(null)
     const r = await contarProductoEnConteo({ conteoId, varianteId: p.id, cantidad: unidades, modo: 'SUMAR' })
     if (r.ok) setUltimo({ ok: true, texto: `${nombre}: ahora ${r.contado.toLocaleString('es-DO')} contados` })
     else {
       setUltimo({ ok: false, texto: `${nombre}: ${r.error}` })
       toast.error(r.error)
     }
+  }
+
+  /** Cuenta `unidades` más EN UN LOTE de un producto con lotes. */
+  async function sumarEnLote(p: ProductoBuscado, lote: LoteElegible, unidades: number) {
+    const nombre = nombreCompleto(p.itemNombre, p.nombreVariante, p.esDefault)
+    const etiqueta = etiquetaDeLote(lote.codigo, lote.vencimiento)
+    const r = await contarProductoEnConteo({ conteoId, varianteId: p.id, loteId: lote.loteId, cantidad: unidades, modo: 'SUMAR' })
+    if (r.ok) {
+      setUltimo({ ok: true, texto: `${nombre} · ${etiqueta}: ahora ${r.contado.toLocaleString('es-DO')} contados` })
+      setEligiendo((e) => (e && e.producto.id === p.id ? { ...e, lotes: e.lotes.map((x) => (x.loteId === lote.loteId ? { ...x, contado: true } : x)) } : e))
+    } else {
+      setUltimo({ ok: false, texto: `${nombre} · ${etiqueta}: ${r.error}` })
+      toast.error(r.error)
+    }
+  }
+
+  function contarEnLote(p: ProductoBuscado, lote: LoteElegible) {
+    const unidades = entero(porEscaneo)
+    if (unidades === null) {
+      toast.error('«Unidades por escaneo» debe ser un entero de 1 en adelante.')
+      return
+    }
+    encolar(() => sumarEnLote(p, lote, unidades))
   }
 
   function contar(p: ProductoBuscado) {
@@ -185,6 +238,29 @@ export function CapturaConteo({ conteoId }: { conteoId: string }) {
             <Input id="cc-por-escaneo" inputMode="numeric" autoComplete="off" value={porEscaneo} onChange={(e) => setPorEscaneo(e.target.value)} aria-invalid={entero(porEscaneo) === null} className="w-28 text-right tabular-nums" />
           </div>
         </div>
+        {eligiendo && (
+          <div className="space-y-2 rounded-lg border border-dashed p-3" role="group" aria-label={`Lotes de ${nombreCompleto(eligiendo.producto.itemNombre, eligiendo.producto.nombreVariante, eligiendo.producto.esDefault)}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium">
+                {nombreCompleto(eligiendo.producto.itemNombre, eligiendo.producto.nombreVariante, eligiendo.producto.esDefault)} <span className="text-xs font-normal text-muted-foreground">lleva lotes: ¿en cuál cuentas?</span>
+              </p>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setEligiendo(null)}>
+                Cerrar lotes
+              </Button>
+            </div>
+            <ul className="flex flex-wrap gap-2" aria-label="Lotes para contar">
+              {eligiendo.lotes.map((l) => (
+                <li key={l.loteId}>
+                  <Button type="button" variant={l.contado ? 'secondary' : 'outline'} size="sm" onClick={() => contarEnLote(eligiendo.producto, l)}>
+                    {etiquetaDeLote(l.codigo, l.vencimiento)}
+                    {l.contado && <CheckCircle2 className="ml-1.5 h-3.5 w-3.5" aria-label="ya tiene conteo" />}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">Cada clic suma las unidades de «Unidades por escaneo» al lote elegido. Si encuentras algo sin lote, cuéntalo en «SIN LOTE».</p>
+          </div>
+        )}
         <div className="min-h-6 text-sm" role="status" aria-live="polite">
           {pendientes > 0 ? (
             <span className="inline-flex items-center gap-2 text-muted-foreground">
