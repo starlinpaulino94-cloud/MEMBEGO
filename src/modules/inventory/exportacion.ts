@@ -437,7 +437,7 @@ export interface OrdenParaCsv {
   valor: string
   valorRecibido: string
   valorPendiente: string
-  detalle: ReadonlyArray<{ sku: string; barcode: string | null; itemNombre: string; nombreVariante: string; esDefault: boolean; pedido: number; recibido: number; cancelado: number; pendiente: number; costo: string; valor: string }>
+  detalle: ReadonlyArray<{ sku: string; barcode: string | null; itemNombre: string; nombreVariante: string; esDefault: boolean; pedido: number; recibido: number; cancelado: number; pendiente: number; costo: string; valor: string; lotesRecibidos?: string | null }>
   entradas: ReadonlyArray<{ numero: string; creadoEn: Date; referencia: string | null; unidades: number; usuarioNombre: string | null }>
 }
 
@@ -477,8 +477,9 @@ export function ordenToCsv(o: OrdenParaCsv, zonaHoraria: string): string {
     },
     {
       titulo: 'Líneas',
-      encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Costo unitario', 'Pedido', 'Recibido', 'Faltante', 'Por llegar', 'Valor pedido'],
-      filas: o.detalle.map((l) => [SIN_FORMULA(l.sku), SIN_FORMULA(l.barcode), SIN_FORMULA(l.esDefault ? l.itemNombre : `${l.itemNombre} · ${l.nombreVariante}`), plano(l.costo), l.pedido, l.recibido, l.cancelado, l.pendiente, plano(l.valor)]),
+      encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Costo unitario', 'Pedido', 'Recibido', 'Faltante', 'Por llegar', 'Valor pedido', 'Lotes recibidos'],
+      // INV-5b2: de qué lotes llegó lo recibido («A-1 ×4, B ×2»); vacío si el producto no lleva lotes. El código de un lote es texto libre.
+      filas: o.detalle.map((l) => [SIN_FORMULA(l.sku), SIN_FORMULA(l.barcode), SIN_FORMULA(l.esDefault ? l.itemNombre : `${l.itemNombre} · ${l.nombreVariante}`), plano(l.costo), l.pedido, l.recibido, l.cancelado, l.pendiente, plano(l.valor), SIN_FORMULA(l.lotesRecibidos ?? null)]),
     },
     {
       titulo: 'Entradas de mercancía',

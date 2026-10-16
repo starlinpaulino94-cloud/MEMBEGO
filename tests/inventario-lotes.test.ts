@@ -160,10 +160,11 @@ test('INV-5a · el candado de empresa: compartido en cada bloqueo de saldos y AN
 
 test('INV-5a · activar los lotes: precondiciones, apertura íntegra y rastro', () => {
   const activar = cuerpoDe(sinComentarios(leer('src/modules/inventory/service.ts')), 'activarLotesEnTx')
-  for (const codigo of ['ACTIVAR_CON_CONTEO_ABIERTO', 'ACTIVAR_CON_TRANSFERENCIA', 'ACTIVAR_CON_ORDEN_DE_COMPRA', 'ACTIVAR_RESERVAS_DESCUADRADAS']) assert.match(activar, new RegExp(`'${codigo}'`), codigo)
+  for (const codigo of ['ACTIVAR_CON_CONTEO_ABIERTO', 'ACTIVAR_CON_TRANSFERENCIA', 'ACTIVAR_RESERVAS_DESCUADRADAS']) assert.match(activar, new RegExp(`'${codigo}'`), codigo)
+  // INV-5b2: una orden de compra abierta ya no impide activar (los lotes se dicen al recibir).
+  assert.doesNotMatch(activar, /ACTIVAR_CON_ORDEN_DE_COMPRA|inventoryPurchaseOrderLine/, 'una orden de compra abierta no bloquea la activación')
   assert.match(activar, /status: 'OPEN'/)
   assert.match(activar, /status: \{ in: \['SENT', 'PARTIAL'\] \}/)
-  assert.match(activar, /status: \{ in: \['DRAFT', 'ORDERED', 'PARTIAL'\] \}/)
   assert.match(activar, /vencerDeNivel\(/, 'las reservas caducadas se vencen antes de copiar lo apartado')
   // La apertura copia las TRES cubetas, tal cual.
   assert.match(activar, /onHand: n\.onHand, reserved: n\.reserved, damaged: n\.damaged/)
@@ -176,7 +177,8 @@ test('INV-5a · los flujos que todavía no reparten por lote se niegan a tocar u
   for (const f of ['contarEnTx', 'transferirEnTx', 'registrarConteoProductoEnTx', 'importarConteoEnTx', 'aplicarConteoEnTx', 'enviarTrasladoEnTx']) {
     assert.match(cuerpoDe(svc, f), /exigirSinLotes\(/, f)
   }
-  assert.match(cuerpoDe(sinComentarios(leer('src/modules/inventory/compras-service.ts')), 'guardarOrdenEnTx'), /exigirSinLotes\(/, 'orden de compra')
+  // INV-5b2: la orden de compra YA trabaja con lotes (se pide por producto y los lotes se dicen al recibir): no se niega.
+  assert.doesNotMatch(sinComentarios(leer('src/modules/inventory/compras-service.ts')), /exigirSinLotes/, 'orden de compra: ya no se niega')
   const imp = sinComentarios(leer('src/modules/inventory/importar.ts'))
   assert.match(cuerpoDe(imp, 'informeDeImportacionEnTx'), /exigirSinLotes\(/, 'la revisión de entradas por archivo')
   assert.match(cuerpoDe(imp, 'informeDeConteoImportadoEnTx'), /exigirSinLotes\(/, 'la revisión de un conteo por archivo')

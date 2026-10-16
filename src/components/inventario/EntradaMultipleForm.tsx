@@ -2,18 +2,19 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Plus, ScanBarcode, Trash2 } from 'lucide-react'
+import { Loader2, ScanBarcode, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { buscarProductosParaEntrada, registrarEntradaMultiple } from '@/modules/inventory/actions'
 import { MAX_LINEAS_ENTRADA, MAX_NOTA, MAX_REFERENCIA } from '@/modules/inventory/entradas'
 import { costoOpcional } from '@/modules/inventory/costos'
-import { CODIGO_SIN_LOTE, MAX_LOTES_POR_LINEA, validarLotesDeLinea } from '@/modules/inventory/lotes'
+import { validarLotesDeLinea } from '@/modules/inventory/lotes'
 import { formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { nuevaClave } from './clave'
+import { EditorDeLotes, loteNuevo, lotesParaEnviar, sumaDeLotes, type LoteForm } from './EditorDeLotes'
 
 export interface SucursalOpcionForm {
   id: string
@@ -35,13 +36,6 @@ interface ProductoBuscado {
   exigeVencimiento: boolean
 }
 
-/** Un lote de una línea, tal como se teclea (todo texto: puede estar a medias). */
-interface LoteForm {
-  codigo: string
-  vence: string
-  cantidad: string
-}
-
 interface LineaForm {
   varianteId: string
   nombre: string
@@ -61,7 +55,7 @@ interface LineaForm {
 const entero = (t: string): number | null => (/^\d{1,7}$/.test(t.trim()) ? Number(t.trim()) : null)
 
 /** Las unidades de una línea: su cantidad, o —si lleva lotes— la suma de los suyos. */
-const unidadesDe = (l: LineaForm): number => (l.llevaLotes ? l.lotes.reduce((s, x) => s + (entero(x.cantidad) ?? 0), 0) : (entero(l.cantidad) ?? 0))
+const unidadesDe = (l: LineaForm): number => (l.llevaLotes ? sumaDeLotes(l.lotes) : (entero(l.cantidad) ?? 0))
 
 /**
  * UNA entrada de mercancía con todas sus líneas: se escanea o se busca cada
@@ -138,7 +132,7 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
           costo: '',
           llevaLotes: p.llevaLotes,
           exigeVencimiento: p.exigeVencimiento,
-          lotes: p.llevaLotes ? [{ codigo: '', vence: '', cantidad: '1' }] : [],
+          lotes: p.llevaLotes ? [loteNuevo()] : [],
         },
       ]
     })
@@ -182,7 +176,7 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
       varianteId: l.varianteId,
       cantidad: unidadesDe(l),
       ...(conCostos && l.costo.trim() !== '' ? { costo: l.costo.trim() } : {}),
-      ...(l.llevaLotes ? { lotes: l.lotes.map((x) => ({ codigo: x.codigo, vencimiento: x.vence === '' ? null : x.vence, cantidad: entero(x.cantidad) ?? 0 })) } : {}),
+      ...(l.llevaLotes ? { lotes: lotesParaEnviar(l.lotes) } : {}),
     }))
     const mala = cuerpo.findIndex((l) => l.cantidad < 1)
     if (mala >= 0) {
@@ -355,70 +349,14 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
                     </Button>
                   </div>
                   {l.llevaLotes && (
-                    <div className="basis-full space-y-2 rounded-lg border border-dashed p-3" role="group" aria-label={`Lotes de ${l.nombre}`}>
-                      <p className="text-xs text-muted-foreground">
-                        Este producto lleva lotes: indica de qué lote es lo que llegó{l.exigeVencimiento ? ' y cuándo vence' : ''}. Escribe {CODIGO_SIN_LOTE} si no trae.
-                      </p>
-                      {l.lotes.map((x, j) => (
-                        <div key={j} className="grid gap-2 sm:grid-cols-[1.4fr_1fr_6rem_auto]">
-                          <div>
-                            <Label htmlFor={`en-lote-${i}-${j}`} className="sr-only">
-                              Código del lote {j + 1} de {l.nombre}
-                            </Label>
-                            <Input
-                              id={`en-lote-${i}-${j}`}
-                              placeholder="Código del lote"
-                              autoComplete="off"
-                              maxLength={60}
-                              value={x.codigo}
-                              onChange={(e) => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: y.lotes.map((z, m) => (m === j ? { ...z, codigo: e.target.value } : z)) } : y)))}
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor={`en-vence-${i}-${j}`} className="sr-only">
-                              Vencimiento del lote {j + 1} de {l.nombre}
-                            </Label>
-                            <Input
-                              id={`en-vence-${i}-${j}`}
-                              type="date"
-                              value={x.vence}
-                              disabled={x.codigo.trim().toUpperCase() === CODIGO_SIN_LOTE}
-                              onChange={(e) => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: y.lotes.map((z, m) => (m === j ? { ...z, vence: e.target.value } : z)) } : y)))}
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor={`en-lote-cant-${i}-${j}`} className="sr-only">
-                              Cantidad del lote {j + 1} de {l.nombre}
-                            </Label>
-                            <Input
-                              id={`en-lote-cant-${i}-${j}`}
-                              inputMode="numeric"
-                              autoComplete="off"
-                              value={x.cantidad}
-                              aria-invalid={entero(x.cantidad) === null || entero(x.cantidad) === 0}
-                              onChange={(e) => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: y.lotes.map((z, m) => (m === j ? { ...z, cantidad: e.target.value } : z)) } : y)))}
-                              className="text-right tabular-nums"
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Quitar el lote ${j + 1} de ${l.nombre}`}
-                            disabled={l.lotes.length === 1}
-                            onClick={() => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: y.lotes.filter((_, m) => m !== j) } : y)))}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden />
-                          </Button>
-                        </div>
-                      ))}
-                      {l.lotes.length < MAX_LOTES_POR_LINEA && (
-                        <Button type="button" variant="outline" size="sm" onClick={() => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes: [...y.lotes, { codigo: '', vence: '', cantidad: '1' }] } : y)))}>
-                          <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-                          Agregar otro lote
-                        </Button>
-                      )}
-                    </div>
+                    <EditorDeLotes
+                      nombre={l.nombre}
+                      exigeVencimiento={l.exigeVencimiento}
+                      lotes={l.lotes}
+                      idBase="en"
+                      indice={i}
+                      onChange={(lotes) => setLineas((ls) => ls.map((y, k) => (k === i ? { ...y, lotes } : y)))}
+                    />
                   )}
                 </li>
               ))}

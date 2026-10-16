@@ -92,6 +92,7 @@ import {
   type LoteDeLinea,
   type RepartoLote,
 } from './lotes'
+import { repartosPorCodigoEnTx } from './lotes-queries'
 import { diaLocal } from '@/modules/reportes/rango'
 
 /**
@@ -1470,8 +1471,9 @@ export interface ResultadoActivarLotes {
  * CONCURRENCIA. Toma el candado EXCLUSIVO de lotes de la empresa (espera a que terminen las operaciones en curso y no deja entrar
  * otras hasta confirmar) y luego bloquea todos los saldos del producto. Por eso lo que se lee aquí no cambia mientras se activa.
  *
- * NO SE ACTIVA con trabajo a medias que no sabe de lotes: un conteo abierto, una transferencia en tránsito o una orden de compra sin
- * cerrar que incluya el producto (esos flujos todavía no reparten por lote; ciérralos y vuelve). Y no se activa si lo apartado de
+ * NO SE ACTIVA con trabajo a medias que no sabe de lotes: un conteo abierto o una transferencia en tránsito que incluya el producto
+ * (esos flujos todavía no reparten por lote; ciérralos y vuelve). Una ORDEN DE COMPRA abierta sí deja activar (INV-5b2): se pide por
+ * producto y los lotes se dicen al recibir, de modo que lo que llegue después entra con su lote. Y no se activa si lo apartado de
  * un saldo no coincide con la suma de sus reservas vivas: la apertura copiaría un descuadre.
  */
 export async function activarLotesEnTx(
@@ -1494,8 +1496,6 @@ export async function activarLotesEnTx(
   if (abiertos) fallo('ACTIVAR_CON_CONTEO_ABIERTO', `«${nombre}» está en el conteo ${abiertos.session.number}, que sigue abierto. Aplícalo o cancélalo y vuelve a intentar.`)
   const enTransito = await tx.inventoryTransferLine.findFirst({ where: { companyId, catalogVariantId: variante.id, transfer: { status: { in: ['SENT', 'PARTIAL'] } } }, select: { transfer: { select: { number: true } } } })
   if (enTransito) fallo('ACTIVAR_CON_TRANSFERENCIA', `«${nombre}» va en la transferencia ${enTransito.transfer.number}, que sigue en tránsito. Recíbela o cancélala y vuelve a intentar.`)
-  const enCompra = await tx.inventoryPurchaseOrderLine.findFirst({ where: { companyId, catalogVariantId: variante.id, order: { status: { in: ['DRAFT', 'ORDERED', 'PARTIAL'] } } }, select: { order: { select: { number: true } } } })
-  if (enCompra) fallo('ACTIVAR_CON_ORDEN_DE_COMPRA', `«${nombre}» está en la orden de compra ${enCompra.order.number}, que sigue abierta. Recíbela, ciérrala o cancélala y vuelve a intentar.`)
 
   const ids = (await tx.inventoryLevel.findMany({ where: { companyId, catalogVariantId: variante.id }, select: { id: true }, orderBy: { id: 'asc' } })).map((n) => n.id)
   if (ids.length > 0) {
@@ -1894,18 +1894,7 @@ export async function registrarEntradaMultipleEnTx(tx: Tx, companyId: string, e:
       // El costo es parte de la operación: la misma clave con otro costo no es un reintento. Tampoco lo es la que responde a otra orden.
       const costoDe = (d: { toFixed(n: number): string } | null) => (d === null ? null : costoADecimal(costoDeDecimal(d)))
       // INV-5a: los lotes también son parte de la operación (código y cantidad de cada uno).
-      const repartosPrevios = new Map<string, Map<string, number>>()
-      if (lotesDe.size > 0) {
-        const previos = await tx.inventoryMovementLot.findMany({
-          where: { companyId, movementId: { in: previa.lines.map((p) => p.movementId) } },
-          select: { movementId: true, quantity: true, balance: { select: { lot: { select: { code: true } } } } },
-        })
-        for (const p of previos) {
-          const por = repartosPrevios.get(p.movementId) ?? new Map<string, number>()
-          por.set(p.balance.lot.code, p.quantity)
-          repartosPrevios.set(p.movementId, por)
-        }
-      }
+      const repartosPrevios = lotesDe.size > 0 ? await repartosPorCodigoEnTx(tx, companyId, previa.lines.map((p) => p.movementId)) : new Map<string, Map<string, number>>()
       const mismosLotes = (l: LineaEntrada, p: { movementId: string }) => {
         const pedidos = lotesDe.get(l.varianteId)
         const previos = repartosPrevios.get(p.movementId)

@@ -994,8 +994,8 @@ test('INV-3b · las acciones de compras autorizan con «comprar» (ni «ajustar�
 test('INV-3b · el servicio de compras NO escribe el ledger ni los saldos: recibir delega en la entrada de mercancía de siempre', () => {
   const f = sinComent(leer('src/modules/inventory/compras-service.ts'))
   assert.doesNotMatch(f, /inventoryMovement|inventoryLevel|inventory_levels|inventory_movements|inventoryReceipt\.(create|update|delete)|escribirMovimiento|inventoryVariantCost|inventory_variant_costs/, 'compras-service no toca el ledger, los saldos ni los costos')
-  // INV-5a: además de la entrada de mercancía, trae el guardia que se niega a pedir un producto con lotes (no escribe nada por sí mismo).
-  assert.match(f, /import \{ exigirSinLotes, registrarEntradaMultipleEnTx \} from '\.\/service'/)
+  // INV-5b2: lo único que trae del servicio de inventario es la entrada de mercancía (que ya reparte por lote); no hay guardia de lotes.
+  assert.match(f, /import \{ registrarEntradaMultipleEnTx \} from '\.\/service'/)
   const recibir = f.slice(f.indexOf('export async function recibirOrdenEnTx')).split('\nexport ')[0]
   assert.match(recibir, /registrarEntradaMultipleEnTx\(\s*tx,\s*companyId,\s*\{[\s\S]*ordenCompraId: orden\.id[\s\S]*\},\s*ctx\s*\)/, 'la entrada lleva el id de la orden bloqueada')
   assert.match(recibir, /costo: costoADecimal\(costoDe\.get\(x\.varianteId\)!\)/, 'el costo de la entrada es el de la línea de la orden, no el que mande el navegador')

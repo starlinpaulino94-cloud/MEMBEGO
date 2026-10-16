@@ -105,6 +105,25 @@ export async function lotesDeVarianteEnTx(tx: Tx, companyId: string, varianteId:
   return { lleva: true, exigeVencimiento: seguimiento.requiresExpiry, hoy, catalogo, porSucursal }
 }
 
+/**
+ * De qué lotes es cada movimiento, por CÓDIGO: movimiento → (código → cantidad). Los movimientos de productos sin lotes no aparecen. Es lo
+ * que compara una clave de idempotencia repetida (entrada, recepción de una orden) con lo que ya quedó registrado.
+ */
+export async function repartosPorCodigoEnTx(tx: Tx, companyId: string, movimientoIds: readonly string[]): Promise<Map<string, Map<string, number>>> {
+  const salida = new Map<string, Map<string, number>>()
+  if (movimientoIds.length === 0) return salida
+  const filas = await tx.inventoryMovementLot.findMany({
+    where: { companyId, movementId: { in: [...movimientoIds] } },
+    select: { movementId: true, quantity: true, balance: { select: { lot: { select: { code: true } } } } },
+  })
+  for (const f of filas) {
+    const por = salida.get(f.movementId) ?? new Map<string, number>()
+    por.set(f.balance.lot.code, f.quantity)
+    salida.set(f.movementId, por)
+  }
+  return salida
+}
+
 /** «A-1 ×4, B ×2»: de qué lotes es cada movimiento (uno por id). Los movimientos de productos sin lotes no aparecen. */
 export async function lotesDeMovimientosEnTx(tx: Tx, companyId: string, movimientoIds: readonly string[]): Promise<Map<string, string>> {
   const salida = new Map<string, string>()

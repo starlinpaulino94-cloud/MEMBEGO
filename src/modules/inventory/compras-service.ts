@@ -10,6 +10,7 @@ import {
   MAX_REFERENCIA_ORDEN,
   PREFIJO_ORDEN,
   esEstadoOrden,
+  esMismaRecepcion,
   fechaPrevistaATexto,
   pendienteDeOrden,
   planDeRecepcionOrden,
@@ -21,11 +22,14 @@ import {
   validarVinculo,
   type EstadoOrden,
   type LineaRecibida,
+  type RecepcionComparable,
 } from './compras'
 import { costoADecimal, costoDeDecimal, formatearMonto, valorDe, type Costo } from './costos'
 import { normalizarTextoLibre } from './entradas'
 import { fallo } from './errores'
-import { exigirSinLotes, registrarEntradaMultipleEnTx } from './service'
+import { validarLotesDeLinea } from './lotes'
+import { repartosPorCodigoEnTx } from './lotes-queries'
+import { registrarEntradaMultipleEnTx } from './service'
 
 /**
  * COMMERCE CORE · inventario — INV-3b: proveedores y órdenes de compra (servicio).
@@ -46,6 +50,11 @@ import { exigirSinLotes, registrarEntradaMultipleEnTx } from './service'
  *
  * Los resultados de las líneas (lo recibido, lo cerrado) se escriben ANTES de cambiar
  * el estado de la orden, que después no admite cambios (la base lo exige).
+ *
+ * LOTES (INV-5b2). Una orden se hace por PRODUCTO: quien pide no sabe de qué lote vendrá la mercancía, así que un producto que
+ * lleva lotes se pide igual que cualquier otro. Los lotes se dicen al RECIBIR: cada tanda trae, de cada producto con lotes, de qué
+ * lotes llegó (código, vencimiento y cantidad), y eso viaja tal cual a la entrada de mercancía, que ya sabe repartir por lote.
+ * Un producto puede empezar a llevar lotes DESPUÉS de pedirse la orden: por eso se mira al recibir, no al pedir.
  */
 
 // ── Ayudas ───────────────────────────────────────────────────────────────────
@@ -126,6 +135,17 @@ async function exigirSucursal(tx: Tx, companyId: string, sucursalId: string, act
   if (!s) fallo('SUCURSAL_NO_ENCONTRADA', 'La sucursal no existe.')
   if (activa && !s.activa) fallo('SUCURSAL_INACTIVA', `La sucursal «${s.nombre}» está desactivada.`)
   return s
+}
+
+/** Cuáles de estos productos llevan lotes AHORA (id → nombre). Pudieron empezar a llevarlos después de pedirse la orden. */
+async function productosConLotes(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, string>> {
+  const unicos = [...new Set(ids)]
+  if (unicos.length === 0) return new Map()
+  const filas = await tx.inventoryLotTracking.findMany({
+    where: { companyId, catalogVariantId: { in: unicos } },
+    select: { catalogVariantId: true, variant: { select: { name: true, isDefault: true, item: { select: { name: true } } } } },
+  })
+  return new Map(filas.map((f) => [f.catalogVariantId, f.variant.isDefault ? f.variant.item.name : `${f.variant.item.name} · ${f.variant.name}`]))
 }
 
 /** Todos los productos existen en la empresa y controlan inventario (si no, no tiene sentido pedirlos). */
@@ -290,8 +310,6 @@ export async function guardarOrdenEnTx(tx: Tx, companyId: string, e: EntradaOrde
   const proveedor = await exigirProveedor(tx, companyId, c.proveedorId, true)
   const sucursal = await exigirSucursal(tx, companyId, c.sucursalId, true)
   await exigirVariantesControladas(tx, companyId, lin.lineas.map((l) => l.varianteId))
-  // INV-5a: recibir una orden todavía no reparte por lote; un producto con lotes entra con una entrada de mercancía (que sí los trae).
-  await exigirSinLotes(tx, companyId, lin.lineas.map((l) => l.varianteId), 'la orden de compra')
 
   let ordenId: string
   let numero: string
@@ -486,16 +504,25 @@ export async function recibirOrdenEnTx(tx: Tx, companyId: string, e: EntradaRece
   if (clave) {
     const previa = await tx.inventoryReceipt.findFirst({
       where: { companyId, idempotencyKey: clave },
-      select: { id: true, number: true, purchaseOrderId: true, unitCount: true, lines: { select: { catalogVariantId: true, quantity: true } } },
+      select: { id: true, number: true, purchaseOrderId: true, unitCount: true, lines: { select: { catalogVariantId: true, quantity: true, movementId: true } } },
     })
     if (previa) {
       if (previa.purchaseOrderId !== orden.id) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra recepción distinta.')
-      // Misma recepción = mismos productos y cantidades (con `todo` no se puede comparar: cuenta lo que ya llegó con esa clave).
+      // Misma recepción = mismos productos, cantidades y lotes (con `todo` no se puede comparar: cuenta lo que ya llegó con esa clave).
       if (!e.todo) {
-        const pedidas = new Map((e.lineas ?? []).filter((l) => l?.cantidad > 0).map((l) => [l.varianteId, l.cantidad]))
-        if (pedidas.size !== previa.lines.length || previa.lines.some((p) => pedidas.get(p.catalogVariantId) !== p.quantity)) {
-          fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra recepción distinta.')
+        const pedidas = new Map<string, RecepcionComparable>()
+        for (const l of (e.lineas ?? []).filter((x) => x?.cantidad > 0)) {
+          let lotes = new Map<string, number>()
+          if (Array.isArray(l.lotes) && l.lotes.length > 0) {
+            const v = validarLotesDeLinea(l.lotes, l.cantidad, { exigirVencimiento: false })
+            if (!v.ok) fallo(v.codigo, v.error)
+            lotes = new Map(v.lotes.map((x) => [x.codigo, x.cantidad]))
+          }
+          pedidas.set(l.varianteId, { varianteId: l.varianteId, cantidad: l.cantidad, lotes })
         }
+        const repartos = await repartosPorCodigoEnTx(tx, companyId, previa.lines.map((p) => p.movementId))
+        const registradas = previa.lines.map((p) => ({ varianteId: p.catalogVariantId, cantidad: p.quantity, lotes: repartos.get(p.movementId) ?? new Map<string, number>() }))
+        if (!esMismaRecepcion(registradas, [...pedidas.values()])) fallo('CLAVE_REUTILIZADA', 'Esa clave de idempotencia ya se usó para otra recepción distinta.')
       }
       return estadoActual({ recibidas: previa.unitCount, cerradas: 0, entradaId: previa.id, entradaNumero: previa.number }, true)
     }
@@ -509,6 +536,14 @@ export async function recibirOrdenEnTx(tx: Tx, companyId: string, e: EntradaRece
   if (!plan.ok) fallo(plan.codigo, plan.error)
 
   const costoDe = new Map(lineas.map((l) => [l.varianteId, l.costo]))
+  // INV-5b2: «recibir todo» no sabe de qué lote llegó un producto que los lleva; eso se dice línea por línea.
+  if (e.todo) {
+    const conLotes = await productosConLotes(tx, companyId, plan.recibir.map((r) => r.varianteId))
+    for (const r of plan.recibir) {
+      const nombre = conLotes.get(r.varianteId)
+      if (nombre) fallo('LOTES_FALTAN', `«${nombre}» lleva lotes: indica de qué lote llegó lo que se recibe (no se puede recibir «todo» sin decirlo).`)
+    }
+  }
   let entrada: { entradaId: string; numero: string } | null = null
   if (plan.recibir.length > 0) {
     const sucursal = await tx.sucursal.findFirst({ where: { id: orden.locationId, companyId }, select: { nombre: true, activa: true } })
@@ -519,7 +554,7 @@ export async function recibirOrdenEnTx(tx: Tx, companyId: string, e: EntradaRece
       companyId,
       {
         sucursalId: orden.locationId,
-        lineas: plan.recibir.map((x) => ({ varianteId: x.varianteId, cantidad: x.cantidad, costo: costoADecimal(costoDe.get(x.varianteId)!) })),
+        lineas: plan.recibir.map((x) => ({ varianteId: x.varianteId, cantidad: x.cantidad, costo: costoADecimal(costoDe.get(x.varianteId)!), ...(x.lotes ? { lotes: x.lotes } : {}) })),
         referencia: referencia.valor,
         nota: nota.valor,
         origen: 'MANUAL',

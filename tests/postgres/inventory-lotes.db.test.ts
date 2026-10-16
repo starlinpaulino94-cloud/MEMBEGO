@@ -24,7 +24,6 @@ import {
   abrirConteoEnTx,
   registrarConteoProductoEnTx,
 } from '../../src/modules/inventory/service'
-import { crearProveedorEnTx, guardarOrdenEnTx } from '../../src/modules/inventory/compras-service'
 import { mermasEnTx } from '../../src/modules/inventory/mermas-queries'
 import { barridoInventario } from '../../src/modules/inventory/barrido'
 import { lotesDeVarianteEnTx } from '../../src/modules/inventory/lotes-queries'
@@ -282,12 +281,6 @@ test('2 · no se activa con trabajo a medias que no sabe de lotes, ni con lo apa
   await enA((tx) => enviarTrasladoEnTx(tx, ctx.a, { origenId: ctx.suc1, destinoId: ctx.suc2, lineas: [{ varianteId: t, cantidad: 2 }], ahora: AHORA }, como(ctx.usuario)))
   assert.equal(await codigoDe(activar(t)), 'ACTIVAR_CON_TRANSFERENCIA')
 
-  // Orden de compra abierta.
-  const o = await producto()
-  const prov = await enA((tx) => crearProveedorEnTx(tx, ctx.a, { nombre: `Prov ${sufijo}` }, como(ctx.usuario)))
-  await enA((tx) => guardarOrdenEnTx(tx, ctx.a, { cabecera: { proveedorId: prov.proveedorId, sucursalId: ctx.suc1 }, lineas: [{ varianteId: o, cantidad: 3, costo: '5' }], ahora: AHORA }, como(ctx.usuario)))
-  assert.equal(await codigoDe(activar(o)), 'ACTIVAR_CON_ORDEN_DE_COMPRA')
-
   // Lo apartado no coincide con las reservas vivas (una reserva sin su movimiento).
   const d = await producto()
   await entrada0(d, 5)
@@ -296,7 +289,7 @@ test('2 · no se activa con trabajo a medias que no sabe de lotes, ni con lo apa
   assert.equal(await codigoDe(activar(d)), 'ACTIVAR_RESERVAS_DESCUADRADAS')
 
   // Nada quedó activado.
-  assert.equal(await prisma.inventoryLotTracking.count({ where: { catalogVariantId: { in: [c, t, o, d] } } }), 0)
+  assert.equal(await prisma.inventoryLotTracking.count({ where: { catalogVariantId: { in: [c, t, d] } } }), 0)
   // Otra empresa no ve el producto.
   const ajeno = await producto()
   assert.equal(await codigoDe(enB((tx) => activarLotesEnTx(tx, ctx.b, { varianteId: ajeno }, como(ctx.usuario)))), 'VARIANTE_NO_ENCONTRADA')
@@ -641,7 +634,7 @@ test('14 · el barrido saca de lo vendible lo disponible de los lotes vencidos (
 
 // ── Lo que todavía no admite lotes ───────────────────────────────────────────
 
-test('15 · conteo, transferencia y orden de compra se niegan, con un mensaje claro, a tocar un producto con lotes', async () => {
+test('15 · conteo y transferencia se niegan, con un mensaje claro, a tocar un producto con lotes', async () => {
   const v = await producto('Bloqueado')
   await activar(v)
   await entrada(v, [{ codigo: 'L', cantidad: 5 }])
@@ -652,8 +645,6 @@ test('15 · conteo, transferencia y orden de compra se niegan, con un mensaje cl
   assert.equal(await sin(enA((tx) => enviarTrasladoEnTx(tx, ctx.a, { origenId: ctx.suc1, destinoId: ctx.suc2, lineas: [{ varianteId: v, cantidad: 1 }] }, como(ctx.usuario)))), 'LOTES_NO_SOPORTADO')
   const conteo = await enA((tx) => abrirConteoEnTx(tx, ctx.a, { sucursalId: ctx.suc2 }, como(ctx.usuario)))
   assert.equal(await sin(enA((tx) => registrarConteoProductoEnTx(tx, ctx.a, { conteoId: conteo.conteoId, varianteId: v, cantidad: 1, modo: 'FIJAR' }, como(ctx.usuario)))), 'LOTES_NO_SOPORTADO')
-  const prov = await enA((tx) => crearProveedorEnTx(tx, ctx.a, { nombre: `Prov lotes ${sufijo}` }, como(ctx.usuario)))
-  assert.equal(await sin(enA((tx) => guardarOrdenEnTx(tx, ctx.a, { cabecera: { proveedorId: prov.proveedorId, sucursalId: ctx.suc1 }, lineas: [{ varianteId: v, cantidad: 1, costo: '1' }] }, como(ctx.usuario)))), 'LOTES_NO_SOPORTADO')
   assert.equal(await prisma.inventoryMovement.count({ where: { companyId: ctx.a } }), antes, 'nada se movió')
   await verificarLotes(v)
   // Recibir suelto (una compra) pide el lote.

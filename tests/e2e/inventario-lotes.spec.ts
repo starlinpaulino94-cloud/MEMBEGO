@@ -360,4 +360,114 @@ test.describe('Inventario · lotes y vencimiento', () => {
     expect(errores, errores.join('\n')).toEqual([])
     await ctx.close()
   })
+
+  test('INV-5b2 · órdenes de compra con lotes: se pide por producto, se recibe diciendo el lote (uno o varios, con vencimiento) y la orden, la entrada y la ficha lo cuentan', async ({ browser }) => {
+    test.setTimeout(240_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+    const PROVEEDOR = `Proveedor lotes E2E ${sufijo}`
+    const fila = (lista: Locator, nombre: string) => lista.getByRole('listitem').filter({ hasText: nombre })
+
+    // ── Un proveedor, y una orden con un producto que lleva lotes y otro que no (antes esto se negaba) ──
+    await p.goto('/admin/inventario/proveedores')
+    const nuevoProveedor = p.getByRole('form', { name: 'Nuevo proveedor' })
+    await nuevoProveedor.getByLabel('Nombre *').fill(PROVEEDOR)
+    await nuevoProveedor.getByRole('button', { name: 'Crear proveedor' }).click()
+    await expect(p.getByText(`Proveedor «${PROVEEDOR}» creado.`)).toBeVisible({ timeout: 15_000 })
+
+    await p.goto('/admin/inventario/compras/nueva')
+    const form = p.getByRole('form', { name: 'Nueva orden de compra' })
+    await form.getByLabel('Sucursal que recibe').selectOption({ label: 'Principal' })
+    const buscar = form.getByLabel('Escanear o buscar un producto')
+    const lineasNueva = form.getByRole('list', { name: 'Productos de la orden' })
+    await buscar.fill(`LOT-${sufijo}`)
+    await buscar.press('Enter')
+    await expect(fila(lineasNueva, PRODUCTO)).toHaveCount(1)
+    await buscar.fill(`CIN-${sufijo}`)
+    await buscar.press('Enter')
+    await expect(fila(lineasNueva, SIN_LOTES)).toHaveCount(1)
+    await fila(lineasNueva, PRODUCTO).getByLabel(/^Cantidad de /).fill('10')
+    await fila(lineasNueva, PRODUCTO).getByLabel(/^Costo de /).fill('8')
+    await fila(lineasNueva, SIN_LOTES).getByLabel(/^Cantidad de /).fill('4')
+    await fila(lineasNueva, SIN_LOTES).getByLabel(/^Costo de /).fill('3')
+    await form.getByRole('button', { name: 'Guardar y pedir' }).click()
+    await p.waitForURL(/\/admin\/inventario\/compras\/(?!nueva)[^/]+$/, { timeout: 30_000 })
+    const idOrden = p.url().split('/').pop()!
+    await expect(p.getByText('Pedida', { exact: true }).first()).toBeVisible()
+    const lineasOrden = p.getByRole('list', { name: 'Líneas de la orden' })
+    await expect(fila(lineasOrden, PRODUCTO)).toContainText('lleva lotes')
+    await expect(fila(lineasOrden, SIN_LOTES)).not.toContainText('lleva lotes')
+
+    // ── Recibir: el producto con lotes pide su lote; el otro, solo la cantidad; y no hay «recibir todo» ──
+    const recibir = p.getByRole('list', { name: 'Lo que llegó' })
+    await expect(p.getByRole('button', { name: 'Recibir todo lo pendiente' })).toHaveCount(0)
+    await expect(p.getByText(/por eso aquí no hay «recibir todo»/)).toBeVisible()
+    await expect(fila(recibir, SIN_LOTES).getByLabel(/^Llegó de /)).toHaveValue('4')
+    await expect(fila(recibir, SIN_LOTES).getByRole('group')).toHaveCount(0)
+    const lotesDe = p.getByRole('group', { name: `Lotes de ${PRODUCTO}` })
+    await expect(lotesDe).toBeVisible()
+    await expect(lotesDe.getByLabel(`Cantidad del lote 1 de ${PRODUCTO}`)).toHaveValue('10') // por defecto, todo lo que falta
+    await p.getByRole('button', { name: 'Recibir lo que llegó' }).click()
+    await expect(p.getByText(new RegExp(`«${PRODUCTO}»: Escribe el código del lote`)).first()).toBeVisible({ timeout: 15_000 })
+
+    // Dos lotes de la misma línea, cada uno con su vencimiento; la cantidad de la línea es la suma.
+    await lotesDe.getByLabel(`Código del lote 1 de ${PRODUCTO}`).fill('e2e-oc-1')
+    await lotesDe.getByLabel(`Vencimiento del lote 1 de ${PRODUCTO}`).fill(PRONTO)
+    await lotesDe.getByLabel(`Cantidad del lote 1 de ${PRODUCTO}`).fill('6')
+    await lotesDe.getByRole('button', { name: 'Agregar otro lote' }).click()
+    await lotesDe.getByLabel(`Código del lote 2 de ${PRODUCTO}`).fill('E2E-OC-2')
+    await lotesDe.getByLabel(`Vencimiento del lote 2 de ${PRODUCTO}`).fill(LEJANO)
+    await lotesDe.getByLabel(`Cantidad del lote 2 de ${PRODUCTO}`).fill('2')
+    await expect(p.getByLabel(`Total de ${PRODUCTO}`)).toHaveText('8')
+    await p.getByLabel(/^Factura o remisión/).fill('FAC-LOTES-1')
+    await p.getByRole('button', { name: 'Recibir lo que llegó' }).click()
+    await expect(p.getByText(/Recibidas 12 en Principal \(entrada ENT-/)).toBeVisible({ timeout: 20_000 })
+    await expect(p.getByText('Recibida en parte', { exact: true }).first()).toBeVisible()
+    await expect(fila(lineasOrden, PRODUCTO)).toContainText('Lotes recibidos: E2E-OC-1 ×6, E2E-OC-2 ×2')
+    await expect(fila(lineasOrden, SIN_LOTES)).not.toContainText('Lotes recibidos')
+
+    // La entrada que produjo la tanda dice de qué lotes llegó cada línea.
+    await p.getByRole('list', { name: 'Entradas de la orden' }).getByRole('link').first().click()
+    await p.waitForURL(/\/admin\/inventario\/entradas\/(?!nueva)[^/]+$/)
+    await expect(p.getByText('E2E-OC-1 ×6, E2E-OC-2 ×2').first()).toBeVisible()
+
+    // ── Lo que falta (2): otro vencimiento para un lote que ya existe se rechaza, y no se mueve nada ──
+    await p.goto(`/admin/inventario/compras/${idOrden}`)
+    await expect(recibir.getByRole('listitem')).toHaveCount(1) // la cinta ya llegó completa
+    const lotesResto = p.getByRole('group', { name: `Lotes de ${PRODUCTO}` })
+    await expect(lotesResto.getByLabel(`Cantidad del lote 1 de ${PRODUCTO}`)).toHaveValue('2')
+    await lotesResto.getByLabel(`Código del lote 1 de ${PRODUCTO}`).fill('E2E-OC-1')
+    await lotesResto.getByLabel(`Vencimiento del lote 1 de ${PRODUCTO}`).fill(LEJANO)
+    await p.getByRole('button', { name: 'Recibir lo que llegó' }).click()
+    await expect(p.getByText(/El lote E2E-OC-1 ya existe y vence el/).first()).toBeVisible({ timeout: 15_000 })
+    await expect(p.getByText('Recibida en parte', { exact: true }).first()).toBeVisible()
+    // Con el vencimiento que tiene, entra en ese lote y la orden se cierra sola.
+    await lotesResto.getByLabel(`Vencimiento del lote 1 de ${PRODUCTO}`).fill(PRONTO)
+    await p.getByRole('button', { name: 'Recibir lo que llegó' }).click()
+    await expect(p.getByText(/cerrada: 2 recibidas \(entrada ENT-/)).toBeVisible({ timeout: 20_000 })
+    await expect(p.getByText('Recibida', { exact: true }).first()).toBeVisible()
+    await expect(fila(lineasOrden, PRODUCTO)).toContainText('Lotes recibidos: E2E-OC-1 ×8, E2E-OC-2 ×2')
+
+    // ── La ficha: los dos lotes en la sucursal que recibió, cada uno con su vencimiento ──
+    await p.goto(`/admin/inventario/${variante}`)
+    await expect(filaDe(p, 'Principal', 'E2E-OC-1')).toBeVisible({ timeout: 15_000 })
+    expect(await cifras(filaDe(p, 'Principal', 'E2E-OC-1'))).toEqual([8, 0, 0])
+    expect(await cifras(filaDe(p, 'Principal', 'E2E-OC-2'))).toEqual([2, 0, 0])
+    await expect(filaDe(p, 'Principal', 'E2E-OC-1')).toContainText(PRONTO)
+    await expect(filaDe(p, 'Principal', 'E2E-OC-2')).toContainText(LEJANO)
+
+    // ── El archivo de la orden trae los lotes recibidos ──
+    const csv = await p.request.get(`/admin/inventario/compras/${idOrden}/exportar`)
+    expect(csv.status()).toBe(200)
+    expect(await csv.text()).toContain('E2E-OC-1 ×8, E2E-OC-2 ×2')
+
+    expect(errores, errores.join('\n')).toEqual([])
+    await ctx.close()
+  })
 })

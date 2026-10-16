@@ -124,7 +124,9 @@ export default async function OrdenCompraPage({ params }: { params: Promise<{ id
                 <p className="text-xs text-muted-foreground">
                   SKU {l.sku}
                   {l.barcode && ` · ${l.barcode}`}
+                  {l.llevaLotes && ' · lleva lotes'}
                 </p>
+                {l.lotesRecibidos && <p className="text-xs text-muted-foreground">Lotes recibidos: {l.lotesRecibidos}</p>}
               </div>
               <div className="flex flex-wrap items-center gap-4 text-right tabular-nums">
                 {(
@@ -155,10 +157,11 @@ export default async function OrdenCompraPage({ params }: { params: Promise<{ id
 
       {abierta && (
         <RecibirOrdenCompraForm
+          key={o.detalle.map((l) => l.pendiente).join('-')}
           ordenId={o.id}
           sucursalNombre={o.sucursalNombre}
           hayRecibido={o.recibidas > 0}
-          lineas={o.detalle.filter((l) => l.pendiente > 0).map((l) => ({ varianteId: l.varianteId, nombre: nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault), sku: l.sku, pendiente: l.pendiente, costo: l.costo }))}
+          lineas={o.detalle.filter((l) => l.pendiente > 0).map((l) => ({ varianteId: l.varianteId, nombre: nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault), sku: l.sku, pendiente: l.pendiente, costo: l.costo, llevaLotes: l.llevaLotes, exigeVencimiento: l.exigeVencimiento }))}
         />
       )}
 

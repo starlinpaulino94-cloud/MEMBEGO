@@ -315,6 +315,11 @@ export function resumirOrden(lineas: readonly LineaDeOrden[]): ResumenDeOrden {
 export interface LineaRecibida {
   varianteId: string
   cantidad: number
+  /**
+   * INV-5b2: de qué lotes llegó, si el producto LLEVA lotes (código, vencimiento opcional y cantidad de cada uno; suman la cantidad de
+   * la línea). Aquí viaja SIN validar: qué productos llevan lotes lo sabe el servicio, que valida con `validarLotesDeLinea`.
+   */
+  lotes?: ReadonlyArray<{ codigo: string; vencimiento?: string | null; cantidad: number }>
 }
 
 export type PlanDeRecepcionOrden =
@@ -352,6 +357,7 @@ export function planDeRecepcionOrden(lineas: readonly LineaDeOrden[], pedidas: r
       if (!l) return { ok: false, codigo: 'LINEA_AJENA', error: 'Uno de los productos no es de esta orden.' }
       if (vistas.has(p.varianteId)) return { ok: false, codigo: 'LINEA_REPETIDA', error: 'Un producto aparece más de una vez en la recepción.' }
       vistas.add(p.varianteId)
+      if (p.lotes !== undefined && p.lotes !== null && !Array.isArray(p.lotes)) return { ok: false, codigo: 'LOTES_INVALIDOS', error: 'Los lotes de uno de los productos no son válidos.' }
       const c = validarCantidad(p.cantidad)
       if (!c.ok) {
         // Recibir 0 de una línea es lo mismo que no tocarla: se admite y se ignora.
@@ -369,7 +375,7 @@ export function planDeRecepcionOrden(lineas: readonly LineaDeOrden[], pedidas: r
               : `Solo faltan ${falta.toLocaleString('es-DO')} por llegar de ese producto; no puedes recibir ${c.valor.toLocaleString('es-DO')}. Si el proveedor mandó de más, regístralo como una entrada aparte.`,
         }
       }
-      recibir.push({ varianteId: p.varianteId, cantidad: c.valor })
+      recibir.push({ varianteId: p.varianteId, cantidad: c.valor, ...(p.lotes && p.lotes.length > 0 ? { lotes: p.lotes } : {}) })
     }
   }
   const recibidoAhora = new Map(recibir.map((r) => [r.varianteId, r.cantidad]))
@@ -387,6 +393,29 @@ export function planDeRecepcionOrden(lineas: readonly LineaDeOrden[], pedidas: r
     return { ok: true, recibir, cerrar: quedan, estadoFinal: 'RECEIVED', pendienteDespues: 0 }
   }
   return { ok: true, recibir, cerrar: [], estadoFinal: 'PARTIAL', pendienteDespues }
+}
+
+/** Una línea de recepción lista para compararla con la que quedó registrada: el producto, cuánto llegó y de qué lotes (código → cantidad; vacío = sin lotes). */
+export interface RecepcionComparable {
+  varianteId: string
+  cantidad: number
+  lotes: ReadonlyMap<string, number>
+}
+
+/**
+ * ¿Es la MISMA recepción? Una clave de idempotencia repetida solo es un reintento si trae los mismos productos, las mismas cantidades y
+ * —INV-5b2— los mismos lotes (código y cantidad de cada uno): otro lote no es el mismo reintento, es otra mercancía.
+ */
+export function esMismaRecepcion(previa: readonly RecepcionComparable[], pedida: readonly RecepcionComparable[]): boolean {
+  if (previa.length !== pedida.length) return false
+  const porProducto = new Map(pedida.map((p) => [p.varianteId, p]))
+  if (porProducto.size !== pedida.length) return false
+  return previa.every((p) => {
+    const q = porProducto.get(p.varianteId)
+    if (!q || q.cantidad !== p.cantidad || q.lotes.size !== p.lotes.size) return false
+    for (const [codigo, cantidad] of p.lotes) if (q.lotes.get(codigo) !== cantidad) return false
+    return true
+  })
 }
 
 // ── Cancelar ─────────────────────────────────────────────────────────────────

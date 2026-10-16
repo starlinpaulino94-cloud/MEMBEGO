@@ -918,7 +918,8 @@ export async function cancelarOrdenCompra(entrada: { ordenId: string; motivo?: s
  */
 export async function recibirOrdenCompra(entrada: {
   ordenId: string
-  lineas?: { varianteId: string; cantidad: number }[]
+  /** INV-5b2: de un producto que lleva lotes, de qué lotes llegó (`[{ codigo, vencimiento?, cantidad }]`; suman la cantidad). */
+  lineas?: { varianteId: string; cantidad: number; lotes?: unknown }[]
   todo?: boolean
   cerrarConFaltante?: boolean
   motivo?: string | null
@@ -929,7 +930,9 @@ export async function recibirOrdenCompra(entrada: {
   const c = await contexto('comprar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return SIN_DATOS
-  const lineas = Array.isArray(entrada.lineas) ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number })) : undefined
+  const lineas = Array.isArray(entrada.lineas)
+    ? entrada.lineas.map((l) => ({ varianteId: texto(l?.varianteId), cantidad: l?.cantidad as number, ...(l?.lotes === undefined || l?.lotes === null ? {} : { lotes: l.lotes as never }) }))
+    : undefined
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
       recibirOrdenEnTx(

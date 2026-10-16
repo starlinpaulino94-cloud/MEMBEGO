@@ -116,7 +116,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-4c · Margen real** | Informe «Margen real» (solo con la función `costos`): por producto, lo cobrado (precio de la línea del pedido menos su descuento) contra el costo que el ledger congeló al vender, con margen y porcentaje; lo que no se puede comparar (sin costo, reembolsado, en otra moneda, sin pedido) se enseña aparte, nunca como cero; filtros, cinco órdenes y CSV. Tarjeta «Inventario» en el dashboard: valor, margen del mes y lo perdido (unidades para quien no tiene `costos`). Sin función de permiso nueva | **Ninguno** (todo se lee del ledger y de los pedidos) | S | **Hecha** (este documento, §23) |
 | **INV-5a · Lotes y vencimiento** | Un producto puede LLEVAR LOTES (se activa por producto, de un solo sentido): cada unidad es de un lote con su código y, si lo tiene, su día de vencimiento; lo que ya había pasa al lote «SIN LOTE»; se vende, se aparta y se saca **primero lo que antes vence** (FEFO) y **lo vencido no se vende**; las devoluciones vuelven a su lote; dañar, ajustar, dar de baja y recuperar por lote; mover unidades entre lotes (corregir uno mal capturado, sin que cuente como merma); el barrido diario saca lo vencido de lo vendible. La base mantiene los saldos por lote y vigila que los lotes sumen lo que hay | `InventoryLotTracking`, `InventoryLot`, `InventoryLotBalance`, `InventoryLotOpening`, `InventoryMovementLot` (migración `20261068`) | L | **Hecha** (este documento, §25) |
 | **INV-5b1 · Vence pronto** | Informe «Vence pronto» (los lotes con existencias que ya vencieron o vencen en 7 a 90 días, por sucursal, de lo que antes vence a lo que después, con lo vendible, lo apartado y lo dañado, filtros, páginas y CSV), una cifra en la tarjeta de inventario del dashboard y un aviso a los administradores desde el barrido diario (una vez por semana y nivel de urgencia, y una vez por día lo que venció) | — (sin migración) | S | **hecha** |
-| INV-5b2 · Lotes en órdenes de compra | Recibir una orden de compra con los lotes de lo que llega (hoy se niega para un producto con lotes) | — | S | pendiente |
+| **INV-5b2 · Lotes en órdenes de compra** | Un producto con lotes se pide como cualquier otro (una orden es por producto) y se recibe **diciendo de qué lote(s) llegó** cada tanda (código, vencimiento y cantidad), con el mismo editor de lotes de la entrada de mercancía; la orden, la entrada, la ficha y el CSV cuentan de qué lotes llegó; una orden abierta ya no impide activar los lotes de un producto | — (sin migración) | S | **hecha** (§29-30) |
 | INV-5b3 · Lotes en conteos | Contar por lote y aplicar la diferencia lote por lote | Conteo por lote | M | pendiente |
 | INV-5b4 · Lotes en transferencias | Que el lote viaje con lo que se transfiere (directa y con envío) | Lotes de la línea | M | pendiente |
 | INV-5b5 · Corregir y desactivar | Corregir el vencimiento de un lote con su historia y desactivar los lotes de un producto | Historia del vencimiento | M | pendiente |
@@ -1711,3 +1711,117 @@ probó con el rol de la base desechable); el rendimiento con un ledger grande (l
 5a, pero no se midió con millones de filas); que el cron del barrido **corra de verdad en producción** y que el aviso llegue a la
 campana de un administrador real (se probó llamando al barrido y leyendo la notificación, no con el cron desplegado); y el aviso de
 correo o push, que no existe (es la campana de siempre).
+
+## 29. INV-5b2 · qué se hizo
+
+**Sin migración ni SQL que aplicar**: usa las tablas de la `20261068` (INV-5a). Antes de 5b2 una orden de compra se negaba a incluir un producto
+con lotes (`LOTES_NO_SOPORTADO`); ahora se pide como cualquier otro y los lotes se dicen **al recibir**.
+
+**La decisión de fondo: la orden sigue siendo por producto.** Quien hace el pedido no sabe de qué lote vendrá la mercancía (ni cuándo vence);
+lo sabe quien la recibe, con la factura o el empaque en la mano. Por eso las líneas de la orden no cambian (producto, cantidad, costo) y cada
+**tanda de recepción** trae, de cada producto que lleva lotes, de qué lotes llegó: `[{ codigo, vencimiento?, cantidad }]`, cuya suma es la
+cantidad de esa línea. Esos lotes viajan tal cual a `registrarEntradaMultipleEnTx` —la entrada de mercancía de siempre, que ya sabe crear los
+lotes que faltan, repartir el movimiento y exigir el vencimiento si el producto lo pide—, así que **el servicio de compras sigue sin escribir
+el ledger ni los saldos ni un solo lote**: recibir sigue teniendo un único camino de escritura. Una guardia lo comprueba.
+
+| Situación al recibir | Qué pasa |
+|---|---|
+| Producto con lotes, con sus lotes (uno o varios) | Entra por lote; los lotes nuevos se crean con su vencimiento; los que ya existían suman |
+| Producto con lotes, sin decir el lote (o con una lista vacía) | `LOTES_FALTAN`: no se mueve nada |
+| Lotes que no suman la cantidad de la línea | `LOTES_NO_CUADRAN` |
+| Producto que exige vencimiento y un lote sin él | `VENCIMIENTO_OBLIGATORIO` |
+| Un lote que ya existe, con otro vencimiento | `LOTE_VENCIMIENTO_DISTINTO` (un lote tiene un solo vencimiento) |
+| Lotes en un producto que no los lleva | `LOTES_NO_APLICAN` |
+| «Recibir todo» con un producto con lotes | `LOTES_FALTAN` con un mensaje claro: «todo» no sabe de qué lote llegó (se rechaza antes de escribir nada) |
+| Un producto que empezó a llevar lotes DESPUÉS de pedirse la orden | Se recibe con lotes; lo que había queda en «SIN LOTE». Se mira al recibir, no al pedir |
+
+**La clave de idempotencia compara también los lotes.** Antes, una recepción repetida con la misma clave era «la misma» si traía los mismos
+productos y cantidades. Con lotes eso no basta: las mismas 6 unidades repartidas de otra forma (o con otro código de lote) son otra mercancía y
+darían por hecha una recepción que no ocurrió. Ahora `esMismaRecepcion` (pura) compara producto, cantidad y lotes (código → cantidad, con los
+códigos normalizados igual que en la entrada: `k-2` y `K-2` son el mismo lote, y el orden de los renglones no importa). Lo que ya quedó
+registrado se lee del reparto de los movimientos de esa entrada con `repartosPorCodigoEnTx`, que ahora comparten la entrada de mercancía y la
+recepción de una orden (la entrada la usaba con su propia copia del código).
+
+**Lo que enseñan la orden y su archivo.** El detalle de la orden dice, de cada línea, si el producto **lleva lotes ahora**, si exige vencimiento
+y **de qué lotes ha llegado lo recibido** hasta ahora, sumando todas las tandas («A-1 ×5, C-1 ×3, B-1 ×2», de más a menos y, a igual cantidad,
+por código); solo cuenta las entradas de **esa** orden. El CSV de la orden gana una columna «Lotes recibidos» al final de las líneas (el código
+de un lote es texto libre, así que se neutraliza contra fórmulas de hoja de cálculo).
+
+**La pantalla de recepción.** Un editor de lotes común (`EditorDeLotes`: código, vencimiento y cantidad de cada lote, «Agregar otro lote»,
+«Quitar») sale de la entrada de mercancía y lo usan las dos pantallas, con los mismos nombres accesibles de siempre. En la recepción, un producto
+con lotes no tiene una cantidad suelta: su cantidad es la **suma de sus lotes** (por defecto, un lote con todo lo que falta, a falta del
+código). Para dejar uno sin recibir se pone su lote en 0. **Con productos con lotes no hay «Recibir todo lo pendiente»** (no sabría de qué lote
+llegó) y la pantalla lo explica. Se valida con las mismas reglas que el servidor (`validarLotesDeLinea`) antes de enviar. El formulario se vuelve a
+montar tras cada tanda (su `key` es lo que falta por llegar), lo que además corrige que conservara las cantidades de antes de la tanda.
+
+**Activar los lotes con una orden abierta.** `activarLotesEnTx` se negaba (`ACTIVAR_CON_ORDEN_DE_COMPRA`) si el producto estaba en una orden de
+compra sin cerrar, porque esa orden no habría podido recibirse. Con 5b2 esa razón desaparece y la negativa se **quitó**: se puede activar con la
+orden abierta y lo que llegue después entra con su lote. (Se encontró porque la prueba de «activar después de pedir» fallaba con ese error.) El
+conteo abierto y la transferencia en tránsito **siguen** bloqueando la activación (5b3 y 5b4 los resolverán). Los textos de la ficha y de la
+tarjeta de activar ya no dicen que no se puede pedir en una orden.
+
+**Archivos.** `modules/inventory/compras.ts` (la línea recibida con lotes, el plan, `esMismaRecepcion`), `compras-service.ts` (recibir),
+`compras-queries.ts` (la lectura de la orden), `lotes-queries.ts` (`repartosPorCodigoEnTx`), `exportacion.ts` (la columna del CSV), `actions.ts`
+(la acción pasa los lotes), `service.ts` (activar sin el bloqueo; la entrada usa la lectura compartida), y `components/inventario/`
+(`EditorDeLotes` nuevo, `EntradaMultipleForm` y `RecibirOrdenCompraForm`) con la página de la orden.
+
+**Lo que 5b2 NO hace.** Contar y transferir un producto con lotes siguen negados (5b3 y 5b4); no se puede indicar el lote al *pedir* (por decisión,
+ver arriba); una orden recibida no reasigna lotes después (para corregir un lote mal capturado está «mover entre lotes» de 5a); y «Qué comprar»
+sigue sugiriendo por producto, no por lote.
+
+## 30. Verificación de INV-5b2 (2026-10-16)
+
+Local, sobre PostgreSQL 16 desechable. **INV-5b2 no trae migración ni SQL que aplicar**: usa las tablas de la `20261068` (INV-5a), que sigue
+pendiente de aplicarse a mano en Supabase antes de desplegar este código. Se probó contra bases desechables (`supplytest` y
+`membego_e2e_inv2`, esta vez en el puerto 5432: el contenedor cambió y hubo que reconstruirlas con `prisma migrate deploy`); **no se tocó
+ninguna base real**. Sin Supabase real, Vercel, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ve la pantalla de recepción**
+(el editor de lotes dentro de cada línea): el E2E comprueba qué dice y qué hace, no su aspecto; ni capturas ni revisión visual en móvil.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo: son de `apps/client`) |
+| `bun run build` y `bun run presupuesto` | verdes; entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB; indicador general 8.935/9.200 KB (97 %; 8.928 antes de 5b2) |
+| Unitarias (`bun run test`) | 4584 pruebas: 4577 pasan, 0 fallan, 7 omitidas heredadas (11 nuevas) |
+| PostgreSQL (`bun run test:db`, base `supplytest`) | **955/955** (948 de antes + 7 nuevas) |
+| Pruebas nuevas | 11 puras y guardias (`inventario-compras-lotes.test.ts`), 7 contra PostgreSQL (`inventory-compras-lotes.db.test.ts`) y 1 recorrido E2E (en `inventario-lotes.spec.ts`); se ajustaron 5 pruebas de 4 archivos que daban por bueno el bloqueo anterior |
+| E2E (`node scripts/e2e/correr.mjs`, escritorio) | **19/19** con el build final: `inventario-admin` (14) y `inventario-lotes` (5) |
+| Mutaciones | 42 en un solo pase (plan, clave de idempotencia, servicio, lecturas, archivo, acción, entrada de mercancía y pantallas): 39 detectadas a la primera y 3 sobrevivientes que se mataron con pruebas nuevas → **42 de 42** |
+
+Qué cubren las pruebas contra PostgreSQL (servicio real): pedir un producto con lotes y otro sin ellos en la misma orden; recibir en dos tandas
+diciendo los lotes (uno o dos por línea, con y sin vencimiento), con el stock, los saldos por lote, los vencimientos guardados, el costo
+promedio, la lectura de la orden («A-1 ×5, C-1 ×3, B-1 ×2») y el archivo; que **nada se mueve** (ni stock, ni lotes, ni la orden) con lotes
+que faltan, que no suman, sin el vencimiento exigido, con otro vencimiento para un lote que ya existe, con el mismo lote con dos
+vencimientos en la línea, con un código que no es un código, con lotes en un producto que no los lleva, con lotes que no son una lista, con
+«recibir todo», con más de lo pedido, ni cuando una línea buena viene con una mala; un producto que empieza a llevar lotes **después** de
+pedirse la orden; la clave de idempotencia (mismo envío escrito distinto = reintento; otro reparto, otro código, un lote de menos o de más,
+otra cantidad = otra recepción; lotes mal armados con una clave repetida dicen qué está mal); cerrar con faltante y cancelar; la sucursal
+que recibe y que la lectura de una orden no mezcla los lotes de otra; y la concurrencia: dos tandas del mismo lote a la vez se turnan y
+suman, el mismo envío dos veces a la vez es **una** entrada, y dos tandas que juntas se pasarían de lo pedido dejan pasar solo una.
+
+Qué cubre el recorrido E2E: proveedor y orden con un producto con lotes y otro sin ellos (antes se negaba) → la orden dice cuál lleva lotes →
+al recibir, el producto con lotes pide su lote y no hay «recibir todo» → sin código no se envía → dos lotes en una línea con su vencimiento
+(el total es la suma) → la orden, la entrada, la ficha y el CSV dicen de qué lotes llegó → el resto con otro vencimiento para un lote que ya
+existe se rechaza sin mover nada y con el suyo cierra la orden.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Una negativa que 5b2 dejaba sin sentido, encontrada por una prueba:** `activarLotesEnTx` se negaba a activar los lotes de un producto que
+  estuviera en una orden de compra abierta (`ACTIVAR_CON_ORDEN_DE_COMPRA`), porque esa orden no habría podido recibirse. La prueba «activar
+  después de pedir» falló con ese error. Con 5b2 la orden sí se recibe con lotes, así que la negativa se quitó (y su prueba de 5a, que la
+  fijaba, se ajustó). El conteo abierto y la transferencia en tránsito siguen bloqueando.
+- **Pruebas mías que fallaron por equivocaciones de las pruebas, no del código:** una comprobación de invariantes de lotes aplicada a un
+  producto que no los lleva (suma cero contra un saldo real), y una lectura de la tabla de lotes hecha justo al navegar, antes de que se
+  pintara (se espera a la fila). Ninguna era del producto.
+- **La clave de idempotencia, mutada:** las mutaciones que la ignoraban (no leer los lotes registrados, no leer los pedidos o no
+  normalizarlos) las matan las pruebas contra PostgreSQL; las que tocaban la comparación pura (sobraba un producto, otra cantidad sin lotes, `null`
+  como «sin lotes») sobrevivieron al primer pase y ahora tienen su caso.
+- **Un refactor pequeño de la entrada de mercancía:** su lectura de «de qué lotes fue lo ya registrado» pasó a ser la `repartosPorCodigoEnTx`
+  compartida. Lo cubren las pruebas de 5a (se corrieron enteras: 955/955) y una mutación que la desactiva.
+
+**Una consecuencia que no se probó por la pantalla:** «Qué comprar» crea sus borradores con la misma acción (`guardarOrdenCompra`), así que ahora
+también incluye productos con lotes; se probó en el servicio, no recorriendo esa pantalla.
+
+**Qué NO se verificó:** cómo se ve nada (ni escritorio con capturas, ni móvil); Supabase real, RLS o permisos de la base real (todo se probó
+con el rol de la base desechable); el rendimiento con una orden de cientos de líneas con lotes (el tope de lotes por línea es 20 y el de
+líneas por orden 200, pero no se midió con carga); la recepción de una orden desde un celular con lector de códigos; y «Qué comprar» con un
+producto con lotes recorriendo la pantalla.
