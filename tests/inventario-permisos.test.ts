@@ -75,6 +75,7 @@ test('todas las acciones exportadas autorizan ANTES de tocar la base', () => {
     'guardarOrdenCompra',
     'importarConteo',
     'iniciarConteo',
+    'lotesParaContarProducto',
     'moverEntreLotesInventario',
     'pedirOrdenCompra',
     'previsualizarConteoImportado',
@@ -840,7 +841,8 @@ test('INV-3a · el costo se escribe en las DOS puertas del ledger y en ninguna o
   assert.ok(simple.indexOf('prepararNivel(') < simple.indexOf('aplicarCostosDeEntradaEnTx('))
   assert.ok(simple.indexOf('aplicarCostosDeEntradaEnTx(') < simple.indexOf('escribirMovimiento('))
   // Un conteo aplicado se valora con el promedio: su lote lleva el producto de cada línea.
-  assert.match(f, /meta: \{ userId: ctx\.actorId, referencia: \{ tipo: 'STOCK_COUNT', id: conteo\.id \}, motivoCodigo: MOTIVO_DE_CONTEO \},\s*varianteId: x\.l\.catalogVariantId/)
+  // (INV-5b3: el ajuste de una línea de lote además lleva su reparto; el producto sigue yendo en el item.)
+  assert.match(f, /referencia: \{ tipo: 'STOCK_COUNT', id: conteo\.id \},\s*motivoCodigo: MOTIVO_DE_CONTEO,[\s\S]*?\},\s*varianteId: x\.l\.catalogVariantId/)
 })
 
 test('INV-3a · corregir el costo valida, bloquea el renglón y deja su rastro (historia inmutable y bitácora) en la misma transacción', () => {
@@ -1450,7 +1452,7 @@ test('INV-4b · ajuste, daño y baja piden el motivo de su clase; recuperar lo d
   assert.match(svc, /if \(e\.destino === 'VENDIBLE' && e\.motivoCodigo\) fallo\('MOTIVO_NO_APLICA'/)
   // Los dos conteos: el manual (una puerta) y el de una sesión (la del lote).
   assert.match(svc, /referencia: \{ tipo: 'STOCK_COUNT', id: randomUUID\(\) \}, motivoCodigo: MOTIVO_DE_CONTEO \}/)
-  assert.match(svc, /meta: \{ userId: ctx\.actorId, referencia: \{ tipo: 'STOCK_COUNT', id: conteo\.id \}, motivoCodigo: MOTIVO_DE_CONTEO \}/)
+  assert.match(svc, /meta: \{\s*userId: ctx\.actorId,\s*referencia: \{ tipo: 'STOCK_COUNT', id: conteo\.id \},\s*motivoCodigo: MOTIVO_DE_CONTEO,/)
   // Las pantallas lo EXIGEN (el servicio, para los procesos que no eligen uno, no).
   const acciones = sinComentarios
   for (const [funcion, destino] of [['registrarDanoInventario', null], ['ajustarInventario', null], ['resolverDanadoInventario', 'BAJA']] as const) {

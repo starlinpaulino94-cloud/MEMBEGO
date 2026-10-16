@@ -197,6 +197,8 @@ export interface FilaHojaParaCsv {
   sku: string
   barcode: string | null
   producto: string
+  /** INV-5b3: el lote de la fila (un producto con lotes sale en una fila por lote). */
+  lote?: string | null
 }
 
 /**
@@ -205,9 +207,16 @@ export interface FilaHojaParaCsv {
  * hay (conteo a ciegas). Es también el formato que se sube de vuelta: las
  * columnas `sku`, `codigo_de_barras` y `contado` son las que lee la importación,
  * y las celdas de `contado` que se dejan vacías significan «no se contó».
+ *
+ * INV-5b3: si hay productos con lotes, el archivo gana la columna `lote` (una fila por lote con existencias); sin ellos, es el mismo
+ * archivo de siempre. Al subirlo, la columna `lote` dice en qué lote se contó cada fila.
  */
 export function hojaDeConteoToCsv(filas: readonly FilaHojaParaCsv[]): string {
-  return armarCsv(['sku', 'codigo_de_barras', 'producto', 'contado'], filas.map((f) => [SIN_FORMULA(f.sku), SIN_FORMULA(f.barcode), SIN_FORMULA(f.producto), '']))
+  const conLotes = filas.some((f) => f.lote)
+  return armarCsv(
+    conLotes ? ['sku', 'codigo_de_barras', 'producto', 'lote', 'contado'] : ['sku', 'codigo_de_barras', 'producto', 'contado'],
+    filas.map((f) => (conLotes ? [SIN_FORMULA(f.sku), SIN_FORMULA(f.barcode), SIN_FORMULA(f.producto), SIN_FORMULA(f.lote ?? null), ''] : [SIN_FORMULA(f.sku), SIN_FORMULA(f.barcode), SIN_FORMULA(f.producto), '']))
+  )
 }
 
 export interface ConteoParaCsv {
@@ -232,6 +241,9 @@ export interface ConteoParaCsv {
     existenciaAntes: number | null
     existenciaDespues: number | null
     ajustado: boolean
+    /** INV-5b3: el lote de la línea (null en un producto sin lotes) y cuándo vence (`YYYY-MM-DD`, o null). */
+    loteCodigo?: string | null
+    loteVencimiento?: string | null
   }>
 }
 
@@ -244,9 +256,11 @@ export interface ConteoParaCsv {
 export function conteoToCsv(c: ConteoParaCsv, zonaHoraria: string): string {
   const lineas = c.detalle.map((l) => {
     if (l.esperado === null) throw new Error('El informe de diferencias necesita lo que decía el sistema: la lectura fue a ciegas.')
-    return { ...l, esperado: l.esperado, nombre: l.esDefault ? l.itemNombre : `${l.itemNombre} · ${l.nombreVariante}` }
+    return { ...l, esperado: l.esperado, nombre: l.esDefault ? l.itemNombre : `${l.itemNombre} · ${l.nombreVariante}`, lote: l.loteCodigo ?? null }
   })
   const resumen = resumirVarianza(lineas)
+  // INV-5b3: con productos con lotes el informe gana las columnas del lote; sin ellos es el archivo de siempre.
+  const conLotes = lineas.some((l) => l.lote)
   const aplicado = c.estado === 'APPLIED'
   return armarCsvBloques([
     {
@@ -263,6 +277,7 @@ export function conteoToCsv(c: ConteoParaCsv, zonaHoraria: string): string {
         ['Aplicado por', SIN_FORMULA(c.aplicadoPorNombre)],
         ['Zona horaria', zonaHoraria],
         ['Productos contados', resumen.lineas],
+        ...(conLotes ? [['De ellos, contados por lote', lineas.filter((l) => l.lote).length]] : []),
         ['Coinciden', resumen.coinciden],
         ['Con sobrante', resumen.sobrantes],
         ['Con faltante', resumen.faltantes],
@@ -273,11 +288,24 @@ export function conteoToCsv(c: ConteoParaCsv, zonaHoraria: string): string {
     },
     {
       titulo: 'Diferencias',
-      encabezados: ['SKU', 'Codigo de barras', 'Producto', 'Esperado al contar', 'Contado', 'Diferencia', 'Resultado', 'Existencia antes de ajustar', 'Existencia despues de ajustar', 'Ajustado'],
+      encabezados: [
+        'SKU',
+        'Codigo de barras',
+        'Producto',
+        ...(conLotes ? ['Lote', 'Vencimiento del lote'] : []),
+        'Esperado al contar',
+        'Contado',
+        'Diferencia',
+        'Resultado',
+        'Existencia antes de ajustar',
+        'Existencia despues de ajustar',
+        'Ajustado',
+      ],
       filas: ordenarPorDiferencia(lineas).map((l) => [
         SIN_FORMULA(l.sku),
         SIN_FORMULA(l.barcode),
         SIN_FORMULA(l.nombre),
+        ...(conLotes ? [SIN_FORMULA(l.lote), l.loteVencimiento ?? ''] : []),
         l.esperado,
         l.contado,
         diferenciaDeConteo(l.contado, l.esperado),

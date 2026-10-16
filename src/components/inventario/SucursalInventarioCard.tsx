@@ -105,7 +105,7 @@ export function SucursalInventarioCard({
   const k = saldo.sucursalId
 
   const def = OPERACIONES.find((o) => o.valor === operacion) ?? OPERACIONES[0]
-  // Con lotes no hay conteo suelto (todavía no reparte por lote): se ofrece todo lo demás.
+  // Con lotes no hay conteo suelto (se cuenta lote por lote en un conteo de Inventario → Conteos): se ofrece todo lo demás.
   const disponibles = OPERACIONES.filter((o) => (!o.soloConDanados || saldo.damaged > 0) && !(lotes && o.valor === 'CONTEO'))
   const entra = lotes !== undefined && OPERACIONES_QUE_ENTRAN.includes(operacion)
   const sale = lotes !== undefined && OPERACIONES_QUE_SALEN.includes(operacion)

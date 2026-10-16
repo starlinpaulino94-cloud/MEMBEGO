@@ -10,7 +10,7 @@ import { BotonExportar } from '@/components/ui/boton-exportar'
 import { PageHeader } from '@/components/ui/page-header'
 import { AplicarConteoForm } from '@/components/inventario/AplicarConteoForm'
 import { InformeDiferencias, type LineaInforme } from '@/components/inventario/InformeDiferencias'
-import { diferenciaDeConteo, motivoDeConteo, planDeAjuste } from '@/modules/inventory/conteos'
+import { claveDeLinea, diferenciaDeConteo, motivoDeConteo, planDeAjuste } from '@/modules/inventory/conteos'
 import { conteoDetalleEnTx, porContarEnTx, saldosActualesDeConteoEnTx, type DetalleConteo } from '@/modules/inventory/queries'
 import { formatearCantidad } from '@/modules/inventory/formato'
 import { describirFalloDeCarga } from '@/modules/inventory/errores-pantalla'
@@ -66,8 +66,9 @@ export default async function RevisarConteoInventarioPage({ params }: { params: 
     const delta = diferenciaDeConteo(l.contado, l.esperado)
     if (delta === 0) continue
     ajustes++
-    const plan = planDeAjuste(delta, saldos.get(l.varianteId) ?? { onHand: 0, reserved: 0, damaged: 0 }, motivoDeConteo(conteo.numero))
-    if (plan.tipo === 'RECHAZADA') bloqueos.set(l.varianteId, plan.motivo)
+    const clave = claveDeLinea(l.varianteId, l.loteId)
+    const plan = planDeAjuste(delta, saldos.get(clave) ?? { onHand: 0, reserved: 0, damaged: 0 }, motivoDeConteo(conteo.numero))
+    if (plan.tipo === 'RECHAZADA') bloqueos.set(clave, plan.motivo)
   }
 
   return (
@@ -98,7 +99,7 @@ export default async function RevisarConteoInventarioPage({ params }: { params: 
       {porContar && porContar.total > 0 && (
         <Alert>
           <AlertDescription>
-            Hay {formatearCantidad(porContar.total)} producto{porContar.total === 1 ? '' : 's'} con existencias que no contaste. No se tocan al aplicar. Si faltó contarlos,{' '}
+            Hay {formatearCantidad(porContar.total)} línea{porContar.total === 1 ? '' : 's'} (producto{porContar.total === 1 ? '' : 's'}, o lote{porContar.total === 1 ? '' : 's'} de un producto con lotes) con existencias que no contaste. No se tocan al aplicar. Si faltó contarlos,{' '}
             <Link href={`/admin/inventario/conteos/${conteo.id}`} className="underline">
               sigue contando
             </Link>

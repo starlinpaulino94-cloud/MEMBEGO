@@ -15,6 +15,10 @@ import { empresaCatalogo, itemSembrado, sucursalSembrada, varianteDe, type Empre
  * que después, con lo vendible, lo apartado y lo dañado → los filtros (estado, ventana, producto o lote, sucursal) → el CSV con los mismos
  * filtros → la tarjeta «Inventario» del dashboard con su «Vence pronto».
  *
+ * INV-5b3 (conteo por lote): contar a ciegas eligiendo el lote de un producto que los lleva → la lista de lo contado y lo que falta por
+ * contar salen por lote → importar una hoja con la columna «lote» (con errores no entra nada) → la hoja en blanco trae una fila por lote →
+ * revisar las diferencias por lote y su CSV → aplicar ajusta cada lote por su diferencia → la ficha, el historial y el informe lo muestran.
+ *
  * Las fechas son relativas a HOY (10 días atrás, 10 y 400 días adelante): la prueba no depende del día en que se corra.
  *
  * La base de E2E se crea con `db push` y `scripts/e2e/base-limpia.mjs` le aplica la migración de lotes (los saldos por lote los
@@ -466,6 +470,187 @@ test.describe('Inventario · lotes y vencimiento', () => {
     const csv = await p.request.get(`/admin/inventario/compras/${idOrden}/exportar`)
     expect(csv.status()).toBe(200)
     expect(await csv.text()).toContain('E2E-OC-1 ×8, E2E-OC-2 ×2')
+
+    expect(errores, errores.join('\n')).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-5b3 · conteo por lote: se cuenta a ciegas eligiendo el lote, se importa una hoja con lotes, se revisan y aplican las diferencias lote por lote', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+
+    // ── Lo que el sistema sabe de Norte: la crema en dos lotes (se recibe ahora) y el jabón con sus dos lotes y la cinta sin lotes (de antes) ──
+    await p.goto(`/admin/inventario/${variante}`)
+    await movimiento(p, 'Norte', { operacion: 'Entrada de mercancía', cantidad: 6, lote: 'CNT-A', vence: PRONTO })
+    await expect(filaDe(p, 'Norte', 'CNT-A')).toBeVisible({ timeout: 15_000 })
+    await movimiento(p, 'Norte', { operacion: 'Entrada de mercancía', cantidad: 4, lote: 'CNT-B' })
+    await expect(filaDe(p, 'Norte', 'CNT-B')).toBeVisible({ timeout: 15_000 })
+
+    // ── Abrir el conteo de Norte ──────────────────────────────────────────
+    await p.goto('/admin/inventario/conteos')
+    const abrir = p.getByRole('form', { name: 'Iniciar conteo' })
+    await abrir.getByLabel('Sucursal que vas a contar').selectOption({ label: 'Norte' })
+    await abrir.getByLabel(/^Para qué es/).fill('Conteo por lote E2E')
+    await abrir.getByRole('button', { name: 'Abrir conteo' }).click()
+    await p.waitForURL(/\/admin\/inventario\/conteos\/(?!nuevo)[^/]+$/, { timeout: 30_000 })
+    const idConteo = p.url().split('/').pop()!
+    const numero = (await p.getByRole('heading', { level: 1 }).innerText()).trim()
+
+    // A ciegas: ni una cifra del sistema; lo que falta por contar sale POR LOTE y sin cantidades.
+    await expect(p.getByText(/Esperado|Disponible|El sistema dice/)).toHaveCount(0)
+    await p.getByText(/Con existencias y todavía sin contar \(/).click()
+    const porContar = p.getByRole('list', { name: 'Productos por contar' })
+    await expect(p.getByText(/Con existencias y todavía sin contar \(5\)/)).toBeVisible()
+    await expect(porContar.getByRole('listitem').filter({ hasText: PRODUCTO }).filter({ hasText: 'Lote CNT-A' })).toContainText(`vence ${PRONTO}`)
+    await expect(porContar.getByRole('listitem').filter({ hasText: PRODUCTO }).filter({ hasText: 'Lote CNT-B' })).toContainText('no vence')
+    await expect(porContar.getByRole('listitem').filter({ hasText: OTRO })).toHaveCount(2)
+    await expect(porContar.getByRole('listitem').filter({ hasText: SIN_LOTES })).toHaveCount(1)
+    await expect(porContar.getByText(/\b(6|4|10)\b(?!-)/)).toHaveCount(0)
+
+    // ── Captura: escanear un producto con lotes pide el lote; el sin lotes se suma como siempre ──
+    const buscar = p.getByLabel('Escanear o buscar un producto para contar')
+    const estado = p.getByRole('status')
+    await buscar.fill(`LOT-${sufijo}`)
+    await buscar.press('Enter')
+    await expect(estado).toContainText(`${PRODUCTO} lleva lotes: elige el lote que estás contando.`, { timeout: 15_000 })
+    const lotes = p.getByRole('group', { name: `Lotes de ${PRODUCTO}` })
+    await expect(lotes).toBeVisible()
+    const opciones = lotes.getByRole('list', { name: 'Lotes para contar' })
+    // Sin cantidades del sistema, y con SIN LOTE y los lotes que existen aunque no tengan nada en esta sucursal.
+    await expect(opciones.getByRole('button', { name: /^SIN LOTE/ })).toBeVisible()
+    await expect(opciones.getByRole('button', { name: /E2E-LEJANO/ })).toBeVisible()
+    await expect(lotes).not.toContainText(/\b(6|4)\b disponibles?/)
+    await p.getByLabel('Unidades por escaneo').fill('5')
+    await opciones.getByRole('button', { name: /Lote CNT-A/ }).click()
+    await expect(estado).toContainText(`${PRODUCTO} · Lote CNT-A · vence ${PRONTO}: ahora 5 contados`, { timeout: 15_000 })
+    await p.getByLabel('Unidades por escaneo').fill('1')
+    for (let i = 0; i < 3; i++) await opciones.getByRole('button', { name: /Lote CNT-B/ }).click()
+    await expect(estado).toContainText('Lote CNT-B · no vence: ahora 3 contados', { timeout: 20_000 })
+    // Un lote que el sistema no tiene aquí (está en Principal) también se cuenta: es lo que apareció en el estante.
+    await opciones.getByRole('button', { name: /E2E-LEJANO/ }).click()
+    await expect(estado).toContainText(`Lote E2E-LEJANO · vence ${LEJANO}: ahora 1 contados`, { timeout: 15_000 })
+    // Un lote equivocado se quita de la lista (por lote: los demás siguen).
+    await opciones.getByRole('button', { name: /Lote E2E-PRONTO/ }).click()
+    await expect(estado).toContainText('Lote E2E-PRONTO', { timeout: 15_000 })
+
+    const lista = p.getByRole('list', { name: 'Productos contados' })
+    await expect(p.getByRole('heading', { name: /^Productos contados \(4\)$/ })).toBeVisible({ timeout: 20_000 })
+    await lista.getByRole('button', { name: new RegExp(`^Quitar ${PRODUCTO} · Lote E2E-PRONTO`) }).click()
+    await expect(p.getByRole('heading', { name: /^Productos contados \(3\)$/ })).toBeVisible({ timeout: 20_000 })
+    // Corregir escribiendo el número: el lote CNT-B era 4.
+    await lista.getByLabel(new RegExp(`^Contado de ${PRODUCTO} · Lote CNT-B`)).fill('4')
+    await lista.getByLabel(new RegExp(`^Contado de ${PRODUCTO} · Lote CNT-B`)).press('Enter')
+    await expect(lista.getByLabel(new RegExp(`^Contado de ${PRODUCTO} · Lote CNT-B`))).toHaveValue('4', { timeout: 20_000 })
+    expect(await lista.getByRole('listitem').count()).toBe(3)
+
+    // ── La hoja en blanco: una fila por lote con existencias en la sucursal, sin cantidades ──
+    const hoja = await (await p.request.get(`/admin/inventario/conteos/${idConteo}/hoja`)).text()
+    expect(hoja).toContain('sku;codigo_de_barras;producto;lote;contado')
+    expect(hoja).toMatch(new RegExp(`^LOT-${sufijo};;${PRODUCTO};CNT-A;$`, 'mi'))
+    expect(hoja).toMatch(new RegExp(`^LOT-${sufijo};;${PRODUCTO};CNT-B;$`, 'mi'))
+    expect(hoja).toMatch(new RegExp(`^JAB-${sufijo};;${OTRO};JAB-A;$`, 'mi'))
+    expect(hoja).toMatch(new RegExp(`^CIN-${sufijo};;${SIN_LOTES};;$`, 'mi'))
+
+    // ── Importar lo contado de los demás lotes: con un error no entra nada ─
+    await p.getByRole('link', { name: 'Importar hoja contada' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}/importar`)
+    // Si el archivo se elige antes de que la página termine de hidratarse, el formulario no se entera: se vuelve a elegir hasta que «Revisar» se habilita.
+    const subir = (nombre: string, contenido: string) =>
+      expect(async () => {
+        await p.getByLabel('Archivo CSV').setInputFiles({ name: nombre, mimeType: 'text/csv', buffer: Buffer.from(contenido, 'utf8') })
+        await expect(p.getByRole('button', { name: 'Revisar archivo' })).toBeEnabled({ timeout: 2_000 })
+      }).toPass({ timeout: 30_000 })
+    await subir('malo.csv', `sku;lote;contado\nJAB-${sufijo};;6\nJAB-${sufijo};NO-EXISTE;2\nCIN-${sufijo};JAB-A;1\n`)
+    await p.getByRole('button', { name: 'Revisar archivo' }).click()
+    await expect(p.getByText(/3 filas con problemas/)).toBeVisible({ timeout: 15_000 })
+    const problemas = p.getByRole('list', { name: 'Filas con problemas' })
+    await expect(problemas).toContainText('lleva lotes: escribe el lote en la columna «lote»')
+    await expect(problemas).toContainText('El lote «NO-EXISTE» no existe')
+    await expect(problemas).toContainText('no lleva lotes: deja vacía la columna «lote»')
+    await expect(p.getByRole('button', { name: /^Cargar/ })).toHaveCount(0)
+    await p.goto(`/admin/inventario/conteos/${idConteo}/importar`)
+    await subir('limpio.csv', `sku;lote;contado\nJAB-${sufijo};jab-a;6\nJAB-${sufijo};JAB-B;3\nCIN-${sufijo};;3\n`)
+    await p.getByRole('button', { name: 'Revisar archivo' }).click()
+    await expect(p.getByText(/El archivo está limpio/)).toBeVisible({ timeout: 15_000 })
+    await expect(p.getByText(`lote JAB-A`).first()).toBeVisible()
+    await p.getByRole('button', { name: /^Cargar 3 productos contados$/ }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}`, { timeout: 30_000 })
+    await expect(p.getByRole('heading', { name: /^Productos contados \(6\)$/ })).toBeVisible({ timeout: 20_000 })
+    await expect(p.getByRole('list', { name: 'Productos contados' }).getByLabel(new RegExp(`^Contado de ${OTRO} · Lote JAB-B`))).toHaveValue('3')
+
+    // ── Revisar: AHORA sí se ve lo esperado por lote y la diferencia ──────
+    await p.getByRole('link', { name: 'Revisar y aplicar' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}/revisar`)
+    const dif = p.getByRole('list', { name: 'Diferencias por producto' })
+    const lote = (codigo: string) => dif.locator(`li[data-lote="${codigo}"]`)
+    await expect(lote('CNT-A')).toContainText('Faltante')
+    await expect(lote('CNT-A').getByText('Esperado').locator('..')).toContainText('6')
+    await expect(lote('CNT-A').getByText('Contado').locator('..')).toContainText('5')
+    await expect(lote('CNT-A')).toContainText(PRODUCTO)
+    await expect(lote('CNT-B')).toContainText('Coincide')
+    await expect(lote('E2E-LEJANO')).toContainText('Sobrante')
+    await expect(lote('E2E-LEJANO').getByText('Esperado').locator('..')).toContainText('0')
+    await expect(lote('JAB-A')).toContainText('Coincide')
+    await expect(lote('JAB-B')).toContainText('Faltante')
+    await expect(lote('JAB-B').getByText('Esperado').locator('..')).toContainText('4')
+    const resumen = p.getByLabel('Resumen de diferencias')
+    await expect(resumen).toContainText('+1 u.')
+    await expect(resumen).toContainText('−2 u.')
+    await expect(p.getByText(/Hay \d+ línea/)).toHaveCount(0) // todo lo que tenía existencias en Norte se contó
+    const csvDif = await p.request.get(`/admin/inventario/conteos/${idConteo}/exportar`)
+    expect(csvDif.status()).toBe(200)
+    const textoDif = await csvDif.text()
+    expect(textoDif).toContain(`Número;${numero}`)
+    expect(textoDif).toContain('SKU;Codigo de barras;Producto;Lote;Vencimiento del lote;Esperado al contar;Contado;Diferencia;Resultado')
+    expect(textoDif).toMatch(new RegExp(`LOT-${sufijo};;${PRODUCTO};CNT-A;${PRONTO};6;5;-1;Faltante`, 'i'))
+    expect(textoDif).toMatch(new RegExp(`LOT-${sufijo};;${PRODUCTO};E2E-LEJANO;${LEJANO};0;1;1;Sobrante`, 'i'))
+    expect(textoDif).toMatch(new RegExp(`JAB-${sufijo};;${OTRO};JAB-B;${LEJANO};4;3;-1;Faltante`, 'i'))
+    expect(textoDif).toMatch(new RegExp(`CIN-${sufijo};;${SIN_LOTES};;;3;3;0;Coincide`, 'i'))
+
+    // ── Aplicar: cada lote se ajusta por SU diferencia ────────────────────
+    await p.getByLabel('Revisé las diferencias y quiero ajustar las existencias.').check()
+    await p.getByRole('button', { name: 'Aplicar conteo' }).click()
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}`, { timeout: 30_000 })
+    await expect(p.getByText(/^Aplicado \d/)).toBeVisible({ timeout: 20_000 })
+    const aplicado = p.getByRole('list', { name: 'Diferencias por producto' })
+    await expect(aplicado.locator('li[data-lote="CNT-A"]')).toContainText('6 → 5')
+    await expect(aplicado.locator('li[data-lote="E2E-LEJANO"]')).toContainText('0 → 1')
+    await expect(aplicado.locator('li[data-lote="JAB-B"]')).toContainText('4 → 3')
+    await expect(aplicado.locator('li[data-lote="CNT-B"]')).toContainText('sin cambio')
+    // Ya no se captura ni se revisa.
+    await p.goto(`/admin/inventario/conteos/${idConteo}/revisar`)
+    await p.waitForURL(`**/admin/inventario/conteos/${idConteo}`)
+
+    // ── Las fichas: los saldos por lote quedaron como se contaron, y lo que no se tocó sigue igual ──
+    await p.goto(`/admin/inventario/${variante}`)
+    await expect(filaDe(p, 'Norte', 'CNT-A')).toBeVisible({ timeout: 15_000 })
+    expect(await cifras(filaDe(p, 'Norte', 'CNT-A'))).toEqual([5, 0, 0])
+    expect(await cifras(filaDe(p, 'Norte', 'CNT-B'))).toEqual([4, 0, 0])
+    expect(await cifras(filaDe(p, 'Norte', 'E2E-LEJANO'))).toEqual([1, 0, 0])
+    expect((await cifras(filaDe(p, 'Principal', 'E2E-LEJANO')))[0], 'la otra sucursal no se tocó').toBe(3)
+    const historial = p.getByRole('list', { name: 'Historial de movimientos' })
+    await expect(historial.getByText('Motivo: Diferencia de conteo').first()).toBeVisible()
+    await expect(historial.getByText(/Lotes: E2E-LEJANO ×1/)).toBeVisible()
+    await expect(historial.getByText(/Lotes: CNT-A ×1/)).toBeVisible()
+    await p.goto(`/admin/inventario/${varianteOtro}`)
+    await expect(filaDe(p, 'Norte', 'JAB-A')).toBeVisible({ timeout: 15_000 })
+    expect(await cifras(filaDe(p, 'Norte', 'JAB-A'))).toEqual([6, 0, 0])
+    expect(await cifras(filaDe(p, 'Norte', 'JAB-B'))).toEqual([3, 0, 0])
+
+    // ── La lista de conteos lo resume ─────────────────────────────────────
+    await p.goto('/admin/inventario/conteos')
+    const conteos = p.getByRole('list', { name: 'Conteos físicos' })
+    await expect(conteos.getByRole('listitem').first()).toContainText(numero)
+    await expect(conteos.getByRole('listitem').first()).toContainText('Aplicado')
+    await expect(conteos.getByRole('listitem').first()).toContainText('+1')
+    await expect(conteos.getByRole('listitem').first()).toContainText('−2')
 
     expect(errores, errores.join('\n')).toEqual([])
     await ctx.close()

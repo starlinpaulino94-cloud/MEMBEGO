@@ -2,6 +2,7 @@ import { armarCsv } from '@/lib/csv'
 import { costoADecimal, formatearCosto, parsearCosto } from './costos'
 import { CANTIDAD_MAXIMA } from './domain'
 import { MAX_LINEAS_IMPORTACION, type LineaEntrada } from './entradas'
+import { normalizarCodigoLote } from './lotes'
 
 /**
  * COMMERCE CORE · inventario — INV-2a: importar existencias desde un CSV.
@@ -102,6 +103,8 @@ const ALIAS_CODIGO = new Set(['codigo_de_barras', 'codigo_barras', 'barcode', 'e
 const ALIAS_CANTIDAD = new Set(['cantidad', 'unidades', 'qty', 'quantity', 'cantidad_recibida'])
 /** INV-3a: el costo unitario de la fila (solo en las entradas). Sin impuestos. */
 const ALIAS_COSTO = new Set(['costo', 'costo_unitario', 'costo_por_unidad', 'costo_de_compra', 'precio_de_compra', 'unit_cost', 'cost'])
+/** INV-5b3: el lote que se contó (solo en el conteo físico; una entrada por archivo todavía no trae lotes). */
+const ALIAS_LOTE = new Set(['lote', 'codigo_de_lote', 'codigo_lote', 'cod_lote', 'n_lote', 'numero_de_lote', 'lot', 'batch'])
 /** El conteo físico acepta además los nombres con que se llama a lo contado. */
 const ALIAS_CONTADO = new Set(['contado', 'conteo', 'cantidad_contada', 'contada', 'cantidad', 'unidades', 'qty', 'quantity'])
 
@@ -118,6 +121,8 @@ export interface FilaCsv {
   cantidad: string
   /** INV-3a: lo que dice la celda del costo (puede ser ''). SOLO está si el archivo trae una columna de costo. */
   costo?: string
+  /** INV-5b3: lo que dice la celda del lote (puede ser ''). SOLO está en un conteo cuyo archivo trae una columna de lote. */
+  lote?: string
 }
 
 export type LecturaCsv = { ok: true; filas: FilaCsv[]; delimitador: Delimitador } | { ok: false; error: string }
@@ -140,6 +145,7 @@ export function leerImportacion(texto: unknown, tipo: TipoImportacion = 'ENTRADA
   const iCodigo = encabezados.findIndex((h) => ALIAS_CODIGO.has(h))
   const iCantidad = encabezados.findIndex((h) => (tipo === 'CONTEO' ? ALIAS_CONTADO : ALIAS_CANTIDAD).has(h))
   const iCosto = tipo === 'ENTRADA' ? encabezados.findIndex((h) => ALIAS_COSTO.has(h)) : -1
+  const iLote = tipo === 'CONTEO' ? encabezados.findIndex((h) => ALIAS_LOTE.has(h)) : -1
   if (iCantidad < 0 || (iSku < 0 && iCodigo < 0)) {
     return { ok: false, error: `La primera fila debe tener los encabezados «sku» (o «codigo_de_barras») y «${NOMBRE_COLUMNA[tipo]}». Descarga ${tipo === 'CONTEO' ? 'la hoja de conteo' : 'la plantilla'} para ver el formato.` }
   }
@@ -151,7 +157,7 @@ export function leerImportacion(texto: unknown, tipo: TipoImportacion = 'ENTRADA
     const f = filas[n]
     // Una fila en blanco (Excel deja muchas al final) no es un dato.
     if (f.every((c) => c.trim() === '')) continue
-    datos.push({ fila: n + 1, sku: celda(f, iSku) || null, barcode: celda(f, iCodigo) || null, cantidad: celda(f, iCantidad), ...(iCosto >= 0 ? { costo: celda(f, iCosto) } : {}) })
+    datos.push({ fila: n + 1, sku: celda(f, iSku) || null, barcode: celda(f, iCodigo) || null, cantidad: celda(f, iCantidad), ...(iCosto >= 0 ? { costo: celda(f, iCosto) } : {}), ...(iLote >= 0 ? { lote: celda(f, iLote) } : {}) })
   }
   if (datos.length === 0) return { ok: false, error: 'El archivo no trae ninguna fila de datos debajo de los encabezados.' }
   return { ok: true, filas: datos, delimitador }
@@ -167,6 +173,11 @@ export interface VarianteImportable {
   nombre: string
   controlaInventario: boolean
   descontinuada: boolean
+  /**
+   * INV-5b3: los lotes del producto, por código normalizado → id del lote, SOLO si el producto lleva lotes (y solo en un conteo, que es
+   * donde se cuenta lote por lote). Ausente = el producto no lleva lotes.
+   */
+  lotes?: ReadonlyMap<string, string>
 }
 
 export interface CatalogoCodigos {
@@ -195,10 +206,15 @@ export interface LineaVistaPrevia {
   fila: number
   sku: string
   nombre: string
+  /** INV-5b3: el lote de la fila (solo en un conteo de un producto con lotes). */
+  lote?: string
   cantidad: number
   /** INV-3a: el costo unitario de la fila, ya formateado; falta si la fila no trae costo. */
   costo?: string
 }
+
+/** Una línea del informe: una de entrada, o —en un conteo de un producto con lotes— con el id del lote que se contó. */
+export type LineaImportada = LineaEntrada & { loteId?: string }
 
 export interface InformeImportacion {
   /** true = se puede aplicar tal cual (sin un solo error y con al menos una línea). */
@@ -210,8 +226,8 @@ export interface InformeImportacion {
   totalErrores: number
   avisos: string[]
   vistaPrevia: LineaVistaPrevia[]
-  /** Las líneas para el servicio; vacío si hay errores (no se aplica nada a medias). */
-  lineas: LineaEntrada[]
+  /** Las líneas para el servicio; vacío si hay errores (no se aplica nada a medias). Las de un conteo de un producto con lotes traen `loteId`. */
+  lineas: LineaImportada[]
   /** Solo en un conteo: filas con la celda vacía, que significan «no se contó» y no se tocan. */
   omitidas?: number
   /** Solo en una entrada con columna de costo: líneas que traen costo (las demás entran sin él y no mueven el promedio). */
@@ -248,7 +264,7 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
   let conCosto = 0
   const errores: ErrorFila[] = []
   const avisos = new Set<string>()
-  const lineas: LineaEntrada[] = []
+  const lineas: LineaImportada[] = []
   const vista: LineaVistaPrevia[] = []
   const primeraVez = new Map<string, number>()
   let unidades = 0
@@ -311,17 +327,39 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
       }
     }
 
+    // INV-5b3: en un conteo, un producto con lotes se cuenta lote por lote (la fila dice cuál); uno sin lotes, sin lote.
+    let loteId: string | null = null
+    let loteCodigo: string | null = null
+    if (variante && variante.controlaInventario && esConteo) {
+      const dicho = (f.lote ?? '').trim()
+      if (variante.lotes) {
+        if (dicho === '') problemas.push(`«${variante.nombre}» lleva lotes: escribe el lote en la columna «lote».`)
+        else {
+          const codigo = normalizarCodigoLote(dicho)
+          if (!codigo.ok) problemas.push(`Lote «${dicho.slice(0, 40)}»: ${codigo.error}`)
+          else if (!variante.lotes.has(codigo.valor)) problemas.push(`El lote «${codigo.valor}» no existe en «${variante.nombre}». Un lote nuevo entra con una entrada de mercancía, no con un conteo.`)
+          else {
+            loteId = variante.lotes.get(codigo.valor)!
+            loteCodigo = codigo.valor
+          }
+        }
+      } else if (dicho !== '') {
+        problemas.push(`«${variante.nombre}» no lleva lotes: deja vacía la columna «lote».`)
+      }
+    }
+
     if (variante) {
       if (!variante.controlaInventario) {
         problemas.push(`«${variante.nombre}» no controla inventario. Actívalo en su ficha del catálogo.`)
         variante = null
       } else {
-        const antes = primeraVez.get(variante.id)
+        const clave = `${variante.id}|${loteId ?? ''}`
+        const antes = primeraVez.get(clave)
         if (antes !== undefined) {
-          problemas.push(`«${variante.nombre}» ya aparece en la fila ${antes}: junta sus cantidades en una sola fila.`)
+          problemas.push(`«${variante.nombre}»${loteCodigo ? ` (lote ${loteCodigo})` : ''} ya aparece en la fila ${antes}: junta sus cantidades en una sola fila.`)
           variante = null
         } else {
-          primeraVez.set(variante.id, f.fila)
+          primeraVez.set(clave, f.fila)
           if (variante.descontinuada) avisos.add(`«${variante.nombre}» está descontinuado en el catálogo; ${esConteo ? 'se cuenta' : 'entra al inventario'} igual.`)
         }
       }
@@ -332,10 +370,10 @@ export function validarImportacion(filas: readonly FilaCsv[], catalogo: Catalogo
       continue
     }
     if (!variante || !cantidad.ok) continue
-    lineas.push(costo === null ? { varianteId: variante.id, cantidad: cantidad.valor } : { varianteId: variante.id, cantidad: cantidad.valor, costo })
+    lineas.push({ varianteId: variante.id, cantidad: cantidad.valor, ...(costo === null ? {} : { costo }), ...(loteId ? { loteId } : {}) })
     if (costo !== null) conCosto++
     unidades += cantidad.valor
-    if (vista.length < MAX_FILAS_VISTA_PREVIA) vista.push({ fila: f.fila, sku: variante.sku, nombre: variante.nombre, cantidad: cantidad.valor, ...(costoVista !== null ? { costo: costoVista } : {}) })
+    if (vista.length < MAX_FILAS_VISTA_PREVIA) vista.push({ fila: f.fila, sku: variante.sku, nombre: variante.nombre, ...(loteCodigo ? { lote: loteCodigo } : {}), cantidad: cantidad.valor, ...(costoVista !== null ? { costo: costoVista } : {}) })
   }
 
   const ok = errores.length === 0 && lineas.length > 0

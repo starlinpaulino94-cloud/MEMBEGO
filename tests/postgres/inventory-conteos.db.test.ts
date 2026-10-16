@@ -460,7 +460,7 @@ test('12 · importar la hoja contada: celdas vacías = «no se contó»; un solo
 
   // Los pendientes por contar son nombres, sin cantidades, y el total es exacto.
   const por = await enA((tx) => porContarEnTx(tx, ctx.a, c.conteoId, ctx.sucA1))
-  assert.ok(por.items.every((i) => Object.keys(i).sort().join() === 'nombre,sku,varianteId'))
+  assert.ok(por.items.every((i) => Object.keys(i).sort().join() === 'loteCodigo,loteId,loteVencimiento,nombre,sku,varianteId'), 'solo nombres y lote: ninguna cantidad')
   assert.equal(por.items.some((i) => i.varianteId === p0), false)
   await cancelar(c.conteoId)
 })

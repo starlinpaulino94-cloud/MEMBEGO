@@ -15,6 +15,8 @@ import { Label } from '@/components/ui/label'
 
 interface Rechazada {
   varianteId: string
+  /** INV-5b3: el lote de la línea rechazada (null en un producto sin lotes); el nombre ya lo incluye. */
+  loteId: string | null
   nombre: string
   sku: string
   motivo: string
@@ -71,7 +73,7 @@ export function AplicarConteoForm({ conteoId, numero, productos, ajustes }: { co
             <p className="font-medium">No se aplicó nada. Estas líneas no se pueden aplicar tal como están:</p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm" aria-label="Líneas que no se pueden aplicar">
               {rechazadas.map((x) => (
-                <li key={x.varianteId}>
+                <li key={`${x.varianteId}|${x.loteId ?? ''}`}>
                   <strong>{x.nombre}</strong> <span className="text-xs">(SKU {x.sku})</span>: {x.motivo}
                 </li>
               ))}

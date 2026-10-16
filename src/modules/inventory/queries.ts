@@ -1,11 +1,11 @@
-import type { CatalogVariantStatus, InventoryMovementType, InventoryReservationStatus, Prisma } from '@prisma/client'
+import { Prisma, type CatalogVariantStatus, type InventoryMovementType, type InventoryReservationStatus } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
 import { costoDeDecimal, formatearCosto, formatearMonto, valorDe } from './costos'
 import { disponible, estadoDeStock, type EstadoStock } from './domain'
 import { USUARIO_SISTEMA, armarCursor, esCodigoExacto, leerCursor, type FiltrosConteos, type FiltrosEntradas, type FiltrosMovimientos, type FiltrosTraslados } from './filtros'
 import { pendienteDeLinea, type EstadoTraslado } from './traslados'
-import { MAX_POR_CONTAR_VISIBLES, TOPE_FILAS_HOJA, type EstadoConteo } from './conteos'
+import { MAX_POR_CONTAR_VISIBLES, TOPE_FILAS_HOJA, claveDeLinea, type EstadoConteo } from './conteos'
 import { limiteDiaLocal } from '@/modules/reportes/rango'
 import { lotesDeMovimientosEnTx } from './lotes-queries'
 
@@ -1065,6 +1065,11 @@ export async function conteosDeLaEmpresaEnTx(
 
 export interface LineaDeConteo {
   varianteId: string
+  /** INV-5b3: el lote que se contó (null en un producto sin lotes). Una línea es un producto o un producto en un lote. */
+  loteId: string | null
+  loteCodigo: string | null
+  /** `YYYY-MM-DD` o null (el lote no vence, o la línea no es de un lote). */
+  loteVencimiento: string | null
   sku: string
   barcode: string | null
   itemNombre: string
@@ -1107,6 +1112,8 @@ export async function conteoDetalleEnTx(tx: Tx, companyId: string, id: string, o
         orderBy: [{ countedAt: 'desc' }, { id: 'desc' }],
         select: {
           catalogVariantId: true,
+          lotId: true,
+          lot: { select: { code: true, expiresOn: true } },
           counted: true,
           expected: true,
           countedById: true,
@@ -1128,6 +1135,9 @@ export async function conteoDetalleEnTx(tx: Tx, companyId: string, id: string, o
     motivoCancelacion: r.cancelReason,
     detalle: r.lines.map((l) => ({
       varianteId: l.catalogVariantId,
+      loteId: l.lotId,
+      loteCodigo: l.lot?.code ?? null,
+      loteVencimiento: l.lot?.expiresOn ? l.lot.expiresOn.toISOString().slice(0, 10) : null,
       sku: l.variant.sku,
       barcode: l.variant.barcode,
       itemNombre: l.variant.item.name,
@@ -1157,76 +1167,131 @@ export async function conteoAbiertoDeSucursalEnTx(tx: Tx, companyId: string, suc
 
 export interface ProductoPorContar {
   varianteId: string
+  /** INV-5b3: si el producto lleva lotes, cada lote con existencias es una línea por contar. */
+  loteId: string | null
+  loteCodigo: string | null
+  loteVencimiento: string | null
   sku: string
   nombre: string
 }
 
 /**
- * Los productos con existencias en la sucursal del conteo que todavía no tienen
- * línea: solo NOMBRES, sin cantidades (conteo a ciegas). Sirve para no dejar
- * pasillos sin contar. El total siempre es exacto; la lista se acota.
+ * Lo que tiene existencias en la sucursal del conteo y todavía no tiene línea: solo NOMBRES, sin cantidades (conteo a ciegas). Sirve
+ * para no dejar pasillos sin contar. Un producto sin lotes es una línea por contar; uno con lotes, una por CADA LOTE con existencias
+ * (contar un lote no cuenta los demás). El total siempre es exacto; la lista se acota.
  */
 export async function porContarEnTx(tx: Tx, companyId: string, conteoId: string, sucursalId: string): Promise<{ total: number; items: ProductoPorContar[] }> {
-  const donde = { companyId, locationId: sucursalId, onHand: { gt: 0 }, variant: { countLines: { none: { sessionId: conteoId } } } } satisfies Prisma.InventoryLevelWhereInput
+  type Fila = { varianteId: string; loteId: string | null; loteCodigo: string | null; loteVencimiento: string | null; sku: string; nombre: string }
+  const base = Prisma.sql`
+    SELECT v."id" AS "varianteId", NULL::text AS "loteId", NULL::text AS "loteCodigo", NULL::text AS "loteVencimiento", v."sku" AS "sku",
+           CASE WHEN v."isDefault" THEN i."name" ELSE i."name" || ' · ' || v."name" END AS "nombre", i."name" AS "orden1", v."position" AS "orden2", ''::text AS "orden3"
+      FROM "inventory_levels" lv
+      JOIN "catalog_variants" v ON v."id" = lv."catalogVariantId" AND v."companyId" = lv."companyId"
+      JOIN "catalog_items" i ON i."id" = v."catalogItemId" AND i."companyId" = v."companyId"
+     WHERE lv."companyId" = ${companyId} AND lv."locationId" = ${sucursalId} AND lv."onHand" > 0
+       AND NOT EXISTS (SELECT 1 FROM "inventory_lot_tracking" t WHERE t."catalogVariantId" = lv."catalogVariantId")
+       AND NOT EXISTS (SELECT 1 FROM "inventory_count_lines" cl WHERE cl."sessionId" = ${conteoId} AND cl."catalogVariantId" = lv."catalogVariantId")
+    UNION ALL
+    SELECT v."id", l."id", l."code", l."expiresOn"::text, v."sku",
+           CASE WHEN v."isDefault" THEN i."name" ELSE i."name" || ' · ' || v."name" END, i."name", v."position", l."code"
+      FROM "inventory_lot_balances" b
+      JOIN "inventory_levels" lv ON lv."id" = b."inventoryLevelId"
+      JOIN "inventory_lots" l ON l."id" = b."lotId"
+      JOIN "catalog_variants" v ON v."id" = b."catalogVariantId" AND v."companyId" = b."companyId"
+      JOIN "catalog_items" i ON i."id" = v."catalogItemId" AND i."companyId" = v."companyId"
+     WHERE b."companyId" = ${companyId} AND lv."locationId" = ${sucursalId} AND b."onHand" > 0
+       AND NOT EXISTS (SELECT 1 FROM "inventory_count_lines" cl WHERE cl."sessionId" = ${conteoId} AND cl."catalogVariantId" = b."catalogVariantId" AND cl."lotId" = b."lotId")`
   const [total, filas] = await Promise.all([
-    tx.inventoryLevel.count({ where: donde }),
-    tx.inventoryLevel.findMany({
-      where: donde,
-      orderBy: [{ variant: { item: { name: 'asc' } } }, { variant: { position: 'asc' } }, { id: 'asc' }],
-      take: MAX_POR_CONTAR_VISIBLES,
-      select: { catalogVariantId: true, variant: { select: { sku: true, name: true, isDefault: true, item: { select: { name: true } } } } },
-    }),
+    tx.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS "n" FROM (${base}) t`,
+    tx.$queryRaw<Fila[]>`SELECT "varianteId", "loteId", "loteCodigo", "loteVencimiento", "sku", "nombre" FROM (${base}) t ORDER BY "orden1", "orden2", "varianteId", "orden3" LIMIT ${MAX_POR_CONTAR_VISIBLES}`,
   ])
-  return {
-    total,
-    items: filas.map((l) => ({
-      varianteId: l.catalogVariantId,
-      sku: l.variant.sku,
-      nombre: l.variant.isDefault ? l.variant.item.name : `${l.variant.item.name} · ${l.variant.name}`,
-    })),
-  }
+  return { total: total[0]?.n ?? 0, items: filas }
 }
 
 export interface FilaHojaDeConteo {
   sku: string
   barcode: string | null
   producto: string
+  /** INV-5b3: el lote de la fila (null en un producto sin lotes). */
+  lote: string | null
 }
 
 /**
- * La HOJA DE CONTEO EN BLANCO de una sucursal: qué productos tienen existencias,
- * sin decir cuántas (para contar en papel o en Excel y subir el resultado). Es el
- * conteo a ciegas llevado al papel.
+ * La HOJA DE CONTEO EN BLANCO de una sucursal: qué tiene existencias, sin decir cuántas (para contar en papel o en Excel y subir el
+ * resultado). Es el conteo a ciegas llevado al papel. Un producto con lotes sale en UNA FILA POR LOTE con existencias.
  */
 export async function hojaDeConteoEnTx(tx: Tx, companyId: string, sucursalId: string): Promise<{ filas: FilaHojaDeConteo[]; truncado: boolean }> {
-  const filas = await tx.inventoryLevel.findMany({
-    where: { companyId, locationId: sucursalId, onHand: { gt: 0 } },
-    orderBy: [{ variant: { item: { name: 'asc' } } }, { variant: { position: 'asc' } }, { id: 'asc' }],
-    take: TOPE_FILAS_HOJA + 1,
-    select: { variant: { select: { sku: true, barcode: true, name: true, isDefault: true, item: { select: { name: true } } } } },
-  })
+  const filas = await tx.$queryRaw<FilaHojaDeConteo[]>`
+    SELECT "sku", "barcode", "producto", "lote" FROM (
+      SELECT v."sku" AS "sku", v."barcode" AS "barcode",
+             CASE WHEN v."isDefault" THEN i."name" ELSE i."name" || ' · ' || v."name" END AS "producto", NULL::text AS "lote",
+             i."name" AS "orden1", v."position" AS "orden2", v."id" AS "orden3", ''::text AS "orden4"
+        FROM "inventory_levels" lv
+        JOIN "catalog_variants" v ON v."id" = lv."catalogVariantId" AND v."companyId" = lv."companyId"
+        JOIN "catalog_items" i ON i."id" = v."catalogItemId" AND i."companyId" = v."companyId"
+       WHERE lv."companyId" = ${companyId} AND lv."locationId" = ${sucursalId} AND lv."onHand" > 0
+         AND NOT EXISTS (SELECT 1 FROM "inventory_lot_tracking" t WHERE t."catalogVariantId" = lv."catalogVariantId")
+      UNION ALL
+      SELECT v."sku", v."barcode", CASE WHEN v."isDefault" THEN i."name" ELSE i."name" || ' · ' || v."name" END, l."code", i."name", v."position", v."id", l."code"
+        FROM "inventory_lot_balances" b
+        JOIN "inventory_levels" lv ON lv."id" = b."inventoryLevelId"
+        JOIN "inventory_lots" l ON l."id" = b."lotId"
+        JOIN "catalog_variants" v ON v."id" = b."catalogVariantId" AND v."companyId" = b."companyId"
+        JOIN "catalog_items" i ON i."id" = v."catalogItemId" AND i."companyId" = v."companyId"
+       WHERE b."companyId" = ${companyId} AND lv."locationId" = ${sucursalId} AND b."onHand" > 0
+    ) t
+    ORDER BY "orden1", "orden2", "orden3", "orden4"
+    LIMIT ${TOPE_FILAS_HOJA + 1}`
   const truncado = filas.length > TOPE_FILAS_HOJA
-  return {
-    filas: (truncado ? filas.slice(0, TOPE_FILAS_HOJA) : filas).map((l) => ({
-      sku: l.variant.sku,
-      barcode: l.variant.barcode,
-      producto: l.variant.isDefault ? l.variant.item.name : `${l.variant.item.name} · ${l.variant.name}`,
-    })),
-    truncado,
-  }
+  return { filas: (truncado ? filas.slice(0, TOPE_FILAS_HOJA) : filas).map((f) => ({ sku: f.sku, barcode: f.barcode, producto: f.producto, lote: f.lote })), truncado }
 }
 
 /**
- * Las existencias de AHORA de los productos de un conteo, por variante. Sirve para
- * avisar de antemano qué líneas no se podrán aplicar (dejarían menos de lo
- * apartado); aplicar vuelve a comprobarlo bajo candado.
+ * Las existencias de AHORA de lo que tiene un conteo, por línea (`claveDeLinea`: producto, o producto y lote). Sirve para avisar de
+ * antemano qué líneas no se podrán aplicar (dejarían menos de lo apartado); aplicar vuelve a comprobarlo bajo candado. Una línea de un
+ * lote se compara con el saldo de ESE lote.
  */
 export async function saldosActualesDeConteoEnTx(tx: Tx, companyId: string, conteoId: string, sucursalId: string): Promise<Map<string, { onHand: number; reserved: number; damaged: number }>> {
-  const filas = await tx.inventoryLevel.findMany({
-    where: { companyId, locationId: sucursalId, variant: { countLines: { some: { sessionId: conteoId } } } },
+  const productos = await tx.inventoryLevel.findMany({
+    where: { companyId, locationId: sucursalId, variant: { countLines: { some: { sessionId: conteoId, lotId: null } } } },
     select: { catalogVariantId: true, onHand: true, reserved: true, damaged: true },
   })
-  return new Map(filas.map((f) => [f.catalogVariantId, { onHand: f.onHand, reserved: f.reserved, damaged: f.damaged }]))
+  const lotes = await tx.inventoryLotBalance.findMany({
+    where: { companyId, level: { locationId: sucursalId }, lot: { countLines: { some: { sessionId: conteoId } } } },
+    select: { catalogVariantId: true, lotId: true, onHand: true, reserved: true, damaged: true },
+  })
+  return new Map([
+    ...productos.map((f) => [claveDeLinea(f.catalogVariantId, null), { onHand: f.onHand, reserved: f.reserved, damaged: f.damaged }] as const),
+    ...lotes.map((f) => [claveDeLinea(f.catalogVariantId, f.lotId), { onHand: f.onHand, reserved: f.reserved, damaged: f.damaged }] as const),
+  ])
+}
+
+export interface LoteParaContar {
+  loteId: string
+  codigo: string
+  /** `YYYY-MM-DD` o null (no vence, o es «SIN LOTE»). */
+  vencimiento: string | null
+  legado: boolean
+  /** Ya tiene línea en este conteo. */
+  contado: boolean
+}
+
+/**
+ * Los lotes entre los que se elige al contar un producto con lotes: los que tienen existencias en cualquier sucursal o ya tuvieron saldo en
+ * ESTA, y siempre «SIN LOTE» (por si se encuentra algo sin lote). A CIEGAS: código y vencimiento, nunca cantidades. En orden FEFO.
+ */
+export async function lotesParaContarEnTx(tx: Tx, companyId: string, conteoId: string, varianteId: string, sucursalId: string): Promise<LoteParaContar[]> {
+  const filas = await tx.$queryRaw<{ loteId: string; codigo: string; vencimiento: string | null; legado: boolean; contado: boolean }[]>`
+    SELECT l."id" AS "loteId", l."code" AS "codigo", l."expiresOn"::text AS "vencimiento", l."legacy" AS "legado",
+           EXISTS (SELECT 1 FROM "inventory_count_lines" cl WHERE cl."sessionId" = ${conteoId} AND cl."lotId" = l."id") AS "contado"
+      FROM "inventory_lots" l
+     WHERE l."companyId" = ${companyId} AND l."catalogVariantId" = ${varianteId}
+       AND (l."legacy"
+            OR EXISTS (SELECT 1 FROM "inventory_lot_balances" b WHERE b."lotId" = l."id" AND b."onHand" > 0)
+            OR EXISTS (SELECT 1 FROM "inventory_lot_balances" b JOIN "inventory_levels" lv ON lv."id" = b."inventoryLevelId" WHERE b."lotId" = l."id" AND lv."locationId" = ${sucursalId}))
+     ORDER BY l."legacy" DESC, (l."expiresOn" IS NULL), l."expiresOn", l."code"
+     LIMIT 100`
+  return filas
 }
 
 // ── INV-2c · Transferencias con envío ────────────────────────────────────────

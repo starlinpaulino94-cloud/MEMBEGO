@@ -44,7 +44,7 @@ import type { ModoConteo } from './conteos'
 import { InventarioError } from './errores'
 import type { InformeImportacion } from './importacion'
 import { aplicarImportacionDeConteoEnTx, aplicarImportacionEnTx, informeDeConteoImportadoEnTx, informeDeImportacionEnTx } from './importar'
-import { buscarVariantesParaEntradaEnTx, historialDeVarianteEnTx, type HistorialPagina, type VarianteBuscable } from './queries'
+import { buscarVariantesParaEntradaEnTx, historialDeVarianteEnTx, lotesParaContarEnTx, type HistorialPagina, type LoteParaContar, type VarianteBuscable } from './queries'
 import { buscarProductosParaOrdenEnTx, type ProductoParaOrden } from './compras-queries'
 import {
   actualizarProveedorEnTx,
@@ -538,15 +538,17 @@ export async function iniciarConteo(entrada: { sucursalId: string; nota?: string
 export async function contarProductoEnConteo(entrada: {
   conteoId: string
   varianteId: string
+  /** INV-5b3: el lote que se cuenta. Obligatorio si el producto lleva lotes. */
+  loteId?: string | null
   cantidad: number
   modo: ModoConteo
-}): Promise<ResultadoInventario<{ varianteId: string; contado: number; nueva: boolean; lineas: number }>> {
+}): Promise<ResultadoInventario<{ varianteId: string; loteId: string | null; contado: number; nueva: boolean; lineas: number }>> {
   const c = await contexto('ajustar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   try {
     const r = await conEmpresa(c.companyId, (tx) =>
-      registrarConteoProductoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId), cantidad: entrada.cantidad, modo: entrada.modo }, c.ctx)
+      registrarConteoProductoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId), loteId: clave(entrada.loteId), cantidad: entrada.cantidad, modo: entrada.modo }, c.ctx)
     )
     refrescar()
     return { ok: true, ...r }
@@ -555,13 +557,13 @@ export async function contarProductoEnConteo(entrada: {
   }
 }
 
-/** Saca un producto del conteo abierto (lo que no tiene línea no se ajusta). */
-export async function quitarProductoDelConteo(entrada: { conteoId: string; varianteId: string }): Promise<ResultadoInventario<{ quitada: boolean }>> {
+/** Saca un producto (o un lote de un producto) del conteo abierto (lo que no tiene línea no se ajusta). */
+export async function quitarProductoDelConteo(entrada: { conteoId: string; varianteId: string; loteId?: string | null }): Promise<ResultadoInventario<{ quitada: boolean }>> {
   const c = await contexto('ajustar')
   if ('error' in c) return { ok: false, error: c.error }
   if (!esObjeto(entrada)) return { ok: false, error: 'Datos no válidos.' }
   try {
-    const r = await conEmpresa(c.companyId, (tx) => quitarLineaDeConteoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId) }))
+    const r = await conEmpresa(c.companyId, (tx) => quitarLineaDeConteoEnTx(tx, c.companyId, { conteoId: texto(entrada.conteoId), varianteId: texto(entrada.varianteId), loteId: clave(entrada.loteId) }))
     refrescar()
     return { ok: true, quitada: r.quitada }
   } catch (e) {
@@ -580,6 +582,27 @@ export async function buscarProductosParaConteo(q: string): Promise<ResultadoInv
   try {
     const productos = await conEmpresa(c.companyId, (tx) => buscarVariantesParaEntradaEnTx(tx, c.companyId, q, null))
     return { ok: true, productos }
+  } catch (e) {
+    return aError(e)
+  }
+}
+
+/**
+ * INV-5b3 · Los lotes entre los que se elige al contar un producto con lotes: código y vencimiento, NUNCA cantidades (conteo a ciegas).
+ * Necesita el conteo abierto: la sucursal sale de él.
+ */
+export async function lotesParaContarProducto(entrada: { conteoId: string; varianteId: string }): Promise<ResultadoInventario<{ lotes: LoteParaContar[] }>> {
+  const c = await contexto('ajustar')
+  if ('error' in c) return { ok: false, error: c.error }
+  if (!esObjeto(entrada) || typeof entrada.conteoId !== 'string' || typeof entrada.varianteId !== 'string') return { ok: false, error: 'Datos no válidos.' }
+  try {
+    const lotes = await conEmpresa(c.companyId, async (tx) => {
+      const conteo = await tx.inventoryCountSession.findFirst({ where: { id: entrada.conteoId, companyId: c.companyId, status: 'OPEN' }, select: { id: true, locationId: true } })
+      if (!conteo) return null
+      return lotesParaContarEnTx(tx, c.companyId, conteo.id, entrada.varianteId, conteo.locationId)
+    })
+    if (lotes === null) return { ok: false, error: 'El conteo no existe o ya no está abierto.' }
+    return { ok: true, lotes }
   } catch (e) {
     return aError(e)
   }

@@ -16,7 +16,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { CapturaConteo } from '@/components/inventario/CapturaConteo'
 import { FilaConteoEditable } from '@/components/inventario/FilaConteoEditable'
 import { InformeDiferencias, type LineaInforme } from '@/components/inventario/InformeDiferencias'
-import { ETIQUETA_ESTADO_CONTEO } from '@/modules/inventory/conteos'
+import { ETIQUETA_ESTADO_CONTEO, claveDeLinea, etiquetaDeLote } from '@/modules/inventory/conteos'
 import { conteoDetalleEnTx, porContarEnTx, type DetalleConteo } from '@/modules/inventory/queries'
 import { formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 import { describirFalloDeCarga } from '@/modules/inventory/errores-pantalla'
@@ -137,17 +137,22 @@ export default async function ConteoInventarioPage({ params }: { params: Promise
                 {conteo.detalle.map((l) =>
                   puedeAjustar ? (
                     <FilaConteoEditable
-                      key={`${l.varianteId}-${l.contado}`}
+                      key={`${claveDeLinea(l.varianteId, l.loteId)}-${l.contado}`}
                       conteoId={conteo.id}
                       varianteId={l.varianteId}
+                      loteId={l.loteId}
+                      loteEtiqueta={l.loteCodigo ? etiquetaDeLote(l.loteCodigo, l.loteVencimiento) : null}
                       nombre={nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault)}
                       sku={l.sku}
                       barcode={l.barcode}
                       contado={l.contado}
                     />
                   ) : (
-                    <li key={l.varianteId} className="flex items-center justify-between gap-3 p-3 text-sm">
-                      <span className="font-medium">{nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault)}</span>
+                    <li key={claveDeLinea(l.varianteId, l.loteId)} className="flex items-center justify-between gap-3 p-3 text-sm">
+                      <span className="font-medium">
+                        {nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault)}
+                        {l.loteCodigo && <span className="ml-2 text-xs font-normal text-muted-foreground">{etiquetaDeLote(l.loteCodigo, l.loteVencimiento)}</span>}
+                      </span>
                       <span className="tabular-nums">{formatearCantidad(l.contado)}</span>
                     </li>
                   )
@@ -167,8 +172,9 @@ export default async function ConteoInventarioPage({ params }: { params: Promise
                 <>
                   <ul className="mt-2 max-h-72 list-disc space-y-1 overflow-auto pl-5" aria-label="Productos por contar">
                     {porContar.items.map((p) => (
-                      <li key={p.varianteId}>
+                      <li key={claveDeLinea(p.varianteId, p.loteId)}>
                         {p.nombre} <span className="text-xs text-muted-foreground">SKU {p.sku}</span>
+                        {p.loteCodigo && <span className="ml-1 text-xs text-muted-foreground">· {etiquetaDeLote(p.loteCodigo, p.loteVencimiento)}</span>}
                       </li>
                     ))}
                   </ul>

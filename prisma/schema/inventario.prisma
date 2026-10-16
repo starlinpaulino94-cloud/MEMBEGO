@@ -384,6 +384,11 @@ model InventoryCountLine {
   catalogVariantId String
   variant          CatalogVariant @relation(fields: [catalogVariantId, companyId], references: [id, companyId], onDelete: Restrict)
 
+  /// INV-5b3 · El lote que se contó. null = producto sin lotes (una línea por producto, como siempre); con lote, una línea por
+  /// producto Y lote. Un producto con lotes solo admite líneas con lote (lo vigila la base).
+  lotId String?
+  lot   InventoryLot? @relation(fields: [lotId, catalogVariantId, companyId], references: [id, catalogVariantId, companyId], onDelete: Restrict)
+
   /// Lo que la persona contó (vendible + apartado; lo dañado no se cuenta).
   counted  Int
   /// Lo que decía el sistema en el momento de contar. Es la referencia de la
@@ -402,9 +407,11 @@ model InventoryCountLine {
   movementId   String?            @unique
   movement     InventoryMovement? @relation(fields: [movementId], references: [id], onDelete: Restrict)
 
-  /// Un producto, una línea por conteo: contarlo otra vez la corrige.
-  @@unique([sessionId, catalogVariantId])
+  /// Un producto (y lote), una línea por conteo: contarlo otra vez la corrige. Con `lotId` null Postgres no ve iguales dos filas: la
+  /// migración 20261069 añade el índice único parcial `inventory_count_lines_sin_lote_key` para los productos sin lotes.
+  @@unique([sessionId, catalogVariantId, lotId])
   @@index([companyId, catalogVariantId])
+  @@index([companyId, lotId])
   @@map("inventory_count_lines")
 }
 
@@ -778,7 +785,8 @@ model InventoryLot {
 
   createdAt DateTime @default(now())
 
-  balances InventoryLotBalance[]
+  balances    InventoryLotBalance[]
+  countLines  InventoryCountLine[]
 
   /// Destino de la FK compuesta de los saldos por lote.
   @@unique([id, catalogVariantId, companyId])

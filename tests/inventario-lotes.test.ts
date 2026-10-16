@@ -174,14 +174,18 @@ test('INV-5a · activar los lotes: precondiciones, apertura íntegra y rastro', 
 
 test('INV-5a · los flujos que todavía no reparten por lote se niegan a tocar un producto con lotes', () => {
   const svc = sinComentarios(leer('src/modules/inventory/service.ts'))
-  for (const f of ['contarEnTx', 'transferirEnTx', 'registrarConteoProductoEnTx', 'importarConteoEnTx', 'aplicarConteoEnTx', 'enviarTrasladoEnTx']) {
+  // INV-5b3: el conteo de una sesión ya cuenta por lote; quedan el conteo suelto de la ficha y las transferencias.
+  for (const f of ['contarEnTx', 'transferirEnTx', 'enviarTrasladoEnTx']) {
     assert.match(cuerpoDe(svc, f), /exigirSinLotes\(/, f)
+  }
+  for (const f of ['registrarConteoProductoEnTx', 'importarConteoEnTx', 'aplicarConteoEnTx']) {
+    assert.doesNotMatch(cuerpoDe(svc, f), /exigirSinLotes\(/, `${f}: ya cuenta por lote`)
   }
   // INV-5b2: la orden de compra YA trabaja con lotes (se pide por producto y los lotes se dicen al recibir): no se niega.
   assert.doesNotMatch(sinComentarios(leer('src/modules/inventory/compras-service.ts')), /exigirSinLotes/, 'orden de compra: ya no se niega')
   const imp = sinComentarios(leer('src/modules/inventory/importar.ts'))
   assert.match(cuerpoDe(imp, 'informeDeImportacionEnTx'), /exigirSinLotes\(/, 'la revisión de entradas por archivo')
-  assert.match(cuerpoDe(imp, 'informeDeConteoImportadoEnTx'), /exigirSinLotes\(/, 'la revisión de un conteo por archivo')
+  assert.doesNotMatch(cuerpoDe(imp, 'informeDeConteoImportadoEnTx'), /exigirSinLotes\(/, 'la revisión de un conteo por archivo ya trae el lote de cada fila')
   const sin = cuerpoDe(svc, 'exigirSinLotes')
   assert.match(sin, /fallo\('LOTES_NO_SOPORTADO'/)
 })

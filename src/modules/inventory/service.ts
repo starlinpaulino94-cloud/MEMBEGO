@@ -10,6 +10,7 @@ import {
   aplicarMovimiento,
   cubetasDeSaldo,
   CANTIDAD_MAXIMA,
+  EXISTENCIA_MAXIMA,
   disponible,
   normalizarMotivo,
   reservaVencida,
@@ -36,13 +37,18 @@ import {
   MAX_MOTIVO_CANCELACION,
   MAX_NOTA_CONTEO,
   PREFIJO_CONTEO,
+  claveDeLinea,
+  compararParaAplicar,
   diferenciaDeConteo,
   esModoConteo,
   motivoDeConteo,
+  nombreDeLinea,
   planDeAjuste,
+  repartirEnRondas,
   validarCantidadContada,
   type EstadoConteo,
   type ModoConteo,
+  type PlanDeAjuste,
 } from './conteos'
 import {
   MAX_MOTIVO_TRASLADO,
@@ -168,7 +174,7 @@ async function exigirVarianteControlada(tx: Tx, companyId: string, varianteId: s
   if (typeof varianteId !== 'string' || varianteId === '') fallo('VARIANTE_NO_ENCONTRADA', 'La variante no existe.')
   const v = await tx.catalogVariant.findFirst({
     where: { id: varianteId, companyId },
-    select: { id: true, sku: true, name: true, item: { select: { id: true, name: true, type: true, capabilities: true } } },
+    select: { id: true, sku: true, name: true, isDefault: true, item: { select: { id: true, name: true, type: true, capabilities: true } } },
   })
   if (!v) fallo('VARIANTE_NO_ENCONTRADA', 'La variante no existe.')
   if (!normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory) {
@@ -537,13 +543,19 @@ async function mismoRepartoQueElPrevio(tx: Tx, companyId: string, movimientoId: 
 }
 
 /** Los flujos que todavía no reparten por lote se niegan a tocar un producto que los lleva (en vez de descuadrarlo). */
-export async function exigirSinLotes(tx: Tx, companyId: string, varianteIds: readonly string[], operacion: string): Promise<void> {
+export async function exigirSinLotes(
+  tx: Tx,
+  companyId: string,
+  varianteIds: readonly string[],
+  operacion: string,
+  sugerencia = 'Usa una entrada de mercancía, una venta, un ajuste o un daño, que sí los reparten.'
+): Promise<void> {
   const unicos = [...new Set(varianteIds)]
   if (unicos.length === 0) return
   const con = await tx.inventoryLotTracking.findMany({ where: { companyId, catalogVariantId: { in: unicos } }, select: { variant: { select: { name: true, isDefault: true, item: { select: { name: true } } } } } })
   if (con.length === 0) return
   const nombres = con.map((c) => (c.variant.isDefault ? c.variant.item.name : `${c.variant.item.name} · ${c.variant.name}`))
-  fallo('LOTES_NO_SOPORTADO', `${nombres.map((n) => `«${n}»`).join(', ')} ${nombres.length === 1 ? 'lleva' : 'llevan'} lotes y ${operacion} todavía no trabaja con lotes. Usa una entrada de mercancía, una venta, un ajuste o un daño, que sí los reparten.`)
+  fallo('LOTES_NO_SOPORTADO', `${nombres.map((n) => `«${n}»`).join(', ')} ${nombres.length === 1 ? 'lleva' : 'llevan'} lotes y ${operacion} todavía no trabaja con lotes. ${sugerencia}`)
 }
 
 interface MetaMovimiento {
@@ -1031,7 +1043,8 @@ export async function contarEnTx(
   if (typeof e.conteo !== 'number' || !Number.isInteger(e.conteo) || e.conteo < 0) fallo('CANTIDAD_INVALIDA', 'El conteo debe ser un número entero de cero en adelante.')
   const ahora = e.ahora ?? new Date()
   const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
-  await exigirSinLotes(tx, companyId, [variante.id], 'el conteo')
+  // INV-5b3: un producto con lotes se cuenta lote por lote, y eso lo hace un conteo (Inventario → Conteos), no esta cifra suelta.
+  await exigirSinLotes(tx, companyId, [variante.id], 'el conteo suelto', 'Cuéntalo en un conteo (Inventario → Conteos), que cuenta lote por lote.')
   const sucursal = await exigirSucursal(tx, companyId, e.sucursalId, false)
   const nivelId = await obtenerNivel(tx, companyId, variante.id, sucursal.id)
   await bloquear(tx, companyId, [nivelId])
@@ -2039,10 +2052,33 @@ function exigirAbierto(c: ConteoBloqueado): void {
   }
 }
 
-/** Lo que dice el sistema hoy de un producto en una sucursal (0 si nunca tuvo saldo). */
-async function existenciaDe(tx: Tx, companyId: string, varianteId: string, sucursalId: string): Promise<number> {
+/** Lo que dice el sistema hoy de un producto en una sucursal (0 si nunca tuvo saldo). INV-5b3: con `loteId`, de ESE lote (0 si nunca tuvo saldo ahí). */
+async function existenciaDe(tx: Tx, companyId: string, varianteId: string, sucursalId: string, loteId: string | null = null): Promise<number> {
+  if (loteId) {
+    const b = await tx.inventoryLotBalance.findFirst({ where: { companyId, lotId: loteId, level: { locationId: sucursalId } }, select: { onHand: true } })
+    return b?.onHand ?? 0
+  }
   const n = await tx.inventoryLevel.findFirst({ where: { companyId, catalogVariantId: varianteId, locationId: sucursalId }, select: { onHand: true } })
   return n?.onHand ?? 0
+}
+
+/**
+ * INV-5b3 · El lote de una línea de conteo. Un producto que LLEVA lotes se cuenta lote por lote: la línea debe decir cuál (y ser de ese
+ * producto); uno que no los lleva se cuenta sin lote. Devuelve el id del lote, o null si el producto no los lleva.
+ */
+async function loteDeLineaDeConteo(tx: Tx, companyId: string, variante: { id: string; item: { name: string }; name: string; isDefault: boolean }, loteId: unknown): Promise<string | null> {
+  const nombre = variante.isDefault ? variante.item.name : `${variante.item.name} · ${variante.name}`
+  const dado = loteId === undefined || loteId === null || loteId === '' ? null : loteId
+  if (dado !== null && (typeof dado !== 'string' || dado.length > 120)) fallo('LOTE_INVALIDO', 'El lote no es válido.')
+  const politica = await politicaDeLotes(tx, companyId, variante.id)
+  if (!politica) {
+    if (dado) fallo('LOTES_NO_APLICAN', `«${nombre}» no lleva lotes: se cuenta sin indicar un lote.`)
+    return null
+  }
+  if (!dado) fallo('LOTES_FALTAN', `«${nombre}» lleva lotes: indica de qué lote es lo que cuentas.`)
+  const lote = await tx.inventoryLot.findFirst({ where: { id: dado as string, companyId, catalogVariantId: variante.id }, select: { id: true } })
+  if (!lote) fallo('LOTE_NO_ENCONTRADO', `Ese lote no existe en «${nombre}».`)
+  return lote.id
 }
 
 export interface ResultadoAbrirConteo {
@@ -2081,6 +2117,8 @@ export async function abrirConteoEnTx(tx: Tx, companyId: string, e: { sucursalId
 export interface EntradaConteoProducto {
   conteoId: string
   varianteId: string
+  /** INV-5b3: el lote que se cuenta. Obligatorio si el producto lleva lotes; prohibido si no. */
+  loteId?: string | null
   cantidad: number
   modo: ModoConteo
   ahora?: Date
@@ -2088,18 +2126,19 @@ export interface EntradaConteoProducto {
 
 export interface ResultadoConteoProducto {
   varianteId: string
-  /** Lo contado de ese producto después de esta captura. */
+  /** INV-5b3: el lote contado (null en un producto sin lotes). */
+  loteId: string | null
+  /** Lo contado de ese producto (y lote) después de esta captura. */
   contado: number
   /** true si era la primera vez que se contaba en este conteo. */
   nueva: boolean
-  /** Productos con línea en el conteo, contando este. */
+  /** Líneas del conteo (productos, o producto y lote), contando esta. */
   lineas: number
 }
 
 /**
- * Cuenta UN producto. `SUMAR` es un escaneo (una unidad más, o las que diga);
- * `FIJAR` es escribir el número (reemplaza lo contado y vuelve a tomar la foto de
- * lo que decía el sistema: es un recuento en este momento).
+ * Cuenta UN producto (o, si lleva lotes, UN LOTE de un producto). `SUMAR` es un escaneo (una unidad más, o las que diga); `FIJAR` es
+ * escribir el número (reemplaza lo contado y vuelve a tomar la foto de lo que decía el sistema: es un recuento en este momento).
  */
 export async function registrarConteoProductoEnTx(tx: Tx, companyId: string, e: EntradaConteoProducto, ctx: ContextoAuditoria): Promise<ResultadoConteoProducto> {
   if (!esModoConteo(e.modo)) fallo('MODO_INVALIDO', 'Indica si sumas una captura o escribes la cantidad.')
@@ -2107,20 +2146,22 @@ export async function registrarConteoProductoEnTx(tx: Tx, companyId: string, e: 
   if (!cantidad.ok) fallo('CANTIDAD_INVALIDA', cantidad.error)
   const conteo = await bloquearConteo(tx, companyId, e.conteoId)
   exigirAbierto(conteo)
+  // INV-5b3: como toda operación sobre un saldo, toma el candado COMPARTIDO de lotes: «este producto lleva lotes» no cambia mientras se captura.
+  await candadoDeLotes(tx, companyId, false)
   const variante = await exigirVarianteControlada(tx, companyId, e.varianteId)
-  await exigirSinLotes(tx, companyId, [variante.id], 'el conteo físico')
-  const previa = await tx.inventoryCountLine.findFirst({ where: { companyId, sessionId: conteo.id, catalogVariantId: variante.id }, select: { id: true, counted: true } })
+  const loteId = await loteDeLineaDeConteo(tx, companyId, variante, e.loteId)
+  const previa = await tx.inventoryCountLine.findFirst({ where: { companyId, sessionId: conteo.id, catalogVariantId: variante.id, lotId: loteId }, select: { id: true, counted: true } })
   const total = await tx.inventoryCountLine.count({ where: { companyId, sessionId: conteo.id } })
   if (!previa && total >= MAX_LINEAS_CONTEO) {
-    fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} productos. Aplícalo y abre otro para seguir.`)
+    fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} líneas (productos, o producto y lote). Aplícalo y abre otro para seguir.`)
   }
-  const esperado = await existenciaDe(tx, companyId, variante.id, conteo.locationId)
+  const esperado = await existenciaDe(tx, companyId, variante.id, conteo.locationId, loteId)
   const ahora = e.ahora ?? new Date()
   if (!previa) {
     await tx.inventoryCountLine.create({
-      data: { companyId, sessionId: conteo.id, catalogVariantId: variante.id, counted: cantidad.valor, expected: esperado, countedById: ctx.actorId, countedAt: ahora },
+      data: { companyId, sessionId: conteo.id, catalogVariantId: variante.id, lotId: loteId, counted: cantidad.valor, expected: esperado, countedById: ctx.actorId, countedAt: ahora },
     })
-    return { varianteId: variante.id, contado: cantidad.valor, nueva: true, lineas: total + 1 }
+    return { varianteId: variante.id, loteId, contado: cantidad.valor, nueva: true, lineas: total + 1 }
   }
   const contado = e.modo === 'SUMAR' ? previa.counted + cantidad.valor : cantidad.valor
   if (contado > CANTIDAD_MAXIMA) fallo('CANTIDAD_INVALIDA', `Un conteo no puede pasar de ${CANTIDAD_MAXIMA.toLocaleString('es-DO')} unidades por producto.`)
@@ -2128,15 +2169,16 @@ export async function registrarConteoProductoEnTx(tx: Tx, companyId: string, e: 
     where: { id: previa.id },
     data: { counted: contado, countedById: ctx.actorId, countedAt: ahora, ...(e.modo === 'FIJAR' ? { expected: esperado } : {}) },
   })
-  return { varianteId: variante.id, contado, nueva: false, lineas: total }
+  return { varianteId: variante.id, loteId, contado, nueva: false, lineas: total }
 }
 
-/** Saca un producto del conteo (mientras está abierto): lo que no tiene línea no se ajusta. */
-export async function quitarLineaDeConteoEnTx(tx: Tx, companyId: string, e: { conteoId: string; varianteId: string }): Promise<{ quitada: boolean }> {
+/** Saca un producto (o un lote de un producto) del conteo, mientras está abierto: lo que no tiene línea no se ajusta. */
+export async function quitarLineaDeConteoEnTx(tx: Tx, companyId: string, e: { conteoId: string; varianteId: string; loteId?: string | null }): Promise<{ quitada: boolean }> {
   const conteo = await bloquearConteo(tx, companyId, e.conteoId)
   exigirAbierto(conteo)
   if (typeof e.varianteId !== 'string' || e.varianteId === '') fallo('VARIANTE_NO_ENCONTRADA', 'La variante no existe.')
-  const r = await tx.inventoryCountLine.deleteMany({ where: { companyId, sessionId: conteo.id, catalogVariantId: e.varianteId } })
+  if (e.loteId !== undefined && e.loteId !== null && (typeof e.loteId !== 'string' || e.loteId.length > 120)) fallo('LOTE_INVALIDO', 'El lote no es válido.')
+  const r = await tx.inventoryCountLine.deleteMany({ where: { companyId, sessionId: conteo.id, catalogVariantId: e.varianteId, lotId: e.loteId || null } })
   return { quitada: r.count > 0 }
 }
 
@@ -2146,32 +2188,43 @@ export interface ResultadoImportarConteo {
   lineas: number
 }
 
+/** Una línea de la hoja contada: un producto o, si lleva lotes, un producto en un lote. */
+export interface LineaDeConteoImportada {
+  varianteId: string
+  /** INV-5b3: obligatorio en un producto con lotes, prohibido en uno sin ellos. */
+  loteId?: string | null
+  cantidad: number
+}
+
 /**
  * Carga de golpe lo contado en una hoja (CSV): TODO O NADA y siempre como
- * `FIJAR`. Un producto que ya tenía línea se reemplaza (la hoja es el recuento
- * más reciente); los demás no se tocan.
+ * `FIJAR`. Una línea que ya existía (el mismo producto y, si lleva lotes, el mismo
+ * lote) se reemplaza (la hoja es el recuento más reciente); las demás no se tocan.
  */
 export async function importarConteoEnTx(
   tx: Tx,
   companyId: string,
-  e: { conteoId: string; lineas: ReadonlyArray<{ varianteId: string; cantidad: number }>; ahora?: Date },
+  e: { conteoId: string; lineas: ReadonlyArray<LineaDeConteoImportada>; ahora?: Date },
   ctx: ContextoAuditoria
 ): Promise<ResultadoImportarConteo> {
   if (!Array.isArray(e.lineas) || e.lineas.length === 0) fallo('CONTEO_SIN_LINEAS', 'El archivo no trae ningún producto contado.')
-  if (e.lineas.length > MAX_LINEAS_CONTEO) fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} productos.`)
+  if (e.lineas.length > MAX_LINEAS_CONTEO) fallo('DEMASIADAS_LINEAS', `Un conteo admite hasta ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} líneas (productos, o producto y lote).`)
   const ids: string[] = []
   const vistos = new Set<string>()
   for (const l of e.lineas) {
     if (!l || typeof l.varianteId !== 'string' || l.varianteId === '') fallo('LINEA_INVALIDA', 'Una línea del archivo no tiene producto.')
+    if (l.loteId !== undefined && l.loteId !== null && (typeof l.loteId !== 'string' || l.loteId === '' || l.loteId.length > 120)) fallo('LOTE_INVALIDO', 'Una línea del archivo trae un lote que no es válido.')
     const c = validarCantidadContada(l.cantidad, 'FIJAR')
     if (!c.ok) fallo('CANTIDAD_INVALIDA', c.error)
-    if (vistos.has(l.varianteId)) fallo('LINEA_REPETIDA', 'Un producto aparece dos veces en el archivo.')
-    vistos.add(l.varianteId)
+    const clave = claveDeLinea(l.varianteId, l.loteId)
+    if (vistos.has(clave)) fallo('LINEA_REPETIDA', 'Un producto (o un lote de un producto) aparece dos veces en el archivo.')
+    vistos.add(clave)
     ids.push(l.varianteId)
   }
   const conteo = await bloquearConteo(tx, companyId, e.conteoId)
   exigirAbierto(conteo)
-  await exigirSinLotes(tx, companyId, ids, 'el conteo físico')
+  // INV-5b3: el candado COMPARTIDO de lotes (ver `registrarConteoProductoEnTx`).
+  await candadoDeLotes(tx, companyId, false)
 
   const variantes = await tx.catalogVariant.findMany({
     where: { companyId, id: { in: ids } },
@@ -2185,27 +2238,47 @@ export async function importarConteoEnTx(
       fallo('SIN_CONTROL_DE_INVENTARIO', `«${v.item.name}» no controla inventario. Actívalo en su ficha del catálogo para contarlo.`)
     }
   }
+  // INV-5b3: un producto con lotes se cuenta lote por lote (y el lote es de ese producto); uno sin lotes, sin lote.
+  const llevan = new Set((await tx.inventoryLotTracking.findMany({ where: { companyId, catalogVariantId: { in: [...new Set(ids)] } }, select: { catalogVariantId: true } })).map((t) => t.catalogVariantId))
+  const loteIds = [...new Set(e.lineas.flatMap((l) => (l.loteId ? [l.loteId] : [])))]
+  const lotes = loteIds.length > 0 ? await tx.inventoryLot.findMany({ where: { companyId, id: { in: loteIds } }, select: { id: true, catalogVariantId: true } }) : []
+  const varianteDeLote = new Map(lotes.map((l) => [l.id, l.catalogVariantId]))
+  const nombreDe = (id: string) => {
+    const v = porId.get(id)!
+    return v.isDefault ? v.item.name : `${v.item.name} · ${v.name}`
+  }
+  for (const l of e.lineas) {
+    if (llevan.has(l.varianteId)) {
+      if (!l.loteId) fallo('LOTES_FALTAN', `«${nombreDe(l.varianteId)}» lleva lotes: indica de qué lote es lo que cuentas.`)
+      if (varianteDeLote.get(l.loteId) !== l.varianteId) fallo('LOTE_NO_ENCONTRADO', `Uno de los lotes del archivo no existe en «${nombreDe(l.varianteId)}».`)
+    } else if (l.loteId) {
+      fallo('LOTES_NO_APLICAN', `«${nombreDe(l.varianteId)}» no lleva lotes: se cuenta sin indicar un lote.`)
+    }
+  }
 
-  const previas = await tx.inventoryCountLine.findMany({ where: { companyId, sessionId: conteo.id }, select: { id: true, catalogVariantId: true } })
-  const previaDe = new Map(previas.map((p) => [p.catalogVariantId, p.id]))
-  const nuevas = ids.filter((id) => !previaDe.has(id)).length
+  const previas = await tx.inventoryCountLine.findMany({ where: { companyId, sessionId: conteo.id }, select: { id: true, catalogVariantId: true, lotId: true } })
+  const previaDe = new Map(previas.map((p) => [claveDeLinea(p.catalogVariantId, p.lotId), p.id]))
+  const nuevas = e.lineas.filter((l) => !previaDe.has(claveDeLinea(l.varianteId, l.loteId))).length
   if (previas.length + nuevas > MAX_LINEAS_CONTEO) {
-    fallo('DEMASIADAS_LINEAS', `Con este archivo el conteo pasaría de ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} productos. Aplícalo y abre otro para seguir.`)
+    fallo('DEMASIADAS_LINEAS', `Con este archivo el conteo pasaría de ${MAX_LINEAS_CONTEO.toLocaleString('es-DO')} líneas. Aplícalo y abre otro para seguir.`)
   }
 
   const niveles = await tx.inventoryLevel.findMany({ where: { companyId, locationId: conteo.locationId, catalogVariantId: { in: ids } }, select: { catalogVariantId: true, onHand: true } })
-  const esperadoDe = new Map(niveles.map((n) => [n.catalogVariantId, n.onHand]))
+  const esperadoDeProducto = new Map(niveles.map((n) => [n.catalogVariantId, n.onHand]))
+  const saldosDeLote = loteIds.length > 0 ? await tx.inventoryLotBalance.findMany({ where: { companyId, lotId: { in: loteIds }, level: { locationId: conteo.locationId } }, select: { lotId: true, onHand: true } }) : []
+  const esperadoDeLote = new Map(saldosDeLote.map((b) => [b.lotId, b.onHand]))
+  const esperadoDe = (l: LineaDeConteoImportada) => (l.loteId ? (esperadoDeLote.get(l.loteId) ?? 0) : (esperadoDeProducto.get(l.varianteId) ?? 0))
   const ahora = e.ahora ?? new Date()
 
-  const aCrear = e.lineas.filter((l) => !previaDe.has(l.varianteId))
+  const aCrear = e.lineas.filter((l) => !previaDe.has(claveDeLinea(l.varianteId, l.loteId)))
   if (aCrear.length > 0) {
     await tx.inventoryCountLine.createMany({
-      data: aCrear.map((l) => ({ companyId, sessionId: conteo.id, catalogVariantId: l.varianteId, counted: l.cantidad, expected: esperadoDe.get(l.varianteId) ?? 0, countedById: ctx.actorId, countedAt: ahora })),
+      data: aCrear.map((l) => ({ companyId, sessionId: conteo.id, catalogVariantId: l.varianteId, lotId: l.loteId || null, counted: l.cantidad, expected: esperadoDe(l), countedById: ctx.actorId, countedAt: ahora })),
     })
   }
-  const aCambiar = e.lineas.filter((l) => previaDe.has(l.varianteId))
+  const aCambiar = e.lineas.filter((l) => previaDe.has(claveDeLinea(l.varianteId, l.loteId)))
   if (aCambiar.length > 0) {
-    const filas = aCambiar.map((l) => Prisma.sql`(${previaDe.get(l.varianteId)!}, ${l.cantidad}::int, ${esperadoDe.get(l.varianteId) ?? 0}::int)`)
+    const filas = aCambiar.map((l) => Prisma.sql`(${previaDe.get(claveDeLinea(l.varianteId, l.loteId))!}, ${l.cantidad}::int, ${esperadoDe(l)}::int)`)
     // `AT TIME ZONE 'UTC'`: la columna es `timestamp` sin zona y Prisma escribe en UTC (ver `escribirMovimientosPorLote`).
     const cambiadas = await tx.$executeRaw`
       UPDATE "inventory_count_lines" AS l
@@ -2219,11 +2292,14 @@ export async function importarConteoEnTx(
 
 export interface LineaRechazada {
   varianteId: string
+  /** INV-5b3: el lote de la línea (null en un producto sin lotes). */
+  loteId: string | null
   sku: string
+  /** El producto y, si lleva lotes, su lote («Crema · lote A-1»). */
   nombre: string
   contado: number
   esperado: number
-  /** Las existencias reales de ahora. */
+  /** Las existencias reales de ahora (de ese lote, si la línea es de un lote). */
   existenciaActual: number
   motivo: string
 }
@@ -2250,10 +2326,14 @@ export type ResultadoAplicarConteo =
   | { aplicada: false; conteoId: string; numero: string; rechazadas: LineaRechazada[] }
 
 /**
- * APLICA el conteo: un ajuste por producto por la diferencia, todo en una
+ * APLICA el conteo: un ajuste por línea por la diferencia, todo en una
  * transacción. Si alguna línea no se puede aplicar, NO se aplica ninguna y se
  * devuelven todas las que fallan (la persona las corrige o las quita y vuelve a
  * aplicar). Aplicar dos veces el mismo conteo no repite nada.
+ *
+ * INV-5b3 · Una línea de un producto con lotes es de UN LOTE: se compara contra el saldo de ese lote (no contra el del producto) y su
+ * ajuste lleva ese lote por reparto. Los ajustes de varios lotes del mismo producto se aplican uno tras otro (cada uno es un
+ * movimiento del producto), en rondas: ver `repartirEnRondas`.
  */
 export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId: string; ahora?: Date }, ctx: ContextoAuditoria): Promise<ResultadoAplicarConteo> {
   const conteo = await bloquearConteo(tx, companyId, e.conteoId)
@@ -2276,24 +2356,26 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
 
   const lineas = await tx.inventoryCountLine.findMany({
     where: { companyId, sessionId: conteo.id },
-    orderBy: [{ catalogVariantId: 'asc' }],
+    orderBy: [{ catalogVariantId: 'asc' }, { lotId: 'asc' }, { id: 'asc' }],
     select: {
       id: true,
       catalogVariantId: true,
+      lotId: true,
       counted: true,
       expected: true,
+      lot: { select: { code: true } },
       variant: { select: { sku: true, name: true, isDefault: true, item: { select: { name: true, type: true, capabilities: true } } } },
     },
   })
   if (lineas.length === 0) fallo('CONTEO_SIN_LINEAS', 'Cuenta al menos un producto antes de aplicar el conteo.')
-  await exigirSinLotes(tx, companyId, lineas.map((l) => l.catalogVariantId), 'el conteo físico')
-  const nombreDe = (l: (typeof lineas)[number]) => (l.variant.isDefault ? l.variant.item.name : `${l.variant.item.name} · ${l.variant.name}`)
+  const nombreDe = (l: (typeof lineas)[number]) => nombreDeLinea(l.variant.isDefault ? l.variant.item.name : `${l.variant.item.name} · ${l.variant.name}`, l.lot?.code)
 
   const sucursal = await exigirSucursal(tx, companyId, conteo.locationId, false)
   if (lineas.some((l) => diferenciaDeConteo(l.counted, l.expected) > 0)) await exigirSucursal(tx, companyId, conteo.locationId, true)
 
-  // Los saldos: se crean en cero los que falten (en orden fijo) y se BLOQUEAN todos juntos, en orden de id.
-  const variantes = lineas.map((l) => l.catalogVariantId)
+  // Los saldos: se crean en cero los que falten (en orden fijo) y se BLOQUEAN todos juntos, en orden de id. Un producto con lotes
+  // tiene UN saldo por sucursal aunque se cuente en varios lotes.
+  const variantes = [...new Set(lineas.map((l) => l.catalogVariantId))]
   await tx.inventoryLevel.createMany({ data: [...variantes].sort().map((v) => ({ companyId, catalogVariantId: v, locationId: sucursal.id })), skipDuplicates: true })
   const niveles = await tx.inventoryLevel.findMany({ where: { companyId, locationId: sucursal.id, catalogVariantId: { in: variantes } }, select: { id: true, catalogVariantId: true } })
   const nivelDe = new Map(niveles.map((n) => [n.catalogVariantId, n.id]))
@@ -2301,65 +2383,118 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
   const idsNivel = niveles.map((n) => n.id)
   let filas = await bloquear(tx, companyId, idsNivel)
 
+  // INV-5b3: los lotes de cada saldo con líneas por lote, leídos con el saldo ya bloqueado.
+  const nivelesConLineasDeLote = [...new Set(lineas.filter((l) => l.lotId).map((l) => nivelDe.get(l.catalogVariantId)!))]
+  let lotesDeNivel = new Map<string, Map<string, LoteConSaldo>>()
+  const cargarLotes = async () => {
+    lotesDeNivel = new Map()
+    for (const n of nivelesConLineasDeLote) lotesDeNivel.set(n, new Map((await cargarLotesDeNivel(tx, companyId, n)).map((l) => [l.loteId, l])))
+  }
+  await cargarLotes()
+
   const motivo = motivoDeConteo(conteo.number)
-  const evaluar = () =>
-    lineas.map((l) => {
+  const SIN_SALDO: Saldo = { onHand: 0, reserved: 0, damaged: 0 }
+  const evaluar = () => {
+    const evaluadas = lineas.map((l) => {
       const fila = filas.get(nivelDe.get(l.catalogVariantId)!)!
       const delta = diferenciaDeConteo(l.counted, l.expected)
       const trackea = normalizarCapacidades(l.variant.item.type, l.variant.item.capabilities).trackInventory
-      const plan = trackea ? planDeAjuste(delta, fila, motivo) : ({ tipo: 'RECHAZADA', motivo: `«${l.variant.item.name}» ya no controla inventario: actívalo en su ficha del catálogo o quítalo del conteo.` } as const)
-      return { l, fila, delta, plan }
+      // Una línea de un lote se compara contra el saldo de ESE lote (0 si nunca tuvo saldo en la sucursal); las demás, contra el del producto.
+      const saldo: Saldo = l.lotId ? (lotesDeNivel.get(fila.id)?.get(l.lotId) ?? SIN_SALDO) : fila
+      const plan: PlanDeAjuste = trackea ? planDeAjuste(delta, saldo, motivo) : { tipo: 'RECHAZADA', motivo: `«${l.variant.item.name}» ya no controla inventario: actívalo en su ficha del catálogo o quítalo del conteo.` }
+      return { l, fila, saldo, delta, plan }
     })
+    // Los ajustes de varios lotes del mismo producto se aplican uno tras otro sobre el saldo del PRODUCTO: se comprueba que cada paso quepa.
+    const porNivel = new Map<string, typeof evaluadas>()
+    for (const x of evaluadas) if (x.l.lotId && x.plan.tipo === 'AJUSTE') porNivel.set(x.fila.id, [...(porNivel.get(x.fila.id) ?? []), x])
+    for (const grupo of porNivel.values()) {
+      grupo.sort((a, b) => compararParaAplicar({ delta: a.delta, loteCodigo: a.l.lot?.code ?? null }, { delta: b.delta, loteCodigo: b.l.lot?.code ?? null }))
+      let estado: Saldo = { onHand: grupo[0].fila.onHand, reserved: grupo[0].fila.reserved, damaged: grupo[0].fila.damaged }
+      for (const x of grupo) {
+        if (x.plan.tipo !== 'AJUSTE') continue
+        try {
+          estado = saldoDeCubetas(aplicarMovimiento(cubetasDeSaldo(estado), x.plan.movimiento))
+        } catch {
+          x.plan = {
+            tipo: 'RECHAZADA',
+            motivo:
+              x.delta > 0
+                ? `La existencia del producto superaría el máximo admitido (${EXISTENCIA_MAXIMA.toLocaleString('es-DO')}). Revisa el conteo de este lote.`
+                : 'Quitar esta diferencia dejaría menos de lo apartado en el producto. Libera o cobra las reservas, o corrige el conteo de este lote.',
+          }
+        }
+      }
+    }
+    return evaluadas
+  }
 
   // Una reserva vencida que nadie ha barrido aún sigue «apartando»: antes de rechazar un faltante por eso, se vencen las caducadas.
   let evaluadas = evaluar()
-  const paraVencer = evaluadas.filter((x) => x.plan.tipo === 'RECHAZADA' && x.delta < 0 && x.fila.reserved > 0).map((x) => x.fila.id)
+  const paraVencer = [...new Set(evaluadas.filter((x) => x.plan.tipo === 'RECHAZADA' && x.delta < 0 && x.saldo.reserved > 0).map((x) => x.fila.id))]
   if (paraVencer.length > 0) {
     let vencidas = 0
     for (const id of paraVencer) vencidas += await vencerDeNivel(tx, companyId, id, ahora)
     if (vencidas > 0) {
       filas = await bloquear(tx, companyId, idsNivel)
+      await cargarLotes()
       evaluadas = evaluar()
     }
   }
 
   const rechazadas = evaluadas.flatMap((x) =>
     x.plan.tipo === 'RECHAZADA'
-      ? [{ varianteId: x.l.catalogVariantId, sku: x.l.variant.sku, nombre: nombreDe(x.l), contado: x.l.counted, esperado: x.l.expected, existenciaActual: x.fila.onHand, motivo: x.plan.motivo } satisfies LineaRechazada]
+      ? [{ varianteId: x.l.catalogVariantId, loteId: x.l.lotId, sku: x.l.variant.sku, nombre: nombreDe(x.l), contado: x.l.counted, esperado: x.l.expected, existenciaActual: x.saldo.onHand, motivo: x.plan.motivo } satisfies LineaRechazada]
       : []
   )
   if (rechazadas.length > 0) return { aplicada: false, conteoId: conteo.id, numero: conteo.number, rechazadas }
 
-  // Los ajustes: uno por producto con diferencia, con el ledger puro sobre el saldo bloqueado.
-  const items: ItemLote[] = []
-  const idLineaDeItem: string[] = []
-  const bajadas: string[] = []
+  // Los ajustes: uno por línea con diferencia, con el ledger puro sobre el saldo bloqueado. Las líneas de lotes de un mismo producto
+  // van en rondas distintas (un saldo aparece una sola vez por ronda) y en cada una el «antes» es el saldo que dejó la anterior.
+  const aplicables = evaluadas
+    .flatMap((x) => (x.plan.tipo === 'AJUSTE' ? [{ ...x, movimiento: x.plan.movimiento }] : []))
+    .sort((a, b) => (a.fila.id < b.fila.id ? -1 : a.fila.id > b.fila.id ? 1 : 0) || compararParaAplicar({ delta: a.delta, loteCodigo: a.l.lot?.code ?? null }, { delta: b.delta, loteCodigo: b.l.lot?.code ?? null }))
+  const estadoDeNivel = new Map<string, Saldo>([...filas.values()].map((f) => [f.id, { onHand: f.onHand, reserved: f.reserved, damaged: f.damaged }]))
+  const movimientoDeLinea = new Map<string, string>()
+  const bajadas = new Set<string>()
   let unidadesSobrantes = 0
   let unidadesFaltantes = 0
-  for (const x of evaluadas) {
-    if (x.plan.tipo !== 'AJUSTE') continue
-    const despues = saldoDeCubetas(aplicarMovimiento(cubetasDeSaldo(x.fila), x.plan.movimiento))
-    items.push({
-      nivelId: x.fila.id,
-      movimiento: x.plan.movimiento,
-      antes: { onHand: x.fila.onHand, reserved: x.fila.reserved, damaged: x.fila.damaged },
-      despues,
-      meta: { userId: ctx.actorId, referencia: { tipo: 'STOCK_COUNT', id: conteo.id }, motivoCodigo: MOTIVO_DE_CONTEO },
-      varianteId: x.l.catalogVariantId,
-    })
-    idLineaDeItem.push(x.l.id)
+  for (const x of aplicables) {
     if (x.delta > 0) unidadesSobrantes += x.delta
     else {
       unidadesFaltantes += -x.delta
-      bajadas.push(x.l.catalogVariantId)
+      bajadas.add(x.l.catalogVariantId)
     }
   }
-  const movimientoIds = await escribirMovimientosPorLote(tx, companyId, items)
-  const movimientoDeLinea = new Map(idLineaDeItem.map((id, i) => [id, movimientoIds[i]]))
-  const despuesDeNivel = new Map(items.map((i) => [i.nivelId, i.despues.onHand]))
+  for (const ronda of repartirEnRondas(aplicables.map((x) => ({ nivelId: x.fila.id, x })))) {
+    const items: ItemLote[] = ronda.map(({ nivelId, x }) => {
+      const antes = estadoDeNivel.get(nivelId)!
+      return {
+        nivelId,
+        movimiento: x.movimiento,
+        antes,
+        despues: saldoDeCubetas(aplicarMovimiento(cubetasDeSaldo(antes), x.movimiento)),
+        meta: {
+          userId: ctx.actorId,
+          referencia: { tipo: 'STOCK_COUNT', id: conteo.id },
+          motivoCodigo: MOTIVO_DE_CONTEO,
+          ...(x.l.lotId ? { reparto: [{ loteId: x.l.lotId, cantidad: x.movimiento.quantity }] } : {}),
+        },
+        varianteId: x.l.catalogVariantId,
+      }
+    })
+    const ids = await escribirMovimientosPorLote(tx, companyId, items)
+    ronda.forEach(({ nivelId, x }, i) => {
+      estadoDeNivel.set(nivelId, items[i].despues)
+      movimientoDeLinea.set(x.l.id, ids[i])
+    })
+  }
 
   // El resultado de CADA línea (también las que coincidieron): se escribe ANTES de cerrar el conteo, que después no admite cambios.
-  const resultados = evaluadas.map((x) => Prisma.sql`(${x.l.id}, ${x.fila.onHand}::int, ${despuesDeNivel.get(x.fila.id) ?? x.fila.onHand}::int, ${movimientoDeLinea.get(x.l.id) ?? null}::text)`)
+  // «Antes» y «después» son las existencias reales del producto o, en una línea de lote, de ese lote.
+  const resultados = evaluadas.map((x) => {
+    const ajustada = movimientoDeLinea.has(x.l.id)
+    return Prisma.sql`(${x.l.id}, ${x.saldo.onHand}::int, ${x.saldo.onHand + (ajustada ? x.delta : 0)}::int, ${movimientoDeLinea.get(x.l.id) ?? null}::text)`
+  })
   const escritas = await tx.$executeRaw`
     UPDATE "inventory_count_lines" AS l
        SET "onHandBefore" = v."antes", "onHandAfter" = v."despues", "movementId" = v."movimiento"
@@ -2367,8 +2502,16 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
      WHERE l."id" = v."id" AND l."companyId" = ${companyId} AND l."sessionId" = ${conteo.id}`
   if (escritas !== evaluadas.length) fallo('LOTE_INCOMPLETO', 'No se pudieron guardar los resultados del conteo.')
 
-  const sinContar = await tx.inventoryLevel.count({ where: { companyId, locationId: sucursal.id, onHand: { gt: 0 }, catalogVariantId: { notIn: variantes } } })
-  const resumen: ResumenConteoAplicado = { lineas: lineas.length, ajustadas: items.length, unidadesSobrantes, unidadesFaltantes, sinContar }
+  // Lo que tiene existencias en la sucursal y no se contó: productos sin lotes (el producto entero) y lotes (cada lote).
+  const productosSinContar = await tx.inventoryLevel.count({ where: { companyId, locationId: sucursal.id, onHand: { gt: 0 }, catalogVariantId: { notIn: variantes }, variant: { lotTracking: { none: {} } } } })
+  const lotesSinContar = await tx.$queryRaw<{ n: number }[]>`
+    SELECT count(*)::int AS "n"
+      FROM "inventory_lot_balances" b
+      JOIN "inventory_levels" lv ON lv."id" = b."inventoryLevelId"
+     WHERE b."companyId" = ${companyId} AND lv."locationId" = ${sucursal.id} AND b."onHand" > 0
+       AND NOT EXISTS (SELECT 1 FROM "inventory_count_lines" cl WHERE cl."sessionId" = ${conteo.id} AND cl."catalogVariantId" = b."catalogVariantId" AND cl."lotId" = b."lotId")`
+  const sinContar = productosSinContar + (lotesSinContar[0]?.n ?? 0)
+  const resumen: ResumenConteoAplicado = { lineas: lineas.length, ajustadas: aplicables.length, unidadesSobrantes, unidadesFaltantes, sinContar }
   await tx.inventoryCountSession.update({
     where: { id: conteo.id },
     data: {
@@ -2388,10 +2531,10 @@ export async function aplicarConteoEnTx(tx: Tx, companyId: string, e: { conteoId
     companyId,
     'INVENTORY_STOCK_CHANGED',
     conteo.id,
-    { tipo: 'ADJUSTMENT', conteo: conteo.number, sucursal: sucursal.nombre, lineas: resumen.lineas, ajustadas: resumen.ajustadas, sobrantes: unidadesSobrantes, faltantes: unidadesFaltantes, sinContar },
+    { tipo: 'ADJUSTMENT', conteo: conteo.number, sucursal: sucursal.nombre, lineas: resumen.lineas, ajustadas: resumen.ajustadas, sobrantes: unidadesSobrantes, faltantes: unidadesFaltantes, sinContar, lineasDeLote: lineas.filter((l) => l.lotId).length },
     'InventoryCountSession'
   )
-  return { aplicada: true, conteoId: conteo.id, numero: conteo.number, resumen, repetido: false, variantesBajadas: bajadas }
+  return { aplicada: true, conteoId: conteo.id, numero: conteo.number, resumen, repetido: false, variantesBajadas: [...bajadas] }
 }
 
 /** Descarta el conteo sin tocar existencias. Queda guardado (quién y por qué), pero ya no admite cambios. */

@@ -117,7 +117,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-5a · Lotes y vencimiento** | Un producto puede LLEVAR LOTES (se activa por producto, de un solo sentido): cada unidad es de un lote con su código y, si lo tiene, su día de vencimiento; lo que ya había pasa al lote «SIN LOTE»; se vende, se aparta y se saca **primero lo que antes vence** (FEFO) y **lo vencido no se vende**; las devoluciones vuelven a su lote; dañar, ajustar, dar de baja y recuperar por lote; mover unidades entre lotes (corregir uno mal capturado, sin que cuente como merma); el barrido diario saca lo vencido de lo vendible. La base mantiene los saldos por lote y vigila que los lotes sumen lo que hay | `InventoryLotTracking`, `InventoryLot`, `InventoryLotBalance`, `InventoryLotOpening`, `InventoryMovementLot` (migración `20261068`) | L | **Hecha** (este documento, §25) |
 | **INV-5b1 · Vence pronto** | Informe «Vence pronto» (los lotes con existencias que ya vencieron o vencen en 7 a 90 días, por sucursal, de lo que antes vence a lo que después, con lo vendible, lo apartado y lo dañado, filtros, páginas y CSV), una cifra en la tarjeta de inventario del dashboard y un aviso a los administradores desde el barrido diario (una vez por semana y nivel de urgencia, y una vez por día lo que venció) | — (sin migración) | S | **hecha** |
 | **INV-5b2 · Lotes en órdenes de compra** | Un producto con lotes se pide como cualquier otro (una orden es por producto) y se recibe **diciendo de qué lote(s) llegó** cada tanda (código, vencimiento y cantidad), con el mismo editor de lotes de la entrada de mercancía; la orden, la entrada, la ficha y el CSV cuentan de qué lotes llegó; una orden abierta ya no impide activar los lotes de un producto | — (sin migración) | S | **hecha** (§29-30) |
-| INV-5b3 · Lotes en conteos | Contar por lote y aplicar la diferencia lote por lote | Conteo por lote | M | pendiente |
+| **INV-5b3 · Lotes en conteos** | Un producto con lotes se cuenta **lote por lote** (a ciegas, eligiendo el lote al escanear), la hoja en blanco y la hoja contada traen la columna `lote`, y al aplicar cada lote se ajusta por **su** diferencia; «sin contar» cuenta lotes; la ficha ya no se niega a contar por lote (el conteo suelto de un número sigue negado) | `20261069` (la línea de conteo lleva el lote; SQL primero) | M | **hecha** (§31-32) |
 | INV-5b4 · Lotes en transferencias | Que el lote viaje con lo que se transfiere (directa y con envío) | Lotes de la línea | M | pendiente |
 | INV-5b5 · Corregir y desactivar | Corregir el vencimiento de un lote con su historia y desactivar los lotes de un producto | Historia del vencimiento | M | pendiente |
 | INV-5c · Series | Número de serie por unidad | Series | L | pendiente |
@@ -1825,3 +1825,144 @@ también incluye productos con lotes; se probó en el servicio, no recorriendo e
 con el rol de la base desechable); el rendimiento con una orden de cientos de líneas con lotes (el tope de lotes por línea es 20 y el de
 líneas por orden 200, pero no se midió con carga); la recepción de una orden desde un celular con lector de códigos; y «Qué comprar» con un
 producto con lotes recorriendo la pantalla.
+
+## 31. INV-5b3 · qué se hizo
+
+**Trae una migración, la `20261069`, y va PRIMERO en Supabase** (antes de desplegar el código; necesita la `20261068` de INV-5a ya aplicada). Es
+aditiva, idempotente y de una sola transacción (con `lock_timeout` de 5 s): una columna que admite `NULL`, dos índices únicos que valen lo mismo
+que el anterior para todo lo que ya existe, una clave foránea y dos funciones/disparadores. Con el código viejo, aplicarla antes no rompe nada
+(el código viejo nunca escribe el lote y sus líneas siguen siendo únicas por conteo y producto).
+
+**El problema.** Hasta 5b2 un producto con lotes no se podía contar: el conteo cuenta UN número por producto, y un producto con lotes reparte cada
+unidad entre sus lotes. Para contarlo hay que contar **cada lote** («de la crema, 4 del lote A-1 y 6 del B-2»).
+
+**El modelo: una línea de conteo es un producto o, si el producto lleva lotes, un producto en un lote.** `inventory_count_lines."lotId"` (nulo en un
+producto sin lotes). Todo lo demás de la línea significa lo mismo: `counted` es lo contado, `expected` lo que decía el sistema **al contar** (aquí, el
+saldo de ESE lote en la sucursal) y al aplicar se ajusta la diferencia con un movimiento `ADJUSTMENT` cuyo reparto es ese lote (cada línea tiene su
+movimiento, así que `movementId` sigue siendo único). La clave de la línea pasa de (conteo, producto) a (conteo, producto, lote) y, para un producto sin
+lotes, **sigue siendo** (conteo, producto); por eso hay **dos** índices únicos: PostgreSQL no considera iguales dos `NULL` en un índice normal, y el
+parcial `… WHERE "lotId" IS NULL` es lo que impide contar dos veces el mismo producto sin lotes. En el código, la llave de una línea es `claveDeLinea`.
+
+**La base vigila la coherencia**, aunque se escriba por fuera del servicio: una clave foránea compuesta (lote, producto, empresa) hacia el lote (el
+lote es de ese producto y de esa empresa, como los saldos por lote); un producto que lleva lotes solo admite líneas con lote y uno que no los lleva, solo
+líneas sin él (disparador al insertar); una línea no cambia de lote (se amplió la función de la `20261057`, que ya impedía cambiar de conteo y de producto
+y tocar un conteo cerrado).
+
+| Situación | Qué pasa |
+|---|---|
+| Contar un producto con lotes sin decir el lote | `LOTES_FALTAN` |
+| Un lote en un producto que no los lleva | `LOTES_NO_APLICAN` |
+| Un lote que no es de ese producto (o no existe) | `LOTE_NO_ENCONTRADO` |
+| Contar el conteo suelto de la ficha (un solo número) con un producto con lotes | Se niega con un aviso que manda a Inventario → Conteos |
+| Importar la misma línea (producto y lote) dos veces | `LINEA_REPETIDA` (dos lotes del mismo producto en el mismo archivo, no) |
+| Activar los lotes de un producto con un conteo abierto que lo incluye | Sigue sin permitirse (`ACTIVAR_CON_CONTEO_ABIERTO`): su línea de conteo cambiaría de régimen a mitad de conteo |
+
+**Contar (a ciegas, como siempre).** Al escanear un producto que lleva lotes la captura no lo suma: abre la lista de sus lotes (código y vencimiento,
+**nunca cantidades**: «Lote A-1 · vence 2027-09-01», «Lote B-2 · no vence», «SIN LOTE»), y cada clic cuenta las «unidades por escaneo» en ESE lote; la
+lista sigue abierta para contar varios lotes del mismo producto y marca los que ya tienen línea. La lista incluye los lotes con existencias en cualquier
+sucursal o que ya tuvieron saldo en esta (lo que aparece en el estante y el sistema no tenía aquí también se cuenta), en orden FEFO, y siempre «SIN LOTE».
+La lista de lo contado enseña una fila por lote, con su nombre accesible («Contado de Crema · Lote A-1 · vence …»), se corrige escribiendo el número y se quita
+por lote. «Con existencias y todavía sin contar» ahora **cuenta lotes**: un lote con existencias que no se contó es una línea pendiente aunque otro lote del
+mismo producto sí se contara.
+
+**Aplicar.** Se compara cada línea de lote contra el saldo de **ese lote**, no contra el del producto, y la diferencia es lo que se ajusta (lo que se vendió
+mientras se contaba se conserva). Como los lotes de un producto comparten UN saldo por sucursal, los ajustes de varios lotes del mismo producto se aplican
+**uno tras otro** y no en un solo envío (`escribirMovimientosPorLote` exige un movimiento por saldo y llamada): `repartirEnRondas` los reparte en rondas de
+modo que un saldo aparezca una sola vez por ronda, en el orden **primero lo que sobra y después lo que falta** (`compararParaAplicar`, y a igual signo, por
+código de lote), y en cada ronda el «antes» es el saldo que dejó la anterior. Antes de escribir nada se comprueba **cada paso** de esa cadena contra el
+ledger puro: si un lote no puede bajar lo que falta (dejaría menos de lo apartado **en ese lote**) o el producto se pasaría del máximo, **se rechaza todo el
+conteo** y se dicen todas las líneas que fallan, con su lote («Crema · lote A-1»). El resultado de cada línea guarda las existencias de antes y de después de
+**ese lote**, y el informe del conteo aplicado las enseña por lote. «Sin contar» al aplicar suma los productos sin lotes con existencias que no se contaron y
+los **lotes** con existencias que no se contaron.
+
+**La hoja y el CSV.** La hoja en blanco gana, solo si hay productos con lotes, la columna `lote` (una fila por lote con existencias en la sucursal, sin
+cantidades; sin productos con lotes es el mismo archivo de siempre). Al subirla, la columna `lote` (o sus alias `codigo_de_lote`, `batch`, …) dice en qué lote
+se contó cada fila; un producto con lotes sin lote, un lote que no existe en ese producto, un lote en un producto que no los lleva, una línea repetida (producto
+y lote) o un código de lote mal escrito se rechazan con su fila y **no entra nada**; un lote nuevo no se crea desde un conteo (entra con una entrada de
+mercancía). Una **entrada** de mercancía por archivo no lee la columna `lote` todavía. El código del lote se normaliza igual que en la entrada (`a-1` y `A-1` son
+el mismo lote). El informe de diferencias en CSV gana las columnas «Lote» y «Vencimiento del lote» y una fila de resumen «De ellos, contados por lote», también
+solo si hay lotes; los códigos de lote se neutralizan contra fórmulas de hoja de cálculo.
+
+**Archivos.** `prisma/migrations/20261069_inventory_count_lots/migration.sql` y `prisma/schema/inventario.prisma` (la columna, la relación y la llave única),
+`modules/inventory/conteos.ts` (`claveDeLinea`, `nombreDeLote`, `etiquetaDeLote`, `nombreDeLinea`, `compararParaAplicar`, `repartirEnRondas`),
+`service.ts` (contar, quitar, importar y aplicar por lote), `queries.ts` (detalle, «por contar», hoja, saldos actuales y `lotesParaContarEnTx`), `actions.ts`
+(`loteId` en contar y quitar, y `lotesParaContarProducto`), `importacion.ts`, `importar.ts` y `exportacion.ts` (el CSV), y `components/inventario/`
+(`CapturaConteo`, `FilaConteoEditable`, `InformeDiferencias`, `AplicarConteoForm`, `ImportarConteoForm`) con las páginas del conteo y su revisión. Además,
+`scripts/e2e/base-limpia.mjs` aplica la `20261069` después de la de lotes.
+
+**Lo que 5b3 NO hace.** No se puede transferir un producto con lotes (5b4); no se puede corregir el vencimiento de un lote ni desactivarlo (5b5); contar no
+crea lotes; y la **ficha de un producto con lotes sigue sin tener un conteo suelto** (un solo número para todo el producto): manda a Inventario → Conteos, que
+cuenta lote por lote.
+
+## 32. Verificación de INV-5b3 (2026-10-16)
+
+Local, sobre PostgreSQL 16 desechable. **INV-5b3 trae la migración `20261069`**: se aplicó (dos veces, para comprobar que es idempotente) a la base
+desechable `supplytest`, se creó con ella la base de E2E `membego_e2e_inv2` y se comprobó contra una base «sombra» que el esquema de Prisma y las
+migraciones no se desvían (`prisma migrate diff --from-migrations … --to-schema-datamodel … --exit-code`: «No difference detected»). **No se tocó ninguna
+base real**: la migración **no se ha aplicado en Supabase**; va primero, antes de desplegar el código. Sin Supabase real, Vercel, móvil ni Safari: **no
+verificados**. **Tampoco se miró cómo se ve** la captura con la lista de lotes, ni la hoja ni el informe por lote: el E2E comprueba qué dicen y qué hacen,
+no su aspecto (ni capturas ni revisión visual en móvil).
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo: son de `apps/client` y de soporte de pruebas) |
+| `bun run build` y `bun run presupuesto` | verdes; entrada compartida 859/1000 KB (86 %), trozo mayor 409/600 KB; indicador general 8.948/9.200 KB (97 %; 8.935 antes de 5b3) |
+| Unitarias (`bun run test`) | 4602 pruebas: 4595 pasan, 0 fallan, 7 omitidas heredadas (18 nuevas) |
+| PostgreSQL (`bun run test:db`, base `supplytest`) | **968/968** en la segunda corrida (955 de antes + 13 nuevas); ver el hallazgo de la primera, abajo |
+| Pruebas nuevas | 18 puras y guardias (`inventario-conteos-lotes.test.ts`), 13 contra PostgreSQL (`inventory-conteos-lotes.db.test.ts`) y 1 recorrido E2E (en `inventario-lotes.spec.ts`); se ajustaron 6 pruebas de 4 archivos que daban por bueno el bloqueo anterior (cuatro guardias, la prueba de claves a ciegas del conteo y una de 5a que contaba un producto con lotes sin lote) |
+| E2E (`node scripts/e2e/correr.mjs`, escritorio) | **20/20** con el build final: `inventario-admin` (14) y `inventario-lotes` (6) |
+| Deriva del esquema | `prisma migrate diff` contra una base sombra con las migraciones aplicadas: sin diferencias |
+| Mutaciones | **83: 82 detectadas y 1 sobreviviente explicada** (76 de código —dominio, servicio, lecturas, CSV, acciones y pantallas— y 7 de la propia migración aplicadas a una base real): 66 de 75 a la primera, 9 sobrevivieron; 7 se mataron con pruebas nuevas, 1 era un mutante mal armado (equivalente: no cambiaba nada) y se sustituyó por dos reales, ambos detectados |
+
+Qué cubren las pruebas contra PostgreSQL (servicio real): contar y aplicar lote por lote (un lote sobra, otro falta, otro coincide) con los saldos por
+lote y el del producto cuadrando; el lote obligatorio, prohibido o ajeno según el producto; «sin contar» que cuenta lotes; un faltante en un lote que
+dejaría menos de lo **apartado de ese lote** rechaza todo el conteo y, corregido, se aplica; lo vendido mientras se contaba se conserva (se ajusta la
+diferencia de cada lote); recontar, sumar y quitar por lote, y un lote sin saldo en la sucursal que se cuenta desde cero (su «antes» es 0, no el del
+producto); muchos lotes del mismo producto en rondas; importar una hoja con lotes (reemplaza solo la línea de ese lote; con un error no entra nada) y el
+recorrido completo **hoja en blanco → llenarla → subirla** con sus errores; el detalle, la hoja y «por contar» por lote (también un producto con lotes sin
+ninguna línea, que sale solo por sus lotes) y los lotes para elegir **sin cantidades**; el conteo suelto de la ficha negado con su aviso; la base rechazando
+—aunque se escriba por fuera del servicio— una línea sin lote en un producto con lotes (y al revés), el lote de otro producto, líneas repetidas, cambiar de
+lote y tocar un conteo cerrado; activar los lotes con un conteo abierto que sigue sin permitirse; y la concurrencia: dos capturas del mismo lote a la vez
+suman, y dos aplicaciones a la vez aplican **una** vez.
+
+Qué cubre el recorrido E2E: la crema recibida en Norte en dos lotes → el conteo a ciegas (sin ninguna cifra del sistema; lo que falta por contar sale por
+lote, sin cantidades) → escanear un producto con lotes abre sus lotes en vez de sumarlo (con «SIN LOTE» y los lotes de otras sucursales, sin cantidades) →
+contar con «unidades por escaneo», una ráfaga de clics que no pierde ninguno y un lote que el sistema no tenía allí → quitar una línea de lote equivocada
+(solo esa) y corregir escribiendo el número → la hoja en blanco por lote → importar una hoja con tres errores (no entra nada) y luego limpia → la
+revisión por lote (esperado, contado, diferencia) y su CSV con el lote y su vencimiento → aplicar (cada lote «antes → después») → las fichas de las dos
+sucursales, el historial («Lotes: …») y la lista de conteos.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Una prueba de Supply V2 falló una vez en la primera corrida completa de `test:db` (967/968) y no tiene que ver con inventario.** Fue `B2·G · §8 caso 1: el
+  worker reclama y muere antes de entregar` (`supply-v2-slice9.db.test.ts`). Se investigó antes de darla por ajena: `recuperarArriendos` recupera como máximo
+  100 reclamos abandonados a la vez (`take: 100`) y en ese momento la base reutilizable `supplytest` tenía **100 de ellos** (98 eventos de incidente
+  financiero acumulados de corridas anteriores del mismo día, que una prueba previa de la misma corrida reclamó), así que la fila de la prueba quedó fuera del
+  lote. Aislada pasa 85/85 dos veces, y la segunda corrida completa, ya con la base limpia, dio **968/968**. Es una fragilidad **ya existente** de esa
+  prueba (depende de cuánta basura haya en la base y de que la corrida dure más de 5 minutos), no de este cambio, que no toca Supply V2; **no se corrigió**
+  aquí (queda como deuda de esa suite).
+- **Pruebas mías que fallaron por equivocaciones de las propias pruebas, no del código:** «sin contar» contaba también otros lotes y productos con
+  existencias en la sucursal; una cuenta de faltantes mal hecha; el código del motivo es `COUNT_DIFFERENCE`; el mensaje de PostgreSQL por una llave repetida;
+  ordenar movimientos y líneas por fecha o id no es fiable (se ordenó en la prueba). Y cuatro guardias estáticas heredadas se rompieron **como se esperaba**
+  (la lista de funciones que exigen «sin lotes», la de acciones exportadas y dos expresiones de la referencia del conteo) y se actualizaron.
+- **Dos fallos del propio recorrido E2E, no del producto:** elegir el archivo CSV antes de que la página terminara de hidratarse deja el botón «Revisar»
+  deshabilitado (se vuelve a elegir hasta que se habilita; el mismo riesgo existe, sin haberse manifestado, en el spec de conteos de 2b), y leer los números
+  de la ficha mientras la página aún pintaba su esqueleto (se espera a la fila).
+- **Mutaciones: lo que enseñaron los 9 sobrevivientes del primer pase.** Las pruebas no comprobaban que el «antes» y el «después» de una línea fueran los de
+  **su lote** (un lote sin saldo en la sucursal, comparado con el del producto, pasaba), que un producto con lotes **sin ninguna línea** sale por lotes y no
+  también entero, que el lote del informe se neutraliza contra fórmulas, ni que las acciones pasaran el lote al servicio ni las pantallas lo usaran en la
+  llave y en el bloqueo; ahora cada una tiene su caso.
+- **El sobreviviente que queda** (`los pasos del producto no se comprueban en orden`) es **equivalente en la práctica**: al aplicar, los ajustes de varios
+  lotes del mismo producto se comprueban y se escriben uno tras otro (primero lo que sobra); el orden solo cambia el resultado pegado al tope de existencias
+  del producto (`EXISTENCIA_MAXIMA`, 1.000 millones de unidades), porque cada lote ya se comprueba contra su propio saldo. No se construyó una prueba con mil
+  millones de unidades. (Mirándolo de nuevo, aplicar primero lo que **falta** nunca habría rechazado de más a ese tope; con el tope donde está, no importa,
+  y se deja como está.)
+- **Un mutante mío salió mal armado:** «el reparto es de otro lote» no cambiaba nada (sumaba cero); se cambió por dos reales («el reparto suma de más» y
+  «el reparto es del primer lote del producto»), ambos detectados.
+
+**Qué NO se verificó:** cómo se ve nada (ni escritorio con capturas, ni móvil); Supabase real, RLS o permisos de la base real (todo se probó con el rol de
+la base desechable) y **la migración `20261069` contra la base real** (hay que aplicarla a mano, antes del código); el rendimiento de un conteo grande (el
+tope es 1.000 líneas, que ahora pueden ser de lotes; no se midió cuánto tarda aplicar mil líneas con muchos lotes por producto, en rondas); la revisión
+con una línea rechazada **recorriendo la pantalla** (el rechazo por lo apartado de un lote se probó en el servicio, no en el E2E); un conteo desde un celular
+con lector de códigos; ni el aviso al administrador, que no cambia. El E2E corre con un servidor al que le faltan las llamadas a un Supabase local que no
+existe aquí: el registro del servidor se llena de `fetch failed … 54329` que no son fallos de las pruebas.

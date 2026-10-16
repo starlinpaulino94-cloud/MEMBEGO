@@ -112,6 +112,14 @@ execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../p
 })
 console.log('ok')
 
+// INV-5b3 · El conteo por lote: el índice único parcial (un producto sin lotes, una línea) y el disparador que exige lote en los
+// productos que los llevan tampoco los trae `db push`. Idempotente; necesita la de lotes ya aplicada.
+process.stdout.write('  conteo por lote…      ')
+execFileSync('psql', [url, '-v', 'ON_ERROR_STOP=1', '-q', '-f', new URL('../../prisma/migrations/20261069_inventory_count_lots/migration.sql', import.meta.url).pathname], {
+  stdio: ['ignore', 'ignore', 'inherit'],
+})
+console.log('ok')
+
 console.log('─'.repeat(60))
 console.log('Lista. El servidor y Playwright tienen que apuntar a esta base:')
 console.log(`  export DATABASE_URL="${url.replace(/:[^:@/]*@/, ':***@')}"`)
