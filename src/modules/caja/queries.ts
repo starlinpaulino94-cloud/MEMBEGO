@@ -1,6 +1,9 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
+import { getCobrosEnLineaDelDia, getCobrosEnLineaDelTurno } from '@/modules/pagos/cobros-en-linea'
+import type { ResumenCobrosEnLinea } from '@/modules/pagos/cobros-en-linea-resumen'
+import { ETIQUETA_CANAL } from '@/modules/pagos/comprobante-tarjeta'
 
 /**
  * Caja (POS) · consultas del turno y búsqueda de órdenes pendientes.
@@ -186,6 +189,11 @@ export interface CierreReporte {
   movimientos: { tipo: 'ENTRADA' | 'SALIDA'; concepto: string; monto: number; fecha: Date }[]
   movimientosEntrada: number
   movimientosSalida: number
+  /**
+   * Cobros con tarjeta de la pasarela (app, web, renovación) de la empresa DURANTE el turno. Informativo: no entran a la
+   * gaveta ni al arqueo. Si hubo varias cajas abiertas a la vez, cada cierre los repite (son de la empresa, no de la caja).
+   */
+  enLinea: { cantidad: number; total: number; porCanal: { etiqueta: string; cantidad: number; total: number }[] }
   empresa: {
     nombre: string
     logoUrl: string | null
@@ -243,6 +251,8 @@ export async function getCierreReporte(
       }),
     ])
   )
+
+  const enLinea = await getCobrosEnLineaDelTurno(companyId, sesion.abiertaAt, sesion.cerradaAt ?? new Date())
 
   let movimientosEntrada = 0
   let movimientosSalida = 0
@@ -307,6 +317,7 @@ export async function getCierreReporte(
     })),
     movimientosEntrada,
     movimientosSalida,
+    enLinea,
     empresa: {
       nombre: sesion.company.name,
       logoUrl: sesion.company.logoUrl,
@@ -404,6 +415,13 @@ export interface ReporteEmpleadoDia {
   porTipo: { tipo: string; label: string; cantidad: number; total: number }[]
   /** Desglose por origen: caja (turno) vs panel (transferencias/confirmaciones). */
   porOrigen: { caja: number; cajaTotal: number; panel: number; panelTotal: number }
+  /**
+   * Cobros con tarjeta de la pasarela (app, web, renovación) de TODA la empresa ese día. No son del empleado ni pasan
+   * por la gaveta: van aparte y NO suman al total de arriba, para que el cuadre del efectivo siga cuadrando.
+   */
+  enLinea: ResumenCobrosEnLinea & {
+    items: { ticketNumero: string; cliente: string; detalle: string; monto: number; canal: string; hora: string }[]
+  }
   empresa: {
     nombre: string
     logoUrl: string | null
@@ -434,6 +452,7 @@ export async function getReporteEmpleadoDia(
   )
 
   const { gte, lt } = rangoDiaLocal(fecha, timeZone)
+  const enLinea = await getCobrosEnLineaDelDia(companyId, fecha, timeZone)
   const cobros = await conEmpresa(companyId, (tx) =>
     tx.transaction.findMany({
       where: {
@@ -481,6 +500,17 @@ export async function getReporteEmpleadoDia(
     total,
     porMetodo,
     porOrigen,
+    enLinea: {
+      ...enLinea.resumen,
+      items: enLinea.items.map((i) => ({
+        ticketNumero: i.ticketNumero,
+        cliente: i.cliente,
+        detalle: i.detalle,
+        monto: i.monto,
+        canal: i.canal ? ETIQUETA_CANAL[i.canal] : 'canal no registrado',
+        hora: i.creadoAt.toISOString(),
+      })),
+    },
     porTipo: [...tipoMap.entries()]
       .map(([tipo, v]) => ({ tipo, label: TIPO_LABEL[tipo] ?? tipo, ...v }))
       .sort((a, b) => b.total - a.total),

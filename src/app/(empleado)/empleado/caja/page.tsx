@@ -7,7 +7,10 @@ import {
   getSucursalesActivas,
   getCierresRecientes,
   getMovimientosSesion,
+  hoyLocal,
 } from '@/modules/caja/queries'
+import { getCobrosEnLineaDelDia } from '@/modules/pagos/cobros-en-linea'
+import { CobrosEnLineaDelDia } from '@/components/caja/CobrosEnLineaDelDia'
 import { CierreCajaDialog } from '@/components/caja/CierreCajaDialog'
 import { ReporteDiaDialog } from '@/components/caja/ReporteDiaDialog'
 import { MovimientosCaja } from '@/components/caja/MovimientosCaja'
@@ -172,10 +175,15 @@ export default async function CajaPage({
     )
   }
 
-  const [resumen, ordenes, movimientos] = await Promise.all([
+  const zonaEmpresa =
+    (await conEmpresa(companyId, (tx) => tx.company.findUnique({ where: { id: companyId }, select: { zonaHoraria: true } })))
+      ?.zonaHoraria || 'America/Santo_Domingo'
+  const [resumen, ordenes, movimientos, enLinea] = await Promise.all([
     getResumenSesion(sesion.id),
     buscarOrdenesPendientes(companyId, q),
     getMovimientosSesion(sesion.id),
+    // Fuera del arqueo: ver `CobrosEnLineaDelDia`. Si falla, la caja sigue funcionando sin esta lista.
+    getCobrosEnLineaDelDia(companyId, hoyLocal(zonaEmpresa), zonaEmpresa).catch(() => null),
   ])
   // Fase 7: la caja conectada al catálogo y a los pedidos (apagada de serie; las acciones lo comprueban otra vez).
   const pos = await posPermitido(companyId)
@@ -249,6 +257,9 @@ export default async function CajaPage({
       <div className="flex flex-wrap justify-end gap-2">
         <ReporteDiaDialog />
       </div>
+
+      {/* Pagos con tarjeta hechos en la app o la web: fuera de la gaveta, con su comprobante para el cuadre. */}
+      {enLinea && <CobrosEnLineaDelDia datos={enLinea} timeZone={zonaEmpresa} />}
 
       {/* Movimientos de efectivo intra-turno (fondo, retiros, gastos). */}
       <MovimientosCaja cajaSesionId={sesion.id} movimientos={movimientos} />

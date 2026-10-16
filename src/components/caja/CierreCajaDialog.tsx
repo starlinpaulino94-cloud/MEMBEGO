@@ -129,6 +129,18 @@ function CierrePreview({ c }: { c: CierreReporte }) {
         </>
       )}
 
+      {c.enLinea.cantidad > 0 && (
+        <>
+          <div className="font-bold">COBROS EN LÍNEA (TARJETA)</div>
+          <div className="text-[0.85em]">Pagados en la app o la web durante el turno. NO pasan por la gaveta: no suman al efectivo ni al arqueo.</div>
+          {c.enLinea.porCanal.map((x) => (
+            <Row key={x.etiqueta} label={`${x.etiqueta} (${x.cantidad})`} value={fmtRD(x.total)} />
+          ))}
+          <Row label={`TOTAL EN LÍNEA (${c.enLinea.cantidad})`} value={fmtRD(c.enLinea.total)} bold />
+          <Sep />
+        </>
+      )}
+
       <div className="font-bold">ARQUEO DE EFECTIVO</div>
       <Row label="Fondo inicial" value={fmtRD(c.balanceInicial)} />
       {(c.movimientosEntrada > 0 || c.movimientosSalida > 0) && (

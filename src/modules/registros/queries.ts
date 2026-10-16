@@ -75,7 +75,7 @@ export interface RegistroItem {
 export interface RegistrosResumen {
   cantidad: number
   total: number
-  porMetodo: { efectivo: number; transferencia: number; otro: number }
+  porMetodo: { efectivo: number; transferencia: number; tarjeta: number; otro: number }
   porTipo: { tipo: string; label: string; cantidad: number; total: number }[]
 }
 
@@ -255,7 +255,7 @@ export async function getRegistros(
 
   const items = rows.map(mapItem)
 
-  const porMetodo = { efectivo: 0, transferencia: 0, otro: 0 }
+  const porMetodo = { efectivo: 0, transferencia: 0, tarjeta: 0, otro: 0 }
   const tipoMap = new Map<string, { cantidad: number; total: number }>()
   let total = 0
   for (const a of agregados) {
@@ -263,6 +263,7 @@ export async function getRegistros(
     total += monto
     if (a.metodoCobro === 'EFECTIVO') porMetodo.efectivo += monto
     else if (a.metodoCobro === 'TRANSFERENCIA') porMetodo.transferencia += monto
+    else if (a.metodoCobro === 'TARJETA') porMetodo.tarjeta += monto
     else porMetodo.otro += monto
     const t = tipoMap.get(a.tipo) ?? { cantidad: 0, total: 0 }
     t.cantidad += 1

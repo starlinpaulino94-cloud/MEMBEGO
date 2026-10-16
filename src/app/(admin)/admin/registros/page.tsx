@@ -97,6 +97,7 @@ export default async function RegistrosPage({
     { label: 'Operaciones con monto', valor: String(resumen.cantidad) },
     { label: 'Efectivo', valor: fmtRD(resumen.porMetodo.efectivo) },
     { label: 'Transferencia', valor: fmtRD(resumen.porMetodo.transferencia) },
+    { label: 'Tarjeta', valor: fmtRD(resumen.porMetodo.tarjeta) },
   ]
 
   return (
@@ -161,7 +162,7 @@ export default async function RegistrosPage({
       </Form>
 
       {/* Resumen (KPIs) */}
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {kpis.map((k) => (
           <div key={k.label} className="rounded-2xl border border-border/70 bg-card p-4">
             <dt className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</dt>
