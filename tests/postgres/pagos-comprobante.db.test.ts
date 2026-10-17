@@ -68,22 +68,22 @@ const membresia = (e: Empresa, extra: Record<string, unknown> = {}) =>
 const hallazgo = (r: Awaited<ReturnType<typeof conciliar>>, clave: string) => r.hallazgos.find((h) => h.clave === clave)
 
 let fetchOriginal: typeof fetch
-const envOriginal = { pub: process.env.CARDNET_TOKENS_PUBLIC_KEY, priv: process.env.CARDNET_TOKENS_PRIVATE_KEY }
+const ant = { pub: process.env.CARDNET_TOKENS_PUBLIC_KEY, priv: process.env.CARDNET_TOKENS_PRIVATE_KEY }
 
 before(() => {
   fetchOriginal = globalThis.fetch
   // Claves de PRUEBA (sintéticas): solo para que la renovación considere configurada la pasarela. No salen a la red:
   // `fetch` se sustituye por una pasarela simulada que aprueba el cobro.
-  process.env.CARDNET_TOKENS_PUBLIC_KEY = 'pk-prueba-sintetica'
-  process.env.CARDNET_TOKENS_PRIVATE_KEY = 'sk-prueba-sintetica'
+  process.env.CARDNET_TOKENS_PUBLIC_KEY = 'prueba-prueba-prueba'
+  process.env.CARDNET_TOKENS_PRIVATE_KEY = 'prueba-prueba-prueba'
 })
 
 after(() => {
   globalThis.fetch = fetchOriginal
-  if (envOriginal.pub === undefined) delete process.env.CARDNET_TOKENS_PUBLIC_KEY
-  else process.env.CARDNET_TOKENS_PUBLIC_KEY = envOriginal.pub
-  if (envOriginal.priv === undefined) delete process.env.CARDNET_TOKENS_PRIVATE_KEY
-  else process.env.CARDNET_TOKENS_PRIVATE_KEY = envOriginal.priv
+  if (ant.pub === undefined) delete process.env.CARDNET_TOKENS_PUBLIC_KEY
+  else process.env.CARDNET_TOKENS_PUBLIC_KEY = ant.pub
+  if (ant.priv === undefined) delete process.env.CARDNET_TOKENS_PRIVATE_KEY
+  else process.env.CARDNET_TOKENS_PRIVATE_KEY = ant.priv
 })
 
 test('H1 · (fase 2) un pago con tarjeta aprobado activa la membresía, entrega Y deja su venta con ticket; la conciliación ya no lo marca', async () => {

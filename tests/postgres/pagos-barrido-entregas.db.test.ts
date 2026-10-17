@@ -55,8 +55,9 @@ const barrer = (e: Empresa, extra: Parameters<typeof barridoEntregasDePago>[0] =
 const avisos = (e: Empresa) => prisma.notificacion.findMany({ where: { userId: { in: e.admins } }, orderBy: { createdAt: 'asc' } })
 const bitacora = (e: Empresa, accion: string) => prisma.auditLog.findMany({ where: { companyId: e.companyId, accion: accion as never } })
 
+const VALOR = 'prueba-prueba-prueba'
 const secretoAnterior = process.env.CRON_SECRET
-before(() => { process.env.CRON_SECRET = 'secreto-de-prueba-del-barrido' })
+before(() => { process.env.CRON_SECRET = VALOR })
 after(() => {
   if (secretoAnterior === undefined) delete process.env.CRON_SECRET
   else process.env.CRON_SECRET = secretoAnterior
@@ -207,12 +208,11 @@ test('8 · el endpoint exige el secreto del cron antes de barrer', async () => {
   const mal = await cron(new NextRequest('http://localhost/api/cron/entregas-pago', { headers: { authorization: 'Bearer otro-secreto' } }))
   assert.equal(mal.status, 401)
 
-  const quitado = process.env.CRON_SECRET
   delete process.env.CRON_SECRET
   assert.equal((await cron(new NextRequest('http://localhost/api/cron/entregas-pago', { headers: { authorization: 'Bearer x' } }))).status, 503, 'sin secreto configurado el servidor está roto, no «no autorizado»')
-  process.env.CRON_SECRET = quitado
+  process.env.CRON_SECRET = VALOR
 
-  const ok = await cron(new NextRequest('http://localhost/api/cron/entregas-pago', { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } }))
+  const ok = await cron(new NextRequest('http://localhost/api/cron/entregas-pago', { headers: { authorization: `Bearer ${VALOR}` } }))
   assert.equal(ok.status, 200)
   const cuerpo = (await ok.json()) as Record<string, unknown>
   assert.equal(cuerpo.ok, true)
