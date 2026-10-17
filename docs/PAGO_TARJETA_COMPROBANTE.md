@@ -209,6 +209,16 @@ política. Cada corrección tiene su prueba en `tests/postgres/pagos-revision-in
 | Migraciones | `20261053`, `20261054`, `20261055` aplicadas; sin deriva de esquema; sellos al día |
 | App Expo | Solo tipos de los archivos tocados (sin dispositivo) |
 
+### Verificación tras la revisión independiente (2026-10-17)
+
+| Comprobación | Resultado |
+|---|---|
+| Tipos y ESLint | Sin errores |
+| Pruebas unitarias | 3,972 de 3,980 pasan; las 2 que fallan son las mismas de fecha fija (14 de octubre); 6 omitidas |
+| Suite PostgreSQL completa | 706 de 707. El fallo fue `supply-v2-slice9` («el arriendo lo rescata»), ajeno a este trabajo: corrió a la vez que las pruebas unitarias y pasa solo (2 de 2 corridas, 85 de 85). Después se añadió la prueba `1b` (fallo real de la extensión con un disparador en la base) y el archivo nuevo pasa 10 de 10 |
+| E2E de navegador (conciliación, comprobante y comprobantes retroactivos, con reconstrucción) | 14 de 14. No se repitió la suite E2E completa |
+| App Expo | Solo tipos, sin dispositivo |
+
 ## Estado final y lo que queda
 
 Entregado (fases 0 a 6): el pago con tarjeta deja su venta y su comprobante en el libro (app, web y renovación), visible e

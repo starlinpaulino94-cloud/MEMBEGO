@@ -162,6 +162,64 @@ test('1 · una renovación cobrada cuya extensión falló se rehace con el reint
   assert.equal(despues.fechaVencimiento?.getTime(), mem.fechaVencimiento?.getTime(), 'una sola extensión')
 })
 
+test('1b · de punta a punta: la pasarela cobra, la extensión FALLA de verdad, la entrega queda fallida y el reintento la rehace sin recobrar', async () => {
+  const e = await empresa('unob', true)
+  const c = await cliente(e)
+  const tarjeta = await prisma.tarjetaTokenizada.create({
+    data: { companyId: e.companyId, clienteId: c, customerId: 'cust-rev1b', paymentProfileId: 'pp-rev1b', token: 'CT__sinteticob', marca: 'VISA', ultimos4: '4242', activa: true },
+    select: { id: true },
+  })
+  const venceAntes = new Date(Date.now() + 3 * H)
+  const m = await membresia(e, c, { estado: 'ACTIVA', pagoConfirmado: true, montoPagado: PRECIO, fechaPago: hace(29 * DIA), fechaInicio: hace(29 * DIA), fechaVencimiento: venceAntes, autoRenovar: true, tarjetaTokenizadaId: tarjeta.id })
+
+  let llamadas = 0
+  globalThis.fetch = (async () => {
+    llamadas++
+    return new Response(JSON.stringify({ Response: { Transaction: { TransactionStatusId: 1, ResponseCode: '00', AuthorizationCode: 'AUTH-R1B' } }, Errors: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+
+  // Un fallo real de la base justo en la extensión: un disparador que rechaza la actualización de ESTA membresía.
+  const nombre = `rev_falla_${sufijo}`
+  await prisma.$executeRawUnsafe(`CREATE OR REPLACE FUNCTION ${nombre}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'falla simulada de la extension'; END $$`)
+  await prisma.$executeRawUnsafe(`CREATE TRIGGER ${nombre} BEFORE UPDATE ON memberships FOR EACH ROW WHEN (NEW.id = '${m}') EXECUTE FUNCTION ${nombre}()`)
+  let soltado = false
+  const soltar = async () => {
+    if (soltado) return
+    soltado = true
+    await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${nombre} ON memberships`)
+    await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS ${nombre}()`)
+  }
+  try {
+    const r = await renovarMembresiaPorTarjeta(m, '127.0.0.1')
+    assert.equal(r.estado, 'error', JSON.stringify(r))
+    assert.equal(llamadas, 1, 'se cobró una vez')
+    const i = await prisma.pagoIntento.findFirstOrThrow({ where: { membershipId: m } })
+    assert.deepEqual([i.estado, i.fulfillmentEstado, i.fulfillmentError, i.fulfillmentIntentos], ['APROBADO', 'FALLIDA', 'Cobrado, pero la extensión falló.', 1], 'cobrado, y la entrega dice que falló')
+    assert.equal((await prisma.membership.findUniqueOrThrow({ where: { id: m } })).fechaVencimiento?.getTime(), venceAntes.getTime(), 'la membresía no se tocó')
+    assert.equal(await ventaDe(i.id), null, 'sin entrega no hay venta')
+
+    // Mientras la entrega siga sin resolverse, otra renovación no vuelve a cobrar.
+    await prisma.pagoIntento.update({ where: { id: i.id }, data: { createdAt: hace(2 * DIA) } })
+    const otra = await renovarMembresiaPorTarjeta(m, '127.0.0.1')
+    assert.equal(otra.estado, 'omitida')
+    assert.equal(llamadas, 1, 'no recobra')
+
+    // Se arregla la base y se reintenta la entrega: extiende, cierra y factura, sin tocar la pasarela.
+    await soltar()
+    const reintento = await reintentarEntrega(i.id)
+    assert.deepEqual([reintento.ok, reintento.entrega], [true, 'COMPLETADA'])
+    assert.equal(llamadas, 1, 'el reintento no recobra')
+    const mem = await prisma.membership.findUniqueOrThrow({ where: { id: m } })
+    assert.equal(mem.fechaVencimiento?.getTime(), periodEnd(venceAntes, 30).getTime())
+    assert.equal(mem.fechaPago?.getTime(), i.activadoAt?.getTime())
+    const venta = await ventaDe(i.id)
+    assert.ok(venta)
+    assert.match(String((venta.snapshot as Record<string, unknown>).metodoCobroLabel), /VISA ••••4242/, 'la renovación inmediata sí lleva su tarjeta')
+  } finally {
+    await soltar()
+  }
+})
+
 test('2 · un cambio de plan pagado con tarjeta no se reintenta en vano: el caso dice qué hace falta y el cierre guarda la evidencia', async () => {
   const e = await empresa('dos')
   const c = await cliente(e)
