@@ -386,11 +386,11 @@ test('6 · la lista de cobros en línea se acota, pero el total del cuadre es el
       timeZone: TZ,
     })
   }
-  const recortado = await getCobrosEnLineaDelDia(e.companyId, hoy(), TZ, { tope: 2 })
+  const recortado = await getCobrosEnLineaDelDia(e.companyId, hoy(), TZ, { tope: 2, conDetalle: true })
   assert.equal(recortado.items.length, 2)
   assert.equal(recortado.truncado, true)
   assert.deepEqual([recortado.resumen.cantidad, recortado.resumen.total], [3, 3 * PRECIO], 'el total no se recorta con la lista')
-  const completo = await getCobrosEnLineaDelDia(e.companyId, hoy(), TZ)
+  const completo = await getCobrosEnLineaDelDia(e.companyId, hoy(), TZ, { conDetalle: true })
   assert.deepEqual([completo.items.length, completo.truncado, completo.resumen.cantidad, completo.resumen.total], [3, false, 3, 3 * PRECIO])
 })
 

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { Prisma } from '@prisma/client'
 import { asegurarUsuario, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
 import { empresaCatalogo, sucursalSembrada, type EmpresaCatalogo } from './catalogo-arnes'
 
@@ -117,6 +118,47 @@ test.describe('Pago con tarjeta · comprobante visible e imprimible', () => {
     await expect(dialogo).toContainText('Tarjeta VISA ••••4242 (en la app)', { timeout: 20_000 })
     await expect(dialogo).toContainText(TICKET)
     await expect(dialogo).not.toContainText(/\d{13,}/)
+    await ctx.close()
+  })
+
+  test('personal de mostrador sin acceso a Comprobantes ve cuánto entró, no quién pagó; con el permiso, ve el detalle', async ({ browser }) => {
+    test.setTimeout(180_000)
+    const prisma = prismaDeArnes()
+    const empleado = await asegurarUsuario('tarjetaEmpleado', e.id)
+    await prisma.user.update({ where: { id: empleado.id }, data: { permisos: Prisma.DbNull } })
+
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    await entrarComo(ctx, 'tarjetaEmpleado', BASE, e.id)
+    await p.goto('/empleado/caja')
+    const seccion = p.getByTestId('cobros-en-linea')
+    await expect(seccion).toBeVisible({ timeout: 30_000 })
+    // El resumen, para el cuadre: cuánto entró y por qué canal.
+    await expect(p.getByTestId('cobros-en-linea-total')).toContainText('RD$500.00')
+    await expect(p.getByTestId('cobros-en-linea-oculto')).toContainText('lo ve quien tiene acceso a Comprobantes')
+    // Pero no el detalle: ni quién, ni qué plan, ni el ticket, ni la autorización, ni el botón de imprimir.
+    await expect(seccion).not.toContainText('Ana Tarjeta')
+    await expect(seccion).not.toContainText(TICKET)
+    await expect(seccion).not.toContainText('VISA')
+    await expect(seccion).not.toContainText(AUTORIZACION)
+    await expect(seccion.getByRole('button', { name: /Imprimir/ })).toHaveCount(0)
+
+    // El cuadre impreso del día trae el mismo resumen y tampoco el detalle.
+    await p.getByRole('button', { name: 'Mi cuadre del día' }).first().click()
+    const cuadre = p.getByRole('dialog')
+    await expect(cuadre).toContainText('TOTAL EN LÍNEA (1)', { timeout: 30_000 })
+    await expect(cuadre).toContainText('RD$500.00')
+    await expect(cuadre).not.toContainText('Ana Tarjeta')
+    await expect(cuadre).not.toContainText(TICKET)
+    await p.keyboard.press('Escape')
+
+    // Se le concede Comprobantes desde Permisos: en su siguiente clic ya ve el detalle (permisos vivos).
+    await prisma.user.update({ where: { id: empleado.id }, data: { permisos: { v: 1, secciones: { facturas: true } } } })
+    await p.goto('/empleado/caja')
+    await expect(p.getByTestId('cobros-en-linea')).toContainText('Ana Tarjeta', { timeout: 30_000 })
+    await expect(p.getByTestId('cobros-en-linea')).toContainText(TICKET)
+    await expect(p.getByTestId('cobros-en-linea-oculto')).toHaveCount(0)
+    await prisma.user.update({ where: { id: empleado.id }, data: { permisos: Prisma.DbNull } })
     await ctx.close()
   })
 

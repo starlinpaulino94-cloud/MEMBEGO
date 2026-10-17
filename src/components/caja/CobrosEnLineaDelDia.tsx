@@ -43,7 +43,26 @@ export function CobrosEnLineaDelDia({ datos, timeZone }: { datos: Datos; timeZon
         </p>
       )}
 
-      {items.length === 0 ? (
+      {datos.detalleOculto && (
+        <div className="mt-3 space-y-2" data-testid="cobros-en-linea-oculto">
+          <p className="text-sm text-muted-foreground">
+            El detalle de cada pago (cliente, plan y autorización) lo ve quien tiene acceso a Comprobantes. Aquí tienes lo que
+            entró, para el cuadre.
+          </p>
+          <ul className="divide-y divide-border/50 text-sm">
+            {resumen.porCanal.map((c) => (
+              <li key={c.etiqueta} className="flex items-center justify-between gap-3 py-2">
+                <span className="text-foreground">
+                  {c.etiqueta} <span className="text-muted-foreground">· {c.cantidad} {c.cantidad === 1 ? 'cobro' : 'cobros'}</span>
+                </span>
+                <span className="font-semibold tabular-nums text-foreground">{fmtRD(c.total)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {datos.detalleOculto ? null : items.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">Todavía no hay cobros en línea hoy.</p>
       ) : (
         <div className="mt-3 divide-y divide-border/50">

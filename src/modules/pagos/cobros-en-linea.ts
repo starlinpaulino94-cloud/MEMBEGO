@@ -20,7 +20,13 @@ import {
 export interface CobrosEnLineaDelDia {
   /** `YYYY-MM-DD` en la zona de la empresa. */
   fecha: string
+  /** El detalle de cada cobro. Vacío si quien pregunta no tiene acceso a Comprobantes (ver `detalleOculto`). */
   items: CobroEnLinea[]
+  /**
+   * `true` si hay cobros pero no se enseñan uno por uno: el resumen (cuántos, cuánto y por qué canal) sí es verdadero y
+   * completo. Quien no puede abrir el historial de Comprobantes tampoco debe leerlo por la caja.
+   */
+  detalleOculto: boolean
   /** `cantidad` y `total` son SIEMPRE los del día completo; el desglose por canal y sucursal es el de `items`. */
   resumen: ResumenCobrosEnLinea
   /** `true` si el día tiene más cobros que los que caben en `items` (el total sigue siendo el real). */
@@ -47,11 +53,28 @@ export async function getCobrosEnLineaDelDia(
   companyId: string,
   fecha: string,
   timeZone: string,
-  /** `tope`: menos filas que el máximo (las pruebas lo usan para forzar el recorte sin crear 500 cobros). */
-  opciones: { sucursalId?: string | null; tope?: number } = {}
+  opciones: {
+    sucursalId?: string | null
+    /** `tope`: menos filas que el máximo (las pruebas lo usan para forzar el recorte sin crear 500 cobros). */
+    tope?: number
+    /**
+     * Si se devuelve cada cobro (cliente, plan, autorización, ticket) o solo el resumen. NEGADO POR DEFECTO: el llamador
+     * lo pide a propósito, tras comprobar que la persona puede ver Comprobantes. Un llamador nuevo que se olvide de
+     * pensarlo recibe el resumen, no el detalle.
+     */
+    conDetalle?: boolean
+  } = {}
 ): Promise<CobrosEnLineaDelDia> {
   const lectura = await leerCobros(companyId, limiteDiaLocal(fecha, timeZone, false), limiteDiaLocal(fecha, timeZone, true), opciones)
-  return { fecha, items: lectura.items, resumen: conCuentaReal(lectura.items, lectura), truncado: lectura.truncado }
+  const conDetalle = opciones.conDetalle === true
+  return {
+    fecha,
+    items: conDetalle ? lectura.items : [],
+    // El resumen sale de TODAS las filas leídas, se enseñe el detalle o no.
+    resumen: conCuentaReal(lectura.items, lectura),
+    truncado: conDetalle && lectura.truncado,
+    detalleOculto: !conDetalle && lectura.cantidad > 0,
+  }
 }
 
 /** Lo mismo para la ventana de un turno de caja (apertura → cierre). Solo el resumen: el detalle va en el cuadre del día. */

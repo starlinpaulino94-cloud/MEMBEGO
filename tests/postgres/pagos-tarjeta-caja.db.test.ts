@@ -58,7 +58,7 @@ test('1 · el listado del día trae SOLO los cobros en línea de la empresa, con
   await cobroEnLinea(a, 1200, 'WEB')
   await efectivoEnCaja(a, 300) // venta en gaveta: no es un cobro en línea
   await cobroEnLinea(b, 9999, 'APP') // otra empresa
-  const r = await getCobrosEnLineaDelDia(a.companyId, hoy(), TZ)
+  const r = await getCobrosEnLineaDelDia(a.companyId, hoy(), TZ, { conDetalle: true })
   assert.equal(r.items.length, 2)
   assert.deepEqual(r.resumen.porCanal.map((c) => [c.canal, c.total]), [['WEB', 1200], ['APP', 500]])
   assert.equal(r.resumen.total, 1700)
@@ -76,7 +76,7 @@ test('2 · un día sin cobros en línea devuelve cero, y otro día no ve los de 
   await cobroEnLinea(e, 700)
   const ayer = await getCobrosEnLineaDelDia(e.companyId, '2020-01-02', TZ)
   assert.deepEqual([ayer.items.length, ayer.resumen.total], [0, 0])
-  const hoyR = await getCobrosEnLineaDelDia(e.companyId, hoy(), TZ)
+  const hoyR = await getCobrosEnLineaDelDia(e.companyId, hoy(), TZ, { conDetalle: true })
   assert.equal(hoyR.items.length, 1)
 })
 
@@ -85,7 +85,7 @@ test('3 · el cuadre del día del empleado enseña los cobros en línea APARTE y
   await efectivoEnCaja(e, 300)
   await cobroEnLinea(e, 500, 'APP')
   await cobroEnLinea(e, 800, 'RENOVACION_AUTOMATICA')
-  const r = await getReporteEmpleadoDia(e.companyId, e.empleadoId, 'Empleada', hoy(), TZ)
+  const r = await getReporteEmpleadoDia(e.companyId, e.empleadoId, 'Empleada', hoy(), TZ, { conDetalleEnLinea: true })
   assert.equal(r.total, 300, 'el total del empleado es solo lo que cobró él')
   assert.equal(r.porMetodo.efectivo, 300)
   assert.equal(r.enLinea.cantidad, 2)
@@ -137,4 +137,33 @@ test('6 · la ficha del cliente lista SUS pagos con tarjeta (más reciente prime
   assert.deepEqual(r.map((x) => x.monto), [800, 500])
   assert.equal((await getCobrosConTarjetaDeCliente(e.companyId, e.clienteId, 1)).length, 1, 'respeta el límite')
   assert.equal((await getCobrosConTarjetaDeCliente('otra-empresa', e.clienteId)).length, 0, 'y no cruza de empresa')
+})
+
+test('5 · sin acceso a Comprobantes se ve el resumen del día, no el detalle: ni cliente, ni plan, ni autorización', async () => {
+  const e = await empresa('sindetalle')
+  await cobroEnLinea(e, 500, 'APP')
+  await cobroEnLinea(e, 800, 'WEB')
+
+  // La caja y el cuadre del día piden el detalle solo si la persona puede abrir Comprobantes. Sin pedirlo, no lo reciben.
+  const dia = await getCobrosEnLineaDelDia(e.companyId, hoy(), TZ)
+  assert.deepEqual([dia.items.length, dia.detalleOculto, dia.truncado], [0, true, false])
+  assert.deepEqual([dia.resumen.cantidad, dia.resumen.total], [2, 1300], 'el resumen es completo y verdadero: alcanza para el cuadre')
+  assert.deepEqual(dia.resumen.porCanal.map((c) => [c.canal, c.cantidad, c.total]), [['WEB', 1, 800], ['APP', 1, 500]])
+  assert.doesNotMatch(JSON.stringify(dia), /A500|A800|Cliente|VISA|ticketNumero|TCK-/, 'ni autorización, ni cliente, ni ticket')
+
+  const reporte = await getReporteEmpleadoDia(e.companyId, e.empleadoId, 'Empleada', hoy(), TZ)
+  assert.deepEqual([reporte.enLinea.items.length, reporte.enLinea.detalleOculto, reporte.enLinea.cantidad, reporte.enLinea.total], [0, true, 2, 1300])
+  assert.doesNotMatch(JSON.stringify(reporte.enLinea), /A500|A800|VISA/)
+
+  // Con el permiso, el detalle completo de siempre.
+  const con = await getCobrosEnLineaDelDia(e.companyId, hoy(), TZ, { conDetalle: true })
+  assert.deepEqual([con.items.length, con.detalleOculto], [2, false])
+  const conReporte = await getReporteEmpleadoDia(e.companyId, e.empleadoId, 'Empleada', hoy(), TZ, { conDetalleEnLinea: true })
+  assert.deepEqual([conReporte.enLinea.items.length, conReporte.enLinea.detalleOculto], [2, false])
+})
+
+test('5b · un día sin cobros en línea no dice que haya detalle oculto', async () => {
+  const e = await empresa('sinnada')
+  const dia = await getCobrosEnLineaDelDia(e.companyId, hoy(), TZ)
+  assert.deepEqual([dia.items.length, dia.detalleOculto, dia.resumen.cantidad], [0, false, 0])
 })

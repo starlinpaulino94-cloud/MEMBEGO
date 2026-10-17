@@ -141,7 +141,7 @@ cámara en tema oscuro.
 | 6.1 | Comprar una membresía de RD$ 500 con tarjeta de prueba **dentro de la app Expo** | Membresía activa; en «Mis pagos» sale «Tarjeta … (en la app)», el **Recibo Nº** y la autorización | ✔ | | |
 | 6.2 | Lo mismo desde el **navegador** (3DS) | Igual, con «(en la web)» | ✔ | | |
 | 6.3 | Pulsar «Atrás» o cerrar la app justo al pagar, y volver a abrirla | Un solo cobro, una sola membresía, **un solo comprobante** | ✔ | | |
-| 6.4 | En la **caja del empleado**: mirar «Cobros con tarjeta en línea de hoy» | Aparece ese pago con su ticket; el **efectivo esperado no cambió** | ✔ | | |
+| 6.4 | En la **caja del empleado**: mirar «Cobros con tarjeta en línea de hoy» | Aparece ese pago con su ticket; el **efectivo esperado no cambió**. Con un usuario de **Recepción o Empleado** (sin Comprobantes) sale solo el resumen, sin cliente ni autorización | ✔ | | |
 | 6.5 | **Imprimir** ese comprobante en la térmica (58 y 80 mm) y en Carta | Dice «Tarjeta VISA ••••NNNN (en la app)» y «Aut. …»; **nunca** el número completo de la tarjeta | ✔ | | |
 | 6.6 | Imprimir «Mi cuadre del día» y el **cierre de caja** de ese día | Sección «Cobros en línea (tarjeta)» aparte; **no suma** al efectivo; el arqueo cuadra igual que sin el pago | ✔ | | |
 | 6.7 | `/admin/facturas` → «Pagos con tarjeta» y `/admin/registros` | El pago está, con su método completo; Registros tiene el subtotal «Tarjeta» | | | |

@@ -194,7 +194,7 @@ política. Cada corrección tiene su prueba en `tests/postgres/pagos-revision-in
 | 5 | La fecha de pago de la membresía era la de la **entrega**, y la de la venta, la del cobro. Con una entrega tardía al otro lado de un cambio de mes, el dinero se contaba en dos periodos. Además, el reporte de Clientes y el detalle de Finanzas seguían sumando membresía y venta. | `fechaPago` de un cobro de pasarela es `activadoAt`. La guarda de doble conteo se aplicó también a «valor de clientes» y al detalle de Finanzas. |
 | 6 | Un proceso **automático** podía escribir una venta fechada en un mes ya cerrado. | Lo automático solo escribe ventas de cobros de hasta 14 días; más viejos solo los escribe una persona con la acción explícita de la conciliación. |
 | 7 | La lista de cobros en línea cortaba a 500 filas y el **total** del cuadre se calculaba con la lista cortada. | El total y la cuenta son los del día completo; la lista avisa cuando está recortada. |
-| 8 | Todos los roles que ven la caja ven la lista de cobros en línea de **toda la empresa**, no solo la de su sucursal. | **No se cambió: es una decisión de política.** Ver decisión 7. |
+| 8 | Todos los roles que entran a la caja veían la lista de cobros en línea de **toda la empresa**, con cliente, plan y autorización; y la acción del cuadre del día la entregaba de cualquier fecha. | **Decidido (decisión 7)**: el detalle lo ve quien puede abrir Comprobantes. Ver «Quién ve el detalle de los cobros en línea» abajo. |
 | 9 | El cron no contaba como error un comprobante que no se pudo escribir (la función devuelve `null`, no lanza), así que decía «todo bien». | Se cuenta en `errores`; y la reparación recorre primero lo más reciente. |
 | 10 | La migración `20261054` se **modificó después de haberse publicado** (se le añadió el relleno). | **No se puede deshacer.** Una base que ya hubiera aplicado la primera versión no tiene el relleno: hay que correrlo a mano (marcado `-- BACKFILL:INICIO/FIN`). Las bases creadas de cero están bien. |
 
@@ -238,6 +238,36 @@ aplica el plan; ya no hace falta que una persona lo apruebe en Pagos.
 **Pruebas:** `tests/postgres/pagos-cambio-plan-tarjeta.db.test.ts` (5, de punta a punta con la base real; probado que fallan si
 se quita la entrega), `tests/cambio-plan-aplicar.test.ts` y las reglas puras de `conciliacion-entrega`.
 
+## Quién ve el detalle de los cobros en línea (decisión 7, 2026-10-17)
+
+**El problema.** La caja enseña los pagos con tarjeta hechos en la app y la web (cliente, plan, ticket y autorización) para el
+cuadre. Los veía cualquiera que entrara a la caja, de toda la empresa, aunque no pudiera abrir el historial de Comprobantes,
+que es el mismo dato. Recepción y Empleado entran a la caja pero no a Comprobantes. Peor: la acción del cuadre del día entregaba
+esa lista de cualquier fecha.
+
+**La regla.** El detalle de cada cobro lo ve **quien puede abrir Comprobantes** (rol y permisos del empleado, leídos vivos en cada
+petición). No se inventó un permiso nuevo: se usa el que ya existe, así que se concede o se niega por empleado desde Permisos.
+Quien no lo tiene recibe el **resumen**: cuántos cobros, cuánto entró y por qué canal. Alcanza para cuadrar. No recibe cliente,
+plan, ticket ni autorización, ni el botón de imprimir.
+
+| Rol (de serie) | Ve el detalle |
+|---|---|
+| Administrador, administrador de empresa, superadmin, gerente, cajero | Sí |
+| Recepción, empleado | No (salvo que se le conceda Comprobantes) |
+
+**Cómo se hace cumplir.**
+
+- En el servidor y **negado por defecto**: `getCobrosEnLineaDelDia` y `getReporteEmpleadoDia` solo devuelven el detalle si el
+  llamador lo pide (`conDetalle` / `conDetalleEnLinea`). Un llamador nuevo que no lo piense recibe el resumen.
+- La página de la caja y la acción `obtenerReporteDia` lo piden con `puedeSeccion('facturas')`. Una prueba vigila que nadie pase
+  un `true` suelto.
+- La pantalla y el cuadre impreso enseñan el resumen cuando el detalle está oculto.
+- No cambia: el cierre de caja (ya era solo resumen), la ficha del cliente y Comprobantes (ya pedían su sección).
+
+**Lo que no se hizo, a propósito.** No se filtró por sucursal: un pago en la app no pertenece a ninguna sucursal («En línea»), así
+que filtrar por sucursal dejaría la lista vacía para todos. Si se quiere que cada sucursal vea solo lo suyo, primero hay que
+decidir a qué sucursal pertenece un pago en línea (decisión 3).
+
 ### Verificación tras la revisión independiente (2026-10-17)
 
 | Comprobación | Resultado |
@@ -257,6 +287,15 @@ se quita la entrega), `tests/cambio-plan-aplicar.test.ts` y las reglas puras de 
 | Suite PostgreSQL completa | 713 de 713 (corrida sola, sin las unitarias a la vez) |
 | E2E de navegador (conciliación, comprobante y retroactivos, con reconstrucción) | 14 de 14. No hay E2E del pago de un cambio de plan: necesita la pasarela real |
 | Migración `20261056` | Aplicada; sin deriva de esquema; sellos al día |
+
+### Verificación tras restringir el detalle de los cobros en línea (2026-10-17)
+
+| Comprobación | Resultado |
+|---|---|
+| Tipos y ESLint | Sin errores |
+| Pruebas unitarias | 3,985 de 3,993 pasan; las 2 de fecha fija (14 de octubre) siguen fallando; 6 omitidas |
+| Suite PostgreSQL completa | 715 de 715 |
+| E2E de navegador (conciliación, comprobante y retroactivos, con reconstrucción) | 15 de 15, incluido el recorrido de un empleado sin Comprobantes (resumen sin detalle, en pantalla y en el cuadre impreso) y de ese mismo empleado con el permiso concedido |
 
 ## Estado final y lo que queda
 
@@ -281,7 +320,7 @@ Queda, y no depende de código:
 4. Numeración: mismo contador `TCK-` que la caja o serie aparte.
 5. Datos de tarjeta en el comprobante: marca y últimos 4 + autorización, nunca el número completo.
 6. Doble conteo anterior de ventas de mostrador y del panel en «Total cobrado»: ¿se corrige con la misma guarda? (ver fase 3).
-7. Cobros en línea en la caja: ¿los ve toda la empresa o solo la sucursal de quien mira? (hallazgo 8 de la revisión independiente).
+7. ~~Cobros en línea en la caja: ¿los ve toda la empresa o solo la sucursal?~~ Decidido: el detalle lo ve quien tiene acceso a Comprobantes; los demás ven el resumen (ver «Quién ve el detalle de los cobros en línea»).
 8. ~~Cambio de plan pagado con tarjeta: ¿entrega automática?~~ Decidido: sí. Construido (ver «Cambio de plan pagado con tarjeta»).
 
 ## Reglas de la corrección

@@ -420,7 +420,10 @@ export interface ReporteEmpleadoDia {
    * por la gaveta: van aparte y NO suman al total de arriba, para que el cuadre del efectivo siga cuadrando.
    */
   enLinea: ResumenCobrosEnLinea & {
+    /** Vacío si quien lo pidió no tiene acceso a Comprobantes: ver `detalleOculto`. */
     items: { ticketNumero: string; cliente: string; detalle: string; monto: number; canal: string; hora: string }[]
+    /** Hay cobros en línea pero este reporte no los enseña uno por uno (el resumen sí es completo). */
+    detalleOculto: boolean
   }
   empresa: {
     nombre: string
@@ -442,7 +445,9 @@ export async function getReporteEmpleadoDia(
   empleadoId: string,
   empleadoNombre: string,
   fecha: string,
-  timeZone: string
+  timeZone: string,
+  /** El detalle de los cobros en línea de TODA la empresa solo lo ve quien puede abrir Comprobantes. Negado por defecto. */
+  opciones: { conDetalleEnLinea?: boolean } = {}
 ): Promise<ReporteEmpleadoDia> {
   const empresa = await conEmpresa(companyId, (tx) =>
     tx.company.findUnique({
@@ -452,7 +457,7 @@ export async function getReporteEmpleadoDia(
   )
 
   const { gte, lt } = rangoDiaLocal(fecha, timeZone)
-  const enLinea = await getCobrosEnLineaDelDia(companyId, fecha, timeZone)
+  const enLinea = await getCobrosEnLineaDelDia(companyId, fecha, timeZone, { conDetalle: opciones.conDetalleEnLinea === true })
   const cobros = await conEmpresa(companyId, (tx) =>
     tx.transaction.findMany({
       where: {
@@ -502,6 +507,7 @@ export async function getReporteEmpleadoDia(
     porOrigen,
     enLinea: {
       ...enLinea.resumen,
+      detalleOculto: enLinea.detalleOculto,
       items: enLinea.items.map((i) => ({
         ticketNumero: i.ticketNumero,
         cliente: i.cliente,

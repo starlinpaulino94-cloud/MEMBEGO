@@ -32,7 +32,7 @@ export interface UsuarioE2E {
   supabaseId: string
   email: string
   nombre: string
-  role: 'SUPERADMIN' | 'CLIENTE' | 'ADMINISTRADOR'
+  role: 'SUPERADMIN' | 'CLIENTE' | 'ADMINISTRADOR' | 'EMPLEADO'
   /** Empresa activa de la sesión (empleados del proveedor). */
   companyId: string | null
 }
@@ -86,6 +86,8 @@ const USUARIOS = {
   /** Pago con tarjeta → comprobante: quien cobra en la caja y revisa los comprobantes, y la persona que pagó en la app. */
   tarjetaAdmin: { email: 'e2e.tarjeta.admin@membego.test', nombre: 'Cajera Tarjeta E2E', role: 'ADMINISTRADOR' },
   tarjetaCliente: { email: 'e2e.tarjeta.cliente@membego.test', nombre: 'Ana Tarjeta E2E', role: 'CLIENTE' },
+  /** Pago con tarjeta → quién ve el detalle: personal de mostrador que entra a la caja pero NO al historial de Comprobantes. */
+  tarjetaEmpleado: { email: 'e2e.tarjeta.empleado@membego.test', nombre: 'Empleado Mostrador E2E', role: 'EMPLEADO' },
   /** Pago con tarjeta → conciliación accionable (fase 4): quien resuelve los casos de /admin/conciliacion. */
   tarjetaConciliador: { email: 'e2e.tarjeta.conciliador@membego.test', nombre: 'Gerente Conciliación E2E', role: 'ADMINISTRADOR' },
   /** Pago con tarjeta → comprobantes retroactivos (fase 6): quien se pone al día con los pagos anteriores al comprobante. */

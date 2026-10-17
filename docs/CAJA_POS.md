@@ -158,7 +158,7 @@ Un pago con tarjeta hecho en la app, en la web o por renovación automática **n
 pasarela. Deja una venta `SALE` con método `TARJETA` y el enlace al cobro (`pagoIntentoId`), sin `cajaSesionId`, así que **ningún
 arqueo lo cuenta** y el efectivo esperado no cambia (el cobro con datáfono del mostrador se sigue guardando como `OTRO`).
 
-- La caja del empleado lista «Cobros con tarjeta en línea de hoy», cada uno con su botón de imprimir.
+- La caja lista «Cobros con tarjeta en línea de hoy», cada uno con su botón de imprimir, **a quien puede abrir Comprobantes** (cajero, gerente, administradores). Recepción y empleado ven solo el resumen del día (cuántos cobros, cuánto y por qué canal), sin cliente, plan ni autorización; se les concede el detalle dándoles Comprobantes en Permisos.
 - «Mi cuadre del día» y el cierre de caja imprimibles llevan un bloque aparte, informativo; no suma a los totales ni al arqueo.
 - Si hay varias cajas abiertas a la vez, cada cierre repite esos cobros: son de la empresa, no de la caja.
 - Cerrar una caja no exige ser quien la abrió; la conciliación solo lleva a esa caja, porque el cierre necesita el efectivo contado.

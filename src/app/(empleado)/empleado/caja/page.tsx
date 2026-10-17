@@ -1,4 +1,4 @@
-import { requireRole } from '@/lib/auth/guards'
+import { puedeSeccion, requireRole } from '@/lib/auth/guards'
 import { conEmpresa } from '@/lib/tenant'
 import { SCANNER_ROLES } from '@/types'
 import {
@@ -183,7 +183,10 @@ export default async function CajaPage({
     buscarOrdenesPendientes(companyId, q),
     getMovimientosSesion(sesion.id),
     // Fuera del arqueo: ver `CobrosEnLineaDelDia`. Si falla, la caja sigue funcionando sin esta lista.
-    getCobrosEnLineaDelDia(companyId, hoyLocal(zonaEmpresa), zonaEmpresa).catch(() => null),
+    // El detalle (cliente, plan, autorización) es el mismo dato que el historial de Comprobantes: solo para quien puede abrirlo.
+    puedeSeccion('facturas')
+      .then((conDetalle) => getCobrosEnLineaDelDia(companyId, hoyLocal(zonaEmpresa), zonaEmpresa, { conDetalle }))
+      .catch(() => null),
   ])
   // Fase 7: la caja conectada al catálogo y a los pedidos (apagada de serie; las acciones lo comprueban otra vez).
   const pos = await posPermitido(companyId)
