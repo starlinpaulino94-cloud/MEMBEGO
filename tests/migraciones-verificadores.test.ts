@@ -48,7 +48,7 @@ test('MIGRACIONES · el verificador largo lista exactamente las migraciones del 
 
 test('MIGRACIONES · las migraciones nuevas del programa de inventario están, y selladas, en los dos sitios', () => {
   const sumas = readFileSync(join(DIR, 'SUMAS.txt'), 'utf8')
-  for (const nombre of ['20261067_inventory_reason_codes', '20261068_inventory_lots', '20261069_inventory_count_lots', '20261070_inventory_lot_expiry_history', '20261071_inventory_serials', '20261072_inventory_kits']) {
+  for (const nombre of ['20261067_inventory_reason_codes', '20261068_inventory_lots', '20261069_inventory_count_lots', '20261070_inventory_lot_expiry_history', '20261071_inventory_serials', '20261072_inventory_kits', '20261073_rol_bodega']) {
     assert.ok(migraciones.some((x) => x.n === nombre), `${nombre} no está en prisma/migrations`)
     assert.ok(sumas.includes(nombre), `${nombre} no está sellada en SUMAS.txt (npm run migraciones:sellar)`)
     assert.ok(readFileSync('scripts/verificar-migraciones.sql', 'utf8').includes(`'${nombre}'`), `${nombre} no está en el verificador largo. ${HINT}`)

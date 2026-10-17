@@ -22,6 +22,7 @@ enum AppRole {
   RECEPCION
   MARKETING // difusión: promociones, campañas, publicaciones, audiencia, notificaciones
   SUPERVISOR // operación: dashboard/reportes, clientes, validar pagos, scanner
+  BODEGA // almacén: mueve existencias (recibir, ajustar, transferir, contar) sin ver costos ni comprar
   /// Vendedor de Excursiones: solo alcanza /vendedor. Es un rol de ACCESO
   /// EXTERNO (hoteles, taxistas, promotores) y por eso no está en ningún grupo
   /// de administración ni del escáner: su aislamiento es estructural, no una

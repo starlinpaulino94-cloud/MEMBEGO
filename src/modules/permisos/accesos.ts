@@ -1,6 +1,7 @@
 import type { AppRole } from '@/types'
 import {
   ADMIN_SECTIONS,
+  FUNCIONES_NEGADAS_POR_ROL,
   ROLES_EXENTOS_PERMISOS,
   canAccessAdminSection,
   seccionConcedida,
@@ -72,11 +73,14 @@ export interface AccesoSeccion {
 export type SeccionEncendida = (section: AdminSection) => boolean
 
 function funcionesNegadasDe(
+  role: AppRole,
   section: AdminSection,
   permisos: PermisosUsuario | null | undefined
 ): string[] {
-  const negadas = permisos?.funciones?.[section]
-  if (!negadas) return []
+  // INV-5e: lo que el ROL no trae de serie (la bodega sin costos) también es una función que a esta persona le falta.
+  const delRol = FUNCIONES_NEGADAS_POR_ROL[role]?.[section] ?? []
+  const negadas = { ...permisos?.funciones?.[section], ...Object.fromEntries(delRol.map((f) => [f, false])) }
+  if (!Object.keys(negadas).length) return []
   const catalogo = FUNCIONES_POR_SECCION[section] ?? []
   /**
    * Solo las que están en el CATÁLOGO, y solo con su nombre.
@@ -101,7 +105,7 @@ export function accesoASeccion(
   seccionEncendida: SeccionEncendida
 ): AccesoSeccion {
   const label = SECCION_LABELS[section] ?? section
-  const funcionesNegadas = funcionesNegadasDe(section, permisos)
+  const funcionesNegadas = funcionesNegadasDe(role, section, permisos)
 
   if (!seccionPermitida(role, section, permisos)) {
     // «Negado» es la negación explícita, la que alguien tuvo que marcar. Si el

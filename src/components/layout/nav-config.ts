@@ -1627,6 +1627,7 @@ const RANGOS: Record<AppRole, number> = {
   SUPERVISOR: 60,
   MARKETING: 55,
   CAJERO: 50,
+  BODEGA: 45,
   RECEPCION: 40,
   EMPLEADO: 30,
   VENDEDOR: 20,
@@ -2131,6 +2132,8 @@ export function roleLabel(role: AppRole): string {
       return 'Marketing'
     case 'SUPERVISOR':
       return 'Supervisor'
+    case 'BODEGA':
+      return 'Bodega'
     case 'VENDEDOR':
       return 'Vendedor'
     default:

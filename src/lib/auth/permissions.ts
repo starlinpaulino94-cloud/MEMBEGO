@@ -180,6 +180,11 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // citas, seguimiento— volvieron al menú lateral como secciones propias).
   SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'app', 'riesgo', 'retencion', 'conciliacion'],
   /**
+   * LA BODEGA (INV-5e). Mueve existencias y nada más: la sección de inventario, sin panel de inicio —que muestra dinero— ni catálogo.
+   * Qué funciones de inventario NO trae de serie lo dice `FUNCIONES_NEGADAS_POR_ROL`.
+   */
+  BODEGA: ['inventario'],
+  /**
    * EL MOSTRADOR. Lo que hace falta para cobrar, registrar una visita y
    * atender a quien está delante: el cliente, su membresía, el cobro, el
    * comprobante, la cita y el canje. Nada de marketing, nada de configuración
@@ -213,6 +218,14 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
     // en cada sucursal, los pedidos que llegan y las ofertas sobre el catálogo.
     'catalogo', 'inventario', 'pedidos-membego', 'deals',
   ],
+}
+
+/**
+ * Funciones que un rol NO trae de serie dentro de una sección que sí tiene (INV-5e). Los permisos por empleado solo guardan negaciones, así
+ * que esto es el único sitio donde un ROL puede traer una función menos: la bodega mueve existencias pero no ve costos ni compra.
+ */
+export const FUNCIONES_NEGADAS_POR_ROL: Partial<Record<AppRole, Partial<Record<AdminSection, readonly string[]>>>> = {
+  BODEGA: { inventario: ['costos', 'comprar'] },
 }
 
 /**
@@ -398,6 +411,7 @@ export function funcionPermitida(
 ): boolean {
   if (!seccionPermitida(role, section, permisos)) return false
   if (ROLES_EXENTOS_PERMISOS.includes(role)) return true
+  if (FUNCIONES_NEGADAS_POR_ROL[role]?.[section]?.includes(funcion)) return false
   return permisos?.funciones?.[section]?.[funcion] !== false
 }
 

@@ -132,7 +132,7 @@ automatizaciones. No existe un rol de «bodega» que mueva stock sin ver finanza
 | **INV-5b5 · Corregir y deshacer** | Corregir el vencimiento de un lote (con motivo, para todas las sucursales y con su historia inmutable) y deshacer la activación de lotes mientras nada se haya movido con lotes. **La desactivación de un producto con historia de lotes NO se hace** (§36) | `20261070` (historia del vencimiento; el disparador del lote solo deja cambiar la fecha con historia de la misma transacción; `inventory_lot_tiene_historial` pasa a mirar los repartos) | M | **hecha** (§36-37) |
 | **INV-5c · Series** | Un producto puede llevar **series**: cada unidad tiene su número de serie y es un lote de UNA unidad, sin vencimiento. «Una serie, una unidad» lo vigila la base. Entradas y órdenes de compra con un número por unidad, «Asignar series» a lo que ya había, vender primero la serie más antigua, y «Buscar una serie» con su historia | `20261071` (bandera `tracksSerials`, la regla de la unidad única y su candado) | L | **hecha** (§38-39) |
 | **INV-5d · Kits** | Un kit es un producto SIN existencias propias, armado con una receta de componentes: venderlo aparta, vende, libera y devuelve los componentes (con sus lotes y series). Cuántos kits alcanzan sale del componente que primero se acaba | `20261072` (receta + foto de lo apartado por pedido; los kits no se anidan) | L | **hecha** (§40-41) |
-| INV-5e · API v1 y rol de bodega | API pública del inventario; un rol que mueve stock sin ver finanzas | — | M | pendiente |
+| **INV-5e · API v1 y rol de bodega** | Un rol nuevo, **Bodega**, que entra al inventario y mueve existencias sin ver costos ni comprar; y la API pública v1 del inventario (leer existencias y movimientos; registrar entradas y ajustes con motivo, con `Idempotency-Key` y solo con clave de empresa) | `20261073` (solo agrega el valor `BODEGA` al enum de roles) | M | **hecha** (§42-43) |
 
 ## 5. INV-1 · qué se hizo
 
@@ -2450,3 +2450,81 @@ toca las que leen las ventas: es la menos arriesgada de la serie); una VENTA de 
 ningún recorrido de pantalla vende uno; las **series en un componente**; el informe de **margen**, el **escaparate público**, las **ofertas** y la **conciliación** con kits (ver §40: no saben de ellos); el rendimiento con
 muchos kits; y que la rama sigue sin PR ni CI remoto desde INV-4a. **Y lo que se decidió no hacer:** anidar kits, darles existencias propias y calcular su precio de los componentes (§40).
 
+## 42. INV-5e · qué se hizo
+
+**Trae una migración, la `20261073`, y se aplica ANTES que el código** (la aplica el flujo «Migrar y desplegar» al fusionar). Es una sola línea: `ALTER TYPE "AppRole" ADD VALUE IF NOT EXISTS 'BODEGA'`. Es aditiva e
+idempotente y no toca ninguna fila ni tabla; con el código viejo no rompe nada (nadie tiene todavía ese rol). Si el código nuevo se desplegara SIN ella, invitar a alguien como Bodega fallaría al guardar.
+
+**El rol de bodega.** `BODEGA` es un rol de equipo más (se invita desde Empleados y se ve en el filtro de usuarios). Su paquete es **solo la sección de inventario**: no tiene el inicio del panel (que enseña dinero),
+ni catálogo, ni pagos, ni reportes generales, ni ajustes. Aterriza en `/admin/inventario`. No es administrador pleno (`FULL_ADMIN_ROLES`) ni entra al escáner.
+
+Dentro del inventario **mueve existencias** (recibir, ajustar, transferir, contar, lotes, series, kits) pero **no tiene `costos` ni `comprar`**: no ve costos, valor, márgenes ni órdenes de compra, y no puede fijar
+costos al recibir. Hasta ahora los permisos por empleado solo guardaban negaciones y no existían funciones negadas *por rol*, así que se añadió `FUNCIONES_NEGADAS_POR_ROL` en `lib/auth/permissions.ts` (hoy una sola
+entrada). Consecuencias deliberadas: ningún ajuste por empleado le devuelve esas dos funciones (los ajustes solo niegan); el editor de Permisos las muestra desmarcadas y deshabilitadas con «(su rol no lo trae)»;
+y la ficha de accesos las lista como lo que le falta. El resto de roles no cambia: una prueba comprueba que administrador, gerente y superadmin conservan las cuatro funciones.
+
+**La API v1 del inventario.** Cuatro rutas bajo `/api/platform/v1/inventory/`, con dos scopes nuevos (`inventory:read`, `inventory:manage`) y dos capabilities (`INVENTORY_LOOKUP`, `INVENTORY_MANAGE`) en
+`packages/contracts`; el inventario documentado a mano, el OpenAPI generado y el panel de claves (con `inventory:manage` como excepción nombrada a «las claves de empresa solo leen») lo reflejan. Detalle y reglas
+para quien integra: [`platform/api-v1.md`](platform/api-v1.md#inventario-inv-5e).
+
+- `GET /inventory/levels` y `GET /inventory/movements`: paginadas por cursor, filtros `branchId` y `variantId`, abiertas a satélite o clave de empresa.
+- `POST /inventory/receipts` y `POST /inventory/adjustments`: solo clave de empresa, `Idempotency-Key` obligatoria. Llaman a **`recibirEnTx` y `ajustarEnTx`, las mismas funciones del panel**: lotes, series, sucursal
+  cerrada y todo lo demás valen igual; la API no tiene otro camino hacia las existencias. La clave del cliente se guarda con el prefijo `api:` en el propio movimiento, y el servicio ya distingue un reintento (misma
+  operación: contesta `repeated: true`) de un abuso (otra operación: `idempotency_key_reused`).
+- Cada movimiento queda atribuido a la clave (referencia `API` + id de la clave, agente `platform-api`) y el ajuste exige el `reasonCode` del catálogo de motivos, como las pantallas.
+- **Sin costos**: ni el costo promedio ni el unitario salen, y un `cost` en el cuerpo se rechaza.
+- Lo que **no** entra en esta entrega: transferencias, conteos, órdenes de compra, kits, elegir la serie al vender, reservar. Se decidió así para no abrir por HTTP lo que más puede equivocarse sin una
+  persona delante; cada uno puede añadirse con su propio scope.
+
+**Archivos.** `prisma/migrations/20261073_rol_bodega/`, `prisma/schema/identidad.prisma`, `src/types/index.ts` (roles, inicio, listas), `lib/auth/permissions.ts` (paquete y funciones negadas por rol),
+`nav-config.ts`, `AppHeader.tsx`, `EmpleadoForms.tsx`, `usuarios/filtros.ts`, `permisos/accesos.ts`, `PermisosEmpleadoForm.tsx`; `modules/plataforma/inventario.ts` e `inventario-dto.ts`, las cuatro rutas, `packages/contracts`
+(`scopes.ts`, `inventario.ts`), `connect/adminActions.ts` y `ClavesApiPanel.tsx`.
+
+**Lo que no cambia y conviene saber.** Varias pantallas de inventario (reservas, series, reportes) se protegen con `requireRole(ADMIN_ROLES)` y no con la sección: no es nuevo y la bodega solo llega a ellas
+porque tiene la sección; la barrera real sigue siendo el proxy por sección y las acciones, que sí piden `requireSection('inventario', función)`.
+
+## 43. Verificación de INV-5e (2026-10-17)
+
+Local, sobre PostgreSQL 16 desechable. **INV-5e trae la migración `20261073`** (una línea: agrega `BODEGA` al enum de roles): se aplicó a las bases desechables `supplytest`, `membego_e2e_inv2` y `sombra`. **No se tocó
+ninguna base real**: la migración **todavía no se ha aplicado en producción**; la aplicará `migrate deploy` al fusionar la rama, antes de desplegar el código, junto con la `20261067`–`20261072`. Sin Supabase real,
+Vercel, móvil ni Safari: **no verificados**. **Tampoco se miró cómo se ve** nada: ni el editor de Permisos con la casilla deshabilitada, ni la ficha de accesos de una bodega, ni el menú que ve ese rol.
+
+| Verificación | Resultado |
+|---|---|
+| `tsc --noEmit` / `bun run lint` | limpio / 0 errores (189 avisos, ninguno nuevo) |
+| `bun run build` y `bun run presupuesto` | verdes; indicador general **9.014/9.200 KB (98 %)** (9.013 antes de 5e: +1 KB; quedan 186 KB de margen) |
+| Unitarias (`bun run test`) | 4675 pruebas: 4668 pasan, 0 fallan, 7 omitidas heredadas (23 nuevas) |
+| PostgreSQL (`bun run test:db`, base `supplytest`) | **1036/1036** en la corrida completa; después se añadieron 3 pruebas a `inventory-api.db.test.ts` (que pasó de 8 a **11/11**) y esa suite se volvió a correr sola: la corrida completa **no** se repitió con las 3 nuevas |
+| Pruebas nuevas | 10 del rol (`inventario-bodega.test.ts`), 13 de la API —puras y guardias de las rutas— (`inventario-api.test.ts`), 11 contra PostgreSQL con el servicio real (`inventory-api.db.test.ts`) y 1 recorrido E2E HTTP (`inventario-api.spec.ts`, 6 pruebas con la siembra); se ajustaron `connect-panel.test.ts` (la lista de excepciones) y `migraciones-verificadores.test.ts` |
+| E2E (`node scripts/e2e/correr.mjs`, escritorio) | **32/32**: `inventario-lotes` (9), `inventario-admin` (15), `inventario-kits` (2) e `inventario-api` (6) |
+| Mutaciones | **46** (11 del rol y los permisos, 21 de la API y 14 de las rutas, el contrato y las claves): 42 detectadas a la primera y 4 que **sobrevivieron** y se mataron con pruebas nuevas; hoy 46 de 46 |
+
+Qué cubren las pruebas contra PostgreSQL (servicio real): una entrada suma, devuelve el saldo y deja el movimiento atribuido a la clave (referencia `API`, sin costo ni usuario); sin nota, el movimiento dice de qué
+clave vino; repetir la misma `Idempotency-Key` no suma dos veces y devuelve el mismo movimiento, y la misma clave con otra cantidad se rechaza; un ajuste sube y baja, deja su código de motivo y su referencia, se
+rechaza con un motivo que no es de su clase, con uno inventado, con «Otro» sin explicación (ni siquiera con solo espacios), en cero y con decimales; un faltante no baja de cero y no deja rastro; producto o
+sucursal de otra empresa o inexistente: no encontrado, y cantidades malas (cero, negativa, decimal, texto, nula, descomunal) rechazadas; las lecturas filtran por sucursal y producto, paginan, no enseñan nada de otra
+empresa ni ninguna columna de costo; la entrada admite lotes igual que en el panel (y rechaza lotes que no suman); el saldo devuelto descuenta lo apartado; y un faltante que deja el producto bajo su umbral avisa
+a los administradores.
+
+Qué cubre el recorrido E2E (HTTP puro, claves de empresa reales y servidor de producción): la entrada exige `Idempotency-Key` y un reintento no suma dos veces → el ajuste con motivo baja el saldo y se rechaza sin
+motivo, con un motivo que no es de faltante, de más de lo que hay y en cero → una clave de solo lectura lee pero no mueve (403) y un `cost` en el cuerpo se rechaza → existencias y libro de movimientos paginan, filtran y
+no traen costos → la clave de otra empresa, sin la capacidad, responde `catalog_not_enabled` y no ve ni mueve estas existencias.
+
+Hallazgos de la propia verificación (importa que se sepan):
+
+- **Esta vez medí la base de comparación antes de mutar** (`mut5e.py base`: rápidas y PostgreSQL en verde), por lo aprendido en 5c y 5d. Las cifras de arriba son de una pasada válida.
+- **Cuatro mutaciones sobrevivieron y mostraron cuatro huecos reales de prueba:** el ajuste por API no probaba su idempotencia (solo la entrada); nada comprobaba que el saldo devuelto fuera el vendible y no el físico
+  (hacía falta una reserva viva); el aviso de stock bajo tras un faltante no tenía prueba; y «los movimientos no traen los de otra empresa» no se comprobaba (la de las existencias sí). Se escribió una prueba para cada
+  una y las cuatro mutaciones se detectan ahora.
+- **Un bug de producto que las pruebas atraparon antes de entregar:** el primer borrador de la API ponía un texto por omisión («API mbk_…») como detalle del ajuste, y con eso «Otro» pasaba **sin que nadie explicara
+  nada** (el detalle nunca estaba vacío). La prueba de «Otro» sin explicación lo delató; el ajuste ya no lleva texto por omisión (la entrada sí, porque su detalle es opcional).
+- **Un fallo de mi prueba, no del producto:** esperaba que repetir un ajuste devolviera el saldo del momento del ajuste; devuelve el saldo de AHORA (10 − 3 + 2), que es lo correcto.
+- **Entorno:** la base local había perdido su contraseña tras un reinicio y las pruebas de PostgreSQL fallaban en masa con «Authentication failed»; no era el código. Se restableció (y la `20261073` se aplicó con
+  `psql`: estas bases desechables no llevan el registro de `migrate deploy`, que se niega con P3005). Los `fetch failed` del log del E2E son los de siempre: no hay Supabase local.
+
+**Qué NO se verificó:** cómo se ve nada (ni escritorio ni móvil); Supabase real, RLS o permisos de la base real y **la migración `20261073` contra la base real**; **un usuario real con rol Bodega recorriendo el panel**
+(el rol se prueba contra las funciones de permisos y el menú que de ellas se deriva, no con una sesión: el E2E no tiene Supabase) — en particular, **qué ve ese usuario en cada pantalla de inventario no se
+recorrió una por una**: la protección es el proxy por sección y las acciones, pero varias pantallas de lectura de inventario usan `requireRole(ADMIN_ROLES)` y su contenido de dinero depende de que cada una consulte
+`costos` (las que muestran costos lo hacen desde INV-3a, y hay pruebas de eso, pero no una que recorra todas con el rol nuevo); la API con un **satélite** de verdad (solo las lecturas lo admiten y no se probó con un
+token de satélite, solo con claves de empresa); el rendimiento de las lecturas con muchos movimientos; las **claves con este scope en producción** (el flujo de crearlas desde el panel se vigila por texto, no con un clic);
+y que la rama sigue sin PR ni CI remoto desde INV-4a. **Y lo que se decidió no hacer:** transferencias, conteos, órdenes de compra, kits y reservas por API, elegir la serie al vender, y costos por API (§42).

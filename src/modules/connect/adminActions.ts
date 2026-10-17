@@ -84,11 +84,12 @@ export interface AccionState {
  * nada, así que no necesita un satélite detrás. Es «ordena tus propios
  * registros», concedible a una integración de trastienda. `catalog:manage` (F1.3)
  * entra con el mismo criterio y un tope más: solo ARMA borradores, no publica.
+ * `inventory:manage` (INV-5e) también: mueve existencias (entradas y ajustes con motivo), no dinero, y cada movimiento queda atribuido a la clave.
  * NO es `customers:write`
  * —crear, que sigue siendo de satélites y arrastra idempotencia y auditoría—:
  * son dos scopes a propósito.
  */
-const SCOPES_DE_ADMINISTRACION = ['webhooks:manage', 'customers:manage', 'catalog:manage']
+const SCOPES_DE_ADMINISTRACION = ['webhooks:manage', 'customers:manage', 'catalog:manage', 'inventory:manage']
 
 /** Scopes que una empresa puede conceder a una clave suya. */
 const SCOPES_PERMITIDOS = [...new Set(Object.values(SCOPES_POR_CAPABILITY).flat())]

@@ -76,10 +76,11 @@ test('panel: no se ofrece NINGUNA escritura de negocio', () => {
   // `catalog:manage` (Commerce Core · F1.3) entra con ese criterio y un tope
   // más: solo ARMA borradores (crear ítems en DRAFT y agregarles variantes
   // mientras lo sean). No publica, no toca lo que ya está a la venta y no
-  // mueve dinero; lo vigila `tests/catalogo-api.test.ts`.
+  // mueve dinero; lo vigila `tests/catalogo-api.test.ts`. `inventory:manage` (INV-5e) igual: mueve existencias, no dinero; lo vigila
+  // `tests/inventario-api.test.ts`.
   assert.deepEqual(
     excepciones.slice().sort(),
-    ['catalog:manage', 'customers:manage', 'webhooks:manage'],
+    ['catalog:manage', 'customers:manage', 'inventory:manage', 'webhooks:manage'],
     'cambió la lista de excepciones'
   )
 
