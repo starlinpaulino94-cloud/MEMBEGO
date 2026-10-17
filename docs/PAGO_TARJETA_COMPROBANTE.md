@@ -253,7 +253,7 @@ se quita la entrega), `tests/cambio-plan-aplicar.test.ts` y las reglas puras de 
 | Comprobación | Resultado |
 |---|---|
 | Tipos y ESLint | Sin errores |
-| Pruebas unitarias | 3,981 de 3,987 pasan; las 2 de fecha fija (14 de octubre) siguen fallando; 6 omitidas |
+| Pruebas unitarias | 3,979 de 3,987 pasan; las 2 de fecha fija (14 de octubre) siguen fallando; 6 omitidas |
 | Suite PostgreSQL completa | 713 de 713 (corrida sola, sin las unitarias a la vez) |
 | E2E de navegador (conciliación, comprobante y retroactivos, con reconstrucción) | 14 de 14. No hay E2E del pago de un cambio de plan: necesita la pasarela real |
 | Migración `20261056` | Aplicada; sin deriva de esquema; sellos al día |
