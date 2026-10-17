@@ -2,6 +2,18 @@ import { conEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { registrarVentaConfirmada } from '@/modules/pagos/venta'
 
+/** ¿Ya hay una venta registrada para este intento de pago? */
+export async function reciboDeIntentoExiste(companyId: string, intentoId: string): Promise<boolean> {
+  return conEmpresa(companyId, async (tx) =>
+    Boolean(
+      await tx.transaction.findFirst({
+        where: { companyId, tipo: 'SALE', snapshot: { path: ['intentoId'], equals: intentoId } },
+        select: { id: true },
+      })
+    )
+  )
+}
+
 /**
  * EL RECIBO DE UN PAGO CON TARJETA (16-10-2026).
  *
@@ -27,6 +39,8 @@ export async function registrarReciboDePasarela(input: {
   proveedor: string
   /** Lo que se vendió, en las palabras del comprobante: «Plan Oro», «Promoción …», «Renovación · Plan Oro». */
   detalle: string
+  /** Cuándo se cobró: el recibo de un pago anterior lleva su fecha, no la de hoy. */
+  ocurridoEn?: Date | null
 }): Promise<{ id: string; codigo: string; ticketNumero: string } | null> {
   try {
     if (!(input.monto > 0)) return null
@@ -63,6 +77,7 @@ export async function registrarReciboDePasarela(input: {
       referenciaPago: input.autorizacion ? `Aut. ${input.autorizacion}` : null,
       membershipId: input.membershipId,
       intentoId: input.intentoId,
+      ocurridoEn: input.ocurridoEn ?? null,
     })
   } catch (e) {
     anotarFallo('pagos:reciboPasarela', { intentoId: input.intentoId })(e)
