@@ -63,6 +63,7 @@ export async function confirmarSesionCardnet(
     currentTarget.target.companyId !== session.companyId ||
     currentTarget.target.clienteId !== session.clienteId ||
     !Number.isFinite(expectedAmount) ||
+    (currentTarget.target.planDestinoId ?? null) !== (session.planDestinoId ?? null) ||
     Math.round(currentTarget.target.amount * 100) !== Math.round(expectedAmount * 100) ||
     (session.guardarRenovacion && !currentTarget.target.allowRenewalConsent)
   ) {

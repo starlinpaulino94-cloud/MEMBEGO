@@ -92,3 +92,11 @@ test('un cambio de plan pagado necesita a una persona; una renovación automáti
   assert.equal(entregaRequierePersona({ canal: 'APP', membership: { estado: 'PENDIENTE', planIdSolicitado: 'plan-nuevo' } }), false, 'una activación normal sí se reintenta')
   assert.equal(entregaRequierePersona({ canal: 'APP', membership: null }), false)
 })
+
+test('un cambio de plan cuyo cobro recuerda el plan pedido se entrega solo; si el pedido cambió o el cobro es viejo, lo decide una persona', () => {
+  const pide = (planIdSolicitado: string | null) => ({ estado: 'ACTIVA', planIdSolicitado })
+  assert.equal(entregaRequierePersona({ canal: 'APP', planDestinoId: 'plan-b', membership: pide('plan-b') }), false, 'el cobro respalda el pedido: se aplica solo')
+  assert.equal(entregaRequierePersona({ canal: 'WEB', planDestinoId: 'plan-b', membership: pide('plan-c') }), true, 'el cliente cambió su pedido después de pagar')
+  assert.equal(entregaRequierePersona({ canal: 'APP', planDestinoId: null, membership: pide('plan-b') }), true, 'cobro anterior a que se guardara el plan')
+  assert.equal(entregaRequierePersona({ canal: 'APP', planDestinoId: 'plan-b', membership: pide(null) }), false, 'sin pedido ya no hay cambio que aplicar a mano')
+})

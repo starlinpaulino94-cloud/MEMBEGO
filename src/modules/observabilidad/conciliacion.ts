@@ -263,6 +263,7 @@ export async function conciliar(
               id: true,
               monto: true,
               canal: true,
+              planDestinoId: true,
               activadoAt: true,
               updatedAt: true,
               fulfillmentEstado: true,
@@ -352,7 +353,7 @@ export async function conciliar(
         const motivo = i.fulfillmentError ? `: ${i.fulfillmentError}` : ''
         const intentos = i.fulfillmentIntentos > 0 ? ` (${i.fulfillmentIntentos} ${i.fulfillmentIntentos === 1 ? 'intento' : 'intentos'})` : ''
         // Un cambio de plan pagado no se reintenta: lo aplica una persona, y el caso debe decirlo en vez de ofrecer un botón que falla.
-        const laAplicaUnaPersona = esperando && entregaRequierePersona({ canal: i.canal, membership: i.membership })
+        const laAplicaUnaPersona = esperando && entregaRequierePersona({ canal: i.canal, planDestinoId: i.planDestinoId, membership: i.membership })
         // Lo que prueba que el producto está activo, con cuánto tardó: quien cierra el registro firma una nota sobre ESTA evidencia.
         const evidencia = esperando ? null : evidenciaDeEntrega({ activadoAt: i.activadoAt, membership: i.membership, compra: i.compra })
         const evidenciaTexto = evidencia

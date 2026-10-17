@@ -62,6 +62,7 @@ export async function asegurarVentaDelIntento(
         tx.pagoIntento.findUnique({
           where: { id: intentoId },
           include: {
+            planDestino: { select: { nombre: true } },
             transaccion: { select: { id: true, codigo: true, ticketNumero: true } },
             cliente: { select: { nombre: true } },
             membership: {
@@ -91,7 +92,9 @@ export async function asegurarVentaDelIntento(
     const tarjetaDelCobro =
       canal === 'RENOVACION_AUTOMATICA' && antiguedadMs <= TARJETA_VIGENTE_MS ? (intento.membership?.tarjetaTokenizada ?? null) : null
     const plan = intento.membership?.plan.nombre
-    const detalle = intento.membership
+    const detalle = intento.planDestino
+      ? `Cambio a ${intento.planDestino.nombre}`
+      : intento.membership
       ? `${canal === 'RENOVACION_AUTOMATICA' ? 'Renovación' : 'Membresía'} ${plan ?? ''}`.trim()
       : `Promoción ${intento.compra?.promocion?.titulo ?? ''}`.trim()
     const sucursal = intento.membership?.sucursalPago ?? intento.compra?.sucursalPago ?? null

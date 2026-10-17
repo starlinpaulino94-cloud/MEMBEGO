@@ -54,6 +54,7 @@ async function cargarCobro(companyId: string, intentoId: string) {
         updatedAt: true,
         activadoAt: true,
         canal: true,
+        planDestinoId: true,
         membership: { select: { pagoConfirmado: true, fechaPago: true, estado: true, planIdSolicitado: true } },
         compra: { select: { pagoConfirmado: true, fechaActivacion: true } },
       },
@@ -128,7 +129,7 @@ export async function reintentarEntregaDeCobro(companyId: string, intentoId: str
   }
 
   // Un cambio de plan pagado lo aplica una persona: reintentar solo toparía con «ya está activa».
-  if (entregaRequierePersona({ canal: cobro.canal, membership: cobro.membership })) return falla(CAMBIO_DE_PLAN_PAGADO)
+  if (entregaRequierePersona({ canal: cobro.canal, planDestinoId: cobro.planDestinoId, membership: cobro.membership })) return falla(CAMBIO_DE_PLAN_PAGADO)
 
   const r = await reintentarEntrega(intentoId)
   await asentarEnBitacora(companyId, actor, 'CONCILIACION_ENTREGA_REINTENTADA', intentoId, {

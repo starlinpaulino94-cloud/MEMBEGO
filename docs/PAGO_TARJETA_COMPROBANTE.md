@@ -187,7 +187,7 @@ política. Cada corrección tiene su prueba en `tests/postgres/pagos-revision-in
 | # | Qué pasaba | Qué se hizo |
 |---|---|---|
 | 1 | Una **renovación automática** cobrada cuya extensión fallaba quedaba fallando para siempre: el reintento llamaba a `activarMembresia`, que rechaza una membresía ya activa. El barrido y la conciliación gastaban sus reintentos en vano. | La extensión vive en `modules/pagos/renovacion-extension.ts` y la usan el cobro y el reintento. Cierra la entrega en la misma transacción que extiende, fecha el pago al cobro y nunca recobra. Además, una renovación aprobada sin entregar **bloquea otro cobro del mismo periodo** (antes, pasadas 12 horas, el cron podía cobrar dos veces). |
-| 1b | Un **cambio de plan** pagado con tarjeta nunca se puede entregar por la pasarela (la membresía ya está activa y el cambio lo aplica una persona), pero se reintentaba sin fin. | No se reintenta (ni el botón ni el barrido). El caso en la conciliación dice qué hacer: aplicar el cambio desde Pagos y luego cerrar el cobro con «Marcar entregada». El barrido lo cuenta aparte y avisa que hace falta una persona. **Sigue sin haber entrega automática de un cambio de plan por tarjeta**: es una función que falta, no un error. |
+| 1b | Un **cambio de plan** pagado con tarjeta nunca se podía entregar por la pasarela (la membresía ya está activa y el cambio lo aplicaba una persona), y se reintentaba sin fin. | Primero se dejó de reintentar en vano. **Después (decisión 8) se construyó la entrega automática**: ver «Cambio de plan pagado con tarjeta» abajo. |
 | 2 | El barrido leía solo las 500 filas más antiguas y filtraba después: con 500 registros viejos sin cerrar, los clientes recientes que esperaban no entraban nunca. | Lee por páginas, lo más reciente primero, con tope de 10 páginas; si no cabe, lo dice (`incompleto`). |
 | 3 | «Marcar entregada» daba por entregado el producto con cualquier activación posterior al cobro, aunque hubiera tardado días. | El caso enseña **qué activación se usó y cuánto tardó** («Se activó 3 días después del cobro. Tardó mucho: comprueba…»), y la bitácora guarda esa evidencia. No se bloquea: puede ser la entrega perdida de verdad. |
 | 4 | El comprobante pegaba la tarjeta **guardada** de la membresía a cualquier cobro, aunque se hubiera pagado con otra. | Marca y últimos 4 solo en renovaciones automáticas y si la venta se escribe enseguida. En los demás casos dice «Tarjeta» y la autorización. |
@@ -208,6 +208,35 @@ política. Cada corrección tiene su prueba en `tests/postgres/pagos-revision-in
 | Suite E2E completa de navegador (con reconstrucción) | 176 pasan, 0 fallan; 205 omitidas por diseño (proyecto móvil o credenciales externas) |
 | Migraciones | `20261053`, `20261054`, `20261055` aplicadas; sin deriva de esquema; sellos al día |
 | App Expo | Solo tipos de los archivos tocados (sin dispositivo) |
+
+## Cambio de plan pagado con tarjeta (decisión 8, 2026-10-17)
+
+Un cliente con la membresía activa pide un plan mayor y paga la **diferencia prorrateada** con tarjeta. Ahora el propio cobro
+aplica el plan; ya no hace falta que una persona lo apruebe en Pagos.
+
+**Cómo funciona**
+
+- El importe sigue saliendo de la base (`calcularPagoCambioPlan`). Al crear el intento se guarda **qué plan se paga**
+  (`pago_intentos.planDestinoId`, y `cardnet_capture_sessions.planDestinoId` para el flujo de la app). Migración
+  `20261056`: dos columnas nulas y dos claves foráneas con `SET NULL`. Sin esa columna no se puede entregar: el prorrateo
+  depende del día y la membresía puede cambiar su pedido entre el cobro y la entrega.
+- Al aprobarse el cobro, `aplicarCambioDePlanCobrado` (`modules/pagos/cambio-plan-cobrado.ts`) aplica **ese** plan y solo si la
+  membresía sigue activa y sigue pidiéndolo. Cierra la entrega en la misma transacción (bajo el reclamo, como las demás), usa
+  el importe que cobró la pasarela, fecha el pago en el cobro y deja auditoría, evento `CAMBIO_PLAN`, aviso al cliente y la
+  venta «Cambio a …» en el libro. Nunca recobra.
+- Lo que cambia en la membresía lo define una sola función pura, `datosDeCambioDePlan`
+  (`modules/membresia/cambio-plan-aplicar.ts`), que ahora usan también las dos aprobaciones del panel: los tres caminos dejan
+  la membresía igual.
+- La app comprueba, antes de cobrar y al confirmar, que el plan que se paga sigue siendo el mismo.
+
+**Cuándo sigue necesitando a una persona** (y lo dice el caso en Conciliación, sin botón de reintento)
+
+- El cliente **cambió su pedido** después de pagar. No se le da el plan nuevo por el precio del anterior. Si vuelve a pedir el
+  plan que pagó, el reintento (o el barrido) lo entrega solo.
+- Cobros de cambio de plan **anteriores a la migración** (no recuerdan el plan).
+
+**Pruebas:** `tests/postgres/pagos-cambio-plan-tarjeta.db.test.ts` (5, de punta a punta con la base real; probado que fallan si
+se quita la entrega), `tests/cambio-plan-aplicar.test.ts` y las reglas puras de `conciliacion-entrega`.
 
 ### Verificación tras la revisión independiente (2026-10-17)
 
@@ -243,7 +272,7 @@ Queda, y no depende de código:
 5. Datos de tarjeta en el comprobante: marca y últimos 4 + autorización, nunca el número completo.
 6. Doble conteo anterior de ventas de mostrador y del panel en «Total cobrado»: ¿se corrige con la misma guarda? (ver fase 3).
 7. Cobros en línea en la caja: ¿los ve toda la empresa o solo la sucursal de quien mira? (hallazgo 8 de la revisión independiente).
-8. Cambio de plan pagado con tarjeta: ¿se construye la entrega automática (aplicar el plan con su prorrateo al aprobar el cobro) o se deja a una persona? (hallazgo 1b).
+8. ~~Cambio de plan pagado con tarjeta: ¿entrega automática?~~ Decidido: sí. Construido (ver «Cambio de plan pagado con tarjeta»).
 
 ## Reglas de la corrección
 

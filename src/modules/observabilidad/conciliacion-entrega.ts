@@ -81,25 +81,27 @@ export function describirDemora(ms: number): string {
 }
 
 /**
- * Un cobro de CAMBIO DE PLAN pagado con tarjeta: la membresía ya está ACTIVA y pide otro plan.
+ * Un cobro de CAMBIO DE PLAN pagado con tarjeta que la pasarela NO puede entregar sola.
  *
- * La pasarela cobró la diferencia pero no sabe aplicar el cambio (eso lo hace una persona al aprobarlo, con su
- * prorrateo). Reintentar la entrega solo toparía con «la membresía ya está activa», una y otra vez, así que ni el
- * botón ni el barrido lo reintentan: se muestra qué hay que hacer. Una RENOVACIÓN automática no entra aquí aunque la
- * membresía esté activa y tenga un cambio pedido: la renovación sí tiene entrega propia.
+ * Un cambio de plan se entrega aplicando el plan que se pagó (`aplicarCambioDePlanCobrado`), y eso exige saber CUÁL: el
+ * cobro lo guarda (`planDestinoId`) y la membresía debe seguir pidiendo ese mismo plan. Se necesita a una persona cuando
+ * la membresía está activa, tiene un cambio pedido y el cobro no lo respalda: es anterior a que se guardara el plan, o el
+ * cliente cambió su pedido después de pagar. Reintentar solo toparía con lo mismo, una y otra vez, así que ni el botón ni el
+ * barrido lo reintentan: se muestra qué hay que hacer. Una RENOVACIÓN automática no entra aquí aunque la membresía esté
+ * activa y tenga un cambio pedido: la renovación tiene su propia entrega.
  */
 export const CAMBIO_DE_PLAN_PAGADO =
-  'Es un cambio de plan pagado con tarjeta: una persona debe aplicarlo desde Pagos (aprobar el cambio de plan) y luego cerrar el cobro con «Marcar entregada».'
+  'Es un cambio de plan pagado con tarjeta que no se pudo aplicar solo (el cobro es anterior al registro del plan o el cliente cambió su pedido): una persona debe aplicarlo desde Pagos (aprobar el cambio de plan) y luego cerrar el cobro con «Marcar entregada».'
 
 export function entregaRequierePersona(e: {
   canal: string | null
+  /** El plan que respalda el cobro (`pago_intentos.planDestinoId`); nulo si no es un cambio de plan o es anterior a la columna. */
+  planDestinoId?: string | null
   membership: { estado: string; planIdSolicitado: string | null } | null
 }): boolean {
-  return (
-    e.canal !== 'RENOVACION_AUTOMATICA' &&
-    e.membership?.estado === 'ACTIVA' &&
-    e.membership.planIdSolicitado != null
-  )
+  if (e.canal === 'RENOVACION_AUTOMATICA') return false
+  if (e.membership?.estado !== 'ACTIVA' || e.membership.planIdSolicitado == null) return false
+  return e.planDestinoId == null || e.planDestinoId !== e.membership.planIdSolicitado
 }
 
 /** `true` si la entrega sigue dentro de su ventana normal de proceso (no hay nada que revisar todavía). */

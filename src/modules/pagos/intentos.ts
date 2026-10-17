@@ -31,6 +31,7 @@ import type { PaymentProviderKind } from '@/lib/payments'
 import type { CanalDeCobro } from '@/modules/pagos/comprobante-tarjeta'
 import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
 import { RECLAMO_PERDIDO, extenderMembresiaCobrada } from '@/modules/pagos/renovacion-extension'
+import { aplicarCambioDePlanCobrado } from '@/modules/pagos/cambio-plan-cobrado'
 import { CAMBIO_DE_PLAN_PAGADO, entregaRequierePersona } from '@/modules/observabilidad/conciliacion-entrega'
 
 export type EstadoIntento = 'CREADO' | 'REDIRIGIDO' | 'APROBADO' | 'RECHAZADO' | 'EXPIRADO' | 'ERROR'
@@ -42,6 +43,8 @@ export interface CrearIntentoInput {
   /** Uno de los dos, según qué se esté pagando. */
   compraId?: string | null
   membershipId?: string | null
+  /** Solo en el cobro de un cambio de plan: el plan que se paga (lo entrega `entregarProducto`). */
+  planDestinoId?: string | null
   monto: number
   moneda?: string
   ipAddress?: string | null
@@ -69,6 +72,7 @@ export async function crearIntento(input: CrearIntentoInput) {
         proveedor: input.proveedor,
         compraId: input.compraId ?? null,
         membershipId: input.membershipId ?? null,
+        planDestinoId: input.planDestinoId ?? null,
         monto: input.monto,
         moneda: input.moneda ?? 'DOP',
         estado: 'CREADO',
@@ -177,6 +181,8 @@ type IntentoEntregable = {
   userAgent: string | null
   /** Por dónde entró el cobro. Una renovación automática se entrega extendiendo, no activando. */
   canal: string | null
+  /** Solo en el cobro de un cambio de plan: el plan pagado. Un cambio de plan se entrega aplicándolo, no activando. */
+  planDestinoId: string | null
 }
 
 /** ¿La membresía de este cobro es un cambio de plan pedido por el cliente (que la pasarela no sabe aplicar)? */
@@ -188,7 +194,7 @@ async function esCambioDePlanPagado(intento: IntentoEntregable): Promise<boolean
       select: { estado: true, planIdSolicitado: true },
     })
   ).catch(() => null)
-  return entregaRequierePersona({ canal: intento.canal, membership })
+  return entregaRequierePersona({ canal: intento.canal, planDestinoId: intento.planDestinoId, membership })
 }
 
 /**
@@ -228,6 +234,20 @@ async function entregarProducto(
         }
         anotarFallo('pagos:entrega:renovacion', { intentoId: intento.id })(error)
         return { completada: false, error: 'La extensión de la renovación falló.' }
+      }
+    }
+    // Un cambio de plan pagado se entrega aplicando el plan que se pagó: la membresía ya está ACTIVA, `activarMembresia` la
+    // rechazaría. Si no se puede aplicar solo (el cliente cambió su pedido después de pagar), queda para una persona.
+    if (intento.planDestinoId) {
+      try {
+        const cambio = await aplicarCambioDePlanCobrado({ companyId: intento.companyId, intentoId: intento.id, claimAt })
+        return cambio.ok ? { completada: true } : { completada: false, error: cambio.error }
+      } catch (error) {
+        if (error instanceof Error && error.message === RECLAMO_PERDIDO) {
+          return { completada: false, error: 'FULFILLMENT_CLAIM_LOST' }
+        }
+        anotarFallo('pagos:entrega:cambio-plan', { intentoId: intento.id })(error)
+        return { completada: false, error: 'El cambio de plan no se pudo aplicar.' }
       }
     }
     let res
@@ -393,6 +413,7 @@ export async function reintentarEntrega(
           ipAddress: true,
           userAgent: true,
           canal: true,
+          planDestinoId: true,
           estado: true,
           fulfillmentEstado: true,
           updatedAt: true,
@@ -406,8 +427,8 @@ export async function reintentarEntrega(
     return { ok: true, entrega: estadoEntregaActual(intento.fulfillmentEstado) }
   }
 
-  // Un cambio de plan pagado lo aplica una persona: reintentarlo solo toparía con «ya está activa» y gastaría el intento.
-  if (entregaRequierePersona({ canal: intento.canal, membership: intento.membership })) {
+  // Un cambio de plan que la pasarela no puede aplicar sola lo aplica una persona: reintentarlo toparía con lo mismo.
+  if (entregaRequierePersona({ canal: intento.canal, planDestinoId: intento.planDestinoId, membership: intento.membership })) {
     return { ok: false, entrega: estadoEntregaActual(intento.fulfillmentEstado), error: CAMBIO_DE_PLAN_PAGADO }
   }
 

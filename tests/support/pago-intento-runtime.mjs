@@ -63,3 +63,8 @@ export const RECLAMO_PERDIDO = 'FULFILLMENT_CLAIM_LOST'
 export async function extenderMembresiaCobrada() {
   throw new Error('extenderMembresiaCobrada no se usa en esta prueba')
 }
+
+// Lo mismo para la entrega de un cambio de plan pagado: estas pruebas no llevan `planDestinoId`.
+export async function aplicarCambioDePlanCobrado() {
+  throw new Error('aplicarCambioDePlanCobrado no se usa en esta prueba')
+}

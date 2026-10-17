@@ -89,6 +89,7 @@ async function leerEsperando(ahora: Date, companyId?: string) {
           companyId: true,
           monto: true,
           canal: true,
+          planDestinoId: true,
           activadoAt: true,
           updatedAt: true,
           fulfillmentEstado: true,
@@ -107,7 +108,7 @@ async function leerEsperando(ahora: Date, companyId?: string) {
         { estado: i.fulfillmentEstado as EstadoDeEntrega, actualizadoAt: i.updatedAt, activadoAt: i.activadoAt, membership: i.membership, compra: i.compra },
         ahora
       )
-      if (situacion === 'CLIENTE_ESPERANDO') esperando.push({ ...i, requierePersona: entregaRequierePersona({ canal: i.canal, membership: i.membership }) })
+      if (situacion === 'CLIENTE_ESPERANDO') esperando.push({ ...i, requierePersona: entregaRequierePersona({ canal: i.canal, planDestinoId: i.planDestinoId, membership: i.membership }) })
     }
     if (filas.length < PAGINA) break
     cursor = filas[filas.length - 1].id
