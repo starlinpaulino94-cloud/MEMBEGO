@@ -1,0 +1,105 @@
+# PostgreSQL 16 para los trabajos de CI, SIN descargar ninguna imagen.
+#
+# POR QUÉ EXISTE
+# Los trabajos levantaban Postgres como `services:` (una imagen de contenedor que
+# el runner descarga antes del primer paso). Esa descarga es el punto más frágil
+# de CI: Docker Hub limitaba las descargas anónimas desde los runners y se pasó a
+# un espejo de AWS (ECR Public) — que tiene su propia cuota compartida entre
+# runners y se agota igual: `toomanyrequests: Data limit exceeded`. El job moría
+# a los 10 segundos, antes de ejecutar una sola prueba, y relanzarlo no servía
+# mientras la cuota siguiera agotada (#621, #624: ninguna de las caídas tenía que
+# ver con el código).
+#
+# El runner de GitHub (ubuntu-24.04) YA trae PostgreSQL 16 instalado, con el
+# servicio apagado. Aquí se crea un clúster propio, con el mismo locale que
+# tenía la imagen (`en_US.UTF-8`: el orden de los textos y `unaccent` dependen
+# de él), y se deja listo con el mismo usuario, contraseña y base que declaraba
+# el contenedor. No hay descarga, así que no hay cuota que agotar.
+#
+# SI EL RUNNER NO LO TRAE (otra imagen, otra versión) no se rompe: se avisa y se
+# cae al contenedor del espejo con reintentos y espera creciente, que es lo que
+# había antes pero sin morir al primer rechazo.
+#
+# Los trabajos que la usan escriben `DATABASE_URL` con `localhost:5432`, igual que
+# antes: el usuario sigue siendo `postgres` y el puerto 5432.
+name: Postgres para CI
+description: PostgreSQL 16 local (sin descargar imágenes) con usuario postgres, contraseña y una base inicial
+
+inputs:
+  password:
+    description: Contraseña del usuario postgres
+    required: true
+  database:
+    description: Base de datos inicial que se crea (vacío = ninguna además de postgres)
+    required: false
+    default: ''
+  port:
+    description: Puerto en el que escucha
+    required: false
+    default: '5432'
+
+runs:
+  using: composite
+  steps:
+    - name: Levantar PostgreSQL 16
+      shell: bash
+      env:
+        PG_PASSWORD: ${{ inputs.password }}
+        PG_DATABASE: ${{ inputs.database }}
+        PG_PORT: ${{ inputs.port }}
+      run: |
+        set -uo pipefail
+        VERSION=16
+        BIN="/usr/lib/postgresql/$VERSION/bin"
+
+        listo() { pg_isready -h localhost -p "$PG_PORT" -q; }
+        esperar() { for _ in $(seq 1 45); do listo && return 0; sleep 1; done; return 1; }
+
+        nativo() {
+          [ -x "$BIN/postgres" ] && command -v pg_createcluster >/dev/null || return 1
+          # El orden de los textos y `unaccent` dependen del locale: el mismo que traía la imagen.
+          if ! locale -a | grep -qi '^en_US\.utf-\?8$'; then
+            sudo locale-gen en_US.UTF-8 >/dev/null || return 1
+          fi
+          sudo pg_createcluster "$VERSION" ci --locale=en_US.UTF-8 --port="$PG_PORT" --start || return 1
+          esperar || return 1
+          sudo -u postgres psql -p "$PG_PORT" -v ON_ERROR_STOP=1 -qc "ALTER USER postgres PASSWORD '$PG_PASSWORD'" || return 1
+          if [ -n "$PG_DATABASE" ]; then
+            sudo -u postgres createdb -p "$PG_PORT" "$PG_DATABASE" || return 1
+          fi
+          # Lo que las pruebas necesitan de un Postgres: contrib (pg_trgm, unaccent) y conexión por TCP con contraseña.
+          local ext
+          ext=$(PGPASSWORD="$PG_PASSWORD" psql -h localhost -p "$PG_PORT" -U postgres -d postgres -tAc \
+            "select count(*) from pg_available_extensions where name in ('pg_trgm','unaccent')") || return 1
+          [ "$ext" = "2" ] || { echo "::warning::al PostgreSQL local le faltan las extensiones pg_trgm/unaccent"; return 1; }
+          return 0
+        }
+
+        contenedor() {
+          local imagen=public.ecr.aws/docker/library/postgres:16
+          local espera=10
+          for intento in 1 2 3 4 5 6; do
+            docker pull "$imagen" && break
+            if [ "$intento" = 6 ]; then echo "::error::no se pudo descargar $imagen tras 6 intentos"; return 1; fi
+            echo "::warning::descarga rechazada (intento $intento); espero ${espera}s"
+            sleep "$espera"; espera=$((espera * 2))
+          done
+          docker run -d --name postgres-ci \
+            -e POSTGRES_PASSWORD="$PG_PASSWORD" -e POSTGRES_DB="${PG_DATABASE:-postgres}" \
+            -p "$PG_PORT:5432" "$imagen" >/dev/null || return 1
+          esperar
+        }
+
+        if nativo; then
+          ORIGEN="PostgreSQL $VERSION del runner (sin descargar imágenes)"
+        else
+          echo "::warning::sin PostgreSQL $VERSION nativo utilizable en este runner: se usa el contenedor del espejo, con reintentos"
+          # Un clúster a medias no puede quedar escuchando en el puerto que va a ocupar el contenedor.
+          sudo pg_dropcluster --stop "$VERSION" ci 2>/dev/null || true
+          contenedor || { echo "::error::no hay PostgreSQL disponible"; exit 1; }
+          ORIGEN="contenedor del espejo (el PostgreSQL del runner no estaba disponible)"
+        fi
+
+        VERSION_REAL=$(PGPASSWORD="$PG_PASSWORD" psql -h localhost -p "$PG_PORT" -U postgres -d postgres -tAc "show server_version")
+        echo "Postgres listo: $ORIGEN · versión $VERSION_REAL"
+        echo "$ORIGEN · versión $VERSION_REAL" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
