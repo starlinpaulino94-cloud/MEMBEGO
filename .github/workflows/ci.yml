@@ -117,26 +117,16 @@ jobs:
     # replicar el historial completo para compararlo con el esquema. Sin ella
     # el paso no puede hacer su trabajo — que es justamente lo que pasaba
     # cuando llevaba `continue-on-error: true`.
-    services:
-      postgres:
-        # Espejo de AWS (ECR Public) de la imagen oficial: Docker Hub limita las
-        # descargas anónimas desde los runners y a veces ni responde al pedir el
-        # token (toomanyrequests / Client.Timeout), y el job moría antes de correr
-        # una sola prueba. ECR Public no exige autenticación.
-        image: public.ecr.aws/docker/library/postgres:16
-        env:
-          POSTGRES_PASSWORD: ci
-          POSTGRES_DB: sombra
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
     steps:
       - uses: actions/checkout@v4
+      # Se usa el PostgreSQL 16 que ya trae el runner, sin descargar una imagen:
+      # el `services:` con la imagen del espejo de ECR moría a los 10 s con
+      # `toomanyrequests` cuando la cuota compartida se agotaba (#621, #624).
+      # Ver .github/actions/postgres.
+      - uses: ./.github/actions/postgres
+        with:
+          password: ci
+          database: sombra
       - uses: actions/setup-node@v4
         with:
           node-version: 22
