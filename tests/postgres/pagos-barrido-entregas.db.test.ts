@@ -196,7 +196,8 @@ test('7 · respeta el presupuesto de tiempo y el tope por pasada, y lo dice', as
 
   const tope = await barrer(e, { maxReintentos: 1 })
   assert.deepEqual([tope.reintentadas, tope.entregadas, tope.incompleto], [1, 1, true], 'el tope deja trabajo para la siguiente pasada')
-  assert.equal((await prisma.pagoIntento.findUniqueOrThrow({ where: { id: i1.id } })).fulfillmentEstado, 'COMPLETADA', 'el más viejo primero')
+  assert.equal((await prisma.pagoIntento.findUniqueOrThrow({ where: { id: i2.id } })).fulfillmentEstado, 'COMPLETADA', 'el más reciente primero (revisión independiente: lo viejo ya no le quita el turno)')
+  assert.equal((await prisma.pagoIntento.findUniqueOrThrow({ where: { id: i1.id } })).fulfillmentEstado, 'FALLIDA')
 
   const resto = await barrer(e)
   assert.deepEqual([resto.reintentadas, resto.entregadas, resto.incompleto], [1, 1, false])

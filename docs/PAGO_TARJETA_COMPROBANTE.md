@@ -178,6 +178,26 @@ y cuenta cuántos cobros entregados no tienen comprobante (recientes con canal y
 reales, cuántos de los 9 pagos de la captura eran falsos positivos y cuántos eran clientes esperando. **No se ha ejecutado contra
 producción**: eso solo puede hacerlo quien tenga acceso a esa base.
 
+## Revisión independiente (2026-10-17)
+
+Después de cerrar las seis fases, un revisor que no había escrito el código leyó todo lo que mueve dinero. Encontró diez cosas.
+Se comprobó cada una contra el código antes de tocar nada; nueve eran reales y se corrigieron, y una es una decisión de
+política. Cada corrección tiene su prueba en `tests/postgres/pagos-revision-independiente.db.test.ts`, que falla si vuelve el defecto.
+
+| # | Qué pasaba | Qué se hizo |
+|---|---|---|
+| 1 | Una **renovación automática** cobrada cuya extensión fallaba quedaba fallando para siempre: el reintento llamaba a `activarMembresia`, que rechaza una membresía ya activa. El barrido y la conciliación gastaban sus reintentos en vano. | La extensión vive en `modules/pagos/renovacion-extension.ts` y la usan el cobro y el reintento. Cierra la entrega en la misma transacción que extiende, fecha el pago al cobro y nunca recobra. Además, una renovación aprobada sin entregar **bloquea otro cobro del mismo periodo** (antes, pasadas 12 horas, el cron podía cobrar dos veces). |
+| 1b | Un **cambio de plan** pagado con tarjeta nunca se puede entregar por la pasarela (la membresía ya está activa y el cambio lo aplica una persona), pero se reintentaba sin fin. | No se reintenta (ni el botón ni el barrido). El caso en la conciliación dice qué hacer: aplicar el cambio desde Pagos y luego cerrar el cobro con «Marcar entregada». El barrido lo cuenta aparte y avisa que hace falta una persona. **Sigue sin haber entrega automática de un cambio de plan por tarjeta**: es una función que falta, no un error. |
+| 2 | El barrido leía solo las 500 filas más antiguas y filtraba después: con 500 registros viejos sin cerrar, los clientes recientes que esperaban no entraban nunca. | Lee por páginas, lo más reciente primero, con tope de 10 páginas; si no cabe, lo dice (`incompleto`). |
+| 3 | «Marcar entregada» daba por entregado el producto con cualquier activación posterior al cobro, aunque hubiera tardado días. | El caso enseña **qué activación se usó y cuánto tardó** («Se activó 3 días después del cobro. Tardó mucho: comprueba…»), y la bitácora guarda esa evidencia. No se bloquea: puede ser la entrega perdida de verdad. |
+| 4 | El comprobante pegaba la tarjeta **guardada** de la membresía a cualquier cobro, aunque se hubiera pagado con otra. | Marca y últimos 4 solo en renovaciones automáticas y si la venta se escribe enseguida. En los demás casos dice «Tarjeta» y la autorización. |
+| 5 | La fecha de pago de la membresía era la de la **entrega**, y la de la venta, la del cobro. Con una entrega tardía al otro lado de un cambio de mes, el dinero se contaba en dos periodos. Además, el reporte de Clientes y el detalle de Finanzas seguían sumando membresía y venta. | `fechaPago` de un cobro de pasarela es `activadoAt`. La guarda de doble conteo se aplicó también a «valor de clientes» y al detalle de Finanzas. |
+| 6 | Un proceso **automático** podía escribir una venta fechada en un mes ya cerrado. | Lo automático solo escribe ventas de cobros de hasta 14 días; más viejos solo los escribe una persona con la acción explícita de la conciliación. |
+| 7 | La lista de cobros en línea cortaba a 500 filas y el **total** del cuadre se calculaba con la lista cortada. | El total y la cuenta son los del día completo; la lista avisa cuando está recortada. |
+| 8 | Todos los roles que ven la caja ven la lista de cobros en línea de **toda la empresa**, no solo la de su sucursal. | **No se cambió: es una decisión de política.** Ver decisión 7. |
+| 9 | El cron no contaba como error un comprobante que no se pudo escribir (la función devuelve `null`, no lanza), así que decía «todo bien». | Se cuenta en `errores`; y la reparación recorre primero lo más reciente. |
+| 10 | La migración `20261054` se **modificó después de haberse publicado** (se le añadió el relleno). | **No se puede deshacer.** Una base que ya hubiera aplicado la primera versión no tiene el relleno: hay que correrlo a mano (marcado `-- BACKFILL:INICIO/FIN`). Las bases creadas de cero están bien. |
+
 ## Verificación de cierre (2026-10-16)
 
 | Comprobación | Resultado |
@@ -212,6 +232,8 @@ Queda, y no depende de código:
 4. Numeración: mismo contador `TCK-` que la caja o serie aparte.
 5. Datos de tarjeta en el comprobante: marca y últimos 4 + autorización, nunca el número completo.
 6. Doble conteo anterior de ventas de mostrador y del panel en «Total cobrado»: ¿se corrige con la misma guarda? (ver fase 3).
+7. Cobros en línea en la caja: ¿los ve toda la empresa o solo la sucursal de quien mira? (hallazgo 8 de la revisión independiente).
+8. Cambio de plan pagado con tarjeta: ¿se construye la entrega automática (aplicar el plan con su prorrateo al aprobar el cobro) o se deja a una persona? (hallazgo 1b).
 
 ## Reglas de la corrección
 

@@ -35,7 +35,7 @@ export function esperaTrasIntentos(intentos: number): number {
   return Math.min(ESPERA_MAX_MS, ESPERA_BASE_MS * 2 ** (intentos - 1))
 }
 
-export type DecisionDeReintento = 'REINTENTAR' | 'ESPERAR' | 'AGOTADO' | 'FUERA_DE_VENTANA'
+export type DecisionDeReintento = 'REINTENTAR' | 'ESPERAR' | 'AGOTADO' | 'FUERA_DE_VENTANA' | 'REQUIERE_PERSONA'
 
 export interface CobroPorReintentar {
   /** Reintentos hechos hasta ahora (`fulfillmentIntentos`). */
@@ -44,10 +44,13 @@ export interface CobroPorReintentar {
   actualizadoAt: Date
   /** Cuándo la pasarela aprobó el cobro. Sin fecha no se puede acotar ni demostrar nada. */
   activadoAt: Date | null
+  /** Un cambio de plan ya pagado: lo aplica una persona, reintentarlo no lo resuelve nunca (ver `entregaRequierePersona`). */
+  requierePersona?: boolean
 }
 
 /** Qué hace el barrido con un cliente que está esperando. El orden de las comprobaciones es parte de la regla. */
 export function decidirReintento(c: CobroPorReintentar, ahora: Date): DecisionDeReintento {
+  if (c.requierePersona) return 'REQUIERE_PERSONA'
   if (!c.activadoAt) return 'FUERA_DE_VENTANA'
   if (ahora.getTime() - c.activadoAt.getTime() > VENTANA_REINTENTO_DIAS * DIA_MS) return 'FUERA_DE_VENTANA'
   if (c.intentos >= MAX_REINTENTOS_AUTOMATICOS) return 'AGOTADO'
@@ -61,7 +64,7 @@ export interface ResumenParaAviso {
   /** Clientes que pagaron con tarjeta y siguen sin su producto (ya pasado el umbral de aviso). */
   esperando: number
   monto: number
-  /** De esos, en cuántos el sistema ya agotó sus reintentos (o es demasiado viejo para reintentarlo): hace falta una persona. */
+  /** De esos, en cuántos el sistema ya agotó sus reintentos, es demasiado viejo o es un cambio de plan: hace falta una persona. */
   sinSalidaAutomatica: number
 }
 

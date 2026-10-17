@@ -1,7 +1,7 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
-import { whereCobrado } from '@/modules/pagos/cobrado'
+import { sinVentaDePasarelaEnElPeriodo, whereCobrado } from '@/modules/pagos/cobrado'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { variacion, diasDelRango, type Rango } from '@/modules/reportes/rango'
 import type { Kpi } from '@/modules/reportes/queries'
@@ -267,8 +267,14 @@ async function valorDelPeriodo(
   rango: { desde: Date; hasta: Date }
 ): Promise<number> {
   const [membresias, caja] = await Promise.all([
+    // Un cobro con tarjeta de la pasarela vive en las dos tablas: la membresía y
+    // su venta del libro. Se cuenta por la caja y se saca del lado de las
+    // membresías, igual que en Finanzas, o este total se inflaría el doble.
     tx.membership.aggregate({
-      where: whereCobrado(rango.desde, rango.hasta, { companyId }),
+      where: whereCobrado(rango.desde, rango.hasta, {
+        companyId,
+        ...sinVentaDePasarelaEnElPeriodo(rango.desde, rango.hasta),
+      }),
       _sum: { montoPagado: true },
     }),
     tx.transaction.aggregate({

@@ -30,6 +30,8 @@ import { activarMembresia } from '@/modules/pagos/activacion'
 import type { PaymentProviderKind } from '@/lib/payments'
 import type { CanalDeCobro } from '@/modules/pagos/comprobante-tarjeta'
 import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
+import { RECLAMO_PERDIDO, extenderMembresiaCobrada } from '@/modules/pagos/renovacion-extension'
+import { CAMBIO_DE_PLAN_PAGADO, entregaRequierePersona } from '@/modules/observabilidad/conciliacion-entrega'
 
 export type EstadoIntento = 'CREADO' | 'REDIRIGIDO' | 'APROBADO' | 'RECHAZADO' | 'EXPIRADO' | 'ERROR'
 
@@ -173,6 +175,20 @@ type IntentoEntregable = {
   membershipId: string | null
   ipAddress: string | null
   userAgent: string | null
+  /** Por dónde entró el cobro. Una renovación automática se entrega extendiendo, no activando. */
+  canal: string | null
+}
+
+/** ¿La membresía de este cobro es un cambio de plan pedido por el cliente (que la pasarela no sabe aplicar)? */
+async function esCambioDePlanPagado(intento: IntentoEntregable): Promise<boolean> {
+  if (!intento.membershipId) return false
+  const membership = await conEmpresa(intento.companyId, (tx) =>
+    tx.membership.findUnique({
+      where: { id: intento.membershipId as string },
+      select: { estado: true, planIdSolicitado: true },
+    })
+  ).catch(() => null)
+  return entregaRequierePersona({ canal: intento.canal, membership })
 }
 
 /**
@@ -200,6 +216,20 @@ async function entregarProducto(
     return { completada: true }
   }
   if (intento.membershipId) {
+    // Una renovación automática no «activa»: la membresía ya está ACTIVA y lo que falta es extenderla. `activarMembresia`
+    // la rechazaría («ya está activa») en cada reintento y el cobro quedaría fallando para siempre.
+    if (intento.canal === 'RENOVACION_AUTOMATICA') {
+      try {
+        const ext = await extenderMembresiaCobrada({ companyId: intento.companyId, intentoId: intento.id, claimAt })
+        return ext.ok ? { completada: true } : { completada: false, error: ext.error }
+      } catch (error) {
+        if (error instanceof Error && error.message === RECLAMO_PERDIDO) {
+          return { completada: false, error: 'FULFILLMENT_CLAIM_LOST' }
+        }
+        anotarFallo('pagos:entrega:renovacion', { intentoId: intento.id })(error)
+        return { completada: false, error: 'La extensión de la renovación falló.' }
+      }
+    }
     let res
     try {
       res = await activarMembresia(intento.membershipId, null, meta, fulfillmentClaim)
@@ -209,7 +239,11 @@ async function entregarProducto(
       }
       throw error
     }
-    if (!res.ok) return { completada: false, error: res.error }
+    if (!res.ok) {
+      // «Ya está activa» no es un fallo cualquiera cuando la membresía pide un cambio de plan ya pagado: hay que decir qué hacer.
+      if (await esCambioDePlanPagado(intento)) return { completada: false, error: CAMBIO_DE_PLAN_PAGADO }
+      return { completada: false, error: res.error }
+    }
     return { completada: true }
   }
   return { completada: false, error: 'Intento sin producto asociado.' }
@@ -358,9 +392,11 @@ export async function reintentarEntrega(
           membershipId: true,
           ipAddress: true,
           userAgent: true,
+          canal: true,
           estado: true,
           fulfillmentEstado: true,
           updatedAt: true,
+          membership: { select: { estado: true, planIdSolicitado: true } },
         },
       })
   )
@@ -368,6 +404,11 @@ export async function reintentarEntrega(
   if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado === 'COMPLETADA') {
     if (intento.estado === 'APROBADO') await asegurarVentaDelIntento(intentoId)
     return { ok: true, entrega: estadoEntregaActual(intento.fulfillmentEstado) }
+  }
+
+  // Un cambio de plan pagado lo aplica una persona: reintentarlo solo toparía con «ya está activa» y gastaría el intento.
+  if (entregaRequierePersona({ canal: intento.canal, membership: intento.membership })) {
+    return { ok: false, entrega: estadoEntregaActual(intento.fulfillmentEstado), error: CAMBIO_DE_PLAN_PAGADO }
   }
 
   const claimAt = new Date()

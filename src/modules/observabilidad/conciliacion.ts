@@ -2,7 +2,15 @@ import 'server-only'
 
 import { conEmpresa } from '@/lib/tenant'
 import { ETIQUETA_CANAL, esCanalDeCobro } from '@/modules/pagos/comprobante-tarjeta'
-import { situacionDeEntrega, type EstadoDeEntrega } from '@/modules/observabilidad/conciliacion-entrega'
+import {
+  CAMBIO_DE_PLAN_PAGADO,
+  DEMORA_SOSPECHOSA_MS,
+  describirDemora,
+  entregaRequierePersona,
+  evidenciaDeEntrega,
+  situacionDeEntrega,
+  type EstadoDeEntrega,
+} from '@/modules/observabilidad/conciliacion-entrega'
 
 /**
  * CONCILIACIÓN DIARIA — que el descuadre lo encuentre el sistema, no el cliente.
@@ -262,7 +270,9 @@ export async function conciliar(
               fulfillmentIntentos: true,
               clienteId: true,
               cliente: { select: { nombre: true } },
-              membership: { select: { pagoConfirmado: true, fechaPago: true, plan: { select: { nombre: true } } } },
+              membership: {
+                select: { pagoConfirmado: true, fechaPago: true, estado: true, planIdSolicitado: true, plan: { select: { nombre: true } } },
+              },
               compra: { select: { pagoConfirmado: true, fechaActivacion: true, promocion: { select: { titulo: true } } } },
             },
             orderBy: { activadoAt: 'desc' },
@@ -341,17 +351,33 @@ export async function conciliar(
         const esperando = situacion === 'CLIENTE_ESPERANDO'
         const motivo = i.fulfillmentError ? `: ${i.fulfillmentError}` : ''
         const intentos = i.fulfillmentIntentos > 0 ? ` (${i.fulfillmentIntentos} ${i.fulfillmentIntentos === 1 ? 'intento' : 'intentos'})` : ''
+        // Un cambio de plan pagado no se reintenta: lo aplica una persona, y el caso debe decirlo en vez de ofrecer un botón que falla.
+        const laAplicaUnaPersona = esperando && entregaRequierePersona({ canal: i.canal, membership: i.membership })
+        // Lo que prueba que el producto está activo, con cuánto tardó: quien cierra el registro firma una nota sobre ESTA evidencia.
+        const evidencia = esperando ? null : evidenciaDeEntrega({ activadoAt: i.activadoAt, membership: i.membership, compra: i.compra })
+        const evidenciaTexto = evidencia
+          ? ` Se activó ${describirDemora(evidencia.demoraMs)} después del cobro.` +
+            (evidencia.demoraMs >= DEMORA_SOSPECHOSA_MS
+              ? ' Tardó mucho: antes de cerrarlo, comprueba en la ficha que esa activación corresponde a este pago.'
+              : '')
+          : ''
         return {
           id: i.id,
           tipo: esperando ? 'CLIENTE_ESPERANDO' : 'REGISTRO_SIN_CERRAR',
           titulo: `${i.cliente?.nombre ?? 'Cliente'} · ${nombreDelProducto(i.membership?.plan.nombre, i.compra?.promocion?.titulo)}`,
-          detalle: esperando
-            ? `El cliente pagó y no tiene su producto. Entrega ${etiquetaDeEntrega(i.fulfillmentEstado)}${motivo}${intentos}`
-            : `El producto ya está activo; el cobro quedó sin marcar como entregado (${etiquetaDeEntrega(i.fulfillmentEstado)})`,
+          detalle: laAplicaUnaPersona
+            ? `El cliente pagó y no tiene su cambio de plan. ${CAMBIO_DE_PLAN_PAGADO}`
+            : esperando
+              ? `El cliente pagó y no tiene su producto. Entrega ${etiquetaDeEntrega(i.fulfillmentEstado)}${motivo}${intentos}`
+              : `El producto ya está activo; el cobro quedó sin marcar como entregado (${etiquetaDeEntrega(i.fulfillmentEstado)}).${evidenciaTexto}`,
           monto: Number(i.monto),
           fecha: i.activadoAt ?? i.updatedAt,
           clienteId: i.clienteId,
-          acciones: esperando ? ['REINTENTAR_ENTREGA', 'ABRIR_FICHA'] : ['MARCAR_ENTREGADA', 'ABRIR_FICHA'],
+          acciones: laAplicaUnaPersona
+            ? ['ABRIR_FICHA']
+            : esperando
+              ? ['REINTENTAR_ENTREGA', 'ABRIR_FICHA']
+              : ['MARCAR_ENTREGADA', 'ABRIR_FICHA'],
         }
       }
       const esperando = sinCerrar.filter((x) => x.situacion === 'CLIENTE_ESPERANDO').map(aCaso)

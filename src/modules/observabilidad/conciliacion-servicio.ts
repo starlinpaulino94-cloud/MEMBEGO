@@ -4,7 +4,14 @@ import { conEmpresa } from '@/lib/tenant'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { reintentarEntrega } from '@/modules/pagos/intentos'
 import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
-import { situacionDeEntrega, type EstadoDeEntrega } from '@/modules/observabilidad/conciliacion-entrega'
+import {
+  CAMBIO_DE_PLAN_PAGADO,
+  DEMORA_SOSPECHOSA_MS,
+  entregaRequierePersona,
+  evidenciaDeEntrega,
+  situacionDeEntrega,
+  type EstadoDeEntrega,
+} from '@/modules/observabilidad/conciliacion-entrega'
 
 /**
  * LAS ACCIONES DE LA CONCILIACIÓN — resolver un caso, con rastro.
@@ -46,7 +53,8 @@ async function cargarCobro(companyId: string, intentoId: string) {
         fulfillmentError: true,
         updatedAt: true,
         activadoAt: true,
-        membership: { select: { pagoConfirmado: true, fechaPago: true } },
+        canal: true,
+        membership: { select: { pagoConfirmado: true, fechaPago: true, estado: true, planIdSolicitado: true } },
         compra: { select: { pagoConfirmado: true, fechaActivacion: true } },
       },
     })
@@ -94,7 +102,7 @@ export async function generarComprobanteDeCobro(companyId: string, intentoId: st
   if (cobro.fulfillmentEstado !== 'COMPLETADA') {
     return falla('El cliente todavía no recibió su producto: primero se entrega («Reintentar entrega» o «Marcar entregada»).')
   }
-  const venta = await asegurarVentaDelIntento(intentoId)
+  const venta = await asegurarVentaDelIntento(intentoId, { explicito: true })
   if (!venta) return falla('No se pudo registrar el comprobante. Revisa el registro del servidor e inténtalo de nuevo.')
   if (!venta.nueva) return { ok: true, mensaje: `Este cobro ya tenía su comprobante (${venta.ticketNumero}).`, ticketNumero: venta.ticketNumero, transactionId: venta.id }
   await asentarEnBitacora(companyId, actor, 'CONCILIACION_COMPROBANTE_GENERADO', intentoId, {
@@ -118,6 +126,9 @@ export async function reintentarEntregaDeCobro(companyId: string, intentoId: str
   if (situacion === 'REGISTRO_SIN_CERRAR') {
     return falla('El producto ya está activo: no hay nada que reintentar. Usa «Marcar entregada» para cerrar el registro.')
   }
+
+  // Un cambio de plan pagado lo aplica una persona: reintentar solo toparía con «ya está activa».
+  if (entregaRequierePersona({ canal: cobro.canal, membership: cobro.membership })) return falla(CAMBIO_DE_PLAN_PAGADO)
 
   const r = await reintentarEntrega(intentoId)
   await asentarEnBitacora(companyId, actor, 'CONCILIACION_ENTREGA_REINTENTADA', intentoId, {
@@ -160,13 +171,24 @@ export async function marcarCobroEntregado(companyId: string, intentoId: string,
     })
   )
   if (cerrado.count === 0) return falla('El cobro cambió mientras lo revisabas. Recarga la pantalla.')
+  // La evidencia con la que se cerró, tal cual: qué activación se usó como prueba y cuánto tardó después del cobro. Una demora
+  // larga no impide cerrar (puede ser la entrega perdida de verdad), pero queda dicho en la bitácora a nombre de quien la firmó.
+  const prueba = evidenciaDeEntrega({ activadoAt: cobro.activadoAt, membership: cobro.membership, compra: cobro.compra })
   await asentarEnBitacora(companyId, actor, 'CONCILIACION_ENTREGA_MARCADA', intentoId, {
     nota: texto,
     estadoAnterior: cobro.fulfillmentEstado,
     entregadoEn: evidencia.toISOString(),
+    evidencia: prueba
+      ? {
+          fuente: prueba.fuente,
+          fecha: prueba.fecha.toISOString(),
+          demoraMs: prueba.demoraMs,
+          demoraSospechosa: prueba.demoraMs >= DEMORA_SOSPECHOSA_MS,
+        }
+      : null,
   })
   // Con la entrega cerrada, el cobro ya se puede facturar: si no tenía su comprobante, se escribe ahora.
-  const venta = await asegurarVentaDelIntento(intentoId)
+  const venta = await asegurarVentaDelIntento(intentoId, { explicito: true })
   return {
     ok: true,
     mensaje: venta?.nueva ? `Cobro cerrado y comprobante generado (${venta.ticketNumero}).` : 'Cobro cerrado como entregado.',
@@ -213,7 +235,7 @@ export async function generarComprobantesPendientes(
   let yaTenian = 0
   let fallidos = 0
   for (const { id } of aHacer) {
-    const venta = await asegurarVentaDelIntento(id)
+    const venta = await asegurarVentaDelIntento(id, { explicito: true })
     if (!venta) fallidos++
     else if (!venta.nueva) yaTenian++
     else {

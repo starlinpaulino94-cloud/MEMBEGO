@@ -5,7 +5,7 @@ import { notificarAdmins } from '@/modules/notificaciones/service'
 import { reintentarEntrega } from '@/modules/pagos/intentos'
 import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
 import { asentarEnBitacora } from '@/modules/observabilidad/conciliacion-servicio'
-import { situacionDeEntrega, type EstadoDeEntrega } from '@/modules/observabilidad/conciliacion-entrega'
+import { entregaRequierePersona, situacionDeEntrega, type EstadoDeEntrega } from '@/modules/observabilidad/conciliacion-entrega'
 import {
   UMBRAL_AVISO_MS,
   VENTANA_COMPROBANTE_DIAS,
@@ -33,7 +33,9 @@ import {
  * serverless con `maxDuration`: lo que no alcanza, lo recoge la siguiente pasada.
  */
 
-const LECTURA_MAX = 500
+/** Filas por página y páginas como máximo: lo que no cabe se marca `incompleto` en vez de callarse. */
+const PAGINA = 500
+const MAX_PAGINAS = 10
 const MAX_REINTENTOS_POR_PASADA = 50
 const MAX_COMPROBANTES_POR_PASADA = 200
 /** Margen bajo `maxDuration = 60` de la ruta: se deja de empezar trabajo nuevo antes de que la función muera a mitad. */
@@ -48,8 +50,8 @@ export interface ResultadoBarridoEntregas {
   reintentadas: number
   /** De esas, las que terminaron entregando el producto. */
   entregadas: number
-  /** Cobros que no se reintentaron: esperando su turno, sin reintentos que gastar, o demasiado viejos. */
-  omitidos: { esperar: number; agotados: number; fueraDeVentana: number }
+  /** Cobros que no se reintentaron: esperando su turno, sin reintentos que gastar, demasiado viejos o a cargo de una persona. */
+  omitidos: { esperar: number; agotados: number; fueraDeVentana: number; requierenPersona: number }
   /** Comprobantes escritos por la autorreparación. */
   comprobantes: number
   /** Clientes que siguen esperando al terminar (los del aviso). */
@@ -62,33 +64,55 @@ export interface ResultadoBarridoEntregas {
   incompleto: boolean
 }
 
+/**
+ * Los clientes que esperan su producto, los más recientes primero y por páginas.
+ *
+ * Antes era UNA lectura de 500 filas, las más antiguas primero, filtrada en memoria: con 500 cobros viejos que no eran
+ * clientes esperando (registros sin cerrar, entregas en vuelo), los cobros recientes que sí lo eran nunca entraban en la
+ * lectura y el barrido no los reintentaba ni los avisaba. Ahora se recorre por páginas (con tope) y el orden pone primero lo
+ * reciente, que es lo que se puede reintentar.
+ */
 async function leerEsperando(ahora: Date, companyId?: string) {
-  const filas = await sinEmpresa('barrido de entregas de pago: leer los cobros sin entregar de todas las empresas', (tx) =>
-    tx.pagoIntento.findMany({
-      where: { estado: 'APROBADO', fulfillmentEstado: { in: ['PENDIENTE', 'PROCESANDO', 'FALLIDA'] }, ...(companyId ? { companyId } : {}) },
-      select: {
-        id: true,
-        companyId: true,
-        monto: true,
-        activadoAt: true,
-        updatedAt: true,
-        fulfillmentEstado: true,
-        fulfillmentIntentos: true,
-        membership: { select: { pagoConfirmado: true, fechaPago: true } },
-        compra: { select: { pagoConfirmado: true, fechaActivacion: true } },
-      },
-      orderBy: [{ activadoAt: 'asc' }, { id: 'asc' }],
-      take: LECTURA_MAX,
-    })
-  )
-  // Solo los CLIENTES ESPERANDO: un registro sin cerrar (el producto ya está activo) o una entrega en vuelo no se tocan.
-  return filas.filter(
-    (i) =>
-      situacionDeEntrega(
+  const esperando = []
+  let cursor: string | undefined
+  let truncado = false
+  for (let pagina = 0; ; pagina++) {
+    if (pagina >= MAX_PAGINAS) {
+      truncado = true
+      break
+    }
+    const filas = await sinEmpresa('barrido de entregas de pago: leer los cobros sin entregar de todas las empresas', (tx) =>
+      tx.pagoIntento.findMany({
+        where: { estado: 'APROBADO', fulfillmentEstado: { in: ['PENDIENTE', 'PROCESANDO', 'FALLIDA'] }, ...(companyId ? { companyId } : {}) },
+        select: {
+          id: true,
+          companyId: true,
+          monto: true,
+          canal: true,
+          activadoAt: true,
+          updatedAt: true,
+          fulfillmentEstado: true,
+          fulfillmentIntentos: true,
+          membership: { select: { pagoConfirmado: true, fechaPago: true, estado: true, planIdSolicitado: true } },
+          compra: { select: { pagoConfirmado: true, fechaActivacion: true } },
+        },
+        orderBy: [{ activadoAt: 'desc' }, { id: 'desc' }],
+        take: PAGINA,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      })
+    )
+    // Solo los CLIENTES ESPERANDO: un registro sin cerrar (el producto ya está activo) o una entrega en vuelo no se tocan.
+    for (const i of filas) {
+      const situacion = situacionDeEntrega(
         { estado: i.fulfillmentEstado as EstadoDeEntrega, actualizadoAt: i.updatedAt, activadoAt: i.activadoAt, membership: i.membership, compra: i.compra },
         ahora
-      ) === 'CLIENTE_ESPERANDO'
-  )
+      )
+      if (situacion === 'CLIENTE_ESPERANDO') esperando.push({ ...i, requierePersona: entregaRequierePersona({ canal: i.canal, membership: i.membership }) })
+    }
+    if (filas.length < PAGINA) break
+    cursor = filas[filas.length - 1].id
+  }
+  return { esperando, truncado }
 }
 
 export async function barridoEntregasDePago(
@@ -98,6 +122,8 @@ export async function barridoEntregasDePago(
     maxReintentos?: number
     /** Barrer UNA sola empresa (una pasada a mano, o una prueba). Sin ella, todas. */
     companyId?: string
+    /** Quién escribe la venta de un cobro entregado. Solo las pruebas lo cambian (para simular que la base no la deja escribir). */
+    asegurarVenta?: typeof asegurarVentaDelIntento
   } = {}
 ): Promise<ResultadoBarridoEntregas> {
   const ahora = opciones.ahora ?? new Date()
@@ -110,7 +136,7 @@ export async function barridoEntregasDePago(
     revisados: 0,
     reintentadas: 0,
     entregadas: 0,
-    omitidos: { esperar: 0, agotados: 0, fueraDeVentana: 0 },
+    omitidos: { esperar: 0, agotados: 0, fueraDeVentana: 0, requierenPersona: 0 },
     comprobantes: 0,
     siguenEsperando: 0,
     avisos: 0,
@@ -119,11 +145,17 @@ export async function barridoEntregasDePago(
   }
 
   // ── 1 · reintentar a los clientes que esperan ──────────────────────────────────────────────────────────────────
-  const esperando = await leerEsperando(ahora, opciones.companyId)
+  const lectura = await leerEsperando(ahora, opciones.companyId)
+  const esperando = lectura.esperando
+  if (lectura.truncado) r.incompleto = true
   r.revisados = esperando.length
   for (const i of esperando) {
-    const decision = decidirReintento({ intentos: i.fulfillmentIntentos, actualizadoAt: i.updatedAt, activadoAt: i.activadoAt }, ahora)
-    if (decision === 'ESPERAR') r.omitidos.esperar++
+    const decision = decidirReintento(
+      { intentos: i.fulfillmentIntentos, actualizadoAt: i.updatedAt, activadoAt: i.activadoAt, requierePersona: i.requierePersona },
+      ahora
+    )
+    if (decision === 'REQUIERE_PERSONA') r.omitidos.requierenPersona++
+    else if (decision === 'ESPERAR') r.omitidos.esperar++
     else if (decision === 'AGOTADO') r.omitidos.agotados++
     else if (decision === 'FUERA_DE_VENTANA') r.omitidos.fueraDeVentana++
     else {
@@ -162,18 +194,28 @@ export async function barridoEntregasDePago(
         ...(opciones.companyId ? { companyId: opciones.companyId } : {}),
       },
       select: { id: true, companyId: true },
-      orderBy: [{ activadoAt: 'asc' }, { id: 'asc' }],
-      take: MAX_COMPROBANTES_POR_PASADA,
+      // Lo reciente primero: si hubiera cobros que no se dejan facturar, los más viejos no deben quitarle el turno a los nuevos.
+      orderBy: [{ activadoAt: 'desc' }, { id: 'desc' }],
+      take: MAX_COMPROBANTES_POR_PASADA + 1,
     })
   )
+  if (sinVenta.length > MAX_COMPROBANTES_POR_PASADA) {
+    r.incompleto = true
+    sinVenta.length = MAX_COMPROBANTES_POR_PASADA
+  }
   for (const i of sinVenta) {
     if (sinTiempo()) {
       r.incompleto = true
       break
     }
     try {
-      const venta = await asegurarVentaDelIntento(i.id)
-      if (venta?.nueva) {
+      const venta = await (opciones.asegurarVenta ?? asegurarVentaDelIntento)(i.id)
+      if (!venta) {
+        // `asegurarVentaDelIntento` no lanza: devuelve null cuando no pudo. Callarlo hacía que el cron dijera «todo bien»
+        // mientras un cobro seguía sin comprobante.
+        r.errores++
+        console.error('[entregas-pago:comprobante]', i.id, 'no se pudo registrar la venta')
+      } else if (venta.nueva) {
         r.comprobantes++
         await asentarEnBitacora(i.companyId, SISTEMA, 'CONCILIACION_COMPROBANTE_GENERADO', i.id, {
           origen: 'AUTOMATICO',
@@ -189,15 +231,20 @@ export async function barridoEntregasDePago(
 
   // ── 3 · avisar a los administradores de lo que sigue sin entregar ──────────────────────────────────────────────
   // Se vuelve a leer: lo que el paso 1 resolvió ya no cuenta, y lo que falló otra vez sí.
-  const siguen = (await leerEsperando(ahora, opciones.companyId)).filter((i) => i.activadoAt && ahora.getTime() - i.activadoAt.getTime() >= UMBRAL_AVISO_MS)
+  const relectura = await leerEsperando(ahora, opciones.companyId)
+  if (relectura.truncado) r.incompleto = true
+  const siguen = relectura.esperando.filter((i) => i.activadoAt && ahora.getTime() - i.activadoAt.getTime() >= UMBRAL_AVISO_MS)
   r.siguenEsperando = siguen.length
   const porEmpresa = new Map<string, { esperando: number; monto: number; sinSalidaAutomatica: number }>()
   for (const i of siguen) {
     const e = porEmpresa.get(i.companyId) ?? { esperando: 0, monto: 0, sinSalidaAutomatica: 0 }
     e.esperando++
     e.monto += Number(i.monto)
-    const d = decidirReintento({ intentos: i.fulfillmentIntentos, actualizadoAt: i.updatedAt, activadoAt: i.activadoAt }, ahora)
-    if (d === 'AGOTADO' || d === 'FUERA_DE_VENTANA') e.sinSalidaAutomatica++
+    const d = decidirReintento(
+      { intentos: i.fulfillmentIntentos, actualizadoAt: i.updatedAt, activadoAt: i.activadoAt, requierePersona: i.requierePersona },
+      ahora
+    )
+    if (d === 'AGOTADO' || d === 'FUERA_DE_VENTANA' || d === 'REQUIERE_PERSONA') e.sinSalidaAutomatica++
     porEmpresa.set(i.companyId, e)
   }
   for (const [companyId, resumen] of porEmpresa) {

@@ -62,3 +62,10 @@ test('la clave del aviso es una por empresa y día', () => {
   assert.notEqual(claveDeAvisoDelDia('emp1', new Date('2026-10-17T00:01:00Z')), a)
   assert.notEqual(claveDeAvisoDelDia('emp2', new Date('2026-10-16T05:00:00Z')), a)
 })
+
+test('un cambio de plan pagado nunca se reintenta solo: lo decide una persona, antes que cualquier otra regla', () => {
+  const base = { intentos: 0, actualizadoAt: hace(2 * H), activadoAt: hace(2 * H), requierePersona: true }
+  assert.equal(decidirReintento(base, ahora), 'REQUIERE_PERSONA')
+  assert.equal(decidirReintento({ ...base, activadoAt: hace(30 * D) }, ahora), 'REQUIERE_PERSONA', 'ni por viejo ni por intentos')
+  assert.equal(decidirReintento({ ...base, requierePersona: false }, ahora), 'REINTENTAR')
+})

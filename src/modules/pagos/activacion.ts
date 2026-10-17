@@ -68,7 +68,7 @@ export async function activarMembresia(
   // esPrimera se calcula dentro de la transacción para evitar race condition
   // con activaciones concurrentes del mismo cliente EN ESTA EMPRESA.
   const { esPrimera } = await conEmpresa(membership.companyId, async (tx) => {
-    let datosCobro: { canal: string | null; intentoId: string } | null = null
+    let datosCobro: { canal: string | null; intentoId: string; cobradoAt: Date | null } | null = null
     if (fulfillmentClaim) {
       const claim = await tx.pagoIntento.updateMany({
         where: {
@@ -85,8 +85,11 @@ export async function activarMembresia(
         },
       })
       if (claim.count !== 1) throw new Error('FULFILLMENT_CLAIM_LOST')
-      const cobro = await tx.pagoIntento.findUnique({ where: { id: fulfillmentClaim.intentoId }, select: { canal: true } })
-      datosCobro = { canal: cobro?.canal ?? null, intentoId: fulfillmentClaim.intentoId }
+      const cobro = await tx.pagoIntento.findUnique({
+        where: { id: fulfillmentClaim.intentoId },
+        select: { canal: true, activadoAt: true },
+      })
+      datosCobro = { canal: cobro?.canal ?? null, intentoId: fulfillmentClaim.intentoId, cobradoAt: cobro?.activadoAt ?? null }
     }
 
     const previasConfirmadas = await tx.membership.count({
@@ -110,7 +113,13 @@ export async function activarMembresia(
         // Cuándo entró el dinero, de una vez y para siempre: los reportes
         // fechaban el cobro por `updatedAt`, así que cualquier edición
         // posterior lo movía de mes (auditoría · A-6).
-        fechaPago: now,
+        //
+        // En un cobro de pasarela el dinero entró cuando la pasarela lo aprobó
+        // (`activadoAt`), no cuando se entregó el producto: una entrega
+        // reintentada días después, o al otro lado de un cambio de mes, dejaría
+        // la membresía en un periodo y la venta del libro en otro, y la guarda
+        // de los reportes (que cuenta lo cobrado UNA vez) los sumaría los dos.
+        fechaPago: datosCobro?.cobradoAt ?? now,
         rechazadoReason: null,
         adminNota: null,
       },

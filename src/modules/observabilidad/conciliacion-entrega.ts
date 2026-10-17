@@ -42,6 +42,66 @@ export function productoYaEntregado(e: EvidenciaDeEntrega): boolean {
   return false
 }
 
+/**
+ * LA EVIDENCIA CON LA QUE SE DA POR ENTREGADO UN COBRO, dicha tal cual.
+ *
+ * `productoYaEntregado` solo acota por abajo: cualquier activación POSTERIOR al cobro cuenta, sea la entrega que se
+ * perdió, una renovación de meses después o un cobro de otro día. No puede distinguirlas, así que quien cierra el
+ * registro debe ver QUÉ se está usando como prueba y CUÁNTO tardó: una activación a los pocos segundos es casi seguro
+ * la entrega; una de varios días puede ser otra cosa, y la nota tiene que decirlo. La bitácora guarda lo mismo.
+ */
+export interface EvidenciaUsada {
+  fuente: 'MEMBRESIA' | 'COMPRA'
+  fecha: Date
+  /** Milisegundos entre el cobro y la activación que lo prueba. Puede ser negativo dentro del margen de reloj. */
+  demoraMs: number
+}
+
+export function evidenciaDeEntrega(e: EvidenciaDeEntrega): EvidenciaUsada | null {
+  if (!productoYaEntregado(e) || !e.activadoAt) return null
+  const fuente = e.membership ? 'MEMBRESIA' : 'COMPRA'
+  const fecha = e.membership ? e.membership.fechaPago : e.compra ? e.compra.fechaActivacion : null
+  if (!fecha) return null
+  return { fuente, fecha, demoraMs: fecha.getTime() - e.activadoAt.getTime() }
+}
+
+/** Demora a partir de la cual la evidencia es DÉBIL: ya no parece la entrega perdida de ese cobro. */
+export const DEMORA_SOSPECHOSA_MS = 24 * 3_600_000
+
+/** «unos segundos», «12 minutos», «3 horas», «2 días»: lo que lee una persona antes de firmar una nota. */
+export function describirDemora(ms: number): string {
+  const abs = Math.max(0, ms)
+  if (abs < 60_000) return 'unos segundos'
+  const min = Math.round(abs / 60_000)
+  if (min < 60) return `${min} ${min === 1 ? 'minuto' : 'minutos'}`
+  const horas = Math.round(abs / 3_600_000)
+  if (horas < 48) return `${horas} ${horas === 1 ? 'hora' : 'horas'}`
+  const dias = Math.round(abs / 86_400_000)
+  return `${dias} días`
+}
+
+/**
+ * Un cobro de CAMBIO DE PLAN pagado con tarjeta: la membresía ya está ACTIVA y pide otro plan.
+ *
+ * La pasarela cobró la diferencia pero no sabe aplicar el cambio (eso lo hace una persona al aprobarlo, con su
+ * prorrateo). Reintentar la entrega solo toparía con «la membresía ya está activa», una y otra vez, así que ni el
+ * botón ni el barrido lo reintentan: se muestra qué hay que hacer. Una RENOVACIÓN automática no entra aquí aunque la
+ * membresía esté activa y tenga un cambio pedido: la renovación sí tiene entrega propia.
+ */
+export const CAMBIO_DE_PLAN_PAGADO =
+  'Es un cambio de plan pagado con tarjeta: una persona debe aplicarlo desde Pagos (aprobar el cambio de plan) y luego cerrar el cobro con «Marcar entregada».'
+
+export function entregaRequierePersona(e: {
+  canal: string | null
+  membership: { estado: string; planIdSolicitado: string | null } | null
+}): boolean {
+  return (
+    e.canal !== 'RENOVACION_AUTOMATICA' &&
+    e.membership?.estado === 'ACTIVA' &&
+    e.membership.planIdSolicitado != null
+  )
+}
+
 /** `true` si la entrega sigue dentro de su ventana normal de proceso (no hay nada que revisar todavía). */
 export function entregaEnCurso(estado: EstadoDeEntrega, actualizadoAt: Date, ahora: Date): boolean {
   if (estado !== 'PENDIENTE' && estado !== 'PROCESANDO') return false

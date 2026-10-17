@@ -56,3 +56,10 @@ export async function reintentarEntrega() {
   current.fulfillmentRetryCalls += 1
   return current.fulfillmentRetryResult ?? { ok: true, entrega: 'PENDIENTE' }
 }
+
+// La extensión de una renovación automática no interviene en estas pruebas (usan el canal de la app): solo hace falta que exista.
+export const RECLAMO_PERDIDO = 'FULFILLMENT_CLAIM_LOST'
+
+export async function extenderMembresiaCobrada() {
+  throw new Error('extenderMembresiaCobrada no se usa en esta prueba')
+}

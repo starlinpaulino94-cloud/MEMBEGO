@@ -12,6 +12,7 @@ const mocked = new Set([
   '@/lib/prisma-errors',
   '@/modules/pagos/activacionCompra',
   '@/modules/pagos/activacion',
+  '@/modules/pagos/renovacion-extension',
 ])
 
 registerHooks({

@@ -1,12 +1,10 @@
 import 'server-only'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { marcarEntrega } from '@/modules/pagos/intentos'
+import { RECLAMO_PERDIDO, extenderMembresiaCobrada } from '@/modules/pagos/renovacion-extension'
 import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
 import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
-import { registrarEventoMembresia } from '@/modules/membresia/eventos'
-import { periodEnd } from '@/lib/server-utils'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
-import { nuevoTokenQr, vencimientoQr } from '@/modules/qr/token'
 import {
   cobrarConCredencialGuardada,
   borrarPerfilCardnet,
@@ -165,19 +163,36 @@ export async function renovarMembresiaPorTarjeta(
     return { estado: 'omitida', motivo: 'La pasarela no está disponible para esta empresa.' }
   }
 
-  // Guarda anti-duplicado: ¿ya intentamos renovarla hace poco?
+  // Guarda anti-duplicado: ¿ya intentamos renovarla hace poco? Y, aunque ya pasara esa ventana, ¿hay una renovación
+  // aprobada de esta membresía que todavía no se entregó? Si la extensión falló, la membresía sigue por vencer y el cron la volvería a
+  // elegir pasada la ventana: cobrar OTRA vez el mismo periodo. Ese cobro se resuelve con su entrega (reintento o
+  // conciliación), no con un cobro nuevo.
   const reciente = await conEmpresa(m.companyId, (tx) =>
     tx.pagoIntento
       .findFirst({
         where: {
           membershipId,
           proveedor: 'CARDNET',
-          createdAt: { gte: new Date(Date.now() - VENTANA_ANTIDUPLICADO_MS) },
+          OR: [
+            { createdAt: { gte: new Date(Date.now() - VENTANA_ANTIDUPLICADO_MS) } },
+            // Solo renovaciones recientes: un registro viejo sin cerrar de otro canal no debe frenar la renovación para siempre.
+            {
+              estado: 'APROBADO',
+              canal: 'RENOVACION_AUTOMATICA',
+              fulfillmentEstado: { not: 'COMPLETADA' },
+              activadoAt: { gte: new Date(Date.now() - 30 * 86_400_000) },
+            },
+          ],
         },
-        select: { id: true },
+        select: { id: true, estado: true },
       })
   ).catch(() => null)
-  if (reciente) return { estado: 'omitida', motivo: 'Ya hubo un intento reciente.' }
+  if (reciente) {
+    return {
+      estado: 'omitida',
+      motivo: reciente.estado === 'APROBADO' ? 'Hay un cobro aprobado sin entregar: se resuelve en Conciliación.' : 'Ya hubo un intento reciente.',
+    }
+  }
 
   const pesos = Number(m.plan.precio)
   if (pesos <= 0) return { estado: 'omitida', motivo: 'Precio del plan no válido.' }
@@ -227,18 +242,20 @@ export async function renovarMembresiaPorTarjeta(
     return { estado: 'rechazada', motivo: cobro.motivo ?? 'La tarjeta fue rechazada.' }
   }
 
-  // Aprobada: extender la membresía (desde el vencimiento actual si aún es
-  // futuro, si no desde hoy) y cerrar el intento de forma idempotente.
+  // Aprobada: cerrar el cobro y extender la membresía (desde el vencimiento actual si aún es futuro, si no desde el
+  // cobro). El cobro se reclama como cualquier entrega de pasarela —`PROCESANDO` con su `claimAt`—: si la extensión falla,
+  // la entrega queda FALLIDA y `reintentarEntrega` la rehace sin recobrar (ver `renovacion-extension.ts`).
   const now = new Date()
-  const base = m.fechaVencimiento && m.fechaVencimiento > now ? m.fechaVencimiento : now
-  const nuevaVigencia = periodEnd(base, m.plan.vigenciaDias ?? 30)
-
+  const claimAt = now
   const marca = await conEmpresa(m.companyId, (tx) =>
     tx.pagoIntento.updateMany({
       where: { id: intento.id, activadoAt: null },
       data: {
         estado: 'APROBADO',
+        updatedAt: claimAt,
         activadoAt: now,
+        fulfillmentEstado: 'PROCESANDO',
+        fulfillmentIntentos: { increment: 1 },
         autorizacion: cobro.autorizacion,
         respuesta: (cobro.crudo ?? null) as never,
       },
@@ -246,113 +263,27 @@ export async function renovarMembresiaPorTarjeta(
   )
   if (marca.count === 0) return { estado: 'omitida', motivo: 'Ya estaba renovada.' }
 
+  let extension: Awaited<ReturnType<typeof extenderMembresiaCobrada>>
   try {
-    await conEmpresa(m.companyId, async (tx) => {      await tx.membership.update({
-        where: { id: membershipId },
-        data: {
-          estado: 'ACTIVA',
-          fechaVencimiento: nuevaVigencia,
-          lavadosRestantes: m.plan.esIlimitado ? 0 : m.plan.lavadosIncluidos,
-          montoPagado: pesos,
-          pagoConfirmado: true,
-          // La renovación es un cobro nuevo: pisa la fecha anterior a
-          // propósito, porque lo que interesa es cuándo entró ESTE dinero.
-          fechaPago: now,
-        },
-      })
-
-      const qrVivo = await tx.qrToken.findFirst({
-        where: { membresiaId: membershipId, activo: true },
-        orderBy: { createdAt: 'desc' },
-        select: { id: true },
-      })
-
-      let qrEmitidoId: string | null = null
-      if (qrVivo) {
-        await tx.qrToken.update({
-          where: { id: qrVivo.id },
-          data: { expiraAt: vencimientoQr() },
-        })
-      } else {
-        const nuevoQr = await tx.qrToken.create({
-          data: {
-            clienteId: m.clienteId,
-            membresiaId: membershipId,
-            token: nuevoTokenQr(),
-            expiraAt: vencimientoQr(),
-          },
-          select: { id: true },
-        })
-        qrEmitidoId = nuevoQr.id
-        await tx.auditLog.create({
-          data: {
-            companyId: m.companyId,
-            userId: null,
-            accion: 'QR_GENERADO',
-            entidadTipo: 'QrToken',
-            entidadId: nuevoQr.id,
-            payload: {
-              clienteId: m.clienteId,
-              membresiaId: membershipId,
-              motivo: 'renovacion_automatica_tarjeta',
-            },
-          },
-        })
-      }
-
-      await tx.auditLog.create({
-        data: {
-          companyId: m.companyId,
-          userId: null,
-          accion: 'PAGO_APROBADO',
-          entidadTipo: 'Membership',
-          entidadId: membershipId,
-          payload: {
-            motivo: 'renovacion_automatica_tarjeta',
-            metodo: 'TARJETA',
-            canal: 'RENOVACION_AUTOMATICA',
-            monto: pesos,
-            intentoId: intento.id,
-            qrEmitido: qrEmitidoId,
-            qrRenovado: qrVivo?.id ?? null,
-          },
-        },
-      })
-
-      // `origen: 'CRON'` es lo que separa esto de una renovación en el
-      // mostrador. Son el mismo hecho comercial con dos lecturas muy
-      // distintas: una la pidió alguien, la otra ocurrió sola con la tarjeta
-      // guardada. Sin ese campo, «renovaciones automáticas» no se puede
-      // reportar y la primera vez que alguien pregunte habrá que adivinarlo.
-      await registrarEventoMembresia(tx, {
-        companyId: m.companyId,
-        membershipId,
-        clienteId: m.clienteId,
-        tipo: 'RENOVADA',
-        origen: 'CRON',
-        estadoAnterior: m.estado,
-        estadoNuevo: 'ACTIVA',
-        planAnteriorId: m.planId,
-        planNuevoId: m.planId,
-        monto: pesos,
-        actorUserId: null,
-        ocurridoEn: now,
-        payload: { automatica: true, intentoId: intento.id },
-      })
-    })
+    extension = await extenderMembresiaCobrada({ companyId: m.companyId, intentoId: intento.id, claimAt })
   } catch (e) {
-    // El cobro SÍ ocurrió; no se revierte activadoAt. La entrega queda
-    // FALLIDA con su motivo: caso de conciliación con reintento explícito.
+    extension = { ok: false, error: e instanceof Error && e.message === RECLAMO_PERDIDO ? RECLAMO_PERDIDO : 'Cobrado, pero la extensión falló.' }
     logErrorBd('pagos:renovacion:extension', e, { membershipId, intentoId: intento.id })
-    await marcarEntrega(m.companyId, intento.id, false, 'Cobrado, pero la extensión falló.')
-    await conEmpresa(m.companyId, (tx) =>
-      tx.pagoIntento
-        .update({ where: { id: intento.id }, data: { motivoRechazo: 'Cobrado, pero la extensión falló.' } })
-    ).catch(anotarFallo('pagos:renovacion:extensionFallo', { intentoId: intento.id }))
+  }
+  if (!extension.ok) {
+    // El cobro SÍ ocurrió; no se revierte activadoAt. Si otro proceso ganó el reclamo, él decide el resultado. Si no, la
+    // entrega queda FALLIDA con su motivo: caso de conciliación con reintento explícito.
+    if (extension.error !== RECLAMO_PERDIDO) {
+      await marcarEntrega(m.companyId, intento.id, false, 'Cobrado, pero la extensión falló.', claimAt)
+      await conEmpresa(m.companyId, (tx) =>
+        tx.pagoIntento
+          .update({ where: { id: intento.id }, data: { motivoRechazo: 'Cobrado, pero la extensión falló.' } })
+      ).catch(anotarFallo('pagos:renovacion:extensionFallo', { intentoId: intento.id }))
+    }
     return { estado: 'error', motivo: 'Cobrado, pero la extensión falló. Revisar a mano.' }
   }
+  const nuevaVigencia = extension.nuevaVigencia
 
-  await marcarEntrega(m.companyId, intento.id, true)
   // El cobro automático también es una venta del libro, con su ticket y comprobante.
   await asegurarVentaDelIntento(intento.id)
 

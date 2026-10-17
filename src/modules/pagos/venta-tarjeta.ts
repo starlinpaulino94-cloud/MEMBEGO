@@ -3,6 +3,7 @@ import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { crearTransaccionAplicada } from '@/lib/transactions/application/transaction-service'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { esCanalDeCobro, snapshotDeCobroConTarjeta, type CanalDeCobro } from '@/modules/pagos/comprobante-tarjeta'
+import { VENTANA_COMPROBANTE_DIAS } from '@/modules/pagos/barrido-entregas-reglas'
 
 /**
  * LA VENTA DE UN COBRO CON TARJETA — el comprobante nace aquí.
@@ -24,7 +25,19 @@ import { esCanalDeCobro, snapshotDeCobroConTarjeta, type CanalDeCobro } from '@/
  *     la misma regla de `registrarVentaConfirmada` del panel.
  *
  * Solo se factura un cobro APROBADO cuya entrega se COMPLETÓ: la venta dice «se vendió y se entregó».
+ *
+ * DOS LÍMITES, para que lo AUTOMÁTICO no reescriba la historia:
+ *
+ *  · La venta lleva la fecha del cobro. Si la escribe un proceso automático (la entrega, el retorno del navegador, el cron)
+ *    de un cobro de hace más de `VENTANA_COMPROBANTE_DIAS` días, caería en un mes ya cerrado y movería sus reportes sin que
+ *    nadie lo decidiera. Ese caso solo lo escribe una persona, con la acción explícita de la conciliación (`explicito`).
+ *  · Los datos de la tarjeta (marca y últimos cuatro) salen de la tarjeta GUARDADA de la membresía, que el cliente puede
+ *    cambiar después. Solo se estampan cuando el cobro fue con esa tarjeta —una renovación automática— y la venta se
+ *    escribe enseguida; en cualquier otro caso el comprobante dice «Tarjeta» y la autorización, sin inventar cuál.
  */
+
+/** Pasado este tiempo desde el cobro, la tarjeta guardada de la membresía ya no se puede dar por la que se usó. */
+export const TARJETA_VIGENTE_MS = 10 * 60_000
 
 export interface VentaDelIntento {
   id: string
@@ -34,7 +47,14 @@ export interface VentaDelIntento {
   nueva: boolean
 }
 
-export async function asegurarVentaDelIntento(intentoId: string): Promise<VentaDelIntento | null> {
+export async function asegurarVentaDelIntento(
+  intentoId: string,
+  opciones: {
+    /** Una persona lo pidió a propósito (conciliación): se permite fechar la venta en un cobro antiguo. */
+    explicito?: boolean
+    ahora?: Date
+  } = {}
+): Promise<VentaDelIntento | null> {
   try {
     const intento = await sinEmpresa(
       'pagos: localizar el intento aprobado para registrar su venta (la empresa sale del propio intento)',
@@ -63,7 +83,13 @@ export async function asegurarVentaDelIntento(intentoId: string): Promise<VentaD
     if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado !== 'COMPLETADA') return null
     if (intento.transaccion) return { ...intento.transaccion, nueva: false }
 
+    const ahora = opciones.ahora ?? new Date()
+    const antiguedadMs = intento.activadoAt ? ahora.getTime() - intento.activadoAt.getTime() : 0
+    if (!opciones.explicito && antiguedadMs > VENTANA_COMPROBANTE_DIAS * 86_400_000) return null
+
     const canal: CanalDeCobro | null = esCanalDeCobro(intento.canal) ? intento.canal : null
+    const tarjetaDelCobro =
+      canal === 'RENOVACION_AUTOMATICA' && antiguedadMs <= TARJETA_VIGENTE_MS ? (intento.membership?.tarjetaTokenizada ?? null) : null
     const plan = intento.membership?.plan.nombre
     const detalle = intento.membership
       ? `${canal === 'RENOVACION_AUTOMATICA' ? 'Renovación' : 'Membresía'} ${plan ?? ''}`.trim()
@@ -93,7 +119,7 @@ export async function asegurarVentaDelIntento(intentoId: string): Promise<VentaD
             canal,
             pagoIntentoId: intento.id,
             autorizacion: intento.autorizacion,
-            tarjeta: intento.membership?.tarjetaTokenizada ?? null,
+            tarjeta: tarjetaDelCobro,
             sucursalNombre: sucursal?.nombre ?? null,
           }),
           auditoria: { ipAddress: intento.ipAddress, userAgent: intento.userAgent },
