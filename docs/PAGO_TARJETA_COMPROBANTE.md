@@ -248,6 +248,16 @@ se quita la entrega), `tests/cambio-plan-aplicar.test.ts` y las reglas puras de 
 | E2E de navegador (conciliación, comprobante y comprobantes retroactivos, con reconstrucción) | 14 de 14. No se repitió la suite E2E completa |
 | App Expo | Solo tipos, sin dispositivo |
 
+### Verificación tras la entrega automática del cambio de plan (2026-10-17)
+
+| Comprobación | Resultado |
+|---|---|
+| Tipos y ESLint | Sin errores |
+| Pruebas unitarias | 3,981 de 3,987 pasan; las 2 de fecha fija (14 de octubre) siguen fallando; 6 omitidas |
+| Suite PostgreSQL completa | 713 de 713 (corrida sola, sin las unitarias a la vez) |
+| E2E de navegador (conciliación, comprobante y retroactivos, con reconstrucción) | 14 de 14. No hay E2E del pago de un cambio de plan: necesita la pasarela real |
+| Migración `20261056` | Aplicada; sin deriva de esquema; sellos al día |
+
 ## Estado final y lo que queda
 
 Entregado (fases 0 a 6): el pago con tarjeta deja su venta y su comprobante en el libro (app, web y renovación), visible e
