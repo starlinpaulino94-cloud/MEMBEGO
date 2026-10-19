@@ -137,6 +137,29 @@ ni en el escáner, y el cliente tampoco tenía recibo.
   `tests/e2e/comprobante-cliente.spec.ts` (web con sesión y app con enlace;
   una página Carta; enlace manipulado → 404).
 
+#### Recibos de los pagos con tarjeta anteriores (17-10-2026)
+Los cobros con tarjeta anteriores al 16-10-2026 no tienen recibo (nunca se creó
+la venta). Se recuperan con `scripts/recibos-tarjetas-anteriores.ts`, que crea
+la venta de cada pago aprobado con la **fecha real del cobro** (`activadoAt`: su
+código `TX-AAAAMMDD`, su fecha y su `appliedAt`), el monto y la autorización de
+CardNET. Código en `src/modules/pagos/recibosAnteriores.ts`.
+
+- **Simulación por defecto**: no escribe nada; lista qué se crearía, por empresa,
+  y qué se omite. `--aplicar` los crea. Opciones: `--empresa=<id>`,
+  `--desde=AAAA-MM-DD`, `--limite=<n>` (500).
+- **Idempotente**: un pago que ya tiene recibo (`snapshot.intentoId`) no se toca.
+- **Solo lo cobrado Y entregado**: «cobrado pero la entrega falló/sigue en
+  proceso» no es un comprobante sino un caso de conciliación, y sale en la lista
+  de omitidos. Los intentos anteriores al 12-09-2026 no tienen estado de entrega
+  (la columna nació ese día con `PENDIENTE` por defecto): para ellos se mira que
+  el producto haya quedado pagado.
+- **Sin acceso local a producción**: Actions → «Recibos de pagos con tarjeta
+  anteriores» → Run workflow (`aplicar` desmarcado = simulación; el resumen del
+  job trae el informe). Usa `MIGRATIONS_DATABASE_URL` y el entorno `production`.
+- Los recibos nuevos reciben el **siguiente número de ticket** de la empresa
+  (`TCK-NNNNNN` es secuencial y no se reescribe el pasado), aunque su fecha sea
+  anterior.
+
 ### 2.3 Caja por turno — `CajaSesion`
 Fuente: `src/modules/caja/*`, `src/components/caja/CajaForms.tsx`, `/empleado/caja`.
 - `abrirCaja` (balance inicial, turno, sucursal, responsable).
