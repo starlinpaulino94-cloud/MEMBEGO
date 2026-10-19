@@ -699,6 +699,14 @@ export interface DisponibilidadDia {
   slots: { hm: string; inicioIso: string; libres: number; vencido: boolean }[]
 }
 
+export interface AgendarPromocionDisponibilidadResponse {
+  readonly agenda: AgendaConfigData | null
+  readonly dias: readonly { readonly ymd: string; readonly etiquetaCerrado: boolean }[]
+  readonly disponibilidad: DisponibilidadDia | null
+  readonly empresa: { readonly name: string; readonly zonaHoraria: string } | null
+  readonly yaTieneCita: boolean
+}
+
 export interface CitasResponse {
   citas: CitaItem[]
   agenda: AgendaConfigData | null
@@ -1273,8 +1281,12 @@ export const api = {
   getMisPromociones: () => fetchBff<MisPromocionesResponse>('/api/v1/cliente/mis-promociones'),
   getMisPromocion: (id: string) =>
     fetchBff<MisPromocionDetalle>(`/api/v1/cliente/mis-promociones/${encodeURIComponent(id)}`),
+  getDisponibilidadPromocion: (id: string, fecha?: string) =>
+    fetchBff<AgendarPromocionDisponibilidadResponse>(
+      `/api/v1/cliente/mis-promociones/${encodeURIComponent(id)}/agendar${qs({ fecha })}`,
+    ),
   agendarPromocion: (id: string, body: AgendarPromocionBody) =>
-    postJson<AgendarPromocionResponse>(`/api/v1/cliente/mis-promociones/${encodeURIComponent(id)}/agendar`, body),
+    postJson<AgendarPromocionResponse>('/api/v1/cliente/citas', { ...body, compraId: id }),
   getRegaloInvitado: (invitadoId: string) =>
     fetchBff<RegaloInvitadoResponse>(`/api/v1/cliente/mis-promociones/regalo/${encodeURIComponent(invitadoId)}`),
   reclamarRegaloInvitado: (invitadoId: string) =>
