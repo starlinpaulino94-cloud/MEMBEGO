@@ -3822,3 +3822,24 @@ ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_clienteId_fkey" FO
 -- AddForeignKey
 ALTER TABLE "ticket_mensajes" ADD CONSTRAINT "ticket_mensajes_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "support_tickets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+CREATE TYPE "PushPlatform" AS ENUM ('ANDROID', 'IOS');
+
+CREATE TABLE "push_tokens" (
+    "id" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "platform" "PushPlatform" NOT NULL,
+    "userId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "push_tokens_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "push_tokens_token_key" ON "push_tokens"("token");
+CREATE INDEX "push_tokens_userId_idx" ON "push_tokens"("userId");
+
+ALTER TABLE "push_tokens"
+ADD CONSTRAINT "push_tokens_userId_fkey"
+FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE "push_tokens" ENABLE ROW LEVEL SECURITY;

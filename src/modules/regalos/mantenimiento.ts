@@ -2,6 +2,7 @@ import { sinEmpresa } from '@/lib/tenant'
 import type { Prisma } from '@prisma/client'
 import { devolverUsos } from '@/modules/regalos/queries'
 import { notificarClienteRegalo } from '@/modules/regalos/entrega'
+import { enviarPushNotificaciones, type NotificacionPush } from '@/modules/notificaciones/push'
 
 /**
  * Regalos P2P · Fase R4 — mantenimiento periódico (se cuelga del cron de
@@ -30,6 +31,7 @@ export async function mantenimientoRegalos(): Promise<{
   let expirados = 0
   let recordatorios = 0
   const notificarExpirado: { remitenteId: string; usos: number }[] = []
+  const notificationsPush: NotificacionPush[] = []
 
   // ── 1 · Expirar vencidos (todas las empresas) ──────────────────────────────
   await sinEmpresa(
@@ -161,8 +163,12 @@ export async function mantenimientoRegalos(): Promise<{
           }
 
           if (nuevos.length > 0) {
-            const creados = await tx.notificacion.createMany({ data: nuevos })
-            recordatorios += creados.count
+            const creados = await tx.notificacion.createManyAndReturn({
+              data: nuevos,
+              select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
+            })
+            notificationsPush.push(...creados)
+            recordatorios += creados.length
           }
         } catch (e) {
           console.error('[regalos-cron] recordatorios', e)
@@ -170,6 +176,8 @@ export async function mantenimientoRegalos(): Promise<{
       }
     }
   )
+
+  await enviarPushNotificaciones(notificationsPush)
 
   for (const n of notificarExpirado) {
     await notificarClienteRegalo(

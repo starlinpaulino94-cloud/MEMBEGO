@@ -6,6 +6,7 @@ import { sanearError } from './domain'
 import { anotarSupply, anotarYContar } from './log'
 import { marcarEntregado, marcarFallido, reclamarEfectos, type EfectoReclamado } from './outbox'
 import { EFECTOS_DE_AVISO } from '../notifications/efectos'
+import { enviarPushNotificaciones } from '@/modules/notificaciones/push'
 
 /**
  * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 2 · DEL OUTBOX A LA COLA (§6, §7, §8).
@@ -376,7 +377,7 @@ async function avisarAlCliente(
   }
 
   try {
-    await sinEmpresa('Supply: avisar al cliente del resultado de su pago', (tx) =>
+    const notification = await sinEmpresa('Supply: avisar al cliente del resultado de su pago', (tx) =>
       tx.notificacion.create({
         data: {
           userId: orden.customerId,
@@ -386,8 +387,10 @@ async function avisarAlCliente(
           href: aviso.href,
           dedupeKey: e.idempotencyKey,
         },
+        select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
       })
     )
+    await enviarPushNotificaciones([notification])
     return { detalle: `aviso creado para la compra ${orden.number}` }
   } catch (err) {
     // P2002: el aviso ya existía. Es la idempotencia funcionando —el intento

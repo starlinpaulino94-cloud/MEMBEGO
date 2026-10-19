@@ -708,6 +708,26 @@ export interface CitasResponse {
   empresa: { name: string; zonaHoraria: string }
 }
 
+export interface NotificacionCliente {
+  readonly id: string
+  readonly tipo: string
+  readonly titulo: string
+  readonly mensaje: string
+  readonly href: string | null
+  readonly leida: boolean
+  readonly createdAt: string
+}
+
+export interface NotificacionesResponse {
+  readonly notificaciones: readonly NotificacionCliente[]
+  readonly noLeidas: number
+}
+
+export interface ActualizarNotificacionResponse {
+  readonly success: true
+  readonly noLeidas: number
+}
+
 export interface CrearCitaBody {
   fecha: string
   hora: string
@@ -1195,6 +1215,25 @@ export const api = {
   getBuscar: (params?: BuscarParams) =>
     fetchBff<BuscadorUnificadoResult>(`/api/v1/cliente/buscar${qs(params)}`),
   getNovedades: () => fetchBff<{ novedades: NovedadInicio[] }>('/api/v1/cliente/novedades'),
+  getNotificaciones: () =>
+    fetchBff<NotificacionesResponse>('/api/v1/cliente/notificaciones'),
+  marcarNotificacionLeida: (id: string) =>
+    fetchBff<ActualizarNotificacionResponse>('/api/v1/cliente/notificaciones', {
+      method: 'PATCH',
+      body: JSON.stringify({ accion: 'marcarLeida', id }),
+    }),
+  marcarTodasNotificacionesLeidas: () =>
+    fetchBff<ActualizarNotificacionResponse>('/api/v1/cliente/notificaciones', {
+      method: 'PATCH',
+      body: JSON.stringify({ accion: 'marcarTodasLeidas' }),
+    }),
+  registrarPushToken: (token: string, platform: 'ANDROID' | 'IOS') =>
+    postJson<{ success: true }>('/api/v1/cliente/notificaciones/push-token', { token, platform }),
+  eliminarPushToken: (token: string) =>
+    fetchBff<{ success: true }>('/api/v1/cliente/notificaciones/push-token', {
+      method: 'DELETE',
+      body: JSON.stringify({ token }),
+    }),
   getIntereses: () => fetchBff<InteresesResponse>('/api/v1/cliente/intereses'),
   guardarIntereses: (categoryIds: string[]) =>
     postJson<{ success: true }>('/api/v1/cliente/intereses', { categoryIds }),

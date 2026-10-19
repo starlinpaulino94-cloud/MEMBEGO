@@ -2,6 +2,7 @@ import type { NotifTipo } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { definicionDeAviso, type CanalDeAviso } from './dominio'
 import { mandarCorreoDeAviso } from './correo'
+import { enviarPushNotificaciones } from '@/modules/notificaciones/push'
 
 /**
  * MEMBEGO SUPPLY · SLICE 9 · BLOQUE 5 · LOS EJECUTORES DE AVISO.
@@ -165,7 +166,7 @@ export async function entregarAviso(e: EfectoDeAviso): Promise<{ detalle: string
 
   if (canal === 'IN_APP') {
     try {
-      await sinEmpresa('Supply: aviso dentro de Membego', (tx) =>
+      const notification = await sinEmpresa('Supply: aviso dentro de Membego', (tx) =>
         tx.notificacion.create({
           data: {
             userId,
@@ -175,8 +176,10 @@ export async function entregarAviso(e: EfectoDeAviso): Promise<{ detalle: string
             href: redaccion.href,
             dedupeKey: e.idempotencyKey,
           },
+          select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
         })
       )
+      await enviarPushNotificaciones([notification])
       return { detalle: 'aviso creado dentro de Membego' }
     } catch (err) {
       // P2002: ya existía. Es la idempotencia funcionando —el intento anterior

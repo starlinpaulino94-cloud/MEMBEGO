@@ -15,6 +15,7 @@ import {
 import { View, ActivityIndicator } from 'react-native'
 import { AuthProvider } from '../src/lib/auth-context'
 import { ClientShell } from '../src/components/layout/ClientShell'
+import { PushNotificationManager } from '../src/components/notificaciones/PushNotificationManager'
 
 export default function RootLayout() {
   const [queryClient] = useState(
@@ -52,6 +53,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <PushNotificationManager />
           <ClientShell />
         </AuthProvider>
       </QueryClientProvider>
