@@ -35,27 +35,6 @@ jobs:
     # con 30 min la corrida se cancelaba al filo (runs #830 y #618) sin ningún fallo.
     timeout-minutes: 45
 
-    services:
-      # PostgreSQL real, no una simulación. La mitad de los fallos que estas
-      # pruebas encuentran son consultas que nunca se ejecutaron contra una
-      # base vacía.
-      postgres:
-        # Espejo de AWS (ECR Public) de la imagen oficial: Docker Hub limita las
-        # descargas anónimas desde los runners y a veces ni responde al pedir el
-        # token (toomanyrequests / Client.Timeout), y el job moría antes de correr
-        # una sola prueba. ECR Public no exige autenticación.
-        image: public.ecr.aws/docker/library/postgres:16
-        env:
-          POSTGRES_PASSWORD: e2e
-          POSTGRES_DB: membego_e2e
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
     env:
       DATABASE_URL: postgresql://postgres:e2e@localhost:5432/membego_e2e
       DIRECT_URL: postgresql://postgres:e2e@localhost:5432/membego_e2e
@@ -93,6 +72,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # PostgreSQL real, no una simulación: la mitad de los fallos que estas
+      # pruebas encuentran son consultas que nunca se ejecutaron contra una base
+      # vacía. Se levanta el PostgreSQL 16 que ya trae el runner, SIN descargar
+      # una imagen: el `services:` con la imagen del espejo de ECR moría a los
+      # 10 s con `toomanyrequests` cuando la cuota compartida se agotaba, antes
+      # de ejecutar una sola prueba (#621, #624). Ver .github/actions/postgres.
+      - uses: ./.github/actions/postgres
+        with:
+          password: e2e
+          database: membego_e2e
       - uses: actions/setup-node@v4
         with:
           node-version: 22
