@@ -1,6 +1,7 @@
 import { Stack, useIsFocused, useRouter } from 'expo-router'
 import { createContext, useContext, type ReactNode } from 'react'
 import { Platform, useWindowDimensions } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Sheet } from './Sheet'
 
 type StandaloneBackgroundClass = 'bg-background' | 'bg-vibe-fondo'
@@ -27,8 +28,10 @@ interface ResponsiveDetailSheetProps {
 export function ResponsiveDetailSheet({ children, footer }: ResponsiveDetailSheetProps) {
   const router = useRouter()
   const isFocused = useIsFocused()
-  const { width } = useWindowDimensions()
+  const { width, height } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
   const showAsSheet = width >= 768 && router.canGoBack()
+  const sheetHeight = Math.max(0, Math.min(height * 0.9, height - insets.top - 16))
 
   return (
     <ResponsiveDetailSheetContext.Provider value={showAsSheet}>
@@ -49,7 +52,8 @@ export function ResponsiveDetailSheet({ children, footer }: ResponsiveDetailShee
             contentStyle={{
               width: '95%',
               maxWidth: 680,
-              height: '90%',
+              height: sheetHeight,
+              maxHeight: height - insets.top - 16,
               alignSelf: 'center',
               overflow: 'hidden',
             }}
