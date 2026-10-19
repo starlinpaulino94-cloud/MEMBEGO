@@ -40,6 +40,7 @@ const TILES = [
   { label: 'Membresías', href: '/mis-membresias' },
   { label: 'Actividad y citas', href: '/citas' },
   { label: 'Mis pagos', href: '/pagos' },
+  { label: 'Tarjetas guardadas', href: '/tarjetas' },
   { label: 'Beneficios', href: '/mis-promociones' },
   { label: 'Vehículos', href: '/vehiculos' },
   { label: 'Historial', href: '/historial' },

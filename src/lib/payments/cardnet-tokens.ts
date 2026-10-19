@@ -809,8 +809,9 @@ export async function borrarPerfilCardnet(input: {
   const paymentProfileId = Number(input.paymentProfileId)
   if (!Number.isSafeInteger(paymentProfileId) || paymentProfileId <= 0) return false
 
-  const { ok } = await postTokens(`/Customer/${encodeURIComponent(input.customerId)}/PaymentProfileDelete`, {
+  const { ok, json } = await postTokens(`/Customer/${encodeURIComponent(input.customerId)}/PaymentProfileDelete`, {
     PaymentProfileId: paymentProfileId,
   })
-  return ok
+  if (!ok) return false
+  return desenvolverRespuesta(json).errores.length === 0
 }

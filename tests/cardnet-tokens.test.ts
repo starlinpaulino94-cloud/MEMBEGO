@@ -208,6 +208,7 @@ test('extraerPerfiles saca token y referencias de PaymentProfiles (camino confir
           Token: 'CT__nuevoToken_bbbbbbbbbbbbbbbb',
           Brand: 'MASTERCARD',
           LastFour: '4444',
+          Expiration: '203012',
         },
       ],
     },
@@ -220,6 +221,8 @@ test('extraerPerfiles saca token y referencias de PaymentProfiles (camino confir
   assert.equal(ultimo.token, 'CT__nuevoToken_bbbbbbbbbbbbbbbb')
   assert.equal(ultimo.marca, 'MASTERCARD')
   assert.equal(ultimo.ultimos4, '4444')
+  assert.equal(ultimo.vencMes, 12)
+  assert.equal(ultimo.vencAnio, 2030)
 })
 
 test('extraerPerfiles con respuesta sin perfiles o malformada devuelve []', async () => {
@@ -281,11 +284,12 @@ test('sin estado de transacción se cae a los indicios de siempre', async () => 
   assert.equal(interpretarCompraToken({ ResponseCode: '51' }).aprobada, false)
 })
 
-test('el contrato de captura acepta un único objetivo y consentimiento solo de membresía', () => {
+test('el contrato de captura acepta un objetivo y mantiene separado el consentimiento de guardar tarjeta', () => {
   assert.equal(cardnetSessionInputSchema.safeParse({ membershipId: 'mem_1' }).success, true)
   assert.equal(cardnetSessionInputSchema.safeParse({ compraId: 'buy_1' }).success, true)
   assert.equal(cardnetSessionInputSchema.safeParse({ membershipId: 'mem_1', compraId: 'buy_1' }).success, false)
   assert.equal(cardnetSessionInputSchema.safeParse({}).success, false)
+  assert.equal(cardnetSessionInputSchema.safeParse({ compraId: 'buy_1', guardarTarjeta: true }).success, true)
   assert.equal(cardnetSessionInputSchema.safeParse({ compraId: 'buy_1', guardarParaRenovacion: true }).success, false)
   assert.equal(cardnetSessionInputSchema.safeParse({ membershipId: 'mem_1', conteoAntes: 0 }).success, false)
   assert.equal(cardnetConfirmInputSchema.safeParse({ sessionId: 's'.repeat(40), captureNonce: 'n'.repeat(40), token: 't'.repeat(24) }).success, true)

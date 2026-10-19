@@ -1,5 +1,40 @@
 # Pago con tarjeta — CardNET tokenizado
 
+## Billetera de tarjetas guardadas
+
+La captura hospedada de CardNET puede registrar perfiles en la cuenta del
+cliente. Membego conserva únicamente el identificador del perfil, marca,
+últimos cuatro dígitos, vencimiento y el token del proveedor cifrado con
+AES-256-GCM. La llave `CARDNET_VAULT_KEY` debe ser base64 de 32 bytes, privada,
+estable entre despliegues y configurada antes de habilitar el guardado. Nunca
+debe llevar prefijo `NEXT_PUBLIC_`.
+
+Las sesiones nuevas registran consentimiento para guardar la tarjeta, separado
+del consentimiento de renovación. Guardar una tarjeta no enlaza una membresía
+ni modifica `autoRenovar`. Las renovaciones existentes siguen su estado previo;
+esta implementación no las habilita.
+
+La migración `20261074_cardnet_saved_cards_security` añade cifrado, tarjeta
+predeterminada y estado de eliminación pendiente. Las filas históricas que
+tengan tokens en claro requieren un backfill controlado, con acceso a la base y
+la llave configurada:
+
+```powershell
+$env:CARDNET_BACKFILL_CONFIRM = 'CIFRAR_TOKENS_CARDNET_HISTORICOS'
+npx tsx --conditions react-server --tsconfig tsconfig.json scripts/cardnet/cifrar-tokens-historicos.ts
+```
+
+No ejecutes el backfill hasta verificar explícitamente el destino de
+`DATABASE_URL` y guardar la llave fuera del repositorio. El script es
+reentrante, no imprime tokens y elimina el valor histórico en claro solo cuando
+confirma que cifró esa fila.
+
+El contrato publicado por CardNET describe el registro de perfiles y su uso en
+compras, pero el flujo de compra con credencial guardada de esta cuenta aún
+requiere certificación QA de la cuenta comercial. Hasta entonces Membego no
+ofrece el cobro con tarjeta guardada como opción de pago. [Guía oficial de
+tokenización y autenticación](https://developers.cardnet.com.do/guias/tokenizacion-autenticacion/).
+
 Estado revisado el **2026-10-09**. El flujo vigente usa captura hospedada y tokens para membresías y compras de promociones, en web y en la API del cliente móvil. El checkout de MembegoOrder y Supply no incorporan esta pasarela.
 
 ## 1. Frontera de seguridad y retiro del flujo directo

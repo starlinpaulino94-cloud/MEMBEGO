@@ -60,7 +60,7 @@ export type CardnetSessionTarget =
   | {
       readonly kind: 'membership'
       readonly membershipId: string
-      readonly guardarParaRenovacion?: boolean
+      readonly guardarTarjeta?: boolean
     }
   | {
       readonly kind: 'promotion'

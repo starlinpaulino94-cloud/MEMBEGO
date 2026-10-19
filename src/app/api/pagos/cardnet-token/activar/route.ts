@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     if (res.estado === 'aprobado') {
       // «Guardar tarjeta» funciona igual llegando por activación que por el
-      // cobro directo — mismo bloque best-effort que /confirmar.
+      // cobro directo; el consentimiento de guardado no activa renovaciones.
       if (guardar && res.perfil) {
         const { guardarTarjeta } = await import('@/modules/pagos/cardnetTokenGuardado')
         await guardarTarjeta({
@@ -110,7 +110,6 @@ export async function POST(req: NextRequest) {
           token: res.perfil.token,
           marca: res.perfil.marca,
           ultimos4: res.perfil.ultimos4,
-          membershipId,
         }).catch((e) => logErrorBd('pagos:activar:guardarTarjeta', e, { membershipId }))
       }
       return NextResponse.json({

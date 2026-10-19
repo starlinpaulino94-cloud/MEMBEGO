@@ -242,11 +242,9 @@ model MembresiaVehiculo {
   @@map("membresia_vehiculos")
 }
 
-/// Fase 2 CardNET (tokenización HOSPEDADA): tarjeta guardada para cobros
-/// recurrentes de membresías. NO guarda el número de tarjeta — solo las
-/// referencias que devuelve CardNET (customer + perfil de pago) y datos de
-/// exhibición (marca y últimos 4). El cobro se hace server-to-server contra
-/// CardNET con esas referencias; la tarjeta vive únicamente en CardNET.
+/// Método de pago CardNET guardado a petición del cliente. Solo conserva la
+/// referencia del proveedor, token cifrado y metadatos permitidos; nunca PAN/CVV.
+/// Guardar la tarjeta no implica consentimiento para renovaciones automáticas.
 model TarjetaTokenizada {
   id        String  @id @default(cuid())
   companyId String
@@ -257,9 +255,14 @@ model TarjetaTokenizada {
   /// Referencias de CardNET (NO son datos de tarjeta).
   customerId       String
   paymentProfileId String?
+  proveedorCuenta  String @default("CARDNET")
   cardnetCaptureSessionId String? @unique
   cardnetCaptureSession CardnetCaptureSession? @relation(fields: [cardnetCaptureSessionId], references: [id], onDelete: SetNull)
-  /// Token reutilizable de la credencial archivada, si el proveedor lo entrega.
+  /// Token cifrado en la aplicación con CARDNET_VAULT_KEY. El token permite
+  /// cobrar y nunca debe devolverse al cliente ni escribirse en logs.
+  tokenCifrado     String?
+  /// Compatibilidad transitoria con tokens históricos en claro. Solo lectura
+  /// hasta correr el backfill; todo token nuevo se cifra en tokenCifrado.
   token            String?
 
   /// Solo para mostrar "•••• 1234 · Visa · 12/27". Nunca el PAN completo.
@@ -269,6 +272,9 @@ model TarjetaTokenizada {
   vencAnio Int?
 
   activa    Boolean  @default(true)
+  predeterminada Boolean @default(false)
+  eliminacionPendiente Boolean @default(false)
+  consentimientoGuardadoAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -276,6 +282,7 @@ model TarjetaTokenizada {
 
   @@index([clienteId, activa])
   @@index([companyId])
+  @@index([eliminacionPendiente, activa], map: "tarjetas_tokenizadas_eliminacion_pendiente_idx")
   @@map("tarjetas_tokenizadas")
 }
 
