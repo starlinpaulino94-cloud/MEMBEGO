@@ -65,6 +65,19 @@ enum DealClaimStatus {
   REFUNDED
 }
 
+/// Supplier & Fulfillment Commerce §17: quién FINANCIA el descuento de una
+/// oferta de la empresa. MERCHANT (lo de siempre): la empresa. MEMBEGO o
+/// SHARED: Membego pone todo o parte → el Marketplace enseña «Vendido por la
+/// empresa · Promoción financiada por Membego» (MERCHANT_SUBSIDIZED). Es la
+/// SEÑAL de presentación y de reporte; la liquidación de ese subsidio a la
+/// empresa es una decisión comercial/contable aparte (USER DECISION REQUIRED)
+/// y no se calcula aquí.
+enum DealSponsor {
+  MERCHANT
+  MEMBEGO
+  SHARED
+}
+
 model Deal {
   id        String  @id @default(cuid())
   companyId String
@@ -84,6 +97,8 @@ model Deal {
   discountType  DealDiscountType
   discountValue Decimal          @db.Decimal(12, 2)
   currency      String           @default("DOP")
+  /// Quién financia el descuento (ver `DealSponsor`). Solo presentación y reporte.
+  sponsor       DealSponsor      @default(MERCHANT)
 
   status          DealStatus @default(DRAFT)
   /// Por qué está pausada o terminó (lo ve la empresa).

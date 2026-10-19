@@ -245,3 +245,15 @@ export async function requireSection(
 export async function puedeFuncion(section: AdminSection, funcion: string): Promise<boolean> {
   return (await requireSection(section, funcion)) !== null
 }
+
+/**
+ * ¿Puede esta persona abrir ESTA sección del panel, aunque la pantalla donde lo pregunta no sea de esa sección?
+ *
+ * Es la pregunta de «¿ve este dato quien ya vería la pantalla que lo muestra?»: la caja enseña, por ejemplo, el detalle de
+ * los cobros en línea, que es el mismo dato que el historial de Comprobantes. Quien no puede abrir ese historial no debe
+ * poder leerlo por la puerta de al lado. Lee los permisos VIVOS (negar a alguien surte efecto en su próximo clic) y
+ * devuelve `false` ante cualquier duda.
+ */
+export async function puedeSeccion(section: AdminSection): Promise<boolean> {
+  return (await requireSection(section)) !== null
+}

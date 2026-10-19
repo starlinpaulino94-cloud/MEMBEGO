@@ -11,7 +11,7 @@ import {
   CardnetCaptureError,
   CardnetCaptureIntroduction,
   CardnetPaymentStatusMessage,
-  RenewalConsent,
+  SavedCardConsent,
 } from '../src/components/pagos/cardnet/primitives'
 
 const SHOWCASE_STATES = [
@@ -23,7 +23,7 @@ const SHOWCASE_STATES = [
 ] as const
 
 export default function CardnetCaptureShowcaseRoute() {
-  const [renewalConsent, setRenewalConsent] = useState(false)
+  const [saveCardConsent, setSaveCardConsent] = useState(false)
   const [staticNotice, setStaticNotice] = useState<string | null>(null)
 
   if (!__DEV__) return null
@@ -65,8 +65,8 @@ export default function CardnetCaptureShowcaseRoute() {
                 <Text className="max-w-[340px] text-center text-sm leading-5 text-muted-foreground">La vista real usa el formulario alojado por CardNET. Esta muestra no contiene campos de tarjeta.</Text>
                 <Button disabled variant="outline">Abrir formulario seguro</Button>
               </View>
-              <RenewalConsent checked={renewalConsent} onChange={setRenewalConsent} />
-              <Text className="text-xs text-muted-foreground">Consentimiento de renovación: {renewalConsent ? 'activado en esta muestra' : 'desactivado por defecto'}</Text>
+              <SavedCardConsent checked={saveCardConsent} onChange={setSaveCardConsent} />
+              <Text className="text-xs text-muted-foreground">Consentimiento para guardar: {saveCardConsent ? 'activado en esta muestra' : 'desactivado por defecto'}</Text>
             </Card>
 
             <CardnetCaptureError

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { BadgeCheck, CalendarClock, Sparkles, Users } from 'lucide-react'
 import { formatPrice } from '@/lib/format'
-import { rutaDePromociones, type Espacio } from '@/modules/comercio/rutas'
+import { rutaDeEmpresa, rutaDePromociones, type Espacio } from '@/modules/comercio/rutas'
 import type { MarketplaceSupplyOffer } from '@/modules/supply-v2/marketplace/read-model'
 
 function dinero(n: string, moneda: string): string {
@@ -17,18 +17,33 @@ function dinero(n: string, moneda: string): string {
  * es la ranura de la compra: aquí no hay botón, formulario ni acción.
  */
 export function FichaDeOfertaMembego({ o, espacio, ranuraCompra }: { o: MarketplaceSupplyOffer; espacio: Espacio; ranuraCompra: ReactNode }) {
+  const { comercial } = o
+  const regalo = comercial.modo === 'MEMBEGO_GIFT'
+  const vitrina = comercial.canje.slug ? rutaDeEmpresa(espacio, comercial.canje.slug) : null
   return (
-    <main className="container max-w-3xl py-10">
+    <main className="container max-w-3xl py-10" data-modo-comercial={comercial.modo}>
       <p className="mb-3 text-caption">
         <Link href={rutaDePromociones(espacio)} className="text-muted-foreground underline-offset-4 hover:underline">← Promociones</Link>
       </p>
       <div className="grid gap-6 rounded-2xl border border-border/70 bg-card p-6 shadow-premium sm:grid-cols-[1fr_18rem]">
         <div className="space-y-4">
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-caption font-semibold text-primary">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden /> Oferta Membego
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-caption font-semibold text-primary" data-testid="etiqueta-comercial">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden /> {comercial.etiqueta}
           </span>
           <h1 className="text-h1" data-testid="oferta-titulo">{o.title}</h1>
-          <p className="text-muted-foreground" data-testid="oferta-proveedor">{o.supplier}</p>
+          <p className="text-muted-foreground" data-testid="linea-vendedor">{comercial.lineaVendedor}</p>
+          <p className="text-muted-foreground" data-testid="oferta-proveedor">
+            Canje en{' '}
+            {vitrina ? (
+              <Link href={vitrina} className="underline" data-testid="canje-enlace">{comercial.canje.nombre}</Link>
+            ) : (
+              <span data-testid="canje-sin-vitrina">{comercial.canje.nombre}</span>
+            )}
+            {comercial.canje.sucursales.length > 0 && (
+              <span className="block text-caption" data-testid="canje-sucursales">{comercial.canje.sucursales.map((s) => s.nombre).join(' · ')}</span>
+            )}
+          </p>
+          {comercial.lineaFinanciacion && <p className="text-caption text-primary" data-testid="linea-financiacion">{comercial.lineaFinanciacion}</p>}
           {o.description && <p className="text-body">{o.description}</p>}
           <ul className="space-y-1 text-sm text-muted-foreground">
             <li className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-success" aria-hidden /> {o.available ? 'Disponible' : 'No disponible ahora mismo'}</li>
@@ -38,11 +53,18 @@ export function FichaDeOfertaMembego({ o, espacio, ranuraCompra }: { o: Marketpl
           </ul>
         </div>
         <div className="space-y-3 rounded-xl border border-border bg-background p-4">
-          <dl className="space-y-1 text-sm">
-            <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Precio regular</dt><dd className="line-through tabular-nums" data-testid="oferta-precio-regular">{formatPrice(o.publicPrice, { moneda: o.currency })}</dd></div>
-            <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Precio Membego</dt><dd className="text-h2 tabular-nums" data-testid="oferta-precio-membego">{formatPrice(o.salePrice, { moneda: o.currency })}</dd></div>
-            <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Ahorras</dt><dd className="font-semibold text-success tabular-nums" data-testid="oferta-ahorro">{dinero(o.savings, o.currency)}</dd></div>
-          </dl>
+          {regalo ? (
+            <dl className="space-y-1 text-sm">
+              <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Valor</dt><dd className="line-through tabular-nums" data-testid="oferta-precio-regular">{formatPrice(o.publicPrice, { moneda: o.currency })}</dd></div>
+              <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Para ti</dt><dd className="text-h2 text-success" data-testid="oferta-precio-membego">GRATIS</dd></div>
+            </dl>
+          ) : (
+            <dl className="space-y-1 text-sm">
+              <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Precio regular</dt><dd className="line-through tabular-nums" data-testid="oferta-precio-regular">{formatPrice(o.publicPrice, { moneda: o.currency })}</dd></div>
+              <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Precio Membego</dt><dd className="text-h2 tabular-nums" data-testid="oferta-precio-membego">{formatPrice(o.salePrice, { moneda: o.currency })}</dd></div>
+              <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Ahorras</dt><dd className="font-semibold text-success tabular-nums" data-testid="oferta-ahorro">{dinero(o.savings, o.currency)}</dd></div>
+            </dl>
+          )}
           {ranuraCompra}
         </div>
       </div>

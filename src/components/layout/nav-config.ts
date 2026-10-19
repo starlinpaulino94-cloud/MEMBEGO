@@ -21,6 +21,7 @@ import {
   History,
   Inbox,
   Landmark,
+  MapPinCheck,
   LayoutDashboard,
   LifeBuoy,
   Link2,
@@ -34,6 +35,7 @@ import {
   Palette,
   Plug,
   QrCode,
+  Receipt,
   ReceiptText,
   Rocket,
   ScanLine,
@@ -269,6 +271,12 @@ export interface ContextoNav {
   permisos?: PermisosUsuario | null
   /** Rutas ya descartadas por quien construyó el contexto. */
   ocultas?: readonly string[]
+  /**
+   * Supplier Lite: la empresa es proveedora de Membego y NO tiene comercio
+   * (ni catálogo, ni pedidos, ni ofertas). Su menú es el del proveedor y nada
+   * más: no se le ofrece el Business OS que no contrató (§6).
+   */
+  soloProveedor?: boolean
 }
 
 // ── Grupos del panel de empresa ─────────────────────────────────────────────
@@ -714,6 +722,96 @@ const G_ADM_CONEXIONES: NavGroup = {
   ],
 }
 
+/**
+ * SUPPLIER & FULFILLMENT COMMERCE · el portal del proveedor (Supplier Lite).
+ * Todo cuelga de la sección `supply` y de la capacidad MEMBEGO_SUPPLIER; las
+ * funciones finas (escanear, ventas adicionales, liquidaciones, personal,
+ * configuración, solicitud) las decide `requireSection` en cada action.
+ * `/admin/supply` (la portada) ya está en Conexiones; aquí van sus pantallas.
+ */
+const ENLACES_PORTAL_PROVEEDOR: readonly NavLink[] = [
+    {
+      href: '/admin/supply/inventario',
+      label: 'Productos de Membego',
+      icon: Warehouse,
+      description: 'Lo que Membego te compró: unidades, derechos, capacidad y vencimientos por contrato.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['inventario', 'productos', 'servicios', 'derechos', 'unidades', 'contrato', 'proveedor', 'supply'],
+    },
+    {
+      href: '/admin/supply/escaner',
+      label: 'Escanear QR',
+      icon: ScanLine,
+      description: 'Lee el QR del cliente, entrega el beneficio de Membego y registra las compras adicionales.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['escanear', 'qr', 'entregar', 'canje', 'proveedor', 'supply'],
+    },
+    {
+      href: '/admin/supply/canjes',
+      label: 'Canjes',
+      icon: ListChecks,
+      description: 'Las entregas hechas: quién, qué, dónde y cuándo.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['canjes', 'entregas', 'redenciones', 'proveedor', 'supply'],
+    },
+    {
+      href: '/admin/supply/ventas-adicionales',
+      label: 'Ventas adicionales',
+      icon: Receipt,
+      description: 'Lo que los clientes de Membego te compraron además de lo incluido, y la comisión solo sobre eso.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['ventas', 'adicionales', 'extras', 'visitas', 'comision', 'proveedor', 'supply'],
+    },
+    {
+      href: '/admin/supply/incidencias',
+      label: 'Incidencias',
+      icon: TriangleAlert,
+      description: 'Lo que salió mal al entregar: QR inválido, producto agotado, cliente equivocado.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['incidencias', 'problemas', 'proveedor', 'supply'],
+    },
+    {
+      href: '/admin/supply/liquidaciones',
+      label: 'Liquidaciones',
+      icon: Landmark,
+      description: 'Lo que Membego te debe y te pagó por lo entregado.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['liquidaciones', 'pagos', 'finanzas', 'proveedor', 'supply'],
+    },
+    {
+      href: '/admin/supply/personal',
+      label: 'Personal',
+      icon: Users,
+      description: 'Quién escanea, quién ve las cuentas y quién solo mira.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['personal', 'equipo', 'operador', 'invitar', 'proveedor', 'supply'],
+    },
+    {
+      href: '/admin/supply/configuracion',
+      label: 'Configuración',
+      icon: SlidersHorizontal,
+      description: 'Contrato, prueba del escáner y lista de preparación de tu portal.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['configuracion', 'contrato', 'prueba', 'activacion', 'proveedor', 'supply'],
+    },
+    {
+      href: '/admin/supply/solicitud-merchant',
+      label: 'Ser empresa Membego',
+      icon: Store,
+      description: 'Pide operar también como empresa Membego: catálogo, pedidos y ofertas en la misma organización.',
+      capacidad: 'MEMBEGO_SUPPLIER',
+      keywords: ['merchant', 'empresa', 'solicitud', 'convertirme', 'vitrina', 'proveedor', 'supply'],
+    },
+]
+
+function delPortal(...hrefs: readonly string[]): NavLink[] {
+  return hrefs.map((href) => {
+    const enlace = ENLACES_PORTAL_PROVEEDOR.find((i) => i.href === href)
+    if (!enlace) throw new Error(`Navegación: no existe la pantalla del portal ${href}.`)
+    return enlace
+  })
+}
+
 const G_SOPORTE: NavGroup = {
   id: 'soporte',
   label: 'Soporte',
@@ -903,6 +1001,44 @@ const ESPACIOS_ADMIN: Workspace[] = [
   },
 ]
 
+/**
+ * EL ESPACIO DEL PROVEEDOR (Supplier Lite, §6). Para una empresa SOLO
+ * proveedora es el único espacio; para una que además vende en Membego se
+ * suma a «Empresa». Sus módulos son los del portal `/admin/supply/*` y nada
+ * del Business OS comercial.
+ */
+const ESPACIO_PROVEEDOR: Workspace = {
+  id: 'proveedor',
+  label: 'Proveedor Membego',
+  short: 'Proveedor',
+  icon: Store,
+  description: 'Lo que Membego te compró y tú entregas: canjes, extras, liquidaciones y tu equipo.',
+  scope: 'COMPANY',
+  capacidad: 'MEMBEGO_SUPPLIER',
+  groups: [
+    {
+      id: 'proveedor-inicio',
+      label: 'Inicio',
+      items: [{ ...deAdmin('/admin/supply')[0]!, label: 'Inicio', principal: true }],
+    },
+    {
+      id: 'proveedor-operacion',
+      label: 'Operación',
+      items: delPortal('/admin/supply/inventario', '/admin/supply/escaner', '/admin/supply/canjes', '/admin/supply/ventas-adicionales', '/admin/supply/incidencias'),
+    },
+    {
+      id: 'proveedor-cuentas',
+      label: 'Cuentas',
+      items: delPortal('/admin/supply/liquidaciones'),
+    },
+    {
+      id: 'proveedor-organizacion',
+      label: 'Organización',
+      items: delPortal('/admin/supply/personal', '/admin/supply/configuracion', '/admin/supply/solicitud-merchant'),
+    },
+  ],
+}
+
 // ── Espacios del cliente ────────────────────────────────────────────────────
 
 /**
@@ -998,6 +1134,15 @@ const G_CLI_MIO: NavGroup = {
       icon: Tag,
       description: 'Ofertas Membego que compraste y tus beneficios.',
       keywords: ['compras', 'membego', 'ofertas', 'beneficios', 'supply'],
+    },
+    {
+      // SUPPLIER & FULFILLMENT COMMERCE · cada vez que usó un beneficio en un
+      // negocio: lo incluido, lo que compró además y su confirmación (§33).
+      href: '/cliente/visitas',
+      label: 'Mis visitas',
+      icon: MapPinCheck,
+      description: 'Dónde usaste un beneficio de Membego y qué compraste además.',
+      keywords: ['visitas', 'membego', 'consumo', 'confirmar', 'compras adicionales'],
     },
     {
       // Supply · Slice 6: bonos y descuentos que Membego le asignó a esta
@@ -1482,6 +1627,7 @@ const RANGOS: Record<AppRole, number> = {
   SUPERVISOR: 60,
   MARKETING: 55,
   CAJERO: 50,
+  BODEGA: 45,
   RECEPCION: 40,
   EMPLEADO: 30,
   VENDEDOR: 20,
@@ -1635,10 +1781,18 @@ export function visibleWorkspaces(ctx: ContextoNav): EspacioVisible[] {
  * nada, con una prueba que no podía fallar. Fuera los dos.
  */
 function espaciosDe(ctx: ContextoNav): Workspace[] {
+  // Supplier Lite (§6): una empresa SOLO proveedora no ve el Business OS.
+  // Vale para cualquier rol del panel y para el superadmin que la opera.
+  if (ctx.soloProveedor && ctx.scope === 'COMPANY') return [ESPACIO_PROVEEDOR]
   const base = workspacesForRole(ctx.role)
-  if (ADMIN_ROLES.includes(ctx.role) || !tieneAlgunaConcesion(ctx)) return base
+  // El espacio del proveedor se SUMA solo cuando la capacidad se leyó y está
+  // encendida: no es un módulo que una empresa pierda si falla una consulta
+  // (el fail-open de las capacidades no aplica a lo que se añade).
+  const esProveedora = ctx.capacidades?.includes('MEMBEGO_SUPPLIER') === true
+  const conProveedor = (ws: Workspace[]) => (esProveedora && ctx.scope === 'COMPANY' && !ws.includes(ESPACIO_PROVEEDOR) ? [...ws, ESPACIO_PROVEEDOR] : ws)
+  if (ADMIN_ROLES.includes(ctx.role) || !tieneAlgunaConcesion(ctx)) return conProveedor(base)
   const yaEstan = new Set(base.map((w) => w.id))
-  return [...base, ...ESPACIOS_ADMIN.filter((w) => !yaEstan.has(w.id))]
+  return conProveedor([...base, ...ESPACIOS_ADMIN.filter((w) => !yaEstan.has(w.id))])
 }
 
 /** ¿Tiene concedida ALGUNA sección? Abre el árbol; el contenido se filtra aparte. */
@@ -1978,6 +2132,8 @@ export function roleLabel(role: AppRole): string {
       return 'Marketing'
     case 'SUPERVISOR':
       return 'Supervisor'
+    case 'BODEGA':
+      return 'Bodega'
     case 'VENDEDOR':
       return 'Vendedor'
     default:

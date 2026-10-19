@@ -3,22 +3,22 @@ import { test } from 'node:test'
 import type { CardnetPaymentStatus, CardnetSessionStartResult } from '../apps/client/src/lib/api'
 import { isCardnetServerApproved, membershipCardnetStartAction, membershipCardnetTarget } from '../apps/client/src/lib/cardnet-membership-checkout'
 
-test('unchecked consent does not request renewal storage', () => {
+test('unchecked consent does not request to save the card', () => {
   assert.deepEqual(membershipCardnetTarget('membership-1', true, false), {
     kind: 'membership',
     membershipId: 'membership-1',
   })
 })
 
-test('affirmative consent on a membership purchase requests renewal storage', () => {
+test('affirmative consent on a membership purchase requests card storage only', () => {
   assert.deepEqual(membershipCardnetTarget('membership-1', true, true), {
     kind: 'membership',
     membershipId: 'membership-1',
-    guardarParaRenovacion: true,
+    guardarTarjeta: true,
   })
 })
 
-test('plan changes cannot request renewal storage', () => {
+test('plan changes cannot request card storage through the membership consent control', () => {
   assert.deepEqual(membershipCardnetTarget('membership-1', false, true), {
     kind: 'membership',
     membershipId: 'membership-1',

@@ -753,6 +753,8 @@ export interface PerfilPagoCardnet {
    * SIN autenticación, donde el token queda activo solo.
    */
   habilitado: boolean
+  vencMes?: number | null
+  vencAnio?: number | null
 }
 
 /** Saca los perfiles de pago de la respuesta de `GET /Customer/{id}`. */
@@ -845,12 +847,20 @@ export function extraerPerfiles(json: Record<string, unknown>): PerfilPagoCardne
       // Solo un `false` explícito deshabilita. Un campo ausente no puede
       // bloquear un cobro que sí habría pasado.
       const enabled = p.Enabled ?? p.enabled ?? p.IsEnabled
+        const expiration = s('Expiration', 'CardExpiration', 'expiration')
+        const vencMesRaw = s('CardExpMonth', 'ExpirationMonth')
+        const vencAnioRaw = s('CardExpYear', 'ExpirationYear')
+        const expiracion = expiration?.match(/^(\d{4})(\d{2})$/)
+        const vencMes = Number(vencMesRaw ?? expiracion?.[2])
+        const vencAnio = Number(vencAnioRaw ?? expiracion?.[1])
       return {
         paymentProfileId: s('PaymentProfileId', 'ProfileId', 'Id', 'id'),
         token: s('Token', 'TrxToken', 'PWToken', 'token'),
         marca: s('Brand', 'CardBrand', 'CardType', 'Franchise'),
         ultimos4,
         habilitado: enabled !== false && enabled !== 'false',
+          vencMes: Number.isInteger(vencMes) && vencMes >= 1 && vencMes <= 12 ? vencMes : null,
+          vencAnio: Number.isInteger(vencAnio) && vencAnio >= 2000 ? vencAnio : null,
       }
     })
     .filter((p) => Boolean(p.token || p.paymentProfileId))

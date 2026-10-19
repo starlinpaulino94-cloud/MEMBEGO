@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../../src/lib/prisma'
 import { conEmpresa } from '../../src/lib/tenant'
 import { cambiarEstadoItemEnTx, crearItemEnTx } from '../../src/modules/catalog/service'
-import { configurarUmbralEnTx, recibirEnTx } from '../../src/modules/inventory/service'
+import { ajustarEnTx, configurarUmbralEnTx, recibirEnTx } from '../../src/modules/inventory/service'
 import { InventarioError } from '../../src/modules/inventory/errores'
 import { PedidoError } from '../../src/modules/orders/errores'
 import { aceptarPedidoEnTx, cancelarPedidoEnTx, completarPorQrEnTx, crearPedidoEnTx, marcarListoEnTx, type ContextoPedido } from '../../src/modules/orders/service'
@@ -316,6 +316,22 @@ test('6 · «Pocas unidades» solo si la empresa fijó un umbral; el aviso de st
   assert.equal(await avisarStockBajo(E.id, [pocas.varianteId, sinUmbral.varianteId]), 1, 'solo avisa la variante con umbral')
   assert.equal(await avisarStockBajo(E.id, [pocas.varianteId]), 0, 'el mismo día no vuelve a sonar')
   assert.equal(await prisma.notificacion.count({ where: { userId: E.admin, titulo: 'Stock bajo' } }), 1)
+})
+
+test('6b · el aviso escala: si avisó «Stock bajo» y el producto luego se AGOTA el mismo día, avisa otra vez (una vez por estado y día)', async () => {
+  const p = await producto(`Cargador ${sufijo}`, 'cargador', 450, { stock: 6, umbral: 5 })
+  const bajar = (cambio: number) => en((tx) => ajustarEnTx(tx, E.id, { varianteId: p.varianteId, sucursalId: E.sucursal, cambio, motivo: 'Merma de prueba' }, ctxOp()))
+  const avisos = (titulo: string) => prisma.notificacion.count({ where: { userId: E.admin, titulo, href: `/admin/inventario/${p.varianteId}` } })
+
+  assert.equal(await avisarStockBajo(E.id, [p.varianteId]), 0, 'con 6 disponibles y umbral 5 todavía no hay nada que avisar')
+  await bajar(-2) // 4 → bajo
+  assert.equal(await avisarStockBajo(E.id, [p.varianteId]), 1)
+  assert.equal(await avisarStockBajo(E.id, [p.varianteId]), 0, 'mismo estado, mismo día: no repite')
+  await bajar(-4) // 0 → agotado
+  assert.equal(await avisarStockBajo(E.id, [p.varianteId]), 1, 'AGOTADO es otro estado: tiene que avisar aunque «Stock bajo» ya avisara hoy')
+  assert.equal(await avisarStockBajo(E.id, [p.varianteId]), 0, 'y tampoco repite')
+  assert.equal(await avisos('Stock bajo'), 1)
+  assert.equal(await avisos('Producto agotado'), 1)
 })
 
 test('7 · los textos de los avisos distinguen quién hizo qué', () => {

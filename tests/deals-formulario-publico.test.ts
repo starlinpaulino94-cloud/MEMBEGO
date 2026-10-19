@@ -119,7 +119,8 @@ test('público: LISTA BLANCA — ni el presupuesto, ni la cuota, ni lo reservado
     assert.ok(!json.includes(prohibido), `la proyección pública enseña «${prohibido}»`)
   }
   assert.deepEqual(Object.keys(o).sort(), [
-    'ahorro', 'currency', 'description', 'empresa', 'endsAt', 'etiqueta', 'id', 'imageUrl', 'itemName', 'itemSlug', 'precioAhora', 'precioAntes', 'quedan', 'soloClientesNuevos', 'sucursales', 'title', 'variantName', 'voucherDays',
+    // `comercial` (Supplier & Fulfillment Commerce §12–§19): quién vende y quién financia, ya resuelto; no lleva ids ni dinero interno.
+    'ahorro', 'comercial', 'currency', 'description', 'empresa', 'endsAt', 'etiqueta', 'id', 'imageUrl', 'itemName', 'itemSlug', 'precioAhora', 'precioAntes', 'quedan', 'soloClientesNuevos', 'sucursales', 'title', 'variantName', 'voucherDays',
   ])
 })
 

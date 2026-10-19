@@ -74,6 +74,8 @@ enum MerchantLedgerEntryType {
   CREDIT
   PROMOTIONAL_CREDIT
   VERIFICATION_ADJUSTMENT
+  /// Supplier & Fulfillment Commerce (§27–§28): comisión sobre una VENTA ADICIONAL de una visita atribuida a Membego. Referencia ANCILLARY_SALE. Nunca sobre la unidad que Membego compró.
+  ANCILLARY_FEE
 }
 
 model MerchantBillingConfig {
@@ -211,6 +213,10 @@ model MerchantLedgerEntry {
   reversals Commission? @relation("CommissionReversal")
   verificationAdjustments         Commission? @relation("CommissionVerificationAdjustment")
   verificationAdjustmentReversals Commission? @relation("CommissionVerificationAdjustmentReversal")
+  // Supplier & Fulfillment Commerce: ventas adicionales de una visita (cargo, reverso y ajuste).
+  ancillaryCharges     AncillarySale? @relation("AncillarySaleCharge")
+  ancillaryReversals   AncillarySale? @relation("AncillarySaleReversal")
+  ancillaryAdjustments AncillarySale? @relation("AncillarySaleAdjustment")
 
   @@unique([companyId, seq])
   @@unique([companyId, idempotencyKey])

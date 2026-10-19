@@ -60,6 +60,7 @@ const ROTULO_ROL: Partial<Record<ContextoNav['role'], string>> = {
   GERENTE: 'Gerente',
   SUPERVISOR: 'Supervisor',
   MARKETING: 'Marketing',
+  BODEGA: 'Bodega',
   CAJERO: 'Cajero',
   RECEPCION: 'Recepción',
   EMPLEADO: 'Empleado',

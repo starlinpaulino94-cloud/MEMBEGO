@@ -27,6 +27,7 @@ export const ROLES_FILTRABLES = [
   'RECEPCION',
   'MARKETING',
   'SUPERVISOR',
+  'BODEGA',
   'EMPLEADO',
   'ADMIN_EMPRESA',
 ] as const

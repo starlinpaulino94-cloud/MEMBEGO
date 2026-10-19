@@ -39,6 +39,8 @@ export const ESPACIO_DE: Record<string, Espacio> = {
   sso: 'acceso',
   invitacion: 'acceso',
   '(cliente)': 'cliente',
+  // El comprobante de pago que la app abre en el navegador del teléfono con un enlace firmado y caduco (host de la app).
+  comprobante: 'cliente',
   '(admin)': 'paneles',
   '(superadmin)': 'paneles',
   '(empleado)': 'paneles',

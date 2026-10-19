@@ -4,7 +4,7 @@ import { ArrowLeft, Search } from 'lucide-react'
 import type { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
-import { whereCobrado } from '@/modules/pagos/cobrado'
+import { sinVentaDePasarelaEnElPeriodo, whereCobrado } from '@/modules/pagos/cobrado'
 import { Input } from '@/components/ui/input'
 import { requireRole, requireSection } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -373,9 +373,16 @@ export default async function DetalleFinanzasPage({
         // las dos consultas, como en el resto del código: lo compartido es la
         // acotación, y el criterio de «cobrado» lo aplica la misma función a
         // las dos, así que filas y total no pueden separarse.
+        //
+        // Lo cobrado con tarjeta de la pasarela ya está en la pestaña de caja
+        // (su venta del libro), así que aquí se saca, igual que en el reporte:
+        // si no, el detalle sumaría más que la cifra que lo abrió. Los
+        // descuentos no se tocan: el reporte tampoco los recorta.
         const acota = {
           companyId,
-          ...(vista === 'DESCUENTOS' ? { descuentoBienvenida: { not: null } } : {}),
+          ...(vista === 'DESCUENTOS'
+            ? { descuentoBienvenida: { not: null } }
+            : sinVentaDePasarelaEnElPeriodo(rango.desde, rango.hasta)),
           ...(recorte ? { sucursalPagoId: recorte.id } : {}),
           ...porCliente,
         }

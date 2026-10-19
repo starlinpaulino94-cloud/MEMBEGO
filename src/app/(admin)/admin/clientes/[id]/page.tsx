@@ -30,6 +30,8 @@ import { BotonConfirmado } from '@/components/ui/boton-confirmado'
 import { SemaforoCliente } from '@/components/admin/SemaforoCliente'
 import { HistorialCliente } from '@/components/admin/HistorialCliente'
 import { getHistorialCliente } from '@/modules/cliente/historial'
+import { getCobrosConTarjetaDeCliente } from '@/modules/pagos/cobros-en-linea'
+import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
 import { semaforoDeFila } from '@/modules/riesgo/clasificar'
 import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
 import type { MembershipEstado } from '@/types'
@@ -138,6 +140,11 @@ export default async function ClienteDetailPage({
   // consultas y la ficha se abre casi siempre por el resumen.
   const historial =
     vista === 'historial' ? await getHistorialCliente(cliente.companyId, cliente.id) : []
+  // Recibos de sus pagos con tarjeta en la app o la web: el personal los reimprime desde aquí.
+  const recibosTarjeta =
+    vista === 'historial'
+      ? await getCobrosConTarjetaDeCliente(cliente.companyId, cliente.id).catch(() => [])
+      : []
 
   let planes: { id: string; nombre: string; precio: string }[] = []
   try {
@@ -449,6 +456,34 @@ export default async function ClienteDetailPage({
               formatearFecha={(d) => formatDateTime(d, prefs)}
               formatearMonto={(n) => formatMoney(n, prefs)}
             />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recibos de pagos con tarjeta hechos en la app o la web: cada uno se imprime o reimprime aquí. */}
+      {vista === 'historial' && recibosTarjeta.length > 0 && (
+        <Card data-testid="recibos-tarjeta">
+          <CardHeader>
+            <CardTitle>Pagos con tarjeta en línea</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border/50">
+              {recibosTarjeta.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{r.detalle}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDateTime(r.creadoAt, prefs)} · <span className="font-mono">{r.ticketNumero}</span> · {r.formaDePago}
+                      {r.autorizacion ? ` · Aut. ${r.autorizacion}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="font-semibold tabular-nums">{formatMoney(r.monto, prefs)}</span>
+                    <FacturaPrintDialog transactionId={r.id} yaImpresa={r.impresa} triggerLabel={r.impresa ? 'Reimprimir' : 'Imprimir'} />
+                  </div>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}

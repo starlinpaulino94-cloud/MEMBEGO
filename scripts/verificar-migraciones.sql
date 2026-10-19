@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en ce287dc4: 212 migraciones, última 20261055_catalog_image_variantes.
+-- Generado con scripts/generar-verificar-migraciones.mjs en b6376545: 240 migraciones, última 20261074_cardnet_saved_cards_security.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -225,7 +225,35 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261052_supply_v2_derechos_por_linea','b374840aa0d8a3e1be74a0b32c3239a430f190e66be3fc857edd9e29352d0fc6'),
   ('20261053_growth_deal_promotion_gate','88e7e6ea7b0e02469da035920510f0024def6334aea12f3d3476e780518ae9a4'),
   ('20261054_growth_campaign_deal','c9a3ee3b07f0da9f10516f4b56dd194bf84ce0eace3506a2c02658622197efac'),
-  ('20261055_catalog_image_variantes','2d553df80118a431cca1d35d7701c1b1a40376ac066c728c98a2deb01102a6c2')
+  ('20261055_catalog_image_variantes','2d553df80118a431cca1d35d7701c1b1a40376ac066c728c98a2deb01102a6c2'),
+  ('20261056_inventory_receipts','0d7871f70b45fb16386fa7408ccd736c7572b82d287671f397f7c207f5c873e4'),
+  ('20261056_supplier_access_enums','05dcfc8a8c07a849efd2c83e8c3a598741e20f2e4b528bd3ba64fbece49db5a1'),
+  ('20261057_inventory_counts','1ceb9f74b461d9113ca9ae616a93481d9b254ecaf9f331348e45fb724a51b218'),
+  ('20261057_supplier_access','62f7035c06053a5f9fe19655883f6b79f7e3953ad98ec6ab33d7ebef7038ec7c'),
+  ('20261058_inventory_transfers','4ec2823fc784e58803418ab79dad690c7825d08996f0dd4e03218392ec820475'),
+  ('20261058_supply_item_fulfillment_enums','3ff9cd29d0338ed4cdb77fb58266b9be61e6ebaface8a9c71b3921f115cff799'),
+  ('20261059_inventory_costs','e10c049dafbd022d66b64d294dc45e3e5722d3c7012737625aa243f47a5caf3e'),
+  ('20261059_supply_item_fulfillment','94f39365c88c847dda75d84a8e4b5ba58acaaab8e536a9ecdc1aa3036dda231e'),
+  ('20261060_deal_sponsor_enums','d8ceab181e0a4cea79fcb90c1deea24a253ba4bb7e9342b4a927674547826acf'),
+  ('20261060_inventory_purchasing','df1c02cd444fa7b99b036f663364ae4f8f56022c54966e61d44df170e1e8c378'),
+  ('20261061_deal_sponsor','3d79d94dfe9f91877caf7ab64d6af5a6859bac7c0fa89eca49946eadf43aab15'),
+  ('20261062_visitas_membego_enums','aa7e218ba95f2c3d4c755f834380f8eaad4dcbd8aa5d3b44412f01ecfa6c3629'),
+  ('20261063_visitas_membego','7632594bb0e636420189e2a5db3dd01a5b7e191e9719271db8985a4721923e7a'),
+  ('20261064_merchant_application_enums','754db56c125662147cca0c95870f096c8790f8532f42af56b5d13dca0fc2cf6c'),
+  ('20261065_merchant_application','31925d14f6590007b502a1cba159a9f3ae6c22507167eba208f5b8702250d270'),
+  ('20261066_inventory_reorder','de7c05577fe669c89b80c633b8e4a256ed9a0c5e512d2caa9c9bf4d7dfde1116'),
+  ('20261067_inventory_reason_codes','1490efcf431982cc2d8aeadf57077c0d5bb8b710fcb82056ae541a1703b87a74'),
+  ('20261067_tarjeta_en_el_libro_enums','a0f14a0b9e1ddfa0a6d68f6dd03161f0b223cfa5c2ddb075f1f823262653a608'),
+  ('20261068_inventory_lots','6be70d427494a82c7e2cc6ce5d47c509b88106ad4959c9ffc38910f0298eb61c'),
+  ('20261068_tarjeta_en_el_libro','379c31a38e6cb46e2f2c976b90c022eb2de86bb14ef2d15befe67aef78681660'),
+  ('20261069_conciliacion_acciones_enum','3753eba71d04da76857d6b7c19708d7dd7e4108d80fffcdfde01cf5f59401b36'),
+  ('20261069_inventory_count_lots','54cad5bad879b22ddd3dad095b12701147440a9982b0cbc09c1129dd7636b606'),
+  ('20261070_cambio_de_plan_en_el_intento','fdb395d1fe97b225d649bdaba332f45f3e964e0529ad042a7b1d4b6b637c00e0'),
+  ('20261070_inventory_lot_expiry_history','4b6d4b01d4bfaf785d1050a7018ee39708b3113a22f9ebab9064df99ea9bc254'),
+  ('20261071_inventory_serials','fb044968ff2e800cf3e4c4c78737c4cdab4ec6278192383d8d3ec5688a9eeffa'),
+  ('20261072_inventory_kits','ad860386546bee8b2f1d9af9e9dd9639cadb4942c4536b88bf13eef2f9b60baf'),
+  ('20261073_rol_bodega','b4b04309b1a2e7c8af77e1774cd8164d9784268e86f7de4494533a2dc4dcfe09'),
+  ('20261074_cardnet_saved_cards_security','e369fa084f99694917dc8cb618c34816c24d237079221a0e7d0ed69aea3eb843')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,

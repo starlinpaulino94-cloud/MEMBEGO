@@ -32,7 +32,7 @@ import {
   CardnetActivationForm,
   CardnetCaptureError,
   CardnetPaymentStatusMessage,
-  RenewalConsent,
+  SavedCardConsent,
 } from '../../src/components/pagos/cardnet/primitives'
 import { ComprobanteMembresiaForm } from '../../src/components/pagos/ComprobanteMembresiaForm'
 import {
@@ -173,7 +173,7 @@ function MembresiaDetailScreenContent() {
   const [cardnetStatus, setCardnetStatus] = useState<CardnetPaymentStatus | null>(null)
   const [cardnetStarting, setCardnetStarting] = useState(false)
   const [cardnetError, setCardnetError] = useState<string | null>(null)
-  const [renewalConsent, setRenewalConsent] = useState(false)
+  const [saveCardConsent, setSaveCardConsent] = useState(false)
   const cardnetStartInFlightRef = useRef(false)
   const cardnetRecoveryPollAttemptsRef = useRef(0)
   const { data: membresiasData, isLoading: loadingMembresias } =
@@ -328,7 +328,7 @@ function MembresiaDetailScreenContent() {
 
     try {
       const result = await api.startCardnetSession(
-        membershipCardnetTarget(membresia.id, permiteConsentimientoRenovacion, renewalConsent),
+        membershipCardnetTarget(membresia.id, permiteConsentimientoRenovacion, saveCardConsent),
       )
       const action = membershipCardnetStartAction(result)
       if (action.kind === 'resume') {
@@ -564,13 +564,13 @@ function MembresiaDetailScreenContent() {
                 <View className="mt-4 gap-3">
                   {permiteConsentimientoRenovacion ? (
                     <>
-                      <RenewalConsent
-                        checked={renewalConsent}
+                      <SavedCardConsent
+                        checked={saveCardConsent}
                         disabled={cardnetStarting}
-                        onChange={setRenewalConsent}
+                        onChange={setSaveCardConsent}
                       />
                       <Text className="text-small leading-5 text-muted-foreground">
-                        La renovación automática solo se habilitará después de que el servidor confirme este pago y si autorizas esta opción.
+                        Guardar la tarjeta y autorizar renovaciones automáticas son opciones distintas.
                       </Text>
                     </>
                   ) : null}

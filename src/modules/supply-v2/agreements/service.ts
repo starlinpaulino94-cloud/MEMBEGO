@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { fallo } from '../core/errores'
+import { exigirProveedorOperativoEnTx } from '../suppliers/acceso'
 import { exigirTransicion, TRANSICIONES_ACUERDO } from '../core/estados'
 import { siguienteNumero } from '../core/numeracion'
 import { resolverAcuerdoComision, snapshotDeAcuerdo, validarAcuerdo, type DatosAcuerdo } from './domain'
@@ -140,6 +141,8 @@ export async function activarAcuerdoEnTx(
     return { id: a.id, version: a.version, versionId: v.id }
   }
   exigirTransicion(TRANSICIONES_ACUERDO, a.status, 'ACTIVE', 'Acuerdo')
+  // Supplier & Fulfillment Commerce §8: un acuerdo NUEVO exige un proveedor operativo.
+  await exigirProveedorOperativoEnTx(tx, a.supplierId, 'acuerdo')
 
   const nuevaVersion = a.version === 0 ? 1 : a.version
   await tx.supplyV2Agreement.update({

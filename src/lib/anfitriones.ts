@@ -32,6 +32,8 @@ const DE_LA_LANDING = new Set([
 const DE_LA_APP = new Set([
   'login', 'acceso', 'registro', 'recuperar', 'actualizar-password', 'confirmar', 'auth', 'sso', 'invitacion',
   'cliente', 'mis-membresias', 'membresia', 'admin', 'superadmin', 'empleado', 'vendedor', 'onboarding',
+  // El comprobante de pago que la app abre en el navegador con un enlace firmado: lo construye `appUrlFor`.
+  'comprobante',
 ])
 
 /** Qué host sirve una ruta. La portada (`/`) es de la landing. */

@@ -39,6 +39,8 @@ export function TarjetaCatalogoPublica({
   // Una oferta de Membego (ítem puente) tiene SU ficha: el checkout es el de Supply, y se compra dentro de la app.
   const esSupply = item.origen === 'SUPPLY' && !!item.ofertaSlug
   const href = esSupply ? rutaDeOfertaMembego(espacio, item.ofertaSlug!) : rutaDeItem(espacio, item.company.slug, item.slug)
+  // Quién vende y dónde se canjea, YA resuelto (§12–§19): la tarjeta no lo infiere.
+  const { comercial } = item
   const agotado = item.disponibilidad === 'AGOTADO'
   const pct = oferta ? porcentajeDeAhorro(oferta) : null
   const servicio = esServicio(item)
@@ -46,7 +48,8 @@ export function TarjetaCatalogoPublica({
     <Link
       href={href}
       className="group flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40"
-      aria-label={`${item.name}${mostrarEmpresa ? ` · ${item.company.name}` : ''}`}
+      aria-label={`${item.name} · ${esSupply ? comercial.lineaVendedor : mostrarEmpresa ? item.company.name : comercial.lineaVendedor}`}
+      data-modo-comercial={comercial.modo}
     >
       <div className="relative aspect-square bg-muted">
         {item.imageUrl ? (
@@ -67,8 +70,8 @@ export function TarjetaCatalogoPublica({
             {pct ? `${pct}% OFF` : oferta.etiqueta}
           </span>
         )}
-        {esSupply && (
-          <span className="absolute left-2 top-2 rounded-full bg-card/95 px-2 py-0.5 text-label-sm font-semibold text-primary">Oferta MembeGo</span>
+        {comercial.etiqueta && (
+          <span className="absolute left-2 top-2 rounded-full bg-card/95 px-2 py-0.5 text-label-sm font-semibold text-primary" data-testid="etiqueta-comercial">{comercial.etiqueta}</span>
         )}
         {agotado && (
           <span className="absolute right-2 top-2 rounded-full bg-foreground/80 px-2 py-0.5 text-label-sm font-semibold text-white">Agotado</span>
@@ -77,6 +80,8 @@ export function TarjetaCatalogoPublica({
       <div className="flex flex-1 flex-col gap-0.5 p-2.5 sm:p-3">
         <h3 className="line-clamp-2 text-label-lg text-foreground">{item.name}</h3>
         {mostrarEmpresa && !esSupply && <p className="truncate text-caption text-muted-foreground">{item.company.name}</p>}
+        {esSupply && comercial.lineaCanje && <p className="truncate text-caption text-muted-foreground" data-testid="linea-canje">{comercial.lineaCanje}</p>}
+        {comercial.lineaFinanciacion && <p className="truncate text-caption text-primary" data-testid="linea-financiacion">{comercial.lineaFinanciacion}</p>}
         {oferta && !agotado ? (
           <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5 tabular-nums">
             <span className="text-price-sm text-foreground">
@@ -88,6 +93,8 @@ export function TarjetaCatalogoPublica({
               {formatearPrecio(oferta.precioAntes, oferta.currency)}
             </span>
           </p>
+        ) : comercial.modo === 'MEMBEGO_GIFT' ? (
+          <p className="mt-1 text-price-sm tabular-nums text-success" data-testid="precio-gratis">Gratis</p>
         ) : item.priceFrom != null ? (
           <p className="mt-1 text-price-sm tabular-nums text-foreground">
             {item.hasVariants && <span className="mr-1 font-normal text-muted-foreground">Desde</span>}

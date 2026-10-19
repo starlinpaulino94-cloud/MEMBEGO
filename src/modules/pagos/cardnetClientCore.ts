@@ -8,7 +8,7 @@ export const cardnetSessionInputSchema = z
   .object({
     membershipId: idSchema.optional(),
     compraId: idSchema.optional(),
-    guardarParaRenovacion: z.boolean().optional(),
+    guardarTarjeta: z.boolean().optional(),
   })
   .strict()
   .superRefine((input, ctx) => {
@@ -16,9 +16,6 @@ export const cardnetSessionInputSchema = z
     const hasPurchase = input.compraId !== undefined
     if (hasMembership === hasPurchase) {
       ctx.addIssue({ code: 'custom', message: 'Debe indicar un solo objetivo.' })
-    }
-    if (input.guardarParaRenovacion && !hasMembership) {
-      ctx.addIssue({ code: 'custom', message: 'El consentimiento solo aplica a membresías.' })
     }
   })
 

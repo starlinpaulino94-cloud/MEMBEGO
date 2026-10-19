@@ -51,6 +51,11 @@ const SCOPES: { valor: string; label: string }[] = [
     valor: 'catalog:manage',
     label: 'Crear productos y variantes en borrador (publicarlos sigue siendo desde el panel)',
   },
+  { valor: 'inventory:read', label: 'Ver tus existencias por sucursal y el libro de movimientos (sin costos)' },
+  {
+    valor: 'inventory:manage',
+    label: 'Registrar entradas de mercancía y ajustes de existencias (cada movimiento queda atribuido a la clave)',
+  },
 ]
 
 export interface ClaveVista {

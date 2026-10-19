@@ -27,6 +27,14 @@ model Invitacion {
   expiraEn    DateTime
   aceptadaEn  DateTime?
   createdAt   DateTime         @default(now())
+  /// Ajustes de permisos que recibirá la cuenta al aceptar (mismo formato
+  /// que `User.permisos`). Los presets de rol del proveedor (operador,
+  /// finanzas, solo lectura) viajan aquí: el rol da el punto de partida y
+  /// esto lo acota. null = hereda su rol tal cual.
+  permisos    Json?
+  /// De dónde nace la invitación: null (equipo de una empresa, lo de siempre)
+  /// o `SUPPLIER_PORTAL` (dueño o personal de un proveedor de Membego).
+  origen      String?
 
   @@index([companyId, estado])
   @@index([email])

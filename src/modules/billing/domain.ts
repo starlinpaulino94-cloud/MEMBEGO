@@ -33,7 +33,13 @@ export const CONFIG_POR_DEFECTO = {
 export const DIAS_DE_GRACIA = 7
 
 /** `referenceType` válidos del libro (la base los exige; ninguno es de Supply). */
-export const REFERENCIAS_DEL_LIBRO = ['COMMISSION', 'PAYMENT', 'MANUAL', 'STATEMENT'] as const
+/**
+ * `ANCILLARY_SALE` (Supplier & Fulfillment Commerce §27): la comisión sobre las
+ * ventas ADICIONALES de una visita atribuida a Membego se asienta en ESTE
+ * libro, con el tipo ANCILLARY_FEE y clave `ancillary:<venta>`. Mismo libro,
+ * misma cuenta por empresa; el documento es la venta, no un pedido.
+ */
+export const REFERENCIAS_DEL_LIBRO = ['COMMISSION', 'PAYMENT', 'MANUAL', 'STATEMENT', 'ANCILLARY_SALE'] as const
 export type ReferenciaDelLibro = (typeof REFERENCIAS_DEL_LIBRO)[number]
 
 // ── Qué pedido comisiona ─────────────────────────────────────────────────────
@@ -196,7 +202,7 @@ export function validarTarifas(c: { cpaAmount?: Monto | null; percentageRate?: M
 
 // ── El libro ─────────────────────────────────────────────────────────────────
 
-export const TIPOS_QUE_SUMAN: readonly MerchantLedgerEntryType[] = ['REDEMPTION_FEE', 'ORDER_FEE']
+export const TIPOS_QUE_SUMAN: readonly MerchantLedgerEntryType[] = ['REDEMPTION_FEE', 'ORDER_FEE', 'ANCILLARY_FEE']
 export const TIPOS_QUE_RESTAN: readonly MerchantLedgerEntryType[] = ['REFUND', 'PAYMENT', 'CREDIT', 'PROMOTIONAL_CREDIT']
 /** Con cualquier signo (nunca cero): el ajuste manual y el ajuste por verificación de una comisión. */
 export const TIPOS_CON_SIGNO: readonly MerchantLedgerEntryType[] = ['ADJUSTMENT', 'VERIFICATION_ADJUSTMENT']

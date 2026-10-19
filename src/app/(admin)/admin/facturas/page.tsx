@@ -66,6 +66,8 @@ const FILTROS = [
   { key: '', label: 'Todo' },
   { key: 'ventas', label: 'Ventas' },
   { key: 'entregas', label: 'Gratis / canjes' },
+  // Pagos con tarjeta de la pasarela (app, web, renovación): su comprobante para el cuadre.
+  { key: 'tarjeta', label: 'Pagos con tarjeta' },
 ] as const
 
 /**
@@ -93,7 +95,7 @@ export default async function FacturasPage({
   const paginacion = leerPaginacion(sp)
   const term = q.trim()
   const tipos =
-    ver === 'ventas'
+    ver === 'ventas' || ver === 'tarjeta'
       ? [...TIPOS_VENTA]
       : ver === 'entregas'
         ? [...TIPOS_ENTREGA]
@@ -102,6 +104,7 @@ export default async function FacturasPage({
   const where: Prisma.TransactionWhereInput = {
     ...(companyId ? { companyId } : {}),
     tipo: { in: tipos },
+    ...(ver === 'tarjeta' ? { metodoCobro: 'TARJETA' as const } : {}),
     ...(term
       ? {
           OR: [
@@ -178,7 +181,7 @@ export default async function FacturasPage({
       {facturas.length === 0 ? (
         <EmptyState
           icon={<ReceiptText className="h-7 w-7" />}
-          title={term ? `Sin comprobantes para “${term}”` : 'Aún no hay comprobantes'}
+          title={term ? `Sin comprobantes para “${term}”` : ver === 'tarjeta' ? 'Aún no hay pagos con tarjeta' : 'Aún no hay comprobantes'}
           description="Cada cobro de caja y cada canje (lavado incluido, promoción, beneficio o premio) genera su comprobante con número y código únicos, y queda aquí para siempre."
         />
       ) : (
@@ -199,7 +202,7 @@ export default async function FacturasPage({
             </thead>
             <tbody className="divide-y divide-border/50">
               {facturas.map((f) => {
-                const snap = (f.snapshot ?? {}) as { detalle?: string; empleado?: string }
+                const snap = (f.snapshot ?? {}) as { detalle?: string; empleado?: string; metodoCobroLabel?: string }
                 return (
                   <tr key={f.id} className="align-middle">
                     <td className="px-4 py-3">
@@ -221,7 +224,7 @@ export default async function FacturasPage({
                     <td className="max-w-52 px-4 py-3">
                       <p className="truncate text-foreground">{snap.detalle ?? '—'}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {f.metodoCobro ?? ''}
+                        {snap.metodoCobroLabel ?? f.metodoCobro ?? ''}
                         {f.sucursal ? ` · ${f.sucursal.nombre}` : ''}
                       </p>
                     </td>

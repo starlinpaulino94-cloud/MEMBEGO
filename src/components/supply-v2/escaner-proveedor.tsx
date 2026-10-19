@@ -13,11 +13,12 @@ import {
   confirmarEntregaAction,
   escanearBeneficioAction,
   registrarIncidenciaAction,
+  type EntregaConVisita,
   type PreviewParaEscaner,
 } from '@/modules/supply-v2/actions-canje'
 import type { EstadoAccion } from '@/modules/supply-v2/actions-util'
-import type { EntregaConfirmada } from '@/modules/supply-v2/redemption/service'
 import { INCIDENT_TYPE_LABELS, RUTA_PORTAL_PROVEEDOR } from '@/modules/supply-v2/core/catalogo'
+import { PanelVisita, type ExtraDelPanel } from './panel-visita'
 
 const QRScanner = dynamic(() => import('@/components/scanner/QRScanner').then((m) => m.QRScanner), {
   ssr: false,
@@ -37,9 +38,9 @@ interface Sucursal {
  * fallar: el código temporal también se puede escribir a mano. Nunca se
  * valida nada en el navegador.
  */
-export function EscanerProveedor({ sucursales }: { sucursales: Sucursal[] }) {
+export function EscanerProveedor({ sucursales, extras = [], puedeVenderExtras = false }: { sucursales: Sucursal[]; extras?: ExtraDelPanel[]; puedeVenderExtras?: boolean }) {
   const [escaneo, accionEscanear, escaneando] = useActionState<EstadoAccion<PreviewParaEscaner>, FormData>(escanearBeneficioAction, {})
-  const [entrega, accionConfirmar, confirmando] = useActionState<EstadoAccion<EntregaConfirmada>, FormData>(confirmarEntregaAction, {})
+  const [entrega, accionConfirmar, confirmando] = useActionState<EstadoAccion<EntregaConVisita>, FormData>(confirmarEntregaAction, {})
   const [manual, setManual] = useState(false)
   const [sucursalId, setSucursalId] = useState(sucursales[0]?.id ?? '')
   const [canal, setCanal] = useState<'QR_SCAN' | 'MANUAL_CODE'>('QR_SCAN')
@@ -91,10 +92,15 @@ export function EscanerProveedor({ sucursales }: { sucursales: Sucursal[] }) {
               <Dato label="Referencia"><span className="font-mono">{entregada.number}</span></Dato>
             </dl>
             {entrega.success && <p className="text-caption text-muted-foreground">{entrega.success}</p>}
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={reiniciar} data-testid="btn-escanear-otro">Escanear otro</Button>
-              <Button asChild variant="ghost"><Link href={RUTA_PORTAL_PROVEEDOR}>Ver entregas</Link></Button>
-            </div>
+            {/* SUPPLIER & FULFILLMENT COMMERCE · la visita atribuida que abrió esta entrega (§23–§27). */}
+            {entregada.visita.status === 'OPEN' ? (
+              <PanelVisita visita={entregada.visita} extras={extras} puedeVenderExtras={puedeVenderExtras} alReiniciar={reiniciar} />
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={reiniciar} data-testid="btn-escanear-otro">Escanear otro</Button>
+                <Button asChild variant="ghost"><Link href={RUTA_PORTAL_PROVEEDOR}>Ver entregas</Link></Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : preview?.valid ? (

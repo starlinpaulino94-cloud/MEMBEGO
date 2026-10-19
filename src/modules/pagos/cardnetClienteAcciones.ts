@@ -77,8 +77,10 @@ async function consumirCaptura(
     currentTarget.target.companyId !== session.companyId ||
     currentTarget.target.clienteId !== session.clienteId ||
     !Number.isFinite(expectedAmount) ||
+    // Cambio de plan: el plan que se paga sigue siendo el que se pidió al abrir la sesión.
+    (currentTarget.target.planDestinoId ?? null) !== (session.planDestinoId ?? null) ||
     Math.round(currentTarget.target.amount * 100) !== Math.round(expectedAmount * 100) ||
-    (session.guardarRenovacion && !currentTarget.target.allowRenewalConsent)
+    (session.guardarTarjeta && !currentTarget.target.allowSaveCard)
   ) {
     await expireSession(session.id, session.companyId, user.supabaseId)
     return {

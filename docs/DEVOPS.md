@@ -23,6 +23,21 @@ aparecían vacíos. Ya pasó con `companies.capacidades`.
 | `dependencias` | `npm audit --omit=dev --audit-level=high` |
 | `esquema` | `prisma validate` + detecta cambios en `prisma/schema/` sin migración |
 
+**PostgreSQL de CI sin descargar imágenes (17-10-2026).** `esquema` y el E2E
+(`e2e.yml`) necesitan un Postgres real. Lo levantaban como `services:` con una
+imagen del espejo de ECR Public, y esa descarga tiene una cuota compartida entre
+runners: agotada, el job moría a los 10 s con `toomanyrequests`, antes de ejecutar
+una sola prueba y sin relación con el código (#621, #624); relanzar no servía
+hasta que la cuota se recuperaba. Ahora ambos usan la acción local
+`.github/actions/postgres`, que crea un clúster del **PostgreSQL 16 que ya trae el
+runner** (`en_US.UTF-8`, usuario `postgres`, puerto 5432: igual que la imagen) y
+no descarga nada. Si algún día el runner no lo trae, la acción avisa y cae al
+contenedor con reintentos y espera creciente. Los flujos `ensayo-rls.yml` y
+`respaldo-verificacion.yml` (no bloquean PRs) siguen con el contenedor; si
+también se ven afectados, se les cambia con una línea cada uno
+(`uses: ./.github/actions/postgres`). La guarda es
+`tests/ci-postgres-sin-registro.test.ts`.
+
 ### `.github/workflows/deploy-migraciones.yml` — al mezclar en `main`
 
 Aplica `prisma migrate deploy` **antes** de disparar el despliegue. Si la
@@ -67,6 +82,17 @@ paso de detección por diff ya no decide nada y `migrate deploy` corre en cada
 push. Lo que el flujo no puede vigilar solo es que `_prisma_migrations` siga
 cuadrando si alguien vuelve a aplicar una migración a mano — eso es disciplina,
 y está escrito en «El registro se desactualiza solo».
+
+**Migraciones que toman bloqueos sobre una tabla caliente (añadido el 2026-10-16).** `migrate deploy` corre en el momento del merge. Una migración
+que construye un índice o una restricción sobre una tabla que escribe cada venta (`inventory_movements`, `inventory_levels`) bloquea esas escrituras
+mientras dura (segundos, aun con cientos de miles de filas). Las migraciones de ese tipo van de una sola transacción con `SET LOCAL lock_timeout`: si
+no consiguen el bloqueo, **fallan enteras y no dejan nada a medias** (el flujo sale rojo y **no despliega**); se reintentan con *Run workflow*. Aun así,
+se fusionan **fuera de hora punta**. Hoy: la `20261068` (lotes). Cada una lo dice en su cabecera. Además, **no se fusiona con el E2E remoto sin
+terminar en verde**: el 15-10 el merge del PR #617 llegó con el E2E cancelado y el de `main` cayó en «Initialize containers» (infraestructura), y
+el último E2E remoto en verde sobre `main` sigue siendo el de #615.
+
+**Los verificadores SQL del registro** (`scripts/verificar-migraciones*.sql`) embeben las huellas de todas las migraciones y se regeneran con cada una
+nueva (`node scripts/generar-verificar-migraciones.mjs`); `tests/migraciones-verificadores.test.ts` falla si quedan viejos. Detalle en `MIGRACIONES.md`.
 
 ## Configuración manual pendiente (sin esto, los flujos no protegen)
 

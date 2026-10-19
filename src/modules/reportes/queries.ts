@@ -13,7 +13,7 @@
 import { conEmpresa, type Tx } from '@/lib/tenant'
 import { armarCsvBloques } from '@/lib/csv'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
-import { whereCobrado } from '@/modules/pagos/cobrado'
+import { sinVentaDePasarelaEnElPeriodo, whereCobrado } from '@/modules/pagos/cobrado'
 import type { Prisma } from '@prisma/client'
 import { diaLocal, diasDelRango, variacion, type Rango } from './rango'
 
@@ -140,7 +140,8 @@ async function sumarMembresias(tx: Tx, companyId: string, desde: Date, hasta: Da
   // sin rellenar: un cobro sin fecha es mejor contarlo por su aproximación que
   // desaparecer de los ingresos sin avisar.
   const agg = await tx.membership.aggregate({
-    where: whereCobrado(desde, hasta, { companyId }),
+    // El pago con tarjeta de la pasarela ya está en la caja como venta: no se cuenta dos veces.
+    where: whereCobrado(desde, hasta, { companyId, ...sinVentaDePasarelaEnElPeriodo(desde, hasta) }),
     _sum: { montoPagado: true },
   })
   return Number(agg._sum.montoPagado ?? 0)

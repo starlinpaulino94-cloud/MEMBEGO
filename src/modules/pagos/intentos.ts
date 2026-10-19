@@ -28,6 +28,11 @@ import { anotarFallo } from '@/lib/prisma-errors'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
 import { activarMembresia } from '@/modules/pagos/activacion'
 import type { PaymentProviderKind } from '@/lib/payments'
+import type { CanalDeCobro } from '@/modules/pagos/comprobante-tarjeta'
+import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
+import { RECLAMO_PERDIDO, extenderMembresiaCobrada } from '@/modules/pagos/renovacion-extension'
+import { aplicarCambioDePlanCobrado } from '@/modules/pagos/cambio-plan-cobrado'
+import { CAMBIO_DE_PLAN_PAGADO, entregaRequierePersona } from '@/modules/observabilidad/conciliacion-entrega'
 
 export type EstadoIntento = 'CREADO' | 'REDIRIGIDO' | 'APROBADO' | 'RECHAZADO' | 'EXPIRADO' | 'ERROR'
 
@@ -38,10 +43,14 @@ export interface CrearIntentoInput {
   /** Uno de los dos, según qué se esté pagando. */
   compraId?: string | null
   membershipId?: string | null
+  /** Solo en el cobro de un cambio de plan: el plan que se paga (lo entrega `entregarProducto`). */
+  planDestinoId?: string | null
   monto: number
   moneda?: string
   ipAddress?: string | null
   userAgent?: string | null
+  /** Por dónde entra el cobro: lo dice el comprobante. */
+  canal?: CanalDeCobro | null
 }
 
 /**
@@ -63,11 +72,13 @@ export async function crearIntento(input: CrearIntentoInput) {
         proveedor: input.proveedor,
         compraId: input.compraId ?? null,
         membershipId: input.membershipId ?? null,
+        planDestinoId: input.planDestinoId ?? null,
         monto: input.monto,
         moneda: input.moneda ?? 'DOP',
         estado: 'CREADO',
         ipAddress: input.ipAddress ?? null,
         userAgent: input.userAgent ?? null,
+        canal: input.canal ?? null,
       },
     })
   )
@@ -137,6 +148,9 @@ async function resultadoIntentoActual(
   ).catch(() => null)
 
   if (actual?.estado === 'APROBADO') {
+    // Una repetición (webhook + retorno del navegador, un reintento) encuentra el cobro ya entregado: si su venta
+    // faltó la primera vez, se escribe ahora. Idempotente por `pagoIntentoId`.
+    if (actual.fulfillmentEstado === 'COMPLETADA') await asegurarVentaDelIntento(intentoId)
     return {
       ok: true,
       estado: 'APROBADO',
@@ -165,6 +179,22 @@ type IntentoEntregable = {
   membershipId: string | null
   ipAddress: string | null
   userAgent: string | null
+  /** Por dónde entró el cobro. Una renovación automática se entrega extendiendo, no activando. */
+  canal: string | null
+  /** Solo en el cobro de un cambio de plan: el plan pagado. Un cambio de plan se entrega aplicándolo, no activando. */
+  planDestinoId: string | null
+}
+
+/** ¿La membresía de este cobro es un cambio de plan pedido por el cliente (que la pasarela no sabe aplicar)? */
+async function esCambioDePlanPagado(intento: IntentoEntregable): Promise<boolean> {
+  if (!intento.membershipId) return false
+  const membership = await conEmpresa(intento.companyId, (tx) =>
+    tx.membership.findUnique({
+      where: { id: intento.membershipId as string },
+      select: { estado: true, planIdSolicitado: true },
+    })
+  ).catch(() => null)
+  return entregaRequierePersona({ canal: intento.canal, planDestinoId: intento.planDestinoId, membership })
 }
 
 /**
@@ -192,6 +222,34 @@ async function entregarProducto(
     return { completada: true }
   }
   if (intento.membershipId) {
+    // Una renovación automática no «activa»: la membresía ya está ACTIVA y lo que falta es extenderla. `activarMembresia`
+    // la rechazaría («ya está activa») en cada reintento y el cobro quedaría fallando para siempre.
+    if (intento.canal === 'RENOVACION_AUTOMATICA') {
+      try {
+        const ext = await extenderMembresiaCobrada({ companyId: intento.companyId, intentoId: intento.id, claimAt })
+        return ext.ok ? { completada: true } : { completada: false, error: ext.error }
+      } catch (error) {
+        if (error instanceof Error && error.message === RECLAMO_PERDIDO) {
+          return { completada: false, error: 'FULFILLMENT_CLAIM_LOST' }
+        }
+        anotarFallo('pagos:entrega:renovacion', { intentoId: intento.id })(error)
+        return { completada: false, error: 'La extensión de la renovación falló.' }
+      }
+    }
+    // Un cambio de plan pagado se entrega aplicando el plan que se pagó: la membresía ya está ACTIVA, `activarMembresia` la
+    // rechazaría. Si no se puede aplicar solo (el cliente cambió su pedido después de pagar), queda para una persona.
+    if (intento.planDestinoId) {
+      try {
+        const cambio = await aplicarCambioDePlanCobrado({ companyId: intento.companyId, intentoId: intento.id, claimAt })
+        return cambio.ok ? { completada: true } : { completada: false, error: cambio.error }
+      } catch (error) {
+        if (error instanceof Error && error.message === RECLAMO_PERDIDO) {
+          return { completada: false, error: 'FULFILLMENT_CLAIM_LOST' }
+        }
+        anotarFallo('pagos:entrega:cambio-plan', { intentoId: intento.id })(error)
+        return { completada: false, error: 'El cambio de plan no se pudo aplicar.' }
+      }
+    }
     let res
     try {
       res = await activarMembresia(intento.membershipId, null, meta, fulfillmentClaim)
@@ -201,7 +259,11 @@ async function entregarProducto(
       }
       throw error
     }
-    if (!res.ok) return { completada: false, error: res.error }
+    if (!res.ok) {
+      // «Ya está activa» no es un fallo cualquiera cuando la membresía pide un cambio de plan ya pagado: hay que decir qué hacer.
+      if (await esCambioDePlanPagado(intento)) return { completada: false, error: CAMBIO_DE_PLAN_PAGADO }
+      return { completada: false, error: res.error }
+    }
     return { completada: true }
   }
   return { completada: false, error: 'Intento sin producto asociado.' }
@@ -319,6 +381,8 @@ export async function confirmarIntento(
     return resultadoIntentoActual(intentoId, intento.companyId, intento, 'La entrega ya fue reclamada por otro proceso.')
   }
   await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error, claimAt)
+  // El cobro quedó entregado: ahora sí, su venta en el libro (ticket + comprobante). Nunca lanza ni detiene nada.
+  if (entrega.completada) await asegurarVentaDelIntento(intentoId)
 
   return {
     ok: true,
@@ -348,15 +412,24 @@ export async function reintentarEntrega(
           membershipId: true,
           ipAddress: true,
           userAgent: true,
+          canal: true,
+          planDestinoId: true,
           estado: true,
           fulfillmentEstado: true,
           updatedAt: true,
+          membership: { select: { estado: true, planIdSolicitado: true } },
         },
       })
   )
   if (!intento) return { ok: false, entrega: 'PENDIENTE', error: 'Intento no encontrado.' }
   if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado === 'COMPLETADA') {
+    if (intento.estado === 'APROBADO') await asegurarVentaDelIntento(intentoId)
     return { ok: true, entrega: estadoEntregaActual(intento.fulfillmentEstado) }
+  }
+
+  // Un cambio de plan que la pasarela no puede aplicar sola lo aplica una persona: reintentarlo toparía con lo mismo.
+  if (entregaRequierePersona({ canal: intento.canal, planDestinoId: intento.planDestinoId, membership: intento.membership })) {
+    return { ok: false, entrega: estadoEntregaActual(intento.fulfillmentEstado), error: CAMBIO_DE_PLAN_PAGADO }
   }
 
   const claimAt = new Date()
@@ -403,6 +476,7 @@ export async function reintentarEntrega(
     return { ok: true, entrega: estadoEntregaActual(actual?.fulfillmentEstado ?? 'PENDIENTE') }
   }
   await marcarEntrega(intento.companyId, intentoId, entrega.completada, entrega.error, claimAt)
+  if (entrega.completada) await asegurarVentaDelIntento(intentoId)
   return {
     ok: entrega.completada,
     entrega: entrega.completada ? 'COMPLETADA' : 'FALLIDA',

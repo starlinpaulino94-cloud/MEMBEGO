@@ -1,3 +1,4 @@
+import type { MetodoCobroTipo } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
 import { crearTransaccionAplicada } from '@/lib/transactions/application/transaction-service'
 
@@ -21,7 +22,7 @@ export async function registrarVentaConfirmada(input: {
   empleadoId: string | null
   detalle: string
   monto: number
-  metodoCobro: 'EFECTIVO' | 'TRANSFERENCIA' | 'OTRO'
+  metodoCobro: MetodoCobroTipo
   metodoCobroLabel: string
   /** Recibo de pago (G6): banco/referencia del pago para el comprobante. */
   referenciaPago?: string | null

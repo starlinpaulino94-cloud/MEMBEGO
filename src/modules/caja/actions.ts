@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
-import { requireRole } from '@/lib/auth/guards'
+import { puedeSeccion, requireRole } from '@/lib/auth/guards'
 import { SCANNER_ROLES } from '@/types'
 import { getRequestMeta } from '@/lib/server-utils'
 import { formSubmitLimiter } from '@/lib/rate-limit'
@@ -109,7 +109,9 @@ export async function obtenerReporteDia(
     auth.userId,
     auth.nombre ?? 'Empleado',
     dia,
-    timeZone
+    timeZone,
+    // El mismo dato que el historial de Comprobantes: lo lee quien puede abrirlo (permisos vivos), no cualquier cajero.
+    { conDetalleEnLinea: await puedeSeccion('facturas') }
   )
   return { reporte }
 }

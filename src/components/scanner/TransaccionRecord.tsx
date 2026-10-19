@@ -7,7 +7,7 @@
  * de la transacción, con reimpresión auditada del comprobante (COPIA #N).
  */
 
-import { useRef, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import {
   CheckCircle2,
   XCircle,
@@ -157,7 +157,7 @@ export function TransaccionRecord({
   const [askMotivo, setAskMotivo] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [printing, startPrinting] = useTransition()
-  const printArmed = useRef(false)
+  const [solicitud, setSolicitud] = useState(0)
 
   function reimprimir() {
     startPrinting(async () => {
@@ -173,14 +173,8 @@ export function TransaccionRecord({
         setTicket(tk.ticket)
         setCopiaNumero(reg.numero)
         setAskMotivo(false)
-        printArmed.current = true
-        // Espera un frame a que el ticket (y su QR) se monte antes de imprimir.
-        setTimeout(() => {
-          if (printArmed.current) {
-            printArmed.current = false
-            window.print()
-          }
-        }, 350)
+        // Imprime cuando el ticket (con su COPIA #N y su QR) ya está pintado: ver AreaDeImpresion.
+        setSolicitud((s) => s + 1)
         toast.success(`Copia #${reg.numero ?? '—'} registrada.`)
       } catch {
         toast.error('No se pudo reimprimir el comprobante.')
@@ -330,6 +324,7 @@ export function TransaccionRecord({
           esCopia
           copiaNumero={copiaNumero}
           logoUrl={ticket.empresa.logoUrl}
+          solicitud={solicitud}
         />
       )}
     </div>

@@ -9,9 +9,11 @@ export type TargetInfo = {
   readonly email: string
   readonly cardnetCustomerId: string | null
   readonly amount: number
-  readonly allowRenewalConsent: boolean
+  readonly allowSaveCard: boolean
   readonly membershipId?: string
   readonly compraId?: string
+  /** Solo en un cambio de plan: el plan que se paga (viaja a la sesión de captura y de ahí al intento). */
+  readonly planDestinoId?: string
 }
 
 export type TargetResolution =
@@ -69,7 +71,7 @@ export async function resolveTarget(
             clienteId: membership.clienteId,
             email: membership.cliente.email,
             cardnetCustomerId: membership.cliente.cardnetCustomerId,
-            allowRenewalConsent:
+            allowSaveCard:
               membership.comprobanteUrl === null &&
               membership.planIdSolicitado === null &&
               (membership.estado === 'PENDIENTE' || membership.estado === 'RECHAZADA'),
@@ -113,7 +115,7 @@ export async function resolveTarget(
             clienteId: compra.clienteId,
             email: compra.cliente.email,
             cardnetCustomerId: compra.cliente.cardnetCustomerId,
-            allowRenewalConsent: false,
+            allowSaveCard: true,
             compraId: compra.id,
           },
         }
@@ -134,5 +136,8 @@ export async function resolveTarget(
   }
   const monto = await montoDeObjetivo(objetivo).catch(() => ({ ok: false as const, motivo: 'No encontrado.' }))
   if (!monto.ok || monto.pesos <= 0 || !Number.isFinite(monto.pesos)) return { kind: 'ineligible' }
-  return { kind: 'ready', target: { ...target, amount: monto.pesos } }
+  return {
+    kind: 'ready',
+    target: { ...target, amount: monto.pesos, ...(monto.planDestinoId ? { planDestinoId: monto.planDestinoId } : {}) },
+  }
 }

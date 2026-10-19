@@ -101,6 +101,24 @@ export async function GET(req: NextRequest) {
         UNION ALL SELECT 'movimientos_caja.esquema', to_regclass('public.movimientos_caja') IS NOT NULL
         UNION ALL SELECT 'ofertas_privadas.esquema', to_regclass('public.ofertas_privadas') IS NOT NULL
         UNION ALL SELECT 'citas.esquema', to_regclass('public.citas') IS NOT NULL
+        UNION ALL SELECT 'inventory_receipts.esquema', to_regclass('public.inventory_receipts') IS NOT NULL
+        UNION ALL SELECT 'inventory_count_sessions.esquema', to_regclass('public.inventory_count_sessions') IS NOT NULL
+        UNION ALL SELECT 'inventory_transfers.esquema', to_regclass('public.inventory_transfers') IS NOT NULL
+        UNION ALL SELECT 'inventory_variant_costs.esquema', to_regclass('public.inventory_variant_costs') IS NOT NULL
+        UNION ALL SELECT 'inventory_movements.unitCost', EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'inventory_movements' AND column_name = 'unitCost')
+        UNION ALL SELECT 'inventory_purchase_orders.esquema', to_regclass('public.inventory_purchase_orders') IS NOT NULL
+        UNION ALL SELECT 'inventory_receipts.purchaseOrderId', EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'inventory_receipts' AND column_name = 'purchaseOrderId')
+        UNION ALL SELECT 'inventory_levels.targetStock', EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'inventory_levels' AND column_name = 'targetStock')
+        UNION ALL SELECT 'inventory_movements.reasonCode', EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'inventory_movements' AND column_name = 'reasonCode')
+        UNION ALL SELECT 'inventory_movement_lots.esquema', to_regclass('public.inventory_movement_lots') IS NOT NULL
         UNION ALL SELECT 'entregas_webhook.proximoIntentoAt', EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'entregas_webhook' AND column_name = 'proximoIntentoAt')`

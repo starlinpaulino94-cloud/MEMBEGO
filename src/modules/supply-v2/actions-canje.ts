@@ -6,10 +6,13 @@ import type { SupplyV2IncidentType } from '@prisma/client'
 import { createRateLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
 import { sinEmpresa } from '@/lib/tenant'
-import { exigirCliente, exigirPermisoSupplyV2, exigirProveedorSupplyV2 } from './permisos'
+import { exigirCliente, exigirPermisoSupplyV2, exigirProveedorSupplyV2, FUNCION_PORTAL } from './permisos'
+import { esCodigoDePrueba } from './suppliers/acceso-dominio'
+import { registrarPruebaDeEscanerEnTx } from './suppliers/acceso'
 import { comoError, contextoDeAuditoria, refrescarSupplyV2, texto, type EstadoAccion } from './actions-util'
-import { RUTA_COMPRAS_CLIENTE, RUTA_PORTAL_PROVEEDOR } from './core/catalogo'
-import { MENSAJES_RECHAZO, normalizarCodigoLeido, type RedeemPreview } from './redemption/domain'
+import { RUTA_COMPRAS_CLIENTE, RUTA_PORTAL_PROVEEDOR, RUTA_PORTAL_VENTAS_ADICIONALES, RUTA_VISITAS_CLIENTE } from './core/catalogo'
+import { abrirVisitaDeRedencionEnTx, type VisitaAbierta } from '@/modules/visitas-membego/service'
+import { MENSAJES_RECHAZO, normalizarCodigoLeido, previewRechazado, type RedeemPreview } from './redemption/domain'
 import {
   abrirSesionQrEnTx,
   confirmarEntregaEnTx,
@@ -42,6 +45,7 @@ function refrescarPortal(): void {
   revalidatePath(RUTA_PORTAL_PROVEEDOR)
   revalidatePath(`${RUTA_PORTAL_PROVEEDOR}/entregas`)
   revalidatePath(`${RUTA_PORTAL_PROVEEDOR}/escaner`)
+  revalidatePath(RUTA_PORTAL_VENTAS_ADICIONALES)
 }
 
 // ── Cliente: «Usar beneficio» (§10–§13) ──────────────────────────────────────
@@ -67,17 +71,28 @@ export async function usarBeneficioAction(_prev: EstadoAccion<QrParaMostrar>, fd
 
 // ── Proveedor: escanear (preview) y confirmar (§15–§19, §22–§26) ────────────
 
-export interface PreviewParaEscaner extends RedeemPreview {
+export type PreviewParaEscaner = RedeemPreview & {
   /** El código tal como se validó, para reenviarlo al confirmar. */
   nonce?: string
+  /** Fue la prueba del escáner (código TEST-…), no un beneficio. */
+  prueba?: boolean
 }
 
 export async function escanearBeneficioAction(_prev: EstadoAccion<PreviewParaEscaner>, fd: FormData): Promise<EstadoAccion<PreviewParaEscaner>> {
   try {
-    const p = await exigirProveedorSupplyV2()
+    const p = await exigirProveedorSupplyV2(FUNCION_PORTAL.escanear)
     if (!(await limiteEscaneo(p.id))) return { error: MENSAJES_RECHAZO.RATE_LIMITED }
     const ctx = await contextoDeAuditoria(p)
-    const nonce = normalizarCodigoLeido(texto(fd, 'codigo', 200))
+    const leido = texto(fd, 'codigo', 200)
+    // Supplier Lite (§8 «QR probado»): un código TEST-… es la prueba del escáner, no un beneficio.
+    if (esCodigoDePrueba(leido.trim())) {
+      const prueba = await sinEmpresa('Supply: el proveedor prueba su escáner', (tx) =>
+        registrarPruebaDeEscanerEnTx(tx, { supplierId: p.supplierId, userId: p.id, codigo: leido.trim() }, ctx)
+      )
+      refrescarPortal()
+      return prueba?.ok ? { success: prueba.mensaje, data: { ...previewRechazado('INVALID_QR'), message: prueba.mensaje, prueba: true } } : { error: prueba?.mensaje ?? MENSAJES_RECHAZO.INVALID_QR }
+    }
+    const nonce = normalizarCodigoLeido(leido)
     const branchId = texto(fd, 'branchId', 60) || null
     const preview = await sinEmpresa('Supply: el proveedor resuelve un QR', (tx) =>
       previsualizarCanjeEnTx(tx, { nonce, empleado: { userId: p.id, companyId: p.companyId, supplierId: p.supplierId }, branchId }, ctx)
@@ -89,9 +104,16 @@ export async function escanearBeneficioAction(_prev: EstadoAccion<PreviewParaEsc
   }
 }
 
-export async function confirmarEntregaAction(_prev: EstadoAccion<EntregaConfirmada>, fd: FormData): Promise<EstadoAccion<EntregaConfirmada>> {
+/**
+ * La entrega confirmada Y la visita que abre (SUPPLIER & FULFILLMENT COMMERCE
+ * §23): redención y visita nacen en la MISMA transacción. Si la visita no se
+ * puede abrir, la entrega tampoco se confirma.
+ */
+export type EntregaConVisita = EntregaConfirmada & { visita: VisitaAbierta }
+
+export async function confirmarEntregaAction(_prev: EstadoAccion<EntregaConVisita>, fd: FormData): Promise<EstadoAccion<EntregaConVisita>> {
   try {
-    const p = await exigirProveedorSupplyV2()
+    const p = await exigirProveedorSupplyV2(FUNCION_PORTAL.escanear)
     if (!(await limiteEscaneo(p.id))) return { error: MENSAJES_RECHAZO.RATE_LIMITED }
     const ctx = await contextoDeAuditoria(p)
     const meta = await getRequestMeta()
@@ -99,12 +121,17 @@ export async function confirmarEntregaAction(_prev: EstadoAccion<EntregaConfirma
     const branchId = texto(fd, 'branchId', 60) || null
     const idempotencyKey = texto(fd, 'idempotencyKey', 80) || null
     const channel = texto(fd, 'channel', 20) === 'MANUAL_CODE' ? 'MANUAL_CODE' : 'QR_SCAN'
-    const r = await sinEmpresa('Supply: el proveedor confirma una entrega', (tx) =>
-      confirmarEntregaEnTx(tx, { nonce, empleado: { userId: p.id, companyId: p.companyId, supplierId: p.supplierId }, branchId, idempotencyKey, deviceInfo: meta.userAgent, channel }, ctx)
-    )
+    const operador = { userId: p.id, companyId: p.companyId, supplierId: p.supplierId }
+    const r = await sinEmpresa('Supply: el proveedor confirma una entrega', async (tx) => {
+      const entrega = await confirmarEntregaEnTx(tx, { nonce, empleado: operador, branchId, idempotencyKey, deviceInfo: meta.userAgent, channel }, ctx)
+      // QR → Redención → Visita, en la misma transacción (§23). Idempotente por redención.
+      const visita = await abrirVisitaDeRedencionEnTx(tx, { redemptionId: entrega.id, operador, branchId }, ctx)
+      return { ...entrega, visita }
+    })
     refrescarPortal()
-    refrescarSupplyV2('supply', 'redenciones')
+    refrescarSupplyV2('supply', 'redenciones', 'visitas')
     revalidatePath(RUTA_COMPRAS_CLIENTE)
+    revalidatePath(RUTA_VISITAS_CLIENTE)
     return { success: r.repetida ? 'Esta entrega ya estaba confirmada.' : 'Entrega confirmada.', id: r.id, data: r }
   } catch (e) {
     return comoError(e, 'confirmarEntrega')
@@ -113,7 +140,7 @@ export async function confirmarEntregaAction(_prev: EstadoAccion<EntregaConfirma
 
 export async function registrarIncidenciaAction(_prev: EstadoAccion, fd: FormData): Promise<EstadoAccion> {
   try {
-    const p = await exigirProveedorSupplyV2()
+    const p = await exigirProveedorSupplyV2(FUNCION_PORTAL.escanear)
     const ctx = await contextoDeAuditoria(p)
     const tipo = texto(fd, 'type', 40) as SupplyV2IncidentType
     if (!INCIDENT_TYPES.includes(tipo)) return { error: 'Elige el tipo de incidencia.' }

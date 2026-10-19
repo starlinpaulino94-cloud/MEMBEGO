@@ -118,6 +118,8 @@ export async function getClienteAllMemberships(
 
 import { unstable_cache } from 'next/cache'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
+import { etiquetaDeCobroConTarjeta, esCanalDeCobro } from '@/modules/pagos/comprobante-tarjeta'
+import { armarReciboDePago, type ReciboDePago } from '@/modules/pagos/recibo-cliente'
 
 /**
  * Empresas donde el usuario tiene cuenta de cliente — para el switcher del
@@ -545,6 +547,31 @@ export interface PagoHistorialItem {
   comprobanteUrl: string | null
   /** Nombre del miembro del equipo que aprobó/rechazó el pago. */
   validadoPor: string | null
+  /** «Tarjeta VISA ••••4242 (en la app)»: con qué y por dónde se pagó, cuando el cobro fue de pasarela. */
+  formaDePago: string | null
+  /**
+   * El recibo del cobro con tarjeta (el mismo ticket que imprime el personal). `null` si el pago no fue de pasarela o
+   * todavía no tiene su venta registrada.
+   */
+  recibo: ReciboDePago | null
+  /**
+   * La venta oficial de ese pago (ticket + factura), si quedó registrada: es lo que se imprime. En un pago con tarjeta es
+   * EXACTA (la venta del intento, por `pagoIntentoId`); en los demás (transferencia, caja) se deduce por membresía y cercanía
+   * de fecha.
+   */
+  transaccionId: string | null
+}
+
+/** Una venta aplicada de esta persona: su comprobante de pago imprimible. */
+export interface ComprobanteCliente {
+  id: string
+  codigo: string
+  ticketNumero: string
+  fecha: Date
+  empresa: string
+  detalle: string | null
+  total: string | null
+  metodoPago: string | null
 }
 
 export interface ClientePagos {
@@ -563,6 +590,8 @@ export interface ClientePagos {
     planSolicitadoNombre: string | null
   } | null
   historial: PagoHistorialItem[]
+  /** Todas sus ventas con comprobante (membresías, promociones, renovaciones), la más reciente primero. */
+  comprobantes: ComprobanteCliente[]
 }
 
 /**
@@ -590,6 +619,52 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
 
   const membershipIds = memberships.map((m) => m.id)
   const current = memberships[0] ?? null
+
+  // Sus comprobantes: las ventas aplicadas a su nombre (las deja la caja, el
+  // panel al confirmar un pago y, desde el 16-10-2026, también la pasarela).
+  const ventas = clienteIds.length
+    ? await sinEmpresa('cliente: mis comprobantes de pago', (tx) =>
+        tx.transaction.findMany({
+          where: { clienteId: { in: clienteIds }, tipo: 'SALE', estado: 'APPLIED' },
+          select: {
+            id: true, codigo: true, ticketNumero: true, createdAt: true, membershipId: true, snapshot: true,
+            company: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        })
+      ).catch((e) => {
+        console.error('[getClientePagos] comprobantes', e)
+        return []
+      })
+    : []
+  const comprobantes: ComprobanteCliente[] = ventas.map((v) => {
+    const sn = (v.snapshot ?? {}) as Record<string, unknown>
+    return {
+      id: v.id,
+      codigo: v.codigo,
+      ticketNumero: v.ticketNumero,
+      fecha: v.createdAt,
+      empresa: v.company.name,
+      detalle: typeof sn.detalle === 'string' ? sn.detalle : typeof sn.servicio === 'string' ? sn.servicio : null,
+      total: typeof sn.total === 'string' ? sn.total : null,
+      metodoPago: typeof sn.metodoCobroLabel === 'string' ? sn.metodoCobroLabel : null,
+    }
+  })
+  // El pago del historial y su venta son el mismo hecho con dos relojes: la
+  // bitácora se escribe al activar y la venta justo después. Misma membresía y
+  // menos de 6 h de diferencia = el mismo pago (la más cercana).
+  const VENTANA_MS = 6 * 60 * 60 * 1000
+  const ventaDe = (membershipId: string | null, fecha: Date): string | null => {
+    if (!membershipId) return null
+    let mejor: { id: string; d: number } | null = null
+    for (const v of ventas) {
+      if (v.membershipId !== membershipId) continue
+      const d = Math.abs(v.createdAt.getTime() - fecha.getTime())
+      if (d <= VENTANA_MS && (!mejor || d < mejor.d)) mejor = { id: v.id, d }
+    }
+    return mejor?.id ?? null
+  }
 
   let historial: PagoHistorialItem[] = []
   if (membershipIds.length > 0) {
@@ -647,6 +722,34 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
         : []
       const validadorName = new Map(validadores.map((u) => [u.id, u.name]))
 
+      // Pagos con tarjeta de la pasarela: el AuditLog guarda `intentoId`, y la venta de ese intento es el recibo. Solo se
+      // leen las ventas de ESTA persona (sus fichas de cliente): un intento ajeno no devuelve nada.
+      const intentoIds = [
+        ...new Set(
+          logs
+            .map((l) => ((l.payload ?? {}) as Record<string, unknown>).intentoId)
+            .filter((v): v is string => typeof v === 'string')
+        ),
+      ]
+      const ventas = intentoIds.length
+        ? await sinEmpresa('cliente: recibos de mis pagos con tarjeta', (tx) =>
+            tx.transaction.findMany({
+              where: { pagoIntentoId: { in: intentoIds }, clienteId: { in: clienteIds }, estado: 'APPLIED' },
+              select: {
+                id: true,
+                pagoIntentoId: true,
+                ticketNumero: true,
+                codigo: true,
+                snapshot: true,
+                monto: true,
+                createdAt: true,
+                company: { select: { name: true, zonaHoraria: true } },
+              },
+            })
+          ).catch(() => [])
+        : []
+      const ventaPorIntento = new Map(ventas.map((v) => [v.pagoIntentoId, v]))
+
       historial = logs.map((l) => {
         const p = (l.payload ?? {}) as Record<string, unknown>
         const planRef =
@@ -654,7 +757,29 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
           (typeof p.planId === 'string' && p.planId) ||
           null
         const info = membershipInfo.get(l.entidadId ?? '') ?? null
+        const intentoId = typeof p.intentoId === 'string' ? p.intentoId : null
+        const venta = intentoId ? ventaPorIntento.get(intentoId) ?? null : null
+        const recibo = venta
+          ? armarReciboDePago({
+              ticketNumero: venta.ticketNumero,
+              codigo: venta.codigo,
+              snapshot: venta.snapshot,
+              empresaNombre: venta.company.name,
+              concepto: planRef ? planName.get(planRef) ?? null : null,
+              monto: Number(venta.monto ?? 0),
+              fecha: venta.createdAt,
+              timeZone: venta.company.zonaHoraria || 'America/Santo_Domingo',
+            })
+          : null
+        // Sin venta todavía (la registra el reintento) el cliente igual ve que pagó con tarjeta y por dónde.
+        const formaDePago =
+          recibo?.formaDePago ??
+          (p.metodo === 'TARJETA'
+            ? etiquetaDeCobroConTarjeta(esCanalDeCobro(p.canal) ? p.canal : null, { marca: null, ultimos4: null })
+            : null)
         return {
+          formaDePago,
+          recibo,
           id: l.id,
           tipo: l.accion === 'PAGO_APROBADO' ? 'APROBADO' : 'RECHAZADO',
           fecha: l.createdAt,
@@ -664,6 +789,7 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
           metodoPagoNombre: info?.metodoPagoNombre ?? null,
           comprobanteUrl: info?.comprobanteUrl ?? null,
           validadoPor: l.userId ? validadorName.get(l.userId) ?? null : null,
+          transaccionId: l.accion === 'PAGO_APROBADO' ? (venta?.id ?? ventaDe(l.entidadId, l.createdAt)) : null,
         }
       })
     } catch (e) {
@@ -692,5 +818,6 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
         }
       : null,
     historial,
+    comprobantes,
   }
 }
