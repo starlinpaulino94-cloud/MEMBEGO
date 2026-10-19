@@ -282,6 +282,7 @@ model TarjetaTokenizada {
 
   @@index([clienteId, activa])
   @@index([companyId])
+  @@index([eliminacionPendiente, activa], map: "tarjetas_tokenizadas_eliminacion_pendiente_idx")
   @@map("tarjetas_tokenizadas")
 }
 

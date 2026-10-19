@@ -123,6 +123,9 @@ model CardnetCaptureSession {
   paymentProfileId  String?
   /// Consentimiento explícito para guardar el medio de pago. No autoriza renovaciones.
   guardarTarjeta    Boolean  @default(false)
+  /// Consentimiento histórico del flujo anterior. Se conserva para auditoría;
+  /// nunca se usa como autorización para guardar tarjeta o renovar.
+  guardarRenovacion  Boolean  @default(false)
   purchaseIntentId  String? @unique
   purchaseIntent    PagoIntento? @relation(fields: [purchaseIntentId], references: [id], onDelete: SetNull)
   tarjetaTokenizada TarjetaTokenizada?
