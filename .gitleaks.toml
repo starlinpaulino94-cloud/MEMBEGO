@@ -44,4 +44,9 @@ regexes = [
   # Ejemplos de la guía para desarrolladores: clave de API con relleno visible.
   '''mbk_x{6,}\.tu-secreto''',
   '''Authorization: Bearer TU_CLAVE_API''',
+  # Registro de migraciones (scripts/verificar-migraciones*.sql, generado por
+  # scripts/generar-verificar-migraciones.mjs): cada fila es ('nombre_de_la_migración','sha256 del
+  # archivo'). Es un checksum público de un archivo del repositorio, no un secreto; la forma exacta
+  # (nombre con guion bajo + 64 hex entre comillas) deja saltar cualquier otro hex pegado aparte.
+  '''_[a-z0-9_]+',\s*'[0-9a-f]{64}'''',
 ]
