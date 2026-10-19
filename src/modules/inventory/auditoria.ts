@@ -32,7 +32,9 @@ export async function auditarInventario(
     | 'InventoryVariantCost'
     | 'InventorySupplier'
     | 'InventoryPurchaseOrder'
-    | 'InventoryVariantSupplier' = 'InventoryLevel'
+    | 'InventoryVariantSupplier'
+    | 'InventoryLotTracking'
+    | 'InventoryKit' = 'InventoryLevel'
 ): Promise<void> {
   await tx.auditLog.create({
     data: {

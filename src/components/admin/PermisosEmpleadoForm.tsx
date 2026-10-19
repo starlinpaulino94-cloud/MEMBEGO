@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 import type { AppRole } from '@/types'
 import {
   ADMIN_SECTIONS,
+  FUNCIONES_NEGADAS_POR_ROL,
   canAccessAdminSection,
   type PermisosUsuario,
 } from '@/lib/auth/permissions'
@@ -120,13 +121,19 @@ export function PermisosEmpleadoForm({
                     Funciones de este módulo
                   </p>
                   {funciones.map((f) => {
-                    const negada = negadas[sec]?.has(f.codigo) ?? false
+                    // INV-5e: lo que el rol no trae de serie no se puede conceder desde aquí.
+                    const delRol = FUNCIONES_NEGADAS_POR_ROL[rol]?.[sec]?.includes(f.codigo) ?? false
+                    const negada = delRol || (negadas[sec]?.has(f.codigo) ?? false)
                     return (
                       <label key={f.codigo} className="flex items-center justify-between gap-3 text-sm">
-                        <span className="text-foreground">{f.label}</span>
+                        <span className="text-foreground">
+                          {f.label}
+                          {delRol && <span className="ml-2 text-caption text-muted-foreground">(su rol no lo trae)</span>}
+                        </span>
                         <input
                           type="checkbox"
                           checked={!negada}
+                          disabled={delRol}
                           onChange={(e) =>
                             setNegadas((m) => {
                               const set = new Set(m[sec] ?? [])

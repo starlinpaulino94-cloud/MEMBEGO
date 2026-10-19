@@ -97,6 +97,17 @@ export const CAPABILITIES = [
    * el ítem, y conceder escribir sin leer sería un scope que miente.
    */
   'CATALOG_MANAGE',
+  /**
+   * LEER las existencias (INV-5e): cuánto hay de cada producto en cada sucursal y el libro de movimientos. Sin costos. Solo responde la
+   * empresa con el catálogo unificado encendido.
+   */
+  'INVENTORY_LOOKUP',
+  /**
+   * MOVER existencias: registrar entradas de mercancía y ajustes (sobrantes y faltantes con su motivo). Es «ordena tus propios registros»
+   * como `catalog:manage`: no mueve dinero ni consume nada de un cliente, y lo hace la clave de la propia empresa, así que no necesita un
+   * sistema satélite. Incluye `inventory:read` porque la respuesta devuelve el saldo resultante. Cada movimiento queda atribuido a la clave.
+   */
+  'INVENTORY_MANAGE',
 ] as const
 
 export type Capability = (typeof CAPABILITIES)[number]
@@ -141,6 +152,9 @@ export const SCOPES_POR_CAPABILITY: Record<Capability, readonly string[]> = {
   CUSTOMER_DELETION: ['customers:read', 'customers:delete'],
   CATALOG_LOOKUP: ['catalog:read'],
   CATALOG_MANAGE: ['catalog:read', 'catalog:manage'],
+  INVENTORY_LOOKUP: ['inventory:read'],
+  // `inventory:read` incluido: la respuesta de una entrada o un ajuste devuelve el saldo, y conceder mover sin leer sería un scope que miente.
+  INVENTORY_MANAGE: ['inventory:read', 'inventory:manage'],
 }
 
 /** Scopes que corresponden a un conjunto de capabilities, sin repetidos. */

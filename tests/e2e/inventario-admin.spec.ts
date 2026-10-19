@@ -45,11 +45,16 @@ async function cifra(t: Locator, etiqueta: string): Promise<number> {
   return Number(m[1].replace(/[.,]/g, ''))
 }
 
-async function registrar(p: Page, sucursal: string, o: { operacion: string; cantidad: number; motivo?: string }) {
+/**
+ * Llena el formulario de movimientos de una sucursal. `codigo` es el motivo del catálogo (ajuste, daño y baja lo piden) y entonces
+ * `motivo` es su DETALLE; en las demás operaciones `motivo` es el texto de siempre.
+ */
+async function registrar(p: Page, sucursal: string, o: { operacion: string; cantidad: number; motivo?: string; codigo?: string }) {
   const f = p.getByRole('form', { name: `Registrar movimiento en ${sucursal}` })
   await f.getByLabel('Movimiento').selectOption({ label: o.operacion })
   await f.getByRole('textbox').first().fill(String(o.cantidad))
-  if (o.motivo !== undefined) await f.getByLabel(/^Motivo/).fill(o.motivo)
+  if (o.codigo !== undefined) await f.getByLabel('Motivo *').selectOption({ label: o.codigo })
+  if (o.motivo !== undefined) await f.getByLabel(o.codigo !== undefined ? /^Detalle/ : /^Motivo/).fill(o.motivo)
   await f.getByRole('button', { name: 'Registrar' }).click()
 }
 
@@ -121,21 +126,37 @@ test.describe('Inventario · panel', () => {
     await registrar(p, 'Principal', { operacion: 'Ajuste: faltante', cantidad: 3 })
     await expect(p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByLabel('Motivo *')).toBeVisible()
     expect(await cifra(principal, 'Disponible')).toBe(10)
-    // …y con motivo, baja.
-    await p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByLabel('Motivo *').fill('Merma')
-    await p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByRole('button', { name: 'Registrar' }).click()
+    // …y eligiendo el motivo del catálogo (con su detalle), baja. Con «Otro» el detalle es obligatorio.
+    const formulario = p.getByRole('form', { name: 'Registrar movimiento en Principal' })
+    await expect(formulario.getByLabel('Motivo *').locator('option')).toContainText(['Elige el motivo…', 'Vencido', 'Robo o hurto', 'Pérdida o extravío', 'Muestra o regalo', 'Consumo interno', 'Devuelto al proveedor', 'Diferencia de conteo', 'Otro'])
+    await expect(formulario.getByLabel('Motivo *').locator('option', { hasText: 'Apareció mercancía' })).toHaveCount(0) // ese es de sobrantes
+    await formulario.getByLabel('Motivo *').selectOption({ label: 'Otro' })
+    const detalle = formulario.getByLabel('Detalle *')
+    await expect(detalle).toBeVisible()
+    // Vacío: lo frena el propio navegador (el campo es `required` con «Otro»); no se envía nada.
+    await formulario.getByRole('button', { name: 'Registrar' }).click()
+    expect(await detalle.evaluate((el) => (el as HTMLInputElement).validity.valueMissing)).toBe(true)
+    expect(await cifra(principal, 'Disponible')).toBe(10)
+    // Solo espacios: el navegador lo da por escrito, y lo frena la pantalla (y, detrás, el servidor) con su aviso.
+    await detalle.fill('   ')
+    await formulario.getByRole('button', { name: 'Registrar' }).click()
+    await expect(p.getByText(/Con «Otro» escribe el detalle/).first()).toBeVisible({ timeout: 15_000 })
+    expect(await cifra(principal, 'Disponible')).toBe(10)
+    await formulario.getByLabel('Motivo *').selectOption({ label: 'Vencido' })
+    await formulario.getByLabel(/^Detalle/).fill('Merma')
+    await formulario.getByRole('button', { name: 'Registrar' }).click()
     await expect.poll(() => cifra(principal, 'Disponible'), { timeout: 15_000 }).toBe(7)
 
     // ── Un faltante imposible avisa y no mueve nada ───────────────────────
-    await registrar(p, 'Principal', { operacion: 'Ajuste: faltante', cantidad: 99, motivo: 'Imposible' })
+    await registrar(p, 'Principal', { operacion: 'Ajuste: faltante', cantidad: 99, codigo: 'Pérdida o extravío', motivo: 'Imposible' })
     await expect(p.getByText(/No hay suficiente: pides 99 y hay 7 disponible/).first()).toBeVisible({ timeout: 15_000 })
     expect(await cifra(principal, 'Disponible')).toBe(7)
 
     // ── Daño y baja de lo dañado ──────────────────────────────────────────
-    await registrar(p, 'Principal', { operacion: 'Mercancía dañada', cantidad: 2, motivo: 'Se mojaron' })
+    await registrar(p, 'Principal', { operacion: 'Mercancía dañada', cantidad: 2, codigo: 'Mal almacenamiento', motivo: 'Se mojaron' })
     await expect.poll(() => cifra(principal, 'Dañado'), { timeout: 15_000 }).toBe(2)
     expect(await cifra(principal, 'Disponible')).toBe(5)
-    await registrar(p, 'Principal', { operacion: 'Dar de baja lo dañado', cantidad: 2, motivo: 'Irrecuperable' })
+    await registrar(p, 'Principal', { operacion: 'Dar de baja lo dañado', cantidad: 2, codigo: 'Defecto de fábrica', motivo: 'Irrecuperable' })
     await expect.poll(() => cifra(principal, 'Dañado'), { timeout: 15_000 }).toBe(0)
     // Sin dañados, esa operación deja de ofrecerse.
     await expect(p.getByRole('form', { name: 'Registrar movimiento en Principal' }).getByLabel('Movimiento').locator('option', { hasText: 'Dar de baja lo dañado' })).toHaveCount(0)
@@ -192,6 +213,22 @@ test.describe('Inventario · panel', () => {
     await expect(historial.getByText('+10')).toBeVisible()
     await expect(historial.getByText('Merma')).toBeVisible()
     await expect(historial.getByText('Compra E2E')).toBeVisible()
+    // INV-4b: cada ajuste y cada daño lleva su motivo del catálogo (el conteo pone el suyo solo); la entrada, ninguno.
+    await expect(historial.getByText('Motivo: Vencido')).toBeVisible()
+    await expect(historial.getByText('Motivo: Mal almacenamiento')).toBeVisible()
+    await expect(historial.getByText('Motivo: Defecto de fábrica')).toBeVisible()
+    await expect(historial.getByText('Motivo: Diferencia de conteo')).toBeVisible()
+    await expect(historial.getByText(/^Motivo: /)).toHaveCount(4)
+    const codigos = await prismaDeArnes().inventoryMovement.findMany({ where: { companyId: con.id, level: { catalogVariantId: variante } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { type: true, reasonCode: true } })
+    expect(codigos.map((m) => [m.type, m.reasonCode])).toEqual([
+      ['PURCHASE', null],
+      ['ADJUSTMENT', 'EXPIRED'],
+      ['DAMAGE', 'STORAGE'],
+      ['ADJUSTMENT', 'DEFECT'],
+      ['TRANSFER_OUT', null],
+      ['TRANSFER_IN', null],
+      ['ADJUSTMENT', 'COUNT_DIFFERENCE'],
+    ])
     // Exactamente los 7 que hizo el recorrido: entrada, faltante, daño, baja,
     // las dos patas de la transferencia y el conteo (los rechazados no escriben).
     const filas = historial.getByRole('listitem')
@@ -1797,6 +1834,588 @@ test.describe('Inventario · panel', () => {
     }
 
     expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-4a · reportes: kardex de un producto, stock sin ventas y rotación — con sus archivos — y quien no tiene «costos» no ve ni un peso', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    // Una empresa propia: los informes son de toda la empresa y tienen que contener solo lo de esta prueba.
+    const emp = await empresaCatalogo(sufijo, 'invrep4', { capacidad: true })
+    const prisma = prismaDeArnes()
+    const principal = (await sucursalSembrada(emp.id, 'Principal')).id
+    const NA = `Arroz INF ${sufijo}`
+    const NB = `Frijol INF ${sufijo}`
+    const NC = `Lenteja INF ${sufijo}`
+    const mk = async (name: string, slug: string, sku: string) => {
+      const it = await itemSembrado(emp.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, price: 100, porDefecto: true }] })
+      return varianteDe(it.id)
+    }
+    const vA = await mk(NA, `arroz-inf-${sufijo}`, `INF-A-${sufijo}`)
+    const vB = await mk(NB, `frijol-inf-${sufijo}`, `INF-B-${sufijo}`)
+    const vC = await mk(NC, `lenteja-inf-${sufijo}`, `INF-C-${sufijo}`)
+    const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000)
+    const dia = (d: Date) => d.toISOString().slice(0, 10)
+    // A: 100 entraron hace 20 días a 5.00 y se vendieron 30 hace 5 → quedan 70. B: 10 a 2.00 desde hace 120 días, sin una venta.
+    // C: 8 desde hace 120 días, sin costo y sin una venta.
+    const nivel = async (variante: string, onHand: number, creado: number) =>
+      prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: variante, locationId: principal, onHand, createdAt: hace(creado) } })
+    const lvA = await nivel(vA, 70, 60)
+    const lvB = await nivel(vB, 10, 120)
+    const lvC = await nivel(vC, 8, 120)
+    const entrada = (nivelId: string, cantidad: number, antes: number, dias: number, costo: string | null) =>
+      prisma.inventoryMovement.create({
+        data: { companyId: emp.id, inventoryLevelId: nivelId, type: 'PURCHASE', destinationBucket: 'AVAILABLE', quantity: cantidad, previousOnHand: antes, newOnHand: antes + cantidad, unitCost: costo, createdAt: hace(dias) },
+      })
+    await entrada(lvA.id, 100, 0, 20, '5.0000')
+    await prisma.inventoryMovement.create({
+      data: { companyId: emp.id, inventoryLevelId: lvA.id, type: 'SALE', sourceBucket: 'AVAILABLE', quantity: 30, previousOnHand: 100, newOnHand: 70, unitCost: '5.0000', createdAt: hace(5) },
+    })
+    await entrada(lvB.id, 10, 0, 120, '2.0000')
+    await entrada(lvC.id, 8, 0, 120, null)
+    for (const [v, costo] of [[vA, '5.0000'], [vB, '2.0000']] as const) await prisma.inventoryVariantCost.create({ data: { companyId: emp.id, catalogVariantId: v, averageCost: costo } })
+
+    const email = 'e2e.catalogo.con@membego.test'
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, emp.id)
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    const fila = (lista: Locator, nombre: string) => lista.getByRole('listitem').filter({ hasText: nombre })
+
+    try {
+      // ── La puerta: una pestaña «Reportes» con los tres informes ───────────
+      await p.goto('/admin/inventario')
+      await vistas.getByRole('link', { name: 'Reportes' }).click()
+      await p.waitForURL('**/admin/inventario/reportes')
+      await expect(p.getByRole('heading', { name: 'Reportes de existencias', level: 1 })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page')
+      const informes = p.getByRole('list', { name: 'Informes' })
+      await expect(informes.getByRole('listitem')).toHaveCount(7) // kardex, sin ventas, mermas, margen real (solo con costos), vence pronto, buscar una serie y rotación
+      await expect(p.getByText('Con costos: cuánto dinero tienen inmovilizado.')).toBeVisible()
+
+      // ── Kardex: se busca el producto, y sus movimientos dejan el saldo ────
+      await informes.getByRole('link', { name: /Kardex de un producto/ }).click()
+      await p.waitForURL('**/admin/inventario/reportes/kardex')
+      await expect(p.getByText('Busca un producto para ver su kardex')).toBeVisible()
+      await p.getByRole('textbox', { name: 'Producto' }).fill(NA)
+      await p.getByRole('button', { name: 'Buscar' }).click()
+      await p.getByRole('list', { name: 'Productos encontrados' }).getByRole('link', { name: new RegExp(NA) }).click()
+      await p.waitForURL(/\/reportes\/kardex\?.*variante=/)
+      await expect(p.getByText(NA, { exact: false }).first()).toBeVisible()
+      const resumen = p.getByLabel('Resumen del periodo')
+      await expect(resumen.getByText('Al empezar').locator('..')).toContainText('0')
+      await expect(resumen.getByText('Entradas').locator('..')).toContainText('+100')
+      await expect(resumen.getByText('Entradas').locator('..')).toContainText('valieron 500.00')
+      await expect(resumen.getByText('Salidas').locator('..')).toContainText('−30')
+      await expect(resumen.getByText('Salidas').locator('..')).toContainText('costaron 150.00')
+      await expect(resumen.getByText('Al terminar').locator('..')).toContainText('70')
+      const kardex = p.getByRole('list', { name: 'Movimientos del kardex' })
+      await expect(kardex.getByRole('listitem')).toHaveCount(2)
+      await expect(kardex.getByRole('listitem').nth(0)).toContainText('Entrada de mercancía')
+      await expect(kardex.getByRole('listitem').nth(0)).toContainText('+100')
+      await expect(kardex.getByRole('listitem').nth(0)).toContainText('saldo 100')
+      await expect(kardex.getByRole('listitem').nth(1)).toContainText('Venta')
+      await expect(kardex.getByRole('listitem').nth(1)).toContainText('saldo 70')
+      await expect(kardex.getByRole('listitem').nth(1)).toContainText('150.00')
+      // Un rango sin movimientos conserva la existencia con la que empezó y con la que terminó.
+      const idA = new URL(p.url()).searchParams.get('variante')!
+      expect(idA).toBe(vA)
+      await p.goto(`/admin/inventario/reportes/kardex?variante=${vA}&desde=${dia(hace(3))}`)
+      await expect(p.getByText(/no tuvo movimientos entre el/)).toBeVisible()
+      await expect(p.getByLabel('Resumen del periodo').getByText('Al empezar').locator('..')).toContainText('70')
+      // Un producto de otra empresa o que no existe no da un kardex ajeno.
+      await p.goto('/admin/inventario/reportes/kardex?variante=cinexistente000000000000')
+      await expect(p.getByText('Ese producto no existe en tu empresa.')).toBeVisible()
+      // Desde la ficha del producto se llega con un clic.
+      await p.goto(`/admin/inventario/${vB}`)
+      await p.getByRole('link', { name: 'Kardex', exact: true }).click()
+      await p.waitForURL(new RegExp(`/reportes/kardex\\?variante=${vB}`))
+      // El archivo del kardex: el mismo resumen, valores sin separador de miles.
+      const kcsv = await p.request.get(`/admin/inventario/reportes/kardex/exportar?variante=${vA}`)
+      expect(kcsv.status()).toBe(200)
+      expect(kcsv.headers()['content-type'] ?? '').toContain('text/csv')
+      const kt = await kcsv.text()
+      expect(kt).toContain('Entradas;100')
+      expect(kt).toContain('Salidas;30')
+      expect(kt).toContain('Existencia al terminar;70')
+      expect(kt).toMatch(/Valor de las entradas[^;]*;500\.00/)
+      expect(kt).toContain('Datos completos;Si')
+      expect((await p.request.get('/admin/inventario/reportes/kardex/exportar')).status()).toBe(400)
+      expect((await p.request.get('/admin/inventario/reportes/kardex/exportar?variante=cinexistente000000000000')).status()).toBe(404)
+
+      // ── Stock sin ventas: lo que tiene existencias y no se ha vendido ─────
+      await p.goto('/admin/inventario/reportes/sin-ventas')
+      await expect(p.getByRole('heading', { name: 'Stock sin ventas', level: 1 })).toBeVisible()
+      const sinVentas = p.getByRole('list', { name: 'Productos sin ventas' })
+      await expect(sinVentas.getByRole('listitem')).toHaveCount(2)
+      await expect(fila(sinVentas, NB)).toContainText('Nunca se ha vendido')
+      await expect(fila(sinVentas, NB)).toContainText('20.00')
+      await expect(fila(sinVentas, NC)).toContainText('Sin costo')
+      await expect(sinVentas.getByText(NA)).toHaveCount(0) // se vendió hace 5 días
+      await expect(p.getByLabel('Dinero parado')).toContainText('20.00')
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('8 unidades paradas no tienen costo')
+      // Un periodo más largo que la edad de los saldos: ninguno ha tenido tiempo de venderse.
+      await p.goto('/admin/inventario/reportes/sin-ventas?dias=365')
+      await expect(p.getByText('Todo lo que tienes se vendió en los últimos 365 días')).toBeVisible()
+      await p.goto(`/admin/inventario/reportes/sin-ventas?q=${encodeURIComponent('no-existe-xyz')}`)
+      await expect(p.getByText('Nada coincide con esos filtros')).toBeVisible()
+      await p.goto('/admin/inventario/reportes/sin-ventas?sucursal=de-otra-empresa&dias=7') // lo ajeno no filtra y un periodo raro vuelve al de siempre
+      await expect(fila(p.getByRole('list', { name: 'Productos sin ventas' }), NB)).toBeVisible()
+      const scsv = await p.request.get('/admin/inventario/reportes/sin-ventas/exportar')
+      expect(scsv.status()).toBe(200)
+      const st = await scsv.text()
+      expect(st).toContain(NB)
+      expect(st).toContain(NC)
+      expect(st).not.toContain(NA)
+      expect(st).toMatch(/Valor inmovilizado[^;]*;20\.00/)
+
+      // ── Rotación y cobertura ──────────────────────────────────────────────
+      await p.goto('/admin/inventario/reportes/rotacion?dias=30')
+      await expect(p.getByRole('heading', { name: 'Rotación y cobertura', level: 1 })).toBeVisible()
+      const estados = p.getByRole('navigation', { name: 'Filtrar por estado de cobertura' })
+      await expect(estados.getByRole('link', { name: 'Todos · 3' })).toBeVisible()
+      await expect(estados.getByRole('link', { name: 'Normal · 1' })).toBeVisible()
+      await expect(estados.getByRole('link', { name: 'Sin ventas · 2' })).toBeVisible()
+      const rot = p.getByRole('list', { name: 'Rotación por producto' })
+      await expect(rot.getByRole('listitem')).toHaveCount(3)
+      await expect(fila(rot, NA)).toContainText('Vendió 30 (1 por día)')
+      await expect(fila(rot, NA)).toContainText('alcanza para 70 días')
+      await expect(fila(rot, NA)).toContainText('Normal')
+      await expect(fila(rot, NB)).toContainText('sin ventas: no hay ritmo')
+      await expect(p.getByLabel('Costo de ventas del periodo')).toContainText('150.00')
+      await expect(p.getByLabel('Días de inventario')).toContainText('74') // 370 de inventario entre 5.00 de costo por día
+      await expect(p.getByLabel('Lo que no tiene costo')).toHaveCount(0) // nada de lo vendido careció de costo
+      await estados.getByRole('link', { name: 'Sin ventas · 2' }).click()
+      await p.waitForURL(/estado=SIN_VENTAS/)
+      await expect(p.getByRole('list', { name: 'Rotación por producto' }).getByRole('listitem')).toHaveCount(2)
+      await expect(p.getByRole('list', { name: 'Rotación por producto' }).getByText(NA)).toHaveCount(0)
+      const rcsv = await p.request.get('/admin/inventario/reportes/rotacion/exportar?dias=30')
+      expect(rcsv.status()).toBe(200)
+      const rt = await rcsv.text()
+      expect(rt).toContain(NA)
+      expect(rt).toMatch(/Costo de ventas del periodo[^;]*;150\.00/)
+      expect(rt).toMatch(/Dias de inventario;74/)
+      const rfiltrado = await p.request.get('/admin/inventario/reportes/rotacion/exportar?dias=30&estado=SIN_VENTAS')
+      const rft = await rfiltrado.text()
+      expect(rft).toContain('Filtro: Estado;Sin ventas')
+      expect(rft).not.toContain(NA)
+
+      // ── Quien NO tiene «costos» ve unidades y días, nunca dinero ──────────
+      await prisma.user.update({ where: { email }, data: { permisos: { v: 1, secciones: {}, funciones: { inventario: { costos: false } } } } })
+      await p.goto('/admin/inventario')
+      await expect(vistas.getByRole('link', { name: 'Reportes' })).toBeVisible()
+      await p.goto('/admin/inventario/reportes')
+      await expect(p.getByText('Con costos:')).toHaveCount(0)
+      // INV-4c: el margen es costo contra precio, así que sin la función ni se ofrece (quedan los otros seis informes).
+      await expect(p.getByRole('list', { name: 'Informes' }).getByRole('listitem')).toHaveCount(6)
+      await expect(p.getByRole('link', { name: /Margen real/ })).toHaveCount(0)
+      await p.goto(`/admin/inventario/reportes/kardex?variante=${vA}`)
+      const sinDinero = async () => {
+        const texto = await p.locator('body').innerText()
+        for (const dinero of ['500.00', '150.00', '20.00', '370.00', 'valieron', 'costaron', 'Dinero parado', 'Costo de ventas', 'Días de inventario', 'Sin costo', 'c/u']) expect(texto, `se coló «${dinero}»`).not.toContain(dinero)
+      }
+      await expect(p.getByRole('list', { name: 'Movimientos del kardex' }).getByRole('listitem')).toHaveCount(2)
+      await sinDinero()
+      await p.goto('/admin/inventario/reportes/sin-ventas')
+      await expect(fila(p.getByRole('list', { name: 'Productos sin ventas' }), NB)).toBeVisible()
+      await sinDinero()
+      await p.goto('/admin/inventario/reportes/rotacion?dias=30')
+      await expect(fila(p.getByRole('list', { name: 'Rotación por producto' }), NA)).toContainText('alcanza para 70 días')
+      await sinDinero()
+      for (const ruta of [`kardex/exportar?variante=${vA}`, 'sin-ventas/exportar', 'rotacion/exportar?dias=30']) {
+        const r = await p.request.get(`/admin/inventario/reportes/${ruta}`)
+        expect(r.status(), ruta).toBe(200)
+        const t = await r.text()
+        for (const dinero of ['500.00', '150.00', '20.00', 'Costo unitario', 'Valor inmovilizado', 'Costo de ventas', 'SIN costo', 'Dias de inventario']) expect(t, `${ruta}: se coló «${dinero}»`).not.toContain(dinero)
+      }
+    } finally {
+      await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
+    }
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-4b · mermas por motivo: lo perdido, los sobrantes y lo dañado cada uno por su motivo, con su archivo — y quien no tiene «costos» no ve ni un peso', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    // Una empresa propia: el informe es de toda la empresa y tiene que contener solo lo de esta prueba.
+    const emp = await empresaCatalogo(sufijo, 'invmer', { capacidad: true })
+    const prisma = prismaDeArnes()
+    const principal = (await sucursalSembrada(emp.id, 'Principal')).id
+    const NA = `Jabón MER ${sufijo}`
+    const NB = `Cera MER ${sufijo}`
+    const mk = async (name: string, slug: string, sku: string) => {
+      const it = await itemSembrado(emp.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, price: 100, porDefecto: true }] })
+      return varianteDe(it.id)
+    }
+    const vA = await mk(NA, `jabon-mer-${sufijo}`, `MER-A-${sufijo}`)
+    const vB = await mk(NB, `cera-mer-${sufijo}`, `MER-B-${sufijo}`)
+    const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000)
+    const nivelA = await prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: vA, locationId: principal, onHand: 70, damaged: 4, createdAt: hace(60) } })
+    const nivelB = await prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: vB, locationId: principal, onHand: 20, createdAt: hace(60) } })
+    type Mov = { nivel: string; type: 'ADJUSTMENT' | 'DAMAGE' | 'PURCHASE' | 'SALE'; origen: 'AVAILABLE' | 'DAMAGED' | null; destino: 'AVAILABLE' | 'DAMAGED' | null; cantidad: number; dias: number; codigo: string | null; texto: string | null; costo: string | null }
+    const mov = (m: Mov) =>
+      prisma.inventoryMovement.create({
+        data: {
+          companyId: emp.id,
+          inventoryLevelId: m.nivel,
+          type: m.type,
+          sourceBucket: m.origen,
+          destinationBucket: m.destino,
+          quantity: m.cantidad,
+          previousOnHand: 100,
+          newOnHand: 100,
+          reason: m.texto,
+          reasonCode: m.codigo,
+          unitCost: m.costo,
+          createdAt: hace(m.dias),
+        },
+      })
+    // A (a 5.00): 100 entraron, se vendieron 3 y hubo de todo lo que explica un motivo. B (sin costo): un faltante.
+    await mov({ nivel: nivelA.id, type: 'PURCHASE', origen: null, destino: 'AVAILABLE', cantidad: 100, dias: 40, codigo: null, texto: null, costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'SALE', origen: 'AVAILABLE', destino: null, cantidad: 3, dias: 11, codigo: null, texto: null, costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'AVAILABLE', destino: null, cantidad: 4, dias: 10, codigo: 'EXPIRED', texto: 'Vencido', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'AVAILABLE', destino: null, cantidad: 2, dias: 9, codigo: 'THEFT', texto: 'Se llevaron dos de la vitrina', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'AVAILABLE', destino: null, cantidad: 1, dias: 8, codigo: null, texto: 'Faltante anterior a los motivos', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: null, destino: 'AVAILABLE', cantidad: 3, dias: 7, codigo: 'FOUND', texto: 'Apareció mercancía', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'DAMAGE', origen: 'AVAILABLE', destino: 'DAMAGED', cantidad: 6, dias: 6, codigo: 'HANDLING', texto: 'Golpe o mal manejo', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'DAMAGED', destino: null, cantidad: 2, dias: 5, codigo: 'EXPIRED', texto: 'Vencido', costo: '5.0000' })
+    await mov({ nivel: nivelA.id, type: 'ADJUSTMENT', origen: 'DAMAGED', destino: 'AVAILABLE', cantidad: 1, dias: 4, codigo: null, texto: 'Resultó vendible', costo: '5.0000' })
+    await mov({ nivel: nivelB.id, type: 'ADJUSTMENT', origen: 'AVAILABLE', destino: null, cantidad: 5, dias: 12, codigo: 'LOST', texto: 'Pérdida o extravío', costo: null })
+
+    const email = 'e2e.catalogo.con@membego.test'
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, emp.id)
+    const vistas = p.getByRole('navigation', { name: 'Vistas del inventario' })
+    const fila = (lista: Locator, nombre: string) => lista.getByRole('listitem').filter({ hasText: nombre })
+
+    try {
+      // ── La puerta: el cuarto informe del hub ──────────────────────────────
+      await p.goto('/admin/inventario/reportes')
+      await p.getByRole('list', { name: 'Informes' }).getByRole('link', { name: /Mermas por motivo/ }).click()
+      await p.waitForURL('**/admin/inventario/reportes/mermas')
+      await expect(p.getByRole('heading', { name: 'Mermas por motivo', level: 1 })).toBeVisible()
+      await expect(vistas.getByRole('link', { name: 'Reportes' })).toHaveAttribute('aria-current', 'page')
+
+      // ── El resumen: lo perdido NO incluye lo dañado ni los sobrantes ──────
+      const resumen = p.getByLabel('Resumen de las mermas')
+      await expect(resumen.getByLabel('Lo perdido')).toContainText('14') // 4 + 2 + 1 + 2 (baja) + 5
+      await expect(resumen.getByLabel('Lo perdido')).toContainText('5 movimientos')
+      await expect(resumen.getByLabel('Lo perdido')).toContainText('45.00') // 9 × 5.00 de A; los 5 de B no tienen costo
+      await expect(resumen.getByLabel('Sobrantes')).toContainText('15.00')
+      await expect(resumen.getByLabel('Dañado')).toContainText('30.00')
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('5 unidades perdidas no tenían costo conocido')
+
+      // ── Lo perdido por motivo: de lo que más vale a lo que menos ──────────
+      const perdido = p.getByRole('list', { name: 'Lo perdido por motivo' })
+      await expect(perdido.getByRole('listitem')).toHaveCount(4)
+      await expect(perdido.getByRole('listitem').nth(0)).toContainText('Vencido')
+      await expect(perdido.getByRole('listitem').nth(0)).toContainText('6 unidades')
+      await expect(perdido.getByRole('listitem').nth(0)).toContainText('30.00')
+      await expect(perdido.getByRole('listitem').nth(1)).toContainText('Robo o hurto')
+      await expect(perdido.getByRole('listitem').nth(2)).toContainText('Sin motivo codificado')
+      await expect(perdido.getByRole('listitem').nth(3)).toContainText('Pérdida o extravío')
+      await expect(perdido.getByRole('listitem').nth(3)).toContainText('5 sin costo')
+      await expect(p.getByRole('list', { name: 'Sobrantes por motivo' }).getByRole('listitem')).toHaveCount(1)
+      await expect(p.getByRole('list', { name: 'Dañado por motivo' }).getByText('Golpe o mal manejo')).toBeVisible()
+
+      // ── El detalle: ni la venta, ni la entrada, ni recuperar lo dañado ────
+      const detalle = p.getByRole('list', { name: 'Movimientos de merma' })
+      await expect(detalle.getByRole('listitem')).toHaveCount(7) // 5 pérdidas (con el faltante sin motivo) + 1 sobrante + 1 daño
+      await expect(fila(detalle, 'Se llevaron dos de la vitrina')).toContainText('Robo o hurto')
+      await expect(fila(detalle, 'Faltante anterior a los motivos')).toContainText('Sin motivo codificado')
+      await expect(detalle.getByText('Resultó vendible')).toHaveCount(0)
+
+      // ── Filtrar por un motivo desde la tabla ──────────────────────────────
+      await perdido.getByRole('link', { name: 'Vencido' }).click()
+      await p.waitForURL(/motivo=EXPIRED/)
+      await expect(p.getByRole('list', { name: 'Movimientos de merma' }).getByRole('listitem')).toHaveCount(2)
+      await p.goto('/admin/inventario/reportes/mermas?motivo=sin')
+      await expect(p.getByRole('list', { name: 'Movimientos de merma' }).getByRole('listitem')).toHaveCount(1)
+      await p.goto(`/admin/inventario/reportes/mermas?q=${encodeURIComponent('no-existe-xyz')}`)
+      await expect(p.getByText('Nada coincide con esos filtros')).toBeVisible()
+      await p.goto('/admin/inventario/reportes/mermas?sucursal=de-otra-empresa&motivo=NO_EXISTE') // lo ajeno no filtra
+      await expect(p.getByRole('list', { name: 'Movimientos de merma' }).getByRole('listitem')).toHaveCount(7)
+      await p.goto(`/admin/inventario/reportes/mermas?desde=${new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10)}`)
+      await expect(p.getByText(/No hubo mermas entre el/)).toBeVisible()
+
+      // ── El motivo se ve también en el kardex y en Movimientos ────────────
+      await p.goto(`/admin/inventario/reportes/kardex?variante=${vA}`)
+      await expect(p.getByText('Motivo: Vencido').first()).toBeVisible()
+      await expect(p.getByText('Motivo: Golpe o mal manejo')).toBeVisible()
+      await p.goto(`/admin/inventario/movimientos?q=${encodeURIComponent(NA)}`)
+      await expect(p.getByText('Motivo: Robo o hurto')).toBeVisible()
+
+      // ── El archivo ───────────────────────────────────────────────────────
+      const csv = await p.request.get('/admin/inventario/reportes/mermas/exportar')
+      expect(csv.status()).toBe(200)
+      expect(csv.headers()['content-type'] ?? '').toContain('text/csv')
+      const texto = await csv.text()
+      expect(texto).toContain('Mermas por motivo')
+      expect(texto).toContain('Lo perdido: unidades;14')
+      expect(texto).toMatch(/Lo perdido: valor[^;]*;45\.00/)
+      expect(texto).toContain('Robo o hurto')
+      expect(texto).toContain('Se llevaron dos de la vitrina')
+      expect(texto).toContain('Datos completos;Si')
+      expect(texto).not.toContain('Resultó vendible')
+      const filtrado = await p.request.get('/admin/inventario/reportes/mermas/exportar?motivo=EXPIRED')
+      const ft = await filtrado.text()
+      expect(ft).toContain('Filtro: Motivo;Vencido')
+      expect(ft).not.toContain('Robo o hurto;')
+
+      // ── Quien NO tiene «costos» ve unidades y motivos, nunca dinero ───────
+      await prisma.user.update({ where: { email }, data: { permisos: { v: 1, secciones: {}, funciones: { inventario: { costos: false } } } } })
+      await p.goto('/admin/inventario/reportes/mermas')
+      await expect(p.getByRole('list', { name: 'Lo perdido por motivo' }).getByRole('listitem')).toHaveCount(4)
+      const cuerpo = await p.locator('body').innerText()
+      for (const dinero of ['45.00', '30.00', '15.00', 'Sin costo', 'sin costo', 'c/u', 'no tenían costo']) expect(cuerpo, `se coló «${dinero}»`).not.toContain(dinero)
+      const sinCostos = await p.request.get('/admin/inventario/reportes/mermas/exportar')
+      expect(sinCostos.status()).toBe(200)
+      const st = await sinCostos.text()
+      expect(st).toContain('Lo perdido: unidades;14')
+      for (const dinero of ['45.00', 'Costo unitario', 'valor', 'SIN costo', 'Unidades sin costo']) expect(st, `el archivo dejó pasar «${dinero}»`).not.toContain(dinero)
+    } finally {
+      await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
+    }
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('INV-4c · margen real y tarjeta del dashboard: lo cobrado contra lo que costó, lo que no entra y por qué, y quien no tiene «costos» no ve ni un peso', async ({ browser }) => {
+    test.setTimeout(300_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    p.on('console', (m) => {
+      if (m.type() === 'error' && !/favicon|Failed to load resource/.test(m.text())) errores.push(`console: ${m.text()}`)
+    })
+    // Una empresa propia: el informe y la tarjeta son de toda la empresa y tienen que contener solo lo de esta prueba.
+    const emp = await empresaCatalogo(sufijo, 'invmgn', { capacidad: true, pedidos: true })
+    const prisma = prismaDeArnes()
+    const principal = (await sucursalSembrada(emp.id, 'Principal')).id
+    const cli = await prisma.cliente.create({ data: { companyId: emp.id, supabaseId: `e2e-mgn-${sufijo}`, nombre: 'Cliente margen', email: `mgn-${sufijo}@prueba.test` }, select: { id: true } })
+    const mk = async (name: string, slug: string, sku: string, precio: number, costo: number | null) => {
+      const it = await itemSembrado(emp.id, { name, slug, controlaInventario: true, variantes: [{ name: 'Default', sku, price: precio, porDefecto: true }] })
+      const v = await varianteDe(it.id)
+      if (costo !== null) await prisma.catalogVariant.update({ where: { id: v }, data: { cost: costo } })
+      return v
+    }
+    const NA = `Camisa MGN ${sufijo}`
+    const NB = `Gorra MGN ${sufijo}`
+    const NC = `Cinta MGN ${sufijo}`
+    const ND = `Taza MGN ${sufijo}`
+    const vA = await mk(NA, `camisa-mgn-${sufijo}`, `MGN-A-${sufijo}`, 100, 60)
+    const vB = await mk(NB, `gorra-mgn-${sufijo}`, `MGN-B-${sufijo}`, 50, 80)
+    const vC = await mk(NC, `cinta-mgn-${sufijo}`, `MGN-C-${sufijo}`, 40, null)
+    const vD = await mk(ND, `taza-mgn-${sufijo}`, `MGN-D-${sufijo}`, 10, 4)
+    const nivel = (v: string, onHand: number) => prisma.inventoryLevel.create({ data: { companyId: emp.id, catalogVariantId: v, locationId: principal, onHand } })
+    const nA = await nivel(vA, 30)
+    const nB = await nivel(vB, 10)
+    const nC = await nivel(vC, 7)
+    const nD = await nivel(vD, 5)
+    let seq = 0
+    /** Un pedido de marketplace con su línea y la venta que dejó en el ledger (con el costo que se congeló). */
+    const venta = async (nivelId: string, variante: string, descripcion: string, sku: string, cantidad: number, precio: number, costo: string | null, estado: 'COMPLETED' | 'REFUNDED') => {
+      seq += 1
+      const total = cantidad * precio
+      const ahora = new Date()
+      const o = await prisma.membegoOrder.create({
+        data: {
+          companyId: emp.id,
+          code: `MBG-MGN-${sufijo}-${seq}`.toUpperCase(),
+          locationId: principal,
+          customerId: cli.id,
+          status: estado,
+          origin: 'MARKETPLACE',
+          subtotal: total,
+          commissionableBase: total,
+          total,
+          acceptedAt: ahora,
+          readyAt: ahora,
+          completedAt: ahora,
+          customerConfirmedAt: ahora,
+          ...(estado === 'REFUNDED' ? { refundedAt: ahora, refundReason: 'Prueba' } : {}),
+        },
+      })
+      await prisma.membegoOrderLine.create({ data: { companyId: emp.id, orderId: o.id, catalogVariantId: variante, description: descripcion, sku, quantity: cantidad, unitPrice: precio, lineTotal: total } })
+      await prisma.inventoryMovement.create({
+        data: { companyId: emp.id, inventoryLevelId: nivelId, type: 'SALE', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: cantidad, previousOnHand: 100, newOnHand: 100 - cantidad, unitCost: costo, referenceType: 'ORDER', referenceId: o.id },
+      })
+    }
+    // A: 2 u a 100 = 200, costaron 120. B: 4 u a 50 = 200, costaron 320 (bajo el costo). C: 5 u a 40 = 200, SIN costo. D: reembolsado.
+    await venta(nA.id, vA, NA, `MGN-A-${sufijo}`, 2, 100, '60.0000', 'COMPLETED')
+    await venta(nB.id, vB, NB, `MGN-B-${sufijo}`, 4, 50, '80.0000', 'COMPLETED')
+    await venta(nC.id, vC, NC, `MGN-C-${sufijo}`, 5, 40, null, 'COMPLETED')
+    await venta(nD.id, vD, ND, `MGN-D-${sufijo}`, 2, 10, '4.0000', 'REFUNDED')
+    // Una pérdida del mes: 3 unidades de A que se perdieron (a 60 = 180).
+    await prisma.inventoryMovement.create({
+      data: { companyId: emp.id, inventoryLevelId: nA.id, type: 'ADJUSTMENT', sourceBucket: 'AVAILABLE', destinationBucket: null, quantity: 3, previousOnHand: 33, newOnHand: 30, reason: 'Pérdida o extravío', reasonCode: 'LOST', unitCost: '60.0000' },
+    })
+
+    const email = 'e2e.catalogo.con@membego.test'
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, emp.id)
+
+    try {
+      // ── La puerta: el hub ofrece el margen a quien tiene «costos» ─────────
+      await p.goto('/admin/inventario/reportes')
+      await p.getByRole('list', { name: 'Informes' }).getByRole('link', { name: /Margen real/ }).click()
+      await p.waitForURL('**/admin/inventario/reportes/margen')
+      await expect(p.getByRole('heading', { name: 'Margen real', level: 1 })).toBeVisible()
+
+      // ── El resumen: lo que entra al margen (sin lo reembolsado ni lo que no tiene costo) ──
+      const resumen = p.getByLabel('Resumen del margen')
+      await expect(resumen.getByLabel('Ingresos')).toContainText('600.00') // 200 + 200 + 200
+      await expect(resumen.getByLabel('Ingresos')).toContainText('11 unidades de 3 productos')
+      await expect(resumen.getByLabel('Costo de lo vendido')).toContainText('440.00') // 120 + 320; los 5 sin costo no suman
+      await expect(resumen.getByLabel('Margen', { exact: true })).toContainText('−40.00') // (600 − 200 sin costo) − 440
+      await expect(resumen.getByLabel('Margen porcentual')).toContainText(/−10[.,]0 %/)
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('5 unidades vendidas no tenían costo conocido')
+      await expect(p.getByLabel('Lo que no tiene costo')).toContainText('200.00')
+
+      // ── Producto por producto: de lo que más margen dejó a lo que menos ───
+      const lista = p.getByRole('list', { name: 'Margen por producto' })
+      await expect(lista.getByRole('listitem')).toHaveCount(3)
+      await expect(lista.getByRole('listitem').nth(0)).toContainText(NA)
+      await expect(lista.getByRole('listitem').nth(0)).toContainText('2 unidades · ingresos 200.00 · costo 120.00')
+      await expect(lista.getByRole('listitem').nth(0)).toContainText('80.00')
+      await expect(lista.getByRole('listitem').nth(0)).toContainText(/40[.,]0 %/)
+      await expect(lista.getByRole('listitem').nth(1)).toContainText(NC)
+      await expect(lista.getByRole('listitem').nth(1)).toContainText('5 sin costo')
+      await expect(lista.getByRole('listitem').nth(2)).toContainText(NB)
+      await expect(lista.getByRole('listitem').nth(2)).toContainText('Bajo el costo')
+      await expect(lista.getByRole('listitem').nth(2)).toContainText('−120.00')
+      await expect(lista.getByRole('listitem').nth(2)).toContainText(/−60[.,]0 %/)
+
+      // ── Lo que no entra, y por qué ────────────────────────────────────────
+      const excluidas = p.getByRole('list', { name: 'Ventas excluidas' })
+      await expect(excluidas.getByRole('listitem')).toHaveCount(1)
+      await expect(excluidas).toContainText('Pedidos reembolsados')
+      await expect(excluidas).toContainText('2 unidades')
+      await expect(excluidas).toContainText('costo 8.00')
+
+      // ── Ordenar: lo que se vende bajo el costo, primero ───────────────────
+      await p.getByLabel('Ordenar').selectOption('peor')
+      await p.getByRole('button', { name: 'Filtrar' }).click()
+      await p.waitForURL(/orden=peor/)
+      await expect(p.getByRole('list', { name: 'Margen por producto' }).getByRole('listitem').nth(0)).toContainText(NB)
+      // …y buscar un producto acota el resumen y la lista.
+      await p.getByRole('textbox', { name: 'Producto' }).fill('Camisa MGN')
+      await p.getByRole('button', { name: 'Filtrar' }).click()
+      await p.waitForURL(/q=Camisa/)
+      await expect(p.getByRole('list', { name: 'Margen por producto' }).getByRole('listitem')).toHaveCount(1)
+      await expect(p.getByLabel('Resumen del margen').getByLabel('Margen', { exact: true })).toContainText('80.00')
+
+      // ── El archivo: los mismos números, planos, con el negativo como número ──
+      const csv = await p.request.get('/admin/inventario/reportes/margen/exportar')
+      expect(csv.status()).toBe(200)
+      const t = await csv.text()
+      expect(t).toContain('Margen;-40.00')
+      expect(t).toContain('Margen %;-10.0')
+      expect(t).toContain('Unidades sin costo (no entran al margen);5')
+      expect(t).toContain('Pedidos reembolsados (fuera del margen): unidades;2')
+      expect(t).toMatch(new RegExp(`${NB};MGN-B-${sufijo.toUpperCase()};4;200\\.00;320\\.00;-120\\.00;-60\\.0;0;0\\.00`, 'i'))
+      expect(t).toContain(`${NC};`)
+      const filtrado = await p.request.get('/admin/inventario/reportes/margen/exportar?q=Camisa%20MGN')
+      const ft = await filtrado.text()
+      expect(ft).toContain('Filtro: Producto;Camisa MGN')
+      expect(ft).toContain('Margen;80.00')
+      expect(ft).not.toContain(NB)
+
+      // ── La tarjeta del dashboard: valor, margen del mes y lo perdido ──────
+      await p.goto('/admin/dashboard')
+      const tarjeta = p.getByRole('region', { name: 'Inventario' })
+      await expect(tarjeta).toBeVisible()
+      // Valor: A 30 × 60 + B 10 × 80 + D 5 × 4 = 2.620 (los 7 de C no tienen costo y no suman).
+      await expect(tarjeta.getByRole('link', { name: /Valor del inventario/ })).toContainText('2,620')
+      await expect(tarjeta.getByRole('link', { name: /Valor del inventario/ })).toContainText('52 unidades · 7 sin costo')
+      await expect(tarjeta.getByRole('link', { name: /Margen del mes/ })).toContainText('40')
+      await expect(tarjeta.getByRole('link', { name: /Margen del mes/ })).toContainText(/−10[.,]0 %/)
+      await expect(tarjeta.getByRole('link', { name: /Margen del mes/ })).toContainText('5 sin costo no entran')
+      await expect(tarjeta.getByRole('link', { name: /Perdido este mes/ })).toContainText('3 unidades')
+      await expect(tarjeta.getByRole('link', { name: /Perdido este mes/ })).toContainText('1 movimiento')
+      await expect(tarjeta.getByRole('link', { name: /Perdido este mes/ })).toContainText('180')
+      await tarjeta.getByRole('link', { name: /Margen del mes/ }).click()
+      await p.waitForURL('**/admin/inventario/reportes/margen')
+
+      // ── Quien NO tiene «costos» no ve ni un peso: ni margen, ni valor, ni archivo ──
+      await prisma.user.update({ where: { email }, data: { permisos: { v: 1, secciones: {}, funciones: { inventario: { costos: false } } } } })
+      await p.goto('/admin/inventario/reportes/margen')
+      await expect(p.getByText('No tienes permiso para ver costos ni el margen')).toBeVisible()
+      const cuerpoMargen = await p.locator('body').innerText()
+      for (const dinero of ['600.00', '440.00', '120.00', '−40.00', '320.00', NA]) expect(cuerpoMargen, `se coló «${dinero}»`).not.toContain(dinero)
+      expect((await p.request.get('/admin/inventario/reportes/margen/exportar')).status()).toBe(403)
+      await p.goto('/admin/dashboard')
+      const sinCostos = p.getByRole('region', { name: 'Inventario' })
+      await expect(sinCostos).toBeVisible()
+      await expect(sinCostos.getByRole('link', { name: /Unidades en existencia/ })).toContainText('52')
+      await expect(sinCostos.getByRole('link', { name: /Perdido este mes/ })).toContainText('3 unidades')
+      await expect(sinCostos.getByRole('link', { name: /Valor del inventario|Margen del mes/ })).toHaveCount(0)
+      const cuerpoTarjeta = await sinCostos.innerText()
+      for (const dinero of ['2,620', '180', 'RD$', 'sin costo', 'Margen']) expect(cuerpoTarjeta, `la tarjeta dejó pasar «${dinero}»`).not.toContain(dinero)
+    } finally {
+      await prisma.user.update({ where: { email }, data: { permisos: Prisma.DbNull } })
+    }
+
+    expect(errores, `errores de consola o de página:\n${errores.join('\n')}`).toEqual([])
+    await ctx.close()
+  })
+
+  test('«Quitar filtros» vacía también el formulario, en todas las pantallas con filtros (antes lo dejaba con el valor anterior)', async ({ browser }) => {
+    test.setTimeout(240_000)
+    const ctx = await browser.newContext()
+    const p = await ctx.newPage()
+    const errores: string[] = []
+    p.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`))
+    await entrarComo(ctx, 'catalogoConCapacidad', BASE, con.id)
+
+    /**
+     * Los formularios de filtros no son controlados (`defaultValue`) y «Quitar filtros» es un enlace: Next navega sin recargar y React
+     * conservaba el árbol, así que la lista salía sin filtros pero el formulario seguía enseñando lo elegido, y volver a pulsar «Filtrar»
+     * re-aplicaba el filtro recién quitado. Cada formulario lleva ahora una `key` que cambia con los filtros de la URL.
+     */
+    const probar = async (ruta: string, select?: { name: string; valor: string }) => {
+      await p.goto(ruta)
+      const q = p.locator('input[name="q"]').first()
+      await expect(q, `${ruta}: no hay campo de búsqueda`).toBeVisible({ timeout: 20_000 })
+      const form = q.locator('xpath=ancestor::form')
+      await q.fill('zzz-no-existe')
+      if (select) await form.locator(`select[name="${select.name}"]`).selectOption(select.valor)
+      await form.locator('button[type="submit"]').click()
+      await p.waitForURL((u) => u.searchParams.get('q') === 'zzz-no-existe' && (!select || u.searchParams.get(select.name) === select.valor), { timeout: 20_000 })
+      await p.getByRole('link', { name: 'Quitar filtros' }).first().click()
+      await p.waitForURL((u) => !u.searchParams.has('q') && (!select || !u.searchParams.has(select.name)), { timeout: 20_000 })
+      await expect(p.locator('input[name="q"]').first(), `${ruta}: «Quitar filtros» deja el texto buscado en el formulario`).toHaveValue('')
+      if (select) await expect(p.locator(`select[name="${select.name}"]`).first(), `${ruta}: «Quitar filtros» deja «${select.name}» elegido`).toHaveValue('')
+    }
+
+    await probar('/admin/inventario', { name: 'estado', valor: 'BAJO' })
+    await probar('/admin/inventario/movimientos', { name: 'tipo', valor: 'PURCHASE' })
+    await probar('/admin/inventario/entradas')
+    await probar('/admin/inventario/conteos', { name: 'estado', valor: 'OPEN' })
+    await probar('/admin/inventario/transferencias', { name: 'estado', valor: 'SENT' })
+    await probar('/admin/inventario/compras', { name: 'estado', valor: 'DRAFT' })
+    await probar('/admin/inventario/proveedores')
+    await probar('/admin/inventario/reposicion')
+    await probar('/admin/inventario/valor')
+    await probar('/admin/inventario/reportes/rotacion')
+    await probar('/admin/inventario/reportes/sin-ventas')
+    await probar('/admin/inventario/reportes/margen')
+    await probar('/admin/inventario/reportes/mermas', { name: 'motivo', valor: 'sin' })
+    await probar('/admin/inventario/reportes/vencimientos')
+
+    expect(errores, errores.join('\n')).toEqual([])
     await ctx.close()
   })
 

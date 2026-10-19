@@ -24,15 +24,17 @@ import {
   Users,
   Wallet,
 } from 'lucide-react'
-import { requireRole } from '@/lib/auth/guards'
+import { requireRole, requireSection, usuarioPuedeFuncion } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { destinoSiSoloProveedora } from '@/modules/supply-v2/permisos'
 import { getDashboardEjecutivo, type DashboardEjecutivo } from '@/modules/admin/dashboardQueries'
 import { getOnboardingEmpresa } from '@/modules/empresas/onboarding'
 import { resumenComercioEmpresa, type ResumenComercio } from '@/modules/comercio/dashboard'
+import { resumenInventarioEmpresa, type ResumenInventario } from '@/modules/inventory/dashboard'
 import { getHomePublicada } from '@/modules/home/composicion'
 import { leerSlidesEditor } from '@/modules/home/editor-contrato'
 import { OnboardingChecklist } from '@/components/admin/OnboardingChecklist'
+import { TarjetaInventario } from '@/components/admin/TarjetaInventario'
 import { formatMoney } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -156,6 +158,7 @@ export default async function AdminDashboard() {
   let company: { name: string; moneda: string; idioma: string; zonaHoraria: string } | null = null
   let publicada: Awaited<ReturnType<typeof getHomePublicada>> = null
   let comercio: ResumenComercio | null = null
+  let inventario: ResumenInventario | null = null
   try {
     // La empresa se lee ANTES: su zona horaria decide dónde empieza «hoy».
     company = await conEmpresa(companyId, (tx) =>
@@ -164,10 +167,20 @@ export default async function AdminDashboard() {
         select: { name: true, moneda: true, idioma: true, zonaHoraria: true },
       })
     )
-    ;[d, publicada, comercio] = await Promise.all([
+    // INV-4c · La tarjeta de inventario es de quien puede ver la sección Inventario; el dinero (valor, margen, lo que costó lo perdido),
+    // de quien además tiene la función `costos`. Sin la sección no se lee nada; sin la función no se lee ni un costo.
+    const userInventario = await requireSection('inventario').catch(() => null)
+    const conCostos = userInventario ? await usuarioPuedeFuncion(userInventario, 'inventario', 'costos') : false
+    ;[d, publicada, comercio, inventario] = await Promise.all([
       getDashboardEjecutivo(companyId, company?.zonaHoraria || 'America/Santo_Domingo'),
       getHomePublicada(companyId).catch(() => null),
       resumenComercioEmpresa(companyId, company?.zonaHoraria || 'America/Santo_Domingo').catch(() => null),
+      userInventario
+        ? resumenInventarioEmpresa(companyId, company?.zonaHoraria || 'America/Santo_Domingo', { conCostos }).catch((e) => {
+            console.error('[admin-dashboard] inventario', e instanceof Error ? e.message : e)
+            return null
+          })
+        : Promise.resolve(null),
     ])
   } catch (e) {
     console.error('[admin-dashboard]', e)
@@ -305,6 +318,9 @@ export default async function AdminDashboard() {
           </dl>
         </section>
       ) : null}
+
+      {/* ── Inventario (INV-4c): existencias, margen del mes y lo perdido ─── */}
+      {inventario ? <TarjetaInventario resumen={inventario} company={company} /> : null}
 
       {/* ── Avisos: solo los que tienen algo que decir ───────────────────── */}
       {d.porVencer7d + d.pagosPendientes === 0 && d.topPromos.length === 0 ? (

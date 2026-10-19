@@ -56,6 +56,8 @@ export default async function ValorInventarioPage({ searchParams }: { searchPara
   const f = { ...pedido }
   if (datos && !datos.sucursales.some((s) => s.id === f.sucursalId)) delete f.sucursalId
   const hayFiltros = Boolean(f.q || f.sucursalId || f.sinCosto || f.mes)
+  /** Cambia cuando cambian los filtros de la URL: remonta el formulario (sus campos no son controlados) para que «Quitar filtros» lo vacíe. */
+  const consultaFiltros = consultaDeFiltrosValor({ ...f, pagina: 1 })
   const v = datos?.valor
   const totalPaginas = v ? Math.max(1, Math.ceil(v.totalFilas / v.porPagina)) : 1
 
@@ -182,7 +184,7 @@ export default async function ValorInventarioPage({ searchParams }: { searchPara
             </CardContent>
           </Card>
 
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar el valor">
+          <form key={consultaFiltros} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar el valor">
             <div className="space-y-1">
               <label htmlFor="va-q" className="text-xs text-muted-foreground">
                 Producto

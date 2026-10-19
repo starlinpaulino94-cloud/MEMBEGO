@@ -91,7 +91,7 @@ export interface ValorDelInventario {
 }
 
 /** `%texto%` para un `ILIKE`, con los comodines del propio texto neutralizados. */
-function patronContiene(q: string): string {
+export function patronContiene(q: string): string {
   return `%${q.replace(/[\\%_]/g, '\\$&')}%`
 }
 
@@ -122,13 +122,22 @@ export function rangoDeMes(mes: string, zonaHoraria: string): { gte: Date; lt: D
   return { gte: limiteDiaLocal(`${mes}-01`, zonaHoraria, false), lt: limiteDiaLocal(mesSiguiente(mes), zonaHoraria, false) }
 }
 
+/** El costo de ventas de un periodo, tal cual sale de la base: el costo ya restado y las unidades. */
+export interface CostoDeVentasCrudo {
+  /** Lo que costó lo vendido menos lo que costó lo devuelto, en diezmilésimas; nunca negativo. */
+  costo: Costo
+  unidadesVendidas: number
+  /** Unidades vendidas cuyo costo no se conocía. */
+  unidadesSinCosto: number
+  unidadesDevueltas: number
+}
+
 /**
- * El costo de ventas de un mes: lo que costó lo que se vendió, menos lo que costó lo
- * que se devolvió, con el costo que cada movimiento congeló al ocurrir. Lo que no
- * tenía costo no suma: se cuenta aparte.
+ * El costo de ventas de un periodo cualquiera (`gte` incluido, `lt` excluido): lo que costó lo que se vendió, menos lo que
+ * costó lo que se devolvió, con el costo que cada movimiento congeló al ocurrir. Lo que no tenía costo no suma: se cuenta aparte.
  */
-export async function costoDeVentasEnTx(tx: Tx, companyId: string, mes: string, zonaHoraria: string, sucursalId?: string): Promise<CostoDeVentasVista> {
-  const { gte, lt } = rangoDeMes(mes, zonaHoraria)
+export async function costoDeVentasEnRangoEnTx(tx: Tx, companyId: string, rango: { gte: Date; lt: Date }, sucursalId?: string): Promise<CostoDeVentasCrudo> {
+  const { gte, lt } = rango
   const filtroSucursal = sucursalId ? Prisma.sql`AND l."locationId" = ${sucursalId}` : Prisma.empty
   const filas = await tx.$queryRaw<{ ventas: Prisma.Decimal; devoluciones: Prisma.Decimal; vendidas: number; sinCosto: number; devueltas: number }[]>`
     SELECT COALESCE(SUM(CASE WHEN m."type" = 'SALE' THEN m."quantity" * m."unitCost" END), 0) AS "ventas",
@@ -143,12 +152,35 @@ export async function costoDeVentasEnTx(tx: Tx, companyId: string, mes: string, 
   const f = filas[0]
   const neto = costoDeDecimal(f?.ventas ?? 0) - costoDeDecimal(f?.devoluciones ?? 0)
   return {
-    mes,
-    costo: formatearMonto(neto < CERO ? CERO : neto),
+    costo: neto < CERO ? CERO : neto,
     unidadesVendidas: Number(f?.vendidas ?? 0),
     unidadesSinCosto: Number(f?.sinCosto ?? 0),
     unidadesDevueltas: Number(f?.devueltas ?? 0),
   }
+}
+
+/** El costo de ventas de un mes (`YYYY-MM`, en el calendario de la empresa), ya formateado para enseñarlo. */
+export async function costoDeVentasEnTx(tx: Tx, companyId: string, mes: string, zonaHoraria: string, sucursalId?: string): Promise<CostoDeVentasVista> {
+  const r = await costoDeVentasEnRangoEnTx(tx, companyId, rangoDeMes(mes, zonaHoraria), sucursalId)
+  return { mes, costo: formatearMonto(r.costo), unidadesVendidas: r.unidadesVendidas, unidadesSinCosto: r.unidadesSinCosto, unidadesDevueltas: r.unidadesDevueltas }
+}
+
+/**
+ * Lo que vale TODO el inventario (vendible + apartado + dañado, en todas las sucursales o en una), con lo que no tiene costo
+ * contado aparte: mismas reglas que la pantalla de Valor, sin su tabla.
+ */
+export async function valorTotalEnTx(tx: Tx, companyId: string, sucursalId?: string): Promise<{ valor: Costo; unidades: number; unidadesSinCosto: number }> {
+  const filtroSucursal = sucursalId ? Prisma.sql`AND l."locationId" = ${sucursalId}` : Prisma.empty
+  const filas = await tx.$queryRaw<{ unidades: number; sinCosto: number; valor: Prisma.Decimal }[]>`
+    SELECT COALESCE(SUM(l."onHand" + l."damaged"), 0)::int AS "unidades",
+           COALESCE(SUM(CASE WHEN COALESCE(c."averageCost", v."cost") IS NULL THEN l."onHand" + l."damaged" ELSE 0 END), 0)::int AS "sinCosto",
+           COALESCE(SUM((l."onHand" + l."damaged") * COALESCE(c."averageCost", v."cost")), 0) AS "valor"
+      FROM "inventory_levels" l
+      JOIN "catalog_variants" v ON v."id" = l."catalogVariantId" AND v."companyId" = l."companyId"
+      LEFT JOIN "inventory_variant_costs" c ON c."catalogVariantId" = v."id" AND c."companyId" = v."companyId"
+     WHERE l."companyId" = ${companyId} AND (l."onHand" + l."damaged") > 0 ${filtroSucursal}`
+  const f = filas[0]
+  return { valor: costoDeDecimal(f?.valor ?? 0), unidades: Number(f?.unidades ?? 0), unidadesSinCosto: Number(f?.sinCosto ?? 0) }
 }
 
 /** Lo que vale lo que va EN CAMINO entre sucursales (enviado y todavía no recibido); null si no se puede leer. */

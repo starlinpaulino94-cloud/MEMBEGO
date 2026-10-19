@@ -270,6 +270,61 @@ que `customers:manage`: no mueve dinero, y se concede a mano al crear la clave.
 
 ---
 
+## Inventario (INV-5e)
+
+Las existencias de la empresa por producto y sucursal, y el libro de movimientos. Se leen con
+`inventory:read` (satélite o clave de empresa) y se mueven con `inventory:manage`, que es **solo de
+la clave de empresa**.
+
+| Método y ruta | Scope | Quién | Qué hace |
+|---|---|---|---|
+| `GET /inventory/levels` | `inventory:read` | satélite o empresa | Existencias paginadas (`limit`, `cursor`; filtros `branchId`, `variantId`): `onHand`, `reserved`, `damaged` y `available` (= `onHand − reserved`) |
+| `GET /inventory/movements` | `inventory:read` | satélite o empresa | El libro de movimientos, del más reciente al más antiguo (mismos filtros) |
+| `POST /inventory/receipts` | `inventory:manage` | **solo clave de empresa** | Llega mercancía de UN producto a UNA sucursal |
+| `POST /inventory/adjustments` | `inventory:manage` | **solo clave de empresa** | Corrige un sobrante (`change` > 0) o un faltante (`change` < 0) |
+
+Cuerpos (todos los campos en inglés, como el resto de la API):
+
+```jsonc
+// POST /inventory/receipts
+{ "variantId": "…", "branchId": "…", "quantity": 12, "note": "Pedido del proveedor",
+  "lots": [{ "code": "L-1", "expiresOn": "2030-01-31", "quantity": 12 }] }   // lots: solo si el producto lleva lotes o series
+
+// POST /inventory/adjustments
+{ "variantId": "…", "branchId": "…", "change": -3, "reasonCode": "LOST", "note": "No apareció",
+  "lotsOut": [{ "lotId": "…", "quantity": 3 }] }                            // lotsOut: de qué lotes sale un faltante (sin decirlo, el que antes vence)
+```
+
+Respuesta de una escritura: `{ "level": { "available", "onHand", "reserved", "damaged" }, "movementId", "repeated" }`.
+`201` si se hizo, `200` con `repeated: true` si era un reintento.
+
+Reglas que conviene saber antes de integrar:
+
+- **Solo si la empresa lo tiene encendido.** Igual que el catálogo: sin `CATALOGO_UNIFICADO` todo
+  contesta `404 NOT_FOUND` con `reason: "catalog_not_enabled"`.
+- **`Idempotency-Key` es obligatoria al escribir** (hasta 100 caracteres imprimibles). Repetir la
+  petición con la misma clave no suma dos veces; la misma clave con **otra** operación contesta
+  `400` con `reason: "idempotency_key_reused"`. (Es la clave del propio movimiento del inventario, no
+  la tabla de satélites.)
+- **El ajuste exige `reasonCode`** del catálogo de motivos del inventario: faltante (`EXPIRED`,
+  `THEFT`, `LOST`, `SAMPLE`, `INTERNAL_USE`, `SUPPLIER_RETURN`, `COUNT_DIFFERENCE`, `OTHER`),
+  sobrante (`COUNT_DIFFERENCE`, `FOUND`, `ENTRY_ERROR`, `OTHER`). Con `OTHER` hay que escribir `note`.
+  Un faltante no baja de cero: contesta `400` con `reason: "insufficient_stock"`.
+- **Es el mismo servicio que usa el panel.** Reglas de lotes, series, sucursales cerradas y kits
+  (un kit no tiene existencias propias) son las del panel; la API no tiene otro camino.
+- **Cada movimiento queda atribuido a la clave**: su referencia es `API` + el id de la clave y la
+  bitácora lleva el agente `platform-api`.
+- **Sin costos, ni de ida ni de vuelta.** Ni el costo promedio ni el unitario cruzan la frontera, y un
+  `cost` en el cuerpo se **rechaza** (`400`) en lugar de ignorarse. Dar costos por la API pediría su
+  propio scope.
+- Lo que la API **no** hace todavía: transferencias, conteos, órdenes de compra, kits, elegir la
+  serie al vender, ni reservar. Eso se hace en el panel.
+
+`inventory:manage` es otra **excepción nombrada** a «las claves de empresa solo leen»: mueve
+existencias, no dinero, y se concede a mano al crear la clave.
+
+---
+
 ## Guardias
 
 | Prueba | Qué impide |

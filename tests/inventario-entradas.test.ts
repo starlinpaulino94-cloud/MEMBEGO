@@ -326,3 +326,36 @@ test('en el CSV de una entrada, lo que escribe una persona no se ejecuta como f�
   }
   assert.ok(!/(^|;)=HYPERLINK/m.test(csv), 'ninguna celda empieza por =')
 })
+
+// ── INV-5a · una línea puede traer lotes ─────────────────────────────────────
+
+test('INV-5a · una línea conserva sus lotes tal como vienen (el servicio los valida: solo él sabe qué productos los llevan)', () => {
+  const r = validarLineasEntrada([
+    { varianteId: 'a', cantidad: 5, lotes: [{ codigo: 'L-1', vencimiento: '2027-01-31', cantidad: 5 }] },
+    { varianteId: 'b', cantidad: 2 },
+    { varianteId: 'c', cantidad: 3, lotes: [] },
+  ])
+  assert.equal(r.ok, true)
+  if (r.ok) {
+    assert.deepEqual(r.lineas[0].lotes, [{ codigo: 'L-1', vencimiento: '2027-01-31', cantidad: 5 }])
+    assert.equal('lotes' in r.lineas[1], false, 'sin lotes, la línea no trae la clave')
+    assert.equal('lotes' in r.lineas[2], false, 'una lista vacía tampoco')
+    assert.equal(r.unidades, 10)
+  }
+  const mala = validarLineasEntrada([{ varianteId: 'a', cantidad: 1, lotes: 'L-1' }])
+  assert.equal(mala.ok, false)
+  assert.equal((mala as { codigo: string }).codigo, 'LOTES_INVALIDOS')
+  assert.equal(validarLineasEntrada([{ varianteId: 'a', cantidad: 1, lotes: null }]).ok, true, 'null = sin lotes')
+})
+
+test('INV-5a · al fusionar líneas del mismo producto se juntan también sus lotes', () => {
+  const f = fusionarLineas([
+    { varianteId: 'a', cantidad: 2, lotes: [{ codigo: 'L-1', cantidad: 2 }] },
+    { varianteId: 'b', cantidad: 1 },
+    { varianteId: 'a', cantidad: 3, costo: '5.0000', lotes: [{ codigo: 'L-1', cantidad: 1 }, { codigo: 'L-2', cantidad: 2 }] },
+  ])
+  assert.deepEqual(f, [
+    { varianteId: 'a', cantidad: 5, costo: '5.0000', lotes: [{ codigo: 'L-1', cantidad: 2 }, { codigo: 'L-1', cantidad: 1 }, { codigo: 'L-2', cantidad: 2 }] },
+    { varianteId: 'b', cantidad: 1 },
+  ])
+})

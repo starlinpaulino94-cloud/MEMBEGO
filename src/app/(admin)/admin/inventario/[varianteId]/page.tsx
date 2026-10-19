@@ -13,6 +13,11 @@ import { advertenciaEstadoManual, formatearCantidad, nombreCompleto } from '@/mo
 import { formatDate, formatDateTime } from '@/lib/format'
 import { pedidoEnCaminoDeVarianteEnTx, proveedoresActivosEnTx, proveedoresDeVarianteEnTx, type OpcionProveedor, type PedidoDeVariante, type ProveedorDeProducto } from '@/modules/inventory/compras-queries'
 import { costoDeVarianteEnTx, type CostoDeVarianteVista } from '@/modules/inventory/valor'
+import { cambiosDeVencimientoEnTx, lotesDeVarianteEnTx, motivoParaNoDesactivarLotesEnTx, type CambioDeVencimiento, type LotesDeVariante } from '@/modules/inventory/lotes-queries'
+import { kitsDondeEntraEnTx } from '@/modules/inventory/kits-queries'
+import { ActivarLotesCard } from '@/components/inventario/ActivarLotesCard'
+import { DesactivarLotesCard } from '@/components/inventario/DesactivarLotesCard'
+import { HistorialDeVencimientos } from '@/components/inventario/HistorialDeVencimientos'
 import { CorregirCostoForm } from '@/components/inventario/CorregirCostoForm'
 import { ProveedoresDeProductoCard } from '@/components/inventario/ProveedoresDeProductoCard'
 import { SucursalInventarioCard } from '@/components/inventario/SucursalInventarioCard'
@@ -50,6 +55,37 @@ export default async function InventarioVariantePage({ params }: { params: Promi
     }
   }
   const [puedeAjustar, puedeTransferir, puedeCostos, puedeComprar] = await Promise.all([puedeFuncion('inventario', 'ajustar'), puedeFuncion('inventario', 'transferir'), puedeFuncion('inventario', 'costos'), puedeFuncion('inventario', 'comprar')])
+  // Los lotes (INV-5a): si el producto los lleva, qué lotes tiene y cuánto hay de cada uno en cada sucursal. Como lo anterior, en su
+  // PROPIA transacción y con su propio try: si la migración de lotes aún no se aplicó, la ficha sigue funcionando.
+  let lotes: LotesDeVariante | null = null
+  if (detalle.controlaInventario) {
+    try {
+      lotes = await conEmpresa(companyId, (tx) => lotesDeVarianteEnTx(tx, companyId, varianteId))
+    } catch (e) {
+      console.error('[admin-inventario-ficha] los lotes no están disponibles', e instanceof Error ? e.message : e)
+    }
+  }
+  // INV-5b5: las correcciones de vencimiento y si la activación todavía se puede deshacer; otra vez en su propia transacción y su
+  // propio try, para que la ficha siga funcionando si la migración de la historia aún no se aplicó.
+  let cambiosDeVencimiento: CambioDeVencimiento[] = []
+  let sePuedeDesactivar = false
+  if (lotes?.lleva) {
+    try {
+      cambiosDeVencimiento = await conEmpresa(companyId, (tx) => cambiosDeVencimientoEnTx(tx, companyId, varianteId))
+      sePuedeDesactivar = puedeAjustar && (await conEmpresa(companyId, (tx) => motivoParaNoDesactivarLotesEnTx(tx, companyId, varianteId))) === null
+    } catch (e) {
+      console.error('[admin-inventario-ficha] la historia de vencimientos no está disponible', e instanceof Error ? e.message : e)
+    }
+  }
+  // INV-5d: en qué kits entra este producto (si algún día se acaba, esos kits dejan de alcanzar); en su propia transacción y su propio try.
+  let kitsDondeEntra: Awaited<ReturnType<typeof kitsDondeEntraEnTx>> = []
+  if (detalle.controlaInventario) {
+    try {
+      kitsDondeEntra = await conEmpresa(companyId, (tx) => kitsDondeEntraEnTx(tx, companyId, varianteId))
+    } catch (e) {
+      console.error('[admin-inventario-ficha] los kits no están disponibles', e instanceof Error ? e.message : e)
+    }
+  }
   // El costo y el valor (INV-3a): solo con la función `costos`, y leído —como lo que va en camino— en su PROPIA transacción y con
   // su propio try: si algo falla, la ficha sigue funcionando sin esta tarjeta.
   let costo: CostoDeVarianteVista | null = null
@@ -98,9 +134,14 @@ export default async function InventarioVariantePage({ params }: { params: Promi
         title={nombreCompleto(detalle.itemNombre, detalle.nombreVariante, detalle.esDefault)}
         description={`SKU ${detalle.sku}`}
         action={
-          <Link href={`/admin/catalogo/${detalle.itemId}`} className="text-sm underline">
-            Ver en el catálogo
-          </Link>
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <Link href={`/admin/inventario/reportes/kardex?variante=${detalle.varianteId}`} className="underline">
+              Kardex
+            </Link>
+            <Link href={`/admin/catalogo/${detalle.itemId}`} className="underline">
+              Ver en el catálogo
+            </Link>
+          </div>
         }
       />
 
@@ -297,6 +338,40 @@ export default async function InventarioVariantePage({ params }: { params: Promi
               </AlertDescription>
             </Alert>
           )}
+          {lotes && !lotes.lleva && puedeAjustar && detalle.sucursales.length > 0 && <ActivarLotesCard varianteId={detalle.varianteId} />}
+          {lotes?.lleva && (
+            <Alert>
+              <AlertDescription>
+                {lotes.series ? (
+                  <>
+                    Este producto lleva <strong>series</strong>: cada unidad tiene su número de serie y no puede estar en dos sitios a la vez. Se vende primero la serie más antigua. Se recibe con una entrada de mercancía o una orden de compra (un número de serie por unidad), se transfiere serie por serie y lo que ya había se queda «SIN SERIE» hasta asignarle su número. Busca una serie y su historia en Inventario → Reportes → Buscar una serie.
+                  </>
+                ) : (
+                  <>
+                Este producto lleva <strong>lotes</strong>: se vende, se aparta y se saca primero lo que antes vence, y lo vencido no se vende. Se transfiere (y se envía a otra sucursal) lote por lote: sale el que antes vence, o los que elijas, y entra al destino en esos mismos lotes. Se cuenta lote por lote en un conteo (Inventario → Conteos), y se recibe con una entrada de mercancía o con una orden de compra (diciendo de qué lote llegó).
+                  </>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+          {kitsDondeEntra.length > 0 && (
+            <Alert>
+              <AlertDescription>
+                Este producto es componente de {kitsDondeEntra.length === 1 ? 'un kit' : `${kitsDondeEntra.length} kits`}: al venderse, se descuenta de aquí.{' '}
+                {kitsDondeEntra.map((k, i) => (
+                  <span key={k.varianteId}>
+                    {i > 0 && ', '}
+                    <strong>{k.cantidad} ×</strong> en {k.nombre}
+                  </span>
+                ))}
+                .{' '}
+                <Link href="/admin/inventario/kits" className="underline">
+                  Ver los kits
+                </Link>
+              </AlertDescription>
+            </Alert>
+          )}
+          {sePuedeDesactivar && <DesactivarLotesCard varianteId={detalle.varianteId} />}
           <div className="grid gap-4 lg:grid-cols-2">
             {detalle.sucursales.map((s) => (
               <SucursalInventarioCard
@@ -305,12 +380,18 @@ export default async function InventarioVariantePage({ params }: { params: Promi
                 puedeAjustar={puedeAjustar}
                 puedeCostos={puedeCostos}
                 hayOtrasConSaldo={detalle.sucursales.some((o) => o.activa && o.sucursalId !== s.sucursalId && o.nivelId !== null)}
+                lotes={lotes?.lleva ? { exigeVencimiento: lotes.exigeVencimiento, series: lotes.series, deSucursal: lotes.porSucursal[s.sucursalId] ?? [], catalogo: lotes.catalogo } : undefined}
                 saldo={{ sucursalId: s.sucursalId, nombre: s.nombre, activa: s.activa, onHand: s.onHand, reserved: s.reserved, damaged: s.damaged, disponible: s.disponible, lowStockThreshold: s.lowStockThreshold, targetStock: s.targetStock, estado: s.estado }}
               />
             ))}
           </div>
+          <HistorialDeVencimientos cambios={cambiosDeVencimiento} />
           {activas.length > 1 && puedeTransferir && (
-            <TransferirForm varianteId={detalle.varianteId} sucursales={activas.map((s) => ({ id: s.sucursalId, nombre: s.nombre, disponible: s.disponible }))} />
+            <TransferirForm
+              varianteId={detalle.varianteId}
+              sucursales={activas.map((s) => ({ id: s.sucursalId, nombre: s.nombre, disponible: s.disponible }))}
+              lotesPorSucursal={lotes?.lleva ? lotes.porSucursal : undefined}
+            />
           )}
         </>
       )}

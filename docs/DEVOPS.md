@@ -83,6 +83,17 @@ push. Lo que el flujo no puede vigilar solo es que `_prisma_migrations` siga
 cuadrando si alguien vuelve a aplicar una migración a mano — eso es disciplina,
 y está escrito en «El registro se desactualiza solo».
 
+**Migraciones que toman bloqueos sobre una tabla caliente (añadido el 2026-10-16).** `migrate deploy` corre en el momento del merge. Una migración
+que construye un índice o una restricción sobre una tabla que escribe cada venta (`inventory_movements`, `inventory_levels`) bloquea esas escrituras
+mientras dura (segundos, aun con cientos de miles de filas). Las migraciones de ese tipo van de una sola transacción con `SET LOCAL lock_timeout`: si
+no consiguen el bloqueo, **fallan enteras y no dejan nada a medias** (el flujo sale rojo y **no despliega**); se reintentan con *Run workflow*. Aun así,
+se fusionan **fuera de hora punta**. Hoy: la `20261068` (lotes). Cada una lo dice en su cabecera. Además, **no se fusiona con el E2E remoto sin
+terminar en verde**: el 15-10 el merge del PR #617 llegó con el E2E cancelado y el de `main` cayó en «Initialize containers» (infraestructura), y
+el último E2E remoto en verde sobre `main` sigue siendo el de #615.
+
+**Los verificadores SQL del registro** (`scripts/verificar-migraciones*.sql`) embeben las huellas de todas las migraciones y se regeneran con cada una
+nueva (`node scripts/generar-verificar-migraciones.mjs`); `tests/migraciones-verificadores.test.ts` falla si quedan viejos. Detalle en `MIGRACIONES.md`.
+
 ## Configuración manual pendiente (sin esto, los flujos no protegen)
 
 1. **Marcar los checks como obligatorios.** Settings → Rules → Rulesets → regla

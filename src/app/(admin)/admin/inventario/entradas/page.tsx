@@ -84,7 +84,7 @@ export default async function EntradasInventarioPage({ searchParams }: { searchP
         </Card>
       ) : (
         <>
-          <form method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar entradas">
+          <form key={consulta} method="get" className="flex flex-wrap items-end gap-3" aria-label="Filtrar entradas">
             <div className="space-y-1">
               <label htmlFor="en-q" className="text-xs text-muted-foreground">
                 Número o factura

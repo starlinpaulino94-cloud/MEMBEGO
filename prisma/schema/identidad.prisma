@@ -22,6 +22,7 @@ enum AppRole {
   RECEPCION
   MARKETING // difusión: promociones, campañas, publicaciones, audiencia, notificaciones
   SUPERVISOR // operación: dashboard/reportes, clientes, validar pagos, scanner
+  BODEGA // almacén: mueve existencias (recibir, ajustar, transferir, contar) sin ver costos ni comprar
   /// Vendedor de Excursiones: solo alcanza /vendedor. Es un rol de ACCESO
   /// EXTERNO (hoteles, taxistas, promotores) y por eso no está en ningún grupo
   /// de administración ni del escáner: su aislamiento es estructural, no una
@@ -992,6 +993,14 @@ model Company {
   inventoryPurchaseOrders InventoryPurchaseOrder[]
   inventoryPurchaseOrderLines InventoryPurchaseOrderLine[]
   inventoryVariantSuppliers InventoryVariantSupplier[]
+  inventoryLotTrackings  InventoryLotTracking[]
+  inventoryLots          InventoryLot[]
+  inventoryLotBalances   InventoryLotBalance[]
+  inventoryLotOpenings   InventoryLotOpening[]
+  inventoryLotExpiryChanges InventoryLotExpiryChange[]
+  inventoryKitComponents InventoryKitComponent[]
+  inventoryKitReservations InventoryKitReservation[]
+  inventoryMovementLots  InventoryMovementLot[]
   // Commerce Core · Fase 3: pedidos Membego. Relaciones inversas.
   membegoOrders          MembegoOrder[]
   membegoOrderLines      MembegoOrderLine[]

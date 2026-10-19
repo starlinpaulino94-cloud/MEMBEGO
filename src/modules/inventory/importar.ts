@@ -3,7 +3,7 @@ import { normalizarCapacidades } from '@/modules/catalog/domain'
 import type { ContextoAuditoria } from './auditoria'
 import { MAX_LINEAS_IMPORTACION } from './entradas'
 import { indexarCatalogo, leerImportacion, validarImportacion, type FilaCsv, type InformeImportacion, type VarianteImportable } from './importacion'
-import { importarConteoEnTx, registrarEntradaMultipleEnTx, type ResultadoEntradaMultiple, type ResultadoImportarConteo } from './service'
+import { exigirSinLotes, importarConteoEnTx, registrarEntradaMultipleEnTx, type ResultadoEntradaMultiple, type ResultadoImportarConteo } from './service'
 
 /**
  * COMMERCE CORE · inventario — INV-2a: importar existencias desde un CSV (la
@@ -17,7 +17,7 @@ import { importarConteoEnTx, registrarEntradaMultipleEnTx, type ResultadoEntrada
  */
 
 /** Los productos de la empresa que el archivo menciona (por SKU o por código de barras), sin importar mayúsculas. */
-export async function resolverCatalogoDeImportacionEnTx(tx: Tx, companyId: string, filas: readonly FilaCsv[]): Promise<VarianteImportable[]> {
+export async function resolverCatalogoDeImportacionEnTx(tx: Tx, companyId: string, filas: readonly FilaCsv[], opciones: { conLotes?: boolean } = {}): Promise<VarianteImportable[]> {
   const skus = [...new Set(filas.map((f) => f.sku?.toLowerCase()).filter((x): x is string => Boolean(x)))]
   const codigos = [...new Set(filas.map((f) => f.barcode?.toLowerCase()).filter((x): x is string => Boolean(x)))]
   if (skus.length === 0 && codigos.length === 0) return []
@@ -29,6 +29,16 @@ export async function resolverCatalogoDeImportacionEnTx(tx: Tx, companyId: strin
     where: { companyId, id: { in: ids.map((r) => r.id) } },
     select: { id: true, sku: true, barcode: true, name: true, isDefault: true, status: true, item: { select: { name: true, type: true, capabilities: true } } },
   })
+  // INV-5b3: en un conteo, los lotes de los productos que los llevan (código normalizado → id) para que la revisión diga qué lote no existe.
+  const lotesDe = new Map<string, Map<string, string>>()
+  if (opciones.conLotes) {
+    const llevan = await tx.inventoryLotTracking.findMany({ where: { companyId, catalogVariantId: { in: vs.map((v) => v.id) } }, select: { catalogVariantId: true } })
+    if (llevan.length > 0) {
+      const lotes = await tx.inventoryLot.findMany({ where: { companyId, catalogVariantId: { in: llevan.map((l) => l.catalogVariantId) } }, select: { id: true, catalogVariantId: true, code: true } })
+      for (const l of llevan) lotesDe.set(l.catalogVariantId, new Map())
+      for (const l of lotes) lotesDe.get(l.catalogVariantId)?.set(l.code, l.id)
+    }
+  }
   return vs.map((v) => ({
     id: v.id,
     sku: v.sku,
@@ -36,6 +46,7 @@ export async function resolverCatalogoDeImportacionEnTx(tx: Tx, companyId: strin
     nombre: v.isDefault ? v.item.name : `${v.item.name} · ${v.name}`,
     controlaInventario: normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory,
     descontinuada: v.status === 'DISCONTINUED',
+    ...(lotesDe.has(v.id) ? { lotes: lotesDe.get(v.id)! } : {}),
   }))
 }
 
@@ -47,7 +58,11 @@ export async function informeDeImportacionEnTx(tx: Tx, companyId: string, texto:
   if (!lectura.ok) return { ok: false, error: lectura.error }
   // Un archivo con más filas que el tope se informa SIN consultar el catálogo.
   const catalogo = lectura.filas.length > MAX_LINEAS_IMPORTACION ? [] : await resolverCatalogoDeImportacionEnTx(tx, companyId, lectura.filas)
-  return { ok: true, informe: validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'ENTRADA', opciones) }
+  const informe = validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'ENTRADA', opciones)
+  // INV-5a: un archivo todavía no trae lotes; un producto que los lleva se recibe con una entrada de mercancía. Se dice en la
+  // revisión, no hasta que se aplica.
+  if (informe.ok) await exigirSinLotes(tx, companyId, informe.lineas.map((l) => l.varianteId), 'la importación de entradas por archivo')
+  return { ok: true, informe }
 }
 
 export type ResultadoAplicacion = { aplicada: true; entrada: ResultadoEntradaMultiple } | { aplicada: false; informe: InformeImportacion }
@@ -76,14 +91,15 @@ export async function aplicarImportacionEnTx(
 
 // ── INV-2b · Importar lo contado en una hoja ─────────────────────────────────
 
-/** Lee y valida la hoja contada contra el catálogo, sin escribir nada. Una celda vacía significa «no se contó». */
+/** Lee y valida la hoja contada contra el catálogo, sin escribir nada. Una celda vacía significa «no se contó». Un producto con lotes trae una fila por lote. */
 export async function informeDeConteoImportadoEnTx(tx: Tx, companyId: string, texto: unknown): Promise<ResultadoInforme> {
   const lectura = leerImportacion(texto, 'CONTEO')
   if (!lectura.ok) return { ok: false, error: lectura.error }
   const conValor = lectura.filas.filter((f) => f.cantidad !== '')
   // Un archivo con más filas contadas que el tope se informa SIN consultar el catálogo.
-  const catalogo = conValor.length > MAX_LINEAS_IMPORTACION ? [] : await resolverCatalogoDeImportacionEnTx(tx, companyId, conValor)
-  return { ok: true, informe: validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'CONTEO') }
+  const catalogo = conValor.length > MAX_LINEAS_IMPORTACION ? [] : await resolverCatalogoDeImportacionEnTx(tx, companyId, conValor, { conLotes: true })
+  const informe = validarImportacion(lectura.filas, indexarCatalogo(catalogo), 'CONTEO')
+  return { ok: true, informe }
 }
 
 export type ResultadoAplicacionConteo = ({ aplicada: true } & ResultadoImportarConteo) | { aplicada: false; informe: InformeImportacion }

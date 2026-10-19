@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cargarMasHistorialInventario, type SerializableHistorial } from '@/modules/inventory/actions'
 import { ETIQUETA_MOVIMIENTO, describirReferencia, efectoLegible, formatearCantidad } from '@/modules/inventory/formato'
+import { detalleDeMotivo, etiquetaDeMotivo } from '@/modules/inventory/motivos'
 import { formatDateTimeExacto } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 
@@ -46,7 +47,9 @@ export function HistorialMovimientos({ varianteId, inicial }: { varianteId: stri
                   {formatDateTimeExacto(f.creadoEn)} · {f.usuarioNombre ?? 'Sistema'}
                   {ref && ` · ${ref}`}
                 </p>
-                {f.motivo && <p className="mt-0.5 break-words text-xs">{f.motivo}</p>}
+                {f.lotes && <p className="mt-0.5 text-xs">Lotes: {f.lotes}</p>}
+                {f.motivoCodigo && <p className="mt-0.5 text-xs font-medium">Motivo: {etiquetaDeMotivo(f.motivoCodigo)}</p>}
+                {detalleDeMotivo(f.motivoCodigo, f.motivo) && <p className="mt-0.5 break-words text-xs">{detalleDeMotivo(f.motivoCodigo, f.motivo)}</p>}
               </div>
               <div className="text-right tabular-nums">
                 <p className={f.efectoOnHand > 0 ? 'font-semibold text-success' : f.efectoOnHand < 0 ? 'font-semibold text-destructive' : 'text-muted-foreground'}>

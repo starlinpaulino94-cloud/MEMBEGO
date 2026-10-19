@@ -34,6 +34,7 @@ const ROL_LABEL: Record<string, string> = {
   CAJERO: 'Cajero (acceso total al panel)',
   SUPERVISOR: 'Supervisor (operación y monitoreo)',
   MARKETING: 'Marketing (difusión)',
+  BODEGA: 'Bodega (mueve existencias, sin costos ni compras)',
   RECEPCION: 'Recepción (mostrador y escáner)',
   EMPLEADO: 'Staff / Empleado (escáner de check-in y operaciones de campo)',
 }

@@ -1,5 +1,6 @@
 import type { Tx } from '@/lib/tenant'
 import { normalizarCapacidades } from '@/modules/catalog/domain'
+import { disponibilidadDeKitsEnTx } from '@/modules/inventory/kits-queries'
 import { PedidoError } from '@/modules/orders/errores'
 import { MAX_PEDIDOS_ABIERTOS_POR_CLIENTE } from '@/modules/orders/domain'
 import { contarPedidosAbiertosEnTx, crearPedidoEnTx, type ContextoPedido } from '@/modules/orders/service'
@@ -99,6 +100,10 @@ export async function resumenDelCarritoEnTx(tx: Tx, companyId: string, lineas: r
     },
   })
   const porId = new Map(variantes.map((v) => [v.id, v]))
+  // INV-5d: un KIT no tiene existencias propias: lo que alcanza es lo que dan sus componentes en la sucursal.
+  const kits = sucursalId
+    ? await disponibilidadDeKitsEnTx(tx, companyId, variantes.filter((v) => !normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory).map((v) => v.id), sucursalId)
+    : new Map<string, { kits: number }>()
   let total = 0
   let moneda: string | null = null
   const renglones: RenglonResumido[] = pedidas.map((l) => {
@@ -111,7 +116,7 @@ export async function resumenDelCarritoEnTx(tx: Tx, companyId: string, lineas: r
     const nombre = v.item.variants.length > 1 ? `${v.item.name} · ${v.name}` : v.item.name
     const precio = Number(v.price.toFixed(2))
     const nivel = Array.isArray(v.inventoryLevels) ? v.inventoryLevels[0] : undefined
-    const existencias = caps.trackInventory && sucursalId ? Math.max(0, (nivel?.onHand ?? 0) - (nivel?.reserved ?? 0)) : null
+    const existencias = caps.trackInventory && sucursalId ? Math.max(0, (nivel?.onHand ?? 0) - (nivel?.reserved ?? 0)) : (kits.get(v.id)?.kits ?? null)
     let problema: string | null = null
     if (v.item.status !== 'ACTIVE' || v.status !== 'ACTIVE' || v.item.source !== 'MERCHANT' || !caps.availableMarketplace) problema = NO_DISPONIBLE
     else if (otraMoneda) problema = `Este producto es en ${v.item.currency} y no se puede pagar junto con los demás (${moneda}).`

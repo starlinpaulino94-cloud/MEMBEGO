@@ -16,21 +16,33 @@ const entero = (t: string): number | null => (/^\d{1,7}$/.test(t.trim()) ? Numbe
  * escribiendo el número (Enter o salir del campo guarda) o se quita. Muestra SOLO
  * lo contado: lo que dice el sistema no llega a esta pantalla (conteo a ciegas).
  */
-export function FilaConteoEditable(p: { conteoId: string; varianteId: string; nombre: string; sku: string; barcode: string | null; contado: number }) {
+export function FilaConteoEditable(p: {
+  conteoId: string
+  varianteId: string
+  /** INV-5b3: el lote de la línea (null en un producto sin lotes) y cómo se nombra («Lote A-1 · vence 2027-09-01»). */
+  loteId?: string | null
+  loteEtiqueta?: string | null
+  nombre: string
+  sku: string
+  barcode: string | null
+  contado: number
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [valor, setValor] = useState(String(p.contado))
+  /** Cómo se llama la línea en los mensajes y en los nombres accesibles: el producto y, si lo hay, su lote. */
+  const nombreLinea = p.loteEtiqueta ? `${p.nombre} · ${p.loteEtiqueta}` : p.nombre
 
   function guardar() {
     if (valor.trim() === String(p.contado)) return
     const n = entero(valor)
     if (n === null || n > 1_000_000) {
-      toast.error(`Revisa lo contado de «${p.nombre}»: es un entero de 0 a 1.000.000.`)
+      toast.error(`Revisa lo contado de «${nombreLinea}»: es un entero de 0 a 1.000.000.`)
       setValor(String(p.contado))
       return
     }
     start(async () => {
-      const r = await contarProductoEnConteo({ conteoId: p.conteoId, varianteId: p.varianteId, cantidad: n, modo: 'FIJAR' })
+      const r = await contarProductoEnConteo({ conteoId: p.conteoId, varianteId: p.varianteId, loteId: p.loteId ?? null, cantidad: n, modo: 'FIJAR' })
       if (!r.ok) {
         toast.error(r.error)
         setValor(String(p.contado))
@@ -42,7 +54,7 @@ export function FilaConteoEditable(p: { conteoId: string; varianteId: string; no
 
   function quitar() {
     start(async () => {
-      const r = await quitarProductoDelConteo({ conteoId: p.conteoId, varianteId: p.varianteId })
+      const r = await quitarProductoDelConteo({ conteoId: p.conteoId, varianteId: p.varianteId, loteId: p.loteId ?? null })
       if (!r.ok) {
         toast.error(r.error)
         return
@@ -58,14 +70,15 @@ export function FilaConteoEditable(p: { conteoId: string; varianteId: string; no
         <p className="text-xs text-muted-foreground">
           SKU {p.sku}
           {p.barcode && ` · ${p.barcode}`}
+          {p.loteEtiqueta && ` · ${p.loteEtiqueta}`}
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <Label htmlFor={`fc-${p.varianteId}`} className="sr-only">
-          Contado de {p.nombre}
+        <Label htmlFor={`fc-${p.varianteId}-${p.loteId ?? ''}`} className="sr-only">
+          Contado de {nombreLinea}
         </Label>
         <Input
-          id={`fc-${p.varianteId}`}
+          id={`fc-${p.varianteId}-${p.loteId ?? ''}`}
           inputMode="numeric"
           autoComplete="off"
           value={valor}
@@ -81,7 +94,7 @@ export function FilaConteoEditable(p: { conteoId: string; varianteId: string; no
           }}
           className="w-24 text-right tabular-nums"
         />
-        <Button type="button" variant="ghost" size="icon" disabled={pending} aria-label={`Quitar ${p.nombre} del conteo`} onClick={quitar}>
+        <Button type="button" variant="ghost" size="icon" disabled={pending} aria-label={`Quitar ${nombreLinea} del conteo`} onClick={quitar}>
           {pending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Trash2 className="h-4 w-4" aria-hidden />}
         </Button>
       </div>

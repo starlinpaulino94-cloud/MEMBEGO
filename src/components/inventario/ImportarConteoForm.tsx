@@ -91,8 +91,8 @@ export function ImportarConteoForm({ conteoId }: { conteoId: string }) {
             <Label htmlFor="ci-archivo">Archivo CSV</Label>
             <Input id="ci-archivo" ref={entrada} type="file" accept=".csv,.txt,text/csv,text/plain" onChange={alElegirArchivo} />
             <p className="text-xs text-muted-foreground">
-              Columnas: <code>sku</code> o <code>codigo_de_barras</code>, y <code>contado</code> (entero; 0 si lo buscaste y no hay). Deja vacía la celda de lo que no contaste. Hasta 1.000 productos con algo contado. Un producto que ya
-              tenía línea en este conteo se reemplaza.
+              Columnas: <code>sku</code> o <code>codigo_de_barras</code>, <code>lote</code> (solo para los productos que llevan lotes: una fila por lote) y <code>contado</code> (entero; 0 si lo buscaste y no hay). Deja vacía la celda de lo
+              que no contaste. Hasta 1.000 filas con algo contado. Un producto (o un lote) que ya tenía línea en este conteo se reemplaza.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -172,7 +172,7 @@ export function ImportarConteoForm({ conteoId }: { conteoId: string }) {
                   {informe.vistaPrevia.map((l) => (
                     <li key={l.fila} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
                       <span>
-                        {l.nombre} <span className="text-xs text-muted-foreground">SKU {l.sku} · fila {l.fila}</span>
+                        {l.nombre} <span className="text-xs text-muted-foreground">SKU {l.sku}{l.lote ? ` · lote ${l.lote}` : ''} · fila {l.fila}</span>
                       </span>
                       <span className="font-semibold tabular-nums">{formatearCantidad(l.cantidad)}</span>
                     </li>

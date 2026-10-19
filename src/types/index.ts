@@ -11,6 +11,7 @@ export const ROLES_APP = [
   'RECEPCION',
   'MARKETING',
   'SUPERVISOR',
+  'BODEGA',
   'EMPLEADO',
   'CLIENTE',
   'VENDEDOR',
@@ -25,6 +26,8 @@ export type AppRole =
   | 'RECEPCION'
   | 'MARKETING'
   | 'SUPERVISOR'
+  // Almacén (INV-5e): solo alcanza /admin/inventario y no ve costos ni compra.
+  | 'BODEGA'
   | 'EMPLEADO'
   | 'CLIENTE'
   // Vendedor de Excursiones (acceso externo: hoteles, taxistas, promotores).
@@ -78,6 +81,7 @@ export const ROLE_HOME: Record<AppRole, string> = {
   RECEPCION: '/empleado/scanner',
   MARKETING: '/admin/dashboard',
   SUPERVISOR: '/admin/dashboard',
+  BODEGA: '/admin/inventario',
   EMPLEADO: '/empleado/scanner',
   // Directo a /mis-membresias: /cliente/dashboard era solo un redirect y
   // duplicaba middleware + layout justo después del login.
@@ -97,6 +101,7 @@ export const ADMIN_ROLES: AppRole[] = [
   'CAJERO',
   'MARKETING',
   'SUPERVISOR',
+  'BODEGA',
   'ADMIN_EMPRESA', // legacy
 ]
 
@@ -119,6 +124,7 @@ export const INVITABLE_ROLES: AppRole[] = [
   'RECEPCION',
   'MARKETING',
   'SUPERVISOR',
+  'BODEGA',
   'EMPLEADO',
 ]
 

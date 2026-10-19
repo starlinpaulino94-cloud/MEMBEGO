@@ -2,11 +2,15 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { ETIQUETA_RESULTADO, clasificarDiferencia, diferenciaDeConteo, ordenarPorDiferencia, resumirVarianza } from '@/modules/inventory/conteos'
+import { ETIQUETA_RESULTADO, claveDeLinea, clasificarDiferencia, diferenciaDeConteo, etiquetaDeLote, ordenarPorDiferencia, resumirVarianza } from '@/modules/inventory/conteos'
 import { formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 
 export interface LineaInforme {
   varianteId: string
+  /** INV-5b3: el lote de la línea (null en un producto sin lotes). */
+  loteId: string | null
+  loteCodigo: string | null
+  loteVencimiento: string | null
   sku: string
   barcode: string | null
   itemNombre: string
@@ -36,10 +40,10 @@ export function InformeDiferencias({
   sinContar: number | null
   /** Ya aplicado: se enseñan las existencias reales de antes y después de ajustar. */
   aplicado: boolean
-  /** Líneas que hoy no se podrían aplicar, con el porqué (solo antes de aplicar). */
+  /** Líneas que hoy no se podrían aplicar, con el porqué (solo antes de aplicar), por `claveDeLinea` (producto, o producto y lote). */
   bloqueos?: ReadonlyMap<string, string>
 }) {
-  const filas = ordenarPorDiferencia(lineas.map((l) => ({ ...l, nombre: nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault) })))
+  const filas = ordenarPorDiferencia(lineas.map((l) => ({ ...l, nombre: nombreCompleto(l.itemNombre, l.nombreVariante, l.esDefault), lote: l.loteCodigo })))
   const r = resumirVarianza(filas)
   const tarjetas: ReadonlyArray<readonly [string, string, string?]> = [
     ['Productos contados', formatearCantidad(r.lineas)],
@@ -69,9 +73,10 @@ export function InformeDiferencias({
           {filas.map((l) => {
             const d = diferenciaDeConteo(l.contado, l.esperado)
             const resultado = clasificarDiferencia(d)
-            const bloqueo = bloqueos?.get(l.varianteId)
+            const clave = claveDeLinea(l.varianteId, l.loteId)
+            const bloqueo = bloqueos?.get(clave)
             return (
-              <li key={l.varianteId} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 p-3 text-sm">
+              <li key={clave} data-lote={l.loteCodigo ?? undefined} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 p-3 text-sm">
                 <div className="min-w-0 flex-1">
                   <Link href={`/admin/inventario/${l.varianteId}`} className="font-medium underline-offset-2 hover:underline">
                     {l.nombre}
@@ -79,6 +84,7 @@ export function InformeDiferencias({
                   <p className="text-xs text-muted-foreground">
                     SKU {l.sku}
                     {l.barcode && ` · ${l.barcode}`}
+                    {l.loteCodigo && ` · ${etiquetaDeLote(l.loteCodigo, l.loteVencimiento)}`}
                   </p>
                   {bloqueo && <p className="mt-1 text-xs text-destructive">No se podría aplicar hoy: {bloqueo}</p>}
                 </div>
