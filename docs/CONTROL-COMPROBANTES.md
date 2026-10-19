@@ -145,6 +145,15 @@ ni en el escáner, y el cliente tampoco tenía recibo.
   `tests/e2e/comprobante-cliente.spec.ts` (web con sesión y app con enlace;
   una página Carta; enlace manipulado → 404).
 
+#### Recibos de los pagos con tarjeta anteriores
+Los cobros con tarjeta anteriores al comprobante no tienen venta. Se recuperan
+desde **Conciliación** («Generar los N comprobantes», con la cifra a la vista y
+a nombre de quien pulsa) o con `scripts/diagnostico-pagos-con-tarjeta.sql` para
+mirar antes. Cada venta lleva la **fecha real del cobro** (`activadoAt`), el
+importe y la autorización. Una primera versión con script y flujo de CI propios
+(`recibos-tarjetas-anteriores`) se retiró al fusionar: escribía por el camino
+paralelo `reciboPasarela`. Ver `docs/PAGO_TARJETA_COMPROBANTE.md`, fase 6.
+
 ### 2.3 Caja por turno — `CajaSesion`
 Fuente: `src/modules/caja/*`, `src/components/caja/CajaForms.tsx`, `/empleado/caja`.
 - `abrirCaja` (balance inicial, turno, sucursal, responsable).
