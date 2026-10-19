@@ -19,6 +19,17 @@ export type {
   CardnetSessionTarget,
 } from './cardnet-api-contracts'
 
+export interface SavedPaymentCard {
+  readonly id: string
+  readonly marca: string | null
+  readonly ultimos4: string | null
+  readonly vencMes: number | null
+  readonly vencAnio: number | null
+  readonly createdAt: string
+  readonly predeterminada: boolean
+  readonly eliminacionPendiente: boolean
+}
+
 function getApiBaseUrl(): string {
   return resolveApiBaseUrl({
     configuredUrl: process.env.EXPO_PUBLIC_API_URL,
@@ -1302,6 +1313,14 @@ export const api = {
 
   // --- Cuenta: pagos ---
   getPagos: () => fetchBff<PagosResponse>('/api/v1/cliente/pagos'),
+  getSavedCards: () => fetchBff<{ tarjetas: SavedPaymentCard[] }>('/api/v1/cliente/pagos/tarjetas'),
+  setDefaultSavedCard: (tarjetaId: string) =>
+    postJson<{ ok: boolean }>('/api/v1/cliente/pagos/tarjetas', { tarjetaId }),
+  deleteSavedCard: (tarjetaId: string) =>
+    fetchBff<{ estado: 'eliminada' | 'pendiente' | 'no_encontrada' }>('/api/v1/cliente/pagos/tarjetas', {
+      method: 'DELETE',
+      body: JSON.stringify({ tarjetaId }),
+    }),
   getComprobanteEnlace: (transactionId: string) =>
     fetchBff<ComprobanteEnlace>(`/api/v1/cliente/comprobantes/${encodeURIComponent(transactionId)}/enlace`),
   comprarPromocion: (promotionId: string) =>
@@ -1314,9 +1333,9 @@ export const api = {
       input.kind === 'membership'
         ? {
             membershipId: input.membershipId,
-            ...(input.guardarParaRenovacion === undefined
+            ...(input.guardarTarjeta === undefined
               ? {}
-              : { guardarParaRenovacion: input.guardarParaRenovacion }),
+              : { guardarTarjeta: input.guardarTarjeta }),
           }
         : { compraId: input.compraId }
 

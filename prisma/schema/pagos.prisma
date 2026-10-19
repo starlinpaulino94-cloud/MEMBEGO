@@ -121,7 +121,8 @@ model CardnetCaptureSession {
   /// Identificadores de perfil previos, sin guardar tokens reutilizables.
   perfilBase        Json?
   paymentProfileId  String?
-  guardarRenovacion Boolean  @default(false)
+  /// Consentimiento explícito para guardar el medio de pago. No autoriza renovaciones.
+  guardarTarjeta    Boolean  @default(false)
   purchaseIntentId  String? @unique
   purchaseIntent    PagoIntento? @relation(fields: [purchaseIntentId], references: [id], onDelete: SetNull)
   tarjetaTokenizada TarjetaTokenizada?

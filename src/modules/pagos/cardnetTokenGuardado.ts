@@ -9,6 +9,7 @@ import {
   cobrarConCredencialGuardada,
   borrarPerfilCardnet,
 } from '@/lib/payments/cardnet-tokens'
+import { cifrarTokenCardnet, descifrarTokenCardnet } from '@/lib/payments/cardnet-vault'
 
 /**
  * FASE 2 — TARJETA GUARDADA Y RENOVACIÓN AUTOMÁTICA (CardNET tokenización).
@@ -28,38 +29,104 @@ export interface GuardarTarjetaInput {
   ultimos4?: string | null
   vencMes?: number | null
   vencAnio?: number | null
-  /** Si se indica, enciende la renovación automática de esta membresía. */
-  membershipId?: string | null
+  cardnetCaptureSessionId?: string | null
 }
 
-/** Persiste una tarjeta tokenizada y, si se pide, la ata a una membresía. */
+/**
+ * Persiste un perfil ya consultado directamente en CardNET. No acepta datos
+ * del perfil enviados por el navegador y nunca activa la renovación.
+ */
 export async function guardarTarjeta(input: GuardarTarjetaInput) {
+  if (!input.companyId || !input.clienteId || !input.customerId || !input.paymentProfileId || !input.token || input.token.length > 512) {
+    throw new Error('CardNET no devolvió un perfil reusable válido.')
+  }
+  const tokenCifrado = cifrarTokenCardnet(input.token)
   return conEmpresa(input.companyId, async (tx) => {
-    const tarjeta = await tx.tarjetaTokenizada.create({
-      data: {
-        companyId: input.companyId,
-        clienteId: input.clienteId,
-        customerId: input.customerId,
-        paymentProfileId: input.paymentProfileId ?? null,
-        token: input.token ?? null,
-        marca: input.marca ?? null,
-        ultimos4: input.ultimos4 ?? null,
-        vencMes: input.vencMes ?? null,
-        vencAnio: input.vencAnio ?? null,
-      },
-    })
-
-    if (input.membershipId) {
-      await tx.membership
-        .updateMany({
-          // Solo si la membresía es de este cliente (barrera de pertenencia).
-          where: { id: input.membershipId, clienteId: input.clienteId },
-          data: { autoRenovar: true, tarjetaTokenizadaId: tarjeta.id },
+    const existing = input.paymentProfileId
+      ? await tx.tarjetaTokenizada.findFirst({
+          where: {
+            companyId: input.companyId,
+            clienteId: input.clienteId,
+            customerId: input.customerId,
+            paymentProfileId: input.paymentProfileId,
+            activa: true,
+          },
         })
-        .catch(anotarFallo('pagos:guardarTarjeta:ataMembresia', { membershipId: input.membershipId }))
+      : null
+    if (existing) {
+      return tx.tarjetaTokenizada.update({
+        where: { id: existing.id },
+        data: {
+          tokenCifrado: existing.tokenCifrado ?? tokenCifrado,
+          token: null,
+          marca: input.marca?.slice(0, 32) ?? existing.marca,
+          ultimos4: input.ultimos4 && /^\d{4}$/.test(input.ultimos4) ? input.ultimos4 : existing.ultimos4,
+          vencMes: input.vencMes && input.vencMes >= 1 && input.vencMes <= 12 ? input.vencMes : existing.vencMes,
+          vencAnio: input.vencAnio && input.vencAnio >= 2000 && input.vencAnio <= 9999 ? input.vencAnio : existing.vencAnio,
+          consentimientoGuardadoAt: existing.consentimientoGuardadoAt ?? new Date(),
+          ...(input.cardnetCaptureSessionId ? { cardnetCaptureSessionId: input.cardnetCaptureSessionId } : {}),
+        },
+      })
     }
 
-    return tarjeta
+    const primera = !(await tx.tarjetaTokenizada.findFirst({
+      where: { companyId: input.companyId, clienteId: input.clienteId, activa: true },
+      select: { id: true },
+    }))
+    try {
+      return await tx.tarjetaTokenizada.create({
+        data: {
+          companyId: input.companyId,
+          clienteId: input.clienteId,
+          customerId: input.customerId,
+          proveedorCuenta: 'CARDNET',
+          paymentProfileId: input.paymentProfileId ?? null,
+          tokenCifrado,
+          cardnetCaptureSessionId: input.cardnetCaptureSessionId ?? null,
+          marca: input.marca?.slice(0, 32) ?? null,
+          ultimos4: input.ultimos4 && /^\d{4}$/.test(input.ultimos4) ? input.ultimos4 : null,
+          vencMes: input.vencMes && input.vencMes >= 1 && input.vencMes <= 12 ? input.vencMes : null,
+          vencAnio: input.vencAnio && input.vencAnio >= 2000 && input.vencAnio <= 9999 ? input.vencAnio : null,
+          predeterminada: primera,
+          consentimientoGuardadoAt: new Date(),
+        },
+      })
+    } catch (error) {
+      // El índice parcial arbitra dos solicitudes concurrentes que registran
+      // el mismo perfil; se recupera la fila ganadora y no se duplica.
+      if (input.paymentProfileId) {
+        const winner = await tx.tarjetaTokenizada.findFirst({
+          where: {
+            companyId: input.companyId,
+            clienteId: input.clienteId,
+            customerId: input.customerId,
+            paymentProfileId: input.paymentProfileId,
+            activa: true,
+          },
+        })
+        if (winner) return winner
+      }
+      // Otra tarjeta del mismo cliente pudo ganar el índice parcial del
+      // predeterminado. El perfil nuevo sigue siendo válido; guárdalo sin
+      // predeterminar y deja que el cliente lo elija desde su billetera.
+      return tx.tarjetaTokenizada.create({
+        data: {
+          companyId: input.companyId,
+          clienteId: input.clienteId,
+          customerId: input.customerId,
+          proveedorCuenta: 'CARDNET',
+          paymentProfileId: input.paymentProfileId,
+          tokenCifrado,
+          cardnetCaptureSessionId: input.cardnetCaptureSessionId ?? null,
+          marca: input.marca?.slice(0, 32) ?? null,
+          ultimos4: input.ultimos4 && /^\d{4}$/.test(input.ultimos4) ? input.ultimos4 : null,
+          vencMes: input.vencMes && input.vencMes >= 1 && input.vencMes <= 12 ? input.vencMes : null,
+          vencAnio: input.vencAnio && input.vencAnio >= 2000 && input.vencAnio <= 9999 ? input.vencAnio : null,
+          predeterminada: false,
+          consentimientoGuardadoAt: new Date(),
+        },
+      }).catch(() => { throw error })
+    }
   })
 }
 
@@ -67,7 +134,7 @@ export async function guardarTarjeta(input: GuardarTarjetaInput) {
 export async function listarTarjetasCliente(clienteId: string, companyId: string) {
   return conEmpresa(companyId, (tx) =>
     tx.tarjetaTokenizada.findMany({
-      where: { clienteId, companyId, activa: true },
+      where: { clienteId, companyId, OR: [{ activa: true }, { eliminacionPendiente: true }] },
       select: {
         id: true,
         marca: true,
@@ -75,37 +142,85 @@ export async function listarTarjetasCliente(clienteId: string, companyId: string
         vencMes: true,
         vencAnio: true,
         createdAt: true,
+        predeterminada: true,
+        eliminacionPendiente: true,
       },
       orderBy: { createdAt: 'desc' },
     })
-  ).catch(() => [])
+  )
+}
+
+/** Marca una tarjeta como predeterminada sin exponer ni aceptar referencias CardNET. */
+export async function establecerTarjetaPredeterminada(id: string, clienteId: string, companyId: string): Promise<boolean> {
+  return conEmpresa(companyId, async (tx) => {
+    const tarjeta = await tx.tarjetaTokenizada.findFirst({
+      where: { id, clienteId, companyId, activa: true, eliminacionPendiente: false },
+      select: { id: true },
+    })
+    if (!tarjeta) return false
+    await tx.tarjetaTokenizada.updateMany({
+      where: { clienteId, companyId, activa: true, predeterminada: true },
+      data: { predeterminada: false },
+    })
+    await tx.tarjetaTokenizada.update({ where: { id: tarjeta.id }, data: { predeterminada: true } })
+    return true
+  })
 }
 
 /** El cliente quita su tarjeta: se desactiva, se borra en CardNET y se apaga la renovación. */
-export async function eliminarTarjeta(id: string, clienteId: string): Promise<boolean> {
-  const tarjeta = await sinEmpresa(
-    'pagos: localizar tarjeta tokenizada por id (su empresa se deriva de la tarjeta)',
-    (tx) => tx.tarjetaTokenizada.findUnique({ where: { id } })
+export async function eliminarTarjeta(
+  id: string,
+  clienteId: string,
+  companyId: string
+): Promise<'eliminada' | 'pendiente' | 'no_encontrada'> {
+  const tarjeta = await conEmpresa(companyId,
+    (tx) => tx.tarjetaTokenizada.findFirst({ where: { id, companyId, clienteId } })
   ).catch(() => null)
-  if (!tarjeta || tarjeta.clienteId !== clienteId || !tarjeta.activa) return false
+  if (!tarjeta || (!tarjeta.activa && !tarjeta.eliminacionPendiente)) return 'no_encontrada'
 
-  if (tarjeta.paymentProfileId) {
-    await borrarPerfilCardnet({
-      customerId: tarjeta.customerId,
-      paymentProfileId: tarjeta.paymentProfileId,
-    }).catch(() => false)
+  // Se revoca localmente antes de la llamada remota: aunque CardNET falle, el
+  // backend deja de ofrecer esta referencia y registra el borrado pendiente.
+  await conEmpresa(tarjeta.companyId, async (tx) => {
+    await tx.tarjetaTokenizada.updateMany({
+      where: { id, clienteId, activa: true },
+      data: {
+        activa: false,
+        predeterminada: false,
+        eliminacionPendiente: true,
+        tokenCifrado: null,
+        token: null,
+      },
+    })
+    await tx.membership.updateMany({
+      where: { tarjetaTokenizadaId: id },
+      data: { autoRenovar: false, tarjetaTokenizadaId: null },
+    })
+    if (tarjeta.predeterminada) {
+      const siguiente = await tx.tarjetaTokenizada.findFirst({
+        where: { companyId: tarjeta.companyId, clienteId, activa: true, eliminacionPendiente: false },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      })
+      if (siguiente) {
+        await tx.tarjetaTokenizada.update({ where: { id: siguiente.id }, data: { predeterminada: true } })
+      }
+    }
+  }).catch((error) => {
+    anotarFallo('pagos:eliminarTarjeta:revocarLocal', { id })(error)
+    throw error
+  })
+
+  const remotoEliminado = !tarjeta.paymentProfileId || await borrarPerfilCardnet({
+    customerId: tarjeta.customerId,
+    paymentProfileId: tarjeta.paymentProfileId,
+  }).catch(() => false)
+  if (remotoEliminado) {
+    await conEmpresa(tarjeta.companyId, (tx) =>
+      tx.tarjetaTokenizada.updateMany({ where: { id, clienteId }, data: { eliminacionPendiente: false } })
+    )
+    return 'eliminada'
   }
-
-  await conEmpresa(tarjeta.companyId, (tx) =>
-    Promise.all([
-      tx.membership.updateMany({
-        where: { tarjetaTokenizadaId: id },
-        data: { autoRenovar: false, tarjetaTokenizadaId: null },
-      }),
-      tx.tarjetaTokenizada.update({ where: { id }, data: { activa: false } }),
-    ])
-  ).catch(anotarFallo('pagos:eliminarTarjeta', { id }))
-  return true
+  return 'pendiente'
 }
 
 export type RenovacionResultado =
@@ -218,7 +333,9 @@ export async function renovarMembresiaPorTarjeta(
     cobro = await cobrarConCredencialGuardada({
       customerId: m.tarjetaTokenizada.customerId,
       paymentProfileId: m.tarjetaTokenizada.paymentProfileId,
-      token: m.tarjetaTokenizada.token,
+      token: m.tarjetaTokenizada.tokenCifrado
+        ? descifrarTokenCardnet(m.tarjetaTokenizada.tokenCifrado)
+        : m.tarjetaTokenizada.token,
       pesos,
       orden: intento.id,
       clienteIp,

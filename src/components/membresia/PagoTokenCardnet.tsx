@@ -264,19 +264,19 @@ export function PagoTokenCardnet({
     })
   }, [])
 
-  // Guarda la tarjeta (Fase 2) tras un cobro aprobado, si el cliente lo pidió.
+  // Pide al servidor guardar el perfil recién aprobado, si el cliente lo pidió.
   const guardarTarjeta = useCallback(async () => {
     const refs = refsGuardado(tokenDataRef.current)
-    if (!refs.customerId && !refs.paymentProfileId && !refs.token) return
+    if (!refs.paymentProfileId) return
     try {
       await fetch('/api/pagos/cardnet-token/guardar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...objetivo, ...refs }),
+        body: JSON.stringify({ paymentProfileId: refs.paymentProfileId, consentimiento: true }),
       })
     } catch {
       // No es crítico para el cobro (que ya aprobó): si falla, el cliente
-      // simplemente no queda con renovación automática. No se le alarma.
+          // simplemente no queda guardada. No se le alarma.
     }
   }, [objetivo])
 
@@ -1525,14 +1525,13 @@ export function PagoTokenCardnet({
 
       {!pasarelaNoDisponible && estado !== 'activacion' && (
         <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
-        {/* Fase 2: renovación automática, con interruptor. Solo antes de pagar. */}
+        {/* Guardar tarjeta, con consentimiento explícito y separado de la renovación. */}
         {(estado === 'listo' || estado === 'error') && (
           <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-colors hover:border-primary/30">
             <span className="text-sm">
-              <span className="font-semibold text-foreground">Renovación automática</span>
+              <span className="font-semibold text-foreground">Guardar esta tarjeta para futuras compras</span>
               <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-                Guarda tu tarjeta de forma encriptada y renueva sola cada período.
-                Puedes quitarla cuando quieras.
+                CardNET conserva el perfil de pago de forma segura. Este permiso no activa renovaciones automáticas.
               </span>
             </span>
             <span className="relative inline-flex shrink-0">
@@ -1544,7 +1543,7 @@ export function PagoTokenCardnet({
               />
               <span
                 className="block h-6 w-11 rounded-full bg-muted transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/40"
-                aria-hidden
+              aria-hidden
               />
               <span
                 className="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5"

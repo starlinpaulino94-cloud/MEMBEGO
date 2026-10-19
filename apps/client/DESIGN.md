@@ -51,7 +51,7 @@ The capture surface is one readable column, centered on larger viewports with a 
 
 ## 5. Components
 
-Reusable client primitives are composed from `Card`, `Button`, `Input`, `Badge`, `PageHeader`, and `EmptyState` in `apps/client/src/components/ui`. New payment controls should reuse those components and use the existing color, type, spacing, and radius tokens. The reusable payment components are `CardnetCapture`, `CardnetCaptureIntroduction`, `RenewalConsent`, `CardnetPaymentStatusMessage`, `CardnetCaptureError`, and `CardnetActivationForm` in `src/components/pagos/cardnet`; the hosted surface is platform-specific (`CaptureSurface.web.tsx` and `CaptureSurface.native.tsx`).
+Reusable client primitives are composed from `Card`, `Button`, `Input`, `Badge`, `PageHeader`, and `EmptyState` in `apps/client/src/components/ui`. New payment controls should reuse those components and use the existing color, type, spacing, and radius tokens. The reusable payment components are `CardnetCapture`, `CardnetCaptureIntroduction`, `SavedCardConsent`, `CardnetPaymentStatusMessage`, `CardnetCaptureError`, and `CardnetActivationForm` in `src/components/pagos/cardnet`; the hosted surface is platform-specific (`CaptureSurface.web.tsx` and `CaptureSurface.native.tsx`).
 
 ### CardNET capture form
 - **Structure**: `Card` with amount/currency summary, a provider-owned capture surface, and a `Button` that opens CardNET.

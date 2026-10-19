@@ -46,7 +46,7 @@ async function existingReservation(
   reservationKey: string,
   user: SessionUser,
   target: TargetInfo,
-  guardarRenovacion: boolean
+  guardarTarjeta: boolean
 ): Promise<CardnetReply | null> {
   const existing = await conEmpresa(target.companyId, (tx) =>
     tx.cardnetCaptureSession.findUnique({ where: { reservaClienteKey: reservationKey } })
@@ -74,7 +74,7 @@ async function existingReservation(
           venceAt: { gt: new Date() },
           captureNonce: existing.captureNonce,
         },
-        data: { captureNonce: hashNonce(nonce), guardarRenovacion },
+        data: { captureNonce: hashNonce(nonce), guardarTarjeta },
       })
     ).catch(() => ({ count: 0 }))
     if (resumed.count !== 1) return fail(409, 'El pago ya se está procesando. Intenta de nuevo.')
@@ -109,12 +109,12 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
   if (resolution.kind === 'missing') return fail(404, 'No se encontró el objetivo de pago.')
   if (resolution.kind === 'ineligible') return fail(409, 'El objetivo de pago ya no admite este cobro.')
   const target = resolution.target
-  if (parsed.data.guardarParaRenovacion && !target.allowRenewalConsent) {
-    return fail(409, 'El objetivo no admite guardar la tarjeta para renovaciones.')
+  if (parsed.data.guardarTarjeta && !target.allowSaveCard) {
+    return fail(409, 'El objetivo no admite guardar esta tarjeta.')
   }
   const reservationKey = cardnetReservationKey(target.companyId, target.clienteId)
-  const guardarRenovacion = parsed.data.guardarParaRenovacion ?? false
-  const cached = await existingReservation(reservationKey, user, target, guardarRenovacion)
+  const guardarTarjeta = parsed.data.guardarTarjeta ?? false
+  const cached = await existingReservation(reservationKey, user, target, guardarTarjeta)
   if (cached) return cached
 
   const config = getTokensPublicConfig()
@@ -139,13 +139,13 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
           monto: target.amount,
           reservaClienteKey: reservationKey,
           captureNonce: hashNonce(nonce),
-          guardarRenovacion,
+          guardarTarjeta,
           venceAt: expiresAt,
         },
       })
     )
   } catch {
-    const conflict = await existingReservation(reservationKey, user, target, guardarRenovacion)
+    const conflict = await existingReservation(reservationKey, user, target, guardarTarjeta)
     return conflict ?? fail(409, 'Ya hay un pago en proceso para este cliente.')
   }
 
@@ -158,7 +158,7 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
     currentTarget.target.compraId !== target.compraId ||
     currentTarget.target.planDestinoId !== target.planDestinoId ||
     currentTarget.target.amount !== target.amount ||
-    (parsed.data.guardarParaRenovacion && !currentTarget.target.allowRenewalConsent)
+    (parsed.data.guardarTarjeta && !currentTarget.target.allowSaveCard)
   ) {
     await failStartingSession(sessionId, target.companyId, user.supabaseId)
     return fail(409, 'El objetivo de pago cambió. Actualiza la pantalla e intenta de nuevo.')

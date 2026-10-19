@@ -31,7 +31,7 @@ export function CardnetCaptureIntroduction() {
   )
 }
 
-export function RenewalConsent({
+export function SavedCardConsent({
   checked,
   disabled = false,
   onChange,
@@ -44,7 +44,7 @@ export function RenewalConsent({
     <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked, disabled }}
-      accessibilityLabel="Guardar medio de pago para renovaciones automáticas"
+      accessibilityLabel="Guardar tarjeta para futuras compras"
       disabled={disabled}
       onPress={() => onChange(!checked)}
       className={`min-h-11 flex-row items-start gap-3 rounded-xl border px-3 py-3 ${checked ? 'border-primary/40 bg-primary/5' : 'border-border bg-card'} ${disabled ? 'opacity-60' : 'active:opacity-80'}`}
@@ -53,8 +53,8 @@ export function RenewalConsent({
         {checked ? <Check size={14} color={colors.surface.background} strokeWidth={3} /> : null}
       </View>
       <View className="flex-1">
-        <Text className="text-sm font-inter-semibold leading-5 text-foreground">Guardar para renovaciones automáticas</Text>
-        <Text className="mt-1 text-small leading-5 text-muted-foreground">CardNET puede conservar un perfil para procesar este pago. Si lo autorizas, lo usaremos para las renovaciones de esta membresía.</Text>
+        <Text className="text-sm font-inter-semibold leading-5 text-foreground">Guardar esta tarjeta para futuras compras</Text>
+        <Text className="mt-1 text-small leading-5 text-muted-foreground">Tu tarjeta se guardará de forma segura en CardNET. Este permiso no activa renovaciones automáticas.</Text>
       </View>
     </Pressable>
   )
