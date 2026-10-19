@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Sparkles } from 'lucide-react'
+import { formatPrice } from '@/lib/format'
 import type { MarketplaceSupplyOffer } from '@/modules/supply-v2/marketplace/read-model'
 
 function dinero(n: string, moneda: string): string {
@@ -24,8 +25,8 @@ export function OfertaMembegoCard({ oferta }: { oferta: MarketplaceSupplyOffer }
         <p className="text-h4 group-hover:underline">{oferta.title}</p>
         <p className="text-caption text-muted-foreground">{oferta.supplier}</p>
         <div className="mt-auto flex items-baseline gap-2 pt-2">
-          <span className="text-h3 tabular-nums" data-testid="oferta-card-precio">{dinero(oferta.salePrice, oferta.currency)}</span>
-          <span className="text-caption text-muted-foreground line-through tabular-nums">{dinero(oferta.publicPrice, oferta.currency)}</span>
+          <span className="text-h3 tabular-nums" data-testid="oferta-card-precio">{formatPrice(oferta.salePrice, { moneda: oferta.currency })}</span>
+          <span className="text-caption text-muted-foreground line-through tabular-nums">{formatPrice(oferta.publicPrice, { moneda: oferta.currency })}</span>
         </div>
         <p className="text-caption text-success">Ahorras {dinero(oferta.savings, oferta.currency)}</p>
       </div>

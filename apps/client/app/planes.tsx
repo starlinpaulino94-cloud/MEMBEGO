@@ -23,7 +23,7 @@ import {
 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { usePlanes } from '../src/hooks/usePlanes'
-import { formatMoney } from '../src/lib/format'
+import { formatPrice } from '../src/lib/format'
 import { cn } from '../src/lib/cn'
 import { Button } from '../src/components/ui/Button'
 import { Card } from '../src/components/ui/Card'
@@ -137,7 +137,7 @@ export function PlanCard({
         {/* Precio */}
         <View className="mt-3 items-baseline flex-row gap-1.5">
           <Text className="text-h1 font-inter-extrabold tabular-nums" style={{ color: companyColor }}>
-            {formatMoney(plan.precio)}
+            {formatPrice(plan.precio)}
           </Text>
           <Text className="text-small font-inter-medium text-muted-foreground">
             /mes
@@ -145,7 +145,7 @@ export function PlanCard({
         </View>
         {precioPorUso != null && (
           <Text className="mt-1 text-caption text-muted-foreground">
-            Equivale a {formatMoney(precioPorUso)} por uso
+            Equivale a {formatPrice(precioPorUso)} por uso
           </Text>
         )}
 
@@ -549,7 +549,7 @@ export default function PlanesScreen() {
                                       : {}),
                                   }}
                                   accessibilityRole="radio"
-                                  accessibilityLabel={`${plan.nombre}${esDestacado ? ' (Recomendado)' : ''}, ${formatMoney(plan.precio)}`}
+                                  accessibilityLabel={`${plan.nombre}${esDestacado ? ' (Recomendado)' : ''}, ${formatPrice(plan.precio)}`}
                                   accessibilityState={{ checked: seleccionado }}
                                 >
                                   {esDestacado && (
@@ -617,7 +617,7 @@ export default function PlanesScreen() {
                           : 'bg-transparent',
                       )}
                       accessibilityRole="tab"
-                      accessibilityLabel={`${plan.nombre}${esDestacado ? ' (Recomendado)' : ''}, ${formatMoney(plan.precio)}`}
+                      accessibilityLabel={`${plan.nombre}${esDestacado ? ' (Recomendado)' : ''}, ${formatPrice(plan.precio)}`}
                       accessibilityState={{ selected: active }}
                     >
                       {esDestacado && (

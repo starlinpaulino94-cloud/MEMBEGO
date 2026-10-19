@@ -30,7 +30,7 @@ import { Button } from '../../src/components/ui/Button'
 import { Card } from '../../src/components/ui/Card'
 import { EmptyState } from '../../src/components/ui/EmptyState'
 import { cn } from '../../src/lib/cn'
-import { formatMoney } from '../../src/lib/format'
+import { formatPrice } from '../../src/lib/format'
 import { brandColor } from '../../src/lib/brand-color'
 import { colors } from '../../src/theme/tokens'
 import { FlashOfferStatus, isFlashOffer } from '../../src/components/marketplace/FlashOfferStatus'
@@ -560,7 +560,7 @@ function PrecioYDescuento({ promotion }: { promotion: PromotionPublic }) {
   return (
     <View className="mt-4 flex-row items-baseline gap-3">
       <Text className="text-3xl font-inter-bold tabular-nums" style={{ color: brandColor(promotion.company.colorPrimario, colors.primary.DEFAULT) }}>
-        {formatMoney(precio)}
+        {formatPrice(precio)}
       </Text>
       {promotion.venta?.agotada ? (
         <View className="rounded-full bg-destructive/10 px-3 py-1">

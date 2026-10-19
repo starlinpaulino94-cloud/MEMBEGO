@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { BadgeCheck, CalendarClock, Sparkles, Users } from 'lucide-react'
+import { formatPrice } from '@/lib/format'
 import { rutaDePromociones, type Espacio } from '@/modules/comercio/rutas'
 import type { MarketplaceSupplyOffer } from '@/modules/supply-v2/marketplace/read-model'
 
@@ -38,8 +39,8 @@ export function FichaDeOfertaMembego({ o, espacio, ranuraCompra }: { o: Marketpl
         </div>
         <div className="space-y-3 rounded-xl border border-border bg-background p-4">
           <dl className="space-y-1 text-sm">
-            <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Precio regular</dt><dd className="line-through tabular-nums" data-testid="oferta-precio-regular">{dinero(o.publicPrice, o.currency)}</dd></div>
-            <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Precio Membego</dt><dd className="text-h2 tabular-nums" data-testid="oferta-precio-membego">{dinero(o.salePrice, o.currency)}</dd></div>
+            <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Precio regular</dt><dd className="line-through tabular-nums" data-testid="oferta-precio-regular">{formatPrice(o.publicPrice, { moneda: o.currency })}</dd></div>
+            <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Precio Membego</dt><dd className="text-h2 tabular-nums" data-testid="oferta-precio-membego">{formatPrice(o.salePrice, { moneda: o.currency })}</dd></div>
             <div className="flex items-baseline justify-between"><dt className="text-muted-foreground">Ahorras</dt><dd className="font-semibold text-success tabular-nums" data-testid="oferta-ahorro">{dinero(o.savings, o.currency)}</dd></div>
           </dl>
           {ranuraCompra}

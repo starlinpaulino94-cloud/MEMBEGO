@@ -5,7 +5,7 @@ import { ArrowRight, Clock, Star, Zap } from 'lucide-react-native'
 import { MarketplaceCard } from './MarketplaceCard'
 import { isFlashOffer } from './FlashOfferStatus'
 import { SavePromoButton } from '../cliente/SavePromoButton'
-import { formatMoney } from '../../lib/format'
+import { formatMoney, formatPrice } from '../../lib/format'
 import { colors } from '../../theme/tokens'
 import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
 import type { PromotionPublic } from '../../lib/api'
@@ -84,8 +84,8 @@ export function BenefitCard({ promotion, saved }: {
         </View>
         <Text className="mt-1 min-h-11 text-small font-inter-bold text-foreground" numberOfLines={2}>{promotion.titulo}</Text>
         <View className="mt-2 gap-1">
-          {price !== null && price > 0 && !expired ? (
-            <Text className="text-price-lg font-inter-bold text-foreground" numberOfLines={1}>{formatMoney(price)}</Text>
+          {price !== null && !expired ? (
+            <Text className="text-price-lg font-inter-bold text-foreground" numberOfLines={1}>{formatPrice(price)}</Text>
           ) : null}
           {expiresAt ? (
             <View className="flex-row items-center gap-1">

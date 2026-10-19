@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
+import { formatPrice } from '@/lib/format'
 import { fechaEditorialIso } from '@/modules/home/editor-contrato'
 import {
   archivarRevision,
@@ -284,7 +285,7 @@ export function EditorInicio({
         return previewPlanes.length > 0
           ? previewPlanes
               .slice(0, 2)
-              .map((p) => `${p.nombre} RD$${p.precio.toLocaleString('es-DO')}/mes`)
+              .map((p) => `${p.nombre} ${formatPrice(p.precio)}/mes`)
               .join(' + ')
           : 'Sin planes activos todavía'
       case 'BANNER_QR':
@@ -905,7 +906,7 @@ export function EditorInicio({
                   <ul className="mt-1 space-y-1">
                     {previewPlanes.slice(0, 2).map((p) => (
                       <li key={p.nombre} className="truncate text-label-sm text-muted-foreground">
-                        {p.nombre} · RD$ {p.precio.toLocaleString('es-DO')}/m
+                        {p.nombre} · {formatPrice(p.precio)}/m
                       </li>
                     ))}
                   </ul>

@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { CalendarDays, Crown, ArrowRight, Sparkles } from 'lucide-react'
 import { getUser } from '@/lib/auth'
 import { conEmpresa } from '@/lib/tenant'
-import { formatMoney, formatDate } from '@/lib/format'
+import { formatPrice, formatDate } from '@/lib/format'
 import { excursionesPublicas, companyIdPorSlug } from '@/modules/excursiones/catalogo/public-queries'
 import { getCompanyPublic } from '@/modules/marketplace/cached'
 
@@ -148,7 +148,7 @@ export default async function BienvenidaRefPage({ params }: BienvenidaRefPagePro
                   <div className="text-right">
                     {exc.precioDesde != null && (
                       <p className="text-sm font-semibold text-primary">
-                        {formatMoney(exc.precioDesde, { moneda: exc.moneda })}
+                        {formatPrice(exc.precioDesde, { moneda: exc.moneda })}
                       </p>
                     )}
                     <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground" />

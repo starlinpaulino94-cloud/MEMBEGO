@@ -5,7 +5,7 @@ import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import { sufijoPeriodo, textoVigencia } from '@/modules/planes/periodo'
 import { plural } from '@/lib/plural'
 import { prisma } from '@/lib/prisma'
@@ -178,7 +178,7 @@ export default async function PlanesPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-2xl font-bold">
-                  {formatMoney(Number(plan.precio), prefs)}
+                  {formatPrice(Number(plan.precio), prefs)}
                   {/* El «/mes» estaba escrito a mano aquí también, y esta
                       pantalla la lee el dueño del negocio: un plan anual se le
                       presentaba como mensual. Misma definición que usa el panel

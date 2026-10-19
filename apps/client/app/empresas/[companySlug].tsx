@@ -42,7 +42,7 @@ import { Button } from '../../src/components/ui/Button'
 import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 import { Skeleton } from '../../src/components/ui/Skeleton'
 import { cn } from '../../src/lib/cn'
-import { formatMoney } from '../../src/lib/format'
+import { formatMoney, formatPrice } from '../../src/lib/format'
 import { BackHeader } from '../../src/components/ui/BackHeader'
 import { colors } from '../../src/theme/tokens'
 import { CompanyProfileExtraSections } from '../../src/components/marketplace/CompanyProfileExtraSections'
@@ -467,7 +467,7 @@ function EmpresaDetalleScreenContent() {
                         </Text>
                         <View className="flex-row items-baseline gap-0.5">
                           <Text className="text-lg font-inter-bold tabular-nums" style={{ color: companyTextColor }}>
-                            {formatMoney(plan.precio)}
+                            {formatPrice(plan.precio)}
                           </Text>
                           <Text className="text-xs text-muted-foreground">
                             /mes
@@ -597,7 +597,7 @@ function EmpresaDetalleScreenContent() {
                           ) : null}
                           {(promo.venta?.precio ?? promo.precio) != null ? (
                             <Text className="text-sm font-inter-bold tabular-nums" style={{ color: companyTextColor }}>
-                              {formatMoney(promo.venta?.precio ?? promo.precio ?? 0)}
+                              {formatPrice(promo.venta?.precio ?? promo.precio ?? 0)}
                             </Text>
                           ) : null}
                           {promo.descuento ? (

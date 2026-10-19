@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import { ArrowRight, Clock, MapPin, Compass, Users } from 'lucide-react-native'
 import { cn } from '../../lib/cn'
-import { formatMoney } from '../../lib/format'
+import { formatPrice } from '../../lib/format'
 import { rnHref } from '../../lib/rutas'
 import type { ExcursionCardData } from '../../lib/api'
 
@@ -193,7 +193,7 @@ export function ExcursionCard({
           <View className="mt-3">
             <Text className="text-xs text-muted-foreground">Desde</Text>
             <Text className="text-2xl font-inter-bold text-foreground tabular-nums">
-              {formatMoney(excursion.precioDesde, { moneda: excursion.moneda || 'DOP' })}
+              {formatPrice(excursion.precioDesde, { moneda: excursion.moneda || 'DOP' })}
             </Text>
           </View>
         ) : null}

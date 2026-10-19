@@ -3,7 +3,7 @@
 import { rutaDeExcursion } from '@/modules/comercio/rutas'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import type { BuscadorUnificadoResult } from '@/modules/cliente/actions'
 import { Search, Tag, Compass, ChevronRight, X, AlertCircle, Clock, MapPin } from 'lucide-react'
 
@@ -146,7 +146,7 @@ export function BuscadorUnificado() {
                           {/* La promoción no lleva moneda propia: se usa el
                               formateador de la plataforma, con su moneda por
                               defecto. Antes leía `p.moneda`, que no existe. */}
-                          {p.precio ? `Desde ${formatMoney(p.precio)}` : 'Ver detalle'}
+                          {p.precio != null ? `Desde ${formatPrice(p.precio)}` : 'Ver detalle'}
                         </span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary capitalize">{p.tipo}</span>
                       </div>
@@ -229,7 +229,7 @@ export function BuscadorUnificado() {
                       </div>
                       {e.precioDesde != null && (
                         <p className="mt-2 text-sm font-semibold text-primary">
-                          Desde {new Intl.NumberFormat('es-DO', { style: 'currency', currency: e.moneda, minimumFractionDigits: 0 }).format(e.precioDesde)}
+                          Desde {formatPrice(e.precioDesde, { moneda: e.moneda })}
                         </p>
                       )}
                     </div>

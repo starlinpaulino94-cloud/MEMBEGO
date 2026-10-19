@@ -2,7 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { MapPin, Gift, Users, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 
 /**
  * BUSINESS CARD — la ÚNICA familia de tarjetas de negocio (DS 2.0 · Fase 4).
@@ -180,7 +180,7 @@ export function BusinessCard({
         {precio && (
           <div className="shrink-0 text-right">
             <p className="text-small font-bold tabular-nums text-primary">
-              {formatMoney(precio.precio)}
+              {formatPrice(precio.precio)}
             </p>
             <p className="text-caption">desde</p>
           </div>
@@ -257,7 +257,7 @@ export function BusinessCard({
         {precio && (
           <span className="mt-auto inline-flex w-fit items-center gap-1.5 rounded-full border border-border px-3 py-1 pt-1 text-label-md text-primary">
             {precio.nombre}
-            <span className="font-bold tabular-nums">{formatMoney(precio.precio)}</span>
+            <span className="font-bold tabular-nums">{formatPrice(precio.precio)}</span>
           </span>
         )}
       </div>

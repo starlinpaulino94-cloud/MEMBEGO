@@ -30,6 +30,7 @@ import {
 } from '@/modules/pagos/metodosDisponibles'
 import { getTokensPublicConfig } from '@/lib/payments/cardnet-tokens'
 import { misClienteIds } from '@/modules/cliente/afiliacion'
+import { formatPrice } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -223,7 +224,7 @@ export default async function MiCompraPage({
         <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 p-5 text-sm">
           <div>
             <p className="text-caption">Precio</p>
-            <p className="font-semibold text-foreground">{precio > 0 ? fmtRD(precio) : 'Gratis'}</p>
+            <p className="font-semibold text-foreground">{formatPrice(precio, null, 2)}</p>
           </div>
           <div>
             <p className="text-caption">Usos</p>
@@ -321,7 +322,7 @@ export default async function MiCompraPage({
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Tu compra de{' '}
-              <span className="font-semibold text-foreground">{fmtRD(precio)}</span> está
+              <span className="font-semibold text-foreground">{formatPrice(precio, null, 2)}</span> está
               reservada. {compra.company.name} está actualizando sus formas de pago; comunícate
               con el negocio para completarla.
             </p>
@@ -362,7 +363,7 @@ export default async function MiCompraPage({
                   metodosPago={metodosPago}
                 />
               }
-              montoTexto={fmtRD(precio)}
+              montoTexto={formatPrice(precio, null, 2)}
               tokensConfig={
                 tokensConfig
                   ? {

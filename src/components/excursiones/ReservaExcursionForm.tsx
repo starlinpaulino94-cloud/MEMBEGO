@@ -28,7 +28,7 @@ import { format, parseISO, addMonths, subMonths, getDaysInMonth, isSameMonth } f
 import { es } from 'date-fns/locale'
 import { reservarExcursion } from '@/modules/excursiones/reservas/cliente-actions'
 import { toggleSeguirEmpresa } from '@/modules/social/actions'
-import { formatMoney } from '@/lib/format'
+import { formatMoney, formatPrice } from '@/lib/format'
 import { useExcursionCart } from '@/components/excursiones/ExcursionCarritoContext'
 import {
   autoResolverItinerarioCombo,
@@ -605,7 +605,7 @@ export function ReservaExcursionForm({
       <h3 className="mb-1 text-h3 font-bold">Reservar</h3>
       {precioDesde != null && (
         <p className="mb-5 text-sm text-muted-foreground">
-          Desde {formatMoney(precioDesde, { moneda })}
+          Desde {formatPrice(precioDesde, { moneda })}
         </p>
       )}
 
@@ -628,7 +628,7 @@ export function ReservaExcursionForm({
             >
               {variantes.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.nombre} — {formatMoney(v.precioAdulto, { moneda })}
+                  {v.nombre} — {formatPrice(v.precioAdulto, { moneda })}
                 </option>
               ))}
             </select>
@@ -1403,7 +1403,7 @@ export function ReservaExcursionForm({
           <div className="space-y-1.5 text-xs text-muted-foreground">
             <div className="flex justify-between">
               <span>
-                {adultos} Adulto(s) × {formatMoney(precioAdulto, { moneda })}
+                {adultos} Adulto(s) × {formatPrice(precioAdulto, { moneda })}
               </span>
               <span className="font-medium text-foreground">
                 {formatMoney(adultos * precioAdulto, { moneda })}
@@ -1412,7 +1412,7 @@ export function ReservaExcursionForm({
             {ninos > 0 && (
               <div className="flex justify-between">
                 <span>
-                  {ninos} Niño(s) × {formatMoney(precioNino, { moneda })}
+                  {ninos} Niño(s) × {formatPrice(precioNino, { moneda })}
                 </span>
                 <span className="font-medium text-foreground">
                   {formatMoney(ninos * precioNino, { moneda })}

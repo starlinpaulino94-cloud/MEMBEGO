@@ -8,7 +8,7 @@ import {
   CreditCard,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { formatMoneyRD } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import { RetailSeccionHeader, RetailSeccionPie } from '@/components/cliente/inicio/RetailSeccion'
 import type { NovedadInicio } from '@/modules/social/queries'
 
@@ -71,7 +71,7 @@ function Dato({ n }: { n: NovedadInicio }) {
       <span className="min-w-0 truncate">
         {n.precio != null ? (
           <span className="text-price-sm tabular-nums text-primary">
-            {formatMoneyRD(n.precio)}
+            {formatPrice(n.precio)}
           </span>
         ) : null}
         {n.incluye ? (

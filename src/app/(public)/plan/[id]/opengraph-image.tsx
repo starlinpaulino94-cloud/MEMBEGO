@@ -1,4 +1,5 @@
 import { getPlanOg } from '@/modules/marketplace/cached'
+import { formatPrice } from '@/lib/format'
 import { OG_SIZE, tarjetaOg } from '@/lib/share/og'
 import { SITE_NAME } from '@/lib/site'
 
@@ -74,7 +75,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     )
   }
 
-  const precio = og.precio > 0 ? fmtRD(og.precio) : 'Gratis'
+  const precio = formatPrice(og.precio)
   const incluye = og.esIlimitado
     ? 'Servicios ilimitados'
     : `${og.lavadosIncluidos} servicio${og.lavadosIncluidos !== 1 ? 's' : ''} incluido${og.lavadosIncluidos !== 1 ? 's' : ''}`

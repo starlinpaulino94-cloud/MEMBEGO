@@ -233,7 +233,7 @@ export default async function FacturasPage({
                         ? fmtRD(Number(f.monto))
                         : f.tipo === 'SALE'
                           ? '—'
-                          : 'Gratis'}
+                          : 'GRATIS'}
                     </td>
                     <td className="px-4 py-3">
                       <span
