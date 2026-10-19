@@ -1,6 +1,7 @@
 import 'server-only'
 import { conEmpresa } from '@/lib/tenant'
 import { consultarClienteCardnet, consultarComprasCardnet } from '@/lib/payments/cardnet-tokens'
+import { referenciaCobro } from '@/lib/payments/cardnet-tokens-core'
 import { guardarTarjeta } from '@/modules/pagos/cardnetTokenGuardado'
 import type { PerfilPagoCardnet } from '@/lib/payments/cardnet-tokens-core'
 import { confirmarIntento, reintentarEntrega } from '@/modules/pagos/intentos'
@@ -52,14 +53,14 @@ export async function searchPurchase(session: LoadedCardnetSession): Promise<{
     customerId: session.customerId,
     from: orderDate(new Date(session.createdAt.getTime() - 24 * 60 * 60 * 1000)),
     to: orderDate(new Date(now.getTime() + 24 * 60 * 60 * 1000)),
-    orderNumber: session.purchaseIntent.cardnetUniqueId,
+    orderNumber: referenciaCobro(session.purchaseIntent.id),
   }).catch(() => null)
   if (!result?.ok) return pending
   const rows = purchaseList(result.json)
   if (!rows) return pending
   const exact = matchingPurchases(rows, {
     customerId: session.customerId,
-    orderNumber: session.purchaseIntent.cardnetUniqueId,
+    orderNumber: referenciaCobro(session.purchaseIntent.id),
     uniqueId: session.purchaseIntent.cardnetUniqueId,
     from: new Date(session.createdAt.getTime() - 24 * 60 * 60 * 1000),
     to: new Date(now.getTime() + 24 * 60 * 60 * 1000),

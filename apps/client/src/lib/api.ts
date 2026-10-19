@@ -28,6 +28,7 @@ export interface SavedPaymentCard {
   readonly createdAt: string
   readonly predeterminada: boolean
   readonly eliminacionPendiente: boolean
+  readonly vencida: boolean
 }
 
 function getApiBaseUrl(): string {
@@ -1386,11 +1387,16 @@ export const api = {
       input.kind === 'membership'
         ? {
             membershipId: input.membershipId,
+            ...(input.tarjetaGuardadaId ? { tarjetaGuardadaId: input.tarjetaGuardadaId } : {}),
             ...(input.guardarTarjeta === undefined
               ? {}
               : { guardarTarjeta: input.guardarTarjeta }),
           }
-        : { compraId: input.compraId }
+        : {
+            compraId: input.compraId,
+            ...(input.tarjetaGuardadaId ? { tarjetaGuardadaId: input.tarjetaGuardadaId } : {}),
+            ...(input.guardarTarjeta ? { guardarTarjeta: true } : {}),
+          }
 
     return parseCardnetResponse(
       postJson<unknown>('/api/v1/cliente/pagos/cardnet/sesion', body),

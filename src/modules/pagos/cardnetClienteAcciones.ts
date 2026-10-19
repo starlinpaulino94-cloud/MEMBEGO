@@ -225,7 +225,13 @@ export async function activarPerfilSesionCardnet(
     updatedAt: claimAt,
   }
   const profile = await getProfileForCharge(activationSession)
-  if (!profile?.token) return success(202, { status: 'pending' })
+  if (!profile?.token) {
+    if (session.capturadoAt === null) {
+      await setActivationClaimState(activationSession, CARDNET_SESSION_STATES.FAILED, { reservaClienteKey: null })
+      return success(200, { status: 'expired' })
+    }
+    return success(202, { status: 'pending' })
+  }
   const currentClaim = await renewActivationClaim(activationSession)
   if (!currentClaim) return success(202, { status: 'pending' })
   if (!profile.habilitado) {

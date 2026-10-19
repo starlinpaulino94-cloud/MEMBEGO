@@ -61,10 +61,13 @@ export type CardnetSessionTarget =
       readonly kind: 'membership'
       readonly membershipId: string
       readonly guardarTarjeta?: boolean
+      readonly tarjetaGuardadaId?: string
     }
   | {
       readonly kind: 'promotion'
       readonly compraId: string
+      readonly tarjetaGuardadaId?: string
+      readonly guardarTarjeta?: boolean
     }
 
 export type CardnetCaptureSession = z.infer<typeof cardnetCaptureSessionSchema>

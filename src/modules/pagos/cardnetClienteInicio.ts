@@ -7,6 +7,8 @@ import {
   consultarClienteCardnet,
 } from '@/lib/payments/cardnet-tokens'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
+import { tarjetaCardnetVencida } from '@/modules/pagos/cardnet-expiracion'
+import { chargeWithProfile, getProfileForCharge } from '@/modules/pagos/cardnetClienteCaptura'
 import {
   CARDNET_SESSION_STATES,
   cardnetReservationKey,
@@ -46,7 +48,8 @@ async function existingReservation(
   reservationKey: string,
   user: SessionUser,
   target: TargetInfo,
-  guardarTarjeta: boolean
+  guardarTarjeta: boolean,
+  tarjetaGuardadaId?: string
 ): Promise<CardnetReply | null> {
   const existing = await conEmpresa(target.companyId, (tx) =>
     tx.cardnetCaptureSession.findUnique({ where: { reservaClienteKey: reservationKey } })
@@ -64,6 +67,10 @@ async function existingReservation(
     existing.estado === CARDNET_SESSION_STATES.CAPTURE_OPEN &&
     existing.venceAt > new Date()
   ) {
+    if (tarjetaGuardadaId) {
+      await expireSession(existing.id, target.companyId, user.supabaseId)
+      return null
+    }
     const nonce = randomBytes(32).toString('base64url')
     const resumed = await conEmpresa(target.companyId, (tx) =>
       tx.cardnetCaptureSession.updateMany({
@@ -109,18 +116,105 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
   if (resolution.kind === 'missing') return fail(404, 'No se encontró el objetivo de pago.')
   if (resolution.kind === 'ineligible') return fail(409, 'El objetivo de pago ya no admite este cobro.')
   const target = resolution.target
+  if (parsed.data.tarjetaGuardadaId && parsed.data.guardarTarjeta) {
+    return fail(400, 'Elige una tarjeta guardada o autoriza guardar una nueva, no ambas opciones.')
+  }
   if (parsed.data.guardarTarjeta && !target.allowSaveCard) {
     return fail(409, 'El objetivo no admite guardar esta tarjeta.')
   }
   const reservationKey = cardnetReservationKey(target.companyId, target.clienteId)
   const guardarTarjeta = parsed.data.guardarTarjeta ?? false
-  const cached = await existingReservation(reservationKey, user, target, guardarTarjeta)
+  const cached = await existingReservation(reservationKey, user, target, guardarTarjeta, parsed.data.tarjetaGuardadaId)
   if (cached) return cached
 
   const config = getTokensPublicConfig()
-  if (!config || !(await puedeCobrarToken(target.companyId).catch(() => false))) {
+  if ((!parsed.data.tarjetaGuardadaId && !config) || !(await puedeCobrarToken(target.companyId).catch(() => false))) {
     return fail(502, 'El pago con tarjeta no está disponible.')
   }
+
+  if (parsed.data.tarjetaGuardadaId) {
+    const card = await conEmpresa(target.companyId, (tx) =>
+      tx.tarjetaTokenizada.findFirst({
+        where: {
+          id: parsed.data.tarjetaGuardadaId,
+          companyId: target.companyId,
+          clienteId: target.clienteId,
+          customerId: target.cardnetCustomerId ?? undefined,
+          proveedorCuenta: 'CARDNET',
+          activa: true,
+          eliminacionPendiente: false,
+        },
+        select: { id: true, customerId: true, paymentProfileId: true, vencMes: true, vencAnio: true },
+      })
+    ).catch(() => null)
+    if (!card?.paymentProfileId || !target.cardnetCustomerId || card.customerId !== target.cardnetCustomerId) {
+      return fail(404, 'No se encontró una tarjeta disponible para este cliente.')
+    }
+    if (tarjetaCardnetVencida(card.vencMes, card.vencAnio)) {
+      return fail(409, 'La tarjeta guardada está vencida. Elige otra tarjeta o agrega una nueva.')
+    }
+
+    const sessionId = randomBytes(24).toString('hex')
+    try {
+      await conEmpresa(target.companyId, (tx) =>
+        tx.cardnetCaptureSession.create({
+          data: {
+            id: sessionId,
+            authSubject: user.supabaseId,
+            companyId: target.companyId,
+            clienteId: target.clienteId,
+            membershipId: target.membershipId ?? null,
+            compraId: target.compraId ?? null,
+            planDestinoId: target.planDestinoId ?? null,
+            monto: target.amount,
+            customerId: card.customerId,
+            paymentProfileId: card.paymentProfileId,
+            reservaClienteKey: reservationKey,
+            estado: CARDNET_SESSION_STATES.PROFILE_PENDING,
+            guardarTarjeta: false,
+            venceAt: new Date(Date.now() + CAPTURE_TTL_MS),
+          },
+        })
+      )
+    } catch {
+      const conflict = await existingReservation(reservationKey, user, target, false, parsed.data.tarjetaGuardadaId)
+      return conflict ?? fail(409, 'Ya hay un pago en proceso para este cliente.')
+    }
+
+    const currentTarget = await resolveTarget(user, parsed.data)
+    if (
+      currentTarget.kind !== 'ready' ||
+      currentTarget.target.companyId !== target.companyId ||
+      currentTarget.target.clienteId !== target.clienteId ||
+      currentTarget.target.amount !== target.amount
+    ) {
+      await conEmpresa(target.companyId, (tx) => tx.cardnetCaptureSession.updateMany({
+        where: { id: sessionId, authSubject: user.supabaseId, estado: CARDNET_SESSION_STATES.PROFILE_PENDING },
+        data: { estado: CARDNET_SESSION_STATES.FAILED, reservaClienteKey: null },
+      }))
+      return fail(409, 'El objetivo de pago cambió. Actualiza la pantalla e intenta de nuevo.')
+    }
+    const session = await loadSession(sessionId, user.supabaseId)
+    if (!session) return fail(502, 'No se pudo iniciar el pago con la pasarela.')
+    const profile = await getProfileForCharge(session)
+    if (!profile?.token) {
+      await conEmpresa(target.companyId, (tx) => tx.cardnetCaptureSession.updateMany({
+        where: { id: sessionId, authSubject: user.supabaseId, estado: CARDNET_SESSION_STATES.PROFILE_PENDING },
+        data: { estado: CARDNET_SESSION_STATES.FAILED, reservaClienteKey: null },
+      }))
+      return fail(409, 'La tarjeta ya no está disponible en CardNET. Actualiza tus tarjetas e intenta de nuevo.')
+    }
+    if (!profile.habilitado) {
+      await conEmpresa(target.companyId, (tx) => tx.cardnetCaptureSession.updateMany({
+        where: { id: sessionId, authSubject: user.supabaseId, estado: CARDNET_SESSION_STATES.PROFILE_PENDING },
+        data: { estado: CARDNET_SESSION_STATES.ACTIVATION_REQUIRED },
+      }))
+      return success(200, { status: 'processing', sessionId })
+    }
+    await chargeWithProfile(session, profile, request)
+    return success(200, { status: 'processing', sessionId })
+  }
+  if (!config) return fail(502, 'El pago con tarjeta no está disponible.')
 
   const sessionId = randomBytes(24).toString('hex')
   const nonce = randomBytes(32).toString('base64url')

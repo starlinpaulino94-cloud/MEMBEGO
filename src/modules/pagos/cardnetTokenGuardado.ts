@@ -10,6 +10,7 @@ import {
   borrarPerfilCardnet,
 } from '@/lib/payments/cardnet-tokens'
 import { cifrarTokenCardnet, descifrarTokenCardnet } from '@/lib/payments/cardnet-vault'
+import { tarjetaCardnetVencida } from '@/modules/pagos/cardnet-expiracion'
 
 /**
  * FASE 2 — TARJETA GUARDADA Y RENOVACIÓN AUTOMÁTICA (CardNET tokenización).
@@ -132,7 +133,7 @@ export async function guardarTarjeta(input: GuardarTarjetaInput) {
 
 /** Tarjetas activas del cliente (para "Mis tarjetas"). Nunca expone el token. */
 export async function listarTarjetasCliente(clienteId: string, companyId: string) {
-  return conEmpresa(companyId, (tx) =>
+  const tarjetas = await conEmpresa(companyId, (tx) =>
     tx.tarjetaTokenizada.findMany({
       where: { clienteId, companyId, OR: [{ activa: true }, { eliminacionPendiente: true }] },
       select: {
@@ -148,6 +149,10 @@ export async function listarTarjetasCliente(clienteId: string, companyId: string
       orderBy: { createdAt: 'desc' },
     })
   )
+  return tarjetas.map((tarjeta) => ({
+    ...tarjeta,
+    vencida: tarjetaCardnetVencida(tarjeta.vencMes, tarjeta.vencAnio),
+  }))
 }
 
 /** Marca una tarjeta como predeterminada sin exponer ni aceptar referencias CardNET. */
@@ -155,9 +160,9 @@ export async function establecerTarjetaPredeterminada(id: string, clienteId: str
   return conEmpresa(companyId, async (tx) => {
     const tarjeta = await tx.tarjetaTokenizada.findFirst({
       where: { id, clienteId, companyId, activa: true, eliminacionPendiente: false },
-      select: { id: true },
+      select: { id: true, vencMes: true, vencAnio: true },
     })
-    if (!tarjeta) return false
+    if (!tarjeta || tarjetaCardnetVencida(tarjeta.vencMes, tarjeta.vencAnio)) return false
     await tx.tarjetaTokenizada.updateMany({
       where: { clienteId, companyId, activa: true, predeterminada: true },
       data: { predeterminada: false },
@@ -273,6 +278,9 @@ export async function renovarMembresiaPorTarjeta(
   if (!m) return { estado: 'omitida', motivo: 'Membresía no encontrada.' }
   if (!m.autoRenovar || !m.tarjetaTokenizada || !m.tarjetaTokenizada.activa) {
     return { estado: 'omitida', motivo: 'Sin renovación automática o sin tarjeta activa.' }
+  }
+  if (tarjetaCardnetVencida(m.tarjetaTokenizada.vencMes, m.tarjetaTokenizada.vencAnio)) {
+    return { estado: 'omitida', motivo: 'La tarjeta guardada está vencida.' }
   }
   if (!(await puedeCobrarToken(m.companyId))) {
     return { estado: 'omitida', motivo: 'La pasarela no está disponible para esta empresa.' }

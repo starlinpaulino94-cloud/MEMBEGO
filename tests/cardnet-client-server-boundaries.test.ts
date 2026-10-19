@@ -13,6 +13,7 @@ interface Scenario {
   authUser: SessionUser
   membership: Row | null
   purchase: Row | null
+  savedCard: Row | null
   sessions: Map<string, Row>
   reservations: Map<string, Row>
   intents: Map<string, Row>
@@ -35,7 +36,7 @@ interface Scenario {
   purchaseSearchResponses?: Array<unknown | null>
   intentCreates: number
   chargeResults: Array<unknown | null>
-  chargeRequests: Array<{ readonly purchaseUniqueId: unknown; readonly order: unknown; readonly amount: unknown; readonly token?: unknown }>
+  chargeRequests: Array<{ readonly purchaseUniqueId: unknown; readonly order: unknown; readonly amount: unknown; readonly token?: unknown; readonly environment?: unknown }>
   confirmationResult?: unknown
   confirmationResults?: unknown[]
   onConfirmIntent?: () => void
@@ -87,7 +88,7 @@ function setup(): Scenario {
       supabaseId: 'qa-user', email: 'qa@example.test',
       metadata: { role: 'CLIENTE', dbUserId: 'qa-db-user', clienteId: 'qa-client', companyId: 'qa-company' },
     },
-    membership: null, purchase: null, sessions: new Map(), reservations: new Map(), intents: new Map(),
+    membership: null, purchase: null, savedCard: null, sessions: new Map(), reservations: new Map(), intents: new Map(),
     config: { captureUrl: 'https://lab.cardnet.com.do', scriptUrl: 'https://tr-tsp-test.gtp-seglan.com/widget.js', publicKey: 'sandbox-public' },
     customerResponse: { denegado: false, email: 'qa@example.test', captureUrl: 'https://lab.cardnet.com.do', uniqueId: 'temporary-customer-id', perfiles: [] },
     searchResponse: { ok: true, json: { Response: { Purchases: [] } } },
@@ -134,8 +135,8 @@ function setup(): Scenario {
         if (s.reservations.has(key)) throw new Error('unique reservation constraint')
         const client = s.membership?.cliente
         const cliente = client && typeof client === 'object' ? client as Row : {}
-        const row: Row = { ...input.data, estado: 'STARTING', createdAt: new Date(), updatedAt: new Date(),
-          cliente: { email: cliente.email ?? 'qa@example.test', cardnetCustomerId: null }, purchaseIntent: null }
+        const row: Row = { purchaseIntentId: null, capturadoAt: null, ...input.data, estado: input.data.estado ?? 'STARTING', createdAt: new Date(), updatedAt: new Date(),
+          cliente: { email: cliente.email ?? 'qa@example.test', cardnetCustomerId: cliente.cardnetCustomerId ?? null }, purchaseIntent: null }
         s.sessions.set(String(row.id), row); s.reservations.set(key, row); return row
       },
       updateMany: async (input: { where: Row; data: Row }) => {
@@ -166,7 +167,10 @@ function setup(): Scenario {
       },
       updateMany: async () => ({ count: 1 }),
     },
-    tarjetaTokenizada: { upsert: async () => ({ id: 'tokenized-card-test' }) },
+    tarjetaTokenizada: {
+      upsert: async () => ({ id: 'tokenized-card-test' }),
+      findFirst: async (input: { where: Row }) => s.savedCard && matches(s.savedCard, input.where) ? s.savedCard : null,
+    },
   }
   Object.assign(globalThis, { __cardnetServiceScenario: s })
   return s
@@ -212,6 +216,77 @@ test('a foreign membership is hidden before CardNET is called', async () => {
   assert.equal(result.status, 404)
   assert.equal(s.targetReads, 1)
   assert.equal(s.providerCalls, 0)
+})
+
+test('a saved-card purchase charges only the owned active profile through the audited intent', async () => {
+  const s = setup()
+  s.membership = membership()
+  const client = s.membership.cliente as Row
+  client.cardnetCustomerId = 'cardnet-customer-test'
+  s.savedCard = {
+    id: 'saved-card-1', companyId: 'qa-company', clienteId: 'qa-client',
+    customerId: 'cardnet-customer-test', paymentProfileId: 'profile-saved',
+    proveedorCuenta: 'CARDNET', activa: true, eliminacionPendiente: false,
+    vencMes: 12, vencAnio: new Date().getFullYear() + 1,
+  }
+  s.customerResponse = {
+    denegado: false, email: 'qa@example.test',
+    perfiles: [{ paymentProfileId: 'profile-saved', token: 'saved-profile-token', habilitado: true }],
+  }
+  const api = await service()
+  const result = await api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
+    membershipId: 'membership-test', tarjetaGuardadaId: 'saved-card-1',
+  })
+  assert.equal(result.status, 200)
+  assert.equal(result.body.status, 'processing')
+  assert.equal(s.chargeCalls, 1, JSON.stringify({ state: [...s.sessions.values()][0]?.estado, customerGets: s.customerGets, intentCreates: s.intentCreates, profile: s.customerResponse.perfiles }))
+  assert.equal(s.intentCreates, 1)
+  assert.equal(s.chargeRequests[0]?.token, 'saved-profile-token')
+  assert.equal(s.chargeRequests[0]?.environment, 'Ecommerce_COF')
+  assert.equal(typeof s.chargeRequests[0]?.purchaseUniqueId, 'string')
+  assert.equal([...s.sessions.values()][0]?.estado, 'PURCHASE_PENDING')
+})
+
+test('an expired saved card is rejected before creating a payment session or charging', async () => {
+  const s = setup()
+  s.membership = membership()
+  const client = s.membership.cliente as Row
+  client.cardnetCustomerId = 'cardnet-customer-test'
+  const previousMonth = new Date()
+  previousMonth.setMonth(previousMonth.getMonth() - 2)
+  s.savedCard = {
+    id: 'saved-card-expired', companyId: 'qa-company', clienteId: 'qa-client',
+    customerId: 'cardnet-customer-test', paymentProfileId: 'profile-expired',
+    proveedorCuenta: 'CARDNET', activa: true, eliminacionPendiente: false,
+    vencMes: previousMonth.getMonth() + 1, vencAnio: previousMonth.getFullYear(),
+  }
+  const api = await service()
+  const result = await api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
+    membershipId: 'membership-test', tarjetaGuardadaId: 'saved-card-expired',
+  })
+  assert.equal(result.status, 409)
+  assert.equal(s.sessions.size, 0)
+  assert.equal(s.chargeCalls, 0)
+})
+
+test('a saved card belonging to another customer is hidden before CardNET lookup', async () => {
+  const s = setup()
+  s.membership = membership()
+  ;(s.membership.cliente as Row).cardnetCustomerId = 'cardnet-customer-test'
+  s.savedCard = {
+    id: 'foreign-saved-card', companyId: 'qa-company', clienteId: 'another-client',
+    customerId: 'cardnet-customer-test', paymentProfileId: 'profile-foreign',
+    proveedorCuenta: 'CARDNET', activa: true, eliminacionPendiente: false,
+    vencMes: 12, vencAnio: new Date().getFullYear() + 1,
+  }
+  const api = await service()
+  const result = await api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
+    membershipId: 'membership-test', tarjetaGuardadaId: 'foreign-saved-card',
+  })
+  assert.equal(result.status, 404)
+  assert.equal(s.customerGets, 0)
+  assert.equal(s.chargeCalls, 0)
+  assert.equal(s.sessions.size, 0)
 })
 
 test('a foreign promotion purchase is hidden before CardNET is called or reserved', async () => {
@@ -1047,7 +1122,7 @@ test('a stale activation result cannot reopen a session approved by another hand
     json: {
       Response: {
         Purchases: [{
-          OrderNumber: stableUniqueId,
+          OrderNumber: 'entpersisted',
           UniqueID: stableUniqueId,
           CustomerId: 'cardnet-customer-test',
           Created: new Date().toISOString(),
@@ -1085,7 +1160,7 @@ test('a stale activation result cannot reopen a session approved by another hand
     json: {
       Response: {
         Purchases: [{
-          OrderNumber: stableUniqueId,
+          OrderNumber: 'entpersisted',
           UniqueID: stableUniqueId,
           CustomerId: 'cardnet-customer-test',
           Created: new Date().toISOString(),
@@ -1113,7 +1188,7 @@ test('a stale pending search cannot invalidate a concurrent approved transition'
     json: {
       Response: {
         Purchases: [{
-          OrderNumber: 'stable-purchase-key',
+          OrderNumber: 'entpersisted',
           UniqueID: 'stable-purchase-key',
           CustomerId: 'cardnet-customer-test',
           Created: new Date().toISOString(),
@@ -1173,7 +1248,7 @@ test('an in-flight fulfillment result does not leave a completed payment pending
     json: {
       Response: {
         Purchases: [{
-          OrderNumber: 'stable-purchase-key',
+          OrderNumber: 'entpersisted',
           UniqueID: 'stable-purchase-key',
           CustomerId: 'cardnet-customer-test',
           Created: new Date().toISOString(),
@@ -1247,7 +1322,7 @@ test('a delayed CardNET POST cannot reopen an approved session after stale recon
     json: {
       Response: {
         Purchases: [{
-          OrderNumber: 'stable-purchase-key',
+          OrderNumber: 'entpersisted',
           UniqueID: 'stable-purchase-key',
           CustomerId: 'cardnet-customer-test',
           Created: new Date().toISOString(),
@@ -1370,7 +1445,7 @@ test('a fulfillment-pending session reconciles approval when local intent confir
     json: {
       Response: {
         Purchases: [{
-          OrderNumber: 'stable-purchase-key',
+          OrderNumber: 'entpersisted',
           UniqueID: 'stable-purchase-key',
           CustomerId: 'cardnet-customer-test',
           Created: new Date().toISOString(),

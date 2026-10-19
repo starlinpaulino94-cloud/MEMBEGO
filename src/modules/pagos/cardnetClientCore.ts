@@ -9,6 +9,7 @@ export const cardnetSessionInputSchema = z
     membershipId: idSchema.optional(),
     compraId: idSchema.optional(),
     guardarTarjeta: z.boolean().optional(),
+    tarjetaGuardadaId: idSchema.optional(),
   })
   .strict()
   .superRefine((input, ctx) => {

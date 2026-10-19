@@ -60,6 +60,32 @@ test('Purchase with an unknown network outcome is not retried against another AP
   assert.match(requests[0] ?? '', /^https:\/\/lab\.cardnet\.com\.do\//)
 })
 
+test('Saved-card purchase sends the stable idempotency key and archived-credential context', async () => {
+  process.env.CARDNET_TOKENS_PUBLIC_KEY = 'qa-public-key'
+  process.env.CARDNET_TOKENS_PRIVATE_KEY = 'qa-private-key'
+  process.env.CARDNET_TOKENS_AMBIENTE = 'pruebas'
+  const requests: Array<{ url: string; body: Record<string, unknown> }> = []
+  globalThis.fetch = async (input, init) => {
+    requests.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> })
+    return new Response(JSON.stringify({ Response: {}, Errors: [] }), { status: 200 })
+  }
+
+  const { cobrarConCredencialGuardada } = await import('../src/lib/payments/cardnet-tokens')
+  await cobrarConCredencialGuardada({
+    customerId: '12345', paymentProfileId: '67890', token: 'qa-profile-token',
+    pesos: 1250, orden: 'intent-123', clienteIp: '127.0.0.1', purchaseUniqueId: 'stable-unique-id',
+  })
+
+  const purchase = requests.find((request) => request.url.endsWith('/Purchase'))
+  assert.ok(purchase)
+  assert.equal(purchase.body.CustomerId, '12345')
+  assert.equal(purchase.body.PaymentProfileId, '67890')
+  assert.equal(purchase.body.TrxToken, 'qa-profile-token')
+  assert.equal(purchase.body.UniqueID, 'stable-unique-id')
+  assert.equal(purchase.body.Environment, 'Ecommerce_COF')
+  assert.equal(purchase.body.Amount, 125000)
+})
+
 test('PaymentProfileDelete sends the documented numeric id using Basic user authentication', async () => {
   const publicKey = 'qa-public-key'
   const privateKey = 'qa-private-key'

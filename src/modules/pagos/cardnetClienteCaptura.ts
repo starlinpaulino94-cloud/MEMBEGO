@@ -1,6 +1,8 @@
 import 'server-only'
 import type { PerfilPagoCardnet } from '@/lib/payments/cardnet-tokens-core'
-import { cobrarConToken, consultarClienteCardnet } from '@/lib/payments/cardnet-tokens'
+import { cobrarConCredencialGuardada, cobrarConToken, consultarClienteCardnet } from '@/lib/payments/cardnet-tokens'
+import { conEmpresa } from '@/lib/tenant'
+import { tarjetaCardnetVencida } from '@/modules/pagos/cardnet-expiracion'
 import {
   CARDNET_SESSION_STATES,
   purchaseDecision,
@@ -37,6 +39,23 @@ export async function getProfileForCharge(
   session: LoadedCardnetSession
 ): Promise<PerfilPagoCardnet | null> {
   if (!session.customerId || !session.paymentProfileId) return null
+  if (session.capturadoAt === null) {
+    const card = await conEmpresa(session.companyId, (tx) =>
+      tx.tarjetaTokenizada.findFirst({
+        where: {
+          companyId: session.companyId,
+          clienteId: session.clienteId,
+          customerId: session.customerId!,
+          paymentProfileId: session.paymentProfileId!,
+          proveedorCuenta: 'CARDNET',
+          activa: true,
+          eliminacionPendiente: false,
+        },
+        select: { vencMes: true, vencAnio: true },
+      })
+    ).catch(() => null)
+    if (!card || tarjetaCardnetVencida(card.vencMes, card.vencAnio)) return null
+  }
   const customer = await consultarClienteCardnet(session.customerId).catch(() => null)
   if (
     !customer ||
@@ -71,14 +90,25 @@ export async function chargeWithProfile(
     return success(202, { status: 'pending' })
   }
   const ip = requestIp(request)
-  const charge = await cobrarConToken({
-    trxToken: profile.token,
-    pesos: Number(purchaseSession.monto),
-    orden: currentIntent.id,
-    clienteIp: ip,
-    customerId: purchaseSession.customerId ?? undefined,
-    purchaseUniqueId: currentIntent.cardnetUniqueId,
-  }).catch(() => null)
+  const savedCardCheckout = purchaseSession.capturadoAt === null
+  const charge = savedCardCheckout
+    ? await cobrarConCredencialGuardada({
+        customerId: purchaseSession.customerId!,
+        paymentProfileId: purchaseSession.paymentProfileId,
+        token: profile.token,
+        pesos: Number(purchaseSession.monto),
+        orden: currentIntent.id,
+        clienteIp: ip,
+        purchaseUniqueId: currentIntent.cardnetUniqueId,
+      }).catch(() => null)
+    : await cobrarConToken({
+        trxToken: profile.token,
+        pesos: Number(purchaseSession.monto),
+        orden: currentIntent.id,
+        clienteIp: ip,
+        customerId: purchaseSession.customerId ?? undefined,
+        purchaseUniqueId: currentIntent.cardnetUniqueId,
+      }).catch(() => null)
   if (!charge) {
     const latest = await loadSession(purchaseSession.id, purchaseSession.authSubject)
     if (!latest) return success(202, { status: 'pending' })
@@ -133,6 +163,22 @@ export async function progressCapture(
     const associated = await associateApprovedCard(session)
     return associated ? success(200, { status: 'approved' }) : success(202, { status: 'pending' })
   }
+  if (
+    session.estado === CARDNET_SESSION_STATES.PROFILE_PENDING &&
+    session.capturadoAt === null &&
+    session.paymentProfileId
+  ) {
+    const profile = await getProfileForCharge(session)
+    if (!profile?.token) {
+      await setSessionState(session, CARDNET_SESSION_STATES.FAILED, { reservaClienteKey: null })
+      return success(200, { status: 'expired' })
+    }
+    if (!profile.habilitado) {
+      await setSessionState(session, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
+      return success(200, { status: 'activation_required' })
+    }
+    return chargeWithProfile(session, profile, request)
+  }
   if (session.estado === CARDNET_SESSION_STATES.ACTIVATION_PROCESSING) {
     if (Date.now() - session.updatedAt.getTime() < ACTIVATION_CLAIM_STALE_MS) {
       return success(202, { status: 'pending' })
@@ -141,7 +187,13 @@ export async function progressCapture(
     const claimed = await loadSession(session.id, session.authSubject)
     if (!claimed) return success(202, { status: 'pending' })
     const profile = await getProfileForCharge(claimed)
-    if (!profile) return success(202, { status: 'pending' })
+    if (!profile) {
+      if (claimed.capturadoAt === null) {
+        await setActivationClaimState(claimed, CARDNET_SESSION_STATES.FAILED, { reservaClienteKey: null })
+        return success(200, { status: 'expired' })
+      }
+      return success(202, { status: 'pending' })
+    }
     if (!profile.habilitado) {
       const required = await setActivationClaimState(claimed, CARDNET_SESSION_STATES.ACTIVATION_REQUIRED)
       return required ? success(200, { status: 'activation_required' }) : success(202, { status: 'pending' })

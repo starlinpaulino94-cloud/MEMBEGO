@@ -13,6 +13,7 @@ import {
 } from '@/lib/payments/cardnet-widget'
 import { normalizarCodigoActivacion } from '@/lib/payments/cardnet-tokens-core'
 import { Button } from '@/components/ui/button'
+import { PagoCardnetGuardada } from '@/components/membresia/PagoCardnetGuardada'
 
 /**
  * Pago con tarjeta HOSPEDADO por CardNET (tokenización).
@@ -262,6 +263,20 @@ export function PagoTokenCardnet({
       referencia: data.compraId ?? data.membershipId ?? null,
       cuando: new Date(),
     })
+  }, [])
+
+  const pagoGuardadoAprobado = useCallback(() => {
+    setEstado('aprobado')
+    anotarComprobante('compraId' in objetivo ? { compraId: objetivo.compraId } : { membershipId: objetivo.membershipId })
+    toast.success(`¡Pago aprobado! Tu ${producto} está activa.`)
+    if (urlExito) router.push(urlExito)
+    else router.refresh()
+  }, [anotarComprobante, objetivo, producto, router, urlExito])
+
+  const prepararPagoGuardado = useCallback(() => {
+    sesionRef.current = null
+    capturaActivaRef.current = null
+    customerIdRef.current = null
   }, [])
 
   // Pide al servidor guardar el perfil recién aprobado, si el cliente lo pidió.
@@ -1525,6 +1540,9 @@ export function PagoTokenCardnet({
 
       {!pasarelaNoDisponible && estado !== 'activacion' && (
         <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
+        {(estado === 'listo' || estado === 'error') ? (
+          <PagoCardnetGuardada objetivo={objetivo} montoTexto={montoTexto} onAprobado={pagoGuardadoAprobado} onIniciar={prepararPagoGuardado} />
+        ) : null}
         {/* Guardar tarjeta, con consentimiento explícito y separado de la renovación. */}
         {(estado === 'listo' || estado === 'error') && (
           <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border/60 bg-card p-4 transition-colors hover:border-primary/30">

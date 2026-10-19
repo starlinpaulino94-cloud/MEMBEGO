@@ -23,7 +23,9 @@ export function membershipCardnetTarget(
   membershipId: string,
   canSaveCard: boolean,
   saveCardConsent: boolean,
+  savedCardId?: string | null,
 ): CardnetSessionTarget {
+  if (savedCardId) return { kind: 'membership', membershipId, tarjetaGuardadaId: savedCardId }
   if (canSaveCard && saveCardConsent) {
     return { kind: 'membership', membershipId, guardarTarjeta: true }
   }
