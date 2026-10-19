@@ -1,6 +1,7 @@
 import 'server-only'
 import { conEmpresa } from '@/lib/tenant'
 import { consultarClienteCardnet, consultarComprasCardnet } from '@/lib/payments/cardnet-tokens'
+import { guardarTarjeta } from '@/modules/pagos/cardnetTokenGuardado'
 import type { PerfilPagoCardnet } from '@/lib/payments/cardnet-tokens-core'
 import { confirmarIntento, reintentarEntrega } from '@/modules/pagos/intentos'
 import {
@@ -114,8 +115,7 @@ export async function associateApprovedCard(
   session: LoadedCardnetSession
 ): Promise<boolean> {
   const customerId = session.customerId
-  const membershipId = session.membershipId
-  if (!customerId || !session.paymentProfileId || !membershipId) return false
+  if (!session.guardarTarjeta || !customerId || !session.paymentProfileId) return false
   const customer = await consultarClienteCardnet(customerId).catch(() => null)
   if (
     !customer ||
@@ -124,26 +124,18 @@ export async function associateApprovedCard(
   const profile = profileForSession(customer.perfiles, session.paymentProfileId)
   if (!profile?.token || !profile.habilitado) return false
 
-  return conEmpresa(session.companyId, async (tx) => {
-    const tarjeta = await tx.tarjetaTokenizada.upsert({
-      where: { cardnetCaptureSessionId: session.id },
-      create: {
-        companyId: session.companyId,
-        clienteId: session.clienteId,
-        customerId,
-        paymentProfileId: profile.paymentProfileId,
-        token: profile.token,
-        marca: profile.marca,
-        ultimos4: profile.ultimos4,
-        cardnetCaptureSessionId: session.id,
-      },
-      update: {},
-    })
-    const attached = await tx.membership.updateMany({
-      where: { id: membershipId, clienteId: session.clienteId },
-      data: { autoRenovar: true, tarjetaTokenizadaId: tarjeta.id },
-    })
-    if (attached.count !== 1) throw new Error('membership association failed')
+  return guardarTarjeta({
+    companyId: session.companyId,
+    clienteId: session.clienteId,
+    customerId,
+    paymentProfileId: profile.paymentProfileId,
+    token: profile.token,
+    marca: profile.marca,
+    ultimos4: profile.ultimos4,
+    vencMes: profile.vencMes,
+    vencAnio: profile.vencAnio,
+    cardnetCaptureSessionId: session.id,
+  }).then(() => conEmpresa(session.companyId, async (tx) => {
     const captured = await tx.cardnetCaptureSession.updateMany({
       where: {
         id: session.id,
@@ -160,7 +152,7 @@ export async function associateApprovedCard(
     })
     if (captured.count !== 1) throw new Error('capture session association changed')
     return true
-  }).catch(() => false)
+  })).catch(() => false)
 }
 
 export async function finishApproval(
@@ -186,7 +178,7 @@ export async function finishApproval(
     const pending = await setSessionState(session, CARDNET_SESSION_STATES.FULFILLMENT_PENDING, { conciliadoAt: new Date() })
     return pending ? success(202, { status: 'pending' }) : currentSessionReply(session)
   }
-  if (session.guardarRenovacion) {
+  if (session.guardarTarjeta) {
     const associated = await associateApprovedCard(session)
     if (!associated) {
       const pending = await setSessionState(session, CARDNET_SESSION_STATES.ASSOCIATION_PENDING, { conciliadoAt: new Date() })

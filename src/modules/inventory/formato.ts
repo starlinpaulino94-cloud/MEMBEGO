@@ -1,5 +1,6 @@
-import type { InventoryMovementType } from '@prisma/client'
+import type { CatalogVariantStatus, InventoryMovementType } from '@prisma/client'
 import type { EstadoStock } from './domain'
+import type { ClaseDeMotivo } from './motivos'
 
 /**
  * COMMERCE CORE · inventario — textos y formato para la interfaz.
@@ -33,6 +34,26 @@ export const BADGE_ESTADO_STOCK: Record<EstadoStock, 'destructive' | 'warning' |
   OK: 'success',
 }
 
+/**
+ * El estado de una variante que la empresa fijó A MANO en el catálogo manda sobre
+ * el inventario: los pedidos y el checkout rechazan toda variante que no esté
+ * «Activa», y la vitrina la enseña «Agotado», haya existencias o no. Reponer
+ * mercancía NO la reactiva. Esto lo dice con palabras, o devuelve null si no hay
+ * nada que advertir.
+ */
+export function advertenciaEstadoManual(estado: CatalogVariantStatus, disponibles: number): string | null {
+  const cuantas = `${formatearCantidad(disponibles)} ${disponibles === 1 ? 'unidad disponible' : 'unidades disponibles'}`
+  if (estado === 'OUT_OF_STOCK') {
+    return disponibles > 0
+      ? `Esta variante está marcada «Agotada» en el catálogo: no se vende aunque haya ${cuantas}.`
+      : 'Esta variante está marcada «Agotada» en el catálogo. Al reponer existencias seguirá sin venderse hasta que la actives.'
+  }
+  if (estado === 'DISCONTINUED' && disponibles > 0) {
+    return `Esta variante está descontinuada en el catálogo: no se vende, pero aún tiene ${cuantas}.`
+  }
+  return null
+}
+
 /** «Camiseta · Grande»; una variante automática (`isDefault`) no se nombra: es el producto. */
 export function nombreCompleto(itemNombre: string, nombreVariante: string, esDefault: boolean): string {
   return esDefault ? itemNombre : `${itemNombre} · ${nombreVariante}`
@@ -57,6 +78,8 @@ export function describirReferencia(tipo: string | null, id: string | null): str
       return 'Transferencia entre sucursales'
     case 'STOCK_COUNT':
       return 'Conteo físico'
+    case 'RECEIPT':
+      return 'Entrada de mercancía'
     case 'RESERVATION':
       return 'Reserva'
     case 'ORDER':
@@ -79,15 +102,18 @@ export const OPERACIONES: ReadonlyArray<{
   ayuda: string
   /** Etiqueta del campo numérico. */
   campo: string
+  /** El texto del motivo es obligatorio (solo en las operaciones que NO se explican con un motivo del catálogo). */
   motivoObligatorio: boolean
+  /** INV-4b: la operación se explica eligiendo un motivo del catálogo de esta clase; el texto pasa a ser un detalle. */
+  claseMotivo?: ClaseDeMotivo
   soloConDanados?: boolean
 }> = [
   { valor: 'ENTRADA', etiqueta: 'Entrada de mercancía', ayuda: 'Llegó mercancía: se suma a lo disponible.', campo: 'Cantidad que llegó', motivoObligatorio: false },
   { valor: 'DEVOLUCION', etiqueta: 'Devolución de un cliente', ayuda: 'Un cliente devolvió mercancía en buen estado.', campo: 'Cantidad devuelta', motivoObligatorio: false },
   { valor: 'CONTEO', etiqueta: 'Conteo físico', ayuda: 'Cuenta lo que hay (disponible + apartado) y el sistema calcula la diferencia.', campo: 'Cantidad contada', motivoObligatorio: false },
-  { valor: 'AJUSTE_SOBRANTE', etiqueta: 'Ajuste: sobrante', ayuda: 'Hay más de lo que dice el sistema.', campo: 'Cantidad sobrante', motivoObligatorio: true },
-  { valor: 'AJUSTE_FALTANTE', etiqueta: 'Ajuste: faltante', ayuda: 'Hay menos de lo que dice el sistema (merma, pérdida).', campo: 'Cantidad faltante', motivoObligatorio: true },
-  { valor: 'DANO', etiqueta: 'Mercancía dañada', ayuda: 'Pasa de disponible a dañado: deja de venderse.', campo: 'Cantidad dañada', motivoObligatorio: true },
+  { valor: 'AJUSTE_SOBRANTE', etiqueta: 'Ajuste: sobrante', ayuda: 'Hay más de lo que dice el sistema.', campo: 'Cantidad sobrante', motivoObligatorio: false, claseMotivo: 'SOBRANTE' },
+  { valor: 'AJUSTE_FALTANTE', etiqueta: 'Ajuste: faltante', ayuda: 'Hay menos de lo que dice el sistema (merma, pérdida).', campo: 'Cantidad faltante', motivoObligatorio: false, claseMotivo: 'FALTANTE' },
+  { valor: 'DANO', etiqueta: 'Mercancía dañada', ayuda: 'Pasa de disponible a dañado: deja de venderse.', campo: 'Cantidad dañada', motivoObligatorio: false, claseMotivo: 'DANO' },
   { valor: 'DANADO_VENDIBLE', etiqueta: 'Lo dañado sí se puede vender', ayuda: 'Vuelve de dañado a disponible.', campo: 'Cantidad recuperada', motivoObligatorio: true, soloConDanados: true },
-  { valor: 'DANADO_BAJA', etiqueta: 'Dar de baja lo dañado', ayuda: 'Sale del inventario para siempre.', campo: 'Cantidad dada de baja', motivoObligatorio: true, soloConDanados: true },
+  { valor: 'DANADO_BAJA', etiqueta: 'Dar de baja lo dañado', ayuda: 'Sale del inventario para siempre.', campo: 'Cantidad dada de baja', motivoObligatorio: false, claseMotivo: 'BAJA', soloConDanados: true },
 ]

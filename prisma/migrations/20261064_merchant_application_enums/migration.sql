@@ -1,0 +1,14 @@
+-- SUPPLIER & FULFILLMENT COMMERCE · Slice 9 · enums de la solicitud Supplier → Merchant
+-- y las acciones de bitácora que la acompañan. Aparte, porque PostgreSQL no admite usar
+-- un valor de enum nuevo en la misma transacción que lo crea. Aditivo e idempotente.
+
+DO $$ BEGIN
+    CREATE TYPE "SupplyV2MerchantApplicationStatus" AS ENUM ('SUBMITTED', 'UNDER_REVIEW', 'MORE_INFO_REQUIRED', 'APPROVED', 'REJECTED', 'WITHDRAWN');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_V2_MERCHANT_APPLICATION_SUBMITTED';
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_V2_MERCHANT_APPLICATION_REVIEWED';
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_V2_MERCHANT_APPLICATION_APPROVED';
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_V2_MERCHANT_APPLICATION_REJECTED';
+ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'SUPPLY_V2_MERCHANT_APPLICATION_WITHDRAWN';

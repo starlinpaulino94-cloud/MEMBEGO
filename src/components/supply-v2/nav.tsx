@@ -21,6 +21,8 @@ export const SECCIONES_SUPPLY_V2 = [
   // Slice 7
   { slug: 'campanas', label: 'Campañas', grupo: 'Comercial' },
   { slug: 'redenciones', label: 'Redenciones', grupo: 'Entrega' },
+  // SUPPLIER & FULFILLMENT COMMERCE · visitas atribuidas y ventas adicionales
+  { slug: 'visitas', label: 'Visitas', grupo: 'Entrega' },
   // Slice 8 · «Fidelización», no «Membresías»: V1 ya usa ese nombre en su
   // propio menú y dos entradas iguales confunden a quien opera.
   { slug: 'fidelizacion', label: 'Fidelización', grupo: 'Clientes' },

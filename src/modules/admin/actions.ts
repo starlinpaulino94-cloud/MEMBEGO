@@ -18,6 +18,7 @@ import { validarCobroMembresia } from '@/modules/membresias/cobro'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/membresia/eventos'
 import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
+import { datosDeCambioDePlan } from '@/modules/membresia/cambio-plan-aplicar'
 import { motivoCambioDirectoBloqueado } from '@/modules/membresia/cambio-plan-pendiente'
 import { explicarNoRenovable, motivoNoRenovable } from '@/modules/membresia/renovacion'
 import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
@@ -104,18 +105,7 @@ async function aplicarCambioPlanPendiente(
   await conEmpresa(companyId, (tx) =>
     tx.membership.update({
       where: { id: membership.id },
-      data: {
-        planId: nuevoPlan.id,
-        planIdSolicitado: null,
-        estado: 'ACTIVA',
-        pagoConfirmado: true,
-        montoPagado: pagoCambio.aPagar,
-        fechaPago: now,
-        fechaInicio: now,
-        fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
-        lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
-        rechazadoReason: null,
-      },
+      data: datosDeCambioDePlan({ nuevoPlan, monto: pagoCambio.aPagar, ahora: now }),
     })
   )
 
@@ -367,18 +357,7 @@ export async function aprobarCambioPlan(
     await conEmpresa(companyId, (tx) =>
       tx.membership.update({
         where: { id: membership.id },
-        data: {
-          planId: nuevoPlan.id,
-          planIdSolicitado: null,
-          estado: 'ACTIVA',
-          pagoConfirmado: true,
-          montoPagado: pagoCambio.aPagar,
-          fechaPago: now,
-          fechaInicio: now,
-          fechaVencimiento: periodEnd(now, nuevoPlan.vigenciaDias),
-          lavadosRestantes: nuevoPlan.esIlimitado ? 0 : nuevoPlan.lavadosIncluidos,
-          rechazadoReason: null,
-        },
+        data: datosDeCambioDePlan({ nuevoPlan, monto: pagoCambio.aPagar, ahora: now }),
       })
     )
 

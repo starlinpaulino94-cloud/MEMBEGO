@@ -82,9 +82,9 @@ export async function POST(req: NextRequest) {
       customerId,
     })
 
-    // Fase 2: si el cliente pidió renovación automática, se guardan las
-    // referencias del perfil recién cobrado (nunca datos de tarjeta). Es
-    // best-effort: el cobro ya aprobó y eso es lo que manda.
+    // Si el cliente consintió guardar su tarjeta, se guardan las referencias
+    // del perfil recién cobrado (nunca datos de tarjeta). Es best-effort: el
+    // cobro ya aprobó y guardar la tarjeta es una operación separada.
     if (res.estado === 'aprobado' && guardar && res.perfil) {
       const { guardarTarjeta } = await import('@/modules/pagos/cardnetTokenGuardado')
       await guardarTarjeta({
@@ -95,7 +95,6 @@ export async function POST(req: NextRequest) {
         token: res.perfil.token,
         marca: res.perfil.marca,
         ultimos4: res.perfil.ultimos4,
-        membershipId,
       }).catch((e) => logErrorBd('pagos:confirmar:guardarTarjeta', e, { membershipId }))
     }
 

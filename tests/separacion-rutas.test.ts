@@ -45,13 +45,16 @@ test('los espacios no se cruzan: lo protegido nunca es landing, enlaces ni acces
   }
 })
 
-test('lo operativo del cliente está bajo /cliente (salvo las dos pantallas de membresías, que se quedan por la app móvil)', () => {
+test('lo operativo del cliente está bajo /cliente (salvo las pantallas que la app móvil abre sin sesión web)', () => {
   const fuera = rutas
     .filter((r) => r.espacio === 'cliente')
     .map((r) => r.url)
     .filter((u) => !u.startsWith('/cliente/'))
     .sort()
-  assert.deepEqual(fuera, ['/membresia/[membresiaId]', '/mis-membresias'])
+  // `/comprobante/[token]`: el comprobante de pago que la app abre en el navegador del teléfono con un enlace
+  // firmado y caduco. No puede vivir bajo `/cliente` porque esa pestaña no trae la sesión de la app: lo que
+  // la autoriza es la firma, no la cookie (ver enlaceComprobante.ts). Las dos de membresías se quedan por la app.
+  assert.deepEqual(fuera, ['/comprobante/[token]', '/membresia/[membresiaId]', '/mis-membresias'])
 })
 
 test('la landing no tiene rutas de carrito, pago ni checkout', () => {

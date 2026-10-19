@@ -33,6 +33,15 @@ model PagoIntento {
   compra       ProductoCompra? @relation(fields: [compraId], references: [id], onDelete: SetNull)
   membershipId String?
   membership   Membership?     @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  /// La venta (libro de transacciones) que dejó este cobro aprobado. Ver `Transaction.pagoIntentoId`.
+  transaccion  Transaction?
+  /// Por dónde entró el cobro: APP (la app del cliente), WEB o RENOVACION_AUTOMATICA (tarjeta guardada). Nulo en
+  /// los intentos anteriores al sprint de comprobantes (CHECK `pago_intentos_canal`).
+  canal        String?
+  /// Solo en el cobro de un CAMBIO DE PLAN: el plan que el cliente pidió y pagó cuando se creó el intento. La entrega
+  /// aplica ESE plan y solo si la membresía sigue pidiéndolo; si el cliente cambió el pedido a mitad, no se aplica a ciegas.
+  planDestinoId String?
+  planDestino   Plan?   @relation("PagoIntentoPlanDestino", fields: [planDestinoId], references: [id], onDelete: SetNull)
 
   monto  Decimal @db.Decimal(10, 2)
   moneda String  @default("DOP")
@@ -97,6 +106,9 @@ model CardnetCaptureSession {
   membership        Membership?     @relation(fields: [membershipId], references: [id], onDelete: Cascade)
   compraId          String?
   compra            ProductoCompra? @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  /// Plan que se está pagando cuando la sesión es de un cambio de plan (pasa tal cual al intento de compra).
+  planDestinoId     String?
+  planDestino       Plan?    @relation("CapturaPlanDestino", fields: [planDestinoId], references: [id], onDelete: SetNull)
   monto             Decimal  @db.Decimal(10, 2)
   moneda            String   @default("DOP")
   estado            String   @default("STARTING")
@@ -109,7 +121,11 @@ model CardnetCaptureSession {
   /// Identificadores de perfil previos, sin guardar tokens reutilizables.
   perfilBase        Json?
   paymentProfileId  String?
-  guardarRenovacion Boolean  @default(false)
+  /// Consentimiento explícito para guardar el medio de pago. No autoriza renovaciones.
+  guardarTarjeta    Boolean  @default(false)
+  /// Consentimiento histórico del flujo anterior. Se conserva para auditoría;
+  /// nunca se usa como autorización para guardar tarjeta o renovar.
+  guardarRenovacion  Boolean  @default(false)
   purchaseIntentId  String? @unique
   purchaseIntent    PagoIntento? @relation(fields: [purchaseIntentId], references: [id], onDelete: SetNull)
   tarjetaTokenizada TarjetaTokenizada?

@@ -107,6 +107,9 @@ model CatalogItem {
   @@unique([id, companyId])
   @@index([companyId, status, position])
   @@index([companyId, type])
+  /// Supplier & Fulfillment Commerce: ítems del catálogo del proveedor mapeados a este (sin duplicar).
+  supplyV2CatalogItems SupplyV2CatalogItem[] @relation("SupplyV2CatalogItemCatalogCore")
+
   @@map("catalog_items")
 }
 
@@ -145,6 +148,29 @@ model CatalogVariant {
 
   /// Existencias por sucursal (Fase 2). RESTRICT: con historial no se borra.
   inventoryLevels InventoryLevel[]
+  /// Entradas de mercancía (INV-2a) en las que ha entrado esta variante.
+  receiptLines    InventoryReceiptLine[]
+  /// Conteos físicos (INV-2b) en los que se ha contado esta variante.
+  countLines      InventoryCountLine[]
+  /// Transferencias con envío (INV-2c) que han llevado esta variante.
+  transferLines   InventoryTransferLine[]
+  /// Costo promedio ponderado de esta variante (INV-3a); no existe hasta la primera entrada con costo o corrección.
+  inventoryCost   InventoryVariantCost?
+  /// Correcciones de su costo promedio (INV-3a).
+  costAdjustments InventoryCostAdjustment[]
+  /// Líneas de órdenes de compra (INV-3b) que lo piden.
+  purchaseOrderLines InventoryPurchaseOrderLine[]
+  /// Proveedores que lo surten (INV-3b).
+  supplierLinks   InventoryVariantSupplier[]
+  /// Si lleva lotes (INV-5a): a lo sumo una fila (único por `catalogVariantId`); no existe hasta que se activan.
+  lotTracking     InventoryLotTracking[]
+  /// Sus lotes (INV-5a).
+  lots            InventoryLot[]
+  /// Si es un kit (INV-5d): los componentes de su receta. Si es componente: los kits en que entra.
+  kitComponents   InventoryKitComponent[] @relation("KitComponents")
+  kitsDondeEntra  InventoryKitComponent[] @relation("ComponentOfKits")
+  kitReservationsAsKit       InventoryKitReservation[] @relation("KitReservationsOfKit")
+  kitReservationsAsComponent InventoryKitReservation[] @relation("KitReservationsOfComponent")
   deals           Deal[]
   /// Pedidos Membego que la piden (Fase 3). RESTRICT: con pedidos no se borra.
   orderLines      MembegoOrderLine[]

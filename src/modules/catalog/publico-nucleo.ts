@@ -11,6 +11,7 @@
 import type { CatalogItemType, CatalogVariantStatus } from '@prisma/client'
 import { urlImagenCatalogo } from './formato'
 import { normalizarCapacidades } from './domain'
+import { presentacionComercial, type PresentacionComercial, type SucursalDeCanje } from '@/modules/comercio/modo-comercial'
 
 /**
  * Ruta pública de las ofertas de Membego (el checkout de Supply). El catálogo NO importa de
@@ -76,6 +77,11 @@ export interface ItemPublicoResumen {
   ofertaSlug: string | null
   /** La mejor disponibilidad entre sus variantes visibles (para la tarjeta). */
   disponibilidad: DisponibilidadPublica
+  /**
+   * Quién vende, quién entrega y quién financia, YA RESUELTO (Supplier &
+   * Fulfillment Commerce §12–§19). La tarjeta no infiere nada de `origen`.
+   */
+  comercial: PresentacionComercial
 }
 
 export interface ItemPublicoDetalle extends ItemPublicoResumen {
@@ -108,15 +114,59 @@ interface FilaItem {
   description: string | null
   type: CatalogItemType
   currency: string
-  company: { slug: string; name: string }
+  company: { slug: string; name: string; sucursales?: SucursalDeCanje[] }
   variants: FilaVariante[]
   images: { path: string; variantesBase?: string | null }[]
   categories?: { category: { name: string; slug: string } }[]
   source: 'MERCHANT' | 'SUPPLY'
   /** Las capacidades del ítem (solo para saber si controla inventario; no salen al público). */
   capabilities?: unknown
-  /** Solo `SUPPLY`: la oferta de origen, EN VIVO (no la copia sincronizada). */
-  supplyOffer?: { slug: string; status: string } | null
+  /**
+   * Solo `SUPPLY`: la oferta de origen, EN VIVO (no la copia sincronizada), con
+   * lo justo para decir quién vende y dónde se canjea (§12–§15). `supplier.company`
+   * es la empresa del proveedor; su `slug` solo se enseña si tiene vitrina.
+   */
+  supplyOffer?: {
+    slug: string
+    status: string
+    priceMode?: 'FIXED' | 'PERCENTAGE' | 'FREE'
+    sourceType?: 'PREPURCHASED_SUPPLY' | 'COMMISSION'
+    salePrice?: { toFixed(n: number): string }
+    /** Beneficios ACTIVOS financiados por Membego sobre la oferta (solo se cuenta si hay). */
+    benefits?: { id: string }[]
+    supplier?: {
+      commercialName: string
+      company?: { slug: string; name: string; isPublished: boolean; isActive: boolean; esDemo?: boolean; sucursales?: SucursalDeCanje[] } | null
+    }
+  } | null
+}
+
+/** La empresa del proveedor tiene vitrina pública: Merchant activo y publicado (§49). */
+export function proveedorConVitrina(c: { isPublished: boolean; isActive: boolean; esDemo?: boolean } | null | undefined): boolean {
+  return !!c && c.isPublished && c.isActive && !c.esDemo
+}
+
+export function comercialDeFila(f: FilaItem): PresentacionComercial {
+  if (f.source === 'SUPPLY' && f.supplyOffer) {
+    const o = f.supplyOffer
+    const empresaProveedor = o.supplier?.company ?? null
+    return presentacionComercial({
+      origen: 'SUPPLY',
+      empresa: { nombre: f.company.name, slug: f.company.slug },
+      supply: {
+        priceMode: o.priceMode ?? 'FIXED',
+        sourceType: o.sourceType ?? 'PREPURCHASED_SUPPLY',
+        salePrice: o.salePrice ? o.salePrice.toFixed(2) : '1.00',
+        subsidioMembego: (o.benefits?.length ?? 0) > 0,
+        proveedor: {
+          nombre: o.supplier?.commercialName ?? empresaProveedor?.name ?? f.company.name,
+          slug: proveedorConVitrina(empresaProveedor) ? empresaProveedor!.slug : null,
+          sucursales: empresaProveedor?.sucursales ?? [],
+        },
+      },
+    })
+  }
+  return presentacionComercial({ origen: 'EMPRESA', empresa: { nombre: f.company.name, slug: f.company.slug }, sucursales: f.company.sucursales ?? [] })
 }
 
 function atributosTexto(raw: unknown): Record<string, string> {
@@ -223,6 +273,7 @@ export function aResumenPublico(f: FilaItem): ItemPublicoResumen | null {
     origen: f.source === 'SUPPLY' ? 'SUPPLY' : 'EMPRESA',
     ofertaSlug: f.source === 'SUPPLY' ? (f.supplyOffer?.slug ?? null) : null,
     disponibilidad: disponibilidadDelItem(vs),
+    comercial: comercialDeFila(f),
   }
 }
 

@@ -53,7 +53,13 @@ export interface MembresiaParaCobro {
 }
 
 export type CobroMembresia =
-  | { ok: true; pesos: number; descripcion: string }
+  | {
+      ok: true
+      pesos: number
+      descripcion: string
+      /** Solo en un cambio de plan: el plan que se paga. El intento lo guarda para poder entregar exactamente ese. */
+      planDestinoId?: string
+    }
   | { ok: false; motivo: string }
 
 /** Motivo del rechazo cuando lo que falla es el ESTADO (no la pertenencia). */
@@ -95,7 +101,12 @@ export function resolverCobroMembresia(m: MembresiaParaCobro): CobroMembresia {
       fechaVencimiento: m.fechaVencimiento,
       vigenciaDias: m.plan.vigenciaDias,
     })
-    return { ok: true, pesos: pago.aPagar, descripcion: `Cambio a ${m.planSolicitado.nombre}` }
+    return {
+      ok: true,
+      pesos: pago.aPagar,
+      descripcion: `Cambio a ${m.planSolicitado.nombre}`,
+      planDestinoId: m.planIdSolicitado as string,
+    }
   }
 
   if (m.estado !== 'PENDIENTE' && m.estado !== 'RECHAZADA') {

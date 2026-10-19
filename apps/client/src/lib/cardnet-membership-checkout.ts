@@ -21,11 +21,11 @@ export function membershipCardnetStartAction(
 
 export function membershipCardnetTarget(
   membershipId: string,
-  canSaveForRenewal: boolean,
-  renewalConsent: boolean,
+  canSaveCard: boolean,
+  saveCardConsent: boolean,
 ): CardnetSessionTarget {
-  if (canSaveForRenewal && renewalConsent) {
-    return { kind: 'membership', membershipId, guardarParaRenovacion: true }
+  if (canSaveCard && saveCardConsent) {
+    return { kind: 'membership', membershipId, guardarTarjeta: true }
   }
 
   return { kind: 'membership', membershipId }

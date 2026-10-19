@@ -22,14 +22,26 @@ export async function auditarInventario(
   companyId: string,
   accion: Extract<AuditAccion, 'INVENTORY_STOCK_CHANGED' | 'INVENTORY_TRANSFERRED' | 'INVENTORY_CONFIGURED'>,
   entidadId: string,
-  payload: Prisma.InputJsonObject
+  payload: Prisma.InputJsonObject,
+  /** Qué es `entidadId`: el saldo (por defecto) o, p.ej., la entrada de mercancía o el conteo que agrupan varios. */
+  entidadTipo:
+    | 'InventoryLevel'
+    | 'InventoryReceipt'
+    | 'InventoryCountSession'
+    | 'InventoryTransfer'
+    | 'InventoryVariantCost'
+    | 'InventorySupplier'
+    | 'InventoryPurchaseOrder'
+    | 'InventoryVariantSupplier'
+    | 'InventoryLotTracking'
+    | 'InventoryKit' = 'InventoryLevel'
 ): Promise<void> {
   await tx.auditLog.create({
     data: {
       companyId,
       userId: ctx.actorId,
       accion,
-      entidadTipo: 'InventoryLevel',
+      entidadTipo,
       entidadId,
       payload,
       ipAddress: ctx.ipAddress ?? null,

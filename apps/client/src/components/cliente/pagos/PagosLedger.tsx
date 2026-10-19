@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, Linking } from 'react-native';
-import { CalendarClock, ExternalLink, FileText, Wallet } from 'lucide-react-native';
+import { View, Text, Pressable, ScrollView, Linking, Share } from 'react-native';
+import { CalendarClock, CreditCard, ExternalLink, FileText, Printer, Share2, Wallet } from 'lucide-react-native';
 import { cn } from '../../../lib/cn';
 import { formatMoney, formatDateTime } from '../../../lib/format';
 import type { PagoHistorialItem } from '../../../lib/api';
 import { EmptyState } from '../../ui/EmptyState';
 import { Sheet } from '../../ui/Sheet';
+import { abrirComprobante } from '../../../lib/comprobantes';
 
 /**
  * Historial de pagos como extracto bancario digital (Revolut/Linear):
@@ -93,12 +94,12 @@ function LedgerRow({
         </Text>
       </View>
 
-      {/* Centro: método de pago (abreviado) */}
-      {item.metodoPagoNombre ? (
-        <View className="hidden max-w-[9rem] shrink-0 flex-row items-center gap-1.5 sm:flex">
-          <Wallet size={14} color="#71717a" />
+      {/* Centro: con qué se pagó (tarjeta de la app/web, o el método de la membresía) */}
+      {item.formaDePago ?? item.metodoPagoNombre ? (
+        <View className="hidden max-w-[12rem] shrink-0 flex-row items-center gap-1.5 sm:flex">
+          {item.formaDePago ? <CreditCard size={14} color="#71717a" /> : <Wallet size={14} color="#71717a" />}
           <Text className="text-xs text-muted-foreground" numberOfLines={1}>
-            {item.metodoPagoNombre}
+            {item.formaDePago ?? item.metodoPagoNombre}
           </Text>
         </View>
       ) : null}
@@ -173,9 +174,12 @@ function ReceiptDrawer({
             {item.planNombre ? (
               <DetailRow label="Plan" value={item.planNombre} />
             ) : null}
-            {item.metodoPagoNombre ? (
-              <DetailRow label="Método de pago" value={item.metodoPagoNombre} />
+            {item.formaDePago ?? item.metodoPagoNombre ? (
+              <DetailRow label="Pagado con" value={(item.formaDePago ?? item.metodoPagoNombre) as string} />
             ) : null}
+            {item.recibo ? <DetailRow label="Recibo Nº" value={item.recibo.ticketNumero} /> : null}
+            {item.recibo?.autorizacion ? <DetailRow label="Autorización" value={item.recibo.autorizacion} /> : null}
+            {item.recibo ? <DetailRow label="Negocio" value={item.recibo.empresaNombre} /> : null}
             {item.validadoPor ? (
               <DetailRow label="Validado por" value={item.validadoPor} />
             ) : null}
@@ -188,6 +192,37 @@ function ReceiptDrawer({
               </View>
             ) : null}
           </View>
+
+          {/* La factura del pago: se abre en el navegador, donde se imprime o se guarda en PDF */}
+          {item.transaccionId ? (
+            <Pressable
+              onPress={() => {
+                abrirComprobante(item.transaccionId!).catch(() => {});
+              }}
+              className="mt-5 flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 active:opacity-80"
+              accessibilityRole="button"
+            >
+              <Printer size={16} color="#ffffff" />
+              <Text className="text-sm font-inter-semibold text-white">
+                Ver / imprimir comprobante
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {/* Recibo de un pago con tarjeta: se comparte como texto (WhatsApp, correo, imprimir desde allí). */}
+          {item.recibo ? (
+            <Pressable
+              onPress={() => {
+                Share.share({ message: item.recibo!.texto }).catch(() => {});
+              }}
+              className="mt-3 flex-row items-center justify-center gap-2 rounded-xl border border-border/60 px-4 py-3 active:opacity-70"
+              accessibilityRole="button"
+              accessibilityLabel="Compartir recibo"
+            >
+              <Share2 size={16} color="#0284c7" />
+              <Text className="text-sm font-inter-semibold text-primary">Compartir recibo</Text>
+            </Pressable>
+          ) : null}
 
           {/* Comprobante */}
           {item.comprobanteUrl ? (

@@ -131,6 +131,11 @@ export function VarianteForm({
               ))}
             </SelectContent>
           </Select>
+          {estado !== 'ACTIVE' && (
+            <p className="text-xs text-muted-foreground">
+              Una variante «{ETIQUETA_ESTADO_VARIANTE[estado]}» no se vende aunque haya existencias, y reponer inventario no la reactiva: hay que volver a ponerla «Activa» aquí.
+            </p>
+          )}
         </div>
         {!ocultarNombre && (
           <div className="space-y-2 sm:col-span-2">

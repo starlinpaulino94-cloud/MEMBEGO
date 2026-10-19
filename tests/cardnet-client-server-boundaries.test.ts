@@ -385,7 +385,7 @@ function openCaptureRow(s: Scenario, overrides: Row = {}): { id: string; row: Ro
     estado: 'CAPTURE_OPEN', venceAt: new Date(Date.now() + 5 * 60_000),
     captureNonce: createHash('sha256').update('nonce-nobody-will-send-0123456789012').digest('hex'),
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: null, purchaseIntentId: null, guardarRenovacion: false,
+    perfilBase: [], paymentProfileId: null, purchaseIntentId: null, guardarTarjeta: false,
     createdAt: new Date(Date.now() - 60_000), updatedAt: new Date(Date.now() - 30_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null }, purchaseIntent: null,
     reservaClienteKey: 'held-open-reservation',
@@ -716,27 +716,27 @@ test('a retry resumes the open capture session and rotates its one-use nonce', a
   assert.equal(s.customerGets, 1)
 })
 
-test('a resumed capture applies the latest renewal-consent choice', async () => {
+test('a resumed capture applies the latest card-saving consent choice', async () => {
   const s = setup()
   s.membership = membership()
   const api = await service()
-  const start = (guardarParaRenovacion: boolean) =>
+  const start = (guardarTarjeta: boolean) =>
     api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
-      membershipId: 'membership-test', guardarParaRenovacion,
+      membershipId: 'membership-test', guardarTarjeta,
     })
   const optedIn = await start(true)
   const optedOut = await start(false)
   assert.equal(optedIn.status, 200)
   assert.equal(optedOut.status, 200)
-  assert.equal([...s.sessions.values()][0]?.guardarRenovacion, false)
+  assert.equal([...s.sessions.values()][0]?.guardarTarjeta, false)
 })
 
-test('renewal consent is rejected for a plan change before CardNET calls', async () => {
+test('card-saving consent is rejected for a plan change before CardNET calls', async () => {
   const s = setup()
   s.membership = { ...membership(), estado: 'ACTIVA', planIdSolicitado: 'new-plan' }
   const api = await service()
   const result = await api.iniciarSesionCardnet(new Request('http://localhost/session'), s.authUser, {
-    membershipId: 'membership-test', guardarParaRenovacion: true,
+    membershipId: 'membership-test', guardarTarjeta: true,
   })
   assert.equal(result.status, 409)
   assert.equal(s.providerCalls, 0)
@@ -1062,7 +1062,7 @@ test('a stale activation result cannot reopen a session approved by another hand
     membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
     estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarTarjeta: false,
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
@@ -1136,7 +1136,7 @@ test('a stale pending search cannot invalidate a concurrent approved transition'
     membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
     estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarTarjeta: false,
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
@@ -1207,7 +1207,7 @@ test('an in-flight fulfillment result does not leave a completed payment pending
     membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
     estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarTarjeta: false,
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
@@ -1271,7 +1271,7 @@ test('a delayed CardNET POST cannot reopen an approved session after stale recon
     membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
     estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarTarjeta: false,
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - PURCHASE_RETRY_MS - 1_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
@@ -1308,7 +1308,7 @@ test('a locally approved intent resumes fulfillment without another CardNET call
     membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
     estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarTarjeta: false,
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
@@ -1340,7 +1340,7 @@ test('a fulfillment-pending session resumes an approved intent without another C
     membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
     estado: 'FULFILLMENT_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarTarjeta: false,
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
@@ -1385,7 +1385,7 @@ test('a fulfillment-pending session reconciles approval when local intent confir
     membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
     estado: 'FULFILLMENT_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarTarjeta: false,
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',
@@ -1418,7 +1418,7 @@ test('a freshly approved intent prevents Purchase when the initial intent read i
     membershipId: 'membership-test', compraId: null, monto: 1000, moneda: 'DOP',
     estado: 'PURCHASE_PENDING', venceAt: new Date(Date.now() + 60_000), captureNonce: null,
     customerId: 'cardnet-customer-test', customerUniqueId: 'temporary-customer-id',
-    perfilBase: [], paymentProfileId: 'profile-fresh', guardarRenovacion: false,
+    perfilBase: [], paymentProfileId: 'profile-fresh', guardarTarjeta: false,
     createdAt: new Date(Date.now() - 120_000), updatedAt: new Date(Date.now() - 90_000),
     cliente: { email: 'qa@example.test', cardnetCustomerId: null },
     purchaseIntentId: 'intent-persisted',

@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   Receipt,
   Sparkles,
+  Printer,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { getClientePagos } from '@/modules/cliente/queries'
@@ -119,7 +120,7 @@ export default async function PagosPage({
   const prefs = await getRegionalPrefs(user.metadata.companyId)
   const fmtMonto = (n: number | null) => (n ? formatMoney(n, prefs) : '—')
 
-  let data: Awaited<ReturnType<typeof getClientePagos>> = { membership: null, historial: [] }
+  let data: Awaited<ReturnType<typeof getClientePagos>> = { membership: null, historial: [], comprobantes: [] }
   let loadError = false
   try {
     // La PERSONA, no la ficha activa: un pago a un negocio y un pago a otro son
@@ -132,7 +133,7 @@ export default async function PagosPage({
     console.error('[cliente-pagos]', e)
   }
 
-  const { membership: m, historial: historialCrudo } = data
+  const { membership: m, historial: historialCrudo, comprobantes } = data
 
   // El bucket de comprobantes es privado (auditoría · C-01): lo que se guarda
   // es la ruta, no una URL. Aquí se firma cada una —5 minutos, previa
@@ -192,7 +193,7 @@ export default async function PagosPage({
             </Button>
           }
         />
-      ) : !m ? (
+      ) : !m && comprobantes.length === 0 ? (
         <EmptyState
           icon={Receipt}
           title="Sin pagos todavía"
@@ -210,7 +211,9 @@ export default async function PagosPage({
         <div className="space-y-8">
           {/* ── Membresía actual: panel de suscripción estilo Stripe Billing ─
                Sin sub-cajas grises ni datos repetidos: el monto y el estado
-               aparecen UNA sola vez. */}
+               aparecen UNA sola vez. Sin membresía (solo compró promociones)
+               se omite: los comprobantes de abajo siguen siendo suyos. */}
+          {m && (
           <section className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
             <div className="flex items-center justify-between border-b border-border/40 px-5 py-3">
               <h2 className="text-sm font-semibold text-muted-foreground">Membresía actual</h2>
@@ -291,8 +294,10 @@ export default async function PagosPage({
               )}
             </div>
           </section>
+          )}
 
           {/* ── Historial ─────────────────────────────────────────────────── */}
+          {m && (
           <section>
             <div className="mb-4 flex items-center gap-2">
               <h2 className="text-lg font-semibold tracking-tight text-foreground">
@@ -307,6 +312,51 @@ export default async function PagosPage({
 
             {/* Extracto contable limpio con visor de comprobantes integrado */}
             <PagosLedger items={historial} prefs={prefs} />
+          </section>
+          )}
+
+          {/* ── Comprobantes de pago: la factura de cada venta, para imprimir o guardar ── */}
+          <section>
+            <div className="mb-4 flex items-center gap-2">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">Comprobantes de pago</h2>
+              {comprobantes.length > 0 && (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                  {comprobantes.length}
+                </span>
+              )}
+            </div>
+            {comprobantes.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground">
+                Cuando se confirme un pago, aquí tendrás su comprobante para imprimir o guardar en PDF.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+                {comprobantes.map((c) => (
+                  <li key={c.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-foreground">
+                        {c.detalle ?? 'Pago'}
+                        <span className="text-muted-foreground"> · {c.empresa}</span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {formatDate(c.fecha, undefined, { dateStyle: 'medium', timeStyle: 'short' })} · {c.codigo}
+                        {c.metodoPago && <span> · {c.metodoPago}</span>}
+                      </p>
+                    </div>
+                    {c.total && (
+                      <span className="shrink-0 font-mono text-sm font-semibold tabular-nums text-foreground">
+                        {formatMoney(Number(c.total), prefs)}
+                      </span>
+                    )}
+                    <Button asChild variant="outline" size="sm" className="shrink-0 gap-1.5">
+                      <Link href={`/cliente/pagos/comprobante/${c.id}`}>
+                        <Printer className="h-3.5 w-3.5" /> Imprimir
+                      </Link>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         </div>
       )}

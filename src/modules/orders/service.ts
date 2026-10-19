@@ -10,6 +10,8 @@ import { ajustarComisionPorVerificacionEnTx, registrarComisionDePedidoEnTx, reve
 import { TTL_MAXIMO_MINUTOS } from '@/modules/inventory/domain'
 import { InventarioError } from '@/modules/inventory/errores'
 import { consumirReservaEnTx, devolverEnTx, liberarReservaEnTx, reservarEnTx, venderEnTx } from '@/modules/inventory/service'
+import { recetasDeKitsEnTx } from '@/modules/inventory/kits-queries'
+import { consumirKitsDeReferenciaEnTx, devolverKitsDeReferenciaEnTx, liberarKitsDeReferenciaEnTx, reservarKitEnTx } from '@/modules/inventory/kits-service'
 import { nuevoTokenQr } from '@/modules/qr/token'
 import { auditarPedido } from './auditoria'
 import {
@@ -315,12 +317,21 @@ export async function crearPedidoEnTx(tx: Tx, companyId: string, e: EntradaPedid
 
   // Aparta el inventario ANTES de escribir las líneas: la línea guarda el id de
   // su reserva y es inmutable. Si algo no alcanza, falla todo y no queda nada.
+  // INV-5d: un KIT no tiene existencias propias (su línea no guarda reserva): aparta sus COMPONENTES, que quedan anotados por pedido.
+  const kits = await recetasDeKitsEnTx(tx, companyId, unidas.map((l) => l.varianteId))
   for (let i = 0; i < unidas.length; i++) {
     const l = unidas[i]
     const v = porId.get(l.varianteId)!
     const calculada = totales.lineas[i]
     let reservaId: string | null = null
-    if (normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory) {
+    if (!normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory && kits.has(v.id)) {
+      await reservarKitEnTx(
+        tx,
+        companyId,
+        { kitVarianteId: v.id, sucursalId: sucursal.id, cantidad: l.cantidad, ttlMinutos: TTL_MAXIMO_MINUTOS, referencia: { tipo: REF_PEDIDO, id: pedido.id }, claveBase: `pedido:${pedido.id}`, ahora },
+        contextoDeInventario(ctx)
+      )
+    } else if (normalizarCapacidades(v.item.type, v.item.capabilities).trackInventory) {
       const r = await reservarEnTx(
         tx,
         companyId,
@@ -745,6 +756,11 @@ async function venderLinea(
   }
 }
 
+/** INV-5d · Vende lo apartado por los kits del pedido (sus componentes); un pedido sin kits no hace nada. */
+async function venderKits(tx: Tx, companyId: string, pedido: { id: string; locationId: string }, ahora: Date, ctx: ContextoPedido): Promise<void> {
+  await consumirKitsDeReferenciaEnTx(tx, companyId, { referencia: { tipo: REF_PEDIDO, id: pedido.id }, sucursalId: pedido.locationId, claveBase: `pedido:${pedido.id}`, ahora }, contextoDeInventario(ctx))
+}
+
 export interface ResultadoCierre {
   pedidoId: string
   code: string
@@ -786,6 +802,7 @@ export async function completarPorQrEnTx(tx: Tx, companyId: string, token: strin
   // de reservar el stock), y así nunca se interbloquean.
   const reclamo = await liquidarReclamoEnTx(tx, contextoDeAuditoria(ctx), companyId, p.id, ahora)
   for (const l of p.lines) await venderLinea(tx, companyId, p, l, ahora, ctx)
+  await venderKits(tx, companyId, p, ahora, ctx)
   const comision = await cobrarComisionDelPedido(tx, companyId, p, nivel, ahora, reclamo ? { dealId: reclamo.dealId, amount: reclamo.fee } : undefined)
   await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_COMPLETED', p.id, {
     code: p.code,
@@ -885,6 +902,7 @@ export async function cerrarPedidoExternoEnTx(
   })
   // Un pedido de caja aparta existencias al crearse: cerrarlo las vende (para el envoltorio de Supply, sin reserva, no hace nada).
   for (const l of p.lines) await venderLinea(tx, companyId, p, l, ahora, ctx)
+  await venderKits(tx, companyId, p, ahora, ctx)
   const comision = await cobrarComisionDelPedido(tx, companyId, p, nivel, ahora)
   await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_COMPLETED', p.id, { code: p.code, por: ctx.actor, cierre: 'EXTERNO', nivel, total: decimalATexto(p.total), comision })
   return { pedidoId: p.id, code: p.code, status: 'COMPLETED', nivel, repetido: false }
@@ -930,6 +948,7 @@ export async function cancelarPedidoEnTx(
     if (!l.inventoryReservationId) continue
     await liberarReservaEnTx(tx, companyId, l.inventoryReservationId, { motivo: `Pedido ${p.code} cancelado`, ahora }, contextoDeInventario(ctx))
   }
+  await liberarKitsDeReferenciaEnTx(tx, companyId, { referencia: { tipo: REF_PEDIDO, id: p.id }, motivo: `Pedido ${p.code} cancelado`, ahora }, contextoDeInventario(ctx))
   await auditarPedido(tx, contextoDeAuditoria(ctx), companyId, 'ORDER_CANCELLED', p.id, { code: p.code, por: ctx.actor, motivo: motivo.valor, desde: p.status })
   return { pedidoId: p.id, status: 'CANCELLED' as const, repetido: false }
 }
@@ -973,6 +992,12 @@ export async function reembolsarPedidoEnTx(
         contextoDeInventario(ctx)
       )
     }
+    await devolverKitsDeReferenciaEnTx(
+      tx,
+      companyId,
+      { referencia: { tipo: REF_PEDIDO, id: p.id }, sucursalId: p.locationId, claveBase: `pedido:${p.id}`, motivo: `Reembolso del pedido ${p.code}`, ahora },
+      contextoDeInventario(ctx)
+    )
   }
   // La venta no se sostuvo: la comisión que se cobró por ella se revierte con un asiento contrario.
   const reverso = await revertirComisionDePedidoEnTx(tx, companyId, p.id, undefined, ahora)

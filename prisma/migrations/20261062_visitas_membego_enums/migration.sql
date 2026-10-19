@@ -1,0 +1,84 @@
+-- SUPPLIER & FULFILLMENT COMMERCE · Slices 5–8 · enums de la visita atribuida a Membego,
+-- las ventas adicionales, su evidencia y su comisión, las disputas; el tipo de asiento
+-- ANCILLARY_FEE del libro de Merchant Billing; avisos y acciones de bitácora nuevos.
+--
+-- En su propia migración porque PostgreSQL no permite usar un valor de enum nuevo en la
+-- MISMA transacción que lo crea (la siguiente los usa en columnas con DEFAULT y en CHECKs).
+-- Todo aditivo e idempotente.
+
+DO $$ BEGIN
+    CREATE TYPE "MembegoVisitOrigin" AS ENUM ('MEMBEGO_SUPPLY', 'MARKETPLACE_ORDER', 'DEAL_CLAIM');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    CREATE TYPE "MembegoVisitStatus" AS ENUM ('OPEN', 'CLOSED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    CREATE TYPE "AncillarySaleStatus" AS ENUM ('REPORTED', 'CONFIRMED', 'DISPUTED', 'ADJUSTED', 'REVERSED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    CREATE TYPE "AncillaryEvidenceLevel" AS ENUM ('MERCHANT_REPORTED', 'CUSTOMER_CONFIRMED', 'PAYMENT_VERIFIED', 'FISCALLY_RECONCILED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    CREATE TYPE "AncillaryCommissionStatus" AS ENUM ('NOT_APPLICABLE', 'PENDING', 'POSTED', 'REVERSED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    CREATE TYPE "AncillarySaleLineKind" AS ENUM ('CATALOG_ITEM', 'CUSTOM_REPORTED_LINE');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    CREATE TYPE "VisitDisputeStatus" AS ENUM ('OPEN', 'UNDER_REVIEW', 'RESOLVED_MERCHANT', 'RESOLVED_CUSTOMER', 'DISMISSED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'VISIT_OPENED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'VISIT_CLOSED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'VISIT_CANCELLED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'ANCILLARY_SALE_RECORDED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'ANCILLARY_SALE_CONFIRMED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'ANCILLARY_SALE_REVERSED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'ANCILLARY_SALE_ADJUSTED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'ANCILLARY_COMMISSION_POSTED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'ANCILLARY_COMMISSION_REVERSED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'VISIT_DISPUTE_OPENED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "AuditAccion" ADD VALUE IF NOT EXISTS 'VISIT_DISPUTE_RESOLVED';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "MerchantLedgerEntryType" ADD VALUE IF NOT EXISTS 'ANCILLARY_FEE';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "NotifTipo" ADD VALUE IF NOT EXISTS 'VISITA_CONFIRMA_CONSUMO';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "NotifTipo" ADD VALUE IF NOT EXISTS 'VISITA_COMPRA_ADICIONAL';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "NotifTipo" ADD VALUE IF NOT EXISTS 'VISITA_DISPUTA';
+END $$;
+DO $$ BEGIN
+    ALTER TYPE "NotifTipo" ADD VALUE IF NOT EXISTS 'SUPPLY_SOLICITUD_MERCHANT';
+END $$;

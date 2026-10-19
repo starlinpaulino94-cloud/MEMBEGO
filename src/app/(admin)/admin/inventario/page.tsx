@@ -1,16 +1,18 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { AlertTriangle, Package, Search, Warehouse } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
-import { requireRole } from '@/lib/auth/guards'
+import { puedeFuncion, requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { PageHeader } from '@/components/ui/page-header'
+import { NavegacionInventario } from '@/components/inventario/NavegacionInventario'
 import { alertasDeStockEnTx, listarInventarioEnTx, sucursalesActivasEnTx, type FiltroEstado } from '@/modules/inventory/queries'
-import { BADGE_ESTADO_STOCK, ETIQUETA_ESTADO_STOCK, formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
+import { BADGE_ESTADO_STOCK, ETIQUETA_ESTADO_STOCK, advertenciaEstadoManual, formatearCantidad, nombreCompleto } from '@/modules/inventory/formato'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +28,8 @@ function enlace(base: Record<string, string | undefined>, cambios: Record<string
 export default async function InventarioPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await requireCompanyContext(user)
+  // INV-3c: la alerta de stock bajo ofrece pasar a «qué comprar» a quien puede comprar.
+  const puedeComprar = await puedeFuncion('inventario', 'comprar')
   const sp = await searchParams
 
   const q = sp.q?.slice(0, 80)
@@ -48,6 +52,11 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
     console.error('[admin-inventario]', e)
   }
 
+  // Un lector de código de barras escribe el código y pulsa Enter: si coincide EXACTO con el SKU o el código
+  // de un solo producto, se salta a su ficha en vez de enseñar una lista de un renglón. (Fuera del try:
+  // `redirect` lanza, y un catch lo tragaría.)
+  if (q && datos?.lista.varianteExacta) redirect(`/admin/inventario/${datos.lista.varianteExacta}`)
+
   const sucursalId = datos?.sucursales.find((s) => s.id === sp.sucursal)?.id
   const filtrado = !!(q || estado || sucursalId)
   const base = { q, sucursal: sucursalId, estado }
@@ -55,6 +64,7 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
   return (
     <div className="space-y-6">
       <PageHeader title="Inventario" description="Cuánto hay de cada producto en cada sucursal, qué se movió y qué se está acabando." />
+      <NavegacionInventario actual="existencias" />
 
       {!datos ? (
         <Card>
@@ -99,6 +109,14 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
                     </li>
                   ))}
                 </ul>
+                {puedeComprar && (
+                  <p className="pt-2 text-xs text-muted-foreground">
+                    <Link href="/admin/inventario/reposicion" className="underline">
+                      Ver qué comprar
+                    </Link>{' '}
+                    (lo que falta para llegar a «llenar hasta», agrupado por proveedor).
+                  </p>
+                )}
                 {datos.alertas.total > datos.alertas.alertas.length && (
                   <p className="pt-2 text-xs text-muted-foreground">
                     Y {datos.alertas.total - datos.alertas.alertas.length} más.{' '}
@@ -111,10 +129,10 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
             </Card>
           )}
 
-          <form method="get" className="flex flex-wrap items-end gap-3">
+          <form key={`${q ?? ''}|${sucursalId ?? ''}|${estado ?? ''}`} method="get" className="flex flex-wrap items-end gap-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input name="q" defaultValue={q ?? ''} placeholder="Buscar por nombre o SKU" aria-label="Buscar por nombre o SKU" className="w-64 pl-8" />
+              <Input name="q" defaultValue={q ?? ''} placeholder="Nombre, SKU o código de barras" aria-label="Buscar por nombre, SKU o código de barras" className="w-72 pl-8" />
             </div>
             {datos.sucursales.length > 1 && (
               <select name="sucursal" defaultValue={sucursalId ?? ''} className="h-9 rounded-lg border border-input bg-background px-3 text-sm" aria-label="Sucursal">
@@ -190,6 +208,12 @@ export default async function InventarioPage({ searchParams }: { searchParams: P
                               {f.sucursales.length > 0 && ` · ${f.sucursales.map((s) => `${s.nombre}: ${formatearCantidad(s.disponible)}`).join(' · ')}`}
                               {f.sucursales.length === 0 && ' · Sin existencias registradas'}
                             </p>
+                            {advertenciaEstadoManual(f.estadoVariante, f.disponible) && (
+                              <p className="mt-1 flex items-start gap-1.5 text-xs text-warning">
+                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                                {advertenciaEstadoManual(f.estadoVariante, f.disponible)}
+                              </p>
+                            )}
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="text-right">

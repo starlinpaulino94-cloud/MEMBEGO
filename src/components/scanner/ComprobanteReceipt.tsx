@@ -4,8 +4,10 @@
  * Comprobante en pantalla tras confirmar un uso (Fase E4). Muestra los
  * identificadores oficiales (TX-… y ticket) y delega la impresión al Receipt
  * Engine (ReceiptTicket: plantilla por empresa, 58/80 mm, QR de la
- * transacción). La primera impresión se registra automáticamente; las
- * siguientes desde esta pantalla quedan auditadas como COPIA.
+ * transacción). Cada impresión queda auditada: la primera es el original y de
+ * la 2ª en adelante el papel lleva «COPIA #N» con el número que registró el
+ * servidor (antes el banner salía de un contador local que aún no se había
+ * pintado al abrir el diálogo, y la copia salía como original).
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -28,6 +30,7 @@ import {
 import { registrarImpresion } from '@/modules/visitas/actions'
 import { registrarImpresionTx, type TicketPayload } from '@/modules/transacciones/actions'
 import { ReceiptTicket } from '@/components/scanner/ReceiptTicket'
+import { AreaDeImpresion } from '@/components/impresion/AreaDeImpresion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { ClienteLookup } from '@/modules/visitas/actions'
@@ -86,8 +89,10 @@ export function ComprobanteReceipt({
   onScanNext,
 }: Props) {
   const hasLogged = useRef(false)
-  const [printCount, setPrintCount] = useState(0)
+  const [impresiones, setImpresiones] = useState(0)
   const [copiaNumero, setCopiaNumero] = useState<number | undefined>()
+  const [solicitud, setSolicitud] = useState(0)
+  const [imprimiendo, setImprimiendo] = useState(false)
   // Compatibilidad: si el servidor aún no devolvió transacción (bundle viejo),
   // se conserva el código derivado de la visita.
   const codigoOperacion = codigo ?? `MBGO-${visitId.slice(-8).toUpperCase()}`
@@ -101,18 +106,21 @@ export function ComprobanteReceipt({
     }
   }, [visitId])
 
-  function handlePrint() {
-    if (transaccionId) {
-      // Cada impresión queda auditada; de la 2ª en adelante es COPIA #N.
-      registrarImpresionTx(transaccionId, printCount > 0 ? 'Reimpresión desde el comprobante' : undefined)
-        .then((r) => {
-          if (r.numero != null) setCopiaNumero(r.numero)
-        })
-        .catch(() => {})
+  async function handlePrint() {
+    if (imprimiendo) return
+    setImprimiendo(true)
+    try {
+      if (transaccionId) {
+        // Cada impresión queda auditada; el servidor dice qué número es (1 = original, 2+ = COPIA #N).
+        const r = await registrarImpresionTx(transaccionId, impresiones > 0 ? 'Reimpresión desde el comprobante' : undefined).catch(() => ({}) as { numero?: number })
+        if (r.numero != null) setCopiaNumero(r.numero > 1 ? r.numero : undefined)
+      }
+      setImpresiones((n) => n + 1)
+      // Se imprime cuando el ticket ya está pintado con estos datos (ver AreaDeImpresion).
+      setSolicitud((s) => s + 1)
+    } finally {
+      setImprimiendo(false)
     }
-    setPrintCount((c) => c + 1)
-    // Deja montar el ticket (y renderizar su QR) antes de abrir el diálogo.
-    setTimeout(() => window.print(), printCount === 0 ? 350 : 0)
   }
 
   async function handleShare() {
@@ -134,11 +142,11 @@ export function ComprobanteReceipt({
     await navigator.clipboard.writeText(text).catch(() => {})
   }
 
-  const esCopia = printCount > 1
+  const esCopia = copiaNumero != null && copiaNumero > 1
   return (
     <>
       {/* Screen view */}
-      <div className="print:hidden space-y-5">
+      <div className="space-y-5">
         {/* Success header */}
         <div className="text-center">
           <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
@@ -184,11 +192,12 @@ export function ComprobanteReceipt({
         <div className="grid grid-cols-3 gap-3">
           <Button
             onClick={handlePrint}
+            disabled={imprimiendo}
             variant="outline"
             className="flex-col gap-1 h-auto py-3"
           >
             <Printer className="h-5 w-5" />
-            <span className="text-caption">{printCount > 0 ? 'Reimprimir' : 'Imprimir'}</span>
+            <span className="text-caption">{impresiones > 0 ? 'Reimprimir' : 'Imprimir'}</span>
           </Button>
           <Button
             onClick={handleShare}
@@ -216,26 +225,15 @@ export function ComprobanteReceipt({
           esCopia={esCopia}
           copiaNumero={esCopia ? copiaNumero : undefined}
           logoUrl={ticket.empresa.logoUrl}
+          solicitud={solicitud}
         />
       ) : (
-        /* Fallback legado si el servidor no devolvió el payload del ticket */
-        <div className="hidden print:block">
-          <style>{`
-            @media print {
-              body * { visibility: hidden !important; }
-              .receipt-print, .receipt-print * { visibility: visible !important; }
-              /* absolute (no fixed): fixed recorta a una página los tickets largos. */
-              .receipt-print { position: absolute; top: 0; left: 0; width: 80mm; }
-              html, body { height: auto !important; overflow: visible !important; }
-            }
-          `}</style>
-          <div
-            className="receipt-print mx-auto font-mono text-black"
-            style={{ width: '80mm', fontSize: '12px', lineHeight: '1.5' }}
-          >
+        /* Fallback legado si el servidor no devolvió el payload del ticket: mismo canal de impresión. */
+        <AreaDeImpresion papel={80} solicitud={solicitud}>
+          <div className="font-mono text-black" style={{ fontSize: '12px', lineHeight: '1.5', padding: '2mm 0' }}>
             <div className="text-center border-b border-black pb-2 mb-3">
               <p className="font-bold text-base">{cliente.empresa}</p>
-              <p className="text-caption">COMPROBANTE DE VISITA</p>
+              <p className="text-caption">COMPROBANTE DE VISITA{esCopia ? ` · COPIA #${copiaNumero}` : ''}</p>
             </div>
             <div className="space-y-1 mb-3">
               <div className="flex justify-between">
@@ -276,12 +274,10 @@ export function ComprobanteReceipt({
             </div>
             <div className="border-t border-black pt-2 text-center text-caption">
               <p>Gracias por tu preferencia.</p>
-              <p className="mt-1 text-caption text-muted-foreground">
-                Ref: {visitId.slice(-12).toUpperCase()}
-              </p>
+              <p className="mt-1 text-caption">Ref: {visitId.slice(-12).toUpperCase()}</p>
             </div>
           </div>
-        </div>
+        </AreaDeImpresion>
       )}
     </>
   )

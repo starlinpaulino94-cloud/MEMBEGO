@@ -40,6 +40,34 @@ export function whereCobrado(
 }
 
 /**
+ * LO QUE LA CAJA YA CONTÓ, NO SE CUENTA OTRA VEZ COMO COBRO DE MEMBRESÍA.
+ *
+ * Un pago con tarjeta de la pasarela activa la membresía (`montoPagado`, `pagoConfirmado`) Y deja una venta `SALE` en
+ * el libro (`transactions`, con `pagoIntentoId`). Los reportes suman los dos flujos —la caja y las membresías— y, sin
+ * esta guarda, ese mismo dinero saldría dos veces en «Total cobrado».
+ *
+ * La guarda deja fuera del flujo de membresías las que tienen una venta de pasarela COBRADA en el MISMO periodo. Es por
+ * periodo a propósito: un cobro anterior a que existiera el comprobante (sin venta) sigue contándose por su membresía,
+ * como siempre, y no desaparece del histórico.
+ *
+ * Alcance deliberado: solo ventas de pasarela. Las ventas de mostrador y del panel que también activan una membresía
+ * no se tocan aquí (ver `docs/PAGO_TARJETA_COMPROBANTE.md`, hallazgo previo): cambiar cifras ya publicadas es una
+ * decisión del negocio, no un efecto lateral de este trabajo.
+ */
+export function sinVentaDePasarelaEnElPeriodo(desde: Date, hasta: Date): Prisma.MembershipWhereInput {
+  return {
+    transacciones: {
+      none: {
+        tipo: 'SALE',
+        estado: { in: ['APPROVED', 'APPLIED'] },
+        pagoIntentoId: { not: null },
+        createdAt: { gte: desde, lt: hasta },
+      },
+    },
+  }
+}
+
+/**
  * El periodo anterior de la misma longitud, para comparar.
  *
  * Se calcula por diferencia real de milisegundos y no restando «30 días»: si el

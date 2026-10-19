@@ -1,24 +1,22 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getUser } from '@/lib/auth'
 import { paymentLimiter, getClientIdentifier } from '@/lib/rate-limit'
-import { crearClienteCardnet, cardnetTokensConfigurado } from '@/lib/payments/cardnet-tokens'
+import { consultarClienteCardnet, cardnetTokensConfigurado } from '@/lib/payments/cardnet-tokens'
 import { guardarTarjeta, eliminarTarjeta } from '@/modules/pagos/cardnetTokenGuardado'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
 import { logErrorBd } from '@/lib/prisma-errors'
+import { conEmpresa } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * FASE 2 — Guardar / quitar una tarjeta tokenizada para renovación automática.
+ * Guardar o quitar una tarjeta CardNET por solicitud del cliente.
  *
- * POST: registra una tarjeta (crea el Customer en CardNET si hace falta) y, si
- *   se indica membershipId, enciende la renovación automática de esa membresía.
- *   El navegador solo manda las REFERENCIAS que devolvió el iframe de CardNET,
- *   nunca datos de tarjeta.
+ * POST: selecciona un PaymentProfileId de la cuenta CardNET ya vinculada al
+ *   cliente. Todas las demás referencias y metadatos salen del servidor.
  * DELETE: el cliente quita su tarjeta.
  *
- * VERIFICAR-QA: qué referencias reutilizables entrega el iframe (paymentProfile
- * / token) se confirma contra el QA de CardNET. El plumbing queda listo.
+ * El guardado requiere consentimiento separado y nunca activa autoRenovar.
  */
 export async function POST(req: NextRequest) {
   const id = getClientIdentifier(req)
@@ -30,7 +28,12 @@ export async function POST(req: NextRequest) {
   if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.clienteId || !user.metadata.companyId) {
     return NextResponse.json({ ok: false, error: 'No autorizado.' }, { status: 401 })
   }
-  if (!cardnetTokensConfigurado() || !(await puedeCobrarToken(user.metadata.companyId))) {
+  const companyId = user.metadata.companyId
+  const clienteId = user.metadata.clienteId
+  if (!companyId || !clienteId) {
+    return NextResponse.json({ ok: false, error: 'No autorizado.' }, { status: 401 })
+  }
+  if (!cardnetTokensConfigurado() || !(await puedeCobrarToken(companyId))) {
     return NextResponse.json({ ok: false, error: 'La tarjeta no está disponible.' }, { status: 400 })
   }
 
@@ -41,53 +44,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Solicitud ilegible.' }, { status: 400 })
   }
 
-  const s = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
-  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
-
-  let customerId = s(cuerpo.customerId)
-  const paymentProfileId = s(cuerpo.paymentProfileId)
-  const token = s(cuerpo.token)
-  const membershipId = s(cuerpo.membershipId)
-
-  // Sin ninguna referencia reutilizable no hay nada que guardar.
-  if (!customerId && !paymentProfileId && !token) {
-    return NextResponse.json({ ok: false, error: 'Faltan datos de la tarjeta guardada.' }, { status: 400 })
+  const paymentProfileId = typeof cuerpo.paymentProfileId === 'string' ? cuerpo.paymentProfileId.trim() : ''
+  if (cuerpo.consentimiento !== true || !/^\d{1,18}$/.test(paymentProfileId)) {
+    return NextResponse.json({ ok: false, error: 'Confirma que deseas guardar esta tarjeta.' }, { status: 400 })
   }
 
   try {
-    if (!customerId) {
-      const cliente = await crearClienteCardnet({
-        email: user.email || `${user.metadata.clienteId}@membego.local`,
-      })
-      if (!cliente.ok) {
-        // `denegado` = el proveedor no nos deja pasar. No es un tropiezo del
-        // momento y reintentar no lo arregla, así que no se invita a hacerlo.
-        return NextResponse.json(
-          {
-            ok: false,
-            error:
-              cliente.motivo === 'denegado'
-                ? 'El pago con tarjeta no está disponible en este momento.'
-                : 'No se pudo registrar la tarjeta. Intenta de nuevo.',
-            motivo: cliente.motivo,
-          },
-          { status: cliente.motivo === 'denegado' ? 503 : 502 }
-        )
-      }
-      customerId = cliente.customerId
+    const cliente = await conEmpresa(companyId, (tx) => tx.cliente.findFirst({
+      where: { id: clienteId, companyId, supabaseId: user.supabaseId, esLocal: false },
+      select: { email: true, cardnetCustomerId: true },
+    }))
+    if (!cliente?.cardnetCustomerId) {
+      return NextResponse.json({ ok: false, error: 'No hay una tarjeta nueva vinculada a tu cuenta.' }, { status: 404 })
+    }
+    const customer = await consultarClienteCardnet(cliente.cardnetCustomerId)
+    if (!cliente.email || !customer.email || customer.email.trim().toLowerCase() !== cliente.email.trim().toLowerCase()) {
+      return NextResponse.json({ ok: false, error: 'No se pudo verificar la cuenta de la tarjeta.' }, { status: 409 })
+    }
+    const profile = customer.perfiles.find((candidate) => candidate.paymentProfileId === paymentProfileId)
+    if (!profile || !profile.token || !profile.habilitado) {
+      return NextResponse.json({ ok: false, error: 'La tarjeta no está lista para guardarse.' }, { status: 409 })
+    }
+    const expirado = profile.vencMes && profile.vencAnio
+      ? new Date(profile.vencAnio, profile.vencMes, 1).getTime() <= Date.now()
+      : false
+    if (expirado) {
+      return NextResponse.json({ ok: false, error: 'La tarjeta está vencida.' }, { status: 409 })
     }
 
     const tarjeta = await guardarTarjeta({
-      companyId: user.metadata.companyId,
-      clienteId: user.metadata.clienteId,
-      customerId,
-      paymentProfileId,
-      token,
-      marca: s(cuerpo.marca),
-      ultimos4: s(cuerpo.ultimos4),
-      vencMes: n(cuerpo.vencMes),
-      vencAnio: n(cuerpo.vencAnio),
-      membershipId,
+      companyId,
+      clienteId,
+      customerId: cliente.cardnetCustomerId,
+      paymentProfileId: profile.paymentProfileId,
+      token: profile.token,
+      marca: profile.marca,
+      ultimos4: profile.ultimos4,
+      vencMes: profile.vencMes,
+      vencAnio: profile.vencAnio,
     })
     return NextResponse.json({ ok: true, tarjetaId: tarjeta.id })
   } catch (e) {
@@ -111,6 +105,9 @@ export async function DELETE(req: NextRequest) {
   if (!tarjetaId) {
     return NextResponse.json({ ok: false, error: 'Falta la tarjeta.' }, { status: 400 })
   }
-  const ok = await eliminarTarjeta(tarjetaId, user.metadata.clienteId).catch(() => false)
-  return NextResponse.json({ ok }, { status: ok ? 200 : 404 })
+  if (!user.metadata.companyId) {
+    return NextResponse.json({ ok: false, error: 'No autorizado.' }, { status: 401 })
+  }
+  const result = await eliminarTarjeta(tarjetaId, user.metadata.clienteId, user.metadata.companyId).catch(() => 'no_encontrada' as const)
+  return NextResponse.json({ estado: result }, { status: result === 'no_encontrada' ? 404 : result === 'pendiente' ? 202 : 200 })
 }

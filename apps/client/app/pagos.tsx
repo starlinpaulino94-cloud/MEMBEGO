@@ -14,6 +14,7 @@ import {
   Receipt,
   Sparkles,
   AlertCircle,
+  Printer,
 } from 'lucide-react-native';
 import { useAuth } from '../src/lib/auth-context';
 import { goBackOr } from '../src/lib/navigation';
@@ -28,6 +29,7 @@ import { Skeleton } from '../src/components/ui/Skeleton';
 import { BillingCycleHeader } from '../src/components/cliente/pagos/BillingCycleHeader';
 import { PagosLedger } from '../src/components/cliente/pagos/PagosLedger';
 import { ComprobanteLink } from '../src/components/pagos/ComprobanteLink';
+import { ComprobantesDePago } from '../src/components/cliente/pagos/ComprobantesDePago';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
@@ -140,6 +142,7 @@ function PagosScreenContent() {
   const aviso = params.pago ? AVISO_PAGO[params.pago] : undefined;
   const membership = data?.membership ?? null;
   const historial = data?.historial ?? [];
+  const comprobantes = data?.comprobantes ?? [];
   const necesitaPago = membership ? NECESITA_PAGO.includes(membership.estado) : false;
   const cambioPendiente = !!membership?.planSolicitadoNombre;
   const backHeader = (
@@ -216,8 +219,8 @@ function PagosScreenContent() {
     );
   }
 
-  /* ── Empty (sin membresía) ─────────────────────────────────────────── */
-  if (!membership) {
+  /* ── Empty (sin membresía ni comprobantes) ─────────────────────────── */
+  if (!membership && comprobantes.length === 0) {
     return (
       <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
         {backHeader}
@@ -295,7 +298,9 @@ function PagosScreenContent() {
           </Button>
         </View>
 
-        {/* ── Membresía actual: panel de suscripción estilo Stripe Billing ─ */}
+        {/* ── Membresía actual: panel de suscripción estilo Stripe Billing ─
+            Sin membresía (solo compró promociones) se omite: los comprobantes siguen siendo suyos. */}
+        {membership ? (
         <Card className="mb-8 p-0">
           {/* Header row */}
           <View className="flex-row items-center justify-between border-b border-border/40 px-5 py-3">
@@ -397,8 +402,11 @@ function PagosScreenContent() {
             ) : null}
           </View>
         </Card>
+        ) : null}
 
         {/* ── Historial ─────────────────────────────────────────────── */}
+        {membership ? (
+        <>
         <View className="mb-4 flex-row items-center gap-2">
           <Text className="text-lg font-inter-bold text-foreground">
             Historial de pagos
@@ -413,6 +421,20 @@ function PagosScreenContent() {
         </View>
 
         <PagosLedger items={historial} />
+        </>
+        ) : null}
+
+        {/* ── Comprobantes de pago: la factura de cada venta, para imprimir o guardar ── */}
+        <View className="mb-4 mt-8 flex-row items-center gap-2">
+          <Printer size={18} color="#0284c7" />
+          <Text className="text-lg font-inter-bold text-foreground">Comprobantes de pago</Text>
+          {comprobantes.length > 0 ? (
+            <View className="rounded-full bg-muted px-2 py-0.5">
+              <Text className="text-xs font-inter-semibold text-muted-foreground">{comprobantes.length}</Text>
+            </View>
+          ) : null}
+        </View>
+        <ComprobantesDePago items={comprobantes} />
       </ScrollView>
     </View>
   );
