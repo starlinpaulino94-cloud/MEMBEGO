@@ -29,6 +29,10 @@ export async function registrarVentaConfirmada(input: {
   sucursalNombre?: string | null
   membershipId?: string | null
   observaciones?: string | null
+  /** Pago por pasarela: el intento que lo cobró (un recibo por intento, nunca dos). */
+  intentoId?: string | null
+  /** Cuándo se cobró, si el recibo se genera después (ver `CrearTransaccionInput.ocurridoEn`). */
+  ocurridoEn?: Date | null
   auditoria?: { ipAddress?: string | null; userAgent?: string | null }
 }): Promise<{ id: string; codigo: string; ticketNumero: string } | null> {
   try {
@@ -75,6 +79,7 @@ export async function registrarVentaConfirmada(input: {
           total: input.monto.toFixed(2),
           metodoCobroLabel: input.metodoCobroLabel,
           referenciaPago: input.referenciaPago ?? undefined,
+          intentoId: input.intentoId ?? undefined,
         },
         auditoria: {
           ipAddress: input.auditoria?.ipAddress ?? null,
@@ -82,6 +87,7 @@ export async function registrarVentaConfirmada(input: {
         },
         resultado: input.observaciones ?? null,
         userId: input.empleadoId,
+        ocurridoEn: input.ocurridoEn ?? undefined,
       })
     })
   } catch (e) {

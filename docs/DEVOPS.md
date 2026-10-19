@@ -23,6 +23,21 @@ aparecían vacíos. Ya pasó con `companies.capacidades`.
 | `dependencias` | `npm audit --omit=dev --audit-level=high` |
 | `esquema` | `prisma validate` + detecta cambios en `prisma/schema/` sin migración |
 
+**PostgreSQL de CI sin descargar imágenes (17-10-2026).** `esquema` y el E2E
+(`e2e.yml`) necesitan un Postgres real. Lo levantaban como `services:` con una
+imagen del espejo de ECR Public, y esa descarga tiene una cuota compartida entre
+runners: agotada, el job moría a los 10 s con `toomanyrequests`, antes de ejecutar
+una sola prueba y sin relación con el código (#621, #624); relanzar no servía
+hasta que la cuota se recuperaba. Ahora ambos usan la acción local
+`.github/actions/postgres`, que crea un clúster del **PostgreSQL 16 que ya trae el
+runner** (`en_US.UTF-8`, usuario `postgres`, puerto 5432: igual que la imagen) y
+no descarga nada. Si algún día el runner no lo trae, la acción avisa y cae al
+contenedor con reintentos y espera creciente. Los flujos `ensayo-rls.yml` y
+`respaldo-verificacion.yml` (no bloquean PRs) siguen con el contenedor; si
+también se ven afectados, se les cambia con una línea cada uno
+(`uses: ./.github/actions/postgres`). La guarda es
+`tests/ci-postgres-sin-registro.test.ts`.
+
 ### `.github/workflows/deploy-migraciones.yml` — al mezclar en `main`
 
 Aplica `prisma migrate deploy` **antes** de disparar el despliegue. Si la

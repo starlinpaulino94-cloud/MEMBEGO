@@ -70,10 +70,16 @@ export interface CrearTransaccionInput {
   readonly executionMs?: number | null
   readonly timeZone?: string
   readonly userId?: string | null
+  /**
+   * Cuándo ocurrió el hecho, si no es ahora: un recibo que se genera después
+   * (el de un pago que ya estaba cobrado) lleva la fecha del cobro, en su
+   * fecha, su código TX-AAAAMMDD y su `appliedAt`. Sin esto saldría fechado hoy.
+   */
+  readonly ocurridoEn?: Date
 }
 
-async function generarIdentificadores(db: Db, companyId: string, timeZone?: string) {
-  const fecha = fechaScope(new Date(), timeZone)
+async function generarIdentificadores(db: Db, companyId: string, timeZone?: string, cuando = new Date()) {
+  const fecha = fechaScope(cuando, timeZone)
   const [txSeq, ticketSeq] = [
     await nextCounter(db, `TX:${fecha}`),
     await nextCounter(db, `TICKET:${companyId}`),
@@ -97,12 +103,14 @@ export async function crearTransaccionAplicada(
   const { codigo, ticketNumero } = await generarIdentificadores(
     db,
     input.companyId,
-    input.timeZone
+    input.timeZone,
+    input.ocurridoEn
   )
-  const now = new Date()
+  const now = input.ocurridoEn ?? new Date()
 
   const tx = await db.transaction.create({
     data: {
+      createdAt: input.ocurridoEn,
       codigo,
       ticketNumero,
       tipo: input.tipo,

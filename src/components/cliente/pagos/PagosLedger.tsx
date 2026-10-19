@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { CalendarClock, ExternalLink, FileText, Wallet } from 'lucide-react'
+import Link from 'next/link'
+import { CalendarClock, ExternalLink, FileText, Printer, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { PagoHistorialItem } from '@/modules/cliente/queries'
@@ -204,6 +205,16 @@ function ReceiptDrawer({
                   </div>
                 )}
               </dl>
+
+              {item.transaccionId && (
+                <Link
+                  href={`/cliente/pagos/comprobante/${item.transaccionId}`}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                >
+                  <Printer className="h-4 w-4" aria-hidden />
+                  Ver / imprimir comprobante
+                </Link>
+              )}
 
               {item.comprobanteUrl ? (
                 <div>

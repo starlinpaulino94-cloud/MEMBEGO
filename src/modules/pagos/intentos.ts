@@ -24,6 +24,8 @@
  */
 
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import type { Prisma } from '@prisma/client'
+import { registrarReciboDePasarela } from '@/modules/pagos/reciboPasarela'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { activarCompraPromocion } from '@/modules/pagos/activacionCompra'
 import { activarMembresia } from '@/modules/pagos/activacion'
@@ -165,6 +167,31 @@ type IntentoEntregable = {
   membershipId: string | null
   ipAddress: string | null
   userAgent: string | null
+  /** Para el recibo: quién pagó, cuánto, con qué pasarela y con qué autorización. */
+  clienteId: string | null
+  monto: Prisma.Decimal | number
+  proveedor: string
+  autorizacion: string | null
+}
+
+/**
+ * El recibo del pago con tarjeta: la venta oficial (ticket + factura) que el
+ * admin ve en Facturas y el cliente en «Mis pagos». Las transferencias no
+ * pasan por aquí (las confirma el admin y ese camino ya deja su recibo).
+ */
+async function dejarRecibo(intento: IntentoEntregable, detalle: string): Promise<void> {
+  if (intento.proveedor === 'TRANSFERENCIA') return
+  await registrarReciboDePasarela({
+    companyId: intento.companyId,
+    intentoId: intento.id,
+    clienteId: intento.clienteId,
+    membershipId: intento.membershipId,
+    compraId: intento.compraId,
+    monto: Number(intento.monto),
+    autorizacion: intento.autorizacion,
+    proveedor: intento.proveedor,
+    detalle,
+  })
 }
 
 /**
@@ -189,6 +216,7 @@ async function entregarProducto(
       fulfillmentClaim,
     })
     if (!res.ok) return { completada: false, error: res.error }
+    await dejarRecibo(intento, `Promoción ${res.promoTitulo}`.trim())
     return { completada: true }
   }
   if (intento.membershipId) {
@@ -202,6 +230,7 @@ async function entregarProducto(
       throw error
     }
     if (!res.ok) return { completada: false, error: res.error }
+    await dejarRecibo(intento, `Plan ${res.planNombre}`.trim())
     return { completada: true }
   }
   return { completada: false, error: 'Intento sin producto asociado.' }
@@ -314,7 +343,10 @@ export async function confirmarIntento(
     return resultadoIntentoActual(intentoId, intento.companyId, intento, 'El intento ya no está pendiente de confirmación.')
   }
 
-  const entrega = await entregarProducto(intento, claimAt)
+  const entrega = await entregarProducto(
+    { ...intento, autorizacion: resultado.autorizacion ?? intento.autorizacion },
+    claimAt
+  )
   if (entrega.error === 'FULFILLMENT_CLAIM_LOST') {
     return resultadoIntentoActual(intentoId, intento.companyId, intento, 'La entrega ya fue reclamada por otro proceso.')
   }
@@ -351,6 +383,10 @@ export async function reintentarEntrega(
           estado: true,
           fulfillmentEstado: true,
           updatedAt: true,
+          clienteId: true,
+          monto: true,
+          proveedor: true,
+          autorizacion: true,
         },
       })
   )
