@@ -8,11 +8,13 @@
  */
 
 import { useRef, useState } from 'react'
-import { ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
+import { Crop, ImageIcon, Loader2, Trash2, UploadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { OG_MAX_MB } from '@/lib/share/og-tamano'
-import { PROMO_IMG_DESCRIPCION, validarDimensionesPromo } from '@/modules/promociones/formato-imagen'
+import { validarDimensionesPromo } from '@/modules/promociones/formato-imagen'
+import { FORMATOS } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 import { uniqueFileName } from '@/lib/storage'
 import { rutaPromocion } from '@/lib/storage-rutas'
 import { Button } from '@/components/ui/button'
@@ -96,6 +98,9 @@ export function PromoImagenUpload({
     }
   }
 
+  // Al elegir una foto se abre el editor; lo que sube es la imagen ya encuadrada (cuadrada, 1080×1080).
+  const { elegir, encuadrar, dialogo } = useEditorDeImagen({ formato: FORMATOS.promocion, alAplicar: handleFile })
+
   return (
     <div className="space-y-2">
       <input type="hidden" name="imagenUrl" value={url} />
@@ -105,22 +110,22 @@ export function PromoImagenUpload({
         accept={ALLOWED.join(',')}
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) void handleFile(f)
+          elegir(e.target.files?.[0])
+          e.target.value = ''
         }}
       />
 
       {url ? (
-        <div className="overflow-hidden rounded-xl border border-border">
+        <div className="aspect-square max-w-xs overflow-hidden rounded-xl border border-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="Imagen de la promoción" className="h-40 w-full object-cover" />
+          <img src={url} alt="Imagen de la promoción" className="h-full w-full object-cover" />
         </div>
       ) : (
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          className="flex aspect-square w-full max-w-xs flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
         >
           {uploading ? (
             <Loader2 className="h-6 w-6 animate-spin" />
@@ -129,7 +134,7 @@ export function PromoImagenUpload({
           )}
           <span className="text-sm">Subir imagen desde tu dispositivo</span>
           <span className="text-xs">JPG, PNG o WebP · máx. {MAX_MB} MB</span>
-          <span className="text-xs opacity-80">{PROMO_IMG_DESCRIPCION}</span>
+          <span className="text-xs opacity-80">{FORMATOS.promocion.descripcion}</span>
         </button>
       )}
 
@@ -146,6 +151,10 @@ export function PromoImagenUpload({
             {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="h-3.5 w-3.5" />}
             Cambiar
           </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={uploading} onClick={() => encuadrar(url)}>
+            <Crop className="h-3.5 w-3.5" aria-hidden />
+            Encuadrar
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -159,6 +168,7 @@ export function PromoImagenUpload({
           </Button>
         </div>
       )}
+      {dialogo}
     </div>
   )
 }

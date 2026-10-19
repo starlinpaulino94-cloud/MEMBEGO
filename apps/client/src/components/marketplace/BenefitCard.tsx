@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Image, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ArrowRight, Clock, Star, Zap } from 'lucide-react-native'
@@ -15,11 +15,16 @@ export function BenefitCard({ promotion, saved }: {
   readonly saved: boolean
 }) {
   const router = useRouter()
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
   const companyColor = brandColor(promotion.company.colorPrimario, colors.primary.DEFAULT)
   const price = promotion.venta?.precio ?? promotion.precio
   const expiresAt = promotion.vigenciaHasta ? new Date(promotion.vigenciaHasta) : null
-  const expired = expiresAt !== null && expiresAt.getTime() < Date.now()
-  const endingSoon = expiresAt !== null && !expired && expiresAt.getTime() - Date.now() < 3 * 86400000
+  const expired = expiresAt !== null && expiresAt.getTime() < now
+  const endingSoon = expiresAt !== null && !expired && expiresAt.getTime() - now < 3 * 86400000
   const discount = promotion.descuento === null ? null : Number(promotion.descuento)
   const discountLabel = promotion.tipo === '2x1'
     ? '2×1'

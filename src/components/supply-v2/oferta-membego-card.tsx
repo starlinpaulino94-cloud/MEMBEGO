@@ -13,21 +13,28 @@ function dinero(n: string, moneda: string): string {
  */
 export function OfertaMembegoCard({ oferta }: { oferta: MarketplaceSupplyOffer }) {
   return (
-    <Link href={oferta.href} className="group flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm transition hover:shadow-premium" data-testid="oferta-membego-card">
+    <Link href={oferta.href} className="group flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm transition hover:shadow-premium" data-testid="oferta-membego-card" data-modo-comercial={oferta.comercial.modo}>
       <div className="flex h-36 items-center justify-center bg-primary/10 text-primary">
         <Sparkles className="h-10 w-10" aria-hidden />
       </div>
       <div className="flex flex-1 flex-col gap-1 p-4">
-        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-caption font-semibold text-primary">
-          Oferta Membego · −{oferta.discountPercentage} %
+        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-caption font-semibold text-primary" data-testid="etiqueta-comercial">
+          {oferta.comercial.etiqueta}{oferta.comercial.modo === 'MEMBEGO_GIFT' ? '' : ` · −${oferta.discountPercentage} %`}
         </span>
         <p className="text-h4 group-hover:underline">{oferta.title}</p>
-        <p className="text-caption text-muted-foreground">{oferta.supplier}</p>
-        <div className="mt-auto flex items-baseline gap-2 pt-2">
-          <span className="text-h3 tabular-nums" data-testid="oferta-card-precio">{dinero(oferta.salePrice, oferta.currency)}</span>
-          <span className="text-caption text-muted-foreground line-through tabular-nums">{dinero(oferta.publicPrice, oferta.currency)}</span>
-        </div>
-        <p className="text-caption text-success">Ahorras {dinero(oferta.savings, oferta.currency)}</p>
+        <p className="text-caption text-muted-foreground" data-testid="linea-vendedor">{oferta.comercial.lineaVendedor}</p>
+        <p className="text-caption text-muted-foreground" data-testid="linea-canje">{oferta.comercial.lineaCanje}</p>
+        {oferta.comercial.modo === 'MEMBEGO_GIFT' ? (
+          <p className="mt-auto pt-2 text-h3 text-success" data-testid="oferta-card-precio">Gratis</p>
+        ) : (
+          <>
+            <div className="mt-auto flex items-baseline gap-2 pt-2">
+              <span className="text-h3 tabular-nums" data-testid="oferta-card-precio">{dinero(oferta.salePrice, oferta.currency)}</span>
+              <span className="text-caption text-muted-foreground line-through tabular-nums">{dinero(oferta.publicPrice, oferta.currency)}</span>
+            </div>
+            <p className="text-caption text-success">Ahorras {dinero(oferta.savings, oferta.currency)}</p>
+          </>
+        )}
       </div>
     </Link>
   )

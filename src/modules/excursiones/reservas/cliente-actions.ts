@@ -39,6 +39,7 @@ import { asegurarClienteEnEmpresa } from '@/modules/cliente/afiliacion'
 import { sendEmail } from '@/lib/email'
 import { correoConfirmacionReserva } from '@/lib/email/plantillas-excursiones'
 import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
+import { appUrl } from '@/lib/site'
 
 export interface ReservaClienteState {
   error?: string
@@ -471,7 +472,7 @@ export async function reservarExcursion(
 
     // Send confirmation email to client (non-blocking)
     if (user.email) {
-      const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
+      const urlBase = appUrl()
       correoConfirmacionReserva({
         nombreCliente: user.email,
         numeroReserva: creada.numero,
@@ -806,7 +807,7 @@ export async function reservarCarritoAction(
 
       // Send confirmation email to client for this reservation (non-blocking)
       if (reserva && user.email) {
-        const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
+        const urlBase = appUrl()
         correoConfirmacionReserva({
           nombreCliente: user.email,
           numeroReserva: reserva.numero,

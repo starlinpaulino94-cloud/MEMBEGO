@@ -14,15 +14,15 @@ import { FUNCIONES_EMPRESA } from '../src/modules/plataforma/conceptos'
 /**
  * COMMERCE CORE · catálogo — capacidad, sección y guardias (Fase 1).
  *
- * El catálogo unificado nace APAGADO para todos y se enciende empresa por
- * empresa. Aquí se comprueba el cableado; el comportamiento contra la base
+ * El catálogo unificado nace ENCENDIDO para todos (experiencia comercial,
+ * 2026-10-08) y se apaga por override si hace falta. Aquí se comprueba el cableado; el comportamiento contra la base
  * está en `tests/postgres/catalog.db.test.ts`.
  */
 
-test('CATALOGO_UNIFICADO existe y no está encendida de serie en ninguna categoría', () => {
+test('CATALOGO_UNIFICADO existe y está encendida de serie en todas las categorías (experiencia comercial)', () => {
   assert.ok((CAPACIDADES as readonly string[]).includes('CATALOGO_UNIFICADO'))
   for (const [categoria, base] of Object.entries(CAPACIDADES_BASE)) {
-    assert.ok(!(base as readonly string[]).includes('CATALOGO_UNIFICADO'), `${categoria} la enciende de serie`)
+    assert.ok((base as readonly string[]).includes('CATALOGO_UNIFICADO'), `${categoria} no la enciende de serie`)
   }
 })
 
@@ -71,13 +71,15 @@ test('todas las acciones exportadas piden la guardia ANTES de tocar la base', ()
     'agregarVarianteCatalogo',
     'asignarCategoriasCatalogo',
     'cambiarEstadoItemCatalogo',
+    'confirmarImagenCatalogo',
     'crearCategoriaCatalogo',
     'crearItemCatalogo',
     'eliminarCategoriaCatalogo',
     'eliminarImagenCatalogo',
     'eliminarVarianteCatalogo',
     'ponerPortadaCatalogo',
-    'subirImagenCatalogo',
+    'prepararSubidaImagenCatalogo',
+    'reencuadrarImagenCatalogo',
   ])
   for (const nombre of exportadas) {
     const desde = sinComentarios.indexOf(`export async function ${nombre}`)
@@ -98,23 +100,61 @@ test('contexto() exige la sección «catalogo» y saca la empresa de la sesión,
   assert.doesNotMatch(sinComentarios, /\bprisma\./, 'las acciones no usan el cliente global: todo va por conEmpresa')
 })
 
-test('subirImagenCatalogo autoriza y comprueba el cupo ANTES de crear el cliente de servicio', () => {
-  const desde = sinComentarios.indexOf('export async function subirImagenCatalogo')
+test('prepararSubidaImagenCatalogo autoriza y comprueba el cupo ANTES de crear el cliente de Storage', () => {
+  const desde = sinComentarios.indexOf('export async function prepararSubidaImagenCatalogo')
   const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
   const guardia = cuerpo.indexOf("contexto('editar')")
   const cupo = cuerpo.indexOf('exigirCupoDeImagen(')
-  const firma = cuerpo.indexOf('detectarTipoImagen(buffer)')
-  const privilegiado = cuerpo.indexOf('createAdminClient()')
-  assert.ok(guardia >= 0 && cupo >= 0 && firma >= 0 && privilegiado >= 0, 'cambió el flujo de subida: revisa esta prueba')
-  assert.ok(guardia < cupo && cupo < privilegiado, 'el cliente de servicio se crea antes de autorizar o de mirar el cupo')
-  assert.ok(firma < privilegiado, 'se sube antes de comprobar la firma del archivo')
-  assert.doesNotMatch(cuerpo, /file\.type|file\.name/, 'vuelve a confiar en el MIME o el nombre del cliente')
-  assert.match(cuerpo, /upsert: false/)
+  const privilegiado = cuerpo.indexOf('createServerClient()')
+  assert.ok(guardia >= 0 && cupo >= 0 && privilegiado >= 0, 'cambió el flujo de subida: revisa esta prueba')
+  assert.ok(guardia < cupo && cupo < privilegiado, 'el cliente de Storage se crea antes de autorizar o de mirar el cupo')
+  assert.match(cuerpo, /createSignedUploadUrl\(path\)/, 'la URL firmada debe ser para la ruta que decide el servidor')
+  assert.doesNotMatch(cuerpo, /upsert: true/, 'una URL firmada nunca debe sobrescribir')
   assert.match(cuerpo, /rutaCatalogo\(c\.companyId, itemId,/, 'la ruta debe llevar la empresa de la SESIÓN')
 })
 
-test('borrar una imagen solo toca del bucket lo que cuelga del ítem de esta empresa', () => {
-  assert.match(sinComentarios, /path\.startsWith\(prefijoImagenesItem\(c\.companyId, itemId\)\)/)
+test('confirmarImagenCatalogo autoriza, exige la ruta de este ítem y decide el tipo por la firma antes de registrar', () => {
+  const desde = sinComentarios.indexOf('export async function confirmarImagenCatalogo')
+  const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
+  const guardia = cuerpo.indexOf("contexto('editar')")
+  const ruta = cuerpo.indexOf('prefijoImagenesItem(c.companyId, itemId)')
+  const privilegiado = cuerpo.indexOf('createServerClient()')
+  const firma = cuerpo.indexOf('detectarTipoImagen(buffer)')
+  const registro = cuerpo.indexOf('registrarImagenEnTx(')
+  assert.ok(guardia >= 0 && ruta >= 0 && privilegiado >= 0 && firma >= 0 && registro >= 0, 'cambió el flujo de confirmación: revisa esta prueba')
+  assert.ok(guardia < ruta && ruta < privilegiado, 'el cliente de Storage se crea antes de autorizar o de validar la ruta')
+  assert.ok(firma < registro, 'se registra la imagen antes de comprobar la firma del archivo')
+  assert.doesNotMatch(cuerpo, /file\.type|file\.name|tipoDeclarado/, 'vuelve a confiar en el MIME o el nombre del cliente')
+  // Lo que no pasa la validación no se queda en Storage: cada salida fallida borra el objeto.
+  assert.ok((cuerpo.match(/await descartar\(/g) ?? []).length >= 4, 'un archivo rechazado debe borrarse del bucket')
+})
+
+test('borrar una imagen solo toca del bucket lo que cuelga del ítem de esta empresa, versiones incluidas', () => {
+  const desde = sinComentarios.indexOf('export async function eliminarImagenCatalogo')
+  const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
+  assert.match(cuerpo, /rutasDeVariantes\(variantesBase\)/, 'al quitar la foto deben irse también sus versiones')
+  assert.match(cuerpo, /\.filter\(\(r\) => r\.startsWith\(prefijo\)\)/, 'solo se borra lo que cuelga del ítem de esta empresa')
+})
+
+test('reencuadrarImagenCatalogo autoriza antes de leer, parte del original y no pisa las versiones viejas hasta el final', () => {
+  const desde = sinComentarios.indexOf('export async function reencuadrarImagenCatalogo')
+  const cuerpo = sinComentarios.slice(desde, sinComentarios.indexOf('\n}\n', desde))
+  const guardia = cuerpo.indexOf("contexto('editar')")
+  const lectura = cuerpo.indexOf('leerImagenParaReencuadrarEnTx(')
+  const cliente = cuerpo.indexOf('createServerClient()')
+  const generar = cuerpo.indexOf('generarVariantesCatalogo(')
+  const subir = cuerpo.indexOf('subirVariantes(')
+  const registro = cuerpo.indexOf('reencuadrarImagenEnTx(')
+  const borrarViejas = cuerpo.indexOf('rutasDeVariantes(anterior)')
+  assert.ok([guardia, lectura, cliente, generar, subir, registro, borrarViejas].every((i) => i >= 0), 'cambió el flujo de reencuadre: revisa esta prueba')
+  assert.ok(guardia < lectura && lectura < cliente && cliente < generar && generar < subir && subir < registro && registro < borrarViejas,
+    'el orden debe ser: autorizar, leer, generar, subir las nuevas, guardar y SOLO ENTONCES borrar las viejas')
+  assert.match(cuerpo, /anterior\.startsWith\(prefijoImagenesItem\(c\.companyId, actual\.itemId\)\)/, 'no se borra nada fuera del ítem de esta empresa')
+  assert.match(cuerpo, /upsert: false|subirVariantes/, 'las versiones nuevas nunca pisan archivos')
+})
+
+test('las versiones se suben con caché larga y sin pisar nada', () => {
+  assert.match(sinComentarios, /cacheControl: '31536000', upsert: false/)
 })
 
 test('el servicio y las lecturas filtran SIEMPRE por companyId (con la Capa 2 apagada es lo único que separa empresas)', () => {
@@ -166,10 +206,10 @@ test('las pantallas de /admin/catalogo se guardan por sección en el layout y po
   assert.match(detalle, /notFound\(\)/, 'un ítem ajeno debe verse como inexistente')
 })
 
-test('la entrada de menú existe, detrás de la capacidad, y en el grupo Catálogo del hub', () => {
+test('la entrada de menú existe, detrás de la capacidad, y abre el grupo Comercio del hub', () => {
   const nav = readFileSync('src/components/layout/nav-config.ts', 'utf8')
   assert.match(nav, /href: '\/admin\/catalogo',[\s\S]{0,400}capacidad: 'CATALOGO_UNIFICADO'/)
-  assert.match(nav, /deAdmin\('\/admin\/catalogo',/)
+  assert.match(nav, /id: 'comercio',\s*label: 'Comercio',\s*items: deAdmin\(\s*'\/admin\/catalogo',/)
   const ctxNav = readFileSync('src/modules/navegacion/contexto.ts', 'utf8')
   assert.match(ctxNav, /'CATALOGO_UNIFICADO'/)
 })

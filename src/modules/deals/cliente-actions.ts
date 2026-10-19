@@ -27,6 +27,9 @@ import { InventarioError } from '@/modules/inventory/errores'
 import { PedidoError } from '@/modules/orders/errores'
 import { OfertaError } from './errores'
 import { refrescarVitrinasDeOfertas } from './vitrinas'
+import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
+import { AUTOMATION_EVENTS } from '@/lib/automation/domain/events'
+import { crearNotificacion } from '@/modules/notificaciones/service'
 import { empresaOfreceOfertas } from './publico'
 import { motivoNoReclamarEnTx, reclamarOfertaEnTx } from './service'
 
@@ -43,7 +46,7 @@ function aError(e: unknown): { ok: false; error: string } {
 const texto = (v: unknown) => (typeof v === 'string' ? v : '')
 
 /** «Obtener oferta»: reserva la parte del presupuesto y un cupo, y crea el pedido (con su QR) de la oferta. */
-export async function reclamarOferta(entrada: { dealId: string; sucursalId: string }): Promise<ResultadoReclamo> {
+export async function reclamarOferta(entrada: { dealId: string; sucursalId: string; campaignId?: string }): Promise<ResultadoReclamo> {
   try {
     const user = await getUser()
     if (!user) return { ok: false, error: 'Inicia sesión para obtener la oferta.', sinSesion: true }
@@ -53,6 +56,7 @@ export async function reclamarOferta(entrada: { dealId: string; sucursalId: stri
 
     const dealId = texto(entrada.dealId)
     const sucursalId = texto(entrada.sucursalId)
+    const campaignId = texto(entrada.campaignId).slice(0, 60) || undefined
     if (!dealId) return { ok: false, error: 'La oferta no existe.' }
     if (!sucursalId) return { ok: false, error: 'Elige la sucursal donde la vas a canjear.' }
 
@@ -79,7 +83,7 @@ export async function reclamarOferta(entrada: { dealId: string; sucursalId: stri
     if ('error' in ficha) return { ok: false, error: ficha.error }
 
     try {
-      const r = await conEmpresa(companyId, (tx) => reclamarOfertaEnTx(tx, companyId, { dealId, customerId: ficha.clienteId, locationId: sucursalId }))
+      const r = await conEmpresa(companyId, (tx) => reclamarOfertaEnTx(tx, companyId, { dealId, customerId: ficha.clienteId, locationId: sucursalId, campaignId }))
       revalidatePath('/cliente/pedidos', 'layout')
       revalidatePath('/admin/deals', 'layout')
       revalidatePath('/admin/pedidos-membego', 'layout')
@@ -88,13 +92,28 @@ export async function reclamarOferta(entrada: { dealId: string; sucursalId: stri
       // Best-effort y DESPUÉS de responder (`after`): un aviso no puede tumbar el reclamo ni perderse al terminar la respuesta.
       after(async () => {
         try {
-          await notificarAdmins(companyId, {
-            tipo: 'SISTEMA',
-            titulo: 'Alguien obtuvo una oferta',
-            mensaje: `El cupón ${r.orderCode} está listo para canjearse con su QR.`,
-            href: `/admin/pedidos-membego/${r.orderId}`,
-            dedupeKey: `oferta-reclamada:${r.claimId}`,
-          })
+          await Promise.allSettled([
+            notificarAdmins(companyId, {
+              tipo: 'SISTEMA',
+              titulo: 'Alguien obtuvo una oferta',
+              mensaje: `El cupón ${r.orderCode} está listo para canjearse con su QR.`,
+              href: `/admin/pedidos-membego/${r.orderId}`,
+              dedupeKey: `oferta-reclamada:${r.claimId}`,
+            }),
+            // Al cliente: su cupón con QR ya existe (es un pedido LISTO).
+            user.metadata.dbUserId
+              ? crearNotificacion({
+                  userId: user.metadata.dbUserId,
+                  tipo: 'SISTEMA',
+                  titulo: 'Tu oferta está lista',
+                  mensaje: `Obtuviste la oferta: el cupón ${r.orderCode} se canjea en el negocio con el QR de tu pedido.`,
+                  href: `/cliente/pedidos/${r.orderId}`,
+                  dedupeKey: `oferta-obtenida:${r.claimId}`,
+                })
+              : Promise.resolve(),
+            // Bus de dominio: «obtenida» ≠ «canjeada» (el canje lo emite el cierre por QR como pedido.completado + oferta.canjeada).
+            emitirEventoEstrategia({ companyId, type: AUTOMATION_EVENTS.DEAL_CLAIMED, subjectId: dealId, payload: { oferta: dealId, reclamo: r.claimId, pedido: r.orderId, ahorro: r.savings } }),
+          ])
         } catch (e) {
           console.error('[deals-cliente] aviso a la empresa', e instanceof Error ? e.message : e)
         }

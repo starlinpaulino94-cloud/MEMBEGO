@@ -24,7 +24,7 @@ import {
 import { cancelarCuponEnTx, generarCuponesEnTx, type CuponesGenerados } from './campaigns/coupons'
 import { AUDIENCIAS, minutosDesdeTexto, ORGANIZADORES, TIPOS_CUPON } from './campaigns/domain'
 import { buscarClientesParaCampana } from './campaigns/queries'
-import { RUTA_CAMPANAS, RUTA_CAMPANAS_PUBLICAS, RUTA_CUPONES_CLIENTE } from './core/catalogo'
+import { RUTA_CAMPANAS, RUTA_CAMPANAS_CLIENTE, RUTA_CAMPANAS_PUBLICAS, RUTA_CUPONES_CLIENTE } from './core/catalogo'
 
 /**
  * MEMBEGO SUPPLY · SLICE 7 · server actions de CAMPAÑAS Y CUPONES (§27).
@@ -41,6 +41,7 @@ function refrescarCampanas(id?: string): void {
   revalidatePath(RUTA_CAMPANAS)
   if (id) revalidatePath(`${RUTA_CAMPANAS}/${id}`)
   revalidatePath(RUTA_CAMPANAS_PUBLICAS)
+  revalidatePath(RUTA_CAMPANAS_CLIENTE, 'layout')
   revalidatePath('/promociones')
   revalidatePath(RUTA_CUPONES_CLIENTE)
 }

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+import { rutaDeExcursion, type Espacio } from '@/modules/comercio/rutas'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -27,7 +29,6 @@ import {
   X,
 } from 'lucide-react'
 import { PromotionGrid } from '@/components/public/PromotionGrid'
-import { FollowButton } from '@/components/public/FollowButton'
 import { ShareButton } from '@/components/public/ShareButton'
 import { ResenasSection } from '@/components/marketplace/ResenasSection'
 import type { CompanyResenas } from '@/modules/resenas/queries'
@@ -46,6 +47,7 @@ import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPub
 import { TarjetaOferta } from '@/components/deals/TarjetaOferta'
 import type { OfertaPublica } from '@/modules/deals/publico-nucleo'
 import type { ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
+import { claveDeItem, indiceDeOfertas, separarCatalogo } from '@/modules/comercio/vitrina'
 
 const TIPO_LABEL: Record<string, string> = {
   carwash: 'Car Wash',
@@ -96,6 +98,17 @@ export interface CompanyProfileProps {
 
   /** Ofertas con presupuesto que se pueden obtener ahora (F5). Vacío = sin sección. */
   ofertas?: OfertaPublica[]
+  /**
+   * Lo único que OPERA en una oferta («Obtener»). Lo pone la PÁGINA que monta el perfil:
+   * la app, el botón que la obtiene; la landing, el enlace que lleva a la app. Así este
+   * componente compartido no importa ninguna operación comercial.
+   */
+  accionDeOferta?: (oferta: OfertaPublica) => ReactNode
+  /**
+   * «Seguir a la empresa». Lo pone la PÁGINA que monta el perfil: la app, el botón que sigue; la landing, un enlace que
+   * lleva a la app (seguir es una acción del cliente). Así este componente compartido no importa ninguna acción.
+   */
+  ranuraSeguir?: ReactNode
 
   /** Excursiones públicas de la empresa (opcional). */
   excursiones?: {
@@ -148,9 +161,12 @@ export function CompanyProfile({
   excursiones = [],
   catalogo = [],
   ofertas = [],
+  accionDeOferta = () => null,
+  ranuraSeguir = null,
 }: CompanyProfileProps) {
   const hayResenas = !!resenas && (resenas.total > 0 || !!resenaFormSlot)
   const isApp = mode === 'app'
+  const espacio: Espacio = isApp ? 'app' : 'publico'
 
   // Rutas dependientes del contexto. En 'app' todo permanece dentro de la
   // aplicación; en 'public' se usan las rutas de la Landing. Fase 4: si el
@@ -164,9 +180,10 @@ export function CompanyProfile({
   // (para que el destinatario, que puede no tener sesión, la pueda abrir).
   const sharePath = `/empresas/${company.slug}`
   const shareUrl = landingUrlFor(sharePath)
-  const followRedirect = isApp
-    ? `/cliente/empresas/${company.slug}`
-    : sharePath
+  // El catálogo se enseña en dos secciones (lo que se recoge y lo que se presta);
+  // cada tarjeta lleva su oferta viva (antes/ahora) sin duplicar el producto.
+  const { productos, servicios } = separarCatalogo(catalogo)
+  const ofertaPorItem = indiceDeOfertas(ofertas)
 
   // Navegación por secciones (solo las que tienen contenido).
   const seccionesNav = [
@@ -176,8 +193,9 @@ export function CompanyProfile({
     posts.beneficios.length > 0 && { id: 'beneficios', label: 'Beneficios' },
     posts.eventos.length > 0 && { id: 'eventos', label: 'Eventos' },
     posts.noticias.length > 0 && { id: 'noticias', label: 'Noticias' },
+    productos.length > 0 && { id: 'catalogo', label: 'Productos' },
+    servicios.length > 0 && { id: 'servicios', label: 'Servicios' },
     ofertas.length > 0 && { id: 'ofertas', label: 'Ofertas' },
-    catalogo.length > 0 && { id: 'catalogo', label: 'Productos y servicios' },
     excursiones.length > 0 && { id: 'excursiones', label: 'Actividades' },
     company.galleryImages.length > 0 && { id: 'galeria', label: 'Galería' },
     hayResenas && { id: 'resenas', label: 'Reseñas' },
@@ -338,7 +356,7 @@ export function CompanyProfile({
                   Quiero una membresía <ArrowRight className="h-4 w-4" aria-hidden />
                 </Link>
               )}
-              <FollowButton companyId={company.id} redirectTo={followRedirect} />
+              {ranuraSeguir}
               <ShareButton
                 title={company.name}
                 text={`Descubre ${company.name} en MembeGo: membresías, promociones y beneficios.`}
@@ -646,27 +664,40 @@ export function CompanyProfile({
           </section>
         )}
 
-        {/* Ofertas con presupuesto (F5): descuentos que se obtienen aquí y se canjean con el QR del pedido */}
-        {ofertas.length > 0 && (
-          <section id="ofertas" className="mt-14 scroll-mt-32">
-            <h2 className="text-h2 text-foreground">Ofertas</h2>
-            <p className="mt-2 text-muted-foreground">Obtén la oferta y canjéala en {company.name} con tu QR.</p>
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {ofertas.map((o) => (
-                <TarjetaOferta key={o.id} oferta={o} retorno={`/empresas/${company.slug}#ofertas`} mostrarEmpresa={false} />
+        {/* Productos (catálogo unificado): lo que se recoge en la sucursal. Cada tarjeta lleva su oferta viva. */}
+        {productos.length > 0 && (
+          <section id="catalogo" className="mt-14 scroll-mt-32">
+            <h2 className="text-h2 text-foreground">Productos</h2>
+            <p className="mt-2 text-muted-foreground">Lo que vende {company.name}. Pides aquí y lo recoges con tu QR.</p>
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {productos.map((item) => (
+                <TarjetaCatalogoPublica key={item.id} item={item} espacio={espacio} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
               ))}
             </div>
           </section>
         )}
 
-        {/* Productos y servicios (catálogo unificado) */}
-        {catalogo.length > 0 && (
-          <section id="catalogo" className="mt-14 scroll-mt-32">
-            <h2 className="text-h2 text-foreground">Productos y servicios</h2>
-            <p className="mt-2 text-muted-foreground">Lo que ofrece {company.name}, con sus precios.</p>
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {catalogo.map((item) => (
-                <TarjetaCatalogoPublica key={item.id} item={item} />
+        {/* Servicios: lo que se presta (lavado, corte, consulta…). Sin cajas que contar. */}
+        {servicios.length > 0 && (
+          <section id="servicios" className="mt-14 scroll-mt-32">
+            <h2 className="text-h2 text-foreground">Servicios</h2>
+            <p className="mt-2 text-muted-foreground">Lo que {company.name} hace por ti, con sus precios.</p>
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {servicios.map((item) => (
+                <TarjetaCatalogoPublica key={item.id} item={item} espacio={espacio} oferta={ofertaPorItem.get(claveDeItem(item)) ?? null} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Ofertas (F5): descuentos sobre esos mismos productos y servicios, que se obtienen aquí y se canjean con el QR del pedido */}
+        {ofertas.length > 0 && (
+          <section id="ofertas" className="mt-14 scroll-mt-32">
+            <h2 className="text-h2 text-foreground">Ofertas</h2>
+            <p className="mt-2 text-muted-foreground">Descuentos sobre lo que vende {company.name}. Obtén la oferta y canjéala con tu QR.</p>
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {ofertas.map((o) => (
+                <TarjetaOferta key={o.id} espacio={espacio} oferta={o} accion={accionDeOferta(o)} mostrarEmpresa={false} />
               ))}
             </div>
           </section>
@@ -690,10 +721,10 @@ export function CompanyProfile({
                   return (
                     <Link
                       key={exc.id}
-                      href={`/empresas/${company.slug}/excursiones/${exc.slug}`}
+                      href={rutaDeExcursion(espacio, company.slug, exc.slug)}
                       className={`group overflow-hidden rounded-lg border border-border bg-card elevation-1 transition-colors duration-fast hover:border-primary/40 ${isAgotada || isFinalizada ? 'opacity-50 pointer-events-none' : ''}`}
                     >
-                      <div className="relative aspect-[16/10] bg-muted">
+                      <div className="relative aspect-video bg-muted">
                         {exc.portadaUrl ? (
                           <Image
                             src={exc.portadaUrl}

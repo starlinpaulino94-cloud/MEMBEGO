@@ -9,11 +9,14 @@ import { registerLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
 import { escaparHtml } from '@/lib/html'
 import { encolarEmail } from '@/modules/jobs/emisiones'
-import { getAppUrl, SITE_NAME } from '@/lib/site'
+import { SITE_NAME, appUrlFor } from '@/lib/site'
 import { TERMS_VERSION } from '@/lib/legal'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { FULL_ADMIN_ROLES, INVITABLE_ROLES, type AppRole } from '@/types'
 import { anotarFallo } from '@/lib/prisma-errors'
+import type { Prisma } from '@prisma/client'
+import { resolverPermisosUsuario } from '@/lib/auth/permissions'
+import { ORIGEN_INVITACION_PROVEEDOR, alAceptarInvitacionDeProveedorEnTx } from '@/modules/supply-v2/suppliers/acceso'
 
 export interface InvitacionState {
   error?: string
@@ -99,7 +102,7 @@ export async function invitarMiembro(
 
   const nombreEmpresa = company?.name ?? 'Una empresa'
   const nombreSeguro = escaparHtml(nombreEmpresa)
-  const url = `${getAppUrl()}/invitacion/${invitacion.token}`
+  const url = appUrlFor(`/invitacion/${invitacion.token}`)
   await encolarEmail({
     to: email,
     subject: `Te invitaron a ${nombreEmpresa}`,
@@ -214,6 +217,10 @@ export async function aceptarInvitacion(
 
     const now = new Date()
     const sid = supabaseId
+    // Supplier Lite: la invitación puede traer el preset de permisos del rol
+    // de proveedor (operador, finanzas, solo lectura). Se copia tal cual a la
+    // cuenta: el rol da el punto de partida y esto lo acota.
+    const permisosHeredados = resolverPermisosUsuario(invitacion.permisos)
     const dbUser = await conEmpresa(invitacion.companyId, (tx) =>
       tx.user.create({
         data: {
@@ -224,6 +231,7 @@ export async function aceptarInvitacion(
           companyId: invitacion.companyId,
           termsAcceptedAt: now,
           termsVersion: TERMS_VERSION,
+          ...(permisosHeredados ? { permisos: permisosHeredados as unknown as Prisma.InputJsonValue } : {}),
         },
       })
     )
@@ -243,6 +251,15 @@ export async function aceptarInvitacion(
         data: { estado: 'ACEPTADA', aceptadaEn: now },
       })
     )
+
+    // Supplier Lite: con la primera persona dentro, el proveedor pasa de
+    // INVITED a ACTIVATION_PENDING y se reevalúa su lista de preparación.
+    // Cruza inquilinos a propósito: el proveedor es una fila de plataforma.
+    if (invitacion.origen === ORIGEN_INVITACION_PROVEEDOR) {
+      await sinEmpresa('invitación de proveedor aceptada: avanzar su acceso operativo', (tx) =>
+        alAceptarInvitacionDeProveedorEnTx(tx, invitacion.companyId, { actorId: dbUser.id, ipAddress, userAgent: null })
+      ).catch(anotarFallo('supply:acceso.aceptarInvitacion'))
+    }
   } catch (e) {
     console.error('[invitacion] aceptar:', e)
     // Rollback completo: sin esto quedaría una fila User huérfana (con

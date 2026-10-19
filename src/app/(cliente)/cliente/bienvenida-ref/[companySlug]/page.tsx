@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { rutaDeExcursion } from '@/modules/comercio/rutas'
 import { redirect } from 'next/navigation'
 import { CalendarDays, Crown, ArrowRight, Sparkles } from 'lucide-react'
 import { getUser } from '@/lib/auth'
@@ -122,7 +123,7 @@ export default async function BienvenidaRefPage({ params }: BienvenidaRefPagePro
               {excursiones.map((exc: (typeof excursiones)[number]) => (
                 <Link
                   key={exc.slug}
-                  href={`/empresas/${companySlug}/excursiones/${exc.slug}`}
+                  href={rutaDeExcursion('app', companySlug, exc.slug)}
                   className="flex items-center gap-4 p-4 transition hover:bg-muted/30"
                 >
                   {exc.portadaUrl ? (

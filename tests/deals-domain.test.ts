@@ -49,6 +49,14 @@ test('validarOferta: acepta una oferta normal y normaliza el texto', () => {
   }
 })
 
+test('validarOferta: conserva solo una referencia Promotion no vacía', () => {
+  const linked = validarOferta(base({ promotionId: ' promo-1 ' }), 100)
+  assert.ok(linked.ok)
+  if (linked.ok) assert.equal(linked.datos.promotionId, 'promo-1')
+  const invalid = validarOferta(base({ promotionId: '   ' }), 100)
+  assert.equal(invalid.ok, false)
+})
+
 test('validarOferta: rechaza lo imposible, con un mensaje que se puede enseñar', () => {
   const malas: [string, Partial<EntradaDeOferta>, number | string][] = [
     ['título corto', { title: 'ab' }, 100],

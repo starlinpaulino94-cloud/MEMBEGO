@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { getAppUrl } from '@/lib/site'
+import { landingUrl } from '@/lib/site'
 
 /**
  * Sitemap de rutas de la LANDING de MembeGo. Solo páginas indexables
@@ -7,7 +7,7 @@ import { getAppUrl } from '@/lib/site'
  * (/login, /registro), que además `robots.ts` marca como Disallow.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = getAppUrl()
+  const base = landingUrl()
   const now = new Date()
 
   // Prioridad alta: home + marketplace. Media: marketing. Baja: legal.

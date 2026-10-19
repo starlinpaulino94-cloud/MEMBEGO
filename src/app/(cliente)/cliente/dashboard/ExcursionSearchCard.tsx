@@ -1,5 +1,6 @@
 'use client'
 
+import { rutaDeExcursion } from '@/modules/comercio/rutas'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Clock, MapPin, AlertCircle, X, Tag, Users, CalendarDays } from 'lucide-react'
@@ -90,7 +91,7 @@ export function ExcursionSearchCard({ excursion, variant = 'default' }: Excursio
 
   return (
     <Link
-      href={`/empresas/${excursion.company.slug}/excursiones/${excursion.slug}`}
+      href={rutaDeExcursion('app', excursion.company.slug, excursion.slug)}
       className={cardClass}
     >
       {/* Portada */}

@@ -1,3 +1,5 @@
+> **REGISTRO HISTÓRICO.** Describe su fecha y commit de origen; no acredita el estado actual de ramas, capacidades, pruebas ni producción. Consultar [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) para el estado vigente y la auditoría de onboarding enlazada allí.
+
 # Production Readiness Report — Sprint de cierre (2026-10-08)
 
 Rama `claude/wizardly-hypatia-x2l9av` · sin PR abierto · todo medido sobre una base local desechable (PostgreSQL 16),

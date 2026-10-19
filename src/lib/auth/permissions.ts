@@ -190,7 +190,9 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // mostrador: en el menú vive bajo el grupo «Marketing», y era el único
   // enlace que hacía que a un cajero le siguiera apareciendo ese título. Un
   // cajero que sí entregue regalos lo recibe desde su pantalla de Permisos.
-  CAJERO: ['dashboard', 'clientes', 'membresias', 'pagos', 'facturas', 'citas', 'scanner', 'ofertas', 'registros', 'conciliacion'],
+  // 'pedidos-membego' entra: el pedido del marketplace se recoge en el mostrador
+  // (aceptar, marcar listo, registrar el pago) y es el cajero quien lo atiende.
+  CAJERO: ['dashboard', 'clientes', 'membresias', 'pagos', 'facturas', 'citas', 'scanner', 'ofertas', 'registros', 'conciliacion', 'pedidos-membego'],
   /**
    * LA OPERACIÓN. Todo lo del mostrador más lo que hace falta para dirigirla:
    * los reportes, la bitácora, el seguimiento, el equipo y las sucursales.
@@ -207,6 +209,9 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
     'ofertas', 'regalos', 'promociones', 'registros', 'actividad', 'reportes',
     'seguimiento', 'riesgo', 'retencion', 'conciliacion', 'empleados', 'invitaciones',
     'sucursales', 'tickets', 'comunicacion', 'app', 'excursiones',
+    // Comercio: quien dirige la operación gestiona lo que se vende, lo que hay
+    // en cada sucursal, los pedidos que llegan y las ofertas sobre el catálogo.
+    'catalogo', 'inventario', 'pedidos-membego', 'deals',
   ],
 }
 

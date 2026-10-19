@@ -7,7 +7,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { getOfertaDetalleAdmin, ofertaVigente } from '@/modules/ofertas/queries'
 import { PERIODO_LABEL } from '@/modules/ofertas/periodo'
-import { absoluteUrl } from '@/lib/site'
+import { landingUrlFor } from '@/lib/site'
 import {
   AgregarInvitadoForm,
   CopiarLinkOferta,
@@ -90,7 +90,7 @@ export default async function OfertaDetallePage({
         <p className="mb-1.5 text-sm font-semibold text-foreground">
           Link privado del regalo
         </p>
-        <CopiarLinkOferta url={absoluteUrl(`/oferta/${oferta.codigo}`)} />
+        <CopiarLinkOferta url={landingUrlFor(`/oferta/${oferta.codigo}`)} />
         <p className="mt-1.5 text-xs text-muted-foreground">
           Compártelo solo con tu lista: aunque el link circule, únicamente las
           cuentas invitadas pueden reclamarlo.

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getApiClientUser, corsHeaders, handleCorsPreflight } from '@/lib/auth/api-guard'
-import { absoluteUrl } from '@/lib/site'
+import { landingUrlFor } from '@/lib/site'
 import { ensureCodigoCorto } from '@/lib/referidos'
 import {
   misCampanasDisponibles,
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     // Enlace corto personal: /invitar/CODIGO?c=<slug>&v=<version> (la versión
     // evita que WhatsApp/Facebook cacheen la vista previa vieja).
     const version = campana.updatedAt.getTime().toString(36)
-    const inviteUrl = absoluteUrl(
+    const inviteUrl = landingUrlFor(
       `/invitar/${codigoCorto}?c=${encodeURIComponent(campana.slug)}&v=${version}`
     )
 

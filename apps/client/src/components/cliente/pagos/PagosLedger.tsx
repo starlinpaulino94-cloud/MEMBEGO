@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, Linking, Share } from 'react-native';
-import { CalendarClock, CreditCard, ExternalLink, FileText, Share2, Wallet } from 'lucide-react-native';
+import { CalendarClock, CreditCard, ExternalLink, FileText, Printer, Share2, Wallet } from 'lucide-react-native';
 import { cn } from '../../../lib/cn';
 import { formatMoney, formatDateTime } from '../../../lib/format';
 import type { PagoHistorialItem } from '../../../lib/api';
 import { EmptyState } from '../../ui/EmptyState';
 import { Sheet } from '../../ui/Sheet';
+import { abrirComprobante } from '../../../lib/comprobantes';
 
 /**
  * Historial de pagos como extracto bancario digital (Revolut/Linear):
@@ -192,13 +193,29 @@ function ReceiptDrawer({
             ) : null}
           </View>
 
+          {/* La factura del pago: se abre en el navegador, donde se imprime o se guarda en PDF */}
+          {item.transaccionId ? (
+            <Pressable
+              onPress={() => {
+                abrirComprobante(item.transaccionId!).catch(() => {});
+              }}
+              className="mt-5 flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 active:opacity-80"
+              accessibilityRole="button"
+            >
+              <Printer size={16} color="#ffffff" />
+              <Text className="text-sm font-inter-semibold text-white">
+                Ver / imprimir comprobante
+              </Text>
+            </Pressable>
+          ) : null}
+
           {/* Recibo de un pago con tarjeta: se comparte como texto (WhatsApp, correo, imprimir desde allí). */}
           {item.recibo ? (
             <Pressable
               onPress={() => {
                 Share.share({ message: item.recibo!.texto }).catch(() => {});
               }}
-              className="mt-5 flex-row items-center justify-center gap-2 rounded-xl border border-border/60 px-4 py-3 active:opacity-70"
+              className="mt-3 flex-row items-center justify-center gap-2 rounded-xl border border-border/60 px-4 py-3 active:opacity-70"
               accessibilityRole="button"
               accessibilityLabel="Compartir recibo"
             >

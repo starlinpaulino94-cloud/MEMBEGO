@@ -185,7 +185,7 @@ test('cada rol de empresa ve el hub con sus ocho grupos', () => {
     assert.deepEqual(visibleGroups(espacios[0]!, ctx).map((g) => g.id), [
       'principal',
       'experiencia-cliente',
-      'catalogo',
+      'comercio',
       'operaciones',
       'clientes',
       'marketing',
@@ -209,7 +209,7 @@ test('el mostrador ve cuatro grupos, y marketing no está entre ellos', () => {
   const espacios = visibleWorkspaces(ctx)
   assert.deepEqual(visibleGroups(espacios[0]!, ctx).map((g) => g.id), [
     'principal',
-    'catalogo',
+    'comercio',
     'operaciones',
     'clientes',
   ])
@@ -221,7 +221,7 @@ test('la operación ve su hub sin la configuración de experiencia', () => {
   const grupos = visibleGroups(espacios[0]!, ctx).map((g) => g.id)
   assert.deepEqual(grupos, [
     'principal',
-    'catalogo',
+    'comercio',
     'operaciones',
     'clientes',
     // Sigue apareciendo, y no por las campañas: dentro solo le quedan

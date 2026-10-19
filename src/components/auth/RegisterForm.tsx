@@ -1,5 +1,7 @@
 'use client'
 
+import { rutaDeExcursiones } from '@/modules/comercio/rutas'
+import { destinoParaRol } from '@/lib/auth/destino-seguro'
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
@@ -46,14 +48,13 @@ export function RegisterForm({
   // Destino tras el registro (`?next=`): si el usuario llegó desde una promo,
   // plan o campaña compartida, lo PRIMERO que ve al entrar es la pantalla de
   // reclamar ese beneficio (no el home genérico). Solo rutas internas
-  // (empieza con "/", no "//") para evitar open redirect.
-  const nextRaw = searchParams.get('next') ?? ''
-  const nextSeguro =
-    nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : null
+  // autorizadas y abribles por un cliente: ver `destino-seguro` (sin open
+  // redirect y sin bucles hacia el propio flujo de acceso).
+  const nextSeguro = destinoParaRol(searchParams.get('next'), 'CLIENTE', '') || null
 
   // Si vino por enlace/código de vendedor, aterriza directamente en el catálogo de excursiones del negocio
   const destinoVendedor = (enlaceSlug || vendedorCode) && companySlug
-    ? `/empresas/${companySlug}/excursiones${enlaceSlug ? `?e=${encodeURIComponent(enlaceSlug)}` : ''}`
+    ? `${rutaDeExcursiones('app', companySlug)}${enlaceSlug ? `?e=${encodeURIComponent(enlaceSlug)}` : ''}`
     : null
 
   // Prioridad: ?next= explícito > referido de vendedor (excursiones) > referido general de cliente > celebración

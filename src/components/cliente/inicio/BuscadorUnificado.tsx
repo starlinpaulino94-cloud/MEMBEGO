@@ -1,5 +1,6 @@
 'use client'
 
+import { rutaDeExcursion } from '@/modules/comercio/rutas'
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { formatMoney } from '@/lib/format'
@@ -115,7 +116,7 @@ export function BuscadorUnificado() {
                     href={`/cliente/promociones/${p.id}`}
                     className="group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md hover:border-primary/30"
                   >
-                    <div className="relative aspect-[4/3] bg-muted overflow-hidden">
+                    <div className="relative aspect-square bg-muted overflow-hidden">
                       {p.imagenUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -165,7 +166,7 @@ export function BuscadorUnificado() {
                   Actividades ({resultados!.excursiones.length})
                 </h3>
                 <Link
-                  href={`/excursiones?q=${encodeURIComponent(q)}`}
+                  href={`/cliente/excursiones?q=${encodeURIComponent(q)}`}
                   className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
                 >
                   Ver todas <ChevronRight className="h-4 w-4" />
@@ -175,10 +176,10 @@ export function BuscadorUnificado() {
                 {resultados!.excursiones.slice(0, 6).map((e) => (
                   <Link
                     key={e.id}
-                    href={`/empresas/${e.empresa.slug}/excursiones/${e.slug}`}
+                    href={rutaDeExcursion('app', e.empresa.slug, e.slug)}
                     className={`group overflow-hidden rounded-xl border bg-card shadow-sm transition hover:shadow-md ${e.agotadaGlobal || e.todasFechasPasadas ? 'opacity-50 pointer-events-none' : ''}`}
                   >
-                    <div className="relative aspect-[16/10] bg-muted">
+                    <div className="relative aspect-video bg-muted">
                       {e.portadaUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -237,7 +238,7 @@ export function BuscadorUnificado() {
               </div>
               <div className="flex justify-center pt-2">
                 <Link
-                  href={`/excursiones?q=${encodeURIComponent(q)}`}
+                  href={`/cliente/excursiones?q=${encodeURIComponent(q)}`}
                   className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
                 >
                   Ver todas las excursiones <ChevronRight className="h-4 w-4" />

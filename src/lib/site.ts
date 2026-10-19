@@ -120,3 +120,14 @@ export function sessionCookieDomain(): string | undefined {
   }
   return raw
 }
+
+/**
+ * Las cookies que viajan de un dominio al otro —atribución del vendedor, del referido, del canal y el visitante— se fijan
+ * en el dominio compartido (`.membego.com`) cuando está configurado. Si no: `{}`, o sea host-only, igual que hoy. Sin
+ * esto, un enlace `/e/…` o `/r/…` (que vive en la landing) sembraría cookies que la app no ve, y la atribución se perdería
+ * justo al registrarse. Se usa con spread: `cookies.set(nombre, valor, { ...opciones, ...dominioDeCookieCompartida() })`.
+ */
+export function dominioDeCookieCompartida(): { domain?: string } {
+  const domain = sessionCookieDomain()
+  return domain ? { domain } : {}
+}

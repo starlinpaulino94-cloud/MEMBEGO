@@ -1,7 +1,11 @@
+import { Fragment } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Mail, MessageCircle } from 'lucide-react'
 import { buildWaLink, SOPORTE_PLATAFORMA } from '@/lib/soporte'
+import { ColumnaDeCuentaDelPie } from './AccionesDeSesion'
+
+const CLASE_ENLACE = 'text-muted-foreground transition-colors duration-fast hover:text-white'
 
 const COLUMNAS = [
   {
@@ -12,13 +16,7 @@ const COLUMNAS = [
       { href: '/descargar', label: 'Descargar la app' },
     ],
   },
-  {
-    titulo: 'Tu cuenta',
-    links: [
-      { href: '/registro', label: 'Crear cuenta' },
-      { href: '/login', label: 'Ingresar' },
-    ],
-  },
+  // «Tu cuenta» no está aquí: depende de quién mire y la pinta `ColumnaDeCuentaDelPie` (componente de cliente).
   {
     titulo: 'Recursos',
     links: [
@@ -84,8 +82,15 @@ export function PublicFooter() {
             </div>
           </div>
 
-          {COLUMNAS.map((col) => (
-            <div key={col.titulo}>
+          {COLUMNAS.map((col, i) => (
+            <Fragment key={col.titulo}>
+            {i === 1 && (
+              <div>
+                <h4 className="mb-4 text-caption font-semibold uppercase tracking-[0.08em] text-muted-foreground">Tu cuenta</h4>
+                <ColumnaDeCuentaDelPie claseEnlace={CLASE_ENLACE} />
+              </div>
+            )}
+            <div>
               <h4 className="mb-4 text-caption font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 {col.titulo}
               </h4>
@@ -102,6 +107,7 @@ export function PublicFooter() {
                 ))}
               </ul>
             </div>
+            </Fragment>
           ))}
         </div>
 

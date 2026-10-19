@@ -18,7 +18,7 @@ import { join } from 'node:path'
 const RAIZ = join(__dirname, '..')
 function archivos(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {
-    const p = join(dir, n)
+    const p = join(dir, n).replaceAll('\\', '/')
     return statSync(p).isDirectory() ? archivos(p) : /\.(ts|tsx)$/.test(n) ? [p] : []
   })
 }

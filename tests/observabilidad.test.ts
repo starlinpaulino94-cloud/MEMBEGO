@@ -362,3 +362,29 @@ test('las migas de navegación también se limpian', () => {
   assert.equal(JSON.stringify(miga).includes('pase=2'), false)
   assert.equal(JSON.stringify(miga).includes('code=3'), false)
 })
+
+test('Sentry descarta el cuerpo completo, incluidos PAN/CVV anidados o serializados', () => {
+  for (const data of [{ pago: { pan: '4111111111111111', cvv: '123' } }, 'pan=4111111111111111&cvv=123']) {
+    const evento = limpiarEvento({ request: { url: '/api/pagos/cardnet/iniciar', data } })
+    assert.equal(Object.hasOwn(evento.request, 'data'), false)
+    assert.equal(evento.request.url, '/api/pagos/cardnet/iniciar')
+  }
+})
+
+test('Sentry Replay enmascara texto, campos y multimedia; no envía breadcrumbs de consola', () => {
+  const config = readFileSync('src/instrumentation-client.ts', 'utf8')
+  assert.match(config, /maskAllText:\s*true/)
+  assert.match(config, /maskAllInputs:\s*true/)
+  assert.match(config, /blockAllMedia:\s*true/)
+  assert.match(config, /console:\s*false/)
+})
+
+test('Sentry elimina PAN/CVV, referencias de pago, teléfonos y direcciones de las URLs', () => {
+  const url = limpiarUrl('/cliente/pagos?paymentReference=ABC123&telefono=8095550100&addressLine1=Calle%20Uno&pan=4111111111111111&cvv=123&page=2')
+  assert.equal(url.includes('ABC123'), false)
+  assert.equal(url.includes('8095550100'), false)
+  assert.equal(url.includes('Calle'), false)
+  assert.equal(url.includes('4111111111111111'), false)
+  assert.equal(url.includes('cvv=123'), false)
+  assert.equal(url.includes('page=2'), true)
+})

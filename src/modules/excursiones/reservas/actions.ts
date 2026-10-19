@@ -61,6 +61,7 @@ import { sincronizarEstadoAgotada } from '../catalogo/agotadas'
 import { getExcursionesConfig } from '../config'
 import { correoConfirmacionReserva, correoAccesoCliente } from '@/lib/email/plantillas-excursiones'
 import { enviarConfirmacionReservaWhatsApp } from './whatsapp-confirmacion'
+import { appUrl } from '@/lib/site'
 
 export interface ReservaActionState {
   error?: string
@@ -268,7 +269,7 @@ export async function crearReserva(
             where: { id: createdUser.id },
             data: { establecerContrasenaToken: token, establecerContrasenaExpira: expira },
           })
-          const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+          const urlBase = appUrl()
           const html = await correoAccesoCliente({ nombre: clienteNombre, email: clienteEmail, token, urlBase })
           await sendEmail({ to: clienteEmail, subject: 'Establece tu contraseña - MembeGo', html })
         } catch (e) {
@@ -615,7 +616,7 @@ export async function crearReserva(
       })
     )
     if (clienteEmail) {
-      const urlBase = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'http://127.0.0.1:3000'
+      const urlBase = appUrl()
       if (reservaCompleta?.checkinToken) {
         correoConfirmacionReserva({
           nombreCliente: clienteNombre || clienteEmail,

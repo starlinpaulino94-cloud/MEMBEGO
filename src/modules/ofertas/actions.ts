@@ -399,6 +399,7 @@ export async function reclamarOferta(
     }
 
     revalidatePath(`/oferta/${codigo}`)
+    revalidatePath(`/cliente/oferta/${codigo}`)
     revalidatePath('/cliente/mis-promociones')
     return { success: true, mensaje: '¡Regalo reclamado! Preséntalo en el local para usarlo.' }
   } catch (e) {

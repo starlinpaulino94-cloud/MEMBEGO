@@ -1,5 +1,6 @@
 'use client'
 
+import { haciaLaApp } from '@/lib/anfitriones'
 import { useMemo } from 'react'
 import { PartyPopper, Gift, Sparkles, Share2, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
@@ -197,7 +198,7 @@ export function CelebracionOverlay({
                 // `router.push` la caché de cliente de la landing viaja
                 // detrás y el login puede renderizarse con el estado de antes.
                 // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-                window.location.href = '/login?next=/mis-membresias'
+                window.location.href = haciaLaApp('/login?next=/mis-membresias')
               }}
               variant="outline"
               className="mt-4 w-full py-5 font-semibold"

@@ -64,11 +64,11 @@ export function WalletCard({
 
     const nextFlipped = !flipped
     setFlipped(nextFlipped)
-    rotation.value = withTiming(nextFlipped ? 180 : 0, { duration: walletCard.flipDuration })
+    rotation.set(withTiming(nextFlipped ? 180 : 0, { duration: walletCard.flipDuration }))
   }
 
   const frontAnimatedStyle = useAnimatedStyle(() => {
-    const rotateY = interpolate(rotation.value, [0, 180], [0, 180], Extrapolation.CLAMP)
+    const rotateY = interpolate(rotation.get(), [0, 180], [0, 180], Extrapolation.CLAMP)
     return {
       transform: [{ perspective: walletCard.perspective }, { rotateY: rotateY + 'deg' }],
       backfaceVisibility: 'hidden' as const,
@@ -76,7 +76,7 @@ export function WalletCard({
   })
 
   const backAnimatedStyle = useAnimatedStyle(() => {
-    const rotateY = interpolate(rotation.value, [0, 180], [180, 360], Extrapolation.CLAMP)
+    const rotateY = interpolate(rotation.get(), [0, 180], [180, 360], Extrapolation.CLAMP)
     return {
       transform: [{ perspective: walletCard.perspective }, { rotateY: rotateY + 'deg' }],
       backfaceVisibility: 'hidden' as const,

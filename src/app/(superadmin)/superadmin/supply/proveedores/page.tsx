@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { ArrowLeftRight, BadgeCheck, Building2, Link2, MessageSquare, ReceiptText, TrendingUp, Truck } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { MarcoSupplyV2 } from '@/components/supply-v2/marco'
@@ -108,7 +109,13 @@ export default async function ProveedoresPage({
               Directorio de empresas de la plataforma y proveedores externos que suministran productos, bonos y servicios.
             </p>
           </div>
-          {nuevo('btn-nuevo-proveedor')}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Supplier & Fulfillment Commerce: la cola Supplier → Merchant, el relevamiento del acceso y el scorecard. */}
+            <Link href={`${RUTA}/solicitudes`} className="text-[13px] font-medium text-sv2-accent hover:underline" data-testid="link-solicitudes-merchant">Solicitudes de empresa</Link>
+            <Link href={`${RUTA}/relevamiento`} className="text-[13px] font-medium text-sv2-accent hover:underline" data-testid="link-relevamiento">Relevamiento de acceso</Link>
+            <Link href={`${RUTA}/scorecard`} className="text-[13px] font-medium text-sv2-accent hover:underline" data-testid="link-scorecard">Scorecard</Link>
+            {nuevo('btn-nuevo-proveedor')}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @5xl:grid-cols-4" data-testid="indicadores-proveedores">

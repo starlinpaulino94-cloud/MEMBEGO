@@ -46,6 +46,30 @@ const PARAMS_PROHIBIDOS = [
   'email',
   'correo',
   'telefono',
+  'phone',
+  'phonenumber',
+  'direccion',
+  'address',
+  'domicilio',
+  'street',
+  'postalcode',
+  'zip',
+  'ref',
+  'reference',
+  'externalreference',
+  'referencia',
+  'referenciapago',
+  'paymentreference',
+  'payment_reference',
+  'paymentref',
+  'pan',
+  'cvv',
+  'cardnumber',
+  'accountnumber',
+  'addressline1',
+  'addressline2',
+  'postaladdress',
+  'streetaddress',
   'password',
 ]
 
@@ -63,9 +87,11 @@ export function limpiarUrl(url: string): string {
     // sitio: solo se usa para volver a serializar.
     const u = new URL(url, 'https://membego.invalid')
     let tocada = false
-    for (const p of PARAMS_PROHIBIDOS) {
-      if (u.searchParams.has(p)) {
-        u.searchParams.set(p, REEMPLAZO)
+    const prohibidos = new Set(PARAMS_PROHIBIDOS.map((p) => p.toLowerCase().replace(/[^a-z0-9]/g, '')))
+    for (const [clave] of u.searchParams) {
+      const normalizada = clave.toLowerCase().replace(/[^a-z0-9]/g, '')
+      if (prohibidos.has(normalizada)) {
+        u.searchParams.set(clave, REEMPLAZO)
         tocada = true
       }
     }
@@ -117,6 +143,8 @@ export function limpiarEvento<T extends EventoSentry>(evento: T): T {
     // Las cookies llevan el token de sesión de Supabase y el pase de
     // mantenimiento. Enteras fuera: no hay ninguna que valga para depurar.
     delete evento.request.cookies
+    // Los cuerpos pueden contener PAN/CVV o credenciales. Conservar solo metadatos.
+    delete evento.request.data
     if (typeof evento.request.url === 'string') {
       evento.request.url = limpiarUrl(evento.request.url)
     }

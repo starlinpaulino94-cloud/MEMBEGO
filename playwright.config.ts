@@ -44,9 +44,14 @@ export default defineConfig({
     // Playwright descargue el suyo. En CI se deja sin definir y `playwright
     // install --with-deps chromium` se encarga; en entornos donde el navegador
     // ya está (contenedores preparados) evita bajar 150 MB por ejecución.
-    ...(process.env.PLAYWRIGHT_CHROMIUM_PATH
-      ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } }
-      : {}),
+    // Separación landing/app · F7: con dos anfitriones (`bun run e2e:dos-anfitriones`) los dos dominios de prueba
+    // (`membego.test`, `app.membego.test`) se resuelven a este equipo sin tocar /etc/hosts ni el DNS.
+    launchOptions: {
+      ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {}),
+      ...(process.env.E2E_DOS_ANFITRIONES === '1'
+        ? { args: ['--host-resolver-rules=MAP membego.test 127.0.0.1, MAP app.membego.test 127.0.0.1'] }
+        : {}),
+    },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     locale: 'es-DO',

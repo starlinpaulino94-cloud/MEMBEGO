@@ -1,3 +1,5 @@
+> **REGISTRO HISTÓRICO.** Describe su fecha y commit de origen; no acredita el estado actual de ramas, capacidades, pruebas ni producción. Consultar [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) para el estado vigente y la auditoría de onboarding enlazada allí.
+
 > **Nota de fusión (PR #570).** Este documento lo escribió otra sesión con el nombre `IMPLEMENTATION_STATUS.md` (Supply 2.0 y el rediseño Stitch, sin acceso al Plan Maestro). Choca con el del plan por Commerce Core, que conserva ese nombre: `docs/IMPLEMENTATION_STATUS.md`. Se renombró para no perder ninguno; el contenido no se tocó.
 
 > **Nota de fusión (PR #574).** La rama `claude/relaxed-brahmagupta-1shtlc` (retiro de Supply V1 y renombrado a «Supply») se bifurcó antes de este renombre y siguió actualizando el archivo viejo con ese nombre. Al fusionar, sus ediciones de contenido se trasladaron aquí —que es lo que de verdad describen— y `docs/IMPLEMENTATION_STATUS.md` se dejó con el estado de Commerce Core sin modificar. Ver «Retiro de Supply V1» en §5.

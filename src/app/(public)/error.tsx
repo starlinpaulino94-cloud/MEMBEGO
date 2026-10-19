@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { EnlaceDeInicio } from '@/components/public/EnlaceDeInicio'
 
 export default function PublicError({
   error,
@@ -23,7 +23,7 @@ export default function PublicError({
       <p className="text-sm text-muted-foreground">No pudimos cargar esta página. Intenta de nuevo.</p>
       <div className="flex gap-3">
         <Button onClick={() => reset()} variant="outline">Reintentar</Button>
-        <Link href="/"><Button>Inicio</Button></Link>
+        <EnlaceDeInicio etiqueta="Inicio" etiquetaConSesion="Ir a mi espacio" />
       </div>
     </div>
   )

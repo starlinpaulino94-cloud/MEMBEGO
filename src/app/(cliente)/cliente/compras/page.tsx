@@ -81,7 +81,7 @@ export default async function ComprasClientePage() {
           description="Las ofertas Membego están en Promociones."
           action={
             <Button asChild>
-              <Link href="/promociones">Ver ofertas</Link>
+              <Link href="/cliente/promociones">Ver ofertas</Link>
             </Button>
           }
         />

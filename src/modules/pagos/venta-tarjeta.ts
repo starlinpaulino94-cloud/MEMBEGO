@@ -84,6 +84,19 @@ export async function asegurarVentaDelIntento(
     if (intento.estado !== 'APROBADO' || intento.fulfillmentEstado !== 'COMPLETADA') return null
     if (intento.transaccion) return { ...intento.transaccion, nueva: false }
 
+    // Un recibo escrito por el camino anterior (`reciboPasarela`, ya retirado) no lleva `pagoIntentoId`, solo `snapshot.intentoId`.
+    // Se ADOPTA —se le pone el enlace al cobro y el método real— en vez de escribir una segunda venta del mismo dinero.
+    const legada = await sinEmpresa('pagos: buscar un recibo anterior del mismo cobro para adoptarlo', (tx) =>
+      tx.transaction.findFirst({
+        where: { companyId: intento.companyId, tipo: 'SALE', pagoIntentoId: null, snapshot: { path: ['intentoId'], equals: intento.id } },
+        select: { id: true, codigo: true, ticketNumero: true, snapshot: true },
+      })
+    )
+    if (legada) {
+      const adoptada = await adoptarReciboLegado(legada, intento)
+      if (adoptada) return adoptada
+    }
+
     const ahora = opciones.ahora ?? new Date()
     const antiguedadMs = intento.activadoAt ? ahora.getTime() - intento.activadoAt.getTime() : 0
     if (!opciones.explicito && antiguedadMs > VENTANA_COMPROBANTE_DIAS * 86_400_000) return null
@@ -144,4 +157,51 @@ export async function asegurarVentaDelIntento(
     anotarFallo('pagos:venta-del-intento', { intentoId })(e)
     return null
   }
+}
+
+/**
+ * Adopta una venta escrita por el camino anterior para el mismo cobro: le pone `pagoIntentoId`, el método TARJETA y los datos del
+ * comprobante de tarjeta (canal y autorización) sobre su snapshot, sin tocar el importe, el ticket ni la fecha. Condicionada a que
+ * siga sin enlace: si dos llamadas la adoptan a la vez, solo una escribe y la otra la encuentra ya adoptada.
+ */
+async function adoptarReciboLegado(
+  legada: { id: string; codigo: string; ticketNumero: string; snapshot: unknown },
+  intento: {
+    id: string
+    companyId: string
+    clienteId: string | null
+    monto: unknown
+    autorizacion: string | null
+    canal: string | null
+    cliente: { nombre: string } | null
+  }
+): Promise<VentaDelIntento | null> {
+  const antes = (legada.snapshot && typeof legada.snapshot === 'object' ? legada.snapshot : {}) as Record<string, unknown>
+  const canal: CanalDeCobro | null = esCanalDeCobro(intento.canal) ? intento.canal : null
+  const detalle = typeof antes.detalle === 'string' && antes.detalle.trim() ? antes.detalle : 'Pago con tarjeta'
+  const comprobante = snapshotDeCobroConTarjeta({
+    detalle,
+    clienteNombre: intento.cliente?.nombre ?? (typeof antes.cliente === 'string' ? antes.cliente : 'Cliente'),
+    monto: Number(intento.monto),
+    canal,
+    pagoIntentoId: intento.id,
+    autorizacion: intento.autorizacion,
+    tarjeta: null,
+    sucursalNombre: null,
+  })
+  const r = await conEmpresa(intento.companyId, (tx) =>
+    tx.transaction.updateMany({
+      where: { id: legada.id, pagoIntentoId: null },
+      data: {
+        pagoIntentoId: intento.id,
+        metodoCobro: 'TARJETA',
+        snapshot: { ...antes, ...(comprobante as Record<string, unknown>), adoptadaDe: 'reciboPasarela' } as Prisma.InputJsonValue,
+      },
+    })
+  )
+  if (r.count === 1) return { id: legada.id, codigo: legada.codigo, ticketNumero: legada.ticketNumero, nueva: false }
+  const ya = await sinEmpresa('pagos: releer el recibo adoptado por otra llamada', (tx) =>
+    tx.transaction.findUnique({ where: { pagoIntentoId: intento.id }, select: { id: true, codigo: true, ticketNumero: true } })
+  )
+  return ya ? { ...ya, nueva: false } : null
 }

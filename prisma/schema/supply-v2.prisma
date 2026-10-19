@@ -37,6 +37,40 @@ enum SupplyV2SupplierStatus {
   BLOCKED
 }
 
+/// ACCESO OPERATIVO del proveedor (Supplier & Fulfillment Commerce §5, §8).
+///
+/// Es OTRA pregunta que `status`: `status` dice si Membego sigue negociando
+/// con el proveedor (comercial); esto dice si el proveedor puede OPERAR sus
+/// obligaciones —entrar, escanear, entregar, registrar extras—. Un proveedor
+/// con contratos vivos (`status = ACTIVE`) puede no tener acceso todavía
+/// (`DRAFT`, histórico) o tenerlo suspendido.
+///
+///   DRAFT → INVITED → ACTIVATION_PENDING → ACTIVE ⇄ SUSPENDED → TERMINATED
+///
+/// ACTIVE solo se alcanza cuando la lista de preparación está completa
+/// (`fulfillmentReadyAt`): usuario activo, sucursal, operador, contrato
+/// aceptado y QR probado. Los proveedores anteriores a esta fase quedan en
+/// DRAFT (sin acceso) o en ACTIVE con dispensa (`readinessWaivedAt`): sus
+/// acuerdos históricos no se rompen.
+enum SupplyV2SupplierAccessStatus {
+  DRAFT
+  INVITED
+  ACTIVATION_PENDING
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+/// Supplier & Fulfillment Commerce · solicitud «Convertirme en empresa Membego» (§39–§41).
+enum SupplyV2MerchantApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  MORE_INFO_REQUIRED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
 enum SupplyV2CatalogItemType {
   PRODUCT
   SERVICE
@@ -58,6 +92,17 @@ enum SupplyV2CatalogItemStatus {
   ACTIVE
   INACTIVE
   ARCHIVED
+}
+
+/// Supplier & Fulfillment Commerce §9: qué RESPALDA la unidad que Membego
+/// compró. 1.000 pizzas son normalmente 1.000 DERECHOS que el proveedor cocina
+/// al canjear (ON_DEMAND), no 1.000 pizzas en un almacén. Informativo para el
+/// portal y para las reglas de capacidad; el ledger de lotes no cambia.
+enum SupplyV2FulfillmentBacking {
+  ON_DEMAND
+  PHYSICAL_RESERVED_STOCK
+  SERVICE_CAPACITY
+  SCHEDULED_CAPACITY
 }
 
 enum SupplyV2AgreementType {
@@ -199,6 +244,30 @@ model SupplyV2Supplier {
 
   notes String?
 
+  // ── Supplier & Fulfillment Commerce · acceso operativo (Supplier Lite) ──
+  /// Ver `SupplyV2SupplierAccessStatus`. DRAFT = sin acceso (histórico o recién creado).
+  accessStatus SupplyV2SupplierAccessStatus @default(DRAFT)
+  /// Correo al que se mandó la invitación del dueño del portal.
+  invitedEmail String?
+  invitedAt    DateTime?
+  /// El dueño aceptó el contrato marco de proveedor desde el portal.
+  termsAcceptedAt   DateTime?
+  termsAcceptedById String?
+  termsAcceptedBy   User?     @relation("SupplyV2SupplierTermsAcceptedBy", fields: [termsAcceptedById], references: [id], onDelete: SetNull)
+  /// Código de prueba vigente del escáner (`TEST-…`); se consume al probarlo.
+  qrTestCode String?
+  qrTestedAt DateTime?
+  /// `eligibleForFulfillment`: la lista de preparación quedó completa.
+  fulfillmentReadyAt DateTime?
+  /// Dispensa del superadmin (proveedores anteriores a esta fase, o un caso
+  /// excepcional): opera sin completar la lista. Siempre con motivo.
+  readinessWaivedAt     DateTime?
+  readinessWaivedReason String?
+  /// Fecha en la que el acceso pasó a ACTIVE por primera vez.
+  activatedAt DateTime?
+  /// Motivo de la última suspensión o baja del acceso.
+  accessStatusReason String?
+
   createdById String?
   createdBy   User?   @relation("SupplyV2SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
@@ -221,6 +290,8 @@ model SupplyV2Supplier {
   payments        SupplyV2SupplierPayment[]
   obligations     SupplyV2SupplierObligation[]
   economicEvents  SupplyV2EconomicEvent[]
+  // Supplier & Fulfillment Commerce · solicitudes para ser Merchant (misma empresa).
+  merchantApplications SupplyV2MerchantApplication[]
   reconciliations SupplyV2Reconciliation[]
   // Slice 5
   settlements      SupplyV2Settlement[]
@@ -229,9 +300,12 @@ model SupplyV2Supplier {
   campaigns        SupplyV2Campaign[]
 
   @@index([status, commercialName])
+  @@index([accessStatus])
 
   // Slice 8 · programas de fidelización que organiza o cofinancia.
   loyaltyPrograms SupplyV2LoyaltyProgram[] @relation("SupplyV2LoyaltyProgramSupplier")
+  // Supplier & Fulfillment Commerce · visitas atribuidas a Membego que este proveedor atendió.
+  visits          MembegoVisit[]
 
   @@map("supply_v2_suppliers")
 }
@@ -316,6 +390,19 @@ model SupplyV2CatalogItem {
 
   status SupplyV2CatalogItemStatus @default(ACTIVE)
 
+  // ── Supplier & Fulfillment Commerce ──
+  /// Cómo se respalda la unidad (§9). ON_DEMAND por defecto: lo normal.
+  fulfillmentBacking SupplyV2FulfillmentBacking @default(ON_DEMAND)
+  /// Capacidad diaria de canje (servicios/capacidad): «hoy 20, usada 8». Nulo = sin tope.
+  dailyCapacity Int?
+  /// MINI CATÁLOGO del proveedor (§26): se vende como EXTRA en una visita
+  /// atribuida a Membego (venta adicional). No lo compra Membego ni tiene lote.
+  sellableAsExtra Boolean @default(false)
+  /// Mapa al catálogo unificado cuando el proveedor ya es Merchant (§20, §26):
+  /// el mismo producto, sin duplicarlo. Opcional y nunca se escribe sobre él.
+  catalogItemId String?
+  catalogItem   CatalogItem? @relation("SupplyV2CatalogItemCatalogCore", fields: [catalogItemId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -331,11 +418,14 @@ model SupplyV2CatalogItem {
   // Slice 4
   invoiceLines   SupplyV2SupplierInvoiceLine[]
   economicEvents SupplyV2EconomicEvent[]
+  /// Supplier & Fulfillment Commerce: líneas de venta adicional que vendieron este extra (§26).
+  ancillaryLines AncillarySaleLine[]
 
   /// `supplierId + sku` único cuando hay SKU (índice parcial en la migración).
   @@unique([supplierId, sku])
   @@unique([supplierId, slug])
   @@index([supplierId, status])
+  @@index([supplierId, sellableAsExtra])
   @@map("supply_v2_catalog_items")
 }
 
@@ -376,6 +466,18 @@ model SupplyV2Agreement {
   allowDepositApplication Boolean                    @default(true)
   /// Texto libre («mensual», «quincenal»); solo informativo en el Slice 4.
   settlementFrequency     String?
+
+  // ── Supplier & Fulfillment Commerce · ventas adicionales en la visita (§37–§38). Van a la foto de la versión. ──
+  /// Las compras adicionales durante una visita atribuida a Membego comisionan.
+  ancillaryCommissionEnabled   Boolean  @default(true)
+  /// Tasa contractual (%); nula = la de la cuenta Merchant Billing de la empresa (8 % por defecto de plataforma).
+  ancillaryCommissionRate      Decimal? @db.Decimal(5, 2)
+  /// Hasta cuándo una compra pertenece a la visita, desde que se abre.
+  attributionWindowMinutes     Int      @default(120)
+  /// La comisión de los extras se asienta solo cuando el cliente confirma.
+  requiresCustomerConfirmation Boolean  @default(false)
+  /// Por encima de este monto reportado se exige comprobante (informativo para revisión).
+  receiptRequiredAbove         Decimal? @db.Decimal(12, 2)
 
   startsAt DateTime
   endsAt   DateTime?
@@ -1343,6 +1445,8 @@ model SupplyV2Redemption {
   // Slice 4
   obligation     SupplyV2SupplierObligation?
   economicEvents SupplyV2EconomicEvent[]
+  /// Supplier & Fulfillment Commerce: la visita que abrió esta entrega (§23).
+  visit          MembegoVisit?
 
   @@index([supplierId, redeemedAt])
   @@index([entitlementId])
@@ -2997,4 +3101,51 @@ enum SupplyV2CampaignEventType {
   COUPONS_GENERATED
   AUDIENCE_ASSIGNED
   BUDGET_WAIVED
+}
+
+// ─────────────────────────────────────────────
+// SUPPLIER & FULFILLMENT COMMERCE · Supplier → Merchant (§39–§41)
+// ─────────────────────────────────────────────
+
+/// La solicitud de un proveedor para operar también como empresa Membego
+/// (catálogo, pedidos, ofertas). La aprobación ENCIENDE capacidades en la
+/// MISMA `Company`: nunca se crea una segunda organización. Los datos del
+/// formulario llegan prellenados desde el proveedor y la empresa (`datos`).
+model SupplyV2MerchantApplication {
+  id         String                            @id @default(cuid())
+  supplierId String
+  supplier   SupplyV2Supplier                  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  companyId  String
+  company    Company                           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  status     SupplyV2MerchantApplicationStatus @default(SUBMITTED)
+
+  /// El formulario, versionado ({v:1, nombreComercial, categoria, descripcion, telefono, direccion, rnc, sucursales, horario, notas}).
+  datos Json
+
+  submittedById String
+  submittedBy   User     @relation("SupplyV2MerchantApplicationSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  submittedAt   DateTime @default(now())
+
+  /// Lo que Membego pidió cuando dejó la solicitud en MORE_INFO_REQUIRED.
+  moreInfoRequest String?
+  /// Respuesta del proveedor a esa petición (vuelve a SUBMITTED).
+  moreInfoResponse String?
+
+  reviewerId     String?
+  reviewer       User?     @relation("SupplyV2MerchantApplicationReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  /// Motivo de la decisión (aprobada o rechazada): lo ve el proveedor.
+  decisionReason String?
+  /// Notas internas de Membego: nunca salen al proveedor.
+  internalNotes  String?
+  /// Capacidades encendidas al aprobar, para la bitácora.
+  capabilitiesGranted Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId, status])
+  @@index([companyId])
+  @@index([status, submittedAt])
+  @@map("supply_v2_merchant_applications")
 }

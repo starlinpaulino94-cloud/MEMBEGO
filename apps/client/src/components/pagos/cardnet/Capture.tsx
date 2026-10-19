@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Text, View } from 'react-native'
+import { ActivityIndicator, Modal, Platform, ScrollView, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { CheckCircle2 } from 'lucide-react-native'
 import type { CardnetCaptureSession, CardnetPaymentStatus } from '../../../lib/api'
 import { api } from '../../../lib/api'
@@ -16,6 +17,7 @@ import {
   CardnetPaymentStatusMessage,
 } from './primitives'
 import {
+  decideCaptureStatus,
   isCardnetSessionExpired,
   shouldRenderPaymentSuccess,
   validateCardnetCaptureSession,
@@ -27,7 +29,11 @@ export interface CardnetCaptureProps {
   readonly onStatusChange?: (status: CardnetPaymentStatus) => void
   readonly onApproved?: () => void
   readonly onRestartSession?: () => void
+  readonly onClose: () => void
 }
+
+/** Cada cuánto se pregunta al servidor mientras el formulario está abierto (≈17 por minuto; el tope de la ruta es 30). */
+const CAPTURE_WATCH_MS = 3500
 
 function formatAmount(amount: number, currency: string): string {
   try {
@@ -56,6 +62,7 @@ export function CardnetCapture({
   onStatusChange,
   onApproved,
   onRestartSession,
+  onClose,
 }: CardnetCaptureProps) {
   const config = useMemo(() => validateCardnetCaptureSession(session), [session])
   const [status, setStatus] = useState<CardnetPaymentStatus | null>(initialStatus)
@@ -64,14 +71,21 @@ export function CardnetCapture({
   const [submittingCapture, setSubmittingCapture] = useState(false)
   const [activationSubmitting, setActivationSubmitting] = useState(false)
   const [activationError, setActivationError] = useState<string | null>(null)
+  const [surfaceKey, setSurfaceKey] = useState(0)
   const submittedRef = useRef(false)
+  const submittingRef = useRef(false)
+  const statusRef = useRef<CardnetPaymentStatus | null>(initialStatus)
+  const sessionIdRef = useRef(session.sessionId)
   const approvedNotifiedRef = useRef(false)
   const pollInFlightRef = useRef(false)
   const pollAttemptsRef = useRef(0)
   const statusKind = status?.status ?? null
 
   const acceptServerStatus = useCallback((next: CardnetPaymentStatus) => {
+    statusRef.current = next
     setStatus(next)
+    // Lo que diga el servidor manda: un error de captura mostrado antes ya no aplica (la tarjeta pudo registrarse igual).
+    setCaptureFailure(null)
     setConfirmationUncertain(false)
     onStatusChange?.(next)
     if (shouldRenderPaymentSuccess(next) && !approvedNotifiedRef.current) {
@@ -81,6 +95,8 @@ export function CardnetCapture({
   }, [onApproved, onStatusChange])
 
   useEffect(() => {
+    sessionIdRef.current = session.sessionId
+    statusRef.current = initialStatus ?? null
     setStatus(initialStatus ?? null)
     setCaptureFailure(null)
     setConfirmationUncertain(false)
@@ -88,25 +104,51 @@ export function CardnetCapture({
     setActivationError(null)
     setActivationSubmitting(false)
     submittedRef.current = false
+    submittingRef.current = false
     approvedNotifiedRef.current = initialStatus?.status === 'approved'
     pollAttemptsRef.current = 0
   }, [initialStatus, session.sessionId])
 
-  const refreshStatus = useCallback(async (): Promise<CardnetPaymentStatus | null> => {
-    if (pollInFlightRef.current) return null
+  /**
+   * Pregunta al servidor cómo va la sesión y actúa según `decideCaptureStatus`.
+   *
+   * `force` salta la regla de «una consulta a la vez»: después de un fallo de `/confirmar` la consulta NO puede descartarse
+   * porque haya otra en vuelo (esa carrera dejaba la pantalla muerta). `silent` no marca «incierto» al fallar: el sondeo de
+   * respaldo mientras se teclea la tarjeta no debe cambiar el formulario por «estamos confirmando» por un parpadeo de red
+   * (se perdería lo que el cliente ya escribió).
+   */
+  const refreshStatus = useCallback(async (options: { force?: boolean; silent?: boolean } = {}): Promise<CardnetPaymentStatus | null> => {
+    if (pollInFlightRef.current && !options.force) return null
     pollInFlightRef.current = true
+    const requestedFor = session.sessionId
     try {
-      const next = await api.getCardnetStatus(session.sessionId)
-      acceptServerStatus(next)
+      const next = await api.getCardnetStatus(requestedFor)
+      if (sessionIdRef.current !== requestedFor) return null
+      const decision = decideCaptureStatus({
+        next,
+        current: statusRef.current,
+        submitted: submittedRef.current,
+        submitting: submittingRef.current,
+      })
+      if (decision === 'accept') acceptServerStatus(next)
+      else if (decision === 'rearm') {
+        submittedRef.current = false
+        setSurfaceKey((key) => key + 1)
+      }
       setConfirmationUncertain(false)
       return next
     } catch {
-      setConfirmationUncertain(true)
+      if (!options.silent) setConfirmationUncertain(true)
       return null
     } finally {
       pollInFlightRef.current = false
     }
   }, [acceptServerStatus, session.sessionId])
+  // El sondeo de respaldo llama siempre a la versión MÁS reciente sin reiniciar su temporizador en cada render del padre.
+  const refreshStatusRef = useRef(refreshStatus)
+  useEffect(() => {
+    refreshStatusRef.current = refreshStatus
+  }, [refreshStatus])
 
   useEffect(() => {
     if (statusKind !== 'pending') return
@@ -124,6 +166,7 @@ export function CardnetCapture({
   const receiveToken = useCallback(async (token: string) => {
     if (submittedRef.current) return
     submittedRef.current = true
+    submittingRef.current = true
     setCaptureFailure(null)
     setConfirmationUncertain(false)
     setSubmittingCapture(true)
@@ -135,8 +178,12 @@ export function CardnetCapture({
       })
       acceptServerStatus(next)
     } catch {
-      await refreshStatus()
+      // `/confirmar` falló: por red, o con un 409 porque el servidor YA avanzó por su cuenta al ver la tarjeta en CardNET.
+      // Manda lo que diga el servidor (se consulta aunque haya otra consulta en vuelo).
+      submittingRef.current = false
+      await refreshStatus({ force: true })
     } finally {
+      submittingRef.current = false
       setSubmittingCapture(false)
     }
   }, [acceptServerStatus, refreshStatus, session.captureNonce, session.sessionId])
@@ -165,9 +212,27 @@ export function CardnetCapture({
   const effectiveStatus = status ?? (expired ? { status: 'expired' as const } : null)
   const showApproved = shouldRenderPaymentSuccess(status)
   const captureIsClosed = effectiveStatus !== null || confirmationUncertain || submittingCapture
-  const retryStatus = useCallback(() => void refreshStatus(), [refreshStatus])
+  const retryStatus = useCallback(() => void refreshStatus({ force: true }), [refreshStatus])
 
-  return (
+  // RED DE SEGURIDAD: mientras el servidor no haya dicho nada, se le pregunta cómo va la sesión.
+  //
+  // Antes la app solo avisaba al servidor cuando el navegador del formulario le entregaba el token, y si esa señal se
+  // perdía (el widget la entrega en otro formato, cierra su ventana antes de entregarla…) la tarjeta quedaba registrada
+  // en CardNET y la pantalla se quedaba en «Completa el formulario» hasta que la sesión vencía, sin cobro y sin error.
+  // El servidor ahora comprueba en CardNET si la tarjeta ya existe y, si es así, avanza el pago y responde `capture:
+  // 'closed'`: aquí el formulario se cierra y sigue el flujo de siempre. Corre incluso con un error de captura a la vista
+  // (la tarjeta pudo registrarse igual) y mientras se envía el token (las respuestas atrasadas se resuelven en
+  // `decideCaptureStatus`). Un fallo de red no cambia nada en pantalla: se reintenta en el siguiente turno.
+  const watching = config !== null && effectiveStatus === null
+  useEffect(() => {
+    if (!watching) return
+    const interval = setInterval(() => {
+      void refreshStatusRef.current({ silent: true })
+    }, CAPTURE_WATCH_MS)
+    return () => clearInterval(interval)
+  }, [watching])
+
+  const captureContent = (
     <View className="mx-auto w-full max-w-[720px] gap-4 px-4 py-4 md:px-6">
       <Card className="gap-4 p-4 md:p-5">
         <View className="flex-row items-start justify-between gap-3">
@@ -194,6 +259,7 @@ export function CardnetCapture({
           ) : null
         ) : (
           <CardnetCaptureSurface
+            key={surfaceKey}
             config={config}
             disabled={false}
             onError={handleCaptureError}
@@ -216,6 +282,40 @@ export function CardnetCapture({
         ) : null}
       </Card>
     </View>
+  )
+
+  if (Platform.OS === 'web') return captureContent
+
+  return (
+    <Modal
+      animationType="slide"
+      onRequestClose={onClose}
+      presentationStyle="fullScreen"
+      visible
+    >
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
+        <View className="border-b border-border px-4 py-3">
+          <View className="mx-auto w-full max-w-[720px] flex-row items-center justify-between gap-3">
+            <View className="flex-1">
+              <Text className="text-base font-inter-semibold text-foreground">Pago seguro</Text>
+              <Text className="text-sm text-muted-foreground">CardNET · {formatAmount(session.amount, session.currency)}</Text>
+            </View>
+            <Button size="sm" variant="outline" onPress={onClose}>
+              Cerrar
+            </Button>
+          </View>
+        </View>
+        {/* En el teléfono el formulario de CardNET se abre en el navegador del sistema (ver CaptureSurface.native.tsx):
+            aquí queda el resumen del pago, el botón para abrirlo y lo que diga el servidor. */}
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {captureContent}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
   )
 }
 

@@ -17,6 +17,41 @@ export interface CardnetTokenMessage {
   readonly token: string
 }
 
+/**
+ * Adónde vuelve la ventana de CardNET abierta en el navegador del teléfono (`/api/v1/cliente/pagos/cardnet/ventana`).
+ * Es el `scheme` de `app.json`; el servidor redirige exactamente aquí (`RETORNO_APP_CARDNET`) y una prueba fija que
+ * los dos coinciden.
+ */
+export const CARDNET_WINDOW_RETURN_URL = 'membego://pago-cardnet' as const
+
+/** ¿Este enlace es la vuelta de la ventana de CardNET? (`+native-intent` no debe navegar con él.) */
+export function isCardnetWindowReturn(url: string): boolean {
+  return url === CARDNET_WINDOW_RETURN_URL || url.startsWith(`${CARDNET_WINDOW_RETURN_URL}?`) || url.startsWith(`${CARDNET_WINDOW_RETURN_URL}/`)
+}
+
+/**
+ * El token que trae la vuelta de la ventana, SOLO si es de esta sesión y tiene forma de token. Sin `URL`/`URLSearchParams`
+ * a propósito: el esquema es propio y se lee a mano. Cualquier otra cosa da `null` y la app sigue con su sondeo (el
+ * servidor ve la tarjeta nueva en CardNET aunque la vuelta se pierda).
+ */
+export function parseCardnetWindowReturn(url: string, sessionId: string): string | null {
+  if (!isCardnetWindowReturn(url)) return null
+  const query = url.split('?')[1]?.split('#')[0] ?? ''
+  const params = new Map<string, string>()
+  for (const pair of query.split('&')) {
+    if (!pair) continue
+    const [rawKey, rawValue = ''] = pair.split('=')
+    try {
+      const key = decodeURIComponent(rawKey.replace(/\+/g, ' '))
+      if (params.has(key)) return null
+      params.set(key, decodeURIComponent(rawValue.replace(/\+/g, ' ')))
+    } catch {
+      return null
+    }
+  }
+  const token = params.get('t')
+  return params.get('s') === sessionId && isValidOneTimeToken(token) ? token : null
+}
 const MODE_CONFIG: Readonly<Record<CardnetCaptureMode, {
   origin: string
   capturePath: string
@@ -56,9 +91,45 @@ export function isValidOneTimeToken(value: unknown): value is string {
   )
 }
 
-export function extractCardnetToken(payload: unknown): string | null {
-  if (!isPlainRecord(payload) || !Object.hasOwn(payload, 'TokenId')) return null
-  return isValidOneTimeToken(payload.TokenId) ? payload.TokenId : null
+/**
+ * Nombres con los que el widget de CardNET puede entregar el token, en orden de preferencia. `TokenId` es el documentado
+ * (manual §7.1); el resto son las grafías que ya tuvo que aceptar la pantalla web de pago. Aquí SOLO se aceptaba
+ * `TokenId` en un objeto plano, y cualquier otra forma (el token como texto, un JSON en texto, un objeto envuelto) se
+ * descartaba EN SILENCIO: la tarjeta quedaba registrada en CardNET y la app no avisaba al servidor.
+ */
+const TOKEN_KEYS = ['TokenId', 'tokenId', 'Token', 'token', 'TrxToken', 'trxToken', 'PWToken'] as const
+const TOKEN_WRAPPERS = ['data', 'Data', 'detail', 'payload', 'Response', 'response'] as const
+
+/**
+ * Extrae el token de lo que entrega el widget. Con `raw` (la llamada directa del SDK, `tokenCreated`), un texto suelto ES
+ * el token; en un mensaje del iframe solo cuentan objetos y JSON en texto (un texto cualquiera no es un token).
+ *
+ * La ventana que la app abre en el navegador (`cardnetVentanaHtml.ts` del servidor) lleva esta misma lógica escrita a
+ * mano; una prueba ejecuta ese código y comprueba que coincide con esta función en cada caso.
+ */
+export function extractCardnetToken(payload: unknown, raw = false, depth = 0): string | null {
+  if (typeof payload === 'string') {
+    const text = payload.trim()
+    if ((text.startsWith('{') || text.startsWith('[')) && depth < 3) {
+      try {
+        return extractCardnetToken(JSON.parse(text) as unknown, raw, depth + 1)
+      } catch {
+        return null
+      }
+    }
+    return raw && depth === 0 && isValidOneTimeToken(text) ? text : null
+  }
+  if (!isPlainRecord(payload) || depth >= 4) return null
+  for (const key of TOKEN_KEYS) {
+    if (Object.hasOwn(payload, key) && isValidOneTimeToken(payload[key])) return payload[key]
+  }
+  for (const key of TOKEN_WRAPPERS) {
+    if (Object.hasOwn(payload, key) && payload[key]) {
+      const nested = extractCardnetToken(payload[key], raw, depth + 1)
+      if (nested) return nested
+    }
+  }
+  return null
 }
 
 export function validateCardnetCaptureSession(
@@ -124,6 +195,15 @@ export function isCardnetSessionExpired(session: Pick<CardnetCaptureSession, 'ex
   return !Number.isFinite(expiresAt) || expiresAt <= now
 }
 
+/**
+ * ¿Esta dirección es la ventana de captura DE ESTA SESIÓN?
+ *
+ * Quedan fijados el origen, la ruta, la llave pública y el `session_id` (el `UniqueID` del Customer). Los DEMÁS parámetros
+ * se toleran a propósito: el widget de CardNET arrastra a la dirección del iframe los valores que se le configuran
+ * (`Capture/?key=…&name=…&currency=…`; la pantalla web ya lo documenta y lo acepta). Antes aquí se exigía que las únicas
+ * claves fueran `key` y `session_id`, así que el iframe REAL no coincidía, la app no reconocía su propia ventana y el token
+ * se descartaba sin avisar, con la tarjeta ya registrada en CardNET.
+ */
 export function isAllowedCardnetFrameUrl(
   rawUrl: string,
   config: CardnetCaptureConfig,
@@ -133,12 +213,12 @@ export function isAllowedCardnetFrameUrl(
   if (!url || url.protocol !== 'https:' || url.origin !== config.origin || url.pathname !== '/servicios/tokens/v1/Capture/') {
     return false
   }
-  const keys = [...url.searchParams.keys()].sort()
   return (
     url.username === '' &&
     url.password === '' &&
     url.hash === '' &&
-    keys.join(',') === 'key,session_id' &&
+    url.searchParams.getAll('key').length === 1 &&
+    url.searchParams.getAll('session_id').length === 1 &&
     url.searchParams.get('key') === session.publicKey &&
     url.searchParams.get('session_id') === session.uniqueId
   )
@@ -157,36 +237,6 @@ export function matchesActiveCaptureFrame(
   )
 }
 
-export function parseNativeCardnetMessage(
-  raw: string,
-  session: Pick<CardnetCaptureSession, 'sessionId' | 'captureNonce'>
-): CardnetTokenMessage | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return null
-  }
-
-  if (!isPlainRecord(parsed)) return null
-  const keys = Object.keys(parsed).sort()
-  if (keys.join(',') !== 'captureNonce,sessionId,token,type') return null
-  if (
-    parsed.type !== 'CARDNET_TOKEN_CREATED' ||
-    parsed.sessionId !== session.sessionId ||
-    parsed.captureNonce !== session.captureNonce ||
-    !isValidOneTimeToken(parsed.token)
-  ) {
-    return null
-  }
-  return {
-    type: 'CARDNET_TOKEN_CREATED',
-    sessionId: session.sessionId,
-    captureNonce: session.captureNonce,
-    token: parsed.token,
-  }
-}
-
 export function createCardnetTokenGate(session: Pick<CardnetCaptureSession, 'sessionId' | 'captureNonce'>) {
   let consumed = false
   return (token: unknown): CardnetTokenMessage | null => {
@@ -199,6 +249,45 @@ export function createCardnetTokenGate(session: Pick<CardnetCaptureSession, 'ses
       token,
     }
   }
+}
+
+/**
+ * ¿Esta respuesta de `/estado` dice que el servidor SIGUE esperando la tarjeta? Solo `pending` con `capture: 'closed'` dice que
+ * ya avanzó; sin marca (un servidor que no la manda) no se sabe y se sigue esperando.
+ */
+export function isCaptureStillOpen(status: CardnetPaymentStatus): boolean {
+  return status.status === 'pending' && status.capture !== 'closed'
+}
+
+export type CaptureStatusDecision =
+  /** Es un resultado del servidor: se muestra (y el formulario se cierra). */
+  | 'accept'
+  /** No cambia nada: la captura sigue abierta, o es una respuesta atrasada que no debe pisar lo que ya se sabe. */
+  | 'ignore'
+  /** El token ya se entregó, `/confirmar` no avanzó y la tarjeta sigue sin verse: el formulario no puede quedar muerto. */
+  | 'rearm'
+
+/**
+ * Qué hacer con una respuesta de `/estado` recibida mientras se captura. Es una función pura porque ahí vivía una carrera:
+ * el token de la app y un sondeo coincidían, `/confirmar` respondía 409 («el servidor ya avanzó»), la consulta de respaldo se
+ * descartaba por haber otra en vuelo y la pantalla se quedaba con el formulario reabierto pero sin entrega ni sondeo.
+ *
+ * `current` es lo último que el servidor dijo (`null` si nada). Una respuesta `pending` atrasada nunca pisa un resultado
+ * (aprobado, rechazado, activación…) ya conocido.
+ */
+export function decideCaptureStatus(input: {
+  readonly next: CardnetPaymentStatus
+  readonly current: CardnetPaymentStatus | null
+  readonly submitted: boolean
+  readonly submitting: boolean
+}): CaptureStatusDecision {
+  const { next, current, submitted, submitting } = input
+  if (!isCaptureStillOpen(next)) {
+    if (next.status === 'pending' && current !== null && current.status !== 'pending') return 'ignore'
+    return 'accept'
+  }
+  if (current !== null) return 'ignore'
+  return submitted && !submitting ? 'rearm' : 'ignore'
 }
 
 export function shouldRenderPaymentSuccess(status: CardnetPaymentStatus | null): boolean {

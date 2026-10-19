@@ -1,4 +1,4 @@
-import '../global.css'
+import '../src/lib/global-styles'
 import React, { useState } from 'react'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'

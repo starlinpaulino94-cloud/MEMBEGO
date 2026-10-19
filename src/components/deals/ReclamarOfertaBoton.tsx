@@ -11,6 +11,7 @@ const campoSelector = 'h-9 w-full rounded-lg border border-input bg-background p
 
 interface Props {
   dealId: string
+  campaignId?: string
   /** Adónde volver tras iniciar sesión. */
   retorno: string
   sucursales: { id: string; nombre: string }[]
@@ -21,7 +22,7 @@ interface Props {
  * la hay, la acción lo dice y se manda a la persona a iniciar sesión y volver aquí. Si ya la
  * había obtenido, se le lleva a su pedido (su cupón con el QR).
  */
-export function ReclamarOfertaBoton({ dealId, retorno, sucursales }: Props) {
+export function ReclamarOfertaBoton({ dealId, campaignId, retorno, sucursales }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [sucursalId, setSucursalId] = useState(sucursales.length === 1 ? sucursales[0].id : '')
@@ -32,7 +33,7 @@ export function ReclamarOfertaBoton({ dealId, retorno, sucursales }: Props) {
       return
     }
     start(async () => {
-      const r = await reclamarOferta({ dealId, sucursalId })
+      const r = await reclamarOferta({ dealId, sucursalId, campaignId })
       if (!r.ok) {
         if (r.sinSesion) {
           router.push(`/login?redirect=${encodeURIComponent(retorno)}`)

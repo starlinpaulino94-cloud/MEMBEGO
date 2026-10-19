@@ -148,7 +148,7 @@ test('el panel de administrador son los ocho grupos del hub, sin perder módulos
   const grupos = navForRole('ADMINISTRADOR')
   assert.deepEqual(
     grupos.map((g) => g.label),
-    ['Principal', 'Experiencia cliente', 'Catálogo', 'Operaciones', 'Clientes', 'Marketing', 'Analítica', 'Ajustes']
+    ['Principal', 'Experiencia cliente', 'Comercio', 'Operaciones', 'Clientes', 'Marketing', 'Analítica', 'Ajustes']
   )
   const enMenu = new Set(allLinks(grupos).map((l) => l.href))
   const faltan = ENLACES_ADMIN.map((i) => i.href).filter((h) => !enMenu.has(h))
@@ -178,7 +178,7 @@ test('las migas nombran el espacio, no solo la página', () => {
   const m = breadcrumbs('/admin/ofertas', ctxDe('ADMINISTRADOR'))
   assert.deepEqual(
     m.map((x) => x.label),
-    ['Empresa', 'Catálogo', 'Ofertas']
+    ['Empresa', 'Comercio', 'Beneficios y regalos']
   )
   // La primera miga es un enlace al aterrizaje del hub: volver deja de exigir
   // un viaje por el menú.

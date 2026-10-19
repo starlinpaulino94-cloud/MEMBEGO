@@ -21,6 +21,8 @@ import {
   type EntradaDeOferta,
 } from './domain'
 import { fallo } from './errores'
+import { validarPromotionParaReclamoEnTx } from './promotion-gate'
+import { finDeVentanaCampana } from '@/modules/engagement/ventana-campana'
 import { COLUMNAS_DE_OFERTA, ajustarEstadoPorPresupuestoEnTx, filaDeOferta } from './reclamos'
 
 /**
@@ -95,6 +97,27 @@ export async function crearOfertaEnTx(tx: Tx, companyId: string, e: EntradaDeOfe
   const valida = validarOferta(e, cuenta.cpaAmount)
   if (!valida.ok) fallo('OFERTA_INVALIDA', valida.error)
   const v = await varianteDeLaOferta(tx, companyId, valida.datos.catalogVariantId)
+  if (valida.datos.promotionId) {
+    const ahora = new Date()
+    const promotion = await tx.promotion.findFirst({
+      where: { id: valida.datos.promotionId, companyId },
+      select: {
+        id: true,
+        status: true,
+        inicioEn: true,
+        finEn: true,
+        actions: { where: { activa: true }, select: { id: true } },
+        restrictions: { where: { activa: true }, select: { id: true } },
+      },
+    })
+    if (!promotion) fallo('PROMOCION_NO_ENCONTRADA', 'La promoción no existe en esta empresa.')
+    if (promotion.status !== 'ACTIVE' || (promotion.inicioEn && promotion.inicioEn > ahora) || (promotion.finEn && promotion.finEn < ahora)) {
+      fallo('PROMOCION_NO_APLICA', 'Elige una promoción activa y vigente.')
+    }
+    if (promotion.actions.length > 0 || promotion.restrictions.length > 0) {
+      fallo('PROMOCION_NO_APLICA', 'Esta oferta solo admite promociones basadas en reglas de elegibilidad.')
+    }
+  }
   if (cuenta.currency !== v.item.currency) {
     fallo('MONEDA_DISTINTA', `«${v.item.name}» está en ${v.item.currency} y tu cuenta Membego cobra en ${cuenta.currency}: no se puede ofrecer.`)
   }
@@ -102,6 +125,7 @@ export async function crearOfertaEnTx(tx: Tx, companyId: string, e: EntradaDeOfe
   const oferta = await tx.deal.create({
     data: {
       companyId,
+      promotionId: valida.datos.promotionId,
       catalogVariantId: v.id,
       title: d.title,
       description: d.description,
@@ -125,6 +149,7 @@ export async function crearOfertaEnTx(tx: Tx, companyId: string, e: EntradaDeOfe
     cuota: cuenta.cpaAmount.toFixed(2),
     presupuesto: d.budgetTotal.toFixed(2),
     cupos: d.maxClaims,
+    promotionId: d.promotionId,
   })
   return { id: oferta.id, fee: cuenta.cpaAmount.toFixed(2), currency: v.item.currency }
 }
@@ -301,7 +326,7 @@ export async function motivoNoReclamarEnTx(tx: Tx, companyId: string, dealId: st
 export async function reclamarOfertaEnTx(
   tx: Tx,
   companyId: string,
-  e: { dealId: string; customerId: string; locationId: string },
+  e: { dealId: string; customerId: string; locationId: string; campaignId?: string | null },
   ahora = new Date()
 ): Promise<ReclamoCreado> {
   if (typeof e.dealId !== 'string' || e.dealId === '') fallo('OFERTA_NO_ENCONTRADA', 'La oferta no existe.')
@@ -314,6 +339,33 @@ export async function reclamarOfertaEnTx(
   const suspendida = !(await cuentaAdmiteCampanasEnTx(tx, companyId))
   const razon = motivoNoReclamable(previa, ahora, suspendida)
   if (razon) fallo(razon.codigo, razon.mensaje)
+  const promotionAplicada = previa.promotionId
+    ? await validarPromotionParaReclamoEnTx(tx, companyId, previa.promotionId, {
+        customerId: e.customerId,
+        locationId: e.locationId,
+        dealId: previa.id,
+        catalogVariantId: previa.catalogVariantId,
+        at: ahora,
+      })
+    : null
+  // La campaña solo recibe atribución si el reclamo llegó directamente por un
+  // enlace activo de esa campaña al mismo Deal y empresa. El ID recibido es
+  // entrada no confiable: se verifica dentro de la misma transacción del reclamo.
+  let campaignId: string | null = null
+  if (typeof e.campaignId === 'string' && e.campaignId.length > 0 && e.campaignId.length <= 60) {
+    const campana = await tx.marketingCampaign.findFirst({
+      where: { id: e.campaignId, companyId, dealId: previa.id, estado: 'ACTIVA' },
+      select: {
+        id: true,
+        fechaInicio: true,
+        fechaFin: true,
+        horaInicioMin: true,
+        horaFinMin: true,
+        diasSemana: true,
+      },
+    })
+    if (campana && finDeVentanaCampana(campana, ahora)) campaignId = campana.id
+  }
   // Cada cupón aparta stock y presupuesto hasta que se canjea o vence: el mismo tope de pedidos abiertos que el
   // checkout (que cuenta también los cupones) impide que una cuenta acapare una oferta entera sin ir a canjear.
   if ((await contarPedidosAbiertosEnTx(tx, companyId, e.customerId)) >= MAX_PEDIDOS_ABIERTOS_POR_CLIENTE) {
@@ -366,7 +418,7 @@ export async function reclamarOfertaEnTx(
       locationId: e.locationId,
       origin: 'MARKETPLACE',
       lineas: [{ varianteId: variante.id, cantidad: 1, descuento: ahorro.toFixed(2) }],
-      atribucion: { channel: 'PROMOTION_CLAIM', promotionId: previa.id },
+      atribucion: { channel: 'PROMOTION_CLAIM', promotionId: previa.id, campaignId },
       notas: `Oferta «${previa.title}»`,
       fuente: { tipo: FUENTE_DE_RECLAMO, id: `${previa.id}:${e.customerId}` },
       ahora,
@@ -397,6 +449,8 @@ export async function reclamarOfertaEnTx(
     cuota: reservada.feePerRedemption.toFixed(2),
     reservado: reservada.budgetReserved.toFixed(2),
     presupuesto: reservada.budgetTotal.toFixed(2),
+    promotion: promotionAplicada,
+    campaignId,
   })
   await ajustarEstadoPorPresupuestoEnTx(tx, { actorId: null }, companyId, reservada, ahora, 'reclamo')
   return { claimId: reclamo.id, orderId: pedido.pedidoId, orderCode: pedido.code, savings: ahorro.toFixed(2), total: pedido.total, expiresAt }

@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { formatDate } from '@/lib/format'
 import { ChipAsignacion } from '@/components/supply-v2/chips'
 import { misBeneficios } from '@/modules/supply-v2/benefits/queries'
-import { BENEFIT_FUNDING_LABELS, dineroSupplyV2, RUTA_OFERTAS_PUBLICAS } from '@/modules/supply-v2/core/catalogo'
+import { BENEFIT_FUNDING_LABELS, dineroSupplyV2, RUTA_OFERTAS_CLIENTE } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mis bonos y descuentos' }
@@ -43,7 +43,7 @@ export default async function MisBonosPage() {
           description="Cuando Membego te asigne un bono o un descuento, lo verás aquí con las ofertas donde puedes usarlo."
           action={
             <Button asChild>
-              <Link href="/promociones">Ver promociones</Link>
+              <Link href="/cliente/promociones">Ver promociones</Link>
             </Button>
           }
         />
@@ -80,7 +80,7 @@ export default async function MisBonosPage() {
                         {b.ofertas.map((o) => (
                           <li key={o.slug}>
                             <Link
-                              href={`${RUTA_OFERTAS_PUBLICAS}/${o.slug}?beneficio=${b.customerBenefitId}`}
+                              href={`${RUTA_OFERTAS_CLIENTE}/${o.slug}?beneficio=${b.customerBenefitId}`}
                               className="text-primary underline-offset-4 hover:underline"
                               data-testid="bono-oferta"
                             >
@@ -94,7 +94,7 @@ export default async function MisBonosPage() {
                   )}
                   {b.usable && b.ofertas[0] && (
                     <Button asChild className="w-full">
-                      <Link href={`${RUTA_OFERTAS_PUBLICAS}/${b.ofertas[0].slug}?beneficio=${b.customerBenefitId}`} data-testid="btn-usar-bono">Usar mi beneficio</Link>
+                      <Link href={`${RUTA_OFERTAS_CLIENTE}/${b.ofertas[0].slug}?beneficio=${b.customerBenefitId}`} data-testid="btn-usar-bono">Usar mi beneficio</Link>
                     </Button>
                   )}
                 </CardContent>

@@ -1,5 +1,6 @@
 'use client'
 
+import { RUTA_CARRITO } from '@/modules/comercio/rutas'
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -43,7 +44,7 @@ export function AgregarAlCarrito({ companySlug, moneda, conVariantes, variantes 
       toast.error(r.error)
       return
     }
-    toast.success('Agregado al carrito.', { action: { label: 'Ver carrito', onClick: () => router.push('/carrito') } })
+    toast.success('Agregado al carrito.', { action: { label: 'Ver carrito', onClick: () => router.push(RUTA_CARRITO) } })
   }
 
   return (
@@ -71,7 +72,7 @@ export function AgregarAlCarrito({ companySlug, moneda, conVariantes, variantes 
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/carrito" className="text-sm text-muted-foreground underline">
+        <Link href={RUTA_CARRITO} className="text-sm text-muted-foreground underline">
           Ver mi carrito
         </Link>
         <Button type="submit" variant="outline">

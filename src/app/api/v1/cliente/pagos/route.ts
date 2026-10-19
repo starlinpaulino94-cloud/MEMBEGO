@@ -55,7 +55,7 @@ export async function GET(request: Request) {
     // Sin ficha de cliente no hay pagos: misma salida que la web.
     if (!user.metadata.clienteId) {
       return NextResponse.json(
-        { membership: null, historial: [] },
+        { membership: null, historial: [], comprobantes: [] },
         { headers: corsHeaders(request) }
       )
     }
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
       }))
     )
 
-    return NextResponse.json({ membership, historial }, { headers: corsHeaders(request) })
+    return NextResponse.json({ membership, historial, comprobantes: data.comprobantes }, { headers: corsHeaders(request) })
   } catch (error) {
     console.error('[api/v1/cliente/pagos] Error cargando pagos:', error)
     return NextResponse.json(

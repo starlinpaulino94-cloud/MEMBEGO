@@ -554,6 +554,24 @@ export interface PagoHistorialItem {
    * todavía no tiene su venta registrada.
    */
   recibo: ReciboDePago | null
+  /**
+   * La venta oficial de ese pago (ticket + factura), si quedó registrada: es lo que se imprime. En un pago con tarjeta es
+   * EXACTA (la venta del intento, por `pagoIntentoId`); en los demás (transferencia, caja) se deduce por membresía y cercanía
+   * de fecha.
+   */
+  transaccionId: string | null
+}
+
+/** Una venta aplicada de esta persona: su comprobante de pago imprimible. */
+export interface ComprobanteCliente {
+  id: string
+  codigo: string
+  ticketNumero: string
+  fecha: Date
+  empresa: string
+  detalle: string | null
+  total: string | null
+  metodoPago: string | null
 }
 
 export interface ClientePagos {
@@ -572,6 +590,8 @@ export interface ClientePagos {
     planSolicitadoNombre: string | null
   } | null
   historial: PagoHistorialItem[]
+  /** Todas sus ventas con comprobante (membresías, promociones, renovaciones), la más reciente primero. */
+  comprobantes: ComprobanteCliente[]
 }
 
 /**
@@ -599,6 +619,52 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
 
   const membershipIds = memberships.map((m) => m.id)
   const current = memberships[0] ?? null
+
+  // Sus comprobantes: las ventas aplicadas a su nombre (las deja la caja, el
+  // panel al confirmar un pago y, desde el 16-10-2026, también la pasarela).
+  const ventas = clienteIds.length
+    ? await sinEmpresa('cliente: mis comprobantes de pago', (tx) =>
+        tx.transaction.findMany({
+          where: { clienteId: { in: clienteIds }, tipo: 'SALE', estado: 'APPLIED' },
+          select: {
+            id: true, codigo: true, ticketNumero: true, createdAt: true, membershipId: true, snapshot: true,
+            company: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        })
+      ).catch((e) => {
+        console.error('[getClientePagos] comprobantes', e)
+        return []
+      })
+    : []
+  const comprobantes: ComprobanteCliente[] = ventas.map((v) => {
+    const sn = (v.snapshot ?? {}) as Record<string, unknown>
+    return {
+      id: v.id,
+      codigo: v.codigo,
+      ticketNumero: v.ticketNumero,
+      fecha: v.createdAt,
+      empresa: v.company.name,
+      detalle: typeof sn.detalle === 'string' ? sn.detalle : typeof sn.servicio === 'string' ? sn.servicio : null,
+      total: typeof sn.total === 'string' ? sn.total : null,
+      metodoPago: typeof sn.metodoCobroLabel === 'string' ? sn.metodoCobroLabel : null,
+    }
+  })
+  // El pago del historial y su venta son el mismo hecho con dos relojes: la
+  // bitácora se escribe al activar y la venta justo después. Misma membresía y
+  // menos de 6 h de diferencia = el mismo pago (la más cercana).
+  const VENTANA_MS = 6 * 60 * 60 * 1000
+  const ventaDe = (membershipId: string | null, fecha: Date): string | null => {
+    if (!membershipId) return null
+    let mejor: { id: string; d: number } | null = null
+    for (const v of ventas) {
+      if (v.membershipId !== membershipId) continue
+      const d = Math.abs(v.createdAt.getTime() - fecha.getTime())
+      if (d <= VENTANA_MS && (!mejor || d < mejor.d)) mejor = { id: v.id, d }
+    }
+    return mejor?.id ?? null
+  }
 
   let historial: PagoHistorialItem[] = []
   if (membershipIds.length > 0) {
@@ -670,6 +736,7 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
             tx.transaction.findMany({
               where: { pagoIntentoId: { in: intentoIds }, clienteId: { in: clienteIds }, estado: 'APPLIED' },
               select: {
+                id: true,
                 pagoIntentoId: true,
                 ticketNumero: true,
                 codigo: true,
@@ -722,6 +789,7 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
           metodoPagoNombre: info?.metodoPagoNombre ?? null,
           comprobanteUrl: info?.comprobanteUrl ?? null,
           validadoPor: l.userId ? validadorName.get(l.userId) ?? null : null,
+          transaccionId: l.accion === 'PAGO_APROBADO' ? (venta?.id ?? ventaDe(l.entidadId, l.createdAt)) : null,
         }
       })
     } catch (e) {
@@ -750,5 +818,6 @@ export async function getClientePagos(supabaseId: string): Promise<ClientePagos>
         }
       : null,
     historial,
+    comprobantes,
   }
 }

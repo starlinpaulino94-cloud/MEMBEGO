@@ -23,7 +23,7 @@ export function FlashOfferStatus({
   color: string
   compact?: boolean
 }) {
-  const [now, setNow] = useState(Date.now())
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000)

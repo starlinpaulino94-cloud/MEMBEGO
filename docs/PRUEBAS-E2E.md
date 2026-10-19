@@ -139,6 +139,22 @@ la aplicación cae a la verificación LOCAL del token, que es la que acepta esa
 cookie. Lo que hacía falta no era un servicio externo: era un secreto de
 relleno y una base desechable.
 
+**Separación landing / app / paneles.** Los specs `separacion-invariantes`, `separacion-f1` a `separacion-f5` prueban,
+por la interfaz y con lo que llega al navegador, que la landing no opera ni descarga código de operación, que el traspaso
+es el que corresponde a visitante, cliente y equipo, que los destinos de retorno no abren redirecciones, y que en la app
+las operaciones funcionan. El spec `separacion-f7` (los dos anfitriones) no corre con la suite normal: se salta si no hay build de dos dominios. Se lanza con
+`bun run e2e:dos-anfitriones` (construye en `.next-f7` con `NEXT_PUBLIC_LANDING_URL`, `NEXT_PUBLIC_APP_ORIGIN` y
+`NEXT_PUBLIC_COOKIE_DOMAIN`; `-- --sin-build` reutiliza el build). Los dominios `membego.test` y `app.membego.test` los resuelve
+Chromium con `--host-resolver-rules` (sin tocar `/etc/hosts`); el cliente HTTP de Node no los ve, así que las pruebas sin
+navegador fijan el `Host` a mano. Detalle en `docs/F7_CORTE_POR_ANFITRION.md`. El mismo spec cubre la limpieza de cookies heredadas de F8 y ejecuta
+`bun run corte:verificar` (con `--via 127.0.0.1:3210`) contra ese servidor. Dos reglas del arnés que importan aquí:
+
+- `entrarComo` firma la cookie de sesión **sin `httpOnly`**, como en producción (`@supabase/ssr` la deja legible por el
+  navegador): la landing solo pregunta por la sesión a quien trae esa cookie, y con una cookie `httpOnly` no la vería.
+- Next 16 streaming: una página «no encontrada» llega con 200 y el cuerpo puede estar a medias al cargar. Se espera el
+  streaming (helper `ir`) y se comprueba el contenido, no el código HTTP; y tras navegar puede quedar unos instantes la
+  página anterior OCULTA en el DOM, así que se filtra por `visible`.
+
 ---
 
 **El catálogo unificado (Commerce Core)** — `catalogo-admin`, `catalogo-publico`
@@ -168,7 +184,41 @@ con el mismo arnés (`itemSembrado({ controlaInventario: true })`,
 no mueve) → daño → baja de lo dañado → umbral y alerta en la lista → transferencia
 entre sucursales → conteo físico → historial con cada movimiento; la variante de
 otra empresa se ve igual que una inventada, y una empresa sin la capacidad no
-entra. **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
+entra. **INV-1** añade un recorrido: las tres vistas (Existencias · Movimientos ·
+Reservas), los 7 movimientos de la empresa, filtros por tipo y por sucursal, la
+exportación CSV con los mismos filtros (y sin sesión o sin la capacidad no sale ni
+una fila), el salto a la ficha con el SKU exacto de un lector, la advertencia de una
+variante «Agotada» a mano (la prueba la fija por Prisma y la restaura) y el umbral
+aplicado también a la otra sucursal con existencias. **INV-2a** añade otro: la pestaña
+Entradas vacía → «Nueva entrada» con un lector (el SKU exacto se añade solo, repetirlo suma
+una unidad, el código de barras funciona igual, un código inexistente y un servicio no
+entran, una cantidad en cero no deja registrar) → la entrada `ENT-AAAA-000001` con sus
+líneas, factura y nota → su CSV (y una entrada inventada da 404) → existencias e historial
+→ lista y filtros (también una URL manipulada) → importación CSV: un archivo con filas malas
+no registra NADA (ni siquiera sus filas buenas) y un archivo limpio sí (una fila por SKU y
+otra por código de barras) → plantilla descargable → sin sesión, o de una empresa sin la
+capacidad, no sale ni una fila. **INV-2b** añade el conteo físico: pestaña Conteos vacía → abrir el conteo de
+Principal → pantalla a ciegas (ni una cifra del sistema; los pendientes salen sin cantidades) → escaneo por código y por
+SKU, «unidades por escaneo», código inexistente y una ráfaga de escaneos seguidos (la cola no pierde ninguno) → corregir
+escribiendo el número → una venta mientras se cuenta → hoja en blanco → importar un archivo con errores (no entra nada)
+y uno limpio → revisar (esperado, contado, diferencia) y su CSV → aplicar por la diferencia (la venta se conserva) → un
+faltante bajo lo apartado se avisa, se rechaza todo y, corregido, se aplica → cancelar con motivo → id inventado, sin
+sesión y sin la capacidad. **INV-2c** añade las transferencias con envío: pestaña Transferencias vacía → «Nueva
+transferencia» con un lector (se ve lo que hay en el origen y no deja pasar de ahí) → enviar: la transferencia
+`TRF-AAAA-000001` queda «En camino», el origen baja, el destino no sube y la ficha del producto muestra «En camino entre
+sucursales» → aviso a los administradores → recibir una parte («Recibida en parte»; lo que falta sigue en camino; escribir más de lo que
+falta no deja recibir) → cerrar con faltante (sin motivo no deja; con motivo queda «Recibida» y lo perdido) → su CSV →
+cancelar otra (lo que seguía en camino VUELVE al origen) → recibir todo de una vez → la lista y sus filtros → lo que NO
+debe pasar (id inventado y CSV de un id inventado, sin sesión, sin la capacidad). **INV-3a** añade el costo
+y el valor: la pestaña Valor (los vasos con costo de referencia valen; un producto sin costo se dice, con su aviso) → una
+entrada con costo (la coma se rechaza con un mensaje que dice qué hacer; con punto, el detalle muestra lo que costó) → otra en
+otra sucursal con una línea sin costo (no mueve el promedio) → la ficha: el promedio ponderado de 10 a 5 y 10 a 7 es 6 →
+el valor por producto y por sucursal, «solo sin costo», búsqueda y una URL manipulada → fijar el costo de lo que ya había
+(sin motivo no deja) → la entrada de un producto desde su ficha con costo (pondera 20 a 6 con 5 a 10 = 6.80) → importar un
+CSV con columna de costo (la coma rechaza TODO el archivo; el limpio dice cuántas líneas traen costo) → el costo de ventas del
+mes con el costo que cada venta congeló y el aviso de lo vendido sin costo → los archivos (valor y entrada, números sin
+separador de miles) → y quien tiene NEGADA la función `costos` no ve la pestaña, la pantalla, la tarjeta de la ficha, el campo
+de costo, el costo de la entrada ni su CSV; la descarga del valor da 403 y un archivo con costos se rechaza. **INV-3b** añade las compras: las pestañas Compras y Proveedores → un proveedor nuevo (el nombre no se repite ni por mayúsculas) → sin proveedor no hay orden → una orden con lector: el costo es obligatorio y la coma se rechaza, el total se calcula mientras se arma → guardar el borrador (no mueve el inventario ni los costos) → editarlo (conserva el número) → pedirla (desde ahí no se edita) → la ficha enseña lo pedido como «Pedido a proveedores», no como existencia → recibir una parte (no deja pasar de lo pedido; con la factura; entra con el costo de la orden, nace el costo promedio y el proveedor queda vinculado con su último costo; la entrada dice de qué orden viene) → cerrar con faltante (sin motivo no deja) → otra orden: cancelar una pedida exige motivo y no entra nada → la lista y sus filtros, el detalle y la desactivación del proveedor (la orden ya pedida se sigue recibiendo) → vincular un proveedor a un producto como preferido y quitarlo → el CSV de la orden → una orden inventada da 404 y su CSV también → y quien tiene NEGADA la función `comprar` no ve las pestañas, ni las órdenes, ni los proveedores, ni las tarjetas de la ficha, ni el enlace de la entrada; la descarga da 403. **INV-3c** añade la reposición: la pestaña Reposición vacía lo explica → en la ficha, «Llenar hasta» 20 (un umbral de 25 se rechaza por quedar sobre el objetivo, uno de 5 vale, y bajar el objetivo al umbral también se rechaza) → la propuesta agrupa por proveedor y sucursal: lo sugerido es lo que falta (20 − 3), el costo es el último de ese proveedor y, si nunca se le compró, queda VACÍO y hay que escribirlo; lo que no tiene proveedor se manda a su ficha y no tiene botón → crear el borrador exige el costo, se puede corregir la cantidad, lleva la nota «Borrador creado desde Reposición.» y no mueve existencias → de vuelta, el borrador se avisa pero NO se descuenta → pedirlo lo vuelve compromiso: el grupo desaparece y solo queda lo que no tiene proveedor → los filtros (sin proveedor, búsqueda sin resultados, sucursal y proveedor ajenos que no filtran) → el CSV con los mismos números (sin lo ya pedido) → y con la función `comprar` negada no hay pestaña, ni enlace «Ver qué comprar», ni cifras, y la descarga da 403, pero «Llenar hasta» sigue disponible (es de `ajustar`). **Ojo:** la base de E2E se crea con `db push`, así que NO lleva los
 disparadores ni los CHECK de las migraciones (la inmutabilidad del ledger y las
 144 combinaciones tipo×origen×destino las prueban `tests/postgres/inventory.db.test.ts`
 y `scripts/probar-rls.mjs`, que sí corren sobre una base migrada). Aquí se prueba

@@ -2,9 +2,10 @@ import { Platform } from 'react-native'
 import Constants from 'expo-constants'
 import { z } from 'zod'
 import {
+  cardnetCaptureSessionSchema,
   cardnetPaymentStatusSchema,
+  cardnetProcessingSessionSchema,
   cardnetPromotionPurchaseSchema,
-  cardnetSessionStartSchema,
   type CardnetSessionTarget,
 } from './cardnet-api-contracts'
 import { supabase } from './supabase'
@@ -48,17 +49,31 @@ export async function fetchBff<T>(path: string, options: RequestInit = {}): Prom
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(url, {
-    ...options,
-    headers,
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
+  const signal = options.signal ?? controller.signal
 
-  if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(errorBody.error || `HTTP error ${res.status}`)
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal,
+      headers,
+    })
+
+    if (!res.ok) {
+      const errorBody = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(errorBody.error || `HTTP error ${res.status}`)
+    }
+
+    return res.json()
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado. Revisa tu conexión e intenta de nuevo.')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
   }
-
-  return res.json()
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +87,30 @@ export type JsonObject = Record<string, unknown>
 async function parseCardnetResponse<T>(request: Promise<unknown>, schema: z.ZodType<T>): Promise<T> {
   return schema.parse(await request)
 }
+
+const cardnetProcessingSessionResponseSchema = z
+  .object({ status: z.literal('processing') })
+  .passthrough()
+  .refine(
+    (response) =>
+      ![
+        'captureNonce',
+        'expiresAt',
+        'amount',
+        'currency',
+        'captureUrl',
+        'scriptUrl',
+        'publicKey',
+        'uniqueId',
+      ].every((field) => Object.prototype.hasOwnProperty.call(response, field)),
+    { message: 'Processing CardNET response cannot carry a capture session' }
+  )
+  .pipe(cardnetProcessingSessionSchema)
+
+export const cardnetSessionStartResponseSchema = z.union([
+  cardnetProcessingSessionResponseSchema,
+  cardnetCaptureSessionSchema,
+])
 
 // --- Marketplace / catálogo ---
 export interface CompanyPublic {
@@ -238,6 +277,19 @@ export interface CompanyReviewsPublic {
 export interface CompanyOwnReview {
   readonly rating: number
   readonly comment: string | null
+}
+
+export interface ReportarResenaBody {
+  readonly resenaId: string
+  readonly companySlug: string
+  readonly motivo: 'OFENSIVO' | 'SPAM' | 'ENGANOSO' | 'ACOSO' | 'OTRO'
+  readonly detalle?: string
+}
+
+export interface ReportarResenaResponse {
+  readonly success: true
+  readonly ticketId: string
+  readonly message: string
 }
 
 export interface CompanyExcursionPublic {
@@ -776,6 +828,8 @@ export interface PagoHistorialItem {
   /** «Tarjeta VISA ••••4242 (en la app)». Ausente en servidores anteriores a que el cobro con tarjeta dejara recibo. */
   formaDePago?: string | null
   recibo?: ReciboDePago | null
+  /** La venta oficial de ese pago, si quedó registrada: es lo que se imprime. */
+  transaccionId: string | null
 }
 
 /** El recibo de un pago con tarjeta en la app o la web: el mismo ticket que tiene el negocio. */
@@ -793,9 +847,29 @@ export interface ReciboDePago {
   texto: string
 }
 
+/** Una venta aplicada de esta persona: su comprobante de pago imprimible. */
+export interface ComprobanteCliente {
+  id: string
+  codigo: string
+  ticketNumero: string
+  fecha: string
+  empresa: string
+  detalle: string | null
+  total: string | null
+  metodoPago: string | null
+}
+
 export interface PagosResponse {
   membership: PagoMembership | null
   historial: PagoHistorialItem[]
+  comprobantes: ComprobanteCliente[]
+}
+
+/** Enlace firmado y de vida corta al comprobante, para abrirlo en el navegador del teléfono. */
+export interface ComprobanteEnlace {
+  url: string
+  vigenciaSegundos: number
+  codigo: string
 }
 
 // --- Cuenta: vehículos ---
@@ -1177,6 +1251,8 @@ export const api = {
       `/api/v1/cliente/empresas/${encodeURIComponent(slug)}/resena`,
       body
     ),
+  reportarResena: (body: ReportarResenaBody) =>
+    postJson<ReportarResenaResponse>('/api/v1/cliente/resenas/reportar', body),
   toggleFavoritaEmpresa: (slug: string) =>
     postJson<{ following?: boolean; esFavorita?: boolean; error?: string }>(
       `/api/v1/cliente/empresas/${encodeURIComponent(slug)}`,
@@ -1226,6 +1302,8 @@ export const api = {
 
   // --- Cuenta: pagos ---
   getPagos: () => fetchBff<PagosResponse>('/api/v1/cliente/pagos'),
+  getComprobanteEnlace: (transactionId: string) =>
+    fetchBff<ComprobanteEnlace>(`/api/v1/cliente/comprobantes/${encodeURIComponent(transactionId)}/enlace`),
   comprarPromocion: (promotionId: string) =>
     parseCardnetResponse(
       postJson<unknown>(`/api/v1/cliente/promociones/${encodeURIComponent(promotionId)}/comprar`, {}),
@@ -1244,7 +1322,7 @@ export const api = {
 
     return parseCardnetResponse(
       postJson<unknown>('/api/v1/cliente/pagos/cardnet/sesion', body),
-      cardnetSessionStartSchema
+      cardnetSessionStartResponseSchema
     )
   },
   confirmCardnetCapture: (input: {
@@ -1256,6 +1334,12 @@ export const api = {
       postJson<unknown>('/api/v1/cliente/pagos/cardnet/confirmar', input),
       cardnetPaymentStatusSchema
     ),
+  /**
+   * La ventana de CardNET que se abre en el navegador del teléfono (no en una WebView): el banco puede verificar la
+   * tarjeta con 3D Secure como en la web. Lleva el id de la sesión y su nonce porque la pestaña no tiene la sesión de la app.
+   */
+  cardnetCaptureWindowUrl: (input: { readonly sessionId: string; readonly captureNonce: string }) =>
+    `${getApiBaseUrl()}/api/v1/cliente/pagos/cardnet/ventana?s=${encodeURIComponent(input.sessionId)}&n=${encodeURIComponent(input.captureNonce)}`,
   getCardnetStatus: (sessionId: string) =>
     parseCardnetResponse(
       fetchBff<unknown>(

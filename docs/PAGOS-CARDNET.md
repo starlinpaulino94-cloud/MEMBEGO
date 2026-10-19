@@ -1,44 +1,19 @@
-# Pago con tarjeta — CardNET (tokenización HOSPEDADA)
+# Pago con tarjeta — CardNET tokenizado
 
-Cobro con tarjeta para las membresías de **CARTOWN** (y solo CARTOWN). Convive
-con el pago en efectivo en sucursal, que no cambia.
+Estado revisado el **2026-10-09**. El flujo vigente usa captura hospedada y tokens para membresías y compras de promociones, en web y en la API del cliente móvil. El checkout de MembegoOrder y Supply no incorporan esta pasarela.
 
----
+## 1. Frontera de seguridad y retiro del flujo directo
 
-## 1. El modelo, y por qué es el seguro
+- La UI web activa es `PagoTokenCardnet`; Expo consume el BFF `/api/v1/cliente/pagos/cardnet/*`. La captura prevista ocurre en la superficie hospedada del proveedor; Membego opera con tokens, importe del servidor y activación idempotente.
+- La habilitación real depende de `PAGO_CARDNET`, configuración de pasarela y rechazo de empresas demo. **No hay una restricción de identidad hardcodeada a CARTOWN** en la orquestación. CARTOWN es el piloto histórico, no una garantía de autorización.
+- Antes de esta limpieza, `POST /api/pagos/cardnet/iniciar` y `completar` sí aceptaban PAN/CVV de un cliente autenticado. Su formulario `PagoTarjetaCardnet` no tiene consumidores en el árbol revisado. No era correcto describir estas rutas como inactivas ni afirmar ausencia absoluta de PAN en el servidor.
+- Ahora `iniciar`, `completar` y el retorno GET/POST responden **410 Gone**, sin leer cuerpo, URL ni sesión, sin persistir ni contactar CardNET. Se conserva esa respuesta para enlaces/clientes antiguos, que deben volver al pago tokenizado. No se redirigen cuerpos de pago.
+- Se mantienen los helpers legacy porque `cardnetToken.ts` y `cardnetClienteObjetivo.ts` comparten `montoDeObjetivo` desde `cardnet3ds.ts`. Eso no autoriza reactivar el cobro directo. Su redacción histórica era superficial y había respuestas crudas persistibles; detalles en [CODEX_ONBOARDING_AUDIT.md](CODEX_ONBOARDING_AUDIT.md).
+- Sentry descarta `request.data`; la política compartida también se aplica en Edge. No se inspeccionaron datos/logs históricos ni la infraestructura del proveedor de hosting. No puede concluirse que nunca hubo almacenamiento accidental.
 
-CardNET captura la tarjeta en **su propia página** (un iframe servido por
-`*.cardnet.com.do`). El cliente digita el número **en CardNET**, y a nosotros
-solo nos llega un **token**. **El número de tarjeta nunca pasa por el servidor
-de MembeGo.** Ese es el modelo de **menor alcance PCI (SAQ A)**: no se puede
-filtrar de nuestra base lo que nunca la toca.
+Pruebas: `tests/cardnet-legacy-retirado.test.ts`, `tests/e2e/cardnet-legacy.spec.ts`, `tests/observabilidad.test.ts` y suites existentes de CardNET tokenizado. No hubo pago real ni uso de credenciales QA. El cumplimiento PCI y el cuestionario aplicable requieren validación con el adquirente; no se certifican por una revisión de código.
 
-> Antes existió una integración DIRECTA (SAQ D, la tarjeta pasaba por nuestro
-> servidor). Se descartó a favor de esta. El código directo se conserva en
-> pausa (`cardnet-core.ts` / `cardnet.ts` / `cardnet3ds.ts` y sus rutas) pero
-> **no se usa**; el flujo activo es el de tokens.
-
-### Lo que el código garantiza
-
-- **La tarjeta nunca llega al servidor.** Solo el token. No hay PAN ni CVV en
-  ninguna parte de MembeGo.
-- **La llave privada es un secreto de servidor.** Va en `Authorization: Basic`
-  desde el servidor, nunca al navegador, nunca a la base, nunca a un log
-  (`sinSensibles()` enmascara tokens en la evidencia).
-- **El monto sale de la base, nunca del navegador.** El cliente dice QUÉ paga
-  (una membresía por id); cuánto se cobra lo lee el servidor (`montoDeObjetivo`).
-- **Solo CARTOWN cobra.** Capacidad `PAGO_CARDNET` encendida + no ser empresa
-  demo — comprobado en la orquestación, no solo en la UI.
-- **Idempotencia.** La activación (`confirmarIntento`) ocurre una sola vez
-  aunque el cliente recargue o haga doble clic.
-
-### Lo que sigue siendo tuyo
-
-- Firmar el **autocuestionario SAQ A** anual ante tu adquiriente (mucho más
-  liviano que el SAQ D).
-- Mantener el servidor parcheado y las llaves fuera de todo lo versionado.
-
----
+Las secciones siguientes conservan la guía del piloto e investigación de protocolos; sus hipótesis no sustituyen documentación del proveedor ni una prueba QA.
 
 ## 2. Cómo funciona un cobro
 
@@ -152,7 +127,7 @@ algo, así que queda escrito:
 
 | Pantalla | De quién | Qué se teclea | Por qué |
 |---|---|---|---|
-| Ventana de captura | **CardNET** (iframe) | Número, CVV, expiración, y el **3DS** del emisor | Nunca vemos el PAN: es lo que nos mantiene en **SAQ A**. `cardnetToken.ts` lo dice: «no hay 3DS que orquestar (lo hace el iframe)» |
+| Ventana de captura | **CardNET** (iframe) | Número, CVV, expiración, y el **3DS** del emisor | La captura hospedada evita que esta UI envíe PAN al backend; no certifica por sí sola el alcance PCI. `cardnetToken.ts` lo dice: «no hay 3DS que orquestar (lo hace el iframe)» |
 | Código de activación | **NUESTRA** | Los 6 caracteres del cargo de RD$1.00 | CardNET **no hospeda ninguna** para esto: su API nos exige mandarle el `ActivationCode` (§7.5) |
 
 **La prueba de que la segunda es nuestra** está en el propio contrato: si
@@ -353,6 +328,116 @@ una vuelta. Las sondas `?perfiles=1` y `?activar=1` miran el Customer de
 - El aviso de pruebas también sale en el banner «Tienes una tarjeta esperando
   su código», no solo dentro de la pantalla de activación (ya estaba ahí
   desde el 28-09-2026).
+
+### Móvil: la tarjeta queda registrada y la app nunca cobra (12-10-2026)
+
+**Síntoma.** CardNET confirma que la tarjeta se registró bien (el `Customer` trae su `PaymentProfile`, `Enabled: true`), pero
+el pago desde la app nunca avanza: la pantalla se queda en «Completa el formulario dentro de CardNET» hasta que la sesión
+vence a los 10 minutos. En la base, 18 sesiones seguidas de `cardnet_capture_sessions` quedaron en `CAPTURE_OPEN` (ninguna
+con `capturadoAt`) y no hubo ni un `pago_intentos` móvil. **Era nuestro, no de CardNET.**
+
+**Por qué.** El flujo móvil tenía UNA sola salida de `CAPTURE_OPEN`: que la app mandara `POST /confirmar` cuando el formulario
+de CardNET le entregaba el token. Y `GET /estado` contestaba «pendiente» sin mirar a CardNET. Si la señal del formulario se
+perdía, la tarjeta existía en CardNET y nadie lo averiguaba. La web no tiene ese punto único: su sondeo le pregunta al
+servidor, y el servidor consulta los perfiles del Customer. Y la señal de la app se perdía en silencio por tres sitios:
+
+| Dónde | Qué pasaba |
+|---|---|
+| Reconocer la ventana (`captureDocument.native.ts`, `security.ts`) | Solo aceptaba un iframe cuya dirección tuviera EXACTAMENTE `key` y `session_id`. El widget añade a esa dirección lo que se le configura (`Capture/?key=…&name=…`), y la web ya lo documentaba: la app no reconocía su propia ventana. |
+| Leer el token | Solo `{ TokenId }` en un objeto plano. La web ya había tenido que aceptar texto suelto, JSON en texto y objetos envueltos. |
+| Entregarlo | Exigía además un mensaje previo del iframe, y que el iframe SIGUIERA en el documento: el widget cierra su ventana ANTES de entregar el token, y su `Iframe.Close` puede reventar a medias (fallo conocido que la web ya blinda). |
+
+No se pudo ver el iframe real desde un teléfono, así que cuál de las tres era la que fallaba en producción no está
+demostrado; las tres eran un riesgo real y están cerradas. Lo importante es que el servidor ya no depende de ninguna.
+
+**Qué cambió.**
+
+1. **El servidor reconcilia (la pieza principal).** Con la captura abierta, cada `GET /estado` puede consultar al Customer
+   (como mucho una vez cada 2 s por sesión) y, si CardNET muestra UN perfil que no estaba al abrir la sesión —con el correo
+   del usuario verificado—, la consume y sigue hasta el cobro por la misma tubería que `/confirmar`
+   (`reconciliarCapturaAbierta` en `cardnetClienteAcciones.ts`). El `token` de `/confirmar` nunca se usó para cobrar (el
+   cobro lee el perfil de CardNET), así que esta señal solo decide CUÁNDO mirar, no QUÉ cobrar: no es menos segura. Re-valida
+   objetivo, importe y consentimiento, igual que `/confirmar`; dos sondeos simultáneos cobran una vez. Reutiliza el perfil
+   que ya leyó (no se lo vuelve a pedir a CardNET) y sigue por `advanceWithProfile`, el mismo tramo que `progressCapture`.
+   Y si CardNET todavía no lista el perfil (o la lectura falla) tras consumir, la sesión vuelve a `CAPTURE_CONSUMED` para que
+   el PRÓXIMO sondeo reintente de inmediato: antes se quedaba 45 s en `PROFILE_PENDING` por el arriendo de
+   `claimProfileCheck`, y el sondeo de la app (18 × 2,5 s) casi se acababa antes. Una captura consumida que lleva 5 minutos sin
+   perfil, sin perfil elegido y sin intento de cobro se expira y **libera la reserva** del cliente (`expireConsumedWithoutProfile`,
+   atómica: no puede expirar un cobro que empezó después de leerla); sin eso, un aviso que no era de una tarjeta dejaba al cliente
+   sin poder abrir otro pago.
+2. **La app pregunta mientras el servidor no haya dicho nada** (`Capture.tsx`, cada 3,5 s, también con un error de captura a
+   la vista y mientras se envía el token). `/estado` marca el `pending`: `capture: 'open'` = el servidor sigue esperando la
+   tarjeta; `capture: 'closed'` = ya se capturó y el pago avanza. Hay DOS valores a propósito: sin marca (un servidor que no
+   la manda) la app no cierra el formulario, porque cerrarlo por error rompería todos los pagos; así se puede desplegar app y
+   servidor en cualquier orden. Un fallo de red no cambia nada en pantalla (no se pierde lo que el cliente ya tecleó).
+   La decisión de qué hacer con cada respuesta es una función pura (`decideCaptureStatus`, `security.ts`): aceptar un
+   resultado, ignorar una respuesta atrasada (nunca pisa un resultado ya conocido) o **volver a armar el formulario** cuando el
+   token ya se entregó, `/confirmar` no avanzó y el servidor sigue sin ver la tarjeta. Esa última rama cierra una carrera real:
+   el token de la app y un sondeo coincidían, `/confirmar` respondía 409 («el servidor ya avanzó»), la consulta de respaldo se
+   descartaba por haber otra en vuelo y la pantalla se quedaba con el formulario reabierto, sin entrega y sin sondeo.
+3. **Puente tolerante.** Ventana reconocida con cualquier parámetro extra (origen, ruta, `key` y `session_id` siguen fijos y
+   se exigen UNA vez); token en cualquier forma conocida; entrega aunque el iframe ya se haya cerrado, con tal de haber visto
+   la ventana correcta abrirse; `Iframe.Close` blindado; y plan B que lee el campo oculto `PWToken`. El texto del puente
+   vive en `pageHelpers.ts` y una prueba lo EJECUTA y lo compara con las versiones de TypeScript.
+4. **`/estado` ya no se corta solo.** Usaba el límite de los cobros (10/min) y el sondeo de la app (cada 2,5 s) lo agotaba:
+   el 429 se leía como «no pudimos confirmar». Pasa al de lecturas (30/min, `paymentSessionLimiter`); confirmar, activar y
+   cobrar conservan el estrecho (lo fija una prueba).
+5. **Rastro.** Una captura que vence sin que nadie avise deja una línea
+   `[pagos:cardnet-cliente] captura vencida sin confirmar`, y una recuperada por el servidor, `captura recuperada por el
+   servidor` (esa línea es la señal de que el puente de la app sigue fallando: si aparece, hay que mirar el iframe real).
+
+**Lo que NO está verificado.** Todo se probó con simulaciones: el servidor contra un CardNET de mentira y la WebView contra un
+SDK y un DOM de mentira. Falta una prueba en un teléfono real (Android e iOS) con una tarjeta de verdad. (Lo que se temía aquí
+—que la WebView no dejara pasar el 3DS del banco— pasó en Android el 14-10-2026; ver la sección siguiente: la app ya no usa
+WebView para el formulario.)
+
+**La tarjeta de prueba que ya quedó registrada.** El Customer ya tiene su perfil, así que el próximo intento lo toma como
+«anterior» y espera uno NUEVO. CardNET crea un perfil por cada captura, de modo que basta repetir la captura. La membresía
+sigue `PENDIENTE` hasta que un cobro apruebe.
+
+**Cómo comprobar que funciona.** Pagar con la app y mirar `cardnet_capture_sessions`: la sesión debe pasar de
+`CAPTURE_OPEN` a `CAPTURE_CONSUMED` (con `capturadoAt`) y aparecer un `pago_intentos` con `cardnetUniqueId`.
+
+### Móvil: «la autenticación falló» dentro del formulario de CardNET (14-10-2026)
+
+**Síntoma.** En la app de Android, CardNET mostraba «la autenticación falló» DENTRO de su formulario a las tarjetas cuyo
+banco pide la verificación 3D Secure; otras tarjetas (las que el banco aprueba sin pedir nada) sí se registraban. La MISMA
+tarjeta se registraba bien en membego.com desde Chrome en el mismo teléfono. Es decir: el fallo era de la WebView, no del
+banco ni de CardNET.
+
+**Por qué la WebView.** El reto 3DS del banco se pinta en un marco de NUESTRA página y el formulario que lo abre hace POST a
+la pasarela (lo dice la CSP de `next.config.ts`); además el banco puede abrir ventanas y usar sus cookies. Un navegador lo da
+todo; la WebView de la app no (ventanas emergentes bloqueadas, navegación restringida a CardNET, sin `Referer`, documento
+armado en memoria). Imitar Chrome dentro de la WebView era perseguir el síntoma.
+
+**Arreglo.** La app ya no pinta el formulario en una WebView: abre en el navegador del sistema (pestaña de Chrome en
+Android, Safari en iPhone, con `expo-web-browser` · `openAuthSessionAsync`) una ventana que sirve el servidor:
+
+| Pieza | Dónde |
+|---|---|
+| Ventana (HTML: SDK oficial, mismos `SetProperties` que la web, puente del token) | `src/modules/pagos/cardnetVentanaHtml.ts` |
+| Quién puede abrirla | `src/modules/pagos/cardnetVentana.ts` |
+| Ruta | `GET /api/v1/cliente/pagos/cardnet/ventana?s=<sessionId>&n=<nonce>` |
+| Botón en la app | `apps/client/src/components/pagos/cardnet/CaptureSurface.native.tsx` |
+| Vuelta a la app | `membego://pago-cardnet?s=…&t=…` (`CARDNET_WINDOW_RETURN_URL`; `app/+native-intent.tsx` evita que el router navegue con ella) |
+
+- La pestaña no tiene la sesión de la app: se abre con el id de la sesión de captura **y su nonce** (la base guarda el hash),
+  solo si la captura está ABIERTA y sin vencer, y con la URL de captura, el script y la llave pública del ambiente
+  configurado. Cualquier otra cosa da la misma página «ya no está disponible» (404), sin oráculo. Límite por IP.
+- Lo que la página enseña (llave pública, `UniqueID`, `CaptureURL`, monto) ya se le entregaba a la app. Cobrar sigue
+  exigiendo la sesión autenticada de la app (`/confirmar` con el nonce) o lo decide el servidor viendo el perfil nuevo.
+- Al entregar CardNET el token, la ventana vuelve a la app con él y la app lo confirma como antes. Si la vuelta se pierde
+  (el cliente cierra la pestaña), el sondeo de `/estado` encuentra la tarjeta nueva en CardNET y avanza
+  (`reconciliarCapturaAbierta`, 12-10-2026).
+- Se retiraron el documento de la WebView (`captureDocument.native.ts`, `pageHelpers.ts`), su política de navegación y sus
+  diagnósticos, y la variable `EXPO_PUBLIC_CARDNET_MERCHANT_ORIGIN`. La versión web de la app (`CaptureSurface.web.tsx`) no
+  cambia.
+- `expo-web-browser` es un módulo nativo: el arreglo llega a los teléfonos con un **build nuevo** de la app. La ruta del
+  servidor tiene que estar desplegada antes de repartir ese build.
+
+Pruebas: `tests/cardnet-ventana-navegador.test.ts` ejecuta la ventana real contra un SDK y un DOM simulados (abre con los
+parámetros de la web, entrega el token en todas sus formas, plan B, `Close` que revienta, sin SDK, datos hostiles) y fija la
+vuelta a la app y el router; `tests/postgres/cardnet-capture-reservation.db.test.ts` fija quién puede abrirla.
 
 ### Lo que solo confirma un cobro real
 

@@ -76,6 +76,8 @@ export const LIMITES = {
 export interface EntradaDeOferta {
   title: string
   description?: string | null
+  /** Regla universal opcional que condiciona reclamos futuros; no cambia la economía de Deal. */
+  promotionId?: string | null
   catalogVariantId: string
   discountType: DealDiscountType
   discountValue: Monto
@@ -90,6 +92,7 @@ export interface EntradaDeOferta {
 export interface OfertaValida {
   title: string
   description: string | null
+  promotionId: string | null
   catalogVariantId: string
   discountType: DealDiscountType
   discountValue: Decimal
@@ -122,6 +125,7 @@ export function validarOferta(e: EntradaDeOferta, cuota: Monto): { ok: true; dat
   if (title.length > LIMITES.tituloMax) return { ok: false, error: `El título no puede pasar de ${LIMITES.tituloMax} letras.` }
   const description = typeof e.description === 'string' && e.description.trim() !== '' ? e.description.trim() : null
   if (description && description.length > LIMITES.descripcionMax) return { ok: false, error: `La descripción no puede pasar de ${LIMITES.descripcionMax} letras.` }
+  if (e.promotionId != null && (typeof e.promotionId !== 'string' || e.promotionId.trim() === '')) return { ok: false, error: 'La promoción seleccionada no es válida.' }
   if (typeof e.catalogVariantId !== 'string' || e.catalogVariantId === '') return { ok: false, error: 'Elige el producto o servicio que ofreces.' }
   if (!TIPOS_DE_DESCUENTO.includes(e.discountType)) return { ok: false, error: 'El tipo de descuento no es válido.' }
   const valor = monto(e.discountValue)
@@ -159,6 +163,7 @@ export function validarOferta(e: EntradaDeOferta, cuota: Monto): { ok: true; dat
     datos: {
       title,
       description,
+      promotionId: e.promotionId?.trim() || null,
       catalogVariantId: e.catalogVariantId,
       discountType: e.discountType,
       discountValue: valor,

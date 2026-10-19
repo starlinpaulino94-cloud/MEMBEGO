@@ -4,7 +4,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { RegistrarSW } from '@/components/system/RegistrarSW'
 import { SCRIPT_COMPACTO } from '@/components/layout/nav-compacto'
-import { SITE_NAME, SITE_DESCRIPTION, getAppUrl } from '@/lib/site'
+import { SITE_DESCRIPTION, SITE_NAME, landingUrl } from '@/lib/site'
 import './globals.css'
 
 const geistSans = Geist({
@@ -25,7 +25,9 @@ const jakarta = Plus_Jakarta_Sans({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL(getAppUrl()),
+  // La base de los canónicos y de og:image es la de la LANDING: es lo que se indexa y se comparte. Con un solo dominio es
+  // el de siempre; la app (`app.membego.com`) va en `noindex` (cabecera X-Robots-Tag del proxy y robots por host).
+  metadataBase: new URL(landingUrl()),
   title: {
     default: SITE_NAME,
     template: `%s · ${SITE_NAME}`,
@@ -40,7 +42,7 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     title: SITE_NAME,
     description: SITE_DESCRIPTION,
-    url: getAppUrl(),
+    url: landingUrl(),
     locale: 'es_ES',
     images: [
       {
@@ -88,7 +90,7 @@ export const metadata: Metadata = {
  * puede mostrarlo en los resultados de búsqueda y el panel de conocimiento.
  */
 function StructuredData() {
-  const base = getAppUrl()
+  const base = landingUrl()
   const organization = {
     '@context': 'https://schema.org',
     '@type': 'Organization',

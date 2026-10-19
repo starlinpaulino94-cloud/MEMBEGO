@@ -56,7 +56,7 @@ export default function AuthLayout() {
               <View className="items-center" style={{ marginBottom: brandMarginBottom }}>
                 <View className="flex-row items-center gap-2">
                   <Image
-                    source={require('../../../../public/icon-512.png')}
+                    source={require('../../assets/icon.png')}
                     accessibilityLabel="Logo de MembeGo"
                     resizeMode="contain"
                     style={{ width: 36, height: 36 }}

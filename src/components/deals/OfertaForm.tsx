@@ -19,11 +19,28 @@ export interface ProductoParaOferta {
   etiqueta: string
   precio: string
   currency: string
+  itemId?: string
+  sinStock?: boolean
+}
+
+/**
+ * Vista previa del precio con la oferta. Es la MISMA regla que `precioDeLaOferta` del dominio
+ * (porcentaje, monto fijo o precio final, acotado entre 0 y el precio de lista), repetida aquí
+ * solo para enseñarla mientras se escribe: el servidor la recalcula y es el único que manda.
+ */
+export function previsualizarPrecio(precioLista: string, tipo: ValoresDeOferta['discountType'], valor: string): { precio: number; ahorro: number } | null {
+  const lista = Number(precioLista)
+  const v = Number(valor)
+  if (!Number.isFinite(lista) || !Number.isFinite(v) || valor.trim() === '') return null
+  let precio = tipo === 'PERCENT' ? (lista * (100 - v)) / 100 : tipo === 'AMOUNT_OFF' ? lista - v : v
+  precio = Math.min(Math.max(precio, 0), lista)
+  return { precio: Math.round(precio * 100) / 100, ahorro: Math.round((lista - precio) * 100) / 100 }
 }
 
 export interface ValoresDeOferta {
   title: string
   description: string
+  promotionId: string
   catalogVariantId: string
   discountType: 'PERCENT' | 'AMOUNT_OFF' | 'FIXED_PRICE'
   discountValue: string
@@ -39,6 +56,7 @@ export interface ValoresDeOferta {
 const VACIO: ValoresDeOferta = {
   title: '',
   description: '',
+  promotionId: '',
   catalogVariantId: '',
   discountType: 'PERCENT',
   discountValue: '',
@@ -52,6 +70,7 @@ const VACIO: ValoresDeOferta = {
 
 interface Props {
   productos: ProductoParaOferta[]
+  promociones?: { id: string; nombre: string }[]
   /** Cuota que Membego cobra por canje (de la tarifa de la cuenta), o null si aún no hay cuenta. */
   cuota: string | null
   moneda: string
@@ -67,7 +86,7 @@ interface Props {
  * calcula (el navegador no manda precios finales, cuotas ni estados). La cuota por canje se
  * enseña para que la empresa vea de antemano lo que le cuesta cada canje y cuántos alcanzan.
  */
-export function OfertaForm({ productos, cuota, moneda, ofertaId, inicial, soloAjustes = false }: Props) {
+export function OfertaForm({ productos, promociones = [], cuota, moneda, ofertaId, inicial, soloAjustes = false }: Props) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -75,6 +94,7 @@ export function OfertaForm({ productos, cuota, moneda, ofertaId, inicial, soloAj
   const set = <K extends keyof ValoresDeOferta>(k: K, valor: ValoresDeOferta[K]) => setV((a) => ({ ...a, [k]: valor }))
 
   const producto = productos.find((p) => p.id === v.catalogVariantId)
+  const vista = useMemo(() => (producto ? previsualizarPrecio(producto.precio, v.discountType, v.discountValue) : null), [producto, v.discountType, v.discountValue])
   const canjes = useMemo(() => {
     const total = Number(v.budgetTotal)
     const c = Number(cuota)
@@ -140,6 +160,17 @@ export function OfertaForm({ productos, cuota, moneda, ofertaId, inicial, soloAj
             {productos.length === 0 && <p className="text-xs text-muted-foreground">No tienes productos o servicios publicados que se vendan por el marketplace. Publica uno en el catálogo primero.</p>}
           </div>
 
+          {!ofertaId && promociones.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="promotionId">Condición de acceso (opcional)</Label>
+              <select id="promotionId" className={campoSelector} value={v.promotionId} onChange={(e) => set('promotionId', e.target.value)}>
+                <option value="">Disponible para todos los clientes elegibles</option>
+                {promociones.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground">Las reglas activas se validan en el servidor al reclamar. Los cupones ya emitidos conservan sus condiciones de canje.</p>
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="discountType">Tipo de descuento</Label>
@@ -157,7 +188,27 @@ export function OfertaForm({ productos, cuota, moneda, ofertaId, inicial, soloAj
               <p className="text-xs text-muted-foreground">{AYUDA_TIPO_DESCUENTO[v.discountType]}</p>
             </div>
           </div>
-          {producto && <p className="text-xs text-muted-foreground">Precio de lista: {producto.precio} {producto.currency}</p>}
+          {producto && (
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm" aria-live="polite">
+              <p className="text-xs text-muted-foreground">Así lo verá el cliente</p>
+              <p className="mt-0.5">
+                <span className="text-muted-foreground">Antes:</span>{' '}
+                <span className={vista && vista.ahorro > 0 ? 'line-through' : ''}>{producto.precio} {producto.currency}</span>
+                {vista && vista.ahorro > 0 && (
+                  <>
+                    {' · '}
+                    <span className="text-muted-foreground">Ahora:</span> <strong>{vista.precio.toFixed(2)} {producto.currency}</strong>
+                    <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">ahorra {vista.ahorro.toFixed(2)}</span>
+                  </>
+                )}
+              </p>
+              {producto.sinStock && (
+                <p className="mt-1 text-xs text-warning">
+                  Este producto está agotado ahora mismo. La oferta se crea igual, pero el marketplace la mostrará como «Agotado» y nadie podrá obtenerla hasta que entres existencias en Inventario. Crear la oferta no cambia el stock.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

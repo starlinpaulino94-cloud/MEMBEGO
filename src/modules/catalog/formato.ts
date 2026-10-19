@@ -1,6 +1,7 @@
 /**
  * COMMERCE CORE · catálogo — formato para pantallas. Puro: sin Prisma ni React.
  */
+import { rutaDeVariante, type NombreVariante } from '@/lib/imagen/formatos'
 
 /** Precio con la moneda DEL ÍTEM (`DOP` → `RD$`), siempre a dos decimales. */
 export function formatearPrecio(monto: number | string, moneda = 'DOP'): string {
@@ -28,6 +29,22 @@ export function urlPublicaCatalogo(
 ): string | null {
   if (!base || !ruta) return null
   return `${base.replace(/\/+$/, '')}/storage/v1/object/public/promociones/${ruta}`
+}
+
+/**
+ * URL de una versión de la foto. Las fotos anteriores al editor de imágenes no
+ * tienen versiones (`variantesBase` null): se sirve el original, que es lo que
+ * siempre se ha servido.
+ */
+export function urlImagenCatalogo(
+  imagen: { path: string; variantesBase?: string | null },
+  variante: NombreVariante | 'original',
+  base: string | undefined = process.env.NEXT_PUBLIC_SUPABASE_URL
+): string | null {
+  if (variante !== 'original' && imagen.variantesBase) {
+    return urlPublicaCatalogo(rutaDeVariante(imagen.variantesBase, variante), base)
+  }
+  return urlPublicaCatalogo(imagen.path, base)
 }
 
 export const ETIQUETA_TIPO: Record<string, string> = {

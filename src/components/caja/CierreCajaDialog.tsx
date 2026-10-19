@@ -2,9 +2,11 @@
 
 /**
  * Reporte de cierre de caja (arqueo "Z") imprimible y reimprimible (Control de
- * comprobantes · Fase 2). Vista previa idéntica a la impresión: la hoja de
- * estilos aísla `.cierre-print` para imprimir solo el reporte. Formato pensado
- * para térmica 80 mm, pero imprime bien en cualquier impresora.
+ * comprobantes · Fase 2). Vista previa idéntica a la impresión: en pantalla el
+ * contenido ocupa los 72 mm útiles de un rollo de 80 mm, y por `AreaDeImpresion`
+ * sale exactamente así, en una sola página y fuera del diálogo (dentro de un
+ * `DialogContent` —`position: fixed`— el reporte se repetía en cada página y el
+ * `overflow` del diálogo lo recortaba por abajo).
  */
 
 import { useState } from 'react'
@@ -18,6 +20,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { ANCHO_IMPRIMIBLE_MM, AreaDeImpresion } from '@/components/impresion/AreaDeImpresion'
 import { obtenerCierre } from '@/modules/caja/actions'
 import type { CierreReporte } from '@/modules/caja/queries'
 
@@ -50,7 +53,8 @@ function Sep({ char = '-' }: { char?: string }) {
   )
 }
 
-function CierrePreview({ c }: { c: CierreReporte }) {
+/** `papel`: en pantalla, el rollo de 80 mm con sus márgenes; al imprimir, solo los 72 mm útiles (el área pone el ancho). */
+function CierrePreview({ c, papel = true }: { c: CierreReporte; papel?: boolean }) {
   const dif = c.diferencia ?? 0
   const difLabel =
     c.diferencia == null
@@ -62,8 +66,10 @@ function CierrePreview({ c }: { c: CierreReporte }) {
           : `Faltante ${fmtRD(Math.abs(dif))}`
   return (
     <div
-      className="mx-auto bg-white font-mono text-black shadow"
-      style={{ width: '80mm', fontSize: '12px', lineHeight: 1.5, padding: '3mm 4mm' }}
+      className={papel ? 'mx-auto bg-white font-mono text-black shadow' : 'font-mono text-black'}
+      style={papel
+        ? { width: '80mm', fontSize: '12px', lineHeight: 1.5, padding: `3mm ${(80 - ANCHO_IMPRIMIBLE_MM[80]) / 2}mm` }
+        : { fontSize: '12px', lineHeight: 1.5, padding: '3mm 0' }}
     >
       {c.empresa.logoUrl && (
         <div className="mb-1 text-center">
@@ -174,6 +180,7 @@ export function CierreCajaDialog({
   const [open, setOpen] = useState(false)
   const [cierre, setCierre] = useState<CierreReporte | null>(null)
   const [cargando, setCargando] = useState(false)
+  const [solicitud, setSolicitud] = useState(0)
 
   function abrir(siguiente: boolean) {
     setOpen(siguiente)
@@ -210,25 +217,18 @@ export function CierreCajaDialog({
         </div>
 
         <Button
-          onClick={() => window.print()}
+          onClick={() => setSolicitud((s) => s + 1)}
           disabled={!cierre}
           className="w-full gap-2 py-5 font-semibold"
         >
           <Printer className="h-4 w-4" /> Imprimir
         </Button>
 
+        {/* Lo que sale en el papel: fuera del diálogo y en una sola hoja. */}
         {cierre && (
-          <div className="cierre-print hidden" aria-hidden>
-            <style>{`
-              @media print {
-                @page { margin: 0; }
-                body * { visibility: hidden !important; }
-                .cierre-print, .cierre-print * { visibility: visible !important; }
-                .cierre-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
-              }
-            `}</style>
-            <CierrePreview c={cierre} />
-          </div>
+          <AreaDeImpresion papel={80} solicitud={solicitud}>
+            <CierrePreview c={cierre} papel={false} />
+          </AreaDeImpresion>
         )}
       </DialogContent>
     </Dialog>

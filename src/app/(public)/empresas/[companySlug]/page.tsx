@@ -1,3 +1,6 @@
+import { AccionDeOfertaPublica } from '@/components/public/AccionDeOfertaPublica'
+import { rutaDeEmpresa } from '@/modules/comercio/rutas'
+import { EnlaceDeTraspaso } from '@/components/public/TraspasoALaApp'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { CompanyProfile } from '@/components/marketplace/CompanyProfile'
@@ -8,6 +11,7 @@ import {
   getCompanyPostsPublic,
   getPromotionsPublic,
   getCatalogoPublicoDeEmpresa,
+  getSucursalesPublic,
 } from '@/modules/marketplace/cached'
 import { ofertasPublicas } from '@/modules/deals/publico'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
@@ -53,7 +57,7 @@ export default async function CompanyDetailPage({
   const company = await getCompanyPublic(companySlug)
   if (!company) notFound()
 
-  const [stats, planes, promotions, posts, prefs, resenas, excursionesData, catalogo, ofertas] = await Promise.all([
+  const [stats, planes, promotions, posts, prefs, resenas, excursionesData, catalogo, ofertas, sucursales] = await Promise.all([
     getCompanyStats(companySlug),
     getCompanyPlanesPublic(company.id),
     getPromotionsPublic({ company: companySlug, limit: 12 }),
@@ -65,6 +69,7 @@ export default async function CompanyDetailPage({
     ),
     getCatalogoPublicoDeEmpresa(company.id, 12),
     ofertasPublicas({ companySlug, limite: 6 }),
+    getSucursalesPublic(company.id).catch(() => []),
   ])
 
   const excursiones = excursionesData.map((exc) => ({
@@ -92,6 +97,10 @@ export default async function CompanyDetailPage({
       excursiones={excursiones}
       catalogo={catalogo}
       ofertas={ofertas}
+      accionDeOferta={(o) => <AccionDeOfertaPublica oferta={o} />}
+      // Seguir es una acción del cliente: en la landing, un enlace que lleva a la vitrina de la app, donde está el botón.
+      ranuraSeguir={<EnlaceDeTraspaso destino={rutaDeEmpresa('app', company.slug)} etiqueta="Seguir en la app" variante="outline" className="w-full sm:w-auto" />}
+      sucursales={sucursales}
     />
   )
 }

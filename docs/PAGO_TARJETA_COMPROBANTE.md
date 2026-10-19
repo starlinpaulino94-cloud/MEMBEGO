@@ -30,7 +30,7 @@ activar ⇒ atascado real).
 | Fase | Contenido | Estado |
 |---|---|---|
 | 0 | Pruebas de caracterización (H1–H7) | ✅ |
-| 1 | Migración aditiva (`20261053`, `20261054`): `MetodoCobroTipo.TARJETA`, `Transaction.pagoIntentoId` único con CHECK y disparador, `PagoIntento.canal`, backfill demostrable del cumplimiento, módulo puro del comprobante | ✅ (`tests/postgres/pagos-tarjeta-modelo.db.test.ts`, `tests/comprobante-tarjeta.test.ts`) |
+| 1 | Migración aditiva (`20261067`, `20261068`): `MetodoCobroTipo.TARJETA`, `Transaction.pagoIntentoId` único con CHECK y disparador, `PagoIntento.canal`, backfill demostrable del cumplimiento, módulo puro del comprobante | ✅ (`tests/postgres/pagos-tarjeta-modelo.db.test.ts`, `tests/comprobante-tarjeta.test.ts`) |
 | 2 | Registrar la venta (`SALE`, método `TARJETA`, canal app/web/renovación) justo después de entregar; idempotente y autorreparable; bitácora `PAGO_APROBADO` con método, canal e intento | ✅ (`tests/postgres/pagos-venta-tarjeta.db.test.ts`; H1 y H4 invertidos) |
 | 3 | Comprobante visible e imprimible: Facturas/Registros con filtro «Tarjeta», ficha del cliente, caja («cobros en línea del día», fuera del arqueo), cuadre y cierre, recibo para el cliente (app, web y BFF) | ✅ (pruebas PG, unitarias y E2E; ver abajo) |
 | 4 | Conciliación accionable: lista de casos por hallazgo, «Generar comprobante», «Reintentar entrega», «Marcar entregada» (con nota), cajas abiertas que llevan a su caja; la regla de entrega distingue «cliente esperando» de «registro sin cerrar» y mira `FALLIDA`/`PROCESANDO` atascados | ✅ (H5, H6 y H7 invertidos; ver abajo) |
@@ -99,7 +99,7 @@ cobro, o dejarlo escrito como decisión.
 ## Fase 4: conciliación accionable
 
 `/admin/conciliacion` es ahora una lista de casos con su acción. Ninguna acción recobra dinero, todas se comprueban otra
-vez en el servidor, son idempotentes y dejan un asiento en la bitácora (migración `20261055`, tres acciones nuevas).
+vez en el servidor, son idempotentes y dejan un asiento en la bitácora (migración `20261069`, tres acciones nuevas).
 
 | Hallazgo | Casos que lista | Acción |
 |---|---|---|
@@ -178,6 +178,26 @@ y cuenta cuántos cobros entregados no tienen comprobante (recientes con canal y
 reales, cuántos de los 9 pagos de la captura eran falsos positivos y cuántos eran clientes esperando. **No se ha ejecutado contra
 producción**: eso solo puede hacerlo quien tenga acceso a esa base.
 
+## Fusión con `main` (2026-10-19)
+
+`main` avanzó 148 commits mientras esta rama estaba abierta y trajo, entre otras cosas, **otra versión del mismo trabajo**
+(`5a91a37c`, «Comprobante de pago: los pagos con tarjeta dejan recibo y el cliente lo imprime»). Textualmente chocaban 9 archivos;
+lo importante no eran las líneas sino que **dos caminos escribían la venta del mismo cobro**. Qué se decidió:
+
+- **Un solo camino para la venta:** el de esta rama (`asegurarVentaDelIntento`: método `TARJETA`, único por `pagoIntentoId` en el
+  libro, con conciliación y cron). Se retiró `reciboPasarela.ts` y sus llamadas. Una venta que ese camino ya hubiera escrito se
+  **adopta** al pedir el comprobante (se le enlaza el cobro y pasa a `TARJETA`), en vez de escribir otra.
+- **Se conservó lo de `main` que suma:** que el cliente imprima su comprobante oficial (`/cliente/pagos/comprobante/[id]`) y, en
+  la app, el enlace firmado y caduco que lo abre en el navegador del teléfono. Se apoyó en el libro de esta rama: en un pago con
+  tarjeta el enlace pago → venta es **exacto, por el cobro**; en los demás se deduce por fecha, como hacía `main`.
+- **En la pantalla del cliente quedaron los dos botones que tenían sentido distinto:** «Ver / imprimir comprobante» (el ticket
+  oficial completo) y, en la app, «Compartir recibo» (el texto, para WhatsApp o correo).
+- **Migraciones renumeradas** a `20261067`–`20261070` (antes `20261053`–`20261056`): `main` ya usaba esos números y un entorno que
+  hubiera aplicado hasta la `20261066` habría recibido las de esta rama fuera de orden. Mismo contenido, mismas sumas. La base se
+  reconstruyó **desde cero** con las 232 migraciones y no hay deriva de esquema.
+- `main` reestructuró `confirmarSesionCardnet` (consumo de la captura, conciliación en el servidor). Se tomó su versión y se volvió a
+  poner encima la comprobación del plan que se paga.
+
 ## Revisión independiente (2026-10-17)
 
 Después de cerrar las seis fases, un revisor que no había escrito el código leyó todo lo que mueve dinero. Encontró diez cosas.
@@ -196,7 +216,7 @@ política. Cada corrección tiene su prueba en `tests/postgres/pagos-revision-in
 | 7 | La lista de cobros en línea cortaba a 500 filas y el **total** del cuadre se calculaba con la lista cortada. | El total y la cuenta son los del día completo; la lista avisa cuando está recortada. |
 | 8 | Todos los roles que entran a la caja veían la lista de cobros en línea de **toda la empresa**, con cliente, plan y autorización; y la acción del cuadre del día la entregaba de cualquier fecha. | **Decidido (decisión 7)**: el detalle lo ve quien puede abrir Comprobantes. Ver «Quién ve el detalle de los cobros en línea» abajo. |
 | 9 | El cron no contaba como error un comprobante que no se pudo escribir (la función devuelve `null`, no lanza), así que decía «todo bien». | Se cuenta en `errores`; y la reparación recorre primero lo más reciente. |
-| 10 | La migración `20261054` se **modificó después de haberse publicado** (se le añadió el relleno). | **No se puede deshacer.** Una base que ya hubiera aplicado la primera versión no tiene el relleno: hay que correrlo a mano (marcado `-- BACKFILL:INICIO/FIN`). Las bases creadas de cero están bien. |
+| 10 | La migración `20261068` se **modificó después de haberse publicado** (se le añadió el relleno). | **No se puede deshacer.** Una base que ya hubiera aplicado la primera versión no tiene el relleno: hay que correrlo a mano (marcado `-- BACKFILL:INICIO/FIN`). Las bases creadas de cero están bien. |
 
 ## Verificación de cierre (2026-10-16)
 
@@ -206,7 +226,7 @@ política. Cada corrección tiene su prueba en `tests/postgres/pagos-revision-in
 | Pruebas unitarias | 3,968 de 3,976 pasan; las 2 que fallan fijan el 14 de octubre de 2026 (ya pasó) y no tienen relación con este trabajo |
 | Suite PostgreSQL completa (contra la base real) | 698 de 698 |
 | Suite E2E completa de navegador (con reconstrucción) | 176 pasan, 0 fallan; 205 omitidas por diseño (proyecto móvil o credenciales externas) |
-| Migraciones | `20261053`, `20261054`, `20261055` aplicadas; sin deriva de esquema; sellos al día |
+| Migraciones | `20261067`, `20261068`, `20261069` aplicadas; sin deriva de esquema; sellos al día |
 | App Expo | Solo tipos de los archivos tocados (sin dispositivo) |
 
 ## Cambio de plan pagado con tarjeta (decisión 8, 2026-10-17)
@@ -218,7 +238,7 @@ aplica el plan; ya no hace falta que una persona lo apruebe en Pagos.
 
 - El importe sigue saliendo de la base (`calcularPagoCambioPlan`). Al crear el intento se guarda **qué plan se paga**
   (`pago_intentos.planDestinoId`, y `cardnet_capture_sessions.planDestinoId` para el flujo de la app). Migración
-  `20261056`: dos columnas nulas y dos claves foráneas con `SET NULL`. Sin esa columna no se puede entregar: el prorrateo
+  `20261070`: dos columnas nulas y dos claves foráneas con `SET NULL`. Sin esa columna no se puede entregar: el prorrateo
   depende del día y la membresía puede cambiar su pedido entre el cobro y la entrega.
 - Al aprobarse el cobro, `aplicarCambioDePlanCobrado` (`modules/pagos/cambio-plan-cobrado.ts`) aplica **ese** plan y solo si la
   membresía sigue activa y sigue pidiéndolo. Cierra la entrega en la misma transacción (bajo el reclamo, como las demás), usa
@@ -286,7 +306,7 @@ decidir a qué sucursal pertenece un pago en línea (decisión 3).
 | Pruebas unitarias | 3,979 de 3,987 pasan; las 2 de fecha fija (14 de octubre) siguen fallando; 6 omitidas |
 | Suite PostgreSQL completa | 713 de 713 (corrida sola, sin las unitarias a la vez) |
 | E2E de navegador (conciliación, comprobante y retroactivos, con reconstrucción) | 14 de 14. No hay E2E del pago de un cambio de plan: necesita la pasarela real |
-| Migración `20261056` | Aplicada; sin deriva de esquema; sellos al día |
+| Migración `20261070` | Aplicada; sin deriva de esquema; sellos al día |
 
 ### Verificación tras restringir el detalle de los cobros en línea (2026-10-17)
 
@@ -296,6 +316,16 @@ decidir a qué sucursal pertenece un pago en línea (decisión 3).
 | Pruebas unitarias | 3,985 de 3,993 pasan; las 2 de fecha fija (14 de octubre) siguen fallando; 6 omitidas |
 | Suite PostgreSQL completa | 715 de 715 |
 | E2E de navegador (conciliación, comprobante y retroactivos, con reconstrucción) | 15 de 15, incluido el recorrido de un empleado sin Comprobantes (resumen sin detalle, en pantalla y en el cuadre impreso) y de ese mismo empleado con el permiso concedido |
+
+### Verificación tras la fusión con `main` (2026-10-19)
+
+| Comprobación | Resultado |
+|---|---|
+| Tipos y ESLint | Sin errores |
+| Pruebas unitarias | 4,486 de 4,493 pasan; 0 fallan; 7 omitidas |
+| Migraciones | Las 232, desde una base vacía, aplican; sin deriva de esquema; sellos al día |
+| Suite PostgreSQL completa | 898 de 904 en la base de pruebas habitual. Las 6 que fallaban son las de `cardnet-capture-reservation` (de `main`): su propia guarda exige una base llamada `supplytest` o `127.0.0.1:15432/cardnetqa`. Corridas ahí, pasan 6 de 6 |
+| E2E de navegador (conciliación, comprobante, retroactivos y comprobante del cliente de `main`, con reconstrucción) | 18 de 18 |
 
 ## Estado final y lo que queda
 

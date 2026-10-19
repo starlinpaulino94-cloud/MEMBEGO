@@ -27,6 +27,7 @@ import { goBackOr } from '../../src/lib/navigation'
 import { Button } from '../../src/components/ui/Button'
 import { BackHeader } from '../../src/components/ui/BackHeader'
 import { Card } from '../../src/components/ui/Card'
+import { MarketplaceCard } from '../../src/components/marketplace/MarketplaceCard'
 import { EmptyState } from '../../src/components/ui/EmptyState'
 import { SectionHeader } from '../../src/components/ui/SectionHeader'
 import { CuentaMembresiasSection } from '../../src/components/cliente/CuentaMembresiasSection'
@@ -222,18 +223,32 @@ export default function CuentaScreen() {
               <Text className="mt-2 text-small text-muted-foreground">Tus negocios frecuentes aparecerán aquí cuando tengas una membresía.</Text>
             ) : (
               <HorizontalScrollWithFade
-                contentContainerClassName="gap-3"
+                contentContainerStyle={{ gap: 12 }}
               >
                 {empresas.map((m) => {
                   const empresa = empresasCatalogo.find((e) => e.id === m.companyId)
                   const esCarwash = empresa?.type === 'carwash'
                   return (
-                    <Card
+                    <MarketplaceCard
                       onPress={() => router.push(esCarwash ? '/citas' : `/empresas/${m.companySlug}`)}
                       key={m.companyId}
-                      className="flex-1 max-w-[176.288px] justify-between overflow-hidden p-0 gap-2 ">
-                      <View className="flex-1 gap-2">
-                        <View className="h-24 aspect-video rounded-lg bg-brand-primary-soft">
+                      accessibilityLabel={`${m.companyName}: ${esCarwash ? 'Pedir turno' : 'Ver negocio'}`}
+                      className="w-56 shrink-0"
+                      footer={(
+                        <LinearGradient
+                          colors={colors.gradient.primary}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={{ minHeight: 40, justifyContent: 'center', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center' }}
+                        >
+                          <Text className="text-label-sm font-inter-bold text-white">
+                            {esCarwash ? 'Pedir turno' : 'Ver negocio'}
+                          </Text>
+                        </LinearGradient>
+                      )}
+                    >
+                      <View className="gap-2">
+                        <View className="h-28 w-full aspect-video overflow-hidden rounded-lg bg-brand-primary-soft">
                           {m.companyLogoUrl ? (
                             <Image source={{ uri: m.companyLogoUrl }} style={{ flex: 1 }} resizeMode="cover" />
                           ) : (
@@ -245,19 +260,7 @@ export default function CuentaScreen() {
 
                         <Text className="text-label-lg text-foreground" numberOfLines={1}>{m.companyName}</Text>
                       </View>
-                      <View>
-                        <LinearGradient
-                          colors={colors.gradient.primary}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          style={{ flex: 1, justifyContent: 'center', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center' }}
-                        >
-                          <Text className="text-label-sm font-inter-bold text-white">
-                            {esCarwash ? 'Pedir turno' : 'Ver negocio'}
-                          </Text>
-                        </LinearGradient>
-                      </View>
-                    </Card>
+                    </MarketplaceCard>
                   )
                 })}
               </HorizontalScrollWithFade>

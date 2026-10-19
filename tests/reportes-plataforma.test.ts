@@ -273,8 +273,9 @@ test('el bloque de impresión está escrito una sola vez', () => {
   const copias = fuentes('src')
     .filter((f) => /@media print/.test(sinComentarios(readFileSync(f, 'utf8'))))
     // Los tickets de 80 mm son otra cosa: papel de rollo continuo con su ancho
-    // y su lógica de reimpresión, no un reporte A4 con cabecera y tablas.
-    .filter((f) => !/scanner|caja|facturas|ofertas/i.test(f))
+    // y su lógica de reimpresión, no un reporte A4 con cabecera y tablas. Su
+    // único @media print vive en `components/impresion` (AreaDeImpresion).
+    .filter((f) => !/scanner|caja|facturas|ofertas|impresion/i.test(f))
     .map((f) => f.replaceAll('\\', '/'))
 
   assert.deepEqual(

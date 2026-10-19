@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { CalendarClock, CreditCard, ExternalLink, FileText, Printer, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { PagoHistorialItem } from '@/modules/cliente/queries'
 import { EmptyState } from '@/components/system/EmptyState'
-import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import {
   Sheet,
   SheetContent,
@@ -228,21 +228,15 @@ function ReceiptDrawer({
                 )}
               </dl>
 
-              {item.recibo && (
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/60 px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
-                  >
-                    <Printer className="h-4 w-4" aria-hidden />
-                    Imprimir recibo
-                  </button>
-                  {/* Solo existe en la hoja: el mismo recibo que el negocio tiene en su caja. */}
-                  <ReporteImprimible soloPapel titulo={item.recibo.empresaNombre} subtitulo={`Recibo de pago · ${item.recibo.ticketNumero}`}>
-                    <pre className="whitespace-pre-wrap font-mono text-sm">{item.recibo.texto}</pre>
-                  </ReporteImprimible>
-                </div>
+              {/* El comprobante oficial (el mismo ticket que imprime el negocio). En un pago con tarjeta la venta es la del intento. */}
+              {item.transaccionId && (
+                <Link
+                  href={`/cliente/pagos/comprobante/${item.transaccionId}`}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+                >
+                  <Printer className="h-4 w-4" aria-hidden />
+                  Ver / imprimir comprobante
+                </Link>
               )}
 
               {item.comprobanteUrl ? (

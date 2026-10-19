@@ -183,10 +183,11 @@ test.describe('Excursiones (regresión del 404 del catálogo)', () => {
             .filter((h) => /^\/empresas\/[^/]+\/excursiones\/[^/]+$/.test(h))
             .map((href) => ({
               href,
-              nombre: (
-                els.find((e) => (e as HTMLAnchorElement).getAttribute('href') === href)
-                  ?.textContent ?? ''
-              ).trim(),
+              // El título de la tarjeta (su h3): el texto completo empieza por insignias (categoría, empresa).
+              nombre: (() => {
+                const tarjeta = els.find((e) => (e as HTMLAnchorElement).getAttribute('href') === href)
+                return (tarjeta?.querySelector('h3')?.textContent ?? tarjeta?.textContent ?? '').trim()
+              })(),
             }))
         )
       enlaces.push(...deLista)

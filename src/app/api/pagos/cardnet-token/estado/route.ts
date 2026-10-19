@@ -7,6 +7,7 @@ import {
   ambienteConfigurado,
 } from '@/lib/payments/cardnet-tokens'
 import { paymentLimiter, paymentSessionLimiter, getClientIdentifier } from '@/lib/rate-limit'
+import { diagnosticarLlaveServicio } from '@/lib/supabase/llave-servicio'
 import { FULL_ADMIN_ROLES } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -147,6 +148,13 @@ export async function GET(req: NextRequest) {
       resendKeyPresente: Boolean(process.env.RESEND_API_KEY?.trim()),
       emailFromPresente: Boolean(process.env.EMAIL_FROM?.trim()),
     },
+    // ¿La llave de servicio de Supabase es de servicio? Si no, toda la administración de usuarios (crear cuentas,
+    // invitaciones, restablecer contraseñas, reparar sesiones) responde 403 y falla en silencio. Solo formato, rol y
+    // motivo: nunca la llave.
+    llaveServicioSupabase: diagnosticarLlaveServicio(
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      process.env.NEXT_PUBLIC_SUPABASE_URL
+    ),
   } : {
     // Para quien no administra: solo si la pasarela está encendida. Es lo
     // único de aquí que le concierne, porque explica por qué su pantalla de

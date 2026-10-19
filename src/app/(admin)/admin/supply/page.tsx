@@ -9,8 +9,9 @@ import { formatDateTime } from '@/lib/format'
 import { ChipRedencion } from '@/components/supply-v2/chips'
 import { proveedorDeLaSesion } from '@/modules/supply-v2/permisos'
 import { entregasDelProveedor, incidenciasDelProveedor, resumenProveedor, resumenVentasProveedor, type VentanaDias } from '@/modules/supply-v2/redemption/queries'
-import { dineroSupplyV2, INCIDENT_TYPE_LABELS, RUTA_PORTAL_BENEFICIOS, RUTA_PORTAL_CAMPANAS,
+import { dineroSupplyV2, INCIDENT_TYPE_LABELS, RUTA_PORTAL_BENEFICIOS, RUTA_PORTAL_CAMPANAS, RUTA_PORTAL_CONFIGURACION,
   RUTA_PORTAL_FIDELIZACION, RUTA_PORTAL_LIQUIDACIONES, RUTA_PORTAL_PROVEEDOR, RUTA_PORTAL_VENTAS } from '@/modules/supply-v2/core/catalogo'
+import { StatusBanner } from '@/components/ui/status-banner'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Entregas Membego' }
@@ -39,6 +40,15 @@ export default async function PortalProveedorPage({ searchParams }: { searchPara
 
   return (
     <div className="space-y-6">
+      {proveedor.accessStatus !== 'ACTIVE' && proveedor.accessStatus !== 'DRAFT' && (
+        <StatusBanner
+          variant="warning"
+          title="Completa tu activación"
+          action={<Button asChild size="sm"><Link href={RUTA_PORTAL_CONFIGURACION} data-testid="link-activacion">Ver qué falta</Link></Button>}
+        >
+          <p data-testid="banner-activacion">Hasta que tu portal esté operativo, Membego no puede publicar ofertas nuevas que dependan de ti: configura tu sucursal, tu operador, acepta el contrato y prueba el escáner.</p>
+        </StatusBanner>
+      )}
       <PageHeader
         title="Entregas Membego"
         description={`Beneficios que los clientes compraron a Membego y ${proveedor.supplierName} entrega. Escanea el QR del cliente y confirma.`}

@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import {
   ajustarInventario,
   contarInventario,
+  fijarObjetivoInventario,
   fijarUmbralInventario,
   registrarDanoInventario,
   registrarDevolucionInventario,
@@ -30,6 +31,8 @@ export interface SaldoSucursalVista {
   damaged: number
   disponible: number
   lowStockThreshold: number
+  /** INV-3c · «Llenar hasta»: 0 = sin objetivo. */
+  targetStock: number
   estado: 'AGOTADO' | 'BAJO' | 'OK'
 }
 
@@ -47,7 +50,21 @@ function Cifra({ etiqueta, valor, fuerte = false }: { etiqueta: string; valor: n
  * movimientos manuales y el umbral de stock bajo. El estado de cada formulario
  * vive aquí; lo que hay en la base se refresca con `router.refresh()`.
  */
-export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { varianteId: string; saldo: SaldoSucursalVista; puedeAjustar: boolean }) {
+export function SucursalInventarioCard({
+  varianteId,
+  saldo,
+  puedeAjustar,
+  puedeCostos = false,
+  hayOtrasConSaldo = false,
+}: {
+  varianteId: string
+  saldo: SaldoSucursalVista
+  puedeAjustar: boolean
+  /** INV-3a: ¿puede registrar costos? Solo entonces la entrada ofrece el campo «Costo unitario». */
+  puedeCostos?: boolean
+  /** ¿Hay otras sucursales activas donde este producto ya tiene saldo? Solo entonces tiene sentido ofrecer aplicar el umbral a todas. */
+  hayOtrasConSaldo?: boolean
+}) {
   const router = useRouter()
   const [pending, start] = useTransition()
   const [operacion, setOperacion] = useState<OperacionManual>('ENTRADA')
@@ -55,6 +72,7 @@ export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { va
   // de movimiento (también controlado) a su primera opción sin avisar a React.
   const [cantidad, setCantidad] = useState('')
   const [motivo, setMotivo] = useState('')
+  const [costo, setCosto] = useState('')
   const clave = useRef(nuevaClave())
   const k = saldo.sucursalId
 
@@ -73,7 +91,7 @@ export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { va
       let r: { ok: true; mensaje: string } | { ok: false; error: string }
       switch (operacion) {
         case 'ENTRADA': {
-          const x = await registrarEntradaInventario({ ...base, cantidad: numero })
+          const x = await registrarEntradaInventario({ ...base, cantidad: numero, ...(puedeCostos && costo.trim() !== '' ? { costo: costo.trim() } : {}) })
           r = x.ok ? { ok: true, mensaje: `Entrada registrada. Disponible: ${formatearCantidad(x.saldo.disponible)}.` } : x
           break
         }
@@ -115,6 +133,7 @@ export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { va
       clave.current = nuevaClave()
       setCantidad('')
       setMotivo('')
+      setCosto('')
       router.refresh()
     })
   }
@@ -123,17 +142,40 @@ export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { va
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const umbral = Number(String(f.get('umbral') ?? '').trim())
+    const aplicarAOtras = f.get('aplicarAOtras') === 'on'
     if (!Number.isInteger(umbral) || umbral < 0) {
       toast.error('El umbral es un número entero, 0 o más.')
       return
     }
     start(async () => {
-      const r = await fijarUmbralInventario({ varianteId, sucursalId: saldo.sucursalId, umbral })
+      const r = await fijarUmbralInventario({ varianteId, sucursalId: saldo.sucursalId, umbral, aplicarAOtras })
       if (!r.ok) {
         toast.error(r.error)
         return
       }
-      toast.success(r.umbral === 0 ? 'Sin aviso de stock bajo.' : `Te avisaremos cuando queden ${formatearCantidad(r.umbral)} o menos.`)
+      const base = r.umbral === 0 ? 'Sin aviso de stock bajo.' : `Te avisaremos cuando queden ${formatearCantidad(r.umbral)} o menos.`
+      toast.success(r.otras > 0 ? `${base} También se aplicó en ${r.otras} ${r.otras === 1 ? 'sucursal más' : 'sucursales más'}.` : base)
+      router.refresh()
+    })
+  }
+
+  function guardarObjetivo(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const f = new FormData(e.currentTarget)
+    const llenarHasta = Number(String(f.get('llenarHasta') ?? '').trim())
+    const aplicarAOtras = f.get('aplicarAOtras') === 'on'
+    if (!Number.isInteger(llenarHasta) || llenarHasta < 0) {
+      toast.error('«Llenar hasta» es un número entero, 0 o más.')
+      return
+    }
+    start(async () => {
+      const r = await fijarObjetivoInventario({ varianteId, sucursalId: saldo.sucursalId, llenarHasta, aplicarAOtras })
+      if (!r.ok) {
+        toast.error(r.error)
+        return
+      }
+      const base = r.llenarHasta === 0 ? 'Sin objetivo: este producto no saldrá en Reposición.' : `Reposición propondrá pedir hasta tener ${formatearCantidad(r.llenarHasta)}.`
+      toast.success(r.otras > 0 ? `${base} También se aplicó en ${r.otras} ${r.otras === 1 ? 'sucursal más' : 'sucursales más'}.` : base)
       router.refresh()
     })
   }
@@ -180,6 +222,13 @@ export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { va
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">{def.ayuda}</p>
+              {puedeCostos && operacion === 'ENTRADA' && (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`costo-${k}`}>Costo unitario (opcional)</Label>
+                  <Input id={`costo-${k}`} name="costo" inputMode="decimal" autoComplete="off" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="Ej: 12.50, sin impuestos" className="w-48" />
+                  <p className="text-xs text-muted-foreground">Con costo, el costo promedio del producto se actualiza; sin él, no cambia.</p>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor={`motivo-${k}`}>{def.motivoObligatorio ? 'Motivo *' : 'Motivo (opcional)'}</Label>
                 <Input id={`motivo-${k}`} name="motivo" maxLength={300} required={def.motivoObligatorio} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={def.motivoObligatorio ? 'Qué pasó' : 'Ej: factura 123 del proveedor'} />
@@ -198,7 +247,32 @@ export function SucursalInventarioCard({ varianteId, saldo, puedeAjustar }: { va
               <Button type="submit" size="sm" variant="outline" disabled={pending}>
                 Guardar umbral
               </Button>
+              {hayOtrasConSaldo && (
+                <label className="flex basis-full items-center gap-2 text-sm">
+                  <input type="checkbox" name="aplicarAOtras" className="h-4 w-4" />
+                  Aplicar también a las otras sucursales donde este producto ya tiene existencias
+                </label>
+              )}
               <p className="basis-full text-xs text-muted-foreground">0 = sin aviso. Cuenta lo disponible (sin lo apartado).</p>
+            </form>
+
+            <form onSubmit={guardarObjetivo} className="flex flex-wrap items-end gap-3 border-t pt-4" aria-label={`Llenar hasta en ${saldo.nombre}`}>
+              <div className="space-y-1.5">
+                <Label htmlFor={`llenar-${k}`}>Llenar hasta</Label>
+                <Input id={`llenar-${k}`} name="llenarHasta" inputMode="numeric" defaultValue={saldo.targetStock} className="w-32" />
+              </div>
+              <Button type="submit" size="sm" variant="outline" disabled={pending}>
+                Guardar objetivo
+              </Button>
+              {hayOtrasConSaldo && (
+                <label className="flex basis-full items-center gap-2 text-sm">
+                  <input type="checkbox" name="aplicarAOtras" className="h-4 w-4" />
+                  Aplicar también a las otras sucursales donde este producto ya tiene existencias
+                </label>
+              )}
+              <p className="basis-full text-xs text-muted-foreground">
+                Hasta cuánto quieres tener aquí. 0 = sin objetivo. En Reposición se propone pedir lo que falta para llegar, descontando lo ya pedido y lo que va en camino. Tiene que ser mayor que el umbral de aviso.
+              </p>
             </form>
           </>
         ) : (

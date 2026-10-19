@@ -4,7 +4,10 @@ import { PopupInteligente } from '@/components/engagement/PopupInteligente'
 import type { PanelPersonal } from '@/modules/cliente/panelPersonal'
 import type { InicioVista } from '@/modules/home/vista'
 import { InicioComercial } from './InicioComercial'
+import { VibeComercio } from './VibeComercio'
 import { VibeReferidos } from './VibeReferidos'
+import type { ItemPublicoResumen } from '@/modules/catalog/publico-nucleo'
+import type { OfertaPublica } from '@/modules/deals/publico-nucleo'
 import { VibeMembresiasActivas } from './VibeMembresiasActivas'
 
 /**
@@ -16,9 +19,12 @@ import { VibeMembresiasActivas } from './VibeMembresiasActivas'
 export function InicioRetail({
   comercial,
   personal,
+  comercio,
 }: {
   comercial: InicioVista
   personal: PanelPersonal
+  /** Ofertas vivas y novedades del catálogo (Commerce Core). Vacío = sin bandas. */
+  comercio?: { ofertas: readonly OfertaPublica[]; productos: readonly ItemPublicoResumen[] }
 }) {
   return (
     // Margen negativo espejo del CustomerShell (`px-4 py-4 lg:px-6`): el
@@ -42,6 +48,9 @@ export function InicioRetail({
         ) : null} */}
 
         <InicioComercial data={comercial} />
+
+        {/* Comercio: ofertas sobre el catálogo (antes/ahora) y lo nuevo que publican los negocios. */}
+        {comercio ? <VibeComercio ofertas={comercio.ofertas} productos={comercio.productos} /> : null}
 
         {/* El banner de referidos cierra la pantalla, salvo que el popup del
             motor ya sea la invitación: la misma dos veces se lee como error. */}

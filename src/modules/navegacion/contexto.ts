@@ -1,4 +1,5 @@
 import { getCapacidadesEmpresa } from '@/modules/capacidades/resolver'
+import { CAPACIDADES_DE_COMERCIO_MERCHANT } from '@/modules/supply-v2/suppliers/acceso-dominio'
 import type { PermisosUsuario } from '@/lib/auth/permissions'
 import type {
   CapacidadNav,
@@ -46,7 +47,16 @@ const CAPACIDADES_DEL_MENU: readonly CapacidadNav[] = [
   'CATALOGO_UNIFICADO',
   'PEDIDOS_MEMBEGO',
   'DEALS_MARKETPLACE',
+  // Supplier Lite: sin esto, «Entregas Membego» (capacidad MEMBEGO_SUPPLIER)
+  // desaparecía del menú de TODA empresa cuyas capacidades cargaran, porque
+  // `capacidadVisible` filtra contra esta lista.
+  'MEMBEGO_SUPPLIER',
 ]
+
+/** Proveedora de Membego sin ninguna capacidad de comercio (ver `tipoDeOrganizacion`). */
+export function esSoloProveedora(activas: readonly string[]): boolean {
+  return activas.includes('MEMBEGO_SUPPLIER') && !CAPACIDADES_DE_COMERCIO_MERCHANT.some((c) => activas.includes(c))
+}
 
 const VERTICALES: readonly TipoEmpresaNav[] = [
   'CAR_WASH',
@@ -89,15 +99,16 @@ export async function contextoDeNavegacion({
 
   try {
     const { categoria, activas } = await getCapacidadesEmpresa(companyId)
+    const encendidas = activas as readonly string[]
     return {
       role,
       scope,
-      capacidades: CAPACIDADES_DEL_MENU.filter((c) =>
-        (activas as readonly string[]).includes(c)
-      ),
+      capacidades: CAPACIDADES_DEL_MENU.filter((c) => encendidas.includes(c)),
       tipoEmpresa: comoVertical(categoria),
       permisos,
       ocultas,
+      // Supplier Lite (§6): proveedora de Membego sin comercio → solo su portal.
+      soloProveedor: esSoloProveedora(encendidas),
     }
   } catch {
     // Ver la nota de cabecera: sin capacidades, no se filtra por capacidad.

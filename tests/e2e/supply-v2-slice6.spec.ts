@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type BrowserContext, type Page } from '@playwright/test'
-import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
+import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE, pasarALaFichaDeLaApp } from './supply-v2-sesion'
 
 /**
  * MEMBEGO SUPPLY · SLICE 6 de punta a punta en navegador (§37).
@@ -189,7 +189,7 @@ async function bonoAprobadoYAsignado(compras: Page, finanzas: Page, urlBono: str
 async function compraConBono(cliente: Page, oferta: string, bono: string, esperado: { aPagar: number; bono: number; ahorroTotal?: number }): Promise<string> {
   await cliente.goto('/promociones')
   await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: oferta }).filter({ visible: true }).first().click()
-  await cliente.waitForURL(/\/promociones\/membego\//)
+  await pasarALaFichaDeLaApp(cliente)
   const selector = cliente.getByTestId('selector-beneficio')
   await expect(selector).toBeVisible()
   const opciones = await cliente.getByTestId('select-beneficio').locator('option').allTextContents()
@@ -365,7 +365,7 @@ async function recorridoCompleto(browser: Browser) {
   await bonoAprobadoYAsignado(compras, finanzas, urlTotal, 'e2e.supply2.cliente@membego.test')
   await cliente.goto('/promociones')
   await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.ofertaCorta }).filter({ visible: true }).first().click()
-  await cliente.waitForURL(/\/promociones\/membego\//)
+  await pasarALaFichaDeLaApp(cliente)
   const ops = await cliente.getByTestId('select-beneficio').locator('option').allTextContents()
   await cliente.getByTestId('select-beneficio').selectOption({ index: ops.findIndex((t) => t.includes(d.bonoTotal)) })
   await expect(cliente.getByTestId('beneficio-cubre-todo')).toBeVisible()
@@ -425,7 +425,7 @@ async function recorridoCompleto(browser: Browser) {
   await expect(finanzas.getByTestId('estado-beneficio')).toHaveText('Pausado')
   await cliente.goto('/promociones')
   await cliente.getByTestId('ofertas-membego').getByTestId('oferta-membego-card').filter({ hasText: d.ofertaCompartida }).filter({ visible: true }).first().click()
-  await cliente.waitForURL(/\/promociones\/membego\//)
+  await pasarALaFichaDeLaApp(cliente)
   const quedan = await cliente.getByTestId('select-beneficio').locator('option').allTextContents().catch(() => [] as string[])
   expect(quedan.some((t) => t.includes(d.bonoCompartido))).toBe(false)
   await cliente.goto('/cliente/bonos')
@@ -474,7 +474,7 @@ async function movil(browser: Browser) {
   const tarjeta = cliente.getByTestId('tarjeta-bono').filter({ hasText: d.bonoTotal })
   await expect(tarjeta.getByTestId('bono-valor')).toHaveText(RD(500))
   await tarjeta.getByTestId('btn-usar-bono').click()
-  await cliente.waitForURL(/\/promociones\/membego\/.*beneficio=/)
+  await cliente.waitForURL(/\/cliente\/ofertas-membego\/.*beneficio=/)
   await expect(cliente.getByTestId('beneficio-cubre-todo')).toBeVisible()
   await expect(cliente.getByTestId('beneficio-a-pagar')).toHaveText(RD(0))
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)

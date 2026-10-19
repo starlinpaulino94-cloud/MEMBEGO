@@ -111,6 +111,26 @@ export async function failStartingSession(sessionId: string, companyId: string, 
   ).catch(() => undefined)
 }
 
+/**
+ * Expira una captura consumida a la que NUNCA se le encontró perfil: libera la reserva para que el cliente pueda abrir otro
+ * pago. Solo si no hay cobro en marcha (ni perfil elegido ni intento): el filtro lo garantiza aunque dos peticiones lleguen a la vez.
+ */
+export async function expireConsumedWithoutProfile(session: LoadedCardnetSession): Promise<boolean> {
+  const updated = await conEmpresa(session.companyId, (tx) =>
+    tx.cardnetCaptureSession.updateMany({
+      where: {
+        id: session.id,
+        authSubject: session.authSubject,
+        estado: { in: [CARDNET_SESSION_STATES.CAPTURE_CONSUMED, CARDNET_SESSION_STATES.PROFILE_PENDING] },
+        purchaseIntentId: null,
+        paymentProfileId: null,
+      },
+      data: { estado: CARDNET_SESSION_STATES.EXPIRED, reservaClienteKey: null, captureNonce: null },
+    })
+  ).catch(() => ({ count: 0 }))
+  return updated.count === 1
+}
+
 export async function setSessionState(
   session: LoadedCardnetSession,
   state: string,

@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE } from './supply-v2-sesion'
+import { asegurarEmpresaProveedora, cerrarPrisma, entrarComo, prismaDeArnes, SESION_LOCAL_DISPONIBLE, pasarALaFichaDeLaApp } from './supply-v2-sesion'
 
 /**
  * MEMBEGO SUPPLY · SLICE 3 de punta a punta en navegador (§73–§76).
@@ -96,7 +96,7 @@ async function compraPagada(cliente: Page, finanzas: Page, d: Datos): Promise<vo
   // llegara a duplicar de verdad, esta misma línea lo caza: no lo esconde.
   await expect(tarjetaOferta).toHaveCount(1)
   await tarjetaOferta.click()
-  await cliente.waitForURL(/\/promociones\/membego\//)
+  await pasarALaFichaDeLaApp(cliente)
   await cliente.getByTestId('btn-comprar').click()
   await cliente.waitForURL(/\/cliente\/compras\/[a-z0-9]+$/)
   await cliente.locator('#referenciaPago').fill(`TRX-S3-${d.sufijo}`)

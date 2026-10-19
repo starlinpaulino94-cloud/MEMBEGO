@@ -7,6 +7,12 @@
  * la factura EXACTAMENTE como saldrá y recién entonces imprime. Cada
  * impresión queda registrada (original / COPIA #N) y auditada. Reutiliza el
  * documento original: nunca genera una factura nueva.
+ *
+ * Lo que va al papel se renderiza en `AreaDeImpresion`, fuera de este diálogo:
+ * dentro de un `DialogContent` (`position: fixed`) la factura salía repetida en
+ * cada página y recortada por el `overflow` del diálogo. La vista previa en
+ * pantalla enseña el rollo con sus márgenes; el contenido mide lo mismo que en
+ * el papel (72 mm útiles en 80 mm, 48 en 58).
  */
 
 import { useEffect, useState } from 'react'
@@ -19,6 +25,7 @@ import {
 } from '@/modules/transacciones/actions'
 import { buildDocFromPayload } from '@/components/scanner/ReceiptTicket'
 import { FacturaSheet } from '@/components/facturas/FacturaSheet'
+import { ANCHO_IMPRIMIBLE_MM, AreaDeImpresion, type PapelRollo } from '@/components/impresion/AreaDeImpresion'
 import { PAPER_COLS, type ReceiptLine } from '@/lib/receipts'
 import {
   Dialog,
@@ -40,8 +47,11 @@ const FORMATOS: { value: Formato; label: string }[] = [
   { value: 'a4', label: 'A4' },
 ]
 
-/** Render visible del ticket térmico (misma fuente de verdad que ReceiptTicket). */
-function TicketPreview({ ticket, widthMm, esCopia }: { ticket: TicketPayload; widthMm: 58 | 80; esCopia: boolean }) {
+/**
+ * Render del ticket térmico (misma fuente de verdad que ReceiptTicket).
+ * `papel`: en pantalla, el rollo con sus márgenes; al imprimir, solo el ancho útil (lo pone el área).
+ */
+function TicketPreview({ ticket, widthMm, esCopia, papel = true }: { ticket: TicketPayload; widthMm: PapelRollo; esCopia: boolean; papel?: boolean }) {
   const doc = buildDocFromPayload(
     { ...ticket, template: { ...ticket.template, paperWidthMm: widthMm } },
     { esCopia }
@@ -67,11 +77,14 @@ function TicketPreview({ ticket, widthMm, esCopia }: { ticket: TicketPayload; wi
   }, [ticket.transaccion.codigo, widthMm, esCopia])
 
   const ALIGN = { left: 'text-left', center: 'text-center', right: 'text-right' } as const
+  const margen = (widthMm - ANCHO_IMPRIMIBLE_MM[widthMm]) / 2
 
   return (
     <div
-      className="mx-auto bg-white font-mono text-black shadow"
-      style={{ width: `${doc.paperWidthMm}mm`, fontSize: doc.paperWidthMm === 58 ? '10px' : '12px', lineHeight: 1.45, padding: '2mm 3mm' }}
+      className={papel ? 'mx-auto bg-white font-mono text-black shadow' : 'font-mono text-black'}
+      style={papel
+        ? { width: `${widthMm}mm`, fontSize: doc.paperWidthMm === 58 ? '10px' : '12px', lineHeight: 1.45, padding: `2mm ${margen}mm` }
+        : { fontSize: doc.paperWidthMm === 58 ? '10px' : '12px', lineHeight: 1.45, padding: '2mm 0' }}
     >
       {doc.lines.map((line, i) => {
         switch (line.kind) {
@@ -138,6 +151,7 @@ export function FacturaPrintDialog({
   const [cargando, setCargando] = useState(false)
   const [formato, setFormato] = useState<Formato>('80')
   const [imprimiendo, setImprimiendo] = useState(false)
+  const [solicitud, setSolicitud] = useState(0)
 
   function abrir(siguiente: boolean) {
     setOpen(siguiente)
@@ -152,19 +166,19 @@ export function FacturaPrintDialog({
   }
 
   async function imprimir() {
-    if (!ticket) return
+    if (!ticket || imprimiendo) return
     setImprimiendo(true)
     try {
       await registrarImpresionTx(transactionId, yaImpresa ? 'Reimpresión desde historial' : undefined)
-      // La hoja de estilos del diálogo aísla .factura-print para imprimir
-      // exactamente lo que muestra la vista previa.
-      window.print()
-    } finally {
-      setImprimiendo(false)
+    } catch {
+      /* la auditoría no debe impedir entregar el papel */
     }
+    // El área imprime cuando la factura ya está pintada; `onImpreso` libera el botón al cerrar el diálogo del sistema.
+    setSolicitud((s) => s + 1)
   }
 
   const esHoja = formato === 'carta' || formato === 'a4'
+  const rollo: PapelRollo = formato === '58' ? 58 : 80
 
   return (
     <Dialog open={open} onOpenChange={abrir}>
@@ -209,7 +223,7 @@ export function FacturaPrintDialog({
               <FacturaSheet ticket={ticket} esCopia={yaImpresa} />
             </div>
           ) : (
-            <TicketPreview ticket={ticket} widthMm={formato === '58' ? 58 : 80} esCopia={yaImpresa} />
+            <TicketPreview ticket={ticket} widthMm={rollo} esCopia={yaImpresa} />
           )}
         </div>
 
@@ -218,28 +232,15 @@ export function FacturaPrintDialog({
           Imprimir {yaImpresa ? '(copia)' : ''}
         </Button>
 
-        {/* Copia OCULTA solo-impresión con el formato elegido */}
+        {/* Lo que sale en el papel, con el formato elegido: fuera del diálogo y en una sola hoja. */}
         {ticket && (
-          <div className="factura-print hidden" aria-hidden>
-            <style>{`
-              @media print {
-                @page { margin: ${esHoja ? '12mm' : '0'}; ${formato === 'a4' ? 'size: A4;' : formato === 'carta' ? 'size: letter;' : ''} }
-                body * { visibility: hidden !important; }
-                .factura-print, .factura-print * { visibility: visible !important; }
-                .factura-print {
-                  display: block !important;
-                  position: absolute; top: 0; left: 0;
-                  width: ${esHoja ? '100%' : formato === '58' ? '58mm' : '80mm'};
-                }
-                html, body { height: auto !important; overflow: visible !important; }
-              }
-            `}</style>
+          <AreaDeImpresion papel={esHoja ? formato : rollo} solicitud={solicitud} onImpreso={() => setImprimiendo(false)}>
             {esHoja ? (
               <FacturaSheet ticket={ticket} esCopia={yaImpresa} />
             ) : (
-              <TicketPreview ticket={ticket} widthMm={formato === '58' ? 58 : 80} esCopia={yaImpresa} />
+              <TicketPreview ticket={ticket} widthMm={rollo} esCopia={yaImpresa} papel={false} />
             )}
-          </div>
+          </AreaDeImpresion>
         )}
       </DialogContent>
     </Dialog>

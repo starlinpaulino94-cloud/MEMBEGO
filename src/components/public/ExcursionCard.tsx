@@ -1,3 +1,4 @@
+import { rutaDeBuscarExcursiones, rutaDeExcursion, type Espacio } from '@/modules/comercio/rutas'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, Clock, MapPin, Compass, Users } from 'lucide-react'
@@ -39,30 +40,26 @@ export interface ExcursionCardData {
 
 interface ExcursionCardProps {
   excursion: ExcursionCardData
+  /** Dónde se pinta: de él sale la ficha a la que lleva (la de la landing o la de la app). Obligatorio. */
+  espacio: Espacio
   variant?: 'default' | 'compact'
-  hrefBase?: string
   retorno?: string
 }
 
-function detalleHref(excursion: ExcursionCardData, hrefBase?: string, retorno?: string) {
-  let base: string
-  if (hrefBase) {
-    base = `${hrefBase}/${excursion.slug}`
-  } else if (excursion.empresa?.slug) {
-    base = `/empresas/${excursion.empresa.slug}/excursiones/${excursion.slug}`
-  } else {
-    base = `/excursiones/${excursion.slug}`
-  }
+function detalleHref(excursion: ExcursionCardData, espacio: Espacio, retorno?: string) {
+  const slugEmpresa = excursion.empresa?.slug
+  // Sin la empresa no hay ficha a la que llevar (la ruta de la ficha es por empresa): se lleva a la lista del espacio.
+  const base = slugEmpresa ? rutaDeExcursion(espacio, slugEmpresa, excursion.slug) : rutaDeBuscarExcursiones(espacio)
   return retorno ? `${base}?retorno=${encodeURIComponent(retorno)}` : base
 }
 
 export function ExcursionCard({
   excursion,
+  espacio,
   variant = 'default',
-  hrefBase,
   retorno,
 }: ExcursionCardProps) {
-  const targetHref = detalleHref(excursion, hrefBase, retorno)
+  const targetHref = detalleHref(excursion, espacio, retorno)
   const isAgotada = excursion.agotadaGlobal ?? false
   const isPasada = excursion.todasFechasPasadas ?? false
   const disabled = isAgotada || isPasada

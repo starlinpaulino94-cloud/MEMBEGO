@@ -107,7 +107,7 @@ export default function QrScreen() {
       showsVerticalScrollIndicator={false}
     >
       {usable ? (
-        <View className="gap-4">
+        <View className="w-full max-w-2xl self-center gap-4">
           {/* ── Main QR Card ─────────────────────────────────────────── */}
           <Card className="items-center overflow-hidden rounded-xl border border-border bg-card p-5">
             {/* Company name */}

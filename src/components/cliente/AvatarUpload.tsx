@@ -5,6 +5,8 @@ import { useRef, useState } from 'react'
 import { Loader2, Camera, User } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { FORMATOS } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 
 interface Props {
   clienteId: string
@@ -18,10 +20,8 @@ export function AvatarUpload({ clienteId, currentUrl, nombre, onUploaded }: Prop
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  /** La foto ya encuadrada (cuadrada, 400×400): es la que se sube. */
+  async function subirArchivo(file: File) {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       toast.error('Solo se aceptan imágenes JPG, PNG o WEBP.')
       return
@@ -56,6 +56,8 @@ export function AvatarUpload({ clienteId, currentUrl, nombre, onUploaded }: Prop
       if (inputRef.current) inputRef.current.value = ''
     }
   }
+
+  const { elegir, dialogo } = useEditorDeImagen({ formato: FORMATOS.avatar, alAplicar: subirArchivo })
 
   const initials = nombre
     .split(' ')
@@ -104,8 +106,9 @@ export function AvatarUpload({ clienteId, currentUrl, nombre, onUploaded }: Prop
         type="file"
         accept="image/jpeg,image/png,image/webp"
         className="hidden"
-        onChange={handleFile}
+        onChange={(e) => elegir(e.target.files?.[0])}
       />
+      {dialogo}
     </div>
   )
 }

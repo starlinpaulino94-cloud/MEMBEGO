@@ -1,3 +1,5 @@
+> **REGISTRO HISTÓRICO.** Describe su fecha y commit de origen; no acredita el estado actual de ramas, capacidades, pruebas ni producción. Consultar [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) para el estado vigente y la auditoría de onboarding enlazada allí.
+
 # Auditoría de las fases F5–F9 (2026-10-07)
 
 > Auditoría independiente del trabajo de la rama `claude/wizardly-hypatia-x2l9av` desde el cierre del lote de la auditoría anterior (`188dcba`) hasta `987548a` (F9 cerrada), contra el **Plan Maestro** (`docs/PLAN_MAESTRO.md` §10 y §19) y contra lo que afirma `docs/IMPLEMENTATION_STATUS.md`. Es la continuación de [`AUDITORIA_2026-10-07_F0-F4.md`](AUDITORIA_2026-10-07_F0-F4.md) con el mismo método y la misma escala. **El código manda**: cada afirmación se contrastó leyendo el archivo y la línea que se citan.

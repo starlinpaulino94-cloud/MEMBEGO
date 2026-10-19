@@ -8,13 +8,36 @@ import {
   createCardnetTokenGate,
   extractCardnetToken,
   isAllowedCardnetFrameUrl,
-  matchesActiveCaptureFrame,
+  isValidOneTimeToken,
 } from './security'
 
 interface PWCheckoutSDK {
   Bind: (event: 'tokenCreated', callback: (payload: unknown) => void) => void
   SetProperties: (properties: Record<string, unknown>) => void
   OpenIframeCustom: (url: string, uniqueId: string) => void
+  Iframe?: { Close?: (...args: unknown[]) => unknown }
+}
+
+/**
+ * El `Iframe.Close` del widget revienta con «Cannot read properties of null (reading 'parentNode')» cuando intenta cerrar
+ * una ventana ya cerrada, y la entrega del token viene justo DESPUÉS del Close en ese mismo manejador: el token se pierde
+ * dentro del widget. Es un fallo conocido (la pantalla web de pago ya lo blinda). Envolverlo deja que su código continúe.
+ */
+function guardWidgetClose(sdk: PWCheckoutSDK) {
+  const iframe = sdk.Iframe
+  if (!iframe || typeof iframe.Close !== 'function') return
+  const current = iframe.Close as ((...args: unknown[]) => unknown) & { guarded?: boolean }
+  if (current.guarded) return
+  const original = current.bind(iframe)
+  const safe = ((...args: unknown[]) => {
+    try {
+      return original(...args)
+    } catch {
+      return undefined
+    }
+  }) as ((...args: unknown[]) => unknown) & { guarded?: boolean }
+  safe.guarded = true
+  iframe.Close = safe
 }
 
 type WindowWithCardnetCheckout = Window & { PWCheckout?: PWCheckoutSDK }
@@ -41,8 +64,9 @@ export default function CardnetCaptureSurface({
 }: CardnetCaptureSurfaceProps) {
   const [ready, setReady] = useState(false)
   const [opened, setOpened] = useState(false)
-  const frameWindow = useRef<Window | null>(null)
-  const trustedToken = useRef<string | null>(null)
+  // Se vio alguna vez la ventana de captura de ESTA sesión. El widget la cierra ANTES de entregar el token, así que exigir
+  // que siga en el documento descartaba el token real.
+  const frameSeen = useRef(false)
   const consumedRef = useRef(false)
   const onTokenRef = useRef(onToken)
   const onErrorRef = useRef(onError)
@@ -52,11 +76,6 @@ export default function CardnetCaptureSurface({
   useEffect(() => {
     let mounted = true
     const gate = createCardnetTokenGate(session)
-    const messageListener = (event: MessageEvent<unknown>) => {
-      if (!matchesActiveCaptureFrame(event, config.origin, frameWindow.current)) return
-      trustedToken.current = extractCardnetToken(event.data)
-    }
-    window.addEventListener('message', messageListener)
     const originalOpen = window.open
     const rejectPopup = ((..._args: Parameters<typeof window.open>) => null) as typeof window.open
     window.open = rejectPopup
@@ -65,8 +84,7 @@ export default function CardnetCaptureSurface({
       const iframe = Array.from(document.querySelectorAll('iframe')).find((candidate) =>
         isAllowedCardnetFrameUrl(candidate.src, config, session)
       )
-      frameWindow.current = iframe?.contentWindow ?? null
-      if (!frameWindow.current) trustedToken.current = null
+      if (iframe) frameSeen.current = true
     }
     const observer = new MutationObserver(refreshActiveFrame)
     observer.observe(document.documentElement, {
@@ -79,17 +97,25 @@ export default function CardnetCaptureSurface({
 
     const handleToken = (payload: unknown) => {
       if (!mounted || consumedRef.current) return
-      const token = extractCardnetToken(payload)
-      if (!token || trustedToken.current !== token || !frameWindow.current) {
+      refreshActiveFrame()
+      // Un texto suelto ES el token cuando lo entrega el SDK (`tokenCreated`); el payload puede venir plano, envuelto o en JSON.
+      const token = extractCardnetToken(payload, true)
+      if (!token || !frameSeen.current) {
         onErrorRef.current('provider_message_rejected')
         return
       }
       const accepted = gate(token)
       if (!accepted) return
       consumedRef.current = true
-      trustedToken.current = null
       onTokenRef.current(accepted.token)
     }
+
+    // Plan B: con autoSubmit apagado el widget también deja el token en el campo oculto del formulario.
+    const fieldWatch = window.setInterval(() => {
+      if (consumedRef.current || !frameSeen.current) return
+      const value = (document.getElementById('PWToken') as HTMLInputElement | null)?.value
+      if (isValidOneTimeToken(value)) handleToken(value)
+    }, 500)
 
     const loadWidget = () => {
       if (!mounted) return
@@ -99,6 +125,7 @@ export default function CardnetCaptureSurface({
         return
       }
       try {
+        guardWidgetClose(sdk)
         bindSdkOnce(sdk)
         activeTokenHandler = handleToken
         setReady(true)
@@ -128,11 +155,10 @@ export default function CardnetCaptureSurface({
 
     return () => {
       mounted = false
-      window.removeEventListener('message', messageListener)
+      window.clearInterval(fieldWatch)
       if (window.open === rejectPopup) window.open = originalOpen
       observer.disconnect()
-      frameWindow.current = null
-      trustedToken.current = null
+      frameSeen.current = false
       if (activeTokenHandler === handleToken) activeTokenHandler = null
     }
   }, [config, session])
@@ -145,6 +171,7 @@ export default function CardnetCaptureSurface({
       return
     }
     try {
+      guardWidgetClose(sdk)
       sdk.SetProperties({
         button_label: 'Continuar con CardNET',
         checkout_card: 1,

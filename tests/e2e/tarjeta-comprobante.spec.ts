@@ -222,7 +222,10 @@ test.describe('Pago con tarjeta · comprobante visible e imprimible', () => {
     await expect(hoja).toContainText(`Recibo Nº`)
     await expect(hoja).toContainText(TICKET)
     await expect(hoja).toContainText(AUTORIZACION)
-    await expect(hoja.getByRole('button', { name: 'Imprimir recibo' })).toBeVisible()
+    // Imprime el comprobante oficial (el mismo ticket del negocio): el enlace lleva a la venta de ESTE cobro.
+    const imprimir = hoja.getByRole('link', { name: 'Ver / imprimir comprobante' })
+    await expect(imprimir).toBeVisible()
+    await expect(imprimir).toHaveAttribute('href', /\/cliente\/pagos\/comprobante\/[a-z0-9]+$/)
     await ctx.close()
   })
 })

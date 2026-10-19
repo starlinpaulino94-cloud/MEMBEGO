@@ -7,6 +7,10 @@ export const CAPTURE_TTL_MS = 10 * 60 * 1000
 export const CLAIM_STALE_MS = 45 * 1000
 export const ACTIVATION_CLAIM_STALE_MS = 120 * 1000
 export const PURCHASE_RETRY_MS = 60 * 1000
+/** Cada cuánto, como mucho, el servidor mira en CardNET si la tarjeta de una captura abierta ya existe. */
+export const CAPTURE_RECONCILE_MS = 2 * 1000
+/** Cuánto se espera, como máximo, a que CardNET liste el perfil de una captura ya consumida antes de soltar la reserva. */
+export const PROFILE_WAIT_MS = 5 * 60 * 1000
 
 export type CardnetReply = {
   readonly status: number
@@ -26,6 +30,24 @@ export function fail(status: number, error: string): CardnetReply {
 
 export function success(status: number, fields: Record<string, unknown> = {}): CardnetReply {
   return { status, body: { ok: true, ...fields } }
+}
+
+/**
+ * Deja rastro de una captura que venció SIN que nadie avisara de que terminó. Es la huella exacta del fallo que se
+ * investigó (formulario abierto, tarjeta en CardNET, sesión que vence a los 10 minutos): sin esta línea solo se veía mirando
+ * la tabla `cardnet_capture_sessions`, y no decía quién había abandonado ni cuándo.
+ */
+export function anotarCapturaVencida(
+  session: { readonly id: string; readonly clienteId: string; readonly createdAt: Date; readonly capturadoAt?: Date | null },
+  origen: 'estado' | 'reanudacion'
+): void {
+  console.warn('[pagos:cardnet-cliente] captura vencida sin confirmar', {
+    origen,
+    sessionId: session.id,
+    clienteId: session.clienteId,
+    abiertaMs: Date.now() - session.createdAt.getTime(),
+    capturadoAt: session.capturadoAt ?? null,
+  })
 }
 
 export function ownRecord(value: unknown): Record<string, unknown> | null {

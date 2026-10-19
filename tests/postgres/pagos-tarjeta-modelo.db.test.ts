@@ -1,7 +1,7 @@
 /**
  * PAGO CON TARJETA → COMPROBANTE · fase 1: lo que la BASE hace cumplir.
  *
- * Migraciones 20261053/20261054:
+ * Migraciones 20261067/20261068:
  *   · `MetodoCobroTipo.TARJETA` existe.
  *   · `transactions.pagoIntentoId` es ÚNICO: un cobro aprobado deja UNA venta.
  *   · Solo una venta `SALE` con método TARJETA lleva intento (CHECK `transactions_pago_intento_coherente`).
@@ -63,7 +63,7 @@ async function rechazo(p: Promise<unknown>): Promise<string> {
 
 let bloqueBackfill = ''
 before(() => {
-  const sql = readFileSync('prisma/migrations/20261054_tarjeta_en_el_libro/migration.sql', 'utf8')
+  const sql = readFileSync('prisma/migrations/20261068_tarjeta_en_el_libro/migration.sql', 'utf8')
   const i = sql.indexOf('-- BACKFILL:INICIO')
   const f = sql.indexOf('-- BACKFILL:FIN')
   assert.ok(i > 0 && f > i, 'la migración trae su bloque de backfill delimitado')

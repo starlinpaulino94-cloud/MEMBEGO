@@ -9,8 +9,9 @@
  */
 
 import type { CatalogItemType, CatalogVariantStatus } from '@prisma/client'
-import { urlPublicaCatalogo } from './formato'
+import { urlImagenCatalogo } from './formato'
 import { normalizarCapacidades } from './domain'
+import { presentacionComercial, type PresentacionComercial, type SucursalDeCanje } from '@/modules/comercio/modo-comercial'
 
 /**
  * Ruta pública de las ofertas de Membego (el checkout de Supply). El catálogo NO importa de
@@ -22,6 +23,19 @@ export const RUTA_OFERTAS_MEMBEGO = '/promociones/membego'
 /** Variantes que se enseñan: las vendibles y las agotadas. La descontinuada no existe para el público. */
 export const ESTADOS_VARIANTE_VISIBLES: readonly CatalogVariantStatus[] = ['ACTIVE', 'OUT_OF_STOCK']
 
+/**
+ * Lo ÚNICO que el consumidor sabe del stock. Nunca una cantidad: «Disponible»,
+ * «Pocas unidades» (solo si la empresa fijó un umbral de aviso y se cruzó) o
+ * «Agotado». Un ítem que no controla inventario está siempre «Disponible».
+ */
+export type DisponibilidadPublica = 'DISPONIBLE' | 'POCAS_UNIDADES' | 'AGOTADO'
+
+export const ETIQUETA_DISPONIBILIDAD: Record<DisponibilidadPublica, string> = {
+  DISPONIBLE: 'Disponible',
+  POCAS_UNIDADES: 'Pocas unidades',
+  AGOTADO: 'Agotado',
+}
+
 export interface VariantePublica {
   id: string
   name: string
@@ -31,6 +45,13 @@ export interface VariantePublica {
   compareAtPrice: string | null
   attributes: Record<string, string>
   available: boolean
+  disponibilidad: DisponibilidadPublica
+  /**
+   * Sucursales (ids) donde la variante tiene existencias para recoger. `null` =
+   * no controla inventario (se puede pedir en cualquier sucursal activa). Son
+   * ids, no cantidades: el consumidor elige dónde, no cuántas quedan.
+   */
+  sucursalesConStock: string[] | null
 }
 
 /** De dónde viene el ítem: lo creó la empresa, o lo refleja el puente desde una oferta de Membego (Supply). */
@@ -54,11 +75,20 @@ export interface ItemPublicoResumen {
    * (la página arma el enlace; Commerce Core no conoce las rutas de Supply).
    */
   ofertaSlug: string | null
+  /** La mejor disponibilidad entre sus variantes visibles (para la tarjeta). */
+  disponibilidad: DisponibilidadPublica
+  /**
+   * Quién vende, quién entrega y quién financia, YA RESUELTO (Supplier &
+   * Fulfillment Commerce §12–§19). La tarjeta no infiere nada de `origen`.
+   */
+  comercial: PresentacionComercial
 }
 
 export interface ItemPublicoDetalle extends ItemPublicoResumen {
   description: string | null
   images: string[]
+  /** Imagen para la tarjeta que se comparte por redes (1,91:1). null = sin foto. */
+  imageShareUrl: string | null
   variants: VariantePublica[]
   categories: { name: string; slug: string }[]
 }
@@ -74,7 +104,7 @@ interface FilaVariante {
    * Existencias por sucursal (Fase 3). Solo importan si el ítem CONTROLA inventario;
    * una sucursal cerrada no cuenta (de ahí no se despacha).
    */
-  inventoryLevels?: { onHand: number; reserved: number; location: { activa: boolean } }[]
+  inventoryLevels?: { onHand: number; reserved: number; lowStockThreshold?: number; locationId?: string; location: { activa: boolean } }[]
 }
 
 interface FilaItem {
@@ -84,15 +114,59 @@ interface FilaItem {
   description: string | null
   type: CatalogItemType
   currency: string
-  company: { slug: string; name: string }
+  company: { slug: string; name: string; sucursales?: SucursalDeCanje[] }
   variants: FilaVariante[]
-  images: { path: string }[]
+  images: { path: string; variantesBase?: string | null }[]
   categories?: { category: { name: string; slug: string } }[]
   source: 'MERCHANT' | 'SUPPLY'
   /** Las capacidades del ítem (solo para saber si controla inventario; no salen al público). */
   capabilities?: unknown
-  /** Solo `SUPPLY`: la oferta de origen, EN VIVO (no la copia sincronizada). */
-  supplyOffer?: { slug: string; status: string } | null
+  /**
+   * Solo `SUPPLY`: la oferta de origen, EN VIVO (no la copia sincronizada), con
+   * lo justo para decir quién vende y dónde se canjea (§12–§15). `supplier.company`
+   * es la empresa del proveedor; su `slug` solo se enseña si tiene vitrina.
+   */
+  supplyOffer?: {
+    slug: string
+    status: string
+    priceMode?: 'FIXED' | 'PERCENTAGE' | 'FREE'
+    sourceType?: 'PREPURCHASED_SUPPLY' | 'COMMISSION'
+    salePrice?: { toFixed(n: number): string }
+    /** Beneficios ACTIVOS financiados por Membego sobre la oferta (solo se cuenta si hay). */
+    benefits?: { id: string }[]
+    supplier?: {
+      commercialName: string
+      company?: { slug: string; name: string; isPublished: boolean; isActive: boolean; esDemo?: boolean; sucursales?: SucursalDeCanje[] } | null
+    }
+  } | null
+}
+
+/** La empresa del proveedor tiene vitrina pública: Merchant activo y publicado (§49). */
+export function proveedorConVitrina(c: { isPublished: boolean; isActive: boolean; esDemo?: boolean } | null | undefined): boolean {
+  return !!c && c.isPublished && c.isActive && !c.esDemo
+}
+
+export function comercialDeFila(f: FilaItem): PresentacionComercial {
+  if (f.source === 'SUPPLY' && f.supplyOffer) {
+    const o = f.supplyOffer
+    const empresaProveedor = o.supplier?.company ?? null
+    return presentacionComercial({
+      origen: 'SUPPLY',
+      empresa: { nombre: f.company.name, slug: f.company.slug },
+      supply: {
+        priceMode: o.priceMode ?? 'FIXED',
+        sourceType: o.sourceType ?? 'PREPURCHASED_SUPPLY',
+        salePrice: o.salePrice ? o.salePrice.toFixed(2) : '1.00',
+        subsidioMembego: (o.benefits?.length ?? 0) > 0,
+        proveedor: {
+          nombre: o.supplier?.commercialName ?? empresaProveedor?.name ?? f.company.name,
+          slug: proveedorConVitrina(empresaProveedor) ? empresaProveedor!.slug : null,
+          sucursales: empresaProveedor?.sucursales ?? [],
+        },
+      },
+    })
+  }
+  return presentacionComercial({ origen: 'EMPRESA', empresa: { nombre: f.company.name, slug: f.company.slug }, sucursales: f.company.sucursales ?? [] })
 }
 
 function atributosTexto(raw: unknown): Record<string, string> {
@@ -115,15 +189,48 @@ export function variantesPublicas(filas: readonly FilaVariante[], agotadaEnOrige
     .map((v) => {
       const price = v.price.toFixed(2)
       const antes = v.compareAtPrice && v.compareAtPrice.toNumber() > v.price.toNumber() ? v.compareAtPrice.toFixed(2) : null
+      const available = v.status === 'ACTIVE' && !agotadaEnOrigen && !sinExistencias(v, controlaInventario)
       return {
         id: v.id,
         name: v.name,
         price,
         compareAtPrice: antes,
         attributes: atributosTexto(v.attributes),
-        available: v.status === 'ACTIVE' && !agotadaEnOrigen && !sinExistencias(v, controlaInventario),
+        available,
+        disponibilidad: !available ? 'AGOTADO' : pocasUnidades(v, controlaInventario) ? 'POCAS_UNIDADES' : 'DISPONIBLE',
+        sucursalesConStock: controlaInventario ? sucursalesConStock(v) : null,
       }
     })
+}
+
+const nivelesActivos = (v: FilaVariante) => (v.inventoryLevels ?? []).filter((n) => n.location.activa)
+
+/**
+ * «Pocas unidades» SOLO si la empresa configuró un umbral de aviso en alguna
+ * sucursal y lo disponible total cayó a ese umbral o menos. Sin umbral, el
+ * consumidor ve «Disponible» hasta que se acaba: la empresa decide si quiere
+ * ese mensaje (configurando el umbral), no el sistema.
+ */
+function pocasUnidades(v: FilaVariante, controlaInventario: boolean): boolean {
+  if (!controlaInventario) return false
+  const niveles = nivelesActivos(v)
+  const umbral = Math.max(0, ...niveles.map((n) => n.lowStockThreshold ?? 0))
+  if (umbral <= 0) return false
+  const disponible = niveles.reduce((t, n) => t + Math.max(0, n.onHand - n.reserved), 0)
+  return disponible <= umbral
+}
+
+function sucursalesConStock(v: FilaVariante): string[] {
+  return nivelesActivos(v)
+    .filter((n) => n.onHand - n.reserved > 0 && typeof n.locationId === 'string')
+    .map((n) => n.locationId as string)
+}
+
+/** La mejor disponibilidad del conjunto: con una «Disponible» basta; si todas agotadas, «Agotado». */
+export function disponibilidadDelItem(vs: readonly VariantePublica[]): DisponibilidadPublica {
+  if (vs.some((v) => v.disponibilidad === 'DISPONIBLE')) return 'DISPONIBLE'
+  if (vs.some((v) => v.disponibilidad === 'POCAS_UNIDADES')) return 'POCAS_UNIDADES'
+  return 'AGOTADO'
 }
 
 /**
@@ -159,12 +266,14 @@ export function aResumenPublico(f: FilaItem): ItemPublicoResumen | null {
     name: f.name,
     type: f.type,
     currency: f.currency,
-    imageUrl: f.images[0] ? urlPublicaCatalogo(f.images[0].path) : null,
+    imageUrl: f.images[0] ? urlImagenCatalogo(f.images[0], 'tarjeta') : null,
     priceFrom: precioDesde(vs),
     hasVariants: vs.length > 1,
     company: { slug: f.company.slug, name: f.company.name },
     origen: f.source === 'SUPPLY' ? 'SUPPLY' : 'EMPRESA',
     ofertaSlug: f.source === 'SUPPLY' ? (f.supplyOffer?.slug ?? null) : null,
+    disponibilidad: disponibilidadDelItem(vs),
+    comercial: comercialDeFila(f),
   }
 }
 
@@ -174,7 +283,8 @@ export function aDetallePublico(f: FilaItem): ItemPublicoDetalle | null {
   return {
     ...resumen,
     description: f.description,
-    images: f.images.map((i) => urlPublicaCatalogo(i.path)).filter((u): u is string => !!u),
+    images: f.images.map((i) => urlImagenCatalogo(i, 'ficha')).filter((u): u is string => !!u),
+    imageShareUrl: f.images[0] ? urlImagenCatalogo(f.images[0], 'compartir') : null,
     variants: variantesPublicas(f.variants, agotadaEnOrigen(f), controlaInventario(f)),
     categories: (f.categories ?? []).map((c) => ({ name: c.category.name, slug: c.category.slug })),
   }

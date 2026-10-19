@@ -1,6 +1,8 @@
+import { twMerge } from 'tailwind-merge'
+
 /**
  * Helper mínimo de concatenación condicional de classNames para RN.
- * Replica la semántica de clsx + tailwind-merge sin dependencias externas.
+ * Replica la semántica de clsx + tailwind-merge.
  *
  * Acepta strings, arrays anidados, objetos (keys truthy = incluidas),
  * y valores falsy (false, null, undefined, 0, '') que se descartan.
@@ -22,5 +24,5 @@ function parseArg(arg: ClassValue): string[] {
 }
 
 export function cn(...args: ClassValue[]): string {
-  return args.flatMap(parseArg).join(' ')
+  return twMerge(args.flatMap(parseArg).join(' '))
 }

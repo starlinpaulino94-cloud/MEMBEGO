@@ -1,5 +1,6 @@
 import type { CatalogItemType, DealDiscountType, Prisma } from '@prisma/client'
-import { urlPublicaCatalogo } from '@/modules/catalog/formato'
+import { presentacionComercial, type PresentacionComercial } from '@/modules/comercio/modo-comercial'
+import { urlImagenCatalogo } from '@/modules/catalog/formato'
 import { precioDeLaOferta, reclamosPosibles, etiquetaDeDescuento } from './domain'
 
 /**
@@ -13,6 +14,8 @@ import { precioDeLaOferta, reclamosPosibles, etiquetaDeDescuento } from './domai
 
 export interface FilaDeOfertaPublica {
   id: string
+  /** Quién financia el descuento (§17): MERCHANT, MEMBEGO o SHARED. */
+  sponsor?: 'MERCHANT' | 'MEMBEGO' | 'SHARED'
   title: string
   description: string | null
   discountType: DealDiscountType
@@ -30,12 +33,14 @@ export interface FilaDeOfertaPublica {
   variant: {
     id: string
     name: string
+    /** La variante automática de un ítem simple: su nombre es de sistema y no se enseña. */
+    isDefault?: boolean
     price: Prisma.Decimal
     item: {
       name: string
       slug: string
       type: CatalogItemType
-      images: { path: string }[]
+      images: { path: string; variantesBase?: string | null }[]
       company: { slug: string; name: string; sucursales: { id: string; nombre: string }[] }
     }
   }
@@ -64,6 +69,8 @@ export interface OfertaPublica {
   soloClientesNuevos: boolean
   /** Solo cuando quedan pocos (≤ 10): crea urgencia sin enseñar el tamaño de la oferta. */
   quedan: number | null
+  /** Quién vende y quién financia (§17): «Vendido por X · Promoción financiada por Membego». */
+  comercial: PresentacionComercial
 }
 
 /** Cuántos «quedan» se enseñan como máximo. */
@@ -92,13 +99,20 @@ export function aOfertaPublica(f: FilaDeOfertaPublica): OfertaPublica | null {
     ahorro: ahorro.toFixed(2),
     itemName: f.variant.item.name,
     itemSlug: f.variant.item.slug,
-    variantName: f.variant.name,
-    imageUrl: f.variant.item.images[0] ? urlPublicaCatalogo(f.variant.item.images[0].path) : null,
+    // Un ítem simple no tiene «variante» para el cliente: se nombra como el ítem.
+    variantName: f.variant.isDefault ? f.variant.item.name : f.variant.name,
+    imageUrl: f.variant.item.images[0] ? urlImagenCatalogo(f.variant.item.images[0], 'tarjeta') : null,
     empresa: { slug: f.variant.item.company.slug, name: f.variant.item.company.name },
     sucursales: f.variant.item.company.sucursales.map((x) => ({ id: x.id, nombre: x.nombre })),
     endsAt: f.endsAt ? f.endsAt.toISOString() : null,
     voucherDays: f.voucherDays,
     soloClientesNuevos: f.newCustomersOnly,
     quedan: posibles <= UMBRAL_QUEDAN ? posibles : null,
+    comercial: presentacionComercial({
+      origen: 'EMPRESA',
+      empresa: { nombre: f.variant.item.company.name, slug: f.variant.item.company.slug },
+      deal: { sponsor: f.sponsor ?? 'MERCHANT' },
+      sucursales: f.variant.item.company.sucursales.map((x) => ({ id: x.id, nombre: x.nombre })),
+    }),
   }
 }

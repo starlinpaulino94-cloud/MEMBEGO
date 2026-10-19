@@ -73,6 +73,78 @@ Fuente: `prisma/schema.prisma` (model `Transaction`), `src/lib/transactions/*`.
   **plantilla configurable por empresa** (encabezado/pie, formato).
 - `FacturaPrintDialog` — vista previa + reimpresión sin generar documento nuevo.
 
+#### Un solo canal de impresión: `AreaDeImpresion` (16-10-2026)
+Auditoría del mostrador: los tickets "se veían bien en la vista previa pero
+salían mal impresos", y a veces **3 o 4 páginas** por un solo toque. Medido con
+la app real en papel de 80 mm (`tests/e2e/zz-impresion-diagnostico`, PDFs):
+
+| Superficie | Antes | Causa medida |
+|---|---|---|
+| Ticket del escáner (reimpresión TX) | 3 páginas; recortado por la derecha (x=41 px, borde 343 > 302 px) | `body * { visibility: hidden }` deja el panel ocupando 1 672 px de alto; la región `position: absolute` se anclaba al envoltorio `animate-scale-in` (conserva `transform`) |
+| Factura 80 mm desde caja | 3 páginas **idénticas**; cortada por abajo | vive dentro de `DialogContent` (`position: fixed` → se repite en cada página); `overflow-y: auto` del diálogo recorta; `overflow: hidden` del bloqueo de scroll |
+| Cuadre del día / cierre de caja | 3 páginas | mismo patrón que la factura |
+| Todos | columna derecha perdida en el papel | se pintaba a 80 mm; una térmica de 80 mm imprime **72 mm** útiles (58 → 48 mm) |
+| Reimpresión del escáner | copia sin «COPIA #N» | `window.print()` con `setTimeout(0)`: el banner aún no estaba pintado |
+
+Ahora **todo ticket pasa por `src/components/impresion/AreaDeImpresion.tsx`**:
+- Portal colgado directamente de `<body>` (fuera de diálogos, `transform` y
+  `overflow`); al imprimir, el resto de hijos de `<body>` pasa a
+  `display: none` (sin altura → **una página**), solo mientras dura la
+  impresión (`body[data-imprimiendo]`). En pantalla el área nunca se ve.
+- Imprime cuando se incrementa `solicitud`, **después** del commit de React y
+  con QR/logo decodificados: lo que sale es exactamente lo que hay en el DOM.
+- Ancho del contenido = ancho útil del papel (`ANCHO_IMPRIMIBLE_MM`: 80→72,
+  58→48). Las vistas previas enseñan el rollo con sus márgenes y el contenido
+  mide lo mismo que en el papel.
+- Rollos: `@page { size: auto; margin: 0 }` (manda el driver); Carta/A4 fijan
+  tamaño y 12 mm de margen.
+- `COPIA #N` sale del número que devuelve `registrarImpresionTx` (servidor), no
+  de un contador local.
+
+Guardas: `tests/impresion-tickets.test.ts` (nadie más llama a `window.print`
+ni escribe su `@media print`) y `tests/e2e/impresion-tickets.spec.ts` (mide en
+el navegador: una página, ticket en el origen, 72 mm, QR cargado). Los reportes
+A4 del panel (`ReporteImprimible`) son otro producto y siguen su propio camino.
+
+#### Pagos con tarjeta dejan recibo, y el cliente lo imprime (16-10-2026)
+El negocio reportaba «el comprobante de pago no me aparece». Causa: los pagos
+con tarjeta (CardNET desde la web y la app, y la renovación automática con
+tarjeta guardada) activaban la membresía o la compra **sin crear la
+`Transaction`** —solo la caja y la confirmación manual del panel llamaban a
+`registrarVentaConfirmada`—, así que no existía nada que imprimir en Facturas
+ni en el escáner, y el cliente tampoco tenía recibo.
+
+- **Un solo camino para la venta del cobro.** La escribe `asegurarVentaDelIntento`
+  (`src/modules/pagos/venta-tarjeta.ts`): venta `SALE` con método `TARJETA`,
+  **única por `pagoIntentoId`** (índice único del libro), con canal, autorización
+  y, en una renovación inmediata, marca y últimos cuatro. Se llama tras cada
+  entrega: `intentos.ts` (al entregar, al repetir y al reintentar) y la
+  renovación automática en `cardnetTokenGuardado.ts`. Webhook + retorno del
+  navegador = una sola venta. Nunca lanza. Las transferencias no pasan por ahí
+  (las confirma el admin y ese camino ya deja recibo). Diseño completo en
+  `docs/PAGO_TARJETA_COMPROBANTE.md`.
+- *Historia.* Una primera versión (`reciboPasarela.ts`, venta `OTRO` con el
+  intento en el snapshot) se retiró al fusionarla con el libro de tarjeta:
+  dos caminos para el mismo cobro serían dos ventas del mismo dinero. Una venta
+  que aquel camino ya hubiera escrito se **adopta** (se le enlaza el cobro y pasa
+  a `TARJETA`), no se duplica.
+- **El cliente imprime su comprobante.** `getClientePagos` devuelve
+  `comprobantes` (todas sus ventas aplicadas) y enlaza cada pago aprobado del
+  historial con su venta (`transaccionId`: exacta por el cobro si fue con tarjeta,
+  por membresía y cercanía de fecha en los demás pagos). Web: «Mis pagos → Comprobantes de
+  pago → Imprimir» (`/cliente/pagos/comprobante/[id]`, con sesión y propiedad
+  verificada por `ticketParaCliente`). App: pide un **enlace firmado y caduco**
+  (`GET /api/v1/cliente/comprobantes/[id]/enlace`, HMAC en
+  `enlaceComprobante.ts`, 20 min) y lo abre en el navegador del teléfono
+  (`/comprobante/[token]`), que es quien imprime o guarda el PDF. Ambas vistas
+  usan `FacturaSheet` por `AreaDeImpresion` (una página Carta).
+- Pruebas: `tests/comprobante-cliente.test.ts` (firma/caducidad del enlace,
+  guardas estructurales), `tests/postgres/comprobante-cliente.db.test.ts`
+  (una venta por cobro, adopción del recibo anterior, «Mis pagos» enlazado por
+  el cobro, propiedad) y
+  `tests/e2e/comprobante-cliente.spec.ts` (web con sesión y app con enlace;
+  una página Carta; enlace manipulado → 404).
+
 ### 2.3 Caja por turno — `CajaSesion`
 Fuente: `src/modules/caja/*`, `src/components/caja/CajaForms.tsx`, `/empleado/caja`.
 - `abrirCaja` (balance inicial, turno, sucursal, responsable).
@@ -271,7 +343,8 @@ histórico de **cierres de caja**, entregas de regalos.
 > - **Acción** (`src/modules/caja/actions.ts`): `obtenerCierre()` (protegida con
 >   `staffAutorizado`) devuelve el reporte serializado.
 > - **UI** (`src/components/caja/CierreCajaDialog.tsx`): vista previa 80 mm
->   (idéntica a la impresión) con `.cierre-print` aislado por `@media print`.
+>   (idéntica a la impresión); desde el 16-10-2026 imprime por
+>   `AreaDeImpresion` (ver §2.2), ya no con un `@media print` propio.
 >   Se ofrece en **Caja** (`/empleado/caja`) como lista **"Cierres recientes"**,
 >   que sobrevive a la revalidación tras cerrar el turno (imprimir al cerrar y
 >   reimprimir cuando se necesite). Verificado con tsc, eslint y `next build`.
