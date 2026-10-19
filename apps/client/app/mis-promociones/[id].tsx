@@ -21,7 +21,7 @@ import {
   Landmark,
 } from 'lucide-react-native'
 import QRCode from 'react-native-qrcode-svg'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../src/lib/auth-context'
 import { useMisPromocion } from '../../src/hooks/useMisPromociones'
 import { formatDateTime } from '../../src/lib/format'
@@ -34,8 +34,9 @@ import { DetailPageFrame } from '../../src/components/ui/DetailPageFrame'
 import { brandColor } from '../../src/lib/brand-color'
 import { colors } from '../../src/theme/tokens'
 import CardnetCapture from '../../src/components/pagos/cardnet/Capture'
-import { CardnetActivationForm, CardnetPaymentStatusMessage } from '../../src/components/pagos/cardnet/primitives'
-import { api, type CardnetCaptureSession, type CardnetPaymentStatus } from '../../src/lib/api'
+import { SavedCardPicker } from '../../src/components/pagos/cardnet/SavedCardPicker'
+import { CardnetActivationForm, CardnetPaymentStatusMessage, SavedCardConsent } from '../../src/components/pagos/cardnet/primitives'
+import { api, type CardnetCaptureSession, type CardnetPaymentStatus, type SavedPaymentCard } from '../../src/lib/api'
 
 /* ── Estado visual (paridad con web compraEstadoVisual) ──────────────── */
 
@@ -83,6 +84,11 @@ function MisPromocionDetalleScreenContent() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { data, isLoading, isError, refetch } = useMisPromocion(id, isAuthenticated)
   const queryClient = useQueryClient()
+  const { data: savedCardsData } = useQuery({
+    queryKey: ['cliente', 'tarjetas-guardadas'],
+    queryFn: api.getSavedCards,
+    enabled: isAuthenticated,
+  })
   const [captureSession, setCaptureSession] = useState<CardnetCaptureSession | null>(null)
   const [captureStatus, setCaptureStatus] = useState<CardnetPaymentStatus | null>(null)
   const [isStartingCardnet, setIsStartingCardnet] = useState(false)
@@ -92,6 +98,8 @@ function MisPromocionDetalleScreenContent() {
   const [recoveryStatusError, setRecoveryStatusError] = useState<string | null>(null)
   const [activationError, setActivationError] = useState<string | null>(null)
   const [activationSubmitting, setActivationSubmitting] = useState(false)
+  const [selectedSavedCardId, setSelectedSavedCardId] = useState<string | null>(null)
+  const [saveCardConsent, setSaveCardConsent] = useState(false)
   const startingCardnet = useRef(false)
   const recoveryStatusRef = useRef<CardnetPaymentStatus | null>(null)
   const recoveryPollInFlight = useRef(false)
@@ -103,7 +111,11 @@ function MisPromocionDetalleScreenContent() {
     setCaptureStartError(false)
     setCaptureStatus(null)
     try {
-      const session = await api.startCardnetSession({ kind: 'promotion', compraId: data.id })
+      const session = await api.startCardnetSession({
+        kind: 'promotion', compraId: data.id,
+        ...(selectedSavedCardId ? { tarjetaGuardadaId: selectedSavedCardId } : {}),
+        ...(saveCardConsent && !selectedSavedCardId ? { guardarTarjeta: true } : {}),
+      })
       setRecoveryStatusError(null)
       setActivationError(null)
       if (!('captureNonce' in session)) {
@@ -127,11 +139,12 @@ function MisPromocionDetalleScreenContent() {
       startingCardnet.current = false
       setIsStartingCardnet(false)
     }
-  }, [data])
+  }, [data, saveCardConsent, selectedSavedCardId])
 
   const handleCardnetApproved = useCallback(() => {
     void refetch()
     void queryClient.invalidateQueries({ queryKey: ['cliente', 'mis-promociones'] })
+    void queryClient.invalidateQueries({ queryKey: ['cliente', 'tarjetas-guardadas'] })
   }, [queryClient, refetch])
 
   const refreshRecoveryStatus = useCallback(async () => {
@@ -266,6 +279,11 @@ function MisPromocionDetalleScreenContent() {
         ) : (
           <DetalleContent
             data={data}
+            savedCards={savedCardsData?.tarjetas ?? []}
+            selectedSavedCardId={selectedSavedCardId}
+            onSelectSavedCard={setSelectedSavedCardId}
+            saveCardConsent={saveCardConsent}
+            onSaveCardConsentChange={setSaveCardConsent}
             router={router}
             startCardnet={startCardnet}
             captureSession={captureSession}
@@ -305,6 +323,11 @@ export default function MisPromocionDetalleScreen() {
 
 function DetalleContent({
   data,
+  savedCards,
+  selectedSavedCardId,
+  onSelectSavedCard,
+  saveCardConsent,
+  onSaveCardConsentChange,
   router,
   startCardnet,
   captureSession,
@@ -323,6 +346,11 @@ function DetalleContent({
   onRecoveryActivation,
 }: {
   data: NonNullable<ReturnType<typeof useMisPromocion>['data']>
+  savedCards: SavedPaymentCard[]
+  selectedSavedCardId: string | null
+  onSelectSavedCard: (id: string | null) => void
+  saveCardConsent: boolean
+  onSaveCardConsentChange: (checked: boolean) => void
   router: ReturnType<typeof useRouter>
   startCardnet: () => Promise<void>
   captureSession: CardnetCaptureSession | null
@@ -469,9 +497,24 @@ function DetalleContent({
                 : 'El negocio confirmará los próximos pasos.'}
             </Text>
             {data.estado === 'PENDIENTE_PAGO' ? (
-              <Button disabled={Boolean(recoverySessionId)} onPress={() => void startCardnet()} loading={isStartingCardnet}>
-                {recoverySessionId ? 'Pago en verificación…' : isStartingCardnet ? 'Preparando CardNET…' : 'Pagar con CardNET'}
-              </Button>
+              <View className="gap-3">
+                {!captureSession && !recoverySessionId ? (
+                  <View className="gap-3">
+                    <SavedCardPicker
+                      cards={savedCards}
+                      selectedId={selectedSavedCardId}
+                      onSelect={(id) => { onSelectSavedCard(id); if (id) setSaveCardConsent(false) }}
+                      disabled={isStartingCardnet}
+                    />
+                    {!selectedSavedCardId ? (
+                      <SavedCardConsent checked={saveCardConsent} disabled={isStartingCardnet} onChange={onSaveCardConsentChange} />
+                    ) : null}
+                  </View>
+                ) : null}
+                <Button disabled={Boolean(recoverySessionId)} onPress={() => void startCardnet()} loading={isStartingCardnet}>
+                  {recoverySessionId ? 'Pago en verificación…' : isStartingCardnet ? 'Preparando CardNET…' : 'Pagar con CardNET'}
+                </Button>
+              </View>
             ) : null}
           </View>
         </Card>

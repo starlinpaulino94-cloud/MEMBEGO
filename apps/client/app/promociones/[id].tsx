@@ -35,9 +35,10 @@ import { brandColor } from '../../src/lib/brand-color'
 import { colors } from '../../src/theme/tokens'
 import { FlashOfferStatus, isFlashOffer } from '../../src/components/marketplace/FlashOfferStatus'
 import CardnetCapture from '../../src/components/pagos/cardnet/Capture'
-import { CardnetActivationForm, CardnetPaymentStatusMessage } from '../../src/components/pagos/cardnet/primitives'
+import { SavedCardPicker } from '../../src/components/pagos/cardnet/SavedCardPicker'
+import { CardnetActivationForm, CardnetPaymentStatusMessage, SavedCardConsent } from '../../src/components/pagos/cardnet/primitives'
 import { api, type CardnetCaptureSession, type CardnetPaymentStatus, type CardnetPromotionPurchaseResult, type PromotionPublic } from '../../src/lib/api'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 /**
  * PROMOCIÓN DETALLE — RN port de /cliente/promociones/[id].
@@ -61,7 +62,11 @@ function PromocionDetalleScreenContent() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const { data, isLoading, isError, refetch } = usePromocion(id, isAuthenticated)
   const queryClient = useQueryClient()
-
+  const { data: savedCardsData } = useQuery({
+    queryKey: ['cliente', 'tarjetas-guardadas'],
+    queryFn: api.getSavedCards,
+    enabled: isAuthenticated,
+  })
   const [copied, setCopied] = useState(false)
   const [purchaseId, setPurchaseId] = useState<string | null>(null)
   const [captureSession, setCaptureSession] = useState<CardnetCaptureSession | null>(null)
@@ -75,18 +80,24 @@ function PromocionDetalleScreenContent() {
   const [isAcquiring, setIsAcquiring] = useState(false)
   const [isStartingSession, setIsStartingSession] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
+  const [selectedSavedCardId, setSelectedSavedCardId] = useState<string | null>(null)
+  const [saveCardConsent, setSaveCardConsent] = useState(false)
   const checkoutInFlight = useRef(false)
   const recoveryStatusRef = useRef<CardnetPaymentStatus | null>(null)
   const recoveryPollInFlight = useRef(false)
 
-  const startCardnetSession = useCallback(async (compraId: string) => {
+  const startCardnetSession = useCallback(async (compraId: string, saveCard = saveCardConsent) => {
     if (checkoutInFlight.current) return
     checkoutInFlight.current = true
     setIsStartingSession(true)
     setPurchaseError(null)
     setCaptureStatus(null)
     try {
-      const session = await api.startCardnetSession({ kind: 'promotion', compraId })
+      const session = await api.startCardnetSession({
+        kind: 'promotion', compraId,
+        ...(selectedSavedCardId ? { tarjetaGuardadaId: selectedSavedCardId } : {}),
+        ...(saveCard && !selectedSavedCardId ? { guardarTarjeta: true } : {}),
+      })
       setCaptureVisible(false)
       setRecoveryError(null)
       setActivationError(null)
@@ -113,7 +124,7 @@ function PromocionDetalleScreenContent() {
       setIsStartingSession(false)
       checkoutInFlight.current = false
     }
-  }, [])
+  }, [saveCardConsent, selectedSavedCardId])
 
   const acquirePromotion = useCallback(async () => {
     if (purchaseId) {
@@ -155,13 +166,14 @@ function PromocionDetalleScreenContent() {
       setIsAcquiring(false)
     }
 
-    if (paidCompraId) await startCardnetSession(paidCompraId)
-  }, [captureSession, id, purchaseId, queryClient, router, startCardnetSession])
+    if (paidCompraId) await startCardnetSession(paidCompraId, saveCardConsent)
+  }, [captureSession, id, purchaseId, queryClient, router, saveCardConsent, startCardnetSession])
 
   const handlePaymentApproved = useCallback(() => {
     if (!purchaseId) return
     void queryClient.invalidateQueries({ queryKey: ['cliente', 'mis-promociones'] })
     void queryClient.invalidateQueries({ queryKey: ['cliente', 'mis-promocion', purchaseId] })
+    void queryClient.invalidateQueries({ queryKey: ['cliente', 'tarjetas-guardadas'] })
     router.replace(`/mis-promociones/${encodeURIComponent(purchaseId)}`)
   }, [purchaseId, queryClient, router])
 
@@ -429,6 +441,21 @@ function PromocionDetalleScreenContent() {
             </Card>
           ) : null}
           <Vigencia promotion={promotion} />
+          {isAuthenticated && !captureVisible && !recoverySessionId && (purchaseId || ((promotion.venta?.precio ?? promotion.precio ?? 0) > 0)) ? (
+            <View className="mb-3">
+              <View className="gap-3">
+                <SavedCardPicker
+                  cards={savedCardsData?.tarjetas ?? []}
+                  selectedId={selectedSavedCardId}
+                  onSelect={(id) => { setSelectedSavedCardId(id); if (id) setSaveCardConsent(false) }}
+                  disabled={isAcquiring || isStartingSession}
+                />
+                {!selectedSavedCardId ? (
+                  <SavedCardConsent checked={saveCardConsent} disabled={isAcquiring || isStartingSession} onChange={setSaveCardConsent} />
+                ) : null}
+              </View>
+            </View>
+          ) : null}
           <Button
             size="xl"
             className="rounded-2xl"

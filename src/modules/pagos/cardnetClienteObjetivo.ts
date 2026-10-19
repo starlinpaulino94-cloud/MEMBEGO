@@ -32,6 +32,7 @@ export async function resolveTarget(
   input: {
     readonly membershipId?: string
     readonly compraId?: string
+    readonly tarjetaGuardadaId?: string
   }
 ): Promise<TargetResolution> {
   const candidate = await sinEmpresa(

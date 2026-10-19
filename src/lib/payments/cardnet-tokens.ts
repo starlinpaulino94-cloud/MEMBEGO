@@ -697,15 +697,9 @@ export async function registrarClienteDiagnostico(email: string): Promise<
 }
 
 /**
- * Cobra una CREDENCIAL GUARDADA (renovación recurrente). Reutiliza el mismo
- * Purchase, pero con las referencias almacenadas en vez de un token de un solo
- * uso.
- *
- * VERIFICAR-QA (importante): la forma exacta de referenciar la tarjeta
- * archivada en el Purchase solo se confirma con CardNET. Se envían todas las
- * referencias que tengamos (token/CustomerId/PaymentProfileId) y se marca la
- * transacción como recurrente. Cuando QA revele el contrato real, se ajusta
- * SOLO este cuerpo — el resto del flujo (activación, idempotencia) no cambia.
+ * Cobra una credencial guardada para una operación iniciada por el cliente o
+ * para el proceso de renovación existente. El caller decide el contexto; esta
+ * función solo forma el Purchase tokenizado de CardNET.
  */
 export async function cobrarConCredencialGuardada(input: {
   customerId: string
@@ -714,6 +708,7 @@ export async function cobrarConCredencialGuardada(input: {
   pesos: number
   orden: string
   clienteIp: string
+  purchaseUniqueId?: string
 }): Promise<CobrarConTokenSalida> {
   const referencia = referenciaCobro(input.orden)
   const cuerpo: Record<string, unknown> = {
@@ -721,6 +716,7 @@ export async function cobrarConCredencialGuardada(input: {
     CustomerId: input.customerId,
     ...(input.paymentProfileId ? { PaymentProfileId: input.paymentProfileId } : {}),
     Order: referencia,
+    ...(input.purchaseUniqueId ? { UniqueID: input.purchaseUniqueId } : {}),
     Amount: montoEnteroMenor(input.pesos),
     Tip: 0,
     Currency: MONEDA_DOP_TOKENS,
@@ -728,7 +724,8 @@ export async function cobrarConCredencialGuardada(input: {
     // Mismo criterio que en el cobro con token: una IP con formato inválido
     // puede tumbar la autorización y el fallo llega disfrazado de rechazo.
     ...(esIpValida(input.clienteIp) ? { CustomerIP: input.clienteIp } : {}),
-    // Marca de credencial archivada / recurrente (nombres del ZTRANS).
+    // Indica credencial archivada. Una compra iniciada por el cliente no
+    // concede consentimiento para una renovación futura.
     Environment: 'Ecommerce_COF',
     DataDo: { Tax: '0', Invoice: referencia },
   }

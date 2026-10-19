@@ -100,15 +100,17 @@ export default function SavedCardsScreen() {
                   <Text className="text-base font-inter-semibold text-foreground">{cardLabel(card)}</Text>
                   {card.predeterminada ? <Text className="rounded-full bg-primary/10 px-2 py-1 text-xs font-inter-semibold text-primary">Predeterminada</Text> : null}
                   {card.eliminacionPendiente ? <Text className="rounded-full bg-warning/10 px-2 py-1 text-xs font-inter-semibold text-warning">Eliminación pendiente</Text> : null}
+                  {card.vencida ? <Text className="rounded-full bg-destructive/10 px-2 py-1 text-xs font-inter-semibold text-destructive">Vencida</Text> : null}
                 </View>
                 <Text className="mt-1 text-small text-muted-foreground">
                   {card.vencMes && card.vencAnio ? `Vence ${String(card.vencMes).padStart(2, '0')}/${String(card.vencAnio).slice(-2)}` : 'Vencimiento no disponible'}
                 </Text>
+                {card.vencida ? <Text className="mt-1 text-small leading-5 text-destructive">No se usará para una renovación. Elimina esta tarjeta y guarda una nueva al hacer otro pago.</Text> : null}
               </View>
             </View>
             {!card.eliminacionPendiente ? (
               <View className="flex-row gap-2">
-                {!card.predeterminada ? (
+                {!card.predeterminada && !card.vencida ? (
                   <Button
                     size="sm"
                     variant="outline"

@@ -2,40 +2,33 @@
 
 ## Billetera de tarjetas guardadas
 
-La captura hospedada de CardNET puede registrar perfiles en la cuenta del
-cliente. Membego conserva únicamente el identificador del perfil, marca,
-últimos cuatro dígitos, vencimiento y el token del proveedor cifrado con
-AES-256-GCM. La llave `CARDNET_VAULT_KEY` debe ser base64 de 32 bytes, privada,
-estable entre despliegues y configurada antes de habilitar el guardado. Nunca
-debe llevar prefijo `NEXT_PUBLIC_`.
+El usuario confirma que CardNET ya opera correctamente en producción para
+Membego. Los checkouts web y móvil permiten elegir una tarjeta guardada en
+pagos puntuales de membresías y promociones. El servidor verifica propietario,
+empresa, perfil vigente y estado de eliminación; consulta el perfil vigente a
+CardNET y cobra dentro de la misma sesión e intento auditable del flujo actual.
+La petición conserva el identificador de compra único para idempotencia y los
+resultados inciertos se concilian consultando CardNET antes de informar el
+estado final. No se prueba con cargos reales en este cambio.
 
-Las sesiones nuevas registran consentimiento para guardar la tarjeta, separado
-del consentimiento de renovación. Guardar una tarjeta no enlaza una membresía
-ni modifica `autoRenovar`. Las renovaciones existentes siguen su estado previo;
-esta implementación no las habilita.
+Membego conserva metadatos permitidos y el token del proveedor cifrado con
+AES-256-GCM; nunca almacena PAN o CVV. Las sesiones registran el consentimiento
+para guardar la tarjeta separado del consentimiento de renovación. Pagar con
+una credencial guardada es una compra iniciada expresamente por el cliente y no
+activa ni modifica `autoRenovar`.
 
 La migración `20261074_cardnet_saved_cards_security` añade cifrado, tarjeta
-predeterminada y estado de eliminación pendiente. Las filas históricas que
-tengan tokens en claro requieren un backfill controlado, con acceso a la base y
-la llave configurada:
+predeterminada y estado de eliminación pendiente. La variable
+`CARDNET_VAULT_KEY`, si se usa para los tokens de la bóveda, debe ser una llave
+privada base64 de 32 bytes, estable entre despliegues y nunca exponerse con
+prefijo `NEXT_PUBLIC_`. Si la base conserva tokens históricos en claro, el
+operador debe confirmar si ya se ejecutó el backfill antes de completar el
+retiro de esos valores. El script controlado está en
+`scripts/cardnet/cifrar-tokens-historicos.ts`.
 
-```powershell
-$env:CARDNET_BACKFILL_CONFIRM = 'CIFRAR_TOKENS_CARDNET_HISTORICOS'
-npx tsx --conditions react-server --tsconfig tsconfig.json scripts/cardnet/cifrar-tokens-historicos.ts
-```
+[Guía oficial de tokenización y autenticación de CardNET](https://developers.cardnet.com.do/guias/tokenizacion-autenticacion/).
 
-No ejecutes el backfill hasta verificar explícitamente el destino de
-`DATABASE_URL` y guardar la llave fuera del repositorio. El script es
-reentrante, no imprime tokens y elimina el valor histórico en claro solo cuando
-confirma que cifró esa fila.
-
-El contrato publicado por CardNET describe el registro de perfiles y su uso en
-compras, pero el flujo de compra con credencial guardada de esta cuenta aún
-requiere certificación QA de la cuenta comercial. Hasta entonces Membego no
-ofrece el cobro con tarjeta guardada como opción de pago. [Guía oficial de
-tokenización y autenticación](https://developers.cardnet.com.do/guias/tokenizacion-autenticacion/).
-
-Estado revisado el **2026-10-09**. El flujo vigente usa captura hospedada y tokens para membresías y compras de promociones, en web y en la API del cliente móvil. El checkout de MembegoOrder y Supply no incorporan esta pasarela.
+Estado revisado el **2026-10-19**. El flujo tokenizado de pagos puntuales cubre membresías y compras de promociones en la API móvil. El checkout de MembegoOrder y Supply no incorporan esta pasarela.
 
 ## 1. Frontera de seguridad y retiro del flujo directo
 
@@ -489,11 +482,14 @@ vuelta a la app y el router; `tests/postgres/cardnet-capture-reservation.db.test
 
 ---
 
-## 6. Fase 2 (pendiente): cobros recurrentes
+## 6. Renovaciones automáticas
 
-Esta fase (cobro único) NO guarda el token. Para membresías con renovación
-automática mensual, la Fase 2 guardará el `Customer`/token de CardNET y una
-automatización mandará el `Purchase` cada período — la lógica de recurrencia es
-nuestra (así lo confirmó CardNET). Endpoints ya conocidos del Postman de
-tokenización: `POST /api/Customer`, `POST /api/Customer/{id}/activate`,
+Las compras puntuales pueden guardar el perfil solamente con consentimiento
+explícito y usarlo cuando el cliente inicia otro pago. Ese consentimiento no
+autoriza cobros futuros. La renovación automática sigue siendo una función
+independiente, bajo el consentimiento y las reglas ya existentes de Membego;
+esta implementación no la activa ni amplía su alcance.
+
+Endpoints CardNET relacionados: `POST /api/Customer`,
+`POST /api/Customer/{id}/activate` y
 `POST /api/Customer/{id}/PaymentProfileDelete`.

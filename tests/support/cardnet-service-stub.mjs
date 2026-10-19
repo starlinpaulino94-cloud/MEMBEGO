@@ -56,6 +56,20 @@ export async function cobrarConToken(params) {
   return scenario().chargeResults.shift() ?? null
 }
 
+export async function cobrarConCredencialGuardada(params) {
+  scenario().providerCalls += 1
+  scenario().chargeRequests.push({
+    purchaseUniqueId: params.purchaseUniqueId,
+    order: params.orden,
+    amount: params.pesos,
+    token: params.token,
+    environment: 'Ecommerce_COF',
+  })
+  scenario().chargeCalls += 1
+  scenario().onCharge?.()
+  return scenario().chargeResults.shift() ?? null
+}
+
 export async function activarPerfilCardnet() {
   const current = scenario()
   current.providerCalls += 1

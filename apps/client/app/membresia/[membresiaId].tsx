@@ -28,6 +28,7 @@ import { brandColor, brandDisplayForeground, hasBrandColor } from '../../src/lib
 import { api } from '../../src/lib/api'
 import type { CardnetCaptureSession, CardnetPaymentStatus } from '../../src/lib/api'
 import { CardnetCapture } from '../../src/components/pagos/cardnet/Capture'
+import { SavedCardPicker } from '../../src/components/pagos/cardnet/SavedCardPicker'
 import {
   CardnetActivationForm,
   CardnetCaptureError,
@@ -174,6 +175,7 @@ function MembresiaDetailScreenContent() {
   const [cardnetStarting, setCardnetStarting] = useState(false)
   const [cardnetError, setCardnetError] = useState<string | null>(null)
   const [saveCardConsent, setSaveCardConsent] = useState(false)
+  const [selectedSavedCardId, setSelectedSavedCardId] = useState<string | null>(null)
   const cardnetStartInFlightRef = useRef(false)
   const cardnetRecoveryPollAttemptsRef = useRef(0)
   const { data: membresiasData, isLoading: loadingMembresias } =
@@ -183,6 +185,11 @@ function MembresiaDetailScreenContent() {
     queryKey: ['cliente', 'membresia-pago', membresiaId],
     queryFn: () => api.getMembresiaPago(membresiaId),
     enabled: isAuthenticated && !!membresiaId,
+  })
+  const { data: savedCardsData } = useQuery({
+    queryKey: ['cliente', 'tarjetas-guardadas'],
+    queryFn: api.getSavedCards,
+    enabled: isAuthenticated,
   })
   const cardnetRecoveryQueryKey = ['cliente', 'cardnet-session-status', cardnetRecoverySessionId] as const
   const cardnetRecoveryQuery = useQuery({
@@ -199,6 +206,7 @@ function MembresiaDetailScreenContent() {
     void Promise.all([
       queryClient.invalidateQueries({ queryKey: ['cliente', 'membresias'] }),
       queryClient.invalidateQueries({ queryKey: ['cliente', 'membresia-pago', membresiaId] }),
+      queryClient.invalidateQueries({ queryKey: ['cliente', 'tarjetas-guardadas'] }),
     ])
   }, [membresiaId, queryClient])
 
@@ -328,7 +336,7 @@ function MembresiaDetailScreenContent() {
 
     try {
       const result = await api.startCardnetSession(
-        membershipCardnetTarget(membresia.id, permiteConsentimientoRenovacion, saveCardConsent),
+        membershipCardnetTarget(membresia.id, permiteConsentimientoRenovacion, saveCardConsent, selectedSavedCardId),
       )
       const action = membershipCardnetStartAction(result)
       if (action.kind === 'resume') {
@@ -562,7 +570,15 @@ function MembresiaDetailScreenContent() {
               ) : null}
               {puedePagarConCardnet && !cardnetSession && !cardnetRecoverySessionId ? (
                 <View className="mt-4 gap-3">
-                  {permiteConsentimientoRenovacion ? (
+                  {savedCardsData?.tarjetas?.length ? (
+                    <SavedCardPicker
+                      cards={savedCardsData.tarjetas}
+                      selectedId={selectedSavedCardId}
+                      onSelect={(id) => { setSelectedSavedCardId(id); if (id) setSaveCardConsent(false) }}
+                      disabled={cardnetStarting}
+                    />
+                  ) : null}
+                  {permiteConsentimientoRenovacion && !selectedSavedCardId ? (
                     <>
                       <SavedCardConsent
                         checked={saveCardConsent}
