@@ -17,7 +17,9 @@ import {
   Clock,
   Copy,
   Check,
+  Gift,
   Tag,
+  TicketPercent,
   AlertCircle,
   Store,
   Share2,
@@ -429,6 +431,25 @@ function PromocionDetalleScreenContent() {
             </Card>
           ) : null}
           <Vigencia promotion={promotion} />
+          {data.enMisBeneficios ? (
+            <Button
+              variant="outline"
+              className="w-full rounded-2xl"
+              icon={<TicketPercent size={18} color={colors.primary.DEFAULT} />}
+              onPress={() => router.push('/mis-promociones')}
+            >
+              Ver mis beneficios
+            </Button>
+          ) : data.enMisRegalos ? (
+            <Button
+              variant="outline"
+              className="w-full rounded-2xl"
+              icon={<Gift size={18} color={colors.primary.DEFAULT} />}
+              onPress={() => router.push('/regalos')}
+            >
+              Ver mis regalos
+            </Button>
+          ) : null}
           <Button
             size="xl"
             className="rounded-2xl"

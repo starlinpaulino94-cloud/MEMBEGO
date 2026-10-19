@@ -555,6 +555,8 @@ export interface PromocionDetalleResponse {
   promotion: PromotionPublic
   esMiEmpresa: boolean
   limite: { limite: number | null; adquiridas: number; alcanzado: boolean }
+  readonly enMisBeneficios: boolean
+  readonly enMisRegalos: boolean
 }
 
 // --- Planes ---
