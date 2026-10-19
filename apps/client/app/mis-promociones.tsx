@@ -147,7 +147,11 @@ function Seccion({
 
 /* ── Screen ─────────────────────────────────────────────────────────── */
 
-function MisPromocionesScreenContent() {
+export function MisPromocionesScreenContent({
+  showBackHeader = true,
+}: {
+  readonly showBackHeader?: boolean
+} = {}) {
   const sheetBackgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
   const router = useRouter()
   const insets = useSafeAreaInsets()
@@ -180,11 +184,13 @@ function MisPromocionesScreenContent() {
 
   return (
     <View className={sheetBackgroundClass === 'bg-surface-card' ? "flex-1 bg-surface-card" : "flex-1 bg-vibe-fondo"}>
-      <BackHeader
-        title="Mis beneficios"
-        leftInset={insets.left}
-        onBack={() => goBackOr(router, '/(tabs)/beneficios')}
-      />
+      {showBackHeader ? (
+        <BackHeader
+          title="Mis beneficios"
+          leftInset={insets.left}
+          onBack={() => goBackOr(router, '/(tabs)/beneficios')}
+        />
+      ) : null}
 
       <ScrollView
         className="flex-1"
@@ -192,7 +198,9 @@ function MisPromocionesScreenContent() {
       >
         {/* ── Header ─────────────────────────────────────────────────── */}
         <View className="mb-6">
-          <Text className="text-2xl font-inter-bold text-foreground">Mis beneficios</Text>
+          {!showBackHeader ? (
+            <Text className="text-2xl font-inter-bold text-foreground">Mis beneficios</Text>
+          ) : null}
           <Text className="text-sm text-muted-foreground mt-1">
             Tu centro de recompensas: lo que puedes usar hoy, lo que está en camino y lo que ya
             disfrutaste.
@@ -224,7 +232,7 @@ function MisPromocionesScreenContent() {
             title="Sin beneficios activos por ahora."
             description="Cuando adquieras una promoción o recibas un regalo, aparecerán aquí listos para usar."
             action={
-              <Button onPress={() => router.push('/(tabs)/inicio')}>Explorar beneficios</Button>
+              <Button onPress={() => router.push('/promociones')}>Explorar beneficios</Button>
             }
           />
         ) : (
