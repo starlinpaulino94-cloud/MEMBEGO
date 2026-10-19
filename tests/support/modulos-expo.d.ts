@@ -7,3 +7,9 @@
 declare module 'react-native'
 declare module 'expo-constants'
 declare module 'expo-secure-store'
+declare module 'expo-router' {
+  export type Href = string | {
+    pathname: string
+    params?: Record<string, string>
+  }
+}
