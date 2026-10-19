@@ -63,7 +63,8 @@ test('cada punto que muta una membresía emite su evento', () => {
     { archivo: ['src', 'modules', 'admin', 'planActions.ts'], tipo: "'VENCIDA'", que: 'desactivar a mano' },
     { archivo: ['src', 'modules', 'membresia', 'actions.ts'], tipo: "'CANCELADA'", que: 'el cliente cancela' },
     { archivo: ['src', 'modules', 'membresia', 'vencimiento.ts'], tipo: "'VENCIDA'", que: 'el job de vencimiento' },
-    { archivo: ['src', 'modules', 'pagos', 'cardnetTokenGuardado.ts'], tipo: "'RENOVADA'", que: 'la renovación con tarjeta' },
+    // La extensión de una renovación vive aparte para que el cobro y el reintento de la entrega la compartan.
+    { archivo: ['src', 'modules', 'pagos', 'renovacion-extension.ts'], tipo: "'RENOVADA'", que: 'la renovación con tarjeta' },
   ]
 
   for (const p of puntos) {
@@ -84,7 +85,7 @@ test('la activación distingue una venta nueva de una vuelta', () => {
 test('la renovación con tarjeta se marca como automática', () => {
   // Sin `origen: CRON` no se puede separar del mostrador, y son dos hechos que
   // el negocio lee muy distinto.
-  const src = fuente('src', 'modules', 'pagos', 'cardnetTokenGuardado.ts')
+  const src = fuente('src', 'modules', 'pagos', 'renovacion-extension.ts')
   assert.match(src, /origen: 'CRON'/)
 })
 

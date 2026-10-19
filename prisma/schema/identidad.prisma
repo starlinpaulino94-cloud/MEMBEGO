@@ -586,6 +586,14 @@ enum AuditAccion {
   ANCILLARY_COMMISSION_REVERSED
   VISIT_DISPUTE_OPENED
   VISIT_DISPUTE_RESOLVED
+
+  // Conciliación accionable (pago con tarjeta → comprobante, fase 4). Cada acción hecha desde /admin/conciliacion.
+  /// Se generó a mano el comprobante (la venta) de un cobro con tarjeta que no lo tenía.
+  CONCILIACION_COMPROBANTE_GENERADO
+  /// Se reintentó la entrega de un cobro aprobado cuyo producto no se activó.
+  CONCILIACION_ENTREGA_REINTENTADA
+  /// Se marcó como entregado un cobro cuyo producto ya estaba activo (con la nota de quien lo hizo).
+  CONCILIACION_ENTREGA_MARCADA
 }
 
 // ─────────────────────────────────────────────

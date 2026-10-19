@@ -12,6 +12,8 @@ export type TargetInfo = {
   readonly allowRenewalConsent: boolean
   readonly membershipId?: string
   readonly compraId?: string
+  /** Solo en un cambio de plan: el plan que se paga (viaja a la sesión de captura y de ahí al intento). */
+  readonly planDestinoId?: string
 }
 
 export type TargetResolution =
@@ -134,5 +136,8 @@ export async function resolveTarget(
   }
   const monto = await montoDeObjetivo(objetivo).catch(() => ({ ok: false as const, motivo: 'No encontrado.' }))
   if (!monto.ok || monto.pesos <= 0 || !Number.isFinite(monto.pesos)) return { kind: 'ineligible' }
-  return { kind: 'ready', target: { ...target, amount: monto.pesos } }
+  return {
+    kind: 'ready',
+    target: { ...target, amount: monto.pesos, ...(monto.planDestinoId ? { planDestinoId: monto.planDestinoId } : {}) },
+  }
 }

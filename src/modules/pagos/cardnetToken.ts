@@ -89,10 +89,12 @@ export async function cobrarObjetivoConToken(input: {
     proveedor: 'CARDNET',
     membershipId: input.objetivo.membershipId ?? null,
     compraId: input.objetivo.compraId ?? null,
+    planDestinoId: monto.planDestinoId ?? null,
     monto: monto.pesos,
     moneda: 'DOP',
     ipAddress: input.clienteIp,
     userAgent: input.userAgent ?? null,
+    canal: 'WEB',
   })
 
   let cobro

@@ -41,6 +41,9 @@ enum MetodoCobroTipo {
   EFECTIVO
   TRANSFERENCIA
   OTRO
+  /// Cobro con tarjeta: el de la pasarela (app, web, renovación automática) y, desde el sprint de cierre,
+  /// el que se quiera registrar como tal en el mostrador. Antes se anotaba como OTRO.
+  TARJETA
 }
 
 /// Sesión de caja de una sucursal (turno): apertura → cobros → cierre con
@@ -253,6 +256,12 @@ model Transaction {
 
   membershipId   String?
   membership     Membership? @relation(fields: [membershipId], references: [id])
+  /// El intento de pago en pasarela que originó esta venta. ÚNICO: un cobro aprobado deja UNA venta aunque
+  /// el webhook o el reintento lleguen dos veces. Solo lo llevan las ventas `SALE` con método TARJETA
+  /// (CHECK `transactions_pago_intento_coherente`) y la base comprueba que el intento sea de la misma empresa
+  /// y esté APROBADO (`transactions_pago_intento_empresa`).
+  pagoIntentoId  String?        @unique
+  pagoIntento    PagoIntento?   @relation(fields: [pagoIntentoId], references: [id], onDelete: SetNull)
   visitId        String?     @unique
   visit          Visit?      @relation(fields: [visitId], references: [id])
   /// QR de un solo uso que se consumió para crear esta transacción: permite

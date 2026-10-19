@@ -114,17 +114,24 @@ tarjeta guardada) activaban la membresía o la compra **sin crear la
 `registrarVentaConfirmada`—, así que no existía nada que imprimir en Facturas
 ni en el escáner, y el cliente tampoco tenía recibo.
 
-- `src/modules/pagos/reciboPasarela.ts` (`registrarReciboDePasarela`): la
-  venta oficial del cobro por pasarela («Tarjeta (CardNET)», `Aut. NNNNNN`,
-  cliente, plan/promoción). **Idempotente por intento** (`snapshot.intentoId`):
-  webhook + retorno del navegador = un solo recibo. Nunca lanza.
-- Se llama desde los puntos de entrega: `intentos.ts › entregarProducto`
-  (compra y membresía, también al reintentar) y la renovación automática en
-  `cardnetTokenGuardado.ts`. Las transferencias no pasan por ahí (las confirma
-  el admin y ese camino ya deja recibo).
+- **Un solo camino para la venta del cobro.** La escribe `asegurarVentaDelIntento`
+  (`src/modules/pagos/venta-tarjeta.ts`): venta `SALE` con método `TARJETA`,
+  **única por `pagoIntentoId`** (índice único del libro), con canal, autorización
+  y, en una renovación inmediata, marca y últimos cuatro. Se llama tras cada
+  entrega: `intentos.ts` (al entregar, al repetir y al reintentar) y la
+  renovación automática en `cardnetTokenGuardado.ts`. Webhook + retorno del
+  navegador = una sola venta. Nunca lanza. Las transferencias no pasan por ahí
+  (las confirma el admin y ese camino ya deja recibo). Diseño completo en
+  `docs/PAGO_TARJETA_COMPROBANTE.md`.
+- *Historia.* Una primera versión (`reciboPasarela.ts`, venta `OTRO` con el
+  intento en el snapshot) se retiró al fusionarla con el libro de tarjeta:
+  dos caminos para el mismo cobro serían dos ventas del mismo dinero. Una venta
+  que aquel camino ya hubiera escrito se **adopta** (se le enlaza el cobro y pasa
+  a `TARJETA`), no se duplica.
 - **El cliente imprime su comprobante.** `getClientePagos` devuelve
   `comprobantes` (todas sus ventas aplicadas) y enlaza cada pago aprobado del
-  historial con su venta (`transaccionId`). Web: «Mis pagos → Comprobantes de
+  historial con su venta (`transaccionId`: exacta por el cobro si fue con tarjeta,
+  por membresía y cercanía de fecha en los demás pagos). Web: «Mis pagos → Comprobantes de
   pago → Imprimir» (`/cliente/pagos/comprobante/[id]`, con sesión y propiedad
   verificada por `ticketParaCliente`). App: pide un **enlace firmado y caduco**
   (`GET /api/v1/cliente/comprobantes/[id]/enlace`, HMAC en
@@ -132,33 +139,20 @@ ni en el escáner, y el cliente tampoco tenía recibo.
   (`/comprobante/[token]`), que es quien imprime o guarda el PDF. Ambas vistas
   usan `FacturaSheet` por `AreaDeImpresion` (una página Carta).
 - Pruebas: `tests/comprobante-cliente.test.ts` (firma/caducidad del enlace,
-  guardas estructurales), `tests/postgres/recibo-pasarela.db.test.ts`
-  (idempotencia real contra PostgreSQL, «Mis pagos», propiedad) y
+  guardas estructurales), `tests/postgres/comprobante-cliente.db.test.ts`
+  (una venta por cobro, adopción del recibo anterior, «Mis pagos» enlazado por
+  el cobro, propiedad) y
   `tests/e2e/comprobante-cliente.spec.ts` (web con sesión y app con enlace;
   una página Carta; enlace manipulado → 404).
 
-#### Recibos de los pagos con tarjeta anteriores (17-10-2026)
-Los cobros con tarjeta anteriores al 16-10-2026 no tienen recibo (nunca se creó
-la venta). Se recuperan con `scripts/recibos-tarjetas-anteriores.ts`, que crea
-la venta de cada pago aprobado con la **fecha real del cobro** (`activadoAt`: su
-código `TX-AAAAMMDD`, su fecha y su `appliedAt`), el monto y la autorización de
-CardNET. Código en `src/modules/pagos/recibosAnteriores.ts`.
-
-- **Simulación por defecto**: no escribe nada; lista qué se crearía, por empresa,
-  y qué se omite. `--aplicar` los crea. Opciones: `--empresa=<id>`,
-  `--desde=AAAA-MM-DD`, `--limite=<n>` (500).
-- **Idempotente**: un pago que ya tiene recibo (`snapshot.intentoId`) no se toca.
-- **Solo lo cobrado Y entregado**: «cobrado pero la entrega falló/sigue en
-  proceso» no es un comprobante sino un caso de conciliación, y sale en la lista
-  de omitidos. Los intentos anteriores al 12-09-2026 no tienen estado de entrega
-  (la columna nació ese día con `PENDIENTE` por defecto): para ellos se mira que
-  el producto haya quedado pagado.
-- **Sin acceso local a producción**: Actions → «Recibos de pagos con tarjeta
-  anteriores» → Run workflow (`aplicar` desmarcado = simulación; el resumen del
-  job trae el informe). Usa `MIGRATIONS_DATABASE_URL` y el entorno `production`.
-- Los recibos nuevos reciben el **siguiente número de ticket** de la empresa
-  (`TCK-NNNNNN` es secuencial y no se reescribe el pasado), aunque su fecha sea
-  anterior.
+#### Recibos de los pagos con tarjeta anteriores
+Los cobros con tarjeta anteriores al comprobante no tienen venta. Se recuperan
+desde **Conciliación** («Generar los N comprobantes», con la cifra a la vista y
+a nombre de quien pulsa) o con `scripts/diagnostico-pagos-con-tarjeta.sql` para
+mirar antes. Cada venta lleva la **fecha real del cobro** (`activadoAt`), el
+importe y la autorización. Una primera versión con script y flujo de CI propios
+(`recibos-tarjetas-anteriores`) se retiró al fusionar: escribía por el camino
+paralelo `reciboPasarela`. Ver `docs/PAGO_TARJETA_COMPROBANTE.md`, fase 6.
 
 ### 2.3 Caja por turno — `CajaSesion`
 Fuente: `src/modules/caja/*`, `src/components/caja/CajaForms.tsx`, `/empleado/caja`.
@@ -471,3 +465,15 @@ Recomendación: **empezar por la Fase 1** — es la que cumple literalmente el
 pedido ("todo lo que se le dé a un cliente debe generar un comprobante") y se
 apoya al 100% en la maquinaria que ya existe (`Transaction` + `ReceiptImpresion`
 + plantillas de impresión).
+
+---
+
+## Actualización (2026-10): los pagos con tarjeta de la pasarela también dejan comprobante
+
+Hasta ahora el comprobante solo nacía en la caja y en el panel (`registrarVentaConfirmada`); un pago con tarjeta aprobado en la app
+activaba la membresía pero no dejaba ticket, ni factura, ni rastro en Comprobantes/Registros. Ahora la venta nace con la entrega del
+cobro (`asegurarVentaDelIntento`): idempotente por `pagoIntentoId`, con la fecha del cobro y la etiqueta «Tarjeta … (en la app)».
+Se ve y se imprime en Comprobantes («Pagos con tarjeta»), Registros, la caja, el cuadre, el cierre, la ficha del cliente y, para
+el cliente, en «Mis pagos». Un cron diario repara los que falten y avisa de lo que no se pueda entregar. Ver
+`docs/PAGO_TARJETA_COMPROBANTE.md`.
+

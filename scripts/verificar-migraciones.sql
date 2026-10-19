@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en e43839c7: 235 migraciones, última 20261073_rol_bodega.
+-- Generado con scripts/generar-verificar-migraciones.mjs en 8e2efccc: 239 migraciones, última 20261073_rol_bodega.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -243,8 +243,12 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261065_merchant_application','31925d14f6590007b502a1cba159a9f3ae6c22507167eba208f5b8702250d270'),
   ('20261066_inventory_reorder','de7c05577fe669c89b80c633b8e4a256ed9a0c5e512d2caa9c9bf4d7dfde1116'),
   ('20261067_inventory_reason_codes','1490efcf431982cc2d8aeadf57077c0d5bb8b710fcb82056ae541a1703b87a74'),
+  ('20261067_tarjeta_en_el_libro_enums','a0f14a0b9e1ddfa0a6d68f6dd03161f0b223cfa5c2ddb075f1f823262653a608'),
   ('20261068_inventory_lots','6be70d427494a82c7e2cc6ce5d47c509b88106ad4959c9ffc38910f0298eb61c'),
+  ('20261068_tarjeta_en_el_libro','379c31a38e6cb46e2f2c976b90c022eb2de86bb14ef2d15befe67aef78681660'),
+  ('20261069_conciliacion_acciones_enum','3753eba71d04da76857d6b7c19708d7dd7e4108d80fffcdfde01cf5f59401b36'),
   ('20261069_inventory_count_lots','54cad5bad879b22ddd3dad095b12701147440a9982b0cbc09c1129dd7636b606'),
+  ('20261070_cambio_de_plan_en_el_intento','fdb395d1fe97b225d649bdaba332f45f3e964e0529ad042a7b1d4b6b637c00e0'),
   ('20261070_inventory_lot_expiry_history','4b6d4b01d4bfaf785d1050a7018ee39708b3113a22f9ebab9064df99ea9bc254'),
   ('20261071_inventory_serials','fb044968ff2e800cf3e4c4c78737c4cdab4ec6278192383d8d3ec5688a9eeffa'),
   ('20261072_inventory_kits','ad860386546bee8b2f1d9af9e9dd9639cadb4942c4536b88bf13eef2f9b60baf'),

@@ -1,7 +1,7 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
-import { whereCobrado } from '@/modules/pagos/cobrado'
+import { sinVentaDePasarelaEnElPeriodo, whereCobrado } from '@/modules/pagos/cobrado'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { diasDelRango, variacion, type Rango } from '@/modules/reportes/rango'
 import type { Kpi } from '@/modules/reportes/queries'
@@ -164,6 +164,8 @@ async function sumarMembresias(
     where: whereCobrado(desde, hasta, {
       companyId,
       ...(filtro ? { sucursalPagoId: filtro.sucursal.id } : {}),
+      // El pago con tarjeta de la pasarela ya está en la caja como venta: no se cuenta dos veces.
+      ...sinVentaDePasarelaEnElPeriodo(desde, hasta),
     }),
     _sum: { montoPagado: true },
   })

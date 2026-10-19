@@ -825,8 +825,26 @@ export interface PagoHistorialItem {
   metodoPagoNombre: string | null
   comprobanteUrl: string | null
   validadoPor: string | null
+  /** «Tarjeta VISA ••••4242 (en la app)». Ausente en servidores anteriores a que el cobro con tarjeta dejara recibo. */
+  formaDePago?: string | null
+  recibo?: ReciboDePago | null
   /** La venta oficial de ese pago, si quedó registrada: es lo que se imprime. */
   transaccionId: string | null
+}
+
+/** El recibo de un pago con tarjeta en la app o la web: el mismo ticket que tiene el negocio. */
+export interface ReciboDePago {
+  ticketNumero: string
+  codigo: string
+  formaDePago: string
+  canal: 'APP' | 'WEB' | 'RENOVACION_AUTOMATICA' | null
+  autorizacion: string | null
+  empresaNombre: string
+  concepto: string
+  monto: number
+  fecha: string
+  /** El recibo en texto plano, listo para compartir. */
+  texto: string
 }
 
 /** Una venta aplicada de esta persona: su comprobante de pago imprimible. */

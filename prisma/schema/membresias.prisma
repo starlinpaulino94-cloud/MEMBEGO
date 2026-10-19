@@ -80,6 +80,9 @@ model Plan {
 
   memberships            Membership[]
   membershipsSolicitadas Membership[]          @relation("PlanSolicitado")
+  /// Cobros y sesiones de captura con tarjeta cuyo destino era este plan (cambio de plan pagado en pasarela).
+  intentosCambioDePlan   PagoIntento[]         @relation("PagoIntentoPlanDestino")
+  sesionesCambioDePlan   CardnetCaptureSession[] @relation("CapturaPlanDestino")
   preciosPorCategoria    PlanPrecioCategoria[]
 
   @@index([companyId])

@@ -236,6 +236,15 @@ test('puerta 35 · cambio de plan sin comprobante cobra la diferencia prorratead
   assert.equal(r.ok === true ? r.pesos : -1, esperado)
   assert.ok(esperado > 0 && esperado < planSolicitado.precio, 'es la diferencia, no el plan completo')
   assert.match(r.ok === true ? r.descripcion : '', /^Cambio a /)
+  assert.equal(r.ok === true ? r.planDestinoId : null, 'plan-gold', 'el cobro dice QUÉ plan se paga, para poder entregarlo')
+})
+
+test('puerta 35 · solo el cambio de plan lleva plan destino; una activación o un reintento de pago, no', () => {
+  for (const estado of ['PENDIENTE', 'RECHAZADA'] as const) {
+    const r = resolverCobroMembresia(membresia({ estado }))
+    assert.equal(r.ok, true)
+    assert.equal(r.ok === true ? r.planDestinoId : 'x', undefined)
+  }
 })
 
 // ── 3. La ruta y las pantallas reales (integración) ──────────────────────────
