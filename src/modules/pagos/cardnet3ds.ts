@@ -85,7 +85,7 @@ const MONEDA_DOP = '214'
 const NO_ENCONTRADO = 'No se encontró qué pagar, o ya no está pendiente.'
 
 export type MontoObjetivo =
-  | { ok: true; pesos: number; descripcion: string }
+  | { ok: true; pesos: number; descripcion: string; planDestinoId?: string }
   | { ok: false; motivo: string }
 
 /**
@@ -242,10 +242,12 @@ export async function iniciarPagoTarjeta(input: {
     proveedor: 'CARDNET',
     membershipId: input.objetivo.membershipId ?? null,
     compraId: input.objetivo.compraId ?? null,
+    planDestinoId: monto.planDestinoId ?? null,
     monto: monto.pesos,
     moneda: 'DOP',
     ipAddress: input.clientIp,
     userAgent: input.browser.userAgent,
+    canal: 'WEB',
   })
 
   let auth

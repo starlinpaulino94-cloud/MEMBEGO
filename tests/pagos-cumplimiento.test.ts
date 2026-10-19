@@ -98,10 +98,20 @@ test('el reintento reclama la entrega (FALLIDA, o un reclamo viejo sin terminar)
   assert.doesNotMatch(reintento, /cobrarConTarjeta|ejecutarCobro|cardnet\w*Cobr/i)
 })
 
-test('la renovación con tarjeta marca la entrega en ambos caminos', () => {
+test('la renovación con tarjeta cierra la entrega en ambos caminos, y el reintento la rehace sin recobrar', () => {
   const src = leer('src/modules/pagos/cardnetTokenGuardado.ts')
-  assert.match(src, /marcarEntrega\w*\(m\.companyId, intento\.id, true\)/)
-  assert.match(src, /marcarEntrega\w*\(m\.companyId, intento\.id, false/)
+  // Camino feliz: el cobro se reclama (PROCESANDO) y la extensión compartida lo cierra COMPLETADA en su propia transacción.
+  assert.match(src, /fulfillmentEstado: 'PROCESANDO'/)
+  assert.match(src, /extenderMembresiaCobrada\(\{ companyId: m\.companyId, intentoId: intento\.id, claimAt \}\)/)
+  // Camino fallido: queda FALLIDA con su motivo, bajo el mismo reclamo.
+  assert.match(src, /marcarEntrega\w*\(m\.companyId, intento\.id, false, [^)]*claimAt\)/)
+  const ext = leer('src/modules/pagos/renovacion-extension.ts')
+  assert.match(ext, /fulfillmentEstado: 'COMPLETADA'/)
+  assert.match(ext, /FULFILLMENT_CLAIM_LOST/)
+  assert.doesNotMatch(ext, /cobrarConCredencialGuardada|cobrarConTarjeta/, 'extender nunca recobra')
+  // El reintento de una renovación va por la extensión, no por `activarMembresia` (que rechaza una membresía ya activa).
+  const intentos = leer('src/modules/pagos/intentos.ts')
+  assert.match(intentos, /canal === 'RENOVACION_AUTOMATICA'[\s\S]*extenderMembresiaCobrada\(/)
 })
 
 // ── Cita: candado por empresa y recompensa en la misma transacción ───────────

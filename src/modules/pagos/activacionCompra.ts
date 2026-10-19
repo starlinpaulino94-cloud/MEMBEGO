@@ -83,6 +83,7 @@ export async function activarCompraPromocion(
 
   try {
     await conEmpresa(cid, async (tx) => {
+      let datosCobro: { canal: string | null; intentoId: string } | null = null
       if (opts.fulfillmentClaim) {
         const claim = await tx.pagoIntento.updateMany({
           where: {
@@ -99,6 +100,8 @@ export async function activarCompraPromocion(
           },
         })
         if (claim.count !== 1) throw new Error('FULFILLMENT_CLAIM_LOST')
+        const cobro = await tx.pagoIntento.findUnique({ where: { id: opts.fulfillmentClaim.intentoId }, select: { canal: true } })
+        datosCobro = { canal: cobro?.canal ?? null, intentoId: opts.fulfillmentClaim.intentoId }
       }
 
       // Cupo atómico: `canjes` cuenta entregas contra `maxCanjes`. La consulta
@@ -153,7 +156,12 @@ export async function activarCompraPromocion(
             accion: 'PAGO_APROBADO',
             entidadTipo: 'ProductoCompra',
             entidadId: idCompra,
-            payload: { promocionId: promo.id, clienteId: clienteIdCompra, monto },
+            payload: {
+              promocionId: promo.id,
+              clienteId: clienteIdCompra,
+              monto,
+              ...(datosCobro ? { metodo: 'TARJETA', canal: datosCobro.canal, intentoId: datosCobro.intentoId } : {}),
+            },
             ...meta,
           },
         ],

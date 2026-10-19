@@ -86,7 +86,7 @@ test.describe('Comprobante de pago del cliente · web con sesión, app con enlac
         select: { id: true },
       }))
     cookie = await cookieDeSesion({ ...u, clienteId: ficha.id })
-    // La venta que deja la pasarela (ver reciboPasarela.ts), tal como queda en la base.
+    // Una venta con tarjeta a su nombre: lo que se imprime es la venta, sin importar quién la escribió (ver venta-tarjeta.ts).
     const n = String(Date.now() % 1_000_000).padStart(6, '0')
     codigo = `TX-20261016-${n}`
     const tx = await prisma.transaction.create({

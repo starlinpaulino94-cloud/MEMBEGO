@@ -36,6 +36,10 @@ function fmtFecha(fecha: string, tz: string) {
   }).format(new Date(`${fecha}T12:00:00Z`))
 }
 
+function fmtHora(iso: string, tz: string) {
+  return new Intl.DateTimeFormat('es-DO', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(iso))
+}
+
 function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div className={`flex justify-between gap-2 ${bold ? 'font-bold' : ''}`}>
@@ -80,7 +84,7 @@ function ReportePreview({ r, papel = true }: { r: ReporteEmpleadoDia; papel?: bo
       <Sep />
 
       {r.estado === 'VACIO' ? (
-        <div className="py-2 text-center">Sin cobros registrados este día.</div>
+        <div className="py-2 text-center">Sin cobros de este empleado este día.</div>
       ) : (
         <>
           <div className="font-bold">COBROS POR MÉTODO</div>
@@ -104,6 +108,25 @@ function ReportePreview({ r, papel = true }: { r: ReporteEmpleadoDia; papel?: bo
               <Sep />
             </>
           )}
+        </>
+      )}
+
+      {r.enLinea.cantidad > 0 && (
+        <>
+          <div className="font-bold">COBROS EN LÍNEA (TARJETA)</div>
+          <div className="text-[0.85em]">Pagados en la app o la web. NO pasan por la gaveta: no suman al efectivo.</div>
+          {r.enLinea.detalleOculto
+            ? r.enLinea.porCanal.map((c) => (
+                <Row key={c.etiqueta} label={`${c.etiqueta} (${c.cantidad})`} value={fmtRD(c.total)} />
+              ))
+            : r.enLinea.items.map((i) => (
+                <div key={i.ticketNumero} className="mt-1">
+                  <Row label={`${i.ticketNumero} · ${fmtHora(i.hora, r.timeZone)}`} value={fmtRD(i.monto)} />
+                  <div className="text-[0.85em]">{i.cliente} · {i.detalle} · {i.canal}</div>
+                </div>
+              ))}
+          <Row label={`TOTAL EN LÍNEA (${r.enLinea.cantidad})`} value={fmtRD(r.enLinea.total)} bold />
+          <Sep />
         </>
       )}
 

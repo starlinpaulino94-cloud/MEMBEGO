@@ -259,11 +259,13 @@ export async function createOrReadIntent(
         proveedor: 'CARDNET',
         membershipId: session.membershipId,
         compraId: session.compraId,
+        planDestinoId: session.planDestinoId,
         monto: session.monto,
         moneda: session.moneda,
         estado: 'CREADO',
         ipAddress: null,
         userAgent: null,
+        canal: 'APP',
         cardnetUniqueId: uniqueId,
       },
     })

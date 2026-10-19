@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -39,29 +39,28 @@ test('el enlace firmado abre su transacción, y solo mientras vive', async () =>
   assert.throws(() => firmarEnlaceComprobante('id con espacios.y puntos', ahora), 'solo se firman ids con forma de id')
 })
 
-test('todo punto de entrega de un pago por pasarela deja recibo (idempotente por intento)', () => {
+test('todo punto de entrega de un pago por pasarela deja su recibo por UN solo camino (idempotente por intento)', () => {
+  // El recibo lo escribe `asegurarVentaDelIntento` (ledger TARJETA, único por `pagoIntentoId`) tras cada entrega: ya no hay un segundo
+  // camino (`reciboPasarela`) que escribiera otra venta del mismo cobro.
+  assert.equal(existsSync(join('src', 'modules', 'pagos', 'reciboPasarela.ts')), false, 'el recibo paralelo se retiró: dos caminos = dos ventas')
   const intentos = leer('src/modules/pagos/intentos.ts')
-  // Compra y membresía: las dos ramas de `entregarProducto` dejan recibo tras activar.
-  assert.equal((intentos.match(/await dejarRecibo\(intento, /g) ?? []).length, 2, 'promoción y plan')
-  assert.match(intentos, /if \(intento\.proveedor === 'TRANSFERENCIA'\) return/, 'las transferencias ya dejan recibo por el panel')
-  assert.match(intentos, /autorizacion: resultado\.autorizacion \?\? intento\.autorizacion/, 'la autorización de la pasarela va al recibo')
-  // El reintento de entrega carga lo que el recibo necesita.
-  assert.match(intentos, /clienteId: true,\s*monto: true,\s*proveedor: true,\s*autorizacion: true,/)
-
+  assert.ok((intentos.match(/await asegurarVentaDelIntento\(/g) ?? []).length >= 3, 'tras entregar, al repetir y al reintentar')
+  assert.doesNotMatch(intentos, /registrarReciboDePasarela|dejarRecibo/)
+  // La renovación automática también.
   const renovacion = leer('src/modules/pagos/cardnetTokenGuardado.ts')
-  assert.match(renovacion, /registrarReciboDePasarela\(\{[\s\S]*?detalle: `Renovación · \$\{m\.plan\.nombre\}`/, 'la renovación automática con tarjeta guardada también')
+  assert.match(renovacion, /await asegurarVentaDelIntento\(intento\.id\)/)
+  assert.doesNotMatch(renovacion, /registrarReciboDePasarela/)
 
-  const recibo = leer('src/modules/pagos/reciboPasarela.ts')
-  assert.match(recibo, /snapshot: \{ path: \['intentoId'\], equals: input\.intentoId \}/, 'un intento = un recibo, aunque la pasarela avise dos veces')
-  assert.match(recibo, /metodoCobroLabel: esCardnet \? 'Tarjeta \(CardNET\)' : 'Tarjeta'/)
-  assert.match(leer('src/modules/pagos/venta.ts'), /intentoId: input\.intentoId \?\? undefined/, 'el intento viaja en el snapshot de la venta')
+  const venta = leer('src/modules/pagos/venta-tarjeta.ts')
+  assert.match(venta, /pagoIntentoId: intento\.id/, 'un intento = una venta, por el índice único del libro')
+  assert.match(venta, /snapshot: \{ path: \['intentoId'\], equals: intento\.id \}/, 'y adopta un recibo escrito por el camino anterior en vez de duplicarlo')
 })
 
 test('el cliente llega a su comprobante: con sesión en la web, con enlace firmado desde la app', () => {
   const queries = leer('src/modules/cliente/queries.ts')
   assert.match(queries, /comprobantes: ComprobanteCliente\[\]/)
   assert.match(queries, /where: \{ clienteId: \{ in: clienteIds \}, tipo: 'SALE', estado: 'APPLIED' \}/, 'solo ventas aplicadas, de cualquiera de sus fichas')
-  assert.match(queries, /transaccionId: l\.accion === 'PAGO_APROBADO' \? ventaDe\(/, 'cada pago aprobado del historial enlaza con su venta')
+  assert.match(queries, /transaccionId: l\.accion === 'PAGO_APROBADO' \? \(venta\?\.id \?\? ventaDe\(/, 'cada pago aprobado del historial enlaza con su venta (exacta si fue con tarjeta)')
 
   const propiedad = leer('src/modules/transacciones/comprobanteCliente.ts')
   assert.match(propiedad, /if \(!mios\.includes\(t\.clienteId\)\) return null/, 'la propiedad decide: una transacción ajena no existe')

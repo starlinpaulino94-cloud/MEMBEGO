@@ -57,7 +57,8 @@ async function existingReservation(
     existing.companyId === target.companyId &&
     existing.clienteId === target.clienteId &&
     existing.membershipId === (target.membershipId ?? null) &&
-    existing.compraId === (target.compraId ?? null)
+    existing.compraId === (target.compraId ?? null) &&
+    (existing.planDestinoId ?? null) === (target.planDestinoId ?? null)
   if (
     sameTarget &&
     existing.estado === CARDNET_SESSION_STATES.CAPTURE_OPEN &&
@@ -134,6 +135,7 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
           clienteId: target.clienteId,
           membershipId: target.membershipId ?? null,
           compraId: target.compraId ?? null,
+          planDestinoId: target.planDestinoId ?? null,
           monto: target.amount,
           reservaClienteKey: reservationKey,
           captureNonce: hashNonce(nonce),
@@ -154,6 +156,7 @@ export async function iniciarSesionCardnet(request: Request, user: SessionUser, 
     currentTarget.target.clienteId !== target.clienteId ||
     currentTarget.target.membershipId !== target.membershipId ||
     currentTarget.target.compraId !== target.compraId ||
+    currentTarget.target.planDestinoId !== target.planDestinoId ||
     currentTarget.target.amount !== target.amount ||
     (parsed.data.guardarParaRenovacion && !currentTarget.target.allowRenewalConsent)
   ) {

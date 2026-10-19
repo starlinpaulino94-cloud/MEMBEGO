@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CalendarClock, ExternalLink, FileText, Printer, Wallet } from 'lucide-react'
+import { CalendarClock, CreditCard, ExternalLink, FileText, Printer, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatMoney, type RegionalPrefs } from '@/lib/format'
 import type { PagoHistorialItem } from '@/modules/cliente/queries'
@@ -104,11 +104,15 @@ function LedgerRow({
         </p>
       </div>
 
-      {/* Centro: método de pago (abreviado) */}
-      {item.metodoPagoNombre && (
-        <span className="hidden max-w-[9rem] shrink-0 items-center gap-1.5 truncate text-xs text-muted-foreground sm:inline-flex">
-          <Wallet className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {item.metodoPagoNombre}
+      {/* Centro: con qué se pagó (tarjeta de la app/web, o el método de la membresía) */}
+      {(item.formaDePago ?? item.metodoPagoNombre) && (
+        <span className="hidden max-w-[12rem] shrink-0 items-center gap-1.5 truncate text-xs text-muted-foreground sm:inline-flex">
+          {item.formaDePago ? (
+            <CreditCard className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          ) : (
+            <Wallet className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          )}
+          {item.formaDePago ?? item.metodoPagoNombre}
         </span>
       )}
 
@@ -186,11 +190,29 @@ function ReceiptDrawer({
                     <dd className="font-medium text-foreground">{item.planNombre}</dd>
                   </div>
                 )}
-                {item.metodoPagoNombre && (
+                {(item.formaDePago ?? item.metodoPagoNombre) && (
                   <div className="flex justify-between gap-3">
-                    <dt className="text-muted-foreground">Método de pago</dt>
-                    <dd className="font-medium text-foreground">{item.metodoPagoNombre}</dd>
+                    <dt className="text-muted-foreground">Pagado con</dt>
+                    <dd className="text-right font-medium text-foreground">{item.formaDePago ?? item.metodoPagoNombre}</dd>
                   </div>
+                )}
+                {item.recibo && (
+                  <>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-muted-foreground">Recibo Nº</dt>
+                      <dd className="font-mono font-medium text-foreground">{item.recibo.ticketNumero}</dd>
+                    </div>
+                    {item.recibo.autorizacion && (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-muted-foreground">Autorización</dt>
+                        <dd className="font-mono font-medium text-foreground">{item.recibo.autorizacion}</dd>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-muted-foreground">Negocio</dt>
+                      <dd className="text-right font-medium text-foreground">{item.recibo.empresaNombre}</dd>
+                    </div>
+                  </>
                 )}
                 {item.validadoPor && (
                   <div className="flex justify-between gap-3">
@@ -206,6 +228,7 @@ function ReceiptDrawer({
                 )}
               </dl>
 
+              {/* El comprobante oficial (el mismo ticket que imprime el negocio). En un pago con tarjeta la venta es la del intento. */}
               {item.transaccionId && (
                 <Link
                   href={`/cliente/pagos/comprobante/${item.transaccionId}`}

@@ -130,6 +130,29 @@ cámara en tema oscuro.
 
 ---
 
+## 6 · Pago con tarjeta en la app: comprobante y conciliación
+
+> **Requiere** credenciales de CardNET (producción o certificación) y una tarjeta de prueba: sin ellas las filas 6.1 a 6.3 no se
+> pueden hacer y quedan **BLOCKED — EXTERNAL CREDENTIALS**. Las demás (6.4 en adelante) se pueden hacer con los pagos que dejen
+> esas pruebas. Detalle del diseño y de las decisiones: `docs/PAGO_TARJETA_COMPROBANTE.md`.
+
+| # | Prueba | Resultado esperado | Bloquea | Dispositivo / nota | ✅/❌ |
+|---|---|---|---|---|---|
+| 6.1 | Comprar una membresía de RD$ 500 con tarjeta de prueba **dentro de la app Expo** | Membresía activa; en «Mis pagos» sale «Tarjeta … (en la app)», el **Recibo Nº** y la autorización | ✔ | | |
+| 6.2 | Lo mismo desde el **navegador** (3DS) | Igual, con «(en la web)» | ✔ | | |
+| 6.3 | Pulsar «Atrás» o cerrar la app justo al pagar, y volver a abrirla | Un solo cobro, una sola membresía, **un solo comprobante** | ✔ | | |
+| 6.4 | En la **caja del empleado**: mirar «Cobros con tarjeta en línea de hoy» | Aparece ese pago con su ticket; el **efectivo esperado no cambió**. Con un usuario de **Recepción o Empleado** (sin Comprobantes) sale solo el resumen, sin cliente ni autorización | ✔ | | |
+| 6.5 | **Imprimir** ese comprobante en la térmica (58 y 80 mm) y en Carta | Dice «Tarjeta VISA ••••NNNN (en la app)» y «Aut. …»; **nunca** el número completo de la tarjeta | ✔ | | |
+| 6.6 | Imprimir «Mi cuadre del día» y el **cierre de caja** de ese día | Sección «Cobros en línea (tarjeta)» aparte; **no suma** al efectivo; el arqueo cuadra igual que sin el pago | ✔ | | |
+| 6.7 | `/admin/facturas` → «Pagos con tarjeta» y `/admin/registros` | El pago está, con su método completo; Registros tiene el subtotal «Tarjeta» | | | |
+| 6.8 | `/admin/reportes/finanzas` del día | «Total cobrado» = RD$ 500 (**no** RD$ 1,000); en el desglose por método sale Tarjeta | ✔ | | |
+| 6.9 | En la app: abrir el pago → «Compartir recibo» (WhatsApp o correo) | Llega el texto del recibo con el mismo Nº de ticket; sin número de tarjeta | | | |
+| 6.10 | Web `/cliente/pagos` → «Imprimir recibo» | Sale solo el recibo (sin menú ni cabecera) | | | |
+| 6.11 | `/admin/conciliacion` después de los pagos anteriores | **Todo cuadra** en cobros sin transacción. Si hay un descuadre, cada caso trae su botón | ✔ | | |
+| 6.12 | Con un pago de prueba cuya entrega se fuerce a fallar (membresía cancelada) → «Reintentar entrega» | Falla con el motivo; al corregir la causa y reintentar, el cliente recibe su producto y queda el comprobante | | | |
+| 6.13 | Caja abierta de ayer: «Abrir caja» desde la conciliación | Lleva a **esa** caja; se cierra contando el efectivo | | | |
+| 6.14 | Al día siguiente (≈ 08:30 hora local) con un caso sin resolver | Los administradores tienen **un** aviso «Pagos con tarjeta sin entregar»; no se repite el mismo día | | | |
+
 ## Cierre de la jornada
 
 1. Exportar la hoja con todos los ✅/❌, dispositivos y capturas.
@@ -138,6 +161,6 @@ cámara en tema oscuro.
 4. Si algo tocó dinero real: **no** se corrige a mano en la base; se corrige con un asiento (`ADJUSTMENT`)
    desde el superadmin, con motivo, y queda en el libro.
 
-**Qué NO cubre esta prueba:** pagos en línea (CardNET: **BLOCKED — EXTERNAL CREDENTIALS**), facturación fiscal
+**Qué NO cubre esta prueba:** pagos en línea con tarjeta (CardNET: **BLOCKED — EXTERNAL CREDENTIALS**; la sección 6 los cubre cuando haya credenciales), facturación fiscal
 (e-CF/DGII: **BLOCKED — EXTERNAL / FISCAL INTEGRATION**), carga con cientos de usuarios simultáneos, ni
 producción con el pooler de la base (el corte de RLS Capa 2 sigue siendo una decisión del usuario).

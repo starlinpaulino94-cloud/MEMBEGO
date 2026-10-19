@@ -35,6 +35,7 @@ const CARDNET_RENOVACION = readFileSync(
   join('src', 'modules', 'pagos', 'cardnetTokenGuardado.ts'),
   'utf8'
 )
+const RENOVACION_EXTENSION = readFileSync(join('src', 'modules', 'pagos', 'renovacion-extension.ts'), 'utf8')
 const PLAN_ACCIONES = readFileSync(join('src', 'modules', 'admin', 'planActions.ts'), 'utf8')
 const SUPER_MEMBRESIA_ACCIONES = readFileSync(
   join('src', 'modules', 'superadmin', 'membresiaActions.ts'),
@@ -124,11 +125,10 @@ test('y queda en el registro qué pasó con el código', () => {
 })
 
 test('la renovación automática por tarjeta también devuelve QR escaneable', () => {
-  const bloque = CARDNET_RENOVACION.slice(
-    CARDNET_RENOVACION.indexOf('export async function renovarMembresiaPorTarjeta'),
-    CARDNET_RENOVACION.indexOf('/** Membresías que toca renovar ahora')
-  )
-  assert.ok(bloque.length > 0, 'no se encontró renovarMembresiaPorTarjeta')
+  // La extensión vive en su propio módulo para que el cobro y el reintento de la entrega la compartan.
+  assert.match(CARDNET_RENOVACION, /extenderMembresiaCobrada\(/, 'renovarMembresiaPorTarjeta extiende por la función compartida')
+  const bloque = RENOVACION_EXTENSION
+  assert.ok(bloque.length > 0, 'no se encontró renovacion-extension.ts')
   assert.match(bloque, /qrToken\.findFirst/)
   assert.match(bloque, /qrToken\.create/)
   assert.match(bloque, /qrToken\.update/)
