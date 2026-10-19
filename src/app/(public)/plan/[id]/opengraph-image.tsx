@@ -13,14 +13,6 @@ export const alt = 'Vista previa de plan de membresía en MembeGo'
 export const size = OG_SIZE
 export const contentType = 'image/png'
 
-function fmtRD(n: number) {
-  return new Intl.NumberFormat('es-DO', {
-    style: 'currency',
-    currency: 'DOP',
-    maximumFractionDigits: 0,
-  }).format(n)
-}
-
 function MembeGoMark() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>

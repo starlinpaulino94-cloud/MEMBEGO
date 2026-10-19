@@ -16,14 +16,6 @@ interface PlanPageProps {
 
 export const revalidate = 3600
 
-function fmtRD(n: number) {
-  return new Intl.NumberFormat('es-DO', {
-    style: 'currency',
-    currency: 'DOP',
-    maximumFractionDigits: 0,
-  }).format(n)
-}
-
 // Fase E8 · Membresías promocionables: vista previa enriquecida al compartir.
 export async function generateMetadata({ params }: PlanPageProps): Promise<Metadata> {
   const { id } = await params

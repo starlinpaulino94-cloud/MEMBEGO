@@ -36,10 +36,6 @@ export const dynamic = 'force-dynamic'
 
 const ESPERA_PAGO = ['SOLICITADA', 'PENDIENTE_PAGO', 'RECHAZADA']
 
-function fmtRD(n: number) {
-  return new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP', maximumFractionDigits: 2 }).format(n)
-}
-
 function fmtFechaHora(d: Date) {
   return new Intl.DateTimeFormat('es-DO', { dateStyle: 'medium', timeStyle: 'short' }).format(d)
 }
