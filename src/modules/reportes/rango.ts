@@ -170,6 +170,21 @@ export function limiteDiaLocal(dia: string, timeZone: string, fin = false): Date
   return new Date(fin ? inicio + 86_400_000 : inicio)
 }
 
+/**
+ * El instante (UTC) en que EMPIEZA «hoy» en el calendario del negocio.
+ *
+ * Es LA definición de «hoy» del panel (auditoría admin · D-03). Antes había
+ * tres: la zona de la empresa en el Resumen, un UTC-4 fijo en «Visitas de hoy»
+ * del escáner y la hora del proceso (UTC en Vercel) en el contador del menú. A
+ * las 8 de la noche en Santo Domingo, las tres pantallas daban números
+ * distintos de las mismas visitas. Quien necesite «hoy» llama a esto, o a
+ * `inicioDeHoy(companyId)` de `@/modules/empresas/hoy` cuando solo tiene la
+ * empresa y no su zona.
+ */
+export function inicioDeHoyEn(timeZone: string, ahora: Date = new Date()): Date {
+  return limiteDiaLocal(diaLocal(ahora, timeZone), timeZone)
+}
+
 /** Suma días a un `YYYY-MM-DD` sin salirse del calendario. */
 export function sumarDias(dia: string, n: number): string {
   const d = new Date(`${dia}T12:00:00Z`)

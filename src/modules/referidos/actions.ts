@@ -7,6 +7,7 @@
 
 import { Prisma, type ReferralEventTipo } from '@prisma/client'
 import { whereCobrado } from '@/modules/pagos/cobrado'
+import { membresiaVigenteSql } from '@/modules/membresia/vigencia'
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import { logReferralEvent, PUNTOS, TIPOS_EMPRESA, TIPOS_GLOBAL } from '@/lib/referidos'
 import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
@@ -736,12 +737,14 @@ export async function getEmpresaReferidosDashboard(
       ),
       tx.referido.count({ where: { ...whereRef, sospechoso: false } }),
       tx.referido.count({ where: { ...whereRef, estado: 'COMPLETADO', sospechoso: false } }),
-      // Clientes referidos ACTIVOS: con membresía activa hoy (legítimos).
+      // Clientes referidos ACTIVOS: con membresía VIGENTE hoy (legítimos). Antes
+      // pedía solo `estado = 'ACTIVA'`, y nada vence las membresías solas: una
+      // vencida en marzo seguía contando como referido activo en octubre.
       tx.$queryRaw<{ n: bigint }[]>(
         Prisma.sql`SELECT count(DISTINCT r."referidoClienteId")::bigint AS n
           FROM "referidos" r
           JOIN "memberships" m ON m."clienteId" = r."referidoClienteId"
-            AND m.estado = 'ACTIVA' AND m."companyId" = r."companyId"
+            AND ${membresiaVigenteSql('m')} AND m."companyId" = r."companyId"
           WHERE ${companyId ? Prisma.sql`r."companyId" = ${companyId}` : Prisma.sql`TRUE`}
             AND r.sospechoso = false`
       ),

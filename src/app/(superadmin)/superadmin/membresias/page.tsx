@@ -75,7 +75,9 @@ export default async function SuperadminMembresiasPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  await requireRole('SUPERADMIN')
+  const superadmin = await requireRole('SUPERADMIN')
+  // La empresa que este superadmin está operando ahora (puede ser ninguna).
+  const empresaActiva = superadmin.metadata.companyId ?? null
   const sp = await searchParams
   const f = leerFiltroMembresias(sp)
   const paginacion = leerPaginacion(sp)
@@ -262,15 +264,23 @@ export default async function SuperadminMembresiasPage({
             {d.filas.map((m) => (
               <tr key={m.id} className="hover:bg-muted">
                 <td className="px-4 py-3 font-medium text-foreground">
-                  {/* La ficha del cliente estaba a un id de distancia —la
-                      página ya lo pasaba— y no había forma de abrirla desde
-                      aquí. Es la pregunta siguiente en cuanto algo no cuadra. */}
-                  <Link
-                    href={`/admin/clientes/${m.clienteId}`}
-                    className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {m.clienteNombre}
-                  </Link>
+                  {/* La ficha del cliente es de /admin, que opera UNA empresa: la
+                      ACTIVA de la sesión. El enlace solo funciona si esa es la
+                      empresa de esta membresía; con otra (o con ninguna) llevaba
+                      a «no encontrado» o de vuelta a Empresas (auditoría admin ·
+                      1.9). Si no coincide se enseña el nombre sin enlace. */}
+                  {m.empresaId === empresaActiva ? (
+                    <Link
+                      href={`/admin/clientes/${m.clienteId}`}
+                      className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {m.clienteNombre}
+                    </Link>
+                  ) : (
+                    <span title="La ficha del cliente se abre desde la empresa: entra a ella primero.">
+                      {m.clienteNombre}
+                    </span>
+                  )}
                   <div className="text-caption text-muted-foreground">{m.clienteEmail}</div>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">

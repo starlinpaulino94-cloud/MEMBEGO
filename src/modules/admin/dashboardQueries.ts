@@ -2,8 +2,8 @@ import { conEmpresa } from '@/lib/tenant'
 import { contarColasDePago } from '@/modules/pagos/colasConteo'
 import { whereTransferencias } from '@/modules/pagos/colas'
 import { whereCobrado } from '@/modules/pagos/cobrado'
-import { diaLocal, limiteDiaLocal, sumarDias } from '@/modules/reportes/rango'
-import { membresiaVigente } from '@/modules/membresia/vigencia'
+import { diaLocal, inicioDeHoyEn, limiteDiaLocal, sumarDias } from '@/modules/reportes/rango'
+import { membresiaVigente, membresiaVigenteSql } from '@/modules/membresia/vigencia'
 
 // F4.8: métricas del dashboard ejecutivo de la empresa. Módulo interno.
 //
@@ -35,10 +35,17 @@ export interface DashboardEjecutivo {
   nuevosSeguidores30d: number
   referidosCompletados: number
   promosActivas: number
-  /** Dinero realmente cobrado este mes (membresías con pago confirmado). */
-  ingresosCobradosMes: number
+  /**
+   * Dinero realmente cobrado este mes (membresías con pago confirmado).
+   *
+   * Las cinco cifras de dinero de este contrato son `null` cuando quien mira no
+   * tiene `reportes › ver_financieros` (auditoría admin · D-01): no se calculan,
+   * no viajan a la página y no pueden pintarse por descuido. `null` es «sin
+   * permiso»; un cero real es `0`.
+   */
+  ingresosCobradosMes: number | null
   /** Lo que facturarían las membresías vigentes al renovar, a precio de tarifa. */
-  recurrenteEsperado: number
+  recurrenteEsperado: number | null
   visitasHoy: number
   visitasMes: number
   clientesEnRiesgo: number
@@ -52,11 +59,11 @@ export interface DashboardEjecutivo {
   recomendaciones: { texto: string; href: string; cta: string }[]
   // ── Contrato Stitch (Resumen Operativo): todo real, nada estimado ──
   /** Cobrado el mes ANTERIOR completo, para el delta «vs mes anterior». */
-  ingresosMesAnterior: number
+  ingresosMesAnterior: number | null
   /** Los 2 planes con más membresías vigentes: «18 Silver · 5 Gold». */
   topPlanes: { nombre: string; total: number }[]
   /** Monto declarado en las transferencias por validar. */
-  transferenciasMonto: number
+  transferenciasMonto: number | null
   /** Monto de la última transferencia recibida en esa cola. */
   ultimaTransferencia: number | null
   /** Nombres (3) de membresías que vencen en 7 días, para la pila de avatares. */
@@ -73,7 +80,19 @@ export async function getDashboardEjecutivo(
    * silencio fue exactamente el fallo. Quien llame tiene que decir en qué
    * calendario vive el negocio.
    */
-  timeZone: string
+  timeZone: string,
+  /**
+   * Qué puede ver quien pide el Resumen (auditoría admin · D-01). SIN valor por
+   * defecto, a propósito: con uno opcional, quien no lo pasara habría calculado
+   * dinero para todos —el defecto que esto cierra— y nada se habría quejado.
+   * Lo que no se concede ni se consulta.
+   */
+  permisos: {
+    /** `reportes › ver_financieros`: ingresos, recurrente y montos de transferencias. */
+    conFinanzas: boolean
+    /** Sección `pagos`: cuántos pagos esperan validación. */
+    conPagos: boolean
+  }
 ): Promise<DashboardEjecutivo> {
   return conEmpresa(companyId, async (tx) => {
   const now = new Date()
@@ -85,7 +104,7 @@ export async function getDashboardEjecutivo(
   // utilidades que ya usaba Reportes — de ahí que las dos pantallas dieran
   // números distintos de las mismas visitas.
   const hoyDia = diaLocal(now, timeZone)
-  const inicioHoy = limiteDiaLocal(hoyDia, timeZone)
+  const inicioHoy = inicioDeHoyEn(timeZone, now)
   const inicioMes = limiteDiaLocal(`${hoyDia.slice(0, 7)}-01`, timeZone)
   // Primer día del mes ANTERIOR, en el calendario del negocio.
   const [anioStr, mesStr] = hoyDia.split('-')
@@ -125,7 +144,8 @@ export async function getDashboardEjecutivo(
     // mandaba al administrador a una pantalla que decía cero.
     // Con el `tx` de esta transacción, no abriendo otra: contar las colas es
     // parte de esta misma lectura.
-    contarColasDePago(companyId, tx).then((c) => c.porValidar),
+    // Solo con la sección Pagos (D-01/D-07): quien no la tiene no ve ni cuántos hay.
+    permisos.conPagos ? contarColasDePago(companyId, tx).then((c) => c.porValidar) : Promise.resolve(0),
     tx.companyFollow.count({ where: { companyId } }),
     tx.companyFollow.count({
       where: { companyId, createdAt: { gte: hace30dias } },
@@ -149,12 +169,14 @@ export async function getDashboardEjecutivo(
     // DINERO COBRADO, no lista de precios. Es la misma fuente que usa
     // /admin/reportes (`montoPagado` de las membresías con pago confirmado),
     // para que las dos pantallas no den cifras distintas del mismo mes.
-    tx.membership
-      .aggregate({
-        where: whereCobrado(inicioMes, undefined, { companyId }),
-        _sum: { montoPagado: true },
-      })
-      .then((a) => Number(a._sum.montoPagado ?? 0)),
+    permisos.conFinanzas
+      ? tx.membership
+          .aggregate({
+            where: whereCobrado(inicioMes, undefined, { companyId }),
+            _sum: { montoPagado: true },
+          })
+          .then((a): number | null => Number(a._sum.montoPagado ?? 0))
+      : Promise.resolve<number | null>(null),
     tx.visit.count({
       where: { cliente: { companyId }, fechaVisita: { gte: inicioHoy } },
     }),
@@ -235,13 +257,15 @@ export async function getDashboardEjecutivo(
     porVencerRows,
     citasHoy,
   ] = await Promise.all([
-    tx.membership
-      .aggregate({
-        where: whereCobrado(inicioMesAnterior, inicioMes, { companyId }),
-        _sum: { montoPagado: true },
-      })
-      .then((a) => Number(a._sum.montoPagado ?? 0))
-      .catch(() => 0),
+    permisos.conFinanzas
+      ? tx.membership
+          .aggregate({
+            where: whereCobrado(inicioMesAnterior, inicioMes, { companyId }),
+            _sum: { montoPagado: true },
+          })
+          .then((a): number | null => Number(a._sum.montoPagado ?? 0))
+          .catch((): number | null => 0)
+      : Promise.resolve<number | null>(null),
     tx.membership
       .groupBy({
         by: ['planId'],
@@ -251,17 +275,22 @@ export async function getDashboardEjecutivo(
         take: 2,
       })
       .catch(() => []),
-    tx.membership
-      .aggregate({ where: whereTransferencias(companyId), _sum: { montoPagado: true } })
-      .then((a) => Number(a._sum.montoPagado ?? 0))
-      .catch(() => 0),
-    tx.membership
-      .findFirst({
-        where: whereTransferencias(companyId),
-        orderBy: { updatedAt: 'desc' },
-        select: { montoPagado: true },
-      })
-      .catch(() => null),
+    // Los montos de las transferencias son dinero: solo con `ver_financieros`.
+    permisos.conFinanzas
+      ? tx.membership
+          .aggregate({ where: whereTransferencias(companyId), _sum: { montoPagado: true } })
+          .then((a): number | null => Number(a._sum.montoPagado ?? 0))
+          .catch((): number | null => 0)
+      : Promise.resolve<number | null>(null),
+    permisos.conFinanzas
+      ? tx.membership
+          .findFirst({
+            where: whereTransferencias(companyId),
+            orderBy: { updatedAt: 'desc' },
+            select: { montoPagado: true },
+          })
+          .catch(() => null)
+      : Promise.resolve(null),
     tx.membership
       .findMany({
         where: { companyId, estado: 'ACTIVA', fechaVencimiento: { gte: now, lte: en7dias } },
@@ -295,7 +324,9 @@ export async function getDashboardEjecutivo(
     total: t._count._all,
   }))
 
-  const recurrenteEsperado = await tx
+  const recurrenteEsperado: number | null = !permisos.conFinanzas
+    ? null
+    : await tx
     .$queryRaw<{ total: number }[]>`
       SELECT COALESCE(SUM(COALESCE(tarifa.precio, p.precio)), 0)::float8 AS total
       FROM "memberships" m
@@ -313,8 +344,7 @@ export async function getDashboardEjecutivo(
         LIMIT 1
       ) tarifa ON TRUE
       WHERE m."companyId" = ${companyId}
-        AND m."estado" = 'ACTIVA'
-        AND (m."fechaVencimiento" IS NULL OR m."fechaVencimiento" >= ${now})
+        AND ${membresiaVigenteSql('m', now)}
     `
     .then((filas) => Number(filas[0]?.total ?? 0))
     .catch((e) => {

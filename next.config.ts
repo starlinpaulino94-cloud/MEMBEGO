@@ -85,6 +85,12 @@ const nextConfig: NextConfig = {
         destination: '/empresas/:slug*',
         permanent: true,
       },
+      // La RAÍZ de cada panel no tiene página y daba 404 a quien la escribe a
+      // mano o la guarda como favorito (auditoría admin · 1.9). Va a su inicio;
+      // el proxy sigue decidiendo después quién puede entrar y adónde rebota.
+      { source: '/admin', destination: '/admin/dashboard', permanent: false },
+      { source: '/superadmin', destination: '/superadmin/dashboard', permanent: false },
+      { source: '/empleado', destination: '/empleado/scanner', permanent: false },
       // Supply 2.0 pasó a llamarse Supply: las URLs viejas (favoritos,
       // notificaciones ya enviadas) siguen llegando a su pantalla.
       {

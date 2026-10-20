@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { Prisma } from '@prisma/client'
+import { membresiaVigenteSql } from '@/modules/membresia/vigencia'
 import { conEmpresa } from '@/lib/tenant'
 import { armarCsvBloques } from '@/lib/csv'
 
@@ -100,8 +101,7 @@ export async function getRetencion(
             COUNT(*)::bigint AS "clientes"
           FROM "clientes" c
           JOIN "memberships" m ON m."clienteId" = c."id"
-           AND m."estado" = 'ACTIVA'
-           AND (m."fechaVencimiento" IS NULL OR m."fechaVencimiento" >= ${ahora})
+           AND ${membresiaVigenteSql('m', ahora)}
           LEFT JOIN LATERAL (
             SELECT MAX(v."fechaVisita") AS "ultima" FROM "visits" v WHERE v."clienteId" = c."id"
           ) uv ON TRUE
@@ -121,8 +121,7 @@ export async function getRetencion(
             SELECT TRUE AS "existe"
             FROM "memberships" m2
             WHERE m2."clienteId" = m."clienteId"
-              AND m2."estado" = 'ACTIVA'
-              AND (m2."fechaVencimiento" IS NULL OR m2."fechaVencimiento" >= ${ahora})
+              AND ${membresiaVigenteSql('m2', ahora)}
             LIMIT 1
           ) viva ON TRUE
           WHERE m."companyId" = ${companyId}
@@ -143,8 +142,7 @@ export async function getRetencion(
           FROM "memberships" m
           JOIN "plans" p ON p."id" = m."planId"
           WHERE m."companyId" = ${companyId}
-            AND m."estado" = 'ACTIVA'
-            AND (m."fechaVencimiento" IS NULL OR m."fechaVencimiento" >= ${ahora})
+            AND ${membresiaVigenteSql('m', ahora)}
             AND p."esIlimitado" = FALSE
         `),
 
@@ -160,8 +158,7 @@ export async function getRetencion(
           FROM "memberships" m
           JOIN "plans" p ON p."id" = m."planId"
           WHERE m."companyId" = ${companyId}
-            AND m."estado" = 'ACTIVA'
-            AND (m."fechaVencimiento" IS NULL OR m."fechaVencimiento" >= ${ahora})
+            AND ${membresiaVigenteSql('m', ahora)}
             AND p."esIlimitado" = FALSE
           GROUP BY p."nombre"
           ORDER BY COUNT(*) DESC

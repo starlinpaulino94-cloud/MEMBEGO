@@ -24,7 +24,8 @@ import {
   Users,
   Wallet,
 } from 'lucide-react'
-import { requireRole, requireSection, usuarioPuedeFuncion } from '@/lib/auth/guards'
+import { requireRole, requireSection, seccionesAbribles, usuarioPuedeFuncion } from '@/lib/auth/guards'
+import { ADMIN_SECTIONS, adminSectionForPath } from '@/lib/auth/permissions'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { destinoSiSoloProveedora } from '@/modules/supply-v2/permisos'
 import { getDashboardEjecutivo, type DashboardEjecutivo } from '@/modules/admin/dashboardQueries'
@@ -88,6 +89,31 @@ function iniciales(nombre: string): string {
 }
 
 /** Tarjeta KPI del diseño: rótulo arriba, número grande, línea y pie. */
+/**
+ * Un bloque que es enlace solo si su sección se puede abrir; si no, el mismo
+ * contenido sin destino (auditoría admin · D-07). La visibilidad es cosmética:
+ * la barrera sigue siendo la guardia de la sección.
+ */
+function Atajo({
+  href,
+  ok,
+  className,
+  children,
+}: {
+  href: string
+  ok: boolean
+  className?: string
+  children: React.ReactNode
+}) {
+  return ok ? (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  ) : (
+    <div className={className}>{children}</div>
+  )
+}
+
 function Kpi({
   icono: Icono,
   rotulo,
@@ -154,6 +180,23 @@ export default async function AdminDashboard() {
     redirect('/onboarding')
   }
 
+  // QUÉ PUEDE VER QUIEN MIRA, resuelto UNA vez (auditoría admin · D-01 y D-07).
+  // El Resumen es la primera pantalla de todo el que entra al panel —también de
+  // Marketing, Supervisor o un cajero—, y pintaba ingresos y atajos como si
+  // todos fueran administradores. Las cifras de dinero exigen la misma función
+  // que Reportes (`reportes › ver_financieros`) y se piden al motor SOLO si se
+  // tiene; cada enlace se pinta solo si su sección se puede abrir. Es cosmético
+  // a propósito: la barrera de verdad sigue en la guardia de cada sección.
+  const [conFinanzas, abribles] = await Promise.all([
+    usuarioPuedeFuncion(user, 'reportes', 'ver_financieros'),
+    seccionesAbribles(user, ADMIN_SECTIONS),
+  ])
+  const ve = (href: string) => {
+    const seccion = adminSectionForPath(href.split('?')[0])
+    return seccion === null || abribles.has(seccion)
+  }
+  const conPagos = ve('/admin/pagos')
+
   let d: DashboardEjecutivo | null = null
   let company: { name: string; moneda: string; idioma: string; zonaHoraria: string } | null = null
   let publicada: Awaited<ReturnType<typeof getHomePublicada>> = null
@@ -172,7 +215,7 @@ export default async function AdminDashboard() {
     const userInventario = await requireSection('inventario').catch(() => null)
     const conCostos = userInventario ? await usuarioPuedeFuncion(userInventario, 'inventario', 'costos') : false
     ;[d, publicada, comercio, inventario] = await Promise.all([
-      getDashboardEjecutivo(companyId, company?.zonaHoraria || 'America/Santo_Domingo'),
+      getDashboardEjecutivo(companyId, company?.zonaHoraria || 'America/Santo_Domingo', { conFinanzas, conPagos }),
       getHomePublicada(companyId).catch(() => null),
       resumenComercioEmpresa(companyId, company?.zonaHoraria || 'America/Santo_Domingo').catch(() => null),
       userInventario
@@ -208,7 +251,11 @@ export default async function AdminDashboard() {
       )
     : null
 
-  const deltaIngresos = delta(d.ingresosCobradosMes, d.ingresosMesAnterior)
+  // Sin permiso de finanzas no hay delta: ni la cifra ni su comparación.
+  const deltaIngresos =
+    d.ingresosCobradosMes !== null && d.ingresosMesAnterior !== null
+      ? delta(d.ingresosCobradosMes, d.ingresosMesAnterior)
+      : null
   const mesActualLabel = new Intl.DateTimeFormat(company?.idioma || 'es-DO', {
     timeZone: tz,
     month: 'long',
@@ -226,6 +273,17 @@ export default async function AdminDashboard() {
     heroSlide = null
   }
   const bloquesActivos = publicada?.bloques.filter((b) => b.activo).length ?? 0
+
+  // El bloque de Comercio solo enseña lo que esta persona puede abrir (D-07).
+  const verPedidos = ve('/admin/pedidos-membego')
+  const verCatalogo = ve('/admin/catalogo')
+  const verInventario = ve('/admin/inventario')
+  const verOfertas = ve('/admin/deals')
+  const hayComercio = comercio
+    ? (comercio.modulos.pedidos && verPedidos) ||
+      (comercio.modulos.catalogo && (verCatalogo || verInventario)) ||
+      (comercio.modulos.ofertas && verOfertas)
+    : false
 
   return (
     <div className="animate-fade-up space-y-6">
@@ -249,24 +307,29 @@ export default async function AdminDashboard() {
           <span className="rounded-lg border border-border bg-card px-3 py-2 text-label-lg capitalize text-muted-foreground">
             {mesActualLabel}
           </span>
-          <Button asChild variant="secondary" className="rounded-full">
-            <Link href="/admin/catalogo/nuevo">
-              <Plus className="size-4" aria-hidden /> Nuevo producto o servicio
-            </Link>
-          </Button>
-          <Button asChild className="rounded-full bg-retail-deep text-white hover:opacity-95">
-            <Link href="/admin/scanner">
-              <QrCode className="size-4" aria-hidden /> Escanear QR
-            </Link>
-          </Button>
+          {ve('/admin/catalogo') ? (
+            <Button asChild variant="secondary" className="rounded-full">
+              <Link href="/admin/catalogo/nuevo">
+                <Plus className="size-4" aria-hidden /> Nuevo producto o servicio
+              </Link>
+            </Button>
+          ) : null}
+          {ve('/admin/scanner') ? (
+            <Button asChild className="rounded-full bg-retail-deep text-white hover:opacity-95">
+              <Link href="/admin/scanner">
+                <QrCode className="size-4" aria-hidden /> Escanear QR
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </div>
 
       {/* Onboarding (F5.1): guía hasta publicar el perfil */}
-      {onboarding && <OnboardingChecklist onboarding={onboarding} />}
+      {/* El asistente lleva a configurar la empresa: solo a quien puede abrir su perfil (D-07). */}
+      {onboarding && ve('/admin/perfil') && <OnboardingChecklist onboarding={onboarding} />}
 
       {/* ── Comercio Membego: lo que la empresa vende y le piden hoy ───────── */}
-      {comercio ? (
+      {comercio && hayComercio ? (
         <section aria-labelledby="comercio-membego" className="rounded-xl border border-border bg-card p-4 elevation-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 id="comercio-membego" className="flex items-center gap-2 text-label-lg text-foreground">
@@ -275,7 +338,7 @@ export default async function AdminDashboard() {
             <span className="text-caption">Catálogo → Inventario → Ofertas → Pedidos</span>
           </div>
           <dl className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {comercio.modulos.pedidos ? (
+            {comercio.modulos.pedidos && verPedidos ? (
               <>
                 <Link href="/admin/pedidos-membego?estado=AWAITING_MERCHANT" className={cn('rounded-lg border p-3 transition hover:bg-muted/40', comercio.pedidosNuevos > 0 ? 'border-primary/40 bg-primary/5' : 'border-border')}>
                   <dt className="text-caption">Pedidos nuevos</dt>
@@ -287,28 +350,34 @@ export default async function AdminDashboard() {
                   <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.pedidosEnCurso)}</dd>
                   <p className="text-label-sm text-muted-foreground">Aceptados o listos para recoger</p>
                 </Link>
-                <div className="rounded-lg border border-border p-3">
-                  <dt className="text-caption">Ventas Membego del mes</dt>
-                  <dd className="text-h3 tabular-nums text-foreground">{formatMoney(Number(comercio.ventasMes), company)}</dd>
-                  <p className="text-label-sm text-muted-foreground">{fmt(comercio.pedidosCompletadosMes)} pedidos completados</p>
-                </div>
+                {conFinanzas ? (
+                  <div className="rounded-lg border border-border p-3">
+                    <dt className="text-caption">Ventas Membego del mes</dt>
+                    <dd className="text-h3 tabular-nums text-foreground">{formatMoney(Number(comercio.ventasMes), company)}</dd>
+                    <p className="text-label-sm text-muted-foreground">{fmt(comercio.pedidosCompletadosMes)} pedidos completados</p>
+                  </div>
+                ) : null}
               </>
             ) : null}
             {comercio.modulos.catalogo ? (
               <>
-                <Link href="/admin/catalogo" className="rounded-lg border border-border p-3 transition hover:bg-muted/40">
-                  <dt className="flex items-center gap-1 text-caption"><Package className="size-3.5" aria-hidden /> Catálogo</dt>
-                  <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.productosPublicados)}</dd>
-                  <p className="text-label-sm text-muted-foreground">{comercio.productosTotal === 0 ? 'Crea tu primer producto' : `publicados de ${fmt(comercio.productosTotal)}`}</p>
-                </Link>
-                <Link href="/admin/inventario?estado=BAJO" className={cn('rounded-lg border p-3 transition hover:bg-muted/40', comercio.stockBajo > 0 ? 'border-warning/50 bg-warning/5' : 'border-border')}>
-                  <dt className="flex items-center gap-1 text-caption"><Warehouse className="size-3.5" aria-hidden /> Stock bajo</dt>
-                  <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.stockBajo)}</dd>
-                  <p className="text-label-sm text-muted-foreground">{comercio.stockBajo > 0 ? 'Productos por reponer' : 'Todo con existencias'}</p>
-                </Link>
+                {verCatalogo ? (
+                  <Link href="/admin/catalogo" className="rounded-lg border border-border p-3 transition hover:bg-muted/40">
+                    <dt className="flex items-center gap-1 text-caption"><Package className="size-3.5" aria-hidden /> Catálogo</dt>
+                    <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.productosPublicados)}</dd>
+                    <p className="text-label-sm text-muted-foreground">{comercio.productosTotal === 0 ? 'Crea tu primer producto' : `publicados de ${fmt(comercio.productosTotal)}`}</p>
+                  </Link>
+                ) : null}
+                {verInventario ? (
+                  <Link href="/admin/inventario?estado=BAJO" className={cn('rounded-lg border p-3 transition hover:bg-muted/40', comercio.stockBajo > 0 ? 'border-warning/50 bg-warning/5' : 'border-border')}>
+                    <dt className="flex items-center gap-1 text-caption"><Warehouse className="size-3.5" aria-hidden /> Stock bajo</dt>
+                    <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.stockBajo)}</dd>
+                    <p className="text-label-sm text-muted-foreground">{comercio.stockBajo > 0 ? 'Productos por reponer' : 'Todo con existencias'}</p>
+                  </Link>
+                ) : null}
               </>
             ) : null}
-            {comercio.modulos.ofertas ? (
+            {comercio.modulos.ofertas && verOfertas ? (
               <Link href="/admin/deals" className="rounded-lg border border-border p-3 transition hover:bg-muted/40">
                 <dt className="flex items-center gap-1 text-caption"><BadgePercent className="size-3.5" aria-hidden /> Ofertas activas</dt>
                 <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.ofertasActivas)}</dd>
@@ -362,12 +431,14 @@ export default async function AdminDashboard() {
                     </span>
                   ) : null}
                 </span>
-                <Link
-                  href="/admin/riesgo?vence=7&sinVisitas=0"
-                  className="inline-flex items-center gap-1 text-label-lg text-primary hover:underline"
-                >
-                  Renovar ahora <ArrowRight className="size-4" aria-hidden />
-                </Link>
+                {ve('/admin/riesgo') ? (
+                  <Link
+                    href="/admin/riesgo?vence=7&sinVisitas=0"
+                    className="inline-flex items-center gap-1 text-label-lg text-primary hover:underline"
+                  >
+                    Renovar ahora <ArrowRight className="size-4" aria-hidden />
+                  </Link>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -384,7 +455,7 @@ export default async function AdminDashboard() {
                     {d.pagosPendientes === 1 ? 'Pago por Validar' : 'Pagos por Validar'}
                   </p>
                   <p className="text-caption">
-                    {d.transferenciasMonto > 0
+                    {d.transferenciasMonto !== null && d.transferenciasMonto > 0
                       ? `Transferencias declaradas · ${formatMoney(d.transferenciasMonto, company)}`
                       : 'En la cola de validación'}
                   </p>
@@ -443,12 +514,14 @@ export default async function AdminDashboard() {
                     }}
                   />
                 </span>
-                <Link
-                  href={`/admin/promociones/${d.topPromos[0].id}/editar`}
-                  className="shrink-0 text-label-lg text-primary hover:underline"
-                >
-                  Gestionar oferta
-                </Link>
+                {ve('/admin/promociones') ? (
+                  <Link
+                    href={`/admin/promociones/${d.topPromos[0].id}/editar`}
+                    className="shrink-0 text-label-lg text-primary hover:underline"
+                  >
+                    Gestionar oferta
+                  </Link>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -457,23 +530,36 @@ export default async function AdminDashboard() {
 
       {/* ── KPI del período ──────────────────────────────────────────────── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi
-          icono={Wallet}
-          rotulo="Ingresos del mes"
-          valor={formatMoney(d.ingresosCobradosMes, company)}
-          linea={deltaIngresos ? `${deltaIngresos} vs mes anterior` : 'Membresías con pago confirmado'}
-          lineaTono={deltaIngresos ? 'success' : 'muted'}
-          pie={
-            <>
-              <span className="truncate">
-                Recurrente esperado: {formatMoney(d.recurrenteEsperado, company)}
-              </span>
-              <span className="shrink-0">
-                Anterior: {formatMoney(d.ingresosMesAnterior, company)}
-              </span>
-            </>
-          }
-        />
+        {d.ingresosCobradosMes !== null ? (
+          <Kpi
+            icono={Wallet}
+            rotulo="Ingresos del mes"
+            valor={formatMoney(d.ingresosCobradosMes, company)}
+            linea={deltaIngresos ? `${deltaIngresos} vs mes anterior` : 'Membresías con pago confirmado'}
+            lineaTono={deltaIngresos ? 'success' : 'muted'}
+            pie={
+              <>
+                <span className="truncate">
+                  Recurrente esperado: {formatMoney(d.recurrenteEsperado ?? 0, company)}
+                </span>
+                <span className="shrink-0">
+                  Anterior: {formatMoney(d.ingresosMesAnterior ?? 0, company)}
+                </span>
+              </>
+            }
+          />
+        ) : (
+          // Sin `reportes › ver_financieros`: ni la cifra ni su rastro (D-01). Mismo
+          // rótulo y misma caja para que la cuadrícula no se mueva; «Sin permiso» es
+          // lo que escribe `KpiReporte` en Reportes.
+          <Kpi
+            icono={Wallet}
+            rotulo="Ingresos del mes"
+            valor="Sin permiso"
+            linea="Tu rol no incluye las cifras de dinero"
+            lineaTono="muted"
+          />
+        )}
         <Kpi
           icono={IdCard}
           rotulo="Membresías activas"
@@ -601,12 +687,16 @@ export default async function AdminDashboard() {
           <div className="flex items-baseline gap-1.5">
             <dt>Clientes sin visitas 30 días:</dt>
             <dd>
-              <Link
-                href="/admin/riesgo?sinVisitas=30&vence=0"
-                className="font-bold text-primary hover:underline"
-              >
-                {fmt(d.clientesEnRiesgo)}
-              </Link>
+              {ve('/admin/riesgo') ? (
+                <Link
+                  href="/admin/riesgo?sinVisitas=30&vence=0"
+                  className="font-bold text-primary hover:underline"
+                >
+                  {fmt(d.clientesEnRiesgo)}
+                </Link>
+              ) : (
+                <span className="font-bold text-foreground">{fmt(d.clientesEnRiesgo)}</span>
+              )}
             </dd>
           </div>
         </dl>
@@ -620,12 +710,14 @@ export default async function AdminDashboard() {
               <span className="size-2 rounded-full bg-success" aria-hidden />
               Canjes y Actividad en Vivo
             </h2>
-            <Link
-              href="/admin/actividad"
-              className="text-label-lg text-primary hover:underline"
-            >
-              Ver registro completo
-            </Link>
+            {ve('/admin/actividad') ? (
+              <Link
+                href="/admin/actividad"
+                className="text-label-lg text-primary hover:underline"
+              >
+                Ver registro completo
+              </Link>
+            ) : null}
           </div>
 
           {d.actividad.length === 0 ? (
@@ -665,9 +757,11 @@ export default async function AdminDashboard() {
               Validaciones de hoy:{' '}
               <span className="font-bold text-foreground">{fmt(d.visitasHoy)} canjes</span>
             </span>
-            <Link href="/admin/registros" className="text-primary hover:underline">
-              Auditoría rápida
-            </Link>
+            {ve('/admin/registros') ? (
+              <Link href="/admin/registros" className="text-primary hover:underline">
+                Auditoría rápida
+              </Link>
+            ) : null}
           </p>
         </section>
 
@@ -701,8 +795,9 @@ export default async function AdminDashboard() {
                   {bloquesActivos} {bloquesActivos === 1 ? 'bloque' : 'bloques'}
                 </span>
               </p>
-              <Link
+              <Atajo
                 href="/admin/personalizacion"
+                ok={ve('/admin/personalizacion')}
                 className="retail-header mt-2 block rounded-lg p-4 text-white outline-none transition hover:opacity-95 focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <p className="text-label-sm uppercase tracking-wide text-white">
@@ -714,14 +809,16 @@ export default async function AdminDashboard() {
                     {heroSlide.subtitulo}
                   </p>
                 ) : null}
-              </Link>
+              </Atajo>
             </>
           ) : (
             <p className="mt-3 rounded-lg bg-muted/60 p-3 text-caption">
               El Inicio del cliente aún no tiene composición publicada.{' '}
-              <Link href="/admin/personalizacion" className="font-semibold text-primary hover:underline">
-                Componer y publicar
-              </Link>
+              {ve('/admin/personalizacion') ? (
+                <Link href="/admin/personalizacion" className="font-semibold text-primary hover:underline">
+                  Componer y publicar
+                </Link>
+              ) : null}
             </p>
           )}
 
@@ -729,12 +826,14 @@ export default async function AdminDashboard() {
             <>
               <p className="mt-4 flex items-center justify-between text-label-sm uppercase tracking-wide text-muted-foreground">
                 Promociones con más vistas
-                <Link
-                  href="/admin/promociones"
-                  className="font-semibold normal-case text-primary hover:underline"
-                >
-                  Editar
-                </Link>
+                {ve('/admin/promociones') ? (
+                  <Link
+                    href="/admin/promociones"
+                    className="font-semibold normal-case text-primary hover:underline"
+                  >
+                    Editar
+                  </Link>
+                ) : null}
               </p>
               <ul className="mt-2 space-y-2">
                 {d.topPromos.slice(0, 2).map((p) => (
@@ -767,9 +866,15 @@ export default async function AdminDashboard() {
               <span className="flex items-center gap-1.5">
                 <CalendarDays className="size-4" aria-hidden /> Agenda de hoy
               </span>
-              <Link href="/admin/citas" className="font-bold text-primary hover:underline">
-                {d.citasHoy} {d.citasHoy === 1 ? 'cita' : 'citas'}
-              </Link>
+              {ve('/admin/citas') ? (
+                <Link href="/admin/citas" className="font-bold text-primary hover:underline">
+                  {d.citasHoy} {d.citasHoy === 1 ? 'cita' : 'citas'}
+                </Link>
+              ) : (
+                <span className="font-bold text-foreground">
+                  {d.citasHoy} {d.citasHoy === 1 ? 'cita' : 'citas'}
+                </span>
+              )}
             </p>
           ) : null}
         </section>
@@ -777,7 +882,8 @@ export default async function AdminDashboard() {
 
       {/* ── Recomendaciones y atajos que no viven arriba ─────────────────── */}
       <section className="space-y-3">
-          {d.recomendaciones.map((r) => (
+          {/* Una recomendación cuyo destino no se puede abrir no se ofrece (D-07). */}
+          {d.recomendaciones.filter((r) => ve(r.href)).map((r) => (
             <p
               key={r.texto}
               className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4"
@@ -794,16 +900,20 @@ export default async function AdminDashboard() {
             </p>
           ))}
           <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline" className="rounded-full">
-              <Link href="/admin/pagos">
-                <Wallet className="size-4" aria-hidden /> Validar pagos
-              </Link>
-            </Button>
-            <Button asChild size="sm" variant="outline" className="rounded-full">
-              <Link href="/admin/notificaciones">
-                <Share2 className="size-4" aria-hidden /> Enviar notificación
-              </Link>
-            </Button>
+            {conPagos ? (
+              <Button asChild size="sm" variant="outline" className="rounded-full">
+                <Link href="/admin/pagos">
+                  <Wallet className="size-4" aria-hidden /> Validar pagos
+                </Link>
+              </Button>
+            ) : null}
+            {ve('/admin/notificaciones') ? (
+              <Button asChild size="sm" variant="outline" className="rounded-full">
+                <Link href="/admin/notificaciones">
+                  <Share2 className="size-4" aria-hidden /> Enviar notificación
+                </Link>
+              </Button>
+            ) : null}
           </div>
       </section>
     </div>

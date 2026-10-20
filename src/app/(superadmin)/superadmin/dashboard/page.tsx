@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/format'
 import { ACCION_LABEL, ENTIDAD_LABEL } from '@/modules/auditoria/queries'
 import { DIAS_SILENCIO } from '@/modules/empresas/silencio'
+import { hrefFiltro } from '@/modules/membresias/filtros'
 import { desdeHace } from '@/lib/plural'
 import {
   PERIODOS,
@@ -121,7 +122,13 @@ function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
 
         {c.pendientes > 0 && (
           <Link
-            href="/superadmin/operaciones"
+            // Las N membresías PENDIENTE_PAGO de ESTA empresa, en la lista donde
+            // se validan. Antes iba a Operaciones, que es la cobertura de
+            // configuración y no tiene ningún pago (auditoría admin · D-05).
+            href={hrefFiltro(
+              { estado: 'PENDIENTE_PAGO', empresa: c.id, ambito: c.esDemo ? 'practica' : 'reales' },
+              '/superadmin/membresias'
+            )}
             className="mt-3 flex items-center justify-end gap-1 text-caption font-medium text-warning hover:underline"
           >
             {c.pendientes} pago{c.pendientes !== 1 ? 's' : ''} pendiente
@@ -236,7 +243,13 @@ export default async function SuperadminDashboard({
             <AlertTile
               label="Pagos por validar"
               value={d.porValidar}
-              href="/superadmin/operaciones"
+              // Operaciones es la cobertura de configuración, no una cola de
+              // pagos (D-05). La cola de comprobantes de la plataforma es la
+              // lista de Membresías. Ojo: este número suma cuatro colas
+              // (comprobantes, cobros en sucursal, compras y cambios de plan) y
+              // la lista solo enseña las membresías; el resto se valida en
+              // `/admin/pagos` de cada empresa.
+              href={hrefFiltro({ estado: 'PENDIENTE_PAGO' }, '/superadmin/membresias')}
               icon={Clock}
               tono="warning"
             />

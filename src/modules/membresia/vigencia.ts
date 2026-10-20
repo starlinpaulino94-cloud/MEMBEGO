@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 
 /**
  * VIGENCIA DE UNA MEMBRESÍA · una sola definición, y una red debajo.
@@ -45,6 +45,25 @@ export function membresiaVigente(ahora: Date = new Date()): Prisma.MembershipWhe
       { OR: [{ fechaVencimiento: null }, { fechaVencimiento: { gte: ahora } }] },
     ],
   }
+}
+
+/**
+ * La MISMA regla para SQL escrito a mano. Era el tercer sitio donde vivía
+ * escrita a mano —riesgo, retención, el recurrente del Resumen y los referidos
+ * activos—, y por eso mismo ya divergía: los referidos activos contaban como
+ * vivas las membresías con la fecha pasada.
+ *
+ * `alias` es el de la tabla `memberships` en la consulta (`m`, `m2`…). Se valida
+ * porque va como identificador, no como parámetro; la fecha sí es parámetro.
+ * `tests/definiciones-unicas.test.ts` falla si alguien vuelve a escribir
+ * `m.estado = 'ACTIVA'` en SQL a mano.
+ */
+export function membresiaVigenteSql(alias = 'm', ahora: Date = new Date()): Prisma.Sql {
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(alias)) {
+    throw new Error(`membresiaVigenteSql: alias inválido (${JSON.stringify(alias)})`)
+  }
+  const a = Prisma.raw(`"${alias}"`)
+  return Prisma.sql`(${a}."estado" = 'ACTIVA' AND (${a}."fechaVencimiento" IS NULL OR ${a}."fechaVencimiento" >= ${ahora}))`
 }
 
 /**

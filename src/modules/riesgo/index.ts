@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { Prisma } from '@prisma/client'
+import { membresiaVigenteSql } from '@/modules/membresia/vigencia'
 import { conEmpresa } from '@/lib/tenant'
 import { type FiltroRiesgo } from '@/modules/riesgo/filtro'
 
@@ -56,9 +57,8 @@ export interface ResultadoRiesgo {
 function condiciones(companyId: string, filtro: FiltroRiesgo, ahora: Date): Prisma.Sql {
   const partes: Prisma.Sql[] = [
     Prisma.sql`m."companyId" = ${companyId}`,
-    // Vigente: activa Y sin vencer. Misma regla que el resto del panel.
-    Prisma.sql`m."estado" = 'ACTIVA'`,
-    Prisma.sql`(m."fechaVencimiento" IS NULL OR m."fechaVencimiento" >= ${ahora})`,
+    // Vigente: activa Y sin vencer. LA regla del panel, no una copia.
+    membresiaVigenteSql('m', ahora),
   ]
 
   if (filtro.sinVisitas > 0) {

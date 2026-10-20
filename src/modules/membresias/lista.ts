@@ -35,6 +35,7 @@ export interface MembresiaFila {
   clienteId: string
   clienteNombre: string
   clienteEmail: string
+  empresaId: string
   empresaNombre: string
   empresaEsDemo: boolean
   planNombre: string
@@ -166,7 +167,7 @@ export async function listarMembresias(
                 select: {
                   nombre: true,
                   email: true,
-                  company: { select: { name: true, esDemo: true } },
+                  company: { select: { id: true, name: true, esDemo: true } },
                 },
               },
               _count: { select: { visits: true, comprobantes: true } },
@@ -214,6 +215,7 @@ export async function listarMembresias(
         clienteId: m.clienteId,
         clienteNombre: m.cliente.nombre,
         clienteEmail: m.cliente.email,
+        empresaId: m.cliente.company.id,
         empresaNombre: m.cliente.company.name,
         empresaEsDemo: m.cliente.company.esDemo,
         planNombre: m.plan.nombre,

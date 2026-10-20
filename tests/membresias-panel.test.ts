@@ -465,6 +465,7 @@ const FILA: MembresiaFila = {
   clienteId: 'c1',
   clienteNombre: 'Ana; Pérez',
   clienteEmail: 'ana@ejemplo.do',
+  empresaId: 'emp1',
   empresaNombre: 'CARTOWN',
   empresaEsDemo: false,
   planNombre: 'Silver',

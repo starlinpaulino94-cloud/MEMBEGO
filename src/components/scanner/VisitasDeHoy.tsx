@@ -3,13 +3,7 @@ import { conEmpresa } from '@/lib/tenant'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
-function startOfTodaySantoDomingo(): Date {
-  // República Dominicana no usa horario de verano: UTC-4 fijo.
-  const now = new Date()
-  const local = new Date(now.getTime() - 4 * 60 * 60 * 1000)
-  local.setUTCHours(0, 0, 0, 0)
-  return new Date(local.getTime() + 4 * 60 * 60 * 1000)
-}
+import { inicioDeHoy } from '@/modules/empresas/hoy'
 
 const fmtHora = new Intl.DateTimeFormat('es-DO', {
   timeZone: 'America/Santo_Domingo',
@@ -41,7 +35,8 @@ export async function VisitasDeHoy({
   try {
     const where = {
       membership: { companyId },
-      fechaVisita: { gte: startOfTodaySantoDomingo() },
+      // «Hoy» del negocio: la misma definición que el Resumen y el menú (D-03).
+      fechaVisita: { gte: await inicioDeHoy(companyId) },
       ...(empleadoId ? { empleadoId } : {}),
     }
     const [rows, count] = await conEmpresa(companyId, (tx) =>
