@@ -1,6 +1,7 @@
 import 'server-only'
 import { sinEmpresa } from '@/lib/tenant'
 import type { CampanaCanal, NotifTipo, Prisma } from '@prisma/client'
+import { enviarPushNotificaciones, type NotificacionPush } from '@/modules/notificaciones/push'
 import { normalizarRaiz, type Nodo, type SegmentoRaiz } from './arbol'
 import { leerArbolTx } from './segmentos'
 import { dondeAudiencia } from './audiencia-sql'
@@ -28,7 +29,8 @@ export async function procesarLoteCampana(
   campanaId: string,
   desde: number
 ): Promise<ResultadoLote> {
-  return sinEmpresa('campaña dirigida: fan-out por lotes (cross-tenant)', async (tx) => {
+  const notificationsPush: NotificacionPush[] = []
+  const resultado = await sinEmpresa('campaña dirigida: fan-out por lotes (cross-tenant)', async (tx) => {
     const campana = await tx.campanaDirigida.findUnique({ where: { id: campanaId } })
     if (!campana || campana.estado !== 'ACTIVA') {
       return { procesados: 0, excludos: 0, continua: false }
@@ -87,7 +89,12 @@ export async function procesarLoteCampana(
     }
 
     if (notifRows.length > 0) {
-      await tx.notificacion.createMany({ data: notifRows, skipDuplicates: true })
+      const creadas = await tx.notificacion.createManyAndReturn({
+        data: notifRows,
+        skipDuplicates: true,
+        select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
+      })
+      notificationsPush.push(...creadas)
     }
     if (entregas.length > 0) {
       await tx.campanaEntrega.createMany({ data: entregas })
@@ -120,6 +127,8 @@ export async function procesarLoteCampana(
 
     return { procesados, excludos, continua }
   })
+  await enviarPushNotificaciones(notificationsPush)
+  return resultado
 }
 
 /** AST de la audiencia de la campaña (segmento guardado o radio de sucursal). */

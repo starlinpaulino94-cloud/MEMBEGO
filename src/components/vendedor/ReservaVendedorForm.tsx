@@ -36,7 +36,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { formatMoney } from '@/lib/format'
+import { formatMoney, formatPrice } from '@/lib/format'
 
 const init: ReservaVendedorState = {}
 
@@ -444,7 +444,7 @@ export function ReservaVendedorForm({
                       <div className="flex items-center justify-between border-t border-border/50 pt-2 text-xs w-full min-w-0">
                         <span className="text-xs text-muted-foreground">Desde</span>
                         <span className="font-mono font-bold text-primary truncate">
-                          {formatMoney(minPrecio, { moneda: e.moneda })}
+                          {formatPrice(minPrecio, { moneda: e.moneda })}
                         </span>
                       </div>
                     </div>
@@ -496,9 +496,9 @@ export function ReservaVendedorForm({
                       <div className="min-w-0 flex-1 pr-2">
                         <p className="text-sm font-bold text-foreground truncate">{v.nombre}</p>
                         <p className="text-xs text-muted-foreground truncate">
-                          Adulto: <span className="font-semibold text-foreground">{formatMoney(v.precioAdulto, { moneda: excursion.moneda })}</span>
+                          Adulto: <span className="font-semibold text-foreground">{formatPrice(v.precioAdulto, { moneda: excursion.moneda })}</span>
                           {v.precioNino != null && (
-                            <> · Niño: <span className="font-semibold text-foreground">{formatMoney(v.precioNino, { moneda: excursion.moneda })}</span></>
+                            <> · Niño: <span className="font-semibold text-foreground">{formatPrice(v.precioNino, { moneda: excursion.moneda })}</span></>
                           )}
                         </p>
                       </div>
@@ -803,8 +803,8 @@ export function ReservaVendedorForm({
                       <span className="text-sm font-bold text-foreground block truncate">Adultos</span>
                       <span className="block text-xs text-muted-foreground truncate">
                         {totales
-                          ? formatMoney(totales.precioAdulto, { moneda: excursion.moneda })
-                          : variante ? formatMoney(variante.precioAdulto, { moneda: excursion.moneda }) : ''} c/u
+                          ? formatPrice(totales.precioAdulto, { moneda: excursion.moneda })
+                          : variante ? formatPrice(variante.precioAdulto, { moneda: excursion.moneda }) : ''} c/u
                       </span>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
@@ -837,9 +837,9 @@ export function ReservaVendedorForm({
                       <span className="text-sm font-bold text-foreground block truncate">Niños</span>
                       <span className="block text-xs text-muted-foreground truncate">
                         {totales
-                          ? formatMoney(totales.precioNino ?? totales.precioAdulto, { moneda: excursion.moneda })
+                          ? formatPrice(totales.precioNino ?? totales.precioAdulto, { moneda: excursion.moneda })
                           : variante
-                          ? formatMoney(variante.precioNino ?? variante.precioAdulto, { moneda: excursion.moneda })
+                          ? formatPrice(variante.precioNino ?? variante.precioAdulto, { moneda: excursion.moneda })
                           : ''} c/u
                       </span>
                     </div>
@@ -1182,7 +1182,7 @@ export function ReservaVendedorForm({
               {variante && (
                 <>
                   <div className="flex justify-between text-muted-foreground gap-2">
-                    <span className="truncate">{adultos} Adulto(s) × {formatMoney(totales?.precioAdulto ?? variante.precioAdulto, { moneda: excursion.moneda })}</span>
+                    <span className="truncate">{adultos} Adulto(s) × {formatPrice(totales?.precioAdulto ?? variante.precioAdulto, { moneda: excursion.moneda })}</span>
                     <span className="font-semibold text-foreground shrink-0">
                       {formatMoney(adultos * (totales?.precioAdulto ?? variante.precioAdulto), { moneda: excursion.moneda })}
                     </span>
@@ -1190,7 +1190,7 @@ export function ReservaVendedorForm({
 
                   {ninos > 0 && (
                     <div className="flex justify-between text-muted-foreground gap-2">
-                      <span className="truncate">{ninos} Niño(s) × {formatMoney(totales?.precioNino ?? (variante.precioNino ?? variante.precioAdulto), { moneda: excursion.moneda })}</span>
+                      <span className="truncate">{ninos} Niño(s) × {formatPrice(totales?.precioNino ?? (variante.precioNino ?? variante.precioAdulto), { moneda: excursion.moneda })}</span>
                       <span className="font-semibold text-foreground shrink-0">
                         {formatMoney(ninos * (totales?.precioNino ?? (variante.precioNino ?? variante.precioAdulto)), { moneda: excursion.moneda })}
                       </span>

@@ -556,6 +556,8 @@ export interface PromocionDetalleResponse {
   promotion: PromotionPublic
   esMiEmpresa: boolean
   limite: { limite: number | null; adquiridas: number; alcanzado: boolean }
+  readonly enMisBeneficios: boolean
+  readonly enMisRegalos: boolean
 }
 
 // --- Planes ---
@@ -711,6 +713,14 @@ export interface DisponibilidadDia {
   slots: { hm: string; inicioIso: string; libres: number; vencido: boolean }[]
 }
 
+export interface AgendarPromocionDisponibilidadResponse {
+  readonly agenda: AgendaConfigData | null
+  readonly dias: readonly { readonly ymd: string; readonly etiquetaCerrado: boolean }[]
+  readonly disponibilidad: DisponibilidadDia | null
+  readonly empresa: { readonly name: string; readonly zonaHoraria: string } | null
+  readonly yaTieneCita: boolean
+}
+
 export interface CitasResponse {
   citas: CitaItem[]
   agenda: AgendaConfigData | null
@@ -718,6 +728,26 @@ export interface CitasResponse {
   disponibilidad: DisponibilidadDia | null
   vehiculos: { id: string; marca: string; modelo: string }[]
   empresa: { name: string; zonaHoraria: string }
+}
+
+export interface NotificacionCliente {
+  readonly id: string
+  readonly tipo: string
+  readonly titulo: string
+  readonly mensaje: string
+  readonly href: string | null
+  readonly leida: boolean
+  readonly createdAt: string
+}
+
+export interface NotificacionesResponse {
+  readonly notificaciones: readonly NotificacionCliente[]
+  readonly noLeidas: number
+}
+
+export interface ActualizarNotificacionResponse {
+  readonly success: true
+  readonly noLeidas: number
 }
 
 export interface CrearCitaBody {
@@ -1247,6 +1277,25 @@ export const api = {
   getBuscar: (params?: BuscarParams) =>
     fetchBff<BuscadorUnificadoResult>(`/api/v1/cliente/buscar${qs(params)}`),
   getNovedades: () => fetchBff<{ novedades: NovedadInicio[] }>('/api/v1/cliente/novedades'),
+  getNotificaciones: () =>
+    fetchBff<NotificacionesResponse>('/api/v1/cliente/notificaciones'),
+  marcarNotificacionLeida: (id: string) =>
+    fetchBff<ActualizarNotificacionResponse>('/api/v1/cliente/notificaciones', {
+      method: 'PATCH',
+      body: JSON.stringify({ accion: 'marcarLeida', id }),
+    }),
+  marcarTodasNotificacionesLeidas: () =>
+    fetchBff<ActualizarNotificacionResponse>('/api/v1/cliente/notificaciones', {
+      method: 'PATCH',
+      body: JSON.stringify({ accion: 'marcarTodasLeidas' }),
+    }),
+  registrarPushToken: (token: string, platform: 'ANDROID' | 'IOS') =>
+    postJson<{ success: true }>('/api/v1/cliente/notificaciones/push-token', { token, platform }),
+  eliminarPushToken: (token: string) =>
+    fetchBff<{ success: true }>('/api/v1/cliente/notificaciones/push-token', {
+      method: 'DELETE',
+      body: JSON.stringify({ token }),
+    }),
   getIntereses: () => fetchBff<InteresesResponse>('/api/v1/cliente/intereses'),
   guardarIntereses: (categoryIds: string[]) =>
     postJson<{ success: true }>('/api/v1/cliente/intereses', { categoryIds }),
@@ -1286,8 +1335,12 @@ export const api = {
   getMisPromociones: () => fetchBff<MisPromocionesResponse>('/api/v1/cliente/mis-promociones'),
   getMisPromocion: (id: string) =>
     fetchBff<MisPromocionDetalle>(`/api/v1/cliente/mis-promociones/${encodeURIComponent(id)}`),
+  getDisponibilidadPromocion: (id: string, fecha?: string) =>
+    fetchBff<AgendarPromocionDisponibilidadResponse>(
+      `/api/v1/cliente/mis-promociones/${encodeURIComponent(id)}/agendar${qs({ fecha })}`,
+    ),
   agendarPromocion: (id: string, body: AgendarPromocionBody) =>
-    postJson<AgendarPromocionResponse>(`/api/v1/cliente/mis-promociones/${encodeURIComponent(id)}/agendar`, body),
+    postJson<AgendarPromocionResponse>('/api/v1/cliente/citas', { ...body, compraId: id }),
   getRegaloInvitado: (invitadoId: string) =>
     fetchBff<RegaloInvitadoResponse>(`/api/v1/cliente/mis-promociones/regalo/${encodeURIComponent(invitadoId)}`),
   reclamarRegaloInvitado: (invitadoId: string) =>

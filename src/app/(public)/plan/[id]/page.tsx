@@ -8,20 +8,13 @@ import { getPlanPublic, getPlanOg } from '@/modules/marketplace/cached'
 import { ShareMenu } from '@/components/public/ShareMenu'
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
+import { formatPrice } from '@/lib/format'
 
 interface PlanPageProps {
   params: Promise<{ id: string }>
 }
 
 export const revalidate = 3600
-
-function fmtRD(n: number) {
-  return new Intl.NumberFormat('es-DO', {
-    style: 'currency',
-    currency: 'DOP',
-    maximumFractionDigits: 0,
-  }).format(n)
-}
 
 // Fase E8 · Membresías promocionables: vista previa enriquecida al compartir.
 export async function generateMetadata({ params }: PlanPageProps): Promise<Metadata> {
@@ -30,7 +23,7 @@ export async function generateMetadata({ params }: PlanPageProps): Promise<Metad
   if (!og) return { title: `Plan · ${SITE_NAME}` }
 
   const title = `${og.nombre} · ${og.empresa}`
-  const precio = og.precio > 0 ? `${fmtRD(og.precio)} · ` : ''
+  const precio = `${formatPrice(og.precio)} · `
   const description = `${precio}${og.descripcion || `Plan de membresía de ${og.empresa} en ${SITE_NAME}`}`.slice(
     0,
     200
@@ -98,7 +91,7 @@ export default async function PlanPublicPage({ params }: PlanPageProps) {
             </div>
             <h1 className="mt-4 text-h1">{plan.nombre}</h1>
             <p className="mt-2 text-h1">
-              {plan.precio > 0 ? fmtRD(plan.precio) : 'Gratis'}
+              {formatPrice(plan.precio)}
               <span className="text-base font-medium opacity-80"> / {plan.vigenciaDias} días</span>
             </p>
           </div>

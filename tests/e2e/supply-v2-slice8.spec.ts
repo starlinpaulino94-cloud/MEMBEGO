@@ -509,7 +509,7 @@ async function movil(browser: Browser) {
   // ── El escaparate y la contratación en el teléfono ──────────────────────
   await cliente.goto('/cliente/membresias-membego')
   const tarjeta = cliente.getByTestId('plan-publico').filter({ hasText: d.planGratis }).filter({ visible: true })
-  await expect(tarjeta.getByTestId('plan-publico-precio')).toHaveText('Gratis')
+  await expect(tarjeta.getByTestId('plan-publico-precio')).toHaveText('GRATIS')
   expect(await cliente.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await cliente.screenshot({ path: 'test-results/shots/supply-v2-s8-movil-escaparate.png', fullPage: true })
 

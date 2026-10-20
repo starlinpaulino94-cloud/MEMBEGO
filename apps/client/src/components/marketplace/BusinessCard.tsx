@@ -3,7 +3,7 @@ import { View, Text, Image } from 'react-native'
 import { useRouter } from 'expo-router'
 import { MapPin, Gift, Users, Star } from 'lucide-react-native'
 import { cn } from '../../lib/cn'
-import { formatMoney } from '../../lib/format'
+import { formatPrice } from '../../lib/format'
 import { brandColor, hasBrandColor } from '../../lib/brand-color'
 import { MarketplaceCard } from './MarketplaceCard'
 
@@ -219,7 +219,7 @@ export function BusinessCard({
             <View className="mt-1.5 flex-row items-center self-start rounded-full border border-border px-3 py-1">
               <Text className="text-xs text-primary" style={companyColor ? { color: companyColor } : undefined}>{precio.nombre} </Text>
               <Text className="text-xs font-inter-bold text-primary tabular-nums" style={companyColor ? { color: companyColor } : undefined}>
-                {formatMoney(precio.precio)}
+                {formatPrice(precio.precio)}
               </Text>
             </View>
           ) : null}

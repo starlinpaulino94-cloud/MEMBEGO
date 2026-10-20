@@ -20,10 +20,10 @@ import {
 import { FiltrosChips, type GrupoFiltro } from '@/components/admin/FiltrosChips'
 import { MembresíasTable, type MembershipRow } from '@/components/admin/MembresíasTable'
 import type { PlanOption } from '@/components/admin/CambiarPlanDialog'
+import { formatPrice } from '@/lib/format'
 import { PageHeader } from '@/components/ui/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { formatMoney } from '@/lib/format'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { BotonExportar } from '@/components/ui/boton-exportar'
@@ -114,7 +114,7 @@ export default async function MembresiasPage({
     planes = planesData.map((p) => ({
       id: p.id,
       nombre: p.nombre,
-      precioLabel: formatMoney(Number(p.precio)),
+      precioLabel: formatPrice(Number(p.precio)),
     }))
   } catch (e) {
     fallo = true

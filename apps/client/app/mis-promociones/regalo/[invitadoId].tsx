@@ -68,7 +68,7 @@ export default function RegaloInvitadoScreen() {
         style={{
           paddingLeft: insets.left + 16,
           paddingRight: 16,
-          paddingTop: 12,
+          paddingTop: insets.top + 12,
           paddingBottom: 12,
         }}
       >

@@ -9,6 +9,7 @@ import {
   Keyboard,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Search, Store, X } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { useExplorar } from '../src/hooks/useExplorar'
@@ -19,6 +20,9 @@ import { Button } from '../src/components/ui/Button'
 import { cn } from '../src/lib/cn'
 import type { BusinessCardData } from '../src/components/marketplace/BusinessCard'
 import { colors } from '../src/theme/tokens'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
+import { BackHeader } from '../src/components/ui/BackHeader'
+import { goBackOr } from '../src/lib/navigation'
 
 /**
  * L4-27 · "Mis empresas" — listado de empresas donde el cliente es miembro
@@ -27,8 +31,9 @@ import { colors } from '../src/theme/tokens'
  *
  * Fuente de verdad: `src/app/(cliente)/cliente/empresas/page.tsx` (web).
  */
-export default function MisEmpresasScreen() {
+function MisEmpresasScreenContent() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
 
   const [searchInput, setSearchInput] = useState('')
@@ -85,6 +90,11 @@ export default function MisEmpresasScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      <BackHeader
+        title="Mis empresas"
+        leftInset={insets.left}
+        onBack={() => goBackOr(router, '/(tabs)/menu')}
+      />
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ padding: 16, alignItems: 'center' }}
@@ -100,9 +110,6 @@ export default function MisEmpresasScreen() {
             <View className="min-w-0 flex-1">
               <Text className="text-xs font-inter-semibold uppercase tracking-wider text-primary">
                 Tu espacio
-              </Text>
-              <Text className="mt-0.5 text-2xl font-inter-bold text-foreground">
-                Mis empresas
               </Text>
             </View>
           </View>
@@ -293,5 +300,13 @@ export default function MisEmpresasScreen() {
         </View>
       </ScrollView>
     </View>
+  )
+}
+
+export default function MisEmpresasScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <MisEmpresasScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

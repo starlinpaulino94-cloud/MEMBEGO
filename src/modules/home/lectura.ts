@@ -8,7 +8,7 @@ import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { getCategoriesPublic, getCompaniesPublic, getPlanesPublic, getFeaturedPromotions, getPromotionsPublic } from '@/modules/marketplace/cached'
 import { excursionesDestacadas } from '@/modules/excursiones/catalogo/search-queries'
 import { getMisEmpresas, getPromoFeed } from '@/modules/social/queries'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import { formatDescuento, PROMO_TIPO_LABEL } from '@/lib/promociones'
 import { EMPRESA_EN_VITRINA, promocionVigente } from '@/modules/promociones/vigencia'
 import type { SessionUser } from '@/types'
@@ -127,7 +127,7 @@ async function novedadesHero(categoriaSlug: string | undefined, ahora: Date): Pr
       color: plan.color,
       imagen: plan.imagenUrl ?? plan.company.logoUrl,
       href: `/cliente/planes/${plan.id}`,
-      precio: formatMoney(Number(plan.precio), plan.company),
+      precio: formatPrice(Number(plan.precio), plan.company),
       periodo: plan.vigenciaDias ? `/${plan.vigenciaDias} días` : plan.esIlimitado ? 'Ilimitada' : '',
     })),
     ...empresas.map((empresa): NovedadHero => ({
@@ -246,7 +246,7 @@ async function heroesPorDefecto(
     )
 
     const precio = p.precioTexto ?? (
-      p.venta ? formatMoney(p.venta.precio) : (p.precio ? formatMoney(Number(p.precio)) : null)
+      p.venta ? formatPrice(p.venta.precio) : (p.precio != null ? formatPrice(Number(p.precio)) : null)
     )
 
     return {
@@ -563,7 +563,7 @@ export async function getInicioVista(
     descripcion: p.descripcion,
     imagen: p.imagenUrl ?? p.company.logoUrl,
     href: `/cliente/planes/${p.id}`,
-    precio: formatMoney(p.precio, p.company),
+    precio: formatPrice(p.precio, p.company),
     periodo: `/ ${p.vigenciaDias} días`,
     valoracion: p.company.averageRating,
     resenas: hechos.get(p.company.id)?.resenas ?? 0,
@@ -585,7 +585,7 @@ export async function getInicioVista(
           ? '3×2'
           : null
 
-    const precioTexto = p.venta ? formatMoney(p.venta.precio) : (p.precio ? formatMoney(Number(p.precio)) : null)
+    const precioTexto = p.venta ? formatPrice(p.venta.precio) : (p.precio != null ? formatPrice(Number(p.precio)) : null)
 
     return {
       id: p.id,
@@ -747,7 +747,7 @@ export async function getInicioVista(
     experiencias: excursiones.flatMap((e): ExperienciaInicio[] => e.company ? [{
       id: e.id, nombre: e.nombre, empresa: e.company.name, descripcion: e.descripcion,
       imagen: e.portadaUrl, href: rutaDeExcursion(espacio, e.company.slug, e.slug),
-      precio: e.variantes.length === 0 ? null : formatMoney(Math.min(...e.variantes.map((v) => v.precioAdulto)), { moneda: e.moneda }),
+      precio: e.variantes.length === 0 ? null : formatPrice(Math.min(...e.variantes.map((v) => v.precioAdulto)), { moneda: e.moneda }),
       duracion: duracionLegible(e.duracionMin),
     }] : []),
     relampago: urgentes.length > 0 && urgentes[0].vigenciaHasta
@@ -760,7 +760,7 @@ export async function getInicioVista(
           colorPrimario: p.company.colorPrimario,
           imagen: p.imagenUrl,
           href: `/cliente/promociones/${p.id}`,
-          precio: p.venta ? formatMoney(p.venta.precio) : null,
+          precio: p.venta ? formatPrice(p.venta.precio) : null,
           descuento: p.descuento != null ? formatDescuento(Number(p.descuento), p.tipo) : null,
           hasta: new Date(p.vigenciaHasta!).toISOString(),
         })),

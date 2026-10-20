@@ -10,7 +10,6 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ArrowLeft,
   CalendarDays,
   Clock,
   Users,
@@ -21,6 +20,8 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../src/lib/auth-context';
 import { goBackOr } from '../src/lib/navigation';
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet';
+import { BackHeader } from '../src/components/ui/BackHeader';
 import { useMisExcursiones } from '../src/hooks/useExcursiones';
 import { formatDate, formatMoney } from '../src/lib/format';
 import { Button } from '../src/components/ui/Button';
@@ -62,7 +63,7 @@ const TONO_TO_VARIANT: Record<string, 'success' | 'warning' | 'info' | 'secondar
   danger: 'destructive',
 };
 
-export default function MisExcursionesScreen() {
+function MisExcursionesScreenContent() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -79,18 +80,8 @@ export default function MisExcursionesScreen() {
 
   if (!isAuthenticated) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-        <View className="px-4 py-3 border-b border-border bg-card">
-          <Pressable
-            onPress={() => goBackOr(router, '/(tabs)/inicio')}
-            className="flex-row items-center gap-1.5"
-          >
-            <ArrowLeft size={16} color="#71717a" />
-            <Text className="text-sm font-inter-semibold text-muted-foreground">
-              Mis excursiones
-            </Text>
-          </Pressable>
-        </View>
+      <View className="flex-1 bg-background">
+        <BackHeader title="Mis excursiones" leftInset={insets.left} onBack={() => goBackOr(router, '/(tabs)/inicio')} />
         <EmptyState
           icon={<Ticket size={40} color="#0284c7" />}
           title="Inicia sesión"
@@ -111,19 +102,8 @@ export default function MisExcursionesScreen() {
   const pasadas = reservas.filter((r) => new Date(r.fecha) < ahora);
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-      {/* Back bar */}
-      <View className="px-4 py-3 border-b border-border bg-card">
-        <Pressable
-            onPress={() => goBackOr(router, '/(tabs)/inicio')}
-          className="flex-row items-center gap-1.5"
-        >
-          <ArrowLeft size={16} color="#71717a" />
-          <Text className="text-sm font-inter-semibold text-muted-foreground">
-            Mis excursiones
-          </Text>
-        </Pressable>
-      </View>
+    <View className="flex-1 bg-background">
+      <BackHeader title="Mis excursiones" leftInset={insets.left} onBack={() => goBackOr(router, '/(tabs)/inicio')} />
 
       <ScrollView
         className="flex-1"
@@ -346,5 +326,13 @@ function ReservaCard({
         </View>
       </View>
     </Card>
+  );
+}
+
+export default function MisExcursionesScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <MisExcursionesScreenContent />
+    </ResponsiveDetailSheet>
   );
 }

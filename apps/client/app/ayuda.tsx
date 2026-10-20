@@ -9,6 +9,7 @@ import {
   TextInput,
 } from 'react-native'
 import { useRouter } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   HelpCircle,
   MessageCircle,
@@ -30,11 +31,13 @@ import { Card } from '../src/components/ui/Card'
 import { Badge } from '../src/components/ui/Badge'
 import { EmptyState } from '../src/components/ui/EmptyState'
 import { Skeleton } from '../src/components/ui/Skeleton'
-import { PageHeader } from '../src/components/ui/PageHeader'
+import { BackHeader } from '../src/components/ui/BackHeader'
 import { cn } from '../src/lib/cn'
 import { rnHref } from '../src/lib/rutas'
 import { colors } from '../src/theme/tokens'
 import type { AyudaResponse } from '../src/lib/api'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
+import { goBackOr } from '../src/lib/navigation'
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -197,8 +200,9 @@ function OnboardingCard({
 
 /* ── Screen ────────────────────────────────────────────────────────────── */
 
-export default function AyudaScreen() {
+function AyudaScreenContent() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const { data, isLoading, isError, refetch } = useAyuda(isAuthenticated)
   const crearTicket = useCrearTicketAyuda()
@@ -279,11 +283,15 @@ export default function AyudaScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      <BackHeader
+        title="Centro de ayuda"
+        leftInset={insets.left}
+        onBack={() => goBackOr(router, '/(tabs)/menu')}
+      />
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-        <PageHeader
-          title="Centro de ayuda"
-          description={`Contáctanos o encuentra respuestas rápidas · ${contacto?.empresaNombre ?? 'MembeGo'}`}
-        />
+        <Text className="mb-6 text-sm text-muted-foreground">
+          Contáctanos o encuentra respuestas rápidas · {contacto?.empresaNombre ?? 'MembeGo'}
+        </Text>
         {onboarding ? (
           <OnboardingCard onboarding={onboarding} onNavigate={(href) => router.push(rnHref(href))} />
         ) : null}
@@ -494,5 +502,13 @@ export default function AyudaScreen() {
         )}
       </ScrollView>
     </View>
+  )
+}
+
+export default function AyudaScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <AyudaScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

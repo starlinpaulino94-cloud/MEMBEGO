@@ -14,7 +14,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { sinEmpresa } from '@/lib/tenant'
 import { planesElegibles } from '@/modules/elegibilidad'
 import { getResenasEmpresa } from '@/modules/marketplace/queries'
-import { formatMoney, type RegionalPrefs } from '@/lib/format'
+import { formatMoney, formatPrice, type RegionalPrefs } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { RatingStars } from '@/components/ui/rating-stars'
 import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
@@ -213,7 +213,7 @@ export default async function PlanDetalleClientePage({
           </div>
           <h1 className="mt-4 text-h1">{planBase.nombre}</h1>
           <p className="mt-2 text-h1">
-            {precio > 0 ? formatMoney(precio, prefs) : 'Gratis'}
+            {formatPrice(precio, prefs)}
             <span className="text-base font-medium opacity-80">
               {' '}
               / {planBase.vigenciaDias} días
@@ -292,7 +292,7 @@ export default async function PlanDetalleClientePage({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm text-white/80">
                           <span>Plan {planBase.nombre}</span>
-                          <span>{formatMoney(desgloseCambio.precioNuevo, prefs)}</span>
+                          <span>{formatPrice(desgloseCambio.precioNuevo, prefs)}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm font-medium text-white">
                           <span className="inline-flex items-center gap-1.5">

@@ -3,7 +3,7 @@ import Image from 'next/image'
 import { Clock, Star } from 'lucide-react'
 import type { PromotionPublic } from '@/modules/marketplace/types'
 import { formatDescuento } from '@/lib/promociones'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import { PromoCountdown } from './PromoCountdown'
 
 /**
@@ -198,7 +198,7 @@ export function PromotionCard({
 
           {promotion.venta && !isExpired ? (
             <p className="mt-1.5 text-price-lg tabular-nums text-foreground">
-              {formatMoney(promotion.venta.precio)}
+              {formatPrice(promotion.venta.precio)}
             </p>
           ) : null}
 

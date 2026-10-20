@@ -5,7 +5,7 @@ import type { PlanConEmpresa } from '@/modules/marketplace/queries'
 import type { CategoryPublic } from '@/modules/marketplace/types'
 import { EmptyState } from '@/components/system/EmptyState'
 import { Button } from '@/components/ui/button'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /**
@@ -223,7 +223,7 @@ export function CatalogoPlanesGlobal({
                         <p className="text-h4 text-foreground">{p.nombre}</p>
                         <p className="mt-1 text-price-lg tabular-nums text-foreground">
                           <span className="text-overline">desde </span>
-                          {formatMoney(p.precio, {
+                          {formatPrice(p.precio, {
                             moneda: empresa.moneda,
                             idioma: empresa.idioma,
                           })}

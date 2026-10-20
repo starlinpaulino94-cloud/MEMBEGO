@@ -25,7 +25,7 @@ import { ComprobantePagoForm } from '@/components/cliente/ComprobantePagoForm'
 import { CancelarPagoBoton } from '@/components/membresia/CancelarPagoBoton'
 import { CancelarMembresiaBoton } from '@/components/membresia/CancelarMembresiaBoton'
 import { Reveal } from '@/components/ui/reveal'
-import { formatMoney } from '@/lib/format'
+import { formatMoney, formatPrice } from '@/lib/format'
 import { ofrecerTransferencia, getMetodosParaCompraNueva } from '@/modules/pagos/metodosDisponibles'
 import { getTokensPublicConfig } from '@/lib/payments/cardnet-tokens'
 import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
@@ -375,7 +375,7 @@ export default async function MembershipDetail({
                 <div className="relative mb-3 space-y-1.5 border-b border-white/20 pb-3">
                   <div className="flex items-center justify-between text-sm text-white/80">
                     <span>Plan {planAPagar?.nombre}</span>
-                    <span>{formatMoney(Number(planAPagar?.precio ?? 0), company)}</span>
+                    <span>{formatPrice(Number(planAPagar?.precio ?? 0), company)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm font-medium text-white">
                     <span className="inline-flex items-center gap-1.5">
@@ -391,7 +391,7 @@ export default async function MembershipDetail({
                     Total a pagar
                   </p>
                   <p className="mt-1 text-4xl font-bold tracking-tight">
-                    {formatMoney(montoAPagar, company)}
+                    {formatPrice(montoAPagar, company)}
                   </p>
                 </div>
                 {descuentoBienvenida <= 0 && (
@@ -429,7 +429,7 @@ export default async function MembershipDetail({
                 referencia={membership.referencia}
                 transferenciaDisponible={transferenciaActiva}
                 tarjetaDisponible={tarjetaDisponible}
-                montoTexto={`RD$${montoAPagar.toLocaleString('es-DO')}`}
+                montoTexto={formatPrice(montoAPagar, company)}
                 tokensConfig={
                   tokensConfig
                     ? {

@@ -24,7 +24,7 @@ import QRCode from 'react-native-qrcode-svg'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../src/lib/auth-context'
 import { useMisPromocion } from '../../src/hooks/useMisPromociones'
-import { formatDateTime } from '../../src/lib/format'
+import { formatDateTime, formatPrice } from '../../src/lib/format'
 import { Button } from '../../src/components/ui/Button'
 import { Card } from '../../src/components/ui/Card'
 import { Badge } from '../../src/components/ui/Badge'
@@ -401,7 +401,7 @@ function DetalleContent({
         <View className="p-5 gap-1">
           <DetailRow
             label="Precio"
-            value={precio > 0 ? `RD$${precio.toLocaleString('es-DO')}` : 'Gratis'}
+            value={formatPrice(precio)}
           />
           <DetailRow
             label="Usos"
@@ -503,7 +503,7 @@ function DetalleContent({
                     <SavedCardPicker
                       cards={savedCards}
                       selectedId={selectedSavedCardId}
-                      onSelect={(id) => { onSelectSavedCard(id); if (id) setSaveCardConsent(false) }}
+                      onSelect={(id) => { onSelectSavedCard(id); if (id) onSaveCardConsentChange(false) }}
                       disabled={isStartingCardnet}
                     />
                     {!selectedSavedCardId ? (

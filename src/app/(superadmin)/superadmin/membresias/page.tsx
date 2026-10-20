@@ -7,7 +7,7 @@ import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { StatCard } from '@/components/ui/stat-card'
 import { Badge } from '@/components/ui/badge'
-import { formatDate, formatMoney } from '@/lib/format'
+import { formatDate, formatMoney, formatPrice } from '@/lib/format'
 import { plural } from '@/lib/plural'
 import { membresiaEstadoUi } from '@/lib/estados'
 import { MembershipAdminActions } from '@/components/admin/MembershipAdminActions'
@@ -306,7 +306,7 @@ export default async function SuperadminMembresiasPage({
                       clienteId: m.clienteId,
                       clienteNombre: m.clienteNombre,
                       planNombre: m.planNombre,
-                      precioTexto: formatMoney(m.planPrecio, {}),
+                      precioTexto: formatPrice(m.planPrecio, {}),
                       lavadosPlan: m.planLavadosIncluidos,
                       lavadosRegalo: m.usosRegaloRestantes,
                       vigenciaDias: m.planVigenciaDias,

@@ -44,7 +44,7 @@ export function ListaDeMembresias({ planes, espacio, accionDelPlan }: { planes: 
                     <h2 className="text-h3" data-testid="plan-publico-nombre">{p.nombre}</h2>
                   </div>
                   <p className="text-h2 tabular-nums" data-testid="plan-publico-precio">
-                    {p.gratuita ? 'Gratis' : p.precio}
+                    {p.gratuita ? 'GRATIS' : p.precio}
                   </p>
                   <p className="text-caption text-muted-foreground" data-testid="plan-publico-duracion">{p.duracionDias} días</p>
                   {p.descripcion && <p className="text-sm text-muted-foreground">{p.descripcion}</p>}

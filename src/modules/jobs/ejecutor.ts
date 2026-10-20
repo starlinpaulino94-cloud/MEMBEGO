@@ -1,4 +1,5 @@
 import { sinEmpresa, type Tx } from '@/lib/tenant'
+import { enviarPushNotificaciones, type NotificacionPush } from '@/modules/notificaciones/push'
 import {
   TAMANO_LOTE_NOTIF,
   type CargaEmail,
@@ -156,7 +157,7 @@ export function dedupeKeyNotificacion(carga: CargaNotificar): string {
  */
 async function notificarLote(carga: CargaNotificar): Promise<ResultadoTrabajo> {
   const claveLote = dedupeKeyNotificacion(carga)
-  const { userIds, hayMas } = await sinEmpresa(
+  const { userIds, hayMas, notifications } = await sinEmpresa(
     'jobs: lote de notificaciones por usuario (cross-tenant)',
     async (tx) => {
       const userIds =
@@ -164,9 +165,9 @@ async function notificarLote(carga: CargaNotificar): Promise<ResultadoTrabajo> {
           ? await idsSeguidores(tx, carga.companyId, carga.desde)
           : await idsClientes(tx, carga.companyId, carga.desde)
 
-      if (userIds.length === 0) return { userIds, hayMas: false }
+      if (userIds.length === 0) return { userIds, hayMas: false, notifications: [] }
 
-      await tx.notificacion.createMany({
+      const notifications = await tx.notificacion.createManyAndReturn({
         data: userIds.map((userId) => ({
           userId,
           ...carga.payload,
@@ -175,13 +176,16 @@ async function notificarLote(carga: CargaNotificar): Promise<ResultadoTrabajo> {
         // Con el índice único (userId, dedupeKey) el reintento del mismo lote
         // se convierte en no-op en vez de duplicar notificaciones.
         skipDuplicates: true,
+        select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
       })
 
-      return { userIds, hayMas: userIds.length === TAMANO_LOTE_NOTIF }
+      return { userIds, hayMas: userIds.length === TAMANO_LOTE_NOTIF, notifications }
     }
   )
 
   if (userIds.length === 0) return { procesados: 0 }
+
+  await enviarPushNotificaciones(notifications)
 
   if (hayMas) {
     const { encolar } = await import('@/modules/jobs/cola')

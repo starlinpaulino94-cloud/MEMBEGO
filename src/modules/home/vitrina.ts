@@ -1,6 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import { sinEmpresa } from '@/lib/tenant'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
 
 /**
@@ -148,7 +148,7 @@ export async function contextoHeroPorDefecto(
       valoracion: e.averageRating != null ? Number(e.averageRating) : null,
       color: e.colorPrimario && /^#[0-9a-fA-F]{6}$/.test(e.colorPrimario) ? e.colorPrimario : null,
       planDesde: barato
-        ? `Planes desde ${formatMoney(Number(barato.precio), e)} / ${barato.vigenciaDias} días`
+        ? `Planes desde ${formatPrice(Number(barato.precio), e)} / ${barato.vigenciaDias} días`
         : null,
     })
   }

@@ -9,7 +9,7 @@ import {
   TONO_EXCURSION,
   type EstadoExcursion,
 } from '@/modules/excursiones/catalogo/nucleo'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 
 type ExcursionRow = {
   id: string
@@ -90,7 +90,7 @@ export function CatalogoLista({ excursiones }: { excursiones: ExcursionRow[] }) 
                       <td className="px-4 py-3 text-muted-foreground">{e.categoria ?? '—'}</td>
                       <td className="px-4 py-3 font-medium text-foreground">
                         {e.variantes[0]
-                          ? formatMoney(Number(e.variantes[0].precioAdulto), { moneda: e.moneda }, 2)
+                          ? formatPrice(Number(e.variantes[0].precioAdulto), { moneda: e.moneda }, 2)
                           : '—'}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{e._count.variantes}</td>

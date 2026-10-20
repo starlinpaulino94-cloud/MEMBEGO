@@ -2,7 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, CircleHelp, Frown, QrCode } from 'lucide-react'
 import { formatDescuento } from '@/lib/promociones'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import type { PromotionPublic } from '@/modules/marketplace/types'
 import { RetailSeccionHeader, RetailValoracion } from '@/components/cliente/inicio/RetailSeccion'
 
@@ -125,7 +125,7 @@ export function QrSinBeneficio({
                   </div>
                   {promo.venta ? (
                     <p className="mt-auto pt-1 text-price-lg text-foreground">
-                      {formatMoney(promo.venta.precio)}
+                      {formatPrice(promo.venta.precio)}
                     </p>
                   ) : null}
                 </div>

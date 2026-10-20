@@ -9,7 +9,7 @@ import { Check, Infinity as InfinityIcon, Plus, Pencil } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DeletePlanButton } from '@/components/admin/DeletePlanButton'
 import { PlanPausarBoton } from '@/components/admin/PlanPausarBoton'
-import { formatMoney, type RegionalPrefs } from '@/lib/format'
+import { formatPrice, type RegionalPrefs } from '@/lib/format'
 import { sufijoPeriodo, textoVigencia } from '@/modules/planes/periodo'
 import { plural } from '@/lib/plural'
 
@@ -172,7 +172,7 @@ export default async function SuperadminPlanesPage({
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <p className="text-h2 tabular-nums text-foreground">
-                      {formatMoney(Number(plan.precio), prefs)}
+                      {formatPrice(Number(plan.precio), prefs)}
                       {/*
                         EL SUFIJO SALE DE LA VIGENCIA, no de una suposición.
                         Estaba escrito «/mes» a mano, siempre: un plan anual

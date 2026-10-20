@@ -176,11 +176,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const clienteId = user.metadata.clienteId
-    if (!clienteId) {
-      return NextResponse.json({ error: 'No autorizado.' }, { status: 401, headers: corsHeaders(request) })
-    }
-    if (!(await formSubmitLimiter(`cita:${clienteId}`))) {
+    const clienteIdSesion = user.metadata.clienteId
+    if (!(await formSubmitLimiter(`cita:${clienteIdSesion ?? user.supabaseId}`))) {
       return NextResponse.json(
         { error: 'Demasiados intentos. Espera un momento.' },
         { status: 429, headers: corsHeaders(request) }
@@ -199,18 +196,54 @@ export async function POST(request: Request) {
     if (!YMD_RE.test(ymd) || !HM_RE.test(hm)) {
       return NextResponse.json({ error: 'Elige día y hora.' }, { status: 400, headers: corsHeaders(request) })
     }
+    if (!clienteIdSesion && !compraId) {
+      return NextResponse.json({ error: 'No autorizado.' }, { status: 401, headers: corsHeaders(request) })
+    }
 
-    const cliente = await sinEmpresa('citas: buscar cliente por id (BFF)', (tx) =>
-      tx.cliente.findUnique({
-        where: { id: clienteId },
-        select: {
-          id: true,
-          nombre: true,
-          companyId: true,
-          company: { select: { zonaHoraria: true, idioma: true } },
-        },
-      })
-    )
+    const clienteIds = compraId ? new Set(await misClienteIds(user.supabaseId)) : new Set<string>()
+    if (clienteIdSesion) clienteIds.add(clienteIdSesion)
+    const compraInicial = compraId
+      ? await sinEmpresa('citas: buscar beneficio entre las fichas de la persona (BFF)', (tx) =>
+          tx.productoCompra.findFirst({
+            where: {
+              id: compraId,
+              clienteId: { in: [...clienteIds] },
+              estado: 'ACTIVA',
+              usosRestantes: { gt: 0 },
+            },
+            select: {
+              cliente: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  companyId: true,
+                  company: { select: { zonaHoraria: true, idioma: true } },
+                },
+              },
+              promocion: { select: { titulo: true } },
+            },
+          })
+        )
+      : null
+    if (compraId && !compraInicial) {
+      return NextResponse.json(
+        { error: 'Esa recompensa ya no está disponible.' },
+        { status: 400, headers: corsHeaders(request) }
+      )
+    }
+    const cliente = compraInicial?.cliente ?? (clienteIdSesion
+      ? await sinEmpresa('citas: buscar cliente por id (BFF)', (tx) =>
+          tx.cliente.findUnique({
+            where: { id: clienteIdSesion },
+            select: {
+              id: true,
+              nombre: true,
+              companyId: true,
+              company: { select: { zonaHoraria: true, idioma: true } },
+            },
+          })
+        )
+      : null)
     if (!cliente) {
       return NextResponse.json({ error: 'Cliente no encontrado.' }, { status: 404, headers: corsHeaders(request) })
     }
@@ -256,7 +289,7 @@ export async function POST(request: Request) {
       }
     }
 
-    let compraTitulo: string | null = null
+    let compraTitulo: string | null = compraInicial?.promocion?.titulo ?? null
     if (compraId) {
       const compra = await conEmpresa(companyId, (tx) =>
         tx.productoCompra.findFirst({

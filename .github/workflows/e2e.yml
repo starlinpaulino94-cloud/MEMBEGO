@@ -109,6 +109,17 @@ jobs:
       - name: Esquema
         run: npx prisma db push --skip-generate --accept-data-loss
 
+      - name: Funciones y disparadores de inventario
+        run: |
+          for migration in \
+            20261068_inventory_lots \
+            20261069_inventory_count_lots \
+            20261070_inventory_lot_expiry_history \
+            20261071_inventory_serials \
+            20261072_inventory_kits; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "prisma/migrations/$migration/migration.sql"
+          done
+
       # La cuenta con la que actúa la integración de pagos externos. El servidor
       # la necesita en el arranque y la comprueba contra la base, que acaba de
       # nacer vacía: hay que crearla antes. Se usa el mismo arnés que las

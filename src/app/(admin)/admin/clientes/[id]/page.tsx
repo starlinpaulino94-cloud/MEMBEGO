@@ -8,7 +8,7 @@ import { requireCompanyContext } from '@/lib/auth/company-context'
 import { emitirQrMembresia } from '@/modules/admin/actions'
 import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { RenovarMembresiaDialog } from '@/components/admin/RenovarMembresiaDialog'
-import { formatMoney, formatDate, formatDateTime } from '@/lib/format'
+import { formatMoney, formatPrice, formatDate, formatDateTime } from '@/lib/format'
 import { fechaInputLocal } from '@/lib/periodos'
 import { QRDisplay } from '@/components/qr/QRDisplay'
 import { EstadoBadge } from '@/components/EstadoBadge'
@@ -294,7 +294,7 @@ export default async function ClienteDetailPage({
                   <Info label="Plan" value={membership.plan.nombre} />
                   <Info
                     label="Precio"
-                    value={formatMoney(Number(membership.plan.precio), prefs)}
+                    value={formatPrice(Number(membership.plan.precio), prefs)}
                   />
                   <Info
                     label="Usos restantes"
@@ -385,7 +385,7 @@ export default async function ClienteDetailPage({
                       clienteId={cliente.id}
                       clienteNombre={cliente.nombre}
                       planNombre={membership.plan.nombre}
-                      precioTexto={formatMoney(Number(membership.plan.precio), prefs)}
+                      precioTexto={formatPrice(Number(membership.plan.precio), prefs)}
                       lavadosPlan={
                         membership.plan.esIlimitado ? null : membership.plan.lavadosIncluidos
                       }

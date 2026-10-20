@@ -1,4 +1,5 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { enviarPushNotificaciones } from './push'
 import type { NotifTipo } from '@prisma/client'
 import { FULL_ADMIN_ROLES } from '@/types'
 
@@ -21,9 +22,15 @@ export async function crearNotificacion(data: {
   dedupeKey?: string
 }) {
   try {
-    await sinEmpresa('notificaciones: crear por usuario (un usuario puede ser de varias empresas)', (tx) =>
-      tx.notificacion.create({ data })
+    const notification = await sinEmpresa(
+      'notificaciones: crear por usuario (un usuario puede ser de varias empresas)',
+      (tx) =>
+        tx.notificacion.create({
+          data,
+          select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
+        }),
     )
+    await enviarPushNotificaciones([notification])
   } catch (e) {
     console.error('[notificacion] create error', e)
   }
@@ -46,21 +53,22 @@ export async function notificarAdmins(
   payload: { tipo: NotifTipo; titulo: string; mensaje: string; href?: string; dedupeKey?: string }
 ): Promise<number> {
   try {
-    return await conEmpresa(companyId, async (tx) => {
+    const notifications = await conEmpresa(companyId, async (tx) => {
       const admins = await tx.user.findMany({
         where: { companyId, role: { in: FULL_ADMIN_ROLES } },
         select: { id: true },
       })
-      if (admins.length === 0) return 0
-      const r = await tx.notificacion.createMany({
+      if (admins.length === 0) return []
+      return tx.notificacion.createManyAndReturn({
         data: admins.map((a) => ({ userId: a.id, ...payload })),
         // Solo muerde cuando el payload trae `dedupeKey`: sin clave, Postgres
         // permite tantos NULL como quiera y esto no cambia nada.
         skipDuplicates: true,
+        select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
       })
-      // Cuántas filas NUEVAS quedaron (con `dedupeKey`, repetir el hecho da 0).
-      return r.count
     })
+    await enviarPushNotificaciones(notifications)
+    return notifications.length
   } catch (e) {
     console.error('[notificacion] notificarAdmins error', e)
     return 0
@@ -138,21 +146,23 @@ export async function notificarSuperadmins(payload: {
   dedupeKey?: string
 }): Promise<number> {
   try {
-    return await sinEmpresa(
+    const notifications = await sinEmpresa(
       'notificaciones: avisar a los superadmin (no pertenecen a ninguna empresa)',
       async (tx) => {
         const supers = await tx.user.findMany({
           where: { role: 'SUPERADMIN' },
           select: { id: true },
         })
-        if (supers.length === 0) return 0
-        const r = await tx.notificacion.createMany({
+        if (supers.length === 0) return []
+        return tx.notificacion.createManyAndReturn({
           data: supers.map((u) => ({ userId: u.id, ...payload })),
           skipDuplicates: true,
+          select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
         })
-        return r.count
       }
     )
+    await enviarPushNotificaciones(notifications)
+    return notifications.length
   } catch (e) {
     console.error('[notificacion] notificarSuperadmins error', e)
     return 0

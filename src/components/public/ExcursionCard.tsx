@@ -2,7 +2,7 @@ import { rutaDeBuscarExcursiones, rutaDeExcursion, type Espacio } from '@/module
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowRight, Clock, MapPin, Compass, Users } from 'lucide-react'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 
 export interface ExcursionCardData {
   id: string
@@ -214,7 +214,7 @@ export function ExcursionCard({
             <div className="mt-3">
               <span className="text-caption text-muted-foreground">Desde</span>
               <p className="text-h1 tabular-nums text-foreground">
-                {formatMoney(excursion.precioDesde, { moneda: excursion.moneda || 'DOP' })}
+                {formatPrice(excursion.precioDesde, { moneda: excursion.moneda || 'DOP' })}
               </p>
             </div>
           )}

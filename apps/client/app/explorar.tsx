@@ -8,9 +8,9 @@ import {
   ActivityIndicator,
   Keyboard,
 } from 'react-native'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ArrowLeft, Search, Store } from 'lucide-react-native'
+import { Search, Store } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { goBackOr } from '../src/lib/navigation'
 import { useExplorar } from '../src/hooks/useExplorar'
@@ -18,6 +18,8 @@ import { ExplorarEmpresasList } from '../src/components/cliente/ExplorarEmpresas
 import { EmptyState } from '../src/components/ui/EmptyState'
 import { Skeleton } from '../src/components/ui/Skeleton'
 import { Button } from '../src/components/ui/Button'
+import { BackHeader } from '../src/components/ui/BackHeader'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
 import { cn } from '../src/lib/cn'
 import type { BusinessCardData } from '../src/components/marketplace/BusinessCard'
 
@@ -27,15 +29,19 @@ import type { BusinessCardData } from '../src/components/marketplace/BusinessCar
  * Muestra: buscador, chips de categoría, contador de resultados,
  * grid de empresas (BusinessCard), empty state.
  */
-export default function ExplorarScreen() {
+function ExplorarScreenContent() {
   const router = useRouter()
+  const params = useLocalSearchParams<{ category?: string | string[] }>()
   const insets = useSafeAreaInsets()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
+  const categoryParam = Array.isArray(params.category)
+    ? params.category[0] ?? ''
+    : params.category ?? ''
 
   // Search: input state + committed query (updated on submit)
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
+  const selectedCategory = categoryParam
 
   const { data, isLoading, isError, refetch } = useExplorar(
     {
@@ -77,33 +83,21 @@ export default function ExplorarScreen() {
   }
 
   function handleCategoryToggle(slug: string) {
-    setSelectedCategory((prev) => (prev === slug ? '' : slug))
+    const nextCategory = selectedCategory === slug ? '' : slug
+    router.setParams({ category: nextCategory || undefined })
+  }
+
+  function handleSelectCategory(slug: string) {
+    router.setParams({ category: slug || undefined })
   }
 
   return (
     <View className="flex-1 bg-background">
-      {/* ── Header con back + título ─────────────────────────────────── */}
-      <View
-        className="flex-row items-center gap-2 border-b border-border bg-background"
-        style={{
-          paddingLeft: insets.left + 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-        }}
-      >
-        <Pressable
-          onPress={() => goBackOr(router, '/(tabs)/inicio')}
-          className="rounded-lg p-2 active:bg-muted"
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-        >
-          <ArrowLeft size={20} color="#111827" />
-        </Pressable>
-        <Text className="text-lg font-inter-bold text-foreground">
-          Explorar empresas
-        </Text>
-      </View>
+      <BackHeader
+        title="Explorar empresas"
+        leftInset={insets.left}
+        onBack={() => goBackOr(router, '/(tabs)/inicio')}
+      />
 
       <ScrollView
         className="flex-1"
@@ -157,7 +151,7 @@ export default function ExplorarScreen() {
           >
             {/* "Todas" chip */}
             <Pressable
-              onPress={() => setSelectedCategory('')}
+              onPress={() => handleSelectCategory('')}
               className={cn(
                 'rounded-full px-4 py-2.5',
                 !selectedCategory
@@ -245,7 +239,7 @@ export default function ExplorarScreen() {
                   onPress={() => {
                     setSearchInput('')
                     setSearchQuery('')
-                    setSelectedCategory('')
+                    handleSelectCategory('')
                   }}
                   variant="outline"
                 >
@@ -273,5 +267,13 @@ export default function ExplorarScreen() {
         )}
       </ScrollView>
     </View>
+  )
+}
+
+export default function ExplorarScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <ExplorarScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

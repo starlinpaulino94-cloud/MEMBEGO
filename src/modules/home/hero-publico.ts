@@ -1,6 +1,6 @@
 import { conEmpresa } from '@/lib/tenant'
 import { rutaDeExcursion, rutaDePlan, type Espacio } from '@/modules/comercio/rutas'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import type { HeroSlide } from './esquema'
 import type { HeroInicio } from './vista'
 
@@ -23,7 +23,7 @@ export async function heroPublico(companyId: string, slide: HeroSlide, espacio: 
       select: { precio: true, vigenciaDias: true },
     })
     const planDesde = barato
-      ? `Planes desde ${formatMoney(Number(barato.precio), empresa)} / ${barato.vigenciaDias} días`
+      ? `Planes desde ${formatPrice(Number(barato.precio), empresa)} / ${barato.vigenciaDias} días`
       : null
     const base = {
       titulo: slide.titulo, subtitulo: slide.subtitulo, empresa: empresa.name,

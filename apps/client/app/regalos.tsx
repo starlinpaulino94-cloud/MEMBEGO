@@ -257,7 +257,7 @@ export default function RegalosScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ paddingTop: 16, paddingBottom: insets.bottom + 24 }}>
+    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }}>
       <View className="px-4">
         {/* Header */}
         <PageHeader
