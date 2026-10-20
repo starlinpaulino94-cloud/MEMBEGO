@@ -98,6 +98,15 @@ Reusable client primitives are composed from `Card`, `Button`, `Input`, `Badge`,
 - **Motion**: no decorative motion.
 - **Layout**: single-column form.
 
+### Native permission wizard
+- **Structure**: full-screen, safe-area-aware native flow with two focused steps: foreground location and push notifications. It is mounted only in Android/iOS builds.
+- **Variants**: first-run prompt, already granted, requestable denial, settings-required denial, requesting, and recoverable error.
+- **Spacing**: use the existing 4px rhythm, 20px content insets, and 44px minimum touch targets.
+- **States**: request an OS permission only after the matching explanation and user action. The user may skip either permission and continue using the app; completion is remembered per account on the device. The wizard can be reopened from Notificaciones.
+- **Accessibility**: plain-language purpose for each permission, visible grant status, explicit labels, and a clear route to device settings after a permanent denial. Do not request background location, camera, microphone, contacts, or broad media access unless a feature begins using them.
+- **Motion**: use the platform modal's short slide transition only; no decorative motion.
+- **Layout**: one readable column, scrollable on short screens, centered with a maximum width on larger native devices.
+
 ## 6. Motion & Interaction
 
 Use client motion tokens: 100ms instant, 150ms fast, 200ms base, and 350ms slow. Existing Pressables use opacity for press feedback; fields use the ring token for focus. Do not animate layout. Respect `prefers-reduced-motion` on Web and avoid motion where none improves payment clarity.

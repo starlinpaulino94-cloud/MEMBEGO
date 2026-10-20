@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ScrollView, Text, Pressable, View, useWindowDimensions } from 'react-native'
+import { Platform, ScrollView, Text, Pressable, View, useWindowDimensions } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   Bell,
   CheckCheck,
+  ShieldCheck,
 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { goBackOr } from '../src/lib/navigation'
@@ -21,6 +22,7 @@ import { Button } from '../src/components/ui/Button'
 import { EmptyState } from '../src/components/ui/EmptyState'
 import { NotificationCard } from '../src/components/notificaciones/NotificationCard'
 import { PushNotificationActivation } from '../src/components/notificaciones/PushNotificationActivation'
+import { useNativePermissionsWizard } from '../src/components/permisos/NativePermissionsWizardProvider'
 import {
   ResponsiveDetailSheet,
   useResponsiveDetailSheetBackgroundClass,
@@ -34,6 +36,7 @@ function NotificacionesScreenContent() {
   const { width } = useWindowDimensions()
   const backgroundClass = useResponsiveDetailSheetBackgroundClass('bg-vibe-fondo')
   const { user, isAuthenticated, isCliente, isLoading: isAuthLoading } = useAuth()
+  const { openWizard } = useNativePermissionsWizard()
   const userId = user?.id ?? null
   const { data, isLoading, isError, refetch } = useNotificaciones(
     userId,
@@ -109,6 +112,16 @@ function NotificacionesScreenContent() {
           </View>
 
           {isAuthenticated && isCliente ? <PushNotificationActivation /> : null}
+
+          {Platform.OS !== 'web' && isAuthenticated && isCliente ? (
+            <Button
+              variant="outline"
+              onPress={openWizard}
+              icon={<ShieldCheck size={17} color={colors.primary.DEFAULT} />}
+            >
+              Revisar permisos del dispositivo
+            </Button>
+          ) : null}
 
           {noLeidas > 0 ? (
             <View className="flex-row flex-wrap items-center justify-between gap-2">
