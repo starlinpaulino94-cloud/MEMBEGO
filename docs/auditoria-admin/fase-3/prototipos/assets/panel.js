@@ -314,7 +314,7 @@
         const k = $('#p-tarea', p).value
         ponerPrueba({ activa: true, tarea: k, t0: Date.now(), clics: 0, pantallas: 1, ruta: 'resumen.html' })
         guardar.poner('mg-rol', TAREAS[k].rol)
-        location.href = 'resumen.html?rol=' + TAREAS[k].rol
+        location.href = new URL('resumen.html?rol=' + TAREAS[k].rol, location.href).toString()
         return
       }
       if (b.hasAttribute('data-fin') && s) {

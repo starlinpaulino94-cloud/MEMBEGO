@@ -33,7 +33,7 @@ El menú es el propuesto en `03` · C.2: **8 grupos, 21 entradas** para el admin
 
 ## 3. Línea base y medida (tarea 3.3)
 
-**Cómo se contó.** *Hoy:* leyendo el código de `origin/main` `4243a0f8` (no cronometrado, no ejecutado en vivo). *Prototipo:* ejecutando el flujo (la tarea 1, con clics reales en el navegador; la 2, con eventos de clic escritos a mano sobre la misma cadena de controles; la 3, leyendo el Resumen, sin clics). Un clic = una pulsación sobre algo interactivo; una pantalla = una ruta distinta (cambiar de cola o de pestaña dentro de la misma no cuenta). Todas las tareas empiezan en el Resumen.
+**Cómo se contó.** *Hoy:* leyendo el código de `origin/main` `4243a0f8` (no cronometrado, no ejecutado en vivo). *Prototipo:* ejecutando el flujo (la tarea 1, con clics reales en el navegador; la 2, con eventos de clic escritos a mano sobre la misma cadena de controles; la 3, leyendo el Resumen, sin clics). Un clic = una pulsación sobre algo interactivo; una pantalla = una ruta distinta (cambiar de cola o de pestaña dentro de la misma no cuenta). Todas las tareas empiezan en el Resumen. **Las cifras del prototipo las dio el propio «Modo de prueba»** al recorrer cada tarea: la 1 marcó 3 clics y 2 pantallas; la 2, 4 clics y 3 pantallas.
 
 | Tarea | Hoy | Prototipo |
 |---|---|---|
