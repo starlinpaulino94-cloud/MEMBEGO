@@ -49,6 +49,19 @@ const TECHOS: Record<string, number> = {
   sombrasArbitrarias: 0,
   duracionesSueltas: 0,
   zIndexSueltos: 5,
+
+  // Fase 2 de la auditoría del panel (docs/auditoria-admin · 12, tarea 2.4): medidas NUEVAS, con el techo que tenían el 2026-10-20 sobre
+  // `origin/main` (4243a0f8). Las cifras del informe 07 se midieron sobre un código anterior y ya no coinciden (p. ej. las variables
+  // con hex de `globals.css` pasaron de 31 a 65): el techo es el de hoy, no el del informe. Cada fase de rediseño baja los suyos aquí
+  // mismo, en el commit que los baja.
+  h1Crudo: 46,
+  botonCrudo: 39,
+  titulo2xlBold: 30,
+  tarjetaLocal: 24,
+  tablaCruda: 54,
+  variablesHexEnGlobalsCss: 65,
+  mapasDeEstado: 58,
+  componentesSinUso: 15,
 }
 
 test('ninguna deuda de diseño crece', () => {
