@@ -2,6 +2,7 @@
 
 import { requireSection } from '@/lib/auth/guards'
 import { conEmpresa } from '@/lib/tenant'
+import { enviarPushNotificaciones } from '@/modules/notificaciones/push'
 import { esSegmentoValido, resolverSegmento } from './segmentos'
 
 // F4.5: envío manual de notificaciones a segmentos de clientes.
@@ -59,8 +60,8 @@ export async function enviarNotificacionSegmento(
       return { error: 'Ese segmento no tiene destinatarios ahora mismo.' }
     }
 
-    await conEmpresa(companyId, (tx) =>
-      tx.notificacion.createMany({
+    const notifications = await conEmpresa(companyId, (tx) =>
+      tx.notificacion.createManyAndReturn({
         data: userIds.map((userId) => ({
           userId,
           tipo: 'SISTEMA' as const,
@@ -68,10 +69,12 @@ export async function enviarNotificacionSegmento(
           mensaje,
           href: '/cliente/promociones',
         })),
+        select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
       })
     )
+    await enviarPushNotificaciones(notifications)
 
-    return { success: true, enviadas: userIds.length }
+    return { success: true, enviadas: notifications.length }
   } catch (e) {
     console.error('[notif-segmento]', e)
     return { error: 'No se pudo enviar. Intenta de nuevo.' }

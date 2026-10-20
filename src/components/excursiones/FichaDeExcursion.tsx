@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { ArrowLeft, Clock, MapPin, Users, Check, X as XIcon, CalendarDays } from 'lucide-react'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import { formatoMinutosAHora, minutosDesdeMedianoche } from '@/modules/excursiones/reservas/nucleo'
 import { rutaDeExcursiones, type Espacio } from '@/modules/comercio/rutas'
 import type { FichaDeExcursionDatos } from '@/modules/comercio/ficha-excursion'
@@ -250,7 +250,7 @@ export function FichaDeExcursion({ ficha, espacio, ranuraReserva }: { ficha: Fic
                         )}
                       </div>
                       <span className="text-sm sm:text-base font-bold text-primary">
-                        {formatMoney(Number(v.precioAdulto), { moneda: exc.moneda })}
+                        {formatPrice(Number(v.precioAdulto), { moneda: exc.moneda })}
                         <span className="text-xs font-normal text-muted-foreground">
                           {' '}/adulto
                         </span>
@@ -292,7 +292,7 @@ export function FichaDeExcursion({ ficha, espacio, ranuraReserva }: { ficha: Fic
           <div>
             <span className="text-xs text-muted-foreground block uppercase font-medium">Precio desde</span>
             <span className="text-base font-bold text-primary">
-              {precioDesde != null ? formatMoney(Number(precioDesde), { moneda: exc.moneda }) : '—'}
+              {precioDesde != null ? formatPrice(Number(precioDesde), { moneda: exc.moneda }) : '—'}
             </span>
           </div>
 

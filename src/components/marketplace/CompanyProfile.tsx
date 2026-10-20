@@ -40,7 +40,7 @@ import type {
 import type { PlanPublic, CompanyPostsPublic, SucursalPublic } from '@/modules/marketplace/queries'
 import type { CtaPlanes } from '@/modules/marketplace/conversion'
 import type { RegionalPrefs } from '@/lib/format'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 import { landingUrlFor } from '@/lib/site'
 import { SucursalesSection } from './SucursalesSection'
 import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPublica'
@@ -478,7 +478,7 @@ export function CompanyProfile({
                     </div>
 
                     <p className="mt-4 text-price-lg tabular-nums text-foreground">
-                      {formatMoney(plan.precio, prefs)}
+                      {formatPrice(plan.precio, prefs)}
                       <span className="text-small font-normal text-muted-foreground">/mes</span>
                     </p>
                     {plan.descripcion && (
@@ -779,7 +779,7 @@ export function CompanyProfile({
                         </div>
                         {exc.precioDesde != null && (
                           <p className="mt-2 text-price-sm tabular-nums text-foreground">
-                            Desde {formatMoney(exc.precioDesde, { moneda: exc.moneda })}
+                            Desde {formatPrice(exc.precioDesde, { moneda: exc.moneda })}
                           </p>
                         )}
                       </div>

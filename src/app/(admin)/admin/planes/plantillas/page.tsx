@@ -21,7 +21,8 @@ const DIFICULTAD_STYLE: Record<PlanPlantillaCard['dificultad'], string> = {
 }
 
 function fmtPrecio(p: PlanPlantillaCard): string {
-  if (p.precioSugerido <= 0) return 'Sin cuota'
+  if (p.precioSugerido === 0) return 'GRATIS'
+  if (p.precioSugerido < 0) return 'Sin cuota'
   return `${p.moneda === 'DOP' ? 'RD$' : p.moneda + ' '}${p.precioSugerido.toLocaleString('es-DO')}`
 }
 

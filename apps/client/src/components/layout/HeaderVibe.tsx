@@ -1,10 +1,12 @@
-import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, TextInput, useWindowDimensions } from 'react-native'
+import React, { useEffect, useState } from 'react'
+import { AppState, Platform, View, Text, TouchableOpacity, TextInput, useWindowDimensions } from 'react-native'
 import { useRouter } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Search, User, Bell, Mic } from 'lucide-react-native'
+import { useQueryClient } from '@tanstack/react-query'
 import { PillUbicacion } from './PillUbicacion'
 import { useAuth } from '../../lib/auth-context'
+import { notificacionesQueryKey, useNotificaciones } from '../../hooks/useNotificaciones'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '../../theme/tokens'
 import { useInicioAccent } from './InicioAccentContext'
@@ -13,8 +15,13 @@ export function HeaderVibe() {
   const router = useRouter()
   const { width } = useWindowDimensions()
   const insets = useSafeAreaInsets()
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, isCliente } = useAuth()
   const { accent } = useInicioAccent()
+  const queryClient = useQueryClient()
+  const { data: notificaciones } = useNotificaciones(
+    user?.id ?? null,
+    isAuthenticated && isCliente,
+  )
   const [searchText, setSearchText] = useState('')
   const gutter = width >= 768 ? 24 : 16
   const topMargin = width >= 768 ? 16 : 12
@@ -22,6 +29,20 @@ export function HeaderVibe() {
   const iniciales = user?.email
     ? user.email.substring(0, 2).toUpperCase()
     : null
+  const noLeidas = notificaciones?.noLeidas ?? 0
+
+  useEffect(() => {
+    const userId = user?.id
+    if (Platform.OS === 'web' || !userId || !isAuthenticated || !isCliente) return
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void queryClient.invalidateQueries({ queryKey: notificacionesQueryKey(userId) })
+      }
+    })
+
+    return () => subscription.remove()
+  }, [isAuthenticated, isCliente, queryClient, user?.id])
 
   return (
     <LinearGradient
@@ -70,11 +91,20 @@ export function HeaderVibe() {
           </View>
 
           <TouchableOpacity
-            onPress={() => router.push('/novedades')}
+            onPress={() => router.push('/notificaciones')}
             activeOpacity={0.8}
             className="h-11 w-11 items-center justify-center rounded-full border border-white bg-white shadow-sm"
+            accessibilityRole="button"
+            accessibilityLabel={noLeidas > 0 ? 'Notificaciones, ' + noLeidas + ' sin leer' : 'Notificaciones'}
           >
             <Bell size={20} color={accent.color} />
+            {noLeidas > 0 ? (
+              <View className="absolute -right-1 -top-1 h-4 min-w-[16px] items-center justify-center rounded-full bg-destructive px-1">
+                <Text className="text-[10px] font-inter-bold leading-none text-white">
+                  {noLeidas > 99 ? '99+' : noLeidas}
+                </Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
 
           <TouchableOpacity

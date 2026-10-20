@@ -1,6 +1,7 @@
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
+import { enviarPushNotificaciones, type NotificacionPush } from '@/modules/notificaciones/push'
 
 // F4.7: motor de automatizaciones. Reglas basadas en tiempo que generan
 // notificaciones a clientes. Sin tablas nuevas: la deduplicación usa un
@@ -40,7 +41,11 @@ interface NotifPendiente {
  * 2 queries por lote (antes: findFirst + create POR USUARIO, es decir,
  * 2×clientes round-trips que retenían conexiones durante todo el cron).
  */
-async function notificarLote(tx: Tx, items: NotifPendiente[]): Promise<number> {
+async function notificarLote(
+  tx: Tx,
+  items: NotifPendiente[],
+  notificationsPush: NotificacionPush[],
+): Promise<number> {
   if (items.length === 0) return 0
   const existentes = await tx.notificacion.findMany({
     where: {
@@ -52,8 +57,12 @@ async function notificarLote(tx: Tx, items: NotifPendiente[]): Promise<number> {
   const ya = new Set(existentes.map((e) => `${e.userId}|${e.href}`))
   const nuevos = items.filter((i) => !ya.has(`${i.userId}|${i.href}`))
   if (nuevos.length === 0) return 0
-  const res = await tx.notificacion.createMany({ data: nuevos })
-  return res.count
+  const creadas = await tx.notificacion.createManyAndReturn({
+    data: nuevos,
+    select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
+  })
+  notificationsPush.push(...creadas)
+  return creadas.length
 }
 
 /**
@@ -69,8 +78,9 @@ export async function ejecutarAutomatizacionesEmpresa(
   // esta. Ese «a veces sí» es lo que hace que un agotamiento de pool sea tan
   // difícil de reproducir.
   const umbralesEmpresa = await getUmbralesRetencion(companyId)
+  const notificationsPush: NotificacionPush[] = []
 
-  return conEmpresa(companyId, async (tx) => {
+  const resultado = await conEmpresa(companyId, async (tx) => {
     const now = new Date()
     const hoyMes = now.getMonth()
     const hoyDia = now.getDate()
@@ -113,7 +123,8 @@ export async function ejecutarAutomatizacionesEmpresa(
             // debe recibir la felicitación de CADA una (el dedupe es por userId+href).
             href: `/cliente/promociones?auto=cumple-${anio}-${companyId}`,
           }]
-        })
+        }),
+        notificationsPush,
       )
     }
 
@@ -148,7 +159,8 @@ export async function ejecutarAutomatizacionesEmpresa(
             mensaje: `Tu membresía en ${company.name} vence el ${fechaStr}. Renuévala para no perder tus beneficios.`,
             href: `/cliente/pagos?auto=vence-${m.id}-${marca}`,
           }]
-        })
+        }),
+        notificationsPush,
       )
     }
 
@@ -185,7 +197,8 @@ export async function ejecutarAutomatizacionesEmpresa(
             // companyId en el marcador: el incentivo mensual es por empresa.
             href: `/cliente/promociones?auto=inactivo-${anio}-${mes}-${companyId}`,
           }]
-        })
+        }),
+        notificationsPush,
       )
     }
 
@@ -228,12 +241,16 @@ export async function ejecutarAutomatizacionesEmpresa(
           // Una vez por semana y por empresa: un aviso diario sobre el mismo
           // problema se convierte en ruido, y el ruido se ignora.
           href: `/admin/riesgo?sinVisitas=${umbrales.dormidoDias >= 60 ? 60 : 30}&vence=0&usos=con&auto=vigilancia-${semana}-${companyId}`,
-        }))
+        })),
+        notificationsPush,
       )
     }
 
     return { cumpleanos, porVencer, inactivos, vigilancia }
   })
+
+  await enviarPushNotificaciones(notificationsPush)
+  return resultado
 }
 
 export interface RepartoAutomatizaciones {

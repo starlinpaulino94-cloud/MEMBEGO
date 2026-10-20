@@ -6,6 +6,7 @@ import { buscarUnificado, type BuscadorUnificadoResult } from '@/modules/cliente
 import { SITE_NAME } from '@/lib/site'
 import { shareMetadata } from '@/lib/share/metadata'
 import { EmptyState } from '@/components/system/EmptyState'
+import { formatPrice } from '@/lib/format'
 
 interface ExcursionesPageProps {
   searchParams: Promise<{
@@ -273,7 +274,7 @@ function ResultsGrid({
 
               {exc.precioDesde != null && (
                 <p className="mt-3 text-sm font-semibold text-primary">
-                  Desde {new Intl.NumberFormat('es-DO', { style: 'currency', currency: exc.moneda, minimumFractionDigits: 0 }).format(exc.precioDesde)}
+                  Desde {formatPrice(exc.precioDesde, { moneda: exc.moneda })}
                 </p>
               )}
 

@@ -1,12 +1,12 @@
 import React, { useState } from 'react'
+import { useRouter } from 'expo-router'
 import { View, Pressable, ActivityIndicator, useWindowDimensions } from 'react-native'
 import { Plus, Check } from 'lucide-react-native'
-import {
-  BusinessCard,
-  type BusinessCardData,
-} from '../marketplace/BusinessCard'
+import { EmpresaMarketplaceCard, type EmpresaMarketplaceCardData } from '../marketplace/EmpresaMarketplaceCard'
+import type { BusinessCardData } from '../marketplace/BusinessCard'
 import { brandColor, brandDisplayForeground } from '../../lib/brand-color'
 import { colors } from '../../theme/tokens'
+import { useInicioAccent } from '../layout/InicioAccentContext'
 
 export type EmpresaExplorar = BusinessCardData
 
@@ -26,6 +26,8 @@ export function ExplorarEmpresasList({
   empresas,
   seguidasIds,
 }: ExplorarEmpresasListProps) {
+  const router = useRouter()
+  const { accent } = useInicioAccent()
   const { width } = useWindowDimensions()
   const columns = width >= 1024 ? 3 : width >= 768 ? 2 : 1
   const rows = Array.from({ length: Math.ceil(empresas.length / columns) }, (_, rowIndex) =>
@@ -57,44 +59,64 @@ export function ExplorarEmpresasList({
           {row.map((company) => {
             const siguiendo = seguidas.has(company.id)
             const pending = pendingId === company.id
-            const companyColor = brandColor(company.colorPrimario, colors.primary.DEFAULT)
-            const activeForeground = brandDisplayForeground(companyColor, colors.primary.DEFAULT)
+            const companyColor = brandColor(company.colorPrimario, accent.color)
+            const activeForeground = brandDisplayForeground(companyColor, accent.color)
+            const empresaCard: EmpresaMarketplaceCardData = {
+              id: company.id,
+              nombre: company.name,
+              slug: company.slug,
+              rubro: RUBRO_LABEL[company.type] ?? company.type,
+              ciudad: company.ciudad,
+              logoUrl: company.logoUrl,
+              colorPrimario: company.colorPrimario,
+              bannerUrl: company.bannerUrl,
+              href: `/empresas/${company.slug}`,
+              valoracion: company.averageRating ?? null,
+              resenas: 0,
+              esMia: false,
+              etiquetaRelacion: siguiendo ? 'Siguiendo' : null,
+            }
 
             return (
-              <View key={company.id} className="min-w-0 flex-1">
-                <BusinessCard
-                  company={company}
-                  hrefBase="/empresas"
+              <View key={company.id} className="relative min-w-0 flex-1">
+                <EmpresaMarketplaceCard
+                  empresa={empresaCard}
+                  accent={accent}
                   className="w-full"
-                  action={
-                    <Pressable
-                      onPress={() => toggleSeguir(company)}
-                      disabled={pending}
-                      className="size-10 items-center justify-center rounded-full border"
-                      style={{
-                        borderColor: companyColor,
-                        backgroundColor: siguiendo ? companyColor : `${companyColor}14`,
-                      }}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        siguiendo
-                          ? `Dejar de seguir a ${company.name}`
-                          : `Seguir a ${company.name}`
-                      }
-                    >
-                      {pending ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={siguiendo ? activeForeground : colors.surface.foreground}
-                        />
-                      ) : siguiendo ? (
-                        <Check size={18} color={activeForeground} />
-                      ) : (
-                        <Plus size={18} color={colors.surface.foreground} />
-                      )}
-                    </Pressable>
-                  }
+                  onPress={() => router.push({
+                    pathname: '/empresas/[companySlug]',
+                    params: { companySlug: company.slug },
+                  })}
                 />
+                <View className="absolute right-2 top-2 z-20">
+                  <Pressable
+                    onPress={() => toggleSeguir(company)}
+                    disabled={pending}
+                    className="size-11 items-center justify-center rounded-full border bg-card/95 shadow-sm"
+                    style={{
+                      borderColor: companyColor,
+                      backgroundColor: siguiendo ? companyColor : `${companyColor}14`,
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      siguiendo
+                        ? `Dejar de seguir a ${company.name}`
+                        : `Seguir a ${company.name}`
+                    }
+                    accessibilityState={{ disabled: pending, selected: siguiendo }}
+                  >
+                    {pending ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={siguiendo ? activeForeground : colors.surface.foreground}
+                      />
+                    ) : siguiendo ? (
+                      <Check size={18} color={activeForeground} />
+                    ) : (
+                      <Plus size={18} color={colors.surface.foreground} />
+                    )}
+                  </Pressable>
+                </View>
               </View>
             )
           })}
@@ -105,4 +127,12 @@ export function ExplorarEmpresasList({
       ))}
     </View>
   )
+}
+
+const RUBRO_LABEL: Readonly<Record<string, string>> = {
+  carwash: 'Car Wash',
+  restaurante: 'Restaurante',
+  gimnasio: 'Gimnasio',
+  salon: 'Salón',
+  excursiones: 'Excursiones',
 }

@@ -3,7 +3,7 @@ import { View, Text, Image, Pressable } from 'react-native'
 import { useRouter } from 'expo-router'
 import { Clock, Star, Zap } from 'lucide-react-native'
 import { cn } from '../../lib/cn'
-import { formatMoney } from '../../lib/format'
+import { formatPrice } from '../../lib/format'
 import { brandColor, hasBrandColor } from '../../lib/brand-color'
 import { isFlashOffer } from '../marketplace/FlashOfferStatus'
 import type { PromotionPublic } from '../../lib/api'
@@ -170,9 +170,9 @@ export function PromotionCard({
         </Text>
 
         {/* Precio */}
-        {precio != null && precio > 0 && !isExpired ? (
+        {precio != null && !isExpired ? (
           <Text className="mt-1.5 text-xl font-inter-bold text-foreground tabular-nums" style={hasCompanyColor ? { color: companyColor } : undefined}>
-            {formatMoney(precio)}
+            {formatPrice(precio)}
           </Text>
         ) : null}
 

@@ -10,6 +10,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Sparkles, CalendarDays, Crown, ArrowRight } from 'lucide-react-native'
 import { api, type EmpresaDetalleResponse, type ExcursionCardData } from '../../src/lib/api'
+import { formatPrice } from '../../src/lib/format'
 import { Card } from '../../src/components/ui/Card'
 import { Button } from '../../src/components/ui/Button'
 import { cn } from '../../src/lib/cn'
@@ -171,9 +172,7 @@ export default function BienvenidaRefScreen() {
                 <View className="items-end">
                   {exc.precioDesde != null && (
                     <Text className="text-sm font-inter-semibold text-primary">
-                      {exc.precioDesde > 0
-                        ? `$${exc.precioDesde.toLocaleString()}`
-                        : 'Gratis'}
+                      {formatPrice(exc.precioDesde, { moneda: exc.moneda })}
                     </Text>
                   )}
                   <ArrowRight size={16} color="#71717a" />

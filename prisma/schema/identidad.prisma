@@ -112,6 +112,11 @@ enum NotifTipo {
 
 }
 
+enum PushPlatform {
+  ANDROID
+  IOS
+}
+
 enum AuditAccion {
   VISITA_CONFIRMADA
   /// Una visita ya registrada se deshizo y el lavado volvió al saldo del
@@ -643,6 +648,7 @@ model User {
   auditLogs        AuditLog[]
   comprobantes     Comprobante[]
   notificaciones   Notificacion[]
+  pushTokens       PushToken[]
   preferenciasDeAviso PreferenciasDeAviso?
   follows          CompanyFollow[]
   promosGuardadas  PromocionGuardada[]
@@ -1341,4 +1347,17 @@ model Notificacion {
   @@index([userId, leida])
   @@index([userId, createdAt])
   @@map("notificaciones")
+}
+
+model PushToken {
+  id        String       @id @default(cuid())
+  token     String       @unique
+  platform  PushPlatform
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([userId])
+  @@map("push_tokens")
 }

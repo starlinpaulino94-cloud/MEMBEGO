@@ -23,9 +23,10 @@ import { EmptyState } from '../src/components/ui/EmptyState'
 import { SectionHeader } from '../src/components/ui/SectionHeader'
 import { Skeleton } from '../src/components/ui/Skeleton'
 import { BackHeader } from '../src/components/ui/BackHeader'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
 import { fetchBff } from '../src/lib/api'
 
-export default function AjustesScreen() {
+function AjustesScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { user, isLoading: authLoading, signOut } = useAuth()
@@ -408,5 +409,13 @@ export default function AjustesScreen() {
         )}
       </ScrollView>
     </View>
+  )
+}
+
+export default function AjustesScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <AjustesScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

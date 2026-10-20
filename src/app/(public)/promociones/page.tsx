@@ -158,7 +158,7 @@ export default async function PromotionsPage({
                 <li key={m.id} className="rounded-2xl border border-border/70 bg-card p-5 shadow-premium" data-testid="membresia-marketplace">
                   <p className="text-caption text-muted-foreground">{m.negocio}</p>
                   <Link href={RUTA_MEMBRESIAS_PUBLICAS} className="text-h3 underline-offset-4 hover:underline">{m.nombre}</Link>
-                  <p className="mt-2 text-h3 tabular-nums">{m.gratuita ? 'Gratis' : m.precio}</p>
+                  <p className="mt-2 text-h3 tabular-nums">{m.gratuita ? 'GRATIS' : m.precio}</p>
                   <p className="mt-1 text-caption text-muted-foreground">{m.duracionDias} días{m.incluye.length > 0 ? ` · ${m.incluye.length} beneficio(s)` : ''}</p>
                 </li>
               ))}

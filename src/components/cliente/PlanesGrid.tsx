@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { seleccionarPlan, type SeleccionState } from '@/modules/membresia/actions'
 import { cn } from '@/lib/utils'
-import { formatMoney, type RegionalPrefs } from '@/lib/format'
+import { formatMoney, formatPrice, type RegionalPrefs } from '@/lib/format'
 import { calcularDescuentoBienvenida } from '@/lib/bienvenida'
 import {
   planRecomendadoPara,
@@ -326,18 +326,18 @@ export function PlanesGrid({
                   <div className="mt-3">
                     {descuento > 0 && (
                       <p className="text-small text-muted-foreground line-through">
-                        {formatMoney(plan.precio, prefs)}
+                        {formatPrice(plan.precio, prefs)}
                       </p>
                     )}
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-h1 leading-none tabular-nums text-foreground">
-                        {formatMoney(precioFinal, prefs)}
+                        {formatPrice(precioFinal, prefs)}
                       </span>
                       <span className="text-small font-medium text-muted-foreground">/mes</span>
                     </div>
                     {precioPorUso != null && (
                       <p className="mt-1.5 text-caption">
-                        Equivale a {formatMoney(precioPorUso, prefs)} por uso
+                        Equivale a {formatPrice(precioPorUso, prefs)} por uso
                       </p>
                     )}
                     {plan.precioDeCategoria && vehiculo && (

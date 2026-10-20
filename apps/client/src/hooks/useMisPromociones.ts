@@ -19,14 +19,26 @@ export function useMisPromocion(id: string | undefined, enabled = true) {
   })
 }
 
+export function useDisponibilidadPromocion(id: string | undefined, fecha?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['cliente', 'mis-promocion-disponibilidad', id ?? '', fecha ?? ''],
+    queryFn: () => api.getDisponibilidadPromocion(id ?? '', fecha),
+    staleTime: 30 * 1000,
+    enabled: enabled && !!id,
+  })
+}
+
 export function useAgendarPromocion() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: AgendarPromocionBody }) =>
       api.agendarPromocion(id, body),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['cliente', 'mis-promociones'] })
       queryClient.invalidateQueries({ queryKey: ['cliente', 'citas'] })
+      queryClient.invalidateQueries({
+        queryKey: ['cliente', 'mis-promocion-disponibilidad', variables.id],
+      })
     },
   })
 }

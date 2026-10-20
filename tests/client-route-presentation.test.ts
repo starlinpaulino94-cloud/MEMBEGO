@@ -29,8 +29,13 @@ test('details and flows use a bare presentation', () => {
   }
 })
 
-test('only entity details qualify for responsive sheets', () => {
+test('menu and account pages with responsive wrappers qualify as sheets', () => {
   for (const pathname of [
+    '/ajustes',
+    '/explorar',
+    '/empresas',
+    '/promociones',
+    '/mis-excursiones',
     '/planes/plan-1',
     '/promociones/promo-1',
     '/membresia/membership-1',
@@ -46,7 +51,6 @@ test('only entity details qualify for responsive sheets', () => {
     '/mis-promociones/promo-1/agendar',
     '/mis-promociones/regalo/invitado-1',
     '/bienvenida-ref/mi-negocio',
-    '/empresas',
   ]) {
     assert.equal(isClientDetailRoute(pathname), false, `${pathname} should remain a full screen`)
   }
@@ -59,6 +63,7 @@ test('account pages already using responsive sheets qualify as details', () => {
     '/intereses',
     '/mis-membresias',
     '/mis-promociones',
+    '/notificaciones',
     '/pagos',
     '/vehiculos',
     '/vehiculos/nuevo',

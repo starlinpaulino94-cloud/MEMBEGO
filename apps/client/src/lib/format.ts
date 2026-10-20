@@ -68,6 +68,16 @@ export function formatMoney(
   return `${symbol}${formatted}`
 }
 
+export function formatPrice(
+  amount: number | string,
+  prefs?: RegionalPrefs | null,
+  decimales = 0
+): string {
+  const value = typeof amount === 'string' && amount.trim() !== '' ? Number(amount) : amount
+  if (typeof value === 'number' && Number.isFinite(value) && value === 0) return 'GRATIS'
+  return formatMoney(amount, prefs, decimales)
+}
+
 // ── Date formatting ─────────────────────────────────────────────────────────
 
 const MONTHS_ES = [

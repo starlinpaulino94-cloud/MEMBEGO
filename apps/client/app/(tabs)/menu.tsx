@@ -68,7 +68,15 @@ export default function MenuScreen() {
   const { data, isLoading } = useMenu()
   const [categoriasAbiertas, setCategoriasAbiertas] = useState(false)
 
-  const filas = data?.items ?? FILAS
+  const filasDisponibles = data?.items ?? FILAS
+  const catalogoPromociones = FILAS.find((fila) => fila.id === 'promociones')
+  const filas = filasDisponibles.some((fila: Fila) => fila.id === 'promociones') || !catalogoPromociones
+    ? filasDisponibles
+    : [
+        ...filasDisponibles.slice(0, 2),
+        catalogoPromociones,
+        ...filasDisponibles.slice(2),
+      ]
   const categorias = data?.categorias ?? []
   const nombre = data?.usuario?.nombre || user?.email?.split('@')[0] || 'Cliente'
 
@@ -202,7 +210,7 @@ export default function MenuScreen() {
           ¿Buscas la configuración? Vive en{' '}
           <Text
             className="font-inter-semibold text-primary"
-            onPress={() => router.push('/(tabs)/cuenta')}
+            onPress={() => router.push('/ajustes')}
           >
             Configuración
           </Text>

@@ -113,7 +113,7 @@ test.describe('Separación F4 · Supply y regalos: la landing informa, la app op
     // Y siguen informando: la ficha trae su precio, y el escaparate su plan.
     await ir(page, publicaOferta())
     await expect(page.getByTestId('oferta-titulo')).toHaveText(OFERTA)
-    await expect(page.getByTestId('oferta-precio-membego')).toContainText('650')
+    await expect(page.getByTestId('oferta-precio-membego')).toHaveText('RD$651')
     await ir(page, '/promociones/membresias')
     await expect(page.getByTestId('plan-publico').filter({ hasText: PLAN })).toBeVisible()
   })
@@ -221,7 +221,7 @@ test.describe('Separación F4 · Supply y regalos: la landing informa, la app op
     const { ctx, page } = await conSesion(browser, 'separacionCliente2', null, clienteInvitado)
     await page.goto(`${appOferta()}?cupon=VERANO`)
     await expect(page.getByTestId('oferta-titulo')).toHaveText(OFERTA)
-    await expect(page.getByTestId('oferta-precio-membego')).toContainText('650')
+    await expect(page.getByTestId('oferta-precio-membego')).toHaveText('RD$651')
     await expect(page.getByTestId('input-cupon')).toHaveValue('VERANO')
     await expect(page.getByTestId('btn-comprar')).toBeEnabled()
     await expect(page.getByRole('link', { name: 'Ver mis cupones' })).toHaveAttribute('href', '/cliente/cupones')

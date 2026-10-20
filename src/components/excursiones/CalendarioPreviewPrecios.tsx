@@ -111,7 +111,7 @@ export function CalendarioPreviewPrecios({
 
   const formatearMoneda = (valor: number | null) => {
     if (valor == null) return '—'
-    if (valor === 0) return 'Gratis'
+    if (valor === 0) return 'GRATIS'
     return `${moneda} $${valor.toFixed(2)}`
   }
 

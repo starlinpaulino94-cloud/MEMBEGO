@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Infinity as SinFin, Link2, Package, Percent, Timer } from 'lucide-react'
 import type { SupplyV2OfferStatus } from '@prisma/client'
-import { formatDate } from '@/lib/format'
+import { formatDate, formatPrice } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { OFFER_SOURCE_LABELS, OFFER_STATUS_LABELS, OFFER_STATUS_TONE } from '@/modules/supply-v2/core/catalogo'
 import type { OfertaEnLista } from '@/modules/supply-v2/offers/queries'
@@ -82,9 +82,9 @@ function Precio({ o }: { o: OfertaEnLista }) {
   return (
     <div className="flex flex-col items-end">
       <span className="whitespace-nowrap text-[15px] font-bold leading-5 tabular-nums">
-        {entero}<span className="text-[12px] font-semibold text-sv2-ink-variant">.{centavos}</span>
+        {venta === 0 ? 'GRATIS' : <>{entero}<span className="text-[12px] font-semibold text-sv2-ink-variant">.{centavos}</span></>}
       </span>
-      {Number(o.publicPrice) > venta && <span className="whitespace-nowrap text-[12px] leading-4 text-sv2-outline line-through">{dinero(Number(o.publicPrice), o.currency)}</span>}
+      {Number(o.publicPrice) > venta && <span className="whitespace-nowrap text-[12px] leading-4 text-sv2-outline line-through">{formatPrice(o.publicPrice, { moneda: o.currency })}</span>}
       {comision ? (
         <>
           <span className={cn(MONO, 'whitespace-nowrap text-sv2-outline')}>Neto prov.: {dinero(venta - (margen ?? 0), o.currency)}</span>

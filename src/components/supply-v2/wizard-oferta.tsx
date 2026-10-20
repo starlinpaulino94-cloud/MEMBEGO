@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { formatPrice } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -148,7 +149,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
                   <Dato k="Proveedor" v={producto.proveedor} />
                   <Dato k="Disponible" v={producto.disponibles.toLocaleString('es-DO')} />
                   <Dato k="Costo promedio" v={dinero(producto.costoPromedio, moneda)} />
-                  <Dato k="Precio público" v={producto.publicPrice ? dinero(producto.publicPrice, moneda) : '—'} />
+                  <Dato k="Precio público" v={producto.publicPrice ? formatPrice(producto.publicPrice, { moneda }, 2) : '—'} />
                 </dl>
               )}
             </section>
@@ -291,8 +292,8 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
                 <Fila k="Título" v={titulo} />
                 <Fila k="Unidades destinadas" v={q.toLocaleString('es-DO')} />
                 <Fila k="Quedarán disponibles" v={Math.max(0, producto.disponibles - q).toLocaleString('es-DO')} />
-                <Fila k="Precio público" v={dinero(pub, moneda)} />
-                <Fila k="Precio Membego" v={dinero(sale, moneda)} destacado />
+                <Fila k="Precio público" v={formatPrice(pub, { moneda }, 2)} />
+                <Fila k="Precio Membego" v={formatPrice(sale, { moneda }, 2)} destacado />
                 <Fila k="Ahorro del cliente" v={`${dinero(ahorro, moneda)} (${pct} %)`} />
                 <Fila k="Margen estimado / unidad" v={dinero(margen, moneda)} />
                 <Fila k="Vigencia" v={`${inicio}${fin ? ` → ${fin}` : ' → sin fecha de fin'}`} />

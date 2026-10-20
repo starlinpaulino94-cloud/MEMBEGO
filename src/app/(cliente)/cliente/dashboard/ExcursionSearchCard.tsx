@@ -4,7 +4,7 @@ import { rutaDeExcursion } from '@/modules/comercio/rutas'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Clock, MapPin, AlertCircle, X, Tag, Users, CalendarDays } from 'lucide-react'
-import { formatMoney } from '@/lib/format'
+import { formatPrice } from '@/lib/format'
 
 export interface ExcursionBuscada {
     id: string
@@ -174,7 +174,7 @@ export function ExcursionSearchCard({ excursion, variant = 'default' }: Excursio
         <div className={variant === 'compact' ? 'mt-2 flex items-end justify-between' : 'mt-auto pt-3'}>
           {excursion.precioDesde != null && (
             <p className="font-semibold text-primary">
-              Desde {formatMoney(excursion.precioDesde, { moneda: excursion.moneda })}
+              Desde {formatPrice(excursion.precioDesde, { moneda: excursion.moneda })}
             </p>
           )}
           {variant === 'default' && (

@@ -9,7 +9,7 @@ import { ArrowLeft, Check, Sparkles } from 'lucide-react-native'
 import { useAuth } from '../../src/lib/auth-context'
 import { usePlanes } from '../../src/hooks/usePlanes'
 import { api } from '../../src/lib/api'
-import { formatMoney } from '../../src/lib/format'
+import { formatPrice } from '../../src/lib/format'
 import { Button } from '../../src/components/ui/Button'
 import { Card } from '../../src/components/ui/Card'
 import { EmptyState } from '../../src/components/ui/EmptyState'
@@ -164,7 +164,7 @@ export default function PlanDetalleScreen() {
                   plan: {
                     name: plan.nombre,
                     color: planColor,
-                    price: formatMoney(plan.precio),
+                    price: formatPrice(plan.precio),
                     validityDays: plan.vigenciaDias,
                     includedUses: plan.esIlimitado ? 'Usos ilimitados' : `${plan.lavadosIncluidos ?? 0} usos`,
                   },

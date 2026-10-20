@@ -6,11 +6,11 @@ import { cn } from '../cn'
  * MUK · Price — el ÚNICO formato de dinero de la plataforma.
  *
  * RD$ + es-DO + tabular-nums, con precio tachado opcional (oferta) y modo
- * "Gratis". Reemplaza a los fmtRD sueltos repetidos por módulo.
+ * "GRATIS" cuando el precio vale cero.
  *
  *   <Price value={1500} />                        → RD$1,500.00
  *   <Price value={990} original={1500} size="lg"/> → RD$990.00  ~RD$1,500.00~
- *   <Price value={0} gratisSiCero />               → Gratis
+ *   <Price value={0} />                            → GRATIS
  */
 const priceVariants = cva('font-semibold tabular-nums text-foreground', {
   variants: {
@@ -31,7 +31,6 @@ export function formatearRD(n: number): string {
 function Price({
   value,
   original,
-  gratisSiCero = false,
   className,
   size,
   ...props
@@ -40,23 +39,10 @@ function Price({
     value: number
     /** Precio anterior (se muestra tachado al lado). */
     original?: number
-    /** Si value === 0, muestra "Gratis" en verde de marca. */
-    gratisSiCero?: boolean
   }) {
-  if (gratisSiCero && value === 0) {
-    return (
-      <span
-        data-slot="price"
-        className={cn(priceVariants({ size }), 'text-success', className)}
-        {...props}
-      >
-        Gratis
-      </span>
-    )
-  }
   return (
     <span data-slot="price" className={cn('inline-flex items-baseline gap-1.5', className)} {...props}>
-      <span className={priceVariants({ size })}>{formatearRD(value)}</span>
+      <span className={cn(priceVariants({ size }), value === 0 && 'text-success')}>{value === 0 ? 'GRATIS' : formatearRD(value)}</span>
       {original != null && original > value && (
         <s className="text-caption font-normal text-muted-foreground">{formatearRD(original)}</s>
       )}

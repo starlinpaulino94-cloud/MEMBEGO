@@ -15,7 +15,7 @@ import type { LucideIcon } from 'lucide-react-native'
 import { SectionHeader } from '../ui/SectionHeader'
 import { CompanyPublicationsSections } from './CompanyPublicationsSections'
 import { CompanyReviewsSection } from './CompanyReviewsSection'
-import { formatMoney } from '../../lib/format'
+import { formatPrice } from '../../lib/format'
 import { brandDisplayForeground } from '../../lib/brand-color'
 import { colors } from '../../theme/tokens'
 import type {
@@ -123,7 +123,7 @@ export function CompanyProfileExtraSections({
                   </View>
                   {excursion.precioDesde != null ? (
                     <Text className="mt-2 text-sm font-inter-bold text-foreground">
-                      Desde {formatMoney(excursion.precioDesde, { moneda: excursion.moneda })}
+                      Desde {formatPrice(excursion.precioDesde, { moneda: excursion.moneda })}
                     </Text>
                   ) : null}
                   {excursion.agotadaGlobal ? <Text className="mt-2 text-xs font-inter-semibold text-destructive">Agotada</Text> : null}

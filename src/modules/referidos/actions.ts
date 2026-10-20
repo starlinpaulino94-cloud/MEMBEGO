@@ -14,6 +14,7 @@ import { emitirEventoEstrategia } from '@/modules/estrategias/eventos'
 import { crearTransaccionAplicada } from '@/lib/transactions'
 import { anotarFallo } from '@/lib/prisma-errors'
 import { encolarRecompensas } from '@/modules/jobs/emisiones'
+import { enviarPushNotificaciones } from '@/modules/notificaciones/push'
 
 /**
  * Fase E6: conversión del referido en su PRIMERA compra confirmada — membresía
@@ -350,13 +351,19 @@ export async function evaluarRecompensas(referenteClienteId: string, companyId: 
   }
 
   if (notificacionesACrear.length > 0) {
-    await sinEmpresa('referidos: crear notificaciones por usuario (notificaciones son por usuario, no por empresa)', (tx) =>
-      tx.notificacion.createMany({
-        data: notificacionesACrear,
-      })
-    ).catch((e) => {
+    try {
+      const notifications = await sinEmpresa(
+        'referidos: crear notificaciones por usuario (notificaciones son por usuario, no por empresa)',
+        (tx) =>
+          tx.notificacion.createManyAndReturn({
+            data: notificacionesACrear,
+            select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
+          }),
+      )
+      await enviarPushNotificaciones(notifications)
+    } catch (e) {
       console.error('[referidos-notifications]', e)
-    })
+    }
   }
 
   // Compatibilidad con vistas existentes: el booleano legacy se mantiene,

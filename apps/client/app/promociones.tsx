@@ -13,8 +13,11 @@ import { EmptyState } from '../src/components/ui/EmptyState'
 import { Button } from '../src/components/ui/Button'
 import { colors } from '../src/theme/tokens'
 import type { PromocionesParams } from '../src/lib/api'
+import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
+import { BackHeader } from '../src/components/ui/BackHeader'
+import { goBackOr } from '../src/lib/navigation'
 
-export default function PromocionesScreen() {
+function PromocionesScreenContent() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
@@ -66,6 +69,11 @@ export default function PromocionesScreen() {
 
   return (
     <View className="flex-1 bg-vibe-fondo">
+      <BackHeader
+        title="Promociones"
+        leftInset={insets.left}
+        onBack={() => goBackOr(router, '/(tabs)/menu')}
+      />
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -125,5 +133,13 @@ export default function PromocionesScreen() {
         </View>
       </ScrollView>
     </View>
+  )
+}
+
+export default function PromocionesScreen() {
+  return (
+    <ResponsiveDetailSheet>
+      <PromocionesScreenContent />
+    </ResponsiveDetailSheet>
   )
 }

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import { unregisterPushToken } from './push-notifications'
 
 interface AuthContextType {
   session: Session | null
@@ -66,6 +67,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { error: error as Error | null }
     },
     signOut: async () => {
+      await unregisterPushToken().catch(() => {
+        console.warn('[auth] No se pudo retirar el token push antes de cerrar sesión.')
+      })
       await supabase.auth.signOut()
     },
   }), [session, user, isLoading, isAuthenticated, isCliente])
