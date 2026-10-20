@@ -158,7 +158,7 @@ function archivosDe(dir: string): string[] {
   for (const e of readdirSync(dir)) {
     const p = join(dir, e)
     if (statSync(p).isDirectory()) acc.push(...archivosDe(p))
-    else if (/\.(ts|tsx)$/.test(p) && !/\.test\.tsx?$/.test(p)) acc.push(relative('.', p))
+    else if (/\.(ts|tsx)$/.test(p) && !/\.test\.tsx?$/.test(p)) acc.push(relative('.', p).replace(/\\/g, '/')) // «/» también en Windows: se compara con 'src/lib/site.ts'
   }
   return acc.sort()
 }
