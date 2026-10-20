@@ -1,5 +1,5 @@
 -- ¿Están aplicadas TODAS las migraciones de prisma/migrations? (versión corta)
--- Generado con scripts/generar-verificar-migraciones.mjs en b6376545: 240 migraciones, última 20261074_cardnet_saved_cards_security.
+-- Generado con scripts/generar-verificar-migraciones.mjs en 4243a0f8: 242 migraciones, última 20261076_push_tokens_rls.
 -- Pégalo entero en el SQL Editor de Supabase. Solo lee. Devuelve UNA fila.
 --   veredicto = 'OK' → no falta ninguna y coinciden nombre y contenido.
 --   Si no, el detalle de qué falta lo da scripts/verificar-migraciones.sql
@@ -10,9 +10,9 @@ WITH base AS (
   FROM _prisma_migrations
   WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
 ), esperado AS (
-  SELECT 240 AS total, '20261074_cardnet_saved_cards_security' AS ultima,
-         '8838242d76076431bb33d20f9820c778' AS nombres,
-         '53975cd6fe635f50c6344352386d241c' AS checksums
+  SELECT 242 AS total, '20261076_push_tokens_rls' AS ultima,
+         'fc33040e467ff2187e2552639de0c207' AS nombres,
+         '1870822f18d57f0e9d685430d96ac880' AS checksums
 ), real AS (
   SELECT count(*) AS aplicadas,
          max(n COLLATE "C") AS ultima,

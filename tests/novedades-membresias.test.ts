@@ -114,7 +114,8 @@ test('la fila de membresía enseña precio y qué incluye', () => {
   assert.match(src, /incluye: resumenDePlan\(/)
   const feed = fuente(...FEED)
   assert.match(feed, /n\.tipo === 'MEMBRESIA'/)
-  assert.match(feed, /formatMoneyRD\(n\.precio\)/)
+  // `formatPrice` es `formatMoneyRD` con «GRATIS» cuando el precio es 0 (29075616).
+  assert.match(feed, /formatPrice\(n\.precio\)/)
 })
 
 test('la membresía tiene su rótulo y su acción propios', () => {

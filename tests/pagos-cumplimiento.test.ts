@@ -13,6 +13,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import './support/sin-server-only'
 import { dedupeKeyNotificacion } from '../src/modules/jobs/ejecutor'
 import type { CargaNotificar } from '../src/modules/jobs/tipos'
 

@@ -100,7 +100,8 @@ test('el panel de plataforma no clava la moneda dominicana', () => {
     !/new Intl\.NumberFormat/.test(codigo),
     'formatear a mano vuelve a clavar idioma y moneda en el archivo'
   )
-  assert.match(SUPER, /formatMoney\(Number\(plan\.precio\), prefs\)/)
+  // `formatPrice` delega en `formatMoney` con las mismas prefs; solo muestra «GRATIS» a 0.
+  assert.match(SUPER, /formatPrice\(Number\(plan\.precio\), prefs\)/)
 })
 
 test('las prefs viajan con la empresa, sin una consulta por empresa', () => {
