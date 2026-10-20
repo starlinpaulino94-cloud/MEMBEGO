@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resumen · Prototipo del panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/estilos.css">
+<script src="https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js" defer></script>
+<script src="assets/panel.js" defer></script>
+</head>
+<body data-pagina="resumen" data-titulo="Resumen" data-roles="ASM">
+<main id="contenido" class="pagina pagina--completo"></main>
+<script>
+/* Un Resumen POR ROL (05 §7): cada bloque declara qué rol lo ve. El servidor filtraría por sección y función;
+   aquí se filtra por rol. Lo que un rol no puede abrir, no se pinta (corrige 05 · D-01 y D-07). */
+document.addEventListener('mg:listo', () => {
+  const { rd, num, esc, ic, iconos, barras, rol } = MG
+  const main = document.getElementById('contenido')
+  const nf1 = new Intl.NumberFormat('es-DO', { maximumFractionDigits: 1 })
+
+  const cifra = ({ titulo, valor, ventana, pie, tono = '', sinPermiso = false, sinDato = false, icono = '' }) => `
+    <div class="tarjeta cifra ${sinPermiso ? 'cifra--sinpermiso' : ''} ${sinDato ? 'cifra--sindato' : ''}">
+      <div class="titulo"><span class="t-etiqueta">${esc(titulo)}</span>${icono ? ic(icono, 'width="16" height="16"') : ''}</div>
+      <div class="t-cifra">${valor}</div>
+      <div class="ventana">${esc(ventana)}</div>
+      <div class="pie ${tono ? 'pie--' + tono : ''}">${pie}</div>
+    </div>`
+
+  const dias = Array.from({ length: 14 }, (_, i) => 7 + i)
+  const letras = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
+  const etiquetas = dias.map((d) => `${d} ${letras[new Date(2026, 9, d).getDay()]}`)
+  const canjes14 = [8, 11, 9, 14, 12, 6, 4, 10, 13, 15, 12, 9, 11, 12]
+
+  /* ── Bloques de "HOY · requiere acción" ── */
+  const cardPagos = `
+    <section class="tarjeta accion" aria-labelledby="h-pagos">
+      <div class="cab"><h3 class="t-tarjeta" id="h-pagos">Pagos por validar</h3><span class="total">5</span></div>
+      <ul>
+        <li><a href="pagos.html?cola=transferencias"><span>Transferencias</span><span><b>2</b> · ${rd(46500)}</span></a></li>
+        <li><a href="pagos.html?cola=sucursal"><span>En sucursal</span><b>1</b></a></li>
+        <li><a href="pagos.html?cola=compras"><span>Compras</span><b>1</b></a></li>
+        <li><a href="pagos.html?cola=cambios"><span>Cambios de plan</span><b>1</b></a></li>
+      </ul>
+      <a class="ir" href="pagos.html">Ir a Pagos ${ic('arrow-right')}</a>
+    </section>`
+  const cardVencen = `
+    <section class="tarjeta accion" aria-labelledby="h-vencen">
+      <div class="cab"><h3 class="t-tarjeta" id="h-vencen">Vencen en 7 días</h3><span class="total">6</span></div>
+      <ul>
+        <li><a href="cliente.html?id=c6"><span>Rafael Antonio Mejía Castillo</span><span class="muted">21 oct</span></a></li>
+        <li><a href="cliente.html?id=c7"><span>Yamilet Altagracia Núñez</span><span class="muted">22 oct</span></a></li>
+        <li><a href="clientes.html"><span class="muted">y 4 más</span></a></li>
+      </ul>
+      <a class="ir" href="clientes.html">Ver en riesgo ${ic('arrow-right')}</a>
+    </section>`
+  const cardCaja = `
+    <section class="tarjeta accion" aria-labelledby="h-caja">
+      <div class="cab"><h3 class="t-tarjeta" id="h-caja">Caja y citas</h3><span class="chip chip--exito">Caja abierta</span></div>
+      <ul>
+        <li><a href="#" data-fuera="Caja"><span>Turno actual · esperado</span><b>${rd(8200)}</b></a></li>
+        <li><a href="#" data-fuera="Citas"><span>Citas de hoy</span><b>4</b></a></li>
+        <li><a href="#" data-fuera="Conciliación"><span>Descuadres de conciliación</span><span class="chip chip--aviso">1</span></a></li>
+      </ul>
+    </section>`
+  const cardSupervisor = `
+    <section class="tarjeta accion" aria-labelledby="h-sup">
+      <div class="cab"><h3 class="t-tarjeta" id="h-sup">Canjes de hoy</h3><span class="total">12</span></div>
+      <ul>
+        <li><a href="#" data-fuera="Canjes y QR"><span>Rosa Amparo</span><b>5</b></a></li>
+        <li><a href="#" data-fuera="Canjes y QR"><span>José Manuel</span><b>4</b></a></li>
+        <li><a href="#" data-fuera="Canjes y QR"><span>Mostrador 2</span><b>3</b></a></li>
+        <li><a href="#" data-fuera="Citas"><span>Citas de hoy</span><b>4</b></a></li>
+      </ul>
+    </section>`
+  const cardRiesgoMkt = `
+    <section class="tarjeta accion" aria-labelledby="h-rmkt">
+      <div class="cab"><h3 class="t-tarjeta" id="h-rmkt">Clientes en riesgo</h3><span class="total">6</span></div>
+      <ul>
+        <li><a href="clientes.html"><span>Vencen en 7 días</span><b>6</b></a></li>
+        <li><a href="clientes.html"><span>Sin visitas en 30 días</span><b>11</b></a></li>
+      </ul>
+      <a class="ir" href="clientes.html">Dirigir una campaña ${ic('arrow-right')}</a>
+    </section>`
+  const cardPromoVence = `
+    <section class="tarjeta accion" aria-labelledby="h-pv">
+      <div class="cab"><h3 class="t-tarjeta" id="h-pv">Beneficios por vencer</h3><span class="total">2</span></div>
+      <ul>
+        <li><a href="beneficios.html"><span>Combo Día de Playa 2×1</span><span class="muted">23 oct</span></a></li>
+        <li><a href="beneficios.html"><span>Happy Hour del Malecón</span><span class="muted">25 oct</span></a></li>
+      </ul>
+      <a class="ir" href="beneficios.html">Ver beneficios ${ic('arrow-right')}</a>
+    </section>`
+
+  /* ── "Este mes" ── */
+  const VENT = '1–20 oct 2026'
+  const ingresos = cifra({ titulo: 'Ingresos del mes', valor: rd(68400), ventana: VENT, pie: `▲ ${nf1.format((68400 - 57700) / 57700 * 100)} % frente a 1–20 sep (${rd(57700)})`, tono: 'exito', icono: 'banknote' })
+  const membresias = cifra({ titulo: 'Membresías activas', valor: '23', ventana: 'al cierre de hoy', pie: '+5 altas · −2 bajas este mes', icono: 'ticket' })
+  const canjes = cifra({ titulo: 'Canjes del mes', valor: num(241), ventana: VENT, pie: '12 hoy', icono: 'qr-code' })
+  const nuevos = cifra({ titulo: 'Clientes nuevos', valor: '44', ventana: VENT, pie: 'Todos los orígenes', icono: 'user-plus' })
+  const registros = cifra({ titulo: 'Registros nuevos', valor: '44', ventana: VENT, pie: 'Instagram 18 · Directo 14 · Referidos 9 · Otros 3', icono: 'user-plus' })
+  const seguidores = cifra({ titulo: 'Seguidores nuevos', valor: '37', ventana: 'últimos 30 días', pie: 'de 1 204 clientes y seguidores', icono: 'heart' })
+  const lider = cifra({ titulo: 'Beneficio con más interacción', valor: '<span style="font-size:18px;line-height:24px">Combo Día de Playa 2×1</span>', ventana: 'acumulado de por vida', pie: '1 240 vistas · 212 compartidas', icono: 'trophy' })
+  const sinDato = cifra({ titulo: 'Interacciones del mes', valor: 'Sin dato', ventana: VENT, pie: 'Hoy los contadores de vistas no guardan fecha: no se puede medir un periodo sin inventarlo.', sinDato: true, icono: 'circle-help' })
+
+  const hoy = rol === 'administrador' ? cardPagos + cardVencen + cardCaja
+            : rol === 'supervisor' ? cardPagos + cardVencen + cardSupervisor
+            : cardRiesgoMkt + cardPromoVence
+  const mes = rol === 'administrador' ? ingresos + membresias + canjes + nuevos
+            : rol === 'supervisor' ? ingresos + membresias + canjes + nuevos
+            : registros + seguidores + lider + sinDato
+  const tituloGrafica = rol === 'marketing' ? 'Registros nuevos · últimos 14 días' : 'Canjes · últimos 14 días'
+  const serie = rol === 'marketing' ? [2, 3, 1, 4, 2, 0, 1, 3, 4, 5, 3, 2, 4, 3] : canjes14
+  const unidad = rol === 'marketing' ? 'registros' : 'canjes'
+  const enlaceGrafica = rol === 'marketing' ? 'Ver origen de los registros' : 'Ver reportes'
+
+  main.innerHTML = `
+    <header class="cabecera">
+      <div class="txt">
+        <h1 class="t-pagina">Resumen</h1>
+        <p class="t-sec">Lo que necesita tu atención hoy y cómo va el mes. Martes 20 de octubre de 2026.</p>
+      </div>
+    </header>
+    <section aria-labelledby="h-hoy" style="display:grid;gap:12px">
+      <h2 class="t-rotulo" id="h-hoy">Hoy · requiere acción</h2>
+      <div class="rejilla-accion">${hoy}</div>
+    </section>
+    <section aria-labelledby="h-mes" style="display:grid;gap:12px">
+      <h2 class="t-rotulo" id="h-mes">Este mes · ${VENT}</h2>
+      <div class="rejilla-cifras">${mes}</div>
+    </section>
+    <section class="tarjeta tarjeta--pad" aria-labelledby="h-graf">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <h2 class="t-tarjeta" id="h-graf">${tituloGrafica}</h2>
+        <a href="#" data-fuera="Reportes">${enlaceGrafica} →</a>
+      </div>
+      <div id="grafica"></div>
+    </section>
+    ${rol === 'marketing' ? `<p class="t-sec" style="display:flex;gap:8px;align-items:flex-start">${ic('info', 'width="16" height="16"')}<span>Marketing no ve dinero, pagos ni canjes: el Resumen no los calcula y no pinta atajos a secciones que este rol no puede abrir.</span></p>` : ''}
+  `
+  barras(document.getElementById('grafica'), serie, etiquetas, { titulo: tituloGrafica, unidad })
+  MG.reenlazar(main)
+  iconos()
+})
+</script>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pagos · Prototipo del panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/estilos.css">
+<script src="https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js" defer></script>
+<script src="assets/panel.js" defer></script>
+</head>
+<body data-pagina="pagos" data-titulo="Pagos" data-roles="AS">
+<!-- Tipo de página: LISTA (10 §8). Cabecera + pestañas de módulo + barra de filtros + tabla + pie. -->
+<main id="contenido" class="pagina pagina--completo"></main>
+<script>
+document.addEventListener('mg:listo', () => {
+  const { $, $$, esc, ic, iconos, rd, datos, confirmar, aviso, abrirCapa, cerrarCapas } = MG
+  const main = $('#contenido')
+  const params = new URLSearchParams(location.search)
+  const ORDEN_COLAS = ['transferencias', 'sucursal', 'compras', 'cambios', 'seguimiento']
+  // Estado: cada fila vive en `datos.pagos`; aprobar o rechazar solo cambia su `resultado` (en el prototipo no se guarda nada).
+  const filas = datos.pagos.map((p) => ({ ...p, resultado: null }))
+  const pendientesDe = (cola) => filas.filter((f) => f.cola === cola && !f.resultado).length
+  const totalPendiente = () => filas.filter((f) => !f.resultado).length
+  // Por defecto se abre la cola con MÁS DINERO esperando (decisión de diseño a aprobar), no una fija.
+  const dineroEn = (cola) => filas.filter((f) => f.cola === cola && !f.resultado).reduce((n, f) => n + f.monto, 0)
+  let cola = ORDEN_COLAS.includes(params.get('cola')) ? params.get('cola') : ORDEN_COLAS.slice().sort((a, b) => dineroEn(b) - dineroEn(a))[0]
+  let q = ''
+  let metodo = ''
+
+  const cuentaTab = () => {
+    const t = $('#tab-cuenta'); if (t) t.textContent = String(totalPendiente())
+    const n = $('.nav-item[aria-current="page"] .cuenta'); if (n) n.textContent = String(totalPendiente())
+  }
+
+  main.innerHTML = `
+    <header class="cabecera">
+      <div class="txt">
+        <h1 class="t-pagina">Pagos</h1>
+        <p class="t-sec">Valida lo que tus clientes ya pagaron o pidieron.</p>
+      </div>
+      <div class="acciones">
+        <button type="button" class="btn btn--borde" data-fuera="Exportar">${ic('download')}Exportar</button>
+        <button type="button" class="btn" data-fuera="Registrar cobro">${ic('plus')}Registrar cobro</button>
+      </div>
+    </header>
+    <nav class="pestanas" aria-label="Secciones de Pagos">
+      <a href="pagos.html" aria-current="page">Por validar <span class="cuenta" id="tab-cuenta">${totalPendiente()}</span></a>
+      <a href="#" data-fuera="Movimientos">Movimientos</a>
+      ${MG.rol === 'administrador' ? `<a href="#" data-fuera="Conciliación">Conciliación <span class="cuenta cuenta--alerta">1</span></a>` : ''}
+    </nav>
+    <section aria-label="Colas de pago" style="display:grid;gap:12px">
+      <div class="segmento" role="group" aria-label="Cola de pago" id="colas"></div>
+      <form class="filtros" role="search" id="filtros" onsubmit="return false">
+        <div class="buscar-lista">${ic('search')}<input type="text" id="q" placeholder="Buscar cliente o referencia" aria-label="Buscar cliente o referencia"></div>
+        <select id="metodo" aria-label="Método de pago">
+          <option value="">Método: todos</option><option value="Transferencia">Transferencia</option><option value="Efectivo">Efectivo</option><option value="Diferencia">Diferencia a cobrar</option>
+        </select>
+        <div class="filtros-activos" id="activos"></div>
+      </form>
+      <div id="zona"></div>
+    </section>
+
+    <!-- Hoja lateral: el comprobante y la decisión, sin salir de la lista -->
+    <aside class="hoja" id="hoja" role="dialog" aria-modal="true" aria-labelledby="hoja-t">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div><h2 class="t-seccion" id="hoja-t"></h2><p class="t-sec" id="hoja-s"></p></div>
+        <button type="button" class="icono-btn" data-cerrar aria-label="Cerrar">${ic('x')}</button>
+      </div>
+      <div class="comprobante-img" role="img" aria-label="Vista previa del comprobante (de ejemplo)">${ic('image')}<span>Comprobante de transferencia<br><small>(imagen de ejemplo)</small></span></div>
+      <dl class="lista-datos" id="hoja-datos"></dl>
+      <div class="campo"><label for="nota">Nota interna <span class="opcional">(opcional)</span></label><textarea id="nota" rows="2"></textarea><span class="ayuda">Solo la ve tu equipo.</span></div>
+      <div class="campo" id="campo-motivo" hidden data-invalido="false">
+        <label for="motivo">Motivo del rechazo</label>
+        <select id="motivo" aria-describedby="motivo-error"><option value="">Elige un motivo</option><option>Monto distinto al del plan</option><option>El comprobante no se lee</option><option>La transferencia no aparece en el banco</option></select>
+        <span class="error" id="motivo-error" role="alert">Elige un motivo: el cliente lo recibirá en su notificación.</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn--exito" data-aprobar-hoja>${ic('check')}Aprobar</button>
+        <button type="button" class="btn btn--peligro" data-rechazar-hoja>${ic('x')}Rechazar</button>
+      </div>
+    </aside>`
+
+  function pintarColas() {
+    $('#colas').innerHTML = ORDEN_COLAS.map((k) => `<button type="button" data-cola="${k}" aria-pressed="${k === cola}">${esc(datos.colas[k])} <span class="cuenta">${pendientesDe(k)}</span></button>`).join('')
+  }
+  function visibles() {
+    return filas.filter((f) => f.cola === cola
+      && (!q || (f.cliente + ' ' + (f.ref || '')).toLowerCase().includes(q.toLowerCase()))
+      && (!metodo || f.metodo.startsWith(metodo)))
+  }
+  function pintarActivos() {
+    const chips = []
+    if (q) chips.push(`<button type="button" class="filtro-chip" data-quitar="q">Búsqueda: ${esc(q)} ${ic('x')}</button>`)
+    if (metodo) chips.push(`<button type="button" class="filtro-chip" data-quitar="metodo">Método: ${esc(metodo)} ${ic('x')}</button>`)
+    if (chips.length) chips.push(`<button type="button" class="enlace-btn" data-limpiar>Limpiar</button>`)
+    $('#activos').innerHTML = chips.join('')
+  }
+  function pintarTabla() {
+    const lista = visibles()
+    const enCola = pendientesDe(cola)
+    const zona = $('#zona')
+    if (!lista.length) {
+      const hayFiltros = q || metodo
+      const otras = ORDEN_COLAS.some((k) => k !== cola && pendientesDe(k) > 0)
+      zona.innerHTML = `<div class="tarjeta vacio">${ic(hayFiltros ? 'search-x' : 'inbox')}
+        <h2 class="t-tarjeta">${hayFiltros ? 'Ningún pago coincide con los filtros' : `Nada pendiente en «${esc(datos.colas[cola])}»`}</h2>
+        <p>${hayFiltros ? 'Prueba con otro nombre o quita un filtro.' : (otras ? 'Otras colas sí tienen trabajo: cámbialas arriba.' : 'No hay pagos esperando acción en ninguna cola. Buen trabajo.')}</p>
+        ${hayFiltros ? '<button type="button" class="btn btn--borde" data-limpiar>Limpiar filtros</button>' : ''}</div>`
+      return
+    }
+    const cuerpo = lista.map((f) => `
+      <tr class="${f.resultado ? 'hecha' : 'navegable'}" data-id="${f.id}">
+        <td class="celda-id"><a class="principal-celda" href="cliente.html?id=${f.cid}">${esc(f.cliente)}</a>${f.ref ? `<span class="secundario mono">${esc(f.ref)}</span>` : ''}</td>
+        <td data-etq="Concepto">${esc(f.concepto)}</td>
+        <td class="p2" data-etq="Método">${esc(f.metodo)}</td>
+        <td class="num" data-etq="Monto"><strong>${rd(f.monto)}</strong></td>
+        <td class="p3 muted" data-etq="Hace">${esc(f.hace)}</td>
+        <td class="acciones">${f.resultado
+          ? `<div class="grupo"><span class="chip ${f.resultado === 'aprobado' ? 'chip--exito' : 'chip--peligro'}">${f.resultado === 'aprobado' ? 'Aprobado' : 'Rechazado'}</span></div>`
+          : `<div class="grupo">
+              <button type="button" class="btn btn--sm btn--borde" data-ver="${f.id}" aria-label="Ver comprobante de ${esc(f.cliente)}">${ic('eye')}<span>Ver</span></button>
+              <button type="button" class="btn btn--sm btn--exito" data-aprobar="${f.id}" aria-label="Aprobar el pago de ${esc(f.cliente)}">${ic('check')}Aprobar</button>
+              <button type="button" class="btn btn--sm btn--peligro" data-rechazar="${f.id}" aria-label="Rechazar el pago de ${esc(f.cliente)}">${ic('x')}Rechazar</button>
+            </div>`}</td>
+      </tr>`).join('')
+    zona.innerHTML = `<div class="tabla-caja"><table class="tabla tabla--tarjetas">
+      <caption class="solo-lector">Pagos por validar en la cola ${esc(datos.colas[cola])}</caption>
+      <thead><tr><th scope="col">Cliente</th><th scope="col">Concepto</th><th scope="col" class="p2">Método</th><th scope="col" class="num">Monto</th><th scope="col" class="p3">Hace</th><th scope="col"><span class="solo-lector">Acciones</span></th></tr></thead>
+      <tbody>${cuerpo}</tbody></table>
+      <div class="tabla-pie"><span>Mostrando ${lista.length} de ${lista.length} · <strong>${enCola}</strong> por validar · ${rd(dineroEn(cola))} esperando</span>
+        <span class="paginacion" aria-label="Paginación"><span aria-hidden="true">«</span><span aria-hidden="true">‹</span><a href="#" aria-current="page">1</a><span aria-hidden="true">›</span><span aria-hidden="true">»</span></span></div></div>`
+  }
+  function pintar() { pintarColas(); pintarActivos(); pintarTabla(); cuentaTab(); iconos(); MG.reenlazar(main) }
+
+  async function aprobar(id) {
+    const f = filas.find((x) => x.id === id); if (!f || f.resultado) return
+    const ok = await confirmar({ titulo: '¿Aprobar este pago?', descripcion: `${f.cliente} · ${rd(f.monto)}. Se activará su membresía y el pago pasa a Movimientos. Esto mueve dinero: se deshace con un ajuste, no con un botón.`, ok: 'Aprobar' })
+    if (!ok) return
+    f.resultado = 'aprobado'; cerrarCapas(); pintar()
+    aviso('Pago confirmado. Membresía activada.')
+  }
+  function abrirHoja(id, rechazar = false) {
+    const f = filas.find((x) => x.id === id); if (!f) return
+    $('#hoja').dataset.id = id
+    $('#hoja-t').textContent = f.cliente
+    $('#hoja-s').textContent = `${f.concepto} · ${rd(f.monto)}`
+    $('#hoja-datos').innerHTML = `<div><dt>Método</dt><dd>${esc(f.metodo)}</dd></div><div><dt>Referencia</dt><dd class="mono">${esc(f.ref || '—')}</dd></div><div><dt>Recibido</dt><dd>${esc(f.hace)}</dd></div>`
+    $('#campo-motivo').hidden = !rechazar
+    $('#campo-motivo').dataset.invalido = 'false'
+    abrirCapa($('#hoja'))
+    if (rechazar) $('#motivo').focus()
+  }
+
+  main.addEventListener('click', async (e) => {
+    const b = e.target.closest('button'); if (!b) return
+    if (b.dataset.cola) { cola = b.dataset.cola; const u = new URL(location.href); u.searchParams.set('cola', cola); history.replaceState(null, '', u); pintar(); return }
+    if (b.dataset.aprobar) { await aprobar(b.dataset.aprobar); return }
+    if (b.dataset.rechazar) { abrirHoja(b.dataset.rechazar, true); return }
+    if (b.dataset.ver) { abrirHoja(b.dataset.ver, false); return }
+    if (b.hasAttribute('data-cerrar')) { cerrarCapas(); return }
+    if (b.hasAttribute('data-aprobar-hoja')) { await aprobar($('#hoja').dataset.id); return }
+    if (b.hasAttribute('data-rechazar-hoja')) {
+      const campo = $('#campo-motivo')
+      if (campo.hidden) { campo.hidden = false; $('#motivo').focus(); return }
+      if (!$('#motivo').value) { campo.dataset.invalido = 'true'; $('#motivo').setAttribute('aria-invalid', 'true'); $('#motivo').focus(); return }
+      const f = filas.find((x) => x.id === $('#hoja').dataset.id); f.resultado = 'rechazado'
+      cerrarCapas(); pintar(); aviso('Pago rechazado. El cliente fue notificado.')
+      return
+    }
+    if (b.dataset.quitar) { if (b.dataset.quitar === 'q') { q = ''; $('#q').value = '' } else { metodo = ''; $('#metodo').value = '' } pintar(); return }
+    if (b.hasAttribute('data-limpiar')) { q = ''; metodo = ''; $('#q').value = ''; $('#metodo').value = ''; pintar(); return }
+  })
+  $('#q').addEventListener('input', (e) => { q = e.target.value.trim(); pintarActivos(); pintarTabla(); iconos(); MG.reenlazar(main) })
+  $('#metodo').addEventListener('change', (e) => { metodo = e.target.value; pintar() })
+  pintar()
+})
+</script>
+</body>
+</html>
