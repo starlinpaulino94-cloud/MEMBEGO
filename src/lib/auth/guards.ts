@@ -257,3 +257,35 @@ export async function puedeFuncion(section: AdminSection, funcion: string): Prom
 export async function puedeSeccion(section: AdminSection): Promise<boolean> {
   return (await requireSection(section)) !== null
 }
+
+/**
+ * Cuáles de estas secciones PUEDE ABRIR este usuario, resuelto de una vez.
+ *
+ * Es `requireSection` para una pantalla que reparte atajos hacia muchas
+ * secciones (el Resumen): preguntar una por una repetiría la lectura de
+ * permisos y de capacidades por cada enlace. Aplica las mismas reglas que
+ * `requireSection` —rol, permisos VIVOS del empleado y capacidades de la
+ * empresa— y ante cualquier duda niega, que para un atajo es lo seguro: el
+ * enlace que no se pinta no se puede pulsar, y la barrera de verdad sigue
+ * siendo la guardia de la sección en el servidor (auditoría admin · D-07).
+ */
+export async function seccionesAbribles(
+  user: SessionUser,
+  secciones: readonly AdminSection[]
+): Promise<Set<AdminSection>> {
+  const role = user.metadata.role
+  let permisos: PermisosUsuario | null = null
+  if (!ROLES_EXENTOS_PERMISOS.includes(role) && user.metadata.dbUserId) {
+    try {
+      permisos = await permisosVivos(user.metadata.dbUserId)
+    } catch {
+      return new Set()
+    }
+  }
+  let capacidadOk: (s: AdminSection) => boolean = () => true
+  if (role !== 'SUPERADMIN') {
+    const { filtroDeCapacidades } = await import('@/modules/capacidades/resolver')
+    capacidadOk = await filtroDeCapacidades(user.metadata.companyId)
+  }
+  return new Set(secciones.filter((s) => seccionPermitida(role, s, permisos) && capacidadOk(s)))
+}

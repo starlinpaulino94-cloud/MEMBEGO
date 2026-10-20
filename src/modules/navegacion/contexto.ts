@@ -85,8 +85,14 @@ export async function contextoDeNavegacion({
    * Ámbito del panel que renderiza: PLATFORM (solo módulos globales) o
    * COMPANY (solo módulos de empresa). Lo fija el layout en el servidor;
    * nunca viene del navegador.
+   *
+   * OBLIGATORIO (auditoría admin · FE-01). Era opcional, y «sin ámbito» significa
+   * «no filtrar»: el layout del mostrador lo omitió y un SUPERADMIN que abría
+   * `/empleado/scanner` veía el riel con Plataforma y Empresa mezcladas, que es
+   * justo lo que el filtro existe para impedir. Obligarlo aquí hace que un
+   * layout nuevo no pueda compilar sin decidir su ámbito.
    */
-  scope?: ScopeNav
+  scope: ScopeNav
   permisos?: PermisosUsuario | null
   /** Rutas ya descartadas (p. ej. las negadas por los ajustes del empleado). */
   ocultas?: string[]

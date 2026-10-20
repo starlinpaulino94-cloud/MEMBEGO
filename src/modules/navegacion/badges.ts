@@ -1,5 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { inicioDeHoy } from '@/modules/empresas/hoy'
 import { COLAS_TICKET } from '@/lib/soporte'
 import type { ClaveBadge } from '@/components/layout/nav-config'
 import type { AppRole } from '@/types'
@@ -105,13 +106,14 @@ const planesActivos = unstable_cache(
 
 /**
  * Visitas registradas HOY en la empresa: el «Canjes y QR · 14» del diseño.
- * El día se corta en hora local del servidor; para un contador de menú esa
- * aproximación basta y no obliga a arrastrar la zona horaria del negocio.
+ * «Hoy» es el del NEGOCIO (`inicioDeHoy`, la misma definición que el Resumen y
+ * «Visitas de hoy» del escáner). Antes se cortaba con la hora del proceso, que
+ * en Vercel es UTC: a las 8 de la noche en Santo Domingo el menú ya contaba el
+ * día siguiente y dos pantallas daban números distintos (auditoría · D-03).
  */
 const canjesDeHoy = unstable_cache(
   async (companyId: string): Promise<number> => {
-    const hoy = new Date()
-    hoy.setHours(0, 0, 0, 0)
+    const hoy = await inicioDeHoy(companyId)
     return conEmpresa(companyId, (tx) =>
       tx.visit.count({ where: { cliente: { companyId }, fechaVisita: { gte: hoy } } })
     )

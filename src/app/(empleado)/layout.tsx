@@ -42,6 +42,10 @@ export default async function EmpleadoLayout({
     contextoDeNavegacion({
       role: user.metadata.role,
       companyId: user.metadata.companyId,
+      // El mostrador opera UNA empresa. Sin ámbito el menú no se filtra, y un
+      // SUPERADMIN (que también entra aquí, vía SCANNER_ROLES) veía Plataforma
+      // y Empresa en dos iconos del riel (auditoría admin · FE-01).
+      scope: 'COMPANY',
       // LOS PERMISOS TAMBIEN LLEGAN AQUI. Sin esto, conceder un modulo del
       // panel a un empleado se guardaba y no aparecia por ningun sitio: su
       // menu se construia solo con su rol, asi que el permiso existia y no

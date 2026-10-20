@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Coins } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
@@ -6,6 +7,7 @@ import {
   misComisiones,
   misLiquidaciones,
 } from '@/modules/excursiones/panel/queries'
+import { paginaDeUrl } from '@/modules/excursiones/panel/saldos'
 import {
   ESTADO_COMISION_LABEL,
   TONO_COMISION,
@@ -23,15 +25,20 @@ import { formatDate, formatMoney } from '@/lib/format'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Mi dinero · Panel Vendedor' }
 
-export default async function MiDineroPage() {
+export default async function MiDineroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pagina?: string | string[] }>
+}) {
   const user = await requireRole(['VENDEDOR'])
+  const pagina = paginaDeUrl((await searchParams).pagina)
   const vendedor = user.metadata.dbUserId
     ? await vendedorDeUsuario(user.metadata.dbUserId)
     : null
   if (!vendedor) redirect('/login')
 
   const [comisiones, liquidaciones] = await Promise.all([
-    misComisiones(vendedor.companyId, vendedor.id),
+    misComisiones(vendedor.companyId, vendedor.id, { pagina }),
     misLiquidaciones(vendedor.companyId, vendedor.id),
   ])
   const dinero = (n: number | string, moneda: string) => formatMoney(n, { moneda }, 2)
@@ -83,7 +90,7 @@ export default async function MiDineroPage() {
           <section aria-labelledby="comisiones-list-heading" className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-4">
             <div className="border-b border-border/60 pb-3">
               <h2 id="comisiones-list-heading" className="text-base font-bold text-foreground">
-                Tus Comisiones ({comisiones.lineas.length})
+                Tus Comisiones ({comisiones.total})
               </h2>
             </div>
 
@@ -126,6 +133,23 @@ export default async function MiDineroPage() {
                 ))}
               </div>
             )}
+
+            {/* Solo aparece cuando hay más comisiones que las de una página. Los saldos de arriba suman todas. */}
+            {comisiones.paginas > 1 ? (
+              <nav aria-label="Páginas de comisiones" className="flex items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                {comisiones.pagina > 1 ? (
+                  <Link href={`/vendedor/comisiones?pagina=${comisiones.pagina - 1}`} className="font-semibold text-primary hover:underline">
+                    ← Más recientes
+                  </Link>
+                ) : <span />}
+                <span>Página {comisiones.pagina} de {comisiones.paginas}</span>
+                {comisiones.pagina < comisiones.paginas ? (
+                  <Link href={`/vendedor/comisiones?pagina=${comisiones.pagina + 1}`} className="font-semibold text-primary hover:underline">
+                    Más antiguas →
+                  </Link>
+                ) : <span />}
+              </nav>
+            ) : null}
           </section>
 
           {/* LIQUIDACIONES / PAGOS */}

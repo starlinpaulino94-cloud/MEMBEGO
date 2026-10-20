@@ -5,6 +5,7 @@ import { contarColasDePago } from '@/modules/pagos/colasConteo'
 import { periodoAnterior, variacion, whereCobrado } from '@/modules/pagos/cobrado'
 import { COLAS_TICKET } from '@/lib/soporte'
 import { estaEnSilencio } from '@/modules/empresas/silencio'
+import { membresiaVigente } from '@/modules/membresia/vigencia'
 
 /**
  * Los datos del Centro de control (panel de plataforma).
@@ -137,10 +138,15 @@ export async function getPanelPlataforma(periodoDias: Periodo): Promise<PanelPla
       ultimaPorEmpresa,
       actividad,
     ] = await Promise.all([
+      // «Activas» = VIGENTES (activa y sin vencer), la misma `membresiaVigente`
+      // que usa Reportes y la lista de Membresías de esta misma plataforma
+      // (auditoría admin · D-04). Con `estado = 'ACTIVA'` a secas, el panel
+      // decía una cifra y «Vigentes hoy» de Membresías decía otra, porque nada
+      // vence las membresías solas. «Pendientes» sí es un estado puro.
       tx.membership
         .groupBy({
           by: ['companyId', 'estado'],
-          where: { estado: { in: ['ACTIVA', 'PENDIENTE_PAGO'] } },
+          where: { OR: [membresiaVigente(ahora), { estado: 'PENDIENTE_PAGO' }] },
           _count: { _all: true },
         })
         .catch(() => []),

@@ -3,7 +3,7 @@ import { requireRole } from '@/lib/auth/guards'
 import {
   vendedorDeUsuario,
   miEmbudo,
-  misComisiones,
+  misSaldos,
 } from '@/modules/excursiones/panel/queries'
 import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { urlDeEnlace, urlDeQr } from '@/modules/excursiones/vendedores/nucleo'
@@ -37,7 +37,9 @@ export default async function VendedorInicioPage() {
 
   const [embudo, comisiones, metas, config] = await Promise.all([
     miEmbudo(vendedor.companyId, vendedor.id),
-    misComisiones(vendedor.companyId, vendedor.id),
+    // Solo los saldos: el Inicio no pinta la lista, y la suma la hace la base
+    // de datos sobre TODAS las comisiones (no sobre las últimas 200).
+    misSaldos(vendedor.companyId, vendedor.id),
     metasDeVendedor(vendedor.companyId, vendedor.id),
     getExcursionesConfig(vendedor.companyId),
   ])

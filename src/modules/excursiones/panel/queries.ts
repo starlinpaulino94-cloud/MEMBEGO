@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
-import { conEmpresa } from '@/lib/tenant'
+import { conEmpresa, type Tx } from '@/lib/tenant'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
+import { paginasDe, resumirSaldos, type GrupoSaldo } from './saldos'
 import { calcularSaldo } from '@/modules/excursiones/reservas/nucleo'
 import { getExcursionesConfig, obtenerDetalleConversion } from '../config'
 
@@ -137,16 +138,63 @@ export async function misReservas(companyId: string, vendedorId: string) {
 }
 
 /**
- * Lo que se le debe y lo que ya cobró. Los números salen de sumar sus
- * comisiones vivas — no hay contador guardado que se pueda desincronizar.
+ * Lo que se le debe y lo que ya cobró: la SUMA, hecha por la base de datos, de
+ * TODAS sus comisiones vivas — no hay contador guardado que se pueda
+ * desincronizar, y tampoco hay tope de filas (auditoría admin · D-02).
+ *
+ * Una fila por estado de pago y moneda: el neto de cada comisión es su monto
+ * más sus ajustes firmados sin bajar de cero (`netoComision`, la misma regla),
+ * y `ANULADA` no cuenta. Se ejecuta con el `tx` que ya está abierto.
  */
-export async function misComisiones(companyId: string, vendedorId: string) {
-  const [comisiones, config] = await Promise.all([
-    conEmpresa(companyId, (tx) =>
-      tx.comisionEntrada.findMany({
+async function gruposDeSaldo(tx: Tx, companyId: string, vendedorId: string): Promise<GrupoSaldo[]> {
+  const filas = await tx.$queryRaw<{ pagada: boolean; moneda: string; neto: number; lineas: bigint }[]>`
+    SELECT (c."estado" = 'PAGADA') AS "pagada",
+           c."moneda" AS "moneda",
+           COALESCE(SUM(GREATEST(0, c."monto" + COALESCE(a."suma", 0))), 0)::float8 AS "neto",
+           COUNT(*)::bigint AS "lineas"
+    FROM "comision_entradas" c
+    LEFT JOIN LATERAL (
+      SELECT SUM(x."monto") AS "suma" FROM "comision_ajustes" x WHERE x."comisionId" = c."id"
+    ) a ON TRUE
+    WHERE c."companyId" = ${companyId}
+      AND c."vendedorId" = ${vendedorId}
+      AND c."estado" <> 'ANULADA'
+    GROUP BY 1, 2
+  `
+  return filas.map((f) => ({ pagada: f.pagada, moneda: f.moneda, neto: Number(f.neto), lineas: Number(f.lineas) }))
+}
+
+/** Solo los saldos (sin lista): para el Inicio, que no pinta comisiones. */
+export async function misSaldos(companyId: string, vendedorId: string) {
+  const [grupos, config] = await Promise.all([
+    conEmpresa(companyId, (tx) => gruposDeSaldo(tx, companyId, vendedorId)),
+    getExcursionesConfig(companyId),
+  ])
+  const { monedaDefecto, tasasCambio } = config
+  return { moneda: monedaDefecto, ...resumirSaldos(grupos, monedaDefecto, tasasCambio) }
+}
+
+/** Comisiones por página de la lista. Los saldos NO dependen de este número. */
+export const COMISIONES_POR_PAGINA = 200
+
+export async function misComisiones(
+  companyId: string,
+  vendedorId: string,
+  opciones: { pagina?: number } = {}
+) {
+  const [{ comisiones, grupos, pagina }, config] = await Promise.all([
+    conEmpresa(companyId, async (tx) => {
+      const grupos = await gruposDeSaldo(tx, companyId, vendedorId)
+      const total = grupos.reduce((t, g) => t + (g.lineas ?? 0), 0)
+      const pagina = Math.min(
+        Math.max(1, Math.trunc(opciones.pagina ?? 1) || 1),
+        paginasDe(total, COMISIONES_POR_PAGINA)
+      )
+      const comisiones = await tx.comisionEntrada.findMany({
         where: { companyId, vendedorId, estado: { not: 'ANULADA' } },
-        orderBy: { createdAt: 'desc' },
-        take: 200,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (pagina - 1) * COMISIONES_POR_PAGINA,
+        take: COMISIONES_POR_PAGINA,
         select: {
           id: true,
           monto: true,
@@ -159,11 +207,13 @@ export async function misComisiones(companyId: string, vendedorId: string) {
           liquidacion: { select: { numero: true, estado: true } },
         },
       })
-    ),
+      return { comisiones, grupos, pagina }
+    }),
     getExcursionesConfig(companyId),
   ])
 
   const { monedaDefecto, tasasCambio } = config
+  const total = grupos.reduce((t, g) => t + (g.lineas ?? 0), 0)
 
   const lineas = comisiones.map((c) => {
     const netoOrig = netoComision(
@@ -186,15 +236,16 @@ export async function misComisiones(companyId: string, vendedorId: string) {
     }
   })
 
-  const suma = (filtro: (l: (typeof lineas)[number]) => boolean) =>
-    Math.round(lineas.filter(filtro).reduce((t, l) => t + l.neto, 0) * 100) / 100
-
   return {
     lineas,
     moneda: monedaDefecto,
-    porCobrar: suma((l) => l.estado !== 'PAGADA'),
-    cobrado: suma((l) => l.estado === 'PAGADA'),
+    // Los saldos salen de la agregación completa, NO de `lineas` (que es una página).
+    ...resumirSaldos(grupos, monedaDefecto, tasasCambio),
     tasasCambio,
+    total,
+    pagina,
+    paginas: paginasDe(total, COMISIONES_POR_PAGINA),
+    porPagina: COMISIONES_POR_PAGINA,
   }
 }
 

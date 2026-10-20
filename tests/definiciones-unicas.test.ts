@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { membresiaVigenteSql } from '../src/modules/membresia/vigencia'
 
 /**
  * UNA SOLA DEFINICIÓN POR CONCEPTO.
@@ -126,4 +127,45 @@ test('contar membresías vigentes pasa por membresiaVigente', () => {
     [],
     'usa `membresiaVigente()` de @/modules/membresia/vigencia:\n' + infractores.join('\n')
   )
+})
+
+/**
+ * VIGENCIA EN SQL CRUDO (auditoría admin · D-24). La regla «activa Y sin vencer»
+ * estaba escrita a mano en cinco consultas `$queryRaw` y una de ellas —los
+ * referidos activos— había divergido: pedía solo `estado = 'ACTIVA'` y contaba
+ * como vivas las membresías con la fecha pasada. `membresiaVigenteSql()` es la
+ * misma regla que `membresiaVigente()` para SQL; esta guardia falla si alguien
+ * vuelve a escribir `m.estado = 'ACTIVA'` en una consulta.
+ *
+ * EXCEPCIÓN ÚNICA: `geo/segmentacion/sql.ts`. Su filtro «ACTIVA» / «SIN_ACTIVA»
+ * es el complemento exacto uno del otro sobre el ESTADO que el administrador
+ * elige en la audiencia; cambiar solo una mitad los dejaría solapados. Es una
+ * decisión de producto (¿«sin membresía activa» incluye a las vencidas sin
+ * barrer?) y queda registrada en el informe de la fase 1, no se resuelve aquí.
+ */
+test('la vigencia de una membresía no se escribe a mano en SQL crudo', () => {
+  const aMano = /\bm2?\s*\.\s*"?estado"?\s*=\s*'ACTIVA'/
+  const infractores: string[] = []
+
+  for (const f of FUENTES) {
+    if (esFuenteDe(f, 'modules/membresia/vigencia.ts')) continue
+    if (esFuenteDe(f, 'modules/geo/segmentacion/sql.ts')) continue
+    if (aMano.test(sinComentarios(readFileSync(f, 'utf8')))) infractores.push(f)
+  }
+
+  assert.deepEqual(
+    infractores,
+    [],
+    'usa `membresiaVigenteSql()` de @/modules/membresia/vigencia:\n' + infractores.join('\n')
+  )
+})
+
+test('membresiaVigenteSql: misma regla que membresiaVigente, con la fecha como parámetro', () => {
+  const ahora = new Date('2026-10-20T12:00:00Z')
+  const q = membresiaVigenteSql('m2', ahora)
+  assert.match(q.text, /"m2"\."estado" = 'ACTIVA'/)
+  assert.match(q.text, /"m2"\."fechaVencimiento" IS NULL OR "m2"\."fechaVencimiento" >= \$1/)
+  assert.deepEqual(q.values, [ahora])
+  // El alias va como identificador, no como parámetro: no se acepta cualquier cosa.
+  assert.throws(() => membresiaVigenteSql('m"; DROP TABLE memberships; --', ahora), /alias inválido/)
 })
