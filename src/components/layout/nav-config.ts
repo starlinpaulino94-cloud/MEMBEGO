@@ -2390,19 +2390,8 @@ export function breadcrumbs(pathname: string, ctx: ContextoNav): Miga[] {
   )
   const resto = pathname.slice(prefijo?.length ?? 0).split('/').filter(Boolean)
 
-  // En una pestaña que no es la primera, el módulo es un enlace y la pestaña es donde estás: «Pagos › Conciliación».
-  const pestana = pestanaDeRuta(m.item, pathname)
-  if (pestana && pestana !== m.item.pestanas?.[0] && !m.item.sinBarra) {
-    migas.push({ label: m.item.label, href: m.item.href })
-    if (resto.length === 0) {
-      migas.push({ label: pestana.label })
-      return migas
-    }
-    migas.push({ label: pestana.label, href: pestana.href })
-    const sub = [...resto].reverse().find((s) => ETIQUETAS_SEGMENTO[s])
-    migas.push({ label: sub ? ETIQUETAS_SEGMENTO[sub] : 'Detalle' })
-    return migas
-  }
+  // La PESTAÑA no es una miga: la barra del módulo ya dice cuál es la activa, y una cuarta miga («Empresa › Operaciones › Pagos ›
+  // Conciliación») no cabe junto al buscador. Las migas llegan hasta el módulo; la pestaña la marca la barra.
 
   if (resto.length === 0) {
     migas.push({ label: m.item.label })

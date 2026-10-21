@@ -190,21 +190,20 @@ test('las migas nombran el espacio, no solo la página', () => {
 })
 
 test('gana el href más largo, no el primero que casa por prefijo', () => {
-  // /admin/audiencia/segmentos casa TAMBIÉN con /admin/audiencia. Si ganara el
-  // prefijo corto, las migas dirían "Audiencia" estando en otra pantalla.
+  // /admin/audiencia/segmentos casa TAMBIÉN con /admin/audiencia (la pestaña «Audiencia» de Reportes). Si ganara el prefijo corto,
+  // las migas dirían «Reportes» estando en otra pantalla: gana la pestaña «Segmentos», que es de Clientes.
   const m = breadcrumbs('/admin/audiencia/segmentos', ctxDe('ADMINISTRADOR'))
-  assert.equal(m[m.length - 1].label, 'Segmentos')
+  assert.deepEqual(m.map((x) => x.label), ['Empresa', 'Clientes'])
+  assert.ok(!m.some((x) => x.label === 'Reportes' || x.label === 'Analítica'))
 })
 
 test('una subvista fuera del menú hereda la miga de su sección', () => {
   // /admin/audiencia/campanas no es una entrada del menú: es una pestaña de Comunicaciones. Las migas deben decir dónde estás
-  // —el módulo y su pestaña—, no quedarse en blanco ni inventar un nombre.
+  // —hasta el módulo—, no quedarse en blanco ni inventar un nombre; la pestaña la marca la barra del módulo.
   const m = breadcrumbs('/admin/audiencia/campanas', ctxDe('ADMINISTRADOR'))
   const etiquetas = m.map((x) => x.label)
-  assert.deepEqual(etiquetas, ['Empresa', 'Marketing', 'Comunicaciones', 'Campañas segmentadas'])
-  // El módulo es un enlace de vuelta; la pestaña, la página actual.
-  assert.equal(m.at(-2)?.href, '/admin/notificaciones')
-  assert.equal(m.at(-1)?.href, undefined)
+  assert.deepEqual(etiquetas, ['Empresa', 'Marketing', 'Comunicaciones'])
+  assert.equal(m.at(-1)?.href, undefined, 'la última miga es la página actual')
 })
 
 test('las subpáginas se nombran en vez de quedar como "Detalle"', () => {

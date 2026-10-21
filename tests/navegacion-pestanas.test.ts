@@ -258,14 +258,17 @@ test('la barra solo trae pestañas que esta persona puede abrir', () => {
 
 // ── Migas, buscador y paleta ─────────────────────────────────────────────────
 
-test('las migas dicen el módulo y la pestaña: «Pagos › Conciliación»', () => {
+test('las migas llegan hasta el módulo; la pestaña la marca la barra, no una cuarta miga', () => {
   const c = de('ADMINISTRADOR')
-  assert.deepEqual(breadcrumbs('/admin/conciliacion', c).map((m) => m.label), ['Empresa', 'Operaciones', 'Pagos', 'Conciliación'])
-  assert.equal(breadcrumbs('/admin/conciliacion', c).at(-2)?.href, '/admin/pagos')
-  // En la primera pestaña no se repite: «Pagos» es la entrada y es donde estás.
-  assert.deepEqual(breadcrumbs('/admin/pagos', c).map((m) => m.label), ['Empresa', 'Operaciones', 'Pagos'])
-  // Una subpantalla de una pestaña nombra la pestaña y luego lo suyo.
-  assert.deepEqual(breadcrumbs('/admin/empleados/accesos', c).map((m) => m.label), ['Empresa', 'Ajustes', 'Equipo', 'Accesos'])
+  // Con cuatro migas no caben junto al buscador (a 1 280 px se vio): la pestaña activa ya la dice la barra del módulo.
+  for (const ruta of ['/admin/pagos', '/admin/conciliacion']) {
+    assert.deepEqual(breadcrumbs(ruta, c).map((m) => m.label), ['Empresa', 'Operaciones', 'Pagos'], ruta)
+  }
+  assert.deepEqual(breadcrumbs('/admin/empleados/accesos', c).map((m) => m.label), ['Empresa', 'Ajustes', 'Equipo'])
+  // Y una subpantalla sigue nombrándose: el módulo es un enlace de vuelta y lo suyo, la página actual.
+  assert.deepEqual(breadcrumbs('/admin/planes/nuevo', c).map((m) => m.label), ['Empresa', 'Comercio', 'Planes', 'Nuevo'])
+  // La pestaña activa sale de la barra.
+  assert.equal(activa('/admin/conciliacion'), 'Conciliación')
 })
 
 test('el buscador lleva DIRECTO a una pantalla que ya no tiene entrada de menú', () => {
@@ -331,4 +334,13 @@ test('la carcasa pinta la barra del módulo encima del contenido, y sin decidir 
   assert.doesNotMatch(barraTsx, /role\s*===/, 'la barra no decide por rol')
   assert.match(barraTsx, /prefetch=\{false\}/, 'sin prefetch, como el menú: cada prefetch de una ruta dinámica cuesta consultas de sesión')
   assert.match(barraTsx, /<NavSeccion/, 'usa la primitiva del sistema de diseño, no una barra propia')
+})
+
+test('las migas de la cabecera se recortan por la derecha en vez de pisarse (con cuatro ya no caben junto al buscador)', () => {
+  const sinComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+  const cabecera = sinComentarios(readFileSync('src/components/layout/AppHeader.tsx', 'utf8'))
+  // El contenedor recorta: sin `overflow-hidden`, un texto que no cabe se dibuja ENCIMA del siguiente.
+  assert.match(cabecera, /aria-label="Ruta de navegación" className="[^"]*overflow-hidden[^"]*"/)
+  // Solo la última miga cede ancho; las anteriores lo conservan (`shrink-0`). Un `min-w-0` en todas era lo que las apilaba.
+  assert.match(cabecera, /ultima \? 'min-w-0' : 'shrink-0'/)
 })
