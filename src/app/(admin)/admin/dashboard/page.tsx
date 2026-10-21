@@ -24,7 +24,7 @@ const TZ_DEFECTO = 'America/Santo_Domingo'
  *
  * Es la primera pantalla de todo el que entra al panel, así que se compone POR LO QUE LA PERSONA PUEDE VER y no por una lista
  * de roles: cada bloque declara su sección y su función (`modules/admin/resumen/bloques.ts`), el motor consulta solo lo que
- * se concede (`consultas.ts`, una transacción) y los enlaces solo existen si la sección se puede abrir. El resumen de
+ * se concede (`consultas.ts`, en transacciones paralelas) y los enlaces solo existen si la sección se puede abrir. El resumen de
  * Comercio y la tarjeta de Inventario, que son de otros módulos, cargan aparte dentro de `<Suspense>`.
  *
  * Qué NO está aquí, a propósito (decisión 1 del prototipo aprobado): seguidores, referidos históricos, «Pico», la actividad
@@ -39,31 +39,31 @@ export default async function AdminDashboard() {
   const portal = await destinoSiSoloProveedora(companyId)
   if (portal) redirect(portal)
 
-  // Onboarding PRIMERO: mientras la empresa no esté publicada, el asistente es su «home». Se resuelve antes de cargar el
-  // Resumen para no desperdiciarlo cuando se va a redirigir igual.
-  const onboarding = await getOnboardingEmpresa(companyId).catch(() => null)
-  if (onboarding && !onboarding.publicado && FULL_ADMIN_ROLES.includes(user.metadata.role)) {
-    redirect('/onboarding')
-  }
-
-  // QUÉ PUEDE VER QUIEN MIRA, resuelto UNA vez (D-01 y D-07): dinero con `reportes › ver_financieros`, desglose por persona con
-  // `reportes › ver_empleados`, y cada enlace solo si su sección se puede abrir. Es cosmético a propósito: la barrera de
+  // Todo lo que NO depende de lo demás se lee a la vez: el asistente de onboarding, lo que la persona puede ver y la empresa
+  // (su zona horaria decide dónde empieza «hoy»). Antes eran tres esperas en fila, y el onboarding —once sentencias— iba solo.
+  // QUÉ PUEDE VER QUIEN MIRA se resuelve UNA vez (D-01 y D-07): dinero con `reportes › ver_financieros`, desglose por persona
+  // con `reportes › ver_empleados`, y cada enlace solo si su sección se puede abrir. Es cosmético a propósito: la barrera de
   // verdad sigue en la guardia de cada sección.
-  const [conFinanzas, conEmpleados, abribles] = await Promise.all([
+  const [onboarding, conFinanzas, conEmpleados, abribles, company] = await Promise.all([
+    getOnboardingEmpresa(companyId).catch(() => null),
     usuarioPuedeFuncion(user, 'reportes', 'ver_financieros'),
     usuarioPuedeFuncion(user, 'reportes', 'ver_empleados'),
     seccionesAbribles(user, ADMIN_SECTIONS),
+    conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({ where: { id: companyId }, select: { name: true, moneda: true, idioma: true, zonaHoraria: true } })
+    ).catch(() => null),
   ])
+  // Mientras la empresa no esté publicada, el asistente es su «home»: se decide ANTES de cargar el Resumen para no
+  // desperdiciarlo cuando se va a redirigir igual.
+  if (onboarding && !onboarding.publicado && FULL_ADMIN_ROLES.includes(user.metadata.role)) {
+    redirect('/onboarding')
+  }
   const ve = (href: string) => {
     const seccion = adminSectionForPath(href.split('?')[0])
     return seccion === null || abribles.has(seccion)
   }
   const bloques = bloquesDelResumen({ puede: (s) => abribles.has(s), conFinanzas, conEmpleados })
 
-  // La empresa se lee ANTES: su zona horaria decide dónde empieza «hoy».
-  const company = await conEmpresa(companyId, (tx) =>
-    tx.company.findUnique({ where: { id: companyId }, select: { name: true, moneda: true, idioma: true, zonaHoraria: true } })
-  ).catch(() => null)
   const tz = company?.zonaHoraria || TZ_DEFECTO
   const regional = { moneda: company?.moneda ?? 'DOP', idioma: company?.idioma || 'es-DO', zonaHoraria: tz }
 
