@@ -5,6 +5,7 @@ import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { promocionPrefill } from '@/modules/admin/plantillas'
 import { PromocionForm } from '@/components/admin/PromocionForm'
+import { PageHeader } from '@/components/ui/page-header'
 import { LayoutTemplate } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -36,12 +37,16 @@ export default async function NuevaPromocionPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Nueva promoción</h1>
-        <p className="text-muted-foreground">
-          Se notificará automáticamente a tus seguidores al publicarla.
-        </p>
-      </div>
+      <PageHeader
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/promociones" className="text-muted-foreground hover:text-foreground">
+            ‹ Promociones
+          </Link>
+        }
+        title="Nueva promoción"
+        description="Se notificará automáticamente a tus seguidores al publicarla."
+      />
 
       {prefill && (
         <div className="flex max-w-2xl items-start gap-3 rounded-xl border border-info/30 bg-info/10 p-4 text-sm">
