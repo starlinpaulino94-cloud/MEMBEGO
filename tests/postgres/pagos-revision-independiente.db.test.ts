@@ -171,6 +171,8 @@ test('1b · de punta a punta: la pasarela cobra, la extensión FALLA de verdad, 
   })
   const venceAntes = new Date(Date.now() + 3 * H)
   const m = await membresia(e, c, { estado: 'ACTIVA', pagoConfirmado: true, montoPagado: PRECIO, fechaPago: hace(29 * DIA), fechaInicio: hace(29 * DIA), fechaVencimiento: venceAntes, autoRenovar: true, tarjetaTokenizadaId: tarjeta.id })
+  // La renovación automática exige un consentimiento VIGENTE: un fixture que la enciende sin uno no es una renovación autorizada.
+  await prisma.consentimientoPago.create({ data: { companyId: e.companyId, clienteId: c, tipo: 'RENOVACION_AUTOMATICA', tarjetaId: tarjeta.id, membershipId: m, origen: 'HEREDADO', textoVersion: 'previo-a-registro' } })
 
   let llamadas = 0
   globalThis.fetch = (async () => {
@@ -402,6 +404,8 @@ test('7 · una renovación cobrada y sin entregar bloquea otro cobro del mismo p
     select: { id: true },
   })
   const m = await membresia(e, c, { estado: 'ACTIVA', pagoConfirmado: true, montoPagado: PRECIO, fechaPago: hace(29 * DIA), fechaInicio: hace(29 * DIA), fechaVencimiento: new Date(Date.now() + 3 * H), autoRenovar: true, tarjetaTokenizadaId: tarjeta.id })
+  // La renovación automática exige un consentimiento VIGENTE: un fixture que la enciende sin uno no es una renovación autorizada.
+  await prisma.consentimientoPago.create({ data: { companyId: e.companyId, clienteId: c, tipo: 'RENOVACION_AUTOMATICA', tarjetaId: tarjeta.id, membershipId: m, origen: 'HEREDADO', textoVersion: 'previo-a-registro' } })
   const hace2d = hace(2 * DIA)
   const pendiente = await cobro(e, c, m, { canal: 'RENOVACION_AUTOMATICA', activadoAt: hace2d, createdAt: hace2d, updatedAt: hace2d, ...falla })
 

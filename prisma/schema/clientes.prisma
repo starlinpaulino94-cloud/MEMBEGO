@@ -97,6 +97,7 @@ model Cliente {
   vehiculos           Vehiculo[]
   memberships         Membership[]
   tarjetasTokenizadas TarjetaTokenizada[]
+  consentimientosPago ConsentimientoPago[]
   qrTokens            QrToken[] // vacío hasta que tenga membresía activa
   visits              Visit[]
   referidosHechos     Referido[]          @relation("Referente")

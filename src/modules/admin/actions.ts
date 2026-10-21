@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath, revalidateTag } from 'next/cache'
+import { revocarConsentimientos } from '@/modules/pagos/consentimientos'
 import { requireAdminUser, requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -777,6 +778,12 @@ export async function cancelarMembresia(
         await tx.membership.update({
         where: { id: membership.id },
         data: { estado: 'CANCELADA', autoRenovar: false, motivoCancelacion: motivo || null },
+      })
+      // Apagar la renovación es RETIRAR el consentimiento de renovar: la fila no se
+      // borra, queda con su fecha de revocación.
+      await revocarConsentimientos(tx, {
+        tipo: 'RENOVACION_AUTOMATICA',
+        membershipId: membership.id,
       })
       await tx.auditLog.create({
         data: {

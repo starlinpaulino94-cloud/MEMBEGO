@@ -976,6 +976,7 @@ model Company {
   memberships            Membership[]
   membresiaEventos       MembresiaEvento[]
   tarjetasTokenizadas    TarjetaTokenizada[]
+  consentimientosPago    ConsentimientoPago[]
   sucursales             Sucursal[]
   cajaSesiones           CajaSesion[]
   metodosPago            MetodoPago[]

@@ -490,6 +490,171 @@ autoriza cobros futuros. La renovación automática sigue siendo una función
 independiente, bajo el consentimiento y las reglas ya existentes de Membego;
 esta implementación no la activa ni amplía su alcance.
 
+> **Estado: construida, NO confirmada con CardNET.** No hay constancia de que un
+> cobro con un perfil guardado (`cobrarConCredencialGuardada`, con
+> `Environment: Ecommerce_COF`) se haya aprobado contra el proveedor. Todo lo
+> probado de esta sección usa un CardNET **simulado**. Hasta que ocurra, la
+> renovación automática no es fiable.
+
+### Qué hay
+
+| Pieza | Dónde |
+|---|---|
+| Registro de lo que el cliente aceptó (guardar la tarjeta / renovar), con texto, fecha, IP y retirada | `consentimientos_pago` (`prisma/schema/pagos.prisma`, migración `20261077_consentimientos_pago`) |
+| Núcleo de consentimientos: textos por versión, `exigeAvisoPrevio` | `src/modules/pagos/consentimientosCore.ts` |
+| Registrar, retirar y consultar consentimientos | `src/modules/pagos/consentimientos.ts` |
+| La política de renovación: clasificar un cobro, reintentos, ciclo (todas las cifras en `POLITICA_RENOVACION`) | `src/modules/pagos/renovacionPolitica.ts` |
+| Renovar, reclamar el intento, apagar la renovación | `src/modules/pagos/cardnetTokenGuardado.ts` |
+| Textos de los avisos al cliente y claves para no repetirlos | `src/modules/pagos/avisosRenovacionCore.ts` |
+| Quién avisa y cuándo (aviso previo del cron, envío único) | `src/modules/pagos/avisosRenovacion.ts` |
+| El HTML del correo de los avisos | `src/modules/pagos/correoAvisoRenovacion.ts` |
+| Cron diario `0 12 * * *`: avisos y después cobros | `/api/cron/renovaciones-tarjeta` (`vercel.json`) |
+| Cobros dudosos en la Conciliación y en Observabilidad | `src/modules/observabilidad/conciliacion.ts`, `metricas.ts` |
+| Qué hacer, paso a paso | `docs/runbooks/pagos-cardnet.md` § 7 |
+
+### Consentimientos
+
+Son **dos**, y no son lo mismo:
+
+- **`GUARDAR_TARJETA`**: permite pagar de nuevo sin escribir la tarjeta, con el
+  cliente delante. Lo registra `guardarTarjeta` **en la misma transacción** que
+  la tarjeta: o quedan las dos cosas o ninguna. Es obligatorio (un parámetro
+  opcional se olvida; uno obligatorio hace que el compilador señale a quien lo
+  olvide).
+- **`RENOVACION_AUTOMATICA`**: permite cobros **sin el cliente**. No se deduce de
+  el anterior: el permiso de guardar dice, a propósito, que «no activa
+  renovaciones automáticas». El cobro automático **exige uno vigente**.
+
+La fila solo se inserta; lo único que cambia es `revocadoAt`, una vez. Se
+retira al quitar la tarjeta y en los tres sitios que apagan `autoRenovar`.
+
+**Cada superficie registra SU texto.** La pantalla web (`guardar-tarjeta-web-v1`)
+y la app móvil (`guardar-tarjeta-movil-v1`) no dicen exactamente lo mismo, y una
+versión publicada no se edita. Hay pruebas que comparan lo que muestra cada
+pantalla con lo que se registra, y fallan si se separan. La sesión móvil no
+conserva la IP ni el agente de la petición: se registran vacíos en vez de
+inventarlos.
+
+**Lo que ya existía queda HEREDADO.** La migración crea un consentimiento
+`HEREDADO` (`previo-a-registro`) por cada tarjeta activa y por cada membresía que
+hoy renueva sola, para que **las renovaciones que ya funcionan no se detengan**
+el día que el cobro empiece a exigir un consentimiento. No hay texto exacto de lo
+que vieron esos clientes, y fingir uno sería fabricar evidencia.
+
+**`renovacion-v1` es un borrador sin pantalla.** Nada la muestra hoy (no existe la
+interfaz para activar la renovación), así que nadie la ha aceptado y se puede
+ajustar. Promete aviso previo y «hasta 3 intentos»; el cobro se niega a salir sin
+el aviso (`exigeAvisoPrevio`) y una prueba obliga a que la cifra del texto sea la
+de la política.
+
+### Rechazos, reintentos y avisos
+
+**Cómo es un ciclo** (con el cron diario de las 12:00 UTC):
+
+1. **7 días antes** del vencimiento: *aviso previo* al cliente («se renovará
+   automáticamente: cobraremos RD$X a tu Visa ····4242 en los días previos»), por
+   correo y en la app. Una vez por ciclo; solo si la empresa puede cobrar.
+2. **Desde 3 días antes**: el cron intenta cobrar.
+3. Un **rechazo real** avisa al cliente y se reintenta al día siguiente, hasta
+   **3 rechazos** y **siempre antes del vencimiento**. Al agotarse apaga
+   `autoRenovar`, retira el consentimiento de renovar y **conserva la tarjeta**.
+
+**Qué pasó con el cobro, y qué se hace** (`clasificarCobro`):
+
+| El cobro… | Se registra | Al cliente | Siguiente intento |
+|---|---|---|---|
+| Se aprobó | `APROBADO`, entrega y venta (como siempre) | recibo | — |
+| El banco dijo que no (51, 05, 61…) | `RECHAZADO` + asiento `PAGO_RECHAZADO` | «no se hizo ningún cargo», y «lo reintentaremos» **solo si de verdad cabe otro intento** | mañana, o se apaga |
+| El banco dijo que no **y no cambia** (14, 41, 43, 54, perfil sin activar) | ídem | «desactivamos la renovación» | se apaga en el primer rechazo |
+| **Sin respuesta**, error 5xx, código **94** («ya se procesó»), excepción, o un intento que quedó `CREADO` sin cerrar | `ERROR` marcado `incierto` | **nada**: no se sabe qué decirle | **ninguno** hasta que una persona lo concilie |
+| La pasarela ni procesó la petición (401/403/404 sin código) | `ERROR` marcado `tecnico` | nada | mañana (seguro que no se cobró; no gasta un rechazo) |
+| Cobró y no se entregó | `APROBADO` con entrega pendiente | — | **ninguno** (ya se cobró); lo resuelve la Conciliación |
+
+**El caso que esto cierra:** un cobro que se cae sin respuesta se guardaba como
+`RECHAZADO` y la ventana anti-duplicado era de 12 h, menos que el período del
+cron. Al día siguiente se volvía a cobrar, y si el primero sí había salido, el
+cliente pagaba dos veces. Ahora el intento dudoso **bloquea el ciclo** y hace
+ruido (`pagos:renovacion:bloqueada-incierta` en el registro de errores, el caso
+«Renovaciones automáticas con resultado dudoso» en la Conciliación y el contador
+*Renovaciones por conciliar* de Observabilidad). Resolverlo reutiliza lo que ya
+hay: si CardNET SÍ cobró, se registra como aprobado y el botón **«Reintentar
+entrega»** extiende la membresía sin recobrar.
+
+**Otras barreras contra el doble cobro**, todas bajo el candado por membresía
+(`pg_advisory_xact_lock`; antes la guarda era «consultar y luego crear», que dos
+ejecuciones a la vez se saltaban):
+
+- Se vuelve a comprobar, justo antes de cobrar, que la membresía sigue `ACTIVA` y
+  dentro de la ventana (`tocaRenovar`). Un segundo cron que llega después de que
+  el primero renovó lee el estado nuevo; sin esto cobraría otra vez.
+- Un cliente que está pagando a mano (o que pagó hace menos de 20 h) frena el
+  cobro automático. Sus rechazos manuales **no** gastan los intentos del cron.
+- Separación mínima de 20 h entre intentos.
+- Se conserva la regla anterior: una renovación aprobada y sin entregar de los
+  últimos 30 días bloquea otro cobro aunque quede fuera del ciclo.
+
+**El aviso previo es una promesa del texto, y el cobro la cumple.** Quien aceptó
+un texto que promete aviso (`exigeAvisoPrevio`) **no se cobra** si no consta el
+aviso de ese ciclo. Los consentimientos heredados nunca lo prometieron y no se
+les exige. El aviso no se manda si la empresa no puede cobrar (pasarela apagada,
+empresa de práctica): decir «se renovará» y no cobrar sería mentirle. Y el
+recordatorio genérico «renuévala» (automatizaciones, 7 días) ya no se manda a
+quien se renueva sola, por la misma razón.
+
+**Tarjeta vencida.** Una tarjeta con vencimiento ya cumplido (el que entrega
+CardNET, `tarjetaCardnetVencida`) **no genera un solo intento**: se apaga la
+renovación, se retira el consentimiento y se avisa. Antes del cobro, si la
+tarjeta ya estará vencida cuando toque, el aviso previo es «no servirá para
+renovar» en vez de «se renovará».
+
+**Las cifras** (`POLITICA_RENOVACION`, un solo objeto): 3 rechazos, primer intento
+3 días antes, 20 h entre intentos, aviso 7 días antes. **Las confirmó el dueño del
+negocio el 21-10-2026.**
+
+> **Cambio de comportamiento al desplegar.** Antes el primer intento era **1 día**
+> antes del vencimiento; ahora es **3**. Con 1 día caben uno o dos intentos antes
+> de que el job de vencimientos (09:00 UTC) pase la membresía a `VENCIDA`, y
+> «reintentar» no existía. Cobrar antes no le quita días al cliente (la renovación
+> extiende desde el vencimiento actual), **pero** la renovación reinicia los
+> lavados incluidos en el momento del cobro, así que el reinicio ocurre hasta 2
+> días antes que antes. Afecta a las renovaciones que YA existen en cuanto se
+> despliegue el código. Volver a 1 día es cambiar `diasAntesDelPrimerIntento`, a
+> costa de los reintentos.
+
+### Para poner esto en producción
+
+1. **Respaldo** y aplicar `prisma/migrations/20261077_consentimientos_pago/migration.sql`
+   (idempotente; se puede pegar en el SQL Editor de Supabase). **Antes** que el
+   código, como siempre. Hereda los consentimientos de lo que ya existe.
+2. Verificar con `npm run migraciones:pendientes` o
+   `scripts/verificar-migraciones-resumen.sql`.
+3. Si la **Capa 2 de RLS** está encendida, volver a correr su script: la tabla
+   entra por `companyId` y necesita su política (`docs/RLS.md`). La migración ya
+   activa RLS; sin política, un rol que no bypasee RLS no vería nada.
+4. Avisar de que **el cobro se adelanta hasta 2 días** (arriba).
+
+### Lo que falta
+
+- **Una pantalla para activar la renovación con su consentimiento.** Hoy nada
+  enciende `autoRenovar` con un consentimiento de cliente, así que `renovacion-v1`
+  no se ha mostrado. Cuando exista, es la que registra ese texto.
+- **Resolver el cobro dudoso preguntándole a CardNET.** El flujo móvil ya
+  reconcilia cobros ambiguos buscando el `Purchase` por `UniqueID`
+  (`consultarComprasCardnet`, `purchaseDecision`). La renovación podría usar la
+  misma consulta y resolver sola buena parte de los casos que hoy van a una
+  persona. No se hizo: es un cambio de alcance y no se puede probar contra el
+  CardNET real.
+- **Reconfirmar las renovaciones heredadas.** El aviso previo les pide que
+  revisen la renovación, pero no hay un botón de «confirmar»: solo pueden
+  desactivarla.
+- **Revisión legal** de `renovacion-v1` y de los permisos de guardar
+  (`docs/tarjetas-guardadas/TEXTOS-LEGALES.md`).
+- **La carrera de `guardarTarjeta`.** Con varias peticiones simultáneas del mismo
+  perfil queda **una** tarjeta y **un** consentimiento, pero algunas peticiones
+  fallan: tras la violación única, la recuperación consulta dentro de la
+  transacción que acaba de abortar. Es anterior al consentimiento; la solución es
+  reintentar `guardarTarjeta` una vez fuera de la transacción.
+
 Endpoints CardNET relacionados: `POST /api/Customer`,
 `POST /api/Customer/{id}/activate` y
 `POST /api/Customer/{id}/PaymentProfileDelete`.

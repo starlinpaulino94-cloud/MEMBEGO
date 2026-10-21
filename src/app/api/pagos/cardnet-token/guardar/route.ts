@@ -6,6 +6,7 @@ import { guardarTarjeta, eliminarTarjeta } from '@/modules/pagos/cardnetTokenGua
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
 import { logErrorBd } from '@/lib/prisma-errors'
 import { conEmpresa } from '@/lib/tenant'
+import { TEXTO_VERSION_GUARDAR_WEB } from '@/modules/pagos/consentimientosCore'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,6 +83,13 @@ export async function POST(req: NextRequest) {
       ultimos4: profile.ultimos4,
       vencMes: profile.vencMes,
       vencAnio: profile.vencAnio,
+      // El cuerpo exige `consentimiento: true` (arriba): es la casilla de la pantalla
+      // web. Se registra el texto que esa pantalla muestra, y de dónde llegó.
+      consentimiento: {
+        textoVersion: TEXTO_VERSION_GUARDAR_WEB,
+        ip: id,
+        userAgent: req.headers.get('user-agent'),
+      },
     })
     return NextResponse.json({ ok: true, tarjetaId: tarjeta.id })
   } catch (e) {
