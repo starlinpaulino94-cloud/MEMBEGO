@@ -12,7 +12,7 @@ export default function PrivacyPage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-h1 text-foreground">Política de Privacidad</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Última actualización: julio de 2026
+          Última actualización: octubre de 2026
         </p>
 
         <section className="mt-8 space-y-6 text-foreground leading-relaxed">
@@ -80,28 +80,115 @@ export default function PrivacyPage() {
               distrae. Pero quién custodia los datos de su tarjeta es
               exactamente el tipo de cosa que tiene derecho a saber, así que
               está escrito aquí, completo y sin adornos. */}
-          <div>
+          {/* LAS CONDICIONES DE PAGO VIVEN AQUÍ, COMPLETAS.
+              La casilla que el cliente marca al guardar su tarjeta o al activar la
+              renovación automática es corta a propósito y remite a esta sección
+              (decisión del dueño, 21-10-2026). Por eso esto tiene que decir TODO lo
+              que el sistema hace —y nada que no haga—: las cifras (días de aviso,
+              días antes del cobro, número de intentos) son las de
+              `POLITICA_RENOVACION`, y una prueba obliga a que coincidan
+              (`tests/politicas-pagos.test.ts`). Si cambia la política, cambia esto. */}
+          <div id="pagos-con-tarjeta">
             <h2 className="text-h2 text-foreground">5. Pagos con tarjeta</h2>
-            <p>
+
+            <h3 className="mt-4 text-base font-semibold text-foreground">5.1 Cómo se procesa tu tarjeta</h3>
+            <p className="mt-2">
               <strong className="font-semibold">MembeGo nunca ve, recibe ni almacena
-              el número de tu tarjeta, su fecha de vencimiento ni el código CVV.</strong>{' '}
+              el número completo de tu tarjeta ni el código CVV.</strong>{' '}
               Cuando pagas con tarjeta, esos datos se escriben directamente en una
               ventana segura operada por{' '}
               <strong className="font-semibold">CardNET</strong>, el procesador de pagos
               autorizado que da servicio a la banca dominicana, y viajan cifrados a
-              sus servidores sin pasar por los nuestros.
-            </p>
-            <p className="mt-3">
-              Lo único que guardamos es una referencia cifrada —un «token»— que
-              permite cobrar el monto acordado sin conocer la tarjeta, junto con la
-              marca y los últimos cuatro dígitos para que puedas reconocerla. Con
-              esa referencia no se puede usar tu tarjeta fuera de MembeGo, y puedes
-              eliminarla cuando quieras desde tu perfil.
+              sus servidores sin pasar por los nuestros. Cada empresa es quien te
+              cobra; MembeGo opera la plataforma y CardNET procesa el pago.
             </p>
             <p className="mt-3">
               Al registrar una tarjeta, tu banco puede aplicar un cargo de
               verificación de RD$1.00 para confirmar que es tuya. Es un paso de
               seguridad del emisor, no un cobro de MembeGo.
+            </p>
+
+            <h3 className="mt-5 text-base font-semibold text-foreground">5.2 Guardar tu tarjeta (opcional)</h3>
+            <p className="mt-2">
+              Al pagar puedes marcar una casilla, que viene sin marcar, para guardar
+              la tarjeta y pagar de nuevo sin escribirla. Lo que guardamos es una
+              referencia cifrada —un «token»— que permite cobrar sin conocer la
+              tarjeta, la marca y los últimos cuatro dígitos para que la reconozcas
+              y, cuando el procesador lo entrega, el mes y el año de vencimiento,
+              para avisarte antes de que venza y no intentar cobros con una tarjeta
+              vencida. Con esa referencia no se puede usar tu tarjeta fuera de
+              MembeGo.
+            </p>
+            <p className="mt-3">
+              Guardar la tarjeta permite pagos que inicias tú, confirmando cada
+              uno. <strong className="font-semibold">No activa la renovación
+              automática</strong>: esa es una autorización distinta (5.3). Puedes
+              eliminar la tarjeta cuando quieras desde tus pagos; al quitarla deja
+              de usarse de inmediato, pedimos a CardNET que borre el perfil y, si
+              una membresía se renovaba con ella, la renovación se desactiva.
+            </p>
+
+            <h3 id="renovacion-automatica" className="mt-5 text-base font-semibold text-foreground">
+              5.3 Renovación automática
+            </h3>
+            <p className="mt-2">
+              Es una autorización aparte, también opcional, que das desde tu
+              membresía eligiendo una tarjeta guardada y aceptando el texto de la
+              casilla. Al aceptarla, aceptas estas condiciones:
+            </p>
+            <ul className="mt-3 list-disc space-y-2 pl-5">
+              <li>
+                <strong className="font-semibold">Qué se cobra.</strong> El precio
+                vigente del plan en el momento del cobro, a la tarjeta que elegiste.
+                Cada renovación extiende tu membresía desde su fecha de vencimiento
+                y reinicia los beneficios del plan.
+              </li>
+              <li>
+                <strong className="font-semibold">Aviso previo.</strong> Siete días
+                antes del vencimiento te avisamos por correo y en tu cuenta, con el
+                monto y la tarjeta. Si no podemos avisarte, no cobramos.
+              </li>
+              <li>
+                <strong className="font-semibold">Cuándo.</strong> El cobro se
+                intenta desde tres días antes del vencimiento. Cobrar antes no te
+                quita días: la nueva vigencia empieza cuando termina la actual.
+              </li>
+              <li>
+                <strong className="font-semibold">Si el banco rechaza el cobro.</strong>{' '}
+                Te avisamos (no se hizo ningún cargo) y volvemos a intentarlo al día
+                siguiente, hasta tres intentos en total y siempre antes del
+                vencimiento. Si se agotan, o si el rechazo indica que la tarjeta ya
+                no sirve (vencida, reportada o inválida), desactivamos la renovación
+                automática y te avisamos. Tu tarjeta sigue guardada, tu membresía
+                sigue vigente hasta su vencimiento y puedes renovarla tú.
+              </li>
+              <li>
+                <strong className="font-semibold">Nunca dos veces.</strong> Si un
+                cobro queda sin respuesta del procesador, no lo repetimos hasta
+                confirmar con CardNET si se realizó. Tras cada cobro recibes el
+                recibo por correo.
+              </li>
+              <li>
+                <strong className="font-semibold">Desactivarla.</strong> Cuando
+                quieras, desde tu membresía o quitando la tarjeta. Los cobros se
+                detienen desde ese momento; la membresía sigue vigente hasta vencer.
+              </li>
+              <li>
+                <strong className="font-semibold">Renovaciones activadas antes de
+                este registro.</strong> Siguen funcionando con estas mismas
+                condiciones. Te lo recordamos en el aviso previo, y puedes
+                confirmarlas o desactivarlas desde tu membresía.
+              </li>
+            </ul>
+
+            <h3 className="mt-5 text-base font-semibold text-foreground">5.4 Constancia de tus autorizaciones</h3>
+            <p className="mt-2">
+              De cada autorización —guardar la tarjeta, renovar automáticamente—
+              registramos qué aceptaste, la versión del texto que viste, la fecha y
+              hora y, en la web, la dirección IP y el navegador desde los que lo
+              hiciste; y, si la retiras, cuándo. Esa constancia se conserva aunque
+              quites la tarjeta, para poder demostrarte qué autorizaste y cuándo, y
+              se elimina junto con tu cuenta según la sección 6.
             </p>
           </div>
 

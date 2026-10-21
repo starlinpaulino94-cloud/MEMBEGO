@@ -163,6 +163,19 @@ Qué hace el sistema (detalle en `docs/PAGOS-CARDNET.md` § 6):
    es un rechazo**: no se avisa al cliente y **no se repite solo**, porque pudo
    haber salido. Es el caso que se concilia a mano (abajo).
 
+### Cómo se activa y se desactiva
+
+El cliente lo hace en el detalle de su membresía (panel **«Renovación automática»**,
+`docs/PAGOS-CARDNET.md` § 6): elige una tarjeta guardada, lee el texto y marca la
+casilla. Eso enciende `autoRenovar` y registra su consentimiento `renovacion-v1`
+en `consentimientos_pago` (con IP y agente). Desactivar lo apaga y lo retira. **No
+se enciende a mano en la base** (ver «No hagas esto»).
+
+Si un cliente dice «lo activé y no me deja»: el panel solo aparece en una membresía
+activa, con vencimiento, sin cancelación programada, sin cambio de plan por pagar,
+con un plan que cuesta algo, y se ofrece activar si la empresa puede cobrar con
+tarjeta. Sin tarjetas guardadas, el panel le explica cómo guardar una.
+
 ### Si la renovación no corrió
 
 Mira, **en orden**: `autoRenovar` encendido · **consentimiento de renovar vigente**

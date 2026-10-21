@@ -13,7 +13,7 @@ export default function TermsPage() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 prose prose-neutral">
         <h1 className="text-h1 text-foreground">Términos y Condiciones</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Última actualización: julio de 2026
+          Última actualización: octubre de 2026
         </p>
 
         <section className="mt-8 space-y-6 text-foreground leading-relaxed">
@@ -49,6 +49,16 @@ export default function TermsPage() {
               Las condiciones, precios y beneficios de cada membresía los define la
               empresa correspondiente. MembeGo actúa como plataforma tecnológica y no
               es responsable de la prestación del servicio ofrecido por cada empresa.
+            </p>
+            <p className="mt-3">
+              Una membresía solo se renueva automáticamente con una tarjeta guardada
+              si lo autorizas expresamente desde tu membresía, y puedes desactivarlo
+              cuando quieras. Las condiciones (aviso previo, intentos de cobro y cómo
+              desactivarla) están en la sección{' '}
+              <Link href="/privacy#renovacion-automatica" className="text-primary hover:underline">
+                «Renovación automática» de la Política de Privacidad
+              </Link>
+              .
             </p>
           </div>
 

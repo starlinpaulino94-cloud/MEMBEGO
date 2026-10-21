@@ -46,20 +46,24 @@ export const TEXTO_VERSION_HEREDADO = 'previo-a-registro'
 // `renderizarTexto`. Lo que se registra es la VERSIÓN de la plantilla; los
 // valores concretos salen de la membresía en ese momento.
 //
-// NO prometas aquí nada que el sistema no haga. `renovacion-v1` promete un aviso
-// antes de cada cobro y reintentos acotados: el cobro se niega a salir sin el
-// aviso (`exigeAvisoPrevio`) y la cifra de intentos la fija
-// `POLITICA_RENOVACION`, con una prueba que obliga a que coincidan.
+// NO prometas aquí nada que el sistema no haga. El texto de renovar es CORTO a
+// propósito (decisión del dueño, 21-10-2026): lo que el cliente acepta es el
+// cobro sin confirmar y las condiciones de la Política de pagos
+// (`/privacy#renovacion-automatica`), que es donde están escritas, completas, las
+// promesas: aviso antes de cada cobro, hasta N intentos, qué pasa si se rechaza.
+// Esas promesas valen igual que si estuvieran aquí: el cobro se niega a salir
+// sin el aviso (`exigeAvisoPrevio`) y una prueba obliga a que las cifras de la
+// política pública sean las de `POLITICA_RENOVACION`.
 
 /** El permiso de guardar, tal como lo muestra la pantalla de pago WEB. */
 export const TEXTO_VERSION_GUARDAR_WEB = 'guardar-tarjeta-web-v1'
 /** El permiso de guardar, tal como lo muestra la app móvil. */
 export const TEXTO_VERSION_GUARDAR_MOVIL = 'guardar-tarjeta-movil-v1'
 /**
- * El texto de renovar automáticamente. BORRADOR hasta que exista la pantalla que
- * lo muestre: ninguna lo muestra hoy, así que mientras tanto se puede ajustar
- * (nadie lo ha aceptado). En cuanto se muestre por primera vez pasa a ser una
- * versión publicada.
+ * El texto de renovar automáticamente, el que muestra el panel «Renovación
+ * automática» de la membresía. BORRADOR mientras esa pantalla no se despliegue
+ * (nadie lo ha aceptado); desde el primer despliegue es una versión publicada y
+ * cualquier cambio es `renovacion-v2`.
  */
 export const TEXTO_VERSION_RENOVACION = 'renovacion-v1'
 
@@ -69,11 +73,15 @@ export const TEXTOS_PUBLICADOS: Readonly<Record<string, string>> = {
   [TEXTO_VERSION_GUARDAR_MOVIL]:
     'Guardar esta tarjeta para futuras compras. Tu tarjeta se guardará de forma segura en CardNET. Este permiso no activa renovaciones automáticas.',
   [TEXTO_VERSION_RENOVACION]:
-    'Renovar mi membresía automáticamente. Autorizo a {empresa} a cobrar a esta tarjeta el precio vigente del plan (hoy {monto}) {periodo}, sin que yo confirme cada cobro. {empresa} me avisará por correo y en mi cuenta antes de cada cobro y cuando un cobro sea rechazado. Si un cobro es rechazado, se intentará de nuevo en los días siguientes, hasta 3 intentos en total y siempre antes del vencimiento de mi membresía; si no se logra, la renovación automática se desactiva. Puedo desactivarlo cuando quiera desde mi membresía o quitando la tarjeta, y el cobro se detiene desde ese momento.',
+    'Renovar mi membresía automáticamente. Autorizo a {empresa} a cobrar a esta tarjeta el precio vigente del plan (hoy {monto}) {periodo}, sin confirmar cada cobro, según las condiciones de renovación automática de la Política de pagos. Puedo desactivarlo cuando quiera.',
 }
 
+/** La sección de la Política de pagos que el texto de renovar incorpora. */
+export const RUTA_POLITICA_RENOVACION = '/privacy#renovacion-automatica'
+
 /**
- * Las versiones cuyo texto PROMETE un aviso antes de cada cobro.
+ * Las versiones cuyo texto PROMETE un aviso antes de cada cobro, directamente o
+ * por la Política de pagos que incorporan («según las condiciones de…»).
  *
  * Es la otra mitad de la promesa: un consentimiento que dice «me avisarán» solo
  * es verdad si el cobro no sale cuando no se pudo avisar. El cobro con tarjeta

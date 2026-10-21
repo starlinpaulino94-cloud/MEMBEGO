@@ -24,11 +24,15 @@ import { OpcionesPago } from '@/components/membresia/OpcionesPago'
 import { ComprobantePagoForm } from '@/components/cliente/ComprobantePagoForm'
 import { CancelarPagoBoton } from '@/components/membresia/CancelarPagoBoton'
 import { CancelarMembresiaBoton } from '@/components/membresia/CancelarMembresiaBoton'
+import { RenovacionAutomatica } from '@/components/membresia/RenovacionAutomatica'
 import { Reveal } from '@/components/ui/reveal'
 import { formatMoney, formatPrice } from '@/lib/format'
 import { ofrecerTransferencia, getMetodosParaCompraNueva } from '@/modules/pagos/metodosDisponibles'
 import { getTokensPublicConfig } from '@/lib/payments/cardnet-tokens'
 import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
+import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
+import { periodoDelPlan } from '@/modules/pagos/consentimientosCore'
+import { estadoRenovacion, tarjetasParaRenovar } from '@/modules/pagos/renovacionCliente'
 
 export const metadata = {
   title: 'Detalles de Membresía',
@@ -264,6 +268,31 @@ export default async function MembershipDetail({
   // de administración aquí anulaba el motivo de que existan las dos.
   const estadoLabel = membresiaEstadoUi(membership.estado).labelCliente
   const company = membership.cliente.company
+
+  // RENOVACIÓN AUTOMÁTICA. Solo en una membresía activa, sin cambio de plan por
+  // pagar, sin la cancelación programada, con vencimiento y con un plan que cuesta algo: las mismas
+  // condiciones que exige el cobro. Se ofrece ACTIVAR si la empresa puede cobrar
+  // con tarjeta ahora; si ya está activa se muestra siempre, para poder
+  // desactivarla aunque la empresa haya apagado el cobro.
+  //
+  // Fail-safe: si cualquiera de estas consultas fallara, el panel simplemente no
+  // aparece — NUNCA tumba la página de la membresía.
+  const renovacion =
+    isActive &&
+    !isChangePending &&
+    !membership.canceladaAlVencimiento &&
+    membership.fechaVencimiento != null &&
+    Number(membership.plan.precio) > 0
+      ? await Promise.all([
+          puedeCobrarToken(empresaDeLaMembresia),
+          estadoRenovacion(empresaDeLaMembresia, membership.id),
+          tarjetasParaRenovar(empresaDeLaMembresia, membership.clienteId),
+        ])
+          .then(([puedeActivar, estado, tarjetas]) =>
+            puedeActivar || estado.activa ? { puedeActivar, estado, tarjetas } : null
+          )
+          .catch(() => null)
+      : null
 
   // Tono del chip de estado en la cabecera.
   const tone = isActive
@@ -617,6 +646,23 @@ export default async function MembershipDetail({
               ))}
             </div>
           </section>
+        )}
+
+        {renovacion && (
+          <RenovacionAutomatica
+            membershipId={membership.id}
+            empresa={company.name}
+            montoTexto={formatMoney(Number(membership.plan.precio), company)}
+            periodoTexto={periodoDelPlan(membership.plan.vigenciaDias)}
+            proximoCobroTexto={
+              membership.fechaVencimiento ? fmtFechaLarga(membership.fechaVencimiento) : null
+            }
+            puedeActivar={renovacion.puedeActivar}
+            activa={renovacion.estado.activa}
+            heredada={renovacion.estado.origen === 'HEREDADO'}
+            tarjetaActual={renovacion.estado.tarjeta}
+            tarjetas={renovacion.tarjetas}
+          />
         )}
 
         {/* Cancelación por el cliente (decisión de producto 12-08-2026):

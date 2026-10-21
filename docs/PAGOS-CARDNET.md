@@ -554,11 +554,59 @@ hoy renueva sola, para que **las renovaciones que ya funcionan no se detengan**
 el día que el cobro empiece a exigir un consentimiento. No hay texto exacto de lo
 que vieron esos clientes, y fingir uno sería fabricar evidencia.
 
-**`renovacion-v1` es un borrador sin pantalla.** Nada la muestra hoy (no existe la
-interfaz para activar la renovación), así que nadie la ha aceptado y se puede
-ajustar. Promete aviso previo y «hasta 3 intentos»; el cobro se niega a salir sin
-el aviso (`exigeAvisoPrevio`) y una prueba obliga a que la cifra del texto sea la
-de la política.
+**`renovacion-v1` es el texto que se acepta al activar la renovación** (ver «La
+pantalla», abajo). Es **corto a propósito** (decisión del dueño, 21-10-2026): autoriza
+el cobro sin confirmar «según las condiciones de renovación automática de la Política
+de pagos», y es la **Política de Privacidad, § 5.3** (`/privacy#renovacion-automatica`,
+enlazada desde la casilla) la que dice, completas, las condiciones: aviso 7 días
+antes, cobro desde 3 días antes, hasta 3 intentos, qué pasa al rechazar, cómo
+desactivar. Como el texto incorpora la política, el cobro se niega a salir sin el
+aviso (`exigeAvisoPrevio`), y `tests/politicas-pagos.test.ts` obliga a que las cifras
+de la política publicada sean las de `POLITICA_RENOVACION`: cambiar una sin la otra
+rompe la build. **Desde que la pantalla se despliegue es una versión
+publicada**: cualquier cambio posterior es `renovacion-v2`, y quien aceptó la v1
+sigue registrado con la v1. Por eso conviene que legal lo revise ANTES de
+desplegar (`docs/tarjetas-guardadas/TEXTOS-LEGALES.md`).
+
+### La pantalla: activar la renovación desde la membresía
+
+En el detalle de la membresía (`/membresia/[id]`), antes del botón de cancelar,
+aparece el panel **«Renovación automática»** (`RenovacionAutomatica.tsx`). Solo en
+una membresía **activa, con vencimiento, sin la cancelación programada, sin un
+cambio de plan por pagar y con un plan que cuesta algo**: las mismas condiciones
+que exige el cobro. Según el caso:
+
+| Situación | Qué ve el cliente |
+|---|---|
+| Apagada, con tarjetas vigentes | Elige la tarjeta (si hay varias), lee el texto corto de `renovacion-v1` (con el enlace «Condiciones de la renovación automática» a la política) y marca una casilla **sin marcar**; el botón no se habilita hasta marcarla |
+| Activa | Con qué tarjeta, cuánto y cuándo; un botón **Desactivar** con confirmación (la tarjeta sigue guardada y la membresía vigente) |
+| Activa pero **heredada** (de antes del registro) | Lo anterior, más «confírmala»: el mismo formulario con la tarjeta actual |
+| Apagada, todas las tarjetas vencidas | Se dice, sin botón |
+| Apagada, sin tarjetas | Se explica cómo guardar una (pagar con tarjeta y marcar «Guardar esta tarjeta para futuras compras»), sin botón |
+| La empresa no puede cobrar con tarjeta | «No está disponible en este negocio por ahora». Si ya estaba activa, **se muestra igual** para poder desactivarla |
+
+Lo que hay detrás (`renovacionActions.ts` la puerta, `renovacionCliente.ts` lo que
+se hace dentro):
+
+- **Activar** exige sesión de cliente, el límite de peticiones, la casilla marcada
+  **en el formulario que llega al servidor**, que la empresa pueda cobrar con
+  tarjeta (`puedeCobrarToken`) y que la membresía sea de esa persona. Enciende
+  `autoRenovar`, ata la tarjeta y registra el consentimiento
+  (`RENOVACION_AUTOMATICA`, `renovacion-v1`, IP y agente) **en la misma
+  transacción**: sin él, el cobro no sale. Se niega, diciendo por qué, donde el cobro
+  después se negaría (membresía no activa, cancelación programada, cambio de plan
+  por pagar, plan gratis, tarjeta ajena, quitada, vencida o sin perfil).
+- Activar con **otra tarjeta** retira el consentimiento anterior y registra uno nuevo
+  (el historial dice cuál estuvo autorizada). Activar con la misma tarjeta una
+  renovación **heredada** la CONFIRMA: se retira el `HEREDADO` y se registra uno de
+  cliente con el texto que de verdad vio.
+- **Desactivar** apaga, retira el consentimiento y conserva la tarjeta. **No depende
+  de ninguna capacidad**: dejar de cobrar no puede depender de un interruptor.
+- «Activa» en la pantalla exige **las tres cosas que el cobro exige**:
+  `autoRenovar`, tarjeta activa y consentimiento vigente.
+- Activar un día cualquiera de la ventana de cobro (a 3 días o menos del
+  vencimiento) puede cobrar ese mismo día: el cron manda primero el aviso previo y
+  después cobra. El panel dice «en los días previos al {vencimiento}».
 
 ### Rechazos, reintentos y avisos
 
@@ -683,12 +731,13 @@ del lado que no cobra de más:
 
 ### Lo que falta
 
-- **Una pantalla para activar la renovación con su consentimiento.** Hoy nada
-  enciende `autoRenovar` con un consentimiento de cliente, así que `renovacion-v1`
-  no se ha mostrado. Cuando exista, es la que registra ese texto.
-- **Reconfirmar las renovaciones heredadas.** El aviso previo les pide que
-  revisen la renovación, pero no hay un botón de «confirmar»: solo pueden
-  desactivarla.
+- **La app móvil.** La pantalla es solo web (el detalle de la membresía). La app no
+  tiene todavía dónde activar o desactivar la renovación; quien la use puede
+  hacerlo desde el navegador.
+- **Ver la pantalla con sesión.** No se pudo abrir con un usuario real (el proyecto de
+  Supabase de QA ya no existe); se verificó su renderizado con datos de prueba en los
+  siete estados, y su comportamiento con pruebas contra PostgreSQL. Conviene mirarla
+  una vez en un entorno con sesión.
 - **Revisión legal** de `renovacion-v1` y de los permisos de guardar
   (`docs/tarjetas-guardadas/TEXTOS-LEGALES.md`).
 
