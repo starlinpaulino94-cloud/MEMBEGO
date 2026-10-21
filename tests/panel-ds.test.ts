@@ -77,6 +77,8 @@ const PANTALLAS_CON_PANEL_DS = [
   'src/app/(admin)/admin/pagos/page.tsx',
   'src/app/(admin)/admin/clientes/page.tsx',
   'src/app/(admin)/admin/clientes/[id]/page.tsx',
+  'src/app/(admin)/admin/ofertas/page.tsx',
+  'src/app/(admin)/admin/ofertas/crear/page.tsx',
 ]
 
 test('solo el contenedor `PanelDs` toca la fuente y la clase del ámbito; solo las pantallas rediseñadas usan el contenedor', () => {

@@ -197,10 +197,11 @@ const contarMapasDeEstado = () => {
  * consumidores aún», docs/auditoria-admin/12). Se EXCLUYEN de «sin uso» mientras esperan, para que construirlas no sea subir un
  * techo. La lista solo puede ENCOGERSE: `tests/deuda-diseno.test.ts` falla si alguna ya tiene importador (hay que quitarla de
  * aquí) y la fase 8 (`knip`) falla si alguna sigue sin él. Cada una tiene su consumidor previsto en el plan: `Tabla` y
- * `BarraFiltros` en Clientes y Pagos (fase 5), `Campo` en los formularios (fase 7), `NavSeccion` en el menú de 21 (fase 6),
- * `SelectorColor` en Empresa, `BarrasSimples` en el Resumen (fase 5).
+ * `BarraFiltros` en Clientes y Pagos (fase 5), `Campo` en los formularios (fase 7), `SelectorColor` en Empresa,
+ * `BarrasSimples` en el Resumen (fase 5). `NavSeccion` salió de la lista con las pestañas de Beneficios (fase 5, 5.4); el
+ * menú de 21 (fase 6) será su segundo consumidor.
  */
-export const PRIMITIVAS_EN_ESPERA = new Set(['campo', 'barra-filtros', 'nav-seccion', 'selector-color'])
+export const PRIMITIVAS_EN_ESPERA = new Set(['campo', 'barra-filtros', 'selector-color'])
 
 const contarComponentesSinUso = () => {
   const dir = join('packages', 'ui', 'src', 'ui')

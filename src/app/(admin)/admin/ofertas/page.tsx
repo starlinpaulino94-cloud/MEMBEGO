@@ -1,162 +1,96 @@
 import Link from 'next/link'
+import { Plus } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
-import {
-  Megaphone,
-  Sparkles,
-  Gift,
-  Plus,
-  ArrowRight,
-  BadgePercent,
-  type LucideIcon,
-} from 'lucide-react'
-import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { ADMIN_ROLES } from '@/types'
-import { requireRole } from '@/lib/auth/guards'
+import { requireRole, seccionesAbribles } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
+import { ADMIN_SECTIONS } from '@/lib/auth/permissions'
+import { tieneCapacidad } from '@/modules/capacidades/resolver'
+import { getRegionalPrefs } from '@/modules/empresas/regional'
+import { contarBeneficios, listarBeneficios, tipoActivo, tiposDisponibles } from '@/modules/ofertas/beneficios'
 import { PageHeader } from '@/components/ui/page-header'
+import { NavSeccion } from '@/components/ui/nav-seccion'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PanelDs } from '@/components/layout/PanelDs'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
+import { TablaBeneficios } from '@/components/admin/beneficios/TablaBeneficios'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Beneficios y regalos' }
 
 /**
- * Hub de Ofertas (Auditoría · Fase D).
+ * BENEFICIOS Y REGALOS (auditoría admin · fase 5, tarea 5.4; antes, el «hub de Ofertas», Auditoría · Fase D).
  *
- * Punto de entrada ÚNICO para todo lo que un negocio "ofrece". Antes había
- * tres módulos sueltos en el menú (Promociones, Banners, Regalos VIP) y el
- * dueño no sabía dónde crear cada cosa. Este hub unifica el punto de partida
- * y el lenguaje: se elige el TIPO de oferta y se enruta al flujo real. Los
- * modelos de datos siguen siendo independientes (no se fusionan tablas); lo
- * que se unifica es la puerta de entrada.
+ * El hub mostraba cuatro tarjetas, cada una con su propio «Nueva …» y su «Ver todas»: el dueño tenía que decidir DÓNDE crear
+ * antes de saber QUÉ quería hacer. Ahora es una vista con una pestaña por tipo —promociones públicas, relámpago, regalos VIP y,
+ * si el módulo está encendido, ofertas sobre el catálogo— y UN solo «Crear beneficio» arriba, que pregunta el tipo.
+ *
+ * Los cuatro modelos de datos siguen siendo independientes y cada tipo conserva su panel de gestión (filtros, paginación,
+ * edición): esta pantalla los junta en una puerta y en una lista corta, no los fusiona. Cada pestaña solo aparece si la persona
+ * puede abrir su sección.
  */
-type TipoOferta = {
-  key: 'catalogo' | 'publica' | 'relampago' | 'vip'
-  titulo: string
-  descripcion: string
-  icon: LucideIcon
-  crearHref: string
-  crearLabel: string
-  gestionarHref: string
-}
-
-const TIPOS: TipoOferta[] = [
-  {
-    // Commerce Core (F5): la oferta que REFERENCIA un producto o servicio del
-    // catálogo. Es la que el marketplace muestra con «antes / ahora»; no crea
-    // un producto duplicado ni toca el inventario al publicarse.
-    key: 'catalogo',
-    titulo: 'Oferta sobre un producto o servicio',
-    descripcion:
-      'Descuento sobre algo de tu catálogo. El marketplace lo muestra con el precio de antes y el de ahora; el cliente lo obtiene y lo canjea con QR.',
-    icon: BadgePercent,
-    crearHref: '/admin/deals/nueva',
-    crearLabel: 'Nueva oferta',
-    gestionarHref: '/admin/deals',
-  },
-  {
-    key: 'publica',
-    titulo: 'Promoción pública',
-    descripcion:
-      'Descuento o beneficio visible para todos tus clientes y seguidores. Se publica en tu perfil y en el inicio de la app.',
-    icon: Megaphone,
-    crearHref: '/admin/promociones/nuevo',
-    crearLabel: 'Nueva promoción',
-    gestionarHref: '/admin/promociones',
-  },
-  {
-    key: 'relampago',
-    titulo: 'Oferta relámpago',
-    descripcion:
-      'Happy Hour u oferta con tiempo límite que aparece viva en el inicio de tus clientes para generar urgencia.',
-    icon: Sparkles,
-    crearHref: '/admin/marketing/nueva',
-    crearLabel: 'Nuevo banner',
-    gestionarHref: '/admin/marketing',
-  },
-  {
-    key: 'vip',
-    titulo: 'Regalo VIP',
-    descripcion:
-      'Beneficio privado para una lista cerrada de clientes. No se publica: solo tu lista puede reclamarlo por enlace.',
-    icon: Gift,
-    crearHref: '/admin/ofertas/nueva',
-    crearLabel: 'Nuevo regalo VIP',
-    gestionarHref: '/admin/ofertas/vip',
-  },
-]
-
-export default async function OfertasHubPage() {
+export default async function BeneficiosPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await requireCompanyContext(user)
+  if (!companyId) return <SinEmpresaActiva seccion="tus beneficios" />
 
-  if (!companyId) {
-    return <SinEmpresaActiva seccion="tus ofertas" />
+  const sp = await searchParams
+  const [abribles, conDeals, regional] = await Promise.all([
+    seccionesAbribles(user, ADMIN_SECTIONS),
+    // La oferta sobre el catálogo solo se ofrece a quien tiene el módulo encendido.
+    tieneCapacidad(companyId, 'DEALS_MARKETPLACE').catch(() => false),
+    getRegionalPrefs(companyId),
+  ])
+  const tipos = tiposDisponibles((s) => abribles.has(s), conDeals)
+  const activo = tipoActivo(typeof sp.tipo === 'string' ? sp.tipo : undefined, tipos)
+
+  if (!activo) {
+    return (
+      <PanelDs>
+        <PageHeader title="Beneficios y regalos" description="Todo lo que ofreces a tus clientes en un solo lugar." />
+        <EmptyState title="No tienes acceso a ningún tipo de beneficio" description="Pídele a quien administra tu equipo que te dé acceso." />
+      </PanelDs>
+    )
   }
 
-  // Conteos por tipo (total por empresa). Fail-open: si una query falla, se
-  // muestra 0 y el hub sigue siendo navegable.
-  const [publicas, relampago, vip, catalogo] = await conEmpresa(companyId,
-    (tx) => Promise.all([
-      tx.promocion.count({ where: { companyId, archivada: false } }).catch(() => 0),
-      tx.marketingCampaign.count({ where: { companyId } }).catch(() => 0),
-      tx.ofertaPrivada.count({ where: { companyId } }).catch(() => 0),
-      tx.deal.count({ where: { companyId, status: { not: 'ARCHIVED' } } }).catch(() => 0),
-    ])
-  )
-  const conteo: Record<TipoOferta['key'], number> = { catalogo, publica: publicas, relampago, vip }
-  // La oferta sobre el catálogo solo se ofrece a quien tiene el módulo encendido.
-  const conDeals = await tieneCapacidad(companyId, 'DEALS_MARKETPLACE').catch(() => false)
-  const tipos = conDeals ? TIPOS : TIPOS.filter((t) => t.key !== 'catalogo')
+  // UNA transacción: los totales de cada pestaña y la lista de la que está abierta.
+  const [conteos, filas] = await conEmpresa(companyId, async (tx) => [
+    await contarBeneficios(tx, companyId, tipos),
+    await listarBeneficios(tx, companyId, activo),
+  ] as const)
+  const tipo = tipos.find((t) => t.key === activo)!
 
   return (
-    <div className="space-y-8">
+    <PanelDs className="space-y-6">
       <PageHeader
         title="Beneficios y regalos"
-        description="Todo lo que ofreces a tus clientes en un solo lugar. Elige el tipo y créalo; cada tipo tiene su propio panel de gestión."
+        description="Todo lo que ofreces a tus clientes en un solo lugar. Elige una pestaña para ver cada tipo."
+        action={
+          <Button asChild>
+            <Link href="/admin/ofertas/crear">
+              <Plus className="size-4" aria-hidden /> Crear beneficio
+            </Link>
+          </Button>
+        }
+        nav={
+          <NavSeccion
+            aria-label="Tipos de beneficio"
+            items={tipos.map((t) => ({ etiqueta: t.pestana, href: `/admin/ofertas?tipo=${t.key}`, activa: t.key === activo, cuenta: conteos[t.key] }))}
+            enlace={({ href, ...resto }) => <Link href={href} {...resto} />}
+          />
+        }
       />
 
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        {tipos.map((t) => {
-          const Icon = t.icon
-          const n = conteo[t.key]
-          return (
-            <div
-              key={t.key}
-              className="flex flex-col rounded-2xl border border-border/70 bg-card p-5 shadow-card"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="font-semibold text-foreground">{t.titulo}</h2>
-                  <p className="text-xs text-muted-foreground">
-                    {n === 0 ? 'Ninguna creada' : `${n} en total`}
-                  </p>
-                </div>
-              </div>
-
-              <p className="mt-3 flex-1 text-sm text-muted-foreground">{t.descripcion}</p>
-
-              <div className="mt-5 flex flex-wrap items-center gap-2">
-                <Link
-                  href={t.crearHref}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
-                >
-                  <Plus className="h-4 w-4" /> {t.crearLabel}
-                </Link>
-                <Link
-                  href={t.gestionarHref}
-                  className="inline-flex items-center gap-1 rounded-xl border border-border/70 px-3.5 py-2 text-sm font-medium text-foreground transition hover:bg-muted"
-                >
-                  Ver todas <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
+      {filas === null ? (
+        <EmptyState title="No se pudo cargar la lista" description="Es un problema temporal; recarga la página en unos segundos." />
+      ) : (
+        <TablaBeneficios tipo={tipo} filas={filas} total={conteos[activo]} regional={regional} />
+      )}
+    </PanelDs>
   )
 }
-
