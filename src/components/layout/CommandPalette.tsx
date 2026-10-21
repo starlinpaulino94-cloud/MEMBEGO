@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { visibleWorkspaces, type ContextoNav } from '@/components/layout/nav-config'
+import { destinosDe, visibleWorkspaces, type ContextoNav } from '@/components/layout/nav-config'
 import {
   CommandDialog,
   CommandEmpty,
@@ -66,7 +66,8 @@ export function CommandPalette({ ctx }: { ctx: ContextoNav }) {
             const heading = variosEspacios ? `${espacio.label} · ${group.label}` : group.label
             return (
               <CommandGroup key={`${espacio.id}:${group.id}`} heading={heading}>
-                {group.items.map((item) => {
+                {/* Cada pestaña de un módulo es también un destino: «Pagos › Conciliación» lleva directo. */}
+                {group.items.flatMap(destinosDe).map((item) => {
                   const Icon = item.icon
                   return (
                     <CommandItem

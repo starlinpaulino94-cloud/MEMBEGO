@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
-import { NavAudiencia } from '@/components/admin/NavAudiencia'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { Megaphone, Plus } from 'lucide-react'
@@ -54,7 +53,6 @@ export default async function CampanasPage() {
         eyebrow="Audiencia"
         title="Campañas segmentadas"
         description="Envía a una audiencia por segmento o por radio de sucursal, con límites de frecuencia por día y semana."
-        nav={<NavAudiencia activa="/admin/audiencia/campanas" />}
         action={
           <Button asChild>
             <Link href="/admin/audiencia/campanas/nueva">

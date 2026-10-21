@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
-import { NavAudiencia } from '@/components/admin/NavAudiencia'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { StatusBanner } from '@/components/ui/status-banner'
@@ -48,7 +47,6 @@ export default async function AudienciaPage() {
       <PageHeader
         title="Audiencia"
         description="Tus seguidores y el rendimiento de tus promociones en el marketplace."
-        nav={<NavAudiencia activa="/admin/audiencia" />}
       />
 
       {/* CUATRO KPI, no ocho (§44). Eran dos rejillas de cuatro tarjetas

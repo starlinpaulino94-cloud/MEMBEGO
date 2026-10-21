@@ -7,6 +7,7 @@ import {
   visibleWorkspaces,
   allLinks,
   breadcrumbs,
+  destinosDe,
   ENLACES_ADMIN,
   type ContextoNav,
 } from '../src/components/layout/nav-config'
@@ -118,7 +119,7 @@ test('en la paleta, espacio + grupo + etiqueta identifica una sola ruta', () => 
     for (const espacio of espacios) {
       for (const g of espacio.groups) {
         const heading = varios ? `${espacio.label} · ${g.label}` : g.label
-        for (const item of g.items) {
+        for (const item of g.items.flatMap(destinosDe)) {
           const clave = `${heading} → ${item.label}`
           const set = porClave.get(clave) ?? new Set()
           set.add(item.href)
@@ -148,9 +149,10 @@ test('el panel de administrador son los ocho grupos del hub, sin perder módulos
   const grupos = navForRole('ADMINISTRADOR')
   assert.deepEqual(
     grupos.map((g) => g.label),
-    ['Principal', 'Experiencia cliente', 'Comercio', 'Operaciones', 'Clientes', 'Marketing', 'Analítica', 'Ajustes']
+    ['Principal', 'App del cliente', 'Comercio', 'Operaciones', 'Clientes', 'Marketing', 'Analítica', 'Ajustes']
   )
-  const enMenu = new Set(allLinks(grupos).map((l) => l.href))
+  // Una ruta está en el menú si es una entrada o una pestaña de alguna (fase 6).
+  const enMenu = new Set(allLinks(grupos).flatMap(destinosDe).map((l) => l.href))
   const faltan = ENLACES_ADMIN.map((i) => i.href).filter((h) => !enMenu.has(h))
   assert.deepEqual(faltan, [], 'Módulos que existen y el menú ya no ofrece:\n  ' + faltan.join('\n  '))
 })
@@ -195,13 +197,14 @@ test('gana el href más largo, no el primero que casa por prefijo', () => {
 })
 
 test('una subvista fuera del menú hereda la miga de su sección', () => {
-  // /admin/audiencia/campanas ya no está en el menú: su navegación son las
-  // pestañas de Audiencia. Las migas deben decir "Audiencia", no quedarse en
-  // blanco ni inventar un nombre.
+  // /admin/audiencia/campanas no es una entrada del menú: es una pestaña de Comunicaciones. Las migas deben decir dónde estás
+  // —el módulo y su pestaña—, no quedarse en blanco ni inventar un nombre.
   const m = breadcrumbs('/admin/audiencia/campanas', ctxDe('ADMINISTRADOR'))
   const etiquetas = m.map((x) => x.label)
-  assert.ok(etiquetas.includes('Audiencia'), `no menciona Audiencia: ${etiquetas.join(' / ')}`)
-  assert.equal(etiquetas[0], 'Empresa')
+  assert.deepEqual(etiquetas, ['Empresa', 'Marketing', 'Comunicaciones', 'Campañas segmentadas'])
+  // El módulo es un enlace de vuelta; la pestaña, la página actual.
+  assert.equal(m.at(-2)?.href, '/admin/notificaciones')
+  assert.equal(m.at(-1)?.href, undefined)
 })
 
 test('las subpáginas se nombran en vez de quedar como "Detalle"', () => {

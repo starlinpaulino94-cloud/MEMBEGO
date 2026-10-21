@@ -12,6 +12,7 @@ import {
   Megaphone,
 } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
+import { registrarAccesoLegado } from '@/modules/navegacion/legado'
 import { referidoEstadoUi } from '@/lib/estados'
 import { ADMIN_ROLES } from '@/types'
 import { requireCompanyContext } from '@/lib/auth/company-context'
@@ -67,6 +68,8 @@ function Bar({ value, max, className }: { value: number; max: number; className?
 export default async function ReferidosPage() {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await requireCompanyContext(user)
+  // Fase 6 · 6.4: la ruta sigue igual; solo se cuenta quién la abre, para decidir con datos si se puede retirar.
+  registrarAccesoLegado('/admin/referidos', companyId)
   const isSuperadmin = user.metadata.role === 'SUPERADMIN'
   const where = companyId ? { companyId } : {}
   const prefs = await getRegionalPrefs(companyId)
