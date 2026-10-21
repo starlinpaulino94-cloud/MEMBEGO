@@ -157,7 +157,7 @@ const VACIOS: ValoresPromocion = {
   visibilidad: 'publica', campanaId: 'none', activo: true,
 }
 
-const pinta = (props: Partial<Parameters<typeof PromocionCampos>[0]> & { valores?: Partial<ValoresPromocion> } = {}) => {
+const pinta = (props: Omit<Partial<Parameters<typeof PromocionCampos>[0]>, 'valores'> & { valores?: Partial<ValoresPromocion> } = {}) => {
   const { valores, ...resto } = props
   const v = { ...VACIOS, ...valores }
   return renderToStaticMarkup(
