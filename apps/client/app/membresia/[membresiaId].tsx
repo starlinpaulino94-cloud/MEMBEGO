@@ -36,6 +36,7 @@ import {
   SavedCardConsent,
 } from '../../src/components/pagos/cardnet/primitives'
 import { ComprobanteMembresiaForm } from '../../src/components/pagos/ComprobanteMembresiaForm'
+import { RenovacionAutomaticaPanel } from '../../src/components/membresia/RenovacionAutomaticaPanel'
 import {
   isCardnetServerApproved,
   membershipCardnetStartAction,
@@ -772,6 +773,10 @@ function MembresiaDetailScreenContent() {
               />
             </View>
           </View>
+
+          {/* Renovación automática: el servidor decide si se ofrece (membresía activa,
+              sin cancelación programada ni cambio de plan por pagar, con tarjeta). */}
+          {isActive ? <RenovacionAutomaticaPanel membershipId={membresia.id} /> : null}
 
         </DetailPageFrame>
       </ScrollView>

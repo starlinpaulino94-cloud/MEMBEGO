@@ -36,6 +36,8 @@ export default function SavedCardsScreen() {
     mutationFn: api.deleteSavedCard,
     onSuccess: async (result) => {
       await refresh()
+      // Quitar una tarjeta apaga las renovaciones que la usaban: que las membresías lo reflejen.
+      await queryClient.invalidateQueries({ queryKey: ['cliente', 'membresia-renovacion'] })
       if (result.estado === 'pendiente') {
         Alert.alert('Eliminación pendiente', 'La tarjeta quedó desactivada en Membego. CardNET todavía no confirma su eliminación remota.')
       }

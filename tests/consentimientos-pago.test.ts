@@ -5,6 +5,7 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import {
   ORIGENES_CONSENTIMIENTO,
+  RUTA_POLITICA_RENOVACION,
   TEXTOS_PUBLICADOS,
   TEXTO_VERSION_GUARDAR_MOVIL,
   TEXTO_VERSION_GUARDAR_WEB,
@@ -58,6 +59,8 @@ const normaliza = (s: string) => s.replace(/\s+/g, ' ').trim()
 const GUARDADO = 'src/modules/pagos/cardnetTokenGuardado.ts'
 const MIGRACION = 'prisma/migrations/20261077_consentimientos_pago/migration.sql'
 const PROMETE_AVISO = /avis(aremos|ará|o|amos|ar)\b|notific(aremos|ará|aci)|recordar/i
+/** Un texto que remite a la Política de pagos promete lo que la política promete (el aviso incluido). */
+const INCORPORA_POLITICA = /según las condiciones de renovación automática de la Política de pagos/
 
 // ── Los dos consentimientos ─────────────────────────────────────────────────
 
@@ -159,21 +162,21 @@ test('los textos de GUARDAR no prometen un aviso que ese permiso no da', () => {
   }
 })
 
-test('la renovación (v1) promete el aviso previo y los reintentos', () => {
+test('la renovación (v1) es corta: autoriza el cobro sin confirmar e incorpora la Política de pagos', () => {
+  // Decisión del dueño (21-10-2026): la casilla no repite las condiciones. Las
+  // condiciones completas (aviso, intentos, cómo desactivar) viven en /privacy, y
+  // `tests/politicas-pagos.test.ts` obliga a que sus cifras sean las de
+  // `POLITICA_RENOVACION` (que aquí solo se importa para que ese vínculo conste).
   const texto = TEXTOS_PUBLICADOS[TEXTO_VERSION_RENOVACION]
   assert.equal(TEXTO_VERSION_RENOVACION, 'renovacion-v1')
-  assert.match(texto, /avisará por correo y en mi cuenta antes de cada cobro/)
-  assert.match(texto, /cuando un cobro sea rechazado/)
-  assert.match(texto, /la renovación automática se desactiva/)
-})
-
-test('la cifra de intentos del texto es la de la política', () => {
-  // El texto le dice al cliente «hasta N intentos». Si alguien cambia
-  // `maxRechazosPorCiclo`, lo que el cliente aceptó deja de ser lo que el
-  // sistema hace: hay que escribir una versión NUEVA del texto, no editar ésta.
-  const dice = TEXTOS_PUBLICADOS[TEXTO_VERSION_RENOVACION].match(/hasta (\d+) intentos/)
-  assert.ok(dice, 'el texto ya no dice cuántos intentos son')
-  assert.equal(Number(dice![1]), POLITICA_RENOVACION.maxRechazosPorCiclo)
+  assert.match(texto, /Autorizo a \{empresa\} a cobrar a esta tarjeta el precio vigente del plan \(hoy \{monto\}\) \{periodo\}/)
+  assert.match(texto, /sin confirmar cada cobro/)
+  assert.match(texto, INCORPORA_POLITICA)
+  assert.match(texto, /Puedo desactivarlo cuando quiera/)
+  assert.ok(texto.length <= 320, `el texto volvió a crecer (${texto.length} caracteres): las condiciones van en la política`)
+  assert.doesNotMatch(texto, /\d+ intentos|avisará/, 'las cifras y promesas van en la política, no en la casilla')
+  assert.equal(RUTA_POLITICA_RENOVACION, '/privacy#renovacion-automatica')
+  assert.ok(POLITICA_RENOVACION.maxRechazosPorCiclo >= 1)
 })
 
 test('lo que exige el cobro coincide con lo que prometen los textos', () => {
@@ -183,7 +186,7 @@ test('lo que exige el cobro coincide con lo que prometen los textos', () => {
   for (const [version, texto] of Object.entries(TEXTOS_PUBLICADOS)) {
     assert.equal(
       exigeAvisoPrevio(version),
-      PROMETE_AVISO.test(texto),
+      PROMETE_AVISO.test(texto) || INCORPORA_POLITICA.test(texto),
       `${version}: promesa de aviso y exigencia del cobro no coinciden`
     )
   }
@@ -202,7 +205,7 @@ test('el texto de renovar dice cuánto, cada cuánto, que es sin confirmar cada 
   assert.match(t, /Lavado Express/)
   assert.match(t, /RD\$1,600/)
   assert.match(t, /cada 30 días/)
-  assert.match(t, /sin que yo confirme cada cobro/)
+  assert.match(t, /sin confirmar cada cobro/)
   assert.match(t, /Puedo desactivarlo cuando quiera/)
 })
 

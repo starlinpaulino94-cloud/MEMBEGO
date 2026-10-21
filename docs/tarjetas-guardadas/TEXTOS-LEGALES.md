@@ -1,10 +1,12 @@
 # Tarjetas guardadas · textos para revisión legal
 
 > **Estado: BORRADOR. Pendiente de revisión legal.** Lo que aquí se describe es
-> lo que el código registra hoy. `renovacion-v1` **no se muestra en ninguna
-> pantalla** (no existe todavía la interfaz para activar la renovación), así que
-> nadie la ha aceptado y se puede ajustar libremente tras esta revisión. Los
-> textos de «guardar la tarjeta» sí se muestran hoy.
+> lo que el código registra hoy. `renovacion-v1` se muestra en el detalle de la
+> membresía (panel «Renovación automática»); **mientras esa pantalla no se
+> despliegue, nadie la ha aceptado y se puede ajustar libremente**, y esta es la
+> ventana para que legal la revise. Desde el primer despliegue es una versión
+> publicada y cualquier cambio es `renovacion-v2`. Los textos de «guardar la
+> tarjeta» ya se muestran hoy.
 
 Este documento junta lo que un abogado necesita leer en un solo sitio: los textos
 que el cliente acepta, qué se registra cuando acepta, lo que el sistema hace de
@@ -19,7 +21,7 @@ debo suponer.
 | Qué permite | Pagar de nuevo sin escribir la tarjeta | Cobrar **sin que el cliente esté presente** |
 | Quién inicia cada cobro | El cliente, con un clic | El sistema, a diario, cuando la membresía está por vencer |
 | `tipo` registrado | `GUARDAR_TARJETA` | `RENOVACION_AUTOMATICA` |
-| Dónde se acepta hoy | Casilla de la pantalla de pago (web) y de la app móvil | **En ninguna** (borrador) |
+| Dónde se acepta | Casilla de la pantalla de pago (web) y de la app móvil | Casilla del panel «Renovación automática» del detalle de la membresía (web y app móvil; el texto lo escribe el servidor) |
 
 El permiso de guardar dice, a propósito, que **«no activa renovaciones
 automáticas»**: guardar no autoriza cobros futuros sin el cliente, y el cobro
@@ -48,25 +50,26 @@ registrado.
 > **Guardar esta tarjeta para futuras compras.** Tu tarjeta se guardará de forma
 > segura en CardNET. Este permiso no activa renovaciones automáticas.
 
-### `renovacion-v1` (borrador, sin pantalla)
+### `renovacion-v1` (borrador; se acepta en el panel «Renovación automática»)
 
 > **Renovar mi membresía automáticamente.** Autorizo a {empresa} a cobrar a esta
-> tarjeta el precio vigente del plan (hoy {monto}) {periodo}, sin que yo confirme
-> cada cobro. {empresa} me avisará por correo y en mi cuenta antes de cada cobro
-> y cuando un cobro sea rechazado. Si un cobro es rechazado, se intentará de
-> nuevo en los días siguientes, hasta 3 intentos en total y siempre antes del
-> vencimiento de mi membresía; si no se logra, la renovación automática se
-> desactiva. Puedo desactivarlo cuando quiera desde mi membresía o quitando la
-> tarjeta, y el cobro se detiene desde ese momento.
+> tarjeta el precio vigente del plan (hoy {monto}) {periodo}, sin confirmar cada
+> cobro, según las condiciones de renovación automática de la Política de pagos.
+> Puedo desactivarlo cuando quiera.
 
-Dos promesas de este texto las cumple el código, no solo el texto:
+Es corto a propósito (decisión del dueño, 21-10-2026): **las condiciones completas
+están en la Política de Privacidad, sección 5.3 «Renovación automática»**
+(`/privacy#renovacion-automatica`), enlazada desde la propia casilla, y es esa
+sección la que hay que revisar junto con este texto. Lo que la política promete lo
+cumple el código:
 
-- **El aviso.** Quien acepte `renovacion-v1` **no se cobra sin que conste el aviso
-  del ciclo** (`exigeAvisoPrevio`). Si no se pudo avisar —el cliente no tiene
-  cuenta donde dejarlo—, no se cobra. Los consentimientos heredados no lo
-  prometieron y no se les exige.
-- **«Hasta 3 intentos».** Es `POLITICA_RENOVACION.maxRechazosPorCiclo`, y una
-  prueba obliga a que el texto y la política coincidan.
+- **El aviso.** La política dice «si no podemos avisarte, no cobramos»: quien
+  acepte `renovacion-v1` **no se cobra sin que conste el aviso del ciclo**
+  (`exigeAvisoPrevio`). Los consentimientos heredados no lo prometieron y no se
+  les exige.
+- **Las cifras** (7 días de aviso, cobro desde 3 días antes, hasta 3 intentos) son
+  las de `POLITICA_RENOVACION`, y `tests/politicas-pagos.test.ts` obliga a que la
+  política publicada y la del sistema coincidan.
 
 `{monto}` sería el precio del **plan** («RD$1,600»), no el del primer pago (que
 puede llevar un descuento de bienvenida que las renovaciones no tienen).
@@ -77,8 +80,8 @@ período».
 
 Los dos textos de guardar ya se muestran: cualquier cambio es una versión nueva
 (`…-v2`) y el registro de quienes aceptaron la anterior sigue diciendo la
-anterior. `renovacion-v1` se puede editar directamente mientras no haya pantalla
-que la muestre; desde que exista, es una versión publicada.
+anterior. `renovacion-v1` se puede editar directamente mientras la pantalla no se haya
+desplegado; desde el primer despliegue es una versión publicada.
 
 ## 3. Qué se registra cuando el cliente acepta
 
@@ -89,7 +92,7 @@ Una fila en `consentimientos_pago` por cada consentimiento:
 | `tipo` | `GUARDAR_TARJETA` o `RENOVACION_AUTOMATICA` |
 | `textoVersion` | La versión del texto mostrado |
 | `otorgadoAt` | Cuándo |
-| `ipAddress`, `userAgent` | Desde dónde (solo web: la sesión móvil no conserva la IP ni el agente, y se registran vacíos en vez de inventarlos) |
+| `ipAddress`, `userAgent` | Desde dónde: la IP y el agente de la petición. El permiso de guardar desde la app móvil los deja vacíos (esa sesión no los conserva) en vez de inventarlos; el de renovar sí los registra, también desde la app |
 | `tarjetaId`, `membershipId` | A qué tarjeta y, si es renovar, a qué membresía |
 | `origen` | `CLIENTE` (lo aceptó en pantalla) o `HEREDADO` (ver abajo) |
 | `revocadoAt` | Cuándo lo retiró, si lo retiró |
@@ -171,15 +174,12 @@ se finge lo contrario. La renovación con esas tarjetas sigue funcionando.
    desactivarla si no la recuerdan, **pero no hay un botón de «confirmar»**: solo
    pueden desactivarla. Si legal exige una reconfirmación explícita, hay que
    construirla.)
-6. **Vencimiento de la tarjeta: la política de privacidad y el código no
-   coinciden.** La política (sección 5, «Pagos con tarjeta») dice que Membego
-   «nunca ve, recibe ni almacena […] su fecha de vencimiento». El código ya
-   guarda `vencMes` y `vencAnio` en `tarjetas_tokenizadas` **cuando CardNET los
-   devuelve** (los nombres de campo que lee —`CardExpMonth`, `ExpirationMonth`,
-   `Expiration`…— son conjeturas no confirmadas por CardNET, así que puede que
-   hoy casi nunca se guarden). Es un hallazgo previo a este trabajo. Hay que
-   decidir una de dos: dejar de guardarlo, o guardarlo y corregir esa frase.
-   **No se ha tocado la política.**
+6. **Vencimiento de la tarjeta.** La política decía que Membego «nunca almacena
+   […] su fecha de vencimiento», pero el código guarda el mes y el año en
+   `tarjetas_tokenizadas` cuando CardNET los devuelve. **Se corrigió la política**
+   (5.2): dice que se guardan, cuando el procesador los entrega, para avisar
+   antes de que venza y no intentar cobros con una tarjeta vencida. ¿Es
+   aceptable guardarlos con ese fin?
 7. **Reintentos y desactivación automática.** El texto fija «hasta 3 intentos» y
    que, si no se logra, la renovación se desactiva. ¿Es suficiente información?
    ¿Es aceptable que el sistema **retire solo** el consentimiento del cliente
@@ -190,15 +190,22 @@ se finge lo contrario. La renovación con esas tarjetas sigue funcionando.
    automáticamente bajo `renovacion-v1`. ¿Es aceptable el correo como canal del
    aviso previo, o debe haber otro (SMS)?
 
-## 6. Política de privacidad
+## 6. Política de privacidad y términos
 
-La política es un texto legal público y **no se ha modificado**. Puntos a revisar
-junto con lo anterior (sección 5 «Pagos con tarjeta»):
+**La sección 5 de la Política de Privacidad se reescribió** (`src/app/(public)/privacy/page.tsx`,
+21-10-2026) y es la que debe revisar legal junto con los textos de arriba:
 
-- «puedes eliminarla cuando quieras desde tu perfil»: confirmar que sigue siendo
-  cierto en la pantalla actual.
-- Añadir que **guardar la tarjeta es opcional**, que **renovar automáticamente es
-  otra autorización, también opcional**, y cómo se retira cada una.
-- Añadir que se registra **cuándo y bajo qué texto** se acepta cada una, desde qué
-  IP y dispositivo (solo web), y por cuánto tiempo se conserva (pregunta 3).
-- La frase del vencimiento (pregunta 6).
+- 5.1 Cómo se procesa la tarjeta (CardNET; quién cobra, quién opera, quién procesa; el
+  cargo de verificación de RD$1.00).
+- 5.2 Guardar la tarjeta (opcional): qué se guarda —incluido el mes y año de
+  vencimiento cuando el procesador lo entrega—, que no activa la renovación, cómo
+  se quita.
+- 5.3 Renovación automática: autorización aparte; precio vigente del plan; aviso 7
+  días antes (sin aviso no se cobra); cobro desde 3 días antes; rechazos (aviso,
+  reintento al día siguiente, hasta 3, siempre antes del vencimiento, desactivación,
+  tarjeta conservada); nunca dos veces; recibo; cómo desactivar; renovaciones
+  anteriores al registro.
+- 5.4 Constancia de las autorizaciones: qué se registra y cuánto se conserva.
+
+Los Términos (§ 4) remiten a esa sección. Falta decidir el plazo de retención
+(pregunta 3): hoy la constancia se elimina con la cuenta.

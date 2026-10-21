@@ -413,6 +413,9 @@ test('10 · REGRESIÓN: un segundo cron que llega DESPUÉS de renovar no cobra o
   assert.equal((await renovar(c)).estado, 'renovada')
   assert.equal(pasarela.llamadas, 1)
   // El vencimiento nuevo (≈ 58 h) sigue DENTRO del margen de 3 días: solo «pagada hace poco» lo detiene.
+  // Se fija a mano: la renovación lo redondea al final del día dominicano, y según la hora a la que corra la prueba eso
+  // lo deja a más de 3 días (fuera de la ventana) y la prueba dejaría de probar lo que dice (falló pasadas las 14:00).
+  await prisma.membership.update({ where: { id: c.membershipId }, data: { fechaVencimiento: adelante(58 * H) } })
   const segundo = await renovar(c)
   assert.equal(segundo.estado, 'omitida')
   assert.equal(pasarela.llamadas, 1, 'no se cobró dos veces')
