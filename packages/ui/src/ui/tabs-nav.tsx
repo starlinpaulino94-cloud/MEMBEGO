@@ -7,8 +7,17 @@ export interface TabsNavItem {
   badge?: number | string | null
   /** Marca la pestaña activa. Lo decide quien la usa, con su router. */
   active?: boolean
-  /** Nodo que envuelve la pestaña: normalmente un `<Link>`. */
-  render: (props: { className: string; children: React.ReactNode }) => React.ReactNode
+  /**
+   * Nodo que envuelve la pestaña: normalmente un `<Link>`.
+   *
+   * Recibe además `aria-current` («page» en la activa): quien lo propague al enlace da a un lector de pantalla la pestaña en la
+   * que está. Es opcional a propósito: los usos anteriores, que no lo propagan, siguen pintando exactamente lo mismo.
+   */
+  render: (props: {
+    className: string
+    children: React.ReactNode
+    'aria-current'?: 'page'
+  }) => React.ReactNode
 }
 
 /**
@@ -66,6 +75,7 @@ export function TabsNav({
           return (
             <li key={i} className="flex">
               {item.render({
+                'aria-current': item.active ? 'page' : undefined,
                 className: cn(
                   // min-h-11: la pestaña es un destino táctil, no una etiqueta.
                   'flex min-h-11 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-small font-medium transition-colors duration-fast outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
