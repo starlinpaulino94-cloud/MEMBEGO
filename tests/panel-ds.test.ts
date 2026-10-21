@@ -72,7 +72,7 @@ const sinComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace
  * `<PanelDs>`: el resto del panel no cambia ni un píxel hasta que las fases 6 y 7 lo revisen. Esta lista solo crece junto a
  * un rediseño y a su medición antes y después; si crece sin él, esta prueba falla.
  */
-const PANTALLAS_CON_PANEL_DS = ['src/app/(admin)/admin/dashboard/page.tsx']
+const PANTALLAS_CON_PANEL_DS = ['src/app/(admin)/admin/dashboard/page.tsx', 'src/app/(admin)/admin/pagos/page.tsx']
 
 test('solo el contenedor `PanelDs` toca la fuente y la clase del ámbito; solo las pantallas rediseñadas usan el contenedor', () => {
   const fuentes = archivos(join(RAIZ, 'src'))

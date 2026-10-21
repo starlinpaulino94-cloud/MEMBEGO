@@ -200,7 +200,7 @@ const contarMapasDeEstado = () => {
  * `BarraFiltros` en Clientes y Pagos (fase 5), `Campo` en los formularios (fase 7), `NavSeccion` en el menú de 21 (fase 6),
  * `SelectorColor` en Empresa, `BarrasSimples` en el Resumen (fase 5).
  */
-export const PRIMITIVAS_EN_ESPERA = new Set(['campo', 'tabla', 'barra-filtros', 'nav-seccion', 'selector-color'])
+export const PRIMITIVAS_EN_ESPERA = new Set(['campo', 'barra-filtros', 'nav-seccion', 'selector-color'])
 
 const contarComponentesSinUso = () => {
   const dir = join('packages', 'ui', 'src', 'ui')
@@ -277,12 +277,14 @@ export const MEDIDAS = {
     filtro: enPanel,
   },
   tarjetaLocal: {
-    que: 'Funciones locales de tarjeta (`Kpi`, `Tarjeta*`, `Metrica`, `Cifra`, `Dato`) en el panel',
+    que: 'Funciones LOCALES de tarjeta (`Kpi`, `Tarjeta*`, `Metrica`, `Cifra`, `Dato`) en el panel',
     porque:
-      'Definidas dentro de una página repiten lo que `StatCard` ya hace, con otro tamaño de cifra y otro radio (FE-04). Una página que se ' +
-      'llame `MetricasPage` no es una tarjeta y no cuenta.',
+      'Definidas dentro de una página o de un archivo y NO exportadas, repiten lo que `StatCard` ya hace, con otro tamaño de cifra y otro radio ' +
+      '(FE-04). Una página que se llame `MetricasPage` no es una tarjeta y no cuenta. Una tarjeta EXPORTADA y compartida (`TarjetaAccion` del ' +
+      'Resumen, las tarjetas de pago de Pagos) es el remedio, no el defecto: desde la fase 5 no cuenta (la medida cuenta lo que su nombre ' +
+      'dice, «locales»; el techo se recalcula con esa definición y solo puede bajar).',
     re: /\bfunction\s+(?:Kpi|Tarjeta|Metrica|Cifra|Dato|StatCard|KpiCard)(?!\w*(?:Page|Layout)\b)\w*\s*\(|\bconst\s+(?:Kpi|Tarjeta|Metrica|Cifra|Dato|StatCard|KpiCard)(?!\w*(?:Page|Layout)\b)\w*\s*=\s*(?:\(|async|function|memo)/g,
-    filtro: enPanel,
+    filtro: (m, a) => enPanel(m, a) && !/\bexport\s+(?:default\s+)?$/.test(m.input.slice(Math.max(0, m.index - 24), m.index)),
   },
   tablaCruda: {
     que: '`<table>` crudas en el panel',
