@@ -25,6 +25,7 @@ import { AjustarVencimiento } from '@/components/superadmin/AjustarVencimiento'
 import { EliminarCuentaButton } from '@/components/superadmin/EliminarCuentaButton'
 import { FileText, MessageCircle, Mail, QrCode, StickyNote } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
+import { PanelDs } from '@/components/layout/PanelDs'
 import { TabsNav } from '@/components/ui/tabs-nav'
 import { BotonConfirmado } from '@/components/ui/boton-confirmado'
 import { SemaforoCliente } from '@/components/admin/SemaforoCliente'
@@ -174,7 +175,7 @@ export default async function ClienteDetailPage({
       membership.lavadosRestantes + membership.lavadosBonoRestantes > 0)
 
   return (
-    <div className="space-y-6">
+    <PanelDs className="space-y-6">
       <PageHeader
         eyebrow={
           <Link href="/admin/clientes" className="hover:underline">
@@ -578,7 +579,7 @@ export default async function ClienteDetailPage({
           />
         </div>
       )}
-    </div>
+    </PanelDs>
   )
 }
 
