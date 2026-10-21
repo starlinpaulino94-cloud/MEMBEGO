@@ -8,6 +8,7 @@ import { formSubmitLimiter } from '@/lib/rate-limit'
 import { generarCodigo } from '@/lib/codes'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 import { registrarEventoMembresia } from '@/modules/membresia/eventos'
+import { revocarConsentimientos } from '@/modules/pagos/consentimientos'
 import {
   registrarComprobanteMembresiaCliente,
   solicitarCambioPlanCliente,
@@ -400,6 +401,12 @@ export async function cancelarMiMembresia(
       await tx.membership.update({
         where: { id: membership.id },
         data: { canceladaAlVencimiento: new Date(), autoRenovar: false },
+      })
+      // Pedir que no se renueve es RETIRAR el consentimiento de renovar: la fila no
+      // se borra, queda con su fecha de revocación.
+      await revocarConsentimientos(tx, {
+        tipo: 'RENOVACION_AUTOMATICA',
+        membershipId: membership.id,
       })
       await tx.auditLog.create({
         data: {

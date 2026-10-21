@@ -42,6 +42,19 @@ export interface MetricaNegocio {
   pagosRechazados24h: number
   /** Cobros iniciados que nunca se resolvieron. Cada uno es un cliente colgado. */
   pagosSinResolver: number
+  /**
+   * Renovaciones automáticas rechazadas por el banco en las últimas 24 h. Cada una
+   * ya avisó al cliente; el número sube cuando algo anda mal con las tarjetas, o
+   * con la pasarela vista desde ellas.
+   */
+  renovacionesRechazadas24h: number
+  /**
+   * Renovaciones automáticas con un cobro de RESULTADO DUDOSO (sin respuesta, o ya
+   * procesado) o COBRADO SIN EXTENDER la membresía, de los últimos 14 días. Cada
+   * una pudo haber cobrado y nadie la va a repetir sola: la atiende una persona.
+   * Ver docs/runbooks/pagos-cardnet.md.
+   */
+  renovacionesPorConciliar: number
   empresasActivas: number
   notificaciones24h: number
 }
@@ -94,6 +107,8 @@ export async function leerMetricas(): Promise<Metricas> {
     pagosAprobados24h: 0,
     pagosRechazados24h: 0,
     pagosSinResolver: 0,
+    renovacionesRechazadas24h: 0,
+    renovacionesPorConciliar: 0,
     empresasActivas: 0,
     notificaciones24h: 0,
   }
@@ -107,6 +122,8 @@ export async function leerMetricas(): Promise<Metricas> {
       pagosAprobados24h,
       pagosRechazados24h,
       pagosSinResolver,
+      renovacionesRechazadas24h,
+      renovacionesPorConciliar,
       empresasActivas,
       notificaciones24h,
     ] = await sinEmpresa('observabilidad: métricas globales de negocio', (tx) =>
@@ -144,6 +161,29 @@ export async function leerMetricas(): Promise<Metricas> {
             company: SIN_DEMO,
           },
         }),
+        tx.pagoIntento.count({
+          where: {
+            createdAt: { gte: hace24 },
+            estado: 'RECHAZADO',
+            canal: 'RENOVACION_AUTOMATICA',
+            company: SIN_DEMO,
+          },
+        }),
+        // Lo que `evaluarCiclo` trata como «no se vuelve a cobrar sin una persona»:
+        // resultado desconocido, cobrado sin extender, o un intento que quedó
+        // abierto y ya no puede estar en curso.
+        tx.pagoIntento.count({
+          where: {
+            createdAt: { gte: haceHoras(14 * 24) },
+            canal: 'RENOVACION_AUTOMATICA',
+            company: SIN_DEMO,
+            OR: [
+              { estado: 'ERROR', respuesta: { path: ['_clasificacion'], equals: 'incierto' } },
+              { estado: 'APROBADO', activadoAt: { not: null }, fulfillmentEstado: { not: 'COMPLETADA' } },
+              { estado: 'CREADO', createdAt: { lt: haceHoras(0.25) } },
+            ],
+          },
+        }),
         tx.company.count({ where: { ...SIN_DEMO, isActive: true } }),
         // Las notificaciones cuelgan del usuario, no de la empresa, y un usuario
         // puede no tener empresa (un cliente del marketplace). El OR conserva a
@@ -165,6 +205,8 @@ export async function leerMetricas(): Promise<Metricas> {
       pagosAprobados24h,
       pagosRechazados24h,
       pagosSinResolver,
+      renovacionesRechazadas24h,
+      renovacionesPorConciliar,
       empresasActivas,
       notificaciones24h,
     })

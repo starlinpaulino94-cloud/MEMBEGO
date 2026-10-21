@@ -167,6 +167,9 @@ model Membership {
   visits       Visit[]
   comprobantes Comprobante[]
   pagoIntentos PagoIntento[]
+  /// Consentimientos que el cliente dio sobre esta membresía (hoy, la
+  /// renovación automática). El cobro automático exige uno VIGENTE.
+  consentimientosPago ConsentimientoPago[]
   cardnetCaptureSessions CardnetCaptureSession[]
   qrTokens     QrToken[]
 
@@ -279,6 +282,7 @@ model TarjetaTokenizada {
   updatedAt DateTime @updatedAt
 
   memberships Membership[]
+  consentimientos ConsentimientoPago[]
 
   @@index([clienteId, activa])
   @@index([companyId])

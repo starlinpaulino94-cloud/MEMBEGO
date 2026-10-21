@@ -166,6 +166,8 @@ test('H4 · (fase 2) la renovación automática con tarjeta guardada cobra, renu
   })
   const venceEn = new Date(Date.now() + 3 * 3_600_000)
   const m = await membresia(e, { estado: 'ACTIVA', pagoConfirmado: true, montoPagado: PRECIO, fechaPago: new Date(Date.now() - 29 * 86_400_000), fechaInicio: new Date(Date.now() - 29 * 86_400_000), fechaVencimiento: venceEn, autoRenovar: true, tarjetaTokenizadaId: tarjeta.id })
+  // La renovación automática exige un consentimiento VIGENTE: un fixture que la enciende sin uno no es una renovación autorizada.
+  await prisma.consentimientoPago.create({ data: { companyId: e.companyId, clienteId: e.clienteId, tipo: 'RENOVACION_AUTOMATICA', tarjetaId: tarjeta.id, membershipId: m.id, origen: 'HEREDADO', textoVersion: 'previo-a-registro' } })
 
   // Pasarela simulada: aprueba el cobro (formato real de CardNET: { Response: { Transaction: { TransactionStatusId: 1, … } }, Errors: [] }).
   let llamadas = 0

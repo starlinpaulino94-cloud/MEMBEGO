@@ -137,6 +137,24 @@ export default async function ObservabilidadPage() {
               </p>
             )}
           </div>
+          <Dato etiqueta="Renovaciones rechazadas" valor={m.negocio.renovacionesRechazadas24h} />
+          <div>
+            <p className="text-small text-muted-foreground">Renovaciones por conciliar</p>
+            <p
+              className={`text-h2 ${
+                m.negocio.renovacionesPorConciliar > 0 ? 'text-warning' : ''
+              }`}
+            >
+              {m.negocio.renovacionesPorConciliar}
+            </p>
+            {m.negocio.renovacionesPorConciliar > 0 && (
+              <p className="mt-1 text-caption text-muted-foreground">
+                Cobros automáticos de los últimos 14 días que pudieron haber salido y que no se
+                repiten solos: sin respuesta de la pasarela, o cobrados sin entregar. Cada uno lo
+                resuelve una persona con el runbook de pagos.
+              </p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

@@ -3,6 +3,7 @@ import { conEmpresa } from '@/lib/tenant'
 import { consultarClienteCardnet, consultarComprasCardnet } from '@/lib/payments/cardnet-tokens'
 import { referenciaCobro } from '@/lib/payments/cardnet-tokens-core'
 import { guardarTarjeta } from '@/modules/pagos/cardnetTokenGuardado'
+import { TEXTO_VERSION_GUARDAR_MOVIL } from '@/modules/pagos/consentimientosCore'
 import type { PerfilPagoCardnet } from '@/lib/payments/cardnet-tokens-core'
 import { confirmarIntento, reintentarEntrega } from '@/modules/pagos/intentos'
 import {
@@ -136,6 +137,10 @@ export async function associateApprovedCard(
     vencMes: profile.vencMes,
     vencAnio: profile.vencAnio,
     cardnetCaptureSessionId: session.id,
+    // La sesión solo se crea si el cliente marcó «guardar» en la app (`guardarTarjeta`),
+    // y ese texto es el de la app móvil. La sesión no conserva la IP ni el agente de
+    // la petición, así que el registro los deja vacíos en vez de inventarlos.
+    consentimiento: { textoVersion: TEXTO_VERSION_GUARDAR_MOVIL, ip: null, userAgent: null },
   }).then(() => conEmpresa(session.companyId, async (tx) => {
     const captured = await tx.cardnetCaptureSession.updateMany({
       where: {
