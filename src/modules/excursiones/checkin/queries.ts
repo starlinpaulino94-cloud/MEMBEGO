@@ -3,6 +3,13 @@ import { OFFSET_PLATAFORMA_MIN } from '@/modules/excursiones/metricas/nucleo'
 import { resumenManifiesto } from './nucleo'
 
 /**
+ * Cuántas salidas del día se traen. Es un tope A PROPÓSITO (el operador mira esta pantalla de pie junto al bus: una lista de mil
+ * filas no se lee), pero ya NO es silencioso: la consulta devuelve el total real y la pantalla avisa cuando no cupieron todas
+ * (06 · T-04). Los totales de arriba cuentan lo que se muestra.
+ */
+export const LIMITE_MANIFIESTO = 500
+
+/**
  * El MANIFIESTO del día: quién sale hoy y quién se subió.
  *
  * Es la pantalla que el operador mira de pie junto al bus, así que trae lo que
@@ -14,23 +21,27 @@ export async function manifiestoDelDia(companyId: string, dia: string) {
   const desde = new Date(Date.parse(`${dia}T00:00:00.000Z`) - OFFSET_PLATAFORMA_MIN * 60_000)
   const hasta = new Date(Date.parse(`${dia}T23:59:59.999Z`) - OFFSET_PLATAFORMA_MIN * 60_000)
 
-  const reservas = await conEmpresa(companyId, (tx) =>
-    tx.reservaExc.findMany({
-      where: { companyId, estado: { not: 'CANCELADA' }, fecha: { gte: desde, lte: hasta } },
-      orderBy: [{ hora: 'asc' }, { numero: 'asc' }],
-      take: 500,
-      select: {
-        id: true, numero: true, hora: true, adultos: true, ninos: true,
-        estado: true, checkinAt: true, clienteId: true, excursionId: true,
-        pasajeros: { select: { presente: true } },
-        items: {
-          select: { id: true, estado: true, checkinAt: true },
+  const donde = { companyId, estado: { not: 'CANCELADA' }, fecha: { gte: desde, lte: hasta } }
+  const [reservas, totalDelDia] = await conEmpresa(companyId, (tx) =>
+    Promise.all([
+      tx.reservaExc.findMany({
+        where: donde,
+        orderBy: [{ hora: 'asc' }, { numero: 'asc' }],
+        take: LIMITE_MANIFIESTO,
+        select: {
+          id: true, numero: true, hora: true, adultos: true, ninos: true,
+          estado: true, checkinAt: true, clienteId: true, excursionId: true,
+          pasajeros: { select: { presente: true } },
+          items: {
+            select: { id: true, estado: true, checkinAt: true },
+          },
         },
-      },
-    })
+      }),
+      tx.reservaExc.count({ where: donde }),
+    ])
   )
   if (reservas.length === 0) {
-    return { filas: [], resumen: resumenManifiesto([]) }
+    return { filas: [], resumen: resumenManifiesto([]), totalDelDia, truncado: false }
   }
 
   const [clientes, excursiones] = await Promise.all([
@@ -76,5 +87,5 @@ export async function manifiestoDelDia(companyId: string, dia: string) {
     }
   })
 
-  return { filas, resumen: resumenManifiesto(filas) }
+  return { filas, resumen: resumenManifiesto(filas), totalDelDia, truncado: totalDelDia > filas.length }
 }
