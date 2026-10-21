@@ -26,6 +26,12 @@ import {
 } from '../../src/modules/pagos/renovacionCliente'
 import { ejecutarAvisosDeRenovacion } from '../../src/modules/pagos/avisosRenovacion'
 import { TEXTO_VERSION_RENOVACION } from '../../src/modules/pagos/consentimientosCore'
+import {
+  activarRenovacionDelCliente,
+  cargarPanelDeRenovacion,
+  desactivarRenovacionDelCliente,
+  renovacionParaLaApp,
+} from '../../src/modules/pagos/renovacionPuerta'
 
 const sufijo = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 const H = 3_600_000
@@ -337,4 +343,166 @@ test('7 · lo que se enciende desde la pantalla SÍ se cobra: aviso previo y des
   const mm = await mem(m.id)
   assert.ok(mm.fechaVencimiento && mm.fechaVencimiento.getTime() > Date.now() + 25 * DIA, 'extendida un período')
   assert.equal(mm.autoRenovar, true)
+})
+
+// ── La puerta compartida por la web y la app móvil ──────────────────────────
+
+const pedido = (c: { id: string; supabaseId: string }) => ({ supabaseId: c.supabaseId, clienteId: c.id })
+const peticion = (membershipId: string, tarjetaId: string, extra: Record<string, unknown> = {}) => ({
+  membershipId,
+  tarjetaId,
+  acepto: true,
+  textoVersionVista: TEXTO_VERSION_RENOVACION,
+  ip: '190.80.12.9',
+  userAgent: 'prueba-app-movil',
+  ...extra,
+})
+
+test('8 · la puerta: sin casilla, con otra versión del texto, de otra persona o sin cobro con tarjeta, NO se enciende (y dice por qué)', async () => {
+  const e = await empresa('ocho')
+  const c = await cliente(e)
+  const otra = await cliente(e)
+  const t = await tarjeta(e, c.id)
+  const m = await membresia(e, c.id)
+
+  const sinCasilla = await activarRenovacionDelCliente(pedido(c), peticion(m.id, t.id, { acepto: false }))
+  assert.deepEqual([sinCasilla.ok, !sinCasilla.ok && sinCasilla.estado], [false, 400])
+  for (const textoVersionVista of [null, 'renovacion-v0', 'guardar-tarjeta-web-v1']) {
+    const r = await activarRenovacionDelCliente(pedido(c), peticion(m.id, t.id, { textoVersionVista }))
+    assert.deepEqual([r.ok, !r.ok && r.estado], [false, 409], `versión ${textoVersionVista}`)
+  }
+  const ajena = await activarRenovacionDelCliente(pedido(otra), peticion(m.id, t.id))
+  assert.deepEqual([ajena.ok, !ajena.ok && ajena.estado], [false, 403])
+  const sinTarjeta = await activarRenovacionDelCliente(pedido(c), peticion(m.id, ''))
+  assert.deepEqual([sinTarjeta.ok, !sinTarjeta.ok && sinTarjeta.estado], [false, 400])
+  const noEsta = await activarRenovacionDelCliente(pedido(c), peticion(m.id, 'no-existe'))
+  assert.deepEqual([noEsta.ok, !noEsta.ok && noEsta.estado], [false, 404])
+  assert.equal((await mem(m.id)).autoRenovar, false)
+  assert.equal((await filas(m.id)).length, 0, 'nada de esto deja un consentimiento')
+
+  // La empresa que NO puede cobrar con tarjeta: no se enciende.
+  await prisma.company.update({ where: { id: e.companyId }, data: { capacidades: { overrides: { PAGO_CARDNET: false } } } })
+  const sinCobro = await activarRenovacionDelCliente(pedido(c), peticion(m.id, t.id))
+  assert.deepEqual([sinCobro.ok, !sinCobro.ok && sinCobro.estado], [false, 403])
+  assert.equal((await mem(m.id)).autoRenovar, false)
+})
+
+test('8b · la puerta: lo que se acepta bien se registra con la versión vigente, la IP y el agente; desactivar NUNCA depende del cobro con tarjeta', async () => {
+  const e = await empresa('ochob')
+  const c = await cliente(e)
+  const t = await tarjeta(e, c.id)
+  const m = await membresia(e, c.id)
+  assert.deepEqual(await activarRenovacionDelCliente(pedido(c), peticion(m.id, t.id)), { ok: true })
+  const [f] = await filas(m.id)
+  assert.deepEqual([f?.textoVersion, f?.ipAddress, f?.userAgent, f?.origen], [TEXTO_VERSION_RENOVACION, '190.80.12.9', 'prueba-app-movil', 'CLIENTE'])
+
+  // La empresa apaga el cobro con tarjeta: el cliente sigue pudiendo desactivarla.
+  await prisma.company.update({ where: { id: e.companyId }, data: { capacidades: { overrides: { PAGO_CARDNET: false } } } })
+  const otra = await cliente(e)
+  const ajena = await desactivarRenovacionDelCliente(pedido(otra), m.id)
+  assert.deepEqual([ajena.ok, !ajena.ok && ajena.estado], [false, 403])
+  assert.deepEqual(await desactivarRenovacionDelCliente(pedido(c), m.id), { ok: true })
+  assert.equal((await mem(m.id)).autoRenovar, false)
+  assert.equal((await filas(m.id)).filter((x) => x.revocadoAt === null).length, 0)
+})
+
+test('8c · el panel: se ofrece si la empresa puede cobrar; si ya está activa se muestra siempre; si no, no aparece', async () => {
+  const e = await empresa('ochoc')
+  const c = await cliente(e)
+  const t = await tarjeta(e, c.id)
+  const m = await membresia(e, c.id)
+  const datos = { id: m.id, companyId: e.companyId, clienteId: c.id }
+
+  const ofrecible = await cargarPanelDeRenovacion(datos)
+  assert.deepEqual([ofrecible?.puedeActivar, ofrecible?.estado.activa, ofrecible?.tarjetas.map((x) => x.id)], [true, false, [t.id]])
+
+  await activar(e, c.id, m.id, t.id)
+  const activa = await cargarPanelDeRenovacion(datos)
+  assert.deepEqual([activa?.estado.activa, activa?.estado.origen, activa?.estado.tarjeta?.id], [true, 'CLIENTE', t.id])
+
+  await prisma.company.update({ where: { id: e.companyId }, data: { capacidades: { overrides: { PAGO_CARDNET: false } } } })
+  const apagadaLaEmpresa = await cargarPanelDeRenovacion(datos)
+  assert.deepEqual([apagadaLaEmpresa?.puedeActivar, apagadaLaEmpresa?.estado.activa], [false, true], 'activa: se muestra para poder desactivarla')
+
+  await desactivarRenovacion({ companyId: e.companyId, clienteId: c.id, membershipId: m.id })
+  assert.equal(await cargarPanelDeRenovacion(datos), null, 'ni activa ni ofrecible: no hay panel')
+})
+
+// ── Lo que la app móvil recibe ──────────────────────────────────────────────
+
+
+test('9 · la app recibe del SERVIDOR si se ofrece, con qué tarjetas y el texto exacto que se registrará', async () => {
+  const e = await empresa('nueve', 1600)
+  const c = await cliente(e)
+  const t1 = await tarjeta(e, c.id, { predeterminada: true })
+  const t2 = await tarjeta(e, c.id, { vencMes: 1, vencAnio: 2020 })
+  const m = await membresia(e, c.id)
+
+  const r = await renovacionParaLaApp(pedido(c), m.id)
+  assert.equal(r.ok, true)
+  if (!r.ok || !r.cuerpo.disponible) throw new Error('debía estar disponible')
+  const d = r.cuerpo
+  assert.deepEqual([d.activa, d.heredada, d.puedeActivar, d.tarjetaActual], [false, false, true, null])
+  assert.deepEqual(d.tarjetas.map((x) => [x.id, x.vencida]), [[t1.id, false], [t2.id, true]])
+  assert.match(d.montoTexto, /1,?600/)
+  assert.deepEqual(d.proximoCobro, (await mem(m.id)).fechaVencimiento)
+
+  // El texto que se muestra ES el que se registra: la versión, y lo que el servidor escribió con sus valores.
+  assert.equal(d.consentimiento.textoVersion, TEXTO_VERSION_RENOVACION)
+  const completo = `${d.consentimiento.titulo} ${d.consentimiento.detalle}`
+  assert.match(completo, new RegExp(`Autorizo a Activar nueve ${sufijo} a cobrar a esta tarjeta`))
+  assert.match(completo, /\(hoy [^)]*1,?600[^)]*\) cada 30 días/)
+  assert.doesNotMatch(completo, /\{(empresa|monto|periodo)\}/)
+  assert.match(d.consentimiento.urlCondiciones, /^https?:\/\/.+\/privacy#renovacion-automatica$/)
+
+  // Y aceptarlo con esa versión funciona; con otra, no.
+  assert.deepEqual(
+    await activarRenovacionDelCliente(pedido(c), peticion(m.id, t1.id, { textoVersionVista: d.consentimiento.textoVersion })),
+    { ok: true }
+  )
+  const activa = await renovacionParaLaApp(pedido(c), m.id)
+  if (!activa.ok || !activa.cuerpo.disponible) throw new Error('debía estar disponible')
+  assert.deepEqual([activa.cuerpo.activa, activa.cuerpo.heredada, activa.cuerpo.tarjetaActual?.id], [true, false, t1.id])
+})
+
+test('9b · la app: lo que no se ofrece no se ofrece (cancelación programada, cambio de plan, vencida), y lo ajeno no se ve', async () => {
+  const e = await empresa('nueveb')
+  const casos: [string, Record<string, unknown>][] = [
+    ['cancelación programada', { canceladaAlVencimiento: new Date() }],
+    ['cambio de plan por pagar', { planIdSolicitado: e.planId }],
+    ['cancelada', { estado: 'CANCELADA' }],
+    ['ya venció', { fechaVencimiento: hace(DIA) }],
+    ['sin fecha de vencimiento', { fechaVencimiento: null }],
+  ]
+  for (const [nombre, cambio] of casos) {
+    const c = await cliente(e)
+    await tarjeta(e, c.id)
+    const m = await membresia(e, c.id, cambio)
+    const r = await renovacionParaLaApp(pedido(c), m.id)
+    assert.deepEqual(r, { ok: true, cuerpo: { disponible: false } }, nombre)
+  }
+  const dueña = await cliente(e)
+  const otra = await cliente(e)
+  const m = await membresia(e, dueña.id)
+  const ajena = await renovacionParaLaApp(pedido(otra), m.id)
+  assert.deepEqual([ajena.ok, !ajena.ok && ajena.estado], [false, 403])
+  const noExiste = await renovacionParaLaApp(pedido(dueña), 'no-existe')
+  assert.deepEqual([noExiste.ok, !noExiste.ok && noExiste.estado], [false, 404])
+})
+
+test('9c · la app: una renovación HEREDADA llega marcada para ofrecer confirmarla, y confirmarla la deja de cliente', async () => {
+  const e = await empresa('nuevec')
+  const c = await cliente(e)
+  const t = await tarjeta(e, c.id)
+  const m = await membresia(e, c.id, { autoRenovar: true, tarjetaTokenizadaId: t.id })
+  await prisma.consentimientoPago.create({
+    data: { companyId: e.companyId, clienteId: c.id, tipo: 'RENOVACION_AUTOMATICA', tarjetaId: t.id, membershipId: m.id, origen: 'HEREDADO', textoVersion: 'previo-a-registro' },
+  })
+  const antes = await renovacionParaLaApp(pedido(c), m.id)
+  if (!antes.ok || !antes.cuerpo.disponible) throw new Error('debía estar disponible')
+  assert.deepEqual([antes.cuerpo.activa, antes.cuerpo.heredada], [true, true])
+  await activarRenovacionDelCliente(pedido(c), peticion(m.id, t.id))
+  const despues = await renovacionParaLaApp(pedido(c), m.id)
+  if (!despues.ok || !despues.cuerpo.disponible) throw new Error('debía estar disponible')
+  assert.deepEqual([despues.cuerpo.activa, despues.cuerpo.heredada], [true, false])
 })

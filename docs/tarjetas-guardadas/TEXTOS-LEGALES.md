@@ -21,7 +21,7 @@ debo suponer.
 | Qué permite | Pagar de nuevo sin escribir la tarjeta | Cobrar **sin que el cliente esté presente** |
 | Quién inicia cada cobro | El cliente, con un clic | El sistema, a diario, cuando la membresía está por vencer |
 | `tipo` registrado | `GUARDAR_TARJETA` | `RENOVACION_AUTOMATICA` |
-| Dónde se acepta | Casilla de la pantalla de pago (web) y de la app móvil | Casilla del panel «Renovación automática» del detalle de la membresía (**solo web**) |
+| Dónde se acepta | Casilla de la pantalla de pago (web) y de la app móvil | Casilla del panel «Renovación automática» del detalle de la membresía (web y app móvil; el texto lo escribe el servidor) |
 
 El permiso de guardar dice, a propósito, que **«no activa renovaciones
 automáticas»**: guardar no autoriza cobros futuros sin el cliente, y el cobro
@@ -92,7 +92,7 @@ Una fila en `consentimientos_pago` por cada consentimiento:
 | `tipo` | `GUARDAR_TARJETA` o `RENOVACION_AUTOMATICA` |
 | `textoVersion` | La versión del texto mostrado |
 | `otorgadoAt` | Cuándo |
-| `ipAddress`, `userAgent` | Desde dónde (solo web: la sesión móvil no conserva la IP ni el agente, y se registran vacíos en vez de inventarlos) |
+| `ipAddress`, `userAgent` | Desde dónde: la IP y el agente de la petición. El permiso de guardar desde la app móvil los deja vacíos (esa sesión no los conserva) en vez de inventarlos; el de renovar sí los registra, también desde la app |
 | `tarjetaId`, `membershipId` | A qué tarjeta y, si es renovar, a qué membresía |
 | `origen` | `CLIENTE` (lo aceptó en pantalla) o `HEREDADO` (ver abajo) |
 | `revocadoAt` | Cuándo lo retiró, si lo retiró |

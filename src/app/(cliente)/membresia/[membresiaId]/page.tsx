@@ -30,9 +30,9 @@ import { formatMoney, formatPrice } from '@/lib/format'
 import { ofrecerTransferencia, getMetodosParaCompraNueva } from '@/modules/pagos/metodosDisponibles'
 import { getTokensPublicConfig } from '@/lib/payments/cardnet-tokens'
 import { calcularPagoCambioPlan } from '@/modules/membresia/prorrateo'
-import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
 import { periodoDelPlan } from '@/modules/pagos/consentimientosCore'
-import { estadoRenovacion, tarjetasParaRenovar } from '@/modules/pagos/renovacionCliente'
+import { cargarPanelDeRenovacion } from '@/modules/pagos/renovacionPuerta'
+import { renovacionVisible } from '@/modules/pagos/renovacionFormato'
 
 export const metadata = {
   title: 'Detalles de Membresía',
@@ -269,30 +269,27 @@ export default async function MembershipDetail({
   const estadoLabel = membresiaEstadoUi(membership.estado).labelCliente
   const company = membership.cliente.company
 
-  // RENOVACIÓN AUTOMÁTICA. Solo en una membresía activa, sin cambio de plan por
-  // pagar, sin la cancelación programada, con vencimiento y con un plan que cuesta algo: las mismas
-  // condiciones que exige el cobro. Se ofrece ACTIVAR si la empresa puede cobrar
-  // con tarjeta ahora; si ya está activa se muestra siempre, para poder
-  // desactivarla aunque la empresa haya apagado el cobro.
+  // RENOVACIÓN AUTOMÁTICA. Solo donde el cobro podría ocurrir (`renovacionVisible`:
+  // las mismas condiciones que exige el cobro), y se ofrece ACTIVAR si la empresa
+  // puede cobrar con tarjeta ahora; si ya está activa se muestra siempre, para poder
+  // desactivarla aunque la empresa haya apagado el cobro. La app móvil usa las
+  // mismas dos funciones (`/api/v1/cliente/membresias/[id]/renovacion`).
   //
-  // Fail-safe: si cualquiera de estas consultas fallara, el panel simplemente no
-  // aparece — NUNCA tumba la página de la membresía.
-  const renovacion =
-    isActive &&
-    !isChangePending &&
-    !membership.canceladaAlVencimiento &&
-    membership.fechaVencimiento != null &&
-    Number(membership.plan.precio) > 0
-      ? await Promise.all([
-          puedeCobrarToken(empresaDeLaMembresia),
-          estadoRenovacion(empresaDeLaMembresia, membership.id),
-          tarjetasParaRenovar(empresaDeLaMembresia, membership.clienteId),
-        ])
-          .then(([puedeActivar, estado, tarjetas]) =>
-            puedeActivar || estado.activa ? { puedeActivar, estado, tarjetas } : null
-          )
-          .catch(() => null)
-      : null
+  // Fail-safe: si cualquiera de las consultas fallara, `cargarPanelDeRenovacion`
+  // devuelve null y el panel no aparece — NUNCA tumba la página de la membresía.
+  const renovacion = renovacionVisible({
+    estado: membership.estado,
+    fechaVencimiento: membership.fechaVencimiento,
+    planIdSolicitado: membership.planIdSolicitado,
+    canceladaAlVencimiento: membership.canceladaAlVencimiento,
+    precioPlan: Number(membership.plan.precio),
+  })
+    ? await cargarPanelDeRenovacion({
+        id: membership.id,
+        companyId: empresaDeLaMembresia,
+        clienteId: membership.clienteId,
+      })
+    : null
 
   // Tono del chip de estado en la cabecera.
   const tone = isActive

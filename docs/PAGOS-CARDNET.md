@@ -608,6 +608,29 @@ se hace dentro):
   vencimiento) puede cobrar ese mismo día: el cron manda primero el aviso previo y
   después cobra. El panel dice «en los días previos al {vencimiento}».
 
+#### La misma pantalla en la app móvil
+
+El detalle de la membresía de la app (`apps/client/app/membresia/[membresiaId].tsx`)
+tiene el mismo panel (`RenovacionAutomaticaPanel.tsx`), con los mismos estados. **Web y
+app entran por la misma puerta** (`renovacionPuerta.ts`: límite de peticiones,
+aceptación explícita, versión del texto, empresa que puede cobrar, membresía de la
+persona), así que responden igual; la app llama a
+`/api/v1/cliente/membresias/[id]/renovacion`:
+
+| Método | Qué hace |
+|---|---|
+| `GET` | Lo que la app muestra: si se ofrece, la tarjeta actual, las tarjetas que sirven, el monto y **el texto del consentimiento escrito por el servidor** (`consentimiento.titulo/detalle`, su `textoVersion` y el enlace a las condiciones) |
+| `POST` `{tarjetaId, textoVersion, acepto: true}` | Activa. Solo `acepto === true` cuenta, y `textoVersion` debe ser la vigente: si el texto cambió desde que la app lo cargó, responde 409 y no registra nada |
+| `DELETE` | Desactiva (no depende de que la empresa pueda cobrar) |
+
+**El servidor manda**: la app no tiene copia del texto aceptado (no hay un segundo texto
+que mantener ni que pueda separarse de lo registrado) y no decide elegibilidad. De la
+IP y el agente del consentimiento, la app aporta los de su petición. Quitar una tarjeta
+en «Tarjetas guardadas» apaga las renovaciones que la usaban y la app lo refleja.
+
+`textoVersion` también es obligatorio en la web (campo oculto del formulario): aceptar
+un texto y anotar otro es justo lo que el registro existe para impedir.
+
 ### Rechazos, reintentos y avisos
 
 **Cómo es un ciclo** (con el cron diario de las 12:00 UTC):
@@ -731,13 +754,13 @@ del lado que no cobra de más:
 
 ### Lo que falta
 
-- **La app móvil.** La pantalla es solo web (el detalle de la membresía). La app no
-  tiene todavía dónde activar o desactivar la renovación; quien la use puede
-  hacerlo desde el navegador.
-- **Ver la pantalla con sesión.** No se pudo abrir con un usuario real (el proyecto de
-  Supabase de QA ya no existe); se verificó su renderizado con datos de prueba en los
-  siete estados, y su comportamiento con pruebas contra PostgreSQL. Conviene mirarla
-  una vez en un entorno con sesión.
+- **Ver las pantallas con sesión.** No se pudieron abrir con un usuario real (el
+  proyecto de Supabase de QA ya no existe). La web se verificó con datos de prueba en
+  los siete estados, y todo el comportamiento con pruebas contra PostgreSQL. **La app
+  móvil se tipó con sus dependencias reales** (copia aislada, `tsc --noEmit`, sin
+  errores en el panel, el cliente de la API ni las dos pantallas tocadas), pero **no se
+  pudo abrir**: falta mirar el panel en un dispositivo o en Expo Web antes de publicar
+  la app. La CI no tipa `apps/client`.
 - **Revisión legal** de `renovacion-v1` y de los permisos de guardar
   (`docs/tarjetas-guardadas/TEXTOS-LEGALES.md`).
 

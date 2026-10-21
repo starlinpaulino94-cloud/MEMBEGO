@@ -185,8 +185,8 @@ export default function PrivacyPage() {
             <p className="mt-2">
               De cada autorización —guardar la tarjeta, renovar automáticamente—
               registramos qué aceptaste, la versión del texto que viste, la fecha y
-              hora y, en la web, la dirección IP y el navegador desde los que lo
-              hiciste; y, si la retiras, cuándo. Esa constancia se conserva aunque
+              hora y, cuando están disponibles, la dirección IP y el navegador o
+              dispositivo desde los que lo hiciste; y, si la retiras, cuándo. Esa constancia se conserva aunque
               quites la tarjeta, para poder demostrarte qué autorizaste y cuándo, y
               se elimina junto con tu cuenta según la sección 6.
             </p>

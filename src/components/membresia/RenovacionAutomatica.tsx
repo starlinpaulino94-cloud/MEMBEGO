@@ -237,6 +237,8 @@ function FormularioDeAutorizacion({
   return (
     <form action={enviar} className="mt-3 space-y-4">
       <input type="hidden" name="membershipId" value={membershipId} />
+      {/* La versión del texto que se está mostrando: es la que se registra. */}
+      <input type="hidden" name="textoVersion" value={TEXTO_VERSION_RENOVACION} />
 
       {tarjetas.length > 1 ? (
         <fieldset className="space-y-2">
