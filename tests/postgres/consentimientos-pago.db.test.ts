@@ -173,14 +173,18 @@ test('2b · dos guardados SIMULTÁNEOS del mismo perfil dejan UNA tarjeta y UN c
   const e = await empresa('dosb')
   const c = await cliente(e)
   const perfil = `pp-cs-carrera-${sufijo}`
-  // Algunas de estas peticiones pueden FALLAR: el manejo de la carrera de `guardarTarjeta` (anterior al consentimiento)
-  // consulta dentro de la transacción que la violación única acaba de abortar. No es lo que se prueba aquí: lo que se
-  // exige es que quede UNA tarjeta y UN consentimiento vigente, y que al menos una petición haya tenido éxito.
+  // Antes algunas FALLABAN: la recuperación de la carrera consultaba dentro de la transacción que la violación única
+  // acababa de abortar (25P02). Ahora se repite en una transacción nueva, y TODAS terminan bien con la misma tarjeta.
   const r = await Promise.allSettled(Array.from({ length: 6 }, () => guardar(e, c, perfil)))
   const tarjetas = await prisma.tarjetaTokenizada.findMany({ where: { clienteId: c, paymentProfileId: perfil, activa: true } })
   assert.equal(tarjetas.length, 1, 'una sola tarjeta activa para el perfil')
   assert.equal(await prisma.consentimientoPago.count({ where: { tarjetaId: tarjetas[0].id, tipo: 'GUARDAR_TARJETA', revocadoAt: null } }), 1)
-  assert.ok(r.some((x) => x.status === 'fulfilled'), 'al menos una petición tuvo éxito')
+  assert.deepEqual(
+    r.map((x) => x.status),
+    Array(6).fill('fulfilled'),
+    `alguna petición falló: ${r.filter((x) => x.status === 'rejected').map((x) => String((x as PromiseRejectedResult).reason)).join(' | ')}`
+  )
+  assert.ok(r.every((x) => x.status === 'fulfilled' && x.value.id === tarjetas[0].id), 'todas devuelven la misma tarjeta')
 })
 
 test('3 · renovar con OTRA tarjeta retira el consentimiento de la anterior y deja uno nuevo: el historial dice qué tarjeta estuvo autorizada', async () => {

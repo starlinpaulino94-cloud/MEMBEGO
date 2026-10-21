@@ -174,10 +174,10 @@ promete aviso, **consta el aviso previo** · la tarjeta no está vencida · la
 capacidad `PAGO_CARDNET` sigue encendida.
 
 El cron responde `{candidatas, renovadas, rechazadas, desactivadas, omitidas,
-sinAviso, bloqueadas, errores, inciertas, avisos}`. Una `omitida` no es un fallo,
-es una de las razones de arriba. **`bloqueadas` e `inciertas` son las que hay que
-mirar a diario**: cada una es un cobro que pudo haber salido y que nadie va a
-repetir solo.
+sinAviso, bloqueadas, errores, inciertas, avisos, conciliacion}`. Una `omitida` no es un fallo,
+es una de las razones de arriba. **`bloqueadas`, `inciertas` y
+`conciliacion.siguenDudosas` son las que hay que mirar a diario**: cada una es un
+cobro que pudo haber salido, que CardNET no aclaró y que nadie va a repetir solo.
 
 ### Qué significa lo que se ve
 
@@ -192,13 +192,24 @@ repetir solo.
 
 ### Conciliar una renovación dudosa
 
-Los cobros automáticos cuyo resultado se desconoce (la cifra es *Renovaciones por
-conciliar* en Observabilidad; también salen en la Conciliación):
+**Primero lo intenta el sistema.** Cada día, antes de cobrar, el cron le pregunta
+a CardNET por cada cobro dudoso de los últimos 14 días (la consulta de compras,
+la misma que usa la app; `conciliarRenovacionesDudosas`), buscándolo por su orden
+y su `UniqueID`. Si CardNET contesta que **se aprobó**, lo registra y extiende la
+membresía sin volver a cobrar (queda `respuesta._conciliado = 'automatico'`); si
+contesta que **se rechazó**, lo registra como un rechazo más (cuenta como intento,
+avisa al cliente) y el ciclo sigue. El cron lo resume en `conciliacion`:
+`{revisadas, aprobadas, rechazadas, siguenDudosas}`.
+
+Lo que queda es lo que CardNET no confirmó con claridad (no aparece, aparece dos
+veces, pendiente, la consulta falla) y los intentos anteriores a este cambio, que
+no llevan `UniqueID` y no se consultan. Esos los resuelve una persona (la cifra es
+*Renovaciones por conciliar* en Observabilidad; también salen en la Conciliación):
 
 ```sql
 select pi.id, pi."membershipId", pi.estado, pi.monto, pi."createdAt",
        pi.respuesta->>'_clasificacion' as clasificacion,
-       pi."motivoRechazo",
+       pi."motivoRechazo", pi."cardnetUniqueId",
        right(regexp_replace(pi.id, '[^A-Za-z0-9]', '', 'g'), 12) as referencia_cardnet
   from pago_intentos pi
  where pi.canal = 'RENOVACION_AUTOMATICA'
@@ -212,7 +223,7 @@ select pi.id, pi."membershipId", pi.estado, pi.monto, pi."createdAt",
 
 Para cada fila, busca en el panel de CardNET la transacción con la **referencia**
 (`referencia_cardnet`: son los últimos 12 caracteres del id del intento, que es
-el `Order` y el `UniqueID` que se le mandó). Hay dos desenlaces:
+el `Order` que se le mandó; el `UniqueID` es `cardnetUniqueId`). Hay dos desenlaces:
 
 - **CardNET SÍ cobró.** Registra el cobro como aprobado. Desde ese momento entra
   por el camino de siempre: aparece en «Pagos cobrados con entrega pendiente» y
@@ -223,7 +234,8 @@ el `Order` y el `UniqueID` que se le mandó). Hay dos desenlaces:
   update pago_intentos
      set estado = 'APROBADO',
          autorizacion = '<código de autorización de CardNET>',
-         "activadoAt" = coalesce("activadoAt", now())
+         "activadoAt" = coalesce("activadoAt", now()),
+         "fulfillmentEstado" = 'FALLIDA'
    where id = '<id del intento>'
      and "fulfillmentEstado" <> 'COMPLETADA';
   ```

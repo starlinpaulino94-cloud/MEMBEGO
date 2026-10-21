@@ -389,19 +389,25 @@ test('lo incierto o técnico NO se avisa al cliente y NO se marca rechazado', ()
   assert.match(rama, /return \{ estado: 'error'/)
 })
 
+/** El registro de un rechazo real: lo comparten el cobro y la conciliación automática. */
+const RECHAZO = () =>
+  trozo(fuente(GUARDADO), 'export async function registrarRechazoDeRenovacion', 'export type RazonOmision')
+
 test('solo un rechazo real escribe RECHAZADO, y lo hace antes de que nada lo marque aprobado', () => {
   const src = RENOVACION()
   const clasifica = src.indexOf('clasificarCobro({')
   const incierto = src.indexOf("clase === 'incierto'")
-  const rechaza = src.indexOf("estado: 'RECHAZADO'")
+  const rechaza = src.indexOf('registrarRechazoDeRenovacion(')
   assert.ok(clasifica > 0 && incierto > clasifica && rechaza > incierto,
     'el rechazo se escribe sin haber descartado antes lo incierto')
   assert.ok(rechaza < src.indexOf("estado: 'APROBADO'"))
+  assert.doesNotMatch(src, /estado: 'RECHAZADO'/, 'el cobro escribe el rechazo por su cuenta, fuera de la función compartida')
+  // Solo cierra un intento que sigue abierto: si otro proceso o una persona ya lo resolvió, no lo pisa.
+  assert.match(RECHAZO(), /estado: \{ in: \['CREADO', 'ERROR'\] \}, activadoAt: null/)
 })
 
 test('el rechazo, su auditoría y apagar la renovación son UNA transacción', () => {
-  const src = RENOVACION()
-  const rama = trozo(src, "estado: 'RECHAZADO'", 'return { apagada }')
+  const rama = trozo(RECHAZO(), "estado: 'RECHAZADO'", 'return { apagada }')
   assert.match(rama, /accion:\s*'PAGO_RECHAZADO'/, 'el rechazo no deja asiento de auditoría')
   assert.match(rama, /apagarRenovacionPorFallo\(/)
   // Si entre una cosa y otra se abriera otra transacción, un fallo dejaría el
@@ -412,13 +418,13 @@ test('el rechazo, su auditoría y apagar la renovación son UNA transacción', (
 })
 
 test('el aviso de rechazo se manda DESPUÉS de registrar, y solo si queda algo cierto que decir', () => {
-  const src = RENOVACION()
+  const src = RECHAZO()
   const registro = src.indexOf('return { apagada }')
   const aviso = src.indexOf("tipo: decision.accion === 'reintentar' ? 'rechazo_con_reintento' : 'rechazo_final'")
   assert.ok(registro > 0 && aviso > registro)
   // No se avisa «desactivamos» si otro la apagó antes (el cliente ya lo sabe).
   assert.match(src, /registro && \(decision\.accion === 'reintentar' \|\| registro\.apagada\)/)
-  assert.match(src, /dedupeKey:\s*clavesDeAviso\.rechazo\(intento\.id\)/)
+  assert.match(src, /dedupeKey:\s*clavesDeAviso\.rechazo\(r\.intentoId\)/)
 })
 
 test('apagar la renovación por un fallo conserva la tarjeta y no programa cancelación', () => {
@@ -450,6 +456,15 @@ test('el cron corre los avisos ANTES de los cobros, y un fallo de avisos no los 
   assert.ok(avisos > 0 && cobros > avisos, 'los cobros corren sin que el aviso de hoy exista')
   assert.match(src, /ejecutarAvisosDeRenovacion\(\)\.catch\(/)
   assert.match(src, /\.\.\.resumen,\s*avisos/)
+})
+
+test('el cron concilia los cobros dudosos ANTES de cobrar, y un fallo ahí no detiene los cobros', () => {
+  const src = fuente('src/app/api/cron/renovaciones-tarjeta/route.ts')
+  const conciliar = src.indexOf('conciliarRenovacionesDudosas()')
+  // Uno que CardNET confirma rechazado deja de bloquear: el cobro de hoy lo puede reintentar.
+  assert.ok(conciliar > 0 && conciliar < src.indexOf('ejecutarRenovacionesTarjeta()'))
+  assert.match(src, /conciliarRenovacionesDudosas\(\)\.catch\(/)
+  assert.match(src, /avisos,\s*conciliacion/)
 })
 
 test('la selección del cron empieza por lo que vence antes', () => {

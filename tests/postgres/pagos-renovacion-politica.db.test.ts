@@ -606,7 +606,7 @@ test('18 · el procedimiento del runbook funciona: «no se cobró» libera el ci
   assert.equal((await renovar(a)).estado, 'renovada', 'el siguiente cobro automático lo reintenta')
 
   // «SÍ se cobró»: se registra como aprobado y entra por el camino de entrega de siempre.
-  await prisma.$executeRaw`UPDATE pago_intentos SET estado = 'APROBADO', autorizacion = 'AUTH-MANUAL', "activadoAt" = coalesce("activadoAt", now()) WHERE id = ${ib.id} AND "fulfillmentEstado" <> 'COMPLETADA'`
+  await prisma.$executeRaw`UPDATE pago_intentos SET estado = 'APROBADO', autorizacion = 'AUTH-MANUAL', "activadoAt" = coalesce("activadoAt", now()), "fulfillmentEstado" = 'FALLIDA' WHERE id = ${ib.id} AND "fulfillmentEstado" <> 'COMPLETADA'`
   // En la vida real el cobro dudoso tiene días; una entrega actualizada hace segundos cuenta como «en curso» y no se señala.
   await prisma.$executeRaw`UPDATE pago_intentos SET "updatedAt" = now() - interval '2 days' WHERE id = ${ib.id}`
   const bloqueado = await renovar(b)

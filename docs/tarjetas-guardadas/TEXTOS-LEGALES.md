@@ -129,7 +129,10 @@ se finge lo contrario. La renovación con esas tarjetas sigue funcionando.
 - Un cobro que se cae **sin respuesta** (o que el banco dice que «ya se
   procesó») **no se trata como rechazado**: no se sabe si se cobró. No se le
   avisa al cliente de nada (no hay nada cierto que decirle) y **no se vuelve a
-  cobrar** hasta que una persona lo concilie. Es la protección contra cobrar dos
+  cobrar** hasta saber qué pasó: al día siguiente el sistema se lo pregunta a
+  CardNET y, si no hay respuesta clara, lo concilia una persona. Si CardNET
+  confirma que sí se cobró, la membresía se extiende sin volver a cobrar; si
+  confirma el rechazo, cuenta como un intento más. Es la protección contra cobrar dos
   veces.
 - Una tarjeta con vencimiento conocido y ya vencido no genera ningún intento: se
   apaga la renovación, se retira el consentimiento y se avisa.

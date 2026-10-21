@@ -462,7 +462,7 @@ export async function conciliar(
           clave: 'renovacion-dudosa',
           titulo: 'Renovaciones automáticas con resultado dudoso',
           explicacion:
-            'El cobro automático se cayó sin respuesta, y pudo haber salido. El sistema no lo repite solo porque sería cobrarle dos veces al cliente. Busca en el panel de CardNET la transacción con esa referencia: si SÍ se cobró, hay que registrarlo como cobro aprobado (entonces aparece arriba, en «Pagos cobrados con entrega pendiente», con su botón «Reintentar entrega»); si NO se cobró, se marca como descartado y el siguiente cobro automático lo reintenta. El procedimiento está en el runbook de pagos.',
+            'El cobro automático se cayó sin respuesta, y pudo haber salido. El sistema no lo repite solo porque sería cobrarle dos veces al cliente. Cada día, antes de cobrar, se le pregunta a CardNET por ese cobro y se resuelve solo si contesta claro; lo que queda aquí es lo que no pudo confirmar. Busca en el panel de CardNET la transacción con esa referencia: si SÍ se cobró, hay que registrarlo como cobro aprobado (entonces aparece arriba, en «Pagos cobrados con entrega pendiente», con su botón «Reintentar entrega»); si NO se cobró, se marca como descartado y el siguiente cobro automático lo reintenta. El procedimiento está en el runbook de pagos.',
           cantidad: casos.length,
           severidad: 'ALTA',
           monto: suma(casos),

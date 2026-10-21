@@ -3,7 +3,7 @@ import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import { marcarEntrega } from '@/modules/pagos/intentos'
 import { RECLAMO_PERDIDO, extenderMembresiaCobrada } from '@/modules/pagos/renovacion-extension'
 import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
-import { anotarFallo, logErrorBd } from '@/lib/prisma-errors'
+import { anotarFallo, esViolacionUnica, logErrorBd } from '@/lib/prisma-errors'
 import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
 import {
   cobrarConCredencialGuardada,
@@ -11,6 +11,7 @@ import {
 } from '@/lib/payments/cardnet-tokens'
 import { cifrarTokenCardnet, descifrarTokenCardnet } from '@/lib/payments/cardnet-vault'
 import { tarjetaCardnetVencida } from '@/modules/pagos/cardnet-expiracion'
+import { stablePurchaseId } from '@/modules/pagos/cardnetClientCore'
 import {
   consentimientoVigente,
   otorgarConsentimiento,
@@ -76,6 +77,22 @@ export async function guardarTarjeta(input: GuardarTarjetaInput) {
     throw new Error('CardNET no devolvió un perfil reusable válido.')
   }
   const tokenCifrado = cifrarTokenCardnet(input.token)
+  // DOS PETICIONES A LA VEZ con el mismo perfil (un doble envío, el retorno del
+  // navegador y el webhook) chocan en el índice único. En PostgreSQL ese choque
+  // ABORTA la transacción entera, así que la recuperación no puede ir dentro de
+  // ella (respondería 25P02, «transacción abortada»): se repite la operación en
+  // una transacción NUEVA, que ya ve la fila ganadora y la actualiza en vez de
+  // crear otra. Mismo patrón que `supply-v2/operations/inbox.ts`.
+  for (let intento = 1; ; intento++) {
+    try {
+      return await guardarTarjetaUnaVez(input, tokenCifrado)
+    } catch (e) {
+      if (intento >= 3 || !esViolacionUnica(e)) throw e
+    }
+  }
+}
+
+function guardarTarjetaUnaVez(input: GuardarTarjetaInput, tokenCifrado: string) {
   return conEmpresa(input.companyId, async (tx) => {
     const tarjeta = await guardarFila(tx, input, tokenCifrado)
     // El consentimiento queda en el MISMO instante atómico que la tarjeta: o
@@ -125,60 +142,26 @@ async function guardarFila(tx: Tx, input: GuardarTarjetaInput, tokenCifrado: str
     where: { companyId: input.companyId, clienteId: input.clienteId, activa: true },
     select: { id: true },
   }))
-  try {
-    return await tx.tarjetaTokenizada.create({
-      data: {
-        companyId: input.companyId,
-        clienteId: input.clienteId,
-        customerId: input.customerId,
-        proveedorCuenta: 'CARDNET',
-        paymentProfileId: input.paymentProfileId ?? null,
-        tokenCifrado,
-        cardnetCaptureSessionId: input.cardnetCaptureSessionId ?? null,
-        marca: input.marca?.slice(0, 32) ?? null,
-        ultimos4: input.ultimos4 && /^\d{4}$/.test(input.ultimos4) ? input.ultimos4 : null,
-        vencMes: input.vencMes && input.vencMes >= 1 && input.vencMes <= 12 ? input.vencMes : null,
-        vencAnio: input.vencAnio && input.vencAnio >= 2000 && input.vencAnio <= 9999 ? input.vencAnio : null,
-        predeterminada: primera,
-        consentimientoGuardadoAt: new Date(),
-      },
-    })
-  } catch (error) {
-    // El índice parcial arbitra dos solicitudes concurrentes que registran
-    // el mismo perfil; se recupera la fila ganadora y no se duplica.
-    if (input.paymentProfileId) {
-      const winner = await tx.tarjetaTokenizada.findFirst({
-        where: {
-          companyId: input.companyId,
-          clienteId: input.clienteId,
-          customerId: input.customerId,
-          paymentProfileId: input.paymentProfileId,
-          activa: true,
-        },
-      })
-      if (winner) return winner
-    }
-    // Otra tarjeta del mismo cliente pudo ganar el índice parcial del
-    // predeterminado. El perfil nuevo sigue siendo válido; guárdalo sin
-    // predeterminar y deja que el cliente lo elija desde su billetera.
-    return tx.tarjetaTokenizada.create({
-      data: {
-        companyId: input.companyId,
-        clienteId: input.clienteId,
-        customerId: input.customerId,
-        proveedorCuenta: 'CARDNET',
-        paymentProfileId: input.paymentProfileId,
-        tokenCifrado,
-        cardnetCaptureSessionId: input.cardnetCaptureSessionId ?? null,
-        marca: input.marca?.slice(0, 32) ?? null,
-        ultimos4: input.ultimos4 && /^\d{4}$/.test(input.ultimos4) ? input.ultimos4 : null,
-        vencMes: input.vencMes && input.vencMes >= 1 && input.vencMes <= 12 ? input.vencMes : null,
-        vencAnio: input.vencAnio && input.vencAnio >= 2000 && input.vencAnio <= 9999 ? input.vencAnio : null,
-        predeterminada: false,
-        consentimientoGuardadoAt: new Date(),
-      },
-    }).catch(() => { throw error })
-  }
+  // Si otra petición guardó a la vez el mismo perfil (o la predeterminada del
+  // cliente), esto choca con el índice único y la transacción queda abortada:
+  // lo resuelve `guardarTarjeta` repitiendo en una transacción nueva.
+  return tx.tarjetaTokenizada.create({
+    data: {
+      companyId: input.companyId,
+      clienteId: input.clienteId,
+      customerId: input.customerId,
+      proveedorCuenta: 'CARDNET',
+      paymentProfileId: input.paymentProfileId ?? null,
+      tokenCifrado,
+      cardnetCaptureSessionId: input.cardnetCaptureSessionId ?? null,
+      marca: input.marca?.slice(0, 32) ?? null,
+      ultimos4: input.ultimos4 && /^\d{4}$/.test(input.ultimos4) ? input.ultimos4 : null,
+      vencMes: input.vencMes && input.vencMes >= 1 && input.vencMes <= 12 ? input.vencMes : null,
+      vencAnio: input.vencAnio && input.vencAnio >= 2000 && input.vencAnio <= 9999 ? input.vencAnio : null,
+      predeterminada: primera,
+      consentimientoGuardadoAt: new Date(),
+    },
+  })
 }
 
 /** Tarjetas activas del cliente (para "Mis tarjetas"). Nunca expone el token. */
@@ -364,6 +347,114 @@ async function marcarIntentoSinResultado(
   ).catch(anotarFallo('pagos:renovacion:errorUpdate', { intentoId }))
 }
 
+export interface RechazoDeRenovacion {
+  companyId: string
+  clienteId: string
+  membershipId: string
+  intentoId: string
+  clase: 'rechazo' | 'rechazo_definitivo'
+  /** El motivo para el cliente (ya traducido); sin él, el aviso usa uno genérico. */
+  motivo: string | null
+  codigo: string | null
+  crudo: Record<string, unknown> | null
+  /** Contando este. */
+  rechazosEnCiclo: number
+  vencimiento: Date
+  aviso: { plan: string; monto: number; tarjeta: string }
+  /** Lo confirmó la conciliación automática después, no la respuesta del cobro. */
+  conciliado?: boolean
+}
+
+/**
+ * UN RECHAZO REAL de una renovación automática.
+ *
+ * Se registra el intento, el asiento de auditoría y —si corresponde— se apaga la
+ * renovación, TODO en una transacción: o queda dicho lo que pasó y lo que se
+ * decidió, o no queda nada a medias. Después se avisa al cliente.
+ *
+ * Lo comparten el cobro (la pasarela contestó «no») y la conciliación automática
+ * (CardNET confirmó, al consultarlo después, que un cobro dudoso se rechazó): las
+ * dos aplican la misma política, con el mismo conteo de intentos.
+ *
+ * Solo cierra un intento que sigue ABIERTO (`CREADO`, o `ERROR` sin activar): si
+ * otra ejecución o una persona ya lo resolvió, no toca nada y devuelve `null`.
+ * También devuelve `null` si la base falla; entonces el intento queda abierto y
+ * `evaluarCiclo` lo lee como resultado desconocido, que no se cobra solo.
+ */
+export async function registrarRechazoDeRenovacion(
+  r: RechazoDeRenovacion
+): Promise<{ apagada: boolean } | null> {
+  const decision = decidirTrasRechazo({
+    clase: r.clase,
+    rechazosEnCiclo: r.rechazosEnCiclo,
+    ahora: new Date(),
+    vencimiento: r.vencimiento,
+  })
+  const registro = await conEmpresa(r.companyId, async (tx) => {
+    const cerrado = await tx.pagoIntento.updateMany({
+      where: { id: r.intentoId, estado: { in: ['CREADO', 'ERROR'] }, activadoAt: null },
+      data: {
+        estado: 'RECHAZADO',
+        motivoRechazo: r.motivo ?? 'Rechazada',
+        respuesta: {
+          ...(r.crudo ?? {}),
+          _clasificacion: r.clase,
+          ...(r.conciliado ? { _conciliado: 'automatico' } : {}),
+        } as never,
+      },
+    })
+    if (cerrado.count !== 1) return null
+    const apagada =
+      decision.accion === 'desactivar'
+        ? await apagarRenovacionPorFallo(tx, { membershipId: r.membershipId })
+        : false
+    await tx.auditLog.create({
+      data: {
+        companyId: r.companyId,
+        userId: null,
+        accion: 'PAGO_RECHAZADO',
+        entidadTipo: 'Membership',
+        entidadId: r.membershipId,
+        payload: {
+          motivo: 'renovacion_automatica_tarjeta',
+          intentoId: r.intentoId,
+          codigo: r.codigo,
+          rechazo: r.rechazosEnCiclo,
+          maximo: POLITICA_RENOVACION.maxRechazosPorCiclo,
+          resultado: decision.accion === 'reintentar' ? 'se_reintentara' : 'renovacion_desactivada',
+          causa: decision.accion === 'desactivar' ? decision.causa : null,
+          ...(r.conciliado ? { conciliado: 'automatico' } : {}),
+        },
+      },
+    })
+    return { apagada }
+  }).catch((e) => {
+    // El cliente no recibe aviso de algo que no quedó registrado; por eso se hace ruido.
+    logErrorBd('pagos:renovacion:rechazo', e, { membershipId: r.membershipId, intentoId: r.intentoId })
+    return null
+  })
+
+  if (registro && (decision.accion === 'reintentar' || registro.apagada)) {
+    await avisarCliente({
+      companyId: r.companyId,
+      clienteId: r.clienteId,
+      tipo: decision.accion === 'reintentar' ? 'rechazo_con_reintento' : 'rechazo_final',
+      datos: {
+        plan: r.aviso.plan,
+        monto: r.aviso.monto,
+        tarjeta: r.aviso.tarjeta,
+        vence: r.vencimiento,
+        membershipId: r.membershipId,
+        motivo: r.motivo,
+        causa: decision.accion === 'desactivar' ? decision.causa : undefined,
+        intentos: r.rechazosEnCiclo,
+      },
+      dedupeKey: clavesDeAviso.rechazo(r.intentoId),
+    })
+  }
+  return registro
+}
+
 /** Por qué una renovación se omitió. Es lo que cuenta el resumen del cron. */
 export type RazonOmision =
   | 'sin_aviso'
@@ -405,7 +496,7 @@ const MARGEN_MS = MARGEN_PRIMER_INTENTO_MS
 const GRACIA_VENCIDA_MS = 3 * 24 * 60 * 60 * 1000
 
 export type ReclamoRenovacion =
-  | { ok: true; id: string; rechazosPrevios: number }
+  | { ok: true; id: string; uniqueId: string; rechazosPrevios: number }
   | { ok: false; motivo: MotivoDeBloqueo }
 
 /**
@@ -502,10 +593,18 @@ export async function reclamarIntentoDeRenovacion(input: {
         moneda: 'DOP',
         estado: 'CREADO',
         ipAddress: input.clienteIp,
+        // Va al proveedor como `UniqueID`: es lo que permite preguntarle después
+        // por ESTE cobro si su respuesta se pierde (ver `conciliarRenovacionesDudosas`).
+        cardnetUniqueId: stablePurchaseId(),
       },
-      select: { id: true },
+      select: { id: true, cardnetUniqueId: true },
     })
-    return { ok: true as const, id: creado.id, rechazosPrevios: rechazosDelCron(previos) }
+    return {
+      ok: true as const,
+      id: creado.id,
+      uniqueId: creado.cardnetUniqueId!,
+      rechazosPrevios: rechazosDelCron(previos),
+    }
   })
 }
 
@@ -766,6 +865,7 @@ export async function renovarMembresiaPorTarjeta(
       pesos,
       orden: intento.id,
       clienteIp,
+      purchaseUniqueId: intento.uniqueId,
     })
   } catch (e) {
     // Una excepción en la llamada NO dice que no se cobró: pudo salir la
@@ -805,69 +905,19 @@ export async function renovarMembresiaPorTarjeta(
   }
 
   if (clase !== 'aprobada') {
-    // Rechazo REAL. Se registra el intento, el asiento de auditoría y —si
-    // corresponde— se apaga la renovación, TODO en una transacción: o queda
-    // dicho lo que pasó y lo que se decidió, o no queda nada a medias.
-    const rechazosEnCiclo = intento.rechazosPrevios + 1
-    const decision = decidirTrasRechazo({ clase, rechazosEnCiclo, ahora: new Date(), vencimiento })
-    const registro = await conEmpresa(m.companyId, async (tx) => {
-      await tx.pagoIntento.update({
-        where: { id: intento.id },
-        data: {
-          estado: 'RECHAZADO',
-          motivoRechazo: cobro.motivo ?? 'Rechazada',
-          respuesta: { ...(cobro.crudo ?? {}), _clasificacion: clase } as never,
-        },
-      })
-      const apagada =
-        decision.accion === 'desactivar'
-          ? await apagarRenovacionPorFallo(tx, { membershipId })
-          : false
-      await tx.auditLog.create({
-        data: {
-          companyId: m.companyId,
-          userId: null,
-          accion: 'PAGO_RECHAZADO',
-          entidadTipo: 'Membership',
-          entidadId: membershipId,
-          payload: {
-            motivo: 'renovacion_automatica_tarjeta',
-            intentoId: intento.id,
-            codigo: cobro.codigo || null,
-            rechazo: rechazosEnCiclo,
-            maximo: POLITICA_RENOVACION.maxRechazosPorCiclo,
-            resultado: decision.accion === 'reintentar' ? 'se_reintentara' : 'renovacion_desactivada',
-            causa: decision.accion === 'desactivar' ? decision.causa : null,
-          },
-        },
-      })
-      return { apagada }
-    }).catch((e) => {
-      // Si esto falla el intento queda `CREADO` sin cerrar, y `evaluarCiclo` lo
-      // lee como resultado desconocido: no se vuelve a cobrar solo. Seguro, pero
-      // el cliente no recibe aviso; por eso se hace ruido.
-      logErrorBd('pagos:renovacion:rechazo', e, { membershipId, intentoId: intento.id })
-      return null
+    const registro = await registrarRechazoDeRenovacion({
+      companyId: m.companyId,
+      clienteId: m.clienteId,
+      membershipId,
+      intentoId: intento.id,
+      clase,
+      motivo: cobro.motivo ?? null,
+      codigo: cobro.codigo || null,
+      crudo: cobro.crudo ?? null,
+      rechazosEnCiclo: intento.rechazosPrevios + 1,
+      vencimiento,
+      aviso: { plan: m.plan.nombre, monto: pesos, tarjeta: etiquetaTarjeta(tarjeta.marca, tarjeta.ultimos4) },
     })
-
-    if (registro && (decision.accion === 'reintentar' || registro.apagada)) {
-      await avisarCliente({
-        companyId: m.companyId,
-        clienteId: m.clienteId,
-        tipo: decision.accion === 'reintentar' ? 'rechazo_con_reintento' : 'rechazo_final',
-        datos: {
-          plan: m.plan.nombre,
-          monto: pesos,
-          tarjeta: etiquetaTarjeta(tarjeta.marca, tarjeta.ultimos4),
-          vence: vencimiento,
-          membershipId,
-          motivo: cobro.motivo,
-          causa: decision.accion === 'desactivar' ? decision.causa : undefined,
-          intentos: rechazosEnCiclo,
-        },
-        dedupeKey: clavesDeAviso.rechazo(intento.id),
-      })
-    }
     return {
       estado: 'rechazada',
       motivo: cobro.motivo ?? 'La tarjeta fue rechazada.',

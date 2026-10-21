@@ -490,11 +490,16 @@ autoriza cobros futuros. La renovación automática sigue siendo una función
 independiente, bajo el consentimiento y las reglas ya existentes de Membego;
 esta implementación no la activa ni amplía su alcance.
 
-> **Estado: construida, NO confirmada con CardNET.** No hay constancia de que un
-> cobro con un perfil guardado (`cobrarConCredencialGuardada`, con
-> `Environment: Ecommerce_COF`) se haya aprobado contra el proveedor. Todo lo
-> probado de esta sección usa un CardNET **simulado**. Hasta que ocurra, la
-> renovación automática no es fiable.
+> **Estado.** El cobro con perfil guardado (`cobrarConCredencialGuardada`, con
+> `Environment: Ecommerce_COF`) es el mismo que usa la app para pagar con una
+> tarjeta guardada, y el dueño confirma (21-10-2026) que los pagos funcionan en la
+> app. Lo nuevo de esta sección (cobrar **sin el cliente**, reintentar, conciliar
+> sola) está probado contra un CardNET **simulado**: el primer ciclo real de
+> renovaciones hay que mirarlo (el resumen del cron y la Conciliación).
+>
+> **No se le consulta nada a CardNET.** Comunicarse con ellos es difícil y no hace
+> falta para operar: las decisiones que dependían de su respuesta se tomaron del
+> lado seguro y están en «Decisiones tomadas sin CardNET», abajo.
 
 ### Qué hay
 
@@ -508,7 +513,8 @@ esta implementación no la activa ni amplía su alcance.
 | Textos de los avisos al cliente y claves para no repetirlos | `src/modules/pagos/avisosRenovacionCore.ts` |
 | Quién avisa y cuándo (aviso previo del cron, envío único) | `src/modules/pagos/avisosRenovacion.ts` |
 | El HTML del correo de los avisos | `src/modules/pagos/correoAvisoRenovacion.ts` |
-| Cron diario `0 12 * * *`: avisos y después cobros | `/api/cron/renovaciones-tarjeta` (`vercel.json`) |
+| Cron diario `0 12 * * *`: conciliar los dudosos, avisos y después cobros | `/api/cron/renovaciones-tarjeta` (`vercel.json`) |
+| Conciliar sola un cobro dudoso preguntándole a CardNET (consulta de compras) | `src/modules/pagos/conciliarRenovacion.ts` |
 | Cobros dudosos en la Conciliación y en Observabilidad | `src/modules/observabilidad/conciliacion.ts`, `metricas.ts` |
 | Qué hacer, paso a paso | `docs/runbooks/pagos-cardnet.md` § 7 |
 
@@ -534,6 +540,13 @@ versión publicada no se edita. Hay pruebas que comparan lo que muestra cada
 pantalla con lo que se registra, y fallan si se separan. La sesión móvil no
 conserva la IP ni el agente de la petición: se registran vacíos en vez de
 inventarlos.
+
+**Guardados simultáneos.** Si dos peticiones guardan a la vez el mismo perfil
+(un doble envío, el retorno del navegador y el webhook), chocan en el índice
+único. En PostgreSQL ese choque aborta la transacción, así que la recuperación
+que había dentro de ella nunca funcionaba y algunas peticiones fallaban.
+`guardarTarjeta` ahora repite la operación en una transacción nueva, que ve la
+tarjeta ganadora: todas terminan bien, con una tarjeta y un consentimiento.
 
 **Lo que ya existía queda HEREDADO.** La migración crea un consentimiento
 `HEREDADO` (`previo-a-registro`) por cada tarjeta activa y por cada membresía que
@@ -576,9 +589,29 @@ cron. Al día siguiente se volvía a cobrar, y si el primero sí había salido, 
 cliente pagaba dos veces. Ahora el intento dudoso **bloquea el ciclo** y hace
 ruido (`pagos:renovacion:bloqueada-incierta` en el registro de errores, el caso
 «Renovaciones automáticas con resultado dudoso» en la Conciliación y el contador
-*Renovaciones por conciliar* de Observabilidad). Resolverlo reutiliza lo que ya
-hay: si CardNET SÍ cobró, se registra como aprobado y el botón **«Reintentar
-entrega»** extiende la membresía sin recobrar.
+*Renovaciones por conciliar* de Observabilidad).
+
+**Y se resuelve solo cuando CardNET contesta claro.** Cada cobro de renovación
+lleva un `UniqueID` (12 dígitos, el mismo formato que la app) que se guarda en
+`pago_intentos.cardnetUniqueId` **antes** de cobrar. Cada día, antes de cobrar, el
+cron le pregunta a CardNET por los dudosos de los últimos 14 días con la consulta
+de compras que ya usa la app (`conciliarRenovacionesDudosas`), y solo acepta una
+respuesta si hay **exactamente una** compra con esa orden, ese `UniqueID`, ese
+cliente y en esas fechas:
+
+- **Aprobada:** se registra como cobro aprobado y se entrega con
+  `reintentarEntrega` (extiende la membresía y deja la venta, **sin volver a
+  cobrar**), y se manda el recibo. Si la entrega falla, queda como cualquier
+  cobro sin entregar y el barrido de entregas la reintenta.
+- **Rechazada:** es un rechazo más, con la misma política que si el banco
+  hubiera contestado a tiempo (`registrarRechazoDeRenovacion`): cuenta como
+  intento, avisa al cliente y, si toca, apaga la renovación. El ciclo sigue.
+- **Cualquier otra cosa** (no aparece, aparece dos veces, pendiente, la consulta
+  falla): **sigue dudoso**. No aparecer no prueba que no se cobró. Lo resuelve una
+  persona con el runbook (§ 7); si CardNET SÍ cobró, el botón **«Reintentar
+  entrega»** extiende la membresía sin recobrar.
+
+Los intentos anteriores a este cambio no llevan `UniqueID` y no se consultan.
 
 **Otras barreras contra el doble cobro**, todas bajo el candado por membresía
 (`pg_advisory_xact_lock`; antes la guarda era «consultar y luego crear», que dos
@@ -621,6 +654,21 @@ negocio el 21-10-2026.**
 > despliegue el código. Volver a 1 día es cambiar `diasAntesDelPrimerIntento`, a
 > costa de los reintentos.
 
+### Decisiones tomadas sin CardNET
+
+Lo que antes quedaba «pendiente de preguntarle a CardNET» se resolvió así, siempre
+del lado que no cobra de más:
+
+| Duda | Decisión |
+|---|---|
+| ¿El cobro con perfil guardado está bien formado? | Es el mismo `Purchase` que ya usa la app para pagar con tarjeta guardada, que funciona. No se toca. |
+| ¿Cómo distinguir un rechazo de un error técnico? | `clasificarCobro`: sin código y sin respuesta clara es **dudoso** (no se repite), nunca «rechazo». Un 401/403/404 sin código es técnico (no gasta intento). |
+| ¿Qué códigos son definitivos? | 14, 41, 43 y 54 (número inválido, tarjeta perdida, robada, vencida) apagan la renovación al primer rechazo; los demás se reintentan dentro del tope de 3. Si un código no definitivo resulta serlo, el costo es como mucho dos reintentos más, siempre antes del vencimiento. |
+| ¿El código 94 («ya se procesó») cobró? | Se trata como **dudoso**: no se repite y se concilia. |
+| ¿Cómo saber si salió un cobro sin respuesta? | La consulta de compras por orden y `UniqueID` (la de la app), con conciliación automática; si no es inequívoca, una persona. |
+| ¿Qué IP mandar sin el cliente presente? | Se conserva lo que ya hacía la renovación (`0.0.0.0`). |
+| ¿De dónde sale el vencimiento de la tarjeta? | Se usa si CardNET lo entrega (`cardnet-expiracion.ts`); si no, la defensa es el rechazo del banco (código 54, definitivo). |
+
 ### Para poner esto en producción
 
 1. **Respaldo** y aplicar `prisma/migrations/20261077_consentimientos_pago/migration.sql`
@@ -638,22 +686,11 @@ negocio el 21-10-2026.**
 - **Una pantalla para activar la renovación con su consentimiento.** Hoy nada
   enciende `autoRenovar` con un consentimiento de cliente, así que `renovacion-v1`
   no se ha mostrado. Cuando exista, es la que registra ese texto.
-- **Resolver el cobro dudoso preguntándole a CardNET.** El flujo móvil ya
-  reconcilia cobros ambiguos buscando el `Purchase` por `UniqueID`
-  (`consultarComprasCardnet`, `purchaseDecision`). La renovación podría usar la
-  misma consulta y resolver sola buena parte de los casos que hoy van a una
-  persona. No se hizo: es un cambio de alcance y no se puede probar contra el
-  CardNET real.
 - **Reconfirmar las renovaciones heredadas.** El aviso previo les pide que
   revisen la renovación, pero no hay un botón de «confirmar»: solo pueden
   desactivarla.
 - **Revisión legal** de `renovacion-v1` y de los permisos de guardar
   (`docs/tarjetas-guardadas/TEXTOS-LEGALES.md`).
-- **La carrera de `guardarTarjeta`.** Con varias peticiones simultáneas del mismo
-  perfil queda **una** tarjeta y **un** consentimiento, pero algunas peticiones
-  fallan: tras la violación única, la recuperación consulta dentro de la
-  transacción que acaba de abortar. Es anterior al consentimiento; la solución es
-  reintentar `guardarTarjeta` una vez fuera de la transacción.
 
 Endpoints CardNET relacionados: `POST /api/Customer`,
 `POST /api/Customer/{id}/activate` y
