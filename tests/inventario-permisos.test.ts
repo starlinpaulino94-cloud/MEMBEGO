@@ -1611,12 +1611,16 @@ test('INV-4c · las lecturas del margen solo LEEN, escriben la empresa en CADA c
 })
 
 test('INV-4c · la tarjeta del dashboard: sin la sección no se lee nada, sin «costos» no se lee ni un costo, y el dinero solo se pinta con ellos', () => {
-  const d = sinComent(leer('src/app/(admin)/admin/dashboard/page.tsx'))
-  assert.match(d, /const userInventario = await requireSection\('inventario'\)/)
-  assert.match(d, /userInventario \? await usuarioPuedeFuncion\(userInventario, 'inventario', 'costos'\) : false/)
-  assert.match(d, /userInventario\s*\?\s*resumenInventarioEmpresa\(companyId, [^)]*\{ conCostos \}\)/, 'sin la sección no se pide; con ella, SU conCostos (no un true fijo)')
-  assert.match(d, /\.catch\(\(e\) => \{[\s\S]*?return null/, 'si la tarjeta falla, el dashboard sigue')
-  assert.match(d, /\{inventario \? <TarjetaInventario resumen=\{inventario\} company=\{company\} \/> : null\}/)
+  // Desde la fase 5 la tarjeta es un componente que carga solo (`InventarioResumen`, dentro de un <Suspense> del Resumen).
+  const d = sinComent(leer('src/components/admin/resumen/InventarioResumen.tsx'))
+  assert.match(d, /const user = await requireSection\('inventario'\)/)
+  assert.match(d, /await usuarioPuedeFuncion\(user, 'inventario', 'costos'\)/)
+  assert.match(d, /resumenInventarioEmpresa\(companyId, zonaHoraria, \{ conCostos \}\)/, 'con la sección, SU conCostos (no un true fijo)')
+  assert.match(d, /if \(!user\) return null/, 'sin la sección no se pide nada')
+  assert.match(d, /\.catch\(\(e\) => \{[\s\S]*?return null/, 'si la tarjeta falla, el Resumen sigue')
+  assert.match(d, /<TarjetaInventario resumen=\{resumen\} company=\{company\} \/>/)
+  const p = sinComent(leer('src/app/(admin)/admin/dashboard/page.tsx'))
+  assert.match(p, /ve\('\/admin\/inventario'\)[\s\S]*?<InventarioResumen/, 'y la página ni la monta si no se puede abrir Inventario')
 
   const m = sinComent(leer('src/modules/inventory/dashboard.ts'))
   assert.doesNotMatch(m, /\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(|\$executeRaw|\$queryRaw/, 'solo compone lecturas ya guardadas')

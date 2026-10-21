@@ -200,7 +200,7 @@ const contarMapasDeEstado = () => {
  * `BarraFiltros` en Clientes y Pagos (fase 5), `Campo` en los formularios (fase 7), `NavSeccion` en el menú de 21 (fase 6),
  * `SelectorColor` en Empresa, `BarrasSimples` en el Resumen (fase 5).
  */
-export const PRIMITIVAS_EN_ESPERA = new Set(['campo', 'tabla', 'barra-filtros', 'nav-seccion', 'selector-color', 'barras-simples'])
+export const PRIMITIVAS_EN_ESPERA = new Set(['campo', 'tabla', 'barra-filtros', 'nav-seccion', 'selector-color'])
 
 const contarComponentesSinUso = () => {
   const dir = join('packages', 'ui', 'src', 'ui')

@@ -5,6 +5,12 @@ import { whereCobrado } from '@/modules/pagos/cobrado'
 import { diaLocal, inicioDeHoyEn, limiteDiaLocal, sumarDias } from '@/modules/reportes/rango'
 import { membresiaVigente, membresiaVigenteSql } from '@/modules/membresia/vigencia'
 
+// ── SIN USO desde la fase 5 de la auditoría (21-10-2026) ──────────────────────────────────────────────────────────────
+// El Resumen ya no pasa por aquí: lo sustituyen `modules/admin/resumen/*` (bloques por permiso, una transacción, ≤ 15
+// consultas). Este archivo se queda hasta la fase 8 SOLO porque tres guiones lo listan como «archivo protegido» y fallarían
+// sin él (`scripts/visual/verify.ts`, `scripts/r0-auth/attest.mts` y `live.mts`); se retira junto con esas listas.
+// No lo importes.
+//
 // F4.8: métricas del dashboard ejecutivo de la empresa. Módulo interno.
 //
 // AUDITORÍA 2026-08 (docs/auditoria-clientes-membresias.md). De los números que
