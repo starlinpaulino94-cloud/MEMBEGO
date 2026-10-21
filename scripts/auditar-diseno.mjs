@@ -196,12 +196,11 @@ const contarMapasDeEstado = () => {
  * Primitivas de la fase 4 que ya existen y todavía no tienen consumidor: es lo que la fase pide («primitivas con su ficha y sin
  * consumidores aún», docs/auditoria-admin/12). Se EXCLUYEN de «sin uso» mientras esperan, para que construirlas no sea subir un
  * techo. La lista solo puede ENCOGERSE: `tests/deuda-diseno.test.ts` falla si alguna ya tiene importador (hay que quitarla de
- * aquí) y la fase 8 (`knip`) falla si alguna sigue sin él. Cada una tiene su consumidor previsto en el plan: `Tabla` y
- * `BarraFiltros` en Clientes y Pagos (fase 5), `Campo` en los formularios (fase 7), `SelectorColor` en Empresa,
- * `BarrasSimples` en el Resumen (fase 5). `NavSeccion` salió de la lista con las pestañas de Beneficios (fase 5, 5.4); el
- * menú de 21 (fase 6) será su segundo consumidor.
+ * aquí) y la fase 8 (`knip`) falla si alguna sigue sin él. Cada una tiene su consumidor previsto en el plan: `BarraFiltros` en
+ * los listados con filtros (fase 7). `Tabla`, `BarrasSimples` y `NavSeccion` salieron de la lista en la fase 5; `Campo` y
+ * `SelectorColor` lo hicieron con el formulario único de plan (fase 7, 7.2).
  */
-export const PRIMITIVAS_EN_ESPERA = new Set(['campo', 'barra-filtros', 'selector-color'])
+export const PRIMITIVAS_EN_ESPERA = new Set(['barra-filtros'])
 
 const contarComponentesSinUso = () => {
   const dir = join('packages', 'ui', 'src', 'ui')

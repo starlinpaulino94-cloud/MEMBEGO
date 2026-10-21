@@ -1,5 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import { camposSinNombre } from '../scripts/campos-sin-etiqueta.mjs'
 
 /**
@@ -61,4 +64,22 @@ test('el detector reconoce las formas válidas de nombrar (prueba de la prueba)'
     `el detector marcó ${total} campos: está contando de más, revisa el reconocimiento ` +
       'de `htmlFor={…}` con plantilla y de los campos envueltos en <label>'
   )
+})
+
+test('un campo dentro de `<Campo>` con `{...control}` está nombrado; el mismo campo suelto, no (prueba de la prueba)', () => {
+  // El detector acepta `{...control}` SOLO si el archivo usa `Campo`, porque es `Campo` quien pinta la etiqueta que apunta al id.
+  // Sin esta guardia, bastaría escribir `{...control}` en cualquier sitio para silenciar al detector.
+  const raiz = mkdtempSync(join(tmpdir(), 'campos-'))
+  try {
+    writeFileSync(
+      join(raiz, 'con-campo.tsx'),
+      `export const A = () => <Campo id="n" etiqueta="Nombre">{(control) => <Input name="n" {...control} />}</Campo>`
+    )
+    writeFileSync(join(raiz, 'sin-campo.tsx'), `export const B = (control: object) => <Input name="n" {...control} />`)
+    writeFileSync(join(raiz, 'sin-nombre.tsx'), `export const C = () => <Input name="n" placeholder="Nombre" />`)
+    const sinNombre = camposSinNombre(raiz).map((r: string) => basename(r.slice(0, r.lastIndexOf(':'))))
+    assert.deepEqual(sinNombre.sort(), ['sin-campo.tsx', 'sin-nombre.tsx'])
+  } finally {
+    rmSync(raiz, { recursive: true, force: true })
+  }
 })

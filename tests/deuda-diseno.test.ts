@@ -45,7 +45,7 @@ const TECHOS: Record<string, number> = {
   // 121 al cerrar la Fase 1; 114 tras el sprint de cierre (2026-10-08): la fusión de la app
   // Expo había subido a 129 y se devolvieron a su sitio (correo a `lib/email`, color de marca
   // por defecto en un solo módulo, texto de ayuda sin hex, botones `destructive`).
-  hexEnInterfaz: 114,
+  hexEnInterfaz: 111,
   colorCrudo: 147,
   radiosFuera: 0,
   microTextos: 0,
@@ -57,9 +57,9 @@ const TECHOS: Record<string, number> = {
   // `origin/main` (4243a0f8). Las cifras del informe 07 se midieron sobre un código anterior y ya no coinciden (p. ej. las variables
   // con hex de `globals.css` pasaron de 31 a 65): el techo es el de hoy, no el del informe. Cada fase de rediseño baja los suyos aquí
   // mismo, en el commit que los baja.
-  h1Crudo: 45,
+  h1Crudo: 41,
   botonCrudo: 39,
-  titulo2xlBold: 30,
+  titulo2xlBold: 28,
   tarjetaLocal: 22,
   tablaCruda: 53,
   variablesHexEnGlobalsCss: 65,
@@ -70,7 +70,7 @@ const TECHOS: Record<string, number> = {
   // dejar a alguien sin nombre o sin foco, y bajarlas es abrir la tarea, no cerrarla (el tipo de `Button` que exija `aria-label`
   // las resuelve de raíz en la fase 7).
   botonIconoSinNombre: 13,
-  outlineSinFoco: 25,
+  outlineSinFoco: 20,
 }
 
 test('ninguna deuda de diseño crece', () => {
