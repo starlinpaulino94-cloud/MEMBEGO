@@ -1,5 +1,8 @@
 import { conEmpresa } from '@/lib/tenant'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
+import type { Prisma } from '@prisma/client'
+import type { Paginacion } from '@/lib/paginacion'
+import { condicionDeEstadoVendedores, type VerVendedores } from './lista'
 
 /** Listado del equipo comercial con su embudo (captados = atribuciones). */
 export async function listadoVendedores(companyId: string) {
@@ -19,6 +22,46 @@ export async function listadoVendedores(companyId: string) {
       },
     })
   )
+}
+
+/**
+ * El equipo comercial PAGINADO por el servidor (06 · T-04): el estado, la búsqueda y la página los resuelve la base y devuelve el
+ * total real. Antes se traían todos los vendedores y se filtraban en el navegador.
+ */
+export async function listarVendedores(
+  companyId: string,
+  opciones: { q?: string; ver?: VerVendedores; paginacion: Pick<Paginacion, 'saltar' | 'tomar'> }
+) {
+  const { q = '', ver = 'activos', paginacion } = opciones
+  const like = { contains: q, mode: 'insensitive' as const }
+  const where: Prisma.VendedorWhereInput = {
+    companyId,
+    ...condicionDeEstadoVendedores(ver),
+    ...(q ? { OR: [{ nombre: like }, { apellido: like }, { codigo: like }, { tipo: like }, { telefono: { contains: q } }] } : {}),
+  }
+  return conEmpresa(companyId, async (tx) => {
+    const [filas, total] = await Promise.all([
+      tx.vendedor.findMany({
+        where,
+        orderBy: [{ estado: 'asc' }, { nombre: 'asc' }],
+        skip: paginacion.saltar,
+        take: paginacion.tomar,
+        select: {
+          id: true,
+          nombre: true,
+          apellido: true,
+          codigo: true,
+          tipo: true,
+          telefono: true,
+          estado: true,
+          _count: { select: { atribuciones: true } },
+        },
+      }),
+      tx.vendedor.count({ where }),
+    ])
+    const hayAlgunoSinFiltro = filas.length === 0 ? (await tx.vendedor.count({ where: { companyId } })) > 0 : true
+    return { filas, total, hayAlgunoSinFiltro }
+  })
 }
 
 /** Perfil completo: datos + enlace + embudo real por etapa. */

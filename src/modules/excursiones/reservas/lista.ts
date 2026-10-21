@@ -1,4 +1,5 @@
 import type { TonoEstado } from '@/components/ui/estado-chip'
+import { condicionDeVer, leerBusqueda, leerVer, opcionesDeVer, tonoDeChip } from '../lista-comun'
 import {
   ESTADOS_CERRADOS,
   ESTADOS_RESERVA,
@@ -15,51 +16,29 @@ import {
  * sin haber mirado el resto y un «sin resultados» podía ser mentira. Ahora la búsqueda, el estado y la página viajan en la URL y
  * los resuelve la base, sobre TODAS las reservas.
  *
- * Esto es el núcleo puro —sin base ni React—: cómo se leen los filtros de la URL y qué condición de estado producen.
+ * Núcleo puro —sin base ni React—: cómo se leen los filtros de la URL y qué condición de estado producen (la mecánica común está
+ * en `../lista-comun`).
  */
 
 /** Lo que se muestra: las abiertas (por defecto), todas, o un estado concreto. */
 export type VerReservas = 'abiertas' | 'todas' | EstadoReserva
 
-/** Tope de la búsqueda: lo que un humano escribe; el resto es ruido o abuso. */
-export const LARGO_MAXIMO_BUSQUEDA = 80
-
-const primero = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
+export { LARGO_MAXIMO_BUSQUEDA } from '../lista-comun'
 
 /** Los filtros de la URL, tolerantes a basura: un valor que no existe vuelve al por defecto, no rompe la pantalla. */
 export function leerFiltrosReservas(sp: Record<string, string | string[] | undefined>): { q: string; ver: VerReservas } {
-  const q = (primero(sp.q) ?? '').trim().slice(0, LARGO_MAXIMO_BUSQUEDA)
-  const pedido = (primero(sp.ver) ?? '').trim()
-  const ver: VerReservas =
-    pedido === 'todas' ? 'todas' : (ESTADOS_RESERVA as readonly string[]).includes(pedido) ? (pedido as EstadoReserva) : 'abiertas'
-  return { q, ver }
+  return { q: leerBusqueda(sp.q), ver: leerVer(sp.ver, ESTADOS_RESERVA, 'abiertas') }
 }
 
 /** Las opciones del selector «Mostrar». «Abiertas» es el valor por defecto y no va en la URL. */
-export const OPCIONES_VER_RESERVAS = [
-  { valor: 'todas', etiqueta: 'Todas (con las cerradas)' },
-  ...ESTADOS_RESERVA.map((e) => ({ valor: e, etiqueta: ESTADO_RESERVA_LABEL[e] })),
-] as const
+export const OPCIONES_VER_RESERVAS = opcionesDeVer(ESTADOS_RESERVA, ESTADO_RESERVA_LABEL, 'Todas (con las cerradas)')
 
 /** La condición de estado para la consulta. */
 export function condicionDeEstado(ver: VerReservas): { estado?: string | { notIn: EstadoReserva[] } } {
-  if (ver === 'todas') return {}
-  if (ver === 'abiertas') return { estado: { notIn: [...ESTADOS_CERRADOS] } }
-  return { estado: ver }
+  return condicionDeVer(ver, 'abiertas', ESTADOS_CERRADOS)
 }
 
 /** El tono del chip de estado, en el vocabulario del sistema de diseño. */
 export function tonoDeReserva(estado: string): TonoEstado {
-  switch (TONO_RESERVA[estado as EstadoReserva]) {
-    case 'success':
-      return 'exito'
-    case 'warning':
-      return 'aviso'
-    case 'danger':
-      return 'peligro'
-    case 'info':
-      return 'info'
-    default:
-      return 'neutro'
-  }
+  return tonoDeChip(TONO_RESERVA[estado as EstadoReserva])
 }
