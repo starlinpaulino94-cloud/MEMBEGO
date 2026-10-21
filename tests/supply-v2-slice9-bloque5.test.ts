@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import './support/sin-server-only'
 import {
   AVISOS,
   AVISO_DEL_DISPARADOR,

@@ -10,6 +10,7 @@
 
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
+import './support/sin-server-only'
 import { claveDedup } from '../src/modules/jobs/cola'
 import { ejecutarTrabajo } from '../src/modules/jobs/ejecutor'
 

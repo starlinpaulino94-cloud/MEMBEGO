@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en b6376545: 240 migraciones, última 20261074_cardnet_saved_cards_security.
+-- Generado con scripts/generar-verificar-migraciones.mjs en 4243a0f8: 242 migraciones, última 20261076_push_tokens_rls.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -253,7 +253,9 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261071_inventory_serials','fb044968ff2e800cf3e4c4c78737c4cdab4ec6278192383d8d3ec5688a9eeffa'),
   ('20261072_inventory_kits','ad860386546bee8b2f1d9af9e9dd9639cadb4942c4536b88bf13eef2f9b60baf'),
   ('20261073_rol_bodega','b4b04309b1a2e7c8af77e1774cd8164d9784268e86f7de4494533a2dc4dcfe09'),
-  ('20261074_cardnet_saved_cards_security','e369fa084f99694917dc8cb618c34816c24d237079221a0e7d0ed69aea3eb843')
+  ('20261074_cardnet_saved_cards_security','e369fa084f99694917dc8cb618c34816c24d237079221a0e7d0ed69aea3eb843'),
+  ('20261075_expo_push_tokens','140596417c3cf46df3538e522c09dd49903e5fedff4d2b4ae251e7b0e4d3ed59'),
+  ('20261076_push_tokens_rls','0006a90d510b74b2f71c33d7d761045b45c15272e9c0c5e29d26915fa002be5d')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,

@@ -162,7 +162,7 @@ test('el catálogo global enseña, no contrata', () => {
   assert.match(src, /\/cliente\/empresas\/\$\{empresa\.slug\}/, 'Cada plan lleva a su negocio.')
   assert.match(
     src,
-    /formatMoney\(p\.precio, \{\s*moneda: empresa\.moneda/,
+    /formatPrice\(p\.precio, \{\s*moneda: empresa\.moneda/,
     'Cada precio con la moneda de SU negocio: 900 pesos mexicanos enseñados ' +
       'como dominicanos no es un detalle de formato.'
   )

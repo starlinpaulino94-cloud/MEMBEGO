@@ -88,7 +88,7 @@ test('INV-5a.1 · la migración está sellada, el esquema de Prisma la refleja y
 // ── El servicio: quién escribe lotes y cómo ──────────────────────────────────
 
 import { readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { posix } from 'node:path'
 
 const sinComentarios = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 /** El cuerpo de una función (o `async function`) del archivo, hasta la siguiente declaración de primer nivel. */
@@ -101,7 +101,8 @@ function cuerpoDe(src: string, nombre: string): string {
 }
 function archivosTs(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {
-    const ruta = join(dir, n)
+    // `posix`: se compara con 'src/modules/...' literal, también en Windows.
+    const ruta = posix.join(dir, n)
     return statSync(ruta).isDirectory() ? archivosTs(ruta) : /\.(ts|tsx)$/.test(n) ? [ruta] : []
   })
 }

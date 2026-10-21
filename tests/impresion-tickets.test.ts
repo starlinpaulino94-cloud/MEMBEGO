@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 
 /**
  * IMPRESIÓN DE TICKETS: UN SOLO CANAL (16-10-2026).
@@ -25,7 +25,8 @@ const sinComentarios = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').rep
 function archivos(dir: string): string[] {
   const salida: string[] = []
   for (const nombre of readdirSync(join(RAIZ, dir))) {
-    const ruta = join(dir, nombre)
+    // `posix`: las rutas se comparan con las de `PUEDEN_IMPRIMIR`, que llevan «/» también en Windows.
+    const ruta = posix.join(dir, nombre)
     if (statSync(join(RAIZ, ruta)).isDirectory()) salida.push(...archivos(ruta))
     else if (/\.(tsx?|mjs)$/.test(nombre) && !/\.test\./.test(nombre)) salida.push(ruta)
   }
