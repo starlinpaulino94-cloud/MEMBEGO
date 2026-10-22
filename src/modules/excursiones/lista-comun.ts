@@ -22,6 +22,43 @@ export function leerBusqueda(valor: string | string[] | undefined): string {
 }
 
 /**
+ * Un parámetro que es un valor de una lista cerrada (un estado, un tipo): el valor si existe, si no vacío («sin filtro»).
+ * Para los filtros que NO esconden nada por defecto; los que sí, usan `leerVer`.
+ */
+export function leerOpcion<E extends string>(valor: string | string[] | undefined, validas: readonly E[]): E | '' {
+  const pedido = (primero(valor) ?? '').trim()
+  return (validas as readonly string[]).includes(pedido) ? (pedido as E) : ''
+}
+
+/** Un id de la URL (el vendedor elegido): solo la forma de un id, sin comprobar que exista. Lo demás es «sin filtro». */
+export function leerId(valor: string | string[] | undefined): string {
+  const pedido = (primero(valor) ?? '').trim()
+  return /^[A-Za-z0-9_-]{1,40}$/.test(pedido) ? pedido : ''
+}
+
+/** Una fecha `AAAA-MM-DD` de la URL, y que exista en el calendario (`2026-02-31` no). Si no, vacío («sin filtro»). */
+export function leerFecha(valor: string | string[] | undefined): string {
+  const pedido = (primero(valor) ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(pedido)) return ''
+  const fecha = new Date(`${pedido}T00:00:00.000Z`)
+  return Number.isNaN(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== pedido ? '' : pedido
+}
+
+/**
+ * El primer instante del día `AAAA-MM-DD` visto desde una zona con ese desfase respecto a UTC, en minutos (−240 = UTC−4). Con
+ * desfase 0 es la medianoche UTC. Lo que se guardó como «fecha» a medianoche UTC (el período de una liquidación) se compara con
+ * desfase 0; lo que es un instante real (cuándo nació una comisión) con el de la plataforma (`OFFSET_PLATAFORMA_MIN`).
+ */
+export function inicioDelDia(dia: string, desfaseMin = 0): Date {
+  return new Date(Date.parse(`${dia}T00:00:00.000Z`) - desfaseMin * 60_000)
+}
+
+/** El último instante (al milisegundo) de ese mismo día. */
+export function finDelDia(dia: string, desfaseMin = 0): Date {
+  return new Date(Date.parse(`${dia}T23:59:59.999Z`) - desfaseMin * 60_000)
+}
+
+/**
  * Qué se muestra: el valor por defecto, `todas` o un estado concreto de la lista. Cualquier otra cosa es el valor por defecto.
  * El tipo devuelto es el de esa lista (`'abiertas' | 'todas' | EstadoReserva`…), para que no se mezclen.
  */

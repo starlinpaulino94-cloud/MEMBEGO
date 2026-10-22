@@ -1,5 +1,8 @@
+import type { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
+import type { Paginacion } from '@/lib/paginacion'
 import { getExcursionesConfig, obtenerDetalleConversion } from '../config'
+import { condicionesDeComisiones, type FiltrosComisiones } from './lista'
 import { netoComision } from './nucleo'
 
 export interface ResumenComisionesResuelto {
@@ -72,23 +75,46 @@ export async function listadoReglas(companyId: string) {
 }
 
 /**
- * Comisiones con su neto ya calculado (monto + ajustes firmados) y el nombre
- * de a quién le tocan.
+ * Una página de comisiones, con su neto ya calculado (monto + ajustes firmados) y el nombre de a quién le tocan.
+ *
+ * Los filtros y la página los resuelve la base sobre TODAS las comisiones de la empresa (antes: `take: 300` sin avisar y el
+ * navegador filtraba esas 300). `total` es el de los filtros, no el de la página; `hayAlguna` distingue «no hay comisiones» de
+ * «el filtro no encontró ninguna».
  */
-export async function listadoComisiones(
+export async function listarComisiones(
   companyId: string,
-  filtros?: { estado?: string; vendedorId?: string }
+  opciones: { filtros: FiltrosComisiones; paginacion: Pick<Paginacion, 'saltar' | 'tomar'> }
 ) {
-  const where: Record<string, unknown> = { companyId }
-  if (filtros?.estado) where.estado = filtros.estado
-  if (filtros?.vendedorId) where.vendedorId = filtros.vendedorId
+  const { filtros, paginacion } = opciones
+  const config = await getExcursionesConfig(companyId)
+  const { q } = filtros
+  const like = { contains: q, mode: 'insensitive' as const }
 
-  const [comisiones, config] = await Promise.all([
-    conEmpresa(companyId, (tx) =>
+  const { comisiones, total, hayAlguna } = await conEmpresa(companyId, async (tx) => {
+    const condiciones = condicionesDeComisiones(filtros, config.monedaDefecto)
+    if (q) {
+      // El vendedor no es una relación del modelo: se buscan primero los que coinciden y se pide «los de esos vendedores».
+      const vendedores = await tx.vendedor.findMany({
+        where: { companyId, OR: [{ nombre: like }, { apellido: like }, { codigo: like }] },
+        select: { id: true },
+        take: 500,
+      })
+      const coincidencias: Prisma.ComisionEntradaWhereInput[] = [
+        { desglose: like },
+        { venta: { numero: like } },
+        { liquidacion: { numero: like } },
+      ]
+      if (vendedores.length) coincidencias.push({ vendedorId: { in: vendedores.map((v) => v.id) } })
+      condiciones.push({ OR: coincidencias })
+    }
+    const where: Prisma.ComisionEntradaWhereInput = { companyId, AND: condiciones }
+
+    const [comisiones, total] = await Promise.all([
       tx.comisionEntrada.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
-        take: 300,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: paginacion.saltar,
+        take: paginacion.tomar,
         select: {
           id: true,
           vendedorId: true,
@@ -104,11 +130,14 @@ export async function listadoComisiones(
           ajustes: { select: { monto: true, motivo: true } },
           venta: { select: { id: true, numero: true, estado: true } },
         },
-      })
-    ),
-    getExcursionesConfig(companyId),
-  ])
-  if (comisiones.length === 0) return []
+      }),
+      tx.comisionEntrada.count({ where }),
+    ])
+    // Solo si no salió nada: ¿es que no hay comisiones, o es que el filtro las esconde? La pantalla dice cosas distintas.
+    const hayAlguna = comisiones.length === 0 ? (await tx.comisionEntrada.count({ where: { companyId } })) > 0 : true
+    return { comisiones, total, hayAlguna }
+  })
+  if (comisiones.length === 0) return { filas: [], total, hayAlguna }
 
   const vendedorIds = [...new Set(comisiones.map((c) => c.vendedorId))]
   const vendedores = await conEmpresa(companyId, (tx) =>
@@ -120,7 +149,7 @@ export async function listadoComisiones(
   const porId = new Map(vendedores.map((v) => [v.id, v]))
   const { monedaDefecto, tasasCambio } = config
 
-  return comisiones.map((c) => {
+  const filas = comisiones.map((c) => {
     const v = porId.get(c.vendedorId)
     const ajustes = c.ajustes.map((a) => ({ monto: Number(a.monto), motivo: a.motivo }))
     const montoBase = Number(c.monto)
@@ -151,7 +180,6 @@ export async function listadoComisiones(
       monedaOriginal: c.moneda,
       conversion: conversionNeto,
       esReglaPredeterminada,
-      reglaSnapshot: c.reglaSnapshot,
       ajustes,
       desglose: c.desglose,
       estado: c.estado,
@@ -161,6 +189,7 @@ export async function listadoComisiones(
       liquidacion: c.liquidacion,
     }
   })
+  return { filas, total, hayAlguna }
 }
 
 /** Resumen financiero y desglose multi-moneda por estado y divisa original. */
