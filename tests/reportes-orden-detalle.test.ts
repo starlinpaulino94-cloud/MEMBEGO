@@ -29,7 +29,9 @@ import {
  *     más recientes» con la tabla ordenada por monto es falso.
  *  4. Que no se pueda ordenar por un dato que el permiso esconde.
  *  5. Que todo encabezado ordenable corresponda a un campo real de su pantalla:
- *     uno que no exista reordenaría por el de por defecto sin decir nada.
+ *     uno que no exista reordenaría por el de por defecto sin decir nada. Desde la fase 7 lo garantiza
+ *     `TablaDetalle`, que solo marca como ordenable la columna cuya clave es un campo. (Desde la fase 7 lo garantiza `TablaDetalle`, que solo
+ *     marca como ordenable la columna cuya clave es un campo.)
  */
 
 const raiz = join(__dirname, '..')
@@ -143,18 +145,19 @@ test('no se puede ordenar por un dato que el permiso esconde', () => {
 })
 
 test('todo encabezado ordenable existe entre los campos de su pantalla', () => {
+  // Ya no se escribe a mano un encabezado por columna (`<ThOrden campo=…>`): `TablaDetalle` marca como ordenable solo la columna cuya
+  // clave es un campo de `campos`. Lo que se vigila aquí es que cada pantalla le pase SUS campos y SU orden, y que el componente no
+  // tenga otra forma de decidir qué se ordena.
   for (const ruta of DETALLES) {
     const txt = leer(ruta)
-    const claves = new Set([...txt.matchAll(/clave: '([^']+)'/g)].map((m) => m[1]))
-    const usados = [...txt.matchAll(/<ThOrden\s+campo="([^"]+)"/g)].map((m) => m[1])
-    assert.ok(usados.length > 0, `${ruta} no tiene ningún encabezado ordenable`)
-    for (const u of usados) {
-      assert.ok(
-        claves.has(u),
-        `${ruta}: el encabezado «${u}» no es un campo de esa pantalla — reordenaría por el de por defecto sin decirlo.`
-      )
-    }
+    assert.match(txt, /<TablaDetalle\b/, `${ruta} no usa TablaDetalle`)
+    assert.match(txt, /campos=\{(campos|CAMPOS)\}/, `${ruta}: la tabla no recibe los campos de su pantalla`)
+    assert.match(txt, /orden=\{orden\}/, `${ruta}: la tabla no sabe cuál es el orden vigente`)
+    assert.match(txt, /enlaceOrden=\{enlaceOrden\}/, `${ruta}: la tabla arma sus propios enlaces de orden`)
+    assert.equal(/<table\b/.test(txt), false, `${ruta} vuelve a pintar una <table> a mano`)
   }
+  const componente = leer('src/components/reportes/TablaDetalle.tsx')
+  assert.match(componente, /ordenable: campos\.some\(\(k\) => k\.clave === c\.clave\)/)
 })
 
 test('ordenar conserva la pestaña y los filtros', () => {

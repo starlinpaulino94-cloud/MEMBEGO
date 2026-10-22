@@ -20,7 +20,7 @@ import {
   type MetaCampo,
   type OrdenDetalle,
 } from '@/modules/reportes/orden-detalle'
-import { ThOrden } from '@/components/reportes/ThOrden'
+import { TablaDetalle } from '@/components/reportes/TablaDetalle'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
@@ -625,98 +625,47 @@ export default async function DetalleFinanzasPage({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-small">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <ThOrden
-                  campo="fecha"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('fecha')}
-                >
-                  Cuándo
-                </ThOrden>
-                <ThOrden
-                  campo="cliente"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('cliente')}
-                >
-                  Cliente
-                </ThOrden>
-                <ThOrden
-                  campo="concepto"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('concepto')}
-                >
-                  {tabla === 'membresias' ? 'Plan' : tabla === 'pasarela' ? 'Pasarela' : 'Método'}
-                </ThOrden>
-                {conSucursal && <ThOrden
-                  campo="sucursal"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('sucursal')}
-                >
-                  Sucursal
-                </ThOrden>}
-                {conEstado && <ThOrden
-                  campo="estado"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('estado')}
-                >
-                  Estado
-                </ThOrden>}
-                {conMotivo && <th className="px-3 py-2 text-overline">Motivo</th>}
-                <ThOrden
-                  campo="monto"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('monto')}
-                  derecha
-                >
-                  {vista === 'DESCUENTOS' ? 'Descuento' : 'Monto'}
-                </ThOrden>
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((f) => (
-                <tr key={f.id} className="border-b border-border/60">
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                    {formatDateTime(f.fecha, prefs)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {f.cliente ? (
-                      <Link
-                        href={`/admin/clientes/${f.cliente.id}`}
-                        className="text-foreground underline-offset-2 hover:underline"
-                      >
-                        {f.cliente.nombre}
-                      </Link>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">{f.concepto}</td>
-                  {conSucursal && (
-                    <td className="px-3 py-2 text-muted-foreground">{f.sucursal ?? '—'}</td>
-                  )}
-                  {conEstado && (
-                    <td className="px-3 py-2 text-muted-foreground">{f.estado ?? '—'}</td>
-                  )}
-                  {conMotivo && (
-                    <td className="px-3 py-2 text-muted-foreground">{f.motivo ?? '—'}</td>
-                  )}
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-foreground">
-                    {dinero(f.monto)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TablaDetalle
+          caption={VISTAS[vista]}
+          campos={campos}
+          orden={orden}
+          enlaceOrden={enlaceOrden}
+          filas={filas}
+          claveDe={(f) => f.id}
+          columnas={[
+            {
+              clave: 'fecha',
+              encabezado: 'Cuándo',
+              celda: (f) => <span className="whitespace-nowrap text-muted-foreground">{formatDateTime(f.fecha, prefs)}</span>,
+            },
+            {
+              clave: 'cliente',
+              encabezado: 'Cliente',
+              celda: (f) =>
+                f.cliente ? (
+                  <Link href={`/admin/clientes/${f.cliente.id}`} className="text-foreground underline-offset-2 hover:underline">
+                    {f.cliente.nombre}
+                  </Link>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                ),
+            },
+            {
+              clave: 'concepto',
+              encabezado: tabla === 'membresias' ? 'Plan' : tabla === 'pasarela' ? 'Pasarela' : 'Método',
+              valor: (f) => f.concepto,
+            },
+            ...(conSucursal ? [{ clave: 'sucursal', encabezado: 'Sucursal', valor: (f: FilaFinanzas) => f.sucursal }] : []),
+            ...(conEstado ? [{ clave: 'estado', encabezado: 'Estado', valor: (f: FilaFinanzas) => f.estado }] : []),
+            ...(conMotivo ? [{ clave: 'motivo', encabezado: 'Motivo', valor: (f: FilaFinanzas) => f.motivo }] : []),
+            {
+              clave: 'monto',
+              encabezado: vista === 'DESCUENTOS' ? 'Descuento' : 'Monto',
+              alineacion: 'derecha',
+              celda: (f) => <span className="whitespace-nowrap text-foreground">{dinero(f.monto)}</span>,
+            },
+          ]}
+        />
       )}
     </div>
   )
