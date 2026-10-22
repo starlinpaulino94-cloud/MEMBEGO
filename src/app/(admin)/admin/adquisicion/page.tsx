@@ -10,6 +10,8 @@ import { EnlacesPromocion } from '@/components/adquisicion/EnlacesPromocion'
 import { getAdquisicion, type AdquisicionFiltro } from '@/modules/adquisicion/queries'
 import { landingUrl } from '@/lib/site'
 import { Compass, Share2 } from 'lucide-react'
+import { Tabla } from '@/components/ui/tabla'
+import { EstadoChip } from '@/components/ui/estado-chip'
 
 export const dynamic = 'force-dynamic'
 
@@ -151,43 +153,29 @@ export default async function AdquisicionPage({
             description="Cuando alguien se registre con tus enlaces de promoción, aquí verás por cuál canal llegó."
           />
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead>
-                <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-3 font-semibold">Cliente</th>
-                  <th className="px-4 py-3 font-semibold">Canal</th>
-                  <th className="px-4 py-3 font-semibold">Registrado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {data.recientes.map((r) => (
-                  <tr key={r.clienteId}>
-                    <td className="max-w-56 px-4 py-3">
-                      <p className="truncate font-medium text-foreground">{r.nombre}</p>
-                      <p className="truncate text-xs text-muted-foreground">{r.contacto ?? '—'}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
-                          r.canal === 'directo'
-                            ? 'bg-muted text-muted-foreground'
-                            : r.canal === 'invitacion'
-                              ? 'bg-primary/10 text-primary'
-                              : 'bg-success/10 text-success'
-                        }`}
-                      >
-                        {r.canalLabel}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                      {fmtFecha(r.fecha)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Tabla
+            caption="Últimos registros"
+            claveDe={(r) => r.clienteId}
+            filas={data.recientes}
+            columnas={[
+              {
+                clave: 'cliente',
+                encabezado: 'Cliente',
+                celda: (r) => (
+                  <div className="max-w-56">
+                    <p className="truncate font-medium text-foreground">{r.nombre}</p>
+                    <p className="truncate text-caption font-normal text-muted-foreground">{r.contacto ?? '—'}</p>
+                  </div>
+                ),
+              },
+              {
+                clave: 'canal',
+                encabezado: 'Canal',
+                celda: (r) => <EstadoChip tono={r.canal === 'directo' ? 'neutro' : r.canal === 'invitacion' ? 'info' : 'exito'}>{r.canalLabel}</EstadoChip>,
+              },
+              { clave: 'fecha', encabezado: 'Registrado', celda: (r) => <span className="whitespace-nowrap text-caption text-muted-foreground">{fmtFecha(r.fecha)}</span> },
+            ]}
+          />
         )}
       </section>
     </div>

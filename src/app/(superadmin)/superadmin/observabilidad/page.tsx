@@ -10,6 +10,7 @@ import {
   variacionVisitas,
 } from '@/modules/observabilidad/metricas'
 import { SLOS, minutosPresupuesto, presupuestoLegible, umbralDeAlerta } from '@/modules/observabilidad/slo'
+import { Tabla } from '@/components/ui/tabla'
 
 export const dynamic = 'force-dynamic'
 
@@ -182,38 +183,42 @@ export default async function ObservabilidadPage() {
             completo de datos para saber si se cumplen. El consumo real del presupuesto se calcula
             con los eventos del log, no con esta página. Ver <code>docs/OBSERVABILIDAD.md</code>.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-sm">
-              <thead className="text-left text-muted-foreground">
-                <tr className="border-b">
-                  <th className="py-2 font-medium">Objetivo</th>
-                  <th className="py-2 font-medium">Meta</th>
-                  <th className="py-2 font-medium">Presupuesto</th>
-                  <th className="py-2 font-medium">Alerta urgente a partir de</th>
-                </tr>
-              </thead>
-              <tbody>
-                {SLOS.map((s) => (
-                  <tr key={s.id} className="border-b last:border-0">
-                    <td className="py-2 pr-4">
-                      <p className="font-medium">{s.nombre}</p>
-                      <p className="text-caption text-muted-foreground">{s.sli}</p>
-                    </td>
-                    <td className="py-2 pr-4 tabular-nums">{(s.objetivo * 100).toFixed(1)}%</td>
-                    <td className="py-2 pr-4">
-                      <span className="tabular-nums">{presupuestoLegible(s)}</span>
-                      <span className="block text-caption text-muted-foreground tabular-nums">
-                        {Math.round(minutosPresupuesto(s))} min
-                      </span>
-                    </td>
-                    <td className="py-2 tabular-nums">
-                      {(umbralDeAlerta(s, 14.4) * 100).toFixed(1)}% de fallos en 1 h
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Tabla
+            caption="Objetivos de servicio"
+            claveDe={(s) => s.id}
+            filas={SLOS}
+            className="border-0 shadow-none"
+            columnas={[
+              {
+                clave: 'objetivo',
+                encabezado: 'Objetivo',
+                celda: (s) => (
+                  <>
+                    <span className="block font-medium">{s.nombre}</span>
+                    <span className="block text-caption font-normal text-muted-foreground">{s.sli}</span>
+                  </>
+                ),
+              },
+              { clave: 'meta', encabezado: 'Meta', alineacion: 'derecha', celda: (s) => `${(s.objetivo * 100).toFixed(1)}%` },
+              {
+                clave: 'presupuesto',
+                encabezado: 'Presupuesto',
+                alineacion: 'derecha',
+                celda: (s) => (
+                  <>
+                    <span>{presupuestoLegible(s)}</span>
+                    <span className="block text-caption text-muted-foreground">{Math.round(minutosPresupuesto(s))} min</span>
+                  </>
+                ),
+              },
+              {
+                clave: 'alerta',
+                encabezado: 'Alerta urgente a partir de',
+                alineacion: 'derecha',
+                celda: (s) => `${(umbralDeAlerta(s, 14.4) * 100).toFixed(1)}% de fallos en 1 h`,
+              },
+            ]}
+          />
         </CardContent>
       </Card>
 
