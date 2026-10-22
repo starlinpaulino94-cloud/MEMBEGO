@@ -25,12 +25,12 @@ import { camposSinNombre } from '../scripts/campos-sin-etiqueta.mjs'
  *  · Donde entran CLIENTES y EMPLEADOS: cero. No es negociable — es gente que
  *    no eligió esta herramienta y que puede necesitar un lector de pantalla.
  *  · En el panel interno: un techo que solo baja, como la deuda tipográfica.
- *    Son 94 campos repartidos por formularios de administración; migrarlos de
+ *    Son 88 campos (94 antes de la fase 7) repartidos por formularios de administración; migrarlos de
  *    una barrida sin poder mirar ninguna pantalla sería peor que la deuda.
  */
 
 /** Techo del panel interno. Bajarlo conforme se salde; nunca subirlo. */
-const TECHO = 94
+const TECHO = 88
 
 /** Áreas donde interactúa alguien que no es personal de oficina. */
 const CARA_AL_USUARIO = /(?:components\/(?:cliente|auth|public|scanner|caja|geo|marketplace|membresia)|app\/\((?:cliente|public|empleado|auth)\))/
