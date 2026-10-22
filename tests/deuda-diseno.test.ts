@@ -63,7 +63,7 @@ const TECHOS: Record<string, number> = {
   tarjetaLocal: 22,
   tablaCruda: 7,
   // Fase 7: la misma deuda en las carpetas de módulos que `PREFIJOS_DE_PANEL` no recorre. Medida el 2026-10-21 (al migrar Reservas).
-  tablaCrudaEnModulos: 28,
+  tablaCrudaEnModulos: 24,
   variablesHexEnGlobalsCss: 65,
   mapasDeEstado: 52,
   componentesSinUso: 15,
