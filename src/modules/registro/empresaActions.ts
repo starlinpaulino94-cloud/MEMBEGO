@@ -1,15 +1,13 @@
 'use server'
 
-import { conEmpresa, sinEmpresa } from '@/lib/tenant'
+import { sinEmpresa } from '@/lib/tenant'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { registerLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
 import { TERMS_VERSION } from '@/lib/legal'
 import { isEmailVerificationEnabled, sendVerificationEmail } from '@/lib/auth/emailVerification'
-import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
-import { anotarFallo } from '@/lib/prisma-errors'
-import { CAPACIDADES_OVERRIDE_TENANT_NUEVO } from '@/modules/capacidades/catalogo'
+import { darDeAltaEmpresa } from '@/modules/empresas/alta'
+import { verticalValido } from '@/modules/empresas/verticales'
 
 // F5.1: registro self-service de empresas (B2B). La empresa se crea
 // DESPUBLICADA (isPublished: false): no aparece en el marketplace hasta
@@ -20,29 +18,6 @@ export interface RegistroEmpresaState {
   success?: boolean
   /** Cuenta creada pero pendiente de confirmar el correo (flag O-1). */
   pendingVerification?: boolean
-}
-
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-}
-
-async function uniqueCompanySlug(name: string): Promise<string> {
-  const base = slugify(name) || 'empresa'
-  let slug = base
-  let n = 1
-  while (await sinEmpresa('registro: comprobar slug de empresa (catálogo global)', (tx) =>
-    tx.company.findUnique({ where: { slug } })
-  )) {
-    n += 1
-    slug = `${base}-${n}`
-  }
-  return slug
 }
 
 export async function registrarEmpresa(
@@ -82,94 +57,43 @@ export async function registrarEmpresa(
     return { error: 'Ya existe una cuenta con ese correo. Inicia sesión.' }
   }
 
-  const supabase = createAdminClient()
-  let companyId: string | null = null
-  let supabaseId: string | null = null
-
   try {
-    const slug = await uniqueCompanySlug(nombreComercial)
-    const company = await sinEmpresa('registro: crear la nueva empresa', (tx) =>
-      tx.company.create({
-        data: {
-          name: nombreComercial,
-          slug,
-          type: tipo,
-          pais: pais || null,
-          isActive: true,
-          // Clave del onboarding: no aparece en el marketplace todavía.
-          isPublished: false,
-          // Fase 0 (Plan Maestro §8.5–§8.6): tenant nuevo nace sin CRM ni
-          // mensajería avanzada; las empresas existentes no se tocan.
-          capacidades: { overrides: CAPACIDADES_OVERRIDE_TENANT_NUEVO },
-        },
-      })
-    )
-    companyId = company.id
-
-    // Toda empresa nace con su sucursal principal: la mayoría tiene un solo
-    // local y sin sucursal la Caja no puede cobrar. La dirección/teléfono se
-    // completan solos cuando el dueño los registre en el onboarding.
-    await ensureSucursalPrincipal(company.id)
-
+    // El vertical se escribe en la columna que manda, como en el alta del superadmin: antes este camino la dejaba vacía (el hueco que
+    // `registro.ts` avisaba) y la empresa se resolvía por el texto de `type`.
+    const codigoVertical = await verticalValido(tipo)
     const verificarCorreo = isEmailVerificationEnabled()
-    const { data: created, error: createError } =
-      await supabase.auth.admin.createUser({
+    const ahora = new Date()
+
+    await darDeAltaEmpresa({
+      empresa: {
+        nombre: nombreComercial,
+        tipo,
+        tipoNegocioCodigo: codigoVertical,
+        pais: pais || null,
+        // Clave del onboarding: no aparece en el marketplace todavía. La dirección y el teléfono se completan solos cuando el dueño los
+        // registre en el onboarding.
+        publicada: false,
+      },
+      administrador: {
+        modo: 'nuevo',
+        nombre: nombrePropietario,
         email,
         password,
         // Con verificación activada la cuenta nace SIN confirmar.
-        email_confirm: !verificarCorreo,
-        user_metadata: { name: nombrePropietario },
-      })
-    if (createError || !created.user) {
-      throw new Error(createError?.message ?? 'No se pudo crear la cuenta.')
-    }
-    supabaseId = created.user.id
-    const nuevoSupabaseId = supabaseId
-
-    await ensureEmailIdentity(supabaseId, email)
-
-    const now = new Date()
-    const dbUser = await conEmpresa(company.id, (tx) =>
-      tx.user.create({
-        data: {
-          supabaseId: nuevoSupabaseId,
-          email,
-          name: nombrePropietario,
-          role: 'ADMINISTRADOR',
-          companyId: company.id,
-          termsAcceptedAt: now,
-          termsVersion: TERMS_VERSION,
-          marketingConsent,
-          marketingConsentAt: marketingConsent ? now : null,
-        },
-      })
-    )
-
-    await supabase.auth.admin.updateUserById(supabaseId, {
-      app_metadata: {
-        role: 'ADMINISTRADOR',
-        dbUserId: dbUser.id,
-        companyId,
+        confirmarCorreo: !verificarCorreo,
+        consentimiento: { terminosVersion: TERMS_VERSION, marketing: marketingConsent, en: ahora },
       },
+      // Dentro de la protección del alta: si el correo de verificación no sale, no queda una cuenta que nunca podrá entrar.
+      alTerminar: verificarCorreo
+        ? async () => {
+            await sendVerificationEmail(createAdminClient(), email, nombrePropietario)
+          }
+        : undefined,
     })
 
-    if (verificarCorreo) {
-      await sendVerificationEmail(supabase, email, nombrePropietario)
-      return { pendingVerification: true }
-    }
-    return { success: true }
+    return verificarCorreo ? { pendingVerification: true } : { success: true }
   } catch (e) {
     console.error('[registro-empresa]', e)
-    // Rollback para no dejar registros huérfanos.
-    if (supabaseId) {
-      await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('registro:rollback-auth-user'))
-    }
-    if (companyId) {
-      const idEmpresa = companyId
-      await conEmpresa(idEmpresa, (tx) =>
-        tx.company.delete({ where: { id: idEmpresa } })
-      ).catch(anotarFallo('registro:company.delete'))
-    }
     return { error: 'No se pudo completar el registro. Intenta de nuevo.' }
   }
 }

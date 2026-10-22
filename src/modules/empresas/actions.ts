@@ -2,12 +2,9 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { getUser } from '@/lib/auth'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
-import { ensureEmailIdentity } from '@/lib/supabase/identity'
-import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
-import { filasDeAcceso } from '@/modules/empresas/accesos'
-import { anotarFallo } from '@/lib/prisma-errors'
+import { darDeAltaEmpresa, slugify } from '@/modules/empresas/alta'
+import { marcarSolicitudCreada, motivoParaNoCrearDesde } from '@/modules/solicitudes/creada'
 import { verticalValido } from '@/modules/empresas/verticales'
 import {
   capacidadesSinCategoriaContradictoria,
@@ -26,30 +23,6 @@ async function requireSuperadmin() {
   const user = await getUser()
   if (!user || user.metadata.role !== 'SUPERADMIN') return null
   return user
-}
-
-/** Convierte un nombre en un slug URL-safe. */
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // quitar acentos
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-}
-
-/** Devuelve un slug único para Company, agregando sufijo si ya existe. */
-async function uniqueCompanySlug(name: string): Promise<string> {
-  const base = slugify(name) || 'empresa'
-  let slug = base
-  let n = 1
-  // Colisiones esperadas raras; el bucle termina rápido.
-  while (await sinEmpresa('superadmin: verificar unicidad de slug', (tx) => tx.company.findUnique({ where: { slug } }))) {
-    n += 1
-    slug = `${base}-${n}`
-  }
-  return slug
 }
 
 /**
@@ -137,139 +110,59 @@ export async function crearEmpresa(
     }
   }
 
-  let companyId: string | null = null
-  const supabase = createAdminClient()
-  let supabaseId: string | null = null
-
   // Empresa de DEMOSTRACIÓN (entrenamiento). Se nombra igual que cualquier
   // otra y se crea por este mismo camino a propósito: el alta es parte de lo
   // que se entrena. Lo único distinto es la marca — y todo lo que esa marca
   // apaga hacia afuera (ver src/modules/demo/index.ts).
-  //
-  // El campo se añade al `data` solo cuando se pide: si la columna todavía no
-  // está migrada, crear empresas NORMALES tiene que seguir funcionando.
   const esDemo = String(formData.get('esDemo') ?? '') === '1'
 
   /**
    * EL VERTICAL, EN LA COLUMNA QUE MANDA.
    *
    * `registro.ts` resuelve el vertical de una empresa leyendo PRIMERO
-   * `tipoNegocioCodigo` y cayendo a `type` solo si está vacía. Su propio
-   * comentario avisaba del hueco: «creada por un camino que aún no la rellena».
-   * Este era ese camino.
-   *
-   * Sin escribirla, elegir «Hotel» en el selector guardaba la cadena en `type`
-   * y la resolución antigua la mandaba al `default: CAR_WASH`. La empresa
-   * quedaba clasificada como lavadero — el mismo fallo que la Fase 7 encontró
-   * probando contra base real, reaparecido por la puerta del formulario.
-   *
-   * Se valida contra la tabla: un código que no existe deja la columna en null
-   * y la empresa se resuelve como siempre, en vez de apuntar a un vertical
-   * inexistente y quedarse sin ningún sistema.
+   * `tipoNegocioCodigo` y cayendo a `type` solo si está vacía. Sin escribirla,
+   * elegir «Hotel» en el selector guardaba la cadena en `type` y la resolución
+   * antigua la mandaba al `default: CAR_WASH`. Se valida contra la tabla: un
+   * código que no existe deja la columna en null y la empresa se resuelve como
+   * siempre, en vez de apuntar a un vertical inexistente.
    */
   const codigoVertical = await verticalValido(type)
 
+  // Una solicitud puede precargar esta pantalla (`?solicitud=`): al terminar queda «Creada» y enlazada a su empresa. Se comprueba
+  // ANTES de crear nada: una solicitud que ya tiene su empresa no deja una segunda.
+  const solicitudId = String(formData.get('solicitudId') ?? '').trim()
+  if (solicitudId) {
+    const motivo = await motivoParaNoCrearDesde(solicitudId)
+    if (motivo) return { error: motivo }
+  }
+
   try {
-    const slug = await uniqueCompanySlug(name)
-    const company = await sinEmpresa('superadmin: crear empresa', (tx) =>
-      tx.company.create({
-        data: {
-          ...(esDemo ? { esDemo: true } : {}),
-          name,
-          slug,
-          type,
-          ...(codigoVertical ? { tipoNegocioCodigo: codigoVertical } : {}),
-          description: String(formData.get('description') ?? '').trim() || null,
-          email: String(formData.get('email') ?? '').trim() || null,
-          telefono: String(formData.get('telefono') ?? '').trim() || null,
-          direccion: String(formData.get('direccion') ?? '').trim() || null,
-          ciudad: String(formData.get('ciudad') ?? '').trim() || null,
-          categoria: String(formData.get('categoria') ?? '').trim() || null,
-          website: String(formData.get('website') ?? '').trim() || null,
-          isActive: true,
-          // Fase 0 (Plan Maestro §8.5–§8.6): tenant nuevo nace sin CRM ni
-          // mensajería avanzada; las empresas existentes no se tocan.
-          capacidades: { overrides: CAPACIDADES_OVERRIDE_TENANT_NUEVO },
-        },
-      })
-    )
-    companyId = company.id
-
-    // Sucursal principal automática con los datos recién capturados: la
-    // mayoría de las empresas tiene un solo local y sin sucursal la Caja
-    // no puede cobrar.
-    await ensureSucursalPrincipal(company.id)
-
-    // Categorías de marketplace (relación many-to-many).
-    const categoryIds = formData
-      .getAll('categoryIds')
-      .map(String)
-      .filter(Boolean)
-    if (categoryIds.length > 0) {
-      await conEmpresa(company.id, (tx) =>
-        tx.companyToCategory.createMany({
-          data: categoryIds.map((categoryId) => ({
-            companyId: company.id,
-            categoryId,
-          })),
-          skipDuplicates: true,
-        })
-      )
-    }
-
-    if (existente) {
-      // Administrador que ya existe: solo se le suma esta empresa a las que
-      // puede abrir. Ni cuenta nueva, ni contraseña, ni cambio de su empresa
-      // activa. `filasDeAcceso` escribe además la fila de su empresa de
-      // siempre — sin eso, al cambiar a esta perdería el camino de vuelta.
-      await sinEmpresa('superadmin: crear filas de acceso del admin', (tx) =>
-        tx.userCompanyAccess.createMany({
-          data: filasDeAcceso(existente.id, company.id, existente.companyId),
-          skipDuplicates: true,
-        })
-      )
-    } else {
-      // Usuario admin en Supabase Auth.
-      const { data: created, error: createError } =
-        await supabase.auth.admin.createUser({
-          email: adminEmail,
-          password: adminPassword,
-          email_confirm: true,
-          user_metadata: { name: adminNombre },
-        })
-      if (createError || !created.user) {
-        throw new Error(createError?.message ?? 'No se pudo crear el usuario admin.')
-      }
-      supabaseId = created.user.id
-
-      await ensureEmailIdentity(supabaseId, adminEmail)
-
-      const sid = supabaseId
-      const uid = company.id
-      const dbUser = await conEmpresa(uid, (tx) =>
-        tx.user.create({
-          data: {
-            supabaseId: sid,
-            email: adminEmail,
-            name: adminNombre,
-            role: 'ADMINISTRADOR',
-            companyId: uid,
-          },
-        })
-      )
-
-      await supabase.auth.admin.updateUserById(supabaseId, {
-        app_metadata: {
-          role: 'ADMINISTRADOR',
-          dbUserId: dbUser.id,
-          companyId: company.id,
-        },
-      })
-    }
+    await darDeAltaEmpresa({
+      empresa: {
+        nombre: name,
+        tipo: type,
+        tipoNegocioCodigo: codigoVertical,
+        esDemo,
+        descripcion: String(formData.get('description') ?? '').trim() || null,
+        email: String(formData.get('email') ?? '').trim() || null,
+        telefono: String(formData.get('telefono') ?? '').trim() || null,
+        direccion: String(formData.get('direccion') ?? '').trim() || null,
+        ciudad: String(formData.get('ciudad') ?? '').trim() || null,
+        categoria: String(formData.get('categoria') ?? '').trim() || null,
+        website: String(formData.get('website') ?? '').trim() || null,
+        // Categorías de marketplace (relación many-to-many).
+        categoryIds: formData.getAll('categoryIds').map(String).filter(Boolean),
+      },
+      administrador: existente
+        ? { modo: 'existente', id: existente.id, companyId: existente.companyId }
+        : { modo: 'nuevo', nombre: adminNombre, email: adminEmail, password: adminPassword, confirmarCorreo: true },
+      alTerminar: solicitudId ? (r) => marcarSolicitudCreada(solicitudId, r.companyId, user.metadata.dbUserId) : undefined,
+    })
 
     revalidatePath('/superadmin/empresas')
     revalidatePath('/superadmin/demo')
     revalidatePath('/superadmin/usuarios')
+    revalidatePath('/superadmin/solicitudes')
     revalidatePath('/empresas')
     return {
       success: true,
@@ -282,23 +175,8 @@ export async function crearEmpresa(
           : `Empresa "${name}" creada con su administrador.`,
     }
   } catch (e) {
+    // El alta ya deshizo lo que alcanzó a crear (la empresa y, si la hizo, la cuenta de Auth; una cuenta existente no se toca nunca).
     console.error('[empresa] crearEmpresa error:', e)
-    // Rollback: borrar el auth user y la empresa recién creada para no dejar
-    // registros huérfanos.
-    //
-    // `supabaseId` solo tiene valor en el camino de "cuenta nueva", así que un
-    // administrador existente NUNCA se toca aquí. Sus filas de acceso a esta
-    // empresa desaparecen solas al borrarla (cascada); las de su empresa de
-    // siempre se quedan, que es lo correcto.
-    if (supabaseId) {
-      await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('empresas:rollback-auth-user'))
-    }
-    if (companyId) {
-      const cid = companyId
-      await sinEmpresa('superadmin: rollback borrar empresa', (tx) =>
-        tx.company.delete({ where: { id: cid } })
-      ).catch(anotarFallo('empresas:company.delete'))
-    }
     return { error: 'No se pudo crear la empresa. Intenta de nuevo.' }
   }
 }
