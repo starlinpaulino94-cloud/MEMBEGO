@@ -65,7 +65,7 @@ const TECHOS: Record<string, number> = {
   // Fase 7: la misma deuda en las carpetas de módulos que `PREFIJOS_DE_PANEL` no recorre. Medida el 2026-10-21 (al migrar Reservas).
   tablaCrudaEnModulos: 28,
   variablesHexEnGlobalsCss: 65,
-  mapasDeEstado: 58,
+  mapasDeEstado: 52,
   componentesSinUso: 15,
 
   // Fase 4 (tarea 4.10): accesibilidad del panel, medida el 2026-10-20 (FE-13). Las dos son CANDIDATOS: se cuenta lo que puede
