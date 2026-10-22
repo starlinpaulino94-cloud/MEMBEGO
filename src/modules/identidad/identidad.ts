@@ -32,6 +32,7 @@ import {
   type RechazoPrevio,
   type ViaVerificacion,
 } from '@/modules/identidad/identidadCore'
+import { MAX_INCIDENCIAS_ABIERTAS, MAX_MENSAJE_INCIDENCIA, esTipoDeIncidencia } from '@/modules/identidad/vistaCore'
 import {
   TIPOS_REQUERIDOS_PARA_CAPTURAR,
   VERSION_VIGENTE,
@@ -348,13 +349,20 @@ export async function revocarConsentimientoIdentidad(
   return r
 }
 
+/**
+ * Los consentimientos que valen PARA CAPTURAR: sin retirar y, además, de la versión VIGENTE del texto. Si el
+ * texto cambia, el permiso que se dio sobre el anterior no cubre lo nuevo: hay que volver a aceptarlo.
+ */
 async function tiposVigentes(tx: Tx, userId: string): Promise<Map<TipoConsentimientoIdentidad, string>> {
   const filas = await tx.identidadConsentimiento.findMany({
     where: { userId, revocadoAt: null },
-    select: { id: true, tipo: true },
+    select: { id: true, tipo: true, textoVersion: true },
   })
   const mapa = new Map<TipoConsentimientoIdentidad, string>()
-  for (const f of filas) mapa.set(f.tipo as TipoConsentimientoIdentidad, f.id)
+  for (const f of filas) {
+    const tipo = f.tipo as TipoConsentimientoIdentidad
+    if (f.textoVersion === VERSION_VIGENTE[tipo]) mapa.set(tipo, f.id)
+  }
   return mapa
 }
 
@@ -685,6 +693,99 @@ export async function registrarEventoDescartado(userId: string, intentoId: strin
   await sinEmpresa('identidad: el worker audita un aviso descartado', (tx) =>
     auditar(tx, 'IDENTIDAD_EVENTO_DESCARTADO', { entidadId: userId, payload: { intentoId, proveedor: 'didit', motivo } })
   )
+}
+
+// ── Incidencias: la persona cuenta que algo no va bien ──────────────────────
+
+export interface IncidenciaDePersona {
+  id: string
+  tipo: string
+  estado: string
+  creadaAt: Date
+  intentoId: string | null
+}
+
+export type ResultadoReportarIncidencia =
+  | { ok: true; id: string }
+  | { ok: false; error: 'tipo_invalido' | 'mensaje_invalido' | 'demasiadas_abiertas' | 'persona_no_encontrada' | 'intento_ajeno' }
+
+/**
+ * Registra una incidencia de la persona sobre su verificación. Es de la PERSONA y de
+ * Membego (no un ticket de una empresa): la mira el equipo autorizado.
+ *
+ *  · el tipo es de una lista cerrada y el mensaje, corto (ver MAX_MENSAJE_INCIDENCIA) y sin caracteres de control;
+ *  · a lo sumo MAX_INCIDENCIAS_ABIERTAS abiertas a la vez: una cola que nadie puede inundar;
+ *  · el intento al que se refiere tiene que ser de ELLA (si no, se rechaza: no se puede apuntar a ajenos);
+ *  · el asiento de bitácora lleva el tipo y el id, nunca el texto de la persona.
+ */
+export async function reportarIncidenciaDePersona(
+  userId: string,
+  input: { tipo: string; mensaje: string; intentoId?: string | null }
+): Promise<ResultadoReportarIncidencia> {
+  if (!esTipoDeIncidencia(input.tipo)) return { ok: false, error: 'tipo_invalido' }
+  const mensaje = (input.mensaje ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim()
+  if (mensaje.length < 1 || mensaje.length > MAX_MENSAJE_INCIDENCIA) return { ok: false, error: 'mensaje_invalido' }
+  return conUsuario(userId, async (tx): Promise<ResultadoReportarIncidencia> => {
+    await bloquearPersona(tx, userId)
+    const persona = await tx.user.findUnique({ where: { id: userId }, select: { id: true } })
+    if (!persona) return { ok: false, error: 'persona_no_encontrada' }
+    const abiertas = await tx.identidadIncidencia.count({ where: { userId, estado: { in: ['abierta', 'en_proceso'] } } })
+    if (abiertas >= MAX_INCIDENCIAS_ABIERTAS) return { ok: false, error: 'demasiadas_abiertas' }
+    let intentoId: string | null = null
+    if (input.intentoId) {
+      const intento = await tx.identidadIntento.findFirst({ where: { id: input.intentoId, userId }, select: { id: true } })
+      if (!intento) return { ok: false, error: 'intento_ajeno' }
+      intentoId = intento.id
+    }
+    const creada = await tx.identidadIncidencia.create({
+      data: { userId, intentoId, tipo: input.tipo, mensaje },
+      select: { id: true },
+    })
+    await auditar(tx, 'IDENTIDAD_INCIDENCIA_REPORTADA', {
+      actorUserId: userId,
+      entidadId: userId,
+      payload: { intentoId, motivo: input.tipo },
+    })
+    return { ok: true, id: creada.id }
+  })
+}
+
+/** Las incidencias abiertas de la persona (las que el equipo todavía no resolvió), de la más nueva a la más vieja. */
+export async function incidenciasAbiertasDe(userId: string): Promise<IncidenciaDePersona[]> {
+  return conUsuario(userId, (tx) =>
+    tx.identidadIncidencia.findMany({
+      where: { userId, estado: { in: ['abierta', 'en_proceso'] } },
+      orderBy: { creadaAt: 'desc' },
+      take: 10,
+      select: { id: true, tipo: true, estado: true, creadaAt: true, intentoId: true },
+    })
+  )
+}
+
+/**
+ * ¿La persona tiene algo de identidad guardado? Un resultado, o un intento que dejó rastro (una sesión con el proveedor o
+ * un motivo de rechazo). Decide si la sección se muestra con la verificación apagada y si se ofrece borrar: tras una
+ * supresión los intentos quedan SIN datos (sin referencia ni código), y eso ya no cuenta.
+ */
+export async function tieneHistorialDeIdentidad(userId: string): Promise<boolean> {
+  return conUsuario(userId, async (tx) => {
+    if ((await tx.identidadVerificacion.count({ where: { userId } })) > 0) return true
+    return (
+      (await tx.identidadIntento.count({
+        where: { userId, OR: [{ referenciaProveedorSellada: { not: null } }, { codigoRazon: { not: null } }, { verificacionId: { not: null } }] },
+      })) > 0
+    )
+  })
+}
+
+/** Qué versión de cada consentimiento tiene VIGENTE (sin retirar) la persona: tipo → versión del texto. */
+export async function consentimientosVigentesDe(userId: string): Promise<Map<TipoConsentimientoIdentidad, string>> {
+  return conUsuario(userId, async (tx) => {
+    const filas = await tx.identidadConsentimiento.findMany({ where: { userId, revocadoAt: null }, select: { tipo: true, textoVersion: true } })
+    const mapa = new Map<TipoConsentimientoIdentidad, string>()
+    for (const f of filas) mapa.set(f.tipo as TipoConsentimientoIdentidad, f.textoVersion)
+    return mapa
+  })
 }
 
 // ── Supresión de los datos de identidad de una persona (derecho de supresión) ─

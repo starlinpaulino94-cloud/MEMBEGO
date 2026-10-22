@@ -25,6 +25,7 @@ import {
   type EstadoIdentidadPublico,
   type EstadoIntento,
 } from '@/modules/identidad/identidadCore'
+import { avisarResultadoDeIdentidad } from '@/modules/identidad/avisos'
 import { ErrorDeProveedor } from '@/modules/identidad/proveedor/contrato'
 import { proveedorDeIdentidad } from '@/modules/identidad/proveedor/didit'
 
@@ -50,8 +51,8 @@ import { proveedorDeIdentidad } from '@/modules/identidad/proveedor/didit'
 
 /** Adonde vuelve la persona en la app móvil. Solo dispara una consulta de estado. */
 export const RETORNO_APP_IDENTIDAD = 'membego://identidad/retorno'
-/** Ruta web a la que vuelve la persona. */
-export const RUTA_WEB_RETORNO_IDENTIDAD = '/cliente/ajustes'
+/** Ruta web a la que vuelve la persona: su pantalla de verificación de identidad. */
+export const RUTA_WEB_RETORNO_IDENTIDAD = '/cliente/identidad'
 
 /** A dónde manda el proveedor a la persona al terminar. Lleva el id y el nonce del intento, nada más. */
 export function urlDeRetornoDeIdentidad(canal: CanalIntento, intentoId: string, nonce: string | null, baseWeb?: string): string {
@@ -185,6 +186,8 @@ export async function sincronizarIntento(intentoId: string, ahora: Date = new Da
     ahora
   )
   if (aplicada.aplicado === 'no_existe') return { resultado: 'no_existe' }
+  // Se le avisa a la persona SOLO la primera vez que el resultado se aplica (el aviso, además, es único por intento y resultado).
+  if (aplicada.aplicado === 'aplicar') await avisarResultadoDeIdentidad(intentoId)
 
   // En revisión (por el proveedor o por documento repetido) la sesión se conserva: lo mira una persona.
   const cerrado = esEstadoFinal(aplicada.estado)

@@ -7,6 +7,10 @@ module.exports = {
   headers: noDisponible('headers'),
   redirect: noDisponible('redirect'),
   notFound: noDisponible('notFound'),
+  // Para pintar componentes de cliente en una prueba (sin navegador): el router no hace nada.
+  useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {} }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
   revalidatePath: () => {},
   revalidateTag: () => {},
   unstable_noStore: () => {},

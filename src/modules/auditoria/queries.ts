@@ -409,6 +409,7 @@ export const ACCION_LABEL: Record<string, string> = {
   IDENTIDAD_SUPRESION_COMPLETADA: 'Identidad: borrado de datos completado',
   IDENTIDAD_SESION_PURGADA: 'Identidad: sesión del proveedor borrada',
   IDENTIDAD_EVENTO_DESCARTADO: 'Identidad: aviso del proveedor descartado',
+  IDENTIDAD_INCIDENCIA_REPORTADA: 'Identidad: incidencia reportada por la persona',
   // Integraciones: lo que sale hacia sistemas de terceros.
   INTEGRACION_SONDEADA: 'Webhook probado',
   INTEGRACION_REINTENTADA: 'Cola de eventos reenviada',

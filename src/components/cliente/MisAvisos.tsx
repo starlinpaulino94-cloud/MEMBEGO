@@ -51,6 +51,9 @@ const ICONO: Partial<Record<NotifTipo, { icon: typeof Bell; cls: string }>> = {
   MEMBRESIA_POR_VENCER: { icon: AlertCircle, cls: 'bg-warning/10 text-warning' },
   RECOMPENSA_REFERIDO: { icon: Gift, cls: 'bg-primary/10 text-primary' },
   PROMOCION_NUEVA: { icon: Gift, cls: 'bg-primary/10 text-primary' },
+  IDENTIDAD_VERIFICADA: { icon: BadgeCheck, cls: 'bg-success/10 text-success' },
+  IDENTIDAD_RECHAZADA: { icon: XCircle, cls: 'bg-destructive/10 text-destructive' },
+  IDENTIDAD_EN_REVISION: { icon: Info, cls: 'bg-info/10 text-info' },
 }
 const POR_DEFECTO = { icon: Info, cls: 'bg-muted text-muted-foreground' }
 

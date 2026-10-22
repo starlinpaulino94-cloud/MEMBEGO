@@ -109,6 +109,10 @@ enum NotifTipo {
   VISITA_COMPRA_ADICIONAL
   VISITA_DISPUTA
   SUPPLY_SOLICITUD_MERCHANT
+  // Verificación de identidad: avisos a la persona cuando su verificación se resuelve.
+  IDENTIDAD_VERIFICADA
+  IDENTIDAD_RECHAZADA
+  IDENTIDAD_EN_REVISION
 
 }
 
@@ -628,6 +632,8 @@ enum AuditAccion {
   IDENTIDAD_SESION_PURGADA
   /// Un aviso del proveedor se descartó por no cuadrar con el intento al que decía referirse.
   IDENTIDAD_EVENTO_DESCARTADO
+  /// La persona reportó un problema con su verificación de identidad (incidencia).
+  IDENTIDAD_INCIDENCIA_REPORTADA
 }
 
 // ─────────────────────────────────────────────
@@ -697,6 +703,8 @@ model User {
   identidadIntentos        IdentidadIntento[]        @relation("IdentidadIntentosDeUsuario")
   identidadConsentimientos IdentidadConsentimiento[] @relation("IdentidadConsentimientosDeUsuario")
   identidadInterruptores   IdentidadInterruptor[]    @relation("IdentidadInterruptorCambiadoPor")
+  identidadIncidencias     IdentidadIncidencia[]     @relation("IdentidadIncidenciasDeUsuario")
+  identidadIncidenciasResueltas IdentidadIncidencia[] @relation("IdentidadIncidenciaResueltaPor")
 
   // Listados de empleados por empresa (/admin/empleados) y conteos por empresa.
   transaccionesComoEmpleado    Transaction[]              @relation("TransactionEmpleado")

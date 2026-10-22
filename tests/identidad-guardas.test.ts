@@ -23,7 +23,7 @@ function archivos(dir: string, ext = /\.(ts|tsx|mts)$/): string[] {
 }
 
 const SERVICIO = 'src/modules/identidad/identidad.ts'
-const MODELOS = /\b(identidadVerificacion|identidadIntento|identidadConsentimiento|identidadInterruptor)\b\s*\.\s*(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/
+const MODELOS = /\b(identidadVerificacion|identidadIntento|identidadConsentimiento|identidadInterruptor|identidadIncidencia)\b\s*\.\s*(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/
 
 test('NADIE ESCRIBE EL ESTADO DE IDENTIDAD FUERA DEL SERVICIO: el resto del código solo lo lee', () => {
   const infractores = archivos('src').filter((f) => f !== SERVICIO && MODELOS.test(quitarComentarios(leer(f))))
@@ -39,9 +39,14 @@ test('NINGUNA RUTA DE API NI ACCIÓN DE CLIENTE MARCA «VERIFICADA»: el resulta
   // Ninguna ruta toca el estado: solo hablan con el worker, el cron y los servicios de lectura.
   const rutas = archivos('src/app').filter((f) => /@\/modules\/identidad\//.test(quitarComentarios(leer(f))))
   assert.deepEqual(rutas.sort(), [
+    'src/app/(cliente)/cliente/ajustes/page.tsx', // el resumen de Configuración (solo lectura)
+    'src/app/(cliente)/cliente/identidad/page.tsx', // la pantalla de la persona (solo lectura)
     'src/app/api/cron/identidad/route.ts',
     'src/app/api/v1/auth/cuenta/route.ts', // elimina la cuenta: purga antes lo del proveedor
+    'src/app/api/v1/cliente/identidad/borrado/route.ts',
+    'src/app/api/v1/cliente/identidad/consentimientos/route.ts',
     'src/app/api/v1/cliente/identidad/estado/route.ts',
+    'src/app/api/v1/cliente/identidad/incidencias/route.ts',
     'src/app/api/v1/cliente/identidad/sesion/route.ts',
     'src/app/api/webhooks/identidad/[proveedor]/route.ts',
   ])
@@ -128,7 +133,7 @@ test('el interruptor y la capacidad nacen apagados en el código: la verificaci�
 
 test('las migraciones de identidad están selladas en SUMAS.txt y son las últimas', () => {
   const sumas = leer('prisma/migrations/SUMAS.txt')
-  for (const m of ['20261078_identidad_acciones_enum', '20261079_identidad_verificacion', '20261080_identidad_acciones_proveedor', '20261081_identidad_proveedor']) assert.ok(sumas.includes(m), `${m} sin sellar (npm run migraciones:sellar)`)
+  for (const m of ['20261078_identidad_acciones_enum', '20261079_identidad_verificacion', '20261080_identidad_acciones_proveedor', '20261081_identidad_proveedor', '20261082_identidad_avisos_incidencias_enums', '20261083_identidad_incidencias']) assert.ok(sumas.includes(m), `${m} sin sellar (npm run migraciones:sellar)`)
 })
 
 // ── Fase 2 · el proveedor ───────────────────────────────────────────────────
@@ -178,17 +183,55 @@ test('EL CLIENTE DEL PROVEEDOR: sin redirecciones, con tiempo máximo y la clave
   assert.doesNotMatch(leer('.env.example'), /NEXT_PUBLIC_DIDIT|EXPO_PUBLIC_DIDIT/)
 })
 
-test('LAS RUTAS DEL CLIENTE: la persona sale de la sesión (nunca del cuerpo), con límite de uso y solo para clientes', () => {
-  for (const f of ['src/app/api/v1/cliente/identidad/sesion/route.ts', 'src/app/api/v1/cliente/identidad/estado/route.ts']) {
+test('LAS RUTAS DEL CLIENTE: la persona sale de la sesión (nunca de la petición), solo para clientes y con límite de uso', () => {
+  const rutas = ['estado', 'sesion', 'consentimientos', 'incidencias', 'borrado'].map((n) => 'src/app/api/v1/cliente/identidad/' + n + '/route.ts')
+  for (const f of rutas) {
     const r = quitarComentarios(leer(f))
     assert.match(r, /getApiClientUser\(request\)/, f)
     assert.match(r, /metadata\.role !== 'CLIENTE'/, f)
-    assert.match(r, /Limiter\(/, f)
     assert.match(r, /user\.metadata\.dbUserId/, f)
-    assert.doesNotMatch(r, /body\.(userId|usuario|personaId)|searchParams\.get\('(userId|usuario)'\)/, f + ': no se acepta de quién es desde la petición')
+    assert.doesNotMatch(r, /datos\.userId|d\.userId|cuerpo\.userId|body\.(userId|usuario|personaId)|searchParams\.get\('(userId|usuario)'\)/, f + ': no se acepta de quién es desde la petición')
+    assert.doesNotMatch(r, /console\./, f)
+    // Cada ruta habla con la puerta compartida (y ahí está el límite de uso) o lleva su propio límite.
+    assert.match(r, /Limiter\(|identidadPuerta/, f)
   }
-  // La dirección con token no se registra en ninguna parte de la ruta.
-  assert.doesNotMatch(quitarComentarios(leer('src/app/api/v1/cliente/identidad/sesion/route.ts')), /console\./)
+  // Los límites viven en la puerta: crear sesión cuesta dinero (estrecho), el resto va con el límite de formularios.
+  const puerta = quitarComentarios(leer('src/modules/identidad/identidadPuerta.ts'))
+  const cuerpo = (nombre: string) => puerta.slice(puerta.indexOf('export async function ' + nombre)).split(/\nexport async function /)[0]
+  assert.match(cuerpo('iniciarVerificacionDePersona'), /identidadSesionLimiter\(/)
+  for (const n of ['cambiarConsentimientoDePersona', 'reportarProblemaDePersona', 'pedirBorradoDePersona']) assert.match(cuerpo(n), /formSubmitLimiter\(/, n)
+  assert.match(quitarComentarios(leer('src/app/api/v1/cliente/identidad/estado/route.ts')), /paymentSessionLimiter\(/)
+  // La puerta no marca a nadie como verificado ni escribe estado.
+  assert.doesNotMatch(puerta, /aplicarDecision|registrarAprobada|estado:\s*'verificada'/)
+})
+
+test('LAS INCIDENCIAS: se escriben solo desde el servicio, sin el texto de la persona en bitácora ni correo, y con la cola acotada', () => {
+  const servicio = quitarComentarios(leer(SERVICIO))
+  assert.match(servicio, /MAX_INCIDENCIAS_ABIERTAS/)
+  assert.match(servicio, /findFirst\(\{ where: \{ id: input\.intentoId, userId \}/, 'el intento tiene que ser de la persona')
+  const puerta = quitarComentarios(leer('src/modules/identidad/identidadPuerta.ts'))
+  const reporte = puerta.slice(puerta.indexOf('export async function reportarProblemaDePersona')).split(/\nexport async function /)[0]
+  assert.doesNotMatch(reporte, /entrada\.mensaje/, 'el correo a soporte no lleva el texto de la persona')
+  const correo = reporte.slice(reporte.indexOf('encolarEmail({'), reporte.indexOf('} catch'))
+  assert.ok(correo.length > 50, 'no se encontró el correo a soporte')
+  assert.doesNotMatch(correo, /quien\.|entrada\.mensaje/, 'ni su correo, ni su id, ni su texto en el aviso a soporte')
+  const migracion = leer('prisma/migrations/20261083_identidad_incidencias/migration.sql')
+  assert.match(migracion, /identidad_incidencias_tipo_chk[\s\S]{0,200}no_puedo_completar/)
+  assert.match(migracion, /identidad_incidencias_mensaje_chk[\s\S]{0,120}BETWEEN 1 AND 600/)
+  assert.match(migracion, /ALTER TABLE "identidad_incidencias" ENABLE ROW LEVEL SECURITY/)
+  assert.match(leer('prisma/migrations_manual/2026-10-rls-identidad.sql'), /CREATE POLICY membego_dueno ON "identidad_incidencias"/)
+})
+
+test('LOS AVISOS: la deduplicación va en la base (clave única por intento y resultado) y los valores del enum van solos en su migración', () => {
+  const avisos = quitarComentarios(leer('src/modules/identidad/avisos.ts'))
+  assert.match(avisos, /skipDuplicates: true/, 'el reclamo no aborta la transacción si el aviso ya existe')
+  assert.match(avisos, /claveDeAviso\(intentoId, resultado\)/)
+  assert.match(avisos, /catch\(anotarFallo/, 'un aviso que falla no tumba la resolución')
+  const sinc = quitarComentarios(leer('src/modules/identidad/sincronizacion.ts'))
+  assert.match(sinc, /if \(aplicada\.aplicado === 'aplicar'\) await avisarResultadoDeIdentidad\(intentoId\)/, 'se avisa solo cuando el resultado se aplica de verdad')
+  const enums = leer('prisma/migrations/20261082_identidad_avisos_incidencias_enums/migration.sql')
+  for (const v of ['IDENTIDAD_VERIFICADA', 'IDENTIDAD_RECHAZADA', 'IDENTIDAD_EN_REVISION', 'IDENTIDAD_INCIDENCIA_REPORTADA']) assert.match(enums, new RegExp(v))
+  assert.doesNotMatch(quitarComentarios(enums).replace(/--.*$/gm, '').replace(/DO \$\$ BEGIN\s*ALTER TYPE[^;]+;\s*END \$\$;/g, ''), /\S/, 'la migración del enum va SOLA')
 })
 
 test('ELIMINAR UNA CUENTA borra antes los datos del proveedor, en TODOS los caminos que eliminan a una persona', () => {

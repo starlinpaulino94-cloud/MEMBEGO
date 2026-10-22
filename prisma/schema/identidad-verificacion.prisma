@@ -140,6 +140,8 @@ model IdentidadIntento {
 
   updatedAt DateTime @updatedAt
 
+  incidencias IdentidadIncidencia[]
+
   @@index([userId, creadoAt])
   @@index([estado, venceAt])
   @@map("identidad_intentos")
@@ -223,4 +225,36 @@ model IdentidadEventoExterno {
   @@index([estado, recibidoAt])
   @@index([intentoId])
   @@map("identidad_eventos_externos")
+}
+
+/// INCIDENCIA: la persona cuenta que no puede verificarse o que el resultado es
+/// incorrecto. Es de la PERSONA y de Membego (no un ticket de una empresa): la
+/// resuelve el equipo autorizado desde el panel de administración.
+///
+///   tipo    no_puedo_completar | rechazo_incorrecto | datos_incorrectos | otro
+///   estado  abierta | en_proceso | resuelta
+model IdentidadIncidencia {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("IdentidadIncidenciasDeUsuario", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// El intento al que se refiere, si lo hay.
+  intentoId String?
+  intento   IdentidadIntento? @relation(fields: [intentoId], references: [id], onDelete: SetNull)
+
+  tipo String
+  /// Texto libre de la persona, de 1 a 600 caracteres. Nunca va a una bitácora ni a un correo.
+  mensaje String
+  estado  String @default("abierta")
+
+  creadaAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  resueltaAt    DateTime?
+  resueltaPorId String?
+  resueltaPor   User?     @relation("IdentidadIncidenciaResueltaPor", fields: [resueltaPorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, creadaAt])
+  @@index([estado, creadaAt])
+  @@map("identidad_incidencias")
 }

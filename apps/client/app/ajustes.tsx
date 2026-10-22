@@ -25,6 +25,7 @@ import { Skeleton } from '../src/components/ui/Skeleton'
 import { BackHeader } from '../src/components/ui/BackHeader'
 import { ResponsiveDetailSheet } from '../src/components/ui/ResponsiveDetailSheet'
 import { fetchBff } from '../src/lib/api'
+import { ResumenIdentidad } from '../src/components/identidad/ResumenIdentidad'
 
 function AjustesScreenContent() {
   const router = useRouter()
@@ -137,7 +138,7 @@ function AjustesScreenContent() {
   const handleEliminarCuenta = () => {
     Alert.alert(
       'Eliminar cuenta',
-      'Se eliminarán tus fichas de cliente, membresías y datos asociados. Los registros contables que deban conservarse por ley quedarán desvinculados de tu perfil. Esta acción no se puede deshacer.',
+      'Se eliminarán tus fichas de cliente, membresías y datos asociados. Los registros contables que deban conservarse por ley quedarán desvinculados de tu perfil. Si verificaste tu identidad, también se borran tu resultado y los datos que guarde nuestro proveedor. Esta acción no se puede deshacer.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -294,6 +295,8 @@ function AjustesScreenContent() {
                 </View>
               </View>
             </Card>
+
+            <ResumenIdentidad />
 
             <Card>
               <View className="mb-2 flex-row items-center gap-2">

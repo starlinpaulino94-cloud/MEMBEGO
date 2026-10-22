@@ -2,6 +2,7 @@ export type ClientRoutePresentation = 'navigation' | 'bare'
 
 const CLIENT_DETAIL_ROUTE_PATTERNS: readonly RegExp[] = [
   /^\/ajustes$/,
+  /^\/identidad$/,
   /^\/ayuda$/,
   /^\/empresas$/,
   /^\/explorar$/,

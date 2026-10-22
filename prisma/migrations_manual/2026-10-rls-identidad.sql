@@ -41,6 +41,10 @@ BEGIN
     RAISE EXCEPTION
       'Falta la migración 20261081_identidad_proveedor. Aplícala primero y vuelve a correr este archivo.';
   END IF;
+  IF to_regclass('public.identidad_incidencias') IS NULL THEN
+    RAISE EXCEPTION
+      'Falta la migración 20261083_identidad_incidencias. Aplícala primero y vuelve a correr este archivo.';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'membego_app') THEN
     RAISE EXCEPTION
       'No existe el rol membego_app: la Capa 2 de RLS no está instalada en esta base. Este archivo no aplica todavía; aplica antes prisma/migrations_manual/2026-07-rls-capa2-aislamiento.sql.';
@@ -64,6 +68,13 @@ CREATE POLICY membego_dueno ON "identidad_intentos" FOR ALL TO membego_app
 
 DROP POLICY IF EXISTS membego_dueno ON "identidad_consentimientos";
 CREATE POLICY membego_dueno ON "identidad_consentimientos" FOR ALL TO membego_app
+  USING (current_setting('app.omnisciente', true) = 'on'
+         OR "userId" = current_setting('app.user_id', true))
+  WITH CHECK (current_setting('app.omnisciente', true) = 'on'
+              OR "userId" = current_setting('app.user_id', true));
+
+DROP POLICY IF EXISTS membego_dueno ON "identidad_incidencias";
+CREATE POLICY membego_dueno ON "identidad_incidencias" FOR ALL TO membego_app
   USING (current_setting('app.omnisciente', true) = 'on'
          OR "userId" = current_setting('app.user_id', true))
   WITH CHECK (current_setting('app.omnisciente', true) = 'on'
@@ -95,5 +106,6 @@ CREATE POLICY membego_plataforma ON "identidad_eventos_externos" FOR ALL TO memb
 --   drop policy if exists membego_dueno on identidad_verificaciones;
 --   drop policy if exists membego_dueno on identidad_intentos;
 --   drop policy if exists membego_dueno on identidad_consentimientos;
+--   drop policy if exists membego_dueno on identidad_incidencias;
 --   drop policy if exists membego_plataforma on identidad_interruptores;
 --   drop policy if exists membego_plataforma on identidad_eventos_externos;
