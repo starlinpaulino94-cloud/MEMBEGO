@@ -5,7 +5,7 @@ import type { MetaCampo, OrdenDetalle } from '@/modules/reportes/orden-detalle'
 /**
  * LAS FILAS QUE PRODUJERON LA CIFRA, EN LA `Tabla` DE SERVIDOR (auditoría admin · fase 7, tarea 7.1; 06 · T-01, T-03, T-15).
  *
- * Sustituye a las cuatro `<table>` de `/reportes/…/detalle` y a su encabezado `ThOrden`. Lo que NO cambia es lo que importa de aquellas
+ * Sustituye a las cuatro tablas a mano de `/reportes/…/detalle` y a su encabezado `ThOrden`. Lo que NO cambia es lo que importa de aquellas
  * pantallas: ordenar **cambia la consulta** (la lista viene recortada a 300 y el recorte lo decide el `orderBy`; nota larga en
  * `modules/reportes/orden-detalle.ts`), así que la cabecera es un enlace y no un control de navegador, y el estado de la tabla se puede
  * pegar en un chat.

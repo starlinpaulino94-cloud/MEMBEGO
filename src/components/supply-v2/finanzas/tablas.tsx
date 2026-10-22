@@ -27,7 +27,7 @@ import { ConfirmarPago } from './acciones-pago'
 /**
  * LAS SEIS LISTAS DE FINANZAS DE SUPPLY EN LA `Tabla` DEL SISTEMA (auditoría admin · fase 7, tarea 7.1; 06 · T-01, T-06, T-15).
  *
- * Eran `<table>` sueltas, sin título para el lector de pantalla ni `scope`. Ahora tienen `caption`, el identificador de cada fila
+ * Eran tablas HTML sueltas, sin título para el lector de pantalla ni `scope`. Ahora tienen `caption`, el identificador de cada fila
  * como `<th scope="row">`, el dinero a la derecha y lo menos importante se oculta en pantalla estrecha. Los `data-testid` que usan
  * las pruebas de extremo a extremo se conservan TODOS (la tabla, la fila y las cifras que se leen); una prueba lo comprueba.
  */

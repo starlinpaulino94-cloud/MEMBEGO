@@ -5,7 +5,7 @@ import { EstadoChip, type TonoEstado } from '@/components/ui/estado-chip'
 /**
  * EL HISTORIAL DE COMPROBANTES, EN LA `Tabla` DE SERVIDOR (auditoría admin · fase 7, tarea 7.1; 06 · T-01, T-06, T-15).
  *
- * Antes era una `<table>` a mano con dos mapas «estado → clases de color», sin título para el lector de pantalla y con el ancho
+ * Antes era una tabla HTML a mano con dos mapas «estado → clases de color», sin título para el lector de pantalla y con el ancho
  * mínimo fijo en 760 px. El comprobante (número, código, tipo y fecha) es el identificador de la fila y el cliente lleva debajo quién lo atendió: así caben
  * seis columnas y la reimpresión no queda fuera de vista en un escritorio. El detalle es de menos prioridad y se oculta en pantallas
  * estrechas, donde el total, el estado y la reimpresión siguen a la vista. La tabla no
