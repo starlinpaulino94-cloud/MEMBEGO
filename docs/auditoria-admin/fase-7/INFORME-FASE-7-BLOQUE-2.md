@@ -51,7 +51,7 @@ Con el cliente existente «Ana Beltré» (sin crear cuentas; el correo, los pago
 
 ### 3.4 Suite completa
 
-**5 080 pruebas; 5 073 pasan, 0 fallan, 7 omitidas**, corrida sobre el árbol final (el primer bloque cerró en 5 051: **+29**). Sin ninguna prueba tocada para que pasara: las 29 son nuevas y el resto no cambió.
+**5 080 pruebas; 5 073 pasan, 0 fallan, 7 omitidas**, corrida sobre el árbol final (el primer bloque cerró en 5 051: **+29**). Las 29 son nuevas; de las existentes solo cambió el techo de campos sin nombre (baja de 88 a 77), ninguna otra.
 
 ## 4. Lo que NO está hecho o NO se sabe
 
