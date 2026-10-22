@@ -5,6 +5,8 @@ import type { Prisma } from '@prisma/client'
 import type { Paginacion } from '@/lib/paginacion'
 import { calcularSaldo, type ReglaPrecioDinamico } from './nucleo'
 import { condicionDeEstado, type VerReservas } from './lista'
+import { LIMITE_BUSQUEDA_CLIENTE } from './formulario'
+import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
 
 /**
  * Las reservas guardan ids planos hacia el Core (cliente, excursión, vendedor)
@@ -294,7 +296,37 @@ export async function excursionesReservables(companyId: string) {
     }))
 }
 
-/** Clientes de la empresa para el selector del alta (los más recientes). */
+/**
+ * Clientes de la empresa que coinciden con lo escrito (nombre, teléfono o correo), para elegir a quién se le hace la reserva.
+ *
+ * Trae uno más del límite para poder decir «hay más»: cortar en silencio sería el mismo defecto del selector de 200 clientes que
+ * esto reemplaza. Siempre dentro de la empresa; nunca devuelve más de `LIMITE_BUSQUEDA_CLIENTE`.
+ */
+export async function buscarClientesParaReserva(companyId: string, q: string) {
+  const clientes = await conEmpresa(companyId, (tx) =>
+    tx.cliente.findMany({
+      where: {
+        companyId,
+        OR: [
+          { nombreBusqueda: { contains: normalizarBusqueda(q) } },
+          { telefono: { contains: q } },
+          { email: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
+      take: LIMITE_BUSQUEDA_CLIENTE + 1,
+      select: { id: true, nombre: true, email: true, telefono: true },
+    })
+  )
+  return { clientes: clientes.slice(0, LIMITE_BUSQUEDA_CLIENTE), hayMas: clientes.length > LIMITE_BUSQUEDA_CLIENTE }
+}
+
+/**
+ * Clientes de la empresa para el selector del alta (los más recientes).
+ *
+ * SOLO queda para el portal del VENDEDOR (`ReservaVendedorForm`), que es de la fase 8: sigue con el tope de 200 y el cliente 201
+ * no se puede elegir ahí. El panel de administración ya no lo usa: busca con `buscarClientesParaReserva`.
+ */
 export async function clientesParaReserva(companyId: string) {
   return conEmpresa(companyId, (tx) =>
     tx.cliente.findMany({
@@ -304,6 +336,12 @@ export async function clientesParaReserva(companyId: string) {
       select: { id: true, nombre: true, email: true, telefono: true },
     })
   )
+}
+
+/** ¿La empresa tiene al menos un cliente? Decide si el formulario arranca buscando o pidiendo los datos de uno nuevo. */
+export async function empresaTieneClientes(companyId: string): Promise<boolean> {
+  const uno = await conEmpresa(companyId, (tx) => tx.cliente.findFirst({ where: { companyId }, select: { id: true } }))
+  return uno !== null
 }
 
 /** Detalle de reserva para el cliente (solo sus propias reservas). */

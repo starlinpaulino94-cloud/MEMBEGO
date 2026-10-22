@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import {
-  clientesParaReserva,
+  empresaTieneClientes,
   excursionesReservables,
 } from '@/modules/excursiones/reservas/queries'
 import { listadoVendedores } from '@/modules/excursiones/vendedores/queries'
@@ -18,8 +18,9 @@ export default async function NuevaReservaPage() {
   const companyId = user.metadata.companyId
   if (!companyId) return <SinEmpresaActiva seccion="las reservas de excursiones" />
 
-  const [clientes, excursiones, vendedores] = await Promise.all([
-    clientesParaReserva(companyId),
+  // Ya no se traen clientes: el formulario los BUSCA en la base. Solo se pregunta si hay alguno, para saber por dónde arrancar.
+  const [hayClientes, excursiones, vendedores] = await Promise.all([
+    empresaTieneClientes(companyId),
     excursionesReservables(companyId),
     listadoVendedores(companyId),
   ])
@@ -41,12 +42,7 @@ export default async function NuevaReservaPage() {
         </p>
       </div>
 
-      <ReservaForm
-        clientes={clientes}
-        excursiones={excursiones}
-        vendedores={vendedores}
-        companyId={companyId}
-      />
+      <ReservaForm excursiones={excursiones} vendedores={vendedores} hayClientes={hayClientes} />
     </div>
   )
 }
