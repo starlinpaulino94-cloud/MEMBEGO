@@ -1,148 +1,72 @@
 'use client'
 
 /**
- * Formulario de excursión (crear y editar). Al CREAR pide además el precio
- * base (que nace como variante «Estándar»); al editar, los precios viven en
- * el editor de variantes. El servidor revalida todo (nucleo.validarExcursion).
+ * Formulario de excursión (crear y editar). Al CREAR pide además el precio base (que nace como variante «Estándar»); al editar,
+ * los precios viven en el editor de variantes. El servidor revalida todo (`leerExcursionDeFormulario` y `validarExcursion`).
+ *
+ * Auditoría admin · fase 7 (7.2): eran 1 641 líneas en un solo componente. Esto es el contenedor: guarda lo que se va llenando,
+ * deriva lo de un combo, manda el formulario y lleva el foco al primer campo con error. Cada sección es un componente en
+ * `./excursion/`; el estado y las cuentas del combo, un hook; y lo que se decide sin navegador, `catalogo/formulario.ts`.
+ * Los campos de texto ahora son CONTROLADOS: antes eran de valor inicial, y React los reiniciaba al fallar la acción, así que un
+ * error del servidor borraba lo escrito.
  */
 
-import { useActionState, useEffect, useState, useMemo } from 'react'
+import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  Loader2,
-  Clock,
-  Plus,
-  Trash2,
-  MapPin,
-  Check,
-  Sparkles,
-  Info,
-  DollarSign,
-  ImageIcon,
-  AlertTriangle,
-  Wand2,
-} from 'lucide-react'
+import { Loader2, ImageIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { crearExcursion, actualizarExcursion, type CatalogoActionState } from '@/modules/excursiones/catalogo/actions'
+import { calcularHoraRegreso } from '@/modules/excursiones/catalogo/nucleo'
 import {
-  crearExcursion,
-  actualizarExcursion,
-  type CatalogoActionState,
-} from '@/modules/excursiones/catalogo/actions'
-import { MONEDAS, DIAS_SEMANA, calcularHoraRegreso } from '@/modules/excursiones/catalogo/nucleo'
+  agregarHoraSalida,
+  ahorroDeCombo,
+  alternarDia,
+  claveDeCombo,
+  derivarDeCombo,
+  diasDePreset,
+  duracionEnMinutos,
+  horariosDataJson,
+  quitarHoraSalida,
+  sumaDePrecios,
+  TODOS_LOS_DIAS,
+  type ActividadParaComboItem,
+  type TipoItem,
+} from '@/modules/excursiones/catalogo/formulario'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ExcursionImagenUpload } from './ExcursionImagenUpload'
+import { ComboActividades } from './excursion/ComboActividades'
+import { SeccionGeneral } from './excursion/SeccionGeneral'
+import { SeccionHorarios } from './excursion/SeccionHorarios'
+import { SeccionPrecios } from './excursion/SeccionPrecios'
+import { SeccionIncluye, SeccionUbicacion } from './excursion/SeccionTextos'
+import { useCombo } from './excursion/useCombo'
+import type { ExcursionEditable, ValoresExcursion } from './excursion/tipos'
+
+export type { ExcursionEditable } from './excursion/tipos'
+export type { ActividadParaComboItem } from '@/modules/excursiones/catalogo/formulario'
 
 const init: CatalogoActionState = {}
 
-export interface ExcursionEditable {
-  id: string
-  nombre: string
-  tipoItem?: string
-  actividadesComboIds?: string[]
-  descripcion: string | null
-  duracionMin: number | null
-  ubicacion: string | null
-  categoria: string | null
-  moneda: string
-  impuestoPct: unknown
-  capacidad: number | null
-  puntoSalida: string | null
-  horaSalida: string | null
-  horaRegreso: string | null
-  incluye: string | null
-  noIncluye: string | null
-  politicas: string | null
-  portadaUrl?: string | null
-  /** URLs de la galería, tal como las guarda la columna JSON. */
-  galeria?: string[] | null
-  horarios?: {
-    id: string
-    horaSalida: string
-    diasSemana: unknown
-    cupo?: number | null
-  }[]
-  comboItems?: {
-    actividadId?: string
-    horaSalida?: string | null
-    permitirSolapamiento?: boolean
-    horarioFijo?: unknown
-    actividad?: {
-      id: string
-      nombre?: string
-      tipoItem?: string
-      horaSalida?: string | null
-      duracionMin?: number | null
-      horarios?: { id: string; horaSalida: string; diasSemana: unknown; cupo?: number | null }[]
-    }
-  }[]
-}
-
-const CATEGORIAS_SUGERIDAS = [
-  'Playa y Catamarán',
-  'Aventura y Buggies',
-  'Ecoturismo y Montaña',
-  'Cultural e Histórica',
-  'Paseo en Barco',
-  'Snorkel y Buceo',
-  'Gastronómica'
-]
-
-const DURACION_PRESETS = [
-  { label: '1 hora', horas: 1 },
-  { label: '2 horas', horas: 2 },
-  { label: '3 horas', horas: 3 },
-  { label: '4 horas (Medio día)', horas: 4 },
-  { label: '6 horas', horas: 6 },
-  { label: '8 horas (Día completo)', horas: 8 },
-  { label: '10 horas', horas: 10 },
-]
-
-const HORAS_PRESETS = [
-  '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'
-]
-
-import {
-  diasComunesCombo,
-  validarItinerarioCombo,
-  autoResolverItinerarioCombo,
-  optimizarItinerarioCombo,
-  generarCombinacionesCombo,
-  formatoMinutosAHora,
-  minutosDesdeMedianoche,
-} from '@/modules/excursiones/reservas/nucleo'
-
-export interface ActividadParaComboItem {
-  id: string
-  nombre: string
-  tipoItem?: string
-  categoria: string | null
-  moneda?: string
-  duracionMin?: number | null
-  horaSalida?: string | null
-  horaRegreso?: string | null
-  capacidad?: number | null
-  precioAdulto?: number | null
-  precioNino?: number | null
-  horarios?: {
-    id: string
-    horaSalida: string
-    diasSemana: number[]
-    cupo?: number | null
-  }[]
-}
-
-const DIAS_NOMBRES: Record<number, string> = {
-  1: 'Lun',
-  2: 'Mar',
-  3: 'Mié',
-  4: 'Jue',
-  5: 'Vie',
-  6: 'Sáb',
-  7: 'Dom',
+function valoresIniciales(excursion: ExcursionEditable | undefined, monedaDefecto: string): ValoresExcursion {
+  return {
+    nombre: excursion?.nombre ?? '',
+    descripcion: excursion?.descripcion ?? '',
+    categoria: excursion?.categoria ?? '',
+    // Al crear arranca en 30; al editar, lo que tenga (si no tiene capacidad declarada se queda vacía, no se inventa una).
+    capacidad: excursion ? String(excursion.capacidad ?? '') : '30',
+    ubicacion: excursion?.ubicacion ?? '',
+    puntoSalida: excursion?.puntoSalida ?? '',
+    incluye: excursion?.incluye ?? '',
+    noIncluye: excursion?.noIncluye ?? '',
+    politicas: excursion?.politicas ?? '',
+    moneda: excursion ? excursion.moneda : monedaDefecto || 'DOP',
+    impuestoPct: excursion?.impuestoPct != null ? String(excursion.impuestoPct) : '',
+    precioAdulto: '',
+    precioNino: '',
+    precioResidente: '',
+    precioNinoResidente: '',
+  }
 }
 
 export function ExcursionForm({
@@ -157,195 +81,18 @@ export function ExcursionForm({
   monedaDefecto?: string
 }) {
   const router = useRouter()
-  const accion = excursion ? actualizarExcursion : crearExcursion
-  const [state, formAction, pending] = useActionState(accion, init)
+  const formRef = useRef<HTMLFormElement>(null)
+  const [state, formAction, pending] = useActionState(excursion ? actualizarExcursion : crearExcursion, init)
 
-  // Tipo de ítem: ACTIVIDAD, PASE_DIA o COMBO
-  const [tipoItem, setTipoItem] = useState<'ACTIVIDAD' | 'COMBO' | 'PASE_DIA'>(() => {
-    if (excursion?.tipoItem === 'COMBO') return 'COMBO'
-    if (excursion?.tipoItem === 'PASE_DIA') return 'PASE_DIA'
-    return 'ACTIVIDAD'
-  })
+  const [tipoItem, setTipoItem] = useState<TipoItem>(() =>
+    excursion?.tipoItem === 'COMBO' ? 'COMBO' : excursion?.tipoItem === 'PASE_DIA' ? 'PASE_DIA' : 'ACTIVIDAD'
+  )
+  const [v, setV] = useState<ValoresExcursion>(() => valoresIniciales(excursion, monedaDefecto))
+  const poner = (cambios: Partial<ValoresExcursion>) => setV((previo) => ({ ...previo, ...cambios }))
 
-  // Actividades seleccionadas para el combo
-  const [actividadesComboSeleccionadas, setActividadesComboSeleccionadas] = useState<string[]>(() => {
-    if (excursion?.comboItems && excursion.comboItems.length > 0) {
-      return excursion.comboItems.map((ci) => ci.actividad?.id || ci.actividadId || '').filter(Boolean)
-    }
-    return excursion?.actividadesComboIds ?? []
-  })
+  const combo = useCombo({ excursion, actividadesDisponibles, tipoItem })
 
-
-  // Mapeo interactivo de horario asignado por actividad (actividadId -> '09:00')
-  const [horariosPorActividad, setHorariosPorActividad] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {}
-    if (excursion?.comboItems && excursion.comboItems.length > 0) {
-      for (const ci of excursion.comboItems) {
-        const actId = ci.actividad?.id || ci.actividadId
-        if (actId) {
-          initial[actId] = (
-            ci.horaSalida ||
-            ci.actividad?.horaSalida ||
-            '09:00'
-          ).trim().slice(0, 5)
-        }
-      }
-    }
-    return initial
-  })
-
-  // Mapeo de permitirSolapamiento por actividad (actividadId -> boolean)
-  const [permitirSolapamiento, setPermitirSolapamiento] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {}
-    if (excursion?.comboItems && excursion.comboItems.length > 0) {
-      for (const ci of excursion.comboItems) {
-        const actId = ci.actividad?.id || ci.actividadId
-        if (actId && (ci as Record<string, unknown>).permitirSolapamiento) {
-          initial[actId] = true
-        }
-      }
-    }
-    return initial
-  })
-
-  const togglePermitirSolapamiento = (actId: string) => {
-    setPermitirSolapamiento((prev) => ({ ...prev, [actId]: !prev[actId] }))
-  }
-
-  // Mapeo de horarios fijos por actividad (actividadId -> string[])
-  const [horarioFijo, _setHorarioFijo] = useState<Record<string, string[]>>(() => {
-    const initial: Record<string, string[]> = {}
-    if (excursion?.comboItems && excursion.comboItems.length > 0) {
-      for (const ci of excursion.comboItems) {
-        const actId = ci.actividad?.id || ci.actividadId
-        if (actId && ci.horarioFijo) {
-          const raw = ci.horarioFijo
-          initial[actId] = Array.isArray(raw) ? (raw as string[]) : typeof raw === 'string' ? [raw] : []
-        }
-      }
-    }
-    return initial
-  })
-
-  // Objetos de las actividades seleccionadas
-  const actividadesSeleccionadasObjs = useMemo(() => {
-    return actividadesDisponibles.filter((a) =>
-      actividadesComboSeleccionadas.includes(a.id)
-    )
-  }, [actividadesDisponibles, actividadesComboSeleccionadas])
-
-  // Actividades que tienen turnos/horarios programados
-  const actividadesConHorario = useMemo(() => {
-    return actividadesSeleccionadasObjs.filter((a) => a.tipoItem !== 'PASE_DIA')
-  }, [actividadesSeleccionadasObjs])
-
-  // Pases de día (acceso libre continuo)
-  const pasesDiaSeleccionados = useMemo(() => {
-    return actividadesSeleccionadasObjs.filter((a) => a.tipoItem === 'PASE_DIA')
-  }, [actividadesSeleccionadasObjs])
-
-  // Actividades con horario seleccionadas con sus horas asignadas
-  const actividadesConHorariosAsignados = useMemo(() => {
-    return actividadesConHorario.map((a) => {
-      // Si hay horarios fijos seleccionados, usar el primero como default
-      const fijos = horarioFijo[a.id]
-      const horaFromFijos = fijos && fijos.length > 0 ? fijos[0] : null
-      return {
-        ...a,
-        horaSalida:
-          horaFromFijos ||
-          horariosPorActividad[a.id] ||
-          a.horaSalida ||
-          (a.horarios && a.horarios.length > 0 ? a.horarios[0].horaSalida : '09:00'),
-        permitirSolapamiento: !!permitirSolapamiento[a.id],
-      }
-    })
-  }, [actividadesConHorario, horariosPorActividad, permitirSolapamiento, horarioFijo])
-
-  // Días comunes compatibles (intersección)
-  const diasComunes = useMemo(() => {
-    return diasComunesCombo(actividadesSeleccionadasObjs)
-  }, [actividadesSeleccionadasObjs])
-
-  // Validación de itinerario de horas (sin solapamiento)
-  const itinerarioResult = useMemo(() => {
-    return validarItinerarioCombo(actividadesConHorariosAsignados)
-  }, [actividadesConHorariosAsignados])
-
-  // Combinaciones válidas completas de horarios para el combo
-  const combinacionesDisponibles = useMemo(() => {
-    if (tipoItem !== 'COMBO' || actividadesSeleccionadasObjs.length < 2) return []
-    const acts = actividadesSeleccionadasObjs.map((a) => {
-      const fijos = horarioFijo[a.id]
-      return {
-        ...a,
-        horarioFijo: fijos && fijos.length > 0 ? fijos : null,
-      }
-    })
-    return generarCombinacionesCombo(acts)
-  }, [tipoItem, actividadesSeleccionadasObjs, horarioFijo])
-
-  // Cambiar turno de una actividad con auto-resolución de solapamientos
-  const cambiarHorarioActividad = (actId: string, nuevaHora: string) => {
-    const updatedHorarios = { ...horariosPorActividad, [actId]: nuevaHora.trim().slice(0, 5) }
-    const actsConNuevaHora = actividadesConHorario.map((a) => ({
-      ...a,
-      horaSalida: updatedHorarios[a.id] || a.horaSalida || '09:00',
-    }))
-
-    const validacion = validarItinerarioCombo(actsConNuevaHora)
-    if (validacion.ok) {
-      setHorariosPorActividad(updatedHorarios)
-      toast.success('Horario actualizado.')
-    } else {
-      // Auto-resolver hacia el horario más cercano no solapado
-      const resolucion = autoResolverItinerarioCombo(actsConNuevaHora, actId)
-      if (resolucion.ok) {
-        setHorariosPorActividad(resolucion.horariosAsignados)
-        toast.info(
-          resolucion.ajustes.length > 0
-            ? `⚡ Sincronizado: ${resolucion.ajustes[0]}`
-            : 'Horario sincronizado sin solapamientos.'
-        )
-      } else {
-        setHorariosPorActividad(updatedHorarios)
-        toast.warning(`⚠️ Horarios solapados: ${validacion.error}`)
-      }
-    }
-  }
-
-  // Auto-sincronizar / optimizar combinación completa
-  const autoSincronizarCombo = () => {
-    const opt = optimizarItinerarioCombo(actividadesConHorario)
-    if (opt.ok) {
-      setHorariosPorActividad(opt.horariosAsignados)
-      toast.success('Itinerario optimizado automáticamente sin solapamiento.')
-    } else {
-      toast.error(opt.error || 'No se encontró combinación válida sin solapamiento.')
-    }
-  }
-
-  const toggleActividadCombo = (id: string) => {
-    setActividadesComboSeleccionadas((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-      const nextConHorario = actividadesDisponibles.filter(
-        (a) => next.includes(a.id) && a.tipoItem !== 'PASE_DIA'
-      )
-      const autoRes = autoResolverItinerarioCombo(nextConHorario)
-      if (autoRes.ok) {
-        setHorariosPorActividad(autoRes.horariosAsignados)
-      }
-      return next
-    })
-  }
-
-  // Duración en horas (por defecto 3 horas o convertido desde duracionMin)
-  const [duracionHoras, setDuracionHoras] = useState<number>(() => {
-    if (excursion?.duracionMin) return Number((excursion.duracionMin / 60).toFixed(1))
-    return 3
-  })
-
-  // Lista de horas de salida configuradas
+  const [duracionHoras, setDuracionHoras] = useState<number>(() => (excursion?.duracionMin ? Number((excursion.duracionMin / 60).toFixed(1)) : 3))
   const [horasSalida, setHorasSalida] = useState<string[]>(() => {
     if (excursion?.horarios && excursion.horarios.length > 0) {
       return Array.from(new Set(excursion.horarios.map((h) => h.horaSalida.trim().slice(0, 5)))).sort()
@@ -353,183 +100,60 @@ export function ExcursionForm({
     if (excursion?.horaSalida) return [excursion.horaSalida.trim().slice(0, 5)]
     return ['09:00']
   })
-
-  // Días de la semana seleccionados (por defecto todos los días [1..7])
   const [diasSeleccionados, setDiasSeleccionados] = useState<number[]>(() => {
     if (excursion?.horarios && excursion.horarios.length > 0) {
-      const allDias = new Set<number>()
-      excursion.horarios.forEach((h) => {
-        if (Array.isArray(h.diasSemana)) {
-          h.diasSemana.forEach((d) => allDias.add(Number(d)))
-        }
-      })
-      if (allDias.size > 0) return Array.from(allDias).sort()
+      const todos = new Set<number>()
+      for (const h of excursion.horarios) if (Array.isArray(h.diasSemana)) h.diasSemana.forEach((d) => todos.add(Number(d)))
+      if (todos.size > 0) return Array.from(todos).sort()
     }
-    return [1, 2, 3, 4, 5, 6, 7]
+    return [...TODOS_LOS_DIAS]
   })
+  const [nuevaHora, setNuevaHora] = useState('14:00')
 
   /**
-   * Días, horas y duración de un COMBO se derivan de sus actividades.
-   *
-   * Era un `useEffect` cuyas dependencias eran cuatro arrays derivados
-   * (`actividadesSeleccionadasObjs`, `diasComunes`, `combinacionesDisponibles`,
-   * `itinerarioResult`). Cada render creaba referencias nuevas, así que el
-   * efecto volvía a correr y PISABA lo que el administrador acabara de
-   * escribir en días, horas o duración.
-   *
-   * La clave se arma con el CONTENIDO, no con la referencia: mientras el
-   * contenido no cambie, no se rederiva nada. Y el ajuste va en el render,
-   * que es donde React quiere el estado derivado.
+   * Días, horas y duración de un COMBO se derivan de sus actividades. La clave se arma con el CONTENIDO, no con la referencia:
+   * mientras el contenido no cambie, no se rederiva nada (antes un efecto con arreglos nuevos en cada render PISABA lo que el
+   * administrador acababa de escribir). Y el ajuste va en el render, que es donde React quiere el estado derivado.
    */
-  const claveCombo =
-    tipoItem === 'COMBO' && actividadesSeleccionadasObjs.length > 0
-      ? [
-          actividadesSeleccionadasObjs.map((a) => a.id).join(','),
-          diasComunes.join(','),
-          combinacionesDisponibles.map((c) => `${c.horaInicio}:${c.duracionTotalMin}`).join(','),
-          itinerarioResult.itinerario.map((i) => `${i.inicio}-${i.fin}`).join(','),
-        ].join('|')
-      : null
-  const [comboDerivadoDe, setComboDerivadoDe] = useState<string | null>(null)
-  if (claveCombo && claveCombo !== comboDerivadoDe) {
-    setComboDerivadoDe(claveCombo)
-    {
-      if (diasComunes.length > 0) {
-        setDiasSeleccionados(diasComunes)
-      }
-      // Calcular duración como la hora de regreso más tardía de todas las actividades
-      if (actividadesSeleccionadasObjs.length > 0) {
-        let minInicio = Infinity
-        let maxFin = 0
-        for (const act of actividadesSeleccionadasObjs) {
-          const fijos = horarioFijo[act.id]
-          const horaBase = fijos && fijos.length > 0
-            ? fijos[0]
-            : act.horaSalida || (act.horarios && act.horarios.length > 0 ? act.horarios[0].horaSalida : '09:00')
-          const inicio = minutosDesdeMedianoche(horaBase.trim().slice(0, 5))
-          if (inicio < minInicio) minInicio = inicio
-          // Calcular fin: horaRegreso si existe, sino horaSalida + duracionMin
-          let fin: number
-          if (act.horaRegreso) {
-            fin = minutosDesdeMedianoche(act.horaRegreso.trim().slice(0, 5))
-          } else {
-            const dur = act.duracionMin && act.duracionMin > 0 ? act.duracionMin : 120
-            fin = inicio + dur
-          }
-          if (fin > maxFin) maxFin = fin
-        }
-        if (minInicio < Infinity && maxFin > 0) {
-          const durTotalMin = maxFin - minInicio
-          if (durTotalMin > 0) {
-            setDuracionHoras(Number((durTotalMin / 60).toFixed(1)))
-          }
-          // Usar la primera hora de salida de la primera actividad
-          const primeraAct = actividadesSeleccionadasObjs[0]
-          const primeraHora = horarioFijo[primeraAct.id]?.[0] ||
-            primeraAct.horaSalida ||
-            (primeraAct.horarios && primeraAct.horarios.length > 0 ? primeraAct.horarios[0].horaSalida : '09:00')
-          setHorasSalida([primeraHora.trim().slice(0, 5)])
-        }
-      }
-    }
+  const clave = claveDeCombo({
+    tipoItem,
+    actividadIds: combo.actividadesSeleccionadas.map((a) => a.id),
+    diasComunes: combo.diasComunes,
+    combinaciones: combo.combinaciones,
+    bloques: combo.itinerario.itinerario,
+  })
+  const [derivadoDe, setDerivadoDe] = useState<string | null>(null)
+  if (clave && clave !== derivadoDe) {
+    setDerivadoDe(clave)
+    if (combo.diasComunes.length > 0) setDiasSeleccionados(combo.diasComunes)
+    const derivado = derivarDeCombo(combo.actividadesSeleccionadas, combo.horarioFijo)
+    if (derivado.duracionHoras !== null) setDuracionHoras(derivado.duracionHoras)
+    if (derivado.primeraHora !== null) setHorasSalida([derivado.primeraHora])
   }
 
-  const [nuevaHoraInput, setNuevaHoraInput] = useState('14:00')
-
-  // Estados de precios para cálculo interactivo
-  const [precioAdultoInput, setPrecioAdultoInput] = useState<string>('')
-  const [precioNinoInput, setPrecioNinoInput] = useState<string>('')
-  const [precioResidenteInput, setPrecioResidenteInput] = useState<string>('')
-  const [precioNinoResidenteInput, setPrecioNinoResidenteInput] = useState<string>('')
-
-  // Suma de precios individuales de las actividades del combo
-  const sumaPreciosActividades = useMemo(() => {
-    if (tipoItem !== 'COMBO' || actividadesSeleccionadasObjs.length === 0) return null
-    const adulto = actividadesSeleccionadasObjs.reduce((acc, a) => acc + (a.precioAdulto || 0), 0)
-    const nino = actividadesSeleccionadasObjs.reduce(
-      (acc, a) => acc + (a.precioNino != null ? a.precioNino : a.precioAdulto || 0),
-      0
-    )
-    return { adulto, nino }
-  }, [tipoItem, actividadesSeleccionadasObjs])
-
-  // Cálculo en tiempo real del ahorro del combo
-  const ahorroCombo = useMemo(() => {
-    if (!sumaPreciosActividades || !precioAdultoInput) return null
-    const precioCombo = parseFloat(precioAdultoInput) || 0
-    if (precioCombo <= 0 || sumaPreciosActividades.adulto <= 0) return null
-    const ahorro = sumaPreciosActividades.adulto - precioCombo
-    const pct = Math.round((ahorro / sumaPreciosActividades.adulto) * 100)
-    return { ahorro, pct }
-  }, [sumaPreciosActividades, precioAdultoInput])
-
-  // Minutos calculados
-  const duracionMin = useMemo(() => {
-    return Math.max(15, Math.round(duracionHoras * 60))
-  }, [duracionHoras])
-
-  // Formato visual amigable de hora en 12h (AM/PM)
-  const formato12h = (h24: string) => {
-    if (!h24 || !h24.includes(':')) return h24
-    const [hStr, mStr] = h24.split(':')
-    const h = parseInt(hStr, 10)
-    const ampm = h >= 12 ? 'PM' : 'AM'
-    const h12 = h % 12 || 12
-    return `${h12}:${mStr} ${ampm}`
-  }
-
-  // Agregar una nueva hora
-  const agregarHora = (hora: string) => {
-    const limpia = hora.trim().slice(0, 5)
-    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(limpia)) return
-    if (!horasSalida.includes(limpia)) {
-      setHorasSalida([...horasSalida, limpia].sort())
-    }
-  }
-
-  const removerHora = (hora: string) => {
-    if (horasSalida.length <= 1) {
-      toast.error('Debe haber al menos una hora de salida')
-      return
-    }
-    setHorasSalida(horasSalida.filter((h) => h !== hora))
-  }
-
-  // Preset de días
-  const seleccionarPresetDias = (tipo: 'todos' | 'laborables' | 'finde') => {
-    if (tipo === 'todos') setDiasSeleccionados([1, 2, 3, 4, 5, 6, 7])
-    if (tipo === 'laborables') setDiasSeleccionados([1, 2, 3, 4, 5])
-    if (tipo === 'finde') setDiasSeleccionados([6, 7])
-  }
-
-  const toggleDia = (dia: number) => {
-    if (diasSeleccionados.includes(dia)) {
-      if (diasSeleccionados.length <= 1) {
-        toast.error('Debe seleccionar al menos un día de salida')
-        return
-      }
-      setDiasSeleccionados(diasSeleccionados.filter((d) => d !== dia))
-    } else {
-      setDiasSeleccionados([...diasSeleccionados, dia].sort())
-    }
-  }
-
-  // Preparar JSON para el backend
-  const horariosDataJson = useMemo(() => {
-    return JSON.stringify(
-      horasSalida.map((h) => ({
-        horaSalida: h,
-        diasSemana: diasSeleccionados,
-        cupo: null,
-      }))
-    )
-  }, [horasSalida, diasSeleccionados])
-
-  // Primera hora de salida y su hora de regreso calculada
+  const duracionMin = duracionEnMinutos(duracionHoras)
   const primeraHoraSalida = horasSalida[0] || '09:00'
-  const primeraHoraRegreso = useMemo(() => {
-    return calcularHoraRegreso(primeraHoraSalida, duracionMin) || ''
-  }, [primeraHoraSalida, duracionMin])
+  const primeraHoraRegreso = calcularHoraRegreso(primeraHoraSalida, duracionMin) || ''
+  const horariosJson = useMemo(() => horariosDataJson(horasSalida, diasSeleccionados), [horasSalida, diasSeleccionados])
+
+  // Lo que ofrece el combo al fijar su precio: la suma de sus actividades y cuánto ahorra el cliente.
+  const resumenCombo = useMemo(() => {
+    if (tipoItem !== 'COMBO') return null
+    const suma = sumaDePrecios(combo.actividadesSeleccionadas)
+    return suma ? { ...suma, ahorro: ahorroDeCombo(suma, v.precioAdulto) } : null
+  }, [tipoItem, combo.actividadesSeleccionadas, v.precioAdulto])
+
+  const agregarHora = (hora: string) => setHorasSalida((previas) => agregarHoraSalida(previas, hora))
+  const quitarHora = (hora: string) => {
+    const r = quitarHoraSalida(horasSalida, hora)
+    if (r.error) toast.error(r.error)
+    else setHorasSalida(r.horas)
+  }
+  const alternarDiaSemana = (dia: number) => {
+    const r = alternarDia(diasSeleccionados, dia)
+    if (r.error) toast.error(r.error)
+    else setDiasSeleccionados(r.dias)
+  }
 
   useEffect(() => {
     if (state.success) {
@@ -539,41 +163,34 @@ export function ExcursionForm({
     }
   }, [state, router])
 
+  // Con errores por campo, el foco va al primero: el campo con `aria-invalid` o, en un grupo, su primer botón o casilla.
+  useEffect(() => {
+    if (!state.campos || Object.keys(state.campos).length === 0) return
+    formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalido="true"] button, [data-invalido="true"] input')?.focus()
+  }, [state])
+
+  const errores = state.campos ?? {}
+  const comboInvalido = tipoItem === 'COMBO' && (!combo.itinerario.ok || combo.seleccionadas.length < 2 || combo.diasComunes.length === 0)
+
   return (
-    <form action={formAction} className="space-y-8">
+    <form ref={formRef} action={formAction} className="space-y-8">
       {excursion ? <input type="hidden" name="excursionId" value={excursion.id} /> : null}
 
-      {/* Campos ocultos calculados */}
+      {/* Lo calculado o elegido con botones. Lo demás lleva su `name` en su campo. */}
       <input type="hidden" name="duracionMin" value={tipoItem === 'PASE_DIA' ? '' : duracionMin} />
       <input type="hidden" name="horaSalida" value={tipoItem === 'PASE_DIA' ? '' : primeraHoraSalida} />
       <input type="hidden" name="horaRegreso" value={tipoItem === 'PASE_DIA' ? '' : primeraHoraRegreso} />
-      <input type="hidden" name="horariosData" value={horariosDataJson} />
-      {tipoItem === 'PASE_DIA' && diasSeleccionados.map((d) => (
-        <input key={d} type="hidden" name="diasSemanaPaseDia" value={d} />
-      ))}
-      <input
-        type="hidden"
-        name="comboActividadesHorarios"
-        value={JSON.stringify(horariosPorActividad)}
-      />
-      <input
-        type="hidden"
-        name="comboPermitirSolapamiento"
-        value={JSON.stringify(permitirSolapamiento)}
-      />
-      <input
-        type="hidden"
-        name="comboHorarioFijo"
-        value={JSON.stringify(horarioFijo)}
-      />
+      <input type="hidden" name="horariosData" value={horariosJson} />
+      {tipoItem === 'PASE_DIA' && diasSeleccionados.map((d) => <input key={d} type="hidden" name="diasSemanaPaseDia" value={d} />)}
+      <input type="hidden" name="comboActividadesHorarios" value={JSON.stringify(combo.horariosPorActividad)} />
+      <input type="hidden" name="comboPermitirSolapamiento" value={JSON.stringify(combo.permitirSolapamiento)} />
+      <input type="hidden" name="comboHorarioFijo" value={JSON.stringify(combo.horarioFijo)} />
 
-      {/* SECCIÓN 0: IMÁGENES Y MULTIMEDIA */}
-      <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
-        <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-          <ImageIcon className="h-5 w-5 text-primary" />
+      <div className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+        <h3 className="flex items-center gap-2 text-base font-bold text-foreground sm:text-lg">
+          <ImageIcon className="h-5 w-5 text-primary" aria-hidden />
           Imágenes de la excursión
         </h3>
-
         <ExcursionImagenUpload
           companyId={companyId}
           excursionId={excursion?.id ?? null}
@@ -582,1024 +199,33 @@ export function ExcursionForm({
         />
       </div>
 
-      {/* SECCIÓN 1: DATOS PRINCIPALES */}
-      <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            Información general
-          </h3>
+      <SeccionGeneral
+        v={v}
+        poner={poner}
+        errores={errores}
+        tipoItem={tipoItem}
+        alCambiarTipo={setTipoItem}
+        combo={<ComboActividades combo={combo} actividadesDisponibles={actividadesDisponibles} duracionHoras={duracionHoras} error={errores.actividadesComboIds} />}
+      />
 
-          {/* Selector de Tipo: ACTIVIDAD vs PASE_DIA vs COMBO */}
-          <div className="flex flex-wrap items-center rounded-xl bg-muted/60 p-1 border border-border/60 gap-1">
-            <button
-              type="button"
-              onClick={() => setTipoItem('ACTIVIDAD')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${tipoItem === 'ACTIVIDAD'
-                ? 'bg-card text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              Tour / Actividad
-            </button>
-            <button
-              type="button"
-              onClick={() => setTipoItem('PASE_DIA')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${tipoItem === 'PASE_DIA'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              Pase de Día (Sin horario)
-            </button>
-            <button
-              type="button"
-              onClick={() => setTipoItem('COMBO')}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${tipoItem === 'COMBO'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              Combo / Paquete
-            </button>
-          </div>
-        </div>
+      <SeccionHorarios
+        tipoItem={tipoItem}
+        duracionHoras={duracionHoras}
+        alCambiarDuracion={setDuracionHoras}
+        horasSalida={horasSalida}
+        alAgregarHora={agregarHora}
+        alQuitarHora={quitarHora}
+        nuevaHora={nuevaHora}
+        alCambiarNuevaHora={setNuevaHora}
+        dias={diasSeleccionados}
+        alAlternarDia={alternarDiaSemana}
+        alElegirPreset={(tipo) => setDiasSeleccionados(diasDePreset(tipo))}
+        error={errores.horasSalida}
+      />
 
-        <input type="hidden" name="tipoItem" value={tipoItem} />
-
-        {tipoItem === 'COMBO' ? (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-            <div className="flex items-start gap-2.5">
-              <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  Configuración de Actividades del Combo
-                </p>
-                <p className="text-caption text-muted-foreground">
-                  Selecciona las 2 o más actividades que integran este combo. Al reservar este paquete, el sistema validará y descontará cupo en cada una de ellas automáticamente.
-                </p>
-              </div>
-            </div>
-
-            {actividadesDisponibles.length === 0 ? (
-              <p className="text-caption text-warning">
-                * No hay otras actividades individuales registradas para crear un combo. Crea primero las actividades individuales.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-56 overflow-y-auto pr-1">
-                {actividadesDisponibles.map((act) => {
-                  const checked = actividadesComboSeleccionadas.includes(act.id)
-                  return (
-                    <label
-                      key={act.id}
-                      className={`flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm cursor-pointer transition ${checked
-                        ? 'border-primary bg-card text-foreground font-medium shadow-xs'
-                        : 'border-border/70 bg-card/60 text-muted-foreground hover:bg-card'
-                        }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          name="actividadesComboIds"
-                          value={act.id}
-                          checked={checked}
-                          onChange={() => toggleActividadCombo(act.id)}
-                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                        />
-                        <span>{act.nombre}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {act.tipoItem === 'PASE_DIA' && (
-                          <span className="text-xs font-bold bg-success/10 text-success px-2 py-0.5 rounded-full border border-success/20">
-                            Daypass
-                          </span>
-                        )}
-                        {act.categoria ? (
-                          <span className="text-caption text-muted-foreground font-normal">
-                            {act.categoria}
-                          </span>
-                        ) : null}
-                      </div>
-                    </label>
-                  )
-                })}
-              </div>
-            )}
-
-            {actividadesComboSeleccionadas.length < 2 ? (
-              <p className="text-caption text-warning font-medium">
-                * Selecciona al menos 2 actividades para habilitar este combo ({actividadesComboSeleccionadas.length} seleccionadas).
-              </p>
-            ) : (
-              <div className="space-y-3 pt-2">
-                <p className="text-caption text-success font-medium flex items-center gap-1">
-                  <Check className="h-3.5 w-3.5" /> Combo válido con {actividadesComboSeleccionadas.length} actividades vinculadas.
-                </p>
-
-                {/* Configuración de Turnos por Actividad */}
-                <div className="rounded-xl border border-border/80 bg-card p-4 space-y-3 shadow-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                        <Clock className="h-4 w-4 text-primary" />
-                        Turnos y Horarios de las Actividades
-                      </h4>
-                      <p className="text-xs text-muted-foreground">
-                        Elige la hora de salida de cada actividad. El sistema auto-sincronizará los turnos para evitar solapamientos.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={autoSincronizarCombo}
-                      className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary hover:bg-primary/20 transition shadow-2xs"
-                    >
-                      <Wand2 className="h-3.5 w-3.5" />
-                      Auto-Sincronizar Turnos
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {actividadesConHorario.length > 0 ? (
-                      actividadesConHorario.map((act) => {
-                        const horaAsignada =
-                          horariosPorActividad[act.id] ||
-                          act.horaSalida ||
-                          (act.horarios && act.horarios.length > 0 ? act.horarios[0].horaSalida : '09:00')
-
-                        const duracionActMin = act.duracionMin && act.duracionMin > 0 ? act.duracionMin : 120
-                        const horaFinAsignada = formatoMinutosAHora(minutosDesdeMedianoche(horaAsignada) + duracionActMin)
-
-                        const slots =
-                          act.horarios && act.horarios.length > 0
-                            ? Array.from(new Set(act.horarios.map((h) => h.horaSalida.trim().slice(0, 5)))).sort()
-                            : [horaAsignada]
-
-                        return (
-                          <div
-                            key={act.id}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/30 p-2.5 text-xs"
-                          >
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-semibold text-foreground">{act.nombre}</span>
-                              <span className="font-mono text-xs text-primary font-semibold bg-primary/10 px-2 py-0.5 rounded-full">
-                                {formato12h(horaAsignada)} → {formato12h(horaFinAsignada)} ({(duracionActMin / 60).toFixed(1)}h)
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-xs text-muted-foreground font-medium mr-1">Turno:</span>
-                              {slots.map((s) => {
-                                const seleccionado = horaAsignada === s
-                                const finSlot = formatoMinutosAHora(minutosDesdeMedianoche(s) + duracionActMin)
-                                return (
-                                  <button
-                                    key={s}
-                                    type="button"
-                                    title={`${formato12h(s)} a ${formato12h(finSlot)}`}
-                                    onClick={() => cambiarHorarioActividad(act.id, s)}
-                                    className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${seleccionado
-                                      ? 'bg-primary text-primary-foreground shadow-xs'
-                                      : 'border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
-                                      }`}
-                                  >
-                                    {formato12h(s)}
-                                  </button>
-                                )
-                              })}
-                              {(!act.horarios || act.horarios.length === 0) && (
-                                <span className="text-xs text-muted-foreground italic">Sin horarios</span>
-                              )}
-                              <label className="flex items-center gap-1.5 ml-2 cursor-pointer text-xs text-muted-foreground font-medium select-none" title="Permitir que esta actividad se solape con otras en el mismo turno">
-                                <input
-                                  type="checkbox"
-                                  checked={!!permitirSolapamiento[act.id]}
-                                  onChange={() => togglePermitirSolapamiento(act.id)}
-                                  className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
-                                />
-                                Solapar
-                              </label>
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic py-1">
-                        Las actividades seleccionadas son pases de día con acceso libre (no requieren turnos horarios).
-                      </p>
-                    )}
-
-                    {/* Tarjeta informativa de Daypasses incluidos */}
-                    {pasesDiaSeleccionados.length > 0 && (
-                      <div className="rounded-lg border border-success/20 bg-success/5 p-3 text-xs text-success space-y-1.5">
-                        <div className="flex items-center gap-1.5 font-bold text-success">
-                          <Sparkles className="h-4 w-4 text-success" />
-                          Pases de Día Incluidos (Acceso Libre todo el día):
-                        </div>
-                        <p className="text-xs text-success/90 leading-relaxed">
-                          Los pases de día ofrecen acceso libre continuo durante la fecha reservada y no requieren asignación de turnos horarios fijos ni interfieren con el itinerario de horas.
-                        </p>
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {pasesDiaSeleccionados.map((pd) => (
-                            <span
-                              key={pd.id}
-                              className="inline-flex items-center gap-1 rounded-lg bg-success/10 px-2.5 py-1 text-xs font-semibold text-success border border-success/20"
-                            >
-                              {pd.nombre}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Widget Interactivo de Itinerario */}
-                <div className="rounded-xl border border-border/80 bg-card p-3.5 space-y-2.5 shadow-xs">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-primary" />
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                        Itinerario del Mismo Día
-                      </h4>
-                    </div>
-                    <div className="text-caption font-medium">
-                      {diasComunes.length > 0 ? (
-                        <span className="text-muted-foreground">
-                          Días comunes: <span className="font-semibold text-foreground">{diasComunes.map((d) => DIAS_NOMBRES[d]).join(', ')}</span>
-                        </span>
-                      ) : (
-                        <span className="text-destructive font-semibold">
-                          ⚠️ No hay días de salida en común entre las actividades
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Estado de solapamiento */}
-                  {itinerarioResult.ok ? (
-                    <div className="flex items-center gap-2 rounded-lg bg-success/10 px-3 py-1.5 text-xs font-medium text-success">
-                      <Check className="h-3.5 w-3.5 shrink-0" />
-                      <span>
-                        {actividadesConHorario.length > 0
-                          ? `Secuencia coordinada sin cruces de horario (${duracionHoras}h en total en el día).`
-                          : 'Pase(s) con acceso libre para la fecha seleccionada.'}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-2.5 text-xs font-medium text-destructive">
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold">{itinerarioResult.error}</p>
-                        <p className="text-xs opacity-90 mt-0.5">
-                          Haz clic en &quot;Auto-Sincronizar Turnos&quot; arriba o cambia los turnos para resolver el conflicto.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Pasos del Itinerario — Gantt Anidado */}
-                  {itinerarioResult.itinerario.length > 0 && (() => {
-                    const bloques = itinerarioResult.itinerario
-                    // Construir mapa de hijos: actividad anidada -> actividad contenedora
-                    const hijosMap = new Map<string, typeof bloques[0]>()
-                    for (const b of bloques) {
-                      if (!b.permitirSolapamiento) continue
-                      const bInicio = minutosDesdeMedianoche(b.inicio)
-                      const bFin = minutosDesdeMedianoche(b.fin)
-                      for (const c of bloques) {
-                        if (c.id === b.id || c.permitirSolapamiento) continue
-                        const cInicio = minutosDesdeMedianoche(c.inicio)
-                        const cFin = minutosDesdeMedianoche(c.fin)
-                        if (cInicio >= bInicio && cFin <= bFin) {
-                          hijosMap.set(c.id!, b)
-                        }
-                      }
-                    }
-
-                    // Bloques raíz (no son hijos de nadie)
-                    const raiz = bloques.filter((b) => !hijosMap.has(b.id!))
-
-                    return (
-                      <div className="space-y-1.5 pt-1">
-                        {raiz.map((bloque, idx) => {
-                          const hijos = bloques.filter((b) => hijosMap.get(b.id!)?.id === bloque.id)
-                          const esContenedor = hijos.length > 0
-                          return (
-                            <div key={bloque.id || idx} className={`rounded-lg border px-3 py-2 text-xs ${esContenedor ? 'border-primary/30 bg-primary/5 space-y-1.5' : 'border-border/60 bg-muted/40'}`}>
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 font-bold text-primary text-xs">
-                                    {idx + 1}
-                                  </span>
-                                  <span className="font-medium text-foreground">{bloque.nombre}</span>
-                                  {esContenedor && (
-                                    <span className="text-xs font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Contenedor</span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-xs">
-                                  <span className="font-semibold text-foreground">{formato12h(bloque.inicio)}</span>
-                                  <span>→</span>
-                                  <span className="font-semibold text-foreground">{formato12h(bloque.fin)}</span>
-                                  <span>({(bloque.duracionMin / 60).toFixed(1)}h)</span>
-                                </div>
-                              </div>
-                              {hijos.length > 0 && (
-                                <div className="ml-7 space-y-1 border-l-2 border-primary/20 pl-2.5">
-                                  {hijos.map((hijo, hIdx) => (
-                                    <div key={hijo.id || hIdx} className="flex items-center justify-between rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-1.5">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="text-xs font-bold text-warning">↳</span>
-                                        <span className="font-medium text-foreground">{hijo.nombre}</span>
-                                        <span className="text-xs font-bold bg-warning/10 text-warning px-1.5 py-0.5 rounded-full">Anidada</span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5 font-mono text-muted-foreground text-xs">
-                                        <span className="font-semibold text-foreground">{formato12h(hijo.inicio)}</span>
-                                        <span>→</span>
-                                        <span className="font-semibold text-foreground">{formato12h(hijo.fin)}</span>
-                                        <span>({(hijo.duracionMin / 60).toFixed(1)}h)</span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })()}
-                  {itinerarioResult.itinerario.length === 0 && pasesDiaSeleccionados.length > 0 && (
-                    <div className="rounded-lg border border-dashed border-success/30 bg-success/5 p-2.5 text-xs text-success font-medium text-center">
-                      Acceso libre durante todo el día para la fecha reservada
-                    </div>
-                  )}
-                </div>
-
-                {/* Listado de todas las combinaciones de turnos que el cliente podrá elegir */}
-                {combinacionesDisponibles.length > 0 && (
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-2">
-                    <div className="flex items-center justify-between flex-wrap gap-1">
-                      <span className="text-xs font-bold text-primary flex items-center gap-1.5">
-                        <Sparkles className="h-4 w-4" />
-                        Opciones de Turnos del Paquete ({combinacionesDisponibles.length} disponibles)
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        Guardadas automáticamente en el catálogo
-                      </span>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {combinacionesDisponibles.map((c, i) => (
-                        <div
-                          key={c.id || i}
-                          className="rounded-lg border border-border/80 bg-background/90 p-2.5 text-xs space-y-1 shadow-2xs"
-                        >
-                          <div className="flex items-center justify-between font-semibold">
-                            <span className="text-foreground">{c.nombre}</span>
-                            <span className="font-mono text-primary font-bold">
-                              {formato12h(c.horaInicio)} → {formato12h(c.horaFin)}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground line-clamp-1">
-                            {c.resumenTexto}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        <div>
-          <Label htmlFor="exc-nombre" className="text-xs sm:text-sm font-semibold">Nombre de la excursión *</Label>
-          <Input
-            id="exc-nombre"
-            name="nombre"
-            defaultValue={excursion?.nombre ?? ''}
-            placeholder="Ej.: Isla Saona Premium & Piscinas Naturales"
-            className="mt-1 h-11 text-sm sm:text-base font-medium"
-            required
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="exc-desc" className="text-xs sm:text-sm font-semibold">Descripción</Label>
-          <Textarea
-            id="exc-desc"
-            name="descripcion"
-            defaultValue={excursion?.descripcion ?? ''}
-            placeholder="Describe la experiencia, actividades, paradas y lo que hace único a este tour."
-            rows={3}
-            className="mt-1 text-sm resize-y"
-          />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="exc-categoria" className="text-xs sm:text-sm font-semibold">Categoría</Label>
-            <Input
-              id="exc-categoria"
-              name="categoria"
-              defaultValue={excursion?.categoria ?? ''}
-              placeholder="Ej.: Playa, Aventura, Buggies…"
-              className="mt-1 h-10 text-sm"
-            />
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {CATEGORIAS_SUGERIDAS.slice(0, 4).map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => {
-                    const input = document.getElementById('exc-categoria') as HTMLInputElement
-                    if (input) input.value = cat
-                  }}
-                  className="rounded-lg border border-border/80 bg-muted/50 px-2 py-0.5 text-caption font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition"
-                >
-                  + {cat}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="exc-capacidad" className="text-xs sm:text-sm font-semibold">
-              {tipoItem === 'PASE_DIA' ? 'Cupo máximo por día' : 'Capacidad total por salida'}
-            </Label>
-            <Input
-              id="exc-capacidad"
-              name="capacidad"
-              type="number"
-              min="1"
-              defaultValue={excursion?.capacidad ?? 30}
-              placeholder={tipoItem === 'PASE_DIA' ? 'Ej.: 100 cupos/día' : 'Ej.: 30 cupos'}
-              className="mt-1 h-10 text-sm font-medium"
-            />
-            <p className="mt-1 text-caption text-muted-foreground">
-              {tipoItem === 'PASE_DIA'
-                ? 'Límite máximo diario de pasajeros que pueden reservar para la misma fecha.'
-                : 'Número máximo de pasajeros por turno.'}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* SECCIÓN 2: LOGÍSTICA Y HORARIOS / DÍAS DE OPERACIÓN */}
-      <div className="rounded-2xl border border-primary/20 bg-card p-5 sm:p-6 space-y-6 shadow-sm">
-        <div>
-          <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-            <Clock className="h-5 w-5 text-primary" />
-            {tipoItem === 'PASE_DIA' ? 'Días de Operación y Disponibilidad' : 'Duración y Horarios de Salida'}
-          </h3>
-          <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-            {tipoItem === 'PASE_DIA'
-              ? 'Este ítem es un Pase de Día / Entrada con acceso libre. Selecciona los días de la semana en que estará disponible para reservar.'
-              : 'La hora de llegada se calcula automáticamente según la duración seleccionada.'}
-          </p>
-        </div>
-
-        {tipoItem === 'PASE_DIA' ? (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
-            <div className="flex items-start gap-2.5">
-              <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  Acceso libre sin horario rígido
-                </p>
-                <p className="text-caption text-muted-foreground">
-                  El cliente reserva su fecha y puede ingresar durante el día. No se requiere elegir turno. El control de cupos se realiza sobre el acumulado del día.
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* 1. Selección de Duración en Horas */}
-            <div className="space-y-2.5 rounded-xl bg-muted/40 p-4 border border-border/60">
-              <Label className="text-xs sm:text-sm font-bold text-foreground">
-                Duración de la excursión (en horas) *
-              </Label>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative w-36">
-                  <Input
-                    aria-label="Duración en horas"
-                    type="number"
-                    min="0.5"
-                    max="24"
-                    step="0.5"
-                    value={duracionHoras}
-                    onChange={(e) => setDuracionHoras(Math.max(0.5, parseFloat(e.target.value) || 1))}
-                    className="h-11 text-base font-bold pr-12 text-primary"
-                  />
-                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground pointer-events-none">
-                    hrs
-                  </span>
-                </div>
-
-                <span className="text-xs sm:text-sm font-semibold text-muted-foreground">
-                  ({duracionMin} minutos de recorrido)
-                </span>
-              </div>
-
-              {/* Presets rápidos de duración */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {DURACION_PRESETS.map((p) => {
-                  const activo = duracionHoras === p.horas
-                  return (
-                    <button
-                      key={p.horas}
-                      type="button"
-                      onClick={() => setDuracionHoras(p.horas)}
-                      className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${activo
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'border border-border bg-background hover:bg-muted text-foreground'
-                        }`}
-                    >
-                      {p.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* 2. Lista de Horarios de Salida y Llegadas Calculadas */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs sm:text-sm font-bold text-foreground">
-                  Horas de salida programadas ({horasSalida.length})
-                </Label>
-              </div>
-
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                {horasSalida.map((h) => {
-                  const llegadaCalc = calcularHoraRegreso(h, duracionMin) || '--:--'
-                  return (
-                    <div
-                      key={h}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-xs hover:border-primary/40 transition"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center rounded-lg bg-primary/10 px-2.5 py-1 text-sm font-black text-primary">
-                            {formato12h(h)}
-                          </span>
-                          <span className="text-xs font-bold text-muted-foreground">Salida</span>
-                        </div>
-                        <p className="text-caption font-medium text-muted-foreground flex items-center gap-1">
-                          🏁 Llegada estimada: <strong className="text-foreground">{formato12h(llegadaCalc)}</strong>
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => removerHora(h)}
-                        disabled={horasSalida.length <= 1}
-                        className="p-2 text-muted-foreground hover:text-destructive transition disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Eliminar este horario"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Agregar nueva hora */}
-              <div className="flex flex-wrap items-center gap-2 pt-2">
-                <Input
-                  aria-label="Nueva hora de salida"
-                  type="time"
-                  value={nuevaHoraInput}
-                  onChange={(e) => setNuevaHoraInput(e.target.value)}
-                  className="h-10 w-32 text-sm font-bold"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => agregarHora(nuevaHoraInput)}
-                  className="h-10 gap-1.5 text-xs sm:text-sm font-bold"
-                >
-                  <Plus className="h-4 w-4" />
-                  Agregar horario
-                </Button>
-
-                {/* Presets rápidos para agregar */}
-                <div className="flex flex-wrap items-center gap-1 pl-2">
-                  <span className="text-caption text-muted-foreground hidden sm:inline">Rápidos:</span>
-                  {HORAS_PRESETS.map((hPreset) => {
-                    const yaEsta = horasSalida.includes(hPreset)
-                    if (yaEsta) return null
-                    return (
-                      <button
-                        key={hPreset}
-                        type="button"
-                        onClick={() => agregarHora(hPreset)}
-                        className="rounded-lg border border-border/80 bg-muted/60 px-2 py-1 text-caption font-semibold text-foreground hover:bg-primary/10 hover:text-primary transition"
-                      >
-                        + {formato12h(hPreset)}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* 3. Días de la Semana en que opera */}
-        <div className="space-y-3 pt-2 border-t border-border/60">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Label className="text-xs sm:text-sm font-bold text-foreground">
-              Días de operación semanales
-            </Label>
-
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={() => seleccionarPresetDias('todos')}
-                className={`rounded-lg px-2.5 py-1 text-caption font-bold transition ${diasSeleccionados.length === 7
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-border bg-card hover:bg-muted text-muted-foreground'
-                  }`}
-              >
-                Todos los días
-              </button>
-              <button
-                type="button"
-                onClick={() => seleccionarPresetDias('laborables')}
-                className={`rounded-lg px-2.5 py-1 text-caption font-bold transition ${diasSeleccionados.length === 5 && !diasSeleccionados.includes(6) && !diasSeleccionados.includes(7)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-border bg-card hover:bg-muted text-muted-foreground'
-                  }`}
-              >
-                Lun a Vie
-              </button>
-              <button
-                type="button"
-                onClick={() => seleccionarPresetDias('finde')}
-                className={`rounded-lg px-2.5 py-1 text-caption font-bold transition ${diasSeleccionados.length === 2 && diasSeleccionados.includes(6) && diasSeleccionados.includes(7)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-border bg-card hover:bg-muted text-muted-foreground'
-                  }`}
-              >
-                Fin de semana
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-            {DIAS_SEMANA.map((d) => {
-              const seleccionado = diasSeleccionados.includes(d.n)
-              return (
-                <button
-                  key={d.n}
-                  type="button"
-                  onClick={() => toggleDia(d.n)}
-                  className={`flex items-center justify-center gap-1.5 rounded-xl border p-2.5 text-xs font-bold transition ${seleccionado
-                    ? 'border-primary bg-primary/10 text-primary font-black shadow-xs'
-                    : 'border-border bg-background text-muted-foreground hover:bg-muted'
-                    }`}
-                >
-                  {seleccionado && <Check className="h-3.5 w-3.5" />}
-                  {d.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* SECCIÓN 3: PRECIOS Y MONEDA */}
-      {!excursion ? (
-        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5 sm:p-6 space-y-4 shadow-sm">
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-primary" />
-              Precio base de la excursión (Variante Estándar)
-            </h3>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Podrás agregar más variantes de precio (VIP, niños, residentes) en cualquier momento desde el catálogo.
-            </p>
-          </div>
-
-          {tipoItem === 'COMBO' && sumaPreciosActividades && sumaPreciosActividades.adulto > 0 ? (
-            <div className="rounded-xl border border-primary/20 bg-background/80 p-4 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Suma individual de actividades
-                  </p>
-                  <p className="text-sm font-bold text-foreground">
-                    ${sumaPreciosActividades.adulto.toFixed(2)} por adulto
-                    {sumaPreciosActividades.nino > 0
-                      ? ` • $${sumaPreciosActividades.nino.toFixed(2)} por niño`
-                      : ''}
-                  </p>
-                </div>
-
-                {ahorroCombo && ahorroCombo.ahorro > 0 ? (
-                  <span className="rounded-full bg-success/15 px-3 py-1 text-xs font-bold text-success">
-                    🔥 Ahorro para el cliente: ${ahorroCombo.ahorro.toFixed(2)} ({ahorroCombo.pct}% descuento)
-                  </span>
-                ) : null}
-              </div>
-
-              {/* Botones de sugerencia rápida */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-caption text-muted-foreground font-medium">Sugerencias:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPrecioAdultoInput(sumaPreciosActividades.adulto.toFixed(2))
-                    if (sumaPreciosActividades.nino > 0) {
-                      setPrecioNinoInput(sumaPreciosActividades.nino.toFixed(2))
-                    }
-                  }}
-                  className="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted transition"
-                >
-                  Copiar suma total (${sumaPreciosActividades.adulto.toFixed(2)})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const desc15 = (sumaPreciosActividades.adulto * 0.85).toFixed(2)
-                    setPrecioAdultoInput(desc15)
-                    if (sumaPreciosActividades.nino > 0) {
-                      setPrecioNinoInput((sumaPreciosActividades.nino * 0.85).toFixed(2))
-                    }
-                  }}
-                  className="rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary hover:bg-primary/20 transition"
-                >
-                  Aplicar 15% de descuento (${(sumaPreciosActividades.adulto * 0.85).toFixed(2)})
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Configuración de Tarifas y Moneda
-              </span>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="exc-moneda" className="text-xs font-semibold text-muted-foreground">
-                  Moneda:
-                </Label>
-                <select
-                  id="exc-moneda"
-                  name="moneda"
-                  defaultValue={monedaDefecto || 'DOP'}
-                  className="h-9 rounded-lg border border-border bg-background px-3 text-xs font-bold text-foreground outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {MONEDAS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Tarifa Turistas / General */}
-              <div className="rounded-xl border border-border/80 bg-background/90 p-4 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-border/50 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🌍</span>
-                    <div>
-                      <h4 className="text-xs font-bold text-foreground uppercase tracking-wide">
-                        Tarifa Turistas / General
-                      </h4>
-                      <p className="text-xs text-muted-foreground">
-                        Boleto estándar internacional
-                      </p>
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-                    Principal
-                  </span>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <Label
-                      htmlFor="exc-precio-adulto"
-                      className="text-xs font-semibold text-foreground"
-                    >
-                      Adulto *
-                    </Label>
-                    <Input
-                      id="exc-precio-adulto"
-                      name="precioAdulto"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      placeholder="80.00"
-                      value={precioAdultoInput}
-                      onChange={(e) => setPrecioAdultoInput(e.target.value)}
-                      className="mt-1 h-10 text-sm font-bold"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label
-                      htmlFor="exc-precio-nino"
-                      className="text-xs font-semibold text-foreground"
-                    >
-                      Niño
-                    </Label>
-                    <Input
-                      id="exc-precio-nino"
-                      name="precioNino"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="40.00"
-                      value={precioNinoInput}
-                      onChange={(e) => setPrecioNinoInput(e.target.value)}
-                      className="mt-1 h-10 text-sm font-medium"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Tarifa Residentes / Locales */}
-              <div className="rounded-xl border border-success/20 bg-success/5 p-4 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-success/20 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🇩🇴</span>
-                    <div>
-                      <h4 className="text-xs font-bold text-foreground uppercase tracking-wide">
-                        Tarifa Residentes / Locales
-                      </h4>
-                      <p className="text-xs text-muted-foreground">
-                        Precio especial para locales
-                      </p>
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-success/15 px-2 py-0.5 text-xs font-bold text-success">
-                    Opcional
-                  </span>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <Label
-                      htmlFor="exc-precio-residente"
-                      className="text-xs font-semibold text-foreground"
-                    >
-                      Adulto
-                    </Label>
-                    <Input
-                      id="exc-precio-residente"
-                      name="precioResidente"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="50.00"
-                      value={precioResidenteInput}
-                      onChange={(e) => setPrecioResidenteInput(e.target.value)}
-                      className="mt-1 h-10 text-sm font-bold"
-                    />
-                  </div>
-                  <div>
-                    <Label
-                      htmlFor="exc-precio-nino-residente"
-                      className="text-xs font-semibold text-foreground"
-                    >
-                      Niño
-                    </Label>
-                    <Input
-                      id="exc-precio-nino-residente"
-                      name="precioNinoResidente"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="25.00"
-                      value={precioNinoResidenteInput}
-                      onChange={(e) => setPrecioNinoResidenteInput(e.target.value)}
-                      className="mt-1 h-10 text-sm font-medium"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
-          <h3 className="text-base font-bold text-foreground">Moneda e Impuestos</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="exc-moneda" className="text-xs sm:text-sm font-semibold">Moneda</Label>
-              <select
-                id="exc-moneda"
-                name="moneda"
-                defaultValue={excursion.moneda}
-                className="mt-1 block h-11 w-full rounded-xl border border-border bg-background px-3 text-sm font-bold text-foreground outline-none focus:ring-2 focus:ring-primary"
-              >
-                {MONEDAS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label htmlFor="exc-impuesto" className="text-xs sm:text-sm font-semibold">Impuesto (%)</Label>
-              <Input
-                id="exc-impuesto"
-                name="impuestoPct"
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                defaultValue={excursion.impuestoPct != null ? String(excursion.impuestoPct) : ''}
-                className="mt-1 h-11 text-sm"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-      {!excursion ? <input type="hidden" name="impuestoPct" value="" /> : null}
-
-      {/* SECCIÓN 4: UBICACIÓN Y PUNTO DE ENCUENTRO */}
-      <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
-        <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-primary" />
-          Ubicación y Punto de Salida
-        </h3>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="exc-ubicacion" className="text-xs sm:text-sm font-semibold">Ciudad / Región</Label>
-            <Input
-              id="exc-ubicacion"
-              name="ubicacion"
-              defaultValue={excursion?.ubicacion ?? ''}
-              placeholder="Ej.: Bayahíbe, La Romana"
-              className="mt-1 h-11 text-sm"
-            />
-          </div>
-          <div>
-            <Label htmlFor="exc-punto" className="text-xs sm:text-sm font-semibold">Punto exacto de encuentro</Label>
-            <Input
-              id="exc-punto"
-              name="puntoSalida"
-              defaultValue={excursion?.puntoSalida ?? ''}
-              placeholder="Ej.: Muelle Principal de Bayahíbe, frente al faro"
-              className="mt-1 h-11 text-sm"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* SECCIÓN 5: QUÉ INCLUYE Y POLÍTICAS */}
-      <div className="rounded-2xl border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
-        <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-          <Info className="h-5 w-5 text-primary" />
-          Inclusiones y Políticas
-        </h3>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="exc-incluye" className="text-xs sm:text-sm font-semibold">¿Qué incluye?</Label>
-            <Textarea
-              id="exc-incluye"
-              name="incluye"
-              defaultValue={excursion?.incluye ?? ''}
-              placeholder="Transporte en lancha, almuerzo buffet, bebidas abiertas, chalecos, guía certificado…"
-              rows={3}
-              className="mt-1 text-sm resize-y"
-            />
-          </div>
-          <div>
-            <Label htmlFor="exc-noincluye" className="text-xs sm:text-sm font-semibold">¿Qué NO incluye?</Label>
-            <Textarea
-              id="exc-noincluye"
-              name="noIncluye"
-              defaultValue={excursion?.noIncluye ?? ''}
-              placeholder="Propinas, fotos profesionales, compras personales…"
-              rows={3}
-              className="mt-1 text-sm resize-y"
-            />
-          </div>
-        </div>
-
-        <div>
-          <Label htmlFor="exc-politicas" className="text-xs sm:text-sm font-semibold">Políticas y recomendaciones</Label>
-          <Textarea
-            id="exc-politicas"
-            name="politicas"
-            defaultValue={excursion?.politicas ?? ''}
-            placeholder="Llevar protector solar, toalla, traje de baño. Cancelaciones con 24h de anticipación…"
-            rows={3}
-            className="mt-1 text-sm resize-y"
-          />
-        </div>
-      </div>
+      <SeccionPrecios v={v} poner={poner} errores={errores} editando={Boolean(excursion)} resumenCombo={resumenCombo} />
+      <SeccionUbicacion v={v} poner={poner} errores={errores} />
+      <SeccionIncluye v={v} poner={poner} errores={errores} />
 
       {state.error ? (
         <Alert variant="destructive">
@@ -1607,15 +233,13 @@ export function ExcursionForm({
         </Alert>
       ) : null}
 
-      {tipoItem === 'COMBO' && !itinerarioResult.ok ? (
+      {tipoItem === 'COMBO' && !combo.itinerario.ok ? (
         <Alert variant="destructive">
-          <AlertDescription className="font-semibold">
-            ⚠️ No se puede guardar el combo: {itinerarioResult.error}
-          </AlertDescription>
+          <AlertDescription className="font-semibold">⚠️ No se puede guardar el combo: {combo.itinerario.error}</AlertDescription>
         </Alert>
       ) : null}
 
-      {tipoItem === 'COMBO' && actividadesComboSeleccionadas.length >= 2 && diasComunes.length === 0 ? (
+      {tipoItem === 'COMBO' && combo.seleccionadas.length >= 2 && combo.diasComunes.length === 0 ? (
         <Alert variant="destructive">
           <AlertDescription className="font-semibold">
             ⚠️ No se puede guardar el combo: Las actividades seleccionadas no comparten ningún día operativo en común.
@@ -1623,16 +247,9 @@ export function ExcursionForm({
         </Alert>
       ) : null}
 
-      <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
-        <Button
-          type="submit"
-          disabled={
-            pending ||
-            (tipoItem === 'COMBO' && (!itinerarioResult.ok || actividadesComboSeleccionadas.length < 2 || diasComunes.length === 0))
-          }
-          className="h-12 w-full sm:w-auto px-8 rounded-xl font-bold text-sm sm:text-base shadow-sm gap-2"
-        >
-          {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+      <div className="flex flex-col items-center justify-end gap-3 pt-2 sm:flex-row">
+        <Button type="submit" disabled={pending || comboInvalido} className="h-12 w-full gap-2 rounded-xl px-8 text-sm font-bold shadow-sm sm:w-auto sm:text-base">
+          {pending ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : null}
           {excursion ? 'Guardar cambios' : 'Crear y publicar excursión'}
         </Button>
       </div>
