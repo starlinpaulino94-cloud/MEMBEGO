@@ -53,7 +53,17 @@ const COLUMNAS: Columna<ClienteCaptadoFila>[] = [
     prioridad: 3,
     celda: (c) => CANAL_ATRIBUCION_LABEL[(c.canal ?? 'ENLACE') as CanalAtribucion] ?? c.canal,
   },
-  { clave: 'createdAt', encabezado: 'Fecha', tipo: 'fechaHora', alineacion: 'derecha' },
+  {
+    clave: 'createdAt',
+    encabezado: 'Fecha',
+    alineacion: 'derecha',
+    // Sin cortes de línea: a 390 px la tabla se desplaza dentro de su caja y una fecha partida en cinco renglones no se lee.
+    celda: (c) => (
+      <time dateTime={new Date(c.createdAt).toISOString()} className="whitespace-nowrap">
+        {formatDateTime(new Date(c.createdAt))}
+      </time>
+    ),
+  },
 ]
 
 export function ClientesCaptadosTabla({
@@ -76,7 +86,6 @@ export function ClientesCaptadosTabla({
       filas={filas}
       claveDe={(c) => c.id}
       columnaIdentificadora="nombre"
-      formato={{ fechaHora: (v) => formatDateTime(new Date(v)) }}
       vacio={vacio}
       sinResultados={sinResultados}
       hayFiltros={hayFiltros}

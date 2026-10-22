@@ -119,7 +119,7 @@ export function ReservaPagos({
       encabezado: 'Monto',
       celda: (p) => <span className={p.estado === 'ANULADO' ? 'font-medium text-foreground line-through' : 'font-medium text-foreground'}>{dinero(p.monto)}</span>,
     },
-    { clave: 'metodo', encabezado: 'Método', celda: (p) => METODO_PAGO_LABEL[p.metodo as keyof typeof METODO_PAGO_LABEL] ?? p.metodo },
+    { clave: 'metodo', encabezado: 'Método', prioridad: 2, celda: (p) => METODO_PAGO_LABEL[p.metodo as keyof typeof METODO_PAGO_LABEL] ?? p.metodo },
     { clave: 'referencia', encabezado: 'Referencia', prioridad: 3 },
     { clave: 'cuando', encabezado: 'Cuándo', prioridad: 2, celda: (p) => formatDateTime(p.createdAt) },
     { clave: 'estado', encabezado: 'Estado', celda: celdaEstado },
