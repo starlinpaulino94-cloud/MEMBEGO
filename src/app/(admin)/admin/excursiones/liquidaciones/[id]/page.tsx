@@ -20,24 +20,12 @@ import {
 } from '@/modules/excursiones/liquidaciones/nucleo'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { LiquidacionAcciones } from '@/components/excursiones/LiquidacionAcciones'
+import { BonosLiquidacionTabla, ComisionesLiquidacionTabla } from '@/components/excursiones/LiquidacionLineasTablas'
 import { StatusChip } from '@/components/ui/status-chip'
 import { formatDate, formatDateTime, formatMoney } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Liquidación' }
-
-const TIPO_REMUNERACION_INFO: Record<
-  string,
-  { label: string; tone: 'success' | 'warning' | 'neutral' | 'info' | 'danger' }
-> = {
-  PORCENTAJE: { label: '% Porcentaje', tone: 'info' },
-  FIJO_ADULTO: { label: 'Fijo Adulto', tone: 'success' },
-  FIJO_NINO: { label: 'Fijo Niño', tone: 'success' },
-  FIJO_VENTA: { label: 'Fijo Venta', tone: 'neutral' },
-  FIJO_PASAJERO: { label: 'Fijo Pasajero', tone: 'neutral' },
-  ESCALON: { label: 'Escalón Volumen', tone: 'info' },
-  PAQUETE_REGALO: { label: '🎁 Paquete Regalo', tone: 'warning' },
-}
 
 export default async function LiquidacionDetallePage({
   params,
@@ -287,34 +275,7 @@ export default async function LiquidacionDetallePage({
               {bonos.length} bono{bonos.length === 1 ? '' : 's'}
             </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-caption uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 pr-3">Descripción / Meta</th>
-                  <th className="py-2 pr-3">Fecha Otorgado</th>
-                  <th className="py-2 pr-3 text-right">Monto</th>
-                  <th className="py-2 text-center">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bonos.map((b) => (
-                  <tr key={b.id} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-3 text-foreground font-medium">{b.descripcion}</td>
-                    <td className="py-2 pr-3 text-muted-foreground">{formatDate(b.createdAt)}</td>
-                    <td className="py-2 pr-3 text-right font-mono font-bold text-foreground">
-                      {dinero(b.monto)}
-                    </td>
-                    <td className="py-2 text-center">
-                      <StatusChip tone={b.estado === 'PAGADO' ? 'success' : 'warning'}>
-                        {b.estado === 'PAGADO' ? 'Pagado' : 'Por liquidar'}
-                      </StatusChip>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <BonosLiquidacionTabla bonos={bonos} moneda={moneda} />
         </section>
       )}
 
@@ -330,89 +291,8 @@ export default async function LiquidacionDetallePage({
           Detalle línea por línea del lote liquidado con su respectivo tipo de remuneración comercial.
         </p>
 
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-caption uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-3">Venta</th>
-                <th className="py-2 pr-3">Tipo</th>
-                <th className="py-2 pr-3">Cálculo & Desglose</th>
-                <th className="py-2 pr-3">Fecha</th>
-                <th className="py-2 text-right">Neto a Liquidar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineas.map((l) => {
-                const info = TIPO_REMUNERACION_INFO[l.tipoCalculo] ?? {
-                  label: l.tipoCalculo,
-                  tone: 'neutral' as const,
-                }
-                const esEspecie = l.tipoCalculo === 'PAQUETE_REGALO'
-
-                return (
-                  <tr key={l.id} className="border-b border-border last:border-0 align-top hover:bg-muted/20 transition-colors">
-                    <td className="py-2.5 pr-3 font-mono font-semibold text-foreground">{l.venta}</td>
-                    <td className="py-2.5 pr-3">
-                      <StatusChip tone={info.tone}>{info.label}</StatusChip>
-                    </td>
-                    <td className="py-2.5 pr-3 text-muted-foreground max-w-sm">
-                      <p className="text-sm text-foreground">{l.desglose}</p>
-                      {l.ajustes.length > 0 ? (
-                        <ul className="mt-1 space-y-0.5 border-t border-border/50 pt-1">
-                          {l.ajustes.map((a, i) => (
-                            <li key={i} className="text-caption text-muted-foreground">
-                              Ajuste {a.monto > 0 ? '+' : ''}
-                              {dinero(a.monto)} · {a.motivo}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </td>
-                    <td className="py-2.5 pr-3 text-muted-foreground whitespace-nowrap">
-                      {formatDate(l.createdAt)}
-                    </td>
-                    <td className="py-2.5 text-right font-medium text-foreground whitespace-nowrap">
-                      {esEspecie ? (
-                        <span className="font-mono text-xs text-muted-foreground font-semibold">
-                          Premio Voucher
-                        </span>
-                      ) : (
-                        <p className="font-mono font-bold">{dinero(l.neto)}</p>
-                      )}
-                      {l.conversion.esConversion && !esEspecie ? (
-                        <div className="mt-1 space-y-0.5 text-right">
-                          <span
-                            className="inline-flex items-center gap-1 text-xs font-mono font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded-lg"
-                            title={`Tasa predeterminada aplicada: ${l.conversion.tasaLabel}`}
-                          >
-                            💱 {l.conversion.tasaLabel}
-                          </span>
-                          <p className="text-caption text-muted-foreground font-mono">
-                            Orig: {formatMoney(l.netoOriginal, { moneda: l.monedaOriginal }, 2)}
-                          </p>
-                          {!l.conversion.tasaConfigurada && (
-                            <span className="block text-xs text-muted-foreground font-semibold">
-                              Tasa 1:1 no configurada
-                            </span>
-                          )}
-                        </div>
-                      ) : null}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colSpan={4} className="pt-4 text-right font-semibold text-foreground text-sm">
-                  Total en Efectivo / Transferencia
-                </td>
-                <td className="pt-4 text-right text-h3 font-mono font-bold text-foreground">
-                  {dinero(String(liquidacion.total))}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+        <div className="mt-3">
+          <ComisionesLiquidacionTabla lineas={lineas} moneda={moneda} total={String(liquidacion.total)} />
         </div>
       </section>
 
