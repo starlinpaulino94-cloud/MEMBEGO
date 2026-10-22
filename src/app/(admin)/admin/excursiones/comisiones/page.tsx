@@ -76,7 +76,7 @@ export default async function ComisionesPage({ searchParams }: { searchParams: P
       ) : null}
 
       <BarraFiltros
-        busqueda={{ nombre: 'q', valor: filtros.q, etiqueta: 'Buscar', placeholder: 'Vendedor, venta (#SAL-…), liquidación o desglose…' }}
+        busqueda={{ nombre: 'q', valor: filtros.q, etiqueta: 'Buscar', placeholder: 'Vendedor, venta o liquidación…' }}
         filtros={[
           {
             nombre: 'vendedor',

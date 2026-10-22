@@ -59,7 +59,7 @@ export default async function LiquidacionesPage({ searchParams }: { searchParams
         </h2>
 
         <BarraFiltros
-          busqueda={{ nombre: 'q', valor: filtros.q, etiqueta: 'Buscar', placeholder: 'Número (PAY-…) o vendedor…' }}
+          busqueda={{ nombre: 'q', valor: filtros.q, etiqueta: 'Buscar', placeholder: 'Número o vendedor…' }}
           filtros={[
             {
               nombre: 'vendedor',
