@@ -216,6 +216,7 @@ const CLAVES_AUDITABLES = new Set([
   'esRevalidacion',
   'cantidad',
   'resultado',
+  'incidenciaId',
 ])
 
 export function payloadSeguro(payload: Record<string, unknown>): Record<string, string | number | boolean | null> {
@@ -785,6 +786,124 @@ export async function consentimientosVigentesDe(userId: string): Promise<Map<Tip
     const mapa = new Map<TipoConsentimientoIdentidad, string>()
     for (const f of filas) mapa.set(f.tipo as TipoConsentimientoIdentidad, f.textoVersion)
     return mapa
+  })
+}
+
+// ── Lo que hace el EQUIPO con un caso (Fase 4) ──────────────────────────────
+
+/** Quita los caracteres de control y recorta. Lo que escribe el equipo (motivos, respuestas) pasa por aquí. */
+function textoLimpio(valor: string | null | undefined, max: number): string {
+  return (valor ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, max)
+}
+
+export type ResultadoResolverRevision =
+  | { ok: true; userId: string; resultado: 'rechazada' | 'repeticion' }
+  | { ok: false; error: 'no_existe' | 'no_esta_en_revision' | 'decision_invalida' }
+
+/**
+ * El equipo resuelve un caso que esperaba a una persona (`en_revision`: lo pidió el proveedor o el mismo documento
+ * aparece en otra cuenta). Solo hay DOS salidas desde aquí, a propósito:
+ *
+ *  · `rechazar`: el intento queda `rechazada_definitiva` con un código NEUTRO (`REVISION_NEGADA`): a la persona se
+ *    le dice «contacta a soporte» y nada más (no se revela que el documento está en otra cuenta, ni qué señal saltó);
+ *  · `pedir_repeticion`: el intento se cancela y la persona puede volver a empezar SIN que cuente como un rechazo
+ *    (no activa la espera ni el tope semanal).
+ *
+ * APROBAR NO ESTÁ AQUÍ. Un caso que el proveedor mandó a revisión se aprueba en la consola del proveedor, donde está la
+ * evidencia, y de ahí vuelve por el aviso y la consulta (`aplicarDecision` sigue siendo el único camino a «verificada»).
+ * Una aprobación a mano sin documento ni hash dejaría pasar un mismo documento en dos cuentas.
+ *
+ * Solo el equipo autorizado, con motivo, y deja asiento. El borrado de la sesión en el proveedor y el aviso a la persona
+ * los hace quien llama (`sincronizacion.ts`): esta capa no habla con el proveedor.
+ */
+export async function resolverRevisionDeIdentidad(
+  actor: ActorDeIdentidad,
+  intentoId: string,
+  decision: 'rechazar' | 'pedir_repeticion',
+  motivo: string,
+  ahora: Date = new Date()
+): Promise<ResultadoResolverRevision> {
+  exigirGestion(actor)
+  // Solo hay dos salidas: cualquier otra cosa (p. ej. «aprobar») se rechaza, no se interpreta como la segunda.
+  if (decision !== 'rechazar' && decision !== 'pedir_repeticion') return { ok: false, error: 'decision_invalida' }
+  const razon = textoLimpio(motivo, 200)
+  if (!razon) throw new ErrorDeIdentidad('motivo_requerido', 'Indica el motivo.')
+  const intento = await ubicarIntento(intentoId)
+  if (!intento) return { ok: false, error: 'no_existe' }
+  return conUsuario(intento.userId, async (tx): Promise<ResultadoResolverRevision> => {
+    await bloquearPersona(tx, intento.userId)
+    const actual = await tx.identidadIntento.findUnique({ where: { id: intentoId }, select: { estado: true, canal: true } })
+    if (!actual) return { ok: false, error: 'no_existe' }
+    // Condición repetida en el UPDATE: si otro proceso (o el proveedor) lo movió entre medias, no se pisa.
+    const cambio =
+      decision === 'rechazar'
+        ? { estado: 'rechazada_definitiva', tipoRechazo: 'definitivo', codigoRazon: 'REVISION_NEGADA', resueltoAt: ahora }
+        : { estado: 'cancelada', tipoRechazo: null, codigoRazon: null, resueltoAt: ahora }
+    const r = await tx.identidadIntento.updateMany({ where: { id: intentoId, estado: 'en_revision' }, data: cambio })
+    if (r.count === 0) return { ok: false, error: 'no_esta_en_revision' }
+    await auditar(tx, 'IDENTIDAD_REVISION_RESUELTA', {
+      actorUserId: actor.userId,
+      entidadId: intento.userId,
+      payload: {
+        intentoId,
+        estadoAnterior: 'en_revision',
+        resultado: decision === 'rechazar' ? 'rechazada' : 'repeticion',
+        codigoRazon: decision === 'rechazar' ? 'REVISION_NEGADA' : null,
+        canal: actual.canal,
+        motivo: razon,
+        rol: actor.rol,
+      },
+    })
+    return { ok: true, userId: intento.userId, resultado: decision === 'rechazar' ? 'rechazada' : 'repeticion' }
+  })
+}
+
+export type ResultadoAtenderIncidencia =
+  | { ok: true; userId: string; estado: 'en_proceso' | 'resuelta'; cambio: boolean; /** La respuesta ya limpia, tal como quedó guardada. */ respuesta: string | null }
+  | { ok: false; error: 'no_existe' | 'ya_resuelta' | 'respuesta_invalida' }
+
+/**
+ * El equipo atiende una incidencia: la TOMA (`abierta` → `en_proceso`, queda dicho quién) o la RESUELVE (con una
+ * respuesta para la persona, de 1 a 500 caracteres: sin respuesta no está resuelta, y la base lo exige también).
+ * Repetir lo ya hecho no cambia nada (`cambio: false`). Solo el equipo autorizado; el asiento lleva el id y el
+ * resultado, NUNCA el texto de la persona ni la respuesta.
+ */
+export async function atenderIncidenciaDeIdentidad(
+  actor: ActorDeIdentidad,
+  incidenciaId: string,
+  accion: 'tomar' | 'resolver',
+  respuesta?: string,
+  ahora: Date = new Date()
+): Promise<ResultadoAtenderIncidencia> {
+  exigirGestion(actor)
+  const texto = textoLimpio(respuesta, 500)
+  if (accion === 'resolver' && texto.length < 1) return { ok: false, error: 'respuesta_invalida' }
+  const fila = await sinEmpresa('identidad: el equipo localiza la incidencia por su id', (tx) =>
+    tx.identidadIncidencia.findUnique({ where: { id: incidenciaId }, select: { userId: true } })
+  )
+  if (!fila) return { ok: false, error: 'no_existe' }
+  return conUsuario(fila.userId, async (tx): Promise<ResultadoAtenderIncidencia> => {
+    await bloquearPersona(tx, fila.userId)
+    const actual = await tx.identidadIncidencia.findUnique({ where: { id: incidenciaId }, select: { estado: true, intentoId: true } })
+    if (!actual) return { ok: false, error: 'no_existe' }
+    if (actual.estado === 'resuelta') {
+      return accion === 'resolver' ? { ok: true, userId: fila.userId, estado: 'resuelta', cambio: false, respuesta: null } : { ok: false, error: 'ya_resuelta' }
+    }
+    if (accion === 'tomar') {
+      if (actual.estado === 'en_proceso') return { ok: true, userId: fila.userId, estado: 'en_proceso', cambio: false, respuesta: null }
+      await tx.identidadIncidencia.update({ where: { id: incidenciaId }, data: { estado: 'en_proceso', atendidaPorId: actor.userId } })
+    } else {
+      await tx.identidadIncidencia.update({
+        where: { id: incidenciaId },
+        data: { estado: 'resuelta', respuesta: texto, resueltaAt: ahora, resueltaPorId: actor.userId, atendidaPorId: actor.userId },
+      })
+    }
+    await auditar(tx, 'IDENTIDAD_INCIDENCIA_ATENDIDA', {
+      actorUserId: actor.userId,
+      entidadId: fila.userId,
+      payload: { incidenciaId, intentoId: actual.intentoId, resultado: accion === 'tomar' ? 'tomada' : 'resuelta', rol: actor.rol },
+    })
+    return { ok: true, userId: fila.userId, estado: accion === 'tomar' ? 'en_proceso' : 'resuelta', cambio: true, respuesta: accion === 'resolver' ? texto : null }
   })
 }
 

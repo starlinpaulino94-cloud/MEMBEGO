@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en ca8b03d4: 249 migraciones, última 20261083_identidad_incidencias.
+-- Generado con scripts/generar-verificar-migraciones.mjs en de0353c1: 251 migraciones, última 20261085_identidad_incidencias_respuesta.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -262,7 +262,9 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261080_identidad_acciones_proveedor','600eee8b5877cdc70dc4569cf414ed53a4b3938422aaf5799cce9ac4cd19abaa'),
   ('20261081_identidad_proveedor','25916026f65f4f72fe56515f90c25d36b1290626fb0e7f309aade652733ee154'),
   ('20261082_identidad_avisos_incidencias_enums','2ca9d999a1f062d334b6031fb7f1572218bb353f4701ee14cd5aad0febf392c5'),
-  ('20261083_identidad_incidencias','3798404b1e045fcbe3dfb04f6c03acb8408d1ebfb16f39b83aac628e9953f515')
+  ('20261083_identidad_incidencias','3798404b1e045fcbe3dfb04f6c03acb8408d1ebfb16f39b83aac628e9953f515'),
+  ('20261084_identidad_admin_enums','fe8951938116a22a5ce66b1ae032ac35051113b1f349bfad98684142e4689a24'),
+  ('20261085_identidad_incidencias_respuesta','5fbcc5c960c258b4bab37b7442175fb43f6fe6ea4600b02d2067d6ce93e959ae')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,

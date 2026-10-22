@@ -254,6 +254,11 @@ model IdentidadIncidencia {
   resueltaPorId String?
   resueltaPor   User?     @relation("IdentidadIncidenciaResueltaPor", fields: [resueltaPorId], references: [id], onDelete: SetNull)
 
+  /// Quién del equipo la tomó, y la respuesta que se le dio a la persona (de 1 a 500 caracteres, escrita por el equipo).
+  atendidaPorId String?
+  atendidaPor   User?   @relation("IdentidadIncidenciaAtendidaPor", fields: [atendidaPorId], references: [id], onDelete: SetNull)
+  respuesta     String?
+
   @@index([userId, creadaAt])
   @@index([estado, creadaAt])
   @@map("identidad_incidencias")

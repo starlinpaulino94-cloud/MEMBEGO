@@ -41,6 +41,8 @@ test('NINGUNA RUTA DE API NI ACCIÓN DE CLIENTE MARCA «VERIFICADA»: el resulta
   assert.deepEqual(rutas.sort(), [
     'src/app/(cliente)/cliente/ajustes/page.tsx', // el resumen de Configuración (solo lectura)
     'src/app/(cliente)/cliente/identidad/page.tsx', // la pantalla de la persona (solo lectura)
+    'src/app/(superadmin)/superadmin/identidad/[userId]/page.tsx', // el caso (solo SUPERADMIN)
+    'src/app/(superadmin)/superadmin/identidad/page.tsx', // el panel del equipo (solo SUPERADMIN)
     'src/app/api/cron/identidad/route.ts',
     'src/app/api/v1/auth/cuenta/route.ts', // elimina la cuenta: purga antes lo del proveedor
     'src/app/api/v1/cliente/identidad/borrado/route.ts',
@@ -133,7 +135,7 @@ test('el interruptor y la capacidad nacen apagados en el código: la verificaci�
 
 test('las migraciones de identidad están selladas en SUMAS.txt y son las últimas', () => {
   const sumas = leer('prisma/migrations/SUMAS.txt')
-  for (const m of ['20261078_identidad_acciones_enum', '20261079_identidad_verificacion', '20261080_identidad_acciones_proveedor', '20261081_identidad_proveedor', '20261082_identidad_avisos_incidencias_enums', '20261083_identidad_incidencias']) assert.ok(sumas.includes(m), `${m} sin sellar (npm run migraciones:sellar)`)
+  for (const m of ['20261078_identidad_acciones_enum', '20261079_identidad_verificacion', '20261080_identidad_acciones_proveedor', '20261081_identidad_proveedor', '20261082_identidad_avisos_incidencias_enums', '20261083_identidad_incidencias', '20261084_identidad_admin_enums', '20261085_identidad_incidencias_respuesta']) assert.ok(sumas.includes(m), `${m} sin sellar (npm run migraciones:sellar)`)
 })
 
 // ── Fase 2 · el proveedor ───────────────────────────────────────────────────
@@ -278,4 +280,77 @@ test('las variables del proveedor están documentadas en .env.example y se exige
   const env = quitarComentarios(leer('src/lib/env.ts'))
   const faltantes = env.slice(env.indexOf('export function faltantesIdentidad'))
   for (const v of ['DIDIT_API_KEY', 'DIDIT_WORKFLOW_ID', 'DIDIT_WEBHOOK_SECRET']) assert.match(faltantes, new RegExp(v), 'faltantesIdentidad debe exigir ' + v)
+})
+
+// ── Fase 4 · el equipo ──────────────────────────────────────────────────────
+
+test('EL PANEL DEL EQUIPO es solo de SUPERADMIN en TODAS sus capas: las páginas, las acciones y el servicio', () => {
+  for (const f of ['src/app/(superadmin)/superadmin/identidad/page.tsx', 'src/app/(superadmin)/superadmin/identidad/[userId]/page.tsx']) {
+    const src = quitarComentarios(leer(f))
+    assert.match(src, /requireRole\('SUPERADMIN'\)/, f)
+    assert.doesNotMatch(src, /\bprisma\b|conEmpresa|conUsuario|sinEmpresa/, f + ': las páginas no tocan la base: todo pasa por el servicio del equipo')
+    assert.doesNotMatch(src, /<img|<Image|referenciaProveedor|hashDedupe/, f + ': nunca una imagen ni la referencia del proveedor')
+  }
+  const acciones = quitarComentarios(leer('src/modules/superadmin/identidadActions.ts'))
+  assert.match(acciones, /^'use server'/m)
+  const exportadas = [...acciones.matchAll(/export async function (\w+)/g)].map((m) => m[1])
+  assert.deepEqual(exportadas.sort(), ['atenderIncidenciaAction', 'cambiarInterruptorAction', 'pedirRevalidacionAction', 'resolverRevisionAction', 'revocarVerificacionAction', 'suprimirIdentidadAction'])
+  for (const nombre of exportadas) {
+    const cuerpo = acciones.slice(acciones.indexOf('function ' + nombre)).split(/\nexport async function /)[0]
+    assert.match(cuerpo, /await requireSuperadmin\(\)/, nombre + ' no exige ser SUPERADMIN')
+    assert.match(cuerpo, /if \(!sesion\) return \{ error: 'No autorizado\.' \}/, nombre)
+  }
+  assert.match(acciones, /user\.metadata\.role !== 'SUPERADMIN'/)
+  // Todas las funciones del servicio del equipo empiezan por la comprobación del rol.
+  const staff = quitarComentarios(leer('src/modules/identidad/staff.ts'))
+  for (const nombre of ['resumenDeLaPlataforma', 'colaDeRevision', 'colaDeIncidencias', 'buscarPersonas', 'verCasoDeIdentidad']) {
+    const cuerpo = staff.slice(staff.indexOf('export async function ' + nombre)).split(/\nexport async function /)[0]
+    assert.match(cuerpo.slice(0, 700), /exigirGestionDeIdentidad\(actor\)/, nombre + ' debe empezar comprobando el rol')
+  }
+  assert.match(quitarComentarios(leer(SERVICIO)), /export const ROLES_GESTION_IDENTIDAD: readonly string\[\] = \['SUPERADMIN'\]/)
+})
+
+test('EL EQUIPO NO PUEDE ACREDITAR A NADIE: no hay acción de aprobar, y lo que resuelve un caso solo rechaza o pide repetir', () => {
+  const acciones = quitarComentarios(leer('src/modules/superadmin/identidadActions.ts'))
+  assert.doesNotMatch(acciones, /aprobar|aplicarDecision|registrarAprobada|estado:\s*'verificada'/i)
+  const servicio = quitarComentarios(leer(SERVICIO))
+  const resolver = servicio.slice(servicio.indexOf('export async function resolverRevisionDeIdentidad')).split(/\nexport (async )?function |\nexport type /)[0]
+  assert.match(resolver, /decision !== 'rechazar' && decision !== 'pedir_repeticion'/, 'una decisión inventada no se interpreta como la segunda salida')
+  assert.doesNotMatch(resolver, /'aprobada'|'verificada'/)
+  assert.match(resolver, /where: \{ id: intentoId, estado: 'en_revision' \}/, 'solo se toca lo que sigue en revisión')
+  // La pantalla lo dice con todas las letras.
+  assert.match(leer('src/app/(superadmin)/superadmin/identidad/[userId]/page.tsx'), /Para aprobar un caso en revisión, hazlo en la consola del proveedor/)
+})
+
+test('EL SERVICIO DEL EQUIPO nunca saca la referencia del proveedor, el hash ni un documento; y cada consulta usa un motivo de lista cerrada', () => {
+  const staff = quitarComentarios(leer('src/modules/identidad/staff.ts'))
+  assert.doesNotMatch(staff, /hashDedupe|abrirReferencia|leerReferenciaDeSesion|sesionesDeLaPersona/, 'staff.ts no toca la referencia ni el hash')
+  // La referencia sellada solo aparece como FILTRO («¿queda algo por borrar en el proveedor?»), nunca elegida ni leída.
+  const usosDeLaReferencia = staff.match(/referenciaProveedorSellada[^\n]*/g) ?? []
+  assert.ok(usosDeLaReferencia.every((u) => /^referenciaProveedorSellada: \{ not: null \},?$/.test(u.trim())), 'la referencia del proveedor solo puede usarse como filtro')
+  assert.match(staff, /if \(!esMotivoDeConsulta\(motivo\)\) throw new ErrorDeIdentidad\('motivo_requerido'/)
+  assert.match(staff, /consultarIdentidadComoStaff\(actor, userId, motivo, contexto\)/, 'la consulta pasa por la función que deja asiento')
+  // La lectura del caso deja asiento ANTES de completar nada: la llamada auditada va primero.
+  assert.ok(staff.indexOf('consultarIdentidadComoStaff(actor') < staff.indexOf("tx.identidadConsentimiento.findMany({ where: { userId }"))
+  // El panel no ofrece ningún enlace de descarga ni tiene rutas que devuelvan archivos.
+  for (const f of archivos('src/app/(superadmin)/superadmin/identidad')) assert.doesNotMatch(quitarComentarios(leer(f)), /download|\.pdf|\.zip|createReadStream|Content-Disposition/i, f)
+  assert.deepEqual(archivos('src/app/(superadmin)/superadmin/identidad').filter((f) => f.endsWith('route.ts')), [], 'el panel no tiene rutas de datos')
+})
+
+test('LAS EMPRESAS NO TOCAN LA IDENTIDAD DE NADIE: sin importar el módulo ni leer sus tablas; solo la insignia «verificada» de la ficha, con la capacidad', () => {
+  const zonasDeEmpresa = [...archivos('src/app/(admin)'), ...archivos('src/modules/admin'), ...archivos('src/components/admin'), ...archivos('src/app/(vendedor)')]
+  const infractores = zonasDeEmpresa.filter((f) => /@\/modules\/identidad\/|\bidentidad(Verificacion|Intento|Consentimiento|Incidencia|EventoExterno|Interruptor)\b/.test(quitarComentarios(leer(f))))
+  // Única excepción (Fase 2): borrar a un empleado se frena mientras haya un borrado de identidad sin completar. La función solo
+  // devuelve un TEXTO de aviso (o null): ningún dato de identidad llega a la empresa.
+  assert.deepEqual(infractores, ['src/modules/admin/actions.ts'], 'una empresa no importa el módulo de identidad ni lee sus tablas')
+  const origen = quitarComentarios(leer('src/modules/admin/actions.ts'))
+  assert.deepEqual([...origen.matchAll(/from '@\/modules\/identidad\/([\w-]+)'/g)].map((m) => m[1]), ['supresion'])
+  assert.match(origen, /import \{ bloqueoPorIdentidadPendiente \} from '@\/modules\/identidad\/supresion'/)
+  // Lo único que lee de la persona: la proyección de la ficha, solo en la ficha de un cliente, y detrás de la capacidad.
+  const lectores = archivos('src').filter((f) => /\bcliente\.identidad(Estado|Nivel|VerificadaEn)\b/.test(quitarComentarios(leer(f))))
+  assert.deepEqual(lectores, ['src/app/(admin)/admin/clientes/[id]/page.tsx'])
+  const ficha = quitarComentarios(leer(lectores[0]))
+  assert.match(ficha, /cliente\.identidadEstado === 'verificada' && \(await tieneCapacidad\(cliente\.companyId, 'VERIFICACION_IDENTIDAD'\)\)/)
+  const insignia = quitarComentarios(leer('src/components/admin/IdentidadVerificadaBadge.tsx'))
+  assert.doesNotMatch(insignia, /rechaz|revis|duplic|nivel|c[eé]dula|selfie/i, 'la insignia no dice nada más que «verificada»')
 })

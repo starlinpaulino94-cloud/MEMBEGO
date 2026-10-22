@@ -113,6 +113,8 @@ enum NotifTipo {
   IDENTIDAD_VERIFICADA
   IDENTIDAD_RECHAZADA
   IDENTIDAD_EN_REVISION
+  /// Se le pide a la persona repetir la verificación (sin que cuente como un rechazo).
+  IDENTIDAD_REPETIR
 
 }
 
@@ -634,6 +636,10 @@ enum AuditAccion {
   IDENTIDAD_EVENTO_DESCARTADO
   /// La persona reportó un problema con su verificación de identidad (incidencia).
   IDENTIDAD_INCIDENCIA_REPORTADA
+  /// El equipo de MEMBEGO resolvió un caso que esperaba a una persona (lo rechazó o pidió repetirlo).
+  IDENTIDAD_REVISION_RESUELTA
+  /// El equipo de MEMBEGO tomó o resolvió una incidencia de verificación de identidad.
+  IDENTIDAD_INCIDENCIA_ATENDIDA
 }
 
 // ─────────────────────────────────────────────
@@ -705,6 +711,7 @@ model User {
   identidadInterruptores   IdentidadInterruptor[]    @relation("IdentidadInterruptorCambiadoPor")
   identidadIncidencias     IdentidadIncidencia[]     @relation("IdentidadIncidenciasDeUsuario")
   identidadIncidenciasResueltas IdentidadIncidencia[] @relation("IdentidadIncidenciaResueltaPor")
+  identidadIncidenciasAtendidas IdentidadIncidencia[] @relation("IdentidadIncidenciaAtendidaPor")
 
   // Listados de empleados por empresa (/admin/empleados) y conteos por empresa.
   transaccionesComoEmpleado    Transaction[]              @relation("TransactionEmpleado")

@@ -323,6 +323,11 @@ export const CODIGOS_RAZON = {
     visible: false,
     mensaje: 'No pudimos verificar tu identidad. Contacta a soporte para que lo revisemos.',
   },
+  REVISION_NEGADA: {
+    reintentable: false,
+    visible: false,
+    mensaje: 'No pudimos verificar tu identidad. Contacta a soporte para que lo revisemos.',
+  },
   FLUJO_INCOMPLETO: {
     reintentable: true,
     visible: false,
@@ -350,6 +355,7 @@ const GRAVEDAD: readonly CodigoRazon[] = [
   'DOCUMENTO_NO_SOPORTADO',
   'DOCUMENTO_ILEGIBLE',
   'SESION_EXPIRADA',
+  'REVISION_NEGADA',
   'FLUJO_INCOMPLETO',
   'RECHAZO_GENERICO',
 ]
