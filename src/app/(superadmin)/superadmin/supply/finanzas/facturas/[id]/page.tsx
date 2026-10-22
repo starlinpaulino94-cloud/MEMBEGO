@@ -9,6 +9,7 @@ import { StatCard } from '@/components/ui/stat-card'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { urlComprobante } from '@/modules/storage/comprobantes'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { TablaLineasFactura } from '@/components/supply-v2/tablas-detalle'
 import { ChipFactura, ChipObligacion } from '@/components/supply-v2/finanzas/chips'
 import { AplicarDeposito, AprobarFactura, CancelarFactura, PagarFactura } from '@/components/supply-v2/finanzas/acciones-factura'
 import { ReversarAplicacion } from '@/components/supply-v2/finanzas/acciones-pago'
@@ -93,24 +94,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Líneas</CardTitle></CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr><th className="py-1 pr-3">Concepto</th><th className="py-1 pr-3 text-right">Cantidad</th><th className="py-1 pr-3 text-right">Costo</th><th className="py-1 pr-3 text-right">Impuestos</th><th className="py-1 text-right">Total</th></tr>
-                </thead>
-                <tbody>
-                  {f.lines.map((l) => (
-                    <tr key={l.id} className="border-t border-border">
-                      <td className="py-2 pr-3 font-medium">{l.descriptionSnapshot}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.quantity.toLocaleString('es-DO')}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(l.unitCost, m)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(l.taxes, m)}</td>
-                      <td className="py-2 text-right tabular-nums">{dineroSupplyV2(l.total, m)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaLineasFactura lineas={f.lines} moneda={m} />
           </CardContent>
         </Card>
         <Card>

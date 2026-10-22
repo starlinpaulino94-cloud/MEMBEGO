@@ -7,6 +7,7 @@ import { StatCard } from '@/components/ui/stat-card'
 import { Button } from '@/components/ui/button'
 import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { TablaCatalogoProveedor } from '@/components/supply-v2/tablas-detalle'
 import { ChipAcuerdo, ChipOrden, ChipProveedor } from '@/components/supply-v2/chips'
 import { DialogoFormulario } from '@/components/supply-v2/dialogo'
 import { FormProducto, type VinculoExistente } from '@/components/supply-v2/form-producto'
@@ -149,35 +150,7 @@ export default async function ProveedorDetallePage({ params }: { params: Promise
           {p.catalogItems.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin productos todavía. Agrega el primero para poder comprarle.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="tabla-catalogo">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr>
-                    <th className="py-1 pr-3">Producto</th>
-                    <th className="py-1 pr-3">Tipo</th>
-                    <th className="py-1 pr-3">SKU</th>
-                    <th className="py-1 pr-3 text-right">Precio público</th>
-                    <th className="py-1">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {p.catalogItems.map((i) => (
-                    <tr key={i.id} className="border-t border-border">
-                      <td className="py-2 pr-3 font-medium">
-                        <Link href={`/superadmin/supply/supply/${i.id}`} className="underline-offset-4 hover:underline">
-                          {i.name}
-                        </Link>
-                        {i.category && <span className="block text-caption text-muted-foreground">{i.category}</span>}
-                      </td>
-                      <td className="py-2 pr-3">{CATALOG_ITEM_TYPE_LABELS[i.type]}</td>
-                      <td className="py-2 pr-3 font-mono text-caption">{i.sku ?? '—'}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dinero(i.publicPrice, i.currency)}</td>
-                      <td className="py-2">{i.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaCatalogoProveedor productos={p.catalogItems} tipos={CATALOG_ITEM_TYPE_LABELS} formato={dinero} />
           )}
         </CardContent>
       </Card>

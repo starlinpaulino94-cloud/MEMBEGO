@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { TablaLineasCompra } from '@/components/supply-v2/tablas-detalle'
 import { ChipOrden } from '@/components/supply-v2/chips'
 import { AccionesOrden } from '@/components/supply-v2/acciones-orden'
 import { FormRecepcion } from '@/components/supply-v2/form-recepcion'
@@ -97,46 +98,7 @@ export default async function CompraDetallePage({ params }: { params: Promise<{ 
             <CardTitle>Qué compra esta orden</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr>
-                    <th className="py-1 pr-3">Producto</th>
-                    <th className="py-1 pr-3 text-right">Cantidad</th>
-                    <th className="py-1 pr-3 text-right">Recibidas</th>
-                    <th className="py-1 pr-3 text-right">Costo unitario</th>
-                    <th className="py-1 text-right">Subtotal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orden.lines.map((l) => (
-                    <tr key={l.id} className="border-t border-border">
-                      <td className="py-2 pr-3 font-medium">{l.descriptionSnapshot}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.quantity.toLocaleString('es-DO')}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums" data-testid="recibidas-linea">
-                        {l.receivedQuantity.toLocaleString('es-DO')} / {l.quantity.toLocaleString('es-DO')}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dinero(l.unitCost, orden.currency)}</td>
-                      <td className="py-2 text-right tabular-nums">{dinero(l.subtotal, orden.currency)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t border-border font-medium">
-                  <tr>
-                    <td className="py-1 pr-3 text-muted-foreground" colSpan={4}>Subtotal</td>
-                    <td className="py-1 text-right tabular-nums">{dinero(orden.subtotal, orden.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-1 pr-3 text-muted-foreground" colSpan={4}>Impuestos ({orden.taxRate.toString()} %)</td>
-                    <td className="py-1 text-right tabular-nums">{dinero(orden.taxes, orden.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-1 pr-3" colSpan={4}>Total</td>
-                    <td className="py-1 text-right text-h4 tabular-nums" data-testid="orden-total">{dinero(orden.total, orden.currency)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+            <TablaLineasCompra lineas={orden.lines} moneda={orden.currency} subtotal={orden.subtotal} impuestos={orden.taxes} porcentajeImpuesto={orden.taxRate.toString()} total={orden.total} formato={dinero} />
           </CardContent>
         </Card>
 

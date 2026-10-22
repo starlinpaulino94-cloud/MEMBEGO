@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { TablaLedgerOferta } from '@/components/supply-v2/tablas-detalle'
 import { ChipCompra, ChipOferta } from '@/components/supply-v2/chips'
 import { ChipModelo } from '@/components/supply-v2/finanzas/chips'
 import { AccionesOferta } from '@/components/supply-v2/acciones-oferta'
@@ -175,25 +176,7 @@ export default async function OfertaDetallePage({ params }: { params: Promise<{ 
           {o.ledger.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="oferta-sin-ledger">{o.sourceType === 'COMMISSION' ? 'Sin movimientos: una venta a comisión nunca escribe en el ledger de lotes.' : 'Sin movimientos.'}</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="oferta-ledger">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr><th className="py-1 pr-3">Tipo</th><th className="py-1 pr-3">Lote</th><th className="py-1 pr-3">Movimiento</th><th className="py-1 pr-3 text-right">Cantidad</th><th className="py-1 pr-3">Usuario</th><th className="py-1">Fecha</th></tr>
-                </thead>
-                <tbody>
-                  {o.ledger.map((e) => (
-                    <tr key={e.id} className="border-t border-border">
-                      <td className="py-2 pr-3 font-medium">{e.type}</td>
-                      <td className="py-2 pr-3">{e.lot.code}</td>
-                      <td className="py-2 pr-3 text-caption text-muted-foreground">{e.sourceBucket ?? 'fuera'} → {e.destinationBucket ?? 'fuera'}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{e.quantity.toLocaleString('es-DO')}</td>
-                      <td className="py-2 pr-3">{e.actor?.name ?? e.actor?.email ?? 'sistema'}</td>
-                      <td className="py-2">{formatDateTime(e.createdAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaLedgerOferta movimientos={o.ledger} />
           )}
         </CardContent>
       </Card>

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatCard } from '@/components/ui/stat-card'
 import { formatDateTime } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { TablaMovimientosDeposito } from '@/components/supply-v2/tablas-detalle'
 import { ChipDeposito } from '@/components/supply-v2/finanzas/chips'
 import { fichaDeposito } from '@/modules/supply-v2/finance/queries'
 import { saldoDeMovimientos } from '@/modules/supply-v2/finance/domain'
@@ -39,27 +40,7 @@ export default async function DepositoPage({ params }: { params: Promise<{ id: s
       <Card>
         <CardHeader><CardTitle>Movimientos</CardTitle></CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-testid="deposito-movimientos">
-              <thead className="text-left text-caption text-muted-foreground"><tr><th className="py-1 pr-3">Fecha</th><th className="py-1 pr-3">Movimiento</th><th className="py-1 pr-3">Detalle</th><th className="py-1 pr-3 text-right">Monto</th><th className="py-1 text-right">Saldo después</th></tr></thead>
-              <tbody>
-                {d.movements.map((mv) => (
-                  <tr key={mv.id} className="border-t border-border">
-                    <td className="py-2 pr-3">{formatDateTime(mv.createdAt)}</td>
-                    <td className="py-2 pr-3 font-medium">{DEPOSIT_MOVEMENT_LABELS[mv.type]}</td>
-                    <td className="py-2 pr-3 text-caption text-muted-foreground">
-                      {mv.application?.invoice && <Link href={`${RUTA_FINANZAS}/facturas/${mv.application.invoice.id}`} className="underline-offset-4 hover:underline">{mv.application.invoice.number}</Link>}
-                      {mv.application?.obligation && <span>{mv.application.obligation.number}</span>}
-                      {mv.reason ? ` ${mv.reason}` : ''}{mv.actor ? ` · ${mv.actor.name ?? mv.actor.email}` : ''}
-                    </td>
-                    <td className={`py-2 pr-3 text-right tabular-nums ${mv.amount.isNegative() ? 'text-destructive' : 'text-success'}`}>{mv.amount.isNegative() ? '−' : '+'}{dineroSupplyV2(mv.amount.abs(), m)}</td>
-                    <td className="py-2 text-right tabular-nums">{dineroSupplyV2(mv.balanceAfter, m)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="border-t border-border"><tr><td className="py-2 pr-3 text-muted-foreground" colSpan={3}>Suma de movimientos</td><td className="py-2 pr-3 text-right font-medium tabular-nums" colSpan={2} data-testid="deposito-suma">{dineroSupplyV2(reconstruido, m)}</td></tr></tfoot>
-            </table>
-          </div>
+          <TablaMovimientosDeposito movimientos={d.movements} moneda={m} etiquetas={DEPOSIT_MOVEMENT_LABELS} suma={reconstruido} rutaFacturas={`${RUTA_FINANZAS}/facturas`} />
         </CardContent>
       </Card>
     </div>

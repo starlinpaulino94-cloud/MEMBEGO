@@ -96,6 +96,10 @@ interface TablaProps<F> {
   /** Pie: paginación, total, exportar. */
   pie?: ReactNode
   className?: string
+  /** `data-testid` de la `<table>`: lo que usan las pruebas de extremo a extremo para encontrarla. Sin él, no se escribe el atributo. */
+  testId?: string
+  /** `data-testid` de cada fila de datos (no de la fila de vacío). */
+  testIdFila?: string
 }
 
 const OCULTAR_POR_PRIORIDAD = { 1: '', 2: 'max-md:hidden', 3: 'max-lg:hidden' } as const
@@ -189,6 +193,8 @@ export function Tabla<F>({
   hayFiltros = false,
   pie,
   className,
+  testId,
+  testIdFila,
 }: TablaProps<F>) {
   const idCol = columnaIdentificadora ?? columnas[0]?.clave
   const textoVacio = hayFiltros ? sinResultados : vacio
@@ -196,7 +202,7 @@ export function Tabla<F>({
   return (
     <div data-slot="tabla" className={cn('overflow-hidden rounded-xl border border-border bg-card shadow-sm', className)}>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-small">
+        <table className="w-full border-collapse text-small" data-testid={testId}>
           <caption className="sr-only">{caption}</caption>
           <thead>
             <tr className="border-b border-border bg-muted/60">
@@ -248,6 +254,7 @@ export function Tabla<F>({
               filas.map((fila) => (
                 <tr
                   key={claveDe(fila)}
+                  data-testid={testIdFila}
                   className={cn('border-b border-border last:border-0', filaNavegable && 'hover:bg-muted/50')}
                 >
                   {columnas.map((c) => {
