@@ -3,6 +3,7 @@ import { CheckCircle2, ArrowRight, Rocket, PartyPopper, Users } from 'lucide-rea
 import type { OnboardingEmpresa } from '@/modules/empresas/onboarding'
 import { Button } from '@/components/ui/button'
 import { PublicarEmpresaButton } from '@/components/admin/PublicarEmpresaButton'
+import { conRetornoAlAsistente } from '@/modules/empresas/onboarding-retorno'
 
 /**
  * Asistente guiado de configuración de empresa (Fase 2B). Presenta los pasos
@@ -20,6 +21,7 @@ export function WizardEmpresa({
 }) {
   const pct = Math.round((onboarding.completados / onboarding.total) * 100)
   const currentIndex = onboarding.items.findIndex((i) => !i.done)
+  const faltanObligatorios = onboarding.items.filter((i) => i.requeridoParaPublicar && !i.done).length
 
   // Caso final: publicada y completa.
   if (onboarding.publicado && onboarding.listoParaPublicar) {
@@ -106,6 +108,9 @@ export function WizardEmpresa({
                   {isCurrent && (
                     <p className="text-xs text-primary">Paso actual</p>
                   )}
+                  {!item.done && !item.requeridoParaPublicar && (
+                    <p className="text-xs text-muted-foreground">Recomendado · no impide publicar</p>
+                  )}
                 </div>
               </div>
               {!item.done && (
@@ -136,7 +141,7 @@ export function WizardEmpresa({
               </p>
             </div>
           </div>
-          <Link href="/admin/empleados">
+          <Link href={conRetornoAlAsistente('/admin/empleados')}>
             <Button size="sm" variant="outline" className="gap-1 text-xs">
               Invitar <ArrowRight className="h-3 w-3" />
             </Button>
@@ -152,7 +157,7 @@ export function WizardEmpresa({
             <p className="text-sm text-primary">
               {onboarding.listoParaPublicar
                 ? '¡Todo listo! Publica tu empresa para que aparezca en el marketplace.'
-                : 'Completa todos los pasos para poder publicar tu empresa.'}
+                : `Te faltan ${faltanObligatorios} ${faltanObligatorios === 1 ? 'paso obligatorio' : 'pasos obligatorios'} para poder publicar tu empresa; los demás son recomendados.`}
             </p>
           </div>
           <PublicarEmpresaButton habilitado={onboarding.listoParaPublicar} />
