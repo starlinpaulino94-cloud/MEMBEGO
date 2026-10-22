@@ -265,7 +265,7 @@ Una sola app Next, un solo backend, una sola autenticación. Lo que cambió es *
 | **Acceso** | Entrar, registrarse, recuperar, confirmar y aceptar invitaciones. | 8 | 3 |
 | **App del cliente** | Todo lo que el cliente hace: comprar, reservar, contratar, reclamar, pagar. | 70 | 0 |
 | **Paneles** | Administrador, superadmin, empleado, vendedor y asistente de negocio. | 309 | 42 |
-| **API** | Handlers de servidor (`/api/**`, incluida la API v1 que usa la app móvil). | 0 | 142 |
+| **API** | Handlers de servidor (`/api/**`, incluida la API v1 que usa la app móvil). | 0 | 146 |
 | **Sistema** | Páginas de error, sin conexión, imágenes para compartir, `robots` y `sitemap`. | 1 | 6 |
 
 **Landing** (31): `/` · `/blog` · `/caracteristicas` · `/catalogo` · `/contact` · `/descargar` · `/eliminar-cuenta` · `/eliminar-cuenta/confirmar` · `/eliminar-cuenta/terminada` · `/empresas` · `/empresas/[companySlug]` · `/empresas/[companySlug]/catalogo/[itemSlug]` · `/empresas/[companySlug]/excursiones` · `/empresas/[companySlug]/excursiones/[excursionSlug]` · `/excursiones` · `/faq` · `/i/[code]` · `/oferta/[codigo]` · `/ofertas` · `/ofertas/[dealId]` · `/plan/[id]` · `/privacy` · `/promocion/[clave]` · `/promociones` · `/promociones/campanas` · `/promociones/campanas/[code]` · `/promociones/membego/[slug]` · `/promociones/membresias` · `/registro-empresa` · `/solicitud-empresa` · `/terms`

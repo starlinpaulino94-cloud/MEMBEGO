@@ -44,6 +44,7 @@
     "verificar:cuenta-y-ayuda": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cuenta-y-ayuda.mts",
     "verificar:cerca-de-mi": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-cerca-de-mi.mts",
     "verificar:rls-cliente-global": "tsx --tsconfig tsconfig.verificacion.json scripts/verificar-rls-cliente-global.mts",
+    "identidad:probar-didit": "tsx --conditions react-server scripts/probar-didit-sandbox.mts",
     "rls:probar": "node scripts/probar-rls.mjs",
     "ensayo:rls": "node scripts/ensayo-rls.mjs",
     "rls:cobertura": "node scripts/rls-cobertura.mjs",

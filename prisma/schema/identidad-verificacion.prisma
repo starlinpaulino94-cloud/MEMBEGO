@@ -1,0 +1,226 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// VERIFICACIÓN DE IDENTIDAD DE LA PERSONA (Fase 1 · backend y modelos)
+//
+// Fuente de verdad del diseño: docs/identidad/AUDITORIA-VERIFICACION-IDENTIDAD.md
+// (aprobada por el dueño el 22-10-2026). Léela antes de tocar esto.
+//
+// NOMBRES: todo lleva `identidad` a propósito. `MembegoVerificationLevel` y los
+// `verification*` de `facturacion-comercial.prisma` significan EVIDENCIA
+// FINANCIERA de un pedido, no identidad de una persona.
+//
+// LO QUE ESTAS TABLAS NUNCA GUARDAN (regla del dueño, art. 213.7 de la Ley
+// 4-23): imágenes, vídeo, plantillas biométricas, número de cédula en claro,
+// nombre legal extraído, tokens de sesión del proveedor ni cuerpos de webhook.
+// El proveedor conserva los documentos bajo contrato; MEMBEGO guarda el
+// RESULTADO, una referencia sellada y el rastro de lo que pasó.
+//
+// TENANCY: estas tablas son de la PERSONA, no de una empresa. Cuelgan de `User`
+// (como `GeoConsent`) y se leen con `conUsuario(userId)`; su RLS es por
+// `app.user_id` (prisma/migrations_manual/2026-10-rls-identidad.sql). Las
+// empresas NO las leen jamás: reciben una proyección binaria en `Cliente`
+// (`identidadEstado`, `identidadNivel`, `identidadVerificadaEn`) y solo si la
+// persona lo consintió.
+//
+// ESTADOS COMO TEXTO, NO ENUM: añadir un estado o un nivel no debe pedir una
+// migración de enum (mismo criterio que `MembresiaEvento.estadoAnterior`). Los
+// valores válidos los fija un CHECK en la migración y `identidadCore.ts`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// EL RESULTADO GLOBAL de identidad de una persona. UNA fila por `User`.
+///
+/// El único escritor es `identidad.ts` (el worker que procesa el resultado del
+/// proveedor tras re-consultarlo). No existe, ni debe existir, ningún endpoint
+/// que marque a alguien como verificado: el cliente nunca decide su propia
+/// identidad.
+model IdentidadVerificacion {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation("IdentidadVerificacionDeUsuario", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// `no_verificada | verificada | expirada | revocada | requiere_revalidacion`.
+  /// La caducidad se evalúa TAMBIÉN al leer (`estadoEfectivo`): una fila
+  /// `verificada` con `expiraEn` pasado ya no vale aunque el barrido diario
+  /// todavía no la haya marcado.
+  estado String @default("no_verificada")
+
+  /// `contacto | documento_selfie | jce_oficial`. Null mientras no esté verificada.
+  nivel String?
+  /// La vía seguida (NIST SP 800-63A-4 §4.2 pide registrarla): `proveedor_documento_selfie`,
+  /// `jce_oficial`, `revision_manual`…
+  viaVerificacion String?
+  /// Quién verificó: `didit`, `incode`… Texto, para poder cambiar de proveedor
+  /// sin migración.
+  proveedor String?
+
+  /// Id de la sesión del proveedor, SELLADO con AES-256-GCM (`cifrado.ts`, AAD
+  /// `identidad:<userId>`). Con ese id y la llave del proveedor se pueden
+  /// descargar los documentos: por eso nunca va en claro ni en logs.
+  referenciaProveedorSellada String?
+  /// Versión de la llave maestra con que se selló (para rotarlas sin parada).
+  claveVersion Int?
+
+  /// HMAC-SHA256(pepper, tipoDoc|numeroDoc|pais), calculado en el worker y
+  /// descartado el número tras hashear. Sirve SOLO para detectar que dos
+  /// cuentas presentan el mismo documento; en colisión el intento pasa a
+  /// `en_revision`, nunca se acredita en silencio.
+  hashDedupe String? @unique
+
+  verificadaEn DateTime?
+  /// Cuándo deja de valer. Se fija al verificar (`POLITICA_IDENTIDAD.validezMeses`).
+  expiraEn     DateTime?
+  revocadaEn   DateTime?
+  /// Código de motivo propio (nunca texto libre del proveedor).
+  motivoRevocacion String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  intentos IdentidadIntento[]
+
+  @@index([estado, expiraEn])
+  @@map("identidad_verificaciones")
+}
+
+/// UN INTENTO de verificación. Es el historial: cada vez que la persona empieza
+/// el proceso hay una fila, y la fila cuenta lo que pasó.
+///
+/// Máquina de estados (solo hacia delante; ver `TRANSICIONES_INTENTO`):
+///   creada → iniciada → enviada → en_proceso →
+///     { aprobada | rechazada_reintentable | rechazada_definitiva |
+///       reenvio_requerido | en_revision | expirada | abandonada | cancelada }
+///
+/// Un índice único parcial (en la migración; Prisma no expresa índices
+/// parciales) garantiza UN solo intento abierto por persona.
+model IdentidadIntento {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("IdentidadIntentosDeUsuario", fields: [userId], references: [id], onDelete: Cascade)
+
+  verificacionId String?
+  verificacion   IdentidadVerificacion? @relation(fields: [verificacionId], references: [id], onDelete: SetNull)
+
+  estado String @default("creada")
+  /// `reintentable | definitivo`. Solo en los rechazos.
+  tipoRechazo String?
+  /// Código del catálogo PROPIO (`CODIGOS_RAZON`), mapeado desde lo que diga el
+  /// proveedor. Nunca el texto del proveedor: el mensaje al usuario lo escribe
+  /// MEMBEGO.
+  codigoRazon String?
+
+  /// `web | movil_hospedado | movil_nativo`.
+  canal String
+  /// Quién lo originó: `cliente` (inició la persona), `staff` (lo pidió un
+  /// administrador), `sistema` (revalidación automática).
+  origen String @default("cliente")
+  actorUserId String?
+  /// Valor de un solo uso que ata el retorno por deep link a ESTE intento.
+  nonce String?
+
+  /// Id de la sesión del proveedor, sellado (ver `IdentidadVerificacion`).
+  referenciaProveedorSellada String?
+  claveVersion Int?
+
+  /// El consentimiento de biometría que estaba vigente al empezar: la prueba de
+  /// que se aceptó ANTES de capturar nada.
+  consentimientoBiometriaId String?
+
+  creadoAt   DateTime  @default(now())
+  iniciadoAt DateTime?
+  enviadoAt  DateTime?
+  resueltoAt DateTime?
+  /// Cuándo se da por abandonado si no avanzó (libera el candado de «un intento abierto»).
+  venceAt    DateTime?
+
+  /// Cuándo se borró la sesión en el proveedor (la prueba de que sus documentos ya no están allí).
+  purgadoAt        DateTime?
+  /// Cuántas veces falló el borrado en el proveedor (para no reintentar eternamente en silencio).
+  purgaIntentos    Int       @default(0)
+  /// La última vez que se le preguntó al proveedor por este intento.
+  ultimaConsultaAt DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, creadoAt])
+  @@index([estado, venceAt])
+  @@map("identidad_intentos")
+}
+
+/// REGISTRO DE CONSENTIMIENTOS de identidad. Solo se inserta: lo único que
+/// cambia de una fila es `revocadoAt`. Re-aceptar un texto NUEVO retira el
+/// anterior y registra otro, así queda dicho qué texto aceptó la persona en
+/// cada momento (a diferencia de `GeoConsent`, que sobrescribe).
+///
+/// Tres tipos, tres textos (art. 58 de la Ley 4-23 y arts. 5 y 80 de la
+/// 172-13), cada uno con su casilla:
+///   IDENTIDAD_BIOMETRIA                  captura de cédula y selfie + datos biométricos faciales
+///   IDENTIDAD_TRANSFERENCIA_INTERNACIONAL el proveedor procesa fuera del país
+///   IDENTIDAD_DIVULGACION_EMPRESAS       las empresas donde eres cliente ven SOLO si estás verificada
+model IdentidadConsentimiento {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("IdentidadConsentimientosDeUsuario", fields: [userId], references: [id], onDelete: Cascade)
+
+  tipo String
+  /// Versión del texto aceptado. Una versión publicada no se edita.
+  textoVersion String
+  /// `web | movil | soporte`.
+  canal      String
+  otorgadoAt DateTime  @default(now())
+  revocadoAt DateTime?
+  ipAddress  String?
+  userAgent  String?
+
+  @@index([userId, tipo, revocadoAt])
+  @@map("identidad_consentimientos")
+}
+
+/// INTERRUPTOR de la verificación de identidad. Una sola fila (`clave`
+/// `VERIFICACION_IDENTIDAD`). Para que algo funcione hacen falta las dos
+/// cosas a favor —el entorno completo y este interruptor encendido—; para
+/// apagarlo basta una. Nace APAGADO y apagar exige motivo (mismo criterio que
+/// `SupplyV2OperationalSwitch`).
+model IdentidadInterruptor {
+  clave   String  @id
+  enabled Boolean @default(false)
+  reason  String?
+
+  changedById String?
+  changedBy   User?    @relation("IdentidadInterruptorCambiadoPor", fields: [changedById], references: [id], onDelete: SetNull)
+  changedAt   DateTime @default(now())
+
+  @@map("identidad_interruptores")
+}
+
+/// BANDEJA de avisos del proveedor (webhooks). Cada aviso AUTENTICADO se registra una
+/// sola vez por `event_id` (los reintentos del proveedor lo reusan) y se procesa
+/// después. NO guarda el cuerpo del aviso ni el id de la sesión: solo el id del
+/// evento, su tipo, el estado que dijo, el id de NUESTRO intento (`vendor_data`) y un
+/// hash del cuerpo. Es de la plataforma, no de una persona: solo la lee el worker.
+///
+///   estado  recibido | procesado | ignorado | fallido
+model IdentidadEventoExterno {
+  id String @id @default(cuid())
+
+  proveedor       String
+  /// `event_id` del proveedor: la clave de idempotencia.
+  eventoExternoId String
+  /// `webhook_type` del proveedor (`status.updated`, `data.updated`…).
+  tipo            String
+  /// El estado que decía el aviso (solo informativo: el worker re-consulta la verdad).
+  estadoExterno   String?
+  /// Nuestro intento (`vendor_data`). Sin FK a propósito: el aviso puede referirse a uno que ya no existe.
+  intentoId       String?
+  payloadHash     String
+
+  estado            String    @default("recibido")
+  /// Un CÓDIGO corto (`intento_desconocido`, `sesion_no_coincide`, `error_proveedor`…), nunca texto del proveedor.
+  detalle           String?
+  intentosDeProceso Int       @default(0)
+  recibidoAt        DateTime  @default(now())
+  procesadoAt       DateTime?
+
+  @@unique([proveedor, eventoExternoId, tipo])
+  @@index([estado, recibidoAt])
+  @@index([intentoId])
+  @@map("identidad_eventos_externos")
+}

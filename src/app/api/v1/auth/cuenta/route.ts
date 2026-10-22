@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getApiClientUser, corsHeaders, handleCorsPreflight } from '@/lib/auth/api-guard'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sinEmpresa } from '@/lib/tenant'
+import { bloqueoPorIdentidadPendientePorSupabaseId } from '@/modules/identidad/supresion'
 import { purgarClienteRow } from '@/modules/superadmin/purgar'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +18,10 @@ export async function DELETE(request: Request) {
   }
 
   try {
+    // Antes de borrar nada: los datos de verificación de identidad que el proveedor tenga de esta persona.
+    const bloqueo = await bloqueoPorIdentidadPendientePorSupabaseId(user.supabaseId)
+    if (bloqueo) return NextResponse.json({ error: bloqueo }, { status: 503, headers: corsHeaders(request) })
+
     const fichas = await sinEmpresa('cuenta: buscar fichas propias para purga', (tx) =>
       tx.cliente.findMany({
         where: { supabaseId: user.supabaseId },

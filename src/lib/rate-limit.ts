@@ -189,6 +189,18 @@ export const paymentSessionLimiter = createRateLimiter({
 })
 
 /**
+ * Crear una SESIÓN DE VERIFICACIÓN DE IDENTIDAD con el proveedor. Cada sesión cuesta dinero
+ * y abre la cámara de la persona: 6 cada 5 minutos por persona dan margen a un reintento tras
+ * un error y cierran la puerta a quien quisiera gastar el presupuesto del proveedor a base de
+ * crear sesiones. (Consultar el estado usa `paymentSessionLimiter`: es barato y se sondea.)
+ */
+export const identidadSesionLimiter = createRateLimiter({
+  interval: 5 * 60 * 1000,
+  maxRequests: 6,
+  name: 'identidad-sesion',
+})
+
+/**
  * Comprobación de un CÓDIGO DE CUPÓN (Supply · Slice 7 §28). Un cupón vale
  * dinero y su código se teclea: sin freno, probar códigos a mano es una
  * estrategia viable. 12 intentos cada 5 minutos por cliente dan margen a

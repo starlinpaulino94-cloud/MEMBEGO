@@ -193,6 +193,12 @@ export const CAPACIDADES = [
   // quien llega con su QR y vende variantes del catálogo en el mostrador. Apagada para todos de serie;
   // exige la caja (`POS_CAJA`) y, según lo que se use, el catálogo y los pedidos.
   'POS_MEMBEGO',
+  // Verificación de identidad (docs/identidad/AUDITORIA-VERIFICACION-IDENTIDAD.md). Nace APAGADA
+  // para todos y SIN sección de admin: el resultado de identidad es de la PERSONA y de MEMBEGO, no
+  // de la empresa. Esta capacidad solo decide si la empresa puede usar la verificación en sus
+  // propias reglas (Fase 5) y ver la insignia binaria en la ficha de sus clientes. Ninguna compra,
+  // promoción ni membresía depende de ella.
+  'VERIFICACION_IDENTIDAD',
 ] as const
 export type Capacidad = (typeof CAPACIDADES)[number]
 
@@ -226,6 +232,7 @@ export const CAPACIDAD_LABELS: Record<Capacidad, string> = {
   PEDIDOS_MEMBEGO: 'Pedidos Membego: pedidos del marketplace con atribución, confirmación y QR',
   DEALS_MARKETPLACE: 'Ofertas y promociones sobre el catálogo: descuentos que los clientes obtienen y canjean, con tope de presupuesto',
   POS_MEMBEGO: 'Caja conectada al catálogo: cobrar pedidos Membego y vender productos en el mostrador',
+  VERIFICACION_IDENTIDAD: 'Verificación de identidad: ver la insignia de identidad verificada y usarla en reglas propias',
 }
 
 /**

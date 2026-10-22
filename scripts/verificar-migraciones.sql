@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en 5571363e: 243 migraciones, última 20261077_consentimientos_pago.
+-- Generado con scripts/generar-verificar-migraciones.mjs en 70f88487: 247 migraciones, última 20261081_identidad_proveedor.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -256,7 +256,11 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261074_cardnet_saved_cards_security','e369fa084f99694917dc8cb618c34816c24d237079221a0e7d0ed69aea3eb843'),
   ('20261075_expo_push_tokens','140596417c3cf46df3538e522c09dd49903e5fedff4d2b4ae251e7b0e4d3ed59'),
   ('20261076_push_tokens_rls','0006a90d510b74b2f71c33d7d761045b45c15272e9c0c5e29d26915fa002be5d'),
-  ('20261077_consentimientos_pago','fe14a7d09234d07ce318497a83e61336652d5c665013f83474a2e7b36884795e')
+  ('20261077_consentimientos_pago','fe14a7d09234d07ce318497a83e61336652d5c665013f83474a2e7b36884795e'),
+  ('20261078_identidad_acciones_enum','6e1ffe96e26494abc4118da894929573c803cd4944736e6445cb4a4c24c4f6e9'),
+  ('20261079_identidad_verificacion','4906d354e4b8de439d6ace4b941940539295cc2dec0e76707a35e31105293e83'),
+  ('20261080_identidad_acciones_proveedor','600eee8b5877cdc70dc4569cf414ed53a4b3938422aaf5799cce9ac4cd19abaa'),
+  ('20261081_identidad_proveedor','25916026f65f4f72fe56515f90c25d36b1290626fb0e7f309aade652733ee154')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,
