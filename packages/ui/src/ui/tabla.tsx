@@ -210,10 +210,10 @@ export function Tabla<F>({
                     scope="col"
                     aria-sort={activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : undefined}
                     className={cn(
-                      'whitespace-nowrap px-4 py-3 text-overline text-muted-foreground',
+                      'whitespace-nowrap px-3 py-3 text-overline text-muted-foreground md:px-4',
                       derecha ? 'text-right' : 'text-left',
                       OCULTAR_POR_PRIORIDAD[c.prioridad ?? 1],
-                      c.clave === idCol && 'min-w-40 max-md:sticky max-md:left-0 max-md:bg-muted'
+                      c.clave === idCol && 'min-w-32 md:min-w-40 max-md:sticky max-md:left-0 max-md:bg-muted'
                     )}
                   >
                     {c.soloLector ? (
@@ -253,7 +253,7 @@ export function Tabla<F>({
                   {columnas.map((c) => {
                     const derecha = c.alineacion ? c.alineacion === 'derecha' : c.tipo === 'numero' || c.tipo === 'dinero'
                     const clases = cn(
-                      'px-4 py-3 align-middle',
+                      'px-3 py-3 align-middle md:px-4',
                       derecha ? 'text-right tabular-nums' : 'text-left',
                       OCULTAR_POR_PRIORIDAD[c.prioridad ?? 1]
                     )
@@ -262,7 +262,7 @@ export function Tabla<F>({
                       <th
                         key={c.clave}
                         scope="row"
-                        className={cn(clases, 'min-w-40 font-medium text-foreground max-md:sticky max-md:left-0 max-md:bg-card')}
+                        className={cn(clases, 'min-w-32 font-medium text-foreground md:min-w-40 max-md:sticky max-md:left-0 max-md:bg-card')}
                       >
                         {contenido}
                       </th>

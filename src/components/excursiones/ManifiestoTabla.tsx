@@ -50,10 +50,11 @@ function Embarque({ f }: { f: FilaManifiesto }) {
  *
  * Es la pantalla que el operador mira de pie junto al bus: el cliente es el identificador de la fila (y su enlace a la reserva),
  * con el teléfono debajo para llamarlo; el embarque se dice con texto, no solo con color; y la excursión, de menos prioridad, se
- * oculta en una pantalla estrecha sin dejar fuera a quién se espera ni si ya se subió.
+ * oculta en una pantalla estrecha sin dejar fuera a quién se espera ni si ya se subió. En el teléfono la hora pasa debajo del
+ * nombre: lo que el operador no puede perder de vista es el embarque, no un encabezado más.
  */
 const COLUMNAS: Columna<FilaManifiesto>[] = [
-  { clave: 'hora', encabezado: 'Hora' },
+  { clave: 'hora', encabezado: 'Hora', prioridad: 2 },
   {
     clave: 'cliente',
     encabezado: 'Cliente',
@@ -63,6 +64,8 @@ const COLUMNAS: Columna<FilaManifiesto>[] = [
           {f.cliente}
         </Link>
         {f.telefono ? <span className="block text-caption text-muted-foreground">{f.telefono}</span> : null}
+        {/* En pantalla estrecha la columna «Hora» se oculta (el operador necesita ver el embarque sin desplazarse): la hora baja aquí. */}
+        {f.hora ? <span className="block text-caption text-muted-foreground md:hidden">{f.hora}</span> : null}
       </>
     ),
   },

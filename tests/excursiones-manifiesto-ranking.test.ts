@@ -55,11 +55,13 @@ test('manifiesto · en un combo cuenta las actividades, no solo la reserva', () 
   assert.match(pinta([fila({ ...combo, itemsCompletados: 3, checkinAt: '2026-10-21T12:00:00Z' })]), /Completo[\s\S]*\(3\/3 acts\)/)
 })
 
-test('manifiesto · la excursión (menos importante) se oculta en pantalla estrecha, pero cliente, pax y embarque no', () => {
+test('manifiesto · la excursión y la hora se ocultan en pantalla estrecha (la hora baja al cliente), pero cliente, pax y embarque no', () => {
   const html = pinta([fila()])
   const encabezado = (texto: string) => html.match(new RegExp(`<th[^>]*>${texto}</th>`))?.[0] ?? ''
   assert.match(encabezado('Excursión'), /hidden/)
-  for (const siempre of ['Hora', 'Cliente', 'Pax', 'Embarque']) {
+  assert.match(encabezado('Hora'), /hidden/)
+  assert.match(html, /md:hidden[^>]*>08:30</, 'la hora no se pierde: baja bajo el nombre del cliente')
+  for (const siempre of ['Cliente', 'Pax', 'Embarque']) {
     assert.doesNotMatch(encabezado(siempre), /hidden/, siempre)
   }
 })
