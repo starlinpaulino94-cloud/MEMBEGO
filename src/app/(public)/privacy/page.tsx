@@ -224,6 +224,12 @@ export default function PrivacyPage() {
               falta para comprar ni para usar tus membresías, y solo pueden hacerlo personas mayores
               de 18 años. Si decides hacerlo, esto es lo que ocurre con tus datos.
             </p>
+            <p className="mt-2">
+              Hay un solo caso en el que MembeGo puede pedírtelo: si aceptaste el contrato de un
+              proveedor de Membego Supply, podemos pedirte que verifiques tu identidad antes de
+              pagarle a ese proveedor. Sigue siendo tu decisión (si no lo haces, ese pago queda a la
+              espera) y nunca se pide para comprar, reservar, renovar ni entrar con tu QR.
+            </p>
 
             <h3 className="mt-5 text-base font-semibold text-foreground">7.1 Qué datos se usan y para qué</h3>
             <p className="mt-2">

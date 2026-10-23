@@ -26,6 +26,7 @@ import {
   type EstadoIntento,
 } from '@/modules/identidad/identidadCore'
 import { avisarResultadoDeIdentidad } from '@/modules/identidad/avisos'
+import { RUTA_DEL_AVISO_PARA_PROVEEDOR } from '@/modules/identidad/avisosCore'
 import { ErrorDeProveedor } from '@/modules/identidad/proveedor/contrato'
 import { proveedorDeIdentidad } from '@/modules/identidad/proveedor/didit'
 
@@ -54,13 +55,27 @@ export const RETORNO_APP_IDENTIDAD = 'membego://identidad/retorno'
 /** Ruta web a la que vuelve la persona: su pantalla de verificación de identidad. */
 export const RUTA_WEB_RETORNO_IDENTIDAD = '/cliente/identidad'
 
+/**
+ * Desde dónde empezó la verificación en la web, para volver al mismo sitio: la pantalla de la persona (cliente) o la del
+ * portal del proveedor (quien aceptó el contrato, Fase 5). LISTA CERRADA: la ruta nunca sale de lo que escribe el usuario.
+ */
+export const RUTAS_WEB_DE_RETORNO = {
+  cliente: RUTA_WEB_RETORNO_IDENTIDAD,
+  proveedor: RUTA_DEL_AVISO_PARA_PROVEEDOR,
+} as const
+export type OrigenWebDeVerificacion = keyof typeof RUTAS_WEB_DE_RETORNO
+
+export function esOrigenWebDeVerificacion(valor: unknown): valor is OrigenWebDeVerificacion {
+  return typeof valor === 'string' && Object.prototype.hasOwnProperty.call(RUTAS_WEB_DE_RETORNO, valor)
+}
+
 /** A dónde manda el proveedor a la persona al terminar. Lleva el id y el nonce del intento, nada más. */
-export function urlDeRetornoDeIdentidad(canal: CanalIntento, intentoId: string, nonce: string | null, baseWeb?: string): string {
+export function urlDeRetornoDeIdentidad(canal: CanalIntento, intentoId: string, nonce: string | null, baseWeb?: string, origen: OrigenWebDeVerificacion = 'cliente'): string {
   const consulta = new URLSearchParams({ intento: intentoId })
   if (nonce) consulta.set('nonce', nonce)
   if (canal === 'web') {
     consulta.set('identidad', 'retorno')
-    return `${baseWeb ?? appUrlFor(RUTA_WEB_RETORNO_IDENTIDAD)}?${consulta.toString()}`
+    return `${baseWeb ?? appUrlFor(RUTAS_WEB_DE_RETORNO[origen])}?${consulta.toString()}`
   }
   return `${RETORNO_APP_IDENTIDAD}?${consulta.toString()}`
 }
@@ -93,7 +108,7 @@ export type ResultadoIniciarSesion =
  */
 export async function iniciarSesionDeVerificacion(
   userId: string,
-  input: { canal: CanalIntento; ip?: string | null; userAgent?: string | null },
+  input: { canal: CanalIntento; ip?: string | null; userAgent?: string | null; origen?: OrigenWebDeVerificacion },
   ahora: Date = new Date()
 ): Promise<ResultadoIniciarSesion> {
   const creado = await crearIntento(userId, { canal: input.canal, ip: input.ip, userAgent: input.userAgent }, ahora)
@@ -114,7 +129,7 @@ export async function iniciarSesionDeVerificacion(
   try {
     sesion = await proveedor.crearSesion({
       intentoId: intento.id,
-      callbackUrl: urlDeRetornoDeIdentidad(input.canal, intento.id, intento.nonce),
+      callbackUrl: urlDeRetornoDeIdentidad(input.canal, intento.id, intento.nonce, undefined, input.origen ?? 'cliente'),
       idioma: 'es',
     })
   } catch (e) {

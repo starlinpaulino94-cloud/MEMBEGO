@@ -94,6 +94,14 @@ CREATE POLICY membego_plataforma ON "identidad_eventos_externos" FOR ALL TO memb
   USING (current_setting('app.omnisciente', true) = 'on')
   WITH CHECK (current_setting('app.omnisciente', true) = 'on');
 
+-- ── 2c. Reglas por función (Fase 5): solo omnisciente ────────────────────────
+-- Configuración de la plataforma: la lee el servicio al confirmar un pago (`sinEmpresa`) y la escribe el superadmin.
+-- Requiere la migración 20261087_identidad_reglas.
+DROP POLICY IF EXISTS membego_plataforma ON "identidad_reglas";
+CREATE POLICY membego_plataforma ON "identidad_reglas" FOR ALL TO membego_app
+  USING (current_setting('app.omnisciente', true) = 'on')
+  WITH CHECK (current_setting('app.omnisciente', true) = 'on');
+
 -- ── 3. Verificación ─────────────────────────────────────────────────────────
 --   -- Con el usuario u1 puesto, no debe verse la verificación de u2.
 --   set role membego_app;
@@ -109,3 +117,4 @@ CREATE POLICY membego_plataforma ON "identidad_eventos_externos" FOR ALL TO memb
 --   drop policy if exists membego_dueno on identidad_incidencias;
 --   drop policy if exists membego_plataforma on identidad_interruptores;
 --   drop policy if exists membego_plataforma on identidad_eventos_externos;
+--   drop policy if exists membego_plataforma on identidad_reglas;

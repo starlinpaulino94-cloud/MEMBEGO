@@ -34,6 +34,14 @@ import {
 } from '@/modules/identidad/identidadCore'
 import { MAX_INCIDENCIAS_ABIERTAS, MAX_MENSAJE_INCIDENCIA, esTipoDeIncidencia } from '@/modules/identidad/vistaCore'
 import {
+  OPERACIONES_CON_REGLA,
+  esAlcanceDeRegla,
+  esOperacionConRegla,
+  reglaPorDefecto,
+  type OperacionDeIdentidad,
+  type ReglaDeIdentidad,
+} from '@/modules/identidad/reglasCore'
+import {
   TIPOS_REQUERIDOS_PARA_CAPTURAR,
   VERSION_VIGENTE,
   type CanalConsentimientoIdentidad,
@@ -97,6 +105,7 @@ export class ErrorDeIdentidad extends Error {
       | 'sin_clave'
       | 'persona_no_encontrada'
       | 'motivo_requerido'
+      | 'regla_invalida'
       | 'falta_configuracion'
       | 'no_existe'
       | 'proveedor_no_disponible',
@@ -162,6 +171,68 @@ export async function cambiarInterruptorDeIdentidad(
   return compuertaDeIdentidad()
 }
 
+// ── Reglas por función (Fase 5) ─────────────────────────────────────────────
+
+/** Las reglas de la plataforma: una por operación del catálogo (la que no tiene fila, apagada). */
+export async function leerReglasDeIdentidad(): Promise<(ReglaDeIdentidad & { motivo: string | null; cambiadoAt: Date | null; cambiadoPor: string | null })[]> {
+  const filas = await sinEmpresa('identidad: leer las reglas por función', (tx) => tx.identidadRegla.findMany({}))
+  return OPERACIONES_CON_REGLA.map((o) => {
+    const f = filas.find((x) => x.operacion === o.clave)
+    const base = reglaPorDefecto(o.clave)
+    if (!f) return { ...base, motivo: null, cambiadoAt: null, cambiadoPor: null }
+    return {
+      operacion: o.clave,
+      activa: f.activa,
+      alcance: esAlcanceDeRegla(f.alcance) ? f.alcance : base.alcance,
+      motivo: f.reason,
+      cambiadoAt: f.changedAt,
+      cambiadoPor: f.changedById,
+    }
+  })
+}
+
+/** Una regla (o `null` si no hay fila). */
+export async function leerReglaDeIdentidad(operacion: OperacionDeIdentidad): Promise<ReglaDeIdentidad | null> {
+  const f = await sinEmpresa('identidad: leer una regla por función', (tx) => tx.identidadRegla.findUnique({ where: { operacion } }))
+  if (!f) return null
+  return { operacion, activa: f.activa, alcance: esAlcanceDeRegla(f.alcance) ? f.alcance : reglaPorDefecto(operacion).alcance }
+}
+
+/**
+ * Enciende, apaga o cambia el alcance de una regla. Solo el equipo autorizado y SIEMPRE con motivo (un candado sin
+ * motivo es una avería que nadie sabe explicar tres semanas después). Encender exige que la verificación esté
+ * disponible: una regla encendida con la verificación apagada no se podría cumplir.
+ */
+export async function cambiarReglaDeIdentidad(
+  actor: ActorDeIdentidad,
+  input: { operacion: string; activa: boolean; alcance: string; motivo: string }
+): Promise<ReglaDeIdentidad> {
+  exigirGestion(actor)
+  if (!esOperacionConRegla(input.operacion)) throw new ErrorDeIdentidad('regla_invalida', 'Esa operación no admite una regla de verificación.')
+  if (!esAlcanceDeRegla(input.alcance)) throw new ErrorDeIdentidad('regla_invalida', 'Elige a qué pagos se aplica.')
+  const motivo = input.motivo?.trim()
+  if (!motivo) throw new ErrorDeIdentidad('motivo_requerido', 'Indica el motivo del cambio.')
+  if (input.activa && !(await compuertaDeIdentidad()).habilitada) {
+    throw new ErrorDeIdentidad('falta_configuracion', 'Para encender una regla, la verificación de identidad tiene que estar encendida y configurada.')
+  }
+  const operacion = input.operacion
+  const alcance = input.alcance
+  await sinEmpresa('identidad: el equipo cambia una regla por función', async (tx) => {
+    const antes = await tx.identidadRegla.findUnique({ where: { operacion } })
+    await tx.identidadRegla.upsert({
+      where: { operacion },
+      create: { operacion, activa: input.activa, alcance, reason: motivo.slice(0, 300), changedById: actor.userId },
+      update: { activa: input.activa, alcance, reason: motivo.slice(0, 300), changedById: actor.userId, changedAt: new Date() },
+    })
+    await auditar(tx, 'IDENTIDAD_REGLA_CAMBIADA', {
+      actorUserId: actor.userId,
+      entidadId: operacion,
+      payload: { operacion, activa: input.activa, alcance, motivo, estadoAnterior: antes ? (antes.activa ? `activa:${antes.alcance}` : 'apagada') : 'sin_regla', rol: actor.rol },
+    })
+  })
+  return { operacion, activa: input.activa, alcance }
+}
+
 // ── Referencias selladas ────────────────────────────────────────────────────
 
 /**
@@ -217,6 +288,9 @@ const CLAVES_AUDITABLES = new Set([
   'cantidad',
   'resultado',
   'incidenciaId',
+  'operacion',
+  'activa',
+  'alcance',
 ])
 
 export function payloadSeguro(payload: Record<string, unknown>): Record<string, string | number | boolean | null> {

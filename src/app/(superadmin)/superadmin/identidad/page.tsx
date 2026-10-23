@@ -16,11 +16,13 @@ import {
   buscarPersonas,
   colaDeIncidencias,
   colaDeRevision,
+  reglasDeLaPlataforma,
   resumenDeLaPlataforma,
   type IncidenciaEnCola,
+  type ReglasParaElEquipo,
   type ResumenDeLaPlataforma,
 } from '@/modules/identidad/staff'
-import { atenderIncidenciaAction, cambiarInterruptorAction } from '@/modules/superadmin/identidadActions'
+import { atenderIncidenciaAction, cambiarInterruptorAction, cambiarReglaAction } from '@/modules/superadmin/identidadActions'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Identidad' }
@@ -33,6 +35,7 @@ const VISTAS = [
   { valor: 'revision', etiqueta: 'Casos en revisión' },
   { valor: 'incidencias', etiqueta: 'Incidencias' },
   { valor: 'personas', etiqueta: 'Buscar a una persona' },
+  { valor: 'reglas', etiqueta: 'Reglas' },
   { valor: 'auditoria', etiqueta: 'Auditoría' },
 ] as const
 type Vista = (typeof VISTAS)[number]['valor']
@@ -48,7 +51,8 @@ const ESTADO_DE_INCIDENCIA: Record<string, { tono: 'warning' | 'info' | 'success
  * VERIFICACIÓN DE IDENTIDAD — el panel del equipo de Membego (Fase 4). Solo SUPERADMIN.
  *
  * Aquí el equipo ve el estado de la plataforma, enciende o apaga la verificación (con motivo), atiende los casos que
- * esperan a una persona y las incidencias, busca a una persona y consulta la bitácora. NO hay forma de ver una imagen ni
+ * esperan a una persona y las incidencias, busca a una persona, decide en qué operaciones se pide identidad (Fase 5) y
+ * consulta la bitácora. NO hay forma de ver una imagen ni
  * de aprobar a nadie desde aquí: la evidencia está en la consola del proveedor y «verificada» solo lo escribe el worker.
  */
 export default async function IdentidadPage({ searchParams }: { searchParams: Promise<{ vista?: string; q?: string; inc?: string }> }) {
@@ -84,7 +88,111 @@ export default async function IdentidadPage({ searchParams }: { searchParams: Pr
       {vista === 'revision' && <Revision cola={await colaDeRevision(actor)} />}
       {vista === 'incidencias' && <Incidencias vista={sp.inc === 'resueltas' ? 'resueltas' : 'abiertas'} datos={await colaDeIncidencias(actor, sp.inc === 'resueltas' ? 'resueltas' : 'abiertas')} />}
       {vista === 'personas' && <Personas q={sp.q ?? ''} personas={await buscarPersonas(actor, sp.q ?? '')} />}
+      {vista === 'reglas' && <Reglas datos={await reglasDeLaPlataforma(actor)} />}
       {vista === 'auditoria' && <Auditoria />}
+    </div>
+  )
+}
+
+// ── Reglas por función ──────────────────────────────────────────────────────
+
+function Reglas({ datos }: { datos: ReglasParaElEquipo }) {
+  const { compuerta, reglas, proveedores, nuncaPide } = datos
+  return (
+    <div className="space-y-6">
+      <Card className="border-border/60 shadow-card">
+        <CardHeader>
+          <CardTitle className="text-h4">Cuándo se pide identidad</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+          <p>
+            La identidad protege el dinero que sale de Membego, no las compras. Por eso hay una lista corta de operaciones que pueden pedirla, todas apagadas de serie, y una lista de lo que no la pide
+            nunca. Una regla encendida solo frena esa operación, con un mensaje que dice qué falta y a quién.
+          </p>
+          <p>
+            <strong className="font-semibold text-foreground">No la piden nunca:</strong> {nuncaPide.join(' · ')}.
+          </p>
+          {!compuerta.habilitada && (
+            <p className="flex items-start gap-2 text-foreground">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+              <span>La verificación está apagada: no se puede encender ninguna regla, y las que estén encendidas no frenan nada hasta que la verificación vuelva.</span>
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {reglas.map((r) => {
+        const alcance = r.alcances.find((a) => a.valor === r.alcance)
+        return (
+          <Card key={r.operacion} className="border-border/60 shadow-card">
+            <CardHeader>
+              <CardTitle className="flex flex-wrap items-center gap-2 text-h4">
+                {r.titulo}
+                <StatusChip tone={r.suspendidaPorLaCompuerta ? 'warning' : r.activa ? 'success' : 'neutral'} className="ml-auto">
+                  {r.suspendidaPorLaCompuerta ? 'Encendida, en pausa' : r.activa ? 'Encendida' : 'Apagada'}
+                </StatusChip>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qué frena</dt>
+                  <dd className="mt-1 text-foreground/90">{r.descripcion}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">A quién se le pide</dt>
+                  <dd className="mt-1 text-foreground/90">{r.seVerificaA}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Se aplica a</dt>
+                  <dd className="mt-1 text-foreground/90">
+                    {alcance?.etiqueta}
+                    <span className="block text-xs text-muted-foreground">{alcance?.explicacion}</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Último cambio</dt>
+                  <dd className="mt-1 text-foreground/90">
+                    {r.cambiadoAt ? fecha(r.cambiadoAt) : 'Nunca se ha tocado'}
+                    {r.motivo && <span className="block text-xs text-muted-foreground">«{r.motivo}»</span>}
+                  </dd>
+                </div>
+              </dl>
+
+              {proveedores && r.operacion === 'PAGO_A_PROVEEDOR' && (
+                <p className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-foreground/90">
+                  Hoy hay <strong className="font-semibold">{proveedores.activos}</strong> proveedores activos: {proveedores.representanteVerificado} con su representante ya verificado,{' '}
+                  {proveedores.representanteSinVerificar} con el representante sin verificar y {proveedores.sinRepresentante} sin nadie que haya aceptado el contrato. Con la regla encendida, el pago a
+                  estos dos últimos grupos no se puede confirmar hasta que se resuelva.
+                </p>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <AccionConTexto
+                  accion={cambiarReglaAction}
+                  campos={{ operacion: r.operacion, activar: 'si' }}
+                  boton={r.activa ? 'Cambiar a qué pagos se aplica' : 'Encender la regla'}
+                  confirmar={r.activa ? 'Guardar el cambio' : 'Encender'}
+                  etiquetaTexto="Motivo del cambio"
+                  maximo={300}
+                  opcion={{ nombre: 'alcance', etiqueta: 'A qué pagos se aplica', valores: r.alcances.map((a) => ({ valor: a.valor, etiqueta: `${a.etiqueta} — ${a.explicacion}` })) }}
+                />
+                {r.activa && (
+                  <AccionConTexto
+                    accion={cambiarReglaAction}
+                    campos={{ operacion: r.operacion, activar: 'no', alcance: r.alcance }}
+                    boton="Apagar la regla"
+                    confirmar="Apagar"
+                    etiquetaTexto="Motivo del cambio"
+                    maximo={300}
+                    peligrosa
+                  />
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })}
     </div>
   )
 }

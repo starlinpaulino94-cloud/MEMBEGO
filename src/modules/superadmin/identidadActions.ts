@@ -5,7 +5,7 @@ import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { DISPARADORES_REVALIDACION, type DisparadorRevalidacion } from '@/modules/identidad/identidadCore'
 import { ErrorDeIdentidad, cambiarInterruptorDeIdentidad, revocarVerificacion, solicitarRevalidacion, type ActorDeIdentidad } from '@/modules/identidad/identidad'
-import { atenderIncidenciaComoStaff, resolverRevisionComoStaff } from '@/modules/identidad/staff'
+import { atenderIncidenciaComoStaff, cambiarReglaComoStaff, resolverRevisionComoStaff } from '@/modules/identidad/staff'
 import { suprimirIdentidadDePersona } from '@/modules/identidad/supresion'
 
 /**
@@ -50,6 +50,25 @@ export async function cambiarInterruptorAction(_prev: EstadoAccionIdentidad, for
     await cambiarInterruptorDeIdentidad(sesion.actor, { encendido: encender, motivo: texto(formData, 'motivo', 300) })
     revalidatePath(RUTA)
     return { success: encender ? 'Verificación de identidad encendida.' : 'Verificación de identidad apagada.' }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+/** Enciende, apaga o cambia el alcance de una regla de verificación por función. Con motivo, siempre. */
+export async function cambiarReglaAction(_prev: EstadoAccionIdentidad, formData: FormData): Promise<EstadoAccionIdentidad> {
+  const sesion = await requireSuperadmin()
+  if (!sesion) return { error: 'No autorizado.' }
+  const activar = formData.get('activar') === 'si'
+  try {
+    await cambiarReglaComoStaff(sesion.actor, {
+      operacion: texto(formData, 'operacion', 60),
+      activa: activar,
+      alcance: texto(formData, 'alcance', 30),
+      motivo: texto(formData, 'motivo', 300),
+    })
+    revalidatePath(RUTA)
+    return { success: activar ? 'Regla guardada y encendida.' : 'Regla apagada.' }
   } catch (e) {
     return comoError(e)
   }

@@ -640,6 +640,8 @@ enum AuditAccion {
   IDENTIDAD_REVISION_RESUELTA
   /// El equipo de MEMBEGO tomó o resolvió una incidencia de verificación de identidad.
   IDENTIDAD_INCIDENCIA_ATENDIDA
+  /// El equipo de MEMBEGO encendió, apagó o cambió el alcance de una regla de verificación de identidad.
+  IDENTIDAD_REGLA_CAMBIADA
 }
 
 // ─────────────────────────────────────────────
@@ -709,6 +711,7 @@ model User {
   identidadIntentos        IdentidadIntento[]        @relation("IdentidadIntentosDeUsuario")
   identidadConsentimientos IdentidadConsentimiento[] @relation("IdentidadConsentimientosDeUsuario")
   identidadInterruptores   IdentidadInterruptor[]    @relation("IdentidadInterruptorCambiadoPor")
+  identidadReglas          IdentidadRegla[]          @relation("IdentidadReglaCambiadaPor")
   identidadIncidencias     IdentidadIncidencia[]     @relation("IdentidadIncidenciasDeUsuario")
   identidadIncidenciasResueltas IdentidadIncidencia[] @relation("IdentidadIncidenciaResueltaPor")
   identidadIncidenciasAtendidas IdentidadIncidencia[] @relation("IdentidadIncidenciaAtendidaPor")

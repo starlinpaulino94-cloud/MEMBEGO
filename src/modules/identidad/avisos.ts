@@ -10,6 +10,7 @@ import {
   claveDeAviso,
   claveDeAvisoDeIncidencia,
   claveDeAvisoDeRepeticion,
+  RUTA_DEL_AVISO_PARA_PROVEEDOR,
   redactarAvisoDeIdentidad,
   redactarAvisoDeRepeticion,
   redactarAvisoDeRespuesta,
@@ -42,11 +43,13 @@ async function dejarAviso(entrada: {
   correo?: AvisoDeIdentidad
 }): Promise<ResultadoDelAviso> {
   const destino = await sinEmpresa('identidad: se deja el aviso en la campana de la persona', async (tx) => {
-    const user = await tx.user.findUnique({ where: { id: entrada.userId }, select: { email: true } })
+    const user = await tx.user.findUnique({ where: { id: entrada.userId }, select: { email: true, role: true } })
     if (!user) return null
+    // Quien no es cliente (el representante de un proveedor) verifica desde su portal: el enlace del aviso va allí.
+    const href = user.role === 'CLIENTE' ? entrada.href : RUTA_DEL_AVISO_PARA_PROVEEDOR
     // El reclamo: crear con la clave de deduplicación sin abortar la transacción si ya existe.
     const reclamo = await tx.notificacion.createMany({
-      data: [{ userId: entrada.userId, tipo: entrada.tipo, titulo: entrada.titulo, mensaje: entrada.mensaje, href: entrada.href, dedupeKey: entrada.dedupeKey }],
+      data: [{ userId: entrada.userId, tipo: entrada.tipo, titulo: entrada.titulo, mensaje: entrada.mensaje, href, dedupeKey: entrada.dedupeKey }],
       skipDuplicates: true,
     })
     if (reclamo.count === 0) return 'ya_enviado' as const
@@ -54,7 +57,7 @@ async function dejarAviso(entrada: {
       where: { userId: entrada.userId, dedupeKey: entrada.dedupeKey },
       select: { id: true, userId: true, titulo: true, mensaje: true, href: true },
     })
-    return { email: user.email, notificacion }
+    return { email: user.email, notificacion, href }
   })
   if (destino === null) return 'omitido'
   if (destino === 'ya_enviado') return 'ya_enviado'
@@ -63,7 +66,7 @@ async function dejarAviso(entrada: {
   const correo = destino.email?.trim()
   if (correo && entrada.correo) {
     try {
-      const { html, text } = armarCorreoDeIdentidad(entrada.correo, { urlBase: appUrl() })
+      const { html, text } = armarCorreoDeIdentidad({ ...entrada.correo, href: destino.href }, { urlBase: appUrl() })
       await encolarEmail({ to: correo, subject: entrada.correo.asunto, html, text })
     } catch (e) {
       anotarFallo('identidad:aviso-correo', { clave: entrada.dedupeKey })(e)

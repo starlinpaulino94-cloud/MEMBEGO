@@ -5,9 +5,11 @@ import {
   CLAVE_INTERRUPTOR_IDENTIDAD,
   ErrorDeIdentidad,
   atenderIncidenciaDeIdentidad,
+  cambiarReglaDeIdentidad,
   compuertaDeIdentidad,
   consultarIdentidadComoStaff,
   exigirGestionDeIdentidad,
+  leerReglasDeIdentidad,
   resolverRevisionDeIdentidad,
   type ActorDeIdentidad,
   type CompuertaDeIdentidad,
@@ -15,6 +17,7 @@ import {
   type ResultadoAtenderIncidencia,
   type ResultadoResolverRevision,
 } from '@/modules/identidad/identidad'
+import { OPERACIONES_SIN_REGLA, operacionConRegla, type AlcanceDeRegla, type OperacionDeIdentidad } from '@/modules/identidad/reglasCore'
 import { avisarRepeticionDeIdentidad, avisarRespuestaDeIncidencia, avisarResultadoDeIdentidad } from '@/modules/identidad/avisos'
 import { purgarSesionDeIntento } from '@/modules/identidad/sincronizacion'
 
@@ -399,4 +402,96 @@ export async function atenderIncidenciaComoStaff(
   const r = await atenderIncidenciaDeIdentidad(actor, incidenciaId, accion, respuesta)
   if (r.ok && accion === 'resolver' && r.cambio && r.respuesta) await avisarRespuestaDeIncidencia(r.userId, incidenciaId, r.respuesta)
   return r
+}
+
+// ── Reglas por función (Fase 5) ─────────────────────────────────────────────
+
+export interface ReglaParaElEquipo {
+  operacion: OperacionDeIdentidad
+  titulo: string
+  descripcion: string
+  seVerificaA: string
+  alcances: readonly { valor: AlcanceDeRegla; etiqueta: string; explicacion: string }[]
+  activa: boolean
+  alcance: AlcanceDeRegla
+  motivo: string | null
+  cambiadoAt: Date | null
+  cambiadoPor: string | null
+  /** Con la verificación apagada la regla no frena nada aunque esté encendida. */
+  suspendidaPorLaCompuerta: boolean
+}
+
+export interface ProveedoresYRepresentantes {
+  activos: number
+  sinRepresentante: number
+  representanteSinVerificar: number
+  representanteVerificado: number
+}
+
+export interface ReglasParaElEquipo {
+  compuerta: CompuertaDeIdentidad
+  reglas: ReglaParaElEquipo[]
+  /** `null` = «sin dato». Informativo: cuántos proveedores activos se frenarían hoy en su próximo pago si la regla pidiera a todos. */
+  proveedores: ProveedoresYRepresentantes | null
+  /** Lo que nunca pide identidad, para que la pantalla lo diga con todas las letras. */
+  nuncaPide: readonly string[]
+}
+
+/** Lo que el panel enseña de las reglas: cada operación con su estado, y el efecto probable en los proveedores de hoy. */
+export async function reglasDeLaPlataforma(actor: ActorDeIdentidad): Promise<ReglasParaElEquipo> {
+  exigirGestionDeIdentidad(actor)
+  const [compuerta, reglas, proveedores] = await Promise.all([
+    compuertaDeIdentidad(),
+    leerReglasDeIdentidad(),
+    medir('proveedores', () =>
+      sinEmpresa('identidad: el equipo cuenta los proveedores y la verificación de su representante', async (tx) => {
+        const filas = await tx.supplyV2Supplier.findMany({ where: { status: 'ACTIVE' }, select: { termsAcceptedById: true } })
+        const ids = [...new Set(filas.flatMap((f) => (f.termsAcceptedById ? [f.termsAcceptedById] : [])))]
+        const verificados = ids.length
+          ? await tx.identidadVerificacion.findMany({
+              where: { userId: { in: ids }, estado: 'verificada', nivel: { in: ['documento_selfie', 'jce_oficial'] }, expiraEn: { gt: new Date() } },
+              select: { userId: true },
+            })
+          : []
+        const ok = new Set(verificados.map((v) => v.userId))
+        const conRep = filas.filter((f) => f.termsAcceptedById)
+        return {
+          activos: filas.length,
+          sinRepresentante: filas.length - conRep.length,
+          representanteVerificado: conRep.filter((f) => ok.has(f.termsAcceptedById!)).length,
+          representanteSinVerificar: conRep.filter((f) => !ok.has(f.termsAcceptedById!)).length,
+        }
+      })
+    ),
+  ])
+  return {
+    compuerta,
+    reglas: reglas.map((r) => {
+      const o = operacionConRegla(r.operacion)
+      return {
+        operacion: r.operacion,
+        titulo: o.titulo,
+        descripcion: o.descripcion,
+        seVerificaA: o.seVerificaA,
+        alcances: o.alcances,
+        activa: r.activa,
+        alcance: r.alcance,
+        motivo: r.motivo,
+        cambiadoAt: r.cambiadoAt,
+        cambiadoPor: r.cambiadoPor,
+        suspendidaPorLaCompuerta: r.activa && !compuerta.habilitada,
+      }
+    }),
+    proveedores,
+    nuncaPide: OPERACIONES_SIN_REGLA.map((o) => o.titulo),
+  }
+}
+
+/** Cambia una regla (con motivo) en nombre del equipo. */
+export async function cambiarReglaComoStaff(
+  actor: ActorDeIdentidad,
+  entrada: { operacion: string; activa: boolean; alcance: string; motivo: string }
+): Promise<void> {
+  exigirGestionDeIdentidad(actor)
+  await cambiarReglaDeIdentidad(actor, entrada)
 }

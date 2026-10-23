@@ -12,7 +12,7 @@ import {
   tieneHistorialDeIdentidad,
 } from '@/modules/identidad/identidad'
 import { esTipoConsentimientoIdentidad, type TipoConsentimientoIdentidad } from '@/modules/identidad/identidadConsentimientosCore'
-import { consultarEstadoConReconciliacion, iniciarSesionDeVerificacion } from '@/modules/identidad/sincronizacion'
+import { consultarEstadoConReconciliacion, iniciarSesionDeVerificacion, type OrigenWebDeVerificacion } from '@/modules/identidad/sincronizacion'
 import { suprimirIdentidadDePersona } from '@/modules/identidad/supresion'
 import { SOPORTE_PLATAFORMA } from '@/lib/soporte'
 import { anotarFallo } from '@/lib/prisma-errors'
@@ -158,7 +158,7 @@ async function aceptar(userId: string, aceptados: Record<string, string>, ctx: C
  */
 export async function iniciarVerificacionDePersona(
   quien: QuienEs,
-  entrada: { aceptados?: Record<string, string>; canalDeCaptura?: 'web' | 'movil_hospedado' | 'movil_nativo' },
+  entrada: { aceptados?: Record<string, string>; canalDeCaptura?: 'web' | 'movil_hospedado' | 'movil_nativo'; origenWeb?: OrigenWebDeVerificacion },
   ctx: ContextoDePeticion
 ): Promise<ResultadoDePuerta<{ url: string; intentoId: string; nonce: string | null }>> {
   if (!(await identidadSesionLimiter(quien.supabaseId))) return falla(429, 'demasiadas_solicitudes')
@@ -168,7 +168,7 @@ export async function iniciarVerificacionDePersona(
     if (r === 'invalido') return falla(400, 'invalido')
   }
   const canal = entrada.canalDeCaptura ?? (ctx.canal === 'web' ? 'web' : 'movil_hospedado')
-  const r = await iniciarSesionDeVerificacion(quien.userId, { canal, ip: ctx.ip, userAgent: ctx.userAgent })
+  const r = await iniciarSesionDeVerificacion(quien.userId, { canal, ip: ctx.ip, userAgent: ctx.userAgent, origen: entrada.origenWeb })
   if (r.ok) return { ok: true, url: r.url, intentoId: r.intentoId, nonce: r.nonce }
   const extra = { esperarHasta: r.esperarHasta ?? null, reintentarEnSegundos: r.reintentarEnSegundos ?? null }
   if (r.motivo === 'no_habilitada') return falla(403, r.motivo, extra)

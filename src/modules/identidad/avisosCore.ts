@@ -21,6 +21,8 @@ export function avisaEsteResultado(estado: string): estado is ResultadoQueAvisa 
 
 /** La ruta a la que lleva el aviso (en la app móvil se traduce a su pantalla de identidad). */
 export const RUTA_DEL_AVISO_DE_IDENTIDAD = '/cliente/identidad'
+/** Lo mismo para quien verifica desde el portal del proveedor (quien aceptó el contrato): no es cliente y no tiene esa pantalla. */
+export const RUTA_DEL_AVISO_PARA_PROVEEDOR = '/admin/supply/identidad'
 
 export interface AvisoDeIdentidad {
   tipoNotificacion: 'IDENTIDAD_VERIFICADA' | 'IDENTIDAD_RECHAZADA' | 'IDENTIDAD_EN_REVISION' | 'IDENTIDAD_REPETIR'

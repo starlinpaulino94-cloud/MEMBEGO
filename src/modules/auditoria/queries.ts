@@ -413,6 +413,7 @@ export const ACCION_LABEL: Record<string, string> = {
   IDENTIDAD_INCIDENCIA_REPORTADA: 'Identidad: incidencia reportada por la persona',
   IDENTIDAD_REVISION_RESUELTA: 'Identidad: caso en revisión resuelto por el equipo',
   IDENTIDAD_INCIDENCIA_ATENDIDA: 'Identidad: incidencia atendida por el equipo',
+  IDENTIDAD_REGLA_CAMBIADA: 'Identidad: regla de verificación cambiada',
   // Integraciones: lo que sale hacia sistemas de terceros.
   INTEGRACION_SONDEADA: 'Webhook probado',
   INTEGRACION_REINTENTADA: 'Cola de eventos reenviada',

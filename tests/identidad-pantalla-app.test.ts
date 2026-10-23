@@ -199,7 +199,10 @@ test('las acciones web solo traducen: cada una exige a la persona de la SESIÓN 
     assert.match(cuerpo, /await exigirPersona\(\)/, `${nombre} no exige a la persona`)
   }
   assert.doesNotMatch(acciones, /formData\.get\('(userId|usuario|personaId|supabaseId)'\)/)
-  assert.match(acciones, /user\.metadata\.role !== 'CLIENTE' \|\| !user\.metadata\.dbUserId/)
+  // La persona de la sesión: un cliente o (Fase 5) quien trabaja en el portal de un proveedor; cualquier otro rol, fuera.
+  assert.match(acciones, /if \(!user \|\| !user\.metadata\.dbUserId\) return null/)
+  assert.match(acciones, /const esCliente = user\.metadata\.role === 'CLIENTE'/)
+  assert.match(acciones, /if \(!esCliente && !\(await proveedorDeLaSesion\(\)\)\) return null/)
 })
 
 test('lo que Configuración muestra del tema es solo un resumen que enlaza a la pantalla, y no rompe Configuración si falla', () => {

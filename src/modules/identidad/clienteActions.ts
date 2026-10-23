@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
+import { proveedorDeLaSesion } from '@/modules/supply-v2/permisos'
 import { TIPOS_CONSENTIMIENTO_IDENTIDAD } from '@/modules/identidad/identidadConsentimientosCore'
+import type { OrigenWebDeVerificacion } from '@/modules/identidad/sincronizacion'
 import {
   cambiarConsentimientoDePersona,
   iniciarVerificacionDePersona,
@@ -25,6 +27,12 @@ import {
  * sesión con el proveedor y devuelve la dirección a la que mandar a la persona.
  */
 
+/** La pantalla de la persona vive en dos sitios (cliente y portal del proveedor): se refrescan los dos. */
+function revalidarPantalla() {
+  revalidatePath('/cliente/identidad')
+  revalidatePath('/admin/supply/identidad')
+}
+
 export interface IdentidadActionState {
   error?: string
   success?: boolean
@@ -32,11 +40,19 @@ export interface IdentidadActionState {
   url?: string
 }
 
-async function exigirPersona(): Promise<{ quien: QuienEs; ctx: ContextoDePeticion } | null> {
+/**
+ * La persona de la SESIÓN: un cliente, o —desde la Fase 5— quien trabaja en el portal de un proveedor (la persona que acepta
+ * su contrato y a quien Membego puede pedirle la verificación antes de pagarle). Cualquier otro rol, fuera. El sitio al que
+ * vuelve tras verificarse sale del ROL, nunca de lo que mande el formulario.
+ */
+async function exigirPersona(): Promise<{ quien: QuienEs; ctx: ContextoDePeticion; origenWeb: OrigenWebDeVerificacion } | null> {
   const user = await getUser()
-  if (!user || user.metadata.role !== 'CLIENTE' || !user.metadata.dbUserId) return null
+  if (!user || !user.metadata.dbUserId) return null
+  const esCliente = user.metadata.role === 'CLIENTE'
+  if (!esCliente && !(await proveedorDeLaSesion())) return null
   const meta = await getRequestMeta()
   return {
+    origenWeb: esCliente ? 'cliente' : 'proveedor',
     quien: { userId: user.metadata.dbUserId, supabaseId: user.supabaseId },
     ctx: { canal: 'web', ip: meta.ipAddress?.split(',')[0]?.trim() ?? null, userAgent: meta.userAgent },
   }
@@ -54,8 +70,8 @@ export async function iniciarVerificacionAction(_prev: IdentidadActionState, for
   for (const tipo of TIPOS_CONSENTIMIENTO_IDENTIDAD) {
     if (formData.get(`acepta:${tipo}`) === 'on') aceptados[tipo] = String(formData.get(`version:${tipo}`) ?? '')
   }
-  const r = await iniciarVerificacionDePersona(p.quien, { aceptados, canalDeCaptura: 'web' }, p.ctx)
-  revalidatePath('/cliente/identidad')
+  const r = await iniciarVerificacionDePersona(p.quien, { aceptados, canalDeCaptura: 'web', origenWeb: p.origenWeb }, p.ctx)
+  revalidarPantalla()
   if (!r.ok) return { error: r.error }
   return { success: true, url: r.url }
 }
@@ -71,7 +87,7 @@ export async function cambiarDivulgacionAction(_prev: IdentidadActionState, form
     p.ctx
   )
   if (!r.ok) return { error: r.error }
-  revalidatePath('/cliente/identidad')
+  revalidarPantalla()
   return { success: true }
 }
 
@@ -85,7 +101,7 @@ export async function reportarProblemaAction(_prev: IdentidadActionState, formDa
     intentoId: String(formData.get('intentoId') ?? '') || null,
   })
   if (!r.ok) return { error: r.error }
-  revalidatePath('/cliente/identidad')
+  revalidarPantalla()
   return { success: true }
 }
 
@@ -95,7 +111,7 @@ export async function borrarDatosDeIdentidadAction(_prev: IdentidadActionState, 
   if (!p) return { error: 'No autorizado.' }
   const r = await pedirBorradoDePersona(p.quien)
   if (!r.ok) return { error: r.error }
-  revalidatePath('/cliente/identidad')
+  revalidarPantalla()
   revalidatePath('/cliente/ajustes')
   return { success: true }
 }

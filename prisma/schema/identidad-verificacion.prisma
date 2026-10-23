@@ -193,6 +193,24 @@ model IdentidadInterruptor {
   @@map("identidad_interruptores")
 }
 
+/// REGLAS POR FUNCIÓN (Fase 5): en qué operaciones Membego pide identidad verificada. Una fila por operación;
+/// sin fila = no pide nada. Las operaciones válidas son una lista CERRADA (el CHECK de la migración y
+/// `OPERACIONES_CON_REGLA`): compras, promociones, membresías, renovaciones y accesos no están ni pueden estar.
+/// Es configuración de la plataforma (solo omnisciente), no de una persona ni de una empresa.
+model IdentidadRegla {
+  operacion String  @id
+  activa    Boolean @default(false)
+  /// 'primer_pago' | 'todos'
+  alcance   String  @default("primer_pago")
+  reason    String?
+
+  changedById String?
+  changedBy   User?    @relation("IdentidadReglaCambiadaPor", fields: [changedById], references: [id], onDelete: SetNull)
+  changedAt   DateTime @default(now())
+
+  @@map("identidad_reglas")
+}
+
 /// BANDEJA de avisos del proveedor (webhooks). Cada aviso AUTENTICADO se registra una
 /// sola vez por `event_id` (los reintentos del proveedor lo reusan) y se procesa
 /// después. NO guarda el cuerpo del aviso ni el id de la sesión: solo el id del

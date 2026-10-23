@@ -23,7 +23,7 @@ function archivos(dir: string, ext = /\.(ts|tsx|mts)$/): string[] {
 }
 
 const SERVICIO = 'src/modules/identidad/identidad.ts'
-const MODELOS = /\b(identidadVerificacion|identidadIntento|identidadConsentimiento|identidadInterruptor|identidadIncidencia)\b\s*\.\s*(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/
+const MODELOS = /\b(identidadVerificacion|identidadIntento|identidadConsentimiento|identidadInterruptor|identidadIncidencia|identidadRegla)\b\s*\.\s*(create|createMany|update|updateMany|upsert|delete|deleteMany)\b/
 
 test('NADIE ESCRIBE EL ESTADO DE IDENTIDAD FUERA DEL SERVICIO: el resto del código solo lo lee', () => {
   const infractores = archivos('src').filter((f) => f !== SERVICIO && MODELOS.test(quitarComentarios(leer(f))))
@@ -39,6 +39,7 @@ test('NINGUNA RUTA DE API NI ACCIÓN DE CLIENTE MARCA «VERIFICADA»: el resulta
   // Ninguna ruta toca el estado: solo hablan con el worker, el cron y los servicios de lectura.
   const rutas = archivos('src/app').filter((f) => /@\/modules\/identidad\//.test(quitarComentarios(leer(f))))
   assert.deepEqual(rutas.sort(), [
+    'src/app/(admin)/admin/supply/identidad/page.tsx', // la pantalla de quien trabaja en el portal del proveedor: solo SU verificación
     'src/app/(cliente)/cliente/ajustes/page.tsx', // el resumen de Configuración (solo lectura)
     'src/app/(cliente)/cliente/identidad/page.tsx', // la pantalla de la persona (solo lectura)
     'src/app/(superadmin)/superadmin/identidad/[userId]/page.tsx', // el caso (solo SUPERADMIN)
@@ -135,7 +136,7 @@ test('el interruptor y la capacidad nacen apagados en el código: la verificaci�
 
 test('las migraciones de identidad están selladas en SUMAS.txt y son las últimas', () => {
   const sumas = leer('prisma/migrations/SUMAS.txt')
-  for (const m of ['20261078_identidad_acciones_enum', '20261079_identidad_verificacion', '20261080_identidad_acciones_proveedor', '20261081_identidad_proveedor', '20261082_identidad_avisos_incidencias_enums', '20261083_identidad_incidencias', '20261084_identidad_admin_enums', '20261085_identidad_incidencias_respuesta']) assert.ok(sumas.includes(m), `${m} sin sellar (npm run migraciones:sellar)`)
+  for (const m of ['20261078_identidad_acciones_enum', '20261079_identidad_verificacion', '20261080_identidad_acciones_proveedor', '20261081_identidad_proveedor', '20261082_identidad_avisos_incidencias_enums', '20261083_identidad_incidencias', '20261084_identidad_admin_enums', '20261085_identidad_incidencias_respuesta', '20261086_identidad_reglas_enums', '20261087_identidad_reglas']) assert.ok(sumas.includes(m), `${m} sin sellar (npm run migraciones:sellar)`)
 })
 
 // ── Fase 2 · el proveedor ───────────────────────────────────────────────────
@@ -294,7 +295,7 @@ test('EL PANEL DEL EQUIPO es solo de SUPERADMIN en TODAS sus capas: las páginas
   const acciones = quitarComentarios(leer('src/modules/superadmin/identidadActions.ts'))
   assert.match(acciones, /^'use server'/m)
   const exportadas = [...acciones.matchAll(/export async function (\w+)/g)].map((m) => m[1])
-  assert.deepEqual(exportadas.sort(), ['atenderIncidenciaAction', 'cambiarInterruptorAction', 'pedirRevalidacionAction', 'resolverRevisionAction', 'revocarVerificacionAction', 'suprimirIdentidadAction'])
+  assert.deepEqual(exportadas.sort(), ['atenderIncidenciaAction', 'cambiarInterruptorAction', 'cambiarReglaAction', 'pedirRevalidacionAction', 'resolverRevisionAction', 'revocarVerificacionAction', 'suprimirIdentidadAction'])
   for (const nombre of exportadas) {
     const cuerpo = acciones.slice(acciones.indexOf('function ' + nombre)).split(/\nexport async function /)[0]
     assert.match(cuerpo, /await requireSuperadmin\(\)/, nombre + ' no exige ser SUPERADMIN')
@@ -303,7 +304,7 @@ test('EL PANEL DEL EQUIPO es solo de SUPERADMIN en TODAS sus capas: las páginas
   assert.match(acciones, /user\.metadata\.role !== 'SUPERADMIN'/)
   // Todas las funciones del servicio del equipo empiezan por la comprobación del rol.
   const staff = quitarComentarios(leer('src/modules/identidad/staff.ts'))
-  for (const nombre of ['resumenDeLaPlataforma', 'colaDeRevision', 'colaDeIncidencias', 'buscarPersonas', 'verCasoDeIdentidad']) {
+  for (const nombre of ['resumenDeLaPlataforma', 'colaDeRevision', 'colaDeIncidencias', 'buscarPersonas', 'verCasoDeIdentidad', 'reglasDeLaPlataforma', 'cambiarReglaComoStaff']) {
     const cuerpo = staff.slice(staff.indexOf('export async function ' + nombre)).split(/\nexport async function /)[0]
     assert.match(cuerpo.slice(0, 700), /exigirGestionDeIdentidad\(actor\)/, nombre + ' debe empezar comprobando el rol')
   }
@@ -342,7 +343,8 @@ test('LAS EMPRESAS NO TOCAN LA IDENTIDAD DE NADIE: sin importar el módulo ni le
   const infractores = zonasDeEmpresa.filter((f) => /@\/modules\/identidad\/|\bidentidad(Verificacion|Intento|Consentimiento|Incidencia|EventoExterno|Interruptor)\b/.test(quitarComentarios(leer(f))))
   // Única excepción (Fase 2): borrar a un empleado se frena mientras haya un borrado de identidad sin completar. La función solo
   // devuelve un TEXTO de aviso (o null): ningún dato de identidad llega a la empresa.
-  assert.deepEqual(infractores, ['src/modules/admin/actions.ts'], 'una empresa no importa el módulo de identidad ni lee sus tablas')
+  // Y la pantalla de la persona que trabaja en el portal del proveedor (Fase 5): es SU verificación, la de la sesión, no la de la empresa.
+  assert.deepEqual(infractores, ['src/app/(admin)/admin/supply/identidad/page.tsx', 'src/modules/admin/actions.ts'], 'una empresa no importa el módulo de identidad ni lee sus tablas')
   const origen = quitarComentarios(leer('src/modules/admin/actions.ts'))
   assert.deepEqual([...origen.matchAll(/from '@\/modules\/identidad\/([\w-]+)'/g)].map((m) => m[1]), ['supresion'])
   assert.match(origen, /import \{ bloqueoPorIdentidadPendiente \} from '@\/modules\/identidad\/supresion'/)
@@ -353,4 +355,103 @@ test('LAS EMPRESAS NO TOCAN LA IDENTIDAD DE NADIE: sin importar el módulo ni le
   assert.match(ficha, /cliente\.identidadEstado === 'verificada' && \(await tieneCapacidad\(cliente\.companyId, 'VERIFICACION_IDENTIDAD'\)\)/)
   const insignia = quitarComentarios(leer('src/components/admin/IdentidadVerificadaBadge.tsx'))
   assert.doesNotMatch(insignia, /rechaz|revis|duplic|nivel|c[eé]dula|selfie/i, 'la insignia no dice nada más que «verificada»')
+})
+
+// ── Fase 5 · reglas por función ─────────────────────────────────────────────
+
+const PAGOS = 'src/modules/supply-v2/finance/payments.ts'
+
+test('LAS REGLAS SOLO LAS CONSULTA LA PUERTA DONDE SALE EL DINERO: ni compras, ni promociones, ni membresías, ni renovaciones, ni accesos', () => {
+  // Quién fuera del módulo de identidad lo importa. Una compra, una renovación o un escáner aquí sería abrirles la puerta de la identidad.
+  const fuera = archivos('src').filter((f) => !f.startsWith('src/modules/identidad/') && /@\/modules\/identidad\//.test(quitarComentarios(leer(f))))
+  assert.deepEqual(fuera.sort(), [
+    'src/app/(admin)/admin/supply/identidad/page.tsx',
+    'src/app/(cliente)/cliente/ajustes/page.tsx',
+    'src/app/(cliente)/cliente/identidad/page.tsx',
+    'src/app/(superadmin)/superadmin/identidad/[userId]/page.tsx',
+    'src/app/(superadmin)/superadmin/identidad/page.tsx',
+    'src/app/api/cron/identidad/route.ts',
+    'src/app/api/v1/auth/cuenta/route.ts',
+    'src/app/api/v1/cliente/identidad/borrado/route.ts',
+    'src/app/api/v1/cliente/identidad/consentimientos/route.ts',
+    'src/app/api/v1/cliente/identidad/estado/route.ts',
+    'src/app/api/v1/cliente/identidad/incidencias/route.ts',
+    'src/app/api/v1/cliente/identidad/sesion/route.ts',
+    'src/app/api/webhooks/identidad/[proveedor]/route.ts',
+    'src/components/cliente/identidad/ResumenIdentidad.tsx',
+    'src/components/cliente/identidad/VerificacionIdentidad.tsx',
+    'src/modules/admin/actions.ts',
+    'src/modules/superadmin/eliminarActions.ts',
+    'src/modules/superadmin/identidadActions.ts',
+    PAGOS,
+  ])
+  // Las reglas (el núcleo y el evaluador) las toca un solo sitio fuera del módulo: la confirmación del pago a un proveedor.
+  const conReglas = archivos('src').filter((f) => !f.startsWith('src/modules/identidad/') && /identidad\/reglas(Core)?['"]/.test(quitarComentarios(leer(f))))
+  assert.deepEqual(conReglas, [PAGOS])
+  // Dentro del módulo, quién consulta la decisión: solo el evaluador y el servicio del equipo (que cambia reglas).
+  const dentro = archivos('src/modules/identidad').filter((f) => /\bdecidirRequisito\b|\bevaluarRequisitoDePagoAProveedor\b/.test(quitarComentarios(leer(f))))
+  assert.deepEqual(dentro.sort(), ['src/modules/identidad/reglas.ts', 'src/modules/identidad/reglasCore.ts'])
+})
+
+test('LA PUERTA DEL PAGO está donde sale el dinero: dentro de la confirmación, antes de moverlo, una sola vez', () => {
+  const pagos = quitarComentarios(leer(PAGOS))
+  assert.equal((pagos.match(/evaluarRequisitoDePagoAProveedor\(/g) ?? []).length, 1, 'un solo sitio pregunta')
+  const confirmar = pagos.slice(pagos.indexOf('export async function confirmarPagoProveedorEnTx')).split(/\nexport async function /)[0]
+  const llamada = confirmar.indexOf('exigirIdentidadDelRepresentante(')
+  assert.ok(llamada > 0, 'la confirmación la llama')
+  assert.ok(llamada > confirmar.indexOf("exigirTransicion(TRANSICIONES_PAGO_PROVEEDOR, p.status, 'CONFIRMED'"), 'después de comprobar que el pago se puede confirmar')
+  assert.ok(llamada < confirmar.indexOf("data: { status: 'CONFIRMED'"), 'ANTES de marcarlo confirmado y de aplicarlo: si se frena, no sale nada')
+  assert.ok(llamada < confirmar.indexOf('aplicarEnTx('), 'antes de aplicar el dinero')
+  // La confirmación repetida (idempotente) no vuelve a preguntar: ya salió.
+  assert.ok(confirmar.indexOf("p.status === 'CONFIRMED'") < llamada)
+  // El representante es quien aceptó el contrato (dato del servidor), nunca algo que llegue de fuera.
+  assert.match(confirmar, /representanteId: p\.supplier\.termsAcceptedById/)
+  assert.match(pagos, /fallo\('IDENTIDAD_DEL_REPRESENTANTE', decision\.mensaje\)/)
+})
+
+test('LA BASE Y EL CÓDIGO COINCIDEN EN QUÉ OPERACIONES PUEDEN TENER REGLA, y ninguna es una compra', () => {
+  const migracion = leer('prisma/migrations/20261087_identidad_reglas/migration.sql')
+  const enBase = [...(migracion.match(/CHECK \("operacion" IN \(([^)]*)\)\)/)?.[1] ?? '').matchAll(/'([A-Z_]+)'/g)].map((m) => m[1])
+  const nucleo = quitarComentarios(leer('src/modules/identidad/reglasCore.ts'))
+  const enCodigo = [...(nucleo.slice(nucleo.indexOf('export const OPERACIONES_CON_REGLA'), nucleo.indexOf('export type OperacionDeIdentidad')).matchAll(/clave: '([A-Z_]+)'/g))].map((m) => m[1])
+  assert.deepEqual(enBase.sort(), enCodigo.sort(), 'el CHECK de la base y el catálogo del código dicen lo mismo')
+  const nunca = [...(nucleo.slice(nucleo.indexOf('export const OPERACIONES_SIN_REGLA')).matchAll(/clave: '([A-Z_]+)'/g))].map((m) => m[1])
+  assert.ok(nunca.length >= 7)
+  assert.deepEqual(enBase.filter((o) => nunca.includes(o)), [], 'una compra, una renovación o un acceso no pueden tener regla')
+  // Nace apagada y vacía: la migración no inserta ninguna regla.
+  assert.doesNotMatch(migracion, /INSERT INTO "identidad_reglas"/)
+  assert.match(migracion, /"activa"\s+BOOLEAN\s+NOT NULL DEFAULT false/)
+})
+
+test('QUIEN VERIFICA DESDE EL PORTAL DEL PROVEEDOR: el sitio de vuelta sale del ROL, la pantalla es la de la sesión y la ruta coincide con el aviso', () => {
+  const acciones = quitarComentarios(leer('src/modules/identidad/clienteActions.ts'))
+  assert.match(acciones, /origenWeb: esCliente \? 'cliente' : 'proveedor'/, 'el origen se deduce del rol')
+  assert.doesNotMatch(acciones, /formData\.get\('origen/, 'nunca de lo que mande el formulario')
+  assert.match(acciones, /if \(!esCliente && !\(await proveedorDeLaSesion\(\)\)\) return null/, 'solo un cliente o alguien del portal de un proveedor')
+  const pagina = quitarComentarios(leer('src/app/(admin)/admin/supply/identidad/page.tsx'))
+  assert.match(pagina, /proveedorDeLaSesion\(\)/)
+  assert.match(pagina, /leerPanelDeIdentidad\(proveedor\.id,/, 'el panel es el de la persona de la sesión')
+  assert.doesNotMatch(pagina, /\bprisma\.|from '@\/lib\/prisma'|conEmpresa|sinEmpresa|await params|\.userId\b/, 'sin base ni identificadores de otra persona')
+  // La misma ruta en el catálogo del portal y en el aviso.
+  const catalogo = quitarComentarios(leer('src/modules/supply-v2/core/catalogo.ts'))
+  assert.match(catalogo, /RUTA_PORTAL_IDENTIDAD = `\$\{RUTA_PORTAL_PROVEEDOR\}\/identidad`/)
+  assert.match(quitarComentarios(leer('src/modules/identidad/avisosCore.ts')), /RUTA_DEL_AVISO_PARA_PROVEEDOR = '\/admin\/supply\/identidad'/)
+  // Y solo hay rutas de retorno de una lista cerrada.
+  assert.match(quitarComentarios(leer('src/modules/identidad/sincronizacion.ts')), /export const RUTAS_WEB_DE_RETORNO = \{\s*cliente: RUTA_WEB_RETORNO_IDENTIDAD,\s*proveedor: RUTA_DEL_AVISO_PARA_PROVEEDOR,\s*\} as const/)
+})
+
+test('EL EVALUADOR DE REGLAS no traga errores: si no puede leer la regla o a la persona, el pago no sale (no sé no es sí)', () => {
+  const reglas = quitarComentarios(leer('src/modules/identidad/reglas.ts'))
+  assert.doesNotMatch(reglas, /catch\s*[({]/, 'ningún try/catch que convierta un fallo en «puede pasar»')
+  assert.doesNotMatch(reglas, /console\./)
+  // Con la regla apagada no se lee nada de la persona (se evalúa antes de tocarla).
+  assert.ok(reglas.indexOf('if (!regla?.activa)') < reglas.indexOf('estadoDeIdentidadDe('))
+})
+
+test('LA POLÍTICA Y LA PANTALLA DEL PORTAL DICEN LA EXCEPCIÓN: solo antes de pagarle a un proveedor, siendo decisión de la persona, y nunca para comprar', () => {
+  const privacidad = leer('src/app/(public)/privacy/page.tsx').replace(/\s+/g, ' ')
+  assert.match(privacidad, /Hay un solo caso en el que MembeGo puede pedírtelo: si aceptaste el contrato de un proveedor de Membego Supply/)
+  assert.match(privacidad, /Sigue siendo tu decisión \(si no lo haces, ese pago queda a la espera\) y nunca se pide para comprar, reservar, renovar ni entrar con tu QR/)
+  const pantalla = leer('src/app/(admin)/admin/supply/identidad/page.tsx').replace(/\s+/g, ' ')
+  assert.match(pantalla, /Es tu decisión: si no la haces, ese pago queda a la espera, y nada más cambia en tu portal/)
 })
