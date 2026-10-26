@@ -6,8 +6,11 @@ import { formatDateTime } from '@/lib/format'
 import { getRequestMeta } from '@/lib/server-utils'
 import { BitacoraTabla } from '@/components/auditoria/BitacoraTabla'
 import { AccionConTexto } from '@/components/superadmin/identidad/AccionConTexto'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { PageHeader } from '@/components/ui/page-header'
 import { StatusChip } from '@/components/ui/status-chip'
+import { Tabla } from '@/components/ui/tabla'
 import { getAuditoria } from '@/modules/auditoria/queries'
 import { DISPARADORES_REVALIDACION } from '@/modules/identidad/identidadCore'
 import { ErrorDeIdentidad } from '@/modules/identidad/identidad'
@@ -77,9 +80,9 @@ export default async function CasoDeIdentidadPage({ params, searchParams }: { pa
                   ))}
                 </select>
               </div>
-              <button type="submit" className="inline-flex h-11 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Button type="submit" size="lg">
                 Abrir el caso
-              </button>
+              </Button>
             </form>
           </CardContent>
         </Card>
@@ -106,13 +109,7 @@ export default async function CasoDeIdentidadPage({ params, searchParams }: { pa
 
   return (
     <div className="space-y-6">
-      {volver}
-      <div>
-        <h1 className="text-h1 text-foreground">{caso.persona.nombre}</h1>
-        <p className="text-sm text-muted-foreground">
-          {caso.persona.email} · <span className="font-mono text-xs">{caso.persona.userId}</span>
-        </p>
-      </div>
+      <PageHeader back={volver} title={caso.persona.nombre} description={`${caso.persona.email} · ${caso.persona.userId}`} />
 
       <Card className="border-border/60 shadow-card">
         <CardHeader>
@@ -126,12 +123,12 @@ export default async function CasoDeIdentidadPage({ params, searchParams }: { pa
         <CardContent className="space-y-4">
           {v ? (
             <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-              <Dato k="Nivel" v={v.nivel ?? '—'} />
-              <Dato k="Vía" v={v.via?.replace(/_/g, ' ') ?? '—'} />
-              <Dato k="Proveedor" v={v.proveedor ?? '—'} />
-              <Dato k="Verificada el" v={fecha(v.verificadaEn)} />
-              <Dato k="Vence el" v={fecha(v.expiraEn)} />
-              {v.revocadaEn && <Dato k="Retirada el" v={`${fecha(v.revocadaEn)}${v.motivoRevocacion ? ` — ${v.motivoRevocacion}` : ''}`} />}
+              <CampoDelResultado k="Nivel" v={v.nivel ?? '—'} />
+              <CampoDelResultado k="Vía" v={v.via?.replace(/_/g, ' ') ?? '—'} />
+              <CampoDelResultado k="Proveedor" v={v.proveedor ?? '—'} />
+              <CampoDelResultado k="Verificada el" v={fecha(v.verificadaEn)} />
+              <CampoDelResultado k="Vence el" v={fecha(v.expiraEn)} />
+              {v.revocadaEn && <CampoDelResultado k="Retirada el" v={`${fecha(v.revocadaEn)}${v.motivoRevocacion ? ` — ${v.motivoRevocacion}` : ''}`} />}
             </dl>
           ) : (
             <p className="text-sm text-muted-foreground">No tiene un resultado guardado.</p>
@@ -274,30 +271,20 @@ export default async function CasoDeIdentidadPage({ params, searchParams }: { pa
           {caso.consentimientos.length === 0 ? (
             <p className="text-sm text-muted-foreground">No ha dado ningún permiso.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
-                <thead>
-                  <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-4 font-semibold">Permiso</th>
-                    <th className="py-2 pr-4 font-semibold">Texto</th>
-                    <th className="py-2 pr-4 font-semibold">Canal</th>
-                    <th className="py-2 pr-4 font-semibold">Dado</th>
-                    <th className="py-2 font-semibold">Retirado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {caso.consentimientos.map((c, k) => (
-                    <tr key={k}>
-                      <td className="py-2 pr-4">{c.tipo.replace('IDENTIDAD_', '').replace(/_/g, ' ').toLowerCase()}</td>
-                      <td className="py-2 pr-4 font-mono text-xs">{c.version}</td>
-                      <td className="py-2 pr-4">{c.canal}</td>
-                      <td className="whitespace-nowrap py-2 pr-4 tabular-nums">{fecha(c.otorgadoAt)}</td>
-                      <td className="whitespace-nowrap py-2 tabular-nums">{fecha(c.revocadoAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Tabla
+              caption="Permisos que dio la persona"
+              claveDe={(c) => `${c.tipo}-${c.version}-${c.canal}-${c.otorgadoAt?.toISOString() ?? ''}`}
+              filas={caso.consentimientos}
+              columnaIdentificadora="permiso"
+              className="border-0 shadow-none"
+              columnas={[
+                { clave: 'permiso', encabezado: 'Permiso', valor: (c) => c.tipo.replace('IDENTIDAD_', '').replace(/_/g, ' ').toLowerCase() },
+                { clave: 'texto', encabezado: 'Texto', celda: (c) => <span className="font-mono text-xs">{c.version}</span> },
+                { clave: 'canal', encabezado: 'Canal', valor: (c) => c.canal },
+                { clave: 'dado', encabezado: 'Dado', celda: (c) => <span className="whitespace-nowrap tabular-nums">{fecha(c.otorgadoAt)}</span> },
+                { clave: 'retirado', encabezado: 'Retirado', celda: (c) => <span className="whitespace-nowrap tabular-nums">{fecha(c.revocadoAt)}</span> },
+              ]}
+            />
           )}
         </CardContent>
       </Card>
@@ -310,7 +297,7 @@ export default async function CasoDeIdentidadPage({ params, searchParams }: { pa
   )
 }
 
-function Dato({ k, v }: { k: string; v: string }) {
+function CampoDelResultado({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex gap-2">
       <dt className="text-muted-foreground">{k}:</dt>
