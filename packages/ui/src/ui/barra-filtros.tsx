@@ -26,6 +26,19 @@ export interface BusquedaFiltro {
   placeholder?: string
 }
 
+export interface FiltroFecha {
+  /** Nombre del parámetro en la URL (`?desde=2026-10-01`). */
+  nombre: string
+  etiqueta: string
+  /** Valor actual, leído de la URL, como `AAAA-MM-DD`. Vacío = sin filtro. */
+  valor: string
+}
+
+/** `2026-10-01` → `01/10/2026` (lo que se dice en el chip); lo que no es una fecha ISO se deja como viene. */
+function fechaLegible(valor: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(valor) ? valor.split('-').reverse().join('/') : valor
+}
+
 type EnlaceBarra = (props: { href: string; className: string; 'aria-label'?: string; children: ReactNode }) => ReactNode
 
 const enlaceNativo: EnlaceBarra = ({ href, className, children, ...resto }) => (
@@ -39,6 +52,8 @@ interface BarraFiltrosProps {
   action?: string
   busqueda?: BusquedaFiltro
   filtros?: readonly FiltroSelect[]
+  /** Fechas (un rango son dos: «desde» y «hasta»). Van en la URL como `AAAA-MM-DD`, igual que los demás filtros. */
+  fechas?: readonly FiltroFecha[]
   /** Parámetros que NO son filtros pero tienen que sobrevivir al enviar (la cola, el orden). */
   conservar?: Readonly<Record<string, string>>
   /** La URL de esta pantalla sin ese parámetro: lo que hace el chip «✕». */
@@ -65,6 +80,7 @@ export function BarraFiltros({
   action = '',
   busqueda,
   filtros = [],
+  fechas = [],
   conservar = {},
   hrefSin,
   hrefLimpiar,
@@ -77,6 +93,10 @@ export function BarraFiltros({
     if (!f.valor) continue
     const opcion = f.opciones.find((o) => o.valor === f.valor)
     if (opcion) activos.push({ nombre: f.nombre, texto: `${f.etiqueta}: ${opcion.etiqueta}` })
+  }
+
+  for (const f of fechas) {
+    if (f.valor) activos.push({ nombre: f.nombre, texto: `${f.etiqueta}: ${fechaLegible(f.valor)}` })
   }
 
   return (
@@ -112,6 +132,14 @@ export function BarraFiltros({
                 </option>
               ))}
             </select>
+          </div>
+        ))}
+        {fechas.map((f) => (
+          <div key={f.nombre} className="flex items-center gap-1.5">
+            <label htmlFor={`filtro-${f.nombre}`} className="whitespace-nowrap text-small text-muted-foreground">
+              {f.etiqueta}
+            </label>
+            <Input id={`filtro-${f.nombre}`} type="date" name={f.nombre} defaultValue={f.valor} className="w-40" />
           </div>
         ))}
         <Button type="submit" variant="secondary">

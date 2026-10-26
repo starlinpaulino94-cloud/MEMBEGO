@@ -85,8 +85,13 @@ test('sin NEXT_PUBLIC_SUPABASE_URL se rechaza, no se deja pasar', () => {
 // ── Guardias de las pantallas ────────────────────────────────────────────────
 
 test('el servidor valida la imagen: no basta con el campo oculto', () => {
+  // Desde la fase 7 la lectura del formulario vive en `modules/planes/formulario.ts` (un solo parser para crear y editar, con el
+  // error enlazado a su campo): la validación de la imagen está ahí y las dos acciones pasan SIEMPRE por él antes de guardar.
+  const parser = fuenteSinComentarios('src', 'modules', 'planes', 'formulario.ts')
+  assert.match(parser, /validarImagenPlan\(imagenUrl\)/)
+  assert.match(parser, /campos\.imagenUrl = errorImagen/)
   const src = fuenteSinComentarios('src', 'modules', 'admin', 'planActions.ts')
-  assert.match(src, /validarImagenPlan\(imagenUrl\)/)
+  assert.equal((src.match(/leerPlanDeFormulario\(formData\)/g) ?? []).length, 2, 'crear y editar leen el formulario con el parser')
   assert.match(src, /imagenUrl: parsed\.imagenUrl/)
 })
 

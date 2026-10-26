@@ -5,9 +5,10 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { TablaPrevistaLiquidacion } from '@/components/supply-v2/tablas-beneficio-campana'
 import { FormLiquidacion } from '@/components/supply-v2/finanzas/form-liquidacion'
 import { previsualizarLiquidacion, proveedoresParaFinanzas } from '@/modules/supply-v2/finance/queries'
-import { dineroSupplyV2, RUTA_LIQUIDACIONES } from '@/modules/supply-v2/core/catalogo'
+import { RUTA_LIQUIDACIONES } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Generar liquidación · Supply' }
@@ -47,17 +48,7 @@ export default async function NuevaLiquidacionPage({ searchParams }: { searchPar
           ) : preview.entregas.length === 0 ? (
             <p className="text-sm text-muted-foreground" data-testid="preview-vacia">Sin entregas a comisión pendientes de liquidar de {preview.proveedor} entre {formatDate(desde)} y {formatDate(hasta)}.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="preview-liquidacion">
-                <thead className="text-left text-caption text-muted-foreground"><tr><th className="py-1 pr-3">Entrega</th><th className="py-1 pr-3">Producto · cliente</th><th className="py-1 pr-3">Fecha</th><th className="py-1 pr-3 text-right">Bruto</th><th className="py-1 pr-3 text-right">Comisión</th><th className="py-1 text-right">Neto</th></tr></thead>
-                <tbody>
-                  {preview.entregas.map((e) => (
-                    <tr key={e.id} className="border-t border-border"><td className="py-2 pr-3 font-medium">{e.redemptionNumber ?? e.number}</td><td className="py-2 pr-3">{e.producto}<span className="block text-caption text-muted-foreground">{e.cliente}</span></td><td className="py-2 pr-3">{formatDate(e.redeemedAt)}</td><td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(e.gross, preview.currency)}</td><td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(e.commission, preview.currency)}</td><td className="py-2 text-right tabular-nums">{dineroSupplyV2(e.net, preview.currency)}</td></tr>
-                  ))}
-                  <tr className="border-t border-border font-medium"><td className="py-2 pr-3" colSpan={3}>{preview.entregas.length} entrega(s)</td><td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(preview.grossSales, preview.currency)}</td><td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(preview.commissionAmount, preview.currency)}</td><td className="py-2 text-right tabular-nums" data-testid="preview-neto">{dineroSupplyV2(preview.supplierNet, preview.currency)}</td></tr>
-                </tbody>
-              </table>
-            </div>
+            <TablaPrevistaLiquidacion entregas={preview.entregas} moneda={preview.currency} bruto={preview.grossSales} comision={preview.commissionAmount} neto={preview.supplierNet} />
           )}
         </CardContent>
       </Card>

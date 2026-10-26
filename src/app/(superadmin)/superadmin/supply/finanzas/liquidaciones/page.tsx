@@ -6,12 +6,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Label } from '@/components/ui/label'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
-import { formatDate } from '@/lib/format'
 import { leerPaginacion } from '@/lib/paginacion'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
-import { ChipLiquidacion } from '@/components/supply-v2/finanzas/chips'
+import { TablaLiquidaciones } from '@/components/supply-v2/finanzas/tablas'
 import { listarLiquidaciones, proveedoresParaFinanzas } from '@/modules/supply-v2/finance/queries'
-import { dineroSupplyV2, RUTA_FINANZAS, RUTA_LIQUIDACIONES, SETTLEMENT_FREQUENCY_LABELS, SETTLEMENT_STATUS_LABELS } from '@/modules/supply-v2/core/catalogo'
+import { RUTA_FINANZAS, RUTA_LIQUIDACIONES, SETTLEMENT_STATUS_LABELS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Liquidaciones · Supply' }
@@ -48,31 +47,7 @@ export default async function LiquidacionesPage({ searchParams }: { searchParams
       {filas.length === 0 ? (
         <EmptyState variant="card" title="Sin liquidaciones" description="Cuando haya entregas a comisión pendientes de pago, genera la liquidación del periodo." action={<Button asChild><Link href={`${RUTA_LIQUIDACIONES}/nueva`}>Generar liquidación</Link></Button>} />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="tabla-liquidaciones">
-                <thead className="text-left text-caption text-muted-foreground"><tr><th className="py-1 pr-3">Liquidación</th><th className="py-1 pr-3">Proveedor</th><th className="py-1 pr-3">Periodo</th><th className="py-1 pr-3 text-right">Bruto</th><th className="py-1 pr-3 text-right">Comisión</th><th className="py-1 pr-3 text-right">Neto</th><th className="py-1 pr-3 text-right">Pagado</th><th className="py-1 pr-3 text-right">Pendiente</th><th className="py-1">Estado</th></tr></thead>
-                <tbody>
-                  {filas.map((l) => (
-                    <tr key={l.id} className="border-t border-border" data-testid="liquidacion">
-                      <td className="py-2 pr-3 font-medium"><Link href={`${RUTA_LIQUIDACIONES}/${l.id}`} className="underline-offset-4 hover:underline" data-testid="link-liquidacion">{l.number}</Link><span className="block text-caption text-muted-foreground">{l.lineas} entrega(s) · {SETTLEMENT_FREQUENCY_LABELS[l.frequency as keyof typeof SETTLEMENT_FREQUENCY_LABELS]}</span></td>
-                      <td className="py-2 pr-3"><Link href={`/superadmin/supply/proveedores/${l.proveedorId}`} className="underline-offset-4 hover:underline">{l.proveedor}</Link></td>
-                      <td className="py-2 pr-3 text-caption">{formatDate(l.periodStart)} – {formatDate(l.periodEnd)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(l.grossSales, l.currency)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(l.commissionAmount, l.currency)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums font-medium">{dineroSupplyV2(l.supplierNet, l.currency)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(l.paidAmount, l.currency)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums" data-testid="liquidacion-pendiente">{dineroSupplyV2(l.pendiente, l.currency)}</td>
-                      <td className="py-2"><ChipLiquidacion estado={l.status as never} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <TablaPaginacion paginacion={paginacion} total={total} params={sp} etiqueta="liquidaciones" />
-          </CardContent>
-        </Card>
+        <TablaLiquidaciones filas={filas} pie={<TablaPaginacion paginacion={paginacion} total={total} params={sp} etiqueta="liquidaciones" />} />
       )}
     </div>
   )

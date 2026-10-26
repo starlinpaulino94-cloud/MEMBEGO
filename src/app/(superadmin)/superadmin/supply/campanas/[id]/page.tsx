@@ -6,13 +6,13 @@ import { StatCard } from '@/components/ui/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
-import { ChipCampana, ChipCupon, ChipFinanciacion, ChipTipoCupon } from '@/components/supply-v2/chips'
-import { AccionesCampana, CancelarCupon, FormAgregarOferta, FormAsignarCampana, FormCupones, FormPromocion, QuitarOferta } from '@/components/supply-v2/acciones-campana'
+import { TablaCupones, TablaHistorialCampana } from '@/components/supply-v2/tablas-beneficio-campana'
+import { ChipCampana, ChipFinanciacion } from '@/components/supply-v2/chips'
+import { AccionesCampana, FormAgregarOferta, FormAsignarCampana, FormCupones, FormPromocion, QuitarOferta } from '@/components/supply-v2/acciones-campana'
 import { fichaCampana, ofertasParaCampana } from '@/modules/supply-v2/campaigns/queries'
 import { puedeSupplyV2 } from '@/modules/supply-v2/permisos'
 import {
   CAMPAIGN_AUDIENCE_LABELS,
-  CAMPAIGN_EVENT_LABELS,
   CAMPAIGN_ORGANIZER_LABELS,
   dineroSupplyV2,
   RUTA_CAMPANAS,
@@ -219,41 +219,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
           {c.cupones.length === 0 ? (
             <p className="px-6 pb-6 text-sm text-muted-foreground">Esta campaña no tiene cupones. Las promociones sin código se aplican solas en su oferta.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="tabla-cupones">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2">Código</th>
-                    <th className="px-4 py-2">Tipo</th>
-                    <th className="px-4 py-2">Cliente</th>
-                    <th className="px-4 py-2">Promoción</th>
-                    <th className="px-4 py-2 text-right">Usos</th>
-                    <th className="px-4 py-2 text-right">Compra mínima</th>
-                    <th className="px-4 py-2">Vence</th>
-                    <th className="px-4 py-2">Estado</th>
-                    <th className="px-4 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {c.cupones.map((k) => (
-                    <tr key={k.id} className="border-t border-border align-top">
-                      <td className="px-4 py-2 font-mono font-medium" data-testid="cupon-codigo">{k.code}</td>
-                      <td className="px-4 py-2"><ChipTipoCupon kind={k.kind} /></td>
-                      <td className="px-4 py-2 text-caption">{k.cliente ?? '—'}</td>
-                      <td className="px-4 py-2 text-caption">{k.promocion}</td>
-                      <td className="px-4 py-2 text-right tabular-nums" data-testid="cupon-usos">
-                        {k.timesRedeemed} / {k.maxRedemptions ?? '∞'}
-                        <span className="block text-caption text-muted-foreground">{k.maxPerCustomer} por cliente</span>
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums">{k.minPurchase ? dinero(k.minPurchase) : '—'}</td>
-                      <td className="px-4 py-2 text-caption">{k.expiresAt ? formatDate(k.expiresAt) : '—'}</td>
-                      <td className="px-4 py-2"><ChipCupon estado={k.status} /></td>
-                      <td className="px-4 py-2">{puedeCupones && k.status === 'ACTIVE' && <CancelarCupon campaignId={c.id} couponId={k.id} />}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaCupones cupones={c.cupones} campaignId={c.id} moneda={c.currency} puedeCupones={puedeCupones} />
           )}
         </CardContent>
       </Card>
@@ -280,28 +246,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
       <Card>
         <CardHeader><CardTitle>Historial de la campaña</CardTitle></CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-testid="historial-campana">
-              <thead className="text-left text-caption text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2">Cuándo</th>
-                  <th className="px-4 py-2">Qué pasó</th>
-                  <th className="px-4 py-2">Detalle</th>
-                  <th className="px-4 py-2">Quién</th>
-                </tr>
-              </thead>
-              <tbody>
-                {c.eventos.map((e) => (
-                  <tr key={e.id} className="border-t border-border align-top">
-                    <td className="px-4 py-2 text-caption">{formatDateTime(e.createdAt)}</td>
-                    <td className="px-4 py-2">{CAMPAIGN_EVENT_LABELS[e.type as keyof typeof CAMPAIGN_EVENT_LABELS] ?? e.type}</td>
-                    <td className="px-4 py-2 text-caption text-muted-foreground">{e.detail ?? '—'}</td>
-                    <td className="px-4 py-2 text-caption">{e.actor ?? 'Sistema'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TablaHistorialCampana eventos={c.eventos} />
         </CardContent>
       </Card>
     </div>

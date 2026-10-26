@@ -123,6 +123,23 @@ const PREFIJOS_DE_PANEL = [
 ]
 const enPanel = (_m, ruta) => PREFIJOS_DE_PANEL.some((p) => normalizar(ruta).startsWith(p))
 
+/**
+ * Carpetas de componentes que son listados DE PERSONAL de un módulo pero no están bajo `components/admin` (fase 7). Se listan una a
+ * una, a propósito: no se amplía `PREFIJOS_DE_PANEL` porque eso cambiaría todas las demás medidas y la razón de dejarlas fuera
+ * (compartidas con el cliente) sigue valiendo para `crm` o `scanner`. Aquí solo hay tablas, y las de estas carpetas son de personal.
+ */
+const CARPETAS_DE_MODULOS = [
+  'src/components/excursiones/',
+  'src/components/carwash/',
+  'src/components/inventario/',
+  'src/components/reportes/',
+  'src/components/facturas/',
+  'src/components/conciliacion/',
+  'src/components/billing/',
+  'src/components/auditoria/',
+  'src/components/supply-v2/',
+]
+
 export const cuenta = (re, filtro = () => true) => {
   const porArchivo = {}, valores = {}
   let total = 0
@@ -196,12 +213,10 @@ const contarMapasDeEstado = () => {
  * Primitivas de la fase 4 que ya existen y todavía no tienen consumidor: es lo que la fase pide («primitivas con su ficha y sin
  * consumidores aún», docs/auditoria-admin/12). Se EXCLUYEN de «sin uso» mientras esperan, para que construirlas no sea subir un
  * techo. La lista solo puede ENCOGERSE: `tests/deuda-diseno.test.ts` falla si alguna ya tiene importador (hay que quitarla de
- * aquí) y la fase 8 (`knip`) falla si alguna sigue sin él. Cada una tiene su consumidor previsto en el plan: `Tabla` y
- * `BarraFiltros` en Clientes y Pagos (fase 5), `Campo` en los formularios (fase 7), `SelectorColor` en Empresa,
- * `BarrasSimples` en el Resumen (fase 5). `NavSeccion` salió de la lista con las pestañas de Beneficios (fase 5, 5.4); el
- * menú de 21 (fase 6) será su segundo consumidor.
+ * aquí) y la fase 8 (`knip`) falla si alguna sigue sin él. HOY ESTÁ VACÍA: `Tabla`, `BarrasSimples` y `NavSeccion` salieron en la fase 5;
+ * `Campo` y `SelectorColor` con el formulario único de plan, y `BarraFiltros` con el listado de reservas de Parques y Tours (fase 7).
  */
-export const PRIMITIVAS_EN_ESPERA = new Set(['campo', 'barra-filtros', 'selector-color'])
+export const PRIMITIVAS_EN_ESPERA = new Set()
 
 const contarComponentesSinUso = () => {
   const dir = join('packages', 'ui', 'src', 'ui')
@@ -294,6 +309,15 @@ export const MEDIDAS = {
       'tabla llega en la fase 4.',
     re: /<table\b/g,
     filtro: enPanel,
+  },
+  tablaCrudaEnModulos: {
+    que: '`<table>` crudas en los componentes de los módulos del panel',
+    porque:
+      'La misma deuda que `tablaCruda`, en carpetas que `PREFIJOS_DE_PANEL` no recorre (excursiones, carwash, inventario, reportes, facturas, ' +
+      'conciliación, billing, auditoría, supply-v2) y que son listados de personal: un listado sin caption, sin scope y con su propia ' +
+      'paginación (06 · T-01). Sin esta medida, migrar Parques y Tours no bajaba ningún número.',
+    re: /<table\b/g,
+    filtro: (_m, ruta) => CARPETAS_DE_MODULOS.some((p) => normalizar(ruta).startsWith(p)),
   },
   variablesHexEnGlobalsCss: {
     que: 'Variables CSS con hex literal en globals.css',

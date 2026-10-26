@@ -56,7 +56,13 @@ import {
   type EstadoReserva,
   type ReglaPrecioDinamico,
 } from './nucleo'
-import { verificarYBloquearCupoActividad } from './queries'
+import { buscarClientesParaReserva, verificarYBloquearCupoActividad } from './queries'
+import {
+  leerBusquedaCliente,
+  leerReservaDeFormulario,
+  type ClienteOpcion,
+  type ErroresReserva,
+} from './formulario'
 import { sincronizarEstadoAgotada } from '../catalogo/agotadas'
 import { getExcursionesConfig } from '../config'
 import { correoConfirmacionReserva, correoAccesoCliente } from '@/lib/email/plantillas-excursiones'
@@ -66,6 +72,8 @@ import { appUrl } from '@/lib/site'
 export interface ReservaActionState {
   error?: string
   success?: string
+  /** El error de CADA campo (`leerReservaDeFormulario`): el formulario lo pone junto a su campo. */
+  campos?: ErroresReserva
   creada?: { reservaId: string; numero: string; total: string }
 }
 
@@ -120,6 +128,32 @@ async function vendedorParaCliente(companyId: string, clienteId: string): Promis
   }
 }
 
+/**
+ * ADMIN · Buscar un cliente de la empresa para la reserva: por nombre, teléfono o correo.
+ *
+ * Antes el formulario traía los 200 clientes más recientes y los ponía en una lista: el cliente 201 no se podía elegir. Ahora se
+ * busca en la base, sobre TODOS los clientes de la empresa, y se dice cuando hay más de los que caben en pantalla.
+ *
+ * La guardia vive AQUÍ: las acciones de servidor se despachan por id desde cualquier ruta permitida, así que ni el proxy ni la
+ * guardia de la página las cubren. Pide la misma función que crear la reserva y la empresa sale de la sesión, no del navegador.
+ */
+export async function buscarClientes(
+  busqueda: string
+): Promise<{ clientes: ClienteOpcion[]; hayMas: boolean } | { error: string }> {
+  try {
+    const user = await requireSection('excursiones', 'reserva_crear')
+    if (!user) return { error: 'No autorizado.' }
+    const companyId = await resolveCompanyId(user)
+    if (!companyId) return { error: 'Empresa requerida.' }
+    const q = leerBusquedaCliente(busqueda)
+    if (!q) return { clientes: [], hayMas: false }
+    return await buscarClientesParaReserva(companyId, q)
+  } catch (e) {
+    console.error('[excursiones] buscarClientes', e)
+    return { error: 'No se pudo buscar. Inténtalo de nuevo.' }
+  }
+}
+
 /** ADMIN · Crear la reserva con sus pasajeros y su número correlativo. */
 export async function crearReserva(
   _prev: ReservaActionState,
@@ -131,17 +165,18 @@ export async function crearReserva(
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
 
-    const clienteIdInput = String(formData.get('clienteId') ?? '').trim()
-    const clienteNombre = String(formData.get('clienteNombre') ?? '').trim()
-    const clienteEmail = String(formData.get('clienteEmail') ?? '').trim().toLowerCase()
-    const clienteTelefono = String(formData.get('clienteTelefono') ?? '').trim()
-    const excursionId = String(formData.get('excursionId') ?? '').trim()
-    const varianteId = String(formData.get('varianteId') ?? '').trim()
-    const vendedorIdInput = String(formData.get('vendedorId') ?? '').trim()
-
-    if (!excursionId || !varianteId) {
-      return { error: 'Selecciona la excursión y una opción de tarifa.' }
-    }
+    // Lo que se puede saber sin la base, con el error de cada campo. Lo demás (cupos, precios, el cliente) se resuelve abajo.
+    const leido = leerReservaDeFormulario(formData)
+    if (!leido.ok) return { error: leido.error, campos: leido.campos }
+    const {
+      clienteId: clienteIdInput,
+      clienteNombre,
+      clienteEmail,
+      clienteTelefono,
+      excursionId,
+      varianteId,
+      vendedorId: vendedorIdInput,
+    } = leido.datos
 
     const config = await getExcursionesConfig(companyId)
     const v = validarReserva({
@@ -158,7 +193,7 @@ export async function crearReserva(
       horaRecogida: String(formData.get('horaRecogida') ?? ''),
       habitacion: String(formData.get('habitacion') ?? ''),
     }, config.maxPasajerosPorReserva)
-    if (!v.ok) return { error: v.error }
+    if (!v.ok) return { error: v.error, campos: { fecha: v.error } }
 
     // =========================================================================
     // RESOLUCIÓN / APROVISIONAMIENTO DEL CLIENTE

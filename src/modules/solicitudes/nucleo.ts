@@ -7,6 +7,8 @@
  * probable con pruebas unitarias.
  */
 
+import type { DatosDeEmpresa } from '@/modules/empresas/alta'
+
 // ── Tipos del negocio en el formulario ───────────────────────────────────────
 
 /** Opciones visibles del formulario. 'Otro' abre el campo libre. */
@@ -277,6 +279,69 @@ export function horarioComoTexto(horario: HorarioDia[]): string {
     .filter((h) => h.dia)
     .map((h) => `${h.dia}: ${h.cerrado ? 'cerrado' : `${h.desde}–${h.hasta}`}`)
     .join(' · ')
+}
+
+// ── De la solicitud a la empresa (fase 7 · 7.3) ─────────────────────────────
+
+/**
+ * Lo que la solicitud dice de la empresa, listo para el alta. Pura: el vertical ya validado y las imágenes ya resueltas llegan de
+ * fuera. La empresa nace SIN publicar: primero se configuran sus planes y promociones.
+ */
+export function empresaDesdeSolicitud(
+  datos: SolicitudDatos,
+  extra: { codigoVertical: string | null; logoUrl: string | null; bannerUrl: string | null }
+): DatosDeEmpresa {
+  return {
+    nombre: datos.negocio.nombre,
+    tipo: extra.codigoVertical ?? (datos.negocio.tipoOtro || 'otro'),
+    tipoNegocioCodigo: extra.codigoVertical,
+    descripcion: datos.negocio.descripcion,
+    email: datos.negocio.correo,
+    telefono: datos.negocio.telefono,
+    direccion: datos.ubicacion.direccion,
+    ciudad: datos.ubicacion.ciudad,
+    website: datos.negocio.web ?? null,
+    googleMapsUrl: datos.ubicacion.maps ?? null,
+    horario: horarioComoTexto(datos.horario) || null,
+    colorPrimario: datos.marca.color ?? null,
+    logoUrl: extra.logoUrl,
+    bannerUrl: extra.bannerUrl,
+    publicada: false,
+  }
+}
+
+/**
+ * Lo que se le ofrece al superadmin ya escrito cuando crea la empresa DESDE una solicitud en «Empresas → Nueva» (04 · F-02: antes
+ * tenía que volver a teclear lo que el solicitante ya había escrito). Solo los campos que ese formulario tiene; la contraseña no
+ * viene nunca de aquí.
+ */
+export interface PrecargaDeEmpresa {
+  name: string
+  /** El código del vertical si el tipo del formulario equivale a uno; si no, `null` y el selector queda donde estaba. */
+  type: string | null
+  email: string
+  telefono: string
+  ciudad: string
+  direccion: string
+  website: string
+  description: string
+  adminNombre: string
+  adminEmail: string
+}
+
+export function precargaDeSolicitud(datos: SolicitudDatos): PrecargaDeEmpresa {
+  return {
+    name: datos.negocio.nombre,
+    type: VERTICAL_POR_TIPO[datos.negocio.tipo] ?? null,
+    email: datos.negocio.correo,
+    telefono: datos.negocio.telefono,
+    ciudad: datos.ubicacion.ciudad,
+    direccion: datos.ubicacion.direccion,
+    website: datos.negocio.web ?? '',
+    description: datos.negocio.descripcion,
+    adminNombre: datos.admin.nombre,
+    adminEmail: datos.admin.correo,
+  }
 }
 
 // ── Adjuntos ─────────────────────────────────────────────────────────────────

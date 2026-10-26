@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/system/EmptyState'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
+import { Tabla } from '@/components/ui/tabla'
 
 export const dynamic = 'force-dynamic'
 
@@ -160,100 +161,89 @@ export default async function RiesgoPage({
             más cuesta perder.
           </p>
 
-          <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-            <table className="w-full">
-              <thead className="border-b border-border/70 bg-muted/50">
-                <tr className="text-overline">
-                  <th className="px-4 py-3 text-left">Cliente</th>
-                  <th className="px-4 py-3 text-left">Plan</th>
-                  <th className="px-4 py-3 text-right">Sin venir</th>
-                  <th className="px-4 py-3 text-right">Vence</th>
-                  <th className="px-4 py-3 text-right">Usos</th>
-                  <th className="px-4 py-3 text-right">En juego</th>
-                  <th className="px-4 py-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {items.map((c) => {
+          <Tabla
+            caption="Clientes en riesgo"
+            claveDe={(c) => c.membershipId}
+            filas={items}
+            formato={{ dinero: (v) => dinero(Number(v)) }}
+            columnaIdentificadora="cliente"
+            columnas={[
+              {
+                clave: 'cliente',
+                encabezado: 'Cliente',
+                celda: (c) => (
+                  <>
+                    <Link href={`/admin/clientes/${c.clienteId}`} className="font-medium text-primary hover:underline">
+                      {c.nombre}
+                    </Link>
+                    <span className="block text-caption font-normal text-muted-foreground">{c.email}</span>
+                  </>
+                ),
+              },
+              { clave: 'plan', encabezado: 'Plan', valor: (c) => c.plan },
+              {
+                clave: 'sinVenir',
+                encabezado: 'Sin venir',
+                alineacion: 'derecha',
+                celda: (c) => {
                   const sinVenir = diasDesde(c.ultimaVisita ? new Date(c.ultimaVisita) : null)
-                  const paraVencer = diasHasta(
-                    c.fechaVencimiento ? new Date(c.fechaVencimiento) : null
-                  )
+                  return sinVenir == null ? <span className="text-destructive">nunca vino</span> : `${sinVenir} d`
+                },
+              },
+              {
+                clave: 'vence',
+                encabezado: 'Vence',
+                alineacion: 'derecha',
+                celda: (c) => {
+                  const paraVencer = diasHasta(c.fechaVencimiento ? new Date(c.fechaVencimiento) : null)
+                  return paraVencer == null ? '—' : <span className={paraVencer <= 7 ? 'font-semibold text-destructive' : ''}>{paraVencer} d</span>
+                },
+              },
+              { clave: 'usos', encabezado: 'Usos', alineacion: 'derecha', celda: (c) => (c.esIlimitado ? '∞' : c.usosRestantes) },
+              { clave: 'enJuego', encabezado: 'En juego', tipo: 'dinero', valor: (c) => c.valorEnJuego },
+              {
+                clave: 'acciones',
+                encabezado: 'Acciones',
+                alineacion: 'derecha',
+                celda: (c) => {
+                  const paraVencer = diasHasta(c.fechaVencimiento ? new Date(c.fechaVencimiento) : null)
                   const wa = waLink(
                     c.telefono,
                     `Hola ${c.nombre.split(' ')[0]}, te escribimos de parte del equipo. ` +
                       (c.esIlimitado
                         ? 'Tu membresía está por vencer y no queremos que la pierdas.'
                         : `Todavía te quedan ${c.usosRestantes} usos en tu plan ${c.plan}` +
-                          (paraVencer != null && paraVencer <= 30
-                            ? `, y vence en ${paraVencer} días.`
-                            : '.')) +
+                          (paraVencer != null && paraVencer <= 30 ? `, y vence en ${paraVencer} días.` : '.')) +
                       ' ¿Te esperamos esta semana?'
                   )
                   return (
-                    <tr key={c.membershipId} className="text-sm">
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/admin/clientes/${c.clienteId}`}
-                          className="font-medium text-primary hover:underline"
+                    <div className="flex items-center justify-end gap-1">
+                      {wa && (
+                        <a
+                          href={wa}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Escribir a ${c.nombre} por WhatsApp`}
+                          aria-label={`Escribir a ${c.nombre} por WhatsApp`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
-                          {c.nombre}
-                        </Link>
-                        <span className="block text-caption">{c.email}</span>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.plan}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {sinVenir == null ? (
-                          <span className="text-destructive">nunca vino</span>
-                        ) : (
-                          `${sinVenir} d`
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {paraVencer == null ? (
-                          '—'
-                        ) : (
-                          <span className={paraVencer <= 7 ? 'font-semibold text-destructive' : ''}>
-                            {paraVencer} d
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {c.esIlimitado ? '∞' : c.usosRestantes}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
-                        {dinero(c.valorEnJuego)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          {wa && (
-                            <a
-                              href={wa}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title={`Escribir a ${c.nombre} por WhatsApp`}
-                              aria-label={`Escribir a ${c.nombre} por WhatsApp`}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                            >
-                              <MessageCircle className="h-4 w-4" />
-                            </a>
-                          )}
-                          <Link
-                            href={`/admin/clientes/${c.clienteId}`}
-                            title="Ver ficha"
-                            aria-label={`Ver ficha de ${c.nombre}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
+                          <MessageCircle className="h-4 w-4" />
+                        </a>
+                      )}
+                      <Link
+                        href={`/admin/clientes/${c.clienteId}`}
+                        title="Ver ficha"
+                        aria-label={`Ver ficha de ${c.nombre}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </div>
                   )
-                })}
-              </tbody>
-            </table>
-          </div>
+                },
+              },
+            ]}
+          />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Button asChild variant="outline" size="sm">

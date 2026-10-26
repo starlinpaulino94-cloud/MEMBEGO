@@ -45,7 +45,7 @@ const TECHOS: Record<string, number> = {
   // 121 al cerrar la Fase 1; 114 tras el sprint de cierre (2026-10-08): la fusión de la app
   // Expo había subido a 129 y se devolvieron a su sitio (correo a `lib/email`, color de marca
   // por defecto en un solo módulo, texto de ayuda sin hex, botones `destructive`).
-  hexEnInterfaz: 114,
+  hexEnInterfaz: 111,
   colorCrudo: 147,
   radiosFuera: 0,
   microTextos: 0,
@@ -57,20 +57,22 @@ const TECHOS: Record<string, number> = {
   // `origin/main` (4243a0f8). Las cifras del informe 07 se midieron sobre un código anterior y ya no coinciden (p. ej. las variables
   // con hex de `globals.css` pasaron de 31 a 65): el techo es el de hoy, no el del informe. Cada fase de rediseño baja los suyos aquí
   // mismo, en el commit que los baja.
-  h1Crudo: 45,
+  h1Crudo: 39,
   botonCrudo: 39,
-  titulo2xlBold: 30,
+  titulo2xlBold: 26,
   tarjetaLocal: 22,
-  tablaCruda: 53,
+  tablaCruda: 7,
+  // Fase 7: la misma deuda en las carpetas de módulos que `PREFIJOS_DE_PANEL` no recorre. Medida el 2026-10-21 (al migrar Reservas).
+  tablaCrudaEnModulos: 24,
   variablesHexEnGlobalsCss: 65,
-  mapasDeEstado: 58,
+  mapasDeEstado: 52,
   componentesSinUso: 15,
 
   // Fase 4 (tarea 4.10): accesibilidad del panel, medida el 2026-10-20 (FE-13). Las dos son CANDIDATOS: se cuenta lo que puede
   // dejar a alguien sin nombre o sin foco, y bajarlas es abrir la tarea, no cerrarla (el tipo de `Button` que exija `aria-label`
   // las resuelve de raíz en la fase 7).
   botonIconoSinNombre: 13,
-  outlineSinFoco: 25,
+  outlineSinFoco: 20,
 }
 
 test('ninguna deuda de diseño crece', () => {

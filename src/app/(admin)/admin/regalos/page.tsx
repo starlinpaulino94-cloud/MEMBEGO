@@ -19,26 +19,28 @@ import {
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { CreditCard, HeartHandshake } from 'lucide-react'
+import { Tabla } from '@/components/ui/tabla'
+import { EstadoChip, type TonoEstado } from '@/components/ui/estado-chip'
 
 const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 
-const GIFTCARD_CHIP: Record<string, string> = {
-  PENDIENTE_PAGO: 'bg-warning/15 text-warning',
-  ACTIVA: 'bg-success/15 text-success',
-  AGOTADA: 'bg-muted text-muted-foreground',
-  CANCELADA: 'bg-destructive/10 text-destructive',
+const TONO_GIFTCARD: Record<string, TonoEstado> = {
+  PENDIENTE_PAGO: 'aviso',
+  ACTIVA: 'exito',
+  AGOTADA: 'neutro',
+  CANCELADA: 'peligro',
 }
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Regalos P2P' }
 
-const ESTADO_CHIP: Record<string, string> = {
-  PENDIENTE: 'bg-warning/15 text-warning',
-  ACEPTADO: 'bg-success/15 text-success',
-  RECHAZADO: 'bg-destructive/10 text-destructive',
-  EXPIRADO: 'bg-muted text-muted-foreground',
-  CANCELADO: 'bg-destructive/10 text-destructive',
+const TONO_REGALO: Record<string, TonoEstado> = {
+  PENDIENTE: 'aviso',
+  ACEPTADO: 'exito',
+  RECHAZADO: 'peligro',
+  EXPIRADO: 'neutro',
+  CANCELADO: 'peligro',
 }
 
 /**
@@ -157,85 +159,80 @@ export default async function RegalosAdminPage({
           description="Cuando un cliente transfiera usos o regale una promoción o membresía a otro, aparecerá aquí con todo su recorrido."
         />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-          <table className="w-full min-w-[820px] text-sm">
-            <thead>
-              <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-3 font-semibold">Regalo</th>
-                <th className="px-4 py-3 font-semibold">Tipo</th>
-                <th className="px-4 py-3 font-semibold">De</th>
-                <th className="px-4 py-3 font-semibold">Para</th>
-                <th className="px-4 py-3 font-semibold">Estado</th>
-                <th className="px-4 py-3 font-semibold">Enviado</th>
-                <th className="px-4 py-3 font-semibold">Expira</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {items.map((r) => (
-                <tr key={r.id} className="align-middle">
-                  <td className="max-w-56 px-4 py-3">
-                    <p className="truncate font-medium text-foreground">{r.beneficio}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {r.tipo === 'TRANSFERENCIA_USOS'
-                        ? `${r.usos} uso${r.usos !== 1 ? 's' : ''}`
-                        : ''}
-                      {r.mensaje ? `${r.tipo === 'TRANSFERENCIA_USOS' ? ' · ' : ''}“${r.mensaje}”` : ''}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                      {TIPO_REGALO_LABEL[r.tipo] ?? r.tipo}
-                    </span>
-                  </td>
-                  <td className="max-w-40 truncate px-4 py-3 text-foreground">{r.remitente}</td>
-                  <td className="max-w-40 px-4 py-3">
-                    <p className="truncate text-foreground">{r.destinatario}</p>
-                    {r.sinCuenta && (
-                      <p className="text-xs text-muted-foreground">aún sin cuenta</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
-                    >
-                      {/* "Pendiente" a secas no dice si hay que cobrar algo o
-                          si solo falta que el destinatario responda. Lo
-                          primero es trabajo del negocio; lo segundo no. */}
-                      {r.espera === 'PAGO'
-                        ? 'Por cobrar'
-                        : r.espera === 'RESPUESTA'
-                          ? 'Esperando respuesta'
-                          : (ESTADO_REGALO_LABEL[r.estado] ?? r.estado)}
-                    </span>
-                    {r.espera === 'PAGO' && (
-                      <Link
-                        href="/admin/pagos"
-                        className="mt-1 block text-xs font-medium text-primary hover:underline"
-                      >
-                        {r.pago?.referencia ? `Cobrar ${r.pago.referencia}` : 'Ver en Pagos'}
-                      </Link>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                    {fmtFecha(r.createdAt)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                    {r.estado === 'PENDIENTE' ? fmtFecha(r.expiraAt) : r.resueltoAt ? fmtFecha(r.resueltoAt) : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {r.estado === 'PENDIENTE' && (
-                      <CancelarRegaloAdminButton
-                        regaloId={r.id}
-                        descripcion={`${r.beneficio} de ${r.remitente} para ${r.destinatario}`}
-                      />
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Tabla
+          caption="Regalos"
+          claveDe={(r) => r.id}
+          filas={items}
+          columnas={[
+            {
+              clave: 'regalo',
+              encabezado: 'Regalo',
+              celda: (r) => (
+                <div className="max-w-56">
+                  <p className="truncate font-medium text-foreground">{r.beneficio}</p>
+                  <p className="truncate text-caption font-normal text-muted-foreground">
+                    {TIPO_REGALO_LABEL[r.tipo] ?? r.tipo}
+                    {r.tipo === 'TRANSFERENCIA_USOS' ? ` · ${r.usos} uso${r.usos !== 1 ? 's' : ''}` : ''}
+                    {r.mensaje ? ` · “${r.mensaje}”` : ''}
+                  </p>
+                  <p className="truncate text-caption font-normal text-muted-foreground">De {r.remitente}</p>
+                </div>
+              ),
+            },
+            {
+              clave: 'para',
+              encabezado: 'Para',
+              prioridad: 2,
+              celda: (r) => (
+                <div className="max-w-40">
+                  <p className="truncate text-foreground">{r.destinatario}</p>
+                  {r.sinCuenta && <p className="text-caption text-muted-foreground">aún sin cuenta</p>}
+                </div>
+              ),
+            },
+            {
+              clave: 'estado',
+              encabezado: 'Estado',
+              celda: (r) => (
+                <>
+                  {/* "Pendiente" a secas no dice si hay que cobrar algo o si solo falta que el destinatario responda. Lo primero es trabajo del
+                      negocio; lo segundo no. */}
+                  <EstadoChip tono={TONO_REGALO[r.estado] ?? 'neutro'}>
+                    {r.espera === 'PAGO' ? 'Por cobrar' : r.espera === 'RESPUESTA' ? 'Esperando respuesta' : (ESTADO_REGALO_LABEL[r.estado] ?? r.estado)}
+                  </EstadoChip>
+                  {r.espera === 'PAGO' && (
+                    <Link href="/admin/pagos" className="mt-1 block text-caption font-medium text-primary hover:underline">
+                      {r.pago?.referencia ? `Cobrar ${r.pago.referencia}` : 'Ver en Pagos'}
+                    </Link>
+                  )}
+                </>
+              ),
+            },
+            {
+              clave: 'fechas',
+              encabezado: 'Enviado y expira',
+              prioridad: 2,
+              celda: (r) => (
+                <span className="whitespace-nowrap text-caption text-muted-foreground">
+                  <span className="block">Enviado {fmtFecha(r.createdAt)}</span>
+                  <span className="block">
+                    {r.estado === 'PENDIENTE' ? `Expira ${fmtFecha(r.expiraAt)}` : r.resueltoAt ? `Resuelto ${fmtFecha(r.resueltoAt)}` : ''}
+                  </span>
+                </span>
+              ),
+            },
+            {
+              clave: 'cancelar',
+              encabezado: 'Cancelar',
+              soloLector: true,
+              alineacion: 'derecha',
+              celda: (r) =>
+                r.estado === 'PENDIENTE' ? (
+                  <CancelarRegaloAdminButton regaloId={r.id} descripcion={`${r.beneficio} de ${r.remitente} para ${r.destinatario}`} />
+                ) : null,
+            },
+          ]}
+        />
       )}
 
       {/* Paginación: sin ella los regalos más viejos que la primera página
@@ -268,66 +265,49 @@ export default async function RegalosAdminPage({
             activarla y redimir sus consumos.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-3 font-semibold">Código</th>
-                  <th className="px-4 py-3 font-semibold">De</th>
-                  <th className="px-4 py-3 font-semibold">Para</th>
-                  <th className="px-4 py-3 text-right font-semibold">Monto</th>
-                  <th className="px-4 py-3 text-right font-semibold">Saldo</th>
-                  <th className="px-4 py-3 font-semibold">Estado</th>
-                  <th className="px-4 py-3 font-semibold">Creada</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {giftCards.items.map((g) => (
-                  <tr key={g.id} className="align-middle">
-                    <td className="px-4 py-3">
-                      <p className="font-mono font-semibold text-foreground">{g.codigo}</p>
-                      {g.mensaje && (
-                        <p className="max-w-44 truncate text-xs text-muted-foreground">“{g.mensaje}”</p>
-                      )}
-                    </td>
-                    <td className="max-w-40 truncate px-4 py-3 text-foreground">{g.comprador}</td>
-                    <td className="max-w-40 px-4 py-3">
-                      <p className="truncate text-foreground">{g.destinatario}</p>
-                      {g.sinCuenta && (
-                        <p className="text-xs text-muted-foreground">aún sin cuenta</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
-                      {fmtRD(g.monto)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                      {g.estado === 'PENDIENTE_PAGO' ? '—' : fmtRD(g.saldo)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${GIFTCARD_CHIP[g.estado] ?? 'bg-muted text-muted-foreground'}`}
-                      >
-                        {ESTADO_GIFTCARD_LABEL[g.estado] ?? g.estado}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                      {fmtFecha(g.createdAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <GiftCardAdminActions
-                        giftCardId={g.id}
-                        codigo={g.codigo}
-                        estado={g.estado}
-                        monto={g.monto}
-                        saldo={g.saldo}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Tabla
+            caption="Tarjetas de regalo"
+            claveDe={(g) => g.id}
+            filas={giftCards.items}
+            columnas={[
+              {
+                clave: 'codigo',
+                encabezado: 'Código',
+                celda: (g) => (
+                  <>
+                    <span className="block font-mono font-semibold text-foreground">{g.codigo}</span>
+                    {g.mensaje && <span className="block max-w-44 truncate text-caption font-normal text-muted-foreground">“{g.mensaje}”</span>}
+                    <span className="block whitespace-nowrap text-caption font-normal text-muted-foreground">Creada {fmtFecha(g.createdAt)}</span>
+                    <span className="block max-w-44 truncate text-caption font-normal text-muted-foreground">De {g.comprador}</span>
+                  </>
+                ),
+              },
+              {
+                clave: 'para',
+                encabezado: 'Para',
+                prioridad: 2,
+                celda: (g) => (
+                  <div className="max-w-40">
+                    <p className="truncate text-foreground">{g.destinatario}</p>
+                    {g.sinCuenta && <p className="text-caption text-muted-foreground">aún sin cuenta</p>}
+                  </div>
+                ),
+              },
+              { clave: 'monto', encabezado: 'Monto', alineacion: 'derecha', celda: (g) => <span className="font-semibold text-foreground">{fmtRD(g.monto)}</span> },
+              { clave: 'saldo', encabezado: 'Saldo', alineacion: 'derecha', celda: (g) => (g.estado === 'PENDIENTE_PAGO' ? '—' : fmtRD(g.saldo)) },
+              {
+                clave: 'estado',
+                encabezado: 'Estado',
+                celda: (g) => <EstadoChip tono={TONO_GIFTCARD[g.estado] ?? 'neutro'}>{ESTADO_GIFTCARD_LABEL[g.estado] ?? g.estado}</EstadoChip>,
+              },
+              {
+                clave: 'acciones',
+                encabezado: 'Acciones',
+                soloLector: true,
+                celda: (g) => <GiftCardAdminActions giftCardId={g.id} codigo={g.codigo} estado={g.estado} monto={g.monto} saldo={g.saldo} />,
+              },
+            ]}
+          />
         )}
       </section>
     </div>

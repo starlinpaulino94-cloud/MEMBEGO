@@ -77,7 +77,7 @@ test('el estado nuevo tiene etiqueta y color propios', () => {
   assert.equal(CAMPANA_ESTADO_LABELS.APLICADA_PARCIAL, 'Aplicada con errores')
   // En ámbar, no en verde: pintarlo igual que un reparto perfecto era el
   // problema original trasladado al color.
-  assert.match(PAGE, /APLICADA_PARCIAL: 'bg-warning\/15 text-warning'/)
+  assert.match(PAGE, /APLICADA_PARCIAL: 'aviso'/)
 })
 
 test('la fecha de aplicación solo se toca si salió algo', () => {
@@ -263,7 +263,7 @@ test('la insignia de errores lleva a la campaña', () => {
 })
 
 test('el encabezado dice de qué es el «3/5»', () => {
-  assert.match(PAGE, />Empresas con su copia</)
+  assert.match(PAGE, /encabezado: 'Empresas con su copia'/)
 })
 
 test('la confirmación es la del sistema, no la del navegador', () => {
@@ -288,6 +288,8 @@ test('un reparto sin ninguna copia se avisa como error, no como éxito', () => {
 })
 
 test('la tabla es legible para quien no la ve', () => {
-  assert.match(PAGE, /<caption className="sr-only">/)
-  assert.match(PAGE, /scope="col"/)
+  // El título y los `scope` los pone la `Tabla` del sistema (caption sr-only, th scope col y row): ya no se escriben a mano aquí.
+  assert.match(PAGE, /<Tabla\b/)
+  assert.match(PAGE, /caption="Campañas conjuntas con su tipo, empresas alcanzadas y estado"/)
+  assert.doesNotMatch(PAGE, /<table\b/)
 })

@@ -15,6 +15,7 @@ import { BotonExportar } from '@/components/ui/boton-exportar'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { UmbralesRetencionForm } from '@/components/admin/UmbralesRetencionForm'
 import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
+import { Tabla } from '@/components/ui/tabla'
 
 export const dynamic = 'force-dynamic'
 
@@ -195,38 +196,24 @@ export default async function RetencionPage() {
             title="Qué planes se usan"
             description="Un plan que casi no se consume no es un buen negocio: es un cliente que no vuelve y una renovación que no llega."
           />
-          <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-            <table className="w-full">
-              <thead className="border-b border-border/70 bg-muted/50">
-                <tr className="text-overline">
-                  <th className="px-4 py-3 text-left">Plan</th>
-                  <th className="px-4 py-3 text-right">Membresías</th>
-                  <th className="px-4 py-3 text-right">Usos vendidos</th>
-                  <th className="px-4 py-3 text-right">Sin consumir</th>
-                  <th className="px-4 py-3 text-right">Consumido</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {r.porPlan.map((p) => (
-                  <tr key={p.plan} className="text-sm">
-                    <td className="px-4 py-3 font-medium text-foreground">{p.plan}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{fmt(p.membresias)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{fmt(p.usosIncluidos)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">{fmt(p.usosRestantes)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <span
-                        className={`tabular-nums font-semibold ${
-                          p.consumido < 40 ? 'text-warning' : 'text-foreground'
-                        }`}
-                      >
-                        {p.consumido}%
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Tabla
+            caption="Consumo por plan"
+            claveDe={(p) => p.plan}
+            filas={r.porPlan}
+            formato={{ numero: fmt }}
+            columnas={[
+              { clave: 'plan', encabezado: 'Plan', valor: (p) => p.plan },
+              { clave: 'membresias', encabezado: 'Membresías', tipo: 'numero', valor: (p) => p.membresias },
+              { clave: 'usosIncluidos', encabezado: 'Usos vendidos', tipo: 'numero', valor: (p) => p.usosIncluidos },
+              { clave: 'usosRestantes', encabezado: 'Sin consumir', tipo: 'numero', valor: (p) => p.usosRestantes },
+              {
+                clave: 'consumido',
+                encabezado: 'Consumido',
+                alineacion: 'derecha',
+                celda: (p) => <span className={`font-semibold ${p.consumido < 40 ? 'text-warning' : 'text-foreground'}`}>{p.consumido}%</span>,
+              },
+            ]}
+          />
         </section>
       )}
     </ReporteImprimible>

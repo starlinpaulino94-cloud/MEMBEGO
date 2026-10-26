@@ -96,6 +96,10 @@ interface TablaProps<F> {
   /** Pie: paginación, total, exportar. */
   pie?: ReactNode
   className?: string
+  /** `data-testid` de la `<table>`: lo que usan las pruebas de extremo a extremo para encontrarla. Sin él, no se escribe el atributo. */
+  testId?: string
+  /** `data-testid` de cada fila de datos (no de la fila de vacío). */
+  testIdFila?: string
 }
 
 const OCULTAR_POR_PRIORIDAD = { 1: '', 2: 'max-md:hidden', 3: 'max-lg:hidden' } as const
@@ -189,6 +193,8 @@ export function Tabla<F>({
   hayFiltros = false,
   pie,
   className,
+  testId,
+  testIdFila,
 }: TablaProps<F>) {
   const idCol = columnaIdentificadora ?? columnas[0]?.clave
   const textoVacio = hayFiltros ? sinResultados : vacio
@@ -196,7 +202,7 @@ export function Tabla<F>({
   return (
     <div data-slot="tabla" className={cn('overflow-hidden rounded-xl border border-border bg-card shadow-sm', className)}>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-small">
+        <table className="w-full border-collapse text-small" data-testid={testId}>
           <caption className="sr-only">{caption}</caption>
           <thead>
             <tr className="border-b border-border bg-muted/60">
@@ -210,10 +216,10 @@ export function Tabla<F>({
                     scope="col"
                     aria-sort={activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : undefined}
                     className={cn(
-                      'whitespace-nowrap px-4 py-3 text-overline text-muted-foreground',
+                      'whitespace-nowrap px-3 py-3 text-overline text-muted-foreground md:px-4',
                       derecha ? 'text-right' : 'text-left',
                       OCULTAR_POR_PRIORIDAD[c.prioridad ?? 1],
-                      c.clave === idCol && 'min-w-40 max-md:sticky max-md:left-0 max-md:bg-muted'
+                      c.clave === idCol && 'min-w-32 md:min-w-40 max-md:sticky max-md:left-0 max-md:bg-muted'
                     )}
                   >
                     {c.soloLector ? (
@@ -248,12 +254,13 @@ export function Tabla<F>({
               filas.map((fila) => (
                 <tr
                   key={claveDe(fila)}
+                  data-testid={testIdFila}
                   className={cn('border-b border-border last:border-0', filaNavegable && 'hover:bg-muted/50')}
                 >
                   {columnas.map((c) => {
                     const derecha = c.alineacion ? c.alineacion === 'derecha' : c.tipo === 'numero' || c.tipo === 'dinero'
                     const clases = cn(
-                      'px-4 py-3 align-middle',
+                      'px-3 py-3 align-middle md:px-4',
                       derecha ? 'text-right tabular-nums' : 'text-left',
                       OCULTAR_POR_PRIORIDAD[c.prioridad ?? 1]
                     )
@@ -262,7 +269,7 @@ export function Tabla<F>({
                       <th
                         key={c.clave}
                         scope="row"
-                        className={cn(clases, 'min-w-40 font-medium text-foreground max-md:sticky max-md:left-0 max-md:bg-card')}
+                        className={cn(clases, 'min-w-32 font-medium text-foreground md:min-w-40 max-md:sticky max-md:left-0 max-md:bg-card')}
                       >
                         {contenido}
                       </th>

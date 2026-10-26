@@ -3,7 +3,9 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { sinEmpresa } from '@/lib/tenant'
 import { requireRole } from '@/lib/auth/guards'
-import { NuevoPlanForm } from '@/components/admin/NuevoPlanForm'
+import { PlanForm } from '@/components/admin/PlanForm'
+import { PageHeader } from '@/components/ui/page-header'
+import { valoresDePlanNuevo } from '@/modules/planes/formulario'
 
 export default async function NuevoPlanPage() {
   await requireRole('SUPERADMIN')
@@ -17,12 +19,18 @@ export default async function NuevoPlanPage() {
   )
 
   return (
-    <div className="max-w-xl space-y-6">
-      <Link href="/superadmin/planes" className="text-sm text-primary hover:underline">
-        ← Volver a planes
-      </Link>
-      <h1 className="text-h1 text-foreground">Nuevo plan</h1>
-      <NuevoPlanForm companies={companies} />
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
+      <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/superadmin/planes" className="text-muted-foreground hover:text-foreground">
+            ‹ Planes
+          </Link>
+        }
+        title="Nuevo plan"
+      />
+      <PlanForm modo="crear" inicial={valoresDePlanNuevo()} companies={companies.map((c) => ({ id: c.id, name: c.name }))} />
     </div>
   )
 }

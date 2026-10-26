@@ -25,6 +25,13 @@ export const ETAPA_ATRIBUCION_LABEL: Record<EtapaAtribucion, string> = {
 export const CANALES_ATRIBUCION = ['QR', 'ENLACE', 'WHATSAPP', 'REDES'] as const
 export type CanalAtribucion = (typeof CANALES_ATRIBUCION)[number]
 
+export const CANAL_ATRIBUCION_LABEL: Record<CanalAtribucion, string> = {
+  QR: 'Código QR',
+  ENLACE: 'Enlace directo',
+  WHATSAPP: 'WhatsApp',
+  REDES: 'Redes sociales',
+}
+
 /**
  * Canal declarado en el enlace (`?c=qr`). Lo que no reconocemos es un enlace
  * normal: preferimos un dato honesto y genérico antes que inventar precisión.
