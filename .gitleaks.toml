@@ -36,6 +36,12 @@ regexes = [
   '''OT_01_abcdefghijklmnop''',
   # Secretos de prueba con nombre de prueba.
   '''sv2-secreto-de-prueba''',
+  # Verificación de identidad: los secretos del aviso del proveedor que inventan las pruebas
+  # (tests/identidad-proveedor.test.ts, tests/identidad-seguridad.test.ts, tests/postgres/identidad.db.test.ts).
+  # Llevan «de-prueba» en el nombre y no son los de ningún entorno.
+  '''secreto-compartido-de-prueba-001''',
+  '''secreto-anterior-de-prueba-0002''',
+  '''secreto-sintetico-de-prueba-01''',
   '''pkce_9f1c8a0b2d3e4f56''',
   '''AB12CD34EF56GH78IJ90KL12''',
   '''eyJhbGciOiJIUzI1NiJ9\.abc\.def''',
