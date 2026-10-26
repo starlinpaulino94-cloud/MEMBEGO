@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beneficios · Prototipo del panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/estilos.css">
+<script src="https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js" defer></script>
+<script src="assets/panel.js" defer></script>
+</head>
+<body data-pagina="beneficios" data-titulo="Beneficios" data-roles="AM">
+<!-- Tipo de página: LISTA. Hoy «Ofertas» es un enrutador de cuatro tarjetas; aquí es una lista real con un solo «Crear beneficio». -->
+<main id="contenido" class="pagina pagina--completo"></main>
+<script>
+document.addEventListener('mg:listo', () => {
+  const { esc, ic, iconos } = MG
+  const main = document.getElementById('contenido')
+  const nuevo = new URLSearchParams(location.search).get('nuevo')
+  const base = [
+    { t: 'Combo Día de Playa 2×1', modo: '2×1', vig: 'hasta el 23 oct', canjes: 212, estado: 'Vence pronto', tono: 'aviso' },
+    { t: 'Happy Hour del Malecón', modo: 'Happy Hour', vig: 'hasta el 25 oct', canjes: 87, estado: 'Publicada', tono: 'exito' },
+    { t: 'Descuento 15 % en el Pase Anual', modo: 'Descuento %', vig: 'hasta el 30 nov', canjes: 41, estado: 'Publicada', tono: 'exito' },
+    { t: 'Cupón de bienvenida', modo: 'Cupón', vig: 'sin vencimiento', canjes: 330, estado: 'Publicada', tono: 'exito' },
+    { t: 'Temporada de Navidad 3×2', modo: '3×2', vig: 'desde el 1 dic', canjes: 0, estado: 'Borrador', tono: 'pendiente' },
+  ]
+  const lista = nuevo ? [{ t: nuevo, modo: new URLSearchParams(location.search).get('modo') || 'Promoción', vig: 'recién publicada', canjes: 0, estado: 'Publicada', tono: 'exito' }, ...base] : base
+  main.innerHTML = `
+    <header class="cabecera">
+      <div class="txt"><h1 class="t-pagina">Beneficios</h1><p class="t-sec">Todo lo que ofreces a tus clientes, en un solo lugar.</p></div>
+      <div class="acciones"><a class="btn" href="beneficio-nuevo.html">${ic('plus')}Crear beneficio</a></div>
+    </header>
+    <nav class="pestanas" aria-label="Tipos de beneficio">
+      <a href="beneficios.html" aria-current="page">Promociones <span class="cuenta">${lista.length}</span></a>
+      <a href="#" data-fuera="Ofertas relámpago">Ofertas relámpago <span class="cuenta">1</span></a>
+      <a href="#" data-fuera="Regalos VIP">Regalos VIP <span class="cuenta">2</span></a>
+      <a href="#" data-fuera="Ofertas sobre productos">Ofertas sobre productos <span class="cuenta">3</span></a>
+    </nav>
+    <div class="tabla-caja"><table class="tabla tabla--tarjetas">
+      <caption class="solo-lector">Promociones</caption>
+      <thead><tr><th scope="col">Beneficio</th><th scope="col">Modalidad</th><th scope="col" class="p2">Vigencia</th><th scope="col" class="num">Canjes</th><th scope="col">Estado</th></tr></thead>
+      <tbody>${lista.map((b, i) => `<tr class="navegable"><td class="celda-id"><a class="principal-celda" href="#" data-fuera="${esc(b.t)}">${esc(b.t)}</a></td><td data-etq="Modalidad">${esc(b.modo)}</td><td class="p2" data-etq="Vigencia">${esc(b.vig)}</td><td class="num" data-etq="Canjes">${b.canjes}</td><td data-etq="Estado"><span class="chip chip--${b.tono}">${esc(b.estado)}</span></td></tr>`).join('')}</tbody></table>
+      <div class="tabla-pie"><span>Mostrando 1–${lista.length} de ${lista.length}</span></div></div>`
+  MG.reenlazar(main)
+  iconos()
+})
+</script>
+</body>
+</html>

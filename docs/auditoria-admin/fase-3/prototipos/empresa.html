@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Empresa · Prototipo del panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/estilos.css">
+<script src="https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js" defer></script>
+<script src="assets/panel.js" defer></script>
+</head>
+<body data-pagina="empresa" data-titulo="Empresa" data-roles="A">
+<!-- Tipo de página: CONFIGURACIÓN (10 §8): hasta 960 px, navegación interna por sección y guardado POR sección.
+     Hoy «Perfil público» tiene 27 controles en 11 secciones con un solo botón de guardar al final (02 · §6). -->
+<main id="contenido" class="pagina pagina--config"></main>
+<script>
+document.addEventListener('mg:listo', () => {
+  const { $, $$, esc, ic, iconos, aviso } = MG
+  const main = $('#contenido')
+
+  // Paleta CERRADA para el color de la empresa (04 · F-07): el color de una empresa colorea sus propios objetos, nunca la interfaz del panel.
+  const PALETA = [['#0f6fd9', 'Azul'], ['#0e7490', 'Turquesa'], ['#047857', 'Verde'], ['#b45309', 'Ámbar'], ['#be123c', 'Frambuesa'], ['#6d28d9', 'Violeta'], ['#334155', 'Pizarra'], ['#c2410c', 'Naranja']]
+  const luz = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] }
+  const contraste = (hex) => { const l = luz(hex); return (1.05) / (l + 0.05) } // texto blanco sobre el color
+
+  const SECCIONES = [
+    { id: 'perfil', t: 'Perfil público' }, { id: 'cobros', t: 'Cobros' }, { id: 'contacto', t: 'Contacto y canales' }, { id: 'comprobante', t: 'Comprobante' },
+  ]
+  const cabSeccion = (s, desc) => `<div class="cab"><div><h2 class="t-seccion" id="h-${s.id}">${s.t}</h2><p class="t-sec">${desc}</p></div>
+    <div style="display:flex;gap:12px;align-items:center"><span class="estado-guardado" role="status">Guardado</span><button type="button" class="btn btn--sm" data-guardar="${s.id}" disabled>Guardar sección</button></div></div>`
+
+  main.innerHTML = `
+    <header class="cabecera"><div class="txt"><h1 class="t-pagina">Empresa</h1><p class="t-sec">Cómo te ven tus clientes y cómo les cobras.</p></div></header>
+    <div class="config">
+      <nav class="config-nav" aria-label="Secciones de Empresa">${SECCIONES.map((s, i) => `<a href="#${s.id}" data-nav="${s.id}" ${i === 0 ? 'aria-current="true"' : ''}>${s.t}<span class="sin-guardar" hidden title="Cambios sin guardar"></span></a>`).join('')}</nav>
+      <div style="display:grid;gap:24px;min-width:0">
+
+        <section class="tarjeta tarjeta--pad config-seccion" id="perfil" data-sucio="false" aria-labelledby="h-perfil">
+          ${cabSeccion(SECCIONES[0], 'Lo que aparece en tu perfil y en el inicio de la app.')}
+          <div class="seccion-form">
+            <div class="campo"><label for="nombre">Nombre comercial</label><input type="text" id="nombre" value="Aventuras del Caribe Tours &amp; Parque Acuático"></div>
+            <div class="campo"><label for="descripcion">Descripción <span class="opcional">(opcional)</span></label><textarea id="descripcion" rows="3">Tours, pasadías y un parque acuático para toda la familia, en el corazón de Samaná.</textarea><span class="ayuda">Dos o tres líneas bastan.</span></div>
+            <div class="campo"><span class="etq" id="l-color">Color de tu marca</span>
+              <div class="paleta" role="radiogroup" aria-labelledby="l-color">${PALETA.map(([hex, n], i) => `<label><input type="radio" name="color" value="${hex}" aria-label="${n}" ${i === 0 ? 'checked' : ''}><span class="muestra" style="background:${hex}"></span></label>`).join('')}</div>
+              <span class="contraste" id="contraste" aria-live="polite"></span>
+              <span class="ayuda">Solo colorea tus propios objetos (tarjetas, QR, comprobantes). Nunca el panel.</span></div>
+          </div>
+        </section>
+
+        <section class="tarjeta tarjeta--pad config-seccion" id="cobros" data-sucio="false" aria-labelledby="h-cobros">
+          ${cabSeccion(SECCIONES[1], 'Cómo pueden pagarte tus clientes.')}
+          <div class="seccion-form">
+            <label class="interruptor"><span><strong>Efectivo en sucursal</strong><br><span class="t-sec">Un empleado confirma el cobro en caja.</span></span><input type="checkbox" role="switch" checked></label>
+            <label class="interruptor"><span><strong>Transferencia bancaria</strong><br><span class="t-sec">El cliente sube su comprobante y lo validas en Pagos.</span></span><input type="checkbox" role="switch" id="sw-transf" checked></label>
+            <div id="datos-transf" class="seccion-form" style="padding-left:16px;border-left:2px solid var(--border)">
+              <div class="fila-campos"><div class="campo"><label for="banco">Banco</label><select id="banco"><option>Banreservas</option><option>Banco Popular</option><option>BHD</option></select></div>
+                <div class="campo"><label for="cuenta">Número de cuenta</label><input type="text" id="cuenta" value="960-123456-7" inputmode="numeric"></div></div>
+              <div class="campo"><label for="titular">Titular</label><input type="text" id="titular" value="Aventuras del Caribe, S.R.L."></div>
+            </div>
+            <div class="interruptor"><span><strong>Tarjeta (CardNET)</strong><br><span class="t-sec">Se cobra y se entrega solo.</span></span><span class="chip chip--exito">Conectada</span></div>
+          </div>
+        </section>
+
+        <section class="tarjeta tarjeta--pad config-seccion" id="contacto" data-sucio="false" aria-labelledby="h-contacto">
+          ${cabSeccion(SECCIONES[2], 'Dónde te escriben y cuándo atiendes.')}
+          <div class="seccion-form">
+            <div class="fila-campos"><div class="campo"><label for="tel">Teléfono</label><input type="tel" id="tel" value="+1 809 555 0100"></div>
+              <div class="campo"><label for="wa">WhatsApp de contacto</label><input type="tel" id="wa" value="+1 829 555 0100"></div></div>
+            <div class="campo"><label for="correo">Correo de contacto</label><input type="email" id="correo" value="hola@aventurasdelcaribe.do"></div>
+            <div class="campo"><label for="horario">Horario <span class="opcional">(opcional)</span></label><input type="text" id="horario" value="Lun–Dom · 8:30 a. m. – 6:00 p. m."></div>
+          </div>
+        </section>
+
+        <section class="tarjeta tarjeta--pad config-seccion" id="comprobante" data-sucio="false" aria-labelledby="h-comprobante">
+          ${cabSeccion(SECCIONES[3], 'Lo que ve el cliente en su comprobante de pago.')}
+          <div class="seccion-form">
+            <label class="interruptor"><span><strong>Mostrar mi logo</strong></span><input type="checkbox" role="switch" checked></label>
+            <div class="campo"><label for="pie">Texto al pie <span class="opcional">(opcional)</span></label><textarea id="pie" rows="2">Gracias por visitarnos. Conserva este comprobante para tus canjes.</textarea></div>
+          </div>
+        </section>
+      </div>
+    </div>`
+
+  // Guardado POR sección: cada una sabe si tiene cambios; el botón solo se activa entonces y el menú lateral marca cuál tiene pendientes.
+  const marcar = (sec, sucio) => {
+    sec.dataset.sucio = String(sucio)
+    $('[data-guardar]', sec).disabled = !sucio
+    $('.estado-guardado', sec).textContent = sucio ? 'Cambios sin guardar' : 'Guardado'
+    const punto = $(`[data-nav="${sec.id}"] .sin-guardar`, main); if (punto) punto.hidden = !sucio
+  }
+  $$('.config-seccion', main).forEach((sec) => {
+    sec.addEventListener('input', () => marcar(sec, true))
+    sec.addEventListener('change', () => marcar(sec, true))
+  })
+  main.addEventListener('click', (e) => {
+    const g = e.target.closest('[data-guardar]')
+    if (g) { const sec = $('#' + g.dataset.guardar, main); marcar(sec, false); aviso(`${SECCIONES.find((s) => s.id === g.dataset.guardar).t}: guardado.`); return }
+    const n = e.target.closest('[data-nav]')
+    if (n) { $$('[data-nav]', main).forEach((a) => a.removeAttribute('aria-current')); n.setAttribute('aria-current', 'true') }
+  })
+  $('#sw-transf').addEventListener('change', (e) => { $('#datos-transf').hidden = !e.target.checked })
+
+  const pintarContraste = () => {
+    const hex = $('input[name="color"]:checked').value
+    const r = contraste(hex)
+    $('#contraste').innerHTML = r >= 4.5
+      ? `<span class="chip chip--exito">Texto blanco: ${r.toFixed(1)}:1 · pasa AA</span>`
+      : `<span class="chip chip--aviso">Texto blanco: ${r.toFixed(1)}:1 · no pasa AA, usaremos texto oscuro</span>`
+  }
+  main.addEventListener('change', (e) => { if (e.target.name === 'color') pintarContraste() })
+  pintarContraste()
+  MG.reenlazar(main)
+  iconos()
+})
+</script>
+</body>
+</html>

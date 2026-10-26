@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ficha de cliente · Prototipo del panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/estilos.css">
+<script src="https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js" defer></script>
+<script src="assets/panel.js" defer></script>
+</head>
+<body data-pagina="clientes" data-titulo="Ficha de cliente" data-roles="AS" data-migas='[["Clientes","clientes.html"]]'>
+<!-- Tipo de página: DETALLE (10 §8). Cabecera con estado y acciones + pestañas + bloque principal + lateral de 320 px. -->
+<main id="contenido" class="pagina pagina--detalle"></main>
+<script>
+document.addEventListener('mg:listo', () => {
+  const { esc, ic, iconos, datos, rd, aviso, confirmar } = MG
+  const main = document.getElementById('contenido')
+  const id = new URLSearchParams(location.search).get('id') || 'c1'
+  const c = datos.clientes.find((x) => x.id === id) || datos.clientes[0]
+  const nombre = c.nombre
+  document.title = `${nombre} · Prototipo del panel`
+  const crumb = document.querySelector('.migas [aria-current]'); if (crumb) { crumb.textContent = nombre; crumb.title = nombre }
+  const iniciales = nombre.split(/\s+/).filter((p) => /^[A-ZÁÉÍÓÚÑ]/.test(p)).slice(0, 2).map((p) => p[0]).join('')
+  const tonoRiesgo = { bajo: 'chip--exito', medio: 'chip--aviso', alto: 'chip--peligro' }
+  const dias = c.vence === '—' ? null : Math.round((new Date(c.vence.replace(/^(\d+) (\w+) (\d+)$/, (_, d, m, y) => `${y}-${{ oct: '10', nov: '11' }[m]}-${d.padStart(2, '0')}`)) - new Date('2026-10-20')) / 86400000)
+  const usos = id === 'c1' ? [7, 24] : [3, 12]
+
+  main.innerHTML = `
+    <header class="cabecera">
+      <div class="txt">
+        <a class="atras" href="clientes.html">${ic('chevron-left')}Clientes</a>
+        <div style="display:flex;gap:14px;align-items:center;min-width:0"><span class="av av--lg" aria-hidden="true">${esc(iniciales)}</span>
+          <div style="min-width:0"><h1 class="t-pagina" style="overflow-wrap:anywhere">${esc(nombre)}</h1>
+          <div class="linea-estado"><span class="chip chip--${c.tono}">${esc(c.estado)}</span>${dias !== null ? `<span class="chip chip--${dias <= 7 ? 'aviso' : 'pendiente'}">Vence ${esc(c.vence)} · en ${dias} ${dias === 1 ? 'día' : 'días'}</span>` : ''}<span class="chip ${tonoRiesgo[c.riesgo]}">Riesgo ${esc(c.riesgo)}</span></div></div></div>
+      </div>
+      <div class="acciones"><button type="button" class="btn" data-renovar>${ic('refresh-cw')}Renovar</button><button type="button" class="btn btn--borde btn--icono" aria-label="Más acciones" data-fuera="Más acciones">${ic('ellipsis')}</button></div>
+    </header>
+    <nav class="pestanas" aria-label="Secciones del cliente">
+      <a href="#" aria-current="page">Resumen</a><a href="#" data-fuera="Membresías">Membresías</a><a href="#" data-fuera="Visitas">Visitas</a><a href="#" data-fuera="Notas">Notas</a><a href="#" data-fuera="Ajustes">Ajustes</a>
+    </nav>
+    <div class="detalle">
+      <div style="display:grid;gap:24px;min-width:0">
+        <section class="tarjeta tarjeta--pad" aria-labelledby="h-mem">
+          <h2 class="t-tarjeta" id="h-mem">Membresía actual</h2>
+          <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:baseline"><strong>${esc(c.plan)}</strong><span class="t-sec">Desde el 12 nov 2025</span></div>
+          <div style="margin:12px 0 6px;display:flex;justify-content:space-between"><span class="t-sec">Visitas usadas</span><span><strong>${usos[0]}</strong> de ${usos[1]}</span></div>
+          <div class="progreso" role="progressbar" aria-valuenow="${usos[0]}" aria-valuemin="0" aria-valuemax="${usos[1]}" aria-label="Visitas usadas"><i style="width:${Math.round(usos[0] / usos[1] * 100)}%"></i></div>
+        </section>
+        <section aria-labelledby="h-pag" style="display:grid;gap:12px">
+          <h2 class="t-tarjeta" id="h-pag">Historial de pagos</h2>
+          <div class="tabla-caja"><table class="tabla tabla--tarjetas">
+            <caption class="solo-lector">Historial de pagos de ${esc(nombre)}</caption>
+            <thead><tr><th scope="col">Fecha</th><th scope="col">Concepto</th><th scope="col" class="p2">Método</th><th scope="col" class="num">Monto</th><th scope="col">Estado</th></tr></thead>
+            <tbody>
+              <tr><td class="celda-id"><time datetime="2025-11-12">12 nov 2025</time></td><td data-etq="Concepto">Pase anual familiar</td><td class="p2" data-etq="Método">Transferencia Banreservas</td><td class="num" data-etq="Monto">${rd(14500)}</td><td data-etq="Estado"><span class="chip chip--exito">Aprobado</span></td></tr>
+              <tr><td class="celda-id"><time datetime="2024-11-10">10 nov 2024</time></td><td data-etq="Concepto">Pase anual familiar</td><td class="p2" data-etq="Método">Tarjeta CardNET</td><td class="num" data-etq="Monto">${rd(13200)}</td><td data-etq="Estado"><span class="chip chip--exito">Aprobado</span></td></tr>
+              <tr><td class="celda-id"><time datetime="2024-03-02">2 mar 2024</time></td><td data-etq="Concepto">Combo Día de Playa 2×1</td><td class="p2" data-etq="Método">Efectivo en sucursal</td><td class="num" data-etq="Monto">${rd(2400)}</td><td data-etq="Estado"><span class="chip chip--exito">Aprobado</span></td></tr>
+            </tbody></table></div>
+        </section>
+        <section class="tarjeta tarjeta--pad" aria-labelledby="h-act">
+          <h2 class="t-tarjeta" id="h-act">Actividad reciente</h2>
+          <ol class="linea-tiempo">
+            <li><span>Canje en sucursal Naco · Entrada de adulto</span><time class="t-sec" datetime="2026-10-18">hace 2 días</time></li>
+            <li><span>Canje en Parque Acuático · Pasadía familiar</span><time class="t-sec" datetime="2026-10-04">hace 16 días</time></li>
+            <li><span>Compartió «Combo Día de Playa 2×1»</span><time class="t-sec" datetime="2026-09-28">hace 22 días</time></li>
+          </ol>
+        </section>
+      </div>
+      <aside class="lateral-ficha" aria-label="Datos del cliente">
+        <section class="tarjeta tarjeta--densa"><h2 class="t-tarjeta">Contacto</h2>
+          <dl class="lista-datos"><div><dt>Teléfono</dt><dd>${esc(c.tel)}</dd></div><div><dt>Correo</dt><dd>cliente.${esc(c.id)}@ejemplo.do</dd></div><div><dt>Registro</dt><dd>12 nov 2025</dd></div></dl>
+          <button type="button" class="btn btn--borde btn--sm" style="margin-top:12px" data-wa>${ic('message-circle')}WhatsApp</button></section>
+        <section class="tarjeta tarjeta--densa"><h2 class="t-tarjeta">Etiquetas</h2><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="etiqueta-ui">Familia</span><span class="etiqueta-ui">Referido</span><span class="etiqueta-ui">Anual</span></div></section>
+        <section class="tarjeta tarjeta--densa"><h2 class="t-tarjeta">QR de canje</h2>
+          <div class="comprobante-img" style="aspect-ratio:1/1;max-width:160px" role="img" aria-label="Código QR de ejemplo">${ic('qr-code', 'width="48" height="48"')}</div></section>
+      </aside>
+    </div>`
+  main.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-wa]')) { aviso(`Se abriría WhatsApp con ${nombre}.`); return }
+    if (e.target.closest('[data-renovar]')) {
+      const ok = await confirmar({ titulo: '¿Renovar esta membresía?', descripcion: `${nombre} · ${c.plan}. Renovar escribe un ingreso: verás el cobro antes de confirmarlo.`, ok: 'Continuar' })
+      if (ok) aviso('Aquí abriría la pantalla de renovación con el cobro a la vista.')
+    }
+  })
+  MG.reenlazar(main)
+  iconos()
+})
+</script>
+</body>
+</html>

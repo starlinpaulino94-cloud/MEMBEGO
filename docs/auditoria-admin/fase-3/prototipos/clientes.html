@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clientes · Prototipo del panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/estilos.css">
+<script src="https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js" defer></script>
+<script src="assets/panel.js" defer></script>
+</head>
+<body data-pagina="clientes" data-titulo="Clientes" data-roles="ASM">
+<!-- Tipo de página: LISTA. Cuatro entradas de menú de hoy (Directorio, Membresías, En riesgo, Segmentos) son pestañas de esta. -->
+<main id="contenido" class="pagina pagina--completo"></main>
+<script>
+document.addEventListener('mg:listo', () => {
+  const { esc, ic, iconos, datos, rol, aviso } = MG
+  const main = document.getElementById('contenido')
+  const esMkt = rol === 'marketing'
+  // Marketing solo tiene «En riesgo» (03 · C.3): la pestaña es la única que existe para este rol, y no abre fichas.
+  const lista = esMkt ? datos.clientes.filter((c) => c.riesgo === 'alto') : datos.clientes
+  const tonoRiesgo = { bajo: 'chip--exito', medio: 'chip--aviso', alto: 'chip--peligro' }
+
+  const filas = lista.map((c) => `
+    <tr class="navegable">
+      <td class="celda-id">${esMkt ? `<span class="principal-celda">${esc(c.nombre)}</span>` : `<a class="principal-celda" href="cliente.html?id=${c.id}">${esc(c.nombre)}</a>`}<span class="secundario">${esc(c.tel)}</span></td>
+      <td data-etq="Plan">${esc(c.plan)}</td>
+      <td data-etq="Estado"><span class="chip chip--${c.tono}">${esc(c.estado)}</span></td>
+      <td class="p2" data-etq="Vence">${esc(c.vence)}</td>
+      <td data-etq="Riesgo"><span class="chip ${tonoRiesgo[c.riesgo]}">${esc(c.riesgo[0].toUpperCase() + c.riesgo.slice(1))}</span></td>
+      <td class="acciones">${esMkt ? `<div class="grupo"><button type="button" class="btn btn--sm btn--borde" data-wa="${esc(c.nombre)}">${ic('message-circle')}WhatsApp</button></div>` : ''}</td>
+    </tr>`).join('')
+
+  main.innerHTML = `
+    <header class="cabecera">
+      <div class="txt"><h1 class="t-pagina">Clientes</h1><p class="t-sec">${esMkt ? 'Quiénes están por irse, para dirigirles una campaña.' : 'Tu directorio, sus membresías y quién está en riesgo.'}</p></div>
+      ${esMkt ? '' : `<div class="acciones"><button type="button" class="btn" data-fuera="Nuevo cliente">${ic('plus')}Nuevo cliente</button></div>`}
+    </header>
+    <nav class="pestanas" aria-label="Secciones de Clientes">
+      ${esMkt ? '' : `<a href="clientes.html" aria-current="page">Directorio</a><a href="#" data-fuera="Membresías">Membresías</a>`}
+      ${esMkt ? `<a href="clientes.html" aria-current="page">En riesgo <span class="cuenta cuenta--alerta">6</span></a>` : `<a href="#" data-fuera="En riesgo">En riesgo <span class="cuenta cuenta--alerta">6</span></a><a href="#" data-fuera="Segmentos">Segmentos</a>`}
+    </nav>
+    <form class="filtros" role="search" onsubmit="return false">
+      <div class="buscar-lista">${ic('search')}<input type="text" placeholder="Buscar por nombre o teléfono" aria-label="Buscar por nombre o teléfono"></div>
+      <select aria-label="Estado"><option>Estado: todos</option><option>Activa</option><option>Vence pronto</option><option>Pendiente de pago</option></select>
+    </form>
+    <div class="tabla-caja"><table class="tabla tabla--tarjetas">
+      <caption class="solo-lector">${esMkt ? 'Clientes en riesgo' : 'Directorio de clientes'}</caption>
+      <thead><tr><th scope="col"><a href="#" data-fuera="Orden por nombre" aria-label="Ordenar por cliente">Cliente ${ic('arrow-up', 'width="12" height="12"')}</a></th><th scope="col">Plan</th><th scope="col">Estado</th><th scope="col" class="p2">Vence</th><th scope="col">Riesgo</th><th scope="col"><span class="solo-lector">Acciones</span></th></tr></thead>
+      <tbody>${filas}</tbody></table>
+      <div class="tabla-pie"><span>Mostrando 1–${lista.length} de ${esMkt ? lista.length : '1 204'}</span>
+        <span class="paginacion" aria-label="Paginación"><span aria-hidden="true">‹</span><a href="#" aria-current="page">1</a><a href="#" data-fuera="Página 2">2</a><a href="#" data-fuera="Página 3">3</a><span aria-hidden="true">…</span><a href="#" data-fuera="Última página">49</a><span aria-hidden="true">›</span></span></div></div>`
+  main.addEventListener('click', (e) => { const b = e.target.closest('[data-wa]'); if (b) aviso(`Se abriría WhatsApp con el mensaje de retención ya escrito para ${b.dataset.wa}.`) })
+  MG.reenlazar(main)
+  iconos()
+})
+</script>
+</body>
+</html>
