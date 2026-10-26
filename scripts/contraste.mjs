@@ -99,6 +99,9 @@ export const PARES = [
   // color con «esto es menos importante» no se lee como estado — y nadie lo
   // había medido como texto, que es como se usa.
   { texto: '--pending', fondo: '--card', minimo: 4.5, que: 'Texto pendiente' },
+  // Fase 4 · `EstadoChip tono="pendiente"` pinta `text-pending` sobre `--card`: es el par de arriba. Se probó sobre `--muted` (el
+  // fondo de los chips neutros) y daba 4,42:1 en claro y en landing, por debajo de AA: por eso el chip lleva `bg-card`, y
+  // `tests/primitivas-panel.test.ts` exige que no vuelva a `bg-muted`.
   { texto: '--ring', fondo: '--background', minimo: 3, que: 'Anillo de foco' },
   { texto: '--border', fondo: '--card', minimo: 1.4, que: 'Borde de tarjeta (separación visible)' },
 ]

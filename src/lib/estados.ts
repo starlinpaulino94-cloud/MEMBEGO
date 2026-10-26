@@ -6,6 +6,7 @@
 // `components/cliente/compra-estado.ts` (ya centralizada).
 
 import type { MembershipEstado } from '@/types'
+import type { TonoEstado } from '@/components/ui/estado-chip'
 
 /** Variantes válidas del componente Badge. */
 export type BadgeVariant =
@@ -99,4 +100,56 @@ export function referidoEstadoUi(estado: string): ReferidoEstadoUi {
 export const REFERIDO_MARCA_SOSPECHOSO: EstadoUi = {
   label: 'Sospechoso',
   variant: 'warning',
+}
+
+// ── Fase 4 · el contrato único «estado de dominio → etiqueta y tono» ────────────────────────────────────────────────
+// docs/auditoria-admin/07 · FE-03: hay 54 mapas «estado → clases de color» repartidos y este archivo solo cubría tres
+// dominios. `estadoUi` es el punto de entrada de TODOS: devuelve lo que el `EstadoChip` necesita (etiqueta y tono). Los mapas
+// de arriba siguen siendo su fuente y se conservan tal cual para los 13 sitios que ya los usan; cada dominio nuevo se añade
+// AQUÍ, no en la pantalla.
+
+/** Los dominios con contrato de estado. Se amplía con cada módulo que migra (fases 5 a 7). */
+export type DominioEstado = 'membresia' | 'campana' | 'referido'
+
+export interface EstadoChipUi {
+  label: string
+  tono: TonoEstado
+}
+
+/** El `variant` de `Badge` de los mapas de arriba, traducido al tono del `EstadoChip`. */
+const TONO_DE_VARIANTE: Record<BadgeVariant, TonoEstado> = {
+  default: 'info',
+  success: 'exito',
+  warning: 'aviso',
+  info: 'info',
+  destructive: 'peligro',
+  secondary: 'neutro',
+  outline: 'neutro',
+}
+
+/**
+ * Etiqueta y tono de un estado, para el `EstadoChip`. Un estado que el dominio no conoce (un valor nuevo en la base antes
+ * de que alguien lo agregue aquí) se muestra con su propio texto y tono neutro: nunca en blanco y nunca con un color que
+ * prometa algo.
+ *
+ *   const { label, tono } = estadoUi('membresia', m.estado)
+ *   <EstadoChip tono={tono}>{label}</EstadoChip>
+ *
+ * `cliente: true` usa el texto pensado para el cliente final donde el dominio lo distingue (membresía, referido).
+ */
+export function estadoUi(dominio: DominioEstado, estado: string, opciones: { cliente?: boolean } = {}): EstadoChipUi {
+  switch (dominio) {
+    case 'membresia': {
+      const e = membresiaEstadoUi(estado)
+      return { label: opciones.cliente ? e.labelCliente : e.label, tono: TONO_DE_VARIANTE[e.variant] }
+    }
+    case 'campana': {
+      const e = campanaEstadoUi(estado)
+      return { label: e.label, tono: TONO_DE_VARIANTE[e.variant] }
+    }
+    case 'referido': {
+      const e = referidoEstadoUi(estado)
+      return { label: opciones.cliente ? e.labelCliente : e.label, tono: TONO_DE_VARIANTE[e.variant] }
+    }
+  }
 }

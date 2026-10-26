@@ -192,9 +192,19 @@ const contarMapasDeEstado = () => {
  * ruta relativa. Un componente sin importadores es mantenimiento sin cliente, y el paquete es lo que un satélite instalaría: se entrega
  * tal cual. No sigue la cadena (un componente que solo usa otro componente sin uso cuenta como usado): es un suelo, no el total.
  */
+/**
+ * Primitivas de la fase 4 que ya existen y todavía no tienen consumidor: es lo que la fase pide («primitivas con su ficha y sin
+ * consumidores aún», docs/auditoria-admin/12). Se EXCLUYEN de «sin uso» mientras esperan, para que construirlas no sea subir un
+ * techo. La lista solo puede ENCOGERSE: `tests/deuda-diseno.test.ts` falla si alguna ya tiene importador (hay que quitarla de
+ * aquí) y la fase 8 (`knip`) falla si alguna sigue sin él. Cada una tiene su consumidor previsto en el plan: `Tabla` y
+ * `BarraFiltros` en Clientes y Pagos (fase 5), `Campo` en los formularios (fase 7), `NavSeccion` en el menú de 21 (fase 6),
+ * `SelectorColor` en Empresa, `BarrasSimples` en el Resumen (fase 5).
+ */
+export const PRIMITIVAS_EN_ESPERA = new Set(['campo', 'tabla', 'barra-filtros', 'nav-seccion', 'selector-color', 'barras-simples'])
+
 const contarComponentesSinUso = () => {
   const dir = join('packages', 'ui', 'src', 'ui')
-  const nombres = readdirSync(dir).filter((f) => f.endsWith('.tsx')).map((f) => f.slice(0, -4))
+  const nombres = readdirSync(dir).filter((f) => f.endsWith('.tsx')).map((f) => f.slice(0, -4)).filter((n) => !PRIMITIVAS_EN_ESPERA.has(n))
   const fuentes = TODOS.map((a) => [normalizar(a), fuenteSinComentarios(a)])
   return nombres.filter((nombre) => {
     const re = new RegExp(`['"](?:@/components/ui/|@membego/ui/ui/|\\./|\\.\\./ui/)${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`)
@@ -298,6 +308,24 @@ export const MEDIDAS = {
     que: 'Componentes de @membego/ui que nadie importa',
     porque: 'Mantenimiento sin cliente, y el paquete se entrega tal cual a cada satélite (FE-14).',
     medir: contarComponentesSinUso,
+  },
+
+  // ── Fase 4 (tarea 4.10): accesibilidad, medida en el panel. Techos nuevos; antes nada los vigilaba (FE-13). ──
+  botonIconoSinNombre: {
+    que: '`<Button size="icon">` sin `aria-label` ni `title` en el panel',
+    porque:
+      'Un botón que solo trae un icono no tiene nombre para un lector de pantalla: «botón» a secas. Se cuenta como CANDIDATO: un ' +
+      '`{...props}` podría traer el nombre, y aun así conviene que se vea en la etiqueta.',
+    re: /<Button\b(?:=>|[^>])*>/g,
+    filtro: (m, a) => enPanel(m, a) && /\bsize=(?:"icon(?:-sm)?"|\{['"]icon(?:-sm)?['"]\})/.test(m[0]) && !/\baria-label=|\btitle=/.test(m[0]),
+  },
+  outlineSinFoco: {
+    que: 'Líneas con `outline-none` sin `focus-visible` en el panel',
+    porque:
+      'Quitar el contorno sin ofrecer otro deja el foco invisible para quien navega con teclado (WCAG 2.4.7). Se cuenta por línea: ' +
+      'un `focus-visible` en la línea siguiente de la misma `className` sale como candidato.',
+    re: /^[^\n]*\boutline-none\b[^\n]*$/gm,
+    filtro: (m, a) => enPanel(m, a) && !/focus-visible/.test(m[0]),
   },
 }
 

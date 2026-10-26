@@ -828,6 +828,17 @@
     font-weight: 500;
     line-height: 0.875rem;
   }
+  /* Fase 4 · la cifra de un KPI del panel: UNA sola talla (docs/auditoria-admin/10 §2). Hoy hay cinco. Clase NUEVA: no
+     cambia nada de lo que ya existe. La usa `StatCard variante="panel"`. */
+  .text-kpi {              /* Cifra de KPI · 28/32 → 24/28 bajo 640px */
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 2rem;
+  }
+  @media (max-width: 639px) {
+    .text-kpi { font-size: 1.5rem; line-height: 1.75rem; }
+  }
   .text-price-lg {         /* El número que decide · 20px */
     font-size: 1.25rem;
     font-weight: 700;
@@ -1413,3 +1424,60 @@
 .retail-header {
   background: linear-gradient(90deg, var(--color-retail-blue) 0%, var(--color-retail-cyan) 100%);
 }
+
+/* ── PANEL · ámbito del sistema de diseño del panel administrativo (docs/auditoria-admin/10 §2, fase 4 · tarea 4.8) ──────
+   La escala tipográfica del panel: Inter, base 14/20, títulos en 600, cifras tabulares en TODO el cuerpo. Se reutilizan los
+   NOMBRES de clase que ya existen (`text-h1`…`text-caption`) y se cambian sus valores en un solo sitio, detrás de este
+   ámbito, para no tocar ni el cliente (`.retail`, `theme-landing`) ni las 200 pantallas que ya los usan.
+
+   ESTÁ DEFINIDO Y APAGADO A PROPÓSITO. Nada en `src/` aplica `.panel-ds`: la fase 4 construye la infraestructura «sin cambiar
+   ninguna pantalla» (docs/auditoria-admin/12). Encenderlo es UN cambio, en `AppShell`: ponerle `panel-ds` y
+   `fuentePanel.variable` (`src/components/layout/fuente-panel.ts`) a la raíz. Cuando se haga, `tests/panel-ds.test.ts` obliga a
+   actualizar su contador de usos y a medir antes y después con el harness de capturas.
+
+   Inter se carga con `next/font` (`--font-panel-inter`); Plus Jakarta y Geist salen DEL PANEL, no del producto. */
+.panel-ds {
+  --font-sans: var(--font-panel-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-panel-inter), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 0.875rem; /* 14 */
+  line-height: 1.25rem; /* 20 */
+  font-variant-numeric: tabular-nums;
+}
+.panel-ds .text-h1 { /* Título de página · 24/32 · 600 · −0,01em */
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@media (max-width: 639px) {
+  .panel-ds .text-h1 { font-size: 1.25rem; line-height: 1.75rem; } /* 20/28 bajo 640px */
+}
+.panel-ds .text-h2 { /* Título de sección · 18/24 · 600 · −0,005em */
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.panel-ds .text-h3,
+.panel-ds .text-h4 { /* Título de tarjeta · 16/22 · 600 */
+  font-size: 1rem;
+  line-height: 1.375rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.panel-ds .text-body { /* Texto base · 14/20 · 400 */
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+.panel-ds .text-small { /* Texto secundario · 13/18 · 400 */
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+}
+.panel-ds .text-caption,
+.panel-ds .text-overline { /* Etiqueta y cabecera de tabla · 12/16 · 500–600 · +0,02em */
+  font-size: 0.75rem;
+  line-height: 1rem;
+  letter-spacing: 0.02em;
+}
+.panel-ds .text-overline { letter-spacing: 0.06em; font-weight: 600; } /* mayúsculas solo en cabeceras de tabla y rótulos de grupo */
