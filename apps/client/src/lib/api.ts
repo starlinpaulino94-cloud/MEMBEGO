@@ -877,6 +877,61 @@ export interface MiExcursionDetalle {
   checkinPorId: string | null
 }
 
+// --- Cuenta: verificación de identidad ---
+// Lo arma el SERVIDOR (src/modules/identidad/vistaCore.ts + identidadPuerta.ts): la app pinta, no decide nada.
+// Una prueba (tests/identidad-pantalla-app.test.ts) fija que estos tipos son los que envía la API.
+export type TonoIdentidad = 'exito' | 'aviso' | 'info' | 'neutro' | 'peligro'
+export type AccionIdentidad = 'verificar' | 'continuar' | 'reintentar' | 'esperar' | 'contactar' | 'ninguna'
+
+export interface VistaIdentidad {
+  estado: 'no_verificada' | 'verificada' | 'expirada' | 'revocada' | 'requiere_revalidacion'
+  intento: string | null
+  tono: TonoIdentidad
+  etiqueta: string
+  titulo: string
+  descripcion: string
+  accion: AccionIdentidad
+  textoAccion: string | null
+  requiereConsentimientos: boolean
+  sondear: boolean
+  aviso: { tono: TonoIdentidad; texto: string } | null
+  puedeReportar: boolean
+  puedeBorrar: boolean
+  mostrarDivulgacion: boolean
+}
+
+export interface ConsentimientoIdentidad {
+  tipo: string
+  obligatorio: boolean
+  textoVersion: string
+  titulo: string
+  detalle: string
+  vigente: boolean
+}
+
+export interface PanelIdentidad {
+  visible: boolean
+  vista: VistaIdentidad
+  intentoId: string | null
+  consentimientos: ConsentimientoIdentidad[]
+  pasos: string[]
+  privacidad: string[]
+  urlCondiciones: string
+  proveedor: string
+  tiposDeIncidencia: { valor: string; etiqueta: string }[]
+  avisoDeIncidencia: string
+  maxMensajeIncidencia: number
+  incidenciasAbiertas: { id: string; etiqueta: string; desde: string }[]
+  soporte: { email: string; whatsapp: string }
+}
+
+export interface SesionIdentidad {
+  ok: true
+  url: string
+  intentoId: string
+  nonce: string | null
+}
+
 // --- Cuenta: pagos ---
 export interface PagoMembership {
   id: string
@@ -1420,6 +1475,17 @@ export const api = {
     fetchBff<{ ok: true }>(`/api/v1/cliente/membresias/${encodeURIComponent(membershipId)}/renovacion`, {
       method: 'DELETE',
     }),
+  // --- Cuenta: verificación de identidad ---
+  getIdentidadPanel: async (): Promise<PanelIdentidad> =>
+    (await fetchBff<{ ok: true; panel: PanelIdentidad }>('/api/v1/cliente/identidad/estado')).panel,
+  /** `consentimientos`: tipo → versión del texto que la persona VIO al marcar la casilla. El servidor rechaza una versión que no es la vigente. */
+  iniciarVerificacionIdentidad: (consentimientos: Record<string, string>) =>
+    postJson<SesionIdentidad>('/api/v1/cliente/identidad/sesion', { canal: 'movil_hospedado', consentimientos }),
+  cambiarConsentimientoIdentidad: (input: { tipo: string; accion: 'aceptar' | 'retirar'; version?: string }) =>
+    postJson<{ ok: true }>('/api/v1/cliente/identidad/consentimientos', input),
+  reportarProblemaIdentidad: (input: { tipo: string; mensaje: string; intentoId?: string | null }) =>
+    postJson<{ ok: true; incidenciaId: string }>('/api/v1/cliente/identidad/incidencias', input),
+  borrarDatosIdentidad: () => postJson<{ ok: true }>('/api/v1/cliente/identidad/borrado', {}),
   setDefaultSavedCard: (tarjetaId: string) =>
     postJson<{ ok: boolean }>('/api/v1/cliente/pagos/tarjetas', { tarjetaId }),
   deleteSavedCard: (tarjetaId: string) =>

@@ -88,7 +88,7 @@ export async function configuracionDelProveedor(supplierId: string) {
   return sinEmpresa('Supply: configuración del proveedor de la sesión', async (tx) => {
     const [preparacion, ficha] = await Promise.all([
       preparacionDelProveedorEnTx(tx, supplierId),
-      tx.supplyV2Supplier.findUniqueOrThrow({ where: { id: supplierId }, select: { termsAcceptedAt: true, qrTestCode: true, qrTestedAt: true, accessStatus: true } }),
+      tx.supplyV2Supplier.findUniqueOrThrow({ where: { id: supplierId }, select: { termsAcceptedAt: true, termsAcceptedById: true, qrTestCode: true, qrTestedAt: true, accessStatus: true } }),
     ])
     return { preparacion, ficha }
   })

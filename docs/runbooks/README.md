@@ -21,6 +21,7 @@ cortos que se atacaron por el sitio equivocado.
 | Una clave o secreto quedó expuesto | [`credencial-filtrada.md`](credencial-filtrada.md) |
 | Necesito cerrar la aplicación para trabajar tranquilo | [`modo-mantenimiento.md`](modo-mantenimiento.md) |
 | Voy a encender el aislamiento RLS (operación planificada, no incidente) | [`rls-encender.md`](rls-encender.md) |
+| Verificación de identidad: rutina, casos en revisión, una persona bloqueada, un borrado, el proveedor caído o una clave expuesta | [`verificacion-identidad.md`](verificacion-identidad.md) |
 
 ### Supply 2.0 · pagos externos (Slice 9)
 

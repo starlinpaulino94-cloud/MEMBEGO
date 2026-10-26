@@ -1,6 +1,6 @@
 /**
  * Sustituye los módulos de runtime de Next.js (`next/headers`,
- * `next/navigation`, `next/cache`) por un stub, en los DOS cargadores: el de
+ * `next/navigation`, `next/cache`) y `server-only` por un stub, en los DOS cargadores: el de
  * ESM (hook de resolución) y el de CommonJS (que es por donde tsx carga el
  * código TypeScript del proyecto).
  *
@@ -13,7 +13,7 @@ import Module, { register } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
 const STUB = fileURLToPath(new URL('./shim-next-stub.cjs', import.meta.url))
-const SUSTITUIDOS = /^next\/(headers|navigation|cache)(\.js)?$/
+const SUSTITUIDOS = /^(next\/(headers|navigation|cache)(\.js)?|server-only)$/
 
 const original = Module._resolveFilename
 Module._resolveFilename = function (request, ...rest) {

@@ -76,6 +76,15 @@ model Cliente {
   /// NO es un dato de tarjeta: es una referencia opaca del proveedor.
   cardnetCustomerId  String?
   fechaNacimiento    DateTime?
+  /// PROYECCIÓN de la identidad de la persona sobre esta ficha: lo único que una
+  /// EMPRESA ve (nunca documentos, selfie ni número de cédula). La escribe SOLO
+  /// el worker de identidad, y solo si la persona consintió la divulgación
+  /// (`IDENTIDAD_DIVULGACION_EMPRESAS`); si lo retira, vuelve a null.
+  /// `identidadEstado`: 'verificada' | null. Null = «no consta», que no es lo mismo
+  /// que «rechazada»: una empresa no puede inferir un rechazo de este campo.
+  identidadEstado        String?
+  identidadNivel         String?
+  identidadVerificadaEn  DateTime?
   avatarUrl          String?
   // F5/Onboarding paso 2 (B2C): perfil ampliado del cliente.
   ciudad             String?

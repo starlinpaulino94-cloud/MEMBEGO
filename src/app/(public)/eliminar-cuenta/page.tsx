@@ -36,7 +36,7 @@ export default function SolicitarEliminacionPage() {
         Escribe el correo de tu cuenta. Te enviaremos un enlace para verificar tu identidad y confirmar la solicitud.
       </p>
       <p className="mt-3 text-sm text-muted-foreground">
-        Eliminaremos tus fichas de cliente, membresías y datos asociados. Conservaremos únicamente los registros contables que deban mantenerse por obligación legal; esos registros quedarán desvinculados de tu perfil.
+        Eliminaremos tus fichas de cliente, membresías y datos asociados. Conservaremos únicamente los registros contables que deban mantenerse por obligación legal; esos registros quedarán desvinculados de tu perfil. Si verificaste tu identidad, también borraremos tu resultado de verificación y los datos que guarde nuestro proveedor.
       </p>
       <form onSubmit={submit} className="mt-8 space-y-4">
         <label htmlFor="email" className="block text-sm font-medium text-foreground">Correo electrónico</label>
