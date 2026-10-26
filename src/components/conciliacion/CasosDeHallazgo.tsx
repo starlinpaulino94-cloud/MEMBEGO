@@ -4,19 +4,22 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Loader2, FileCheck2, RefreshCw, CheckCheck, Store, UserRound } from 'lucide-react'
+import { Loader2, FileCheck2, RefreshCw, CheckCheck, Store, UserRound, CircleSlash, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
 import { CierreCajaDialog } from '@/components/caja/CierreCajaDialog'
 import {
+  cerrarSinEntregarAccion,
   generarComprobanteAccion,
   generarComprobantesPendientesAccion,
   marcarEntregadaAccion,
   reintentarEntregaAccion,
 } from '@/modules/observabilidad/conciliacion-actions'
+import { MOTIVOS_DE_CIERRE, NOTA_DE_CIERRE_MIN } from '@/modules/observabilidad/conciliacion-entrega'
 import type { CasoDeConciliacion } from '@/modules/observabilidad/conciliacion'
 
 /**
@@ -55,7 +58,7 @@ export function CasosDeHallazgo({
       {lote && puedeResolver && <LoteDeComprobantes lote={lote} dias={dias} />}
       <ul className="divide-y divide-border/50" data-testid="casos-de-hallazgo">
         {casos.map((c) => (
-          <FilaDeCaso key={`${c.tipo}-${c.id}`} caso={c} puedeResolver={puedeResolver} fecha={fmtFecha(c.fecha)} />
+          <FilaDeCaso key={`${c.tipo}-${c.id}`} caso={c} puedeResolver={puedeResolver} fecha={fmtFecha(c.fecha)} fmtFecha={fmtFecha} />
         ))}
       </ul>
       {total > casos.length && (
@@ -67,7 +70,17 @@ export function CasosDeHallazgo({
   )
 }
 
-function FilaDeCaso({ caso, puedeResolver, fecha }: { caso: CasoDeConciliacion; puedeResolver: boolean; fecha: string }) {
+function FilaDeCaso({
+  caso,
+  puedeResolver,
+  fecha,
+  fmtFecha,
+}: {
+  caso: CasoDeConciliacion
+  puedeResolver: boolean
+  fecha: string
+  fmtFecha: (d: Date | string) => string
+}) {
   const router = useRouter()
   const [pendiente, empezar] = useTransition()
   /** La venta que acaba de nacer: se ofrece imprimirla sin salir de aquí. */
@@ -96,6 +109,7 @@ function FilaDeCaso({ caso, puedeResolver, fecha }: { caso: CasoDeConciliacion; 
         <p className="truncate text-sm font-medium text-foreground">{caso.titulo}</p>
         {caso.detalle && <p className="mt-0.5 text-xs text-muted-foreground">{caso.detalle}</p>}
         <p className="mt-0.5 text-overline text-muted-foreground">{fecha}</p>
+        {(caso.diagnostico || (caso.hechos && caso.hechos.length > 0)) && <DetalleDeCaso caso={caso} fmtFecha={fmtFecha} />}
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
         {caso.monto != null && <span className="text-sm font-semibold tabular-nums text-foreground">{fmtRD(caso.monto)}</span>}
@@ -127,6 +141,14 @@ function FilaDeCaso({ caso, puedeResolver, fecha }: { caso: CasoDeConciliacion; 
 
         {caso.acciones.includes('MARCAR_ENTREGADA') && puedeResolver && (
           <MarcarEntregada caso={caso} pendiente={pendiente} onConfirmar={(nota) => correr(() => marcarEntregadaAccion(caso.id, nota))} />
+        )}
+
+        {caso.acciones.includes('CERRAR_SIN_ENTREGAR') && puedeResolver && (
+          <CerrarSinEntregar
+            caso={caso}
+            pendiente={pendiente}
+            onConfirmar={(motivo, nota) => correr(() => cerrarSinEntregarAccion(caso.id, motivo, nota))}
+          />
         )}
 
         {caso.acciones.includes('ABRIR_FICHA') && caso.clienteId && (
@@ -166,8 +188,9 @@ function MarcarEntregada({ caso, pendiente, onConfirmar }: { caso: CasoDeConcili
         <DialogHeader>
           <DialogTitle>Marcar como entregada</DialogTitle>
           <DialogDescription>
-            {caso.titulo}. El producto de este cobro ya está activo; solo falta cerrar el registro. No se cobra nada y queda en la
-            bitácora a tu nombre.
+            {caso.titulo}. El producto de este cobro ya se activó; solo falta cerrar el registro. No se cobra nada y queda en la
+            bitácora a tu nombre. Si el cobro no tenía su venta en el libro, se registra ahora con la fecha del cobro (su
+            comprobante). Si el dinero se devolvió, no uses esto: usa «Cerrar sin entregar».
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
@@ -189,6 +212,110 @@ function MarcarEntregada({ caso, pendiente, onConfirmar }: { caso: CasoDeConcili
           }}
         >
           Marcar entregada
+        </Button>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * «Ver detalle»: POR QUÉ el caso está aquí y los datos del cobro para decidir (referencia, autorización, estado, intentos,
+ * último error, evidencia). Sin esto la persona solo veía «Entrega pendiente» y un botón de reintentar, sin saber si
+ * reintentar tenía sentido. Un `<details>` nativo: se abre con teclado y no necesita estado.
+ */
+function DetalleDeCaso({ caso, fmtFecha }: { caso: CasoDeConciliacion; fmtFecha: (d: Date | string) => string }) {
+  return (
+    <details className="group mt-1.5" data-testid="detalle-de-caso">
+      <summary className="inline-flex cursor-pointer select-none items-center gap-1 text-xs font-medium text-primary hover:underline [&::-webkit-details-marker]:hidden">
+        <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden /> Ver detalle
+      </summary>
+      <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+        {caso.diagnostico && <p className="text-xs text-foreground">{caso.diagnostico}</p>}
+        {caso.hechos && caso.hechos.length > 0 && (
+          <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[max-content_1fr]">
+            {caso.hechos.map((h) => (
+              <div key={h.etiqueta} className="contents">
+                <dt className="text-muted-foreground">{h.etiqueta}</dt>
+                <dd className="break-all text-foreground">{h.fecha ? fmtFecha(h.fecha) : h.texto}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+    </details>
+  )
+}
+
+/**
+ * «Cerrar sin entregar»: para lo que reintentar no arregla (el dinero se devolvió, fue un cobro de prueba, el producto ya no
+ * existe). Exige un motivo de la lista y una nota; el servidor lo vuelve a comprobar y lo asienta en la bitácora.
+ */
+function CerrarSinEntregar({
+  caso,
+  pendiente,
+  onConfirmar,
+}: {
+  caso: CasoDeConciliacion
+  pendiente: boolean
+  onConfirmar: (motivo: string, nota: string) => void
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const [motivo, setMotivo] = useState('')
+  const [nota, setNota] = useState('')
+  const valida = motivo !== '' && nota.trim().length >= NOTA_DE_CIERRE_MIN
+
+  return (
+    <Dialog open={abierto} onOpenChange={setAbierto}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="ghost" disabled={pendiente} data-testid="cerrar-sin-entregar">
+          <CircleSlash className="h-4 w-4" aria-hidden /> Cerrar sin entregar
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cerrar sin entregar</DialogTitle>
+          <DialogDescription>
+            {caso.titulo}. El cobro sale de la conciliación y no se entrega nada: no se cobra, no se devuelve dinero (un
+            reembolso se hace en CardNET) y no se registra ninguna venta. Queda en la bitácora a tu nombre con el motivo y la nota.
+          </DialogDescription>
+        </DialogHeader>
+        {caso.diagnostico && <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">{caso.diagnostico}</p>}
+        <div className="space-y-2">
+          <Label htmlFor={`motivo-${caso.id}`}>Motivo</Label>
+          <Select value={motivo} onValueChange={setMotivo}>
+            <SelectTrigger id={`motivo-${caso.id}`}>
+              <SelectValue placeholder="Elige por qué no se entrega" />
+            </SelectTrigger>
+            <SelectContent>
+              {MOTIVOS_DE_CIERRE.map((m) => (
+                <SelectItem key={m.codigo} value={m.codigo}>
+                  {m.etiqueta}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`nota-cierre-${caso.id}`}>Nota (obligatoria)</Label>
+          <Textarea
+            id={`nota-cierre-${caso.id}`}
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            maxLength={300}
+            placeholder="Ej: Reembolsado en CardNET el 20-oct, referencia 123456."
+          />
+        </div>
+        <Button
+          variant="destructive"
+          disabled={!valida || pendiente}
+          onClick={() => {
+            onConfirmar(motivo, nota)
+            setAbierto(false)
+            setMotivo('')
+            setNota('')
+          }}
+        >
+          Cerrar sin entregar
         </Button>
       </DialogContent>
     </Dialog>

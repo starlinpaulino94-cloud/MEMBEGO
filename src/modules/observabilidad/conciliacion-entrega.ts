@@ -21,13 +21,29 @@ export const MARGEN_DE_ENTREGA_MS = 60_000
 /** Una entrega recién empezada (PENDIENTE o PROCESANDO) no es un fallo: es el cobro en curso. */
 export const ENTREGA_EN_CURSO_MS = 2 * 60_000
 
-export type EstadoDeEntrega = 'PENDIENTE' | 'PROCESANDO' | 'FALLIDA' | 'COMPLETADA'
+/**
+ * `DESCARTADA` = una persona cerró el cobro SIN entregar desde la conciliación (reembolsado, cobro de prueba, producto que
+ * ya no existe…), con motivo y nota en la bitácora. Es un estado final como `COMPLETADA`, pero no factura: no hubo venta.
+ */
+export type EstadoDeEntrega = 'PENDIENTE' | 'PROCESANDO' | 'FALLIDA' | 'COMPLETADA' | 'DESCARTADA'
+
+/** Los estados que ya no esperan nada: ni la conciliación ni el barrido los vuelven a mirar. */
+export const ENTREGA_CERRADA: readonly EstadoDeEntrega[] = ['COMPLETADA', 'DESCARTADA']
 
 export interface EvidenciaDeEntrega {
   /** Cuándo la pasarela aprobó el cobro. Sin esta fecha nada se puede demostrar. */
   activadoAt: Date | null
   membership: { pagoConfirmado: boolean; fechaPago: Date | null } | null
   compra: { pagoConfirmado: boolean; fechaActivacion: Date | null } | null
+  /**
+   * La activación de ESTE producto anotada en la bitácora (`PAGO_APROBADO`), si la hay (`activacionesEnBitacora`).
+   *
+   * La membresía sola no basta: su estado de HOY puede no decir nada del cobro de hace meses. Una membresía que se
+   * activó con el cobro, venció y volvió a quedar pendiente tiene `pagoConfirmado = false`, y sin la bitácora parecía un
+   * cliente esperando; «Reintentar entrega» la habría activado otro periodo con aquel pago. Y si la membresía se borró
+   * (el cliente eliminó su cuenta), la bitácora es lo único que queda.
+   */
+  activacionRegistrada?: Date | null
 }
 
 /**
@@ -37,10 +53,14 @@ export interface EvidenciaDeEntrega {
 export function productoYaEntregado(e: EvidenciaDeEntrega): boolean {
   if (!e.activadoAt) return false
   const desde = e.activadoAt.getTime() - MARGEN_DE_ENTREGA_MS
+  if (e.activacionRegistrada && e.activacionRegistrada.getTime() >= desde) return true
   if (e.membership) return e.membership.pagoConfirmado && e.membership.fechaPago != null && e.membership.fechaPago.getTime() >= desde
   if (e.compra) return e.compra.pagoConfirmado && e.compra.fechaActivacion != null && e.compra.fechaActivacion.getTime() >= desde
   return false
 }
+
+/** El cobro ya no apunta a nada: su membresía o su compra se borró (la relación queda en nulo). No hay a quién entregar. */
+export const productoEliminado = (e: Pick<EvidenciaDeEntrega, 'membership' | 'compra'>) => e.membership == null && e.compra == null
 
 /**
  * LA EVIDENCIA CON LA QUE SE DA POR ENTREGADO UN COBRO, dicha tal cual.
@@ -51,7 +71,7 @@ export function productoYaEntregado(e: EvidenciaDeEntrega): boolean {
  * la entrega; una de varios días puede ser otra cosa, y la nota tiene que decirlo. La bitácora guarda lo mismo.
  */
 export interface EvidenciaUsada {
-  fuente: 'MEMBRESIA' | 'COMPRA'
+  fuente: 'MEMBRESIA' | 'COMPRA' | 'BITACORA'
   fecha: Date
   /** Milisegundos entre el cobro y la activación que lo prueba. Puede ser negativo dentro del margen de reloj. */
   demoraMs: number
@@ -59,8 +79,12 @@ export interface EvidenciaUsada {
 
 export function evidenciaDeEntrega(e: EvidenciaDeEntrega): EvidenciaUsada | null {
   if (!productoYaEntregado(e) || !e.activadoAt) return null
-  const fuente = e.membership ? 'MEMBRESIA' : 'COMPRA'
-  const fecha = e.membership ? e.membership.fechaPago : e.compra ? e.compra.fechaActivacion : null
+  // La bitácora va primero: anota la activación en el momento en que ocurrió, y el producto puede haber cambiado después.
+  const desde = e.activadoAt.getTime() - MARGEN_DE_ENTREGA_MS
+  const delProducto = e.membership ? e.membership.fechaPago : e.compra ? e.compra.fechaActivacion : null
+  const fuente: EvidenciaUsada['fuente'] =
+    e.activacionRegistrada && e.activacionRegistrada.getTime() >= desde ? 'BITACORA' : e.membership ? 'MEMBRESIA' : 'COMPRA'
+  const fecha = fuente === 'BITACORA' ? e.activacionRegistrada! : delProducto
   if (!fecha) return null
   return { fuente, fecha, demoraMs: fecha.getTime() - e.activadoAt.getTime() }
 }
@@ -110,7 +134,12 @@ export function entregaEnCurso(estado: EstadoDeEntrega, actualizadoAt: Date, aho
   return ahora.getTime() - actualizadoAt.getTime() < ENTREGA_EN_CURSO_MS
 }
 
-export type SituacionDeEntrega = 'EN_CURSO' | 'CLIENTE_ESPERANDO' | 'REGISTRO_SIN_CERRAR' | 'ENTREGADA'
+/**
+ * · `SIN_PRODUCTO`: la membresía o la compra del cobro ya no existe y nada prueba que se entregara. Reintentar no puede
+ *   funcionar nunca (no hay qué activar) y nadie espera en la app: lo cierra una persona («Cerrar sin entregar»).
+ * · `DESCARTADA`: ya la cerró una persona sin entregar.
+ */
+export type SituacionDeEntrega = 'EN_CURSO' | 'CLIENTE_ESPERANDO' | 'REGISTRO_SIN_CERRAR' | 'SIN_PRODUCTO' | 'ENTREGADA' | 'DESCARTADA'
 
 /** Resume qué hay que hacer con un cobro aprobado. Es lo único que decide qué acción se ofrece. */
 export function situacionDeEntrega(
@@ -118,6 +147,85 @@ export function situacionDeEntrega(
   ahora: Date
 ): SituacionDeEntrega {
   if (e.estado === 'COMPLETADA') return 'ENTREGADA'
+  if (e.estado === 'DESCARTADA') return 'DESCARTADA'
   if (entregaEnCurso(e.estado, e.actualizadoAt, ahora)) return 'EN_CURSO'
-  return productoYaEntregado(e) ? 'REGISTRO_SIN_CERRAR' : 'CLIENTE_ESPERANDO'
+  if (productoYaEntregado(e)) return 'REGISTRO_SIN_CERRAR'
+  return productoEliminado(e) ? 'SIN_PRODUCTO' : 'CLIENTE_ESPERANDO'
 }
+
+/**
+ * Un cobro que NUNCA pasó por el control de entregas: sigue `PENDIENTE`, sin un solo intento y sin error. Es lo que dejó la
+ * columna de cumplimiento al nacer (12-sep-2026, `20260912_p1b_cumplimiento_dedupe`): todos los cobros aprobados de antes
+ * recibieron `PENDIENTE` por defecto, aunque el sistema de entonces sí activó su producto. Hoy cualquier cobro aprobado
+ * entra en `PROCESANDO` con un intento, así que esta combinación solo la tienen esos.
+ */
+export function anteriorAlControlDeEntregas(e: { estado: EstadoDeEntrega; intentos: number; error: string | null }): boolean {
+  return e.estado === 'PENDIENTE' && e.intentos === 0 && !e.error
+}
+
+/**
+ * POR QUÉ ESTE COBRO ESTÁ EN LA CONCILIACIÓN, en una frase que una persona entiende sin abrir la base de datos.
+ *
+ * Antes la pantalla solo decía «Entrega pendiente» —sin motivo, porque un cobro antiguo no tiene ningún error anotado— y
+ * el único botón era reintentar, que en estos casos o fallaba siempre o activaba otro periodo gratis.
+ */
+export function diagnosticoDeEntrega(e: {
+  situacion: SituacionDeEntrega
+  estado: EstadoDeEntrega
+  error: string | null
+  intentos: number
+  evidencia: EvidenciaUsada | null
+  productoEliminado: boolean
+}): string {
+  const antiguo = anteriorAlControlDeEntregas(e)
+  const partes: string[] = []
+  if (antiguo) {
+    partes.push(
+      'Este cobro es anterior al control de entregas (12-sep-2026): el sistema de entonces activaba el producto pero no anotaba el resultado, por eso figura «pendiente» sin ningún error.'
+    )
+  } else if (e.estado === 'FALLIDA') {
+    partes.push(`La entrega falló${e.intentos > 0 ? ` (${e.intentos} ${e.intentos === 1 ? 'intento' : 'intentos'})` : ''}: ${e.error ?? 'sin mensaje de error'}.`)
+  } else if (e.estado === 'PROCESANDO') {
+    partes.push('La entrega empezó y no terminó: el proceso se interrumpió a mitad (por ejemplo, la función del servidor se cortó).')
+  } else if (e.estado === 'PENDIENTE') {
+    partes.push('La entrega nunca se completó y no dejó ningún error anotado.')
+  }
+
+  if (e.evidencia) {
+    const donde =
+      e.evidencia.fuente === 'BITACORA'
+        ? 'La bitácora registra la activación del producto'
+        : e.evidencia.fuente === 'MEMBRESIA'
+          ? 'La membresía muestra su pago confirmado'
+          : 'La compra muestra su activación'
+    partes.push(`${donde} ${describirDemora(e.evidencia.demoraMs)} después del cobro: el cliente sí lo recibió y solo falta cerrar el registro.`)
+    if (e.productoEliminado) partes.push('El producto se eliminó después (normalmente porque el cliente borró su cuenta).')
+  } else if (e.situacion === 'SIN_PRODUCTO') {
+    partes.push(
+      'La membresía o compra de este cobro ya no existe (se elimina, por ejemplo, cuando el cliente borra su cuenta) y no hay registro de que se activara. No hay nada que entregar: reintentar no puede funcionar. Comprueba en CardNET si el cobro se devolvió y ciérralo con «Cerrar sin entregar».'
+    )
+  } else if (e.situacion === 'CLIENTE_ESPERANDO') {
+    partes.push('No hay ninguna activación de este producto después del cobro: el cliente pagó y no lo tiene.')
+  }
+  return partes.join(' ')
+}
+
+/**
+ * Por qué una persona cierra un cobro SIN entregar. La lista es cerrada para que la bitácora se pueda contar; «Otro» exige
+ * que la nota lo explique.
+ */
+export const MOTIVOS_DE_CIERRE = [
+  { codigo: 'REEMBOLSADO', etiqueta: 'Se devolvió el dinero al cliente (reembolso en CardNET)' },
+  { codigo: 'PRODUCTO_ELIMINADO', etiqueta: 'El producto o la cuenta del cliente ya no existe' },
+  { codigo: 'COBRO_DE_PRUEBA', etiqueta: 'Fue un cobro de prueba' },
+  { codigo: 'RESUELTO_FUERA', etiqueta: 'Se resolvió con el cliente por otra vía' },
+  { codigo: 'OTRO', etiqueta: 'Otro motivo (explícalo en la nota)' },
+] as const
+
+export type MotivoDeCierre = (typeof MOTIVOS_DE_CIERRE)[number]['codigo']
+
+export const esMotivoDeCierre = (v: unknown): v is MotivoDeCierre =>
+  typeof v === 'string' && MOTIVOS_DE_CIERRE.some((m) => m.codigo === v)
+
+/** Una nota corta no explica nada: es lo único que dirá, dentro de meses, por qué este cobro no se entregó. */
+export const NOTA_DE_CIERRE_MIN = 10

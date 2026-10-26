@@ -202,6 +202,8 @@ export function evaluarCiclo(
 ): EvaluacionCiclo {
   const t = ahora.getTime()
 
+  // `DESCARTADA` (cerrado sin entregar desde la conciliación) también bloquea, a propósito: el cobro SALIÓ en este ciclo, y
+  // volver a cobrar solo porque alguien anotó «se reembolsó» es un doble cargo si el reembolso no llegó a hacerse.
   if (intentos.some((i) => i.activadoAt !== null && i.fulfillmentEstado !== 'COMPLETADA')) {
     return { permitido: false, motivo: 'cobrado' }
   }

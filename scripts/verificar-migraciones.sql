@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en 5571363e: 243 migraciones, última 20261077_consentimientos_pago.
+-- Generado con scripts/generar-verificar-migraciones.mjs en 70f88487: 244 migraciones, última 20261078_conciliacion_cerrar_sin_entregar.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -256,7 +256,8 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261074_cardnet_saved_cards_security','e369fa084f99694917dc8cb618c34816c24d237079221a0e7d0ed69aea3eb843'),
   ('20261075_expo_push_tokens','140596417c3cf46df3538e522c09dd49903e5fedff4d2b4ae251e7b0e4d3ed59'),
   ('20261076_push_tokens_rls','0006a90d510b74b2f71c33d7d761045b45c15272e9c0c5e29d26915fa002be5d'),
-  ('20261077_consentimientos_pago','fe14a7d09234d07ce318497a83e61336652d5c665013f83474a2e7b36884795e')
+  ('20261077_consentimientos_pago','fe14a7d09234d07ce318497a83e61336652d5c665013f83474a2e7b36884795e'),
+  ('20261078_conciliacion_cerrar_sin_entregar','1a52882b75f2536a289a92f807ac9ee927414d1d710c05405a5aebeb7eea7d76')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,

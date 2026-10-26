@@ -599,6 +599,8 @@ enum AuditAccion {
   CONCILIACION_ENTREGA_REINTENTADA
   /// Se marcó como entregado un cobro cuyo producto ya estaba activo (con la nota de quien lo hizo).
   CONCILIACION_ENTREGA_MARCADA
+  /// Se cerró SIN entregar un cobro aprobado (reembolsado, de prueba, producto eliminado…), con motivo y nota.
+  CONCILIACION_ENTREGA_CERRADA_SIN_ENTREGAR
 }
 
 // ─────────────────────────────────────────────

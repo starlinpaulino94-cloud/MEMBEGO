@@ -148,7 +148,11 @@ test('2 · si el cliente cambió su pedido después de pagar NO se aplica a cieg
   assert.equal(await ventaDe(intentoId), null)
 
   const h = (await conciliar(e.companyId)).hallazgos.find((x) => x.clave === 'cobrado-sin-entregar')
-  assert.deepEqual(h?.casos.map((c) => c.acciones), [['ABRIR_FICHA']], 'solo una persona puede resolverlo: no se ofrece un botón que falla')
+  assert.deepEqual(
+    h?.casos.map((c) => c.acciones),
+    [['CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA']],
+    'solo una persona puede resolverlo: no se ofrece un botón que falla (sí cerrarlo, si por ejemplo se reembolsó)'
+  )
   const intentos = cobro.fulfillmentIntentos
   const enVano = await reintentarEntrega(intentoId)
   assert.deepEqual([enVano.ok, enVano.error], [false, CAMBIO_DE_PLAN_PAGADO])
