@@ -4,11 +4,13 @@ import { requireRole } from '@/lib/auth/guards'
 import { formatDateTime } from '@/lib/format'
 import { BitacoraTabla } from '@/components/auditoria/BitacoraTabla'
 import { AccionConTexto } from '@/components/superadmin/identidad/AccionConTexto'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatCard } from '@/components/ui/stat-card'
 import { StatusChip } from '@/components/ui/status-chip'
+import { Tabla } from '@/components/ui/tabla'
 import { getAuditoria } from '@/modules/auditoria/queries'
 import { TIPOS_DE_INCIDENCIA } from '@/modules/identidad/vistaCore'
 import {
@@ -199,7 +201,7 @@ function Reglas({ datos }: { datos: ReglasParaElEquipo }) {
 
 // ── Resumen ─────────────────────────────────────────────────────────────────
 
-function Dato({ valor }: { valor: number | null }) {
+function ValorONada({ valor }: { valor: number | null }) {
   return valor === null ? <span className="text-muted-foreground">Sin dato</span> : <>{valor}</>
 }
 
@@ -254,18 +256,18 @@ function Resumen({ resumen }: { resumen: ResumenDeLaPlataforma }) {
       </Card>
 
       <section aria-label="Contadores" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Intentos en 24 h" value={<Dato valor={resumen.intentos24h?.total ?? null} />} sub={resumen.intentos24h ? Object.entries(resumen.intentos24h.porEstado).map(([e, c]) => `${e.replace(/_/g, ' ')}: ${c}`).join(' · ') || 'ninguno' : undefined} />
-        <StatCard label="Verificadas vigentes" value={<Dato valor={resumen.verificadasVigentes} />} sub={resumen.vencenEn30Dias === null ? undefined : `${resumen.vencenEn30Dias} vencen en 30 días`} />
+        <StatCard label="Intentos en 24 h" value={<ValorONada valor={resumen.intentos24h?.total ?? null} />} sub={resumen.intentos24h ? Object.entries(resumen.intentos24h.porEstado).map(([e, c]) => `${e.replace(/_/g, ' ')}: ${c}`).join(' · ') || 'ninguno' : undefined} />
+        <StatCard label="Verificadas vigentes" value={<ValorONada valor={resumen.verificadasVigentes} />} sub={resumen.vencenEn30Dias === null ? undefined : `${resumen.vencenEn30Dias} vencen en 30 días`} />
         <StatCard
           label="Casos en revisión"
-          value={<Dato valor={resumen.enRevision?.total ?? null} />}
+          value={<ValorONada valor={resumen.enRevision?.total ?? null} />}
           sub={resumen.enRevision ? `${resumen.enRevision.porDocumentoRepetido} por documento repetido · el más viejo: ${fecha(resumen.enRevision.masAntiguoAt)}` : undefined}
           href="/superadmin/identidad?vista=revision"
           hrefLabel="Ver los casos en revisión"
         />
         <StatCard
           label="Incidencias abiertas"
-          value={<Dato valor={resumen.incidenciasAbiertas?.total ?? null} />}
+          value={<ValorONada valor={resumen.incidenciasAbiertas?.total ?? null} />}
           sub={resumen.incidenciasAbiertas ? `la más vieja: ${fecha(resumen.incidenciasAbiertas.masAntiguaAt)}` : undefined}
           href="/superadmin/identidad?vista=incidencias"
           hrefLabel="Ver las incidencias abiertas"
@@ -279,13 +281,13 @@ function Resumen({ resumen }: { resumen: ResumenDeLaPlataforma }) {
         <CardContent>
           <ul className="space-y-3 text-sm">
             <Alerta ok={resumen.purgasPendientes === 0} sinDato={resumen.purgasPendientes === null}>
-              <strong className="font-semibold">Borrados pendientes en el proveedor:</strong> <Dato valor={resumen.purgasPendientes} />. Son intentos ya cerrados cuya sesión (con los documentos) sigue en el proveedor; el barrido diario los reintenta.
+              <strong className="font-semibold">Borrados pendientes en el proveedor:</strong> <ValorONada valor={resumen.purgasPendientes} />. Son intentos ya cerrados cuya sesión (con los documentos) sigue en el proveedor; el barrido diario los reintenta.
             </Alerta>
             <Alerta ok={resumen.avisosFallidos === 0} sinDato={resumen.avisosFallidos === null}>
-              <strong className="font-semibold">Avisos del proveedor sin procesar:</strong> <Dato valor={resumen.avisosFallidos} />. Si crece, algo falla entre el proveedor y Membego.
+              <strong className="font-semibold">Avisos del proveedor sin procesar:</strong> <ValorONada valor={resumen.avisosFallidos} />. Si crece, algo falla entre el proveedor y Membego.
             </Alerta>
             <Alerta ok={resumen.supresionesSinCompletar?.total === 0} sinDato={resumen.supresionesSinCompletar === null}>
-              <strong className="font-semibold">Borrados pedidos por las personas sin completar:</strong> <Dato valor={resumen.supresionesSinCompletar?.total ?? null} />
+              <strong className="font-semibold">Borrados pedidos por las personas sin completar:</strong> <ValorONada valor={resumen.supresionesSinCompletar?.total ?? null} />
               {resumen.supresionesSinCompletar && resumen.supresionesSinCompletar.vencidas > 0
                 ? ` — ${resumen.supresionesSinCompletar.vencidas} con más de 7 días: el plazo legal es de 10 días hábiles.`
                 : '.'}
@@ -322,37 +324,38 @@ function Revision({ cola }: { cola: Awaited<ReturnType<typeof colaDeRevision>> }
       <p className="text-sm text-muted-foreground">
         {cola.total} {cola.total === 1 ? 'caso' : 'casos'}, los más antiguos primero{cola.total > LIMITE_DE_COLA ? ` (se muestran ${LIMITE_DE_COLA})` : ''}. La evidencia está en la consola del proveedor: búscala por la referencia del intento. Para aprobar, hazlo allí.
       </p>
-      <div className="overflow-x-auto rounded-xl border border-border/70 bg-card">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead>
-            <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th className="px-4 py-3 font-semibold">Persona</th>
-              <th className="px-4 py-3 font-semibold">Por qué espera</th>
-              <th className="px-4 py-3 font-semibold">Desde</th>
-              <th className="px-4 py-3 font-semibold">Referencia del intento</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/50">
-            {cola.casos.map((c) => (
-              <tr key={c.intentoId} className="align-top">
-                <td className="px-4 py-3">
-                  <p className="font-medium text-foreground">{c.nombre}</p>
-                  <p className="text-xs text-muted-foreground">{c.email}</p>
-                </td>
-                <td className="px-4 py-3">{(c.codigoRazon && RAZON_DE_REVISION[c.codigoRazon]) ?? c.codigoRazon ?? 'Lo pidió el proveedor'}</td>
-                <td className="whitespace-nowrap px-4 py-3 tabular-nums">{fecha(c.creadoAt)}</td>
-                <td className="px-4 py-3 font-mono text-xs">{c.intentoId}</td>
-                <td className="px-4 py-3 text-right">
-                  <Link href={`/superadmin/identidad/${c.userId}?motivo=revision_de_caso`} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
-                    Abrir el caso
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Tabla
+        caption="Casos de identidad en revisión"
+        claveDe={(c) => c.intentoId}
+        filas={cola.casos}
+        columnaIdentificadora="persona"
+        columnas={[
+          {
+            clave: 'persona',
+            encabezado: 'Persona',
+            celda: (c) => (
+              <>
+                <p className="font-medium text-foreground">{c.nombre}</p>
+                <p className="text-xs text-muted-foreground">{c.email}</p>
+              </>
+            ),
+          },
+          { clave: 'razon', encabezado: 'Por qué espera', valor: (c) => (c.codigoRazon && RAZON_DE_REVISION[c.codigoRazon]) ?? c.codigoRazon ?? 'Lo pidió el proveedor' },
+          { clave: 'desde', encabezado: 'Desde', celda: (c) => <span className="whitespace-nowrap tabular-nums">{fecha(c.creadoAt)}</span> },
+          { clave: 'referencia', encabezado: 'Referencia del intento', celda: (c) => <span className="font-mono text-xs">{c.intentoId}</span> },
+          {
+            clave: 'abrir',
+            encabezado: 'Acciones',
+            soloLector: true,
+            alineacion: 'derecha',
+            celda: (c) => (
+              <Link href={`/superadmin/identidad/${c.userId}?motivo=revision_de_caso`} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
+                Abrir el caso
+              </Link>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }
@@ -442,45 +445,47 @@ function Personas({ q, personas }: { q: string; personas: Awaited<ReturnType<typ
           </label>
           <input id="q" name="q" defaultValue={q} minLength={3} className="h-11 w-72 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
         </div>
-        <button type="submit" className="inline-flex h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <Search className="h-4 w-4" aria-hidden />
+        <Button type="submit" size="lg">
+          <Search aria-hidden />
           Buscar
-        </button>
+        </Button>
       </form>
       {q.trim().length < 3 ? (
         <p className="text-sm text-muted-foreground">Escribe al menos tres caracteres. No hay un listado completo de personas a propósito.</p>
       ) : personas.length === 0 ? (
         <EmptyState title="Sin resultados" description="Prueba con otra parte del correo o del nombre." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border/70 bg-card">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-3 font-semibold">Persona</th>
-                <th className="px-4 py-3 font-semibold">Verificación</th>
-                <th className="px-4 py-3 font-semibold">Último intento</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {personas.map((p) => (
-                <tr key={p.userId}>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-foreground">{p.nombre}</p>
-                    <p className="text-xs text-muted-foreground">{p.email}</p>
-                  </td>
-                  <td className="px-4 py-3">{p.estado ? p.estado.replace(/_/g, ' ') : 'Sin verificar'}</td>
-                  <td className="px-4 py-3">{p.ultimoIntento ? `${p.ultimoIntento.estado.replace(/_/g, ' ')} · ${fecha(p.ultimoIntento.creadoAt)}` : '—'}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/superadmin/identidad/${p.userId}`} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
-                      Abrir el caso
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Tabla
+          caption="Personas encontradas"
+          claveDe={(p) => p.userId}
+          filas={personas}
+          columnaIdentificadora="persona"
+          columnas={[
+            {
+              clave: 'persona',
+              encabezado: 'Persona',
+              celda: (p) => (
+                <>
+                  <p className="font-medium text-foreground">{p.nombre}</p>
+                  <p className="text-xs text-muted-foreground">{p.email}</p>
+                </>
+              ),
+            },
+            { clave: 'verificacion', encabezado: 'Verificación', valor: (p) => (p.estado ? p.estado.replace(/_/g, ' ') : 'Sin verificar') },
+            { clave: 'ultimo', encabezado: 'Último intento', valor: (p) => (p.ultimoIntento ? `${p.ultimoIntento.estado.replace(/_/g, ' ')} · ${fecha(p.ultimoIntento.creadoAt)}` : '—') },
+            {
+              clave: 'abrir',
+              encabezado: 'Acciones',
+              soloLector: true,
+              alineacion: 'derecha',
+              celda: (p) => (
+                <Link href={`/superadmin/identidad/${p.userId}`} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
+                  Abrir el caso
+                </Link>
+              ),
+            },
+          ]}
+        />
       )}
     </div>
   )
