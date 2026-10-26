@@ -339,6 +339,8 @@ test('5 · LA COLA DE REVISIÓN trae a quien espera, con el código crudo (el eq
 })
 
 test('5b · LA COLA DE INCIDENCIAS separa lo abierto de lo resuelto, con quién la atendió', async () => {
+  // La cola se acota (lo más antiguo primero): en una base de pruebas reutilizada, las incidencias abiertas de corridas anteriores la llenarían.
+  await prisma.identidadIncidencia.deleteMany({ where: { estado: { in: ['abierta', 'en_proceso'] } } })
   const q = await persona('cola-inc')
   const rep = await reportarProblemaDePersona(q, { tipo: 'datos_incorrectos', mensaje: `Mi nombre sale mal ${sufijo}` })
   if (!rep.ok) throw new Error('x')
