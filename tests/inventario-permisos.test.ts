@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { CAPACIDAD_DE_SECCION, CAPACIDADES_BASE, SECCIONES_POR_CAPACIDAD } from '../src/modules/capacidades/catalogo'
 import { ADMIN_SECTIONS, adminSectionForPath, seccionPermitida } from '../src/lib/auth/permissions'
 import { FUNCIONES_POR_SECCION } from '../src/lib/auth/funciones'
+import { GRUPOS_HUB_ADMIN, rutasOfrecidas } from '../src/components/layout/nav-config'
 
 /**
  * COMMERCE CORE · inventario — sección, guardias y aislamiento (Fase 2).
@@ -176,7 +177,11 @@ test('el cron del inventario existe, está programado y exige el secreto', () =>
 test('la entrada de menú existe, detrás de la capacidad, y va junto al catálogo en el grupo Comercio del hub', () => {
   const nav = readFileSync('src/components/layout/nav-config.ts', 'utf8')
   assert.match(nav, /href: '\/admin\/inventario',[\s\S]{0,500}capacidad: 'CATALOGO_UNIFICADO'/)
-  assert.match(nav, /deAdmin\(\s*'\/admin\/catalogo', '\/admin\/inventario',/)
+  // Fase 6: va junto al catálogo, como su segunda pestaña, y con la misma capacidad.
+  const catalogo = GRUPOS_HUB_ADMIN.find((g) => g.id === 'comercio')?.items.find((i) => i.href === '/admin/catalogo')
+  assert.deepEqual(catalogo?.pestanas?.map((p) => p.href), ['/admin/catalogo', '/admin/inventario'])
+  assert.ok(rutasOfrecidas({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: ['CATALOGO_UNIFICADO'] }).includes('/admin/inventario'))
+  assert.ok(!rutasOfrecidas({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: [] }).includes('/admin/inventario'))
 })
 
 // ── Interfaz ─────────────────────────────────────────────────────────────────

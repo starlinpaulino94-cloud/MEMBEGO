@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { conEmpresa, type Tx } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
+import { registrarAccesoLegado } from '@/modules/navegacion/legado'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -37,6 +38,8 @@ export default async function CampanasPage({
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId
+  // Fase 6 · 6.4: la ruta sigue igual; solo se cuenta quién la abre, para decidir con datos si se puede retirar.
+  registrarAccesoLegado('/admin/campanas', companyId)
   const sp = await searchParams
   const paginacion = leerPaginacion(sp)
 

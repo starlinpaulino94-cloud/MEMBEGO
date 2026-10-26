@@ -17,6 +17,7 @@ import {
 import {
   navForRole,
   allLinks,
+  destinosDe,
   hrefsNegadosPorPermisos,
   visibleWorkspaces,
   visibleGroups,
@@ -170,7 +171,8 @@ test('toda ruta /admin del menú resuelve a una sección conocida', () => {
     'CLIENTE',
   ]
   for (const role of roles) {
-    for (const link of allLinks(navForRole(role))) {
+    // Cada entrada Y cada una de sus pestañas (fase 6): una pestaña sin sección sería una puerta que Permisos no puede cerrar.
+    for (const link of allLinks(navForRole(role)).flatMap(destinosDe)) {
       if (!link.href.startsWith('/admin')) continue
       if (PENDIENTES.includes(link.href)) continue
       assert.ok(
@@ -556,9 +558,11 @@ test('entrar por concesión abre SOLO lo concedido, ni siquiera el panel de inic
 test('el menú del mostrador enseña lo concedido, y solo eso', () => {
   const enlaces = (permisos: ReturnType<typeof resolverPermisosUsuario>) => {
     const ctx = { role: 'EMPLEADO' as AppRole, scope: 'COMPANY' as const, permisos }
+    // Cada entrada y cada una de sus pestañas visibles: Clientes y Membresías son dos pestañas de un mismo módulo (fase 6).
     return visibleWorkspaces(ctx)
       .flatMap((w) => visibleGroups(w, ctx))
       .flatMap((g) => allLinks([g]))
+      .flatMap(destinosDe)
       .map((l) => l.href)
   }
   // Sin concesiones, su menú es el de siempre: ni un enlace del panel.

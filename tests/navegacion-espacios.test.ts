@@ -11,6 +11,8 @@ import {
   workspaceOf,
   workspacesForRole,
   buscarModulos,
+  pestanasDeModulo,
+  rutasOfrecidas,
   CLAVES_BADGE,
   ENLACES_ADMIN,
   GRUPOS_HUB_ADMIN,
@@ -113,8 +115,9 @@ test('el rango ordena de plataforma a cliente', () => {
 
 // ── Visibilidad por CAPACIDAD ───────────────────────────────────────────────
 
-const rutasDe = (c: ContextoNav) =>
-  visibleWorkspaces(c).flatMap((w) => w.groups.flatMap((g) => g.items.map((i) => i.href)))
+// TODAS las rutas que se ofrecen: cada entrada y cada una de sus pestañas visibles (fase 6). El `href` de una entrada con
+// pestañas solo dice a dónde aterriza; lo que contiene lo dice `rutasOfrecidas`.
+const rutasDe = (c: ContextoNav) => rutasOfrecidas(c)
 
 test('sin la capacidad CITAS, el módulo Citas no se ofrece', () => {
   const conTodo = ctx({ capacidades: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'EXCURSIONES'] })
@@ -234,14 +237,18 @@ test('canSeeItem no depende del orden en que se pregunte', () => {
 
 test('el espacio de una ruta se resuelve por el prefijo más largo', () => {
   const c = ctx()
-  // /admin/audiencia/segmentos casa con DOS módulos: «Audiencia» (Analítica)
-  // y «Segmentos» (Clientes). Gana el prefijo largo.
+  // /admin/audiencia/segmentos casa con DOS pestañas de dos módulos: «Audiencia» (Reportes) y «Segmentos» (Clientes). Lo mismo
+  // /admin/audiencia/campanas con «Audiencia» y «Campañas segmentadas» (Comunicaciones). Gana el prefijo largo.
   //
-  // Con el hub en una sola columna las dos viven en el MISMO espacio, así que
-  // lo que hay que comprobar ya no es a qué espacio van sino a qué módulo
-  // resuelven — que es lo que decide qué fila se marca activa.
-  assert.equal(resolverRuta('/admin/audiencia', c)?.href, '/admin/audiencia')
-  assert.equal(resolverRuta('/admin/audiencia/segmentos', c)?.href, '/admin/audiencia/segmentos')
+  // Con el hub en una sola columna todas viven en el MISMO espacio, así que lo que hay que comprobar es a qué MÓDULO resuelven
+  // —que decide qué fila se marca activa— y cuál es su pestaña activa. `resolverRuta` devuelve la entrada (su aterrizaje).
+  assert.equal(resolverRuta('/admin/audiencia', c)?.href, '/admin/reportes')
+  assert.equal(resolverRuta('/admin/audiencia/segmentos', c)?.href, '/admin/clientes')
+  assert.equal(resolverRuta('/admin/audiencia/campanas', c)?.href, '/admin/notificaciones')
+  const activa = (p: string) => pestanasDeModulo(p, c)?.pestanas.find((x) => x.activa)?.label
+  assert.equal(activa('/admin/audiencia'), 'Audiencia')
+  assert.equal(activa('/admin/audiencia/segmentos'), 'Segmentos')
+  assert.equal(activa('/admin/audiencia/campanas'), 'Campañas segmentadas')
   assert.equal(workspaceOf('/admin/audiencia/segmentos', c), 'empresa')
 })
 
@@ -567,7 +574,8 @@ test('el hub administrativo son los ocho grupos del diseño, en su orden', () =>
 })
 
 test('ningún módulo de administración se queda fuera del hub', () => {
-  const enHub = new Set(GRUPOS_HUB_ADMIN.flatMap((g) => g.items.map((i) => i.href)))
+  // Una ruta está «en el hub» si es una entrada o una pestaña de alguna entrada (fase 6).
+  const enHub = new Set(GRUPOS_HUB_ADMIN.flatMap((g) => g.items.flatMap((i) => [i.href, ...(i.pestanas ?? []).map((p) => p.href)])))
   const huerfanos = ENLACES_ADMIN.map((i) => i.href).filter((h) => !enHub.has(h))
   assert.deepEqual(
     huerfanos,
@@ -580,7 +588,10 @@ test('ningún módulo aparece en dos grupos del hub', () => {
   const vistos = new Map<string, string[]>()
   for (const grupo of GRUPOS_HUB_ADMIN) {
     for (const item of grupo.items) {
-      vistos.set(item.href, [...(vistos.get(item.href) ?? []), grupo.id])
+      // La entrada y sus pestañas cuentan una vez cada ruta (la primera pestaña ES la entrada).
+      for (const href of new Set([item.href, ...(item.pestanas ?? []).map((p) => p.href)])) {
+        vistos.set(href, [...(vistos.get(href) ?? []), `${grupo.id}/${item.label}`])
+      }
     }
   }
   const repetidos = [...vistos.entries()]
