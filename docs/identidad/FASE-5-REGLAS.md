@@ -2,7 +2,7 @@
 
 Estado: **construida y probada (núcleo puro, base de datos, guardas de código y mutaciones); sin verla en un navegador con sesión
 real de SUPERADMIN ni de un proveedor.** Sigue apagada: no hay ninguna regla encendida (nace vacía), y la verificación no se ofrece
-a nadie hasta que se encienda el interruptor (entorno completo + interruptor en base de datos + capacidad). No se usa con
+a nadie hasta que se encienda el interruptor (entorno completo + interruptor en base de datos; la capacidad por empresa solo gobierna la insignia de la ficha). No se usa con
 documentos reales hasta el dictamen legal y el contrato con el proveedor. Base: [AUDITORIA-VERIFICACION-IDENTIDAD.md](./AUDITORIA-VERIFICACION-IDENTIDAD.md),
 [FASE-1-BACKEND.md](./FASE-1-BACKEND.md), [FASE-2-PROVEEDOR.md](./FASE-2-PROVEEDOR.md), [FASE-3-CLIENTE.md](./FASE-3-CLIENTE.md) y
 [FASE-4-ADMINISTRACION.md](./FASE-4-ADMINISTRACION.md).

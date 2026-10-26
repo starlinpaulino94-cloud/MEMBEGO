@@ -39,8 +39,9 @@ se muestra en ninguna pantalla. Base: [AUDITORIA-VERIFICACION-IDENTIDAD.md](./AU
 - **Vence a los 36 meses**; vencida deja de valer aunque el barrido no haya corrido.
 - **Revocar / revalidar / consultar** son del equipo (`SUPERADMIN`), con motivo y asiento.
   La bitácora usa una lista cerrada de claves, sin datos personales.
-- **Triple compuerta**: variables de entorno + interruptor en base de datos (nace apagado)
-  + capacidad. Con una pieza ausente, falla cerrada.
+- **Doble compuerta**: variables de entorno + interruptor en base de datos (nace apagado). Con una pieza ausente,
+  falla cerrada. (La capacidad `VERIFICACION_IDENTIDAD` por empresa no es una tercera compuerta: solo decide si la empresa ve
+  la insignia «verificada» en la ficha de sus clientes; la verificación es de la persona, no de una empresa.)
 
 ## Para encenderla en un entorno (NO con documentos reales todavía)
 

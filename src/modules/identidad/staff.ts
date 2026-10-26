@@ -7,6 +7,7 @@ import {
   atenderIncidenciaDeIdentidad,
   cambiarReglaDeIdentidad,
   compuertaDeIdentidad,
+  crearIntento,
   consultarIdentidadComoStaff,
   exigirGestionDeIdentidad,
   leerReglasDeIdentidad,
@@ -402,6 +403,33 @@ export async function atenderIncidenciaComoStaff(
   const r = await atenderIncidenciaDeIdentidad(actor, incidenciaId, accion, respuesta)
   if (r.ok && accion === 'resolver' && r.cambio && r.respuesta) await avisarRespuestaDeIncidencia(r.userId, incidenciaId, r.respuesta)
   return r
+}
+
+// ── Reabrir la verificación de quien quedó bloqueado ────────────────────────
+
+export type ResultadoReabrir =
+  | { ok: true; intentoId: string }
+  | { ok: false; error: 'ya_verificada' | 'intento_abierto' | 'falta_consentimiento' | 'no_habilitada' | 'persona_no_encontrada' | 'espera' | 'otro' }
+
+/**
+ * Le abre a la persona un intento nuevo aunque tenga un rechazo definitivo o demasiados rechazos: es lo que el mensaje «contacta a soporte»
+ * promete. NO verifica a nadie ni se salta nada de lo demás: sigue haciendo falta que la persona haya dado sus permisos, que la
+ * verificación esté encendida y que no tenga ya una verificación vigente ni un intento abierto; y la persona tiene que pasar de verdad por
+ * el proveedor. Queda con el origen `staff`, el nombre de quien lo hizo y el motivo en el asiento, y se le avisa a la persona.
+ */
+export async function reabrirVerificacionComoStaff(actor: ActorDeIdentidad, userId: string, motivo: string): Promise<ResultadoReabrir> {
+  exigirGestionDeIdentidad(actor)
+  const razon = (motivo ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, 200)
+  if (!razon) throw new ErrorDeIdentidad('motivo_requerido', 'Indica el motivo.')
+  const r = await crearIntento(userId, { canal: 'web', origen: 'staff', actorUserId: actor.userId, desbloqueoPorStaff: true, motivoDelEquipo: razon })
+  if (!r.ok) {
+    const conocidos = ['ya_verificada', 'intento_abierto', 'falta_consentimiento', 'no_habilitada', 'persona_no_encontrada', 'espera'] as const
+    return { ok: false, error: (conocidos as readonly string[]).includes(r.motivo) ? (r.motivo as (typeof conocidos)[number]) : 'otro' }
+  }
+  // Ya había uno abierto: no se reabrió nada (la persona lo retoma desde su pantalla).
+  if (r.reutilizado) return { ok: false, error: 'intento_abierto' }
+  await avisarRepeticionDeIdentidad(r.intento.id)
+  return { ok: true, intentoId: r.intento.id }
 }
 
 // ── Reglas por función (Fase 5) ─────────────────────────────────────────────

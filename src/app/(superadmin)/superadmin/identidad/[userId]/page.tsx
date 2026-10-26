@@ -16,6 +16,7 @@ import { TIPOS_DE_INCIDENCIA } from '@/modules/identidad/vistaCore'
 import {
   atenderIncidenciaAction,
   pedirRevalidacionAction,
+  reabrirVerificacionAction,
   resolverRevisionAction,
   revocarVerificacionAction,
   suprimirIdentidadAction,
@@ -100,6 +101,8 @@ export default async function CasoDeIdentidadPage({ params, searchParams }: { pa
   const linea = await getAuditoria(null, { entidadTipo: 'IdentidadVerificacion', entidadId: userId }, 50)
   const v = caso.verificacion
   const verificada = caso.estado.estado === 'verificada'
+  // «Contacta a soporte» le llega a quien quedó bloqueado (rechazo definitivo o demasiados rechazos): aquí se le reabre.
+  const bloqueada = !caso.estado.puedeIniciar && ['bloqueada_por_rechazo_definitivo', 'demasiados_rechazos'].includes(caso.estado.motivoNoPuedeIniciar ?? '') && !caso.estado.intentoAbierto
 
   return (
     <div className="space-y-6">
@@ -133,7 +136,24 @@ export default async function CasoDeIdentidadPage({ params, searchParams }: { pa
           ) : (
             <p className="text-sm text-muted-foreground">No tiene un resultado guardado.</p>
           )}
+          {bloqueada && (
+            <p className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-foreground/90">
+              Esta persona no puede volver a intentarlo sola ({caso.estado.motivoNoPuedeIniciar === 'bloqueada_por_rechazo_definitivo' ? 'tuvo un rechazo definitivo' : 'acumuló demasiados rechazos'}).
+              Si después de revisar su caso decides darle otra oportunidad, puedes reabrirle la verificación: tiene que hacerla ella, pasando de nuevo por el
+              proveedor, y se le avisa.
+            </p>
+          )}
           <div className="flex flex-wrap items-start gap-2">
+            {bloqueada && (
+              <AccionConTexto
+                accion={reabrirVerificacionAction}
+                campos={{ userId }}
+                boton="Reabrir la verificación"
+                etiquetaTexto="Motivo (queda en la bitácora con tu nombre)"
+                maximo={200}
+                confirmar="Reabrir"
+              />
+            )}
             {verificada && (
               <>
                 <AccionConTexto accion={revocarVerificacionAction} campos={{ userId }} boton="Retirar la verificación" etiquetaTexto="Motivo (se guarda con el resultado)" maximo={120} peligrosa confirmar="Retirar" />

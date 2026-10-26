@@ -18,6 +18,7 @@ import { prisma } from '../../src/lib/prisma'
 import {
   ErrorDeIdentidad,
   cambiarInterruptorDeIdentidad,
+  estadoDeIdentidadDe,
   crearIntento,
   registrarSolicitudDeSupresion,
   type ActorDeIdentidad,
@@ -33,6 +34,7 @@ import {
   buscarPersonas,
   colaDeIncidencias,
   colaDeRevision,
+  reabrirVerificacionComoStaff,
   resolverRevisionComoStaff,
   resumenDeLaPlataforma,
   verCasoDeIdentidad,
@@ -426,4 +428,73 @@ test('6c · LAS PURGAS PENDIENTES y los avisos fallidos del proveedor se cuentan
 
   await prisma.identidadEventoExterno.create({ data: { proveedor: 'didit', eventoExternoId: `fallido-${sufijo}`, tipo: 'status.updated', payloadHash: 'h'.repeat(64), estado: 'fallido', detalle: 'proveedor_no_disponible' } })
   assert.equal((await resumenDeLaPlataforma(staff)).avisosFallidos, antes.avisosFallidos! + 1)
+})
+
+// ── 7 · Reabrirle la verificación a quien quedó bloqueado ───────────────────
+
+test('7 · REABRIR: «contacta a soporte» tiene herramienta. Solo el equipo, con motivo; deja un intento nuevo del equipo, el asiento con su nombre y el motivo, y avisa a la persona UNA vez', async () => {
+  const e = await empezada('bloqueada')
+  await recibir(avisoFirmado(dd.poner(e.intentoId, 'Declined', ['LIVENESS_FACE_ATTACK']), { estado: 'Declined' }))
+  const bloqueada = await estadoDeIdentidadDe(e.q.userId)
+  assert.deepEqual([bloqueada.puedeIniciar, bloqueada.motivoNoPuedeIniciar], [false, 'bloqueada_por_rechazo_definitivo'])
+
+  const admin = await persona('admin-reabre', 'ADMINISTRADOR')
+  for (const actor of [{ userId: admin.userId, rol: 'ADMINISTRADOR' }, { userId: e.q.userId, rol: 'CLIENTE' }, { userId: '', rol: 'SUPERADMIN' }]) {
+    await assert.rejects(() => reabrirVerificacionComoStaff(actor, e.q.userId, 'quiero'), noAutorizado)
+  }
+  await assert.rejects(() => reabrirVerificacionComoStaff(staff, e.q.userId, '   '), (x) => x instanceof ErrorDeIdentidad && x.codigo === 'motivo_requerido')
+  assert.equal((await estadoDeIdentidadDe(e.q.userId)).puedeIniciar, false, 'sin autorización ni motivo, sigue bloqueada')
+
+  const r = await reabrirVerificacionComoStaff(staff, e.q.userId, 'Revisado con la persona por WhatsApp: el documento era el suyo.\u0007')
+  assert.equal(r.ok, true, JSON.stringify(r))
+  if (!r.ok) return
+  const nuevo = await intentoDe(r.intentoId)
+  assert.deepEqual([nuevo.estado, nuevo.origen, nuevo.actorUserId, nuevo.userId], ['creada', 'staff', staff.userId, e.q.userId])
+  const asiento = (await asientos(e.q.userId, 'IDENTIDAD_VERIFICACION_INICIADA')).find((a) => (a.payload as Record<string, unknown>).intentoId === r.intentoId)
+  assert.ok(asiento, 'deja asiento')
+  assert.equal(asiento!.userId, staff.userId, 'con el nombre de quien lo hizo')
+  assert.equal((asiento!.payload as Record<string, unknown>).motivo, 'Revisado con la persona por WhatsApp: el documento era el suyo.', 'con su motivo, sin caracteres de control')
+  const avisos = (await notifs(e.q.userId)).filter((n) => n.tipo === 'IDENTIDAD_REPETIR')
+  assert.equal(avisos.length, 1)
+  assert.doesNotMatch(JSON.stringify(avisos), /fraude|ataque|prueba de vida|WhatsApp/i, 'el aviso no cuenta el motivo del equipo ni el del rechazo')
+
+  // Reabrir otra vez no abre otro: la persona tiene uno abierto.
+  assert.deepEqual(await reabrirVerificacionComoStaff(staff, e.q.userId, 'otra vez'), { ok: false, error: 'intento_abierto' })
+  assert.equal(await prisma.identidadIntento.count({ where: { userId: e.q.userId, origen: 'staff' } }), 1)
+  assert.equal((await notifs(e.q.userId)).filter((n) => n.tipo === 'IDENTIDAD_REPETIR').length, 1)
+
+  // La persona sigue de verdad: retoma ESE intento, pasa por el proveedor y solo entonces queda verificada.
+  const retoma = await iniciarVerificacionDePersona(e.q, {}, WEB)
+  assert.equal(retoma.ok && retoma.intentoId, r.intentoId)
+  assert.equal((await estadoDeIdentidadDe(e.q.userId)).estado === 'verificada', false, 'reabrir no verifica a nadie')
+  await recibir(avisoFirmado(dd.aprobar(r.intentoId, { cedula: '006-' + sufijo + '-reabierta' })))
+  assert.equal((await estadoDeIdentidadDe(e.q.userId)).estado, 'verificada')
+  assert.deepEqual(await reabrirVerificacionComoStaff(staff, e.q.userId, 'ya está verificada'), { ok: false, error: 'ya_verificada' })
+})
+
+test('7b · REABRIR a quien acumuló demasiados rechazos; y NO a quien no dio sus permisos, ni con la verificación apagada, ni a quien no existe', async () => {
+  // Tres rechazos reintentables en la semana: la puerta ya no lo deja volver solo.
+  const e = await empezada('demasiados')
+  await prisma.identidadIntento.update({ where: { id: e.intentoId }, data: { estado: 'abandonada', resueltoAt: new Date() } })
+  for (let k = 1; k <= 3; k++) {
+    await prisma.identidadIntento.create({ data: { userId: e.q.userId, estado: 'rechazada_reintentable', tipoRechazo: 'reintentable', codigoRazon: 'RECHAZO_GENERICO', canal: 'web', resueltoAt: new Date(Date.now() - k * DIA) } })
+  }
+  assert.equal((await estadoDeIdentidadDe(e.q.userId)).motivoNoPuedeIniciar, 'demasiados_rechazos')
+  const r = await reabrirVerificacionComoStaff(staff, e.q.userId, 'Soporte resolvió el problema de luz con la persona')
+  assert.equal(r.ok, true, JSON.stringify(r))
+
+  // Sin permisos dados: el equipo no puede saltarse el consentimiento (la persona los da ella, en su pantalla).
+  const sinPermisos = await persona('sin-permisos')
+  assert.deepEqual(await reabrirVerificacionComoStaff(staff, sinPermisos.userId, 'prueba'), { ok: false, error: 'falta_consentimiento' })
+  assert.equal(await prisma.identidadIntento.count({ where: { userId: sinPermisos.userId } }), 0, 'no se creó ningún intento')
+
+  // Con la verificación apagada, nadie abre nada.
+  await cambiarInterruptorDeIdentidad(staff, { encendido: false, motivo: 'Prueba: verificación apagada.' })
+  try {
+    assert.deepEqual(await reabrirVerificacionComoStaff(staff, sinPermisos.userId, 'prueba'), { ok: false, error: 'no_habilitada' })
+  } finally {
+    await cambiarInterruptorDeIdentidad(staff, { encendido: true, motivo: 'Prueba: vuelve a encenderse.' })
+  }
+  // Una persona que no existe no abre nada y no rompe.
+  assert.deepEqual(await reabrirVerificacionComoStaff(staff, 'cm-no-existe-0000', 'prueba'), { ok: false, error: 'persona_no_encontrada' })
 })

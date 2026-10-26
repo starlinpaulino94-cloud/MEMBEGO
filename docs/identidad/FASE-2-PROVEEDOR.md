@@ -1,7 +1,7 @@
 # Verificación de identidad · Fase 2 — Integración con el proveedor
 
 Estado: **construida y probada con un Didit simulado; sin activar.** Nada de esto se enciende
-solo: la verificación sigue apagada (interruptor + entorno completo + capacidad) y no se usa con
+solo: la verificación sigue apagada (interruptor + entorno completo) y no se usa con
 documentos reales hasta el dictamen legal y el contrato con el proveedor. Base:
 [AUDITORIA-VERIFICACION-IDENTIDAD.md](./AUDITORIA-VERIFICACION-IDENTIDAD.md) y
 [FASE-1-BACKEND.md](./FASE-1-BACKEND.md).

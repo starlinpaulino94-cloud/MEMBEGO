@@ -588,6 +588,8 @@ export async function crearIntento(
     actorUserId?: string | null
     /** Solo el equipo: reabre a quien quedó bloqueado por rechazos. */
     desbloqueoPorStaff?: boolean
+    /** Por qué lo reabre el equipo (queda en el asiento). */
+    motivoDelEquipo?: string
     ip?: string | null
     userAgent?: string | null
   },
@@ -657,7 +659,13 @@ async function crearIntentoUnaVez(
     await auditar(tx, 'IDENTIDAD_VERIFICACION_INICIADA', {
       actorUserId: input.actorUserId ?? userId,
       entidadId: userId,
-      payload: { intentoId: creado.id, canal: input.canal, origen: input.origen ?? 'cliente', esRevalidacion: evaluacion.esRevalidacion },
+      payload: {
+        intentoId: creado.id,
+        canal: input.canal,
+        origen: input.origen ?? 'cliente',
+        esRevalidacion: evaluacion.esRevalidacion,
+        ...(input.motivoDelEquipo ? { motivo: input.motivoDelEquipo } : {}),
+      },
       ip: input.ip,
       userAgent: input.userAgent,
     })

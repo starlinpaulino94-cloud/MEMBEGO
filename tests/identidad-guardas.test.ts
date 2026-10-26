@@ -295,7 +295,7 @@ test('EL PANEL DEL EQUIPO es solo de SUPERADMIN en TODAS sus capas: las páginas
   const acciones = quitarComentarios(leer('src/modules/superadmin/identidadActions.ts'))
   assert.match(acciones, /^'use server'/m)
   const exportadas = [...acciones.matchAll(/export async function (\w+)/g)].map((m) => m[1])
-  assert.deepEqual(exportadas.sort(), ['atenderIncidenciaAction', 'cambiarInterruptorAction', 'cambiarReglaAction', 'pedirRevalidacionAction', 'resolverRevisionAction', 'revocarVerificacionAction', 'suprimirIdentidadAction'])
+  assert.deepEqual(exportadas.sort(), ['atenderIncidenciaAction', 'cambiarInterruptorAction', 'cambiarReglaAction', 'pedirRevalidacionAction', 'reabrirVerificacionAction', 'resolverRevisionAction', 'revocarVerificacionAction', 'suprimirIdentidadAction'])
   for (const nombre of exportadas) {
     const cuerpo = acciones.slice(acciones.indexOf('function ' + nombre)).split(/\nexport async function /)[0]
     assert.match(cuerpo, /await requireSuperadmin\(\)/, nombre + ' no exige ser SUPERADMIN')
@@ -304,7 +304,7 @@ test('EL PANEL DEL EQUIPO es solo de SUPERADMIN en TODAS sus capas: las páginas
   assert.match(acciones, /user\.metadata\.role !== 'SUPERADMIN'/)
   // Todas las funciones del servicio del equipo empiezan por la comprobación del rol.
   const staff = quitarComentarios(leer('src/modules/identidad/staff.ts'))
-  for (const nombre of ['resumenDeLaPlataforma', 'colaDeRevision', 'colaDeIncidencias', 'buscarPersonas', 'verCasoDeIdentidad', 'reglasDeLaPlataforma', 'cambiarReglaComoStaff']) {
+  for (const nombre of ['resumenDeLaPlataforma', 'colaDeRevision', 'colaDeIncidencias', 'buscarPersonas', 'verCasoDeIdentidad', 'reglasDeLaPlataforma', 'cambiarReglaComoStaff', 'reabrirVerificacionComoStaff']) {
     const cuerpo = staff.slice(staff.indexOf('export async function ' + nombre)).split(/\nexport async function /)[0]
     assert.match(cuerpo.slice(0, 700), /exigirGestionDeIdentidad\(actor\)/, nombre + ' debe empezar comprobando el rol')
   }
@@ -454,4 +454,25 @@ test('LA POLÍTICA Y LA PANTALLA DEL PORTAL DICEN LA EXCEPCIÓN: solo antes de p
   assert.match(privacidad, /Sigue siendo tu decisión \(si no lo haces, ese pago queda a la espera\) y nunca se pide para comprar, reservar, renovar ni entrar con tu QR/)
   const pantalla = leer('src/app/(admin)/admin/supply/identidad/page.tsx').replace(/\s+/g, ' ')
   assert.match(pantalla, /Es tu decisión: si no la haces, ese pago queda a la espera, y nada más cambia en tu portal/)
+})
+
+// ── Fase 7 · reabrir la verificación de quien quedó bloqueado ───────────────
+
+test('REABRIR NO VERIFICA A NADIE: solo crea un intento del equipo con motivo, pasando por la compuerta y los permisos, y avisa a la persona', () => {
+  const staff = quitarComentarios(leer('src/modules/identidad/staff.ts'))
+  const f = staff.slice(staff.indexOf('export async function reabrirVerificacionComoStaff')).split(/\nexport (async )?function |\nexport type |\n\/\/ ── /)[0]
+  assert.match(f.slice(0, 200), /exigirGestionDeIdentidad\(actor\)/, 'lo primero es comprobar el rol')
+  assert.match(f, /throw new ErrorDeIdentidad\('motivo_requerido'/)
+  assert.match(f, /crearIntento\(userId, \{ canal: 'web', origen: 'staff', actorUserId: actor\.userId, desbloqueoPorStaff: true, motivoDelEquipo: razon \}\)/)
+  assert.doesNotMatch(f, /aplicarDecision|registrarAprobada|estado: 'verificada'|'aprobada'/, 'no acredita: eso sigue siendo del worker, tras el proveedor')
+  assert.match(f, /if \(r\.reutilizado\) return \{ ok: false, error: 'intento_abierto' \}/, 'si ya había uno abierto, no reabre nada')
+  assert.ok(f.indexOf('crearIntento(') < f.indexOf('avisarRepeticionDeIdentidad('), 'se avisa DESPUÉS de abrir')
+  // El desbloqueo solo salta las reglas de rechazos: la compuerta, los permisos y «ya verificada» siguen en pie.
+  const nucleo = quitarComentarios(leer('src/modules/identidad/identidadCore.ts'))
+  const evaluar = nucleo.slice(nucleo.indexOf('export function evaluarNuevoIntento')).split(/\n\/\/ ── /)[0]
+  assert.ok(evaluar.indexOf("motivo: 'ya_verificada'") < evaluar.indexOf('desbloqueoPorStaff'))
+  assert.ok(evaluar.indexOf("motivo: 'falta_consentimiento'") < evaluar.indexOf('if (!ctx.desbloqueoPorStaff)'))
+  // Y ningún otro sitio fuera del equipo puede pedir el desbloqueo.
+  const llamadores = archivos('src').filter((f) => /desbloqueoPorStaff:\s*true/.test(quitarComentarios(leer(f))))
+  assert.deepEqual(llamadores, ['src/modules/identidad/staff.ts'])
 })

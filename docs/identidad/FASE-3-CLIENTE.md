@@ -2,7 +2,7 @@
 
 Estado: **construida y probada (render, código fuente y base de datos); sin verla en un dispositivo ni en un
 navegador con sesión real.** Sigue apagada: la verificación no se ofrece a nadie hasta que se encienda el
-interruptor (entorno completo + interruptor en base de datos + capacidad), y no se usa con documentos reales
+interruptor (entorno completo + interruptor en base de datos; la capacidad por empresa solo gobierna la insignia de la ficha), y no se usa con documentos reales
 hasta el dictamen legal y el contrato con el proveedor. Base: [AUDITORIA-VERIFICACION-IDENTIDAD.md](./AUDITORIA-VERIFICACION-IDENTIDAD.md),
 [FASE-1-BACKEND.md](./FASE-1-BACKEND.md) y [FASE-2-PROVEEDOR.md](./FASE-2-PROVEEDOR.md).
 

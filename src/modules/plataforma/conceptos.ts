@@ -96,7 +96,7 @@ export const FUNCIONES_EMPRESA = [
   // Commerce Core (Fase 7): la caja conectada al catálogo y a los pedidos. Vive en el Core.
   'POS_MEMBEGO',
   // Verificación de identidad (Fase 1): vive en el Core y es de la PERSONA; la empresa
-  // solo enciende que su panel muestre la insignia y la use en reglas propias.
+  // solo enciende que su panel muestre la insignia «identidad verificada» en la ficha de sus clientes.
   'VERIFICACION_IDENTIDAD',
 ] as const satisfies readonly Capacidad[]
 

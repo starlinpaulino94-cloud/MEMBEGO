@@ -5,7 +5,7 @@ import { getUser } from '@/lib/auth'
 import { getRequestMeta } from '@/lib/server-utils'
 import { DISPARADORES_REVALIDACION, type DisparadorRevalidacion } from '@/modules/identidad/identidadCore'
 import { ErrorDeIdentidad, cambiarInterruptorDeIdentidad, revocarVerificacion, solicitarRevalidacion, type ActorDeIdentidad } from '@/modules/identidad/identidad'
-import { atenderIncidenciaComoStaff, cambiarReglaComoStaff, resolverRevisionComoStaff } from '@/modules/identidad/staff'
+import { atenderIncidenciaComoStaff, cambiarReglaComoStaff, reabrirVerificacionComoStaff, resolverRevisionComoStaff } from '@/modules/identidad/staff'
 import { suprimirIdentidadDePersona } from '@/modules/identidad/supresion'
 
 /**
@@ -69,6 +69,28 @@ export async function cambiarReglaAction(_prev: EstadoAccionIdentidad, formData:
     })
     revalidatePath(RUTA)
     return { success: activar ? 'Regla guardada y encendida.' : 'Regla apagada.' }
+  } catch (e) {
+    return comoError(e)
+  }
+}
+
+/** Le abre un intento nuevo a quien quedó bloqueado por rechazos (lo que promete «contacta a soporte»). Con motivo; la persona debe pasar por el proveedor. */
+export async function reabrirVerificacionAction(_prev: EstadoAccionIdentidad, formData: FormData): Promise<EstadoAccionIdentidad> {
+  const sesion = await requireSuperadmin()
+  if (!sesion) return { error: 'No autorizado.' }
+  try {
+    const r = await reabrirVerificacionComoStaff(sesion.actor, texto(formData, 'userId', 100), texto(formData, 'motivo', 200))
+    revalidatePath(RUTA)
+    if (r.ok) return { success: 'Se reabrió la verificación y se le avisó a la persona. Tiene que hacerla ella.' }
+    const porque: Record<string, string> = {
+      ya_verificada: 'Esa persona ya tiene una verificación vigente.',
+      intento_abierto: 'Esa persona ya tiene un intento abierto: lo retoma desde su pantalla.',
+      falta_consentimiento: 'Esa persona no tiene dados sus permisos: tiene que aceptarlos ella desde su pantalla antes de verificarse.',
+      no_habilitada: 'La verificación está apagada: enciéndela antes de reabrir a nadie.',
+      persona_no_encontrada: 'Esa persona no existe.',
+      espera: 'Esa persona está en la espera obligatoria tras un rechazo: puede volver a intentarlo en unos minutos sin ayuda.',
+    }
+    return { error: porque[r.error] ?? 'No se pudo reabrir la verificación.' }
   } catch (e) {
     return comoError(e)
   }

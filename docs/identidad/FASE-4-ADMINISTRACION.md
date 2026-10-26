@@ -2,7 +2,7 @@
 
 Estado: **construida y probada (código fuente, render y base de datos); sin verla en un navegador con sesión real de
 SUPERADMIN.** Sigue apagada: la verificación no se ofrece a nadie hasta que se encienda el interruptor (entorno completo +
-interruptor en base de datos + capacidad), y no se usa con documentos reales hasta el dictamen legal y el contrato con el
+interruptor en base de datos; la capacidad por empresa solo gobierna la insignia de la ficha), y no se usa con documentos reales hasta el dictamen legal y el contrato con el
 proveedor. Base: [AUDITORIA-VERIFICACION-IDENTIDAD.md](./AUDITORIA-VERIFICACION-IDENTIDAD.md),
 [FASE-1-BACKEND.md](./FASE-1-BACKEND.md), [FASE-2-PROVEEDOR.md](./FASE-2-PROVEEDOR.md) y [FASE-3-CLIENTE.md](./FASE-3-CLIENTE.md).
 
@@ -13,7 +13,7 @@ cuatro pestañas, y una ficha por persona (`/superadmin/identidad/[userId]`).
 
 | Pieza pedida | Dónde |
 |---|---|
-| Consultar el estado de identidad | **Resumen**: compuerta (entorno / interruptor / capacidad), intentos de 24 h por estado, verificadas vigentes y las que vencen en 30 días. **Personas**: búsqueda por correo o nombre (mínimo 3 letras; no hay listado completo a propósito). **Ficha**: estado, vigencia, permisos dados, intentos, incidencias y línea de tiempo |
+| Consultar el estado de identidad | **Resumen**: compuerta (entorno / interruptor), intentos de 24 h por estado, verificadas vigentes y las que vencen en 30 días. **Personas**: búsqueda por correo o nombre (mínimo 3 letras; no hay listado completo a propósito). **Ficha**: estado, vigencia, permisos dados, intentos, incidencias y línea de tiempo |
 | Revisar intentos e incidentes | Intentos con su estado y código de razón en la ficha; **Incidencias** (abiertas / resueltas) con «tomar» y «resolver» |
 | Gestionar casos en revisión humana | **Revisión**: cola de casos (los más antiguos primero; se marca el que espera por documento repetido). En la ficha: **rechazar** o **pedir que repita** |
 | Consultar registros de auditoría | **Actividad**: bitácora filtrada a la identidad (`IDENTIDAD_*` + entidad `IdentidadVerificacion`), con las etiquetas en español |
