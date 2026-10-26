@@ -1,921 +1,105 @@
-import Link from 'next/link'
-import { conEmpresa } from '@/lib/tenant'
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES } from '@/types'
-import {
-  Activity,
-  ArrowRight,
-  Banknote,
-  CalendarDays,
-  CheckCircle2,
-  CircleAlert,
-  IdCard,
-  Lightbulb,
-  Megaphone,
-  Package,
-  Plus,
-  QrCode,
-  ShoppingBag,
-  BadgePercent,
-  Warehouse,
-  Share2,
-  Smartphone,
-  TrendingUp,
-  Users,
-  Wallet,
-} from 'lucide-react'
-import { requireRole, requireSection, seccionesAbribles, usuarioPuedeFuncion } from '@/lib/auth/guards'
-import { ADMIN_SECTIONS, adminSectionForPath } from '@/lib/auth/permissions'
+import { conEmpresa } from '@/lib/tenant'
+import { requireRole, seccionesAbribles, usuarioPuedeFuncion } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
+import { ADMIN_SECTIONS, adminSectionForPath } from '@/lib/auth/permissions'
 import { destinoSiSoloProveedora } from '@/modules/supply-v2/permisos'
-import { getDashboardEjecutivo, type DashboardEjecutivo } from '@/modules/admin/dashboardQueries'
 import { getOnboardingEmpresa } from '@/modules/empresas/onboarding'
-import { resumenComercioEmpresa, type ResumenComercio } from '@/modules/comercio/dashboard'
-import { resumenInventarioEmpresa, type ResumenInventario } from '@/modules/inventory/dashboard'
-import { getHomePublicada } from '@/modules/home/composicion'
-import { leerSlidesEditor } from '@/modules/home/editor-contrato'
+import { bloquesDelResumen } from '@/modules/admin/resumen/bloques'
+import { getResumen } from '@/modules/admin/resumen/consultas'
+import { PanelDs } from '@/components/layout/PanelDs'
 import { OnboardingChecklist } from '@/components/admin/OnboardingChecklist'
-import { TarjetaInventario } from '@/components/admin/TarjetaInventario'
-import { formatMoney } from '@/lib/format'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { ResumenPanel } from '@/components/admin/resumen/ResumenPanel'
+import { ComercioResumen } from '@/components/admin/resumen/ComercioResumen'
+import { InventarioResumen } from '@/components/admin/resumen/InventarioResumen'
 
 export const dynamic = 'force-dynamic'
 
-const fmt = (n: number) => new Intl.NumberFormat('es-DO').format(n)
+const TZ_DEFECTO = 'America/Santo_Domingo'
 
-const ACCION_LABEL: Record<string, string> = {
-  VISITA_CONFIRMADA: 'Visita confirmada',
-  VISITA_REVERTIDA: 'Visita revertida',
-  PAGO_APROBADO: 'Pago aprobado',
-  PAGO_RECHAZADO: 'Pago rechazado',
-  MEMBRESIA_CANCELADA: 'Membresía cancelada',
-  MEMBRESIA_RENOVADA: 'Membresía renovada',
-  QR_GENERADO: 'QR generado',
-  QR_USADO: 'QR usado',
-  COMPROBANTE_IMPRESO: 'Comprobante impreso',
-  REFERIDO_COMPLETADO: 'Referido completado',
-  RECOMPENSA_OTORGADA: 'Recompensa otorgada',
-  NOTA_INTERNA: 'Nota interna',
-  COMPOSICION_PUBLICADA: 'Inicio publicado',
-  COMPOSICION_PAUSADA: 'Inicio pausado',
-}
-
-function fmtHora(d: Date, timeZone: string) {
-  return new Intl.DateTimeFormat('es-DO', {
-    timeZone,
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(d))
-}
-
-/** «+18.5%» real, o null cuando no hay base de comparación. */
-function delta(actual: number, anterior: number): string | null {
-  if (anterior <= 0) return null
-  const pct = ((actual - anterior) / anterior) * 100
-  const signo = pct >= 0 ? '+' : ''
-  return `${signo}${pct.toFixed(1)}%`
-}
-
-function iniciales(nombre: string): string {
-  return nombre
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0] ?? '')
-    .join('')
-    .toUpperCase()
-}
-
-/** Tarjeta KPI del diseño: rótulo arriba, número grande, línea y pie. */
 /**
- * Un bloque que es enlace solo si su sección se puede abrir; si no, el mismo
- * contenido sin destino (auditoría admin · D-07). La visibilidad es cosmética:
- * la barrera sigue siendo la guardia de la sección.
+ * EL RESUMEN (auditoría admin · fase 5, tarea 5.1).
+ *
+ * Es la primera pantalla de todo el que entra al panel, así que se compone POR LO QUE LA PERSONA PUEDE VER y no por una lista
+ * de roles: cada bloque declara su sección y su función (`modules/admin/resumen/bloques.ts`), el motor consulta solo lo que
+ * se concede (`consultas.ts`, en transacciones paralelas) y los enlaces solo existen si la sección se puede abrir. El resumen de
+ * Comercio y la tarjeta de Inventario, que son de otros módulos, cargan aparte dentro de `<Suspense>`.
+ *
+ * Qué NO está aquí, a propósito (decisión 1 del prototipo aprobado): seguidores, referidos históricos, «Pico», la actividad
+ * en vivo y «Estado en App Móvil». Lo que cada uno aportaba vive en su pantalla (Registros, Personalización, Audiencia).
  */
-function Atajo({
-  href,
-  ok,
-  className,
-  children,
-}: {
-  href: string
-  ok: boolean
-  className?: string
-  children: React.ReactNode
-}) {
-  return ok ? (
-    <Link href={href} className={className}>
-      {children}
-    </Link>
-  ) : (
-    <div className={className}>{children}</div>
-  )
-}
-
-function Kpi({
-  icono: Icono,
-  rotulo,
-  valor,
-  unidad,
-  linea,
-  lineaTono = 'muted',
-  pie,
-}: {
-  icono: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>
-  rotulo: string
-  valor: string
-  unidad?: string
-  linea?: React.ReactNode
-  lineaTono?: 'brand' | 'success' | 'muted'
-  pie?: React.ReactNode
-}) {
-  return (
-    <div className="flex flex-col rounded-xl border border-border bg-card p-4 elevation-1">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-label-sm uppercase tracking-wide text-muted-foreground">{rotulo}</p>
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-primary">
-          <Icono className="size-4" aria-hidden />
-        </span>
-      </div>
-      <p className="mt-1 flex items-baseline gap-1.5">
-        <span className="text-h1 tabular-nums text-foreground">{valor}</span>
-        {unidad ? <span className="text-small text-muted-foreground">{unidad}</span> : null}
-      </p>
-      {linea ? (
-        <p
-          className={cn(
-            'mt-0.5 text-caption',
-            lineaTono === 'brand' && 'font-semibold text-primary',
-            lineaTono === 'success' && 'font-semibold text-success'
-          )}
-        >
-          {linea}
-        </p>
-      ) : null}
-      {pie ? (
-        <div className="mt-auto flex items-center justify-between gap-2 rounded-lg bg-muted/60 px-2.5 py-1.5 pt-1.5 text-label-sm text-muted-foreground [&>*]:min-w-0">
-          {pie}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 export default async function AdminDashboard() {
   const user = await requireRole(ADMIN_ROLES)
-  // ÁMBITO EMPRESA: sin empresa activa no hay vista global aquí — el
-  // superadmin elige empresa en plataforma y el staff ve /admin/sin-empresa.
+  // ÁMBITO EMPRESA: sin empresa activa no hay vista global aquí — el superadmin elige empresa en plataforma y el staff ve
+  // /admin/sin-empresa.
   const companyId = await requireCompanyContext(user)
   // Supplier Lite (§6): una empresa SOLO proveedora de Membego vive en su portal.
   const portal = await destinoSiSoloProveedora(companyId)
   if (portal) redirect(portal)
 
-  // Onboarding PRIMERO: mientras la empresa no esté publicada, el asistente es
-  // su "home". Se resuelve antes de cargar el dashboard pesado para no
+  // Todo lo que NO depende de lo demás se lee a la vez: el asistente de onboarding, lo que la persona puede ver y la empresa
+  // (su zona horaria decide dónde empieza «hoy»). Antes eran tres esperas en fila, y el onboarding —once sentencias— iba solo.
+  // QUÉ PUEDE VER QUIEN MIRA se resuelve UNA vez (D-01 y D-07): dinero con `reportes › ver_financieros`, desglose por persona
+  // con `reportes › ver_empleados`, y cada enlace solo si su sección se puede abrir. Es cosmético a propósito: la barrera de
+  // verdad sigue en la guardia de cada sección.
+  const [onboarding, conFinanzas, conEmpleados, abribles, company] = await Promise.all([
+    getOnboardingEmpresa(companyId).catch(() => null),
+    usuarioPuedeFuncion(user, 'reportes', 'ver_financieros'),
+    usuarioPuedeFuncion(user, 'reportes', 'ver_empleados'),
+    seccionesAbribles(user, ADMIN_SECTIONS),
+    conEmpresa(companyId, (tx) =>
+      tx.company.findUnique({ where: { id: companyId }, select: { name: true, moneda: true, idioma: true, zonaHoraria: true } })
+    ).catch(() => null),
+  ])
+  // Mientras la empresa no esté publicada, el asistente es su «home»: se decide ANTES de cargar el Resumen para no
   // desperdiciarlo cuando se va a redirigir igual.
-  const onboarding = await getOnboardingEmpresa(companyId).catch(() => null)
   if (onboarding && !onboarding.publicado && FULL_ADMIN_ROLES.includes(user.metadata.role)) {
     redirect('/onboarding')
   }
-
-  // QUÉ PUEDE VER QUIEN MIRA, resuelto UNA vez (auditoría admin · D-01 y D-07).
-  // El Resumen es la primera pantalla de todo el que entra al panel —también de
-  // Marketing, Supervisor o un cajero—, y pintaba ingresos y atajos como si
-  // todos fueran administradores. Las cifras de dinero exigen la misma función
-  // que Reportes (`reportes › ver_financieros`) y se piden al motor SOLO si se
-  // tiene; cada enlace se pinta solo si su sección se puede abrir. Es cosmético
-  // a propósito: la barrera de verdad sigue en la guardia de cada sección.
-  const [conFinanzas, abribles] = await Promise.all([
-    usuarioPuedeFuncion(user, 'reportes', 'ver_financieros'),
-    seccionesAbribles(user, ADMIN_SECTIONS),
-  ])
   const ve = (href: string) => {
     const seccion = adminSectionForPath(href.split('?')[0])
     return seccion === null || abribles.has(seccion)
   }
-  const conPagos = ve('/admin/pagos')
+  const bloques = bloquesDelResumen({ puede: (s) => abribles.has(s), conFinanzas, conEmpleados })
 
-  let d: DashboardEjecutivo | null = null
-  let company: { name: string; moneda: string; idioma: string; zonaHoraria: string } | null = null
-  let publicada: Awaited<ReturnType<typeof getHomePublicada>> = null
-  let comercio: ResumenComercio | null = null
-  let inventario: ResumenInventario | null = null
-  try {
-    // La empresa se lee ANTES: su zona horaria decide dónde empieza «hoy».
-    company = await conEmpresa(companyId, (tx) =>
-      tx.company.findUnique({
-        where: { id: companyId },
-        select: { name: true, moneda: true, idioma: true, zonaHoraria: true },
-      })
-    )
-    // INV-4c · La tarjeta de inventario es de quien puede ver la sección Inventario; el dinero (valor, margen, lo que costó lo perdido),
-    // de quien además tiene la función `costos`. Sin la sección no se lee nada; sin la función no se lee ni un costo.
-    const userInventario = await requireSection('inventario').catch(() => null)
-    const conCostos = userInventario ? await usuarioPuedeFuncion(userInventario, 'inventario', 'costos') : false
-    ;[d, publicada, comercio, inventario] = await Promise.all([
-      getDashboardEjecutivo(companyId, company?.zonaHoraria || 'America/Santo_Domingo', { conFinanzas, conPagos }),
-      getHomePublicada(companyId).catch(() => null),
-      resumenComercioEmpresa(companyId, company?.zonaHoraria || 'America/Santo_Domingo').catch(() => null),
-      userInventario
-        ? resumenInventarioEmpresa(companyId, company?.zonaHoraria || 'America/Santo_Domingo', { conCostos }).catch((e) => {
-            console.error('[admin-dashboard] inventario', e instanceof Error ? e.message : e)
-            return null
-          })
-        : Promise.resolve(null),
-    ])
-  } catch (e) {
+  const tz = company?.zonaHoraria || TZ_DEFECTO
+  const regional = { moneda: company?.moneda ?? 'DOP', idioma: company?.idioma || 'es-DO', zonaHoraria: tz }
+
+  const datos = await getResumen(companyId, tz, bloques, { conFinanzas, conEmpleados }).catch((e) => {
     console.error('[admin-dashboard]', e)
+    return null
+  })
+  if (!datos) {
+    return <p className="text-muted-foreground">No pudimos cargar el panel en este momento. Intenta de nuevo.</p>
   }
 
-  if (!d) {
-    return (
-      <p className="text-muted-foreground">
-        No pudimos cargar el panel en este momento. Intenta de nuevo.
-      </p>
-    )
-  }
-
-  const tz = company?.zonaHoraria || 'America/Santo_Domingo'
-  const maxVisitas = Math.max(1, ...d.visitasPorDia.map((v) => v.total))
-
-  // «Pico: Sábados» — el día con más canjes de la serie, si hubo alguno.
-  const pico = d.visitasPorDia.reduce(
-    (mejor, v) => (v.total > (mejor?.total ?? 0) ? v : mejor),
-    null as { fecha: string; total: number } | null
-  )
-  const nombrePico = pico
-    ? new Intl.DateTimeFormat('es-DO', { weekday: 'long', timeZone: 'UTC' }).format(
-        new Date(`${pico.fecha}T12:00:00Z`)
-      )
-    : null
-
-  // Sin permiso de finanzas no hay delta: ni la cifra ni su comparación.
-  const deltaIngresos =
-    d.ingresosCobradosMes !== null && d.ingresosMesAnterior !== null
-      ? delta(d.ingresosCobradosMes, d.ingresosMesAnterior)
-      : null
-  const mesActualLabel = new Intl.DateTimeFormat(company?.idioma || 'es-DO', {
-    timeZone: tz,
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date())
-
-  // El hero publicado (si hay): la tarjeta «Estado en App Móvil» enseña lo que
-  // el cliente está viendo AHORA, no una maqueta.
-  const heroBloque = publicada?.bloques.find((b) => b.tipo === 'HERO')
-  let heroSlide: { titulo: string; subtitulo: string } | null = null
-  try {
-    const slides = heroBloque ? leerSlidesEditor(heroBloque.config) : []
-    heroSlide = slides[0] ?? null
-  } catch {
-    heroSlide = null
-  }
-  const bloquesActivos = publicada?.bloques.filter((b) => b.activo).length ?? 0
-
-  // El bloque de Comercio solo enseña lo que esta persona puede abrir (D-07).
-  const verPedidos = ve('/admin/pedidos-membego')
-  const verCatalogo = ve('/admin/catalogo')
-  const verInventario = ve('/admin/inventario')
-  const verOfertas = ve('/admin/deals')
-  const hayComercio = comercio
-    ? (comercio.modulos.pedidos && verPedidos) ||
-      (comercio.modulos.catalogo && (verCatalogo || verInventario)) ||
-      (comercio.modulos.ofertas && verOfertas)
-    : false
+  const fecha = new Intl.DateTimeFormat(regional.idioma, { dateStyle: 'full', timeZone: tz }).format(new Date())
 
   return (
-    <div className="animate-fade-up space-y-6">
-      {/* ── Cabecera del resumen ─────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-h1 text-foreground">Resumen Operativo</h1>
-            {deltaIngresos ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-brand-primary-soft px-2.5 py-1 text-label-md font-semibold text-primary">
-                <TrendingUp className="size-3.5" aria-hidden />
-                {deltaIngresos} vs mes anterior
-              </span>
+    <PanelDs>
+      <ResumenPanel
+        datos={datos}
+        bloques={bloques}
+        ve={ve}
+        company={regional}
+        fecha={fecha}
+        // El asistente lleva a configurar la empresa: solo a quien puede abrir su perfil (D-07).
+        trasCabecera={onboarding && ve('/admin/perfil') ? <OnboardingChecklist onboarding={onboarding} /> : null}
+        alFinal={
+          <>
+            <Suspense fallback={null}>
+              <ComercioResumen companyId={companyId} zonaHoraria={tz} company={regional} ve={ve} conFinanzas={conFinanzas} />
+            </Suspense>
+            {ve('/admin/inventario') ? (
+              <Suspense fallback={null}>
+                <InventarioResumen companyId={companyId} zonaHoraria={tz} company={regional} />
+              </Suspense>
             ) : null}
-          </div>
-          <p className="mt-1 text-small text-muted-foreground">
-            Centro de mando comercial y flujo de canjes de {company?.name ?? 'tu negocio'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-lg border border-border bg-card px-3 py-2 text-label-lg capitalize text-muted-foreground">
-            {mesActualLabel}
-          </span>
-          {ve('/admin/catalogo') ? (
-            <Button asChild variant="secondary" className="rounded-full">
-              <Link href="/admin/catalogo/nuevo">
-                <Plus className="size-4" aria-hidden /> Nuevo producto o servicio
-              </Link>
-            </Button>
-          ) : null}
-          {ve('/admin/scanner') ? (
-            <Button asChild className="rounded-full bg-retail-deep text-white hover:opacity-95">
-              <Link href="/admin/scanner">
-                <QrCode className="size-4" aria-hidden /> Escanear QR
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Onboarding (F5.1): guía hasta publicar el perfil */}
-      {/* El asistente lleva a configurar la empresa: solo a quien puede abrir su perfil (D-07). */}
-      {onboarding && ve('/admin/perfil') && <OnboardingChecklist onboarding={onboarding} />}
-
-      {/* ── Comercio Membego: lo que la empresa vende y le piden hoy ───────── */}
-      {comercio && hayComercio ? (
-        <section aria-labelledby="comercio-membego" className="rounded-xl border border-border bg-card p-4 elevation-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="comercio-membego" className="flex items-center gap-2 text-label-lg text-foreground">
-              <ShoppingBag className="size-4 text-primary" aria-hidden /> Comercio Membego
-            </h2>
-            <span className="text-caption">Catálogo → Inventario → Ofertas → Pedidos</span>
-          </div>
-          <dl className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {comercio.modulos.pedidos && verPedidos ? (
-              <>
-                <Link href="/admin/pedidos-membego?estado=AWAITING_MERCHANT" className={cn('rounded-lg border p-3 transition hover:bg-muted/40', comercio.pedidosNuevos > 0 ? 'border-primary/40 bg-primary/5' : 'border-border')}>
-                  <dt className="text-caption">Pedidos nuevos</dt>
-                  <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.pedidosNuevos)}</dd>
-                  <p className="text-label-sm text-muted-foreground">{comercio.pedidosNuevos > 0 ? 'Esperan tu respuesta' : 'Nada pendiente'}</p>
-                </Link>
-                <Link href="/admin/pedidos-membego" className="rounded-lg border border-border p-3 transition hover:bg-muted/40">
-                  <dt className="text-caption">En curso</dt>
-                  <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.pedidosEnCurso)}</dd>
-                  <p className="text-label-sm text-muted-foreground">Aceptados o listos para recoger</p>
-                </Link>
-                {conFinanzas ? (
-                  <div className="rounded-lg border border-border p-3">
-                    <dt className="text-caption">Ventas Membego del mes</dt>
-                    <dd className="text-h3 tabular-nums text-foreground">{formatMoney(Number(comercio.ventasMes), company)}</dd>
-                    <p className="text-label-sm text-muted-foreground">{fmt(comercio.pedidosCompletadosMes)} pedidos completados</p>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-            {comercio.modulos.catalogo ? (
-              <>
-                {verCatalogo ? (
-                  <Link href="/admin/catalogo" className="rounded-lg border border-border p-3 transition hover:bg-muted/40">
-                    <dt className="flex items-center gap-1 text-caption"><Package className="size-3.5" aria-hidden /> Catálogo</dt>
-                    <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.productosPublicados)}</dd>
-                    <p className="text-label-sm text-muted-foreground">{comercio.productosTotal === 0 ? 'Crea tu primer producto' : `publicados de ${fmt(comercio.productosTotal)}`}</p>
-                  </Link>
-                ) : null}
-                {verInventario ? (
-                  <Link href="/admin/inventario?estado=BAJO" className={cn('rounded-lg border p-3 transition hover:bg-muted/40', comercio.stockBajo > 0 ? 'border-warning/50 bg-warning/5' : 'border-border')}>
-                    <dt className="flex items-center gap-1 text-caption"><Warehouse className="size-3.5" aria-hidden /> Stock bajo</dt>
-                    <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.stockBajo)}</dd>
-                    <p className="text-label-sm text-muted-foreground">{comercio.stockBajo > 0 ? 'Productos por reponer' : 'Todo con existencias'}</p>
-                  </Link>
-                ) : null}
-              </>
-            ) : null}
-            {comercio.modulos.ofertas && verOfertas ? (
-              <Link href="/admin/deals" className="rounded-lg border border-border p-3 transition hover:bg-muted/40">
-                <dt className="flex items-center gap-1 text-caption"><BadgePercent className="size-3.5" aria-hidden /> Ofertas activas</dt>
-                <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.ofertasActivas)}</dd>
-                <p className="text-label-sm text-muted-foreground">{fmt(comercio.canjesMes)} canjes este mes</p>
-              </Link>
-            ) : null}
-          </dl>
-        </section>
-      ) : null}
-
-      {/* ── Inventario (INV-4c): existencias, margen del mes y lo perdido ─── */}
-      {inventario ? <TarjetaInventario resumen={inventario} company={company} /> : null}
-
-      {/* ── Avisos: solo los que tienen algo que decir ───────────────────── */}
-      {d.porVencer7d + d.pagosPendientes === 0 && d.topPromos.length === 0 ? (
-        <p className="flex items-center gap-2 rounded-xl border border-border bg-card p-4 text-small text-muted-foreground">
-          <CheckCircle2 className="size-5 shrink-0 text-success" aria-hidden />
-          Todo al día: sin pagos por validar ni membresías a punto de vencer.
-        </p>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-3">
-          {d.porVencer7d > 0 ? (
-            <div className="flex flex-col rounded-xl border border-border bg-card p-4 elevation-1">
-              <div className="flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-                  <CircleAlert className="size-5" aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-label-lg text-foreground">
-                    {d.porVencer7d} {d.porVencer7d === 1 ? 'Membresía' : 'Membresías'} en Riesgo
-                  </p>
-                  <p className="text-caption">Vencen en los próximos 7 días</p>
-                </div>
-                <span className="shrink-0 rounded-full bg-destructive/10 px-2.5 py-1 text-label-sm font-semibold text-destructive">
-                  Crítico
-                </span>
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <span className="flex -space-x-1.5" aria-hidden>
-                  {d.porVencerNombres.map((n) => (
-                    <span
-                      key={n}
-                      className="flex size-7 items-center justify-center rounded-full border-2 border-card bg-brand-primary-soft text-label-sm font-semibold text-primary"
-                    >
-                      {iniciales(n)}
-                    </span>
-                  ))}
-                  {d.porVencer7d > d.porVencerNombres.length ? (
-                    <span className="flex size-7 items-center justify-center rounded-full border-2 border-card bg-muted text-label-sm font-semibold text-muted-foreground">
-                      +{d.porVencer7d - d.porVencerNombres.length}
-                    </span>
-                  ) : null}
-                </span>
-                {ve('/admin/riesgo') ? (
-                  <Link
-                    href="/admin/riesgo?vence=7&sinVisitas=0"
-                    className="inline-flex items-center gap-1 text-label-lg text-primary hover:underline"
-                  >
-                    Renovar ahora <ArrowRight className="size-4" aria-hidden />
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          {d.pagosPendientes > 0 ? (
-            <div className="flex flex-col rounded-xl border border-border bg-card p-4 elevation-1">
-              <div className="flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-primary">
-                  <Banknote className="size-5" aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-label-lg text-foreground">
-                    {d.pagosPendientes}{' '}
-                    {d.pagosPendientes === 1 ? 'Pago por Validar' : 'Pagos por Validar'}
-                  </p>
-                  <p className="text-caption">
-                    {d.transferenciasMonto !== null && d.transferenciasMonto > 0
-                      ? `Transferencias declaradas · ${formatMoney(d.transferenciasMonto, company)}`
-                      : 'En la cola de validación'}
-                  </p>
-                </div>
-                <span className="shrink-0 rounded-full bg-warning/10 px-2.5 py-1 text-label-sm font-semibold text-warning">
-                  Pendientes
-                </span>
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <span className="truncate text-caption">
-                  {d.ultimaTransferencia != null
-                    ? `Última: ${formatMoney(d.ultimaTransferencia, company)}`
-                    : ''}
-                </span>
-                <Button asChild size="sm" className="rounded-full bg-retail-deep text-white hover:opacity-95">
-                  <Link href="/admin/pagos">Revisar y Aprobar</Link>
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
-          {d.topPromos[0] ? (
-            <div className="flex flex-col rounded-xl border border-border bg-card p-4 elevation-1">
-              <div className="flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-primary">
-                  <Megaphone className="size-5" aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-label-lg text-foreground">
-                    Campaña: {d.topPromos[0].titulo}
-                  </p>
-                  <p className="text-caption">
-                    {fmt(d.topPromos[0].vistas)} vistas registradas en app
-                  </p>
-                </div>
-                {d.topPromos[0].vistas > 0 ? (
-                  <span className="shrink-0 rounded-full bg-retail-cyan/15 px-2.5 py-1 text-label-sm font-semibold text-retail-deep">
-                    {Math.min(
-                      100,
-                      Math.round((d.topPromos[0].guardadas / d.topPromos[0].vistas) * 100)
-                    )}
-                    % Guardan
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <span
-                  className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
-                  role="img"
-                  aria-label={`${d.topPromos[0].guardadas} de ${d.topPromos[0].vistas} vistas la guardaron`}
-                >
-                  <span
-                    className="block h-full rounded-full bg-primary"
-                    style={{
-                      width: `${Math.min(100, Math.round((d.topPromos[0].guardadas / Math.max(1, d.topPromos[0].vistas)) * 100))}%`,
-                    }}
-                  />
-                </span>
-                {ve('/admin/promociones') ? (
-                  <Link
-                    href={`/admin/promociones/${d.topPromos[0].id}/editar`}
-                    className="shrink-0 text-label-lg text-primary hover:underline"
-                  >
-                    Gestionar oferta
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      )}
-
-      {/* ── KPI del período ──────────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {d.ingresosCobradosMes !== null ? (
-          <Kpi
-            icono={Wallet}
-            rotulo="Ingresos del mes"
-            valor={formatMoney(d.ingresosCobradosMes, company)}
-            linea={deltaIngresos ? `${deltaIngresos} vs mes anterior` : 'Membresías con pago confirmado'}
-            lineaTono={deltaIngresos ? 'success' : 'muted'}
-            pie={
-              <>
-                <span className="truncate">
-                  Recurrente esperado: {formatMoney(d.recurrenteEsperado ?? 0, company)}
-                </span>
-                <span className="shrink-0">
-                  Anterior: {formatMoney(d.ingresosMesAnterior ?? 0, company)}
-                </span>
-              </>
-            }
-          />
-        ) : (
-          // Sin `reportes › ver_financieros`: ni la cifra ni su rastro (D-01). Mismo
-          // rótulo y misma caja para que la cuadrícula no se mueva; «Sin permiso» es
-          // lo que escribe `KpiReporte` en Reportes.
-          <Kpi
-            icono={Wallet}
-            rotulo="Ingresos del mes"
-            valor="Sin permiso"
-            linea="Tu rol no incluye las cifras de dinero"
-            lineaTono="muted"
-          />
-        )}
-        <Kpi
-          icono={IdCard}
-          rotulo="Membresías activas"
-          valor={fmt(d.membresiasActivas)}
-          unidad="vigentes"
-          linea={
-            d.porVencer7d > 0 ? `${d.porVencer7d} por vencer en 7 días` : 'Ninguna vence esta semana'
-          }
-          lineaTono={d.porVencer7d > 0 ? 'brand' : 'muted'}
-          pie={
-            d.topPlanes.length > 0 ? (
-              <>
-                {d.topPlanes.map((p) => (
-                  <span key={p.nombre} className="truncate">
-                    <span aria-hidden>● </span>
-                    {p.total} {p.nombre}
-                  </span>
-                ))}
-              </>
-            ) : undefined
-          }
-        />
-        <Kpi
-          icono={QrCode}
-          rotulo="Canjes hoy"
-          valor={fmt(d.visitasHoy)}
-          unidad="validados"
-          linea={`${fmt(d.visitasMes)} en el mes`}
-          lineaTono="brand"
-          pie={
-            d.citasHoy > 0 ? (
-              <>
-                <span className="truncate">Agenda de hoy</span>
-                <span className="shrink-0 font-semibold text-foreground">
-                  {d.citasHoy} {d.citasHoy === 1 ? 'cita' : 'citas'}
-                </span>
-              </>
-            ) : undefined
-          }
-        />
-        <Kpi
-          icono={Users}
-          rotulo="Clientes registrados"
-          valor={fmt(d.clientesTotal)}
-          unidad="socios"
-          linea={`+${fmt(d.clientesNuevos30d)} nuevos este período`}
-          lineaTono="brand"
-          pie={
-            <>
-              <span className="truncate">Seguidores</span>
-              <span className="shrink-0 font-semibold text-foreground">
-                {fmt(d.seguidores)} (+{d.nuevosSeguidores30d})
-              </span>
-            </>
-          }
-        />
-      </div>
-
-      {/* ── Canjes de los últimos 14 días ────────────────────────────────── */}
-      <section className="rounded-xl border border-border bg-card p-5 elevation-1">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h2 className="flex items-center gap-2 text-h3 text-foreground">
-              Visitas y Canjes validados
-              <span className="text-small font-normal text-muted-foreground">
-                (Últimos 14 días)
-              </span>
-              {nombrePico && (pico?.total ?? 0) > 0 ? (
-                <span className="rounded-full bg-retail-cyan/15 px-2.5 py-1 text-label-sm font-semibold capitalize text-retail-deep">
-                  Pico: {nombrePico}
-                </span>
-              ) : null}
-            </h2>
-            <p className="mt-0.5 text-caption">
-              Canjes validados en caja, en el calendario del negocio
-            </p>
-          </div>
-          <span className="flex items-center gap-1.5 text-label-md text-muted-foreground">
-            <span className="size-2.5 rounded-full bg-primary" aria-hidden /> Canjes validados
-          </span>
-        </div>
-
-        <div className="mt-4 flex h-40 items-end gap-1.5">
-          {d.visitasPorDia.map((v, idx) => (
-            <div
-              key={v.fecha}
-              className="animate-grow-y group relative flex-1 rounded-t-lg bg-primary/80 transition-colors hover:bg-primary"
-              style={{
-                height: `${Math.max(3, (v.total / maxVisitas) * 100)}%`,
-                animationDelay: `${idx * 35}ms`,
-              }}
-              title={`${v.fecha}: ${v.total} canje(s)`}
-            />
-          ))}
-        </div>
-        <div className="mt-1.5 flex gap-1.5">
-          {d.visitasPorDia.map((v, idx) => (
-            <span
-              key={v.fecha}
-              className={cn(
-                'flex-1 text-center text-label-sm text-muted-foreground',
-                idx === d.visitasPorDia.length - 1 && 'font-bold text-primary'
-              )}
-            >
-              {idx === d.visitasPorDia.length - 1 ? `Hoy (${v.total})` : v.fecha.slice(8)}
-            </span>
-          ))}
-        </div>
-
-        {/* La franja del pie lleva cifras REALES del período, no las del
-            mockup: aquí viven las referencias que antes eran su propia lista. */}
-        <dl className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border pt-3 text-label-md text-muted-foreground">
-          <div className="flex items-baseline gap-1.5">
-            <dt>Visitas este mes:</dt>
-            <dd className="font-bold text-foreground">{fmt(d.visitasMes)}</dd>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <dt>Promociones activas:</dt>
-            <dd className="font-bold text-foreground">{fmt(d.promosActivas)}</dd>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <dt>Referidos completados:</dt>
-            <dd className="font-bold text-foreground">{fmt(d.referidosCompletados)}</dd>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <dt>Clientes sin visitas 30 días:</dt>
-            <dd>
-              {ve('/admin/riesgo') ? (
-                <Link
-                  href="/admin/riesgo?sinVisitas=30&vence=0"
-                  className="font-bold text-primary hover:underline"
-                >
-                  {fmt(d.clientesEnRiesgo)}
-                </Link>
-              ) : (
-                <span className="font-bold text-foreground">{fmt(d.clientesEnRiesgo)}</span>
-              )}
-            </dd>
-          </div>
-        </dl>
-      </section>
-
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-        {/* ── Actividad en vivo ──────────────────────────────────────────── */}
-        <section className="rounded-xl border border-border bg-card p-5 elevation-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-h3 text-foreground">
-              <span className="size-2 rounded-full bg-success" aria-hidden />
-              Canjes y Actividad en Vivo
-            </h2>
-            {ve('/admin/actividad') ? (
-              <Link
-                href="/admin/actividad"
-                className="text-label-lg text-primary hover:underline"
-              >
-                Ver registro completo
-              </Link>
-            ) : null}
-          </div>
-
-          {d.actividad.length === 0 ? (
-            <p className="mt-3 text-small text-muted-foreground">Sin actividad registrada.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {d.actividad.slice(0, 5).map((a) => (
-                <li
-                  key={a.id}
-                  className="flex items-center gap-3 rounded-lg bg-muted/60 px-3 py-2.5"
-                >
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-label-lg text-primary">
-                    {a.autor ? iniciales(a.autor) : <Activity className="size-4" aria-hidden />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-label-lg text-foreground">
-                        {a.autor ?? 'Sistema'}
-                      </span>
-                      <span className="rounded-full bg-card px-2 py-0.5 text-label-sm font-semibold text-muted-foreground">
-                        {ACCION_LABEL[a.accion] ?? a.accion}
-                      </span>
-                    </span>
-                    <span className="block truncate text-caption">{a.entidadTipo}</span>
-                  </span>
-                  <span className="shrink-0 text-label-sm text-muted-foreground">
-                    {fmtHora(a.fecha, tz)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <p className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3 text-label-md text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <QrCode className="size-4" aria-hidden />
-              Validaciones de hoy:{' '}
-              <span className="font-bold text-foreground">{fmt(d.visitasHoy)} canjes</span>
-            </span>
-            {ve('/admin/registros') ? (
-              <Link href="/admin/registros" className="text-primary hover:underline">
-                Auditoría rápida
-              </Link>
-            ) : null}
-          </p>
-        </section>
-
-        {/* ── Estado en App Móvil ────────────────────────────────────────── */}
-        <section className="rounded-xl border border-border bg-card p-5 elevation-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-h3 text-foreground">
-              <Smartphone className="size-4" aria-hidden /> Estado en App Móvil
-            </h2>
-            <span
-              className={cn(
-                'rounded-full px-2.5 py-1 text-label-sm font-semibold',
-                publicada?.estado === 'PUBLICADA'
-                  ? 'bg-success/10 text-success'
-                  : 'bg-muted text-muted-foreground'
-              )}
-            >
-              {publicada?.estado === 'PUBLICADA'
-                ? 'Público Ahora'
-                : publicada?.estado === 'PAUSADA'
-                  ? 'Pausado'
-                  : 'Sin publicación'}
-            </span>
-          </div>
-
-          {heroSlide ? (
-            <>
-              <p className="mt-3 flex items-center justify-between text-label-sm uppercase tracking-wide text-muted-foreground">
-                Banner principal activo
-                <span>
-                  {bloquesActivos} {bloquesActivos === 1 ? 'bloque' : 'bloques'}
-                </span>
-              </p>
-              <Atajo
-                href="/admin/personalizacion"
-                ok={ve('/admin/personalizacion')}
-                className="retail-header mt-2 block rounded-lg p-4 text-white outline-none transition hover:opacity-95 focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <p className="text-label-sm uppercase tracking-wide text-white">
-                  {publicada?.territorio ?? company?.name}
-                </p>
-                <p className="mt-0.5 text-h3 text-white">{heroSlide.titulo}</p>
-                {heroSlide.subtitulo ? (
-                  <p className="mt-0.5 line-clamp-2 text-caption text-white">
-                    {heroSlide.subtitulo}
-                  </p>
-                ) : null}
-              </Atajo>
-            </>
-          ) : (
-            <p className="mt-3 rounded-lg bg-muted/60 p-3 text-caption">
-              El Inicio del cliente aún no tiene composición publicada.{' '}
-              {ve('/admin/personalizacion') ? (
-                <Link href="/admin/personalizacion" className="font-semibold text-primary hover:underline">
-                  Componer y publicar
-                </Link>
-              ) : null}
-            </p>
-          )}
-
-          {d.topPromos.length > 0 ? (
-            <>
-              <p className="mt-4 flex items-center justify-between text-label-sm uppercase tracking-wide text-muted-foreground">
-                Promociones con más vistas
-                {ve('/admin/promociones') ? (
-                  <Link
-                    href="/admin/promociones"
-                    className="font-semibold normal-case text-primary hover:underline"
-                  >
-                    Editar
-                  </Link>
-                ) : null}
-              </p>
-              <ul className="mt-2 space-y-2">
-                {d.topPromos.slice(0, 2).map((p) => (
-                  <li
-                    key={p.id}
-                    className="flex items-center gap-2.5 rounded-lg bg-muted/60 px-3 py-2.5"
-                  >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-card text-primary">
-                      <Megaphone className="size-4" aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-label-lg text-foreground">
-                        {p.titulo}
-                      </span>
-                      <span className="block text-label-sm text-muted-foreground">
-                        {fmt(p.vistas)} vistas · {fmt(p.guardadas)} guardadas
-                      </span>
-                    </span>
-                    <span className="shrink-0 rounded-full bg-success/10 px-2 py-0.5 text-label-sm font-semibold text-success">
-                      Activa
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-
-          {d.citasHoy > 0 ? (
-            <p className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-3 text-label-md text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <CalendarDays className="size-4" aria-hidden /> Agenda de hoy
-              </span>
-              {ve('/admin/citas') ? (
-                <Link href="/admin/citas" className="font-bold text-primary hover:underline">
-                  {d.citasHoy} {d.citasHoy === 1 ? 'cita' : 'citas'}
-                </Link>
-              ) : (
-                <span className="font-bold text-foreground">
-                  {d.citasHoy} {d.citasHoy === 1 ? 'cita' : 'citas'}
-                </span>
-              )}
-            </p>
-          ) : null}
-        </section>
-      </div>
-
-      {/* ── Recomendaciones y atajos que no viven arriba ─────────────────── */}
-      <section className="space-y-3">
-          {/* Una recomendación cuyo destino no se puede abrir no se ofrece (D-07). */}
-          {d.recomendaciones.filter((r) => ve(r.href)).map((r) => (
-            <p
-              key={r.texto}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4"
-            >
-              <span className="flex min-w-0 items-center gap-2.5 text-small text-foreground">
-                <Lightbulb className="size-5 shrink-0 text-primary" aria-hidden />
-                {r.texto}
-              </span>
-              <Button asChild size="sm" variant="outline" className="rounded-full">
-                <Link href={r.href}>
-                  {r.cta} <ArrowRight aria-hidden />
-                </Link>
-              </Button>
-            </p>
-          ))}
-          <div className="flex flex-wrap gap-2">
-            {conPagos ? (
-              <Button asChild size="sm" variant="outline" className="rounded-full">
-                <Link href="/admin/pagos">
-                  <Wallet className="size-4" aria-hidden /> Validar pagos
-                </Link>
-              </Button>
-            ) : null}
-            {ve('/admin/notificaciones') ? (
-              <Button asChild size="sm" variant="outline" className="rounded-full">
-                <Link href="/admin/notificaciones">
-                  <Share2 className="size-4" aria-hidden /> Enviar notificación
-                </Link>
-              </Button>
-            ) : null}
-          </div>
-      </section>
-    </div>
+          </>
+        }
+      />
+    </PanelDs>
   )
 }

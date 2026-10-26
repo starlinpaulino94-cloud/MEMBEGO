@@ -57,11 +57,11 @@ const TECHOS: Record<string, number> = {
   // `origin/main` (4243a0f8). Las cifras del informe 07 se midieron sobre un código anterior y ya no coinciden (p. ej. las variables
   // con hex de `globals.css` pasaron de 31 a 65): el techo es el de hoy, no el del informe. Cada fase de rediseño baja los suyos aquí
   // mismo, en el commit que los baja.
-  h1Crudo: 46,
+  h1Crudo: 45,
   botonCrudo: 39,
   titulo2xlBold: 30,
-  tarjetaLocal: 24,
-  tablaCruda: 54,
+  tarjetaLocal: 22,
+  tablaCruda: 53,
   variablesHexEnGlobalsCss: 65,
   mapasDeEstado: 58,
   componentesSinUso: 15,

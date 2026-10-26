@@ -264,7 +264,7 @@ Una sola app Next, un solo backend, una sola autenticación. Lo que cambió es *
 | **Enlaces compartidos** | Invitaciones y enlaces cortos que llevan a la landing, al registro o a la app. | 2 | 2 |
 | **Acceso** | Entrar, registrarse, recuperar, confirmar y aceptar invitaciones. | 8 | 3 |
 | **App del cliente** | Todo lo que el cliente hace: comprar, reservar, contratar, reclamar, pagar. | 70 | 0 |
-| **Paneles** | Administrador, superadmin, empleado, vendedor y asistente de negocio. | 309 | 42 |
+| **Paneles** | Administrador, superadmin, empleado, vendedor y asistente de negocio. | 310 | 42 |
 | **API** | Handlers de servidor (`/api/**`, incluida la API v1 que usa la app móvil). | 0 | 141 |
 | **Sistema** | Páginas de error, sin conexión, imágenes para compartir, `robots` y `sitemap`. | 1 | 6 |
 
@@ -276,7 +276,7 @@ Una sola app Next, un solo backend, una sola autenticación. Lo que cambió es *
 
 **App del cliente** (70): `/cliente/ajustes` · `/cliente/ayuda` · `/cliente/ayuda/[id]` · `/cliente/bienvenida` · `/cliente/bienvenida-ref/[companySlug]` · `/cliente/bonos` · `/cliente/buscar` · `/cliente/campanas` · `/cliente/campanas/[code]` · `/cliente/carrito` · `/cliente/carrito/excursiones` · `/cliente/carrito/pagar/[companySlug]` · `/cliente/celebracion` · `/cliente/cerca` · `/cliente/citas` · `/cliente/compras` · `/cliente/compras/[id]` · `/cliente/cupones` · `/cliente/dashboard` · `/cliente/empresas` · `/cliente/empresas/[companySlug]` · `/cliente/empresas/[companySlug]/catalogo/[itemSlug]` · `/cliente/empresas/[companySlug]/excursiones` · `/cliente/empresas/[companySlug]/excursiones/[excursionSlug]` · `/cliente/establecer-contrasena` · `/cliente/excursiones` · `/cliente/excursiones/[reservaId]` · `/cliente/excursiones/buscar` · `/cliente/explorar` · `/cliente/fidelizacion` · `/cliente/historial` · `/cliente/inicio` · `/cliente/intereses` · `/cliente/invita-y-gana` · `/cliente/membresia` · `/cliente/membresias-membego` · `/cliente/menu` · `/cliente/mis-excursiones` · `/cliente/mis-excursiones/[reservaId]` · `/cliente/mis-promociones` · `/cliente/mis-promociones/[id]` · `/cliente/mis-promociones/[id]/agendar` · `/cliente/mis-promociones/regalo/[invitadoId]` · `/cliente/novedades` · `/cliente/oferta/[codigo]` · `/cliente/ofertas-membego/[slug]` · `/cliente/ofertas/[dealId]` · `/cliente/pagos` · `/cliente/pagos/comprobante/[id]` · `/cliente/pedidos` · `/cliente/pedidos/[id]` · `/cliente/perfil` · `/cliente/planes` · `/cliente/planes/[planId]` · `/cliente/promociones` · `/cliente/promociones/[id]` · `/cliente/qr` · `/cliente/referidos` · `/cliente/regalos` · `/cliente/regalos/enviar` · `/cliente/regalos/giftcard` · `/cliente/regalos/regalar` · `/cliente/ruleta` · `/cliente/vehiculos` · `/cliente/vehiculos/nuevo` · `/cliente/visitas` · `/cliente/visitas/[id]` · `/comprobante/[token]` · `/membresia/[membresiaId]` · `/mis-membresias`
 
-**Paneles**: `/admin` (240) · `/empleado` (2) · `/onboarding` (1) · `/superadmin` (102) · `/vendedor` (6)
+**Paneles**: `/admin` (241) · `/empleado` (2) · `/onboarding` (1) · `/superadmin` (102) · `/vendedor` (6)
 
 <!-- RUTAS-POR-ESPACIO:FIN -->
 

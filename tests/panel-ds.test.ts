@@ -65,13 +65,48 @@ test('«pendiente» está expuesto a Tailwind UNA vez y su token existe en claro
   assert.equal((CSS.match(/^\s*--pending: /gm) ?? []).length >= 2, true, 'el token --pending en al menos dos temas')
 })
 
-test('NADIE enciende `.panel-ds` ni importa la fuente del panel todavía (la fase 4 no cambia pantallas)', () => {
-  const usos = archivos(join(RAIZ, 'src'))
+const sinComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+/**
+ * QUIÉN ENCIENDE `.panel-ds` (fase 5). Hasta la fase 4 nadie; desde la 5, SOLO las pantallas que ella rediseña, envueltas en
+ * `<PanelDs>`: el resto del panel no cambia ni un píxel hasta que las fases 6 y 7 lo revisen. Esta lista solo crece junto a
+ * un rediseño y a su medición antes y después; si crece sin él, esta prueba falla.
+ */
+const PANTALLAS_CON_PANEL_DS = [
+  'src/app/(admin)/admin/dashboard/page.tsx',
+  'src/app/(admin)/admin/pagos/page.tsx',
+  'src/app/(admin)/admin/clientes/page.tsx',
+  'src/app/(admin)/admin/clientes/[id]/page.tsx',
+  'src/app/(admin)/admin/ofertas/page.tsx',
+  'src/app/(admin)/admin/ofertas/crear/page.tsx',
+]
+
+test('solo el contenedor `PanelDs` toca la fuente y la clase del ámbito; solo las pantallas rediseñadas usan el contenedor', () => {
+  const fuentes = archivos(join(RAIZ, 'src'))
+  const tocaElAmbito = fuentes
     .filter((p) => !rel(p).endsWith('app/globals.css'))
     .filter((p) => !rel(p).endsWith('components/layout/fuente-panel.ts'))
-    .filter((p) => /panel-ds|fuentePanel|fuente-panel/.test(readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
+    .filter((p) => !rel(p).endsWith('components/layout/PanelDs.tsx'))
+    .filter((p) => /panel-ds|fuentePanel|fuente-panel/.test(sinComentarios(readFileSync(p, 'utf8'))))
     .map(rel)
-  assert.deepEqual(usos, [], 'Algo enciende el ámbito del panel. Es la fase 5 y requiere comparar capturas: actualiza esta prueba en ese commit.')
+  assert.deepEqual(tocaElAmbito, [], 'Solo `PanelDs.tsx` puede importar la fuente del panel o escribir `panel-ds`.')
+
+  const usanElContenedor = fuentes
+    .filter((p) => !rel(p).endsWith('components/layout/PanelDs.tsx'))
+    .filter((p) => /components\/layout\/PanelDs/.test(sinComentarios(readFileSync(p, 'utf8'))))
+    .map(rel)
+    .sort()
+  assert.deepEqual(
+    usanElContenedor,
+    [...PANTALLAS_CON_PANEL_DS].sort(),
+    'Una pantalla nueva enciende el ámbito del panel: añádela aquí SOLO con su medición antes y después (docs/auditoria-admin/fase-5).'
+  )
+})
+
+test('el panel de empresa en su conjunto NO enciende el ámbito: `AppShell` y los layouts siguen como estaban', () => {
+  for (const f of ['src/components/layout/AppShell.tsx', 'src/app/(admin)/layout.tsx']) {
+    assert.doesNotMatch(sinComentarios(readFileSync(join(RAIZ, f), 'utf8')), /panel-ds|PanelDs|fuentePanel/, f)
+  }
 })
 
 test('el módulo de la fuente del panel carga Inter como variable, sin precarga', () => {
