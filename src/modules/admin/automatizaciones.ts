@@ -1,6 +1,7 @@
 import { conEmpresa, sinEmpresa, type Tx } from '@/lib/tenant'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
 import { getUmbralesRetencion } from '@/modules/riesgo/umbrales'
+import { puedeCobrarToken } from '@/modules/pagos/cardnetToken'
 import { enviarPushNotificaciones, type NotificacionPush } from '@/modules/notificaciones/push'
 
 // F4.7: motor de automatizaciones. Reglas basadas en tiempo que generan
@@ -78,6 +79,14 @@ export async function ejecutarAutomatizacionesEmpresa(
   // esta. Ese «a veces sí» es lo que hace que un agotamiento de pool sea tan
   // difícil de reproducir.
   const umbralesEmpresa = await getUmbralesRetencion(companyId)
+  // Por la misma razón, fuera de la transacción: consulta capacidades.
+  //
+  // Quien se renueva SOLA recibe el aviso de renovación (`avisosRenovacion`, que
+  // dice «se renovará automáticamente»), y el recordatorio de la regla 2 dice
+  // justo lo contrario: «renuévala». Los dos el mismo día serían una
+  // contradicción. Solo se excluye a esos clientes si la empresa puede cobrar de
+  // verdad: si no, el aviso de renovación no sale y se quedarían sin recordatorio.
+  const renuevaSola = await puedeCobrarToken(companyId).catch(() => false)
   const notificationsPush: NotificacionPush[] = []
 
   const resultado = await conEmpresa(companyId, async (tx) => {
@@ -134,6 +143,17 @@ export async function ejecutarAutomatizacionesEmpresa(
         companyId,
         estado: 'ACTIVA',
         fechaVencimiento: { gte: now, lte: en7dias },
+        // Las tres cosas que hacen que el cobro automático sí corra: lo mismo que
+        // exige `ejecutarAvisosDeRenovacion` para avisarle.
+        ...(renuevaSola
+          ? {
+              NOT: {
+                autoRenovar: true,
+                tarjetaTokenizada: { activa: true },
+                consentimientosPago: { some: { tipo: 'RENOVACION_AUTOMATICA', revocadoAt: null } },
+              },
+            }
+          : {}),
       },
       select: {
         id: true,

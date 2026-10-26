@@ -42,6 +42,7 @@ import {
   Scale,
   ListChecks,
   ShieldAlert,
+  ShieldCheck,
   Share2,
   SlidersHorizontal,
   TextSearch,
@@ -1665,6 +1666,13 @@ const G_SA_NEGOCIO: NavGroup = {
       icon: UserCog,
       description: 'Usuarios y roles de la plataforma.',
       keywords: ['usuarios', 'cuentas', 'personas'],
+    },
+    {
+      href: '/superadmin/identidad',
+      label: 'Identidad',
+      icon: ShieldCheck,
+      description: 'Verificación de identidad: casos, incidencias y estado.',
+      keywords: ['identidad', 'verificacion', 'cedula', 'kyc', 'selfie', 'incidencias'],
     },
     {
       href: '/superadmin/planes',

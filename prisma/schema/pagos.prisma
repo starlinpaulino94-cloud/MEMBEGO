@@ -142,3 +142,58 @@ model CardnetCaptureSession {
   @@index([estado, venceAt])
   @@map("cardnet_capture_sessions")
 }
+
+// ─── Consentimiento sobre la tarjeta ─────────────────────────────────────────
+
+/// Lo que el cliente aceptó sobre su tarjeta, con la prueba de cuándo y bajo
+/// qué texto. GUARDAR la tarjeta y RENOVAR automáticamente son DOS
+/// consentimientos distintos con DOS operaciones distintas: el primero permite
+/// pagos que el cliente inicia; el segundo permite cobros SIN él.
+///
+/// Solo se inserta. Lo único que se modifica de una fila es `revocadoAt`, y una
+/// sola vez: retirar el consentimiento no borra que existió. Ante una disputa o
+/// un contracargo, esta fila es la evidencia.
+///
+/// Índices únicos parciales (solo en la migración `20261077_consentimientos_pago`,
+/// Prisma no los expresa):
+///   · UNIQUE (tipo, tarjetaId) WHERE vigente y sin membresía — un consentimiento
+///     de guardar vigente por tarjeta.
+///   · UNIQUE (tipo, membershipId) WHERE vigente — uno de renovar por membresía.
+model ConsentimientoPago {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  /// 'GUARDAR_TARJETA' | 'RENOVACION_AUTOMATICA' (validado en código y por CHECK).
+  tipo String
+
+  /// A qué tarjeta se refiere. La fila sobrevive si la tarjeta se borra.
+  tarjetaId    String?
+  tarjeta      TarjetaTokenizada? @relation(fields: [tarjetaId], references: [id], onDelete: SetNull)
+  /// A qué membresía, cuando el consentimiento es de renovar.
+  membershipId String?
+  membership   Membership?        @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  /// 'CLIENTE' = lo aceptó en pantalla. 'HEREDADO' = la tarjeta o la renovación
+  /// existían antes de que hubiera este registro: se asume el consentimiento que
+  /// la pantalla de entonces pedía, y queda marcado para poder pedir una
+  /// reconfirmación.
+  origen       String @default("CLIENTE")
+  /// Identificador del texto que se le mostró (el texto vive en código, por
+  /// versión, y una versión publicada no se edita). Heredados: 'previo-a-registro'.
+  textoVersion String
+
+  otorgadoAt DateTime  @default(now())
+  revocadoAt DateTime?
+
+  ipAddress String?
+  userAgent String?
+
+  @@index([companyId])
+  @@index([clienteId, tipo, revocadoAt])
+  @@index([tarjetaId])
+  @@index([membershipId, tipo])
+  @@map("consentimientos_pago")
+}

@@ -8,6 +8,7 @@ import type { Prisma } from '@prisma/client'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { plural } from '@/lib/plural'
 import { explicarNoBorrable } from '@/modules/membresias/borrable'
+import { revocarConsentimientos } from '@/modules/pagos/consentimientos'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
 import { leerPlanDeFormulario, type ErroresPlan, type ValoresPlan } from '@/modules/planes/formulario'
 import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/membresia/eventos'
@@ -448,6 +449,11 @@ export async function cancelarMembresia(
       await tx.membership.update({
         where: { id: membershipId },
         data: { estado: 'CANCELADA', autoRenovar: false },
+      })
+      // Apagar la renovación es RETIRAR el consentimiento de renovar.
+      await revocarConsentimientos(tx, {
+        tipo: 'RENOVACION_AUTOMATICA',
+        membershipId,
       })
       await tx.auditLog.create({
         data: {

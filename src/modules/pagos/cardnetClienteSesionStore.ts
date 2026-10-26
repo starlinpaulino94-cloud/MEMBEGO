@@ -1,8 +1,7 @@
 import 'server-only'
-import { randomInt } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
-import { CARDNET_SESSION_STATES } from '@/modules/pagos/cardnetClientCore'
+import { CARDNET_SESSION_STATES, stablePurchaseId } from '@/modules/pagos/cardnetClientCore'
 import { ACTIVATION_CLAIM_STALE_MS, CLAIM_STALE_MS } from '@/modules/pagos/cardnetClienteShared'
 
 export type CardnetReceiptGateTransaction = Pick<Prisma.TransactionClient, 'cardnetCaptureSession'>
@@ -187,10 +186,6 @@ export async function setActivationClaimState(
     })
   ).catch(() => ({ count: 0 }))
   return updated.count === 1
-}
-
-function stablePurchaseId(): string {
-  return String(randomInt(100_000_000_000, 999_999_999_999))
 }
 
 export async function createOrReadIntent(

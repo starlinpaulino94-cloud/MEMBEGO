@@ -31,6 +31,42 @@ export interface SavedPaymentCard {
   readonly vencida: boolean
 }
 
+/** Una tarjeta guardada tal como se ofrece para renovar: solo lo que permite reconocerla. */
+export interface RenovacionTarjeta {
+  readonly id: string
+  readonly marca: string | null
+  readonly ultimos4: string | null
+  readonly predeterminada: boolean
+  readonly vencida: boolean
+}
+
+/**
+ * La renovación automática de una membresía, tal como la decide el SERVIDOR: si se
+ * ofrece, con qué tarjetas, y el texto del consentimiento que la persona acepta (la
+ * app lo muestra tal cual y devuelve su versión al aceptar).
+ */
+export type RenovacionAutomatica =
+  | { readonly disponible: false }
+  | {
+      readonly disponible: true
+      readonly activa: boolean
+      /** Se activó antes de que existiera el registro de consentimientos: se ofrece confirmarla. */
+      readonly heredada: boolean
+      readonly tarjetaActual: { readonly id: string; readonly marca: string | null; readonly ultimos4: string | null } | null
+      /** ¿La empresa puede cobrar con tarjeta ahora? Sin esto no se ofrece ACTIVAR (sí desactivar). */
+      readonly puedeActivar: boolean
+      readonly tarjetas: readonly RenovacionTarjeta[]
+      readonly proximoCobro: string | null
+      readonly montoTexto: string
+      readonly consentimiento: {
+        readonly textoVersion: string
+        readonly titulo: string
+        readonly detalle: string
+        /** Las condiciones completas, en la Política de Privacidad. */
+        readonly urlCondiciones: string
+      }
+    }
+
 function getApiBaseUrl(): string {
   return resolveApiBaseUrl({
     configuredUrl: process.env.EXPO_PUBLIC_API_URL,
@@ -841,6 +877,61 @@ export interface MiExcursionDetalle {
   checkinPorId: string | null
 }
 
+// --- Cuenta: verificación de identidad ---
+// Lo arma el SERVIDOR (src/modules/identidad/vistaCore.ts + identidadPuerta.ts): la app pinta, no decide nada.
+// Una prueba (tests/identidad-pantalla-app.test.ts) fija que estos tipos son los que envía la API.
+export type TonoIdentidad = 'exito' | 'aviso' | 'info' | 'neutro' | 'peligro'
+export type AccionIdentidad = 'verificar' | 'continuar' | 'reintentar' | 'esperar' | 'contactar' | 'ninguna'
+
+export interface VistaIdentidad {
+  estado: 'no_verificada' | 'verificada' | 'expirada' | 'revocada' | 'requiere_revalidacion'
+  intento: string | null
+  tono: TonoIdentidad
+  etiqueta: string
+  titulo: string
+  descripcion: string
+  accion: AccionIdentidad
+  textoAccion: string | null
+  requiereConsentimientos: boolean
+  sondear: boolean
+  aviso: { tono: TonoIdentidad; texto: string } | null
+  puedeReportar: boolean
+  puedeBorrar: boolean
+  mostrarDivulgacion: boolean
+}
+
+export interface ConsentimientoIdentidad {
+  tipo: string
+  obligatorio: boolean
+  textoVersion: string
+  titulo: string
+  detalle: string
+  vigente: boolean
+}
+
+export interface PanelIdentidad {
+  visible: boolean
+  vista: VistaIdentidad
+  intentoId: string | null
+  consentimientos: ConsentimientoIdentidad[]
+  pasos: string[]
+  privacidad: string[]
+  urlCondiciones: string
+  proveedor: string
+  tiposDeIncidencia: { valor: string; etiqueta: string }[]
+  avisoDeIncidencia: string
+  maxMensajeIncidencia: number
+  incidenciasAbiertas: { id: string; etiqueta: string; desde: string }[]
+  soporte: { email: string; whatsapp: string }
+}
+
+export interface SesionIdentidad {
+  ok: true
+  url: string
+  intentoId: string
+  nonce: string | null
+}
+
 // --- Cuenta: pagos ---
 export interface PagoMembership {
   id: string
@@ -1368,6 +1459,33 @@ export const api = {
   // --- Cuenta: pagos ---
   getPagos: () => fetchBff<PagosResponse>('/api/v1/cliente/pagos'),
   getSavedCards: () => fetchBff<{ tarjetas: SavedPaymentCard[] }>('/api/v1/cliente/pagos/tarjetas'),
+  getRenovacionAutomatica: (membershipId: string) =>
+    fetchBff<RenovacionAutomatica>(`/api/v1/cliente/membresias/${encodeURIComponent(membershipId)}/renovacion`),
+  activarRenovacionAutomatica: (
+    membershipId: string,
+    input: { tarjetaId: string; textoVersion: string }
+  ) =>
+    // `acepto: true` solo se envía desde la casilla marcada: es lo que el servidor exige.
+    postJson<{ ok: true }>(`/api/v1/cliente/membresias/${encodeURIComponent(membershipId)}/renovacion`, {
+      tarjetaId: input.tarjetaId,
+      textoVersion: input.textoVersion,
+      acepto: true,
+    }),
+  desactivarRenovacionAutomatica: (membershipId: string) =>
+    fetchBff<{ ok: true }>(`/api/v1/cliente/membresias/${encodeURIComponent(membershipId)}/renovacion`, {
+      method: 'DELETE',
+    }),
+  // --- Cuenta: verificación de identidad ---
+  getIdentidadPanel: async (): Promise<PanelIdentidad> =>
+    (await fetchBff<{ ok: true; panel: PanelIdentidad }>('/api/v1/cliente/identidad/estado')).panel,
+  /** `consentimientos`: tipo → versión del texto que la persona VIO al marcar la casilla. El servidor rechaza una versión que no es la vigente. */
+  iniciarVerificacionIdentidad: (consentimientos: Record<string, string>) =>
+    postJson<SesionIdentidad>('/api/v1/cliente/identidad/sesion', { canal: 'movil_hospedado', consentimientos }),
+  cambiarConsentimientoIdentidad: (input: { tipo: string; accion: 'aceptar' | 'retirar'; version?: string }) =>
+    postJson<{ ok: true }>('/api/v1/cliente/identidad/consentimientos', input),
+  reportarProblemaIdentidad: (input: { tipo: string; mensaje: string; intentoId?: string | null }) =>
+    postJson<{ ok: true; incidenciaId: string }>('/api/v1/cliente/identidad/incidencias', input),
+  borrarDatosIdentidad: () => postJson<{ ok: true }>('/api/v1/cliente/identidad/borrado', {}),
   setDefaultSavedCard: (tarjetaId: string) =>
     postJson<{ ok: boolean }>('/api/v1/cliente/pagos/tarjetas', { tarjetaId }),
   deleteSavedCard: (tarjetaId: string) =>

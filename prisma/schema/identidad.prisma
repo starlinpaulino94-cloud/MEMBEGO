@@ -109,6 +109,12 @@ enum NotifTipo {
   VISITA_COMPRA_ADICIONAL
   VISITA_DISPUTA
   SUPPLY_SOLICITUD_MERCHANT
+  // Verificación de identidad: avisos a la persona cuando su verificación se resuelve.
+  IDENTIDAD_VERIFICADA
+  IDENTIDAD_RECHAZADA
+  IDENTIDAD_EN_REVISION
+  /// Se le pide a la persona repetir la verificación (sin que cuente como un rechazo).
+  IDENTIDAD_REPETIR
 
 }
 
@@ -599,6 +605,43 @@ enum AuditAccion {
   CONCILIACION_ENTREGA_REINTENTADA
   /// Se marcó como entregado un cobro cuyo producto ya estaba activo (con la nota de quien lo hizo).
   CONCILIACION_ENTREGA_MARCADA
+  // ── Verificación de identidad (docs/identidad/AUDITORIA-VERIFICACION-IDENTIDAD.md) ──
+  // El payload lleva CÓDIGOS y ids, nunca nombre, documento, imagen ni texto del
+  // proveedor. El consentimiento no entra aquí: su tabla ES el registro.
+  /// La persona empezó una verificación (se creó el intento).
+  IDENTIDAD_VERIFICACION_INICIADA
+  /// El proveedor aprobó y el worker registró el resultado global.
+  IDENTIDAD_VERIFICACION_APROBADA
+  /// El intento quedó esperando a una persona (el proveedor lo pidió, o el mismo documento aparece en otra cuenta).
+  IDENTIDAD_VERIFICACION_EN_REVISION
+  /// El intento terminó sin aprobación (reintentable o definitiva, con su código de razón).
+  IDENTIDAD_VERIFICACION_RECHAZADA
+  /// Se retiró la verificación (por una persona autorizada o por el sistema), con su motivo.
+  IDENTIDAD_VERIFICACION_REVOCADA
+  /// La verificación llegó a su fecha de expiración.
+  IDENTIDAD_VERIFICACION_EXPIRADA
+  /// Se pidió revalidar a la persona (documento vencido, cambio de nombre, sospecha, solicitud).
+  IDENTIDAD_REVALIDACION_REQUERIDA
+  /// Una persona autorizada del equipo de MEMBEGO consultó el estado de identidad de alguien.
+  IDENTIDAD_ESTADO_CONSULTADO_POR_STAFF
+  /// El equipo de Membego encendió o apagó la verificación de identidad de la plataforma (con su motivo).
+  IDENTIDAD_INTERRUPTOR_CAMBIADO
+  /// La persona pidió borrar sus datos de identidad (derecho de supresión).
+  IDENTIDAD_SUPRESION_SOLICITADA
+  /// Se completó el borrado de sus datos de identidad en MEMBEGO y en el proveedor.
+  IDENTIDAD_SUPRESION_COMPLETADA
+  /// Se borró la sesión de verificación en el proveedor (procesar y purgar): sus documentos ya no están allí.
+  IDENTIDAD_SESION_PURGADA
+  /// Un aviso del proveedor se descartó por no cuadrar con el intento al que decía referirse.
+  IDENTIDAD_EVENTO_DESCARTADO
+  /// La persona reportó un problema con su verificación de identidad (incidencia).
+  IDENTIDAD_INCIDENCIA_REPORTADA
+  /// El equipo de MEMBEGO resolvió un caso que esperaba a una persona (lo rechazó o pidió repetirlo).
+  IDENTIDAD_REVISION_RESUELTA
+  /// El equipo de MEMBEGO tomó o resolvió una incidencia de verificación de identidad.
+  IDENTIDAD_INCIDENCIA_ATENDIDA
+  /// El equipo de MEMBEGO encendió, apagó o cambió el alcance de una regla de verificación de identidad.
+  IDENTIDAD_REGLA_CAMBIADA
 }
 
 // ─────────────────────────────────────────────
@@ -661,6 +704,17 @@ model User {
   // Geolocalización (G-1): la ubicación es de la PERSONA, cross-empresa.
   customerLocations CustomerLocation[]
   geoConsents       GeoConsent[]
+
+  // Verificación de identidad (docs/identidad/AUDITORIA-VERIFICACION-IDENTIDAD.md):
+  // el resultado es de la PERSONA, global, no de una empresa.
+  identidadVerificacion    IdentidadVerificacion?    @relation("IdentidadVerificacionDeUsuario")
+  identidadIntentos        IdentidadIntento[]        @relation("IdentidadIntentosDeUsuario")
+  identidadConsentimientos IdentidadConsentimiento[] @relation("IdentidadConsentimientosDeUsuario")
+  identidadInterruptores   IdentidadInterruptor[]    @relation("IdentidadInterruptorCambiadoPor")
+  identidadReglas          IdentidadRegla[]          @relation("IdentidadReglaCambiadaPor")
+  identidadIncidencias     IdentidadIncidencia[]     @relation("IdentidadIncidenciasDeUsuario")
+  identidadIncidenciasResueltas IdentidadIncidencia[] @relation("IdentidadIncidenciaResueltaPor")
+  identidadIncidenciasAtendidas IdentidadIncidencia[] @relation("IdentidadIncidenciaAtendidaPor")
 
   // Listados de empleados por empresa (/admin/empleados) y conteos por empresa.
   transaccionesComoEmpleado    Transaction[]              @relation("TransactionEmpleado")
@@ -976,6 +1030,7 @@ model Company {
   memberships            Membership[]
   membresiaEventos       MembresiaEvento[]
   tarjetasTokenizadas    TarjetaTokenizada[]
+  consentimientosPago    ConsentimientoPago[]
   sucursales             Sucursal[]
   cajaSesiones           CajaSesion[]
   metodosPago            MetodoPago[]

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath, revalidateTag } from 'next/cache'
+import { revocarConsentimientos } from '@/modules/pagos/consentimientos'
 import { requireAdminUser, requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -22,6 +23,7 @@ import { datosDeCambioDePlan } from '@/modules/membresia/cambio-plan-aplicar'
 import { motivoCambioDirectoBloqueado } from '@/modules/membresia/cambio-plan-pendiente'
 import { explicarNoRenovable, motivoNoRenovable } from '@/modules/membresia/renovacion'
 import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
+import { bloqueoPorIdentidadPendiente } from '@/modules/identidad/supresion'
 
 /**
  * Ensure the membership belongs to the admin's company (superadmin = any).
@@ -778,6 +780,12 @@ export async function cancelarMembresia(
         where: { id: membership.id },
         data: { estado: 'CANCELADA', autoRenovar: false, motivoCancelacion: motivo || null },
       })
+      // Apagar la renovación es RETIRAR el consentimiento de renovar: la fila no se
+      // borra, queda con su fecha de revocación.
+      await revocarConsentimientos(tx, {
+        tipo: 'RENOVACION_AUTOMATICA',
+        membershipId: membership.id,
+      })
       await tx.auditLog.create({
         data: {
           companyId: membership.cliente.companyId,
@@ -1355,6 +1363,10 @@ export async function eliminarEmpleado(
     }
     const companyId = empleado.companyId
     if (!companyId) return { error: 'Miembro del equipo sin empresa.' }
+
+    // Los datos de verificación de identidad que el proveedor tenga de esta persona se borran ANTES de eliminarla.
+    const bloqueoIdentidad = await bloqueoPorIdentidadPendiente(empleado.id)
+    if (bloqueoIdentidad) return { error: bloqueoIdentidad }
 
     const supabase = createAdminClient()
     const { error: delError } = await supabase.auth.admin.deleteUser(

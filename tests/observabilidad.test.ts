@@ -268,6 +268,8 @@ function metricas(sistema: Partial<Metricas['sistema']>): Metricas {
       pagosAprobados24h: 0,
       pagosRechazados24h: 0,
       pagosSinResolver: 0,
+      renovacionesRechazadas24h: 0,
+      renovacionesPorConciliar: 0,
       empresasActivas: 0,
       notificaciones24h: 0,
     },

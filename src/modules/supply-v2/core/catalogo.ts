@@ -243,6 +243,8 @@ export const RUTA_PORTAL_CANJES = `${RUTA_PORTAL_PROVEEDOR}/canjes`
 export const RUTA_PORTAL_INCIDENCIAS = `${RUTA_PORTAL_PROVEEDOR}/incidencias`
 export const RUTA_PORTAL_PERSONAL = `${RUTA_PORTAL_PROVEEDOR}/personal`
 export const RUTA_PORTAL_CONFIGURACION = `${RUTA_PORTAL_PROVEEDOR}/configuracion`
+/** Verificación de identidad de quien aceptó el contrato (Fase 5): la pantalla de la persona, dentro del portal. */
+export const RUTA_PORTAL_IDENTIDAD = `${RUTA_PORTAL_PROVEEDOR}/identidad`
 /** SUPPLIER & FULFILLMENT COMMERCE · visitas atribuidas y ventas adicionales (§24–§36). */
 export const RUTA_PORTAL_VENTAS_ADICIONALES = `${RUTA_PORTAL_PROVEEDOR}/ventas-adicionales`
 export const RUTA_VISITAS = `${BASE_SUPPLY_V2}/visitas`

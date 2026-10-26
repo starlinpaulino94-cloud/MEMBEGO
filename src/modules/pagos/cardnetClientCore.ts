@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomInt } from 'node:crypto'
 import { z } from 'zod'
 import { desenvolverRespuesta, interpretarCompraToken, TRANSACTION_STATUS, type PerfilPagoCardnet } from '@/lib/payments/cardnet-tokens-core'
 
@@ -166,6 +166,15 @@ function field(value: unknown, ...keys: readonly string[]): string | null {
     }
   }
   return null
+}
+
+/**
+ * El `UniqueID` de un `Purchase`: 12 dígitos al azar, que se guardan en
+ * `pago_intentos.cardnetUniqueId` ANTES de cobrar. Con él (y la referencia de la
+ * orden) la consulta de compras encuentra ESE cobro cuando su respuesta se perdió.
+ */
+export function stablePurchaseId(): string {
+  return String(randomInt(100_000_000_000, 999_999_999_999))
 }
 
 export function purchaseDecision(httpStatus: number, payload: unknown): CardnetPurchaseDecision {

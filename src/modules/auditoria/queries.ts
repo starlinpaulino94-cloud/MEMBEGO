@@ -25,6 +25,7 @@ export const ENTIDAD_LABEL: Record<string, string> = {
   ColaVehiculo: 'Cola',
   Company: 'Empresa',
   EvidenciaFoto: 'Foto',
+  IdentidadVerificacion: 'Identidad',
   Membership: 'Membresía',
   Plan: 'Plan',
   MovimientoCaja: 'Movimiento de caja',
@@ -395,6 +396,24 @@ export const ACCION_LABEL: Record<string, string> = {
   CONCILIACION_COMPROBANTE_GENERADO: 'Conciliación: comprobante de tarjeta generado',
   CONCILIACION_ENTREGA_REINTENTADA: 'Conciliación: entrega reintentada',
   CONCILIACION_ENTREGA_MARCADA: 'Conciliación: entrega marcada como completada',
+  // Verificación de identidad.
+  IDENTIDAD_VERIFICACION_INICIADA: 'Identidad: verificación iniciada',
+  IDENTIDAD_VERIFICACION_APROBADA: 'Identidad: verificación aprobada',
+  IDENTIDAD_VERIFICACION_EN_REVISION: 'Identidad: verificación enviada a revisión',
+  IDENTIDAD_VERIFICACION_RECHAZADA: 'Identidad: verificación rechazada',
+  IDENTIDAD_VERIFICACION_REVOCADA: 'Identidad: verificación revocada',
+  IDENTIDAD_VERIFICACION_EXPIRADA: 'Identidad: verificación expirada',
+  IDENTIDAD_REVALIDACION_REQUERIDA: 'Identidad: revalidación requerida',
+  IDENTIDAD_ESTADO_CONSULTADO_POR_STAFF: 'Identidad: estado consultado por el equipo de Membego',
+  IDENTIDAD_INTERRUPTOR_CAMBIADO: 'Identidad: interruptor de la verificación cambiado',
+  IDENTIDAD_SUPRESION_SOLICITADA: 'Identidad: borrado de datos solicitado',
+  IDENTIDAD_SUPRESION_COMPLETADA: 'Identidad: borrado de datos completado',
+  IDENTIDAD_SESION_PURGADA: 'Identidad: sesión del proveedor borrada',
+  IDENTIDAD_EVENTO_DESCARTADO: 'Identidad: aviso del proveedor descartado',
+  IDENTIDAD_INCIDENCIA_REPORTADA: 'Identidad: incidencia reportada por la persona',
+  IDENTIDAD_REVISION_RESUELTA: 'Identidad: caso en revisión resuelto por el equipo',
+  IDENTIDAD_INCIDENCIA_ATENDIDA: 'Identidad: incidencia atendida por el equipo',
+  IDENTIDAD_REGLA_CAMBIADA: 'Identidad: regla de verificación cambiada',
   // Integraciones: lo que sale hacia sistemas de terceros.
   INTEGRACION_SONDEADA: 'Webhook probado',
   INTEGRACION_REINTENTADA: 'Cola de eventos reenviada',
@@ -460,6 +479,11 @@ export interface AuditoriaFiltro {
   q?: string
   desde?: string
   hasta?: string
+  /** Todas las acciones cuyo nombre empieza así (p. ej. `IDENTIDAD_`): la bitácora de un módulo entero. */
+  accionPrefijo?: string
+  /** Sobre qué entidad: el tipo (`IdentidadVerificacion`) y su id (la persona). Exactos, a diferencia de `q`. */
+  entidadTipo?: string
+  entidadId?: string
 }
 
 export interface AuditoriaItem {
@@ -557,7 +581,11 @@ export async function getAuditoria(
           ? { payload: { path: ['tipo'], equals: subtipo } }
           : filtro.accion
             ? { accion: filtro.accion as never }
-            : {}),
+            : filtro.accionPrefijo
+              ? { accion: { in: Object.keys(ACCION_LABEL).filter((a) => a.startsWith(filtro.accionPrefijo!)) as never[] } }
+              : {}),
+        ...(filtro.entidadTipo ? { entidadTipo: filtro.entidadTipo } : {}),
+        ...(filtro.entidadId ? { entidadId: filtro.entidadId } : {}),
         ...(desde || hasta
           ? { createdAt: { ...(desde ? { gte: desde } : {}), ...(hasta ? { lte: hasta } : {}) } }
           : {}),

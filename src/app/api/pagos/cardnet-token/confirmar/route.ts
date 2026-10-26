@@ -3,6 +3,7 @@ import { getUser } from '@/lib/auth'
 import { paymentLimiter, getClientIdentifier } from '@/lib/rate-limit'
 import { cobrarPendienteConPerfil } from '@/modules/pagos/cardnetToken'
 import { logErrorBd } from '@/lib/prisma-errors'
+import { TEXTO_VERSION_GUARDAR_WEB } from '@/modules/pagos/consentimientosCore'
 
 export const dynamic = 'force-dynamic'
 
@@ -95,6 +96,12 @@ export async function POST(req: NextRequest) {
         token: res.perfil.token,
         marca: res.perfil.marca,
         ultimos4: res.perfil.ultimos4,
+        // Lo que el cliente aceptó al marcar «guardar»: el texto que la pantalla web muestra.
+        consentimiento: {
+          textoVersion: TEXTO_VERSION_GUARDAR_WEB,
+          ip: id,
+          userAgent: req.headers.get('user-agent'),
+        },
       }).catch((e) => logErrorBd('pagos:confirmar:guardarTarjeta', e, { membershipId }))
     }
 

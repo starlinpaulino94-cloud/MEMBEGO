@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { conEmpresa } from '@/lib/tenant'
+import { referenciaCobro } from '@/lib/payments/cardnet-tokens-core'
 import { ETIQUETA_CANAL, esCanalDeCobro } from '@/modules/pagos/comprobante-tarjeta'
 import {
   CAMBIO_DE_PLAN_PAGADO,
@@ -49,6 +50,7 @@ export type TipoDeCaso =
   | 'MEMBRESIA_SIN_TRANSACCION'
   | 'CLIENTE_ESPERANDO'
   | 'REGISTRO_SIN_CERRAR'
+  | 'RENOVACION_DUDOSA'
   | 'CAJA_ABIERTA'
   | 'CAJA_DESCUADRADA'
 
@@ -133,6 +135,7 @@ export async function conciliar(
         cajasAbiertas,
         descuadres,
         sinEntregar,
+        renovacionesDudosas,
       ] = await Promise.all([
           // 1a · Cobros con tarjeta de la pasarela ya ENTREGADOS cuya venta (el comprobante) no está en el libro.
           // Se miran desde el cobro, no desde la membresía: así también se ve una renovación cuyo pago no dejó venta
@@ -279,6 +282,38 @@ export async function conciliar(
             orderBy: { activadoAt: 'desc' },
             take: LECTURA_MAX,
           }),
+
+          // 7 · Renovaciones automáticas cuyo cobro NO tiene resultado confirmado.
+          //
+          // Un cobro que se cae sin respuesta (o que la pasarela dice que «ya se procesó») pudo haber salido, y
+          // repetirlo es cobrarle dos veces al cliente: el sistema NO lo repite solo (ver `evaluarCiclo`). El caso
+          // sigue abierto hasta que una persona lo compruebe en el panel de CardNET. Un cobro aprobado que no se
+          // entregó NO es esto: ése ya sale arriba (6), con sus acciones.
+          //
+          // Mira 14 días, como el contador de Observabilidad, para que el caso no caduque antes de que alguien lo vea.
+          tx.pagoIntento.findMany({
+            where: {
+              companyId,
+              canal: 'RENOVACION_AUTOMATICA',
+              createdAt: { gte: new Date(ahora.getTime() - 14 * 86_400_000) },
+              OR: [
+                { estado: 'ERROR', respuesta: { path: ['_clasificacion'], equals: 'incierto' } },
+                // Un intento que quedó abierto y ya no puede estar en curso (el proceso murió a medias).
+                { estado: 'CREADO', createdAt: { lt: new Date(ahora.getTime() - 15 * 60_000) } },
+              ],
+            },
+            select: {
+              id: true,
+              monto: true,
+              createdAt: true,
+              motivoRechazo: true,
+              clienteId: true,
+              cliente: { select: { nombre: true } },
+              membership: { select: { plan: { select: { nombre: true } } } },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: LECTURA_MAX,
+          }),
         ])
 
       const tope = (casos: CasoDeConciliacion[]) => casos.slice(0, CASOS_POR_HALLAZGO)
@@ -409,6 +444,30 @@ export async function conciliar(
           monto: suma(registroSinCerrar),
           href: null,
           casos: tope(registroSinCerrar),
+        })
+      }
+
+      if (renovacionesDudosas.length > 0) {
+        const casos = renovacionesDudosas.map((i): CasoDeConciliacion => ({
+          id: i.id,
+          tipo: 'RENOVACION_DUDOSA',
+          titulo: `${i.cliente?.nombre ?? 'Cliente'} · ${nombreDelProducto(i.membership?.plan.nombre, null)}`,
+          detalle: `Referencia en CardNET: ${referenciaCobro(i.id)}. ${i.motivoRechazo ?? 'El cobro quedó sin cerrar.'}`,
+          monto: Number(i.monto),
+          fecha: i.createdAt,
+          clienteId: i.clienteId,
+          acciones: ['ABRIR_FICHA'],
+        }))
+        hallazgos.push({
+          clave: 'renovacion-dudosa',
+          titulo: 'Renovaciones automáticas con resultado dudoso',
+          explicacion:
+            'El cobro automático se cayó sin respuesta, y pudo haber salido. El sistema no lo repite solo porque sería cobrarle dos veces al cliente. Cada día, antes de cobrar, se le pregunta a CardNET por ese cobro y se resuelve solo si contesta claro; lo que queda aquí es lo que no pudo confirmar. Busca en el panel de CardNET la transacción con esa referencia: si SÍ se cobró, hay que registrarlo como cobro aprobado (entonces aparece arriba, en «Pagos cobrados con entrega pendiente», con su botón «Reintentar entrega»); si NO se cobró, se marca como descartado y el siguiente cobro automático lo reintenta. El procedimiento está en el runbook de pagos.',
+          cantidad: casos.length,
+          severidad: 'ALTA',
+          monto: suma(casos),
+          href: null,
+          casos: tope(casos),
         })
       }
 

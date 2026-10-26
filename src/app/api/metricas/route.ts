@@ -120,6 +120,16 @@ function aPrometheus(m: Metricas): string {
     'Cobros iniciados hace mas de 1 h que siguen sin resolverse. Cada uno es un cliente colgado.',
     n.pagosSinResolver
   )
+  g(
+    'renovaciones_rechazadas_24h',
+    'Renovaciones automaticas rechazadas por el banco en 24 h.',
+    n.renovacionesRechazadas24h
+  )
+  g(
+    'renovaciones_por_conciliar',
+    'Renovaciones automaticas con un cobro dudoso o cobrado sin entregar (14 dias). Las atiende una persona.',
+    n.renovacionesPorConciliar
+  )
   g('empresas_activas', 'Empresas activas, sin contar las de practica.', n.empresasActivas)
   g('notificaciones_24h', 'Notificaciones creadas en 24 h.', n.notificaciones24h)
 
