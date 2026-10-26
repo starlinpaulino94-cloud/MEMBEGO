@@ -5,8 +5,9 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
-import { ChipAsignacion, ChipBeneficio, ChipFinanciacion, ChipReservaBeneficio } from '@/components/supply-v2/chips'
-import { AccionesBeneficio, CancelarAsignacion, ReversarAplicacion } from '@/components/supply-v2/acciones-beneficio'
+import { TablaAsignaciones, TablaUsosBeneficio, TablaMovimientosBeneficio } from '@/components/supply-v2/tablas-beneficio-campana'
+import { ChipBeneficio, ChipFinanciacion } from '@/components/supply-v2/chips'
+import { AccionesBeneficio } from '@/components/supply-v2/acciones-beneficio'
 import { FormAsignarBeneficio } from '@/components/supply-v2/form-asignar-beneficio'
 import { fichaBeneficio } from '@/modules/supply-v2/benefits/queries'
 import { puedeSupplyV2 } from '@/modules/supply-v2/permisos'
@@ -14,10 +15,8 @@ import {
   BENEFIT_FUNDING_EXPLICACION,
   BENEFIT_SCOPE_LABELS,
   BENEFIT_VALUE_TYPE_LABELS,
-  BENEFIT_MOVEMENT_LABELS,
   dineroSupplyV2,
   RUTA_BENEFICIOS,
-  RUTA_COMPRAS_CLIENTE,
 } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
@@ -143,37 +142,7 @@ export default async function BeneficioPage({ params }: { params: Promise<{ id: 
           {b.asignaciones.length === 0 ? (
             <p className="px-6 pb-6 text-sm text-muted-foreground">Nadie lo tiene todavía. Mientras no se asigne, nadie puede usarlo.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="tabla-asignaciones">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2">Cliente</th>
-                    <th className="px-4 py-2">Estado</th>
-                    <th className="px-4 py-2 text-right">Usos</th>
-                    <th className="px-4 py-2">Vence</th>
-                    <th className="px-4 py-2">Nota</th>
-                    <th className="px-4 py-2">Otorgado</th>
-                    <th className="px-4 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {b.asignaciones.map((g) => (
-                    <tr key={g.id} className="border-t border-border align-top">
-                      <td className="px-4 py-2 font-medium">
-                        {g.cliente}
-                        <span className="block text-caption text-muted-foreground">{g.email}</span>
-                      </td>
-                      <td className="px-4 py-2"><ChipAsignacion estado={g.status} /></td>
-                      <td className="px-4 py-2 text-right tabular-nums">{g.usesConsumed} / {g.usesAllowed}</td>
-                      <td className="px-4 py-2 text-caption">{g.expiresAt ? formatDate(g.expiresAt) : '—'}</td>
-                      <td className="px-4 py-2 text-caption text-muted-foreground">{g.note ?? '—'}</td>
-                      <td className="px-4 py-2 text-caption">{formatDate(g.grantedAt)}<span className="block text-muted-foreground">{g.otorgadoPor}</span></td>
-                      <td className="px-4 py-2">{puedeCancelar && g.status === 'AVAILABLE' && <CancelarAsignacion benefitId={b.id} customerBenefitId={g.id} />}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaAsignaciones asignaciones={b.asignaciones} benefitId={b.id} puedeCancelar={puedeCancelar} />
           )}
         </CardContent>
       </Card>
@@ -184,42 +153,7 @@ export default async function BeneficioPage({ params }: { params: Promise<{ id: 
           {b.usos.length === 0 ? (
             <p className="px-6 pb-6 text-sm text-muted-foreground">Ninguna compra lo ha usado todavía.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="tabla-usos-beneficio">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2">Compra</th>
-                    <th className="px-4 py-2">Cliente</th>
-                    <th className="px-4 py-2">Estado</th>
-                    <th className="px-4 py-2 text-right">Unid.</th>
-                    <th className="px-4 py-2 text-right">Descuento del proveedor</th>
-                    <th className="px-4 py-2 text-right">Bono de Membego</th>
-                    <th className="px-4 py-2">Cuándo</th>
-                    <th className="px-4 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {b.usos.map((u) => (
-                    <tr key={u.id} className="border-t border-border align-top">
-                      <td className="px-4 py-2 font-mono text-caption">
-                        <Link href={`${RUTA_COMPRAS_CLIENTE}/${u.orderId}`} className="underline-offset-4 hover:underline">{u.orderNumber}</Link>
-                      </td>
-                      <td className="px-4 py-2">{u.cliente}</td>
-                      <td className="px-4 py-2"><ChipReservaBeneficio estado={u.status as 'ACTIVE' | 'APPLIED' | 'RELEASED' | 'EXPIRED' | 'REVERSED'} /></td>
-                      <td className="px-4 py-2 text-right tabular-nums">{u.quantity}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{dinero(u.supplierAmount)}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{dinero(u.membegoAmount)}</td>
-                      <td className="px-4 py-2 text-caption">
-                        {formatDateTime(u.createdAt)}
-                        {u.appliedAt && <span className="block text-muted-foreground">Aplicado {formatDateTime(u.appliedAt)}</span>}
-                        {u.reversedReason && <span className="block text-destructive">Reversado: {u.reversedReason}</span>}
-                      </td>
-                      <td className="px-4 py-2">{puedeCancelar && u.status === 'APPLIED' && <ReversarAplicacion benefitId={b.id} reservationId={u.id} />}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaUsosBeneficio usos={b.usos} benefitId={b.id} moneda={b.currency} puedeCancelar={puedeCancelar} />
           )}
         </CardContent>
       </Card>
@@ -227,36 +161,7 @@ export default async function BeneficioPage({ params }: { params: Promise<{ id: 
       <Card>
         <CardHeader><CardTitle>Libro de movimientos del presupuesto</CardTitle></CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" data-testid="tabla-movimientos-beneficio">
-              <thead className="text-left text-caption text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2">Cuándo</th>
-                  <th className="px-4 py-2">Movimiento</th>
-                  <th className="px-4 py-2 text-right">Reservado</th>
-                  <th className="px-4 py-2 text-right">Consumido</th>
-                  <th className="px-4 py-2 text-right">Reservado después</th>
-                  <th className="px-4 py-2 text-right">Consumido después</th>
-                  <th className="px-4 py-2">Motivo</th>
-                  <th className="px-4 py-2">Quién</th>
-                </tr>
-              </thead>
-              <tbody>
-                {b.movimientos.map((m) => (
-                  <tr key={m.id} className="border-t border-border align-top">
-                    <td className="px-4 py-2 text-caption">{formatDateTime(m.createdAt)}</td>
-                    <td className="px-4 py-2">{BENEFIT_MOVEMENT_LABELS[m.type as keyof typeof BENEFIT_MOVEMENT_LABELS] ?? m.type}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{dinero(m.reservedDelta)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{dinero(m.consumedDelta)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{dinero(m.reservedAfter)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{dinero(m.consumedAfter)}</td>
-                    <td className="px-4 py-2 text-caption text-muted-foreground">{m.reason ?? '—'}</td>
-                    <td className="px-4 py-2 text-caption">{m.actor ?? 'Sistema'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TablaMovimientosBeneficio movimientos={b.movimientos} moneda={b.currency} />
         </CardContent>
       </Card>
     </div>

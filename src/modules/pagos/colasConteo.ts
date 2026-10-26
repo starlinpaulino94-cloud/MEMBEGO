@@ -70,9 +70,19 @@ export async function contarColasDePago(
    * segunda y pedía otra conexión desde dentro de la primera — que con el
    * pooler delante es como se agota el pool, sin dar un error que lo explique.
    */
-  txAbierta?: LectorColas
+  txAbierta?: LectorColas,
+  opciones: {
+    /**
+     * `false` salta las dos consultas de «seguimiento» (empezaron y no completaron) y lo deja en 0: el Resumen solo avisa de
+     * las cuatro colas de TRABAJO y ese número no lo pinta. Cada consulta que no se hace son dos sentencias menos por
+     * carga (fase 5 · el Resumen tiene un tope de consultas). Por defecto se cuentan, como siempre: la pantalla de Pagos
+     * necesita el seguimiento para su pestaña.
+     */
+    conSeguimiento?: boolean
+  } = {}
 ): Promise<ConteoColasPago> {
   const cero = () => 0
+  const conSeguimiento = opciones.conSeguimiento !== false
   const correr = async (tx: LectorColas): Promise<ConteoColasPago> => {
     const [
       sucursalMembresias,
@@ -88,8 +98,8 @@ export async function contarColasDePago(
       tx.membership.count({ where: whereTransferencias(companyId) }).catch(cero),
       tx.productoCompra.count({ where: whereComprasEnValidacion(companyId) }).catch(cero),
       tx.membership.count({ where: whereCambiosDePlan(companyId) }).catch(cero),
-      tx.membership.count({ where: whereMembresiasSinCompletar(companyId) }).catch(cero),
-      tx.productoCompra.count({ where: whereComprasSinCompletar(companyId) }).catch(cero),
+      conSeguimiento ? tx.membership.count({ where: whereMembresiasSinCompletar(companyId) }).catch(cero) : Promise.resolve(0),
+      conSeguimiento ? tx.productoCompra.count({ where: whereComprasSinCompletar(companyId) }).catch(cero) : Promise.resolve(0),
     ])
     const sucursal = sucursalMembresias + sucursalCompras
     return {

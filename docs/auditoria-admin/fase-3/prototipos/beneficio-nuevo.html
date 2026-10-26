@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crear beneficio · Prototipo del panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/estilos.css">
+<script src="https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js" defer></script>
+<script src="assets/panel.js" defer></script>
+</head>
+<body data-pagina="beneficios" data-titulo="Crear beneficio" data-roles="AM" data-migas='[["Beneficios","beneficios.html"]]'>
+<!-- Tipo de página: FORMULARIO (10 §8): una columna de hasta 720 px, secciones por intención, barra de acciones fija.
+     Hoy: 25 controles en una columna con seis intenciones mezcladas (04 · F-05). Aquí: ≤ 7 a la vista, el resto en «Opciones avanzadas». -->
+<main id="contenido" class="pagina pagina--formulario"></main>
+<script>
+document.addEventListener('mg:listo', () => {
+  const { $, $$, esc, ic, iconos, aviso } = MG
+  const main = $('#contenido')
+  const hoyISO = '2026-10-20', en30 = '2026-11-19'
+
+  // Los cuatro tipos que existen hoy detrás del hub (la auditoría contó tres; el código ya tiene cuatro).
+  const TIPOS = [
+    { v: 'publica', t: 'Promoción pública', d: 'Visible para todos tus clientes y seguidores.' },
+    { v: 'relampago', t: 'Oferta relámpago', d: 'Con tiempo límite: aparece viva en el inicio.' },
+    { v: 'vip', t: 'Regalo VIP', d: 'Privado: solo una lista cerrada puede reclamarlo.' },
+    { v: 'producto', t: 'Oferta sobre un producto', d: 'Descuento sobre algo de tu catálogo, con «antes / ahora».' },
+  ]
+  const MODALIDADES = [
+    { v: 'descuento', t: 'Descuento %' }, { v: '2x1', t: '2×1' }, { v: '3x2', t: '3×2' }, { v: 'monto', t: 'Monto fijo' }, { v: 'otra', t: 'Otra…' },
+  ]
+
+  main.innerHTML = `
+    <header class="cabecera">
+      <div class="txt"><a class="atras" href="beneficios.html">${ic('chevron-left')}Beneficios</a><h1 class="t-pagina">Crear beneficio</h1>
+        <p class="t-sec">Elige qué ofreces y cuándo. Lo demás puedes ajustarlo después.</p></div>
+    </header>
+    <form id="form" novalidate>
+      <section class="seccion-form" aria-labelledby="s1">
+        <div class="cab"><span class="paso" aria-hidden="true">1</span><h2 class="t-seccion" id="s1">Qué es</h2></div>
+        <fieldset style="border:0;padding:0;margin:0">
+          <legend class="solo-lector">Tipo de beneficio</legend>
+          <div class="opciones-tarjeta" id="tipos">${TIPOS.map((t, i) => `<label class="opcion"><input type="radio" name="tipo" value="${t.v}" ${i === 0 ? 'checked' : ''}><span class="t">${esc(t.t)}</span><span class="d">${esc(t.d)}</span></label>`).join('')}</div>
+        </fieldset>
+        <div class="campo"><span class="etq" id="l-mod">Modalidad</span>
+          <div class="segmento" role="radiogroup" aria-labelledby="l-mod" id="modalidades">${MODALIDADES.map((m, i) => `<button type="button" role="radio" aria-checked="${i === 0}" aria-pressed="${i === 0}" data-mod="${m.v}">${esc(m.t)}</button>`).join('')}</div>
+        </div>
+        <div class="campo" id="c-titulo" data-invalido="false">
+          <label for="titulo">Título</label>
+          <input type="text" id="titulo" name="titulo" maxlength="80" autocomplete="off" aria-describedby="titulo-ayuda titulo-error" placeholder="Ej.: Pasadía 2×1 entre semana">
+          <span class="ayuda" id="titulo-ayuda">Lo verá el cliente en su inicio y en tu perfil.</span>
+          <span class="error" id="titulo-error" role="alert">Escribe un título para publicar.</span>
+        </div>
+        <div class="campo"><label for="desc">Descripción <span class="opcional">(opcional)</span></label><textarea id="desc" name="desc" rows="3"></textarea></div>
+      </section>
+
+      <section class="seccion-form" aria-labelledby="s2" style="margin-top:24px">
+        <div class="cab"><span class="paso" aria-hidden="true">2</span><h2 class="t-seccion" id="s2">Cuándo y cuánto</h2></div>
+        <div class="fila-campos">
+          <div class="campo"><label for="desde">Empieza</label><input type="date" id="desde" name="desde" value="${hoyISO}"></div>
+          <div class="campo"><label for="hasta">Termina <span class="opcional">(opcional)</span></label><input type="date" id="hasta" name="hasta" value="${en30}"></div>
+        </div>
+        <div class="campo" id="c-descuento"><label for="descuento">Descuento</label>
+          <div class="prefijo"><input type="number" id="descuento" name="descuento" min="1" max="100" value="15" aria-describedby="desc-ayuda"><span id="sufijo">%</span></div>
+          <span class="ayuda" id="desc-ayuda">Porcentaje sobre el precio de lista.</span></div>
+      </section>
+
+      <details class="avanzadas" style="margin-top:24px">
+        <summary>Opciones avanzadas ${ic('chevron-right')}</summary>
+        <div class="cuerpo">
+          <div class="fila-campos">
+            <div class="campo"><label for="cupos">Cupos totales <span class="opcional">(opcional)</span></label><input type="number" id="cupos" min="1" placeholder="Sin límite"></div>
+            <div class="campo"><label for="porcliente">Límite por cliente <span class="opcional">(opcional)</span></label><input type="number" id="porcliente" min="1" placeholder="Sin límite"></div>
+          </div>
+          <div class="campo"><span class="etq">Días permitidos <span class="opcional">(opcional)</span></span>
+            <div class="segmento" id="dias">${['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d) => `<button type="button" aria-pressed="false">${d}</button>`).join('')}</div></div>
+          <label class="interruptor"><span><strong>Se vende</strong><br><span class="t-sec">El cliente lo compra en lugar de reclamarlo gratis.</span></span><input type="checkbox" role="switch" id="vende"></label>
+          <div class="campo" id="c-precio" hidden><label for="precio">Precio</label><div class="prefijo"><span>RD$</span><input type="number" id="precio" min="0"></div></div>
+          <div class="campo"><label for="campana">Campaña <span class="opcional">(opcional)</span></label><select id="campana"><option>Sin campaña</option><option>Verano 2026</option><option>Navidad 2026</option></select></div>
+          <div class="campo"><label for="og">Texto al compartir <span class="opcional">(opcional)</span></label><input type="text" id="og" placeholder="Si lo dejas vacío usamos el título"></div>
+        </div>
+      </details>
+
+      <section class="vista-previa" aria-label="Así lo verá el cliente" style="margin-top:24px" id="previa"></section>
+
+      <div class="barra-acciones">
+        <button type="button" class="btn btn--borde" data-borrador>Guardar borrador</button>
+        <div class="der"><a class="btn btn--ghost" href="beneficios.html">Cancelar</a><button type="submit" class="btn" id="publicar">${ic('send')}Publicar</button></div>
+      </div>
+    </form>
+    <section class="tarjeta tarjeta--pad" id="exito" hidden aria-live="polite">
+      <div class="vacio" style="padding:16px">${ic('circle-check')}<h2 class="t-seccion">Beneficio publicado</h2><p id="exito-t"></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><a class="btn" id="ver-lista" href="beneficios.html">Ver en Beneficios</a><a class="btn btn--borde" href="beneficio-nuevo.html">Crear otro</a></div></div>
+    </section>`
+
+  let modalidad = 'descuento'
+  const etqMod = Object.fromEntries(MODALIDADES.map((m) => [m.v, m.t]))
+  const previa = () => {
+    const t = $('#titulo').value.trim() || 'Tu título aparecerá aquí'
+    const tipo = (TIPOS.find((x) => x.v === (document.querySelector('input[name="tipo"]:checked') || {}).value) || TIPOS[0]).t
+    const ins = modalidad === 'descuento' ? `${$('#descuento').value || 0} % de descuento` : modalidad === 'monto' ? `RD$ ${$('#descuento').value || 0} de descuento` : etqMod[modalidad]
+    const hasta = $('#hasta').value
+    $('#previa').innerHTML = `<span class="t-rotulo">Así lo verá el cliente</span><span class="insignia">${esc(ins)}</span><strong class="t-tarjeta" style="overflow-wrap:anywhere">${esc(t)}</strong>
+      <span class="t-sec">${esc(tipo)} · ${hasta ? 'hasta el ' + hasta.split('-').reverse().join('/') : 'sin fecha de fin'}</span>`
+  }
+  const ajustarModalidad = () => {
+    const sinValor = modalidad === '2x1' || modalidad === '3x2' || modalidad === 'otra'
+    $('#c-descuento').hidden = sinValor
+    $('#sufijo').textContent = modalidad === 'monto' ? 'RD$' : '%'
+    $('#desc-ayuda').textContent = modalidad === 'monto' ? 'Cantidad que se descuenta del precio.' : 'Porcentaje sobre el precio de lista.'
+    previa()
+  }
+
+  main.addEventListener('click', (e) => {
+    const m = e.target.closest('[data-mod]')
+    if (m) { modalidad = m.dataset.mod; $$('[data-mod]', main).forEach((b) => { const on = b === m; b.setAttribute('aria-checked', String(on)); b.setAttribute('aria-pressed', String(on)) }); ajustarModalidad(); return }
+    const d = e.target.closest('#dias button'); if (d) { d.setAttribute('aria-pressed', String(d.getAttribute('aria-pressed') !== 'true')); return }
+    if (e.target.closest('[data-borrador]')) { aviso('Borrador guardado. Puedes seguir después desde Beneficios.'); return }
+  })
+  main.addEventListener('input', previa)
+  main.addEventListener('change', (e) => {
+    if (e.target.id === 'vende') $('#c-precio').hidden = !e.target.checked
+    previa()
+  })
+
+  // Validación: al salir del campo; al enviar, el foco va al primer error (04 §3 · reglas 9). El error está ENLAZADO al campo.
+  const validarTitulo = () => {
+    const vacio = !$('#titulo').value.trim()
+    $('#c-titulo').dataset.invalido = String(vacio)
+    $('#titulo').setAttribute('aria-invalid', String(vacio))
+    return !vacio
+  }
+  $('#titulo').addEventListener('blur', validarTitulo)
+  $('#form').addEventListener('submit', (e) => {
+    e.preventDefault()
+    if (!validarTitulo()) { $('#titulo').focus(); return }
+    const t = $('#titulo').value.trim()
+    $('#form').hidden = true
+    $('#exito').hidden = false
+    $('#exito-t').textContent = `«${t}» ya es visible para tus clientes.`
+    $('#ver-lista').setAttribute('href', MG.conRol(`beneficios.html?nuevo=${encodeURIComponent(t)}&modo=${encodeURIComponent(etqMod[modalidad])}`))
+    $('#exito').scrollIntoView({ block: 'center' })
+    aviso('Beneficio publicado.')
+  })
+
+  ajustarModalidad()
+  MG.reenlazar(main)
+  iconos()
+})
+</script>
+</body>
+</html>

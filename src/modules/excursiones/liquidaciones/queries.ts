@@ -1,32 +1,68 @@
+import type { Prisma } from '@prisma/client'
 import { conEmpresa } from '@/lib/tenant'
+import type { Paginacion } from '@/lib/paginacion'
 import { getExcursionesConfig, convertirMoneda, obtenerDetalleConversion } from '../config'
 import { netoComision } from '@/modules/excursiones/comisiones/nucleo'
+import { condicionesDeLiquidaciones, type FiltrosLiquidaciones } from './lista'
 
-/** Liquidaciones de la empresa con el nombre de a quién se le pagó. */
-export async function listadoLiquidaciones(companyId: string) {
-  const [liquidaciones, config] = await Promise.all([
-    conEmpresa(companyId, (tx) =>
-      tx.liquidacion.findMany({
-        where: { companyId },
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        select: {
-          id: true,
-          numero: true,
-          vendedorId: true,
-          periodoDesde: true,
-          periodoHasta: true,
-          total: true,
-          moneda: true,
-          estado: true,
-          pagadaAt: true,
-          _count: { select: { comisiones: true } },
-        },
-      })
-    ),
+/**
+ * Una página de liquidaciones con el nombre de a quién se le pagó y el total en la moneda de la empresa.
+ *
+ * Los filtros y la página los resuelve la base sobre TODAS las liquidaciones (antes: `take: 200` sin avisar y el navegador
+ * filtraba esas 200). `total` es el de los filtros; `hayAlguna` distingue «no hay liquidaciones» de «el filtro no encontró».
+ */
+export async function listarLiquidaciones(
+  companyId: string,
+  opciones: { filtros: FiltrosLiquidaciones; paginacion: Pick<Paginacion, 'saltar' | 'tomar'> }
+) {
+  const { filtros, paginacion } = opciones
+  const { q } = filtros
+  const like = { contains: q, mode: 'insensitive' as const }
+
+  const [{ liquidaciones, total, hayAlguna }, config] = await Promise.all([
+    conEmpresa(companyId, async (tx) => {
+      const condiciones = condicionesDeLiquidaciones(filtros)
+      if (q) {
+        // El vendedor no es una relación del modelo: se buscan primero los que coinciden y se pide «las de esos vendedores».
+        const vendedores = await tx.vendedor.findMany({
+          where: { companyId, OR: [{ nombre: like }, { apellido: like }, { codigo: like }] },
+          select: { id: true },
+          take: 500,
+        })
+        const coincidencias: Prisma.LiquidacionWhereInput[] = [{ numero: like }]
+        if (vendedores.length) coincidencias.push({ vendedorId: { in: vendedores.map((v) => v.id) } })
+        condiciones.push({ OR: coincidencias })
+      }
+      const where: Prisma.LiquidacionWhereInput = { companyId, AND: condiciones }
+
+      const [liquidaciones, total] = await Promise.all([
+        tx.liquidacion.findMany({
+          where,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          skip: paginacion.saltar,
+          take: paginacion.tomar,
+          select: {
+            id: true,
+            numero: true,
+            vendedorId: true,
+            periodoDesde: true,
+            periodoHasta: true,
+            total: true,
+            moneda: true,
+            estado: true,
+            pagadaAt: true,
+            _count: { select: { comisiones: true } },
+          },
+        }),
+        tx.liquidacion.count({ where }),
+      ])
+      // Solo si no salió nada: ¿es que no hay liquidaciones, o es que el filtro las esconde? La pantalla dice cosas distintas.
+      const hayAlguna = liquidaciones.length === 0 ? (await tx.liquidacion.count({ where: { companyId } })) > 0 : true
+      return { liquidaciones, total, hayAlguna }
+    }),
     getExcursionesConfig(companyId),
   ])
-  if (liquidaciones.length === 0) return []
+  if (liquidaciones.length === 0) return { filas: [], total, hayAlguna }
 
   const vendedores = await conEmpresa(companyId, (tx) =>
     tx.vendedor.findMany({
@@ -37,7 +73,7 @@ export async function listadoLiquidaciones(companyId: string) {
   const porId = new Map(vendedores.map((v) => [v.id, v]))
   const { monedaDefecto, tasasCambio } = config
 
-  return liquidaciones.map((l) => {
+  const filas = liquidaciones.map((l) => {
     const v = porId.get(l.vendedorId)
     return {
       id: l.id,
@@ -54,6 +90,7 @@ export async function listadoLiquidaciones(companyId: string) {
       comisiones: l._count.comisiones,
     }
   })
+  return { filas, total, hayAlguna }
 }
 
 /** El recibo: la liquidación con cada comisión que la compone. */

@@ -19,7 +19,7 @@ import {
   siguienteDireccion,
   type CampoOrden,
 } from '@/modules/reportes/orden-detalle'
-import { ThOrden } from '@/components/reportes/ThOrden'
+import { TablaDetalle } from '@/components/reportes/TablaDetalle'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
@@ -379,116 +379,76 @@ export default async function DetalleOperacionPage({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-small">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <ThOrden
-                  campo="fecha"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('fecha')}
-                >
-                  Cuándo
-                </ThOrden>
-                {esRevertidas && <ThOrden
-                  campo="revertida"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('revertida')}
-                >
-                  Cuándo se revirtió
-                </ThOrden>}
-                <ThOrden
-                  campo="cliente"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('cliente')}
-                >
-                  Cliente
-                </ThOrden>
-                <ThOrden
-                  campo="servicio"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('servicio')}
-                >
-                  Servicio
-                </ThOrden>
-                <ThOrden
-                  campo="sucursal"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('sucursal')}
-                >
-                  Sucursal
-                </ThOrden>
-                {verEmpleados && <th className="px-3 py-2 text-overline">Empleado</th>}
-                {!esRevertidas && <th className="px-3 py-2 text-overline">Descontó</th>}
-                {esRevertidas && <th className="px-3 py-2 text-overline">Motivo</th>}
-                {esRevertidas && verEmpleados && (
-                  <th className="px-3 py-2 text-overline">Quién la revirtió</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((f) => (
-                <tr key={f.id} className="border-b border-border/60">
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                    {formatDateTime(f.fechaVisita, prefs)}
-                    {/* Fuera de la pestaña de revertidas, una fila revertida
-                        no se disfraza de canje normal. */}
-                    {!esRevertidas && f.revertidaAt && (
-                      <span
-                        className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-caption"
-                        title="Esta visita se revirtió después; sigue contando como canje"
-                      >
-                        revertida
-                      </span>
-                    )}
-                  </td>
-                  {esRevertidas && (
-                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                      {f.revertidaAt ? formatDateTime(f.revertidaAt, prefs) : '—'}
-                    </td>
-                  )}
-                  <td className="px-3 py-2">
-                    <Link
-                      href={`/admin/clientes/${f.cliente.id}`}
-                      className="text-foreground underline-offset-2 hover:underline"
+        <TablaDetalle
+          caption={VISTAS[vista]}
+          campos={campos}
+          orden={orden}
+          enlaceOrden={enlaceOrden}
+          filas={filas}
+          claveDe={(f) => f.id}
+          columnas={[
+            {
+              clave: 'fecha',
+              encabezado: 'Cuándo',
+              celda: (f) => (
+                <span className="whitespace-nowrap text-muted-foreground">
+                  {formatDateTime(f.fechaVisita, prefs)}
+                  {/* Fuera de la pestaña de revertidas, una fila revertida no se disfraza de canje normal. */}
+                  {!esRevertidas && f.revertidaAt && (
+                    <span
+                      className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-caption"
+                      title="Esta visita se revirtió después; sigue contando como canje"
                     >
-                      {f.cliente.nombre}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">{f.servicio}</td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {f.sucursal?.nombre ?? '(sin asignar)'}
-                  </td>
-                  {verEmpleados && (
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {f.empleado?.name ?? '(sin asignar)'}
-                    </td>
+                      revertida
+                    </span>
                   )}
-                  {!esRevertidas && (
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {f.descontado ? 'Sí' : 'No'}
-                    </td>
-                  )}
-                  {esRevertidas && (
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {f.revertidaMotivo ?? '—'}
-                    </td>
-                  )}
-                  {esRevertidas && verEmpleados && (
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {f.revertidaPor?.name ?? f.revertidaPorSistema ?? '—'}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </span>
+              ),
+            },
+            ...(esRevertidas
+              ? [
+                  {
+                    clave: 'revertida',
+                    encabezado: 'Cuándo se revirtió',
+                    celda: (f: (typeof filas)[number]) => (
+                      <span className="whitespace-nowrap text-muted-foreground">
+                        {f.revertidaAt ? formatDateTime(f.revertidaAt, prefs) : '—'}
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
+            {
+              clave: 'cliente',
+              encabezado: 'Cliente',
+              celda: (f) => (
+                <Link href={`/admin/clientes/${f.cliente.id}`} className="text-foreground underline-offset-2 hover:underline">
+                  {f.cliente.nombre}
+                </Link>
+              ),
+            },
+            { clave: 'servicio', encabezado: 'Servicio', valor: (f) => f.servicio },
+            { clave: 'sucursal', encabezado: 'Sucursal', valor: (f) => f.sucursal?.nombre ?? '(sin asignar)' },
+            ...(verEmpleados
+              ? [{ clave: 'atendio', encabezado: 'Empleado', valor: (f: (typeof filas)[number]) => f.empleado?.name ?? '(sin asignar)' }]
+              : []),
+            ...(!esRevertidas
+              ? [{ clave: 'descontado', encabezado: 'Descontó', valor: (f: (typeof filas)[number]) => (f.descontado ? 'Sí' : 'No') }]
+              : []),
+            ...(esRevertidas
+              ? [{ clave: 'motivo', encabezado: 'Motivo', valor: (f: (typeof filas)[number]) => f.revertidaMotivo }]
+              : []),
+            ...(esRevertidas && verEmpleados
+              ? [
+                  {
+                    clave: 'quien',
+                    encabezado: 'Quién la revirtió',
+                    valor: (f: (typeof filas)[number]) => f.revertidaPor?.name ?? f.revertidaPorSistema,
+                  },
+                ]
+              : []),
+          ]}
+        />
       )}
     </div>
   )

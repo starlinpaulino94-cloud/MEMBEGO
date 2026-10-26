@@ -20,6 +20,7 @@
     "geo:seed": "tsx scripts/geo-seed.ts",
     "test": "tsx --test tests/*.test.ts",
     "docs:rutas": "tsx scripts/docs/rutas-por-espacio.ts --escribir",
+    "docs:galeria-panel": "tsx scripts/docs/galeria-panel.ts",
     "test:db": "tsx --conditions react-server --import ./scripts/supply-db/shim-next.mjs --test --test-concurrency=1 tests/postgres/*.db.test.ts",
     "migraciones:sellar": "node scripts/sellar-migraciones.mjs",
     "certificar:referidos": "tsx --tsconfig tsconfig.json scripts/certificar-referidos.ts",

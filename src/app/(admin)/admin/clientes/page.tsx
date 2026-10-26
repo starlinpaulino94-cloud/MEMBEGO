@@ -6,6 +6,8 @@ import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { PageHeader } from '@/components/ui/page-header'
+import { PanelDs } from '@/components/layout/PanelDs'
+import { getRegionalPrefs } from '@/modules/empresas/regional'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ClientesTable, type ClienteRow } from '@/components/admin/ClientesTable'
@@ -70,9 +72,10 @@ export default async function ClientesPage({
   // El filtro vive en `modules/admin/clientesFiltro`: la exportación usa el
   // MISMO, para que el CSV no pueda separarse nunca de lo que se ve.
   const where = whereClientes(companyId, sp)
-  const umbrales = await getUmbralesRetencion(companyId ?? '__none__').catch(() =>
-    resolverUmbrales(null)
-  )
+  const [umbrales, regional] = await Promise.all([
+    getUmbralesRetencion(companyId ?? '__none__').catch(() => resolverUmbrales(null)),
+    getRegionalPrefs(companyId),
+  ])
 
   let clientes: ClienteRow[] = []
   let categorias: { id: string; nombre: string }[] = []
@@ -163,7 +166,7 @@ export default async function ClientesPage({
   const hasta = Math.min(pagina * POR_PAGINA, total)
 
   return (
-    <div className="space-y-6">
+    <PanelDs className="space-y-6">
       <PageHeader
         title="Clientes"
         description={
@@ -211,26 +214,33 @@ export default async function ClientesPage({
         />
       </Form>
 
-      <ClientesTable data={clientes} />
-
-      {paginas > 1 && (
-        <nav className="flex items-center justify-between gap-3" aria-label="Paginación">
-          <PaginaLink
-            href={urlConFiltros('/admin/clientes', { ...sp, p: undefined }, { p: pagina - 1 > 1 ? pagina - 1 : undefined })}
-            disponible={pagina > 1}
-            texto="← Anterior"
-          />
-          <span className="text-sm text-muted-foreground">
-            Página {pagina} de {paginas}
-          </span>
-          <PaginaLink
-            href={urlConFiltros('/admin/clientes', { ...sp, p: undefined }, { p: pagina + 1 })}
-            disponible={pagina < paginas}
-            texto="Siguiente →"
-          />
-        </nav>
-      )}
-    </div>
+      <ClientesTable
+        data={clientes}
+        regional={regional}
+        hayFiltros={!fallo && (Boolean(busqueda) || hayFiltrosClientes(f))}
+        fallo={fallo}
+        // UNA sola paginación, la del servidor (en la URL): antes había otra, de cliente, dentro de ésta (fase 5 · 5.3).
+        pie={
+          paginas > 1 ? (
+            <nav className="flex items-center justify-between gap-3" aria-label="Paginación">
+              <PaginaLink
+                href={urlConFiltros('/admin/clientes', { ...sp, p: undefined }, { p: pagina - 1 > 1 ? pagina - 1 : undefined })}
+                disponible={pagina > 1}
+                texto="← Anterior"
+              />
+              <span className="text-sm text-muted-foreground">
+                Página {pagina} de {paginas}
+              </span>
+              <PaginaLink
+                href={urlConFiltros('/admin/clientes', { ...sp, p: undefined }, { p: pagina + 1 })}
+                disponible={pagina < paginas}
+                texto="Siguiente →"
+              />
+            </nav>
+          ) : undefined
+        }
+      />
+    </PanelDs>
   )
 }
 

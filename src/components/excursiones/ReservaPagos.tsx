@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { StatusChip } from '@/components/ui/status-chip'
+import { Tabla, type Columna } from '@/components/ui/tabla'
 import { formatDateTime, formatMoney } from '@/lib/format'
 
 const init: ReservaActionState = {}
@@ -77,6 +78,52 @@ export function ReservaPagos({
   }, [anularState, router])
 
   const dinero = (n: number | string) => formatMoney(n, { moneda }, 2)
+
+  /** La celda de estado: el pago anulado conserva su motivo; el registrado deja anularlo con motivo, en la misma fila. */
+  const celdaEstado = (p: PagoFila) => {
+    if (p.estado === 'ANULADO') {
+      return (
+        <div>
+          <StatusChip tone="neutral">Anulado</StatusChip>
+          {p.notas ? <p className="mt-1 text-caption text-muted-foreground">{p.notas}</p> : null}
+        </div>
+      )
+    }
+    if (anularId === p.id) {
+      return (
+        <form action={anularAction} className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="pagoId" value={p.id} />
+          <Input name="motivo" required placeholder="Motivo de la anulación" aria-label="Motivo de la anulación" className="h-8 w-48" />
+          <Button type="submit" size="sm" variant="destructive" disabled={anulando}>
+            Confirmar
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setAnularId(null)}>
+            Cancelar
+          </Button>
+        </form>
+      )
+    }
+    return (
+      <div className="flex items-center gap-2">
+        <StatusChip tone="success">Registrado</StatusChip>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setAnularId(p.id)}>
+          Anular
+        </Button>
+      </div>
+    )
+  }
+
+  const columnas: Columna<PagoFila>[] = [
+    {
+      clave: 'monto',
+      encabezado: 'Monto',
+      celda: (p) => <span className={p.estado === 'ANULADO' ? 'font-medium text-foreground line-through' : 'font-medium text-foreground'}>{dinero(p.monto)}</span>,
+    },
+    { clave: 'metodo', encabezado: 'Método', prioridad: 2, celda: (p) => METODO_PAGO_LABEL[p.metodo as keyof typeof METODO_PAGO_LABEL] ?? p.metodo },
+    { clave: 'referencia', encabezado: 'Referencia', prioridad: 3 },
+    { clave: 'cuando', encabezado: 'Cuándo', prioridad: 2, celda: (p) => formatDateTime(p.createdAt) },
+    { clave: 'estado', encabezado: 'Estado', celda: celdaEstado },
+  ]
 
   return (
     <section className="rounded-2xl border border-border bg-card p-5">
@@ -144,78 +191,14 @@ export function ReservaPagos({
       ) : null}
 
       {pagos.length > 0 ? (
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-caption uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-3">Monto</th>
-                <th className="py-2 pr-3">Método</th>
-                <th className="py-2 pr-3">Referencia</th>
-                <th className="py-2 pr-3">Cuándo</th>
-                <th className="py-2">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pagos.map((p) => (
-                <tr key={p.id} className="border-b border-border last:border-0 align-top">
-                  <td className="py-2 pr-3 font-medium text-foreground">
-                    <span className={p.estado === 'ANULADO' ? 'line-through' : ''}>
-                      {dinero(p.monto)}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-3 text-muted-foreground">
-                    {METODO_PAGO_LABEL[p.metodo as keyof typeof METODO_PAGO_LABEL] ?? p.metodo}
-                  </td>
-                  <td className="py-2 pr-3 text-muted-foreground">{p.referencia ?? '—'}</td>
-                  <td className="py-2 pr-3 text-muted-foreground">{formatDateTime(p.createdAt)}</td>
-                  <td className="py-2">
-                    {p.estado === 'ANULADO' ? (
-                      <div>
-                        <StatusChip tone="neutral">Anulado</StatusChip>
-                        {p.notas ? (
-                          <p className="mt-1 text-caption text-muted-foreground">{p.notas}</p>
-                        ) : null}
-                      </div>
-                    ) : anularId === p.id ? (
-                      <form action={anularAction} className="flex flex-wrap items-center gap-2">
-                        <input type="hidden" name="pagoId" value={p.id} />
-                        <Input
-                          name="motivo"
-                          required
-                          placeholder="Motivo de la anulación"
-                          aria-label="Motivo de la anulación"
-                          className="h-8 w-48"
-                        />
-                        <Button type="submit" size="sm" variant="destructive" disabled={anulando}>
-                          Confirmar
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setAnularId(null)}
-                        >
-                          Cancelar
-                        </Button>
-                      </form>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <StatusChip tone="success">Registrado</StatusChip>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setAnularId(p.id)}
-                        >
-                          Anular
-                        </Button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4">
+          <Tabla
+            caption="Cobros de la reserva, del más reciente al más antiguo; los anulados se conservan con su motivo"
+            columnas={columnas}
+            filas={pagos}
+            claveDe={(p) => p.id}
+            columnaIdentificadora="monto"
+          />
         </div>
       ) : (
         <p className="mt-4 text-sm text-muted-foreground">Todavía no hay cobros registrados.</p>

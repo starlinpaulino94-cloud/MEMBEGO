@@ -8,6 +8,7 @@ import {
   CLAVES_BADGE,
   menuEnUnaColumna,
   ofreceEntradaAEmpresa,
+  rutasOfrecidas,
   ofreceSalidaAPlataforma,
   visibleGroups,
   visibleWorkspaces,
@@ -32,8 +33,8 @@ const PLATFORM: ContextoNav = { role: 'SUPERADMIN', scope: 'PLATFORM' }
 const EMPRESA_COMO_SA: ContextoNav = { role: 'SUPERADMIN', scope: 'COMPANY' }
 const ADMIN: ContextoNav = { role: 'ADMINISTRADOR', scope: 'COMPANY' }
 
-const hrefsDe = (c: ContextoNav) =>
-  visibleWorkspaces(c).flatMap((w) => w.groups.flatMap((g) => g.items.map((i) => i.href)))
+// Cada entrada y cada una de sus pestañas (fase 6): el `href` de una entrada solo dice a dónde aterriza.
+const hrefsDe = (c: ContextoNav) => rutasOfrecidas(c)
 
 test('en PLATFORM solo se ofrecen módulos globales', () => {
   const espacios = visibleWorkspaces(PLATFORM)
@@ -53,8 +54,11 @@ test('en COMPANY el superadmin solo ve módulos de empresa', () => {
   const espacios = visibleWorkspaces(EMPRESA_COMO_SA)
   assert.deepEqual(espacios.map((w) => w.id), ['empresa'])
   const hrefs = hrefsDe(EMPRESA_COMO_SA)
+  // `/empleado/caja` es la excepción declarada: la Caja es de la empresa pero vive en la pantalla de mostrador (D-09). Ninguna
+  // otra ruta que no sea del panel de empresa cabe en este ámbito, y menos una de `/superadmin`.
   for (const h of hrefs) {
-    assert.ok(h.startsWith('/admin'), `el ámbito COMPANY ofrece una ruta global: ${h}`)
+    assert.ok(h.startsWith('/admin') || h === '/empleado/caja', `el ámbito COMPANY ofrece una ruta global: ${h}`)
+    assert.ok(!h.startsWith('/superadmin'), `el ámbito COMPANY ofrece una ruta de plataforma: ${h}`)
   }
 })
 

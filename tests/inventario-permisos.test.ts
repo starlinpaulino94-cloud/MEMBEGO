@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { CAPACIDAD_DE_SECCION, CAPACIDADES_BASE, SECCIONES_POR_CAPACIDAD } from '../src/modules/capacidades/catalogo'
 import { ADMIN_SECTIONS, adminSectionForPath, seccionPermitida } from '../src/lib/auth/permissions'
 import { FUNCIONES_POR_SECCION } from '../src/lib/auth/funciones'
+import { GRUPOS_HUB_ADMIN, rutasOfrecidas } from '../src/components/layout/nav-config'
 
 /**
  * COMMERCE CORE · inventario — sección, guardias y aislamiento (Fase 2).
@@ -176,7 +177,11 @@ test('el cron del inventario existe, está programado y exige el secreto', () =>
 test('la entrada de menú existe, detrás de la capacidad, y va junto al catálogo en el grupo Comercio del hub', () => {
   const nav = readFileSync('src/components/layout/nav-config.ts', 'utf8')
   assert.match(nav, /href: '\/admin\/inventario',[\s\S]{0,500}capacidad: 'CATALOGO_UNIFICADO'/)
-  assert.match(nav, /deAdmin\(\s*'\/admin\/catalogo', '\/admin\/inventario',/)
+  // Fase 6: va junto al catálogo, como su segunda pestaña, y con la misma capacidad.
+  const catalogo = GRUPOS_HUB_ADMIN.find((g) => g.id === 'comercio')?.items.find((i) => i.href === '/admin/catalogo')
+  assert.deepEqual(catalogo?.pestanas?.map((p) => p.href), ['/admin/catalogo', '/admin/inventario'])
+  assert.ok(rutasOfrecidas({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: ['CATALOGO_UNIFICADO'] }).includes('/admin/inventario'))
+  assert.ok(!rutasOfrecidas({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: [] }).includes('/admin/inventario'))
 })
 
 // ── Interfaz ─────────────────────────────────────────────────────────────────
@@ -1611,12 +1616,16 @@ test('INV-4c · las lecturas del margen solo LEEN, escriben la empresa en CADA c
 })
 
 test('INV-4c · la tarjeta del dashboard: sin la sección no se lee nada, sin «costos» no se lee ni un costo, y el dinero solo se pinta con ellos', () => {
-  const d = sinComent(leer('src/app/(admin)/admin/dashboard/page.tsx'))
-  assert.match(d, /const userInventario = await requireSection\('inventario'\)/)
-  assert.match(d, /userInventario \? await usuarioPuedeFuncion\(userInventario, 'inventario', 'costos'\) : false/)
-  assert.match(d, /userInventario\s*\?\s*resumenInventarioEmpresa\(companyId, [^)]*\{ conCostos \}\)/, 'sin la sección no se pide; con ella, SU conCostos (no un true fijo)')
-  assert.match(d, /\.catch\(\(e\) => \{[\s\S]*?return null/, 'si la tarjeta falla, el dashboard sigue')
-  assert.match(d, /\{inventario \? <TarjetaInventario resumen=\{inventario\} company=\{company\} \/> : null\}/)
+  // Desde la fase 5 la tarjeta es un componente que carga solo (`InventarioResumen`, dentro de un <Suspense> del Resumen).
+  const d = sinComent(leer('src/components/admin/resumen/InventarioResumen.tsx'))
+  assert.match(d, /const user = await requireSection\('inventario'\)/)
+  assert.match(d, /await usuarioPuedeFuncion\(user, 'inventario', 'costos'\)/)
+  assert.match(d, /resumenInventarioEmpresa\(companyId, zonaHoraria, \{ conCostos \}\)/, 'con la sección, SU conCostos (no un true fijo)')
+  assert.match(d, /if \(!user\) return null/, 'sin la sección no se pide nada')
+  assert.match(d, /\.catch\(\(e\) => \{[\s\S]*?return null/, 'si la tarjeta falla, el Resumen sigue')
+  assert.match(d, /<TarjetaInventario resumen=\{resumen\} company=\{company\} \/>/)
+  const p = sinComent(leer('src/app/(admin)/admin/dashboard/page.tsx'))
+  assert.match(p, /ve\('\/admin\/inventario'\)[\s\S]*?<InventarioResumen/, 'y la página ni la monta si no se puede abrir Inventario')
 
   const m = sinComent(leer('src/modules/inventory/dashboard.ts'))
   assert.doesNotMatch(m, /\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(|\$executeRaw|\$queryRaw/, 'solo compone lecturas ya guardadas')

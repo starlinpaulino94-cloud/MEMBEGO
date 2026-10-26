@@ -6,12 +6,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
-import { NavAudiencia } from '@/components/admin/NavAudiencia'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { StatusBanner } from '@/components/ui/status-banner'
 import { StatCard } from '@/components/ui/stat-card'
 import { Users, Eye, Percent, Handshake } from 'lucide-react'
+import { Tabla } from '@/components/ui/tabla'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,7 +48,6 @@ export default async function AudienciaPage() {
       <PageHeader
         title="Audiencia"
         description="Tus seguidores y el rendimiento de tus promociones en el marketplace."
-        nav={<NavAudiencia activa="/admin/audiencia" />}
       />
 
       {/* CUATRO KPI, no ocho (§44). Eran dos rejillas de cuatro tarjetas
@@ -116,35 +115,32 @@ export default async function AudienciaPage() {
               }
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-overline">
-                    <th className="px-5 py-3 font-medium">Promoción</th>
-                    <th className="px-5 py-3 text-right font-medium">Vistas</th>
-                    <th className="px-5 py-3 text-right font-medium">Compartidas</th>
-                    <th className="px-5 py-3 text-right font-medium">Guardadas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.promos.map((p) => (
-                    <tr key={p.id} className="border-b border-border/50">
-                      <td className="px-5 py-3">
-                        <span className="font-medium text-foreground">{p.titulo}</span>{' '}
-                        {!p.activo && (
-                          <Badge variant="secondary" className="ml-1">
-                            Inactiva
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-right tabular-nums">{fmt(p.vistas)}</td>
-                      <td className="px-5 py-3 text-right tabular-nums">{fmt(p.compartidas)}</td>
-                      <td className="px-5 py-3 text-right tabular-nums">{fmt(p.guardadas)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Tabla
+              caption="Rendimiento por promoción"
+              claveDe={(p) => p.id}
+              filas={stats.promos}
+              className="border-0 shadow-none"
+              columnas={[
+                {
+                  clave: 'promocion',
+                  encabezado: 'Promoción',
+                  celda: (p) => (
+                    <>
+                      <span className="font-medium text-foreground">{p.titulo}</span>
+                      {!p.activo && (
+                        <Badge variant="secondary" className="ml-2">
+                          Inactiva
+                        </Badge>
+                      )}
+                    </>
+                  ),
+                },
+                { clave: 'vistas', encabezado: 'Vistas', tipo: 'numero', valor: (p) => p.vistas },
+                { clave: 'compartidas', encabezado: 'Compartidas', tipo: 'numero', valor: (p) => p.compartidas },
+                { clave: 'guardadas', encabezado: 'Guardadas', tipo: 'numero', valor: (p) => p.guardadas },
+              ]}
+              formato={{ numero: fmt }}
+            />
           )}
         </CardContent>
       </Card>

@@ -15,6 +15,7 @@ import { CampanaGlobalAcciones } from '@/components/superadmin/CampanaGlobalAcci
 import { PageHeader } from '@/components/ui/page-header'
 import { formatDateTime } from '@/lib/format'
 import { ArrowLeft, Check, Clock, TriangleAlert } from 'lucide-react'
+import { Tabla } from '@/components/ui/tabla'
 
 export const dynamic = 'force-dynamic'
 
@@ -169,57 +170,50 @@ export default async function CampanaGlobalDetallePage({
       </section>
       )}
 
-      <section className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-        <table className="w-full min-w-[520px] text-sm">
-          <thead>
-            <tr className="border-b border-border/60 text-left text-caption uppercase tracking-wide text-muted-foreground">
-              <th className="px-4 py-3 font-semibold">Empresa</th>
-              <th className="px-4 py-3 font-semibold">Estado</th>
-              <th className="px-4 py-3 font-semibold">Aplicada</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/50">
-            {campana.participantes.map((p) => (
-              <tr key={p.id}>
-                <td className="px-4 py-3 text-foreground">
-                  {p.company.name}
-                  {!p.company.isActive && (
-                    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-overline text-muted-foreground">
-                      inactiva
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  {p.error ? (
-                    <span
-                      className="inline-flex items-center gap-1.5 text-caption font-semibold text-destructive"
-                      title={p.error}
-                    >
-                      <TriangleAlert className="h-3.5 w-3.5" /> Error
-                    </span>
-                  ) : p.aplicadaAt ? (
-                    <span className="inline-flex items-center gap-1.5 text-caption font-semibold text-success">
-                      <Check className="h-3.5 w-3.5" /> Creada
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-caption text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" /> Pendiente
-                    </span>
-                  )}
-                  {p.error && (
-                    <p className="mt-0.5 max-w-64 truncate text-caption text-muted-foreground">
-                      {p.error}
-                    </p>
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-caption text-muted-foreground">
-                  {p.aplicadaAt ? formatDateTime(p.aplicadaAt) : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <Tabla
+        caption="Empresas de la campaña"
+        claveDe={(p) => p.id}
+        filas={campana.participantes}
+        columnas={[
+          {
+            clave: 'empresa',
+            encabezado: 'Empresa',
+            celda: (p) => (
+              <>
+                {p.company.name}
+                {!p.company.isActive && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-overline text-muted-foreground">inactiva</span>}
+              </>
+            ),
+          },
+          {
+            clave: 'estado',
+            encabezado: 'Estado',
+            celda: (p) => (
+              <>
+                {p.error ? (
+                  <span className="inline-flex items-center gap-1.5 text-caption font-semibold text-destructive" title={p.error}>
+                    <TriangleAlert className="h-3.5 w-3.5" /> Error
+                  </span>
+                ) : p.aplicadaAt ? (
+                  <span className="inline-flex items-center gap-1.5 text-caption font-semibold text-success">
+                    <Check className="h-3.5 w-3.5" /> Creada
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-caption text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" /> Pendiente
+                  </span>
+                )}
+                {p.error && <span className="mt-0.5 block max-w-64 truncate text-caption font-normal text-muted-foreground">{p.error}</span>}
+              </>
+            ),
+          },
+          {
+            clave: 'aplicada',
+            encabezado: 'Aplicada',
+            celda: (p) => <span className="whitespace-nowrap text-caption text-muted-foreground">{p.aplicadaAt ? formatDateTime(p.aplicadaAt) : '—'}</span>,
+          },
+        ]}
+      />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { StatusChip } from '@/components/ui/status-chip'
 import type { UsoSatelite } from '@/modules/plataforma/metricas'
+import { Tabla } from '@/components/ui/tabla'
 
 /**
  * TARJETA DE USO DE UN SATÉLITE (B-7 · vista del superadmin).
@@ -61,41 +62,31 @@ export function SateliteUsoCard({ satelite, dias }: { satelite: UsoSatelite; dia
 
             {/* Errores = permiso insuficiente: una integración golpeando con un
                 scope que no tiene. Es la señal más útil de esta pantalla. */}
-            <div className="overflow-hidden rounded-lg border border-border/60">
-              <table className="w-full text-caption">
-                <thead className="bg-muted/40 text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-1.5 text-left font-medium">Endpoint</th>
-                    <th className="px-3 py-1.5 text-right font-medium">Llamadas</th>
-                    <th className="px-3 py-1.5 text-right font-medium">Con error</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/50">
-                  {resumen.porEndpoint.slice(0, TOP_ENDPOINTS).map((e) => (
-                    <tr key={`${e.metodo} ${e.endpoint}`}>
-                      <td className="px-3 py-1.5">
-                        <span className="font-mono">
-                          <span className="text-muted-foreground">{e.metodo}</span> {e.endpoint}
-                        </span>
-                      </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">{miles(e.peticiones)}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">
-                        {e.errores > 0 ? (
-                          <span className="text-warning">{miles(e.errores)}</span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {resumen.porEndpoint.length > TOP_ENDPOINTS && (
-                <p className="bg-muted/20 px-3 py-1.5 text-caption text-muted-foreground">
-                  y {resumen.porEndpoint.length - TOP_ENDPOINTS} endpoint(s) más
-                </p>
-              )}
-            </div>
+            <Tabla
+              caption="Endpoints más llamados"
+              claveDe={(e) => `${e.metodo} ${e.endpoint}`}
+              filas={resumen.porEndpoint.slice(0, TOP_ENDPOINTS)}
+              className="border-0 shadow-none"
+              columnas={[
+                {
+                  clave: 'endpoint',
+                  encabezado: 'Endpoint',
+                  celda: (e) => (
+                    <span className="font-mono">
+                      <span className="text-muted-foreground">{e.metodo}</span> {e.endpoint}
+                    </span>
+                  ),
+                },
+                { clave: 'llamadas', encabezado: 'Llamadas', tipo: 'numero', valor: (e) => e.peticiones },
+                {
+                  clave: 'errores',
+                  encabezado: 'Con error',
+                  alineacion: 'derecha',
+                  celda: (e) => (e.errores > 0 ? <span className="text-warning">{miles(e.errores)}</span> : <span className="text-muted-foreground">—</span>),
+                },
+              ]}
+              formato={{ numero: miles }}
+            />
           </>
         )}
       </CardContent>

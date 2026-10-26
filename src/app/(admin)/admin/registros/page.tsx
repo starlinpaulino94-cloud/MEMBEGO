@@ -21,6 +21,8 @@ import {
 import { FileText, Search } from 'lucide-react'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
+import { Tabla } from '@/components/ui/tabla'
+import { EstadoChip, type TonoEstado } from '@/components/ui/estado-chip'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,11 +30,11 @@ export const metadata = { title: 'Registros' }
 
 const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 
-const ESTADO_CHIP: Record<string, string> = {
-  APPLIED: 'bg-success/15 text-success',
-  CANCELLED: 'bg-destructive/10 text-destructive',
-  REVERTED: 'bg-warning/15 text-warning',
-  ERROR: 'bg-destructive/10 text-destructive',
+const TONO_COMPROBANTE: Record<string, TonoEstado> = {
+  APPLIED: 'exito',
+  CANCELLED: 'peligro',
+  REVERTED: 'aviso',
+  ERROR: 'peligro',
 }
 
 /**
@@ -194,68 +196,68 @@ export default async function RegistrosPage({
           description="Cada operación (venta, uso, promoción, beneficio o canje) queda aquí con su comprobante, para siempre."
         />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-          <table className="w-full min-w-[860px] text-sm">
-            <thead>
-              <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-3 font-semibold">Comprobante</th>
-                <th className="px-4 py-3 font-semibold">Tipo</th>
-                <th className="px-4 py-3 font-semibold">Cliente</th>
-                <th className="px-4 py-3 font-semibold">Detalle</th>
-                <th className="px-4 py-3 font-semibold">Empleado</th>
-                <th className="px-4 py-3 text-right font-semibold">Monto</th>
-                <th className="px-4 py-3 font-semibold">Estado</th>
-                <th className="px-4 py-3 font-semibold">Fecha</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {items.map((r) => (
-                <tr key={r.id} className="align-middle">
-                  <td className="px-4 py-3">
-                    <p className="font-mono font-semibold text-foreground">{r.ticketNumero}</p>
-                    <p className="font-mono text-xs text-muted-foreground">{r.codigo}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                      {r.tipoLabel}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-foreground">{r.cliente ?? '—'}</td>
-                  <td className="max-w-52 px-4 py-3">
-                    <p className="truncate text-foreground">{r.detalle ?? '—'}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {r.metodoCobro ? METODO_LABEL[r.metodoCobro] ?? r.metodoCobro : (r.esEntrega ? 'Sin costo' : '')}
-                      {r.sucursal ? ` · ${r.sucursal}` : ''}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-foreground">{r.empleado ?? '—'}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
-                    {r.monto == null ? '—' : fmtRD(r.monto)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
-                    >
-                      {r.estadoLabel}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                    {fmtFecha(r.fecha)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <FacturaPrintDialog transactionId={r.id} yaImpresa={r.impresiones > 0} />
-                      {r.estado === 'APPLIED' && (
-                        <AnularTransaccionButton transactionId={r.id} referencia={r.ticketNumero} />
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Tabla
+          caption="Comprobantes"
+          claveDe={(r) => r.id}
+          filas={items}
+          columnas={[
+            {
+              clave: 'comprobante',
+              encabezado: 'Comprobante',
+              celda: (r) => (
+                <>
+                  <span className="block font-mono font-semibold text-foreground">{r.ticketNumero}</span>
+                  <span className="block font-mono text-caption font-normal text-muted-foreground">{r.codigo}</span>
+                  <span className="block text-caption font-normal text-muted-foreground">
+                    {r.tipoLabel} · <time dateTime={new Date(r.fecha).toISOString()}>{fmtFecha(r.fecha)}</time>
+                  </span>
+                </>
+              ),
+            },
+            {
+              clave: 'cliente',
+              encabezado: 'Cliente',
+              celda: (r) => (
+                <>
+                  <span className="block whitespace-nowrap">{r.cliente ?? '—'}</span>
+                  {r.empleado ? <span className="block whitespace-nowrap text-caption text-muted-foreground">Atendió {r.empleado}</span> : null}
+                </>
+              ),
+            },
+            {
+              clave: 'detalle',
+              encabezado: 'Detalle',
+              prioridad: 3,
+              celda: (r) => (
+                <div className="max-w-40">
+                  <p className="truncate text-foreground">{r.detalle ?? '—'}</p>
+                  <p className="truncate text-caption text-muted-foreground">
+                    {r.metodoCobro ? METODO_LABEL[r.metodoCobro] ?? r.metodoCobro : (r.esEntrega ? 'Sin costo' : '')}
+                    {r.sucursal ? ` · ${r.sucursal}` : ''}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              clave: 'monto',
+              encabezado: 'Monto',
+              alineacion: 'derecha',
+              celda: (r) => <span className="font-semibold text-foreground">{r.monto == null ? '—' : fmtRD(r.monto)}</span>,
+            },
+            { clave: 'estado', encabezado: 'Estado', celda: (r) => <EstadoChip tono={TONO_COMPROBANTE[r.estado] ?? 'neutro'}>{r.estadoLabel}</EstadoChip> },
+            {
+              clave: 'acciones',
+              encabezado: 'Acciones',
+              soloLector: true,
+              celda: (r) => (
+                <div className="flex flex-col items-end gap-1">
+                  <FacturaPrintDialog transactionId={r.id} yaImpresa={r.impresiones > 0} />
+                  {r.estado === 'APPLIED' && <AnularTransaccionButton transactionId={r.id} referencia={r.ticketNumero} />}
+                </div>
+              ),
+            },
+          ]}
+        />
       )}
 
       {/* Paginación: los filtros activos viajan en cada enlace. Sin esto, los

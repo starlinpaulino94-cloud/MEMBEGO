@@ -15,23 +15,22 @@ import { randomBytes } from 'crypto'
 import { revalidatePath } from 'next/cache'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { sinEmpresa, conEmpresa } from '@/lib/tenant'
+import { sinEmpresa } from '@/lib/tenant'
 import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { ensureEmailIdentity } from '@/lib/supabase/identity'
 import { registerLimiter } from '@/lib/rate-limit'
 import { getRequestMeta } from '@/lib/server-utils'
 import { sendEmail } from '@/lib/email'
 import { uniqueFileName } from '@/lib/storage'
 import { anotarFallo } from '@/lib/prisma-errors'
-import { ensureSucursalPrincipal } from '@/modules/empresas/sucursalPrincipal'
 import { verticalValido } from '@/modules/empresas/verticales'
-import { CAPACIDADES_OVERRIDE_TENANT_NUEVO } from '@/modules/capacidades/catalogo'
+import { darDeAltaEmpresa } from '@/modules/empresas/alta'
+import { marcarSolicitudCreada, motivoParaNoCrearDesde } from './creada'
 import {
   validarDatosSolicitud,
-  horarioComoTexto,
   extensionDeMime,
   VERTICAL_POR_TIPO,
+  empresaDesdeSolicitud,
   IMG_TIPOS_PERMITIDOS,
   IMG_MAX_BYTES,
   ESTADOS_SOLICITUD,
@@ -232,31 +231,6 @@ export interface CrearDesdeSolicitudState {
   companySlug?: string
 }
 
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-}
-
-async function slugUnico(nombre: string): Promise<string> {
-  const base = slugify(nombre) || 'empresa'
-  let slug = base
-  let n = 1
-  while (
-    await sinEmpresa('solicitudes: comprobar slug (catálogo global)', (tx) =>
-      tx.company.findUnique({ where: { slug }, select: { id: true } })
-    )
-  ) {
-    n += 1
-    slug = `${base}-${n}`
-  }
-  return slug
-}
-
 /**
  * Crea la EMPRESA y la CUENTA del administrador a partir de la solicitud.
  *
@@ -276,11 +250,10 @@ export async function crearEmpresaDesdeSolicitud(
   const id = String(formData.get('id') ?? '')
   if (!id) return { error: 'Solicitud no especificada.' }
 
+  const motivo = await motivoParaNoCrearDesde(id)
+  if (motivo) return { error: motivo }
   const solicitud = await prisma.solicitudEmpresa.findUnique({ where: { id } })
   if (!solicitud) return { error: 'Solicitud no encontrada.' }
-  if (solicitud.estado === 'CREADA' && solicitud.companyId) {
-    return { error: 'Esta solicitud ya tiene su empresa creada.' }
-  }
 
   const v = validarDatosSolicitud(solicitud.datos)
   if (!v.ok) return { error: `La solicitud está incompleta: ${v.error}` }
@@ -297,113 +270,29 @@ export async function crearEmpresaDesdeSolicitud(
   )
   if (yaExiste) {
     return {
-      error: `Ya existe una cuenta con ${correoAdmin}. Crea la empresa desde «Empresas → Nueva» usando la opción de cuenta existente, y marca esta solicitud en las notas.`,
+      error: `Ya existe una cuenta con ${correoAdmin}. Usa «Crear con los datos precargados»: te lleva a «Empresas → Nueva» con esta solicitud ya escrita, para elegir esa cuenta como administrador.`,
     }
   }
 
-  const supabase = createAdminClient()
-  let companyId: string | null = null
-  let supabaseId: string | null = null
   try {
     const codigoVertical = await verticalValido(VERTICAL_POR_TIPO[datos.negocio.tipo] ?? null)
-    const slug = await slugUnico(datos.negocio.nombre)
-    const company = await sinEmpresa('solicitudes: crear la empresa aprobada', (tx) =>
-      tx.company.create({
-        data: {
-          name: datos.negocio.nombre,
-          slug,
-          type: codigoVertical ?? (datos.negocio.tipoOtro || 'otro'),
-          ...(codigoVertical ? { tipoNegocioCodigo: codigoVertical } : {}),
-          description: datos.negocio.descripcion,
-          email: datos.negocio.correo,
-          telefono: datos.negocio.telefono,
-          direccion: datos.ubicacion.direccion,
-          ciudad: datos.ubicacion.ciudad,
-          website: datos.negocio.web ?? null,
-          googleMapsUrl: datos.ubicacion.maps ?? null,
-          horario: horarioComoTexto(datos.horario) || null,
-          colorPrimario: datos.marca.color ?? null,
-          logoUrl,
-          bannerUrl,
-          isActive: true,
-          // Sin publicar: primero se configuran planes y promociones.
-          isPublished: false,
-          // Fase 0 (Plan Maestro §8.5–§8.6): tenant nuevo nace sin CRM ni
-          // mensajería avanzada; las empresas existentes no se tocan.
-          capacidades: { overrides: CAPACIDADES_OVERRIDE_TENANT_NUEVO },
-        },
-      })
-    )
-    companyId = company.id
-    await ensureSucursalPrincipal(company.id)
 
     // Contraseña temporal legible (se entrega por WhatsApp y se cambia al entrar).
     const passwordTemporal = randomBytes(9).toString('base64url').replace(/[-_]/g, 'a').slice(0, 12)
-    const { data: created, error: createError } = await supabase.auth.admin.createUser({
-      email: correoAdmin,
-      password: passwordTemporal,
-      email_confirm: true,
-      user_metadata: { name: datos.admin.nombre },
-    })
-    if (createError || !created.user) {
-      throw new Error(createError?.message ?? 'No se pudo crear la cuenta del administrador.')
-    }
-    supabaseId = created.user.id
-    await ensureEmailIdentity(supabaseId, correoAdmin)
 
-    const idEmpresa = company.id
-    const idSupabase = supabaseId
-    const dbUser = await conEmpresa(idEmpresa, (tx) =>
-      tx.user.create({
-        data: {
-          supabaseId: idSupabase,
-          email: correoAdmin,
-          name: datos.admin.nombre,
-          role: 'ADMINISTRADOR',
-          companyId: idEmpresa,
-        },
-      })
-    )
-    await supabase.auth.admin.updateUserById(supabaseId, {
-      app_metadata: { role: 'ADMINISTRADOR', dbUserId: dbUser.id, companyId: idEmpresa },
+    const alta = await darDeAltaEmpresa({
+      empresa: empresaDesdeSolicitud(datos, { codigoVertical, logoUrl, bannerUrl }),
+      administrador: { modo: 'nuevo', nombre: datos.admin.nombre, email: correoAdmin, password: passwordTemporal, confirmarCorreo: true },
+      // La solicitud queda «Creada» DENTRO del alta: si no se pudo marcar, no queda una empresa sin su solicitud.
+      alTerminar: (r) => marcarSolicitudCreada(id, r.companyId, user.metadata.dbUserId),
     })
-
-    await prisma.solicitudEmpresa.update({
-      where: { id },
-      data: { estado: 'CREADA', companyId: idEmpresa },
-    })
-
-    const meta = await getRequestMeta()
-    await conEmpresa(idEmpresa, (tx) =>
-      tx.auditLog.create({
-        data: {
-          companyId: idEmpresa,
-          userId: user.metadata.dbUserId ?? null,
-          accion: 'NOTA_INTERNA',
-          entidadTipo: 'Company',
-          entidadId: idEmpresa,
-          payload: { tipo: 'EMPRESA_CREADA_DESDE_SOLICITUD', solicitudId: id },
-          ...meta,
-        },
-      })
-    ).catch(anotarFallo('solicitudes:auditLog'))
 
     revalidatePath('/superadmin/solicitudes')
     revalidatePath(`/superadmin/solicitudes/${id}`)
     revalidatePath('/superadmin/empresas')
-    return { companySlug: slug, credenciales: { correo: correoAdmin, passwordTemporal } }
+    return { companySlug: alta.slug, credenciales: { correo: correoAdmin, passwordTemporal } }
   } catch (e) {
     console.error('[solicitudes] crear empresa:', e)
-    // Rollback: no dejar empresa sin administrador ni cuenta huérfana.
-    if (supabaseId) {
-      await supabase.auth.admin.deleteUser(supabaseId).catch(anotarFallo('solicitudes:rollback-auth'))
-    }
-    if (companyId) {
-      const idEmpresa = companyId
-      await conEmpresa(idEmpresa, (tx) => tx.company.delete({ where: { id: idEmpresa } })).catch(
-        anotarFallo('solicitudes:rollback-company')
-      )
-    }
     return { error: 'No se pudo crear la empresa. Revisa los datos e intenta de nuevo.' }
   }
 }

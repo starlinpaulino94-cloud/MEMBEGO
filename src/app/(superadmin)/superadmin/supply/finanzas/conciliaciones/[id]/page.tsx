@@ -8,6 +8,7 @@ import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { leerPaginacion } from '@/lib/paginacion'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { TablaLineasConciliacion } from '@/components/supply-v2/tablas-detalle'
 import { ChipConciliacion } from '@/components/supply-v2/finanzas/chips'
 import { RegistrarCifrasProveedor, RegistrarMontoProveedor, ResolverConciliacion } from '@/components/supply-v2/finanzas/form-conciliacion'
 import { fichaConciliacion } from '@/modules/supply-v2/finance/queries'
@@ -63,22 +64,7 @@ export default async function ConciliacionPage({ params, searchParams }: { param
         <CardHeader><CardTitle>Lo que Membego registró en el periodo</CardTitle></CardHeader>
         <CardContent>
           {r.totalLineas === 0 ? <p className="text-sm text-muted-foreground">Ningún movimiento con este proveedor en el periodo.</p> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="conciliacion-lineas">
-                <thead className="text-left text-caption text-muted-foreground"><tr><th className="py-1 pr-3">Fecha</th><th className="py-1 pr-3">Tipo</th><th className="py-1 pr-3">Detalle</th><th className="py-1 pr-3 text-right">Membego</th><th className="py-1 text-right">Proveedor</th></tr></thead>
-                <tbody>
-                  {r.lineas.map((l) => (
-                    <tr key={l.id} className="border-t border-border">
-                      <td className="py-2 pr-3">{formatDate(l.occurredAt)}</td>
-                      <td className="py-2 pr-3">{TIPO[l.type] ?? l.type}</td>
-                      <td className="py-2 pr-3">{l.description}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(l.internalAmount, m)}</td>
-                      <td className="py-2 text-right tabular-nums text-muted-foreground">{l.supplierAmount ? dineroSupplyV2(l.supplierAmount, m) : SIN_INFORMACION_DEL_PROVEEDOR}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaLineasConciliacion lineas={r.lineas} moneda={m} tipos={TIPO} />
           )}
           <TablaPaginacion paginacion={paginacion} total={r.totalLineas} params={sp} etiqueta="líneas" />
         </CardContent>

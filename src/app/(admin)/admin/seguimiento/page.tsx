@@ -19,15 +19,17 @@ import { SeguimientoConfigCard } from '@/components/seguimiento/SeguimientoConfi
 import { getSeguimientoConfig, renderMensajeSeguimiento } from '@/modules/seguimiento/config'
 import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
+import { Tabla } from '@/components/ui/tabla'
+import { EstadoChip, type TonoEstado } from '@/components/ui/estado-chip'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Seguimiento de recompensas' }
 
-const ESTADO_CHIP: Record<string, string> = {
-  SIN_USAR: 'bg-warning/15 text-warning',
-  USADO: 'bg-success/15 text-success',
-  VENCIDO: 'bg-destructive/10 text-destructive',
+const TONO_SEGUIMIENTO: Record<string, TonoEstado> = {
+  SIN_USAR: 'aviso',
+  USADO: 'exito',
+  VENCIDO: 'peligro',
 }
 
 /**
@@ -201,94 +203,104 @@ export default async function SeguimientoPage({
           description="Cuando un cliente reciba un lavado gratis, un premio de la ruleta o una recompensa de campaña, aparecerá aquí con su estado."
         />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-          <table className="w-full min-w-[1040px] text-sm">
-            <thead>
-              <tr className="border-b border-border/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-3 font-semibold">Cliente</th>
-                <th className="px-4 py-3 font-semibold">Recompensa</th>
-                <th className="px-4 py-3 font-semibold">Estado</th>
-                <th className="px-4 py-3 font-semibold">Otorgado</th>
-                <th className="px-4 py-3 font-semibold">Vence</th>
-                <th className="px-4 py-3 font-semibold">Usado</th>
-                <th className="px-4 py-3 text-right font-semibold">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {items.map((r) => (
-                <tr key={r.compraId} className="align-middle">
-                  <td className="max-w-52 px-4 py-3">
-                    <p className="truncate font-medium text-foreground">{r.cliente}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {r.telefono ?? r.email ?? '—'}
+        <Tabla
+          caption="Recompensas entregadas"
+          claveDe={(r) => r.compraId}
+          filas={items}
+          columnaIdentificadora="cliente"
+          columnas={[
+            {
+              clave: 'cliente',
+              encabezado: 'Cliente',
+              celda: (r) => (
+                <div className="max-w-52">
+                  <p className="truncate font-medium text-foreground">{r.cliente}</p>
+                  <p className="truncate text-caption font-normal text-muted-foreground">{r.telefono ?? r.email ?? '—'}</p>
+                </div>
+              ),
+            },
+            {
+              clave: 'recompensa',
+              encabezado: 'Recompensa',
+              prioridad: 2,
+              celda: (r) => (
+                <div className="max-w-48">
+                  <p className="truncate text-foreground">{r.promocion}</p>
+                  {r.usosIncluidos > 1 && (
+                    <p className="text-caption text-muted-foreground">
+                      {r.usosRestantes}/{r.usosIncluidos} usos disponibles
                     </p>
-                  </td>
-                  <td className="max-w-48 px-4 py-3">
-                    <p className="truncate text-foreground">{r.promocion}</p>
-                    {r.usosIncluidos > 1 && (
-                      <p className="text-xs text-muted-foreground">
-                        {r.usosRestantes}/{r.usosIncluidos} usos disponibles
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${ESTADO_CHIP[r.estado] ?? 'bg-muted text-muted-foreground'}`}
-                    >
-                      {SEGUIMIENTO_ESTADO_LABEL[r.estado]}
+                  )}
+                </div>
+              ),
+            },
+            {
+              clave: 'estado',
+              encabezado: 'Estado',
+              celda: (r) => (
+                <>
+                  <EstadoChip tono={TONO_SEGUIMIENTO[r.estado] ?? 'neutro'}>{SEGUIMIENTO_ESTADO_LABEL[r.estado]}</EstadoChip>
+                  {r.estado === 'SIN_USAR' && (
+                    <span className="mt-0.5 block text-caption text-muted-foreground">
+                      hace {r.diasDesdeOtorgado} día{r.diasDesdeOtorgado !== 1 ? 's' : ''}
                     </span>
-                    {r.estado === 'SIN_USAR' && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        hace {r.diasDesdeOtorgado} día{r.diasDesdeOtorgado !== 1 ? 's' : ''}
-                      </p>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                    {fmtFecha(r.otorgadoAt)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                    {fmtFecha(r.venceAt)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs">
-                    {r.usadoAt ? (
-                      <>
-                        <p className="text-foreground">{fmtFechaHora(r.usadoAt)}</p>
-                        <p className="text-muted-foreground">
-                          {r.usadoPor ? `por ${r.usadoPor}` : ''}
-                          {r.canjeInterno && (
-                            <span className="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-overline text-primary">
-                              interno
-                            </span>
-                          )}
-                        </p>
-                      </>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <SeguimientoAcciones
-                      compraId={r.compraId}
-                      qrTokenId={r.qrTokenId}
-                      estado={r.estado}
-                      cliente={r.cliente}
-                      telefono={r.telefono}
-                      email={r.email}
-                      promocion={r.promocion}
-                      empresa={empresaNombre}
-                      mensaje={renderMensajeSeguimiento(config.plantillaMensaje, {
-                        cliente: r.cliente,
-                        empresa: empresaNombre,
-                        recompensa: r.promocion,
-                        vence: r.venceAt ? fmtFecha(r.venceAt) : null,
-                      })}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  )}
+                </>
+              ),
+            },
+            {
+              clave: 'fechas',
+              encabezado: 'Otorgado y vence',
+              prioridad: 3,
+              celda: (r) => (
+                <span className="whitespace-nowrap text-caption text-muted-foreground">
+                  <span className="block">Otorgado {fmtFecha(r.otorgadoAt)}</span>
+                  <span className="block">Vence {fmtFecha(r.venceAt)}</span>
+                </span>
+              ),
+            },
+            {
+              clave: 'usado',
+              encabezado: 'Usado',
+              prioridad: 2,
+              celda: (r) =>
+                r.usadoAt ? (
+                  <span className="whitespace-nowrap text-caption">
+                    <span className="block text-foreground">{fmtFechaHora(r.usadoAt)}</span>
+                    <span className="block text-muted-foreground">
+                      {r.usadoPor ? `por ${r.usadoPor}` : ''}
+                      {r.canjeInterno && <span className="ml-1 rounded bg-primary/10 px-1.5 py-0.5 text-overline text-primary">interno</span>}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                ),
+            },
+            {
+              clave: 'acciones',
+              encabezado: 'Acciones',
+              alineacion: 'derecha',
+              celda: (r) => (
+                <SeguimientoAcciones
+                  compraId={r.compraId}
+                  qrTokenId={r.qrTokenId}
+                  estado={r.estado}
+                  cliente={r.cliente}
+                  telefono={r.telefono}
+                  email={r.email}
+                  promocion={r.promocion}
+                  empresa={empresaNombre}
+                  mensaje={renderMensajeSeguimiento(config.plantillaMensaje, {
+                    cliente: r.cliente,
+                    empresa: empresaNombre,
+                    recompensa: r.promocion,
+                    vence: r.venceAt ? fmtFecha(r.venceAt) : null,
+                  })}
+                />
+              ),
+            },
+          ]}
+        />
       )}
 
       {items.length > 0 && (

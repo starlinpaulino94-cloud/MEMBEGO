@@ -4,8 +4,9 @@ import { requireRole } from '@/lib/auth/guards'
 import { PageHeader } from '@/components/ui/page-header'
 import { StatCard } from '@/components/ui/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatDate, formatMoneyRD } from '@/lib/format'
+import { formatMoneyRD } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { TablaLotesDelProducto } from '@/components/supply-v2/tablas-detalle'
 import { ChipLote, ChipOferta } from '@/components/supply-v2/chips'
 import { Button } from '@/components/ui/button'
 import { fichaProductoSupply } from '@/modules/supply-v2/pool/queries'
@@ -101,47 +102,7 @@ export default async function SupplyProductoPage({ params }: { params: Promise<{
           {item.lots.length === 0 ? (
             <p className="text-sm text-muted-foreground">Todavía no se ha recibido nada de este producto.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="tabla-lotes">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr>
-                    <th className="py-1 pr-3">Lote</th>
-                    <th className="py-1 pr-3 text-right">Recibidas</th>
-                    <th className="py-1 pr-3 text-right">Disponibles</th>
-                    <th className="py-1 pr-3 text-right">Asig. · Res. · Emit. · Red.</th>
-                    <th className="py-1 pr-3 text-right">Costo</th>
-                    <th className="py-1 pr-3">Vence</th>
-                    <th className="py-1 pr-3">Orden</th>
-                    <th className="py-1">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {item.lots.map((l) => (
-                    <tr key={l.id} className="border-t border-border">
-                      <td className="py-2 pr-3 font-medium">
-                        <Link href={`/superadmin/supply/supply/lotes/${l.id}`} className="underline-offset-4 hover:underline">
-                          {l.code}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.quantityReceived.toLocaleString('es-DO')}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.quantityAvailable.toLocaleString('es-DO')}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{l.quantityAllocated} · {l.quantityReserved} · {l.quantityIssued} · {l.quantityRedeemed}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dinero(l.unitCost, l.currency)}</td>
-                      <td className="py-2 pr-3">{l.expiresAt ? formatDate(l.expiresAt) : '—'}</td>
-                      <td className="py-2 pr-3">
-                        <Link href={`/superadmin/supply/compras/${l.purchaseOrder.id}`} className="underline-offset-4 hover:underline">
-                          {l.purchaseOrder.number}
-                        </Link>
-                        <span className="block text-caption text-muted-foreground">{l.receipt.number}</span>
-                      </td>
-                      <td className="py-2">
-                        <ChipLote estado={l.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaLotesDelProducto formato={dinero} lotes={item.lots.map((l) => ({ ...l, status: <ChipLote estado={l.status} /> }))} />
           )}
         </CardContent>
       </Card>

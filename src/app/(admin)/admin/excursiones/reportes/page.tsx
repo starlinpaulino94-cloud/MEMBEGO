@@ -1,4 +1,5 @@
 import { requireRole } from '@/lib/auth/guards'
+import { registrarAccesoLegado } from '@/modules/navegacion/legado'
 import { ADMIN_ROLES } from '@/types'
 import { resumenDelPeriodo } from '@/modules/excursiones/metricas/queries'
 import { rangoDeParametros } from '@/modules/excursiones/reportes/nucleo'
@@ -26,6 +27,8 @@ export default async function ReportesPage({
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId
+  // Fase 6 · 6.4: la ruta sigue igual; solo se cuenta quién la abre, para decidir con datos si se puede retirar.
+  registrarAccesoLegado('/admin/excursiones/reportes', companyId)
   if (!companyId) return <SinEmpresaActiva seccion="los reportes de excursiones" />
 
   const sp = await searchParams

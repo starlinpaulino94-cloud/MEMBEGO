@@ -176,7 +176,7 @@ mayor monto». El cobro más grande del trimestre podría no estar en la lista
 mientras la tabla parece estar respondiendo a la pregunta.
 
 Por eso ahí el orden **viaja a la consulta**: se elige con un enlace
-(`components/reportes/ThOrden.tsx`), se lee de la URL (`?o=` y `?d=`) y entra en
+(la cabecera de `components/reportes/TablaDetalle.tsx`), se lee de la URL (`?o=` y `?d=`) y entra en
 el `orderBy` de Prisma. Sin JavaScript, imprimible, y el enlace se puede pegar
 en un chat tal cual. Un `?o=` inventado a mano cae al orden por defecto: lo que
 no está en la lista de campos de esa pantalla no llega nunca a la consulta.

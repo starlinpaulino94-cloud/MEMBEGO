@@ -11,6 +11,7 @@ import {
 } from '@/modules/conciliacion/domain'
 import { ReporteImprimible } from '@/components/ui/reporte-imprimible'
 import { SectionHeader } from '@/components/ui/section-header'
+import { Tabla } from '@/components/ui/tabla'
 
 const num = (n: number) => new Intl.NumberFormat('es-DO').format(n)
 
@@ -101,26 +102,19 @@ export function ConciliacionVista({ hallazgos, generadoEn, controles }: { hallaz
                             <span className="font-medium text-foreground">Qué hacer: </span>
                             {h.regla.queHacer}
                           </p>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm">
-                              <thead>
-                                <tr className="border-b border-border text-muted-foreground">
-                                  <th scope="col" className="py-1.5 pr-3 font-medium">Empresa</th>
-                                  <th scope="col" className="py-1.5 pr-3 font-medium">Caso</th>
-                                  <th scope="col" className="py-1.5 font-medium">Qué no cuadra</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {h.muestra.map((f, i) => (
-                                  <tr key={`${f.companyId}-${f.referencia}-${i}`} className="border-b border-border/60 last:border-0">
-                                    <td className="py-1.5 pr-3">{f.empresa}</td>
-                                    <td className="py-1.5 pr-3 font-mono">{f.referencia}</td>
-                                    <td className="py-1.5 text-muted-foreground">{f.detalle}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                          {/* Se imprime con el reporte: ninguna columna se oculta en estrecho (el papel cuenta como pantalla estrecha). */}
+                          <Tabla
+                            caption={`Casos de la regla ${h.regla.codigo}`}
+                            columnaIdentificadora="caso"
+                            className="border-0 shadow-none"
+                            filas={h.muestra.map((f, i) => ({ ...f, posicion: i }))}
+                            claveDe={(f) => `${f.companyId}-${f.referencia}-${f.posicion}`}
+                            columnas={[
+                              { clave: 'empresa', encabezado: 'Empresa', valor: (f) => f.empresa },
+                              { clave: 'caso', encabezado: 'Caso', celda: (f) => <span className="font-mono">{f.referencia}</span> },
+                              { clave: 'detalle', encabezado: 'Qué no cuadra', celda: (f) => <span className="font-normal text-muted-foreground">{f.detalle}</span> },
+                            ]}
+                          />
                           {h.total > h.muestra.length && (
                             <p className="text-xs text-muted-foreground">
                               Se enseñan los {h.muestra.length} más recientes de {num(h.total)} (hasta {MUESTRA_POR_REGLA} por regla).

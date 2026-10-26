@@ -3,8 +3,9 @@ import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatDate, formatDateTime, formatMoneyRD } from '@/lib/format'
+import { formatDate, formatMoneyRD } from '@/lib/format'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
+import { TablaLedgerLote } from '@/components/supply-v2/tablas-detalle'
 import { ChipLote } from '@/components/supply-v2/chips'
 import { fichaLote } from '@/modules/supply-v2/pool/queries'
 
@@ -75,37 +76,7 @@ export default async function LoteDetallePage({ params }: { params: Promise<{ id
             <CardTitle>Ledger</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="tabla-ledger">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr>
-                    <th className="py-1 pr-3">Tipo</th>
-                    <th className="py-1 pr-3">Movimiento</th>
-                    <th className="py-1 pr-3 text-right">Cantidad</th>
-                    <th className="py-1 pr-3 text-right">Disponible antes → después</th>
-                    <th className="py-1 pr-3">Usuario</th>
-                    <th className="py-1">Fecha</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lote.ledgerEntries.map((a) => (
-                    <tr key={a.id} className="border-t border-border">
-                      <td className="py-2 pr-3 font-medium">{a.type}</td>
-                      <td className="py-2 pr-3 text-caption text-muted-foreground">
-                        {a.sourceBucket ?? 'fuera'} → {a.destinationBucket ?? 'fuera'}
-                        {a.reason ? ` · ${a.reason}` : ''}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{a.destinationBucket === 'AVAILABLE' && !a.sourceBucket ? '+' : ''}{a.quantity.toLocaleString('es-DO')}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
-                        {a.balanceBefore.toLocaleString('es-DO')} → {a.balanceAfter.toLocaleString('es-DO')}
-                      </td>
-                      <td className="py-2 pr-3">{a.actor?.name ?? a.actor?.email ?? '—'}</td>
-                      <td className="py-2">{formatDateTime(a.createdAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaLedgerLote movimientos={lote.ledgerEntries} />
           </CardContent>
         </Card>
       </div>

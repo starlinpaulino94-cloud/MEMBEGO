@@ -29,10 +29,13 @@ import {
   generarCombinacionesCombo,
   diasComunesCombo,
 } from '@/modules/excursiones/reservas/nucleo'
+import { leerExcursionDeFormulario, type ErroresExcursion } from './formulario'
 
 export interface CatalogoActionState {
   error?: string
   success?: string
+  /** El error de CADA campo del formulario de excursión (`leerExcursionDeFormulario`): el formulario lo pone junto a su campo. */
+  campos?: ErroresExcursion
   /** id de la excursión creada (para redirigir al detalle). */
   excursionId?: string
 }
@@ -79,6 +82,10 @@ export async function crearExcursion(
     if (!user) return { error: 'No autorizado.' }
     const companyId = await resolveCompanyId(user, formData)
     if (!companyId) return { error: 'Empresa requerida.' }
+
+    // Lo que se puede saber sin la base, con el error de cada campo. Lo demás (actividades, cruces de horario) se resuelve abajo.
+    const leido = leerExcursionDeFormulario(formData, 'crear')
+    if (!leido.ok) return { error: leido.error, campos: leido.campos }
 
     const v = validarExcursion(deForm(formData, CAMPOS_EXCURSION))
     if (!v.ok) return { error: v.error }
@@ -355,6 +362,9 @@ export async function actualizarExcursion(
     if (!(await excursionDeMiEmpresa(companyId, excursionId))) {
       return { error: 'Excursión no encontrada.' }
     }
+
+    const leido = leerExcursionDeFormulario(formData, 'editar')
+    if (!leido.ok) return { error: leido.error, campos: leido.campos }
 
     const v = validarExcursion(deForm(formData, CAMPOS_EXCURSION))
     if (!v.ok) return { error: v.error }

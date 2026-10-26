@@ -9,7 +9,8 @@ import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { formatDate, formatDateTime } from '@/lib/format'
 import { leerPaginacion } from '@/lib/paginacion'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
-import { ChipLiquidacion, ChipObligacion, ChipPagoProveedor } from '@/components/supply-v2/finanzas/chips'
+import { TablaLineasLiquidacion } from '@/components/supply-v2/tablas-detalle'
+import { ChipLiquidacion, ChipPagoProveedor } from '@/components/supply-v2/finanzas/chips'
 import { AprobarLiquidacion, CancelarLiquidacion } from '@/components/supply-v2/finanzas/form-liquidacion'
 import { FormPago } from '@/components/supply-v2/finanzas/form-pago'
 import { ConfirmarPago } from '@/components/supply-v2/finanzas/acciones-pago'
@@ -115,28 +116,7 @@ export default async function LiquidacionPage({ params, searchParams }: { params
         <CardHeader><CardTitle>Entregas liquidadas (foto)</CardTitle></CardHeader>
         <CardContent>
           {l.totalLineas === 0 ? <p className="text-sm text-muted-foreground">Sin líneas: las entregas salieron de esta liquidación antes de pagarse.</p> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="liq-lineas">
-                <thead className="text-left text-caption text-muted-foreground"><tr><th className="py-1 pr-3">Entrega</th><th className="py-1 pr-3">Obligación</th><th className="py-1 pr-3 text-right">Bruto</th><th className="py-1 pr-3 text-right">Contractual</th><th className="py-1 pr-3 text-right">Bono Membego</th><th className="py-1 pr-3 text-right">Pagó el cliente</th><th className="py-1 pr-3 text-right">Comisión</th><th className="py-1 pr-3 text-right">Ya adelantado</th><th className="py-1 pr-3 text-right">Neto</th><th className="py-1 pr-3 text-right">Pagado</th><th className="py-1">Estado</th></tr></thead>
-                <tbody>
-                  {l.lineas.map((x) => (
-                    <tr key={x.id} className="border-t border-border" data-testid="liq-linea">
-                      <td className="py-2 pr-3">{x.redemptionId ? <Link href={`/superadmin/supply/redenciones/${x.redemptionId}`} className="underline-offset-4 hover:underline">{x.descripcion}</Link> : x.descripcion}</td>
-                      <td className="py-2 pr-3 font-mono text-caption">{x.obligationNumber}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.grossAmount, m)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.contractualAmount, m)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.membegoSubsidyAmount, m)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.customerPaidAmount, m)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.commissionAmount, m)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.alreadyPaidAmount, m)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums font-medium">{dineroSupplyV2(x.supplierNet, m)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(x.paidAmount, m)}</td>
-                      <td className="py-2"><ChipObligacion estado={x.obligationStatus} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TablaLineasLiquidacion lineas={l.lineas} moneda={m} />
           )}
           <TablaPaginacion paginacion={paginacion} total={l.totalLineas} params={sp} etiqueta="entregas" />
           <p className="mt-2 text-caption text-muted-foreground">Las líneas son una foto al generar la liquidación: cambios posteriores en el acuerdo o el catálogo no la alteran.</p>

@@ -509,8 +509,25 @@ function limiteDia(fecha: string, fin: boolean): Date | null {
   return new Date(`${fecha}T${fin ? '23:59:59.999' : '00:00:00.000'}Z`)
 }
 
+/**
+ * Un valor de «antes» o «después» como texto. Un número o un texto se dicen tal cual; el saldo de un producto del inventario
+ * (`{ onHand, reserved, damaged }`) se dice con sus cubetas. Cualquier otro objeto no se puede decir en una línea y se omite: antes
+ * se pasaba por `String()` y la bitácora enseñaba «[object Object] → [object Object]».
+ */
+function valorLegible(v: unknown): string | null {
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v)
+  if (v && typeof v === 'object' && typeof (v as { onHand?: unknown }).onHand === 'number') {
+    const s = v as { onHand: number; reserved?: unknown; damaged?: unknown }
+    const partes = [`${s.onHand} en existencia`]
+    if (typeof s.reserved === 'number' && s.reserved !== 0) partes.push(`${s.reserved} apartadas`)
+    if (typeof s.damaged === 'number' && s.damaged !== 0) partes.push(`${s.damaged} dañadas`)
+    return partes.join(', ')
+  }
+  return null
+}
+
 /** Resumen corto de lo que pasó, leído del payload de cada acción. */
-function describir(payload: Record<string, unknown>): string | null {
+export function describir(payload: Record<string, unknown>): string | null {
   const tipo = typeof payload.tipo === 'string' ? payload.tipo : null
   const base = tipo ? (SUBTIPO_LABEL[tipo] ?? tipo) : null
 
@@ -519,9 +536,9 @@ function describir(payload: Record<string, unknown>): string | null {
   if (typeof payload.motivo === 'string' && payload.motivo) {
     partes.push(payload.motivo)
   }
-  if (payload.antes != null && payload.despues != null) {
-    partes.push(`${String(payload.antes)} → ${String(payload.despues)}`)
-  }
+  const antes = valorLegible(payload.antes)
+  const despues = valorLegible(payload.despues)
+  if (antes !== null && despues !== null) partes.push(`${antes} → ${despues}`)
   if (typeof payload.de === 'string' && typeof payload.a === 'string') {
     partes.push(`${payload.de} → ${payload.a}`)
   }

@@ -135,7 +135,9 @@ test('todo sitio que crea una empresa usa CAPACIDADES_OVERRIDE_TENANT_NUEVO (si 
     if (!t.includes('CAPACIDADES_OVERRIDE_TENANT_NUEVO')) sinOverride.push(rel)
   }
   // Piso de cordura: si el rastreo dejara de ver las altas, la prueba pasaría en vacío.
-  // Eran 5 mientras existía Supply V1 (proveedores.ts, retirado en #574); hoy son 4.
-  assert.ok(altas >= 4, `solo encontró ${altas} altas de empresa`)
+  // Eran 5 mientras existía Supply V1 (proveedores.ts, retirado en #574), luego 4. Hoy son 3 A PROPÓSITO (auditoría admin · fase 7, 7.3):
+  // el alta única (`empresas/alta.ts`, que usan el superadmin, la solicitud y el registro público), la copia de una empresa
+  // (`duplicarEmpresa`) y la empresa Supplier Lite.
+  assert.ok(altas >= 3, `solo encontró ${altas} altas de empresa`)
   assert.deepEqual(sinOverride, [], 'estas altas de empresa no usan CAPACIDADES_OVERRIDE_TENANT_NUEVO')
 })

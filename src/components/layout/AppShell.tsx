@@ -7,6 +7,7 @@ import { CLAVE_COMPACTO } from './nav-compacto'
 import { AppSidebar } from '@/components/layout/AppSidebar'
 import { AppHeader } from '@/components/layout/AppHeader'
 import { NavProgress } from '@/components/layout/NavProgress'
+import { PestanasModulo } from '@/components/layout/PestanasModulo'
 import type { BadgesNav } from '@/components/layout/NavPanel'
 import {
   Sheet,
@@ -267,6 +268,8 @@ export function AppShell({
               'mx-auto w-full max-w-7xl px-4 py-8 md:px-6 lg:px-8'
             )}
           >
+            {/* Las pestañas del módulo al que pertenece la ruta (fase 6): las decide nav-config, no cada pantalla. */}
+            <PestanasModulo ctx={ctx} />
             {children}
           </main>
         </div>

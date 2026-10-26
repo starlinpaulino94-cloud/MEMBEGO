@@ -7,12 +7,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Label } from '@/components/ui/label'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
-import { formatDate } from '@/lib/format'
 import { leerPaginacion } from '@/lib/paginacion'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
-import { ChipFactura } from '@/components/supply-v2/finanzas/chips'
+import { TablaFacturas } from '@/components/supply-v2/finanzas/tablas'
 import { listarFacturas, proveedoresParaFinanzas } from '@/modules/supply-v2/finance/queries'
-import { dineroSupplyV2, INVOICE_STATUS_LABELS, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
+import { INVOICE_STATUS_LABELS, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Facturas de proveedor · Supply' }
@@ -68,47 +67,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
       {filas.length === 0 ? (
         <EmptyState variant="card" title="Sin facturas" description={proveedor || estado ? 'Ninguna factura cumple el filtro.' : 'Registra la primera factura de un proveedor contra su orden de compra.'} />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="tabla-facturas">
-                <thead className="text-left text-caption text-muted-foreground">
-                  <tr>
-                    <th className="py-1 pr-3">Factura</th>
-                    <th className="py-1 pr-3">Proveedor</th>
-                    <th className="py-1 pr-3">Fecha</th>
-                    <th className="py-1 pr-3">Vencimiento</th>
-                    <th className="py-1 pr-3 text-right">Total</th>
-                    <th className="py-1 pr-3 text-right">Aplicado</th>
-                    <th className="py-1 pr-3 text-right">Pagado</th>
-                    <th className="py-1 pr-3 text-right">Pendiente</th>
-                    <th className="py-1">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filas.map((f) => (
-                    <tr key={f.id} className="border-t border-border" data-testid="factura">
-                      <td className="py-2 pr-3 font-medium">
-                        <Link href={`${RUTA_FINANZAS}/facturas/${f.id}`} className="underline-offset-4 hover:underline" data-testid="link-factura">{f.number}</Link>
-                        {f.supplierInvoiceNumber && <span className="block text-caption text-muted-foreground">{f.supplierInvoiceNumber}</span>}
-                        {f.purchaseOrder && <span className="block text-caption text-muted-foreground">{f.purchaseOrder.number}</span>}
-                      </td>
-                      <td className="py-2 pr-3">{f.proveedor}</td>
-                      <td className="py-2 pr-3">{formatDate(f.documentDate)}</td>
-                      <td className="py-2 pr-3">{f.dueDate ? formatDate(f.dueDate) : '—'}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(f.total, f.currency)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(f.amountApplied, f.currency)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(f.amountPaid, f.currency)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums" data-testid="factura-pendiente">{dineroSupplyV2(f.amountDue, f.currency)}</td>
-                      <td className="py-2"><ChipFactura estado={f.status} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <TablaPaginacion paginacion={paginacion} total={total} params={sp} etiqueta="facturas" />
-          </CardContent>
-        </Card>
+        <TablaFacturas filas={filas} pie={<TablaPaginacion paginacion={paginacion} total={total} params={sp} etiqueta="facturas" />} />
       )}
     </div>
   )
