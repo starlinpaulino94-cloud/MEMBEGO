@@ -3,6 +3,10 @@ import { ArrowRight, QrCode, ShieldCheck, Sparkles } from 'lucide-react'
 import type { PlatformStats } from '@/modules/marketplace/cached'
 import { EnlaceDeCuenta } from './AccionesDeSesion'
 
+// Por debajo de estos mínimos la cifra resta credibilidad ("1 promoción
+// vigente") en lugar de sumarla, así que no se muestra.
+const MINIMO_PARA_MOSTRAR = { membresias: 100, promociones: 5 }
+
 function fmt(n: number) {
   return new Intl.NumberFormat('es-DO').format(n)
 }
@@ -11,9 +15,9 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
   // Solo métricas reales con valor y centradas en el cliente (marca única:
   // sin conteos de "empresas" ni "ciudades" que delaten un marketplace).
   const metrics = [
-    { label: 'Membresías activas', value: stats.membresiasActivas },
-    { label: 'Promociones vigentes', value: stats.promocionesVigentes },
-  ].filter((m) => m.value > 0)
+    { label: 'Membresías activas', value: stats.membresiasActivas, minimo: MINIMO_PARA_MOSTRAR.membresias },
+    { label: 'Promociones vigentes', value: stats.promocionesVigentes, minimo: MINIMO_PARA_MOSTRAR.promociones },
+  ].filter((m) => m.value >= m.minimo)
 
   return (
     <section className="relative overflow-hidden bg-slate-950">
@@ -69,7 +73,7 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
                     <div className="text-h1">
                       {fmt(m.value)}
                     </div>
-                    <div className="mt-0.5 text-sm text-primary/80">{m.label}</div>
+                    <div className="mt-0.5 text-sm text-white/70">{m.label}</div>
                   </div>
                 ))}
               </div>
@@ -123,7 +127,7 @@ export function HeroSection({ stats }: { stats: PlatformStats }) {
             </div>
 
             {/* Chips flotantes */}
-            <div className="absolute -left-5 top-10 hidden animate-float-slow items-center gap-1.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm font-medium text-foreground shadow-premium sm:flex">
+            <div className="absolute -left-6 -top-8 hidden animate-float-slow items-center gap-1.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm font-medium text-foreground shadow-premium sm:flex">
               <QrCode className="h-4 w-4 text-primary" /> Válida al instante
             </div>
             <div className="absolute -bottom-4 -right-3 hidden animate-float items-center gap-1.5 rounded-2xl bg-card px-3.5 py-2.5 text-sm font-medium text-foreground shadow-premium delay-300 sm:flex">
