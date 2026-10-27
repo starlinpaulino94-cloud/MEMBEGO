@@ -194,67 +194,104 @@ export function TablaReporte({
   if (filas.length === 0) {
     return <p className="text-sm text-muted-foreground">{vacio}</p>
   }
+  const [primera, ...resto] = columnas
   return (
-    <div className={cn('overflow-x-auto', className)}>
-      {/* `pl-4` en las columnas a la derecha: sin él, en un móvil dos cabeceras
-          numéricas seguidas se tocaban («INGRESOSACTIVASUSOS»). */}
-      <table className="w-full text-sm print:text-xs">
-        {titulo && (
-          <caption className="sr-only text-left print:not-sr-only print:mb-1 print:font-bold">
-            {titulo}
-          </caption>
-        )}
-        <thead>
-          <tr className="border-b border-border text-left print:border-black">
-            {columnas.map((c) => (
-              <th
-                key={c.clave}
-                scope="col"
-                className={cn(
-                  'py-2 pr-3 text-overline font-semibold print:py-1 print:text-xs',
-                  c.alinearDerecha && 'pl-4 pr-0 text-right'
-                )}
-              >
-                {c.titulo}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((f, i) => (
-            <tr key={f.__clave ?? i} className="border-b border-border/50">
-              {columnas.map((c) => (
-                <td
-                  key={c.clave}
-                  className={cn(
-                    'py-2 pr-3 text-foreground print:py-0.5',
-                    c.alinearDerecha && 'pl-4 pr-0 text-right tabular-nums'
-                  )}
-                >
-                  {f[c.clave]}
-                </td>
+    <div className={className}>
+      {/* EN UN MÓVIL, TARJETAS. Con cinco columnas la tabla medía más que la
+          pantalla y «Activas», «Usos» y «Por vencer» solo existían si se
+          deslizaba la tabla de lado, sin que nada lo avisara. Por debajo de
+          `sm` cada fila es una tarjeta —la primera columna de título, el resto
+          como «etiqueta · valor»— y en papel siempre se imprime la tabla. */}
+      <ul className="space-y-2 sm:hidden print:hidden">
+        {filas.map((f, i) => (
+          <li key={f.__clave ?? i} className="rounded-xl border border-border/60 bg-card p-3.5">
+            <p className="min-w-0 truncate font-medium text-foreground">{f[primera.clave]}</p>
+            <dl className="mt-2 space-y-1">
+              {resto.map((c) => (
+                <div key={c.clave} className="flex items-baseline justify-between gap-3 text-sm">
+                  <dt className="text-muted-foreground">{c.titulo}</dt>
+                  <dd className="tabular-nums text-foreground">{f[c.clave]}</dd>
+                </div>
               ))}
-            </tr>
-          ))}
-        </tbody>
+            </dl>
+          </li>
+        ))}
         {total && (
-          <tfoot>
-            <tr className="border-t-2 border-border font-semibold print:border-black">
+          <li className="rounded-xl border-2 border-border bg-muted/40 p-3.5 font-semibold">
+            <p className="text-foreground">{total[primera.clave]}</p>
+            <dl className="mt-2 space-y-1">
+              {resto.map((c) => (
+                <div key={c.clave} className="flex items-baseline justify-between gap-3 text-sm">
+                  <dt className="font-medium text-muted-foreground">{c.titulo}</dt>
+                  <dd className="tabular-nums text-foreground">{total[c.clave]}</dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        )}
+      </ul>
+
+      <div className="hidden overflow-x-auto sm:block print:block">
+        {/* `pl-4` en las columnas a la derecha: sin él, en un móvil dos cabeceras
+            numéricas seguidas se tocaban («INGRESOSACTIVASUSOS»). */}
+        <table className="w-full text-sm print:text-xs">
+          {titulo && (
+            <caption className="sr-only text-left print:not-sr-only print:mb-1 print:font-bold">
+              {titulo}
+            </caption>
+          )}
+          <thead>
+            <tr className="border-b border-border text-left print:border-black">
               {columnas.map((c) => (
-                <td
+                <th
                   key={c.clave}
+                  scope="col"
                   className={cn(
-                    'py-2 pr-3 text-foreground print:py-0.5',
-                    c.alinearDerecha && 'pl-4 pr-0 text-right tabular-nums'
+                    'py-2 pr-3 text-overline font-semibold print:py-1 print:text-xs',
+                    c.alinearDerecha && 'pl-4 pr-0 text-right'
                   )}
                 >
-                  {total[c.clave]}
-                </td>
+                  {c.titulo}
+                </th>
               ))}
             </tr>
-          </tfoot>
-        )}
-      </table>
+          </thead>
+          <tbody>
+            {filas.map((f, i) => (
+              <tr key={f.__clave ?? i} className="border-b border-border/50">
+                {columnas.map((c) => (
+                  <td
+                    key={c.clave}
+                    className={cn(
+                      'py-2 pr-3 text-foreground print:py-0.5',
+                      c.alinearDerecha && 'pl-4 pr-0 text-right tabular-nums'
+                    )}
+                  >
+                    {f[c.clave]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+          {total && (
+            <tfoot>
+              <tr className="border-t-2 border-border font-semibold print:border-black">
+                {columnas.map((c) => (
+                  <td
+                    key={c.clave}
+                    className={cn(
+                      'py-2 pr-3 text-foreground print:py-0.5',
+                      c.alinearDerecha && 'pl-4 pr-0 text-right tabular-nums'
+                    )}
+                  >
+                    {total[c.clave]}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
     </div>
   )
 }
