@@ -168,3 +168,17 @@ test('la bitácora no escribe «[object Object]» cuando el antes y el después 
   assert.doesNotMatch(describir({ tipo: 'COSTO', antes: { x: 1 }, despues: { x: 2 } }) ?? '', /object/)
   assert.equal(describir({}), null)
 })
+
+test('la bitácora dice los estados de Supply en español y con el género de lo que cambió', async () => {
+  const { describir } = await import('../src/modules/auditoria/queries')
+  // Una oferta queda «activa»; un lote, «activo».
+  assert.equal(describir({ antes: 'DRAFT', despues: 'ACTIVE' }, 'SupplyV2Offer'), 'Borrador → Activa')
+  assert.equal(describir({ antes: 'DRAFT', despues: 'ACTIVE' }, 'SupplyV2Lot'), 'Borrador → Activo')
+  assert.equal(describir({ antes: 'PENDING_APPROVAL', despues: 'PARTIALLY_RECEIVED' }, 'SupplyV2PurchaseOrder'), 'Pendiente de aprobación → Recibida parcialmente')
+  assert.equal(describir({ de: 'PAUSED', a: 'ACTIVE' }, 'SupplyV2Benefit'), 'Pausado → Activo')
+  // Sin entidad se dice en femenino (la mayoría); lo que no es un estado conocido no se toca.
+  assert.equal(describir({ antes: 'APPROVED', despues: 'PAID' }), 'Aprobada → Pagada')
+  assert.equal(describir({ antes: 'CODIGO_RARO', despues: '2.50' }, 'SupplyV2Offer'), 'CODIGO_RARO → 2.50')
+  // Un estado ya en español no cambia.
+  assert.equal(describir({ antes: 'PENDIENTE', despues: 'ACTIVA' }), 'PENDIENTE → ACTIVA')
+})
