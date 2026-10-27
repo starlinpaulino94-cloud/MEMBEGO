@@ -164,7 +164,7 @@ const comision = (extra: Partial<ComisionFila> = {}): ComisionFila => ({
   desglose: '10 % de RD$ 1,000',
   estado: 'APROBADA',
   createdAt: '2026-10-05T15:00:00.000Z',
-  venta: { id: 'vt1', numero: 'SAL-2026-0001', estado: 'CONFIRMADA' },
+  venta: { id: 'vt1', numero: 'SAL-2026-0001', estado: 'CONFIRMADA', reservaId: 'rs1' },
   liquidacion: null,
   ...extra,
 })
@@ -177,7 +177,9 @@ test('comisiones · tabla: caption, vendedor como identificador con su código, 
   assert.match(out, /<caption[^>]*>[^<]*Comisiones de los vendedores/)
   assert.match(out, /<th[^>]*scope="row"[^>]*>[\s\S]*href="\/admin\/excursiones\/vendedores\/v1"[^>]*>Luis Gómez/)
   assert.match(out, /LG01/)
-  assert.match(out, /href="\/admin\/excursiones\/ventas\/vt1"[^>]*>SAL-2026-0001/)
+  // La venta no tiene página propia: se abre desde su reserva. Enlazar a `/ventas/<id>` daba un 404.
+  assert.match(out, /href="\/admin\/excursiones\/reservas\/rs1"[^>]*>SAL-2026-0001/)
+  assert.doesNotMatch(out, /\/admin\/excursiones\/ventas\//)
   assert.match(out, />Aprobada</)
   assert.match(out, /<td[^>]*text-right[^>]*>[\s\S]*RD\$|<td[^>]*text-right[^>]*>[\s\S]*90/)
 })

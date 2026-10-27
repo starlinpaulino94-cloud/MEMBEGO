@@ -73,6 +73,7 @@ export default async function ActividadPage({
         </div>
         <select
           name="accion"
+          aria-label="Acción"
           defaultValue={accion ?? ''}
           className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
         >

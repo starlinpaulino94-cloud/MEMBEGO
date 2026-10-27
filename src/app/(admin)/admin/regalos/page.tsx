@@ -122,6 +122,7 @@ export default async function RegalosAdminPage({
       >
         <select
           name="tipo"
+          aria-label="Tipo de regalo"
           defaultValue={sp.tipo ?? ''}
           className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
         >
@@ -132,6 +133,7 @@ export default async function RegalosAdminPage({
         </select>
         <select
           name="estado"
+          aria-label="Estado"
           defaultValue={sp.estado ?? ''}
           className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
         >

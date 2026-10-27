@@ -74,6 +74,7 @@ export function PersonalizacionForm({ config }: { config: EngagementConfig }) {
           <Input
             name="color"
             type="color"
+            aria-label="Color de acento"
             value={color}
             onChange={(e) => setColor(e.target.value)}
             className="h-11 w-20 p-1"

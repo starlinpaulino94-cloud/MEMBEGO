@@ -216,7 +216,7 @@ function Buscador() {
           placeholder="A123456, Juan, 809…"
           className="min-h-11"
         />
-        <Button type="button" disabled={buscando} onClick={buscar} className="min-h-11 shrink-0">
+        <Button type="button" disabled={buscando} onClick={buscar} aria-label="Buscar" className="min-h-11 shrink-0">
           {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
         </Button>
       </div>

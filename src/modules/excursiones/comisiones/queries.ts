@@ -128,7 +128,7 @@ export async function listarComisiones(
           liquidacionId: true,
           liquidacion: { select: { id: true, numero: true } },
           ajustes: { select: { monto: true, motivo: true } },
-          venta: { select: { id: true, numero: true, estado: true } },
+          venta: { select: { id: true, numero: true, estado: true, reservaId: true } },
         },
       }),
       tx.comisionEntrada.count({ where }),

@@ -134,6 +134,7 @@ export function EvidenciaForm({
       <div className="flex flex-wrap items-center gap-2">
         <select
           name="momento"
+          aria-label="Momento de la foto"
           defaultValue="ANTES"
           className="h-10 rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground"
         >

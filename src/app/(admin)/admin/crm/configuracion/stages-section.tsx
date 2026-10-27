@@ -111,10 +111,10 @@ export function StagesSection({ companyId, initialStages }: StagesSectionProps) 
                   className="h-8"
                   autoFocus
                 />
-                <Button size="icon-sm" variant="ghost" onClick={() => renameStage(stage.id)}>
+                <Button size="icon-sm" variant="ghost" onClick={() => renameStage(stage.id)} aria-label="Guardar el nombre">
                   <Check className="h-4 w-4" />
                 </Button>
-                <Button size="icon-sm" variant="ghost" onClick={() => setEditingStageId(null)}>
+                <Button size="icon-sm" variant="ghost" onClick={() => setEditingStageId(null)} aria-label="Cancelar">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -133,6 +133,7 @@ export function StagesSection({ companyId, initialStages }: StagesSectionProps) 
                 className="h-6 w-6"
                 disabled={i === 0}
                 onClick={() => moveStage(stage.id, -1)}
+                aria-label={`Subir la etapa ${stage.nombre}`}
               >
                 <ChevronUp className="h-3.5 w-3.5" />
               </Button>
@@ -142,6 +143,7 @@ export function StagesSection({ companyId, initialStages }: StagesSectionProps) 
                 className="h-6 w-6"
                 disabled={i === stages.length - 1}
                 onClick={() => moveStage(stage.id, 1)}
+                aria-label={`Bajar la etapa ${stage.nombre}`}
               >
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>
@@ -151,13 +153,14 @@ export function StagesSection({ companyId, initialStages }: StagesSectionProps) 
               variant="ghost"
               size="icon-sm"
               onClick={() => { setEditingStageId(stage.id); setEditingStageName(stage.nombre) }}
+              aria-label={`Renombrar la etapa ${stage.nombre}`}
             >
               <Pencil className="h-4 w-4" />
             </Button>
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon-sm">
+                <Button variant="ghost" size="icon-sm" aria-label={`Eliminar la etapa ${stage.nombre}`}>
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </AlertDialogTrigger>

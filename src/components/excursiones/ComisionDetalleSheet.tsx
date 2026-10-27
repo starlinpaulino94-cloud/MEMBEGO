@@ -60,7 +60,7 @@ export interface ComisionDetalleItem {
   desglose: string
   estado: string
   createdAt: Date | string
-  venta: { id: string; numero: string; estado: string } | null
+  venta: { id: string; numero: string; estado: string; reservaId: string } | null
   liquidacionId?: string | null
   liquidacion?: { id: string; numero: string } | null
 }
@@ -178,7 +178,7 @@ export function ComisionDetalleSheet({
               </span>
               {comision.venta ? (
                 <Link
-                  href={`/admin/excursiones/ventas/${comision.venta.id}`}
+                  href={`/admin/excursiones/reservas/${comision.venta.reservaId}`}
                   className="font-mono font-semibold text-sm text-foreground hover:text-primary hover:underline"
                 >
                   {comision.venta.numero}
